@@ -1,54 +1,29 @@
 "use client";
 
-// STUB del panel de notas del estudio. Funcional mínimo (textarea + guardar);
-// T6 pule el estilo/estados. La persistencia real la conecta CbctViewer →
-// onGuardarNota (T7 contra PatientFile.doctorNotes).
+// Panel de notas del estudio: textarea + botón Guardar con estado `saved`
+// (✓ Guardado). La persistencia real la hace CbctViewer → onGuardarNota (T7
+// contra PatientFile.doctorNotes). Estilo en cbct.css.
 
 import type { NotesPanelProps } from "../types";
-
-const titleStyle: React.CSSProperties = { fontSize: 12, fontWeight: 700, color: "#aeb9cc", margin: "0 0 6px" };
+import { IcCheck, IcDownload } from "../icons";
+import "../cbct.css";
 
 export function NotesPanel({ notes, setNotes, onSave, saved }: NotesPanelProps) {
   return (
-    <section className="vc-panel" style={{ padding: 12 }}>
-      <h3 className="vc-panel-title" style={titleStyle}>Notas del estudio</h3>
+    <div className="vc-section">
+      <div className="vc-sec-title">Notas del estudio</div>
       <textarea
         className="vc-notes"
+        placeholder="Hallazgos clínicos, plan de tratamiento, observaciones sobre este CBCT…"
         value={notes}
+        aria-label="Notas del estudio"
         onChange={(e) => setNotes(e.target.value)}
-        placeholder="Escribe la nota del estudio…"
-        rows={4}
-        style={{
-          width: "100%",
-          resize: "vertical",
-          background: "#0e141d",
-          border: "1px solid #1e2733",
-          borderRadius: 8,
-          color: "#dbe3ee",
-          fontSize: 12,
-          padding: 8,
-          fontFamily: "inherit",
-        }}
       />
-      <button
-        type="button"
-        className="vc-notes-save"
-        onClick={onSave}
-        style={{
-          marginTop: 8,
-          padding: "8px 14px",
-          borderRadius: 8,
-          border: "none",
-          cursor: "pointer",
-          fontSize: 12,
-          fontWeight: 600,
-          color: "#fff",
-          background: saved ? "#1f8a5b" : "var(--accent, #2a6fdb)",
-        }}
-      >
-        {saved ? "Guardado ✓" : "Guardar nota"}
+      <button type="button" className={"vc-save" + (saved ? " done" : "")} onClick={onSave}>
+        {saved ? <IcCheck /> : <IcDownload />}
+        {saved ? "Guardado" : "Guardar notas"}
       </button>
-    </section>
+    </div>
   );
 }
 

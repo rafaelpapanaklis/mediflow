@@ -1,21 +1,81 @@
 "use client";
 
-// STUB del panel de render de volumen. TODO(T6): Sólido/MIP + slider de umbral
-// escribiendo en `setVol`; deshabilitar cuando !active.
+// Panel de render de volumen: modo Sólido/MIP + umbral de hueso. Deshabilitado
+// cuando !active (volumen no visible): la sección se atenúa (.dim → opacity +
+// pointer-events:none) y los controles quedan inertes. Estilo en cbct.css.
 
-import type { VolumePanelProps } from "../types";
+import type { ReactNode } from "react";
+import type { VolumePanelProps, VolState } from "../types";
+import { IcLayers } from "../icons";
+import { Seg } from "./Seg";
+import "../cbct.css";
 
-const titleStyle: React.CSSProperties = { fontSize: 12, fontWeight: 700, color: "#aeb9cc", margin: "0 0 6px" };
-const stubStyle: React.CSSProperties = { fontSize: 11, color: "#6f7c92", margin: 0 };
-
-export function VolumePanel({ vol, active }: VolumePanelProps) {
+function Slider({
+  icon,
+  label,
+  value,
+  min = 0,
+  max = 100,
+  step = 1,
+  disabled,
+  onChange,
+}: {
+  icon: ReactNode;
+  label: string;
+  value: number;
+  min?: number;
+  max?: number;
+  step?: number;
+  disabled?: boolean;
+  onChange: (v: number) => void;
+}) {
   return (
-    <section className="vc-panel" style={{ padding: 12, borderBottom: "1px solid #161d27", opacity: active ? 1 : 0.5 }}>
-      <h3 className="vc-panel-title" style={titleStyle}>Volumen 3D</h3>
-      <p className="vc-panel-stub" style={stubStyle}>
-        {active ? `modo ${vol.mode} · umbral ${vol.umbral}` : "inactivo (activa el plano 3D o MPR)"} — pendiente (T6)
-      </p>
-    </section>
+    <div className={"vc-slider" + (disabled ? " is-disabled" : "")}>
+      <div className="vc-slider-head">
+        <span className="vc-slider-lb">
+          {icon}
+          {label}
+        </span>
+        <span className="vc-slider-val">{value}</span>
+      </div>
+      <input
+        type="range"
+        min={min}
+        max={max}
+        step={step}
+        value={value}
+        disabled={disabled}
+        aria-label={label}
+        onChange={(e) => onChange(Number(e.target.value))}
+      />
+    </div>
+  );
+}
+
+export function VolumePanel({ vol, setVol, active }: VolumePanelProps) {
+  return (
+    <div className={"vc-section" + (active ? "" : " dim")} aria-disabled={!active}>
+      <div className="vc-sec-title">
+        Render de volumen {!active && <span className="vc-hu">3D</span>}
+      </div>
+      <Seg
+        small
+        options={[
+          { id: "solido", label: "Sólido" },
+          { id: "mip", label: "MIP" },
+        ]}
+        value={vol.mode}
+        onChange={(m) => active && setVol((prev) => ({ ...prev, mode: m as VolState["mode"] }))}
+      />
+      <div style={{ height: 10 }} />
+      <Slider
+        icon={<IcLayers />}
+        label="Umbral de hueso"
+        value={vol.umbral}
+        disabled={!active}
+        onChange={(v) => active && setVol((prev) => ({ ...prev, umbral: v }))}
+      />
+    </div>
   );
 }
 
