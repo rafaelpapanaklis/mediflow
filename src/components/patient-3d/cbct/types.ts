@@ -224,7 +224,21 @@ export interface StageProps {
   focused?: boolean;
   /** pedir foco de este cuadrante (MPR). */
   onFocus?: () => void;
-  // TODO(T7): hooks de render real (callback renderSlice/canvas del cargador).
+  /**
+   * (T7) Inyección del render REAL del corte/volumen. ADITIVO sobre el contrato:
+   * si se provee, REEMPLAZA el placeholder procedural de T5. Debe rellenar la caja
+   * de imagen al 100%×100% y ser PURO (el Stage también lo renderiza dentro de la
+   * lupa, así que se invoca más de una vez con los mismos argumentos). Lo
+   * implementa T7 desde el cargador DICOM (DecodedSlice → canvas/bitmap), usando
+   * los argumentos para elegir corte/plano y aplicar la ventana HU / el volumen.
+   */
+  renderContent?: (args: {
+    plane: Plane;
+    sliceIndex: number;
+    view: ViewState;
+    hu: HUState;
+    vol: VolState;
+  }) => ReactNode;
 }
 
 /** Rail de herramientas (vertical u horizontal). Implementa T5. */
