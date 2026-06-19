@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getAuthContext } from "@/lib/auth-context";
 import { prisma } from "@/lib/prisma";
 import { revalidateAfter } from "@/lib/cache/revalidate";
+import { logMutation } from "@/lib/audit";
 
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
   const ctx = await getAuthContext();
@@ -80,6 +81,18 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
       },
     });
 
+    // NOM-024 §6.3.5 — bitácora: nueva sesión + cambio de estado del plan.
+    await logMutation({
+      req,
+      clinicId:   ctx.clinicId,
+      userId:     ctx.userId,
+      entityType: "treatment",
+      entityId:   params.id,
+      action:     "update",
+      before:     { status: plan.status, completedSessions: completedCount },
+      after:      { status: isCompleted ? "COMPLETED" : "ACTIVE", completedSessions: nextNumber, addedSession: nextNumber },
+    });
+
     revalidateAfter("treatments");
     return NextResponse.json({ success: true, sessionNumber: nextNumber, completed: isCompleted });
   }
@@ -90,6 +103,19 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
       return NextResponse.json({ error: "Estado inválido" }, { status: 400 });
     }
     await prisma.treatmentPlan.updateMany({ where: { id: params.id, clinicId: ctx.clinicId }, data: { status: body.status } });
+
+    // NOM-024 §6.3.5 — bitácora: cambio de estado del plan.
+    await logMutation({
+      req,
+      clinicId:   ctx.clinicId,
+      userId:     ctx.userId,
+      entityType: "treatment",
+      entityId:   params.id,
+      action:     "update",
+      before:     { status: plan.status },
+      after:      { status: body.status },
+    });
+
     return NextResponse.json({ success: true });
   }
 
@@ -102,6 +128,19 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   if (body.sessionIntervalDays !== undefined) data.sessionIntervalDays = Number(body.sessionIntervalDays);
 
   await prisma.treatmentPlan.updateMany({ where: { id: params.id, clinicId: ctx.clinicId }, data });
+
+  // NOM-024 §6.3.5 — bitácora: edición general del plan (solo campos cambiados).
+  await logMutation({
+    req,
+    clinicId:   ctx.clinicId,
+    userId:     ctx.userId,
+    entityType: "treatment",
+    entityId:   params.id,
+    action:     "update",
+    before:     { name: plan.name, description: plan.description, totalCost: Number(plan.totalCost), totalSessions: plan.totalSessions, sessionIntervalDays: plan.sessionIntervalDays },
+    after:      { name: data.name ?? plan.name, description: data.description ?? plan.description, totalCost: data.totalCost ?? Number(plan.totalCost), totalSessions: data.totalSessions ?? plan.totalSessions, sessionIntervalDays: data.sessionIntervalDays ?? plan.sessionIntervalDays },
+  });
+
   revalidateAfter("treatments");
   return NextResponse.json({ success: true });
 }
@@ -115,6 +154,18 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
     return NextResponse.json({ error: "No autorizado" }, { status: 403 });
   }
   await prisma.treatmentPlan.deleteMany({ where: { id: params.id, clinicId: ctx.clinicId } });
+
+  // NOM-024 §6.3.5 — bitácora: borrado del plan de tratamiento.
+  await logMutation({
+    req,
+    clinicId:   ctx.clinicId,
+    userId:     ctx.userId,
+    entityType: "treatment",
+    entityId:   params.id,
+    action:     "delete",
+    before:     { name: plan.name, patientId: plan.patientId, doctorId: plan.doctorId, status: plan.status },
+  });
+
   revalidateAfter("treatments");
   return NextResponse.json({ success: true });
 }

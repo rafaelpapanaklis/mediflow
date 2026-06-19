@@ -14,6 +14,8 @@ import {
   readCurrentEntries,
 } from "@/lib/odontogram/snapshot";
 import { sendReviewInvitation } from "@/lib/reviews/invite";
+import { logMutation } from "@/lib/audit";
+import { EMPTY_NOTE_ERROR, isClinicalNoteEmpty } from "@/lib/clinical/note-validation";
 
 export const dynamic = "force-dynamic";
 
@@ -66,7 +68,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
           id: parsed.data.clinicalNoteId,
           clinicId: session.clinic.id,
         },
-        select: { id: true, specialtyData: true },
+        select: { id: true, specialtyData: true, subjective: true, objective: true, assessment: true, plan: true },
       })
     : await prisma.medicalRecord.findFirst({
         where: {
@@ -76,20 +78,31 @@ export async function PATCH(req: NextRequest, { params }: Params) {
             equals: params.id,
           },
         },
-        select: { id: true, specialtyData: true },
+        select: { id: true, specialtyData: true, subjective: true, objective: true, assessment: true, plan: true },
         orderBy: { createdAt: "desc" },
       });
+
+  // NOM-004 CAMPOS-OBLIGATORIOS (brecha #19): no cerrar la cita FIRMANDO una nota
+  // vacía. Si hay nota a firmar y está vacía, se bloquea el cierre (422).
+  const willSign = !!note && parsed.data.signNote !== false;
+  if (willSign && note && isClinicalNoteEmpty(note)) {
+    return NextResponse.json({ error: EMPTY_NOTE_ERROR }, { status: 422 });
+  }
+
+  const completedAt = new Date();
+  const signedAtIso = new Date().toISOString();
+  const prevSpec = (note?.specialtyData ?? {}) as Record<string, unknown>;
 
   const updated = await prisma.$transaction(async (tx) => {
     const appt = await tx.appointment.update({
       where: { id: params.id },
-      data: { status: "COMPLETED", completedAt: new Date() },
+      data: { status: "COMPLETED", completedAt },
       include: {
         patient: { select: { id: true, firstName: true, lastName: true } },
         doctor:  { select: { id: true, firstName: true, lastName: true } },
       },
     });
-    if (note && parsed.data.signNote !== false) {
+    if (willSign && note) {
       const currentSpec = (note.specialtyData ?? {}) as Record<string, unknown>;
       await tx.medicalRecord.update({
         where: { id: note.id },
@@ -97,13 +110,39 @@ export async function PATCH(req: NextRequest, { params }: Params) {
           specialtyData: {
             ...currentSpec,
             status: "SIGNED",
-            signedAt: new Date().toISOString(),
+            signedAt: signedAtIso,
           },
         },
       });
     }
     return appt;
   });
+
+  // NOM-004 / NOM-024 AUDITORIA (brecha #9): el cierre de la cita y la FIRMA del
+  // expediente — evento legalmente decisivo — ahora dejan rastro. Antes la firma
+  // NO se auditaba. clinicId SIEMPRE de la sesión (multi-tenant); best-effort.
+  await logMutation({
+    req,
+    clinicId: session.clinic.id,
+    userId: session.user.id,
+    entityType: "appointment",
+    entityId: params.id,
+    action: "update",
+    before: { status: existing.status },
+    after: { status: "COMPLETED", completedAt: completedAt.toISOString() },
+  });
+  if (willSign && note) {
+    await logMutation({
+      req,
+      clinicId: session.clinic.id,
+      userId: session.user.id,
+      entityType: "record",
+      entityId: note.id,
+      action: "update",
+      before: { status: prevSpec.status ?? null, signedAt: prevSpec.signedAt ?? null },
+      after: { status: "SIGNED", signedAt: signedAtIso },
+    });
+  }
 
   // ─── Snapshot odontograma + diff vs anterior + tratamientos sugeridos ───
   // Se ejecuta DESPUÉS de marcar COMPLETED para no afectar el cierre si algo
@@ -155,7 +194,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   return NextResponse.json({
     appointment: appointmentToDTO(updated, session.clinic.category),
     clinicalNoteId: note?.id ?? null,
-    signed: !!note && parsed.data.signNote !== false,
+    signed: willSign,
     odontogramSnapshotId: snapshotId,
     suggestedTreatments,
   });

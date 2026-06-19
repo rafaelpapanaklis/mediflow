@@ -11,6 +11,8 @@ import { useT } from "@/i18n/i18n-provider";
 import { OdontogramV2 } from "@/components/dashboard/odontogram-v2/App";
 import { fetchRecords, syncOdontogram } from "@/components/dashboard/odontogram-v2/adapter";
 import type { Records, ToothRecord } from "@/components/dashboard/odontogram-v2/types";
+import { Cie10Selector } from "@/components/dashboard/clinical/cie10-selector";
+import { useCodedDiagnoses } from "@/components/clinical/use-coded-diagnoses";
 
 /** ¿El registro de un diente trae algo marcado? (superficies, hallazgos o nota) */
 function toothRecordHasContent(rec: ToothRecord | undefined): boolean {
@@ -60,6 +62,9 @@ interface Props {
 export function DentalForm({ patientId, onSaved, initialRecord }: Props) {
   const t = useT();
   const isEditing = !!initialRecord;
+  // Dx CIE-10 codificados (NOM-024 §6.3 / NOM-004). Edición: en vivo contra el
+  // expediente existente; consulta nueva: local y se vuelca tras crear el record.
+  const { dxs, onAdd: onAddDx, onRemove: onRemoveDx, flush: flushDx } = useCodedDiagnoses(initialRecord?.id ?? null);
   const initialSpec = (initialRecord?.specialtyData ?? {}) as any;
   const [saving,     setSaving]     = useState(false);
   const [catalog, setCatalog] = useState<CatalogProcedure[]>([]);
@@ -241,7 +246,7 @@ export function DentalForm({ patientId, onSaved, initialRecord }: Props) {
   }
 
   async function handleSave() {
-    if (!form.subjective && !form.assessment) {
+    if (!form.subjective && !form.assessment && dxs.length === 0) {
       toast.error(t("clinical.dentalForm.reasonOrDiagnosisRequired"));
       return;
     }
@@ -316,6 +321,11 @@ export function DentalForm({ patientId, onSaved, initialRecord }: Props) {
         });
         if (!res.ok) throw new Error((await res.json()).error ?? t("clinical.dentalForm.saveError"));
         record = await res.json();
+        // Persistir los dx codificados en el expediente recién creado → fluyen al CDA.
+        if (dxs.length > 0) {
+          const savedDx = await flushDx(record.id);
+          if (savedDx < dxs.length) toast.error("La consulta se guardó, pero algún diagnóstico CIE-10 no se registró.");
+        }
         // El odontograma del paciente AVANZA con esta consulta (modelo "evoluciona").
         // Solo si la precarga del vivo llegó a "ready": el sync REEMPLAZA todo, y
         // hacerlo tras una precarga fallida/incompleta borraría el historial dental.
@@ -753,6 +763,14 @@ export function DentalForm({ patientId, onSaved, initialRecord }: Props) {
             </a>
           </div>
         )}
+      </CardNew>
+
+      {/* DIAGNÓSTICO CIE-10 (codificado) — NOM-024 §6.3 / NOM-004: fluye al CDA.
+          Envuelto con stopPropagation de Enter para no disparar el submit del form. */}
+      <CardNew title="Diagnóstico CIE-10">
+        <div onKeyDown={(e) => { if (e.key === "Enter") e.preventDefault(); }}>
+          <Cie10Selector diagnoses={dxs} onAdd={onAddDx} onRemove={onRemoveDx} disabled={saving} />
+        </div>
       </CardNew>
 
       {/* DIAGNÓSTICO Y PLAN */}

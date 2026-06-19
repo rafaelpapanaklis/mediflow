@@ -125,6 +125,7 @@ async function countUnanalyzedXrays(clinicId: string, doctorId: string): Promise
       where: {
         clinicId,
         uploadedBy: doctorId,
+        deletedAt: null,
         category: {
           in: [
             "XRAY_PERIAPICAL",

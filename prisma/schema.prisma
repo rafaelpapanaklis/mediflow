@@ -92,6 +92,13 @@ model Clinic {
   // Cancellation request (user-initiated from settings)
   cancelRequested        Boolean   @default(false)
   cancelRequestedAt      DateTime?
+  // NOM-004 / NOM-024 §7 — archivado LÓGICO en vez de hard-delete. Eliminar una
+  // clínica jamás debe cascada-destruir el expediente: se marca archivada (el
+  // expediente se conserva) y se baja isPublic/landingActive. archivedAt != null
+  // = clínica archivada.
+  archivedAt             DateTime?
+  archivedBy             String?
+  archiveReason          String?   @db.Text
   recallMonths           Int       @default(6) // months before annual reminder
   recallActive           Boolean   @default(false)
   googlePlaceId          String? // Google Maps Place ID for fetching reviews
@@ -1801,6 +1808,13 @@ model PatientFile {
   // que el dibujo sea estable a cualquier zoom/tamaño de visor.
   annotations Json?
 
+  // NOM-004 conservación / NOM-024 §7 — borrado LÓGICO (jamás hard-delete).
+  // El blob en Storage se PRESERVA; deletedAt oculta el archivo de las vistas
+  // activas (radiografías, modelos 3D, timeline, export) sin destruir el dato.
+  deletedAt    DateTime?
+  deletedBy    String?
+  deleteReason String?   @db.Text
+
   patient      Patient       @relation(fields: [patientId], references: [id], onDelete: Cascade)
   clinic       Clinic        @relation(fields: [clinicId], references: [id], onDelete: Cascade)
   xrayAnalysis XrayAnalysis?
@@ -1848,6 +1862,7 @@ model PatientFile {
 
   @@index([clinicId, patientId, createdAt(sort: Desc)])
   @@index([patientId, category])
+  @@index([clinicId, deletedAt])
   @@map("patient_files")
 }
 
@@ -2074,7 +2089,10 @@ model AuditLog {
   userAgent  String?
   createdAt  DateTime @default(now())
 
-  clinic Clinic @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  // NOM-024 §6.3.5 — la bitácora NO se destruye al borrar la clínica. La FK
+  // real en BD es ON DELETE RESTRICT (ver sql/nom-audit-immutable.sql, aplicado
+  // a mano). Se declara Restrict aquí para que el ORM no reintroduzca CASCADE.
+  clinic Clinic @relation(fields: [clinicId], references: [id], onDelete: Restrict)
   user   User   @relation(fields: [userId], references: [id])
 
   @@index([clinicId, entityType, entityId])
@@ -2368,6 +2386,14 @@ model Prescription {
   // receta (perMedication/interactions/summary + checkedAt). NUNCA se muestra
   // en la verificación pública — el endpoint /verify no lo selecciona.
   aiCheck          Json?
+
+  // NOM-004 conservación / NOM-024 §7 — anulación LÓGICA (jamás hard-delete).
+  // status: "ACTIVE" | "VOIDED". Una receta anulada se conserva en BD y el QR
+  // público sigue resolviendo, pero la verificación pública muestra "ANULADA".
+  status     String    @default("ACTIVE")
+  voidedAt   DateTime?
+  voidedBy   String?
+  voidReason String?   @db.Text
 
   medicalRecord MedicalRecord?     @relation(fields: [medicalRecordId], references: [id], onDelete: SetNull)
   patient       Patient            @relation(fields: [patientId], references: [id], onDelete: Cascade)

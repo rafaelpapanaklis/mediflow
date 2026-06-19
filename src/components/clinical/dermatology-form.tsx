@@ -7,6 +7,8 @@ import { BadgeNew }  from "@/components/ui/design-system/badge-new";
 import { BodyMap, BeforeAfterGallery } from "@/components/clinical/shared";
 import { DateField } from "@/components/ui/date-field";
 import { useT } from "@/i18n/i18n-provider";
+import { Cie10Selector } from "@/components/dashboard/clinical/cie10-selector";
+import { useCodedDiagnoses } from "@/components/clinical/use-coded-diagnoses";
 
 // value = stored data (Spanish); labelKey resolves via t() at render time.
 const BODY_ZONES = [
@@ -86,14 +88,6 @@ const SCORAD_INTENSITY_ITEMS = [
   { value: "Sequedad",           labelKey: "clinical.dermatologyForm.intensityDryness" },
 ];
 
-const DIAGNOSES_CIE10_DERM = [
-  "L20 - Dermatitis atópica","L23 - Dermatitis alérgica de contacto","L30 - Dermatitis, no especificada",
-  "L40 - Psoriasis","L50 - Urticaria","L70 - Acné","L80 - Vitíligo","L82 - Queratosis seborreica",
-  "L85 - Queratosis actínica","B35 - Dermatofitosis","B37 - Candidiasis cutánea","C43 - Melanoma maligno de piel",
-  "C44 - Carcinoma de piel","D22 - Nevo melanocítico","L57 - Daño actínico crónico","L60 - Onicodistrofia",
-  "L63 - Alopecia areata","L65 - Alopecia no cicatricial","Otro",
-];
-
 const PHOTO_COMPARISON = [
   { value: "Primera documentación", labelKey: "clinical.dermatologyForm.photoFirstDoc" },
   { value: "Mejoría evidente",      labelKey: "clinical.dermatologyForm.photoImproved" },
@@ -114,7 +108,8 @@ export function DermatologyForm({ patientId, onSaved }: Props) {
   const [objective, setObjective] = useState("");
   const [assessment, setAssessment] = useState("");
   const [plan, setPlan] = useState("");
-  const [diagnosis, setDiagnosis] = useState("");
+  // Dx CIE-10 codificados (NOM-024 §6.3 / NOM-004) — consulta nueva: local + flush al crear.
+  const { dxs, onAdd: onAddDx, onRemove: onRemoveDx, flush: flushDx, summary: dxSummary } = useCodedDiagnoses(null);
 
   const [fitzpatrick, setFitzpatrick] = useState("");
 
@@ -212,7 +207,7 @@ export function DermatologyForm({ patientId, onSaved }: Props) {
   );
 
   async function handleSave() {
-    if (!subjective && !assessment) { toast.error(t("clinical.dermatologyForm.reasonOrDiagnosisRequired")); return; }
+    if (!subjective && !assessment && dxs.length === 0) { toast.error(t("clinical.dermatologyForm.reasonOrDiagnosisRequired")); return; }
     setSaving(true);
     try {
       const res = await fetch("/api/clinical", {
@@ -220,7 +215,7 @@ export function DermatologyForm({ patientId, onSaved }: Props) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           patientId,
-          subjective, objective, assessment: assessment || diagnosis, plan,
+          subjective, objective, assessment: assessment || dxSummary, plan,
           specialtyData: {
             type: "dermatology",
             fitzpatrick,
@@ -242,14 +237,20 @@ export function DermatologyForm({ patientId, onSaved }: Props) {
               comparison: photoComparison,
               notes: photoNotes,
             },
-            diagnosis,
+            diagnosis: dxSummary,
             medications: medications.filter(m => m.drug),
             returnDate,
           },
         }),
       });
       if (!res.ok) throw new Error((await res.json()).error);
-      onSaved(await res.json());
+      const record = await res.json();
+      // Persistir los dx codificados en el expediente recién creado → fluyen al CDA.
+      if (dxs.length > 0) {
+        const saved = await flushDx(record.id);
+        if (saved < dxs.length) toast.error("La consulta se guardó, pero algún diagnóstico CIE-10 no se registró.");
+      }
+      onSaved(record);
       toast.success(t("clinical.dermatologyForm.savedToast"));
     } catch (err: any) { toast.error(err.message ?? t("common.genericError")); } finally { setSaving(false); }
   }
@@ -546,10 +547,7 @@ export function DermatologyForm({ patientId, onSaved }: Props) {
           </div>
           <div className="field-new">
             <label className="field-new__label">{t("clinical.dermatologyForm.cie10Label")}</label>
-            <select className="input-new" value={diagnosis} onChange={e => setDiagnosis(e.target.value)}>
-              <option value="">{t("clinical.dermatologyForm.selectPlaceholder")}</option>
-              {DIAGNOSES_CIE10_DERM.map(d => <option key={d} value={d}>{d}</option>)}
-            </select>
+            <Cie10Selector diagnoses={dxs} onAdd={onAddDx} onRemove={onRemoveDx} disabled={saving} />
           </div>
           <div className="field-new" style={{ gridColumn: "1 / -1" }}>
             <label className="field-new__label">{t("clinical.dermatologyForm.treatmentPlanLabel")}</label>

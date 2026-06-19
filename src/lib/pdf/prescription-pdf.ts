@@ -128,6 +128,12 @@ export async function buildPrescriptionPdf(
     qrDataUrl,
     signedElectronically: !!signed,
     signedAt: signed?.signedAt ? signed.signedAt.toISOString() : null,
+    // NOM-004 / NOM-024 §7 — anulación lógica: el builder ya trae todos los
+    // escalares de Prescription (query con include, sin select), así que
+    // status/voidReason/voidedAt están disponibles sin tocar los endpoints.
+    voided: rx.status === "VOIDED",
+    voidReason: rx.voidReason ?? null,
+    voidedAt: rx.voidedAt ? rx.voidedAt.toISOString() : null,
   });
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

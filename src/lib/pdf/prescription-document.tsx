@@ -43,6 +43,11 @@ export interface PrescriptionDocumentProps {
   qrDataUrl: string | null;
   signedElectronically: boolean;
   signedAt: string | null;
+  // NOM-004 / NOM-024 §7 — receta ANULADA (status VOIDED). Estampa watermark +
+  // banner para que el PDF jamás se confunda con una receta vigente.
+  voided: boolean;
+  voidReason: string | null;
+  voidedAt: string | null;
 }
 
 const styles = StyleSheet.create({
@@ -231,6 +236,40 @@ const styles = StyleSheet.create({
     borderTopColor: "#e5e5ed",
     paddingTop: 8,
   },
+  watermark: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  watermarkText: {
+    fontSize: 120,
+    color: "#dc2626",
+    fontFamily: "Helvetica-Bold",
+    opacity: 0.16,
+    transform: "rotate(-45deg)",
+    letterSpacing: 6,
+  },
+  voidBanner: {
+    backgroundColor: "#dc2626",
+    borderRadius: 6,
+    padding: 10,
+    marginBottom: 14,
+  },
+  voidBannerTitle: {
+    fontSize: 13,
+    color: "#ffffff",
+    fontFamily: "Helvetica-Bold",
+    letterSpacing: 0.5,
+  },
+  voidBannerReason: {
+    fontSize: 8.5,
+    color: "#ffffff",
+    marginTop: 2,
+  },
 });
 
 function fmtDate(iso: string | null): string {
@@ -250,6 +289,20 @@ export function PrescriptionDocument(props: PrescriptionDocumentProps) {
   return (
     <Document>
       <Page size="LETTER" style={styles.page} wrap>
+        {/* NOM-004 / NOM-024 §7 — sello de ANULADA si la receta fue anulada */}
+        {props.voided ? (
+          <View style={styles.watermark} fixed>
+            <Text style={styles.watermarkText}>ANULADA</Text>
+          </View>
+        ) : null}
+        {props.voided ? (
+          <View style={styles.voidBanner}>
+            <Text style={styles.voidBannerTitle}>RECETA ANULADA — SIN VALIDEZ</Text>
+            <Text style={styles.voidBannerReason}>
+              Esta receta fue anulada{props.voidedAt ? ` el ${fmtDate(props.voidedAt)}` : ""} y no debe surtirse.{props.voidReason ? ` Motivo: ${props.voidReason}` : ""}
+            </Text>
+          </View>
+        ) : null}
         {/* Membrete */}
         <View style={styles.header}>
           <View style={styles.headerLeft}>

@@ -2,10 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { getAuthContext } from "@/lib/auth-context";
 import { prisma } from "@/lib/prisma";
-import { createClient as createAdmin } from "@supabase/supabase-js";
 import { logAudit } from "@/lib/audit";
 import { hasPermission } from "@/lib/auth/permissions";
-import { BUCKETS, extractStoragePath } from "@/lib/storage";
 
 /* ═══════════════════════════════════════════════════════════════════ */
 /*  PATCH — actualiza las notas clínicas del doctor sobre el archivo   */
@@ -84,37 +82,41 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
   });
   if (!file) return NextResponse.json({ error: "Archivo no encontrado" }, { status: 404 });
 
-  // Delete from Supabase Storage. file.url puede ser un path nuevo o una
-  // URL legacy — extractStoragePath maneja ambos formatos.
+  // Ya borrado lógicamente — idempotente.
+  if (file.deletedAt) return NextResponse.json({ success: true, softDeleted: true });
+
+  // Motivo opcional del body.
+  let reason: string | null = null;
   try {
-    const supabase = createAdmin(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!,
-      { auth: { persistSession: false } }
-    );
-    const storagePath = extractStoragePath(file.url, BUCKETS.PATIENT_FILES);
-    if (storagePath) {
-      await supabase.storage.from(BUCKETS.PATIENT_FILES).remove([storagePath]);
+    const body = await req.json();
+    if (body && typeof body.reason === "string" && body.reason.trim()) {
+      reason = body.reason.trim().slice(0, 2000);
     }
-  } catch (e) {
-    console.error("Storage delete error (non-fatal):", e);
+  } catch {
+    /* sin body */
   }
 
-  await prisma.patientFile.deleteMany({ where: { id: params.id, clinicId: ctx.clinicId } });
+  // NOM-004 conservación / NOM-024 §7 — NO hard-delete: borrado LÓGICO. El blob
+  // en Storage se PRESERVA (parte del expediente, conservación ≥5 años); solo se
+  // marca deletedAt para ocultarlo de las vistas activas.
+  await prisma.patientFile.updateMany({
+    where: { id: params.id, clinicId: ctx.clinicId },
+    data:  { deletedAt: new Date(), deletedBy: ctx.userId, deleteReason: reason },
+  });
 
   await logAudit({
     clinicId:   ctx.clinicId,
     userId:     ctx.userId,
     entityType: "patient-file",
     entityId:   params.id,
-    action:     "delete",
+    action:     "soft_delete",
     changes: {
       _deleted: {
         before: { name: file.name, category: file.category, url: file.url },
-        after:  null,
+        after:  { deletedAt: new Date().toISOString(), deleteReason: reason },
       },
     },
   });
 
-  return NextResponse.json({ success: true });
+  return NextResponse.json({ success: true, softDeleted: true });
 }
