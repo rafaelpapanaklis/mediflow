@@ -41,6 +41,18 @@ const DicomSetViewer = dynamic(() => import("./DicomSetViewer"), {
   ),
 });
 
+// Visor CBCT REDISEÑADO (WS2-T7): enchufa el cargador real + persistencia al
+// <CbctViewer/>. Primario para sets CBCT; DicomSetViewer queda como fallback
+// (clásico) hasta QA. Dinámico + client-only (jszip + dicom-parser + three).
+const CbctStudyViewer = dynamic(() => import("./cbct/CbctStudyViewer"), {
+  ssr: false,
+  loading: () => (
+    <div className="flex items-center justify-center text-xs text-white/70" style={{ height: 480 }}>
+      <span className="inline-block w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin mr-2" />
+    </div>
+  ),
+});
+
 // Miniatura por tarjeta. Dinámica para que three.js solo se descargue cuando se
 // abre la pestaña de modelos, no en el bundle del expediente.
 const Model3DThumbnail = dynamic(() => import("./Model3DThumbnail"), {
@@ -84,6 +96,9 @@ export function Models3DTab({ patientId }: { patientId: string }) {
   const [uploading, setUploading] = useState(false);
   const [progress, setProgress] = useState(0);
   const [viewer, setViewer] = useState<Model3DFile | null>(null);
+  // Visor CBCT: usa el rediseñado por defecto; `useClassic` cae al DicomSetViewer
+  // clásico (fallback hasta QA, o si el set no es CBCT legible).
+  const [useClassic, setUseClassic] = useState(false);
   const inputRef = useRef<HTMLInputElement | null>(null);
 
   // Carga inicial de la lista.
@@ -232,6 +247,7 @@ export function Models3DTab({ patientId }: { patientId: string }) {
   // carga inicial; de paso refresca la lista.
   const openViewer = useCallback(
     async (file: Model3DFile) => {
+      setUseClassic(false); // cada apertura arranca en el visor rediseñado
       try {
         const res = await fetch(`/api/patients/${patientId}/models-3d`);
         if (res.ok) {
@@ -270,6 +286,10 @@ export function Models3DTab({ patientId }: { patientId: string }) {
     },
     [patientId, t],
   );
+
+  // Cae al visor clásico (DicomSetViewer) si el rediseñado no puede leer el set,
+  // o por elección manual (botón del header). Estable para el effect de fallback.
+  const handleCbctFallback = useCallback(() => setUseClassic(true), []);
 
   // Cerrar visor con Escape.
   useEffect(() => {
@@ -406,43 +426,68 @@ export function Models3DTab({ patientId }: { patientId: string }) {
                 <h3 className="text-sm font-bold truncate">{viewer.name}</h3>
                 <p className="text-[11px] text-muted-foreground">{t("patients.models3d.viewerHint")}</p>
               </div>
-              <button
-                type="button"
-                onClick={() => setViewer(null)}
-                className="p-1.5 rounded-lg hover:bg-muted transition-colors flex-shrink-0"
-                aria-label={t("patients.models3d.close")}
-              >
-                <X className="w-4 h-4" />
-              </button>
+              <div className="flex items-center gap-2 flex-shrink-0">
+                {isZip(viewer.name) && (
+                  <button
+                    type="button"
+                    onClick={() => setUseClassic((c) => !c)}
+                    className="text-[11px] font-semibold px-2.5 py-1.5 rounded-lg border border-border text-foreground hover:bg-muted transition-colors"
+                    title="Cambiar entre el visor nuevo y el clásico"
+                  >
+                    {useClassic ? "Visor nuevo" : "Visor clásico"}
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setViewer(null)}
+                  className="p-1.5 rounded-lg hover:bg-muted transition-colors"
+                  aria-label={t("patients.models3d.close")}
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
             </div>
-            <div className="p-3 max-h-[80vh] overflow-y-auto">
-              {isZip(viewer.name) ? (
-                <DicomSetViewer
-                  url={viewer.url}
-                  name={viewer.name}
+            {isZip(viewer.name) && !useClassic ? (
+              // Visor CBCT rediseñado (T7 enchufa datos reales; el render del Stage
+              // llega en T5). Altura fija para que el <CbctViewer/> llene el modal.
+              <div style={{ height: "80vh" }}>
+                <CbctStudyViewer
                   patientId={patientId}
-                  fileId={viewer.id}
-                  initialNotes={viewer.doctorNotes ?? ""}
+                  file={viewer}
+                  onClose={() => setViewer(null)}
+                  onFallback={handleCbctFallback}
                 />
-              ) : formatFromName(viewer.name) === "dicom" ? (
-                <DicomViewer2D
-                  url={viewer.url}
-                  name={viewer.name}
-                  patientId={patientId}
-                  fileId={viewer.id}
-                  initialNotes={viewer.doctorNotes ?? ""}
-                />
-              ) : (
-                <Model3DViewer
-                  url={viewer.url}
-                  format={formatFromName(viewer.name)}
-                  patientId={patientId}
-                  fileId={viewer.id}
-                  initialNotes={viewer.doctorNotes ?? ""}
-                  initialAnnotations={viewer.annotations}
-                />
-              )}
-            </div>
+              </div>
+            ) : (
+              <div className="p-3 max-h-[80vh] overflow-y-auto">
+                {isZip(viewer.name) ? (
+                  <DicomSetViewer
+                    url={viewer.url}
+                    name={viewer.name}
+                    patientId={patientId}
+                    fileId={viewer.id}
+                    initialNotes={viewer.doctorNotes ?? ""}
+                  />
+                ) : formatFromName(viewer.name) === "dicom" ? (
+                  <DicomViewer2D
+                    url={viewer.url}
+                    name={viewer.name}
+                    patientId={patientId}
+                    fileId={viewer.id}
+                    initialNotes={viewer.doctorNotes ?? ""}
+                  />
+                ) : (
+                  <Model3DViewer
+                    url={viewer.url}
+                    format={formatFromName(viewer.name)}
+                    patientId={patientId}
+                    fileId={viewer.id}
+                    initialNotes={viewer.doctorNotes ?? ""}
+                    initialAnnotations={viewer.annotations}
+                  />
+                )}
+              </div>
+            )}
           </div>
         </div>
       )}

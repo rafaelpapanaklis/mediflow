@@ -83,6 +83,15 @@ export function CbctViewer({
 
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const didMount = useRef(false);
+  // Persistencia de hallazgos (T7): debounce + flush al desmontar. El handler y
+  // los annos van por ref para no reiniciar el temporizador por cambios de
+  // identidad y para flushear la última edición pendiente.
+  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const annosRef = useRef<Anno[]>(annos);
+  annosRef.current = annos;
+  const dirtyRef = useRef(false);
+  const onGuardarHallazgosRef = useRef(onGuardarHallazgos);
+  onGuardarHallazgosRef.current = onGuardarHallazgos;
 
   // ── Anotaciones (ops del §3) ─────────────────────────────────────────────
   const addAnno = (a: Anno) => {
@@ -131,15 +140,35 @@ export function CbctViewer({
     }
   };
 
-  // Persistencia de hallazgos: al cambiar `annos` (tras el montaje) avisa al
-  // contenedor. TODO(T7): debounce + manejo de error visible.
+  // Persistencia de hallazgos (T7): debounce 800ms al cambiar `annos` (tras el
+  // montaje) + aviso de error visible. El primer render (montaje) no guarda.
   useEffect(() => {
     if (!didMount.current) {
       didMount.current = true;
       return;
     }
-    Promise.resolve(onGuardarHallazgos(annos)).catch(() => {});
-  }, [annos, onGuardarHallazgos]);
+    dirtyRef.current = true;
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(() => {
+      dirtyRef.current = false;
+      Promise.resolve(onGuardarHallazgosRef.current(annosRef.current)).catch(() =>
+        showToast("No se pudieron guardar los hallazgos"),
+      );
+    }, 800);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [annos]);
+
+  // Flush al desmontar: no perder la última edición pendiente del debounce.
+  useEffect(
+    () => () => {
+      if (saveTimer.current) clearTimeout(saveTimer.current);
+      if (dirtyRef.current) {
+        dirtyRef.current = false;
+        Promise.resolve(onGuardarHallazgosRef.current(annosRef.current)).catch(() => {});
+      }
+    },
+    [],
+  );
 
   // limpia el timer del toast al desmontar
   useEffect(() => () => {
