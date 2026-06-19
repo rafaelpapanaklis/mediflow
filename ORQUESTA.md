@@ -1,3 +1,59 @@
+===========================================================================
+## WS2-T3 - "Importar mi clinica": wizard de migracion (UI, cliente mock) [feat/import-wizard-ui, 2026-06-18]
+===========================================================================
+QUE SE HIZO: traduje el prototipo design/import-clinic/ a componentes reales del
+panel (Next.js 14 App Router, TS). Wizard completo navegable con datos SIMULADOS
+(sin backend). Lanzador en la pagina de Pacientes + estado vacio mejorado.
+
+CONTRATO DE FRONTEND (un solo punto de inyeccion; T4 mete el cliente real):
+- interface ImportClient { getOrigins, preview, commit, templateUrl, submitAssisted }
+- Tipos: Origin, Entity, ColumnMapping, DetectedColumn, TargetField, PreviewRow,
+  PreviewResult, CommitResult, AssistedResult.
+- MockImportClient devuelve las cifras/filas exactas del prototipo (1,240 validos,
+  18 errores, 7 duplicados; resumen 1,240 pacientes / $340,000 / 85 citas).
+- TODO(T4) marcados: plantilla real multi-pestana, preview/commit reales contra
+  /api/import, reporte de errores real, ticket de migracion asistida.
+
+ARCHIVOS NUEVOS (src/components/import/, 11):
+- import-client.ts    contrato + MockImportClient + ORIGINS + DATA_TYPES + helpers
+- import-wizard.tsx   modal .modal--wide (Radix Dialog) + stepbar 6 pasos + maquina
+                      de estado + validaciones + commit/progreso simulado
+- step-origin / step-export / step-what / step-upload / step-mapping / step-review
+- importing-panel / result-panel / assisted-panel
+
+ARCHIVOS MODIFICADOS (4):
+- src/app/dashboard/patients/patients-client.tsx: boton "Importar mi clinica" en la
+  toolbar (junto a Nuevo paciente) + estado vacio grande (0 pacientes y sin filtros)
+  con CTA grande + "Migracion asistida"; monta ImportWizard (open local, recarga la
+  lista al terminar). Nuevo sub-componente ImportClinicEmpty.
+- src/app/globals.css: seccion "Importar mi clinica" (clases .imp-) sobre los tokens
+  del panel; reusa .btn-new / .badge-new / .table-new / .switch / .modal. Light y Dark
+  por variables (sin color hardcodeado por tema), hover/focus-visible, responsive y
+  prefers-reduced-motion.
+- src/i18n/dictionaries/es.json y en.json: namespace shell.importClinic (es + en),
+  microcopy del prototipo en espanol neutro; plurales con {one,other}.
+
+FIDELIDAD AL PROTOTIPO: 6 pasos (Origen, Exportar, Que importar, Subir, Mapear,
+Revisar) + Importando + Resultado + Migracion asistida (acuse 48 h). 11 origenes
+(9 con perfil = auto-mapeo + instrucciones; Excel/Otro = manual + plantilla).
+Dropzone 4 estados (vacio/arrastrando/cargado/error; .xlsx o .csv; max 5 MB; teclado).
+Mapeo auto vs manual con "sin mapear" en ambar. Revisar: stat-cards + tabla con
+motivo en hover/foco + switch omitir duplicados.
+
+ACCESIBILIDAD: Radix Dialog (role=dialog, aria-modal, Esc, focus-trap, cierre por
+backdrop), aria-pressed en tarjetas de origen, dropzone operable por teclado
+(Enter/Espacio), foco visible, labels en selects, tooltip accesible por foco.
+
+BUILD: npm run build (prisma generate + next build), sin pipes. EXIT 0,
+"Compiled successfully", type-check OK, dashboard/patients en el manifest (dynamic,
+20.4 kB). Los prisma:error DATABASE_URL son del prerender sin DB en este entorno y
+no afectan el exit (igual que el resto de worktrees).
+
+SIN SQL. SIN envs nuevas. Cliente real = WS2-T4 (no se creo src/lib/import/client.ts).
+NO mergeado a main: pendiente QA de Rafael en Preview.
+design/import-clinic/ queda como referencia local (no commiteado).
+
+
 
 
 ═══════════════════════════════════════════════════════════════════════════

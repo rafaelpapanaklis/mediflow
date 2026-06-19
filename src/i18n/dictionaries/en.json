@@ -598,6 +598,186 @@
         "other": "Import {count} patients"
       }
     },
+    "importClinic": {
+      "launch": "Import my clinic",
+      "assistedCta": "Assisted migration",
+      "headerTitle": "Import my clinic",
+      "closeWizard": "Close wizard",
+      "back": "Back",
+      "continue": "Continue",
+      "sending": "Sending…",
+      "subStep": "Step {step} of 6",
+      "subAssisted": "Assisted migration",
+      "stepsAria": "Import steps",
+      "errPreview": "We couldn't read the file. Please try again.",
+      "errImport": "We couldn't complete the import. Please try again.",
+      "errAssisted": "We couldn't send your file. Please try again.",
+      "steps": {
+        "origin": "Source",
+        "export": "Export",
+        "what": "What to import",
+        "upload": "Upload",
+        "map": "Map",
+        "review": "Review"
+      },
+      "empty": {
+        "title": "Bring in the data from your current system",
+        "desc": "If you already use Dentalink, Open Dental, another system or your own Excel, the wizard guides you step by step to migrate patients, balances and appointments. Without losing anything.",
+        "hint": "Compatible with Dentalink, Medilink, Open Dental, Dentrix, Eaglesoft, Gesden and more."
+      },
+      "step1": {
+        "title": "Where does your data come from?",
+        "sub": "Choose your current system. We'll adapt the instructions and column mapping to your choice.",
+        "metaProfile": "Profile ready",
+        "metaManual": "Manual mapping",
+        "assistedTitle": "Prefer we do it for you?",
+        "assistedDesc": "Free assisted migration: send us your backup and our team gets it ready.",
+        "needOrigin": "Choose your system to continue"
+      },
+      "step2": {
+        "title": "Export your data",
+        "subProfile": "Follow these steps to get the file from {name}.",
+        "subExcel": "Use our template to arrange your data. That makes mapping faster.",
+        "templateTitle": "DaleControl template (.xlsx)",
+        "templateDesc": "Three tabs: Patients, Balances and Appointments. Copy and paste your data into the indicated columns.",
+        "templateBtn": "Download template",
+        "ownFileNote": "Already have your own file? That works too. Just make sure the first row has the column names.",
+        "dentalink": {
+          "s1h": "Open Dentalink",
+          "s1p": "Sign in and open the `Settings` menu in the top right corner.",
+          "s2h": "Go to Export data",
+          "s2p": "In the `Data & Backups` section choose `Export patients`.",
+          "s3h": "Select the range",
+          "s3p": "Check «All patients» and the `Excel (.xlsx)` format.",
+          "s4h": "Download the file",
+          "s4p": "Click `Generate` and save the file to your computer. You'll upload it in the next step."
+        },
+        "generic": {
+          "s1h": "Open your system",
+          "s1p": "Go to the patients or reports section of your current software.",
+          "s2h": "Look for «Export»",
+          "s2p": "Most systems let you export to `Excel (.xlsx)` or `CSV`.",
+          "s3h": "Export all records",
+          "s3p": "Select the full range and download the file.",
+          "s4h": "Keep it handy",
+          "s4p": "You'll upload it in the next step. If your file doesn't have clear headers, don't worry: we'll help you map it."
+        }
+      },
+      "step3": {
+        "title": "What do you want to bring in?",
+        "sub": "We recommend starting with the essentials. You can import the rest later.",
+        "needOne": "Choose at least one data type",
+        "badgeRec": "Recommended",
+        "badgeEasy": "Easy",
+        "badgeAdv": "Advanced",
+        "patients": "Patients",
+        "patientsMeta": "Name, contact, date of birth",
+        "balances": "Balances",
+        "balancesMeta": "Debts and credits per patient",
+        "appointments": "Upcoming appointments",
+        "appointmentsMeta": "Future schedule so you don't miss any",
+        "treatments": "Treatments",
+        "treatmentsMeta": "Plans and procedures per patient",
+        "history": "Clinical history",
+        "historyMeta": "Notes and progress (requires more mapping)"
+      },
+      "step4": {
+        "title": "Upload your file",
+        "sub": "Drag the file you exported or browse for it on your device.",
+        "dropTitle": "Drag your file here",
+        "dropHint": "or click to browse on your device",
+        "formats": "Formats: .xlsx or .csv · max {mb} MB",
+        "errorTitle": "We couldn't use that file",
+        "errorHint": "It must be .xlsx or .csv and under 5 MB.",
+        "errorRetry": "Try again with the correct file.",
+        "invalidType": "The file «{name}» isn't supported. Use .xlsx or .csv.",
+        "invalidSize": "The file «{name}» is over {mb} MB.",
+        "validMsg": "Valid file. Continue to mapping.",
+        "remove": "Remove",
+        "needFile": "Upload an .xlsx or .csv file"
+      },
+      "step5": {
+        "title": "Match the columns",
+        "subProfile": "We recognized the {name} format and matched the columns automatically. Check that everything lines up.",
+        "subManual": "Manually match each column of your file with a DaleControl field.",
+        "bannerAutoTitle": "Automatic mapping applied",
+        "bannerAutoDesc": "{matched} of {total} columns matched on their own thanks to the {name} profile.",
+        "bannerManualTitle": "Manual mapping",
+        "bannerManualDesc": "Since your source is «{name}», pick the field for each column by hand.",
+        "colYour": "Your column",
+        "colTarget": "DaleControl field",
+        "statusAuto": "Automatic",
+        "statusManual": "Manual",
+        "statusSkip": "Unmapped",
+        "samplePrefix": "e.g.",
+        "loading": "Reading your file…"
+      },
+      "step6": {
+        "title": "Review before importing",
+        "sub": "We validate each row. Fix the errors now or import them and fix them later.",
+        "statValid": "Valid",
+        "statErrors": "With errors",
+        "statDuplicates": "Duplicates",
+        "skipDup": "Skip duplicates",
+        "hoverHint": "Hover over an error to see the reason",
+        "colRow": "Row",
+        "colName": "Name",
+        "colPhone": "Phone",
+        "colBalance": "Balance",
+        "badgeOk": "OK",
+        "badgeError": "Error",
+        "badgeDuplicate": "Duplicate",
+        "importBtn": {
+          "one": "Import {count} record",
+          "other": "Import {count} records"
+        }
+      },
+      "importing": {
+        "title": "Importing your data…",
+        "dontClose": "Don't close this window. It'll take less than a minute.",
+        "prep": "Preparing…",
+        "validating": "Validating patients…",
+        "balances": "Importing balances…",
+        "scheduling": "Scheduling appointments…",
+        "finishing": "Finishing…"
+      },
+      "result": {
+        "title": "Done! Your clinic is in DaleControl",
+        "lead": {
+          "one": "We imported your data successfully. {count} record with an error wasn't imported; you can fix it and upload it again.",
+          "other": "We imported your data successfully. {count} records with errors weren't imported; you can fix them and upload them again."
+        },
+        "pillPatients": "patients",
+        "pillBalances": "in balances",
+        "pillAppointments": "upcoming appointments",
+        "reportLine": {
+          "one": "{count} row with an error wasn't imported.",
+          "other": "{count} rows with errors weren't imported."
+        },
+        "downloadReport": "Download report",
+        "reportSoon": "The error report will be available once the backend is connected.",
+        "goPatients": "View patients",
+        "importAnother": "Import something else"
+      },
+      "assisted": {
+        "title": "Assisted migration · free",
+        "sub": "Send us a backup or export of your system and our team sets everything up for you. Ideal if you'd rather not do it by hand.",
+        "dropTitle": "Drag your backup or export",
+        "dropHint": "We accept any format: Excel, CSV, backup .zip, etc.",
+        "formats": "Up to 50 MB",
+        "noteLabel": "Anything we should know? (optional)",
+        "notePlaceholder": "e.g. I've used Dentalink since 2019, I have 2 branches…",
+        "privacy": "Your data is transmitted encrypted and only the migration team accesses it. We don't share it with third parties and delete it from our servers when finished. We comply with the LFPDPPP.",
+        "send": "Send for review",
+        "needFile": "Upload a backup to send",
+        "ready": "Ready to send",
+        "sentTitle": "We received your file",
+        "sentLead": "Your migration is under review by the team. We'll notify you by email and inside the panel when it's ready.",
+        "sentStripTitle": "Under review by the team",
+        "sentStripDesc": "Estimated time: 48 business hours. You don't need to do anything else.",
+        "done": "Got it"
+      }
+    },
     "paymentMethodModal": {
       "errOpenStripe": "Couldn't open Stripe",
       "errStripe": "Stripe error",
