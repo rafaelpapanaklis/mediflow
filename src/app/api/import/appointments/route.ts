@@ -2,23 +2,21 @@ import { NextRequest, NextResponse } from "next/server";
 import { getAuthContext } from "@/lib/auth-context";
 import { rateLimit } from "@/lib/rate-limit";
 import { parseImportForm, runImport, importErrorResponse } from "@/lib/import/engine";
-import { patientsHandler } from "@/lib/import/entities";
+import { appointmentsHandler } from "@/lib/import/entities";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
 /**
- * POST /api/patients/import — importación masiva de PACIENTES (entity="patients").
+ * POST /api/import/appointments — importa CITAS (entity="appointments").
+ * Resuelve patientId (teléfono/correo/nombre) + doctorId (nombre → User de la
+ * clínica), valida fecha/hora, calcula endsAt (default 30 min) y crea la cita con
+ * status SCHEDULED. Dedup por (paciente + horario) en archivo y contra DB.
  *
- * El motor (parseo seguro, mapeo, dedup, batch insert) vive en src/lib/import.
- * Acepta `columnMapping` opcional (JSON header→campo); si no llega, autodetecta
- * con HEADER_VARIANTS y lo devuelve como `suggestedMapping` en el dry-run.
- *
- * Compatibilidad: la respuesta conserva 100% lo que devolvía antes. El dry-run
- * solo AÑADE `entity`, `columns` y `suggestedMapping`; el commit solo añade
- * `entity` (campos nuevos que el modal viejo ignora).
+ * Mismo contrato que /api/patients/import (FormData + dry-run/commit).
  *
  * Multi-tenant: clinicId SIEMPRE de la sesión (getAuthContext), nunca del body.
+ * TODO(revisar): ¿restringir a ADMIN/RECEPTIONIST? hoy basta sesión válida.
  */
 export async function POST(req: NextRequest) {
   const rl = rateLimit(req, 3, 60_000);
@@ -29,7 +27,7 @@ export async function POST(req: NextRequest) {
 
   try {
     const form = await parseImportForm(req);
-    const result = await runImport(patientsHandler, {
+    const result = await runImport(appointmentsHandler, {
       file: form.file,
       clinicId: ctx.clinicId,
       userId: ctx.userId,

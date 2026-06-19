@@ -1,6 +1,61 @@
 
 
 ═══════════════════════════════════════════════════════════════════════════
+## WS2-T1 — Motor de importación "Importar mi clínica" (backend núcleo) ✅ EN RAMA feat/import-engine (NO main, 2026-06-18)
+═══════════════════════════════════════════════════════════════════════════
+Extrae y generaliza el motor de /api/patients/import a src/lib/import (agnóstico a entidad) y
+agrega 2 entidades nuevas: saldos y citas. NO toca main. Build EXIT 0. SIN SQL (usa tablas
+existentes Patient/Invoice/Appointment).
+
+ARCHIVOS NUEVOS:
+  - src/lib/import/types.ts    — contrato ÚNICO (Entity, ColumnMapping, PreviewRow, PreviewResult,
+    CommitResult). WS2-T2 (profiles) y WS2-T3 (UI) importan de aquí.
+  - src/lib/import/engine.ts   — parseSpreadsheet (exceljs, magic bytes, tope 5MB/5000 filas),
+    applyMapping, autodetect, parseImportForm, ImportError+importErrorResponse, runImport
+    (pipeline genérico preview/commit + audit). Inyección de deps: engine NO importa entities
+    (sin ciclos). Helpers de parseo (norm/parseDate/parsePhone/parseAmount/last10/normName).
+  - src/lib/import/entities.ts — validadores patientsHandler (reusa normalización original) /
+    balancesHandler (Invoice de apertura) / appointmentsHandler + resolución paciente/doctor.
+  - src/app/api/import/balances/route.ts       (entity="balances")
+  - src/app/api/import/appointments/route.ts   (entity="appointments")
+ARCHIVO REFACTOR:
+  - src/app/api/patients/import/route.ts — usa el engine; acepta columnMapping opcional; en
+    dry-run AÑADE columns + suggestedMapping. Respuesta 100% COMPATIBLE con el modal viejo
+    (total/validos/invalidos/duplicados/preview intactos; solo añade campos nuevos).
+
+CONTRATO (las 3 rutas, mismo shape · FormData: file, dryRun, skipDuplicates, columnMapping?):
+  dry-run → { entity, total, validos, invalidos, duplicados, columns, suggestedMapping, preview[] }
+  commit  → { entity, created, skipped, duplicates, errors[] }
+  Row = { row, data, status:"ok"|"error"|"duplicate", errors[], warnings[] }
+
+DECISIONES / LÓGICA:
+  - columnMapping: si viene se SANEA (solo headers reales + campos válidos de la entidad); si no,
+    autodetección (HEADER_VARIANTS) = suggestedMapping. Campo "" = no importar.
+  - SALDOS: Invoice "factura de apertura" (invoiceNumber MF-#### continuando la secuencia; items
+    "Saldo inicial migrado"; subtotal=total=balance=monto; status PENDING; SIN CFDI). Resuelve
+    paciente por phone(last10)→email→nombre. Idempotente: paciente ya migrado o repetido = duplicado.
+    parseAmount tolera "$1,250.00" / "1.250,50".
+  - CITAS: resuelve patientId (phone/email/nombre) + doctorId (nombre→User activo de la clínica),
+    fecha+hora (default 09:00), endsAt=+duración (default 30 min), type default "Consulta", status
+    SCHEDULED. Dedup por (paciente+horario) en archivo y contra DB.
+  - Multi-tenant: clinicId SIEMPRE de getAuthContext (nunca del body); rateLimit(3/min) + logAudit
+    en las 3 rutas. Seguridad conservada: exceljs (no SheetJS), magic bytes, topes 5MB/5000 filas.
+
+BUILD: npm run build (worktree; node_modules vía junction al repo principal; SIN pipes). ✓ Compiled
+  successfully · type-check sin errores · /api/import/balances + /api/import/appointments +
+  /api/patients/import en el manifest · EXIT 0. Los prisma:error DATABASE_URL son del prerender
+  sin DB (patrón conocido).
+
+NO TOCADO: src/lib/import/profiles/ (WS2-T2), frontend/wizard (WS2-T3), main, design/ (prototipo).
+
+PENDIENTES / TODO:
+  - ¿Restringir balances/appointments a ADMIN? hoy basta sesión válida (paridad con patients).
+  - Pacientes con una sola columna "nombre completo" (sin apellido aparte): patients sigue exigiendo
+    firstName+lastName (compat). Un profile de WS2-T2 podría dividir el nombre.
+  - QA: dry-run + commit de las 3 entidades con archivos reales (xlsx y csv con ; y ,).
+  - Merge a main lo hace Rafael tras QA (orden con WS2-T2/T3).
+
+═══════════════════════════════════════════════════════════════════════════
 ## WS-RT-INBOX merge — Inbox en tiempo real (polling) ✅ EN MAIN (6b4b2e6, 2026-06-17)
 ═══════════════════════════════════════════════════════════════════════════
 QUÉ SE HIZO: merge de la rama feat/rt-inbox a main y push (deploy auto en Vercel).
