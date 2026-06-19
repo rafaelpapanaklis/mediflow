@@ -1,6 +1,71 @@
 
 
 ═══════════════════════════════════════════════════════════════════════════
+## WS2-T2 — Importar mi clínica · Backend periférico (perfiles + plantilla + asistida) ✅ EN RAMA feat/import-profiles (NO main, build EXIT 0, 2026-06-18)
+═══════════════════════════════════════════════════════════════════════════
+Rama feat/import-profiles (base 18a64fb). Build `npm run build` EXIT 0 — ✓ Compiled
+successfully, type-check sin errores, 278/278 páginas (+2 = mis 2 endpoints nuevos). Los
+prisma:error DATABASE_URL son del prerender sin DB en este entorno y no afectan el exit.
+
+QUÉ: las 3 piezas de backend/datos REALES detrás del prototipo design/import-clinic/
+(diseño puro). NO toqué el engine ni types.ts (territorio de T1) ni la UI (T3).
+
+1) PERFILES DE ORIGEN — src/lib/import/profiles/ (un archivo por origen):
+   - origin.ts: tipos LOCALES (DcField, OriginInstruction, OriginProfile, Origin). A
+     propósito NO se llama types.ts (ese es de T1); si T1 publica un contrato equivalente,
+     se re-exporta desde ahí.
+   - 9 con perfil (dentalink, medilink, identalsoft, opendental, dentrix, eaglesoft,
+     gesden, dentidesk, dentalcore) + excel/otro (hasProfile:false, mapeo manual).
+   - HONESTIDAD: TODOS verified:false. Sin export de muestra real, los mapeos son
+     PLAUSIBLES por convención (columna del sistema → campo canónico de DaleControl).
+     Dentalink (Reportes→Excel) y Open Dental (Query→CSV) llevan instrucciones realistas.
+   - index.ts: ORIGIN_PROFILES (orden del grid del prototipo), getOriginProfile(id),
+     listOrigins() → proyección al contrato.
+   - campoDC alineado al importador real (HEADER_VARIANTS de patients/import): firstName,
+     lastName, email, phone, dob, gender, address, bloodType, notes + fullName/rfc/balance.
+
+2) GET /api/import/origins → Origin[] (forma del contrato, array tal cual). Sesión
+   requerida + rateLimit; datos estáticos (no DB, no clinicId). Incluye `verified` como
+   extra (superset del contrato, ignorable por T1/T3).
+
+3) POST /api/import/assisted (FormData file ≤50MB + note) → { ok, ticketId? }:
+   - Sube el archivo al bucket PRIVADO patient-files bajo import-assisted/{clinicId}/
+     (aislado por clínica, cliente admin de Supabase).
+   - Abre un ticket de SOPORTE existente (createTicket) → notifica al equipo por email +
+     folio #DC-#### de seguimiento. category "DUDA" (el módulo no tiene "migración"; el
+     asunto la identifica), priority "ALTA".
+   - Adjunta el archivo al ticket (inyección server-side vía Prisma, A PROPÓSITO: el
+     archivo excede los topes de adjuntos de soporte 5MB/imagen-PDF; el path es de
+     confianza y acotado por clinicId; la capa de lectura solo firma, no re-valida).
+   - rateLimit + logAudit (entityType "clinic", action "create"). SIN tabla nueva.
+   - ⚠️ Límite de infra: en Vercel el body de una function tope ~4.5MB; archivos mayores
+     necesitarían signed upload URL directo a storage (followup). Hoy se respeta el
+     contrato (FormData) y se documenta.
+
+4) GET /api/patients/import/template → refactor de 1 hoja a .xlsx de 3 HOJAS (Pacientes,
+   Saldos, Citas), encabezados + 1 fila de muestra c/u. xlsx SOLO para generar (output de
+   confianza); el parseo de subidas sigue por exceljs. Encabezados de "Pacientes"
+   coinciden con los que reconoce el importador real.
+
+REGLAS: clinicId SIEMPRE del ctx (nunca del body), rateLimit + logAudit en endpoints con
+efectos, multi-tenant estricto. NO se creó worktree ni se tocó main. NO mergeado (Rafael
+QA + merge en orden).
+
+ARCHIVOS (16): src/lib/import/profiles/{origin,index,dentalink,medilink,identalsoft,
+opendental,dentrix,eaglesoft,gesden,dentidesk,dentalcore,excel,otro}.ts (13) +
+src/app/api/import/origins/route.ts + src/app/api/import/assisted/route.ts (nuevos) +
+src/app/api/patients/import/template/route.ts (refactor 1→3 hojas).
+
+SIN SQL nuevo. SIN envs nuevas (usa las de Supabase ya existentes). design/ NO se commitea
+(es referencia del prototipo, no producto).
+
+🔴 PENDIENTE Rafael: QA. (a) /api/import/origins responde el catálogo; (b) migración
+asistida sube archivo y crea ticket #DC-#### con adjunto descargable en /admin/soporte;
+(c) la plantilla baja con 3 hojas. Followups: subida directa a storage para archivos
+>~4.5MB (límite Vercel); verificar perfiles contra exports reales para subir verified:true
+por sistema.
+
+═══════════════════════════════════════════════════════════════════════════
 ## WS-RT-INBOX merge — Inbox en tiempo real (polling) ✅ EN MAIN (6b4b2e6, 2026-06-17)
 ═══════════════════════════════════════════════════════════════════════════
 QUÉ SE HIZO: merge de la rama feat/rt-inbox a main y push (deploy auto en Vercel).
