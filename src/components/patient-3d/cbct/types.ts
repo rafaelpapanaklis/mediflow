@@ -168,6 +168,21 @@ export interface CbctEstudio {
 }
 
 /**
+ * Firma del render REAL del corte/volumen, inyectable desde el cargador DICOM
+ * (T7). La COMPARTEN <CbctViewer/> (que la recibe y la baja a cada Stage) y
+ * StageProps (que la invoca). El render debe rellenar la caja de imagen al
+ * 100%×100% y ser PURO: el Stage lo llama más de una vez por render (contenido
+ * del recuadro + duplicado dentro de la lupa).
+ */
+export type RenderContent = (args: {
+  plane: Plane;
+  sliceIndex: number;
+  view: ViewState;
+  hu: HUState;
+  vol: VolState;
+}) => ReactNode;
+
+/**
  * Props del componente raíz <CbctViewer/>.
  *
  * `mmPorPixel`: escala REAL por plano para convertir distancias normalizadas a
@@ -182,6 +197,12 @@ export interface CbctViewerProps {
   estudio: CbctEstudio;
   paciente: CbctPaciente;
   mmPorPixel: Record<Plane, number>;
+  /**
+   * (T7) Render REAL del corte/volumen, que <CbctViewer/> baja a CADA Stage
+   * (incluido el modo MPR 2×2 y el comparar A/B). Si se omite, el Stage usa su
+   * placeholder procedural. Misma firma que StageProps.renderContent.
+   */
+  renderContent?: RenderContent;
   /** Anotaciones iniciales (cargadas de PatientFile.annotations por T7). */
   initialAnnos?: Anno[];
   /** Nota inicial del estudio (PatientFile.doctorNotes). */
@@ -226,19 +247,12 @@ export interface StageProps {
   onFocus?: () => void;
   /**
    * (T7) Inyección del render REAL del corte/volumen. ADITIVO sobre el contrato:
-   * si se provee, REEMPLAZA el placeholder procedural de T5. Debe rellenar la caja
-   * de imagen al 100%×100% y ser PURO (el Stage también lo renderiza dentro de la
-   * lupa, así que se invoca más de una vez con los mismos argumentos). Lo
-   * implementa T7 desde el cargador DICOM (DecodedSlice → canvas/bitmap), usando
-   * los argumentos para elegir corte/plano y aplicar la ventana HU / el volumen.
+   * si se provee, REEMPLAZA el placeholder procedural de T5. Lo implementa T7
+   * desde el cargador DICOM (DecodedSlice → canvas/bitmap), usando los argumentos
+   * para elegir corte/plano y aplicar la ventana HU / el volumen. Firma compartida
+   * con CbctViewerProps.renderContent → ver RenderContent.
    */
-  renderContent?: (args: {
-    plane: Plane;
-    sliceIndex: number;
-    view: ViewState;
-    hu: HUState;
-    vol: VolState;
-  }) => ReactNode;
+  renderContent?: RenderContent;
 }
 
 /** Rail de herramientas (vertical u horizontal). Implementa T5. */

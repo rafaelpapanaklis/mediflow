@@ -1,25 +1,52 @@
 "use client";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// CbctStudyViewer — ENCHUFA el cargador real + persistencia al <CbctViewer/>
-// rediseñado y lo abre desde Models3DTab (WS2-T7).
+// CbctStudyViewer — ENCHUFA el cargador real + el RENDER real + persistencia al
+// <CbctViewer/> rediseñado y lo abre desde Models3DTab (WS2-T7 = datos; WS2-T8 =
+// conecta el render al Stage de T5 vía renderContent).
 //
-// Bajo la decisión "solo data" (no se toca el Stage): el ÁREA DE IMAGEN del
-// visor sigue siendo el stub de la fundación hasta que T5 implemente el render.
-// Aquí ya quedan REALES: la escala mmPorPixel (de cabeceras DICOM), la
-// persistencia (annotations/doctorNotes vía API multi-tenant) y el conteo de
-// cortes / espaciado del header. Si el set no se puede leer como CBCT, cae al
-// visor clásico (DicomSetViewer) vía onFallback.
+// Quedan REALES: el ÁREA DE IMAGEN (corte 2D rasterizado por SliceCanvas y
+// volumen 3D por VolumeCanvas, inyectados al Stage vía renderContent), la escala
+// mmPorPixel (de cabeceras DICOM), la persistencia (annotations/doctorNotes vía
+// API multi-tenant) y el conteo de cortes / espaciado del header. Si el set no se
+// puede leer como CBCT, cae al visor clásico (DicomSetViewer) vía onFallback.
 //
-// useCbctStudy carga en segundo plano (cacheado): el visor se ve al instante;
-// mmPorPixel y los datos del header se rellenan al terminar.
+// useCbctStudy carga en segundo plano (cacheado): el visor se ve al instante con
+// el placeholder; al terminar, renderContent pinta los cortes/volumen reales y se
+// rellenan mmPorPixel y los datos del header.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { useCallback, useEffect, useMemo } from "react";
+import type { CSSProperties } from "react";
 import { CbctViewer } from "./CbctViewer";
 import { useCbctStudy } from "./useCbctStudy";
 import { makeCbctHandlers, parseInitialAnnos } from "./persistence";
-import type { Anno } from "./types";
+import { SliceCanvas } from "./render/SliceCanvas";
+import { VolumeCanvas } from "./render/VolumeCanvas";
+import type { Anno, RenderContent } from "./types";
+
+// Estilo del lienzo del corte 2D: rellena la caja de imagen del Stage al 100%×100%
+// (igual que el placeholder de T5) para que el overlay de anotaciones quede
+// alineado. El pan/zoom los aplica el Stage por transform del contenedor; aquí
+// solo se pinta el corte (físico-proporcional) estirado a la caja.
+const SLICE_STYLE: CSSProperties = {
+  position: "absolute",
+  inset: 0,
+  width: "100%",
+  height: "100%",
+  display: "block",
+};
+
+// El volumen 3D (Dicom3DVolume) trae alto fijo + sus propios controles internos:
+// lo centramos vertical y a todo el ancho de la caja.
+const VOL_WRAP_STYLE: CSSProperties = {
+  position: "absolute",
+  inset: 0,
+  display: "flex",
+  flexDirection: "column",
+  justifyContent: "center",
+  overflow: "hidden",
+};
 
 export interface CbctStudyFile {
   id: string;
@@ -62,6 +89,39 @@ export function CbctStudyViewer({
   );
   const handlers = useMemo(() => makeCbctHandlers(patientId, file.id), [patientId, file.id]);
 
+  // Render REAL del corte/volumen para el Stage (decisión "opción 2"): se inyecta
+  // SOLO con el estudio listo; mientras carga/empty/error devolvemos undefined y
+  // el Stage cae a su placeholder procedural. vol3d → volumen 3D real
+  // (Dicom3DVolume); el resto de planos → corte 2D rasterizado (HU Int16 → canvas)
+  // con la ventana W/L base del estudio. Es PURO (el Stage lo invoca también en la
+  // lupa) y respeta multi-tenant: no toca red, la persistencia va por los handlers.
+  const renderContent = useMemo<RenderContent | undefined>(() => {
+    if (study.status !== "ready" || study.slices.length === 0) return undefined;
+    const slices = study.slices;
+    const baseC = study.defaultHU ? study.defaultHU.center : undefined;
+    const baseW = study.defaultHU ? study.defaultHU.width : undefined;
+    return ({ plane, sliceIndex, view, hu, vol }) => {
+      if (plane === "vol3d") {
+        return (
+          <div style={VOL_WRAP_STYLE}>
+            <VolumeCanvas slices={slices} vol={vol} yaw={view.yaw} />
+          </div>
+        );
+      }
+      return (
+        <SliceCanvas
+          slices={slices}
+          plane={plane}
+          sliceIndex={sliceIndex}
+          hu={hu}
+          defaultCenter={baseC}
+          defaultWidth={baseW}
+          style={SLICE_STYLE}
+        />
+      );
+    };
+  }, [study.status, study.slices, study.defaultHU]);
+
   const estudio = useMemo(
     () => ({
       id: file.id,
@@ -89,6 +149,7 @@ export function CbctStudyViewer({
         estudio={estudio}
         paciente={paciente}
         mmPorPixel={study.mmPorPixel}
+        renderContent={renderContent}
         initialAnnos={initialAnnos}
         initialNotes={file.doctorNotes ?? ""}
         onGuardarHallazgos={handlers.onGuardarHallazgos}

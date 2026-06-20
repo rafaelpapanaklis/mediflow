@@ -50,6 +50,7 @@ export function CbctViewer({
   estudio,
   paciente,
   mmPorPixel,
+  renderContent,
   initialAnnos,
   initialNotes,
   onGuardarHallazgos,
@@ -211,6 +212,7 @@ export function CbctViewer({
       sliceIndex={opts.viewB ? sliceB : slices[pl]}
       planeLabel={(PLANES.find((p) => p.id === pl) || { label: "" }).label}
       mmPorPixel={mmPorPixel}
+      renderContent={renderContent}
       compact={opts.compact}
       focused={opts.focused}
       onFocus={opts.onFocus}
