@@ -143,6 +143,20 @@ export interface AnnoPatch {
 // ── Helper de setters estilo React (valor o updater) ─────────────────────────
 export type Setter<T> = (next: T | ((prev: T) => T)) => void;
 
+// ── Notas del estudio (FIX1) ─────────────────────────────────────────────────
+// El estudio guarda VARIAS notas independientes (agregar/editar/borrar), no un
+// solo bloque de texto. Se persisten serializadas como JSON dentro del mismo
+// `doctorNotes` (string) del PatientFile → SIN migración de esquema. Ver
+// persistence.parseInitialNotes / serializeNotes (defensivo con texto legado).
+export interface EstudioNota {
+  /** id estable (geometry.uid()). */
+  id: string;
+  /** contenido de la nota. */
+  texto: string;
+  /** epoch ms de creación/última edición (0 = legado sin fecha). */
+  ts: number;
+}
+
 // ── Entrada del componente raíz ──────────────────────────────────────────────
 
 /** Paciente dueño del estudio (multi-tenant: el id ancla la persistencia). */
@@ -203,10 +217,19 @@ export interface CbctViewerProps {
    * placeholder procedural. Misma firma que StageProps.renderContent.
    */
   renderContent?: RenderContent;
+  /**
+   * (FIX3) Máximo de cortes REAL por plano (de study.dims): el visor lo baja al
+   * Scrubber / celdas MPR y clampa los cortes. Si se omite, usa el PLANE_MAX fijo.
+   */
+  planeMax?: Record<Plane, number>;
   /** Anotaciones iniciales (cargadas de PatientFile.annotations por T7). */
   initialAnnos?: Anno[];
-  /** Nota inicial del estudio (PatientFile.doctorNotes). */
-  initialNotes?: string | null;
+  /**
+   * Notas iniciales del estudio (LISTA). Las deserializa CbctStudyViewer desde
+   * PatientFile.doctorNotes con parseInitialNotes (JSON serializado, o 1 nota si
+   * es texto plano legado).
+   */
+  initialNotes?: EstudioNota[];
   /** Persistir hallazgos (anotaciones). Puede ser async. */
   onGuardarHallazgos: (a: Anno[]) => void | Promise<void>;
   /** Persistir la nota del estudio. Puede ser async. */
@@ -253,6 +276,14 @@ export interface StageProps {
    * con CbctViewerProps.renderContent → ver RenderContent.
    */
   renderContent?: RenderContent;
+  /** (FIX3) máximo de cortes REAL del plano (de study.dims); si falta usa PLANE_MAX. */
+  planeMax?: number;
+  /**
+   * (FIX6) genera la etiqueta monotónica de una nueva anotación ("Nota N"). La da
+   * CbctViewer (contador que no se reusa al borrar). Si falta, Stage cae al conteo
+   * transitorio (modo autónomo).
+   */
+  nextAnnoLabel?: () => string;
 }
 
 /** Rail de herramientas (vertical u horizontal). Implementa T5. */
@@ -280,6 +311,8 @@ export interface ScrubberProps {
   onReset: () => void;
   zoom: number;
   setZoom: Setter<number>;
+  /** (FIX3) máximo de cortes REAL del plano (de study.dims), no el fijo PLANE_MAX. */
+  max: number;
 }
 
 /** Panel de ventana de densidad (HU). Implementa T6. */
@@ -308,11 +341,18 @@ export interface FindingsPanelProps {
   mmPorPixel: Record<Plane, number>;
 }
 
-/** Panel de notas del estudio. Implementa T6. */
+/** Panel de notas del estudio: LISTA de notas independientes (FIX1). Implementa T6. */
 export interface NotesPanelProps {
-  notes: string;
-  setNotes: Setter<string>;
-  onSave: () => void;
+  notes: EstudioNota[];
+  /** agregar una nota nueva con este texto. */
+  onAdd: (texto: string) => void;
+  /** editar el texto de la nota `id`. */
+  onEdit: (id: string, texto: string) => void;
+  /** borrar la nota `id`. */
+  onRemove: (id: string) => void;
+  /** (FIX2) hay cambios sin persistir (autosave en curso/pendiente). */
+  dirty: boolean;
+  /** (FIX2) pulso ✓ tras un autosave correcto. */
   saved: boolean;
 }
 

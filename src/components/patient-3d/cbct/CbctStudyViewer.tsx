@@ -20,10 +20,11 @@ import { useCallback, useEffect, useMemo } from "react";
 import type { CSSProperties } from "react";
 import { CbctViewer } from "./CbctViewer";
 import { useCbctStudy } from "./useCbctStudy";
-import { makeCbctHandlers, parseInitialAnnos } from "./persistence";
+import { makeCbctHandlers, parseInitialAnnos, parseInitialNotes } from "./persistence";
 import { SliceCanvas } from "./render/SliceCanvas";
 import { VolumeCanvas } from "./render/VolumeCanvas";
-import type { Anno, RenderContent } from "./types";
+import { PLANE_MAX } from "./constants";
+import type { Anno, EstudioNota, Plane, RenderContent } from "./types";
 
 // Estilo del lienzo del corte 2D: rellena la caja de imagen del Stage al 100%×100%
 // (igual que el placeholder de T5) para que el overlay de anotaciones quede
@@ -87,7 +88,20 @@ export function CbctStudyViewer({
     () => parseInitialAnnos(file.annotations),
     [file.annotations],
   );
+  // FIX1: deserializa las notas (lista JSON; 1 nota si es texto plano legado).
+  const initialNotes: EstudioNota[] = useMemo(
+    () => parseInitialNotes(file.doctorNotes),
+    [file.doctorNotes],
+  );
   const handlers = useMemo(() => makeCbctHandlers(patientId, file.id), [patientId, file.id]);
+
+  // FIX3: rango de cortes REAL por plano (de las dimensiones del volumen). Mientras
+  // el estudio carga (dims null) cae al PLANE_MAX fijo.
+  const planeMax = useMemo<Record<Plane, number>>(() => {
+    const d = study.dims;
+    if (!d) return PLANE_MAX;
+    return { axial: d.depth, coronal: d.rows, sagital: d.cols, vol3d: 1 };
+  }, [study.dims]);
 
   // Render REAL del corte/volumen para el Stage (decisión "opción 2"): se inyecta
   // SOLO con el estudio listo; mientras carga/empty/error devolvemos undefined y
@@ -151,7 +165,8 @@ export function CbctStudyViewer({
         mmPorPixel={study.mmPorPixel}
         renderContent={renderContent}
         initialAnnos={initialAnnos}
-        initialNotes={file.doctorNotes ?? ""}
+        initialNotes={initialNotes}
+        planeMax={planeMax}
         onGuardarHallazgos={handlers.onGuardarHallazgos}
         onGuardarNota={handlers.onGuardarNota}
         onCerrar={onCerrar}
