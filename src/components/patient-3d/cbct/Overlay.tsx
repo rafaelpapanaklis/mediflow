@@ -173,9 +173,16 @@ export function Overlay({ annos, draft, box, zoom, plane, selectedId, onSelect, 
         if (a.type === "implante") {
           if (d.kind === "move") return { ...a, p };
           if (d.kind === "tip") {
-            const ang = (Math.atan2(p.x - a.p.x, -(p.y - a.p.y)) * 180) / Math.PI;
+            // El tirador 'tip' se DIBUJA en (ctr + half·sin(ang), ctr + half·cos(ang)) con
+            // half = length01·H/2 (ver renderImplant). Invertimos ESA MISMA fórmula para que el
+            // tirador quede bajo el dedo: ang = atan2(Δx, Δy). Antes se negaba Δy [atan2(Δx,-Δy)],
+            // lo que invertía el eje vertical → el tirador "saltaba" al lado opuesto al arrastrar
+            // arriba/abajo. length01 = 2·dist01 porque el tip está a media longitud (half) del
+            // centro. Normalizamos el ángulo a [0,360) para no devolver negativos.
+            const ang = (Math.atan2(p.x - a.p.x, p.y - a.p.y) * 180) / Math.PI;
+            const angNorm = ((ang % 360) + 360) % 360;
             const len = dist01(p, a.p) * 2;
-            return { ...a, angle: ang, length01: Math.max(0.05, Math.min(0.6, len)) };
+            return { ...a, angle: angNorm, length01: Math.max(0.05, Math.min(0.6, len)) };
           }
           return a;
         }
