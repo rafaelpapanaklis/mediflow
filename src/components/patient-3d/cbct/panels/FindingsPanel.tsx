@@ -22,15 +22,27 @@ const LEN_MIN = 0.1;
 const LEN_MAX = 0.95;
 const LEN_STEP = 0.02;
 
+// Texto cuando aún no hay escala real del plano (cabeceras DICOM no listas o
+// ausentes): evita el engañoso "0.0 mm" en distancias y dimensiones de implante.
+const SIN_ESCALA = "sin escala";
+
 function findingMeta(a: Anno, mmPorPixel: Record<Plane, number>): { label: string; val: string } {
   const scale = mmPorPixel[a.plane] || 0;
-  if (a.type === "distancia") return { label: "Distancia", val: mmBetween(a.points[0], a.points[1], scale).toFixed(1) + " mm" };
+  const hasScale = scale > 0;
+  if (a.type === "distancia")
+    return {
+      label: "Distancia",
+      val: hasScale ? mmBetween(a.points[0], a.points[1], scale).toFixed(1) + " mm" : SIN_ESCALA,
+    };
   if (a.type === "angulo")
     return { label: "Ángulo", val: (a.points.length >= 3 ? angleAt(a.points[0], a.points[1], a.points[2]).toFixed(0) : "–") + "°" };
   if (a.type === "anotacion") return { label: a.label || "Nota", val: "Marca" };
   if (a.type === "canal") return { label: a.label || "Conducto", val: a.points.length + " pts" };
   if (a.type === "implante")
-    return { label: "Implante", val: (a.length01 * scale).toFixed(1) + "×Ø" + (a.diam01 * scale).toFixed(1) + " mm" };
+    return {
+      label: "Implante",
+      val: hasScale ? (a.length01 * scale).toFixed(1) + "×Ø" + (a.diam01 * scale).toFixed(1) + " mm" : SIN_ESCALA,
+    };
   return { label: "Hallazgo", val: "" };
 }
 
@@ -49,6 +61,7 @@ export function FindingsPanel({ annos, selectedId, onSelect, onRemove, onRename,
         {annos.map((a) => {
           const m = findingMeta(a, mmPorPixel);
           const scale = mmPorPixel[a.plane] || 0;
+          const hasScale = scale > 0;
           const color = TOOL_COLORS[a.type];
           const editable = a.type === "anotacion" || a.type === "canal";
           const sel = a.id === selectedId;
@@ -94,7 +107,7 @@ export function FindingsPanel({ annos, selectedId, onSelect, onRemove, onRename,
                     >
                       −
                     </button>
-                    <span className="vc-step-val">Ø {(a.diam01 * scale).toFixed(1)}</span>
+                    <span className="vc-step-val">Ø {hasScale ? (a.diam01 * scale).toFixed(1) : "—"}</span>
                     <button
                       type="button"
                       aria-label="Aumentar diámetro del implante"
@@ -111,7 +124,7 @@ export function FindingsPanel({ annos, selectedId, onSelect, onRemove, onRename,
                     >
                       −
                     </button>
-                    <span className="vc-step-val">L {(a.length01 * scale).toFixed(1)}</span>
+                    <span className="vc-step-val">L {hasScale ? (a.length01 * scale).toFixed(1) : "—"}</span>
                     <button
                       type="button"
                       aria-label="Aumentar largo del implante"
