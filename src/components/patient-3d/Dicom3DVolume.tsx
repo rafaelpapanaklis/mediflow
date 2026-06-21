@@ -17,6 +17,7 @@ import { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { VolumeRenderShader1 } from "three/examples/jsm/shaders/VolumeShader.js";
+import type { VolState } from "./cbct/types";
 
 export interface VolSlice {
   rows: number;
@@ -64,7 +65,17 @@ function boneColormap(): THREE.DataTexture {
   return tex;
 }
 
-export default function Dicom3DVolume({ slices }: { slices: VolSlice[] }) {
+export default function Dicom3DVolume({
+  slices,
+  vol,
+  yaw,
+}: {
+  slices: VolSlice[];
+  /** WS2-T9: modo/umbral del VolumePanel. Si llega, manda sobre los botones internos. */
+  vol?: VolState;
+  /** WS2-T9: rotación del panel. Aceptada por contrato; la rotación efectiva la maneja OrbitControls (arrastre directo), no se inyecta para no pelearse con la cámara. */
+  yaw?: number;
+}) {
   const mountRef = useRef<HTMLDivElement | null>(null);
   const [renderstyle, setRenderstyle] = useState<0 | 1>(1); // 1 = Sólido/ISO (defecto), 0 = MIP
   const [iso, setIso] = useState(0.36); // umbral que aísla hueso/diente
@@ -410,6 +421,20 @@ export default function Dicom3DVolume({ slices }: { slices: VolSlice[] }) {
     };
   }, [slices]);
 
+  // WS2-T9 (fix P0): el VolumePanel (panel derecho) es la fuente del modo y el
+  // umbral cuando se provee `vol`. Lo mapeamos al estado interno —que YA está
+  // cableado al shader vía el efecto de abajo— en vez de a los botones internos:
+  //   modo:   "mip" → 0 (MIP) · "solido" → 1 (Sólido/ISO).
+  //   umbral: 0..100 → iso 0.12..0.6 (mismo rango que el slider interno).
+  // setState con el mismo valor hace bail-out en React → sin bucles. Sin `vol`
+  // (uso suelto del componente) conserva sus propios controles intactos.
+  useEffect(() => {
+    if (!vol) return;
+    setRenderstyle(vol.mode === "mip" ? 0 : 1);
+    const u = Math.max(0, Math.min(100, Number(vol.umbral) || 0));
+    setIso(0.12 + (u / 100) * (0.6 - 0.12));
+  }, [vol]);
+
   // Estilo (MIP/ISO) y umbral viven en estado de React: cambiarlos NO
   // re-ejecuta el efecto del visor, así que pedimos un frame para reflejarlos.
   useEffect(() => {
@@ -422,6 +447,9 @@ export default function Dicom3DVolume({ slices }: { slices: VolSlice[] }) {
         ref={mountRef}
         style={{ width: "100%", height: 460, background: "#000", borderRadius: 8, overflow: "hidden" }}
       />
+      {/* WS2-T9: controles internos SOLO en uso suelto (sin panel). Con `vol`
+          presente manda el VolumePanel y estos se ocultan para no duplicar. */}
+      {!vol && (
       <div className="mt-3 flex items-center gap-3 flex-wrap bg-muted/40 rounded-lg p-3 border border-border">
         <div className="flex gap-1">
           <button
@@ -458,6 +486,7 @@ export default function Dicom3DVolume({ slices }: { slices: VolSlice[] }) {
         )}
         <span className="text-[10px] text-muted-foreground">Arrastra para rotar · scroll para zoom</span>
       </div>
+      )}
     </div>
   );
 }

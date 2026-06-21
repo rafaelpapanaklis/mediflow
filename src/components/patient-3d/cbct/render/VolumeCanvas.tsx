@@ -7,13 +7,11 @@
 // con colormap óseo + on-demand + robustez ante pérdida de contexto WebGL). No
 // reimplementa nada del volumen.
 //
-// Costura para T5: Dicom3DVolume HOY gestiona MIP/ISO/umbral y la rotación con
-// sus PROPIOS controles internos (botones + OrbitControls), así que `vol`/`yaw`
-// se aceptan como contrato a futuro pero aún no se inyectan (haría falta levantar
-// ese control al panel rediseñado, lo que tocaría Dicom3DVolume — fuera del
-// alcance "solo data" de T7). Por ahora el volumen se controla solo.
-//
-// NOTA (decisión WS2-T7 "solo data"): módulo LISTO; T5 lo monta en el Stage.
+// WS2-T9: `vol` (modo Sólido/MIP + umbral del panel) YA se inyecta a
+// Dicom3DVolume, que ahora reacciona al panel en vez de a sus botones internos
+// (antes el panel derecho no afectaba al volumen 3D — bug P0). `yaw` se pasa
+// también; la rotación efectiva la sigue manejando OrbitControls (arrastre
+// directo sobre el canvas 3D) para no duplicar/romper el control de cámara.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import dynamic from "next/dynamic";
@@ -50,14 +48,14 @@ export interface VolumeCanvasProps {
   className?: string;
 }
 
-export function VolumeCanvas({ slices, className }: VolumeCanvasProps) {
+export function VolumeCanvas({ slices, vol, yaw, className }: VolumeCanvasProps) {
   if (!slices || slices.length === 0) return null;
   // Dicom3DVolume lee pixels por índice (HU Int16, compatible); su VolSlice aún
   // tipa Float32Array, así que adaptamos el tipo aquí (igual que DicomSetViewer)
   // sin tocar ese archivo.
   return (
     <div className={className}>
-      <Dicom3DVolume slices={slices as unknown as VolSlice[]} />
+      <Dicom3DVolume slices={slices as unknown as VolSlice[]} vol={vol} yaw={yaw} />
     </div>
   );
 }
