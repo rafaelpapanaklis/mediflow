@@ -137,6 +137,8 @@ export function Stage(props: StageProps) {
     focused,
     onFocus,
     renderContent,
+    planeMax,
+    nextAnnoLabel,
   } = props;
 
   const stageRef = useRef<HTMLDivElement>(null);
@@ -231,8 +233,12 @@ export function Stage(props: StageProps) {
   // ── Captura de puntos por herramienta ──────────────────────────────────────
   const commitPoint = (p: Pt) => {
     if (tool === "anotacion") {
-      const n = annos.filter((a) => a.type === "anotacion").length + 1;
-      addAnno({ id: uid(), type: "anotacion", plane, points: [p], label: "Nota " + n });
+      // FIX6: etiqueta de un contador monótono (no se reusa al borrar). Fallback al
+      // conteo transitorio si Stage se usa suelto (sin nextAnnoLabel).
+      const label = nextAnnoLabel
+        ? nextAnnoLabel()
+        : "Nota " + (annos.filter((a) => a.type === "anotacion").length + 1);
+      addAnno({ id: uid(), type: "anotacion", plane, points: [p], label });
       return;
     }
     if (tool === "implante") {
@@ -427,7 +433,7 @@ export function Stage(props: StageProps) {
       onPointerUp={onPointerUp}
       onPointerCancel={onPointerUp}
     >
-      <div ref={contentRef} style={contentStyle}>
+      <div ref={contentRef} data-vc-content="" style={contentStyle}>
         {renderInner()}
         <Overlay
           annos={annos}
@@ -449,7 +455,7 @@ export function Stage(props: StageProps) {
         style={{ position: "absolute", left: 10, top: 10, display: "flex", gap: 8, alignItems: "center", padding: "4px 9px", borderRadius: 8, background: "rgba(8,12,18,.7)", border: "1px solid #1b2430", pointerEvents: "none" }}
       >
         <span style={{ fontSize: 12, fontWeight: 700, color: "#dbe3ee" }}>{planeLabel || plane}</span>
-        {!is3d ? <span style={{ fontSize: 11, color: "#7d8aa0" }}>{sliceIndex} / {PLANE_MAX[plane]}</span> : null}
+        {!is3d ? <span style={{ fontSize: 11, color: "#7d8aa0" }}>{sliceIndex} / {planeMax || PLANE_MAX[plane]}</span> : null}
         {is3d ? <span style={{ fontSize: 11, color: "#7d8aa0" }}>{vol.mode === "mip" ? "MIP" : "Sólido"}</span> : null}
       </div>
 

@@ -6,10 +6,9 @@
 // global = T6.
 
 import type { ScrubberProps } from "../types";
-import { PLANE_MAX } from "../constants";
 import { IcReset, IcZoomIn, IcZoomOut, IcCube } from "../icons";
 
-export function Scrubber({ plane, sliceIndex, setSlice, onReset, zoom, setZoom }: ScrubberProps) {
+export function Scrubber({ plane, sliceIndex, setSlice, onReset, zoom, setZoom, max }: ScrubberProps) {
   const is3d = plane === "vol3d";
   const ibtn: React.CSSProperties = {
     display: "inline-flex",
@@ -40,7 +39,7 @@ export function Scrubber({ plane, sliceIndex, setSlice, onReset, zoom, setZoom }
           <input
             type="range"
             min={1}
-            max={PLANE_MAX[plane]}
+            max={max}
             value={sliceIndex}
             aria-label="Corte"
             onChange={(e) => setSlice(Number(e.target.value))}
@@ -48,7 +47,7 @@ export function Scrubber({ plane, sliceIndex, setSlice, onReset, zoom, setZoom }
           />
           <span className="vc-scrub-num" style={{ fontSize: 12, color: "#cdd5e1", minWidth: 76, textAlign: "right", fontVariantNumeric: "tabular-nums" }}>
             {sliceIndex}
-            <span style={{ color: "#6f7c92" }}> / {PLANE_MAX[plane]}</span>
+            <span style={{ color: "#6f7c92" }}> / {max}</span>
           </span>
         </>
       )}

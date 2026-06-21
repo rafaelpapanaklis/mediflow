@@ -17,6 +17,7 @@ import type {
   Anno,
   AnnoPatch,
   CbctViewerProps,
+  EstudioNota,
   HUState,
   Layout,
   Plane,
@@ -36,6 +37,8 @@ import { VolumePanel } from "./panels/VolumePanel";
 import { FindingsPanel } from "./panels/FindingsPanel";
 import { NotesPanel } from "./panels/NotesPanel";
 import { Seg } from "./panels/Seg";
+import { uid } from "./geometry";
+import { serializeNotes, captureStageToBlob, downloadBlob } from "./persistence";
 
 const LAYOUTS: { id: Layout; label: string; Icon: CbctIcon }[] = [
   { id: "inmersivo", label: "Inmersivo", Icon: IcExpand },
@@ -51,6 +54,7 @@ export function CbctViewer({
   paciente,
   mmPorPixel,
   renderContent,
+  planeMax,
   initialAnnos,
   initialNotes,
   onGuardarHallazgos,
@@ -73,8 +77,9 @@ export function CbctViewer({
   const [vol, setVol] = useState<VolState>({ mode: "solido", umbral: 62 });
   const [slices, setSlices] = useState<Record<Plane, number>>({ axial: 256, coronal: 256, sagital: 335, vol3d: 1 });
   const [sliceB, setSliceB] = useState<number>(360);
-  const [notes, setNotes] = useState<string>(initialNotes ?? "");
-  const [saved, setSaved] = useState<boolean>(false);
+  const [notes, setNotes] = useState<EstudioNota[]>(initialNotes ?? []);
+  const [notesDirty, setNotesDirty] = useState<boolean>(false);
+  const [notesSaved, setNotesSaved] = useState<boolean>(false);
   const [rightOpen, setRightOpen] = useState<boolean>(true);
   const [compare, setCompare] = useState<boolean>(false);
   const [focusPlane, setFocusPlane] = useState<Plane>("vol3d");
@@ -93,6 +98,43 @@ export function CbctViewer({
   const dirtyRef = useRef(false);
   const onGuardarHallazgosRef = useRef(onGuardarHallazgos);
   onGuardarHallazgosRef.current = onGuardarHallazgos;
+
+  // Persistencia de NOTAS (FIX2): mismo patrón que hallazgos (debounce + flush al
+  // desmontar). Handler/notas por ref; el estado dirty/saved alimenta el panel.
+  const notesDidMount = useRef(false);
+  const notesTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const notesRef = useRef<EstudioNota[]>(notes);
+  notesRef.current = notes;
+  const notesDirtyRef = useRef(false);
+  const notesSavedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const onGuardarNotaRef = useRef(onGuardarNota);
+  onGuardarNotaRef.current = onGuardarNota;
+
+  // Caja del cuerpo: para localizar el Stage enfocado al capturar (FIX4).
+  const bodyRef = useRef<HTMLDivElement>(null);
+
+  // FIX6: contador monótono de "Nota N" (NO se reusa al borrar). Init = max N de
+  // las anotaciones iniciales + 1 (se calcula una sola vez).
+  const annoCounter = useRef<number>(0);
+  if (annoCounter.current === 0) {
+    let mx = 0;
+    const src = initialAnnos ?? [];
+    for (let i = 0; i < src.length; i++) {
+      const a = src[i];
+      if (a && a.type === "anotacion" && typeof a.label === "string") {
+        const m = /^Nota\s+(\d+)$/.exec(a.label);
+        if (m) {
+          const v = parseInt(m[1], 10);
+          if (v > mx) mx = v;
+        }
+      }
+    }
+    annoCounter.current = mx + 1;
+  }
+  const nextAnnoLabel = () => "Nota " + annoCounter.current++;
+
+  // FIX3: rango de cortes por plano (real de study.dims, o fallback fijo).
+  const pmax = (pl: Plane): number => (planeMax && planeMax[pl]) || PLANE_MAX[pl];
 
   // ── Anotaciones (ops del §3) ─────────────────────────────────────────────
   const addAnno = (a: Anno) => {
@@ -124,22 +166,37 @@ export function CbctViewer({
     if (toastTimer.current) clearTimeout(toastTimer.current);
     toastTimer.current = setTimeout(() => setToast(null), 2200);
   };
-  const shot = () => {
-    // TODO(T5/T7): captura real (canvas.toBlob del lienzo + overlay → expediente).
+  // FIX4: captura REAL. Compone el corte enfocado + overlay → PNG y lo descarga.
+  // (Subir al estudio queda pendiente de endpoint/columna; ver persistence.ts.)
+  const shot = async () => {
     setFlash(true);
     setTimeout(() => setFlash(false), 320);
-    showToast("Captura guardada en el estudio");
-  };
-  const saveNotes = async () => {
     try {
-      await onGuardarNota(notes);
-      setSaved(true);
-      showToast("Notas guardadas");
-      setTimeout(() => setSaved(false), 1600);
+      const root = bodyRef.current;
+      const stageEl = root
+        ? root.querySelector(".vc-stage.focused") || root.querySelector(".vc-stage")
+        : null;
+      const blob = await captureStageToBlob(stageEl);
+      if (!blob) {
+        showToast("No se pudo generar la captura");
+        return;
+      }
+      const capPlane: Plane = layout === "mpr" ? focusPlane : plane;
+      const safe = (paciente.nombre || "paciente").replace(/[^\w.-]+/g, "_").slice(0, 40) || "paciente";
+      const suffix = capPlane !== "vol3d" ? "-c" + slices[capPlane] : "";
+      downloadBlob(blob, "captura-" + safe + "-" + capPlane + suffix + ".png");
+      showToast("Captura descargada");
     } catch {
-      showToast("No se pudo guardar la nota");
+      showToast("No se pudo generar la captura");
     }
   };
+
+  // ── Notas del estudio (FIX1): lista independiente (autosave por el efecto) ──
+  const addNota = (texto: string) =>
+    setNotes((p) => p.concat([{ id: uid(), texto, ts: Date.now() }]));
+  const editNota = (id: string, texto: string) =>
+    setNotes((p) => p.map((n) => (n.id === id ? { ...n, texto, ts: Date.now() } : n)));
+  const removeNota = (id: string) => setNotes((p) => p.filter((n) => n.id !== id));
 
   // Persistencia de hallazgos (T7): debounce 800ms al cambiar `annos` (tras el
   // montaje) + aviso de error visible. El primer render (montaje) no guarda.
@@ -171,6 +228,48 @@ export function CbctViewer({
     [],
   );
 
+  // Persistencia de NOTAS (FIX2): debounce 1000ms al cambiar `notes` (tras el
+  // montaje). Serializa la LISTA a string (doctorNotes) y mueve dirty/saved.
+  useEffect(() => {
+    if (!notesDidMount.current) {
+      notesDidMount.current = true;
+      return;
+    }
+    notesDirtyRef.current = true;
+    setNotesDirty(true);
+    setNotesSaved(false);
+    if (notesTimer.current) clearTimeout(notesTimer.current);
+    notesTimer.current = setTimeout(() => {
+      notesDirtyRef.current = false;
+      Promise.resolve(onGuardarNotaRef.current(serializeNotes(notesRef.current)))
+        .then(() => {
+          setNotesDirty(false);
+          setNotesSaved(true);
+          if (notesSavedTimer.current) clearTimeout(notesSavedTimer.current);
+          notesSavedTimer.current = setTimeout(() => setNotesSaved(false), 1600);
+        })
+        .catch(() => {
+          notesDirtyRef.current = true;
+          setNotesDirty(true);
+          showToast("No se pudo guardar la nota");
+        });
+    }, 1000);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [notes]);
+
+  // Flush de notas al desmontar (última edición pendiente del debounce).
+  useEffect(
+    () => () => {
+      if (notesTimer.current) clearTimeout(notesTimer.current);
+      if (notesSavedTimer.current) clearTimeout(notesSavedTimer.current);
+      if (notesDirtyRef.current) {
+        notesDirtyRef.current = false;
+        Promise.resolve(onGuardarNotaRef.current(serializeNotes(notesRef.current))).catch(() => {});
+      }
+    },
+    [],
+  );
+
   // limpia el timer del toast al desmontar
   useEffect(() => () => {
     if (toastTimer.current) clearTimeout(toastTimer.current);
@@ -182,6 +281,26 @@ export function CbctViewer({
     const t = setTimeout(() => setShowHint(false), 5200);
     return () => clearTimeout(t);
   }, [tool]);
+
+  // FIX3: al llegar el rango REAL (o cambiar de estudio), clampa cada corte a
+  // [1, max] del plano para no quedar fuera de rango (p.ej. el default 335).
+  useEffect(() => {
+    setSlices((s) => {
+      let changed = false;
+      const next: Record<Plane, number> = { ...s };
+      for (let i = 0; i < PLANES.length; i++) {
+        const id = PLANES[i].id;
+        const mx = Math.max(1, pmax(id));
+        const c = Math.min(Math.max(1, s[id]), mx);
+        if (c !== s[id]) {
+          next[id] = c;
+          changed = true;
+        }
+      }
+      return changed ? next : s;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [planeMax]);
 
   // ── Setters por plano ─────────────────────────────────────────────────────
   const setViewFor = (pl: Plane): Setter<ViewState> => (next) =>
@@ -213,6 +332,8 @@ export function CbctViewer({
       planeLabel={(PLANES.find((p) => p.id === pl) || { label: "" }).label}
       mmPorPixel={mmPorPixel}
       renderContent={renderContent}
+      planeMax={pmax(pl)}
+      nextAnnoLabel={nextAnnoLabel}
       compact={opts.compact}
       focused={opts.focused}
       onFocus={opts.onFocus}
@@ -251,7 +372,7 @@ export function CbctViewer({
             <span>Comparar</span>
           </button>
         )}
-        <button className="vc-hbtn" style={styles.hbtn(false)} onClick={shot} title="Captura">
+        <button className="vc-hbtn" style={styles.hbtn(false)} onClick={shot} title="Descargar captura (PNG)">
           <IcDownload />
         </button>
         <button className="vc-hbtn close" style={styles.hbtn(false)} title="Cerrar" onClick={onCerrar}>
@@ -274,7 +395,7 @@ export function CbctViewer({
                 <input
                   type="range"
                   min={1}
-                  max={PLANE_MAX[p.id]}
+                  max={pmax(p.id)}
                   value={slices[p.id]}
                   onChange={(e) => setSlices((s) => ({ ...s, [p.id]: Number(e.target.value) }))}
                   style={{ width: "100%", accentColor: ACCENT }}
@@ -311,6 +432,7 @@ export function CbctViewer({
           onReset={() => resetView(plane)}
           zoom={views[plane].zoom}
           setZoom={setZoomFor(plane)}
+          max={pmax(plane)}
         />
       </div>
     );
@@ -324,7 +446,7 @@ export function CbctViewer({
       {rightOpen && (
         <div className="vc-right-scroll" style={{ overflowY: "auto", height: "100%" }}>
           <WindowPanel hu={hu} setHu={setHu} />
-          <VolumePanel vol={vol} setVol={setVol} active={plane === "vol3d" || layout === "mpr"} />
+          <VolumePanel vol={vol} setVol={setVol} active={plane === "vol3d" || (layout === "mpr" && focusPlane === "vol3d")} />
           <FindingsPanel
             annos={annos}
             selectedId={selectedId}
@@ -334,7 +456,14 @@ export function CbctViewer({
             onEditImplant={updateAnno}
             mmPorPixel={mmPorPixel}
           />
-          <NotesPanel notes={notes} setNotes={setNotes} onSave={saveNotes} saved={saved} />
+          <NotesPanel
+            notes={notes}
+            onAdd={addNota}
+            onEdit={editNota}
+            onRemove={removeNota}
+            dirty={notesDirty}
+            saved={notesSaved}
+          />
         </div>
       )}
     </div>
@@ -358,7 +487,7 @@ export function CbctViewer({
   );
 
   const inner = (
-    <div className={"vc-body layout-" + layout} style={styles.body}>
+    <div ref={bodyRef} className={"vc-body layout-" + layout} style={styles.body}>
       <div className="vc-rail" style={styles.rail}>
         <Toolbar tool={tool} setTool={setTool} orientation="v" onUndo={undo} canUndo={annos.length > 0} onClear={clearAll} onShot={shot} />
       </div>
