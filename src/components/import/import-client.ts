@@ -41,6 +41,8 @@ export interface DetectedColumn {
 export interface TargetField {
   value: string;
   label: string;
+  /** Clave i18n opcional; si está, la UI la traduce y `label` queda solo de fallback. */
+  labelKey?: string;
 }
 
 /** Fila de muestra validada para la pantalla de revisión (paso 6). */

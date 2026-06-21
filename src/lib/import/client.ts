@@ -58,39 +58,41 @@ interface BackendOrigin {
 //   balances:     name | phone | email | amount
 //   appointments: name | phone | email | doctor | date | time | type | duration | notes
 // ---------------------------------------------------------------------------
-const NO_IMPORT: TargetField = { value: "", label: "— Sin importar —" };
+// Las etiquetas llevan `labelKey` (shell.importClinic.fields.*) para que el paso 5
+// (Mapear) se muestre en el idioma activo; `label` queda como fallback en español.
+const NO_IMPORT: TargetField = { value: "", label: "— Sin importar —", labelKey: "shell.importClinic.fields.noImport" };
 
 const CANONICAL_FIELDS: Record<Entity, TargetField[]> = {
   patients: [
     NO_IMPORT,
-    { value: "firstName", label: "Nombre" },
-    { value: "lastName", label: "Apellido" },
-    { value: "phone", label: "Teléfono" },
-    { value: "email", label: "Correo electrónico" },
-    { value: "dob", label: "Fecha de nacimiento" },
-    { value: "gender", label: "Género" },
-    { value: "bloodType", label: "Tipo de sangre" },
-    { value: "address", label: "Dirección" },
-    { value: "notes", label: "Notas" },
+    { value: "firstName", label: "Nombre", labelKey: "shell.importClinic.fields.firstName" },
+    { value: "lastName", label: "Apellido", labelKey: "shell.importClinic.fields.lastName" },
+    { value: "phone", label: "Teléfono", labelKey: "shell.importClinic.fields.phone" },
+    { value: "email", label: "Correo electrónico", labelKey: "shell.importClinic.fields.email" },
+    { value: "dob", label: "Fecha de nacimiento", labelKey: "shell.importClinic.fields.dob" },
+    { value: "gender", label: "Género", labelKey: "shell.importClinic.fields.gender" },
+    { value: "bloodType", label: "Tipo de sangre", labelKey: "shell.importClinic.fields.bloodType" },
+    { value: "address", label: "Dirección", labelKey: "shell.importClinic.fields.address" },
+    { value: "notes", label: "Notas", labelKey: "shell.importClinic.fields.notes" },
   ],
   balances: [
     NO_IMPORT,
-    { value: "name", label: "Nombre del paciente" },
-    { value: "phone", label: "Teléfono" },
-    { value: "email", label: "Correo electrónico" },
-    { value: "amount", label: "Saldo / Monto" },
+    { value: "name", label: "Nombre del paciente", labelKey: "shell.importClinic.fields.name" },
+    { value: "phone", label: "Teléfono", labelKey: "shell.importClinic.fields.phone" },
+    { value: "email", label: "Correo electrónico", labelKey: "shell.importClinic.fields.email" },
+    { value: "amount", label: "Saldo / Monto", labelKey: "shell.importClinic.fields.amount" },
   ],
   appointments: [
     NO_IMPORT,
-    { value: "name", label: "Nombre del paciente" },
-    { value: "phone", label: "Teléfono" },
-    { value: "email", label: "Correo electrónico" },
-    { value: "doctor", label: "Doctor / Profesional" },
-    { value: "date", label: "Fecha" },
-    { value: "time", label: "Hora" },
-    { value: "type", label: "Tipo / Motivo" },
-    { value: "duration", label: "Duración (min)" },
-    { value: "notes", label: "Notas" },
+    { value: "name", label: "Nombre del paciente", labelKey: "shell.importClinic.fields.name" },
+    { value: "phone", label: "Teléfono", labelKey: "shell.importClinic.fields.phone" },
+    { value: "email", label: "Correo electrónico", labelKey: "shell.importClinic.fields.email" },
+    { value: "doctor", label: "Doctor / Profesional", labelKey: "shell.importClinic.fields.doctor" },
+    { value: "date", label: "Fecha", labelKey: "shell.importClinic.fields.date" },
+    { value: "time", label: "Hora", labelKey: "shell.importClinic.fields.time" },
+    { value: "type", label: "Tipo / Motivo", labelKey: "shell.importClinic.fields.type" },
+    { value: "duration", label: "Duración (min)", labelKey: "shell.importClinic.fields.duration" },
+    { value: "notes", label: "Notas", labelKey: "shell.importClinic.fields.notes" },
   ],
 };
 

@@ -557,48 +557,26 @@
       "notesPlaceholder": "Reason for visit, medical history…",
       "createPatient": "Create patient"
     },
-    "importPatients": {
-      "errFileType": "Only .xlsx or .csv files",
-      "errFileSize": "File exceeds 5MB",
-      "errProcess": "Error processing",
-      "errProcessFile": "Error processing file",
-      "errImport": "Error importing",
-      "title": "Import patients from Excel/CSV",
-      "dropzone": "Drag your file here or click to select",
-      "dropzoneHint": ".xlsx or .csv · Max 5MB · up to 5,000 rows",
-      "downloadTemplate": "Download template",
-      "processing": "Processing {name}…",
-      "statValid": "Valid",
-      "statErrors": "Errors",
-      "statDuplicates": "Duplicates",
-      "colName": "Name",
-      "colEmail": "Email",
-      "colPhone": "Phone",
-      "badgeError": "Error",
-      "badgeDuplicate": "Duplicate",
-      "committing": "Importing patients… this may take a few seconds.",
-      "importedCount": {
-        "one": "{count} patient imported",
-        "other": "{count} patients imported"
-      },
-      "errorRowsSkipped": {
-        "one": "{count} row with errors skipped",
-        "other": "{count} rows with errors skipped"
-      },
-      "moreRows": {
-        "one": "… and {count} more row",
-        "other": "… and {count} more rows"
-      },
-      "skipDuplicates": {
-        "one": "Skip {count} duplicate",
-        "other": "Skip {count} duplicates"
-      },
-      "importBtn": {
-        "one": "Import {count} patient",
-        "other": "Import {count} patients"
-      }
-    },
     "importClinic": {
+      "fields": {
+        "noImport": "— Don't import —",
+        "firstName": "First name",
+        "lastName": "Last name",
+        "phone": "Phone",
+        "email": "Email",
+        "dob": "Date of birth",
+        "gender": "Gender",
+        "bloodType": "Blood type",
+        "address": "Address",
+        "notes": "Notes",
+        "name": "Patient name",
+        "amount": "Balance / Amount",
+        "doctor": "Doctor / Provider",
+        "date": "Date",
+        "time": "Time",
+        "type": "Type / Reason",
+        "duration": "Duration (min)"
+      },
       "launch": "Import my clinic",
       "assistedCta": "Assisted migration",
       "headerTitle": "Import my clinic",

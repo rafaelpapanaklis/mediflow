@@ -6,6 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { logAudit } from "@/lib/audit";
 import { BUCKETS } from "@/lib/storage";
 import { createTicket } from "@/lib/support/service";
+import { detectDangerousExecutable } from "@/lib/validate-upload";
 
 // ═══════════════════════════════════════════════════════════════════════════
 // POST /api/import/assisted  (WS2-T2) — Migración asistida.
@@ -96,8 +97,27 @@ export async function POST(req: NextRequest) {
     .slice(2)}.${safeExt(file.name)}`;
   const contentType = file.type || "application/octet-stream";
 
+  // Leer los bytes una sola vez: sirven para el veto de ejecutables y la subida.
+  let bytes: ArrayBuffer;
   try {
-    const bytes = await file.arrayBuffer();
+    bytes = await file.arrayBuffer();
+  } catch (e) {
+    console.error("[import/assisted] no se pudo leer el archivo:", e);
+    return NextResponse.json({ error: "No se pudo leer el archivo" }, { status: 400 });
+  }
+
+  // Veto duro de ejecutables por CONTENIDO (MZ/ELF/Mach-O), sin importar la
+  // extensión declarada. Se acepta el resto de formatos de migración
+  // (xlsx/csv/zip/sql/txt…); el equipo los baja luego por signed URL.
+  const danger = detectDangerousExecutable(bytes);
+  if (danger) {
+    return NextResponse.json(
+      { error: `Archivo no permitido: el contenido es un ${danger}.` },
+      { status: 400 },
+    );
+  }
+
+  try {
     const supabase = getAdminSupabase();
     const { error: uploadError } = await supabase.storage
       .from(BUCKETS.PATIENT_FILES)

@@ -557,48 +557,26 @@
       "notesPlaceholder": "Motivo de consulta, antecedentes…",
       "createPatient": "Crear paciente"
     },
-    "importPatients": {
-      "errFileType": "Solo archivos .xlsx o .csv",
-      "errFileSize": "Archivo supera 5MB",
-      "errProcess": "Error al procesar",
-      "errProcessFile": "Error al procesar archivo",
-      "errImport": "Error al importar",
-      "title": "Importar pacientes desde Excel/CSV",
-      "dropzone": "Arrastra tu archivo aquí o haz clic para seleccionar",
-      "dropzoneHint": ".xlsx o .csv · Máximo 5MB · hasta 5,000 filas",
-      "downloadTemplate": "Descargar plantilla",
-      "processing": "Procesando {name}…",
-      "statValid": "Válidos",
-      "statErrors": "Errores",
-      "statDuplicates": "Duplicados",
-      "colName": "Nombre",
-      "colEmail": "Email",
-      "colPhone": "Teléfono",
-      "badgeError": "Error",
-      "badgeDuplicate": "Duplicado",
-      "committing": "Importando pacientes… esto puede tardar unos segundos.",
-      "importedCount": {
-        "one": "{count} paciente importado",
-        "other": "{count} pacientes importados"
-      },
-      "errorRowsSkipped": {
-        "one": "{count} fila con errores omitida",
-        "other": "{count} filas con errores omitidas"
-      },
-      "moreRows": {
-        "one": "… y {count} fila más",
-        "other": "… y {count} filas más"
-      },
-      "skipDuplicates": {
-        "one": "Omitir {count} duplicado",
-        "other": "Omitir {count} duplicados"
-      },
-      "importBtn": {
-        "one": "Importar {count} paciente",
-        "other": "Importar {count} pacientes"
-      }
-    },
     "importClinic": {
+      "fields": {
+        "noImport": "— Sin importar —",
+        "firstName": "Nombre",
+        "lastName": "Apellido",
+        "phone": "Teléfono",
+        "email": "Correo electrónico",
+        "dob": "Fecha de nacimiento",
+        "gender": "Género",
+        "bloodType": "Tipo de sangre",
+        "address": "Dirección",
+        "notes": "Notas",
+        "name": "Nombre del paciente",
+        "amount": "Saldo / Monto",
+        "doctor": "Doctor / Profesional",
+        "date": "Fecha",
+        "time": "Hora",
+        "type": "Tipo / Motivo",
+        "duration": "Duración (min)"
+      },
       "launch": "Importar mi clínica",
       "assistedCta": "Migración asistida",
       "headerTitle": "Importar mi clínica",

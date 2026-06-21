@@ -85,7 +85,7 @@ export function StepMapping({ t, origin, preview, mapping, onChange }: Props) {
                         onChange={(e) => onChange(col.source, e.target.value)}
                       >
                         {preview.targetFields.map((f) => (
-                          <option key={f.value} value={f.value}>{f.label}</option>
+                          <option key={f.value} value={f.value}>{f.labelKey ? t(f.labelKey) : f.label}</option>
                         ))}
                       </select>
                     </td>

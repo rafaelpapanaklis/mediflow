@@ -101,11 +101,19 @@ async function insertNumbered(args: {
       created += (await create(build(slice))).count;
     } catch (e: any) {
       if (e?.code === "P2002") {
+        // Carrera de numeración: renumera el slice y reintenta una vez en bloque.
         const fresh = await count();
         slice.forEach((r, j) => { r.data[numberField] = format(fresh + 1 + j); });
-        created += (await create(build(slice))).count;
+        try {
+          created += (await create(build(slice))).count;
+        } catch {
+          created += await insertSliceByRow(slice, { count, numberField, format, build, create });
+        }
       } else {
-        throw e;
+        // Error de DB ≠ P2002 (p. ej. FK P2003 si borraron patient/doctorId entre
+        // dry-run y commit): NO abortamos el lote. Aislamos fila por fila para
+        // insertar las válidas y marcar SOLO la mala como error (se reporta).
+        created += await insertSliceByRow(slice, { count, numberField, format, build, create });
       }
     }
   }
@@ -114,6 +122,58 @@ async function insertNumbered(args: {
 
 const pickInsertable = (rows: PreviewRow[], skipDuplicates: boolean) =>
   rows.filter((r) => r.status === "ok" || (!skipDuplicates && r.status === "duplicate"));
+
+/** Mensaje en español para un error de DB al insertar una fila concreta. */
+function rowDbErrorMessage(e: any): string {
+  const code = e?.code;
+  if (code === "P2003") return "No se pudo guardar: el paciente o doctor referido ya no existe";
+  if (code === "P2002") return "No se pudo guardar: registro duplicado";
+  return "No se pudo guardar la fila (error de base de datos)";
+}
+
+/** Marca una fila como error de commit; se reporta por fila y NO aborta el lote. */
+function markRowError(r: PreviewRow, e: any) {
+  r.status = "error";
+  r.errors.push(rowDbErrorMessage(e));
+}
+
+/**
+ * Inserta un slice fila por fila cuando el insert en bloque falló por un error de
+ * DB que NO es de numeración (p. ej. FK P2003). Inserta las válidas, renumera y
+ * reintenta una vez ante P2002, y marca como error las filas que sigan fallando.
+ * Devuelve cuántas se crearon; las filas marcadas error fluyen al reporte por fila.
+ */
+async function insertSliceByRow(
+  slice: PreviewRow[],
+  args: {
+    count: () => Promise<number>;
+    numberField: string;
+    format: (seq: number) => string;
+    build: (slice: PreviewRow[]) => any[];
+    create: (data: any[]) => Promise<{ count: number }>;
+  },
+): Promise<number> {
+  const { count, numberField, format, build, create } = args;
+  let made = 0;
+  for (const r of slice) {
+    try {
+      made += (await create(build([r]))).count;
+    } catch (e: any) {
+      if (e?.code === "P2002") {
+        try {
+          const fresh = await count();
+          r.data[numberField] = format(fresh + 1);
+          made += (await create(build([r]))).count;
+        } catch (e2: any) {
+          markRowError(r, e2);
+        }
+      } else {
+        markRowError(r, e);
+      }
+    }
+  }
+  return made;
+}
 
 // ===========================================================================
 // PACIENTES — reusa la normalización del endpoint original (firstName/lastName/
@@ -192,35 +252,43 @@ export const patientsHandler: EntityHandler = {
       if (pr.errors.length > 0) pr.status = "error";
 
       if (pr.status === "ok") {
+        // El teléfono se DEDUPLICA por last10 (misma convención que resolvePatient/
+        // loadPatientIndex), no por el string crudo: "+5255…" y "5255…" = mismo paciente.
+        const phoneKey = data.phone ? last10(data.phone) : null;
         if (data.email && seenEmails.has(data.email)) {
           pr.status = "duplicate"; pr.warnings.push("Email repetido en el archivo");
-        } else if (data.phone && seenPhones.has(data.phone)) {
+        } else if (phoneKey && seenPhones.has(phoneKey)) {
           pr.status = "duplicate"; pr.warnings.push("Teléfono repetido en el archivo");
         } else {
           if (data.email) seenEmails.add(data.email);
-          if (data.phone) seenPhones.add(data.phone);
+          if (phoneKey) seenPhones.add(phoneKey);
         }
       }
       out.push(pr);
     }
 
-    // Dedup contra DB en una sola query (email/phone de la clínica).
+    // Dedup contra DB. El teléfono NO se compara con un IN crudo: el padrón puede
+    // guardarlo en otro formato, así que se normaliza a last10 (igual que
+    // loadPatientIndex/resolvePatient). El correo se compara en minúsculas. Se carga
+    // el padrón de la clínica (phone/email), aceptable para una migración puntual.
     const okRows = out.filter((r) => r.status === "ok");
-    const emails = okRows.map((r) => r.data.email).filter(Boolean) as string[];
-    const phones = okRows.map((r) => r.data.phone).filter(Boolean) as string[];
-    if (emails.length > 0 || phones.length > 0) {
-      const orClauses: any[] = [];
-      if (emails.length > 0) orClauses.push({ email: { in: emails } });
-      if (phones.length > 0) orClauses.push({ phone: { in: phones } });
+    const hasEmail = okRows.some((r) => r.data.email);
+    const hasPhone = okRows.some((r) => r.data.phone);
+    if (hasEmail || hasPhone) {
       const existing = await prisma.patient.findMany({
-        where: { clinicId, OR: orClauses },
+        where: { clinicId },
         select: { email: true, phone: true },
       });
-      const dbEmails = new Set(existing.map((e) => e.email).filter(Boolean) as string[]);
-      const dbPhones = new Set(existing.map((e) => e.phone).filter(Boolean) as string[]);
+      const dbEmails = new Set(
+        existing.map((e) => e.email?.toLowerCase()).filter(Boolean) as string[],
+      );
+      const dbPhones = new Set(
+        existing.map((e) => (e.phone ? last10(e.phone) : null)).filter(Boolean) as string[],
+      );
       for (const r of out) {
         if (r.status !== "ok") continue;
-        if ((r.data.email && dbEmails.has(r.data.email)) || (r.data.phone && dbPhones.has(r.data.phone))) {
+        const phoneKey = r.data.phone ? last10(r.data.phone) : null;
+        if ((r.data.email && dbEmails.has(r.data.email)) || (phoneKey && dbPhones.has(phoneKey))) {
           r.status = "duplicate"; r.warnings.push("Ya existe en la base de datos");
         }
       }
@@ -251,7 +319,8 @@ export const patientsHandler: EntityHandler = {
       })),
       create: (data) => prisma.patient.createMany({ data, skipDuplicates: true }),
     });
-    return { created, skipped: toInsert.length - created };
+    const erroredNow = toInsert.filter((r) => r.status === "error").length;
+    return { created, skipped: Math.max(0, toInsert.length - created - erroredNow) };
   },
 };
 
@@ -346,7 +415,8 @@ export const balancesHandler: EntityHandler = {
       }),
       create: (data) => prisma.invoice.createMany({ data, skipDuplicates: true }),
     });
-    return { created, skipped: toInsert.length - created };
+    const erroredNow = toInsert.filter((r) => r.status === "error").length;
+    return { created, skipped: Math.max(0, toInsert.length - created - erroredNow) };
   },
 };
 
@@ -489,25 +559,37 @@ export const appointmentsHandler: EntityHandler = {
   async commit(rows, clinicId, skipDuplicates) {
     const toInsert = pickInsertable(rows, skipDuplicates);
     if (toInsert.length === 0) return { created: 0, skipped: 0 };
+    const build = (slice: PreviewRow[]) =>
+      slice.map((r) => ({
+        clinicId,
+        patientId: r.data.patientId,
+        doctorId: r.data.doctorId,
+        type: r.data.type,
+        startsAt: r.data.startsAt,
+        endsAt: r.data.endsAt,
+        status: "SCHEDULED" as any,
+        notes: r.data.notes ?? null,
+      }));
+    const createMany = (data: any[]) => prisma.appointment.createMany({ data, skipDuplicates: true });
     let created = 0;
     for (let i = 0; i < toInsert.length; i += BATCH) {
       const slice = toInsert.slice(i, i + BATCH);
-      const res = await prisma.appointment.createMany({
-        data: slice.map((r) => ({
-          clinicId,
-          patientId: r.data.patientId,
-          doctorId: r.data.doctorId,
-          type: r.data.type,
-          startsAt: r.data.startsAt,
-          endsAt: r.data.endsAt,
-          status: "SCHEDULED" as any,
-          notes: r.data.notes ?? null,
-        })),
-        skipDuplicates: true,
-      });
-      created += res.count;
+      try {
+        created += (await createMany(build(slice))).count;
+      } catch {
+        // Error de DB en el bloque (p. ej. FK P2003 por doctorId/patientId borrado
+        // entre dry-run y commit): NO abortamos el lote, aislamos fila por fila.
+        for (const r of slice) {
+          try {
+            created += (await createMany(build([r]))).count;
+          } catch (e2: any) {
+            markRowError(r, e2);
+          }
+        }
+      }
     }
-    return { created, skipped: toInsert.length - created };
+    const erroredNow = toInsert.filter((r) => r.status === "error").length;
+    return { created, skipped: Math.max(0, toInsert.length - created - erroredNow) };
   },
 };
 
