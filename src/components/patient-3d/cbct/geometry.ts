@@ -18,6 +18,9 @@ export function dist01(a: Pt, b: Pt): number {
  * no un campo de visión simulado.
  */
 export function mmBetween(a: Pt, b: Pt, mmPorUnidad: number): number {
+  // Sin escala válida (0, negativa, NaN o cabecera DICOM ausente) no hay mm
+  // reales que reportar: devolvemos 0 y dejamos que la UI muestre "sin escala".
+  if (!(mmPorUnidad > 0)) return 0;
   return dist01(a, b) * mmPorUnidad;
 }
 
