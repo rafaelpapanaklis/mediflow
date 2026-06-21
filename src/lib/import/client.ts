@@ -78,9 +78,13 @@ const CANONICAL_FIELDS: Record<Entity, TargetField[]> = {
   balances: [
     NO_IMPORT,
     { value: "name", label: "Nombre del paciente", labelKey: "shell.importClinic.fields.name" },
+    { value: "lastName", label: "Apellido", labelKey: "shell.importClinic.fields.lastName" },
     { value: "phone", label: "Teléfono", labelKey: "shell.importClinic.fields.phone" },
     { value: "email", label: "Correo electrónico", labelKey: "shell.importClinic.fields.email" },
     { value: "amount", label: "Saldo / Monto", labelKey: "shell.importClinic.fields.amount" },
+    { value: "type", label: "Tipo (adeudo/favor)", labelKey: "shell.importClinic.fields.balanceType" },
+    { value: "description", label: "Concepto", labelKey: "shell.importClinic.fields.concept" },
+    { value: "date", label: "Fecha", labelKey: "shell.importClinic.fields.date" },
   ],
   appointments: [
     NO_IMPORT,
@@ -300,6 +304,8 @@ function adaptPreview(entity: Entity, b: BackendPreviewResult): PreviewResult {
       name: rowName(data),
       phone: data.phone ? String(data.phone) : "—",
       balance: amount !== null ? formatMoney(amount) : "—",
+      // Solo saldos traen `kind` (adeudo/favor); en pacientes/citas queda undefined.
+      kind: data.kind === "credit" || data.kind === "debt" ? data.kind : undefined,
       status: r.status,
       reason: rowReason(r),
     };

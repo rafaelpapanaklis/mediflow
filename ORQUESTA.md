@@ -588,3 +588,58 @@ registradas, sin warnings nuevos — solo el ruido conocido `prisma:error DATABA
 
 ### VEREDICTO actualizado
 3/4 bloqueadores resueltos + build verde. **Para preview/QA interno: listo.** Para **PROD**, falta cerrar el P1 del signo de saldos (`template tipo`) o documentar que la plantilla de Saldos NO debe usar la columna `tipo` (usar monto negativo para «a favor»). Pendiente QA de Rafael con un export real.
+
+===========================================================================
+## FEAT · Crédito de paciente / Saldo a favor — CIERRA el P1 del signo [integ/import-clinic, 2026-06-21]
+===========================================================================
+Se creó el concepto de **saldo a favor (crédito) por paciente** (no existía: el balance del
+paciente siempre era ≥0) y con él se cierra el **4.º P1** de la QA: la columna `tipo`
+(adeudo|favor) de la plantilla de Saldos ahora se HONRA → ya no se invierte el signo.
+**Build EXIT 0** (`✓ Compiled successfully`, type-check 0 errores, `✓ 280/280` páginas; solo
+el ruido conocido `prisma:error DATABASE_URL` del SSG sin env). Multi-tenant: todo aislado por
+`clinicId`. NO en `main`.
+
+### Qué se construyó
+- **Schema** `prisma/schema.prisma`: modelo `PatientCredit` (id, clinicId, patientId, amount>0,
+  description?, source @default("migrated"), creditDate @default(now()), createdAt) +
+  `@@index([clinicId, patientId])` + `@@map("patient_credits")` + relación inversa en Patient y
+  Clinic. Saldo a favor del paciente = SUM(amount). **v1 SIN consumo** (no se descuenta de adeudos).
+- **SQL A MANO — PENDIENTE DE APLICAR** `sql/patient-credits.sql`: CREATE TABLE/INDEX IF NOT EXISTS
+  + FKs con guard sobre pg_constraint + RLS deny-all (patrón supplier-marketplace, policy
+  `patient_credits_deny_anon`). Idempotente. NO usa current_setting (el proyecto aísla Prisma-side).
+- **Backend** `src/lib/patient-credit.ts`: `getPatientCreditBalance(clinicId, patientId)` y
+  `getClinicCreditTotal(clinicId)` = SUM(amount), aislado por clínica. **Resilientes**: si la tabla
+  aún no está migrada (P2021/P2022) devuelven 0 → el perfil del paciente y la cobranza NO se rompen
+  tras el deploy (mismo espíritu que la resiliencia de clinic-layout).
+- **Import** `src/lib/import/entities.ts` (balancesHandler):
+  - `headerVariants` reconoce ahora `lastName`(apellido), `type`(tipo), `description`(concepto), `date`(fecha).
+  - Resuelve al paciente combinando **nombre + apellido** (antes solo `nombre`).
+  - `classifyBalance`: `tipo`=favor → crédito; adeudo/vacío → factura de apertura (como hoy). Sin
+    columna `tipo`, respeta el signo del monto (negativo=favor). **El monto se guarda SIEMPRE positivo.**
+  - `commit` dividido por tipo: favor → `PatientCredit` (`insertCredits`, commit resiliente por
+    lote/fila); adeudo → Invoice de apertura `MF-####` (idéntico a antes, `insertNumbered`).
+  - **Idempotencia por tipo**: adeudo = 1 factura de apertura/paciente (como hoy); favor = no duplica
+    un crédito migrado equivalente (mismo paciente + monto). Dedup en-archivo también por tipo.
+- **UI perfil paciente**: card "Finanzas" + sidebar "Estado de cuenta" muestran **"Saldo a favor: $X"
+  en VERDE** (var --success / emerald-600) solo cuando >0, distinto del adeudo en rojo. `page.tsx` lo
+  trae aislado por clínica (helper resiliente).
+- **UI cobranza** `billing-client.tsx`: KPI "Saldo a favor" (total de la clínica) cuando >0; el grid de
+  KPIs pasó a `auto-fit` (responsive a 4/5 tarjetas, sin anchos fijos).
+- **Wizard import**: `CANONICAL_FIELDS.balances` ofrece Apellido/Tipo/Concepto/Fecha en el mapeo; el
+  paso 6 (revisión) **etiqueta cada fila "a favor" (verde) o "adeudo"** y colorea el monto a favor.
+- **i18n** es/en (espejo): `patients.summary.credit`, `patients.sideCards.creditBalance`,
+  `billing.billingClient.kpiCredit`, `shell.importClinic.fields.balanceType`/`.concept`,
+  `shell.importClinic.step6.kindCredit`/`.kindDebt`.
+
+### Estado del P1
+| Hallazgo | Estado |
+|---|---|
+| **P1 ▲ template `tipo`(adeudo\|favor) ignorado → saldo «a favor» importado como ADEUDO (signo invertido)** | ✅ **RESUELTO** — el handler honra `tipo`; favor→`PatientCredit`, adeudo→Invoice; monto siempre positivo; preview lo distingue. |
+
+### 🔴 Pendiente de Rafael
+- **Aplicar `sql/patient-credits.sql`** a mano en Supabase **ANTES** de usar el import de saldos a
+  favor. (Sin la tabla, los adeudos siguen importando normal; los créditos «favor» se marcan como
+  error de fila, no tumban el import — degradación elegante.)
+- QA con un export real que use la columna `tipo` (preview debe mostrar «a favor»/«adeudo» por fila).
+- Decisión heredada de la QA previa: gating de rol en `/api/patients/import` si pacientes también
+  debe ser ADMIN/RECEPCIÓN (saldos/citas ya lo tienen).

@@ -51,6 +51,8 @@ export interface PreviewRow {
   name: string;
   phone: string;
   balance: string;
+  /** Solo en saldos: "credit" = a favor (verde), "debt" = adeudo. */
+  kind?: "debt" | "credit";
   status: "ok" | "error" | "duplicate";
   /** Motivo del error/duplicado (se muestra en tooltip). */
   reason?: string;

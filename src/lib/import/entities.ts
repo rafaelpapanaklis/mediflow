@@ -13,6 +13,7 @@ import {
   VALID_BLOOD,
   type EntityHandler,
   last10,
+  norm,
   normName,
   parseAmount,
   parseDate,
@@ -325,19 +326,85 @@ export const patientsHandler: EntityHandler = {
 };
 
 // ===========================================================================
-// SALDOS — crea una "factura de apertura" (Invoice) por paciente con su saldo.
-// Resuelve paciente por phone(last10)/email/nombre. SIN CFDI. Idempotente: si el
-// paciente ya tiene una factura de apertura migrada, se marca duplicado.
+// SALDOS — por fila, el `tipo` decide el destino (el monto SIEMPRE se guarda
+// positivo): "adeudo" (o vacío) → factura de apertura (Invoice PENDING, como
+// antes); "favor" → saldo a favor (PatientCredit). Resuelve paciente por
+// phone(last10)/email/nombre+apellido. SIN CFDI. Idempotente por tipo: adeudo =
+// 1 factura de apertura por paciente; favor = no duplica un crédito migrado
+// equivalente (mismo paciente + monto).
 // ===========================================================================
+
+/** source de los créditos creados por la migración (marca de idempotencia). */
+const MIGRATED_SOURCE = "migrated";
+
+/** Clave de equivalencia de un crédito migrado: paciente + monto (2 decimales). */
+const creditKey = (patientId: string, amount: number) =>
+  `${patientId}|${Math.abs(amount).toFixed(2)}`;
+
+/**
+ * Clasifica una fila de saldo en "credit" (a favor) o "debt" (adeudo). Si la
+ * fila trae columna `tipo`, manda el texto ("favor"/"a favor"/"crédito"/"haber"/
+ * "abono" = a favor; cualquier otro = adeudo). Sin `tipo`, decide el signo del
+ * monto (negativo = a favor, convención documentada en parseAmount).
+ */
+function classifyBalance(rawType: any, amount: number): "credit" | "debt" {
+  if (rawType !== undefined && rawType !== null && String(rawType).trim() !== "") {
+    const n = norm(rawType);
+    if (n.includes("favor") || n === "credito" || n === "credit" || n === "haber" || n === "abono") {
+      return "credit";
+    }
+    return "debt";
+  }
+  return amount < 0 ? "credit" : "debt";
+}
+
+/**
+ * Inserta PatientCredit por lotes, aislando fila por fila ante error de DB
+ * (mismo patrón resiliente que appointmentsHandler.commit). Sin numeración.
+ */
+async function insertCredits(rows: PreviewRow[], clinicId: string): Promise<number> {
+  const build = (slice: PreviewRow[]) =>
+    slice.map((r) => ({
+      clinicId,
+      patientId: r.data.patientId as string,
+      amount: r.data.amount as number,
+      description: (r.data.description as string | null) ?? null,
+      source: MIGRATED_SOURCE,
+      ...(r.data.creditDate ? { creditDate: r.data.creditDate as Date } : {}),
+    }));
+  const createMany = (data: any[]) => prisma.patientCredit.createMany({ data, skipDuplicates: true });
+  let made = 0;
+  for (let i = 0; i < rows.length; i += BATCH) {
+    const slice = rows.slice(i, i + BATCH);
+    try {
+      made += (await createMany(build(slice))).count;
+    } catch {
+      // Error de DB en el bloque (p. ej. FK P2003 si borraron al paciente entre
+      // dry-run y commit): NO abortamos el lote, aislamos fila por fila.
+      for (const r of slice) {
+        try {
+          made += (await createMany(build([r]))).count;
+        } catch (e2: any) {
+          markRowError(r, e2);
+        }
+      }
+    }
+  }
+  return made;
+}
 
 export const balancesHandler: EntityHandler = {
   entity: "balances",
   auditEntityType: "invoice",
   headerVariants: {
-    name:   ["nombre", "nombredelpaciente", "paciente", "nombrecompleto", "nombres", "cliente"],
-    phone:  ["telefono", "celular", "whatsapp", "phone", "movil"],
-    email:  ["email", "correo", "correoelectronico"],
-    amount: ["saldo", "monto", "adeudo", "balance", "saldopendiente", "deuda", "importe", "saldoactual", "porcobrar"],
+    name:        ["nombre", "nombredelpaciente", "paciente", "nombrecompleto", "nombres", "cliente"],
+    lastName:    ["apellido", "apellidos", "lastname"],
+    phone:       ["telefono", "celular", "whatsapp", "phone", "movil"],
+    email:       ["email", "correo", "correoelectronico"],
+    amount:      ["saldo", "monto", "adeudo", "balance", "saldopendiente", "deuda", "importe", "saldoactual", "porcobrar"],
+    type:        ["tipo", "tiposaldo", "tipodesaldo", "movimiento", "tipomovimiento", "adeudoofavor", "naturaleza"],
+    description: ["concepto", "descripcion", "motivo", "referencia", "detalle", "observaciones"],
+    date:        ["fecha", "fechasaldo", "fechadelsaldo", "fechamovimiento", "fechacargo"],
   },
 
   validateMapping(campos) {
@@ -350,39 +417,79 @@ export const balancesHandler: EntityHandler = {
 
   async process(rows, clinicId) {
     const idx = await loadPatientIndex(clinicId);
-    // Pacientes que YA tienen saldo inicial migrado → idempotencia.
+    // Idempotencia ADEUDOS: pacientes con factura de apertura migrada.
     const existingOpening = await prisma.invoice.findMany({
       where: { clinicId, notes: OPENING_BALANCE_NOTE },
       select: { patientId: true },
     });
-    const alreadyMigrated = new Set(existingOpening.map((i) => i.patientId));
-    const seenPatients = new Set<string>();
+    const migratedInvoice = new Set(existingOpening.map((i) => i.patientId));
+    // Idempotencia A FAVOR: créditos migrados (clave paciente|monto). Resiliente
+    // si patient_credits aún no existe (se aplica a mano, sql/patient-credits.sql).
+    const migratedCredit = new Set<string>();
+    try {
+      const existingCredits = await prisma.patientCredit.findMany({
+        where: { clinicId, source: MIGRATED_SOURCE },
+        select: { patientId: true, amount: true },
+      });
+      for (const c of existingCredits) migratedCredit.add(creditKey(c.patientId, c.amount));
+    } catch (e: any) {
+      if (e?.code !== "P2021" && e?.code !== "P2022") throw e;
+    }
+
+    const seenDebt = new Set<string>();   // patientId
+    const seenCredit = new Set<string>(); // patientId|monto
     const out: PreviewRow[] = [];
 
     for (const { row, mapped } of rows) {
       const pr: PreviewRow = { row, data: {}, status: "ok", errors: [], warnings: [] };
 
-      const amount = parseAmount(mapped.amount);
-      if (amount === null) pr.errors.push(`Saldo inválido "${mapped.amount ?? ""}"`);
-      else if (amount === 0) pr.errors.push("Saldo en cero — nada que migrar");
+      const parsed = parseAmount(mapped.amount);
+      if (parsed === null) pr.errors.push(`Saldo inválido "${mapped.amount ?? ""}"`);
+      else if (parsed === 0) pr.errors.push("Saldo en cero — nada que migrar");
 
-      const res = resolvePatient(mapped, idx);
+      // Identidad: combina nombre + apellido (antes solo usaba `nombre`). El
+      // índice byName se arma con `${firstName} ${lastName}`, así que el nombre
+      // completo discrimina mejor entre homónimos de pila.
+      const fullName = [mapped.name, mapped.lastName]
+        .map((v) => (v == null ? "" : String(v).trim()))
+        .filter(Boolean)
+        .join(" ");
+      const res = resolvePatient(fullName ? { ...mapped, name: fullName } : mapped, idx);
       if (res.error) pr.errors.push(res.error);
 
       if (pr.errors.length > 0) { pr.status = "error"; out.push(pr); continue; }
 
+      // `tipo` decide el destino/signo; el monto se guarda SIEMPRE positivo.
+      const kind = classifyBalance(mapped.type, parsed!);
+      const amount = Math.abs(parsed!);
+
       pr.data = {
         patientId: res.id,
         amount,
-        name: mapped.name ? String(mapped.name).trim() : undefined,
+        kind,
+        name: fullName || (mapped.name ? String(mapped.name).trim() : undefined),
       };
 
-      if (alreadyMigrated.has(res.id!)) {
-        pr.status = "duplicate"; pr.warnings.push("El paciente ya tiene saldo inicial migrado");
-      } else if (seenPatients.has(res.id!)) {
-        pr.status = "duplicate"; pr.warnings.push("Paciente repetido en el archivo");
+      if (kind === "credit") {
+        pr.data.description = mapped.description ? String(mapped.description).trim().slice(0, 300) : null;
+        const d = parseDate(mapped.date);
+        if (d) pr.data.creditDate = d; // si no, Prisma usa default(now())
+        const key = creditKey(res.id!, amount);
+        if (migratedCredit.has(key)) {
+          pr.status = "duplicate"; pr.warnings.push("El paciente ya tiene este saldo a favor migrado");
+        } else if (seenCredit.has(key)) {
+          pr.status = "duplicate"; pr.warnings.push("Saldo a favor repetido en el archivo");
+        } else {
+          seenCredit.add(key);
+        }
       } else {
-        seenPatients.add(res.id!);
+        if (migratedInvoice.has(res.id!)) {
+          pr.status = "duplicate"; pr.warnings.push("El paciente ya tiene saldo inicial migrado");
+        } else if (seenDebt.has(res.id!)) {
+          pr.status = "duplicate"; pr.warnings.push("Paciente repetido en el archivo");
+        } else {
+          seenDebt.add(res.id!);
+        }
       }
       out.push(pr);
     }
@@ -392,29 +499,42 @@ export const balancesHandler: EntityHandler = {
   async commit(rows, clinicId, skipDuplicates) {
     const toInsert = pickInsertable(rows, skipDuplicates);
     if (toInsert.length === 0) return { created: 0, skipped: 0 };
-    const created = await insertNumbered({
-      rows: toInsert,
-      count: () => prisma.invoice.count({ where: { clinicId } }),
-      numberField: "invoiceNumber",
-      format: (seq) => `MF-${String(seq).padStart(4, "0")}`,
-      build: (slice) => slice.map((r) => {
-        const amount = r.data.amount as number;
-        return {
-          clinicId,
-          patientId: r.data.patientId,
-          invoiceNumber: r.data.invoiceNumber,
-          items: [{ description: OPENING_BALANCE_NOTE, quantity: 1, unitPrice: amount, total: amount }],
-          subtotal: amount,
-          discount: 0,
-          total: amount,
-          paid: 0,
-          balance: amount,
-          status: "PENDING" as any,
-          notes: OPENING_BALANCE_NOTE,
-        };
-      }),
-      create: (data) => prisma.invoice.createMany({ data, skipDuplicates: true }),
-    });
+
+    // Divide por tipo: adeudos → factura de apertura; a favor → PatientCredit.
+    const debtRows = toInsert.filter((r) => r.data.kind !== "credit");
+    const creditRows = toInsert.filter((r) => r.data.kind === "credit");
+    let created = 0;
+
+    if (debtRows.length > 0) {
+      created += await insertNumbered({
+        rows: debtRows,
+        count: () => prisma.invoice.count({ where: { clinicId } }),
+        numberField: "invoiceNumber",
+        format: (seq) => `MF-${String(seq).padStart(4, "0")}`,
+        build: (slice) => slice.map((r) => {
+          const amount = r.data.amount as number;
+          return {
+            clinicId,
+            patientId: r.data.patientId,
+            invoiceNumber: r.data.invoiceNumber,
+            items: [{ description: OPENING_BALANCE_NOTE, quantity: 1, unitPrice: amount, total: amount }],
+            subtotal: amount,
+            discount: 0,
+            total: amount,
+            paid: 0,
+            balance: amount,
+            status: "PENDING" as any,
+            notes: OPENING_BALANCE_NOTE,
+          };
+        }),
+        create: (data) => prisma.invoice.createMany({ data, skipDuplicates: true }),
+      });
+    }
+
+    if (creditRows.length > 0) {
+      created += await insertCredits(creditRows, clinicId);
+    }
+
     const erroredNow = toInsert.filter((r) => r.status === "error").length;
     return { created, skipped: Math.max(0, toInsert.length - created - erroredNow) };
   },

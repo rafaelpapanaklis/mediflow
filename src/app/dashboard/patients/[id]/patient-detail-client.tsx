@@ -361,6 +361,8 @@ interface Props {
   /** Estado del cuestionario de salud para el aviso (anamnesis WS1-T2). */
   questionnaireStatus?: "none" | "stale" | "ok";
   questionnaireFilledAt?: string | null;
+  /** Saldo a favor (crédito) del paciente = SUM(patient_credits.amount). 0 si no tiene. */
+  creditBalance?: number;
 }
 
 export function PatientDetailClient({
@@ -377,6 +379,7 @@ export function PatientDetailClient({
   orthoRedesignBundle,
   activityCounts,
   questionnaireStatus,
+  creditBalance = 0,
 }: Props) {
   const t = useT();
   const router = useRouter();
@@ -1383,6 +1386,12 @@ export function PatientDetailClient({
                     <span className="text-muted-foreground">{t("patients.summary.pending")}</span>
                     <span className="font-bold text-rose-600">{formatCurrency(totalBalance)}</span>
                   </div>
+                  {creditBalance > 0 && (
+                    <div className="flex justify-between py-1.5 border-t border-slate-50">
+                      <span className="text-muted-foreground">{t("patients.summary.credit")}</span>
+                      <span className="font-bold text-emerald-600">{formatCurrency(creditBalance)}</span>
+                    </div>
+                  )}
                 </div>
                 <div className="h-1.5 bg-muted rounded-full overflow-hidden">
                   <div className="h-full bg-emerald-500 rounded-full transition-all" style={{ width: `${pctPaid}%` }} />
@@ -2959,6 +2968,7 @@ export function PatientDetailClient({
             total: totalPlan,
             paid: totalPaid,
             balance: totalBalance,
+            credit: creditBalance,
             pct: pctPaid,
           }}
           patientId={patient.id}

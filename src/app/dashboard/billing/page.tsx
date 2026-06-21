@@ -1,6 +1,7 @@
 export const dynamic = "force-dynamic";
 import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { getClinicCreditTotal } from "@/lib/patient-credit";
 import { BillingClient } from "./billing-client";
 import { requirePermissionOrRedirect } from "@/lib/auth/require-permission";
 
@@ -8,7 +9,7 @@ export default async function BillingPage() {
   const user = await getCurrentUser();
   requirePermissionOrRedirect(user, "billing.view");
 
-  const [invoices, patients, clinic] = await Promise.all([
+  const [invoices, patients, clinic, creditTotal] = await Promise.all([
     prisma.invoice.findMany({
       where:   { clinicId: user.clinicId },
       include: {
@@ -27,6 +28,8 @@ export default async function BillingPage() {
       where:  { id: user.clinicId },
       select: { facturApiEnabled: true, rfcEmisor: true },
     }),
+    // Saldo a favor total de la clínica (resiliente si patient_credits no existe aún).
+    getClinicCreditTotal(user.clinicId),
   ]);
 
   const totalPaid    = invoices.filter(i => i.status === "PAID").reduce((s, i) => s + i.paid, 0);
@@ -47,6 +50,7 @@ export default async function BillingPage() {
       totalPending={totalPending}
       totalOverdue={totalOverdue}
       monthInvoices={monthInvoices}
+      creditTotal={creditTotal}
       clinic={{ facturApiEnabled: clinic?.facturApiEnabled ?? false, rfcEmisor: clinic?.rfcEmisor ?? null }}
     />
   );

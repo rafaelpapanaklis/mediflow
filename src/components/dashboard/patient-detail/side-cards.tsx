@@ -25,6 +25,8 @@ interface SideCardsProps {
     total: number;
     paid: number;
     balance: number;
+    /** Saldo a favor (crédito). Se muestra en verde solo si > 0. */
+    credit?: number;
     pct: number;
   };
   patientId: string;
@@ -137,6 +139,12 @@ export function SideCards({
           <span>{t("patients.sideCards.pendingBalance")}</span>
           <strong>{formatCurrency(finance.balance)}</strong>
         </div>
+        {(finance.credit ?? 0) > 0 && (
+          <div className={`${styles.financeRow} ${styles.success}`}>
+            <span>{t("patients.sideCards.creditBalance")}</span>
+            <strong>{formatCurrency(finance.credit ?? 0)}</strong>
+          </div>
+        )}
         <div className={styles.financeBar}>
           <div className={styles.financeBarFill} style={{ width: `${finance.pct}%` }} />
         </div>

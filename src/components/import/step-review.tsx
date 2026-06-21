@@ -96,7 +96,23 @@ export function StepReview({ t, preview, skipDup, onToggleSkip }: Props) {
                   <td className="mono">{r.row}</td>
                   <td>{r.name}</td>
                   <td className="mono">{r.phone}</td>
-                  <td className="mono">{r.balance}</td>
+                  <td className="mono">
+                    <span style={r.kind === "credit" ? { color: "var(--success)", fontWeight: 600 } : undefined}>
+                      {r.balance}
+                    </span>
+                    {r.kind && (
+                      <span
+                        style={{
+                          marginLeft: 6,
+                          fontSize: 11,
+                          fontWeight: 600,
+                          color: r.kind === "credit" ? "var(--success)" : "var(--text-3)",
+                        }}
+                      >
+                        {t(r.kind === "credit" ? "shell.importClinic.step6.kindCredit" : "shell.importClinic.step6.kindDebt")}
+                      </span>
+                    )}
+                  </td>
                   <td><StatusBadge t={t} row={r} /></td>
                 </tr>
               ))}
