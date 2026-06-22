@@ -20,6 +20,7 @@ import {
   type PreviewResult,
   type CommitResult,
   type Origin,
+  type OnUploadProgress,
   ORIGINS,
   DATA_TYPES,
   isAcceptedFile,
@@ -33,6 +34,7 @@ import { StepUpload } from "./step-upload";
 import { StepMapping } from "./step-mapping";
 import { StepReview } from "./step-review";
 import { ImportingPanel } from "./importing-panel";
+import { UploadProgress, type UploadProgressState } from "./upload-progress";
 import { ResultPanel } from "./result-panel";
 import { AssistedPanel } from "./assisted-panel";
 
@@ -73,8 +75,8 @@ export function ImportWizard({ open, onClose, onImported, startInAssisted = fals
   const [preview, setPreview] = useState<PreviewResult | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [result, setResult] = useState<CommitResult | null>(null);
-  const [pct, setPct] = useState(0);
-  const [progLabel, setProgLabel] = useState("");
+  // Progreso REAL de la subida (vista previa del paso 5 + commit). null = inactivo.
+  const [uploadProg, setUploadProg] = useState<UploadProgressState | null>(null);
 
   // Asistida
   const [assistedFile, setAssistedFile] = useState<File | null>(null);
@@ -82,17 +84,38 @@ export function ImportWizard({ open, onClose, onImported, startInAssisted = fals
   const [assistedSent, setAssistedSent] = useState(false);
   const [assistedSubmitting, setAssistedSubmitting] = useState(false);
 
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const origin = useMemo(() => origins.find((o) => o.id === originId) ?? null, [origins, originId]);
 
-  function clearTimer() {
-    if (intervalRef.current) { clearInterval(intervalRef.current); intervalRef.current = null; }
+  // Construye un callback de progreso que calcula la ETA: velocidad =
+  // bytes_subidos / segundos_transcurridos → ETA = bytes_restantes / velocidad.
+  // Captura el inicio al CREARSE (justo antes de lanzar la subida); cada entidad
+  // del commit usa uno nuevo para medir su propia subida por separado.
+  function makeUploadHandler(label: string): OnUploadProgress {
+    const startedAt = performance.now();
+    return ({ loaded, total, pct }) => {
+      let eta: number | null = null;
+      const elapsedSec = (performance.now() - startedAt) / 1000;
+      if (pct < 100 && loaded > 0 && elapsedSec > 0.25) {
+        const speed = loaded / elapsedSec; // bytes/s
+        if (speed > 0) eta = (total - loaded) / speed;
+      }
+      setUploadProg({ phase: pct >= 100 ? "processing" : "uploading", pct, eta, label });
+    };
   }
 
-  // Reset al abrir; limpia timers al cerrar/desmontar.
+  // Contexto del commit multi-entidad: "Pacientes · 1 de 3" (solo si hay >1).
+  function entityLabel(ent: Entity, i: number, n: number): string {
+    if (n <= 1) return "";
+    return t("shell.importClinic.importing.step", {
+      entity: t(`shell.importClinic.importing.ent.${ent}`),
+      i: i + 1,
+      n,
+    });
+  }
+
+  // Reset al abrir.
   useEffect(() => {
     if (open) {
-      clearTimer();
       setFlow(startInAssisted ? "assisted" : "wizard");
       setStep(1);
       setOriginId(null);
@@ -104,8 +127,7 @@ export function ImportWizard({ open, onClose, onImported, startInAssisted = fals
       setPreview(null);
       setPreviewLoading(false);
       setResult(null);
-      setPct(0);
-      setProgLabel("");
+      setUploadProg(null);
       setAssistedFile(null);
       setAssistedNote("");
       setAssistedSent(false);
@@ -113,7 +135,6 @@ export function ImportWizard({ open, onClose, onImported, startInAssisted = fals
       // Refresca el catálogo de orígenes desde el cliente (contrato getOrigins).
       api.getOrigins().then((list) => { if (list?.length) setOrigins(list); }).catch(() => {});
     }
-    return clearTimer;
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, startInAssisted]);
 
@@ -122,7 +143,9 @@ export function ImportWizard({ open, onClose, onImported, startInAssisted = fals
     if (flow !== "wizard" || step !== 5 || !file || preview || previewLoading) return;
     let alive = true;
     setPreviewLoading(true);
-    api.preview("patients", file)
+    setUploadProg({ phase: "uploading", pct: 0, eta: null, label: "" });
+    const onProg = makeUploadHandler("");
+    api.preview("patients", file, undefined, (p) => { if (alive) onProg(p); })
       .then((res) => {
         if (!alive) return;
         setPreview(res);
@@ -136,7 +159,7 @@ export function ImportWizard({ open, onClose, onImported, startInAssisted = fals
         }
       })
       .catch(() => { if (alive) toast.error(t("shell.importClinic.errPreview")); })
-      .finally(() => { if (alive) setPreviewLoading(false); });
+      .finally(() => { if (alive) { setPreviewLoading(false); setUploadProg(null); } });
     return () => { alive = false; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [flow, step, file, preview, previewLoading, origin]);
@@ -180,25 +203,10 @@ export function ImportWizard({ open, onClose, onImported, startInAssisted = fals
       .filter((d) => d.entity && types.has(d.id))
       .map((d) => d.entity as Entity);
     const toRun: Entity[] = entities.length ? entities : ["patients"];
+    const n = toRun.length;
 
     setStep("importing");
-    setPct(0);
-    setProgLabel(t("shell.importClinic.importing.prep"));
-
-    // Barra creciente (tope 90%) mientras corren los commits reales.
-    const labels: [number, string][] = [
-      [15, t("shell.importClinic.importing.validating")],
-      [45, t("shell.importClinic.importing.balances")],
-      [75, t("shell.importClinic.importing.scheduling")],
-    ];
-    let p = 0;
-    clearTimer();
-    intervalRef.current = setInterval(() => {
-      p = Math.min(90, p + Math.random() * 9 + 3);
-      setPct(p);
-      const lbl = labels.find(([thr]) => p <= thr);
-      if (lbl) setProgLabel(lbl[1]);
-    }, 360);
+    setUploadProg({ phase: "uploading", pct: 0, eta: null, label: entityLabel(toRun[0], 0, n) });
 
     const agg: CommitResult = {
       created: 0,
@@ -209,9 +217,22 @@ export function ImportWizard({ open, onClose, onImported, startInAssisted = fals
     };
     let committedAny = false;
 
-    for (const ent of toRun) {
+    // Cada entidad vuelve a SUBIR el MISMO archivo (pacientes primero, para que
+    // saldos/citas resuelvan al paciente recién creado). Medimos la subida real de
+    // cada una por separado: barra + ETA mientras sube, "Procesando…" al 100%.
+    for (let i = 0; i < toRun.length; i++) {
+      const ent = toRun[i];
+      const label = entityLabel(ent, i, n);
+      setUploadProg({ phase: "uploading", pct: 0, eta: null, label });
+      const onProg = makeUploadHandler(label);
       try {
-        const r = await api.commit(ent, f, ent === "patients" ? mapping : {}, { skipDuplicates: skipDup });
+        const r = await api.commit(
+          ent,
+          f,
+          ent === "patients" ? mapping : {},
+          { skipDuplicates: skipDup },
+          onProg,
+        );
         committedAny = true;
         agg.created += r.created;
         agg.errors += r.errors;
@@ -225,19 +246,17 @@ export function ImportWizard({ open, onClose, onImported, startInAssisted = fals
         // Falla una entidad secundaria (p. ej. el archivo no trae columnas de saldo
         // o cita) → se omite y se continúa con el resto.
         if (!committedAny) {
-          clearTimer();
           toast.error(e instanceof Error ? e.message : t("shell.importClinic.errImport"));
+          setUploadProg(null);
           setStep(6);
           return;
         }
       }
     }
 
-    clearTimer();
     setResult(agg);
-    setPct(100);
-    setProgLabel(t("shell.importClinic.importing.finishing"));
-    setTimeout(() => setStep("result"), 480);
+    setUploadProg(null);
+    setStep("result");
   }
 
   // ---- Asistida ----
@@ -270,7 +289,6 @@ export function ImportWizard({ open, onClose, onImported, startInAssisted = fals
   }
 
   function startWizard() {
-    clearTimer();
     setFlow("wizard");
     setStep(1);
     setOriginId(null);
@@ -281,7 +299,7 @@ export function ImportWizard({ open, onClose, onImported, startInAssisted = fals
     setSkipDup(true);
     setPreview(null);
     setResult(null);
-    setPct(0);
+    setUploadProg(null);
   }
 
   // ---- Navegación ----
@@ -401,7 +419,7 @@ export function ImportWizard({ open, onClose, onImported, startInAssisted = fals
                   onDone={onClose}
                 />
               ) : step === "importing" ? (
-                <ImportingPanel t={t} pct={pct} label={progLabel} />
+                <ImportingPanel t={t} prog={uploadProg} />
               ) : step === "result" && result ? (
                 <ResultPanel
                   t={t}
@@ -423,9 +441,7 @@ export function ImportWizard({ open, onClose, onImported, startInAssisted = fals
                 <StepUpload t={t} file={file} error={uploadError} onFile={handleFile} onRemove={removeFile} />
               ) : step === 5 ? (
                 previewLoading || !preview ? (
-                  <div className="imp-loading">
-                    <span className="imp-spin-sm" aria-hidden /> {t("shell.importClinic.step5.loading")}
-                  </div>
+                  <UploadProgress t={t} prog={uploadProg} variant="inline" />
                 ) : origin ? (
                   <StepMapping
                     t={t}

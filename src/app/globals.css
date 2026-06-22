@@ -3285,6 +3285,17 @@
 .imp-spin-sm { width: 18px; height: 18px; border-radius: 50%; border: 2px solid var(--brand-soft); border-top-color: var(--brand); animation: impSpin .8s linear infinite; flex: none; }
 @keyframes impSpin { to { transform: rotate(360deg); } }
 
+/* Progreso real de subida (paso 5 vista previa + Importando) */
+.imp-upprog { display: flex; flex-direction: column; align-items: center; width: 100%; }
+.imp-upprog--inline { padding: 44px 0; }
+.imp-upprog__line { font-size: 14px; font-weight: 600; color: var(--text-1); text-align: center; }
+.imp-upprog--inline .imp-upprog__line { font-size: 13px; }
+.imp-upprog__ctx { margin-top: 3px; font-size: 12px; color: var(--text-3); text-align: center; }
+.imp-upprog--proc { gap: 10px; }
+.imp-upprog--proc .imp-spin { margin-bottom: 0; }
+.imp-upprog--inline.imp-upprog--proc { padding: 44px 0; }
+.imp-upprog__proc { font-size: 13px; color: var(--text-2); }
+
 /* Estado vacio (pagina Pacientes) */
 .imp-empty { border: 1px dashed var(--border-strong); border-radius: var(--radius-lg); background: var(--bg-elev); padding: 52px 28px; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 8px; }
 .imp-empty__glyph { width: 64px; height: 64px; border-radius: 16px; background: var(--brand-soft); color: var(--brand); display: grid; place-items: center; margin-bottom: 8px; }

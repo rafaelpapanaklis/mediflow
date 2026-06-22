@@ -714,14 +714,21 @@
           "other": "Importar {count} registros"
         }
       },
+      "upload": {
+        "uploading": "Subiendo archivo… {pct}%",
+        "processing": "Procesando…",
+        "eta": "{time} restantes",
+        "aria": "Progreso de subida"
+      },
       "importing": {
         "title": "Importando tus datos…",
         "dontClose": "No cierres esta ventana. Tardará menos de un minuto.",
-        "prep": "Preparando…",
-        "validating": "Validando pacientes…",
-        "balances": "Importando saldos…",
-        "scheduling": "Agendando citas…",
-        "finishing": "Finalizando…"
+        "step": "{entity} · {i} de {n}",
+        "ent": {
+          "patients": "Pacientes",
+          "balances": "Saldos",
+          "appointments": "Citas"
+        }
       },
       "result": {
         "title": "¡Listo! Tu clínica está en DaleControl",

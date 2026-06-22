@@ -1,28 +1,22 @@
 "use client";
 
-// Pantalla "Importando" — barra de progreso animada (simulada por el wizard).
-import { Loader2 } from "lucide-react";
+// Pantalla "Importando" — progreso REAL de subida por entidad (barra + ETA) y
+// luego "Procesando…" mientras el servidor inserta. La lógica vive en el wizard;
+// aquí solo se pinta el estado `prog`.
 import type { TFunction } from "@/i18n/t";
+import { UploadProgress, type UploadProgressState } from "./upload-progress";
 
 interface Props {
   t: TFunction;
-  pct: number;
-  label: string;
+  prog: UploadProgressState | null;
 }
 
-export function ImportingPanel({ t, pct, label }: Props) {
+export function ImportingPanel({ t, prog }: Props) {
   return (
-    <div className="imp-importing" role="status" aria-live="polite">
-      <Loader2 className="animate-spin imp-spin" size={48} aria-hidden />
+    <div className="imp-importing">
       <h3 className="imp-title" style={{ textAlign: "center" }}>{t("shell.importClinic.importing.title")}</h3>
       <p className="imp-sub" style={{ textAlign: "center", marginBottom: 0 }}>{t("shell.importClinic.importing.dontClose")}</p>
-      <div className="imp-progress">
-        <i style={{ width: `${pct}%` }} />
-      </div>
-      <div className="imp-progress-meta">
-        <span>{label}</span>
-        <span className="mono">{Math.round(pct)}%</span>
-      </div>
+      <UploadProgress t={t} prog={prog} variant="panel" />
     </div>
   );
 }

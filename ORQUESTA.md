@@ -534,6 +534,57 @@ Cruce adversarial: de TODOS los hallazgos (prior + nuevos), 0 rechazados; 1 ajus
 | P2 ✓ (ajustado) | components/dashboard/import-patients-modal.tsx + es.json/en.json:560 | Modal HUÉRFANO (0 referencias; Pacientes monta `ImportWizard`). NO es import roto. Borrar archivo + bloque `shell.importPatients` (560-600 en AMBOS dicts). | Borrar modal + bloque i18n juntos. |
 | P2 ✓ (ajustado) | components/import/import-client.ts:200 | `MockImportClient` muerto (default = `RealImportClient`). **PERO el archivo es load-bearing** (interface/ORIGINS/DATA_TYPES/helpers usados por 9 archivos). AJUSTE al prior «borrar archivo»: borrar SOLO la clase (~195-238) + fixtures `SAMPLE_*`/`TARGET_FIELDS`/`delay`, no el archivo. | Borrar la clase + sus fixtures, o dejar como stub de test. |
 
+===========================================================================
+## UI · Progreso REAL al subir/importar archivo (paso 5 Mapear + commit) [integ/import-clinic, 2026-06-22]
+===========================================================================
+Se reemplazó el spinner genérico **«Leyendo tu archivo…»** (paso 5) y la barra **simulada** de
+«Importando…» (commit) por **progreso REAL de subida**: % medido + barra + tiempo restante (ETA), y
+al 100% una fase honesta **«Procesando…»** (indeterminada) mientras el servidor parsea/inserta.
+**No se inventa ningún %** del procesamiento (no es medible por fila en una sola respuesta).
+**Build EXIT 0** (`✓ Compiled successfully`, type-check 0 errores, `✓ 280/280` páginas; solo el ruido
+conocido `prisma:error DATABASE_URL` del SSG sin env). Aislado por `clinicId` (sin cambios de datos). NO en `main`.
+
+### Qué se construyó
+- **`src/lib/import/client.ts` (RealImportClient) — fetch → XMLHttpRequest en `post()`**: el POST con
+  archivo (lo usan `preview()` dry-run y `commit()`) ahora va por XHR para exponer el progreso de
+  subida vía `xhr.upload.onprogress`. Se **conservan**: timeout (ahora `xhr.timeout`, mismo 60s),
+  parseo tolerante de JSON (incluso en respuestas !ok, para extraer `{error,detalle}`) y los mismos
+  mensajes de error en español (timeout vs red, vía `UploadTimeoutError`/`UploadNetworkError`).
+  `getOrigins`/`submitAssisted` siguen con `fetchWithTimeout` (intactos). `xhr.upload.onload` emite un
+  100% final garantizado → la UI pasa a «Procesando…».
+- **Contrato `src/components/import/import-client.ts`**: tipos nuevos `UploadProgressEvent`
+  `{loaded,total,pct}` + `OnUploadProgress`; `preview`/`commit` aceptan un `onProgress?` opcional
+  (último parámetro). `MockImportClient` lo acepta y lo ignora (es el doble de tests; no se simula %).
+- **Componente nuevo `src/components/import/upload-progress.tsx`** (reutilizable, 2 variantes
+  inline/panel): fase `uploading` = «Subiendo archivo… NN%» + barra + ETA; fase `processing` =
+  spinner + «Procesando…». A11y: la barra es `role="progressbar"` con `aria-valuenow/min/max` +
+  `aria-label`; «Procesando…» en `role="status"`/`aria-live="polite"` (anuncio único, sin floodear el
+  lector con cada %). Responsive + claro/oscuro por variables (reusa `.imp-progress`).
+- **`import-wizard.tsx`**: se eliminó la simulación con `setInterval` (`pct`/`progLabel` → estado único
+  `uploadProg`). ETA = `loaded/segundos` → `(total-loaded)/velocidad`, formateada «~Xs» / «~Xm Ys»
+  (umbral de 0.25s para que sea fiable). **Paso 5**: la vista previa (dry-run de pacientes) cablea
+  `onProgress`. **Commit multi-entidad**: cada entidad (pacientes→saldos→citas) vuelve a subir el
+  MISMO archivo, así que se mide su subida por separado con etiqueta «Pacientes · 1 de 3» (solo si >1).
+- **`importing-panel.tsx`**: ahora solo pinta `<UploadProgress variant="panel">` bajo el título.
+- **i18n es/en** (espejo): `shell.importClinic.upload.{uploading,processing,eta,aria}` +
+  `importing.step` + `importing.ent.{patients,balances,appointments}` (se quitaron las etiquetas de la
+  barra simulada `prep/validating/scheduling/finishing`, ya muertas).
+- **CSS** `globals.css`: bloque `.imp-upprog*` (reduced-motion ya cubierto por `.imp-progress > i`).
+
+### Decisiones / notas
+- **Honestidad del %**: solo la SUBIDA es medible (`fetch` no la expone → XHR). El procesamiento del
+  servidor NO se finge: barra → 100% → «Procesando…» indeterminado hasta la respuesta.
+- **Multi-entidad**: progreso POR entidad (la barra se reinicia por cada subida del archivo). Es lo
+  fiel a la realidad; el contador «N de M» lo explica. Alternativa descartada: una barra agregada
+  mezclaría subida medible con procesamiento no medible.
+- Con archivos chicos el % pasa volando (correcto); la mejora se nota con archivos grandes.
+
+### 🔴 Pendiente de Rafael
+- **QA** del flujo con un archivo grande real (idealmente con throttling de red) para ver la barra/ETA;
+  verificar es/en y claro/oscuro, y la transición a «Procesando…».
+- Nota: el P2 previo «error de upload sin `aria-live`» es del **paso 4** (`step-upload.tsx`), distinto
+  de esta barra; sigue abierto en la tabla de QA de arriba (fuera de alcance de esta tarea).
+
 **Notas menores (sub-P2, del verificador):**
 - **Seguridad:** el `file.name` del cliente se guarda sin sanitizar, pero el render de `/admin/soporte` lo escapa (React text/attrs) → **NO hay stored-XSS** (revisado y descartado, no es hallazgo).
 - **Seguridad:** si el paso de ticket falla TRAS subir, queda un blob huérfano en el bucket (higiene, sin impacto de seguridad/tenant).

@@ -714,14 +714,21 @@
           "other": "Import {count} records"
         }
       },
+      "upload": {
+        "uploading": "Uploading file… {pct}%",
+        "processing": "Processing…",
+        "eta": "{time} left",
+        "aria": "Upload progress"
+      },
       "importing": {
         "title": "Importing your data…",
         "dontClose": "Don't close this window. It'll take less than a minute.",
-        "prep": "Preparing…",
-        "validating": "Validating patients…",
-        "balances": "Importing balances…",
-        "scheduling": "Scheduling appointments…",
-        "finishing": "Finishing…"
+        "step": "{entity} · {i} of {n}",
+        "ent": {
+          "patients": "Patients",
+          "balances": "Balances",
+          "appointments": "Appointments"
+        }
       },
       "result": {
         "title": "Done! Your clinic is in DaleControl",

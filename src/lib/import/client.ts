@@ -29,6 +29,7 @@ import {
   type DetectedColumn,
   type TargetField,
   type PreviewRow,
+  type OnUploadProgress,
   ORIGINS,
 } from "@/components/import/import-client";
 import type {
@@ -187,11 +188,18 @@ export class RealImportClient implements ImportClient {
   }
 
   // -- Vista previa (dry-run) ---------------------------------------------------
-  async preview(entity: Entity, file: File, mapping?: ColumnMapping): Promise<PreviewResult> {
-    const backend = (await this.post(entity, file, {
-      dryRun: true,
-      mapping,
-    })) as BackendPreviewResult;
+  async preview(
+    entity: Entity,
+    file: File,
+    mapping?: ColumnMapping,
+    onProgress?: OnUploadProgress,
+  ): Promise<PreviewResult> {
+    const backend = (await this.post(
+      entity,
+      file,
+      { dryRun: true, mapping },
+      onProgress,
+    )) as BackendPreviewResult;
     return adaptPreview(entity, backend);
   }
 
@@ -201,12 +209,14 @@ export class RealImportClient implements ImportClient {
     file: File,
     mapping: ColumnMapping,
     opts: { skipDuplicates: boolean },
+    onProgress?: OnUploadProgress,
   ): Promise<CommitResult> {
-    const backend = (await this.post(entity, file, {
-      dryRun: false,
-      mapping,
-      skipDuplicates: opts.skipDuplicates,
-    })) as BackendCommitResult;
+    const backend = (await this.post(
+      entity,
+      file,
+      { dryRun: false, mapping, skipDuplicates: opts.skipDuplicates },
+      onProgress,
+    )) as BackendCommitResult;
     return adaptCommit(entity, backend);
   }
 
@@ -232,10 +242,14 @@ export class RealImportClient implements ImportClient {
   }
 
   // -- POST genérico a un endpoint de entidad (FormData del contrato) -----------
+  // Usa XMLHttpRequest (no fetch) para poder reportar el progreso REAL de la subida
+  // vía `xhr.upload.onprogress`. Se conservan timeout, errores en español y el
+  // parseo tolerante de JSON del camino anterior con fetch.
   private async post(
     entity: Entity,
     file: File,
     opts: { dryRun: boolean; mapping?: ColumnMapping; skipDuplicates?: boolean },
+    onProgress?: OnUploadProgress,
   ): Promise<unknown> {
     const fd = new FormData();
     fd.append("file", file);
@@ -253,14 +267,21 @@ export class RealImportClient implements ImportClient {
       if (Object.keys(cleaned).length > 0) fd.append("columnMapping", JSON.stringify(cleaned));
     }
 
-    let res: Response;
+    let res: XhrResponse;
     try {
-      res = await fetchWithTimeout(ENDPOINTS[entity], { method: "POST", body: fd }, PREVIEW_TIMEOUT_MS);
+      res = await xhrPost(ENDPOINTS[entity], fd, PREVIEW_TIMEOUT_MS, onProgress);
     } catch (e) {
       throw asSpanishError(e);
     }
 
-    const json = await res.json().catch(() => null);
+    // Parseo tolerante (equivalente a `res.json().catch(() => null)` de fetch): se
+    // intenta SIEMPRE, incluso en respuestas !ok, para extraer {error, detalle}.
+    let json: any = null;
+    try {
+      json = res.text ? JSON.parse(res.text) : null;
+    } catch {
+      json = null;
+    }
     if (!res.ok) throw new Error(backendError(json, res.status, "No se pudo procesar el archivo"));
     if (!json || typeof json !== "object") throw new Error("Respuesta inesperada del servidor");
     return json;
@@ -343,8 +364,80 @@ function adaptCommit(entity: Entity, b: BackendCommitResult): CommitResult {
 }
 
 // ---------------------------------------------------------------------------
-// fetch con timeout + errores en español.
+// Subida con progreso (XHR) + fetch con timeout + errores en español.
 // ---------------------------------------------------------------------------
+
+/** Respuesta cruda de `xhrPost` (espejo mínimo de lo que usábamos de fetch). */
+interface XhrResponse {
+  status: number;
+  ok: boolean;
+  text: string;
+}
+
+/** Timeout de la subida (xhr.timeout); se traduce igual que el AbortError de fetch. */
+class UploadTimeoutError extends Error {
+  constructor() {
+    super("upload-timeout");
+    this.name = "UploadTimeoutError";
+  }
+}
+/** Fallo de red / CORS / aborto de la subida. */
+class UploadNetworkError extends Error {
+  constructor() {
+    super("upload-network");
+    this.name = "UploadNetworkError";
+  }
+}
+
+/**
+ * POST de FormData vía XMLHttpRequest, con progreso REAL de subida y timeout nativo.
+ * Resuelve con {status, ok, text} (misma semántica que la rama fetch anterior) y
+ * rechaza con UploadTimeoutError / UploadNetworkError para que `asSpanishError` los
+ * traduzca a los mismos mensajes en español que ya se usaban.
+ */
+function xhrPost(
+  url: string,
+  body: FormData,
+  ms: number,
+  onProgress?: OnUploadProgress,
+): Promise<XhrResponse> {
+  return new Promise<XhrResponse>((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", url);
+    xhr.timeout = ms;
+    // No fijamos Content-Type: el navegador pone el boundary multipart de FormData.
+    xhr.setRequestHeader("Accept", "application/json");
+
+    if (onProgress && xhr.upload) {
+      let lastTotal = 0;
+      xhr.upload.onprogress = (e: ProgressEvent) => {
+        if (!e.lengthComputable || e.total <= 0) return;
+        lastTotal = e.total;
+        const pct = Math.min(100, Math.round((e.loaded / e.total) * 100));
+        onProgress({ loaded: e.loaded, total: e.total, pct });
+      };
+      // Garantiza un 100% final (la UI pasa a "Procesando…") aunque el último
+      // evento de progreso no aterrice exacto en total.
+      xhr.upload.onload = () => {
+        if (lastTotal > 0) onProgress({ loaded: lastTotal, total: lastTotal, pct: 100 });
+      };
+    }
+
+    xhr.onload = () => {
+      const status = xhr.status;
+      resolve({ status, ok: status >= 200 && status < 300, text: xhr.responseText ?? "" });
+    };
+    xhr.onerror = () => reject(new UploadNetworkError());
+    xhr.ontimeout = () => reject(new UploadTimeoutError());
+    xhr.onabort = () => reject(new UploadNetworkError());
+
+    try {
+      xhr.send(body);
+    } catch {
+      reject(new UploadNetworkError());
+    }
+  });
+}
 
 async function fetchWithTimeout(url: string, init: RequestInit, ms: number): Promise<Response> {
   const ctrl = new AbortController();
@@ -358,7 +451,10 @@ async function fetchWithTimeout(url: string, init: RequestInit, ms: number): Pro
 
 /** Normaliza un error de red/timeout a un mensaje claro en español. */
 function asSpanishError(e: unknown): Error {
-  if (e instanceof DOMException && e.name === "AbortError") {
+  if (
+    (e instanceof DOMException && e.name === "AbortError") ||
+    e instanceof UploadTimeoutError
+  ) {
     return new Error("La operación tardó demasiado. Inténtalo de nuevo o usa la migración asistida.");
   }
   return new Error("No se pudo conectar con el servidor. Revisa tu conexión e inténtalo de nuevo.");

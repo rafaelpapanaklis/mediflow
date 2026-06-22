@@ -15,6 +15,19 @@ export type Entity = "patients" | "balances" | "appointments";
 /** Mapa columna-del-archivo → campo de DaleControl (valor "" = sin importar). */
 export type ColumnMapping = Record<string, string>;
 
+/**
+ * Progreso REAL de subida del archivo, tal cual lo reporta `xhr.upload.onprogress`
+ * (bytes ya enviados / totales). `pct` es 0..100 entero. Solo mide la SUBIDA; el
+ * procesamiento del servidor no expone progreso por fila y se muestra aparte como
+ * "Procesando…".
+ */
+export interface UploadProgressEvent {
+  loaded: number;
+  total: number;
+  pct: number;
+}
+export type OnUploadProgress = (p: UploadProgressEvent) => void;
+
 /** Sistema de origen (paso 1). `hasProfile` = auto-mapeo + instrucciones propias. */
 export interface Origin {
   id: string;
@@ -92,12 +105,18 @@ export interface AssistedResult {
  */
 export interface ImportClient {
   getOrigins(): Promise<Origin[]>;
-  preview(entity: Entity, file: File, mapping?: ColumnMapping): Promise<PreviewResult>;
+  preview(
+    entity: Entity,
+    file: File,
+    mapping?: ColumnMapping,
+    onProgress?: OnUploadProgress,
+  ): Promise<PreviewResult>;
   commit(
     entity: Entity,
     file: File,
     mapping: ColumnMapping,
     opts: { skipDuplicates: boolean },
+    onProgress?: OnUploadProgress,
   ): Promise<CommitResult>;
   templateUrl(): string;
   submitAssisted(file: File, note: string): Promise<AssistedResult>;
@@ -206,7 +225,12 @@ export class MockImportClient implements ImportClient {
     return delay(ORIGINS, 120);
   }
 
-  preview(_entity: Entity, _file: File, _mapping?: ColumnMapping): Promise<PreviewResult> {
+  preview(
+    _entity: Entity,
+    _file: File,
+    _mapping?: ColumnMapping,
+    _onProgress?: OnUploadProgress,
+  ): Promise<PreviewResult> {
     return delay({
       totalRows: 1265,
       columns: SAMPLE_COLUMNS,
@@ -221,6 +245,7 @@ export class MockImportClient implements ImportClient {
     _file: File,
     _mapping: ColumnMapping,
     opts: { skipDuplicates: boolean },
+    _onProgress?: OnUploadProgress,
   ): Promise<CommitResult> {
     return delay({
       created: 1240,
