@@ -690,7 +690,10 @@
         "statusManual": "Manual",
         "statusSkip": "Sin mapear",
         "samplePrefix": "Ej.",
-        "loading": "Leyendo tu archivo…"
+        "loading": "Leyendo tu archivo…",
+        "errorTitle": "No pudimos leer tu archivo",
+        "errorDesc": "Revisa que sea un .xlsx o .csv válido e inténtalo de nuevo.",
+        "retry": "Reintentar"
       },
       "step6": {
         "title": "Revisa antes de importar",

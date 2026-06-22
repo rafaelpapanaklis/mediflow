@@ -690,7 +690,10 @@
         "statusManual": "Manual",
         "statusSkip": "Unmapped",
         "samplePrefix": "e.g.",
-        "loading": "Reading your file…"
+        "loading": "Reading your file…",
+        "errorTitle": "We couldn't read your file",
+        "errorDesc": "Check that it's a valid .xlsx or .csv and try again.",
+        "retry": "Try again"
       },
       "step6": {
         "title": "Review before importing",

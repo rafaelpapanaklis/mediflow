@@ -10,7 +10,7 @@
 // ============================================================================
 import { useEffect, useMemo, useRef, useState } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
-import { X, ArrowLeft, ArrowRight, Check } from "lucide-react";
+import { X, ArrowLeft, ArrowRight, Check, AlertCircle, RefreshCw } from "lucide-react";
 import toast from "react-hot-toast";
 import { useT } from "@/i18n/i18n-provider";
 import {
@@ -74,6 +74,7 @@ export function ImportWizard({ open, onClose, onImported, startInAssisted = fals
   const [skipDup, setSkipDup] = useState(true);
   const [preview, setPreview] = useState<PreviewResult | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewError, setPreviewError] = useState<string | null>(null);
   const [result, setResult] = useState<CommitResult | null>(null);
   // Progreso REAL de la subida (vista previa del paso 5 + commit). null = inactivo.
   const [uploadProg, setUploadProg] = useState<UploadProgressState | null>(null);
@@ -85,6 +86,14 @@ export function ImportWizard({ open, onClose, onImported, startInAssisted = fals
   const [assistedSubmitting, setAssistedSubmitting] = useState(false);
 
   const origin = useMemo(() => origins.find((o) => o.id === originId) ?? null, [origins, originId]);
+
+  // Token de la petición de preview EN VUELO: solo la MÁS RECIENTE aplica su
+  // resultado/loading. Atado a la PETICIÓN (archivo/montaje), NO al ciclo del
+  // efecto — reemplaza el viejo flag `alive` que el re-run del efecto (por tener
+  // `previewLoading` en las deps) ponía en false y descartaba la respuesta 200.
+  const previewReqRef = useRef(0);
+  // Invalida cualquier preview en vuelo al desmontar (evita setState tardío).
+  useEffect(() => () => { previewReqRef.current++; }, []);
 
   // Construye un callback de progreso que calcula la ETA: velocidad =
   // bytes_subidos / segundos_transcurridos → ETA = bytes_restantes / velocidad.
@@ -126,6 +135,8 @@ export function ImportWizard({ open, onClose, onImported, startInAssisted = fals
       setSkipDup(true);
       setPreview(null);
       setPreviewLoading(false);
+      setPreviewError(null);
+      previewReqRef.current++;
       setResult(null);
       setUploadProg(null);
       setAssistedFile(null);
@@ -138,16 +149,24 @@ export function ImportWizard({ open, onClose, onImported, startInAssisted = fals
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, startInAssisted]);
 
-  // Carga el preview al entrar al paso 5 (mapeo) si aún no existe.
-  useEffect(() => {
-    if (flow !== "wizard" || step !== 5 || !file || preview || previewLoading) return;
-    let alive = true;
+  // Carga la vista previa (dry-run) del paso 5. Extraída a función para poder
+  // REINTENTAR desde el estado de error. La staleness se controla con un TOKEN
+  // (previewReqRef) atado a la PETICIÓN: solo la última aplica su resultado y
+  // SIEMPRE apaga el loading. (Antes, el efecto tenía `previewLoading` en sus
+  // deps → al setearlo se re-corría, su cleanup ponía alive=false y el `.then`
+  // hacía `if(!alive) return`, descartando la respuesta 200 → spinner eterno.)
+  function loadPreview() {
+    if (!file) return;
+    const f = file;
+    const reqId = ++previewReqRef.current;
+    const stale = () => previewReqRef.current !== reqId;
+    setPreviewError(null);
     setPreviewLoading(true);
     setUploadProg({ phase: "uploading", pct: 0, eta: null, label: "" });
     const onProg = makeUploadHandler("");
-    api.preview("patients", file, undefined, (p) => { if (alive) onProg(p); })
+    api.preview("patients", f, undefined, (p) => { if (!stale()) onProg(p); })
       .then((res) => {
-        if (!alive) return;
+        if (stale()) return;
         setPreview(res);
         // Con perfil: sembrar el mapeo desde las sugerencias. Sin perfil: vacío.
         if (origin?.hasProfile) {
@@ -158,11 +177,27 @@ export function ImportWizard({ open, onClose, onImported, startInAssisted = fals
           setMapping({});
         }
       })
-      .catch(() => { if (alive) toast.error(t("shell.importClinic.errPreview")); })
-      .finally(() => { if (alive) { setPreviewLoading(false); setUploadProg(null); } });
-    return () => { alive = false; };
+      .catch(() => { if (!stale()) setPreviewError(t("shell.importClinic.step5.errorTitle")); })
+      .finally(() => { if (!stale()) { setPreviewLoading(false); setUploadProg(null); } });
+  }
+
+  // Reintento manual desde el estado de error (botón "Reintentar").
+  function retryPreview() {
+    setPreviewError(null);
+    setPreview(null);
+    loadPreview();
+  }
+
+  // Dispara la carga al entrar al paso 5 si aún no hay preview (ni error mostrado).
+  // `previewLoading`/`previewError` NO van en las deps a propósito: son estados que
+  // el propio efecto/loadPreview setean; tenerlos como deps re-corría el efecto y
+  // rompía la petición. La re-entrada se evita con la guarda (`preview`/`previewError`)
+  // y los lanzamientos concurrentes se resuelven por token (gana el último).
+  useEffect(() => {
+    if (flow !== "wizard" || step !== 5 || !file || preview || previewError) return;
+    loadPreview();
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [flow, step, file, preview, previewLoading, origin]);
+  }, [flow, step, file, preview, origin]);
 
   // ---- Archivo (paso 4) ----
   function handleFile(f: File) {
@@ -178,15 +213,21 @@ export function ImportWizard({ open, onClose, onImported, startInAssisted = fals
     }
     setUploadError(null);
     setFile(f);
-    // Un archivo nuevo invalida el preview/mapeo previos.
+    // Un archivo nuevo invalida preview/mapeo/estado y cualquier petición en vuelo.
     setPreview(null);
     setMapping({});
+    setPreviewError(null);
+    setPreviewLoading(false);
+    previewReqRef.current++;
   }
   function removeFile() {
     setFile(null);
     setUploadError(null);
     setPreview(null);
     setMapping({});
+    setPreviewError(null);
+    setPreviewLoading(false);
+    previewReqRef.current++;
   }
 
   // ---- Importar (commit multi-entidad + progreso) ----
@@ -298,6 +339,9 @@ export function ImportWizard({ open, onClose, onImported, startInAssisted = fals
     setMapping({});
     setSkipDup(true);
     setPreview(null);
+    setPreviewError(null);
+    setPreviewLoading(false);
+    previewReqRef.current++;
     setResult(null);
     setUploadProg(null);
   }
@@ -440,7 +484,16 @@ export function ImportWizard({ open, onClose, onImported, startInAssisted = fals
               ) : step === 4 ? (
                 <StepUpload t={t} file={file} error={uploadError} onFile={handleFile} onRemove={removeFile} />
               ) : step === 5 ? (
-                previewLoading || !preview ? (
+                previewError ? (
+                  <div className="imp-error" role="alert">
+                    <AlertCircle size={40} className="imp-error__ic" aria-hidden />
+                    <h3 className="imp-error__title">{t("shell.importClinic.step5.errorTitle")}</h3>
+                    <p className="imp-error__desc">{t("shell.importClinic.step5.errorDesc")}</p>
+                    <button type="button" className="btn-new btn-new--secondary imp-error__btn" onClick={retryPreview}>
+                      <RefreshCw size={14} /> {t("shell.importClinic.step5.retry")}
+                    </button>
+                  </div>
+                ) : previewLoading || !preview ? (
                   <UploadProgress t={t} prog={uploadProg} variant="inline" />
                 ) : origin ? (
                   <StepMapping

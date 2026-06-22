@@ -3296,6 +3296,13 @@
 .imp-upprog--inline.imp-upprog--proc { padding: 44px 0; }
 .imp-upprog__proc { font-size: 13px; color: var(--text-2); }
 
+/* Error de vista previa (paso 5) — reemplaza el spinner eterno */
+.imp-error { display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; gap: 6px; padding: 40px 16px; }
+.imp-error__ic { color: var(--danger); }
+.imp-error__title { margin: 6px 0 0; font-size: 15px; font-weight: 600; color: var(--text-1); }
+.imp-error__desc { margin: 0; font-size: 13px; color: var(--text-3); max-width: 360px; }
+.imp-error__btn { margin-top: 10px; }
+
 /* Estado vacio (pagina Pacientes) */
 .imp-empty { border: 1px dashed var(--border-strong); border-radius: var(--radius-lg); background: var(--bg-elev); padding: 52px 28px; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 8px; }
 .imp-empty__glyph { width: 64px; height: 64px; border-radius: 16px; background: var(--brand-soft); color: var(--brand); display: grid; place-items: center; margin-bottom: 8px; }
