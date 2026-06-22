@@ -27,6 +27,7 @@ import { OBJLoader } from "three/examples/jsm/loaders/OBJLoader.js";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { CSS2DRenderer, CSS2DObject } from "three/examples/jsm/renderers/CSS2DRenderer.js";
 import { mergeVertices } from "three/examples/jsm/utils/BufferGeometryUtils.js";
+import { computeBoundsTree, disposeBoundsTree, acceleratedRaycast } from "three-mesh-bvh";
 import {
   Ruler,
   RotateCw,
@@ -46,6 +47,18 @@ import {
 import toast from "react-hot-toast";
 import { useT } from "@/i18n/i18n-provider";
 import { fetchWithCache } from "@/lib/dicom-cache";
+
+// three-mesh-bvh — acelera el raycast de MEDICIÓN. Sin BVH, intersectObject()
+// prueba triángulo por triángulo: en arcadas densas (cientos de miles de tris)
+// cada clic para medir recorre toda la malla y se siente lento. Con un BVH
+// (computeBoundsTree sobre la geometría) + acceleratedRaycast en el prototipo de
+// Mesh, el pick baja por un árbol espacial → instantáneo. El parche es global
+// pero RETROCOMPATIBLE: acceleratedRaycast cae al raycast original para mallas
+// sin boundsTree (pines de marcas, otros visores 3D de la app), así que no
+// altera ningún otro comportamiento.
+THREE.BufferGeometry.prototype.computeBoundsTree = computeBoundsTree;
+THREE.BufferGeometry.prototype.disposeBoundsTree = disposeBoundsTree;
+THREE.Mesh.prototype.raycast = acceleratedRaycast;
 
 // "dicom" cubre tomografías .dcm/.dicom: no son mallas, no se cargan con three.
 export type Model3DFormat = "stl" | "ply" | "obj" | "dicom";
@@ -106,6 +119,7 @@ function disposeObject(obj: THREE.Object3D) {
   obj.traverse((child) => {
     const mesh = child as THREE.Mesh;
     if (mesh.isMesh) {
+      mesh.geometry?.disposeBoundsTree?.(); // libera el BVH (parche three-mesh-bvh).
       mesh.geometry?.dispose?.();
       const mat = mesh.material;
       if (Array.isArray(mat)) mat.forEach((m) => m?.dispose?.());
@@ -483,6 +497,8 @@ export default function Model3DViewer({
       // Solo recalculamos normales si la geometría no las trae (p. ej. PLY que
       // las incluye debe respetarlas; STL ya las recalculó tras el welding).
       if (!geometry.hasAttribute("normal")) geometry.computeVertexNormals();
+      // BVH: picks de medición O(log n) en vez de O(tris) (parche three-mesh-bvh).
+      geometry.computeBoundsTree();
       const hasColor = geometry.hasAttribute("color");
       const material = new THREE.MeshPhongMaterial({
         color: hasColor ? 0xffffff : COLOR_PRESETS[DEFAULT_COLOR],
@@ -533,6 +549,7 @@ export default function Model3DViewer({
             const mesh = child as THREE.Mesh;
             if (mesh.isMesh) {
               mesh.geometry?.computeVertexNormals?.();
+              mesh.geometry?.computeBoundsTree?.(); // BVH para medición rápida.
               mesh.material = new THREE.MeshPhongMaterial({
                 color: COLOR_PRESETS[DEFAULT_COLOR],
                 specular: 0x222222,
@@ -553,6 +570,9 @@ export default function Model3DViewer({
     const pts: THREE.Vector3[] = []; // puntos pendientes del par en curso.
     const pendingMarkers: THREE.Mesh[] = [];
     const raycaster = new THREE.Raycaster();
+    // Con BVH solo necesitamos el hit más cercano (medir/marcar usan hits[0]);
+    // firstHitOnly evita recolectar todas las intersecciones del rayo.
+    raycaster.firstHitOnly = true;
     const ndc = new THREE.Vector2();
     const lineMat = new THREE.LineBasicMaterial({ color: MEASURE_COLOR });
     let downX = 0;
