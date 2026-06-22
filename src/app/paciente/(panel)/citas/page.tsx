@@ -22,6 +22,7 @@ import {
 } from "@/components/paciente/ui";
 import { ReagendarModal } from "@/components/paciente/reagendar-modal";
 import { CancelarModal } from "@/components/paciente/cancelar-modal";
+import { ConfirmarAsistencia } from "@/components/paciente/confirmar-asistencia-button";
 
 const GAP = "clamp(12px, 2vw, 20px)";
 const GRID_COLS = "repeat(auto-fit, minmax(min(100%, 340px), 1fr))";
@@ -155,6 +156,11 @@ export default function PacienteCitasPage() {
                             {clinicName(clinics, cita.clinicId)}
                           </span>
                         )}
+                        {/* WS1-T3: confirmar asistencia (solo PENDING/SCHEDULED sin cambio en curso). */}
+                        {!cita.pendingChange &&
+                          (cita.status === "PENDING" || cita.status === "SCHEDULED") && (
+                            <ConfirmarAsistencia citaId={cita.id} onConfirmed={() => mutate()} />
+                          )}
                         {cita.pendingChange ? (
                           <div
                             style={{
