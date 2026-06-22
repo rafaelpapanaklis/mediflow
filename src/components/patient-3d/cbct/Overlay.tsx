@@ -351,7 +351,21 @@ export function Overlay({ annos, draft, box, zoom, plane, selectedId, onSelect, 
   if (!W || !H) return null;
 
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", overflow: "visible" }}>
+    <svg
+      viewBox={`0 0 ${W} ${H}`}
+      preserveAspectRatio="none"
+      style={{
+        position: "absolute",
+        inset: 0,
+        width: "100%",
+        height: "100%",
+        overflow: "visible",
+        // En el VOLUMEN 3D el giro/zoom los maneja OrbitControls sobre el lienzo
+        // WebGL de abajo → el overlay NO debe capturar el puntero o TAPA el giro.
+        // (En los cortes 2D sí captura, para seleccionar/arrastrar anotaciones.)
+        pointerEvents: plane === "vol3d" ? "none" : undefined,
+      }}
+    >
       {list.map((a) => renderAny(a as RenderAnno, false))}
       {draft && draft.points.length > 0 ? renderAny({ ...draft, id: "__draft" } as RenderAnno, true) : null}
     </svg>

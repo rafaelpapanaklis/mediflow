@@ -83,12 +83,19 @@ export function FindingsPanel({ annos, selectedId, onSelect, onRemove, onRename,
               <span className="vc-find-dot" style={{ background: color }} />
               <div className="vc-find-main">
                 {editable ? (
-                  <input
+                  <textarea
                     className="vc-find-edit"
                     value={m.label}
-                    aria-label="Etiqueta del hallazgo"
+                    rows={1}
+                    placeholder="Describe el hallazgo…"
+                    aria-label="Descripción del hallazgo"
                     onChange={(e) => onRename(a.id, e.target.value)}
                     onClick={(e) => e.stopPropagation()}
+                    onInput={(e) => {
+                      const t = e.currentTarget;
+                      t.style.height = "auto";
+                      t.style.height = t.scrollHeight + "px";
+                    }}
                   />
                 ) : (
                   <span className="vc-find-lb">{m.label}</span>
