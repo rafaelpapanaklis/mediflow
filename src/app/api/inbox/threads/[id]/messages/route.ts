@@ -210,6 +210,10 @@ export async function POST(req: NextRequest, { params }: Params) {
         // sendEmail nunca tira: si no hay transporte (o falla), el mensaje
         // queda guardado pero marcado como no entregado.
         if (!delivered) sendError = "email_not_delivered";
+      } else if (thread.channel === "PORTAL") {
+        // Chat in-app del portal del paciente (WS2-T2): la "entrega" es la
+        // propia DB — el paciente lo lee en /paciente/inbox por polling. Sin
+        // canal externo ni sendError: para el staff es un envío normal.
       } else {
         // PORTAL_FORM, VALIDATION, REMINDER: sin ruta de entrega saliente.
         // Guardamos el mensaje y lo marcamos (no rompemos el flujo).
