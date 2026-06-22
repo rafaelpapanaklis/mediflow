@@ -2,7 +2,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
-  Plus, CheckCircle2, Clock, AlertCircle, FileText, Search, X,
+  Plus, CheckCircle2, Clock, AlertCircle, FileText, Search, X, Wallet,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { KpiCard }   from "@/components/ui/design-system/kpi-card";
@@ -40,6 +40,8 @@ interface Props {
   totalPending:  number;
   totalOverdue:  number;
   monthInvoices: number;
+  /** Saldo a favor total de la clínica (SUM patient_credits). 0 si no hay. */
+  creditTotal?:  number;
   clinic:        { facturApiEnabled: boolean; rfcEmisor: string | null };
 }
 
@@ -47,7 +49,7 @@ function patientNameOf(inv: any): string {
   return `${inv.patient?.firstName ?? ""} ${inv.patient?.lastName ?? ""}`.trim() || "—";
 }
 
-export function BillingClient({ invoices: initial, patients, totalPaid, totalPending, totalOverdue, monthInvoices, clinic }: Props) {
+export function BillingClient({ invoices: initial, patients, totalPaid, totalPending, totalOverdue, monthInvoices, creditTotal = 0, clinic }: Props) {
   const t = useT();
   const router = useRouter();
   const [invoices, setInvoices] = useState(initial);
@@ -199,11 +201,14 @@ export function BillingClient({ invoices: initial, patients, totalPaid, totalPen
       </div>
 
       {/* KPIs */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 14, marginBottom: 20 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 14, marginBottom: 20 }}>
         <KpiCard label={t("billing.billingClient.kpiTotalCollected")} value={fmtMXN(totalPaid)}       icon={CheckCircle2} />
         <KpiCard label={t("billing.billingClient.kpiToCollect")}      value={fmtMXN(totalPending)}    icon={Clock} />
         <KpiCard label={t("billing.billingClient.kpiOverdue")}        value={fmtMXN(totalOverdue)}    icon={AlertCircle} />
         <KpiCard label={t("billing.billingClient.kpiThisMonth")}      value={String(monthInvoices)}   icon={FileText} />
+        {creditTotal > 0 && (
+          <KpiCard label={t("billing.billingClient.kpiCredit")}       value={fmtMXN(creditTotal)}     icon={Wallet} />
+        )}
       </div>
 
       {/* Filters */}

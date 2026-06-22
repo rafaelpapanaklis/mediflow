@@ -1,24 +1,24 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getAuthContext } from "@/lib/auth-context";
+import { getAuthContext, requireRole } from "@/lib/auth-context";
 import { rateLimit } from "@/lib/rate-limit";
 import { parseImportForm, runImport, importErrorResponse } from "@/lib/import/engine";
-import { patientsHandler } from "@/lib/import/entities";
+import { balancesHandler } from "@/lib/import/entities";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
 /**
- * POST /api/patients/import — importación masiva de PACIENTES (entity="patients").
+ * POST /api/import/balances — importa SALDOS (entity="balances"). Crea una
+ * "factura de apertura" (Invoice) por paciente con su saldo (concepto
+ * "Saldo inicial migrado", balance=monto, SIN CFDI). Resuelve al paciente por
+ * teléfono(last10)/correo/nombre dentro de la clínica.
  *
- * El motor (parseo seguro, mapeo, dedup, batch insert) vive en src/lib/import.
- * Acepta `columnMapping` opcional (JSON header→campo); si no llega, autodetecta
- * con HEADER_VARIANTS y lo devuelve como `suggestedMapping` en el dry-run.
- *
- * Compatibilidad: la respuesta conserva 100% lo que devolvía antes. El dry-run
- * solo AÑADE `entity`, `columns` y `suggestedMapping`; el commit solo añade
- * `entity` (campos nuevos que el modal viejo ignora).
+ * Mismo contrato que /api/patients/import (FormData + dry-run/commit). Idempotente:
+ * si el paciente ya tiene saldo inicial migrado, la fila se marca como duplicado.
  *
  * Multi-tenant: clinicId SIEMPRE de la sesión (getAuthContext), nunca del body.
+ * Acceso: solo ADMIN/RECEPCIONISTA (SUPER_ADMIN incluido). Importar saldos crea
+ * registros financieros (Invoice), así que el DOCTOR no puede hacerlo en masa.
  */
 export async function POST(req: NextRequest) {
   const rl = rateLimit(req, 3, 60_000);
@@ -26,10 +26,12 @@ export async function POST(req: NextRequest) {
 
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const roleGate = requireRole(ctx, "ADMIN", "RECEPTIONIST");
+  if (roleGate) return roleGate;
 
   try {
     const form = await parseImportForm(req);
-    const result = await runImport(patientsHandler, {
+    const result = await runImport(balancesHandler, {
       file: form.file,
       clinicId: ctx.clinicId,
       userId: ctx.userId,

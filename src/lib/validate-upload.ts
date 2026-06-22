@@ -61,6 +61,16 @@ function dangerousExecutable(buf: Buffer): string | null {
   return null;
 }
 
+/**
+ * Veto duro de ejecutables para subidas de CUALQUIER formato (p. ej. la migración
+ * asistida acepta xlsx/csv/zip/sql/txt…): inspecciona los primeros bytes y devuelve
+ * el nombre del binario peligroso (MZ/ELF/Mach-O…) o null si no lo es. NO restringe
+ * por extensión ni exige una firma concreta; solo bloquea ejecutables.
+ */
+export function detectDangerousExecutable(bytes: ArrayBuffer): string | null {
+  return dangerousExecutable(headOf(bytes));
+}
+
 // ---------------------------------------------------------------------------
 // Modelos 3D y tomografías (STL / PLY / OBJ / DICOM)
 // ---------------------------------------------------------------------------

@@ -557,45 +557,217 @@
       "notesPlaceholder": "Motivo de consulta, antecedentes…",
       "createPatient": "Crear paciente"
     },
-    "importPatients": {
-      "errFileType": "Solo archivos .xlsx o .csv",
-      "errFileSize": "Archivo supera 5MB",
-      "errProcess": "Error al procesar",
-      "errProcessFile": "Error al procesar archivo",
-      "errImport": "Error al importar",
-      "title": "Importar pacientes desde Excel/CSV",
-      "dropzone": "Arrastra tu archivo aquí o haz clic para seleccionar",
-      "dropzoneHint": ".xlsx o .csv · Máximo 5MB · hasta 5,000 filas",
-      "downloadTemplate": "Descargar plantilla",
-      "processing": "Procesando {name}…",
-      "statValid": "Válidos",
-      "statErrors": "Errores",
-      "statDuplicates": "Duplicados",
-      "colName": "Nombre",
-      "colEmail": "Email",
-      "colPhone": "Teléfono",
-      "badgeError": "Error",
-      "badgeDuplicate": "Duplicado",
-      "committing": "Importando pacientes… esto puede tardar unos segundos.",
-      "importedCount": {
-        "one": "{count} paciente importado",
-        "other": "{count} pacientes importados"
+    "importClinic": {
+      "fields": {
+        "noImport": "— Sin importar —",
+        "firstName": "Nombre",
+        "lastName": "Apellido",
+        "phone": "Teléfono",
+        "email": "Correo electrónico",
+        "dob": "Fecha de nacimiento",
+        "gender": "Género",
+        "bloodType": "Tipo de sangre",
+        "address": "Dirección",
+        "notes": "Notas",
+        "name": "Nombre del paciente",
+        "amount": "Saldo / Monto",
+        "balanceType": "Tipo (adeudo/favor)",
+        "concept": "Concepto",
+        "doctor": "Doctor / Profesional",
+        "date": "Fecha",
+        "time": "Hora",
+        "type": "Tipo / Motivo",
+        "duration": "Duración (min)"
       },
-      "errorRowsSkipped": {
-        "one": "{count} fila con errores omitida",
-        "other": "{count} filas con errores omitidas"
+      "launch": "Importar mi clínica",
+      "assistedCta": "Migración asistida",
+      "headerTitle": "Importar mi clínica",
+      "closeWizard": "Cerrar asistente",
+      "back": "Atrás",
+      "continue": "Continuar",
+      "sending": "Enviando…",
+      "subStep": "Paso {step} de 6",
+      "subAssisted": "Migración asistida",
+      "stepsAria": "Pasos de la importación",
+      "errPreview": "No pudimos leer el archivo. Inténtalo de nuevo.",
+      "errImport": "No se pudo completar la importación. Inténtalo de nuevo.",
+      "errAssisted": "No se pudo enviar tu archivo. Inténtalo de nuevo.",
+      "steps": {
+        "origin": "Origen",
+        "export": "Exportar",
+        "what": "Qué importar",
+        "upload": "Subir",
+        "map": "Mapear",
+        "review": "Revisar"
       },
-      "moreRows": {
-        "one": "… y {count} fila más",
-        "other": "… y {count} filas más"
+      "empty": {
+        "title": "Trae los datos de tu sistema actual",
+        "desc": "Si ya usas Dentalink, Open Dental, otro sistema o tu propio Excel, el asistente te guía paso a paso para migrar pacientes, saldos y citas. Sin perder nada.",
+        "hint": "Compatible con Dentalink, Medilink, Open Dental, Dentrix, Eaglesoft, Gesden y más."
       },
-      "skipDuplicates": {
-        "one": "Omitir {count} duplicado",
-        "other": "Omitir {count} duplicados"
+      "step1": {
+        "title": "¿De dónde vienen tus datos?",
+        "sub": "Elige tu sistema actual. Adaptaremos las instrucciones y el mapeo de columnas a tu elección.",
+        "metaProfile": "Perfil listo",
+        "metaManual": "Mapeo manual",
+        "assistedTitle": "¿Prefieres que lo hagamos por ti?",
+        "assistedDesc": "Migración asistida gratis: súbenos tu respaldo y nuestro equipo lo deja listo.",
+        "needOrigin": "Elige tu sistema para continuar"
       },
-      "importBtn": {
-        "one": "Importar {count} paciente",
-        "other": "Importar {count} pacientes"
+      "step2": {
+        "title": "Exporta tus datos",
+        "subProfile": "Sigue estos pasos para obtener el archivo desde {name}.",
+        "subExcel": "Usa nuestra plantilla para acomodar tus datos. Así el mapeo será más rápido.",
+        "templateTitle": "Plantilla de DaleControl (.xlsx)",
+        "templateDesc": "Tres pestañas: Pacientes, Saldos y Citas. Copia y pega tus datos en las columnas indicadas.",
+        "templateBtn": "Descargar plantilla",
+        "ownFileNote": "¿Ya tienes tu propio archivo? También funciona. Solo asegúrate de que la primera fila tenga los nombres de las columnas.",
+        "dentalink": {
+          "s1h": "Entra a Dentalink",
+          "s1p": "Inicia sesión y abre el menú `Configuración` en la esquina superior derecha.",
+          "s2h": "Ve a Exportar datos",
+          "s2p": "En la sección `Datos & Respaldos` elige `Exportar pacientes`.",
+          "s3h": "Selecciona el rango",
+          "s3p": "Marca «Todos los pacientes» y el formato `Excel (.xlsx)`.",
+          "s4h": "Descarga el archivo",
+          "s4p": "Pulsa `Generar` y guarda el archivo en tu computadora. Lo subirás en el siguiente paso."
+        },
+        "generic": {
+          "s1h": "Abre tu sistema",
+          "s1p": "Entra a la sección de pacientes o reportes de tu software actual.",
+          "s2h": "Busca «Exportar»",
+          "s2p": "La mayoría de los sistemas permiten exportar a `Excel (.xlsx)` o `CSV`.",
+          "s3h": "Exporta todos los registros",
+          "s3p": "Selecciona el rango completo y descarga el archivo.",
+          "s4h": "Guárdalo a la mano",
+          "s4p": "Lo subirás en el siguiente paso. Si tu archivo no tiene encabezados claros, no te preocupes: te ayudamos a mapearlo."
+        }
+      },
+      "step3": {
+        "title": "¿Qué quieres traer?",
+        "sub": "Te recomendamos empezar por lo esencial. Puedes importar lo demás después.",
+        "needOne": "Elige al menos un tipo de dato",
+        "badgeRec": "Recomendado",
+        "badgeEasy": "Fácil",
+        "badgeAdv": "Avanzado",
+        "patients": "Pacientes",
+        "patientsMeta": "Nombre, contacto, fecha de nacimiento",
+        "balances": "Saldos",
+        "balancesMeta": "Adeudos y pagos a favor por paciente",
+        "appointments": "Citas próximas",
+        "appointmentsMeta": "Agenda futura para no perder ninguna",
+        "treatments": "Tratamientos",
+        "treatmentsMeta": "Planes y procedimientos por paciente",
+        "history": "Historial clínico",
+        "historyMeta": "Notas y evolución (requiere más mapeo)"
+      },
+      "step4": {
+        "title": "Sube tu archivo",
+        "sub": "Arrastra el archivo que exportaste o búscalo en tu equipo.",
+        "dropTitle": "Arrastra tu archivo aquí",
+        "dropHint": "o haz clic para buscarlo en tu equipo",
+        "formats": "Formatos: .xlsx o .csv · máx. {mb} MB",
+        "errorTitle": "No pudimos usar ese archivo",
+        "errorHint": "Debe ser .xlsx o .csv y pesar menos de 5 MB.",
+        "errorRetry": "Vuelve a intentarlo con el archivo correcto.",
+        "invalidType": "El archivo «{name}» no es compatible. Usa .xlsx o .csv.",
+        "invalidSize": "El archivo «{name}» supera los {mb} MB.",
+        "validMsg": "Archivo válido. Continúa al mapeo.",
+        "remove": "Quitar",
+        "needFile": "Sube un archivo .xlsx o .csv"
+      },
+      "step5": {
+        "title": "Empareja las columnas",
+        "subProfile": "Reconocimos el formato de {name} y emparejamos las columnas automáticamente. Revisa que todo cuadre.",
+        "subManual": "Empareja manualmente cada columna de tu archivo con un campo de DaleControl.",
+        "bannerAutoTitle": "Mapeo automático aplicado",
+        "bannerAutoDesc": "{matched} de {total} columnas se emparejaron solas gracias al perfil de {name}.",
+        "bannerManualTitle": "Mapeo manual",
+        "bannerManualDesc": "Como tu origen es «{name}», elige a mano el campo de cada columna.",
+        "colYour": "Tu columna",
+        "colTarget": "Campo de DaleControl",
+        "statusAuto": "Automático",
+        "statusManual": "Manual",
+        "statusSkip": "Sin mapear",
+        "samplePrefix": "Ej.",
+        "loading": "Leyendo tu archivo…",
+        "errorTitle": "No pudimos leer tu archivo",
+        "errorDesc": "Revisa que sea un .xlsx o .csv válido e inténtalo de nuevo.",
+        "retry": "Reintentar"
+      },
+      "step6": {
+        "title": "Revisa antes de importar",
+        "sub": "Validamos cada fila. Corrige los errores ahora o impórtalos y arréglalos después.",
+        "statValid": "Válidos",
+        "statErrors": "Con errores",
+        "statDuplicates": "Duplicados",
+        "skipDup": "Omitir duplicados",
+        "hoverHint": "Pasa el cursor sobre un error para ver el motivo",
+        "colRow": "Fila",
+        "colName": "Nombre",
+        "colPhone": "Teléfono",
+        "colBalance": "Saldo",
+        "kindCredit": "a favor",
+        "kindDebt": "adeudo",
+        "badgeOk": "OK",
+        "badgeError": "Error",
+        "badgeDuplicate": "Duplicado",
+        "importBtn": {
+          "one": "Importar {count} registro",
+          "other": "Importar {count} registros"
+        }
+      },
+      "upload": {
+        "uploading": "Subiendo archivo… {pct}%",
+        "processing": "Procesando…",
+        "eta": "{time} restantes",
+        "aria": "Progreso de subida"
+      },
+      "importing": {
+        "title": "Importando tus datos…",
+        "dontClose": "No cierres esta ventana. Tardará menos de un minuto.",
+        "step": "{entity} · {i} de {n}",
+        "ent": {
+          "patients": "Pacientes",
+          "balances": "Saldos",
+          "appointments": "Citas"
+        }
+      },
+      "result": {
+        "title": "¡Listo! Tu clínica está en DaleControl",
+        "lead": {
+          "one": "Importamos tus datos correctamente. {count} registro con error no se importó; puedes corregirlo y volver a subirlo.",
+          "other": "Importamos tus datos correctamente. {count} registros con error no se importaron; puedes corregirlos y volver a subirlos."
+        },
+        "pillPatients": "pacientes",
+        "pillBalances": "en saldos",
+        "pillAppointments": "citas próximas",
+        "reportLine": {
+          "one": "{count} fila con error no se importó.",
+          "other": "{count} filas con error no se importaron."
+        },
+        "downloadReport": "Descargar reporte",
+        "reportSoon": "El reporte de errores estará disponible al conectar el backend.",
+        "goPatients": "Ver pacientes",
+        "importAnother": "Importar otra cosa"
+      },
+      "assisted": {
+        "title": "Migración asistida · gratis",
+        "sub": "Súbenos un respaldo o exportación de tu sistema y nuestro equipo deja todo listo por ti. Ideal si no quieres hacerlo a mano.",
+        "dropTitle": "Arrastra tu respaldo o exportación",
+        "dropHint": "Aceptamos cualquier formato: Excel, CSV, .zip de respaldo, etc.",
+        "formats": "Hasta 50 MB",
+        "noteLabel": "¿Algo que debamos saber? (opcional)",
+        "notePlaceholder": "Ej. uso Dentalink desde 2019, tengo 2 sucursales…",
+        "privacy": "Tus datos se transmiten cifrados y solo el equipo de migración los consulta. No los compartimos con terceros y los eliminamos de nuestros servidores al terminar. Cumplimos con la LFPDPPP.",
+        "send": "Enviar para revisión",
+        "needFile": "Sube un respaldo para enviar",
+        "ready": "Listo para enviar",
+        "sentTitle": "Recibimos tu archivo",
+        "sentLead": "Tu migración está en revisión por el equipo. Te avisaremos por correo y dentro del panel cuando esté lista.",
+        "sentStripTitle": "En revisión por el equipo",
+        "sentStripDesc": "Tiempo estimado: 48 horas hábiles. No necesitas hacer nada más.",
+        "done": "Entendido"
       }
     },
     "paymentMethodModal": {
@@ -1414,6 +1586,7 @@
       "totalPlan": "Total plan",
       "paid": "Pagado",
       "pending": "Pendiente",
+      "credit": "Saldo a favor",
       "pctCovered": "{pct}% cubierto"
     },
     "history": {
@@ -1894,6 +2067,7 @@
       "treatmentTotal": "Total tratamiento",
       "paid": "Pagado",
       "pendingBalance": "Saldo pendiente",
+      "creditBalance": "Saldo a favor",
       "pctCovered": "{pct}% cubierto",
       "chargeNow": "Cobrar ahora",
       "autoRules": "Reglas automáticas",
@@ -2059,6 +2233,7 @@
       "kpiToCollect": "Por cobrar",
       "kpiOverdue": "Vencido",
       "kpiThisMonth": "Este mes",
+      "kpiCredit": "Saldo a favor",
       "searchPlaceholder": "Buscar por paciente o folio…",
       "emptyNoInvoices": "No hay facturas todavía",
       "emptyNoResults": "Sin resultados para los filtros aplicados",

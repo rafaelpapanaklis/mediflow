@@ -29,6 +29,7 @@ import {
   Tag,
   User,
   Download,
+  Upload,
   Trash2,
   X,
   ChevronDown,
@@ -43,6 +44,7 @@ import { useT } from "@/i18n/i18n-provider";
 import type { TFunction } from "@/i18n/t";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import { NewPatientModal } from "@/components/dashboard/new-patient-modal";
+import { ImportWizard } from "@/components/import/import-wizard";
 import { DateField } from "@/components/ui/date-field";
 import styles from "./patients.module.css";
 
@@ -282,6 +284,8 @@ export function PatientsClient({ doctors }: Props) {
 
   // Modal
   const [newPatientOpen, setNewPatientOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
+  const [importAssisted, setImportAssisted] = useState(false);
 
   // Navegación J/K
   const [focusedIdx, setFocusedIdx] = useState<number>(-1);
@@ -504,6 +508,17 @@ export function PatientsClient({ doctors }: Props) {
   const pageStart = total === 0 ? 0 : (page - 1) * PAGE_SIZE + 1;
   const pageEnd = Math.min(total, page * PAGE_SIZE);
   const pagesToShow = computePages(page, totalPages);
+
+  // ¿Hay algún filtro/búsqueda activo? Si no, y total === 0, la clínica está
+  // vacía de verdad → mostramos el CTA grande de "Importar mi clínica".
+  const anyFilterActive =
+    Boolean(search) ||
+    statusFilter !== "ALL" ||
+    quickFilter !== null ||
+    Boolean(advAgeMin) || Boolean(advAgeMax) || advGenders.length > 0 ||
+    Boolean(advDoctorId) || advTags.length > 0 || advHasDebt !== "any" ||
+    Boolean(advVisitFrom) || Boolean(advVisitTo) || Boolean(advSource);
+  const showEmptyClinic = !loading && !error && total === 0 && !anyFilterActive;
 
   const handleStatClick = (kind: "total" | "newMonth" | "debt" | "nextAppt") => {
     if (kind === "total") {
@@ -729,6 +744,15 @@ export function PatientsClient({ doctors }: Props) {
 
         <button
           type="button"
+          className={styles.btn}
+          onClick={() => { setImportAssisted(false); setImportOpen(true); }}
+          title={t("shell.importClinic.launch")}
+        >
+          <Upload size={13} aria-hidden /> {t("shell.importClinic.launch")}
+        </button>
+
+        <button
+          type="button"
           className={`${styles.btn} ${styles.btnPrimary}`}
           onClick={() => setNewPatientOpen(true)}
           title={t("patients.toolbar.newPatientTitle")}
@@ -769,6 +793,11 @@ export function PatientsClient({ doctors }: Props) {
           <AlertCircle size={28} style={{ marginBottom: 8, color: "var(--red)" }} aria-hidden />
           <div>{t("patients.list.errorPrefix", { message: error })}</div>
         </div>
+      ) : showEmptyClinic ? (
+        <ImportClinicEmpty
+          onImport={() => { setImportAssisted(false); setImportOpen(true); }}
+          onAssisted={() => { setImportAssisted(true); setImportOpen(true); }}
+        />
       ) : view === "list" ? (
         <PatientsTable
           patients={patients}
@@ -856,11 +885,42 @@ export function PatientsClient({ doctors }: Props) {
           reload();
         }}
       />
+
+      <ImportWizard
+        open={importOpen}
+        startInAssisted={importAssisted}
+        onClose={() => setImportOpen(false)}
+        onImported={() => {
+          setImportOpen(false);
+          setPage(1);
+          reload();
+        }}
+      />
     </div>
   );
 }
 
 /* ─── Sub-componentes ─── */
+
+function ImportClinicEmpty({ onImport, onAssisted }: { onImport: () => void; onAssisted: () => void }) {
+  const t = useT();
+  return (
+    <div className="imp-empty">
+      <div className="imp-empty__glyph" aria-hidden><Users size={30} /></div>
+      <h2 className="imp-empty__title">{t("shell.importClinic.empty.title")}</h2>
+      <p className="imp-empty__desc">{t("shell.importClinic.empty.desc")}</p>
+      <div className="imp-empty__cta">
+        <button type="button" className="btn-new btn-new--primary" style={{ height: 40, padding: "0 18px" }} onClick={onImport}>
+          <Upload size={15} aria-hidden /> {t("shell.importClinic.launch")}
+        </button>
+        <button type="button" className="btn-new btn-new--secondary" style={{ height: 40, padding: "0 18px" }} onClick={onAssisted}>
+          {t("shell.importClinic.assistedCta")}
+        </button>
+      </div>
+      <p className="imp-empty__hint">{t("shell.importClinic.empty.hint")}</p>
+    </div>
+  );
+}
 
 function HeroStats({
   stats, loading, onClick, activeFilter,

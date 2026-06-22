@@ -178,6 +178,7 @@ model Clinic {
   cfdis                CfdiRecord[]
   treatments           TreatmentPlan[]
   paymentPlans         PaymentPlan[]
+  patientCredits       PatientCredit[]
   consentForms         ConsentForm[]
   periodontalRecords   PeriodontalRecord[]
   subscriptionInvoices SubscriptionInvoice[]
@@ -1169,6 +1170,7 @@ model Patient {
   files               PatientFile[]
   treatments          TreatmentPlan[]
   paymentPlans        PaymentPlan[]
+  patientCredits      PatientCredit[]
   consentForms        ConsentForm[]
   periodontalRecords  PeriodontalRecord[]
   beforeAfterPhotos   BeforeAfterPhoto[]
@@ -1255,6 +1257,27 @@ model Patient {
   @@index([clinicId, createdAt(sort: Desc)])
   @@index([primaryDoctorId])
   @@map("patients")
+}
+
+/// Saldo a favor (crédito) del paciente. v1 SIN consumo: el saldo a favor de un
+/// paciente = SUM(amount) de sus filas. Lo alimenta el import de "Saldos"
+/// (col tipo=favor) y, a futuro, sobrepagos / notas de crédito. Aislamiento por
+/// clínica = Prisma-side (where clinicId), igual que el resto del modelo.
+model PatientCredit {
+  id          String   @id @default(cuid())
+  clinicId    String
+  patientId   String
+  amount      Float // siempre > 0; el "a favor" lo expresa el modelo, no el signo
+  description String?
+  source      String   @default("migrated")
+  creditDate  DateTime @default(now())
+  createdAt   DateTime @default(now())
+
+  clinic  Clinic  @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  patient Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
+
+  @@index([clinicId, patientId])
+  @@map("patient_credits")
 }
 
 /// Estado por superficie del odontograma (32 dientes adultos / 5 superficies).

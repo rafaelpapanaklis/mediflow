@@ -3,6 +3,7 @@ export const dynamic = "force-dynamic";
 import { getCurrentUser } from "@/lib/auth";
 import { getServerT } from "@/i18n/server";
 import { prisma } from "@/lib/prisma";
+import { getPatientCreditBalance } from "@/lib/patient-credit";
 import { notFound } from "next/navigation";
 import { headers } from "next/headers";
 import { logAudit } from "@/lib/audit";
@@ -103,7 +104,7 @@ export default async function PatientDetailPage({ params }: { params: { id: stri
   // activas (o todas, si la clínica está en trial vigente) y reusamos esa
   // lista para Pediatría / Periodoncia / prefill endo. Reemplaza tres
   // llamadas previas a canAccessModule() — mismo contrato, una query.
-  const [clinicModuleKeys, activityCounts, latestQuestionnaire] = await Promise.all([
+  const [clinicModuleKeys, activityCounts, latestQuestionnaire, creditBalance] = await Promise.all([
     getActiveClinicModuleKeys(user.clinicId),
     getPatientActivityCounts({ clinicId: user.clinicId, patientId: patient.id }),
     // Cuestionario de salud vigente (anamnesis WS1-T2). .catch(()=>null) lo
@@ -114,6 +115,9 @@ export default async function PatientDetailPage({ params }: { params: { id: stri
       orderBy: { filledAt: "desc" },
       select: { riskFlags: true, filledAt: true },
     }).catch(() => null),
+    // Saldo a favor (crédito) del paciente. El helper ya es resiliente si la
+    // tabla patient_credits aún no está migrada (devuelve 0).
+    getPatientCreditBalance(user.clinicId, patient.id),
   ]);
   const questionnaireRiskFlags = latestQuestionnaire?.riskFlags ?? [];
   const questionnaireFilledAt  = latestQuestionnaire?.filledAt ? latestQuestionnaire.filledAt.toISOString() : null;
@@ -302,6 +306,7 @@ export default async function PatientDetailPage({ params }: { params: { id: stri
           activityCounts={activityCounts}
           questionnaireStatus={questionnaireStatus}
           questionnaireFilledAt={questionnaireFilledAt}
+          creditBalance={creditBalance}
         />
       </ErrorBoundary>
     </div>
