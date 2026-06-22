@@ -694,3 +694,40 @@ el ruido conocido `prisma:error DATABASE_URL` del SSG sin env). Multi-tenant: to
 - QA con un export real que use la columna `tipo` (preview debe mostrar «a favor»/«adeudo» por fila).
 - Decisión heredada de la QA previa: gating de rol en `/api/patients/import` si pacientes también
   debe ser ADMIN/RECEPCIÓN (saldos/citas ya lo tienen).
+
+===========================================================================
+## FIX · El preview del paso 5 ya no se queda en spinner eterno [integ/import-clinic, 2026-06-22]
+===========================================================================
+**Bug confirmado por Rafael:** `/api/patients/import` responde 200 OK pero el wizard se queda en
+«Leyendo tu archivo…» para siempre. **Build EXIT 0** (`✓ Compiled successfully`, type-check 0 errores,
+`✓ 280/280`; solo el ruido conocido `prisma:error DATABASE_URL` del SSG sin env). NO en `main`.
+Commit `1113a439`.
+
+### Causa raíz (PRE-EXISTENTE — ya estaba en `25ff0505`, NO la introdujo la ola de progreso)
+El `useEffect` que carga el preview al entrar al paso 5 tenía **`previewLoading` en sus dependencias**.
+`setPreviewLoading(true)` re-disparaba el efecto → el cleanup del primer run ponía `alive=false` →
+cuando el fetch resolvía, el `.then` hacía `if(!alive) return` y **descartaba la respuesta 200**, sin
+apagar nunca el loading. (Verificado con `git show 25ff0505:…import-wizard.tsx` → la dep ya estaba.)
+
+### Qué se arregló (`src/components/import/import-wizard.tsx`)
+1. **Causa raíz:** se quita `previewLoading` de las deps. La carga se extrae a `loadPreview()` y la
+   staleness deja de atarse al ciclo del efecto: se decide con un **token por petición**
+   (`previewReqRef`, un `useRef`) atado al **archivo/montaje**. Solo la petición MÁS RECIENTE aplica su
+   resultado y SIEMPRE apaga el loading; `stale()` reemplaza al viejo `alive`. Deps del efecto ahora =
+   `[flow, step, file, preview, origin]`. La re-entrada se evita por la guarda (`preview`/`previewError`)
+   y los lanzamientos concurrentes los gana el último (token). El token se invalida en
+   **desmontaje, open-reset, handleFile, removeFile y startWizard** → ninguna respuesta vieja (de otro
+   archivo o de una sesión anterior) pisa a la nueva. **No hay bucle**: setear `preview` re-corre el
+   efecto pero la guarda `|| preview` corta.
+2. **Estado de error real:** nuevo `previewError`. Si el preview falla (incluye el **timeout de 60s**
+   del XHR), se muestra **«No pudimos leer tu archivo» + botón «Reintentar»** (re-dispara `loadPreview`)
+   en vez del spinner infinito. i18n es/en (`shell.importClinic.step5.errorTitle/errorDesc/retry`),
+   `role="alert"`, icono en `var(--danger)`, responsive claro/oscuro (CSS `.imp-error`).
+3. **Commit/importing:** revisado — `runImport()` NO comparte el patrón. Es una acción async del
+   usuario (no un efecto con deps/cleanup), así que no descarta respuestas. Sin cambios ahí.
+
+### 🔴 Pendiente de Rafael
+- **QA**: re-probar el paso 5 con el 200 real (antes se colgaba) → debe pasar a Mapear. Forzar un fallo
+  (p. ej. cortar la red) para ver «No pudimos leer tu archivo» + «Reintentar», y que el reintento cargue.
+- El `errPreview` (toast) quedó sin uso en código (la ruta de error ahora es inline); la clave i18n
+  sigue por si se reusa.
