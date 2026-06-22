@@ -64,6 +64,124 @@ function boneColormap(): THREE.DataTexture {
   return tex;
 }
 
+// ---------------------------------------------------------------------------
+// AUTO-VENTANA POR HISTOGRAMA (el CBCT no da Hounsfield estables) ------------
+// El CBCT no produce HU absolutos fiables: dos tomografos —o dos exposiciones—
+// asignan numeros distintos al MISMO hueso, asi que una ventana/umbral FIJO no
+// cae bien en todos los estudios. En vez de HU absolutos trabajamos en "gray
+// values" RELATIVOS: tras la normalizacion p1/p99 (que ya estira el rango real
+// del estudio a 0-255) localizamos por histograma los 3 hitos de densidad y de
+// ellos derivamos la ventana por defecto + los presets. Asi el volumen sale
+// bien contrastado "por defecto" en cualquier CBCT sin tocar nada.
+function clamp(v: number, lo: number, hi: number) {
+  return v < lo ? lo : v > hi ? hi : v;
+}
+function lerp(a: number, b: number, t: number) {
+  return a + (b - a) * t;
+}
+
+// Otsu sobre el histograma en el rango de bins [lo,hi]: encuentra el umbral que
+// MAXIMIZA la varianza entre las dos clases (fondo vs objeto). Es libre de
+// parametros, asi que se adapta solo a cada estudio sin numeros magicos.
+function otsuBin(hist: Uint32Array, lo: number, hi: number) {
+  let total = 0;
+  let sum = 0;
+  for (let i = lo; i <= hi; i++) {
+    total += hist[i];
+    sum += i * hist[i];
+  }
+  if (total === 0) return Math.floor((lo + hi) / 2);
+  let wB = 0;
+  let sumB = 0;
+  let best = -1;
+  let thr = lo;
+  for (let i = lo; i <= hi; i++) {
+    wB += hist[i];
+    if (wB === 0) continue;
+    const wF = total - wB;
+    if (wF === 0) break;
+    sumB += i * hist[i];
+    const mB = sumB / wB;
+    const mF = (sum - sumB) / wF;
+    const between = wB * wF * (mB - mF) * (mB - mF);
+    if (between > best) {
+      best = between;
+      thr = i;
+    }
+  }
+  return thr;
+}
+
+type AutoWindow = {
+  gAir: number;
+  gBone: number;
+  gHi: number;
+  sliderMin: number;
+  sliderMax: number;
+  sliderStep: number;
+  presets: Record<"bone" | "tissue" | "air", { iso: number; clim: [number, number] }>;
+};
+
+// A partir del histograma de 256 bins del volumen YA normalizado localiza:
+//   gAir  = frontera aire/fondo <-> cabeza   (Otsu global)
+//   gBone = frontera tejido blando <-> hueso (Otsu dentro de la cabeza)
+//   gHi   = techo de densidad util            (percentil 99.5; ignora metal)
+// y construye la ventana por defecto + los presets de densidad, todo en valores
+// RELATIVOS al propio estudio (no HU). 'bone' es el defecto auto-contrastado.
+function computeAutoWindowFromHist(hist: Uint32Array, total: number): AutoWindow {
+  const n = total > 0 ? total : 1;
+  const airBin = otsuBin(hist, 0, 255);
+  const boneBin = otsuBin(hist, Math.min(255, airBin + 1), 255);
+  let cum = 0;
+  let hiBin = 255;
+  const hiT = n * 0.995;
+  for (let i = 0; i < 256; i++) {
+    cum += hist[i];
+    if (cum >= hiT) {
+      hiBin = i;
+      break;
+    }
+  }
+  // Orden garantizado con separaciones minimas para que la ventana nunca colapse.
+  const gAir = clamp(airBin / 255, 0.04, 0.6);
+  const gBone = clamp(boneBin / 255, gAir + 0.08, 0.95);
+  const gHi = clamp(hiBin / 255, gBone + 0.04, 1);
+  const mid = lerp(gAir, gBone, 0.5);
+
+  const presets: AutoWindow["presets"] = {
+    // Hueso/diente: iso en la frontera osea, ventana del medio-tejido al techo
+    // -> superficie osea nitida con relieve (defecto auto-contrastado).
+    bone: { iso: gBone, clim: [mid, gHi] },
+    // Tejido blando: iso apenas dentro de la piel -> se ve la envolvente facial;
+    // ventana abierta para que el hueso asome bajo el tejido.
+    tissue: { iso: lerp(gAir, gBone, 0.3), clim: [lerp(0, gAir, 0.5), gHi] },
+    // Aire/baja densidad: iso casi en la piel + ventana baja -> resalta cavidades
+    // (senos / via aerea) y densidades suaves.
+    air: { iso: lerp(gAir, gBone, 0.1), clim: [0, mid] },
+  };
+
+  const sliderMin = clamp(gAir * 0.8, 0.02, 0.5);
+  const sliderMax = clamp(gHi, sliderMin + 0.1, 0.99);
+  const sliderStep = Math.max(0.005, Math.round(((sliderMax - sliderMin) / 100) * 1000) / 1000);
+  return { gAir, gBone, gHi, sliderMin, sliderMax, sliderStep, presets };
+}
+
+// Ventana de respaldo (estudio plano / antes del primer calculo): equivale al
+// comportamiento fijo anterior para que la UI tenga limites sanos desde el inicio.
+const FALLBACK_WINDOW: AutoWindow = {
+  gAir: 0.12,
+  gBone: 0.36,
+  gHi: 0.9,
+  sliderMin: 0.12,
+  sliderMax: 0.6,
+  sliderStep: 0.01,
+  presets: {
+    bone: { iso: 0.36, clim: [0.12, 0.9] },
+    tissue: { iso: 0.22, clim: [0.06, 0.9] },
+    air: { iso: 0.16, clim: [0, 0.5] },
+  },
+};
+
 export default function Dicom3DVolume({ slices }: { slices: VolSlice[] }) {
   const mountRef = useRef<HTMLDivElement | null>(null);
   const [renderstyle, setRenderstyle] = useState<0 | 1>(1); // 1 = Sólido/ISO (defecto), 0 = MIP
@@ -72,10 +190,34 @@ export default function Dicom3DVolume({ slices }: { slices: VolSlice[] }) {
   styleRef.current = renderstyle;
   const isoRef = useRef(iso);
   isoRef.current = iso;
+  // Preset de densidad activo (hueso/tejido/aire). 'bone' = auto-contrastado.
+  const [preset, setPreset] = useState<"bone" | "tissue" | "air">("bone");
+  const presetRef = useRef(preset);
+  presetRef.current = preset;
+  // Ventana auto + presets calculados del histograma del propio estudio (no HU
+  // fijos). `auto` alimenta la UI (limites del slider); `autoRef` da acceso sin
+  // closure obsoleto a los handlers; `climRef` lo empuja el loop cada frame.
+  const [auto, setAuto] = useState<AutoWindow>(FALLBACK_WINDOW);
+  const autoRef = useRef<AutoWindow>(FALLBACK_WINDOW);
+  const climRef = useRef<[number, number]>(FALLBACK_WINDOW.presets.bone.clim);
   // Render BAJO DEMANDA: el efecto del visor publica aquí su "pedir un frame"
   // para que los cambios de estilo/umbral (estado de React, que NO re-ejecutan
   // el efecto) puedan despertar el loop y pintar un cuadro nuevo.
   const requestRenderRef = useRef<(() => void) | null>(null);
+
+  // Aplica un preset de densidad: reubica iso + ventana a los hitos del estudio
+  // (valores RELATIVOS, no HU), sincroniza el slider y pide un cuadro. No
+  // re-ejecuta el efecto pesado: el loop lee iso/clim por ref cada frame.
+  const applyPreset = (key: "bone" | "tissue" | "air") => {
+    const pr = autoRef.current.presets[key];
+    if (!pr) return;
+    presetRef.current = key;
+    climRef.current = pr.clim;
+    isoRef.current = pr.iso;
+    setPreset(key);
+    setIso(pr.iso);
+    requestRenderRef.current?.();
+  };
 
   useEffect(() => {
     const mount = mountRef.current;
@@ -169,9 +311,13 @@ export default function Dicom3DVolume({ slices }: { slices: VolSlice[] }) {
     // de valores): un único vóxel de metal/artefacto dispara el max y aplasta el
     // contraste óseo, así que normalizamos contra [p1,p99] saturando las colas.
     const vol = new Uint8Array(W * H * D);
+    // Histograma del volumen YA normalizado (256 bins): lo construimos en la
+    // misma pasada de escritura para alimentar la auto-ventana sin un 2.º barrido.
+    const hist256 = new Uint32Array(256);
     const span = maxV - minV;
     if (span <= 0) {
       vol.fill(0); // volumen plano: nada que normalizar
+      hist256[0] = vol.length;
     } else {
       const BINS = 1024;
       const binW = span / BINS;
@@ -211,9 +357,23 @@ export default function Dicom3DVolume({ slices }: { slices: VolSlice[] }) {
       for (let i = 0; i < avg.length; i++) {
         let g = ((avg[i] - p1) / range) * 255;
         g = g < 0 ? 0 : g > 255 ? 255 : g;
-        vol[i] = g;
+        const b = g | 0; // bin 0..255 (vol[i] trunca al mismo entero)
+        vol[i] = b;
+        hist256[b]++;
       }
     }
+
+    // --- AUTO-VENTANA + PRESETS DE DENSIDAD (gray values relativos) --------
+    // Con el histograma del estudio derivamos la ventana y los presets en vez
+    // de usar HU/umbrales fijos, y aplicamos el preset activo (al montar =
+    // 'bone' auto) a iso + ventana ANTES del primer cuadro.
+    const win = computeAutoWindowFromHist(hist256, vol.length);
+    autoRef.current = win;
+    setAuto(win);
+    const activePreset = win.presets[presetRef.current] || win.presets.bone;
+    climRef.current = activePreset.clim;
+    isoRef.current = activePreset.iso;
+    setIso(activePreset.iso);
 
     const texture = new THREE.Data3DTexture(vol, W, H, D);
     texture.format = THREE.RedFormat;
@@ -261,7 +421,7 @@ export default function Dicom3DVolume({ slices }: { slices: VolSlice[] }) {
     const uniforms = THREE.UniformsUtils.clone(VolumeRenderShader1.uniforms);
     uniforms.u_data.value = texture;
     uniforms.u_size.value.set(W, H, D);
-    uniforms.u_clim.value.set(0.12, 0.9);
+    uniforms.u_clim.value.set(climRef.current[0], climRef.current[1]);
     uniforms.u_renderstyle.value = styleRef.current;
     uniforms.u_renderthreshold.value = isoRef.current;
     uniforms.u_cmdata.value = cmtex;
@@ -308,6 +468,7 @@ export default function Dicom3DVolume({ slices }: { slices: VolSlice[] }) {
       if (needsRender) {
         uniforms.u_renderstyle.value = styleRef.current;
         uniforms.u_renderthreshold.value = isoRef.current;
+        uniforms.u_clim.value.set(climRef.current[0], climRef.current[1]);
         renderer.render(scene, camera);
         needsRender = false;
       }
@@ -441,14 +602,41 @@ export default function Dicom3DVolume({ slices }: { slices: VolSlice[] }) {
             MIP
           </button>
         </div>
+        <div className="flex items-center gap-1">
+          <span className="text-[10px] text-muted-foreground mr-0.5">Densidad</span>
+          <button
+            type="button"
+            onClick={() => applyPreset("bone")}
+            title="Hueso / diente — auto-contrastado por el histograma del estudio"
+            className={`text-[11px] px-2.5 py-1 rounded ${preset === "bone" ? "bg-brand-600 text-white" : "bg-muted text-foreground border border-border"}`}
+          >
+            Hueso
+          </button>
+          <button
+            type="button"
+            onClick={() => applyPreset("tissue")}
+            title="Tejido blando — envolvente facial"
+            className={`text-[11px] px-2.5 py-1 rounded ${preset === "tissue" ? "bg-brand-600 text-white" : "bg-muted text-foreground border border-border"}`}
+          >
+            Tejido
+          </button>
+          <button
+            type="button"
+            onClick={() => applyPreset("air")}
+            title="Aire / baja densidad — cavidades y vía aérea"
+            className={`text-[11px] px-2.5 py-1 rounded ${preset === "air" ? "bg-brand-600 text-white" : "bg-muted text-foreground border border-border"}`}
+          >
+            Aire
+          </button>
+        </div>
         {renderstyle === 1 && (
           <label className="flex items-center gap-2 text-[11px] text-muted-foreground flex-1 min-w-[160px]">
             Umbral
             <input
               type="range"
-              min={0.12}
-              max={0.6}
-              step={0.01}
+              min={auto.sliderMin}
+              max={auto.sliderMax}
+              step={auto.sliderStep}
               value={iso}
               onChange={(e) => setIso(Number(e.target.value))}
               className="flex-1 accent-brand-500"
