@@ -5,7 +5,7 @@ import { createCalendarEvent, refreshAccessToken, getOrCreateClinicCalendar } fr
 import { rateLimit } from "@/lib/rate-limit";
 import { tzLocalToUtc } from "@/lib/agenda/time-utils";
 import { getPatientPortalContext } from "@/lib/patient-portal/guard";
-import { resolveBookingPatient } from "@/lib/patient-portal/link";
+import { resolveBookingPatient, resolveGuestBookingPatient } from "@/lib/patient-portal/link";
 
 export async function POST(req: NextRequest) {
   try {
@@ -45,14 +45,10 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Formato de hora inválido" }, { status: 400 });
   }
 
-  // ── Require patient portal session ─────────────────────────────────────────
+  // ── Sesión del portal (OPCIONAL) ───────────────────────────────────────────
+  // CON sesión → la cita se liga a la cuenta del paciente. SIN sesión → reserva
+  // como INVITADO (queda como expediente en la clínica). Nunca obliga a registro.
   const ctx = await getPatientPortalContext();
-  if (!ctx) {
-    return NextResponse.json(
-      { error: "Inicia sesión para reservar tu cita", requiresAuth: true },
-      { status: 401 }
-    );
-  }
 
   // ── Find clinic ────────────────────────────────────────────────────────────
   const clinic = await prisma.clinic.findUnique({
@@ -93,17 +89,29 @@ export async function POST(req: NextRequest) {
   const endMins = slotMins + 30;
   const endTime = `${String(Math.floor(endMins / 60)).padStart(2,"0")}:${String(endMins % 60).padStart(2,"0")}`;
 
-  // ── Resolve patient from portal session (link por email verificado o crear) ─
-  const resolved = await resolveBookingPatient({
-    accountId:       ctx.account.id,
-    accountEmail:    ctx.account.email,
-    clinicId:        clinic.id,
-    firstName:       firstName.trim(),
-    lastName:        lastName.trim(),
-    phone:           cleanPhone,
-    email:           email?.trim() || null,
-    primaryDoctorId: doctorId,
-  });
+  // ── Resolver el Patient ────────────────────────────────────────────────────
+  //  · CON sesión → liga a la cuenta (email verificado o crea + vincula).
+  //  · SIN sesión (invitado) → reusa solo por email EXACTO o crea nuevo;
+  //    JAMÁS adopta por teléfono (robo de expediente).
+  const resolved = ctx
+    ? await resolveBookingPatient({
+        accountId:       ctx.account.id,
+        accountEmail:    ctx.account.email,
+        clinicId:        clinic.id,
+        firstName:       firstName.trim(),
+        lastName:        lastName.trim(),
+        phone:           cleanPhone,
+        email:           email?.trim() || null,
+        primaryDoctorId: doctorId,
+      })
+    : await resolveGuestBookingPatient({
+        clinicId:        clinic.id,
+        firstName:       firstName.trim(),
+        lastName:        lastName.trim(),
+        phone:           cleanPhone,
+        email:           email?.trim() || null,
+        primaryDoctorId: doctorId,
+      });
 
   // ── Check conflict + create appointment in a transaction (prevent double-booking) ──
   const startsAtBook = tzLocalToUtc(date, slotH, slotM, clinic.timezone);

@@ -217,6 +217,7 @@ export interface PatientMe {
 
 export const PATIENT_ME_API = "/api/paciente/me";
 export const PATIENT_REGISTER_PATH = "/paciente/registro";
+export const PATIENT_LOGIN_PATH = "/paciente/login";
 
 // ── Endpoints públicos de booking REUTILIZADOS (ya existen en main) ──────────
 

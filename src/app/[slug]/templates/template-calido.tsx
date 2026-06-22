@@ -14,6 +14,7 @@ import {
   useScrolled, useActiveSection, useLightbox, scrollToId,
 } from "../_shared/landing-utils";
 import { BookingModal } from "../_shared/booking-modal";
+import { useReservarAutoOpen } from "../_shared/use-reservar-autoopen";
 
 const DAYS_SHORT = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
 
@@ -32,6 +33,7 @@ export function TemplateCalido({ clinic }: TemplateProps) {
   // ---- estado ----
   const [booking, setBooking] = useState<{ open: boolean; service?: string; doctorId?: string }>({ open: false });
   const openBooking = (opts?: { service?: string; doctorId?: string }) => setBooking({ open: true, ...opts });
+  useReservarAutoOpen(() => openBooking());
   const closeBooking = () => setBooking((b) => ({ ...b, open: false }));
   const scrolled = useScrolled(40);
   const [menu, setMenu] = useState(false);

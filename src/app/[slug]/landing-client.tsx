@@ -53,6 +53,7 @@ export function ClinicLandingClient({ clinic, highlights }:{ clinic:Clinic; high
   const themeDark = hexAdjust(theme, -35);
   const [showBook, setShowBook] = useState(false);
   const [bookPrefill, setBookPrefill] = useState<BookingPrefill|null>(null);
+  const [bookAccount, setBookAccount] = useState<PacienteMe|null>(null);
   const [lightbox, setLightbox] = useState<number|null>(null);
   const [openFaq, setOpenFaq]   = useState<number|null>(null);
   const [scrolled, setScrolled] = useState(false);
@@ -79,16 +80,19 @@ export function ClinicLandingClient({ clinic, highlights }:{ clinic:Clinic; high
     return () => window.removeEventListener("scroll", fn);
   }, []);
 
-  // GATE: reservar requiere sesión del portal del paciente. Sin sesión →
-  // registro con ?next= de vuelta a esta landing (reabre el modal solo).
+  // Reservar SIN obligar cuenta: con sesión prellena y liga a la cuenta; sin
+  // sesión abre en modo INVITADO. Iniciar sesión / crear cuenta se ofrecen
+  // dentro del modal (con ?next= de regreso a esta misma reserva).
   async function openBooking() {
     const me = await fetchPacienteMe();
-    if (!me) {
-      window.location.assign(`/paciente/registro?next=${encodeURIComponent(`/${clinic.slug}?reservar=1`)}`);
-      return;
+    if (me) {
+      const { firstName, lastName } = splitFullName(me.name);
+      setBookPrefill({ firstName, lastName, phone: me.phone ?? "", email: me.email });
+      setBookAccount(me);
+    } else {
+      setBookPrefill(null);
+      setBookAccount(null);
     }
-    const { firstName, lastName } = splitFullName(me.name);
-    setBookPrefill({ firstName, lastName, phone: me.phone ?? "", email: me.email });
     setShowBook(true);
   }
 
@@ -602,13 +606,13 @@ export function ClinicLandingClient({ clinic, highlights }:{ clinic:Clinic; high
       </footer>
 
       {/* BOOKING MODAL */}
-      {showBook && <BookingModal clinic={clinic} onClose={() => setShowBook(false)} theme={theme} themeDark={themeDark} prefill={bookPrefill}/>}
+      {showBook && <BookingModal clinic={clinic} onClose={() => setShowBook(false)} theme={theme} themeDark={themeDark} prefill={bookPrefill} account={bookAccount}/>}
     </div>
     </>
   );
 }
 
-function BookingModal({ clinic, onClose, theme, themeDark, prefill }:{ clinic:Clinic; onClose:()=>void; theme:string; themeDark:string; prefill?:BookingPrefill|null }) {
+function BookingModal({ clinic, onClose, theme, themeDark, prefill, account }:{ clinic:Clinic; onClose:()=>void; theme:string; themeDark:string; prefill?:BookingPrefill|null; account?:PacienteMe|null }) {
   const [step, setStep]           = useState(1);
   const [doctor, setDoctor]       = useState<Clinic["users"][0]|null>(null);
   const [calDate, setCalDate]     = useState(new Date());
@@ -641,13 +645,19 @@ function BookingModal({ clinic, onClose, theme, themeDark, prefill }:{ clinic:Cl
       .then(r=>r.json()).then(d=>setSlots(d.slots??[])).catch(()=>{}).finally(()=>setLoadSlots(false));
   },[selDate,doctor,clinic.slug]);
 
+  function goLogin() {
+    window.location.assign(`/paciente/login?next=${encodeURIComponent(`/${clinic.slug}?reservar=1`)}`);
+  }
+  function goRegister() {
+    window.location.assign(`/paciente/registro?next=${encodeURIComponent(`/${clinic.slug}?reservar=1`)}`);
+  }
+
   async function submit() {
     if (!form.firstName.trim()||!form.lastName.trim()||form.phone.trim().replace(/\D/g,"").length<10) { setError("Completa nombre y teléfono válido"); return; }
     setError(""); setSubmitting(true);
     try {
       const res=await fetch("/api/public/book",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({slug:clinic.slug,doctorId:doctor!.id,date:selDate,startTime:selSlot,type:form.type,firstName:form.firstName.trim(),lastName:form.lastName.trim(),phone:form.phone.trim(),email:form.email.trim()||undefined,notes:form.notes.trim()||undefined})});
       const data=await res.json();
-      if (res.status===401) { window.location.assign(`/paciente/registro?next=${encodeURIComponent(`/${clinic.slug}?reservar=1`)}`); return; }
       if (!res.ok) throw new Error(data.error??"Error al agendar");
       setStep(4);
     } catch(e:any){setError(e.message);} finally{setSubmitting(false);}
@@ -757,6 +767,28 @@ function BookingModal({ clinic, onClose, theme, themeDark, prefill }:{ clinic:Cl
               <div className="rounded-2xl p-4 text-sm font-semibold flex items-center gap-2.5" style={{background:`${theme}10`,color:themeDark}}>
                 <Calendar size={15}/> {selDate?new Date(selDate+"T00:00:00").toLocaleDateString("es-MX",{weekday:"short",day:"numeric",month:"long"}):""} · {selSlot} · Dr/a. {doctor?.firstName}
               </div>
+              {account ? (
+                <div className="rounded-2xl px-4 py-3 text-xs font-semibold flex items-center gap-2" style={{background:"#f0fdf4",color:"#15803d"}}>
+                  <Check size={14} className="shrink-0"/>
+                  <span className="truncate">Agendas con tu cuenta · {account.email}</span>
+                </div>
+              ) : (
+                <div className="rounded-2xl border-2 border-gray-100 p-3.5">
+                  <p className="text-xs text-gray-500 mb-2.5">Agenda como invitado llenando tus datos, o entra a tu cuenta DaleControl:</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button type="button" onClick={goLogin}
+                      className="py-2 rounded-xl text-xs font-bold border-2 transition-colors hover:bg-gray-50"
+                      style={{borderColor:`${theme}55`,color:themeDark}}>
+                      Iniciar sesión
+                    </button>
+                    <button type="button" onClick={goRegister}
+                      className="py-2 rounded-xl text-xs font-bold text-white transition-opacity hover:opacity-90"
+                      style={{background:theme}}>
+                      Crear cuenta
+                    </button>
+                  </div>
+                </div>
+              )}
               <div className="grid grid-cols-2 gap-3">
                 {[{l:"Nombre *",k:"firstName",p:"Nombre"},{l:"Apellido *",k:"lastName",p:"Apellido"}].map(f=>(
                   <div key={f.k}>

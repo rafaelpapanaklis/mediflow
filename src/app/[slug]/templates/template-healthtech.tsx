@@ -17,6 +17,7 @@ import {
   scrollToId, useLightbox, Lightbox, tint, shade, alpha, mix, hexAdjust,
 } from "../_shared/landing-utils";
 import { BookingModal } from "../_shared/booking-modal";
+import { useReservarAutoOpen } from "../_shared/use-reservar-autoopen";
 
 const DAYS_FULL = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"];
 const CLOSED_RED = "#b91c1c";
@@ -99,6 +100,7 @@ export function TemplateHealthtech({ clinic, highlights }: TemplateProps) {
   const [booking, setBooking] = useState<{ open: boolean; preselectedService?: string; preselectedDoctorId?: string }>({ open: false });
   const openBooking = (opts?: { service?: string; doctorId?: string }) =>
     setBooking({ open: true, preselectedService: opts?.service, preselectedDoctorId: opts?.doctorId });
+  useReservarAutoOpen(() => openBooking());
   const closeBooking = () => setBooking((b) => ({ ...b, open: false }));
 
   const scrolled = useScrolled(40);

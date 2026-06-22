@@ -17,6 +17,7 @@ import {
   useScrolled, useActiveSection, Reveal, scrollToId, useLightbox, Lightbox,
 } from "../_shared/landing-utils";
 import { BookingModal } from "../_shared/booking-modal";
+import { useReservarAutoOpen } from "../_shared/use-reservar-autoopen";
 
 const DAYS_FULL = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"];
 const CERRADO = "#b91c1c";
@@ -72,6 +73,7 @@ export function TemplateFuturista({ clinic, highlights }: TemplateProps) {
   /* ---------- estado ---------- */
   const [booking, setBooking] = useState<{ open: boolean; service?: string; doctorId?: string }>({ open: false });
   const openBooking = (opts: { service?: string; doctorId?: string } = {}) => setBooking({ open: true, service: opts.service, doctorId: opts.doctorId });
+  useReservarAutoOpen(() => openBooking());
   const closeBooking = () => setBooking((b) => ({ ...b, open: false }));
   const [menu, setMenu] = useState(false);
   const [showFab, setShowFab] = useState(false);

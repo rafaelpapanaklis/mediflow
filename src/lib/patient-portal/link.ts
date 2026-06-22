@@ -134,3 +134,65 @@ export async function resolveBookingPatient(
   await createLinkIgnoringDuplicate(accountId, patient.id, clinicId);
   return { patientId: patient.id, created: true };
 }
+
+export interface ResolveGuestBookingPatientArgs {
+  clinicId: string;
+  firstName: string;
+  lastName: string;
+  phone: string; // ya limpio (solo dígitos)
+  email?: string | null; // email del form (opcional)
+  primaryDoctorId?: string | null;
+}
+
+/**
+ * Resuelve el Patient a usar en una reserva SIN sesión (INVITADO):
+ *  1. Si el form trae email → reusa el Patient de la clínica cuyo email coincida
+ *     EXACTO (case-insensitive, no borrado). Esto deja que un paciente conocido
+ *     reuse su expediente sin cuenta.
+ *  2. Si no hay email, o no hay match → CREA Patient nuevo (mismo row-lock y
+ *     formato de patientNumber que resolveBookingPatient: serializa por clínica).
+ * No crea ningún vínculo cuenta↔paciente: el invitado no tiene cuenta.
+ * PROHIBIDO: adoptar un Patient encontrado por TELÉFONO (robo de expediente).
+ */
+export async function resolveGuestBookingPatient(
+  args: ResolveGuestBookingPatientArgs,
+): Promise<{ patientId: string; created: boolean }> {
+  const { clinicId, firstName, lastName, phone, primaryDoctorId } = args;
+  const email = args.email?.trim() || null;
+
+  // 1. Reusa SOLO por email exacto (NUNCA por teléfono).
+  if (email) {
+    const byEmail = await prisma.patient.findFirst({
+      where: {
+        clinicId,
+        email: { equals: email, mode: "insensitive" },
+        deletedAt: null,
+      },
+      select: { id: true },
+    });
+    if (byEmail) {
+      return { patientId: byEmail.id, created: false };
+    }
+  }
+
+  // 2. Crear Patient nuevo. Transacción CORTA con el mismo row-lock y formato de
+  //    patientNumber que resolveBookingPatient (serializa creates por clínica).
+  const patient = await prisma.$transaction(async (tx) => {
+    await tx.$executeRaw`SELECT 1 FROM clinics WHERE id = ${clinicId} FOR UPDATE`;
+    const count = await tx.patient.count({ where: { clinicId } });
+    const patientNumber = `P${String(count + 1).padStart(4, "0")}`;
+    return tx.patient.create({
+      data: {
+        clinicId,
+        patientNumber,
+        firstName: firstName.trim(),
+        lastName: lastName.trim(),
+        phone,
+        email,
+        primaryDoctorId: primaryDoctorId ?? null,
+      },
+    });
+  });
+
+  return { patientId: patient.id, created: true };
+}

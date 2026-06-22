@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo } from "react";
 import { ChevronLeft, ChevronRight, Check, Phone, FileText, Loader2, MapPin, Clock, Calendar } from "lucide-react";
+import type { PacienteMe } from "@/lib/patient-portal/types";
 
 interface Doctor {
   id: string; firstName: string; lastName: string;
@@ -48,6 +49,7 @@ export function BookingClient({ clinic, preselectedService, categoryServices }: 
   const [loadSlots,  setLoadSlots]  = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error,      setError]      = useState("");
+  const [account,    setAccount]    = useState<PacienteMe | null>(null);
   const [form, setForm] = useState({
     firstName:"", lastName:"", phone:"", email:"",
     type: preselectedService ?? "", notes:"",
@@ -98,19 +100,17 @@ export function BookingClient({ clinic, preselectedService, categoryServices }: 
       .finally(() => setLoadSlots(false));
   }, [selDate, doctor, clinic.slug]);
 
-  // Reservar requiere cuenta de paciente (cookie patient_session): sin sesión
-  // → registro con ?next= de regreso; con sesión → prefill de contacto.
+  // Reservar SIN obligar cuenta: con sesión prellena el contacto y la cita se
+  // liga a la cuenta; sin sesión, reserva como INVITADO (iniciar sesión / crear
+  // cuenta se ofrecen en el paso de datos, con ?next= de regreso aquí).
   useEffect(() => {
     let cancelled = false;
     fetch("/api/paciente/me", { credentials: "same-origin", cache: "no-store" })
       .then(r => (r.ok ? r.json() : null))
       .catch(() => null)
       .then(me => {
-        if (cancelled) return;
-        if (!me) {
-          window.location.assign(`/paciente/registro?next=${encodeURIComponent(`/reservar/${clinic.slug}`)}`);
-          return;
-        }
+        if (cancelled || !me) return;
+        setAccount(me);
         setForm(f => {
           const parts = typeof me.name === "string" ? me.name.trim().split(/\s+/) : [];
           return {
@@ -124,6 +124,13 @@ export function BookingClient({ clinic, preselectedService, categoryServices }: 
       });
     return () => { cancelled = true; };
   }, [clinic.slug]);
+
+  function goLogin() {
+    window.location.assign(`/paciente/login?next=${encodeURIComponent(`/reservar/${clinic.slug}`)}`);
+  }
+  function goRegister() {
+    window.location.assign(`/paciente/registro?next=${encodeURIComponent(`/reservar/${clinic.slug}`)}`);
+  }
 
   async function submit() {
     setError(""); setSubmitting(true);
@@ -142,10 +149,6 @@ export function BookingClient({ clinic, preselectedService, categoryServices }: 
       const text = await res.text();
       let data: any;
       try { data = JSON.parse(text); } catch { data = { error: text || `Error del servidor (${res.status})` }; }
-      if (res.status === 401) {
-        window.location.assign(`/paciente/registro?next=${encodeURIComponent(`/reservar/${clinic.slug}`)}`);
-        return;
-      }
       if (!res.ok) throw new Error(data.error ?? "Error al agendar");
       setStep(5);
     } catch (err: any) { setError(err.message); }
@@ -406,6 +409,26 @@ export function BookingClient({ clinic, preselectedService, categoryServices }: 
                 📋 {form.type}
               </div>
             </div>
+
+            {account ? (
+              <div style={{ display:"flex", alignItems:"center", gap:8, background:"#052e16", border:"1px solid #16a34a", borderRadius:12, padding:"10px 14px", marginBottom:16, fontSize:13, color:"#4ade80", fontWeight:600 }}>
+                <Check size={15}/> <span style={{ overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>Agendas con tu cuenta · {account.email}</span>
+              </div>
+            ) : (
+              <div style={{ background:"#1e293b", border:"1px solid #334155", borderRadius:12, padding:"12px 14px", marginBottom:16 }}>
+                <p style={{ fontSize:13, color:"#94a3b8", marginBottom:10 }}>Agenda como invitado llenando tus datos, o entra a tu cuenta DaleControl:</p>
+                <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
+                  <button type="button" onClick={goLogin}
+                    style={{ padding:"9px", borderRadius:10, fontSize:13, fontWeight:700, background:"transparent", color:"#93c5fd", border:"1.5px solid #2563eb", cursor:"pointer" }}>
+                    Iniciar sesión
+                  </button>
+                  <button type="button" onClick={goRegister}
+                    style={{ padding:"9px", borderRadius:10, fontSize:13, fontWeight:700, background:"#2563eb", color:"#fff", border:"none", cursor:"pointer" }}>
+                    Crear cuenta
+                  </button>
+                </div>
+              </div>
+            )}
 
             <h1 style={{ fontSize:20, fontWeight:800, color:"#f1f5f9", marginBottom:16 }}>Tus datos</h1>
 

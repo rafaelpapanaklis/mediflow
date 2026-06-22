@@ -1,7 +1,7 @@
 "use client";
 
 import { type CSSProperties, type FocusEvent, useEffect, useRef, useState } from "react";
-import { Calendar, Check, Loader2, ShieldCheck } from "lucide-react";
+import { Calendar, Check, Loader2 } from "lucide-react";
 import {
   DEFAULT_SERVICE,
   PUBLIC_AVAILABILITY_API,
@@ -21,6 +21,7 @@ import {
   formatDateEs,
   fetchPatientMe,
   buildRegistroUrl,
+  buildLoginUrl,
   persistSelection,
   cleanPhoneDigits,
   splitName,
@@ -64,7 +65,6 @@ export function BookingSchedule(props: BookingScheduleProps) {
   const INK = "var(--ink, #0f172a)";
   const MUTED = "var(--muted, #64748b)";
   const LINE = "var(--line, #e9e7f3)";
-  const V50 = "var(--v50, #f5f3ff)";
   const B2 = "var(--b2, #6d28d9)";
   const TINT2 = "var(--tint2, #faf8ff)";
   const labelStyle: CSSProperties = { fontSize: 11, fontWeight: 600, color: MUTED };
@@ -160,6 +160,11 @@ export function BookingSchedule(props: BookingScheduleProps) {
     window.location.href = buildRegistroUrl();
   }
 
+  function goToLogin() {
+    persistSelection({ clinicSlug: clinic.slug, service, doctorId: doctor.id, date, slot });
+    window.location.href = buildLoginUrl();
+  }
+
   const focusTheme = (e: FocusEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     e.currentTarget.style.borderColor = theme;
   };
@@ -171,7 +176,9 @@ export function BookingSchedule(props: BookingScheduleProps) {
   const showPhoneError = phoneInvalid && (phoneTouched || attempted);
 
   async function submit() {
-    if (typeof authState !== "object" || submitting) return;
+    // Invitado (anon) o con sesión pueden agendar; solo se bloquea mientras se
+    // verifica la sesión o ya hay un envío en curso.
+    if (authState === "checking" || submitting) return;
     setAttempted(true);
     if (!date || !slot) {
       onBack();
@@ -406,36 +413,41 @@ export function BookingSchedule(props: BookingScheduleProps) {
         </div>
       )}
 
-      {authState === "anon" && (
-        <div className="px-1 py-4 text-center">
-          <div
-            className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl"
-            style={{ background: V50, color: B2 }}
-          >
-            <ShieldCheck size={26} />
-          </div>
-          <h4 className="mb-1.5 text-base" style={{ fontWeight: 700, color: INK }}>
-            Crea tu cuenta para confirmar
-          </h4>
-          <p className="mx-auto mb-5 max-w-[300px]" style={{ fontSize: 13, color: MUTED }}>
-            Tu selección queda guardada: al volver continúas justo donde quedaste.
-          </p>
-          <button
-            type="button"
-            onClick={goToRegister}
-            className="w-full rounded-2xl py-3.5 text-sm font-bold text-white transition-all"
-            style={{
-              background: "linear-gradient(135deg, var(--b, #7c3aed), var(--b2, #6d28d9))",
-              boxShadow: "0 8px 24px rgba(124, 58, 237, 0.28)",
-            }}
-          >
-            Continuar con mi cuenta
-          </button>
-        </div>
-      )}
-
-      {typeof authState === "object" && (
+      {authState !== "checking" && (
         <>
+          {typeof authState === "object" ? (
+            <div className="flex items-center gap-2 rounded-2xl px-4 py-3" style={{ background: "#f0fdf4" }}>
+              <Check size={14} style={{ color: "#15803d", flexShrink: 0 }} />
+              <span className="truncate" style={{ fontSize: 12, fontWeight: 600, color: "#15803d" }}>
+                Agendas con tu cuenta · {authState.email ?? authState.name}
+              </span>
+            </div>
+          ) : (
+            <div className="rounded-2xl border-2 p-3.5" style={{ borderColor: LINE }}>
+              <p className="mb-2.5" style={{ fontSize: 12, color: MUTED }}>
+                Agenda como invitado llenando tus datos, o entra a tu cuenta DaleControl:
+              </p>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={goToLogin}
+                  className="rounded-xl border-2 py-2 text-xs font-bold transition-colors"
+                  style={{ borderColor: `${theme}55`, color: B2, background: "#fff" }}
+                >
+                  Iniciar sesión
+                </button>
+                <button
+                  type="button"
+                  onClick={goToRegister}
+                  className="rounded-xl py-2 text-xs font-bold text-white transition-opacity hover:opacity-90"
+                  style={{ background: theme }}
+                >
+                  Crear cuenta
+                </button>
+              </div>
+            </div>
+          )}
+
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="mb-1.5 block" style={labelStyle}>

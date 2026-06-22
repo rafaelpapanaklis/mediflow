@@ -11,6 +11,7 @@ import {
   BOOKING_STORAGE_KEY,
   PATIENT_ME_API,
   PATIENT_REGISTER_PATH,
+  PATIENT_LOGIN_PATH,
   type BookingSelection,
   type DirectoryClinic,
   type DirectorySchedule,
@@ -121,6 +122,13 @@ export function buildRegistroUrl(): string {
   if (typeof window === "undefined") return PATIENT_REGISTER_PATH;
   const next = window.location.pathname + window.location.search;
   return `${PATIENT_REGISTER_PATH}?next=${encodeURIComponent(next)}`;
+}
+
+/** URL de login con ?next= apuntando a la URL ACTUAL (que ya lleva la selección). */
+export function buildLoginUrl(): string {
+  if (typeof window === "undefined") return PATIENT_LOGIN_PATH;
+  const next = window.location.pathname + window.location.search;
+  return `${PATIENT_LOGIN_PATH}?next=${encodeURIComponent(next)}`;
 }
 
 // ── Paso derivado de la selección (el popup no persiste el paso) ─────────────

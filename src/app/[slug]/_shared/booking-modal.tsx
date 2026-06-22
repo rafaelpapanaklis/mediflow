@@ -9,6 +9,7 @@
 import { useState, useEffect, useRef } from "react";
 import { X, Check, Loader2, ArrowRight, Calendar } from "lucide-react";
 import type { LandingClinic, LandingDoctor } from "./types";
+import type { PacienteMe } from "@/lib/patient-portal/types";
 import { hexAdjust } from "./landing-utils";
 
 const MONTHS_ES = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
@@ -16,6 +17,14 @@ const DAYS_SHORT = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
 
 function toYMD(d: Date) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+/** Divide el nombre completo de la cuenta en nombre + apellido(s) para prellenar. */
+function splitName(full: string): { firstName: string; lastName: string } {
+  const parts = (full ?? "").trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return { firstName: "", lastName: "" };
+  if (parts.length === 1) return { firstName: parts[0], lastName: "" };
+  return { firstName: parts[0], lastName: parts.slice(1).join(" ") };
 }
 
 export interface BookingModalProps {
@@ -39,6 +48,7 @@ export function BookingModal({ clinic, theme, open, onClose, preselectedDoctorId
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [form, setForm] = useState({ firstName: "", lastName: "", phone: "", email: "", type: "Consulta general", notes: "" });
+  const [account, setAccount] = useState<PacienteMe | null>(null);
   const cardRef = useRef<HTMLDivElement>(null);
 
   const schedMap = Object.fromEntries(clinic.schedules.map((s) => [s.dayOfWeek, s]));
@@ -72,9 +82,32 @@ export function BookingModal({ clinic, theme, open, onClose, preselectedDoctorId
     setStep(pre ? 2 : 1);
     setCalDate(new Date());
     setSelDate(""); setSlots([]); setSelSlot(""); setLoadSlots(false);
-    setSubmitting(false); setError("");
+    setSubmitting(false); setError(""); setAccount(null);
     setForm({ firstName: "", lastName: "", phone: "", email: "", type: preselectedService || "Consulta general", notes: "" });
   }, [open, preselectedDoctorId, preselectedService, clinic.users]);
+
+  // Sesión del portal (OPCIONAL): si el visitante ya tiene cuenta, prellena sus
+  // datos y la cita se ligará a su cuenta. Sin sesión → reserva como invitado.
+  useEffect(() => {
+    if (!open) return;
+    let alive = true;
+    fetch("/api/paciente/me", { credentials: "same-origin", cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((me: PacienteMe | null) => {
+        if (!alive || !me) return;
+        setAccount(me);
+        const { firstName, lastName } = splitName(me.name);
+        setForm((f) => ({
+          ...f,
+          firstName: f.firstName || firstName,
+          lastName: f.lastName || lastName,
+          phone: f.phone || (me.phone ?? ""),
+          email: f.email || (me.email ?? ""),
+        }));
+      })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, [open]);
 
   // Esc + bloqueo de scroll del body + focus-trap
   useEffect(() => {
@@ -94,6 +127,17 @@ export function BookingModal({ clinic, theme, open, onClose, preselectedDoctorId
     document.addEventListener("keydown", onKey);
     return () => { document.body.style.overflow = ""; document.removeEventListener("keydown", onKey); };
   }, [open, onClose]);
+
+  // Botones "ya tengo cuenta": vuelven a esta misma landing y reabren la modal.
+  function authReturnUrl() {
+    return `/${clinic.slug}?reservar=1`;
+  }
+  function goLogin() {
+    window.location.assign(`/paciente/login?next=${encodeURIComponent(authReturnUrl())}`);
+  }
+  function goRegister() {
+    window.location.assign(`/paciente/registro?next=${encodeURIComponent(authReturnUrl())}`);
+  }
 
   async function submit() {
     if (!form.firstName.trim() || !form.lastName.trim() || form.phone.trim().replace(/\D/g, "").length < 10) { setError("Completa nombre y teléfono válido"); return; }
@@ -219,6 +263,28 @@ export function BookingModal({ clinic, theme, open, onClose, preselectedDoctorId
               <div className="rounded-2xl p-4 text-sm font-semibold flex items-center gap-2.5" style={{ background: `${theme}10`, color: themeDark }}>
                 <Calendar size={15} /> {selDate ? new Date(selDate + "T00:00:00").toLocaleDateString("es-MX", { weekday: "short", day: "numeric", month: "long" }) : ""} · {selSlot} · Dr/a. {doctor?.firstName}
               </div>
+              {account ? (
+                <div className="rounded-2xl px-4 py-3 text-xs font-semibold flex items-center gap-2" style={{ background: "#f0fdf4", color: "#15803d" }}>
+                  <Check size={14} className="shrink-0" />
+                  <span className="truncate">Agendas con tu cuenta · {account.email}</span>
+                </div>
+              ) : (
+                <div className="rounded-2xl border-2 border-gray-100 p-3.5">
+                  <p className="text-xs text-gray-500 mb-2.5">Agenda como invitado llenando tus datos, o entra a tu cuenta DaleControl:</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button type="button" onClick={goLogin}
+                      className="py-2 rounded-xl text-xs font-bold border-2 transition-colors hover:bg-gray-50"
+                      style={{ borderColor: `${theme}55`, color: themeDark }}>
+                      Iniciar sesión
+                    </button>
+                    <button type="button" onClick={goRegister}
+                      className="py-2 rounded-xl text-xs font-bold text-white transition-opacity hover:opacity-90"
+                      style={{ background: theme }}>
+                      Crear cuenta
+                    </button>
+                  </div>
+                </div>
+              )}
               <div className="grid grid-cols-2 gap-3">
                 {[{ l: "Nombre *", k: "firstName", p: "Nombre" }, { l: "Apellido *", k: "lastName", p: "Apellido" }].map((f) => (
                   <div key={f.k}>
