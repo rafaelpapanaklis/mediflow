@@ -279,6 +279,10 @@ export function Stage(props: StageProps) {
   // ── Punteros ───────────────────────────────────────────────────────────────
   const onPointerDown = (e: React.PointerEvent) => {
     onFocus && onFocus();
+    // En el VOLUMEN 3D con "Navegar", el giro/zoom los maneja OrbitControls (sobre
+    // el lienzo WebGL). Si el Stage captura el puntero aquí, el evento nunca llega
+    // al control 3D y el modelo NO rota → en ese caso no interceptamos.
+    if (is3d && tool === "cursor") return;
     try {
       stageRef.current && stageRef.current.setPointerCapture(e.pointerId);
     } catch (_) {

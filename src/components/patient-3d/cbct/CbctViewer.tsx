@@ -48,6 +48,9 @@ const LAYOUTS: { id: Layout; label: string; Icon: CbctIcon }[] = [
 
 const blankView = (): ViewState => ({ zoom: 1, panX: 0, panY: 0, yaw: 0 });
 const ACCENT = "#2a6fdb";
+// Umbral del volumen 3D por preset de densidad (0..100; alto = más denso/menos
+// tejido). Hace que los presets "esculpan" también el 3D, no solo la ventana 2D.
+const PRESET_UMBRAL: Record<string, number> = { hueso: 62, dientes: 82, blando: 28, seno: 45 };
 
 export function CbctViewer({
   estudio,
@@ -197,6 +200,15 @@ export function CbctViewer({
   const editNota = (id: string, texto: string) =>
     setNotes((p) => p.map((n) => (n.id === id ? { ...n, texto, ts: Date.now() } : n)));
   const removeNota = (id: string) => setNotes((p) => p.filter((n) => n.id !== id));
+
+  // Los presets de densidad también fijan el umbral del VOLUMEN 3D (no solo la
+  // ventana de los cortes 2D): "Esmalte" sube el umbral para aislar dientes,
+  // "Tejido blando" lo baja, etc. Solo al ELEGIR un preset (no en ajuste manual).
+  useEffect(() => {
+    const u = PRESET_UMBRAL[hu.preset];
+    if (u != null) setVol((v) => (v.umbral === u ? v : { ...v, umbral: u }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hu.preset]);
 
   // Persistencia de hallazgos (T7): debounce 800ms al cambiar `annos` (tras el
   // montaje) + aviso de error visible. El primer render (montaje) no guarda.

@@ -235,11 +235,15 @@ export default function Dicom3DVolume({
     texture.needsUpdate = true;
 
     const width = mount.clientWidth || 600;
-    const height = 460;
+    // Alto RESPONSIVO al contenedor cuando manda el panel (visor nuevo, `vol`
+    // presente); 460 fijo en uso suelto (visor clásico) para no romper su layout.
+    const height = (vol ? mount.clientHeight : 0) || 460;
 
     // antialias:false → el MSAA solo suaviza los bordes del cubo contenedor; el
     // ray casting de volumen no se beneficia, así que es coste inútil de GPU.
-    const renderer = new THREE.WebGLRenderer({ antialias: false, alpha: true });
+    // preserveDrawingBuffer:true → deja LEER el lienzo (Captura: drawImage/toBlob);
+    // sin esto el buffer se descarta tras pintar y la foto sale NEGRA.
+    const renderer = new THREE.WebGLRenderer({ antialias: false, alpha: true, preserveDrawingBuffer: true });
     renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
     renderer.setSize(width, height);
     mount.appendChild(renderer.domElement);
@@ -390,18 +394,24 @@ export default function Dicom3DVolume({
 
     const onResize = () => {
       const nw = mount.clientWidth || 600;
-      renderer.setSize(nw, height);
-      const a = nw / height;
+      const nh = (vol ? mount.clientHeight : 0) || height;
+      renderer.setSize(nw, nh);
+      const a = nw / nh;
       camera.left = (-frustum * a) / 2;
       camera.right = (frustum * a) / 2;
       camera.updateProjectionMatrix();
       requestRender(); // el cambio de tamaño necesita un cuadro nuevo
     };
     window.addEventListener("resize", onResize);
+    // En MPR/modal la CELDA cambia de tamaño SIN que cambie la ventana → un
+    // ResizeObserver del contenedor mantiene el lienzo ajustado a su caja real.
+    const ro = typeof ResizeObserver !== "undefined" ? new ResizeObserver(onResize) : null;
+    ro?.observe(mount);
 
     return () => {
       cancelAnimationFrame(raf);
       window.removeEventListener("resize", onResize);
+      ro?.disconnect();
       controls.removeEventListener("change", requestRender);
       renderer.domElement.removeEventListener("webglcontextlost", onContextLost);
       renderer.domElement.removeEventListener("webglcontextrestored", onContextRestored);
@@ -442,10 +452,10 @@ export default function Dicom3DVolume({
   }, [renderstyle, iso]);
 
   return (
-    <div>
+    <div style={{ width: "100%", height: vol ? "100%" : "auto" }}>
       <div
         ref={mountRef}
-        style={{ width: "100%", height: 460, background: "#000", borderRadius: 8, overflow: "hidden" }}
+        style={{ width: "100%", height: vol ? "100%" : 460, minHeight: vol ? 220 : 460, background: "#000", borderRadius: 8, overflow: "hidden" }}
       />
       {/* WS2-T9: controles internos SOLO en uso suelto (sin panel). Con `vol`
           presente manda el VolumePanel y estos se ocultan para no duplicar. */}

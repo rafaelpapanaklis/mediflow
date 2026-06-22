@@ -70,14 +70,14 @@ export function parseInitialNotes(raw: unknown): EstudioNota[] {
       const arr = JSON.parse(s);
       if (Array.isArray(arr)) {
         const out: EstudioNota[] = [];
+        const seen = new Set<string>();
         for (let i = 0; i < arr.length; i++) {
           const n: any = arr[i];
           if (!n || typeof n !== "object" || typeof n.texto !== "string") continue;
-          out.push({
-            id: typeof n.id === "string" && n.id ? n.id : uid(),
-            texto: n.texto,
-            ts: typeof n.ts === "number" ? n.ts : 0,
-          });
+          let id = typeof n.id === "string" && n.id ? n.id : uid();
+          while (seen.has(id)) id = uid(); // ids ÚNICOS: si el guardado trae duplicados, no colapsan en la UI
+          seen.add(id);
+          out.push({ id, texto: n.texto, ts: typeof n.ts === "number" ? n.ts : 0 });
         }
         return out;
       }
