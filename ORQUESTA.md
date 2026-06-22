@@ -1,3 +1,53 @@
+═══════════════════════════════════════════════════════════════════════════
+## IMPORT→MAIN — Integración a main: import (fix UX mapeo) + saldo a favor + buscador ✅ EN MAIN (2026-06-22)
+═══════════════════════════════════════════════════════════════════════════
+OBJETIVO: dejar en main (producción) DOS arreglos de forma segura — el wizard
+"Importar mi clínica" (con fix UX del mapeo) y el buscador de pacientes por nombre
+completo. Build EXIT 0 por paso; main intacto ante cualquier fallo.
+
+FIX UX DEL MAPEO (commit bd888a5d · src/components/import/import-wizard.tsx):
+  El paso 5 (Mapear) y 6 (Revisar) asumían SIEMPRE la entidad "patients": el
+  preview se pedía fijo con "patients", así que al importar solo Saldos/Citas el
+  dropdown ofrecía campos de paciente y Revisar salía en 0/duplicados.
+  - principalEntity = primera entidad elegida en el paso 3 (prioridad pacientes >
+    saldos > citas; el orden de DATA_TYPES ya lo refleja).
+  - El preview del paso 5 se pide con principalEntity → targetFields =
+    CANONICAL_FIELDS[principalEntity] (Saldo→Monto, Tipo, Concepto…); el paso 6
+    muestra montos/estado reales de esa entidad.
+  - runImport aplica el mapeo del paso 5 a la entidad PRINCIPAL (no solo a
+    pacientes); las demás se autodetectan. Commit multi-entidad intacto.
+  - Volver al paso 3 y cambiar la selección invalida preview/mapeo (evita
+    arrastrar un mapeo de paciente a un commit de saldos).
+
+ORDEN DE INTEGRACIÓN (ajuste seguro vs. el plan): la rama fix/patient-search-
+  fullname NO era aislada — su historia es main (e60679cd) + 1 commit del buscador.
+  Mergearla tal cual habría arrastrado todo NOM-024 y dado los conflictos schema/
+  i18n EN el paso del buscador (al revés del plan). Por eso INVERTÍ el orden:
+  primero traje main a integ, luego el buscador (que así aporta solo patients/
+  route.ts). Resultado final idéntico al objetivo.
+
+FUSIONADO EN integ/import-clinic:
+  1) fix UX mapeo → bd888a5d (build EXIT 0).
+  2) merge origin/main (e60679cd) → be6db6e8. Auto-fusión (ort) SIN conflictos;
+     verifiqué la UNIÓN a mano: schema conserva PatientCredit Y NOM-024
+     (archivedAt/deletedAt/AuditLog); es/en.json conservan importClinic.*
+     (fields.amount, step6.kindCredit) Y claves NOM; JSON válido. Build EXIT 0.
+  3) merge --no-ff fix/patient-search-fullname → e7940d99. Limpio: solo
+     patients/route.ts (búsqueda v2 por tokens — cada token matchea en algún campo
+     → encuentra por nombre completo) + ORQUESTA.md. Build EXIT 0.
+  Push integ: 11d9f92f..e7940d99.
+
+MERGE A MAIN: git merge --no-ff integ/import-clinic → b19de73e. main era ancestro
+  de integ → SIN conflictos. Build (prisma generate && next build) EXIT 0 · Compiled
+  successfully · 279/279 páginas · rutas /api/patients/import y /dashboard/patients
+  en el manifest. Push origin main: e60679cd..b19de73e (Vercel auto-deploy).
+  Reemplaza el modal viejo import-patients-modal.tsx.
+
+NOTAS: sql/patient-credits.sql YA está aplicado en Supabase (sin acción). design/
+  (prototipo local untracked/ignored) NO se tocó. Los prisma:error DATABASE_URL son
+  del prerender sin DB (patrón conocido), no fatales.
+ESTADO: main = import + saldo a favor + buscador. ✅
+
 ===========================================================================
 ## WS2-T3 - "Importar mi clinica": wizard de migracion (UI, cliente mock) [feat/import-wizard-ui, 2026-06-18]
 ===========================================================================
