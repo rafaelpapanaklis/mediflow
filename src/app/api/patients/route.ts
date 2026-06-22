@@ -83,13 +83,28 @@ async function v2Handler(
   if (status && ["ACTIVE", "INACTIVE", "ARCHIVED"].includes(status)) {
     where.status = status;
   }
-  if (search) {
-    where.OR = [
-      { firstName: { contains: search, mode: "insensitive" } },
-      { lastName: { contains: search, mode: "insensitive" } },
-      { email: { contains: search, mode: "insensitive" } },
-      { phone: { contains: search, mode: "insensitive" } },
-      { patientNumber: { contains: search, mode: "insensitive" } },
+  // Búsqueda por TOKENS: "Juan Perez Lopez" debe encontrar a quien tiene
+  // firstName="Juan" / lastName="Perez Lopez". Antes se hacía OR del término
+  // COMPLETO en cada campo, así que ninguna columna sola contenía la frase entera
+  // (pero "Perez Lopez" sí). Ahora cada token debe matchear en ALGÚN campo (AND de
+  // ORs) → el orden da igual ("Lopez Juan" también encuentra). Se usa where.AND y
+  // NO where.OR a propósito: así no se pisa el OR de visibilidad que
+  // buildPatientWhere fija a los doctores (solo ven sus pacientes); Prisma combina
+  // clinicId + (OR visibilidad) + (AND tokens) todos con AND.
+  const tokens = search.split(/\s+/).filter(Boolean);
+  if (tokens.length) {
+    const prev = Array.isArray(where.AND) ? where.AND : where.AND ? [where.AND] : [];
+    where.AND = [
+      ...prev,
+      ...tokens.map((tok): Prisma.PatientWhereInput => ({
+        OR: [
+          { firstName: { contains: tok, mode: "insensitive" } },
+          { lastName: { contains: tok, mode: "insensitive" } },
+          { email: { contains: tok, mode: "insensitive" } },
+          { phone: { contains: tok, mode: "insensitive" } },
+          { patientNumber: { contains: tok, mode: "insensitive" } },
+        ],
+      })),
     ];
   }
   if (genders.length > 0) {
