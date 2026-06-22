@@ -87,6 +87,17 @@ export function ImportWizard({ open, onClose, onImported, startInAssisted = fals
 
   const origin = useMemo(() => origins.find((o) => o.id === originId) ?? null, [origins, originId]);
 
+  // Entidades elegidas en el paso 3, en ORDEN de prioridad (el orden de DATA_TYPES
+  // ya es pacientes → saldos → citas). La PRINCIPAL es la primera: define los campos
+  // del mapeo (paso 5) y el preview de revisión (paso 6). Antes el paso 5/6 asumían
+  // SIEMPRE "patients", así que al importar solo saldos/citas el dropdown ofrecía
+  // campos de paciente y la revisión salía en 0/duplicados.
+  const selectedEntities = useMemo<Entity[]>(
+    () => DATA_TYPES.filter((d) => d.entity && types.has(d.id)).map((d) => d.entity as Entity),
+    [types],
+  );
+  const principalEntity: Entity = selectedEntities[0] ?? "patients";
+
   // Token de la petición de preview EN VUELO: solo la MÁS RECIENTE aplica su
   // resultado/loading. Atado a la PETICIÓN (archivo/montaje), NO al ciclo del
   // efecto — reemplaza el viejo flag `alive` que el re-run del efecto (por tener
@@ -164,7 +175,7 @@ export function ImportWizard({ open, onClose, onImported, startInAssisted = fals
     setPreviewLoading(true);
     setUploadProg({ phase: "uploading", pct: 0, eta: null, label: "" });
     const onProg = makeUploadHandler("");
-    api.preview("patients", f, undefined, (p) => { if (!stale()) onProg(p); })
+    api.preview(principalEntity, f, undefined, (p) => { if (!stale()) onProg(p); })
       .then((res) => {
         if (stale()) return;
         setPreview(res);
@@ -187,6 +198,21 @@ export function ImportWizard({ open, onClose, onImported, startInAssisted = fals
     setPreview(null);
     loadPreview();
   }
+
+  // Si cambia la entidad PRINCIPAL (porque el usuario volvió al paso 3 y ajustó la
+  // selección), invalida el preview/mapeo en vuelo: el paso 5 lo recargará con los
+  // campos de la nueva entidad y el paso 6 mostrará su preview. Mismo saneo que al
+  // cambiar de archivo; evita arrastrar un mapeo de paciente a un commit de saldos.
+  const principalRef = useRef(principalEntity);
+  useEffect(() => {
+    if (principalRef.current === principalEntity) return;
+    principalRef.current = principalEntity;
+    setPreview(null);
+    setMapping({});
+    setPreviewError(null);
+    setPreviewLoading(false);
+    previewReqRef.current++;
+  }, [principalEntity]);
 
   // Dispara la carga al entrar al paso 5 si aún no hay preview (ni error mostrado).
   // `previewLoading`/`previewError` NO van en las deps a propósito: son estados que
@@ -233,17 +259,14 @@ export function ImportWizard({ open, onClose, onImported, startInAssisted = fals
   // ---- Importar (commit multi-entidad + progreso) ----
   // Importa, EN ORDEN, las entidades elegidas en el paso 3 (pacientes → saldos →
   // citas) desde el MISMO archivo. Pacientes va primero para que saldos/citas
-  // resuelvan al paciente recién creado. Pacientes usa el mapeo del paso 5; saldos
-  // y citas se autodetectan (su mapeo no se edita en esta UI). El resumen se
+  // resuelvan al paciente recién creado. La entidad PRINCIPAL (la primera elegida)
+  // usa el mapeo del paso 5; las demás se autodetectan en el backend. El resumen se
   // acumula por entidad. La barra "crece" mientras corre el trabajo real y se
   // completa solo al terminar (no se simula el éxito).
   async function runImport() {
     if (!file) return;
     const f = file;
-    const entities = DATA_TYPES
-      .filter((d) => d.entity && types.has(d.id))
-      .map((d) => d.entity as Entity);
-    const toRun: Entity[] = entities.length ? entities : ["patients"];
+    const toRun: Entity[] = selectedEntities.length ? selectedEntities : ["patients"];
     const n = toRun.length;
 
     setStep("importing");
@@ -270,7 +293,7 @@ export function ImportWizard({ open, onClose, onImported, startInAssisted = fals
         const r = await api.commit(
           ent,
           f,
-          ent === "patients" ? mapping : {},
+          ent === principalEntity ? mapping : {},
           { skipDuplicates: skipDup },
           onProg,
         );
