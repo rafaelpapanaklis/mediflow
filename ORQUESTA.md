@@ -1,4 +1,53 @@
 ═══════════════════════════════════════════════════════════════════════════
+## WS2-T6 — Visor 3D: auto-ventana por histograma + presets de densidad (CBCT sin HU fijos) ✅ EN RAMA feat/viewer-auto-window (9d56e318, 2026-06-22) · NO main
+═══════════════════════════════════════════════════════════════════════════
+Ramificada de main (e60679cd). OWNERSHIP estricto: `src/components/patient-3d/Dicom3DVolume.tsx` y NADA más.
+
+**Problema**
+El CBCT no entrega Hounsfield (HU) estables: dos tomógrafos —o dos exposiciones— asignan números
+distintos al MISMO hueso. Por eso la ventana/umbral FIJOS del render volumétrico (`u_clim=[0.12,0.9]`,
+iso 0.36, slider 0.12–0.6) no caían exactos en todos los estudios y el volumen salía mal contrastado.
+
+**Solución (auto-ventana en gray values RELATIVOS, no HU)**
+Sobre la normalización p1/p99 que YA existía (estira el rango real del estudio a 0–255), ahora se
+construye el histograma de 256 bins EN LA MISMA pasada de escritura (sin 2.º barrido) y de él se
+localizan los 3 hitos de densidad del propio estudio:
+- `gAir`  = frontera aire/fondo ↔ cabeza  → **Otsu** global (libre de parámetros, se adapta solo).
+- `gBone` = frontera tejido blando ↔ hueso → **Otsu** dentro de la cabeza (bins > gAir).
+- `gHi`   = techo de densidad útil          → **percentil 99.5** (ignora metal/artefacto).
+Con orden garantizado y separaciones mínimas (la ventana nunca colapsa).
+
+**Qué se ve ahora**
+- **Auto-contraste por defecto:** al cargar, iso + ventana se fijan al preset `bone` derivado de los
+  hitos → hueso/diente nítido sin tocar nada.
+- **Presets de densidad** (botones "Densidad: Hueso · Tejido · Aire"), todos RELATIVOS al estudio:
+  · Hueso → iso=gBone, ventana=[medio(gAir,gBone), gHi] (superficie ósea con relieve / defecto).
+  · Tejido → iso apenas dentro de la piel (30% gAir→gBone) → envolvente facial; ventana abierta.
+  · Aire → iso casi en la piel + ventana baja [0, medio] → resalta cavidades (senos / vía aérea).
+- **Slider "Umbral" data-driven:** min/max/step salen de los hitos (no 0.12–0.6 fijos); afina iso
+  dentro del preset. El preset también mueve el thumb (sincronizado).
+- En MIP la ventana del preset también aplica (el colormap usa `u_clim`).
+
+**Se conservan intactos:** ray casting `VolumeRenderShader1`, colormap óseo (marrón→marfil), toggle
+MIP/Sólido, render bajo demanda y la robustez ante pérdida de contexto WebGL.
+
+**Implementación (1 archivo)**
+- Helpers a nivel de módulo: `clamp`, `lerp`, `otsuBin`, `computeAutoWindowFromHist` (→ `AutoWindow`),
+  `FALLBACK_WINDOW` (= comportamiento fijo anterior, para estudio plano / antes del 1.er cálculo).
+- Estado/refs nuevos: `preset`+`presetRef`, `auto`+`autoRef` (límites de UI / acceso a handlers sin
+  closure obsoleto), `climRef` (la ventana ahora es ref pura). `u_clim` se empuja al shader CADA frame
+  desde `climRef` (init + loop), igual patrón que iso/estilo.
+- `applyPreset(key)` reubica iso+ventana, sincroniza slider y pide un cuadro; NO re-ejecuta el efecto
+  pesado del visor.
+
+**Build:** `npx next build` → **EXIT 0**. `✓ Compiled successfully`, type-check sin errores (0 TS),
+275 rutas generadas. Los `prisma:error DATABASE_URL` son del shell sin `.env` (igual que main y el
+resto de worktrees) y no rompen la build.
+
+**Pendiente Rafael:** QA visual en Preview con CBCT real (verificar que `bone` sale bien por defecto y
+que Tejido/Aire son útiles); merge a main SOLO tras QA OK. **Env nuevas: NINGUNA. SQL nuevo: NINGUNO.**
+
+═══════════════════════════════════════════════════════════════════════════
 ## NOM-OLA1-INTEG — Integración de las 5 ramas NOM Ola 1 + fix P2 (PDF receta anulada) 🟡 EN RAMA integ/nom-ola1 (NO main, 2026-06-17)
 ═══════════════════════════════════════════════════════════════════════════
 Integra en UNA rama las 5 ramas de la Ola 1 NOM-024 + arregla el P2 (PDF de receta anulada
