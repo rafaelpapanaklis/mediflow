@@ -179,14 +179,12 @@ export function ImportWizard({ open, onClose, onImported, startInAssisted = fals
       .then((res) => {
         if (stale()) return;
         setPreview(res);
-        // Con perfil: sembrar el mapeo desde las sugerencias. Sin perfil: vacío.
-        if (origin?.hasProfile) {
-          const seeded: ColumnMapping = {};
-          for (const c of res.columns) seeded[c.source] = c.suggestion ?? "";
-          setMapping(seeded);
-        } else {
-          setMapping({});
-        }
+        // Siembra el mapeo desde las sugerencias del backend (autodetecta SIEMPRE,
+        // con o sin perfil); el usuario solo ajusta lo que falte. Antes solo sembraba
+        // con perfil → "Mi Excel"/"Otro" salían con TODO en "Sin importar".
+        const seeded: ColumnMapping = {};
+        for (const c of res.columns) seeded[c.source] = c.suggestion ?? "";
+        setMapping(seeded);
       })
       .catch(() => { if (!stale()) setPreviewError(t("shell.importClinic.step5.errorTitle")); })
       .finally(() => { if (!stale()) { setPreviewLoading(false); setUploadProg(null); } });
@@ -524,6 +522,7 @@ export function ImportWizard({ open, onClose, onImported, startInAssisted = fals
                     origin={origin}
                     preview={preview}
                     mapping={mapping}
+                    hasSecondary={selectedEntities.length > 1}
                     onChange={(source, value) => setMapping((m) => ({ ...m, [source]: value }))}
                   />
                 ) : null
