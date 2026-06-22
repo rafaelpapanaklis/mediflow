@@ -19,7 +19,8 @@
     "test:active-clinic-modules": "tsx --test src/lib/clinical-shared/__tests__/get-active-clinic-modules.test.ts",
     "test:pediatrics-tab-state": "tsx --test src/lib/pediatrics/__tests__/tab-state.test.ts",
     "test:wa-booking": "tsx --test src/lib/whatsapp/bot/__tests__/booking.test.ts",
-    "test:inbox": "tsx --test src/lib/inbox/__tests__/inbox-send.test.ts"
+    "test:inbox": "tsx --test src/lib/inbox/__tests__/inbox-send.test.ts",
+    "test:audit": "tsx --test src/lib/admin/audit-core.test.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
