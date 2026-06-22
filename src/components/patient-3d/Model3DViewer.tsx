@@ -7,11 +7,14 @@
 //
 // El modelo es ESTÁTICO por defecto: solo se mueve cuando el usuario arrastra
 // (OrbitControls manual). Hay un toggle "Auto-rotar" APAGADO por defecto que
-// además respeta prefers-reduced-motion (con movimiento reducido nunca rota).
+// gira el modelo con CUALQUIER herramienta activa y respeta
+// prefers-reduced-motion (con movimiento reducido nunca rota).
 //
 // Herramientas (selector de modo Rotar | Medir | Marcar):
-//  - Medir: clic en dos puntos de la superficie (raycasting) → cota con la
-//    distancia en mm/cm. Etiquetas vía CSS2DRenderer superpuesto.
+//  - Medir: dos clics en la superficie (raycasting) O un arrastre (presiona en
+//    el inicio, suelta en el final, con cota en vivo) → distancia en mm/cm,
+//    como en el visor DICOM. Etiquetas vía CSS2DRenderer. En este modo el
+//    arrastre mide (no rota): la rotación manual queda en la herramienta Rotar.
 //  - Marcar: clic en la superficie coloca un pin con etiqueta editable; clic
 //    sobre un pin lo borra. Los pins se guardan en PatientFile.annotations.
 // Más herramientas en la toolbar: encuadrar/reset, vistas rápidas
@@ -169,6 +172,7 @@ interface ViewerApi {
   applyUnit: (u: MeasureUnit) => void;
   clearMeasure: () => void;
   syncAutoRotate: () => void;
+  applyMode: (m: ToolMode) => void;
   applyWireframe: (on: boolean) => void;
   applyColor: (hex: number) => void;
   resetView: () => void;
@@ -298,6 +302,10 @@ export default function Model3DViewer({
     controls.dampingFactor = 0.08;
     controls.autoRotateSpeed = 1.2;
     controls.autoRotate = false; // ESTÁTICO por defecto; solo rota al arrastrar.
+    // En modo medir el arrastre dibuja la cota (no rota). enableRotate se
+    // re-sincroniza con la herramienta vía applyMode; aquí fija el estado inicial
+    // por si el visor se (re)monta ya en modo medir.
+    controls.enableRotate = modeRef.current !== "measure";
 
     let object: THREE.Object3D | null = null;
     let disposed = false;
@@ -417,8 +425,9 @@ export default function Model3DViewer({
     };
 
     const syncAutoRotate = () => {
-      controls.autoRotate =
-        autoRotateRef.current && modeRef.current === "rotate" && !reduceMotion;
+      // Auto-rotar funciona con CUALQUIER herramienta activa (sin candado de
+      // modo); solo respeta prefers-reduced-motion.
+      controls.autoRotate = autoRotateRef.current && !reduceMotion;
       requestRender(); // arranca el loop si se activó autoRotate.
     };
 
@@ -577,6 +586,7 @@ export default function Model3DViewer({
     const lineMat = new THREE.LineBasicMaterial({ color: MEASURE_COLOR });
     let downX = 0;
     let downY = 0;
+    let downBtn = -1; // botón del pointerdown (0 = primario) para distinguir gestos.
 
     const makeMarker = (p: THREE.Vector3) => {
       const m = new THREE.Mesh(
@@ -649,30 +659,166 @@ export default function Model3DViewer({
       setMeasureCount(measurements.length);
     };
 
+    // Apunta el rayo de picking desde coordenadas de pantalla (NDC + cámara).
+    const setRayFrom = (clientX: number, clientY: number) => {
+      const rect = renderer.domElement.getBoundingClientRect();
+      ndc.x = ((clientX - rect.left) / rect.width) * 2 - 1;
+      ndc.y = -((clientY - rect.top) / rect.height) * 2 + 1;
+      raycaster.setFromCamera(ndc, camera);
+    };
+    // Punto 3D sobre la superficie del modelo bajo el cursor (o null si no toca).
+    const pickSurface = (clientX: number, clientY: number): THREE.Vector3 | null => {
+      const target = object;
+      if (!target) return null;
+      setRayFrom(clientX, clientY);
+      const hits = raycaster.intersectObject(target, true);
+      return hits.length ? hits[0].point.clone() : null;
+    };
+    // Descarta el clic simple pendiente (marcador del primer punto sin pareja).
+    const clearPending = () => {
+      for (const m of pendingMarkers) disposeMeasureObject(m);
+      pendingMarkers.length = 0;
+      pts.length = 0;
+    };
+
+    // ---- Medición por ARRASTRE (gesto unificado con el visor DICOM) ----
+    // pointerdown fija el inicio sobre la superficie; pointermove dibuja la cota
+    // en vivo (línea + extremos + etiqueta); pointerup la fija. Coexiste con el
+    // flujo de 2 clics: un clic sin arrastre cae a placePoint(). En modo medir la
+    // rotación de OrbitControls está apagada (applyMode), así el arrastre
+    // izquierdo mide en vez de girar; rueda (zoom) y botón derecho (paneo) siguen.
+    // OrbitControls captura el puntero en su propio pointerdown → el pointermove/up
+    // siguen llegando aunque el arrastre salga del lienzo.
+    interface PreviewRec {
+      startMarker: THREE.Mesh;
+      endMarker: THREE.Mesh;
+      line: THREE.Line;
+      lineGeo: THREE.BufferGeometry;
+      el: HTMLElement;
+      label: CSS2DObject;
+    }
+    let dragStart: THREE.Vector3 | null = null; // punto inicial del arrastre.
+    let dragMoved = false; // ¿el arrastre superó el umbral de clic?
+    let preview: PreviewRec | null = null; // cota en vivo mientras se arrastra.
+
+    const updatePreview = (a: THREE.Vector3, b: THREE.Vector3) => {
+      if (!preview) {
+        const lineGeo = new THREE.BufferGeometry().setFromPoints([a, b]);
+        const line = new THREE.Line(lineGeo, lineMat);
+        measureGroup.add(line);
+        const { el, label } = makeLabel(
+          formatDistance(a.distanceTo(b), unitRef.current),
+          a.clone().add(b).multiplyScalar(0.5),
+        );
+        preview = { startMarker: makeMarker(a), endMarker: makeMarker(b), line, lineGeo, el, label };
+      }
+      preview.endMarker.position.copy(b);
+      const pos = preview.lineGeo.attributes.position as THREE.BufferAttribute;
+      pos.setXYZ(0, a.x, a.y, a.z);
+      pos.setXYZ(1, b.x, b.y, b.z);
+      pos.needsUpdate = true;
+      preview.el.textContent = formatDistance(a.distanceTo(b), unitRef.current);
+      preview.label.position.copy(a.clone().add(b).multiplyScalar(0.5));
+      requestRender();
+    };
+
+    // Libera la cota en vivo (cancelación): NO toca lineMat, que es compartido.
+    const disposePreview = () => {
+      if (!preview) return;
+      for (const mk of [preview.startMarker, preview.endMarker]) {
+        mk.geometry?.dispose?.();
+        (mk.material as THREE.Material)?.dispose?.();
+        mk.parent?.remove(mk);
+      }
+      preview.line.geometry?.dispose?.();
+      preview.line.parent?.remove(preview.line);
+      preview.el?.remove?.();
+      preview.label.parent?.remove(preview.label);
+      preview = null;
+    };
+
+    const cancelDragMeasure = () => {
+      disposePreview();
+      dragStart = null;
+      dragMoved = false;
+      requestRender();
+    };
+
+    // Convierte la cota en vivo en una medición permanente (como el flujo de clics).
+    const finalizePreview = () => {
+      if (!preview) return;
+      const raw = preview.startMarker.position.distanceTo(preview.endMarker.position);
+      measurements.push({
+        raw,
+        labelEl: preview.el,
+        objects: [preview.startMarker, preview.endMarker, preview.line, preview.label],
+      });
+      preview = null;
+      setMeasureCount(measurements.length);
+      requestRender();
+    };
+
     const onPointerDown = (e: PointerEvent) => {
       downX = e.clientX;
       downY = e.clientY;
+      downBtn = e.button;
+      disposePreview(); // limpia cualquier cota en vivo huérfana.
+      dragStart = null;
+      dragMoved = false;
+      // En modo medir, el botón primario fija el inicio del posible arrastre.
+      if (modeRef.current === "measure" && e.button === 0) {
+        dragStart = pickSurface(e.clientX, e.clientY);
+      }
     };
+
+    const onPointerMove = (e: PointerEvent) => {
+      if (modeRef.current !== "measure" || !dragStart) return;
+      if (!(e.buttons & 1)) return; // solo mientras se mantiene el botón primario.
+      if (!dragMoved) {
+        if (Math.hypot(e.clientX - downX, e.clientY - downY) <= 6) return;
+        dragMoved = true;
+        clearPending(); // un arrastre cancela un clic simple a medio camino.
+      }
+      const p = pickSurface(e.clientX, e.clientY);
+      if (p) updatePreview(dragStart, p); // fuera de la malla: conserva el último.
+    };
+
     const onPointerUp = (e: PointerEvent) => {
       const target = object;
-      if (!target) return;
-      // Si hubo arrastre, fue una rotación con OrbitControls → no actuar.
-      if (Math.hypot(e.clientX - downX, e.clientY - downY) > 6) return;
+      if (!target) {
+        cancelDragMeasure();
+        return;
+      }
       const m = modeRef.current;
-      if (m !== "measure" && m !== "mark") return;
-
-      const rect = renderer.domElement.getBoundingClientRect();
-      ndc.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
-      ndc.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
-      raycaster.setFromCamera(ndc, camera);
+      const moved = Math.hypot(e.clientX - downX, e.clientY - downY) > 6;
 
       if (m === "measure") {
-        const hits = raycaster.intersectObject(target, true);
-        if (hits.length) placePoint(hits[0].point);
+        if (downBtn !== 0) return; // botón derecho/medio = paneo/zoom, no mide.
+        if (dragMoved) {
+          // (b) Arrastre: fija la cota A→B.
+          if (preview) {
+            const end = pickSurface(e.clientX, e.clientY);
+            if (end && dragStart) updatePreview(dragStart, end);
+            finalizePreview();
+          } else {
+            cancelDragMeasure(); // se arrastró sin tocar nunca la superficie.
+          }
+          dragStart = null;
+          dragMoved = false;
+          return;
+        }
+        // (a) Clic sin arrastre → flujo de 2 clics.
+        if (dragStart) placePoint(dragStart);
+        dragStart = null;
         return;
       }
 
-      // Modo marcar: clic sobre un pin existente → borrarlo.
+      // Modo marcar: el arrastre (rotar/panear) no actúa; solo el clic limpio.
+      if (m !== "mark") return;
+      if (moved) return;
+      setRayFrom(e.clientX, e.clientY);
+
+      // Clic sobre un pin existente → borrarlo.
       const pinHits = raycaster.intersectObjects(markGroup.children, true);
       const hitPin = pinHits.find((h) => (h.object.userData as { pinId?: string })?.pinId);
       if (hitPin) {
@@ -691,6 +837,7 @@ export default function Model3DViewer({
       }
     };
     renderer.domElement.addEventListener("pointerdown", onPointerDown);
+    renderer.domElement.addEventListener("pointermove", onPointerMove);
     renderer.domElement.addEventListener("pointerup", onPointerUp);
 
     apiRef.current = {
@@ -700,6 +847,12 @@ export default function Model3DViewer({
       },
       clearMeasure: clearMeasurements,
       syncAutoRotate,
+      applyMode: (m) => {
+        // En medir, el arrastre dibuja la cota → apaga la rotación de cámara;
+        // en otras herramientas, el arrastre vuelve a rotar.
+        controls.enableRotate = m !== "measure";
+        if (m !== "measure") cancelDragMeasure(); // cambiar de herramienta cancela una cota a medias.
+      },
       applyWireframe: setObjectWireframe,
       applyColor: setObjectColor,
       resetView: () => {
@@ -735,9 +888,11 @@ export default function Model3DViewer({
       cancelAnimationFrame(raf);
       window.removeEventListener("resize", onResize);
       renderer.domElement.removeEventListener("pointerdown", onPointerDown);
+      renderer.domElement.removeEventListener("pointermove", onPointerMove);
       renderer.domElement.removeEventListener("pointerup", onPointerUp);
       renderer.domElement.removeEventListener("webglcontextlost", onContextLost);
       renderer.domElement.removeEventListener("webglcontextrestored", onContextRestored);
+      disposePreview(); // libera una cota en vivo a medio arrastre, si la hubiera.
       clearMeasurements();
       clearPinObjects();
       lineMat.dispose();
@@ -757,7 +912,10 @@ export default function Model3DViewer({
   }, [unit]);
   useEffect(() => {
     apiRef.current?.syncAutoRotate();
-  }, [autoRotate, mode]);
+  }, [autoRotate]);
+  useEffect(() => {
+    apiRef.current?.applyMode(mode);
+  }, [mode]);
   useEffect(() => {
     apiRef.current?.applyWireframe(wireframe);
   }, [wireframe]);
