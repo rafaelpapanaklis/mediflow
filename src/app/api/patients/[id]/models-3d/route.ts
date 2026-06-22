@@ -3,17 +3,33 @@ import { randomUUID } from "crypto";
 import { getAuthContext } from "@/lib/auth-context";
 import { prisma } from "@/lib/prisma";
 import { createClient as createAdmin } from "@supabase/supabase-js";
-import { BUCKETS, signMaybeUrl, signMaybeUrls } from "@/lib/storage";
+import {
+  BUCKETS,
+  signMaybeUrl,
+  signMaybeUrls,
+  extractStoragePath,
+  SIGNED_URL_TTL_SECONDS,
+} from "@/lib/storage";
 import { validateModel3D } from "@/lib/validate-upload";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-export const maxDuration = 60;
+// Subir + convertir una malla a GLB puede tardar; damos margen (Vercel Pro).
+export const maxDuration = 300;
 
 // Mallas (stl/ply/obj) + tomografías DICOM (dcm/dicom). DICOM no se renderiza
 // como malla todavía: se almacena, valida y permite descargar.
 const ALLOWED_EXT = ["stl", "ply", "obj", "dcm", "dicom"] as const;
 const MAX_SIZE = 100 * 1024 * 1024; // 100 MB
+
+// Mallas hasta este tamaño se convierten a GLB web DENTRO del request. Por
+// encima se sube solo el original (la conversión quedaría para un job aparte)
+// para no agotar memoria/tiempo de la función. La subida del original NUNCA se
+// bloquea por la conversión.
+const MAX_CONVERT_SIZE = 60 * 1024 * 1024; // 60 MB
+// El GLB web vive JUNTO al original (mismo folder por clinicId): path + sufijo.
+const WEB_GLB_SUFFIX = ".web.glb";
+const GLB_CONTENT_TYPE = "model/gltf-binary";
 
 function extOf(name: string): string {
   return (name.split(".").pop() ?? "").toLowerCase();
@@ -40,6 +56,44 @@ function getAdminSupabase() {
     process.env.SUPABASE_SERVICE_ROLE_KEY!,
     { auth: { persistSession: false } },
   );
+}
+
+// Solo estas mallas se convierten a GLB web. DICOM (.dcm/.dicom) NO se toca.
+function isMeshExt(ext: string): boolean {
+  const e = ext.toLowerCase();
+  return e === "stl" || e === "ply" || e === "obj";
+}
+
+// Firma en UN batch las URLs del GLB web hermano (mismo path + sufijo) de cada
+// malla. Devuelve "" donde no aplica (DICOM/legacy) o el objeto no existe
+// (subida vieja / conversión fallida). Silencioso: no lanza ni ensucia logs.
+async function signWebGlbUrls(
+  urls: Array<string | null | undefined>,
+  names: Array<string | null | undefined>,
+): Promise<string[]> {
+  const result: string[] = new Array(urls.length).fill("");
+  const idxs: number[] = [];
+  const paths: string[] = [];
+  urls.forEach((u, i) => {
+    if (!isMeshExt(extOf(names[i] || u || ""))) return;
+    const p = extractStoragePath(u);
+    if (!p) return;
+    idxs.push(i);
+    paths.push(`${p}${WEB_GLB_SUFFIX}`);
+  });
+  if (paths.length === 0) return result;
+  try {
+    const { data, error } = await getAdminSupabase()
+      .storage.from(BUCKETS.PATIENT_FILES)
+      .createSignedUrls(paths, SIGNED_URL_TTL_SECONDS);
+    if (error || !data) return result;
+    data.forEach((row, k) => {
+      if (!row.error && row.signedUrl) result[idxs[k]] = row.signedUrl;
+    });
+  } catch {
+    // best-effort: si la firma batch falla, todas quedan "".
+  }
+  return result;
 }
 
 // GET /api/patients/[id]/models-3d — lista los modelos 3D del paciente con
@@ -83,13 +137,20 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
 
   // Firma todas las URLs en UN round-trip (createSignedUrls) en vez de N×.
   const urls = await signMaybeUrls(files.map((f) => f.url));
-  const signed = files.map((f, i) => ({ ...f, url: urls[i] }));
+  // webUrl: GLB web-optimizado hermano (carga rápida en el visor). Vacío para
+  // DICOM/legacy/sin convertir → el visor cae al original (`url`).
+  const webUrls = await signWebGlbUrls(
+    files.map((f) => f.url),
+    files.map((f) => f.name),
+  );
+  const signed = files.map((f, i) => ({ ...f, url: urls[i], webUrl: webUrls[i] }));
   return NextResponse.json(signed);
 }
 
 // POST /api/patients/[id]/models-3d — sube un modelo 3D (STL/PLY/OBJ) o una
 // tomografía DICOM (.dcm/.dicom) tal cual (sin sharp). Valida extensión y
-// tamaño. Crea un PatientFile con category SCAN_STL.
+// tamaño. Crea un PatientFile con category SCAN_STL. Para mallas, además genera
+// best-effort un GLB web-optimizado hermano (Meshopt + decimación) para el visor.
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
@@ -166,6 +227,28 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     select: { id: true, name: true, url: true, size: true, mimeType: true, createdAt: true },
   });
 
+  // Best-effort: genera y sube un GLB web-optimizado HERMANO (mismo folder por
+  // clinicId) para que el visor cargue rápido. El original se conserva intacto.
+  // Si la conversión o su subida fallan, la respuesta sigue OK (webUrl = "").
+  let webUrl = "";
+  if (isMeshExt(ext) && file.size <= MAX_CONVERT_SIZE) {
+    try {
+      const { convertMeshToWebGlb } = await import("@/lib/mesh-to-glb");
+      const glb = await convertMeshToWebGlb(bytes, ext as "stl" | "ply" | "obj");
+      const webPath = `${path}${WEB_GLB_SUFFIX}`;
+      const { error: webErr } = await supabase.storage
+        .from(BUCKETS.PATIENT_FILES)
+        .upload(webPath, glb, { contentType: GLB_CONTENT_TYPE, upsert: true });
+      if (webErr) {
+        console.error("[models-3d] web GLB upload error:", webErr);
+      } else {
+        webUrl = await signMaybeUrl(webPath).catch(() => "");
+      }
+    } catch (e) {
+      console.error("[models-3d] mesh→GLB conversion skipped:", (e as Error)?.message ?? e);
+    }
+  }
+
   const signedUrl = await signMaybeUrl(record.url).catch(() => "");
-  return NextResponse.json({ ...record, url: signedUrl }, { status: 201 });
+  return NextResponse.json({ ...record, url: signedUrl, webUrl }, { status: 201 });
 }

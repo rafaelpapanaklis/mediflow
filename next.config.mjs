@@ -10,6 +10,24 @@ const nextConfig = {
       { protocol: "https", hostname: "images.unsplash.com" },
     ],
   },
+  // Los codecs DICOM comprimidos (@cornerstonejs/dicom-codec -> glue Emscripten de
+  // OpenJPEG/CharLS/libjpeg-turbo, que descomprime JPEG2000/JPEG-LS/HTJ2K/RLE en el
+  // Web Worker del visor CBCT) llevan require("fs")/require("path") detras de un
+  // guard ENVIRONMENT_IS_NODE que JAMAS corre en el navegador. En el bundle de
+  // cliente esos builtins no existen -> los resolvemos a `false` (modulo vacio) para
+  // que webpack no falle al compilar el chunk. Solo cliente: el build de servidor
+  // conserva fs/path reales (no se tocan).
+  webpack: (config, { isServer }) => {
+    if (!isServer) {
+      config.resolve = config.resolve || {};
+      config.resolve.fallback = {
+        ...(config.resolve.fallback || {}),
+        fs: false,
+        path: false,
+      };
+    }
+    return config;
+  },
   async headers() {
     return [
       {

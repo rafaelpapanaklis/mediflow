@@ -9,9 +9,10 @@
 // Todas las vistas 2D comparten el mismo window/level (brillo/contraste), zoom
 // y desplazamiento. Solo cortes sin comprimir.
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import JSZip from "jszip";
+import dicomParser from "dicom-parser";
 import {
   Loader2,
   RotateCcw,
@@ -23,6 +24,8 @@ import {
   RectangleHorizontal,
   RectangleVertical,
   Move,
+  Ruler,
+  Crosshair,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { fetchWithCache, getDecodedSlices, putDecodedSlices } from "@/lib/dicom-cache";
@@ -155,6 +158,199 @@ async function decodeOnMain(
   return out;
 }
 
+/* -------------------------------------------------------------------------- */
+/* WS2-T5 · Valor de gris seguro (sonda) + medición honesta (mm)               */
+/* -------------------------------------------------------------------------- */
+
+// Herramienta activa sobre la vista 2D. "pan" = comportamiento original.
+type Tool = "pan" | "measure" | "probe";
+
+const TOOLS: { key: Tool; label: string }[] = [
+  { key: "pan", label: "Mover" },
+  { key: "measure", label: "Medir" },
+  { key: "probe", label: "Sonda" },
+];
+
+function toolIcon(key: Tool) {
+  if (key === "measure") return <Ruler className="w-3.5 h-3.5" aria-hidden />;
+  if (key === "probe") return <Crosshair className="w-3.5 h-3.5" aria-hidden />;
+  return <Move className="w-3.5 h-3.5" aria-hidden />;
+}
+
+// Segmento de medición en coordenadas del raster (px del lienzo de la imagen).
+interface MeasureSeg {
+  a0: number;
+  b0: number;
+  a1: number;
+  b1: number;
+}
+// Punto de la sonda + valor de gris leído debajo (Int16, rescale aplicado).
+interface ProbePoint {
+  a: number;
+  b: number;
+  value: number;
+}
+
+// De dónde sale el espaciado en plano (mm/px). Precedencia clínica:
+//   pixel-spacing (0028,0030) = medida real reconstruida (CT/CBCT) -> exacta.
+//   imager-pixel-spacing (0018,1164) = en el detector (pano/periapical) -> la
+//     proyección amplía la anatomía (magnificación geométrica) -> aproximada.
+//   none = sin metadato de escala -> NO se puede dar mm (se muestra px).
+type SpacingSource = "pixel-spacing" | "imager-pixel-spacing" | "none";
+
+interface ScaleInfo {
+  sx: number; // mm por columna (eje X)
+  sy: number; // mm por fila (eje Y)
+  sz: number; // mm entre cortes (eje Z)
+  xySource: SpacingSource; // fuente del espaciado en plano
+  zCalibrated: boolean; // sz viene de SpacingBetweenSlices/SliceThickness (no derivado)
+}
+
+// Estado de calibración de UNA medición. "approx" = magnificación de proyección;
+// "uncal" = sin escala mm fiable (se reporta en px, nunca un mm inventado).
+type CalibStatus = "exact" | "approx" | "uncal";
+
+// El peor estado domina la medición (un eje sin calibrar invalida el mm).
+function worstStatus(a: CalibStatus, b: CalibStatus): CalibStatus {
+  const rank: Record<CalibStatus, number> = { exact: 0, approx: 1, uncal: 2 };
+  return rank[a] >= rank[b] ? a : b;
+}
+
+// Tamaño del raster de salida de un plano: 1 px = el espaciado más fino, para no
+// perder resolución nativa y dar proporciones físicas reales. Acotado a MAXDIM
+// por lado (rendimiento; el lienzo se reescala al contenedor igual). Compartido
+// por el pintado de la imagen y la matemática de medición, para que coincidan.
+const MAXDIM = 1024;
+function rasterDims(nA: number, sA: number, nB: number, sB: number): { W: number; H: number } {
+  const pmm = Math.min(sA, sB) || 1;
+  let W = Math.max(1, Math.round((nA * sA) / pmm));
+  let H = Math.max(1, Math.round((nB * sB) / pmm));
+  const m = Math.max(W, H);
+  if (m > MAXDIM) {
+    const k = MAXDIM / m;
+    W = Math.max(1, Math.round(W * k));
+    H = Math.max(1, Math.round(H * k));
+  }
+  return { W, H };
+}
+
+// Escala INFERIDA de los cortes ya decodificados (siempre disponible, instantánea).
+// El core (dicom-decode-core) solo captura PixelSpacing (0028,0030) y cae a [1,1]
+// si falta; por eso aquí: espaciado real (!= [1,1]) -> pixel-spacing exacto; [1,1]
+// o ausente -> sin escala (none). El caso ImagerPixelSpacing-solo (pano) NO se
+// distingue desde los cortes -> lo resuelve probeScale() leyendo el header. Si el
+// plano está calibrado en XY, el Z (whatever) es de confianza para ese volumen.
+function inferScale(s: Slice): ScaleInfo {
+  const ps = s.pixelSpacing;
+  const sx = ps && ps[0] > 0 ? ps[0] : 1;
+  const sy = ps && ps[1] > 0 ? ps[1] : 1;
+  const zRaw = s.zSpacing;
+  const sz = zRaw && zRaw > 0 ? zRaw : sy;
+  const hasReal = !!(ps && (ps[0] !== 1 || ps[1] !== 1));
+  return { sx, sy, sz, xySource: hasReal ? "pixel-spacing" : "none", zCalibrated: hasReal };
+}
+
+// Lee "fila\\columna" (formato de PixelSpacing/ImagerPixelSpacing) -> {x,y} en mm.
+// Un solo valor presente = píxel cuadrado. Null si no hay par válido (>0).
+function parseSpacingPair(str: string | undefined): { x: number; y: number } | null {
+  if (!str) return null;
+  const p = str.split("\\");
+  const yv = parseFloat(p[0]); // Δy (entre filas)
+  const xv = parseFloat(p[1]); // Δx (entre columnas)
+  const y = Number.isFinite(yv) && yv > 0 ? yv : NaN;
+  const x = Number.isFinite(xv) && xv > 0 ? xv : Number.isFinite(yv) && yv > 0 ? yv : NaN;
+  if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+  return { x, y };
+}
+
+function firstPositive(str: string | undefined): number {
+  if (!str) return NaN;
+  const v = parseFloat(String(str).split("\\")[0]);
+  return Number.isFinite(v) && v > 0 ? v : NaN;
+}
+
+// Lee el header de UN corte del .zip (descomprime 1 entrada, no todo) para resolver
+// la fuente real del espaciado con la precedencia PixelSpacing > ImagerPixelSpacing.
+// Best-effort y nunca lanza. Se corre solo cuando ya tenemos el blob en mano (ruta
+// de descarga); el resultado se cachea en localStorage por fileId para las
+// reaperturas (que sirven del cache de cortes y no traen el blob).
+async function probeScale(blob: Blob): Promise<ScaleInfo | null> {
+  try {
+    const zip = await JSZip.loadAsync(blob);
+    const entry = (Object.values(zip.files) as any[]).find((f) => !f.dir && isDicomEntryName(f.name));
+    if (!entry) return null;
+    const buf = await entry.async("arraybuffer");
+    const ds = dicomParser.parseDicom(new Uint8Array(buf));
+
+    const px = parseSpacingPair(ds.string("x00280030")); // PixelSpacing
+    const imager = parseSpacingPair(ds.string("x00181164")); // ImagerPixelSpacing
+    let sx = 1;
+    let sy = 1;
+    let xySource: SpacingSource = "none";
+    if (px) {
+      sx = px.x;
+      sy = px.y;
+      xySource = "pixel-spacing";
+    } else if (imager) {
+      sx = imager.x;
+      sy = imager.y;
+      xySource = "imager-pixel-spacing";
+    }
+
+    // Z: SpacingBetweenSlices (0018,0088) -> SliceThickness (0018,0050).
+    const zBetween = firstPositive(ds.string("x00180088"));
+    const zThick = firstPositive(ds.string("x00180050"));
+    let sz = sy;
+    let zCalibrated = false;
+    if (Number.isFinite(zBetween)) {
+      sz = zBetween;
+      zCalibrated = true;
+    } else if (Number.isFinite(zThick)) {
+      sz = zThick;
+      zCalibrated = true;
+    } else {
+      sz = sy;
+      zCalibrated = xySource !== "none";
+    }
+    return { sx, sy, sz, xySource, zCalibrated };
+  } catch {
+    return null;
+  }
+}
+
+const SCALE_LS_PREFIX = "cbct-scale:v1:";
+function loadStoredScale(fileId: string): ScaleInfo | null {
+  try {
+    if (typeof localStorage === "undefined") return null;
+    const raw = localStorage.getItem(SCALE_LS_PREFIX + fileId);
+    if (!raw) return null;
+    const o = JSON.parse(raw);
+    if (
+      o &&
+      typeof o.sx === "number" &&
+      typeof o.sy === "number" &&
+      typeof o.sz === "number" &&
+      o.sx > 0 &&
+      o.sy > 0 &&
+      o.sz > 0
+    ) {
+      const src: SpacingSource =
+        o.xySource === "pixel-spacing" || o.xySource === "imager-pixel-spacing" ? o.xySource : "none";
+      return { sx: o.sx, sy: o.sy, sz: o.sz, xySource: src, zCalibrated: !!o.zCalibrated };
+    }
+  } catch {
+    /* localStorage no disponible o JSON inválido: se ignora */
+  }
+  return null;
+}
+function storeScale(fileId: string, s: ScaleInfo): void {
+  try {
+    if (typeof localStorage !== "undefined") localStorage.setItem(SCALE_LS_PREFIX + fileId, JSON.stringify(s));
+  } catch {
+    /* cuota/privado: se ignora */
+  }
+}
+
 export default function DicomSetViewer({ url, name, fileId, patientId, initialNotes = "" }: Props) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [slices, setSlices] = useState<Slice[]>([]);
@@ -172,6 +368,14 @@ export default function DicomSetViewer({ url, name, fileId, patientId, initialNo
   const [savingNotes, setSavingNotes] = useState(false);
   const dragRef = useRef<{ x: number; y: number } | null>(null);
   const defaultWin = useRef({ c: 0, w: 1 });
+
+  // WS2-T5: sonda (valor relativo) + medición honesta.
+  const overlayRef = useRef<HTMLCanvasElement | null>(null);
+  const [scaleInfo, setScaleInfo] = useState<ScaleInfo | null>(null);
+  const [tool, setTool] = useState<Tool>("pan");
+  const [measure, setMeasure] = useState<MeasureSeg | null>(null);
+  const [probe, setProbe] = useState<ProbePoint | null>(null);
+  const measuringRef = useRef(false);
 
   // La signed URL cambia en cada apertura (TTL corto); el fileId es estable. El
   // efecto se re-ejecuta por fileId, NO por url, para no re-decodificar al
@@ -205,6 +409,25 @@ export default function DicomSetViewer({ url, name, fileId, patientId, initialNo
 
     setStatus("loading");
     setProgress({ done: 0, total: 0 });
+    setScaleInfo(null); // escala del estudio anterior no debe filtrarse
+
+    // Resuelve la escala física (mm/px) con la precedencia clínica. Solo refina lo
+    // que `geom` ya infiere de los cortes: usa el cache (localStorage) y, en la
+    // ruta de descarga, sondea el header para detectar ImagerPixelSpacing (pano).
+    const applyScale = async (blob: Blob | null) => {
+      const stored = loadStoredScale(fileId);
+      if (stored) {
+        if (!cancelled) setScaleInfo(stored);
+        return;
+      }
+      if (!blob) return; // ruta de cache de cortes: sin blob, queda la inferencia
+      const probed = await probeScale(blob);
+      if (probed && !cancelled) {
+        setScaleInfo(probed);
+        storeScale(fileId, probed);
+      }
+    };
+
     (async () => {
       try {
         // 1) ¿Cortes ya decodificados en cache (IndexedDB por fileId)? Salta
@@ -213,6 +436,7 @@ export default function DicomSetViewer({ url, name, fileId, patientId, initialNo
         if (cancelled) return;
         if (cachedSlices && cachedSlices.length > 0) {
           finalize(cachedSlices as Slice[]);
+          void applyScale(null); // sin blob: usa localStorage o la inferencia de geom
           return;
         }
 
@@ -242,6 +466,9 @@ export default function DicomSetViewer({ url, name, fileId, patientId, initialNo
         }
 
         finalize(decoded);
+        // Sondea el header (1 entrada) para la fuente real del espaciado; aprovecha
+        // el blob recién bajado y no bloquea el render ni el cacheo de cortes.
+        void applyScale(blob);
         // 4) Cachea el decodificado (best-effort) para próximas aperturas.
         void putDecodedSlices(fileId, decoded);
       } catch {
@@ -256,6 +483,51 @@ export default function DicomSetViewer({ url, name, fileId, patientId, initialNo
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fileId]);
 
+  // Geometría del plano activo (mm/px por eje + tamaño del raster), compartida por
+  // el pintado de la imagen y la matemática de medición para que coincidan exacto.
+  // Usa la escala resuelta (scaleInfo) o, si aún no llega, la inferida de los
+  // cortes. Para CBCT ambas son idénticas; para pano corrige la proporción.
+  const geom = useMemo(() => {
+    if (slices.length === 0) return null;
+    const s0 = slices[0];
+    const cols = s0.cols;
+    const rows = s0.rows;
+    const depth = slices.length;
+    const sc = scaleInfo ?? inferScale(s0);
+    const { sx, sy, sz } = sc;
+    let nA: number;
+    let sA: number;
+    let nB: number;
+    let sB: number;
+    let axisA: "X" | "Y" | "Z";
+    let axisB: "X" | "Y" | "Z";
+    if (view === "coronal") {
+      nA = cols;
+      sA = sx;
+      nB = depth;
+      sB = sz;
+      axisA = "X";
+      axisB = "Z";
+    } else if (view === "sagittal") {
+      nA = rows;
+      sA = sy;
+      nB = depth;
+      sB = sz;
+      axisA = "Y";
+      axisB = "Z";
+    } else {
+      // axial (y default mientras la vista es "volume")
+      nA = cols;
+      sA = sx;
+      nB = rows;
+      sB = sy;
+      axisA = "X";
+      axisB = "Y";
+    }
+    const { W, H } = rasterDims(nA, sA, nB, sB);
+    return { cols, rows, depth, sx, sy, sz, nA, sA, nB, sB, axisA, axisB, W, H, sc };
+  }, [slices, view, scaleInfo]);
+
   // Pinta la vista 2D activa (axial / coronal / sagital) con el mismo
   // window/level, RESPETANDO el espaciado físico (mm) del estudio: cada plano se
   // rasteriza con proporciones reales (PixelSpacing × zSpacing) y se MUESTREA con
@@ -268,6 +540,7 @@ export default function DicomSetViewer({ url, name, fileId, patientId, initialNo
     if (!canvas) return;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
+    if (!geom) return;
 
     const cols = slices[0].cols;
     const rows = slices[0].rows;
@@ -276,37 +549,15 @@ export default function DicomSetViewer({ url, name, fileId, patientId, initialNo
     const span = width <= 0 ? 1 : width;
     // MONOCHROME1/2 es propiedad de la serie: el corte medio la representa.
     const inv = slices[Math.floor(depth / 2)].invert;
-
-    // Espaciado físico (mm). Guard para cache vieja sin estos campos → isotrópico
-    // (se comporta como antes, sin corrección, en vez de romper).
-    const sp = slices[0].pixelSpacing;
-    const sx = sp && sp[0] > 0 ? sp[0] : 1; // mm por columna (eje X)
-    const sy = sp && sp[1] > 0 ? sp[1] : 1; // mm por fila (eje Y)
-    const zRaw = slices[0].zSpacing;
-    const sz = zRaw && zRaw > 0 ? zRaw : sy; // mm entre cortes (eje Z)
+    // Tamaño/proporción física (mm) del raster: lo provee `geom` (compartido con la
+    // medición para que coincidan exacto). Aquí solo se muestrea por índice nativo.
+    const { W, H } = geom;
 
     // HU → gris [0,255] con window/level + invert MONOCHROME1.
     const toGray = (hu: number) => {
       let g = ((hu - lo) / span) * 255;
       g = g < 0 ? 0 : g > 255 ? 255 : g;
       return inv ? 255 - g : g;
-    };
-
-    // Tamaño del raster de salida: 1 px = el espaciado más fino del plano, para
-    // no perder resolución nativa y dar proporciones físicas reales. Acotado a
-    // MAXDIM por lado (rendimiento; el lienzo se reescala al contenedor igual).
-    const MAXDIM = 1024;
-    const raster = (nA: number, sA: number, nB: number, sB: number) => {
-      const pmm = Math.min(sA, sB) || 1;
-      let W = Math.max(1, Math.round((nA * sA) / pmm));
-      let H = Math.max(1, Math.round((nB * sB) / pmm));
-      const m = Math.max(W, H);
-      if (m > MAXDIM) {
-        const k = MAXDIM / m;
-        W = Math.max(1, Math.round(W * k));
-        H = Math.max(1, Math.round(H * k));
-      }
-      return { W, H };
     };
 
     // Pinta un raster W×H: sample(colSalida, filaSalida) → HU interpolado.
@@ -333,7 +584,6 @@ export default function DicomSetViewer({ url, name, fileId, patientId, initialNo
       const s = slices[Math.min(idx, depth - 1)];
       if (!s) return;
       const px = s.pixels;
-      const { W, H } = raster(cols, sx, rows, sy);
       paint(W, H, (a, b) => {
         const fx = ((a + 0.5) * cols) / W - 0.5;
         const fy = ((b + 0.5) * rows) / H - 0.5;
@@ -355,7 +605,6 @@ export default function DicomSetViewer({ url, name, fileId, patientId, initialNo
       // Plano (X,Z) en Y fijo: ancho = X (cols·sx), alto = Z (depth·sz).
       // Interpola en X y en Z (entre cortes adyacentes) → sin escalones.
       const yb = Math.min(coronalY, rows - 1) * cols;
-      const { W, H } = raster(cols, sx, depth, sz);
       paint(W, H, (a, b) => {
         const fx = ((a + 0.5) * cols) / W - 0.5;
         const fz = ((b + 0.5) * depth) / H - 0.5;
@@ -377,7 +626,6 @@ export default function DicomSetViewer({ url, name, fileId, patientId, initialNo
       // Plano (Y,Z) en X fijo: ancho = Y (rows·sy), alto = Z (depth·sz).
       // Interpola en Y y en Z (entre cortes adyacentes) → sin escalones.
       const xf = Math.min(sagittalX, cols - 1);
-      const { W, H } = raster(rows, sy, depth, sz);
       paint(W, H, (a, b) => {
         const fy = ((a + 0.5) * rows) / W - 0.5;
         const fz = ((b + 0.5) * depth) / H - 0.5;
@@ -398,7 +646,59 @@ export default function DicomSetViewer({ url, name, fileId, patientId, initialNo
         return left + (right - left) * tz;
       });
     }
-  }, [status, slices, view, idx, coronalY, sagittalX, center, width]);
+  }, [status, slices, geom, view, idx, coronalY, sagittalX, center, width]);
+
+  // Dibuja las anotaciones (línea de medición + cruz de la sonda) en un lienzo de
+  // OVERLAY independiente, del mismo tamaño/posición que el de la imagen, para no
+  // pelear con el repintado de la imagen. Coordenadas en px del raster.
+  useEffect(() => {
+    const cv = overlayRef.current;
+    if (!cv || !geom) return;
+    if (cv.width !== geom.W) cv.width = geom.W;
+    if (cv.height !== geom.H) cv.height = geom.H;
+    const ctx = cv.getContext("2d");
+    if (!ctx) return;
+    ctx.clearRect(0, 0, cv.width, cv.height);
+    const lw = Math.max(1, Math.round(Math.min(cv.width, cv.height) / 300));
+    if (measure) {
+      ctx.strokeStyle = "rgba(56,189,248,0.95)"; // sky-400
+      ctx.lineWidth = lw + 1;
+      ctx.beginPath();
+      ctx.moveTo(measure.a0, measure.b0);
+      ctx.lineTo(measure.a1, measure.b1);
+      ctx.stroke();
+      ctx.fillStyle = "rgba(56,189,248,0.95)";
+      const r = lw + 2;
+      ctx.beginPath();
+      ctx.arc(measure.a0, measure.b0, r, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(measure.a1, measure.b1, r, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    if (probe && tool === "probe") {
+      ctx.strokeStyle = "rgba(250,204,21,0.95)"; // amber-300
+      ctx.lineWidth = lw;
+      const len = (lw + 2) * 4;
+      ctx.beginPath();
+      ctx.moveTo(probe.a - len, probe.b);
+      ctx.lineTo(probe.a + len, probe.b);
+      ctx.moveTo(probe.a, probe.b - len);
+      ctx.lineTo(probe.a, probe.b + len);
+      ctx.stroke();
+    }
+  }, [geom, measure, probe, tool]);
+
+  // Cambiar de plano/corte invalida una medición o sonda hechas sobre otro plano.
+  useEffect(() => {
+    setMeasure(null);
+    setProbe(null);
+  }, [view, idx, coronalY, sagittalX]);
+
+  // La sonda es un indicador en vivo; al salir de esa herramienta no debe quedar.
+  useEffect(() => {
+    if (tool !== "probe") setProbe(null);
+  }, [tool]);
 
   const saveNotes = useCallback(async () => {
     setSavingNotes(true);
@@ -422,6 +722,8 @@ export default function DicomSetViewer({ url, name, fileId, patientId, initialNo
     setWidth(defaultWin.current.w);
     setZoom(1);
     setPan({ x: 0, y: 0 });
+    setMeasure(null);
+    setProbe(null);
   };
 
   // Cambiar de vista centra de nuevo el plano (cada vista tiene su proporción).
@@ -435,15 +737,91 @@ export default function DicomSetViewer({ url, name, fileId, patientId, initialNo
     e.preventDefault();
     setZoom((z) => Math.min(8, Math.max(0.25, z * (e.deltaY < 0 ? 1.1 : 0.9))));
   };
+
+  // clientX/Y → coordenadas del raster del lienzo de la imagen. El rect del lienzo
+  // ya incluye el zoom/pan (transform CSS) y el letterboxing, así que el mapeo es
+  // correcto en cualquier zoom. Acotado al lienzo.
+  const toRaster = (clientX: number, clientY: number): { a: number; b: number } | null => {
+    const cv = canvasRef.current;
+    if (!cv || cv.width === 0 || cv.height === 0) return null;
+    const rect = cv.getBoundingClientRect();
+    if (rect.width === 0 || rect.height === 0) return null;
+    let a = ((clientX - rect.left) / rect.width) * cv.width;
+    let b = ((clientY - rect.top) / rect.height) * cv.height;
+    a = a < 0 ? 0 : a > cv.width ? cv.width : a;
+    b = b < 0 ? 0 : b > cv.height ? cv.height : b;
+    return { a, b };
+  };
+
+  // Valor de gris (Int16, rescale aplicado) bajo el raster (a,b) por vecino más
+  // cercano en el plano activo. Es RELATIVO (no HU): el CBCT no entrega Hounsfield
+  // reales; sirve para comparar zonas del mismo estudio.
+  const sampleValueAt = (a: number, b: number): number | null => {
+    if (!geom || slices.length === 0) return null;
+    const { cols, rows, depth, W, H } = geom;
+    const cl = (v: number, n: number) => (v < 0 ? 0 : v > n - 1 ? n - 1 : v);
+    if (view === "coronal") {
+      const x = Math.round(cl(((a + 0.5) * cols) / W - 0.5, cols));
+      const z = Math.round(cl(((b + 0.5) * depth) / H - 0.5, depth));
+      const yb = Math.min(coronalY, rows - 1) * cols;
+      const v = slices[z]?.pixels[yb + x];
+      return v == null ? null : v;
+    }
+    if (view === "sagittal") {
+      const y = Math.round(cl(((a + 0.5) * rows) / W - 0.5, rows));
+      const z = Math.round(cl(((b + 0.5) * depth) / H - 0.5, depth));
+      const xf = Math.min(sagittalX, cols - 1);
+      const v = slices[z]?.pixels[y * cols + xf];
+      return v == null ? null : v;
+    }
+    // axial
+    const s = slices[Math.min(idx, depth - 1)];
+    if (!s) return null;
+    const x = Math.round(cl(((a + 0.5) * cols) / W - 0.5, cols));
+    const y = Math.round(cl(((b + 0.5) * rows) / H - 0.5, rows));
+    const v = s.pixels[y * cols + x];
+    return v == null ? null : v;
+  };
+
   const onDown = (e: React.MouseEvent) => {
-    dragRef.current = { x: e.clientX - pan.x, y: e.clientY - pan.y };
+    if (tool === "pan") {
+      dragRef.current = { x: e.clientX - pan.x, y: e.clientY - pan.y };
+      return;
+    }
+    const p = toRaster(e.clientX, e.clientY);
+    if (!p) return;
+    if (tool === "measure") {
+      measuringRef.current = true;
+      setMeasure({ a0: p.a, b0: p.b, a1: p.a, b1: p.b });
+    } else {
+      const v = sampleValueAt(p.a, p.b);
+      setProbe(v == null ? null : { a: p.a, b: p.b, value: v });
+    }
   };
   const onMove = (e: React.MouseEvent) => {
-    if (!dragRef.current) return;
-    setPan({ x: e.clientX - dragRef.current.x, y: e.clientY - dragRef.current.y });
+    if (tool === "pan") {
+      if (!dragRef.current) return;
+      setPan({ x: e.clientX - dragRef.current.x, y: e.clientY - dragRef.current.y });
+      return;
+    }
+    const p = toRaster(e.clientX, e.clientY);
+    if (!p) return;
+    if (tool === "measure") {
+      if (!measuringRef.current) return;
+      setMeasure((m) => (m ? { ...m, a1: p.a, b1: p.b } : m));
+    } else {
+      const v = sampleValueAt(p.a, p.b);
+      setProbe(v == null ? null : { a: p.a, b: p.b, value: v });
+    }
   };
   const onUp = () => {
     dragRef.current = null;
+    measuringRef.current = false;
+  };
+  const onLeave = () => {
+    dragRef.current = null;
+    measuringRef.current = false;
+    if (tool === "probe") setProbe(null);
   };
 
   // Barra de vistas (Axial · Coronal · Sagital · Volumen 3D). Una a la vez.
@@ -566,6 +944,35 @@ export default function DicomSetViewer({ url, name, fileId, patientId, initialNo
 
   const viewLabel = view === "coronal" ? "Coronal" : view === "sagittal" ? "Sagital" : "Axial";
 
+  // Lectura de la medición activa: distancia con honestidad de escala. Anisotrópica
+  // (mm/px puede diferir por eje según el plano). status: exact | approx | uncal.
+  const readout = (() => {
+    if (!geom || !measure) return null;
+    const da = measure.a1 - measure.a0;
+    const db = measure.b1 - measure.b0;
+    const mm = Math.hypot((da * geom.nA * geom.sA) / geom.W, (db * geom.nB * geom.sB) / geom.H);
+    const pxNative = Math.hypot((da * geom.nA) / geom.W, (db * geom.nB) / geom.H);
+    const axisStat = (axis: "X" | "Y" | "Z"): CalibStatus =>
+      axis === "Z"
+        ? geom.sc.zCalibrated
+          ? "exact"
+          : "uncal"
+        : geom.sc.xySource === "pixel-spacing"
+          ? "exact"
+          : geom.sc.xySource === "imager-pixel-spacing"
+            ? "approx"
+            : "uncal";
+    const status = worstStatus(axisStat(geom.axisA), axisStat(geom.axisB));
+    return { mm, pxNative, status };
+  })();
+
+  const toolHint =
+    tool === "measure"
+      ? "Arrastra sobre la imagen para medir"
+      : tool === "probe"
+        ? "Mueve el cursor para leer el valor relativo"
+        : "Arrastrar = mover · scroll = zoom";
+
   return (
     <div className="flex flex-col lg:flex-row gap-4">
       <div className="flex-1 min-w-0">
@@ -578,28 +985,101 @@ export default function DicomSetViewer({ url, name, fileId, patientId, initialNo
           <Dicom3DVolume slices={slices as unknown as VolSlice[]} />
         ) : (
           <>
+            {/* Herramientas de la vista 2D: Mover · Medir · Sonda. */}
+            <div className="flex items-center justify-between gap-2 mb-2">
+              <div
+                className="inline-flex items-center gap-1 p-1 rounded-lg bg-muted/40 border border-border"
+                role="group"
+                aria-label="Herramienta de imagen"
+              >
+                {TOOLS.map((t) => {
+                  const active = tool === t.key;
+                  return (
+                    <button
+                      key={t.key}
+                      type="button"
+                      aria-pressed={active}
+                      onClick={() => setTool(t.key)}
+                      className={`text-xs font-semibold px-2.5 py-1.5 rounded-md inline-flex items-center gap-1.5 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 ${
+                        active ? "bg-brand-600 text-white shadow-sm" : "text-foreground hover:bg-muted"
+                      }`}
+                    >
+                      {toolIcon(t.key)}
+                      {t.label}
+                    </button>
+                  );
+                })}
+              </div>
+              <span className="text-[10px] text-muted-foreground hidden sm:block">{toolHint}</span>
+            </div>
+
             <div
               className="relative w-full overflow-hidden rounded-lg select-none"
-              style={{ height: 480, background: "#000", cursor: dragRef.current ? "grabbing" : "grab" }}
+              style={{
+                height: 480,
+                background: "#000",
+                cursor: tool === "pan" ? (dragRef.current ? "grabbing" : "grab") : "crosshair",
+              }}
               onWheel={onWheel}
               onMouseDown={onDown}
               onMouseMove={onMove}
               onMouseUp={onUp}
-              onMouseLeave={onUp}
+              onMouseLeave={onLeave}
             >
               <div
                 className="absolute inset-0 flex items-center justify-center"
                 style={{ transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})` }}
               >
-                <canvas
-                  ref={canvasRef}
-                  className="max-w-full max-h-full"
-                  style={{ imageRendering: "pixelated", maxHeight: 480 }}
-                />
+                {/* Wrapper que envuelve a la imagen (elemento reemplazado: hace el
+                    "contain" con su ratio intrínseco) para que el overlay calce exacto.
+                    max-w-full + maxHeight conservan el ajuste al contenedor. */}
+                <div className="relative max-w-full" style={{ maxHeight: 480 }}>
+                  <canvas
+                    ref={canvasRef}
+                    className="block max-w-full max-h-full"
+                    style={{ imageRendering: "pixelated", maxHeight: 480 }}
+                  />
+                  {/* Overlay de anotaciones: mismo tamaño/posición; no captura el mouse. */}
+                  <canvas
+                    ref={overlayRef}
+                    aria-hidden
+                    className="absolute inset-0 w-full h-full pointer-events-none"
+                    style={{ imageRendering: "pixelated" }}
+                  />
+                </div>
               </div>
               <div className="absolute top-2 left-2 text-[11px] font-mono text-white/80 bg-black/50 rounded px-2 py-0.5">
                 {viewLabel} · {pos.current}/{pos.total}
               </div>
+
+              {/* HUD derecho: lectura de la herramienta activa. */}
+              {tool === "probe" && probe && (
+                <div className="absolute top-2 right-2 max-w-[60%] text-right bg-black/60 rounded px-2 py-1">
+                  <div className="text-[11px] font-mono text-white">Valor relativo: {probe.value}</div>
+                  <div className="text-[9px] text-amber-200/90 leading-tight">
+                    relativo entre zonas · NO es densidad ósea (HU)
+                  </div>
+                </div>
+              )}
+              {tool === "measure" && readout && (
+                <div className="absolute top-2 right-2 max-w-[60%] text-right bg-black/60 rounded px-2 py-1">
+                  <div className="text-[12px] font-mono text-white">
+                    {readout.status === "uncal"
+                      ? `${Math.round(readout.pxNative)} px`
+                      : `${readout.status === "approx" ? "≈ " : ""}${readout.mm.toFixed(1)} mm`}
+                  </div>
+                  {readout.status === "approx" && (
+                    <div className="text-[9px] text-amber-200/90 leading-tight">
+                      aproximada · magnificación geométrica de proyección
+                    </div>
+                  )}
+                  {readout.status === "uncal" && (
+                    <div className="text-[9px] text-amber-200/90 leading-tight">
+                      sin escala mm calibrada en el estudio
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
             <div className="mt-3 space-y-3 bg-muted/40 rounded-lg p-3 border border-border">
@@ -652,9 +1132,7 @@ export default function DicomSetViewer({ url, name, fileId, patientId, initialNo
                 />
               </div>
               <div className="flex items-center justify-between gap-2">
-                <span className="text-[10px] text-muted-foreground">
-                  Scroll = zoom · arrastrar = mover · slider = plano
-                </span>
+                <span className="text-[10px] text-muted-foreground">Scroll = zoom · slider = plano</span>
                 <button
                   type="button"
                   onClick={reset}
@@ -663,6 +1141,15 @@ export default function DicomSetViewer({ url, name, fileId, patientId, initialNo
                   <RotateCcw className="w-3 h-3" /> Reiniciar
                 </button>
               </div>
+              <p className="text-[10px] text-amber-700 dark:text-amber-300/90 flex items-start gap-1 leading-snug">
+                <span aria-hidden>⚠</span>
+                <span>
+                  El CBCT no entrega unidades Hounsfield (HU) reales: el valor de la sonda es relativo para
+                  comparar zonas del mismo estudio, no densidad ósea. Las medidas usan el espaciado físico del
+                  estudio; en proyecciones (solo <code>ImagerPixelSpacing</code>) son aproximadas por
+                  magnificación, y sin escala calibrada se reportan en px.
+                </span>
+              </p>
             </div>
           </>
         )}
