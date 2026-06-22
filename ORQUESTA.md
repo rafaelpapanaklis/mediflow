@@ -1000,3 +1000,70 @@ apagar nunca el loading. (Verificado con `git show 25ff0505:…import-wizard.tsx
   (p. ej. cortar la red) para ver «No pudimos leer tu archivo» + «Reintentar», y que el reintento cargue.
 - El `errPreview` (toast) quedó sin uso en código (la ruta de error ahora es inline); la clave i18n
   sigue por si se reusa.
+## FIX · Buscador de pacientes no encuentra por nombre completo [fix/patient-search-fullname, 2026-06-22]
+
+**Bug:** en `src/app/api/patients/route.ts` (búsqueda v2) el search hacía un `where.OR` de
+`contains` del término **COMPLETO** en cada campo por separado. Por eso "Juan Perez Lopez" NO
+encontraba al paciente firstName="Juan" / lastName="Perez Lopez" (ninguna columna sola contiene la
+frase entera), aunque "Perez Lopez" sí.
+
+**Fix:** se tokeniza el search por espacios y se exige que **cada token matchee en ALGÚN campo**
+(AND de ORs). El orden deja de importar.
+
+```ts
+const tokens = search.split(/\s+/).filter(Boolean);
+if (tokens.length) {
+  const prev = Array.isArray(where.AND) ? where.AND : where.AND ? [where.AND] : [];
+  where.AND = [
+    ...prev,
+    ...tokens.map((tok): Prisma.PatientWhereInput => ({
+      OR: [
+        { firstName: { contains: tok, mode: "insensitive" } },
+        { lastName:  { contains: tok, mode: "insensitive" } },
+        { email:     { contains: tok, mode: "insensitive" } },
+        { phone:     { contains: tok, mode: "insensitive" } },
+        { patientNumber: { contains: tok, mode: "insensitive" } },
+      ],
+    })),
+  ];
+}
+```
+
+### Por qué `where.AND` y NO `where.OR` (bonus: cierra un leak de visibilidad)
+`buildPatientWhere` (auth-context.ts) fija `where.OR` a los **doctores** para que solo vean SUS
+pacientes (`primaryDoctorId` / con cita / con expediente suyo). El código viejo hacía
+`where.OR = [search…]`, **pisando ese OR** → un doctor que buscaba veía pacientes de OTROS doctores
+de la clínica (intra-tenant, el `clinicId` seguía aplicando). Al mover el search a `where.AND`,
+Prisma combina `clinicId` + `(OR visibilidad)` + `(AND tokens)` todos con AND → se respeta la
+visibilidad del doctor Y se arregla el nombre completo. (No es regresión del scope: el `clinicId`
+nunca se tocó; multi-tenant intacto.)
+
+### Filtros conservados
+- `status`, `gender`, `doctorId`, `source` → campos escalares: sin cambio.
+- `quickFilter`: "vip" → `where.tags` (escalar); "debt"/"nextAppt"/"birthdayWeek"/"noContact6m" →
+  post-fetch. **Ninguno toca `where.AND`/`where.OR`** → no choca con el search.
+- `clinicId` (multi-tenant) → siempre presente vía `buildPatientWhere`. El `count()` usa el MISMO
+  `where`, así que el total pagina consistente con la lista.
+
+### Consistencia con el código existente
+El endpoint dedicado `/api/patients/search/route.ts` (autocompletar) YA hacía exactamente esto
+(`AND: tokens.map(t => ({ OR: [...] }))`). Este fix alinea la lista v2 con ese patrón ya probado.
+
+### Casos verificados (por forma de query Prisma; ver nota)
+Paciente firstName="Juan", lastName="Perez Lopez":
+- "Juan" → firstName ✓ · "Perez Lopez" → lastName(Perez) ∧ lastName(Lopez) ✓ · "Juan Perez Lopez" ✓
+- "Lopez Juan" (orden invertido) → lastName(Lopez) ∧ firstName(Juan) ✓
+- teléfono parcial → phone contains ✓ · email (o parte) → email contains ✓ · apellido solo → ✓
+
+### Build / estado
+- **Build EXIT 0**: `✓ Compiled successfully`, type-check 0 errores (la anotación
+  `(tok): Prisma.PatientWhereInput =>` evita el widening de `mode`), `✓ 275/275` páginas; solo el
+  ruido conocido `prisma:error DATABASE_URL` del SSG sin env. NO en `main`.
+- `npm install` corrido (faltaba node_modules en el worktree).
+
+### 🔴 Pendiente de Rafael / followups (fuera de alcance)
+- **QA con datos reales**: la verificación de arriba es por forma de query (en build NO hay
+  `DATABASE_URL`, no se corren queries). Probar en la lista de Pacientes los 7 casos.
+- **Handler legacy** (`legacyHandler`, ~líneas 439-444): combobox/modales siguen con el OR del
+  término completo → MISMO bug latente al teclear nombre+apellido. No tocado por scope; fix trivial
+  idéntico si se quiere. (`/api/patients/search` ya está bien.)
