@@ -23,7 +23,7 @@ export const maxDuration = 300;
  * vía el clinicId existente en cada row, no se cruzan.
  */
 export async function POST(req: NextRequest) {
-  if (!isAdminAuthed()) {
+  if (!(await isAdminAuthed())) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

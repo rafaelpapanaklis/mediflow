@@ -19,7 +19,7 @@ const FIELDS = [
 ] as const;
 
 export async function PATCH(req: NextRequest) {
-  if (!isAdminAuthed()) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!(await isAdminAuthed())) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   let body: any;
   try {

@@ -1,16 +1,12 @@
+import { isAdminAuthed } from "@/lib/admin-auth";
 import { NextRequest, NextResponse } from "next/server";
-import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
 
-function isAdminAuthed() {
-  const token = cookies().get("admin_token")?.value;
-  return !!token && token === process.env.ADMIN_SECRET_TOKEN;
-}
 
 const ALLOWED_TARGETS = ["all", "BASIC", "PRO", "CLINIC"] as const;
 
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
-  if (!isAdminAuthed()) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!(await isAdminAuthed())) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   let body: any;
   try { body = await req.json(); }
@@ -35,7 +31,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 }
 
 export async function DELETE(_req: NextRequest, { params }: { params: { id: string } }) {
-  if (!isAdminAuthed()) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!(await isAdminAuthed())) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   await prisma.coupon.delete({ where: { id: params.id } });
   return NextResponse.json({ success: true });
 }

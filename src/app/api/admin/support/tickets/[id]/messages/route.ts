@@ -13,7 +13,7 @@ import { addSupportMessage } from "@/lib/support/service";
 export const dynamic = "force-dynamic";
 
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
-  if (!isAdminAuthed()) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!(await isAdminAuthed())) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const payload = await req.json().catch(() => null);
   if (!payload) return NextResponse.json({ error: "JSON inválido" }, { status: 400 });

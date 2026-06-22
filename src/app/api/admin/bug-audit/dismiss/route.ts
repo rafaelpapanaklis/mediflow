@@ -1,15 +1,10 @@
+import { isAdminAuthed } from "@/lib/admin-auth";
 import { NextResponse, type NextRequest } from "next/server";
-import { cookies } from "next/headers";
 import { randomUUID } from "crypto";
 import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
 
-function isAdminAuthed(): boolean {
-  const token = cookies().get("admin_token")?.value;
-  const secret = process.env.ADMIN_SECRET_TOKEN;
-  return !!token && !!secret && token === secret;
-}
 
 /**
  * POST /api/admin/bug-audit/dismiss
@@ -22,7 +17,7 @@ function isAdminAuthed(): boolean {
  * Solo platform admin (cookie `admin_token`).
  */
 export async function POST(req: NextRequest) {
-  if (!isAdminAuthed()) {
+  if (!(await isAdminAuthed())) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -62,7 +57,7 @@ export async function POST(req: NextRequest) {
  * Re-activa un item dismissed (lo saca de la lista).
  */
 export async function DELETE(req: NextRequest) {
-  if (!isAdminAuthed()) {
+  if (!(await isAdminAuthed())) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

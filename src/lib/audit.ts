@@ -57,6 +57,10 @@ interface AuditOptions {
   changes?:   Record<string, { before: any; after: any }>;
   ipAddress?: string;
   userAgent?: string;
+  // WS2-T3 — atribución: "admin" + actorAdminId cuando la ejecuta un AdminUser
+  // de plataforma. Default (undefined) → "staff" (User de clínica) en BD.
+  actorType?:    "staff" | "admin";
+  actorAdminId?: string;
 }
 
 export async function logAudit(opts: AuditOptions) {
@@ -71,6 +75,8 @@ export async function logAudit(opts: AuditOptions) {
         changes:    opts.changes ?? null,
         ipAddress:  opts.ipAddress ?? null,
         userAgent:  opts.userAgent ?? null,
+        actorType:    opts.actorType,             // undefined → default 'staff' en BD
+        actorAdminId: opts.actorAdminId ?? null,
       },
     });
   } catch (e) {
@@ -113,6 +119,8 @@ export async function logMutation(opts: {
   action: "create" | "update" | "delete" | "void" | "soft_delete" | "archive";
   before?: Record<string, any> | null;
   after?: Record<string, any> | null;
+  actorType?:    "staff" | "admin";
+  actorAdminId?: string;
 }): Promise<void> {
   try {
     const { ipAddress, userAgent } = extractAuditMeta(opts.req);

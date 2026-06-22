@@ -1,17 +1,13 @@
+import { isAdminAuthed } from "@/lib/admin-auth";
 import { NextRequest, NextResponse } from "next/server";
-import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
 
-function isAdminAuthed() {
-  const token = cookies().get("admin_token")?.value;
-  return !!token && token === process.env.ADMIN_SECRET_TOKEN;
-}
 
 // Envía emails usando Resend (https://resend.com) si RESEND_API_KEY está configurada.
 // Fallback: responde 503 con instrucciones. No usamos SMTP directo para mantener el
 // bundle ligero en entornos serverless.
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
-  if (!isAdminAuthed()) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!(await isAdminAuthed())) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const apiKey = process.env.RESEND_API_KEY;
   const fromAddress = process.env.MEDIFLOW_EMAIL_FROM || "DaleControl <soporte@dalecontrol.com>";

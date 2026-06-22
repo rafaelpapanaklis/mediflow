@@ -1,12 +1,8 @@
+import { isAdminAuthed } from "@/lib/admin-auth";
 import { NextRequest, NextResponse } from "next/server";
-import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
 import { sendAffiliatePayoutPaidEmail } from "@/lib/affiliate-emails";
 
-function isAdminAuthed() {
-  const token = cookies().get("admin_token")?.value;
-  return !!token && token === process.env.ADMIN_SECRET_TOKEN;
-}
 
 /**
  * POST /api/admin/affiliates/[id]/payouts — marca TODAS las comisiones
@@ -14,7 +10,7 @@ function isAdminAuthed() {
  * payout (fire-and-forget, respeta notifyPayout).
  */
 export async function POST(_req: NextRequest, { params }: { params: { id: string } }) {
-  if (!isAdminAuthed()) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!(await isAdminAuthed())) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const pending = await prisma.affiliateCommission.aggregate({
     where: { affiliateId: params.id, status: "pending" },

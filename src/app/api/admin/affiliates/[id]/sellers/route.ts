@@ -1,12 +1,8 @@
+import { isAdminAuthed } from "@/lib/admin-auth";
 import { NextRequest, NextResponse } from "next/server";
-import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
 import { getSellerStatsForAffiliate } from "@/lib/affiliates/seller-stats";
 
-function isAdminAuthed() {
-  const token = cookies().get("admin_token")?.value;
-  return !!token && token === process.env.ADMIN_SECRET_TOKEN;
-}
 
 /**
  * GET /api/admin/affiliates/[id]/sellers — lista el EQUIPO de vendedores del
@@ -17,7 +13,7 @@ function isAdminAuthed() {
  * degrada a { sellers: [] } sin romper (ver lesson_ortho_schema_drift).
  */
 export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
-  if (!isAdminAuthed()) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!(await isAdminAuthed())) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   try {
     const [sellers, stats] = await Promise.all([

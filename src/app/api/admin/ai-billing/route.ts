@@ -27,7 +27,7 @@ const realCostMxn = (rows: FxRow[]) =>
   rows.reduce((a, r) => a + ((r._sum.costUsdMicros ?? 0) / 1_000_000) * r.fxRate, 0);
 
 export async function GET(_req: NextRequest) {
-  if (!isAdminAuthed()) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!(await isAdminAuthed())) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   try {
     const now = new Date();

@@ -2112,6 +2112,13 @@ model AuditLog {
   userAgent  String?
   createdAt  DateTime @default(now())
 
+  // WS2-T3 — atribución del actor de la acción: "staff" (User de clínica) o
+  // "admin" (AdminUser de plataforma). actorAdminId referencia AdminUser.id SIN
+  // FK estricta (a propósito): la bitácora no se acopla al panel y los borrados
+  // de AdminUser no la rompen.
+  actorType    String?  @default("staff")
+  actorAdminId String?
+
   // NOM-024 §6.3.5 — la bitácora NO se destruye al borrar la clínica. La FK
   // real en BD es ON DELETE RESTRICT (ver sql/nom-audit-immutable.sql, aplicado
   // a mano). Se declara Restrict aquí para que el ORM no reintroduzca CASCADE.
@@ -2121,6 +2128,43 @@ model AuditLog {
   @@index([clinicId, entityType, entityId])
   @@index([clinicId, createdAt])
   @@map("audit_logs")
+}
+
+// ── WS2-T3 · Sesiones de admin en DB ──────────────────────────────────────
+// Identidad real del administrador de plataforma. Sustituye la cookie global
+// única (env ADMIN_SECRET_TOKEN) por sesiones con identidad + revocación.
+// GLOBAL: NO lleva clinicId, queda fuera del RLS por clínica a propósito.
+model AdminUser {
+  id           String         @id @default(cuid())
+  email        String         @unique
+  passwordHash String
+  totpSecret   String?
+  totpEnabled  Boolean        @default(false)
+  role         String         @default("SUPER_ADMIN")
+  isActive     Boolean        @default(true)
+  createdAt    DateTime       @default(now())
+
+  sessions     AdminSession[]
+
+  @@map("admin_users")
+}
+
+// Una fila por sesión activa. En BD solo vive el sha256 del token; el token en
+// claro únicamente viaja en la cookie httpOnly del navegador del admin.
+model AdminSession {
+  id          String    @id @default(cuid())
+  adminUserId String
+  tokenHash   String    @unique
+  ipAddress   String?
+  userAgent   String?
+  createdAt   DateTime  @default(now())
+  expiresAt   DateTime
+  revokedAt   DateTime?
+
+  adminUser   AdminUser @relation(fields: [adminUserId], references: [id], onDelete: Cascade)
+
+  @@index([adminUserId])
+  @@map("admin_sessions")
 }
 
 model InventoryItem {

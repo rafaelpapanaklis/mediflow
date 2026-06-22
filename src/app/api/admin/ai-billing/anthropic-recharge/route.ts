@@ -9,7 +9,7 @@ export const runtime = "nodejs";
 // (AnthropicRecharge.amountUsdCents). Acepta `amountUsd` (dólares) o
 // `amountUsdCents` (centavos) directo.
 export async function POST(req: NextRequest) {
-  if (!isAdminAuthed()) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!(await isAdminAuthed())) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   let body: any;
   try {

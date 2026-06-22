@@ -53,22 +53,15 @@ export async function middleware(request: NextRequest) {
   }
 
   if (pathname.startsWith("/admin") && pathname !== "/admin/login") {
-    try {
-      const token = request.cookies.get("admin_token")?.value;
-      const secret = process.env.ADMIN_SECRET_TOKEN;
-      const ok = !!token && !!secret && token.length === secret.length &&
-        // timing-safe via simple XOR loop (middleware Edge runtime sin crypto.timingSafeEqual garantizado)
-        (() => {
-          let diff = 0;
-          for (let i = 0; i < token.length; i++) diff |= token.charCodeAt(i) ^ secret.charCodeAt(i);
-          return diff === 0;
-        })();
-      if (!ok) {
-        const url = request.nextUrl.clone();
-        url.pathname = "/admin/login";
-        return NextResponse.redirect(url);
-      }
-    } catch {
+    // Edge runtime: NO puede consultar Prisma. Aquí sólo se valida PRESENCIA de
+    // la cookie (gate barato anti-flash). La validación REAL de la sesión —viva,
+    // no revocada, no expirada, AdminUser activo— corre en runtime Node: el
+    // layout server de /admin (src/app/admin/layout.tsx) y cada ruta
+    // /api/admin/* vía isAdminAuthed()/getAdminSession(). Una cookie presente
+    // pero inválida/revocada pasa este gate pero el layout/ruta la rechaza
+    // (fail-closed), así que la revocación es efectiva donde importa.
+    const token = request.cookies.get("admin_token")?.value;
+    if (!token) {
       const url = request.nextUrl.clone();
       url.pathname = "/admin/login";
       return NextResponse.redirect(url);

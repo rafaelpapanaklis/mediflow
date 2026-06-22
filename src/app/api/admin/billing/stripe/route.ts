@@ -2,14 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { createCustomer, createCheckoutForSubscription, cancelSubscription, getCustomerPortalUrl, pauseSubscription, resumeSubscription } from "@/lib/stripe-subscriptions";
 import { isStripeConfigured, stripeUnavailableResponse } from "@/lib/stripe";
-
-function isAdmin(req: NextRequest): boolean {
-  const token = req.cookies.get("admin_token")?.value;
-  return !!token && token === process.env.ADMIN_SECRET_TOKEN;
-}
+import { isAdminAuthed } from "@/lib/admin-auth";
 
 export async function POST(req: NextRequest) {
-  if (!isAdmin(req)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!(await isAdminAuthed())) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (!isStripeConfigured()) return NextResponse.json(stripeUnavailableResponse(), { status: 503 });
 
   try {
