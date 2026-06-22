@@ -4,13 +4,18 @@
 // + rescale corriendo en el main thread). Devuelve los cortes con sus buffers
 // TRANSFERIDOS (cero copia de vuelta al hilo principal).
 //
+// Aquí también se DESCOMPRIME el DICOM comprimido (JPEG2000/JPEG-LS/HTJ2K/RLE/
+// JPEG…) vía decodeSliceAsync → @cornerstonejs/dicom-codec (códec WASM bajo
+// demanda), siempre dentro del worker: la descompresión jamás corre en el main thread.
+//
 // El bundler de Next (webpack 5) emite este archivo como un chunk de worker
 // aparte gracias a `new Worker(new URL("./dicom-decode.worker.ts", import.meta.url))`
 // en DicomSetViewer. Si el bundling fallara, DicomSetViewer cae a decodificar
-// en el hilo principal (con cesión fina), así que la app nunca depende de esto.
+// en el hilo principal (con cesión fina) — esa ruta de respaldo solo lee DICOM
+// SIN comprimir, por diseño (no se carga el códec WASM al main thread).
 
 import JSZip from "jszip";
-import { decodeSlice, isDicomEntryName, type DecodedSlice } from "./dicom-decode-core";
+import { decodeSliceAsync, isDicomEntryName, type DecodedSlice } from "./dicom-decode-core";
 
 // Scope del worker SIN tipos DOM (evita el choque de libs dom/webworker en el
 // tsconfig del proyecto, que solo incluye "dom"). `self` existe en el worker.
@@ -35,8 +40,9 @@ ctx.onmessage = async (e: MessageEvent) => {
     for (const entry of entries) {
       try {
         const buf: ArrayBuffer = await entry.async("arraybuffer");
-        // decodeSlice devuelve un array de cortes (1 normal, >1 multi-frame).
-        const s = decodeSlice(buf, done);
+        // decodeSliceAsync devuelve un array de cortes (1 normal, >1 multi-frame) y
+        // descomprime con el códec WASM si el corte viene comprimido (JPEG2000/LS/…).
+        const s = await decodeSliceAsync(buf, done);
         if (s) slices.push(...s);
       } catch {
         /* corte inválido: se salta sin romper el set */
