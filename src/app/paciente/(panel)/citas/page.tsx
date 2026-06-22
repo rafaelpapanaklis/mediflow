@@ -9,7 +9,8 @@
 // · Estados vacíos: "No tienes citas próximas" / "Aún no tienes citas pasadas".
 // · Responsive: lista de cards en móvil; en desktop puede ser tabla fluida
 //   (width 100%, sin min-width que corte).
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import Link from "next/link";
 import { usePacienteData } from "@/lib/patient-portal/use-paciente";
 import type { PacienteCita, PacienteCitasResponse } from "@/lib/patient-portal/types";
 import {
@@ -39,6 +40,18 @@ export default function PacienteCitasPage() {
   const [sel, setSel] = useState<{ cita: PacienteCita; kind: "reagendar" | "cancelar" } | null>(
     null
   );
+  const [solicitada, setSolicitada] = useState(false);
+
+  // Aviso one-shot tras agendar desde /paciente/citas/nueva (?solicitada=1).
+  // Client-only (window) → sin useSearchParams, no requiere Suspense boundary.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const sp = new URLSearchParams(window.location.search);
+    if (sp.get("solicitada") === "1") {
+      setSolicitada(true);
+      window.history.replaceState(null, "", window.location.pathname);
+    }
+  }, []);
 
   const clinics = data ? data.clinics : [];
   const multiClinic = clinics.length > 1;
@@ -54,9 +67,76 @@ export default function PacienteCitasPage() {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: GAP, width: "100%", minWidth: 0 }}>
-      <h1 style={{ margin: 0, fontSize: "clamp(20px, 2.4vw, 26px)", fontWeight: 700 }}>
-        Tus citas
-      </h1>
+      <div
+        style={{
+          display: "flex",
+          flexWrap: "wrap",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: 12,
+        }}
+      >
+        <h1 style={{ margin: 0, fontSize: "clamp(20px, 2.4vw, 26px)", fontWeight: 700 }}>
+          Tus citas
+        </h1>
+        <Link
+          href="/paciente/citas/nueva"
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 6,
+            padding: "9px 16px",
+            borderRadius: 10,
+            background: "#7c3aed",
+            color: "#fff",
+            border: "1px solid #8b5cf6",
+            fontSize: 13.5,
+            fontWeight: 600,
+            textDecoration: "none",
+            whiteSpace: "nowrap",
+          }}
+        >
+          + Agendar cita
+        </Link>
+      </div>
+
+      {solicitada && (
+        <div
+          role="status"
+          style={{
+            display: "flex",
+            alignItems: "flex-start",
+            justifyContent: "space-between",
+            gap: 10,
+            background: "rgba(52,211,153,0.12)",
+            border: "1px solid rgba(52,211,153,0.4)",
+            color: "#6ee7b7",
+            borderRadius: 12,
+            padding: "11px 14px",
+            fontSize: 13.5,
+            lineHeight: 1.45,
+          }}
+        >
+          <span>Tu cita fue solicitada. La clínica la confirmará pronto.</span>
+          <button
+            type="button"
+            onClick={() => setSolicitada(false)}
+            aria-label="Cerrar aviso"
+            style={{
+              flexShrink: 0,
+              background: "transparent",
+              border: "none",
+              color: "inherit",
+              fontSize: 14,
+              cursor: "pointer",
+              lineHeight: 1,
+              fontFamily: "inherit",
+            }}
+          >
+            ✕
+          </button>
+        </div>
+      )}
 
       {!data && error ? (
         <PacienteCard>
