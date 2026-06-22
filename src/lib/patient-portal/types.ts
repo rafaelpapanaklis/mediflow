@@ -322,3 +322,50 @@ export interface PacienteReceta {
 export interface PacienteRecetasResponse {
   recetas: PacienteReceta[];
 }
+
+// ── Agendar cita nueva (WS2-T1, aditivo) ─────────────────────────────────────
+
+/** Doctor agendable de una clínica (wizard de nueva cita). */
+export interface PacienteBookingDoctor {
+  id: string;
+  name: string; // "Nombre Apellido"
+  specialty: string | null;
+}
+
+/** Clínica + sus doctores agendables. GET /api/paciente/booking/options. */
+export interface PacienteBookingClinica {
+  clinicId: string;
+  clinicName: string;
+  timezone: string;
+  doctors: PacienteBookingDoctor[];
+}
+
+export interface PacienteBookingOptionsResponse {
+  clinics: PacienteBookingClinica[];
+}
+
+/** GET /api/paciente/booking/slots?clinicId=&doctorId=&date=YYYY-MM-DD. */
+export interface PacienteBookingSlotsResponse {
+  date: string; // YYYY-MM-DD
+  timezone: string;
+  durationMin: number; // 30
+  slots: string[]; // "HH:mm" libres
+}
+
+/** Body de POST /api/paciente/appointments (agendar nueva cita). */
+export interface PacienteNuevaCitaBody {
+  clinicId: string;
+  doctorId: string;
+  date: string; // YYYY-MM-DD
+  startTime: string; // HH:mm
+  type?: string;
+  reason?: string;
+}
+
+/** Respuesta de POST /api/paciente/appointments. */
+export interface PacienteNuevaCitaResponse {
+  ok: boolean;
+  appointmentId: string;
+  startsAt: string; // ISO UTC
+  status: string; // "PENDING"
+}
