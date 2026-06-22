@@ -26,6 +26,9 @@ model Clinic {
   logoUrl         String?
   taxId           String?
   isPublic        Boolean        @default(false)
+  // Seguridad: si true, TODO usuario de la clínica debe enrolar 2FA al entrar
+  // al panel (enrolamiento forzado). Ver sql/sec-staff-2fa.sql.
+  require2fa      Boolean        @default(false)
   description     String?
   plan            Plan           @default(PRO)
   // Trial — 14 días desde creación. trialStartedAt agregado en Sprint 1
@@ -1006,6 +1009,13 @@ model User {
   // deja solo el título). Valores: "clinico" | "catalogo" | "specialties" |
   // "admin". Persistente por cuenta → sobrevive logout/login y dispositivos.
   sidebarCollapsed String[] @default([])
+
+  // 2FA (TOTP) por usuario — opcional, o forzado por Clinic.require2fa.
+  // totpSecret: secret base32 (otplib). recoveryCodes: hashes bcrypt de un
+  // solo uso. Ver src/lib/auth/two-factor.ts + sql/sec-staff-2fa.sql.
+  totpSecret    String?
+  totpEnabled   Boolean  @default(false)
+  recoveryCodes String[] @default([])
 
   clinic             Clinic              @relation(fields: [clinicId], references: [id], onDelete: Cascade)
   appointments       Appointment[]

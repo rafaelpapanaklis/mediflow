@@ -50,6 +50,10 @@ export async function GET(request: Request) {
       const ownedIds = userClinics.map(u => u.clinicId);
       const picked = pickActiveClinicId(current, ownedIds);
       writeActiveClinicCookie(res, picked.clinicId);
+      // Mismo gate de login que post-login: si la membresía activa tiene 2FA o
+      // la clínica lo exige, marca el flag pendiente y borra df_2fa previa.
+      const { applyTwoFactorLoginCookies } = await import("@/lib/auth/two-factor-cookie");
+      await applyTwoFactorLoginCookies(res, supabaseId, picked.clinicId);
       return res;
     }
   } catch (err) {
