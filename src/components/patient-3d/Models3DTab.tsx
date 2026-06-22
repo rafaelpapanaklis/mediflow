@@ -11,6 +11,7 @@ import { Plus, Trash2, Box, X, Layers } from "lucide-react";
 import toast from "react-hot-toast";
 import { useT } from "@/i18n/i18n-provider";
 import type { Model3DFormat } from "./Model3DViewer";
+import DiagnosticDisclaimer from "./DiagnosticDisclaimer";
 
 const Model3DViewer = dynamic(() => import("./Model3DViewer"), {
   ssr: false,
@@ -415,6 +416,13 @@ export function Models3DTab({ patientId }: { patientId: string }) {
                 <X className="w-4 h-4" />
               </button>
             </div>
+            {/* ENTRADA ÚNICA "Ver en 3D": el botón del modelo abre este modal y
+                aquí se elige el visor REAL según el tipo de archivo — nunca el
+                placeholder de descarga de Model3DViewer (su rama DICOM):
+                  · .zip           → DicomSetViewer (set CBCT: MPR + volumen 3D)
+                  · .dcm / .dicom  → DicomViewer2D (corte único 2D)
+                  · .stl/.ply/.obj → Model3DViewer (malla 3D)
+                El clinicId y la signed URL los resuelve el API; multi-tenant intacto. */}
             <div className="p-3 max-h-[80vh] overflow-y-auto">
               {isZip(viewer.name) ? (
                 <DicomSetViewer
@@ -443,6 +451,9 @@ export function Models3DTab({ patientId }: { patientId: string }) {
                 />
               )}
             </div>
+            {/* Leyenda legal persistente: se monta UNA vez aquí (no en cada visor
+                interno) para que aparezca igual con malla, DICOM o CBCT. */}
+            <DiagnosticDisclaimer text={t("patients.models3d.diagnosticDisclaimer")} />
           </div>
         </div>
       )}

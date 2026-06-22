@@ -1212,6 +1212,7 @@
       "view": "View in 3D",
       "viewerTitle": "3D model: {name}",
       "viewerHint": "Drag to rotate · scroll to zoom",
+      "diagnosticDisclaimer": "Visual aid only — not for primary diagnosis; not a substitute for a certified diagnostic workstation",
       "deleteConfirm": "Delete model \"{name}\"?",
       "deleteSuccess": "Model deleted",
       "deleteError": "Could not delete the model",

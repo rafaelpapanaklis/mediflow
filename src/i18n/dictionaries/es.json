@@ -1212,6 +1212,7 @@
       "view": "Ver en 3D",
       "viewerTitle": "Modelo 3D: {name}",
       "viewerHint": "Arrastra para rotar · scroll para zoom",
+      "diagnosticDisclaimer": "Solo apoyo visual — no para diagnóstico primario; no sustituye una estación diagnóstica certificada",
       "deleteConfirm": "¿Eliminar el modelo \"{name}\"?",
       "deleteSuccess": "Modelo eliminado",
       "deleteError": "No se pudo eliminar el modelo",
