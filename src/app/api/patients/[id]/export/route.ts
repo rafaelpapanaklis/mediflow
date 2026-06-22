@@ -61,12 +61,12 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
       where: { medicalRecord: { patientId: patient.id } },
     }),
     prisma.prescription.findMany({
-      where: { patientId: patient.id },
+      where: { patientId: patient.id, status: "ACTIVE" },
       include: { items: true },
       orderBy: { issuedAt: "desc" },
     }),
     prisma.patientFile.findMany({
-      where: { patientId: patient.id },
+      where: { patientId: patient.id, deletedAt: null },
       orderBy: { createdAt: "desc" },
     }),
     prisma.invoice.findMany({

@@ -19,7 +19,9 @@ interface Diagnosis {
 
 interface Props {
   diagnoses: Diagnosis[];
-  onAdd: (input: { cie10Code: string; isPrimary: boolean; note?: string }) => Promise<void>;
+  // `description` es opcional: lo usa el modo local (consulta nueva) para mostrar
+  // el texto del dx en el chip sin re-fetch. El path persistido lo ignora.
+  onAdd: (input: { cie10Code: string; isPrimary: boolean; note?: string; description?: string }) => Promise<void>;
   onRemove: (dxId: string) => Promise<void>;
   disabled?: boolean;
 }
@@ -78,13 +80,14 @@ export function Cie10Selector({ diagnoses, onAdd, onRemove, disabled }: Props) {
     await onAdd({
       cie10Code: code.code,
       isPrimary: diagnoses.length === 0, // primero agregado = primario por default
+      description: code.description,
     });
     setOpen(false); setQuery("");
   }
 
   async function togglePrimary(dx: Diagnosis) {
     if (dx.isPrimary) return; // already primary, nothing to do
-    await onAdd({ cie10Code: dx.cie10Code, isPrimary: true });
+    await onAdd({ cie10Code: dx.cie10Code, isPrimary: true, description: dx.cie10?.description });
     // Caller re-fetches; simpler than handling state locally
   }
 

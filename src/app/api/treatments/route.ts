@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getAuthContext } from "@/lib/auth-context";
 import { prisma } from "@/lib/prisma";
 import { revalidateAfter } from "@/lib/cache/revalidate";
+import { logMutation } from "@/lib/audit";
 
 // GET /api/treatments — list all treatment plans for clinic (role-filtered)
 export async function GET(req: NextRequest) {
@@ -90,6 +91,18 @@ export async function POST(req: NextRequest) {
       doctor:  { select: { id: true, firstName: true, lastName: true } },
       sessions:true,
     },
+  });
+
+  // NOM-024 §6.3.5 — bitácora de creación del plan de tratamiento.
+  // clinicId/userId SIEMPRE de sesión (getAuthContext), nunca del body.
+  await logMutation({
+    req,
+    clinicId:   ctx.clinicId,
+    userId:     ctx.userId,
+    entityType: "treatment",
+    entityId:   plan.id,
+    action:     "create",
+    after:      { patientId: plan.patientId, doctorId: plan.doctorId, name: plan.name, totalSessions: plan.totalSessions, totalCost: Number(plan.totalCost) },
   });
 
   revalidateAfter("treatments");

@@ -3,6 +3,7 @@ import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
 import { readActiveClinicCookie } from "@/lib/active-clinic";
+import { logMutation } from "@/lib/audit";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { revalidateAfter, revalidatePatientProfile } from "@/lib/cache/revalidate";
 
@@ -112,6 +113,23 @@ export async function POST(req: NextRequest) {
       specialtyData: true,
       createdAt: true,
       updatedAt: true,
+    },
+  });
+
+  // NOM-004 AUDITORIA (brecha #9): la creación del expediente deja rastro.
+  // clinicId SIEMPRE de la sesión (multi-tenant); best-effort, nunca rompe el alta.
+  await logMutation({
+    req,
+    clinicId: dbUser.clinicId,
+    userId: dbUser.id,
+    entityType: "record",
+    entityId: record.id,
+    action: "create",
+    after: {
+      patientId: record.patientId,
+      doctorId: record.doctorId,
+      status: "DRAFT",
+      appointmentId: parsed.data.appointmentId ?? null,
     },
   });
 

@@ -134,7 +134,7 @@ export async function GET(req: NextRequest, { params }: Params) {
       take: limit + 1,
     }) : Promise.resolve([]),
     wantRx ? prisma.prescription.findMany({
-      where: { clinicId: user.clinicId, patientId: params.id, ...dateRange<"issuedAt">("issuedAt") },
+      where: { clinicId: user.clinicId, patientId: params.id, status: "ACTIVE", ...dateRange<"issuedAt">("issuedAt") },
       select: {
         id: true, issuedAt: true, qrCode: true, verifyUrl: true, cofeprisGroup: true,
         items: { select: { cums: { select: { descripcion: true } } } },
@@ -150,6 +150,7 @@ export async function GET(req: NextRequest, { params }: Params) {
       where: {
         clinicId: user.clinicId,
         patientId: params.id,
+        deletedAt: null,
         category: { in: ["XRAY_PERIAPICAL", "XRAY_PANORAMIC", "XRAY_BITEWING", "XRAY_OCCLUSAL"] },
         ...dateRange<"createdAt">("createdAt"),
       },

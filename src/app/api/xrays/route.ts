@@ -29,6 +29,7 @@ export async function GET(req: NextRequest) {
     where: {
       patientId,
       clinicId: ctx.clinicId,
+      deletedAt: null, // NOM-024 §7 — oculta radiografías borradas lógicamente
       NOT: {
         OR: [
           { category: "SCAN_STL" as any },

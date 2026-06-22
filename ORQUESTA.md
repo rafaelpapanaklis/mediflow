@@ -4,6 +4,275 @@
 QUE SE HIZO: traduje el prototipo design/import-clinic/ a componentes reales del
 panel (Next.js 14 App Router, TS). Wizard completo navegable con datos SIMULADOS
 (sin backend). Lanzador en la pagina de Pacientes + estado vacio mejorado.
+═══════════════════════════════════════════════════════════════════════════
+## NOM-OLA1-INTEG — Integración de las 5 ramas NOM Ola 1 + fix P2 (PDF receta anulada) 🟡 EN RAMA integ/nom-ola1 (NO main, 2026-06-17)
+═══════════════════════════════════════════════════════════════════════════
+Integra en UNA rama las 5 ramas de la Ola 1 NOM-024 + arregla el P2 (PDF de receta anulada
+sin sello "ANULADA"). NO toca main. Build VERDE, EXIT 0.
+
+RAMAS MERGEADAS (git merge --no-ff, en este orden) sobre main (18a64fb):
+  a) feat/nom-rls          → 34b6fe3  (RLS deny-all faltante + sql/nom-rls-missing.sql)
+  b) feat/nom-cie10        → 265f49d  (selector CIE-10 real en medicine/dental/dermatology forms)
+  c) feat/nom-expediente   → 5c8fd23  (validación de campos mínimos + audit de notas/firma clínica)
+  d) feat/nom-conservacion → e9865b7  (anulación lógica receta + soft-delete archivos + archivado clínica; DUEÑA del schema)
+  e) feat/nom-bitacora     → 263c7d2  (bitácora inmutable + audit de mutaciones/lecturas)
+
+CONFLICTOS (schema.prisma + audit.ts): NO hubo conflicto de merge real. Los cambios de
+conservacion y bitacora caen en regiones DISJUNTAS → git (ort) los auto-fusionó. VERIFIQUÉ a
+mano que quedó la UNIÓN de ambos (no se descartó nada):
+  - prisma/schema.prisma: conservacion (Clinic.archivedAt/archivedBy/archiveReason;
+    PatientFile.deletedAt/deletedBy/deleteReason + @@index([clinicId, deletedAt]);
+    Prescription.status/voidedAt/voidedBy/voidReason) Y bitacora (AuditLog.clinic onDelete
+    Cascade→Restrict + comentario, L2095). Modelos distintos.
+  - src/lib/audit.ts: conservacion (AuditAction +"void"|"soft_delete"|"archive"; logMutation
+    soporta esas acciones) Y bitacora (AuditEntityType +"periodontal"|"body-map").
+  `npx prisma generate` corrido tras el merge. ORQUESTA.md también se auto-fusionó (rls + conservacion + bitacora).
+
+FIX P2 — PDF de receta ANULADA (RX-06):
+  El builder COMPARTIDO src/lib/pdf/prescription-pdf.ts ya hace su propio query con `include`
+  (sin select) → rx.status/voidReason/voidedAt YA estaban disponibles, NO hubo que tocar los
+  endpoints. Ahora pasa voided=(status==="VOIDED")/voidReason/voidedAt a PrescriptionDocument,
+  que estampa (a) watermark diagonal "ANULADA" (rojo, fixed, todas las páginas) y (b) banner
+  rojo "RECETA ANULADA — SIN VALIDEZ" con motivo + fecha. Cubre los 3 consumidores del builder:
+  prescriptions/[id]/pdf (dashboard), prescriptions/[id]/verify/pdf (público) y
+  paciente/recetas/[id]/pdf (portal). @react-pdf/renderer v4.5.1 (transform/opacity OK).
+  Archivos: prescription-document.tsx (+props + estilos watermark/banner + render),
+  prescription-pdf.ts (pasa los 3 campos).
+
+BUILD: npx next build (worktree; node_modules vía junction; SIN pipes). ✓ Compiled successfully ·
+  type-check sin errores · ✓ Generating static pages (275/275) · EXIT 0. Los prisma:error
+  DATABASE_URL son del prerender sin DB (patrón conocido). Las 3 rutas PDF en el manifest.
+
+🔴 SQL A APLICAR A MANO (Supabase SQL Editor, NO prisma migrate; idempotentes):
+  1) sql/nom-rls-missing.sql      — RLS deny-all en las 16 tablas sin RLS (portal paciente, IA recetas, labs).
+  2) sql/nom-conservacion.sql     — columnas/índices de borrado lógico (archivado / soft-delete / anulación).
+  3) sql/nom-audit-immutable.sql  — trigger append-only en audit_logs + FK clinics→audit_logs RESTRICT.
+  ⚠️ Tras (3): borrar una clínica con bitácora FALLARÁ (FK RESTRICT) — comportamiento NOM-024
+  correcto; conservacion ya cambió el endpoint admin/clinics/[id] a archivado lógico → validar en QA.
+
+RAMA: integ/nom-ola1 (worktree mediflow-worktrees/nom-integ). Pusheada a origin. NO mergear a main sin QA.
+QA: aplicar los 3 SQL en orden; anular una receta → su PDF (dashboard/portal/verify) sale con
+  watermark+banner "ANULADA"; smoke de RLS, CIE-10 en consulta, validación de notas, conservación
+  (anti-hard-delete) y bitácora inmutable. Aislamiento multi-tenant intacto (clinicId de sesión).
+
+FIX UX (followup, 2026-06-18) — fix: lista de recetas muestra anuladas con badge ANULADA (antes las ocultaba).
+  El GET /api/prescriptions filtraba status:"ACTIVE" → al anular una receta desaparecía de la lista y
+  parecía borrada, contradiciendo la conservación NOM-004/§7. Ahora el GET devuelve TODAS (activas +
+  anuladas; status/voidedAt/voidReason ya venían por ser escalares), ordenadas vigentes primero y
+  anuladas al final (sort estable → issuedAt desc dentro de cada grupo). prescriptions-tab.tsx: badge
+  rojo "ANULADA", tarjeta atenuada (opacity) + título tachado, muestra motivo + fecha de anulación; en
+  anuladas se ocultan WhatsApp/Correo/Eliminar (ni se reenvía ni se re-anula) y se mantienen PDF
+  (sellado) + Verificación. i18n es/en (statusVoided/voidedOn/voidReason). SIN SQL. Build EXIT 0.
+  OTRAS superficies que aún filtran status:"ACTIVE" (NO tocadas — decisión de producto, reportadas a
+  Rafael): timeline del paciente (api/patients/[id]/timeline), export JSON (api/patients/[id]/export) y
+  export-CDA (api/patients/[id]/export-cda). Portal del paciente (api/paciente/recetas) se deja como
+  está por indicación expresa. Aislamiento multi-tenant intacto (clinicId de sesión).
+  Archivos: api/prescriptions/route.ts, components/dashboard/patient-detail/prescriptions-tab.tsx,
+  i18n/dictionaries/es.json + en.json.
+
+═══════════════════════════════════════════════════════════════════════════
+## NOM-RLS — RLS deny-all FALTANTE (portal paciente + IA recetas + labs B2B) ✅ EN RAMA feat/nom-rls (56b1e9f, 2026-06-17) · NO en main
+═══════════════════════════════════════════════════════════════════════════
+QUÉ SE HIZO: cierra AC-10 / AC-14 y el gap #26 del audit
+docs/compliance/NOM024_AUDIT_2026-06-17.md (Área 9 — Control de acceso). Habilita
+RLS + policy RESTRICTIVE deny-all a (anon, authenticated) en las 16 tablas que hoy
+NO la tenían. Base legal: LFPDPPP art. 19 + NOM-024-SSA3-2012 §6.3.2. Defense-in-
+depth: una fuga del anon key ya NO expone passwordHash/tokenHash del portal del
+paciente ni los datos del módulo de laboratorios vía PostgREST. El service role
+bypassa RLS por diseño → la app (Prisma server-side) sigue igual; estas policies
+son inertes para el cliente.
+
+PATRÓN (idéntico a sql/rls-deny-all-policies.sql): helper público
+_apply_deny_all_rls(text) → ALTER TABLE ... ENABLE ROW LEVEL SECURITY + CREATE
+POLICY <tabla>_deny_anon AS RESTRICTIVE FOR ALL TO anon, authenticated
+USING (false) WITH CHECK (false), sólo si no existe; envuelto en EXCEPTION WHEN
+undefined_table; DROP FUNCTION al final. Idempotente y re-ejecutable.
+
+TABLAS CUBIERTAS (16):
+- Portal del paciente (3): patient_accounts, patient_account_links,
+  patient_account_sessions   (def. sql/patient-portal.sql)
+- IA de recetas (1): prescription_ai_checks   (def. sql/prescription-ai-check.sql;
+  OJO: el nombre real es PLURAL — el audit lo nombraba "prescription_ai_check")
+- Laboratorios B2B (12): dental_labs, dental_lab_users, dental_lab_services,
+  dental_lab_orders, dental_lab_order_events, dental_lab_order_files,
+  dental_lab_traffic_history, dental_lab_bank_accounts, dental_lab_fiscal_data,
+  dental_lab_invoices, dental_lab_chat_threads, dental_lab_chat_messages
+  (def. sql/laboratorios.sql / Prisma @@map, verificado 1:1)
+
+ALCANCE EXTENDIDO (+2 sobre el gap #26, deliberado): patient_account_links (mismo
+cluster de PII: mapea cuenta↔paciente↔clínica) y el padre dental_labs (datos del
+lab + mpAccessToken de b2b-payments.sql). Dejar hermanos del mismo archivo sin RLS
+contradecía el objetivo. Verificado contra TODOS los sql/*.sql: ninguna de las 16
+tenía RLS previa (ai-billing, afiliados, supplier, quotes, etc. ya cubren las suyas).
+
+ARCHIVOS (1, +112): sql/nom-rls-missing.sql (NUEVO). NO toca schema.prisma ni rutas.
+
+SQL A APLICAR (a mano, Supabase SQL editor, tras revisar la rama):
+  → sql/nom-rls-missing.sql
+La verificación viene al pie del archivo (debe devolver 16 filas con
+policyname LIKE '%_deny_anon').
+
+BUILD: npx next build (sin pipes), EXIT 0, ✓ Compiled successfully, 276/276 páginas.
+(El build es sólo confirmación de no-regresión: sql/ no se compila; cero cambios de código.)
+
+RAMA: feat/nom-rls (commit SQL 56b1e9f). NO mergeada a main. Sin envs nuevas.
+QA (Rafael): aplicar el SQL en Supabase; confirmar que portal del paciente, bot de
+IA de recetas y módulo de labs siguen operando (van por service role) y que la
+query de verificación devuelve 16 policies.
+
+═══════════════════════════════════════════════════════════════════════════
+## [NOM-CONSERVACION] Anti-hard-delete / conservación (NOM-004 / NOM-024 §7) ✅ rama feat/nom-conservacion — NO main (2026-06-17)
+═══════════════════════════════════════════════════════════════════════════
+QUÉ SE HIZO: cierra Ola 1·fila 1 del audit (docs/compliance/NOM024_AUDIT_2026-06-17.md):
+RX-11, RX-06, RET-01, RET-12. El borrado FÍSICO del expediente se sustituye por
+anulación/borrado LÓGICO con motivo + preservación. Ningún DELETE destruye ya
+recetas, radiografías, modelos 3D, ni el expediente al "eliminar" una clínica.
+
+CAMBIOS:
+1) Receta (RX-11/RX-06) — api/prescriptions/[id]/route.ts: DELETE ya NO hace
+   prisma.delete; ANULA (status=VOIDED + voidedAt + voidedBy + voidReason),
+   idempotente, motivo opcional { reason } en el body. Se quitó el bloqueo por
+   cofeprisFolio (anular ≠ destruir).
+   · Verificación pública (el QR sigue resolviendo, muestra "ANULADA"):
+     api/prescriptions/[id]/verify/route.ts (valid=!expired && !voided; isVoided +
+     voidReason) y portal/prescription/[id]/verify/page.tsx (banner rojo "⛔ Receta
+     ANULADA — no debe ser surtida" + motivo; oculta botón Descargar PDF).
+   · Anuladas ocultas de listas ACTIVAS (where status:"ACTIVE"): prescriptions/
+     route.ts, paciente/recetas, patients/[id]/timeline, patients/[id]/export,
+     patients/[id]/export-cda. El backup db-export NO se filtra (conserva todo).
+2) Radiografías + Modelos 3D (RET-01) — soft-delete de PatientFile:
+   api/xrays/[id]/route.ts y api/patients/[id]/models-3d/[fileId]/route.ts (DELETE)
+   ya NO borran blob de Storage ni fila → marcan deletedAt/deletedBy/deleteReason;
+   el blob se CONSERVA. Filtro deletedAt:null en vistas activas: xrays/route.ts,
+   dashboard/xrays/[patientId]/page.tsx, patients/[id]/timeline, patients/[id]/
+   models-3d/route.ts, patients/[id]/export, dashboard/home/doctor (count).
+3) Clínica (RET-01/RET-12) — api/admin/clinics/[id]/route.ts: DELETE ya NO hace
+   prisma.clinic.delete (CASCADE que destruía pacientes/recetas/radiografías/
+   bitácora) ni borra Storage. ARCHIVA: archivedAt + archivedBy(=IP) + archiveReason
+   + isPublic=false + landingActive=false. El expediente y los archivos se CONSERVAN.
+   Roster admin (admin/clinics/page.tsx) filtra archivedAt:null. Guard "única
+   clínica" ahora cuenta solo activas.
+4) Bitácora — lib/audit.ts: AuditAction y logMutation aceptan void|soft_delete|
+   archive; preservan before + after (con el motivo).
+
+SCHEMA (prisma/schema.prisma) — aditivo (nullable salvo status):
+- Prescription: status @default("ACTIVE"), voidedAt, voidedBy, voidReason
+- PatientFile:  deletedAt, deletedBy, deleteReason + @@index([clinicId, deletedAt])
+- Clinic:       archivedAt, archivedBy, archiveReason
+
+SQL A APLICAR (a mano, tras desplegar): sql/nom-conservacion.sql — idempotente
+(ADD COLUMN / CREATE INDEX IF NOT EXISTS), cero DROP. prescriptions.status NOT NULL
+DEFAULT 'ACTIVE' (filas viejas → ACTIVE, siguen visibles). ⚠️ aplicar junto al
+deploy (feature en main sin su SQL = outage en tabla core).
+
+BUILD: npx next build (sin pipe) → EXIT 0, ✓ Compiled successfully, type-check OK,
+276/276 páginas. prisma generate OK (cliente compartido por junction). Los
+prisma:error DATABASE_URL son del prerender sin DB en este entorno (igual que main).
+
+MULTI-TENANT: sin cambios; clinicId siempre de la sesión en cada query.
+
+PENDIENTE / FOLLOW-UPS (fuera de esta tarea):
+- PDF de verificación (lib/pdf/prescription-pdf.ts) no estampa "ANULADA" aún → por
+  eso se oculta el botón Descargar PDF en recetas anuladas.
+- Clínica archivada sale del directorio público (isPublic=false) y del roster admin,
+  pero NO se filtra de crons ni de ~30 clinic.findMany restantes; evaluar en QA.
+- Falta UI para capturar el motivo al borrar (hoy { reason } es opcional en el body).
+- No hay "desanular"/restaurar desde UI (reactivar = poner el campo a null).
+- QA: anular receta→QR ANULADA; borrar rx/3D→desaparece pero el blob persiste;
+  archivar clínica→el expediente persiste.
+
+RAMA: feat/nom-conservacion (worktree mediflow-worktrees/nom-conservacion). NO main.
+═══════════════════════════════════════════════════════════════════════════
+## NOM-BITACORA — Bitácora de auditoría INMUTABLE + auditar mutaciones/lecturas (NOM-024 §6.3.5) 🟡 EN RAMA feat/nom-bitacora (NO main, 2026-06-17)
+═══════════════════════════════════════════════════════════════════════════
+Cierra los gaps #7, #8, #9 y #10 de la auditoría NOM-024
+(docs/compliance/NOM024_AUDIT_2026-06-17.md, Área 4 AUD-2..AUD-5). NO toca main.
+Build VERDE (npx next build, sin pipes), EXIT 0.
+
+QUÉ SE HIZO:
+1) INMUTABILIDAD (gap #7 / AUD-2) — SQL nuevo a aplicar a MANO: sql/nom-audit-immutable.sql.
+   Trigger BEFORE UPDATE OR DELETE en audit_logs que lanza excepción → la tabla queda
+   APPEND-ONLY (solo INSERT). Idempotente.
+2) FK clinics→audit_logs CASCADE → RESTRICT (gap #8 / AUD-3) — en el mismo .sql. Borrar una
+   clínica con bitácora ahora FALLA en vez de destruir el rastro. El DO-block localiza la FK
+   existente por catálogo (nombre auto-generado variable) y la recrea como
+   audit_logs_clinicId_fkey ON DELETE RESTRICT. Idempotente. También se actualizó
+   prisma/schema.prisma (AuditLog.clinic onDelete Cascade→Restrict) para que el ORM no
+   reintroduzca CASCADE en un futuro db push. NO cambia el client generado.
+3) DEJÓ DE BORRAR LA BITÁCORA (gap #8 / AUD-3) — src/app/api/cron/retention/route.ts: se
+   eliminó el bloque auditLog.deleteMany (>7 años), su entrada en summary (auditLogsDeleted)
+   y la var sevenYearsAgo. El resto del cron (anonimización inbox >2a y arco >5a por clínica)
+   queda INTACTO. El archivado WORM off-site lo sigue haciendo el cron db-export (no se toca).
+   JSDoc actualizado.
+4) AUDITAR MUTACIONES antes sin registro (gap #9 / AUD-4) — logMutation de @/lib/audit,
+   clinicId/userId SIEMPRE de sesión (getAuthContext), nunca del body:
+   - treatments POST (crear plan)  → entityType "treatment", create.
+   - treatments/[id] PATCH (add_session, cambio de estado, edición general) y DELETE.
+   - periodontal POST (crear registro) → entityType "periodontal" (nuevo en el union).
+   - body-map POST (crear anotación)   → entityType "body-map" (nuevo en el union).
+5) AUDITAR LECTURA del expediente (gap #10 / AUD-5) — src/app/dashboard/patients/[id]/page.tsx:
+   al abrir el detalle del paciente se registra logAudit action "view", entityType "record",
+   entityId = patientId, con IP/UA vía headers(). Mismo patrón que el read-log ya existente
+   en /api/records GET.
+   NO se tocó clinical-notes/route, clinical/route ni appointments/[id]/complete (otra terminal).
+
+ARCHIVOS (8 modificados + 1 nuevo):
+- sql/nom-audit-immutable.sql              (NUEVO — aplicar a mano en Supabase)
+- prisma/schema.prisma                     (AuditLog.clinic onDelete → Restrict + comentario)
+- src/app/api/cron/retention/route.ts      (−auditLog.deleteMany; summary y JSDoc ajustados)
+- src/app/api/treatments/route.ts          (audit POST)
+- src/app/api/treatments/[id]/route.ts     (audit PATCH ×3 + DELETE)
+- src/app/api/periodontal/route.ts         (audit POST)
+- src/app/api/body-map/route.ts            (audit POST)
+- src/app/dashboard/patients/[id]/page.tsx (audit READ del expediente)
+- src/lib/audit.ts                          (+entityType "periodontal" | "body-map")
+
+🔴 SQL A APLICAR A MANO (Supabase SQL Editor, NO prisma migrate):
+   sql/nom-audit-immutable.sql — trigger append-only + FK RESTRICT. Idempotente.
+   ⚠️ CONSECUENCIA ESPERADA tras aplicar: borrar una clínica que tenga audit_logs fallará
+   (FK RESTRICT). Es el comportamiento NOM-024 correcto; el flujo "eliminar clínica" del
+   /admin (admin/clinics/[id]) deberá archivar/desligar la bitácora antes de borrar →
+   followup separado, fuera de esta terminal.
+
+BUILD: npx next build (worktree; node_modules vía junction al repo principal; SIN pipes).
+   ✓ Compiled successfully · type-check sin errores · ✓ Generating static pages (276/276) ·
+   EXIT 0. Los prisma:error DATABASE_URL son del prerender sin DB en este entorno y NO
+   afectan el exit (patrón conocido). Rutas tocadas presentes en el manifest como ƒ.
+
+RAMA: feat/nom-bitacora (worktree mediflow-worktrees/nom-bitacora). NO mergear a main sin QA.
+
+QA (Rafael):
+- Aplicar sql/nom-audit-immutable.sql en Supabase; verificar trigger + FK (queries al pie del
+  .sql). Probar que un UPDATE/DELETE manual a audit_logs FALLA.
+- Crear/editar/borrar un plan de tratamiento, un registro periodontal y una anotación de
+  body-map, y abrir un expediente → confirmar filas nuevas en audit_logs (acción correcta,
+  clinicId de la clínica activa, IP/UA en la lectura).
+- Confirmar que el cron de retención ya NO reporta auditLogsDeleted ni borra bitácora.
+
+═══════════════════════════════════════════════════════════════════════════
+## [NOM024-AUDIT] Auditoría de cumplimiento NOM-024 / NOM-004 / LFPDPPP 🔍 (SOLO LECTURA, 2026-06-17)
+═══════════════════════════════════════════════════════════════════════════
+QUÉ SE HIZO: auditoría EXHAUSTIVA de cumplimiento normativo del panel contra el código real de main (HEAD 18a64fb). NO se tocó código. Orquestada con workflow multi-agente: 12 auditores en paralelo → verificación adversarial por área ("schema presente ≠ funcional end-to-end") → síntesis (25 agentes, ~2.3M tokens, 853 tool calls).
+
+REPORTE COMPLETO: `docs/compliance/NOM024_AUDIT_2026-06-17.md` (resumen ejecutivo + tabla requisito-por-requisito de las 12 áreas + gaps por riesgo legal + plan de cierre). Toda afirmación cita evidencia file:line.
+
+CUMPLIMIENTO GLOBAL ESTIMADO: ≈ 44% (ponderado por riesgo ~42%).
+- NOM-024 (identificadores, catálogos, bitácora, CDA, acceso) ≈ 47%
+- NOM-004 (expediente, firma, receta, referencia) ≈ 46%
+- LFPDPPP (cifrado, retención, ARCO/aviso) ≈ 42%
+
+POR ÁREA: 1 Identificadores 55% ⚠️ · 2 Catálogos CIE/CUMS 48% ⚠️ · 3 Expediente NOM-004 44% ❌ · 4 Bitácora 32% ❌ · 5 Firma FIEL/SAT 33% ❌ · 6 Receta electrónica 60% ⚠️ · 7 HL7 CDA R2 38% ❌ · 8 Referencia/contrarreferencia 33% ❌ · 9 Control de acceso/RLS 62% ⚠️ · 10 Cifrado 33% ❌ · 11 Retención/backups 48% ⚠️ · 12 ARCO/aviso 46% ⚠️.
+
+HALLAZGOS DE RIESGO ALTO (bloquean conformidad como ECE):
+1. FIRMA: el motor FIEL real (PKCS#7 + AES-256-GCM) existe pero NINGUNA pantalla firma notas SOAP/consentimientos; la "firma" de nota es un flag JSON `status:'SIGNED'` sin hash; la verificación pública declara "válida" solo por `expiresAt`, jamás verifica la firma.
+2. BITÁCORA: no es inmutable — el cron de retención hace `auditLog.deleteMany`, hay `ON DELETE CASCADE` desde clinics, el cierre/firma del expediente no deja rastro, y la clínica no puede consultar su bitácora (endpoint sin UI).
+3. EXPEDIENTE EN CLARO: SOAP, recetas, alergias, padecimientos, vitals y `specialtyData` se guardan sin cifrar a nivel app; el módulo crypto existe pero está descableado.
+4. RECETAS/REFERENCIAS DESTRUIBLES: `DELETE /api/prescriptions/[id]` hace hard delete (rompe el QR público); la hoja de referencia imprimible es código muerto.
+5. CDA NO INTEROPERABLE: OIDs de ejemplo (rompen datatype II), sin validación XSD/Schematron, sin importación; el flujo de consulta ni siquiera codifica el diagnóstico (CIE-10 hardcodeado falso).
+6. ARCO: el ejecutor de acceso/rectificación/cancelación/oposición tiene CERO llamadores; "archivar paciente" no anonimiza PII; sin seguimiento del plazo de 20 días.
+7. ACCESO: tablas del portal del paciente sin RLS; /admin con un único `ADMIN_SECRET_TOKEN` compartido sobre PHI de TODAS las clínicas.
+
+VEREDICTO: NO se puede acreditar conformidad como Expediente Clínico Electrónico ni de protección de datos sensibles HOY. Sí opera como sistema de gestión clínica básico. (Auditoría técnica de código, no dictamen legal — validar riesgos altos con asesoría legal/INAI/COFEPRIS.)
 
 CONTRATO DE FRONTEND (un solo punto de inyeccion; T4 mete el cliente real):
 - interface ImportClient { getOrigins, preview, commit, templateUrl, submitAssisted }

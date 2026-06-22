@@ -9,8 +9,10 @@ import { revalidatePath } from "next/cache";
 export const dynamic = "force-dynamic";
 
 // DELETE /api/prescriptions/[id]
-// Elimina una receta. Solo el doctor que la emitio o admins.
-// Cascade: PrescriptionItem se borra por FK; MedicalRecord queda intacto.
+// NOM-004 conservación / NOM-024 §7 — NO borra físico: ANULA lógicamente la
+// receta (status=VOIDED + voidedAt + voidReason). El registro y el QR público
+// se conservan; la verificación pública muestra "ANULADA". Solo el doctor que
+// la emitió o admins. Motivo opcional en el body: { reason }.
 export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -21,7 +23,7 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
 
   const existing = await prisma.prescription.findFirst({
     where:  { id: params.id, clinicId: ctx.clinicId },
-    select: { id: true, doctorId: true, patientId: true, cofeprisFolio: true },
+    select: { id: true, doctorId: true, patientId: true, status: true, voidedAt: true },
   });
   if (!existing) {
     return NextResponse.json({ error: "Receta no encontrada" }, { status: 404 });
@@ -33,15 +35,33 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
   }
 
-  // Receta con folio COFEPRIS asignado: bloquear delete (compliance).
-  if (existing.cofeprisFolio) {
-    return NextResponse.json(
-      { error: "No se puede eliminar una receta con folio COFEPRIS. Reemplaza por una nueva." },
-      { status: 400 },
-    );
+  // Ya anulada — idempotente (no re-escribe motivo/fecha).
+  if (existing.voidedAt || existing.status === "VOIDED") {
+    return NextResponse.json({ success: true, voided: true });
   }
 
-  await prisma.prescription.delete({ where: { id: params.id } });
+  // Motivo opcional del body (el DELETE puede venir sin cuerpo).
+  let reason: string | null = null;
+  try {
+    const body = await req.json();
+    if (body && typeof body.reason === "string" && body.reason.trim()) {
+      reason = body.reason.trim().slice(0, 2000);
+    }
+  } catch {
+    /* sin body */
+  }
+
+  // NOM-004 conservación / NOM-024 §7 — anulación LÓGICA (jamás hard-delete).
+  // El registro y el QR público se conservan; la verificación muestra "ANULADA".
+  await prisma.prescription.update({
+    where: { id: existing.id },
+    data: {
+      status:     "VOIDED",
+      voidedAt:   new Date(),
+      voidedBy:   ctx.userId,
+      voidReason: reason,
+    },
+  });
 
   await logMutation({
     req,
@@ -49,11 +69,12 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
     userId: ctx.userId,
     entityType: "prescription",
     entityId: params.id,
-    action: "delete",
-    before: { patientId: existing.patientId, doctorId: existing.doctorId },
+    action: "void",
+    before: { patientId: existing.patientId, doctorId: existing.doctorId, status: existing.status ?? "ACTIVE" },
+    after:  { status: "VOIDED", voidReason: reason },
   });
 
   revalidatePath("/dashboard/clinical");
   revalidatePath("/dashboard/patients");
-  return NextResponse.json({ success: true });
+  return NextResponse.json({ success: true, voided: true });
 }

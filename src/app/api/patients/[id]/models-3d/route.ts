@@ -58,6 +58,7 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
     where: {
       patientId: params.id,
       clinicId: ctx.clinicId,
+      deletedAt: null, // NOM-024 §7 — oculta modelos 3D borrados lógicamente
       OR: [
         { category: "SCAN_STL" as any },
         { name: { endsWith: ".stl" } },

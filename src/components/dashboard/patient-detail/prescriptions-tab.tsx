@@ -30,6 +30,10 @@ interface Rx {
   cofeprisFolio?: string | null;
   diagnosis?: string | null;
   indications?: string | null;
+  // NOM-004/§7: "ACTIVE" | "VOIDED". Si el DTO no lo trae, se asume ACTIVE.
+  status?: string | null;
+  voidedAt?: string | null;
+  voidReason?: string | null;
   doctor?: { firstName: string; lastName: string } | null;
   items: RxItem[];
 }
@@ -146,21 +150,34 @@ export function PrescriptionsTab({ patientId }: Props) {
       ) : (
         <div className="space-y-2">
           {list.map((rx) => {
+            const voided = (rx.status ?? "ACTIVE") === "VOIDED";
             const expired = rx.expiresAt ? new Date(rx.expiresAt).getTime() < Date.now() : false;
             return (
-              <div key={rx.id} className="rounded-xl border border-border bg-card p-4">
+              <div
+                key={rx.id}
+                className={`rounded-xl border border-border bg-card p-4${voided ? " opacity-60" : ""}`}
+              >
                 <div className="flex flex-wrap items-center gap-2">
-                  <span className="text-sm font-bold">{fmtDate(rx.issuedAt)}</span>
-                  <span
-                    className="rounded-full px-2 py-0.5 text-[11px] font-bold"
-                    style={
-                      expired
-                        ? { background: "rgba(220, 38, 38, 0.12)", color: "#b91c1c" }
-                        : { background: "rgba(16, 185, 129, 0.12)", color: "#059669" }
-                    }
-                  >
-                    {expired ? t("patients.prescriptionsTab.statusExpired") : t("patients.prescriptionsTab.statusValid")}
-                  </span>
+                  <span className={`text-sm font-bold${voided ? " line-through" : ""}`}>{fmtDate(rx.issuedAt)}</span>
+                  {voided ? (
+                    <span
+                      className="rounded-full px-2 py-0.5 text-[11px] font-bold"
+                      style={{ background: "rgba(220, 38, 38, 0.16)", color: "#b91c1c" }}
+                    >
+                      {t("patients.prescriptionsTab.statusVoided")}
+                    </span>
+                  ) : (
+                    <span
+                      className="rounded-full px-2 py-0.5 text-[11px] font-bold"
+                      style={
+                        expired
+                          ? { background: "rgba(220, 38, 38, 0.12)", color: "#b91c1c" }
+                          : { background: "rgba(16, 185, 129, 0.12)", color: "#059669" }
+                      }
+                    >
+                      {expired ? t("patients.prescriptionsTab.statusExpired") : t("patients.prescriptionsTab.statusValid")}
+                    </span>
+                  )}
                   {rx.cofeprisGroup && (
                     <span
                       className="rounded-full px-2 py-0.5 text-[11px] font-bold"
@@ -192,6 +209,17 @@ export function PrescriptionsTab({ patientId }: Props) {
                     {t("patients.prescriptionsTab.folio", { folio: rx.cofeprisFolio })}
                   </div>
                 )}
+                {voided && (rx.voidedAt || rx.voidReason) && (
+                  <div className="mt-1 text-xs" style={{ color: "#b91c1c" }}>
+                    {rx.voidedAt && (
+                      <span className="font-semibold">
+                        {t("patients.prescriptionsTab.voidedOn", { date: fmtDate(rx.voidedAt) })}
+                      </span>
+                    )}
+                    {rx.voidedAt && rx.voidReason && " · "}
+                    {rx.voidReason && t("patients.prescriptionsTab.voidReason", { reason: rx.voidReason })}
+                  </div>
+                )}
 
                 <div className="mt-3 flex flex-wrap items-center gap-2">
                   <a
@@ -203,32 +231,37 @@ export function PrescriptionsTab({ patientId }: Props) {
                     <FileDown size={13} aria-hidden />
                     {t("patients.prescriptionsTab.actionPdf")}
                   </a>
-                  <button
-                    type="button"
-                    disabled={busy === `${rx.id}:whatsapp`}
-                    onClick={() => send(rx, "whatsapp")}
-                    className="inline-flex items-center gap-1.5 rounded-lg border border-border px-2.5 py-1.5 text-xs font-semibold transition-colors hover:bg-muted disabled:opacity-60"
-                  >
-                    {busy === `${rx.id}:whatsapp` ? (
-                      <Loader2 size={13} className="animate-spin" aria-hidden />
-                    ) : (
-                      <MessageCircle size={13} aria-hidden />
-                    )}
-                    {t("patients.prescriptionsTab.actionWhatsApp")}
-                  </button>
-                  <button
-                    type="button"
-                    disabled={busy === `${rx.id}:email`}
-                    onClick={() => send(rx, "email")}
-                    className="inline-flex items-center gap-1.5 rounded-lg border border-border px-2.5 py-1.5 text-xs font-semibold transition-colors hover:bg-muted disabled:opacity-60"
-                  >
-                    {busy === `${rx.id}:email` ? (
-                      <Loader2 size={13} className="animate-spin" aria-hidden />
-                    ) : (
-                      <Mail size={13} aria-hidden />
-                    )}
-                    {t("patients.prescriptionsTab.actionEmail")}
-                  </button>
+                  {/* NOM-004/§7: una receta ANULADA no se reenvía al paciente — solo PDF (sellado) y Verificación. */}
+                  {!voided && (
+                    <>
+                      <button
+                        type="button"
+                        disabled={busy === `${rx.id}:whatsapp`}
+                        onClick={() => send(rx, "whatsapp")}
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-border px-2.5 py-1.5 text-xs font-semibold transition-colors hover:bg-muted disabled:opacity-60"
+                      >
+                        {busy === `${rx.id}:whatsapp` ? (
+                          <Loader2 size={13} className="animate-spin" aria-hidden />
+                        ) : (
+                          <MessageCircle size={13} aria-hidden />
+                        )}
+                        {t("patients.prescriptionsTab.actionWhatsApp")}
+                      </button>
+                      <button
+                        type="button"
+                        disabled={busy === `${rx.id}:email`}
+                        onClick={() => send(rx, "email")}
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-border px-2.5 py-1.5 text-xs font-semibold transition-colors hover:bg-muted disabled:opacity-60"
+                      >
+                        {busy === `${rx.id}:email` ? (
+                          <Loader2 size={13} className="animate-spin" aria-hidden />
+                        ) : (
+                          <Mail size={13} aria-hidden />
+                        )}
+                        {t("patients.prescriptionsTab.actionEmail")}
+                      </button>
+                    </>
+                  )}
                   <a
                     href={rx.verifyUrl || `/portal/prescription/${rx.id}/verify`}
                     target="_blank"
@@ -238,19 +271,21 @@ export function PrescriptionsTab({ patientId }: Props) {
                     <ShieldCheck size={13} aria-hidden />
                     {t("patients.prescriptionsTab.actionVerify")}
                   </a>
-                  <button
-                    type="button"
-                    disabled={busy === `${rx.id}:delete`}
-                    onClick={() => remove(rx)}
-                    className="inline-flex items-center gap-1.5 rounded-lg border border-border px-2.5 py-1.5 text-xs font-semibold text-red-600 transition-colors hover:bg-muted disabled:opacity-60"
-                  >
-                    {busy === `${rx.id}:delete` ? (
-                      <Loader2 size={13} className="animate-spin" aria-hidden />
-                    ) : (
-                      <Trash2 size={13} aria-hidden />
-                    )}
-                    {t("patients.prescriptionsTab.actionDelete")}
-                  </button>
+                  {!voided && (
+                    <button
+                      type="button"
+                      disabled={busy === `${rx.id}:delete`}
+                      onClick={() => remove(rx)}
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-border px-2.5 py-1.5 text-xs font-semibold text-red-600 transition-colors hover:bg-muted disabled:opacity-60"
+                    >
+                      {busy === `${rx.id}:delete` ? (
+                        <Loader2 size={13} className="animate-spin" aria-hidden />
+                      ) : (
+                        <Trash2 size={13} aria-hidden />
+                      )}
+                      {t("patients.prescriptionsTab.actionDelete")}
+                    </button>
+                  )}
                 </div>
               </div>
             );

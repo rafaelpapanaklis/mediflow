@@ -9,8 +9,9 @@ import { CalculatorModal } from "@/components/clinical/calculators/calculator-mo
 import { EvolutionChart } from "@/components/clinical/shared";
 import { DateField } from "@/components/ui/date-field";
 import { useT } from "@/i18n/i18n-provider";
+import { Cie10Selector } from "@/components/dashboard/clinical/cie10-selector";
+import { useCodedDiagnoses } from "@/components/clinical/use-coded-diagnoses";
 
-const DIAGNOSES_CIE10 = ["J00 - Resfriado común","J06 - IRA superior","J18 - Neumonía","K29 - Gastritis","K57 - Diverticulosis","K92 - Hemorragia GI","E11 - Diabetes tipo 2","E14 - Diabetes NE","I10 - Hipertensión esencial","I50 - Insuficiencia cardíaca","J45 - Asma","F32 - Depresión","F41 - Ansiedad","M54 - Dorsalgia","N39 - ITU","Otro"];
 const SPECIALTIES = ["Cardiología","Neurología","Dermatología","Gastroenterología","Ortopedia","Ginecología","Urología","Psiquiatría","Oftalmología","ORL","Endocrinología","Reumatología","Oncología"];
 
 interface Props { patientId: string; onSaved: (record: any) => void }
@@ -19,10 +20,11 @@ export function GeneralMedicineForm({ patientId, onSaved }: Props) {
   const t = useT();
   const [saving, setSaving] = useState(false);
   const [calcOpen, setCalcOpen] = useState(false);
+  // Dx CIE-10 codificados (NOM-024 §6.3 / NOM-004) — consulta nueva: local + flush al crear.
+  const { dxs, onAdd: onAddDx, onRemove: onRemoveDx, flush: flushDx, summary: dxSummary } = useCodedDiagnoses(null);
   const [form, setForm] = useState({
     subjective: "", objective: "", assessment: "", plan: "",
     vitals: { bloodPressure:"", heartRate:"", temperature:"", respiratoryRate:"", oxygenSat:"", bloodGlucose:"", weight:"", height:"" },
-    diagnosis: "",
     medications: [{ drug:"", dose:"", frequency:"", duration:"", route:"oral", instructions:"" }],
     referral: { needed: false, specialty:"", reason:"" },
     labs: "", studies: "",
@@ -134,7 +136,7 @@ export function GeneralMedicineForm({ patientId, onSaved }: Props) {
   function removeMed(i: number) { set("medications", form.medications.filter((_,j) => j !== i)); }
 
   async function handleSave() {
-    if (!form.subjective && !form.assessment) { toast.error(t("clinical.medicineForm.errorReasonOrDx")); return; }
+    if (!form.subjective && !form.assessment && dxs.length === 0) { toast.error(t("clinical.medicineForm.errorReasonOrDx")); return; }
     setSaving(true);
     try {
       const res = await fetch("/api/clinical", {
@@ -142,12 +144,12 @@ export function GeneralMedicineForm({ patientId, onSaved }: Props) {
         body: JSON.stringify({
           patientId,
           subjective: form.subjective, objective: form.objective,
-          assessment: form.assessment || form.diagnosis, plan: form.plan,
+          assessment: form.assessment || dxSummary, plan: form.plan,
           vitals: form.vitals,
           specialtyData: {
             type: "medicine",
             vitals: form.vitals,
-            diagnosis: form.diagnosis,
+            diagnosis: dxSummary,
             medications: form.medications.filter(m => m.drug),
             referral: form.referral.needed ? form.referral : undefined,
             labs: form.labs, studies: form.studies,
@@ -162,7 +164,13 @@ export function GeneralMedicineForm({ patientId, onSaved }: Props) {
         }),
       });
       if (!res.ok) throw new Error((await res.json()).error);
-      onSaved(await res.json());
+      const record = await res.json();
+      // Persistir los dx codificados en el expediente recién creado → fluyen al CDA.
+      if (dxs.length > 0) {
+        const saved = await flushDx(record.id);
+        if (saved < dxs.length) toast.error("La consulta se guardó, pero algún diagnóstico CIE-10 no se registró.");
+      }
+      onSaved(record);
       toast.success(t("clinical.medicineForm.savedToast"));
     } catch (err: any) { toast.error(err.message ?? t("common.genericError")); } finally { setSaving(false); }
   }
@@ -456,10 +464,7 @@ export function GeneralMedicineForm({ patientId, onSaved }: Props) {
             </div>
             <div className="field-new">
               <label className="field-new__label">{t("clinical.medicineForm.diagnosisCie10")}</label>
-              <select className="input-new" value={form.diagnosis} onChange={e => set("diagnosis", e.target.value)}>
-                <option value="">{t("clinical.medicineForm.selectPlaceholder")}</option>
-                {DIAGNOSES_CIE10.map(d => <option key={d} value={d}>{d}</option>)}
-              </select>
+              <Cie10Selector diagnoses={dxs} onAdd={onAddDx} onRemove={onRemoveDx} disabled={saving} />
             </div>
             <div className="field-new">
               <label className="field-new__label">{t("clinical.medicineForm.freeDiagnosis")}</label>
