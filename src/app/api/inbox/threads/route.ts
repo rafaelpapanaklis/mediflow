@@ -9,7 +9,7 @@ import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 export const dynamic = "force-dynamic";
 
 const STATUS = z.enum(["UNREAD", "READ", "ARCHIVED", "SNOOZED"]);
-const CHANNEL = z.enum(["WHATSAPP", "EMAIL", "PORTAL_FORM", "VALIDATION", "REMINDER"]);
+const CHANNEL = z.enum(["WHATSAPP", "EMAIL", "PORTAL_FORM", "VALIDATION", "REMINDER", "PORTAL"]);
 
 const CreateSchema = z.object({
   channel: CHANNEL,
@@ -74,8 +74,8 @@ export async function GET(req: NextRequest) {
       where.status = status as "UNREAD" | "READ" | "ARCHIVED" | "SNOOZED";
     }
     const channel = sp.get("channel");
-    if (channel && ["WHATSAPP", "EMAIL", "PORTAL_FORM", "VALIDATION", "REMINDER"].includes(channel)) {
-      where.channel = channel as "WHATSAPP" | "EMAIL" | "PORTAL_FORM" | "VALIDATION" | "REMINDER";
+    if (channel && ["WHATSAPP", "EMAIL", "PORTAL_FORM", "VALIDATION", "REMINDER", "PORTAL"].includes(channel)) {
+      where.channel = channel as "WHATSAPP" | "EMAIL" | "PORTAL_FORM" | "VALIDATION" | "REMINDER" | "PORTAL";
     }
     const assignedTo = sp.get("assignedTo");
     if (assignedTo === "me") where.assignedToId = dbUser.id;

@@ -27,12 +27,13 @@ import {
   X,
   Menu,
   ArrowLeft,
+  MessageSquare,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { useT } from "@/i18n/i18n-provider";
 import styles from "./inbox.module.css";
 
-type Channel = "WHATSAPP" | "EMAIL" | "PORTAL_FORM" | "VALIDATION" | "REMINDER";
+type Channel = "WHATSAPP" | "EMAIL" | "PORTAL_FORM" | "VALIDATION" | "REMINDER" | "PORTAL";
 type Status = "UNREAD" | "READ" | "ARCHIVED" | "SNOOZED";
 type Direction = "IN" | "OUT";
 
@@ -78,6 +79,7 @@ const CHANNEL_META: Record<Channel, { labelKey: string; color: string; icon: typ
   PORTAL_FORM: { labelKey: "inbox.client.channelForm", color: "#06b6d4", icon: FileText },
   VALIDATION:  { labelKey: "inbox.client.channelValidation", color: "#d97706", icon: Calendar },
   REMINDER:    { labelKey: "inbox.client.channelReminder", color: "#7c3aed", icon: Bell },
+  PORTAL:      { labelKey: "inbox.client.channelPortal", color: "#6366f1", icon: MessageSquare },
 };
 
 const SYSTEM_FOLDERS: Array<{ id: string; labelKey: string; icon: typeof InboxIcon }> = [
