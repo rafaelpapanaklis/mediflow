@@ -12,29 +12,34 @@ interface Props {
   origin: Origin;
   preview: PreviewResult;
   mapping: ColumnMapping;
+  /** El usuario eligió saldos/citas además de la entidad principal: esas columnas
+   *  (Saldo, Tipo, Fecha de cita…) se autodetectan al importar, no se mapean aquí. */
+  hasSecondary: boolean;
   onChange: (source: string, value: string) => void;
 }
 
-export function StepMapping({ t, origin, preview, mapping, onChange }: Props) {
-  const isProfile = origin.hasProfile;
+export function StepMapping({ t, origin, preview, mapping, hasSecondary, onChange }: Props) {
   const total = preview.columns.length;
   const matched = preview.columns.filter((c) => c.suggestion).length;
+  // Banner "automático" siempre que el backend reconoció columnas (con o sin perfil);
+  // solo "manual" puro cuando no reconoció ninguna.
+  const showAuto = matched > 0;
 
   return (
     <div>
       <h2 className="imp-title">{t("shell.importClinic.step5.title")}</h2>
       <p className="imp-sub">
-        {isProfile
-          ? t("shell.importClinic.step5.subProfile", { name: origin.name })
+        {showAuto
+          ? t("shell.importClinic.step5.subAuto")
           : t("shell.importClinic.step5.subManual")}
       </p>
 
-      {isProfile ? (
+      {showAuto ? (
         <div className="imp-callout imp-callout--ok">
           <span className="imp-callout__ic" aria-hidden><Sparkles size={21} /></span>
           <div className="imp-callout__txt">
             <b>{t("shell.importClinic.step5.bannerAutoTitle")}</b>
-            <p>{t("shell.importClinic.step5.bannerAutoDesc", { matched, total, name: origin.name })}</p>
+            <p>{t("shell.importClinic.step5.bannerAutoDesc", { matched, total })}</p>
           </div>
         </div>
       ) : (
@@ -45,6 +50,12 @@ export function StepMapping({ t, origin, preview, mapping, onChange }: Props) {
             <p>{t("shell.importClinic.step5.bannerManualDesc", { name: origin.name })}</p>
           </div>
         </div>
+      )}
+
+      {hasSecondary && (
+        <p className="imp-sub" style={{ marginTop: 10, color: "var(--text-3)", fontSize: 13 }}>
+          {t("shell.importClinic.step5.autoDetectNote")}
+        </p>
       )}
 
       <div className="table-wrap" style={{ marginTop: 14, border: "1px solid var(--border-soft)", borderRadius: "var(--radius)", overflow: "hidden" }}>
@@ -62,7 +73,7 @@ export function StepMapping({ t, origin, preview, mapping, onChange }: Props) {
               {preview.columns.map((col, i) => {
                 const value = mapping[col.source] ?? "";
                 const unmapped = value === "";
-                const auto = isProfile && !unmapped && value === col.suggestion;
+                const auto = !unmapped && value === col.suggestion;
                 const selectId = `imp-map-${i}`;
                 return (
                   <tr key={col.source}>
