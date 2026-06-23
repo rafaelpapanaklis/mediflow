@@ -40,6 +40,9 @@ function interpolate(template: string, vars?: TVars): string {
  */
 export function makeT(dict: Dictionary) {
   return function t(key: string, vars?: TVars): string {
+    // Defensa: una llave undefined/no-string reventaba en lookup (key.split) y
+    // tumbaba TODA la página (client-side exception). Nunca debe romper el render.
+    if (typeof key !== "string") return "";
     let node = lookup(dict, key);
 
     if (node && typeof node === "object" && vars && "count" in vars) {
