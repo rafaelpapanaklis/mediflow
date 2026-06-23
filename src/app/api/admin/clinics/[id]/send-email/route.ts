@@ -1,13 +1,15 @@
-import { isAdminAuthed } from "@/lib/admin-auth";
+import { getAdminSession } from "@/lib/admin-auth";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { logAdminGlobalEvent } from "@/lib/admin-audit";
 
 
 // Envía emails usando Resend (https://resend.com) si RESEND_API_KEY está configurada.
 // Fallback: responde 503 con instrucciones. No usamos SMTP directo para mantener el
 // bundle ligero en entornos serverless.
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
-  if (!(await isAdminAuthed())) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const admin = await getAdminSession();
+  if (!admin) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const apiKey = process.env.RESEND_API_KEY;
   const fromAddress = process.env.MEDIFLOW_EMAIL_FROM || "DaleControl <soporte@dalecontrol.com>";
@@ -61,6 +63,10 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       return NextResponse.json({ error: `Resend: ${err.slice(0, 300)}` }, { status: 502 });
     }
     const data = await res.json();
+    logAdminGlobalEvent({
+      req, admin: admin.user, entity: "clinic-email", entityId: params.id,
+      action: "send", clinicId: params.id, after: { to, subject },
+    });
     return NextResponse.json({ success: true, to, data });
   } catch (err: any) {
     return NextResponse.json({ error: err.message ?? "Error al enviar" }, { status: 500 });

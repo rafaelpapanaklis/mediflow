@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { isAdminAuthed } from "@/lib/admin-auth";
+import { getAdminSession } from "@/lib/admin-auth";
 import { isPlanId } from "@/lib/billing/plans";
 import { clearPlanConfigCache } from "@/lib/plans";
+import { logAdminGlobalEvent } from "@/lib/admin-audit";
 import { FALLBACK_PLAN_CONFIG, PLAN_MODULE_KEYS } from "@/lib/plan-shared";
 
 export const dynamic = "force-dynamic";
@@ -31,7 +32,8 @@ function serialize(row: any) {
 }
 
 export async function PATCH(req: NextRequest, { params }: { params: { planId: string } }) {
-  if (!(await isAdminAuthed())) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const admin = await getAdminSession();
+  if (!admin) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const planId = params.planId;
   if (!isPlanId(planId)) return NextResponse.json({ error: "Plan inválido" }, { status: 400 });
@@ -116,10 +118,9 @@ export async function PATCH(req: NextRequest, { params }: { params: { planId: st
       create: createData,
     });
     clearPlanConfigCache();
-    console.info("[admin/plan-config] update", {
-      planId,
-      before: serialize(before),
-      after: serialize(saved),
+    logAdminGlobalEvent({
+      req, admin: admin.user, entity: "plan-config", entityId: planId,
+      action: "update", before: serialize(before), after: serialize(saved),
     });
     return NextResponse.json(serialize(saved));
   } catch (err: any) {

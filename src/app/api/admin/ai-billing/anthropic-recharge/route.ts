@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { isAdminAuthed } from "@/lib/admin-auth";
+import { getAdminSession } from "@/lib/admin-auth";
+import { logAdminGlobalEvent } from "@/lib/admin-audit";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -9,7 +10,8 @@ export const runtime = "nodejs";
 // (AnthropicRecharge.amountUsdCents). Acepta `amountUsd` (dólares) o
 // `amountUsdCents` (centavos) directo.
 export async function POST(req: NextRequest) {
-  if (!(await isAdminAuthed())) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const admin = await getAdminSession();
+  if (!admin) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   let body: any;
   try {
@@ -34,6 +36,10 @@ export async function POST(req: NextRequest) {
 
   try {
     const recharge = await prisma.anthropicRecharge.create({ data: { amountUsdCents, note } });
+    logAdminGlobalEvent({
+      req, admin: admin.user, entity: "ai-recharge", entityId: recharge.id,
+      action: "create", after: { amountUsdCents, note },
+    });
     return NextResponse.json(recharge, { status: 201 });
   } catch (err: any) {
     console.error("[admin/ai-billing/anthropic-recharge POST]", err?.message ?? err);

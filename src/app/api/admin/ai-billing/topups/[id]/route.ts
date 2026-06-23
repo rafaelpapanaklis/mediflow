@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { isAdminAuthed } from "@/lib/admin-auth";
+import { getAdminSession } from "@/lib/admin-auth";
+import { logAdminClinicMutation } from "@/lib/admin-audit";
 import { getOrCreateWallet } from "@/lib/ai-billing/wallet";
 
 export const runtime = "nodejs";
@@ -18,7 +19,8 @@ export const dynamic = "force-dynamic";
  *  - reject: marca el AiTopup como REJECTED sin tocar el saldo. Tambien idempotente.
  */
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
-  if (!(await isAdminAuthed())) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const admin = await getAdminSession();
+  if (!admin) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const id = params.id;
   let body: any = {};
@@ -52,6 +54,12 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     if (claim.count === 0) {
       return NextResponse.json({ ok: true, alreadyResolved: true, status: topup.status });
     }
+    await logAdminClinicMutation({
+      req, admin: admin.user, clinicId: topup.clinicId,
+      entityType: "ai-wallet", entityId: topup.id, action: "update",
+      before: { status: "PENDING" },
+      after: { op: "topup_reject", status: "REJECTED", amountCents: topup.amountCents },
+    });
     return NextResponse.json({ ok: true, status: "REJECTED" });
   }
 
@@ -96,6 +104,18 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
       status: fresh?.status ?? topup.status,
     });
   }
+
+  await logAdminClinicMutation({
+    req, admin: admin.user, clinicId: topup.clinicId,
+    entityType: "ai-wallet", entityId: topup.id, action: "update",
+    before: { status: "PENDING" },
+    after: {
+      op: "topup_confirm",
+      status: "PAID",
+      amountCents: topup.amountCents,
+      balanceAfterCents: result.balanceAfterCents,
+    },
+  });
 
   return NextResponse.json({
     ok: true,

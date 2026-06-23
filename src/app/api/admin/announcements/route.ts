@@ -1,6 +1,7 @@
-import { isAdminAuthed } from "@/lib/admin-auth";
+import { isAdminAuthed, getAdminSession } from "@/lib/admin-auth";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { logAdminGlobalEvent } from "@/lib/admin-audit";
 
 
 const ALLOWED_TYPES = ["info", "warning", "success", "maintenance"] as const;
@@ -15,7 +16,8 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
-  if (!(await isAdminAuthed())) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const admin = await getAdminSession();
+  if (!admin) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   let body: any;
   try { body = await req.json(); }
@@ -37,6 +39,11 @@ export async function POST(req: NextRequest) {
       startsAt,
       endsAt,
     },
+  });
+
+  logAdminGlobalEvent({
+    req, admin: admin.user, entity: "announcement", entityId: created.id,
+    action: "create", after: { message, type, active: created.active },
   });
 
   return NextResponse.json(created, { status: 201 });

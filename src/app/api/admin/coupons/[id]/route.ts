@@ -1,12 +1,14 @@
-import { isAdminAuthed } from "@/lib/admin-auth";
+import { getAdminSession } from "@/lib/admin-auth";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { logAdminGlobalEvent } from "@/lib/admin-audit";
 
 
 const ALLOWED_TARGETS = ["all", "BASIC", "PRO", "CLINIC"] as const;
 
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
-  if (!(await isAdminAuthed())) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const admin = await getAdminSession();
+  if (!admin) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   let body: any;
   try { body = await req.json(); }
@@ -27,11 +29,24 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   }
 
   const updated = await prisma.coupon.update({ where: { id: params.id }, data });
+  logAdminGlobalEvent({
+    req, admin: admin.user, entity: "coupon", entityId: params.id,
+    action: "update", after: data,
+  });
   return NextResponse.json(updated);
 }
 
-export async function DELETE(_req: NextRequest, { params }: { params: { id: string } }) {
-  if (!(await isAdminAuthed())) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {
+  const admin = await getAdminSession();
+  if (!admin) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const before = await prisma.coupon.findUnique({
+    where: { id: params.id },
+    select: { code: true, type: true, value: true },
+  });
   await prisma.coupon.delete({ where: { id: params.id } });
+  logAdminGlobalEvent({
+    req, admin: admin.user, entity: "coupon", entityId: params.id,
+    action: "delete", before,
+  });
   return NextResponse.json({ success: true });
 }
