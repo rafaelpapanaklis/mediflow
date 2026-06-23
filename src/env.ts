@@ -70,6 +70,11 @@ const envSchema = z.object({
   WA_WEBHOOK_VERIFY_TOKEN: z.string().optional(),
   WHATSAPP_APP_SECRET: z.string().optional(),
 
+  // ── Rate-limit / fail-ban persistente (opcional) ─────────────────
+  // Si faltan, el fail-ban cae a memoria (degradado). Ver src/lib/failban.ts.
+  UPSTASH_REDIS_REST_URL: z.string().url().optional(),
+  UPSTASH_REDIS_REST_TOKEN: z.string().optional(),
+
   // ── Integraciones varias ──────────────────────────────────────────
   GOOGLE_CLIENT_ID: z.string().optional(),
   GOOGLE_CLIENT_SECRET: z.string().optional(),

@@ -10,7 +10,7 @@
 //   createPatientSession() + Set-Cookie patient_session (auto-login) → 200 { ok: true }.
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { rateLimit } from "@/lib/rate-limit";
+import { persistentRateLimit, failbanGuard, recordAuthFailure, recordAuthSuccess } from "@/lib/failban";
 import { sha256 } from "@/lib/patient-portal/crypto";
 import { createPatientSession, sessionCookieOptions } from "@/lib/patient-portal/session";
 import { autoLinkPatientsByEmail } from "@/lib/patient-portal/link";
@@ -20,7 +20,7 @@ export const dynamic = "force-dynamic";
 
 export async function POST(req: NextRequest) {
   try {
-    const rl = rateLimit(req, 10);
+    const rl = await persistentRateLimit(req, { limit: 10 });
     if (rl) return rl;
 
     const body = await req.json().catch(() => null);
@@ -30,6 +30,10 @@ export async function POST(req: NextRequest) {
     if (!email || !code) {
       return NextResponse.json({ error: "Código inválido o expirado" }, { status: 400 });
     }
+
+    // Lockout por fallos (IP + cuenta), antes de tocar la BD.
+    const locked = await failbanGuard(req, { scope: "paciente-verify", account: email });
+    if (locked) return locked;
 
     const account = await prisma.patientAccount.findUnique({ where: { email } });
     if (!account) {
@@ -58,6 +62,7 @@ export async function POST(req: NextRequest) {
         where: { id: account.id },
         data: { verifyAttempts: { increment: 1 } },
       });
+      await recordAuthFailure(req, { scope: "paciente-verify", account: email });
       return NextResponse.json({ error: "Código incorrecto" }, { status: 400 });
     }
 
@@ -71,6 +76,9 @@ export async function POST(req: NextRequest) {
         verifyAttempts: 0,
       },
     });
+
+    // Verificación correcta → resetea contadores de fallo (IP + cuenta).
+    await recordAuthSuccess(req, { scope: "paciente-verify", account: email });
 
     // Auto-link de expedientes por email verificado (best-effort, no rompe).
     await autoLinkPatientsByEmail(account.id, account.email);

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createHmac } from "crypto";
-import { rateLimit } from "@/lib/rate-limit";
+import { persistentRateLimit, failbanGuard, recordAuthFailure, recordAuthSuccess } from "@/lib/failban";
 import { extractAuditMeta } from "@/lib/audit";
 import {
   ADMIN_COOKIE,
@@ -64,8 +64,13 @@ function verifyTOTP(token: string, secret: string): boolean {
  */
 export async function POST(req: NextRequest) {
   try {
-    const rl = rateLimit(req, 3, 15 * 60 * 1000);
+    const rl = await persistentRateLimit(req, { limit: 3, windowSec: 15 * 60 });
     if (rl) return rl;
+
+    // Lockout por fallos. En el paso "password" el admin aún no está
+    // identificado (la UI no pide usuario), así que el guard es por IP.
+    const locked = await failbanGuard(req, { scope: "admin-auth" });
+    if (locked) return locked;
 
     const { step, password, totp } = await req.json();
     const pwd = String(password ?? "");
@@ -83,6 +88,7 @@ export async function POST(req: NextRequest) {
     if (step === "password") {
       const admin = await findAdminByPassword(pwd);
       if (!admin) {
+        await recordAuthFailure(req, { scope: "admin-auth" });
         await new Promise((r) => setTimeout(r, 1000)); // anti-bruteforce
         return NextResponse.json({ error: "Contraseña incorrecta" }, { status: 401 });
       }
@@ -91,11 +97,16 @@ export async function POST(req: NextRequest) {
 
     if (step === "totp") {
       const admin = await findAdminByPassword(pwd);
-      if (!admin) return NextResponse.json({ error: "Sesión inválida" }, { status: 401 });
+      if (!admin) {
+        await recordAuthFailure(req, { scope: "admin-auth" });
+        return NextResponse.json({ error: "Sesión inválida" }, { status: 401 });
+      }
 
       // TOTP por usuario: si el admin tiene 2FA habilitado es obligatorio.
       if (admin.totpEnabled) {
         if (!admin.totpSecret || !verifyTOTP(String(totp ?? ""), admin.totpSecret)) {
+          // Ya conocemos al admin → cuenta el fallo por IP y por cuenta.
+          await recordAuthFailure(req, { scope: "admin-auth", account: admin.id });
           return NextResponse.json({ error: "Código 2FA incorrecto o expirado" }, { status: 401 });
         }
       }
@@ -108,6 +119,8 @@ export async function POST(req: NextRequest) {
 
       const response = NextResponse.json({ ok: true });
       response.cookies.set(ADMIN_COOKIE, token, adminCookieOptions());
+      // Login completo OK → resetea contadores de fallo (IP + cuenta).
+      await recordAuthSuccess(req, { scope: "admin-auth", account: admin.id });
       return response;
     }
 

@@ -26,12 +26,43 @@ export function LoginForm() {
       const supabase = createClient();
       // Cerrar sesión previa para evitar contaminación cross-account.
       try { await supabase.auth.signOut(); } catch { /* ignore */ }
+
+      // Fail-ban: lockout por IP/cuenta tras varios intentos fallidos. Best-
+      // effort y FAIL-OPEN: solo bloquea ante un 429 explícito; cualquier otro
+      // resultado (o error de red) deja pasar para no romper logins legítimos.
+      try {
+        const guard = await fetch("/api/auth/login-attempt", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ phase: "check", email }),
+        });
+        if (guard.status === 429) {
+          setError("Demasiados intentos. Espera unos minutos e inténtalo de nuevo.");
+          setLoading(false);
+          return;
+        }
+      } catch { /* fail-open */ }
+
       const { error: authError } = await supabase.auth.signInWithPassword({ email, password });
       if (authError) {
+        // Cuenta el fallo (fire-and-forget; no bloquea la UI).
+        void fetch("/api/auth/login-attempt", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ phase: "fail", email }),
+        }).catch(() => {});
         setError("Email o contraseña incorrectos.");
         setLoading(false);
         return;
       }
+
+      // Éxito → resetea contadores de fallo (fire-and-forget).
+      void fetch("/api/auth/login-attempt", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phase: "success", email }),
+      }).catch(() => {});
+
       // Sembrar/limpiar cookie activeClinicId para el nuevo supabaseId.
       try { await fetch("/api/auth/post-login", { method: "POST" }); } catch { /* ignore */ }
       toast.success("¡Bienvenido!");

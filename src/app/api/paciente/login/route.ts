@@ -10,7 +10,7 @@
 //   → 200 { ok: true }.
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { rateLimit } from "@/lib/rate-limit";
+import { persistentRateLimit, failbanGuard, recordAuthFailure, recordAuthSuccess } from "@/lib/failban";
 import { verifyPassword } from "@/lib/patient-portal/crypto";
 import { createPatientSession, sessionCookieOptions } from "@/lib/patient-portal/session";
 import { autoLinkPatientsByEmail } from "@/lib/patient-portal/link";
@@ -20,7 +20,7 @@ export const dynamic = "force-dynamic";
 
 export async function POST(req: NextRequest) {
   try {
-    const limited = rateLimit(req, 8);
+    const limited = await persistentRateLimit(req, { limit: 8 });
     if (limited) return limited;
 
     let body: any;
@@ -33,18 +33,25 @@ export async function POST(req: NextRequest) {
     const email = typeof body?.email === "string" ? body.email.trim().toLowerCase() : "";
     const password = typeof body?.password === "string" ? body.password : "";
 
+    // Lockout por fallos: bloquea por IP y por cuenta (email) ANTES de validar.
+    const locked = await failbanGuard(req, { scope: "paciente-login", account: email });
+    if (locked) return locked;
+
     // Mensaje genérico idéntico (sin enumeración) para cualquier credencial mala.
     if (!email || !password) {
+      await recordAuthFailure(req, { scope: "paciente-login", account: email });
       return NextResponse.json({ error: "Correo o contraseña incorrectos" }, { status: 401 });
     }
 
     const account = await prisma.patientAccount.findUnique({ where: { email } });
     if (!account) {
+      await recordAuthFailure(req, { scope: "paciente-login", account: email });
       return NextResponse.json({ error: "Correo o contraseña incorrectos" }, { status: 401 });
     }
 
     const passwordOk = await verifyPassword(password, account.passwordHash);
     if (!passwordOk) {
+      await recordAuthFailure(req, { scope: "paciente-login", account: email });
       return NextResponse.json({ error: "Correo o contraseña incorrectos" }, { status: 401 });
     }
 
@@ -68,6 +75,9 @@ export async function POST(req: NextRequest) {
     } catch (err) {
       console.error("[paciente/login] autoLinkPatientsByEmail error:", err);
     }
+
+    // Éxito → resetea contadores de fallo (IP + cuenta).
+    await recordAuthSuccess(req, { scope: "paciente-login", account: email });
 
     const res = NextResponse.json({ ok: true });
     res.cookies.set(PATIENT_SESSION_COOKIE, token, sessionCookieOptions(expiresAt));
