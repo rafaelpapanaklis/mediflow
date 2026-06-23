@@ -10,7 +10,8 @@ import { useTOptional } from "@/i18n/i18n-provider";
 import {
   AUDIT_ACTION_OPTIONS, AUDIT_ENTITY_OPTIONS, ROLE_OPTIONS, ROLE_LABELS,
   actionMeta, entityLabel, normalizeChanges, formatAuditValue,
-  type AuditTone, type AuditLogRow, type AuditQueryResult,
+  QUICK_RANGE_KEYS, QUICK_RANGE_LABELS, quickRangeValues, matchQuickRange,
+  type QuickRangeKey, type AuditTone, type AuditLogRow, type AuditQueryResult,
 } from "@/lib/admin/audit-core";
 
 const PAGE_SIZE = 50;
@@ -58,6 +59,13 @@ const EMPTY: Filters = {
 const SELECT_CLS =
   "text-xs px-2 py-2 bg-background border border-border rounded-lg text-foreground";
 
+const RANGE_I18N: Record<QuickRangeKey, string> = {
+  today: "auditoria.rangeToday",
+  "7d": "auditoria.range7d",
+  "30d": "auditoria.range30d",
+  "3m": "auditoria.range3m",
+};
+
 export function AuditoriaClient() {
   const tt = useTOptional();
   const tr = (k: string, fb: string) => { const v = tt?.(k); return !v || v === k ? fb : v; };
@@ -94,6 +102,10 @@ export function AuditoriaClient() {
 
   function patch(p: Partial<Filters>) { setFilters((f) => ({ ...f, ...p })); }
   function clearAll() { setFilters(EMPTY); setQInput(""); }
+
+  // Rango rápido: rellena Desde/Hasta y dispara la búsqueda al instante (SWR re-fetch por cambio de key).
+  const activeRange = matchQuickRange(filters.dateFrom, filters.dateTo);
+  function applyQuickRange(k: QuickRangeKey) { patch(quickRangeValues(k)); }
 
   return (
     <div className="p-4 sm:p-6 space-y-4">
@@ -134,6 +146,26 @@ export function AuditoriaClient() {
         </select>
         <input type="date" className={SELECT_CLS} value={filters.dateFrom} onChange={(e) => patch({ dateFrom: e.target.value })} aria-label={tr("auditoria.dateFrom", "Fecha desde")} />
         <input type="date" className={SELECT_CLS} value={filters.dateTo} onChange={(e) => patch({ dateTo: e.target.value })} aria-label={tr("auditoria.dateTo", "Fecha hasta")} />
+        <div className="flex items-center gap-1.5 flex-wrap" role="group" aria-label={tr("auditoria.quickRange", "Rango rápido")}>
+          {QUICK_RANGE_KEYS.map((k) => {
+            const active = activeRange === k;
+            return (
+              <button
+                key={k}
+                type="button"
+                aria-pressed={active}
+                onClick={() => applyQuickRange(k)}
+                className={`text-xs font-semibold px-2.5 py-2 rounded-lg border transition-colors ${
+                  active
+                    ? "bg-brand-600 border-brand-600 text-white"
+                    : "bg-background border-border text-foreground hover:bg-muted/50"
+                }`}
+              >
+                {tr(RANGE_I18N[k], QUICK_RANGE_LABELS[k])}
+              </button>
+            );
+          })}
+        </div>
         {hasActiveFilters && (
           <button type="button" onClick={clearAll} className="inline-flex items-center gap-1 text-xs font-semibold px-2 py-2 bg-card border border-border rounded-lg hover:bg-muted/50">
             <RotateCcw size={13} /> {tr("auditoria.clear", "Limpiar")}

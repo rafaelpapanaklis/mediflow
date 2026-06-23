@@ -12,7 +12,8 @@ import { BadgeNew } from "@/components/ui/design-system/badge-new";
 import {
   AUDIT_ACTION_OPTIONS, AUDIT_ENTITY_OPTIONS, ROLE_OPTIONS, ROLE_LABELS,
   actionMeta, entityLabel, normalizeChanges, formatAuditValue,
-  type AuditLogRow, type AuditQueryResult,
+  QUICK_RANGE_KEYS, QUICK_RANGE_LABELS, quickRangeValues, matchQuickRange,
+  type QuickRangeKey, type AuditLogRow, type AuditQueryResult,
 } from "@/lib/admin/audit-core";
 
 interface ClinicOpt { id: string; name: string }
@@ -89,6 +90,10 @@ export function AuditoriaClient({ clinics }: { clinics: ClinicOpt[] }) {
   function patch(p: Partial<Filters>) { setFilters((f) => ({ ...f, ...p })); }
   function clearAll() { setFilters(EMPTY); setQInput(""); }
 
+  // Rango rápido: rellena Desde/Hasta y dispara la búsqueda al instante (SWR re-fetch por cambio de key).
+  const activeRange = matchQuickRange(filters.dateFrom, filters.dateTo);
+  function applyQuickRange(k: QuickRangeKey) { patch(quickRangeValues(k)); }
+
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
       {/* Header */}
@@ -147,6 +152,22 @@ export function AuditoriaClient({ clinics }: { clinics: ClinicOpt[] }) {
             Hasta
             <input type="date" className="input-new" value={filters.dateTo} onChange={(e) => patch({ dateTo: e.target.value })} aria-label="Fecha hasta" />
           </label>
+          <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }} role="group" aria-label="Rango rápido">
+            {QUICK_RANGE_KEYS.map((k) => {
+              const active = activeRange === k;
+              return (
+                <button
+                  key={k}
+                  type="button"
+                  className={`btn-new btn-new--sm ${active ? "btn-new--primary" : "btn-new--secondary"}`}
+                  aria-pressed={active}
+                  onClick={() => applyQuickRange(k)}
+                >
+                  {QUICK_RANGE_LABELS[k]}
+                </button>
+              );
+            })}
+          </div>
           {hasActiveFilters && (
             <button type="button" className="btn-new btn-new--ghost btn-new--sm" onClick={clearAll}>
               <RotateCcw size={13} /> Limpiar

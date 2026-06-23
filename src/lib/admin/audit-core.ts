@@ -222,6 +222,61 @@ export function buildAuditWhere(filters: AuditQueryFilters): Prisma.AuditLogWher
   return where;
 }
 
+// ───────────────────────── Rangos rápidos de fecha (UI) ─────────────────────────
+
+export type QuickRangeKey = "today" | "7d" | "30d" | "3m";
+
+export const QUICK_RANGE_KEYS: readonly QuickRangeKey[] = ["today", "7d", "30d", "3m"];
+
+/** Etiquetas en español neutro (fallback i18n). */
+export const QUICK_RANGE_LABELS: Record<QuickRangeKey, string> = {
+  today: "Hoy",
+  "7d": "Últimos 7 días",
+  "30d": "Últimos 30 días",
+  "3m": "Últimos 3 meses",
+};
+
+/** `yyyy-mm-dd` en hora LOCAL (no UTC → evita corrimiento de día en el <input type="date">). */
+function toLocalYmd(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+/**
+ * Devuelve {dateFrom, dateTo} (`yyyy-mm-dd` local) de un rango rápido. Ventanas
+ * inclusivas que terminan HOY. `now` inyectable para tests deterministas.
+ */
+export function quickRangeValues(
+  key: QuickRangeKey,
+  now: Date = new Date(),
+): { dateFrom: string; dateTo: string } {
+  const to = new Date(now);
+  const from = new Date(now);
+  switch (key) {
+    case "today": break;
+    case "7d": from.setDate(from.getDate() - 6); break;   // hoy + 6 previos = 7 días
+    case "30d": from.setDate(from.getDate() - 29); break; // hoy + 29 previos = 30 días
+    case "3m": from.setMonth(from.getMonth() - 3); break;
+  }
+  return { dateFrom: toLocalYmd(from), dateTo: toLocalYmd(to) };
+}
+
+/** Qué rango rápido coincide EXACTAMENTE con (dateFrom, dateTo), o null si ninguno. */
+export function matchQuickRange(
+  dateFrom: string,
+  dateTo: string,
+  now: Date = new Date(),
+): QuickRangeKey | null {
+  if (!dateFrom || !dateTo) return null;
+  for (const key of QUICK_RANGE_KEYS) {
+    const r = quickRangeValues(key, now);
+    if (r.dateFrom === dateFrom && r.dateTo === dateTo) return key;
+  }
+  return null;
+}
+
 // ───────────────────────── Normalización de `changes` ─────────────────────────
 
 export type AuditChangeKind = "created" | "deleted" | "updated" | "empty";
