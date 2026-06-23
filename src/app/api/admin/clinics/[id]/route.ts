@@ -1,11 +1,19 @@
-import { isAdminAuthed } from "@/lib/admin-auth";
+import { getAdminSession } from "@/lib/admin-auth";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { logAdminClinicMutation } from "@/lib/admin-audit";
 
 
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
-  if (!(await isAdminAuthed())) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const admin = await getAdminSession();
+  if (!admin) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const body = await req.json();
+
+  const before = await prisma.clinic.findUnique({
+    where: { id: params.id },
+    select: { plan: true, trialEndsAt: true, name: true },
+  });
+
   const clinic = await prisma.clinic.update({
     where: { id: params.id },
     data: {
@@ -14,11 +22,20 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
       ...(body.name        ? { name: body.name } : {}),
     },
   });
+
+  await logAdminClinicMutation({
+    req, admin: admin.user, clinicId: params.id,
+    entityType: "clinic", entityId: params.id, action: "update",
+    before: before ?? undefined,
+    after: { plan: clinic.plan, trialEndsAt: clinic.trialEndsAt, name: clinic.name },
+  });
+
   return NextResponse.json(clinic);
 }
 
 export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {
-  if (!(await isAdminAuthed())) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const admin = await getAdminSession();
+  if (!admin) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const clinicId = params.id;
 
@@ -79,7 +96,7 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
   }
 
   // Audit estructurado a Vercel Logs (la clínica se conserva; dejamos rastro del
-  // archivado con identidad disponible — IP del admin — y motivo).
+  // archivado con identidad del admin y motivo).
   console.log(JSON.stringify({
     type:            "admin.clinic.archived",
     at:              new Date().toISOString(),
@@ -88,9 +105,19 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
     clinicSlug:      clinic.slug,
     clinicCreatedAt: clinic.createdAt.toISOString(),
     reason,
+    adminId:         admin.user.id,
+    adminEmail:      admin.user.email,
     adminIp,
     userAgent:       req.headers.get("user-agent") ?? null,
   }));
+
+  // Bitácora NOM-024: el archivado de una clínica es un soft-delete auditable.
+  await logAdminClinicMutation({
+    req, admin: admin.user, clinicId: clinic.id,
+    entityType: "clinic", entityId: clinic.id, action: "archive",
+    before: { name: clinic.name, slug: clinic.slug, archivedAt: null },
+    after: { archivedAt: new Date().toISOString(), reason },
+  });
 
   return NextResponse.json({
     success: true,

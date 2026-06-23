@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { isAdminAuthed } from "@/lib/admin-auth";
+import { isAdminAuthed, getAdminSession } from "@/lib/admin-auth";
+import { logAdminClinicMutation } from "@/lib/admin-audit";
 
 export async function POST(req: NextRequest) {
-  if (!(await isAdminAuthed())) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const admin = await getAdminSession();
+  if (!admin) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { clinicId, amount, method, reference, periodStart, periodEnd, notes, status } = await req.json();
 
@@ -36,6 +38,15 @@ export async function POST(req: NextRequest) {
       },
     });
   }
+
+  await logAdminClinicMutation({
+    req, admin: admin.user, clinicId,
+    entityType: "admin-billing", entityId: clinicId, action: "create",
+    after: {
+      op: "create_invoice", invoiceId: invoice.id, amount: invoice.amount,
+      method: method ?? null, status: invoice.status, activated: status === "paid",
+    },
+  });
 
   return NextResponse.json(invoice, { status: 201 });
 }

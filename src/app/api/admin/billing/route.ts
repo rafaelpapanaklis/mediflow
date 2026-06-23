@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { refundPayment } from "@/lib/stripe-subscriptions";
 import { isStripeConfigured, stripeUnavailableResponse } from "@/lib/stripe";
-import { isAdminAuthed } from "@/lib/admin-auth";
+import { isAdminAuthed, getAdminSession } from "@/lib/admin-auth";
+import { logAdminClinicMutation } from "@/lib/admin-audit";
 
 // GET — Dashboard metrics
 export async function GET(req: NextRequest) {
@@ -89,7 +90,10 @@ export async function GET(req: NextRequest) {
 
 // POST — Verify/confirm a pending payment
 export async function POST(req: NextRequest) {
-  if (!(await isAdminAuthed())) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  // getAdminSession (no isAdminAuthed) para tener la identidad del admin y dejar
+  // la atribución real en la bitácora. La decisión de auth es idéntica.
+  const admin = await getAdminSession();
+  if (!admin) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   try {
   const body = await req.json();
@@ -119,14 +123,25 @@ export async function POST(req: NextRequest) {
       },
     });
 
+    await logAdminClinicMutation({
+      req, admin: admin.user, clinicId: invoice.clinicId,
+      entityType: "admin-billing", entityId: invoice.clinicId, action: "update",
+      after: { op: "verify_payment", invoiceId, amount: invoice.amount, subscriptionStatus: "active" },
+    });
+
     return NextResponse.json({ success: true });
   }
 
   if (action === "reject_payment") {
     const { invoiceId, reason } = body;
-    await prisma.subscriptionInvoice.update({
+    const updated = await prisma.subscriptionInvoice.update({
       where: { id: invoiceId },
       data: { status: "failed", notes: reason ?? "Pago rechazado por admin" },
+    });
+    await logAdminClinicMutation({
+      req, admin: admin.user, clinicId: updated.clinicId,
+      entityType: "admin-billing", entityId: updated.clinicId, action: "update",
+      after: { op: "reject_payment", invoiceId, status: "failed", reason: reason ?? null },
     });
     return NextResponse.json({ success: true });
   }
@@ -147,6 +162,12 @@ export async function POST(req: NextRequest) {
       },
     });
 
+    await logAdminClinicMutation({
+      req, admin: admin.user, clinicId,
+      entityType: "admin-billing", entityId: clinicId, action: "update",
+      after: { op: "activate_clinic", plan, months: months ?? 1, subscriptionStatus: "active", monthlyPrice: PRICES[plan] ?? 499 },
+    });
+
     return NextResponse.json({ success: true });
   }
 
@@ -155,6 +176,11 @@ export async function POST(req: NextRequest) {
     await prisma.clinic.update({
       where: { id: clinicId },
       data: { subscriptionStatus: "cancelled" },
+    });
+    await logAdminClinicMutation({
+      req, admin: admin.user, clinicId,
+      entityType: "admin-billing", entityId: clinicId, action: "update",
+      after: { op: "suspend_clinic", subscriptionStatus: "cancelled" },
     });
     return NextResponse.json({ success: true });
   }
@@ -180,6 +206,11 @@ export async function POST(req: NextRequest) {
     const marca = `[REEMBOLSADO${amt ? " $" + amt : ""}]${reason ? " " + String(reason).slice(0, 180) : ""}`;
     await prisma.subscriptionInvoice.update({ where: { id: invoiceId }, data: { notes: marca } });
     console.log("[ADMIN] refund_payment", { invoiceId, clinicId: invoice.clinicId, amount: amt ?? "full", ref });
+    await logAdminClinicMutation({
+      req, admin: admin.user, clinicId: invoice.clinicId,
+      entityType: "admin-billing", entityId: invoice.clinicId, action: "update",
+      after: { op: "refund_payment", invoiceId, amount: amt ?? "full", reference: ref, reason: reason ?? null },
+    });
     return NextResponse.json({ success: true });
   }
 

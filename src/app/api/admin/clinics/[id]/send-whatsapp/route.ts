@@ -1,10 +1,12 @@
-import { isAdminAuthed } from "@/lib/admin-auth";
+import { getAdminSession } from "@/lib/admin-auth";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { logAdminGlobalEvent } from "@/lib/admin-audit";
 
 
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
-  if (!(await isAdminAuthed())) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const admin = await getAdminSession();
+  if (!admin) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const token = process.env.MEDIFLOW_WHATSAPP_TOKEN;
   const phoneNumberId = process.env.MEDIFLOW_WHATSAPP_PHONE_ID;
@@ -57,6 +59,10 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       return NextResponse.json({ error: `WhatsApp API: ${err.slice(0, 300)}` }, { status: 502 });
     }
     const data = await res.json();
+    logAdminGlobalEvent({
+      req, admin: admin.user, entity: "clinic-whatsapp", entityId: params.id,
+      action: "send", clinicId: params.id, after: { to: normalized, message: message.slice(0, 200) },
+    });
     return NextResponse.json({ success: true, to: normalized, data });
   } catch (err: any) {
     return NextResponse.json({ error: err.message ?? "Error al enviar" }, { status: 500 });

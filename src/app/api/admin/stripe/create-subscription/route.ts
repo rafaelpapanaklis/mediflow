@@ -1,11 +1,13 @@
-import { isAdminAuthed } from "@/lib/admin-auth";
+import { getAdminSession } from "@/lib/admin-auth";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getStripeSafe, getPriceIdForPlan, stripeUnavailableResponse } from "@/lib/stripe";
+import { logAdminClinicMutation } from "@/lib/admin-audit";
 
 
 export async function POST(req: NextRequest) {
-  if (!(await isAdminAuthed())) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const admin = await getAdminSession();
+  if (!admin) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const stripe = getStripeSafe();
   if (!stripe) return NextResponse.json(stripeUnavailableResponse(), { status: 503 });
@@ -49,6 +51,12 @@ export async function POST(req: NextRequest) {
     success_url: `${process.env.NEXT_PUBLIC_APP_URL ?? "https://www.dalecontrol.com"}/dashboard/billing/success?session_id={CHECKOUT_SESSION_ID}`,
     cancel_url:  `${process.env.NEXT_PUBLIC_APP_URL ?? "https://www.dalecontrol.com"}/dashboard/billing/cancel`,
     metadata: { clinicId: clinic.id, plan },
+  });
+
+  await logAdminClinicMutation({
+    req, admin: admin.user, clinicId: clinic.id,
+    entityType: "admin-billing", entityId: clinic.id, action: "update",
+    after: { op: "create_subscription_checkout", plan, stripeCustomerId: customerId, sessionId: session.id },
   });
 
   return NextResponse.json({ url: session.url, sessionId: session.id });

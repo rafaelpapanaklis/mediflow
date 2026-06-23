@@ -1,6 +1,7 @@
-import { isAdminAuthed } from "@/lib/admin-auth";
+import { isAdminAuthed, getAdminSession } from "@/lib/admin-auth";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { logAdminClinicMutation } from "@/lib/admin-audit";
 
 
 export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
@@ -16,7 +17,8 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
 }
 
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
-  if (!(await isAdminAuthed())) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const admin = await getAdminSession();
+  if (!admin) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   let body: any;
   try { body = await req.json(); }
@@ -29,6 +31,12 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   const note = await prisma.adminClinicNote.create({
     data: { clinicId: params.id, content, authorId: null },
     include: { author: { select: { firstName: true, lastName: true, email: true } } },
+  });
+
+  await logAdminClinicMutation({
+    req, admin: admin.user, clinicId: params.id,
+    entityType: "clinic-note", entityId: note.id, action: "create",
+    after: { content },
   });
 
   return NextResponse.json(note, { status: 201 });

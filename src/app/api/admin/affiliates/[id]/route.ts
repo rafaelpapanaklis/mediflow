@@ -1,6 +1,7 @@
-import { isAdminAuthed } from "@/lib/admin-auth";
+import { getAdminSession } from "@/lib/admin-auth";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { logAdminGlobalEvent } from "@/lib/admin-audit";
 
 
 // Estados que el admin asigna a mano desde el panel. PENDING no se asigna
@@ -10,7 +11,8 @@ type AssignableStatus = (typeof ASSIGNABLE_STATUSES)[number];
 
 // PATCH /api/admin/affiliates/[id]  body: { status }
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
-  if (!(await isAdminAuthed())) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const admin = await getAdminSession();
+  if (!admin) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   let body: any;
   try { body = await req.json(); }
@@ -34,6 +36,11 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 
   try {
     const updated = await prisma.affiliate.update({ where: { id: params.id }, data });
+    logAdminGlobalEvent({
+      req, admin: admin.user, entity: "affiliate", entityId: params.id,
+      action: status === "APPROVED" ? "approve" : status === "REJECTED" ? "reject" : "suspend",
+      after: { status: updated.status, approvedAt: updated.approvedAt ?? null },
+    });
     return NextResponse.json(updated);
   } catch {
     return NextResponse.json({ error: "Afiliado no encontrado" }, { status: 404 });

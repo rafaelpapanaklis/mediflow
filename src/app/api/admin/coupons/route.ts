@@ -1,6 +1,7 @@
-import { isAdminAuthed } from "@/lib/admin-auth";
+import { isAdminAuthed, getAdminSession } from "@/lib/admin-auth";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { logAdminGlobalEvent } from "@/lib/admin-audit";
 
 
 const ALLOWED_TYPES  = ["percentage", "fixed"] as const;
@@ -38,7 +39,8 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
-  if (!(await isAdminAuthed())) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const admin = await getAdminSession();
+  if (!admin) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   let body: any;
   try { body = await req.json(); }
@@ -69,6 +71,11 @@ export async function POST(req: NextRequest) {
         validUntil,
         active: body?.active !== false,
       },
+    });
+    logAdminGlobalEvent({
+      req, admin: admin.user, entity: "coupon", entityId: created.id,
+      action: "create",
+      after: { code, type: body.type, value, appliesTo, maxUses, active: created.active },
     });
     return NextResponse.json(created, { status: 201 });
   } catch (err: any) {

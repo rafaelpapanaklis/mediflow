@@ -2,10 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { createCustomer, createCheckoutForSubscription, cancelSubscription, getCustomerPortalUrl, pauseSubscription, resumeSubscription } from "@/lib/stripe-subscriptions";
 import { isStripeConfigured, stripeUnavailableResponse } from "@/lib/stripe";
-import { isAdminAuthed } from "@/lib/admin-auth";
+import { getAdminSession } from "@/lib/admin-auth";
+import { logAdminClinicMutation } from "@/lib/admin-audit";
 
 export async function POST(req: NextRequest) {
-  if (!(await isAdminAuthed())) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const admin = await getAdminSession();
+  if (!admin) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (!isStripeConfigured()) return NextResponse.json(stripeUnavailableResponse(), { status: 503 });
 
   try {
@@ -33,6 +35,11 @@ export async function POST(req: NextRequest) {
         cancelUrl: `${process.env.NEXT_PUBLIC_APP_URL}/dashboard/settings?stripe=subscription_cancelled`,
       });
 
+      await logAdminClinicMutation({
+        req, admin: admin.user, clinicId,
+        entityType: "admin-billing", entityId: clinicId, action: "update",
+        after: { op: "create_subscription", plan: body.plan ?? clinic.plan, stripeCustomerId: customerId },
+      });
       return NextResponse.json({ url });
     }
 
@@ -42,6 +49,11 @@ export async function POST(req: NextRequest) {
       await prisma.clinic.update({
         where: { id: clinicId },
         data: { subscriptionStatus: "cancelled", stripeSubscriptionId: null },
+      });
+      await logAdminClinicMutation({
+        req, admin: admin.user, clinicId,
+        entityType: "admin-billing", entityId: clinicId, action: "update",
+        after: { op: "cancel_subscription", subscriptionStatus: "cancelled" },
       });
       return NextResponse.json({ success: true });
     }
@@ -57,6 +69,11 @@ export async function POST(req: NextRequest) {
       await pauseSubscription(clinic.stripeSubscriptionId);
       await prisma.clinic.update({ where: { id: clinicId }, data: { subscriptionStatus: "paused" } });
       console.log("[ADMIN] pause_subscription", { clinicId, subscriptionId: clinic.stripeSubscriptionId });
+      await logAdminClinicMutation({
+        req, admin: admin.user, clinicId,
+        entityType: "admin-billing", entityId: clinicId, action: "update",
+        after: { op: "pause_subscription", subscriptionStatus: "paused" },
+      });
       return NextResponse.json({ success: true });
     }
 
@@ -65,6 +82,11 @@ export async function POST(req: NextRequest) {
       await resumeSubscription(clinic.stripeSubscriptionId);
       await prisma.clinic.update({ where: { id: clinicId }, data: { subscriptionStatus: "active" } });
       console.log("[ADMIN] resume_subscription", { clinicId, subscriptionId: clinic.stripeSubscriptionId });
+      await logAdminClinicMutation({
+        req, admin: admin.user, clinicId,
+        entityType: "admin-billing", entityId: clinicId, action: "update",
+        after: { op: "resume_subscription", subscriptionStatus: "active" },
+      });
       return NextResponse.json({ success: true });
     }
 

@@ -1,4 +1,4 @@
-import { isAdminAuthed } from "@/lib/admin-auth";
+import { isAdminAuthed, getAdminSession } from "@/lib/admin-auth";
 // Config global del programa de afiliados (niveles bronce/plata/oro).
 // GET → { config: ProgramConfig, exists: boolean } (exists=false ⇒ tabla sin
 //   crear: el front muestra "corre sql/afiliados-ventas.sql" y modo legacy).
@@ -9,6 +9,7 @@ import { isAdminAuthed } from "@/lib/admin-auth";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { DEFAULT_PROGRAM_CONFIG } from "@/lib/affiliate-levels";
+import { logAdminGlobalEvent } from "@/lib/admin-audit";
 
 
 // Normaliza la fila de BD al shape ProgramConfig (sin id/updatedAt).
@@ -42,7 +43,8 @@ export async function GET() {
 }
 
 export async function PUT(req: NextRequest) {
-  if (!(await isAdminAuthed())) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const admin = await getAdminSession();
+  if (!admin) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   let body: any;
   try { body = await req.json(); }
@@ -85,10 +87,15 @@ export async function PUT(req: NextRequest) {
 
   const data = { bronzePct, silverPct, goldPct, silverMinActive, goldMinActive };
   try {
+    const prev = await prisma.affiliateProgramConfig.findUnique({ where: { id: 1 } });
     const row = await prisma.affiliateProgramConfig.upsert({
       where: { id: 1 },
       create: { id: 1, ...data },
       update: data,
+    });
+    logAdminGlobalEvent({
+      req, admin: admin.user, entity: "affiliate-config", entityId: "1",
+      action: "update", before: prev ? toConfig(prev) : null, after: data,
     });
     return NextResponse.json({ ok: true, config: toConfig(row) });
   } catch {

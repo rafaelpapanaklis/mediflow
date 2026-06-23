@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { isAdminAuthed } from "@/lib/admin-auth";
+import { getAdminSession } from "@/lib/admin-auth";
+import { logAdminClinicMutation } from "@/lib/admin-audit";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -14,7 +15,8 @@ const MAX_ADJUST_ABS_CENTS = 5_000_000;
 // (src/lib/ai-billing/wallet.ts): upsert del monedero + asiento en el libro
 // mayor (type ADJUSTMENT, source ADMIN) con balanceAfterCents consistente.
 export async function POST(req: NextRequest) {
-  if (!(await isAdminAuthed())) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const admin = await getAdminSession();
+  if (!admin) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   let body: any;
   try {
@@ -61,6 +63,18 @@ export async function POST(req: NextRequest) {
         },
       });
       return { balanceAfterCents: wallet.balanceCents, transactionId: txn.id };
+    });
+
+    await logAdminClinicMutation({
+      req, admin: admin.user, clinicId,
+      entityType: "ai-wallet", entityId: clinicId, action: "update",
+      after: {
+        op: "adjust",
+        amountCents,
+        balanceAfterCents: result.balanceAfterCents,
+        transactionId: result.transactionId,
+        note,
+      },
     });
 
     return NextResponse.json({ ok: true, clinicId, amountCents, ...result }, { status: 201 });

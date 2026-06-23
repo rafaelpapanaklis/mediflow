@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { isAdminAuthed } from "@/lib/admin-auth";
+import { getAdminSession } from "@/lib/admin-auth";
 import { clearPricingCache } from "@/lib/ai-billing/pricing";
+import { logAdminGlobalEvent } from "@/lib/admin-audit";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -19,7 +20,8 @@ const FIELDS = [
 ] as const;
 
 export async function PATCH(req: NextRequest) {
-  if (!(await isAdminAuthed())) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const admin = await getAdminSession();
+  if (!admin) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   let body: any;
   try {
@@ -47,12 +49,17 @@ export async function PATCH(req: NextRequest) {
   }
 
   try {
+    const prev = await prisma.aiPricingConfig.findUnique({ where: { id: "default" } });
     const config = await prisma.aiPricingConfig.upsert({
       where: { id: "default" },
       update: data,
       create: { id: "default", ...data },
     });
     clearPricingCache();
+    logAdminGlobalEvent({
+      req, admin: admin.user, entity: "ai-pricing", entityId: "default",
+      action: "update", before: prev ?? null, after: data,
+    });
     return NextResponse.json(config);
   } catch (err: any) {
     console.error("[admin/ai-billing/pricing PATCH]", err?.message ?? err);

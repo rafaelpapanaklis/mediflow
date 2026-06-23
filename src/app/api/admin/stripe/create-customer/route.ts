@@ -1,11 +1,13 @@
-import { isAdminAuthed } from "@/lib/admin-auth";
+import { getAdminSession } from "@/lib/admin-auth";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getStripeSafe, stripeUnavailableResponse } from "@/lib/stripe";
+import { logAdminClinicMutation } from "@/lib/admin-audit";
 
 
 export async function POST(req: NextRequest) {
-  if (!(await isAdminAuthed())) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const admin = await getAdminSession();
+  if (!admin) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const stripe = getStripeSafe();
   if (!stripe) return NextResponse.json(stripeUnavailableResponse(), { status: 503 });
@@ -39,6 +41,12 @@ export async function POST(req: NextRequest) {
   await prisma.clinic.update({
     where: { id: clinic.id },
     data:  { stripeCustomerId: customer.id },
+  });
+
+  await logAdminClinicMutation({
+    req, admin: admin.user, clinicId: clinic.id,
+    entityType: "admin-billing", entityId: clinic.id, action: "update",
+    after: { op: "create_stripe_customer", stripeCustomerId: customer.id },
   });
 
   return NextResponse.json({ customer, reused: false });

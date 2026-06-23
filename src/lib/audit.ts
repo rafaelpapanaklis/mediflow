@@ -11,6 +11,10 @@ export type AuditAction =
   // Reset de contraseña por SUPER_ADMIN. NO incluye el password (ni hash)
   // en el log — solo la acción y el target.
   | "password_reset"
+  // Acciones de admin de PLATAFORMA (WS2 · cobertura de auditoría): ciclo de
+  // vida de entidades globales (afiliados/labs/suppliers) y operaciones de
+  // cobro/payout/envío iniciadas desde /admin.
+  | "approve" | "reject" | "suspend" | "payout" | "send"
   // Acciones pediátricas (spec §4.B.5). El union se extiende vía
   // PediatricAuditAction para que TypeScript valide los strings al pasarlos
   // a logAudit/logMutation.
@@ -33,6 +37,28 @@ export type AuditEntityType =
   | "clinic"
   | "subscription"
   | "quote"
+  // Plataforma / admin (WS2 · cobertura de auditoría en /admin). Tipan tanto las
+  // filas clinic-scoped que SÍ entran a AuditLog (p.ej. "admin-billing",
+  // "ai-wallet", anclando a la clínica + un usuario suyo) como los eventos
+  // GLOBALES sin clínica (p.ej. "ai-pricing", "coupon", "affiliate"), que se
+  // registran como evento estructurado en logs vía logAdminGlobalEvent porque
+  // AuditLog.clinicId/userId son FK NOT NULL y no admiten una acción sin clínica.
+  | "admin-billing"
+  | "ai-wallet"
+  | "ai-pricing"
+  | "ai-recharge"
+  | "affiliate"
+  | "affiliate-payout"
+  | "affiliate-config"
+  | "coupon"
+  | "announcement"
+  | "supplier"
+  | "lab"
+  | "plan-config"
+  | "clinic-note"
+  | "review"
+  | "clinic-email"
+  | "clinic-whatsapp"
   // Pediatrics module entity types (spec §4.B.5)
   | "pediatric-record"
   | "ped-guardian"
@@ -150,6 +176,10 @@ export async function logMutation(opts: {
       changes,
       ipAddress,
       userAgent,
+      // Reenviar la atribución del actor (antes se perdía aquí): sin esto, una
+      // mutación ejecutada por un AdminUser quedaba registrada como "staff".
+      actorType:    opts.actorType,
+      actorAdminId: opts.actorAdminId,
     });
   } catch (e) {
     console.error("logMutation error:", e);
