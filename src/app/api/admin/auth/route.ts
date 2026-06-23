@@ -1,17 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createHmac, timingSafeEqual } from "crypto";
+import { createHmac } from "crypto";
 import { rateLimit } from "@/lib/rate-limit";
-
-function safeEqual(a: string, b: string): boolean {
-  const aBuf = Buffer.from(a);
-  const bBuf = Buffer.from(b);
-  if (aBuf.length !== bBuf.length) return false;
-  return timingSafeEqual(aBuf, bBuf);
-}
+import { extractAuditMeta } from "@/lib/audit";
+import {
+  ADMIN_COOKIE,
+  adminCookieOptions,
+  ensureSeedAdmin,
+  findAdminByPassword,
+  createAdminSession,
+} from "@/lib/admin-auth";
 
 /**
- * Minimal TOTP verification without otplib (avoids Edge/serverless compatibility issues).
- * Implements RFC 6238 TOTP with a 30-second step and ±1 window.
+ * Minimal TOTP verification without otplib (avoids Edge/serverless compatibility
+ * issues). Implements RFC 6238 TOTP with a 30-second step and ±1 window.
  */
 function verifyTOTP(token: string, secret: string): boolean {
   try {
@@ -52,49 +53,67 @@ function verifyTOTP(token: string, secret: string): boolean {
   }
 }
 
+/**
+ * WS2-T3 · Login admin contra AdminUser (BD) + sesión real.
+ *
+ * Mantiene el contrato de 2 pasos del formulario (step: "password" | "totp"),
+ * el rate-limit (3/15min) y el delay anti-bruteforce. La UI no pide email: se
+ * identifica al admin por contraseña (bcrypt) entre los admins activos. Al éxito
+ * se crea una AdminSession y la cookie admin_token lleva el token ALEATORIO en
+ * claro (httpOnly, 8h) — su sha256 vive en BD.
+ */
 export async function POST(req: NextRequest) {
   try {
     const rl = rateLimit(req, 3, 15 * 60 * 1000);
     if (rl) return rl;
 
     const { step, password, totp } = await req.json();
-    const adminPassword = process.env.ADMIN_PASSWORD;
-    const adminTotp     = process.env.ADMIN_TOTP_SECRET;
-    const adminToken    = process.env.ADMIN_SECRET_TOKEN;
+    const pwd = String(password ?? "");
 
-    if (!adminPassword || !adminTotp || !adminToken) {
-      return NextResponse.json({ error: "Admin no configurado. Agrega ADMIN_PASSWORD, ADMIN_TOTP_SECRET y ADMIN_SECRET_TOKEN en Vercel." }, { status: 500 });
+    // Semilla idempotente: si no hay ningún AdminUser, crea el primero desde las
+    // envs actuales (ADMIN_PASSWORD + ADMIN_TOTP_SECRET) para no perder acceso.
+    const hasAdmin = await ensureSeedAdmin();
+    if (!hasAdmin) {
+      return NextResponse.json(
+        { error: "Admin no configurado. Agrega ADMIN_PASSWORD (y ADMIN_TOTP_SECRET) en Vercel para crear el primer administrador." },
+        { status: 500 },
+      );
     }
 
     if (step === "password") {
-      if (!safeEqual(String(password ?? ""), adminPassword)) {
-        await new Promise(r => setTimeout(r, 1000));
+      const admin = await findAdminByPassword(pwd);
+      if (!admin) {
+        await new Promise((r) => setTimeout(r, 1000)); // anti-bruteforce
         return NextResponse.json({ error: "Contraseña incorrecta" }, { status: 401 });
       }
       return NextResponse.json({ ok: true });
     }
 
     if (step === "totp") {
-      if (!safeEqual(String(password ?? ""), adminPassword)) return NextResponse.json({ error: "Sesión inválida" }, { status: 401 });
+      const admin = await findAdminByPassword(pwd);
+      if (!admin) return NextResponse.json({ error: "Sesión inválida" }, { status: 401 });
 
-      const isValid = verifyTOTP(totp, adminTotp);
+      // TOTP por usuario: si el admin tiene 2FA habilitado es obligatorio.
+      if (admin.totpEnabled) {
+        if (!admin.totpSecret || !verifyTOTP(String(totp ?? ""), admin.totpSecret)) {
+          return NextResponse.json({ error: "Código 2FA incorrecto o expirado" }, { status: 401 });
+        }
+      }
 
-      if (!isValid) return NextResponse.json({ error: "Código 2FA incorrecto o expirado" }, { status: 401 });
+      const meta = extractAuditMeta(req);
+      const { token } = await createAdminSession(admin.id, {
+        ipAddress: meta.ipAddress,
+        userAgent: meta.userAgent,
+      });
 
       const response = NextResponse.json({ ok: true });
-      response.cookies.set("admin_token", adminToken, {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === "production",
-        sameSite: "strict",
-        maxAge: 60 * 60 * 8,
-        path: "/",
-      });
+      response.cookies.set(ADMIN_COOKIE, token, adminCookieOptions());
       return response;
     }
 
     return NextResponse.json({ error: "Paso inválido" }, { status: 400 });
   } catch (err: any) {
     console.error("Admin auth error:", err);
-    return NextResponse.json({ error: err.message ?? "Error interno de autenticación" }, { status: 500 });
+    return NextResponse.json({ error: err?.message ?? "Error interno de autenticación" }, { status: 500 });
   }
 }

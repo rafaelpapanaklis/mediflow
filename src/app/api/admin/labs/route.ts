@@ -1,13 +1,9 @@
+import { isAdminAuthed } from "@/lib/admin-auth";
 import { NextRequest, NextResponse } from "next/server";
-import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
 import type { DentalLabStatus } from "@/lib/laboratorios/types";
 import { parsePageParams } from "@/lib/pagination";
 
-function isAdminAuthed() {
-  const token = cookies().get("admin_token")?.value;
-  return !!token && token === process.env.ADMIN_SECRET_TOKEN;
-}
 
 const LAB_STATUSES = ["PENDING", "APPROVED", "REJECTED", "SUSPENDED"] as const;
 
@@ -15,7 +11,7 @@ const LAB_STATUSES = ["PENDING", "APPROVED", "REJECTED", "SUSPENDED"] as const;
 // DentalLab es GLOBAL (sin clinicId): el admin de plataforma ve TODOS los
 // laboratorios sin importar la clínica. `status` filtra opcionalmente.
 export async function GET(req: NextRequest) {
-  if (!isAdminAuthed()) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!(await isAdminAuthed())) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const statusParam = req.nextUrl.searchParams.get("status");
   const status = (LAB_STATUSES as readonly string[]).includes(statusParam ?? "")

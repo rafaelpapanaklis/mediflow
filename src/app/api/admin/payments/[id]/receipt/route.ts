@@ -1,17 +1,13 @@
+import { isAdminAuthed } from "@/lib/admin-auth";
 import { NextRequest, NextResponse } from "next/server";
-import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
 
-function isAdminAuthed() {
-  const token = cookies().get("admin_token")?.value;
-  return !!token && token === process.env.ADMIN_SECRET_TOKEN;
-}
 
 // Recibo NO fiscal en HTML. El navegador puede exportarlo a PDF con
 // Ctrl/Cmd+P → "Guardar como PDF". Evitamos dependencias pesadas
 // (@react-pdf/renderer) porque el documento es informativo.
 export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
-  if (!isAdminAuthed()) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!(await isAdminAuthed())) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const payment = await prisma.subscriptionInvoice.findUnique({
     where: { id: params.id },

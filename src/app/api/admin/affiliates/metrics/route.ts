@@ -1,5 +1,5 @@
+import { isAdminAuthed } from "@/lib/admin-auth";
 import { NextResponse } from "next/server";
-import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
 import {
   type AffiliateFunnel,
@@ -11,10 +11,6 @@ import {
 
 export const dynamic = "force-dynamic";
 
-function isAdminAuthed() {
-  const token = cookies().get("admin_token")?.value;
-  return !!token && token === process.env.ADMIN_SECRET_TOKEN;
-}
 
 export interface AdminAffiliateTopRow {
   affiliateId: string;
@@ -66,7 +62,7 @@ export interface AdminAffiliateMetricsResponse {
  * individuales.
  */
 export async function GET() {
-  if (!isAdminAuthed()) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!(await isAdminAuthed())) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   try {
     const now = new Date();

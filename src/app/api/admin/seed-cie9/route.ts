@@ -11,7 +11,7 @@ export const maxDuration = 60;
  * Solo admin de plataforma (cookie admin_token, isAdminAuthed). Idempotente.
  */
 export async function POST() {
-  if (!isAdminAuthed()) {
+  if (!(await isAdminAuthed())) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
   const result = await prisma.cie9Code.createMany({

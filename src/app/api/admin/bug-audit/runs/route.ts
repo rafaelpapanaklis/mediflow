@@ -1,14 +1,9 @@
+import { isAdminAuthed } from "@/lib/admin-auth";
 import { NextResponse } from "next/server";
-import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
 
-function isAdminAuthed(): boolean {
-  const token = cookies().get("admin_token")?.value;
-  const secret = process.env.ADMIN_SECRET_TOKEN;
-  return !!token && !!secret && token === secret;
-}
 
 /**
  * GET /api/admin/bug-audit/runs
@@ -20,7 +15,7 @@ function isAdminAuthed(): boolean {
  * Solo platform admin (cookie `admin_token`).
  */
 export async function GET() {
-  if (!isAdminAuthed()) {
+  if (!(await isAdminAuthed())) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

@@ -1,12 +1,8 @@
+import { isAdminAuthed } from "@/lib/admin-auth";
 import { NextRequest, NextResponse } from "next/server";
-import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
 import * as XLSX from "xlsx";
 
-function isAdminAuthed() {
-  const token = cookies().get("admin_token")?.value;
-  return !!token && token === process.env.ADMIN_SECRET_TOKEN;
-}
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -142,7 +138,7 @@ function parseDate(raw: string | null, fallback: Date): Date {
 }
 
 export async function GET(req: NextRequest) {
-  if (!isAdminAuthed()) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!(await isAdminAuthed())) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const url = new URL(req.url);
   const from = parseDate(url.searchParams.get("from"), new Date(new Date().getFullYear(), 0, 1));

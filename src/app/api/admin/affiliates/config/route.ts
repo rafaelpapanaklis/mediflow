@@ -1,3 +1,4 @@
+import { isAdminAuthed } from "@/lib/admin-auth";
 // Config global del programa de afiliados (niveles bronce/plata/oro).
 // GET → { config: ProgramConfig, exists: boolean } (exists=false ⇒ tabla sin
 //   crear: el front muestra "corre sql/afiliados-ventas.sql" y modo legacy).
@@ -6,14 +7,9 @@
 // Auth: cookie admin_token === ADMIN_SECRET_TOKEN (mismo patrón que
 // /api/admin/coupons).
 import { NextRequest, NextResponse } from "next/server";
-import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
 import { DEFAULT_PROGRAM_CONFIG } from "@/lib/affiliate-levels";
 
-function isAdminAuthed() {
-  const token = cookies().get("admin_token")?.value;
-  return !!token && token === process.env.ADMIN_SECRET_TOKEN;
-}
 
 // Normaliza la fila de BD al shape ProgramConfig (sin id/updatedAt).
 function toConfig(row: {
@@ -33,7 +29,7 @@ function toConfig(row: {
 }
 
 export async function GET() {
-  if (!isAdminAuthed()) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!(await isAdminAuthed())) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   try {
     const row = await prisma.affiliateProgramConfig.findUnique({ where: { id: 1 } });
@@ -46,7 +42,7 @@ export async function GET() {
 }
 
 export async function PUT(req: NextRequest) {
-  if (!isAdminAuthed()) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!(await isAdminAuthed())) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   let body: any;
   try { body = await req.json(); }

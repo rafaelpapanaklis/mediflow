@@ -1,14 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-
-// Simple admin auth check
-function isAdmin(req: NextRequest) {
-  const token = req.cookies.get("admin_token")?.value;
-  return token === process.env.ADMIN_SECRET_TOKEN;
-}
+import { isAdminAuthed } from "@/lib/admin-auth";
 
 export async function POST(req: NextRequest) {
-  if (!isAdmin(req)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!(await isAdminAuthed())) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { clinicId, amount, method, reference, periodStart, periodEnd, notes, status } = await req.json();
 
@@ -46,7 +41,7 @@ export async function POST(req: NextRequest) {
 }
 
 export async function GET(req: NextRequest) {
-  if (!isAdmin(req)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!(await isAdminAuthed())) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const clinicId = new URL(req.url).searchParams.get("clinicId");
   const invoices = await prisma.subscriptionInvoice.findMany({

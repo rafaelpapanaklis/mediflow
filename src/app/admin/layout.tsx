@@ -24,7 +24,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   // /admin/login vive BAJO este layout, así que redirect("/admin/login") aquí
   // haría loop infinito para el visitante sin cookie; en su lugar se renderiza
   // el login y children (las páginas admin) nunca llega al cliente.
-  if (!isAdminAuthed()) {
+  if (!(await isAdminAuthed())) {
     return <AdminLoginPage />;
   }
 

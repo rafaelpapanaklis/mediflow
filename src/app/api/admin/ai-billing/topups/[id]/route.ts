@@ -18,7 +18,7 @@ export const dynamic = "force-dynamic";
  *  - reject: marca el AiTopup como REJECTED sin tocar el saldo. Tambien idempotente.
  */
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
-  if (!isAdminAuthed()) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!(await isAdminAuthed())) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const id = params.id;
   let body: any = {};

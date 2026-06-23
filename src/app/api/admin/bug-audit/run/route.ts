@@ -1,5 +1,5 @@
+import { isAdminAuthed } from "@/lib/admin-auth";
 import { NextResponse, type NextRequest } from "next/server";
-import { cookies } from "next/headers";
 import { randomUUID } from "crypto";
 import { prisma } from "@/lib/prisma";
 import { runAllScanners } from "@/lib/bug-audit/registry";
@@ -18,11 +18,6 @@ const VALID_SECTIONS: ScannerSection[] = ["backend", "security", "performance", 
 /** Auth idéntica al resto de /api/admin/* — cookie `admin_token` contra
  *  `ADMIN_SECRET_TOKEN`. La capa middleware ya redirige el navegador en
  *  /admin/*; aquí defendemos el endpoint contra llamadas directas. */
-function isAdminAuthed(): boolean {
-  const token = cookies().get("admin_token")?.value;
-  const secret = process.env.ADMIN_SECRET_TOKEN;
-  return !!token && !!secret && token === secret;
-}
 
 /**
  * POST /api/admin/bug-audit/run
@@ -34,7 +29,7 @@ function isAdminAuthed(): boolean {
  * bug_audit_runs y devuelve summary + items.
  */
 export async function POST(req: NextRequest) {
-  if (!isAdminAuthed()) {
+  if (!(await isAdminAuthed())) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

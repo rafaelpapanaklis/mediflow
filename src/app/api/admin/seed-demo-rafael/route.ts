@@ -326,7 +326,7 @@ interface SeedError { stage: string; message: string; item?: string }
 // ─────────────────────────────────────────────────────────────────────────
 
 export async function POST(req: NextRequest) {
-  if (!isAdminAuthed()) {
+  if (!(await isAdminAuthed())) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -1043,7 +1043,7 @@ export async function POST(req: NextRequest) {
 // ─────────────────────────────────────────────────────────────────────────
 
 export async function DELETE(req: NextRequest) {
-  if (!isAdminAuthed()) {
+  if (!(await isAdminAuthed())) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

@@ -14,7 +14,7 @@ import { listAdminTickets, getAdminMetrics } from "@/lib/support/service";
 export const dynamic = "force-dynamic";
 
 export async function GET(req: NextRequest) {
-  if (!isAdminAuthed()) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!(await isAdminAuthed())) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   try {
     const sp = req.nextUrl.searchParams;

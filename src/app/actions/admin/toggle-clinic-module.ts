@@ -23,8 +23,8 @@
  * `paymentMethod != 'admin'` para excluir grants administrativos.
  */
 import { revalidatePath } from "next/cache";
-import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
+import { isAdminAuthed } from "@/lib/admin-auth";
 import {
   ADMIN_GRANT_BILLING_CYCLE,
   ADMIN_GRANT_PAYMENT_METHOD,
@@ -37,17 +37,14 @@ import {
 
 export type { ToggleClinicModuleInput, ToggleClinicModuleResult };
 
-function isAdminAuthed(): boolean {
-  const token = cookies().get("admin_token")?.value;
-  const expected = process.env.ADMIN_SECRET_TOKEN;
-  return !!token && !!expected && token === expected;
-}
-
 export async function toggleClinicModule(
   input: ToggleClinicModuleInput,
 ): Promise<ToggleClinicModuleResult> {
+  // El core espera isAuthed síncrono; precomputamos la sesión (DB-backed) y le
+  // pasamos un closure que devuelve el booleano ya resuelto.
+  const authed = await isAdminAuthed();
   return toggleClinicModuleCore(input, {
-    isAuthed: isAdminAuthed,
+    isAuthed: () => authed,
     findClinic: (id) =>
       prisma.clinic.findUnique({ where: { id }, select: { id: true } }),
     findModule: (key) =>
