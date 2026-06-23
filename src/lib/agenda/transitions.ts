@@ -81,23 +81,17 @@ export interface TransitionCheckResult {
 export function canTransition(
   from: AppointmentStatus,
   to: AppointmentStatus,
-  role: UserRole,
-  now: Date,
-  appointmentStart: Date,
+  _role: UserRole,
+  _now: Date,
+  _appointmentStart: Date,
 ): TransitionCheckResult {
+  // Transiciones LIBRES: el staff puede corregir el estado de una cita a
+  // cualquier otro (p. ej. volver de Confirmada a Pendiente). El permiso de
+  // gestión ya lo valida el endpoint (sesión de clínica + doctor-dueño); aquí
+  // solo bloqueamos el no-op. La matriz TRANSITIONS se conserva para
+  // availableTransitions/analytics, pero ya no restringe el cambio manual.
   if (from === to) {
     return { ok: false, error: "La cita ya está en ese estado." };
-  }
-  const t = TRANSITIONS.find((x) => x.from === from && x.to === to);
-  if (!t) {
-    return { ok: false, error: `Transición no permitida: ${from} → ${to}.` };
-  }
-  if (!t.allowedRoles.includes(role)) {
-    return { ok: false, error: "No tienes permiso para este cambio de estado." };
-  }
-  if (t.predicate) {
-    const err = t.predicate(now, appointmentStart);
-    if (err) return { ok: false, error: err };
   }
   return { ok: true };
 }
@@ -124,7 +118,12 @@ export function availableTransitions(
  * y la UI muestra el toast de error.
  */
 export function possibleTransitions(from: AppointmentStatus): AppointmentStatus[] {
-  return TRANSITIONS.filter((t) => t.from === from).map((t) => t.to);
+  // Todos los estados (menos el actual): la UI ofrece pasar a cualquiera.
+  const ALL: AppointmentStatus[] = [
+    "SCHEDULED", "CONFIRMED", "CHECKED_IN", "IN_CHAIR",
+    "IN_PROGRESS", "COMPLETED", "CHECKED_OUT", "CANCELLED", "NO_SHOW",
+  ];
+  return ALL.filter((s) => s !== from);
 }
 
 export function sideEffectsOf(

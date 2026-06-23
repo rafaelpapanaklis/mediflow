@@ -130,7 +130,7 @@ export async function POST(req: NextRequest) {
         type:        type?.trim() || "Consulta general",
         startsAt:    startsAtBook,
         endsAt:      endsAtBook,
-        status:      "PENDING",
+        status:      "SCHEDULED",
         notes:       notes?.trim() || null,
       },
     });
