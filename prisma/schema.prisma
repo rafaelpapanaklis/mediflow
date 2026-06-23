@@ -2137,6 +2137,11 @@ model AuditLog {
 
   @@index([clinicId, entityType, entityId])
   @@index([clinicId, createdAt])
+  // Panel de auditoría (/admin/auditoria, /dashboard/auditoria): orden y filtro
+  // global por fecha y por usuario. El CREATE INDEX en BD lo aplica Rafael a
+  // mano — ver sql/audit-indexes.sql.
+  @@index([createdAt])
+  @@index([userId, createdAt])
   @@map("audit_logs")
 }
 
