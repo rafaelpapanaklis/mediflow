@@ -19,6 +19,12 @@ import { I18nProvider } from "@/i18n/i18n-provider";
 import { getDict } from "@/i18n/dictionaries";
 import { makeT } from "@/i18n/t";
 import { localeFromClinic } from "@/i18n/server";
+import { hasValidTwoFactorCookie } from "@/lib/auth/two-factor-cookie";
+import {
+  TWO_FA_ROUTE_PREFIX,
+  TWO_FA_CHALLENGE_PATH,
+  TWO_FA_SETUP_PATH,
+} from "@/lib/auth/two-factor-constants";
 
 const ACTIVE_SUBSCRIPTION_STATUSES = new Set(["active", "trialing", "paid"]);
 
@@ -43,6 +49,43 @@ export default async function DashboardLayout({ children }: { children: React.Re
   const locale = localeFromClinic(clinic);
   const dict = getDict(locale);
   const t = makeT(dict);
+
+  // ── Gate 2FA (AUTORITATIVO, no evitable) ──────────────────────────
+  // La sesión la crea Supabase tras el password; el 2FA es una segunda barrera
+  // a nivel de aplicación. Corre en CADA render de /dashboard (force-dynamic)
+  // con la BD en mano, así que NO se puede saltar navegando directo — a
+  // diferencia del fast-path del middleware (presencia de cookie en Edge, sin
+  // BD). Aunque la cookie df_2fa_pending falte o se borre, este check bloquea.
+  //   • Usuario con totpEnabled sin df_2fa válida → reto TOTP.
+  //   • Clínica con require2fa y usuario sin 2FA → enrolamiento forzado.
+  // Las rutas /dashboard/2fa* quedan EXENTAS (si no, loop) y se renderizan con
+  // layout mínimo (sin sidebar/topbar) para no exponer el panel antes del 2FA.
+  const isTwoFaRoute = pathname.startsWith(TWO_FA_ROUTE_PREFIX);
+  if (!isTwoFaRoute) {
+    if (
+      (user as { totpEnabled?: boolean }).totpEnabled &&
+      !hasValidTwoFactorCookie(user.supabaseId, user.clinicId)
+    ) {
+      redirect(`${TWO_FA_CHALLENGE_PATH}?next=${encodeURIComponent(pathname || "/dashboard")}`);
+    }
+    if (
+      (clinic as { require2fa?: boolean }).require2fa &&
+      !(user as { totpEnabled?: boolean }).totpEnabled
+    ) {
+      redirect(TWO_FA_SETUP_PATH);
+    }
+  }
+  if (isTwoFaRoute) {
+    // Layout mínimo: sin sidebar/topbar ni providers de dashboard; dentro de
+    // I18nProvider para que el reto/enrolamiento tengan useT.
+    return (
+      <I18nProvider locale={locale} dict={dict}>
+        <main className="flex min-h-screen w-full items-center justify-center bg-background px-4 py-10 font-sans">
+          {children}
+        </main>
+      </I18nProvider>
+    );
+  }
 
   // ── Gating sin plan activo (sin modal bloqueante) ────────────────
   // Una clínica está sin acceso cuando trialEndsAt < now Y la suscripción

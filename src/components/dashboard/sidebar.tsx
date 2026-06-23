@@ -1072,6 +1072,11 @@ function SidebarFooter({
 
   const logout = async () => {
     try {
+      // POST al endpoint server: borra cookies httpOnly que el cliente no puede
+      // tocar (activeClinicId, df_2fa, df_2fa_pending) y hace signOut server-side.
+      // Sin esto, df_2fa podría sobrevivir al logout y saltarse el reto en el
+      // siguiente login dentro de su ventana de 12 h.
+      try { await fetch("/api/auth/logout", { method: "POST" }); } catch { /* ignore */ }
       const { createClient } = await import("@/lib/supabase/client");
       const supabase = createClient();
       await supabase.auth.signOut();

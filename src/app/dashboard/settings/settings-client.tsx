@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { Building, User, Clock, Shield, Receipt, Bot, CalendarCheck, ExternalLink, Zap, CreditCard, Bell } from "lucide-react";
 import { SubscriptionTab } from "@/components/dashboard/subscription-tab";
 import { RemindersSection } from "./reminders-section";
+import { TwoFactorCard } from "@/components/dashboard/security/two-factor-card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -869,6 +870,11 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
             </div>
             <Button onClick={changePassword} disabled={saving || !pwForm.next}>{saving ? t("settings.client.changingPasswordBtn") : t("settings.client.changePasswordBtn")}</Button>
           </div>
+          <TwoFactorCard
+            initialEnabled={!!(user as any).totpEnabled}
+            initialRequire2fa={!!(clinic as any)?.require2fa}
+            isAdmin={user.role === "ADMIN" || user.role === "SUPER_ADMIN"}
+          />
           <div className="bg-card border border-border rounded-2xl p-6 shadow-card">
             <h2 className="text-base font-bold mb-4">{t("settings.client.accountInfoTitle")}</h2>
             <div className="space-y-2 text-sm">

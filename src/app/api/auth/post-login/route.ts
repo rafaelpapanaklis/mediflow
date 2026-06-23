@@ -7,6 +7,7 @@ import {
   readActiveClinicCookie,
   pickActiveClinicId,
 } from "@/lib/active-clinic";
+import { applyTwoFactorLoginCookies, clearAllTwoFactorCookies } from "@/lib/auth/two-factor-cookie";
 
 /**
  * Llamado por el cliente justo después de un login exitoso (email+password u OAuth).
@@ -37,6 +38,7 @@ export async function POST() {
 
   if (userClinics.length === 0) {
     clearActiveClinicCookie(res);
+    clearAllTwoFactorCookies(res);
     return res;
   }
 
@@ -44,5 +46,8 @@ export async function POST() {
   const ownedIds = userClinics.map(u => u.clinicId);
   const picked = pickActiveClinicId(current, ownedIds);
   writeActiveClinicCookie(res, picked.clinicId);
+  // Si la membresía activa tiene 2FA (o la clínica lo exige) marca el flag
+  // pendiente y borra cualquier df_2fa previa → fuerza el reto este login.
+  await applyTwoFactorLoginCookies(res, user.id, picked.clinicId);
   return res;
 }
