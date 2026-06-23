@@ -145,14 +145,13 @@ export interface ResolveGuestBookingPatientArgs {
 }
 
 /**
- * Resuelve el Patient a usar en una reserva SIN sesión (INVITADO):
- *  1. Si el form trae email → reusa el Patient de la clínica cuyo email coincida
- *     EXACTO (case-insensitive, no borrado). Esto deja que un paciente conocido
- *     reuse su expediente sin cuenta.
- *  2. Si no hay email, o no hay match → CREA Patient nuevo (mismo row-lock y
- *     formato de patientNumber que resolveBookingPatient: serializa por clínica).
- * No crea ningún vínculo cuenta↔paciente: el invitado no tiene cuenta.
- * PROHIBIDO: adoptar un Patient encontrado por TELÉFONO (robo de expediente).
+ * Resuelve el Patient a usar en una reserva SIN sesión (INVITADO).
+ * SIEMPRE crea un Patient NUEVO: el invitado NUNCA reusa un expediente existente
+ * (decisión de seguridad — impide que un tercero cuelgue citas en el expediente de
+ * otra persona poniendo su email sin verificar). La continuidad/de-duplicación se
+ * logra cuando la persona crea cuenta y verifica su email (autoLinkPatientsByEmail).
+ * No crea vínculo cuenta↔paciente: el invitado no tiene cuenta.
+ * PROHIBIDO: adoptar un Patient por email NI por teléfono.
  */
 export async function resolveGuestBookingPatient(
   args: ResolveGuestBookingPatientArgs,
@@ -160,23 +159,9 @@ export async function resolveGuestBookingPatient(
   const { clinicId, firstName, lastName, phone, primaryDoctorId } = args;
   const email = args.email?.trim() || null;
 
-  // 1. Reusa SOLO por email exacto (NUNCA por teléfono).
-  if (email) {
-    const byEmail = await prisma.patient.findFirst({
-      where: {
-        clinicId,
-        email: { equals: email, mode: "insensitive" },
-        deletedAt: null,
-      },
-      select: { id: true },
-    });
-    if (byEmail) {
-      return { patientId: byEmail.id, created: false };
-    }
-  }
-
-  // 2. Crear Patient nuevo. Transacción CORTA con el mismo row-lock y formato de
-  //    patientNumber que resolveBookingPatient (serializa creates por clínica).
+  // INVITADO: SIEMPRE crea un Patient nuevo (nunca reusa por email ni por teléfono).
+  // Transacción CORTA con el mismo row-lock y formato de patientNumber que
+  // resolveBookingPatient (serializa creates por clínica).
   const patient = await prisma.$transaction(async (tx) => {
     await tx.$executeRaw`SELECT 1 FROM clinics WHERE id = ${clinicId} FOR UPDATE`;
     const count = await tx.patient.count({ where: { clinicId } });
