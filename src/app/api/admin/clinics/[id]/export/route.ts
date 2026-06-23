@@ -1,13 +1,9 @@
+import { isAdminAuthed } from "@/lib/admin-auth";
 import { NextRequest, NextResponse } from "next/server";
-import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
 import archiver from "archiver";
 import { PassThrough } from "node:stream";
 
-function isAdminAuthed() {
-  const token = cookies().get("admin_token")?.value;
-  return !!token && token === process.env.ADMIN_SECRET_TOKEN;
-}
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -26,7 +22,7 @@ function toCsv(rows: Record<string, any>[]): string {
 }
 
 export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
-  if (!isAdminAuthed()) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!(await isAdminAuthed())) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const clinicId = params.id;
   const clinic = await prisma.clinic.findUnique({

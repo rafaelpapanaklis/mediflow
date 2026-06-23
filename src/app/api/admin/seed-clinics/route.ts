@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
+import { isAdminAuthed } from "@/lib/admin-auth";
 
 /**
  * POST /api/admin/seed-clinics
@@ -12,9 +13,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Seed endpoint disabled in production" }, { status: 403 });
   }
   try {
-  // Allow access from admin panel (admin_token cookie) OR from the user's own session
-  const adminToken = req.cookies.get("admin_token")?.value;
-  const isAdmin = adminToken && adminToken === process.env.ADMIN_SECRET_TOKEN;
+  // Allow access from admin panel (sesión admin en BD) OR from the user's own session
+  const isAdmin = await isAdminAuthed();
 
   let supabaseId: string;
   let email: string;

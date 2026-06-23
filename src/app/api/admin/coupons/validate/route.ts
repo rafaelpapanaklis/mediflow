@@ -1,14 +1,10 @@
+import { isAdminAuthed } from "@/lib/admin-auth";
 import { NextRequest, NextResponse } from "next/server";
-import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
 
-function isAdminAuthed() {
-  const token = cookies().get("admin_token")?.value;
-  return !!token && token === process.env.ADMIN_SECRET_TOKEN;
-}
 
 export async function POST(req: NextRequest) {
-  if (!isAdminAuthed()) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!(await isAdminAuthed())) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   let body: any;
   try { body = await req.json(); }

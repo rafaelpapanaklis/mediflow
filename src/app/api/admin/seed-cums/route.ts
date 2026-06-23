@@ -14,7 +14,7 @@ export const maxDuration = 60;
  * Tabla GLOBAL — catálogo SSA público.
  */
 export async function POST() {
-  if (!isAdminAuthed()) {
+  if (!(await isAdminAuthed())) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

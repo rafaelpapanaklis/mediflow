@@ -1,22 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
-import { cookies } from "next/headers";
-import { timingSafeEqual } from "crypto";
 import { createClient } from "@supabase/supabase-js";
 import { prisma } from "@/lib/prisma";
 import { writeActiveClinicCookie } from "@/lib/active-clinic";
-
-function safeEqual(a: string, b: string): boolean {
-  const aBuf = Buffer.from(a);
-  const bBuf = Buffer.from(b);
-  if (aBuf.length !== bBuf.length) return false;
-  return timingSafeEqual(aBuf, bBuf);
-}
+import { getAdminSession } from "@/lib/admin-auth";
 
 export async function GET(req: NextRequest) {
-  // 1. Verify admin is authenticated
-  const adminToken = cookies().get("admin_token")?.value;
-  const secret = process.env.ADMIN_SECRET_TOKEN;
-  if (!adminToken || !secret || !safeEqual(adminToken, secret)) {
+  // 1. Verify admin is authenticated (sesión real en BD)
+  const admin = await getAdminSession();
+  if (!admin) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   }
 
@@ -87,8 +78,8 @@ export async function GET(req: NextRequest) {
   }
 
   // Audit trail: AdminClinicNote sirve como bitácora de impersonación (authorId=null
-  // porque el super-admin se autentica con ADMIN_SECRET_TOKEN, no como User).
-  // La TTL del magic link la hereda de Supabase (OTP Expiry en Authentication settings).
+  // porque el AdminUser de plataforma no es una fila User; el admin queda en el
+  // content vía su email). La TTL del magic link la hereda de Supabase.
   try {
     const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "unknown";
     const ua = req.headers.get("user-agent")?.slice(0, 200) ?? "unknown";
@@ -96,10 +87,10 @@ export async function GET(req: NextRequest) {
       data: {
         clinicId,
         authorId: null,
-        content: `[IMPERSONATION] super-admin accedió como ${user.email} (${user.firstName} ${user.lastName}) desde IP ${ip} · UA ${ua} · ${new Date().toISOString()}`,
+        content: `[IMPERSONATION] admin ${admin.user.email} accedió como ${user.email} (${user.firstName} ${user.lastName}) desde IP ${ip} · UA ${ua} · ${new Date().toISOString()}`,
       },
     });
-    console.warn("[impersonate]", JSON.stringify({ clinicId, targetUser: user.email, ip, at: new Date().toISOString() }));
+    console.warn("[impersonate]", JSON.stringify({ clinicId, admin: admin.user.email, targetUser: user.email, ip, at: new Date().toISOString() }));
   } catch (logErr) {
     console.error("[impersonate] audit log failed:", logErr);
   }

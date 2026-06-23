@@ -18,7 +18,7 @@ type TopupStatus = (typeof VALID_STATUSES)[number];
  * isAdminAuthed. Query: ?status=PENDING|PAID|REJECTED|FAILED, ?take, ?page.
  */
 export async function GET(req: NextRequest) {
-  if (!isAdminAuthed()) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!(await isAdminAuthed())) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const statusParam = (req.nextUrl.searchParams.get("status") ?? "PENDING").toUpperCase();
   const status: TopupStatus = (VALID_STATUSES as readonly string[]).includes(statusParam)

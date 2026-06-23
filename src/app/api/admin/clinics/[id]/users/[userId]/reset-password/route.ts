@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { isAdminAuthed } from "@/lib/admin-auth";
+import { getAdminSession } from "@/lib/admin-auth";
 import { prisma } from "@/lib/prisma";
 import { createClient as createAdminClient } from "@supabase/supabase-js";
 import { logAudit, extractAuditMeta } from "@/lib/audit";
@@ -32,7 +32,8 @@ export async function POST(
   req: NextRequest,
   { params }: { params: { id: string; userId: string } },
 ) {
-  if (!isAdminAuthed()) {
+  const admin = await getAdminSession();
+  if (!admin) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -109,9 +110,9 @@ export async function POST(
   }
 
   // Audit log — registramos la ACCIÓN y el target, JAMÁS la contraseña.
-  // AuditLog.userId es FK NOT NULL a User y el admin global (cookie) no tiene
+  // AuditLog.userId es FK NOT NULL a User y el AdminUser de plataforma no tiene
   // fila User; usamos el propio target (válido y de esta clínica) como ancla y
-  // `by: "admin"` deja constancia de que fue una acción del admin, no del user.
+  // actorType:"admin" + actorAdminId dejan la atribución REAL (qué admin lo hizo).
   const meta = extractAuditMeta(req);
   await logAudit({
     clinicId:   params.id,
@@ -125,17 +126,20 @@ export async function POST(
     },
     ipAddress: meta.ipAddress,
     userAgent: meta.userAgent,
+    actorType:    "admin",
+    actorAdminId: admin.user.id,
   });
 
-  // Atribución de admin a Vercel Logs (logAudit no captura "qué admin" porque el
-  // admin global se autentica por cookie, no por User). NUNCA incluye contraseña.
+  // Atribución del admin también a Vercel Logs. NUNCA incluye contraseña.
   console.log(JSON.stringify({
-    type:      "admin.user.passwordReset",
-    at:        new Date().toISOString(),
-    clinicId:  params.id,
-    userId:    target.id,
-    userEmail: target.email,
-    ip:        meta.ipAddress ?? null,
+    type:       "admin.user.passwordReset",
+    at:         new Date().toISOString(),
+    clinicId:   params.id,
+    userId:     target.id,
+    userEmail:  target.email,
+    adminId:    admin.user.id,
+    adminEmail: admin.user.email,
+    ip:         meta.ipAddress ?? null,
   }));
 
   return NextResponse.json({ success: true });

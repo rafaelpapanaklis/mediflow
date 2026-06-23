@@ -15,7 +15,7 @@ export const maxDuration = 60;
  * Solo el admin de plataforma puede ejecutar el seed.
  */
 export async function POST() {
-  if (!isAdminAuthed()) {
+  if (!(await isAdminAuthed())) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

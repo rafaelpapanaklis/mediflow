@@ -1,5 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { updateSession } from "@/lib/supabase/middleware";
+// Edge-safe: solo una constante string, sin node:crypto/otplib/prisma.
+import { TWO_FA_PENDING_COOKIE } from "@/lib/auth/two-factor-constants";
 
 // These paths should NOT be treated as clinic slugs
 const RESERVED_PATHS = new Set([
@@ -53,22 +55,15 @@ export async function middleware(request: NextRequest) {
   }
 
   if (pathname.startsWith("/admin") && pathname !== "/admin/login") {
-    try {
-      const token = request.cookies.get("admin_token")?.value;
-      const secret = process.env.ADMIN_SECRET_TOKEN;
-      const ok = !!token && !!secret && token.length === secret.length &&
-        // timing-safe via simple XOR loop (middleware Edge runtime sin crypto.timingSafeEqual garantizado)
-        (() => {
-          let diff = 0;
-          for (let i = 0; i < token.length; i++) diff |= token.charCodeAt(i) ^ secret.charCodeAt(i);
-          return diff === 0;
-        })();
-      if (!ok) {
-        const url = request.nextUrl.clone();
-        url.pathname = "/admin/login";
-        return NextResponse.redirect(url);
-      }
-    } catch {
+    // Edge runtime: NO puede consultar Prisma. Aquí sólo se valida PRESENCIA de
+    // la cookie (gate barato anti-flash). La validación REAL de la sesión —viva,
+    // no revocada, no expirada, AdminUser activo— corre en runtime Node: el
+    // layout server de /admin (src/app/admin/layout.tsx) y cada ruta
+    // /api/admin/* vía isAdminAuthed()/getAdminSession(). Una cookie presente
+    // pero inválida/revocada pasa este gate pero el layout/ruta la rechaza
+    // (fail-closed), así que la revocación es efectiva donde importa.
+    const token = request.cookies.get("admin_token")?.value;
+    if (!token) {
       const url = request.nextUrl.clone();
       url.pathname = "/admin/login";
       return NextResponse.redirect(url);
@@ -92,6 +87,21 @@ export async function middleware(request: NextRequest) {
   }
 
   if (pathname.startsWith("/dashboard")) {
+    // Fast-path 2FA (Edge, sin crypto): si el cierre de login marcó
+    // df_2fa_pending (usuario debe pasar 2FA) y aún no lo superó, lo mandamos
+    // al reto antes de tocar el layout. Las propias rutas /dashboard/2fa*
+    // quedan exentas (si no, loop). Es solo UX/defensa: el gate AUTORITATIVO
+    // (firma df_2fa + BD) vive en el layout, así que aunque esta cookie falte
+    // o se borre, el layout bloquea igual.
+    if (
+      !pathname.startsWith("/dashboard/2fa") &&
+      request.cookies.get(TWO_FA_PENDING_COOKIE)?.value
+    ) {
+      const url = request.nextUrl.clone();
+      url.pathname = "/dashboard/2fa";
+      url.search = `?next=${encodeURIComponent(pathname)}`;
+      return NextResponse.redirect(url);
+    }
     return await updateSession(request);
   }
 

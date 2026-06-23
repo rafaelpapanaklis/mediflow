@@ -26,6 +26,9 @@ model Clinic {
   logoUrl         String?
   taxId           String?
   isPublic        Boolean        @default(false)
+  // Seguridad: si true, TODO usuario de la clínica debe enrolar 2FA al entrar
+  // al panel (enrolamiento forzado). Ver sql/sec-staff-2fa.sql.
+  require2fa      Boolean        @default(false)
   description     String?
   plan            Plan           @default(PRO)
   // Trial — 14 días desde creación. trialStartedAt agregado en Sprint 1
@@ -1006,6 +1009,13 @@ model User {
   // deja solo el título). Valores: "clinico" | "catalogo" | "specialties" |
   // "admin". Persistente por cuenta → sobrevive logout/login y dispositivos.
   sidebarCollapsed String[] @default([])
+
+  // 2FA (TOTP) por usuario — opcional, o forzado por Clinic.require2fa.
+  // totpSecret: secret base32 (otplib). recoveryCodes: hashes bcrypt de un
+  // solo uso. Ver src/lib/auth/two-factor.ts + sql/sec-staff-2fa.sql.
+  totpSecret    String?
+  totpEnabled   Boolean  @default(false)
+  recoveryCodes String[] @default([])
 
   clinic             Clinic              @relation(fields: [clinicId], references: [id], onDelete: Cascade)
   appointments       Appointment[]
@@ -2112,6 +2122,13 @@ model AuditLog {
   userAgent  String?
   createdAt  DateTime @default(now())
 
+  // WS2-T3 — atribución del actor de la acción: "staff" (User de clínica) o
+  // "admin" (AdminUser de plataforma). actorAdminId referencia AdminUser.id SIN
+  // FK estricta (a propósito): la bitácora no se acopla al panel y los borrados
+  // de AdminUser no la rompen.
+  actorType    String?  @default("staff")
+  actorAdminId String?
+
   // NOM-024 §6.3.5 — la bitácora NO se destruye al borrar la clínica. La FK
   // real en BD es ON DELETE RESTRICT (ver sql/nom-audit-immutable.sql, aplicado
   // a mano). Se declara Restrict aquí para que el ORM no reintroduzca CASCADE.
@@ -2120,7 +2137,49 @@ model AuditLog {
 
   @@index([clinicId, entityType, entityId])
   @@index([clinicId, createdAt])
+  // Panel de auditoría (/admin/auditoria, /dashboard/auditoria): orden y filtro
+  // global por fecha y por usuario. El CREATE INDEX en BD lo aplica Rafael a
+  // mano — ver sql/audit-indexes.sql.
+  @@index([createdAt])
+  @@index([userId, createdAt])
   @@map("audit_logs")
+}
+
+// ── WS2-T3 · Sesiones de admin en DB ──────────────────────────────────────
+// Identidad real del administrador de plataforma. Sustituye la cookie global
+// única (env ADMIN_SECRET_TOKEN) por sesiones con identidad + revocación.
+// GLOBAL: NO lleva clinicId, queda fuera del RLS por clínica a propósito.
+model AdminUser {
+  id           String         @id @default(cuid())
+  email        String         @unique
+  passwordHash String
+  totpSecret   String?
+  totpEnabled  Boolean        @default(false)
+  role         String         @default("SUPER_ADMIN")
+  isActive     Boolean        @default(true)
+  createdAt    DateTime       @default(now())
+
+  sessions     AdminSession[]
+
+  @@map("admin_users")
+}
+
+// Una fila por sesión activa. En BD solo vive el sha256 del token; el token en
+// claro únicamente viaja en la cookie httpOnly del navegador del admin.
+model AdminSession {
+  id          String    @id @default(cuid())
+  adminUserId String
+  tokenHash   String    @unique
+  ipAddress   String?
+  userAgent   String?
+  createdAt   DateTime  @default(now())
+  expiresAt   DateTime
+  revokedAt   DateTime?
+
+  adminUser   AdminUser @relation(fields: [adminUserId], references: [id], onDelete: Cascade)
+
+  @@index([adminUserId])
+  @@map("admin_sessions")
 }
 
 model InventoryItem {

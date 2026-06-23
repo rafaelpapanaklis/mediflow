@@ -14,7 +14,7 @@ const MAX_ADJUST_ABS_CENTS = 5_000_000;
 // (src/lib/ai-billing/wallet.ts): upsert del monedero + asiento en el libro
 // mayor (type ADJUSTMENT, source ADMIN) con balanceAfterCents consistente.
 export async function POST(req: NextRequest) {
-  if (!isAdminAuthed()) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!(await isAdminAuthed())) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   let body: any;
   try {

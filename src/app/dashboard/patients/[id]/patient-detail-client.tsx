@@ -18,6 +18,7 @@ import { SoapEditorInline, type SoapDraft } from "@/components/dashboard/patient
 import { NoteDetailModal, type ClinicalNote } from "@/components/dashboard/patient-detail/note-detail-modal";
 import { InvoiceDetailModal } from "@/components/dashboard/billing/invoice-detail-modal";
 import { HistoriaTimeline } from "@/components/dashboard/patient-detail/historia-timeline";
+import { PatientAuditHistory } from "@/components/dashboard/patient-detail/patient-audit-history";
 import patientDetailStyles from "@/components/dashboard/patient-detail/patient-detail.module.css";
 import { DentalForm }          from "@/components/clinical/dental-form";
 import { HealthQuestionnaireTab } from "@/components/dashboard/patient-detail/health-questionnaire-tab";
@@ -1408,6 +1409,7 @@ export function PatientDetailClient({
 
           {/* ===== TAB: HISTORIA CLINICA ===== */}
           {tab === "historia" && (
+            <div className="space-y-4">
             <div className="bg-card border border-border rounded-xl p-5">
               <div className="flex items-baseline justify-between mb-4">
                 <h2 className="text-sm font-bold">{t("patients.history.title")}</h2>
@@ -1426,6 +1428,8 @@ export function PatientDetailClient({
                 onOpenTreatment={() => setTab("tratamiento")}
                 onOpenReferral={() => setTab("referencias")}
               />
+            </div>
+            <PatientAuditHistory patientId={patient.id} />
             </div>
           )}
 

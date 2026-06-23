@@ -31,7 +31,7 @@ function serialize(row: any) {
 }
 
 export async function PATCH(req: NextRequest, { params }: { params: { planId: string } }) {
-  if (!isAdminAuthed()) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!(await isAdminAuthed())) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const planId = params.planId;
   if (!isPlanId(planId)) return NextResponse.json({ error: "Plan inválido" }, { status: 400 });
