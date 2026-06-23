@@ -14,7 +14,7 @@
 // así que mover el brillo NO re-resamplea (solo regenerar la curva/slab lo hace).
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Loader2, Eraser, RefreshCw, Layers, Spline, Ruler } from "lucide-react";
+import { Loader2, Eraser, RefreshCw, Layers, Spline, Ruler, Wand2 } from "lucide-react";
 import type { Slice, ScaleInfo } from "./cbct-mpr-shared";
 import { planeGeom } from "./cbct-mpr-shared";
 import {
@@ -26,6 +26,7 @@ import {
   type Vec2,
   type VolumeRef,
 } from "./panoramic-reslice";
+import { autoDetectArch } from "./arch-autodetect";
 
 interface Props {
   slices: Slice[];
@@ -70,8 +71,15 @@ export default function PanoramicPane({ slices, scale, center, width, initialZ }
   const [pano, setPano] = useState<PanoResult | null>(null);
   const [stale, setStale] = useState(false);
   const [generating, setGenerating] = useState(false);
+  const [detecting, setDetecting] = useState(false);
+  const [autoNote, setAutoNote] = useState<string | null>(null);
 
   const dragIdx = useRef<number | null>(null);
+  // Evita que el efecto "stale" marque la pano como desactualizada justo cuando la
+  // auto-detección rellena los puntos Y regenera en el mismo lote.
+  const suppressStaleRef = useRef(false);
+  // La auto-detección de entrada al modo pano corre UNA sola vez.
+  const autoTriedRef = useRef(false);
 
   const invert = slices.length ? slices[Math.floor(depth / 2)].invert : false;
 
@@ -282,6 +290,10 @@ export default function PanoramicPane({ slices, scale, center, width, initialZ }
 
   // Cualquier cambio que afecte el reslice marca la pano como desactualizada.
   useEffect(() => {
+    if (suppressStaleRef.current) {
+      suppressStaleRef.current = false; // la auto-detección ya regeneró: no marcar stale
+      return;
+    }
     if (pano) setStale(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [controlVox, slabMm, mode]);
@@ -397,7 +409,35 @@ export default function PanoramicPane({ slices, scale, center, width, initialZ }
   };
 
   /* ------------------------------ generar ---------------------------------- */
-  const canGenerate = controlVox.length >= 3 && depth >= 2 && !generating;
+  const canGenerate = controlVox.length >= 3 && depth >= 2 && !generating && !detecting;
+
+  // Arma el VolumeRef reusando el volumen ya cargado (solo copia refs de píxeles).
+  const buildVol = useCallback(
+    (): VolumeRef => ({
+      slices: slices.map((s) => s.pixels),
+      cols,
+      rows,
+      depth,
+      sx: scale.sx,
+      sy: scale.sy,
+      sz: scale.sz,
+    }),
+    [slices, cols, rows, depth, scale.sx, scale.sy, scale.sz],
+  );
+
+  // Reslice síncrono a partir de unos puntos en vóxel (compartido por «Generar» y la
+  // auto-detección). Acepta el VolumeRef ya armado para no reconstruirlo dos veces.
+  const reslice = useCallback(
+    (ctrlVox: Vec2[], vol?: VolumeRef) => {
+      if (ctrlVox.length < 3 || depth < 2) return;
+      const v = vol ?? buildVol();
+      const ctrl = ctrlVox.map((p) => ({ x: p.x * scale.sx, y: p.y * scale.sy }));
+      const res = reslicePanoramic(v, { controlMm: ctrl, slabMm, mode });
+      setPano(res);
+      setStale(false);
+    },
+    [buildVol, depth, scale.sx, scale.sy, slabMm, mode],
+  );
 
   const generate = useCallback(() => {
     if (controlVox.length < 3 || depth < 2) return;
@@ -406,19 +446,7 @@ export default function PanoramicPane({ slices, scale, center, width, initialZ }
     requestAnimationFrame(() =>
       requestAnimationFrame(() => {
         try {
-          const vol: VolumeRef = {
-            slices: slices.map((s) => s.pixels),
-            cols,
-            rows,
-            depth,
-            sx: scale.sx,
-            sy: scale.sy,
-            sz: scale.sz,
-          };
-          const ctrl = controlVox.map((p) => ({ x: p.x * scale.sx, y: p.y * scale.sy }));
-          const res = reslicePanoramic(vol, { controlMm: ctrl, slabMm, mode });
-          setPano(res);
-          setStale(false);
+          reslice(controlVox);
         } catch {
           setPano(null);
         } finally {
@@ -426,7 +454,53 @@ export default function PanoramicPane({ slices, scale, center, width, initialZ }
         }
       }),
     );
-  }, [controlVox, slices, cols, rows, depth, scale.sx, scale.sy, scale.sz, slabMm, mode]);
+  }, [controlVox, depth, reslice]);
+
+  // Auto-detecta la curva de la arcada sobre el volumen y rellena los puntos (editables).
+  // Si autoGen, además regenera la panorámica para verla de inmediato. Cede el hilo para
+  // pintar «Detectando arcada…» antes del cómputo síncrono.
+  const runAutoDetect = useCallback(
+    (autoGen: boolean) => {
+      if (slices.length === 0 || depth < 4 || cols < 8 || rows < 8) return;
+      setDetecting(true);
+      setAutoNote(null);
+      requestAnimationFrame(() =>
+        requestAnimationFrame(() => {
+          try {
+            const vol = buildVol();
+            const mmPts = autoDetectArch(vol);
+            if (mmPts && mmPts.length >= 3) {
+              // mm de mundo → vóxel continuo del axial (misma conversión que controlMm).
+              const voxPts = mmPts.map((p) => ({
+                x: Math.min(Math.max(p.x / scale.sx, 0), cols - 1),
+                y: Math.min(Math.max(p.y / scale.sy, 0), rows - 1),
+              }));
+              if (autoGen) suppressStaleRef.current = true;
+              setControlVox(voxPts);
+              if (autoGen) reslice(voxPts, vol);
+            } else {
+              setAutoNote("No se detectó la arcada automáticamente. Trázala a mano.");
+            }
+          } catch {
+            setAutoNote("No se detectó la arcada automáticamente. Trázala a mano.");
+          } finally {
+            setDetecting(false);
+          }
+        }),
+      );
+    },
+    [buildVol, reslice, slices.length, depth, cols, rows, scale.sx, scale.sy],
+  );
+
+  // Al ENTRAR al modo pano, si no hay curva previa, auto-detecta UNA vez y, si hay
+  // puntos, auto-genera. Si devuelve null, deja el estado actual (trazado manual).
+  useEffect(() => {
+    if (autoTriedRef.current) return;
+    if (slices.length === 0 || depth < 4 || cols < 8 || rows < 8) return;
+    autoTriedRef.current = true;
+    if (controlVox.length > 0) return; // ya hay una curva → respetarla
+    runAutoDetect(true);
+  }, [slices.length, depth, cols, rows, controlVox.length, runAutoDetect]);
 
   /* -------------------------------- render --------------------------------- */
   return (
@@ -435,17 +509,31 @@ export default function PanoramicPane({ slices, scale, center, width, initialZ }
         {/* ---------- Panel 1: AXIAL de trazado ---------- */}
         <div className="flex flex-col self-start rounded-lg border border-border bg-card overflow-hidden">
           <div className="flex items-center justify-between gap-2 px-2 py-1 bg-muted/40 border-b border-border">
-            <span className="inline-flex items-center gap-1.5 text-[11px] font-mono text-foreground">
-              <Spline className="w-3.5 h-3.5" aria-hidden /> Traza la arcada (axial)
+            <span className="inline-flex items-center gap-1.5 text-[11px] font-mono text-foreground min-w-0">
+              <Spline className="w-3.5 h-3.5 flex-shrink-0" aria-hidden />
+              <span className="truncate">Traza la arcada (axial)</span>
             </span>
-            <button
-              type="button"
-              onClick={clearCurve}
-              disabled={controlVox.length === 0}
-              className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-1 rounded-md text-foreground hover:bg-muted disabled:opacity-40 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
-            >
-              <Eraser className="w-3.5 h-3.5" /> Limpiar
-            </button>
+            <div className="flex items-center gap-1 flex-shrink-0">
+              <button
+                type="button"
+                onClick={() => runAutoDetect(true)}
+                disabled={detecting || generating || depth < 4}
+                title="Detecta la curva de la arcada automáticamente (editable después)"
+                className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-1 rounded-md text-foreground hover:bg-muted disabled:opacity-40 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
+              >
+                <Wand2 className="w-3.5 h-3.5 flex-shrink-0" />
+                <span className="hidden sm:inline">Auto-detectar</span>
+              </button>
+              <button
+                type="button"
+                onClick={clearCurve}
+                disabled={controlVox.length === 0}
+                className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-1 rounded-md text-foreground hover:bg-muted disabled:opacity-40 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
+              >
+                <Eraser className="w-3.5 h-3.5 flex-shrink-0" />
+                <span className="hidden sm:inline">Limpiar</span>
+              </button>
+            </div>
           </div>
           <div
             className="relative w-full select-none"
@@ -474,10 +562,16 @@ export default function PanoramicPane({ slices, scale, center, width, initialZ }
             <div className="absolute top-2 left-2 text-[11px] font-mono text-white/90 bg-black/50 rounded px-2 py-0.5">
               Axial · {Math.min(axialZ, Math.max(depth - 1, 0)) + 1}/{depth}
             </div>
-            {controlVox.length < 3 && (
+            {controlVox.length < 3 && !detecting && (
               <div className="absolute bottom-2 left-2 right-2 text-[11px] text-white/90 bg-black/55 rounded px-2 py-1 leading-snug">
-                Haz clic para colocar puntos sobre la arcada (mínimo 3). Arrastra para mover, clic
-                derecho para borrar.
+                {autoNote && <span className="block text-amber-200 mb-0.5">{autoNote}</span>}
+                Haz clic para colocar puntos sobre la arcada (mínimo 3), o usa «Auto-detectar».
+                Arrastra para mover, clic derecho para borrar.
+              </div>
+            )}
+            {detecting && (
+              <div className="absolute inset-0 flex items-center justify-center bg-black/45 text-white">
+                <Loader2 className="w-5 h-5 animate-spin mr-2" /> Detectando arcada…
               </div>
             )}
           </div>
