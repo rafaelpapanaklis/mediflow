@@ -19,11 +19,14 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 
   if (!installmentId) return NextResponse.json({ error: "installmentId requerido" }, { status: 400 });
 
-  // Mark installment as paid
-  await prisma.planPayment.update({
-    where: { id: installmentId },
+  // Mark installment as paid — scoped to THIS plan (ya verificado por clínica)
+  // para evitar IDOR cross-tenant: sin planId, un usuario podría marcar pagada
+  // la cuota de OTRA clínica pasando su installmentId.
+  const res = await prisma.planPayment.updateMany({
+    where: { id: installmentId, planId: params.id },
     data:  { paidAt: new Date(), method: method ?? null, notes: notes ?? null },
   });
+  if (res.count === 0) return NextResponse.json({ error: "Cuota no encontrada" }, { status: 404 });
 
   // Check if all installments are paid → complete the plan
   const updated = await prisma.planPayment.findMany({ where: { planId: params.id } });
