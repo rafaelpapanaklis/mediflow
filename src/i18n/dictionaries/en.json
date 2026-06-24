@@ -1326,6 +1326,7 @@
       "cuestionario": "Health questionnaire",
       "evolucion": "SOAP notes",
       "radiografias": "X-rays",
+      "subidos": "Patient uploads",
       "modelos3d": "3D models",
       "tratamiento": "Treatment plan",
       "referencias": "Referrals",

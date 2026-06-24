@@ -34,12 +34,13 @@ import type { PacienteDocumentosResponse } from "@/lib/patient-portal/types";
 import { TabConsentimientos } from "@/components/paciente/documentos/tab-consentimientos";
 import { TabRecetas } from "@/components/paciente/documentos/tab-recetas";
 import { TabRecibos } from "@/components/paciente/documentos/tab-recibos";
+import { TabSubidos } from "@/components/paciente/documentos/tab-subidos";
 import { PacienteCard, ClinicFilterChips } from "@/components/paciente/ui";
 
 const TEXT = "rgba(255,255,255,0.92)";
 const MUTED = "rgba(255,255,255,0.55)";
 
-type DocsTab = "consentimientos" | "recetas" | "recibos";
+type DocsTab = "consentimientos" | "recetas" | "recibos" | "subidos";
 
 const retryBtn: CSSProperties = {
   background: "#7c3aed",
@@ -99,6 +100,7 @@ export default function PacienteDocumentosPage() {
     { id: "consentimientos", label: `Consentimientos (${consentimientos.length})` },
     { id: "recetas", label: "Recetas" },
     { id: "recibos", label: `Recibos de pago (${recibos.length})` },
+    { id: "subidos", label: "Mis archivos" },
   ];
 
   return (
@@ -133,6 +135,7 @@ export default function PacienteDocumentosPage() {
       {tab === "recibos" && (
         <TabRecibos recibos={recibos} clinics={clinics} clinicFilter={clinicFilter} />
       )}
+      {tab === "subidos" && <TabSubidos clinics={clinics} />}
     </PageShell>
   );
 }
