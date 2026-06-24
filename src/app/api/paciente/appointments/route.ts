@@ -338,7 +338,7 @@ export async function POST(req: NextRequest) {
             type: cleanType,
             startsAt,
             endsAt,
-            status: "PENDING",
+            status: "SCHEDULED",
             source: "PATIENT_PORTAL",
             notes: cleanNotes,
           },
@@ -458,7 +458,7 @@ export async function POST(req: NextRequest) {
       ok: true,
       appointmentId: appt.id,
       startsAt: appt.startsAt.toISOString(),
-      status: "PENDING",
+      status: "SCHEDULED",
     });
   } catch (err: any) {
     console.error("[paciente/appointments POST] error:", err);
