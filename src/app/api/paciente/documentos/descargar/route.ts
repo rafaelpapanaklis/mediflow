@@ -1,4 +1,4 @@
-// GET /api/paciente/documentos/descargar?tipo=consentimiento&id=<cuid>
+// GET /api/paciente/documentos/descargar?tipo=consentimiento|subido&id=<cuid>
 // Implementa D2 (WS1-T6). Devuelve { url } con signed URL de CORTA duración
 // (TTL default 300s de src/lib/storage.ts) generada server-side TRAS validar
 // el vínculo cuenta↔expediente. NUNCA exponer paths del bucket.
@@ -33,12 +33,34 @@ export async function GET(req: Request) {
     const { searchParams } = new URL(req.url);
     const tipo = searchParams.get("tipo");
     const id = searchParams.get("id");
-    if (tipo !== "consentimiento" || !id) {
+    if ((tipo !== "consentimiento" && tipo !== "subido") || !id) {
       return NextResponse.json({ error: "Solicitud inválida" }, { status: 400 });
     }
 
     // 404 GENÉRICO idéntico para todos los fallos — sin oráculo de ids.
     const notFound = () => NextResponse.json({ error: "No encontrado" }, { status: 404 });
+
+    // Archivo subido por el paciente (WS1-T8): valida dueño (accountId) +
+    // vínculo (clinicId/patientId en ctx.links) y firma el storageKey.
+    if (tipo === "subido") {
+      const up = await prisma.patientUpload.findUnique({
+        where: { id },
+        select: { accountId: true, clinicId: true, patientId: true, storageKey: true },
+      });
+      if (
+        !up ||
+        up.accountId !== ctx.account.id ||
+        !ctx.links.some((l) => l.patientId === up.patientId && l.clinicId === up.clinicId)
+      ) {
+        return notFound();
+      }
+      const signed = await signMaybeUrl(up.storageKey);
+      if (!signed) return notFound();
+      return NextResponse.json(
+        { url: signed },
+        { status: 200, headers: { "Cache-Control": "private, no-store" } },
+      );
+    }
 
     const form = await prisma.consentForm.findUnique({
       where: { id },

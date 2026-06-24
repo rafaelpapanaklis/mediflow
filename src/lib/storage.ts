@@ -162,6 +162,39 @@ export async function signMaybeUrls(
 }
 
 /**
+ * Sube un binario al bucket privado. `path` es el storageKey interno (nunca se
+ * expone al cliente: se firma on-demand con signMaybeUrl). `upsert: false` → no
+ * pisa un objeto existente. Lanza si Supabase devuelve error.
+ */
+export async function uploadFileToStorage(
+  path: string,
+  body: ArrayBuffer | Buffer | Uint8Array,
+  contentType: string,
+  bucket: BucketName = BUCKETS.PATIENT_FILES,
+): Promise<void> {
+  const { error } = await admin()
+    .storage.from(bucket)
+    .upload(path, body, { contentType, upsert: false });
+  if (error) {
+    throw new Error(`No se pudo subir ${bucket}/${path}: ${error.message}`);
+  }
+}
+
+/**
+ * Borra un objeto del bucket por su path interno. Lanza si Supabase devuelve
+ * error (el caller decide si es best-effort).
+ */
+export async function removeFileFromStorage(
+  path: string,
+  bucket: BucketName = BUCKETS.PATIENT_FILES,
+): Promise<void> {
+  const { error } = await admin().storage.from(bucket).remove([path]);
+  if (error) {
+    throw new Error(`No se pudo borrar ${bucket}/${path}: ${error.message}`);
+  }
+}
+
+/**
  * Compat — algunas tablas guardaban signed URLs legacy con expiración
  * `/storage/v1/object/sign/...?token=...`. Esta función las mapeaba al
  * formato `public/...` cuando el bucket aún era público.

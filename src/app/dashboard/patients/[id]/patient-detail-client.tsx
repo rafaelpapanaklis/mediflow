@@ -29,6 +29,7 @@ import { ReferralsTab } from "@/components/dashboard/patients/referrals-tab";
 import { Models3DTab } from "@/components/patient-3d/Models3DTab";
 import { QuotesTab } from "@/components/quotes/quotes-tab";
 import { PrescriptionsTab } from "@/components/dashboard/patient-detail/prescriptions-tab";
+import { PatientUploadsSection } from "@/components/patients/patient-uploads-section";
 import toast from "react-hot-toast";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -228,6 +229,7 @@ const TABS_BASE = [
   { id: "expediente",    labelKey: "patients.tabs.expediente"         },
   { id: "historial-consultas", labelKey: "patients.tabs.historialConsultas" },
   { id: "radiografias",  labelKey: "patients.tabs.radiografias"       },
+  { id: "subidos",       labelKey: "patients.tabs.subidos"            },
   { id: "modelos-3d",    labelKey: "patients.tabs.modelos3d"          },
   { id: "tratamiento",   labelKey: "patients.tabs.tratamiento"        },
   { id: "recetas",       labelKey: "patients.tabs.recetas"            },
@@ -2640,6 +2642,11 @@ export function PatientDetailClient({
           {/* ===== TAB: RECETAS ===== */}
           {tab === "recetas" && (
             <PrescriptionsTab patientId={patient.id} />
+          )}
+
+          {/* ===== TAB: SUBIDOS POR EL PACIENTE ===== */}
+          {tab === "subidos" && (
+            <PatientUploadsSection patientId={patient.id} />
           )}
 
           {/* ===== TAB: CITAS ===== */}

@@ -367,5 +367,26 @@ export interface PacienteNuevaCitaResponse {
   ok: boolean;
   appointmentId: string;
   startsAt: string; // ISO UTC
-  status: string; // "PENDING"
+  status: string; // "SCHEDULED"
+}
+
+// ── Subir documentos (WS1-T8, aditivo) ───────────────────────────────────────
+
+/** Tipo de archivo que el paciente sube (WS1-T8). Espejo del enum Prisma. */
+export type PacienteSubidoKind = "ESTUDIO" | "IDENTIFICACION" | "OTRO";
+
+/** Archivo subido por el paciente (shape de GET /api/paciente/documentos/subidos).
+ *  NUNCA incluye el storageKey: la descarga se firma on-demand. */
+export interface PacienteSubido {
+  id: string;
+  clinicId: string;
+  fileName: string;
+  fileType: string; // MIME
+  sizeBytes: number;
+  kind: PacienteSubidoKind;
+  createdAt: string; // ISO
+}
+
+export interface PacienteSubidosResponse {
+  items: PacienteSubido[]; // desc por createdAt
 }
