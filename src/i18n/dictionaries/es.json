@@ -352,14 +352,14 @@
         "one": "{count} día",
         "other": "{count} días"
       },
-      "warningSuffix": "restantes en tu prueba gratuita · Renueva tu plan para no perder el acceso",
+      "warningSuffix": "restantes · Activa tu plan para no perder el acceso",
       "ctaChooseMine": "Elegir mis módulos",
-      "promoTitle": "Prueba gratis · Acceso completo a todos los módulos",
+      "promoTitle": "Activa tu plan · Acceso completo a todos los módulos",
       "promoYouHave": "Te quedan",
-      "promoSuffix": "· Sin tarjeta · Sin compromiso"
+      "promoSuffix": "· Sin permanencia"
     },
     "trialPill": {
-      "ariaIntro": "Prueba gratis.",
+      "ariaIntro": "Activa tu plan.",
       "ariaExpiresSoon": "Vence hoy o pronto",
       "ariaDaysLeft": {
         "one": "Queda {count} día.",
@@ -367,20 +367,20 @@
       },
       "ariaClickDetails": "Click para ver detalles.",
       "expiresToday": "Hoy vence",
-      "trialLabel": "Prueba:",
+      "trialLabel": "Plan:",
       "dayUnit": {
         "one": "día",
         "other": "días"
       },
-      "popoverPlan": "Prueba gratis · Plan",
+      "popoverPlan": "Tu plan",
       "expiresInHours": "Vence en menos de {hours} h",
       "daysLeftFull": {
         "one": "Queda {count} día",
         "other": "Quedan {count} días"
       },
-      "bodyCritical": "Activa tu plan antes de que termine la prueba para no perder acceso a tus datos.",
+      "bodyCritical": "Activa tu plan para no perder acceso a tus datos.",
       "bodyUrgent": "Quedan pocos días. Activa tu plan para seguir usando DaleControl sin interrupciones.",
-      "bodyCalm": "Activa tu plan cuando quieras. Al terminar la prueba se pausa el acceso.",
+      "bodyCalm": "Activa tu plan cuando quieras. Sin él, el acceso se pausa.",
       "activateNow": "Activar plan ahora",
       "remindTomorrow": "Recordarme mañana",
       "urgentBadge": "Urgente",
@@ -800,7 +800,7 @@
       "planUpdatedToast": "Plan actualizado a {plan}",
       "errChangePlanGeneric": "Error al cambiar plan",
       "statusActive": "Suscripción activa",
-      "statusTrial": "Prueba gratis",
+      "statusTrial": "Por activar",
       "statusTrialExpired": "Prueba expirada",
       "statusNone": "Sin suscripción",
       "yourPlan": "Tu plan",
@@ -814,7 +814,7 @@
       "oneDayLeft": "1 día restante",
       "daysLeftOfTotal": "{days} días restantes de {total}",
       "endsOn": "Termina el {date}",
-      "trialExpiredNotice": "Tu prueba gratis expiró el {date}. Activa tu suscripción para recuperar acceso.",
+      "trialExpiredNotice": "Tu acceso expiró el {date}. Activa tu suscripción para recuperarlo.",
       "changePlanTitle": "Cambiar plan",
       "changePlanDescSub": "El cambio se aplica de inmediato con prorrateo automático del periodo en curso.",
       "changePlanDescCheckout": "Cambiaremos tu plan ahora; el cobro se realiza cuando actives tu plan.",
@@ -7528,7 +7528,7 @@
       "removeFromCart": "Eliminar {name} del carrito",
       "title": "Marketplace de módulos",
       "subtitleExpired": "Tu prueba terminó. Activa los módulos que necesitas para continuar.",
-      "subtitleTrial": "Estás probando todos los módulos gratis. Compra los que más uses para conservarlos después del día 14.",
+      "subtitleTrial": "Activa tu plan y conserva los módulos que más uses.",
       "subtitleDefault": "Activa los módulos que necesitas para tu clínica.",
       "addError": "No se pudo agregar al carrito",
       "removeError": "No se pudo quitar del carrito",

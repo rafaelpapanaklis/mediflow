@@ -101,7 +101,7 @@ export const pricingPlans: PricingPlan[] = [
     price: "$499",
     period: "/mes",
     features: ["1 profesional", "200 pacientes", "Agenda completa", "Expediente clínico", "Facturación básica", "Soporte por email"],
-    cta: "Empezar 14 días gratis",
+    cta: "Crear mi cuenta",
     highlighted: false,
   },
   {
@@ -110,7 +110,7 @@ export const pricingPlans: PricingPlan[] = [
     price: "$999",
     period: "/mes",
     features: ["Hasta 5 profesionales", "Pacientes ilimitados", "Todo lo del Básico", "Fotos antes/después", "Paquetes y membresías", "WhatsApp bidireccional", "Soporte prioritario"],
-    cta: "Empezar 14 días gratis",
+    cta: "Crear mi cuenta",
     highlighted: true,
   },
   {
@@ -119,7 +119,7 @@ export const pricingPlans: PricingPlan[] = [
     price: "$2,499",
     period: "/mes",
     features: ["Profesionales ilimitados", "Todo lo del Profesional", "Múltiples sucursales", "Inventario avanzado", "Reportes y analytics", "API access", "Soporte 24/7"],
-    cta: "Empezar 14 días gratis",
+    cta: "Crear mi cuenta",
     highlighted: false,
   },
 ];

@@ -64,7 +64,7 @@ export async function sendEmail(payload: EmailPayload): Promise<{ delivered: boo
 }
 
 /**
- * Email de bienvenida post-signup. Incluye fecha formateada de fin de trial.
+ * Email de bienvenida post-signup (modelo sin prueba gratis: se paga para activar).
  */
 export async function sendWelcomeEmail(opts: {
   email: string;
@@ -73,12 +73,7 @@ export async function sendWelcomeEmail(opts: {
   trialEndsAt: Date;
   dashboardUrl: string;
 }) {
-  const { email, firstName, clinicName, trialEndsAt, dashboardUrl } = opts;
-  const trialDate = trialEndsAt.toLocaleDateString("es-MX", {
-    day: "numeric",
-    month: "long",
-    year: "numeric",
-  });
+  const { email, firstName, clinicName, dashboardUrl } = opts;
 
   const html = `
 <!doctype html>
@@ -97,10 +92,10 @@ export async function sendWelcomeEmail(opts: {
 
     <div style="padding: 18px 20px; background: rgba(124,58,237,0.1); border: 1px solid rgba(124,58,237,0.3); border-radius: 10px; margin: 24px 0;">
       <div style="font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: #a78bfa; font-weight: 600; margin-bottom: 6px;">
-        Prueba gratis · 14 días
+        Activa tu plan
       </div>
       <div style="font-size: 14px; color: rgba(245,245,247,0.85); line-height: 1.5;">
-        Tu prueba termina el <strong style="color: #f5f5f7;">${trialDate}</strong>. Acceso completo a todos los módulos sin cargo hasta entonces.
+        Elige tu plan para activar tu cuenta y desbloquear todos los módulos.
       </div>
     </div>
 
@@ -114,7 +109,7 @@ export async function sendWelcomeEmail(opts: {
         <li>Agrega tu primer paciente desde el módulo <em>Pacientes</em>.</li>
         <li>Agenda tu primera cita con la integración de WhatsApp.</li>
         <li>Configura tu RFC emisor si vas a facturar CFDI.</li>
-        <li>Invita a tu equipo (hasta ${"{clinicSize}"} miembros según tu plan).</li>
+        <li>Invita a tu equipo según tu plan.</li>
       </ul>
     </div>
 
@@ -133,7 +128,7 @@ export async function sendWelcomeEmail(opts: {
   const text =
     `¡Bienvenido${firstName ? `, ${firstName}` : ""}!\n\n` +
     `Tu cuenta de DaleControl está lista y tu clínica "${clinicName}" ya puede empezar a operar.\n\n` +
-    `Prueba gratis de 14 días — termina el ${trialDate}.\n\n` +
+    `Activa tu plan para empezar a usar todos los módulos.\n\n` +
     `Accede a tu dashboard: ${dashboardUrl}\n\n` +
     `Tips para empezar:\n` +
     `• Agrega tu primer paciente desde Pacientes\n` +
@@ -145,7 +140,7 @@ export async function sendWelcomeEmail(opts: {
 
   await sendEmail({
     to: email,
-    subject: "Bienvenido a DaleControl · Tu prueba de 14 días empieza hoy",
+    subject: "Bienvenido a DaleControl · Activa tu plan",
     html,
     text,
   });

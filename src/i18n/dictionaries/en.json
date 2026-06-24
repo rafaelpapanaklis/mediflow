@@ -352,14 +352,14 @@
         "one": "{count} day",
         "other": "{count} days"
       },
-      "warningSuffix": "left in your free trial · Renew your plan to keep your access",
+      "warningSuffix": "left · Activate your plan to keep your access",
       "ctaChooseMine": "Choose my modules",
-      "promoTitle": "Free trial · Full access to all modules",
+      "promoTitle": "Activate your plan · Full access to all modules",
       "promoYouHave": "You have",
-      "promoSuffix": "left · No card · No commitment"
+      "promoSuffix": "left · No lock-in"
     },
     "trialPill": {
-      "ariaIntro": "Free trial.",
+      "ariaIntro": "Activate your plan.",
       "ariaExpiresSoon": "Expires today or soon",
       "ariaDaysLeft": {
         "one": "{count} day left.",
@@ -367,20 +367,20 @@
       },
       "ariaClickDetails": "Click to see details.",
       "expiresToday": "Expires today",
-      "trialLabel": "Trial:",
+      "trialLabel": "Plan:",
       "dayUnit": {
         "one": "day",
         "other": "days"
       },
-      "popoverPlan": "Free trial · Plan",
+      "popoverPlan": "Your plan",
       "expiresInHours": "Expires in less than {hours} h",
       "daysLeftFull": {
         "one": "{count} day left",
         "other": "{count} days left"
       },
-      "bodyCritical": "Activate your plan before the trial ends so you don't lose access to your data.",
+      "bodyCritical": "Activate your plan so you don't lose access to your data.",
       "bodyUrgent": "Only a few days left. Activate your plan to keep using DaleControl without interruptions.",
-      "bodyCalm": "Activate your plan whenever you want. When the trial ends, access is paused.",
+      "bodyCalm": "Activate your plan whenever you want. Without it, access is paused.",
       "activateNow": "Activate plan now",
       "remindTomorrow": "Remind me tomorrow",
       "urgentBadge": "Urgent",
@@ -800,7 +800,7 @@
       "planUpdatedToast": "Plan updated to {plan}",
       "errChangePlanGeneric": "Error changing plan",
       "statusActive": "Active subscription",
-      "statusTrial": "Free trial",
+      "statusTrial": "To activate",
       "statusTrialExpired": "Trial expired",
       "statusNone": "No subscription",
       "yourPlan": "Your plan",
@@ -814,7 +814,7 @@
       "oneDayLeft": "1 day left",
       "daysLeftOfTotal": "{days} days left of {total}",
       "endsOn": "Ends on {date}",
-      "trialExpiredNotice": "Your free trial expired on {date}. Activate your subscription to regain access.",
+      "trialExpiredNotice": "Your access expired on {date}. Activate your subscription to restore it.",
       "changePlanTitle": "Change plan",
       "changePlanDescSub": "The change applies immediately with automatic proration of the current period.",
       "changePlanDescCheckout": "We'll change your plan now; billing happens when you activate your plan.",
@@ -7528,7 +7528,7 @@
       "removeFromCart": "Remove {name} from cart",
       "title": "Module marketplace",
       "subtitleExpired": "Your trial has ended. Activate the modules you need to continue.",
-      "subtitleTrial": "You're trying all modules for free. Buy the ones you use most to keep them after day 14.",
+      "subtitleTrial": "Activate your plan and keep the modules you use most.",
       "subtitleDefault": "Activate the modules your clinic needs.",
       "addError": "Couldn't add to cart",
       "removeError": "Couldn't remove from cart",
