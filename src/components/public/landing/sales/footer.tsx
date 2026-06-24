@@ -40,7 +40,7 @@ export function SalesFooter() {
           <div className="mfh-foot__col">
             <h4>Legal</h4>
             <Link href="/legal/privacy">Aviso de privacidad</Link>
-            <a href="/#precios">Términos del servicio</a>
+            <Link href="/terminos">Términos del servicio</Link>
             <a href="/#producto">CFDI 4.0 · NOM-024</a>
           </div>
         </div>
