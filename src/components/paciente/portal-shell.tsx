@@ -26,6 +26,7 @@ import {
   LogOut,
 } from "lucide-react";
 import { Logo } from "@/components/public/landing/primitives/logo";
+import { NotifBell } from "@/components/paciente/notif-bell";
 import type { PacienteMe } from "@/lib/patient-portal/types";
 
 export interface PacientePortalShellProps {
@@ -177,6 +178,9 @@ export function PacientePortalShell({ me, children }: PacientePortalShellProps) 
               </Link>
             );
           })}
+          {/* Notificaciones: item extra con campana + badge de no leídas.
+              Fuera de NAV_ITEMS para no agregarlo al bottom-nav (clamp 320px). */}
+          <NotifBell variant="sidebar" />
         </nav>
 
         {/* Paciente + cerrar sesión */}
@@ -318,6 +322,9 @@ export function PacientePortalShell({ me, children }: PacientePortalShellProps) 
           >
             {firstName}
           </span>
+          {/* Campana móvil: en el topbar (NO en el bottom-nav) para no romper
+              el clamp de 320px del bottom-nav de 6 ítems. */}
+          <NotifBell variant="topbar" />
           <button
             type="button"
             onClick={handleLogout}
