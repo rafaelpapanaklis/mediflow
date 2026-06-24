@@ -29,6 +29,7 @@ import {
   Ruler,
   Crosshair,
   Pipette,
+  Spline,
   Maximize2,
   Minimize2,
 } from "lucide-react";
@@ -59,6 +60,17 @@ const Dicom3DVolume = dynamic(() => import("./Dicom3DVolume"), {
   loading: () => (
     <div className="flex items-center justify-center text-muted-foreground" style={{ height: 460 }}>
       <Loader2 className="w-5 h-5 animate-spin mr-2" /> Preparando volumen 3D…
+    </div>
+  ),
+});
+
+// Modo Panorámica (reslice curvo de la arcada) — F4, pieza 1. Dinámico: no carga
+// la matemática del reslice hasta que el doctor entra a ese modo.
+const PanoramicPane = dynamic(() => import("./PanoramicPane"), {
+  ssr: false,
+  loading: () => (
+    <div className="flex items-center justify-center text-muted-foreground" style={{ height: 420 }}>
+      <Loader2 className="w-5 h-5 animate-spin mr-2" /> Preparando panorámica…
     </div>
   ),
 });
@@ -295,6 +307,10 @@ export default function DicomSetViewer({ url, name, fileId, patientId, initialNo
   // Layout: null = rejilla 2×2; o el cuadrante maximizado.
   const [maximized, setMaximized] = useState<PlaneKey | "volume" | null>(null);
   const [resetNonce, setResetNonce] = useState(0);
+
+  // Modo de vista: rejilla MPR 2×2 (por defecto) o Panorámica (reslice curvo). El
+  // modo pano es ADITIVO: no altera el MPR, solo lo sustituye mientras está activo.
+  const [viewMode, setViewMode] = useState<"mpr" | "pano">("mpr");
 
   const [notes, setNotes] = useState(initialNotes);
   const [savingNotes, setSavingNotes] = useState(false);
@@ -605,44 +621,66 @@ export default function DicomSetViewer({ url, name, fileId, patientId, initialNo
       {/* Barra de control: herramientas + guías + presets de ventana + ajuste fino. */}
       <div className="flex flex-col gap-2 bg-muted/40 rounded-lg p-2 border border-border">
         <div className="flex items-center justify-between gap-2 flex-wrap">
-          <div
-            className="inline-flex items-center gap-1 p-1 rounded-lg bg-background/60 border border-border"
-            role="group"
-            aria-label="Herramienta de imagen"
-          >
-            {TOOLS.map((t) => {
-              const active = tool === t.key;
-              return (
-                <button
-                  key={t.key}
-                  type="button"
-                  aria-pressed={active}
-                  onClick={() => setTool(t.key)}
-                  className={`text-xs font-semibold px-2.5 py-1.5 rounded-md inline-flex items-center gap-1.5 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 ${
-                    active ? "bg-brand-600 text-white shadow-sm" : "text-foreground hover:bg-muted"
-                  }`}
-                >
-                  {toolIcon(t.key)}
-                  {t.label}
-                </button>
-              );
-            })}
-          </div>
+          {viewMode === "mpr" ? (
+            <div
+              className="inline-flex items-center gap-1 p-1 rounded-lg bg-background/60 border border-border"
+              role="group"
+              aria-label="Herramienta de imagen"
+            >
+              {TOOLS.map((t) => {
+                const active = tool === t.key;
+                return (
+                  <button
+                    key={t.key}
+                    type="button"
+                    aria-pressed={active}
+                    onClick={() => setTool(t.key)}
+                    className={`text-xs font-semibold px-2.5 py-1.5 rounded-md inline-flex items-center gap-1.5 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 ${
+                      active ? "bg-brand-600 text-white shadow-sm" : "text-foreground hover:bg-muted"
+                    }`}
+                  >
+                    {toolIcon(t.key)}
+                    {t.label}
+                  </button>
+                );
+              })}
+            </div>
+          ) : (
+            <span className="inline-flex items-center gap-1.5 text-[11px] text-muted-foreground px-1">
+              <Spline className="w-3.5 h-3.5" aria-hidden /> Modo panorámica — traza la arcada sobre el axial
+            </span>
+          )}
 
           <div className="flex items-center gap-2 flex-wrap">
+            {/* Cambio de modo: rejilla MPR ↔ Panorámica (reslice curvo de la arcada). */}
             <button
               type="button"
-              aria-pressed={showGuides}
-              onClick={() => setShowGuides((v) => !v)}
+              aria-pressed={viewMode === "pano"}
+              onClick={() => setViewMode((m) => (m === "pano" ? "mpr" : "pano"))}
               className={`text-[11px] font-semibold px-2.5 py-1.5 rounded-md inline-flex items-center gap-1.5 border transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 ${
-                showGuides
+                viewMode === "pano"
                   ? "bg-brand-600 text-white border-brand-600"
                   : "bg-background/60 text-foreground border-border hover:bg-muted"
               }`}
-              title="Mostrar u ocultar las guías de la cruz sincronizada"
+              title="Reconstrucción panorámica (reslice curvo de la arcada)"
             >
-              <Crosshair className="w-3.5 h-3.5" /> Guías
+              <Spline className="w-3.5 h-3.5" /> {viewMode === "pano" ? "Vista MPR" : "Panorámica"}
             </button>
+            {viewMode === "mpr" && (
+              <button
+                type="button"
+                aria-pressed={showGuides}
+                onClick={() => setShowGuides((v) => !v)}
+                className={`text-[11px] font-semibold px-2.5 py-1.5 rounded-md inline-flex items-center gap-1.5 border transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 ${
+                  showGuides
+                    ? "bg-brand-600 text-white border-brand-600"
+                    : "bg-background/60 text-foreground border-border hover:bg-muted"
+                }`}
+                title="Mostrar u ocultar las guías de la cruz sincronizada"
+              >
+                <Crosshair className="w-3.5 h-3.5" /> Guías
+              </button>
+            )}
             <button
               type="button"
               onClick={reset}
@@ -709,8 +747,10 @@ export default function DicomSetViewer({ url, name, fileId, patientId, initialNo
         </div>
       </div>
 
-      {/* Rejilla 2×2 (Axial · Coronal · Sagital · Volumen 3D) o el cuadrante maximizado. */}
-      {maximized === "volume" ? (
+      {/* Panorámica (reslice curvo) o rejilla 2×2 (Axial·Coronal·Sagital·Volumen 3D). */}
+      {viewMode === "pano" ? (
+        <PanoramicPane slices={slices} scale={scale} center={center} width={width} initialZ={cross.z} />
+      ) : maximized === "volume" ? (
         volumeCell
       ) : maximizedPlane ? (
         renderPane(maximizedPlane, 620)
@@ -734,7 +774,7 @@ export default function DicomSetViewer({ url, name, fileId, patientId, initialNo
         </span>
       </p>
 
-      {status === "ready" && (
+      {status === "ready" && viewMode === "mpr" && (
         <p className="text-[10px] text-muted-foreground">
           {slices.length} cortes · cruz sincronizada en mm · rueda = navegar cortes · Ctrl/⌘+rueda = zoom · doble clic =
           centrar.
