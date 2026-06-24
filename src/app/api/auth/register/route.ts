@@ -3,7 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
 import { getPlanLimits } from "@/lib/plans";
 import { z } from "zod";
-import { rateLimit } from "@/lib/rate-limit";
+import { persistentRateLimit, failbanGuard, recordAuthFailure, recordAuthSuccess, AUTH_FLOOD_RATE_LIMIT } from "@/lib/failban";
 import { sendWelcomeEmail } from "@/lib/email";
 import { SITE_URL } from "@/lib/seo";
 import { logError } from "@/lib/safe-log";
@@ -48,8 +48,13 @@ async function generateSlug(name: string) {
 }
 
 export async function POST(req: NextRequest) {
-  const rl = rateLimit(req, 5); // 5 requests per minute per IP
+  // Anti-flood GENEROSO por IP: el lockout (5.º fallo + backoff) corta antes.
+  const rl = await persistentRateLimit(req, AUTH_FLOOD_RATE_LIMIT);
   if (rl) return rl;
+
+  // Lockout por fallos (por IP — el email aún no se ha parseado).
+  const locked = await failbanGuard(req, { scope: "auth-register" });
+  if (locked) return locked;
 
   try {
     const body = await req.json();
@@ -58,7 +63,10 @@ export async function POST(req: NextRequest) {
 
     if (data.slug) {
       const existing = await prisma.clinic.findUnique({ where: { slug: data.slug } });
-      if (existing) return NextResponse.json({ error: "Ese subdominio ya está en uso" }, { status: 400 });
+      if (existing) {
+        await recordAuthFailure(req, { scope: "auth-register", account: data.email });
+        return NextResponse.json({ error: "Ese subdominio ya está en uso" }, { status: 400 });
+      }
     }
 
     const { data: authData, error: authError } = await supabase.auth.signUp({
@@ -66,6 +74,8 @@ export async function POST(req: NextRequest) {
       options: { data: { first_name: data.firstName, last_name: data.lastName } },
     });
     if (authError || !authData.user) {
+      // Incluye "email ya registrado" de Supabase → frena enumeración por alta.
+      await recordAuthFailure(req, { scope: "auth-register", account: data.email });
       return NextResponse.json({ error: authError?.message ?? "Error al crear cuenta" }, { status: 400 });
     }
 
@@ -288,6 +298,9 @@ export async function POST(req: NextRequest) {
         clinicName: data.clinicName,
       }).catch(err => logError("[register] affiliate referral email failed:", err));
     }
+
+    // Alta exitosa → resetea contadores de fallo (IP + cuenta).
+    await recordAuthSuccess(req, { scope: "auth-register", account: data.email });
 
     return NextResponse.json({
       success: true,

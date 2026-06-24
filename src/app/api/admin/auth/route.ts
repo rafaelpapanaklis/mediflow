@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createHmac } from "crypto";
-import { rateLimit } from "@/lib/rate-limit";
+import { persistentRateLimit, failbanGuard, recordAuthFailure, recordAuthSuccess, AUTH_FLOOD_RATE_LIMIT } from "@/lib/failban";
 import { extractAuditMeta } from "@/lib/audit";
 import {
   ADMIN_COOKIE,
@@ -57,15 +57,23 @@ function verifyTOTP(token: string, secret: string): boolean {
  * WS2-T3 · Login admin contra AdminUser (BD) + sesión real.
  *
  * Mantiene el contrato de 2 pasos del formulario (step: "password" | "totp"),
- * el rate-limit (3/15min) y el delay anti-bruteforce. La UI no pide email: se
+ * el rate-limit anti-flood (15/60s), el lockout con backoff (al 5.º fallo) y el
+ * delay anti-bruteforce. La UI no pide email: se
  * identifica al admin por contraseña (bcrypt) entre los admins activos. Al éxito
  * se crea una AdminSession y la cookie admin_token lleva el token ALEATORIO en
  * claro (httpOnly, 8h) — su sha256 vive en BD.
  */
 export async function POST(req: NextRequest) {
   try {
-    const rl = rateLimit(req, 3, 15 * 60 * 1000);
+    // Anti-flood GENEROSO: NO debe cortar antes que el lockout. La fuerza bruta
+    // la frena el lockout de abajo (5.º fallo + backoff), no este límite.
+    const rl = await persistentRateLimit(req, AUTH_FLOOD_RATE_LIMIT);
     if (rl) return rl;
+
+    // Lockout por fallos. En el paso "password" el admin aún no está
+    // identificado (la UI no pide usuario), así que el guard es por IP.
+    const locked = await failbanGuard(req, { scope: "admin-auth" });
+    if (locked) return locked;
 
     const { step, password, totp } = await req.json();
     const pwd = String(password ?? "");
@@ -83,6 +91,7 @@ export async function POST(req: NextRequest) {
     if (step === "password") {
       const admin = await findAdminByPassword(pwd);
       if (!admin) {
+        await recordAuthFailure(req, { scope: "admin-auth" });
         await new Promise((r) => setTimeout(r, 1000)); // anti-bruteforce
         return NextResponse.json({ error: "Contraseña incorrecta" }, { status: 401 });
       }
@@ -91,11 +100,16 @@ export async function POST(req: NextRequest) {
 
     if (step === "totp") {
       const admin = await findAdminByPassword(pwd);
-      if (!admin) return NextResponse.json({ error: "Sesión inválida" }, { status: 401 });
+      if (!admin) {
+        await recordAuthFailure(req, { scope: "admin-auth" });
+        return NextResponse.json({ error: "Sesión inválida" }, { status: 401 });
+      }
 
       // TOTP por usuario: si el admin tiene 2FA habilitado es obligatorio.
       if (admin.totpEnabled) {
         if (!admin.totpSecret || !verifyTOTP(String(totp ?? ""), admin.totpSecret)) {
+          // Ya conocemos al admin → cuenta el fallo por IP y por cuenta.
+          await recordAuthFailure(req, { scope: "admin-auth", account: admin.id });
           return NextResponse.json({ error: "Código 2FA incorrecto o expirado" }, { status: 401 });
         }
       }
@@ -108,6 +122,8 @@ export async function POST(req: NextRequest) {
 
       const response = NextResponse.json({ ok: true });
       response.cookies.set(ADMIN_COOKIE, token, adminCookieOptions());
+      // Login completo OK → resetea contadores de fallo (IP + cuenta).
+      await recordAuthSuccess(req, { scope: "admin-auth", account: admin.id });
       return response;
     }
 

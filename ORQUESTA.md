@@ -1,4 +1,50 @@
 ═══════════════════════════════════════════════════════════════════════════
+## SEC-FAILBAN-FIX — Rate-limit (anti-flood) ≠ lockout (anti-fuerza-bruta) ✅ (2026-06-23) · rama feat/sec-failban (NO main)
+═══════════════════════════════════════════════════════════════════════════
+COMMIT: 67f114a2 · BUILD EXIT 0 (✓ Compiled successfully; solo el ruido conocido
+prisma:error DATABASE_URL del SSG sin env). NO mergeado a main: pendiente review + QA.
+
+PROBLEMA (QA): en /api/admin/auth el persistentRateLimit era { limit: 3, windowSec: 15min },
+que disparaba al 4.º request — ANTES del lockout (threshold 5). El usuario veía "Demasiados
+intentos" al 4.º fallo y el lockout con backoff nunca llegaba a actuar. Rate-limit (anti-flood)
+y lockout (anti-fuerza-bruta) se estaban solapando.
+
+DECISIÓN / DISEÑO:
+  - El rate-limit (persistentRateLimit, por IP, ventana deslizante) es ANTI-FLOOD: generoso.
+    Un humano que se equivoca de contraseña NO debe chocar con él.
+  - La fuerza bruta la controla el LOCKOUT (failbanGuard + recordAuthFailure): threshold 5 /
+    15min con backoff exponencial (60s → 30min). Ese es el que bloquea (al 5.º fallo).
+  - Invariante: rate-limit.limit >> lockout.threshold (5) → el lockout corta SIEMPRE primero en
+    el camino de fallos; el rate-limit solo frena ráfagas/DoS que NO cuentan como fallo.
+  - Constante compartida nueva en src/lib/failban.ts (documentada para no volver a bajarla):
+      export const AUTH_FLOOD_RATE_LIMIT = { limit: 15, windowSec: 60 };  // 15/60s
+
+LÍMITES NUEVOS POR ENDPOINT (rate-limit anti-flood → quién corta primero):
+  - /api/admin/auth        3/15min → 15/60s | lockout 5/15min | + delay 1s anti-bruteforce (conservado)
+  - /api/paciente/login    8/60s   → 15/60s | lockout 5/15min
+  - /api/paciente/verify   10/60s  → 15/60s | lockout 5/15min (+ gate DB verifyAttempts)
+  - /api/auth/register     5/60s   → 15/60s | lockout 5/15min (por IP)
+  - /api/auth/check-email  10/60s  → 15/60s | lockout 60/15min (CHECK_EMAIL_POLICY, anti-enumeración)
+  - /api/auth/login-attempt 30/60s (SIN cambio) | lockout 5/15min
+        → se deja en 30: cada intento de login llama este endpoint varias veces
+          (check + fail/success); 30 sigue MUY por encima del threshold 5.
+
+RESULTADO ESPERADO (admin): fallos 1–4 → "Contraseña incorrecta"; 5.º fallo → lockout y desde
+ahí 429 con Retry-After (backoff creciente). Coherencia verificada en el resto: el rate-limit ya
+no corta antes que el lockout en ningún endpoint de credenciales.
+
+NOTA check-email: su lockout es 60/15min (anti-enumeración, no es "5 strikes"). Ahí rate-limit
+(15/60s, anti-ráfaga) y lockout (60/15min, anti-escaneo sostenido) son capas COMPLEMENTARIAS, no
+solapadas — no hay UX de backoff por contraseña que romper.
+
+ARCHIVOS: src/lib/failban.ts (constante) + los 6 routes. 7 files, +41/-15.
+
+🔴 PENDIENTE DE RAFAEL:
+  - Review + QA del flujo (idealmente con Upstash configurado para probar la persistencia real;
+    sin UPSTASH_* el failban cae a memoria por instancia — degradado pero funcional).
+  - Merge a main SOLO tras QA OK.
+
+═══════════════════════════════════════════════════════════════════════════
 ## IMPORT→MAIN — Integración a main: import (fix UX mapeo) + saldo a favor + buscador ✅ EN MAIN (2026-06-22)
 ═══════════════════════════════════════════════════════════════════════════
 OBJETIVO: dejar en main (producción) DOS arreglos de forma segura — el wizard
