@@ -28,12 +28,16 @@ import { prisma } from "@/lib/prisma";
 import { sendWhatsAppMessage } from "@/lib/whatsapp";
 import { sendEmail } from "@/lib/email";
 import { formatApptDateParts } from "@/lib/reminders/config";
+import { createPatientNotification } from "@/lib/patient-notifications/create";
 
 export async function notifyPatientChangeResolution(changeRequestId: string): Promise<void> {
   try {
     const cr = await prisma.appointmentChangeRequest.findUnique({
       where: { id: changeRequestId },
       select: {
+        clinicId: true,
+        patientId: true,
+        accountId: true,
         type: true,
         status: true,
         resolutionNote: true,
@@ -127,6 +131,22 @@ export async function notifyPatientChangeResolution(changeRequestId: string): Pr
         console.error("[appointment-change notify]", e);
       }
     }
+
+    // Centro de notificaciones in-app del portal (además de WA/email).
+    // createPatientNotification es best-effort: jamás lanza.
+    await createPatientNotification({
+      clinicId: cr.clinicId,
+      patientId: cr.patientId,
+      accountId: cr.accountId,
+      type: "APPOINTMENT_CHANGE",
+      title:
+        cr.status === "APPROVED" && cr.type === "RESCHEDULE"
+          ? "Tu cita fue reagendada"
+          : cr.status === "APPROVED" && cr.type === "CANCEL"
+            ? "Tu cita fue cancelada"
+            : "Sobre tu solicitud de cambio",
+      body: message.replace(/\*/g, ""),
+    });
   } catch (e) {
     console.error("[appointment-change notify]", e);
   }

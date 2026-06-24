@@ -182,6 +182,7 @@ model Clinic {
   treatments           TreatmentPlan[]
   paymentPlans         PaymentPlan[]
   patientCredits       PatientCredit[]
+  patientNotifications PatientNotification[]
   consentForms         ConsentForm[]
   periodontalRecords   PeriodontalRecord[]
   subscriptionInvoices SubscriptionInvoice[]
@@ -1196,6 +1197,7 @@ model Patient {
   patientReminders    Reminder[]
   referrals           Referral[]
   accountLinks        PatientAccountLink[]
+  notifications       PatientNotification[]
 
   // Pediatrics module — see docs/marketplace/research/odontopediatria/SPEC.md §5
   pediatricRecord      PediatricRecord?
@@ -6861,10 +6863,44 @@ model PatientAccount {
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
-  links    PatientAccountLink[]
-  sessions PatientAccountSession[]
+  // Preferencias de notificación del paciente (canal + anticipación). null =
+  // usar la configuración de recordatorios de la clínica (sin override). El
+  // cron de recordatorios las respeta. Ver src/lib/patient-notifications.
+  notifPrefs Json?
+
+  links         PatientAccountLink[]
+  sessions      PatientAccountSession[]
+  notifications PatientNotification[]
 
   @@map("patient_accounts")
+}
+
+/// Centro de notificaciones del paciente (portal): recordatorios de cita,
+/// resoluciones de cambios de cita y, a futuro, mensajes. Multi-tenant por
+/// clinicId+patientId (el portal filtra por los patientId de PatientAccountLink
+/// de la sesión). dedupeKey da idempotencia al cron de recordatorios (una por
+/// cita+momento "<appointmentId>:<offsetMin>"); null en eventos únicos.
+/// SQL a mano: sql/patient-notifications.sql.
+model PatientNotification {
+  id        String    @id @default(cuid())
+  clinicId  String
+  patientId String
+  accountId String?
+  type      String // "APPOINTMENT_REMINDER" | "APPOINTMENT_CHANGE" | "MESSAGE"
+  title     String
+  body      String    @db.Text
+  dedupeKey String? // cron: "<appointmentId>:<offsetMin>"; null = evento único
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  clinic  Clinic          @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  patient Patient         @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  account PatientAccount? @relation(fields: [accountId], references: [id], onDelete: SetNull)
+
+  @@unique([patientId, dedupeKey])
+  @@index([patientId, createdAt(sort: Desc)])
+  @@index([accountId, readAt])
+  @@map("patient_notifications")
 }
 
 model PatientAccountLink {
