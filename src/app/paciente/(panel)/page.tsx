@@ -24,6 +24,7 @@ import {
   formatMxn,
   formatFechaHora,
 } from "@/components/paciente/ui";
+import { ResenaPostcita } from "@/components/paciente/resena-postcita";
 
 const QUICK_LINKS = [
   { href: "/paciente/citas", label: "Citas", Icon: CalendarDays },
@@ -138,6 +139,8 @@ export default function PacienteInicioPage() {
           Este es el resumen de tu salud
         </p>
       </header>
+
+      <ResenaPostcita />
 
       <div style={GRID_STYLE}>
         <PacienteCard title="Próximas citas">

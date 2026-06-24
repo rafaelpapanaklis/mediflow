@@ -115,6 +115,36 @@ export interface ReviewInviteView {
   serviceName: string | null;
 }
 
+// ── Portal del paciente: calificar visitas (post-cita) ─────────────────────
+
+/**
+ * Una cita COMPLETADA del paciente y, si existe, el estado de su reseña.
+ * `status` null = aún no hay fila de reseña; `rating`/`comment` solo si ya la
+ * calificó. La UI antepone "Dr(a)." a `doctorName`.
+ */
+export interface PatientReviewItemDTO {
+  appointmentId: string;
+  clinicId: string;
+  clinicName: string;
+  clinicSlug: string;
+  doctorName: string;
+  type: string;
+  date: string; // ISO (startsAt)
+  rating: number | null;
+  comment: string | null;
+  status: ReviewStatus | null;
+}
+
+/**
+ * GET /api/paciente/resenas → visitas por calificar (`pending`) y ya calificadas
+ * (`done`). El portal solo necesita `pending` para la tarjeta; `done` cubre el
+ * "saber qué citas ya tienen reseña".
+ */
+export interface PatientReviewablesResponse {
+  pending: PatientReviewItemDTO[];
+  done: PatientReviewItemDTO[];
+}
+
 // ── Helpers cliente-seguros ────────────────────────────────────────────────
 
 /** "María" + "López Hernández" → "María L." (privacidad estilo Doctoralia). */

@@ -1,12 +1,15 @@
 import "server-only";
+import crypto from "crypto";
 import { prisma } from "@/lib/prisma";
 import {
   REVIEW_PAGE_SIZE,
   REVIEW_STATUS,
+  REVIEW_TOKEN_TTL_DAYS,
   REVIEW_MAX_COMMENT_CHARS,
   REVIEW_MAX_RESPONSE_CHARS,
   REVIEW_MAX_REPORT_REASON_CHARS,
   ReviewError,
+  buildAuthorName,
   clampRating,
   roundAvg,
   type AdminReviewDTO,
@@ -15,6 +18,8 @@ import {
   type PublicReviewDTO,
   type PublicReviewsResponse,
   type AdminReviewsResponse,
+  type PatientReviewItemDTO,
+  type PatientReviewablesResponse,
   type ReviewInviteView,
   type ReviewStatus,
   type ReviewSummary,
@@ -429,4 +434,166 @@ export async function adminModerateReview(
         : { status: REVIEW_STATUS.PUBLISHED, reported: false, reportedReason: null, reportedAt: null },
   });
   return { ok: true };
+}
+
+// ── Portal del paciente: calificar visitas completadas (post-cita) ───────────
+// El paciente autenticado deja su reseña desde /paciente sin necesitar el link
+// por token. Reusa ClinicReview + la MISMA moderación (status published, el
+// admin puede ocultar). Multi-tenant: SIEMPRE filtra por los patientId de la
+// sesión (ctx.links); nunca confía en ids del cliente.
+
+/** "Juan" + "Pérez García" → "Juan Pérez García" para mostrar al paciente. */
+function doctorDisplayName(firstName?: string | null, lastName?: string | null): string {
+  return `${(firstName ?? "").trim()} ${(lastName ?? "").trim()}`.replace(/\s+/g, " ").trim() || "tu doctor";
+}
+
+/**
+ * Citas COMPLETED/CHECKED_OUT del paciente (de SUS expedientes vinculados),
+ * separadas en `pending` (sin reseña enviada) y `done` (ya calificadas). Dos
+ * queries (citas + reseñas por appointmentId), sin N+1.
+ */
+export async function getPatientReviewables(
+  links: { patientId: string; clinicId: string }[],
+): Promise<PatientReviewablesResponse> {
+  const patientIds = Array.from(new Set(links.map((l) => l.patientId).filter(Boolean)));
+  if (patientIds.length === 0) return { pending: [], done: [] };
+
+  const appts = await prisma.appointment.findMany({
+    where: { patientId: { in: patientIds }, status: { in: ["COMPLETED", "CHECKED_OUT"] } },
+    orderBy: { startsAt: "desc" },
+    take: 60,
+    select: {
+      id: true,
+      clinicId: true,
+      type: true,
+      startsAt: true,
+      doctor: { select: { firstName: true, lastName: true } },
+      clinic: { select: { name: true, slug: true } },
+    },
+  });
+  if (appts.length === 0) return { pending: [], done: [] };
+
+  const reviews = await prisma.clinicReview.findMany({
+    where: { appointmentId: { in: appts.map((a) => a.id) } },
+    select: { appointmentId: true, rating: true, comment: true, status: true, submittedAt: true },
+  });
+  const byAppt = new Map(reviews.map((r) => [r.appointmentId, r]));
+
+  const pending: PatientReviewItemDTO[] = [];
+  const done: PatientReviewItemDTO[] = [];
+  for (const a of appts) {
+    const r = byAppt.get(a.id);
+    // "Calificada" = enviada por el paciente (deja de ser pending y tiene fecha
+    // de envío). Una invitación pending sin enviar sigue siendo "por calificar".
+    const submitted = !!r && r.status !== REVIEW_STATUS.PENDING && r.submittedAt != null;
+    const item: PatientReviewItemDTO = {
+      appointmentId: a.id,
+      clinicId: a.clinicId,
+      clinicName: a.clinic?.name ?? "",
+      clinicSlug: a.clinic?.slug ?? "",
+      doctorName: doctorDisplayName(a.doctor?.firstName, a.doctor?.lastName),
+      type: a.type,
+      date: a.startsAt.toISOString(),
+      rating: r?.rating ?? null,
+      comment: r?.comment ?? null,
+      status: (r?.status as ReviewStatus | undefined) ?? null,
+    };
+    (submitted ? done : pending).push(item);
+  }
+  return { pending, done };
+}
+
+/**
+ * El paciente autenticado publica la reseña de UNA de sus citas completadas.
+ *   · Si ya existe la invitación pending (creada al cerrar la cita) → la publica
+ *     con guarda de status (pending → published), igual que el flujo por token.
+ *   · Si no hay fila (p. ej. cita cerrada sin canal de contacto) → la crea ya
+ *     publicada, generando token/tokenExpiresAt para respetar el NOT NULL del
+ *     esquema (queda inerte: la reseña ya es published).
+ * Verificada por construcción: solo cita COMPLETED/CHECKED_OUT de un patientId
+ * de la sesión. Idempotente: appointmentId @unique + guardas → 1 reseña/cita.
+ */
+export async function submitPatientReview(
+  links: { patientId: string; clinicId: string }[],
+  appointmentIdInput: unknown,
+  ratingInput: unknown,
+  commentInput: unknown,
+): Promise<{ ok: true; status: ReviewStatus }> {
+  const appointmentId = typeof appointmentIdInput === "string" ? appointmentIdInput.trim() : "";
+  if (!appointmentId) throw new ReviewError("Cita no válida.", 400);
+
+  const rating = clampRating(ratingInput);
+  if (rating == null) throw new ReviewError("Selecciona una calificación de 1 a 5 estrellas.", 400);
+
+  const patientIds = Array.from(new Set(links.map((l) => l.patientId).filter(Boolean)));
+  if (patientIds.length === 0) throw new ReviewError("Cita no encontrada.", 404);
+
+  // Ownership + completada: la cita debe ser de un expediente del paciente
+  // autenticado y estar cerrada. Esto es lo que "verifica" la reseña.
+  const appt = await prisma.appointment.findFirst({
+    where: {
+      id: appointmentId,
+      patientId: { in: patientIds },
+      status: { in: ["COMPLETED", "CHECKED_OUT"] },
+    },
+    select: {
+      id: true,
+      clinicId: true,
+      patientId: true,
+      patient: { select: { firstName: true, lastName: true } },
+    },
+  });
+  if (!appt) throw new ReviewError("Cita no encontrada o aún no completada.", 404);
+
+  const comment = sanitizePlainText(commentInput, REVIEW_MAX_COMMENT_CHARS) || null;
+
+  const existing = await prisma.clinicReview.findUnique({
+    where: { appointmentId: appt.id },
+    select: { id: true, status: true },
+  });
+
+  if (existing) {
+    if (existing.status !== REVIEW_STATUS.PENDING) {
+      throw new ReviewError("Ya calificaste esta visita. ¡Gracias!", 409);
+    }
+    const res = await prisma.clinicReview.updateMany({
+      where: { id: existing.id, status: REVIEW_STATUS.PENDING },
+      data: { rating, comment, status: REVIEW_STATUS.PUBLISHED, submittedAt: new Date() },
+    });
+    if (res.count === 0) throw new ReviewError("Ya calificaste esta visita. ¡Gracias!", 409);
+    return { ok: true, status: REVIEW_STATUS.PUBLISHED };
+  }
+
+  const token = crypto.randomBytes(24).toString("base64url");
+  const tokenExpiresAt = new Date(Date.now() + REVIEW_TOKEN_TTL_DAYS * 24 * 60 * 60 * 1000);
+  const authorName = buildAuthorName(appt.patient?.firstName ?? "", appt.patient?.lastName ?? "");
+  try {
+    await prisma.clinicReview.create({
+      data: {
+        clinicId: appt.clinicId,
+        patientId: appt.patientId,
+        appointmentId: appt.id,
+        authorName,
+        rating,
+        comment,
+        status: REVIEW_STATUS.PUBLISHED,
+        submittedAt: new Date(),
+        token,
+        tokenExpiresAt,
+      },
+    });
+  } catch (e: unknown) {
+    // Carrera con la invitación automática: la fila apareció entre el read y el
+    // create (appointmentId @unique). Reintenta el flip pending → published.
+    if ((e as { code?: string })?.code === "P2002") {
+      const res = await prisma.clinicReview.updateMany({
+        where: { appointmentId: appt.id, status: REVIEW_STATUS.PENDING },
+        data: { rating, comment, status: REVIEW_STATUS.PUBLISHED, submittedAt: new Date() },
+      });
+      if (res.count === 0) throw new ReviewError("Ya calificaste esta visita. ¡Gracias!", 409);
+      return { ok: true, status: REVIEW_STATUS.PUBLISHED };
+    }
+    throw e;
+  }
+  return { ok: true, status: REVIEW_STATUS.PUBLISHED };
 }
