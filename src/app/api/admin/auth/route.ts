@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createHmac } from "crypto";
-import { persistentRateLimit, failbanGuard, recordAuthFailure, recordAuthSuccess } from "@/lib/failban";
+import { persistentRateLimit, failbanGuard, recordAuthFailure, recordAuthSuccess, AUTH_FLOOD_RATE_LIMIT } from "@/lib/failban";
 import { extractAuditMeta } from "@/lib/audit";
 import {
   ADMIN_COOKIE,
@@ -57,14 +57,17 @@ function verifyTOTP(token: string, secret: string): boolean {
  * WS2-T3 · Login admin contra AdminUser (BD) + sesión real.
  *
  * Mantiene el contrato de 2 pasos del formulario (step: "password" | "totp"),
- * el rate-limit (3/15min) y el delay anti-bruteforce. La UI no pide email: se
+ * el rate-limit anti-flood (15/60s), el lockout con backoff (al 5.º fallo) y el
+ * delay anti-bruteforce. La UI no pide email: se
  * identifica al admin por contraseña (bcrypt) entre los admins activos. Al éxito
  * se crea una AdminSession y la cookie admin_token lleva el token ALEATORIO en
  * claro (httpOnly, 8h) — su sha256 vive en BD.
  */
 export async function POST(req: NextRequest) {
   try {
-    const rl = await persistentRateLimit(req, { limit: 3, windowSec: 15 * 60 });
+    // Anti-flood GENEROSO: NO debe cortar antes que el lockout. La fuerza bruta
+    // la frena el lockout de abajo (5.º fallo + backoff), no este límite.
+    const rl = await persistentRateLimit(req, AUTH_FLOOD_RATE_LIMIT);
     if (rl) return rl;
 
     // Lockout por fallos. En el paso "password" el admin aún no está

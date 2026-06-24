@@ -3,7 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
 import { getPlanLimits } from "@/lib/plans";
 import { z } from "zod";
-import { persistentRateLimit, failbanGuard, recordAuthFailure, recordAuthSuccess } from "@/lib/failban";
+import { persistentRateLimit, failbanGuard, recordAuthFailure, recordAuthSuccess, AUTH_FLOOD_RATE_LIMIT } from "@/lib/failban";
 import { sendWelcomeEmail } from "@/lib/email";
 import { SITE_URL } from "@/lib/seo";
 import { logError } from "@/lib/safe-log";
@@ -48,7 +48,8 @@ async function generateSlug(name: string) {
 }
 
 export async function POST(req: NextRequest) {
-  const rl = await persistentRateLimit(req, { limit: 5 }); // 5/min por IP
+  // Anti-flood GENEROSO por IP: el lockout (5.º fallo + backoff) corta antes.
+  const rl = await persistentRateLimit(req, AUTH_FLOOD_RATE_LIMIT);
   if (rl) return rl;
 
   // Lockout por fallos (por IP — el email aún no se ha parseado).

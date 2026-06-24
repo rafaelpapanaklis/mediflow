@@ -26,7 +26,9 @@ const SCOPE = "clinic-login";
  * conteo de fallos sigue siendo server-side. Endurecer con captcha = otra ola.
  */
 export async function POST(req: NextRequest) {
-  // Throttle del propio endpoint (anti-spam del contador).
+  // Anti-flood del endpoint (anti-spam del contador). Intencionalmente más alto
+  // (30/60s) porque cada intento de login lo llama varias veces (check + fail/
+  // success); sigue MUY por encima del lockout (5.º fallo), que corta primero.
   const limited = await persistentRateLimit(req, { limit: 30 });
   if (limited) return limited;
 

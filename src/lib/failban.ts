@@ -164,6 +164,19 @@ export interface RateLimitOptions {
 }
 
 /**
+ * Límite ANTI-FLOOD por IP para endpoints de autenticación. Es GENEROSO a
+ * propósito: un humano que se equivoca de contraseña NUNCA debe chocar con él.
+ *
+ * El control de FUERZA BRUTA es responsabilidad del LOCKOUT (failbanGuard +
+ * recordAuthFailure, threshold 5 con backoff), que SIEMPRE debe dispararse
+ * ANTES que este rate-limit. Por eso 15/60s queda MUY por encima del threshold
+ * 5: en el camino de fallos el lockout corta primero (al 5.º fallo, con
+ * Retry-After creciente) y este límite solo frena ráfagas/DoS que NO cuentan
+ * como fallo. NO bajar este límite por debajo de la cuenta del lockout.
+ */
+export const AUTH_FLOOD_RATE_LIMIT: RateLimitOptions = { limit: 15, windowSec: 60 };
+
+/**
  * Rate-limit por ventana deslizante. Upstash si está configurado; si no,
  * memoria. Fail-open ante error de Redis. Devuelve 429 (con Retry-After) si se
  * excede el límite, o null si la petición pasa.

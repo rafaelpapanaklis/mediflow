@@ -1,6 +1,6 @@
 // POST /api/paciente/login — Implementa A1. CONTRATO FIJO.
 // Body: LoginBody { email, password }.
-// · rateLimit(req, 8).
+// · rateLimit anti-flood (15/60s); el lockout (5.º fallo) corta antes.
 // · email lowercase. Cuenta inexistente o password mal → 401 { error } genérico
 //   (mismo mensaje, sin enumeración). verifyPassword SIEMPRE que haya cuenta.
 // · Cuenta sin verificar → 403 { error, needsVerification: true } (la UI manda
@@ -10,7 +10,7 @@
 //   → 200 { ok: true }.
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { persistentRateLimit, failbanGuard, recordAuthFailure, recordAuthSuccess } from "@/lib/failban";
+import { persistentRateLimit, failbanGuard, recordAuthFailure, recordAuthSuccess, AUTH_FLOOD_RATE_LIMIT } from "@/lib/failban";
 import { verifyPassword } from "@/lib/patient-portal/crypto";
 import { createPatientSession, sessionCookieOptions } from "@/lib/patient-portal/session";
 import { autoLinkPatientsByEmail } from "@/lib/patient-portal/link";
@@ -20,7 +20,8 @@ export const dynamic = "force-dynamic";
 
 export async function POST(req: NextRequest) {
   try {
-    const limited = await persistentRateLimit(req, { limit: 8 });
+    // Anti-flood GENEROSO: el lockout (5.º fallo + backoff) corta antes que esto.
+    const limited = await persistentRateLimit(req, AUTH_FLOOD_RATE_LIMIT);
     if (limited) return limited;
 
     let body: any;

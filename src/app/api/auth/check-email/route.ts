@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
-import { persistentRateLimit, failbanGuard, recordAuthFailure } from "@/lib/failban";
+import { persistentRateLimit, failbanGuard, recordAuthFailure, AUTH_FLOOD_RATE_LIMIT } from "@/lib/failban";
 
 const schema = z.object({ email: z.string().email() });
 
@@ -25,7 +25,9 @@ async function emailExists(raw: string) {
 }
 
 export async function GET(req: NextRequest) {
-  const limited = await persistentRateLimit(req, { limit: 10 });
+  // Anti-flood (15/60s). El anti-enumeración real lo hace el lockout
+  // (CHECK_EMAIL_POLICY, 60/15min); este límite solo frena ráfagas.
+  const limited = await persistentRateLimit(req, AUTH_FLOOD_RATE_LIMIT);
   if (limited) return limited;
   const locked = await failbanGuard(req, { scope: "check-email" });
   if (locked) return locked;
@@ -36,7 +38,9 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const limited = await persistentRateLimit(req, { limit: 10 });
+  // Anti-flood (15/60s). El anti-enumeración real lo hace el lockout
+  // (CHECK_EMAIL_POLICY, 60/15min); este límite solo frena ráfagas.
+  const limited = await persistentRateLimit(req, AUTH_FLOOD_RATE_LIMIT);
   if (limited) return limited;
   const locked = await failbanGuard(req, { scope: "check-email" });
   if (locked) return locked;

@@ -1,6 +1,6 @@
 // POST /api/paciente/verify — Implementa A3.
 // Body: VerifyBody { email, code }.
-// · rateLimit(req, 10).
+// · rateLimit anti-flood (15/60s); el lockout (5.º fallo) corta antes.
 // · Buscar cuenta por email lowercase. Si no existe o ya verificada sin código
 //   pendiente → 400 genérico { error: "Código inválido o expirado" }.
 // · Validar: verifyAttempts < VERIFY_MAX_ATTEMPTS (si excede → 429 y pedir
@@ -10,7 +10,7 @@
 //   createPatientSession() + Set-Cookie patient_session (auto-login) → 200 { ok: true }.
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { persistentRateLimit, failbanGuard, recordAuthFailure, recordAuthSuccess } from "@/lib/failban";
+import { persistentRateLimit, failbanGuard, recordAuthFailure, recordAuthSuccess, AUTH_FLOOD_RATE_LIMIT } from "@/lib/failban";
 import { sha256 } from "@/lib/patient-portal/crypto";
 import { createPatientSession, sessionCookieOptions } from "@/lib/patient-portal/session";
 import { autoLinkPatientsByEmail } from "@/lib/patient-portal/link";
@@ -20,7 +20,9 @@ export const dynamic = "force-dynamic";
 
 export async function POST(req: NextRequest) {
   try {
-    const rl = await persistentRateLimit(req, { limit: 10 });
+    // Anti-flood GENEROSO: el lockout (5.º fallo) + el gate de verifyAttempts
+    // cortan antes que esto.
+    const rl = await persistentRateLimit(req, AUTH_FLOOD_RATE_LIMIT);
     if (rl) return rl;
 
     const body = await req.json().catch(() => null);
