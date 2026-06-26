@@ -287,6 +287,27 @@ export function PacienteLoginForm() {
             Crea tu cuenta →
           </Link>
         </div>
+
+        <div
+          style={{
+            textAlign: "center",
+            fontSize: 12,
+            color: "rgba(245,245,247,0.42)",
+            display: "flex",
+            flexDirection: "column",
+            gap: 10,
+          }}
+        >
+          <span>
+            ¿Eres una clínica?{" "}
+            <Link href="/login" style={{ ...LINK, color: "rgba(245,245,247,0.72)" }}>
+              Entra al panel de tu clínica
+            </Link>
+          </span>
+          <Link href="/" style={{ color: "rgba(245,245,247,0.5)", textDecoration: "none" }}>
+            ← Volver a DaleControl
+          </Link>
+        </div>
       </div>
     </div>
   );
