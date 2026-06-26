@@ -748,7 +748,7 @@ export default function DicomSetViewer({ url, name, fileId, patientId, liteUrl, 
       <div className="p-2">
         {/* En móvil submuestrea más fino (128 vs 256): el pico de `avg` Float32
             cae de ~67 MB a ~8 MB y la textura 3D a 1/8, clave para no recargar. */}
-        <Dicom3DVolume slices={slices as unknown as VolSlice[]} maxDim={lowMem ? 128 : 256} />
+        <Dicom3DVolume slices={slices as unknown as VolSlice[]} maxDim={256} />
       </div>
     </div>
   );
