@@ -5,7 +5,6 @@ import { redirect } from "next/navigation";
 import { getCurrentUser, getUserClinics } from "@/lib/auth";
 import { Sidebar } from "@/components/dashboard/sidebar";
 import { Topbar } from "@/components/dashboard/topbar";
-import { TrialBanner } from "@/components/dashboard/trial-banner";
 import { GlobalAnnouncementBanner } from "@/components/dashboard/global-announcement-banner";
 import { ActiveConsultProvider } from "@/components/dashboard/active-consult-provider";
 import { NewAppointmentProvider } from "@/components/dashboard/new-appointment/new-appointment-provider";
@@ -206,11 +205,9 @@ export default async function DashboardLayout({ children }: { children: React.Re
         <GlobalAnnouncementBanner />
         <Topbar
           clinicName={clinic.name}
-          trialEndsAt={isInTrial ? trialEndsAt : null}
           plan={clinic.plan as any}
           userRole={user.role}
         />
-        <TrialBanner trialEndsAt={trialEndsAt} isInTrial={isInTrial} />
         <PatientContextBar />
         <main
           id="main-content"
