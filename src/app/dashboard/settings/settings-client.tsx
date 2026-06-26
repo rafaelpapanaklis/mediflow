@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { createClient } from "@/lib/supabase/client";
+import { DIRECTORY_CATEGORIES } from "@/lib/directory/types";
 import { useT } from "@/i18n/i18n-provider";
 import toast from "react-hot-toast";
 import dynamic from "next/dynamic";
@@ -29,13 +30,14 @@ const DAYS        = [
   "settings.clientDays.saturday",
   "settings.clientDays.sunday",
 ];
-// DaleControl es DENTAL — solo categorías dentales en el selector de
-// clínica. La lista completa de categorías legacy queda en el enum
-// ClinicCategory de Prisma para no romper datos históricos.
-// labelKey apunta a una llave i18n; se resuelve con t(labelKey) en el render.
-const CATEGORIES = [
-  { id:"DENTAL", labelKey:"settings.clientCategory.dental" },
-  { id:"OTHER",  labelKey:"settings.clientCategory.other" },
+// Selector de categoría de la clínica = las 17 categorías del directorio
+// (fuente ÚNICA: DIRECTORY_CATEGORIES) + "Otra". El value es el enum
+// ClinicCategory de Prisma. Elegir una categoría REAL es lo que hace que la
+// clínica aparezca en su página /descubre/[categoria]; "OTHER" solo sale en
+// "Todas". El label ya viene en español del contrato (sin llave i18n).
+const CATEGORIES: { id: string; label: string }[] = [
+  ...DIRECTORY_CATEGORIES.map((c) => ({ id: c.category, label: c.label })),
+  { id: "OTHER", label: "Otra / general" },
 ];
 const TIMEZONES = [
   { id: "America/Mexico_City",  label: "Ciudad de Mexico (GMT-6)" },
@@ -350,7 +352,7 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
             <Label>{t("settings.client.categoryLabel")}</Label>
             <select className="flex h-11 w-full rounded-xl border border-border bg-card px-4 text-base focus:outline-none"
               value={clinic.category ?? "OTHER"} onChange={e => setClinic((c: any) => ({ ...c, category: e.target.value }))}>
-              {CATEGORIES.map(c => <option key={c.id} value={c.id}>{t(c.labelKey)}</option>)}
+              {CATEGORIES.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
             </select>
           </div>
           <div className="space-y-1.5">
@@ -432,22 +434,48 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
               onChange={e => setClinic((c: any) => ({ ...c, description: e.target.value }))}
             />
           </div>
-          <div className={`flex items-center justify-between p-4 rounded-2xl border-2 transition-colors ${isPublic ? "border-blue-500 bg-blue-600/10" : "border-border bg-transparent"}`}>
-            <div>
-              <div className={`text-sm font-bold ${isPublic ? "text-blue-700 dark:text-blue-300" : "text-foreground"}`}>
-                {isPublic ? t("settings.client.publicClinicLabel") : t("settings.client.privateClinicLabel")}
+          <div>
+            <div className={`flex items-center justify-between p-4 rounded-2xl border-2 transition-colors ${isPublic ? "border-blue-500 bg-blue-600/10" : "border-border bg-transparent"}`}>
+              <div>
+                <div className={`text-sm font-bold ${isPublic ? "text-blue-700 dark:text-blue-300" : "text-foreground"}`}>
+                  {isPublic ? t("settings.client.publicClinicLabel") : t("settings.client.privateClinicLabel")}
+                </div>
+                <div className={`text-xs mt-0.5 ${isPublic ? "text-blue-600 dark:text-blue-400" : "text-muted-foreground"}`}>
+                  {isPublic
+                    ? t("settings.client.publicClinicDesc")
+                    : t("settings.client.privateClinicDesc")}
+                </div>
               </div>
-              <div className={`text-xs mt-0.5 ${isPublic ? "text-blue-600 dark:text-blue-400" : "text-muted-foreground"}`}>
-                {isPublic
-                  ? t("settings.client.publicClinicDesc")
-                  : t("settings.client.privateClinicDesc")}
-              </div>
+              {/* Gate: solo se ACTIVA con ciudad + categoría real (≠ OTHER) — los
+                  datos sin los que la clínica no surgiría en el directorio. */}
+              <button type="button"
+                onClick={() => {
+                  const cityOk = Boolean((clinic.city ?? "").trim());
+                  const catOk = Boolean(clinic.category) && clinic.category !== "OTHER";
+                  if (!isPublic && !(cityOk && catOk)) {
+                    toast.error("Completa ciudad y categoría para aparecer en el directorio.");
+                    return;
+                  }
+                  setIsPublic((p: boolean) => !p);
+                }}
+                className={`relative flex-shrink-0 w-11 h-6 rounded-full transition-colors ml-4 ${isPublic ? "bg-blue-600" : "bg-muted-foreground/30"}`}>
+                <div className="absolute top-0.5 w-5 h-5 rounded-full bg-card shadow-sm transition-all"
+                  style={{ left: isPublic ? "22px" : "2px" }} />
+              </button>
             </div>
-            <button type="button" onClick={() => setIsPublic((p: boolean) => !p)}
-              className={`relative flex-shrink-0 w-11 h-6 rounded-full transition-colors ml-4 ${isPublic ? "bg-blue-600" : "bg-muted-foreground/30"}`}>
-              <div className="absolute top-0.5 w-5 h-5 rounded-full bg-card shadow-sm transition-all"
-                style={{ left: isPublic ? "22px" : "2px" }} />
-            </button>
+            {!(Boolean((clinic.city ?? "").trim()) && Boolean(clinic.category) && clinic.category !== "OTHER") && (
+              <p className={`text-xs mt-2 ${isPublic ? "text-amber-600 dark:text-amber-400" : "text-muted-foreground"}`}>
+                {isPublic ? "Completa " : "Agrega "}
+                {!((clinic.city ?? "").trim()) && (!clinic.category || clinic.category === "OTHER")
+                  ? "tu ciudad y categoría"
+                  : !((clinic.city ?? "").trim())
+                    ? "tu ciudad"
+                    : "tu categoría"}
+                {isPublic
+                  ? " (campos de arriba) para que tu clínica aparezca en el directorio."
+                  : " (campos de arriba) para poder publicar tu clínica en el directorio."}
+              </p>
+            )}
           </div>
           <div className="pt-2 flex items-center justify-between">
             <span className={`text-sm font-bold px-3 py-1 rounded-full border ${clinic.plan==="CLINIC"?"bg-violet-50 text-violet-700 border-violet-200":clinic.plan==="PRO"?"bg-brand-600/15 text-brand-700 border-brand-200":"bg-muted text-muted-foreground border-border"}`}>
