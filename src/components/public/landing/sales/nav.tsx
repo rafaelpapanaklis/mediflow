@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { Menu, X, ArrowRight } from "lucide-react";
+import { Menu, X, ArrowRight, UserRound } from "lucide-react";
 import { SalesLogo } from "./logo";
 
 const LINKS = [
@@ -57,6 +57,10 @@ export function SalesNav({ isLoggedIn = false }: { isLoggedIn?: boolean }) {
             </Link>
           ) : (
             <>
+              <Link href="/paciente/login" className="mfh-nav__patient" title="Portal del paciente">
+                <UserRound aria-hidden /> Soy paciente
+              </Link>
+              <span className="mfh-nav__sep" aria-hidden />
               <Link href="/login" className="mfh-nav__ghost">Iniciar sesión</Link>
               <Link href="/signup" className="mfh-btn mfh-btn--primary mfh-nav__signup-desktop">
                 Crear cuenta
@@ -91,6 +95,10 @@ export function SalesNav({ isLoggedIn = false }: { isLoggedIn?: boolean }) {
               </Link>
             ) : (
               <>
+                <Link href="/paciente/login" className="mfh-btn mfh-btn--ghost mfh-btn--block" onClick={() => setOpen(false)}>
+                  <UserRound size={16} aria-hidden /> Soy paciente
+                </Link>
+                <div className="mfh-mobile__hint">¿Administras una clínica?</div>
                 <Link href="/login" className="mfh-btn mfh-btn--ghost mfh-btn--block" onClick={() => setOpen(false)}>
                   Iniciar sesión
                 </Link>
