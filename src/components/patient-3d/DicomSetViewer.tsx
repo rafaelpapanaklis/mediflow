@@ -276,6 +276,33 @@ function storeScale(fileId: string, s: ScaleInfo): void {
   }
 }
 
+// Detecta dispositivos de POCA RAM (móvil/tablet). Montar la rejilla 2×2 (3 canvas
+// MPR) + el volumen 3D WebGL a la vez, encima del estudio completo ya en memoria,
+// supera el tope de memoria de la pestaña y iOS/WebKit la RECARGA sin avisar
+// (Safari y Chrome de iPhone usan el mismo motor). En estos equipos el visor
+// degrada a UNA vista a la vez y el 3D bajo demanda. Defensivo: nunca lanza.
+function isLowMemoryDevice(): boolean {
+  try {
+    if (typeof navigator === "undefined") return false;
+    const dm = (navigator as any).deviceMemory; // solo Chromium; ausente en iOS
+    if (typeof dm === "number" && dm > 0 && dm <= 4) return true; // ≤4 GB
+    const ua = navigator.userAgent || "";
+    // iPadOS moderno se hace pasar por "Macintosh": lo delatan los puntos táctiles.
+    const iOS = /iPhone|iPad|iPod/.test(ua) || (/Macintosh/.test(ua) && (navigator as any).maxTouchPoints > 1);
+    const android = /Android/.test(ua);
+    // "(hover: none) and (pointer: coarse)" = táctil SIN mouse (móvil/tablet real);
+    // excluye laptops/2-en-1 con trackpad (RAM de sobra). Los iPad con teclado ya
+    // caen por el UA de arriba, así que no se pierden.
+    const touchOnly =
+      typeof window !== "undefined" &&
+      typeof window.matchMedia === "function" &&
+      window.matchMedia("(hover: none) and (pointer: coarse)").matches;
+    return iOS || android || !!touchOnly;
+  } catch {
+    return false;
+  }
+}
+
 export default function DicomSetViewer({ url, name, fileId, patientId, initialNotes = "" }: Props) {
   const [slices, setSlices] = useState<Slice[]>([]);
   const [status, setStatus] = useState<"loading" | "ready" | "error" | "empty">("loading");
@@ -295,6 +322,14 @@ export default function DicomSetViewer({ url, name, fileId, patientId, initialNo
   // Layout: null = rejilla 2×2; o el cuadrante maximizado.
   const [maximized, setMaximized] = useState<PlaneKey | "volume" | null>(null);
   const [resetNonce, setResetNonce] = useState(0);
+
+  // Móvil/poca RAM: detección UNA sola vez (no cambia en vida del visor). En este
+  // modo NO montamos la rejilla 2×2 + el volumen 3D juntos (pico que recarga la
+  // pestaña en iOS): mostramos UNA vista a la vez y el 3D solo cuando se pide.
+  const [lowMem] = useState<boolean>(() => isLowMemoryDevice());
+  // Vista activa en modo móvil. Arranca en "axial" (corte nativo, barato); el 3D
+  // ("volume") solo se monta cuando el usuario lo elige → "bajo demanda".
+  const [mobileView, setMobileView] = useState<PlaneKey | "volume">("axial");
 
   const [notes, setNotes] = useState(initialNotes);
   const [savingNotes, setSavingNotes] = useState(false);
@@ -593,7 +628,9 @@ export default function DicomSetViewer({ url, name, fileId, patientId, initialNo
         </button>
       </div>
       <div className="p-2">
-        <Dicom3DVolume slices={slices as unknown as VolSlice[]} />
+        {/* En móvil submuestrea más fino (128 vs 256): el pico de `avg` Float32
+            cae de ~67 MB a ~8 MB y la textura 3D a 1/8, clave para no recargar. */}
+        <Dicom3DVolume slices={slices as unknown as VolSlice[]} maxDim={lowMem ? 128 : 256} />
       </div>
     </div>
   );
@@ -709,8 +746,53 @@ export default function DicomSetViewer({ url, name, fileId, patientId, initialNo
         </div>
       </div>
 
-      {/* Rejilla 2×2 (Axial · Coronal · Sagital · Volumen 3D) o el cuadrante maximizado. */}
-      {maximized === "volume" ? (
+      {/* Layout. En móvil/poca RAM: UNA vista a la vez (selector) + 3D bajo demanda
+          — así NO se montan la rejilla 2×2 y el volumen 3D juntos, que es el pico
+          que recargaba la pestaña en iOS. En escritorio: rejilla 2×2 o el cuadrante
+          maximizado, igual que antes. La cruz sincronizada sigue compartida. */}
+      {lowMem ? (
+        <div className="flex flex-col gap-2">
+          <div
+            className="inline-flex items-center gap-1 p-1 rounded-lg bg-background/60 border border-border self-start flex-wrap"
+            role="group"
+            aria-label="Vista del estudio"
+          >
+            {PLANES.map((p) => {
+              const active = mobileView === p.key;
+              return (
+                <button
+                  key={p.key}
+                  type="button"
+                  aria-pressed={active}
+                  onClick={() => setMobileView(p.key)}
+                  className={`text-xs font-semibold px-2.5 py-1.5 rounded-md inline-flex items-center gap-1.5 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 ${
+                    active ? "bg-brand-600 text-white shadow-sm" : "text-foreground hover:bg-muted"
+                  }`}
+                >
+                  {p.label}
+                </button>
+              );
+            })}
+            <button
+              type="button"
+              aria-pressed={mobileView === "volume"}
+              onClick={() => setMobileView("volume")}
+              title="Cargar el volumen 3D (usa más memoria)"
+              className={`text-xs font-semibold px-2.5 py-1.5 rounded-md inline-flex items-center gap-1.5 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 ${
+                mobileView === "volume" ? "bg-brand-600 text-white shadow-sm" : "text-foreground hover:bg-muted"
+              }`}
+            >
+              <Box className="w-3.5 h-3.5" aria-hidden /> 3D
+            </button>
+          </div>
+          {mobileView === "volume"
+            ? volumeCell
+            : renderPane(PLANES.find((p) => p.key === mobileView) ?? PLANES[0], 460)}
+          <p className="text-[10px] text-muted-foreground">
+            En este dispositivo se muestra una vista a la vez para ahorrar memoria. Toca “3D” para cargar el volumen.
+          </p>
+        </div>
+      ) : maximized === "volume" ? (
         volumeCell
       ) : maximizedPlane ? (
         renderPane(maximizedPlane, 620)
