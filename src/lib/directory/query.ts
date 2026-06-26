@@ -15,10 +15,18 @@ import {
   DIRECTORY_PAGE_SIZE,
   getCategoryByEnum,
   type DirectoryClinic,
+  type ClinicCategoryValue,
 } from "./types";
 import { normalizeCity, deriveCities, cityLabelFromSlug, type CityOption } from "./cities";
 
-/** Visibilidad base del directorio: públicas y no canceladas. */
+/**
+ * Visibilidad base del directorio: públicas y con plan no cancelado.
+ * SOLO exige isPublic + suscripción ≠ "cancelled". NO requiere ciudad, pin
+ * (lat/lng) ni categoría real: una clínica con plan activo + isPublic SIEMPRE
+ * cuenta en "Todas" aunque le falten datos opcionales. Los filtros por
+ * categoría/ciudad/mapa se agregan ENCIMA de esta base solo cuando aplican.
+ * Fuente ÚNICA: la API /api/directory/clinics importa esto (no lo duplica).
+ */
 export function visibilityWhere(): any {
   return {
     isPublic: true,
@@ -106,7 +114,10 @@ export function toDirectoryClinic(row: any, rating?: { avg: number; count: numbe
     id: row.id,
     name: row.name,
     slug: row.slug,
-    category: row.category,
+    // Defensivo: si por un dato legacy llegara null/indefinido, cae a OTHER —
+    // no rompe el contrato (categoría no-nula) ni desaparece de "Todas". OTHER
+    // se etiqueta como "Especialidad" y queda fuera del grid por categoría.
+    category: (row.category ?? "OTHER") as ClinicCategoryValue,
     city: row.city,
     state: row.state,
     address: row.address,
