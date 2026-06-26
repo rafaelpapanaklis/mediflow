@@ -83,7 +83,14 @@ export interface BuildCbctLiteResult {
  * ArrayBuffer / Uint8Array) — en el endpoint llega el Blob de Supabase Storage.
  */
 export async function buildCbctLite(input: ArrayBuffer | Uint8Array | Blob): Promise<BuildCbctLiteResult> {
-  const zip = await JSZip.loadAsync(input as any);
+  // JSZip en Node NO soporta Blob (su lectura de Blob usa FileReader, solo navegador).
+  // supabase.storage.download() devuelve un Blob -> convertir a Uint8Array, o JSZip lanza
+  // "Can't read the data of the loaded zip file".
+  const zipInput =
+    input instanceof Uint8Array || input instanceof ArrayBuffer
+      ? input
+      : new Uint8Array(await (input as Blob).arrayBuffer());
+  const zip = await JSZip.loadAsync(zipInput);
   const entries = (Object.values(zip.files) as any[]).filter((f) => !f.dir && isDicomEntryName(f.name));
   if (entries.length === 0) throw new Error("El .zip no contiene cortes DICOM legibles");
 
