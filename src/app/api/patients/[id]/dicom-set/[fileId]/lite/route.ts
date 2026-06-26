@@ -110,9 +110,10 @@ export async function POST(
       sourceSlices: result.sourceSlices,
     };
   } catch (e) {
-    console.error("[cbct-lite] build error:", (e as Error)?.message ?? e);
+    const detail = (e as Error)?.message ?? String(e);
+    console.error("[cbct-lite] build error:", detail, (e as Error)?.stack);
     return NextResponse.json(
-      { error: "No se pudo generar la versión ligera del estudio" },
+      { error: "No se pudo generar la versión ligera del estudio", detail },
       { status: 500 },
     );
   }

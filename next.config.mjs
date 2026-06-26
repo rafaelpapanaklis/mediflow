@@ -10,6 +10,18 @@ const nextConfig = {
       { protocol: "https", hostname: "images.unsplash.com" },
     ],
   },
+  // Los .wasm de @cornerstonejs/dicom-codec (descompresion DICOM) se cargan en el
+  // SERVIDOR con fs.readFileSync(__dirname + "/*.wasm"). Al no haber import estatico,
+  // Next no los detecta como dependencia y los deja fuera del bundle de la funcion en
+  // Vercel -> el endpoint /lite no puede decodificar CBCT comprimido (0 cortes, 500).
+  // Los incluimos explicitamente en el trazado de archivos de ESA funcion (Next 14).
+  experimental: {
+    outputFileTracingIncludes: {
+      "/api/patients/[id]/dicom-set/[fileId]/lite": [
+        "./node_modules/@cornerstonejs/**/*.wasm",
+      ],
+    },
+  },
   // Los codecs DICOM comprimidos (@cornerstonejs/dicom-codec -> glue Emscripten de
   // OpenJPEG/CharLS/libjpeg-turbo, que descomprime JPEG2000/JPEG-LS/HTJ2K/RLE en el
   // Web Worker del visor CBCT) llevan require("fs")/require("path") detras de un

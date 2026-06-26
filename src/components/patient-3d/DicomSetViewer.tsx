@@ -349,6 +349,10 @@ export default function DicomSetViewer({ url, name, fileId, patientId, liteUrl, 
   // Móvil: el lite se está generando en el servidor (1ª apertura). Cambia el
   // mensaje de carga a "optimizando para tu dispositivo".
   const [liteBuilding, setLiteBuilding] = useState(false);
+  // Móvil: mensaje de error real del servidor cuando la generación del lite falla
+  // (campo `detail` del 500). Temporal/diagnóstico: se muestra discreto en la
+  // pantalla de error para depurar por qué no abre en el dispositivo.
+  const [liteError, setLiteError] = useState("");
   // Modo de vista (solo escritorio): rejilla MPR 2×2 (por defecto) o Panorámica
   // (reslice curvo). En móvil se usa `mobileView` (una vista a la vez).
   const [viewMode, setViewMode] = useState<"mpr" | "pano">("mpr");
@@ -442,6 +446,10 @@ export default function DicomSetViewer({ url, name, fileId, patientId, liteUrl, 
               if (gen.ok) {
                 const j = await gen.json().catch(() => null);
                 if (j?.liteUrl) parsed = await fetchLite(j.liteUrl as string);
+              } else {
+                // Diagnóstico temporal: el servidor manda el error real en `detail`.
+                const j = await gen.json().catch(() => null);
+                if (!cancelled && j?.detail) setLiteError(String(j.detail));
               }
             } finally {
               if (!cancelled) setLiteBuilding(false);
@@ -679,6 +687,11 @@ export default function DicomSetViewer({ url, name, fileId, patientId, liteUrl, 
                 ? "No se pudo preparar la versión para móvil de este estudio. Es muy grande para el teléfono; ábrelo desde una computadora para verlo completo."
                 : "El archivo no pudo descomprimirse o leerse. Asegúrate de subir un .zip válido del estudio."}
           </p>
+          {lowMem && status === "error" && liteError && (
+            <p className="text-[10px] mt-2 max-w-sm font-mono text-muted-foreground/80 break-words">
+              {liteError}
+            </p>
+          )}
           <a
             href={url}
             download={name}
