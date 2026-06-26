@@ -290,11 +290,14 @@ function isLowMemoryDevice(): boolean {
     // iPadOS moderno se hace pasar por "Macintosh": lo delatan los puntos táctiles.
     const iOS = /iPhone|iPad|iPod/.test(ua) || (/Macintosh/.test(ua) && (navigator as any).maxTouchPoints > 1);
     const android = /Android/.test(ua);
-    const coarse =
+    // "(hover: none) and (pointer: coarse)" = táctil SIN mouse (móvil/tablet real);
+    // excluye laptops/2-en-1 con trackpad (RAM de sobra). Los iPad con teclado ya
+    // caen por el UA de arriba, así que no se pierden.
+    const touchOnly =
       typeof window !== "undefined" &&
       typeof window.matchMedia === "function" &&
-      window.matchMedia("(pointer: coarse)").matches;
-    return iOS || android || !!coarse;
+      window.matchMedia("(hover: none) and (pointer: coarse)").matches;
+    return iOS || android || !!touchOnly;
   } catch {
     return false;
   }
