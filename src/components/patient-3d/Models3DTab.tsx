@@ -62,6 +62,8 @@ interface Model3DFile {
   createdAt: string;
   doctorNotes?: string | null;
   annotations?: unknown;
+  // CBCT reducido para móvil (`.lite.bin`); "" si aún no se generó. Lo llena el GET.
+  liteUrl?: string;
 }
 
 const ACCEPT = ".stl,.ply,.obj,.dcm,.dicom,.zip";
@@ -430,6 +432,7 @@ export function Models3DTab({ patientId }: { patientId: string }) {
                   name={viewer.name}
                   patientId={patientId}
                   fileId={viewer.id}
+                  liteUrl={viewer.liteUrl}
                   initialNotes={viewer.doctorNotes ?? ""}
                 />
               ) : formatFromName(viewer.name) === "dicom" ? (

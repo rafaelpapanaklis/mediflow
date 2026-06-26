@@ -11,6 +11,7 @@ import {
   SIGNED_URL_TTL_SECONDS,
 } from "@/lib/storage";
 import { validateModel3D } from "@/lib/validate-upload";
+import { CBCT_LITE_SUFFIX } from "@/components/patient-3d/cbct-lite-shared";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -96,6 +97,38 @@ async function signWebGlbUrls(
   return result;
 }
 
+// Firma en UN batch el CBCT lite hermano (`<path>.lite.bin`) de cada set CBCT
+// (.zip). Es el volumen reducido que carga el MÓVIL. Devuelve "" donde no aplica
+// (no es .zip) o el lite aún no se generó → el visor móvil lo pide bajo demanda.
+async function signCbctLiteUrls(
+  urls: Array<string | null | undefined>,
+  names: Array<string | null | undefined>,
+): Promise<string[]> {
+  const result: string[] = new Array(urls.length).fill("");
+  const idxs: number[] = [];
+  const paths: string[] = [];
+  urls.forEach((u, i) => {
+    if (!/\.zip$/i.test(names[i] || u || "")) return; // solo sets CBCT
+    const p = extractStoragePath(u);
+    if (!p) return;
+    idxs.push(i);
+    paths.push(`${p}${CBCT_LITE_SUFFIX}`);
+  });
+  if (paths.length === 0) return result;
+  try {
+    const { data, error } = await getAdminSupabase()
+      .storage.from(BUCKETS.PATIENT_FILES)
+      .createSignedUrls(paths, SIGNED_URL_TTL_SECONDS);
+    if (error || !data) return result;
+    data.forEach((row, k) => {
+      if (!row.error && row.signedUrl) result[idxs[k]] = row.signedUrl;
+    });
+  } catch {
+    // best-effort: si la firma batch falla, todas quedan "".
+  }
+  return result;
+}
+
 // GET /api/patients/[id]/models-3d — lista los modelos 3D del paciente con
 // signed URL fresca por archivo. Multi-tenant: clinicId SIEMPRE de la sesión.
 export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
@@ -143,7 +176,18 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
     files.map((f) => f.url),
     files.map((f) => f.name),
   );
-  const signed = files.map((f, i) => ({ ...f, url: urls[i], webUrl: webUrls[i] }));
+  // liteUrl: CBCT reducido hermano (`.lite.bin`) para MÓVIL. Vacío si aún no existe
+  // → el visor móvil lo genera bajo demanda (POST .../dicom-set/[fileId]/lite).
+  const liteUrls = await signCbctLiteUrls(
+    files.map((f) => f.url),
+    files.map((f) => f.name),
+  );
+  const signed = files.map((f, i) => ({
+    ...f,
+    url: urls[i],
+    webUrl: webUrls[i],
+    liteUrl: liteUrls[i],
+  }));
   return NextResponse.json(signed);
 }
 
