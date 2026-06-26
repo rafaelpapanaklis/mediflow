@@ -51,6 +51,7 @@ import {
   type Tool,
   type WindowKey,
 } from "./cbct-mpr-shared";
+import { decodeCbctLite } from "./cbct-lite-shared";
 
 // Render volumétrico 3D (three.js). Dinámico para no cargar el shader hasta que
 // el componente se monta (trae su propio canvas + controles de densidad/opacidad).
@@ -68,6 +69,9 @@ interface Props {
   name: string;
   fileId: string;
   patientId: string;
+  // CBCT reducido para móvil (`.lite.bin`); "" / undefined si aún no se generó.
+  // En móvil el visor carga ESTE binario (~20 MB) en vez del .zip (300-600 MB).
+  liteUrl?: string;
   initialNotes?: string;
 }
 
@@ -303,7 +307,7 @@ function isLowMemoryDevice(): boolean {
   }
 }
 
-export default function DicomSetViewer({ url, name, fileId, patientId, initialNotes = "" }: Props) {
+export default function DicomSetViewer({ url, name, fileId, patientId, liteUrl, initialNotes = "" }: Props) {
   const [slices, setSlices] = useState<Slice[]>([]);
   const [status, setStatus] = useState<"loading" | "ready" | "error" | "empty">("loading");
   const [progress, setProgress] = useState({ done: 0, total: 0 });
@@ -330,6 +334,9 @@ export default function DicomSetViewer({ url, name, fileId, patientId, initialNo
   // Vista activa en modo móvil. Arranca en "axial" (corte nativo, barato); el 3D
   // ("volume") solo se monta cuando el usuario lo elige → "bajo demanda".
   const [mobileView, setMobileView] = useState<PlaneKey | "volume">("axial");
+  // Móvil: el lite se está generando en el servidor (1ª apertura). Cambia el
+  // mensaje de carga a "optimizando para tu dispositivo".
+  const [liteBuilding, setLiteBuilding] = useState(false);
 
   const [notes, setNotes] = useState(initialNotes);
   const [savingNotes, setSavingNotes] = useState(false);
@@ -389,6 +396,72 @@ export default function DicomSetViewer({ url, name, fileId, patientId, initialNo
       }
     };
 
+    // MÓVIL/poca RAM: NO descargar/descomprimir el .zip (300-600 MB) — ese pico es
+    // lo que recarga la pestaña en iOS. Carga el CBCT "lite" (~20 MB) que genera el
+    // servidor; si aún no existe, lo pide (POST) y lo espera. El lite ya trae su
+    // spacing físico ajustado, así que aquí NO usamos probeScale/loadStoredScale
+    // (serían los del estudio full): scaleInfo queda null → inferScale(lite).
+    if (lowMem) {
+      const fetchLite = async (u: string) => {
+        try {
+          const res = await fetch(u);
+          if (!res.ok) return null;
+          const buf = await res.arrayBuffer();
+          return decodeCbctLite(buf); // { meta, slices } | null
+        } catch {
+          return null;
+        }
+      };
+      (async () => {
+        try {
+          let parsed = liteUrl ? await fetchLite(liteUrl) : null;
+          if (cancelled) return;
+          if (!parsed) {
+            // No existe aún (o falló la descarga): pídele al servidor que lo genere.
+            setLiteBuilding(true);
+            try {
+              const gen = await fetch(`/api/patients/${patientId}/dicom-set/${fileId}/lite`, {
+                method: "POST",
+              });
+              if (cancelled) return;
+              if (gen.ok) {
+                const j = await gen.json().catch(() => null);
+                if (j?.liteUrl) parsed = await fetchLite(j.liteUrl as string);
+              }
+            } finally {
+              if (!cancelled) setLiteBuilding(false);
+            }
+          }
+          if (cancelled) return;
+          if (parsed && parsed.slices.length > 0) {
+            // El lite ya trae su spacing físico ajustado por el submuestreo. Fijamos
+            // scaleInfo desde su `meta` (que conoce hasRealSpacing) en vez de inferirlo
+            // de [dx,dy]: si el estudio no tenía PixelSpacing real, dx=1×factor ≠ 1
+            // engañaría a inferScale marcando mm donde solo hay px.
+            const m = parsed.meta;
+            setScaleInfo({
+              sx: m.dx,
+              sy: m.dy,
+              sz: m.dz,
+              xySource: m.hasRealSpacing ? "pixel-spacing" : "none",
+              zCalibrated: m.hasRealSpacing,
+            });
+            finalize(parsed.slices as Slice[]);
+          } else {
+            setStatus("error");
+          }
+        } catch {
+          if (!cancelled) {
+            setLiteBuilding(false);
+            setStatus("error");
+          }
+        }
+      })();
+      return () => {
+        cancelled = true;
+      };
+    }
+
     (async () => {
       try {
         const cachedSlices = await getDecodedSlices(fileId);
@@ -432,7 +505,7 @@ export default function DicomSetViewer({ url, name, fileId, patientId, initialNo
       activeWorker?.terminate();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fileId]);
+  }, [fileId, lowMem, liteUrl, patientId]);
 
   // Auto-ventana p1/p99 al cargar (mejor que el WindowCenter/Width del scanner, que
   // en CBCT suele caer mal). Se aplica una vez por estudio en cuanto hay percentiles.
@@ -540,8 +613,19 @@ export default function DicomSetViewer({ url, name, fileId, patientId, initialNo
     return (
       <div className="flex flex-col items-center justify-center text-muted-foreground" style={{ height: 480 }}>
         <Loader2 className="w-6 h-6 animate-spin mb-3" />
-        <p className="text-sm">Descomprimiendo y leyendo el CBCT…</p>
-        {progress.total > 0 && (
+        <p className="text-sm">
+          {lowMem
+            ? liteBuilding
+              ? "Optimizando este estudio para tu dispositivo…"
+              : "Cargando la versión optimizada…"
+            : "Descomprimiendo y leyendo el CBCT…"}
+        </p>
+        {lowMem && liteBuilding && (
+          <p className="text-xs mt-1 max-w-xs text-center">
+            La primera vez puede tardar un momento; después abre al instante.
+          </p>
+        )}
+        {!lowMem && progress.total > 0 && (
           <>
             <p className="text-xs mt-1">
               {progress.done} / {progress.total} cortes
@@ -567,12 +651,18 @@ export default function DicomSetViewer({ url, name, fileId, patientId, initialNo
         >
           <Layers className="w-10 h-10 mb-3 text-muted-foreground" />
           <p className="text-sm font-bold text-foreground">
-            {status === "empty" ? "No se encontraron cortes legibles" : "No se pudo leer el set"}
+            {status === "empty"
+              ? "No se encontraron cortes legibles"
+              : lowMem
+                ? "No se pudo abrir en este dispositivo"
+                : "No se pudo leer el set"}
           </p>
           <p className="text-xs mt-1 max-w-sm">
             {status === "empty"
               ? "El .zip no contiene cortes DICOM legibles. Verifica que sea la carpeta del CBCT (archivos .dcm)."
-              : "El archivo no pudo descomprimirse o leerse. Asegúrate de subir un .zip válido del estudio."}
+              : lowMem
+                ? "No se pudo preparar la versión para móvil de este estudio. Es muy grande para el teléfono; ábrelo desde una computadora para verlo completo."
+                : "El archivo no pudo descomprimirse o leerse. Asegúrate de subir un .zip válido del estudio."}
           </p>
           <a
             href={url}

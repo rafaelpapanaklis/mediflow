@@ -1,4 +1,10 @@
 {
+  "functions": {
+    "src/app/api/patients/*/dicom-set/*/lite/route.ts": {
+      "memory": 3009,
+      "maxDuration": 300
+    }
+  },
   "crons": [
     {
       "path": "/api/cron/annual-reminder",
