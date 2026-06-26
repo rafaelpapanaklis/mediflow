@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DaleControl · Importar mi clínica</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<!-- ============ ICONOS (sprite) ============ -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="i-users" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13A4 4 0 0 1 16 11"/></symbol>
+    <symbol id="i-calendar" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></symbol>
+    <symbol id="i-money" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v10M14.5 9.5c-.5-.7-1.5-1-2.5-1-1.4 0-2.5.7-2.5 1.8 0 2.4 5 1.2 5 3.6 0 1.1-1.1 1.8-2.5 1.8-1 0-2-.3-2.5-1"/></symbol>
+    <symbol id="i-chart" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M7 15l3-4 3 3 5-7"/></symbol>
+    <symbol id="i-settings" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></symbol>
+    <symbol id="i-import" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5M12 15V3"/></symbol>
+    <symbol id="i-grid" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></symbol>
+    <symbol id="i-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6L6 18M6 6l12 12"/></symbol>
+    <symbol id="i-alert" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16h.01"/></symbol>
+    <symbol id="i-arrow-r" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></symbol>
+    <symbol id="i-arrow-l" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M11 18l-6-6 6-6"/></symbol>
+    <symbol id="i-file" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></symbol>
+    <symbol id="i-download" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5M12 15V3"/></symbol>
+    <symbol id="i-cloud" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M16 16l-4-4-4 4M12 12v9"/><path d="M20.4 14.9A5 5 0 0 0 18 5.5h-1.3A8 8 0 1 0 4 13.3"/></symbol>
+    <symbol id="i-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4.2"/><path d="M12 2v2.5M12 19.5V22M4.2 4.2l1.8 1.8M18 18l1.8 1.8M2 12h2.5M19.5 12H22M4.2 19.8L6 18M18 6l1.8-1.8"/></symbol>
+    <symbol id="i-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></symbol>
+    <symbol id="i-shield" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></symbol>
+    <symbol id="i-spark" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z"/></symbol>
+    <symbol id="i-clock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol>
+    <symbol id="i-copy" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></symbol>
+    <symbol id="i-stack" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l9 5-9 5-9-5 9-5z"/><path d="M3 12l9 5 9-5M3 17l9 5 9-5"/></symbol>
+  </defs>
+</svg>
+
+<!-- ============ APP SHELL ============ -->
+<div class="app">
+  <!-- Sidebar (placeholder de contexto) -->
+  <aside class="sidebar" aria-label="Navegación del panel">
+    <div class="brand-mark">
+      <div class="brand-logo">D</div>
+      <div class="brand-name">Dale<span>Control</span></div>
+    </div>
+    <button class="nav-item"><svg class="ic"><use href="#i-chart"/></svg><span class="lbl-txt">Inicio</span></button>
+    <button class="nav-item is-active"><svg class="ic"><use href="#i-users"/></svg><span class="lbl-txt">Pacientes</span></button>
+    <button class="nav-item"><svg class="ic"><use href="#i-calendar"/></svg><span class="lbl-txt">Agenda</span></button>
+    <button class="nav-item"><svg class="ic"><use href="#i-money"/></svg><span class="lbl-txt">Cobranza</span></button>
+    <div class="nav-sep"></div>
+    <button class="nav-item"><svg class="ic"><use href="#i-settings"/></svg><span class="lbl-txt">Configuración</span></button>
+    <div class="nav-foot">
+      <a class="nav-item" href="estados.html"><svg class="ic"><use href="#i-grid"/></svg><span class="lbl-txt">Galería de estados</span></a>
+    </div>
+  </aside>
+
+  <div class="main">
+    <!-- Topbar -->
+    <header class="topbar">
+      <div class="crumbs">Clínica · <b>Pacientes</b></div>
+      <div class="spacer"></div>
+      <button class="theme-toggle" id="themeBtn" aria-label="Cambiar tema">
+        <svg class="ic" id="themeIc"><use href="#i-moon"/></svg>
+        <span id="themeLbl">Oscuro</span>
+      </button>
+      <div class="avatar">DR</div>
+    </header>
+
+    <!-- Contenido: lanzador -->
+    <div class="content">
+      <div class="page">
+        <div class="page-head">
+          <div class="titles">
+            <h1>Pacientes</h1>
+            <p class="sub">Aún no tienes pacientes registrados en DaleControl.</p>
+          </div>
+          <div class="actions">
+            <button class="btn btn--brand" id="openWizard">
+              <svg class="ic"><use href="#i-import"/></svg> Importar mi clínica
+            </button>
+          </div>
+        </div>
+
+        <!-- Estado vacío -->
+        <div class="empty">
+          <div class="glyph"><svg class="ic"><use href="#i-users"/></svg></div>
+          <h2>Trae los datos de tu sistema actual</h2>
+          <p>Si ya usas Dentalink, Open Dental, otro sistema o tu propio Excel, el asistente te guía paso a paso para migrar pacientes, saldos y citas. Sin perder nada.</p>
+          <div class="empty-cta">
+            <button class="btn btn--brand btn--lg" id="openWizard2">
+              <svg class="ic"><use href="#i-import"/></svg> Importar mi clínica
+            </button>
+            <button class="btn btn--lg" id="openAssisted">Migración asistida</button>
+          </div>
+          <p class="hint">Compatible con Dentalink, Medilink, Open Dental, Dentrix, Eaglesoft, Gesden y más.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ WIZARD MODAL ============ -->
+<div class="modal-scrim" id="scrim" role="dialog" aria-modal="true" aria-labelledby="wzHeadTitle">
+  <div class="modal">
+    <div class="modal-head">
+      <div class="ttl" id="wzHeadTitle">Importar mi clínica<small id="wzHeadSub">Asistente de migración</small></div>
+      <div class="spacer"></div>
+      <button class="icon-btn" id="closeWizard" aria-label="Cerrar asistente"><svg class="ic"><use href="#i-x"/></svg></button>
+    </div>
+
+    <!-- Step bar -->
+    <nav class="stepbar" id="stepbar" aria-label="Pasos de la importación"></nav>
+
+    <div class="modal-body" id="wzBody">
+      <!-- ===== PASO 1 · ORIGEN ===== -->
+      <section class="wz-panel" data-panel="1">
+        <h2 class="wz-title">¿De dónde vienen tus datos?</h2>
+        <p class="wz-sub">Elige tu sistema actual. Adaptaremos las instrucciones y el mapeo de columnas a tu elección.</p>
+        <div class="src-grid" id="srcGrid" role="group" aria-label="Sistema de origen"></div>
+        <div class="callout">
+          <div class="ic-wrap"><svg class="ic"><use href="#i-spark"/></svg></div>
+          <div class="txt">
+            <b>¿Prefieres que lo hagamos por ti?</b>
+            <p>Migración asistida gratis: súbenos tu respaldo y nuestro equipo lo deja listo.</p>
+          </div>
+          <button class="btn btn--soft" id="toAssisted">Migración asistida</button>
+        </div>
+      </section>
+
+      <!-- ===== PASO 2 · CÓMO EXPORTAR ===== -->
+      <section class="wz-panel" data-panel="2">
+        <h2 class="wz-title">Exporta tus datos</h2>
+        <p class="wz-sub" id="expSub">Sigue estos pasos para obtener el archivo desde tu sistema.</p>
+        <div id="exportContent"><!-- inyectado según origen --></div>
+      </section>
+
+      <!-- ===== PASO 3 · QUÉ IMPORTAR ===== -->
+      <section class="wz-panel" data-panel="3">
+        <h2 class="wz-title">¿Qué quieres traer?</h2>
+        <p class="wz-sub">Te recomendamos empezar por lo esencial. Puedes importar lo demás después.</p>
+        <div class="opt-list" id="optList"></div>
+      </section>
+
+      <!-- ===== PASO 4 · SUBIR ===== -->
+      <section class="wz-panel" data-panel="4">
+        <h2 class="wz-title">Sube tu archivo</h2>
+        <p class="wz-sub" id="upSub">Arrastra el archivo que exportaste o búscalo en tu equipo.</p>
+        <div id="uploadArea"></div>
+        <input type="file" id="fileInput" accept=".xlsx,.csv" hidden>
+      </section>
+
+      <!-- ===== PASO 5 · MAPEAR ===== -->
+      <section class="wz-panel" data-panel="5">
+        <h2 class="wz-title">Empareja las columnas</h2>
+        <p class="wz-sub" id="mapSub">Conectamos cada columna de tu archivo con un campo de DaleControl.</p>
+        <div id="mapStatusBanner"></div>
+        <div class="table-wrap" style="margin-top:14px">
+          <div class="table-scroll">
+            <table class="table" id="mapTable">
+              <thead>
+                <tr>
+                  <th>Tu columna</th>
+                  <th class="col-arrow"></th>
+                  <th>Campo de DaleControl</th>
+                  <th>Estado</th>
+                </tr>
+              </thead>
+              <tbody id="mapBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===== PASO 6 · REVISAR ===== -->
+      <section class="wz-panel" data-panel="6">
+        <h2 class="wz-title">Revisa antes de importar</h2>
+        <p class="wz-sub">Validamos cada fila. Corrige los errores ahora o impórtalos y arréglalos después.</p>
+        <div class="stat-grid">
+          <div class="stat-card ok">
+            <div class="top"><div class="s-ic"><svg class="ic"><use href="#i-check"/></svg></div><span class="s-lbl">Válidos</span></div>
+            <div class="s-val tnum" id="stOk">1,240</div>
+          </div>
+          <div class="stat-card err">
+            <div class="top"><div class="s-ic"><svg class="ic"><use href="#i-alert"/></svg></div><span class="s-lbl">Con errores</span></div>
+            <div class="s-val tnum" id="stErr">18</div>
+          </div>
+          <div class="stat-card warn">
+            <div class="top"><div class="s-ic"><svg class="ic"><use href="#i-copy"/></svg></div><span class="s-lbl">Duplicados</span></div>
+            <div class="s-val tnum" id="stDup">7</div>
+          </div>
+        </div>
+
+        <div class="toolbar">
+          <label class="switch is-on" id="dupSwitch">
+            <span class="track"></span>
+            <input type="checkbox" checked>
+            <span>Omitir duplicados</span>
+          </label>
+          <div class="spacer"></div>
+          <span class="muted-3" style="font-size:13px">Pasa el cursor sobre un error para ver el motivo</span>
+        </div>
+
+        <div class="table-wrap">
+          <div class="table-scroll">
+            <table class="table" id="reviewTable">
+              <thead>
+                <tr>
+                  <th>Fila</th><th>Nombre</th><th>Teléfono</th><th>Saldo</th><th>Estado</th>
+                </tr>
+              </thead>
+              <tbody id="reviewBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===== IMPORTANDO ===== -->
+      <section class="wz-panel" data-panel="importing">
+        <div class="importing">
+          <div class="spin" aria-hidden="true"></div>
+          <h3>Importando tus datos…</h3>
+          <p>No cierres esta ventana. Tardará menos de un minuto.</p>
+          <div class="progress"><i id="progBar"></i></div>
+          <div class="progress-meta">
+            <span id="progLabel">Preparando…</span>
+            <span class="tnum" id="progPct">0%</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===== RESULTADO ===== -->
+      <section class="wz-panel" data-panel="result">
+        <div class="result">
+          <div class="seal"><svg class="ic"><use href="#i-check"/></svg></div>
+          <h2>¡Listo! Tu clínica está en DaleControl</h2>
+          <p class="lead">Importamos tus datos correctamente. Los 18 registros con error no se importaron; puedes corregirlos y volver a subirlos.</p>
+          <div class="summary-row">
+            <div class="summary-pill"><span class="v tnum">1,240</span><span class="k">pacientes</span></div>
+            <div class="summary-pill"><span class="v tnum">$340,000</span><span class="k">en saldos</span></div>
+            <div class="summary-pill"><span class="v tnum">85</span><span class="k">citas próximas</span></div>
+          </div>
+          <div class="report-line">
+            <svg class="ic"><use href="#i-alert"/></svg>
+            <span>18 filas con error no se importaron.</span>
+            <div class="spacer"></div>
+            <a class="btn-link" href="#"><svg class="ic" style="width:16px;height:16px"><use href="#i-download"/></svg> Descargar reporte</a>
+          </div>
+          <div class="ctas">
+            <button class="btn btn--brand" id="goPatients"><svg class="ic"><use href="#i-users"/></svg> Ver pacientes</button>
+            <button class="btn" id="importAnother"><svg class="ic"><use href="#i-import"/></svg> Importar otra cosa</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===== MIGRACIÓN ASISTIDA ===== -->
+      <section class="wz-panel" data-panel="assisted">
+        <div id="assistedForm">
+          <h2 class="wz-title">Migración asistida · gratis</h2>
+          <p class="wz-sub">Súbenos un respaldo o exportación de tu sistema y nuestro equipo deja todo listo por ti. Ideal si no quieres hacerlo a mano.</p>
+          <div id="assistedDrop"></div>
+          <input type="file" id="assistedFileInput" hidden>
+          <div class="field" style="margin-top:18px">
+            <label for="assistedNote">¿Algo que debamos saber? (opcional)</label>
+            <textarea class="text-input" id="assistedNote" placeholder="Ej. uso Dentalink desde 2019, tengo 2 sucursales…"></textarea>
+          </div>
+          <div class="note">
+            <svg class="ic"><use href="#i-shield"/></svg>
+            <p>Tus datos se transmiten cifrados y solo el equipo de migración los consulta. No los compartimos con terceros y los eliminamos de nuestros servidores al terminar. Cumplimos con la LFPDPPP.</p>
+          </div>
+        </div>
+        <!-- estado enviado -->
+        <div id="assistedSent" style="display:none">
+          <div class="result">
+            <div class="seal" style="background:var(--brand-soft);color:var(--brand)"><svg class="ic"><use href="#i-clock"/></svg></div>
+            <h2>Recibimos tu archivo</h2>
+            <p class="lead">Tu migración está en revisión por el equipo. Te avisaremos por correo y dentro del panel cuando esté lista.</p>
+            <div class="review-strip">
+              <div class="ic-wrap"><svg class="ic"><use href="#i-clock"/></svg></div>
+              <div>
+                <b>En revisión por el equipo</b>
+                <p>Tiempo estimado: 48 horas hábiles. No necesitas hacer nada más.</p>
+              </div>
+            </div>
+            <div class="ctas" style="margin-top:22px">
+              <button class="btn btn--brand" id="assistedDone">Entendido</button>
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <!-- Footer del wizard -->
+    <div class="modal-foot" id="wzFoot">
+      <button class="btn" id="btnBack"><svg class="ic"><use href="#i-arrow-l"/></svg> Atrás</button>
+      <span class="hint" id="footHint"></span>
+      <div class="spacer"></div>
+      <button class="btn btn--brand" id="btnNext">Continuar <svg class="ic"><use href="#i-arrow-r"/></svg></button>
+    </div>
+  </div>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>

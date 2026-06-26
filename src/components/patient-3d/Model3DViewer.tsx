@@ -27,9 +27,11 @@ import * as THREE from "three";
 import { STLLoader } from "three/examples/jsm/loaders/STLLoader.js";
 import { PLYLoader } from "three/examples/jsm/loaders/PLYLoader.js";
 import { OBJLoader } from "three/examples/jsm/loaders/OBJLoader.js";
+import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
+import { MeshoptDecoder } from "three/examples/jsm/libs/meshopt_decoder.module.js";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { CSS2DRenderer, CSS2DObject } from "three/examples/jsm/renderers/CSS2DRenderer.js";
-import { mergeVertices } from "three/examples/jsm/utils/BufferGeometryUtils.js";
+import { mergeVertices, mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import { computeBoundsTree, disposeBoundsTree, acceleratedRaycast } from "three-mesh-bvh";
 import {
   Ruler,
@@ -80,6 +82,13 @@ export interface Pin3D {
 
 export interface Model3DViewerProps {
   url: string;
+  /**
+   * GLB web-optimizado hermano (Meshopt + decimación) que genera el servidor al
+   * subir la malla, conservando la escala real. Si viene, el visor lo carga en
+   * lugar del original (carga más rápida); si está vacío o falla, cae al `url`
+   * original sin regresión. Solo aplica a mallas (stl/ply/obj), no a DICOM.
+   */
+  webUrl?: string;
   /** Si no se pasa, se infiere de la extensión de la URL. */
   format?: Model3DFormat;
   onClose?: () => void;
@@ -193,6 +202,7 @@ function segBtn(active: boolean): string {
 
 export default function Model3DViewer({
   url,
+  webUrl,
   format,
   onClose,
   patientId,
@@ -519,56 +529,114 @@ export default function Model3DViewer({
       return new THREE.Mesh(geometry, material);
     };
 
-    // Carga el modelo a través de la cache de archivos (IndexedDB por fileId):
+    // Descarga el archivo ORIGINAL a través de la cache (IndexedDB por fileId):
     // reabrir el mismo escaneo no vuelve a descargarlo de Supabase. Si no hay
-    // fileId, cae a un fetch directo. Usamos .parse() con el blob (no .load(url))
-    // para reutilizar el archivo ya descargado/cacheado.
-    const blobPromise = fileId
-      ? fetchWithCache(fileId, url)
-      : fetch(url).then((r) => {
-          if (!r.ok) throw new Error("fetch");
-          return r.blob();
+    // fileId, cae a un fetch directo. Se difiere a una función (en vez de iniciar
+    // la descarga de inmediato) para NO traer el original cuando el GLB web ya
+    // basta — solo se descarga en el fallback.
+    const fetchOriginalBlob = () =>
+      fileId
+        ? fetchWithCache(fileId, url)
+        : fetch(url).then((r) => {
+            if (!r.ok) throw new Error("fetch");
+            return r.blob();
+          });
+
+    // RUTA ORIGINAL (default + fallback): parsea el archivo crudo con su loader
+    // por formato. Comportamiento histórico, intacto. Usamos .parse() con el blob
+    // (no .load(url)) para reutilizar el archivo ya descargado/cacheado.
+    const loadOriginal = async () => {
+      const blob = await fetchOriginalBlob();
+      if (disposed) return;
+      if (fmt === "stl") {
+        // STL llega NO indexado con normales por cara → aspecto facetado. Para
+        // un sombreado suave: borramos la normal por cara (si no, mergeVertices
+        // no fusionaría posiciones coincidentes con normales distintas),
+        // fusionamos vértices duplicados y recalculamos normales suaves.
+        let geometry = new STLLoader().parse(await blob.arrayBuffer());
+        geometry.deleteAttribute("normal");
+        geometry = mergeVertices(geometry);
+        geometry.computeVertexNormals();
+        addObject(meshFromGeometry(geometry));
+      } else if (fmt === "ply") {
+        // PLYLoader (r184) ya convierte los colores por vértice de sRGB a
+        // lineal al parsear (setRGB(..., SRGBColorSpace)); con el
+        // outputColorSpace sRGB por defecto del renderer se ven correctos.
+        // No reconvertir aquí: duplicaría la corrección y oscurecería.
+        addObject(meshFromGeometry(new PLYLoader().parse(await blob.arrayBuffer())));
+      } else {
+        // OBJ → Group; aplicamos material uniforme a cada mesh para uniformar
+        // escaneos sin .mtl.
+        const group = new OBJLoader().parse(await blob.text());
+        group.traverse((child) => {
+          const mesh = child as THREE.Mesh;
+          if (mesh.isMesh) {
+            mesh.geometry?.computeVertexNormals?.();
+            mesh.geometry?.computeBoundsTree?.(); // BVH para medición rápida.
+            mesh.material = new THREE.MeshPhongMaterial({
+              color: COLOR_PRESETS[DEFAULT_COLOR],
+              specular: 0x222222,
+              shininess: 70,
+              side: THREE.DoubleSide,
+            });
+          }
         });
+        addObject(group);
+      }
+    };
+
+    // RUTA RÁPIDA: GLB web-optimizado (webUrl). Lo genera el servidor al subir la
+    // malla (Meshopt + decimación) CONSERVANDO la escala real. Devuelve true si
+    // logró montar una malla; false → el caller cae a loadOriginal() sin
+    // regresión. El GLB puede venir CUANTIZADO (KHR_mesh_quantization): la
+    // dequantización queda en la matriz del nodo, por eso horneamos la
+    // world-matrix en la geometría (updateWorldMatrix + applyMatrix4) → las
+    // mediciones dan los MISMOS mm que el original.
+    const tryLoadWebGlb = async (): Promise<boolean> => {
+      if (!webUrl) return false;
+      let scene: THREE.Object3D;
+      try {
+        const loader = new GLTFLoader();
+        loader.setMeshoptDecoder(MeshoptDecoder); // EXT_meshopt_compression.
+        scene = (await loader.loadAsync(webUrl)).scene;
+      } catch (err) {
+        console.warn("[Model3DViewer] GLB web load failed → fallback al original", err);
+        return false;
+      }
+      if (disposed) return true; // visor desmontado durante la carga: nada que montar.
+      // Reúne TODAS las mallas del GLB en world-space (hornea la matriz del nodo).
+      const geometries: THREE.BufferGeometry[] = [];
+      scene.updateMatrixWorld(true);
+      scene.traverse((child) => {
+        const mesh = child as THREE.Mesh;
+        if (mesh.isMesh && mesh.geometry) {
+          mesh.updateWorldMatrix(true, false);
+          const g = mesh.geometry.clone();
+          g.applyMatrix4(mesh.matrixWorld);
+          geometries.push(g);
+        }
+      });
+      if (geometries.length === 0) return false; // GLB sin mallas → fallback.
+      let geometry: THREE.BufferGeometry | null;
+      if (geometries.length === 1) {
+        geometry = geometries[0];
+      } else {
+        // mergeGeometries devuelve null si los atributos no son compatibles.
+        geometry = mergeGeometries(geometries, false);
+        for (const g of geometries) g.dispose();
+        if (!geometry) return false; // no se pudo fusionar → fallback al original.
+      }
+      // MISMO pipeline que el original: NO usamos el material del GLB, sino el
+      // material clínico del visor (meshFromGeometry), con BVH (computeBoundsTree)
+      // para el picking y el mismo encuadre por bounding box → se ve y mide igual.
+      addObject(meshFromGeometry(geometry));
+      return true;
+    };
 
     void (async () => {
       try {
-        const blob = await blobPromise;
-        if (disposed) return;
-        if (fmt === "stl") {
-          // STL llega NO indexado con normales por cara → aspecto facetado. Para
-          // un sombreado suave: borramos la normal por cara (si no, mergeVertices
-          // no fusionaría posiciones coincidentes con normales distintas),
-          // fusionamos vértices duplicados y recalculamos normales suaves.
-          let geometry = new STLLoader().parse(await blob.arrayBuffer());
-          geometry.deleteAttribute("normal");
-          geometry = mergeVertices(geometry);
-          geometry.computeVertexNormals();
-          addObject(meshFromGeometry(geometry));
-        } else if (fmt === "ply") {
-          // PLYLoader (r184) ya convierte los colores por vértice de sRGB a
-          // lineal al parsear (setRGB(..., SRGBColorSpace)); con el
-          // outputColorSpace sRGB por defecto del renderer se ven correctos.
-          // No reconvertir aquí: duplicaría la corrección y oscurecería.
-          addObject(meshFromGeometry(new PLYLoader().parse(await blob.arrayBuffer())));
-        } else {
-          // OBJ → Group; aplicamos material uniforme a cada mesh para uniformar
-          // escaneos sin .mtl.
-          const group = new OBJLoader().parse(await blob.text());
-          group.traverse((child) => {
-            const mesh = child as THREE.Mesh;
-            if (mesh.isMesh) {
-              mesh.geometry?.computeVertexNormals?.();
-              mesh.geometry?.computeBoundsTree?.(); // BVH para medición rápida.
-              mesh.material = new THREE.MeshPhongMaterial({
-                color: COLOR_PRESETS[DEFAULT_COLOR],
-                specular: 0x222222,
-                shininess: 70,
-                side: THREE.DoubleSide,
-              });
-            }
-          });
-          addObject(group);
-        }
+        const loadedFromGlb = await tryLoadWebGlb();
+        if (!loadedFromGlb && !disposed) await loadOriginal();
       } catch (err) {
         onLoadError(err);
       }
@@ -904,7 +972,7 @@ export default function Model3DViewer({
       if (container.contains(renderer.domElement)) container.removeChild(renderer.domElement);
       if (container.contains(ldom)) container.removeChild(ldom);
     };
-  }, [url, format, reduceMotion]);
+  }, [url, webUrl, format, reduceMotion]);
 
   // Sincroniza estado React → escena imperativa (sin reconstruir el visor).
   useEffect(() => {

@@ -57,6 +57,9 @@ interface Model3DFile {
   id: string;
   name: string;
   url: string;
+  // GLB web-optimizado hermano (firmado) que devuelven GET/POST; "" o ausente
+  // para DICOM/legacy/conversión fallida. El visor de malla lo carga si existe.
+  webUrl?: string;
   size: number | null;
   mimeType: string | null;
   createdAt: string;
@@ -446,6 +449,7 @@ export function Models3DTab({ patientId }: { patientId: string }) {
               ) : (
                 <Model3DViewer
                   url={viewer.url}
+                  webUrl={viewer.webUrl}
                   format={formatFromName(viewer.name)}
                   patientId={patientId}
                   fileId={viewer.id}
