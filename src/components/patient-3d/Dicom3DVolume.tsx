@@ -24,7 +24,11 @@ export interface VolSlice {
   pixels: Float32Array;
 }
 
-const MAX_DIM = 256; // tope por eje para no agotar VRAM (CBCT son enormes)
+// Tope por eje del volumen 3D (CBCT son enormes). Es el DEFAULT de escritorio; en
+// móvil/poca RAM el visor pasa 128 vía la prop `maxDim` para reducir el pico de
+// memoria (avg Float32 + textura 3D) que, al sumarse al estudio completo en RAM,
+// hacía que iOS/WebKit recargara la pestaña.
+const MAX_DIM = 256;
 
 // Colormap ÓSEO/MARFIL: interpola de marrón oscuro → marfil/crema (R y G altos,
 // B medio) para que el hueso se vea natural y con relieve. El alfa sube rápido
@@ -182,7 +186,7 @@ const FALLBACK_WINDOW: AutoWindow = {
   },
 };
 
-export default function Dicom3DVolume({ slices }: { slices: VolSlice[] }) {
+export default function Dicom3DVolume({ slices, maxDim = MAX_DIM }: { slices: VolSlice[]; maxDim?: number }) {
   const mountRef = useRef<HTMLDivElement | null>(null);
   const [renderstyle, setRenderstyle] = useState<0 | 1>(1); // 1 = Sólido/ISO (defecto), 0 = MIP
   const [iso, setIso] = useState(0.36); // umbral que aísla hueso/diente
@@ -228,9 +232,9 @@ export default function Dicom3DVolume({ slices }: { slices: VolSlice[] }) {
     const depth = slices.length;
 
     // Factor de submuestreo por eje.
-    const sx = Math.max(1, Math.ceil(cols / MAX_DIM));
-    const sy = Math.max(1, Math.ceil(rows / MAX_DIM));
-    const sz = Math.max(1, Math.ceil(depth / MAX_DIM));
+    const sx = Math.max(1, Math.ceil(cols / maxDim));
+    const sy = Math.max(1, Math.ceil(rows / maxDim));
+    const sz = Math.max(1, Math.ceil(depth / maxDim));
     const W = Math.max(1, Math.floor(cols / sx));
     const H = Math.max(1, Math.floor(rows / sy));
     const D = Math.max(1, Math.floor(depth / sz));
@@ -569,7 +573,7 @@ export default function Dicom3DVolume({ slices }: { slices: VolSlice[] }) {
         renderer.domElement.parentNode.removeChild(renderer.domElement);
       }
     };
-  }, [slices]);
+  }, [slices, maxDim]);
 
   // Estilo (MIP/ISO) y umbral viven en estado de React: cambiarlos NO
   // re-ejecuta el efecto del visor, así que pedimos un frame para reflejarlos.
