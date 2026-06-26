@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { IBM_Plex_Sans, IBM_Plex_Mono } from "next/font/google";
+import Script from "next/script";
 import { Toaster } from "react-hot-toast";
 import { Analytics } from "@vercel/analytics/next";
 import { SpeedInsights } from "@vercel/speed-insights/next";
@@ -75,6 +76,19 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         `}} />
       </head>
       <body className={`${sans.variable} ${mono.variable} antialiased font-sans bg-background text-foreground`}>
+        {/* Google tag (gtag.js) — Google Ads AW-18276007996 (conversiones) */}
+        <Script
+          src="https://www.googletagmanager.com/gtag/js?id=AW-18276007996"
+          strategy="afterInteractive"
+        />
+        <Script id="ga-gtag" strategy="afterInteractive">
+          {`
+            window.dataLayer = window.dataLayer || [];
+            function gtag(){dataLayer.push(arguments);}
+            gtag('js', new Date());
+            gtag('config', 'AW-18276007996');
+          `}
+        </Script>
         {/* Toaster centralizado: única posición (top-right), duraciones
             consistentes (3s success/info, 5s error). Estilos globales
             via className para que dark mode funcione automáticamente
