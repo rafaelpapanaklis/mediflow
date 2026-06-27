@@ -9,8 +9,18 @@ interface SocialButtonsProps {
   redirectTo?: string;
 }
 
+/**
+ * Poner `true` cuando Google esté habilitado en Supabase
+ * (Authentication → Providers). Mientras esté en `false`, el botón
+ * "Continuar con Google" y su separador quedan ocultos para evitar el
+ * 400 "Unsupported provider: provider is not enabled".
+ */
+export const GOOGLE_OAUTH_ENABLED = false;
+
 export function SocialButtons({ redirectTo = "/dashboard" }: SocialButtonsProps) {
   const [loading, setLoading] = useState(false);
+
+  if (!GOOGLE_OAUTH_ENABLED) return null;
 
   async function handleOAuth(provider: "google") {
     try {

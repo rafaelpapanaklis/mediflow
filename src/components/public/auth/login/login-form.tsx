@@ -5,7 +5,7 @@ import { useState, type FormEvent } from "react";
 import toast from "react-hot-toast";
 import { createClient } from "@/lib/supabase/client";
 import { Logo } from "../../landing/primitives/logo";
-import { SocialButtons } from "../social-buttons";
+import { SocialButtons, GOOGLE_OAUTH_ENABLED } from "../social-buttons";
 import { Divider } from "../divider";
 import { FormField } from "../form-field";
 import { PasswordInput } from "../password-input";
@@ -106,9 +106,12 @@ export function LoginForm() {
       </div>
 
       {/* SSO */}
-      <SocialButtons redirectTo="/dashboard" />
-
-      <Divider label="o con tu correo" />
+      {GOOGLE_OAUTH_ENABLED && (
+        <>
+          <SocialButtons redirectTo="/dashboard" />
+          <Divider label="o con tu correo" />
+        </>
+      )}
 
       {/* Form */}
       <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: 16 }}>

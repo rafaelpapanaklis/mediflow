@@ -4,7 +4,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import toast from "react-hot-toast";
 import { Logo } from "../../landing/primitives/logo";
-import { SocialButtons } from "../social-buttons";
+import { SocialButtons, GOOGLE_OAUTH_ENABLED } from "../social-buttons";
 import { Divider } from "../divider";
 import { Stepper } from "./stepper";
 import { Step1Account } from "./step-1-account";
@@ -277,7 +277,7 @@ export function SignupForm() {
       </div>
 
       {/* Social buttons (only step 1, not in OAuth flow) */}
-      {step === 1 && !isOAuthFlow && (
+      {step === 1 && !isOAuthFlow && GOOGLE_OAUTH_ENABLED && (
         <>
           <SocialButtons redirectTo="/dashboard" />
           <Divider label="o con tu correo" />
