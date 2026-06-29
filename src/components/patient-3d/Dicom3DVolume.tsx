@@ -430,10 +430,19 @@ export default function Dicom3DVolume({ slices, maxDim = MAX_DIM }: { slices: Vo
     uniforms.u_renderthreshold.value = isoRef.current;
     uniforms.u_cmdata.value = cmtex;
 
+    // Jitter anti-banding: desplaza el inicio de cada rayo una fracción pseudo-aleatoria
+    // de un paso (por pixel) para romper el "escalonado"/anillos del ray-casting (costo ~0,
+    // no agrega pasos). Se inyecta sobre el shader de three.js SIN copiarlo (replace del
+    // punto de arranque del rayo). `step` ya está calculado en ese punto del shader.
+    const jitteredFragmentShader = VolumeRenderShader1.fragmentShader.replace(
+      "vec3 start_loc = front / u_size;",
+      "vec3 start_loc = front / u_size;\n            float jitterAmt = fract(sin(dot(gl_FragCoord.xy, vec2(12.9898, 78.233))) * 43758.5453);\n            start_loc += step * jitterAmt;",
+    );
+
     const material = new THREE.ShaderMaterial({
       uniforms,
       vertexShader: VolumeRenderShader1.vertexShader,
-      fragmentShader: VolumeRenderShader1.fragmentShader,
+      fragmentShader: jitteredFragmentShader,
       side: THREE.BackSide,
     });
 
