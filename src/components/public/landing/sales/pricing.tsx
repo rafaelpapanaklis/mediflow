@@ -8,14 +8,13 @@ import { Check, ShieldCheck } from "lucide-react";
  * Precios en MXN. Mensual confirmado.
  * Promos vigentes:
  *  - Anual: 30% de descuento → redondear(mensual × 12 × 0.70).
- *  - Mensual: −15% los primeros 3 meses → redondear(mensual × 0.85), luego precio normal.
  *  - Instalación ($500 pago único) incluida sin costo en todos los planes.
  * EDITABLE — ajusta montos y features aquí.
  */
 const PRICING = {
   basic: {
     name: "Basic", desc: "Para ordenar tu clínica desde el día uno", popular: false,
-    monthly: 499, annual: 4192, promo3m: 424, plan: "basic",
+    monthly: 499, annual: 4192, plan: "basic",
     feats: [
       "Agenda con recordatorios por WhatsApp",
       "Expediente clínico + odontograma",
@@ -26,7 +25,7 @@ const PRICING = {
   },
   pro: {
     name: "Pro", desc: "La favorita de las clínicas dentales", popular: true,
-    monthly: 999, annual: 8392, promo3m: 849, plan: "pro",
+    monthly: 999, annual: 8392, plan: "pro",
     feats: [
       "Todo lo de Basic, y además:",
       "Radiografías con análisis por IA",
@@ -37,7 +36,7 @@ const PRICING = {
   },
   clinic: {
     name: "Clinic", desc: "Para clínicas con varios consultorios", popular: false,
-    monthly: 1999, annual: 16792, promo3m: 1699, plan: "clinic",
+    monthly: 1999, annual: 16792, plan: "clinic",
     feats: [
       "Todo lo de Pro, y además:",
       "Consultorios y usuarios ilimitados",
@@ -71,12 +70,12 @@ export function Pricing() {
             </button>
           </div>
 
-          {/* Aviso de promoción según el periodo elegido (se anuncia al togglear). */}
-          <p className="mfh-price-notice" role="status" aria-live="polite">
-            {annual
-              ? "⏳ Promoción válida por las próximas 72 horas"
-              : "−15% en tus primeros 3 meses · luego precio normal"}
-          </p>
+          {/* Aviso de promoción (solo aplica al plan anual). */}
+          {annual && (
+            <p className="mfh-price-notice" role="status" aria-live="polite">
+              ⏳ Promoción válida por las próximas 72 horas
+            </p>
+          )}
         </div>
 
         <div className="mfh-plans">
@@ -100,15 +99,6 @@ export function Pricing() {
                   <div className="mfh-plan__note" style={{ textAlign: "left", marginTop: 6 }}>
                     {annual ? "Facturado al año · 30% de descuento" : "Sin permanencia · cancela cuando quieras"}
                   </div>
-
-                  {/* Promo mensual: −15% los primeros 3 meses, luego precio normal. */}
-                  {!annual && (
-                    <p className="mfh-plan__promo">
-                      <span className="mfh-plan__promo-badge">−15% primeros 3 meses</span>
-                      <span className="mfh-plan__promo-val">${fmt(p.promo3m)}/mes</span>
-                      <span className="mfh-plan__promo-ref">luego ${fmt(p.monthly)}/mes</span>
-                    </p>
-                  )}
 
                   {/* Instalación: $500 pago único tachado, incluido sin costo. */}
                   <p className="mfh-plan__install">
