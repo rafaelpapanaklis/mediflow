@@ -61,6 +61,13 @@ export function NewPatientModal({ open, onClose, onCreated, initialName, initial
     if (errors[k]) setErrors(e => { const next = { ...e }; delete next[k]; return next; });
   };
 
+  // Hoy en ISO local (yyyy-mm-dd) — tope para la fecha de nacimiento: sin futuro
+  // y con el año máximo del calendario fijado al actual.
+  const todayISO = (() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  })();
+
   useEffect(() => {
     if (!open) return;
     const next = { ...emptyForm };
@@ -187,7 +194,7 @@ export function NewPatientModal({ open, onClose, onCreated, initialName, initial
                 </div>
                 <div className="field-new">
                   <label className="field-new__label">{t("shell.newPatient.dob")} <span className="req">*</span></label>
-                  <DateField className="input-new" value={form.dob} onChange={e => set("dob", e.target.value)} style={{ borderColor: errors.dob ? '#ef4444' : undefined }} />
+                  <DateField className="input-new" value={form.dob} max={todayISO} onChange={e => set("dob", e.target.value)} style={{ borderColor: errors.dob ? '#ef4444' : undefined }} />
                 </div>
                 <div className="field-new">
                   <label className="field-new__label">{t("shell.newPatient.gender")} <span className="req">*</span></label>
