@@ -44,7 +44,7 @@ const PRICING = {
     feats: [
       "Todo lo de Pro, y además:",
       "Consultorios y usuarios ilimitados",
-      "Multi-sucursal y roles avanzados",
+      "Varias clínicas en una cuenta · roles avanzados",
       "75 GB · WhatsApp 6,000+/mes",
       "Soporte prioritario",
       "Migración y onboarding dedicado",
