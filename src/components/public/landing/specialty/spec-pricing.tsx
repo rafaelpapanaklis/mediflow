@@ -32,8 +32,8 @@ export async function SpecPricing({ spec }: { spec: Specialty }) {
         "2 usuarios · 1 sucursal",
         "Agenda + WhatsApp",
         "Expediente + odontograma",
-        "Pacientes ilimitados",
-        "Facturación CFDI 4.0",
+        "Hasta 200 pacientes",
+        "5 GB · CFDI 4.0",
       ],
     },
     {

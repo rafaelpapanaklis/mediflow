@@ -104,22 +104,21 @@ export interface PlanConfigShape {
 
 /**
  * FALLBACK = SEED. Precios 499/999/1999 (anual = 30% de descuento →
- * 4192/8392/16792). Límites finales (25-jun): pacientes ilimitados en todos;
- * usuarios 2/6/∞; storage 3/15/75 GB; IA 15k/200k/1M tokens; WhatsApp
- * 300/1500/6000. BASIC con IA en degustación pero SIN analytics/tv-modes;
- * PRO y CLINIC con todo. Editable en /admin sin redeploy.
+ * 4192/8392/16792). Límites finales: pacientes 200/∞/∞; usuarios 2/6/∞;
+ * storage 5/15/75 GB; IA 0/200k/1M; WhatsApp 300/1500/6000; BASIC SIN
+ * IA/analytics/tv-modes; PRO y CLINIC con todo. Editable en /admin sin redeploy.
  */
 export const FALLBACK_PLAN_CONFIG: Record<PlanId, PlanConfigShape> = {
   BASIC: {
     label: "Básico",
     priceMxnMonthly: 499,
     priceMxnAnnual: 4192,
-    storageBytes: 3 * GB,
-    aiTokensDefault: 15_000,
+    storageBytes: 5 * GB,
+    aiTokensDefault: 0,
     whatsappMonthly: 300,
-    maxPatients: null,
+    maxPatients: 200,
     maxUsers: 2,
-    features: { ...allModules(true), analytics: false, "tv-modes": false },
+    features: { ...allModules(true), "ai-assistant": false, analytics: false, "tv-modes": false },
   },
   PRO: {
     label: "Profesional",
