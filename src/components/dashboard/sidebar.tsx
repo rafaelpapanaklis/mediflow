@@ -6,7 +6,7 @@ import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import * as Tooltip from "@radix-ui/react-tooltip";
 import {
   Home, Calendar, Users, MessageCircle, Inbox as InboxIcon,
-  Sparkles, FileImage, Camera, FlaskConical, Dumbbell, Footprints,
+  Sparkles, Camera, FlaskConical, Dumbbell, Footprints,
   Activity, Gift, DoorOpen, Package, Building2,
   CreditCard, BarChart3, Monitor, UserCog, Globe, ClipboardList, Settings,
   ShoppingBag, Baby, Zap, Smile, Anchor, Truck, ShoppingCart,
@@ -140,15 +140,11 @@ const NAV_ITEMS: NavItemDef[] = [
   { id: "home",         section: "workspace", label: "Hoy",         href: "/dashboard",               icon: Home,          matchExact: true, permission: "today.view" },
   { id: "appointments", section: "workspace", label: "Agenda",      href: "/dashboard/agenda",        icon: Calendar,      permission: "agenda.view" },
   { id: "patients",     section: "workspace", label: "Pacientes",   href: "/dashboard/patients",      icon: Users,         permission: "patients.view" },
-  { id: "inbox",        section: "workspace", label: "Inbox",       href: "/dashboard/inbox",         icon: InboxIcon,     countKey: "inboxUnread",   permission: "inbox.view", moduleKey: "inbox" },
-  { id: "messages",     section: "workspace", label: "Mensajes",    href: "/dashboard/whatsapp",      icon: MessageCircle, countKey: "messagesUnread", permission: "whatsapp.view", moduleKey: "whatsapp" },
+  { id: "inbox",        section: "workspace", label: "Inbox",       href: "/dashboard/inbox",         icon: InboxIcon,     countKey: "inboxUnread",   permission: "inbox.view", moduleKey: "inbox", comingSoon: true },
+  { id: "messages",     section: "workspace", label: "Whatsapp / Bot",    href: "/dashboard/whatsapp",      icon: MessageCircle, countKey: "messagesUnread", permission: "whatsapp.view", moduleKey: "whatsapp", comingSoon: true },
   { id: "marketplace",  section: "workspace", label: "Marketplace", href: "/dashboard/marketplace",   icon: ShoppingBag,   permission: "marketplace.view", moduleKey: "marketplace" },
 
   { id: "ai",           section: "clinico", label: "IA asistente", href: "/dashboard/ai-assistant", icon: Sparkles, moduleKey: "ai-assistant" },
-  { id: "xrays",        section: "clinico", label: "Radiografías", href: "/dashboard/xrays",
-    icon: FileImage, countKey: "xraysUnanalyzed",
-    categories: ["DENTAL", "MEDICINE", "PODIATRY"],
-    permission: "xrays.view" },
   { id: "before-after", section: "clinico", label: "Antes/Después", href: "/dashboard/before-after",
     icon: Camera,
     categories: ["DERMATOLOGY", "AESTHETIC_MEDICINE", "BEAUTY_CENTER", "HAIR_RESTORATION", "LASER_HAIR_REMOVAL"] },
