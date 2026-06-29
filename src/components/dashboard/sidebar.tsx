@@ -131,6 +131,9 @@ interface NavItemDef {
   // (área "core" del producto). Se usa hoy para los items de
   // "Especialidades" y se puede extender a otras áreas modulares.
   moduleKey?: string;
+  // "Próximamente": si es true el item se muestra pero NO navega (sin Link).
+  // renderItem lo pinta como <div> deshabilitado con badge "Próximamente".
+  comingSoon?: boolean;
 }
 
 const NAV_ITEMS: NavItemDef[] = [
@@ -168,27 +171,27 @@ const NAV_ITEMS: NavItemDef[] = [
     icon: Baby,
     categories: ["DENTAL", "MEDICINE"],
     permission: "specialties.pediatrics",
-    moduleKey: PEDIATRICS_MODULE_KEY },
+    moduleKey: PEDIATRICS_MODULE_KEY, comingSoon: true },
   { id: "endodontics",  section: "specialties", label: "Endodoncia", href: "/dashboard/specialties/endodontics",
     icon: Zap,
     categories: ["DENTAL"],
     permission: "specialties.endodontics",
-    moduleKey: ENDODONTICS_MODULE_KEY },
+    moduleKey: ENDODONTICS_MODULE_KEY, comingSoon: true },
   { id: "periodontics", section: "specialties", label: "Periodoncia", href: "/dashboard/specialties/periodontics",
     icon: Activity,
     categories: ["DENTAL"],
     permission: "specialties.periodontics",
-    moduleKey: PERIODONTICS_MODULE_KEY },
+    moduleKey: PERIODONTICS_MODULE_KEY, comingSoon: true },
   { id: "orthodontics", section: "specialties", label: "Ortodoncia", href: "/dashboard/specialties/orthodontics",
     icon: Smile,
     categories: ["DENTAL"],
     permission: "specialties.orthodontics",
-    moduleKey: ORTHODONTICS_MODULE_KEY },
+    moduleKey: ORTHODONTICS_MODULE_KEY, comingSoon: true },
   { id: "implants",     section: "specialties", label: "Implantología", href: "/dashboard/specialties/implants",
     icon: Anchor,
     categories: ["DENTAL"],
     permission: "specialties.implants",
-    moduleKey: IMPLANTS_MODULE_KEY },
+    moduleKey: IMPLANTS_MODULE_KEY, comingSoon: true },
 
   { id: "packages",     section: "catalogo", label: "Paquetes",     href: "/dashboard/packages",
     icon: Gift, adminOnly: true,
@@ -416,6 +419,60 @@ export function Sidebar(props: SidebarProps) {
 
   const renderItem = useCallback(
     (item: NavItemDef) => {
+      // "Próximamente": el item se muestra pero NO navega. Mismo layout visual
+      // que el Link normal (icono + label) pero sin href, sin hover y con
+      // cursor/opacidad de deshabilitado. Badge solo en modo expandido; en
+      // colapsado (icon-only) solo opacidad + title nativo.
+      if (item.comingSoon) {
+        const SoonIcon = item.icon;
+        return (
+          <div
+            key={item.id}
+            title={collapsed ? "Próximamente" : undefined}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: collapsed ? 0 : 10,
+              justifyContent: collapsed ? "center" : "flex-start",
+              padding: collapsed ? "8px 0" : "7px 10px",
+              borderRadius: 8,
+              color: "var(--text-2)",
+              fontSize: 13,
+              fontWeight: 500,
+              background: "transparent",
+              border: "1px solid transparent",
+              whiteSpace: "nowrap",
+              cursor: "not-allowed",
+              opacity: 0.55,
+            }}
+          >
+            <SoonIcon size={16} aria-hidden style={{ flexShrink: 0 }} />
+            {!collapsed && (
+              <>
+                <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis" }}>
+                  {t(`sidebar.nav.${item.id}`)}
+                </span>
+                <span
+                  style={{
+                    marginLeft: "auto",
+                    fontSize: 9,
+                    fontWeight: 700,
+                    textTransform: "uppercase",
+                    letterSpacing: 0.3,
+                    color: "var(--text-2)",
+                    border: "1px solid var(--border-soft)",
+                    borderRadius: 6,
+                    padding: "1px 5px",
+                  }}
+                >
+                  Próximamente
+                </span>
+              </>
+            )}
+          </div>
+        );
+      }
+
       const active = isActivePath(pathname, item.href, item.matchExact);
       const count = getCount(item.countKey);
       const Icon = item.icon;
