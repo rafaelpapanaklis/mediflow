@@ -2910,7 +2910,15 @@ export function PatientDetailClient({
           )}
 
           {tab === "presupuestos" && (
-            <QuotesTab patientId={patient.id} />
+            <QuotesTab
+              patientId={patient.id}
+              onViewInvoice={(invoiceId) => {
+                const inv = (invoices as any[]).find((i) => i.id === invoiceId);
+                if (inv) setInvoiceDetailOpen(inv);
+                else setTab("facturacion"); // factura recién creada aún no en el snapshot
+              }}
+              onViewPlan={() => setTab("tratamiento")}
+            />
           )}
 
           {tab === "facturacion" && (

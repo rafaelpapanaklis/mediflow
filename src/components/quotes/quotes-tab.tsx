@@ -53,9 +53,13 @@ interface QuotesTabProps {
   patientId: string;
   /** Si viene, abre el editor directamente con estos conceptos. */
   prefill?: QuotePrefill | null;
+  /** Abre la factura ya generada del presupuesto (la maneja el contenedor del expediente). */
+  onViewInvoice?: (invoiceId: string) => void;
+  /** Abre el plan de tratamiento ya generado (lo maneja el contenedor del expediente). */
+  onViewPlan?: (planId: string) => void;
 }
 
-export function QuotesTab({ patientId, prefill }: QuotesTabProps) {
+export function QuotesTab({ patientId, prefill, onViewInvoice, onViewPlan }: QuotesTabProps) {
   const [quotes, setQuotes] = useState<QuoteDTO[]>([]);
   const [loading, setLoading] = useState(true);
   const [editorOpen, setEditorOpen] = useState(false);
@@ -138,7 +142,7 @@ export function QuotesTab({ patientId, prefill }: QuotesTabProps) {
       ) : (
         <div className="space-y-3">
           {quotes.map((q) => (
-            <QuoteCard key={q.id} quote={q} onChanged={load} onEdit={() => openEdit(q)} />
+            <QuoteCard key={q.id} quote={q} onChanged={load} onEdit={() => openEdit(q)} onViewInvoice={onViewInvoice} onViewPlan={onViewPlan} />
           ))}
         </div>
       )}
@@ -150,7 +154,7 @@ export function QuotesTab({ patientId, prefill }: QuotesTabProps) {
 // Tarjeta de un presupuesto + acciones
 // ---------------------------------------------------------------------------
 
-function QuoteCard({ quote, onChanged, onEdit }: { quote: QuoteDTO; onChanged: () => Promise<void> | void; onEdit: () => void }) {
+function QuoteCard({ quote, onChanged, onEdit, onViewInvoice, onViewPlan }: { quote: QuoteDTO; onChanged: () => Promise<void> | void; onEdit: () => void; onViewInvoice?: (invoiceId: string) => void; onViewPlan?: (planId: string) => void }) {
   const [busy, setBusy] = useState(false);
   const [copied, setCopied] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
@@ -293,10 +297,27 @@ function QuoteCard({ quote, onChanged, onEdit }: { quote: QuoteDTO; onChanged: (
 
         {quote.status === "ACCEPTED" && (
           <>
-            <Btn onClick={() => post(`/api/quotes/${quote.id}/invoice`)} tone="success">
+            <Btn
+              onClick={async () => {
+                // Ya facturado → abre la factura (modal del expediente). Si no,
+                // genérala y, con el id devuelto, ábrela directo.
+                if (quote.invoiceId) { onViewInvoice?.(quote.invoiceId); return; }
+                const out = await post(`/api/quotes/${quote.id}/invoice`);
+                if (out?.invoiceId) onViewInvoice?.(out.invoiceId);
+              }}
+              tone="success"
+            >
               <ReceiptText size={12} /> {quote.invoiceId ? "Ver factura" : "Generar factura"}
             </Btn>
-            <Btn onClick={() => post(`/api/quotes/${quote.id}/treatment-plan`)} tone="primary">
+            <Btn
+              onClick={async () => {
+                // Ya tiene plan → ábrelo (tab Tratamiento). Si no, créalo y ábrelo.
+                if (quote.treatmentPlanId) { onViewPlan?.(quote.treatmentPlanId); return; }
+                const out = await post(`/api/quotes/${quote.id}/treatment-plan`);
+                if (out?.treatmentPlanId) onViewPlan?.(out.treatmentPlanId);
+              }}
+              tone="primary"
+            >
               <ClipboardList size={12} /> {quote.treatmentPlanId ? "Ver plan" : "Crear plan"}
             </Btn>
           </>
