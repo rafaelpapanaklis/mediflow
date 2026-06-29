@@ -16,8 +16,8 @@ export async function SpecPricing({ spec }: { spec: Specialty }) {
   const accent = spec.accent;
   const aiDesc =
     spec.category === "Dental"
-      ? "IA radiografías 50/mes"
-      : "IA análisis 50/mes";
+      ? "IA para radiografías"
+      : "IA para análisis";
 
   const resolved = await getResolvedPlans();
 
@@ -29,11 +29,11 @@ export async function SpecPricing({ spec }: { spec: Specialty }) {
       cta:   "Elegir plan",
       href:  "/signup?plan=basic",
       items: [
-        "1 profesional · 1 sucursal",
+        "2 usuarios · 1 sucursal",
         "Agenda + WhatsApp",
-        "Expediente digital",
-        "Hasta 500 pacientes",
-        "CFDI (50 timbres/mes)",
+        "Expediente + odontograma",
+        "Pacientes ilimitados",
+        "Facturación CFDI 4.0",
       ],
     },
     {
@@ -44,26 +44,26 @@ export async function SpecPricing({ spec }: { spec: Specialty }) {
       cta:     "Elegir plan",
       href:    "/signup?plan=pro",
       items: [
-        "Hasta 3 profesionales",
+        "6 usuarios",
         "Pacientes ilimitados",
         "CFDI ilimitado",
         aiDesc,
         "Portal del paciente",
-        "Landing pública",
+        "Página web pública",
       ],
     },
     {
       name:  "CLINIC",
       price: resolved[2].priceMxn,
       tag:   "Multi-sucursal",
-      cta:   "Hablar con ventas",
-      href:  "/contact?plan=clinic",
+      cta:   "Elegir plan",
+      href:  "/signup?plan=clinic",
       items: [
-        "Profesionales ilimitados",
-        "Hasta 5 sucursales",
-        "IA ilimitada",
+        "Usuarios ilimitados",
+        "Multi-sucursal",
+        "IA ampliada (1M tokens)",
         "Reportes consolidados",
-        "API + integraciones",
+        "Soporte prioritario",
         "Onboarding dedicado",
       ],
     },

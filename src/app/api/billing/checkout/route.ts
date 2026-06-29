@@ -16,8 +16,8 @@ const BodySchema = z.object({
   // único (asíncrono, NO auto-renueva). Default "card" para no romper
   // a los llamadores existentes (p. ej. las tarjetas de /dashboard/suspended).
   method: z.enum(["card", "spei", "oxxo"]).default("card"),
-  // Ciclo de facturación. "annual" = 10 meses (2 gratis). Default "monthly"
-  // para no romper a los llamadores existentes.
+  // Ciclo de facturación. "annual" = 30% de descuento (plan.priceMxnAnnual).
+  // Default "monthly" para no romper a los llamadores existentes.
   billing: z.enum(["monthly", "annual"]).default("monthly"),
 });
 
@@ -135,10 +135,9 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // Anual = 10 meses (2 gratis). El monto sube; el PERIODO lo fija el webhook
-  // (nextBillingDate +1 año / +1 mes según metadata.billing).
-  const months = billing === "annual" ? 10 : 1;
-  const unitAmount = plan.priceMxn * months * 100;
+  // Anual = 30% de descuento (priceMxnAnnual, fuente única de planes). El
+  // PERIODO lo fija el webhook (nextBillingDate +1 año / +1 mes según billing).
+  const unitAmount = (billing === "annual" ? plan.priceMxnAnnual : plan.priceMxn) * 100;
   // metadata compartida: el webhook discrimina por kind y activa según método+billing.
   const meta = {
     clinicId: clinic.id,

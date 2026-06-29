@@ -17,10 +17,10 @@ const PRICING = {
     monthly: 499, annual: 4192, plan: "basic",
     feats: [
       "Agenda con recordatorios por WhatsApp",
-      "Expediente clínico + odontograma",
-      "Facturación CFDI 4.0",
-      "Portal del paciente",
-      "1 consultorio · hasta 2 usuarios",
+      "Expediente + odontograma · Pacientes ilimitados",
+      "Recetas y Facturación CFDI 4.0",
+      "Portal del paciente + IA de prueba",
+      "1 consultorio · 2 usuarios",
     ],
   },
   pro: {
@@ -59,7 +59,7 @@ export function Pricing() {
         <div className="mfh-head mfh-center mfh-reveal">
           <span className="mfh-kicker">Planes</span>
           <h2 className="mfh-h2 mfh-balance">Un precio claro, en pesos</h2>
-          <p className="mfh-lede">Sin permanencia, cancela cuando quieras. Todos los planes incluyen migración, soporte en español y CFDI 4.0 / NOM-024.</p>
+          <p className="mfh-lede">Sin permanencia y con garantía de 30 días. Todos los planes incluyen migración, soporte en español y CFDI 4.0 / NOM-024.</p>
 
           <div className="mfh-toggle" role="group" aria-label="Periodo de facturación">
             <button type="button" className="mfh-toggle__btn" data-active={!annual} onClick={() => setAnnual(false)} aria-pressed={!annual}>

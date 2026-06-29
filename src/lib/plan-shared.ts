@@ -84,9 +84,9 @@ function allModules(value: boolean): Record<string, boolean> {
 
 /** Copy de marketing por plan (bullets para tarjetas de precio). */
 export const PLAN_MARKETING: Record<PlanId, { name: string; features: string[] }> = {
-  BASIC:  { name: "Básico",      features: ["1 profesional", "200 pacientes", "Agenda", "Facturación"] },
-  PRO:    { name: "Profesional", features: ["3 profesionales", "Pacientes ilimitados", "Expedientes", "Reportes"] },
-  CLINIC: { name: "Clínica",     features: ["Todo ilimitado", "Multi-sucursal", "API", "Manager"] },
+  BASIC:  { name: "Básico",      features: ["2 usuarios", "Pacientes ilimitados", "Agenda + WhatsApp", "CFDI + Portal"] },
+  PRO:    { name: "Profesional", features: ["6 usuarios", "IA radiografías", "Analytics + reportes", "Mi Clínica 3D"] },
+  CLINIC: { name: "Clínica",     features: ["Usuarios ilimitados", "Multi-sucursal", "Soporte prioritario", "Onboarding dedicado"] },
 };
 
 /** Forma cruda de un plan (= columnas de plan_configs, storage en bytes). */
@@ -103,41 +103,42 @@ export interface PlanConfigShape {
 }
 
 /**
- * FALLBACK = SEED. Valores ACTUALES correctos: precios 499/999/1999
- * (anual = ×10, 2 meses gratis) + límites de los antiguos PLAN_LIMITS.
- * BASIC arranca SIN ai-assistant/analytics/tv-modes (tier de entrada);
- * PRO y CLINIC con todo habilitado. El admin puede editar todo sin redeploy.
+ * FALLBACK = SEED. Precios 499/999/1999 (anual = 30% de descuento →
+ * 4192/8392/16792). Límites finales (25-jun): pacientes ilimitados en todos;
+ * usuarios 2/6/∞; storage 3/15/75 GB; IA 15k/200k/1M tokens; WhatsApp
+ * 300/1500/6000. BASIC con IA en degustación pero SIN analytics/tv-modes;
+ * PRO y CLINIC con todo. Editable en /admin sin redeploy.
  */
 export const FALLBACK_PLAN_CONFIG: Record<PlanId, PlanConfigShape> = {
   BASIC: {
     label: "Básico",
     priceMxnMonthly: 499,
-    priceMxnAnnual: 4990,
-    storageBytes: 1 * GB,
-    aiTokensDefault: 50_000,
-    whatsappMonthly: 200,
-    maxPatients: 200,
-    maxUsers: 1,
-    features: { ...allModules(true), "ai-assistant": false, analytics: false, "tv-modes": false },
+    priceMxnAnnual: 4192,
+    storageBytes: 3 * GB,
+    aiTokensDefault: 15_000,
+    whatsappMonthly: 300,
+    maxPatients: null,
+    maxUsers: 2,
+    features: { ...allModules(true), analytics: false, "tv-modes": false },
   },
   PRO: {
     label: "Profesional",
     priceMxnMonthly: 999,
-    priceMxnAnnual: 9990,
-    storageBytes: 10 * GB,
+    priceMxnAnnual: 8392,
+    storageBytes: 15 * GB,
     aiTokensDefault: 200_000,
-    whatsappMonthly: 1000,
+    whatsappMonthly: 1500,
     maxPatients: null,
-    maxUsers: 3,
+    maxUsers: 6,
     features: allModules(true),
   },
   CLINIC: {
     label: "Clínica",
     priceMxnMonthly: 1999,
-    priceMxnAnnual: 19990,
-    storageBytes: 100 * GB,
+    priceMxnAnnual: 16792,
+    storageBytes: 75 * GB,
     aiTokensDefault: 1_000_000,
-    whatsappMonthly: 5000,
+    whatsappMonthly: 6000,
     maxPatients: null,
     maxUsers: null,
     features: allModules(true),

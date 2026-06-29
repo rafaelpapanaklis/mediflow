@@ -72,13 +72,13 @@ export function SuspendedPlanCards({ plans, currentPlan = null }: Props) {
     return p ? p.priceMxn : null;
   }
 
-  // Precio/mes mostrado: anual = priceMxn*10/12 redondeado (2 meses gratis);
-  // mensual = priceMxn tal cual. Total anual = priceMxn*10.
+  // Precio/mes mostrado: anual = 30% de descuento (priceMxn*0.70);
+  // mensual = priceMxn tal cual. Total anual = priceMxn*12*0.70.
   function perMonth(priceMxn: number): number {
-    return billing === "annual" ? Math.round((priceMxn * 10) / 12) : priceMxn;
+    return billing === "annual" ? Math.round(priceMxn * 0.7) : priceMxn;
   }
   function annualTotal(priceMxn: number): number {
-    return priceMxn * 10;
+    return Math.round(priceMxn * 12 * 0.7);
   }
 
   const methods: Array<{ id: PayMethod; label: string }> = [
