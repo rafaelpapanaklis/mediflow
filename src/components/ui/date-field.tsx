@@ -103,6 +103,13 @@ function ensurePopoverStyles() {
 .df-day:hover:not(:disabled) { background:var(--bg-hover); }
 .df-day:focus-visible { outline:2px solid var(--brand); outline-offset:1px; }
 .df-day:disabled { color:var(--text-4); opacity:.4; cursor:default; }
+.df-trigger { font-weight:600; text-align:center; }
+.df-trigger:hover { background:var(--bg-hover); color:var(--brand); }
+.df-list { position:absolute; top:34px; z-index:5; max-height:220px; overflow-y:auto; background:var(--bg-elev); border:1px solid var(--border-strong); border-radius:10px; box-shadow:0 8px 24px rgba(0,0,0,.18); padding:4px; display:flex; flex-direction:column; gap:2px; }
+.df-opt { width:100%; text-align:center; height:30px; border:0; background:transparent; color:var(--text-1); font-size:12px; border-radius:7px; cursor:pointer; white-space:nowrap; padding:0 10px; }
+.df-opt:hover:not(:disabled) { background:var(--bg-hover); }
+.df-opt[aria-selected="true"] { background:var(--brand); color:#fff; font-weight:700; }
+.df-opt:disabled { opacity:.4; cursor:default; }
 `;
   document.head.appendChild(el);
 }
@@ -145,6 +152,7 @@ export const DateField = forwardRef<HTMLInputElement, DateFieldProps>(function D
   const calBtnRef = useRef<HTMLButtonElement>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
   const gridRef = useRef<HTMLDivElement>(null);
+  const yearListRef = useRef<HTMLDivElement>(null);
 
   const [mounted, setMounted] = useState(false);
   const [focused, setFocused] = useState(false);
@@ -156,8 +164,22 @@ export const DateField = forwardRef<HTMLInputElement, DateFieldProps>(function D
   const now = new Date();
   const [viewYear, setViewYear] = useState(() => now.getFullYear());
   const [viewMonth, setViewMonth] = useState(() => now.getMonth());
+  // Dropdowns PROPIOS de mes/año: los <select> nativos abren un menú del SO que
+  // escapa el popover (en portal) y cerraba el calendario. null = ninguno abierto.
+  const [picker, setPicker] = useState<null | "month" | "year">(null);
 
   useEffect(() => { setMounted(true); ensurePopoverStyles(); }, []);
+
+  // Cierra los dropdowns al cerrar el calendario; al abrir el de año, lo centra.
+  useEffect(() => { if (!open) setPicker(null); }, [open]);
+  useEffect(() => {
+    if (picker !== "year") return;
+    const raf = requestAnimationFrame(() => {
+      const sel = yearListRef.current?.querySelector('[aria-selected="true"]') as HTMLElement | null;
+      sel?.scrollIntoView({ block: "center" });
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [picker]);
 
   // Sincroniza el texto visible con el value externo cuando NO se está editando.
   useEffect(() => { if (!focused) setText(toDMY(isoValue)); }, [isoValue, focused]);
@@ -388,33 +410,67 @@ export const DateField = forwardRef<HTMLInputElement, DateFieldProps>(function D
         visibility: ready ? "visible" : "hidden",
       }}
     >
-      {/* Encabezado: ‹ + mes + año + › */}
-      <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 10 }}>
+      {/* Encabezado: ‹ + mes + año + › (dropdowns PROPIOS, no <select> nativo). */}
+      <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 10, position: "relative" }}>
         <button type="button" className="df-nav" aria-label="Mes anterior" disabled={prevDisabled} onClick={() => shiftMonth(-1)}>
           <ChevronLeft size={16} />
         </button>
-        <select
-          className="df-sel"
-          aria-label="Mes"
-          value={viewMonth}
-          onChange={(e) => setViewMonth(+e.target.value)}
+        <button
+          type="button"
+          className="df-sel df-trigger"
+          aria-haspopup="listbox"
+          aria-expanded={picker === "month"}
+          onClick={() => setPicker((p) => (p === "month" ? null : "month"))}
           style={{ flex: 1, minWidth: 0 }}
         >
-          {MONTHS_ES.map((mn, idx) => (
-            <option key={mn} value={idx} disabled={idx < monthMin || idx > monthMax}>{mn}</option>
-          ))}
-        </select>
-        <select
-          className="df-sel"
-          aria-label="Año"
-          value={viewYear}
-          onChange={(e) => changeYear(+e.target.value)}
+          {MONTHS_ES[viewMonth]}
+        </button>
+        <button
+          type="button"
+          className="df-sel df-trigger"
+          aria-haspopup="listbox"
+          aria-expanded={picker === "year"}
+          onClick={() => setPicker((p) => (p === "year" ? null : "year"))}
         >
-          {years.map((y) => <option key={y} value={y}>{y}</option>)}
-        </select>
+          {viewYear}
+        </button>
         <button type="button" className="df-nav" aria-label="Mes siguiente" disabled={nextDisabled} onClick={() => shiftMonth(1)}>
           <ChevronRight size={16} />
         </button>
+
+        {picker === "month" && (
+          <div role="listbox" aria-label="Elegir mes" className="df-list" style={{ left: 36, right: 36 }}>
+            {MONTHS_ES.map((mn, idx) => (
+              <button
+                key={mn}
+                type="button"
+                role="option"
+                aria-selected={idx === viewMonth}
+                className="df-opt"
+                disabled={idx < monthMin || idx > monthMax}
+                onClick={() => { setViewMonth(idx); setPicker(null); }}
+              >
+                {mn}
+              </button>
+            ))}
+          </div>
+        )}
+        {picker === "year" && (
+          <div ref={yearListRef} role="listbox" aria-label="Elegir año" className="df-list" style={{ right: 36, width: 92 }}>
+            {years.map((y) => (
+              <button
+                key={y}
+                type="button"
+                role="option"
+                aria-selected={y === viewYear}
+                className="df-opt"
+                onClick={() => { changeYear(y); setPicker(null); }}
+              >
+                {y}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Días de la semana */}
