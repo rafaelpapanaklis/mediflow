@@ -13,6 +13,7 @@ import { Step3PlanPayment, type CardDetails } from "./step-3-plan-payment";
 import type { Billing, PlanId } from "./plan-card";
 import { isPlanId } from "@/lib/billing/plans";
 import { RefClickTracker } from "@/components/afiliados/ref-click-tracker";
+import { trackSignupConversionAndRedirect } from "@/lib/gtag";
 
 interface SignupState {
   // Step 1
@@ -232,7 +233,7 @@ export function SignupForm() {
       // /dashboard, así no pasa por el gating ni ve modal alguno) donde elige
       // plan, método y paga. El webhook activa la cuenta al confirmar el pago.
       toast.success("¡Cuenta creada! Elige cómo pagar para activar tu plan.");
-      window.location.href = "/dashboard/suspended";
+      trackSignupConversionAndRedirect("/dashboard/suspended");
       return;
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Error al crear cuenta";
