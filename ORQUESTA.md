@@ -1,8 +1,17 @@
 ═══════════════════════════════════════════════════════════════════════════
-## ONBOARDING-EMAILS — Correos "plan activado" (1er pago) + "plan renovado" (Resend) ✅ (2026-06-29) · rama feat/billing-emails (NO main)
+## BILLING-EMAILS-MERGE — Correos de billing → MAIN ✅ (2026-06-29)
 ═══════════════════════════════════════════════════════════════════════════
-COMMIT: dd014101 · BUILD EXIT 0 (✓ Compiled successfully, sin warnings en archivos tocados).
-NO mergeado a main: pendiente aplicar SQL + QA con pago de prueba (que llegue el correo A).
+MERGE: d50b28fe (`--no-ff` de feat/billing-emails @ 8708ac17 sobre main f52400dd) · BUILD EXIT 0
+(✓ Compiled successfully). 0 conflictos: sin solapamiento de archivos (main solo había tocado 3
+componentes UI del DateField; la rama toca email.ts/webhook/schema/sql/ORQUESTA). Pusheado a
+origin/main → Vercel auto-deploy. SQL `sql/billing-email-log.sql` YA aplicado en Supabase (aparte).
+Sin envs nuevas. Detalle de la feature ↓.
+
+═══════════════════════════════════════════════════════════════════════════
+## ONBOARDING-EMAILS — Correos "plan activado" (1er pago) + "plan renovado" (Resend) ✅ (2026-06-29) · rama feat/billing-emails → MERGEADA a main
+═══════════════════════════════════════════════════════════════════════════
+COMMIT: dd014101 · MERGE a main: d50b28fe (29-jun) · BUILD EXIT 0 (✓ Compiled successfully, sin warnings).
+SQL billing-email-log.sql YA aplicado. QA: validar con pago de prueba real en prod (que llegue el correo).
 
 OBJETIVO: 2 correos branded (mismo estilo dark que sendWelcomeEmail) disparados desde el
 webhook de Stripe:
