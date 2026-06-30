@@ -5,6 +5,8 @@ import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { OverviewClient } from "./overview-client";
 import { requirePermissionOrRedirect } from "@/lib/auth/require-permission";
+import { getActiveClinicModuleKeys } from "@/lib/clinical-shared/get-active-clinic-modules";
+import { ModuleLocked } from "@/components/dashboard/module-locked";
 import { getServerT } from "@/i18n/server";
 
 export const metadata: Metadata = { title: "Analytics — DaleControl" };
@@ -14,6 +16,13 @@ const MIN_APPTS_FOR_INSIGHTS = 30;
 export default async function AnalyticsOverviewPage() {
   const user = await getCurrentUser();
   requirePermissionOrRedirect(user, "analytics.view");
+
+  // Gating por PLAN (no solo por rol): si el plan de la clínica no incluye
+  // Analytics, no se puede abrir por URL. Mismo criterio que el sidebar
+  // (getActiveClinicModuleKeys): fail-open en trial / error, oculta en BASIC.
+  const activeModules = await getActiveClinicModuleKeys(user.clinicId);
+  if (!activeModules.includes("analytics")) return <ModuleLocked name="Analytics" />;
+
   const clinicId = user.clinicId;
   const { t } = await getServerT();
 
