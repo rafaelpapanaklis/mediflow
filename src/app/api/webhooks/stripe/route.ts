@@ -18,6 +18,8 @@ import {
 import { PATIENT_INVOICE_KIND, applyInvoiceOnlinePayment } from "@/lib/patient-portal/online-payment";
 import { getPlanLimits } from "@/lib/plans";
 import { isPlanId } from "@/lib/billing/plans";
+import { sendPlanActivatedEmail, sendPlanRenewedEmail } from "@/lib/email";
+import { PLAN_MARKETING } from "@/lib/plan-shared";
 
 // Next.js App Router: no hace body-parsing automático aquí porque leemos el
 // raw body para verificar la firma de Stripe.
@@ -25,6 +27,10 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const ONE_MONTH_MS = 30 * 24 * 60 * 60 * 1000;
+
+// Base pública para los links de los correos de billing (mismo patrón que
+// affiliate-emails / recordatorios). Sin dependencia del request.
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://www.dalecontrol.com";
 
 export async function POST(req: NextRequest) {
   const stripe = getStripeSafe();
@@ -245,10 +251,95 @@ export async function POST(req: NextRequest) {
           where: { stripeCustomerId: customerId },
           select: {
             id: true,
+            name: true,
+            email: true,
+            plan: true,
+            nextBillingDate: true,
+            // Dueño de la clínica (SUPER_ADMIN más antiguo activo) → destinatario
+            // preferente de los correos de billing; cae a clinic.email si no hay.
+            users: {
+              where: { role: "SUPER_ADMIN", isActive: true },
+              orderBy: { createdAt: "asc" },
+              take: 1,
+              select: { email: true, firstName: true },
+            },
             affiliateId: true,
             affiliate: { select: { commissionPct: true, status: true } },
           },
         });
+
+        // ──────────────────────────────────────────────────────────────────
+        // CORREOS DE CICLO DE VIDA DEL PLAN — van ANTES del break por afiliado
+        // para que lleguen a TODAS las clínicas (no solo a las referidas):
+        //   billing_reason "subscription_create" → "plan activado" (1er pago)
+        //   billing_reason "subscription_cycle"  → "plan renovado" (renovación)
+        //   otros billing_reason                 → se ignoran.
+        // Idempotente por invoiceId: Stripe dispara invoice.paid +
+        // invoice.payment_succeeded para la misma factura → la fila única en
+        // billing_email_logs garantiza UN solo correo. Fire-and-forget: ni el
+        // envío ni un fallo del guard bloquean el 200 ni la lógica de afiliado.
+        if (clinic) {
+          try {
+            const reason = invoice.billing_reason;
+            const kind =
+              reason === "subscription_create" ? "plan_activated"
+              : reason === "subscription_cycle" ? "plan_renewed"
+              : null;
+            if (kind) {
+              const owner = clinic.users[0];
+              const to = owner?.email ?? clinic.email ?? null;
+              if (to) {
+                // Guard ATÓMICO: la fila única (invoiceId) es el candado. Si ya
+                // existe (P2002) o la tabla aún no está migrada, NO enviamos
+                // (no podemos deduplicar → preferimos no duplicar).
+                let firstTime = false;
+                try {
+                  await prisma.billingEmailLog.create({
+                    data: { invoiceId, clinicId: clinic.id, kind, email: to },
+                  });
+                  firstTime = true;
+                } catch (e: any) {
+                  if (e?.code !== "P2002") {
+                    console.error("[stripe webhook] billing email guard:", e?.code ?? e);
+                  }
+                }
+                if (firstTime) {
+                  const planName =
+                    PLAN_MARKETING[clinic.plan as keyof typeof PLAN_MARKETING]?.name ?? String(clinic.plan);
+                  if (kind === "plan_activated") {
+                    sendPlanActivatedEmail({
+                      email: to,
+                      firstName: owner?.firstName,
+                      clinicName: clinic.name,
+                      planName,
+                      dashboardUrl: `${SITE_URL}/dashboard`,
+                    }).catch(() => {});
+                  } else {
+                    // Próxima fecha de cobro: fin del periodo facturado en la
+                    // línea (= próxima renovación) o nextBillingDate como fallback.
+                    const lineEnd = invoice.lines?.data?.[0]?.period?.end ?? null;
+                    const nextBillingDate = lineEnd
+                      ? new Date(lineEnd * 1000)
+                      : clinic.nextBillingDate ?? null;
+                    sendPlanRenewedEmail({
+                      email: to,
+                      firstName: owner?.firstName,
+                      clinicName: clinic.name,
+                      planName,
+                      amountPaid: (invoice.amount_paid ?? 0) / 100,
+                      currency: invoice.currency ?? "mxn",
+                      nextBillingDate,
+                      receiptsUrl: `${SITE_URL}/dashboard/settings?tab=subscription`,
+                    }).catch(() => {});
+                  }
+                }
+              }
+            }
+          } catch (err) {
+            console.error("[stripe webhook] billing email section:", err);
+          }
+        }
+
         if (!clinic?.affiliateId || !clinic.affiliate) break; // sin afiliado referente
         // Solo afiliados APPROVED acumulan comisión: la aprobación puede
         // revocarse (suspendido/rechazado) DESPUÉS de la atribución del alta.

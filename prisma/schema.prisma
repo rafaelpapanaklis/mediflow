@@ -328,6 +328,23 @@ enum Plan {
   CLINIC
 }
 
+// Idempotencia de los correos de ciclo de vida del plan (activado / renovado).
+// Una fila por factura de Stripe: la unicidad de `invoiceId` evita el doble
+// envío cuando Stripe dispara invoice.paid + invoice.payment_succeeded para la
+// misma factura. Sin relación/FK a Clinic a propósito (log liviano que solo
+// escribe/lee el webhook con service role). Ver sql/billing-email-log.sql.
+model BillingEmailLog {
+  id        String   @id @default(cuid())
+  invoiceId String   @unique
+  clinicId  String
+  kind      String // "plan_activated" | "plan_renewed"
+  email     String
+  createdAt DateTime @default(now())
+
+  @@index([clinicId])
+  @@map("billing_email_logs")
+}
+
 // ═══════════════════════════════════════════════════════════════════════
 // PROVEEDORES / COMPRAS — marketplace B2B. El proveedor es GLOBAL (sin
 // clinicId): vende a cualquier clínica. Carrito, pedidos y chat son por
