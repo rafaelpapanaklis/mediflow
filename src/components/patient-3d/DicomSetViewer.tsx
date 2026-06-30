@@ -356,6 +356,10 @@ export default function DicomSetViewer({ url, name, fileId, patientId, liteUrl, 
   // Modo de vista (solo escritorio): rejilla MPR 2×2 (por defecto) o Panorámica
   // (reslice curvo). En móvil se usa `mobileView` (una vista a la vez).
   const [viewMode, setViewMode] = useState<"mpr" | "pano">("mpr");
+  // Calidad ALTA opt-in ("HD"): carga un lite de 384² (en vez de 256²) y renderiza
+  // el volumen a maxDim 384. Default SIEMPRE 256 (seguro en cualquier equipo); iOS
+  // no permite detectar la gama de forma fiable, por eso es manual.
+  const [hd, setHd] = useState(false);
 
   const [notes, setNotes] = useState(initialNotes);
   const [savingNotes, setSavingNotes] = useState(false);
@@ -433,15 +437,17 @@ export default function DicomSetViewer({ url, name, fileId, patientId, liteUrl, 
       };
       (async () => {
         try {
-          let parsed = liteUrl ? await fetchLite(liteUrl) : null;
+          // Con HD ignoramos el liteUrl (prop, que es 256) y pedimos siempre el alta.
+          let parsed = (!hd && liteUrl) ? await fetchLite(liteUrl) : null;
           if (cancelled) return;
           if (!parsed) {
             // No existe aún (o falló la descarga): pídele al servidor que lo genere.
             setLiteBuilding(true);
             try {
-              const gen = await fetch(`/api/patients/${patientId}/dicom-set/${fileId}/lite`, {
-                method: "POST",
-              });
+              const gen = await fetch(
+                `/api/patients/${patientId}/dicom-set/${fileId}/lite${hd ? "?res=hi" : ""}`,
+                { method: "POST" },
+              );
               if (cancelled) return;
               if (gen.ok) {
                 const j = await gen.json().catch(() => null);
@@ -528,7 +534,7 @@ export default function DicomSetViewer({ url, name, fileId, patientId, liteUrl, 
       activeWorker?.terminate();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fileId, lowMem, liteUrl, patientId]);
+  }, [fileId, lowMem, liteUrl, patientId, hd]);
 
   // Auto-ventana p1/p99 al cargar (mejor que el WindowCenter/Width del scanner, que
   // en CBCT suele caer mal). Se aplica una vez por estudio en cuanto hay percentiles.
@@ -748,7 +754,7 @@ export default function DicomSetViewer({ url, name, fileId, patientId, liteUrl, 
       <div className="p-2">
         {/* En móvil submuestrea más fino (128 vs 256): el pico de `avg` Float32
             cae de ~67 MB a ~8 MB y la textura 3D a 1/8, clave para no recargar. */}
-        <Dicom3DVolume slices={slices as unknown as VolSlice[]} maxDim={256} />
+        <Dicom3DVolume slices={slices as unknown as VolSlice[]} maxDim={hd ? 384 : 256} />
       </div>
     </div>
   );
@@ -823,6 +829,19 @@ export default function DicomSetViewer({ url, name, fileId, patientId, liteUrl, 
                 <Crosshair className="w-3.5 h-3.5" /> Guías
               </button>
             )}
+            <button
+              type="button"
+              aria-pressed={hd}
+              onClick={() => setHd((v) => !v)}
+              title="Calidad alta (más nítido; usa más memoria, solo equipos potentes)"
+              className={`text-[11px] font-semibold px-2.5 py-1.5 rounded-md inline-flex items-center gap-1.5 border transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 ${
+                hd
+                  ? "bg-brand-600 text-white border-brand-600"
+                  : "bg-background/60 text-foreground border-border hover:bg-muted"
+              }`}
+            >
+              HD
+            </button>
             <button
               type="button"
               onClick={reset}

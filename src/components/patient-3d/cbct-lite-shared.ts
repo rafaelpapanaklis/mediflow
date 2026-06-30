@@ -127,4 +127,6 @@ export function decodeCbctLite(buf: ArrayBuffer): { meta: CbctLiteMeta; slices: 
 
 // Sufijo del derivado lite hermano en storage (igual patrón que `.web.glb`).
 export const CBCT_LITE_SUFFIX = ".lite.bin";
+// Variante de ALTA resolución (opt-in "HD" en el visor): 384² en plano vs 256.
+export const CBCT_LITE_HI_SUFFIX = ".lite-hi.bin";
 export const CBCT_LITE_CONTENT_TYPE = "application/octet-stream";

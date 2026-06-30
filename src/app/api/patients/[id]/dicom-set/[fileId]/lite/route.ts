@@ -13,7 +13,7 @@ import { createClient as createAdmin } from "@supabase/supabase-js";
 import { getAuthContext } from "@/lib/auth-context";
 import { prisma } from "@/lib/prisma";
 import { BUCKETS, extractStoragePath, SIGNED_URL_TTL_SECONDS } from "@/lib/storage";
-import { CBCT_LITE_SUFFIX, CBCT_LITE_CONTENT_TYPE } from "@/components/patient-3d/cbct-lite-shared";
+import { CBCT_LITE_SUFFIX, CBCT_LITE_HI_SUFFIX, CBCT_LITE_CONTENT_TYPE } from "@/components/patient-3d/cbct-lite-shared";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -72,7 +72,9 @@ export async function POST(
 
   const zipPath = extractStoragePath(file.url);
   if (!zipPath) return NextResponse.json({ error: "Ruta de estudio inválida" }, { status: 400 });
-  const litePath = `${zipPath}${CBCT_LITE_SUFFIX}`;
+  // ?res=hi → variante de alta resolución (384²). Default = lite normal (256²).
+  const hi = req.nextUrl.searchParams.get("res") === "hi";
+  const litePath = `${zipPath}${hi ? CBCT_LITE_HI_SUFFIX : CBCT_LITE_SUFFIX}`;
 
   const supabase = getAdminSupabase();
   const force = req.nextUrl.searchParams.get("force") === "1";
@@ -101,7 +103,7 @@ export async function POST(
   let info: { count: number; rows: number; cols: number; sourceSlices: number };
   try {
     const { buildCbctLite } = await import("@/lib/cbct-lite");
-    const result = await buildCbctLite(dl.data);
+    const result = await buildCbctLite(dl.data, hi ? 384 : 256, 180);
     bytes = result.bytes;
     info = {
       count: result.meta.count,

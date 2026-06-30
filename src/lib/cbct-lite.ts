@@ -82,7 +82,11 @@ export interface BuildCbctLiteResult {
  * si el zip no trae cortes legibles. `input` acepta lo que JSZip entiende (Blob /
  * ArrayBuffer / Uint8Array) — en el endpoint llega el Blob de Supabase Storage.
  */
-export async function buildCbctLite(input: ArrayBuffer | Uint8Array | Blob): Promise<BuildCbctLiteResult> {
+export async function buildCbctLite(
+  input: ArrayBuffer | Uint8Array | Blob,
+  targetXY: number = TARGET_XY,
+  targetZ: number = TARGET_Z,
+): Promise<BuildCbctLiteResult> {
   // JSZip en Node NO soporta Blob (su lectura de Blob usa FileReader, solo navegador).
   // supabase.storage.download() devuelve un Blob -> convertir a Uint8Array, o JSZip lanza
   // "Can't read the data of the loaded zip file".
@@ -113,8 +117,8 @@ export async function buildCbctLite(input: ArrayBuffer | Uint8Array | Blob): Pro
       if (baseRows === 0) {
         baseRows = s.rows;
         baseCols = s.cols;
-        xStep = Math.max(1, Math.ceil(s.cols / TARGET_XY));
-        yStep = Math.max(1, Math.ceil(s.rows / TARGET_XY));
+        xStep = Math.max(1, Math.ceil(s.cols / targetXY));
+        yStep = Math.max(1, Math.ceil(s.rows / targetXY));
       }
       // CBCT real es homogéneo; un corte de dims distintas (raro) se omite para
       // mantener el volumen rectangular.
@@ -139,7 +143,7 @@ export async function buildCbctLite(input: ArrayBuffer | Uint8Array | Blob): Pro
   reduced.sort((a, b) => a.order - b.order);
 
   // 3) Submuestreo en Z: 1 de cada zStep para no pasar de TARGET_Z cortes.
-  const zStep = Math.max(1, Math.ceil(reduced.length / TARGET_Z));
+  const zStep = Math.max(1, Math.ceil(reduced.length / targetZ));
   const picked: ReducedSlice[] = [];
   for (let i = 0; i < reduced.length; i += zStep) picked.push(reduced[i]);
 
