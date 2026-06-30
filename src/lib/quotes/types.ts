@@ -74,6 +74,46 @@ export interface QuoteDTO {
   items: QuoteItemDTO[];
 }
 
+/** Ítem de factura tal como se guarda en el JSON `Invoice.items`. */
+export interface BillingInvoiceItem {
+  description: string;
+  quantity: number;
+  unitPrice: number;
+  total: number;
+}
+
+/** Pago serializado (money en number, fecha en ISO). */
+export interface BillingPaymentLite {
+  id: string;
+  amount: number;
+  method: string;
+  reference: string | null;
+  notes: string | null;
+  paidAt: string;
+}
+
+/**
+ * Factura serializada mínima que consume la tabla de "Facturación" del
+ * expediente y el modal de cobro. Money SIEMPRE en number; createdAt en ISO.
+ * Es la shape que devuelve createInvoiceFromQuote y que el cliente inserta en
+ * el state `invoices` sin recargar.
+ */
+export interface BillingInvoiceLite {
+  id: string;
+  invoiceNumber: string;
+  patientId: string;
+  status: string;
+  subtotal: number;
+  discount: number;
+  total: number;
+  paid: number;
+  balance: number;
+  notes: string | null;
+  items: BillingInvoiceItem[];
+  payments: BillingPaymentLite[];
+  createdAt: string;
+}
+
 /**
  * Vista pública (solo lectura) que ve el paciente en /presupuesto/[token].
  * NO incluye datos sensibles extra (clinicId, patientId, ids internos, notas

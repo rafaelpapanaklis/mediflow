@@ -2918,6 +2918,11 @@ export function PatientDetailClient({
                 else setTab("facturacion"); // factura recién creada aún no en el snapshot
               }}
               onViewPlan={() => setTab("tratamiento")}
+              onInvoiceCreated={(inv) =>
+                setInvoices((prev: any[]) =>
+                  prev.some((i: any) => i.id === inv.id) ? prev : [inv, ...prev]
+                )
+              }
             />
           )}
 

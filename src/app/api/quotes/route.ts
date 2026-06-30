@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { logAudit } from "@/lib/audit";
 import { createQuoteWithFolio, parseValidUntil } from "@/lib/quotes/service";
 import { serializeQuote } from "@/lib/quotes/serialize";
+import { createInvoiceFromQuote } from "@/lib/quotes/create-invoice-from-quote";
 
 export const dynamic = "force-dynamic";
 
@@ -104,5 +105,17 @@ export async function POST(req: NextRequest) {
     changes: { folio: { before: null, after: quote.folio }, total: { before: null, after: Number(quote.total) } },
   });
 
-  return NextResponse.json(serializeQuote(quote), { status: 201 });
+  // Factura automática (BORRADOR) al CREAR el presupuesto, para que aparezca
+  // de inmediato en la pestaña "Facturación" del expediente. Best-effort: si
+  // falla, NO bloquea la creación del presupuesto. Idempotente por diseño.
+  let invoice = null;
+  try {
+    const res = await createInvoiceFromQuote(quote, ctx);
+    invoice = res.invoice;
+    quote.invoiceId = res.invoice.id; // refleja el vínculo en el DTO devuelto
+  } catch (e) {
+    console.error("[quotes:create] factura automática falló (no bloquea):", e);
+  }
+
+  return NextResponse.json({ ...serializeQuote(quote), invoice }, { status: 201 });
 }
