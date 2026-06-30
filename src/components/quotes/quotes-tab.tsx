@@ -6,7 +6,7 @@ import {
   CheckCircle2, XCircle, Pencil, Files, ReceiptText, ClipboardList, Search,
 } from "lucide-react";
 import { computeTotals } from "@/lib/quotes/compute";
-import type { QuoteDTO, QuoteStatus, QuoteItemInput } from "@/lib/quotes/types";
+import type { QuoteDTO, QuoteStatus, QuoteItemInput, BillingInvoiceLite } from "@/lib/quotes/types";
 
 function money(n: number): string {
   const v = isFinite(Number(n)) ? Number(n) : 0;
@@ -57,9 +57,11 @@ interface QuotesTabProps {
   onViewInvoice?: (invoiceId: string) => void;
   /** Abre el plan de tratamiento ya generado (lo maneja el contenedor del expediente). */
   onViewPlan?: (planId: string) => void;
+  /** Se dispara al CREAR un presupuesto nuevo cuya factura automática llegó en la respuesta. */
+  onInvoiceCreated?: (invoice: BillingInvoiceLite) => void;
 }
 
-export function QuotesTab({ patientId, prefill, onViewInvoice, onViewPlan }: QuotesTabProps) {
+export function QuotesTab({ patientId, prefill, onViewInvoice, onViewPlan, onInvoiceCreated }: QuotesTabProps) {
   const [quotes, setQuotes] = useState<QuoteDTO[]>([]);
   const [loading, setLoading] = useState(true);
   const [editorOpen, setEditorOpen] = useState(false);
@@ -96,7 +98,10 @@ export function QuotesTab({ patientId, prefill, onViewInvoice, onViewPlan }: Quo
   function openEdit(q: QuoteDTO) { setEditing(q); setInitialItems(null); setEditorOpen(true); }
   function closeEditor() { setEditorOpen(false); setEditing(null); setInitialItems(null); }
 
-  async function onSaved() {
+  async function onSaved(created?: { invoice?: BillingInvoiceLite | null }) {
+    // Solo en CREACIÓN llega `created.invoice`: insértala en Facturación al
+    // instante (el contenedor deduplica por id). En edición no viene.
+    if (created?.invoice && onInvoiceCreated) onInvoiceCreated(created.invoice);
     closeEditor();
     setLoading(true);
     await load();
@@ -376,7 +381,7 @@ function QuoteEditor({
   editing: QuoteDTO | null;
   prefill: QuotePrefill | null;
   onCancel: () => void;
-  onSaved: () => void;
+  onSaved: (created?: { invoice?: BillingInvoiceLite | null }) => void;
 }) {
   const [title, setTitle] = useState(editing?.title ?? prefill?.title ?? "Presupuesto");
   const [items, setItems] = useState<EditorItem[]>(() => toEditorItems(prefill, editing));
@@ -480,7 +485,9 @@ function QuoteEditor({
       });
       const out = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(out.error ?? "No se pudo guardar");
-      onSaved();
+      // En creación, propaga la factura automática (si vino) para insertarla en
+      // Facturación sin recargar. En edición no se factura.
+      onSaved(editing ? undefined : { invoice: out.invoice ?? null });
     } catch (e) {
       setError((e as Error).message);
       setSaving(false);
