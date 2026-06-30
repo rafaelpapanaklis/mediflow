@@ -2,7 +2,7 @@
 
 import { forwardRef, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Calendar, ChevronLeft, ChevronRight } from "lucide-react";
+import { Calendar, ChevronLeft, ChevronRight, ChevronDown } from "lucide-react";
 
 /* ------------------------------------------------------------------ */
 /* Helpers puros                                                       */
@@ -89,27 +89,50 @@ function ensurePopoverStyles() {
   el.id = STYLE_ID;
   el.textContent = `
 .df-pop, .df-pop * { box-sizing: border-box; }
+.df-pop { animation: df-pop-in .15s cubic-bezier(.16,1,.3,1); transform-origin: top center; }
+@keyframes df-pop-in { from { opacity:0; transform: translateY(-6px) scale(.97); } to { opacity:1; transform:none; } }
+.df-wrap:focus-within { border-color: var(--brand) !important; box-shadow: 0 0 0 3px var(--brand-soft); }
 .df-input::placeholder { color: var(--text-4); }
-.df-cal { display:inline-flex; align-items:center; justify-content:center; background:transparent; border:0; padding:2px; margin:0; color:var(--text-3); cursor:pointer; flex-shrink:0; border-radius:6px; }
+.df-cal { display:inline-flex; align-items:center; justify-content:center; background:transparent; border:0; padding:2px; margin:0; color:var(--text-3); cursor:pointer; flex-shrink:0; border-radius:6px; transition:color .12s; }
 .df-cal:hover:not(:disabled) { color:var(--brand); }
 .df-cal:disabled { cursor:default; opacity:.5; }
 .df-cal:focus-visible { outline:2px solid var(--brand); outline-offset:1px; }
-.df-nav { display:inline-flex; align-items:center; justify-content:center; width:30px; height:30px; border:1px solid var(--border-soft); border-radius:8px; background:var(--bg-elev); color:var(--text-2); cursor:pointer; flex-shrink:0; }
-.df-nav:hover:not(:disabled) { background:var(--bg-hover); color:var(--brand); }
-.df-nav:disabled { opacity:.35; cursor:default; }
-.df-sel { height:30px; border:1px solid var(--border-soft); border-radius:8px; background:var(--bg-elev); color:var(--text-1); font-size:12px; padding:0 6px; cursor:pointer; }
-.df-sel:focus-visible, .df-nav:focus-visible { outline:2px solid var(--brand); outline-offset:1px; }
-.df-day { height:32px; width:100%; display:grid; place-items:center; border:0; background:transparent; color:var(--text-1); font-size:12px; border-radius:8px; cursor:pointer; }
-.df-day:hover:not(:disabled) { background:var(--bg-hover); }
-.df-day:focus-visible { outline:2px solid var(--brand); outline-offset:1px; }
-.df-day:disabled { color:var(--text-4); opacity:.4; cursor:default; }
-.df-trigger { font-weight:600; text-align:center; }
-.df-trigger:hover { background:var(--bg-hover); color:var(--brand); }
-.df-list { position:absolute; top:34px; z-index:5; max-height:220px; overflow-y:auto; background:var(--bg-elev); border:1px solid var(--border-strong); border-radius:10px; box-shadow:0 8px 24px rgba(0,0,0,.18); padding:4px; display:flex; flex-direction:column; gap:2px; }
-.df-opt { width:100%; text-align:center; height:30px; border:0; background:transparent; color:var(--text-1); font-size:12px; border-radius:7px; cursor:pointer; white-space:nowrap; padding:0 10px; }
-.df-opt:hover:not(:disabled) { background:var(--bg-hover); }
+.df-nav { display:inline-flex; align-items:center; justify-content:center; width:30px; height:30px; border:1px solid var(--border-soft); border-radius:9px; background:var(--bg-elev); color:var(--text-2); cursor:pointer; flex-shrink:0; transition:background .12s, color .12s, border-color .12s; }
+.df-nav:hover:not(:disabled) { background:var(--brand-soft); color:var(--brand); border-color:var(--border-brand); }
+.df-nav:disabled { opacity:.3; cursor:default; }
+.df-nav:focus-visible { outline:2px solid var(--brand); outline-offset:1px; }
+.df-sel { height:30px; border:1px solid var(--border-soft); border-radius:9px; background:var(--bg-elev); color:var(--text-1); font-size:12.5px; padding:0 8px; cursor:pointer; }
+.df-sel:focus-visible { outline:2px solid var(--brand); outline-offset:1px; }
+.df-trigger { display:inline-flex; align-items:center; justify-content:center; gap:4px; font-weight:600; transition:background .12s, color .12s, border-color .12s; }
+.df-trigger:hover { background:var(--brand-soft); color:var(--brand); border-color:var(--border-brand); }
+.df-trigger[aria-expanded="true"] { background:var(--brand-soft); color:var(--brand); border-color:var(--border-brand); }
+.df-tri-caret { flex-shrink:0; opacity:.7; transition:transform .15s ease; }
+.df-trigger[aria-expanded="true"] .df-tri-caret { transform:rotate(180deg); }
+.df-list { position:absolute; top:36px; z-index:5; max-height:226px; overflow-y:auto; background:var(--bg-elev); border:1px solid var(--border-strong); border-radius:11px; box-shadow:0 10px 28px rgba(0,0,0,.2); padding:5px; display:flex; flex-direction:column; gap:2px; }
+.df-opt { width:100%; text-align:center; height:30px; border:0; background:transparent; color:var(--text-1); font-size:12.5px; border-radius:8px; cursor:pointer; white-space:nowrap; padding:0 10px; transition:background .1s, color .1s; }
+.df-opt:hover:not(:disabled) { background:var(--brand-soft); color:var(--brand); }
 .df-opt[aria-selected="true"] { background:var(--brand); color:#fff; font-weight:700; }
 .df-opt:disabled { opacity:.4; cursor:default; }
+.df-wd { text-align:center; font-size:10.5px; font-weight:700; letter-spacing:.05em; text-transform:uppercase; color:var(--text-4); padding-bottom:2px; }
+.df-day { position:relative; height:34px; width:100%; display:grid; place-items:center; border:0; background:transparent; color:var(--text-1); font-size:12.5px; border-radius:10px; cursor:pointer; transition:background .12s, color .12s, transform .08s; }
+.df-day:hover:not(:disabled) { background:var(--brand-soft); color:var(--brand); }
+.df-day:active:not(:disabled) { transform:scale(.9); }
+.df-day:focus-visible { outline:2px solid var(--brand); outline-offset:1px; }
+.df-day:disabled { color:var(--text-4); opacity:.4; cursor:default; }
+.df-day--today { color:var(--brand); font-weight:700; }
+.df-day--today::after { content:""; position:absolute; bottom:5px; left:50%; transform:translateX(-50%); width:4px; height:4px; border-radius:50%; background:var(--brand); }
+.df-day--sel, .df-day--sel:hover { background:var(--brand); color:#fff; font-weight:700; box-shadow:0 2px 10px rgba(124,58,237,.45); }
+.df-day--sel::after { display:none; }
+.df-foot { display:flex; justify-content:space-between; align-items:center; gap:8px; margin-top:10px; padding-top:9px; border-top:1px solid var(--border-soft); }
+.df-foot-btn { background:transparent; border:0; color:var(--brand); font-size:12px; font-weight:600; padding:5px 10px; border-radius:8px; cursor:pointer; transition:background .12s; }
+.df-foot-btn:hover { background:var(--brand-soft); }
+.df-foot-btn:focus-visible { outline:2px solid var(--brand); outline-offset:1px; }
+.df-foot-btn--muted { color:var(--text-3); }
+.df-foot-btn--muted:hover { background:var(--bg-hover); color:var(--text-1); }
+@media (prefers-reduced-motion: reduce) {
+  .df-pop { animation:none; }
+  .df-day, .df-nav, .df-sel, .df-trigger, .df-opt, .df-cal, .df-tri-caret { transition:none; }
+}
 `;
   document.head.appendChild(el);
 }
@@ -245,7 +268,8 @@ export const DateField = forwardRef<HTMLInputElement, DateFieldProps>(function D
     return () => document.removeEventListener("mousedown", onDown);
   }, [open]);
 
-  // Esc cierra el popover (captura, para no cerrar un modal padre).
+  // Esc cierra el dropdown abierto o, si no hay, el popover (captura, para no
+  // cerrar un modal padre).
   useEffect(() => {
     if (!open) return;
     function onKey(e: KeyboardEvent) {
@@ -330,6 +354,33 @@ export const DateField = forwardRef<HTMLInputElement, DateFieldProps>(function D
     requestAnimationFrame(() => inputRef.current?.focus());
   }
 
+  // "Hoy": lleva la VISTA al mes actual (acotado a min/max) y enfoca el día de
+  // hoy, sin seleccionar — útil en todos los usos y sin riesgo para nacimiento.
+  function goToday() {
+    let y = now.getFullYear();
+    let m0 = now.getMonth();
+    if (y < minYear) { y = minYear; m0 = minDate ? minDate.m0 : 0; }
+    else if (y > maxYear) { y = maxYear; m0 = maxDate ? maxDate.m0 : 11; }
+    else {
+      if (y === maxYear && maxDate && m0 > maxDate.m0) m0 = maxDate.m0;
+      if (y === minYear && minDate && m0 < minDate.m0) m0 = minDate.m0;
+    }
+    setPicker(null);
+    setViewYear(y);
+    setViewMonth(m0);
+    requestAnimationFrame(() => {
+      const day = now.getFullYear() === y && now.getMonth() === m0 ? now.getDate() : 1;
+      (gridRef.current?.querySelector(`[data-day="${day}"]`) as HTMLElement | null)?.focus();
+    });
+  }
+
+  function clearValue() {
+    setText("");
+    emit("");
+    setOpen(false);
+    requestAnimationFrame(() => inputRef.current?.focus());
+  }
+
   /* --- límites de mes para el año visible --- */
   const monthMin = viewYear === minYear && minDate ? minDate.m0 : 0;
   const monthMax = viewYear === maxYear && maxDate ? maxDate.m0 : 11;
@@ -400,18 +451,18 @@ export const DateField = forwardRef<HTMLInputElement, DateFieldProps>(function D
         top: coords.top,
         left: coords.left,
         zIndex: 9999,
-        width: "min(320px, calc(100vw - 16px))",
+        width: "min(328px, calc(100vw - 16px))",
         background: "var(--bg-elev)",
         border: "1px solid var(--border-strong)",
-        borderRadius: 12,
-        boxShadow: "0 12px 32px rgba(0,0,0,0.18), 0 2px 8px rgba(0,0,0,0.12)",
-        padding: 12,
+        borderRadius: 14,
+        boxShadow: "0 16px 40px rgba(0,0,0,0.22), 0 2px 8px rgba(0,0,0,0.12)",
+        padding: 14,
         color: "var(--text-1)",
         visibility: ready ? "visible" : "hidden",
       }}
     >
       {/* Encabezado: ‹ + mes + año + › (dropdowns PROPIOS, no <select> nativo). */}
-      <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 10, position: "relative" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 12, position: "relative" }}>
         <button type="button" className="df-nav" aria-label="Mes anterior" disabled={prevDisabled} onClick={() => shiftMonth(-1)}>
           <ChevronLeft size={16} />
         </button>
@@ -424,6 +475,7 @@ export const DateField = forwardRef<HTMLInputElement, DateFieldProps>(function D
           style={{ flex: 1, minWidth: 0 }}
         >
           {MONTHS_ES[viewMonth]}
+          <ChevronDown size={13} className="df-tri-caret" aria-hidden />
         </button>
         <button
           type="button"
@@ -433,6 +485,7 @@ export const DateField = forwardRef<HTMLInputElement, DateFieldProps>(function D
           onClick={() => setPicker((p) => (p === "year" ? null : "year"))}
         >
           {viewYear}
+          <ChevronDown size={13} className="df-tri-caret" aria-hidden />
         </button>
         <button type="button" className="df-nav" aria-label="Mes siguiente" disabled={nextDisabled} onClick={() => shiftMonth(1)}>
           <ChevronRight size={16} />
@@ -476,7 +529,7 @@ export const DateField = forwardRef<HTMLInputElement, DateFieldProps>(function D
       {/* Días de la semana */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(7,1fr)", marginBottom: 4 }}>
         {WEEKDAYS_ES.map((w, i) => (
-          <div key={i} style={{ textAlign: "center", fontSize: 11, color: "var(--text-3)", fontWeight: 600 }}>{w}</div>
+          <div key={i} className="df-wd">{w}</div>
         ))}
       </div>
 
@@ -499,7 +552,7 @@ export const DateField = forwardRef<HTMLInputElement, DateFieldProps>(function D
               key={d}
               type="button"
               data-day={d}
-              className="df-day"
+              className={`df-day${isSel ? " df-day--sel" : isToday ? " df-day--today" : ""}`}
               role="gridcell"
               aria-label={`${d} de ${MONTHS_ES[viewMonth]} de ${viewYear}`}
               aria-selected={isSel}
@@ -507,17 +560,17 @@ export const DateField = forwardRef<HTMLInputElement, DateFieldProps>(function D
               tabIndex={-1}
               disabled={isDisabled}
               onClick={() => pick(d)}
-              style={{
-                background: isSel ? "var(--brand)" : undefined,
-                color: isSel ? "#fff" : undefined,
-                fontWeight: isSel || isToday ? 700 : 400,
-                boxShadow: !isSel && isToday ? "inset 0 0 0 1.5px var(--brand)" : undefined,
-              }}
             >
               {d}
             </button>
           );
         })}
+      </div>
+
+      {/* Pie: atajos */}
+      <div className="df-foot">
+        <button type="button" className="df-foot-btn" onClick={goToday}>Hoy</button>
+        <button type="button" className="df-foot-btn df-foot-btn--muted" onClick={clearValue}>Limpiar</button>
       </div>
     </div>,
     document.body,
@@ -526,7 +579,7 @@ export const DateField = forwardRef<HTMLInputElement, DateFieldProps>(function D
   return (
     <span
       ref={wrapperRef}
-      className={className}
+      className={className ? `${className} df-wrap` : "df-wrap"}
       onClick={(e) => {
         // Click en el área del campo (no en el botón ni en el input) enfoca el input.
         if (e.target === wrapperRef.current) inputRef.current?.focus();
@@ -584,6 +637,7 @@ export const DateField = forwardRef<HTMLInputElement, DateFieldProps>(function D
         aria-label="Abrir calendario"
         disabled={disabled}
         onClick={(e) => { e.stopPropagation(); if (open) setOpen(false); else openPopover(); }}
+        style={open ? { color: "var(--brand)" } : undefined}
       >
         <Calendar size={14} />
       </button>
