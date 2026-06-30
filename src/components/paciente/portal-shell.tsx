@@ -21,10 +21,12 @@ import {
   FileText,
   CreditCard,
   FolderOpen,
+  MessageSquare,
   User,
   LogOut,
 } from "lucide-react";
 import { Logo } from "@/components/public/landing/primitives/logo";
+import { NotifBell } from "@/components/paciente/notif-bell";
 import type { PacienteMe } from "@/lib/patient-portal/types";
 
 export interface PacientePortalShellProps {
@@ -43,6 +45,7 @@ type NavItem = {
 const NAV_ITEMS: NavItem[] = [
   { href: "/paciente", label: "Inicio", icon: Home, exact: true },
   { href: "/paciente/citas", label: "Citas", icon: Calendar },
+  { href: "/paciente/inbox", label: "Mensajes", icon: MessageSquare },
   { href: "/paciente/historial", label: "Historial", icon: FileText },
   { href: "/paciente/pagos", label: "Pagos", icon: CreditCard },
   { href: "/paciente/documentos", label: "Documentos", icon: FolderOpen },
@@ -175,6 +178,9 @@ export function PacientePortalShell({ me, children }: PacientePortalShellProps) 
               </Link>
             );
           })}
+          {/* Notificaciones: item extra con campana + badge de no leídas.
+              Fuera de NAV_ITEMS para no agregarlo al bottom-nav (clamp 320px). */}
+          <NotifBell variant="sidebar" />
         </nav>
 
         {/* Paciente + cerrar sesión */}
@@ -316,6 +322,9 @@ export function PacientePortalShell({ me, children }: PacientePortalShellProps) 
           >
             {firstName}
           </span>
+          {/* Campana móvil: en el topbar (NO en el bottom-nav) para no romper
+              el clamp de 320px del bottom-nav de 6 ítems. */}
+          <NotifBell variant="topbar" />
           <button
             type="button"
             onClick={handleLogout}
@@ -371,18 +380,29 @@ export function PacientePortalShell({ me, children }: PacientePortalShellProps) 
                 flexDirection: "column",
                 alignItems: "center",
                 gap: 3,
-                padding: "8px 2px 7px",
-                // 6 items: el label más largo ("Documentos") debe caber en
-                // pantallas de 320px sin cortarse.
-                fontSize: "clamp(9px, 2.5vw, 10.5px)",
-                whiteSpace: "nowrap",
+                padding: "8px 1px 7px",
+                minWidth: 0,
+                // 7 items: el label más largo ("Documentos", 10 caracteres) debe
+                // caber en pantallas de 320px (≈45px por columna). Bajamos el
+                // mínimo del clamp a 8px y, como red de seguridad, el span
+                // elipsiza antes de pisar al vecino.
+                fontSize: "clamp(8px, 2.2vw, 10.5px)",
                 fontWeight: 500,
                 textDecoration: "none",
                 background: active ? "rgba(124,58,237,0.15)" : "transparent",
               }}
             >
               <Icon size={19} />
-              <span>{item.label}</span>
+              <span
+                style={{
+                  maxWidth: "100%",
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                {item.label}
+              </span>
             </Link>
           );
         })}

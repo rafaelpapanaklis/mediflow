@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { UserRound } from "lucide-react";
 import { Logo } from "./primitives/logo";
 import { SpecialtiesDropdown } from "./specialties-dropdown";
 
@@ -66,7 +67,7 @@ export function Header({ isLoggedIn = false }: HeaderProps) {
           <Link href="#testimonials" style={{ color: "inherit", textDecoration: "none" }}>Clientes</Link>
         </div>
 
-        <div style={{ display: "flex", gap: 10, alignItems: "center", fontSize: 13 }}>
+        <div style={{ display: "flex", gap: 10, alignItems: "center", justifyContent: "flex-end", flexWrap: "wrap", rowGap: 8, fontSize: 13 }}>
           <button
             type="button"
             onClick={() => setMode(m => (m === "dark" ? "light" : "dark"))}
@@ -98,7 +99,25 @@ export function Header({ isLoggedIn = false }: HeaderProps) {
             </Link>
           ) : (
             <>
-              <Link href="/login" style={{ color: "var(--ld-fg-muted)", textDecoration: "none" }}>
+              <Link
+                href="/paciente/login"
+                title="Portal del paciente"
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 6,
+                  padding: "7px 12px",
+                  borderRadius: 8,
+                  border: "1px solid var(--ld-border)",
+                  color: "var(--ld-fg)",
+                  fontWeight: 500,
+                  textDecoration: "none",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                <UserRound size={15} aria-hidden /> Soy paciente
+              </Link>
+              <Link href="/login" style={{ color: "var(--ld-fg-muted)", textDecoration: "none", whiteSpace: "nowrap" }}>
                 Iniciar sesión
               </Link>
               <Link

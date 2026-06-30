@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { Inter } from "next/font/google";
 import { MapPin } from "lucide-react";
 import { SalesNavSession } from "@/components/public/landing/nav-session";
@@ -93,6 +94,12 @@ export default function DescubrePage() {
                 <span className="mfh-pill"><span className="mfh-dot" /> Confirmación por WhatsApp</span>
                 <span className="mfh-pill"><span className="mfh-dot" /> Sin costo para ti</span>
               </div>
+              <p style={{ margin: "8px 0 0", fontSize: 14, color: "var(--body)" }}>
+                ¿Ya tienes una cita?{" "}
+                <Link href="/paciente/login" style={{ color: "var(--b2)", fontWeight: 600, textDecoration: "none" }}>
+                  Entra a tu cuenta de paciente →
+                </Link>
+              </p>
             </div>
           </div>
         </section>

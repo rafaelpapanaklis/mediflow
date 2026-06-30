@@ -13,7 +13,7 @@
 // Layout responsive: grid que colapsa a 1 columna en móvil, sin anchos fijos.
 // Español neutro con tú. Estilo dark consistente (PacienteCard).
 import Link from "next/link";
-import { CalendarDays, FileText, CreditCard, User } from "lucide-react";
+import { CalendarDays, CalendarPlus, FileText, CreditCard, User } from "lucide-react";
 import { usePacienteData } from "@/lib/patient-portal/use-paciente";
 import type { PacienteSummaryResponse } from "@/lib/patient-portal/types";
 import {
@@ -24,9 +24,11 @@ import {
   formatMxn,
   formatFechaHora,
 } from "@/components/paciente/ui";
+import { ResenaPostcita } from "@/components/paciente/resena-postcita";
 
 const QUICK_LINKS = [
   { href: "/paciente/citas", label: "Citas", Icon: CalendarDays },
+  { href: "/paciente/citas/nueva", label: "Agendar", Icon: CalendarPlus },
   { href: "/paciente/historial", label: "Historial", Icon: FileText },
   { href: "/paciente/pagos", label: "Pagos", Icon: CreditCard },
   { href: "/paciente/perfil", label: "Perfil", Icon: User },
@@ -137,6 +139,8 @@ export default function PacienteInicioPage() {
           Este es el resumen de tu salud
         </p>
       </header>
+
+      <ResenaPostcita />
 
       <div style={GRID_STYLE}>
         <PacienteCard title="Próximas citas">

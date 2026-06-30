@@ -182,6 +182,7 @@ model Clinic {
   treatments           TreatmentPlan[]
   paymentPlans         PaymentPlan[]
   patientCredits       PatientCredit[]
+  patientNotifications PatientNotification[]
   consentForms         ConsentForm[]
   periodontalRecords   PeriodontalRecord[]
   subscriptionInvoices SubscriptionInvoice[]
@@ -297,6 +298,8 @@ model Clinic {
   // WS2-T3. Requiere sql/mapa-directorio.sql aplicado en Supabase.
   latitude  Float?
   longitude Float?
+
+  patientUploads PatientUpload[]
 
   @@map("clinics")
 }
@@ -1213,6 +1216,7 @@ model Patient {
   patientReminders    Reminder[]
   referrals           Referral[]
   accountLinks        PatientAccountLink[]
+  notifications       PatientNotification[]
 
   // Pediatrics module — see docs/marketplace/research/odontopediatria/SPEC.md §5
   pediatricRecord      PediatricRecord?
@@ -1278,6 +1282,7 @@ model Patient {
   clinicalReminders ClinicalReminder[]
   patientShareLinks PatientShareLink[]
   quotes            Quote[]
+  patientUploads    PatientUpload[]
 
   @@unique([clinicId, patientNumber])
   @@index([clinicId, status])
@@ -2700,6 +2705,9 @@ enum InboxChannel {
   PORTAL_FORM
   VALIDATION
   REMINDER
+  /// Chat in-app del portal del paciente (WS2-T2). Sin entrega externa: la
+  /// "entrega" es la propia DB (el paciente lo lee en /paciente/inbox).
+  PORTAL
 }
 
 enum InboxStatus {
@@ -6878,10 +6886,45 @@ model PatientAccount {
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
-  links    PatientAccountLink[]
-  sessions PatientAccountSession[]
+  // Preferencias de notificación del paciente (canal + anticipación). null =
+  // usar la configuración de recordatorios de la clínica (sin override). El
+  // cron de recordatorios las respeta. Ver src/lib/patient-notifications.
+  notifPrefs Json?
+
+  links         PatientAccountLink[]
+  sessions      PatientAccountSession[]
+  uploads       PatientUpload[]
+  notifications PatientNotification[]
 
   @@map("patient_accounts")
+}
+
+/// Centro de notificaciones del paciente (portal): recordatorios de cita,
+/// resoluciones de cambios de cita y, a futuro, mensajes. Multi-tenant por
+/// clinicId+patientId (el portal filtra por los patientId de PatientAccountLink
+/// de la sesión). dedupeKey da idempotencia al cron de recordatorios (una por
+/// cita+momento "<appointmentId>:<offsetMin>"); null en eventos únicos.
+/// SQL a mano: sql/patient-notifications.sql.
+model PatientNotification {
+  id        String    @id @default(cuid())
+  clinicId  String
+  patientId String
+  accountId String?
+  type      String // "APPOINTMENT_REMINDER" | "APPOINTMENT_CHANGE" | "MESSAGE"
+  title     String
+  body      String    @db.Text
+  dedupeKey String? // cron: "<appointmentId>:<offsetMin>"; null = evento único
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  clinic  Clinic          @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  patient Patient         @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  account PatientAccount? @relation(fields: [accountId], references: [id], onDelete: SetNull)
+
+  @@unique([patientId, dedupeKey])
+  @@index([patientId, createdAt(sort: Desc)])
+  @@index([accountId, readAt])
+  @@map("patient_notifications")
 }
 
 model PatientAccountLink {
@@ -6912,6 +6955,40 @@ model PatientAccountSession {
   @@index([accountId])
   @@index([expiresAt])
   @@map("patient_account_sessions")
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// PORTAL DEL PACIENTE — ARCHIVOS SUBIDOS POR EL PACIENTE (WS1-T8)
+// El paciente sube estudios / identificación / otros desde /paciente/documentos.
+// clinicId/patientId SIEMPRE derivados del link de la sesión (ctx.links), nunca
+// del cliente. El binario vive en el bucket privado patient-files; `storageKey`
+// es el path interno (se firma on-demand, jamás público). La clínica los ve en
+// el expediente. Requiere sql/paciente-uploads.sql aplicado a mano en Supabase.
+enum PatientUploadKind {
+  ESTUDIO
+  IDENTIFICACION
+  OTRO
+}
+
+model PatientUpload {
+  id         String            @id @default(cuid())
+  clinicId   String
+  patientId  String
+  accountId  String
+  fileName   String
+  fileType   String
+  storageKey String
+  sizeBytes  Int
+  kind       PatientUploadKind @default(OTRO)
+  createdAt  DateTime          @default(now())
+
+  clinic  Clinic         @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  patient Patient        @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  account PatientAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@index([clinicId, patientId, createdAt(sort: Desc)])
+  @@index([accountId])
+  @@map("patient_uploads")
 }
 
 // ─────────────────────────────────────────────────────────────────────────

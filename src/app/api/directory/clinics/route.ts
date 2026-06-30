@@ -8,7 +8,13 @@ import {
   type DirectoryClinicsResponse,
 } from "@/lib/directory/types";
 import { boundingBox, haversineKm, isValidLatLng, parseCoord } from "@/lib/directory/distance";
-import { resolveCityVariants } from "@/lib/directory/query";
+// Fuente ÚNICA de la visibilidad + select público + mapeo (no se duplica aquí).
+import {
+  resolveCityVariants,
+  visibilityWhere,
+  queryDirectoryClinics,
+  toDirectoryClinic,
+} from "@/lib/directory/query";
 import { getRatingsForClinics } from "@/lib/reviews/service";
 
 // GET /api/directory/clinics — API pública del directorio (sin auth).
@@ -31,124 +37,9 @@ function emptyResponse(page: number): DirectoryClinicsResponse {
   return { items: [], total: 0, page, pageSize: DIRECTORY_PAGE_SIZE, totalPages: 0 };
 }
 
-/** Visibilidad base (SIEMPRE, también con slug): públicas y no canceladas. */
-function visibilityWhere(): any {
-  return {
-    isPublic: true,
-    AND: [
-      { OR: [{ subscriptionStatus: null }, { subscriptionStatus: { notIn: ["cancelled"] } }] },
-    ],
-  };
-}
-
-/** findMany con el select de SOLO datos públicos y el orden del directorio. */
-function queryDirectoryClinics(where: any, skip: number, take: number) {
-  return prisma.clinic.findMany({
-    where,
-    orderBy: [{ landingActive: "desc" }, { name: "asc" }],
-    skip,
-    take,
-    select: {
-      id: true,
-      name: true,
-      slug: true,
-      category: true,
-      city: true,
-      state: true,
-      address: true,
-      phone: true,
-      latitude: true,
-      longitude: true,
-      logoUrl: true,
-      description: true,
-      landingCoverUrl: true,
-      landingTagline: true,
-      landingThemeColor: true,
-      landingActive: true,
-      landingServices: true,
-      schedules: {
-        select: { dayOfWeek: true, enabled: true, openTime: true, closeTime: true },
-      },
-      users: {
-        where: { isActive: true, role: { in: ["DOCTOR", "ADMIN", "SUPER_ADMIN"] } },
-        select: {
-          id: true,
-          firstName: true,
-          lastName: true,
-          specialty: true,
-          color: true,
-          avatarUrl: true,
-          services: true,
-        },
-        orderBy: { firstName: "asc" },
-      },
-    },
-  });
-}
-
-/** users[].services ∪ landingServices (strings u objetos { name }) → no vacíos, dedup case-insensitive, máx 6. */
-function buildFeaturedServices(users: any[], landingServices: unknown): string[] {
-  const seen = new Set<string>();
-  const out: string[] = [];
-  const add = (value: unknown) => {
-    if (out.length >= 6 || typeof value !== "string") return;
-    const name = value.trim();
-    if (!name) return;
-    const key = name.toLowerCase();
-    if (seen.has(key)) return;
-    seen.add(key);
-    out.push(name);
-  };
-  for (const u of users ?? []) {
-    if (Array.isArray(u?.services)) for (const s of u.services) add(s);
-  }
-  if (Array.isArray(landingServices)) {
-    for (const entry of landingServices) {
-      if (typeof entry === "string") add(entry);
-      else if (entry && typeof entry === "object" && !Array.isArray(entry)) add((entry as any).name);
-    }
-  }
-  return out;
-}
-
-function toDirectoryClinic(row: any, rating?: { avg: number; count: number }): DirectoryClinic {
-  return {
-    id: row.id,
-    name: row.name,
-    slug: row.slug,
-    category: row.category,
-    city: row.city,
-    state: row.state,
-    address: row.address,
-    phone: row.phone,
-    latitude: row.latitude ?? null,
-    longitude: row.longitude ?? null,
-    logoUrl: row.logoUrl,
-    coverUrl: row.landingCoverUrl,
-    description: row.description,
-    tagline: row.landingTagline,
-    themeColor: row.landingThemeColor,
-    landingActive: row.landingActive,
-    featuredServices: buildFeaturedServices(row.users, row.landingServices),
-    doctors: (row.users ?? []).map((u: any) => ({
-      id: u.id,
-      firstName: u.firstName,
-      lastName: u.lastName,
-      specialty: u.specialty,
-      color: u.color,
-      avatarUrl: u.avatarUrl,
-      services: Array.isArray(u.services) ? u.services : [],
-    })),
-    schedules: (row.schedules ?? []).map((s: any) => ({
-      dayOfWeek: s.dayOfWeek,
-      enabled: s.enabled,
-      openTime: s.openTime,
-      closeTime: s.closeTime,
-    })),
-    ratingAvg: rating?.avg ?? 0,
-    ratingCount: rating?.count ?? 0,
-  };
-}
+// visibilityWhere / queryDirectoryClinics / toDirectoryClinic viven en
+// @/lib/directory/query (fuente ÚNICA, importados arriba). Antes estaban
+// DUPLICADOS aquí y podían divergir del listado SSR de /descubre/[categoria].
 
 export async function GET(req: NextRequest) {
   try {

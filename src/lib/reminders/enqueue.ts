@@ -23,11 +23,15 @@ import {
   renderReminderTemplate,
 } from "@/lib/reminders/config";
 import { WA_REMINDER_STATUS } from "@/lib/whatsapp/reminder-status";
+import { loadNotifPrefsByAccount } from "@/lib/patient-notifications/prefs";
+import type { NotifPrefs } from "@/lib/patient-notifications/types";
 
 export interface SweepSummary {
   clinics: number;
   queuedWhatsapp: number;
   queuedEmail: number;
+  /** Notificaciones in-app del portal creadas (centro de notificaciones). */
+  inAppNotifications: number;
   skipped: number;
   errors: Array<{ clinicId: string; reason: string }>;
 }
@@ -52,6 +56,7 @@ export async function sweepAppointmentReminders(opts?: {
     clinics: 0,
     queuedWhatsapp: 0,
     queuedEmail: 0,
+    inAppNotifications: 0,
     skipped: 0,
     errors: [],
   };
@@ -90,6 +95,7 @@ export async function sweepAppointmentReminders(opts?: {
         offset: number;
         appointments: Array<{
           id: string;
+          patientId: string;
           startsAt: Date;
           confirmToken: string | null;
           patient: {
@@ -113,6 +119,7 @@ export async function sweepAppointmentReminders(opts?: {
           },
           select: {
             id: true,
+            patientId: true,
             startsAt: true,
             confirmToken: true,
             patient: {
@@ -131,6 +138,9 @@ export async function sweepAppointmentReminders(opts?: {
         summary.clinics++;
         continue;
       }
+      const candidatePatientIds = Array.from(
+        new Set(candidatesByOffset.flatMap((c) => c.appointments.map((a) => a.patientId))),
+      );
 
       // 2d. Dedup en UNA query por clínica: filas APPT_AUTO ya encoladas para
       //     estas citas → Set de llaves cita+momento+canal. Jamás dos
@@ -151,19 +161,83 @@ export async function sweepAppointmentReminders(opts?: {
         seen.add(dedupeKey(row.appointmentId, p?.offsetMin, p?.channel));
       }
 
+      // Cuentas del portal vinculadas a estos pacientes (para el centro de
+      // notificaciones in-app) y sus preferencias de recordatorio. Best-effort:
+      // un fallo aquí NO frena el envío de recordatorios (usa config de clínica).
+      const accountByPatient = new Map<string, string>();
+      let prefsByAccount = new Map<string, NotifPrefs>();
+      try {
+        const links = await prisma.patientAccountLink.findMany({
+          where: { patientId: { in: candidatePatientIds }, clinicId: clinic.id },
+          select: { patientId: true, accountId: true },
+        });
+        for (const l of links) {
+          if (!accountByPatient.has(l.patientId)) {
+            accountByPatient.set(l.patientId, l.accountId);
+          }
+        }
+        prefsByAccount = await loadNotifPrefsByAccount(links.map((l) => l.accountId));
+      } catch (err) {
+        console.error("[reminders/enqueue] links/prefs (best-effort):", err);
+      }
+
       // confirmToken generados en esta corrida (reusados entre offsets/canales).
       const tokenCache = new Map<string, string>();
 
       const rows: Prisma.WhatsAppReminderCreateManyInput[] = [];
+      const notifRows: Prisma.PatientNotificationCreateManyInput[] = [];
       let clinicWhatsapp = 0;
       let clinicEmail = 0;
 
       for (const { offset, appointments } of candidatesByOffset) {
         for (const appt of appointments) {
+          const accountId = accountByPatient.get(appt.patientId);
+          const pref = accountId ? prefsByAccount.get(accountId) : undefined;
+
+          // Preferencias del paciente (solo si guardó un override válido).
+          // Garantía: NUNCA dejan al paciente sin ningún canal (si el filtro
+          // vaciaría ambos, se ignora y se usa la config de la clínica).
+          let pWantsWhatsapp = wantsWhatsapp;
+          let pWantsEmail = wantsEmail;
+          if (pref) {
+            // Anticipación: si la clínica ofrece ese momento, el paciente solo
+            // recibe ESE offset; si no lo ofrece, no se filtra (sigue recibiendo).
+            if (settings.offsets.includes(pref.leadMinutes) && offset !== pref.leadMinutes) {
+              continue;
+            }
+            const wa = wantsWhatsapp && (pref.channel === "whatsapp" || pref.channel === "both");
+            const em = wantsEmail && (pref.channel === "email" || pref.channel === "both");
+            if (wa || em) {
+              pWantsWhatsapp = wa;
+              pWantsEmail = em;
+            }
+          }
+
           const waKey = dedupeKey(appt.id, offset, "whatsapp");
           const emailKey = dedupeKey(appt.id, offset, "email");
-          const queueWhatsapp = wantsWhatsapp && !seen.has(waKey);
-          const queueEmail = wantsEmail && !seen.has(emailKey);
+          const queueWhatsapp = pWantsWhatsapp && !seen.has(waKey);
+          const queueEmail = pWantsEmail && !seen.has(emailKey);
+
+          // Fecha/hora local (puro, barato): cuerpo de la notificación in-app
+          // y del mensaje WA/email (más abajo).
+          const { fecha, hora } = formatApptDateParts(appt.startsAt, clinic.timezone);
+          const doctorName = `Dr/a. ${appt.doctor.firstName} ${appt.doctor.lastName}`.trim();
+
+          // Centro de notificaciones in-app del portal: una por cita+momento,
+          // solo si el paciente tiene cuenta. Idempotente por (patientId,
+          // dedupeKey) vía createMany skipDuplicates — independiente de WA/email.
+          if (accountId) {
+            notifRows.push({
+              clinicId: clinic.id,
+              patientId: appt.patientId,
+              accountId,
+              type: "APPOINTMENT_REMINDER",
+              title: "Recordatorio de tu cita",
+              body: `Tu cita en ${clinic.name} es el ${fecha} a las ${hora}. Te atiende ${doctorName}.`,
+              dedupeKey: `${appt.id}:${offset}`,
+            });
+          }
+
           if (!queueWhatsapp && !queueEmail) continue;
 
           // 2e. Asegura confirmToken: si la cita no tiene, genera uno y
@@ -190,13 +264,12 @@ export async function sweepAppointmentReminders(opts?: {
           tokenCache.set(appt.id, token);
 
           const confirmUrl = getConfirmUrl(token);
-          const { fecha, hora } = formatApptDateParts(appt.startsAt, clinic.timezone);
           const message = renderReminderTemplate(settings.template, {
             paciente: appt.patient.firstName,
             clinica: clinic.name,
             fecha,
             hora,
-            doctor: `Dr/a. ${appt.doctor.firstName} ${appt.doctor.lastName}`.trim(),
+            doctor: doctorName,
             link: confirmUrl,
           });
 
@@ -260,6 +333,27 @@ export async function sweepAppointmentReminders(opts?: {
       for (let i = 0; i < rows.length; i += CHUNK) {
         await prisma.whatsAppReminder.createMany({ data: rows.slice(i, i + CHUNK) });
       }
+
+      // 2g. Notificaciones in-app (centro de notificaciones del portal).
+      // Best-effort + skipDuplicates: idempotente y JAMÁS frena los
+      // recordatorios (si la tabla aún no existe por SQL pendiente, se ignora).
+      if (notifRows.length > 0) {
+        try {
+          for (let i = 0; i < notifRows.length; i += CHUNK) {
+            const res = await prisma.patientNotification.createMany({
+              data: notifRows.slice(i, i + CHUNK),
+              skipDuplicates: true,
+            });
+            summary.inAppNotifications += res.count;
+          }
+        } catch (err) {
+          console.error(
+            "[reminders/enqueue] patientNotification.createMany (best-effort):",
+            err,
+          );
+        }
+      }
+
       summary.queuedWhatsapp += clinicWhatsapp;
       summary.queuedEmail += clinicEmail;
       summary.clinics++;

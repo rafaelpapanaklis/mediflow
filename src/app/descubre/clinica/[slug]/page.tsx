@@ -367,6 +367,12 @@ export default async function ClinicProfilePage({ params }: { params: { slug: st
               <div className="rounded-2xl border p-5" style={{ borderColor: `${theme}30`, background: `${theme}0c` }}>
                 <p className="mb-3 text-sm font-semibold" style={{ color: "var(--ink, #0f172a)" }}>Agenda tu cita en línea</p>
                 <ReserveButton clinic={dirClinic} full label="Reservar cita" />
+                <p className="mt-3 text-center text-[12px]" style={{ color: "var(--muted, #64748b)" }}>
+                  ¿Ya tienes cita?{" "}
+                  <Link href="/paciente/login" className="font-semibold hover:underline" style={{ color: theme }}>
+                    Entra a tu cuenta
+                  </Link>
+                </p>
               </div>
             </aside>
           </div>
