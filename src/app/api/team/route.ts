@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthContext, requireAdmin } from "@/lib/auth-context";
 import { prisma } from "@/lib/prisma";
+import { getPlanLimits } from "@/lib/plans";
 import { createClient as createAdminClient } from "@supabase/supabase-js";
 import { logMutation } from "@/lib/audit";
 import { revalidateAfter } from "@/lib/cache/revalidate";
@@ -66,6 +67,20 @@ export async function POST(req: NextRequest) {
   if (existing.some(u => u.email === email.trim().toLowerCase())) {
     return NextResponse.json({ error: "Ya existe un usuario con ese email en esta clínica" }, { status: 400 });
   }
+
+  // Tope de usuarios por plan (enforcement). maxUsers null = ilimitado.
+  const clinicPlan = await prisma.clinic.findUnique({ where: { id: ctx!.clinicId }, select: { plan: true } });
+  const { maxUsers } = await getPlanLimits(clinicPlan?.plan);
+  if (maxUsers != null) {
+    const activeUsers = await prisma.user.count({ where: { clinicId: ctx!.clinicId, isActive: true } });
+    if (activeUsers >= maxUsers) {
+      return NextResponse.json(
+        { error: `Tu plan incluye ${maxUsers} usuario(s). Sube de plan para agregar más miembros.`, code: "PLAN_LIMIT_USERS", limit: maxUsers },
+        { status: 402 },
+      );
+    }
+  }
+
   const usedColors    = existing.map(u => u.color);
   const assignedColor = color || DOCTOR_COLORS.find(c => !usedColors.includes(c)) || DOCTOR_COLORS[0];
 
