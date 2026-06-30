@@ -181,6 +181,26 @@ export const DateField = forwardRef<HTMLInputElement, DateFieldProps>(function D
     return () => cancelAnimationFrame(raf);
   }, [picker]);
 
+  // Rueda del mouse en los dropdowns mes/año: Radix Dialog usa react-remove-scroll,
+  // que escucha 'wheel' en document (BURBUJA) y bloquea el scroll fuera del modal —
+  // el popover vive en un portal a <body>, así que la lista no scrolleaba con la
+  // rueda (solo con la barra). Un listener NATIVO en CAPTURA en la lista (passive:
+  // false) corre ANTES y hace el scroll a mano + stopPropagation, así react-remove-
+  // scroll nunca lo ve.
+  useEffect(() => {
+    if (!picker) return;
+    const list = popoverRef.current?.querySelector(".df-list") as HTMLElement | null;
+    if (!list) return;
+    const onWheel = (e: WheelEvent) => {
+      if (list.scrollHeight <= list.clientHeight) return;
+      e.preventDefault();
+      e.stopPropagation();
+      list.scrollTop += e.deltaY;
+    };
+    list.addEventListener("wheel", onWheel, { passive: false, capture: true });
+    return () => list.removeEventListener("wheel", onWheel, { capture: true } as EventListenerOptions);
+  }, [picker]);
+
   // Sincroniza el texto visible con el value externo cuando NO se está editando.
   useEffect(() => { if (!focused) setText(toDMY(isoValue)); }, [isoValue, focused]);
 
