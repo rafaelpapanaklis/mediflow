@@ -23,10 +23,21 @@ DialogOverlay.displayName = DialogPrimitive.Overlay.displayName;
 // "flex-1 overflow-y-auto min-h-0" para scrollear y que el botón de acción
 // (Cobrar/Guardar) nunca quede fuera de pantalla en laptops de poca altura.
 const DialogContent = React.forwardRef<React.ElementRef<typeof DialogPrimitive.Content>, React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content>>(
-  ({ className, children, ...props }, ref) => (
+  ({ className, children, onPointerDownOutside, onInteractOutside, ...props }, ref) => (
     <DialogPortal>
       <DialogOverlay />
       <DialogPrimitive.Content ref={ref} aria-describedby={undefined}
+        // El popover del DateField vive en un portal a <body> → Radix lo vería como
+        // "afuera" y cerraría el modal al clic en mes/año/día. Lo excluimos aquí para
+        // TODOS los modales que usan este wrapper (sin tocar cada uno).
+        onPointerDownOutside={(e) => {
+          if ((e.target as HTMLElement | null)?.closest?.("[data-datefield-popover]")) { e.preventDefault(); return; }
+          onPointerDownOutside?.(e);
+        }}
+        onInteractOutside={(e) => {
+          if ((e.target as HTMLElement | null)?.closest?.("[data-datefield-popover]")) { e.preventDefault(); return; }
+          onInteractOutside?.(e);
+        }}
         className={cn("fixed left-[50%] top-[50%] z-[200] translate-x-[-50%] translate-y-[-50%] bg-white rounded-2xl shadow-card-md w-[calc(100%-2rem)] max-w-lg flex max-h-[90vh] flex-col overflow-hidden data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95", className)} {...props}>
         {children}
         <DialogPrimitive.Close className="absolute right-4 top-4 rounded-lg p-1 text-muted-foreground hover:bg-muted transition-colors">

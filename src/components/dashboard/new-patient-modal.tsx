@@ -152,6 +152,14 @@ export function NewPatientModal({ open, onClose, onCreated, initialName, initial
         <Dialog.Content
           className="modal"
           onEscapeKeyDown={onClose}
+          // El popover del DateField vive en un portal a <body> → Radix lo vería como
+          // "afuera" y cerraría el modal al clic en mes/año/día. Lo excluimos.
+          onPointerDownOutside={(e) => {
+            if ((e.target as HTMLElement | null)?.closest?.("[data-datefield-popover]")) e.preventDefault();
+          }}
+          onInteractOutside={(e) => {
+            if ((e.target as HTMLElement | null)?.closest?.("[data-datefield-popover]")) e.preventDefault();
+          }}
           aria-describedby={undefined}
           style={{
             position: "fixed",

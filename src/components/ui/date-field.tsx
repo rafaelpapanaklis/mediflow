@@ -392,6 +392,7 @@ export const DateField = forwardRef<HTMLInputElement, DateFieldProps>(function D
     <div
       ref={popoverRef}
       className="df-pop"
+      data-datefield-popover=""
       role="dialog"
       aria-modal="false"
       aria-label="Selector de fecha"
