@@ -30,6 +30,7 @@ import { Models3DTab } from "@/components/patient-3d/Models3DTab";
 import { QuotesTab } from "@/components/quotes/quotes-tab";
 import { PrescriptionsTab } from "@/components/dashboard/patient-detail/prescriptions-tab";
 import { PatientUploadsSection } from "@/components/patients/patient-uploads-section";
+import { InvoiceEditorModal } from "@/components/billing/invoice-editor-modal";
 import toast from "react-hot-toast";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -462,8 +463,6 @@ export function PatientDetailClient({
   const [invoiceDetailOpen, setInvoiceDetailOpen] = useState<any | null>(null);
   const [invoices, setInvoices] = useState(initialInvoices);
   const [showNewInvoice, setShowNewInvoice] = useState(false);
-  const [savingInv, setSavingInv] = useState(false);
-  const [invForm, setInvForm] = useState({ description: "", quantity: "1", unitPrice: "", notes: "" });
   useEffect(() => {
     setInvoices(initialInvoices);
   }, [initialInvoices]);
@@ -491,32 +490,6 @@ export function PatientDetailClient({
     if (target) setInvoiceDetailOpen(target);
     else setTab("facturacion");
   };
-
-  async function createInvoiceForPatient() {
-    if (!invForm.description || !invForm.unitPrice) { toast.error("Falta el concepto o el precio"); return; }
-    setSavingInv(true);
-    try {
-      const qty = Number(invForm.quantity) || 1;
-      const price = Number(invForm.unitPrice) || 0;
-      const total = Math.round(qty * price * 100) / 100;
-      const res = await fetch("/api/invoices", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ patientId: patient.id, notes: invForm.notes, items: [{ description: invForm.description, quantity: qty, unitPrice: price, total }] }),
-      });
-      if (!res.ok) throw new Error((await res.json()).error || "Error");
-      const inv = await res.json();
-      setInvoices((prev: any[]) => [inv, ...prev]);
-      toast.success("Factura creada: " + inv.invoiceNumber);
-      setShowNewInvoice(false);
-      setInvForm({ description: "", quantity: "1", unitPrice: "", notes: "" });
-      router.refresh();
-    } catch (err: any) {
-      toast.error(err.message || "No se pudo crear la factura");
-    } finally {
-      setSavingInv(false);
-    }
-  }
 
   async function handleDeleteRecord(record: { id: string; specialtyData?: any }) {
     const status = record.specialtyData?.status ?? "DRAFT";
@@ -3168,24 +3141,18 @@ export function PatientDetailClient({
         </DialogContent>
       </Dialog>
 
-      {/* Nueva factura para este paciente — botón en el header del tab Facturación */}
-      <Dialog open={showNewInvoice} onOpenChange={setShowNewInvoice}>
-        <DialogContent className="max-w-md">
-          <DialogHeader><DialogTitle className="text-foreground font-bold">Nueva factura · {fullName}</DialogTitle></DialogHeader>
-          <div className="px-6 py-4 space-y-4">
-            <div className="space-y-1.5"><Label>Concepto</Label><Input value={invForm.description} onChange={e => setInvForm(f => ({ ...f, description: e.target.value }))} placeholder="Ej. Limpieza dental" /></div>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5"><Label>Cantidad</Label><Input type="number" min="1" value={invForm.quantity} onChange={e => setInvForm(f => ({ ...f, quantity: e.target.value }))} /></div>
-              <div className="space-y-1.5"><Label>Precio unitario</Label><Input type="number" min="0" step="0.01" value={invForm.unitPrice} onChange={e => setInvForm(f => ({ ...f, unitPrice: e.target.value }))} placeholder="0.00" /></div>
-            </div>
-            <div className="space-y-1.5"><Label>Notas (opcional)</Label><Input value={invForm.notes} onChange={e => setInvForm(f => ({ ...f, notes: e.target.value }))} /></div>
-            <div className="flex justify-end gap-2 pt-2">
-              <button type="button" onClick={() => setShowNewInvoice(false)} className="text-sm px-4 py-2 rounded-lg border border-border">Cancelar</button>
-              <button type="button" onClick={createInvoiceForPatient} disabled={savingInv} className="text-sm px-4 py-2 rounded-lg bg-brand-600 text-white font-bold disabled:opacity-50">{savingInv ? "Creando…" : "Crear factura"}</button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
+      {/* Nueva factura para este paciente — editor completo (paridad con presupuestos) */}
+      <InvoiceEditorModal
+        open={showNewInvoice}
+        patientId={patient.id}
+        patientName={fullName}
+        onClose={() => setShowNewInvoice(false)}
+        onCreated={(inv) => {
+          setInvoices((prev: any[]) => (prev.some((i: any) => i.id === inv.id) ? prev : [inv, ...prev]));
+          setShowNewInvoice(false);
+          router.refresh();
+        }}
+      />
 
       {/* Modal de detalle de nota SOAP — abre al hacer click en una row del
        *  tab Notas SOAP. */}
