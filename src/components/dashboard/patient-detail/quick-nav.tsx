@@ -147,7 +147,9 @@ export function QuickNav({
       icon: HeartPulse,
       count: counts.periodoncia,
       badgeTone: "brand",
-      dimmed: activityCounts !== undefined && activityCounts.periodoncia === 0,
+      disabled: true,
+      disabledReason: "Próximamente",
+      dimmed: false,
     });
   }
   if (showEndodontics) {
@@ -157,7 +159,9 @@ export function QuickNav({
       icon: Zap,
       count: counts.endodoncia,
       badgeTone: "brand",
-      dimmed: activityCounts !== undefined && activityCounts.endodoncia === 0,
+      disabled: true,
+      disabledReason: "Próximamente",
+      dimmed: false,
     });
   }
   if (showImplants) {
@@ -167,7 +171,9 @@ export function QuickNav({
       icon: Anchor,
       count: counts.implantes,
       badgeTone: "brand",
-      dimmed: activityCounts !== undefined && activityCounts.implantes === 0,
+      disabled: true,
+      disabledReason: "Próximamente",
+      dimmed: false,
     });
   }
   if (showOrthodontics) {
@@ -177,7 +183,9 @@ export function QuickNav({
       icon: Smile,
       count: counts.ortodoncia,
       badgeTone: "brand",
-      dimmed: activityCounts !== undefined && activityCounts.ortodoncia === 0,
+      disabled: true,
+      disabledReason: "Próximamente",
+      dimmed: false,
     });
   }
 

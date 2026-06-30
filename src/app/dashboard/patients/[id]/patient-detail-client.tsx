@@ -276,10 +276,11 @@ function buildTabs(opts: {
     const odontoIdx = out.findIndex((t) => t.id === "odontograma");
     out.splice(odontoIdx >= 0 ? odontoIdx : 2, 0, tab);
   };
-  if (opts.showPeriodontics)  insertBeforeOdonto({ id: "periodoncia", labelKey: "patients.tabs.periodoncia" });
-  if (opts.showEndodontics)   insertBeforeOdonto({ id: "endodoncia",  labelKey: "patients.tabs.endodoncia"  });
-  if (opts.showImplants)      insertBeforeOdonto({ id: "implantes",   labelKey: "patients.tabs.implantes"   });
-  if (opts.showOrthodontics)  insertBeforeOdonto({ id: "ortodoncia",  labelKey: "patients.tabs.ortodoncia"  });
+  // Próximamente: deshabilitadas (no clickeables), igual que Pediatría disabled.
+  if (opts.showPeriodontics)  insertBeforeOdonto({ id: "periodoncia", labelKey: "patients.tabs.periodoncia", disabled: true, disabledReason: "Próximamente" });
+  if (opts.showEndodontics)   insertBeforeOdonto({ id: "endodoncia",  labelKey: "patients.tabs.endodoncia",  disabled: true, disabledReason: "Próximamente" });
+  if (opts.showImplants)      insertBeforeOdonto({ id: "implantes",   labelKey: "patients.tabs.implantes",   disabled: true, disabledReason: "Próximamente" });
+  if (opts.showOrthodontics)  insertBeforeOdonto({ id: "ortodoncia",  labelKey: "patients.tabs.ortodoncia",  disabled: true, disabledReason: "Próximamente" });
   return out;
 }
 
