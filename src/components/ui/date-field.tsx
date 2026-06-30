@@ -236,28 +236,22 @@ export const DateField = forwardRef<HTMLInputElement, DateFieldProps>(function D
     setOpen(true);
   }
 
-  // Cierre + escudo en UN listener en CAPTURA en document (corre ANTES que Radix,
-  // que escucha pointerdown en burbuja en document). El popover vive en un portal
-  // a <body>:
-  //  · clic DENTRO del popover  → stopPropagation (Radix nunca lo ve → no cierra el
-  //    modal) y NO cerramos el popover (se podrá elegir mes/año/día).
-  //  · clic en el CAMPO         → no cerramos (es para abrir/teclear).
-  //  · clic GENUINAMENTE afuera → cerramos el popover.
+  // Cerrar al hacer click GENUINAMENTE afuera. pointerdown en BURBUJA con containment;
+  // SIN stopPropagation (eso bloqueaba los onClick del popover → mes/año/día no
+  // respondían). NO hace falta proteger de Radix: el popover, aunque vive en un portal
+  // a <body>, es descendiente del Dialog en el ÁRBOL DE REACT, y Radix decide
+  // "outside" por isPointerInsideReactTree (árbol React, no DOM) → NO cierra el modal.
   useEffect(() => {
     if (!open) return;
-    function onDownCapture(e: Event) {
+    function onDown(e: Event) {
       const t = e.target as Node | null;
       if (!t) return;
-      if (popoverRef.current?.contains(t)) { e.stopPropagation(); return; }
+      if (popoverRef.current?.contains(t)) return;
       if (wrapperRef.current?.contains(t)) return;
       setOpen(false);
     }
-    document.addEventListener("pointerdown", onDownCapture, true);
-    document.addEventListener("mousedown", onDownCapture, true);
-    return () => {
-      document.removeEventListener("pointerdown", onDownCapture, true);
-      document.removeEventListener("mousedown", onDownCapture, true);
-    };
+    document.addEventListener("pointerdown", onDown);
+    return () => document.removeEventListener("pointerdown", onDown);
   }, [open]);
 
   // Esc cierra el popover (captura, para no cerrar un modal padre).
@@ -274,18 +268,6 @@ export const DateField = forwardRef<HTMLInputElement, DateFieldProps>(function D
     return () => document.removeEventListener("keydown", onKey, true);
   }, [open]);
 
-  // Escudo de FOCO en CAPTURA en document (antes que Radix, que escucha focusin en
-  // burbuja): si el foco entra al popover (al hacer clic en un día/mes/año), Radix
-  // lo veía como "foco afuera" del modal y cerraba. Lo frenamos aquí.
-  useEffect(() => {
-    if (!open) return;
-    function onFocusInCapture(e: Event) {
-      const t = e.target as Node | null;
-      if (t && popoverRef.current?.contains(t)) e.stopPropagation();
-    }
-    document.addEventListener("focusin", onFocusInCapture, true);
-    return () => document.removeEventListener("focusin", onFocusInCapture, true);
-  }, [open]);
 
   // Posiciona el popover (fixed → escapa overflow/transform del modal).
   useEffect(() => {
