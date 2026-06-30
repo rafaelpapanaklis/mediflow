@@ -391,6 +391,10 @@ export const DateField = forwardRef<HTMLInputElement, DateFieldProps>(function D
       aria-label="Selector de fecha"
       style={{
         position: "fixed",
+        // Radix Dialog (modal) pone pointer-events:none en el <body> para inertizar el
+        // fondo; el popover vive en un portal a <body> y lo HEREDA → el mouse no
+        // interactúa (cursor default, sin clicks). Lo restauramos explícitamente.
+        pointerEvents: "auto",
         top: coords.top,
         left: coords.left,
         zIndex: 9999,
