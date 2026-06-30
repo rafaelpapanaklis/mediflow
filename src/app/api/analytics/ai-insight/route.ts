@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
 import { chat } from "@/lib/integrations/claude";
+import { aiTokenLimitError, addAiTokens } from "@/lib/ai-tokens";
 
 export const dynamic = "force-dynamic";
 
@@ -36,6 +37,9 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "missing_fields" }, { status: 400 });
   }
 
+  const aiErr = await aiTokenLimitError(user.clinicId);
+  if (aiErr) return NextResponse.json(aiErr, { status: 429 });
+
   const result = await chat({
     system: SYSTEM_PROMPT,
     messages: [
@@ -50,6 +54,8 @@ export async function POST(req: NextRequest) {
   if (result.error) {
     return NextResponse.json({ error: result.error }, { status: 502 });
   }
+
+  await addAiTokens(user.clinicId, (result.inputTokens ?? 0) + (result.outputTokens ?? 0));
 
   return NextResponse.json({
     insight: result.text,

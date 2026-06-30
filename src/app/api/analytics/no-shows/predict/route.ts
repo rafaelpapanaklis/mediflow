@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { chat } from "@/lib/integrations/claude";
+import { aiTokenLimitError, addAiTokens } from "@/lib/ai-tokens";
 
 export const dynamic = "force-dynamic";
 
@@ -152,6 +153,9 @@ export async function POST(req: NextRequest) {
 
   // IA refinement (opcional, si key disponible). Si Claude falla
   // mantenemos baseline.
+  const aiErr = await aiTokenLimitError(clinicId);
+  if (aiErr) return NextResponse.json(aiErr, { status: 429 });
+
   const aiResult = await chat({
     system: AI_SYSTEM_PROMPT,
     messages: [
@@ -181,6 +185,8 @@ export async function POST(req: NextRequest) {
     ],
     maxTokens: 300,
   });
+
+  await addAiTokens(clinicId, (aiResult.inputTokens ?? 0) + (aiResult.outputTokens ?? 0));
 
   let probability = baselineProb;
   let aiFactors: Array<{ label: string; weight: number; reason: string }> = [];

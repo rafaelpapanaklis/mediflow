@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { readActiveClinicCookie } from "@/lib/active-clinic";
 import { rateLimit } from "@/lib/rate-limit";
 import { chat } from "@/lib/integrations/claude";
+import { aiTokenLimitError, addAiTokens } from "@/lib/ai-tokens";
 import { TREATMENT_KINDS } from "@/lib/agenda/types";
 
 export const dynamic = "force-dynamic";
@@ -183,6 +184,9 @@ Responde SOLO con un JSON válido (sin markdown, sin texto extra) con esta estru
   "reasoning": "Explicación breve en español de los cambios realizados (2-3 oraciones)"
 }`;
 
+    const aiErr = await aiTokenLimitError(dbUser.clinicId);
+    if (aiErr) return NextResponse.json(aiErr, { status: 429 });
+
     const result = await chat({
       model: "claude-sonnet-4-6",
       maxTokens: 2000,
@@ -195,6 +199,9 @@ Responde SOLO con un JSON válido (sin markdown, sin texto extra) con esta estru
         { status: 502 },
       );
     }
+
+    await addAiTokens(dbUser.clinicId, (result.inputTokens ?? 0) + (result.outputTokens ?? 0));
+
     if (result.mock) {
       return NextResponse.json({
         result: {
