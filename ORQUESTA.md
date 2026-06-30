@@ -1,4 +1,53 @@
 ═══════════════════════════════════════════════════════════════════════════
+## ONBOARDING-EMAILS — Correos "plan activado" (1er pago) + "plan renovado" (Resend) ✅ (2026-06-29) · rama feat/billing-emails (NO main)
+═══════════════════════════════════════════════════════════════════════════
+COMMIT: dd014101 · BUILD EXIT 0 (✓ Compiled successfully, sin warnings en archivos tocados).
+NO mergeado a main: pendiente aplicar SQL + QA con pago de prueba (que llegue el correo A).
+
+OBJETIVO: 2 correos branded (mismo estilo dark que sendWelcomeEmail) disparados desde el
+webhook de Stripe:
+  A) "Plan activado"  — cuando la clínica COMPLETA su 1er pago.
+  B) "Plan renovado"  — en cada renovación del ciclo.
+
+HELPERS (src/lib/email.ts):
+  - sendPlanActivatedEmail({ email, firstName?, clinicName, planName, dashboardUrl })
+      HTML dark + texto plano. Felicita, badge "Suscripción activa", CTA → SITE_URL/dashboard,
+      4 primeros pasos (paciente, agenda WhatsApp, RFC/CFDI, equipo), soporte@dalecontrol.com.
+  - sendPlanRenewedEmail({ email, firstName?, clinicName, planName, amountPaid, currency,
+      nextBillingDate?, receiptsUrl })
+      Tono recibo: tabla Plan / Monto cobrado / Próximo cobro + CTA → recibos
+      (/dashboard/settings?tab=subscription).
+  - Utils privados: formatBillingMoney (Intl currency, fallback "$X CUR") y formatBillingDate
+      (fecha larga es-MX; devuelve null si Invalid Date — Intl.format LANZA con fechas inválidas).
+
+ENGANCHE (src/app/api/webhooks/stripe/route.ts · case invoice.paid / invoice.payment_succeeded):
+  - Sección de correos AL INICIO del case, ANTES del `break` por afiliado (~L343) → llega a
+    TODAS las clínicas, no solo a las referidas (ese break temprano era el riesgo).
+  - UN solo lookup de clínica (select ampliado): id, name, email, plan, nextBillingDate,
+    users (SUPER_ADMIN activo más antiguo: email+firstName) + affiliateId/affiliate (lo previo).
+  - Distingue por invoice.billing_reason: subscription_create → A; subscription_cycle → B;
+    resto → ignora. Destinatario = owner.email ?? clinic.email; si no hay, omite sin romper.
+  - planName desde PLAN_MARKETING (Básico/Profesional/Clínica). SITE_URL = NEXT_PUBLIC_SITE_URL.
+  - Próxima fecha (B): invoice.lines.data[0].period.end, fallback clinic.nextBillingDate.
+  - Fire-and-forget (.catch(()=>{})) + try/catch de toda la sección → no bloquea el 200 ni
+    la lógica de afiliado (que queda INTACTA).
+
+IDEMPOTENCIA: model BillingEmailLog (@@map "billing_email_logs"; invoiceId @unique; @@index clinicId).
+  El INSERT de la fila ÚNICA por invoiceId es el candado atómico: solo el 1er evento gana y envía;
+  el 2.º (Stripe dispara invoice.paid + invoice.payment_succeeded para la misma factura) cae en
+  P2002 → no reenvía. Si la tabla aún no existe (pre-SQL) o el guard falla → NO envía (no rompe).
+
+SQL PENDIENTE (NO aplicado — lo pega Rafael en Supabase):
+  sql/billing-email-log.sql → CREATE TABLE "billing_email_logs" + UNIQUE(invoiceId) +
+  INDEX(clinicId) + RLS deny-all. Aditivo e idempotente.
+
+ARCHIVOS: src/lib/email.ts (+195), webhook route (+91), prisma/schema.prisma (+17),
+  sql/billing-email-log.sql (nuevo). 4 files, +303.
+
+PENDIENTE RAFAEL: (1) aplicar sql/billing-email-log.sql; (2) QA = pago de prueba real y
+  confirmar que llega el correo; (3) merge a main tras QA OK.
+
+═══════════════════════════════════════════════════════════════════════════
 ## SEC-FAILBAN-FIX — Rate-limit (anti-flood) ≠ lockout (anti-fuerza-bruta) ✅ (2026-06-23) · rama feat/sec-failban (NO main)
 ═══════════════════════════════════════════════════════════════════════════
 COMMIT: 67f114a2 · BUILD EXIT 0 (✓ Compiled successfully; solo el ruido conocido
