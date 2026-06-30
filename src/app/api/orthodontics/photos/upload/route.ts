@@ -10,6 +10,7 @@ import { validateMagicNumber } from "@/lib/validate-upload";
 import { canAccessModule } from "@/lib/marketplace/access-control";
 import { ORTHODONTICS_MODULE_KEY } from "@/lib/specialties/keys";
 import type { OrthoPhotoSetType } from "@prisma/client";
+import { storageQuotaError } from "@/lib/storage-quota";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -77,6 +78,10 @@ export async function POST(req: NextRequest) {
   if (file.size > MAX_IMAGE_SIZE) {
     return NextResponse.json({ error: "Imagen demasiado grande (máx 25 MB)." }, { status: 413 });
   }
+
+  // Tope de almacenamiento por plan (enforcement) — antes de leer/subir bytes.
+  const quotaErr = await storageQuotaError(ctx.clinicId, file.size);
+  if (quotaErr) return quotaErr;
 
   // Seguridad: `view` viene del cliente y se interpola en el path del bucket. Sin
   // sanitizar, un valor como "../<otra-clinica>/..." escaparía la carpeta de la

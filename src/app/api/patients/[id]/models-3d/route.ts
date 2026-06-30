@@ -12,6 +12,7 @@ import {
 } from "@/lib/storage";
 import { validateModel3D } from "@/lib/validate-upload";
 import { CBCT_LITE_SUFFIX } from "@/components/patient-3d/cbct-lite-shared";
+import { storageQuotaError } from "@/lib/storage-quota";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -214,6 +215,11 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   if (!(file instanceof Blob)) {
     return NextResponse.json({ error: "Archivo requerido" }, { status: 400 });
   }
+
+  // Tope de almacenamiento por plan (enforcement) — antes de subir al bucket.
+  const quotaErr = await storageQuotaError(ctx.clinicId, (file as Blob).size);
+  if (quotaErr) return quotaErr;
+
   const originalName = ((file as File).name || "modelo").trim();
   const ext = extOf(originalName);
   if (!ALLOWED_EXT.includes(ext as (typeof ALLOWED_EXT)[number])) {

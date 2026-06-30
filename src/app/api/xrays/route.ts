@@ -3,6 +3,7 @@ import { getAuthContext } from "@/lib/auth-context";
 import { prisma } from "@/lib/prisma";
 import { createClient as createAdmin } from "@supabase/supabase-js";
 import { BUCKETS, signMaybeUrl, signMaybeUrls } from "@/lib/storage";
+import { storageQuotaError } from "@/lib/storage-quota";
 
 function getAdminSupabase() {
   return createAdmin(
@@ -84,6 +85,10 @@ export async function POST(req: NextRequest) {
     where: { id: patientId, clinicId: ctx.clinicId },
   });
   if (!patient) return NextResponse.json({ error: "Paciente no encontrado" }, { status: 404 });
+
+  // Tope de almacenamiento por plan (enforcement) — antes de subir al bucket.
+  const quotaErr = await storageQuotaError(ctx.clinicId, file.size);
+  if (quotaErr) return quotaErr;
 
   const supabase = getAdminSupabase();
   const ext  = (file.name.split(".").pop() ?? "jpg").replace(/[^a-z0-9]/gi, "").slice(0, 8).toLowerCase() || "jpg";
