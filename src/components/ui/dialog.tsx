@@ -31,11 +31,11 @@ const DialogContent = React.forwardRef<React.ElementRef<typeof DialogPrimitive.C
         // "afuera" y cerraría el modal al clic en mes/año/día. Lo excluimos aquí para
         // TODOS los modales que usan este wrapper (sin tocar cada uno).
         onPointerDownOutside={(e) => {
-          if ((e.target as HTMLElement | null)?.closest?.("[data-datefield-popover]")) { e.preventDefault(); return; }
+          if (((e.detail?.originalEvent?.target ?? e.target) as HTMLElement | null)?.closest?.("[data-datefield-popover]")) { e.preventDefault(); return; }
           onPointerDownOutside?.(e);
         }}
         onInteractOutside={(e) => {
-          if ((e.target as HTMLElement | null)?.closest?.("[data-datefield-popover]")) { e.preventDefault(); return; }
+          if (((e.detail?.originalEvent?.target ?? e.target) as HTMLElement | null)?.closest?.("[data-datefield-popover]")) { e.preventDefault(); return; }
           onInteractOutside?.(e);
         }}
         className={cn("fixed left-[50%] top-[50%] z-[200] translate-x-[-50%] translate-y-[-50%] bg-white rounded-2xl shadow-card-md w-[calc(100%-2rem)] max-w-lg flex max-h-[90vh] flex-col overflow-hidden data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95", className)} {...props}>

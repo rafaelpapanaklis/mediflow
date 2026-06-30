@@ -213,8 +213,12 @@ export const DateField = forwardRef<HTMLInputElement, DateFieldProps>(function D
   const minYear = minDate ? minDate.y : 1900;
   const maxYear = maxDate ? maxDate.y : now.getFullYear();
 
-  function openPopover() {
+  // Si el popover se abre por clic en el INPUT, no robamos el foco al grid (para
+  // poder seguir tecleando); sí lo enfocamos al abrir por el botón o por teclado.
+  const focusGridRef = useRef(true);
+  function openPopover(focusGrid = true) {
     if (disabled) return;
+    focusGridRef.current = focusGrid;
     const sel = parseISO(isoValue);
     let y: number, m0: number;
     if (sel) {
@@ -308,6 +312,7 @@ export const DateField = forwardRef<HTMLInputElement, DateFieldProps>(function D
   // Foco inicial dentro del calendario al abrir.
   useEffect(() => {
     if (!open) return;
+    if (!focusGridRef.current) return; // abierto por clic en el input → no robar foco
     const raf = requestAnimationFrame(() => {
       const sel = parseISO(isoValue);
       let day = 1;
@@ -559,10 +564,10 @@ export const DateField = forwardRef<HTMLInputElement, DateFieldProps>(function D
         onFocus={(e) => { setFocused(true); onFocus?.(e); }}
         onBlur={(e) => { setFocused(false); onBlur?.(e); }}
         onKeyDown={(e) => {
-          if (e.key === "ArrowDown" && !open) { e.preventDefault(); openPopover(); }
+          if (e.key === "ArrowDown" && !open) { e.preventDefault(); openPopover(true); }
           onKeyDown?.(e);
         }}
-        onClick={onClick}
+        onClick={(e) => { if (!open) openPopover(false); onClick?.(e); }}
         style={{
           flex: 1,
           minWidth: 0,
