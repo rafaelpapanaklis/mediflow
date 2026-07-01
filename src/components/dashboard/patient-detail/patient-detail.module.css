@@ -240,13 +240,21 @@
   display: flex; flex-direction: column;
   gap: 12px;
 }
-/* Laptop ≤1366px: el side-panel cae al flujo normal, en una fila nueva de
-   ancho completo DEBAJO del contenido (NO se oculta — Reglas 2 y 3). Las
-   cards se reparten en grid auto-fit para no apilarse demasiado alto. */
+/* Laptop ≤1366px: el side-panel cae al flujo normal, en una fila nueva
+   DEBAJO del contenido (NO se oculta — Reglas 2 y 3). Las cards se
+   reparten en grid auto-fit para no apilarse demasiado alto.
+   ⚠️ La fila arranca en la COLUMNA 2 (no 1/-1): Chrome NO limita un grid
+   item sticky a su celda sino al contenedor completo, así que el quick-nav
+   (sticky) se deslizaba hacia abajo al scrollear y se encimaba sobre las
+   cards que pasaban por debajo de su columna (tapaba Próxima cita /
+   WhatsApp en laptops). Al no compartir columna, el overlap es imposible;
+   el quick-nav además abarca ambas filas para que el sticky siga vivo a la
+   altura de las cards. */
 @media (max-width: 1366px) {
   .layout { grid-template-columns: 200px 1fr; }
+  .quickNav { grid-row: 1 / span 2; }
   .sidePanel {
-    grid-column: 1 / -1;
+    grid-column: 2 / -1;
     position: static;
     top: auto;
     display: grid;
@@ -256,6 +264,9 @@
 }
 @media (max-width: 1024px) {
   .layout { grid-template-columns: 1fr; }
+  /* El quick-nav está oculto aquí (display:none en su sección) → las cards
+     recuperan el ancho completo del grid de 1 columna. */
+  .sidePanel { grid-column: 1 / -1; }
   /* .quickNav { display: none } vive en la sección QUICK NAV, después de su
      base, para respetar override-después-de-base en la cascada. */
 }
