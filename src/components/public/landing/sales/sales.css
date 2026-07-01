@@ -539,56 +539,6 @@
 .mfh-stars svg { width: 15px; height: 15px; }
 
 /* ════════════════════════════════════════════════════════════════════════
-   PRECIOS
-   ════════════════════════════════════════════════════════════════════════ */
-.mfh-toggle { display: inline-flex; align-items: center; gap: 4px; padding: 5px; border-radius: 999px; border: 1px solid var(--line); background: #fff; box-shadow: var(--sh-sm); margin: 22px auto 0; flex-wrap: wrap; max-width: 100%; justify-content: center; }
-.mfh-toggle__btn { border: 0; background: transparent; cursor: pointer; font-size: 13.5px; font-weight: 600; color: var(--muted); padding: 8px 18px; border-radius: 999px; transition: color .15s, background .15s; display: inline-flex; align-items: center; gap: 8px; }
-.mfh-toggle__btn[data-active="true"] { color: #fff; background: linear-gradient(180deg, var(--b), var(--b2)); box-shadow: var(--sh-b); }
-.mfh-toggle__save { font-size: 10.5px; font-weight: 700; color: var(--ok); background: rgba(5,150,105,.12); padding: 2px 7px; border-radius: 999px; white-space: nowrap; }
-.mfh-toggle__btn[data-active="true"] .mfh-toggle__save { color: #fff; background: rgba(255,255,255,.22); }
-
-.mfh-plans { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; margin-top: 44px; align-items: stretch; }
-@media (max-width: 900px) { .mfh-plans { grid-template-columns: 1fr; max-width: 460px; margin-inline: auto; } }
-.mfh-plan { position: relative; display: flex; flex-direction: column; gap: 18px; padding: 28px 24px; background: #fff; border: 1px solid var(--line); border-radius: var(--r-lg); box-shadow: var(--sh-sm); transition: transform .2s ease, box-shadow .2s ease, border-color .2s ease; }
-.mfh-plan--pop { border-color: transparent; box-shadow: var(--sh-lg); background:
-  linear-gradient(#fff, #fff) padding-box,
-  linear-gradient(160deg, var(--b), var(--b-acc)) border-box;
-  border: 2px solid transparent; transform: translateY(-6px); }
-@media (max-width: 900px) { .mfh-plan--pop { transform: none; } }
-.mfh-plan__pop { position: absolute; top: 0; left: 50%; transform: translate(-50%, -50%); font-size: 11px; font-weight: 700; letter-spacing: .02em; color: #fff; background: linear-gradient(180deg, var(--b), var(--b2)); padding: 5px 14px; border-radius: 999px; box-shadow: var(--sh-b); white-space: nowrap; }
-.mfh-plan__name { font-size: 14px; font-weight: 700; letter-spacing: .02em; text-transform: uppercase; color: var(--b2); }
-.mfh-plan__desc { font-size: 13px; color: var(--muted); margin-top: -10px; }
-.mfh-plan__price { display: flex; align-items: baseline; gap: 4px; }
-.mfh-plan__amt { font-size: 42px; font-weight: 700; letter-spacing: -.03em; color: var(--ink); font-variant-numeric: tabular-nums; }
-.mfh-plan__cur { font-size: 15px; font-weight: 600; color: var(--muted); }
-.mfh-plan__per { font-size: 13px; color: var(--muted); }
-.mfh-plan__feats { display: flex; flex-direction: column; gap: 11px; margin: 4px 0; }
-.mfh-plan__feat { display: flex; gap: 9px; align-items: flex-start; font-size: 13.5px; color: var(--body); }
-.mfh-plan__feat svg { width: 18px; height: 18px; color: var(--b); flex-shrink: 0; margin-top: 1px; }
-.mfh-plan__cta { margin-top: auto; }
-.mfh-plan__note { font-size: 11.5px; color: var(--faint); text-align: center; }
-
-/* Hover premium: anillo morado + sombra suave + leve elevación (AA: solo decorativo). */
-.mfh-plan:hover { transform: translateY(-4px); box-shadow: 0 0 0 2px var(--b-acc), var(--sh-lg); }
-.mfh-plan:not(.mfh-plan--pop):hover { border-color: var(--b-acc); }
-.mfh-plan--pop:hover { transform: translateY(-10px); box-shadow: 0 0 0 2px var(--b), var(--sh-lg); }
-@media (prefers-reduced-motion: reduce) { .mfh-plan:hover, .mfh-plan--pop:hover { transform: none; } }
-
-/* Aviso de promoción (cambia con el toggle, aria-live). */
-.mfh-price-notice { margin: 16px auto 0; max-width: 540px; text-align: center; font-size: 13.5px; font-weight: 600; color: var(--b-ink); background: var(--v50); border: 1px solid var(--v200); border-radius: 12px; padding: 9px 16px; }
-
-/* Promo mensual: −15% los primeros 3 meses. */
-.mfh-plan__promo { margin-top: 12px; display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 8px; font-size: 12.5px; }
-.mfh-plan__promo-badge { font-weight: 700; color: #fff; background: linear-gradient(180deg, var(--b), var(--b2)); border-radius: 999px; padding: 2px 9px; font-size: 11px; white-space: nowrap; }
-.mfh-plan__promo-val { font-weight: 700; font-size: 15px; color: var(--b-ink); }
-.mfh-plan__promo-ref { color: var(--muted); }
-
-/* Instalación: $500 pago único tachado + incluido sin costo. */
-.mfh-plan__install { margin-top: 12px; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; font-size: 12.5px; color: var(--muted); }
-.mfh-plan__install-old { text-decoration: line-through; color: var(--faint); }
-.mfh-plan__install-free { font-weight: 700; color: #047857; background: #d1fae5; border-radius: 999px; padding: 2px 9px; font-size: 11.5px; white-space: nowrap; }
-
-/* ════════════════════════════════════════════════════════════════════════
    CONFIANZA + FAQ
    ════════════════════════════════════════════════════════════════════════ */
 .mfh-trust { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }

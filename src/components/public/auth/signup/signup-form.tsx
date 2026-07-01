@@ -104,6 +104,9 @@ export function SignupForm() {
   // plan; sin uno válido (y fuera del flujo OAuth) mandamos de vuelta a /#precios.
   const planParam = (searchParams.get("plan") ?? "").toUpperCase();
   const initialPlan: PlanId | null = isPlanId(planParam) ? planParam : null;
+  // Periodo elegido en la landing (?billing=annual|monthly). Viaja al registro;
+  // el cobro real se hace en el panel de activación (Stripe Checkout).
+  const initialBilling: Billing = searchParams.get("billing") === "annual" ? "annual" : "monthly";
   const initialStepParam = searchParams.get("step");
   const initialStep: 1 | 2 | 3 =
     initialStepParam === "2" ? 2 :
@@ -115,6 +118,7 @@ export function SignupForm() {
   const [form, setForm] = useState<SignupState>(() => ({
     ...INITIAL,
     plan: initialPlan ?? INITIAL.plan,
+    billing: initialBilling,
     email: initialEmail,
     // En OAuth flow el "nombre" se tomará del Supabase user en el backend
     nombre: isOAuthFlow ? "(OAuth)" : "",

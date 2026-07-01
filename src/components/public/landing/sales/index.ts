@@ -5,7 +5,7 @@ export { FeaturesGrid } from "./features-grid";
 export { Spotlights } from "./spotlights";
 export { Comparison } from "./comparison";
 export { Testimonials } from "./testimonials";
-export { Pricing } from "./pricing";
+export { default as PricingSection } from "./PricingSection";
 export { TrustFaq } from "./trust-faq";
 export { FinalCta } from "./final-cta";
 export { SalesFooter } from "./footer";

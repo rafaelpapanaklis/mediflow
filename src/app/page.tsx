@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import {
   SalesHero, SocialProof, FeaturesGrid, Spotlights,
-  Comparison, Testimonials, Pricing, TrustFaq, FinalCta, SalesFooter,
+  Comparison, Testimonials, PricingSection, TrustFaq, FinalCta, SalesFooter,
 } from "@/components/public/landing/sales";
 import { PlanComparison } from "@/components/public/landing/sales/plan-comparison";
 import { SalesNavSession } from "@/components/public/landing/nav-session";
@@ -10,7 +10,7 @@ import "@/components/public/landing/sales/sales.css";
 
 const inter = Inter({
   subsets: ["latin"],
-  weight: ["400", "500", "600", "700"],
+  weight: ["400", "500", "600", "700", "800"],
   variable: "--font-inter",
   display: "swap",
 });
@@ -123,7 +123,7 @@ export default function HomePage() {
         <Spotlights />
         <Comparison />
         <Testimonials />
-        <Pricing />
+        <PricingSection />
         <PlanComparison />
         <TrustFaq />
         <FinalCta />
