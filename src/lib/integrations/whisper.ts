@@ -16,6 +16,8 @@ export interface TranscribeInput {
   mime: string;
   /** ISO code: "es", "en", etc. Whisper auto-detecta si no se especifica. */
   language?: string;
+  /** Hint de vocabulario/contexto (mejora términos técnicos y puntuación). */
+  prompt?: string;
 }
 
 export interface TranscribeResult {
@@ -40,6 +42,7 @@ export async function transcribeAudio(input: TranscribeInput): Promise<Transcrib
     form.append("file", blob, input.filename);
     form.append("model", "whisper-1");
     if (input.language) form.append("language", input.language);
+    if (input.prompt) form.append("prompt", input.prompt);
     form.append("response_format", "verbose_json");
 
     const res = await fetch("https://api.openai.com/v1/audio/transcriptions", {

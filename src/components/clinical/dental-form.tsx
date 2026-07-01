@@ -13,6 +13,7 @@ import { fetchRecords, syncOdontogram } from "@/components/dashboard/odontogram-
 import type { Records, ToothRecord } from "@/components/dashboard/odontogram-v2/types";
 import { Cie10Selector } from "@/components/dashboard/clinical/cie10-selector";
 import { useCodedDiagnoses } from "@/components/clinical/use-coded-diagnoses";
+import { DictationMic } from "@/components/clinical/shared/dictation-mic";
 
 /** ¿El registro de un diente trae algo marcado? (superficies, hallazgos o nota) */
 function toothRecordHasContent(rec: ToothRecord | undefined): boolean {
@@ -188,6 +189,13 @@ export function DentalForm({ patientId, onSaved, initialRecord }: Props) {
     nextVisit:   initialSpec.nextVisit ?? "",
   }));
   const set = (k: string, v: any) => setForm(f => ({ ...f, [k]: v }));
+  // Dictado por voz: agrega la transcripción AL FINAL del campo (nunca reemplaza).
+  // setForm funcional para no pisar lo que se tecleó mientras se transcribía.
+  const appendDictation = (key: string, sep: string) => (text: string) =>
+    setForm(f => {
+      const prev = String((f as any)[key] ?? "");
+      return { ...f, [key]: prev.trim() ? prev.replace(/\s+$/, "") + sep + text : text };
+    });
 
   // ── Signos vitales de ESTA consulta ──────────────────────────────────────
   // Mismas claves canónicas que CardiologyForm (bloodPressure/heartRate/
@@ -372,7 +380,10 @@ export function DentalForm({ patientId, onSaved, initialRecord }: Props) {
       {/* ANAMNESIS */}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
         <div className="field-new">
-          <label className="field-new__label">{t("clinical.dentalForm.reasonLabel")}</label>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+            <label className="field-new__label">{t("clinical.dentalForm.reasonLabel")}</label>
+            <DictationMic disabled={saving} onText={appendDictation("subjective", "\n")} />
+          </div>
           <textarea
             className="input-new"
             style={{ height: 80, paddingTop: 8, resize: "vertical" }}
@@ -382,7 +393,10 @@ export function DentalForm({ patientId, onSaved, initialRecord }: Props) {
           />
         </div>
         <div className="field-new">
-          <label className="field-new__label">{t("clinical.dentalForm.medicalHistoryLabel")}</label>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+            <label className="field-new__label">{t("clinical.dentalForm.medicalHistoryLabel")}</label>
+            <DictationMic disabled={saving} onText={appendDictation("objective", "\n")} />
+          </div>
           <textarea
             className="input-new"
             style={{ height: 80, paddingTop: 8, resize: "vertical" }}
@@ -776,13 +790,19 @@ export function DentalForm({ patientId, onSaved, initialRecord }: Props) {
       {/* DIAGNÓSTICO Y PLAN */}
       <div className="grid grid-cols-2 gap-4">
         <div className="field-new">
-          <label className="field-new__label">{t("clinical.dentalForm.clinicalObservationsLabel")}</label>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+            <label className="field-new__label">{t("clinical.dentalForm.clinicalObservationsLabel")}</label>
+            <DictationMic disabled={saving} onText={appendDictation("assessment", "\n")} />
+          </div>
           <textarea className="input-new"
             style={{ minHeight: 80, resize: "vertical" }}
             placeholder={t("clinical.dentalForm.clinicalObservationsPlaceholder")} value={form.assessment} onChange={e => set("assessment", e.target.value)} />
         </div>
         <div className="field-new">
-          <label className="field-new__label">{t("clinical.dentalForm.futurePlanLabel")}</label>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+            <label className="field-new__label">{t("clinical.dentalForm.futurePlanLabel")}</label>
+            <DictationMic disabled={saving} onText={appendDictation("plan", "\n")} />
+          </div>
           <textarea className="input-new"
             style={{ minHeight: 80, resize: "vertical" }}
             placeholder={t("clinical.dentalForm.futurePlanPlaceholder")} value={form.plan} onChange={e => set("plan", e.target.value)} />
@@ -791,12 +811,18 @@ export function DentalForm({ patientId, onSaved, initialRecord }: Props) {
 
       <div className="grid grid-cols-2 gap-4">
         <div className="field-new">
-          <label className="field-new__label">{t("clinical.dentalForm.xraysLabel")}</label>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+            <label className="field-new__label">{t("clinical.dentalForm.xraysLabel")}</label>
+            <DictationMic disabled={saving} onText={appendDictation("xrays", " ")} />
+          </div>
           <input className="input-new"
             placeholder={t("clinical.dentalForm.xraysPlaceholder")} value={form.xrays} onChange={e => set("xrays", e.target.value)} />
         </div>
         <div className="field-new">
-          <label className="field-new__label">{t("clinical.dentalForm.nextVisitLabel")}</label>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+            <label className="field-new__label">{t("clinical.dentalForm.nextVisitLabel")}</label>
+            <DictationMic disabled={saving} onText={appendDictation("nextVisit", " ")} />
+          </div>
           <input className="input-new"
             placeholder={t("clinical.dentalForm.nextVisitPlaceholder")} value={form.nextVisit} onChange={e => set("nextVisit", e.target.value)} />
         </div>
