@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { getAuthContext } from "@/lib/auth-context";
 import { prisma } from "@/lib/prisma";
 import { signMaybeUrl } from "@/lib/storage";
+import { storageQuotaError } from "@/lib/storage-quota";
+import { createClient as createAdmin } from "@supabase/supabase-js";
 
 // Registra como PatientFile un set CBCT (.zip) ya subido a Storage vía la signed
 // upload URL. Guarda SOLO el path interno; la signed URL se firma bajo demanda.
@@ -34,6 +36,19 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     return NextResponse.json({ error: "Path inválido" }, { status: 400 });
   }
   if (!path) return NextResponse.json({ error: "Falta el path" }, { status: 400 });
+
+  // Tope de almacenamiento del plan. El .zip ya está en el bucket (subida
+  // directa), así que si excede la cuota lo borramos para no dejar huérfano.
+  if (size) {
+    const quotaErr = await storageQuotaError(ctx.clinicId, size);
+    if (quotaErr) {
+      try {
+        const admin = createAdmin(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!, { auth: { persistSession: false } });
+        await admin.storage.from("patient-files").remove([path]);
+      } catch {}
+      return quotaErr;
+    }
+  }
 
   const record = await prisma.patientFile.create({
     data: {
