@@ -36,7 +36,7 @@ import { PLAN_MODULE_KEYS } from "@/lib/plan-shared";
 /**
  * Universo de keys consideradas "especialidad clínica" en el sidebar y
  * en el tab strip del paciente. Cuando DaleControl lance un nuevo módulo
- * clínico se agrega aquí + en `NAV_ITEMS`/`buildTabs` correspondientes.
+ * clínico se agrega aquí + en `NAV_ITEMS`/`buildPatientNavItems` correspondientes.
  */
 export const SPECIALTY_MODULE_KEYS = [
   PEDIATRICS_MODULE_KEY,
