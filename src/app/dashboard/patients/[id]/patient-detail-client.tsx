@@ -11,6 +11,7 @@ import { OdontogramV2 } from "@/components/dashboard/odontogram-v2/App";
 import { HeroCard } from "@/components/dashboard/patient-detail/hero-card";
 import { TreatmentsModal, type SuggestedTreatment } from "@/components/dashboard/patient-detail/treatments-modal";
 import { QuickNav } from "@/components/dashboard/patient-detail/quick-nav";
+import { buildPatientNavItems } from "@/components/dashboard/patient-detail/patient-nav-items";
 import { SideCards } from "@/components/dashboard/patient-detail/side-cards";
 import { useNewAppointmentDialog } from "@/components/dashboard/new-appointment/new-appointment-provider";
 import { ConsultBar } from "@/components/dashboard/patient-detail/consult-bar";
@@ -222,71 +223,6 @@ const INV_STATUS: Record<string, { labelKey: string; cls: string }> = {
   OVERDUE: { labelKey: "patients.invStatus.overdue", cls: "bg-rose-50 text-rose-700 border border-rose-200"   },
 };
 
-const TABS_BASE = [
-  { id: "resumen",       labelKey: "patients.tabs.resumen"            },
-  { id: "historia",      labelKey: "patients.tabs.historia"           },
-  { id: "cuestionario",  labelKey: "patients.tabs.cuestionario"       },
-  { id: "odontograma",   labelKey: "patients.tabs.odontograma"        },
-  { id: "expediente",    labelKey: "patients.tabs.expediente"         },
-  { id: "historial-consultas", labelKey: "patients.tabs.historialConsultas" },
-  { id: "radiografias",  labelKey: "patients.tabs.radiografias"       },
-  { id: "subidos",       labelKey: "patients.tabs.subidos"            },
-  { id: "modelos-3d",    labelKey: "patients.tabs.modelos3d"          },
-  { id: "tratamiento",   labelKey: "patients.tabs.tratamiento"        },
-  { id: "recetas",       labelKey: "patients.tabs.recetas"            },
-  { id: "referencias",   labelKey: "patients.tabs.referencias"        },
-  { id: "agenda",        labelKey: "patients.tabs.agenda"             },
-  { id: "presupuestos",  labelKey: "patients.tabs.presupuestos"       },
-  { id: "facturacion",   labelKey: "patients.tabs.facturacion"        },
-];
-
-interface PatientTab {
-  id: string;
-  labelKey: string;
-  /** Tab visible pero deshabilitado: no responde click, sirve de feedback. */
-  disabled?: boolean;
-  /** Tooltip mostrado en `title` cuando `disabled=true`. */
-  disabledReason?: string;
-}
-
-function buildTabs(opts: {
-  /** Tab Pediatría con tres estados — ver `derivePediatricsTabState`. */
-  pediatrics: { state: "enabled" | "disabled" | "hidden"; reason?: string };
-  /** Periodoncia hoy solo enabled/hidden — no tiene gate clínico extra. */
-  showPeriodontics: boolean;
-  /** Endodoncia — enabled cuando el módulo está activo en la clínica
-   *  (el componente maneja el caso de paciente sin tratamientos endo). */
-  showEndodontics: boolean;
-  /** Implantes — enabled cuando el módulo está activo. Sin gate de edad. */
-  showImplants: boolean;
-  /** Ortodoncia — enabled cuando el módulo está activo. Sin gate de edad. */
-  showOrthodontics: boolean;
-}): PatientTab[] {
-  const out: PatientTab[] = [...TABS_BASE];
-  // Insertar "Pediatría" entre "Historia clínica" y "Odontograma" según spec §1.2.
-  if (opts.pediatrics.state !== "hidden") {
-    out.splice(2, 0, {
-      id:             "pediatria",
-      labelKey:       "patients.tabs.pediatria",
-      disabled:       opts.pediatrics.state === "disabled",
-      disabledReason: opts.pediatrics.state === "disabled" ? opts.pediatrics.reason : undefined,
-    });
-  }
-  // Insertar las especialidades dentales justo antes de "Odontograma".
-  // Cada splice usa odontoIdx fresco, así el orden de inserción se preserva:
-  // periodoncia → endodoncia → implantes → ortodoncia.
-  const insertBeforeOdonto = (tab: PatientTab) => {
-    const odontoIdx = out.findIndex((t) => t.id === "odontograma");
-    out.splice(odontoIdx >= 0 ? odontoIdx : 2, 0, tab);
-  };
-  // Próximamente: deshabilitadas (no clickeables), igual que Pediatría disabled.
-  if (opts.showPeriodontics)  insertBeforeOdonto({ id: "periodoncia", labelKey: "patients.tabs.periodoncia", disabled: true, disabledReason: "Próximamente" });
-  if (opts.showEndodontics)   insertBeforeOdonto({ id: "endodoncia",  labelKey: "patients.tabs.endodoncia",  disabled: true, disabledReason: "Próximamente" });
-  if (opts.showImplants)      insertBeforeOdonto({ id: "implantes",   labelKey: "patients.tabs.implantes",   disabled: true, disabledReason: "Próximamente" });
-  if (opts.showOrthodontics)  insertBeforeOdonto({ id: "ortodoncia",  labelKey: "patients.tabs.ortodoncia",  disabled: true, disabledReason: "Próximamente" });
-  return out;
-}
-
 const SEV_STYLES: Record<string, { bg: string; text: string; labelKey: string }> = {
   alta:        { bg: "bg-rose-50 border-rose-200",    text: "text-rose-700",    labelKey: "patients.severity.alta"        },
   media:       { bg: "bg-amber-50 border-amber-200",  text: "text-amber-700",   labelKey: "patients.severity.media"       },
@@ -399,16 +335,22 @@ export function PatientDetailClient({
   const showEndodontics  = endoSummaries !== null && endoSummaries !== undefined;
   const showImplants     = implants !== null && implants !== undefined;
   const showOrthodontics = orthoData !== null && orthoData !== undefined;
-  const tabs = useMemo(
-    () => buildTabs({
+  // Items de la tab bar móvil — MISMA fuente de verdad que el QuickNav de
+  // escritorio (patient-nav-items.ts): mismos items, orden, labels y gating.
+  // Solo en móvil los chips disabled (especialidades "Próximamente", Pediatría
+  // bloqueada) van AL FINAL: la barra esconde su scrollbar y caben ~4 chips
+  // por pantalla, así que un bloque de chips muertos a media barra empujaba
+  // "Nueva consulta" e "Historial de consultas" fuera de la vista.
+  const tabs = useMemo(() => {
+    const items = buildPatientNavItems({
       pediatrics:      { state: pediatricsState, reason: PEDIATRICS_DISABLED_REASON },
       showPeriodontics,
       showEndodontics,
       showImplants,
       showOrthodontics,
-    }),
-    [pediatricsState, showPeriodontics, showEndodontics, showImplants, showOrthodontics],
-  );
+    });
+    return [...items.filter((i) => !i.disabled), ...items.filter((i) => i.disabled)];
+  }, [pediatricsState, showPeriodontics, showEndodontics, showImplants, showOrthodontics]);
   const tabFromUrl = searchParams.get("tab");
   const initialTab =
     tabFromUrl === "pediatria" && showPediatrics
