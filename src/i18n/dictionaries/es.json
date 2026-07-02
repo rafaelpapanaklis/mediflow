@@ -3918,6 +3918,20 @@
     }
   },
   "clinical": {
+    "dictation": {
+      "dictate": "Dictar por voz",
+      "stop": "Detener y transcribir",
+      "cancel": "Cancelar dictado",
+      "transcribing": "Transcribiendo…",
+      "retry": "Reintentar transcripción",
+      "discard": "Descartar",
+      "noSpeech": "No se detectó voz en la grabación.",
+      "micDenied": "No se pudo acceder al micrófono. Revisa los permisos del navegador.",
+      "notConfigured": "El dictado por voz no está configurado en este servidor.",
+      "failed": "No se pudo transcribir el audio.",
+      "busy": "Ya hay una grabación en curso.",
+      "unsupported": "Tu navegador no soporta grabación de audio."
+    },
     "meridianMap": {
       "title": "Mapa de meridianos",
       "pointsActivated": "{used} / {total} puntos activados"

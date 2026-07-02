@@ -3918,6 +3918,20 @@
     }
   },
   "clinical": {
+    "dictation": {
+      "dictate": "Voice dictation",
+      "stop": "Stop and transcribe",
+      "cancel": "Cancel dictation",
+      "transcribing": "Transcribing…",
+      "retry": "Retry transcription",
+      "discard": "Discard",
+      "noSpeech": "No speech was detected in the recording.",
+      "micDenied": "Could not access the microphone. Check your browser permissions.",
+      "notConfigured": "Voice dictation is not configured on this server.",
+      "failed": "The audio could not be transcribed.",
+      "busy": "A recording is already in progress.",
+      "unsupported": "Your browser does not support audio recording."
+    },
     "meridianMap": {
       "title": "Meridian map",
       "pointsActivated": "{used} / {total} points activated"
