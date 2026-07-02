@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Search, X, Star, Plus } from "lucide-react";
 
 interface Cie10Code {
@@ -30,14 +31,25 @@ interface Props {
  * Combobox para buscar y seleccionar códigos CIE-10. Muestra los dx ya
  * agregados arriba con chip por código + estrella si es primario + ✕ para
  * remover. Abajo, input con búsqueda async a /api/catalogs/cie10.
+ *
+ * El dropdown de resultados se renderiza en un PORTAL a <body> con position
+ * fixed (mismo patrón que date-field): dentro de la card lo recortaba el
+ * overflow:hidden de .card, y en los modales quedaba clipeado por el scroll.
  */
 export function Cie10Selector({ diagnoses, onAdd, onRemove, disabled }: Props) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<Cie10Code[]>([]);
   const [loading, setLoading] = useState(false);
   const [open, setOpen] = useState(false);
+  const [mounted, setMounted] = useState(false);
+  const [ready, setReady] = useState(false);
+  const [coords, setCoords] = useState({ top: 0, left: 0, width: 0 });
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const anchorRef = useRef<HTMLDivElement>(null);   // wrapper del input (ancla del dropdown)
+  const dropdownRef = useRef<HTMLDivElement>(null); // dropdown portaleado
+
+  useEffect(() => { setMounted(true); }, []);
 
   useEffect(() => {
     if (query.trim().length < 2) {
@@ -62,15 +74,54 @@ export function Cie10Selector({ diagnoses, onAdd, onRemove, disabled }: Props) {
     };
   }, [query]);
 
+  // Cerrar solo al hacer click GENUINAMENTE afuera: el dropdown vive en un
+  // portal a <body>, así que hay que checar AMBOS refs (contenedor y dropdown);
+  // si solo se checa el contenedor, el pointerdown sobre un resultado cierra el
+  // dropdown antes de que dispare su onClick. SIN stopPropagation (rompe los
+  // onClick dentro de Radix Dialog).
   useEffect(() => {
-    function onClick(e: MouseEvent) {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
-        setOpen(false);
-      }
+    function onDown(e: Event) {
+      const t = e.target as Node | null;
+      if (!t) return;
+      if (containerRef.current?.contains(t)) return;
+      if (dropdownRef.current?.contains(t)) return;
+      setOpen(false);
     }
-    document.addEventListener("mousedown", onClick);
-    return () => document.removeEventListener("mousedown", onClick);
+    document.addEventListener("pointerdown", onDown);
+    return () => document.removeEventListener("pointerdown", onDown);
   }, []);
+
+  const showDropdown = open && (loading || results.length > 0 || query.trim().length >= 2);
+
+  // Posiciona el dropdown (fixed → escapa el overflow:hidden de .card y el
+  // scroll de los modales). Se reposiciona en scroll (captura) y resize; si no
+  // cabe abajo y sí arriba, flipea arriba — mismo patrón que date-field.
+  useEffect(() => {
+    if (!showDropdown) { setReady(false); return; }
+    function place() {
+      const r = anchorRef.current?.getBoundingClientRect();
+      if (!r) return;
+      const margin = 4;
+      const popH = dropdownRef.current?.offsetHeight ?? 280;
+      const width = r.width;
+      let left = r.left;
+      if (left + width > window.innerWidth - 8) left = window.innerWidth - 8 - width;
+      if (left < 8) left = 8;
+      let top = r.bottom + margin;
+      if (top + popH > window.innerHeight - 8 && r.top - margin - popH > 8) {
+        top = r.top - margin - popH; // si no cabe abajo y sí arriba, va arriba
+      }
+      setCoords({ top, left, width });
+      setReady(true);
+    }
+    place();
+    window.addEventListener("resize", place);
+    window.addEventListener("scroll", place, true);
+    return () => {
+      window.removeEventListener("resize", place);
+      window.removeEventListener("scroll", place, true);
+    };
+  }, [showDropdown, results.length, loading]);
 
   async function pick(code: Cie10Code) {
     if (diagnoses.some((d) => d.cie10Code === code.code)) {
@@ -154,7 +205,7 @@ export function Cie10Selector({ diagnoses, onAdd, onRemove, disabled }: Props) {
       )}
 
       {/* Search input */}
-      <div style={{ position: "relative" }}>
+      <div ref={anchorRef} style={{ position: "relative" }}>
         <Search
           size={14}
           aria-hidden
@@ -185,21 +236,27 @@ export function Cie10Selector({ diagnoses, onAdd, onRemove, disabled }: Props) {
         />
       </div>
 
-      {/* Results dropdown */}
-      {open && (loading || results.length > 0 || query.trim().length >= 2) && (
+      {/* Results dropdown — portal a <body> para escapar overflow/scroll */}
+      {showDropdown && mounted && createPortal(
         <div
+          ref={dropdownRef}
           style={{
-            position: "absolute",
-            top: "calc(100% + 4px)",
-            left: 0,
-            right: 0,
+            position: "fixed",
+            // Radix Dialog (modal) pone pointer-events:none en el <body> para
+            // inertizar el fondo; el portal lo hereda y el mouse no podría
+            // interactuar. Se restaura explícitamente (igual que date-field).
+            pointerEvents: "auto",
+            top: coords.top,
+            left: coords.left,
+            width: coords.width,
             maxHeight: 280,
             overflowY: "auto",
             background: "var(--bg-elev, #fff)",
             border: "1px solid var(--border-strong, #94a3b8)",
             borderRadius: 10,
-            zIndex: 20,
+            zIndex: 9999,
             boxShadow: "0 12px 30px -12px rgba(15,23,42,0.30)",
+            visibility: ready ? "visible" : "hidden",
           }}
         >
           {loading && (
@@ -254,7 +311,8 @@ export function Cie10Selector({ diagnoses, onAdd, onRemove, disabled }: Props) {
               </button>
             );
           })}
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );
