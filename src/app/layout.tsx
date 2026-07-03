@@ -60,17 +60,16 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <head>
         {/* Verificación de dominio de Meta (Business Manager → Dominios). No mover de <head>. */}
         <meta name="facebook-domain-verification" content="vbkgvotyofxz7i64jkvb9kgtep2oki" />
+        {/* Tema: default SIEMPRE claro (sin fallback a prefers-color-scheme).
+            La clase dark solo se aplica en rutas del panel y solo si el
+            usuario la eligió (toggles del panel guardan localStorage 'theme'). */}
         <script dangerouslySetInnerHTML={{ __html: `
           (function() {
             try {
               var saved = localStorage.getItem('theme');
-              if (saved === 'dark') {
-                document.documentElement.classList.add('dark');
-              } else if (saved === 'light') {
-                document.documentElement.classList.remove('dark');
-              } else if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
-                document.documentElement.classList.add('dark');
-              }
+              var p = location.pathname;
+              var isPanel = p.indexOf('/dashboard') === 0 || p.indexOf('/admin') === 0;
+              if (isPanel && saved === 'dark') document.documentElement.classList.add('dark');
             } catch(e) {}
           })();
         `}} />

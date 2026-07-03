@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type ReactNode } from "react";
+import type { ReactNode } from "react";
 import { Glow } from "../landing/primitives/glow";
 import { GridBg } from "../landing/primitives/grid-bg";
 
@@ -16,24 +16,9 @@ interface AuthShellProps {
 /**
  * Layout split-screen reutilizable para /login y /signup.
  * Aplica .landing-theme al wrapper para usar los tokens --ld-*.
- * Maneja su propio toggle dark/light persistido.
+ * Siempre en claro: el modo oscuro solo existe dentro del panel.
  */
 export function AuthShell({ visual, form, split = "50/50" }: AuthShellProps) {
-  const [mode, setMode] = useState<"dark" | "light">("dark");
-  const [mounted, setMounted] = useState(false);
-
-  useEffect(() => {
-    const saved = typeof window !== "undefined" ? localStorage.getItem("ld-theme") : null;
-    if (saved === "light" || saved === "dark") setMode(saved);
-    setMounted(true);
-  }, []);
-
-  useEffect(() => {
-    if (!mounted) return;
-    document.documentElement.querySelector(".landing-theme")?.setAttribute("data-mode", mode);
-    try { localStorage.setItem("ld-theme", mode); } catch {}
-  }, [mode, mounted]);
-
   // Proporción de columnas por split. "45/55" da más ancho al form (signup con
   // 3 planes para elegir) sin tocar "50/50" (login) ni "60/40".
   const [leftRatio, rightRatio] =
@@ -44,7 +29,7 @@ export function AuthShell({ visual, form, split = "50/50" }: AuthShellProps) {
   return (
     <div
       className="landing-theme auth-shell"
-      data-mode={mode}
+      data-mode="light"
       style={{
         minHeight: "100vh",
         display: "grid",
@@ -89,30 +74,6 @@ export function AuthShell({ visual, form, split = "50/50" }: AuthShellProps) {
           background: "var(--ld-bg)",
         }}
       >
-        {/* Theme toggle top-right */}
-        <button
-          type="button"
-          onClick={() => setMode(m => (m === "dark" ? "light" : "dark"))}
-          aria-label={mode === "dark" ? "Cambiar a modo claro" : "Cambiar a modo oscuro"}
-          style={{
-            position: "absolute",
-            top: 24,
-            right: 28,
-            width: 32,
-            height: 32,
-            borderRadius: 8,
-            background: "rgba(255,255,255,0.04)",
-            border: "1px solid var(--ld-border)",
-            color: "var(--ld-fg)",
-            cursor: "pointer",
-            display: "grid",
-            placeItems: "center",
-            zIndex: 10,
-          }}
-        >
-          {mode === "dark" ? "🌙" : "☀"}
-        </button>
-
         <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center" }}>
           <div style={{ width: "100%", maxWidth: split === "45/55" ? 600 : split === "60/40" ? 460 : 420 }}>{form}</div>
         </div>
