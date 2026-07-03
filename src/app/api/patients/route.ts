@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { Prisma, PatientStatus, Gender } from "@prisma/client";
 import { getAuthContext, buildPatientWhere } from "@/lib/auth-context";
 import { prisma } from "@/lib/prisma";
+import { getPlanLimits } from "@/lib/plans";
 import { validateCurpRecord, type CurpStatusValue } from "@/lib/validators/curp";
 import { logMutation } from "@/lib/audit";
 import { revalidateAfter } from "@/lib/cache/revalidate";
@@ -485,6 +486,19 @@ function isBirthdayThisWeek(dobIso: string | null): boolean {
 export async function POST(req: NextRequest) {
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  // Tope de pacientes por plan (enforcement). maxPatients null = ilimitado.
+  const clinicPlanRow = await prisma.clinic.findUnique({ where: { id: ctx.clinicId }, select: { plan: true } });
+  const { maxPatients } = await getPlanLimits(clinicPlanRow?.plan);
+  if (maxPatients != null) {
+    const patientCount = await prisma.patient.count({ where: { clinicId: ctx.clinicId } });
+    if (patientCount >= maxPatients) {
+      return NextResponse.json(
+        { error: `Tu plan incluye hasta ${maxPatients} pacientes. Sube de plan para seguir creciendo.`, code: "PLAN_LIMIT_PATIENTS", limit: maxPatients },
+        { status: 402 },
+      );
+    }
+  }
 
   const body = await req.json();
   const count = await prisma.patient.count({ where: { clinicId: ctx.clinicId } });
