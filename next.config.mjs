@@ -57,13 +57,15 @@ const nextConfig = {
             key: "Content-Security-Policy",
             value: [
               "default-src 'self'",
-              "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://js.stripe.com https://www.paypal.com https://www.paypalobjects.com https://www.googletagmanager.com",
-              "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
-              "font-src 'self' https://fonts.gstatic.com data:",
+              // embed.tawk.to / *.tawk.to = livechat Tawk.to de la landing (script + iframe + fuentes).
+              "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://js.stripe.com https://www.paypal.com https://www.paypalobjects.com https://www.googletagmanager.com https://embed.tawk.to https://*.tawk.to",
+              // *.tawk.to también en style-src: el widget carga sus CSS desde embed.tawk.to (sin esto no monta).
+              "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://embed.tawk.to https://*.tawk.to",
+              "font-src 'self' https://fonts.gstatic.com data: https://*.tawk.to",
               "img-src 'self' data: blob: https: http:",
               "media-src 'self' blob: https:",
               "connect-src 'self' https: wss:",
-              "frame-src 'self' https://js.stripe.com https://www.paypal.com https://www.google.com https://daily.co https://*.daily.co",
+              "frame-src 'self' https://js.stripe.com https://www.paypal.com https://www.google.com https://daily.co https://*.daily.co https://*.tawk.to",
               "frame-ancestors 'none'",
               "base-uri 'self'",
               "form-action 'self'",

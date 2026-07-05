@@ -1,115 +1,48 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
-import { Menu, X, ArrowRight, UserRound } from "lucide-react";
-import { SalesLogo } from "./logo";
+import { NAV } from "./v2/landing-data";
+import "./v2/landing-v2.css";
 
-const LINKS = [
-  { href: "/descubre", label: "Encuentra tu clínica" },
-  { href: "/#producto", label: "Producto" },
-  { href: "/#funciones", label: "Funciones" },
-  { href: "/#precios", label: "Planes" },
-  { href: "/#clientes", label: "Clientes" },
-];
-
-// Rutas de página (sin ancla) van con <Link>; las de ancla siguen con <a>.
-const isPageLink = (href: string) => href.startsWith("/") && !href.includes("#");
-
+/**
+ * Nav de la landing v2 (diseño handoff): sticky con blur, logo D azul,
+ * anclas Funciones/Comparativa/Precios/FAQ y sesión a la derecha.
+ * Conserva el contrato de siempre: <SalesNav isLoggedIn> — la detección de
+ * sesión sigue viviendo en nav-session.tsx (client, cookie de Supabase).
+ * También la usan las páginas de /descubre, por eso las anclas van con "/#…"
+ * y se conserva el acceso "Soy paciente".
+ */
 export function SalesNav({ isLoggedIn = false }: { isLoggedIn?: boolean }) {
-  const [scrolled, setScrolled] = useState(false);
-  const [open, setOpen] = useState(false);
-
-  useEffect(() => {
-    const onScroll = () => setScrolled(window.scrollY > 8);
-    onScroll();
-    window.addEventListener("scroll", onScroll, { passive: true });
-    return () => window.removeEventListener("scroll", onScroll);
-  }, []);
-
-  // Cierra el menú móvil al pasar a desktop.
-  useEffect(() => {
-    const mq = window.matchMedia("(min-width: 881px)");
-    const onChange = () => mq.matches && setOpen(false);
-    mq.addEventListener("change", onChange);
-    return () => mq.removeEventListener("change", onChange);
-  }, []);
-
   return (
-    <header className="mfh-nav" data-scrolled={scrolled}>
-      <div className="mfh-container mfh-nav__inner">
-        <SalesLogo />
-
-        <nav className="mfh-nav__links" aria-label="Principal">
-          {LINKS.map((l) =>
-            isPageLink(l.href) ? (
-              <Link key={l.href} href={l.href} className="mfh-nav__link">{l.label}</Link>
-            ) : (
-              <a key={l.href} href={l.href} className="mfh-nav__link">{l.label}</a>
-            )
-          )}
-        </nav>
-
-        <div className="mfh-nav__right">
+    <nav aria-label="Principal" style={{ position: "sticky", top: 0, zIndex: 50, background: "rgba(255,255,255,.88)", backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)", borderBottom: "1px solid #e8edf5" }}>
+      <div style={{ maxWidth: 1180, margin: "0 auto", padding: "0 20px", minHeight: 64, display: "flex", alignItems: "center", gap: 18, flexWrap: "wrap" }}>
+        <Link href="/" style={{ display: "flex", alignItems: "center", gap: 9, textDecoration: "none", color: "#0f172a", padding: "10px 0" }}>
+          <span style={{ display: "flex", width: 30, height: 30, borderRadius: 9, background: "linear-gradient(135deg,#2563eb,#1d4ed8)", alignItems: "center", justifyContent: "center", color: "#fff", fontWeight: 800, fontSize: 15 }}>D</span>
+          <span style={{ fontWeight: 800, fontSize: 17, letterSpacing: "-0.01em" }}>DaleControl</span>
+        </Link>
+        <div className="dcv2-nav-anchors" style={{ display: "flex", alignItems: "center", gap: 4, flexWrap: "wrap", marginLeft: "auto" }}>
+          {NAV.links.map((l) => (
+            <a key={l.href} href={`/${l.href}`} className="dcv2-navlink">{l.label}</a>
+          ))}
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginLeft: "auto" }}>
           {isLoggedIn ? (
-            <Link href="/dashboard" className="mfh-btn mfh-btn--primary mfh-nav__signup-desktop">
-              Ir al dashboard <ArrowRight />
+            <Link href="/dashboard" className="dcv2-btn-primary" style={{ fontSize: 14.5, padding: "11px 18px", borderRadius: 10, boxShadow: "0 4px 14px rgba(37,99,235,.28)", whiteSpace: "nowrap" }}>
+              Ir al panel
             </Link>
           ) : (
             <>
-              <Link href="/paciente/login" className="mfh-nav__patient" title="Portal del paciente">
-                <UserRound aria-hidden /> Soy paciente
+              <Link href="/paciente/login" className="dcv2-nav-ghost dcv2-nav-patient" style={{ color: "#64748b", fontSize: 13.5 }} title="Portal del paciente">
+                Soy paciente
               </Link>
-              <span className="mfh-nav__sep" aria-hidden />
-              <Link href="/login" className="mfh-nav__ghost">Iniciar sesión</Link>
-              <Link href="/signup" className="mfh-btn mfh-btn--primary mfh-nav__signup-desktop">
-                Crear cuenta
+              <Link href="/login" className="dcv2-nav-ghost">{NAV.login}</Link>
+              <Link href="/signup" className="dcv2-btn-primary" style={{ fontSize: 14.5, padding: "11px 18px", borderRadius: 10, boxShadow: "0 4px 14px rgba(37,99,235,.28)", whiteSpace: "nowrap" }}>
+                {NAV.signup}
               </Link>
             </>
           )}
-          <button
-            type="button"
-            className="mfh-burger"
-            aria-label={open ? "Cerrar menú" : "Abrir menú"}
-            aria-expanded={open}
-            onClick={() => setOpen((v) => !v)}
-          >
-            {open ? <X size={20} /> : <Menu size={20} />}
-          </button>
         </div>
       </div>
-
-      <div className="mfh-mobile" data-open={open}>
-        <div className="mfh-container mfh-mobile__inner">
-          {LINKS.map((l) =>
-            isPageLink(l.href) ? (
-              <Link key={l.href} href={l.href} className="mfh-mobile__link" onClick={() => setOpen(false)}>{l.label}</Link>
-            ) : (
-              <a key={l.href} href={l.href} className="mfh-mobile__link" onClick={() => setOpen(false)}>{l.label}</a>
-            )
-          )}
-          <div className="mfh-mobile__cta">
-            {isLoggedIn ? (
-              <Link href="/dashboard" className="mfh-btn mfh-btn--primary mfh-btn--block" onClick={() => setOpen(false)}>
-                Ir al dashboard <ArrowRight />
-              </Link>
-            ) : (
-              <>
-                <Link href="/paciente/login" className="mfh-btn mfh-btn--ghost mfh-btn--block" onClick={() => setOpen(false)}>
-                  <UserRound size={16} aria-hidden /> Soy paciente
-                </Link>
-                <div className="mfh-mobile__hint">¿Administras una clínica?</div>
-                <Link href="/login" className="mfh-btn mfh-btn--ghost mfh-btn--block" onClick={() => setOpen(false)}>
-                  Iniciar sesión
-                </Link>
-                <Link href="/signup" className="mfh-btn mfh-btn--primary mfh-btn--block" onClick={() => setOpen(false)}>
-                  Crear cuenta
-                </Link>
-              </>
-            )}
-          </div>
-        </div>
-      </div>
-    </header>
+    </nav>
   );
 }

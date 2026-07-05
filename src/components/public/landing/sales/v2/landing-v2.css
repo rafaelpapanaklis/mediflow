@@ -1,0 +1,118 @@
+/* DaleControl — Landing v2 (handoff high-fidelity).
+   Keyframes copiados del reference + estados hover/focus que el inline style
+   no puede expresar. Todo namespaced dcv2- para no chocar con sales.css. */
+
+@keyframes dcKen { 0%, 100% { transform: scale(1.05) translateY(0); } 50% { transform: scale(1.18) translateY(-3%); } }
+@keyframes dcScanY { 0%, 100% { top: 28%; } 50% { top: 68%; } }
+@keyframes dcSlide { 0%, 100% { left: 16%; } 50% { left: 74%; } }
+@keyframes dcSlideB { 0%, 100% { left: 68%; } 50% { left: 20%; } }
+@keyframes dcOrbit { 0%, 100% { transform: perspective(520px) rotateY(-13deg) scale(1.05); } 50% { transform: perspective(520px) rotateY(13deg) scale(1.12); } }
+@keyframes stlWobble { 0%, 100% { transform: perspective(720px) rotateX(12deg) rotateY(-32deg) scale(1); } 50% { transform: perspective(720px) rotateX(3deg) rotateY(32deg) scale(1.06); } }
+
+.dcv2-ken-9 { animation: dcKen 9s ease-in-out infinite; }
+.dcv2-ken-12 { animation: dcKen 12s ease-in-out infinite; }
+.dcv2-ken-14 { animation: dcKen 14s ease-in-out infinite; }
+.dcv2-scan-9 { animation: dcScanY 9s ease-in-out infinite; }
+.dcv2-scan-14 { animation: dcScanY 14s ease-in-out infinite; }
+.dcv2-slide-9 { animation: dcSlide 9s ease-in-out infinite; }
+.dcv2-slideb-12 { animation: dcSlideB 12s ease-in-out infinite; }
+.dcv2-orbit-9 { animation: dcOrbit 9s ease-in-out infinite; }
+.dcv2-stl { animation: stlWobble 9s ease-in-out infinite; }
+
+@media (prefers-reduced-motion: reduce) {
+  .dcv2-ken-9, .dcv2-ken-12, .dcv2-ken-14, .dcv2-scan-9, .dcv2-scan-14,
+  .dcv2-slide-9, .dcv2-slideb-12, .dcv2-orbit-9, .dcv2-stl {
+    animation: none !important;
+  }
+}
+
+/* ── Nav ── */
+.dcv2-navlink {
+  text-decoration: none;
+  color: #475569;
+  font-size: 14.5px;
+  font-weight: 600;
+  padding: 10px 12px;
+  border-radius: 9px;
+  transition: background .15s, color .15s;
+}
+.dcv2-navlink:hover { background: #eff6ff; color: #1d4ed8; }
+.dcv2-navlink:focus-visible { outline: 2px solid #2563eb; outline-offset: 2px; }
+
+.dcv2-nav-ghost {
+  text-decoration: none;
+  color: #334155;
+  font-size: 14.5px;
+  font-weight: 600;
+  padding: 10px 14px;
+  border-radius: 10px;
+  white-space: nowrap;
+  transition: background .15s;
+}
+.dcv2-nav-ghost:hover { background: #f1f5f9; }
+.dcv2-nav-ghost:focus-visible { outline: 2px solid #2563eb; outline-offset: 2px; }
+
+/* En pantallas chicas las anclas se ocultan (siguen en el footer);
+   quedan logo + sesión/CTA en una sola fila. */
+@media (max-width: 700px) {
+  .dcv2-nav-anchors { display: none !important; }
+}
+/* "Soy paciente" se oculta en móvil chico: el grupo de sesión no cabe en 375px. */
+@media (max-width: 520px) {
+  .dcv2-nav-patient { display: none !important; }
+}
+/* La sidebar decorativa del mockup del hero se oculta en móvil chico para que
+   los 4 KPIs quepan sin desbordar la página. */
+@media (max-width: 480px) {
+  .dcv2-hero-side { display: none !important; }
+}
+
+/* ── Botones azules (hero, nav CTA, pricing, CTA final) ── */
+.dcv2-btn-primary {
+  text-decoration: none;
+  background: #2563eb;
+  color: #fff;
+  font-weight: 700;
+  transition: background .16s, transform .16s;
+}
+.dcv2-btn-primary:hover { background: #1d4ed8; transform: translateY(-1px); }
+.dcv2-btn-primary:focus-visible { outline: 2px solid #0f172a; outline-offset: 2px; }
+
+.dcv2-btn-plan-sec {
+  text-decoration: none;
+  transition: background .16s, border-color .16s;
+}
+.dcv2-btn-plan-sec:hover { background: #eff6ff; border-color: #2563eb !important; }
+.dcv2-btn-plan-sec:focus-visible { outline: 2px solid #0f172a; outline-offset: 2px; }
+
+.dcv2-toggle-btn { transition: all .18s; }
+.dcv2-toggle-btn:focus-visible { outline: 2px solid #2563eb; outline-offset: 2px; }
+
+/* ── Grid de features ── */
+.dcv2-gridcard { transition: box-shadow .18s, transform .18s; }
+.dcv2-gridcard:hover { box-shadow: 0 10px 26px rgba(15,23,42,.08); transform: translateY(-2px); }
+
+/* ── FAQ ── */
+.dcv2-faq-btn { transition: background .15s; }
+.dcv2-faq-btn:hover { background: #f8fafc; }
+.dcv2-faq-btn:focus-visible { outline: 2px solid #2563eb; outline-offset: -2px; }
+
+/* ── CTA final (botón blanco) ── */
+.dcv2-btn-white {
+  text-decoration: none;
+  transition: transform .16s;
+}
+.dcv2-btn-white:hover { transform: translateY(-1px); }
+.dcv2-btn-white:focus-visible { outline: 2px solid #fff; outline-offset: 3px; }
+
+.dcv2-btn-glass {
+  text-decoration: none;
+  transition: background .16s;
+}
+.dcv2-btn-glass:hover { background: rgba(255,255,255,.2) !important; }
+.dcv2-btn-glass:focus-visible { outline: 2px solid #fff; outline-offset: 3px; }
+
+/* ── Footer ── */
+.dcv2-footer-link { color: #94a3b8; text-decoration: none; transition: color .15s; }
+.dcv2-footer-link:hover { color: #fff; }
+.dcv2-footer-link:focus-visible { outline: 2px solid #2563eb; outline-offset: 2px; }
