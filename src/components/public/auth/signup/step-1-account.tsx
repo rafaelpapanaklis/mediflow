@@ -124,9 +124,9 @@ export function Step1Account({ values, onChange, onContinue }: Step1AccountProps
           height: 44,
           borderRadius: 10,
           background: buttonDisabled
-            ? "rgba(124,58,237,0.4)"
+            ? "#ede9fe"
             : "linear-gradient(180deg, #8b5cf6, #7c3aed)",
-          color: "#fff",
+          color: buttonDisabled ? "#8b5cf6" : "#fff",
           fontSize: 14,
           fontWeight: 600,
           border: "none",

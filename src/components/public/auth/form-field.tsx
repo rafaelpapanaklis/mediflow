@@ -20,17 +20,13 @@ export const FormField = forwardRef<HTMLInputElement, InputProps>(function FormF
   { label, hint, error, children, ...inputProps },
   ref,
 ) {
-  const borderColor = error
-    ? "rgba(239,68,68,0.5)"
-    : "var(--ld-border)";
-
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
       <label
         style={{
           fontSize: 12,
           fontWeight: 500,
-          color: "var(--ld-fg, #f5f5f7)",
+          color: "var(--ld-fg, #0f172a)",
           letterSpacing: "-0.005em",
         }}
       >
@@ -41,33 +37,28 @@ export const FormField = forwardRef<HTMLInputElement, InputProps>(function FormF
         <input
           ref={ref}
           {...inputProps}
+          // Focus y error se pintan en globals.css (.landing-theme input) —
+          // el border-color !important de ahí anula cualquier estilo inline.
+          aria-invalid={error ? true : undefined}
           style={{
             height: 42,
             padding: "0 14px",
             borderRadius: 10,
-            background: "rgba(255,255,255,0.03)",
-            border: `1px solid ${borderColor}`,
+            background: "#ffffff",
+            border: "1px solid var(--ld-border)",
             color: "var(--ld-fg)",
             fontSize: 14,
             fontFamily: "inherit",
             outline: "none",
-            transition: "border-color .15s, background .15s",
-          }}
-          onFocus={e => {
-            if (!error) e.currentTarget.style.borderColor = "rgba(124,58,237,0.6)";
-            inputProps.onFocus?.(e);
-          }}
-          onBlur={e => {
-            if (!error) e.currentTarget.style.borderColor = "var(--ld-border)";
-            inputProps.onBlur?.(e);
+            transition: "border-color .15s, box-shadow .15s",
           }}
         />
       )}
 
       {error ? (
-        <div style={{ fontSize: 11, color: "#f87171", lineHeight: 1.4 }}>{error}</div>
+        <div role="alert" style={{ fontSize: 11, color: "#dc2626", lineHeight: 1.4 }}>{error}</div>
       ) : hint ? (
-        <div style={{ fontSize: 11, color: "var(--ld-fg-muted)", lineHeight: 1.4 }}>{hint}</div>
+        <div style={{ fontSize: 11, color: "#94a3b8", lineHeight: 1.4 }}>{hint}</div>
       ) : null}
     </div>
   );

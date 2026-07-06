@@ -1465,11 +1465,14 @@
 }
 
 .landing-theme[data-mode="light"] {
-  --ld-bg: #fafafa;
+  /* Jerarquía slate (misma familia que la landing v2: ink/body/muted) */
+  --ld-bg: #f7f8fb;
   --ld-bg-2: #ffffff;
-  --ld-fg: #0a0a0f;
-  --ld-fg-muted: rgba(10,10,15,0.6);
-  --ld-border: rgba(10,10,15,0.08);
+  --ld-fg: #0f172a;
+  --ld-fg-muted: #475569;
+  --ld-border: rgba(15,23,42,0.1);
+  /* En claro el acento "light" debe OSCURECER para ser legible como link/logo */
+  --ld-brand-light: #6d28d9;
   --ld-app-bg: #ffffff;
   --ld-app-sidebar: #fafafa;
   --ld-app-card: rgba(10,10,15,0.015);
@@ -1484,6 +1487,39 @@
   background-color: transparent !important;
   color: inherit !important;
   border-color: var(--ld-border) !important;
+}
+
+/* En claro los campos van blancos sobre la tarjeta/fondo suave */
+.landing-theme[data-mode="light"] input:not([type="checkbox"]):not([type="radio"]),
+.landing-theme[data-mode="light"] textarea,
+.landing-theme[data-mode="light"] select {
+  background-color: #ffffff !important;
+}
+.landing-theme[data-mode="light"] input::placeholder,
+.landing-theme[data-mode="light"] textarea::placeholder {
+  color: #94a3b8;
+  opacity: 1;
+}
+
+/* Focus ring violeta accesible. Va en CSS porque el border-color !important
+   de arriba anula cualquier intento inline de los componentes. */
+.landing-theme input:not([type="checkbox"]):not([type="radio"]):focus,
+.landing-theme textarea:focus,
+.landing-theme select:focus {
+  border-color: rgba(124,58,237,0.65) !important;
+  box-shadow: 0 0 0 3px rgba(124,58,237,0.16);
+  outline: none;
+}
+
+/* Estado de error via aria-invalid (el border inline también muere con el !important) */
+.landing-theme input[aria-invalid="true"],
+.landing-theme textarea[aria-invalid="true"] {
+  border-color: rgba(220,38,38,0.55) !important;
+}
+.landing-theme input[aria-invalid="true"]:focus,
+.landing-theme textarea[aria-invalid="true"]:focus {
+  border-color: rgba(220,38,38,0.7) !important;
+  box-shadow: 0 0 0 3px rgba(220,38,38,0.12);
 }
 
 .landing-theme *::selection {

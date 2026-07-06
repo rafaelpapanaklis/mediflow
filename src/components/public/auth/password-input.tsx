@@ -13,7 +13,6 @@ export const PasswordInput = forwardRef<HTMLInputElement, PasswordInputProps>(fu
   ref,
 ) {
   const [show, setShow] = useState(false);
-  const borderColor = error ? "rgba(239,68,68,0.5)" : "var(--ld-border)";
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
@@ -22,7 +21,7 @@ export const PasswordInput = forwardRef<HTMLInputElement, PasswordInputProps>(fu
           style={{
             fontSize: 12,
             fontWeight: 500,
-            color: "var(--ld-fg, #f5f5f7)",
+            color: "var(--ld-fg, #0f172a)",
             letterSpacing: "-0.005em",
           }}
         >
@@ -35,27 +34,22 @@ export const PasswordInput = forwardRef<HTMLInputElement, PasswordInputProps>(fu
           ref={ref}
           type={show ? "text" : "password"}
           {...rest}
+          // Focus y error viven en globals.css (.landing-theme input) — el
+          // border-color !important de ahí anula cualquier estilo inline.
+          aria-invalid={error ? true : undefined}
           style={{
             width: "100%",
             height: 42,
             padding: "0 44px 0 14px",
             borderRadius: 10,
-            background: "rgba(255,255,255,0.03)",
-            border: `1px solid ${borderColor}`,
+            background: "#ffffff",
+            border: "1px solid var(--ld-border)",
             color: "var(--ld-fg)",
             fontSize: 14,
             fontFamily: "inherit",
             outline: "none",
-            transition: "border-color .15s",
+            transition: "border-color .15s, box-shadow .15s",
             boxSizing: "border-box",
-          }}
-          onFocus={e => {
-            if (!error) e.currentTarget.style.borderColor = "rgba(124,58,237,0.6)";
-            rest.onFocus?.(e);
-          }}
-          onBlur={e => {
-            if (!error) e.currentTarget.style.borderColor = "var(--ld-border)";
-            rest.onBlur?.(e);
           }}
         />
         <button
@@ -83,7 +77,7 @@ export const PasswordInput = forwardRef<HTMLInputElement, PasswordInputProps>(fu
         </button>
       </div>
 
-      {error && <div style={{ fontSize: 11, color: "#f87171", lineHeight: 1.4 }}>{error}</div>}
+      {error && <div role="alert" style={{ fontSize: 11, color: "#dc2626", lineHeight: 1.4 }}>{error}</div>}
     </div>
   );
 });

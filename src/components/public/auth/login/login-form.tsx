@@ -121,9 +121,9 @@ export function LoginForm() {
             style={{
               padding: "10px 14px",
               borderRadius: 10,
-              background: "rgba(239,68,68,0.08)",
-              border: "1px solid rgba(239,68,68,0.25)",
-              color: "#fca5a5",
+              background: "rgba(220,38,38,0.06)",
+              border: "1px solid rgba(220,38,38,0.25)",
+              color: "#dc2626",
               fontSize: 13,
             }}
           >
@@ -177,9 +177,9 @@ export function LoginForm() {
             height: 44,
             borderRadius: 10,
             background: loading || !email || !password
-              ? "rgba(124,58,237,0.4)"
+              ? "#ede9fe"
               : "linear-gradient(180deg, #8b5cf6, #7c3aed)",
-            color: "#fff",
+            color: loading || !email || !password ? "#8b5cf6" : "#fff",
             fontSize: 14,
             fontWeight: 600,
             border: "none",

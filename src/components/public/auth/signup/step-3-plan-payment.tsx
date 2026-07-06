@@ -149,8 +149,11 @@ export function Step3PlanPayment({ values, onChange, onBack, onSubmit, loading }
             height: 46,
             borderRadius: 12,
             border: "none",
-            background: canSubmit ? "linear-gradient(90deg, #a78bfa, #7c3aed)" : "rgba(255,255,255,0.08)",
-            color: canSubmit ? "#fff" : "var(--ld-fg-muted)",
+            background: canSubmit ? "linear-gradient(180deg, #8b5cf6, #7c3aed)" : "#eef1f6",
+            color: canSubmit ? "#fff" : "#94a3b8",
+            boxShadow: canSubmit
+              ? "0 8px 20px -6px rgba(124,58,237,0.5), inset 0 1px 0 rgba(255,255,255,0.15)"
+              : "none",
             fontWeight: 700,
             fontSize: 15,
             cursor: canSubmit ? "pointer" : "not-allowed",

@@ -286,10 +286,10 @@ export function SignupForm() {
           style={{
             padding: "10px 14px",
             borderRadius: 10,
-            background: "rgba(52,211,153,0.1)",
-            border: "1px solid rgba(52,211,153,0.3)",
+            background: "rgba(5,150,105,0.07)",
+            border: "1px solid rgba(5,150,105,0.3)",
             fontSize: 12,
-            color: "#6ee7b7",
+            color: "#047857",
             display: "flex",
             alignItems: "center",
             gap: 8,

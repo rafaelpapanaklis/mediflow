@@ -41,18 +41,18 @@ export function PlanCard({
       : "var(--ld-border)";
 
   const background = selected
-    ? "linear-gradient(180deg, rgba(124,58,237,0.14), rgba(124,58,237,0.04))"
+    ? "linear-gradient(180deg, rgba(124,58,237,0.1), rgba(124,58,237,0.02))"
     : popular
-      ? "linear-gradient(180deg, rgba(124,58,237,0.06), rgba(255,255,255,0.01))"
-      : "rgba(255,255,255,0.02)";
+      ? "linear-gradient(180deg, rgba(124,58,237,0.05), #ffffff)"
+      : "#ffffff";
 
   const boxShadow = selected
-    ? "0 0 30px rgba(124,58,237,0.2), 0 0 0 3px rgba(124,58,237,0.1)"
+    ? "0 0 30px rgba(124,58,237,0.16), 0 0 0 3px rgba(124,58,237,0.12)"
     : popular
-      ? "0 0 40px rgba(124,58,237,0.12)"
+      ? "0 8px 30px -8px rgba(124,58,237,0.2)"
       : hover
-        ? "0 10px 30px rgba(0,0,0,0.25)"
-        : "none";
+        ? "0 10px 30px rgba(15,23,42,0.1)"
+        : "0 1px 3px rgba(15,23,42,0.04)";
 
   return (
     <button
@@ -107,9 +107,9 @@ export function PlanCard({
             right: 18,
             padding: "3px 10px",
             borderRadius: 100,
-            background: "rgba(52,211,153,0.15)",
-            color: "#34d399",
-            border: "1px solid rgba(52,211,153,0.35)",
+            background: "rgba(5,150,105,0.08)",
+            color: "#047857",
+            border: "1px solid rgba(5,150,105,0.3)",
             fontSize: 10,
             fontWeight: 600,
             letterSpacing: "0.1em",
@@ -131,10 +131,10 @@ export function PlanCard({
             width: 22,
             height: 22,
             borderRadius: 22,
-            background: "#34d399",
+            background: "#059669",
             display: "grid",
             placeItems: "center",
-            boxShadow: "0 4px 12px rgba(52,211,153,0.4)",
+            boxShadow: "0 4px 12px rgba(5,150,105,0.35)",
           }}
         >
           <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
@@ -157,7 +157,7 @@ export function PlanCard({
             height: 18,
             borderRadius: 18,
             flexShrink: 0,
-            border: `2px solid ${selected ? "var(--ld-brand-light)" : "rgba(255,255,255,0.2)"}`,
+            border: `2px solid ${selected ? "var(--ld-brand-light)" : "#cbd5e1"}`,
             background: selected
               ? "radial-gradient(circle, var(--ld-brand-light) 45%, transparent 50%)"
               : "transparent",
@@ -169,7 +169,7 @@ export function PlanCard({
             fontWeight: 600,
             fontSize: 15,
             letterSpacing: "0.08em",
-            color: selected || popular ? "#a78bfa" : "var(--ld-fg)",
+            color: selected || popular ? "var(--ld-brand-light)" : "var(--ld-fg)",
           }}
         >
           {name}
@@ -234,7 +234,7 @@ export function PlanCard({
             <span
               aria-hidden="true"
               style={{
-                color: selected ? "#34d399" : popular ? "#a78bfa" : "var(--ld-fg-muted)",
+                color: selected ? "#059669" : popular ? "#7c3aed" : "var(--ld-fg-muted)",
                 flexShrink: 0,
                 fontSize: 12,
                 marginTop: 1,

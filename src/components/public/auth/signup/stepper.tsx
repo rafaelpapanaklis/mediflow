@@ -30,19 +30,19 @@ export function Stepper({ step }: StepperProps) {
         const circleBg = isActive
           ? "linear-gradient(180deg, #8b5cf6, #7c3aed)"
           : isDone
-            ? "rgba(52,211,153,0.15)"
-            : "rgba(255,255,255,0.04)";
+            ? "rgba(5,150,105,0.1)"
+            : "#f8fafc";
 
         const circleBorder = isActive
           ? "1px solid rgba(124,58,237,0.6)"
           : isDone
-            ? "1px solid rgba(52,211,153,0.35)"
+            ? "1px solid rgba(5,150,105,0.35)"
             : "1px solid var(--ld-border)";
 
         const circleColor = isActive
           ? "#fff"
           : isDone
-            ? "#34d399"
+            ? "#059669"
             : "var(--ld-fg-muted)";
 
         return (
@@ -80,7 +80,7 @@ export function Stepper({ step }: StepperProps) {
                   <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
                     <path
                       d="M2 6 L5 9 L10 3"
-                      stroke="#34d399"
+                      stroke="#059669"
                       strokeWidth="2.2"
                       strokeLinecap="round"
                       strokeLinejoin="round"
@@ -114,7 +114,7 @@ export function Stepper({ step }: StepperProps) {
                   borderRadius: 2,
                   position: "relative",
                   overflow: "hidden",
-                  background: "rgba(255,255,255,0.06)",
+                  background: "rgba(15,23,42,0.08)",
                 }}
               >
                 <div
@@ -123,7 +123,7 @@ export function Stepper({ step }: StepperProps) {
                     inset: 0,
                     background:
                       s.n < step
-                        ? "linear-gradient(90deg, #34d399, #a78bfa)"
+                        ? "linear-gradient(90deg, #059669, #7c3aed)"
                         : "transparent",
                     transition: "all 0.3s",
                   }}

@@ -83,14 +83,15 @@ function ThemedSelect({
     <>
     <Select.Root value={value || undefined} onValueChange={onValueChange} disabled={disabled}>
       <Select.Trigger
+        className="themed-select-trigger"
         style={{
           width: "100%",
           height: 42,
           padding: "0 14px",
           borderRadius: 10,
-          background: "rgba(255,255,255,0.03)",
+          background: "#ffffff",
           border: "1px solid var(--ld-border)",
-          color: hasValue ? "var(--ld-fg)" : "var(--ld-fg-muted)",
+          color: hasValue ? "var(--ld-fg)" : "#94a3b8",
           fontSize: 14,
           fontFamily: "inherit",
           outline: "none",
@@ -104,23 +105,25 @@ function ThemedSelect({
       >
         <Select.Value placeholder={placeholder} />
         <Select.Icon asChild>
-          <ChevronDown size={16} style={{ color: "rgba(245,245,247,0.5)", flexShrink: 0 }} />
+          <ChevronDown size={16} style={{ color: "var(--ld-fg-muted)", flexShrink: 0 }} />
         </Select.Icon>
       </Select.Trigger>
       <Select.Portal>
+        {/* OJO: el Content renderiza en un portal FUERA de .landing-theme —
+            los tokens --ld-* no existen aquí; colores light en literal. */}
         <Select.Content
           position="popper"
           sideOffset={6}
           style={{
-            background: "#111115",
-            border: "1px solid var(--ld-border)",
+            background: "#ffffff",
+            border: "1px solid #e6e8f0",
             borderRadius: 10,
             padding: 4,
             zIndex: 9999,
             minWidth: "var(--radix-select-trigger-width)",
             maxHeight: 320,
             overflow: "hidden",
-            boxShadow: "0 12px 40px -12px rgba(0,0,0,0.6)",
+            boxShadow: "0 12px 40px -12px rgba(15,23,42,0.28)",
           }}
         >
           <Select.ScrollUpButton
@@ -129,8 +132,8 @@ function ThemedSelect({
               alignItems: "center",
               justifyContent: "center",
               height: 24,
-              background: "linear-gradient(180deg, #111115 0%, rgba(17,17,21,0.9) 100%)",
-              color: "rgba(245,245,247,0.6)",
+              background: "linear-gradient(180deg, #ffffff 0%, rgba(255,255,255,0.9) 100%)",
+              color: "#64748b",
               fontSize: 10,
               cursor: "default",
             }}
@@ -147,7 +150,7 @@ function ThemedSelect({
                   padding: "8px 30px 8px 12px",
                   borderRadius: 6,
                   fontSize: 14,
-                  color: "#f5f5f7",
+                  color: "#0f172a",
                   cursor: "pointer",
                   outline: "none",
                   userSelect: "none",
@@ -158,7 +161,7 @@ function ThemedSelect({
               >
                 <Select.ItemText>{opt.label}</Select.ItemText>
                 <Select.ItemIndicator style={{ position: "absolute", right: 10, display: "inline-flex" }}>
-                  <Check size={14} style={{ color: "#a78bfa" }} />
+                  <Check size={14} style={{ color: "#6d28d9" }} />
                 </Select.ItemIndicator>
               </Select.Item>
             ))}
@@ -169,8 +172,8 @@ function ThemedSelect({
               alignItems: "center",
               justifyContent: "center",
               height: 24,
-              background: "linear-gradient(0deg, #111115 0%, rgba(17,17,21,0.9) 100%)",
-              color: "rgba(245,245,247,0.6)",
+              background: "linear-gradient(0deg, #ffffff 0%, rgba(255,255,255,0.9) 100%)",
+              color: "#64748b",
               fontSize: 10,
               cursor: "default",
             }}
@@ -181,32 +184,36 @@ function ThemedSelect({
       </Select.Portal>
     </Select.Root>
     <style jsx global>{`
+      .themed-select-trigger:focus-visible {
+        border-color: rgba(124, 58, 237, 0.65) !important;
+        box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.16);
+      }
       .themed-select-item[data-highlighted] {
-        background: rgba(124, 58, 237, 0.15);
-        color: #fff;
+        background: rgba(124, 58, 237, 0.08);
+        color: #4c1d95;
       }
       .themed-select-item[data-state="checked"] {
-        background: rgba(124, 58, 237, 0.08);
+        background: rgba(124, 58, 237, 0.06);
       }
       .themed-select-viewport {
         scrollbar-width: thin;
-        scrollbar-color: rgba(124, 58, 237, 0.4) rgba(255, 255, 255, 0.04);
+        scrollbar-color: rgba(124, 58, 237, 0.35) rgba(15, 23, 42, 0.05);
       }
       .themed-select-viewport::-webkit-scrollbar {
         width: 10px;
       }
       .themed-select-viewport::-webkit-scrollbar-track {
-        background: rgba(255, 255, 255, 0.04);
+        background: rgba(15, 23, 42, 0.05);
         border-radius: 10px;
         margin: 4px 0;
       }
       .themed-select-viewport::-webkit-scrollbar-thumb {
-        background: rgba(124, 58, 237, 0.45);
+        background: rgba(124, 58, 237, 0.35);
         border-radius: 10px;
-        border: 2px solid #111115;
+        border: 2px solid #ffffff;
       }
       .themed-select-viewport::-webkit-scrollbar-thumb:hover {
-        background: rgba(124, 58, 237, 0.7);
+        background: rgba(124, 58, 237, 0.55);
       }
     `}</style>
     </>
@@ -334,9 +341,9 @@ export function Step2Clinic({
             height: 44,
             borderRadius: 10,
             background: !canContinue
-              ? "rgba(124,58,237,0.4)"
+              ? "#ede9fe"
               : "linear-gradient(180deg, #8b5cf6, #7c3aed)",
-            color: "#fff",
+            color: !canContinue ? "#8b5cf6" : "#fff",
             fontSize: 14,
             fontWeight: 600,
             border: "none",

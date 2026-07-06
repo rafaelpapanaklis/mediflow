@@ -15,10 +15,10 @@ export function scorePassword(pwd: string): 0 | 1 | 2 | 3 | 4 {
 
 const LEVELS: Array<{ label: string; color: string }> = [
   { label: "",        color: "transparent" },
-  { label: "Débil",   color: "#ef4444" },
-  { label: "Regular", color: "#fbbf24" },
-  { label: "Buena",   color: "#a78bfa" },
-  { label: "Fuerte",  color: "#34d399" },
+  { label: "Débil",   color: "#dc2626" },
+  { label: "Regular", color: "#d97706" },
+  { label: "Buena",   color: "#7c3aed" },
+  { label: "Fuerte",  color: "#059669" },
 ];
 
 export function PasswordStrength({ password }: PasswordStrengthProps) {
@@ -38,7 +38,7 @@ export function PasswordStrength({ password }: PasswordStrengthProps) {
                 flex: 1,
                 height: 3,
                 borderRadius: 2,
-                background: on ? color : "rgba(255,255,255,0.08)",
+                background: on ? color : "rgba(15,23,42,0.08)",
                 boxShadow: on ? `0 0 6px ${color}66` : "none",
                 transition: "background .2s, box-shadow .2s",
               }}

@@ -51,7 +51,7 @@ export function SocialButtons({ redirectTo = "/dashboard" }: SocialButtonsProps)
     gap: 10,
     padding: "0 16px",
     borderRadius: 10,
-    background: "rgba(255,255,255,0.03)",
+    background: "#ffffff",
     border: "1px solid var(--ld-border)",
     color: "var(--ld-fg)",
     fontSize: 13,
