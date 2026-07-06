@@ -75,16 +75,6 @@ const SPECIALTY_TO_CATEGORY: Record<string, string> = {
   homeopatia: "ALTERNATIVE_MEDICINE",
 };
 
-function slugifyClinic(name: string): string {
-  return name
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/(^-|-$)/g, "")
-    .slice(0, 30);
-}
-
 export function SignupForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -152,10 +142,11 @@ export function SignupForm() {
     submitLockRef.current = true;
     setLoading(true);
     try {
-      const slug = slugifyClinic(form.clinicName);
+      // Sin slug en el payload: el backend lo autogenera único con sufijo
+      // (-1, -2…); mandarlo derivado del nombre bloqueaba nombres comunes
+      // con "Ese subdominio ya está en uso" sin que el usuario pudiera editarlo.
       const basePayload = {
         clinicName: form.clinicName,
-        slug,
         specialty: form.specialty,
         category: SPECIALTY_TO_CATEGORY[form.specialty] ?? "OTHER",
         country: "México",
