@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { createClient } from "@/lib/supabase/client";
 import { SalesNav } from "./sales/nav";
 import { Header } from "./header";
 import { SpecNav } from "./specialty/spec-nav";
@@ -15,16 +16,31 @@ function useHasSupabaseSession(): boolean {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
 
   useEffect(() => {
+    // Fast-path: sin cookie sb-*-auth-token no hay nada que validar.
     const hasAuthCookie = document.cookie.split(";").some((chunk) => {
       const name = chunk.trim().split("=")[0];
       return (
         name.startsWith("sb-") &&
         name.includes("-auth-token") &&
-        // El code-verifier de PKCE puede quedar suelto sin sesión real.
         !name.includes("code-verifier")
       );
     });
-    if (hasAuthCookie) setIsLoggedIn(true);
+    if (!hasAuthCookie) return;
+
+    // La cookie puede estar VENCIDA (quedaba "Ir al panel" fantasma que
+    // rebotaba al login). Validamos la sesión real; getSession auto-renueva
+    // con el refresh token si puede, y si no, el nav queda como visitante.
+    let cancelled = false;
+    const supabase = createClient();
+    supabase.auth
+      .getSession()
+      .then(({ data }) => {
+        if (!cancelled && data.session) setIsLoggedIn(true);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   return isLoggedIn;
