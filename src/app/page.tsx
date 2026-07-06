@@ -18,9 +18,9 @@ const inter = Inter({
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://www.dalecontrol.com";
 
 export const metadata: Metadata = {
-  title: { absolute: "DaleControl — Software dental todo-en-uno para clínicas en México" },
+  title: { absolute: "DaleControl · El software dental más completo de México" },
   description:
-    "Agenda con WhatsApp, expediente con odontograma, radiografías 3D con IA y facturación para clínicas dentales en México. Todo desde tu navegador, en español y en pesos.",
+    "Dale control total a tu clínica: 30+ funciones en un solo lugar — agenda, WhatsApp, radiografías con IA y modelos 3D. Desde $499 con garantía de 30 días.",
   keywords: [
     "software dental",
     "software para dentistas",
@@ -37,16 +37,16 @@ export const metadata: Metadata = {
     locale: "es_MX",
     url: SITE_URL,
     siteName: "DaleControl",
-    title: "DaleControl — Software dental todo-en-uno para clínicas en México",
+    title: "DaleControl · El software dental más completo de México",
     description:
-      "Agenda, expediente con odontograma, radiografías 3D con IA y WhatsApp para clínicas dentales en México.",
+      "Dale control total a tu clínica: 30+ funciones en un solo lugar — agenda, WhatsApp, radiografías con IA y modelos 3D. Desde $499 con garantía de 30 días.",
     images: [{ url: "/og-home.png", width: 1200, height: 630, alt: "DaleControl — software dental todo-en-uno" }],
   },
   twitter: {
     card: "summary_large_image",
-    title: "DaleControl — Software dental para clínicas en México",
+    title: "DaleControl · El software dental más completo de México",
     description:
-      "Agenda con WhatsApp, odontograma, radiografías 3D con IA y facturación. Todo en una sola plataforma.",
+      "Dale control total a tu clínica: 30+ funciones en un solo lugar — agenda, WhatsApp, radiografías con IA y modelos 3D. Desde $499 con garantía de 30 días.",
     images: ["/og-home.png"],
   },
 };
