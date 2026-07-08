@@ -198,10 +198,14 @@ export function Tooth3D({ meta, record, onSurface, style, resetKey }: Tooth3DPro
         if (hits.length && st.onSurface) st.onSurface(hits[0].object.userData.letter);
       }
     };
+    const onCancel = () => { dragging = false; };
     el.addEventListener("pointerdown", onDown);
     el.addEventListener("pointermove", onMove);
     el.addEventListener("pointerup", onUp);
+    el.addEventListener("pointercancel", onCancel);
     el.style.cursor = "grab";
+    // iOS: el drag rota el diente; sin esto Safari lo trata como scroll y dispara pointercancel
+    el.style.touchAction = "none";
 
     // Put patches+labels inside the tooth group so they rotate together
     Object.values(patches).forEach((p) => { scene.remove(p); tooth.add(p); });
@@ -247,6 +251,7 @@ export function Tooth3D({ meta, record, onSurface, style, resetKey }: Tooth3DPro
       el.removeEventListener("pointerdown", onDown);
       el.removeEventListener("pointermove", onMove);
       el.removeEventListener("pointerup", onUp);
+      el.removeEventListener("pointercancel", onCancel);
       // full dispose: geometries, materials, and sprite/canvas textures
       scene.traverse((obj: any) => {
         if (obj.geometry) obj.geometry.dispose();

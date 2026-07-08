@@ -198,3 +198,15 @@
 /* mini palette inside detail */
 .odo-app .odo-dt-pal { display: flex; gap: 6px; flex-wrap: wrap; }
 .odo-app .odo-dt-pal .odo-chip { min-width: 0; padding: 6px; }
+
+/* ============ TOUCH (iOS / Android) ============ */
+/* Taps directos, sin heurística de doble-tap; el scroll de página sigue normal */
+.odo-app, .odo-app button, .odo-app svg { touch-action: manipulation; }
+.odo-app { -webkit-tap-highlight-color: transparent; }
+/* Sin lupa/selección de texto al dejar el dedo sobre el chart o la paleta */
+.odo-app .odo-chart, .odo-app .odo-palette { -webkit-user-select: none; user-select: none; }
+/* Móvil: el chart scrollea horizontal en vez de comprimir 16 dientes a ~20px */
+@media (max-width: 640px) {
+  .odo-app .odo-chart-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .odo-app .odo-chart { min-width: 620px; }
+}
