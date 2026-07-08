@@ -175,6 +175,7 @@ model Clinic {
   appointmentChangeRequests AppointmentChangeRequest[]
   records              MedicalRecord[]
   invoices             Invoice[]
+  cashRegisters        CashRegister[]
   schedules            ClinicSchedule[]
   inventory            InventoryItem[]
   reminders            WhatsAppReminder[]
@@ -1101,6 +1102,10 @@ model User {
   patientShareLinksGenerated PatientShareLink[]          @relation("PatientShareLinkCreator")
   treatmentLinksAuthored     TreatmentLink[]             @relation("TreatmentLinkAuthor")
 
+  // Caja / corte de caja (WS1-T2)
+  cashRegistersOpened     CashRegister[]   @relation("CashRegisterOperator")
+  cashWithdrawalsRecorded CashWithdrawal[] @relation("CashWithdrawalRecordedBy")
+
   @@unique([supabaseId, clinicId])
   @@index([supabaseId])
   @@map("users")
@@ -1822,6 +1827,67 @@ model Payment {
 
   @@index([invoiceId])
   @@map("payments")
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// CAJA / CORTE DE CAJA DIARIO (WS1-T2). La página general /dashboard/billing
+// se reconvirtió en "Caja". La facturación POR PACIENTE no cambia: Caja solo
+// LEE de invoices/payments. Ver sql/caja.sql (aplicar en Supabase ANTES del
+// merge). Una caja OPEN por clínica a la vez (garantizado en la API).
+// ═══════════════════════════════════════════════════════════════════════
+enum CashStatus {
+  OPEN
+  CLOSED
+}
+
+/// Turno de caja. Mientras está OPEN los totales (ingresos/descuentos/IVA/
+/// retiros) NO se guardan: se DERIVAN en vivo de payments/invoices en la
+/// ventana [openedAt, closedAt ?? now]. Al CERRAR se CONGELAN en los campos
+/// snapshot* para auditoría (no se recalculan después).
+model CashRegister {
+  id                    String     @id @default(cuid())
+  clinicId              String
+  operatorId            String // usuario que abrió la caja
+  openedAt              DateTime   @default(now())
+  openingBalance        Float
+  closedAt              DateTime?
+  countedClosingBalance Float? // efectivo físico contado al cierre
+  closingNotes          String?
+  status                CashStatus @default(OPEN)
+
+  // Snapshot congelado al cierre — auditoría, NO recalcular.
+  snapshotCashIncome   Float?
+  snapshotOtherIncome  Float?
+  snapshotDiscounts    Float?
+  snapshotTax          Float?
+  snapshotWithdrawals  Float?
+  snapshotExpectedCash Float?
+  snapshotVariance     Float?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  clinic      Clinic           @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  operator    User             @relation("CashRegisterOperator", fields: [operatorId], references: [id])
+  withdrawals CashWithdrawal[]
+
+  @@index([clinicId, status])
+  @@map("cash_registers")
+}
+
+model CashWithdrawal {
+  id             String   @id @default(cuid())
+  cashRegisterId String
+  amount         Float
+  reason         String
+  recordedBy     String // usuario que registró el retiro
+  recordedAt     DateTime @default(now())
+
+  cashRegister   CashRegister @relation(fields: [cashRegisterId], references: [id], onDelete: Cascade)
+  recordedByUser User         @relation("CashWithdrawalRecordedBy", fields: [recordedBy], references: [id])
+
+  @@index([cashRegisterId])
+  @@map("cash_withdrawals")
 }
 
 model ClinicSchedule {

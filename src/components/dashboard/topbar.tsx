@@ -37,6 +37,7 @@ const ROUTE_LABELS: Record<string, string> = {
   "/dashboard/resources":         "shell.topbar.routeRecursos",
   "/dashboard/resource-bookings": "shell.topbar.routeReservasLegacy",
   "/dashboard/inventory":     "shell.topbar.routeInventario",
+  "/dashboard/caja":          "shell.topbar.routeCaja",
   "/dashboard/billing":       "shell.topbar.routeFacturacion",
   "/dashboard/reports":       "shell.topbar.routeReportes",
   "/dashboard/team":          "shell.topbar.routeEquipo",
@@ -91,7 +92,7 @@ export function Topbar({
     enabled: modalsClosed,
     onCreateAppointment: () => openAppt({ openAgendaAfter: true }),
     onCreatePatient:     () => openPatient(),
-    onCreateInvoice:     () => router.push("/dashboard/billing?new=1"),
+    onCreateInvoice:     () => router.push("/dashboard/caja?tab=facturas"),
     onCreateSoap: () => {
       if (consult) {
         router.push(`/dashboard/patients/${consult.patientId}?tab=soap&new=1`);
