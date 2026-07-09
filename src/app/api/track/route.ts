@@ -6,7 +6,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { prismaAdmin } from "@/lib/prisma-admin";
-import { readGeo } from "@/lib/analytics/geo";
+import { resolveGeo } from "@/lib/analytics/geo";
 import { parseUserAgent } from "@/lib/analytics/ua";
 import { classifyReferrer } from "@/lib/analytics/referrer";
 import { resolveIdentity } from "@/lib/analytics/identity";
@@ -17,7 +17,7 @@ export const dynamic = "force-dynamic";
 
 const EventSchema = z
   .object({
-    type: z.enum(["pageview", "click", "scroll", "custom", "rage_click"]),
+    type: z.enum(["pageview", "click", "scroll", "custom", "rage_click", "ping"]),
     path: z.string().min(1).max(512),
     t: z.number().optional(),
     title: z.string().max(300).optional(),
@@ -87,13 +87,14 @@ export async function POST(req: NextRequest) {
 }
 
 async function ingest(req: NextRequest, p: Payload): Promise<void> {
+  // Los "ping" (heartbeat) sólo refrescan lastSeenAt: no se persisten como evento.
+  const persistable = p.events.filter((e) => e.type !== "ping");
   const pvEvents = p.events.filter((e) => e.type === "pageview");
   const firstPath = pvEvents.length ? pvEvents[0].path : p.events[0].path;
   const surface = surfaceFromPath(firstPath);
   if (surface === "admin") return; // no se rastrea el panel del owner
 
   const now = new Date();
-  const geo = readGeo(req);
   const ua = parseUserAgent(req.headers.get("user-agent"));
   if (ua.device === "bot") return; // no rastrear bots que ejecutan JS (Lighthouse, headless, scrapers)
   const selfHost = req.headers.get("host");
@@ -122,9 +123,14 @@ async function ingest(req: NextRequest, p: Payload): Promise<void> {
     },
   });
 
-  // Identidad: sólo al crear o mientras siga anónima (evita getUser en cada batch).
+  // Batch sólo de heartbeats para una sesión inexistente: nada que crear ni
+  // persistir; el ping sólo sirve para refrescar una sesión viva.
+  if (!existing && persistable.length === 0) return;
+
+  // Identidad: sólo al crear o mientras siga anónima (evita getUser en cada
+  // batch). En un batch sólo-ping (heartbeat) se omite → update barato por PK.
   let identity = null as Awaited<ReturnType<typeof resolveIdentity>> | null;
-  if (!existing || existing.identityType === "anonymous") {
+  if ((!existing || existing.identityType === "anonymous") && persistable.length > 0) {
     identity = await resolveIdentity();
   }
 
@@ -147,6 +153,9 @@ async function ingest(req: NextRequest, p: Payload): Promise<void> {
       : {};
 
   if (!existing) {
+    // Geo definitiva por IP (primario) + headers (fallback). Sólo aquí: una vez
+    // por sesión nueva, cacheado por IP → no se llama al servicio en cada batch.
+    const geo = await resolveGeo(req);
     try {
       await prismaAdmin.analyticsSession.create({
         data: {
@@ -230,9 +239,11 @@ async function ingest(req: NextRequest, p: Payload): Promise<void> {
     });
   }
 
+  if (persistable.length === 0) return; // batch sólo de pings: lastSeenAt ya refrescado
+
   const clinicIdForEvents = identity?.clinicId ?? existing?.clinicId ?? null;
   await prismaAdmin.analyticsEvent.createMany({
-    data: p.events.map((e) => ({
+    data: persistable.map((e) => ({
       sessionId: p.sid,
       visitorId: p.vid,
       clinicId: clinicIdForEvents,

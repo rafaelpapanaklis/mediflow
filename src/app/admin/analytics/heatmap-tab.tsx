@@ -44,7 +44,7 @@ export function HeatmapTab({ query }: TabProps) {
   if (!data || data.paths.length === 0)
     return (
       <CardNew>
-        <EmptyState icon="🖱️" title="Sin clicks registrados" hint="El heatmap muestra dónde hacen click los visitantes en cada página. Aparece cuando haya interacción registrada." />
+        <EmptyState icon="🖱️" title="Aún no hay clicks en este rango" hint="El mapa de calor traza los clicks reales sobre cada página (no scroll ni movimiento del mouse). En cuanto un visitante haga click en el sitio dentro del rango de fechas seleccionado, aparecerá aquí." />
       </CardNew>
     );
 

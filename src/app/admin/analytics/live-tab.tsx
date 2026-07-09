@@ -84,7 +84,7 @@ export function LiveTab(_: TabProps) {
             {formatNumber(count)} <span style={{ fontSize: 14, fontWeight: 400, color: "var(--text-3)" }}>{count === 1 ? "visitante ahora" : "visitantes ahora"}</span>
           </div>
           <div style={{ fontSize: 12, color: "var(--text-3)", marginTop: 4 }}>
-            Activos en los últimos {data?.windowMinutes ?? 5} min · se actualiza cada 5s
+            Activos en los últimos {data?.windowSeconds ?? 75}s · se actualiza cada 5s
           </div>
         </div>
       </div>
