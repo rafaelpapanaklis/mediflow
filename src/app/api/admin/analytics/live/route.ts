@@ -86,6 +86,7 @@ export async function GET(_req: NextRequest) {
       count: visitors.length,
       countByCountry,
       windowMinutes: Math.round(LIVE_WINDOW_MS / 60000),
+      windowSeconds: Math.round(LIVE_WINDOW_MS / 1000),
     };
     return NextResponse.json(body);
   } catch (e) {

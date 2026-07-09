@@ -18,6 +18,8 @@ import {
   SESSION_TS_KEY,
   SESSION_TIMEOUT_MS,
   FLUSH_INTERVAL_MS,
+  HEARTBEAT_INTERVAL_MS,
+  CLICK_FLUSH_MS,
   MAX_BATCH,
   surfaceFromPath,
 } from "./constants";
@@ -28,6 +30,8 @@ let vid = "";
 let sid = "";
 let queue: TrackEvent[] = [];
 let flushTimer: ReturnType<typeof setInterval> | null = null;
+let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
+let clickFlushTimer: ReturnType<typeof setTimeout> | null = null;
 let scrollTimer: ReturnType<typeof setTimeout> | null = null;
 let attribution: Partial<TrackPayload> = {};
 
@@ -263,6 +267,7 @@ function onClick(e: MouseEvent): void {
     const publicSurface = surfaceFromPath(curPath) === "public";
     const { selector, text } = describeTarget(target, publicSurface);
     enqueue({ type: "click", path: curPath, t: now(), x: round3(x), y, vw, vh, docH, selector, text });
+    scheduleClickFlush(); // envío pronto: no perder clicks de visitas de rebote
     detectRage(e.clientX, e.clientY);
   } catch {
     /* ignore */
@@ -307,6 +312,46 @@ function clearScrollTimer(): void {
   if (scrollTimer) {
     clearTimeout(scrollTimer);
     scrollTimer = null;
+  }
+}
+
+// Heartbeat: mientras la pestaña esté visible y haya una página activa, envía un
+// "ping" ligero cada HEARTBEAT_INTERVAL_MS para refrescar lastSeenAt en el server
+// (así "en vivo" cuenta al presente-pero-quieto). Se detiene al ocultarse/salir.
+function startHeartbeat(): void {
+  if (heartbeatTimer) return;
+  heartbeatTimer = setInterval(() => {
+    try {
+      if (document.visibilityState !== "visible") return;
+    } catch {
+      return;
+    }
+    if (!curPath) return;
+    enqueue({ type: "ping", path: curPath, t: now() });
+  }, HEARTBEAT_INTERVAL_MS);
+}
+
+function stopHeartbeat(): void {
+  if (heartbeatTimer) {
+    clearInterval(heartbeatTimer);
+    heartbeatTimer = null;
+  }
+}
+
+// Flush corto tras un click (agrupa ráfagas en un solo envío). Cubre visitas de
+// rebote: el click sale en ~1s aunque el beacon de salida se pierda.
+function scheduleClickFlush(): void {
+  if (clickFlushTimer) return;
+  clickFlushTimer = setTimeout(() => {
+    clickFlushTimer = null;
+    flush(false);
+  }, CLICK_FLUSH_MS);
+}
+
+function clearClickFlush(): void {
+  if (clickFlushTimer) {
+    clearTimeout(clickFlushTimer);
+    clickFlushTimer = null;
   }
 }
 
@@ -376,9 +421,13 @@ export function start(): void {
     if (document.visibilityState === "hidden") {
       emitPageLeave();
       flush(true);
-    } else if (document.visibilityState === "visible" && curPath && !pageOpen) {
-      curEnteredAt = now();
-      pageOpen = true;
+      stopHeartbeat(); // se fue/ocultó: deja de refrescar lastSeenAt → cae de "en vivo"
+    } else if (document.visibilityState === "visible") {
+      if (curPath && !pageOpen) {
+        curEnteredAt = now();
+        pageOpen = true;
+      }
+      startHeartbeat(); // volvió: reanuda el latido
     }
   };
   document.addEventListener("visibilitychange", visL);
@@ -386,10 +435,12 @@ export function start(): void {
   const hideL = () => {
     emitPageLeave();
     flush(true);
+    stopHeartbeat();
   };
   window.addEventListener("pagehide", hideL);
 
   flushTimer = setInterval(() => flush(false), FLUSH_INTERVAL_MS);
+  startHeartbeat();
 
   cleanups = [
     () => document.removeEventListener("click", clickL, true),
@@ -401,6 +452,8 @@ export function start(): void {
       flushTimer = null;
     },
     clearScrollTimer,
+    stopHeartbeat,
+    clearClickFlush,
   ];
 }
 

@@ -12,7 +12,8 @@ export type TrackEventType =
   | "click"
   | "scroll"
   | "custom"
-  | "rage_click";
+  | "rage_click"
+  | "ping"; // heartbeat: sólo refresca lastSeenAt; no se persiste como evento
 
 export interface TrackEvent {
   type: TrackEventType;
@@ -227,4 +228,6 @@ export interface LiveResponse {
   count: number;
   countByCountry: { country: string; count: number }[];
   windowMinutes: number;
+  /** Ventana "activo ahora" en segundos (más preciso que windowMinutes). */
+  windowSeconds: number;
 }
