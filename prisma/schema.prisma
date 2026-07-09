@@ -7400,3 +7400,113 @@ model QuoteItem {
   @@index([quoteId])
   @@map("quote_items")
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Analítica de primera parte (self-hosted). Panel privado del owner en
+// /admin/analytics. Sin FKs a clinics/users a propósito: la ingesta (/api/track)
+// debe ser robusta aunque el clinicId/userId venga de una cookie stale; el panel
+// hace el join manualmente. Los ids identificados se guardan denormalizados.
+// SQL espejo en sql/analytics.sql. RLS deny-all (Prisma service-role bypasa).
+// ─────────────────────────────────────────────────────────────────────────────
+
+model AnalyticsSession {
+  id               String   @id // uuid generado en el cliente (== sid)
+  visitorId        String
+  surface          String   @default("public") // public|dashboard|portal|affiliate|supplier|lab
+
+  // Identidad resuelta desde cookies en el servidor (anonymous|staff|patient|admin)
+  identityType     String   @default("anonymous")
+  clinicId         String?
+  userId           String?
+  patientAccountId String?
+  email            String?
+  displayName      String?
+  role             String?
+  plan             String?
+
+  // Navegación / atribución
+  entryPath        String?
+  exitPath         String?
+  referrer         String?
+  referrerHost     String?
+  referrerType     String?  // direct|search|social|ads|referral|internal
+  utmSource        String?
+  utmMedium        String?
+  utmCampaign      String?
+  utmTerm          String?
+  utmContent       String?
+  gclid            String?
+
+  // Geo (headers de Vercel)
+  country          String?
+  region           String?
+  city             String?
+  latitude         Float?
+  longitude        Float?
+  ip               String?
+
+  // Dispositivo
+  device           String?
+  browser          String?
+  os               String?
+  screenW          Int?
+  screenH          Int?
+  language         String?
+  timezone         String?
+
+  // Métricas agregadas de la sesión
+  pageviews        Int      @default(0)
+  clicks           Int      @default(0)
+  maxScroll        Int      @default(0)
+  durationMs       Int      @default(0)
+  isBounce         Boolean  @default(true)
+
+  startedAt        DateTime @default(now())
+  lastSeenAt       DateTime @default(now())
+  createdAt        DateTime @default(now())
+
+  events           AnalyticsEvent[]
+
+  @@index([startedAt])
+  @@index([clinicId, startedAt])
+  @@index([surface, startedAt])
+  @@index([visitorId])
+  @@index([lastSeenAt])
+  @@index([identityType, startedAt])
+  @@index([referrerType, startedAt])
+  @@index([country, startedAt])
+  @@map("analytics_sessions")
+}
+
+model AnalyticsEvent {
+  id         String   @id @default(cuid())
+  sessionId  String
+  visitorId  String
+  clinicId   String?
+  surface    String?
+  type       String // pageview|click|scroll|custom|rage_click
+  path       String
+  title      String?
+  referrer   String?
+  name       String?
+  x          Float?
+  y          Float?
+  vw         Int?
+  vh         Int?
+  docH       Int?
+  scrollPct  Int?
+  selector   String?
+  text       String?
+  durationMs Int?
+  meta       Json?
+  createdAt  DateTime @default(now())
+
+  session    AnalyticsSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId])
+  @@index([clinicId, createdAt])
+  @@index([type, path, createdAt])
+  @@index([path, createdAt])
+  @@index([createdAt])
+  @@map("analytics_events")
+}

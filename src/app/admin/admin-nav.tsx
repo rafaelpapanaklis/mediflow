@@ -6,7 +6,7 @@ import { useState } from "react";
 import {
   LayoutDashboard, Building2, CreditCard, TrendingDown, CheckSquare,
   BarChart3, Megaphone, Ticket, Settings, LogOut, Menu, X, Bug, Truck, Handshake, Coins, Star,
-  LifeBuoy, FlaskConical, Users, KeyRound, ScrollText,
+  LifeBuoy, FlaskConical, Users, KeyRound, ScrollText, LineChart,
 } from "lucide-react";
 import { BadgeNew } from "@/components/ui/design-system/badge-new";
 import { AvatarNew } from "@/components/ui/design-system/avatar-new";
@@ -31,6 +31,7 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/admin/soporte",      label: "Soporte",      icon: LifeBuoy,        section: "main"   },
   { href: "/admin/churn",        label: "Retención",    icon: TrendingDown,    section: "main"   },
   { href: "/admin/onboarding",   label: "Onboarding",   icon: CheckSquare,     section: "main"   },
+  { href: "/admin/analytics",    label: "Analytics",    icon: LineChart,       section: "growth" },
   { href: "/admin/reports",      label: "Reportes",     icon: BarChart3,       section: "growth" },
   { href: "/admin/announcements",label: "Anuncios",     icon: Megaphone,       section: "growth" },
   { href: "/admin/coupons",      label: "Cupones",      icon: Ticket,          section: "growth" },
