@@ -1,8 +1,10 @@
 // Geolocalización + IP del visitante (servidor).
 //
-// FUENTE PRIMARIA: lookup server-side por IP contra ipwho.is (HTTPS, sin API key).
-// La geo-IP nativa de Vercel (x-vercel-ip-*) ubica mal muchas IPs de ISPs MX
-// (p. ej. Totalplay: Mérida → Cd. Juárez), así que la usamos sólo de FALLBACK.
+// FUENTE PRIMARIA: lookup server-side por IP contra ipinfo.io (HTTPS). La geo-IP
+// nativa de Vercel (x-vercel-ip-*) ubica mal muchas IPs de ISPs MX (p. ej.
+// Totalplay: Mérida → Cd. Juárez) — igual que ipwho.is, verificado —, así que la
+// usamos sólo de FALLBACK. ipinfo.io sí acierta esas IPs. Con IPINFO_TOKEN (env)
+// da 50k consultas/mes; sin token funciona a bajo volumen (~1k/día).
 //
 // PRIVACIDAD (app médica): al servicio externo se le envía ÚNICAMENTE la IP del
 // visitante (ningún otro dato/PII), y sólo la primera vez que se ve esa IP: el
@@ -22,8 +24,8 @@ export interface GeoInfo {
 }
 
 // ── Config del lookup por IP (fácil de cambiar/desactivar) ───────────────────
-/** Endpoint del servicio; {ip} se sustituye por la IP. ipwho.is = HTTPS, sin key. */
-const GEOIP_ENDPOINT = "https://ipwho.is/{ip}";
+/** Endpoint del servicio; {ip} se sustituye por la IP. ipinfo.io = HTTPS. */
+const GEOIP_ENDPOINT = "https://ipinfo.io/{ip}/json";
 const GEOIP_ENABLED = true; // false → sólo headers de Vercel
 const GEOIP_TIMEOUT_MS = 1500; // corto: jamás bloquear la ingesta
 const GEOIP_TTL_MS = 12 * 60 * 60 * 1000; // cache positiva 12h
@@ -110,19 +112,28 @@ async function lookupIp(ip: string): Promise<Partial<GeoInfo> | null> {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), GEOIP_TIMEOUT_MS);
   try {
-    const res = await fetch(GEOIP_ENDPOINT.replace("{ip}", encodeURIComponent(ip)), {
+    const token = process.env.IPINFO_TOKEN;
+    const base = GEOIP_ENDPOINT.replace("{ip}", encodeURIComponent(ip));
+    const url = token ? `${base}?token=${encodeURIComponent(token)}` : base;
+    const res = await fetch(url, {
       signal: ctrl.signal,
       headers: { accept: "application/json" },
       cache: "no-store", // no dejar que Next cachee la respuesta externa
     });
-    if (!res.ok) return null;
+    if (!res.ok) return null; // 429 (rate limit sin token) / 4xx / 5xx → fallback a headers
     const d: any = await res.json();
-    if (!d || d.success === false) return null; // ipwho.is responde 200 con success:false en error
-    const lat = typeof d.latitude === "number" ? d.latitude : num(d.latitude ?? null);
-    const lng = typeof d.longitude === "number" ? d.longitude : num(d.longitude ?? null);
-    const country = d.country_code || null; // 2 letras, consistente con x-vercel-ip-country
+    if (!d || d.error || d.bogon) return null; // ipinfo: {error:{...}} o {bogon:true}
+    const country = d.country || null; // ipinfo ya devuelve 2 letras (ISO), consistente con Vercel
     const city = d.city || null;
-    const region = d.region || d.region_code || null;
+    const region = d.region || null;
+    // ipinfo entrega la coordenada como loc:"lat,lng"
+    let lat: number | null = null;
+    let lng: number | null = null;
+    if (typeof d.loc === "string" && d.loc.includes(",")) {
+      const [la, lo] = d.loc.split(",");
+      lat = num(la);
+      lng = num(lo);
+    }
     if (!country && !city && lat == null) return null; // respuesta sin datos útiles → fallo
     return { country, region, city, latitude: lat, longitude: lng };
   } catch {
