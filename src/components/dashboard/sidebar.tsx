@@ -141,7 +141,7 @@ const NAV_ITEMS: NavItemDef[] = [
   { id: "appointments", section: "workspace", label: "Agenda",      href: "/dashboard/agenda",        icon: Calendar,      permission: "agenda.view" },
   { id: "patients",     section: "workspace", label: "Pacientes",   href: "/dashboard/patients",      icon: Users,         permission: "patients.view" },
   { id: "inbox",        section: "workspace", label: "Inbox",       href: "/dashboard/inbox",         icon: InboxIcon,     countKey: "inboxUnread",   permission: "inbox.view", moduleKey: "inbox", comingSoon: true },
-  { id: "messages",     section: "workspace", label: "Whatsapp / Bot",    href: "/dashboard/whatsapp",      icon: MessageCircle, countKey: "messagesUnread", permission: "whatsapp.view", moduleKey: "whatsapp", comingSoon: true },
+  { id: "messages",     section: "workspace", label: "Whatsapp / Bot",    href: "/dashboard/whatsapp",      icon: MessageCircle, countKey: "messagesUnread", permission: "whatsapp.view", moduleKey: "whatsapp" },
   { id: "marketplace",  section: "workspace", label: "Marketplace", href: "/dashboard/marketplace",   icon: ShoppingBag,   permission: "marketplace.view", moduleKey: "marketplace", comingSoon: true },
 
   { id: "ai",           section: "clinico", label: "IA asistente", href: "/dashboard/ai-assistant", icon: Sparkles, moduleKey: "ai-assistant" },

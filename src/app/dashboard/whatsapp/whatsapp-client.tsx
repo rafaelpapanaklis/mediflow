@@ -15,6 +15,7 @@ import { useT } from "@/i18n/i18n-provider";
 interface Props {
   connected:     boolean;
   phoneNumberId: string;
+  wabaId:        string;
   reminderMsg:   string;
   reminder24h:   boolean;
   reminder1h:    boolean;
@@ -22,7 +23,7 @@ interface Props {
 }
 
 export function WhatsAppClient({
-  connected: initConnected, phoneNumberId: initPhone,
+  connected: initConnected, phoneNumberId: initPhone, wabaId: initWabaId,
   reminderMsg: initMsg, reminder24h: init24h, reminder1h: init1h, clinicName,
 }: Props) {
   const t = useT();
@@ -32,7 +33,7 @@ export function WhatsAppClient({
   const [step,       setStep]       = useState<"intro" | "config" | "done">(initConnected ? "done" : "intro");
   const [loading,    setLoading]    = useState(false);
   const [showToken,  setShowToken]  = useState(false);
-  const [form,       setForm]       = useState({ phoneNumberId: initPhone, accessToken: "" });
+  const [form,       setForm]       = useState({ phoneNumberId: initPhone, accessToken: "", wabaId: initWabaId });
   const defaultMsg = `Hola {nombre} 👋, te recordamos tu cita en *${clinicName}* el *{fecha}* a las *{hora}h*.\n\nDr/a. {doctor}\n\n_Responde este mensaje si necesitas cambiarla._`;
   const [msg,        setMsg]        = useState(initMsg || defaultMsg);
   const [r24h,       setR24h]       = useState(init24h);
@@ -46,7 +47,7 @@ export function WhatsAppClient({
       const res = await fetch("/api/whatsapp/connect", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ phoneNumberId: form.phoneNumberId, accessToken: form.accessToken }),
+        body: JSON.stringify({ phoneNumberId: form.phoneNumberId, accessToken: form.accessToken, wabaId: form.wabaId }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
@@ -152,6 +153,17 @@ export function WhatsAppClient({
           </CardNew>
 
           <div style={{
+            background: "var(--info-soft)",
+            border: "1px solid rgba(59,130,246,0.2)",
+            borderRadius: "var(--radius)",
+            padding: 14,
+            fontSize: 12,
+            color: "#93c5fd",
+          }}>
+            <strong>{t("inbox.whatsapp.coexistenceLabel")}</strong> {t("inbox.whatsapp.coexistenceBody")}
+          </div>
+
+          <div style={{
             background: "var(--warning-soft)",
             border: "1px solid rgba(245,158,11,0.2)",
             borderRadius: "var(--radius)",
@@ -187,6 +199,23 @@ export function WhatsAppClient({
                 />
                 <p style={{ fontSize: 10, color: "var(--text-4)" }}>
                   {t("inbox.whatsapp.phoneIdHint")}
+                </p>
+              </div>
+
+              <div className="field-new">
+                <label className="field-new__label">{t("inbox.whatsapp.wabaLabel")}</label>
+                <input
+                  className="input-new mono"
+                  placeholder="102290129340398"
+                  inputMode="numeric"
+                  value={form.wabaId}
+                  onChange={e => {
+                    const v = e.target.value.replace(/\D/g, "");
+                    setForm(f => ({ ...f, wabaId: v }));
+                  }}
+                />
+                <p style={{ fontSize: 10, color: "var(--text-4)" }}>
+                  {t("inbox.whatsapp.wabaHint")}
                 </p>
               </div>
 

@@ -66,6 +66,17 @@ export async function POST(req: NextRequest) {
     const entry    = body?.entry?.[0];
     const changes  = entry?.changes?.[0];
     const value    = changes?.value;
+
+    // ── Coexistence: la clínica respondió al paciente DESDE su app de WhatsApp
+    //    Business del celular (mismo número conectado al panel). Meta lo entrega
+    //    como `smb_message_echoes` (no `messages`). Lo reflejamos en el Inbox
+    //    como saliente de la clínica y PAUSAMOS el bot del hilo (un humano tomó
+    //    la conversación) para no responder doble. No corre runBotTurn.
+    if (changes?.field === "smb_message_echoes") {
+      await ingestBusinessAppEchoes(value);
+      return NextResponse.json({ ok: true });
+    }
+
     const messages = value?.messages;
 
     if (!messages?.length) return NextResponse.json({ ok: true });
@@ -236,6 +247,15 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true });
     }
 
+    // ── El staff tomó el control del hilo → el bot calla ──
+    // botActive=false lo pone (a) el handoff del propio bot o (b) un echo de
+    // coexistence (la clínica ya respondió al paciente desde su WhatsApp del
+    // cel). El mensaje entrante ya quedó arriba en el Inbox para que lo atienda
+    // una persona; NO llamamos a runBotTurn para no responder encima del humano.
+    if (thread.botActive === false) {
+      return NextResponse.json({ ok: true });
+    }
+
     // ── Rate-limit del bot (anti-spam, anti-drenaje del wallet) ──
     // Por remitente (wa_id) y por clínica, ANTES de llamar a Claude. Al
     // excederse NO se responde (responder aquí permitiría spam de envíos
@@ -323,5 +343,104 @@ export async function POST(req: NextRequest) {
   } catch (err) {
     console.error("WhatsApp webhook error:", err);
     return NextResponse.json({ ok: true }); // siempre 200 para evitar reintentos de Meta
+  }
+}
+
+/**
+ * Coexistence: ingesta los mensajes que la clínica envió al paciente DESDE su
+ * app de WhatsApp Business del celular (mismo número conectado al panel). Meta
+ * los entrega como `smb_message_echoes` (field hermano de `value`), con
+ * `value.message_echoes[]` (from = número del negocio, to = paciente). Cada eco
+ * se refleja como mensaje OUT en el Inbox (sentById null: aparece como enviado
+ * por la clínica, no por un usuario concreto) y PAUSA el bot del hilo
+ * (botActive=false) — un humano está respondiendo, para evitar doble respuesta.
+ * Solo texto por ahora (los echoes de tipo revoke/edit no traen text.body y se
+ * ignoran). El bot se reactiva con el toggle del hilo en el Inbox.
+ */
+async function ingestBusinessAppEchoes(value: any) {
+  const phoneNumberId = value?.metadata?.phone_number_id;
+  const echoes = Array.isArray(value?.message_echoes) ? value.message_echoes : [];
+  if (!phoneNumberId || echoes.length === 0) return;
+
+  const clinic = await prisma.clinic.findFirst({
+    where: { waPhoneNumberId: phoneNumberId },
+    select: { id: true },
+  });
+  if (!clinic) return;
+
+  for (let i = 0; i < echoes.length; i++) {
+    const echo = echoes[i];
+    const to   = (echo?.to as string | undefined)?.trim();  // teléfono del paciente
+    const text = echo?.text?.body?.trim() ?? "";            // solo texto por ahora
+    if (!to || !text) continue;
+
+    // Empareja al paciente por los últimos 10 dígitos normalizados (igual que el
+    // flujo entrante). El `contains` solo pre-filtra en la BD; el match es exacto.
+    const toLast10 = normalizeLast10(to);
+    const candidates = toLast10.length === 10
+      ? await prisma.patient.findMany({
+          where: { clinicId: clinic.id, phone: { contains: toLast10 } },
+          select: { id: true, phone: true },
+          take: 25,
+        })
+      : [];
+    const patient = candidates.find((p) => normalizeLast10(p.phone ?? "") === toLast10) ?? null;
+
+    const now = new Date();
+    let thread = await prisma.inboxThread.findFirst({
+      where: { clinicId: clinic.id, channel: "WHATSAPP", externalId: to },
+      select: { id: true, patientId: true },
+    });
+    if (!thread) {
+      try {
+        thread = await prisma.inboxThread.create({
+          data: {
+            clinicId: clinic.id,
+            channel: "WHATSAPP",
+            externalId: to,
+            patientId: patient?.id ?? null,
+            subject: `WhatsApp · ${to}`,
+            status: "READ",   // saliente de la clínica: no es algo "sin leer"
+            lastMessageAt: now,
+            botActive: false, // un humano está atendiendo este hilo
+          },
+          select: { id: true, patientId: true },
+        });
+      } catch (err) {
+        // Carrera entre reintentos de Meta (@@unique [clinicId, channel, externalId]).
+        if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
+          thread = await prisma.inboxThread.findFirst({
+            where: { clinicId: clinic.id, channel: "WHATSAPP", externalId: to },
+            select: { id: true, patientId: true },
+          });
+        }
+        if (!thread) throw err;
+      }
+    } else {
+      await prisma.inboxThread.update({
+        where: { id: thread.id },
+        data: {
+          botActive: false, // el staff tomó el control → el bot calla
+          lastMessageAt: now,
+          ...(patient && !thread.patientId ? { patientId: patient.id } : {}),
+        },
+      });
+    }
+
+    try {
+      await prisma.inboxMessage.create({
+        data: {
+          threadId: thread.id,
+          direction: "OUT",
+          body: text,
+          externalId: echo?.id ?? null, // dedup por wamid (Meta reintenta)
+          sentAt: now,
+        },
+      });
+    } catch (err) {
+      // @@unique [threadId, externalId]: eco ya ingestado por un reintento → ok.
+      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") continue;
+      throw err;
+    }
   }
 }

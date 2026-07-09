@@ -45,6 +45,8 @@ model Clinic {
   // WhatsApp (legacy Meta Cloud API)
   waPhoneNumberId  String? @unique
   waAccessToken    String?
+  waBusinessAccountId String? // WhatsApp Business Account ID (coexistence)
+  waConnMethod        String? // "manual" | "coexistence"
   waConnected      Boolean @default(false)
   waReminderActive Boolean @default(true)
   waReminder24h    Boolean @default(true)
