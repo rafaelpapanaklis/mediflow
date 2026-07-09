@@ -5,6 +5,7 @@ import { Toaster } from "react-hot-toast";
 import { Analytics } from "@vercel/analytics/next";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 import { ConfirmProvider } from "@/components/ui/confirm-dialog";
+import { AnalyticsTracker } from "@/components/analytics/analytics-tracker";
 import "./globals.css";
 
 const sans = IBM_Plex_Sans({ subsets: ["latin"], weight: ["300", "400", "500", "600", "700"], variable: "--font-sans", display: "swap" });
@@ -123,6 +124,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         </ConfirmProvider>
         <Analytics />
         <SpeedInsights />
+        {/* Analítica propia (DaleControl) — tracker de primera parte para /admin/analytics.
+            No rastrea /admin ni /live; identidad resuelta server-side desde cookies. */}
+        <AnalyticsTracker />
       </body>
     </html>
   );

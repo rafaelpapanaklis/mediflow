@@ -3370,3 +3370,15 @@
   .imp-progress > i { transition: none; }
 }
 
+/* Analytics (/admin/analytics): grid 2 columnas (contenido + panel lateral) que
+   colapsa a 1 columna en móvil. Inline styles no permiten @media, por eso va aquí. */
+.an-2col {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(260px, 1fr);
+  gap: 14px;
+  align-items: start;
+}
+@media (max-width: 768px) {
+  .an-2col { grid-template-columns: 1fr; }
+}
+
