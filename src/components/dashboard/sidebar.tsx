@@ -263,12 +263,19 @@ function isActivePath(pathname: string | null, href: string, matchExact?: boolea
   return pathname === href || pathname.startsWith(href + "/");
 }
 
+// TEMPORAL: ocultar la sección "Especialidades" (Odontopediatría, Endodoncia,
+// Periodoncia, Ortodoncia, Implantología) mientras se terminan de desarrollar.
+// Hoy son stubs "Próximamente" sin funcionalidad. Poner en false para re-mostrarlas.
+const HIDE_SPECIALTIES = true;
+
 function shouldShowItem(
   item: NavItemDef,
   user: SidebarUser,
   category: ClinicCategory,
   clinicModuleKeys: string[],
 ): boolean {
+  // Oculta toda la sección de especialidades (aún en desarrollo). Ver HIDE_SPECIALTIES.
+  if (HIDE_SPECIALTIES && item.section === "specialties") return false;
   if (item.adminOnly && user.role !== "SUPER_ADMIN" && user.role !== "ADMIN") return false;
   if (item.categories && item.categories.length > 0) {
     if (!item.categories.includes(category)) return false;
