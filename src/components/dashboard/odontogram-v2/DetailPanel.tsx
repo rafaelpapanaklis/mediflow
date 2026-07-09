@@ -33,7 +33,12 @@ export function DetailPanel({
   const t = I18N[lang];
   const meta = classify(fdi);
   const num = numberLabel(fdi, numbering);
-  const [view, setView] = useState<"3d" | "2d">("3d");
+  // Default 2D en dispositivos táctiles (teléfono/tablet), 3D en escritorio con
+  // mouse. El usuario puede cambiar con el toggle 3D/2D; esto solo fija el inicio.
+  const [view, setView] = useState<"3d" | "2d">(() => {
+    if (typeof window === "undefined") return "3d";
+    return window.matchMedia("(pointer: coarse)").matches ? "2d" : "3d";
+  });
   const [resetKey, setResetKey] = useState(0);
   const [note, setNoteLocal] = useState(record.note || "");
 
