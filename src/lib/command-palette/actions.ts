@@ -36,7 +36,7 @@ export function buildGlobalActions(): CommandItem[] {
       shortcut: "I",
       tone: "brand",
       keywords: ["facturar", "cobrar", "cfdi"],
-      run: (ctx) => ctx.push("/dashboard/billing?new=1"),
+      run: (ctx) => ctx.push("/dashboard/caja?tab=facturas"),
     },
 
     // ═══ IR A ═══════════════════════════════════════════════════
@@ -53,7 +53,7 @@ export function buildGlobalActions(): CommandItem[] {
       run: (ctx) => ctx.push("/dashboard/whatsapp") },
     { id: "go:billing", group: "ir-a", label: "Facturación", icon: CreditCard, shortcut: "G F",
       keywords: ["facturas", "pagos", "cfdi"],
-      run: (ctx) => ctx.push("/dashboard/billing") },
+      run: (ctx) => ctx.push("/dashboard/caja") },
     { id: "go:xrays", group: "ir-a", label: "Radiografías", icon: FileImage, shortcut: "G R",
       keywords: ["rx", "rayos", "imagenes"],
       run: (ctx) => ctx.push("/dashboard/xrays") },

@@ -187,8 +187,8 @@ export function QuickActionsBar({ currentUserId, clinicId, isAdmin }: QuickActio
     ...(isAdmin ? [{
       icon: <Pill className="w-5 h-5" />,
       label: t("shell.quickActions.billing"),
-      path: "/dashboard/billing",
-      onClick: () => router.push("/dashboard/billing"),
+      path: "/dashboard/caja",
+      onClick: () => router.push("/dashboard/caja"),
     }] : []),
   ];
 

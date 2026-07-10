@@ -37,6 +37,7 @@ export type AuditEntityType =
   | "clinic"
   | "subscription"
   | "quote"
+  | "cash-register"
   // Plataforma / admin (WS2 · cobertura de auditoría en /admin). Tipan tanto las
   // filas clinic-scoped que SÍ entran a AuditLog (p.ej. "admin-billing",
   // "ai-wallet", anclando a la clínica + un usuario suyo) como los eventos
