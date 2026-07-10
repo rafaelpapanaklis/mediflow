@@ -1040,6 +1040,11 @@ model User {
   totpEnabled   Boolean  @default(false)
   recoveryCodes String[] @default([])
 
+  // Caja (corte diario) — acceso por usuario + PIN. Ver src/lib/caja-pin.ts +
+  // sql/caja_pin_permiso_iva.sql. canAccessCaja = gate; cajaPinHash = bcrypt(6 díg).
+  canAccessCaja Boolean @default(false)
+  cajaPinHash   String?
+
   clinic             Clinic              @relation(fields: [clinicId], references: [id], onDelete: Cascade)
   appointments       Appointment[]
   records            MedicalRecord[]
@@ -1795,6 +1800,11 @@ model Invoice {
   cfdiUuid      String?
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
+
+  // Doctor atribuido para reportes por médico en Caja + IVA configurable por factura.
+  doctorId    String?
+  taxRate     Float    @default(16)
+  taxIncluded Boolean  @default(true)
 
   clinic      Clinic       @relation(fields: [clinicId], references: [id], onDelete: Cascade)
   patient     Patient      @relation(fields: [patientId], references: [id], onDelete: Cascade)

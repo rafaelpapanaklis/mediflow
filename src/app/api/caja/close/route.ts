@@ -6,6 +6,7 @@ import { getAuthContext } from "@/lib/auth-context";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { logMutation } from "@/lib/audit";
 import { getOpenRegister, deriveWindow, money } from "@/lib/caja";
+import { canUseCaja, verifyCajaPin } from "@/lib/caja-pin";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -21,10 +22,24 @@ export async function POST(req: NextRequest) {
   if (!ctx) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
   const denied = denyIfMissingPermission(ctx, "billing.view");
   if (denied) return denied;
+  if (!canUseCaja(ctx.user)) {
+    return NextResponse.json({ error: "No tienes permiso para operar la Caja. Pide a un administrador que te habilite el acceso.", code: "CAJA_NO_ACCESS" }, { status: 403 });
+  }
   const { clinicId, userId } = ctx;
 
+  let raw: any;
+  try { raw = await req.json(); } catch { raw = {}; }
+
+  // Caja v2: PIN obligatorio por usuario antes de cerrar.
+  if (!ctx.user?.cajaPinHash) {
+    return NextResponse.json({ error: "Configura tu PIN de Caja antes de cerrar. Ve a Caja → Configurar PIN.", code: "CAJA_PIN_REQUIRED" }, { status: 402 });
+  }
+  if (!(await verifyCajaPin(String(raw?.pin ?? ""), ctx.user.cajaPinHash))) {
+    return NextResponse.json({ error: "PIN de Caja incorrecto.", code: "CAJA_PIN_INVALID" }, { status: 403 });
+  }
+
   try {
-    const { countedClosingBalance, closingNotes } = closeSchema.parse(await req.json());
+    const { countedClosingBalance, closingNotes } = closeSchema.parse(raw);
 
     const reg = await getOpenRegister(clinicId);
     if (!reg) return NextResponse.json({ error: "No hay caja abierta." }, { status: 400 });

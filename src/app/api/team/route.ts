@@ -54,7 +54,7 @@ export async function POST(req: NextRequest) {
 
   const body = await req.json();
   const { email, firstName, lastName, role, specialty, color, phone, services,
-          cedulaProfesional, especialidad, cedulaEspecialidad } = body;
+          cedulaProfesional, especialidad, cedulaEspecialidad, canAccessCaja } = body;
 
   if (!firstName?.trim() || !lastName?.trim() || !email?.trim()) {
     return NextResponse.json({ error: "Nombre, apellido y email son requeridos" }, { status: 400 });
@@ -122,6 +122,7 @@ export async function POST(req: NextRequest) {
       cedulaProfesional:  cedulaProfesional?.trim() || null,
       especialidad:       especialidad?.trim() || null,
       cedulaEspecialidad: cedulaEspecialidad?.trim() || null,
+      canAccessCaja:      canAccessCaja === true,
     },
   });
 
