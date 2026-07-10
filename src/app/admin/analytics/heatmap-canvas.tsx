@@ -4,12 +4,21 @@
 // normalizados: x = fracción del ancho del viewport (0..1); y = px absoluto que
 // normalizamos por el docH de cada click a una altura de referencia. Densidad
 // aditiva → rampa de color (azul→cian→verde→amarillo→rojo).
+//
+// Dos modos:
+//  - Autónomo (sin width/height): dibuja a lo ancho del contenedor y a una altura de
+//    referencia fija (REF_HEIGHT). Es la vista "simple"/fallback sobre fondo gris.
+//  - Controlado (width y height dados): dibuja EXACTAMENTE a ese lienzo para
+//    superponerse 1:1 sobre el <iframe> de la página real (mismo sistema de coords).
+//    La resolución interna se acota por área (MAX_PX) y se estira por CSS → sin jank en
+//    páginas muy altas; el radio del blob escala con el ancho para verse consistente.
 
 import { useEffect, useRef } from "react";
 import type { HeatPoint } from "@/lib/analytics/types";
 
-const REF_HEIGHT = 1400; // altura de referencia del "documento" en px de canvas
+const REF_HEIGHT = 1400; // altura de referencia del "documento" en px de canvas (modo autónomo)
 const RADIUS = 28;
+const MAX_PX = 3_000_000; // techo de píxeles del lienzo interno (acota getImageData en páginas largas)
 
 let RAMP: Uint8ClampedArray | null = null;
 function getRamp(): Uint8ClampedArray {
@@ -30,18 +39,38 @@ function getRamp(): Uint8ClampedArray {
   return RAMP;
 }
 
-export function HeatmapCanvas({ points }: { points: HeatPoint[] }) {
+export function HeatmapCanvas({
+  points,
+  width,
+  height,
+}: {
+  points: HeatPoint[];
+  /** Modo controlado: ancho lógico del lienzo (= ancho de referencia del iframe). */
+  width?: number;
+  /** Modo controlado: alto lógico del lienzo (= alto real del contenido del iframe). */
+  height?: number;
+}) {
+  const controlled = !!(width && height && width > 0 && height > 0);
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
   useEffect(() => {
     const wrap = wrapRef.current;
     const canvas = canvasRef.current;
-    if (!wrap || !canvas) return;
+    if (!canvas) return;
+    if (!controlled && !wrap) return;
 
     function draw() {
-      const W = Math.max(320, Math.floor(wrap!.clientWidth));
-      const H = REF_HEIGHT;
+      // Tamaño lógico (espacio de coordenadas donde caen los clicks).
+      const cssW = controlled ? (width as number) : Math.max(320, Math.floor(wrap!.clientWidth));
+      const cssH = controlled ? (height as number) : REF_HEIGHT;
+      // Resolución interna: en controlado acotamos por área para no reventar CPU/memoria
+      // con páginas largas (getImageData es O(W·H)); CSS estira el lienzo a cssW×cssH.
+      const q = controlled ? Math.min(1, Math.sqrt(MAX_PX / (cssW * cssH))) : 1;
+      const W = Math.max(1, Math.round(cssW * q));
+      const H = Math.max(1, Math.round(cssH * q));
+      const radius = controlled ? Math.max(10, W * 0.024) : RADIUS;
+
       canvas!.width = W;
       canvas!.height = H;
       const ctx = canvas!.getContext("2d");
@@ -51,15 +80,15 @@ export function HeatmapCanvas({ points }: { points: HeatPoint[] }) {
 
       // 1) Capa de intensidad en escala de grises (alfa aditiva).
       points.forEach((p) => {
-        const docH = p.docH && p.docH > 0 ? p.docH : REF_HEIGHT;
+        const docH = p.docH && p.docH > 0 ? p.docH : cssH;
         const x = Math.min(1, Math.max(0, p.x)) * W;
         const y = Math.min(1, Math.max(0, p.y / docH)) * H;
-        const grd = ctx.createRadialGradient(x, y, 0, x, y, RADIUS);
+        const grd = ctx.createRadialGradient(x, y, 0, x, y, radius);
         grd.addColorStop(0, "rgba(0,0,0,0.14)");
         grd.addColorStop(1, "rgba(0,0,0,0)");
         ctx.fillStyle = grd;
         ctx.beginPath();
-        ctx.arc(x, y, RADIUS, 0, Math.PI * 2);
+        ctx.arc(x, y, radius, 0, Math.PI * 2);
         ctx.fill();
       });
 
@@ -80,7 +109,11 @@ export function HeatmapCanvas({ points }: { points: HeatPoint[] }) {
     }
 
     draw();
-    let lastW = wrap.clientWidth;
+
+    // Controlado: el tamaño lo fijan las props → redibuja al cambiar props/puntos (deps).
+    if (controlled) return;
+
+    let lastW = wrap!.clientWidth;
     let raf = 0;
     const ro = new ResizeObserver(() => {
       const w = wrap!.clientWidth;
@@ -89,12 +122,29 @@ export function HeatmapCanvas({ points }: { points: HeatPoint[] }) {
       if (raf) cancelAnimationFrame(raf);
       raf = requestAnimationFrame(() => draw());
     });
-    ro.observe(wrap);
+    ro.observe(wrap!);
     return () => {
       if (raf) cancelAnimationFrame(raf);
       ro.disconnect();
     };
-  }, [points]);
+  }, [points, controlled, width, height]);
+
+  // Controlado: lienzo absoluto que cubre al padre (el <iframe>), sin cromo ni scroll.
+  if (controlled) {
+    return (
+      <canvas
+        ref={canvasRef}
+        aria-hidden
+        style={{
+          position: "absolute",
+          inset: 0,
+          width: `${width}px`,
+          height: `${height}px`,
+          pointerEvents: "none",
+        }}
+      />
+    );
+  }
 
   return (
     <div
