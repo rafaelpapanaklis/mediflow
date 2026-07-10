@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { CardNew } from "@/components/ui/design-system/card-new";
 import { BarList, LoadingState, ErrorState, EmptyState, SERIES } from "./ui";
 import { HeatmapCanvas } from "./heatmap-canvas";
+import { HeatmapStage } from "./heatmap-stage";
 import { formatNumber } from "@/lib/analytics/format";
 import type { HeatmapResponse } from "@/lib/analytics/types";
 import type { TabProps } from "./analytics-client";
@@ -14,6 +15,7 @@ export function HeatmapTab({ query }: TabProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [tick, setTick] = useState(0);
+  const [showPage, setShowPage] = useState(true); // fondo = página real vs. mapa simple
 
   useEffect(() => {
     const ctrl = new AbortController();
@@ -62,7 +64,11 @@ export function HeatmapTab({ query }: TabProps) {
               ))}
             </select>
           </div>
-          <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 10 }}>
+          <div style={{ marginLeft: "auto", display: "flex", flexWrap: "wrap", alignItems: "center", gap: 14 }}>
+            <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "var(--text-3)", cursor: "pointer" }}>
+              <input type="checkbox" checked={showPage} onChange={(e) => setShowPage(e.target.checked)} />
+              Página de fondo
+            </label>
             <span style={{ fontSize: 12, color: "var(--text-3)" }}>{formatNumber(data.total)} clicks</span>
             <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: "var(--text-3)" }}>
               <span>frío</span>
@@ -74,9 +80,9 @@ export function HeatmapTab({ query }: TabProps) {
       </CardNew>
 
       <div className="an-2col">
-        <CardNew noPad title="Mapa de calor de clicks" sub="Posición normalizada por ancho de viewport y alto de página">
+        <CardNew noPad title="Mapa de calor de clicks" sub={showPage ? "Clicks sobre la página real (ancho representativo de captura)" : "Posición normalizada por ancho de viewport y alto de página"}>
           <div style={{ padding: 12, opacity: loading ? 0.6 : 1, transition: "opacity .2s" }}>
-            <HeatmapCanvas points={data.points} />
+            {showPage ? <HeatmapStage points={data.points} path={path} /> : <HeatmapCanvas points={data.points} />}
           </div>
         </CardNew>
         <CardNew title="Elementos más clickeados">

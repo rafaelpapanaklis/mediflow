@@ -45,7 +45,11 @@ const nextConfig = {
       {
         source: "/:path*",
         headers: [
-          { key: "X-Frame-Options", value: "DENY" },
+          // SAMEORIGIN (antes DENY): permite el self-framing que necesita el visor del
+          // heatmap (/admin/analytics embebe páginas PROPIAS en un <iframe> para dibujar
+          // los clicks encima del layout real). Sigue bloqueando el enmarcado por terceros
+          // (clickjacking): sólo nuestro propio origen puede enmarcarnos.
+          { key: "X-Frame-Options", value: "SAMEORIGIN" },
           { key: "X-Content-Type-Options", value: "nosniff" },
           { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
           { key: "Strict-Transport-Security", value: "max-age=31536000; includeSubDomains" },
@@ -68,7 +72,9 @@ const nextConfig = {
               "connect-src 'self' https: wss:",
               // td.doubleclick / googleads.g.doubleclick = iframes del tag de conversiones de Google Ads.
               "frame-src 'self' https://js.stripe.com https://www.paypal.com https://www.google.com https://td.doubleclick.net https://googleads.g.doubleclick.net https://daily.co https://*.daily.co https://*.tawk.to",
-              "frame-ancestors 'none'",
+              // 'self' (antes 'none'): equivalente moderno de X-Frame-Options SAMEORIGIN.
+              // Habilita el iframe same-origin del visor de heatmap; terceros siguen sin poder enmarcar.
+              "frame-ancestors 'self'",
               "base-uri 'self'",
               "form-action 'self'",
             ].join("; "),
