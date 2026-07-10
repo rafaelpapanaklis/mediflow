@@ -72,6 +72,8 @@ model Clinic {
   regimenFiscal    String?
   cpEmisor         String?
   facturApiEnabled Boolean @default(false)
+  csdUploaded      Boolean   @default(false) // CSD (Certificado de Sello Digital) cargado en Facturapi
+  csdValidUntil    DateTime? // Vigencia del CSD (expires_at que reporta Facturapi)
 
   // Identificación NOM-024 — CLUES Sector Salud (Compliance Fase A)
   clues String? @db.VarChar(11)
