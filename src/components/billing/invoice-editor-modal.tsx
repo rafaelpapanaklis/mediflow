@@ -5,7 +5,8 @@
 // global (% / monto), totales en vivo. Reusa la matemática autoritativa de
 // `@/lib/quotes/compute` (computeTotals/round2) y mapea al contrato de
 // POST /api/invoices = { patientId, items:[{description,quantity,unitPrice,total}],
-// discount, notes? }. El servidor recalcula subtotal/total/balance.
+// discount, notes?, doctorId?, taxRate?, taxIncluded? }.
+// El servidor recalcula subtotal/total/balance (y aplica IVA agregado si taxIncluded=false).
 
 import { useState, useEffect, useMemo } from "react";
 import { Plus, Loader2, Trash2, Check, Search } from "lucide-react";
@@ -19,6 +20,7 @@ function money(n: number): string {
 }
 
 interface CatalogProcedure { id: string; name: string; basePrice: number; category?: string }
+interface DoctorOption { id: string; name: string }
 
 interface EditorItem {
   key: string;
@@ -66,6 +68,14 @@ function InvoiceEditorBody({
   const [notes, setNotes] = useState("");
   const [saving, setSaving] = useState(false);
 
+  // Doctor atribuido (Invoice.doctorId, OLA 1) — opcional.
+  const [doctors, setDoctors] = useState<DoctorOption[]>([]);
+  const [doctorId, setDoctorId] = useState("");
+
+  // IVA (Invoice.taxRate / taxIncluded, OLA 1). Default: 16% ya incluido en el precio.
+  const [taxRate, setTaxRate] = useState<number>(16);
+  const [taxIncluded, setTaxIncluded] = useState<boolean>(true);
+
   // Tarifario para el autocomplete (mismo endpoint que presupuestos).
   const [catalog, setCatalog] = useState<CatalogProcedure[]>([]);
   const [search, setSearch] = useState("");
@@ -76,6 +86,13 @@ function InvoiceEditorBody({
       .then((r) => (r.ok ? r.json() : []))
       .then((d) => setCatalog(Array.isArray(d) ? d.map((p: { id: string; name: string; basePrice: number; category?: string }) => ({ id: p.id, name: p.name, basePrice: Number(p.basePrice) || 0, category: p.category })) : []))
       .catch(() => setCatalog([]));
+  }, []);
+
+  useEffect(() => {
+    fetch("/api/agenda/doctors")
+      .then((r) => (r.ok ? r.json() : { doctors: [] }))
+      .then((d) => setDoctors(Array.isArray(d?.doctors) ? d.doctors.map((x: { id: string; name: string }) => ({ id: x.id, name: x.name })) : []))
+      .catch(() => setDoctors([]));
   }, []);
 
   const filtered = useMemo(() => {
@@ -91,6 +108,20 @@ function InvoiceEditorBody({
       discountAmount: discountMode === "amount" ? discountValue : null,
     });
   }, [items, discountMode, discountValue]);
+
+  // IVA en vivo sobre la base (subtotal − descuento):
+  //   incluido → IVA = base − base/(1+r); total = base.
+  //   agregado → IVA = base·r;            total = base + IVA.
+  const { tax, grandTotal } = useMemo(() => {
+    const base = totals.total;
+    const r = Math.min(100, Math.max(0, taxRate)) / 100;
+    if (taxIncluded) {
+      const t = r > 0 ? round2(base - base / (1 + r)) : 0;
+      return { tax: t, grandTotal: round2(base) };
+    }
+    const t = round2(base * r);
+    return { tax: t, grandTotal: round2(base + t) };
+  }, [totals.total, taxRate, taxIncluded]);
 
   function addProcedure(p: CatalogProcedure) {
     setItems((prev) => [...prev, {
@@ -137,7 +168,10 @@ function InvoiceEditorBody({
         total: round2(it.lineTotal),
       })),
       discount: round2(normalized.discountAmount),
+      taxRate: Math.min(100, Math.max(0, taxRate)),
+      taxIncluded,
     };
+    if (doctorId) payload.doctorId = doctorId;
     if (notes.trim()) payload.notes = notes.trim();
     try {
       const res = await fetch("/api/invoices", {
@@ -257,24 +291,54 @@ function InvoiceEditorBody({
           )}
         </div>
 
-        {/* Descuento global + notas */}
-        <div className="bg-card border border-border rounded-xl p-4 grid sm:grid-cols-2 gap-4">
-          <div>
-            <label className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground">Descuento global</label>
-            <div className="flex items-center gap-1.5 mt-1">
-              <select value={discountMode} onChange={(e) => setDiscountMode(e.target.value as "none" | "pct" | "amount")}
-                className="bg-background border border-border rounded-lg px-2 py-2 text-sm">
-                <option value="none">Sin descuento</option>
-                <option value="pct">Porcentaje %</option>
-                <option value="amount">Monto $</option>
+        {/* Doctor + Descuento global + IVA + Notas */}
+        <div className="bg-card border border-border rounded-xl p-4 space-y-4">
+          <div className="grid sm:grid-cols-2 gap-4">
+            <div>
+              <label className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground">Doctor</label>
+              <select value={doctorId} onChange={(e) => setDoctorId(e.target.value)}
+                className="mt-1 w-full bg-background border border-border rounded-lg px-2 py-2 text-sm">
+                <option value="">Sin asignar</option>
+                {doctors.map((d) => (
+                  <option key={d.id} value={d.id}>{d.name}</option>
+                ))}
               </select>
-              {discountMode !== "none" && (
-                <input type="number" min={0} step="0.01" value={discountValue}
-                  onChange={(e) => setDiscountValue(num(e.target.value))}
-                  className="w-28 bg-background border border-border rounded-lg px-3 py-2 text-sm" />
-              )}
+            </div>
+            <div>
+              <label className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground">Descuento global</label>
+              <div className="flex items-center gap-1.5 mt-1">
+                <select value={discountMode} onChange={(e) => setDiscountMode(e.target.value as "none" | "pct" | "amount")}
+                  className="bg-background border border-border rounded-lg px-2 py-2 text-sm">
+                  <option value="none">Sin descuento</option>
+                  <option value="pct">Porcentaje %</option>
+                  <option value="amount">Monto $</option>
+                </select>
+                {discountMode !== "none" && (
+                  <input type="number" min={0} step="0.01" value={discountValue}
+                    onChange={(e) => setDiscountValue(num(e.target.value))}
+                    className="w-28 bg-background border border-border rounded-lg px-3 py-2 text-sm" />
+                )}
+              </div>
             </div>
           </div>
+
+          <div className="grid sm:grid-cols-2 gap-4">
+            <div>
+              <label className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground">IVA (%)</label>
+              <input type="number" min={0} max={100} step="0.01" value={taxRate}
+                onChange={(e) => setTaxRate(Math.min(100, Math.max(0, num(e.target.value))))}
+                className="mt-1 w-full bg-background border border-border rounded-lg px-3 py-2 text-sm" />
+            </div>
+            <div className="flex sm:items-end">
+              <label className="inline-flex items-center gap-2 text-sm font-medium cursor-pointer select-none py-2">
+                <input type="checkbox" checked={taxIncluded}
+                  onChange={(e) => setTaxIncluded(e.target.checked)}
+                  className="h-4 w-4 rounded border-border accent-brand-600" />
+                El precio ya incluye IVA
+              </label>
+            </div>
+          </div>
+
           <div>
             <label className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground">Notas</label>
             <input value={notes} onChange={(e) => setNotes(e.target.value)}
@@ -295,8 +359,11 @@ function InvoiceEditorBody({
               <span>Descuento</span><span>-{money(totals.discountAmount)}</span>
             </div>
           )}
+          <div className="flex justify-between w-full max-w-xs text-xs text-muted-foreground">
+            <span>IVA {round2(taxRate)}%{taxIncluded ? " (incluido)" : ""}</span><span>{money(tax)}</span>
+          </div>
           <div className="flex justify-between w-full max-w-xs text-base font-bold text-brand-700 dark:text-brand-300 pt-1">
-            <span>Total</span><span>{money(totals.total)}</span>
+            <span>Total</span><span>{money(grandTotal)}</span>
           </div>
         </div>
         <div className="flex items-center justify-end gap-2">

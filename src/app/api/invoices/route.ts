@@ -6,6 +6,7 @@ import { invoiceSchema } from "@/lib/validations";
 import { readActiveClinicCookie } from "@/lib/active-clinic";
 import { logMutation } from "@/lib/audit";
 import { revalidateAfter } from "@/lib/cache/revalidate";
+import { round2 } from "@/lib/quotes/compute";
 
 async function getCtx() {
   const supabase = createClient();
@@ -49,13 +50,37 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
     const data = invoiceSchema.parse(body);
-    const subtotal = data.items.reduce((s, i) => s + i.total, 0);
-    const total = subtotal - (data.discount ?? 0);
+
+    // Campos IVA/doctor de la OLA 1 — no viven en invoiceSchema: se leen del body crudo.
+    const taxIncluded = body.taxIncluded !== false; // default: el precio ya incluye IVA
+    let taxRate = Number(body.taxRate);
+    if (!isFinite(taxRate) || taxRate < 0) taxRate = 16;
+    taxRate = Math.min(100, taxRate);
+
+    // Doctor atribuido (opcional). Se valida que sea un DOCTOR de ESTA clínica (aislamiento).
+    let doctorId: string | null = null;
+    if (typeof body.doctorId === "string" && body.doctorId.trim()) {
+      const doc = await prisma.user.findFirst({
+        where: { id: body.doctorId.trim(), clinicId, role: "DOCTOR" },
+        select: { id: true },
+      });
+      if (!doc) return NextResponse.json({ error: "Doctor inválido para esta clínica" }, { status: 400 });
+      doctorId = doc.id;
+    }
+
+    const subtotal = round2(data.items.reduce((s, i) => s + i.total, 0));
+    const base = round2(subtotal - (data.discount ?? 0));
+    // IVA incluido → el total NO cambia (impuesto embebido en el precio).
+    // IVA agregado → se suma sobre la base.
+    const tax = taxIncluded ? 0 : round2(base * (taxRate / 100));
+    const total = round2(base + tax);
+
     const invoice = await prisma.invoice.create({
       data: { clinicId, patientId: data.patientId, appointmentId: data.appointmentId ?? undefined,
         invoiceNumber: await nextInvoiceNumber(clinicId), items: data.items, subtotal, discount: data.discount ?? 0,
         total, paid: 0, balance: total, status: "PENDING", paymentMethod: data.paymentMethod, notes: data.notes,
-        dueDate: data.dueDate ? new Date(data.dueDate) : undefined },
+        dueDate: data.dueDate ? new Date(data.dueDate) : undefined,
+        doctorId, taxRate, taxIncluded },
       include: { patient: true },
     });
 
