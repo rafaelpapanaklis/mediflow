@@ -151,14 +151,47 @@ export async function cancelInvoice(orgApiKey: string, invoiceId: string, motive
   }
 }
 
-// Get org API key (each org has its own key)
+// ── Org API keys (por organización) ─────────────────────────────────────────────
+// Ambiente de trabajo del CFDI. Hoy TODO corre en PRUEBAS (timbres de prueba, no
+// van al SAT). Para activar Live, cambiar a "live" y ajustar getOrgApiKey.
+const CFDI_ENV: "test" | "live" = "test";
+
+/**
+ * Obtiene la Secret Key de la organización, con la que se timbra y se descargan
+ * los CFDI (POST /invoices, GET /invoices/{id}/pdf|xml).
+ *
+ * TEST (actual): GET /v2/organizations/{id}/test-api-key → Test Secret Key.
+ *   Facturapi devuelve la llave como string JSON directo (no un objeto);
+ *   parseamos defensivamente por si algún entorno la envolviera.
+ * LIVE (futuro): GET /v2/organizations/{id}/keys lista las Live API Keys
+ *   (arreglo de objetos); tomar la key activa. Sin usar por ahora.
+ *
+ * Se autentica con la USER_KEY (llave de cuenta), NO con la org key.
+ */
 export async function getOrgApiKey(orgId: string): Promise<string> {
-  const res = await fetch(`${FACTURAPI_BASE}/organizations/${orgId}/apikeys`, {
+  if (CFDI_ENV !== "test") {
+    // Switch a Live: GET /organizations/{id}/keys y tomar la llave activa.
+    throw new Error("CFDI Live aún no está habilitado");
+  }
+
+  const res = await fetch(`${FACTURAPI_BASE}/organizations/${orgId}/test-api-key`, {
     headers: { "Authorization": `Bearer ${USER_KEY}` },
   });
+  if (!res.ok) {
+    let msg = "Error obteniendo la API key de prueba de la organización";
+    try { const d = await res.json(); msg = d?.message ?? msg; } catch { /* body vacío/binario */ }
+    throw new Error(msg);
+  }
+
+  // /test-api-key responde la llave como string JSON directo.
   const data = await res.json();
-  if (!res.ok) throw new Error("Error obteniendo API key de la organización");
-  return data.secret_key;
+  const key = typeof data === "string"
+    ? data
+    : (data?.secret_key ?? data?.key ?? data?.value ?? null);
+  if (typeof key !== "string" || !key) {
+    throw new Error("Respuesta inesperada al obtener la API key de prueba de Facturapi");
+  }
+  return key;
 }
 
 // ── Certificado de Sello Digital (CSD) ──────────────────────────────────────────
@@ -171,7 +204,7 @@ export interface CsdStatus {
 
 /**
  * Sube el CSD (Certificado de Sello Digital) de la clínica a su organización.
- * Endpoint Facturapi: PUT /v2/organizations/{id}/certificate — multipart/form-data
+ * Endpoint Facturapi: PUT /v2/organizations/{id}/csd — multipart/form-data
  * con los campos `cer`, `key` y `password`. Se autentica con la USER_KEY (operación
  * de cuenta), NO con la org key. Devuelve el estado del certificado.
  *
@@ -190,7 +223,7 @@ export async function uploadCertificate(
   form.append("password", password);
 
   // Sin header Content-Type: fetch fija el boundary multipart automáticamente.
-  const res = await fetch(`${FACTURAPI_BASE}/organizations/${orgId}/certificate`, {
+  const res = await fetch(`${FACTURAPI_BASE}/organizations/${orgId}/csd`, {
     method:  "PUT",
     headers: { "Authorization": `Bearer ${USER_KEY}` },
     body:    form,

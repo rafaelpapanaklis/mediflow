@@ -35,7 +35,7 @@ const METHOD_LABEL_KEYS: Record<string, string> = {
 
 interface Invoice {
   id: string;
-  patientId: string;
+  patientId?: string; // presente en las facturas reales; opcional por seguridad de tipos
   invoiceNumber: string;
   total: number;
   paid: number;
@@ -146,11 +146,13 @@ export function InvoiceDetailModal({ open, invoice, patientName, onClose, onMuta
     setBusy(true);
     try {
       // (a) Persistir fiscales en el paciente (best-effort, no bloquea el timbrado).
-      fetch(`/api/patients/${invoice.patientId}`, {
-        method:  "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body:    JSON.stringify({ rfcPaciente: rfc, razonSocialPac: nombre, regimenFiscalPac: fiscal.regimen, cpPaciente: cp }),
-      }).catch(() => {});
+      if (invoice.patientId) {
+        fetch(`/api/patients/${invoice.patientId}`, {
+          method:  "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body:    JSON.stringify({ rfcPaciente: rfc, razonSocialPac: nombre, regimenFiscalPac: fiscal.regimen, cpPaciente: cp }),
+        }).catch(() => {});
+      }
 
       // (b) Timbrar.
       const res = await fetch("/api/cfdi", {
