@@ -4,6 +4,8 @@ import { prisma } from "@/lib/prisma";
 import { getClinicCreditTotal } from "@/lib/patient-credit";
 import { requirePermissionOrRedirect } from "@/lib/auth/require-permission";
 import { getCajaState, getCajaHistory } from "@/lib/caja";
+import { canUseCaja } from "@/lib/caja-pin";
+import { ModuleLocked } from "@/components/dashboard/module-locked";
 import { CajaClient } from "./caja-client";
 
 // Caja = corte de caja diario. Reemplaza la página general /dashboard/billing.
@@ -11,6 +13,8 @@ import { CajaClient } from "./caja-client";
 export default async function CajaPage() {
   const user = await getCurrentUser();
   requirePermissionOrRedirect(user, "billing.view");
+  // Gate de Caja por usuario (CONTRATO CAJA v2): sin permiso → módulo bloqueado.
+  if (!canUseCaja(user)) return <ModuleLocked name="Caja" />;
 
   const [caja, history, invoices, patients, clinic, creditTotal] = await Promise.all([
     getCajaState(user.clinicId),
@@ -47,6 +51,7 @@ export default async function CajaPage() {
       caja={caja}
       history={history}
       timezone={clinic?.timezone ?? "America/Mexico_City"}
+      hasPin={!!user.cajaPinHash}
       billing={{
         invoices: invoices as any,
         patients,

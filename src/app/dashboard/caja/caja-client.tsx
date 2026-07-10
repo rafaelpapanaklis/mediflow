@@ -3,7 +3,8 @@ import React, { useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   Wallet, TrendingUp, Percent, Receipt, ArrowDownCircle, Banknote,
-  Lock, Plus, Printer, X, ChevronDown, ChevronRight, History,
+  Lock, Printer, X, ChevronDown, ChevronRight, History,
+  CreditCard, Download, AlertTriangle, KeyRound,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { KpiCard }   from "@/components/ui/design-system/kpi-card";
@@ -30,26 +31,31 @@ interface Props {
   caja:     CajaState;
   history:  CajaHistoryRow[];
   timezone: string;
+  hasPin:   boolean;
   billing:  BillingProps;
 }
 
 interface CloseSummary {
-  openedAt:       string;
-  closedAt:       string;
-  openingBalance: number;
-  cashIncome:     number;
-  otherIncome:    number;
-  totalIncome:    number;
-  discounts:      number;
-  tax:            number;
-  withdrawals:    number;
-  expectedCash:   number;
-  counted:        number;
-  variance:       number;
-  list:           CajaState["list"];
+  openedAt:         string;
+  closedAt:         string;
+  openingBalance:   number;
+  cashIncome:       number;
+  cardDebitIncome:  number;
+  cardCreditIncome: number;
+  otherIncome:      number;
+  totalIncome:      number;
+  discounts:        number;
+  tax:              number;
+  withdrawals:      number;
+  expectedCash:     number;
+  counted:          number;
+  variance:         number;
+  list:             CajaState["list"];
 }
 
-export function CajaClient({ caja, history, timezone, billing }: Props) {
+const PIN_RE = /^\d{6}$/;
+
+export function CajaClient({ caja, history, timezone, hasPin: hasPinInitial, billing }: Props) {
   const t = useT();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -58,6 +64,9 @@ export function CajaClient({ caja, history, timezone, billing }: Props) {
     searchParams.get("tab") === "facturas" ? "facturas" : "caja",
   );
 
+  // ¿El usuario ya configuró su PIN de Caja? Puede volverse true tras crearlo.
+  const [hasPin, setHasPin] = useState(hasPinInitial);
+
   // Modals
   const [showOpen, setShowOpen]             = useState(false);
   const [showWithdrawal, setShowWithdrawal] = useState(false);
@@ -65,12 +74,19 @@ export function CajaClient({ caja, history, timezone, billing }: Props) {
   const [summary, setSummary]               = useState<CloseSummary | null>(null);
   const [showHistory, setShowHistory]       = useState(false);
 
-  // Form state
+  // Form state — apertura
   const [openingBalance, setOpeningBalance] = useState("");
+  const [openPin, setOpenPin]               = useState("");
+  const [openPinConfirm, setOpenPinConfirm] = useState("");
+  const [openWAmount, setOpenWAmount]       = useState("");
+  const [openWReason, setOpenWReason]       = useState("");
+  // Form state — retiro
   const [wAmount, setWAmount]               = useState("");
   const [wReason, setWReason]               = useState("");
+  // Form state — cierre
   const [counted, setCounted]               = useState("");
   const [closingNotes, setClosingNotes]     = useState("");
+  const [closePin, setClosePin]             = useState("");
   const [busy, setBusy]                     = useState(false);
 
   const reg    = caja.register;
@@ -90,6 +106,9 @@ export function CajaClient({ caja, history, timezone, billing }: Props) {
     new Date(iso).toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit", timeZone: timezone });
   const fmtDateTime = (iso: string) =>
     new Date(iso).toLocaleString("es-MX", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit", timeZone: timezone });
+
+  // Facturación del día (siempre disponible, con o sin caja abierta).
+  const collectedToday = Math.max(0, caja.billedToday - caja.pendingToday);
 
   // Diferencia en vivo dentro del modal de cierre.
   const countedNum = parseFloat(counted);
@@ -120,14 +139,38 @@ export function CajaClient({ caja, history, timezone, billing }: Props) {
     }
   }
 
+  function startOpen() {
+    // Prefija la apertura con el efectivo de hoy aún no cuadrado (editable).
+    setOpeningBalance(caja.suggestedOpening > 0 ? String(caja.suggestedOpening) : "");
+    setOpenPin(""); setOpenPinConfirm(""); setOpenWAmount(""); setOpenWReason("");
+    setShowOpen(true);
+  }
+
   async function openRegister() {
     const bal = parseFloat(openingBalance);
     if (Number.isNaN(bal) || bal < 0) { toast.error(t("cashRegister.amountInvalid")); return; }
-    const ok = await post("/api/caja/open", { openingBalance: bal });
+    if (!PIN_RE.test(openPin)) { toast.error("El PIN debe ser de 6 dígitos."); return; }
+
+    // Si el usuario aún no tiene PIN, lo crea antes de abrir (open exige PIN).
+    if (!hasPin) {
+      if (openPin !== openPinConfirm) { toast.error("Los PIN no coinciden."); return; }
+      const setRes = await post("/api/caja/pin", { action: "set", pin: openPin });
+      if (!setRes) return;
+      setHasPin(true);
+    }
+
+    const ok = await post("/api/caja/open", { openingBalance: bal, pin: openPin });
     if (!ok) return;
+
+    // Retiro inicial opcional en la misma apertura.
+    const amt = parseFloat(openWAmount);
+    if (!Number.isNaN(amt) && amt > 0) {
+      await post("/api/caja/withdrawal", { amount: amt, reason: openWReason.trim() || "Retiro de apertura" });
+    }
+
     toast.success(t("cashRegister.toastOpened"));
     setShowOpen(false);
-    setOpeningBalance("");
+    setOpeningBalance(""); setOpenPin(""); setOpenPinConfirm(""); setOpenWAmount(""); setOpenWReason("");
     router.refresh();
   }
 
@@ -146,29 +189,66 @@ export function CajaClient({ caja, history, timezone, billing }: Props) {
   async function closeRegister() {
     const cnt = parseFloat(counted);
     if (Number.isNaN(cnt) || cnt < 0) { toast.error(t("cashRegister.amountInvalid")); return; }
+    if (!PIN_RE.test(closePin)) { toast.error("El PIN debe ser de 6 dígitos."); return; }
     if (!totals || !reg) return;
-    const res = await post("/api/caja/close", { countedClosingBalance: cnt, closingNotes: closingNotes.trim() || undefined });
+    const res = await post("/api/caja/close", {
+      countedClosingBalance: cnt,
+      closingNotes: closingNotes.trim() || undefined,
+      pin: closePin,
+    });
     if (!res) return;
     // Congela el resumen del corte para mostrarlo/imprimirlo (tras refresh reg = null).
     setSummary({
-      openedAt:       reg.openedAt,
-      closedAt:       new Date().toISOString(),
-      openingBalance: totals.openingBalance,
-      cashIncome:     totals.cashIncome,
-      otherIncome:    totals.otherIncome,
-      totalIncome:    totals.totalIncome,
-      discounts:      totals.discounts,
-      tax:            totals.tax,
-      withdrawals:    totals.withdrawals,
-      expectedCash:   totals.expectedCash,
-      counted:        cnt,
-      variance:       typeof res.variance === "number" ? res.variance : cnt - totals.expectedCash,
-      list:           caja.list,
+      openedAt:         reg.openedAt,
+      closedAt:         new Date().toISOString(),
+      openingBalance:   totals.openingBalance,
+      cashIncome:       totals.cashIncome,
+      cardDebitIncome:  totals.cardDebitIncome,
+      cardCreditIncome: totals.cardCreditIncome,
+      otherIncome:      totals.otherIncome,
+      totalIncome:      totals.totalIncome,
+      discounts:        totals.discounts,
+      tax:              totals.tax,
+      withdrawals:      totals.withdrawals,
+      expectedCash:     totals.expectedCash,
+      counted:          cnt,
+      variance:         typeof res.variance === "number" ? res.variance : cnt - totals.expectedCash,
+      list:             caja.list,
     });
     toast.success(t("cashRegister.toastClosed"));
     setShowClose(false);
-    setCounted(""); setClosingNotes("");
+    setCounted(""); setClosingNotes(""); setClosePin("");
     router.refresh();
+  }
+
+  // Exporta las ventas del turno a CSV (abre en Excel). Sigue el patrón cliente
+  // del repo (Blob + createObjectURL); BOM para acentos + CRLF para Excel.
+  function downloadVentasCsv() {
+    const rows = caja.list;
+    if (rows.length === 0) { toast.error("No hay ventas para exportar."); return; }
+    const cell = (v: string | number) => `"${String(v ?? "").replace(/"/g, '""')}"`;
+    const header = ["Fecha", "Paciente", "Procedimiento", "Método", "Total", "Descuento", "Profesional"];
+    const lines = [
+      header.join(","),
+      ...rows.map(r => [
+        cell(fmtDateTime(r.at)),
+        cell(r.patientName),
+        cell(r.concept),
+        cell(methodLabel(r.method)),
+        r.amount,
+        r.discount,
+        cell(r.doctorName),
+      ].join(",")),
+    ];
+    const csv = "﻿" + lines.join("\r\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `caja-ventas-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+    toast.success("Ventas exportadas.");
   }
 
   function printSummary(s: CloseSummary) {
@@ -187,6 +267,8 @@ export function CajaClient({ caja, history, timezone, billing }: Props) {
         ${line(t("cashRegister.kpiOpening"), fmtMXNdec(s.openingBalance))}
         ${line(t("cashRegister.kpiIncome"), fmtMXNdec(s.totalIncome))}
         ${line(t("cashRegister.methodCash"), fmtMXNdec(s.cashIncome))}
+        ${line(t("cashRegister.methodDebit"), fmtMXNdec(s.cardDebitIncome))}
+        ${line(t("cashRegister.methodCredit"), fmtMXNdec(s.cardCreditIncome))}
         ${line(t("cashRegister.kpiDiscounts"), fmtMXNdec(s.discounts))}
         ${line(t("cashRegister.kpiTax"), fmtMXNdec(s.tax))}
         ${line(t("cashRegister.kpiWithdrawals"), fmtMXNdec(s.withdrawals))}
@@ -244,6 +326,20 @@ export function CajaClient({ caja, history, timezone, billing }: Props) {
         />
       ) : (
         <div style={{ padding: "clamp(14px, 1.6vw, 28px)" }}>
+          {/* ── Facturación del día (siempre visible) ── */}
+          <div style={{ marginBottom: 18 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+              <Receipt size={15} style={{ color: "var(--text-3)" }} />
+              <span style={{ color: "var(--text-2)", fontSize: 13.5, fontWeight: 600 }}>Facturación del día</span>
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 14 }}>
+              <KpiCard label="Facturado hoy" value={fmtMXNdec(caja.billedToday)}  icon={Receipt} />
+              <KpiCard label="Cobrado hoy"   value={fmtMXNdec(collectedToday)}    icon={TrendingUp} />
+              <KpiCard label="Por cobrar"    value={fmtMXNdec(caja.pendingToday)} icon={Wallet} />
+              <KpiCard label="Vencido"       value={fmtMXNdec(caja.overdueToday)} icon={AlertTriangle} />
+            </div>
+          </div>
+
           {!reg || !totals ? (
             /* ── Caja cerrada ── */
             <CardNew>
@@ -251,7 +347,7 @@ export function CajaClient({ caja, history, timezone, billing }: Props) {
                 <Wallet size={34} style={{ color: "var(--text-3)", marginBottom: 12 }} />
                 <div style={{ color: "var(--text-1)", fontSize: 16, fontWeight: 600 }}>{t("cashRegister.closedTitle")}</div>
                 <p style={{ color: "var(--text-3)", fontSize: 13, margin: "6px 0 18px" }}>{t("cashRegister.closedDesc")}</p>
-                <ButtonNew variant="primary" icon={<Wallet size={14} />} onClick={() => setShowOpen(true)}>
+                <ButtonNew variant="primary" icon={<Wallet size={14} />} onClick={startOpen}>
                   {t("cashRegister.openCta")}
                 </ButtonNew>
               </div>
@@ -276,18 +372,23 @@ export function CajaClient({ caja, history, timezone, billing }: Props) {
                 </div>
               </div>
 
-              {/* KPIs */}
+              {/* KPIs del turno — incluye desglose de tarjeta débito/crédito */}
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 14, marginBottom: 8 }}>
-                <KpiCard label={t("cashRegister.kpiOpening")}      value={fmtMXNdec(totals.openingBalance)} icon={Wallet} />
-                <KpiCard label={t("cashRegister.kpiIncome")}       value={fmtMXNdec(totals.totalIncome)}    icon={TrendingUp} />
-                <KpiCard label={t("cashRegister.kpiDiscounts")}    value={fmtMXNdec(totals.discounts)}      icon={Percent} />
-                <KpiCard label={t("cashRegister.kpiTax")}          value={fmtMXNdec(totals.tax)}            icon={Receipt} />
-                <KpiCard label={t("cashRegister.kpiWithdrawals")}  value={fmtMXNdec(totals.withdrawals)}    icon={ArrowDownCircle} />
-                <KpiCard label={t("cashRegister.kpiExpectedCash")} value={fmtMXNdec(totals.expectedCash)}   icon={Banknote} />
+                <KpiCard label={t("cashRegister.kpiOpening")}      value={fmtMXNdec(totals.openingBalance)}   icon={Wallet} />
+                <KpiCard label={t("cashRegister.kpiIncome")}       value={fmtMXNdec(totals.totalIncome)}      icon={TrendingUp} />
+                <KpiCard label={t("cashRegister.methodCash")}      value={fmtMXNdec(totals.cashIncome)}       icon={Banknote} />
+                <KpiCard label={t("cashRegister.methodDebit")}     value={fmtMXNdec(totals.cardDebitIncome)}  icon={CreditCard} />
+                <KpiCard label={t("cashRegister.methodCredit")}    value={fmtMXNdec(totals.cardCreditIncome)} icon={CreditCard} />
+                <KpiCard label={t("cashRegister.kpiDiscounts")}    value={fmtMXNdec(totals.discounts)}        icon={Percent} />
+                <KpiCard label={t("cashRegister.kpiTax")}          value={fmtMXNdec(totals.tax)}              icon={Receipt} />
+                <KpiCard label={t("cashRegister.kpiWithdrawals")}  value={fmtMXNdec(totals.withdrawals)}      icon={ArrowDownCircle} />
+                <KpiCard label={t("cashRegister.kpiExpectedCash")} value={fmtMXNdec(totals.expectedCash)}     icon={Banknote} />
               </div>
-              <p style={{ color: "var(--text-3)", fontSize: 12, margin: "0 0 18px" }}>
-                {t("cashRegister.incomeBreakdown", { cash: fmtMXNdec(totals.cashIncome), other: fmtMXNdec(totals.otherIncome) })}
-              </p>
+              {totals.otherIncome > 0 && (
+                <p style={{ color: "var(--text-3)", fontSize: 12, margin: "0 0 18px" }}>
+                  Otros métodos (transferencia / cheque / otro): {fmtMXNdec(totals.otherIncome)}
+                </p>
+              )}
 
               {/* Retiros del turno */}
               {caja.withdrawals.length > 0 && (
@@ -303,9 +404,15 @@ export function CajaClient({ caja, history, timezone, billing }: Props) {
                 </CardNew>
               )}
 
-              {/* Lista del turno */}
+              {/* ── Finanzas: ventas del turno + exportar ── */}
               <div style={{ marginTop: 18 }}>
-                <CardNew noPad title={t("cashRegister.listTitle")}>
+                <CardNew noPad>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap", padding: "14px 16px", borderBottom: "1px solid var(--border-soft)" }}>
+                    <span style={{ color: "var(--text-1)", fontSize: 14, fontWeight: 600 }}>Finanzas · ventas del día</span>
+                    <ButtonNew variant="secondary" icon={<Download size={14} />} onClick={downloadVentasCsv} disabled={caja.list.length === 0}>
+                      Descargar Excel
+                    </ButtonNew>
+                  </div>
                   {caja.list.length === 0 ? (
                     <div style={{ padding: "40px 24px", textAlign: "center", color: "var(--text-3)", fontSize: 13 }}>
                       {t("cashRegister.emptyList")}
@@ -318,8 +425,9 @@ export function CajaClient({ caja, history, timezone, billing }: Props) {
                             <th>{t("cashRegister.thTime")}</th>
                             <th>{t("cashRegister.thPatient")}</th>
                             <th>{t("cashRegister.thConcept")}</th>
-                            <th style={{ textAlign: "right" }}>{t("cashRegister.thAmount")}</th>
                             <th>{t("cashRegister.thMethod")}</th>
+                            <th style={{ textAlign: "right" }}>{t("cashRegister.thAmount")}</th>
+                            <th style={{ textAlign: "right" }}>Descuento</th>
                             <th>{t("cashRegister.thDoctor")}</th>
                           </tr>
                         </thead>
@@ -329,8 +437,9 @@ export function CajaClient({ caja, history, timezone, billing }: Props) {
                               <td style={{ whiteSpace: "nowrap", color: "var(--text-3)" }}>{fmtTime(r.at)}</td>
                               <td style={{ color: "var(--text-1)" }}>{r.patientName}</td>
                               <td style={{ color: "var(--text-2)" }}>{r.concept}</td>
-                              <td style={{ textAlign: "right", fontWeight: 600, color: "var(--text-1)", whiteSpace: "nowrap" }}>{fmtMXNdec(r.amount)}</td>
                               <td><BadgeNew tone={r.method === "cash" ? "success" : "info"}>{methodLabel(r.method)}</BadgeNew></td>
+                              <td style={{ textAlign: "right", fontWeight: 600, color: "var(--text-1)", whiteSpace: "nowrap" }}>{fmtMXNdec(r.amount)}</td>
+                              <td style={{ textAlign: "right", color: "var(--text-3)", whiteSpace: "nowrap" }}>{r.discount > 0 ? `−${fmtMXNdec(r.discount)}` : "—"}</td>
                               <td style={{ color: "var(--text-2)" }}>{r.doctorName}</td>
                             </tr>
                           ))}
@@ -394,7 +503,7 @@ export function CajaClient({ caja, history, timezone, billing }: Props) {
         </div>
       )}
 
-      {/* ── Modal: Abrir caja ── */}
+      {/* ── Modal: Abrir caja (PIN + apertura sugerida + retiro inicial) ── */}
       {showOpen && (
         <div className="modal-overlay" onClick={() => setShowOpen(false)}>
           <div className="modal" onClick={e => e.stopPropagation()}>
@@ -404,12 +513,52 @@ export function CajaClient({ caja, history, timezone, billing }: Props) {
             </div>
             <form onSubmit={e => { e.preventDefault(); openRegister(); }}>
               <div className="modal__body">
-                <div className="field-new">
-                  <label className="field-new__label">{t("cashRegister.openingBalanceLabel")}</label>
-                  <input type="number" min={0} step="0.01" className="input-new" autoFocus placeholder="0.00"
-                    value={openingBalance} onChange={e => setOpeningBalance(e.target.value)} />
-                  <span style={{ color: "var(--text-3)", fontSize: 12, marginTop: 4 }}>{t("cashRegister.openingBalanceHint")}</span>
+                {/* PIN de Caja */}
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10, color: "var(--text-2)", fontSize: 13, fontWeight: 600 }}>
+                  <KeyRound size={14} /> {hasPin ? "Ingresa tu PIN de Caja" : "Crea tu PIN de 6 dígitos"}
                 </div>
+                {!hasPin && (
+                  <p style={{ color: "var(--text-3)", fontSize: 12, margin: "0 0 12px" }}>
+                    Este PIN protege la apertura y el cierre de Caja. Guárdalo: lo pediremos en cada corte.
+                  </p>
+                )}
+                <div className="field-new" style={{ marginBottom: 14 }}>
+                  <label className="field-new__label">PIN <span className="req">*</span></label>
+                  <input type="password" inputMode="numeric" pattern="\d{6}" maxLength={6} className="input-new" autoFocus
+                    placeholder="••••••" value={openPin}
+                    onChange={e => setOpenPin(e.target.value.replace(/\D/g, "").slice(0, 6))} />
+                </div>
+                {!hasPin && (
+                  <div className="field-new" style={{ marginBottom: 14 }}>
+                    <label className="field-new__label">Confirma tu PIN <span className="req">*</span></label>
+                    <input type="password" inputMode="numeric" pattern="\d{6}" maxLength={6} className="input-new"
+                      placeholder="••••••" value={openPinConfirm}
+                      onChange={e => setOpenPinConfirm(e.target.value.replace(/\D/g, "").slice(0, 6))} />
+                  </div>
+                )}
+
+                <div className="field-new" style={{ marginBottom: 14 }}>
+                  <label className="field-new__label">{t("cashRegister.openingBalanceLabel")}</label>
+                  <input type="number" min={0} step="0.01" className="input-new" placeholder="0.00"
+                    value={openingBalance} onChange={e => setOpeningBalance(e.target.value)} />
+                  <span style={{ color: "var(--text-3)", fontSize: 12, marginTop: 4 }}>
+                    Sugerido por el efectivo de hoy aún no cuadrado: {fmtMXNdec(caja.suggestedOpening)}
+                  </span>
+                </div>
+
+                {/* Retiro inicial opcional */}
+                <div className="field-new" style={{ marginBottom: 10 }}>
+                  <label className="field-new__label">Retiro inicial (opcional)</label>
+                  <input type="number" min={0} step="0.01" className="input-new" placeholder="0.00"
+                    value={openWAmount} onChange={e => setOpenWAmount(e.target.value)} />
+                </div>
+                {parseFloat(openWAmount) > 0 && (
+                  <div className="field-new">
+                    <label className="field-new__label">Motivo del retiro</label>
+                    <input className="input-new" placeholder={t("cashRegister.reasonPlaceholder")}
+                      value={openWReason} onChange={e => setOpenWReason(e.target.value)} />
+                  </div>
+                )}
               </div>
               <div className="modal__footer">
                 <ButtonNew variant="ghost" type="button" onClick={() => setShowOpen(false)}>{t("common.cancel")}</ButtonNew>
@@ -450,7 +599,7 @@ export function CajaClient({ caja, history, timezone, billing }: Props) {
         </div>
       )}
 
-      {/* ── Modal: Cerrar caja ── */}
+      {/* ── Modal: Cerrar caja (corte con desglose + PIN) ── */}
       {showClose && totals && (
         <div className="modal-overlay" onClick={() => setShowClose(false)}>
           <div className="modal" onClick={e => e.stopPropagation()}>
@@ -460,6 +609,16 @@ export function CajaClient({ caja, history, timezone, billing }: Props) {
             </div>
             <form onSubmit={e => { e.preventDefault(); closeRegister(); }}>
               <div className="modal__body">
+                {/* Desglose del corte */}
+                <div style={{ display: "flex", flexDirection: "column", gap: 2, background: "var(--bg-elev)", borderRadius: 8, padding: "6px 12px", marginBottom: 14 }}>
+                  <CloseLine label={t("cashRegister.kpiOpening")}   value={fmtMXNdec(totals.openingBalance)} />
+                  <CloseLine label={t("cashRegister.methodCash")}   value={fmtMXNdec(totals.cashIncome)} />
+                  <CloseLine label={t("cashRegister.methodDebit")}  value={fmtMXNdec(totals.cardDebitIncome)} />
+                  <CloseLine label={t("cashRegister.methodCredit")} value={fmtMXNdec(totals.cardCreditIncome)} />
+                  <CloseLine label={t("cashRegister.kpiTax")}       value={fmtMXNdec(totals.tax)} />
+                  <CloseLine label={t("cashRegister.kpiWithdrawals")} value={`−${fmtMXNdec(totals.withdrawals)}`} />
+                  <CloseLine label={t("cashRegister.kpiIncome")}    value={fmtMXNdec(totals.totalIncome)} strong />
+                </div>
                 <div style={{ display: "flex", justifyContent: "space-between", padding: "10px 12px", background: "var(--bg-elev)", borderRadius: 8, marginBottom: 14 }}>
                   <span style={{ color: "var(--text-2)", fontSize: 13 }}>{t("cashRegister.expectedCashLabel")}</span>
                   <span style={{ color: "var(--text-1)", fontWeight: 700 }}>{fmtMXNdec(totals.expectedCash)}</span>
@@ -476,10 +635,16 @@ export function CajaClient({ caja, history, timezone, billing }: Props) {
                     <BadgeNew tone={varianceTone(liveVariance)}>{fmtMXNdec(liveVariance)}</BadgeNew>
                   </div>
                 )}
-                <div className="field-new">
+                <div className="field-new" style={{ marginBottom: 14 }}>
                   <label className="field-new__label">{t("cashRegister.notesLabel")}</label>
                   <input className="input-new" placeholder={t("cashRegister.notesPlaceholder")}
                     value={closingNotes} onChange={e => setClosingNotes(e.target.value)} />
+                </div>
+                <div className="field-new">
+                  <label className="field-new__label" style={{ display: "flex", alignItems: "center", gap: 6 }}><KeyRound size={13} /> PIN de Caja <span className="req">*</span></label>
+                  <input type="password" inputMode="numeric" pattern="\d{6}" maxLength={6} className="input-new"
+                    placeholder="••••••" value={closePin}
+                    onChange={e => setClosePin(e.target.value.replace(/\D/g, "").slice(0, 6))} />
                 </div>
               </div>
               <div className="modal__footer">
@@ -507,6 +672,8 @@ export function CajaClient({ caja, history, timezone, billing }: Props) {
                 <SumRow label={t("cashRegister.kpiOpening")}      value={fmtMXNdec(summary.openingBalance)} />
                 <SumRow label={t("cashRegister.kpiIncome")}       value={fmtMXNdec(summary.totalIncome)} />
                 <SumRow label={t("cashRegister.methodCash")}      value={fmtMXNdec(summary.cashIncome)} />
+                <SumRow label={t("cashRegister.methodDebit")}     value={fmtMXNdec(summary.cardDebitIncome)} />
+                <SumRow label={t("cashRegister.methodCredit")}    value={fmtMXNdec(summary.cardCreditIncome)} />
                 <SumRow label={t("cashRegister.kpiDiscounts")}    value={fmtMXNdec(summary.discounts)} />
                 <SumRow label={t("cashRegister.kpiTax")}          value={fmtMXNdec(summary.tax)} />
                 <SumRow label={t("cashRegister.kpiWithdrawals")}  value={fmtMXNdec(summary.withdrawals)} />
@@ -556,6 +723,15 @@ function SumRow({ label, value, strong }: { label: string; value: string; strong
   return (
     <div style={{ display: "flex", justifyContent: "space-between", gap: 10, padding: "8px 10px", background: "var(--bg-elev)", borderRadius: 8 }}>
       <span style={{ color: "var(--text-3)", fontSize: 12.5 }}>{label}</span>
+      <span style={{ color: "var(--text-1)", fontWeight: strong ? 700 : 600, fontSize: 13 }}>{value}</span>
+    </div>
+  );
+}
+
+function CloseLine({ label, value, strong }: { label: string; value: string; strong?: boolean }) {
+  return (
+    <div style={{ display: "flex", justifyContent: "space-between", gap: 10, padding: "5px 0", borderTop: strong ? "1px solid var(--border-soft)" : "none", marginTop: strong ? 4 : 0 }}>
+      <span style={{ color: "var(--text-2)", fontSize: 12.5 }}>{label}</span>
       <span style={{ color: "var(--text-1)", fontWeight: strong ? 700 : 600, fontSize: 13 }}>{value}</span>
     </div>
   );
