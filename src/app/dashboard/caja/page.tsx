@@ -21,7 +21,7 @@ export default async function CajaPage() {
     getCajaHistory(user.clinicId, 30),
     prisma.invoice.findMany({
       where:   { clinicId: user.clinicId },
-      include: { patient: { select: { id: true, firstName: true, lastName: true } }, payments: true },
+      include: { patient: { select: { id: true, firstName: true, lastName: true, rfcPaciente: true, razonSocialPac: true, regimenFiscalPac: true, cpPaciente: true } }, payments: true },
       orderBy: { createdAt: "desc" },
       take: 100,
     }),

@@ -39,7 +39,10 @@ export async function GET(_req: NextRequest, { params }: { params: { appointment
 
   const invoice = await prisma.invoice.findFirst({
     where: { appointmentId: params.appointmentId, clinicId },
-    include: { payments: { orderBy: { paidAt: "asc" } } },
+    include: {
+      payments: { orderBy: { paidAt: "asc" } },
+      patient:  { select: { rfcPaciente: true, razonSocialPac: true, regimenFiscalPac: true, cpPaciente: true } },
+    },
   });
   if (!invoice) return NextResponse.json({ error: "invoice_not_found" }, { status: 404 });
 

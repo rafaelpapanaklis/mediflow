@@ -106,8 +106,9 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   const has = (k: string) => Object.prototype.hasOwnProperty.call(body, k);
 
   // Whitelist de campos editables vía PATCH. NO incluye clinicId, id,
-  // patientNumber, portalToken, datos fiscales ni CURP (esos se editan por
-  // el formulario completo vía PUT, que valida su coherencia NOM-024).
+  // patientNumber, portalToken ni CURP. Los datos fiscales del receptor CFDI
+  // (rfcPaciente/razonSocialPac/regimenFiscalPac/cpPaciente) SÍ se aceptan aquí:
+  // se guardan al timbrar una factura para reusarlos la próxima vez.
   const data: Prisma.PatientUncheckedUpdateInput = {};
   const set = (k: string, v: unknown) => { (data as Record<string, unknown>)[k] = v; };
 
@@ -117,6 +118,14 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
       const v = body[k];
       if (v !== null && typeof v !== "string") throw new Error(`Campo ${k} inválido`);
       set(k, v === null || v === "" ? null : v);
+    }
+    // Datos fiscales del receptor CFDI (nullable). Se normalizan con trim.
+    for (const k of ["rfcPaciente", "razonSocialPac", "regimenFiscalPac", "cpPaciente"] as const) {
+      if (!has(k)) continue;
+      const v = body[k];
+      if (v !== null && typeof v !== "string") throw new Error(`Campo ${k} inválido`);
+      const trimmed = typeof v === "string" ? v.trim() : v;
+      set(k, trimmed === null || trimmed === "" ? null : trimmed);
     }
     for (const k of ["firstName", "lastName"] as const) {
       if (!has(k)) continue;

@@ -110,6 +110,12 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
     razonSocial:  clinic.name         ?? "",
   });
 
+  // CSD (Certificado de Sello Digital) — subida a Facturapi
+  const [cerFile, setCerFile]         = useState<File | null>(null);
+  const [keyFile, setKeyFile]         = useState<File | null>(null);
+  const [csdPassword, setCsdPassword] = useState("");
+  const [csdUploading, setCsdUploading] = useState(false);
+
   // AI usage info
   const aiUsed      = clinic.aiTokensUsed  ?? 0;
   const aiLimit     = clinic.aiTokensLimit ?? 50000;
@@ -230,6 +236,31 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
       toast.success(t("settings.client.cfdiSavedToast"));
       setClinic((c: any) => ({ ...c, facturApiEnabled: true, ...cfdiForm }));
     } catch (err: any) { toast.error(err.message); } finally { setSaving(false); }
+  }
+
+  async function fileToBase64(file: File): Promise<string> {
+    const buf = await file.arrayBuffer();
+    return Buffer.from(new Uint8Array(buf)).toString("base64");
+  }
+
+  async function uploadCsd() {
+    if (!clinic.facturApiEnabled) { toast.error(t("settings.client.csdNeedRfcFirst")); return; }
+    if (!cerFile || !keyFile || !csdPassword.trim()) { toast.error(t("settings.client.csdFilesRequired")); return; }
+    setCsdUploading(true);
+    try {
+      const [cerBase64, keyBase64] = await Promise.all([fileToBase64(cerFile), fileToBase64(keyFile)]);
+      const res = await fetch("/api/settings/cfdi/certificate", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ cerBase64, keyBase64, password: csdPassword }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Error");
+      toast.success(t("settings.client.csdUploadedToast"));
+      setClinic((c: any) => ({ ...c, csdUploaded: true, csdValidUntil: data.csdValidUntil ?? null }));
+      setCerFile(null); setKeyFile(null); setCsdPassword("");
+    } catch (err: any) {
+      toast.error(err.message ?? t("settings.client.csdUploadError"));
+    } finally { setCsdUploading(false); }
   }
 
   async function changePassword() {
@@ -689,6 +720,59 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
 
             <div className="text-xs text-muted-foreground bg-muted/30 rounded-xl p-3">
               <strong>{t("settings.client.cfdiNoteLabel")}</strong>{t("settings.client.cfdiNoteBody")}
+            </div>
+          </div>
+
+          {/* ── CERTIFICADOS CSD ── */}
+          <div className="bg-card border border-border rounded-2xl p-6 shadow-card space-y-5">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h2 className="text-base font-bold">{t("settings.client.csdTitle")}</h2>
+                <p className="text-sm text-muted-foreground mt-0.5">{t("settings.client.csdSubtitle")}</p>
+              </div>
+              {clinic.csdUploaded && (
+                <span className="text-sm font-bold bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300 px-3 py-1 rounded-full whitespace-nowrap">
+                  {t("settings.client.csdActiveBadge")}
+                </span>
+              )}
+            </div>
+
+            <div className="text-sm rounded-xl p-3 bg-muted/30 text-muted-foreground">
+              {clinic.csdUploaded
+                ? (clinic.csdValidUntil
+                    ? t("settings.client.csdValidUntilLabel", { date: new Date(clinic.csdValidUntil).toLocaleDateString() })
+                    : t("settings.client.csdActiveBadge"))
+                : t("settings.client.csdNoneYet")}
+            </div>
+
+            <div className="space-y-4">
+              <div className="space-y-1.5">
+                <Label className="text-base font-semibold">{t("settings.client.csdCerLabel")}</Label>
+                <input type="file" accept=".cer,application/x-x509-ca-cert,application/octet-stream"
+                  onChange={e => setCerFile(e.target.files?.[0] ?? null)}
+                  className="block w-full text-sm text-muted-foreground file:mr-3 file:rounded-lg file:border-0 file:bg-muted file:px-3 file:py-2 file:text-sm file:font-semibold file:text-foreground hover:file:bg-muted/70" />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-base font-semibold">{t("settings.client.csdKeyLabel")}</Label>
+                <input type="file" accept=".key,application/octet-stream"
+                  onChange={e => setKeyFile(e.target.files?.[0] ?? null)}
+                  className="block w-full text-sm text-muted-foreground file:mr-3 file:rounded-lg file:border-0 file:bg-muted file:px-3 file:py-2 file:text-sm file:font-semibold file:text-foreground hover:file:bg-muted/70" />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-base font-semibold">{t("settings.client.csdPasswordLabel")}</Label>
+                <Input type="password" value={csdPassword} onChange={e => setCsdPassword(e.target.value)}
+                  placeholder={t("settings.client.csdPasswordPlaceholder")} autoComplete="off" />
+              </div>
+            </div>
+
+            <div className="pt-1">
+              <Button onClick={uploadCsd} disabled={csdUploading} className="w-full sm:w-auto">
+                {csdUploading ? t("settings.client.csdUploadingBtn") : t("settings.client.csdUploadBtn")}
+              </Button>
+            </div>
+
+            <div className="text-xs bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 rounded-xl p-3 text-blue-700 dark:text-blue-300">
+              {t("settings.client.csdTestNote")}
             </div>
           </div>
         </div>

@@ -87,7 +87,7 @@ export async function POST(req: NextRequest) {
       notes: `Clínica: ${clinic.name}${clinic.rfcEmisor ? ` | RFC: ${clinic.rfcEmisor}` : ""}`,
     });
 
-    await prisma.$transaction([
+    const [cfdiRecord] = await prisma.$transaction([
       prisma.cfdiRecord.create({
         data: {
           clinicId:       ctx!.clinicId,
@@ -110,6 +110,7 @@ export async function POST(req: NextRequest) {
     ]);
 
     return NextResponse.json({
+      cfdiId: cfdiRecord.id, // para descargar PDF/XML vía /api/cfdi/[cfdiId]/pdf|xml
       uuid:   result.uuid,
       pdfUrl: result.pdf_url,
       xmlUrl: result.xml_url,
@@ -125,10 +126,14 @@ export async function GET(req: NextRequest) {
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
+  // ?invoiceId= devuelve el CFDI de una factura puntual (lo usa el modal para
+  // resolver el cfdiId de una factura ya timbrada y ofrecer descarga PDF/XML).
+  const invoiceId = req.nextUrl.searchParams.get("invoiceId");
+
   const cfdis = await prisma.cfdiRecord.findMany({
-    where:   { clinicId: ctx.clinicId },
+    where:   { clinicId: ctx.clinicId, ...(invoiceId ? { invoiceId } : {}) },
     orderBy: { createdAt: "desc" },
-    take:    50,
+    take:    invoiceId ? 1 : 50,
   });
   return NextResponse.json(cfdis);
 }

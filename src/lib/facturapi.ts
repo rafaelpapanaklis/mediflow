@@ -13,51 +13,9 @@ const FACTURAPI_BASE = "https://www.facturapi.io/v2";
 // User key = master key for creating organizations
 const USER_KEY = process.env.FACTURAPI_USER_KEY!;
 
-// Claves SAT para servicios médicos
-export const CLAVES_SAT_MEDICOS = {
-  // Servicios médicos generales
-  consulta:        { clave: "85101500", descripcion: "Servicios de consulta médica" },
-  dental:          { clave: "85121500", descripcion: "Servicios de odontología" },
-  psicologia:      { clave: "85122200", descripcion: "Servicios de psicología" },
-  nutricion:       { clave: "85181600", descripcion: "Servicios de nutriología" },
-  laboratorio:     { clave: "85101700", descripcion: "Servicios de laboratorio clínico" },
-  radiologia:      { clave: "85101800", descripcion: "Servicios de radiología" },
-  cirugia:         { clave: "85102200", descripcion: "Servicios quirúrgicos" },
-  otro:            { clave: "85101500", descripcion: "Servicios médicos" },
-};
-
-export const UNIDAD_SAT = "E48"; // Unidad de servicio
-
-export const REGIMENES_FISCALES = [
-  { clave: "601", descripcion: "General de Ley Personas Morales" },
-  { clave: "603", descripcion: "Personas Morales con Fines no Lucrativos" },
-  { clave: "605", descripcion: "Sueldos y Salarios e Ingresos Asimilados a Salarios" },
-  { clave: "606", descripcion: "Arrendamiento" },
-  { clave: "607", descripcion: "Régimen de Enajenación o Adquisición de Bienes" },
-  { clave: "608", descripcion: "Demás ingresos" },
-  { clave: "610", descripcion: "Residentes en el Extranjero sin Establecimiento Permanente en México" },
-  { clave: "611", descripcion: "Ingresos por Dividendos (socios y accionistas)" },
-  { clave: "612", descripcion: "Personas Físicas con Actividades Empresariales y Profesionales" },
-  { clave: "614", descripcion: "Ingresos por intereses" },
-  { clave: "615", descripcion: "Régimen de los ingresos por obtención de premios" },
-  { clave: "616", descripcion: "Sin obligaciones fiscales" },
-  { clave: "621", descripcion: "Incorporación Fiscal" },
-  { clave: "622", descripcion: "Actividades Agrícolas, Ganaderas, Silvícolas y Pesqueras" },
-  { clave: "623", descripcion: "Opcional para Grupos de Sociedades" },
-  { clave: "624", descripcion: "Coordinados" },
-  { clave: "625", descripcion: "Régimen de las Actividades Empresariales con ingresos a través de Plataformas Tecnológicas" },
-  { clave: "626", descripcion: "Régimen Simplificado de Confianza" },
-];
-
-export const USOS_CFDI = [
-  { clave: "G03", descripcion: "Gastos en general" },
-  { clave: "D01", descripcion: "Honorarios médicos, dentales y gastos hospitalarios" },
-  { clave: "D02", descripcion: "Gastos médicos por incapacidad o discapacidad" },
-  { clave: "D04", descripcion: "Donativos" },
-  { clave: "D07", descripcion: "Primas por seguros de gastos médicos" },
-  { clave: "S01", descripcion: "Sin efectos fiscales" },
-  { clave: "CP01", descripcion: "Pagos" },
-];
+// Catálogos SAT (client-safe) — definidos en ./cfdi-catalogs y re-exportados aquí
+// para no romper los imports server-side existentes (`@/lib/facturapi`).
+export { CLAVES_SAT_MEDICOS, UNIDAD_SAT, REGIMENES_FISCALES, USOS_CFDI } from "./cfdi-catalogs";
 
 // ── Organization management ────────────────────────────────────────────────────
 
@@ -193,14 +151,114 @@ export async function cancelInvoice(orgApiKey: string, invoiceId: string, motive
   }
 }
 
-// Get org API key (each org has its own key)
+// ── Org API keys (por organización) ─────────────────────────────────────────────
+// Ambiente de trabajo del CFDI. Hoy TODO corre en PRUEBAS (timbres de prueba, no
+// van al SAT). Para activar Live, cambiar a "live" y ajustar getOrgApiKey.
+const CFDI_ENV: "test" | "live" = "test";
+
+/**
+ * Obtiene la Secret Key de la organización, con la que se timbra y se descargan
+ * los CFDI (POST /invoices, GET /invoices/{id}/pdf|xml).
+ *
+ * TEST (actual): GET /v2/organizations/{id}/test-api-key → Test Secret Key.
+ *   Facturapi devuelve la llave como string JSON directo (no un objeto);
+ *   parseamos defensivamente por si algún entorno la envolviera.
+ * LIVE (futuro): GET /v2/organizations/{id}/keys lista las Live API Keys
+ *   (arreglo de objetos); tomar la key activa. Sin usar por ahora.
+ *
+ * Se autentica con la USER_KEY (llave de cuenta), NO con la org key.
+ */
 export async function getOrgApiKey(orgId: string): Promise<string> {
-  const res = await fetch(`${FACTURAPI_BASE}/organizations/${orgId}/apikeys`, {
+  if (CFDI_ENV !== "test") {
+    // Switch a Live: GET /organizations/{id}/keys y tomar la llave activa.
+    throw new Error("CFDI Live aún no está habilitado");
+  }
+
+  const res = await fetch(`${FACTURAPI_BASE}/organizations/${orgId}/test-api-key`, {
     headers: { "Authorization": `Bearer ${USER_KEY}` },
   });
+  if (!res.ok) {
+    let msg = "Error obteniendo la API key de prueba de la organización";
+    try { const d = await res.json(); msg = d?.message ?? msg; } catch { /* body vacío/binario */ }
+    throw new Error(msg);
+  }
+
+  // /test-api-key responde la llave como string JSON directo.
   const data = await res.json();
-  if (!res.ok) throw new Error("Error obteniendo API key de la organización");
-  return data.secret_key;
+  const key = typeof data === "string"
+    ? data
+    : (data?.secret_key ?? data?.key ?? data?.value ?? null);
+  if (typeof key !== "string" || !key) {
+    throw new Error("Respuesta inesperada al obtener la API key de prueba de Facturapi");
+  }
+  return key;
+}
+
+// ── Certificado de Sello Digital (CSD) ──────────────────────────────────────────
+
+export interface CsdStatus {
+  hasCertificate: boolean;
+  validUntil:     string | null; // expires_at del certificado (ISO)
+  serialNumber:   string | null; // número de serie del CSD
+}
+
+/**
+ * Sube el CSD (Certificado de Sello Digital) de la clínica a su organización.
+ * Endpoint Facturapi: PUT /v2/organizations/{id}/csd — multipart/form-data
+ * con los campos `cer`, `key` y `password`. Se autentica con la USER_KEY (operación
+ * de cuenta), NO con la org key. Devuelve el estado del certificado.
+ *
+ * Nota: en ambiente de PRUEBAS Facturapi timbra con certificados de prueba propios,
+ * así que el timbrado funciona sin CSD reales. El CSD es obligatorio solo en Live.
+ */
+export async function uploadCertificate(
+  orgId: string,
+  cerBuffer: Buffer,
+  keyBuffer: Buffer,
+  password: string,
+): Promise<CsdStatus> {
+  const form = new FormData();
+  form.append("cer", new Blob([new Uint8Array(cerBuffer)], { type: "application/octet-stream" }), "cer.cer");
+  form.append("key", new Blob([new Uint8Array(keyBuffer)], { type: "application/octet-stream" }), "key.key");
+  form.append("password", password);
+
+  // Sin header Content-Type: fetch fija el boundary multipart automáticamente.
+  const res = await fetch(`${FACTURAPI_BASE}/organizations/${orgId}/csd`, {
+    method:  "PUT",
+    headers: { "Authorization": `Bearer ${USER_KEY}` },
+    body:    form,
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.message ?? "Error subiendo el certificado CSD");
+
+  const cert = data.certificate ?? {};
+  return {
+    hasCertificate: cert.has_certificate ?? true,
+    validUntil:     cert.expires_at ? new Date(cert.expires_at).toISOString() : null,
+    serialNumber:   cert.serial_number ?? null,
+  };
+}
+
+/**
+ * Descarga el PDF o XML de un CFDI timbrado desde Facturapi usando la org key.
+ * Facturapi expone GET /v2/invoices/{id}/pdf y /xml autenticados con la secret
+ * key de la organización. Devolvemos el ArrayBuffer para hacer proxy sin exponer
+ * la org key al cliente.
+ */
+export async function downloadInvoiceFile(
+  orgApiKey: string,
+  facturapiId: string,
+  format: "pdf" | "xml",
+): Promise<ArrayBuffer> {
+  const res = await fetch(`${FACTURAPI_BASE}/invoices/${facturapiId}/${format}`, {
+    headers: { "Authorization": `Bearer ${orgApiKey}` },
+  });
+  if (!res.ok) {
+    let msg = `Error descargando ${format.toUpperCase()} del CFDI`;
+    try { const d = await res.json(); msg = d.message ?? msg; } catch { /* body binario o vacío */ }
+    throw new Error(msg);
+  }
+  return res.arrayBuffer();
 }
 
 // Validate RFC with SAT via Facturapi

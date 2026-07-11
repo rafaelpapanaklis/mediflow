@@ -54,7 +54,7 @@ export default async function PatientDetailPage({ params }: { params: { id: stri
           take: 20,
           include: { doctor: { select: { id: true, firstName: true, lastName: true } } },
         },
-        invoices: { include: { payments: true } },
+        invoices: { include: { payments: true, patient: { select: { rfcPaciente: true, razonSocialPac: true, regimenFiscalPac: true, cpPaciente: true } } } },
         // FIX: fetch treatment plans for the Tratamientos tab
         treatments: {
           orderBy: { createdAt: "desc" },
