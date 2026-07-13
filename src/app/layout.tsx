@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { IBM_Plex_Sans, IBM_Plex_Mono } from "next/font/google";
+import { IBM_Plex_Sans, IBM_Plex_Mono, Hanken_Grotesk } from "next/font/google";
 import Script from "next/script";
 import { Toaster } from "react-hot-toast";
 import { Analytics } from "@vercel/analytics/next";
@@ -10,6 +10,8 @@ import "./globals.css";
 
 const sans = IBM_Plex_Sans({ subsets: ["latin"], weight: ["300", "400", "500", "600", "700"], variable: "--font-sans", display: "swap" });
 const mono = IBM_Plex_Mono({ subsets: ["latin"], weight: ["400", "500", "600", "700"], variable: "--font-mono", display: "swap" });
+// Tipografía del wordmark DaleControl (kit de marca "logo 105"): solo pesos del logo.
+const logo = Hanken_Grotesk({ subsets: ["latin"], weight: ["600", "700"], variable: "--font-logo", display: "swap" });
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://www.dalecontrol.com";
 
@@ -75,7 +77,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           })();
         `}} />
       </head>
-      <body className={`${sans.variable} ${mono.variable} antialiased font-sans bg-background text-foreground`}>
+      <body className={`${sans.variable} ${mono.variable} ${logo.variable} antialiased font-sans bg-background text-foreground`}>
         {/* Google tag (gtag.js) — Google Ads AW-18276007996 (conversiones) */}
         <Script
           src="https://www.googletagmanager.com/gtag/js?id=AW-18276007996"

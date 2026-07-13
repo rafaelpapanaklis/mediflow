@@ -2,10 +2,12 @@
 
 import Link from "next/link";
 import { NAV } from "./v2/landing-data";
+import { BrandGlyph, BRAND } from "../primitives/logo";
 import "./v2/landing-v2.css";
 
 /**
- * Nav de la landing v2 (diseño handoff): sticky con blur, logo D azul,
+ * Nav de la landing v2 (diseño handoff): sticky con blur, logo de marca
+ * (capas apiladas morado→azul, kit "logo 105"),
  * anclas Funciones/Comparativa/Precios/FAQ y sesión a la derecha.
  * Conserva el contrato de siempre: <SalesNav isLoggedIn> — la detección de
  * sesión sigue viviendo en nav-session.tsx (client, cookie de Supabase).
@@ -17,8 +19,10 @@ export function SalesNav({ isLoggedIn = false }: { isLoggedIn?: boolean }) {
     <nav aria-label="Principal" style={{ position: "sticky", top: 0, zIndex: 50, background: "rgba(255,255,255,.88)", backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)", borderBottom: "1px solid #e8edf5" }}>
       <div style={{ maxWidth: 1180, margin: "0 auto", padding: "0 20px", minHeight: 64, display: "flex", alignItems: "center", gap: 18, flexWrap: "wrap" }}>
         <Link href="/" style={{ display: "flex", alignItems: "center", gap: 9, textDecoration: "none", color: "#0f172a", padding: "10px 0" }}>
-          <span style={{ display: "flex", width: 30, height: 30, borderRadius: 9, background: "linear-gradient(135deg,#2563eb,#1d4ed8)", alignItems: "center", justifyContent: "center", color: "#fff", fontWeight: 800, fontSize: 15 }}>D</span>
-          <span style={{ fontWeight: 800, fontSize: 17, letterSpacing: "-0.01em" }}>DaleControl</span>
+          <BrandGlyph size={30} />
+          <span style={{ fontFamily: "var(--font-logo, var(--font-sans, system-ui, sans-serif))", fontWeight: 700, fontSize: 18, letterSpacing: "-0.025em" }}>
+            <span style={{ color: BRAND.morado }}>Dale</span>Control
+          </span>
         </Link>
         <div className="dcv2-nav-anchors" style={{ display: "flex", alignItems: "center", gap: 4, flexWrap: "wrap", marginLeft: "auto" }}>
           {NAV.links.map((l) => (

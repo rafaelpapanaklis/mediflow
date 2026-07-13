@@ -1,5 +1,6 @@
 import type { CSSProperties } from "react";
 import { BrowserFrame } from "./browser-frame";
+import { BrandGlyph } from "../../primitives/logo";
 
 /**
  * Mockups del panel — JSX estático portado 1:1 del reference. Son
@@ -91,7 +92,7 @@ export function AgendaMock() {
       <div style={{ padding: "12px 14px" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, marginBottom: 8, flexWrap: "wrap" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 7, flexWrap: "wrap" }}>
-            <span style={{ display: "flex", width: 18, height: 18, borderRadius: 5, background: "#7c3aed", color: "#fff", fontSize: 9, fontWeight: 800, alignItems: "center", justifyContent: "center" }}>D</span>
+            <BrandGlyph size={18} />
             <b style={{ fontSize: 11 }}>DaleControl</b>
             <span style={{ display: "inline-flex", background: "#f4f1fb", borderRadius: 8, padding: 2, fontSize: 9.5, fontWeight: 700 }}>
               <span style={{ padding: "3px 8px", color: "#64748b" }}>Día</span>
@@ -404,7 +405,7 @@ export function ClinicaVisualMock() {
   return (
     <BrowserFrame url="app.dalecontrol.com/mi-clinica-visual">
       <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 12px", borderBottom: "1px solid #eef2f7", fontSize: 9, fontWeight: 700, flexWrap: "wrap" }}>
-        <span style={{ display: "flex", width: 16, height: 16, borderRadius: 5, background: "#7c3aed", color: "#fff", fontSize: 8, fontWeight: 800, alignItems: "center", justifyContent: "center" }}>D</span>
+        <BrandGlyph size={16} />
         <b style={{ fontSize: 10 }}>DaleControl</b>
         <span style={{ color: "#64748b", border: "1px solid #eeeaf8", borderRadius: 6, padding: "2px 7px" }}>Rafael Clinica</span>
         <span style={{ display: "inline-flex", background: "#f4f1fb", borderRadius: 7, padding: 2 }}>

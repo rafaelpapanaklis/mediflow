@@ -40,14 +40,14 @@ export const metadata: Metadata = {
     title: "DaleControl · El software dental más completo de México",
     description:
       "Dale control total a tu clínica: 30+ funciones en un solo lugar — agenda, WhatsApp, radiografías con IA y modelos 3D. Desde $499 con garantía de 30 días.",
-    images: [{ url: "/og-home.png", width: 1200, height: 630, alt: "DaleControl — software dental todo-en-uno" }],
+    images: [{ url: "/og/home", width: 1200, height: 630, alt: "DaleControl — software dental todo-en-uno" }],
   },
   twitter: {
     card: "summary_large_image",
     title: "DaleControl · El software dental más completo de México",
     description:
       "Dale control total a tu clínica: 30+ funciones en un solo lugar — agenda, WhatsApp, radiografías con IA y modelos 3D. Desde $499 con garantía de 30 días.",
-    images: ["/og-home.png"],
+    images: ["/og/home"],
   },
 };
 

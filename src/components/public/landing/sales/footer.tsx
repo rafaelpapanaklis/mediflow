@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { FOOTER } from "./v2/landing-data";
+import { BrandGlyph } from "../primitives/logo";
 import "./v2/landing-v2.css";
 
 /**
@@ -16,8 +17,8 @@ export function SalesFooter() {
         <div style={{ display: "flex", flexWrap: "wrap", gap: 40, justifyContent: "space-between", paddingBottom: 36, borderBottom: "1px solid #1e293b" }}>
           <div style={{ maxWidth: 280 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 9, marginBottom: 14 }}>
-              <span style={{ display: "flex", width: 30, height: 30, borderRadius: 9, background: "#2563eb", alignItems: "center", justifyContent: "center", color: "#fff", fontWeight: 800, fontSize: 15 }}>D</span>
-              <span style={{ fontWeight: 800, fontSize: 17, color: "#fff" }}>DaleControl</span>
+              <BrandGlyph size={30} mono="#fff" />
+              <span style={{ fontFamily: "var(--font-logo, var(--font-sans, system-ui, sans-serif))", fontWeight: 700, fontSize: 18, letterSpacing: "-0.025em", color: "#fff" }}>DaleControl</span>
             </div>
             <p style={{ fontSize: 13.5, lineHeight: 1.6, margin: 0 }}>{FOOTER.blurb}</p>
           </div>

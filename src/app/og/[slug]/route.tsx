@@ -29,21 +29,23 @@ export async function GET(_req: Request, { params }: { params: { slug: string } 
         }}
       >
         <div style={{ display: "flex", alignItems: "center", gap: "16px", marginBottom: "32px" }}>
+          {/* Isotipo de marca (kit "logo 105"): capas apiladas blancas sobre degradado morado→azul. */}
           <div
             style={{
               width: "64px",
               height: "64px",
               borderRadius: "16px",
-              background: "linear-gradient(135deg, #7C3AED, #a78bfa)",
+              background: "linear-gradient(135deg, #7C3AED, #2563EB)",
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
-              color: "white",
-              fontSize: "32px",
-              fontWeight: 800,
             }}
           >
-            M
+            <svg width="44" height="44" viewBox="0 0 36 36" fill="none">
+              <path d="M18 4 L31 11 L18 18 L5 11 Z" fill="rgba(255,255,255,.18)" stroke="#ffffff" strokeWidth="2.4" strokeLinejoin="round" />
+              <path d="M5.5 18.5 L18 25.2 L30.5 18.5" fill="none" stroke="#ffffff" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
+              <path d="M5.5 24.5 L18 31.2 L30.5 24.5" fill="none" stroke="#ffffff" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" opacity=".5" />
+            </svg>
           </div>
           <span style={{ color: "white", fontSize: "36px", fontWeight: 700 }}>DaleControl</span>
         </div>

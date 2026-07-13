@@ -228,15 +228,12 @@
 /* ════════════════════════════════════════════════════════════════════════
    BRAND / LOGO
    ════════════════════════════════════════════════════════════════════════ */
-.mfh-logo { display: inline-flex; align-items: center; gap: 10px; text-decoration: none; }
-.mfh-logo__mark {
-  width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center;
-  background: linear-gradient(150deg, var(--b) 0%, var(--b2) 100%);
-  box-shadow: 0 8px 18px -8px rgba(124,58,237,.6), inset 0 1px 0 rgba(255,255,255,.3);
-  flex-shrink: 0;
+.mfh-logo { display: inline-flex; align-items: center; gap: 9px; text-decoration: none; }
+.mfh-logo svg { flex-shrink: 0; }
+.mfh-logo__name {
+  font-family: var(--font-logo, var(--font-sans, system-ui, sans-serif));
+  font-size: 19px; font-weight: 700; letter-spacing: -0.025em; color: var(--ink);
 }
-.mfh-logo__mark svg { width: 19px; height: 19px; color: #fff; }
-.mfh-logo__name { font-size: 19px; font-weight: 700; letter-spacing: -0.02em; color: var(--ink); }
 .mfh-logo--invert .mfh-logo__name { color: #fff; }
 
 /* ════════════════════════════════════════════════════════════════════════
