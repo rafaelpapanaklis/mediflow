@@ -137,6 +137,16 @@ export interface WaitlistEntryDTO {
   createdAt: string;
 }
 
+/**
+ * Horario de atención por día (ClinicSchedule). dayOfWeek 0=Lunes…6=Domingo.
+ */
+export interface ClinicScheduleDayDTO {
+  dayOfWeek: number;
+  enabled: boolean;
+  openTime: string;   // "HH:MM"
+  closeTime: string;  // "HH:MM"
+}
+
 export interface AgendaDayResponse {
   range: { from: string; to: string };
   timezone: string;
@@ -148,6 +158,8 @@ export interface AgendaDayResponse {
   resources: ResourceDTO[];
   pendingValidation: AgendaAppointmentDTO[];
   waitlistCount: number;
+  /** Opcional: solo lo envía GET /api/appointments (lo consume SlotGridPicker). */
+  schedules?: ClinicScheduleDayDTO[];
 }
 
 export interface CreateAppointmentInput {
@@ -161,6 +173,8 @@ export interface CreateAppointmentInput {
   isWalkIn?: boolean;
   overrideReason?: string | null;
   notifyPatient?: boolean;
+  /** Confirmación explícita del staff para agendar fuera del horario de atención. */
+  outsideScheduleOk?: boolean;
 }
 
 export interface UpdateAppointmentInput {
@@ -171,6 +185,8 @@ export interface UpdateAppointmentInput {
   reason?: string | null;
   overrideReason?: string | null;
   notifyPatient?: boolean;
+  /** Confirmación explícita del staff para reagendar fuera del horario de atención. */
+  outsideScheduleOk?: boolean;
 }
 
 export interface AppointmentConflictError {

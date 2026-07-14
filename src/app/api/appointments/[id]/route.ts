@@ -9,6 +9,7 @@ import {
 } from "@/lib/agenda/api-helpers";
 import { appointmentToDTO } from "@/lib/agenda/server";
 import { canOverrideOverlap } from "@/lib/agenda/transitions";
+import { isOutsideClinicSchedule } from "@/lib/agenda/clinic-schedule";
 import { validateResourceSchedule } from "@/lib/agenda/resource-schedule";
 import { loadResourceSchedule } from "@/lib/agenda/resource-schedule.server";
 import { revalidateAfter, revalidatePatientProfile } from "@/lib/cache/revalidate";
@@ -178,6 +179,30 @@ export async function PATCH(
       return NextResponse.json(
         { error: "resource_unavailable", reason: valid.reason },
         { status: 422 },
+      );
+    }
+  }
+
+  // Aviso "fuera del horario de atención" (ClinicSchedule): solo cuando el
+  // PATCH mueve la cita (trae startsAt/endsAt) — ediciones de motivo/estado
+  // de citas viejas fuera de horario no deben disparar el 409. NO bloquea:
+  // el staff confirma reenviando outsideScheduleOk: true; overrideReason
+  // (escape hatch existente) también lo omite para no cambiar su flujo.
+  if ((body.startsAt || body.endsAt) && !body.outsideScheduleOk && !body.overrideReason) {
+    const schedules = await prisma.clinicSchedule.findMany({
+      where: { clinicId: session.clinic.id },
+      select: { dayOfWeek: true, enabled: true, openTime: true, closeTime: true },
+    });
+    const outside = isOutsideClinicSchedule(
+      schedules,
+      newStarts,
+      newEnds,
+      session.clinic.timezone,
+    );
+    if (outside) {
+      return NextResponse.json(
+        { error: "OUTSIDE_SCHEDULE", reason: outside.reason, message: outside.message },
+        { status: 409 },
       );
     }
   }

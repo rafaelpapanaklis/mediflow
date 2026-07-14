@@ -72,12 +72,16 @@ export function AgendaEditAppointmentModal({ appt, isOpen, onClose }: Props) {
   const [form, setForm] = useState<FormState | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [conflict, setConflict] = useState<string | null>(null);
+  // Aviso "fuera del horario de atención": mismo patrón que `conflict` — se
+  // muestra inline y el siguiente submit reintenta con outsideScheduleOk.
+  const [outsideNotice, setOutsideNotice] = useState<string | null>(null);
 
   // Hidratar el form cuando se abre con un appointment.
   useEffect(() => {
     if (!isOpen || !appt) {
       setForm(null);
       setConflict(null);
+      setOutsideNotice(null);
       return;
     }
     const startLocal = isoToLocalParts(appt.startsAt, state.timezone);
@@ -94,6 +98,7 @@ export function AgendaEditAppointmentModal({ appt, isOpen, onClose }: Props) {
       overrideReason: "",
     });
     setConflict(null);
+    setOutsideNotice(null);
   }, [isOpen, appt, state.timezone]);
 
   // Cerrar con Escape.
@@ -132,6 +137,7 @@ export function AgendaEditAppointmentModal({ appt, isOpen, onClose }: Props) {
         resourceId: form.resourceId || null,
         ...(form.overrideReason ? { overrideReason: form.overrideReason } : {}),
         ...(form.reason !== (appt.reason ?? "") ? { reason: form.reason } : {}),
+        ...(outsideNotice ? { outsideScheduleOk: true } : {}),
       });
       dispatch({ type: "REPLACE_APPOINTMENT", appointment: updated });
       toast.success(t("agenda.editApptModal.apptUpdated"));
@@ -155,6 +161,8 @@ export function AgendaEditAppointmentModal({ appt, isOpen, onClose }: Props) {
             resourceName,
           ),
         );
+      } else if (e?.error === "OUTSIDE_SCHEDULE") {
+        setOutsideNotice(e.message ?? t("agenda.outsideSchedule.fallbackMsg"));
       } else {
         const detail = e?.reason ?? e?.error ?? e?.message ?? t("agenda.editApptModal.updateFailed");
         const prefix = e?.status ? `[${e.status}] ` : "";
@@ -289,6 +297,20 @@ export function AgendaEditAppointmentModal({ appt, isOpen, onClose }: Props) {
             />
           </Field>
 
+          {outsideNotice && (
+            <div style={{
+              padding: 10,
+              background: "color-mix(in srgb, var(--warning) 10%, transparent)",
+              border: "1px solid var(--warning)",
+              borderRadius: 6,
+              fontSize: 12,
+              color: "var(--text-1)",
+            }}>
+              <strong style={{ color: "var(--warning)" }}>{t("agenda.outsideSchedule.title")}:</strong>{" "}
+              {outsideNotice} {t("agenda.outsideSchedule.confirmQuestion")}
+            </div>
+          )}
+
           {conflict && (
             <div style={{
               padding: 10,
@@ -331,7 +353,7 @@ export function AgendaEditAppointmentModal({ appt, isOpen, onClose }: Props) {
               style={btnPrimaryStyle}
               disabled={submitting}
             >
-              {submitting ? t("common.saving") : conflict ? t("agenda.editApptModal.overrideAndSave") : t("common.saveChanges")}
+              {submitting ? t("common.saving") : conflict ? t("agenda.editApptModal.overrideAndSave") : outsideNotice ? t("agenda.outsideSchedule.confirmBtn") : t("common.saveChanges")}
             </button>
           </footer>
         </form>

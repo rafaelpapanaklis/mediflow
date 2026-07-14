@@ -22,6 +22,7 @@ import type {
   ResourceDTO,
 } from "@/lib/agenda/types";
 import { describeOverlapConflict, describeResourceUnavailable } from "@/lib/agenda/conflict-copy";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 import { useT } from "@/i18n/i18n-provider";
 import type { TFunction } from "@/i18n/t";
 import { getResourceSchedule } from "@/lib/agenda/mutations";
@@ -58,6 +59,7 @@ interface BootData {
 export function NewAppointmentDialog({ isOpen, onClose, params }: Props) {
   const t = useT();
   const router = useRouter();
+  const confirm = useConfirm();
   const reasonPresets = REASON_PRESET_KEYS.map((key) => t(key));
 
   const [boot, setBoot] = useState<BootData | null>(null);
@@ -252,9 +254,17 @@ export function NewAppointmentDialog({ isOpen, onClose, params }: Props) {
     }
     if (!boot) return;
 
+    await send(false);
+  };
+
+  // Hace el POST real. Si el backend responde 409 OUTSIDE_SCHEDULE (fuera del
+  // horario de atención), pide confirmación explícita y reintenta UNA vez con
+  // outsideScheduleOk: true. Separado de submit() para que el reintento no
+  // repita las validaciones de formulario.
+  const send = async (outsideOk: boolean) => {
     const finalReason = reason.trim() || null;
 
-    const startsAt = new Date(slotIso);
+    const startsAt = new Date(slotIso as string);
     const endsAt = new Date(startsAt.getTime() + duration * 60_000);
 
     setSubmitting(true);
@@ -264,7 +274,7 @@ export function NewAppointmentDialog({ isOpen, onClose, params }: Props) {
         credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          patientId: patient.id,
+          patientId: patient!.id,
           doctorId,
           resourceId: resourceId || null,
           startsAt: startsAt.toISOString(),
@@ -272,11 +282,28 @@ export function NewAppointmentDialog({ isOpen, onClose, params }: Props) {
           reason: finalReason,
           isTeleconsult: false,
           notifyPatient,
+          ...(outsideOk ? { outsideScheduleOk: true } : {}),
         }),
       });
 
       if (res.status === 409) {
-        const body = (await res.json()) as AppointmentConflictError;
+        const body = (await res.json().catch(() => ({}))) as {
+          error?: string;
+          message?: string;
+          conflictingAppointment?: AppointmentConflictError["conflictingAppointment"];
+        };
+        if (body?.error === "OUTSIDE_SCHEDULE") {
+          setSubmitting(false);
+          const goAhead = await confirm({
+            title: t("agenda.outsideSchedule.title"),
+            description: `${body.message ?? t("agenda.outsideSchedule.fallbackMsg")} ${t("agenda.outsideSchedule.confirmQuestion")}`,
+            variant: "warning",
+            confirmText: t("agenda.outsideSchedule.confirmBtn"),
+            cancelText: t("common.cancel"),
+          });
+          if (goAhead) await send(true);
+          return;
+        }
         toast.error(
           describeOverlapConflict(body.conflictingAppointment, {
             doctorId,

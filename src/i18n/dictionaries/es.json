@@ -1122,6 +1122,12 @@
       "rescheduling": "Reprogramando...",
       "reschedule": "Reprogramar"
     },
+    "outsideSchedule": {
+      "title": "Fuera del horario de atención",
+      "confirmQuestion": "¿Agendar de todos modos?",
+      "confirmBtn": "Agendar de todos modos",
+      "fallbackMsg": "La cita queda fuera del horario de atención de la clínica."
+    },
     "resourcesModal": {
       "teamTitle": "Equipo",
       "resourcesTitle": "Sillones / Salas / Equipo",
@@ -2606,7 +2612,8 @@
         "other": "{count} libres"
       },
       "slotsGroupAria": "Slots {group}",
-      "slotsAvailableAria": "Slots disponibles"
+      "slotsAvailableAria": "Slots disponibles",
+      "outsideScheduleHint": "Fuera del horario de atención"
     },
     "summaryFooter": {
       "creating": "Creando...",

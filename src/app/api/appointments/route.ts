@@ -21,6 +21,7 @@ import {
   todayInTz,
 } from "@/lib/agenda/time-utils";
 import { canOverrideOverlap } from "@/lib/agenda/transitions";
+import { isOutsideClinicSchedule } from "@/lib/agenda/clinic-schedule";
 import { validateResourceSchedule } from "@/lib/agenda/resource-schedule";
 import { loadResourceSchedule } from "@/lib/agenda/resource-schedule.server";
 import { logMutation } from "@/lib/audit";
@@ -101,7 +102,7 @@ export async function GET(req: NextRequest) {
 
   const range = dayRangeUtc(dateISO, session.timeConfig);
 
-  const [appointments, doctors, resources, pendingValidation, waitlistCount] =
+  const [appointments, doctors, resources, pendingValidation, waitlistCount, schedules] =
     await Promise.all([
       fetchAppointmentsForDay(dateISO, session.timeConfig, {
         clinicId: session.clinic.id,
@@ -120,6 +121,11 @@ export async function GET(req: NextRequest) {
         session.clinic.category,
       ),
       fetchWaitlistCount(session.clinic.id),
+      prisma.clinicSchedule.findMany({
+        where: { clinicId: session.clinic.id },
+        orderBy: { dayOfWeek: "asc" },
+        select: { dayOfWeek: true, enabled: true, openTime: true, closeTime: true },
+      }),
     ]);
 
   const response: AgendaDayResponse = {
@@ -136,6 +142,7 @@ export async function GET(req: NextRequest) {
     resources,
     pendingValidation,
     waitlistCount,
+    schedules,
   };
 
   return NextResponse.json(response, {
@@ -259,6 +266,29 @@ export async function POST(req: NextRequest) {
           reason: valid.reason,
         },
         { status: 422 },
+      );
+    }
+  }
+
+  // Aviso "fuera del horario de atención" (ClinicSchedule): NO bloquea — el
+  // staff confirma reenviando outsideScheduleOk: true. overrideReason (escape
+  // hatch existente que ya salta las demás validaciones de horario) también
+  // lo omite para no cambiar su comportamiento.
+  if (!body.outsideScheduleOk && !body.overrideReason) {
+    const schedules = await prisma.clinicSchedule.findMany({
+      where: { clinicId: session.clinic.id },
+      select: { dayOfWeek: true, enabled: true, openTime: true, closeTime: true },
+    });
+    const outside = isOutsideClinicSchedule(
+      schedules,
+      startsAt,
+      endsAt,
+      session.clinic.timezone,
+    );
+    if (outside) {
+      return NextResponse.json(
+        { error: "OUTSIDE_SCHEDULE", reason: outside.reason, message: outside.message },
+        { status: 409 },
       );
     }
   }
