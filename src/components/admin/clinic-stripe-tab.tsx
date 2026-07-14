@@ -234,7 +234,7 @@ export function ClinicStripeTab({ clinicId, clinicName, plan, stripeCustomerId, 
                   key={p}
                   type="button"
                   onClick={() => setSelectedPlan(p)}
-                  className={selectedPlan === p ? "is-active" : ""}
+                  className={`segment-new__btn${selectedPlan === p ? " segment-new__btn--active" : ""}`}
                   role="tab"
                   aria-selected={selectedPlan === p}
                 >
