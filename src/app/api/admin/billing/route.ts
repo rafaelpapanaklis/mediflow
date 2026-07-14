@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { refundPayment } from "@/lib/stripe-subscriptions";
 import { isStripeConfigured, stripeUnavailableResponse } from "@/lib/stripe";
+import { getPlanLimits } from "@/lib/plans";
 import { isAdminAuthed, getAdminSession } from "@/lib/admin-auth";
 import { logAdminClinicMutation } from "@/lib/admin-audit";
 
@@ -150,7 +151,9 @@ export async function POST(req: NextRequest) {
     const { clinicId, plan, months } = body;
     const nextBilling = new Date();
     nextBilling.setMonth(nextBilling.getMonth() + (months ?? 1));
-    const PRICES: Record<string, number> = { BASIC: 299, PRO: 499, CLINIC: 799 };
+    // Precio mensual desde plan_configs (fallback plan-shared) — misma fuente
+    // que el checkout; un plan inválido coacciona a PRO.
+    const { monthlyPrice } = await getPlanLimits(plan);
 
     await prisma.clinic.update({
       where: { id: clinicId },
@@ -158,14 +161,14 @@ export async function POST(req: NextRequest) {
         subscriptionStatus: "active",
         plan: plan as any,
         nextBillingDate: nextBilling,
-        monthlyPrice: PRICES[plan] ?? 499,
+        monthlyPrice,
       },
     });
 
     await logAdminClinicMutation({
       req, admin: admin.user, clinicId,
       entityType: "admin-billing", entityId: clinicId, action: "update",
-      after: { op: "activate_clinic", plan, months: months ?? 1, subscriptionStatus: "active", monthlyPrice: PRICES[plan] ?? 499 },
+      after: { op: "activate_clinic", plan, months: months ?? 1, subscriptionStatus: "active", monthlyPrice },
     });
 
     return NextResponse.json({ success: true });

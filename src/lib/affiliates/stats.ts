@@ -120,7 +120,7 @@ export function activeClinicWhere(now: Date = new Date()) {
 // ── MRR ──────────────────────────────────────────────────────────────────
 // Fallback de precios por plan (mismos montos que el dashboard de admin).
 
-export const PLAN_PRICES_MXN: Record<string, number> = { BASIC: 299, PRO: 499, CLINIC: 799 };
+export const PLAN_PRICES_MXN: Record<string, number> = { BASIC: 419, PRO: 689, CLINIC: 1719 };
 
 export function clinicMonthlyMxn(
   plan: string | null | undefined,

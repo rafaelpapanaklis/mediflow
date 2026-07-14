@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Lock, Sparkles } from "lucide-react";
 import { isPlanId, type PlanId } from "@/lib/billing/plans";
 import { getResolvedPlans } from "@/lib/plans";
+import { isFirstContract } from "@/lib/billing/first-month-promo";
 import { SuspendedPlanCards, type PlanCardData } from "./suspended-client";
 import { getServerT } from "@/i18n/server";
 import { getCurrentUser } from "@/lib/auth";
@@ -22,6 +23,7 @@ export default async function SuspendedPage({
     id: p.id,
     name: p.name,
     priceMxn: p.priceMxn,
+    priceMxnAnnual: p.priceMxnAnnual,
     features: [...p.features],
   }));
 
@@ -29,9 +31,18 @@ export default async function SuspendedPage({
   const user = await getCurrentUser();
   const clinic = await prisma.clinic.findUnique({
     where: { id: user.clinicId },
-    select: { plan: true, subscriptionStatus: true },
+    select: {
+      plan: true,
+      subscriptionStatus: true,
+      // Para la promo de 1er mes (misma regla que /api/billing/checkout).
+      stripeSubscriptionId: true,
+      subscriptionId: true,
+      nextBillingDate: true,
+    },
   });
   const currentPlan: PlanId | null = clinic && isPlanId(clinic.plan) ? clinic.plan : null;
+  // Promo 1er mes: solo PRIMERA contratación (el checkout re-valida server-side).
+  const firstMonthEligible = !!clinic && isFirstContract(clinic);
 
   // Copy adaptativo según el estado de la cuenta:
   //  - Reactivación = cuenta que YA tuvo acceso y se pausó por un pago
@@ -90,7 +101,7 @@ export default async function SuspendedPage({
           </p>
         </div>
 
-        <SuspendedPlanCards plans={planCards} currentPlan={currentPlan} />
+        <SuspendedPlanCards plans={planCards} currentPlan={currentPlan} firstMonthEligible={firstMonthEligible} />
 
         <p className="mt-6 text-center text-[12.5px] text-muted-foreground">
           <Link href="/login" className="transition hover:text-foreground">

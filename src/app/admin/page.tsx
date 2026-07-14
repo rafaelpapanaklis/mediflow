@@ -16,7 +16,7 @@ import { KpiCard }   from "@/components/ui/design-system/kpi-card";
 
 export const metadata: Metadata = { title: "Super Admin — DaleControl" };
 
-const PLAN_PRICES: Record<string, number> = { BASIC: 299, PRO: 499, CLINIC: 799 };
+const PLAN_PRICES: Record<string, number> = { BASIC: 419, PRO: 689, CLINIC: 1719 };
 
 export default async function AdminPage() {
   try {

@@ -4,12 +4,15 @@ import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import toast from "react-hot-toast";
 import { CreditCard, Loader2, Lock, Check } from "lucide-react";
 import type { PlanId } from "@/lib/billing/plans";
+import { FIRST_MONTH_PROMO_MXN } from "@/lib/plan-shared";
 import { useT } from "@/i18n/i18n-provider";
 
 export interface PlanCardData {
   id: PlanId;
   name: string;
   priceMxn: number;
+  /** Total anual (35% de descuento) — viene de plan_configs vía getResolvedPlans. */
+  priceMxnAnnual: number;
   features: string[];
 }
 
@@ -19,6 +22,8 @@ type Billing = "monthly" | "annual";
 interface Props {
   plans: PlanCardData[];
   currentPlan?: PlanId | null;
+  /** True si es la PRIMERA contratación de la clínica → promo 1er mes ($19/$29/$39, solo mensual con tarjeta). */
+  firstMonthEligible?: boolean;
 }
 
 // Upsell: qué plan sugerir según el actual. CLINIC es el tope (sin sugerencia).
@@ -32,7 +37,7 @@ function fmt(n: number): string {
   return "$" + Math.round(n).toLocaleString("es-MX");
 }
 
-export function SuspendedPlanCards({ plans, currentPlan = null }: Props) {
+export function SuspendedPlanCards({ plans, currentPlan = null, firstMonthEligible = false }: Props) {
   const t = useT();
   const [pendingPlan, setPendingPlan] = useState<PlanId | null>(null);
   const [method, setMethod] = useState<PayMethod>("card");
@@ -72,13 +77,13 @@ export function SuspendedPlanCards({ plans, currentPlan = null }: Props) {
     return p ? p.priceMxn : null;
   }
 
-  // Precio/mes mostrado: anual = 30% de descuento (priceMxn*0.70);
-  // mensual = priceMxn tal cual. Total anual = priceMxn*12*0.70.
-  function perMonth(priceMxn: number): number {
-    return billing === "annual" ? Math.round(priceMxn * 0.7) : priceMxn;
+  // Precio/mes mostrado: anual = priceMxnAnnual/12 (35% de descuento, viene
+  // de plan_configs — misma fuente que el checkout); mensual = priceMxn tal cual.
+  function perMonth(plan: PlanCardData): number {
+    return billing === "annual" ? Math.round(plan.priceMxnAnnual / 12) : plan.priceMxn;
   }
-  function annualTotal(priceMxn: number): number {
-    return Math.round(priceMxn * 12 * 0.7);
+  function annualSavings(plan: PlanCardData): number {
+    return Math.max(0, plan.priceMxn * 12 - plan.priceMxnAnnual);
   }
 
   const methods: Array<{ id: PayMethod; label: string }> = [
@@ -163,7 +168,10 @@ export function SuspendedPlanCards({ plans, currentPlan = null }: Props) {
 
   const selected = plans.find((p) => p.id === selectedPlan) ?? plans[0];
   const isRedirecting = pendingPlan !== null;
-  const ctaPrice = selected ? perMonth(selected.priceMxn) : 0;
+  const ctaPrice = selected ? perMonth(selected) : 0;
+  // La promo de 1er mes SOLO aplica pagando con tarjeta en ciclo mensual
+  // (misma regla que /api/billing/checkout) — el CTA la refleja tal cual.
+  const ctaPromo = firstMonthEligible && billing === "monthly" && method === "card";
 
   return (
     <div>
@@ -190,7 +198,7 @@ export function SuspendedPlanCards({ plans, currentPlan = null }: Props) {
           ))}
         </div>
         <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1.5 text-xs font-bold text-emerald-700 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-300">
-          2 meses gratis
+          {billing === "annual" || !firstMonthEligible ? "Anual: 35% de descuento" : "Tu primer mes desde $19"}
         </span>
       </div>
 
@@ -274,7 +282,7 @@ export function SuspendedPlanCards({ plans, currentPlan = null }: Props) {
 
                 <div className="flex items-baseline gap-1">
                   <span className="text-[34px] font-extrabold leading-none tracking-tight text-violet-600 dark:text-violet-400">
-                    {fmt(perMonth(plan.priceMxn))}
+                    {fmt(perMonth(plan))}
                   </span>
                   <span className="text-sm font-semibold text-muted-foreground">
                     {t("pages.suspended.perMonth")}
@@ -282,8 +290,10 @@ export function SuspendedPlanCards({ plans, currentPlan = null }: Props) {
                 </div>
                 <div className="-mt-1 text-xs text-muted-foreground">
                   {billing === "annual"
-                    ? `${fmt(annualTotal(plan.priceMxn))} al año · 2 meses gratis`
-                    : "Facturación mensual · cancela cuando quieras"}
+                    ? `${fmt(plan.priceMxnAnnual)} al año · ahorras ${fmt(annualSavings(plan))} (35%)`
+                    : firstMonthEligible
+                      ? `Tu primer mes: solo ${fmt(FIRST_MONTH_PROMO_MXN[plan.id])} con tarjeta · luego ${fmt(plan.priceMxn)}/mes`
+                      : "Facturación mensual · cancela cuando quieras"}
                 </div>
 
                 {showUpsellLine && (
@@ -373,7 +383,9 @@ export function SuspendedPlanCards({ plans, currentPlan = null }: Props) {
           {isRedirecting
             ? t("pages.suspended.redirecting")
             : selected
-              ? `Pagar ${selected.name} — ${fmt(ctaPrice)}/mes`
+              ? ctaPromo
+                ? `Pagar ${selected.name} — ${fmt(FIRST_MONTH_PROMO_MXN[selected.id])} el primer mes`
+                : `Pagar ${selected.name} — ${fmt(ctaPrice)}/mes`
               : ""}
         </button>
 
