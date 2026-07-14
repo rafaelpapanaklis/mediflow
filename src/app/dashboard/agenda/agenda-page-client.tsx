@@ -276,6 +276,17 @@ const AGX_CSS = `
   font-weight: 500;
 }
 
+/* CANCELLED (prototipo .appt.cancelled): nombre en itálica --text-3 y hora
+   --text-4. La card expone data-status; mayor especificidad que las reglas
+   base de hora/nombre de arriba → gana sin !important. */
+:where(.agx-agenda) [data-appt-id][data-status="CANCELLED"] > div:first-of-type > span:last-child {
+  font-style: italic;
+  color: var(--text-3);
+}
+:where(.agx-agenda) [data-appt-id][data-status="CANCELLED"] > div:first-of-type > :nth-child(1 of span:not([aria-hidden])) {
+  color: var(--text-4);
+}
+
 /* Vista Lista: mismo mapa por estado (la fila ya expone --mf-status-color) */
 :where(.agx-agenda) [role="listitem"] {
   background: color-mix(in srgb, var(--mf-status-color, var(--brand)) 7%, var(--bg-elev));
