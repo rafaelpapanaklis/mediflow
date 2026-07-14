@@ -85,6 +85,7 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
     return requested === "subscription" && !admin ? "clinica" : requested;
   });
   const [saving,   setSaving]   = useState(false);
+  const [savingSchedule, setSavingSchedule] = useState(false);
   const [user,     setUser]     = useState(initUser);
   const [clinic,   setClinic]   = useState(initClinic);
   const [isPublic, setIsPublic] = useState<boolean>(Boolean(initClinic.isPublic ?? false));
@@ -136,6 +137,28 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
       if (!res.ok) throw new Error();
       toast.success(t("settings.client.clinicSavedToast"));
     } catch { toast.error(t("settings.client.saveErrorToast")); } finally { setSaving(false); }
+  }
+
+  // Horarios de atención — manda SIEMPRE los 7 días (0=Lunes...6=Domingo);
+  // los días sin fila (sáb/dom del seed) van con defaults y enabled=false.
+  async function saveSchedule() {
+    setSavingSchedule(true);
+    try {
+      const schedules = DAYS.map((_, i) => {
+        const s = schedule[i] ?? { enabled:false, open:"09:00", close:"18:00" };
+        return { dayOfWeek: i, enabled: !!s.enabled, openTime: s.open || "09:00", closeTime: s.close || "18:00" };
+      });
+      const res = await fetch("/api/settings/schedule", {
+        method: "PATCH", headers: { "Content-Type":"application/json" },
+        body: JSON.stringify({ schedules }),
+      });
+      if (res.ok) {
+        toast.success(t("settings.client.hoursSavedToast"));
+      } else {
+        const data = await res.json().catch(() => null);
+        toast.error(data?.error || t("settings.client.saveErrorToast"));
+      }
+    } catch { toast.error(t("settings.client.saveErrorToast")); } finally { setSavingSchedule(false); }
   }
 
   // Idioma del panel: guarda el locale de la clínica y recarga para cargar el diccionario.
@@ -943,7 +966,7 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
               return (
                 <div key={day} className={`flex items-center gap-4 p-3.5 rounded-xl border transition-colors ${s.enabled ? "bg-brand-600/15 border-brand-200" : "bg-muted/30 border-border"}`}>
                   <input type="checkbox" checked={s.enabled}
-                    onChange={e => setSchedule(sc => ({ ...sc, [i]:{ ...sc[i], enabled:e.target.checked } }))}
+                    onChange={e => setSchedule(sc => ({ ...sc, [i]:{ ...(sc[i] ?? { enabled:false, open:"09:00", close:"18:00" }), enabled:e.target.checked } }))}
                     className="w-4 h-4 rounded accent-brand-600 flex-shrink-0" />
                   <span className={`text-base font-semibold w-24 ${s.enabled ? "text-brand-700 dark:text-brand-300" : "text-muted-foreground"}`}>{t(day)}</span>
                   {s.enabled ? (
@@ -964,7 +987,7 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
             })}
           </div>
           <div className="flex justify-end mt-5">
-            <Button onClick={() => toast.success(t("settings.client.hoursSavedToast"))}>{t("settings.client.hoursSaveBtn")}</Button>
+            <Button onClick={saveSchedule} disabled={savingSchedule}>{savingSchedule ? t("common.saving") : t("settings.client.hoursSaveBtn")}</Button>
           </div>
         </div>
       )}
