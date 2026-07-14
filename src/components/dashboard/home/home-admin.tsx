@@ -44,7 +44,7 @@ export function HomeAdmin({ clinic, data, period }: Props) {
         justifyContent: "space-between",
         gap: 16,
         flexWrap: "wrap",
-        marginBottom: 18,
+        marginBottom: 24,
       }}>
         <Greeting
           userFullName={clinic.name}
@@ -59,8 +59,8 @@ export function HomeAdmin({ clinic, data, period }: Props) {
         style={{
           display: "grid",
           gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-          gap: 14,
-          marginBottom: 18,
+          gap: 16,
+          marginBottom: 20,
         }}
       >
         {data.kpis.length === 0 ? (
@@ -73,6 +73,7 @@ export function HomeAdmin({ clinic, data, period }: Props) {
               value={k.value}
               icon={iconForKpi(k.label)}
               delta={k.delta}
+              hero={i === 0}
             />
           ))
         )}
@@ -82,7 +83,7 @@ export function HomeAdmin({ clinic, data, period }: Props) {
         style={{
           display: "flex",
           justifyContent: "flex-end",
-          marginBottom: 14,
+          marginBottom: 12,
         }}
       >
         <AdminPeriodToggle value={period} />
@@ -92,8 +93,8 @@ export function HomeAdmin({ clinic, data, period }: Props) {
         style={{
           display: "grid",
           gridTemplateColumns: "minmax(0, 2fr) minmax(0, 1fr)",
-          gap: 18,
-          marginBottom: 18,
+          gap: 16,
+          marginBottom: 24,
         }}
         className="mf-home-admin-grid"
       >
@@ -127,7 +128,7 @@ export function HomeAdmin({ clinic, data, period }: Props) {
             style={{
               padding: "32px 16px",
               textAlign: "center",
-              color: "var(--text-2)",
+              color: "var(--text-3)",
               fontSize: 13,
             }}
           >
@@ -151,8 +152,8 @@ function KpiPlaceholderGrid() {
   ];
   return (
     <>
-      {placeholders.map((p) => (
-        <KpiCard key={p.label} label={p.label} value="—" icon={p.icon} />
+      {placeholders.map((p, i) => (
+        <KpiCard key={p.label} label={p.label} value="—" icon={p.icon} hero={i === 0} />
       ))}
     </>
   );

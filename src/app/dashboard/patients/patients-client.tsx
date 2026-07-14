@@ -148,6 +148,10 @@ const ALL_COLUMNS: Array<{ id: ColumnId; labelKey: string; required?: boolean }>
 ];
 const DEFAULT_VISIBLE: ColumnId[] = ALL_COLUMNS.map((c) => c.id);
 
+// Rampa violeta suave para avatares de iniciales (solo presentación):
+// tinte determinístico por índice de fila, como AV_TINTS del prototipo.
+const AVATAR_TINTS = [styles.avatarT0, styles.avatarT1, styles.avatarT2, styles.avatarT3];
+
 /* ─── Helpers ─── */
 
 function initials(p: { firstName: string; lastName: string }): string {
@@ -657,7 +661,7 @@ export function PatientsClient({ doctors }: Props) {
 
       <div className={styles.toolbar}>
         <div className={styles.searchWrap}>
-          <Search size={15} aria-hidden className={styles.searchIcon} />
+          <Search size={15} strokeWidth={1.75} aria-hidden className={styles.searchIcon} />
           <input
             ref={searchRef}
             type="text"
@@ -677,7 +681,7 @@ export function PatientsClient({ doctors }: Props) {
             onClick={() => { setView("list"); writeJSONLS(VIEW_STORAGE_KEY, "list"); }}
             title={t("patients.toolbar.viewListTitle")}
           >
-            <Rows3 size={13} aria-hidden /> {t("patients.toolbar.viewList")}
+            <Rows3 size={13} strokeWidth={1.75} aria-hidden /> {t("patients.toolbar.viewList")}
           </button>
           <button
             type="button"
@@ -685,15 +689,15 @@ export function PatientsClient({ doctors }: Props) {
             onClick={() => { setView("grid"); writeJSONLS(VIEW_STORAGE_KEY, "grid"); }}
             title={t("patients.toolbar.viewGridTitle")}
           >
-            <LayoutGrid size={13} aria-hidden /> {t("patients.toolbar.viewGrid")}
+            <LayoutGrid size={13} strokeWidth={1.75} aria-hidden /> {t("patients.toolbar.viewGrid")}
             <kbd>G</kbd>
           </button>
         </div>
 
         <div className={styles.dropdownWrap}>
           <button type="button" className={styles.btn} onClick={() => setColsDropdownOpen((v) => !v)}>
-            <Columns3 size={13} aria-hidden /> {t("patients.toolbar.columns")}
-            <ChevronDown size={11} aria-hidden />
+            <Columns3 size={13} strokeWidth={1.75} aria-hidden /> {t("patients.toolbar.columns")}
+            <ChevronDown size={11} strokeWidth={1.75} aria-hidden />
           </button>
           {colsDropdownOpen && (
             <>
@@ -737,7 +741,7 @@ export function PatientsClient({ doctors }: Props) {
           }}
           title={t("patients.toolbar.moreFiltersTitle")}
         >
-          <Filter size={13} aria-hidden /> {t("patients.toolbar.moreFilters")}
+          <Filter size={13} strokeWidth={1.75} aria-hidden /> {t("patients.toolbar.moreFilters")}
         </button>
 
         <span className={styles.toolbarSpacer} />
@@ -748,7 +752,7 @@ export function PatientsClient({ doctors }: Props) {
           onClick={() => { setImportAssisted(false); setImportOpen(true); }}
           title={t("shell.importClinic.launch")}
         >
-          <Upload size={13} aria-hidden /> {t("shell.importClinic.launch")}
+          <Upload size={13} strokeWidth={1.75} aria-hidden /> {t("shell.importClinic.launch")}
         </button>
 
         <button
@@ -757,7 +761,7 @@ export function PatientsClient({ doctors }: Props) {
           onClick={() => setNewPatientOpen(true)}
           title={t("patients.toolbar.newPatientTitle")}
         >
-          <Plus size={13} aria-hidden /> {t("patients.toolbar.newPatient")}
+          <Plus size={13} strokeWidth={1.75} aria-hidden /> {t("patients.toolbar.newPatient")}
         </button>
       </div>
 
@@ -765,21 +769,21 @@ export function PatientsClient({ doctors }: Props) {
         <div className={styles.bulkBar}>
           <span className={styles.bulkCount}>{t("patients.bulk.selectedCount", { count: selected.size })}</span>
           <button type="button" className={styles.btn} onClick={() => toast(t("patients.bulk.assignTagSoon"))}>
-            <Tag size={13} aria-hidden /> {t("patients.bulk.assignTag")}
+            <Tag size={13} strokeWidth={1.75} aria-hidden /> {t("patients.bulk.assignTag")}
           </button>
           <button type="button" className={styles.btn} onClick={() => toast(t("patients.bulk.assignDoctorSoon"))}>
-            <User size={13} aria-hidden /> {t("patients.bulk.assignDoctor")}
+            <User size={13} strokeWidth={1.75} aria-hidden /> {t("patients.bulk.assignDoctor")}
           </button>
           <span className={styles.bulkDivider} aria-hidden />
           <button type="button" className={styles.btn} onClick={() => toast(t("patients.bulk.whatsappCampaignSoon"))}>
-            <MessageCircle size={13} aria-hidden /> {t("patients.bulk.whatsappCampaign")}
+            <MessageCircle size={13} strokeWidth={1.75} aria-hidden /> {t("patients.bulk.whatsappCampaign")}
           </button>
           <button type="button" className={styles.btn} onClick={bulkExportCsv}>
-            <Download size={13} aria-hidden /> {t("patients.bulk.exportCsv")}
+            <Download size={13} strokeWidth={1.75} aria-hidden /> {t("patients.bulk.exportCsv")}
           </button>
           <span className={styles.bulkDivider} aria-hidden />
           <button type="button" className={`${styles.btn} ${styles.btnDanger}`} onClick={bulkArchive}>
-            <Trash2 size={13} aria-hidden /> {t("patients.bulk.archive")}
+            <Trash2 size={13} strokeWidth={1.75} aria-hidden /> {t("patients.bulk.archive")}
           </button>
           <span className={styles.toolbarSpacer} />
           <button type="button" className={`${styles.btn} ${styles.btnGhost}`} onClick={() => setSelected(new Set())}>
@@ -790,7 +794,7 @@ export function PatientsClient({ doctors }: Props) {
 
       {error ? (
         <div className={styles.empty}>
-          <AlertCircle size={28} style={{ marginBottom: 8, color: "var(--red)" }} aria-hidden />
+          <AlertCircle size={28} strokeWidth={1.75} style={{ marginBottom: 8, color: "var(--danger)" }} aria-hidden />
           <div>{t("patients.list.errorPrefix", { message: error })}</div>
         </div>
       ) : showEmptyClinic ? (
@@ -831,10 +835,10 @@ export function PatientsClient({ doctors }: Props) {
           </span>
           <div className={styles.pageControls}>
             <button type="button" className={styles.pageBtn} disabled={page === 1} onClick={() => setPage(1)} title={t("patients.pagination.first")}>
-              <ChevronsLeft size={13} aria-hidden />
+              <ChevronsLeft size={13} strokeWidth={1.75} aria-hidden />
             </button>
             <button type="button" className={styles.pageBtn} disabled={page === 1} onClick={() => setPage((p) => p - 1)} title={t("common.previous")}>
-              <ChevronLeft size={13} aria-hidden />
+              <ChevronLeft size={13} strokeWidth={1.75} aria-hidden />
             </button>
             {pagesToShow.map((p, i) =>
               p === "..." ? (
@@ -851,10 +855,10 @@ export function PatientsClient({ doctors }: Props) {
               ),
             )}
             <button type="button" className={styles.pageBtn} disabled={page === totalPages} onClick={() => setPage((p) => p + 1)} title={t("common.next")}>
-              <ChevronRight size={13} aria-hidden />
+              <ChevronRight size={13} strokeWidth={1.75} aria-hidden />
             </button>
             <button type="button" className={styles.pageBtn} disabled={page === totalPages} onClick={() => setPage(totalPages)} title={t("patients.pagination.last")}>
-              <ChevronsRight size={13} aria-hidden />
+              <ChevronsRight size={13} strokeWidth={1.75} aria-hidden />
             </button>
           </div>
         </div>
@@ -906,12 +910,12 @@ function ImportClinicEmpty({ onImport, onAssisted }: { onImport: () => void; onA
   const t = useT();
   return (
     <div className="imp-empty">
-      <div className="imp-empty__glyph" aria-hidden><Users size={30} /></div>
+      <div className="imp-empty__glyph" aria-hidden><Users size={30} strokeWidth={1.75} /></div>
       <h2 className="imp-empty__title">{t("shell.importClinic.empty.title")}</h2>
       <p className="imp-empty__desc">{t("shell.importClinic.empty.desc")}</p>
       <div className="imp-empty__cta">
         <button type="button" className="btn-new btn-new--primary" style={{ height: 40, padding: "0 18px" }} onClick={onImport}>
-          <Upload size={15} aria-hidden /> {t("shell.importClinic.launch")}
+          <Upload size={15} strokeWidth={1.75} aria-hidden /> {t("shell.importClinic.launch")}
         </button>
         <button type="button" className="btn-new btn-new--secondary" style={{ height: 40, padding: "0 18px" }} onClick={onAssisted}>
           {t("shell.importClinic.assistedCta")}
@@ -1003,7 +1007,7 @@ function StatCard({
       ].filter(Boolean).join(" ")}
     >
       <span className={styles.statCardLabel}>
-        <Icon size={11} aria-hidden /> {label}
+        <Icon size={11} strokeWidth={1.75} aria-hidden /> {label}
       </span>
       <span className={`${styles.statCardValue} ${styles.mono}`}>{value}</span>
       <span
@@ -1013,7 +1017,7 @@ function StatCard({
           deltaTone === "down" ? styles.statCardDeltaDown : "",
         ].filter(Boolean).join(" ")}
       >
-        <DeltaIcon size={11} aria-hidden /> {deltaText}
+        <DeltaIcon size={11} strokeWidth={1.75} aria-hidden /> {deltaText}
       </span>
     </button>
   );
@@ -1049,7 +1053,7 @@ function PatientsTable({
     return (
       <div className={styles.tableWrap}>
         <div className={styles.empty}>
-          <Users size={28} style={{ opacity: 0.3, marginBottom: 8 }} aria-hidden />
+          <Users size={28} strokeWidth={1.75} style={{ opacity: 0.3, marginBottom: 8 }} aria-hidden />
           <div>{t("patients.list.emptyFiltered")}</div>
         </div>
       </div>
@@ -1115,12 +1119,13 @@ function SortHeader({
   const isActive = sortCol === col;
   return (
     <th
-      className={`${styles.thSortable} ${isActive ? styles.thSorted : ""}`}
+      className={`${styles.thSortable} ${isActive ? styles.thSorted : ""} ${col === "balance" ? styles.thNum : ""}`}
       onClick={() => onSort(col)}
     >
       {label}
       <ChevronDown
         size={11}
+        strokeWidth={1.75}
         aria-hidden
         className={`${styles.sortIcon} ${isActive ? styles.sortIconActive : ""} ${isActive && sortDir === "asc" ? styles.sortIconDesc : ""}`}
       />
@@ -1178,9 +1183,9 @@ function PatientRowComp({
       {visibleCol("patient") && (
         <td>
           <div className={styles.patientCell}>
-            <span className={styles.avatar}>
+            <span className={`${styles.avatar} ${AVATAR_TINTS[idx % AVATAR_TINTS.length]}`}>
               {initials(p)}
-              {p.isVip && <span className={styles.vipBadge}><Star size={8} fill="currentColor" /></span>}
+              {p.isVip && <span className={styles.vipBadge}><Star size={8} strokeWidth={1.75} fill="currentColor" /></span>}
             </span>
             <span className={styles.patientInfo}>
               <span className={styles.patientName}>{highlightMatch(p.fullName, search)}</span>
@@ -1264,7 +1269,7 @@ function PatientRowComp({
               title={t("patients.row.whatsapp")}
               onClick={(e) => e.stopPropagation()}
             >
-              <MessageCircle size={13} aria-hidden />
+              <MessageCircle size={13} strokeWidth={1.75} aria-hidden />
             </a>
           )}
           {p.phone && (
@@ -1274,7 +1279,7 @@ function PatientRowComp({
               title={t("patients.row.call")}
               onClick={(e) => e.stopPropagation()}
             >
-              <Phone size={13} aria-hidden />
+              <Phone size={13} strokeWidth={1.75} aria-hidden />
             </a>
           )}
           <Link
@@ -1283,7 +1288,7 @@ function PatientRowComp({
             title={t("patients.row.schedule")}
             onClick={(e) => e.stopPropagation()}
           >
-            <Calendar size={13} aria-hidden />
+            <Calendar size={13} strokeWidth={1.75} aria-hidden />
           </Link>
           <button
             type="button"
@@ -1294,14 +1299,14 @@ function PatientRowComp({
               onToggleVip(p.id);
             }}
           >
-            <Star size={13} fill={p.isVip ? "currentColor" : "none"} aria-hidden />
+            <Star size={13} strokeWidth={1.75} fill={p.isVip ? "currentColor" : "none"} aria-hidden />
           </button>
           <Link
             href={`/dashboard/patients/${p.id}`}
             className={styles.actionView}
             onClick={(e) => e.stopPropagation()}
           >
-            {t("common.view")} <ArrowRight size={11} aria-hidden />
+            {t("common.view")} <ArrowRight size={11} strokeWidth={1.75} aria-hidden />
           </Link>
         </div>
       </td>
@@ -1331,7 +1336,7 @@ function PatientsGrid({
   if (patients.length === 0) {
     return (
       <div className={styles.empty}>
-        <Users size={28} style={{ opacity: 0.3, marginBottom: 8 }} aria-hidden />
+        <Users size={28} strokeWidth={1.75} style={{ opacity: 0.3, marginBottom: 8 }} aria-hidden />
         <div>{t("patients.list.emptyFiltered")}</div>
       </div>
     );
@@ -1349,9 +1354,9 @@ function PatientsGrid({
             className={`${styles.gridCard} ${isSelected ? styles.gridCardSelected : ""}`}
           >
             <div className={styles.gridTop}>
-              <span className={`${styles.avatar} ${styles.avatarLg}`}>
+              <span className={`${styles.avatar} ${styles.avatarLg} ${AVATAR_TINTS[idx % AVATAR_TINTS.length]}`}>
                 {initials(p)}
-                {p.isVip && <span className={styles.vipBadge}><Star size={9} fill="currentColor" /></span>}
+                {p.isVip && <span className={styles.vipBadge}><Star size={9} strokeWidth={1.75} fill="currentColor" /></span>}
               </span>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <h3 className={styles.gridName}>
@@ -1421,7 +1426,7 @@ function PatientsGrid({
                   onClick={(e) => e.stopPropagation()}
                   title={t("patients.row.whatsapp")}
                 >
-                  <MessageCircle size={13} aria-hidden />
+                  <MessageCircle size={13} strokeWidth={1.75} aria-hidden />
                 </a>
               )}
               {p.phone && (
@@ -1431,12 +1436,12 @@ function PatientsGrid({
                   onClick={(e) => e.stopPropagation()}
                   title={t("patients.row.call")}
                 >
-                  <Phone size={13} aria-hidden />
+                  <Phone size={13} strokeWidth={1.75} aria-hidden />
                 </a>
               )}
               <span style={{ flex: 1 }} />
               <span className={styles.actionView}>
-                {t("common.view")} <ArrowRight size={11} aria-hidden />
+                {t("common.view")} <ArrowRight size={11} strokeWidth={1.75} aria-hidden />
               </span>
             </div>
           </Link>
@@ -1496,7 +1501,7 @@ function FilterDrawer({
         <header className={styles.drawerHeader}>
           <h3 id="filter-drawer-title" className={styles.drawerTitle}>{t("patients.drawer.title")}</h3>
           <button type="button" className={`${styles.btn} ${styles.btnIcon}`} onClick={onClose} aria-label={t("common.close")}>
-            <X size={14} aria-hidden />
+            <X size={14} strokeWidth={1.75} aria-hidden />
           </button>
         </header>
         <div className={styles.drawerBody}>

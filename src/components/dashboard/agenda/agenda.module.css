@@ -237,7 +237,7 @@
   font-family: inherit;
   box-shadow: 0 0 0 1px rgba(124,58,237,0.5), 0 4px 16px -4px rgba(124,58,237,0.4);
 }
-.newApptBtn:hover { background: #8b5cf6; }
+.newApptBtn:hover { background: var(--violet-700); }
 
 /* Popover "Más vistas" (audit ajuste 5) */
 .moreViewsPopover {
@@ -822,7 +822,7 @@
   background: var(--brand); color: #fff;
   border-color: var(--brand);
 }
-.detailAction.primary:hover { background: #8b5cf6; }
+.detailAction.primary:hover { background: var(--violet-700); }
 
 /* Único contenedor scrollable — abarca eje horario + columnas */
 .scrollArea {
@@ -964,6 +964,12 @@
   .apptHighlight {
     animation: none;
     box-shadow: 0 0 0 2px var(--brand);
+  }
+  .monthDayPreview {
+    transition: none;
+  }
+  .monthDayPreview:hover {
+    transform: none;
   }
 }
 
@@ -1117,6 +1123,9 @@
   opacity: 0.42;
   background: var(--bg);
 }
+.monthDay.today {
+  background: var(--brand-softer);
+}
 .monthDay.today .monthDayNum {
   color: var(--brand);
 }
@@ -1131,19 +1140,72 @@
 }
 .monthDayBadge {
   display: inline-flex; align-items: center; gap: 4px;
-  padding: 1px 6px;
-  border-radius: 8px;
-  font-size: 9px; font-weight: 600;
+  padding: 1.5px 7px;
+  border-radius: 99px;
+  font-size: 10px; font-weight: 700;
+  font-variant-numeric: tabular-nums;
   background: var(--brand-soft);
   color: var(--brand);
   align-self: flex-start;
+  white-space: nowrap;
 }
+/* Chip de cita por ESTADO (Variante A): fondo soft del estado + borde
+   izquierdo 2px sólido; 1 línea con elipsis. La vista pone
+   --mf-status-color inline (mismo mapa de tokens que la card). */
 .monthDayPreview {
-  font-size: 9px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  min-width: 0;
+  padding: 2px 6px;
+  border: 1px solid var(--border-soft);
+  border-left: 2px solid var(--mf-status-color, var(--brand));
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--mf-status-color, var(--brand)) 12%, var(--bg-elev));
   color: var(--text-2);
+  font-size: 10px;
+  text-align: left;
+  cursor: pointer;
+  overflow: hidden;
+  transition: box-shadow var(--dur-1) var(--ease), transform var(--dur-1) var(--ease);
+}
+.monthDayPreview:hover {
+  box-shadow: var(--shadow-1);
+  transform: translateY(-1px);
+}
+.monthChipTime {
+  flex: none;
+  font-size: 9.5px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  /* 22% hacia --text-1 = tinta AA en claro y oscuro (mismo truco que Día) */
+  color: color-mix(in srgb, var(--mf-status-color, var(--text-1)) 78%, var(--text-1));
+}
+.monthChipText {
+  flex: 1;
+  min-width: 0;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  color: var(--text-2);
+}
+.monthDayMore {
+  width: 100%;
+  padding: 1px 2px;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--brand);
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.monthDayMore:hover {
+  text-decoration: underline;
 }
 
 /* ─────── WEEK VIEW ───────────────────────────────────────────────── */
@@ -1165,6 +1227,11 @@
 .weekHeaderCell:last-child { border-right: none; }
 .weekHeaderCell.today {
   background: var(--brand-softer);
+}
+/* HOY: DOW y número en tinta de marca (prototipo .ag-dayhead.today) */
+.weekHeaderCell.today .weekHeaderDow,
+.weekHeaderCell.today .weekHeaderDay {
+  color: var(--brand);
 }
 .weekHeaderCell.today:hover {
   background: color-mix(in srgb, var(--brand) 12%, var(--bg-elev));
@@ -1408,7 +1475,7 @@
   background: var(--brand); color: #fff;
   border-color: var(--brand);
 }
-.modalAddSave:hover { background: #8b5cf6; }
+.modalAddSave:hover { background: var(--violet-700); }
 .modalAddSave:disabled {
   background: var(--bg-elev-2);
   color: var(--text-4);
@@ -1691,7 +1758,8 @@
   top: 2px; right: 2px;
   width: 18px; height: 18px;
   display: grid; place-items: center;
-  background: rgba(255,255,255,0.6);
+  /* Vidrio de superficie (antes rgba blanco fijo — ilegible en dark) */
+  background: color-mix(in srgb, var(--bg-elev) 65%, transparent);
   border: 1px solid var(--border-soft);
   border-radius: 4px;
   color: var(--text-2);

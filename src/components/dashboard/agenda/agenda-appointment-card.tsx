@@ -243,6 +243,7 @@ export function AgendaAppointmentCard({
     <div
       ref={setNodeRef}
       data-appt-id={appointment.id}
+      data-status={appointment.status}
       data-column-mode={columnMode}
       className={className}
       style={

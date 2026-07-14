@@ -67,7 +67,11 @@ export function AgendaWeekView() {
   }
 
   return (
-    <div className={styles.scrollArea}>
+    <div className={styles.scrollArea} style={{ overflowY: "hidden" }}>
+      {/* Split header/cuerpo (lección clamp de sticky en Chrome): mismo patrón
+          que la vista Día del piloto — header de días en su PROPIO grid fuera
+          del scroller vertical; el horizontal lo da scrollArea para ambos.
+          Solo contenedores decorativos; hijos/clases/droppables intactos. */}
       <div
         className={styles.scrollGrid}
         style={
@@ -76,44 +80,76 @@ export function AgendaWeekView() {
             "--mf-agenda-slot-min": state.slotMinutes,
             "--mf-agenda-day-start": state.dayStart,
             "--mf-agenda-day-end": state.dayEnd,
+            display: "flex",
+            flexDirection: "column",
+            height: "100%",
+            minWidth: "min-content",
           } as React.CSSProperties
         }
       >
-        <div className={styles.cornerCell} aria-hidden />
-        <div className={styles.columnsHeader}>
-          {days.map((d) => {
-            const classes = [
-              styles.weekHeaderCell,
-              d.iso === today ? styles.today : "",
-              d.iso === state.dayISO ? styles.active : "",
-            ]
-              .filter(Boolean)
-              .join(" ");
-            return (
-              <button
-                key={d.iso}
-                type="button"
-                className={classes}
-                onClick={() => jumpToDay(d.iso)}
-                aria-label={t("agenda.weekView.openDayAria", { date: d.iso })}
-                title={t("agenda.weekView.openDayTitle", { date: d.iso })}
-              >
-                <div className={styles.weekHeaderDow}>{t(d.dowKey)}</div>
-                <div className={styles.weekHeaderDay}>{d.day}</div>
-              </button>
-            );
-          })}
+        <div
+          className="agx-day-head"
+          style={{
+            display: "grid",
+            gridTemplateColumns: "var(--mf-agenda-axis-w) minmax(0, 1fr)",
+            flex: "none",
+            overflowY: "hidden",
+            scrollbarGutter: "stable",
+          }}
+        >
+          <div className={styles.cornerCell} aria-hidden />
+          <div className={styles.columnsHeader}>
+            {days.map((d) => {
+              const classes = [
+                styles.weekHeaderCell,
+                d.iso === today ? styles.today : "",
+                d.iso === state.dayISO ? styles.active : "",
+              ]
+                .filter(Boolean)
+                .join(" ");
+              return (
+                <button
+                  key={d.iso}
+                  type="button"
+                  className={classes}
+                  onClick={() => jumpToDay(d.iso)}
+                  aria-label={t("agenda.weekView.openDayAria", { date: d.iso })}
+                  title={t("agenda.weekView.openDayTitle", { date: d.iso })}
+                >
+                  <div className={styles.weekHeaderDow}>{t(d.dowKey)}</div>
+                  <div className={styles.weekHeaderDay}>{d.day}</div>
+                </button>
+              );
+            })}
+          </div>
         </div>
-        <AgendaTimeAxis />
-        <div className={styles.columnsBody}>
-          {days.map((d) => (
-            <WeekDayColumn
-              key={d.iso}
-              day={d}
-              isToday={d.iso === today}
-              slotsTotal={slotsTotal}
-            />
-          ))}
+        <div
+          style={{
+            flex: "1 1 0%",
+            minHeight: 0,
+            overflowY: "auto",
+            overflowX: "hidden",
+            scrollbarGutter: "stable",
+          }}
+        >
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "var(--mf-agenda-axis-w) minmax(0, 1fr)",
+            }}
+          >
+            <AgendaTimeAxis />
+            <div className={styles.columnsBody}>
+              {days.map((d) => (
+                <WeekDayColumn
+                  key={d.iso}
+                  day={d}
+                  isToday={d.iso === today}
+                  slotsTotal={slotsTotal}
+                />
+              ))}
+            </div>
+          </div>
         </div>
       </div>
     </div>

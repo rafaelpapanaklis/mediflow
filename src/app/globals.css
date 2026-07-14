@@ -89,6 +89,25 @@
     --radius:    10px;
     --radius-lg: 14px;
 
+    /* ── Rediseño 2026-07 (Variante A) — marca "105" + elevación + motion.
+       El degradado SOLO en 4 acentos (CTA primario, barra activa del
+       sidebar, chip del KPI hero, logo). Jamás texto sobre él <AA. ── */
+    --brand-grad:   linear-gradient(90deg, #7C3AED, #2563EB);
+    --brand-grad-v: linear-gradient(180deg, #7C3AED, #2563EB);
+    --brand-blue:   #2563EB;
+    /* Tinta fuerte para TEXTO sobre fondos *-soft (AA 4.5:1; el par de
+       --danger-strong ya existía más abajo para CAMBRA). */
+    --success-strong: #047857;
+    --warning-strong: #a85a05;
+    --info-strong:    #1d4ed8;
+    --shadow-1: 0 1px 2px rgba(20,16,31,.05);
+    --shadow-2: 0 4px 12px -2px rgba(20,16,31,.08);
+    --shadow-3: 0 16px 40px -12px rgba(20,16,31,.18);
+    --ring: 0 0 0 3px rgba(124,58,237,.35);
+    --dur-1: 150ms;
+    --dur-2: 250ms;
+    --ease: cubic-bezier(.2,.8,.4,1);
+
     /* ── Patient Context Bar (consulta activa) — brand tint neutro ── */
     --consult-active-bg:     rgba(124,58,237,0.06);
     --consult-active-border: rgba(124,58,237,0.25);
@@ -179,6 +198,16 @@
 
     /* ── Interactive border (reservado v2.2+) ── */
     --border-interactive:    rgba(255,255,255,0.18);
+
+    /* ── Rediseño 2026-07 (Variante A) — sombras profundas + ring visible ── */
+    --shadow-1: 0 1px 2px rgba(0,0,0,.35);
+    --shadow-2: 0 4px 12px -2px rgba(0,0,0,.40);
+    --shadow-3: 0 16px 40px -12px rgba(0,0,0,.55);
+    --ring: 0 0 0 3px rgba(167,139,250,.40);
+    /* Tinta fuerte sobre *-soft en dark = versión clara (los soft son oscuros) */
+    --success-strong: #34d399;
+    --warning-strong: #fbbf24;
+    --info-strong:    #60a5fa;
 
     /* Tailwind-compat HSL (dark — space purple) */
     --background:        255 30% 6%;
@@ -401,6 +430,7 @@
   background: var(--bg-elev);
   border: 1px solid var(--border-soft);
   border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-1);
   position: relative;
   overflow: hidden;
 }
@@ -429,9 +459,15 @@
   background: var(--bg-elev);
   border: 1px solid var(--border-soft);
   border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-1);
   padding: 18px;
   position: relative;
   overflow: hidden;
+  transition: box-shadow var(--dur-1) var(--ease), transform var(--dur-1) var(--ease);
+}
+.kpi:hover {
+  box-shadow: var(--shadow-2);
+  transform: translateY(-1px);
 }
 .kpi__top {
   display: flex;
@@ -440,42 +476,50 @@
   margin-bottom: 14px;
 }
 .kpi__label {
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 500;
   color: var(--text-3);
   letter-spacing: 0.04em;
   text-transform: uppercase;
 }
 .kpi__icon {
-  width: 28px;
-  height: 28px;
-  border-radius: 8px;
-  background: var(--brand-softer);
+  width: 34px;
+  height: 34px;
+  border-radius: var(--radius);
+  background: var(--brand-soft);
   color: #c4b5fd;
   display: grid;
   place-items: center;
-  border: 1px solid rgba(124,58,237,0.2);
+  border: 1px solid transparent;
+}
+/* KPI hero — ÚNICO KPI del grupo con acento de marca (degradado "105") */
+.kpi--hero .kpi__icon,
+:root:not(.dark) .kpi--hero .kpi__icon {
+  background: var(--brand-grad);
+  color: #fff;
+  border-color: transparent;
+  box-shadow: 0 3px 8px rgba(124, 58, 237, 0.30);
 }
 .kpi__value {
   font-family: var(--font-sans, system-ui, sans-serif);
-  font-size: 26px;
-  font-weight: 600;
-  letter-spacing: -0.02em;
+  font-size: 28px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
   color: var(--text-1);
-  line-height: 1;
+  line-height: 1.05;
 }
 .kpi__delta {
   display: inline-flex;
   align-items: center;
-  gap: 3px;
-  font-size: 11px;
-  font-family: var(--font-mono, ui-monospace, monospace);
+  gap: 5px;
+  font-size: 12.5px;
   margin-top: 8px;
-  font-weight: 500;
+  font-weight: 600;
 }
 .kpi__delta--up   { color: var(--success); }
 .kpi__delta--down { color: var(--danger); }
-.kpi__delta-sub   { color: var(--text-3); margin-left: 4px; font-family: inherit; }
+.kpi__delta-sub   { color: var(--text-3); margin-left: 4px; font-weight: 400; }
 
 /* Badge (nuevo) --------------------------------------------------- */
 .badge-new {
@@ -493,15 +537,15 @@
 }
 .badge-new__dot { width: 5px; height: 5px; border-radius: 50%; }
 .badge-new--success { background: var(--success-soft); color: #6ee7b7; border-color: rgba(16,185,129,0.2); }
-.badge-new--success .badge-new__dot { background: var(--success); box-shadow: 0 0 6px var(--success); }
+.badge-new--success .badge-new__dot { background: var(--success); }
 .badge-new--warning { background: var(--warning-soft); color: #fcd34d; border-color: rgba(245,158,11,0.2); }
-.badge-new--warning .badge-new__dot { background: var(--warning); box-shadow: 0 0 6px var(--warning); }
+.badge-new--warning .badge-new__dot { background: var(--warning); }
 .badge-new--danger  { background: var(--danger-soft);  color: #fca5a5; border-color: rgba(239,68,68,0.2); }
-.badge-new--danger .badge-new__dot  { background: var(--danger);  box-shadow: 0 0 6px var(--danger); }
+.badge-new--danger .badge-new__dot  { background: var(--danger); }
 .badge-new--info    { background: var(--info-soft);    color: #93c5fd; border-color: rgba(59,130,246,0.2); }
-.badge-new--info .badge-new__dot    { background: var(--info);    box-shadow: 0 0 6px var(--info); }
+.badge-new--info .badge-new__dot    { background: var(--info); }
 .badge-new--brand   { background: var(--brand-soft);   color: #c4b5fd; border-color: rgba(124,58,237,0.2); }
-.badge-new--brand .badge-new__dot   { background: var(--brand);   box-shadow: 0 0 6px var(--brand); }
+.badge-new--brand .badge-new__dot   { background: var(--brand); }
 .badge-new--neutral { background: rgba(255,255,255,0.04); color: var(--text-2); border-color: var(--border-soft); }
 
 /* Avatar (nuevo) -------------------------------------------------- */
@@ -526,37 +570,40 @@
 .btn-new {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  height: 32px;
-  padding: 0 12px;
-  border-radius: 8px;
-  font-size: 12px;
-  font-weight: 500;
+  gap: 7px;
+  height: 36px;
+  padding: 0 14px;
+  border-radius: var(--radius);
+  font-size: 13px;
+  font-weight: 600;
   cursor: pointer;
   border: 1px solid transparent;
-  transition: all .15s;
+  transition: background var(--dur-1) var(--ease),
+              color var(--dur-1) var(--ease),
+              box-shadow var(--dur-1) var(--ease),
+              transform var(--dur-1) var(--ease);
   white-space: nowrap;
 }
+.btn-new:active:not(:disabled) { transform: scale(.98); }
 .btn-new--primary {
   background: var(--brand);
   color: #fff;
-  box-shadow: 0 0 0 1px rgba(124,58,237,0.5),
-              0 4px 16px -4px rgba(124,58,237,0.5),
-              inset 0 1px 0 rgba(255,255,255,0.15);
+  box-shadow: var(--shadow-1);
 }
-.btn-new--primary:hover   { background: #8b5cf6; }
+.btn-new--primary:hover   { background: #6d28d9; box-shadow: var(--shadow-2); }
 .btn-new--secondary {
   background: var(--bg-elev);
-  color: var(--text-1);
-  border-color: var(--border-strong);
+  color: var(--text-2);
+  border-color: var(--border-soft);
+  box-shadow: var(--shadow-1);
 }
-.btn-new--secondary:hover { background: var(--bg-elev-2); }
+.btn-new--secondary:hover { background: var(--bg-hover); color: var(--text-1); }
 .btn-new--ghost   { background: transparent; color: var(--text-2); }
 .btn-new--ghost:hover     { background: var(--bg-hover); color: var(--text-1); }
-.btn-new--danger  { background: var(--danger); color: #fff; }
-.btn-new--danger:hover    { background: #f87171; }
-.btn-new--sm { height: 28px; font-size: 11px; padding: 0 10px; }
-.btn-new:disabled { opacity: 0.4; cursor: not-allowed; }
+.btn-new--danger  { background: var(--danger); color: #fff; box-shadow: var(--shadow-1); }
+.btn-new--danger:hover    { background: #b91c1c; box-shadow: var(--shadow-2); }
+.btn-new--sm { height: 32px; font-size: 12.5px; padding: 0 12px; border-radius: var(--radius-sm); }
+.btn-new:disabled { opacity: 0.45; cursor: not-allowed; }
 
 /* Tag ------------------------------------------------------------- */
 .tag-new {
@@ -577,14 +624,14 @@
 .table-new { width: 100%; border-collapse: collapse; font-size: 12px; }
 .table-new th {
   text-align: left;
-  font-weight: 500;
+  font-weight: 600;
   color: var(--text-3);
   padding: 10px 14px;
   border-bottom: 1px solid var(--border-soft);
-  font-size: 10px;
+  font-size: 11.5px;
   text-transform: uppercase;
-  letter-spacing: 0.06em;
-  background: rgba(255,255,255,0.015);
+  letter-spacing: 0.05em;
+  background: var(--bg-elev-2);
 }
 .table-new td {
   padding: 12px 14px;
@@ -650,22 +697,26 @@
 /* Segmented control ---------------------------------------------- */
 .segment-new {
   display: inline-flex;
-  background: var(--bg-elev);
+  gap: 2px;
+  background: var(--bg-elev-2);
   border: 1px solid var(--border-soft);
-  border-radius: 8px;
+  border-radius: var(--radius);
   padding: 3px;
 }
 .segment-new__btn {
   border: none;
   background: transparent;
-  color: var(--text-3);
-  font-size: 11px;
+  color: var(--text-2);
+  font-size: 12.5px;
   font-weight: 500;
-  padding: 5px 10px;
-  border-radius: 6px;
+  height: 28px;
+  padding: 0 13px;
+  border-radius: 7px;
   cursor: pointer;
+  transition: background var(--dur-1) var(--ease), color var(--dur-1) var(--ease), box-shadow var(--dur-1) var(--ease);
 }
-.segment-new__btn--active { background: rgba(255,255,255,0.06); color: var(--text-1); }
+.segment-new__btn:hover { color: var(--text-1); }
+.segment-new__btn--active { background: rgba(255,255,255,0.06); color: var(--text-1); font-weight: 600; }
 
 /* Skeleton -------------------------------------------------------- */
 .skel-new {
@@ -1329,10 +1380,13 @@
   background: var(--bg-hover);
 }
 
-/* Cards en light: sombra suave en vez de borders sólo */
+/* Cards en light: sombra del sistema (shadow-1; hover del .kpi sube a 2) */
 :root:not(.dark) .card,
 :root:not(.dark) .kpi {
-  box-shadow: 0 1px 3px rgba(15,10,30,0.04), 0 1px 2px rgba(15,10,30,0.03);
+  box-shadow: var(--shadow-1);
+}
+:root:not(.dark) .kpi:hover {
+  box-shadow: var(--shadow-2);
 }
 
 /* Modal en light: sombra más notoria */
@@ -1374,9 +1428,10 @@
 
 /* Segment button activo en light */
 :root:not(.dark) .segment-new__btn--active {
-  color: var(--brand);
+  color: var(--text-1);
   background: var(--bg-elev);
-  box-shadow: 0 1px 3px rgba(15,10,30,0.08);
+  box-shadow: var(--shadow-1);
+  font-weight: 600;
 }
 
 /* Form section rule en light */
@@ -1680,18 +1735,36 @@
 .mf-sidebar-item--active::before {
   content: "";
   position: absolute;
-  left: -10px;
+  left: 0;
   top: 50%;
-  width: 2px;
-  height: 16px;
-  margin-top: -8px;
-  background: var(--brand);
-  border-radius: 2px;
-  box-shadow: 0 0 8px rgba(124, 58, 237, 0.6);
+  width: 3px;
+  height: 20px;
+  margin-top: -10px;
+  background: var(--brand-grad-v);
+  border-radius: 99px;
 }
 .mf-sidebar--collapsed .mf-sidebar-item--active::before {
-  left: -8px;
+  left: 0;
 }
+
+/* Contador del nav (Variante A) — pill --brand-soft; texto AA en ambos temas */
+.mf-nav-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 19px;
+  height: 19px;
+  padding: 0 5px;
+  border-radius: 99px;
+  background: var(--brand-soft);
+  color: #6d28d9; /* brand-700 sobre brand-soft light */
+  font-size: 11px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+}
+.dark .mf-nav-count { color: #c4b5fd; } /* violet-300 sobre brand-soft dark */
+.mf-sidebar-item--active .mf-nav-count { background: rgba(124, 58, 237, 0.18); }
 
 .mf-sidebar-item-dot {
   position: absolute;

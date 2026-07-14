@@ -5,7 +5,6 @@ import { useAgenda } from "./agenda-provider";
 import { useT } from "@/i18n/i18n-provider";
 import { todayInTz } from "@/lib/agenda/time-utils";
 import { calendarDayISO, formatTimeInTz } from "@/lib/agenda/date-ranges";
-import { doctorColorFor } from "@/lib/agenda/doctor-color";
 import type { AgendaAppointmentDTO } from "@/lib/agenda/types";
 import styles from "./agenda.module.css";
 
@@ -19,6 +18,21 @@ const WEEKDAY_KEYS = [
   "agenda.monthView.dowSun",
 ];
 const MONTH_PREVIEW_LIMIT = 4;
+
+// Variante A (solo presentación): color POR ESTADO — mismo mapa de tokens
+// que STATUS_COLOR de agenda-appointment-card.tsx. CANCELLED no aparece en
+// vista Mes (se filtra arriba), se incluye por completitud del tipo.
+const MONTH_STATUS_COLOR: Record<string, string> = {
+  SCHEDULED:    "var(--warning)",
+  CONFIRMED:    "var(--info)",
+  CHECKED_IN:   "var(--brand)",
+  IN_CHAIR:     "var(--brand)",
+  IN_PROGRESS:  "var(--success)",
+  COMPLETED:    "var(--text-3)",
+  CHECKED_OUT:  "var(--text-3)",
+  CANCELLED:    "var(--text-4)",
+  NO_SHOW:      "var(--danger)",
+};
 
 interface MonthCell {
   iso: string;
@@ -129,31 +143,24 @@ export function AgendaMonthView() {
                 )}
               </div>
               {preview.map((a) => {
-                const docMeta = a.doctor
-                  ? state.doctors.find((d) => d.id === a.doctor!.id) ?? null
-                  : null;
-                const docColor = a.doctor
-                  ? doctorColorFor(a.doctor.id, docMeta?.color ?? null)
-                  : "var(--brand)";
+                const statusColor = MONTH_STATUS_COLOR[a.status] ?? "var(--brand)";
                 return (
                   <button
                     key={a.id}
                     type="button"
                     onClick={(e) => handleApptClick(e, a.id)}
                     className={styles.monthDayPreview}
-                    style={{
-                      border: 0,
-                      borderLeft: `3px solid ${docColor}`,
-                      background: "transparent",
-                      padding: "0 0 0 5px",
-                      textAlign: "left",
-                      cursor: "pointer",
-                      width: "100%",
-                    }}
+                    data-status={a.status}
+                    style={{ "--mf-status-color": statusColor } as React.CSSProperties}
                     title={`${formatTimeInTz(a.startsAt, state.timezone)} · ${a.patient.name}${a.reason ? ` — ${a.reason}` : ""}`}
                   >
-                    {formatTimeInTz(a.startsAt, state.timezone)} {a.patient.name}
-                    {a.reason ? ` · ${a.reason}` : ""}
+                    <span className={styles.monthChipTime}>
+                      {formatTimeInTz(a.startsAt, state.timezone)}
+                    </span>
+                    <span className={styles.monthChipText}>
+                      {a.patient.name}
+                      {a.reason ? ` · ${a.reason}` : ""}
+                    </span>
                   </button>
                 );
               })}
@@ -164,16 +171,7 @@ export function AgendaMonthView() {
                     e.stopPropagation();
                     jumpToDay(c.iso);
                   }}
-                  className={styles.monthDayPreview}
-                  style={{
-                    border: 0,
-                    background: "transparent",
-                    padding: "0 0 0 5px",
-                    textAlign: "left",
-                    cursor: "pointer",
-                    width: "100%",
-                    fontWeight: 600,
-                  }}
+                  className={styles.monthDayMore}
                   title={t("agenda.monthView.viewApptsTitle", { count, iso: c.iso })}
                   aria-label={t("agenda.monthView.viewApptsAria", { count, iso: c.iso })}
                 >
