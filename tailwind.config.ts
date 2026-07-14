@@ -1,4 +1,5 @@
 import type { Config } from "tailwindcss";
+import colors from "tailwindcss/colors";
 
 const config: Config = {
   darkMode: "class",
@@ -41,9 +42,11 @@ const config: Config = {
           accent:          "hsl(var(--sidebar-accent) / <alpha-value>)",
           "accent-foreground": "hsl(var(--sidebar-accent-foreground))",
         },
-        violet:           "hsl(var(--violet) / <alpha-value>)",
-        indigo:           "hsl(var(--indigo) / <alpha-value>)",
-        teal:             "hsl(var(--teal) / <alpha-value>)",
+        // Un color PLANO aquí pisa la escala 50-950 entera de Tailwind (violet-600
+        // etc. dejan de compilarse en TODO el repo). Conservar escala + DEFAULT.
+        violet:           { ...colors.violet, DEFAULT: "hsl(var(--violet) / <alpha-value>)" },
+        indigo:           { ...colors.indigo, DEFAULT: "hsl(var(--indigo) / <alpha-value>)" },
+        teal:             { ...colors.teal,   DEFAULT: "hsl(var(--teal) / <alpha-value>)" },
         surface:          "hsl(var(--surface))",
         "surface-elevated": "hsl(var(--surface-elevated))",
         brand: {
