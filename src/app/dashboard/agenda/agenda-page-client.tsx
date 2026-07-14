@@ -89,6 +89,211 @@ export function useDragOverlap(droppableId: string): DragOverlapMode {
   return ctx.mode;
 }
 
+/* ─────── Piloto rediseño Variante A (14-jul) — SOLO presentación ───────
+ * Overrides scoped a .agx-agenda vía ganchos ESTABLES que los hijos ya
+ * renderizan (atributos ARIA / data-*), nunca clases hasheadas del module.
+ * Solo tokens de globals.css; :where() mantiene por debajo de los estados
+ * del module CSS (.selected, .apptPast, .apptPending, modo sillón, .active
+ * de pills) para no pisar semántica existente. Cero lógica. */
+const AGX_CSS = `
+/* ── Toolbar: barra única ── */
+.agx-agenda > header { gap: 10px; padding: 6px 16px; box-shadow: none; }
+/* Marca duplicada dentro de la agenda: el chrome del panel ya la muestra */
+.agx-agenda > header > div:first-child { display: none; }
+
+/* View switcher segmentado (Día/Semana/Mes/Lista) + segmento Sillones/Doctores */
+.agx-agenda [role="tablist"] {
+  background: var(--bg-elev-2);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius);
+  padding: 3px;
+  gap: 2px;
+}
+.agx-agenda [role="tab"] {
+  min-height: 28px;
+  padding: 4px 13px;
+  border-radius: 7px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-2);
+  transition: background var(--dur-1) var(--ease), color var(--dur-1) var(--ease), box-shadow var(--dur-1) var(--ease);
+}
+.agx-agenda [role="tab"]:hover { color: var(--text-1); }
+.agx-agenda [role="tab"][aria-selected="true"] {
+  background: var(--bg-elev);
+  color: var(--text-1);
+  font-weight: 600;
+  box-shadow: var(--shadow-1);
+}
+
+/* Navegación de fechas (chevrones) + fecha 15/700 tabular */
+.agx-agenda > header > div > button[aria-label] {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-soft);
+  background: var(--bg-elev);
+  color: var(--text-2);
+  transition: background var(--dur-1) var(--ease), color var(--dur-1) var(--ease);
+}
+.agx-agenda > header > div > button[aria-label]:hover { background: var(--bg-hover); color: var(--text-1); }
+.agx-agenda > header > div > button + span {
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--text-1);
+  font-variant-numeric: tabular-nums;
+}
+/* Botón "Hoy" */
+.agx-agenda > header > button:not(:last-child) {
+  min-height: 32px;
+  padding: 5px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-soft);
+  background: var(--bg-elev);
+  color: var(--text-2);
+  box-shadow: var(--shadow-1);
+}
+.agx-agenda > header > button:not(:last-child):hover { background: var(--bg-hover); color: var(--text-1); }
+
+/* Pills de filtro (Doctores/Sillones/Estado): chips radius 99 + contador
+   en --brand-soft. :where() deja que .filterPill.active del module gane. */
+:where(.agx-agenda) > header button[aria-haspopup] {
+  min-height: 32px;
+  padding: 5px 12px;
+  gap: 7px;
+  border-radius: 99px;
+  border: 1px solid var(--border-soft);
+  background: var(--bg-elev);
+  color: var(--text-2);
+  font-size: 12.5px;
+  font-weight: 500;
+  box-shadow: var(--shadow-1);
+}
+:where(.agx-agenda) > header button[aria-haspopup] > span:not([aria-hidden]) {
+  min-width: 17px;
+  height: 17px;
+  padding: 0 5px;
+  border-radius: 99px;
+  background: var(--brand-soft);
+  color: var(--brand);
+  font-size: 10.5px;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+:where(.agx-agenda) > header button[aria-haspopup] > span[aria-hidden] { color: var(--text-4); font-size: 10px; }
+
+/* Búsqueda */
+.agx-agenda > header input[type="search"] {
+  min-height: 32px;
+  padding: 6px 10px 6px 26px;
+  font-size: 12.5px;
+  background: var(--bg-elev);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-1);
+  transition: box-shadow var(--dur-1) var(--ease), border-color var(--dur-1) var(--ease);
+}
+.agx-agenda > header input[type="search"]:focus {
+  outline: none;
+  border-color: var(--border-brand);
+  box-shadow: var(--ring);
+}
+
+/* CTA primario: violeta plano 36px (el degradado de marca es del sidebar) */
+.agx-agenda > header > button:last-child {
+  min-height: 36px;
+  padding: 8px 14px;
+  gap: 7px;
+  font-size: 13px;
+  font-weight: 600;
+  border-radius: var(--radius);
+  background: var(--brand);
+  color: #fff;
+  box-shadow: var(--shadow-1);
+  transition: background var(--dur-1) var(--ease), box-shadow var(--dur-1) var(--ease), transform var(--dur-1) var(--ease);
+}
+.agx-agenda > header > button:last-child:hover { background: var(--violet-700); box-shadow: var(--shadow-2); }
+.agx-agenda > header > button:last-child:active { transform: scale(0.98); }
+
+/* Sub-toolbar: contadores tabulares */
+.agx-agenda > header + div strong { font-variant-numeric: tabular-nums; }
+
+/* ── Chips de cita: color POR ESTADO (decisión 14-jul) ──
+   La card ya expone --mf-status-color con el token fuerte por estado
+   (SCHEDULED→warning · CONFIRMED→info · CHECKED_IN→brand ·
+   IN_PROGRESS→success · COMPLETED→text-3 · CANCELLED→text-4 ·
+   NO_SHOW→danger). Fondo soft derivado con color-mix (equivale a los
+   tokens -soft: 10-12% del fuerte sobre --bg-elev, y adapta dark) +
+   borde IZQUIERDO 2px sólido. El module conserva past/selected/
+   in-progress/pending/sillón por especificidad. */
+:where(.agx-agenda) [data-appt-id] {
+  background: color-mix(in srgb, var(--mf-status-color, var(--brand)) 12%, var(--bg-elev));
+  border-color: var(--border-soft);
+  border-left-width: 2px;
+  border-left-color: var(--mf-status-color, var(--brand));
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-1);
+}
+:where(.agx-agenda) [data-appt-id]:not([aria-selected="true"]):hover { box-shadow: var(--shadow-2); }
+
+/* Hora 10.5/700 con el color fuerte del estado; el 22% de --text-1 lo
+   oscurece en claro y lo aclara en oscuro → contraste AA en ambos temas */
+:where(.agx-agenda) [data-appt-id] > div:first-of-type > :nth-child(1 of span:not([aria-hidden])) {
+  color: color-mix(in srgb, var(--mf-status-color, var(--text-1)) 78%, var(--text-1));
+  font-size: 10.5px;
+}
+:where(.agx-agenda) [data-appt-id] > div:first-of-type > span:last-child {
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
+/* Avatar del doctor → PUNTO de color 8px con borde de superficie
+   (conserva el background --mf-doc-color que ya pinta el module) */
+:where(.agx-agenda) [data-appt-id] > div > span[aria-hidden] {
+  order: 3;
+  width: 8px;
+  height: 8px;
+  min-width: 8px;
+  border-radius: 99px;
+  border: 1.5px solid var(--bg-elev);
+  font-size: 0;
+  line-height: 0;
+  color: transparent;
+  overflow: hidden;
+}
+
+/* Línea 2 (tratamiento): texto plano --text-2, sin chip color-doctor */
+:where(.agx-agenda) [data-appt-id] > div + div > span {
+  background: transparent;
+  padding: 0;
+  color: var(--text-2);
+  font-size: 10.5px;
+  font-weight: 500;
+}
+
+/* Vista Lista: mismo mapa por estado (la fila ya expone --mf-status-color) */
+:where(.agx-agenda) [role="listitem"] {
+  background: color-mix(in srgb, var(--mf-status-color, var(--brand)) 7%, var(--bg-elev));
+  border-left-color: var(--mf-status-color, var(--brand));
+}
+
+/* Móvil: el header de columnas (ahora fijo, apilado) no debe comerse el alto */
+@media (max-width: 767.98px) {
+  .agx-agenda .agx-day-head { max-height: 128px; overflow-y: auto; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .agx-agenda [role="tab"],
+  .agx-agenda > header button,
+  .agx-agenda [data-appt-id] { transition: none; }
+}
+`;
+
 function AgendaShell({ highlightId }: { highlightId: string | null }) {
   const { state, dispatch, setDay, invalidateRangeCache } = useAgenda();
   const router = useRouter();
@@ -402,7 +607,13 @@ function AgendaShell({ highlightId }: { highlightId: string | null }) {
       ) : columns.length === 0 ? (
         <AgendaEmptyDay />
       ) : (
-        <div className={styles.scrollArea}>
+        <div className={styles.scrollArea} style={{ overflowY: "hidden" }}>
+          {/* Split header/cuerpo (lección del repo): Chrome clampea
+              position:sticky al área del grid, así que el header de columnas
+              vive en su PROPIO grid fuera del scroller vertical, como el
+              prototipo (.ag-head fuera de .ag-body). El scroll horizontal lo
+              sigue dando scrollArea para ambos; el vertical solo el cuerpo.
+              Mismos hijos y clases del module — solo contenedores decorativos. */}
           <div
             className={styles.scrollGrid}
             style={
@@ -411,20 +622,52 @@ function AgendaShell({ highlightId }: { highlightId: string | null }) {
                 "--mf-agenda-slot-min": state.slotMinutes,
                 "--mf-agenda-day-start": state.dayStart,
                 "--mf-agenda-day-end": state.dayEnd,
+                display: "flex",
+                flexDirection: "column",
+                height: "100%",
+                minWidth: "min-content",
               } as React.CSSProperties
             }
           >
-            <div className={styles.cornerCell} aria-hidden />
-            <div className={styles.columnsHeader}>
-              {columns.map((col) => (
-                <AgendaColumnHeader key={col.key} column={col} />
-              ))}
+            <div
+              className="agx-day-head"
+              style={{
+                display: "grid",
+                gridTemplateColumns: "var(--mf-agenda-axis-w) minmax(0, 1fr)",
+                flex: "none",
+                overflowY: "hidden",
+                scrollbarGutter: "stable",
+              }}
+            >
+              <div className={styles.cornerCell} aria-hidden />
+              <div className={styles.columnsHeader}>
+                {columns.map((col) => (
+                  <AgendaColumnHeader key={col.key} column={col} />
+                ))}
+              </div>
             </div>
-            <AgendaTimeAxis />
-            <div className={styles.columnsBody}>
-              {columns.map((col) => (
-                <AgendaColumn key={col.key} column={col} />
-              ))}
+            <div
+              style={{
+                flex: "1 1 0%",
+                minHeight: 0,
+                overflowY: "auto",
+                overflowX: "hidden",
+                scrollbarGutter: "stable",
+              }}
+            >
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "var(--mf-agenda-axis-w) minmax(0, 1fr)",
+                }}
+              >
+                <AgendaTimeAxis />
+                <div className={styles.columnsBody}>
+                  {columns.map((col) => (
+                    <AgendaColumn key={col.key} column={col} />
+                  ))}
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -433,7 +676,11 @@ function AgendaShell({ highlightId }: { highlightId: string | null }) {
   );
 
   return (
-    <div className={`${styles.page} ${detailOpen ? "" : styles.detailClosed}`}>
+    <div
+      className={`${styles.page} ${detailOpen ? "" : styles.detailClosed} agx-agenda`}
+      style={{ "--mf-subbar-h": "40px" } as React.CSSProperties}
+    >
+      <style>{AGX_CSS}</style>
       <DragOverlapContext.Provider value={dragOverlap}>
         <DndContext
           sensors={sensors}

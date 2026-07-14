@@ -24,8 +24,8 @@ export function HomeSection({
       style={{
         background: "var(--bg-elev)",
         border: "1px solid var(--border-soft)",
-        borderRadius: 14,
-        boxShadow: "0 1px 3px rgba(15,10,30,0.04), 0 1px 2px rgba(15,10,30,0.03)",
+        borderRadius: "var(--radius-lg)",
+        boxShadow: "var(--shadow-1)",
         overflow: "hidden",
         display: "flex",
         flexDirection: "column",
@@ -35,21 +35,19 @@ export function HomeSection({
       <header
         style={{
           display: "flex",
-          alignItems: "center",
+          alignItems: "flex-start",
           justifyContent: "space-between",
           gap: 12,
-          padding: "14px 18px",
-          borderBottom: "1px solid var(--border-soft)",
+          padding: "16px 20px 12px",
         }}
       >
         <div style={{ minWidth: 0 }}>
           <h2
             style={{
-              fontSize: 13,
+              fontSize: 15,
               fontWeight: 600,
               color: "var(--text-1)",
               margin: 0,
-              letterSpacing: "-0.01em",
             }}
           >
             {title}
@@ -57,8 +55,8 @@ export function HomeSection({
           {subtitle && (
             <div
               style={{
-                fontSize: 11,
-                color: "var(--text-2)",
+                fontSize: 12.5,
+                color: "var(--text-3)",
                 marginTop: 2,
               }}
             >
@@ -68,7 +66,7 @@ export function HomeSection({
         </div>
         {action && <div style={{ flexShrink: 0 }}>{action}</div>}
       </header>
-      <div style={{ padding: noPad ? 0 : 18 }}>{children}</div>
+      <div style={{ padding: noPad ? 0 : "0 20px 20px" }}>{children}</div>
     </section>
   );
 }

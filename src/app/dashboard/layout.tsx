@@ -177,7 +177,9 @@ export default async function DashboardLayout({ children }: { children: React.Re
     <a href="#main-content" className="mf-skip-link">
       {t("common.skipToContent")}
     </a>
-    <div className="dashboard-shell flex min-h-screen font-sans">
+    {/* Fondo --bg plano (Variante A): inline y solo aquí — .dashboard-shell la
+        comparten labs/proveedores/afiliados, que no entran en el piloto. */}
+    <div className="dashboard-shell flex min-h-screen font-sans" style={{ background: "var(--bg)" }}>
       <Sidebar
         user={{
           firstName: user.firstName,

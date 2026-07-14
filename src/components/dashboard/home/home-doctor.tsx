@@ -48,7 +48,7 @@ export function HomeDoctor({ user, data }: Props) {
         justifyContent: "space-between",
         gap: 16,
         flexWrap: "wrap",
-        marginBottom: 18,
+        marginBottom: 24,
       }}>
         <Greeting userFullName={`Dr. ${user.displayName}`} trailing={trailing} />
         <HomeQuickActions />
@@ -60,8 +60,8 @@ export function HomeDoctor({ user, data }: Props) {
         style={{
           display: "grid",
           gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)",
-          gap: 18,
-          marginBottom: 18,
+          gap: 16,
+          marginBottom: 24,
         }}
         className="mf-home-doctor-grid"
       >
@@ -111,7 +111,7 @@ export function HomeDoctor({ user, data }: Props) {
               style={{
                 padding: "32px 16px",
                 textAlign: "center",
-                color: "var(--text-2)",
+                color: "var(--text-3)",
                 fontSize: 13,
               }}
             >

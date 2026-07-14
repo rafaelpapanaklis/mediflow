@@ -58,7 +58,7 @@ export function HomeReceptionist({ user, data }: Props) {
         justifyContent: "space-between",
         gap: 16,
         flexWrap: "wrap",
-        marginBottom: 18,
+        marginBottom: 24,
       }}>
         <Greeting
           userFullName={user.displayName}
@@ -75,8 +75,8 @@ export function HomeReceptionist({ user, data }: Props) {
         style={{
           display: "grid",
           gridTemplateColumns: "minmax(0, 2fr) minmax(0, 1fr)",
-          gap: 18,
-          marginBottom: 18,
+          gap: 16,
+          marginBottom: 24,
         }}
         className="mf-home-receptionist-grid"
       >
@@ -155,7 +155,7 @@ export function HomeReceptionist({ user, data }: Props) {
           {data.checkedInPatients.length > 0 && (
             <div
               style={{
-                padding: "12px 14px",
+                padding: "12px 16px",
                 background: "var(--brand-softer)",
                 borderTop: "1px solid var(--border-soft)",
               }}
@@ -166,10 +166,10 @@ export function HomeReceptionist({ user, data }: Props) {
                   alignItems: "center",
                   gap: 6,
                   fontSize: 11,
-                  fontWeight: 600,
+                  fontWeight: 700,
                   letterSpacing: "0.06em",
                   textTransform: "uppercase",
-                  color: "var(--trial-accent-calm)",
+                  color: "var(--brand)",
                   marginBottom: 6,
                 }}
               >
@@ -190,9 +190,9 @@ export function HomeReceptionist({ user, data }: Props) {
                   <span>{p.patient.name}</span>
                   <span
                     style={{
-                      color: "var(--text-2)",
-                      fontFamily: "var(--font-mono, monospace)",
-                      fontSize: 11,
+                      color: "var(--text-3)",
+                      fontVariantNumeric: "tabular-nums",
+                      fontSize: 12,
                     }}
                   >
                     {p.minutesWaiting ?? 0} min

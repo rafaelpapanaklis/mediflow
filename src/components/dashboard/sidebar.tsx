@@ -10,7 +10,7 @@ import {
   Activity, Gift, DoorOpen, Package, Building2,
   CreditCard, Wallet, BarChart3, Monitor, UserCog, Globe, ClipboardList, Settings,
   ShoppingBag, Baby, Zap, Smile, Anchor, Truck, ShoppingCart,
-  ChevronDown, ChevronRight, Moon, Sun, LogOut, PanelLeftClose, PanelLeft,
+  ChevronDown, Moon, Sun, LogOut, PanelLeftClose, PanelLeft,
   X, Plus, LifeBuoy, Star, ScrollText, type LucideIcon,
 } from "lucide-react";
 import { useSidebarCounts } from "@/hooks/use-sidebar-counts";
@@ -437,10 +437,11 @@ export function Sidebar(props: SidebarProps) {
               alignItems: "center",
               gap: collapsed ? 0 : 10,
               justifyContent: collapsed ? "center" : "flex-start",
-              padding: collapsed ? "8px 0" : "7px 10px",
+              padding: collapsed ? "8px 0" : "0 10px 0 12px",
+              minHeight: 40,
               borderRadius: 8,
               color: "var(--text-2)",
-              fontSize: 13,
+              fontSize: 13.5,
               fontWeight: 500,
               background: "transparent",
               border: "1px solid transparent",
@@ -449,7 +450,7 @@ export function Sidebar(props: SidebarProps) {
               opacity: 0.55,
             }}
           >
-            <SoonIcon size={16} aria-hidden style={{ flexShrink: 0 }} />
+            <SoonIcon size={18} strokeWidth={1.75} aria-hidden style={{ flexShrink: 0 }} />
             {!collapsed && (
               <>
                 <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis" }}>
@@ -459,13 +460,13 @@ export function Sidebar(props: SidebarProps) {
                   style={{
                     marginLeft: "auto",
                     fontSize: 9,
-                    fontWeight: 700,
+                    fontWeight: 600,
                     textTransform: "uppercase",
-                    letterSpacing: 0.3,
-                    color: "var(--text-2)",
+                    letterSpacing: "0.06em",
+                    color: "var(--text-3)",
                     border: "1px solid var(--border-soft)",
-                    borderRadius: 6,
-                    padding: "1px 5px",
+                    borderRadius: 99,
+                    padding: "1.5px 6px",
                   }}
                 >
                   Próximamente
@@ -492,18 +493,16 @@ export function Sidebar(props: SidebarProps) {
             alignItems: "center",
             gap: collapsed ? 0 : 10,
             justifyContent: collapsed ? "center" : "flex-start",
-            padding: collapsed ? "8px 0" : "7px 10px",
+            padding: collapsed ? "8px 0" : "0 10px 0 12px",
+            minHeight: 40,
             borderRadius: 8,
             color: active ? undefined : "var(--text-2)",
-            fontSize: 13,
-            fontWeight: 500,
+            fontSize: 13.5,
+            fontWeight: active ? 600 : 500,
             textDecoration: "none",
             background: active ? "var(--brand-soft)" : "transparent",
-            border: active ? "1px solid rgba(124,58,237,0.20)" : "1px solid transparent",
-            boxShadow: active
-              ? "0 0 12px rgba(124,58,237,0.08), inset 0 0 0 1px rgba(124,58,237,0.08)"
-              : "none",
-            transition: "background 0.15s, color 0.15s, border-color 0.15s",
+            border: "1px solid transparent",
+            transition: "background var(--dur-1) var(--ease), color var(--dur-1) var(--ease)",
             whiteSpace: "nowrap",
           }}
           onMouseEnter={(e) => {
@@ -517,28 +516,14 @@ export function Sidebar(props: SidebarProps) {
             e.currentTarget.style.color = "var(--text-2)";
           }}
         >
-          <Icon size={16} aria-hidden style={{ flexShrink: 0 }} />
+          <Icon size={18} strokeWidth={1.75} aria-hidden style={{ flexShrink: 0 }} />
           {!collapsed && (
             <>
               <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis" }}>
                 {t(`sidebar.nav.${item.id}`)}
               </span>
               {count > 0 && (
-                <span
-                  aria-label={t("sidebar.itemPending", { count })}
-                  style={{
-                    fontFamily: "var(--font-mono, monospace)",
-                    fontSize: 10,
-                    fontWeight: 500,
-                    padding: "1px 6px",
-                    minWidth: 18,
-                    textAlign: "center",
-                    borderRadius: 10,
-                    background: active ? "rgba(124,58,237,0.20)" : "var(--brand-soft)",
-                    color: active ? "var(--brand)" : "var(--text-2)",
-                    flexShrink: 0,
-                  }}
-                >
+                <span className="mf-nav-count" aria-label={t("sidebar.itemPending", { count })}>
                   {count > 99 ? "99+" : count}
                 </span>
               )}
@@ -547,9 +532,9 @@ export function Sidebar(props: SidebarProps) {
                   aria-label={t("sidebar.consultInProgress")}
                   title={t("sidebar.consultInProgress")}
                   style={{
-                    width: 6, height: 6, borderRadius: "50%",
+                    width: 7, height: 7, borderRadius: "50%",
                     background: "var(--success)",
-                    boxShadow: "0 0 4px rgba(16,185,129,0.6)",
+                    boxShadow: "0 0 0 3px var(--success-soft)",
                     flexShrink: 0,
                   }}
                 />
@@ -634,6 +619,45 @@ export function Sidebar(props: SidebarProps) {
 
   const sidebarInner = (
     <>
+      {/* Marca "105" — degradado SOLO aquí, en el CTA, barra activa y KPI hero */}
+      <div
+        aria-hidden
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: collapsed ? "center" : "flex-start",
+          gap: 9,
+          padding: collapsed ? "2px 0 10px" : "2px 10px 12px",
+        }}
+      >
+        <svg width="26" height="26" viewBox="0 0 36 36" aria-hidden="true" style={{ flexShrink: 0 }}>
+          <defs>
+            <linearGradient id="mf-lg-brand" x1="0" x2="1">
+              <stop offset="0" stopColor="#7c3aed" />
+              <stop offset="1" stopColor="#2563eb" />
+            </linearGradient>
+          </defs>
+          <path d="M18 4 L31 11 L18 18 L5 11 Z" fill="#efeafe" stroke="#7c3aed" strokeWidth="2.4" strokeLinejoin="round" />
+          <path d="M5.5 18.5 L18 25.2 L30.5 18.5" fill="none" stroke="url(#mf-lg-brand)" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
+          <path d="M5.5 24.5 L18 31.2 L30.5 24.5" fill="none" stroke="url(#mf-lg-brand)" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" opacity=".45" />
+        </svg>
+        {!collapsed && (
+          <div
+            style={{
+              fontFamily: "var(--font-logo, var(--font-sans, system-ui, sans-serif))",
+              fontSize: 16.5,
+              letterSpacing: "-0.025em",
+              lineHeight: 1,
+              paddingTop: 1,
+              whiteSpace: "nowrap",
+            }}
+          >
+            <span style={{ color: "var(--brand)", fontWeight: 700 }}>Dale</span>
+            <span style={{ color: "var(--text-1)", fontWeight: 600 }}>Control</span>
+          </div>
+        )}
+      </div>
+
       <ClinicSwitcher
         collapsed={collapsed}
         clinicName={props.clinicName}
@@ -657,18 +681,24 @@ export function Sidebar(props: SidebarProps) {
                     height: 36,
                     display: "grid",
                     placeItems: "center",
-                    background: "var(--brand)",
+                    background: "var(--brand-grad)",
                     color: "#fff",
                     border: "none",
                     borderRadius: 8,
                     cursor: "pointer",
-                    boxShadow: "0 4px 12px -2px color-mix(in srgb, var(--brand) 45%, transparent)",
-                    transition: "transform 0.12s, box-shadow 0.12s",
+                    boxShadow: "var(--shadow-2)",
+                    transition: "transform var(--dur-1) var(--ease), box-shadow var(--dur-1) var(--ease)",
                   }}
-                  onMouseEnter={(e) => { e.currentTarget.style.transform = "translateY(-1px)"; }}
-                  onMouseLeave={(e) => { e.currentTarget.style.transform = "translateY(0)"; }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.transform = "translateY(-1px)";
+                    e.currentTarget.style.boxShadow = "var(--shadow-3)";
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.transform = "translateY(0)";
+                    e.currentTarget.style.boxShadow = "var(--shadow-2)";
+                  }}
                 >
-                  <Plus size={18} aria-hidden />
+                  <Plus size={18} strokeWidth={1.75} aria-hidden />
                 </button>
               </Tooltip.Trigger>
               <Tooltip.Portal>
@@ -695,33 +725,34 @@ export function Sidebar(props: SidebarProps) {
             aria-label={t("sidebar.newAppointmentAria")}
             style={{
               margin: "10px 12px 14px",
-              padding: "9px 14px",
+              height: 40,
+              padding: "0 14px",
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
               gap: 8,
-              background: "var(--brand)",
+              background: "var(--brand-grad)",
               color: "#fff",
               border: "none",
-              borderRadius: 9,
-              fontSize: 13,
-              fontWeight: 700,
+              borderRadius: 10,
+              fontSize: 13.5,
+              fontWeight: 600,
               cursor: "pointer",
               fontFamily: "inherit",
               letterSpacing: "-0.01em",
-              boxShadow: "0 4px 14px -2px color-mix(in srgb, var(--brand) 50%, transparent)",
-              transition: "transform 0.12s, box-shadow 0.12s, filter 0.12s",
+              boxShadow: "var(--shadow-2)",
+              transition: "transform var(--dur-1) var(--ease), box-shadow var(--dur-1) var(--ease)",
             }}
             onMouseEnter={(e) => {
               e.currentTarget.style.transform = "translateY(-1px)";
-              e.currentTarget.style.filter = "brightness(1.08)";
+              e.currentTarget.style.boxShadow = "var(--shadow-3)";
             }}
             onMouseLeave={(e) => {
               e.currentTarget.style.transform = "translateY(0)";
-              e.currentTarget.style.filter = "brightness(1)";
+              e.currentTarget.style.boxShadow = "var(--shadow-2)";
             }}
           >
-            <Plus size={15} aria-hidden />
+            <Plus size={16} strokeWidth={1.75} aria-hidden />
             {t("sidebar.newAppointment")}
           </button>
         )
@@ -846,6 +877,10 @@ export function Sidebar(props: SidebarProps) {
         style={{
           width: collapsed ? 68 : undefined,
           paddingInline: collapsed ? 8 : 10,
+          // Variante A: sidebar claro sólido. Inline para no tocar .sidebar-new,
+          // que comparten los paneles de labs/proveedores/admin (fuera del piloto).
+          background: "var(--bg-elev)",
+          borderRight: "1px solid var(--border-soft)",
         }}
       >
         {sidebarInner}
@@ -897,7 +932,7 @@ function ClinicSwitcher({
           background: "linear-gradient(135deg, #7c3aed, #5b21b6)",
           display: "grid", placeItems: "center",
           color: "#fff", fontWeight: 700, fontSize: 11,
-          boxShadow: "0 0 20px rgba(124,58,237,0.4), inset 0 1px 0 rgba(255,255,255,0.2)",
+          boxShadow: "0 2px 6px rgba(124,58,237,0.35)",
           flexShrink: 0,
         }}
       >
@@ -915,16 +950,21 @@ function ClinicSwitcher({
           >
             {clinicName}
           </div>
-          <div
+          <span
             style={{
-              fontSize: 10, fontWeight: 600,
-              letterSpacing: "0.06em",
-              color: "var(--text-3)",
+              display: "inline-block",
+              marginTop: 2,
+              fontSize: 9.5, fontWeight: 700,
+              letterSpacing: "0.08em",
+              color: "var(--brand)",
+              background: "var(--brand-soft)",
+              borderRadius: 99,
+              padding: "1.5px 7px",
               textTransform: "uppercase",
             }}
           >
             {plan}
-          </div>
+          </span>
         </div>
       )}
       {!collapsed && hasOthers && (
@@ -936,18 +976,19 @@ function ClinicSwitcher({
   const brandStyle: React.CSSProperties = {
     display: "flex",
     alignItems: "center",
+    justifyContent: collapsed ? "center" : "flex-start",
     gap: 10,
-    padding: collapsed ? "8px 4px" : "8px 10px",
+    padding: collapsed ? "6px 4px" : "9px 10px",
     marginBottom: 10,
-    paddingBottom: 14,
-    borderBottom: "1px solid var(--border-soft)",
     width: "100%",
-    background: "transparent",
-    border: "none",
-    borderRadius: 8,
+    background: "var(--bg-elev)",
+    border: "1px solid var(--border-soft)",
+    borderRadius: 10,
+    boxShadow: "var(--shadow-1)",
     cursor: hasOthers ? "pointer" : "default",
     fontFamily: "var(--font-sans, system-ui, sans-serif)",
     textAlign: "left",
+    transition: "background var(--dur-1) var(--ease), box-shadow var(--dur-1) var(--ease)",
   };
 
   if (!hasOthers) {
@@ -959,8 +1000,14 @@ function ClinicSwitcher({
       <DropdownMenu.Trigger
         aria-label={t("sidebar.clinicSwitcherAria", { name: clinicName })}
         style={brandStyle}
-        onMouseEnter={(e) => { e.currentTarget.style.background = "var(--bg-hover)"; }}
-        onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.background = "var(--bg-hover)";
+          e.currentTarget.style.boxShadow = "var(--shadow-2)";
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.background = "var(--bg-elev)";
+          e.currentTarget.style.boxShadow = "var(--shadow-1)";
+        }}
       >
         {brandContent}
       </DropdownMenu.Trigger>
@@ -1052,7 +1099,7 @@ function CollapsibleSection({
 }) {
   const bodyId = `mf-sidebar-section-${id}`;
   return (
-    <div style={{ marginTop: 6 }}>
+    <div style={{ marginTop: 14 }}>
       <button
         type="button"
         onClick={onToggle}
@@ -1063,27 +1110,31 @@ function CollapsibleSection({
           alignItems: "center",
           gap: 6,
           width: "100%",
-          padding: "10px 10px 6px",
+          padding: "6px 10px",
           background: "transparent",
           border: "none",
+          borderRadius: 6,
           color: "var(--text-3)",
-          fontSize: 10,
-          fontWeight: 600,
+          fontSize: 11,
+          fontWeight: 700,
           letterSpacing: "0.08em",
           textTransform: "uppercase",
           cursor: "pointer",
           fontFamily: "inherit",
           textAlign: "left",
+          transition: "color var(--dur-1) var(--ease)",
         }}
+        onMouseEnter={(e) => { e.currentTarget.style.color = "var(--text-2)"; }}
+        onMouseLeave={(e) => { e.currentTarget.style.color = "var(--text-3)"; }}
       >
-        <ChevronRight
-          size={12}
+        {label}
+        <ChevronDown
+          size={14}
           aria-hidden
           className="mf-sidebar-section-chevron"
           data-collapsed={collapsed}
-          style={{ flexShrink: 0 }}
+          style={{ flexShrink: 0, marginLeft: "auto", color: "var(--text-4)" }}
         />
-        {label}
       </button>
       <div
         className="mf-sidebar-section-body"
@@ -1197,8 +1248,10 @@ function SidebarFooter({
             border: "none",
             color: "var(--text-3)",
             fontSize: 12,
+            fontWeight: 500,
             cursor: "pointer",
             fontFamily: "inherit",
+            transition: "background var(--dur-1) var(--ease), color var(--dur-1) var(--ease)",
           }}
           onMouseEnter={(e) => {
             e.currentTarget.style.background = "var(--bg-hover)";
@@ -1209,7 +1262,7 @@ function SidebarFooter({
             e.currentTarget.style.color = "var(--text-3)";
           }}
         >
-          {isDark ? <Sun size={14} aria-hidden /> : <Moon size={14} aria-hidden />}
+          {isDark ? <Sun size={15} strokeWidth={1.75} aria-hidden /> : <Moon size={15} strokeWidth={1.75} aria-hidden />}
           {!collapsed && (isDark ? t("sidebar.modeLight") : t("sidebar.modeDark"))}
         </button>
 
@@ -1232,6 +1285,7 @@ function SidebarFooter({
             fontSize: 12,
             cursor: "pointer",
             fontFamily: "inherit",
+            transition: "background var(--dur-1) var(--ease), color var(--dur-1) var(--ease)",
           }}
           onMouseEnter={(e) => {
             e.currentTarget.style.background = "var(--bg-hover)";
@@ -1261,6 +1315,7 @@ function SidebarFooter({
             cursor: "pointer",
             fontFamily: "inherit",
             width: "100%",
+            transition: "background var(--dur-1) var(--ease)",
           }}
           onMouseEnter={(e) => (e.currentTarget.style.background = "var(--bg-hover)")}
           onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
