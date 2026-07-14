@@ -6,7 +6,9 @@ import type { CSSProperties } from "react";
 import { PLANS, PRICING_COPY, fmtMXN, type Plan } from "./landing-data";
 
 /**
- * Sección de precios: toggle Mensual/Anual + 3 tarjetas.
+ * Sección de precios (CAMBIOS §2-§3): toggle Mensual/Anual (35% off), promo
+ * de primer mes SOLO en mensual, badges flotantes en las 3 tarjetas y los 3
+ * CTAs "Contratar Ahora!" en el MISMO azul sólido, anclados abajo.
  * CTA → /signup?plan=basic|pro|clinic&billing=monthly|annual — el signup
  * valida ?plan= contra PlanId (BASIC|PRO|CLINIC), ver signup-form.tsx.
  */
@@ -14,6 +16,13 @@ const PLAN_TO_SIGNUP: Record<Plan["key"], "basic" | "pro" | "clinic"> = {
   basico: "basic",
   profesional: "pro",
   clinica: "clinic",
+};
+
+/** Sombra del badge flotante, a juego con su fondo (reference badgeSh). */
+const BADGE_SHADOW: Record<string, string> = {
+  "#0d9488": "rgba(13,148,136,.35)",
+  "#2563eb": "rgba(37,99,235,.35)",
+  "#1e3a8a": "rgba(30,58,138,.35)",
 };
 
 const srOnly: CSSProperties = { position: "absolute", width: 1, height: 1, overflow: "hidden", clip: "rect(0 0 0 0)", whiteSpace: "nowrap" };
@@ -34,12 +43,20 @@ export function PricingSection() {
   const toggleIdle: CSSProperties = { background: "transparent", color: "#475569" };
 
   return (
-    <section id="precios" style={{ scrollMarginTop: 80, background: "radial-gradient(1000px 480px at 50% -60px,#dbeafe 0%,#fff 60%)", padding: "80px 20px" }}>
+    <section id="precios" style={{ scrollMarginTop: 80, background: "radial-gradient(1000px 480px at 50% -60px,#dbeafe 0%,#fff 60%)", padding: "76px 20px" }}>
       <div style={{ maxWidth: 1180, margin: "0 auto" }}>
         <div style={{ textAlign: "center", maxWidth: 660, margin: "0 auto 28px" }}>
           <div style={{ fontSize: 13, fontWeight: 700, letterSpacing: ".08em", textTransform: "uppercase", color: "#2563eb", marginBottom: 12 }}>{PRICING_COPY.eyebrow}</div>
-          <h2 style={{ fontSize: "clamp(28px,3.4vw,40px)", lineHeight: 1.15, fontWeight: 800, letterSpacing: "-0.02em", margin: "0 0 12px" }}>{PRICING_COPY.title}</h2>
-          <p style={{ fontSize: 17, lineHeight: 1.55, color: "#475569", margin: 0 }}>{PRICING_COPY.subtitle}</p>
+          {/* Título SIEMPRE en una sola línea centrada: se escala, no se parte (CAMBIOS §3). */}
+          <h2 style={{ fontSize: "clamp(16px,4.4vw,36px)", lineHeight: 1.15, fontWeight: 800, letterSpacing: "-0.02em", margin: "0 auto 12px", whiteSpace: "nowrap", width: "max-content", maxWidth: "100%" }}>{PRICING_COPY.title}</h2>
+          {/* Copy de landing-data; el "$19" va en verde como en el reference. */}
+          <p style={{ fontSize: 17, lineHeight: 1.55, color: "#475569", margin: 0 }}>
+            {PRICING_COPY.subtitle.split("$19").map((part, i, arr) =>
+              i < arr.length - 1
+                ? <span key={i}>{part}<b style={{ color: "#15803d" }}>$19</b></span>
+                : <span key={i}>{part}</span>
+            )}
+          </p>
         </div>
 
         {/* Toggle Mensual / Anual */}
@@ -67,21 +84,21 @@ export function PricingSection() {
           </div>
         </div>
 
-        {/* Tarjetas */}
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(290px,1fr))", gap: 22, alignItems: "start" }}>
+        {/* Tarjetas — misma altura; el CTA se ancla abajo (marginTop:auto) */}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(290px,1fr))", gap: 22 }}>
           {PLANS.map((p) => {
             const big = anual ? p.yearlyPerMonth : p.monthly;
             const billing = anual ? "annual" : "monthly";
+            const first = fmtMXN(p.firstMonth);
             const cardStyle: CSSProperties = p.recommended
               ? { position: "relative", background: "#fff", border: "2px solid #2563eb", borderRadius: 22, padding: "34px 26px 28px", display: "flex", flexDirection: "column", boxShadow: "0 18px 44px rgba(37,99,235,.18)" }
               : { position: "relative", background: "#fff", border: "1px solid #e8edf5", borderRadius: 22, padding: "30px 26px 28px", display: "flex", flexDirection: "column", boxShadow: "0 4px 22px rgba(30,64,175,.05)" };
             return (
               <article key={p.key} style={cardStyle}>
-                {p.recommended && (
-                  <div style={{ position: "absolute", top: -14, left: "50%", transform: "translateX(-50%)", background: "#2563eb", color: "#fff", fontSize: 12.5, fontWeight: 700, letterSpacing: ".03em", padding: "7px 18px", borderRadius: 999, boxShadow: "0 6px 16px rgba(37,99,235,.35)", whiteSpace: "nowrap" }}>
-                    {PRICING_COPY.popularBadge}
-                  </div>
-                )}
+                {/* Badge flotante en las TRES tarjetas (CAMBIOS §3) */}
+                <div style={{ position: "absolute", top: -14, left: "50%", transform: "translateX(-50%)", background: p.badgeColor, color: "#fff", fontSize: 12.5, fontWeight: 700, letterSpacing: ".03em", padding: "7px 18px", borderRadius: 999, boxShadow: `0 6px 16px ${BADGE_SHADOW[p.badgeColor] ?? "rgba(15,23,42,.25)"}`, whiteSpace: "nowrap" }}>
+                  {p.badge}
+                </div>
                 <div style={{ fontSize: 14, fontWeight: 700, letterSpacing: ".04em", textTransform: "uppercase", color: "#1d4ed8" }}>{p.name}</div>
                 <p style={{ fontSize: 15, color: "#475569", margin: "8px 0 0", lineHeight: 1.45, minHeight: 42 }}>{p.tagline}</p>
                 <div style={{ marginTop: 18, display: "flex", alignItems: "flex-end", gap: 8 }}>
@@ -89,14 +106,20 @@ export function PricingSection() {
                   <span style={{ fontSize: 14, fontWeight: 600, color: "#64748b", paddingBottom: 8 }}>MXN<br />/mes</span>
                 </div>
                 <div style={{ marginTop: 6, fontSize: 13, color: "#94a3b8" }}>{PRICING_COPY.noContract}</div>
+                {/* Promo primer mes: caja SUTIL, SOLO en mensual (CAMBIOS §3) */}
+                {!anual && (
+                  <div style={{ marginTop: 14, background: "#f6fdf8", border: "1px solid #d9f3e1", borderRadius: 10, padding: "8px 12px", fontSize: 13, color: "#3f6e51" }}>
+                    Tu primer mes: <b style={{ color: "#15803d" }}>solo {first}</b> · ahorras {fmtMXN(p.monthly - p.firstMonth)}
+                  </div>
+                )}
                 {anual && (
-                  <div style={{ marginTop: 8, fontSize: 13.5, color: "#334155" }}>
-                    {PRICING_COPY.billedYearly(fmtMXN(p.yearly))} · <span style={{ color: "#15803d", fontWeight: 600 }}>{PRICING_COPY.savings(fmtMXN(p.yearlySavings))}</span>
+                  <div style={{ marginTop: 14, background: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: 10, padding: "9px 12px", fontSize: 13, color: "#334155" }}>
+                    {PRICING_COPY.billedYearly(fmtMXN(p.yearly))} · <span style={{ color: "#15803d", fontWeight: 700 }}>{PRICING_COPY.savings(fmtMXN(p.yearlySavings))}</span>
                   </div>
                 )}
                 <div style={{ height: 1, background: "#e8edf5", margin: "20px 0 14px" }} />
 
-                {/* Capacidades con pill */}
+                {/* Capacidades con pill (Tokens IA en Básico = ✗ gris, CAMBIOS §2) */}
                 <ul style={{ listStyle: "none", margin: "0 0 14px", padding: "0 0 14px", borderBottom: "1px solid #e8edf5", display: "flex", flexDirection: "column", gap: 1 }}>
                   {p.capacity.map((c) => (
                     <li key={c.text} style={{ display: "flex", gap: 11, alignItems: "center", padding: "6px 0" }}>
@@ -117,7 +140,7 @@ export function PricingSection() {
                 )}
 
                 {/* Features ✓/✗ */}
-                <ul style={{ listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 1 }}>
+                <ul style={{ listStyle: "none", margin: "0 0 22px", padding: 0, display: "flex", flexDirection: "column", gap: 1 }}>
                   {p.features.map((f) => (
                     <li key={f.text} style={{ display: "flex", gap: 11, alignItems: "flex-start", padding: "7px 0" }}>
                       <span style={{ flex: "0 0 auto", marginTop: 1 }}>
@@ -135,26 +158,28 @@ export function PricingSection() {
                   ))}
                 </ul>
 
+                {/* CTA: los 3 planes con el MISMO azul sólido, 2 líneas, anclado abajo */}
                 <Link
                   href={`/signup?plan=${PLAN_TO_SIGNUP[p.key]}&billing=${billing}`}
-                  className={p.recommended ? "dcv2-btn-primary" : "dcv2-btn-plan-sec"}
-                  style={
-                    p.recommended
-                      ? { marginTop: 22, display: "block", textAlign: "center", width: "100%", padding: 14, borderRadius: 13, border: "none", background: "#2563eb", fontSize: 15.5, fontWeight: 700, color: "#fff", boxShadow: "0 8px 20px rgba(37,99,235,.30)" }
-                      : { marginTop: 22, display: "block", textAlign: "center", width: "100%", padding: 14, borderRadius: 13, border: "1.5px solid #dbe4f3", background: "#fff", fontSize: 15.5, fontWeight: 700, color: "#1d4ed8" }
-                  }
+                  className="dcv2-btn-plan"
+                  style={{ marginTop: "auto", display: "block", textAlign: "center", textDecoration: "none", width: "100%", padding: "12px 14px", borderRadius: 13, border: "none", background: "#2563eb", color: "#fff", boxShadow: "0 10px 24px rgba(37,99,235,.35)" }}
                 >
-                  {PRICING_COPY.cta}
+                  <span style={{ display: "block", fontSize: 16, fontWeight: 800, letterSpacing: "-0.01em" }}>{PRICING_COPY.cta}</span>
+                  {!anual && (
+                    <span style={{ display: "block", marginTop: 4, fontSize: 12.5, fontWeight: 800, color: "#fff", background: "rgba(255,255,255,.16)", borderRadius: 999, padding: "3px 10px", width: "fit-content", marginLeft: "auto", marginRight: "auto" }}>
+                      {PRICING_COPY.ctaSub(first)}
+                    </span>
+                  )}
                 </Link>
               </article>
             );
           })}
         </div>
 
-        {/* Chips de confianza */}
-        <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "center", gap: 12, marginTop: 34 }}>
+        {/* 8 chips de confianza compactos: caben en 2 líneas en desktop (CAMBIOS §3) */}
+        <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "center", gap: 9, marginTop: 34 }}>
           {PRICING_COPY.trustChips.map((chip) => (
-            <div key={chip} style={{ display: "inline-flex", alignItems: "center", gap: 8, background: "#fff", border: "1px solid #e8edf5", borderRadius: 999, padding: "10px 18px", fontSize: 14, fontWeight: 600, color: "#334155" }}>
+            <div key={chip} style={{ display: "inline-flex", alignItems: "center", gap: 7, background: "#fff", border: "1px solid #e8edf5", borderRadius: 999, padding: "8px 13px", fontSize: 13, fontWeight: 600, color: "#334155", whiteSpace: "nowrap" }}>
               <span style={{ color: "#2563eb", fontWeight: 800 }}>✓</span> {chip}
             </div>
           ))}

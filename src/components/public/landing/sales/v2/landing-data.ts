@@ -1,6 +1,6 @@
 /**
  * DaleControl — Landing page: datos y copy (fuente de verdad).
- * NO cambiar precios, límites ni textos sin aprobación de negocio.
+ * Actualizado 2026-07-14. NO cambiar precios, límites ni textos sin aprobación de negocio.
  */
 
 export interface Feature {
@@ -19,12 +19,15 @@ export interface Plan {
   key: 'basico' | 'profesional' | 'clinica';
   name: string;
   tagline: string;
+  badge: string;          // etiqueta flotante sobre la tarjeta
+  badgeColor: string;     // fondo del badge
   monthly: number;        // MXN/mes
-  yearly: number;         // MXN/año (30% off)
+  firstMonth: number;     // PROMO: precio del primer mes (solo en modo mensual)
+  yearly: number;         // MXN/año (35% off)
   yearlyPerMonth: number; // equivalente mensual del anual
   yearlySavings: number;  // ahorro anual vs mensual
-  recommended: boolean;
-  addendum: string | null; // "Todo lo de X, y además:"
+  recommended: boolean;   // tarjeta destacada (borde azul + sombra)
+  addendum: string | null;
   capacity: CapacityRow[];
   features: Feature[];
 }
@@ -34,11 +37,12 @@ export const PLANS: Plan[] = [
     key: 'basico',
     name: 'Básico',
     tagline: 'Para ordenar tu clínica desde el día uno',
-    monthly: 499, yearly: 4192, yearlyPerMonth: 349, yearlySavings: 1796,
+    badge: 'Clínica nueva', badgeColor: '#0d9488',
+    monthly: 419, firstMonth: 19, yearly: 3264, yearlyPerMonth: 272, yearlySavings: 1764,
     recommended: false,
     addendum: null,
     capacity: [
-      { text: 'Pacientes', value: '200', included: true },
+      { text: 'Pacientes', value: '500', included: true },
       { text: 'Usuarios', value: '2', included: true },
       { text: 'Almacenamiento', value: '5 GB', included: true },
       { text: 'Tokens IA', value: '0 · Sin IA', included: false },
@@ -57,7 +61,8 @@ export const PLANS: Plan[] = [
     key: 'profesional',
     name: 'Profesional',
     tagline: 'La favorita de las clínicas dentales',
-    monthly: 999, yearly: 8392, yearlyPerMonth: 699, yearlySavings: 3596,
+    badge: '★ Más popular', badgeColor: '#2563eb',
+    monthly: 689, firstMonth: 29, yearly: 5376, yearlyPerMonth: 448, yearlySavings: 2892,
     recommended: true,
     addendum: 'Todo lo de Básico, y además:',
     capacity: [
@@ -79,7 +84,8 @@ export const PLANS: Plan[] = [
     key: 'clinica',
     name: 'Clínica',
     tagline: 'Para clínicas con varios consultorios',
-    monthly: 1999, yearly: 16792, yearlyPerMonth: 1399, yearlySavings: 7196,
+    badge: 'Clínica Grande', badgeColor: '#1e3a8a',
+    monthly: 1719, firstMonth: 39, yearly: 13404, yearlyPerMonth: 1117, yearlySavings: 7224,
     recommended: false,
     addendum: 'Todo lo de Profesional, y además:',
     capacity: [
@@ -100,43 +106,57 @@ export const PLANS: Plan[] = [
 
 export const PRICING_COPY = {
   eyebrow: 'Precios',
-  title: 'Un precio claro, en pesos y sin contratos',
-  subtitle: 'Elige tu plan, regístrate y paga desde el panel. Sin permanencia: cancela cuando quieras.',
+  // El título va en UNA sola línea centrada (white-space:nowrap + font clamp)
+  title: 'Un precio transparente y sin contratos',
+  subtitle: 'Regístrate hoy: tu primer mes cuesta desde $19 y no hay permanencia.',
   toggleMonthly: 'Mensual',
   toggleYearly: 'Anual',
-  yearlyBadge: '30% de descuento',
+  yearlyBadge: '35% de descuento',
   perMonth: 'MXN /mes',
   noContract: 'Sin permanencia · cancela cuando quieras',
+  // Caja promo sutil (solo modo mensual): fondo #f6fdf8, borde #d9f3e1
+  promo: (first: string, save: string) => `Tu primer mes: solo ${first} · ahorras ${save}`,
   billedYearly: (total: string) => `Facturado anualmente: ${total}`,
   savings: (amount: string) => `ahorras ${amount}`,
-  popularBadge: '★ Más popular',
-  cta: '¡Empieza ya!',
-  trustChips: ['Sin permanencia ni contratos anuales', 'Precios en MXN + IVA', 'Soporte en español'],
+  // CTA de 2 líneas — los 3 planes usan el MISMO botón azul sólido (#2563eb)
+  cta: 'Contratar Ahora!',
+  ctaSub: (first: string) => `Empieza hoy por solo ${first} MXN`, // pill blanca translúcida dentro del botón
+  trustChips: [
+    'Sin permanencia ni contratos anuales',
+    'Precios en MXN + IVA',
+    'Soporte en español e inglés',
+    'Página web gratuita incluida en cualquier plan',
+    'Última tecnología de software en IA',
+    'Datos respaldados con alta seguridad',
+    'CRM incluido de tus clientes',
+    'Facturación directa desde DaleControl',
+  ], // 8 chips compactos (13px) que caben en 2 líneas en desktop
 };
 
 export const HERO = {
   badge: 'Datos cifrados y respaldos diarios',
   title: 'El control total de tu clínica dental, en un solo lugar',
   subtitle: 'Agenda, cobros, radiografías 3D con IA y WhatsApp — todo desde tu navegador, en español y en pesos.',
-  ctaPrimary: 'Empieza hoy',      // → registro
-  ctaSecondary: 'Ver Precios!',   // botón azul sólido → #precios
-  bullets: ['Sin permanencia', 'Sin instalar nada', 'Precios en MXN'],
+  ctaPrimary: 'Empieza hoy',    // → registro
+  ctaSecondary: 'Ver Precios!', // botón AZUL SÓLIDO (igual que el primario) → #precios
+  bullets: ['Tu primer mes desde $19', 'Sin permanencia', 'Sin instalar nada'], // el 1º en verde #15803d
 };
 
 export const NAV = {
   links: [
     { label: 'Funciones', href: '#funciones' },
-    { label: 'Comparativa', href: '#comparativa' },
     { label: 'Precios', href: '#precios' },
+    { label: 'Comparativa', href: '#comparativa' },
     { label: 'FAQ', href: '#faq' },
   ],
   login: 'Iniciar sesión',
   signup: 'Crear cuenta',
 };
 
+/** Banda azul degradada (#1e3a8a→#2563eb), números blancos gigantes */
 export const STATS = [
-  { value: '+2,000', label: 'clínicas confían en DaleControl' },
-  { value: '+250,000', label: 'pacientes gestionados', trend: '▲ 35% este año' },
+  { value: '350+', label: 'clínicas nuevas en solo este mes' },
+  { value: '+500,000', label: 'pacientes gestionados', trend: '▲ 35% este año' },
   { value: '+10M', label: 'tokens de IA utilizados' },
 ];
 
@@ -146,7 +166,7 @@ export const SPOTLIGHTS_HEADER = {
   subtitle: 'No te lo contamos: míralo. Así se ve el panel real de DaleControl por dentro.',
 };
 
-/** 8 spotlights; el campo mockup indica qué mockup del reference se porta. */
+/** 6 spotlights (radiografías+modelos3D fusionados; whatsapp+IA fusionados) */
 export const SPOTLIGHTS = [
   {
     id: 'agenda', badge: 'Agenda inteligente',
@@ -183,69 +203,49 @@ export const SPOTLIGHTS = [
     mockup: 'presupuesto',
   },
   {
-    id: 'radiografias', badge: 'Radiografías con IA en la nube',
-    title: 'Tu CBCT en el navegador, sin instalar nada',
-    desc: 'Sube el DICOM y míralo desde cualquier dispositivo: en el consultorio, en casa o en el celular.',
+    id: 'imagenes3d', badge: 'Radiografías + Modelos 3D con IA',
+    title: 'Radiografías CBCT y modelos 3D, en tu navegador',
+    desc: 'Sube el DICOM de tu tomógrafo o el STL de tu escáner y míralos desde cualquier dispositivo — sin instalar nada.',
     bullets: [
-      'Reconstrucción 3D y cortes axial / coronal / sagital',
-      'Panorámica generada automáticamente',
-      'Análisis con IA que resalta hallazgos',
+      'Cortes axial, coronal y sagital + panorámica automática',
+      'IA que resalta hallazgos en el estudio',
+      'Modelos STL, PLY u OBJ girables dentro del expediente',
+      'Compártelos con el paciente para cerrar el tratamiento',
     ],
-    mockup: 'visor-dicom', // usa las 4 imágenes reales public/landing/cbct/*
-  },
-  {
-    id: 'modelos3d', badge: 'Modelos 3D dentales en vivo',
-    title: 'Muéstrale al paciente su boca en 3D',
-    desc: 'Sube archivos STL, PLY u OBJ de tu escáner intraoral y gíralos directo en el expediente del paciente.',
-    bullets: [
-      'Visor 3D en el navegador, sin programas extra',
-      'Vive dentro del expediente: odontograma, radiografías y plan de tratamiento juntos',
-      'Compártelos con el paciente para cerrar tratamientos',
-    ],
-    mockup: 'visor-stl', // arcada gris con raíces + toolbar Rotar/Medir/Marcar
+    mockup: 'visor-dicom-stl', // 4 imágenes reales public/landing/cbct/* (142px, object-fit:contain) + tira STL animada
   },
   {
     id: 'clinica3d', badge: 'Tu clínica en 3D',
     title: 'Un recorrido virtual que convierte curiosos en pacientes',
-    desc: 'Los pacientes recorren tu clínica desde su celular antes de agendar. Confianza que se nota.',
+    desc: 'Tu clínica en tercera dimensión, con cada sillón y consultorio en vivo. Los pacientes la recorren desde su celular antes de agendar.',
     bullets: [
-      'Diséñala tú mismo: arrastra paredes, sillones, rayos X y mobiliario',
-      'Modo "En Vivo" con el estado real de cada consultorio',
+      'Recórrela como si estuvieras adentro: sillones, consultorios y recepción',
+      'Modo "En Vivo": qué silla está ocupada y quién espera, en tiempo real',
       'Compártela en redes y en tu página pública',
     ],
-    mockup: 'clinica-visual', // plano con "● Ana Torres · En silla", "● J. Medina · Esperando"
+    mockup: 'clinica-isometrica', // escena SVG isométrica: 3 sillones dentales, recepción, sala de espera, chips de estado
   },
   {
-    id: 'whatsapp', badge: 'WhatsApp integrado',
-    title: 'Un bot que agenda citas mientras tú atiendes',
-    desc: 'Todo el WhatsApp de tu clínica en un inbox dentro del panel, en tiempo real.',
+    id: 'whatsapp-ia', badge: 'WhatsApp + Asistente IA',
+    title: 'Un bot que agenda citas y una IA que trabaja contigo',
+    desc: 'El WhatsApp de tu clínica y tu asistente clínico viven dentro del panel — atienden mientras tú trabajas.',
     bullets: [
-      'Bot que agenda citas solo, 24/7',
-      'Recordatorios y confirmaciones automáticas',
+      'Bot que agenda citas solo, 24/7, con recordatorios y confirmaciones',
       'Recall automático de pacientes inactivos',
+      'Diagnóstico diferencial, dosis y notas SOAP con /comandos',
     ],
-    mockup: 'inbox-whatsapp',
-  },
-  {
-    id: 'ia', badge: 'Asistente IA clínico',
-    title: 'Una IA que conoce tu clínica y trabaja contigo',
-    desc: 'Pregúntale por pacientes, agenda o cualquier dato de tu clínica — dentro del panel, sin salir a otra app.',
-    bullets: [
-      'Diagnóstico diferencial y dosis de medicamentos',
-      'Redacta notas SOAP y recetas con /comandos',
-      'Resume historias clínicas y sugiere estudios a pedir',
-    ],
-    disclaimer: 'Sus sugerencias no reemplazan el criterio clínico.',
-    mockup: 'asistente-ia',
+    disclaimer: 'Las sugerencias de la IA no reemplazan el criterio clínico.',
+    mockup: 'inbox-ia-split', // ventana dividida: chat WhatsApp | tarjetas IA + /comandos
   },
 ];
 
 export const MODULES_TRIO = {
   title: 'Y también dominas los números, tu equipo y tu presencia en línea',
   subtitle: 'Tres módulos más, directo del panel.',
+  // Los 3 mockups se estiran a la MISMA altura (flex column + flex:1)
   items: [
-    { id: 'analytics', title: 'Analytics que hablan claro', desc: 'Ocupación, doctores, procedimientos, no-shows, sala de espera, costos y margen — por día, mes, trimestre o año.', mockup: 'analytics' },
-    { id: 'equipo', title: 'Tu equipo, con roles y permisos', desc: 'Invita doctores y admins, controla qué ve cada quien y mide citas e ingresos por doctor.', mockup: 'equipo' },
+    { id: 'analytics', title: 'Analytics que hablan claro', desc: 'Ocupación, doctores, procedimientos, no-shows, costos y margen — por día, mes, trimestre o año.', mockup: 'analytics' },
+    { id: 'equipo', title: 'Tu equipo, con roles y permisos', desc: 'Invita doctores y admins, controla qué ve cada quien y mide citas e ingresos por doctor.', mockup: 'equipo' }, // usuario "Rafael Martinez"
     { id: 'web', title: 'Tu página web, lista en minutos', desc: 'Elige entre 4 plantillas, publica con un clic y capta pacientes con tu link propio y reseñas post-cita.', mockup: 'pagina-web' },
   ],
 };
@@ -287,12 +287,23 @@ export const COMPARISON = {
   ],
 };
 
+/** Carrusel infinito derecha→izquierda (55s, pausa al hover, respeta prefers-reduced-motion).
+ *  Fotos: usar assets propios o un servicio de avatares licenciado. En el reference se usan
+ *  retratos de randomuser.me SOLO como placeholder — reemplazar por fotos reales/licenciadas
+ *  antes de producción. Van como background-image (no <img>). */
 export const TESTIMONIALS = {
   title: 'Doctores que ya tomaron el control',
   items: [
-    { initials: 'MG', name: 'Dra. Mariana Gutiérrez', role: 'Ortodoncia · Guadalajara', quote: 'Antes perdía 3 o 4 citas por semana. Con los recordatorios de WhatsApp mis pacientes confirman solos y mi agenda está llena.' },
-    { initials: 'LH', name: 'Dr. Luis Hernández', role: 'Implantología · Monterrey', quote: 'Ver el CBCT desde el navegador, sin instalar nada, me cambió la consulta. Se lo muestro al paciente en 3D y el tratamiento se vende solo.' },
-    { initials: 'KR', name: 'Dra. Karla Ríos', role: 'Odontopediatría · CDMX', quote: 'Dejé el Excel en una semana. Presupuesto, firma y factura salen juntos, y por fin sé cuánto ingresa mi clínica cada día.' },
+    { photo: 'women/44', name: 'Dra. Mariana Gutiérrez', role: 'Clínica Dental Sonría · Guadalajara', quote: 'Antes perdía 3 o 4 citas por semana. Con los recordatorios de WhatsApp mis pacientes confirman solos y mi agenda está llena.' },
+    { photo: 'men/32', name: 'Dr. Luis Hernández', role: 'Dental Vega Implantes · Monterrey', quote: 'Ver el CBCT desde el navegador, sin instalar nada, me cambió la consulta. Se lo muestro al paciente en 3D y el tratamiento se vende solo.' },
+    { photo: 'women/65', name: 'Dra. Karla Ríos', role: 'Sonrisitas Kids · CDMX', quote: 'Dejé el Excel en una semana. Presupuesto, firma y factura salen juntos, y por fin sé cuánto ingresa mi clínica cada día.' },
+    { photo: 'men/52', name: 'Dr. Andrés Salazar', role: 'Centro Dental Alameda · Puebla', quote: 'El bot de WhatsApp me agendó 14 citas el primer mes, varias en domingo por la noche. Es como tener recepcionista 24/7.' },
+    { photo: 'women/21', name: 'Dra. Fernanda Olvera', role: 'Odontología Integral Roma · CDMX', quote: 'La migración fue lo que más miedo me daba y tardó una tarde. Importaron mis 1,800 pacientes desde Excel sin perder nada.' },
+    { photo: 'men/76', name: 'Dr. Ricardo Peña', role: 'Dental Care Del Valle · Querétaro', quote: 'Con los saldos a la vista recuperé más de $40,000 en cuentas que tenía olvidadas. Solo eso ya pagó el año completo.' },
+    { photo: 'women/58', name: 'Dra. Paulina Cervantes', role: 'Ortodoncia Cervantes · Tijuana', quote: 'Mis pacientes de brackets ven su avance en el portal y pagan en línea. Bajé los no-shows a la mitad en dos meses.' },
+    { photo: 'men/18', name: 'Dr. Emilio Ramos', role: 'Clínica Ramos & Asociados · Mérida', quote: 'Tengo dos sucursales y por fin veo todo en una sola cuenta: ingresos por doctor, ocupación y no-shows en tiempo real.' },
+    { photo: 'women/33', name: 'Dra. Sofía Ibarra', role: 'Dental Boutique Ibarra · León', quote: 'La IA me redacta las notas SOAP mientras termino con el paciente. Me ahorro una hora de papeleo todos los días.' },
+    { photo: 'men/61', name: 'Dr. Héctor Fuentes', role: 'Odontología Fuentes · Toluca', quote: 'Publiqué mi página con el recorrido 3D de la clínica y ahora llegan pacientes diciendo "quiero atenderme ahí". Impresiona de verdad.' },
   ],
 };
 
@@ -304,17 +315,17 @@ export const FAQ = {
     { q: '¿Puedo migrar desde mi sistema anterior o desde Excel?', a: 'Sí. Con "Importar mi clínica" traes tus pacientes, citas e historiales desde tu software anterior o desde hojas de Excel, con nuestro acompañamiento durante la migración.' },
     { q: '¿Necesito instalar algo o comprar equipo?', a: 'No. DaleControl funciona 100% en el navegador — incluso el visor de radiografías CBCT y los modelos 3D. Solo necesitas internet y el equipo que ya tienes.' },
     { q: '¿Funciona en el celular?', a: 'Sí. El panel es completamente responsive: puedes revisar tu agenda, contestar WhatsApp y ver tus ingresos desde el celular o la tablet.' },
-    { q: '¿Hay permanencia o contrato anual?', a: 'No. Los planes son mes a mes y puedes cancelar cuando quieras. Si eliges el plan anual solo es para obtener el 30% de descuento, no por obligación contractual.' },
-    { q: '¿Cómo funciona el pago?', a: 'Creas tu cuenta, eliges tu plan y pagas directamente desde el panel con tarjeta. Los precios están en pesos mexicanos y recibes tu factura. No manejamos periodo de prueba: eliges tu plan y empiezas a trabajar el mismo día.' },
+    { q: '¿Hay permanencia o contrato anual?', a: 'No. Los planes son mes a mes y puedes cancelar cuando quieras. Si eliges el plan anual solo es para obtener el 35% de descuento, no por obligación contractual.' },
+    { q: '¿Cómo funciona el pago?', a: 'Creas tu cuenta, eliges tu plan y pagas directamente desde el panel con tarjeta. Tu primer mes cuesta desde $19 y después se cobra el precio normal de tu plan. Los precios están en pesos mexicanos y recibes tu factura.' },
     { q: '¿Qué pasa si necesito ayuda?', a: 'Tienes soporte en español por chat y WhatsApp. En el plan Clínica además cuentas con soporte prioritario y un onboarding dedicado para tu equipo.' },
   ],
 };
 
 export const FINAL_CTA = {
   title: 'Toma el control de tu clínica hoy mismo',
-  subtitle: 'Crea tu cuenta en minutos, importa tus pacientes y empieza a llenar tu agenda. Sin permanencia.',
-  ctaPrimary: 'Crear mi cuenta',   // → registro
-  ctaSecondary: 'Ver funciones',   // → #funciones
+  subtitle: 'Crea tu cuenta en minutos, importa tus pacientes y empieza a llenar tu agenda. Tu primer mes desde $19.',
+  ctaPrimary: 'Crear mi cuenta',
+  ctaSecondary: 'Ver funciones',
   bullets: '✓ Datos cifrados · ✓ Respaldos diarios · ✓ Soporte en español',
 };
 

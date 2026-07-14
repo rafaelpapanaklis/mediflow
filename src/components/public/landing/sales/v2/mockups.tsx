@@ -139,7 +139,7 @@ export function AgendaMock() {
         </div>
         <div style={{ marginTop: 9, background: "#f0fdf4", border: "1px solid #dcfce7", borderRadius: 10, padding: "8px 11px", display: "flex", gap: 8, alignItems: "center" }}>
           <span style={{ display: "flex", width: 22, height: 22, borderRadius: "50%", background: "#16a34a", color: "#fff", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 800, flex: "0 0 auto" }}>W</span>
-          <span style={{ fontSize: 10, color: "#334155" }}>"Hola Ana 👋 te recordamos tu cita mañana 10:00 am" · <b style={{ color: "#16a34a" }}>Confirmó ✓</b></span>
+          <span style={{ fontSize: 10, color: "#334155" }}>&ldquo;Hola Ana 👋 te recordamos tu cita mañana 10:00 am&rdquo; · <b style={{ color: "#16a34a" }}>Confirmó ✓</b></span>
         </div>
       </div>
     </BrowserFrame>
@@ -227,19 +227,25 @@ export function PresupuestoMock() {
   );
 }
 
-/* ── 5. Visor DICOM (4 imágenes reales animadas) ───────────────────────── */
-const dicomTile: CSSProperties = { background: "#000", borderRadius: 10, height: 118, position: "relative", overflow: "hidden" };
-const dicomImg: CSSProperties = { position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" };
+/* ── 5. Radiografías + Modelos 3D FUSIONADO (CAMBIOS §1): 4 cuadrantes DICOM
+      con imágenes reales (142px, object-fit CONTAIN sobre negro — cover
+      recortaba la anatomía, CAMBIOS §5) + tira inferior con el STL animado. ── */
+const dicomTile: CSSProperties = { background: "#000", borderRadius: 10, height: 142, position: "relative", overflow: "hidden" };
+const dicomImg: CSSProperties = { position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "contain" };
 const dicomLabel: CSSProperties = { position: "absolute", left: 8, top: 6, fontSize: 8.5, color: "#e2e8f0", fontWeight: 700, textShadow: "0 1px 3px #000" };
-export function DicomMock() {
+export function DicomStlMock() {
   return (
-    <BrowserFrame url="app.dalecontrol.com/radiografias" shadow="0 18px 44px rgba(15,23,42,.12)">
+    <BrowserFrame
+      url="app.dalecontrol.com/imagenes-3d"
+      shadow="0 18px 44px rgba(15,23,42,.12)"
+      right={<span style={{ marginLeft: "auto", fontSize: 9.5, fontWeight: 800, color: "#6d28d9", background: "#f1ebfe", borderRadius: 999, padding: "3px 9px", whiteSpace: "nowrap" }}>✦ IA activa</span>}
+    >
       <div style={{ padding: 14 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 10, gap: 8 }}>
           <span><b style={{ fontSize: 12.5 }}>DICOM Angela Bastounis.zip</b><br /><span style={{ fontSize: 9.5, color: "#94a3b8" }}>Arrastra para rotar · scroll para zoom</span></span>
-          <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
-            <span style={{ fontSize: 9.5, fontWeight: 800, color: "#6d28d9", background: "#f1ebfe", borderRadius: 999, padding: "3px 9px", whiteSpace: "nowrap" }}>✦ IA activa</span>
-            <span style={{ color: "#94a3b8", fontSize: 11, fontWeight: 700 }}>✕</span>
+          <span style={{ display: "inline-flex", background: "#f4f1fb", borderRadius: 8, padding: 2, fontSize: 9.5, fontWeight: 700 }}>
+            <span style={{ padding: "3px 9px", background: "#fff", borderRadius: 6, color: "#6d28d9", boxShadow: "0 1px 3px rgba(0,0,0,.08)", whiteSpace: "nowrap" }}>CBCT · DICOM</span>
+            <span style={{ padding: "3px 9px", color: "#64748b", whiteSpace: "nowrap" }}>Modelo STL</span>
           </span>
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
@@ -262,267 +268,231 @@ export function DicomMock() {
           </div>
           <div style={dicomTile}>
             <img src="/landing/cbct/cbct-sagital.png" alt="" loading="lazy" className="dcv2-ken-14" style={dicomImg} />
-            <span className="dcv2-scan-14" style={{ position: "absolute", left: 0, right: 0, top: "50%", height: 1.5, background: "rgba(34,211,238,.45)" }} />
+            <span className="dcv2-scan-14" style={{ position: "absolute", left: 0, right: 0, top: "50%", height: 1.5, background: "rgba(251,191,36,.45)" }} />
             <span style={dicomLabel}>● Sagital · 335/668</span>
           </div>
           <div style={dicomTile}>
             <img src="/landing/cbct/cbct-volumen.png" alt="" loading="lazy" className="dcv2-orbit-9" style={dicomImg} />
             <span style={dicomLabel}>⬡ Volumen 3D</span>
             <span style={{ position: "absolute", left: 8, bottom: 6, fontSize: 7.5, color: "#4ade80", fontWeight: 800, textShadow: "0 1px 3px #000" }}>● Rotando</span>
-            <span style={{ position: "absolute", right: 8, bottom: 6, fontSize: 8.5, color: "#93c5fd", fontWeight: 700, textShadow: "0 1px 3px #000" }}>⤢ Ampliar</span>
           </div>
         </div>
-        <div style={{ marginTop: 9, display: "flex", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
-          <span style={{ fontSize: 9, color: "#6d28d9", fontWeight: 700, background: "#f1ebfe", borderRadius: 999, padding: "3px 9px" }}>✦ Panorámica generada automáticamente</span>
-          <span style={{ fontSize: 8.5, color: "#94a3b8" }}>ⓘ Solo apoyo visual — no sustituye una estación diagnóstica certificada</span>
+        {/* Tira STL (arcada del reference, ids propios para no chocar) */}
+        <div style={{ marginTop: 8, background: "#04060a", borderRadius: 10, height: 96, position: "relative", overflow: "hidden" }}>
+          <svg viewBox="0 0 260 130" className="dcv2-stl" style={{ position: "absolute", left: "50%", top: "54%", width: 196, margin: "-49px 0 0 -98px" }} aria-hidden="true">
+            <defs>
+              <linearGradient id="dcv2mCrown" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#f0f3f7" /><stop offset="1" stopColor="#aab3bf" /></linearGradient>
+              <linearGradient id="dcv2mBand" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#c3cad4" /><stop offset="1" stopColor="#79828f" /></linearGradient>
+              <linearGradient id="dcv2mRoot" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#98a1ad" /><stop offset="1" stopColor="#d3d9e0" /></linearGradient>
+            </defs>
+            <g fill="url(#dcv2mRoot)">
+              <path d="M 25 76 L 31 76 L 28 92 Z" /><path d="M 33 76 L 39 76 L 36 94 Z" />
+              <path d="M 41 73 L 47 73 L 44 91 Z" /><path d="M 49 73 L 55 73 L 52 90 Z" />
+              <path d="M 61 71 L 67 71 L 64 92 Z" />
+              <path d="M 78 68 L 84 68 L 81 90 Z" />
+              <path d="M 94 67 L 100 67 L 97 89 Z" />
+              <path d="M 111 66 L 117 66 L 114 88 Z" />
+              <path d="M 127 66 L 133 66 L 130 88 Z" />
+              <path d="M 143 66 L 149 66 L 146 88 Z" />
+              <path d="M 160 67 L 166 67 L 163 89 Z" />
+              <path d="M 176 68 L 182 68 L 179 90 Z" />
+              <path d="M 193 71 L 199 71 L 196 92 Z" />
+              <path d="M 205 73 L 211 73 L 208 90 Z" /><path d="M 213 73 L 219 73 L 216 91 Z" />
+              <path d="M 221 76 L 227 76 L 224 92 Z" /><path d="M 229 76 L 235 76 L 232 94 Z" />
+            </g>
+            <path d="M 16 64 Q 130 36 244 64 L 244 80 Q 130 52 16 80 Z" fill="url(#dcv2mBand)" stroke="#6d7683" strokeWidth="0.8" />
+            <g fill="url(#dcv2mCrown)" stroke="#8e97a4" strokeWidth="0.7">
+              <g transform="translate(32 60.3) rotate(-12)"><rect x="-7.5" y="-17" width="15" height="17" rx="4.5" /></g>
+              <g transform="translate(48 57.2) rotate(-10)"><rect x="-7.5" y="-17" width="15" height="17" rx="4.5" /></g>
+              <g transform="translate(64 54.7) rotate(-8)"><rect x="-7.5" y="-17" width="15" height="17" rx="4.5" /></g>
+              <g transform="translate(81 52.6) rotate(-6)"><rect x="-7.5" y="-17" width="15" height="17" rx="4.5" /></g>
+              <g transform="translate(97 51.2) rotate(-4)"><rect x="-7.5" y="-17" width="15" height="17" rx="4.5" /></g>
+              <g transform="translate(114 50.3) rotate(-2)"><rect x="-7.5" y="-17" width="15" height="17" rx="4.5" /></g>
+              <g transform="translate(130 50) rotate(0)"><rect x="-7.5" y="-17" width="15" height="17" rx="4.5" /></g>
+              <g transform="translate(146 50.3) rotate(2)"><rect x="-7.5" y="-17" width="15" height="17" rx="4.5" /></g>
+              <g transform="translate(163 51.2) rotate(4)"><rect x="-7.5" y="-17" width="15" height="17" rx="4.5" /></g>
+              <g transform="translate(179 52.6) rotate(6)"><rect x="-7.5" y="-17" width="15" height="17" rx="4.5" /></g>
+              <g transform="translate(196 54.7) rotate(8)"><rect x="-7.5" y="-17" width="15" height="17" rx="4.5" /></g>
+              <g transform="translate(212 57.2) rotate(10)"><rect x="-7.5" y="-17" width="15" height="17" rx="4.5" /></g>
+              <g transform="translate(228 60.3) rotate(12)"><rect x="-7.5" y="-17" width="15" height="17" rx="4.5" /></g>
+            </g>
+            <ellipse cx="105" cy="50" rx="55" ry="9" fill="#fff" opacity=".13" />
+          </svg>
+          <span style={{ position: "absolute", left: 10, top: 7, fontSize: 8.5, color: "#93c5fd", fontWeight: 700 }}>modelo_dental_arcada.stl · STL · PLY · OBJ</span>
+          <span style={{ position: "absolute", left: 10, bottom: 7, fontSize: 8, color: "#4ade80", fontWeight: 800 }}>● Auto-rotar</span>
+          <span style={{ position: "absolute", right: 10, bottom: 7, fontSize: 8.5, color: "#cbd5e1" }}>↻ Arrastra para girar</span>
         </div>
+        <div style={{ marginTop: 8, fontSize: 8.5, color: "#94a3b8" }}>ⓘ Solo apoyo visual — no sustituye una estación diagnóstica certificada</div>
       </div>
     </BrowserFrame>
   );
 }
 
-/* ── 6. Visor STL 3D ───────────────────────────────────────────────────── */
-const stlSeg: CSSProperties = { display: "inline-flex", border: "1px solid #e2e8f0", borderRadius: 8, overflow: "hidden" };
-const stlSegBtn: CSSProperties = { padding: "4px 8px", color: "#475569", whiteSpace: "nowrap" };
-const stlSegSep: CSSProperties = { ...stlSegBtn, borderLeft: "1px solid #e2e8f0" };
-export function StlMock() {
+/* ── 6. Tu clínica en 3D — escena SVG isométrica NUEVA (CAMBIOS §1): piso con
+      cuadrícula, paredes con ventanas, 3 sillones azules con lámpara,
+      recepción, banca de espera, plantas + chips de estado y clinicFloat.
+      SVG copiado íntegro del reference. ── */
+export function ClinicaIsometricaMock() {
   return (
-    <BrowserFrame url="app.dalecontrol.com/pacientes/francisco-r">
-      <div style={{ display: "flex" }}>
-        <div style={{ width: 104, borderRight: "1px solid #eef2f7", padding: "10px 8px", fontSize: 8.5 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 5, marginBottom: 8 }}>
-            <span style={{ display: "flex", width: 18, height: 18, borderRadius: "50%", background: "#ede9fe", color: "#6d28d9", fontSize: 7, fontWeight: 800, alignItems: "center", justifyContent: "center" }}>FR</span>
-            <b style={{ fontSize: 8.5, lineHeight: 1.2 }}>Francisco<br />Rivera Reyes</b>
-          </div>
-          <div style={{ fontSize: 6.5, fontWeight: 800, color: "#94a3b8", letterSpacing: ".05em", marginBottom: 4 }}>CLÍNICO</div>
-          <div style={{ color: "#64748b", padding: "3px 6px" }}>Resumen</div>
-          <div style={{ color: "#64748b", padding: "3px 6px" }}>Odontograma</div>
-          <div style={{ color: "#64748b", padding: "3px 6px" }}>Radiografías</div>
-          <div style={{ background: "#f1ebfe", color: "#6d28d9", fontWeight: 700, borderRadius: 6, padding: "3px 6px" }}>Modelos 3D</div>
-          <div style={{ color: "#64748b", padding: "3px 6px" }}>Plan tratamiento</div>
-          <div style={{ color: "#64748b", padding: "3px 6px" }}>Recetas</div>
-        </div>
-        <div style={{ flex: 1, padding: 12 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8, gap: 8 }}>
-            <b style={{ fontSize: 11 }}>modelo_dental_dientes_arcada.stl</b>
-            <span style={{ fontSize: 8.5, color: "#94a3b8" }}>Arrastra para rotar · scroll para zoom</span>
-          </div>
-          <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginBottom: 8, fontSize: 8, fontWeight: 700 }}>
-            <span style={stlSeg}>
-              <span style={{ padding: "4px 8px", background: "#2563eb", color: "#fff", whiteSpace: "nowrap" }}>⟳ Rotar</span>
-              <span style={stlSegSep}>⤏ Medir</span>
-              <span style={stlSegSep}>◎ Marcar</span>
-            </span>
-            <span style={stlSeg}>
-              <span style={stlSegBtn}>Frontal</span>
-              <span style={stlSegSep}>Oclusal</span>
-              <span style={stlSegSep}>Lateral</span>
-            </span>
-            <span style={stlSeg}>
-              <span style={{ padding: "4px 8px", background: "#0f172a", color: "#fff", whiteSpace: "nowrap" }}>▢ Sólido</span>
-              <span style={stlSegSep}>▦ Malla</span>
-            </span>
-            <span style={{ display: "inline-flex", alignItems: "center", gap: 4, border: "1px solid #e2e8f0", borderRadius: 8, padding: "0 7px" }}>
-              <span style={{ width: 9, height: 9, borderRadius: "50%", background: "#d9cbb2" }} />
-              <span style={{ width: 9, height: 9, borderRadius: "50%", background: "#bcd7f0", boxShadow: "0 0 0 1.5px #2563eb" }} />
-              <span style={{ width: 9, height: 9, borderRadius: "50%", background: "#c4b5fd" }} />
-            </span>
-            <span style={{ display: "inline-flex", alignItems: "center", border: "1px solid #bbf7d0", background: "#f0fdf4", borderRadius: 8, padding: "4px 8px", color: "#15803d", whiteSpace: "nowrap" }}>⟳ Auto-rotar</span>
-          </div>
-          <div style={{ background: "radial-gradient(300px 170px at 50% 45%,#141a24 0%,#04060a 78%)", borderRadius: 10, height: 158, position: "relative", overflow: "hidden" }}>
-            <svg viewBox="0 0 260 130" className="dcv2-stl" style={{ position: "absolute", left: "50%", top: "50%", width: 226, margin: "-57px 0 0 -113px" }} aria-hidden="true">
-              <defs>
-                <linearGradient id="dcv2Crown" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#f0f3f7" /><stop offset="1" stopColor="#aab3bf" /></linearGradient>
-                <linearGradient id="dcv2Band" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#c3cad4" /><stop offset="1" stopColor="#79828f" /></linearGradient>
-                <linearGradient id="dcv2Root" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#98a1ad" /><stop offset="1" stopColor="#d3d9e0" /></linearGradient>
-              </defs>
-              <g fill="url(#dcv2Root)">
-                <path d="M 25 76 L 31 76 L 28 92 Z" /><path d="M 33 76 L 39 76 L 36 94 Z" />
-                <path d="M 41 73 L 47 73 L 44 91 Z" /><path d="M 49 73 L 55 73 L 52 90 Z" />
-                <path d="M 61 71 L 67 71 L 64 92 Z" />
-                <path d="M 78 68 L 84 68 L 81 90 Z" />
-                <path d="M 94 67 L 100 67 L 97 89 Z" />
-                <path d="M 111 66 L 117 66 L 114 88 Z" />
-                <path d="M 127 66 L 133 66 L 130 88 Z" />
-                <path d="M 143 66 L 149 66 L 146 88 Z" />
-                <path d="M 160 67 L 166 67 L 163 89 Z" />
-                <path d="M 176 68 L 182 68 L 179 90 Z" />
-                <path d="M 193 71 L 199 71 L 196 92 Z" />
-                <path d="M 205 73 L 211 73 L 208 90 Z" /><path d="M 213 73 L 219 73 L 216 91 Z" />
-                <path d="M 221 76 L 227 76 L 224 92 Z" /><path d="M 229 76 L 235 76 L 232 94 Z" />
-              </g>
-              <path d="M 16 64 Q 130 36 244 64 L 244 80 Q 130 52 16 80 Z" fill="url(#dcv2Band)" stroke="#6d7683" strokeWidth="0.8" />
-              <g fill="url(#dcv2Crown)" stroke="#8e97a4" strokeWidth="0.7">
-                <g transform="translate(32 60.3) rotate(-12)"><rect x="-7.5" y="-17" width="15" height="17" rx="4.5" /></g>
-                <g transform="translate(48 57.2) rotate(-10)"><rect x="-7.5" y="-17" width="15" height="17" rx="4.5" /></g>
-                <g transform="translate(64 54.7) rotate(-8)"><rect x="-7.5" y="-17" width="15" height="17" rx="4.5" /></g>
-                <g transform="translate(81 52.6) rotate(-6)"><rect x="-7.5" y="-17" width="15" height="17" rx="4.5" /></g>
-                <g transform="translate(97 51.2) rotate(-4)"><rect x="-7.5" y="-17" width="15" height="17" rx="4.5" /></g>
-                <g transform="translate(114 50.3) rotate(-2)"><rect x="-7.5" y="-17" width="15" height="17" rx="4.5" /></g>
-                <g transform="translate(130 50) rotate(0)"><rect x="-7.5" y="-17" width="15" height="17" rx="4.5" /></g>
-                <g transform="translate(146 50.3) rotate(2)"><rect x="-7.5" y="-17" width="15" height="17" rx="4.5" /></g>
-                <g transform="translate(163 51.2) rotate(4)"><rect x="-7.5" y="-17" width="15" height="17" rx="4.5" /></g>
-                <g transform="translate(179 52.6) rotate(6)"><rect x="-7.5" y="-17" width="15" height="17" rx="4.5" /></g>
-                <g transform="translate(196 54.7) rotate(8)"><rect x="-7.5" y="-17" width="15" height="17" rx="4.5" /></g>
-                <g transform="translate(212 57.2) rotate(10)"><rect x="-7.5" y="-17" width="15" height="17" rx="4.5" /></g>
-                <g transform="translate(228 60.3) rotate(12)"><rect x="-7.5" y="-17" width="15" height="17" rx="4.5" /></g>
-              </g>
-              <g stroke="#7e8794" strokeWidth="0.8" fill="none" opacity=".7">
-                <path d="M 92 46 Q 97 49 102 46" /><path d="M 125 44 Q 130 47 135 44" /><path d="M 158 46 Q 163 49 168 46" />
-                <path d="M 43 54 Q 48 57 53 54" /><path d="M 207 54 Q 212 57 217 54" />
-              </g>
-              <ellipse cx="105" cy="50" rx="55" ry="9" fill="#fff" opacity=".13" />
-            </svg>
-            <span style={{ position: "absolute", left: 10, top: 8, fontSize: 8.5, color: "#93c5fd", fontWeight: 700 }}>⟳ Rotar activo · arrastra el modelo</span>
-            <span style={{ position: "absolute", left: 10, bottom: 8, fontSize: 8, color: "#4ade80", fontWeight: 800 }}>● Auto-rotar</span>
-            <span style={{ position: "absolute", right: 10, bottom: 8, fontSize: 8.5, color: "#cbd5e1" }}>Zoom 140%</span>
-          </div>
-          <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
-            <span style={{ flex: 1, textAlign: "center", background: "#7c3aed", color: "#fff", fontSize: 9, fontWeight: 700, borderRadius: 7, padding: 6 }}>Compartir con paciente</span>
-            <span style={{ flex: 1, textAlign: "center", background: "#f1ebfe", color: "#6d28d9", fontSize: 9, fontWeight: 700, borderRadius: 7, padding: 6 }}>Notas del modelo</span>
-            <span style={{ flex: 1, textAlign: "center", border: "1px solid #eeeaf8", color: "#475569", fontSize: 9, fontWeight: 700, borderRadius: 7, padding: 6 }}>STL · PLY · OBJ</span>
-          </div>
-        </div>
-      </div>
-    </BrowserFrame>
-  );
-}
-
-/* ── 7. Mi Clínica Visual (plano En Vivo) ──────────────────────────────── */
-function PaletteGroup({ title, tint, items }: { title: string; tint: string; items: string[] }) {
-  return (
-    <>
-      {title}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 3, margin: "4px 0 7px", textAlign: "center", fontSize: 6, fontWeight: 600, color: "#64748b" }}>
-        {items.map((it) => (
-          <span key={it}><span style={{ display: "block", height: 16, background: tint, borderRadius: 4, marginBottom: 2 }} />{it}</span>
-        ))}
-      </div>
-    </>
-  );
-}
-export function ClinicaVisualMock() {
-  return (
-    <BrowserFrame url="app.dalecontrol.com/mi-clinica-visual">
+    <BrowserFrame url="app.dalecontrol.com/mi-clinica-3d">
       <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 12px", borderBottom: "1px solid #eef2f7", fontSize: 9, fontWeight: 700, flexWrap: "wrap" }}>
-        <BrandGlyph size={16} />
-        <b style={{ fontSize: 10 }}>DaleControl</b>
-        <span style={{ color: "#64748b", border: "1px solid #eeeaf8", borderRadius: 6, padding: "2px 7px" }}>Rafael Clinica</span>
+        <span style={{ color: "#6d28d9", whiteSpace: "nowrap" }}>⬡ Mi Clínica 3D</span>
         <span style={{ display: "inline-flex", background: "#f4f1fb", borderRadius: 7, padding: 2 }}>
-          <span style={{ padding: "3px 8px", color: "#94a3b8" }}>Edición</span>
-          <span style={{ padding: "3px 8px", background: "#fff", borderRadius: 5, color: "#15803d", boxShadow: "0 1px 3px rgba(0,0,0,.08)" }}>● En Vivo</span>
+          <span style={{ padding: "3px 8px", color: "#94a3b8", whiteSpace: "nowrap" }}>Edición</span>
+          <span style={{ padding: "3px 8px", background: "#fff", borderRadius: 5, color: "#15803d", boxShadow: "0 1px 3px rgba(0,0,0,.08)", whiteSpace: "nowrap" }}>● En Vivo</span>
         </span>
-        <span style={{ color: "#64748b" }}>⤴ Compartir</span>
-        <span style={{ color: "#64748b" }}>⬡ Mi Clínica 3D</span>
-        <span style={{ color: "#64748b" }}>☀ Día · 11:00</span>
-        <span style={{ marginLeft: "auto", color: "#94a3b8" }}>↩ Deshacer · 100% · 1:1</span>
+        <span style={{ color: "#64748b", whiteSpace: "nowrap" }}>⤴ Compartir</span>
+        <span style={{ marginLeft: "auto", color: "#64748b", whiteSpace: "nowrap" }}>☀ Día · 11:00</span>
       </div>
-      <div style={{ display: "flex" }}>
-        <div style={{ width: 92, borderRight: "1px solid #eef2f7", padding: 8, fontSize: 7, color: "#94a3b8", fontWeight: 800, letterSpacing: ".05em" }}>
-          <PaletteGroup title="ESTRUCTURA" tint="#f4f1fb" items={["Pared", "Puerta", "Ventana"]} />
-          <PaletteGroup title="EQUIPO DENTAL" tint="#e8f0fe" items={["Sillón 6/7", "Rayos X", "Esteriliz."]} />
-          <PaletteGroup title="RECEPCIÓN" tint="#fdf1e8" items={["Mostrador", "Silla", "Banca 3P"]} />
-        </div>
-        <div style={{ flex: 1, position: "relative", height: 208, background: "conic-gradient(from 45deg,#f3f7fd 25%,#e7eefa 25% 50%,#f3f7fd 50% 75%,#e7eefa 75%) 0 0/30px 30px" }}>
-          <span style={{ position: "absolute", left: "6%", top: 26, width: "31%", height: 64, background: "#fff", border: "1px solid #cfd9ea", borderRadius: 7, boxShadow: "6px 6px 0 rgba(148,163,184,.22)" }} />
-          <span style={{ position: "absolute", left: "9.5%", top: 52, width: 32, height: 14, background: "linear-gradient(180deg,#8fbcf7,#6ba3ef)", borderRadius: "3px 9px 9px 3px", boxShadow: "2px 2px 0 rgba(148,163,184,.4)" }} />
-          <span style={{ position: "absolute", left: "9.5%", top: 42, width: 13, height: 11, background: "#3b82f6", borderRadius: "3px 3px 1px 1px" }} />
-          <span style={{ position: "absolute", left: "24%", top: 66, width: 11, height: 11, background: "#e2e8f0", border: "1px solid #cbd5e1", borderRadius: 3 }} />
-          <span style={{ position: "absolute", left: "30%", top: 34, width: 15, height: 9, background: "#334155", borderRadius: 2 }} />
-          <span style={{ position: "absolute", left: "8%", top: 16, background: "#0f172a", color: "#fff", fontSize: 7.5, padding: "2px 7px", borderRadius: 99, whiteSpace: "nowrap" }}>Consultorio 1</span>
-          <span style={{ position: "absolute", left: "8%", top: 98, background: "#dcfce7", color: "#15803d", fontWeight: 800, fontSize: 7.5, padding: "2px 7px", borderRadius: 99, border: "1px solid #bbf7d0", whiteSpace: "nowrap" }}>● Ana Torres · En silla</span>
-          <span style={{ position: "absolute", right: "6%", top: 38, width: "27%", height: 58, background: "#fff", border: "1px solid #cfd9ea", borderRadius: 7, boxShadow: "6px 6px 0 rgba(148,163,184,.22)" }} />
-          <span style={{ position: "absolute", right: "15%", top: 60, width: 30, height: 13, background: "linear-gradient(180deg,#8fbcf7,#6ba3ef)", borderRadius: "3px 9px 9px 3px", boxShadow: "2px 2px 0 rgba(148,163,184,.4)" }} />
-          <span style={{ position: "absolute", right: "24.5%", top: 51, width: 12, height: 10, background: "#3b82f6", borderRadius: "3px 3px 1px 1px" }} />
-          <span style={{ position: "absolute", right: "8%", top: 28, background: "#0f172a", color: "#fff", fontSize: 7.5, padding: "2px 7px", borderRadius: 99, whiteSpace: "nowrap" }}>Consultorio 2</span>
-          <span style={{ position: "absolute", right: "6.5%", top: 104, background: "#fef3c7", color: "#b45309", fontWeight: 800, fontSize: 7.5, padding: "2px 7px", borderRadius: 99, border: "1px solid #fde68a", whiteSpace: "nowrap" }}>● J. Medina · Esperando</span>
-          <span style={{ position: "absolute", left: "12%", bottom: 18, width: "47%", height: 58, background: "#fff", border: "1px solid #cfd9ea", borderRadius: 7, boxShadow: "6px 6px 0 rgba(148,163,184,.22)" }} />
-          <span style={{ position: "absolute", left: "15%", bottom: 46, width: 46, height: 14, background: "linear-gradient(180deg,#f7c48e,#eda863)", borderRadius: 3, boxShadow: "2px 2px 0 rgba(148,163,184,.4)" }} />
-          <span style={{ position: "absolute", left: "38%", bottom: 28, width: 11, height: 11, background: "#dbeafe", border: "1px solid #bfdbfe", borderRadius: "2px 2px 3px 3px" }} />
-          <span style={{ position: "absolute", left: "43.5%", bottom: 28, width: 11, height: 11, background: "#dbeafe", border: "1px solid #bfdbfe", borderRadius: "2px 2px 3px 3px" }} />
-          <span style={{ position: "absolute", left: "49%", bottom: 28, width: 11, height: 11, background: "#dbeafe", border: "1px solid #bfdbfe", borderRadius: "2px 2px 3px 3px" }} />
-          <span style={{ position: "absolute", left: "38.8%", bottom: 35, width: 7, height: 7, background: "#16a34a", borderRadius: "50%", border: "1px solid #fff" }} />
-          <span style={{ position: "absolute", left: "44.3%", bottom: 35, width: 7, height: 7, background: "#16a34a", borderRadius: "50%", border: "1px solid #fff" }} />
-          <span style={{ position: "absolute", left: "33%", bottom: 80, background: "#7c3aed", color: "#fff", fontWeight: 700, fontSize: 7.5, padding: "2px 7px", borderRadius: 99, whiteSpace: "nowrap" }}>Recepción · 2 en espera</span>
-          <span style={{ position: "absolute", right: "9%", bottom: 30, width: 12, height: 12, background: "radial-gradient(circle at 35% 35%,#4ade80,#16a34a)", borderRadius: "50% 50% 50% 8%" }} />
-          <span style={{ position: "absolute", right: "9.8%", bottom: 24, width: 4, height: 7, background: "#92400e", borderRadius: 1 }} />
-          <span style={{ position: "absolute", left: "53%", top: 24, width: 17, height: 10, background: "#0f172a", borderRadius: 2, border: "1px solid #475569" }} />
-          <span style={{ position: "absolute", right: 6, bottom: 6, background: "rgba(255,255,255,.9)", border: "1px solid #e2e8f0", borderRadius: 6, padding: "3px 7px", fontSize: 7, color: "#64748b", fontWeight: 600 }}>R rota · Del borra · ⌘Z deshacer</span>
-        </div>
+      <div style={{ position: "relative", background: "linear-gradient(180deg,#eff5fe 0%,#dce9fb 100%)", overflow: "hidden" }}>
+        <svg viewBox="0 0 480 274" className="dcv2-clinic" style={{ display: "block", width: "100%", height: "auto" }} aria-hidden="true">
+          <defs>
+            <linearGradient id="dcv2WallL" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stopColor="#f8fbff" /><stop offset="1" stopColor="#e9f1fc" /></linearGradient>
+            <linearGradient id="dcv2WallR" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stopColor="#e2ecfa" /><stop offset="1" stopColor="#f2f7fe" /></linearGradient>
+            <linearGradient id="dcv2ChairBlue" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#60a5fa" /><stop offset="1" stopColor="#3b82f6" /></linearGradient>
+          </defs>
+          {/* paredes */}
+          <polygon points="30,156 240,60 240,6 30,102" fill="url(#dcv2WallL)" stroke="#d3e0f4" strokeWidth="1" />
+          <polygon points="240,60 450,156 450,102 240,6" fill="url(#dcv2WallR)" stroke="#d3e0f4" strokeWidth="1" />
+          <polygon points="82,120 124,101 124,74 82,93" fill="#dbeafe" stroke="#bfdbfe" />
+          <polygon points="146,90 188,71 188,44 146,63" fill="#dbeafe" stroke="#bfdbfe" />
+          <polygon points="292,70 334,89 334,63 292,44" fill="#dbeafe" stroke="#bfdbfe" />
+          <circle cx="388" cy="100" r="7" fill="#fff" stroke="#cbd5e1" /><path d="M388 96v4l3 2" stroke="#64748b" strokeWidth="1.2" fill="none" strokeLinecap="round" />
+          {/* piso */}
+          <polygon points="240,60 450,156 240,252 30,156" fill="#eaf2fd" stroke="#d7e3f6" strokeWidth="1.2" />
+          <g stroke="#cddcf3" strokeWidth="0.8" opacity=".55">
+            <path d="M72 137 L282 233" /><path d="M114 118 L324 214" /><path d="M156 98 L366 194" /><path d="M198 79 L408 175" />
+            <path d="M72 175 L282 79" /><path d="M114 194 L324 98" /><path d="M156 214 L366 118" /><path d="M198 233 L408 137" />
+          </g>
+          {/* tapetes */}
+          <path d="M140 116 L184 138 L140 160 L96 138 Z" fill="#f7fafe" stroke="#e3edfb" />
+          <path d="M240 158 L284 180 L240 202 L196 180 Z" fill="#f7fafe" stroke="#e3edfb" />
+          <path d="M340 116 L384 138 L340 160 L296 138 Z" fill="#f7fafe" stroke="#e3edfb" />
+          {/* sillón dental 1 */}
+          <g transform="translate(140,136)">
+            <ellipse cx="0" cy="13" rx="26" ry="7" fill="rgba(30,58,138,.12)" />
+            <ellipse cx="0" cy="10" rx="10" ry="3.5" fill="#94a3b8" />
+            <rect x="-2.5" y="-2" width="5" height="12" rx="1.5" fill="#a8b3c2" />
+            <rect x="6" y="-9" width="17" height="5.5" rx="2.75" fill="url(#dcv2ChairBlue)" transform="rotate(-16 6 -9)" />
+            <rect x="-12" y="-7" width="22" height="6.5" rx="3" fill="#3b82f6" />
+            <rect x="-18" y="-27" width="7.5" height="22" rx="3.75" fill="url(#dcv2ChairBlue)" transform="rotate(-22 -14 -16)" />
+            <circle cx="-17.5" cy="-28.5" r="3.8" fill="#1d4ed8" />
+            <rect x="-7" y="-11.5" width="12" height="2.6" rx="1.3" fill="#dbeafe" />
+            <path d="M18 -6 L27 -30 L14 -37" stroke="#cbd5e1" strokeWidth="2" fill="none" strokeLinecap="round" />
+            <ellipse cx="11" cy="-38.5" rx="6" ry="4" fill="#fff" stroke="#cbd5e1" />
+            <circle cx="11" cy="-38" r="1.8" fill="#fde68a" />
+            <rect x="26" y="-3" width="11" height="11" rx="1.5" fill="#f1f5f9" stroke="#dfe6ef" />
+            <rect x="27.5" y="-10" width="8" height="5.5" rx="1" fill="#0f172a" />
+          </g>
+          {/* sillón dental 2 */}
+          <g transform="translate(240,178)">
+            <ellipse cx="0" cy="13" rx="26" ry="7" fill="rgba(30,58,138,.12)" />
+            <ellipse cx="0" cy="10" rx="10" ry="3.5" fill="#94a3b8" />
+            <rect x="-2.5" y="-2" width="5" height="12" rx="1.5" fill="#a8b3c2" />
+            <rect x="6" y="-9" width="17" height="5.5" rx="2.75" fill="url(#dcv2ChairBlue)" transform="rotate(-16 6 -9)" />
+            <rect x="-12" y="-7" width="22" height="6.5" rx="3" fill="#3b82f6" />
+            <rect x="-18" y="-27" width="7.5" height="22" rx="3.75" fill="url(#dcv2ChairBlue)" transform="rotate(-22 -14 -16)" />
+            <circle cx="-17.5" cy="-28.5" r="3.8" fill="#1d4ed8" />
+            <rect x="-7" y="-11.5" width="12" height="2.6" rx="1.3" fill="#dbeafe" />
+            <path d="M18 -6 L27 -30 L14 -37" stroke="#cbd5e1" strokeWidth="2" fill="none" strokeLinecap="round" />
+            <ellipse cx="11" cy="-38.5" rx="6" ry="4" fill="#fff" stroke="#cbd5e1" />
+            <rect x="26" y="-3" width="11" height="11" rx="1.5" fill="#f1f5f9" stroke="#dfe6ef" />
+          </g>
+          {/* sillón dental 3 */}
+          <g transform="translate(340,136)">
+            <ellipse cx="0" cy="13" rx="26" ry="7" fill="rgba(30,58,138,.12)" />
+            <ellipse cx="0" cy="10" rx="10" ry="3.5" fill="#94a3b8" />
+            <rect x="-2.5" y="-2" width="5" height="12" rx="1.5" fill="#a8b3c2" />
+            <rect x="6" y="-9" width="17" height="5.5" rx="2.75" fill="url(#dcv2ChairBlue)" transform="rotate(-16 6 -9)" />
+            <rect x="-12" y="-7" width="22" height="6.5" rx="3" fill="#3b82f6" />
+            <rect x="-18" y="-27" width="7.5" height="22" rx="3.75" fill="url(#dcv2ChairBlue)" transform="rotate(-22 -14 -16)" />
+            <circle cx="-17.5" cy="-28.5" r="3.8" fill="#1d4ed8" />
+            <rect x="-7" y="-11.5" width="12" height="2.6" rx="1.3" fill="#dbeafe" />
+            <path d="M18 -6 L27 -30 L14 -37" stroke="#cbd5e1" strokeWidth="2" fill="none" strokeLinecap="round" />
+            <ellipse cx="11" cy="-38.5" rx="6" ry="4" fill="#fff" stroke="#cbd5e1" />
+            <circle cx="11" cy="-38" r="1.8" fill="#fde68a" />
+            <rect x="26" y="-3" width="11" height="11" rx="1.5" fill="#f1f5f9" stroke="#dfe6ef" />
+          </g>
+          {/* recepción */}
+          <g transform="translate(138,216)">
+            <ellipse cx="4" cy="12" rx="34" ry="8" fill="rgba(30,58,138,.10)" />
+            <polygon points="-28,-14 28,-14 36,-4 -20,-4" fill="#f5d0a4" />
+            <polygon points="-20,-4 36,-4 36,9 -20,9" fill="#e9b878" />
+            <polygon points="-28,-14 -20,-4 -20,9 -28,-1" fill="#dda963" />
+            <rect x="-4" y="-27" width="15" height="10" rx="1.5" fill="#0f172a" />
+            <rect x="2" y="-17" width="3" height="4" fill="#475569" />
+            <circle cx="-16" cy="-22" r="4.5" fill="#a78bfa" />
+            <rect x="-21" y="-18" width="10" height="8" rx="4" fill="#7c3aed" />
+          </g>
+          {/* banca de espera */}
+          <g transform="translate(346,214)">
+            <ellipse cx="0" cy="11" rx="32" ry="7" fill="rgba(30,58,138,.10)" />
+            <rect x="-28" y="-5" width="56" height="7" rx="3.5" fill="#dbeafe" stroke="#bfdbfe" />
+            <rect x="-24" y="2" width="4" height="7" fill="#94a3b8" /><rect x="20" y="2" width="4" height="7" fill="#94a3b8" />
+            <circle cx="-12" cy="-13" r="4.5" fill="#93c5fd" /><rect x="-17" y="-9" width="10" height="7" rx="3.5" fill="#60a5fa" />
+            <circle cx="8" cy="-13" r="4.5" fill="#fbbf24" /><rect x="3" y="-9" width="10" height="7" rx="3.5" fill="#f59e0b" />
+          </g>
+          {/* plantas */}
+          <g transform="translate(58,158)">
+            <ellipse cx="0" cy="9" rx="12" ry="4" fill="rgba(30,58,138,.10)" />
+            <polygon points="-7,0 7,0 5,9 -5,9" fill="#e9b878" />
+            <ellipse cx="-4" cy="-7" rx="5" ry="8" fill="#4ade80" /><ellipse cx="4" cy="-8" rx="5" ry="9" fill="#22c55e" /><ellipse cx="0" cy="-13" rx="4" ry="7" fill="#86efac" />
+          </g>
+          <g transform="translate(424,158)">
+            <ellipse cx="0" cy="9" rx="12" ry="4" fill="rgba(30,58,138,.10)" />
+            <polygon points="-7,0 7,0 5,9 -5,9" fill="#e9b878" />
+            <ellipse cx="-4" cy="-7" rx="5" ry="8" fill="#4ade80" /><ellipse cx="4" cy="-8" rx="5" ry="9" fill="#22c55e" /><ellipse cx="0" cy="-13" rx="4" ry="7" fill="#86efac" />
+          </g>
+          {/* TV de pared */}
+          <rect x="222" y="18" width="36" height="21" rx="2" fill="#0f172a" stroke="#475569" transform="skewY(-24) translate(0 118)" />
+        </svg>
+        <span style={{ position: "absolute", left: "19%", top: "24%", transform: "translateX(-50%)", background: "#dcfce7", color: "#15803d", fontWeight: 800, fontSize: 8, padding: "3px 8px", borderRadius: 999, border: "1px solid #bbf7d0", whiteSpace: "nowrap", boxShadow: "0 2px 6px rgba(15,23,42,.12)" }}>● Ana Torres · En atención</span>
+        <span style={{ position: "absolute", left: "50%", top: "44%", transform: "translateX(-50%)", background: "#eff6ff", color: "#1d4ed8", fontWeight: 800, fontSize: 8, padding: "3px 8px", borderRadius: 999, border: "1px solid #bfdbfe", whiteSpace: "nowrap", boxShadow: "0 2px 6px rgba(15,23,42,.12)" }}>Sillón libre</span>
+        <span style={{ position: "absolute", right: "6%", top: "24%", background: "#fef3c7", color: "#b45309", fontWeight: 800, fontSize: 8, padding: "3px 8px", borderRadius: 999, border: "1px solid #fde68a", whiteSpace: "nowrap", boxShadow: "0 2px 6px rgba(15,23,42,.12)" }}>● J. Medina · Esperando</span>
+        <span style={{ position: "absolute", left: "8%", bottom: "9%", background: "#7c3aed", color: "#fff", fontWeight: 700, fontSize: 8, padding: "3px 8px", borderRadius: 999, whiteSpace: "nowrap", boxShadow: "0 2px 6px rgba(15,23,42,.2)" }}>Recepción · 2 en espera</span>
+        <span style={{ position: "absolute", right: "3%", bottom: "5%", fontSize: 8, color: "#64748b", fontWeight: 600, background: "rgba(255,255,255,.85)", border: "1px solid #e2e8f0", borderRadius: 6, padding: "3px 7px" }}>↻ Arrastra para recorrerla</span>
       </div>
     </BrowserFrame>
   );
 }
 
-/* ── 8. Inbox WhatsApp ─────────────────────────────────────────────────── */
-export function InboxMock() {
+/* ── 7. WhatsApp + Asistente IA FUSIONADO (CAMBIOS §1): ventana dividida —
+      chat del bot | tarjetas IA con /comandos. ── */
+export function InboxIaSplitMock() {
   return (
     <BrowserFrame
       url="app.dalecontrol.com/inbox"
       right={<span style={{ marginLeft: "auto", fontSize: 8.5, fontWeight: 800, color: "#16a34a", background: "#dcfce7", borderRadius: 999, padding: "2px 8px", whiteSpace: "nowrap" }}>● Bot activo</span>}
     >
-      <div style={{ display: "flex" }}>
-        <div style={{ width: 118, borderRight: "1px solid #eef2f7", padding: "8px 6px" }}>
-          <div style={{ fontSize: 8, fontWeight: 800, color: "#94a3b8", letterSpacing: ".05em", padding: "0 4px", marginBottom: 5 }}>INBOX · WHATSAPP</div>
-          <div style={{ background: "#f1ebfe", borderRadius: 8, padding: "6px 7px", marginBottom: 4 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 8.5 }}><b>Ana Torres</b><span style={{ color: "#94a3b8", fontSize: 7 }}>10:02</span></div>
-            <div style={{ fontSize: 7.5, color: "#16a34a", fontWeight: 700 }}>Confirmó su cita ✓</div>
+      <div style={{ display: "flex", flexWrap: "wrap" }}>
+        <div style={{ flex: "1 1 200px", minWidth: 200, borderRight: "1px solid #eef2f7", padding: 11, display: "flex", flexDirection: "column", gap: 7 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 1 }}>
+            <span style={{ display: "flex", width: 20, height: 20, borderRadius: "50%", background: "#16a34a", color: "#fff", alignItems: "center", justifyContent: "center", fontSize: 9, fontWeight: 800 }}>W</span>
+            <b style={{ fontSize: 10.5 }}>Inbox WhatsApp</b>
           </div>
-          <div style={{ borderRadius: 8, padding: "6px 7px", marginBottom: 4 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 8.5 }}><b>Luis Martínez</b><span style={{ color: "#94a3b8", fontSize: 7 }}>09:48</span></div>
-            <div style={{ fontSize: 7.5, color: "#64748b" }}>¿Precio de limpieza?</div>
+          <div style={{ alignSelf: "flex-start", background: "#f1f5f9", borderRadius: "11px 11px 11px 4px", padding: "7px 10px", maxWidth: "92%", fontSize: 10 }}>Hola, ¿tienen espacio para limpieza esta semana?</div>
+          <div style={{ alignSelf: "flex-end", background: "#dcfce7", borderRadius: "11px 11px 4px 11px", padding: "7px 10px", maxWidth: "92%", fontSize: 10 }}>¡Claro! Tengo jueves 12:00 o viernes 10:30. ¿Cuál prefieres? 🤖</div>
+          <div style={{ alignSelf: "flex-start", background: "#f1f5f9", borderRadius: "11px 11px 11px 4px", padding: "7px 10px", maxWidth: "92%", fontSize: 10 }}>Viernes 10:30 👍</div>
+          <div style={{ alignSelf: "center", background: "#f1ebfe", border: "1px solid #e2d8fb", color: "#6d28d9", fontWeight: 700, borderRadius: 999, padding: "4px 11px", fontSize: 8.5, textAlign: "center" }}>✓ El bot agendó: viernes 10:30 · Limpieza</div>
+          <div style={{ marginTop: "auto", fontSize: 8.5, color: "#94a3b8" }}><span style={{ color: "#6d28d9", fontWeight: 700 }}>✦ Recall:</span> Elena Castro · 6 meses sin venir → mensaje enviado</div>
+        </div>
+        <div style={{ flex: "1 1 190px", minWidth: 190, padding: 11, display: "flex", flexDirection: "column", gap: 7 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 1 }}>
+            <span style={{ display: "flex", width: 20, height: 20, borderRadius: 6, background: "#7c3aed", color: "#fff", alignItems: "center", justifyContent: "center", fontSize: 10 }}>✦</span>
+            <b style={{ fontSize: 10.5 }}>Asistente IA Clínico</b>
           </div>
-          <div style={{ borderRadius: 8, padding: "6px 7px" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 8.5 }}><b>Elena Castro</b><span style={{ color: "#94a3b8", fontSize: 7 }}>09:15</span></div>
-            <div style={{ fontSize: 7.5, color: "#64748b" }}><span style={{ color: "#6d28d9", fontWeight: 700 }}>✦ Recall:</span> 6 meses sin venir</div>
+          <div style={{ border: "1px solid #eeeaf8", borderRadius: 9, padding: 8 }}><div style={{ fontSize: 10, fontWeight: 700 }}>⚕ Diagnóstico diferencial</div><div style={{ fontSize: 8, color: "#94a3b8", marginTop: 2 }}>Paciente con síntomas X/Y/Z, dame DDx</div></div>
+          <div style={{ border: "1px solid #eeeaf8", borderRadius: 9, padding: 8 }}><div style={{ fontSize: 10, fontWeight: 700 }}>▤ Redactar nota SOAP</div><div style={{ fontSize: 8, color: "#94a3b8", marginTop: 2 }}>Estructura una nota de evolución</div></div>
+          <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+            <span style={{ fontSize: 8, fontWeight: 700, color: "#6d28d9", background: "#f1ebfe", borderRadius: 999, padding: "3px 8px" }}>/soap</span>
+            <span style={{ fontSize: 8, fontWeight: 700, color: "#475569", border: "1px solid #e8e3f6", borderRadius: 999, padding: "3px 8px" }}>/receta</span>
+            <span style={{ fontSize: 8, fontWeight: 700, color: "#475569", border: "1px solid #e8e3f6", borderRadius: 999, padding: "3px 8px" }}>Resumir historia</span>
+          </div>
+          <div style={{ marginTop: "auto", display: "flex", alignItems: "center", gap: 6, border: "1px solid #e8e3f6", borderRadius: 9, padding: "7px 9px" }}>
+            <span style={{ flex: 1, fontSize: 8.5, color: "#94a3b8" }}>Pregúntame o escribe / …</span>
+            <span style={{ display: "flex", width: 19, height: 19, borderRadius: 6, background: "#7c3aed", color: "#fff", alignItems: "center", justifyContent: "center", fontSize: 9 }}>➤</span>
           </div>
         </div>
-        <div style={{ flex: 1, padding: 10, display: "flex", flexDirection: "column", gap: 7, fontSize: 10 }}>
-          <div style={{ alignSelf: "flex-start", background: "#f1f5f9", borderRadius: "11px 11px 11px 4px", padding: "7px 10px", maxWidth: "88%" }}>Hola, ¿tienen espacio para limpieza esta semana?</div>
-          <div style={{ alignSelf: "flex-end", background: "#dcfce7", borderRadius: "11px 11px 4px 11px", padding: "7px 10px", maxWidth: "88%" }}>¡Claro! Tengo jueves 12:00 o viernes 10:30. ¿Cuál prefieres? <span style={{ color: "#16a34a", fontWeight: 800 }}>🤖</span></div>
-          <div style={{ alignSelf: "flex-start", background: "#f1f5f9", borderRadius: "11px 11px 11px 4px", padding: "7px 10px", maxWidth: "88%" }}>Viernes 10:30 👍</div>
-          <div style={{ alignSelf: "center", background: "#f1ebfe", border: "1px solid #e2d8fb", color: "#6d28d9", fontWeight: 700, borderRadius: 999, padding: "5px 12px", fontSize: 9 }}>✓ El bot agendó: viernes 10:30 · Limpieza</div>
-          <div style={{ marginTop: "auto", display: "flex", alignItems: "center", gap: 6, border: "1px solid #eeeaf8", borderRadius: 9, padding: "6px 9px" }}>
-            <span style={{ flex: 1, fontSize: 9, color: "#94a3b8" }}>Escribe un mensaje…</span>
-            <span style={{ display: "flex", width: 20, height: 20, borderRadius: 7, background: "#16a34a", color: "#fff", alignItems: "center", justifyContent: "center", fontSize: 9 }}>➤</span>
-          </div>
-        </div>
-      </div>
-    </BrowserFrame>
-  );
-}
-
-/* ── 9. Asistente IA ───────────────────────────────────────────────────── */
-export function AsistenteIaMock() {
-  const chipIdle: CSSProperties = { fontSize: 8.5, fontWeight: 700, color: "#475569", border: "1px solid #e8e3f6", borderRadius: 999, padding: "3px 9px" };
-  return (
-    <BrowserFrame url="app.dalecontrol.com/ia-asistente">
-      <div style={{ padding: 14 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 4 }}>
-          <span style={{ display: "flex", width: 34, height: 34, borderRadius: 10, background: "#7c3aed", color: "#fff", alignItems: "center", justifyContent: "center", fontSize: 15, boxShadow: "0 6px 14px rgba(124,58,237,.3)" }}>✦</span>
-          <span><b style={{ fontSize: 13, display: "block" }}>Asistente IA Clínico</b><span style={{ fontSize: 9, color: "#94a3b8" }}>Sesión activa · 0 mensajes · <b style={{ color: "#6d28d9" }}>+ Nueva conversación ⌘K</b></span></span>
-        </div>
-        <p style={{ fontSize: 9.5, color: "#64748b", lineHeight: 1.5, margin: "8px 0 10px" }}>Apoyo informativo para diagnósticos diferenciales, dosis, redacción de notas SOAP, recetas y revisiones rápidas. Sus sugerencias no reemplazan el criterio clínico.</p>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 11 }}>
-          <div style={{ border: "1px solid #eeeaf8", borderRadius: 10, padding: 10 }}><div style={{ fontSize: 11, fontWeight: 700, color: "#0f172a" }}>⚕ Diagnóstico diferencial</div><div style={{ fontSize: 8.5, color: "#94a3b8", marginTop: 3 }}>Paciente con síntomas X/Y/Z, dame DDx</div></div>
-          <div style={{ border: "1px solid #eeeaf8", borderRadius: 10, padding: 10 }}><div style={{ fontSize: 11, fontWeight: 700, color: "#0f172a" }}>⚖ Dosis de medicamento</div><div style={{ fontSize: 8.5, color: "#94a3b8", marginTop: 3 }}>Verifica posología estándar</div></div>
-          <div style={{ border: "1px solid #eeeaf8", borderRadius: 10, padding: 10 }}><div style={{ fontSize: 11, fontWeight: 700, color: "#0f172a" }}>▤ Redactar SOAP</div><div style={{ fontSize: 8.5, color: "#94a3b8", marginTop: 3 }}>Estructura una nota de evolución</div></div>
-          <div style={{ border: "1px solid #eeeaf8", borderRadius: 10, padding: 10 }}><div style={{ fontSize: 11, fontWeight: 700, color: "#0f172a" }}>⌬ Estudios a pedir</div><div style={{ fontSize: 8.5, color: "#94a3b8", marginTop: 3 }}>Lab y gabinete recomendados</div></div>
-        </div>
-        <div style={{ display: "flex", gap: 5, flexWrap: "wrap", marginBottom: 8 }}>
-          <span style={{ fontSize: 8.5, fontWeight: 700, color: "#6d28d9", background: "#f1ebfe", borderRadius: 999, padding: "3px 9px" }}>/soap</span>
-          <span style={chipIdle}>Resumir historia</span>
-          <span style={chipIdle}>Preguntar sobre xray</span>
-          <span style={chipIdle}>/receta</span>
-          <span style={chipIdle}>WhatsApp paciente</span>
-        </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 8, border: "1px solid #e8e3f6", borderRadius: 11, padding: "9px 11px" }}>
-          <span style={{ color: "#94a3b8", fontSize: 10 }}>⊕</span>
-          <span style={{ flex: 1, fontSize: 10, color: "#94a3b8" }}>Pregúntame sobre un paciente, escribe / para comandos…</span>
-          <span style={{ color: "#94a3b8", fontSize: 10 }}>🎙</span>
-          <span style={{ display: "flex", width: 22, height: 22, borderRadius: 8, background: "#7c3aed", color: "#fff", alignItems: "center", justifyContent: "center", fontSize: 10 }}>➤</span>
-        </div>
-        <div style={{ marginTop: 6, fontSize: 7.5, color: "#94a3b8", textAlign: "center" }}>↵ enviar · ⇧↵ nueva línea · / comandos · ⌘K nuevo chat</div>
       </div>
     </BrowserFrame>
   );
@@ -533,8 +503,8 @@ export function AnalyticsMock() {
   const tab: CSSProperties = { color: "#64748b", border: "1px solid #eeeaf8", borderRadius: 999, padding: "3px 8px" };
   const stat: CSSProperties = { border: "1px solid #eeeaf8", borderRadius: 8, padding: 7 };
   return (
-    <BrowserFrame url="…/analytics" small shadow="0 12px 30px rgba(15,23,42,.08)">
-      <div style={{ padding: 12 }}>
+    <BrowserFrame url="…/analytics" small stretch shadow="0 12px 30px rgba(15,23,42,.08)">
+      <div style={{ padding: 12, flex: 1, display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
         <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginBottom: 10, fontSize: 8, fontWeight: 700 }}>
           <span style={{ background: "#f1ebfe", color: "#6d28d9", borderRadius: 999, padding: "3px 8px" }}>Resumen</span>
           <span style={tab}>Ocupación</span>
@@ -570,8 +540,8 @@ export function AnalyticsMock() {
 export function EquipoMock() {
   const stat: CSSProperties = { border: "1px solid #eeeaf8", borderRadius: 8, padding: 7, textAlign: "center" };
   return (
-    <BrowserFrame url="…/equipo" small shadow="0 12px 30px rgba(15,23,42,.08)">
-      <div style={{ padding: 12 }}>
+    <BrowserFrame url="…/equipo" small stretch shadow="0 12px 30px rgba(15,23,42,.08)">
+      <div style={{ padding: 12, flex: 1, display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10, gap: 8 }}>
           <span><b style={{ fontSize: 11.5 }}>Equipo médico</b><br /><span style={{ fontSize: 8.5, color: "#94a3b8" }}>Rafael Clinica · 3 miembros activos</span></span>
           <span style={{ fontSize: 9, color: "#fff", fontWeight: 700, background: "#7c3aed", borderRadius: 7, padding: "4px 9px", whiteSpace: "nowrap" }}>+ Invitar miembro</span>
@@ -607,8 +577,8 @@ export function EquipoMock() {
 export function PaginaWebMock() {
   const chip: CSSProperties = { border: "1px solid #eeeaf8", borderRadius: 99, padding: "2px 7px" };
   return (
-    <BrowserFrame url="…/pagina-web" small shadow="0 12px 30px rgba(15,23,42,.08)">
-      <div style={{ padding: 12 }}>
+    <BrowserFrame url="…/pagina-web" small stretch shadow="0 12px 30px rgba(15,23,42,.08)">
+      <div style={{ padding: 12, flex: 1, display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 9, gap: 8 }}>
           <span><b style={{ fontSize: 11.5 }}>Página pública de tu clínica</b><br /><span style={{ fontSize: 8.5, color: "#94a3b8" }}>Cómo te verán tus pacientes</span></span>
           <span style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 8.5, fontWeight: 800, color: "#16a34a", background: "#dcfce7", borderRadius: 999, padding: "3px 9px", whiteSpace: "nowrap" }}>● Publicada</span>

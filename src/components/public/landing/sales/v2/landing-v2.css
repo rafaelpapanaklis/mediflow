@@ -6,8 +6,11 @@
 @keyframes dcScanY { 0%, 100% { top: 28%; } 50% { top: 68%; } }
 @keyframes dcSlide { 0%, 100% { left: 16%; } 50% { left: 74%; } }
 @keyframes dcSlideB { 0%, 100% { left: 68%; } 50% { left: 20%; } }
-@keyframes dcOrbit { 0%, 100% { transform: perspective(520px) rotateY(-13deg) scale(1.05); } 50% { transform: perspective(520px) rotateY(13deg) scale(1.12); } }
+/* dcOrbit del reference nuevo (CAMBIOS §5): giro 3D ±20° con rotateX ±3°, no paneo. */
+@keyframes dcOrbit { 0%, 100% { transform: perspective(600px) rotateY(-20deg) rotateX(3deg) scale(1.08); } 50% { transform: perspective(600px) rotateY(20deg) rotateX(-3deg) scale(1.16); } }
 @keyframes stlWobble { 0%, 100% { transform: perspective(720px) rotateX(12deg) rotateY(-32deg) scale(1); } 50% { transform: perspective(720px) rotateX(3deg) rotateY(32deg) scale(1.06); } }
+@keyframes clinicFloat { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
+@keyframes testiScroll { from { transform: translateX(0); } to { transform: translateX(-50%); } }
 
 .dcv2-ken-9 { animation: dcKen 9s ease-in-out infinite; }
 .dcv2-ken-12 { animation: dcKen 12s ease-in-out infinite; }
@@ -18,10 +21,15 @@
 .dcv2-slideb-12 { animation: dcSlideB 12s ease-in-out infinite; }
 .dcv2-orbit-9 { animation: dcOrbit 9s ease-in-out infinite; }
 .dcv2-stl { animation: stlWobble 9s ease-in-out infinite; }
+.dcv2-clinic { animation: clinicFloat 7s ease-in-out infinite; }
+/* Carrusel de testimonios: 55s lineal infinito, se PAUSA al hover (CAMBIOS §4). */
+.dcv2-testi-track { animation: testiScroll 55s linear infinite; }
+.dcv2-testi-track:hover { animation-play-state: paused; }
 
 @media (prefers-reduced-motion: reduce) {
   .dcv2-ken-9, .dcv2-ken-12, .dcv2-ken-14, .dcv2-scan-9, .dcv2-scan-14,
-  .dcv2-slide-9, .dcv2-slideb-12, .dcv2-orbit-9, .dcv2-stl {
+  .dcv2-slide-9, .dcv2-slideb-12, .dcv2-orbit-9, .dcv2-stl,
+  .dcv2-clinic, .dcv2-testi-track {
     animation: none !important;
   }
 }
@@ -78,12 +86,26 @@
 .dcv2-btn-primary:hover { background: #1d4ed8; transform: translateY(-1px); }
 .dcv2-btn-primary:focus-visible { outline: 2px solid #0f172a; outline-offset: 2px; }
 
-.dcv2-btn-plan-sec {
-  text-decoration: none;
+/* CTA de precios (los 3 iguales): hover con rebote scale(1.05) + anillo azul (CAMBIOS §3). */
+.dcv2-btn-plan {
+  transition: all .22s cubic-bezier(.34,1.56,.64,1);
+}
+.dcv2-btn-plan:hover {
+  background: #1d4ed8 !important;
+  transform: scale(1.05);
+  box-shadow: 0 14px 30px rgba(37,99,235,.42), 0 0 0 3px rgba(59,130,246,.5) !important;
+}
+.dcv2-btn-plan:focus-visible { outline: 2px solid #0f172a; outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) {
+  .dcv2-btn-plan:hover { transform: none; }
+}
+
+/* Hero: "Ver Precios!" blanco con borde (reference). */
+.dcv2-btn-hero-sec {
   transition: background .16s, border-color .16s;
 }
-.dcv2-btn-plan-sec:hover { background: #eff6ff; border-color: #2563eb !important; }
-.dcv2-btn-plan-sec:focus-visible { outline: 2px solid #0f172a; outline-offset: 2px; }
+.dcv2-btn-hero-sec:hover { border-color: #2563eb !important; background: #eff6ff !important; }
+.dcv2-btn-hero-sec:focus-visible { outline: 2px solid #2563eb; outline-offset: 2px; }
 
 .dcv2-toggle-btn { transition: all .18s; }
 .dcv2-toggle-btn:focus-visible { outline: 2px solid #2563eb; outline-offset: 2px; }

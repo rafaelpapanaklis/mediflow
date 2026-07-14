@@ -17,13 +17,14 @@ export function Hero() {
             <Link href="/signup" className="dcv2-btn-primary" style={{ fontSize: 16, padding: "15px 28px", borderRadius: 12, boxShadow: "0 10px 26px rgba(37,99,235,.32)" }}>
               {HERO.ctaPrimary}
             </Link>
-            <a href="#precios" className="dcv2-btn-primary" style={{ fontSize: 16, padding: "15px 28px", borderRadius: 12, boxShadow: "0 10px 26px rgba(37,99,235,.32)" }}>
+            <a href="#precios" className="dcv2-btn-hero-sec" style={{ fontSize: 16, fontWeight: 700, padding: "15px 28px", borderRadius: 12, background: "#fff", color: "#1d4ed8", border: "1.5px solid #bfdbfe", textDecoration: "none" }}>
               {HERO.ctaSecondary}
             </a>
           </div>
+          {/* El primer bullet ("Tu primer mes desde $19") va en verde (CAMBIOS §1). */}
           <div style={{ display: "flex", gap: 18, flexWrap: "wrap", marginTop: 22, fontSize: 13.5, color: "#64748b", fontWeight: 500 }}>
-            {HERO.bullets.map((b) => (
-              <span key={b}>✓ {b}</span>
+            {HERO.bullets.map((b, i) => (
+              <span key={b} style={i === 0 ? { color: "#15803d", fontWeight: 700 } : undefined}>✓ {b}</span>
             ))}
           </div>
         </div>

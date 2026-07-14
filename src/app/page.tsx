@@ -20,7 +20,7 @@ const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://www.dalecontrol.co
 export const metadata: Metadata = {
   title: { absolute: "DaleControl · El software dental más completo de México" },
   description:
-    "Dale control total a tu clínica: 30+ funciones en un solo lugar — agenda, WhatsApp, radiografías con IA y modelos 3D. Desde $499 con garantía de 30 días.",
+    "Dale control total a tu clínica: 30+ funciones en un solo lugar — agenda, WhatsApp, radiografías con IA y modelos 3D. Desde $419 al mes — y tu primer mes por solo $19.",
   keywords: [
     "software dental",
     "software para dentistas",
@@ -39,14 +39,14 @@ export const metadata: Metadata = {
     siteName: "DaleControl",
     title: "DaleControl · El software dental más completo de México",
     description:
-      "Dale control total a tu clínica: 30+ funciones en un solo lugar — agenda, WhatsApp, radiografías con IA y modelos 3D. Desde $499 con garantía de 30 días.",
+      "Dale control total a tu clínica: 30+ funciones en un solo lugar — agenda, WhatsApp, radiografías con IA y modelos 3D. Desde $419 al mes — y tu primer mes por solo $19.",
     images: [{ url: "/og/home", width: 1200, height: 630, alt: "DaleControl — software dental todo-en-uno" }],
   },
   twitter: {
     card: "summary_large_image",
     title: "DaleControl · El software dental más completo de México",
     description:
-      "Dale control total a tu clínica: 30+ funciones en un solo lugar — agenda, WhatsApp, radiografías con IA y modelos 3D. Desde $499 con garantía de 30 días.",
+      "Dale control total a tu clínica: 30+ funciones en un solo lugar — agenda, WhatsApp, radiografías con IA y modelos 3D. Desde $419 al mes — y tu primer mes por solo $19.",
     images: ["/og/home"],
   },
 };
@@ -80,9 +80,9 @@ const JSON_LD = {
       description:
         "Plataforma todo-en-uno para clínicas dentales: agenda con WhatsApp, expediente con odontograma, radiografías 3D con IA y facturación.",
       offers: [
-        { "@type": "Offer", name: "Básico", price: "499", priceCurrency: "MXN", category: "Suscripción mensual" },
-        { "@type": "Offer", name: "Profesional", price: "999", priceCurrency: "MXN", category: "Suscripción mensual" },
-        { "@type": "Offer", name: "Clínica", price: "1999", priceCurrency: "MXN", category: "Suscripción mensual" },
+        { "@type": "Offer", name: "Básico", price: "419", priceCurrency: "MXN", category: "Suscripción mensual" },
+        { "@type": "Offer", name: "Profesional", price: "689", priceCurrency: "MXN", category: "Suscripción mensual" },
+        { "@type": "Offer", name: "Clínica", price: "1719", priceCurrency: "MXN", category: "Suscripción mensual" },
       ],
     },
     {
@@ -101,7 +101,7 @@ const JSON_LD = {
         {
           "@type": "Question",
           name: "¿Hay permanencia o contrato anual?",
-          acceptedAnswer: { "@type": "Answer", text: "No. Los planes son mes a mes y puedes cancelar cuando quieras. Si eliges el plan anual solo es para obtener el 30% de descuento, no por obligación contractual." },
+          acceptedAnswer: { "@type": "Answer", text: "No. Los planes son mes a mes y puedes cancelar cuando quieras. Si eliges el plan anual solo es para obtener el 35% de descuento, no por obligación contractual." },
         },
         {
           "@type": "Question",
@@ -131,14 +131,15 @@ export default function HomePage() {
       <a href="#mfh-main" className="mf-skip-link">Saltar al contenido</a>
       <SalesNavSession />
       <main id="mfh-main">
+        {/* Orden CAMBIOS §1: precios va ANTES del trío de módulos. */}
         <Hero />
         <SocialProofBar />
         <Spotlights />
+        <PricingSection />
         <ModulesTrio />
         <FeaturesGrid />
         <Comparison />
         <Testimonials />
-        <PricingSection />
         <TrustFaq />
         <FinalCta />
       </main>
