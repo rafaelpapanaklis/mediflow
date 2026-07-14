@@ -13,6 +13,9 @@ export interface RescheduleConfirmProps {
   newStartsAt: string;
   timezone: string;
   submitting: boolean;
+  /** Aviso "fuera del horario de atención" (409 del PATCH). Si está seteado,
+   * el botón Confirmar pasa a "Agendar de todos modos". */
+  outsideNotice?: string | null;
   onConfirm: () => void;
   onCancel: () => void;
 }
@@ -25,7 +28,7 @@ function formatDateShort(iso: string, timezone: string): string {
 }
 
 export function AgendaRescheduleConfirmModal({
-  open, doctorName, originalStartsAt, newStartsAt, timezone, submitting, onConfirm, onCancel,
+  open, doctorName, originalStartsAt, newStartsAt, timezone, submitting, outsideNotice, onConfirm, onCancel,
 }: RescheduleConfirmProps) {
   const t = useT();
   const originalTime = formatTimeInTz(originalStartsAt, timezone);
@@ -74,6 +77,13 @@ export function AgendaRescheduleConfirmModal({
                 <div style={dateStyle}>{newDate}</div>
               </div>
             </div>
+
+            {outsideNotice && (
+              <div role="alert" style={outsideNoticeStyle}>
+                <strong style={{ color: "var(--warning)" }}>{t("agenda.outsideSchedule.title")}:</strong>{" "}
+                {outsideNotice} {t("agenda.outsideSchedule.confirmQuestion")}
+              </div>
+            )}
           </div>
 
           <footer style={footerStyle}>
@@ -81,7 +91,11 @@ export function AgendaRescheduleConfirmModal({
               {t("common.cancel")}
             </ButtonNew>
             <ButtonNew variant="primary" onClick={onConfirm} disabled={submitting}>
-              {submitting ? t("agenda.rescheduleConfirm.rescheduling") : t("agenda.rescheduleConfirm.reschedule")}
+              {submitting
+                ? t("agenda.rescheduleConfirm.rescheduling")
+                : outsideNotice
+                ? t("agenda.outsideSchedule.confirmBtn")
+                : t("agenda.rescheduleConfirm.reschedule")}
             </ButtonNew>
           </footer>
         </Dialog.Content>
@@ -124,4 +138,13 @@ const dateStyle: React.CSSProperties = { fontSize: 13, color: "var(--text-2)" };
 const footerStyle: React.CSSProperties = {
   display: "flex", justifyContent: "flex-end", gap: 8, padding: "14px 20px",
   borderTop: "1px solid var(--border-soft)", flexShrink: 0,
+};
+const outsideNoticeStyle: React.CSSProperties = {
+  padding: 10,
+  background: "color-mix(in srgb, var(--warning) 10%, transparent)",
+  border: "1px solid var(--warning)",
+  borderRadius: 8,
+  fontSize: 12,
+  lineHeight: 1.5,
+  color: "var(--text-1)",
 };

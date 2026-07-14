@@ -113,6 +113,10 @@ function AgendaShell({ highlightId }: { highlightId: string | null }) {
     doctorName: string;
   } | null>(null);
   const [rescheduling, setRescheduling] = useState(false);
+  // Aviso "fuera del horario de atención" devuelto por el PATCH (409
+  // OUTSIDE_SCHEDULE). Mientras esté seteado, el modal de confirmación lo
+  // muestra y el siguiente Confirmar reintenta con outsideScheduleOk: true.
+  const [outsideNotice, setOutsideNotice] = useState<string | null>(null);
 
   const handleDragStart = useCallback((_e: DragStartEvent) => {
     setDragOverlap({ overId: null, mode: null });
@@ -296,6 +300,7 @@ function AgendaShell({ highlightId }: { highlightId: string | null }) {
       const doctor = state.doctors.find((d) => d.id === (newDoctorId ?? currentDoctorId));
       const doctorName = doctor?.shortName ?? doctor?.displayName ?? t("agenda.pageClient.doctorFallback");
 
+      setOutsideNotice(null);
       setPendingReschedule({
         original,
         newStartsAt: result.startsAt,
@@ -338,12 +343,14 @@ function AgendaShell({ highlightId }: { highlightId: string | null }) {
       endsAt: newEndsAt,
     });
 
-    const apiPayload: { startsAt: string; endsAt: string; doctorId?: string; resourceId?: string | null } = {
+    const apiPayload: { startsAt: string; endsAt: string; doctorId?: string; resourceId?: string | null; outsideScheduleOk?: boolean } = {
       startsAt: newStartsAt,
       endsAt: newEndsAt,
     };
     if (newDoctorId !== currentDoctorId && newDoctorId) apiPayload.doctorId = newDoctorId;
     if (newResourceId !== currentResourceId) apiPayload.resourceId = newResourceId;
+    // Segundo Confirmar tras el aviso de fuera de horario = confirmación explícita.
+    if (outsideNotice) apiPayload.outsideScheduleOk = true;
 
     try {
       const updated = await rescheduleAppointment(original.id, apiPayload);
@@ -356,11 +363,15 @@ function AgendaShell({ highlightId }: { highlightId: string | null }) {
       invalidateRangeCache();
       toast.success(t("agenda.pageClient.rescheduleSuccess"));
       setPendingReschedule(null);
+      setOutsideNotice(null);
       if (toDayISO !== state.dayISO) setDay(toDayISO);
     } catch (err) {
       dispatch({ type: "ROLLBACK_RESCHEDULE", original });
       const apiErr = err as ApiError;
-      if (apiErr?.error === "appointment_overlap") {
+      if (apiErr?.error === "OUTSIDE_SCHEDULE") {
+        // El modal sigue abierto: muestra el aviso y espera la confirmación.
+        setOutsideNotice(apiErr.message ?? t("agenda.outsideSchedule.fallbackMsg"));
+      } else if (apiErr?.error === "appointment_overlap") {
         toast.error(describeOverlapConflict(apiErr.conflictingAppointment, {
           doctorId: optimisticDoctorId,
           resourceId: newResourceId,
@@ -371,11 +382,12 @@ function AgendaShell({ highlightId }: { highlightId: string | null }) {
     } finally {
       setRescheduling(false);
     }
-  }, [pendingReschedule, rescheduling, dispatch, state.dayISO, setDay, invalidateRangeCache, t]);
+  }, [pendingReschedule, rescheduling, outsideNotice, dispatch, state.dayISO, setDay, invalidateRangeCache, t]);
 
   const handleCancelReschedule = useCallback(() => {
     if (rescheduling) return;
     setPendingReschedule(null);
+    setOutsideNotice(null);
   }, [rescheduling]);
 
   // WS1-T5: tras aprobar/rechazar una solicitud de cambio del portal, la cita
@@ -458,6 +470,7 @@ function AgendaShell({ highlightId }: { highlightId: string | null }) {
           newStartsAt={pendingReschedule.newStartsAt}
           timezone={state.timezone}
           submitting={rescheduling}
+          outsideNotice={outsideNotice}
           onConfirm={handleConfirmReschedule}
           onCancel={handleCancelReschedule}
         />

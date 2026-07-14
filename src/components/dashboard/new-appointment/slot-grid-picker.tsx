@@ -13,8 +13,10 @@ import {
   type ClinicTimeConfig,
 } from "@/lib/agenda/time-utils";
 import { buildOpenSlotSet } from "@/lib/agenda/resource-schedule";
+import { buildClinicOpenSlotSet } from "@/lib/agenda/clinic-schedule";
 import type {
   AgendaAppointmentDTO,
+  ClinicScheduleDayDTO,
   DoctorColumnDTO,
   WeekScheduleDTO,
 } from "@/lib/agenda/types";
@@ -39,6 +41,8 @@ interface Props {
 
 interface FetchedDay {
   appointments: AgendaAppointmentDTO[];
+  /** Horario de atención (ClinicSchedule) que devuelve el mismo GET. */
+  schedules: ClinicScheduleDayDTO[] | null;
   loaded: boolean;
 }
 
@@ -54,24 +58,28 @@ export function SlotGridPicker({
   grouped = false,
 }: Props) {
   const t = useT();
-  const [day, setDay] = useState<FetchedDay>({ appointments: [], loaded: false });
+  const [day, setDay] = useState<FetchedDay>({ appointments: [], schedules: null, loaded: false });
   const [loading, setLoading] = useState(false);
   const selectedRef = useRef<HTMLButtonElement | null>(null);
 
   useEffect(() => {
     if (!doctorId) return;
     setLoading(true);
-    setDay({ appointments: [], loaded: false });
+    setDay({ appointments: [], schedules: null, loaded: false });
     fetch(`/api/appointments?date=${dateISO}&scope=clinic`, { credentials: "include" })
       .then((r) => (r.ok ? r.json() : null))
       .then((body) => {
         if (body && Array.isArray(body.appointments)) {
-          setDay({ appointments: body.appointments, loaded: true });
+          setDay({
+            appointments: body.appointments,
+            schedules: Array.isArray(body.schedules) ? body.schedules : null,
+            loaded: true,
+          });
         } else {
-          setDay({ appointments: [], loaded: true });
+          setDay({ appointments: [], schedules: null, loaded: true });
         }
       })
-      .catch(() => setDay({ appointments: [], loaded: true }))
+      .catch(() => setDay({ appointments: [], schedules: null, loaded: true }))
       .finally(() => setLoading(false));
   }, [dateISO, doctorId]);
 
@@ -117,6 +125,18 @@ export function SlotGridPicker({
     return buildOpenSlotSet(resourceSchedule, dateISO, config);
   }, [resourceId, resourceSchedule, dateISO, config]);
 
+  // Slots dentro del horario de atención de la clínica (ClinicSchedule).
+  // `null` = clínica sin horario configurado → no se atenúa nada. A
+  // diferencia de resourceOpenSlots, esto solo ATENÚA (el slot sigue
+  // clickeable; el backend pide confirmación al agendar fuera).
+  const clinicOpenSlots = useMemo<Set<number> | null>(
+    () => buildClinicOpenSlotSet(day.schedules, dateISO, config),
+    [day.schedules, dateISO, config],
+  );
+
+  const isOutsideClinicHours = (idx: number): boolean =>
+    clinicOpenSlots !== null && !clinicOpenSlots.has(idx);
+
   const isSlotFree = (idx: number): boolean => {
     const slotUtcMs = dayStartUtcMs + idx * config.slotMinutes * 60_000;
     if (slotUtcMs <= nowMs) return false;
@@ -145,12 +165,17 @@ export function SlotGridPicker({
   }, [valueIdx, day.loaded]);
 
   const firstFreeIdx = useMemo(() => {
+    // Prefiere el primer slot libre DENTRO del horario de la clínica; si no
+    // hay ninguno dentro, cae al primer libre aunque esté fuera.
+    let fallback = -1;
     for (let i = 0; i < total; i++) {
-      if (isSlotFree(i)) return i;
+      if (!isSlotFree(i)) continue;
+      if (!isOutsideClinicHours(i)) return i;
+      if (fallback < 0) fallback = i;
     }
-    return -1;
+    return fallback;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [total, occupiedDoctor, occupiedResource, resourceOpenSlots, slotsNeeded]);
+  }, [total, occupiedDoctor, occupiedResource, resourceOpenSlots, clinicOpenSlots, slotsNeeded]);
 
   const jumpToFirstFree = () => {
     if (firstFreeIdx < 0) return;
@@ -176,6 +201,9 @@ export function SlotGridPicker({
     const free = isSlotFree(idx);
     const occupied = !free;
     const selected = idx === valueIdx;
+    // Fuera del horario de atención: atenuado pero CLICKEABLE — al agendar,
+    // el backend responde 409 y la UI pide confirmación explícita.
+    const outside = free && isOutsideClinicHours(idx);
     const slotUtc = slotIndexToUtc(idx, dateISO, config);
     const label = formatSlotTime(slotUtc.toISOString(), config.timezone);
 
@@ -188,6 +216,7 @@ export function SlotGridPicker({
         aria-selected={selected}
         aria-disabled={occupied}
         disabled={occupied}
+        title={outside && !selected ? t("appointments.slotGrid.outsideScheduleHint") : undefined}
         onClick={() => onChange(slotUtc.toISOString())}
         style={{
           ...slotBtnStyle,
@@ -199,11 +228,11 @@ export function SlotGridPicker({
           borderColor: selected ? "var(--border-brand)" : "var(--border-soft)",
           color: selected
             ? "var(--trial-accent-calm)"
-            : occupied
+            : occupied || outside
             ? "var(--text-4)"
             : "var(--text-1)",
           cursor: occupied ? "not-allowed" : "pointer",
-          opacity: occupied ? 0.55 : 1,
+          opacity: occupied ? 0.55 : outside && !selected ? 0.5 : 1,
           boxShadow: selected ? "0 0 0 1px var(--border-brand) inset" : "none",
         }}
         onMouseEnter={(e) => {

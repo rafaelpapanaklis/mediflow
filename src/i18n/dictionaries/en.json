@@ -1122,6 +1122,12 @@
       "rescheduling": "Rescheduling...",
       "reschedule": "Reschedule"
     },
+    "outsideSchedule": {
+      "title": "Outside clinic hours",
+      "confirmQuestion": "Schedule anyway?",
+      "confirmBtn": "Schedule anyway",
+      "fallbackMsg": "The appointment falls outside the clinic's opening hours."
+    },
     "resourcesModal": {
       "teamTitle": "Team",
       "resourcesTitle": "Chairs / Rooms / Equipment",
@@ -2606,7 +2612,8 @@
         "other": "{count} free"
       },
       "slotsGroupAria": "{group} slots",
-      "slotsAvailableAria": "Available slots"
+      "slotsAvailableAria": "Available slots",
+      "outsideScheduleHint": "Outside clinic hours"
     },
     "summaryFooter": {
       "creating": "Creating...",

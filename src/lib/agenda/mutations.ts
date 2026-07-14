@@ -14,6 +14,8 @@ export interface ApiError {
   status: number;
   error: string;
   reason?: string;
+  /** Mensaje legible del backend (p. ej. OUTSIDE_SCHEDULE). */
+  message?: string;
   issues?: unknown;
   count?: number;
   sample?: string[];
@@ -35,6 +37,7 @@ async function jsonOrThrow<T>(res: Response): Promise<T> {
       status: res.status,
       error: body.error ?? "request_failed",
       reason: body.reason,
+      message: body.message,
       issues: body.issues,
       count: body.count,
       sample: body.sample,
@@ -94,6 +97,8 @@ export interface RescheduleAppointmentInput {
   resourceId?: string | null;
   reason?: string | null;
   overrideReason?: string | null;
+  /** Confirmación explícita para reagendar fuera del horario de atención. */
+  outsideScheduleOk?: boolean;
 }
 
 export async function rescheduleAppointment(
