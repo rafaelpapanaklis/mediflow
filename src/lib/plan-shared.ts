@@ -84,7 +84,7 @@ function allModules(value: boolean): Record<string, boolean> {
 
 /** Copy de marketing por plan (bullets para tarjetas de precio). */
 export const PLAN_MARKETING: Record<PlanId, { name: string; features: string[] }> = {
-  BASIC:  { name: "Básico",      features: ["2 usuarios", "Pacientes ilimitados", "Agenda + WhatsApp", "CFDI + Portal"] },
+  BASIC:  { name: "Básico",      features: ["2 usuarios", "500 pacientes", "Agenda + WhatsApp", "CFDI + Portal"] },
   PRO:    { name: "Profesional", features: ["6 usuarios", "IA radiografías", "Analytics + reportes", "Mi Clínica 3D"] },
   CLINIC: { name: "Clínica",     features: ["Usuarios ilimitados", "Multi-sucursal", "Soporte prioritario", "Onboarding dedicado"] },
 };
@@ -103,27 +103,28 @@ export interface PlanConfigShape {
 }
 
 /**
- * FALLBACK = SEED. Precios 499/999/1999 (anual = 30% de descuento →
- * 4192/8392/16792). Límites finales: pacientes 200/∞/∞; usuarios 2/6/∞;
- * storage 5/15/75 GB; IA 0/200k/1M; WhatsApp 300/1500/6000; BASIC SIN
- * IA/analytics/tv-modes; PRO y CLINIC con todo. Editable en /admin sin redeploy.
+ * FALLBACK = SEED. Precios 419/689/1719 (anual = 35% de descuento →
+ * 3264/5376/13404, equivalentes a 272/448/1117 al mes). Límites finales:
+ * pacientes 500/∞/∞; usuarios 2/6/∞; storage 5/15/75 GB; IA 0/200k/1M;
+ * WhatsApp 300/1500/6000; BASIC SIN IA/analytics/tv-modes; PRO y CLINIC con
+ * todo. Editable en /admin sin redeploy.
  */
 export const FALLBACK_PLAN_CONFIG: Record<PlanId, PlanConfigShape> = {
   BASIC: {
     label: "Básico",
-    priceMxnMonthly: 499,
-    priceMxnAnnual: 4192,
+    priceMxnMonthly: 419,
+    priceMxnAnnual: 3264,
     storageBytes: 5 * GB,
     aiTokensDefault: 0,
     whatsappMonthly: 300,
-    maxPatients: 200,
+    maxPatients: 500,
     maxUsers: 2,
     features: { ...allModules(true), "ai-assistant": false, analytics: false, "tv-modes": false },
   },
   PRO: {
     label: "Profesional",
-    priceMxnMonthly: 999,
-    priceMxnAnnual: 8392,
+    priceMxnMonthly: 689,
+    priceMxnAnnual: 5376,
     storageBytes: 15 * GB,
     aiTokensDefault: 200_000,
     whatsappMonthly: 1500,
@@ -133,8 +134,8 @@ export const FALLBACK_PLAN_CONFIG: Record<PlanId, PlanConfigShape> = {
   },
   CLINIC: {
     label: "Clínica",
-    priceMxnMonthly: 1999,
-    priceMxnAnnual: 16792,
+    priceMxnMonthly: 1719,
+    priceMxnAnnual: 13404,
     storageBytes: 75 * GB,
     aiTokensDefault: 1_000_000,
     whatsappMonthly: 6000,
@@ -146,9 +147,23 @@ export const FALLBACK_PLAN_CONFIG: Record<PlanId, PlanConfigShape> = {
 
 /** Precio mensual de respaldo por plan (solo para estimaciones donde no hay DB). */
 export const FALLBACK_PLAN_PRICES_MXN: Record<string, number> = {
-  BASIC: 499,
-  PRO: 999,
-  CLINIC: 1999,
+  BASIC: 419,
+  PRO: 689,
+  CLINIC: 1719,
+};
+
+/**
+ * PROMO 1ER MES (precio TOTAL de la primera factura mensual, MXN + IVA).
+ * Solo aplica a la PRIMERA suscripción MENSUAL con tarjeta de una clínica
+ * (nunca al plan anual ni a cambios de plan/reactivaciones). NO es trial: el
+ * primer mes SE COBRA a este precio; del segundo ciclo en adelante Stripe
+ * cobra el precio normal automáticamente. La regla vive en
+ * `src/lib/billing/first-month-promo.ts` (server).
+ */
+export const FIRST_MONTH_PROMO_MXN: Record<PlanId, number> = {
+  BASIC: 19,
+  PRO: 29,
+  CLINIC: 39,
 };
 
 export function formatBytes(bytes: number): string {

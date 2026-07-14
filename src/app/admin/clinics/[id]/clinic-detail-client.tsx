@@ -26,7 +26,7 @@ interface AdminNote {
   author?: { firstName: string; lastName: string; email: string } | null;
 }
 
-const PLAN_PRICES: Record<string, number> = { BASIC: 49, PRO: 99, CLINIC: 249 };
+const PLAN_PRICES: Record<string, number> = { BASIC: 419, PRO: 689, CLINIC: 1719 };
 const BANK_INFO = { nombre: "Efthymios Rafail Papanaklis", clabe: "012910015008025244", banco: "BBVA" };
 
 type BadgeTone = "success" | "warning" | "danger" | "info" | "brand" | "neutral";

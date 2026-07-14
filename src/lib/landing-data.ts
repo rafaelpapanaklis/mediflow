@@ -98,16 +98,16 @@ export const pricingPlans: PricingPlan[] = [
   {
     name: "Básico",
     subtitle: "Para consultorios individuales",
-    price: "$499",
+    price: "$419",
     period: "/mes",
-    features: ["1 profesional", "200 pacientes", "Agenda completa", "Expediente clínico", "Facturación básica", "Soporte por email"],
+    features: ["1 profesional", "500 pacientes", "Agenda completa", "Expediente clínico", "Facturación básica", "Soporte por email"],
     cta: "Crear mi cuenta",
     highlighted: false,
   },
   {
     name: "Profesional",
     subtitle: "El más popular",
-    price: "$999",
+    price: "$689",
     period: "/mes",
     features: ["Hasta 5 profesionales", "Pacientes ilimitados", "Todo lo del Básico", "Fotos antes/después", "Paquetes y membresías", "WhatsApp bidireccional", "Soporte prioritario"],
     cta: "Crear mi cuenta",
@@ -116,7 +116,7 @@ export const pricingPlans: PricingPlan[] = [
   {
     name: "Clínica",
     subtitle: "Para equipos grandes",
-    price: "$2,499",
+    price: "$1,719",
     period: "/mes",
     features: ["Profesionales ilimitados", "Todo lo del Profesional", "Múltiples sucursales", "Inventario avanzado", "Reportes y analytics", "API access", "Soporte 24/7"],
     cta: "Crear mi cuenta",

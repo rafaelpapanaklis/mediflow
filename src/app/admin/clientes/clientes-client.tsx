@@ -77,8 +77,8 @@ export function ClientesClient({ clientes }: { clientes: ClienteRow[] }) {
       if (plan !== "all" && c.plans.indexOf(plan) < 0) return false;
       if (soloMulti && c.clinicsCount < 2) return false;
       if (mrrRange === "paying" && c.mrr <= 0) return false;
-      if (mrrRange === "999" && c.mrr < 999) return false;
-      if (mrrRange === "1999" && c.mrr < 1999) return false;
+      if (mrrRange === "689" && c.mrr < 689) return false;
+      if (mrrRange === "1719" && c.mrr < 1719) return false;
       return true;
     });
   }, [clientes, search, estado, plan, soloMulti, mrrRange]);
@@ -143,8 +143,8 @@ export function ClientesClient({ clientes }: { clientes: ClienteRow[] }) {
         <select className="input-new" value={mrrRange} onChange={(e) => setMrrRange(e.target.value)} style={{ width: "auto" }}>
           <option value="all">Cualquier MRR</option>
           <option value="paying">Pagando (&gt; $0)</option>
-          <option value="999">≥ $999</option>
-          <option value="1999">≥ $1,999</option>
+          <option value="689">≥ $689</option>
+          <option value="1719">≥ $1,719</option>
         </select>
         <button
           type="button"

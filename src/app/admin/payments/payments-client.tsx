@@ -12,7 +12,7 @@ import { fmtMXN } from "@/lib/format";
 
 /* ── Constants ────────────────────────────────────────────────────────────── */
 
-const PLAN_PRICES: Record<string, number> = { BASIC: 299, PRO: 499, CLINIC: 799 };
+const PLAN_PRICES: Record<string, number> = { BASIC: 419, PRO: 689, CLINIC: 1719 };
 
 const PAYMENT_METHODS = [
   { value: "stripe",   label: "Stripe",        icon: "\uD83D\uDCB3" },
@@ -412,7 +412,7 @@ export function PaymentsClient({
                   type="number"
                   value={form.amount}
                   onChange={e => setF("amount", e.target.value)}
-                  placeholder="499"
+                  placeholder="419"
                 />
               </div>
 

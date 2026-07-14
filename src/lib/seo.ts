@@ -60,7 +60,7 @@ export function softwareApplicationLd(opts: SoftwareApplicationLd) {
     operatingSystem: "Web",
     offers: {
       "@type": "Offer",
-      price: "499",
+      price: "419",
       priceCurrency: "MXN",
       availability: "https://schema.org/InStock",
     },

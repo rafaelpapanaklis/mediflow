@@ -196,7 +196,7 @@ function deriveTags(opts: {
   const { createdAt, mrr, activeCount, healthScore, agg, norms, lastAccess } = opts;
   const tags: ClienteTag[] = [];
   if (createdAt && (Date.now() - createdAt.getTime()) / DAY <= 14) tags.push("nuevo");
-  if (mrr >= 1999 || activeCount >= 2 || healthScore >= 80) tags.push("vip");
+  if (mrr >= 1719 || activeCount >= 2 || healthScore >= 80) tags.push("vip");
   const staleActive =
     activeCount > 0 && (!lastAccess || (Date.now() - lastAccess.getTime()) / DAY > 14);
   if (healthScore < 40 || agg === "churn" || norms.indexOf("past_due") >= 0 || staleActive) {

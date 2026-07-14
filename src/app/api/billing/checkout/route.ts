@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { getStripeSafe, stripeUnavailableResponse } from "@/lib/stripe";
 import { PLAN_IDS, type PlanId } from "@/lib/billing/plans";
 import { getResolvedPlan } from "@/lib/plans";
+import { ensureFirstMonthCoupon, isFirstContract } from "@/lib/billing/first-month-promo";
 import { logAudit, extractAuditMeta } from "@/lib/audit";
 
 export const runtime = "nodejs";
@@ -16,7 +17,7 @@ const BodySchema = z.object({
   // único (asíncrono, NO auto-renueva). Default "card" para no romper
   // a los llamadores existentes (p. ej. las tarjetas de /dashboard/suspended).
   method: z.enum(["card", "spei", "oxxo"]).default("card"),
-  // Ciclo de facturación. "annual" = 30% de descuento (plan.priceMxnAnnual).
+  // Ciclo de facturación. "annual" = 35% de descuento (plan.priceMxnAnnual).
   // Default "monthly" para no romper a los llamadores existentes.
   billing: z.enum(["monthly", "annual"]).default("monthly"),
 });
@@ -72,6 +73,10 @@ export async function POST(req: NextRequest) {
       email: true,
       stripeCustomerId: true,
       stripeSubscriptionId: true,
+      // Para la promo de 1er mes (isFirstContract): suscripción legacy y
+      // último periodo activado — no se limpian al cancelar.
+      subscriptionId: true,
+      nextBillingDate: true,
     },
   });
   if (!clinic) {
@@ -135,9 +140,20 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // Anual = 30% de descuento (priceMxnAnnual, fuente única de planes). El
+  // Anual = 35% de descuento (priceMxnAnnual, fuente única de planes). El
   // PERIODO lo fija el webhook (nextBillingDate +1 año / +1 mes según billing).
   const unitAmount = (billing === "annual" ? plan.priceMxnAnnual : plan.priceMxn) * 100;
+
+  // PROMO 1ER MES ($19/$29/$39 + IVA): SOLO tarjeta + ciclo mensual + PRIMERA
+  // contratación de la clínica (reactivaciones y cambios de plan NO aplican;
+  // change-plan ni siquiera pasa por aquí). Cupón "once": la 1a factura sale
+  // al precio promo y desde la 2a Stripe cobra el precio normal. NO es trial.
+  const applyFirstMonthPromo =
+    method === "card" && billing === "monthly" && isFirstContract(clinic);
+  const promoCouponId = applyFirstMonthPromo
+    ? await ensureFirstMonthCoupon(stripe, plan)
+    : null;
+
   // metadata compartida: el webhook discrimina por kind y activa según método+billing.
   const meta = {
     clinicId: clinic.id,
@@ -145,6 +161,7 @@ export async function POST(req: NextRequest) {
     kind: "platform-subscription",
     method,
     billing,
+    firstMonthPromo: promoCouponId ? "1" : "0",
   };
 
   let session;
@@ -171,6 +188,9 @@ export async function POST(req: NextRequest) {
       ],
       metadata: meta,
       subscription_data: { metadata: meta },
+      // discounts es incompatible con allow_promotion_codes (no usamos códigos
+      // manuales aquí); solo se manda cuando la promo aplica.
+      ...(promoCouponId ? { discounts: [{ coupon: promoCouponId }] } : {}),
       success_url: `${baseUrl}/dashboard`,
       cancel_url: `${baseUrl}/dashboard/suspended`,
     });
@@ -234,7 +254,7 @@ export async function POST(req: NextRequest) {
     changes: {
       _created: {
         before: null,
-        after: { plan: plan.id, priceMxn: plan.priceMxn, billing, amountMxn: unitAmount / 100, sessionId: session.id },
+        after: { plan: plan.id, priceMxn: plan.priceMxn, billing, amountMxn: unitAmount / 100, firstMonthCoupon: promoCouponId, sessionId: session.id },
       },
     },
     ipAddress,

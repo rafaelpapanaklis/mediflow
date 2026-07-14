@@ -14,7 +14,7 @@ import { AvatarNew } from "@/components/ui/design-system/avatar-new";
 import { KpiCard }   from "@/components/ui/design-system/kpi-card";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 
-const PLAN_PRICES: Record<string, number> = { BASIC: 49, PRO: 99, CLINIC: 249 };
+const PLAN_PRICES: Record<string, number> = { BASIC: 419, PRO: 689, CLINIC: 1719 };
 
 interface Props { clinics: any[] }
 

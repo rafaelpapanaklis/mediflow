@@ -1,19 +1,18 @@
 import type { ReactNode } from "react";
 import { SPOTLIGHTS, SPOTLIGHTS_HEADER } from "./landing-data";
 import {
-  AgendaMock, PacientesMock, PresupuestoMock, DicomMock,
-  StlMock, ClinicaVisualMock, InboxMock, AsistenteIaMock,
+  AgendaMock, PacientesMock, PresupuestoMock,
+  DicomStlMock, ClinicaIsometricaMock, InboxIaSplitMock,
 } from "./mockups";
 
+/* 6 spotlights (CAMBIOS §1): DICOM+STL y WhatsApp+IA fusionados; clínica isométrica nueva. */
 const MOCKUPS: Record<string, ReactNode> = {
   "agenda-semanal": <AgendaMock />,
   "tabla-pacientes": <PacientesMock />,
   "presupuesto": <PresupuestoMock />,
-  "visor-dicom": <DicomMock />,
-  "visor-stl": <StlMock />,
-  "clinica-visual": <ClinicaVisualMock />,
-  "inbox-whatsapp": <InboxMock />,
-  "asistente-ia": <AsistenteIaMock />,
+  "visor-dicom-stl": <DicomStlMock />,
+  "clinica-isometrica": <ClinicaIsometricaMock />,
+  "inbox-ia-split": <InboxIaSplitMock />,
 };
 
 export function Spotlights() {
