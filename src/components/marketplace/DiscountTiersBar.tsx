@@ -32,19 +32,20 @@ export function DiscountTiersBar({ cartCount }: DiscountTiersBarProps) {
   const progress    = nextTier ? (cartCount / nextTier.count) * 100 : 100;
 
   return (
-    <div className="mb-7 bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 rounded-2xl p-6 text-white relative overflow-hidden ring-1 ring-white/10">
-      <div className="absolute top-0 right-0 w-64 h-64 bg-gradient-to-br from-blue-500/20 to-cyan-500/0 rounded-full blur-3xl -mr-20 -mt-20" />
-      <div className="absolute bottom-0 left-0 w-48 h-48 bg-gradient-to-tr from-violet-500/15 to-purple-500/0 rounded-full blur-3xl -ml-20 -mb-20" />
-
+    <div className="mb-7 relative overflow-hidden rounded-[var(--radius-lg)] p-6 bg-[var(--brand-soft)] border border-[var(--border-brand)] shadow-[var(--shadow-1)]">
       <div className="relative">
-        <div className="flex items-start justify-between mb-5 gap-4">
+        <div className="flex items-start justify-between mb-5 gap-4 flex-wrap">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-white/10 backdrop-blur flex items-center justify-center flex-shrink-0">
-              <Gift className="w-5 h-5 text-amber-300" aria-hidden />
-            </div>
+            <span
+              className="w-10 h-10 rounded-[var(--radius)] flex items-center justify-center flex-shrink-0 text-white shadow-[0_3px_8px_rgba(124,58,237,.30)]"
+              style={{ background: "var(--brand-grad)" }}
+              aria-hidden
+            >
+              <Gift className="w-5 h-5" strokeWidth={1.75} />
+            </span>
             <div>
-              <h2 className="text-base font-semibold tracking-tight">{t("pages.discountTiers.title")}</h2>
-              <p className="text-sm text-slate-300 mt-0.5">
+              <h2 className="text-base font-semibold tracking-tight text-[var(--text-1)]">{t("pages.discountTiers.title")}</h2>
+              <p className="text-[13px] text-[var(--text-3)] mt-0.5">
                 {t("pages.discountTiers.subtitle")}
               </p>
             </div>
@@ -53,19 +54,19 @@ export function DiscountTiersBar({ cartCount }: DiscountTiersBarProps) {
             <div
               role="status"
               aria-live="polite"
-              className="bg-emerald-500/20 backdrop-blur border border-emerald-400/30 rounded-lg px-3 py-2 flex items-center gap-2 flex-shrink-0"
+              className="rounded-[var(--radius-sm)] px-3 py-2 flex items-center gap-2 flex-shrink-0 bg-[var(--success-soft)] text-[var(--success-strong)]"
             >
-              <Check className="w-4 h-4 text-emerald-300" strokeWidth={3} aria-hidden />
-              <span className="text-sm font-medium text-emerald-100">{t("pages.discountTiers.activeDiscount", { discount: currentTier.discount })}</span>
+              <Check className="w-4 h-4" strokeWidth={1.75} aria-hidden />
+              <span className="text-[13px] font-semibold">{t("pages.discountTiers.activeDiscount", { discount: currentTier.discount })}</span>
             </div>
           )}
         </div>
 
         <div className="relative mb-3 px-2">
-          <div className="h-2 bg-white/10 rounded-full overflow-hidden">
+          <div className="h-2 rounded-full overflow-hidden bg-[var(--bg-elev-2)]">
             <div
-              className="h-full bg-gradient-to-r from-blue-400 via-cyan-400 to-emerald-400 rounded-full transition-all duration-500"
-              style={{ width: `${Math.min(progress, 100)}%` }}
+              className="h-full rounded-full transition-all duration-500"
+              style={{ width: `${Math.min(progress, 100)}%`, background: "var(--brand-grad)" }}
             />
           </div>
 
@@ -78,12 +79,15 @@ export function DiscountTiersBar({ cartCount }: DiscountTiersBarProps) {
                   className="absolute"
                   style={{ left: `calc(${(tier.count / 10) * 100}% - 8px)`, top: 0 }}
                 >
-                  <div className={`w-4 h-4 rounded-full border-2 transition-all ${
-                    reached
-                      ? "bg-emerald-400 border-emerald-400 shadow-lg shadow-emerald-400/50"
-                      : "bg-slate-800 dark:bg-slate-950 border-white/30"
-                  }`}>
-                    {reached && <Check className="w-2.5 h-2.5 text-white m-0.5" strokeWidth={4} aria-hidden />}
+                  <div
+                    className={`w-4 h-4 rounded-full border-2 flex items-center justify-center transition-all ${
+                      reached
+                        ? "border-transparent text-white"
+                        : "bg-[var(--bg-elev)] border-[var(--border-strong)]"
+                    }`}
+                    style={reached ? { background: "var(--brand-grad)" } : undefined}
+                  >
+                    {reached && <Check className="w-2.5 h-2.5" strokeWidth={3} aria-hidden />}
                   </div>
                 </div>
               );
@@ -97,12 +101,12 @@ export function DiscountTiersBar({ cartCount }: DiscountTiersBarProps) {
             return (
               <div
                 key={tier.count}
-                className={`text-center p-3 rounded-lg transition-all ${reached ? "bg-white/5" : ""}`}
+                className={`text-center p-3 rounded-[var(--radius)] transition-all ${reached ? "bg-[var(--bg-elev)] shadow-[var(--shadow-1)]" : ""}`}
               >
-                <div className={`text-3xl font-bold tracking-tight ${reached ? "text-white" : "text-slate-500"}`}>
+                <div className={`text-3xl font-bold tracking-tight tabular-nums ${reached ? "text-[var(--brand)]" : "text-[var(--text-4)]"}`}>
                   {tier.discount}%
                 </div>
-                <div className={`text-xs mt-1 ${reached ? "text-slate-200" : "text-slate-500"}`}>
+                <div className={`text-xs mt-1 ${reached ? "text-[var(--text-2)]" : "text-[var(--text-3)]"}`}>
                   {t("pages.discountTiers.modulesCount", { count: tier.count })}
                 </div>
               </div>
@@ -114,16 +118,16 @@ export function DiscountTiersBar({ cartCount }: DiscountTiersBarProps) {
           <div
             role="status"
             aria-live="polite"
-            className="mt-4 pt-4 border-t border-white/10 flex items-center gap-2 text-sm"
+            className="mt-4 pt-4 border-t border-[var(--border-brand)] flex items-center gap-2 text-[13px]"
           >
-            <Info className="w-4 h-4 text-blue-300 flex-shrink-0" aria-hidden />
-            <span className="text-slate-300">
+            <Info className="w-4 h-4 flex-shrink-0 text-[var(--info)]" strokeWidth={1.75} aria-hidden />
+            <span className="text-[var(--text-2)]">
               {t("pages.discountTiers.addPrefix")}{" "}
-              <strong className="text-white">
+              <strong className="text-[var(--text-1)] font-semibold">
                 {t("pages.discountTiers.modulesMore", { count: nextTier.count - cartCount })}
               </strong>{" "}
               {t("pages.discountTiers.toUnlock")}{" "}
-              <strong className="text-white">{t("pages.discountTiers.percentDiscount", { discount: nextTier.discount })}</strong>
+              <strong className="text-[var(--text-1)] font-semibold">{t("pages.discountTiers.percentDiscount", { discount: nextTier.discount })}</strong>
             </span>
           </div>
         )}

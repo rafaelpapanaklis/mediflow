@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, X, Package, Users } from "lucide-react";
+import { Plus, X, Package, Users, Check, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import toast from "react-hot-toast";
@@ -99,31 +99,33 @@ export function PackagesClient({ initialPackages, initialRedemptions }: { initia
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
         <div>
-          <h1 className="text-2xl font-extrabold">{t("pages.packages.title")}</h1>
-          <p className="text-sm text-muted-foreground mt-0.5">{t("pages.packages.registeredCount", { count: packages.length })}</p>
+          <h1 className="text-[22px] font-bold tracking-tight" style={{ color: "var(--text-1)" }}>{t("pages.packages.title")}</h1>
+          <p className="text-[12.5px] mt-0.5" style={{ color: "var(--text-3)" }}>{t("pages.packages.registeredCount", { count: packages.length })}</p>
         </div>
         {tab === "paquetes" && (
           <Button onClick={() => setShowAdd(true)}>
-            <Plus className="w-5 h-5 mr-2" /> {t("pages.packages.newPackage")}
+            <Plus className="w-[18px] h-[18px] mr-2" strokeWidth={1.75} aria-hidden="true" /> {t("pages.packages.newPackage")}
           </Button>
         )}
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-2 mb-6">
+      <div className="segment-new mb-6">
         <button
+          aria-pressed={tab === "paquetes"}
           onClick={() => setTab("paquetes")}
-          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold border-2 transition-all ${tab === "paquetes" ? "bg-brand-600 text-white border-brand-600" : "bg-card border-border hover:border-slate-400"}`}
+          className={`segment-new__btn inline-flex items-center gap-1.5 focus-visible:outline-none focus-visible:[box-shadow:var(--ring)] ${tab === "paquetes" ? "segment-new__btn--active" : ""}`}
         >
-          <Package className="w-4 h-4" /> {t("pages.packages.tabPackages")}
+          <Package size={16} strokeWidth={1.75} aria-hidden="true" /> {t("pages.packages.tabPackages")}
         </button>
         <button
+          aria-pressed={tab === "clientes"}
           onClick={() => setTab("clientes")}
-          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold border-2 transition-all ${tab === "clientes" ? "bg-brand-600 text-white border-brand-600" : "bg-card border-border hover:border-slate-400"}`}
+          className={`segment-new__btn inline-flex items-center gap-1.5 focus-visible:outline-none focus-visible:[box-shadow:var(--ring)] ${tab === "clientes" ? "segment-new__btn--active" : ""}`}
         >
-          <Users className="w-4 h-4" /> {t("pages.packages.tabClients")}
+          <Users size={16} strokeWidth={1.75} aria-hidden="true" /> {t("pages.packages.tabClients")}
         </button>
       </div>
 
@@ -131,27 +133,79 @@ export function PackagesClient({ initialPackages, initialRedemptions }: { initia
       {tab === "paquetes" && (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {packages.map(pkg => (
-            <div key={pkg.id} className="bg-card border border-border rounded-xl p-5">
-              <div className="flex items-start justify-between">
-                <h3 className="text-base font-bold">{pkg.name}</h3>
-                <button onClick={() => handleDeletePackage(pkg.id)} className="text-muted-foreground hover:text-rose-500">
-                  <X className="w-4 h-4" />
+            <div
+              key={pkg.id}
+              className="p-5 flex flex-col"
+              style={{ background: "var(--bg-elev)", border: "1px solid var(--border-soft)", borderRadius: "var(--radius-lg)", boxShadow: "var(--shadow-1)" }}
+            >
+              <div className="flex items-start justify-between gap-2">
+                <div className="flex items-start gap-3 min-w-0">
+                  <span
+                    className="flex h-9 w-9 shrink-0 items-center justify-center"
+                    style={{ background: "var(--brand-soft)", color: "var(--brand)", borderRadius: "var(--radius)" }}
+                    aria-hidden="true"
+                  >
+                    <Package size={18} strokeWidth={1.75} />
+                  </span>
+                  <div className="min-w-0">
+                    <h3 className="text-[15px] font-semibold leading-snug" style={{ color: "var(--text-1)" }}>{pkg.name}</h3>
+                    {pkg.description && <p className="text-[12.5px] mt-0.5" style={{ color: "var(--text-3)" }}>{pkg.description}</p>}
+                  </div>
+                </div>
+                <button
+                  onClick={() => handleDeletePackage(pkg.id)}
+                  aria-label={t("common.delete")}
+                  className="inline-flex h-10 w-10 -mr-2 -mt-2 shrink-0 items-center justify-center transition-colors duration-150 hover:bg-[var(--danger-soft)] hover:text-[var(--danger)] focus-visible:outline-none focus-visible:[box-shadow:var(--ring)] active:scale-[.98]"
+                  style={{ color: "var(--text-3)", borderRadius: "var(--radius-sm)" }}
+                >
+                  <Trash2 size={18} strokeWidth={1.75} aria-hidden="true" />
                 </button>
               </div>
-              {pkg.description && <p className="text-sm text-muted-foreground mt-1">{pkg.description}</p>}
-              <div className="mt-3 space-y-1">
-                <p className="text-sm"><span className="font-medium">{t("pages.packages.sessionsLabel")}</span> {pkg.totalSessions}</p>
-                <p className="text-sm"><span className="font-medium">{t("pages.packages.priceLabel")}</span> ${pkg.price.toLocaleString("es-MX")}</p>
-                <p className="text-sm"><span className="font-medium">{t("pages.packages.validityLabel")}</span> {t("pages.packages.daysCount", { count: pkg.validDays })}</p>
-                {pkg.bodyZone && <p className="text-sm"><span className="font-medium">{t("pages.packages.zoneLabel")}</span> {pkg.bodyZone}</p>}
-                <p className="text-sm"><span className="font-medium">{t("pages.packages.activeClientsLabel")}</span> {pkg._count.redemptions}</p>
+              <div className="flex-1">
+                <p className="mt-4 flex items-baseline gap-1.5">
+                  <span className="text-xs font-medium" style={{ color: "var(--text-3)" }}>{t("pages.packages.priceLabel")}</span>
+                  <span className="text-[26px] font-bold leading-none tabular-nums" style={{ color: "var(--text-1)" }}>${pkg.price.toLocaleString("es-MX")}</span>
+                </p>
+                <ul className="mt-4 space-y-2">
+                  <li className="flex items-center gap-2 text-[13px]" style={{ color: "var(--text-2)" }}>
+                    <Check size={16} strokeWidth={1.75} className="shrink-0" style={{ color: "var(--success)" }} aria-hidden="true" />
+                    <span>{t("pages.packages.sessionsLabel")} <span className="font-semibold tabular-nums" style={{ color: "var(--text-1)" }}>{pkg.totalSessions}</span></span>
+                  </li>
+                  <li className="flex items-center gap-2 text-[13px]" style={{ color: "var(--text-2)" }}>
+                    <Check size={16} strokeWidth={1.75} className="shrink-0" style={{ color: "var(--success)" }} aria-hidden="true" />
+                    <span>{t("pages.packages.validityLabel")} <span className="font-semibold tabular-nums" style={{ color: "var(--text-1)" }}>{t("pages.packages.daysCount", { count: pkg.validDays })}</span></span>
+                  </li>
+                  {pkg.bodyZone && (
+                    <li className="flex items-center gap-2 text-[13px]" style={{ color: "var(--text-2)" }}>
+                      <Check size={16} strokeWidth={1.75} className="shrink-0" style={{ color: "var(--success)" }} aria-hidden="true" />
+                      <span>{t("pages.packages.zoneLabel")} <span className="font-semibold" style={{ color: "var(--text-1)" }}>{pkg.bodyZone}</span></span>
+                    </li>
+                  )}
+                </ul>
+              </div>
+              <div className="mt-4 pt-4" style={{ borderTop: "1px solid var(--border-soft)" }}>
+                <span
+                  className="inline-flex items-center gap-1.5 h-[26px] px-2.5 rounded-full text-xs font-semibold tabular-nums"
+                  style={{ background: "var(--brand-soft)", color: "var(--brand)" }}
+                >
+                  <Users size={16} strokeWidth={1.75} aria-hidden="true" />
+                  {t("pages.packages.activeClientsLabel")} {pkg._count.redemptions}
+                </span>
               </div>
             </div>
           ))}
           {packages.length === 0 && (
-            <div className="col-span-full text-center py-16 text-muted-foreground">
-              <Package className="w-12 h-12 mx-auto mb-3 opacity-20" />
-              <p className="text-base font-semibold">{t("pages.packages.noPackages")}</p>
+            <div
+              className="col-span-full flex flex-col items-center justify-center px-6 py-14 text-center"
+              style={{ background: "var(--bg-elev)", border: "1px dashed var(--border-soft)", borderRadius: "var(--radius-lg)" }}
+            >
+              <span className="flex h-11 w-11 items-center justify-center rounded-full mb-3" style={{ background: "var(--brand-soft)", color: "var(--brand)" }} aria-hidden="true">
+                <Package size={20} strokeWidth={1.75} />
+              </span>
+              <p className="text-sm font-medium" style={{ color: "var(--text-3)" }}>{t("pages.packages.noPackages")}</p>
+              <button type="button" onClick={() => setShowAdd(true)} className="btn-new btn-new--primary mt-4">
+                <Plus size={16} strokeWidth={1.75} aria-hidden="true" /> {t("pages.packages.newPackage")}
+              </button>
             </div>
           )}
         </div>
@@ -163,39 +217,66 @@ export function PackagesClient({ initialPackages, initialRedemptions }: { initia
           {redemptions.map(r => {
             const pct = r.totalSessions > 0 ? (r.sessionsUsed / r.totalSessions) * 100 : 0;
             return (
-              <div key={r.id} className="bg-card border border-border rounded-xl p-5">
-                <div className="flex items-center justify-between mb-2">
-                  <div>
-                    <p className="text-base font-bold">{r.patient.firstName} {r.patient.lastName}</p>
-                    <p className="text-sm text-muted-foreground">{r.package.name}</p>
+              <div
+                key={r.id}
+                className="p-5"
+                style={{ background: "var(--bg-elev)", border: "1px solid var(--border-soft)", borderRadius: "var(--radius-lg)", boxShadow: "var(--shadow-1)" }}
+              >
+                <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <span
+                      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-[11px] font-bold"
+                      style={{ background: "var(--violet-100)", color: "var(--violet-700)" }}
+                      aria-hidden="true"
+                    >
+                      {(r.patient.firstName || "").charAt(0).toUpperCase()}{(r.patient.lastName || "").charAt(0).toUpperCase()}
+                    </span>
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold truncate" style={{ color: "var(--text-1)" }}>{r.patient.firstName} {r.patient.lastName}</p>
+                      <p className="text-[12.5px] truncate" style={{ color: "var(--text-3)" }}>{r.package.name}</p>
+                    </div>
                   </div>
                   <Button
                     size="sm"
                     disabled={r.sessionsUsed >= r.totalSessions}
                     onClick={() => handleMarkSession(r.id)}
                   >
+                    <Check className="w-4 h-4 mr-1.5" strokeWidth={1.75} aria-hidden="true" />
                     {t("pages.packages.markSession")}
                   </Button>
                 </div>
                 <div className="flex items-center gap-3">
-                  <div className="flex-1 bg-muted rounded-full h-3 overflow-hidden">
+                  <div className="flex-1 h-2 rounded-full overflow-hidden" style={{ background: "var(--bg-elev-2)" }}>
                     <div
-                      className="h-full bg-brand-600 rounded-full transition-all"
-                      style={{ width: `${Math.min(pct, 100)}%` }}
+                      className="h-full rounded-full transition-all"
+                      style={{ width: `${Math.min(pct, 100)}%`, background: "var(--brand-grad)" }}
                     />
                   </div>
-                  <span className="text-sm font-bold whitespace-nowrap">{r.sessionsUsed}/{r.totalSessions}</span>
+                  <span
+                    className="text-[13px] font-bold whitespace-nowrap tabular-nums"
+                    style={{ color: r.sessionsUsed >= r.totalSessions ? "var(--success-strong)" : "var(--text-1)" }}
+                  >
+                    {r.sessionsUsed}/{r.totalSessions}
+                  </span>
                 </div>
-                <p className="text-xs text-muted-foreground mt-2">
-                  {t("pages.packages.expires")} {new Date(r.expiresAt).toLocaleDateString("es-MX")}
+                <p className="text-xs mt-2" style={{ color: "var(--text-3)" }}>
+                  {t("pages.packages.expires")} <span className="tabular-nums">{new Date(r.expiresAt).toLocaleDateString("es-MX")}</span>
                 </p>
               </div>
             );
           })}
           {redemptions.length === 0 && (
-            <div className="text-center py-16 text-muted-foreground">
-              <Users className="w-12 h-12 mx-auto mb-3 opacity-20" />
-              <p className="text-base font-semibold">{t("pages.packages.noActiveClients")}</p>
+            <div
+              className="flex flex-col items-center justify-center px-6 py-14 text-center"
+              style={{ background: "var(--bg-elev)", border: "1px dashed var(--border-soft)", borderRadius: "var(--radius-lg)" }}
+            >
+              <span className="flex h-11 w-11 items-center justify-center rounded-full mb-3" style={{ background: "var(--brand-soft)", color: "var(--brand)" }} aria-hidden="true">
+                <Users size={20} strokeWidth={1.75} />
+              </span>
+              <p className="text-sm font-medium" style={{ color: "var(--text-3)" }}>{t("pages.packages.noActiveClients")}</p>
+              <button type="button" onClick={() => setTab("paquetes")} className="btn-new btn-new--secondary mt-4">
+                <Package size={16} strokeWidth={1.75} aria-hidden="true" /> {t("pages.packages.tabPackages")}
+              </button>
             </div>
           )}
         </div>
@@ -203,11 +284,21 @@ export function PackagesClient({ initialPackages, initialRedemptions }: { initia
 
       {/* Add Package Modal */}
       {showAdd && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
-          <div className="bg-card border border-border rounded-2xl shadow-xl w-full max-w-lg max-h-[90vh] flex flex-col overflow-hidden">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-border shrink-0">
-              <h2 className="text-lg font-bold">{t("pages.packages.newPackageModalTitle")}</h2>
-              <button onClick={() => setShowAdd(false)} className="p-2 rounded-lg hover:bg-muted text-muted-foreground"><X className="w-5 h-5" /></button>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 motion-safe:animate-in motion-safe:fade-in motion-safe:duration-200">
+          <div
+            className="w-full max-w-lg max-h-[90vh] flex flex-col overflow-hidden motion-safe:animate-in motion-safe:fade-in motion-safe:zoom-in-95 motion-safe:duration-200"
+            style={{ background: "var(--bg-elev)", border: "1px solid var(--border-soft)", borderRadius: "var(--radius-lg)", boxShadow: "var(--shadow-3)" }}
+          >
+            <div className="flex items-center justify-between px-6 py-4 shrink-0" style={{ borderBottom: "1px solid var(--border-soft)" }}>
+              <h2 className="text-base font-semibold" style={{ color: "var(--text-1)" }}>{t("pages.packages.newPackageModalTitle")}</h2>
+              <button
+                onClick={() => setShowAdd(false)}
+                aria-label={t("common.close")}
+                className="inline-flex h-10 w-10 -mr-2 shrink-0 items-center justify-center transition-colors duration-150 hover:bg-[var(--bg-hover)] focus-visible:outline-none focus-visible:[box-shadow:var(--ring)] active:scale-[.98]"
+                style={{ color: "var(--text-3)", borderRadius: "var(--radius-sm)" }}
+              >
+                <X size={20} strokeWidth={1.75} aria-hidden="true" />
+              </button>
             </div>
             <div className="px-6 py-5 space-y-4 flex-1 overflow-y-auto min-h-0">
               <div className="space-y-1.5">

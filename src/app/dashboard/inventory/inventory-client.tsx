@@ -1,12 +1,16 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, type CSSProperties } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
-import { Plus, Search, Package, X, Trash2, Minus, Check } from "lucide-react";
+import {
+  Plus, Search, Package, X, Trash2, Minus, Check,
+  AlertTriangle, PackageX, PackageOpen, SearchX, Banknote,
+  Wrench, Cog, FlaskConical, Ruler, Microscope, Syringe,
+  type LucideIcon,
+} from "lucide-react";
 import toast from "react-hot-toast";
 import { KpiCard }   from "@/components/ui/design-system/kpi-card";
 import { CardNew }   from "@/components/ui/design-system/card-new";
-import { BadgeNew }  from "@/components/ui/design-system/badge-new";
 import { ButtonNew } from "@/components/ui/design-system/button-new";
 import { fmtMXN }    from "@/lib/format";
 import { useConfirm } from "@/components/ui/confirm-dialog";
@@ -32,15 +36,15 @@ const DENTAL_ICONS = [
   { id: "guantes-cubrebocas", src: "/icons/dental/guantes-cubrebocas.png", labelKey: "procurement.inventoryClient.iconGuantes" },
 ];
 
-const CATEGORY_EMOJI: Record<string, string> = {
-  "Instrumental básico":        "🔧",
-  "Fresas dentales":            "⚙️",
-  "Materiales de restauración": "🧴",
-  "Ortodoncia":                 "📐",
-  "Endodoncia":                 "🔬",
-  "Cirugía e implantes":        "🏥",
-  "Consumibles":                "📦",
-  "Otro":                       "📦",
+const CATEGORY_FALLBACK_ICON: Record<string, LucideIcon> = {
+  "Instrumental básico":        Wrench,
+  "Fresas dentales":            Cog,
+  "Materiales de restauración": FlaskConical,
+  "Ortodoncia":                 Ruler,
+  "Endodoncia":                 Microscope,
+  "Cirugía e implantes":        Syringe,
+  "Consumibles":                Package,
+  "Otro":                       Package,
 };
 
 const CATEGORY_DEFAULT_ICON: Record<string, string> = {
@@ -74,10 +78,35 @@ function getStatus(item: Item): StatusTab {
   return "disponible";
 }
 
+const statusPillBase: CSSProperties = {
+  display: "inline-flex", alignItems: "center", gap: 5,
+  minHeight: 24, padding: "3px 10px", borderRadius: 999,
+  fontSize: 11.5, fontWeight: 600, whiteSpace: "nowrap",
+};
+
 function statusBadge(s: StatusTab, t: TFunction) {
-  if (s === "sin")        return <BadgeNew tone="danger"  dot>{t("procurement.inventoryClient.badgeOut")}</BadgeNew>;
-  if (s === "poco")       return <BadgeNew tone="warning" dot>{t("procurement.inventoryClient.badgeLow")}</BadgeNew>;
-  return <BadgeNew tone="success" dot>{t("procurement.inventoryClient.badgeOk")}</BadgeNew>;
+  if (s === "sin") {
+    return (
+      <span style={{ ...statusPillBase, background: "var(--danger-soft)", color: "var(--danger)" }}>
+        <PackageX size={16} strokeWidth={1.75} aria-hidden />
+        {t("procurement.inventoryClient.badgeOut")}
+      </span>
+    );
+  }
+  if (s === "poco") {
+    return (
+      <span style={{ ...statusPillBase, background: "var(--warning-soft)", color: "var(--warning-strong)" }}>
+        <AlertTriangle size={16} strokeWidth={1.75} aria-hidden />
+        {t("procurement.inventoryClient.badgeLow")}
+      </span>
+    );
+  }
+  return (
+    <span style={{ ...statusPillBase, background: "var(--success-soft)", color: "var(--success-strong)" }}>
+      <span aria-hidden style={{ width: 6, height: 6, borderRadius: 999, background: "currentColor", flexShrink: 0 }} />
+      {t("procurement.inventoryClient.badgeOk")}
+    </span>
+  );
 }
 
 function ItemIcon({ iconId, category, size = 40 }: { iconId: string; category: string; size?: number }) {
@@ -91,6 +120,7 @@ function ItemIcon({ iconId, category, size = 40 }: { iconId: string; category: s
         className="object-contain flex-shrink-0" />
     );
   }
+  const FallbackIcon = CATEGORY_FALLBACK_ICON[category] ?? Package;
   return (
     <div style={{
       width: size, height: size,
@@ -99,9 +129,9 @@ function ItemIcon({ iconId, category, size = 40 }: { iconId: string; category: s
       borderRadius: 8,
       display: "grid",
       placeItems: "center",
-      fontSize: size * 0.5,
+      color: "var(--text-3)",
     }} className="flex-shrink-0">
-      {CATEGORY_EMOJI[category] ?? "📦"}
+      <FallbackIcon size={20} strokeWidth={1.75} aria-hidden />
     </div>
   );
 }
@@ -138,7 +168,7 @@ function IconPicker({ selected, onSelect }: { selected: string; onSelect: (id: s
               display: "grid",
               placeItems: "center",
               cursor: "pointer",
-              transition: "all .12s",
+              transition: "background var(--dur-1) var(--ease), border-color var(--dur-1) var(--ease)",
             }}
           >
             <img src={icon.src} alt={t(icon.labelKey)}
@@ -278,30 +308,30 @@ export function InventoryClient({ initialItems }: { initialItems: Item[]; specia
   return (
     <div style={{ padding: "clamp(14px, 1.6vw, 28px)", maxWidth: 1400, margin: "0 auto" }}>
       {/* Header */}
-      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 22, gap: 24, flexWrap: "wrap" }}>
+      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 24, gap: 24, flexWrap: "wrap" }}>
         <div>
-          <h1 style={{ fontSize: "clamp(16px, 1.4vw, 22px)", letterSpacing: "-0.02em", color: "var(--text-1)", fontWeight: 600, margin: 0 }}>{t("procurement.inventoryClient.title")}</h1>
+          <h1 style={{ fontSize: "clamp(18px, 1.6vw, 22px)", letterSpacing: "-0.01em", color: "var(--text-1)", fontWeight: 700, margin: 0 }}>{t("procurement.inventoryClient.title")}</h1>
           <p style={{ color: "var(--text-3)", fontSize: 13, marginTop: 4 }}>
             {t("procurement.inventoryClient.subtitle", { items: items.length, units: kpis.totalQty.toLocaleString("es-MX") })}
           </p>
         </div>
-        <ButtonNew variant="primary" icon={<Plus size={14} />} onClick={() => setShowAdd(true)}>
+        <ButtonNew variant="primary" icon={<Plus size={16} strokeWidth={1.75} />} onClick={() => setShowAdd(true)}>
           {t("procurement.inventoryClient.newItem")}
         </ButtonNew>
       </div>
 
       {/* KPIs */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 14, marginBottom: 20 }}>
-        <KpiCard label={t("procurement.inventoryClient.kpiTotalItems")} value={String(items.length)}       icon={Package} />
-        <KpiCard label={t("procurement.inventoryClient.kpiLowStock")}      value={String(kpis.lowCount)}      icon={Package} />
-        <KpiCard label={t("procurement.inventoryClient.kpiOutOfStock")}        value={String(kpis.outCount)}      icon={Package} />
-        <KpiCard label={t("procurement.inventoryClient.kpiTotalValue")}     value={fmtMXN(kpis.totalValue)}    icon={Package} />
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 16, marginBottom: 24 }}>
+        <KpiCard label={t("procurement.inventoryClient.kpiTotalItems")} value={String(items.length)}       icon={Package} hero />
+        <KpiCard label={t("procurement.inventoryClient.kpiLowStock")}      value={String(kpis.lowCount)}      icon={AlertTriangle} />
+        <KpiCard label={t("procurement.inventoryClient.kpiOutOfStock")}        value={String(kpis.outCount)}      icon={PackageX} />
+        <KpiCard label={t("procurement.inventoryClient.kpiTotalValue")}     value={fmtMXN(kpis.totalValue)}    icon={Banknote} />
       </div>
 
       {/* Filters */}
       <div style={{ display: "flex", gap: 8, marginBottom: 18, flexWrap: "wrap", alignItems: "center" }}>
         <div className="search-field">
-          <Search size={14} />
+          <Search size={16} strokeWidth={1.75} aria-hidden />
           <input
             value={search}
             onChange={e => setSearch(e.target.value)}
@@ -325,20 +355,29 @@ export function InventoryClient({ initialItems }: { initialItems: Item[]; specia
       {/* List */}
       <CardNew noPad>
         {filtered.length === 0 ? (
-          <div style={{ padding: "48px 24px", textAlign: "center" }}>
-            <Package size={32} style={{ color: "var(--text-4)", margin: "0 auto 12px" }} />
-            <p style={{ color: "var(--text-3)", fontSize: 13 }}>
+          <div style={{ padding: "56px 24px", textAlign: "center" }}>
+            <div style={{
+              width: 48, height: 48, margin: "0 auto 14px", borderRadius: 999,
+              background: "var(--bg-elev-2)", border: "1px solid var(--border-soft)",
+              display: "grid", placeItems: "center", color: "var(--text-3)",
+            }}>
+              {search
+                ? <SearchX size={20} strokeWidth={1.75} aria-hidden />
+                : <PackageOpen size={20} strokeWidth={1.75} aria-hidden />}
+            </div>
+            <p style={{ color: "var(--text-3)", fontSize: 13.5, margin: 0 }}>
               {search ? t("common.noResults") : tab === "todos" ? t("procurement.inventoryClient.emptyNoItems") : t("procurement.inventoryClient.emptyNoItemsInState")}
             </p>
             {items.length === 0 && (
-              <div style={{ marginTop: 12 }}>
-                <ButtonNew variant="primary" size="sm" icon={<Plus size={14} />} onClick={() => setShowAdd(true)}>
+              <div style={{ marginTop: 14 }}>
+                <ButtonNew variant="primary" size="sm" icon={<Plus size={16} strokeWidth={1.75} aria-hidden />} onClick={() => setShowAdd(true)}>
                   {t("procurement.inventoryClient.addFirstItem")}
                 </ButtonNew>
               </div>
             )}
           </div>
         ) : (
+          <div style={{ overflowX: "auto" }}>
           <table className="table-new">
             <thead>
               <tr>
@@ -358,7 +397,7 @@ export function InventoryClient({ initialItems }: { initialItems: Item[]; specia
                 const iconId    = item.emoji && DENTAL_ICONS.find(i => i.id === item.emoji)
                   ? item.emoji
                   : (CATEGORY_DEFAULT_ICON[item.category] ?? "fresa-jeringa");
-                const qtyColor  = status === "sin" ? "var(--danger)" : status === "poco" ? "var(--warning)" : "var(--success)";
+                const qtyColor  = status === "sin" ? "var(--danger)" : status === "poco" ? "var(--warning-strong)" : "var(--success-strong)";
                 return (
                   <tr key={item.id}>
                     <td>
@@ -367,7 +406,7 @@ export function InventoryClient({ initialItems }: { initialItems: Item[]; specia
                         <div>
                           <div style={{ fontWeight: 500, color: "var(--text-1)" }}>{item.name}</div>
                           {item.description && (
-                            <div style={{ fontSize: 11, color: "var(--text-3)", maxWidth: 280, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                            <div style={{ fontSize: 12, color: "var(--text-3)", maxWidth: 280, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                               {item.description}
                             </div>
                           )}
@@ -397,7 +436,7 @@ export function InventoryClient({ initialItems }: { initialItems: Item[]; specia
                             style={{ padding: 0, width: 28 }}
                             aria-label={t("common.confirm")}
                           >
-                            <Check size={12} />
+                            <Check size={16} strokeWidth={1.75} aria-hidden />
                           </button>
                         </div>
                       ) : (
@@ -438,17 +477,17 @@ export function InventoryClient({ initialItems }: { initialItems: Item[]; specia
                           style={{ padding: 0, width: 28, color: "var(--danger)" }}
                           aria-label={t("procurement.inventoryClient.removeOne")}
                         >
-                          <Minus size={12} />
+                          <Minus size={16} strokeWidth={1.75} aria-hidden />
                         </button>
                         <button
                           type="button"
                           disabled={isLoad}
                           onClick={() => changeQty(item.id, 1)}
                           className="btn-new btn-new--ghost btn-new--sm"
-                          style={{ padding: 0, width: 28, color: "var(--success)" }}
+                          style={{ padding: 0, width: 28, color: "var(--success-strong)" }}
                           aria-label={t("procurement.inventoryClient.addOne")}
                         >
-                          <Plus size={12} />
+                          <Plus size={16} strokeWidth={1.75} aria-hidden />
                         </button>
                         <button
                           type="button"
@@ -457,7 +496,7 @@ export function InventoryClient({ initialItems }: { initialItems: Item[]; specia
                           style={{ padding: 0, width: 28 }}
                           aria-label={t("common.delete")}
                         >
-                          <Trash2 size={12} />
+                          <Trash2 size={16} strokeWidth={1.75} aria-hidden />
                         </button>
                       </div>
                     </td>
@@ -466,6 +505,7 @@ export function InventoryClient({ initialItems }: { initialItems: Item[]; specia
               })}
             </tbody>
           </table>
+          </div>
         )}
       </CardNew>
 
@@ -511,7 +551,7 @@ export function InventoryClient({ initialItems }: { initialItems: Item[]; specia
                   className="btn-new btn-new--ghost btn-new--sm"
                   aria-label={t("common.close")}
                 >
-                  <X size={14} />
+                  <X size={16} strokeWidth={1.75} aria-hidden />
                 </button>
               </Dialog.Close>
             </div>

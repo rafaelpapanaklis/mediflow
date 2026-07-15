@@ -26,7 +26,7 @@ export function CartItem({ module: m, onRemove }: CartItemProps) {
   const Icon = getModuleIcon(m.iconKey);
 
   return (
-    <div className="flex items-center gap-4 bg-[var(--bg-elev)] border border-[var(--border-soft)] rounded-xl p-4">
+    <div className="flex items-center gap-4 bg-[var(--bg-elev)] border border-[var(--border-soft)] rounded-[var(--radius-lg)] shadow-[var(--shadow-1)] p-4">
       <div className={`w-10 h-10 rounded-lg ${m.iconBg} flex items-center justify-center flex-shrink-0`}>
         <Icon className={`w-5 h-5 ${m.iconColor}`} strokeWidth={2} aria-hidden />
       </div>
@@ -34,16 +34,16 @@ export function CartItem({ module: m, onRemove }: CartItemProps) {
         <div className="font-semibold text-[14px] text-[var(--text-1)] truncate">{m.name}</div>
         <div className="text-xs text-[var(--text-3)]">{m.category}</div>
       </div>
-      <div className="text-sm font-semibold text-[var(--text-1)] flex-shrink-0">
+      <div className="text-sm font-bold tabular-nums text-[var(--text-1)] flex-shrink-0">
         ${m.priceMxnMonthly} {t("pages.marketplace.mxnPerMonth")}
       </div>
       <button
         type="button"
         onClick={onRemove}
         aria-label={t("pages.marketplace.removeFromCart", { name: m.name })}
-        className="p-2 rounded-md text-[var(--text-3)] hover:text-red-600 dark:hover:text-red-400 hover:bg-red-500/10 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500/40"
+        className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-[var(--radius-sm)] text-[var(--text-3)] transition-colors duration-150 hover:text-[var(--danger)] hover:bg-[var(--danger-soft)] active:scale-[.98] focus-visible:outline-none focus-visible:[box-shadow:var(--ring)]"
       >
-        <Trash2 className="w-4 h-4" aria-hidden />
+        <Trash2 className="w-4 h-4" strokeWidth={1.75} aria-hidden />
       </button>
     </div>
   );

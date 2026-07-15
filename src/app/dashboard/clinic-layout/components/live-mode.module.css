@@ -60,7 +60,7 @@
 .tooltipTime {
   font-size: 11px;
   font-weight: 700;
-  color: #4A90E2;
+  color: #7C3AED;
   font-variant-numeric: tabular-nums;
   margin-top: 4px;
 }
@@ -169,7 +169,7 @@
   border: 1px solid #DCE8F4;
   border-radius: 7px;
   background: #F8FAFC;
-  color: #4A90E2;
+  color: #7C3AED;
   font-size: 11px;
   font-weight: 600;
   cursor: pointer;
@@ -181,17 +181,17 @@
   font-family: inherit;
 }
 .statusOdontogramBtn:hover {
-  background: #E8F4F8;
-  border-color: #4A90E2;
+  background: #F5F3FF;
+  border-color: #7C3AED;
 }
 :global(.dark) .statusOdontogramBtn {
   background: rgba(255, 255, 255, 0.04);
   border-color: rgba(255, 255, 255, 0.08);
-  color: #818cf8;
+  color: #a78bfa;
 }
 :global(.dark) .statusOdontogramBtn:hover {
-  background: rgba(129, 140, 248, 0.12);
-  border-color: #818cf8;
+  background: rgba(167, 139, 250, 0.12);
+  border-color: #a78bfa;
 }
 
 /* ─── Timeline ─── */
@@ -233,7 +233,7 @@
 }
 .timelineNowBtn {
   margin-left: auto;
-  background: #4A90E2;
+  background: #7C3AED;
   color: #fff;
   border: none;
   border-radius: 6px;
@@ -319,7 +319,7 @@
   top: 30px;
   bottom: 16px;
   width: 0;
-  border-left: 2px dashed #4A90E2;
+  border-left: 2px dashed #7C3AED;
   pointer-events: none;
 }
 .timelineMarkerView span {
@@ -329,8 +329,8 @@
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: #4A90E2;
-  box-shadow: 0 0 6px #4A90E2;
+  background: #7C3AED;
+  box-shadow: 0 0 6px #7C3AED;
 }
 
 .timelineSection {

@@ -47,18 +47,18 @@
   align-items: center;
   gap: 14px;
   padding: 16px 28px;
-  background: linear-gradient(135deg, #4A90E2, #2A68C0);
+  background: linear-gradient(135deg, #7C3AED, #6D28D9);
   color: #fff;
   border-radius: 14px;
-  box-shadow: 0 16px 48px -10px rgba(74, 144, 226, 0.55);
+  box-shadow: 0 16px 48px -10px rgba(124, 58, 237, 0.55);
   font-size: 17px;
   font-weight: 700;
   letter-spacing: -0.01em;
   animation: mfCallPulse 1.6s ease-in-out infinite;
 }
 @keyframes mfCallPulse {
-  0%, 100% { box-shadow: 0 16px 48px -10px rgba(74, 144, 226, 0.55); }
-  50%      { box-shadow: 0 18px 60px -8px rgba(74, 144, 226, 0.85); }
+  0%, 100% { box-shadow: 0 16px 48px -10px rgba(124, 58, 237, 0.55); }
+  50%      { box-shadow: 0 18px 60px -8px rgba(124, 58, 237, 0.85); }
 }
 .callPatient {
   font-weight: 800;
@@ -99,7 +99,7 @@
   font-family: var(--font-mono, ui-monospace, monospace);
   font-size: 10.5px;
   font-weight: 700;
-  background: #4A90E2;
+  background: #7C3AED;
   color: #fff;
   padding: 1px 7px;
   border-radius: 999px;
@@ -116,11 +116,11 @@
   color: #6B7A99;
   font-family: inherit;
 }
-.soundBtn:hover { background: #E8F4F8; color: #4A90E2; border-color: #B4D2F0; }
+.soundBtn:hover { background: #F5F3FF; color: #7C3AED; border-color: #DDD6FE; }
 .soundBtn[aria-pressed="true"] {
-  background: #E8F4F8;
-  color: #4A90E2;
-  border-color: #B4D2F0;
+  background: #F5F3FF;
+  color: #7C3AED;
+  border-color: #DDD6FE;
 }
 
 /* ─── Lista ─── */
@@ -151,9 +151,9 @@
   font-family: var(--font-mono, ui-monospace, monospace);
   font-size: 11px;
   font-weight: 800;
-  color: #4A90E2;
+  color: #7C3AED;
   text-align: center;
-  background: #E8F4F8;
+  background: #F5F3FF;
   border-radius: 5px;
   padding: 2px 0;
 }
