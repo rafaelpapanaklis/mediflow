@@ -46,7 +46,7 @@ model Clinic {
   waPhoneNumberId  String? @unique
   waAccessToken    String?
   waBusinessAccountId String? // WhatsApp Business Account ID (coexistence)
-  waConnMethod        String? // "manual" | "coexistence"
+  waConnMethod        String? // "manual" | "coexistence" | "embedded"
   waConnected      Boolean @default(false)
   waReminderActive Boolean @default(true)
   waReminder24h    Boolean @default(true)
