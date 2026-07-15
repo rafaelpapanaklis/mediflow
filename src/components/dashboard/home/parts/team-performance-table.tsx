@@ -96,7 +96,6 @@ export function TeamPerformanceTable({ rows }: { rows: HomeAdminTeamRow[] }) {
               <td
                 style={{
                   textAlign: "right",
-                  fontFamily: "var(--font-mono, monospace)",
                   fontWeight: 500,
                   fontVariantNumeric: "tabular-nums",
                 }}
@@ -109,7 +108,6 @@ export function TeamPerformanceTable({ rows }: { rows: HomeAdminTeamRow[] }) {
               <td
                 style={{
                   textAlign: "right",
-                  fontFamily: "var(--font-mono, monospace)",
                   fontWeight: 500,
                   fontVariantNumeric: "tabular-nums",
                 }}
@@ -176,6 +174,7 @@ function SortableTh({
         {label}
         <Icon
           size={11}
+          strokeWidth={1.75}
           style={{ color: isActive ? "var(--brand)" : "var(--text-3)" }}
           aria-hidden
         />
@@ -221,7 +220,6 @@ function CompletionCell({ pct }: { pct: number }) {
       </div>
       <span
         style={{
-          fontFamily: "var(--font-mono, monospace)",
           fontSize: 12,
           fontWeight: 500,
           color,

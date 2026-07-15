@@ -1,0 +1,284 @@
+/* ═══════════════════════════════════════════════════════════════
+   /dashboard/formulas — rediseño Ola 1 (Variante A "Refinada")
+   Contrato: docs/design/PANEL_REDESIGN_SPEC.md
+   Patrón clonado del piloto: src/app/dashboard/patients/patients.module.css
+   Hermanos de ola: procedures / before-after.
+   Solo tokens semánticos de globals.css; dark mode automático.
+   ═══════════════════════════════════════════════════════════════ */
+
+.page {
+  font-family: var(--font-sans, system-ui, sans-serif);
+  color: var(--text-1);
+  font-size: 14px;
+  padding: clamp(16px, 1.6vw, 28px);
+  max-width: 1280px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+/* ─── Header de página ─── */
+.head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px 16px;
+}
+.title {
+  font-size: 21px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  line-height: 1.2;
+  color: var(--text-1);
+}
+.subtitle {
+  font-size: 13px;
+  color: var(--text-3);
+  margin-top: 3px;
+}
+
+/* ─── Búsqueda de paciente ─── */
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+/* Scope bajo .page → gana especificidad a las utilidades base del <Label> */
+.page .fieldLabel {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-3);
+}
+.searchWrap {
+  position: relative;
+  width: 100%;
+  max-width: 420px;
+}
+.searchIcon {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-4);
+  pointer-events: none;
+}
+.searchInput {
+  width: 100%;
+  height: 40px;
+  padding: 0 14px 0 38px;
+  background: var(--bg-elev);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius);
+  font-family: inherit;
+  font-size: 14px;
+  color: var(--text-1);
+  box-shadow: var(--shadow-1);
+  transition: box-shadow var(--dur-1) var(--ease), border-color var(--dur-1) var(--ease);
+}
+.searchInput::placeholder { color: var(--text-4); }
+.searchInput:focus {
+  outline: none;
+  border-color: var(--border-brand);
+  box-shadow: var(--ring);
+}
+
+/* ─── Lista de pacientes ─── */
+.patientList {
+  background: var(--bg-elev);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-1);
+  overflow: hidden;
+}
+.patientRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 44px;
+  padding: 10px 16px;
+  background: transparent;
+  border: none;
+  text-align: left;
+  cursor: pointer;
+  color: var(--text-2);
+  font-family: inherit;
+  transition: background var(--dur-1) var(--ease), color var(--dur-1) var(--ease);
+}
+.patientRow + .patientRow { border-top: 1px solid var(--border-soft); }
+.patientRow:hover { background: var(--bg-hover); color: var(--text-1); }
+.patientRow:focus-visible { outline: none; box-shadow: var(--ring); }
+.patientRowName {
+  flex: 1;
+  min-width: 0;
+  font-size: 13.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.patientRowChevron {
+  color: var(--text-4);
+  flex: none;
+  transition: color var(--dur-1) var(--ease), transform var(--dur-1) var(--ease);
+}
+.patientRow:hover .patientRowChevron { color: var(--brand); transform: translateX(2px); }
+.emptyRow {
+  padding: 32px 16px;
+  text-align: center;
+  color: var(--text-3);
+  font-size: 13px;
+}
+
+/* ─── Cabecera del paciente seleccionado ─── */
+.selectedHead {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.backBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  align-self: flex-start;
+  height: 32px;
+  padding: 0 8px 0 4px;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  color: var(--brand);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background var(--dur-1) var(--ease), color var(--dur-1) var(--ease);
+}
+.backBtn:hover { background: var(--brand-soft); color: var(--brand); }
+.backBtn:focus-visible { outline: none; box-shadow: var(--ring); }
+.selectedName {
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--text-1);
+}
+
+.loading {
+  font-size: 13px;
+  color: var(--text-3);
+}
+
+/* ─── Tarjetas de fórmula ─── */
+.recordList {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.recordCard {
+  background: var(--bg-elev);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-1);
+  padding: 16px 20px;
+  transition: box-shadow var(--dur-1) var(--ease), transform var(--dur-1) var(--ease);
+}
+.recordCard:hover {
+  box-shadow: var(--shadow-2);
+  transform: translateY(-1px);
+}
+.recordHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.recordType {
+  display: inline-flex;
+  align-items: center;
+  height: 22px;
+  padding: 0 10px;
+  border-radius: 999px;
+  background: var(--brand-soft);
+  color: var(--brand);
+  font-size: 11.5px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.recordDate {
+  font-size: 12px;
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.recordMeta {
+  font-size: 12px;
+  color: var(--text-3);
+  margin-top: 8px;
+}
+.recordNotes {
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-2);
+  margin-top: 4px;
+}
+.formulaBox {
+  background: var(--bg-elev-2);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+  margin-top: 12px;
+}
+.formulaRow {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 3px 0;
+  font-size: 12.5px;
+}
+.formulaKey {
+  font-weight: 500;
+  color: var(--text-3);
+}
+.formulaVal {
+  color: var(--text-1);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ─── Empty state ─── */
+.emptyCard {
+  background: var(--bg-elev);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-1);
+  padding: 56px 20px;
+  text-align: center;
+}
+.emptyIcon {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: var(--bg-elev-2);
+  color: var(--text-4);
+  display: grid;
+  place-items: center;
+  margin: 0 auto 12px;
+}
+.emptyTitle {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--text-2);
+}
+
+/* ─── Motion: respetar prefers-reduced-motion (spec §Motion) ─── */
+@media (prefers-reduced-motion: reduce) {
+  .page *,
+  .page *::before,
+  .page *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}

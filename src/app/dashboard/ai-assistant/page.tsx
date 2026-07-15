@@ -511,8 +511,8 @@ export default function AIAssistantPage() {
                 </div>
               ) : (
                 <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 10, textAlign: "center", padding: "16px 8px" }}>
-                  <div style={{ width: 44, height: 44, borderRadius: 12, background: "var(--brand-softer)", border: "1px solid rgba(124,58,237,0.20)", display: "grid", placeItems: "center", color: "var(--brand)" }}>
-                    <Sparkles size={20} aria-hidden />
+                  <div style={{ width: 44, height: 44, borderRadius: 12, background: "var(--brand-softer)", border: "1px solid var(--border-brand)", display: "grid", placeItems: "center", color: "var(--brand)" }}>
+                    <Sparkles size={20} strokeWidth={1.75} aria-hidden />
                   </div>
                   <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text-1)" }}>
                     {t("pages.aiAssistant.noConversationsYet")}
@@ -523,20 +523,9 @@ export default function AIAssistantPage() {
                   <button
                     type="button"
                     onClick={startNew}
-                    style={{
-                      marginTop: 4,
-                      display: "inline-flex", alignItems: "center", gap: 5,
-                      padding: "6px 12px",
-                      background: "var(--brand)",
-                      color: "#fff",
-                      border: "1px solid var(--brand)",
-                      borderRadius: 8,
-                      fontSize: 11.5, fontWeight: 600,
-                      cursor: "pointer",
-                      fontFamily: "inherit",
-                    }}
+                    className={styles.emptyStartBtn}
                   >
-                    <Plus size={11} aria-hidden /> {t("pages.aiAssistant.start")}
+                    <Plus size={11} strokeWidth={1.75} aria-hidden /> {t("pages.aiAssistant.start")}
                   </button>
                 </div>
               )}

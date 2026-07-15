@@ -53,8 +53,8 @@ export function ActionItemRow({ item }: { item: HomeActionItem }) {
         {item.detail && (
           <div
             style={{
-              fontSize: 11,
-              color: "var(--text-2)",
+              fontSize: 12,
+              color: "var(--text-3)",
               marginTop: 2,
               lineHeight: 1.45,
             }}
@@ -68,14 +68,14 @@ export function ActionItemRow({ item }: { item: HomeActionItem }) {
               marginTop: 8,
               fontSize: 12,
               color: "var(--brand)",
-              fontWeight: 500,
+              fontWeight: 600,
               display: "inline-flex",
               alignItems: "center",
               gap: 2,
             }}
           >
             {cta.label}
-            <ChevronRight size={12} aria-hidden />
+            <ChevronRight size={12} strokeWidth={1.75} aria-hidden />
           </div>
         )}
       </div>
@@ -91,7 +91,7 @@ export function ActionItemRow({ item }: { item: HomeActionItem }) {
     textDecoration: "none",
     color: "inherit",
     cursor: cta ? "pointer" : "default",
-    transition: "background 0.12s",
+    transition: "background var(--dur-1) var(--ease)",
   };
 
   if (cta?.href) {

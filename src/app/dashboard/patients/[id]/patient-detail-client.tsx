@@ -4,7 +4,7 @@ import { useCallback, useState, useEffect, useMemo } from "react";
 import { useT } from "@/i18n/i18n-provider";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ArrowLeft, Phone, Mail, Calendar, AlertTriangle, Plus, Printer, Edit, Download, Pill, HeartPulse, Play, Trash2, XCircle } from "lucide-react";
+import { ArrowLeft, Phone, Mail, Calendar, AlertTriangle, Check, Plus, Printer, Edit, Download, Pill, HeartPulse, Play, Trash2, X as XIcon, XCircle } from "lucide-react";
 import { formatCurrency, formatDate, getInitials, avatarColor } from "@/lib/utils";
 import { ageFromDob, fmtMXN } from "@/lib/format";
 import { OdontogramV2 } from "@/components/dashboard/odontogram-v2/App";
@@ -208,26 +208,32 @@ function detectSpecialty(_raw: string) {
   return "dental";
 }
 
+/* Chips de estado — patrón Variante A: fondo *-soft + texto *-strong (tokens
+   semánticos de globals.css, flippean solos en dark). Sin borde: pill limpio
+   como el prototipo. Neutros (COMPLETED/NO_SHOW) usan bg-elev-2 + text-2 (AA). */
 const APPT_STATUS: Record<string, { labelKey: string; cls: string }> = {
-  PENDING:   { labelKey: "patients.apptStatus.pending",   cls: "bg-amber-50 text-amber-700 border border-amber-200"      },
-  CONFIRMED: { labelKey: "patients.apptStatus.confirmed", cls: "bg-emerald-50 text-emerald-700 border border-emerald-200" },
-  COMPLETED: { labelKey: "patients.apptStatus.completed", cls: "bg-muted text-muted-foreground border border-border"      },
-  CANCELLED: { labelKey: "patients.apptStatus.cancelled", cls: "bg-rose-50 text-rose-700 border border-rose-200"          },
-  NO_SHOW:   { labelKey: "patients.apptStatus.noShow",    cls: "bg-muted text-muted-foreground border border-border"       },
+  PENDING:   { labelKey: "patients.apptStatus.pending",   cls: "bg-[var(--warning-soft)] text-[var(--warning-strong)]" },
+  CONFIRMED: { labelKey: "patients.apptStatus.confirmed", cls: "bg-[var(--success-soft)] text-[var(--success-strong)]" },
+  COMPLETED: { labelKey: "patients.apptStatus.completed", cls: "bg-[var(--bg-elev-2)] text-[var(--text-2)]" },
+  CANCELLED: { labelKey: "patients.apptStatus.cancelled", cls: "bg-[var(--danger-soft)] text-[var(--danger-strong)]" },
+  NO_SHOW:   { labelKey: "patients.apptStatus.noShow",    cls: "bg-[var(--bg-elev-2)] text-[var(--text-2)]" },
 };
 
 const INV_STATUS: Record<string, { labelKey: string; cls: string }> = {
-  PENDING: { labelKey: "patients.invStatus.pending", cls: "bg-amber-50 text-amber-700 border border-amber-200" },
-  PARTIAL: { labelKey: "patients.invStatus.partial", cls: "bg-blue-50 text-blue-700 border border-blue-200"   },
-  PAID:    { labelKey: "patients.invStatus.paid",    cls: "bg-emerald-50 text-emerald-700 border border-emerald-200" },
-  OVERDUE: { labelKey: "patients.invStatus.overdue", cls: "bg-rose-50 text-rose-700 border border-rose-200"   },
+  PENDING: { labelKey: "patients.invStatus.pending", cls: "bg-[var(--warning-soft)] text-[var(--warning-strong)]" },
+  PARTIAL: { labelKey: "patients.invStatus.partial", cls: "bg-[var(--info-soft)] text-[var(--info-strong)]" },
+  PAID:    { labelKey: "patients.invStatus.paid",    cls: "bg-[var(--success-soft)] text-[var(--success-strong)]" },
+  OVERDUE: { labelKey: "patients.invStatus.overdue", cls: "bg-[var(--danger-soft)] text-[var(--danger-strong)]" },
 };
 
+/* `bg` incluye border-color porque los consumidores aplican la clase `border`.
+   alta/media llevan borde semántico (tokens *-border-strong existentes);
+   baja/informativo usan borde neutro suave. */
 const SEV_STYLES: Record<string, { bg: string; text: string; labelKey: string }> = {
-  alta:        { bg: "bg-rose-50 border-rose-200",    text: "text-rose-700",    labelKey: "patients.severity.alta"        },
-  media:       { bg: "bg-amber-50 border-amber-200",  text: "text-amber-700",   labelKey: "patients.severity.media"       },
-  baja:        { bg: "bg-blue-50 border-blue-200",    text: "text-blue-700",    labelKey: "patients.severity.baja"        },
-  informativo: { bg: "bg-emerald-50 border-emerald-200", text: "text-emerald-700", labelKey: "patients.severity.informativo" },
+  alta:        { bg: "bg-[var(--danger-soft)] border-[var(--danger-border-strong)]",   text: "text-[var(--danger-strong)]",  labelKey: "patients.severity.alta"        },
+  media:       { bg: "bg-[var(--warning-soft)] border-[var(--warning-border-strong)]", text: "text-[var(--warning-strong)]", labelKey: "patients.severity.media"       },
+  baja:        { bg: "bg-[var(--info-soft)] border-[var(--border-soft)]",              text: "text-[var(--info-strong)]",    labelKey: "patients.severity.baja"        },
+  informativo: { bg: "bg-[var(--success-soft)] border-[var(--border-soft)]",           text: "text-[var(--success-strong)]", labelKey: "patients.severity.informativo" },
 };
 
 const FILE_CAT_LABELS: Record<string, string> = {
@@ -375,9 +381,9 @@ export function PatientDetailClient({
   // Aviso de cuestionario de salud faltante/vencido (anamnesis WS1-T2).
   const showQuestionnaireWarning = questionnaireStatus === "none" || questionnaireStatus === "stale";
   const questionnaireBanner = (
-    <div className="flex items-center justify-between gap-3 flex-wrap rounded-xl border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/20 px-4 py-3">
-      <div className="flex items-center gap-2 text-sm text-amber-800 dark:text-amber-300">
-        <AlertTriangle className="w-4 h-4 flex-shrink-0" />
+    <div className="flex items-center justify-between gap-3 flex-wrap rounded-[var(--radius-lg)] border border-[var(--warning-border-strong)] bg-[var(--warning-soft)] px-4 py-3">
+      <div className="flex items-center gap-2 text-sm text-[var(--warning-strong)]">
+        <AlertTriangle className="w-4 h-4 flex-shrink-0" strokeWidth={1.75} aria-hidden />
         <span>
           {questionnaireStatus === "stale"
             ? "El cuestionario de salud tiene más de 12 meses. Conviene actualizarlo."
@@ -387,7 +393,7 @@ export function PatientDetailClient({
       <button
         type="button"
         onClick={() => setTab("cuestionario")}
-        className="text-xs font-bold px-3 py-1.5 rounded-lg bg-amber-600 text-white hover:bg-amber-700 flex-shrink-0"
+        className="text-xs font-bold px-3.5 py-2.5 rounded-lg bg-[var(--brand)] text-white hover:bg-[var(--violet-700)] focus-visible:outline-none focus-visible:[box-shadow:var(--ring)] active:scale-[.98] transition duration-150 flex-shrink-0"
       >
         Llenar cuestionario
       </button>
@@ -1018,8 +1024,8 @@ export function PatientDetailClient({
   return (
     <div style={{ padding: "20px 28px 28px", maxWidth: outerMaxWidth, margin: "0 auto" }}>
       <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, color: "var(--text-3)", marginBottom: 12 }}>
-        <Link href="/dashboard/patients" style={{ color: "var(--text-3)", textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 4 }}>
-          <ArrowLeft size={12} /> {t("patients.breadcrumb.patients")}
+        <Link href="/dashboard/patients" className="inline-flex items-center gap-1 rounded-md text-[var(--text-3)] no-underline transition-colors duration-150 hover:text-[var(--text-1)] focus-visible:outline-none focus-visible:[box-shadow:var(--ring)]">
+          <ArrowLeft size={12} strokeWidth={1.75} aria-hidden /> {t("patients.breadcrumb.patients")}
         </Link>
         <span style={{ color: "var(--text-4)" }}>/</span>
         <span style={{ color: "var(--text-1)", fontWeight: 500 }}>{fullName}</span>
@@ -1029,10 +1035,10 @@ export function PatientDetailClient({
         <button
           type="button"
           onClick={() => { window.location.href = `/api/patients/${patient.id}/export-cda`; }}
-          className="ml-auto inline-flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-semibold rounded-md border border-border bg-card hover:bg-muted text-foreground"
+          className="ml-auto inline-flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-semibold rounded-md border border-border bg-card hover:bg-muted text-foreground shadow-[var(--shadow-1)] transition duration-150 focus-visible:outline-none focus-visible:[box-shadow:var(--ring)] active:scale-[.98]"
           title={t("patients.export.cdaTitle")}
         >
-          <Download size={11} aria-hidden /> {t("patients.export.cdaLabel")}
+          <Download size={11} strokeWidth={1.75} aria-hidden /> {t("patients.export.cdaLabel")}
         </button>
       </div>
 
@@ -1079,7 +1085,7 @@ export function PatientDetailClient({
       {/* Pediatrics — chips informativos cuando aplica el módulo (spec §1.3) */}
       {pediatricsData && (
         <div className="flex flex-wrap items-center gap-2 px-1 -mt-2 mb-2">
-          <span className="inline-flex items-center gap-1 rounded-full border border-violet-200 bg-violet-50 px-3 py-1 text-xs font-semibold text-violet-700 dark:border-violet-700 dark:bg-violet-950 dark:text-violet-200">
+          <span className="inline-flex items-center gap-1 rounded-full border border-[var(--violet-200)] bg-[var(--violet-100)] px-3 py-1 text-xs font-semibold text-[var(--violet-700)]">
             <span className="font-mono">{pediatricsData.ageFormatted}</span>
           </span>
           <span className="inline-flex items-center gap-1 rounded-full border border-border bg-card px-3 py-1 text-xs font-semibold capitalize">
@@ -1203,12 +1209,12 @@ export function PatientDetailClient({
 
           {/* ===== TAB: RESUMEN ===== */}
           {tab === "resumen" && (
-            <div className="grid grid-cols-2 gap-4">
-              {showQuestionnaireWarning && <div className="col-span-2">{questionnaireBanner}</div>}
-              <div className="bg-card border border-border rounded-xl p-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {showQuestionnaireWarning && <div className="md:col-span-2">{questionnaireBanner}</div>}
+              <div className="bg-card border border-border rounded-[var(--radius-lg)] shadow-[var(--shadow-1)] p-4">
                 <div className="flex items-center gap-2 mb-3">
-                  <div className="w-2 h-2 rounded-full bg-brand-500" />
-                  <span className="text-xs font-bold">{t("patients.summary.clinicalSummary")}</span>
+                  <div className="w-2 h-2 rounded-full bg-[var(--brand)]" />
+                  <span className="text-[15px] font-semibold text-[var(--text-1)]">{t("patients.summary.clinicalSummary")}</span>
                 </div>
                 <HistoriaTimeline
                   patientId={patient.id}
@@ -1235,15 +1241,15 @@ export function PatientDetailClient({
                       clinicSpecialty: specialty ?? "",
                     });
                     return (
-                      <div className="bg-card border border-dashed border-border rounded-xl p-4 text-center">
+                      <div className="bg-card border border-dashed border-border rounded-[var(--radius-lg)] p-4 text-center">
                         <p className="text-xs font-semibold text-foreground mb-1">{suggestion.headline}</p>
                         <p className="text-xs text-muted-foreground mb-3">{suggestion.hint}</p>
                         <button
                           type="button"
                           onClick={() => setTab("expediente")}
-                          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-brand-600 text-white hover:bg-brand-700"
+                          className="inline-flex items-center gap-1.5 px-3.5 py-2.5 text-xs font-semibold rounded-lg bg-[var(--brand)] text-white hover:bg-[var(--violet-700)] focus-visible:outline-none focus-visible:[box-shadow:var(--ring)] active:scale-[.98] transition duration-150"
                         >
-                          <Play size={12} aria-hidden /> {t("patients.summary.startConsult")}
+                          <Play size={12} strokeWidth={1.75} aria-hidden /> {t("patients.summary.startConsult")}
                         </button>
                       </div>
                     );
@@ -1251,36 +1257,36 @@ export function PatientDetailClient({
                 />
                 {records[0]?.specialtyData?.periodontal && (
                   <div className="mt-3">
-                    <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-wide mb-2">{t("patients.summary.clinicalTrafficLight")}</div>
-                    <div className="grid grid-cols-3 gap-1.5 text-[10px] font-bold text-center">
-                      <div className="bg-emerald-50 text-emerald-700 rounded-lg py-1.5">✓ {t("patients.summary.hygiene")}<br/>{t("patients.summary.hygieneGood")}</div>
-                      <div className="bg-amber-50 text-amber-700 rounded-lg py-1.5">⚠ {t("patients.summary.caries")}<br/>{t("patients.summary.cariesModerate")}</div>
-                      <div className="bg-rose-50 text-rose-700 rounded-lg py-1.5">✕ {t("patients.summary.perio")}<br/>{records[0]?.specialtyData?.periodontal?.gingival ?? t("patients.summary.noData")}</div>
+                    <div className="text-[11px] font-semibold text-[var(--text-3)] uppercase tracking-wide mb-2">{t("patients.summary.clinicalTrafficLight")}</div>
+                    <div className="grid grid-cols-3 gap-1.5 text-[11px] font-semibold text-center">
+                      <div className="bg-[var(--success-soft)] text-[var(--success-strong)] rounded-lg py-1.5"><Check size={11} strokeWidth={1.75} className="inline -mt-0.5" aria-hidden /> {t("patients.summary.hygiene")}<br/>{t("patients.summary.hygieneGood")}</div>
+                      <div className="bg-[var(--warning-soft)] text-[var(--warning-strong)] rounded-lg py-1.5"><AlertTriangle size={11} strokeWidth={1.75} className="inline -mt-0.5" aria-hidden /> {t("patients.summary.caries")}<br/>{t("patients.summary.cariesModerate")}</div>
+                      <div className="bg-[var(--danger-soft)] text-[var(--danger-strong)] rounded-lg py-1.5"><XIcon size={11} strokeWidth={1.75} className="inline -mt-0.5" aria-hidden /> {t("patients.summary.perio")}<br/>{records[0]?.specialtyData?.periodontal?.gingival ?? t("patients.summary.noData")}</div>
                     </div>
                   </div>
                 )}
               </div>
 
-              <div className="bg-card border border-border rounded-xl p-4">
+              <div className="bg-card border border-border rounded-[var(--radius-lg)] shadow-[var(--shadow-1)] p-4">
                 <div className="flex items-center gap-2 mb-3">
-                  <div className="w-2 h-2 rounded-full bg-emerald-500" />
-                  <span className="text-xs font-bold">{t("patients.summary.medicalHistory")}</span>
+                  <div className="w-2 h-2 rounded-full bg-[var(--success)]" />
+                  <span className="text-[15px] font-semibold text-[var(--text-1)]">{t("patients.summary.medicalHistory")}</span>
                 </div>
                 {(patient.allergies?.length || patient.currentMedications?.length || patient.chronicConditions?.length) ? (
                   <div className="flex flex-wrap gap-1.5 mb-3">
                     {patient.allergies?.map((a: string) => (
-                      <span key={`a-${a}`} className="inline-flex items-center gap-1 rounded-full border border-rose-200 bg-rose-50 px-2 py-0.5 text-[11px] font-semibold text-rose-700">
-                        <AlertTriangle size={11} aria-hidden /> {a}
+                      <span key={`a-${a}`} className="inline-flex items-center gap-1 rounded-full bg-[var(--danger-soft)] px-2 py-0.5 text-[11px] font-semibold text-[var(--danger-strong)]">
+                        <AlertTriangle size={11} strokeWidth={1.75} aria-hidden /> {a}
                       </span>
                     ))}
                     {patient.currentMedications?.map((m: string) => (
-                      <span key={`m-${m}`} className="inline-flex items-center gap-1 rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-[11px] font-semibold text-blue-700">
-                        <Pill size={11} aria-hidden /> {m}
+                      <span key={`m-${m}`} className="inline-flex items-center gap-1 rounded-full bg-[var(--info-soft)] px-2 py-0.5 text-[11px] font-semibold text-[var(--info-strong)]">
+                        <Pill size={11} strokeWidth={1.75} aria-hidden /> {m}
                       </span>
                     ))}
                     {patient.chronicConditions?.map((c: string) => (
-                      <span key={`c-${c}`} className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-700">
-                        <HeartPulse size={11} aria-hidden /> {c}
+                      <span key={`c-${c}`} className="inline-flex items-center gap-1 rounded-full bg-[var(--warning-soft)] px-2 py-0.5 text-[11px] font-semibold text-[var(--warning-strong)]">
+                        <HeartPulse size={11} strokeWidth={1.75} aria-hidden /> {c}
                       </span>
                     ))}
                   </div>
@@ -1292,7 +1298,7 @@ export function PatientDetailClient({
                     { label: t("common.notes"),                val: patient.notes?.slice(0, 60) || "—" },
                     { label: "Contacto de emergencia",         val: patient.emergencyContactName ? [patient.emergencyContactName, patient.emergencyContactPhone, patient.emergencyContactRelation].filter(Boolean).join(" · ") : "—" },
                   ].map(r => (
-                    <div key={r.label} className="flex justify-between items-start py-1.5 border-b border-slate-50">
+                    <div key={r.label} className="flex justify-between items-start py-1.5 border-b border-[var(--border-soft)]">
                       <span className="text-muted-foreground">{r.label}</span>
                       <span className="font-semibold text-right max-w-[55%]">{r.val}</span>
                     </div>
@@ -1302,49 +1308,49 @@ export function PatientDetailClient({
 
               {/* Próxima cita */}
               {nextAppt && (
-                <div className="bg-card border border-border rounded-xl p-4">
+                <div className="bg-card border border-border rounded-[var(--radius-lg)] shadow-[var(--shadow-1)] p-4">
                   <div className="flex items-center gap-2 mb-3">
-                    <div className="w-2 h-2 rounded-full bg-brand-500" />
-                    <span className="text-xs font-bold">{t("patients.summary.nextAppointment")}</span>
+                    <div className="w-2 h-2 rounded-full bg-[var(--brand)]" />
+                    <span className="text-[15px] font-semibold text-[var(--text-1)]">{t("patients.summary.nextAppointment")}</span>
                   </div>
-                  <div className="bg-blue-50 border border-blue-200 rounded-xl p-3">
-                    <div className="text-sm font-extrabold text-brand-700">{formatDate(nextAppt.date)}</div>
+                  <div className="bg-[var(--brand-softer)] border border-[var(--border-brand)] rounded-[10px] p-3">
+                    <div className="text-sm font-bold text-[var(--violet-700)] tabular-nums">{formatDate(nextAppt.date)}</div>
                     <div className="text-xs text-foreground mt-1">{nextAppt.type}</div>
-                    <div className="text-[10px] text-muted-foreground">{nextAppt.startTime}h · {t("patients.doctorPrefix")} {nextAppt.doctor?.firstName} {nextAppt.doctor?.lastName}</div>
+                    <div className="text-[11px] text-muted-foreground tabular-nums">{nextAppt.startTime}h · {t("patients.doctorPrefix")} {nextAppt.doctor?.firstName} {nextAppt.doctor?.lastName}</div>
                   </div>
                 </div>
               )}
 
               {/* Finanzas resumen */}
-              <div className="bg-card border border-border rounded-xl p-4">
+              <div className="bg-card border border-border rounded-[var(--radius-lg)] shadow-[var(--shadow-1)] p-4">
                 <div className="flex items-center gap-2 mb-3">
-                  <div className="w-2 h-2 rounded-full bg-amber-500" />
-                  <span className="text-xs font-bold">{t("patients.summary.finance")}</span>
+                  <div className="w-2 h-2 rounded-full bg-[var(--warning)]" />
+                  <span className="text-[15px] font-semibold text-[var(--text-1)]">{t("patients.summary.finance")}</span>
                 </div>
                 <div className="space-y-1.5 text-xs mb-3">
-                  <div className="flex justify-between py-1.5 border-b border-slate-50">
+                  <div className="flex justify-between py-1.5 border-b border-[var(--border-soft)]">
                     <span className="text-muted-foreground">{t("patients.summary.totalPlan")}</span>
-                    <span className="font-bold">{formatCurrency(totalPlan)}</span>
+                    <span className="font-bold tabular-nums">{formatCurrency(totalPlan)}</span>
                   </div>
-                  <div className="flex justify-between py-1.5 border-b border-slate-50">
+                  <div className="flex justify-between py-1.5 border-b border-[var(--border-soft)]">
                     <span className="text-muted-foreground">{t("patients.summary.paid")}</span>
-                    <span className="font-bold text-emerald-600">{formatCurrency(totalPaid)}</span>
+                    <span className="font-bold tabular-nums text-[var(--success-strong)]">{formatCurrency(totalPaid)}</span>
                   </div>
                   <div className="flex justify-between py-1.5">
                     <span className="text-muted-foreground">{t("patients.summary.pending")}</span>
-                    <span className="font-bold text-rose-600">{formatCurrency(totalBalance)}</span>
+                    <span className="font-bold tabular-nums text-[var(--danger)]">{formatCurrency(totalBalance)}</span>
                   </div>
                   {creditBalance > 0 && (
-                    <div className="flex justify-between py-1.5 border-t border-slate-50">
+                    <div className="flex justify-between py-1.5 border-t border-[var(--border-soft)]">
                       <span className="text-muted-foreground">{t("patients.summary.credit")}</span>
-                      <span className="font-bold text-emerald-600">{formatCurrency(creditBalance)}</span>
+                      <span className="font-bold tabular-nums text-[var(--success-strong)]">{formatCurrency(creditBalance)}</span>
                     </div>
                   )}
                 </div>
                 <div className="h-1.5 bg-muted rounded-full overflow-hidden">
-                  <div className="h-full bg-emerald-500 rounded-full transition-all" style={{ width: `${pctPaid}%` }} />
+                  <div className="h-full bg-[var(--success)] rounded-full transition-all" style={{ width: `${pctPaid}%` }} />
                 </div>
-                <div className="text-[10px] text-muted-foreground text-right mt-1">{t("patients.summary.pctCovered", { pct: pctPaid })}</div>
+                <div className="text-[11px] text-muted-foreground text-right mt-1 tabular-nums">{t("patients.summary.pctCovered", { pct: pctPaid })}</div>
               </div>
             </div>
           )}
@@ -1357,10 +1363,10 @@ export function PatientDetailClient({
           {/* ===== TAB: HISTORIA CLINICA ===== */}
           {tab === "historia" && (
             <div className="space-y-4">
-            <div className="bg-card border border-border rounded-xl p-5">
+            <div className="bg-card border border-border rounded-[var(--radius-lg)] shadow-[var(--shadow-1)] p-5">
               <div className="flex items-baseline justify-between mb-4">
-                <h2 className="text-sm font-bold">{t("patients.history.title")}</h2>
-                <p className="text-xs text-muted-foreground">
+                <h2 className="text-[15px] font-semibold text-[var(--text-1)]">{t("patients.history.title")}</h2>
+                <p className="text-[12.5px] text-[var(--text-3)]">
                   {t("patients.history.subtitle")}
                 </p>
               </div>
@@ -2056,9 +2062,9 @@ export function PatientDetailClient({
 
           {/* ===== TAB: NUEVA CONSULTA (specialty form) ===== */}
           {tab === "expediente" && (
-            <div className="bg-card border border-border rounded-xl p-5">
+            <div className="bg-card border border-border rounded-xl p-5 shadow-[var(--shadow-1)]">
               <div className="flex items-center justify-between mb-4 gap-3 flex-wrap">
-                <h2 className="text-sm font-bold">
+                <h2 className="text-[15px] font-semibold tracking-[-0.01em]">
                   {currentSpecialty === "dental"     ? t("patients.newConsult.titleDental") :
                    currentSpecialty === "nutrition"  ? t("patients.newConsult.titleNutrition") :
                    currentSpecialty === "psychology" ? t("patients.newConsult.titlePsychology") :
@@ -2069,7 +2075,7 @@ export function PatientDetailClient({
                   <select
                     value={currentSpecialty}
                     onChange={(e) => setOverrideSpecialty(e.target.value)}
-                    className="flex h-8 rounded-lg border border-border bg-card px-3 text-xs"
+                    className="flex h-9 rounded-lg border border-border bg-card px-3 text-xs focus:outline-none focus:ring-2 focus:ring-[var(--brand-soft)] focus:border-[var(--border-brand)]"
                   >
                     <option value="dental">{t("patients.newConsult.optDental")}</option>
                     <option value="nutrition">{t("patients.newConsult.optNutrition")}</option>
@@ -2080,7 +2086,7 @@ export function PatientDetailClient({
                     <button
                       type="button"
                       onClick={() => setOverrideSpecialty(null)}
-                      className="text-[10px] text-muted-foreground hover:text-foreground underline"
+                      className="text-xs text-muted-foreground hover:text-foreground underline rounded-[4px] focus-visible:outline-none focus-visible:shadow-[var(--ring)]"
                       title={t("patients.newConsult.resetTitle")}
                     >
                       {t("patients.newConsult.reset")}
@@ -2100,10 +2106,10 @@ export function PatientDetailClient({
           {tab === "historial-consultas" && (
             <div className="space-y-3">
               <div className="flex items-center justify-between">
-                <h2 className="text-sm font-bold">{t("patients.consultHistory.title", { count: records.length })}</h2>
+                <h2 className="text-[15px] font-semibold tracking-[-0.01em]">{t("patients.consultHistory.title", { count: records.length })}</h2>
                 <button
                   onClick={() => setTab("expediente")}
-                  className="text-xs font-semibold text-brand-600 hover:underline"
+                  className="text-xs font-semibold text-[var(--brand)] hover:underline rounded-[4px] focus-visible:outline-none focus-visible:shadow-[var(--ring)]"
                 >
                   {t("patients.consultHistory.newConsult")}
                 </button>
@@ -2115,7 +2121,7 @@ export function PatientDetailClient({
                   <div className="text-sm font-semibold">{t("patients.consultHistory.empty")}</div>
                   <button
                     onClick={() => setTab("expediente")}
-                    className="text-xs text-brand-600 hover:underline mt-2 inline-block"
+                    className="text-xs text-[var(--brand)] hover:underline mt-2 inline-block rounded-[4px] focus-visible:outline-none focus-visible:shadow-[var(--ring)]"
                   >
                     {t("patients.consultHistory.registerFirst")}
                   </button>
@@ -2137,11 +2143,11 @@ export function PatientDetailClient({
                     <button
                       type="button"
                       onClick={() => toggleConsulta(record.id)}
-                      className="w-full flex items-center justify-between gap-3 px-5 py-3 border-b border-border bg-muted/30 hover:bg-muted/50 transition-colors text-left"
+                      className="w-full flex items-center justify-between gap-3 px-5 py-3 border-b border-border bg-muted/30 hover:bg-muted/50 transition-colors text-left focus-visible:outline-none focus-visible:shadow-[var(--ring)]"
                       aria-expanded={isExpanded}
                     >
                       <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-full bg-blue-100 border-2 border-brand-500 flex items-center justify-center text-[10px] font-bold text-brand-700">
+                        <div className="w-8 h-8 rounded-full bg-[var(--violet-100)] flex items-center justify-center text-[11px] font-bold text-[var(--violet-700)] tabular-nums">
                           {records.length - idx}
                         </div>
                         <div>
@@ -2152,10 +2158,10 @@ export function PatientDetailClient({
                         </div>
                       </div>
                       <div className="flex items-center gap-3">
-                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                        <span className={`text-[11px] font-semibold px-2.5 py-0.5 rounded-full ${
                           isSigned
-                            ? "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/30 dark:text-emerald-300 dark:border-emerald-800"
-                            : "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/30 dark:text-amber-300 dark:border-amber-800"
+                            ? "bg-[var(--success-soft)] text-[var(--success-strong)]"
+                            : "bg-[var(--warning-soft)] text-[var(--warning-strong)]"
                         }`}>
                           {isSigned ? t("patients.note.signed") : t("patients.note.draft")}
                         </span>
@@ -2201,7 +2207,7 @@ export function PatientDetailClient({
                         <button
                           type="button"
                           onClick={() => handleDeleteRecord(record)}
-                          className="text-xs font-semibold text-rose-600 hover:underline"
+                          className="text-xs font-semibold text-[var(--danger)] hover:underline rounded-[4px] focus-visible:outline-none focus-visible:shadow-[var(--ring)]"
                         >
                           {t("patients.consultHistory.deleteDraft")}
                         </button>
@@ -2235,11 +2241,11 @@ export function PatientDetailClient({
             return (
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
-                  <h2 className="text-sm font-bold">{t("patients.treatment.title")}</h2>
+                  <h2 className="text-[15px] font-semibold tracking-[-0.01em]">{t("patients.treatment.title")}</h2>
                   <button
                     type="button"
                     onClick={() => setShowNewTreatment(true)}
-                    className="text-xs font-semibold bg-brand-600 text-white px-3 py-1.5 rounded-lg hover:bg-brand-700"
+                    className="inline-flex items-center text-xs font-semibold bg-[var(--brand)] text-white px-3 h-9 rounded-lg hover:bg-[var(--violet-700)] shadow-[var(--shadow-1)] transition-colors focus-visible:outline-none focus-visible:shadow-[var(--ring)] active:scale-[0.98]"
                   >
                     {t("patients.treatment.newTreatment")}
                   </button>
@@ -2247,29 +2253,29 @@ export function PatientDetailClient({
 
                 {treatments.length > 0 && (
                   <div className="grid grid-cols-3 gap-2">
-                    <div className="bg-brand-50 dark:bg-brand-950/30 border border-brand-200 dark:border-brand-800 rounded-xl p-3 text-center">
-                      <div className="text-xl font-bold text-brand-700 dark:text-brand-300">{pendingSessionsTotal}</div>
-                      <div className="text-[10px] uppercase tracking-wide text-muted-foreground mt-0.5">{t("patients.treatment.pendingSessions")}</div>
+                    <div className="bg-[var(--brand-softer)] border border-[var(--border-brand)] rounded-xl p-3 text-center">
+                      <div className="text-xl font-bold tabular-nums text-[var(--brand)]">{pendingSessionsTotal}</div>
+                      <div className="text-[11px] uppercase tracking-wide text-muted-foreground mt-0.5">{t("patients.treatment.pendingSessions")}</div>
                     </div>
-                    <div className="bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 rounded-xl p-3 text-center">
-                      <div className="text-xl font-bold text-emerald-700 dark:text-emerald-300">{activeCount}</div>
-                      <div className="text-[10px] uppercase tracking-wide text-muted-foreground mt-0.5">{t("patients.treatment.active")}</div>
+                    <div className="bg-[var(--success-soft)] border border-[var(--border-soft)] rounded-xl p-3 text-center">
+                      <div className="text-xl font-bold tabular-nums text-[var(--success-strong)]">{activeCount}</div>
+                      <div className="text-[11px] uppercase tracking-wide text-muted-foreground mt-0.5">{t("patients.treatment.active")}</div>
                     </div>
                     <div className="bg-muted border border-border rounded-xl p-3 text-center">
-                      <div className="text-xl font-bold text-muted-foreground">{completedCount}</div>
-                      <div className="text-[10px] uppercase tracking-wide text-muted-foreground mt-0.5">{t("patients.treatment.completed")}</div>
+                      <div className="text-xl font-bold tabular-nums text-muted-foreground">{completedCount}</div>
+                      <div className="text-[11px] uppercase tracking-wide text-muted-foreground mt-0.5">{t("patients.treatment.completed")}</div>
                     </div>
                   </div>
                 )}
 
                 {treatments.length === 0 ? (
                   <div className="bg-card border border-border rounded-xl px-5 py-10 text-center text-muted-foreground">
-                    <div className="text-3xl mb-2">💊</div>
+                    <Pill className="w-5 h-5 mx-auto mb-2 text-[var(--text-3)]" strokeWidth={1.75} aria-hidden="true" />
                     <div className="text-sm font-semibold">{t("patients.treatment.empty")}</div>
                     <button
                       type="button"
                       onClick={() => setShowNewTreatment(true)}
-                      className="text-xs text-brand-600 hover:underline mt-2 inline-block"
+                      className="text-xs text-[var(--brand)] hover:underline mt-2 inline-block rounded-[4px] focus-visible:outline-none focus-visible:shadow-[var(--ring)]"
                     >
                       {t("patients.treatment.createFirst")}
                     </button>
@@ -2279,10 +2285,10 @@ export function PatientDetailClient({
                   const pct = plan.totalSessions > 0 ? Math.round((completed / plan.totalSessions) * 100) : 0;
                   const pendingThis = Math.max(0, (plan.totalSessions || 0) - completed);
                   const STATUS_CFG: Record<string,{labelKey:string;cls:string}> = {
-                    ACTIVE:    { labelKey:"patients.treatmentStatus.active",    cls:"bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/30 dark:text-emerald-300 dark:border-emerald-800" },
-                    COMPLETED: { labelKey:"patients.treatmentStatus.completed", cls:"bg-muted text-muted-foreground border-border" },
-                    ABANDONED: { labelKey:"patients.treatmentStatus.abandoned", cls:"bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/30 dark:text-rose-300 dark:border-rose-800" },
-                    PAUSED:    { labelKey:"patients.treatmentStatus.paused",    cls:"bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/30 dark:text-amber-300 dark:border-amber-800" },
+                    ACTIVE:    { labelKey:"patients.treatmentStatus.active",    cls:"bg-[var(--success-soft)] text-[var(--success-strong)] border-transparent" },
+                    COMPLETED: { labelKey:"patients.treatmentStatus.completed", cls:"bg-muted text-muted-foreground border-transparent" },
+                    ABANDONED: { labelKey:"patients.treatmentStatus.abandoned", cls:"bg-[var(--danger-soft)] text-[var(--danger-strong)] border-transparent" },
+                    PAUSED:    { labelKey:"patients.treatmentStatus.paused",    cls:"bg-[var(--warning-soft)] text-[var(--warning-strong)] border-transparent" },
                   };
                   const cfg = STATUS_CFG[plan.status] ?? STATUS_CFG.ACTIVE;
                   return (
@@ -2292,7 +2298,7 @@ export function PatientDetailClient({
                       tabIndex={0}
                       onClick={() => setViewPlan(plan)}
                       onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setViewPlan(plan); } }}
-                      className="bg-card border border-border rounded-xl p-4 cursor-pointer hover:border-brand-300 hover:shadow-sm transition-colors w-full text-left"
+                      className="bg-card border border-border rounded-xl p-4 cursor-pointer shadow-[var(--shadow-1)] hover:border-[var(--border-brand)] hover:shadow-[var(--shadow-2)] transition-all w-full text-left focus-visible:outline-none focus-visible:shadow-[var(--ring)]"
                     >
                       <div className="flex items-start justify-between gap-3 mb-3">
                         <div>
@@ -2305,36 +2311,36 @@ export function PatientDetailClient({
                           )}
                         </div>
                         <div className="flex items-center gap-2 flex-shrink-0">
-                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${cfg.cls}`}>
+                          <span className={`text-[11px] font-semibold px-2.5 py-0.5 rounded-full border ${cfg.cls}`}>
                             {t(cfg.labelKey)}
                           </span>
-                          <button type="button" onClick={(e) => { e.stopPropagation(); setEditPlan(plan); }} className="p-1.5 rounded-lg text-muted-foreground hover:text-brand-600 hover:bg-brand-50 dark:hover:bg-brand-950/40 transition-colors" aria-label={t("patients.treatment.editAria", { name: plan.name })} title={t("patients.treatment.editBtn")}>
-                            <Edit className="w-3.5 h-3.5" />
+                          <button type="button" onClick={(e) => { e.stopPropagation(); setEditPlan(plan); }} className="p-1.5 rounded-lg text-muted-foreground hover:text-[var(--brand)] hover:bg-[var(--brand-soft)] transition-colors focus-visible:outline-none focus-visible:shadow-[var(--ring)]" aria-label={t("patients.treatment.editAria", { name: plan.name })} title={t("patients.treatment.editBtn")}>
+                            <Edit className="w-4 h-4" strokeWidth={1.75} />
                           </button>
                           <button
                             type="button"
                             onClick={(e) => { e.stopPropagation(); handleDeleteTreatment(plan); }}
-                            className="p-1.5 rounded-lg text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors"
+                            className="p-1.5 rounded-lg text-[var(--danger)] hover:bg-[var(--danger-soft)] transition-colors focus-visible:outline-none focus-visible:shadow-[var(--ring)]"
                             aria-label={t("patients.treatment.deletePlanAria", { name: plan.name })}
                             title={t("patients.treatment.deletePlanTitle")}
                           >
-                            <Trash2 className="w-3.5 h-3.5" />
+                            <Trash2 className="w-4 h-4" strokeWidth={1.75} />
                           </button>
                         </div>
                       </div>
                       <div className="flex items-center gap-3 mb-2">
                         <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
-                          <div className="h-full bg-brand-500 rounded-full" style={{ width: `${pct}%` }} />
+                          <div className="h-full bg-[var(--brand)] rounded-full" style={{ width: `${pct}%` }} />
                         </div>
-                        <span className="text-xs font-bold text-muted-foreground">
+                        <span className="text-xs font-bold text-muted-foreground tabular-nums">
                           {completed}/{plan.totalSessions}
                         </span>
                       </div>
                       <div className="flex gap-4 text-xs text-muted-foreground flex-wrap">
-                        <span>💰 {formatCurrency(plan.totalCost)}</span>
+                        <span className="tabular-nums">💰 {formatCurrency(plan.totalCost)}</span>
                         <span>📅 {t("patients.treatment.everyDays", { days: plan.sessionIntervalDays })}</span>
                         {pendingThis > 0 && plan.status === "ACTIVE" && (
-                          <span className="text-brand-600 dark:text-brand-400 font-semibold">⏳ {t("patients.treatment.pendingCount", { count: pendingThis })}</span>
+                          <span className="text-[var(--brand)] font-semibold">⏳ {t("patients.treatment.pendingCount", { count: pendingThis })}</span>
                         )}
                         {plan.nextExpectedDate && (
                           <span>⏰ {t("patients.treatment.next", { date: new Date(plan.nextExpectedDate).toLocaleDateString("es-MX",{day:"numeric",month:"short"}) })}</span>
@@ -2354,11 +2360,11 @@ export function PatientDetailClient({
                       className="bg-card border border-border rounded-2xl w-[min(92vw,560px)] max-h-[90vh] overflow-auto"
                     >
                       <div className="flex items-center justify-between px-5 py-4 border-b border-border">
-                        <h3 className="text-sm font-bold">{t("patients.treatment.modalTitle", { name: `${patient.firstName} ${patient.lastName}` })}</h3>
+                        <h3 className="text-[15px] font-bold">{t("patients.treatment.modalTitle", { name: `${patient.firstName} ${patient.lastName}` })}</h3>
                         <button
                           type="button"
                           onClick={() => !savingTreatment && setShowNewTreatment(false)}
-                          className="text-muted-foreground hover:text-foreground p-1"
+                          className="w-9 h-9 grid place-items-center rounded-lg text-muted-foreground hover:text-foreground hover:bg-[var(--bg-hover)] transition-colors focus-visible:outline-none focus-visible:shadow-[var(--ring)]"
                           aria-label={t("common.close")}
                         >
                           ×
@@ -2392,7 +2398,7 @@ export function PatientDetailClient({
                                 key={suggestion}
                                 type="button"
                                 onClick={() => setTreatmentForm(f => ({ ...f, name: suggestion }))}
-                                className="text-[10px] px-2 py-1 rounded-full border border-border bg-muted hover:bg-brand-50 hover:border-brand-300"
+                                className="text-[11px] px-2.5 py-1 rounded-full border border-border bg-muted hover:bg-[var(--brand-soft)] hover:border-[var(--border-brand)] transition-colors focus-visible:outline-none focus-visible:shadow-[var(--ring)]"
                               >
                                 {suggestion}
                               </button>
@@ -2451,7 +2457,7 @@ export function PatientDetailClient({
                           type="button"
                           onClick={() => setShowNewTreatment(false)}
                           disabled={savingTreatment}
-                          className="text-xs font-semibold border border-border px-4 py-2 rounded-lg hover:bg-muted disabled:opacity-50"
+                          className="text-xs font-semibold border border-border px-4 py-2 rounded-lg hover:bg-muted disabled:opacity-[.45] disabled:cursor-not-allowed transition-colors focus-visible:outline-none focus-visible:shadow-[var(--ring)]"
                         >
                           {t("common.cancel")}
                         </button>
@@ -2459,7 +2465,7 @@ export function PatientDetailClient({
                           type="button"
                           onClick={handleCreateTreatment}
                           disabled={savingTreatment}
-                          className="text-xs font-semibold bg-brand-600 text-white px-4 py-2 rounded-lg hover:bg-brand-700 disabled:opacity-50"
+                          className="text-xs font-semibold bg-[var(--brand)] text-white px-4 py-2 rounded-lg hover:bg-[var(--violet-700)] disabled:opacity-[.45] disabled:cursor-not-allowed transition-colors focus-visible:outline-none focus-visible:shadow-[var(--ring)] active:scale-[0.98]"
                         >
                           {savingTreatment ? t("patients.treatment.creating") : t("patients.treatment.createBtn")}
                         </button>
@@ -2473,18 +2479,18 @@ export function PatientDetailClient({
                   const vCompleted = vp.sessions?.length ?? 0;
                   const vPct = vp.totalSessions > 0 ? Math.round((vCompleted / vp.totalSessions) * 100) : 0;
                   const vCls: Record<string,string> = {
-                    ACTIVE:"bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/30 dark:text-emerald-300 dark:border-emerald-800",
-                    COMPLETED:"bg-muted text-muted-foreground border-border",
-                    ABANDONED:"bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/30 dark:text-rose-300 dark:border-rose-800",
-                    PAUSED:"bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/30 dark:text-amber-300 dark:border-amber-800",
+                    ACTIVE:"bg-[var(--success-soft)] text-[var(--success-strong)] border-transparent",
+                    COMPLETED:"bg-muted text-muted-foreground border-transparent",
+                    ABANDONED:"bg-[var(--danger-soft)] text-[var(--danger-strong)] border-transparent",
+                    PAUSED:"bg-[var(--warning-soft)] text-[var(--warning-strong)] border-transparent",
                   };
                   const vKey: Record<string,string> = { ACTIVE:"patients.treatmentStatus.active", COMPLETED:"patients.treatmentStatus.completed", ABANDONED:"patients.treatmentStatus.abandoned", PAUSED:"patients.treatmentStatus.paused" };
                   return (
                     <div style={{ position:"fixed", inset:0, background:"rgba(15,10,30,0.55)", backdropFilter:"blur(4px)", zIndex:80, display:"grid", placeItems:"center" }} onClick={() => setViewPlan(null)}>
                       <div onClick={(e)=>e.stopPropagation()} className="bg-card border border-border rounded-2xl w-[min(92vw,560px)] max-h-[90vh] overflow-auto">
                         <div className="flex items-center justify-between px-5 py-4 border-b border-border">
-                          <h3 className="text-sm font-bold">{t("patients.treatment.viewTitle")}</h3>
-                          <button type="button" onClick={() => setViewPlan(null)} className="text-muted-foreground hover:text-foreground p-1" aria-label={t("common.close")}>×</button>
+                          <h3 className="text-[15px] font-bold">{t("patients.treatment.viewTitle")}</h3>
+                          <button type="button" onClick={() => setViewPlan(null)} className="w-9 h-9 grid place-items-center rounded-lg text-muted-foreground hover:text-foreground hover:bg-[var(--bg-hover)] transition-colors focus-visible:outline-none focus-visible:shadow-[var(--ring)]" aria-label={t("common.close")}>×</button>
                         </div>
                         <div className="p-5 space-y-4">
                           <div className="flex items-start justify-between gap-3">
@@ -2492,18 +2498,18 @@ export function PatientDetailClient({
                               <div className="font-bold text-base">{vp.name}</div>
                               <div className="text-xs text-muted-foreground mt-0.5">{t("patients.doctorPrefix")} {vp.doctor?.firstName} {vp.doctor?.lastName}</div>
                             </div>
-                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${vCls[vp.status] ?? vCls.ACTIVE}`}>{t(vKey[vp.status] ?? vKey.ACTIVE)}</span>
+                            <span className={`text-[11px] font-semibold px-2.5 py-0.5 rounded-full border ${vCls[vp.status] ?? vCls.ACTIVE}`}>{t(vKey[vp.status] ?? vKey.ACTIVE)}</span>
                           </div>
                           {vp.description && <div className="text-sm text-muted-foreground">{vp.description}</div>}
                           <div>
                             <div className="flex items-center justify-between text-xs text-muted-foreground mb-1">
                               <span>{t("patients.treatment.progressLabel")}</span>
-                              <span className="font-bold">{vCompleted}/{vp.totalSessions} ({vPct}%)</span>
+                              <span className="font-bold tabular-nums">{vCompleted}/{vp.totalSessions} ({vPct}%)</span>
                             </div>
-                            <div className="h-2 bg-muted rounded-full overflow-hidden"><div className="h-full bg-brand-500 rounded-full" style={{ width: `${vPct}%` }} /></div>
+                            <div className="h-2 bg-muted rounded-full overflow-hidden"><div className="h-full bg-[var(--brand)] rounded-full" style={{ width: `${vPct}%` }} /></div>
                           </div>
                           <div className="grid grid-cols-2 gap-3 text-sm">
-                            <div><div className="text-[11px] uppercase tracking-wide text-muted-foreground">{t("patients.treatment.totalCost")}</div><div className="font-semibold">{formatCurrency(vp.totalCost)}</div></div>
+                            <div><div className="text-[11px] uppercase tracking-wide text-muted-foreground">{t("patients.treatment.totalCost")}</div><div className="font-semibold tabular-nums">{formatCurrency(vp.totalCost)}</div></div>
                             <div><div className="text-[11px] uppercase tracking-wide text-muted-foreground">{t("patients.treatment.daysBetween")}</div><div className="font-semibold">{vp.sessionIntervalDays}</div></div>
                             <div><div className="text-[11px] uppercase tracking-wide text-muted-foreground">{t("patients.treatment.startLabel")}</div><div className="font-semibold">{new Date(vp.startDate).toLocaleDateString("es-MX",{day:"numeric",month:"short",year:"numeric"})}</div></div>
                             {vp.nextExpectedDate && <div><div className="text-[11px] uppercase tracking-wide text-muted-foreground">{t("patients.treatment.nextLabel")}</div><div className="font-semibold">{new Date(vp.nextExpectedDate).toLocaleDateString("es-MX",{day:"numeric",month:"short"})}</div></div>}
@@ -2525,8 +2531,8 @@ export function PatientDetailClient({
                           </div>
                         </div>
                         <div className="flex items-center justify-end gap-2 px-5 py-4 border-t border-border">
-                          <button type="button" onClick={() => setViewPlan(null)} className="px-3 h-9 rounded-lg border border-border text-sm font-semibold hover:bg-muted">{t("common.close")}</button>
-                          <button type="button" onClick={() => { const p = viewPlan; setViewPlan(null); setEditPlan(p); }} className="px-3 h-9 rounded-lg bg-brand-600 text-white text-sm font-semibold hover:bg-brand-700 inline-flex items-center gap-1.5"><Edit className="w-3.5 h-3.5" />{t("patients.treatment.editBtn")}</button>
+                          <button type="button" onClick={() => setViewPlan(null)} className="px-3 h-9 rounded-lg border border-border text-sm font-semibold hover:bg-muted transition-colors focus-visible:outline-none focus-visible:shadow-[var(--ring)]">{t("common.close")}</button>
+                          <button type="button" onClick={() => { const p = viewPlan; setViewPlan(null); setEditPlan(p); }} className="px-3 h-9 rounded-lg bg-[var(--brand)] text-white text-sm font-semibold hover:bg-[var(--violet-700)] transition-colors focus-visible:outline-none focus-visible:shadow-[var(--ring)] active:scale-[0.98] inline-flex items-center gap-1.5"><Edit className="w-4 h-4" strokeWidth={1.75} />{t("patients.treatment.editBtn")}</button>
                         </div>
                       </div>
                     </div>
@@ -2537,8 +2543,8 @@ export function PatientDetailClient({
                   <div style={{ position:"fixed", inset:0, background:"rgba(15,10,30,0.55)", backdropFilter:"blur(4px)", zIndex:80, display:"grid", placeItems:"center" }} onClick={() => !savingEditPlan && setEditPlan(null)}>
                     <div onClick={(e)=>e.stopPropagation()} className="bg-card border border-border rounded-2xl w-[min(92vw,560px)] max-h-[90vh] overflow-auto">
                       <div className="flex items-center justify-between px-5 py-4 border-b border-border">
-                        <h3 className="text-sm font-bold">{t("patients.treatment.editTitle")}</h3>
-                        <button type="button" onClick={() => !savingEditPlan && setEditPlan(null)} className="text-muted-foreground hover:text-foreground p-1" aria-label={t("common.close")}>×</button>
+                        <h3 className="text-[15px] font-bold">{t("patients.treatment.editTitle")}</h3>
+                        <button type="button" onClick={() => !savingEditPlan && setEditPlan(null)} className="w-9 h-9 grid place-items-center rounded-lg text-muted-foreground hover:text-foreground hover:bg-[var(--bg-hover)] transition-colors focus-visible:outline-none focus-visible:shadow-[var(--ring)]" aria-label={t("common.close")}>×</button>
                       </div>
                       <div className="p-5 space-y-3">
                         <div className="space-y-1.5">
@@ -2574,8 +2580,8 @@ export function PatientDetailClient({
                         </div>
                       </div>
                       <div className="flex items-center justify-end gap-2 px-5 py-4 border-t border-border">
-                        <button type="button" disabled={savingEditPlan} onClick={() => setEditPlan(null)} className="px-3 h-9 rounded-lg border border-border text-sm font-semibold hover:bg-muted disabled:opacity-50">{t("common.cancel")}</button>
-                        <button type="button" disabled={savingEditPlan} onClick={handleUpdatePlan} className="px-3 h-9 rounded-lg bg-brand-600 text-white text-sm font-semibold hover:bg-brand-700 disabled:opacity-50">{savingEditPlan ? t("patients.treatment.saving") : t("patients.treatment.saveBtn")}</button>
+                        <button type="button" disabled={savingEditPlan} onClick={() => setEditPlan(null)} className="px-3 h-9 rounded-lg border border-border text-sm font-semibold hover:bg-muted disabled:opacity-[.45] disabled:cursor-not-allowed transition-colors focus-visible:outline-none focus-visible:shadow-[var(--ring)]">{t("common.cancel")}</button>
+                        <button type="button" disabled={savingEditPlan} onClick={handleUpdatePlan} className="px-3 h-9 rounded-lg bg-[var(--brand)] text-white text-sm font-semibold hover:bg-[var(--violet-700)] disabled:opacity-[.45] disabled:cursor-not-allowed transition-colors focus-visible:outline-none focus-visible:shadow-[var(--ring)] active:scale-[0.98]">{savingEditPlan ? t("patients.treatment.saving") : t("patients.treatment.saveBtn")}</button>
                       </div>
                     </div>
                   </div>
@@ -2601,15 +2607,16 @@ export function PatientDetailClient({
           )}
 
           {tab === "agenda" && (
-            <div className="bg-card border border-border rounded-xl overflow-hidden">
+            <div className="bg-card border border-border rounded-xl overflow-hidden shadow-[var(--shadow-1)]">
               <div className="flex items-center justify-between px-5 py-4 border-b border-border">
-                <h2 className="text-sm font-bold">{t("patients.agenda.title", { count: appointments.length })}</h2>
-                <button onClick={openNewAppointmentForPatient} className="text-xs font-semibold text-brand-600 hover:underline">{t("patients.agenda.schedule")}</button>
+                <h2 className="text-[15px] font-semibold tracking-[-0.01em]">{t("patients.agenda.title", { count: appointments.length })}</h2>
+                <button onClick={openNewAppointmentForPatient} className="text-xs font-semibold text-[var(--brand)] hover:underline rounded-[4px] focus-visible:outline-none focus-visible:shadow-[var(--ring)]">{t("patients.agenda.schedule")}</button>
               </div>
 
-              <table className="w-full text-xs">
+              <div className={patientDetailStyles.tableScrollB}>
+              <table className={patientDetailStyles.tableB}>
                 <thead>
-                  <tr className="bg-muted/30 border-b border-border">
+                  <tr>
                     {[
                       { id: "date", label: t("common.date") },
                       { id: "time", label: t("patients.agenda.colTime") },
@@ -2618,32 +2625,32 @@ export function PatientDetailClient({
                       { id: "status", label: t("common.status") },
                       { id: "actions", label: "" },
                     ].map(h => (
-                      <th key={h.id} className="text-left px-4 py-2.5 text-[10px] font-bold text-muted-foreground uppercase tracking-wide">{h.label}</th>
+                      <th key={h.id}>{h.label}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
                   {appointments.length === 0 ? (
-                    <tr><td colSpan={6} className="px-4 py-10 text-center text-muted-foreground">{t("patients.agenda.empty")}</td></tr>
+                    <tr><td colSpan={6} className={patientDetailStyles.tdEmptyB}>{t("patients.agenda.empty")}</td></tr>
                   ) : appointments.map(a => {
                     const s = APPT_STATUS[a.status] ?? APPT_STATUS.PENDING;
                     return (
-                      <tr key={a.id} className="border-b border-border/50 hover:bg-muted/20">
-                        <td className="px-4 py-2 font-medium">{formatDate(a.date)}</td>
-                        <td className="px-4 py-2 text-muted-foreground font-mono">{a.startTime}</td>
-                        <td className="px-4 py-2">{a.type}</td>
-                        <td className="px-4 py-2 text-muted-foreground">{a.doctor?.firstName} {a.doctor?.lastName}</td>
-                        <td className="px-4 py-2"><span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${s.cls}`}>{t(s.labelKey)}</span></td>
-                        <td className="px-4 py-2 text-right">
+                      <tr key={a.id}>
+                        <td className="font-medium">{formatDate(a.date)}</td>
+                        <td className="text-muted-foreground font-mono tabular-nums">{a.startTime}</td>
+                        <td>{a.type}</td>
+                        <td className="text-muted-foreground">{a.doctor?.firstName} {a.doctor?.lastName}</td>
+                        <td><span className={`inline-flex items-center text-[11px] font-semibold px-2.5 py-0.5 rounded-full whitespace-nowrap ${s.cls}`}>{t(s.labelKey)}</span></td>
+                        <td className="text-right">
                           {a.status !== "CANCELLED" && a.status !== "COMPLETED" && (
                             <button
                               type="button"
                               onClick={() => handleCancelAppointment(a)}
-                              className="p-1.5 rounded-lg text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors"
+                              className="p-1.5 rounded-lg text-[var(--danger)] hover:bg-[var(--danger-soft)] transition-colors focus-visible:outline-none focus-visible:shadow-[var(--ring)]"
                               aria-label={t("patients.agenda.cancelAppt")}
                               title={t("patients.agenda.cancelAppt")}
                             >
-                              <XCircle className="w-3.5 h-3.5" />
+                              <XCircle className="w-4 h-4" strokeWidth={1.75} />
                             </button>
                           )}
                         </td>
@@ -2652,6 +2659,7 @@ export function PatientDetailClient({
                   })}
                 </tbody>
               </table>
+              </div>
             </div>
           )}
 
@@ -2662,13 +2670,13 @@ export function PatientDetailClient({
             return (
               <div className="space-y-4">
                 {/* Upload bar */}
-                <div className="bg-card border border-border rounded-xl p-4 flex items-center justify-between">
+                <div className="bg-card border border-border rounded-xl p-4 flex items-center justify-between gap-3 flex-wrap shadow-[var(--shadow-1)]">
                   <div>
-                    <h2 className="text-sm font-bold">{t("patients.xrays.title")}</h2>
-                    <p className="text-xs text-muted-foreground">{t("patients.xrays.fileCount", { count: files.length })}</p>
+                    <h2 className="text-[15px] font-semibold tracking-[-0.01em]">{t("patients.xrays.title")}</h2>
+                    <p className="text-xs text-muted-foreground tabular-nums">{t("patients.xrays.fileCount", { count: files.length })}</p>
                   </div>
-                  <label className="flex items-center gap-1.5 text-xs font-semibold bg-brand-600 text-white px-3 py-2 rounded-lg cursor-pointer hover:bg-brand-700 transition-colors">
-                    <Plus className="w-3.5 h-3.5" />
+                  <label className="flex items-center gap-1.5 text-xs font-semibold bg-[var(--brand)] text-white px-3 h-9 rounded-lg cursor-pointer hover:bg-[var(--violet-700)] transition-colors shadow-[var(--shadow-1)]">
+                    <Plus className="w-4 h-4" strokeWidth={1.75} />
                     {uploadingFile ? t("patients.xrays.uploading") : t("patients.xrays.uploadFile")}
                     <input type="file" className="hidden" accept="image/*,application/pdf" onChange={uploadFile} disabled={uploadingFile} />
                   </label>
@@ -2698,7 +2706,7 @@ export function PatientDetailClient({
                           <button
                             type="button"
                             onClick={openInViewer}
-                            className="w-32 h-24 bg-black rounded-lg overflow-hidden flex-shrink-0 relative cursor-pointer hover:opacity-90 transition-opacity group"
+                            className="w-32 h-24 bg-black rounded-lg overflow-hidden flex-shrink-0 relative cursor-pointer hover:opacity-90 transition-opacity group focus-visible:outline-none focus-visible:shadow-[var(--ring)]"
                             aria-label={t("patients.xrays.openViewerAria", { name: f.name })}
                           >
                             <img src={f.url} alt={f.name} className="w-full h-full object-cover opacity-90" />
@@ -2715,11 +2723,11 @@ export function PatientDetailClient({
                             <button
                               type="button"
                               onClick={openInViewer}
-                              className="text-sm font-bold truncate hover:text-brand-600 hover:underline text-left"
+                              className="text-sm font-bold truncate hover:text-[var(--brand)] hover:underline text-left rounded-[4px] focus-visible:outline-none focus-visible:shadow-[var(--ring)]"
                             >
                               {f.name}
                             </button>
-                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-muted text-muted-foreground border border-border">
+                            <span className="text-[11px] font-semibold px-2.5 py-0.5 rounded-full bg-muted text-muted-foreground border border-border whitespace-nowrap">
                               {FILE_CAT_LABELS[f.category] ? t(FILE_CAT_LABELS[f.category]) : f.category}
                             </span>
                           </div>
@@ -2736,7 +2744,7 @@ export function PatientDetailClient({
                               <button
                                 type="button"
                                 onClick={openInViewer}
-                                className="flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-lg bg-card text-foreground border border-border hover:bg-muted/50 transition-colors"
+                                className="flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-lg bg-card text-foreground border border-border hover:bg-muted/50 transition-colors focus-visible:outline-none focus-visible:shadow-[var(--ring)]"
                               >
                                 <span>🔍</span> {t("patients.xrays.openInViewer")}
                               </button>
@@ -2746,11 +2754,11 @@ export function PatientDetailClient({
                                 type="button"
                                 onClick={() => analyzeFile(f.id)}
                                 disabled={analyzing === f.id}
-                                className={`flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-lg transition-colors ${
+                                className={`flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-lg transition-colors focus-visible:outline-none focus-visible:shadow-[var(--ring)] ${
                                   result
-                                    ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
-                                    : "bg-violet-600 text-white hover:bg-violet-700"
-                                } disabled:opacity-60`}
+                                    ? "bg-[var(--success-soft)] text-[var(--success-strong)] border border-transparent"
+                                    : "bg-[var(--brand)] text-white hover:bg-[var(--violet-700)]"
+                                } disabled:opacity-[.45]`}
                               >
                                 {analyzing === f.id ? (
                                   <><span className="inline-block w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" /> {t("patients.xrays.analyzing")}</>
@@ -2765,7 +2773,7 @@ export function PatientDetailClient({
                               <button
                                 type="button"
                                 onClick={() => setExpandedFile(isExp ? null : f.id)}
-                                className="text-xs font-semibold text-muted-foreground border border-border px-3 py-1.5 rounded-lg hover:bg-muted/50"
+                                className="text-xs font-semibold text-muted-foreground border border-border px-3 py-1.5 rounded-lg hover:bg-muted/50 transition-colors focus-visible:outline-none focus-visible:shadow-[var(--ring)]"
                               >
                                 {isExp ? t("patients.xrays.hideResults") : t("patients.xrays.showResults")}
                               </button>
@@ -2773,11 +2781,11 @@ export function PatientDetailClient({
                             <button
                               type="button"
                               onClick={() => handleDeleteFile(f)}
-                              className="flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-lg text-rose-600 border border-rose-200 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors"
+                              className="flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-lg text-[var(--danger)] border border-[var(--danger-border-strong)] hover:bg-[var(--danger-soft)] transition-colors focus-visible:outline-none focus-visible:shadow-[var(--ring)]"
                               aria-label={t("patients.xrays.deleteFileAria", { name: f.name })}
                               title={t("patients.xrays.deleteFileTitle")}
                             >
-                              <Trash2 className="w-3 h-3" />
+                              <Trash2 className="w-4 h-4" strokeWidth={1.75} />
                               {t("common.delete")}
                             </button>
                           </div>
@@ -2788,9 +2796,9 @@ export function PatientDetailClient({
                       {result && isExp && (
                         <div className="border-t border-border bg-muted p-4 space-y-3">
                           {/* Summary */}
-                          <div className="bg-violet-50 border border-violet-200 rounded-xl p-3">
-                            <h4 className="text-xs font-bold text-violet-700 mb-1">{t("patients.xrays.aiSummaryTitle")}</h4>
-                            <p className="text-xs text-violet-900 leading-relaxed">{result.analysis.summary}</p>
+                          <div className="bg-[var(--brand-soft)] border border-[var(--border-brand)] rounded-xl p-3">
+                            <h4 className="text-xs font-bold text-[var(--violet-700)] dark:text-[var(--violet-300)] mb-1">{t("patients.xrays.aiSummaryTitle")}</h4>
+                            <p className="text-xs text-[var(--text-1)] leading-relaxed">{result.analysis.summary}</p>
                           </div>
 
                           {/* Findings */}
@@ -2803,7 +2811,7 @@ export function PatientDetailClient({
                                     {finding.id ?? i + 1}
                                   </span>
                                   <span className={`text-xs font-bold ${sev.text}`}>{finding.title}</span>
-                                  <span className={`ml-auto text-[10px] font-bold px-2 py-0.5 rounded-full border ${sev.bg} ${sev.text}`}>
+                                  <span className={`ml-auto text-[11px] font-semibold px-2.5 py-0.5 rounded-full border ${sev.bg} ${sev.text}`}>
                                     {t(sev.labelKey)}
                                   </span>
                                 </div>
@@ -2815,10 +2823,10 @@ export function PatientDetailClient({
                                   <div className="w-14 h-1 bg-muted rounded-full overflow-hidden">
                                     <div className="h-full rounded-full" style={{
                                       width: `${finding.confidence}%`,
-                                      backgroundColor: finding.confidence > 80 ? "#22c55e" : finding.confidence > 60 ? "#eab308" : "#ef4444",
+                                      backgroundColor: finding.confidence > 80 ? "var(--success)" : finding.confidence > 60 ? "var(--warning)" : "var(--danger)",
                                     }} />
                                   </div>
-                                  <span className="text-[10px] text-muted-foreground">{t("patients.xrays.confidence", { pct: finding.confidence })}</span>
+                                  <span className="text-[11px] text-muted-foreground tabular-nums">{t("patients.xrays.confidence", { pct: finding.confidence })}</span>
                                 </div>
                               </div>
                             );
@@ -2826,9 +2834,9 @@ export function PatientDetailClient({
 
                           {/* Recommendations */}
                           {result.analysis.recommendations && (
-                            <div className="bg-blue-50 border border-blue-200 rounded-xl p-3">
-                              <h4 className="text-xs font-bold text-blue-700 mb-1">{t("patients.xrays.recommendations")}</h4>
-                              <p className="text-xs text-blue-900">{result.analysis.recommendations}</p>
+                            <div className="bg-[var(--info-soft)] border border-[var(--border-soft)] rounded-xl p-3">
+                              <h4 className="text-xs font-bold text-[var(--info-strong)] mb-1">{t("patients.xrays.recommendations")}</h4>
+                              <p className="text-xs text-[var(--text-1)]">{result.analysis.recommendations}</p>
                             </div>
                           )}
 

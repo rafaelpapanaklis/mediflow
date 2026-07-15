@@ -6,6 +6,7 @@ import toast from "react-hot-toast";
 import { formatCurrency } from "@/lib/utils";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import { useT } from "@/i18n/i18n-provider";
+import styles from "./procedures.module.css";
 import {
   Plus,
   Search,
@@ -233,52 +234,55 @@ export function ProceduresClient({ initialProcedures }: Props) {
   const activeCount = procedures.filter((p) => p.isActive).length;
 
   return (
-    <div className="p-4 lg:p-8 max-w-7xl mx-auto space-y-6">
+    <div className={styles.page}>
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <div className={styles.head}>
         <div>
-          <h1 className="text-2xl lg:text-3xl font-extrabold text-foreground">
+          <h1 className={styles.title}>
             {t("pages.procedures.title")}
           </h1>
-          <p className="text-sm text-muted-foreground mt-1">
+          <p className={styles.subtitle}>
             {t("pages.procedures.countProcedures", { count: procedures.length })}{" "}
             · {t("pages.procedures.countActive", { count: activeCount })}
           </p>
         </div>
         <button
           onClick={openCreate}
-          className="inline-flex items-center gap-2 px-4 py-2.5 bg-brand-600 hover:bg-brand-700 text-white font-semibold text-sm rounded-xl shadow-card transition-colors"
+          className={styles.btnPrimary}
         >
-          <Plus className="w-4 h-4" />
+          <Plus size={16} strokeWidth={1.75} />
           {t("pages.procedures.newProcedure")}
         </button>
       </div>
 
       {/* Info banner */}
-      <div className="flex gap-3 p-4 bg-brand-600/15 border border-brand-200 dark:border-brand-800/40 rounded-2xl">
-        <Info className="w-5 h-5 text-brand-600 dark:text-brand-400 flex-shrink-0 mt-0.5" />
-        <p className="text-sm text-brand-900 dark:text-brand-100 leading-relaxed">
+      <div className={styles.banner}>
+        <Info size={18} strokeWidth={1.75} className={styles.bannerIcon} aria-hidden="true" />
+        <p className={styles.bannerText}>
           {t("pages.procedures.infoBanner")}
         </p>
       </div>
 
       {/* Search */}
-      <div className="relative">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+      <div className={styles.searchWrap}>
+        <Search size={16} strokeWidth={1.75} className={styles.searchIcon} aria-hidden="true" />
         <input
           type="text"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder={t("pages.procedures.searchPlaceholder")}
-          className="w-full pl-10 pr-4 py-2.5 bg-card border border-border rounded-xl text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-500"
+          aria-label={t("pages.procedures.searchPlaceholder")}
+          className={styles.searchInput}
         />
       </div>
 
       {/* Empty state */}
       {filtered.length === 0 ? (
-        <div className="bg-card border border-border rounded-2xl shadow-card p-12 text-center">
-          <Tag className="w-10 h-10 text-slate-300 mx-auto mb-3" />
-          <p className="text-sm text-muted-foreground">
+        <div className={styles.emptyCard}>
+          <span className={styles.emptyIcon} aria-hidden="true">
+            <Tag size={22} strokeWidth={1.75} />
+          </span>
+          <p>
             {procedures.length === 0
               ? t("pages.procedures.emptyNoProcedures")
               : t("pages.procedures.emptyNoMatch")}

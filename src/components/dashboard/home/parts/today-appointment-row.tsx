@@ -10,16 +10,22 @@ import type { AppointmentDTO, AppointmentStatus } from "@/lib/home/types";
 import { formatShortTime } from "@/lib/home/greet";
 import { useT } from "@/i18n/i18n-provider";
 
-const STATUS_DOT: Record<AppointmentStatus, string> = {
-  SCHEDULED:    "var(--warning)",
-  CONFIRMED:    "var(--info)",
-  CHECKED_IN:   "var(--brand)",
-  IN_CHAIR:     "var(--brand)",
-  IN_PROGRESS:  "var(--success)",
-  COMPLETED:    "var(--text-3)",
-  CHECKED_OUT:  "var(--text-3)",
-  NO_SHOW:      "var(--danger)",
-  CANCELLED:    "var(--text-4)",
+// Pills de estado del sistema (prototipo variante-a: fondo *-soft + dot 6px
+// currentColor + tinta *-strong 11/600). Texto sobre --brand-soft usa
+// --trial-accent-calm (violet-700 en light / violet-300 en dark — AA).
+const STATUS_PILL: Record<
+  AppointmentStatus,
+  { bg: string; fg: string; italic?: boolean }
+> = {
+  SCHEDULED:    { bg: "var(--warning-soft)", fg: "var(--warning-strong)" },
+  CONFIRMED:    { bg: "var(--info-soft)",    fg: "var(--info-strong)" },
+  CHECKED_IN:   { bg: "var(--brand-soft)",   fg: "var(--trial-accent-calm)" },
+  IN_CHAIR:     { bg: "var(--brand-soft)",   fg: "var(--trial-accent-calm)" },
+  IN_PROGRESS:  { bg: "var(--success-soft)", fg: "var(--success-strong)" },
+  COMPLETED:    { bg: "var(--bg-elev-2)",    fg: "var(--text-3)" },
+  CHECKED_OUT:  { bg: "var(--bg-elev-2)",    fg: "var(--text-3)" },
+  NO_SHOW:      { bg: "var(--danger-soft)",  fg: "var(--danger-strong)" },
+  CANCELLED:    { bg: "var(--bg-elev-2)",    fg: "var(--text-4)", italic: true },
 };
 
 const STATUS_LABEL_KEY: Record<AppointmentStatus, string> = {
@@ -62,37 +68,28 @@ export function TodayAppointmentRow({
         gap: 12,
         padding: "10px 14px",
         borderBottom: "1px solid var(--border-soft)",
-        transition: "background 0.12s",
+        transition: "background var(--dur-1) var(--ease)",
       }}
       onMouseEnter={(e) => (e.currentTarget.style.background = "var(--bg-hover)")}
       onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
     >
-      <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
-        <span
-          aria-label={statusLabel}
-          title={statusLabel}
-          style={{
-            width: 8,
-            height: 8,
-            borderRadius: "50%",
-            background: STATUS_DOT[appt.status],
-            boxShadow: appt.status === "IN_PROGRESS"
-              ? "0 0 6px var(--success)"
-              : "none",
-          }}
-        />
-        <span
-          style={{
-            fontFamily: "var(--font-mono, monospace)",
-            fontSize: 13,
-            fontWeight: 500,
-            color: "var(--text-1)",
-            fontVariantNumeric: "tabular-nums",
-          }}
-        >
-          {formatShortTime(appt.startsAt)}
-        </span>
-      </div>
+      <span
+        style={{
+          flex: "none",
+          minWidth: 72,
+          textAlign: "center",
+          padding: "4px 8px",
+          borderRadius: 8,
+          background: "var(--brand-soft)",
+          color: "var(--trial-accent-calm)",
+          fontSize: 12,
+          fontWeight: 600,
+          fontVariantNumeric: "tabular-nums",
+          whiteSpace: "nowrap",
+        }}
+      >
+        {formatShortTime(appt.startsAt)}
+      </span>
 
       <div style={{ flex: 1, minWidth: 0 }}>
         <button
@@ -104,8 +101,8 @@ export function TodayAppointmentRow({
             padding: 0,
             cursor: "pointer",
             textAlign: "left",
-            fontSize: 13,
-            fontWeight: 500,
+            fontSize: 13.5,
+            fontWeight: 600,
             color: "var(--text-1)",
             fontFamily: "inherit",
             whiteSpace: "nowrap",
@@ -119,8 +116,8 @@ export function TodayAppointmentRow({
         </button>
         <div
           style={{
-            fontSize: 11,
-            color: "var(--text-2)",
+            fontSize: 12,
+            color: "var(--text-3)",
             marginTop: 2,
             display: "flex",
             alignItems: "center",
@@ -131,10 +128,10 @@ export function TodayAppointmentRow({
           }}
         >
           {appt.isTeleconsult && (
-            <Video size={10} aria-hidden style={{ color: "var(--info)" }} />
+            <Video size={12} strokeWidth={1.75} aria-hidden style={{ color: "var(--info)" }} />
           )}
           {appt.isWalkIn && (
-            <Footprints size={10} aria-hidden style={{ color: "var(--warning)" }} />
+            <Footprints size={12} strokeWidth={1.75} aria-hidden style={{ color: "var(--warning)" }} />
           )}
           <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>
             {appt.reason ?? t("home.apptRow.defaultReason")}
@@ -143,16 +140,30 @@ export function TodayAppointmentRow({
         </div>
       </div>
 
+      <span style={statusPillStyle(appt.status)}>
+        <span
+          aria-hidden
+          style={{
+            width: 6,
+            height: 6,
+            borderRadius: 999,
+            background: "currentColor",
+            flexShrink: 0,
+          }}
+        />
+        {statusLabel}
+      </span>
+
       {appt.status === "CHECKED_IN" && appt.minutesWaiting != null && (
         <span
           style={{
-            fontSize: 10,
-            padding: "2px 6px",
-            borderRadius: 4,
+            fontSize: 11,
+            padding: "3px 8px",
+            borderRadius: 999,
             background: "var(--brand-soft)",
             color: "var(--trial-accent-calm)",
-            fontFamily: "var(--font-mono, monospace)",
-            fontWeight: 500,
+            fontWeight: 600,
+            fontVariantNumeric: "tabular-nums",
             whiteSpace: "nowrap",
             flexShrink: 0,
           }}
@@ -190,7 +201,7 @@ export function TodayAppointmentRow({
                 aria-label={t("home.apptRow.moreActions")}
                 style={iconBtnStyle}
               >
-                <MoreHorizontal size={14} />
+                <MoreHorizontal size={16} strokeWidth={1.75} />
               </button>
             </DropdownMenu.Trigger>
             <DropdownMenu.Portal>
@@ -239,11 +250,31 @@ const iconBtnStyle: React.CSSProperties = {
   placeItems: "center",
   background: "transparent",
   border: "1px solid transparent",
-  borderRadius: 6,
+  borderRadius: "var(--radius-sm)",
   color: "var(--text-2)",
   cursor: "pointer",
-  transition: "all 0.15s",
+  transition:
+    "background var(--dur-1) var(--ease), color var(--dur-1) var(--ease), border-color var(--dur-1) var(--ease)",
 };
+
+// Pill de estado: fondo *-soft + dot currentColor + texto 11/600 radius 99.
+function statusPillStyle(status: AppointmentStatus): React.CSSProperties {
+  const c = STATUS_PILL[status];
+  return {
+    flexShrink: 0,
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 5,
+    fontSize: 11,
+    fontWeight: 600,
+    padding: "3px 9px",
+    borderRadius: 999,
+    background: c.bg,
+    color: c.fg,
+    fontStyle: c.italic ? "italic" : "normal",
+    whiteSpace: "nowrap",
+  };
+}
 
 function IconButton({
   icon: Icon,
@@ -281,7 +312,7 @@ function IconButton({
           : "var(--text-2)";
       }}
     >
-      <Icon size={14} />
+      <Icon size={16} strokeWidth={1.75} />
     </button>
   );
 }
@@ -290,10 +321,9 @@ const dropdownStyle: React.CSSProperties = {
   minWidth: 160,
   background: "var(--bg-elev)",
   border: "1px solid var(--border-strong)",
-  borderRadius: 10,
+  borderRadius: "var(--radius)",
   padding: 4,
-  boxShadow:
-    "0 20px 50px -10px rgba(15,10,30,0.25), 0 8px 20px -8px rgba(15,10,30,0.15)",
+  boxShadow: "var(--shadow-3)",
   zIndex: 50,
   fontFamily: "var(--font-sans, system-ui, sans-serif)",
 };
