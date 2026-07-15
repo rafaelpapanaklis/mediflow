@@ -118,11 +118,11 @@ export function PaymentModal({ open, invoice, onClose, onSuccess }: PaymentModal
             </div>
             <div className="flex justify-between">
               <span className="text-muted-foreground">{t("clinical.paymentModal.paid")}</span>
-              <span className="text-emerald-600 font-bold">{formatCurrency(invoice.paid)}</span>
+              <span className="font-bold" style={{ color: "var(--success)" }}>{formatCurrency(invoice.paid)}</span>
             </div>
             <div className="flex justify-between">
               <span className="text-muted-foreground">{t("clinical.paymentModal.pendingBalance")}</span>
-              <span className="text-rose-600 font-bold">{formatCurrency(invoice.balance)}</span>
+              <span className="font-bold" style={{ color: "var(--danger)" }}>{formatCurrency(invoice.balance)}</span>
             </div>
           </div>
 
@@ -138,7 +138,7 @@ export function PaymentModal({ open, invoice, onClose, onSuccess }: PaymentModal
               autoFocus
             />
             {isOverpay && (
-              <p className="text-[11px] text-rose-600">
+              <p className="text-[11px]" style={{ color: "var(--danger)" }}>
                 {t("clinical.paymentModal.overpayWarning", { balance: formatCurrency(invoice.balance) })}
               </p>
             )}
@@ -172,7 +172,7 @@ export function PaymentModal({ open, invoice, onClose, onSuccess }: PaymentModal
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
               <Label>{t("common.date")}</Label>
-              <DateField className="flex h-10 w-full rounded-lg border border-border bg-white px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 focus:border-brand-600 disabled:opacity-50 transition-colors" value={paidAt} onChange={(e) => setPaidAt(e.target.value)} />
+              <DateField className="flex h-10 w-full rounded-lg border border-border bg-card px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 focus:border-brand-600 disabled:opacity-50 transition-colors" value={paidAt} onChange={(e) => setPaidAt(e.target.value)} />
             </div>
             <div className="space-y-1.5">
               <Label>{t("clinical.paymentModal.reference")}</Label>

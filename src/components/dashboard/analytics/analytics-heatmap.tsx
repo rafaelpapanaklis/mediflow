@@ -37,7 +37,8 @@ export function AnalyticsHeatmap({ data, hours, daysES = DAYS_DEFAULT, onCellCli
       style={{
         background: "var(--bg-elev)",
         border: "1px solid var(--border-soft)",
-        borderRadius: 14,
+        borderRadius: "var(--radius-lg)",
+        boxShadow: "var(--shadow-1)",
         padding: 18,
         position: "relative",
         fontFamily: "var(--font-sans, system-ui, sans-serif)",
@@ -176,7 +177,7 @@ export function AnalyticsHeatmap({ data, hours, daysES = DAYS_DEFAULT, onCellCli
             padding: "8px 10px",
             fontSize: 11,
             color: "var(--text-1)",
-            boxShadow: "0 8px 24px -8px rgba(15, 10, 30, 0.4)",
+            boxShadow: "var(--shadow-3)",
             pointerEvents: "none",
             zIndex: 100,
             whiteSpace: "nowrap",

@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
 import toast from "react-hot-toast";
-import { X, Copy, Plus, Trash2, Clock } from "lucide-react";
+import { X, Copy, Plus, Trash2, Clock, ArrowRight } from "lucide-react";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import { useT } from "@/i18n/i18n-provider";
 import {
@@ -207,7 +207,7 @@ export function ResourceScheduleDrawer({ resource, isOpen, onClose }: Props) {
         <Dialog.Content className={styles.drawer} aria-describedby={undefined}>
           <div className={styles.header}>
             <div className={styles.headerInner}>
-              <Clock size={18} className={styles.headerIcon} aria-hidden />
+              <Clock size={18} strokeWidth={1.75} className={styles.headerIcon} aria-hidden />
               <div>
                 <Dialog.Title className={styles.title}>
                   {t("procurement.resScheduleDrawer.title")} · {resource?.name ?? ""}
@@ -224,7 +224,7 @@ export function ResourceScheduleDrawer({ resource, isOpen, onClose }: Props) {
                 aria-label={t("common.close")}
                 disabled={saving}
               >
-                <X size={16} />
+                <X size={18} strokeWidth={1.75} />
               </button>
             </Dialog.Close>
           </div>
@@ -240,7 +240,7 @@ export function ResourceScheduleDrawer({ resource, isOpen, onClose }: Props) {
                 </div>
                 <button
                   type="button"
-                  className={styles.bannerBtn}
+                  className="btn-new btn-new--primary btn-new--sm"
                   onClick={enableSchedule}
                 >
                   {t("procurement.resScheduleDrawer.configureSchedule")}
@@ -255,7 +255,7 @@ export function ResourceScheduleDrawer({ resource, isOpen, onClose }: Props) {
                     onClick={copyMondayToWeekdays}
                     title={t("procurement.resScheduleDrawer.copyMondayTitle")}
                   >
-                    <Copy size={12} /> {t("procurement.resScheduleDrawer.copyMonday")}
+                    <Copy size={14} strokeWidth={1.75} /> {t("procurement.resScheduleDrawer.copyMonday")}
                   </button>
                 </div>
 
@@ -264,7 +264,10 @@ export function ResourceScheduleDrawer({ resource, isOpen, onClose }: Props) {
                   const day = dIdx as 0 | 1 | 2 | 3 | 4 | 5 | 6;
                   const windows = week.days[day];
                   return (
-                    <div key={labelKey} className={styles.dayBlock}>
+                    <div
+                      key={labelKey}
+                      className={`${styles.dayBlock} ${windows.length > 0 ? styles.dayBlockOpen : ""}`}
+                    >
                       <div className={styles.dayHead}>
                         <span className={styles.dayLabel}>{label}</span>
                         {windows.length === 0 && (
@@ -275,7 +278,7 @@ export function ResourceScheduleDrawer({ resource, isOpen, onClose }: Props) {
                           className={styles.addWindowBtn}
                           onClick={() => addWindow(day)}
                         >
-                          <Plus size={11} /> {t("common.add")}
+                          <Plus size={14} strokeWidth={1.75} /> {t("common.add")}
                         </button>
                       </div>
                       {windows.length > 0 && (
@@ -291,7 +294,9 @@ export function ResourceScheduleDrawer({ resource, isOpen, onClose }: Props) {
                                 }
                                 aria-label={t("procurement.resScheduleDrawer.windowStartAria", { day: label, n: i + 1 })}
                               />
-                              <span className={styles.windowArrow}>→</span>
+                              <span className={styles.windowArrow} aria-hidden>
+                                <ArrowRight size={14} strokeWidth={1.75} />
+                              </span>
                               <input
                                 type="time"
                                 className={styles.timeInput}
@@ -308,7 +313,7 @@ export function ResourceScheduleDrawer({ resource, isOpen, onClose }: Props) {
                                 aria-label={t("procurement.resScheduleDrawer.removeWindowAria", { n: i + 1 })}
                                 title={t("procurement.resScheduleDrawer.removeWindowTitle")}
                               >
-                                <Trash2 size={12} />
+                                <Trash2 size={16} strokeWidth={1.75} />
                               </button>
                             </div>
                           ))}
@@ -335,7 +340,7 @@ export function ResourceScheduleDrawer({ resource, isOpen, onClose }: Props) {
             <div className={styles.footerRight}>
               <button
                 type="button"
-                className={styles.cancelBtn}
+                className="btn-new btn-new--secondary"
                 onClick={onClose}
                 disabled={saving}
               >
@@ -343,7 +348,7 @@ export function ResourceScheduleDrawer({ resource, isOpen, onClose }: Props) {
               </button>
               <button
                 type="button"
-                className={styles.saveBtn}
+                className="btn-new btn-new--primary"
                 onClick={() => void handleSave()}
                 disabled={saving || loading || alwaysOpen}
               >

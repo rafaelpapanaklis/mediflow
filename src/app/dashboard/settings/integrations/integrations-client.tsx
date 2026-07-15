@@ -130,7 +130,7 @@ export function IntegrationsClient({
     <div className={styles.page}>
       <header className={styles.header}>
         <Link href="/dashboard/settings" className={styles.backLink}>
-          <ArrowLeft size={14} aria-hidden /> {t("settings.integrations.backToSettings")}
+          <ArrowLeft size={14} strokeWidth={1.75} aria-hidden /> {t("settings.integrations.backToSettings")}
         </Link>
         <h1 className={styles.title}>{t("settings.integrations.title")}</h1>
         <p className={styles.subtitle}>
@@ -143,7 +143,7 @@ export function IntegrationsClient({
         <section className={styles.card}>
           <div className={styles.cardHeader}>
             <div className={styles.cardIcon} data-tone="green">
-              <MessageCircle size={18} aria-hidden />
+              <MessageCircle size={18} strokeWidth={1.75} aria-hidden />
             </div>
             <div className={styles.cardHeaderInfo}>
               <h2 className={styles.cardTitle}>WhatsApp Business</h2>
@@ -176,7 +176,7 @@ export function IntegrationsClient({
                   onClick={() => setShowToken((v) => !v)}
                   aria-label={showToken ? t("settings.integrations.hideToken") : t("settings.integrations.showToken")}
                 >
-                  {showToken ? <EyeOff size={13} aria-hidden /> : <Eye size={13} aria-hidden />}
+                  {showToken ? <EyeOff size={13} strokeWidth={1.75} aria-hidden /> : <Eye size={13} strokeWidth={1.75} aria-hidden />}
                 </button>
               }
             />
@@ -202,7 +202,7 @@ export function IntegrationsClient({
               onClick={saveTwilio}
               disabled={savingTwilio}
             >
-              <Save size={12} aria-hidden />
+              <Save size={12} strokeWidth={1.75} aria-hidden />
               {savingTwilio ? t("common.saving") : t("settings.integrations.saveCredentials")}
             </button>
           </footer>
@@ -212,7 +212,7 @@ export function IntegrationsClient({
         <section className={styles.card}>
           <div className={styles.cardHeader}>
             <div className={styles.cardIcon} data-tone="blue">
-              <Mail size={18} aria-hidden />
+              <Mail size={18} strokeWidth={1.75} aria-hidden />
             </div>
             <div className={styles.cardHeaderInfo}>
               <h2 className={styles.cardTitle}>{t("settings.integrations.emailTitle")}</h2>
@@ -241,11 +241,11 @@ export function IntegrationsClient({
               <span className={styles.envCheckLabel}>POSTMARK_INBOUND_SECRET</span>
               {serverStatus.postmarkInbound ? (
                 <span className={styles.envCheckOk}>
-                  <CheckCircle2 size={11} aria-hidden /> {t("settings.integrations.configured")}
+                  <CheckCircle2 size={11} strokeWidth={1.75} aria-hidden /> {t("settings.integrations.configured")}
                 </span>
               ) : (
                 <span className={styles.envCheckOff}>
-                  <XCircle size={11} aria-hidden /> {t("settings.integrations.notConfigured")}
+                  <XCircle size={11} strokeWidth={1.75} aria-hidden /> {t("settings.integrations.notConfigured")}
                 </span>
               )}
             </div>
@@ -258,7 +258,7 @@ export function IntegrationsClient({
               onClick={saveEmail}
               disabled={savingEmail}
             >
-              <Save size={12} aria-hidden />
+              <Save size={12} strokeWidth={1.75} aria-hidden />
               {savingEmail ? t("common.saving") : t("settings.integrations.saveAddress")}
             </button>
           </footer>
@@ -268,7 +268,7 @@ export function IntegrationsClient({
         <section className={styles.card}>
           <div className={styles.cardHeader}>
             <div className={styles.cardIcon} data-tone="purple">
-              <Sparkles size={18} aria-hidden />
+              <Sparkles size={18} strokeWidth={1.75} aria-hidden />
             </div>
             <div className={styles.cardHeaderInfo}>
               <h2 className={styles.cardTitle}>{t("settings.integrations.aiTitle")}</h2>
@@ -284,11 +284,11 @@ export function IntegrationsClient({
               <span className={styles.envCheckLabel}>ANTHROPIC_API_KEY</span>
               {serverStatus.anthropic ? (
                 <span className={styles.envCheckOk}>
-                  <CheckCircle2 size={11} aria-hidden /> {t("settings.integrations.configuredOnServer")}
+                  <CheckCircle2 size={11} strokeWidth={1.75} aria-hidden /> {t("settings.integrations.configuredOnServer")}
                 </span>
               ) : (
                 <span className={styles.envCheckOff}>
-                  <XCircle size={11} aria-hidden /> {t("settings.integrations.missingConfigureVercel")}
+                  <XCircle size={11} strokeWidth={1.75} aria-hidden /> {t("settings.integrations.missingConfigureVercel")}
                 </span>
               )}
             </div>
@@ -303,7 +303,7 @@ export function IntegrationsClient({
         <section className={styles.card}>
           <div className={styles.cardHeader}>
             <div className={styles.cardIcon} data-tone="orange">
-              <Mic size={18} aria-hidden />
+              <Mic size={18} strokeWidth={1.75} aria-hidden />
             </div>
             <div className={styles.cardHeaderInfo}>
               <h2 className={styles.cardTitle}>{t("settings.integrations.sttTitle")}</h2>
@@ -319,11 +319,11 @@ export function IntegrationsClient({
               <span className={styles.envCheckLabel}>OPENAI_API_KEY</span>
               {serverStatus.openai ? (
                 <span className={styles.envCheckOk}>
-                  <CheckCircle2 size={11} aria-hidden /> {t("settings.integrations.configuredOnServer")}
+                  <CheckCircle2 size={11} strokeWidth={1.75} aria-hidden /> {t("settings.integrations.configuredOnServer")}
                 </span>
               ) : (
                 <span className={styles.envCheckOff}>
-                  <XCircle size={11} aria-hidden /> {t("settings.integrations.missingConfigureVercel")}
+                  <XCircle size={11} strokeWidth={1.75} aria-hidden /> {t("settings.integrations.missingConfigureVercel")}
                 </span>
               )}
             </div>
@@ -342,20 +342,20 @@ function StatusBadge({ status }: { status: Status }) {
   if (status === "ok") {
     return (
       <span className={`${styles.statusBadge} ${styles.statusOk}`}>
-        <CheckCircle2 size={11} aria-hidden /> {t("settings.integrations.statusActive")}
+        <CheckCircle2 size={11} strokeWidth={1.75} aria-hidden /> {t("settings.integrations.statusActive")}
       </span>
     );
   }
   if (status === "warn") {
     return (
       <span className={`${styles.statusBadge} ${styles.statusWarn}`}>
-        <AlertTriangle size={11} aria-hidden /> {t("settings.integrations.statusIncomplete")}
+        <AlertTriangle size={11} strokeWidth={1.75} aria-hidden /> {t("settings.integrations.statusIncomplete")}
       </span>
     );
   }
   return (
     <span className={`${styles.statusBadge} ${styles.statusOff}`}>
-      <XCircle size={11} aria-hidden /> {t("settings.integrations.statusDisabled")}
+      <XCircle size={11} strokeWidth={1.75} aria-hidden /> {t("settings.integrations.statusDisabled")}
     </span>
   );
 }

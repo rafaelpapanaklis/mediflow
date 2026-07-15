@@ -1,5 +1,6 @@
 "use client";
 
+import { Target, ThumbsUp, Zap, AlertTriangle } from "lucide-react";
 import { useT } from "@/i18n/i18n-provider";
 
 /**
@@ -44,7 +45,8 @@ export function EfficiencyGauge({ score, monthAverage, label }: Props) {
       style={{
         background: "var(--bg-elev)",
         border: "1px solid var(--border-soft)",
-        borderRadius: 14,
+        borderRadius: "var(--radius-lg)",
+        boxShadow: "var(--shadow-1)",
         padding: 20,
         display: "flex",
         flexDirection: "column",
@@ -125,7 +127,7 @@ export function EfficiencyGauge({ score, monthAverage, label }: Props) {
           fontWeight: 500,
         }}
       >
-        <span style={{ color: tone.color, fontSize: 16 }} aria-hidden>{tone.emoji}</span>
+        <tone.Icon size={16} strokeWidth={1.75} aria-hidden style={{ color: tone.color, flexShrink: 0 }} />
         <span>{motivationalMessage(t, safe, delta)}</span>
       </div>
     </div>
@@ -133,10 +135,12 @@ export function EfficiencyGauge({ score, monthAverage, label }: Props) {
 }
 
 function scoreTone(score: number) {
-  if (score >= 85) return { color: "#10b981", emoji: "🎯" };
-  if (score >= 70) return { color: "#84cc16", emoji: "💪" };
-  if (score >= 50) return { color: "#d97706", emoji: "⚡" };
-  return { color: "#dc2626", emoji: "🔴" };
+  // color alimenta el ARCO del gauge (no tocar valores); Icon es solo
+  // decorativo para la fila de mensaje (lucide en lugar de emoji).
+  if (score >= 85) return { color: "#10b981", Icon: Target };
+  if (score >= 70) return { color: "#84cc16", Icon: ThumbsUp };
+  if (score >= 50) return { color: "#d97706", Icon: Zap };
+  return { color: "#dc2626", Icon: AlertTriangle };
 }
 
 function motivationalMessage(

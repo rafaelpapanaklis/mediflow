@@ -100,38 +100,18 @@ export function CostsClient() {
             type="month"
             value={month}
             onChange={(e) => setMonth(e.target.value)}
-            style={{
-              background: "var(--bg-elev)",
-              color: "var(--text-1)",
-              border: "1px solid var(--border-soft)",
-              borderRadius: 8,
-              padding: "6px 10px",
-              fontSize: 12,
-              fontFamily: "inherit",
-            }}
+            className="input-new"
+            style={{ width: "auto" }}
           />
           {data && data.resources.length > 0 && (
             <button
               type="button"
               onClick={requestAiInsight}
               disabled={aiLoading}
-              style={{
-                padding: "7px 12px",
-                fontSize: 12,
-                fontWeight: 600,
-                background: "linear-gradient(135deg, #7c3aed, #5b21b6)",
-                color: "#fff",
-                border: "1px solid var(--brand)",
-                borderRadius: 8,
-                cursor: aiLoading ? "wait" : "pointer",
-                fontFamily: "inherit",
-                display: "inline-flex",
-                alignItems: "center",
-                gap: 6,
-                boxShadow: "0 4px 14px -4px rgba(124, 58, 237, 0.45)",
-              }}
+              className="btn-new btn-new--primary btn-new--sm"
+              style={{ cursor: aiLoading ? "wait" : undefined }}
             >
-              <Sparkles size={13} aria-hidden />
+              <Sparkles size={16} strokeWidth={1.75} aria-hidden />
               {aiLoading ? t("analytics.costs.analyzing") : t("analytics.costs.analyzeWithAi")}
             </button>
           )}
@@ -151,7 +131,7 @@ export function CostsClient() {
                 padding: 14,
                 background: "var(--brand-softer)",
                 border: "1px solid var(--brand-soft)",
-                borderRadius: 10,
+                borderRadius: "var(--radius)",
                 fontSize: 13,
                 color: "var(--text-1)",
                 lineHeight: 1.6,
@@ -161,33 +141,29 @@ export function CostsClient() {
                 alignItems: "flex-start",
               }}
             >
-              <Sparkles size={16} style={{ color: "var(--brand)", flexShrink: 0, marginTop: 2 }} aria-hidden />
+              <Sparkles size={16} strokeWidth={1.75} style={{ color: "var(--brand)", flexShrink: 0, marginTop: 2 }} aria-hidden />
               <div>{aiInsight}</div>
             </div>
           )}
 
           {/* Totales */}
           <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 14, marginBottom: 14 }}>
-            <TotalCard label={t("analytics.costs.revenue")} value={fmtMXN(data.totals.revenue)} tone="brand" icon={<DollarSign size={14} aria-hidden />} />
-            <TotalCard label={t("analytics.costs.costs")} value={fmtMXN(data.totals.cost)} tone="warning" icon={<TrendingDown size={14} aria-hidden />} />
+            <TotalCard label={t("analytics.costs.revenue")} value={fmtMXN(data.totals.revenue)} tone="brand" icon={<DollarSign size={16} strokeWidth={1.75} aria-hidden />} />
+            <TotalCard label={t("analytics.costs.costs")} value={fmtMXN(data.totals.cost)} tone="warning" icon={<TrendingDown size={16} strokeWidth={1.75} aria-hidden />} />
             <TotalCard
               label={t("analytics.costs.margin")}
               value={fmtMXN(data.totals.margin)}
               tone={data.totals.margin >= 0 ? "success" : "danger"}
-              icon={<TrendingUp size={14} aria-hidden />}
+              icon={<TrendingUp size={16} strokeWidth={1.75} aria-hidden />}
             />
           </div>
 
           {/* Tabla */}
-          <div style={{
-            background: "var(--bg-elev)",
-            border: "1px solid var(--border-soft)",
-            borderRadius: 14,
-            overflow: "hidden",
-          }}>
-            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+          <div className="card">
+            <div style={{ overflowX: "auto" }}>
+            <table className="table-new">
               <thead>
-                <tr style={{ background: "var(--bg-elev-2)" }}>
+                <tr>
                   <Th>{t("analytics.costs.colChair")}</Th>
                   <Th align="right">{t("analytics.costs.colRent")}</Th>
                   <Th align="right">{t("analytics.costs.colOps")}</Th>
@@ -204,7 +180,7 @@ export function CostsClient() {
                     key={r.resourceId}
                     style={{
                       borderTop: "1px solid var(--border-soft)",
-                      background: r.margin < 0 ? "rgba(220, 38, 38, 0.04)" : undefined,
+                      background: r.margin < 0 ? "var(--danger-soft)" : undefined,
                     }}
                   >
                     <Td>
@@ -226,7 +202,7 @@ export function CostsClient() {
                     <Td
                       align="right"
                       mono
-                      color={r.margin >= 0 ? "#10b981" : "#dc2626"}
+                      color={r.margin >= 0 ? "var(--success-strong)" : "var(--danger)"}
                     >
                       <strong>{fmtMXN(r.margin)}</strong>
                     </Td>
@@ -235,8 +211,8 @@ export function CostsClient() {
                       mono
                       color={
                         r.marginPct == null ? "var(--text-4)" :
-                        r.marginPct >= 30 ? "#10b981" :
-                        r.marginPct >= 0 ? "#d97706" : "#dc2626"
+                        r.marginPct >= 30 ? "var(--success-strong)" :
+                        r.marginPct >= 0 ? "var(--warning-strong)" : "var(--danger)"
                       }
                     >
                       {r.marginPct != null ? `${r.marginPct}%` : "—"}
@@ -253,13 +229,14 @@ export function CostsClient() {
                           borderRadius: 7, color: "var(--text-3)", cursor: "pointer",
                         }}
                       >
-                        <Pencil size={12} aria-hidden />
+                        <Pencil size={12} strokeWidth={1.75} aria-hidden />
                       </button>
                     </Td>
                   </tr>
                 ))}
               </tbody>
             </table>
+            </div>
           </div>
           <div style={{ marginTop: 10, fontSize: 11, color: "var(--text-3)", lineHeight: 1.5 }}>
             {t("analytics.costs.footerNote")}
@@ -331,41 +308,22 @@ function EditCostModal({
       aria-modal="true"
       aria-labelledby="cost-modal-title"
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
-      style={{
-        position: "fixed",
-        inset: 0,
-        background: "rgba(5, 5, 10, 0.72)",
-        WebkitBackdropFilter: "blur(6px)",
-        backdropFilter: "blur(6px)",
-        display: "grid",
-        placeItems: "center",
-        zIndex: 100,
-        padding: 24,
-      }}
+      className="modal-overlay"
     >
-      <div
-        style={{
-          background: "var(--bg-elev)",
-          border: "1px solid var(--border-strong)",
-          borderRadius: 14,
-          width: "100%",
-          maxWidth: 460,
-          fontFamily: "var(--font-sans, system-ui, sans-serif)",
-        }}
-      >
-        <div style={{ padding: "16px 20px", borderBottom: "1px solid var(--border-soft)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <h3 id="cost-modal-title" style={{ fontSize: 15, fontWeight: 700, color: "var(--text-1)", margin: 0 }}>
+      <div className="modal" style={{ maxWidth: 460 }}>
+        <div className="modal__header">
+          <h3 id="cost-modal-title" className="modal__title" style={{ margin: 0 }}>
             {t("analytics.costs.modalTitle", { name: resource.name })}
           </h3>
           <button type="button" onClick={onClose} aria-label={t("common.close")} style={{
             width: 28, height: 28, display: "grid", placeItems: "center",
             background: "transparent", border: "1px solid var(--border-soft)",
-            borderRadius: 7, color: "var(--text-3)", cursor: "pointer",
+            borderRadius: "var(--radius-sm)", color: "var(--text-3)", cursor: "pointer",
           }}>
-            <X size={13} aria-hidden />
+            <X size={16} strokeWidth={1.75} aria-hidden />
           </button>
         </div>
-        <div style={{ padding: 20, display: "flex", flexDirection: "column", gap: 12 }}>
+        <div className="modal__body" style={{ display: "flex", flexDirection: "column", gap: 12 }}>
           <Field label={t("analytics.costs.fieldRent")}>
             <input type="number" min={0} step={0.01} value={rent} onChange={(e) => setRent(e.target.value)} className="input-new mono" placeholder="0.00" />
           </Field>
@@ -382,23 +340,12 @@ function EditCostModal({
             />
           </Field>
         </div>
-        <div style={{ padding: "14px 20px", borderTop: "1px solid var(--border-soft)", background: "var(--bg-elev-2)", display: "flex", justifyContent: "flex-end", gap: 8 }}>
-          <button type="button" onClick={onClose} style={{
-            padding: "8px 14px", fontSize: 13, fontWeight: 600,
-            background: "transparent", color: "var(--text-2)",
-            border: "1px solid var(--border-strong)", borderRadius: 8,
-            cursor: "pointer", fontFamily: "inherit",
-          }}>
+        <div style={{ padding: "14px 22px", borderTop: "1px solid var(--border-soft)", background: "var(--bg-elev-2)", display: "flex", justifyContent: "flex-end", gap: 8 }}>
+          <button type="button" onClick={onClose} className="btn-new btn-new--secondary btn-new--sm">
             {t("common.cancel")}
           </button>
-          <button type="button" onClick={save} disabled={saving} style={{
-            padding: "8px 16px", fontSize: 13, fontWeight: 700,
-            background: "var(--brand)", color: "#fff",
-            border: "1px solid var(--brand)", borderRadius: 8,
-            cursor: saving ? "wait" : "pointer", fontFamily: "inherit",
-            display: "inline-flex", alignItems: "center", gap: 6,
-          }}>
-            <Save size={13} aria-hidden />
+          <button type="button" onClick={save} disabled={saving} className="btn-new btn-new--primary btn-new--sm" style={{ cursor: saving ? "wait" : undefined }}>
+            <Save size={16} strokeWidth={1.75} aria-hidden />
             {saving ? t("analytics.costs.saving") : t("common.save")}
           </button>
         </div>
@@ -421,16 +368,17 @@ function Field({ label, hint, children }: { label: string; hint?: string; childr
 
 function TotalCard({ label, value, tone, icon }: { label: string; value: string; tone: "brand" | "success" | "warning" | "danger"; icon: React.ReactNode }) {
   const colors = {
-    brand:   { bg: "var(--brand-softer)",       border: "rgba(124, 58, 237, 0.20)", fg: "var(--brand)" },
-    success: { bg: "rgba(16, 185, 129, 0.10)",  border: "rgba(16, 185, 129, 0.25)", fg: "#059669" },
-    warning: { bg: "rgba(217, 119, 6, 0.10)",   border: "rgba(217, 119, 6, 0.25)",  fg: "#d97706" },
-    danger:  { bg: "rgba(220, 38, 38, 0.10)",   border: "rgba(220, 38, 38, 0.25)",  fg: "#dc2626" },
+    brand:   { bg: "var(--brand-soft)",   border: "var(--border-brand)", fg: "var(--brand)" },
+    success: { bg: "var(--success-soft)", border: "transparent",         fg: "var(--success-strong)" },
+    warning: { bg: "var(--warning-soft)", border: "transparent",         fg: "var(--warning-strong)" },
+    danger:  { bg: "var(--danger-soft)",  border: "transparent",         fg: "var(--danger)" },
   }[tone];
   return (
     <div style={{
       background: "var(--bg-elev)",
       border: "1px solid var(--border-soft)",
-      borderRadius: 14,
+      borderRadius: "var(--radius-lg)",
+      boxShadow: "var(--shadow-1)",
       padding: 16,
       display: "flex",
       flexDirection: "column",
@@ -493,7 +441,8 @@ function Box({ children }: { children: React.ReactNode }) {
     <div style={{
       background: "var(--bg-elev)",
       border: "1px solid var(--border-soft)",
-      borderRadius: 14,
+      borderRadius: "var(--radius-lg)",
+      boxShadow: "var(--shadow-1)",
       padding: 40,
       textAlign: "center",
       color: "var(--text-3)",

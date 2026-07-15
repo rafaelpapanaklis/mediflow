@@ -38,11 +38,13 @@ const STATUS_LABEL_KEY: Record<ArcoRow["status"], string> = {
   REJECTED: "settings.arco.statusRejected",
 };
 
-const STATUS_COLOR: Record<ArcoRow["status"], string> = {
-  PENDING:     "#d97706",
-  IN_PROGRESS: "#2563eb",
-  RESOLVED:    "#059669",
-  REJECTED:    "#b91c1c",
+// Tono semántico del sistema (badge-new): pendiente=warning, en curso=info,
+// resuelta=success, rechazada=danger. Migrado de hex crudos a clases del sistema.
+const STATUS_TONE: Record<ArcoRow["status"], string> = {
+  PENDING:     "warning",
+  IN_PROGRESS: "info",
+  RESOLVED:    "success",
+  REJECTED:    "danger",
 };
 
 export function ArcoRequestsClient({ clinicRequests, anonymousRequests, isSuperAdmin }: Props) {
@@ -99,56 +101,54 @@ function Table({ rows, onEdit }: { rows: ArcoRow[]; onEdit: (r: ArcoRow) => void
     );
   }
   return (
-    <div style={{ background: "var(--bg-elev, #fff)", border: "1px solid var(--border-soft, #e2e8f0)", borderRadius: 10, overflow: "hidden" }}>
-      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
-        <thead>
-          <tr style={{ background: "var(--bg-elev-2, #f1f5f9)" }}>
-            <Th>{t("common.date")}</Th>
-            <Th>{t("settings.arco.colType")}</Th>
-            <Th>{t("settings.arco.colEmail")}</Th>
-            <Th>{t("settings.arco.colReason")}</Th>
-            <Th>{t("settings.arco.colStatus")}</Th>
-            <Th />
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((r) => (
-            <tr key={r.id} style={{ borderTop: "1px solid var(--border-soft, #f1f5f9)" }}>
-              <Td>{new Date(r.createdAt).toLocaleDateString("es-MX", { day: "2-digit", month: "short", year: "numeric" })}</Td>
-              <Td><strong>{t(TYPE_LABEL_KEY[r.type])}</strong></Td>
-              <Td><code style={{ fontFamily: "monospace", fontSize: 12 }}>{r.email}</code></Td>
-              <Td>
-                <div style={{ maxWidth: 360, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                  {r.reason}
-                </div>
-              </Td>
-              <Td>
-                <span style={{ padding: "2px 8px", fontSize: 11, fontWeight: 700, borderRadius: 99, color: "#fff", background: STATUS_COLOR[r.status] }}>
-                  {t(STATUS_LABEL_KEY[r.status])}
-                </span>
-              </Td>
-              <Td>
-                <button
-                  type="button"
-                  onClick={() => onEdit(r)}
-                  style={{ padding: "5px 10px", fontSize: 12, background: "var(--bg-elev-2, #f1f5f9)", border: "1px solid var(--border-soft, #cbd5e1)", borderRadius: 8, cursor: "pointer", fontFamily: "inherit" }}
-                >
-                  {t("settings.arco.manage")}
-                </button>
-              </Td>
+    <div className="card" style={{ overflow: "hidden" }}>
+      <div style={{ overflowX: "auto" }}>
+        <table className="table-new">
+          <thead>
+            <tr>
+              <th>{t("common.date")}</th>
+              <th>{t("settings.arco.colType")}</th>
+              <th>{t("settings.arco.colEmail")}</th>
+              <th>{t("settings.arco.colReason")}</th>
+              <th>{t("settings.arco.colStatus")}</th>
+              <th />
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {rows.map((r) => (
+              <tr key={r.id}>
+                <td style={{ fontVariantNumeric: "tabular-nums", color: "var(--text-3)", whiteSpace: "nowrap" }}>
+                  {new Date(r.createdAt).toLocaleDateString("es-MX", { day: "2-digit", month: "short", year: "numeric" })}
+                </td>
+                <td><strong style={{ fontWeight: 600 }}>{t(TYPE_LABEL_KEY[r.type])}</strong></td>
+                <td><code className="mono" style={{ fontSize: 12, color: "var(--text-2)" }}>{r.email}</code></td>
+                <td>
+                  <div style={{ maxWidth: 360, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", color: "var(--text-2)" }}>
+                    {r.reason}
+                  </div>
+                </td>
+                <td>
+                  <span className={`badge-new badge-new--${STATUS_TONE[r.status]}`}>
+                    <span className="badge-new__dot" />
+                    {t(STATUS_LABEL_KEY[r.status])}
+                  </span>
+                </td>
+                <td>
+                  <button
+                    type="button"
+                    onClick={() => onEdit(r)}
+                    className="btn-new btn-new--secondary btn-new--sm"
+                  >
+                    {t("settings.arco.manage")}
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
-}
-
-function Th({ children }: { children?: React.ReactNode }) {
-  return <th style={{ padding: "10px 12px", textAlign: "left", fontSize: 11, fontWeight: 700, color: "var(--text-3, #64748b)", textTransform: "uppercase", letterSpacing: "0.04em" }}>{children}</th>;
-}
-function Td({ children }: { children?: React.ReactNode }) {
-  return <td style={{ padding: "10px 12px" }}>{children}</td>;
 }
 
 function EditModal({ request, onClose, onSaved }: { request: ArcoRow; onClose: () => void; onSaved: () => void }) {
@@ -176,34 +176,30 @@ function EditModal({ request, onClose, onSaved }: { request: ArcoRow; onClose: (
 
   return (
     <div
+      className="modal-overlay"
       role="dialog"
       aria-modal="true"
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
-      style={{
-        position: "fixed", inset: 0,
-        background: "rgba(15, 10, 30, 0.55)", backdropFilter: "blur(4px)",
-        display: "grid", placeItems: "center", zIndex: 100, padding: 24,
-      }}
     >
-      <div style={{ background: "var(--bg-elev, #fff)", border: "1px solid var(--border-strong, #94a3b8)", borderRadius: 14, width: "100%", maxWidth: 540, maxHeight: "90vh", display: "flex", flexDirection: "column", overflow: "hidden" }}>
-        <div style={{ padding: "16px 20px", borderBottom: "1px solid var(--border-soft, #e2e8f0)", flexShrink: 0 }}>
-          <h3 style={{ fontSize: 15, fontWeight: 700, margin: 0 }}>
+      <div className="modal">
+        <div className="modal__header">
+          <h3 className="modal__title">
             {t("settings.arco.modalTitle", { type: t(TYPE_LABEL_KEY[request.type]) })} · {request.email}
           </h3>
         </div>
-        <div style={{ padding: 20, display: "flex", flexDirection: "column", gap: 12, flex: 1, overflowY: "auto", minHeight: 0 }}>
-          <div>
+        <div className="modal__body" style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+          <div className="field-new">
             <Label>{t("settings.arco.requesterReason")}</Label>
-            <p style={{ marginTop: 4, padding: 10, background: "var(--bg-elev-2, #f1f5f9)", borderRadius: 8, fontSize: 13, whiteSpace: "pre-wrap" }}>
+            <p style={{ padding: 10, background: "var(--bg-elev-2)", borderRadius: "var(--radius-sm)", fontSize: 13, whiteSpace: "pre-wrap", color: "var(--text-2)" }}>
               {request.reason}
             </p>
           </div>
-          <div>
+          <div className="field-new">
             <Label>{t("settings.arco.colStatus")}</Label>
             <select
+              className="input-new"
               value={status}
               onChange={(e) => setStatus(e.target.value as ArcoRow["status"])}
-              style={{ width: "100%", padding: "8px 10px", border: "1px solid var(--border-soft, #cbd5e1)", borderRadius: 8, fontFamily: "inherit", fontSize: 13, marginTop: 4 }}
             >
               <option value="PENDING">{t("settings.arco.statusPending")}</option>
               <option value="IN_PROGRESS">{t("settings.arco.statusInProgress")}</option>
@@ -211,22 +207,23 @@ function EditModal({ request, onClose, onSaved }: { request: ArcoRow; onClose: (
               <option value="REJECTED">{t("settings.arco.statusRejected")}</option>
             </select>
           </div>
-          <div>
+          <div className="field-new">
             <Label>{t("settings.arco.internalNotes")}</Label>
             <textarea
+              className="input-new"
               value={notes}
               onChange={(e) => setNotes(e.target.value.slice(0, 4000))}
               rows={5}
               placeholder={t("settings.arco.notesPlaceholder")}
-              style={{ width: "100%", padding: "10px 12px", border: "1px solid var(--border-soft, #cbd5e1)", borderRadius: 8, fontFamily: "inherit", fontSize: 13, marginTop: 4, resize: "vertical" }}
+              style={{ height: "auto", resize: "vertical" }}
             />
           </div>
         </div>
-        <div style={{ padding: "14px 20px", borderTop: "1px solid var(--border-soft, #e2e8f0)", display: "flex", justifyContent: "flex-end", gap: 8, flexShrink: 0 }}>
-          <button type="button" onClick={onClose} style={{ padding: "8px 14px", fontSize: 13, fontWeight: 600, background: "transparent", color: "var(--text-2, #475569)", border: "1px solid var(--border-strong, #94a3b8)", borderRadius: 8, cursor: "pointer", fontFamily: "inherit" }}>
+        <div className="modal__footer">
+          <button type="button" onClick={onClose} className="btn-new btn-new--secondary">
             {t("common.cancel")}
           </button>
-          <button type="button" onClick={save} disabled={saving} style={{ padding: "8px 16px", fontSize: 13, fontWeight: 700, background: "var(--brand, #2563eb)", color: "#fff", border: "1px solid var(--brand, #2563eb)", borderRadius: 8, cursor: saving ? "wait" : "pointer", fontFamily: "inherit" }}>
+          <button type="button" onClick={save} disabled={saving} className="btn-new btn-new--primary">
             {saving ? t("common.saving") : t("common.save")}
           </button>
         </div>
@@ -236,5 +233,5 @@ function EditModal({ request, onClose, onSaved }: { request: ArcoRow; onClose: (
 }
 
 function Label({ children }: { children: React.ReactNode }) {
-  return <span style={{ fontSize: 11, fontWeight: 700, color: "var(--text-3, #64748b)", textTransform: "uppercase", letterSpacing: "0.04em" }}>{children}</span>;
+  return <span className="field-new__label" style={{ textTransform: "uppercase", letterSpacing: "0.04em" }}>{children}</span>;
 }

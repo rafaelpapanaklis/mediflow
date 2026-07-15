@@ -1,13 +1,12 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Building, User, Clock, Shield, Receipt, Bot, CalendarCheck, ExternalLink, Zap, CreditCard, Bell } from "lucide-react";
+import { Building, User, Clock, Shield, Receipt, Bot, CalendarCheck, ExternalLink, Zap, CreditCard, Bell, MessageCircle } from "lucide-react";
 import { SubscriptionTab } from "@/components/dashboard/subscription-tab";
 import { RemindersSection } from "./reminders-section";
 import { TwoFactorCard } from "@/components/dashboard/security/two-factor-card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { createClient } from "@/lib/supabase/client";
 import { DIRECTORY_CATEGORIES } from "@/lib/directory/types";
 import { useT } from "@/i18n/i18n-provider";
@@ -374,21 +373,22 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
       </div>
 
       {/* Layout: sidebar vertical + panel */}
-      <div style={{ display: "flex", gap: 24, alignItems: "flex-start" }}>
-        <div style={{ width: 220, display: "flex", flexDirection: "column", gap: 2, flexShrink: 0, position: "sticky", top: 24 }}>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 24, alignItems: "flex-start" }}>
+        <div style={{ width: 220, maxWidth: "100%", display: "flex", flexDirection: "column", gap: 2, flexShrink: 0, position: "sticky", top: 24 }}>
           {TABS.map(item => (
             <button
               key={item.id}
               type="button"
               onClick={() => setTab(item.id)}
               className={`vnav-item ${tab === item.id ? "vnav-item--active" : ""}`}
+              style={{ minHeight: 40 }}
             >
-              <item.icon size={14} />
+              <item.icon size={16} strokeWidth={1.75} />
               <span>{item.label}</span>
             </button>
           ))}
         </div>
-        <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ flex: "1 1 480px", minWidth: 0 }}>
 
       {/* ── SUSCRIPCIÓN ── */}
       {tab === "subscription" && isAdminUser && <SubscriptionTab clinic={clinic} />}
@@ -396,23 +396,26 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
       {/* ── CLÍNICA ── */}
       {tab === "clinica" && (
         <>
-        <div className="bg-card border border-border rounded-2xl p-6 shadow-card max-w-lg space-y-4">
-          <h2 className="text-base font-bold">{t("settings.client.clinicDataTitle")}</h2>
-          <div className="space-y-1.5">
-            <Label>{t("settings.client.clinicNameLabel")}</Label>
+        <div className="card max-w-lg">
+          <div className="card__header">
+            <div className="card__title">{t("settings.client.clinicDataTitle")}</div>
+          </div>
+          <div className="card__body space-y-4">
+          <div className="field-new">
+            <label className="field-new__label">{t("settings.client.clinicNameLabel")}</label>
             <Input value={clinic.name ?? ""} onChange={e => setClinic((c: any) => ({ ...c, name: e.target.value }))} />
           </div>
-          <div className="space-y-1.5">
-            <Label>{t("settings.client.categoryLabel")}</Label>
-            <select className="flex h-11 w-full rounded-xl border border-border bg-card px-4 text-base focus:outline-none"
+          <div className="field-new">
+            <label className="field-new__label">{t("settings.client.categoryLabel")}</label>
+            <select className="flex h-10 w-full rounded-[var(--radius)] border border-border bg-card px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20 focus:border-brand-600 transition-colors"
               value={clinic.category ?? "OTHER"} onChange={e => setClinic((c: any) => ({ ...c, category: e.target.value }))}>
               {CATEGORIES.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
             </select>
           </div>
-          <div className="space-y-1.5">
-            <Label>{t("settings.client.timezoneLabel")}</Label>
+          <div className="field-new">
+            <label className="field-new__label">{t("settings.client.timezoneLabel")}</label>
             <select
-              className="flex h-11 w-full rounded-xl border border-border bg-card px-4 text-base focus:outline-none"
+              className="flex h-10 w-full rounded-[var(--radius)] border border-border bg-card px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20 focus:border-brand-600 transition-colors"
               value={clinic.timezone ?? "America/Mexico_City"}
               onChange={e => setClinic((c: any) => ({ ...c, timezone: e.target.value }))}
             >
@@ -422,10 +425,10 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
               {t("settings.client.timezoneHelp")}
             </div>
           </div>
-          <div className="space-y-1.5">
-            <Label>Idioma del panel · Panel language</Label>
+          <div className="field-new">
+            <label className="field-new__label">Idioma del panel · Panel language</label>
             <select
-              className="flex h-11 w-full rounded-xl border border-border bg-card px-4 text-base focus:outline-none"
+              className="flex h-10 w-full rounded-[var(--radius)] border border-border bg-card px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20 focus:border-brand-600 transition-colors"
               value={clinic.locale ?? "es"}
               onChange={e => saveLocale(e.target.value)}
             >
@@ -437,11 +440,11 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
             </div>
           </div>
           <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1.5"><Label>{t("settings.client.cityLabel")}</Label><Input value={clinic.city ?? ""} onChange={e => setClinic((c: any) => ({ ...c, city: e.target.value }))} /></div>
-            <div className="space-y-1.5"><Label>{t("settings.client.addressLabel")}</Label><Input value={clinic.address ?? ""} onChange={e => setClinic((c: any) => ({ ...c, address: e.target.value }))} /></div>
+            <div className="field-new"><label className="field-new__label">{t("settings.client.cityLabel")}</label><Input value={clinic.city ?? ""} onChange={e => setClinic((c: any) => ({ ...c, city: e.target.value }))} /></div>
+            <div className="field-new"><label className="field-new__label">{t("settings.client.addressLabel")}</label><Input value={clinic.address ?? ""} onChange={e => setClinic((c: any) => ({ ...c, address: e.target.value }))} /></div>
           </div>
-          <div className="space-y-1.5">
-            <Label>{t("settings.client.mapsLinkLabel")}</Label>
+          <div className="field-new">
+            <label className="field-new__label">{t("settings.client.mapsLinkLabel")}</label>
             <Input
               placeholder="https://maps.app.goo.gl/…"
               value={clinic.mapsUrl ?? ""}
@@ -451,7 +454,7 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
               {t("settings.client.mapsLinkHelp")}
             </div>
           </div>
-          <div className="space-y-1.5">
+          <div className="field-new">
             <ClinicLocationPicker
               address={clinic.address}
               city={clinic.city}
@@ -463,11 +466,11 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
               }
             />
           </div>
-          <div className="space-y-1.5"><Label>{t("settings.client.phoneLabel")}</Label><Input value={clinic.phone ?? ""} onChange={e => setClinic((c: any) => ({ ...c, phone: e.target.value }))} /></div>
-          <div className="space-y-1.5"><Label>{t("settings.client.contactEmailLabel")}</Label><Input type="email" value={clinic.email ?? ""} onChange={e => setClinic((c: any) => ({ ...c, email: e.target.value }))} /></div>
+          <div className="field-new"><label className="field-new__label">{t("settings.client.phoneLabel")}</label><Input value={clinic.phone ?? ""} onChange={e => setClinic((c: any) => ({ ...c, phone: e.target.value }))} /></div>
+          <div className="field-new"><label className="field-new__label">{t("settings.client.contactEmailLabel")}</label><Input type="email" value={clinic.email ?? ""} onChange={e => setClinic((c: any) => ({ ...c, email: e.target.value }))} /></div>
           {/* NOM-024 — CLUES Sector Salud */}
-          <div className="space-y-1.5">
-            <Label>{t("settings.client.cluesLabel")}</Label>
+          <div className="field-new">
+            <label className="field-new__label">{t("settings.client.cluesLabel")}</label>
             <Input
               maxLength={11}
               placeholder={t("settings.client.cluesPlaceholder")}
@@ -478,10 +481,10 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
               {t("settings.client.cluesHelp")}
             </div>
           </div>
-          <div className="space-y-1.5">
-            <Label>{t("settings.client.descriptionLabel")}</Label>
+          <div className="field-new">
+            <label className="field-new__label">{t("settings.client.descriptionLabel")}</label>
             <textarea
-              className="flex w-full rounded-xl border border-border bg-card px-4 py-3 text-sm focus:outline-none resize-none"
+              className="flex w-full rounded-[var(--radius)] border border-border bg-card px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20 focus:border-brand-600 transition-colors resize-none"
               rows={2}
               placeholder={t("settings.client.descriptionPlaceholder")}
               value={clinic.description ?? ""}
@@ -489,12 +492,12 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
             />
           </div>
           <div>
-            <div className={`flex items-center justify-between p-4 rounded-2xl border-2 transition-colors ${isPublic ? "border-blue-500 bg-blue-600/10" : "border-border bg-transparent"}`}>
+            <div className="flex items-center justify-between p-4" style={{ borderRadius: "var(--radius)", border: `1px solid ${isPublic ? "var(--consult-active-border)" : "var(--border-soft)"}`, background: isPublic ? "var(--brand-softer)" : "transparent", transition: "background var(--dur-1) var(--ease), border-color var(--dur-1) var(--ease)" }}>
               <div>
-                <div className={`text-sm font-bold ${isPublic ? "text-blue-700 dark:text-blue-300" : "text-foreground"}`}>
+                <div className="text-sm font-semibold" style={{ color: "var(--text-1)" }}>
                   {isPublic ? t("settings.client.publicClinicLabel") : t("settings.client.privateClinicLabel")}
                 </div>
-                <div className={`text-xs mt-0.5 ${isPublic ? "text-blue-600 dark:text-blue-400" : "text-muted-foreground"}`}>
+                <div className="text-xs mt-0.5" style={{ color: "var(--text-3)" }}>
                   {isPublic
                     ? t("settings.client.publicClinicDesc")
                     : t("settings.client.privateClinicDesc")}
@@ -512,13 +515,13 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
                   }
                   setIsPublic((p: boolean) => !p);
                 }}
-                className={`relative flex-shrink-0 w-11 h-6 rounded-full transition-colors ml-4 ${isPublic ? "bg-blue-600" : "bg-muted-foreground/30"}`}>
-                <div className="absolute top-0.5 w-5 h-5 rounded-full bg-card shadow-sm transition-all"
-                  style={{ left: isPublic ? "22px" : "2px" }} />
+                aria-label={isPublic ? t("settings.client.publicClinicLabel") : t("settings.client.privateClinicLabel")}
+                className={`switch ml-4 ${isPublic ? "switch--on" : ""}`}>
+                <span className="switch__thumb" />
               </button>
             </div>
             {!(Boolean((clinic.city ?? "").trim()) && Boolean(clinic.category) && clinic.category !== "OTHER") && (
-              <p className={`text-xs mt-2 ${isPublic ? "text-amber-600 dark:text-amber-400" : "text-muted-foreground"}`}>
+              <p className="text-xs mt-2" style={{ color: isPublic ? "var(--warning-strong)" : "var(--text-3)" }}>
                 {isPublic ? "Completa " : "Agrega "}
                 {!((clinic.city ?? "").trim()) && (!clinic.category || clinic.category === "OTHER")
                   ? "tu ciudad y categoría"
@@ -532,10 +535,11 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
             )}
           </div>
           <div className="pt-2 flex items-center justify-between">
-            <span className={`text-sm font-bold px-3 py-1 rounded-full border ${clinic.plan==="CLINIC"?"bg-violet-50 text-violet-700 border-violet-200":clinic.plan==="PRO"?"bg-brand-600/15 text-brand-700 border-brand-200":"bg-muted text-muted-foreground border-border"}`}>
+            <span className={`badge-new ${clinic.plan === "CLINIC" || clinic.plan === "PRO" ? "badge-new--brand" : "badge-new--neutral"}`}>
               {t("settings.client.planBadge", { plan: clinic.plan })}
             </span>
             <Button onClick={saveClinic} disabled={saving}>{saving ? t("common.saving") : t("common.saveChanges")}</Button>
+          </div>
           </div>
         </div>
 
@@ -543,25 +547,29 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
             PATCH /api/clinic rechaza otros roles y estos toggles guardan al
             instante. */}
         {isAdminUser && (
-          <div className="bg-card border border-border rounded-2xl p-6 shadow-card max-w-lg mt-5 space-y-4">
-            <div>
-              <h2 className="text-base font-bold">Portal del paciente — cambios de cita</h2>
-              <p className="text-sm text-muted-foreground mt-0.5">
-                Controla cómo se manejan las solicitudes de reagendar o cancelar que tus pacientes envían desde su portal.
-              </p>
+          <div className="card max-w-lg mt-5">
+            <div className="card__header">
+              <div>
+                <div className="card__title">Portal del paciente — cambios de cita</div>
+                <div className="card__sub">
+                  Controla cómo se manejan las solicitudes de reagendar o cancelar que tus pacientes envían desde su portal.
+                </div>
+              </div>
             </div>
-            <div className={`flex items-center justify-between p-4 rounded-2xl border-2 transition-colors ${clinic.patientChangesAutoApprove ? "border-violet-500 bg-violet-600/10" : "border-border bg-transparent"}`}>
+            <div className="card__body space-y-4">
+            <div className="flex items-center justify-between p-4" style={{ borderRadius: "var(--radius)", border: `1px solid ${clinic.patientChangesAutoApprove ? "var(--consult-active-border)" : "var(--border-soft)"}`, background: clinic.patientChangesAutoApprove ? "var(--brand-softer)" : "transparent", transition: "background var(--dur-1) var(--ease), border-color var(--dur-1) var(--ease)" }}>
               <div className="pr-4">
-                <div className={`text-sm font-bold ${clinic.patientChangesAutoApprove ? "text-violet-700 dark:text-violet-300" : "text-foreground"}`}>Auto-aprobar cambios de pacientes</div>
-                <div className="text-xs mt-0.5 text-muted-foreground">Si está apagado, las solicitudes llegan a tu agenda para aprobarlas.</div>
+                <div className="text-sm font-semibold" style={{ color: "var(--text-1)" }}>Auto-aprobar cambios de pacientes</div>
+                <div className="text-xs mt-0.5" style={{ color: "var(--text-3)" }}>Si está apagado, las solicitudes llegan a tu agenda para aprobarlas.</div>
               </div>
               <button type="button" onClick={() => savePortalAutoApprove(!(clinic.patientChangesAutoApprove ?? false))}
-                className={`relative flex-shrink-0 w-11 h-6 rounded-full transition-colors ${clinic.patientChangesAutoApprove ? "bg-violet-600" : "bg-muted-foreground/30"}`}>
-                <div className="absolute top-0.5 w-5 h-5 rounded-full bg-card shadow-sm transition-all" style={{ left: clinic.patientChangesAutoApprove ? "22px" : "2px" }} />
+                aria-label="Auto-aprobar cambios de pacientes"
+                className={`switch ${clinic.patientChangesAutoApprove ? "switch--on" : ""}`}>
+                <span className="switch__thumb" />
               </button>
             </div>
-            <div className="space-y-1.5">
-              <Label>Ventana mínima (horas)</Label>
+            <div className="field-new">
+              <label className="field-new__label">Ventana mínima (horas)</label>
               <Input
                 type="number"
                 min={0}
@@ -576,6 +584,7 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
                 Los pacientes no pueden pedir cambios a menos de estas horas de su cita.
               </div>
             </div>
+            </div>
           </div>
         )}
         </>
@@ -584,20 +593,23 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
       {/* ── SERVICIOS POR DOCTOR ── */}
       {tab === "servicios" && (
         <div className="space-y-5 max-w-2xl">
-          <div className="bg-card border border-border rounded-2xl p-6 shadow-card">
-            <h2 className="text-base font-bold mb-1">{t("settings.client.servicesTitle")}</h2>
-            <p className="text-sm text-muted-foreground mb-5">
-              {t("settings.client.servicesSubtitle")}
-            </p>
+          <div className="card">
+            <div className="card__header">
+              <div>
+                <div className="card__title">{t("settings.client.servicesTitle")}</div>
+                <div className="card__sub">{t("settings.client.servicesSubtitle")}</div>
+              </div>
+            </div>
+            <div className="card__body">
 
             {team.length === 0 ? (
               <div className="text-sm text-muted-foreground text-center py-8">{t("settings.client.noActiveProfessionals")}</div>
             ) : (
               <div className="space-y-4">
                 {team.map(member => (
-                  <div key={member.id} className="border border-border rounded-xl p-4">
+                  <div key={member.id} style={{ border: "1px solid var(--border-soft)", borderRadius: "var(--radius)", padding: 16 }}>
                     <div className="flex items-center gap-3 mb-3">
-                      <div className="w-9 h-9 rounded-full bg-brand-600 flex items-center justify-center text-sm font-bold text-white flex-shrink-0">
+                      <div className="avatar-new">
                         {member.firstName[0]}{member.lastName[0]}
                       </div>
                       <div>
@@ -623,7 +635,7 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
                     {/* Add service */}
                     <div className="flex gap-2">
                       <input
-                        className="flex-1 h-9 rounded-lg border border-border bg-card px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+                        className="flex-1 h-10 rounded-[var(--radius)] border border-border bg-card px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20 focus:border-brand-600 transition-colors"
                         placeholder={t("settings.client.servicePlaceholder")}
                         onKeyDown={e => {
                           if (e.key === "Enter") {
@@ -647,22 +659,27 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
                 ))}
               </div>
             )}
+            </div>
           </div>
         </div>
       )}
 
       {/* ── PERFIL ── */}
       {tab === "perfil" && (
-        <div className="bg-card border border-border rounded-2xl p-6 shadow-card max-w-lg space-y-4">
-          <h2 className="text-base font-bold">{t("settings.client.profileTitle")}</h2>
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1.5"><Label>{t("settings.client.firstNameLabel")}</Label><Input value={user.firstName ?? ""} onChange={e => setUser((u: any) => ({ ...u, firstName: e.target.value }))} /></div>
-            <div className="space-y-1.5"><Label>{t("settings.client.lastNameLabel")}</Label><Input value={user.lastName ?? ""} onChange={e => setUser((u: any) => ({ ...u, lastName: e.target.value }))} /></div>
+        <div className="card max-w-lg">
+          <div className="card__header">
+            <div className="card__title">{t("settings.client.profileTitle")}</div>
           </div>
-          <div className="space-y-1.5"><Label>{t("settings.client.emailLabel")}</Label><Input value={user.email ?? ""} disabled className="opacity-60" /></div>
-          <div className="space-y-1.5"><Label>{t("settings.client.phoneLabel")}</Label><Input value={user.phone ?? ""} onChange={e => setUser((u: any) => ({ ...u, phone: e.target.value }))} /></div>
+          <div className="card__body space-y-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="field-new"><label className="field-new__label">{t("settings.client.firstNameLabel")}</label><Input value={user.firstName ?? ""} onChange={e => setUser((u: any) => ({ ...u, firstName: e.target.value }))} /></div>
+            <div className="field-new"><label className="field-new__label">{t("settings.client.lastNameLabel")}</label><Input value={user.lastName ?? ""} onChange={e => setUser((u: any) => ({ ...u, lastName: e.target.value }))} /></div>
+          </div>
+          <div className="field-new"><label className="field-new__label">{t("settings.client.emailLabel")}</label><Input value={user.email ?? ""} disabled className="opacity-60" /></div>
+          <div className="field-new"><label className="field-new__label">{t("settings.client.phoneLabel")}</label><Input value={user.phone ?? ""} onChange={e => setUser((u: any) => ({ ...u, phone: e.target.value }))} /></div>
           <div className="flex justify-end pt-2">
             <Button onClick={saveUser} disabled={saving}>{saving ? t("common.saving") : t("settings.client.saveProfileBtn")}</Button>
+          </div>
           </div>
         </div>
       )}
@@ -670,26 +687,27 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
       {/* ── FACTURACIÓN CFDI ── */}
       {tab === "facturacion" && (
         <div className="space-y-5 max-w-lg">
-          <div className="bg-card border border-border rounded-2xl p-6 shadow-card space-y-5">
-            <div className="flex items-start justify-between">
+          <div className="card">
+            <div className="card__header">
               <div>
-                <h2 className="text-base font-bold">{t("settings.client.cfdiTitle")}</h2>
-                <p className="text-sm text-muted-foreground mt-0.5">{t("settings.client.cfdiSubtitle")}</p>
+                <div className="card__title">{t("settings.client.cfdiTitle")}</div>
+                <div className="card__sub">{t("settings.client.cfdiSubtitle")}</div>
               </div>
               {clinic.facturApiEnabled && (
-                <span className="text-sm font-bold bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300 px-3 py-1 rounded-full">
+                <span className="badge-new badge-new--success">
                   {t("settings.client.cfdiActiveBadge")}
                 </span>
               )}
             </div>
+            <div className="card__body space-y-4">
 
-            <div className="bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 rounded-xl p-4 text-sm text-blue-700 dark:text-blue-300">
+            <div className="text-sm" style={{ background: "var(--info-soft)", border: "1px solid var(--info-soft)", color: "var(--info-strong)", borderRadius: "var(--radius)", padding: 14 }}>
               <strong>{t("settings.client.cfdiPoweredByTitle")}</strong>{t("settings.client.cfdiPoweredByBody")}
             </div>
 
             <div className="space-y-4">
-              <div className="space-y-1.5">
-                <Label className="text-base font-semibold">{t("settings.client.rfcLabel")}</Label>
+              <div className="field-new">
+                <label className="field-new__label">{t("settings.client.rfcLabel")}</label>
                 <Input
                   placeholder="Ej: XAXX010101000"
                   value={cfdiForm.rfcEmisor}
@@ -700,8 +718,8 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
                 <p className="text-xs text-muted-foreground">{t("settings.client.rfcHelp")}</p>
               </div>
 
-              <div className="space-y-1.5">
-                <Label className="text-base font-semibold">{t("settings.client.razonSocialLabel")}</Label>
+              <div className="field-new">
+                <label className="field-new__label">{t("settings.client.razonSocialLabel")}</label>
                 <Input
                   placeholder={t("settings.client.razonSocialPlaceholder")}
                   value={cfdiForm.razonSocial}
@@ -711,16 +729,16 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
                 <p className="text-xs text-muted-foreground">{t("settings.client.razonSocialHelp")}</p>
               </div>
 
-              <div className="space-y-1.5">
-                <Label className="text-base font-semibold">{t("settings.client.regimenLabel")}</Label>
-                <select className="flex h-11 w-full rounded-xl border border-border bg-card px-4 text-base focus:outline-none"
+              <div className="field-new">
+                <label className="field-new__label">{t("settings.client.regimenLabel")}</label>
+                <select className="flex h-10 w-full rounded-[var(--radius)] border border-border bg-card px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20 focus:border-brand-600 transition-colors"
                   value={cfdiForm.regimenFiscal} onChange={e => setCfdiForm(f => ({ ...f, regimenFiscal: e.target.value }))}>
                   {REGIMENES.map(r => <option key={r.clave} value={r.clave}>{r.clave} — {r.desc}</option>)}
                 </select>
               </div>
 
-              <div className="space-y-1.5">
-                <Label className="text-base font-semibold">{t("settings.client.cpFiscalLabel")}</Label>
+              <div className="field-new">
+                <label className="field-new__label">{t("settings.client.cpFiscalLabel")}</label>
                 <Input
                   placeholder="Ej: 97000"
                   value={cfdiForm.cpEmisor}
@@ -736,31 +754,33 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
                 {saving ? t("settings.client.cfdiSavingBtn") : t("settings.client.cfdiSaveBtn")}
               </Button>
               <a href="https://www.facturapi.io" target="_blank" rel="noopener noreferrer"
-                className="flex items-center gap-1.5 px-4 py-2 border border-border rounded-xl text-sm font-semibold hover:bg-muted transition-colors">
-                <ExternalLink className="w-4 h-4" /> Facturapi
+                className="btn-new btn-new--secondary">
+                <ExternalLink size={16} strokeWidth={1.75} /> Facturapi
               </a>
             </div>
 
-            <div className="text-xs text-muted-foreground bg-muted/30 rounded-xl p-3">
+            <div className="text-xs" style={{ color: "var(--text-3)", background: "var(--bg-elev-2)", borderRadius: "var(--radius)", padding: 12 }}>
               <strong>{t("settings.client.cfdiNoteLabel")}</strong>{t("settings.client.cfdiNoteBody")}
+            </div>
             </div>
           </div>
 
           {/* ── CERTIFICADOS CSD ── */}
-          <div className="bg-card border border-border rounded-2xl p-6 shadow-card space-y-5">
-            <div className="flex items-start justify-between gap-3">
+          <div className="card">
+            <div className="card__header">
               <div>
-                <h2 className="text-base font-bold">{t("settings.client.csdTitle")}</h2>
-                <p className="text-sm text-muted-foreground mt-0.5">{t("settings.client.csdSubtitle")}</p>
+                <div className="card__title">{t("settings.client.csdTitle")}</div>
+                <div className="card__sub">{t("settings.client.csdSubtitle")}</div>
               </div>
               {clinic.csdUploaded && (
-                <span className="text-sm font-bold bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300 px-3 py-1 rounded-full whitespace-nowrap">
+                <span className="badge-new badge-new--success whitespace-nowrap">
                   {t("settings.client.csdActiveBadge")}
                 </span>
               )}
             </div>
+            <div className="card__body space-y-4">
 
-            <div className="text-sm rounded-xl p-3 bg-muted/30 text-muted-foreground">
+            <div className="text-sm" style={{ borderRadius: "var(--radius)", padding: 12, background: "var(--bg-elev-2)", color: "var(--text-2)" }}>
               {clinic.csdUploaded
                 ? (clinic.csdValidUntil
                     ? t("settings.client.csdValidUntilLabel", { date: new Date(clinic.csdValidUntil).toLocaleDateString() })
@@ -769,20 +789,20 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
             </div>
 
             <div className="space-y-4">
-              <div className="space-y-1.5">
-                <Label className="text-base font-semibold">{t("settings.client.csdCerLabel")}</Label>
+              <div className="field-new">
+                <label className="field-new__label">{t("settings.client.csdCerLabel")}</label>
                 <input type="file" accept=".cer,application/x-x509-ca-cert,application/octet-stream"
                   onChange={e => setCerFile(e.target.files?.[0] ?? null)}
                   className="block w-full text-sm text-muted-foreground file:mr-3 file:rounded-lg file:border-0 file:bg-muted file:px-3 file:py-2 file:text-sm file:font-semibold file:text-foreground hover:file:bg-muted/70" />
               </div>
-              <div className="space-y-1.5">
-                <Label className="text-base font-semibold">{t("settings.client.csdKeyLabel")}</Label>
+              <div className="field-new">
+                <label className="field-new__label">{t("settings.client.csdKeyLabel")}</label>
                 <input type="file" accept=".key,application/octet-stream"
                   onChange={e => setKeyFile(e.target.files?.[0] ?? null)}
                   className="block w-full text-sm text-muted-foreground file:mr-3 file:rounded-lg file:border-0 file:bg-muted file:px-3 file:py-2 file:text-sm file:font-semibold file:text-foreground hover:file:bg-muted/70" />
               </div>
-              <div className="space-y-1.5">
-                <Label className="text-base font-semibold">{t("settings.client.csdPasswordLabel")}</Label>
+              <div className="field-new">
+                <label className="field-new__label">{t("settings.client.csdPasswordLabel")}</label>
                 <Input type="password" value={csdPassword} onChange={e => setCsdPassword(e.target.value)}
                   placeholder={t("settings.client.csdPasswordPlaceholder")} autoComplete="off" />
               </div>
@@ -794,8 +814,9 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
               </Button>
             </div>
 
-            <div className="text-xs bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 rounded-xl p-3 text-blue-700 dark:text-blue-300">
+            <div className="text-xs" style={{ background: "var(--info-soft)", border: "1px solid var(--info-soft)", color: "var(--info-strong)", borderRadius: "var(--radius)", padding: 12 }}>
               {t("settings.client.csdTestNote")}
+            </div>
             </div>
           </div>
         </div>
@@ -804,51 +825,55 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
       {/* ── ASISTENTE IA ── */}
       {tab === "ia" && (
         <div className="space-y-5 max-w-lg">
-          <div className="bg-card border border-border rounded-2xl p-6 shadow-card">
-            <div className="flex items-center gap-3 mb-5">
-              <div className="w-11 h-11 rounded-2xl bg-violet-100 dark:bg-violet-900/40 flex items-center justify-center">
-                <Bot className="w-6 h-6 text-violet-600" />
-              </div>
-              <div>
-                <h2 className="text-base font-bold">{t("settings.client.aiTitle")}</h2>
-                <p className="text-sm text-muted-foreground">{t("settings.client.aiSubtitle")}</p>
+          <div className="card">
+            <div className="card__header">
+              <div className="flex items-center gap-3">
+                <div style={{ width: 40, height: 40, borderRadius: "var(--radius)", background: "var(--brand-soft)", color: "var(--brand)", display: "grid", placeItems: "center", flexShrink: 0 }}>
+                  <Bot size={20} strokeWidth={1.75} />
+                </div>
+                <div>
+                  <div className="card__title">{t("settings.client.aiTitle")}</div>
+                  <div className="card__sub">{t("settings.client.aiSubtitle")}</div>
+                </div>
               </div>
             </div>
+            <div className="card__body">
 
             {/* Usage bar */}
             <div className="mb-5">
               <div className="flex items-center justify-between mb-2">
                 <span className="text-sm font-semibold text-muted-foreground flex items-center gap-1.5">
-                  <Zap className="w-4 h-4 text-violet-500" /> {t("settings.client.aiTokensUsedThisMonth")}
+                  <Zap size={16} strokeWidth={1.75} style={{ color: "var(--brand)" }} /> {t("settings.client.aiTokensUsedThisMonth")}
                 </span>
-                <span className="text-sm font-bold">{aiUsed.toLocaleString()} / {aiLimit.toLocaleString()}</span>
+                <span className="text-sm font-bold" style={{ fontVariantNumeric: "tabular-nums" }}>{aiUsed.toLocaleString()} / {aiLimit.toLocaleString()}</span>
               </div>
-              <div className="h-3 bg-muted rounded-full overflow-hidden">
-                <div className={`h-full rounded-full transition-all ${aiPercent > 80 ? "bg-rose-500" : aiPercent > 60 ? "bg-amber-500" : "bg-violet-500"}`}
-                  style={{ width:`${aiPercent}%` }} />
+              <div className="h-2 rounded-full overflow-hidden" style={{ background: "var(--bg-elev-2)" }}>
+                <div className="h-full rounded-full"
+                  style={{ width:`${aiPercent}%`, background: aiPercent > 80 ? "var(--danger)" : aiPercent > 60 ? "var(--warning)" : "var(--brand)", transition: "width var(--dur-2) var(--ease)" }} />
               </div>
               <div className="flex items-center justify-between mt-1.5">
                 <span className="text-sm text-muted-foreground">{t("settings.client.aiPercentUsed", { percent: aiPercent })}</span>
-                <span className="text-sm font-semibold text-violet-600">{t("settings.client.aiTokensRemaining", { count: aiRemaining.toLocaleString() })}</span>
+                <span className="text-sm font-semibold text-violet-600 dark:text-violet-300">{t("settings.client.aiTokensRemaining", { count: aiRemaining.toLocaleString() })}</span>
               </div>
             </div>
 
             {/* Stats */}
             <div className="grid grid-cols-3 gap-3 mb-5">
               {[
-                { label:t("settings.client.aiStatTokensRemaining"), val:aiRemaining.toLocaleString(), color:"text-violet-600" },
+                { label:t("settings.client.aiStatTokensRemaining"), val:aiRemaining.toLocaleString(), color:"text-violet-600 dark:text-violet-300" },
                 { label:t("settings.client.aiStatConsultations"), val:Math.floor(aiRemaining/800).toString(), color:"text-foreground" },
-                { label:t("settings.client.aiStatEstimatedCost"),   val:`~$${((aiUsed/1_000_000)*1).toFixed(4)} USD`, color:"text-emerald-600" },
+                { label:t("settings.client.aiStatEstimatedCost"),   val:`~$${((aiUsed/1_000_000)*1).toFixed(4)} USD`, color:"text-emerald-600 dark:text-emerald-300" },
               ].map(s => (
-                <div key={s.label} className="bg-muted/20 rounded-xl p-3 text-center">
-                  <div className={`text-xl font-extrabold ${s.color}`}>{s.val}</div>
+                <div key={s.label} className="text-center" style={{ background: "var(--bg-elev-2)", borderRadius: "var(--radius)", padding: 12 }}>
+                  <div className={`text-xl font-bold ${s.color}`} style={{ fontVariantNumeric: "tabular-nums" }}>{s.val}</div>
                   <div className="text-xs text-muted-foreground mt-0.5">{s.label}</div>
                 </div>
               ))}
             </div>
 
-            <div className="bg-violet-50 dark:bg-violet-950/20 border border-violet-200 dark:border-violet-800 rounded-xl p-4 text-sm text-violet-700 dark:text-violet-300">
-              <strong>{t("settings.client.aiHowItWorksTitle")}</strong>{t("settings.client.aiHowItWorksBody")}
+            <div className="text-sm" style={{ background: "var(--brand-softer)", border: "1px solid var(--brand-soft)", color: "var(--text-2)", borderRadius: "var(--radius)", padding: 14 }}>
+              <strong style={{ color: "var(--text-1)" }}>{t("settings.client.aiHowItWorksTitle")}</strong>{t("settings.client.aiHowItWorksBody")}
+            </div>
             </div>
           </div>
         </div>
@@ -997,10 +1022,10 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
         <div className="space-y-5 max-w-lg">
           <div className="bg-card border border-border rounded-2xl p-6 shadow-card space-y-4">
             <h2 className="text-base font-bold">{t("settings.client.changePasswordTitle")}</h2>
-            <div className="space-y-1.5"><Label>{t("settings.client.newPasswordLabel")}</Label>
+            <div className="field-new"><label className="field-new__label">{t("settings.client.newPasswordLabel")}</label>
               <Input type="password" autoComplete="new-password" placeholder={t("settings.client.newPasswordPlaceholder")} value={pwForm.next} onChange={e => setPwForm(f => ({ ...f, next:e.target.value }))} />
             </div>
-            <div className="space-y-1.5"><Label>{t("settings.client.confirmPasswordLabel")}</Label>
+            <div className="field-new"><label className="field-new__label">{t("settings.client.confirmPasswordLabel")}</label>
               <Input type="password" autoComplete="new-password" placeholder={t("settings.client.confirmPasswordPlaceholder")} value={pwForm.confirm} onChange={e => setPwForm(f => ({ ...f, confirm:e.target.value }))} />
             </div>
             <Button onClick={changePassword} disabled={saving || !pwForm.next}>{saving ? t("settings.client.changingPasswordBtn") : t("settings.client.changePasswordBtn")}</Button>

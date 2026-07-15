@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Star, FileDown } from "lucide-react";
+import { Star, FileDown, Stethoscope } from "lucide-react";
 import toast from "react-hot-toast";
 import { AnalyticsLayout } from "@/components/dashboard/analytics/analytics-layout";
 import { useT } from "@/i18n/i18n-provider";
@@ -104,47 +104,28 @@ export function DoctorsClient() {
       title={t("analytics.doctors.title")}
       subtitle={t("analytics.doctors.subtitle")}
       rightActions={
-        <div style={{ display: "flex", gap: 6 }}>
-          {PRESETS.map((p) => (
-            <button
-              key={p.id}
-              type="button"
-              onClick={() => setPreset(p.id)}
-              style={{
-                padding: "6px 12px",
-                fontSize: 12,
-                fontWeight: 600,
-                background: preset === p.id ? "var(--brand)" : "var(--bg-elev)",
-                color: preset === p.id ? "#fff" : "var(--text-2)",
-                border: `1px solid ${preset === p.id ? "var(--brand)" : "var(--border-soft)"}`,
-                borderRadius: 8,
-                cursor: "pointer",
-                fontFamily: "inherit",
-              }}
-            >
-              {t(p.labelKey)}
-            </button>
-          ))}
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <div className="segment-new">
+            {PRESETS.map((p) => (
+              <button
+                key={p.id}
+                type="button"
+                onClick={() => setPreset(p.id)}
+                aria-pressed={preset === p.id}
+                className={`segment-new__btn${preset === p.id ? " segment-new__btn--active" : ""}`}
+              >
+                {t(p.labelKey)}
+              </button>
+            ))}
+          </div>
           <button
             type="button"
             onClick={generatePayroll}
             disabled={!data || data.doctors.length === 0 || generatingPayroll}
-            style={{
-              padding: "6px 12px",
-              fontSize: 12,
-              fontWeight: 600,
-              background: "var(--bg-elev)",
-              color: "var(--text-1)",
-              border: "1px solid var(--border-strong)",
-              borderRadius: 8,
-              cursor: generatingPayroll ? "wait" : "pointer",
-              fontFamily: "inherit",
-              display: "inline-flex",
-              alignItems: "center",
-              gap: 6,
-            }}
+            className="btn-new btn-new--secondary btn-new--sm"
+            style={{ cursor: generatingPayroll ? "wait" : undefined }}
           >
-            <FileDown size={13} aria-hidden />
+            <FileDown size={16} strokeWidth={1.75} aria-hidden />
             {generatingPayroll ? t("analytics.doctors.generating") : t("analytics.doctors.exportPayroll")}
           </button>
         </div>
@@ -154,23 +135,20 @@ export function DoctorsClient() {
         <Box>{t("common.loading")}</Box>
       ) : !data || data.doctors.length === 0 ? (
         <Box>
+          <div aria-hidden style={{ color: "var(--text-4)", marginBottom: 8 }}>
+            <Stethoscope size={20} strokeWidth={1.75} />
+          </div>
           <strong style={{ color: "var(--text-2)" }}>{t("analytics.doctors.noDataTitle")}</strong>
           <div style={{ marginTop: 6, color: "var(--text-3)", fontSize: 13 }}>
             {t("analytics.doctors.noDataDesc")}
           </div>
         </Box>
       ) : (
-        <div
-          style={{
-            background: "var(--bg-elev)",
-            border: "1px solid var(--border-soft)",
-            borderRadius: 14,
-            overflow: "hidden",
-          }}
-        >
-          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+        <div className="card">
+          <div style={{ overflowX: "auto" }}>
+          <table className="table-new">
             <thead>
-              <tr style={{ background: "var(--bg-elev-2)" }}>
+              <tr>
                 <Th>{t("analytics.doctors.colDoctor")}</Th>
                 <Th align="right">{t("analytics.doctors.colAppts")}</Th>
                 <Th align="right">{t("analytics.doctors.colCompleted")}</Th>
@@ -183,7 +161,7 @@ export function DoctorsClient() {
             </thead>
             <tbody>
               {data.doctors.map((d) => (
-                <tr key={d.id} style={{ borderTop: "1px solid var(--border-soft)" }}>
+                <tr key={d.id}>
                   <Td>
                     <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                       <span
@@ -203,7 +181,7 @@ export function DoctorsClient() {
                   <Td align="right" mono>{d.apptsTotal}</Td>
                   <Td align="right" mono><strong>{d.apptsCompleted}</strong></Td>
                   <Td align="right" mono color="var(--text-3)">{d.apptsPerDay}</Td>
-                  <Td align="right" mono color={d.noShowRate > 10 ? "#dc2626" : "var(--text-3)"}>
+                  <Td align="right" mono color={d.noShowRate > 10 ? "var(--danger)" : "var(--text-3)"}>
                     {d.apptsNoShow} <span style={{ fontSize: 10 }}>({d.noShowRate}%)</span>
                   </Td>
                   <Td align="right" mono color="var(--text-2)">
@@ -211,7 +189,7 @@ export function DoctorsClient() {
                   </Td>
                   <Td align="right">
                     {d.avgSatisfaction != null ? (
-                      <span style={{ display: "inline-flex", alignItems: "center", gap: 3, color: "#d97706", fontWeight: 600, fontFamily: "var(--font-mono, monospace)" }}>
+                      <span style={{ display: "inline-flex", alignItems: "center", gap: 3, color: "var(--warning-strong)", fontWeight: 600, fontFamily: "var(--font-mono, monospace)" }}>
                         <Star size={11} fill="currentColor" aria-hidden />
                         {d.avgSatisfaction.toFixed(1)}
                         <span style={{ fontSize: 10, color: "var(--text-4)", fontWeight: 500 }}>({d.satisfactionCount})</span>
@@ -225,6 +203,7 @@ export function DoctorsClient() {
               ))}
             </tbody>
           </table>
+          </div>
         </div>
       )}
       <div style={{ marginTop: 12, fontSize: 11, color: "var(--text-3)", lineHeight: 1.5 }}>
@@ -235,17 +214,7 @@ export function DoctorsClient() {
 }
 
 function Th({ children, align = "left" }: { children: React.ReactNode; align?: "left" | "right" }) {
-  return (
-    <th style={{
-      padding: "10px 14px",
-      textAlign: align,
-      fontSize: 10,
-      fontWeight: 700,
-      color: "var(--text-3)",
-      textTransform: "uppercase",
-      letterSpacing: "0.06em",
-    }}>{children}</th>
-  );
+  return <th scope="col" style={{ textAlign: align }}>{children}</th>;
 }
 
 function Td({ children, align = "left", mono, color }: {
@@ -253,9 +222,8 @@ function Td({ children, align = "left", mono, color }: {
 }) {
   return (
     <td style={{
-      padding: "10px 14px",
       textAlign: align,
-      color: color ?? "var(--text-1)",
+      ...(color ? { color } : null),
       fontFamily: mono ? "var(--font-mono, monospace)" : "inherit",
       fontVariantNumeric: mono ? "tabular-nums" : "normal",
     }}>{children}</td>
@@ -267,7 +235,8 @@ function Box({ children }: { children: React.ReactNode }) {
     <div style={{
       background: "var(--bg-elev)",
       border: "1px solid var(--border-soft)",
-      borderRadius: 14,
+      borderRadius: "var(--radius-lg)",
+      boxShadow: "var(--shadow-1)",
       padding: 40,
       textAlign: "center",
       color: "var(--text-2)",

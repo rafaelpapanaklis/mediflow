@@ -72,7 +72,8 @@ export function OverviewClient({ data }: Props) {
             style={{
               background: "var(--bg-elev)",
               border: "1px solid var(--border-soft)",
-              borderRadius: 14,
+              borderRadius: "var(--radius-lg)",
+              boxShadow: "var(--shadow-1)",
               padding: 20,
               minHeight: 240,
               display: "grid",
@@ -88,11 +89,12 @@ export function OverviewClient({ data }: Props) {
         )}
 
         <AnalyticsCard
+          className="kpi--hero"
           label={t("analytics.overview.apptsThisMonth")}
           value={data.monthAppts.toLocaleString("es-MX")}
           delta={data.apptsDeltaPct !== 0 ? { pct: data.apptsDeltaPct } : null}
           hint={t("analytics.overview.vsPrevMonth")}
-          icon={<Calendar size={14} aria-hidden />}
+          icon={<Calendar size={16} strokeWidth={1.75} aria-hidden />}
           tone="brand"
         />
         <AnalyticsCard
@@ -100,7 +102,7 @@ export function OverviewClient({ data }: Props) {
           value={data.completedMonth.toLocaleString("es-MX")}
           delta={data.completedDeltaPct !== 0 ? { pct: data.completedDeltaPct } : null}
           hint={t("analytics.overview.vsPrevMonth")}
-          icon={<CheckCircle2 size={14} aria-hidden />}
+          icon={<CheckCircle2 size={16} strokeWidth={1.75} aria-hidden />}
           tone="success"
         />
         <AnalyticsCard
@@ -112,7 +114,7 @@ export function OverviewClient({ data }: Props) {
               : null
           }
           hint={t("analytics.overview.ofMonthTotal")}
-          icon={<AlertCircle size={14} aria-hidden />}
+          icon={<AlertCircle size={16} strokeWidth={1.75} aria-hidden />}
           tone={data.noShowRate > 10 ? "danger" : data.noShowRate > 5 ? "warning" : "neutral"}
         />
       </div>
@@ -127,14 +129,14 @@ export function OverviewClient({ data }: Props) {
               : "—"
           }
           hint={data.avgWaitMin == null ? t("analytics.overview.notEnoughDataWait") : t("analytics.overview.monthAverage")}
-          icon={<Clock size={14} aria-hidden />}
+          icon={<Clock size={16} strokeWidth={1.75} aria-hidden />}
           tone={data.avgWaitMin != null && data.avgWaitMin > 20 ? "warning" : "neutral"}
         />
         <AnalyticsCard
           label={t("analytics.overview.apptsToday")}
           value={data.todayCount.toLocaleString("es-MX")}
           hint={t("analytics.overview.scheduledNotCancelled")}
-          icon={<Calendar size={14} aria-hidden />}
+          icon={<Calendar size={16} strokeWidth={1.75} aria-hidden />}
           tone="brand"
         />
       </div>
@@ -147,9 +149,9 @@ function DataCollectingBanner({ progress, count }: { progress: number; count: nu
   return (
     <div
       style={{
-        background: "rgba(217, 119, 6, 0.08)",
-        border: "1px solid rgba(217, 119, 6, 0.25)",
-        borderRadius: 12,
+        background: "var(--warning-soft)",
+        border: "1px solid var(--warning-border-strong)",
+        borderRadius: "var(--radius-lg)",
         padding: "14px 18px",
         marginBottom: 14,
         display: "flex",
@@ -163,17 +165,17 @@ function DataCollectingBanner({ progress, count }: { progress: number; count: nu
           width: 32,
           height: 32,
           borderRadius: 8,
-          background: "rgba(217, 119, 6, 0.15)",
+          background: "var(--warning-soft-strong)",
           display: "grid",
           placeItems: "center",
-          color: "#d97706",
+          color: "var(--warning)",
           flexShrink: 0,
         }}
       >
-        <Database size={16} aria-hidden />
+        <Database size={16} strokeWidth={1.75} aria-hidden />
       </div>
       <div style={{ flex: 1 }}>
-        <div style={{ fontSize: 13, fontWeight: 600, color: "#92400e", marginBottom: 4 }}>
+        <div style={{ fontSize: 13, fontWeight: 600, color: "var(--warning-strong)", marginBottom: 4 }}>
           {t("analytics.overview.collectingData")}
         </div>
         <div style={{ fontSize: 12, color: "var(--text-2)", marginBottom: 8 }}>
@@ -182,7 +184,7 @@ function DataCollectingBanner({ progress, count }: { progress: number; count: nu
         <div
           style={{
             height: 6,
-            background: "rgba(217, 119, 6, 0.15)",
+            background: "var(--warning-soft-strong)",
             borderRadius: 999,
             overflow: "hidden",
           }}
@@ -191,7 +193,7 @@ function DataCollectingBanner({ progress, count }: { progress: number; count: nu
             style={{
               width: `${progress}%`,
               height: "100%",
-              background: "#d97706",
+              background: "var(--warning)",
               transition: "width 0.4s",
             }}
           />

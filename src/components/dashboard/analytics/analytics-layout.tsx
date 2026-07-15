@@ -66,7 +66,8 @@ export function AnalyticsLayout({ children, title, subtitle, rightActions }: Pro
         style={{
           background: "var(--bg-elev)",
           border: "1px solid var(--border-soft)",
-          borderRadius: 14,
+          borderRadius: "var(--radius-lg)",
+          boxShadow: "var(--shadow-1)",
           padding: 8,
           height: "fit-content",
           position: "sticky",
@@ -96,21 +97,15 @@ export function AnalyticsLayout({ children, title, subtitle, rightActions }: Pro
               <Link
                 key={tab.id}
                 href={tab.href}
+                aria-current={isActive ? "page" : undefined}
+                className={`vnav-item${isActive ? " vnav-item--active" : ""}`}
                 style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 9,
-                  padding: "8px 10px",
-                  fontSize: 13,
-                  fontWeight: 500,
-                  color: isActive ? "var(--brand)" : "var(--text-2)",
-                  background: isActive ? "var(--brand-softer)" : "transparent",
-                  borderRadius: 8,
+                  minHeight: 40,
                   textDecoration: "none",
-                  transition: "background 0.12s, color 0.12s",
+                  ...(isActive ? { color: "var(--consult-active-accent)" } : null),
                 }}
               >
-                <tab.icon size={14} aria-hidden style={{ flexShrink: 0 }} />
+                <tab.icon size={16} strokeWidth={1.75} aria-hidden style={{ flexShrink: 0 }} />
                 <span>{t(tab.labelKey)}</span>
               </Link>
             );
@@ -133,17 +128,17 @@ export function AnalyticsLayout({ children, title, subtitle, rightActions }: Pro
           <div>
             <h1
               style={{
-                fontSize: "clamp(18px, 1.5vw, 24px)",
+                fontSize: "clamp(20px, 1.6vw, 22px)",
                 letterSpacing: "-0.02em",
                 color: "var(--text-1)",
-                fontWeight: 600,
+                fontWeight: 700,
                 margin: 0,
               }}
             >
               {title}
             </h1>
             {subtitle && (
-              <p style={{ color: "var(--text-3)", fontSize: 13, marginTop: 4, margin: 0 }}>
+              <p style={{ color: "var(--text-3)", fontSize: 13, margin: 0, marginTop: 4 }}>
                 {subtitle}
               </p>
             )}

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Lightbulb } from "lucide-react";
+import { Grid3x3, Lightbulb } from "lucide-react";
 import { AnalyticsLayout } from "@/components/dashboard/analytics/analytics-layout";
 import { AnalyticsHeatmap, type HeatmapCell } from "@/components/dashboard/analytics/analytics-heatmap";
 import { useT } from "@/i18n/i18n-provider";
@@ -63,23 +63,14 @@ export function OccupancyClient({ resources, doctors }: Props) {
       title={t("analytics.occupancy.title")}
       subtitle={t("analytics.occupancy.subtitle")}
       rightActions={
-        <div style={{ display: "flex", gap: 6 }}>
+        <div className="segment-new">
           {PRESETS.map((p) => (
             <button
               key={p.id}
               type="button"
               onClick={() => setPreset(p.id)}
-              style={{
-                padding: "6px 12px",
-                fontSize: 12,
-                fontWeight: 600,
-                background: preset === p.id ? "var(--brand)" : "var(--bg-elev)",
-                color: preset === p.id ? "#fff" : "var(--text-2)",
-                border: `1px solid ${preset === p.id ? "var(--brand)" : "var(--border-soft)"}`,
-                borderRadius: 8,
-                cursor: "pointer",
-                fontFamily: "inherit",
-              }}
+              aria-pressed={preset === p.id}
+              className={`segment-new__btn${preset === p.id ? " segment-new__btn--active" : ""}`}
             >
               {t(p.labelKey)}
             </button>
@@ -118,7 +109,8 @@ export function OccupancyClient({ resources, doctors }: Props) {
           style={{
             background: "var(--bg-elev)",
             border: "1px solid var(--border-soft)",
-            borderRadius: 14,
+            borderRadius: "var(--radius-lg)",
+            boxShadow: "var(--shadow-1)",
             padding: 60,
             textAlign: "center",
             color: "var(--text-3)",
@@ -132,14 +124,16 @@ export function OccupancyClient({ resources, doctors }: Props) {
           style={{
             background: "var(--bg-elev)",
             border: "1px solid var(--border-soft)",
-            borderRadius: 14,
+            borderRadius: "var(--radius-lg)",
+            boxShadow: "var(--shadow-1)",
             padding: 60,
             textAlign: "center",
             color: "var(--text-3)",
             fontSize: 13,
           }}
         >
-          {t("analytics.occupancy.noData")}
+          <Grid3x3 size={20} strokeWidth={1.75} aria-hidden style={{ color: "var(--text-4)", marginBottom: 8 }} />
+          <div>{t("analytics.occupancy.noData")}</div>
         </div>
       ) : (
         <>
@@ -155,9 +149,9 @@ export function OccupancyClient({ resources, doctors }: Props) {
               style={{
                 marginTop: 14,
                 padding: 14,
-                background: "rgba(217, 119, 6, 0.08)",
-                border: "1px solid rgba(217, 119, 6, 0.25)",
-                borderRadius: 10,
+                background: "var(--warning-soft)",
+                border: "1px solid var(--warning-border-strong)",
+                borderRadius: "var(--radius)",
                 display: "flex",
                 gap: 12,
                 alignItems: "flex-start",
@@ -165,8 +159,8 @@ export function OccupancyClient({ resources, doctors }: Props) {
                 color: "var(--text-2)",
               }}
             >
-              <div style={{ color: "#d97706", flexShrink: 0, marginTop: 2 }}>
-                <Lightbulb size={16} aria-hidden />
+              <div style={{ color: "var(--warning)", flexShrink: 0, marginTop: 2 }}>
+                <Lightbulb size={16} strokeWidth={1.75} aria-hidden />
               </div>
               <div>
                 <strong style={{ color: "var(--text-1)" }}>{data.insights.leastUsedResource.name}</strong>{" "}
@@ -199,16 +193,8 @@ function FilterSelect({
       <select
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        style={{
-          background: "var(--bg-elev)",
-          color: "var(--text-1)",
-          border: "1px solid var(--border-soft)",
-          borderRadius: 8,
-          padding: "7px 10px",
-          fontSize: 12,
-          fontFamily: "inherit",
-          minWidth: 160,
-        }}
+        className="input-new"
+        style={{ minWidth: 160, width: "auto" }}
       >
         {options.map((opt) => (
           <option key={opt.id} value={opt.id}>{opt.label}</option>
@@ -220,18 +206,9 @@ function FilterSelect({
 
 function Stat({ label, value }: { label: string; value: string }) {
   return (
-    <div
-      style={{
-        background: "var(--bg-elev)",
-        border: "1px solid var(--border-soft)",
-        borderRadius: 12,
-        padding: 14,
-      }}
-    >
-      <div style={{ fontSize: 10, fontWeight: 700, color: "var(--text-3)", textTransform: "uppercase", letterSpacing: "0.06em" }}>
-        {label}
-      </div>
-      <div style={{ fontSize: 22, fontWeight: 700, color: "var(--text-1)", marginTop: 4, fontVariantNumeric: "tabular-nums" }}>
+    <div className="kpi">
+      <div className="kpi__label">{label}</div>
+      <div className="kpi__value" style={{ fontSize: 22, marginTop: 6 }}>
         {value}
       </div>
     </div>

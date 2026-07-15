@@ -27,26 +27,18 @@ export interface AnalyticsCardProps {
 }
 
 const TONE_BG: Record<NonNullable<AnalyticsCardProps["tone"]>, string> = {
-  brand:   "var(--brand-softer)",
-  success: "rgba(16, 185, 129, 0.10)",
-  warning: "rgba(217, 119, 6, 0.10)",
-  danger:  "rgba(220, 38, 38, 0.10)",
+  brand:   "var(--brand-soft)",
+  success: "var(--success-soft)",
+  warning: "var(--warning-soft)",
+  danger:  "var(--danger-soft)",
   neutral: "var(--bg-elev-2)",
-};
-
-const TONE_BORDER: Record<NonNullable<AnalyticsCardProps["tone"]>, string> = {
-  brand:   "rgba(124, 58, 237, 0.20)",
-  success: "rgba(16, 185, 129, 0.25)",
-  warning: "rgba(217, 119, 6, 0.25)",
-  danger:  "rgba(220, 38, 38, 0.25)",
-  neutral: "var(--border-soft)",
 };
 
 const TONE_FG: Record<NonNullable<AnalyticsCardProps["tone"]>, string> = {
   brand:   "var(--brand)",
-  success: "#059669",
-  warning: "#d97706",
-  danger:  "#dc2626",
+  success: "var(--success-strong)",
+  warning: "var(--warning-strong)",
+  danger:  "var(--danger-strong)",
   neutral: "var(--text-2)",
 };
 
@@ -62,71 +54,38 @@ export function AnalyticsCard({
 }: AnalyticsCardProps) {
   return (
     <div
-      className={className}
-      style={{
-        background: "var(--bg-elev)",
-        border: "1px solid var(--border-soft)",
-        borderRadius: 14,
-        padding: 16,
-        display: "flex",
-        flexDirection: "column",
-        gap: 8,
-        minHeight: 120,
-        fontFamily: "var(--font-sans, system-ui, sans-serif)",
-      }}
+      className={`kpi${className ? ` ${className}` : ""}`}
+      style={{ minHeight: 120 }}
     >
-      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+      <div className="kpi__top" style={{ marginBottom: 10, gap: 8 }}>
+        <div
+          className="kpi__label"
+          style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+        >
+          {label}
+        </div>
         {icon && (
           <div
+            className="kpi__icon"
             aria-hidden
             style={{
-              width: 28,
-              height: 28,
-              borderRadius: 8,
-              background: TONE_BG[tone],
-              border: `1px solid ${TONE_BORDER[tone]}`,
-              display: "grid",
-              placeItems: "center",
-              color: TONE_FG[tone],
               flexShrink: 0,
+              ...(tone === "brand"
+                ? null
+                : { background: TONE_BG[tone], color: TONE_FG[tone], borderColor: "transparent" }),
             }}
           >
             {icon}
           </div>
         )}
-        <div
-          style={{
-            fontSize: 11,
-            fontWeight: 600,
-            color: "var(--text-3)",
-            letterSpacing: "0.04em",
-            textTransform: "uppercase",
-            flex: 1,
-            minWidth: 0,
-            overflow: "hidden",
-            textOverflow: "ellipsis",
-            whiteSpace: "nowrap",
-          }}
-        >
-          {label}
-        </div>
       </div>
-      <div
-        style={{
-          fontSize: "clamp(22px, 2vw, 28px)",
-          fontWeight: 700,
-          color: "var(--text-1)",
-          letterSpacing: "-0.02em",
-          lineHeight: 1.1,
-          fontVariantNumeric: "tabular-nums",
-        }}
-      >
+      <div className="kpi__value" style={{ fontSize: "clamp(22px, 2vw, 28px)" }}>
         {value}
       </div>
       {(delta || hint) && (
-        <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12 }}>
+        <div className="kpi__delta" style={{ display: "flex", flexWrap: "wrap", rowGap: 2 }}>
           {delta && <DeltaPill pct={delta.pct} absolute={delta.absolute} />}
-          {hint && <span style={{ color: "var(--text-3)" }}>{hint}</span>}
+          {hint && <span className="kpi__delta-sub">{hint}</span>}
         </div>
       )}
       {sparkline && sparkline.length > 1 && <Sparkline data={sparkline} tone={tone} />}
@@ -138,23 +97,22 @@ function DeltaPill({ pct, absolute }: { pct: number; absolute?: string }) {
   const isUp = pct > 0;
   const isFlat = pct === 0;
   const Icon = isFlat ? Minus : isUp ? TrendingUp : TrendingDown;
-  const color = isFlat ? "var(--text-3)" : isUp ? "#059669" : "#dc2626";
   const sign = isUp ? "+" : "";
   return (
     <span
+      className={isFlat ? undefined : isUp ? "kpi__delta--up" : "kpi__delta--down"}
       style={{
         display: "inline-flex",
         alignItems: "center",
-        gap: 3,
-        color,
-        fontWeight: 600,
+        gap: 4,
         fontVariantNumeric: "tabular-nums",
+        ...(isFlat ? { color: "var(--text-3)" } : null),
       }}
     >
-      <Icon size={12} aria-hidden />
+      <Icon size={14} strokeWidth={1.75} aria-hidden />
       {sign}
       {pct.toFixed(0)}%
-      {absolute && <span style={{ color: "var(--text-3)", fontWeight: 500 }}>· {absolute}</span>}
+      {absolute && <span className="kpi__delta-sub">· {absolute}</span>}
     </span>
   );
 }

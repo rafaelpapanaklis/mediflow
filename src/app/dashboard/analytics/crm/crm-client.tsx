@@ -130,27 +130,27 @@ export function CrmClient() {
               label="LTV promedio"
               value={money(value?.totals.avgLtv ?? 0)}
               hint="cobrado por paciente"
-              icon={<TrendingUp size={14} aria-hidden />}
+              icon={<TrendingUp size={16} strokeWidth={1.75} aria-hidden />}
             />
             <AnalyticsCard
               label="Ingresos cobrados"
               value={money(value?.totals.paid ?? 0)}
               hint={`${value?.totals.payingPatients ?? 0} pacientes con pagos`}
-              icon={<DollarSign size={14} aria-hidden />}
+              icon={<DollarSign size={16} strokeWidth={1.75} aria-hidden />}
               tone="success"
             />
             <AnalyticsCard
               label="Saldo por cobrar"
               value={money(value?.totals.balance ?? 0)}
               hint={`${value?.totals.patients ?? 0} pacientes`}
-              icon={<DollarSign size={14} aria-hidden />}
+              icon={<DollarSign size={16} strokeWidth={1.75} aria-hidden />}
               tone={value && value.totals.balance > 0 ? "warning" : "neutral"}
             />
             <AnalyticsCard
               label="En riesgo de abandono"
               value={String(churn?.count ?? 0)}
               hint="requieren contacto"
-              icon={<AlertTriangle size={14} aria-hidden />}
+              icon={<AlertTriangle size={16} strokeWidth={1.75} aria-hidden />}
               tone={churn && churn.count > 0 ? "danger" : "success"}
             />
           </div>
@@ -195,7 +195,7 @@ export function CrmClient() {
             <Panel
               title="Top pacientes por valor"
               right={
-                <div style={{ display: "flex", gap: 4 }}>
+                <div className="segment-new">
                   {([
                     { k: "paid" as SortKey, l: "Pagado" },
                     { k: "invoiced" as SortKey, l: "Facturado" },
@@ -206,17 +206,8 @@ export function CrmClient() {
                       key={opt.k}
                       type="button"
                       onClick={() => setSortKey(opt.k)}
-                      style={{
-                        padding: "3px 8px",
-                        fontSize: 11,
-                        fontWeight: 600,
-                        borderRadius: 6,
-                        cursor: "pointer",
-                        fontFamily: "inherit",
-                        border: "1px solid var(--border-strong)",
-                        background: sortKey === opt.k ? "var(--brand-softer)" : "var(--bg-elev)",
-                        color: sortKey === opt.k ? "var(--brand)" : "var(--text-3)",
-                      }}
+                      aria-pressed={sortKey === opt.k}
+                      className={`segment-new__btn${sortKey === opt.k ? " segment-new__btn--active" : ""}`}
                     >
                       {opt.l}
                     </button>
@@ -228,9 +219,9 @@ export function CrmClient() {
                 <Empty>Sin pacientes con facturación todavía.</Empty>
               ) : (
                 <div style={{ overflowX: "auto" }}>
-                  <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12.5 }}>
+                  <table className="table-new">
                     <thead>
-                      <tr style={{ textAlign: "left", color: "var(--text-3)", fontSize: 11, textTransform: "uppercase", letterSpacing: "0.04em" }}>
+                      <tr>
                         <th style={thStyle}>Paciente</th>
                         <th style={thStyleRight}>Facturado</th>
                         <th style={thStyleRight}>Pagado</th>
@@ -247,8 +238,8 @@ export function CrmClient() {
                             <div style={{ fontSize: 11, color: "var(--text-4)" }}>{p.patientNumber}</div>
                           </td>
                           <td style={tdStyleRightMono}>{money(p.invoiced)}</td>
-                          <td style={{ ...tdStyleRightMono, color: "#059669", fontWeight: 600 }}>{money(p.paid)}</td>
-                          <td style={{ ...tdStyleRightMono, color: p.balance > 0 ? "#dc2626" : "var(--text-4)" }}>{p.balance > 0 ? money(p.balance) : "—"}</td>
+                          <td style={{ ...tdStyleRightMono, color: "var(--success-strong)", fontWeight: 600 }}>{money(p.paid)}</td>
+                          <td style={{ ...tdStyleRightMono, color: p.balance > 0 ? "var(--danger)" : "var(--text-4)" }}>{p.balance > 0 ? money(p.balance) : "—"}</td>
                           <td style={tdStyleRightMono}>{p.visits}</td>
                           <td style={{ ...tdStyleRight, color: "var(--text-3)" }}>{dateShort(p.lastVisit)}</td>
                         </tr>
@@ -273,7 +264,7 @@ export function CrmClient() {
                           <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text-1)" }}>{p.name}</div>
                           <div style={{ fontSize: 11, color: "var(--text-3)", marginTop: 2, display: "flex", flexWrap: "wrap", gap: 4 }}>
                             {p.reasons.map((r, i) => (
-                              <span key={i} style={{ background: "rgba(220,38,38,0.10)", color: "#dc2626", borderRadius: 6, padding: "1px 6px" }}>{r}</span>
+                              <span key={i} style={{ background: "var(--danger-soft)", color: "var(--danger)", borderRadius: 6, padding: "1px 6px" }}>{r}</span>
                             ))}
                           </div>
                         </div>
@@ -282,10 +273,10 @@ export function CrmClient() {
                             href={wa}
                             target="_blank"
                             rel="noopener noreferrer"
-                            style={{ flexShrink: 0, display: "inline-flex", alignItems: "center", gap: 5, padding: "5px 9px", fontSize: 11, fontWeight: 600, borderRadius: 7, textDecoration: "none", background: "rgba(16,185,129,0.12)", color: "#059669", border: "1px solid rgba(16,185,129,0.25)" }}
+                            style={{ flexShrink: 0, display: "inline-flex", alignItems: "center", gap: 5, padding: "5px 9px", fontSize: 11, fontWeight: 600, borderRadius: 7, textDecoration: "none", background: "var(--success-soft)", color: "var(--success-strong)", border: "1px solid var(--success-soft)" }}
                             title="Contactar por WhatsApp"
                           >
-                            <MessageCircle size={12} aria-hidden /> Contactar
+                            <MessageCircle size={12} strokeWidth={1.75} aria-hidden /> Contactar
                           </a>
                         ) : (
                           <span style={{ flexShrink: 0, fontSize: 11, color: "var(--text-4)" }}>Sin teléfono</span>
@@ -312,9 +303,9 @@ const tdStyleRightMono: React.CSSProperties = { ...tdStyleRight, fontVariantNume
 
 function Panel({ title, right, children }: { title: string; right?: ReactNode; children: ReactNode }) {
   return (
-    <div style={{ background: "var(--bg-elev)", border: "1px solid var(--border-soft)", borderRadius: 14, overflow: "hidden" }}>
-      <div style={{ padding: "10px 14px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, borderBottom: "1px solid var(--border-soft)", background: "var(--bg-elev-2)" }}>
-        <span style={{ fontSize: 12, fontWeight: 700, color: "var(--text-2)" }}>{title}</span>
+    <div className="card">
+      <div className="card__header">
+        <span className="card__title">{title}</span>
         {right}
       </div>
       {children}
@@ -328,7 +319,7 @@ function Empty({ children }: { children: ReactNode }) {
 
 function Box({ children }: { children: ReactNode }) {
   return (
-    <div style={{ background: "var(--bg-elev)", border: "1px solid var(--border-soft)", borderRadius: 14, padding: 40, textAlign: "center", color: "var(--text-3)", fontSize: 13 }}>
+    <div style={{ background: "var(--bg-elev)", border: "1px solid var(--border-soft)", borderRadius: "var(--radius-lg)", boxShadow: "var(--shadow-1)", padding: 40, textAlign: "center", color: "var(--text-3)", fontSize: 13 }}>
       {children}
     </div>
   );

@@ -2,9 +2,6 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { ShieldCheck, Copy, Check, Download, KeyRound } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { useT } from "@/i18n/i18n-provider";
 import toast from "react-hot-toast";
 
@@ -112,7 +109,14 @@ export function TwoFactorSetup({ forced = false, onEnabled }: Props) {
   const errorBox = error ? (
     <div
       role="alert"
-      className="rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-sm text-rose-600 dark:text-rose-400"
+      style={{
+        background: "var(--danger-soft)",
+        border: "1px solid var(--danger-border-strong)",
+        borderRadius: "var(--radius)",
+        padding: "8px 12px",
+        fontSize: 12,
+        color: "var(--danger)",
+      }}
     >
       {error}
     </div>
@@ -121,13 +125,26 @@ export function TwoFactorSetup({ forced = false, onEnabled }: Props) {
   // ── Paso: códigos de recuperación ───────────────────────────────
   if (step === "codes") {
     return (
-      <div className="bg-card border border-border rounded-2xl p-6 shadow-card space-y-4">
-        <div className="flex items-center gap-2">
-          <KeyRound className="h-5 w-5 text-brand-600" />
-          <h2 className="text-base font-bold">{t("settings.client.tfa.recoveryTitle")}</h2>
+      <div className="card p-6 space-y-4">
+        <div className="form-section__title">
+          <KeyRound size={16} strokeWidth={1.75} />
+          {t("settings.client.tfa.recoveryTitle")}
+          <span className="form-section__rule" />
         </div>
-        <p className="text-sm text-muted-foreground">{t("settings.client.tfa.recoveryHint")}</p>
-        <ul className="grid grid-cols-2 gap-2 rounded-xl border border-border bg-muted/30 p-4 font-mono text-sm">
+        <p style={{ fontSize: 12.5, color: "var(--text-3)", margin: 0 }}>
+          {t("settings.client.tfa.recoveryHint")}
+        </p>
+        <ul
+          className="mono grid grid-cols-2 gap-2"
+          style={{
+            background: "var(--bg-elev-2)",
+            border: "1px solid var(--border-soft)",
+            borderRadius: "var(--radius-lg)",
+            padding: 16,
+            fontSize: 12,
+            color: "var(--text-1)",
+          }}
+        >
           {codes.map((c) => (
             <li key={c} className="text-center tracking-wider">
               {c}
@@ -135,19 +152,19 @@ export function TwoFactorSetup({ forced = false, onEnabled }: Props) {
           ))}
         </ul>
         <div className="flex flex-wrap gap-2">
-          <Button type="button" variant="outline" size="sm" onClick={copyCodes}>
-            {copied ? <Check className="mr-1.5 h-4 w-4" /> : <Copy className="mr-1.5 h-4 w-4" />}
+          <button type="button" className="btn-new btn-new--secondary btn-new--sm" onClick={copyCodes}>
+            {copied ? <Check size={16} strokeWidth={1.75} /> : <Copy size={16} strokeWidth={1.75} />}
             {copied ? t("settings.client.tfa.recoveryCopied") : t("settings.client.tfa.recoveryCopy")}
-          </Button>
-          <Button type="button" variant="outline" size="sm" onClick={downloadCodes}>
-            <Download className="mr-1.5 h-4 w-4" />
+          </button>
+          <button type="button" className="btn-new btn-new--secondary btn-new--sm" onClick={downloadCodes}>
+            <Download size={16} strokeWidth={1.75} />
             {t("settings.client.tfa.recoveryDownload")}
-          </Button>
+          </button>
         </div>
         <div className="flex justify-end pt-1">
-          <Button type="button" onClick={finish}>
+          <button type="button" className="btn-new btn-new--primary" style={{ height: 40 }} onClick={finish}>
             {t("settings.client.tfa.recoveryDone")}
-          </Button>
+          </button>
         </div>
       </div>
     );
@@ -156,35 +173,70 @@ export function TwoFactorSetup({ forced = false, onEnabled }: Props) {
   // ── Paso: escanear QR + verificar ───────────────────────────────
   if (step === "scan") {
     return (
-      <div className="bg-card border border-border rounded-2xl p-6 shadow-card space-y-4">
+      <div className="card p-6 space-y-4">
         {forced && (
-          <div className="space-y-1 border-b border-border/60 pb-3">
-            <h2 className="text-base font-bold">{t("settings.client.tfa.forcedTitle")}</h2>
-            <p className="text-sm text-muted-foreground">{t("settings.client.tfa.forcedSubtitle")}</p>
+          <div
+            className="space-y-1"
+            style={{ borderBottom: "1px solid var(--border-soft)", paddingBottom: 12 }}
+          >
+            <h2 style={{ fontSize: 15, fontWeight: 600, color: "var(--text-1)", margin: 0 }}>
+              {t("settings.client.tfa.forcedTitle")}
+            </h2>
+            <p style={{ fontSize: 12.5, color: "var(--text-3)", margin: 0 }}>
+              {t("settings.client.tfa.forcedSubtitle")}
+            </p>
           </div>
         )}
-        <div className="space-y-1">
-          <h3 className="text-sm font-semibold">{t("settings.client.tfa.scanTitle")}</h3>
-          <p className="text-xs text-muted-foreground">{t("settings.client.tfa.scanHint")}</p>
+        <div>
+          <div className="form-section__title">
+            {t("settings.client.tfa.scanTitle")}
+            <span className="form-section__rule" />
+          </div>
+          <p style={{ fontSize: 12, color: "var(--text-3)", margin: 0 }}>
+            {t("settings.client.tfa.scanHint")}
+          </p>
         </div>
 
         <div className="flex flex-col items-center gap-3">
-          {qr ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={qr}
-              alt="QR 2FA"
-              width={200}
-              height={200}
-              className="rounded-xl border border-border bg-white p-2"
-            />
-          ) : (
-            <div className="h-[200px] w-[200px] animate-pulse rounded-xl border border-border bg-muted/30" />
-          )}
+          <div
+            style={{
+              background: "var(--bg-elev-2)",
+              borderRadius: "var(--radius-lg)",
+              padding: 16,
+            }}
+          >
+            {qr ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={qr}
+                alt="QR 2FA"
+                width={200}
+                height={200}
+                className="block bg-white p-2"
+                style={{ borderRadius: "var(--radius)" }}
+              />
+            ) : (
+              <div
+                className="skel-new"
+                style={{ width: 200, height: 200, borderRadius: "var(--radius)" }}
+              />
+            )}
+          </div>
           {secret && (
             <div className="w-full text-center">
-              <p className="text-xs text-muted-foreground">{t("settings.client.tfa.manualLabel")}</p>
-              <code className="mt-1 inline-block break-all rounded-md bg-muted px-2 py-1 font-mono text-xs">
+              <p style={{ fontSize: 11, color: "var(--text-3)", margin: 0 }}>
+                {t("settings.client.tfa.manualLabel")}
+              </p>
+              <code
+                className="mono mt-1 inline-block break-all"
+                style={{
+                  background: "var(--bg-elev-2)",
+                  borderRadius: "var(--radius-sm)",
+                  padding: "4px 8px",
+                  fontSize: 12,
+                  color: "var(--text-1)",
+                }}
+              >
                 {secret}
               </code>
             </div>
@@ -193,24 +245,32 @@ export function TwoFactorSetup({ forced = false, onEnabled }: Props) {
 
         {errorBox}
 
-        <div className="space-y-1.5">
-          <Label>{t("settings.client.tfa.codeLabel")}</Label>
-          <Input
+        <div className="field-new">
+          <label className="field-new__label">{t("settings.client.tfa.codeLabel")}</label>
+          <input
             value={code}
             onChange={(e) => setCode(e.target.value)}
             inputMode="numeric"
             autoComplete="one-time-code"
             maxLength={6}
             placeholder={t("settings.client.tfa.codePlaceholder")}
-            className="text-center text-lg tracking-[0.3em]"
+            className="input-new mono"
+            style={{
+              height: 52,
+              fontSize: 22,
+              textAlign: "center",
+              letterSpacing: "0.3em",
+              fontVariantNumeric: "tabular-nums",
+            }}
           />
         </div>
 
         <div className="flex flex-wrap justify-end gap-2 pt-1">
           {!forced && (
-            <Button
+            <button
               type="button"
-              variant="ghost"
+              className="btn-new btn-new--ghost"
+              style={{ height: 40 }}
               onClick={() => {
                 setStep("start");
                 setCode("");
@@ -218,11 +278,17 @@ export function TwoFactorSetup({ forced = false, onEnabled }: Props) {
               }}
             >
               {t("settings.client.tfa.cancel")}
-            </Button>
+            </button>
           )}
-          <Button type="button" onClick={confirm} disabled={loading || !code.trim()}>
+          <button
+            type="button"
+            className="btn-new btn-new--primary"
+            style={{ height: 40 }}
+            onClick={confirm}
+            disabled={loading || !code.trim()}
+          >
             {loading ? t("settings.client.tfa.verifying") : t("settings.client.tfa.verifyBtn")}
-          </Button>
+          </button>
         </div>
       </div>
     );
@@ -232,10 +298,16 @@ export function TwoFactorSetup({ forced = false, onEnabled }: Props) {
   return (
     <div className="space-y-3">
       {errorBox}
-      <Button type="button" onClick={begin} disabled={loading}>
-        <ShieldCheck className="mr-1.5 h-4 w-4" />
+      <button
+        type="button"
+        className="btn-new btn-new--primary"
+        style={{ height: 40 }}
+        onClick={begin}
+        disabled={loading}
+      >
+        <ShieldCheck size={16} strokeWidth={1.75} />
         {loading ? t("settings.client.tfa.verifying") : t("settings.client.tfa.setupBtn")}
-      </Button>
+      </button>
     </div>
   );
 }

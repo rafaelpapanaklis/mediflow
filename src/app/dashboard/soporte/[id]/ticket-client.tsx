@@ -17,10 +17,11 @@ import Link from "next/link";
 import toast from "react-hot-toast";
 import {
   ArrowLeft, Paperclip, FileText, Send, X,
-  CheckCircle2, Loader2, LifeBuoy, Image as ImageIcon,
+  CheckCircle2, Loader2, LifeBuoy, Image as ImageIcon, Star,
 } from "lucide-react";
 import { BadgeNew } from "@/components/ui/design-system/badge-new";
 import { ButtonNew } from "@/components/ui/design-system/button-new";
+import { AvatarNew } from "@/components/ui/design-system/avatar-new";
 import {
   SUPPORT_STATUS_LABELS_CLINIC,
   SUPPORT_CATEGORY_LABELS,
@@ -40,9 +41,10 @@ import type {
 
 type BadgeTone = "success" | "warning" | "danger" | "info" | "brand" | "neutral";
 
+// MISMO mapa en soporte/soporte-client.tsx — mantener en sincronía.
 const STATUS_TONES: Record<string, BadgeTone> = {
-  ABIERTO: "brand",              // violeta
-  EN_PROGRESO: "info",           // azul
+  ABIERTO: "info",               // azul
+  EN_PROGRESO: "brand",          // violeta (en curso)
   ESPERANDO_RESPUESTA: "warning",// ámbar
   RESUELTO: "success",           // verde
   CERRADO: "neutral",            // gris
@@ -88,11 +90,11 @@ function AttachmentItem({ att }: { att: SupportAttachment }) {
   if (!att.signedUrl) {
     return (
       <span
-        className="inline-flex items-center gap-1.5 rounded-lg border border-border px-2 py-1 text-xs"
+        className="tag-new"
         style={{ color: "var(--text-3)" }}
         title="Adjunto no disponible por ahora"
       >
-        {isImage ? <ImageIcon size={13} aria-hidden /> : <FileText size={13} aria-hidden />}
+        {isImage ? <ImageIcon size={16} strokeWidth={1.75} aria-hidden /> : <FileText size={16} strokeWidth={1.75} aria-hidden />}
         <span className="max-w-[140px] truncate">{att.name}</span>
       </span>
     );
@@ -112,8 +114,8 @@ function AttachmentItem({ att }: { att: SupportAttachment }) {
           src={att.signedUrl}
           alt={att.name}
           loading="lazy"
-          className="rounded-lg border border-border object-cover"
-          style={{ maxWidth: 160, maxHeight: 160 }}
+          className="object-cover"
+          style={{ maxWidth: 160, maxHeight: 160, borderRadius: "var(--radius)", border: "1px solid var(--border-soft)" }}
         />
       </a>
     );
@@ -124,10 +126,11 @@ function AttachmentItem({ att }: { att: SupportAttachment }) {
       href={att.signedUrl}
       target="_blank"
       rel="noopener noreferrer"
-      className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-2 py-1 text-xs text-foreground hover:underline"
+      className="tag-new hover:underline"
+      style={{ background: "var(--bg-elev)" }}
       title={att.name}
     >
-      <FileText size={13} aria-hidden />
+      <FileText size={16} strokeWidth={1.75} aria-hidden />
       <span className="max-w-[160px] truncate">{att.name}</span>
     </a>
   );
@@ -147,7 +150,7 @@ function MessageBubble({ msg }: { msg: SupportMessageDTO }) {
             {msg.body}
           </p>
           {time && (
-            <p className="mt-0.5 text-[10px]" style={{ color: "var(--text-3)" }}>{time}</p>
+            <p className="mt-0.5" style={{ fontSize: 11, color: "var(--text-3)" }}>{time}</p>
           )}
         </div>
       </div>
@@ -160,21 +163,24 @@ function MessageBubble({ msg }: { msg: SupportMessageDTO }) {
     : (msg.authorName || "Soporte DaleControl");
 
   return (
-    <div className={`flex ${isClinic ? "justify-end" : "justify-start"}`}>
+    <div className={`flex items-start gap-2 ${isClinic ? "justify-end" : "justify-start"}`}>
+      {!isClinic && <AvatarNew name={authorLabel} size="sm" className="mt-1" />}
       <div
-        className={`max-w-[85%] sm:max-w-[65%] rounded-2xl border px-3.5 py-2.5 ${
-          isClinic ? "rounded-br-md" : "rounded-bl-md bg-card border-border"
-        }`}
-        style={isClinic ? { background: "var(--brand-soft)", borderColor: "rgba(124,58,237,0.25)" } : undefined}
+        className="max-w-[85%] sm:max-w-[65%] px-3.5 py-2.5"
+        style={
+          isClinic
+            ? { background: "var(--brand-soft)", border: "1px solid rgba(124,58,237,0.25)", borderRadius: "var(--radius-lg)", borderBottomRightRadius: "var(--radius-sm)" }
+            : { background: "var(--bg-elev-2)", border: "1px solid var(--border-soft)", borderRadius: "var(--radius-lg)", borderBottomLeftRadius: "var(--radius-sm)" }
+        }
       >
         <p
-          className="mb-1 text-xs font-semibold"
-          style={{ color: isClinic ? "var(--brand)" : "var(--text-2)" }}
+          className="mb-1 font-semibold"
+          style={{ fontSize: 11, color: isClinic ? "var(--brand)" : "var(--text-2)" }}
         >
           {authorLabel}
         </p>
         {/* Texto plano siempre — nunca HTML */}
-        <p className="whitespace-pre-wrap break-words text-sm leading-relaxed text-foreground">
+        <p className="whitespace-pre-wrap break-words text-sm leading-relaxed" style={{ color: "var(--text-1)" }}>
           {msg.body}
         </p>
         {attachments.length > 0 && (
@@ -186,13 +192,14 @@ function MessageBubble({ msg }: { msg: SupportMessageDTO }) {
         )}
         {time && (
           <p
-            className={`mt-1 text-[10px] ${isClinic ? "text-right" : "text-left"}`}
-            style={{ color: "var(--text-3)" }}
+            className={`mt-1 ${isClinic ? "text-right" : "text-left"}`}
+            style={{ fontSize: 11, color: "var(--text-3)" }}
           >
             {time}
           </p>
         )}
       </div>
+      {isClinic && <AvatarNew name={authorLabel} size="sm" className="mt-1" />}
     </div>
   );
 }
@@ -210,10 +217,15 @@ function StarPicker({ value, onChange }: { value: number; onChange: (v: number) 
           aria-checked={value === n}
           aria-label={`${n} ${n === 1 ? "estrella" : "estrellas"}`}
           onClick={() => onChange(value === n ? 0 : n)}
-          className="px-0.5 text-2xl leading-none transition-transform hover:scale-110"
-          style={{ color: n <= value ? "#f59e0b" : "var(--text-3)" }}
+          className="transition-transform hover:scale-110"
+          style={{
+            width: 40, height: 40, display: "grid", placeItems: "center",
+            background: "transparent", border: "none", cursor: "pointer",
+            color: n <= value ? "var(--warning-strong)" : "var(--text-3)",
+            transitionDuration: "var(--dur-1)", transitionTimingFunction: "var(--ease)",
+          }}
         >
-          ★
+          <Star size={22} strokeWidth={1.75} fill={n <= value ? "currentColor" : "none"} aria-hidden />
         </button>
       ))}
     </div>
@@ -237,16 +249,17 @@ function CloseDialog({
         role="dialog"
         aria-modal="true"
         aria-label="Cerrar ticket"
-        className="relative flex max-h-[90vh] w-full max-w-sm flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-xl"
+        className="relative flex max-h-[90vh] w-full max-w-sm flex-col overflow-hidden"
+        style={{ background: "var(--bg-elev)", border: "1px solid var(--border-strong)", borderRadius: "var(--radius-lg)", boxShadow: "var(--shadow-3)" }}
       >
-        <h3 className="shrink-0 px-5 pb-3 pt-5 text-base font-semibold text-foreground">¿Resolvimos tu problema?</h3>
+        <h3 className="shrink-0 px-5 pb-3 pt-5 text-base font-semibold" style={{ color: "var(--text-1)" }}>¿Resolvimos tu problema?</h3>
         <div className="min-h-0 flex-1 overflow-y-auto px-5">
-          <p className="text-sm text-muted-foreground">
+          <p className="text-sm" style={{ color: "var(--text-2)" }}>
             Al cerrar el ticket ya no podrás responder en este hilo. Si quieres, califica la atención (es opcional).
           </p>
           <div className="mt-4">
             <StarPicker value={rating} onChange={setRating} />
-            <p className="mt-1.5 text-center text-xs text-muted-foreground">
+            <p className="mt-1.5 text-center text-xs" style={{ color: "var(--text-3)" }}>
               {rating > 0 ? `${rating} de 5` : "Sin calificación"}
             </p>
           </div>
@@ -259,7 +272,7 @@ function CloseDialog({
             variant="primary"
             onClick={() => onConfirm(rating)}
             disabled={closing}
-            icon={closing ? <Loader2 size={14} className="animate-spin" aria-hidden /> : undefined}
+            icon={closing ? <Loader2 size={16} strokeWidth={1.75} className="animate-spin" aria-hidden /> : undefined}
           >
             {closing ? "Cerrando…" : "Cerrar ticket"}
           </ButtonNew>
@@ -461,8 +474,8 @@ export function TicketClient({ ticketId }: { ticketId: string }) {
   if (loading) {
     return (
       <div className="flex min-h-[50vh] flex-col items-center justify-center gap-3 p-6">
-        <Loader2 size={22} className="animate-spin text-muted-foreground" aria-hidden />
-        <p className="text-sm text-muted-foreground">Cargando ticket…</p>
+        <Loader2 size={20} strokeWidth={1.75} className="animate-spin" style={{ color: "var(--text-3)" }} aria-hidden />
+        <p className="text-sm" style={{ color: "var(--text-3)" }}>Cargando ticket…</p>
       </div>
     );
   }
@@ -470,13 +483,13 @@ export function TicketClient({ ticketId }: { ticketId: string }) {
   if (notFound) {
     return (
       <div className="flex min-h-[55vh] flex-col items-center justify-center gap-2 p-6 text-center">
-        <LifeBuoy size={28} className="text-muted-foreground" aria-hidden />
-        <h2 className="text-lg font-semibold text-foreground">Ticket no encontrado</h2>
-        <p className="max-w-sm text-sm text-muted-foreground">
+        <LifeBuoy size={20} strokeWidth={1.75} style={{ color: "var(--text-4)" }} aria-hidden />
+        <h2 className="text-lg font-semibold" style={{ color: "var(--text-1)" }}>Ticket no encontrado</h2>
+        <p className="max-w-sm text-sm" style={{ color: "var(--text-3)" }}>
           Puede que el enlace sea incorrecto o que el ticket ya no exista.
         </p>
         <Link href="/dashboard/soporte" className="btn-new btn-new--secondary mt-2">
-          <ArrowLeft size={14} aria-hidden /> Volver a Soporte
+          <ArrowLeft size={16} strokeWidth={1.75} aria-hidden /> Volver a Soporte
         </Link>
       </div>
     );
@@ -485,15 +498,15 @@ export function TicketClient({ ticketId }: { ticketId: string }) {
   if (loadError || !ticket) {
     return (
       <div className="flex min-h-[55vh] flex-col items-center justify-center gap-2 p-6 text-center">
-        <LifeBuoy size={28} className="text-muted-foreground" aria-hidden />
-        <h2 className="text-lg font-semibold text-foreground">No se pudo cargar el ticket</h2>
-        <p className="max-w-sm text-sm text-muted-foreground">
+        <LifeBuoy size={20} strokeWidth={1.75} style={{ color: "var(--text-4)" }} aria-hidden />
+        <h2 className="text-lg font-semibold" style={{ color: "var(--text-1)" }}>No se pudo cargar el ticket</h2>
+        <p className="max-w-sm text-sm" style={{ color: "var(--text-3)" }}>
           Revisa tu conexión e inténtalo de nuevo.
         </p>
         <div className="mt-2 flex items-center gap-2">
           <ButtonNew variant="primary" onClick={() => loadTicket()}>Reintentar</ButtonNew>
           <Link href="/dashboard/soporte" className="btn-new btn-new--ghost">
-            <ArrowLeft size={14} aria-hidden /> Soporte
+            <ArrowLeft size={16} strokeWidth={1.75} aria-hidden /> Soporte
           </Link>
         </div>
       </div>
@@ -516,23 +529,23 @@ export function TicketClient({ ticketId }: { ticketId: string }) {
         className="mb-3 inline-flex w-fit items-center gap-1.5 text-[13px] hover:underline"
         style={{ color: "var(--text-3)" }}
       >
-        <ArrowLeft size={14} aria-hidden /> Soporte
+        <ArrowLeft size={16} strokeWidth={1.75} aria-hidden /> Soporte
       </Link>
 
       {/* Encabezado */}
-      <div className="flex flex-wrap items-start justify-between gap-3 border-b border-border pb-4">
+      <div className="flex flex-wrap items-start justify-between gap-3 pb-4" style={{ borderBottom: "1px solid var(--border-soft)" }}>
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="font-mono text-xs text-muted-foreground">{ticket.folioLabel}</span>
+            <span className="mono" style={{ fontSize: 11, color: "var(--text-3)" }}>{ticket.folioLabel}</span>
             <BadgeNew tone={statusTone} dot>{statusLabel}</BadgeNew>
           </div>
-          <h1 className="mt-1 break-words text-lg font-semibold text-foreground sm:text-xl">
+          <h1 className="mt-1 break-words text-lg font-semibold sm:text-xl" style={{ color: "var(--text-1)", letterSpacing: "-0.02em" }}>
             {ticket.subject}
           </h1>
           <div className="mt-2 flex flex-wrap items-center gap-2">
             <BadgeNew tone="neutral">{categoryLabel}</BadgeNew>
-            <BadgeNew tone={priorityTone}>Prioridad: {priorityLabel}</BadgeNew>
-            <span className="text-xs text-muted-foreground">
+            <BadgeNew tone={priorityTone} dot>Prioridad: {priorityLabel}</BadgeNew>
+            <span className="text-xs" style={{ color: "var(--text-3)" }}>
               Creado el {formatDateLong(ticket.createdAt)}
             </span>
           </div>
@@ -547,7 +560,7 @@ export function TicketClient({ ticketId }: { ticketId: string }) {
       {/* Hilo */}
       <div className="flex flex-1 flex-col gap-3 py-4">
         {visibleMessages.length === 0 ? (
-          <p className="py-6 text-center text-sm text-muted-foreground">
+          <p className="py-6 text-center text-sm" style={{ color: "var(--text-3)" }}>
             Aún no hay mensajes en este ticket.
           </p>
         ) : (
@@ -559,11 +572,11 @@ export function TicketClient({ ticketId }: { ticketId: string }) {
       {/* Banner de resuelto */}
       {ticket.status === "RESUELTO" && (
         <div
-          className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-xl border px-3.5 py-2.5"
-          style={{ background: "var(--success-soft)", borderColor: "rgba(16,185,129,0.25)" }}
+          className="mb-3 flex flex-wrap items-center justify-between gap-2 px-3.5 py-2.5"
+          style={{ background: "var(--success-soft)", border: "1px solid rgba(16,185,129,0.25)", borderRadius: "var(--radius)" }}
         >
-          <div className="flex min-w-0 items-center gap-2 text-sm" style={{ color: "var(--success)" }}>
-            <CheckCircle2 size={16} className="shrink-0" aria-hidden />
+          <div className="flex min-w-0 items-center gap-2 text-sm" style={{ color: "var(--success-strong)" }}>
+            <CheckCircle2 size={16} strokeWidth={1.75} className="shrink-0" aria-hidden />
             <span>Marcamos tu ticket como resuelto. Si todo quedó bien, ciérralo y califica la atención.</span>
           </div>
           <ButtonNew variant="secondary" onClick={() => setCloseOpen(true)}>
@@ -574,14 +587,14 @@ export function TicketClient({ ticketId }: { ticketId: string }) {
 
       {/* Composer / aviso de cerrado */}
       {isClosed ? (
-        <div className="rounded-2xl border border-border bg-card px-4 py-5 text-center">
-          <p className="text-sm font-medium text-foreground">Este ticket está cerrado.</p>
+        <div className="px-4 py-5 text-center" style={{ background: "var(--bg-elev)", border: "1px solid var(--border-soft)", borderRadius: "var(--radius-lg)", boxShadow: "var(--shadow-1)" }}>
+          <p className="text-sm font-medium" style={{ color: "var(--text-1)" }}>Este ticket está cerrado.</p>
           {typeof ticket.rating === "number" && ticket.rating >= 1 && (
-            <p className="mt-1 text-xs text-muted-foreground">
-              Tu calificación: <span style={{ color: "#f59e0b" }}>{"★".repeat(Math.min(5, ticket.rating))}</span> ({ticket.rating}/5)
+            <p className="mt-1 text-xs" style={{ color: "var(--text-3)" }}>
+              Tu calificación: <span style={{ color: "var(--warning-strong)" }}>{"★".repeat(Math.min(5, ticket.rating))}</span> ({ticket.rating}/5)
             </p>
           )}
-          <p className="mt-1 text-xs text-muted-foreground">
+          <p className="mt-1 text-xs" style={{ color: "var(--text-3)" }}>
             Si necesitas algo más, crea un ticket nuevo y te atendemos.
           </p>
           <Link href="/dashboard/soporte" className="btn-new btn-new--primary mt-3">
@@ -596,29 +609,30 @@ export function TicketClient({ ticketId }: { ticketId: string }) {
               {pendingFiles.map((f, i) => (
                 <span
                   key={`${f.path}-${i}`}
-                  className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-2 py-1 text-xs text-foreground"
+                  className="tag-new"
+                  style={{ background: "var(--bg-elev)" }}
                 >
                   {f.type && f.type.startsWith("image/")
-                    ? <ImageIcon size={13} className="text-muted-foreground" aria-hidden />
-                    : <FileText size={13} className="text-muted-foreground" aria-hidden />}
-                  <span className="max-w-[140px] truncate">{f.name}</span>
+                    ? <ImageIcon size={16} strokeWidth={1.75} style={{ color: "var(--text-3)" }} aria-hidden />
+                    : <FileText size={16} strokeWidth={1.75} style={{ color: "var(--text-3)" }} aria-hidden />}
+                  <span className="max-w-[140px] truncate" style={{ color: "var(--text-1)" }}>{f.name}</span>
                   {formatBytes(f.size) && (
-                    <span className="text-muted-foreground">{formatBytes(f.size)}</span>
+                    <span style={{ color: "var(--text-3)" }}>{formatBytes(f.size)}</span>
                   )}
                   <button
                     type="button"
                     aria-label={`Quitar ${f.name}`}
                     onClick={() => removePending(i)}
-                    className="text-muted-foreground hover:text-foreground"
+                    className="text-[color:var(--text-3)] hover:text-[color:var(--text-1)]"
                   >
-                    <X size={12} aria-hidden />
+                    <X size={16} strokeWidth={1.75} aria-hidden />
                   </button>
                 </span>
               ))}
             </div>
           )}
 
-          <div className="rounded-2xl border border-border bg-card p-2 shadow-sm sm:p-3">
+          <div className="p-2 sm:p-3" style={{ background: "var(--bg-elev)", border: "1px solid var(--border-soft)", borderRadius: "var(--radius-lg)", boxShadow: "var(--shadow-1)" }}>
             <textarea
               value={body}
               onChange={(e) => setBody(e.target.value.slice(0, SUPPORT_MAX_BODY_CHARS))}
@@ -627,7 +641,8 @@ export function TicketClient({ ticketId }: { ticketId: string }) {
               rows={2}
               maxLength={SUPPORT_MAX_BODY_CHARS}
               disabled={sending}
-              className="w-full resize-none bg-transparent px-1.5 pt-1 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none"
+              className="w-full resize-none bg-transparent px-1.5 pt-1 text-sm placeholder:text-muted-foreground focus:outline-none"
+              style={{ color: "var(--text-1)" }}
             />
             <div className="mt-1 flex items-center justify-between gap-2">
               <div className="flex items-center gap-1.5">
@@ -648,17 +663,17 @@ export function TicketClient({ ticketId }: { ticketId: string }) {
                   title="Imágenes o PDF · máx. 5MB · hasta 5 por mensaje"
                 >
                   {uploading
-                    ? <Loader2 size={14} className="animate-spin" aria-hidden />
-                    : <Paperclip size={14} aria-hidden />}
+                    ? <Loader2 size={16} strokeWidth={1.75} className="animate-spin" aria-hidden />
+                    : <Paperclip size={16} strokeWidth={1.75} aria-hidden />}
                   <span className="hidden sm:inline">{uploading ? "Subiendo…" : "Adjuntar"}</span>
                 </button>
-                <span className="hidden text-[11px] text-muted-foreground sm:inline">
+                <span className="hidden sm:inline" style={{ fontSize: 11, color: "var(--text-3)", fontVariantNumeric: "tabular-nums" }}>
                   {pendingFiles.length}/{SUPPORT_MAX_FILES_PER_MESSAGE}
                 </span>
               </div>
               <div className="flex items-center gap-2">
                 {body.length > SUPPORT_MAX_BODY_CHARS - 500 && (
-                  <span className="text-[11px] text-muted-foreground">
+                  <span style={{ fontSize: 11, color: "var(--text-3)", fontVariantNumeric: "tabular-nums" }}>
                     {body.length}/{SUPPORT_MAX_BODY_CHARS}
                   </span>
                 )}
@@ -667,15 +682,15 @@ export function TicketClient({ ticketId }: { ticketId: string }) {
                   onClick={handleSend}
                   disabled={sending || uploading || !body.trim()}
                   icon={sending
-                    ? <Loader2 size={14} className="animate-spin" aria-hidden />
-                    : <Send size={14} aria-hidden />}
+                    ? <Loader2 size={16} strokeWidth={1.75} className="animate-spin" aria-hidden />
+                    : <Send size={16} strokeWidth={1.75} aria-hidden />}
                 >
                   {sending ? "Enviando…" : "Enviar"}
                 </ButtonNew>
               </div>
             </div>
           </div>
-          <p className="mt-1.5 hidden text-center text-[11px] text-muted-foreground sm:block">
+          <p className="mt-1.5 hidden text-center sm:block" style={{ fontSize: 11, color: "var(--text-3)" }}>
             Enter para enviar · Shift+Enter para salto de línea
           </p>
         </div>
