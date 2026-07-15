@@ -19,13 +19,14 @@ const PAYMENT_FORM_BY_METHOD: Record<string, string> = {
 };
 
 // labelKey -> translation key resolved via t() at render time.
+// cls = badge-new semántico del sistema (mismo mapa de tonos que BillingClient).
 const INV_STATUS: Record<string, { labelKey: string; cls: string }> = {
-  PENDING: { labelKey: "clinical.invoiceDetail.statusPending", cls: "bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300 border border-amber-200 dark:border-amber-800" },
-  PARTIAL: { labelKey: "clinical.invoiceDetail.statusPartial",   cls: "bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300 border border-blue-200 dark:border-blue-800" },
-  PAID:    { labelKey: "clinical.invoiceDetail.statusPaid",    cls: "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800" },
-  OVERDUE: { labelKey: "clinical.invoiceDetail.statusOverdue",   cls: "bg-rose-100 text-rose-800 dark:bg-rose-900/40 dark:text-rose-300 border border-rose-200 dark:border-rose-800" },
-  CANCELLED: { labelKey: "clinical.invoiceDetail.statusCancelled", cls: "bg-muted text-muted-foreground border border-border" },
-  DRAFT:   { labelKey: "clinical.invoiceDetail.statusDraft",  cls: "bg-muted text-muted-foreground border border-border" },
+  PENDING: { labelKey: "clinical.invoiceDetail.statusPending", cls: "badge-new badge-new--warning" },
+  PARTIAL: { labelKey: "clinical.invoiceDetail.statusPartial", cls: "badge-new badge-new--info" },
+  PAID:    { labelKey: "clinical.invoiceDetail.statusPaid",    cls: "badge-new badge-new--success" },
+  OVERDUE: { labelKey: "clinical.invoiceDetail.statusOverdue", cls: "badge-new badge-new--danger" },
+  CANCELLED: { labelKey: "clinical.invoiceDetail.statusCancelled", cls: "badge-new badge-new--neutral" },
+  DRAFT:   { labelKey: "clinical.invoiceDetail.statusDraft",   cls: "badge-new badge-new--brand" },
 };
 
 const METHOD_LABEL_KEYS: Record<string, string> = {
@@ -300,7 +301,7 @@ export function InvoiceDetailModal({ open, invoice, patientName, onClose, onMuta
           <DialogHeader>
             <DialogTitle className="text-foreground font-bold flex items-center gap-3 flex-wrap">
               <span className="font-mono">{invoice.invoiceNumber}</span>
-              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${s.cls}`}>{t(s.labelKey)}</span>
+              <span className={s.cls}>{t(s.labelKey)}</span>
             </DialogTitle>
           </DialogHeader>
 
@@ -312,12 +313,12 @@ export function InvoiceDetailModal({ open, invoice, patientName, onClose, onMuta
               {(invoice.discount ?? 0) > 0 && (
                 <>
                   <div className="flex justify-between"><span className="text-muted-foreground">{t("clinical.invoiceDetail.subtotal")}</span><span>{formatCurrency(invoice.subtotal ?? invoice.total + (invoice.discount ?? 0))}</span></div>
-                  <div className="flex justify-between"><span className="text-muted-foreground">{t("clinical.invoiceDetail.discount")}</span><span className="text-amber-600 dark:text-amber-400">−{formatCurrency(invoice.discount ?? 0)}</span></div>
+                  <div className="flex justify-between"><span className="text-muted-foreground">{t("clinical.invoiceDetail.discount")}</span><span style={{ color: "var(--warning)" }}>−{formatCurrency(invoice.discount ?? 0)}</span></div>
                 </>
               )}
               <div className="flex justify-between"><span className="text-muted-foreground">{t("common.total")}</span><span className="font-bold">{formatCurrency(invoice.total)}</span></div>
-              <div className="flex justify-between"><span className="text-muted-foreground">{t("clinical.invoiceDetail.paid")}</span><span className="text-emerald-600 dark:text-emerald-400 font-bold">{formatCurrency(invoice.paid)}</span></div>
-              <div className="flex justify-between"><span className="text-muted-foreground">{t("clinical.invoiceDetail.balance")}</span><span className="text-rose-600 dark:text-rose-400 font-bold">{formatCurrency(invoice.balance)}</span></div>
+              <div className="flex justify-between"><span className="text-muted-foreground">{t("clinical.invoiceDetail.paid")}</span><span className="font-bold" style={{ color: "var(--success)" }}>{formatCurrency(invoice.paid)}</span></div>
+              <div className="flex justify-between"><span className="text-muted-foreground">{t("clinical.invoiceDetail.balance")}</span><span className="font-bold" style={{ color: "var(--danger)" }}>{formatCurrency(invoice.balance)}</span></div>
               {invoice.paymentMethod && (
                 <div className="flex justify-between"><span className="text-muted-foreground">{t("clinical.invoiceDetail.method")}</span><span className="capitalize">{METHOD_LABEL_KEYS[invoice.paymentMethod] ? t(METHOD_LABEL_KEYS[invoice.paymentMethod]) : invoice.paymentMethod}</span></div>
               )}
@@ -590,7 +591,14 @@ export function InvoiceDetailModal({ open, invoice, patientName, onClose, onMuta
           <div className="px-6 py-4 space-y-3 flex-1 overflow-y-auto min-h-0">
             <p className="text-xs text-muted-foreground">{t("clinical.invoiceDetail.cfdiFormHelp")}</p>
             {invoice.balance > 0 && (
-              <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-lg px-3 py-2 text-[11px] text-amber-700 dark:text-amber-300">
+              <div
+                className="rounded-lg px-3 py-2 text-[11px]"
+                style={{
+                  background: "var(--warning-soft)",
+                  border: "1px solid var(--warning-border-strong)",
+                  color: "var(--warning-strong)",
+                }}
+              >
                 {t("clinical.invoiceDetail.cfdiBalanceWarning")}
               </div>
             )}

@@ -4,20 +4,13 @@
   margin: 0 auto;
   padding: 24px 28px 48px;
   font-family: var(--font-sans, system-ui, sans-serif);
-  color: var(--text-1, #0f172a);
+  color: var(--text-1);
 
-  --bg-soft: #f8fafc;
-  --status-ok-text: #047857;
-  --status-warn-text: #b45309;
-  --neutral-text: #475569;
-}
-
-/* ─── DARK MODE — overrides ─── */
-:global(.dark) .page {
-  --bg-soft: #1A1630;
-  --status-ok-text: #34d399;
-  --status-warn-text: #fbbf24;
-  --neutral-text: #94a3b8;
+  /* Alias legacy → tokens del sistema (dark mode automático, sin override). */
+  --bg-soft: var(--bg-elev-2);
+  --status-ok-text: var(--success-strong);
+  --status-warn-text: var(--warning-strong);
+  --neutral-text: var(--text-2);
 }
 
 .header {
@@ -88,10 +81,10 @@
   flex-shrink: 0;
   color: #fff;
 }
-.cardIcon[data-tone="green"]  { background: linear-gradient(135deg, #10b981, #059669); }
-.cardIcon[data-tone="blue"]   { background: linear-gradient(135deg, #3b82f6, #1d4ed8); }
-.cardIcon[data-tone="purple"] { background: linear-gradient(135deg, #7c3aed, #5b21b6); }
-.cardIcon[data-tone="orange"] { background: linear-gradient(135deg, #f59e0b, #d97706); }
+.cardIcon[data-tone="green"]  { background: linear-gradient(135deg, var(--success), var(--success-strong)); }
+.cardIcon[data-tone="blue"]   { background: linear-gradient(135deg, var(--info), var(--info-strong)); }
+.cardIcon[data-tone="purple"] { background: linear-gradient(135deg, var(--violet-500), var(--violet-700)); }
+.cardIcon[data-tone="orange"] { background: linear-gradient(135deg, var(--warning), var(--warning-strong)); }
 
 .cardHeaderInfo { flex: 1; min-width: 0; }
 .cardTitle {
@@ -120,19 +113,19 @@
   flex-shrink: 0;
 }
 .statusOk {
-  background: rgba(16, 185, 129, 0.10);
+  background: var(--success-soft);
   color: var(--status-ok-text);
-  border-color: rgba(16, 185, 129, 0.45);
+  border-color: var(--success);
 }
 .statusWarn {
-  background: rgba(245, 158, 11, 0.10);
+  background: var(--warning-soft);
   color: var(--status-warn-text);
-  border-color: rgba(245, 158, 11, 0.45);
+  border-color: var(--warning);
 }
 .statusOff {
-  background: rgba(148, 163, 184, 0.12);
+  background: var(--bg-elev-2);
   color: var(--neutral-text);
-  border-color: rgba(148, 163, 184, 0.4);
+  border-color: var(--border-strong);
 }
 
 .cardBody {
@@ -197,8 +190,8 @@
 }
 .fieldInput:focus {
   outline: none;
-  border-color: var(--brand, #7c3aed);
-  box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.12);
+  border-color: var(--brand);
+  box-shadow: var(--ring);
 }
 .fieldSuffix {
   position: absolute;
@@ -291,17 +284,17 @@
   padding: 8px 14px;
   font-size: 12px;
   font-weight: 700;
-  background: var(--brand, #7c3aed);
+  background: var(--brand);
   color: #fff;
-  border: 1px solid var(--brand, #7c3aed);
+  border: 1px solid var(--brand);
   border-radius: 8px;
   cursor: pointer;
   font-family: inherit;
-  transition: background 0.12s, transform 0.08s;
-  box-shadow: 0 4px 14px -4px rgba(124, 58, 237, 0.45);
+  transition: background var(--dur-1) var(--ease), transform var(--dur-1) var(--ease), box-shadow var(--dur-1) var(--ease);
+  box-shadow: var(--shadow-2);
 }
 .btnPrimary:hover:not(:disabled) {
-  background: #8b5cf6;
+  box-shadow: var(--shadow-3);
   transform: translateY(-1px);
 }
 .btnPrimary:disabled {

@@ -21,13 +21,13 @@ import {
   Plus,
   Search,
   Bot,
-  Check,
   CheckCheck,
   ExternalLink,
-  X,
   Menu,
   ArrowLeft,
   MessageSquare,
+  User,
+  UserX,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { useT } from "@/i18n/i18n-provider";
@@ -539,11 +539,11 @@ export function InboxClient() {
       >
         <div className={styles.brandHeader}>
           <div className={styles.brandRow}>
-            <span className={styles.brandIcon}><InboxIcon size={14} aria-hidden /></span>
+            <span className={styles.brandIcon}><InboxIcon size={14} strokeWidth={1.75} aria-hidden /></span>
             Inbox
           </div>
           <button type="button" className={styles.composeBtn}>
-            <Plus size={13} aria-hidden /> {t("inbox.client.compose")}
+            <Plus size={13} strokeWidth={1.75} aria-hidden /> {t("inbox.client.compose")}
             <kbd>C</kbd>
           </button>
         </div>
@@ -559,7 +559,7 @@ export function InboxClient() {
                 className={`${styles.folder} ${isActive ? styles.folderActive : ""}`}
                 onClick={() => handleFolderClick(f.id)}
               >
-                <span className={styles.folderIcon}><f.icon size={14} aria-hidden /></span>
+                <span className={styles.folderIcon}><f.icon size={14} strokeWidth={1.75} aria-hidden /></span>
                 <span className={styles.folderLabel}>{t(f.labelKey)}</span>
                 {f.id === "inbox" && counts.total > 0 && (
                   <span className={styles.folderCount}>{counts.total}</span>
@@ -594,7 +594,7 @@ export function InboxClient() {
             className={`${styles.folder} ${activeAssignee === "me" ? styles.folderActive : ""}`}
             onClick={() => handleAssigneeClick("me")}
           >
-            <span className={styles.folderIcon}>👤</span>
+            <span className={styles.folderIcon}><User size={14} strokeWidth={1.75} aria-hidden /></span>
             <span className={styles.folderLabel}>{t("inbox.client.assigneeMe")}</span>
           </button>
           <button
@@ -602,7 +602,7 @@ export function InboxClient() {
             className={`${styles.folder} ${activeAssignee === "unassigned" ? styles.folderActive : ""}`}
             onClick={() => handleAssigneeClick("unassigned")}
           >
-            <span className={styles.folderIcon}>?</span>
+            <span className={styles.folderIcon}><UserX size={14} strokeWidth={1.75} aria-hidden /></span>
             <span className={styles.folderLabel}>{t("inbox.client.assigneeUnassigned")}</span>
           </button>
         </div>
@@ -627,7 +627,7 @@ export function InboxClient() {
               onClick={() => setMobileSidebarOpen(true)}
               aria-label={t("inbox.client.openChannelsAndFolders")}
             >
-              <Menu size={16} aria-hidden />
+              <Menu size={16} strokeWidth={1.75} aria-hidden />
             </button>
             <h2>{folderTitle}</h2>
             <span className={styles.threadCount}>
@@ -635,7 +635,7 @@ export function InboxClient() {
             </span>
           </div>
           <div className={styles.threadSearch}>
-            <Search size={13} aria-hidden className={styles.threadSearchIcon} />
+            <Search size={13} strokeWidth={1.75} aria-hidden className={styles.threadSearchIcon} />
             <input
               type="text"
               className={styles.threadSearchInput}
@@ -664,10 +664,10 @@ export function InboxClient() {
           {loadingList ? (
             <div className={styles.emptyState}>{t("common.loading")}</div>
           ) : error ? (
-            <div className={styles.emptyState} style={{ color: "var(--st-warning)" }}>{error}</div>
+            <div className={styles.emptyState} style={{ color: "var(--warning)" }}>{error}</div>
           ) : filteredThreads.length === 0 ? (
             <div className={styles.emptyState}>
-              <InboxIcon size={36} aria-hidden style={{ opacity: 0.3, marginBottom: 8 }} />
+              <InboxIcon size={36} strokeWidth={1.75} aria-hidden style={{ opacity: 0.3, marginBottom: 8 }} />
               <div>{t("inbox.client.emptyThreadsIn", { folder: folderTitle.toLowerCase() })}</div>
             </div>
           ) : (
@@ -699,7 +699,7 @@ export function InboxClient() {
                       style={{ ["--mf-ch-color" as never]: meta.color }}
                       title={t(meta.labelKey)}
                     >
-                      <Icon size={9} aria-hidden />
+                      <Icon size={9} strokeWidth={1.75} aria-hidden />
                     </span>
                   </span>
                   <span className={styles.threadBody}>
@@ -708,14 +708,14 @@ export function InboxClient() {
                         {th.patient ? `${th.patient.firstName} ${th.patient.lastName}` : th.subject}
                       </span>
                       <span className={styles.threadTime}>
-                        {isSnoozed && "⏰ "}{formatTime(th.lastMessageAt)}
+                        {isSnoozed && <Clock size={11} strokeWidth={1.75} aria-hidden />}{formatTime(th.lastMessageAt)}
                       </span>
                     </span>
                     <span className={styles.threadSubject}>{th.subject}</span>
                     {th.tags.length > 0 && (
                       <span className={styles.threadTags}>
                         {th.tags.slice(0, 3).map((tag) => (
-                          <span key={tag} className={styles.threadTag} style={{ ["--mf-tag-color" as never]: "#7c3aed" }}>
+                          <span key={tag} className={styles.threadTag} style={{ ["--mf-tag-color" as never]: "var(--brand)" }}>
                             {tag}
                           </span>
                         ))}
@@ -733,7 +733,7 @@ export function InboxClient() {
       <section className={styles.detailCol}>
         {!activeThread ? (
           <div className={styles.emptyState} style={{ flex: 1 }}>
-            <InboxIcon size={48} aria-hidden style={{ opacity: 0.25, marginBottom: 12 }} />
+            <InboxIcon size={48} strokeWidth={1.75} aria-hidden style={{ opacity: 0.25, marginBottom: 12 }} />
             <h2 style={{ fontSize: 16, fontWeight: 700, color: "var(--text-1)", marginBottom: 4 }}>
               {t("inbox.client.selectConversation")}
             </h2>
@@ -749,7 +749,7 @@ export function InboxClient() {
                 onClick={() => setActiveThreadId(null)}
                 aria-label={t("inbox.client.backToList")}
               >
-                <ArrowLeft size={16} aria-hidden />
+                <ArrowLeft size={16} strokeWidth={1.75} aria-hidden />
               </button>
               <span className={styles.detailAvatar}>{getInitials(activePatient)}</span>
               <div className={styles.detailHeaderInfo}>
@@ -761,7 +761,7 @@ export function InboxClient() {
                 <div className={styles.detailMeta}>
                   {channelMeta && (
                     <span className={styles.channelTag} style={{ ["--mf-ch-color" as never]: channelMeta.color }}>
-                      <channelMeta.icon size={11} aria-hidden /> {t(channelMeta.labelKey)}
+                      <channelMeta.icon size={11} strokeWidth={1.75} aria-hidden /> {t(channelMeta.labelKey)}
                     </span>
                   )}
                   <span>·</span>
@@ -779,7 +779,7 @@ export function InboxClient() {
                     aria-label={activeThread.botActive ? t("inbox.client.botPause") : t("inbox.client.botResume")}
                     onClick={toggleBot}
                   >
-                    <Bot size={14} aria-hidden style={{ color: activeThread.botActive ? "#25d366" : "#94a3b8" }} />
+                    <Bot size={14} strokeWidth={1.75} aria-hidden style={{ color: activeThread.botActive ? "var(--success)" : "var(--text-3)" }} />
                   </button>
                 )}
                 <button
@@ -789,7 +789,7 @@ export function InboxClient() {
                   aria-label={t("inbox.client.archiveConversation")}
                   onClick={archiveThread}
                 >
-                  <Archive size={14} aria-hidden />
+                  <Archive size={14} strokeWidth={1.75} aria-hidden />
                 </button>
               </div>
             </header>
@@ -807,7 +807,7 @@ export function InboxClient() {
                   className={styles.assigneeStripLink}
                   href={`/dashboard/patients/${activePatient.id}`}
                 >
-                  <ExternalLink size={11} aria-hidden style={{ display: "inline", marginRight: 3 }} />
+                  <ExternalLink size={11} strokeWidth={1.75} aria-hidden style={{ display: "inline", marginRight: 3 }} />
                   {t("inbox.client.viewRecord")}
                 </a>
               )}
@@ -853,7 +853,7 @@ export function InboxClient() {
                             <div>{m.body}</div>
                             <span className={styles.messageMeta}>
                               {formatBubbleTime(m.sentAt)}
-                              {isOut && <CheckCheck size={11} aria-hidden style={{ color: "var(--st-success)" }} />}
+                              {isOut && <CheckCheck size={11} strokeWidth={1.75} aria-hidden style={{ color: "var(--success)" }} />}
                             </span>
                           </div>
                         </div>
@@ -908,7 +908,7 @@ export function InboxClient() {
                     onClick={sendReply}
                     disabled={!composerText.trim() || sending}
                   >
-                    <Send size={12} aria-hidden />
+                    <Send size={12} strokeWidth={1.75} aria-hidden />
                     {sending ? t("inbox.client.sending") : composerMode === "internal" ? t("inbox.client.saveNote") : t("common.send")}
                     <kbd>⌘↵</kbd>
                   </button>

@@ -81,10 +81,10 @@ export function RecallSection({ clinic }: { clinic: any }) {
   }
 
   return (
-    <div className="bg-card border border-border rounded-2xl p-6 shadow-card max-w-lg space-y-4">
+    <div className="card max-w-lg space-y-4" style={{ padding: 24 }}>
       <div>
-        <h2 className="text-base font-bold">Reactivación de pacientes (recall)</h2>
-        <p className="text-sm text-muted-foreground mt-0.5">
+        <h2 style={{ fontSize: 15, fontWeight: 600, color: "var(--text-1)" }}>Reactivación de pacientes (recall)</h2>
+        <p style={{ fontSize: 13, color: "var(--text-3)", marginTop: 2 }}>
           Avísale automáticamente a los pacientes que llevan tiempo sin venir que les toca su
           limpieza o revisión. Sólo se contacta a quienes ya tuvieron una consulta y no tienen
           cita futura agendada.
@@ -93,19 +93,18 @@ export function RecallSection({ clinic }: { clinic: any }) {
 
       {/* Toggle activar/desactivar */}
       <div
-        className={`flex items-center justify-between gap-4 p-4 rounded-2xl border-2 transition-colors ${
-          form.enabled ? "border-emerald-500 bg-emerald-600/10" : "border-border bg-transparent"
-        }`}
+        className="flex items-center justify-between gap-4 p-4 transition-colors"
+        style={{
+          borderRadius: "var(--radius-lg)",
+          border: `2px solid ${form.enabled ? "var(--success)" : "var(--border-soft)"}`,
+          background: form.enabled ? "var(--success-soft)" : "transparent",
+        }}
       >
         <div className="min-w-0">
-          <div
-            className={`text-sm font-bold ${
-              form.enabled ? "text-emerald-700 dark:text-emerald-300" : "text-foreground"
-            }`}
-          >
+          <div style={{ fontSize: 13.5, fontWeight: 600, color: form.enabled ? "var(--success-strong)" : "var(--text-1)" }}>
             Reactivación automática
           </div>
-          <div className="text-xs mt-0.5 text-muted-foreground">
+          <div style={{ fontSize: 12, marginTop: 2, color: "var(--text-3)" }}>
             Un barrido diario busca pacientes por reactivar y les envía el recordatorio.
           </div>
         </div>
@@ -121,7 +120,7 @@ export function RecallSection({ clinic }: { clinic: any }) {
 
       {/* Intervalo */}
       <div className="space-y-1.5">
-        <Label>¿Cada cuánto se considera "por reactivar"?</Label>
+        <Label>¿Cada cuánto se considera &quot;por reactivar&quot;?</Label>
         <div className="flex flex-wrap gap-2">
           {INTERVAL_OPTIONS.map((opt) => {
             const active = form.intervalDays === opt.days;
@@ -131,18 +130,19 @@ export function RecallSection({ clinic }: { clinic: any }) {
                 type="button"
                 onClick={() => setForm((f) => ({ ...f, intervalDays: opt.days }))}
                 aria-pressed={active}
-                className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition-colors ${
-                  active
-                    ? "bg-brand-600/15 text-brand-700 dark:text-brand-300 border-brand-200 dark:border-brand-800"
-                    : "bg-transparent text-muted-foreground border-border hover:border-brand-300"
-                }`}
+                className="px-3 py-1.5 rounded-full text-xs font-semibold transition-colors"
+                style={{
+                  border: `1px solid ${active ? "var(--brand-soft)" : "var(--border-soft)"}`,
+                  background: active ? "var(--brand-soft)" : "transparent",
+                  color: active ? "var(--brand)" : "var(--text-3)",
+                }}
               >
                 {opt.label}
               </button>
             );
           })}
         </div>
-        <div className="text-[11px] text-muted-foreground">
+        <div style={{ fontSize: 11, color: "var(--text-3)" }}>
           Tiempo sin venir desde la última consulta completada.
         </div>
       </div>
@@ -151,7 +151,7 @@ export function RecallSection({ clinic }: { clinic: any }) {
       <div className="space-y-1.5">
         <Label>Canal</Label>
         <select
-          className="flex h-11 w-full rounded-xl border border-border bg-card px-4 text-base focus:outline-none"
+          className="input-new"
           value={form.channel}
           onChange={(e) => setForm((f) => ({ ...f, channel: e.target.value as ReminderChannel }))}
         >
@@ -160,7 +160,7 @@ export function RecallSection({ clinic }: { clinic: any }) {
           <option value="both">WhatsApp y email</option>
         </select>
         {includesWhatsApp && !waConnected && (
-          <div className="text-xs text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 rounded-xl p-3">
+          <div style={{ fontSize: 12, color: "var(--warning-strong)", background: "var(--warning-soft)", border: "1px solid var(--warning-border-strong)", borderRadius: "var(--radius)", padding: 12 }}>
             WhatsApp no está conectado en esta clínica.{" "}
             <a href="/dashboard/whatsapp" className="font-semibold underline">
               Conectar WhatsApp
@@ -168,7 +168,7 @@ export function RecallSection({ clinic }: { clinic: any }) {
           </div>
         )}
         {includesEmail && (
-          <div className="text-[11px] text-muted-foreground">
+          <div style={{ fontSize: 11, color: "var(--text-3)" }}>
             El email requiere tener configurado el proveedor de correo (Resend).
           </div>
         )}
@@ -181,25 +181,27 @@ export function RecallSection({ clinic }: { clinic: any }) {
           <button
             type="button"
             onClick={() => setForm((f) => ({ ...f, message: DEFAULT_RECALL_MESSAGE }))}
-            className="text-[11px] text-muted-foreground underline hover:text-foreground"
+            className="underline"
+            style={{ fontSize: 11, color: "var(--text-3)" }}
           >
             Restaurar predeterminado
           </button>
         </div>
         <textarea
-          className="flex w-full rounded-xl border border-border bg-card px-4 py-3 text-sm focus:outline-none resize-y"
+          className="input-new resize-y"
+          style={{ height: "auto", padding: "10px 12px" }}
           rows={5}
           value={form.message}
           onChange={(e) => setForm((f) => ({ ...f, message: e.target.value }))}
         />
-        <div className="text-[11px] text-muted-foreground">
+        <div style={{ fontSize: 11, color: "var(--text-3)" }}>
           Variables disponibles: {"{nombre}"} y {"{clinica}"}.
         </div>
       </div>
 
       {/* Preview burbuja */}
-      <div className="rounded-xl border border-border bg-muted/30 p-3">
-        <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-2">
+      <div style={{ borderRadius: "var(--radius)", border: "1px solid var(--border-soft)", background: "var(--bg-elev-2)", padding: 12 }}>
+        <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--text-3)", marginBottom: 8 }}>
           Vista previa
         </div>
         <div
@@ -225,7 +227,8 @@ export function RecallSection({ clinic }: { clinic: any }) {
           type="button"
           onClick={runNow}
           disabled={running || !form.enabled}
-          className="text-xs font-semibold text-brand-700 dark:text-brand-300 underline disabled:opacity-40 disabled:no-underline"
+          className="text-xs font-semibold underline disabled:opacity-40 disabled:no-underline"
+          style={{ color: "var(--brand)" }}
           title={form.enabled ? "Ejecuta el barrido ahora para esta clínica" : "Activa la reactivación primero"}
         >
           {running ? "Ejecutando…" : "Ejecutar barrido ahora"}

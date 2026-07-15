@@ -5,7 +5,10 @@ import useSWR from "swr";
 import {
   ScrollText, Search, ChevronLeft, ChevronRight, X, RotateCcw,
   User as UserIcon, Tag, Clock, Globe,
+  Plus, Pencil, Trash, Trash2, Ban, Archive, Eye, KeyRound, FileText, Activity,
 } from "lucide-react";
+import { BadgeNew } from "@/components/ui/design-system/badge-new";
+import { AvatarNew } from "@/components/ui/design-system/avatar-new";
 import { useTOptional } from "@/i18n/i18n-provider";
 import {
   AUDIT_ACTION_OPTIONS, AUDIT_ENTITY_OPTIONS, ROLE_OPTIONS, ROLE_LABELS,
@@ -16,14 +19,41 @@ import {
 
 const PAGE_SIZE = 50;
 
-const TONE_CLASSES: Record<AuditTone, string> = {
-  success: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400",
-  info: "bg-blue-500/15 text-blue-600 dark:text-blue-400",
-  danger: "bg-red-500/15 text-red-600 dark:text-red-400",
-  warning: "bg-amber-500/15 text-amber-700 dark:text-amber-400",
-  brand: "bg-brand-500/15 text-brand-600 dark:text-brand-400",
-  neutral: "bg-muted text-muted-foreground",
+// Icono lucide por acción del catálogo de audit-core (fallback Activity).
+const ACTION_ICONS: Record<string, typeof Plus> = {
+  create: Plus,
+  update: Pencil,
+  delete: Trash2,
+  void: Ban,
+  soft_delete: Trash,
+  archive: Archive,
+  view: Eye,
+  password_reset: KeyRound,
+  XRAY_NOTES_UPDATED: FileText,
+  FILE_NOTES_UPDATED: FileText,
 };
+
+// Tinta del icono por tono (variantes *-strong = contraste AA en light y dark).
+const TONE_ICON_COLORS: Record<AuditTone, string> = {
+  success: "var(--success-strong)",
+  info: "var(--info-strong)",
+  danger: "var(--danger)",
+  warning: "var(--warning-strong)",
+  brand: "var(--brand)",
+  neutral: "var(--text-3)",
+};
+
+/** Icono según acción + badge semántico del sistema (create=success, update=info, delete=danger…). */
+function ActionCell({ action }: { action: string }) {
+  const am = actionMeta(action);
+  const Icon = ACTION_ICONS[action] || Activity;
+  return (
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+      <Icon size={16} strokeWidth={1.75} style={{ color: TONE_ICON_COLORS[am.tone], flexShrink: 0 }} aria-hidden />
+      <BadgeNew tone={am.tone}>{am.label}</BadgeNew>
+    </span>
+  );
+}
 
 const fetcher = async (url: string): Promise<AuditQueryResult> => {
   const r = await fetch(url, { cache: "no-store" });
@@ -56,8 +86,7 @@ const EMPTY: Filters = {
   role: "", action: "", entityType: "", userId: "", entityId: "", dateFrom: "", dateTo: "",
 };
 
-const SELECT_CLS =
-  "text-xs px-2 py-2 bg-background border border-border rounded-lg text-foreground";
+const SELECT_CLS = "input-new";
 
 const RANGE_I18N: Record<QuickRangeKey, string> = {
   today: "auditoria.rangeToday",
@@ -111,24 +140,26 @@ export function AuditoriaClient() {
     <div className="p-4 sm:p-6 space-y-4">
       {/* Header */}
       <div className="flex items-center gap-3">
-        <ScrollText size={20} className="text-brand-600 dark:text-brand-400" />
+        <ScrollText size={20} strokeWidth={1.75} style={{ color: "var(--brand)" }} aria-hidden />
         <div>
-          <h1 className="text-xl font-bold">{tr("auditoria.title", "Bitácora de actividad")}</h1>
-          <p className="text-xs text-muted-foreground">
+          <h1 className="text-xl font-bold" style={{ color: "var(--text-1)", letterSpacing: "-0.02em" }}>{tr("auditoria.title", "Bitácora de actividad")}</h1>
+          <p className="text-xs" style={{ color: "var(--text-3)" }}>
             {tr("auditoria.subtitleClinic", "Quién hizo qué en tu clínica, cuándo y desde dónde.")}
           </p>
         </div>
       </div>
 
       {/* Filtros */}
-      <div className="bg-card border border-border rounded-xl p-3 flex flex-wrap items-center gap-2">
-        <div className="relative flex-1 min-w-[200px]">
-          <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+      <div
+        className="flex flex-wrap items-center gap-2"
+        style={{ background: "var(--bg-elev)", border: "1px solid var(--border-soft)", borderRadius: "var(--radius-lg)", boxShadow: "var(--shadow-1)", padding: 12 }}
+      >
+        <div className="search-field" style={{ flex: 1, minWidth: 200, width: "auto" }}>
+          <Search size={16} strokeWidth={1.75} aria-hidden />
           <input
             value={qInput}
             onChange={(e) => setQInput(e.target.value)}
             placeholder={tr("auditoria.searchPlaceholder", "Buscar (ID, IP, navegador)…")}
-            className="w-full text-xs pl-8 pr-2 py-2 bg-background border border-border rounded-lg text-foreground"
             aria-label={tr("auditoria.search", "Búsqueda libre")}
           />
         </div>
@@ -146,7 +177,7 @@ export function AuditoriaClient() {
         </select>
         <input type="date" className={SELECT_CLS} value={filters.dateFrom} onChange={(e) => patch({ dateFrom: e.target.value })} aria-label={tr("auditoria.dateFrom", "Fecha desde")} />
         <input type="date" className={SELECT_CLS} value={filters.dateTo} onChange={(e) => patch({ dateTo: e.target.value })} aria-label={tr("auditoria.dateTo", "Fecha hasta")} />
-        <div className="flex items-center gap-1.5 flex-wrap" role="group" aria-label={tr("auditoria.quickRange", "Rango rápido")}>
+        <div className="segment-new" role="group" aria-label={tr("auditoria.quickRange", "Rango rápido")}>
           {QUICK_RANGE_KEYS.map((k) => {
             const active = activeRange === k;
             return (
@@ -155,11 +186,7 @@ export function AuditoriaClient() {
                 type="button"
                 aria-pressed={active}
                 onClick={() => applyQuickRange(k)}
-                className={`text-xs font-semibold px-2.5 py-2 rounded-lg border transition-colors ${
-                  active
-                    ? "bg-brand-600 border-brand-600 text-white"
-                    : "bg-background border-border text-foreground hover:bg-muted/50"
-                }`}
+                className={`segment-new__btn${active ? " segment-new__btn--active" : ""}`}
               >
                 {tr(RANGE_I18N[k], QUICK_RANGE_LABELS[k])}
               </button>
@@ -167,8 +194,8 @@ export function AuditoriaClient() {
           })}
         </div>
         {hasActiveFilters && (
-          <button type="button" onClick={clearAll} className="inline-flex items-center gap-1 text-xs font-semibold px-2 py-2 bg-card border border-border rounded-lg hover:bg-muted/50">
-            <RotateCcw size={13} /> {tr("auditoria.clear", "Limpiar")}
+          <button type="button" onClick={clearAll} className="btn-new btn-new--ghost btn-new--sm">
+            <RotateCcw size={16} strokeWidth={1.75} aria-hidden /> {tr("auditoria.clear", "Limpiar")}
           </button>
         )}
       </div>
@@ -182,56 +209,61 @@ export function AuditoriaClient() {
       )}
 
       {/* Tabla */}
-      <div className="bg-card border border-border rounded-xl overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-xs">
+      <div className="card">
+        <div style={{ overflowX: "auto" }}>
+          <table className="table-new">
             <thead>
-              <tr className="border-b border-border text-left text-muted-foreground">
-                <th className="p-3 font-semibold">{tr("auditoria.colDate", "Fecha")}</th>
-                <th className="p-3 font-semibold">{tr("auditoria.colUser", "Usuario")}</th>
-                <th className="p-3 font-semibold">{tr("auditoria.colAction", "Acción")}</th>
-                <th className="p-3 font-semibold">{tr("auditoria.colEntity", "Entidad")}</th>
-                <th className="p-3 font-semibold">{tr("auditoria.colIp", "IP")}</th>
-                <th className="p-3 font-semibold text-right">{tr("auditoria.colDetail", "Detalle")}</th>
+              <tr>
+                <th>{tr("auditoria.colDate", "Fecha")}</th>
+                <th>{tr("auditoria.colUser", "Usuario")}</th>
+                <th>{tr("auditoria.colAction", "Acción")}</th>
+                <th>{tr("auditoria.colEntity", "Entidad")}</th>
+                <th>{tr("auditoria.colIp", "IP")}</th>
+                <th style={{ textAlign: "right" }}>{tr("auditoria.colDetail", "Detalle")}</th>
               </tr>
             </thead>
             <tbody>
-              {rows.map((r) => {
-                const am = actionMeta(r.action);
-                return (
-                  <tr key={r.id} className="border-b border-border last:border-0 hover:bg-muted/30">
-                    <td className="p-3 whitespace-nowrap text-muted-foreground">{fmtDateTime(r.createdAt)}</td>
-                    <td className="p-3">
-                      <button type="button" onClick={() => patch({ userId: r.userId })} title={tr("auditoria.filterByUser", "Filtrar por este usuario")} className="text-left hover:underline">
-                        <div className="font-medium text-foreground">{r.userName}</div>
-                        {r.userRole && <div className="text-[10px] text-muted-foreground">{ROLE_LABELS[r.userRole] ?? r.userRole}</div>}
-                      </button>
-                    </td>
-                    <td className="p-3">
-                      <span className={`inline-block text-[10px] font-bold px-2 py-0.5 rounded ${TONE_CLASSES[am.tone]}`}>{am.label}</span>
-                    </td>
-                    <td className="p-3">
-                      <button type="button" onClick={() => patch({ entityId: r.entityId })} title={tr("auditoria.filterByEntity", "Filtrar por esta entidad")} className="text-left hover:underline">
-                        <div className="text-foreground">{entityLabel(r.entityType)}</div>
-                        <div className="text-[10px] text-muted-foreground max-w-[160px] truncate">{r.entityId}</div>
-                      </button>
-                    </td>
-                    <td className="p-3 font-mono text-[11px] text-muted-foreground">{r.ipAddress ?? "—"}</td>
-                    <td className="p-3 text-right">
-                      <button type="button" onClick={() => setDetail(r)} className="text-xs font-semibold px-2 py-1 bg-card border border-border rounded hover:bg-muted/50">
-                        {tr("auditoria.view", "Ver")}
-                      </button>
-                    </td>
-                  </tr>
-                );
-              })}
+              {rows.map((r) => (
+                <tr key={r.id}>
+                  <td className="whitespace-nowrap" style={{ color: "var(--text-3)", fontVariantNumeric: "tabular-nums" }}>{fmtDateTime(r.createdAt)}</td>
+                  <td>
+                    <button type="button" onClick={() => patch({ userId: r.userId })} title={tr("auditoria.filterByUser", "Filtrar por este usuario")} className="inline-flex items-center gap-2 text-left hover:underline">
+                      <AvatarNew name={r.userName} size="sm" />
+                      <span className="min-w-0">
+                        <span className="block truncate" style={{ fontWeight: 600, color: "var(--text-1)" }}>{r.userName}</span>
+                        {r.userRole && <span className="block" style={{ fontSize: 10, color: "var(--text-3)" }}>{ROLE_LABELS[r.userRole] ?? r.userRole}</span>}
+                      </span>
+                    </button>
+                  </td>
+                  <td><ActionCell action={r.action} /></td>
+                  <td>
+                    <button type="button" onClick={() => patch({ entityId: r.entityId })} title={tr("auditoria.filterByEntity", "Filtrar por esta entidad")} className="text-left hover:underline">
+                      <span className="block" style={{ color: "var(--text-2)" }}>{entityLabel(r.entityType)}</span>
+                      <span className="block max-w-[160px] truncate mono" style={{ fontSize: 10, color: "var(--text-3)" }}>{r.entityId}</span>
+                    </button>
+                  </td>
+                  <td className="mono whitespace-nowrap" style={{ fontSize: 11, color: "var(--text-3)" }}>{r.ipAddress ?? "—"}</td>
+                  <td style={{ textAlign: "right" }}>
+                    <button type="button" onClick={() => setDetail(r)} className="btn-new btn-new--secondary btn-new--sm">
+                      {tr("auditoria.view", "Ver")}
+                    </button>
+                  </td>
+                </tr>
+              ))}
               {!isLoading && rows.length === 0 && (
-                <tr><td colSpan={6} className="p-10 text-center text-muted-foreground">
-                  {error ? tr("auditoria.loadError", "No se pudo cargar la bitácora.") : tr("auditoria.empty", "Sin eventos para estos filtros.")}
+                <tr><td colSpan={6}>
+                  <div className="flex flex-col items-center justify-center gap-2 text-center" style={{ padding: "40px 16px" }}>
+                    <ScrollText size={20} strokeWidth={1.75} style={{ color: "var(--text-4)" }} aria-hidden />
+                    <span style={{ fontSize: 13, color: "var(--text-3)" }}>
+                      {error ? tr("auditoria.loadError", "No se pudo cargar la bitácora.") : tr("auditoria.empty", "Sin eventos para estos filtros.")}
+                    </span>
+                  </div>
                 </td></tr>
               )}
               {isLoading && rows.length === 0 && (
-                <tr><td colSpan={6} className="p-10 text-center text-muted-foreground">{tr("auditoria.loading", "Cargando…")}</td></tr>
+                <tr><td colSpan={6}>
+                  <div className="text-center" style={{ padding: "40px 16px", fontSize: 13, color: "var(--text-3)" }}>{tr("auditoria.loading", "Cargando…")}</div>
+                </td></tr>
               )}
             </tbody>
           </table>
@@ -239,18 +271,19 @@ export function AuditoriaClient() {
       </div>
 
       {/* Paginación */}
-      <div className="flex items-center justify-between gap-3 flex-wrap">
-        <div className="text-xs text-muted-foreground">
+      <div
+        className="pagination"
+        style={{ borderTop: "none", background: "var(--bg-elev)", border: "1px solid var(--border-soft)", borderRadius: "var(--radius-lg)", boxShadow: "var(--shadow-1)" }}
+      >
+        <div className="pagination__info">
           {tr("auditoria.pageOf", "Página")} {page} {tr("auditoria.of", "de")} {totalPages} · {total.toLocaleString("es-MX")} {tr("auditoria.events", "eventos")}
         </div>
-        <div className="flex gap-2">
-          <button type="button" disabled={page <= 1 || isLoading} onClick={() => setPage((p) => Math.max(1, p - 1))}
-            className="inline-flex items-center gap-1 text-xs font-semibold px-3 py-1.5 bg-card border border-border rounded-lg hover:bg-muted/50 disabled:opacity-50">
-            <ChevronLeft size={14} /> {tr("auditoria.prev", "Anterior")}
+        <div className="pagination__pages">
+          <button type="button" className="btn-new btn-new--secondary btn-new--sm" disabled={page <= 1 || isLoading} onClick={() => setPage((p) => Math.max(1, p - 1))}>
+            <ChevronLeft size={16} strokeWidth={1.75} aria-hidden /> {tr("auditoria.prev", "Anterior")}
           </button>
-          <button type="button" disabled={page >= totalPages || isLoading} onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-            className="inline-flex items-center gap-1 text-xs font-semibold px-3 py-1.5 bg-card border border-border rounded-lg hover:bg-muted/50 disabled:opacity-50">
-            {tr("auditoria.next", "Siguiente")} <ChevronRight size={14} />
+          <button type="button" className="btn-new btn-new--secondary btn-new--sm" disabled={page >= totalPages || isLoading} onClick={() => setPage((p) => Math.min(totalPages, p + 1))}>
+            {tr("auditoria.next", "Siguiente")} <ChevronRight size={16} strokeWidth={1.75} aria-hidden />
           </button>
         </div>
       </div>
@@ -262,9 +295,12 @@ export function AuditoriaClient() {
 
 function Chip({ label, onClear }: { label: string; onClear: () => void }) {
   return (
-    <span className="inline-flex items-center gap-1.5 text-[11px] px-2 py-1 rounded-full bg-brand-500/10 border border-border text-foreground max-w-[320px]">
+    <span
+      className="inline-flex items-center gap-1.5 max-w-[320px]"
+      style={{ fontSize: 11, padding: "4px 8px", borderRadius: 999, background: "var(--brand-soft)", border: "1px solid var(--border-soft)", color: "var(--text-1)" }}
+    >
       <span className="truncate">{label}</span>
-      <button type="button" onClick={onClear} aria-label="Quitar filtro" className="text-muted-foreground hover:text-foreground"><X size={12} /></button>
+      <button type="button" onClick={onClear} aria-label="Quitar filtro" className="text-[color:var(--text-3)] hover:text-[color:var(--text-1)]"><X size={14} strokeWidth={1.75} aria-hidden /></button>
     </span>
   );
 }
@@ -280,17 +316,17 @@ function DetailModal({ row, onClose, tr }: { row: AuditLogRow; onClose: () => vo
   const norm = normalizeChanges(row.changes);
 
   return (
-    <div className="fixed inset-0 z-[100] grid place-items-center p-4 bg-black/60 backdrop-blur-sm" onClick={onClose} role="dialog" aria-modal="true">
-      <div className="w-full max-w-2xl max-h-[90vh] overflow-auto bg-card border border-border rounded-xl shadow-2xl" onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-center justify-between p-4 border-b border-border">
-          <div className="flex items-center gap-2">
-            <span className={`text-[10px] font-bold px-2 py-0.5 rounded ${TONE_CLASSES[am.tone]}`}>{am.label}</span>
-            <span className="text-sm font-bold">{entityLabel(row.entityType)}</span>
+    <div className="modal-overlay" onClick={onClose} role="dialog" aria-modal="true">
+      <div className="modal modal--wide" onClick={(e) => e.stopPropagation()}>
+        <div className="modal__header">
+          <div className="flex items-center gap-2 min-w-0">
+            <BadgeNew tone={am.tone}>{am.label}</BadgeNew>
+            <span className="modal__title truncate">{entityLabel(row.entityType)}</span>
           </div>
-          <button type="button" onClick={onClose} aria-label={tr("auditoria.close", "Cerrar")} className="text-muted-foreground hover:text-foreground"><X size={18} /></button>
+          <button type="button" onClick={onClose} aria-label={tr("auditoria.close", "Cerrar")} className="btn-new btn-new--ghost btn-new--sm"><X size={16} strokeWidth={1.75} aria-hidden /></button>
         </div>
 
-        <div className="p-4 space-y-4">
+        <div className="modal__body space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Meta icon={Clock} label={tr("auditoria.colDate", "Fecha")} value={fmtDateTime(row.createdAt)} />
             <Meta icon={UserIcon} label={tr("auditoria.user", "Usuario")} value={`${row.userName}${row.userRole ? ` · ${ROLE_LABELS[row.userRole] ?? row.userRole}` : ""}`} sub={row.userEmail ?? undefined} />
@@ -298,36 +334,36 @@ function DetailModal({ row, onClose, tr }: { row: AuditLogRow; onClose: () => vo
             <Meta icon={Tag} label={tr("auditoria.entity", "Entidad")} value={entityLabel(row.entityType)} sub={row.entityId} mono />
           </div>
           {row.userAgent && (
-            <div className="text-[11px] text-muted-foreground break-words">
+            <div className="break-words" style={{ fontSize: 11, color: "var(--text-3)" }}>
               <span className="font-semibold">{tr("auditoria.browser", "Navegador")}:</span> {row.userAgent}
             </div>
           )}
 
           <div>
-            <div className="text-xs font-semibold mb-2">
+            <div className="text-xs font-semibold mb-2" style={{ color: "var(--text-1)" }}>
               {norm.kind === "created" ? tr("auditoria.created", "Datos creados")
                 : norm.kind === "deleted" ? tr("auditoria.deleted", "Datos eliminados")
                 : norm.kind === "updated" ? tr("auditoria.updated", "Campos modificados")
                 : tr("auditoria.changes", "Cambios")}
             </div>
             {norm.fields.length === 0 ? (
-              <div className="text-xs text-muted-foreground">{tr("auditoria.noChanges", "Sin detalle de cambios registrado.")}</div>
+              <div className="text-xs" style={{ color: "var(--text-3)" }}>{tr("auditoria.noChanges", "Sin detalle de cambios registrado.")}</div>
             ) : (
-              <div className="overflow-x-auto border border-border rounded-lg">
-                <table className="w-full text-xs">
+              <div style={{ overflowX: "auto", border: "1px solid var(--border-soft)", borderRadius: "var(--radius)" }}>
+                <table className="table-new">
                   <thead>
-                    <tr className="border-b border-border text-left text-muted-foreground">
-                      <th className="p-2 font-semibold">{tr("auditoria.field", "Campo")}</th>
-                      <th className="p-2 font-semibold">{tr("auditoria.before", "Antes")}</th>
-                      <th className="p-2 font-semibold">{tr("auditoria.after", "Después")}</th>
+                    <tr>
+                      <th>{tr("auditoria.field", "Campo")}</th>
+                      <th>{tr("auditoria.before", "Antes")}</th>
+                      <th>{tr("auditoria.after", "Después")}</th>
                     </tr>
                   </thead>
                   <tbody>
                     {norm.fields.map((f) => (
-                      <tr key={f.field} className="border-b border-border last:border-0 align-top">
-                        <td className="p-2 font-medium whitespace-nowrap">{f.field}</td>
-                        <td className="p-2 text-muted-foreground max-w-[240px] break-words">{formatAuditValue(f.before)}</td>
-                        <td className={`p-2 max-w-[240px] break-words ${norm.kind === "deleted" ? "text-muted-foreground" : "text-foreground"}`}>{formatAuditValue(f.after)}</td>
+                      <tr key={f.field} className="align-top">
+                        <td className="font-medium whitespace-nowrap">{f.field}</td>
+                        <td className="max-w-[240px] break-words" style={{ color: "var(--text-3)" }}>{formatAuditValue(f.before)}</td>
+                        <td className="max-w-[240px] break-words" style={{ color: norm.kind === "deleted" ? "var(--text-3)" : "var(--text-1)" }}>{formatAuditValue(f.after)}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -346,11 +382,11 @@ function Meta({ icon: Icon, label, value, sub, mono }: {
 }) {
   return (
     <div className="flex gap-2">
-      <Icon size={14} className="text-muted-foreground mt-0.5 shrink-0" />
+      <Icon size={16} strokeWidth={1.75} className="mt-0.5 shrink-0" style={{ color: "var(--text-3)" }} aria-hidden />
       <div className="min-w-0">
-        <div className="text-[10px] uppercase tracking-wide text-muted-foreground">{label}</div>
-        <div className={`text-[13px] text-foreground break-words ${mono ? "font-mono" : ""}`}>{value}</div>
-        {sub && <div className="text-[11px] text-muted-foreground break-words">{sub}</div>}
+        <div className="text-[10px] uppercase tracking-wide" style={{ color: "var(--text-3)" }}>{label}</div>
+        <div className={`text-[13px] break-words ${mono ? "mono" : ""}`} style={{ color: "var(--text-1)" }}>{value}</div>
+        {sub && <div className="text-[11px] break-words" style={{ color: "var(--text-3)" }}>{sub}</div>}
       </div>
     </div>
   );

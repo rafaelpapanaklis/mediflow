@@ -96,19 +96,26 @@ export function RemindersSection({ clinic }: { clinic: any }) {
 
   return (
     <div className="space-y-6">
-    <div className="bg-card border border-border rounded-2xl p-6 shadow-card max-w-lg space-y-4">
+    <div className="card max-w-lg space-y-4" style={{ padding: 24 }}>
       <div>
-        <h2 className="text-base font-bold">{t("settings.reminders.title")}</h2>
-        <p className="text-sm text-muted-foreground mt-0.5">{t("settings.reminders.subtitle")}</p>
+        <h2 style={{ fontSize: 15, fontWeight: 600, color: "var(--text-1)" }}>{t("settings.reminders.title")}</h2>
+        <p style={{ fontSize: 13, color: "var(--text-3)", marginTop: 2 }}>{t("settings.reminders.subtitle")}</p>
       </div>
 
       {/* Toggle activar/desactivar */}
-      <div className={`flex items-center justify-between gap-4 p-4 rounded-2xl border-2 transition-colors ${form.enabled ? "border-emerald-500 bg-emerald-600/10" : "border-border bg-transparent"}`}>
+      <div
+        className="flex items-center justify-between gap-4 p-4 transition-colors"
+        style={{
+          borderRadius: "var(--radius-lg)",
+          border: `2px solid ${form.enabled ? "var(--success)" : "var(--border-soft)"}`,
+          background: form.enabled ? "var(--success-soft)" : "transparent",
+        }}
+      >
         <div className="min-w-0">
-          <div className={`text-sm font-bold ${form.enabled ? "text-emerald-700 dark:text-emerald-300" : "text-foreground"}`}>
+          <div style={{ fontSize: 13.5, fontWeight: 600, color: form.enabled ? "var(--success-strong)" : "var(--text-1)" }}>
             {t("settings.reminders.enabledLabel")}
           </div>
-          <div className="text-xs mt-0.5 text-muted-foreground">
+          <div style={{ fontSize: 12, marginTop: 2, color: "var(--text-3)" }}>
             {t("settings.reminders.enabledDesc")}
           </div>
         </div>
@@ -136,20 +143,21 @@ export function RemindersSection({ clinic }: { clinic: any }) {
                 onClick={() => toggleOffset(min)}
                 disabled={blocked}
                 aria-pressed={active}
-                className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition-colors ${
-                  active
-                    ? "bg-brand-600/15 text-brand-700 dark:text-brand-300 border-brand-200 dark:border-brand-800"
-                    : "bg-transparent text-muted-foreground border-border hover:border-brand-300"
-                } ${blocked ? "opacity-40 cursor-not-allowed" : ""}`}
+                className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-colors ${blocked ? "opacity-40 cursor-not-allowed" : ""}`}
+                style={{
+                  border: `1px solid ${active ? "var(--brand-soft)" : "var(--border-soft)"}`,
+                  background: active ? "var(--brand-soft)" : "transparent",
+                  color: active ? "var(--brand)" : "var(--text-3)",
+                }}
               >
                 {t(OFFSET_LABEL_KEYS[min])}
               </button>
             );
           })}
         </div>
-        <div className="text-[11px] text-muted-foreground">{t("settings.reminders.offsetsHint")}</div>
+        <div style={{ fontSize: 11, color: "var(--text-3)" }}>{t("settings.reminders.offsetsHint")}</div>
         {form.offsets.length === 0 && (
-          <div className="text-xs text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 rounded-xl p-3">
+          <div style={{ fontSize: 12, color: "var(--warning-strong)", background: "var(--warning-soft)", border: "1px solid var(--warning-border-strong)", borderRadius: "var(--radius)", padding: 12 }}>
             {t("settings.reminders.noOffsetsWarning")}
           </div>
         )}
@@ -159,7 +167,7 @@ export function RemindersSection({ clinic }: { clinic: any }) {
       <div className="space-y-1.5">
         <Label>{t("settings.reminders.channelLabel")}</Label>
         <select
-          className="flex h-11 w-full rounded-xl border border-border bg-card px-4 text-base focus:outline-none"
+          className="input-new"
           value={form.channel}
           onChange={e => setForm(f => ({ ...f, channel: e.target.value as ReminderChannel }))}
         >
@@ -168,7 +176,7 @@ export function RemindersSection({ clinic }: { clinic: any }) {
           <option value="both">{t("settings.reminders.channelBoth")}</option>
         </select>
         {includesWhatsApp && !waConnected && (
-          <div className="text-xs text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 rounded-xl p-3">
+          <div style={{ fontSize: 12, color: "var(--warning-strong)", background: "var(--warning-soft)", border: "1px solid var(--warning-border-strong)", borderRadius: "var(--radius)", padding: 12 }}>
             {t("settings.reminders.waNotConnectedWarning")}{" "}
             <a href="/dashboard/whatsapp" className="font-semibold underline">
               {t("settings.reminders.waConnectLink")}
@@ -176,7 +184,7 @@ export function RemindersSection({ clinic }: { clinic: any }) {
           </div>
         )}
         {includesEmail && (
-          <div className="text-[11px] text-muted-foreground">
+          <div style={{ fontSize: 11, color: "var(--text-3)" }}>
             {t("settings.reminders.emailOnlyNote")}
           </div>
         )}
@@ -189,25 +197,27 @@ export function RemindersSection({ clinic }: { clinic: any }) {
           <button
             type="button"
             onClick={() => setForm(f => ({ ...f, template: DEFAULT_REMINDER_TEMPLATE }))}
-            className="text-[11px] text-muted-foreground underline hover:text-foreground"
+            className="underline"
+            style={{ fontSize: 11, color: "var(--text-3)" }}
           >
             {t("settings.reminders.restoreDefaultBtn")}
           </button>
         </div>
         <textarea
-          className="flex w-full rounded-xl border border-border bg-card px-4 py-3 text-sm focus:outline-none resize-y"
+          className="input-new resize-y"
+          style={{ height: "auto", padding: "10px 12px" }}
           rows={5}
           value={form.template}
           onChange={e => setForm(f => ({ ...f, template: e.target.value }))}
         />
-        <div className="text-[11px] text-muted-foreground">
+        <div style={{ fontSize: 11, color: "var(--text-3)" }}>
           {t("settings.reminders.templateVarsHint")}
         </div>
       </div>
 
       {/* Preview burbuja WhatsApp (mismo patrón que whatsapp-client) */}
-      <div className="rounded-xl border border-border bg-muted/30 p-3">
-        <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-2">
+      <div style={{ borderRadius: "var(--radius)", border: "1px solid var(--border-soft)", background: "var(--bg-elev-2)", padding: 12 }}>
+        <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--text-3)", marginBottom: 8 }}>
           {t("settings.reminders.previewLabel")}
         </div>
         <div
@@ -229,7 +239,7 @@ export function RemindersSection({ clinic }: { clinic: any }) {
       </div>
 
       {/* Nota fija: link público de confirmación */}
-      <div className="text-xs text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 rounded-xl p-3">
+      <div style={{ fontSize: 12, color: "var(--info-strong)", background: "var(--info-soft)", border: "1px solid var(--info)", borderRadius: "var(--radius)", padding: 12 }}>
         {t("settings.reminders.confirmLinkNote")}
       </div>
 

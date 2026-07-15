@@ -14,15 +14,16 @@
   right: 0;
   bottom: 0;
   width: min(520px, 100vw);
-  background: var(--bg);
-  border-left: 1px solid var(--border-strong);
-  box-shadow: -16px 0 40px -8px rgba(0, 0, 0, 0.25);
+  background: var(--bg-elev);
+  border-left: 1px solid var(--border-soft);
+  border-radius: var(--radius-lg) 0 0 var(--radius-lg);
+  box-shadow: var(--shadow-3);
   z-index: 201;
   display: flex;
   flex-direction: column;
   font-family: var(--font-sans, system-ui, sans-serif);
   color: var(--text-1);
-  animation: schedSlide 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+  animation: schedSlide var(--dur-2) var(--ease);
 }
 
 @keyframes schedFade {
@@ -32,6 +33,10 @@
 @keyframes schedSlide {
   from { transform: translateX(100%); }
   to { transform: translateX(0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .overlay,
+  .drawer { animation: none; }
 }
 
 .header {
@@ -54,9 +59,10 @@
   flex-shrink: 0;
 }
 .title {
-  font-size: 16px;
-  font-weight: 700;
+  font-size: 15px;
+  font-weight: 600;
   margin: 0 0 2px;
+  color: var(--text-1);
 }
 .subtitle {
   font-size: 12px;
@@ -65,23 +71,29 @@
   line-height: 1.4;
 }
 .closeBtn {
-  width: 28px;
-  height: 28px;
+  width: 36px;
+  height: 36px;
   display: grid;
   place-items: center;
   background: transparent;
-  border: 1px solid var(--border-soft);
-  border-radius: 7px;
+  border: none;
+  border-radius: var(--radius);
   color: var(--text-3);
   cursor: pointer;
   flex-shrink: 0;
+  transition: background var(--dur-1) var(--ease),
+              color var(--dur-1) var(--ease);
 }
 .closeBtn:hover {
-  border-color: var(--border-strong);
+  background: var(--bg-hover);
   color: var(--text-1);
 }
+.closeBtn:focus-visible {
+  outline: none;
+  box-shadow: var(--ring);
+}
 .closeBtn:disabled {
-  opacity: 0.5;
+  opacity: 0.45;
   cursor: not-allowed;
 }
 
@@ -105,11 +117,11 @@
   padding: 16px;
   border: 1px solid var(--border-brand);
   background: var(--brand-softer);
-  border-radius: 8px;
+  border-radius: var(--radius);
 }
 .bannerTitle {
   font-size: 13px;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--brand);
   margin-bottom: 6px;
 }
@@ -117,20 +129,8 @@
   font-size: 12px;
   color: var(--text-2);
   line-height: 1.5;
-  margin-bottom: 10px;
+  margin-bottom: 12px;
 }
-.bannerBtn {
-  padding: 7px 12px;
-  background: var(--brand);
-  color: #fff;
-  border: none;
-  border-radius: 6px;
-  font-size: 12px;
-  font-weight: 600;
-  cursor: pointer;
-  font-family: inherit;
-}
-.bannerBtn:hover { background: #8b5cf6; }
 
 .quickActions {
   display: flex;
@@ -140,27 +140,40 @@
 .quickBtn {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  padding: 5px 10px;
+  gap: 6px;
+  height: 32px;
+  padding: 0 12px;
   background: var(--bg-elev);
   border: 1px solid var(--border-soft);
-  border-radius: 6px;
-  font-size: 11px;
+  border-radius: var(--radius-sm);
+  font-size: 12px;
   font-weight: 600;
   color: var(--text-2);
   cursor: pointer;
   font-family: inherit;
+  transition: background var(--dur-1) var(--ease),
+              color var(--dur-1) var(--ease),
+              border-color var(--dur-1) var(--ease);
 }
 .quickBtn:hover {
+  background: var(--bg-hover);
   border-color: var(--border-strong);
   color: var(--text-1);
+}
+.quickBtn:focus-visible {
+  outline: none;
+  box-shadow: var(--ring);
 }
 
 .dayBlock {
   border: 1px solid var(--border-soft);
-  border-radius: 8px;
+  border-radius: var(--radius);
   padding: 12px;
-  background: var(--bg-elev);
+  background: var(--bg-elev-2);
+}
+.dayBlockOpen {
+  border-left: 2px solid var(--success);
+  padding-left: 11px;
 }
 .dayHead {
   display: flex;
@@ -170,39 +183,47 @@
 }
 .dayLabel {
   font-size: 13px;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--text-1);
   flex: 1;
 }
 .closedBadge {
   font-size: 10px;
-  font-weight: 700;
+  font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.05em;
   color: var(--text-3);
-  padding: 2px 7px;
+  padding: 2px 8px;
   border: 1px solid var(--border-soft);
-  border-radius: 4px;
-  background: var(--bg-elev-2);
+  border-radius: 20px;
+  background: var(--bg-elev);
 }
 .addWindowBtn {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  padding: 4px 8px;
+  height: 30px;
+  padding: 0 10px;
   background: transparent;
-  border: 1px dashed var(--border-soft);
-  border-radius: 5px;
-  font-size: 11px;
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-sm);
+  font-size: 11.5px;
   font-weight: 500;
   color: var(--text-2);
   cursor: pointer;
   font-family: inherit;
+  transition: background var(--dur-1) var(--ease),
+              color var(--dur-1) var(--ease),
+              border-color var(--dur-1) var(--ease);
 }
 .addWindowBtn:hover {
   border-color: var(--border-brand);
   background: var(--brand-softer);
   color: var(--brand);
+}
+.addWindowBtn:focus-visible {
+  outline: none;
+  box-shadow: var(--ring);
 }
 
 .windowList {
@@ -216,40 +237,52 @@
   gap: 8px;
 }
 .timeInput {
-  padding: 6px 8px;
+  height: 36px;
+  padding: 0 8px;
   border: 1px solid var(--border-soft);
-  border-radius: 6px;
-  background: var(--bg);
+  border-radius: var(--radius-sm);
+  background: var(--bg-elev);
   font-size: 13px;
   font-family: inherit;
   font-weight: 600;
+  font-variant-numeric: tabular-nums;
   color: var(--text-1);
   width: 110px;
+  transition: border-color var(--dur-1) var(--ease),
+              box-shadow var(--dur-1) var(--ease);
 }
+.timeInput:hover { border-color: var(--border-strong); }
 .timeInput:focus {
   outline: none;
   border-color: var(--border-brand);
+  box-shadow: var(--ring);
 }
 .windowArrow {
-  color: var(--text-3);
-  font-size: 14px;
-  font-weight: 700;
+  display: grid;
+  place-items: center;
+  color: var(--text-4);
 }
 .removeWindowBtn {
-  width: 26px;
-  height: 26px;
+  width: 36px;
+  height: 36px;
   display: grid;
   place-items: center;
   background: transparent;
   border: none;
-  border-radius: 5px;
+  border-radius: var(--radius-sm);
   color: var(--text-3);
   cursor: pointer;
   margin-left: auto;
+  transition: background var(--dur-1) var(--ease),
+              color var(--dur-1) var(--ease);
 }
 .removeWindowBtn:hover {
   background: var(--danger-soft);
   color: var(--danger);
+}
+.removeWindowBtn:focus-visible {
+  outline: none;
+  box-shadow: var(--ring);
 }
 
 .footer {
@@ -266,52 +299,29 @@
   gap: 8px;
   margin-left: auto;
 }
-.cancelBtn {
-  padding: 8px 14px;
-  background: transparent;
-  border: 1px solid var(--border-strong);
-  border-radius: 7px;
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text-2);
-  cursor: pointer;
-  font-family: inherit;
-}
-.cancelBtn:hover { color: var(--text-1); }
-.saveBtn {
-  padding: 8px 16px;
-  background: var(--brand);
-  color: #fff;
-  border: 1px solid var(--brand);
-  border-radius: 7px;
-  font-size: 13px;
-  font-weight: 700;
-  cursor: pointer;
-  font-family: inherit;
-}
-.saveBtn:hover { background: #8b5cf6; }
-.saveBtn:disabled {
-  background: var(--bg-elev-2);
-  color: var(--text-4);
-  border-color: var(--border-soft);
-  cursor: not-allowed;
-}
 .dangerBtn {
-  padding: 7px 12px;
+  height: 36px;
+  padding: 0 12px;
   background: transparent;
   border: 1px solid var(--border-soft);
-  border-radius: 6px;
-  font-size: 12px;
+  border-radius: var(--radius-sm);
+  font-size: 12.5px;
   font-weight: 600;
   color: var(--danger);
   cursor: pointer;
   font-family: inherit;
+  transition: background var(--dur-1) var(--ease),
+              border-color var(--dur-1) var(--ease);
 }
 .dangerBtn:hover {
   background: var(--danger-soft);
   border-color: var(--danger);
 }
+.dangerBtn:focus-visible {
+  outline: none;
+  box-shadow: var(--ring);
+}
 .dangerBtn:disabled {
-  opacity: 0.5;
+  opacity: 0.45;
   cursor: not-allowed;
 }

@@ -58,6 +58,9 @@ export function WaitingRoomClient() {
         <Box>{t("common.loading")}</Box>
       ) : !data || data.sampleSize === 0 ? (
         <Box>
+          <div aria-hidden style={{ color: "var(--text-4)", marginBottom: 8 }}>
+            <Clock size={20} strokeWidth={1.75} />
+          </div>
           <strong style={{ color: "var(--text-2)" }}>{t("analytics.waitingRoom.emptyTitle")}</strong>
           <div style={{ marginTop: 6, color: "var(--text-3)", fontSize: 13 }}>
             {t("analytics.waitingRoom.emptyHint")}
@@ -70,19 +73,19 @@ export function WaitingRoomClient() {
             <div
               style={{
                 marginBottom: 14,
-                background: "rgba(220, 38, 38, 0.08)",
-                border: "1px solid rgba(220, 38, 38, 0.30)",
-                borderRadius: 12,
+                background: "var(--danger-soft)",
+                border: "1px solid var(--danger-border-strong)",
+                borderRadius: "var(--radius)",
                 overflow: "hidden",
               }}
             >
-              <div style={{ padding: "10px 14px", fontSize: 12, fontWeight: 700, color: "#dc2626", display: "inline-flex", alignItems: "center", gap: 6 }}>
-                <AlertTriangle size={14} aria-hidden />
+              <div style={{ padding: "10px 14px", fontSize: 12, fontWeight: 700, color: "var(--danger)", display: "inline-flex", alignItems: "center", gap: 6 }}>
+                <AlertTriangle size={16} strokeWidth={1.75} aria-hidden />
                 {t("analytics.waitingRoom.alertBanner", { count: data.longWaits.length, threshold: data.threshold })}
               </div>
               {data.longWaits.map((w) => (
                 <div key={w.appointmentId} style={{
-                  borderTop: "1px solid rgba(220, 38, 38, 0.20)",
+                  borderTop: "1px solid var(--danger-border-strong)",
                   padding: "10px 14px",
                   display: "grid",
                   gridTemplateColumns: "60px 1fr",
@@ -92,7 +95,7 @@ export function WaitingRoomClient() {
                   <div style={{
                     fontSize: 18,
                     fontWeight: 700,
-                    color: "#dc2626",
+                    color: "var(--danger)",
                     fontFamily: "var(--font-mono, monospace)",
                   }}>
                     {w.waitedMin}m
@@ -114,20 +117,20 @@ export function WaitingRoomClient() {
               label={t("analytics.waitingRoom.kpiAvgLabel")}
               value={`${data.overallAvg} min`}
               hint={t("analytics.waitingRoom.kpiAvgHint", { count: data.sampleSize })}
-              icon={<Clock size={14} aria-hidden />}
+              icon={<Clock size={16} strokeWidth={1.75} aria-hidden />}
               tone={data.overallAvg > data.threshold ? "warning" : "neutral"}
             />
             <AnalyticsCard
               label={t("analytics.waitingRoom.kpiMedianLabel")}
               value={`${data.overallMedian} min`}
               hint={t("analytics.waitingRoom.kpiMedianHint")}
-              icon={<Clock size={14} aria-hidden />}
+              icon={<Clock size={16} strokeWidth={1.75} aria-hidden />}
             />
             <AnalyticsCard
               label={t("analytics.waitingRoom.kpiAlertsLabel")}
               value={String(data.longWaits.length)}
               hint={t("analytics.waitingRoom.kpiAlertsHint", { threshold: data.threshold })}
-              icon={<AlertTriangle size={14} aria-hidden />}
+              icon={<AlertTriangle size={16} strokeWidth={1.75} aria-hidden />}
               tone={data.longWaits.length > 0 ? "danger" : "success"}
             />
           </div>
@@ -155,16 +158,12 @@ export function WaitingRoomClient() {
           </div>
 
           {/* Por hora — tabla simple */}
-          <div style={{
-            background: "var(--bg-elev)",
-            border: "1px solid var(--border-soft)",
-            borderRadius: 14,
-            overflow: "hidden",
-          }}>
-            <div style={{ padding: "12px 16px", fontSize: 12, fontWeight: 700, color: "var(--text-2)", background: "var(--bg-elev-2)" }}>
-              {t("analytics.waitingRoom.tableTitle")}
+          <div className="card">
+            <div className="card__header">
+              <span className="card__title">{t("analytics.waitingRoom.tableTitle")}</span>
             </div>
-            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+            <div style={{ overflowX: "auto" }}>
+            <table className="table-new">
               <thead>
                 <tr>
                   <Th>{t("analytics.waitingRoom.colHour")}</Th>
@@ -177,17 +176,18 @@ export function WaitingRoomClient() {
                 {data.byHour.map((h) => (
                   <tr key={h.hour} style={{ borderTop: "1px solid var(--border-soft)" }}>
                     <Td mono>{h.hour}:00</Td>
-                    <Td align="right" mono color={h.avgMin > data.threshold ? "#dc2626" : "var(--text-1)"}>
+                    <Td align="right" mono color={h.avgMin > data.threshold ? "var(--danger)" : "var(--text-1)"}>
                       <strong>{h.avgMin} min</strong>
                     </Td>
                     <Td align="right" mono color="var(--text-3)">{h.count}</Td>
-                    <Td align="right" mono color={h.longWaits > 0 ? "#d97706" : "var(--text-3)"}>
+                    <Td align="right" mono color={h.longWaits > 0 ? "var(--warning-strong)" : "var(--text-3)"}>
                       {h.longWaits}
                     </Td>
                   </tr>
                 ))}
               </tbody>
             </table>
+            </div>
           </div>
         </>
       )}
@@ -228,7 +228,8 @@ function Box({ children }: { children: React.ReactNode }) {
     <div style={{
       background: "var(--bg-elev)",
       border: "1px solid var(--border-soft)",
-      borderRadius: 14,
+      borderRadius: "var(--radius-lg)",
+      boxShadow: "var(--shadow-1)",
       padding: 40,
       textAlign: "center",
       color: "var(--text-2)",

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { TrendingUp, TrendingDown, Minus, Sparkles } from "lucide-react";
+import { TrendingUp, TrendingDown, Minus, Sparkles, Database } from "lucide-react";
 import toast from "react-hot-toast";
 import { AnalyticsLayout } from "@/components/dashboard/analytics/analytics-layout";
 import { useT } from "@/i18n/i18n-provider";
@@ -76,23 +76,10 @@ export function ProceduresClient() {
             type="button"
             onClick={requestAiInsight}
             disabled={aiLoading}
-            style={{
-              padding: "7px 12px",
-              fontSize: 12,
-              fontWeight: 600,
-              background: "linear-gradient(135deg, #7c3aed, #5b21b6)",
-              color: "#fff",
-              border: "1px solid var(--brand)",
-              borderRadius: 8,
-              cursor: aiLoading ? "wait" : "pointer",
-              fontFamily: "inherit",
-              display: "inline-flex",
-              alignItems: "center",
-              gap: 6,
-              boxShadow: "0 4px 14px -4px rgba(124, 58, 237, 0.45)",
-            }}
+            className="btn-new btn-new--primary btn-new--sm"
+            style={{ cursor: aiLoading ? "wait" : undefined }}
           >
-            <Sparkles size={13} aria-hidden />
+            <Sparkles size={16} strokeWidth={1.75} aria-hidden />
             {aiLoading ? t("analytics.procedures.analyzing") : t("analytics.procedures.analyzeWithAi")}
           </button>
         ) : null
@@ -102,6 +89,9 @@ export function ProceduresClient() {
         <Box>{t("common.loading")}</Box>
       ) : !data || data.insufficientData ? (
         <Box>
+          <div aria-hidden style={{ color: "var(--text-4)", marginBottom: 8 }}>
+            <Database size={20} strokeWidth={1.75} />
+          </div>
           <strong style={{ color: "var(--text-2)" }}>{t("analytics.procedures.collectingData")}</strong>
           <div style={{ marginTop: 6, color: "var(--text-3)", fontSize: 13 }}>
             {t("analytics.procedures.collectingDataDetail", { count: data?.sampleSize ?? 0 })}
@@ -116,7 +106,7 @@ export function ProceduresClient() {
                 padding: 14,
                 background: "var(--brand-softer)",
                 border: "1px solid var(--brand-soft)",
-                borderRadius: 10,
+                borderRadius: "var(--radius)",
                 fontSize: 13,
                 color: "var(--text-1)",
                 lineHeight: 1.6,
@@ -126,22 +116,16 @@ export function ProceduresClient() {
                 alignItems: "flex-start",
               }}
             >
-              <Sparkles size={16} style={{ color: "var(--brand)", flexShrink: 0, marginTop: 2 }} aria-hidden />
+              <Sparkles size={16} strokeWidth={1.75} style={{ color: "var(--brand)", flexShrink: 0, marginTop: 2 }} aria-hidden />
               <div>{aiInsight}</div>
             </div>
           )}
 
-          <div
-            style={{
-              background: "var(--bg-elev)",
-              border: "1px solid var(--border-soft)",
-              borderRadius: 14,
-              overflow: "hidden",
-            }}
-          >
-            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+          <div className="card">
+            <div style={{ overflowX: "auto" }}>
+            <table className="table-new">
               <thead>
-                <tr style={{ background: "var(--bg-elev-2)" }}>
+                <tr>
                   <Th>{t("analytics.procedures.colProcedure")}</Th>
                   <Th align="right">{t("analytics.procedures.colPerformed")}</Th>
                   <Th align="right">{t("analytics.procedures.colAvgTime")}</Th>
@@ -166,14 +150,14 @@ export function ProceduresClient() {
                     <Td>
                       {p.fastest ? (
                         <span style={{ color: "var(--text-2)" }}>
-                          {p.fastest.name} <span style={{ color: "#10b981", fontFamily: "var(--font-mono, monospace)" }}>{p.fastest.avgMin}min</span>
+                          {p.fastest.name} <span style={{ color: "var(--success)", fontFamily: "var(--font-mono, monospace)" }}>{p.fastest.avgMin}min</span>
                         </span>
                       ) : <span style={{ color: "var(--text-4)" }}>—</span>}
                     </Td>
                     <Td>
                       {p.slowest ? (
                         <span style={{ color: "var(--text-2)" }}>
-                          {p.slowest.name} <span style={{ color: "#dc2626", fontFamily: "var(--font-mono, monospace)" }}>{p.slowest.avgMin}min</span>
+                          {p.slowest.name} <span style={{ color: "var(--danger)", fontFamily: "var(--font-mono, monospace)" }}>{p.slowest.avgMin}min</span>
                         </span>
                       ) : <span style={{ color: "var(--text-4)" }}>—</span>}
                     </Td>
@@ -181,6 +165,7 @@ export function ProceduresClient() {
                 ))}
               </tbody>
             </table>
+            </div>
           </div>
           <div style={{ marginTop: 10, fontSize: 11, color: "var(--text-3)" }}>
             {t("analytics.procedures.footerNote", { count: data.sampleSize })}
@@ -194,7 +179,7 @@ export function ProceduresClient() {
 function VarianceCell({ variance }: { variance: number | null }) {
   if (variance == null) return <span style={{ color: "var(--text-4)" }}>—</span>;
   const Icon = variance === 0 ? Minus : variance > 0 ? TrendingUp : TrendingDown;
-  const color = variance === 0 ? "var(--text-3)" : variance > 0 ? "#dc2626" : "#10b981";
+  const color = variance === 0 ? "var(--text-3)" : variance > 0 ? "var(--danger)" : "var(--success)";
   const sign = variance > 0 ? "+" : "";
   return (
     <span style={{ display: "inline-flex", alignItems: "center", gap: 4, color, fontWeight: 600, fontFamily: "var(--font-mono, monospace)" }}>

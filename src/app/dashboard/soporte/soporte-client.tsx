@@ -27,15 +27,24 @@ import {
 } from "@/lib/support/types";
 import type { SupportAttachment, SupportTicketSummary } from "@/lib/support/types";
 
-// Tono visual del badge de estado: ABIERTO violeta/brand, EN_PROGRESO azul,
+// Tono visual del badge de estado: ABIERTO azul/info, EN_PROGRESO violeta/brand,
 // ESPERANDO_RESPUESTA ámbar, RESUELTO verde, CERRADO gris.
+// MISMO mapa en soporte/[id]/ticket-client.tsx — mantener en sincronía.
 type BadgeTone = "success" | "warning" | "danger" | "info" | "brand" | "neutral";
 const STATUS_TONES: Record<string, BadgeTone> = {
-  ABIERTO: "brand",
-  EN_PROGRESO: "info",
+  ABIERTO: "info",
+  EN_PROGRESO: "brand",
   ESPERANDO_RESPUESTA: "warning",
   RESUELTO: "success",
   CERRADO: "neutral",
+};
+
+// Prioridad → tono semántico (URGENTE rojo, ALTA ámbar, NORMAL/BAJA gris).
+const PRIORITY_TONES: Record<string, BadgeTone> = {
+  URGENTE: "danger",
+  ALTA: "warning",
+  NORMAL: "neutral",
+  BAJA: "neutral",
 };
 
 const FILE_ACCEPT = SUPPORT_ALLOWED_MIME.join(",");
@@ -51,12 +60,6 @@ function formatBytes(n: number): string {
   if (n >= 1024 * 1024) return `${(n / (1024 * 1024)).toFixed(1)} MB`;
   if (n >= 1024) return `${Math.round(n / 1024)} KB`;
   return `${n} B`;
-}
-
-function priorityClass(priority: string): string {
-  if (priority === "URGENTE") return "text-red-500 font-semibold";
-  if (priority === "ALTA") return "text-amber-500";
-  return "text-muted-foreground";
 }
 
 export function SoporteClient() {
@@ -202,45 +205,45 @@ export function SoporteClient() {
           <h1 style={{ fontSize: "clamp(16px, 1.4vw, 22px)", letterSpacing: "-0.02em", color: "var(--text-1)", fontWeight: 600, margin: 0 }}>
             Soporte Técnico
           </h1>
-          <p className="text-sm text-muted-foreground mt-1.5">
+          <p className="text-sm mt-1.5" style={{ color: "var(--text-3)" }}>
             ¿Necesitas ayuda? Levanta un ticket y te respondemos por aquí y por correo.
           </p>
         </div>
-        <ButtonNew variant="primary" type="button" icon={<Plus size={16} />} onClick={() => setShowNew(true)}>
+        <ButtonNew variant="primary" type="button" icon={<Plus size={16} strokeWidth={1.75} />} onClick={() => setShowNew(true)}>
           Nuevo ticket
         </ButtonNew>
       </div>
 
       {/* Lista de tickets / skeleton / estado vacío */}
       {loading ? (
-        <div className="rounded-xl border border-border bg-card overflow-hidden" aria-busy="true">
+        <div className="card" aria-busy="true">
           {[0, 1, 2].map(i => (
-            <div key={i} className="px-4 py-4 md:px-5 border-b border-border last:border-b-0 animate-pulse">
-              <div className="h-3 w-24 rounded bg-muted/60 mb-3" />
-              <div className="h-4 w-2/3 max-w-xs rounded bg-muted/60 mb-3" />
-              <div className="flex gap-2">
-                <div className="h-5 w-20 rounded-full bg-muted/60" />
-                <div className="h-5 w-28 rounded-full bg-muted/60" />
+            <div key={i} className="list-row" style={{ flexDirection: "column", alignItems: "flex-start", gap: 10, padding: "14px 18px" }}>
+              <span className="skel-new" style={{ height: 10, width: 96 }} />
+              <span className="skel-new" style={{ height: 14, width: "60%", maxWidth: 320 }} />
+              <div style={{ display: "flex", gap: 8 }}>
+                <span className="skel-new" style={{ height: 20, width: 80, borderRadius: 20 }} />
+                <span className="skel-new" style={{ height: 20, width: 112, borderRadius: 20 }} />
               </div>
             </div>
           ))}
         </div>
       ) : tickets.length === 0 ? (
-        <div className="rounded-xl border border-border bg-card">
+        <div className="card">
           <div className="flex flex-col items-center justify-center text-center px-6 py-16">
-            <LifeBuoy className="w-14 h-14 text-muted-foreground/30 mb-4" strokeWidth={1.25} />
+            <LifeBuoy size={32} className="mb-4" strokeWidth={1.75} style={{ color: "var(--text-4)" }} aria-hidden />
             <div className="text-lg font-semibold" style={{ color: "var(--text-1)" }}>Aún no tienes tickets</div>
-            <p className="text-sm text-muted-foreground mt-1.5 max-w-sm">
+            <p className="text-sm mt-1.5 max-w-sm" style={{ color: "var(--text-3)" }}>
               Si encuentras un error, tienes una duda o quieres sugerir algo, levanta un ticket
               y el equipo de DaleControl te responderá lo antes posible.
             </p>
-            <ButtonNew variant="primary" type="button" className="mt-5" icon={<Plus size={16} />} onClick={() => setShowNew(true)}>
+            <ButtonNew variant="primary" type="button" className="mt-5" icon={<Plus size={16} strokeWidth={1.75} />} onClick={() => setShowNew(true)}>
               Crear mi primer ticket
             </ButtonNew>
           </div>
         </div>
       ) : (
-        <div className="rounded-xl border border-border bg-card overflow-hidden">
+        <div className="card">
           {tickets.map(tk => {
             const statusLabel = SUPPORT_STATUS_LABELS_CLINIC[tk.status] || tk.status;
             const tone = STATUS_TONES[tk.status] || "neutral";
@@ -251,29 +254,30 @@ export function SoporteClient() {
                 key={tk.id}
                 type="button"
                 onClick={() => router.push(`/dashboard/soporte/${tk.id}`)}
-                className="w-full text-left px-4 py-4 md:px-5 border-b border-border last:border-b-0 hover:bg-muted/20 transition-colors"
+                className="list-row w-full text-left"
+                style={{ display: "block", padding: "14px 18px" }}
               >
                 <div className="flex flex-col gap-2 md:flex-row md:items-center md:gap-4">
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <span className="mono text-xs text-muted-foreground">{tk.folioLabel}</span>
+                      <span className="mono" style={{ fontSize: 11, color: "var(--text-3)" }}>{tk.folioLabel}</span>
                       {tk.clinicUnread === true && (
                         <BadgeNew tone="brand" dot>Respuesta nueva</BadgeNew>
                       )}
                     </div>
-                    <div className="text-base font-semibold truncate mt-1" style={{ color: "var(--text-1)" }}>
+                    <div className="truncate mt-1" style={{ fontSize: 14, fontWeight: 600, color: "var(--text-1)" }}>
                       {tk.subject}
                     </div>
                     <div className="flex items-center gap-2 flex-wrap mt-2">
                       <BadgeNew tone="neutral">{catLabel}</BadgeNew>
                       <BadgeNew tone={tone} dot>{statusLabel}</BadgeNew>
-                      <span className={`text-xs ${priorityClass(tk.priority)}`}>Prioridad: {prioLabel}</span>
+                      <BadgeNew tone={PRIORITY_TONES[tk.priority] || "neutral"} dot>{prioLabel}</BadgeNew>
                     </div>
                   </div>
                   <div className="flex items-center gap-3 md:flex-col md:items-end md:gap-1.5 flex-shrink-0">
-                    <span className="text-xs text-muted-foreground whitespace-nowrap">{formatShortDate(tk.lastActivityAt)}</span>
+                    <span className="whitespace-nowrap" style={{ fontSize: 12, color: "var(--text-3)", fontVariantNumeric: "tabular-nums" }}>{formatShortDate(tk.lastActivityAt)}</span>
                     {tk.rating != null && (
-                      <span className="text-xs text-amber-500 whitespace-nowrap">★ {tk.rating}/5</span>
+                      <span className="whitespace-nowrap" style={{ fontSize: 12, color: "var(--warning-strong)", fontVariantNumeric: "tabular-nums" }}>★ {tk.rating}/5</span>
                     )}
                   </div>
                 </div>
@@ -295,7 +299,7 @@ export function SoporteClient() {
                 aria-label="Cerrar"
                 onClick={() => { if (!submitting) setShowNew(false); }}
               >
-                <X size={14} />
+                <X size={16} strokeWidth={1.75} />
               </button>
             </div>
 
@@ -340,7 +344,7 @@ export function SoporteClient() {
                   value={body}
                   onChange={e => setBody(e.target.value)}
                 />
-                <div className="mono text-right text-xs text-muted-foreground mt-1">
+                <div className="mono text-right text-xs mt-1" style={{ color: "var(--text-3)", fontVariantNumeric: "tabular-nums" }}>
                   {body.length}/{SUPPORT_MAX_BODY_CHARS}
                 </div>
               </div>
@@ -359,24 +363,24 @@ export function SoporteClient() {
                 />
                 <div className="flex flex-col gap-2">
                   {attachments.map((f, i) => (
-                    <div key={`${f.path}-${i}`} className="flex items-center gap-2 rounded-lg border border-border bg-muted/20 px-3 py-2">
-                      <FileText size={14} className="text-muted-foreground flex-shrink-0" />
-                      <span className="text-sm truncate flex-1 min-w-0">{f.name}</span>
-                      <span className="mono text-xs text-muted-foreground flex-shrink-0">{formatBytes(f.size)}</span>
+                    <div key={`${f.path}-${i}`} className="flex items-center gap-2 px-3 py-2" style={{ background: "var(--bg-elev-2)", border: "1px solid var(--border-soft)", borderRadius: "var(--radius-sm)" }}>
+                      <FileText size={16} strokeWidth={1.75} className="flex-shrink-0" style={{ color: "var(--text-3)" }} aria-hidden />
+                      <span className="text-sm truncate flex-1 min-w-0" style={{ color: "var(--text-1)" }}>{f.name}</span>
+                      <span className="mono text-xs flex-shrink-0" style={{ color: "var(--text-3)" }}>{formatBytes(f.size)}</span>
                       <button
                         type="button"
-                        className="text-muted-foreground hover:text-red-500 transition-colors flex-shrink-0"
+                        className="flex-shrink-0 transition-colors text-[color:var(--text-3)] hover:text-[color:var(--danger)]"
                         aria-label={`Quitar ${f.name}`}
                         onClick={() => removeAttachment(i)}
                         disabled={submitting}
                       >
-                        <X size={14} />
+                        <X size={16} strokeWidth={1.75} />
                       </button>
                     </div>
                   ))}
                   {uploading && (
-                    <div className="flex items-center gap-2 text-sm text-muted-foreground px-1">
-                      <Loader2 size={14} className="animate-spin" /> Subiendo…
+                    <div className="flex items-center gap-2 text-sm px-1" style={{ color: "var(--text-3)" }}>
+                      <Loader2 size={16} strokeWidth={1.75} className="animate-spin" aria-hidden /> Subiendo…
                     </div>
                   )}
                   <div>
@@ -384,7 +388,7 @@ export function SoporteClient() {
                       variant="secondary"
                       size="sm"
                       type="button"
-                      icon={<Paperclip size={14} />}
+                      icon={<Paperclip size={16} strokeWidth={1.75} />}
                       onClick={() => { if (fileInputRef.current) fileInputRef.current.click(); }}
                       disabled={uploading || submitting || attachments.length >= SUPPORT_MAX_FILES_PER_MESSAGE}
                     >

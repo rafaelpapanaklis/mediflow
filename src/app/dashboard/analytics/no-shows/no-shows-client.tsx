@@ -115,23 +115,10 @@ export function NoShowsClient() {
             type="button"
             onClick={requestAiInsight}
             disabled={aiLoading}
-            style={{
-              padding: "7px 12px",
-              fontSize: 12,
-              fontWeight: 600,
-              background: "linear-gradient(135deg, #7c3aed, #5b21b6)",
-              color: "#fff",
-              border: "1px solid var(--brand)",
-              borderRadius: 8,
-              cursor: aiLoading ? "wait" : "pointer",
-              fontFamily: "inherit",
-              display: "inline-flex",
-              alignItems: "center",
-              gap: 6,
-              boxShadow: "0 4px 14px -4px rgba(124, 58, 237, 0.45)",
-            }}
+            className="btn-new btn-new--primary btn-new--sm"
+            style={{ cursor: aiLoading ? "wait" : undefined }}
           >
-            <Sparkles size={13} aria-hidden />
+            <Sparkles size={16} strokeWidth={1.75} aria-hidden />
             {aiLoading ? t("analytics.noShows.analyzing") : t("analytics.noShows.analyzeWithAi")}
           </button>
         ) : null
@@ -140,7 +127,12 @@ export function NoShowsClient() {
       {loading ? (
         <Box>{t("common.loading")}</Box>
       ) : !data || data.total === 0 ? (
-        <Box>{t("analytics.noShows.noAppointments")}</Box>
+        <Box>
+          <div aria-hidden style={{ color: "var(--text-4)", marginBottom: 8 }}>
+            <AlertCircle size={20} strokeWidth={1.75} />
+          </div>
+          {t("analytics.noShows.noAppointments")}
+        </Box>
       ) : (
         <>
           {aiInsight && (
@@ -150,7 +142,7 @@ export function NoShowsClient() {
                 padding: 14,
                 background: "var(--brand-softer)",
                 border: "1px solid var(--brand-soft)",
-                borderRadius: 10,
+                borderRadius: "var(--radius)",
                 fontSize: 13,
                 color: "var(--text-1)",
                 lineHeight: 1.6,
@@ -160,7 +152,7 @@ export function NoShowsClient() {
                 alignItems: "flex-start",
               }}
             >
-              <Sparkles size={16} style={{ color: "var(--brand)", flexShrink: 0, marginTop: 2 }} aria-hidden />
+              <Sparkles size={16} strokeWidth={1.75} style={{ color: "var(--brand)", flexShrink: 0, marginTop: 2 }} aria-hidden />
               <div>{aiInsight}</div>
             </div>
           )}
@@ -170,7 +162,7 @@ export function NoShowsClient() {
               label={t("analytics.noShows.rateLabel")}
               value={`${data.rate}%`}
               hint={t("analytics.noShows.rateHint", { count: data.noShowCount, total: data.total })}
-              icon={<AlertCircle size={14} aria-hidden />}
+              icon={<AlertCircle size={16} strokeWidth={1.75} aria-hidden />}
               tone={data.rate > 10 ? "danger" : data.rate > 5 ? "warning" : "success"}
             />
             <AnalyticsCard
@@ -228,7 +220,7 @@ export function NoShowsClient() {
                   <div style={{
                     fontSize: 18,
                     fontWeight: 700,
-                    color: u.probability >= 0.75 ? "#dc2626" : "#d97706",
+                    color: u.probability >= 0.75 ? "var(--danger)" : "var(--warning-strong)",
                     fontFamily: "var(--font-mono, monospace)",
                   }}>
                     {Math.round(u.probability * 100)}%
@@ -264,7 +256,7 @@ export function NoShowsClient() {
                     }}
                     title={t("analytics.noShows.recalculateWithAi")}
                   >
-                    <RefreshCw size={11} aria-hidden style={{ animation: refreshingPredId === u.appointmentId ? "spin 0.8s linear infinite" : undefined }} />
+                    <RefreshCw size={11} strokeWidth={1.75} aria-hidden style={{ animation: refreshingPredId === u.appointmentId ? "spin 0.8s linear infinite" : undefined }} />
                     {refreshingPredId === u.appointmentId ? "…" : t("analytics.noShows.refresh")}
                   </button>
                 </div>
@@ -294,7 +286,7 @@ export function NoShowsClient() {
                   fontSize: 13,
                 }}>
                   <span style={{ color: "var(--text-1)" }}>{p.name}</span>
-                  <span style={{ color: "#dc2626", fontWeight: 600, fontFamily: "var(--font-mono, monospace)" }}>
+                  <span style={{ color: "var(--danger)", fontWeight: 600, fontFamily: "var(--font-mono, monospace)" }}>
                     {t("analytics.noShows.noShowCount", { count: p.count })}
                   </span>
                 </div>
@@ -312,7 +304,8 @@ function Box({ children }: { children: React.ReactNode }) {
     <div style={{
       background: "var(--bg-elev)",
       border: "1px solid var(--border-soft)",
-      borderRadius: 14,
+      borderRadius: "var(--radius-lg)",
+      boxShadow: "var(--shadow-1)",
       padding: 40,
       textAlign: "center",
       color: "var(--text-3)",

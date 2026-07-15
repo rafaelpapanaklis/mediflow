@@ -82,7 +82,7 @@ export function SignatureClient({ cert }: Props) {
   return (
     <div style={{ padding: "clamp(14px, 1.6vw, 28px)", maxWidth: 720, margin: "0 auto" }}>
       <h1 style={{ fontSize: 22, fontWeight: 700, marginBottom: 4, display: "inline-flex", alignItems: "center", gap: 10 }}>
-        <ShieldCheck size={20} aria-hidden style={{ color: "var(--brand, #2563eb)" }} />
+        <ShieldCheck size={20} strokeWidth={1.75} aria-hidden style={{ color: "var(--brand)" }} />
         {t("settings.signature.title")}
       </h1>
       <p style={{ fontSize: 13, color: "var(--text-3, #64748b)", marginBottom: 24 }}>
@@ -94,13 +94,13 @@ export function SignatureClient({ cert }: Props) {
           style={{
             padding: 16,
             marginBottom: 20,
-            background: expired ? "rgba(220, 38, 38, 0.08)" : expiringSoon ? "rgba(217, 119, 6, 0.08)" : "rgba(16, 185, 129, 0.08)",
-            border: `1px solid ${expired ? "rgba(220, 38, 38, 0.30)" : expiringSoon ? "rgba(217, 119, 6, 0.30)" : "rgba(16, 185, 129, 0.30)"}`,
-            borderRadius: 12,
+            background: expired ? "var(--danger-soft)" : expiringSoon ? "var(--warning-soft)" : "var(--success-soft)",
+            border: `1px solid ${expired ? "var(--danger-border-strong)" : expiringSoon ? "var(--warning-border-strong)" : "var(--success-strong)"}`,
+            borderRadius: "var(--radius-lg)",
           }}
         >
-          <div style={{ display: "flex", alignItems: "center", gap: 10, fontWeight: 700, fontSize: 14, marginBottom: 10, color: expired ? "#b91c1c" : expiringSoon ? "#92400e" : "#065f46" }}>
-            {expired ? <AlertTriangle size={16} aria-hidden /> : <Check size={16} aria-hidden />}
+          <div style={{ display: "flex", alignItems: "center", gap: 10, fontWeight: 700, fontSize: 14, marginBottom: 10, color: expired ? "var(--danger-strong)" : expiringSoon ? "var(--warning-strong)" : "var(--success-strong)" }}>
+            {expired ? <AlertTriangle size={16} strokeWidth={1.75} aria-hidden /> : <Check size={16} strokeWidth={1.75} aria-hidden />}
             {expired
               ? t("settings.signature.statusExpired")
               : expiringSoon
@@ -142,18 +142,12 @@ export function SignatureClient({ cert }: Props) {
 
         <Field label={t("settings.signature.passwordLabel")} required>
           <input
+            className="input-new"
             type="password"
             value={keyPassword}
             onChange={(e) => setKeyPassword(e.target.value)}
             autoComplete="off"
             placeholder={t("settings.signature.passwordPlaceholder")}
-            style={{
-              padding: "10px 12px",
-              border: "1px solid var(--border-soft, #cbd5e1)",
-              borderRadius: 8,
-              fontFamily: "inherit",
-              fontSize: 13,
-            }}
           />
         </Field>
 
@@ -164,23 +158,10 @@ export function SignatureClient({ cert }: Props) {
         <button
           type="submit"
           disabled={submitting || !cerFile || !keyFile || !keyPassword}
-          style={{
-            padding: "10px 16px",
-            fontSize: 13,
-            fontWeight: 700,
-            background: "var(--brand, #2563eb)",
-            color: "#fff",
-            border: "none",
-            borderRadius: 8,
-            cursor: submitting ? "wait" : "pointer",
-            fontFamily: "inherit",
-            display: "inline-flex",
-            alignItems: "center",
-            gap: 8,
-            alignSelf: "flex-start",
-          }}
+          className="btn-new btn-new--primary"
+          style={{ alignSelf: "flex-start", cursor: submitting ? "wait" : undefined }}
         >
-          <Upload size={14} aria-hidden />
+          <Upload size={16} strokeWidth={1.75} aria-hidden />
           {submitting ? t("settings.signature.uploading") : (cert ? t("settings.signature.replaceCert") : t("settings.signature.uploadCert"))}
         </button>
       </form>
@@ -205,7 +186,7 @@ function Field({ label, required, children }: { label: string; required?: boolea
   return (
     <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
       <span style={{ fontSize: 11, fontWeight: 700, color: "var(--text-2, #475569)", textTransform: "uppercase", letterSpacing: "0.04em" }}>
-        {label} {required && <span style={{ color: "#dc2626" }}>*</span>}
+        {label} {required && <span style={{ color: "var(--danger)" }}>*</span>}
       </span>
       {children}
     </label>

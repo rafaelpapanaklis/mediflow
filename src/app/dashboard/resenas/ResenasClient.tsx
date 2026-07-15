@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Loader2, MessageSquare, Star, Flag, EyeOff } from "lucide-react";
 import { ReviewStars } from "@/components/reviews/ReviewStars";
+import { AvatarNew } from "@/components/ui/design-system/avatar-new";
 import {
   REVIEW_MAX_RESPONSE_CHARS,
   formatReviewDate,
@@ -57,19 +58,26 @@ export function ResenasClient() {
       </header>
 
       {data && data.summary.count > 0 && (
-        <div
-          style={{
-            display: "flex", alignItems: "center", gap: 14, padding: "14px 18px", marginBottom: 16,
-            background: "var(--bg-elev)", border: "1px solid var(--border-soft)", borderRadius: 14,
-          }}
-        >
-          <div style={{ fontSize: 30, fontWeight: 800, color: "var(--text-1)", lineHeight: 1 }}>
-            {data.summary.avg.toFixed(1)}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 14, marginBottom: 16 }}>
+          <div className="kpi kpi--hero">
+            <div className="kpi__top">
+              <span className="kpi__label">Calificación promedio</span>
+              <div className="kpi__icon"><Star size={18} strokeWidth={1.75} aria-hidden /></div>
+            </div>
+            <div className="kpi__value">{data.summary.avg.toFixed(1)}</div>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 8 }}>
+              <ReviewStars value={data.summary.avg} size={14} />
+              <span style={{ fontSize: 12, color: "var(--text-3)", fontVariantNumeric: "tabular-nums" }}>de 5</span>
+            </div>
           </div>
-          <div>
-            <ReviewStars value={data.summary.avg} size={16} />
-            <div style={{ fontSize: 12, color: "var(--text-3)", marginTop: 2 }}>
-              {data.summary.count} {data.summary.count === 1 ? "reseña publicada" : "reseñas publicadas"}
+          <div className="kpi">
+            <div className="kpi__top">
+              <span className="kpi__label">{data.summary.count === 1 ? "Reseña publicada" : "Reseñas publicadas"}</span>
+              <div className="kpi__icon"><MessageSquare size={18} strokeWidth={1.75} aria-hidden /></div>
+            </div>
+            <div className="kpi__value">{data.summary.count}</div>
+            <div style={{ fontSize: 12, color: "var(--text-3)", marginTop: 8 }}>
+              opiniones verificadas de pacientes
             </div>
           </div>
         </div>
@@ -77,10 +85,10 @@ export function ResenasClient() {
 
       {loading ? (
         <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "40px 0", justifyContent: "center", color: "var(--text-3)" }}>
-          <Loader2 size={18} className="animate-spin" /> Cargando…
+          <Loader2 size={18} strokeWidth={1.75} className="animate-spin" /> Cargando…
         </div>
       ) : error ? (
-        <div style={{ padding: 16, borderRadius: 12, background: "rgba(220,38,38,0.08)", color: "#dc2626", fontSize: 14 }}>
+        <div style={{ padding: 16, borderRadius: "var(--radius)", background: "var(--danger-soft)", color: "var(--danger)", fontSize: 13.5 }}>
           {error}
         </div>
       ) : !data || data.items.length === 0 ? (
@@ -94,7 +102,7 @@ export function ResenasClient() {
           {data.totalPages > 1 && (
             <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 12, paddingTop: 8 }}>
               <PagerBtn disabled={page <= 1} onClick={() => load(page - 1)}>Anterior</PagerBtn>
-              <span style={{ fontSize: 13, color: "var(--text-3)" }}>
+              <span style={{ fontSize: 13, color: "var(--text-3)", fontVariantNumeric: "tabular-nums" }}>
                 {page} / {data.totalPages}
               </span>
               <PagerBtn disabled={page >= data.totalPages} onClick={() => load(page + 1)}>Siguiente</PagerBtn>
@@ -145,36 +153,44 @@ function ReviewRow({
   const hidden = review.status === "hidden";
 
   return (
-    <article
-      style={{
-        padding: 16, background: "var(--bg-elev)", border: "1px solid var(--border-soft)", borderRadius: 14,
-        opacity: hidden ? 0.7 : 1,
-      }}
-    >
+    <article className="card" style={{ opacity: hidden ? 0.7 : 1 }}>
+      <div className="card__body">
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
-        <div>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-            <span style={{ fontWeight: 600, color: "var(--text-1)", fontSize: 14 }}>{review.authorName}</span>
-            {review.rating != null && <ReviewStars value={review.rating} size={14} />}
-            <span style={{ fontSize: 12, color: "var(--text-3)", textTransform: "capitalize" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
+          <AvatarNew name={review.authorName} />
+          <div style={{ minWidth: 0 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+              <span style={{ fontWeight: 600, color: "var(--text-1)", fontSize: 14 }}>{review.authorName}</span>
+              {review.rating != null && <ReviewStars value={review.rating} size={14} />}
+            </div>
+            <div style={{ fontSize: 12, color: "var(--text-3)", textTransform: "capitalize", fontVariantNumeric: "tabular-nums", marginTop: 2 }}>
               {formatReviewDate(review.submittedAt ?? review.createdAt)}
-            </span>
+            </div>
           </div>
         </div>
-        <div style={{ display: "flex", gap: 6 }}>
-          {review.reported && <Badge color="#b45309" bg="rgba(245,158,11,0.14)" icon={<Flag size={11} />}>Reportada</Badge>}
-          {hidden && <Badge color="var(--text-3)" bg="var(--bg-hover)" icon={<EyeOff size={11} />}>Oculta</Badge>}
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+          {review.reported && (
+            <span className="badge-new badge-new--warning">
+              <Flag size={11} strokeWidth={1.75} aria-hidden /> Reportada
+            </span>
+          )}
+          {hidden && (
+            <span className="badge-new badge-new--neutral">
+              <EyeOff size={11} strokeWidth={1.75} aria-hidden /> Oculta
+            </span>
+          )}
+          {review.response && <span className="badge-new badge-new--info">Respondida</span>}
         </div>
       </div>
 
       {review.comment && (
-        <p style={{ marginTop: 10, fontSize: 14, lineHeight: 1.55, color: "var(--text-2)" }}>{review.comment}</p>
+        <p style={{ marginTop: 10, fontSize: 13.5, lineHeight: 1.55, color: "var(--text-2)" }}>{review.comment}</p>
       )}
 
       {review.response ? (
-        <div style={{ marginTop: 12, padding: 12, borderRadius: 10, background: "var(--brand-soft)", borderLeft: "3px solid var(--brand)" }}>
-          <div style={{ fontSize: 11, fontWeight: 700, color: "var(--brand)", marginBottom: 3 }}>Tu respuesta</div>
-          <p style={{ fontSize: 13, lineHeight: 1.5, color: "var(--text-2)" }}>{review.response}</p>
+        <div style={{ marginTop: 12, padding: 12, borderRadius: "var(--radius)", background: "var(--brand-soft)", borderLeft: "3px solid var(--brand)" }}>
+          <span className="badge-new badge-new--brand" style={{ marginBottom: 6 }}>Tu respuesta</span>
+          <p style={{ fontSize: 13.5, lineHeight: 1.5, color: "var(--text-2)" }}>{review.response}</p>
         </div>
       ) : open ? (
         <div style={{ marginTop: 12 }}>
@@ -184,33 +200,23 @@ function ReviewRow({
             rows={3}
             placeholder="Responde con amabilidad y profesionalismo…"
             autoFocus
-            style={{
-              width: "100%", resize: "none", borderRadius: 10, padding: "10px 12px", fontSize: 14,
-              border: "1px solid var(--border-soft)", background: "var(--bg-base, #fff)", color: "var(--text-1)",
-              fontFamily: "inherit", outline: "none",
-            }}
+            className="input-new"
+            style={{ height: "auto", minHeight: 88, resize: "none", padding: "10px 12px", fontSize: 13.5, fontFamily: "inherit" }}
           />
-          {err && <div style={{ color: "#dc2626", fontSize: 12, marginTop: 4 }}>{err}</div>}
-          <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+          {err && <div style={{ color: "var(--danger)", fontSize: 12, marginTop: 4 }}>{err}</div>}
+          <div style={{ display: "flex", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
             <button
               type="button"
               onClick={send}
               disabled={saving || !text.trim()}
-              style={{
-                display: "inline-flex", alignItems: "center", gap: 6, padding: "8px 14px", borderRadius: 9,
-                background: "var(--brand)", color: "#fff", fontSize: 13, fontWeight: 600, border: "none",
-                cursor: saving ? "default" : "pointer", opacity: saving || !text.trim() ? 0.6 : 1,
-              }}
+              className="btn-new btn-new--primary"
             >
-              {saving && <Loader2 size={14} className="animate-spin" />} Publicar respuesta
+              {saving && <Loader2 size={16} strokeWidth={1.75} className="animate-spin" />} Publicar respuesta
             </button>
             <button
               type="button"
               onClick={() => { setOpen(false); setErr(""); }}
-              style={{
-                padding: "8px 14px", borderRadius: 9, background: "transparent", color: "var(--text-2)",
-                fontSize: 13, fontWeight: 600, border: "1px solid var(--border-soft)", cursor: "pointer",
-              }}
+              className="btn-new btn-new--ghost"
             >
               Cancelar
             </button>
@@ -220,38 +226,28 @@ function ReviewRow({
         <button
           type="button"
           onClick={() => setOpen(true)}
-          style={{
-            marginTop: 12, display: "inline-flex", alignItems: "center", gap: 6, padding: "7px 12px", borderRadius: 9,
-            background: "transparent", color: "var(--brand)", fontSize: 13, fontWeight: 600,
-            border: "1px solid var(--border-soft)", cursor: "pointer",
-          }}
+          className="btn-new btn-new--secondary btn-new--sm"
+          style={{ marginTop: 12 }}
         >
-          <MessageSquare size={14} /> Responder
+          <MessageSquare size={16} strokeWidth={1.75} aria-hidden /> Responder
         </button>
       )}
+      </div>
     </article>
   );
 }
 
 function EmptyState() {
   return (
-    <div style={{ textAlign: "center", padding: "48px 16px", background: "var(--bg-elev)", border: "1px solid var(--border-soft)", borderRadius: 14 }}>
-      <div style={{ display: "inline-flex", padding: 14, borderRadius: 16, background: "var(--brand-soft)", color: "var(--brand)", marginBottom: 12 }}>
-        <Star size={24} />
+    <div className="card" style={{ textAlign: "center", padding: "48px 16px" }}>
+      <div style={{ display: "inline-flex", padding: 14, borderRadius: "var(--radius-lg)", background: "var(--brand-soft)", color: "var(--brand)", marginBottom: 12 }}>
+        <Star size={20} strokeWidth={1.75} aria-hidden />
       </div>
       <p style={{ fontWeight: 700, color: "var(--text-1)" }}>Todavía no tienes reseñas</p>
-      <p style={{ fontSize: 14, color: "var(--text-3)", marginTop: 4, maxWidth: 360, marginInline: "auto" }}>
+      <p style={{ fontSize: 13.5, color: "var(--text-3)", marginTop: 4, maxWidth: 360, marginInline: "auto" }}>
         Cuando marques una cita como completada, el paciente recibirá una invitación para calificarte.
       </p>
     </div>
-  );
-}
-
-function Badge({ children, color, bg, icon }: { children: React.ReactNode; color: string; bg: string; icon?: React.ReactNode }) {
-  return (
-    <span style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "3px 8px", borderRadius: 999, background: bg, color, fontSize: 11, fontWeight: 700 }}>
-      {icon}{children}
-    </span>
   );
 }
 
@@ -261,11 +257,7 @@ function PagerBtn({ children, disabled, onClick }: { children: React.ReactNode; 
       type="button"
       onClick={onClick}
       disabled={disabled}
-      style={{
-        padding: "7px 14px", borderRadius: 9, background: "var(--bg-elev)", color: "var(--text-1)",
-        fontSize: 13, fontWeight: 600, border: "1px solid var(--border-soft)",
-        cursor: disabled ? "default" : "pointer", opacity: disabled ? 0.5 : 1,
-      }}
+      className="btn-new btn-new--secondary btn-new--sm"
     >
       {children}
     </button>

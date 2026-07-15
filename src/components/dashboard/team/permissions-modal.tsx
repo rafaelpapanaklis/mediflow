@@ -2,9 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import toast from "react-hot-toast";
-import { Shield } from "lucide-react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
+import { Shield, X } from "lucide-react";
 import {
   ALL_PERMISSIONS,
   PERMISSION_GROUPS,
@@ -111,74 +109,138 @@ export function PermissionsModal({ open, member, onClose, onSaved }: Permissions
     }
   }
 
-  if (!member) return null;
+  if (!open || !member) return null;
   const fullName = `${member.firstName} ${member.lastName}`.trim();
 
   return (
-    <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
-      <DialogContent className="max-w-2xl bg-card text-foreground border border-border max-h-[85vh]">
-        <DialogHeader>
-          <DialogTitle className="text-foreground font-bold flex items-center gap-2">
-            <Shield size={16} className="text-violet-600 dark:text-violet-400" />
+    <div
+      className="modal-overlay"
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+    >
+      <div
+        className="modal modal--wide"
+        role="dialog"
+        aria-modal="true"
+        style={{ display: "flex", flexDirection: "column", overflow: "hidden" }}
+      >
+        <div className="modal__header">
+          <h2 className="modal__title" style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <Shield size={16} strokeWidth={1.75} aria-hidden style={{ color: "var(--brand)" }} />
             {t("settings.team.permissionsOf", { name: fullName })}
-          </DialogTitle>
-        </DialogHeader>
+          </h2>
+          <button
+            type="button"
+            onClick={onClose}
+            className="btn-new btn-new--ghost"
+            style={{ padding: 0, width: 36 }}
+            aria-label={t("common.close")}
+          >
+            <X size={18} strokeWidth={1.75} />
+          </button>
+        </div>
 
-        <div className="px-6 py-4 space-y-5 flex-1 overflow-y-auto min-h-0">
+        <div className="modal__body space-y-5" style={{ overflowY: "auto", flex: 1, minHeight: 0 }}>
           {/* Toggle use-default */}
-          <label className="flex items-start gap-3 p-3 rounded-lg border border-border bg-muted/30 cursor-pointer">
+          <label
+            className="flex items-start justify-between gap-3 cursor-pointer"
+            style={{
+              padding: 14,
+              borderRadius: "var(--radius)",
+              border: `1px solid ${useDefault ? "var(--consult-active-border)" : "var(--border-soft)"}`,
+              background: useDefault ? "var(--brand-softer)" : "transparent",
+              transition: "background var(--dur-1) var(--ease), border-color var(--dur-1) var(--ease)",
+            }}
+          >
+            <div className="flex-1">
+              <div style={{ fontSize: 13.5, fontWeight: 600, color: "var(--text-1)" }}>
+                {t("settings.permissions.useRoleDefault")}{" "}
+                <span className="mono" style={{ fontSize: 12, color: "var(--text-3)" }}>
+                  {ROLE_LABEL[memberRole] ? t(ROLE_LABEL[memberRole]) : memberRole}
+                </span>
+              </div>
+              <div style={{ fontSize: 11.5, color: "var(--text-3)", marginTop: 2 }}>
+                {t("settings.permissions.useRoleDefaultHint")}
+              </div>
+            </div>
             <input
               type="checkbox"
               checked={useDefault}
               onChange={(e) => toggleUseDefault(e.target.checked)}
-              className="mt-1"
+              className="peer sr-only"
             />
-            <div className="flex-1">
-              <div className="text-sm font-semibold text-foreground">
-                {t("settings.permissions.useRoleDefault")} <span className="font-mono text-xs text-muted-foreground">{ROLE_LABEL[memberRole] ? t(ROLE_LABEL[memberRole]) : memberRole}</span>
-              </div>
-              <div className="text-[11px] text-muted-foreground mt-0.5">
-                {t("settings.permissions.useRoleDefaultHint")}
-              </div>
-            </div>
+            <span
+              className={`switch peer-focus-visible:shadow-[var(--ring)] ${useDefault ? "switch--on" : ""}`}
+              aria-hidden
+              style={{ marginTop: 2 }}
+            >
+              <span className="switch__thumb" />
+            </span>
           </label>
 
           {/* Permission groups */}
           <div className="space-y-4">
             {PERMISSION_GROUPS.map((group) => (
               <div key={group.title}>
-                <h3 className="text-[11px] font-bold text-muted-foreground uppercase tracking-wide mb-2">
+                <div className="form-section__title">
                   {group.title}
-                </h3>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 bg-card border border-border rounded-lg p-3">
+                  <span className="form-section__rule" aria-hidden />
+                </div>
+                <div
+                  className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 p-3"
+                  style={{
+                    background: "var(--bg-elev-2)",
+                    border: "1px solid var(--border-soft)",
+                    borderRadius: "var(--radius)",
+                  }}
+                >
                   {group.keys.map((key) => {
                     const isChecked = selected.has(key);
                     const isInRoleDefault = roleDefaults.has(key);
                     return (
                       <label
                         key={key}
-                        className={`flex items-start gap-2 p-1.5 rounded text-xs ${
-                          useDefault ? "cursor-default opacity-60" : "cursor-pointer hover:bg-muted/40"
-                        }`}
+                        className={`flex items-start justify-between gap-2 ${useDefault ? "" : "hover:bg-[var(--bg-hover)]"}`}
+                        style={{
+                          padding: "6px 8px",
+                          borderRadius: "var(--radius-sm)",
+                          cursor: useDefault ? "default" : "pointer",
+                          opacity: useDefault ? 0.6 : 1,
+                          transition: "background var(--dur-1) var(--ease)",
+                        }}
                       >
-                        <input
-                          type="checkbox"
-                          checked={isChecked}
-                          disabled={useDefault}
-                          onChange={() => togglePermission(key)}
-                          className="mt-0.5"
-                        />
-                        <div className="min-w-0">
-                          <div className="font-medium text-foreground">{ALL_PERMISSIONS[key]}</div>
-                          <div className="font-mono text-[10px] text-muted-foreground flex items-center gap-1.5">
+                        <div className="min-w-0 flex-1">
+                          <div style={{ fontSize: 12.5, fontWeight: 500, color: "var(--text-1)" }}>
+                            {ALL_PERMISSIONS[key]}
+                          </div>
+                          <div
+                            className="mono"
+                            style={{ fontSize: 10.5, color: "var(--text-3)", display: "flex", alignItems: "center", gap: 6, marginTop: 1 }}
+                          >
                             {key}
                             {isInRoleDefault && (
-                              <span className="text-[9px] px-1 py-px rounded bg-violet-50 text-violet-700 dark:bg-violet-950/40 dark:text-violet-300">
+                              <span
+                                className="badge-new badge-new--brand"
+                                style={{ height: 16, padding: "0 6px", fontSize: 9 }}
+                              >
                                 {t("settings.permissions.roleBadge")}
                               </span>
                             )}
                           </div>
                         </div>
+                        <input
+                          type="checkbox"
+                          checked={isChecked}
+                          disabled={useDefault}
+                          onChange={() => togglePermission(key)}
+                          className="peer sr-only"
+                        />
+                        <span
+                          className={`switch peer-focus-visible:shadow-[var(--ring)] ${isChecked ? "switch--on" : ""}`}
+                          aria-hidden
+                          style={{ marginTop: 1 }}
+                        >
+                          <span className="switch__thumb" />
+                        </span>
                       </label>
                     );
                   })}
@@ -188,13 +250,25 @@ export function PermissionsModal({ open, member, onClose, onSaved }: Permissions
           </div>
         </div>
 
-        <DialogFooter>
-          <Button variant="outline" onClick={onClose} disabled={saving}>{t("common.cancel")}</Button>
-          <Button onClick={save} disabled={saving}>
+        <div className="modal__footer">
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={saving}
+            className="btn-new btn-new--secondary"
+          >
+            {t("common.cancel")}
+          </button>
+          <button
+            type="button"
+            onClick={save}
+            disabled={saving}
+            className="btn-new btn-new--primary"
+          >
             {saving ? t("common.saving") : useDefault ? t("settings.permissions.revertToRoleDefault") : t("settings.permissions.savePermissionsCount", { count: selected.size })}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }

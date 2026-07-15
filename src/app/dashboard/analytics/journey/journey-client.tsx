@@ -59,23 +59,14 @@ export function JourneyClient() {
       title={t("analytics.journeyClient.title")}
       subtitle={t("analytics.journeyClient.subtitle")}
       rightActions={
-        <div style={{ display: "flex", gap: 6 }}>
+        <div className="segment-new">
           {PRESETS.map((p) => (
             <button
               key={p.id}
               type="button"
               onClick={() => setPreset(p.id)}
-              style={{
-                padding: "6px 12px",
-                fontSize: 12,
-                fontWeight: 600,
-                background: preset === p.id ? "var(--brand)" : "var(--bg-elev)",
-                color: preset === p.id ? "#fff" : "var(--text-2)",
-                border: `1px solid ${preset === p.id ? "var(--brand)" : "var(--border-soft)"}`,
-                borderRadius: 8,
-                cursor: "pointer",
-                fontFamily: "inherit",
-              }}
+              aria-pressed={preset === p.id}
+              className={`segment-new__btn${preset === p.id ? " segment-new__btn--active" : ""}`}
             >
               {t(p.labelKey)}
             </button>
@@ -95,10 +86,10 @@ export function JourneyClient() {
                 marginBottom: 14,
                 padding: 14,
                 background: data.bottleneck.avgMin > 30
-                  ? "rgba(220, 38, 38, 0.08)"
-                  : "rgba(217, 119, 6, 0.08)",
-                border: `1px solid ${data.bottleneck.avgMin > 30 ? "rgba(220, 38, 38, 0.30)" : "rgba(217, 119, 6, 0.30)"}`,
-                borderRadius: 12,
+                  ? "var(--danger-soft)"
+                  : "var(--warning-soft)",
+                border: `1px solid ${data.bottleneck.avgMin > 30 ? "var(--danger-border-strong)" : "var(--warning-border-strong)"}`,
+                borderRadius: "var(--radius)",
                 display: "flex",
                 gap: 12,
                 alignItems: "flex-start",
@@ -106,8 +97,8 @@ export function JourneyClient() {
                 color: "var(--text-2)",
               }}
             >
-              <div style={{ color: data.bottleneck.avgMin > 30 ? "#dc2626" : "#d97706", flexShrink: 0, marginTop: 2 }}>
-                <AlertTriangle size={16} aria-hidden />
+              <div style={{ color: data.bottleneck.avgMin > 30 ? "var(--danger)" : "var(--warning-strong)", flexShrink: 0, marginTop: 2 }}>
+                <AlertTriangle size={16} strokeWidth={1.75} aria-hidden />
               </div>
               <div>
                 <strong style={{ color: "var(--text-1)" }}>{t("analytics.journeyClient.bottleneckLabel", { label: data.bottleneck.label })}</strong>
@@ -124,7 +115,8 @@ export function JourneyClient() {
             style={{
               background: "var(--bg-elev)",
               border: "1px solid var(--border-soft)",
-              borderRadius: 14,
+              borderRadius: "var(--radius-lg)",
+              boxShadow: "var(--shadow-1)",
               padding: 24,
               marginBottom: 14,
             }}
@@ -136,16 +128,9 @@ export function JourneyClient() {
           </div>
 
           {/* Stages timing */}
-          <div
-            style={{
-              background: "var(--bg-elev)",
-              border: "1px solid var(--border-soft)",
-              borderRadius: 14,
-              overflow: "hidden",
-            }}
-          >
-            <div style={{ padding: "12px 16px", fontSize: 12, fontWeight: 700, color: "var(--text-2)", background: "var(--bg-elev-2)", borderBottom: "1px solid var(--border-soft)" }}>
-              {t("analytics.journeyClient.avgTimePerStage")}
+          <div className="card">
+            <div className="card__header">
+              <span className="card__title">{t("analytics.journeyClient.avgTimePerStage")}</span>
             </div>
             {data.stages.map((s) => (
               <div
@@ -157,7 +142,7 @@ export function JourneyClient() {
                   gridTemplateColumns: "1fr auto auto",
                   gap: 16,
                   alignItems: "center",
-                  background: data.bottleneck?.id === s.id ? "rgba(217, 119, 6, 0.04)" : undefined,
+                  background: data.bottleneck?.id === s.id ? "var(--warning-soft)" : undefined,
                 }}
               >
                 <div>
@@ -172,16 +157,16 @@ export function JourneyClient() {
                   fontWeight: 700,
                   color: s.sample === 0
                     ? "var(--text-4)"
-                    : s.avgMin > 30 ? "#dc2626"
-                    : s.avgMin > 15 ? "#d97706"
-                    : "#10b981",
+                    : s.avgMin > 30 ? "var(--danger)"
+                    : s.avgMin > 15 ? "var(--warning-strong)"
+                    : "var(--success-strong)",
                   fontFamily: "var(--font-mono, monospace)",
                   fontVariantNumeric: "tabular-nums",
                   display: "inline-flex",
                   alignItems: "center",
                   gap: 4,
                 }}>
-                  <Clock size={13} aria-hidden />
+                  <Clock size={13} strokeWidth={1.75} aria-hidden />
                   {s.sample > 0 ? `${s.avgMin} min` : "—"}
                 </div>
               </div>
@@ -219,13 +204,13 @@ function FunnelView({
         const isFirst = idx === 0;
         const isLast = idx === funnel.length - 1;
         const drop =
-          isFirst && dropOffs.cancelled > 0 ? { label: t("analytics.journeyClient.cancelled"), count: dropOffs.cancelled, color: "#94a3b8" } :
+          isFirst && dropOffs.cancelled > 0 ? { label: t("analytics.journeyClient.cancelled"), count: dropOffs.cancelled } :
           step.id === "scheduled" || step.id === "arrived" ? null :
           null;
 
         // Drop-off por NO_SHOW se renderea entre "scheduled" y "arrived".
         const noShowDrop = idx === 0 && dropOffs.noShow > 0
-          ? { label: t("analytics.journeyClient.noShow"), count: dropOffs.noShow, color: "#dc2626" }
+          ? { label: t("analytics.journeyClient.noShow"), count: dropOffs.noShow }
           : null;
 
         return (
@@ -235,7 +220,7 @@ function FunnelView({
               <div
                 style={{
                   flex: 1,
-                  background: "linear-gradient(90deg, var(--brand) 0%, var(--brand-soft) 100%)",
+                  background: "var(--brand)",
                   width: `${widthPct}%`,
                   height: 36,
                   borderRadius: 8,
@@ -273,10 +258,10 @@ function FunnelView({
             {!isLast && (drop || noShowDrop) && (
               <div style={{ display: "flex", paddingLeft: 24, alignItems: "center", gap: 8, marginTop: 2 }}>
                 {drop && (
-                  <DropPill label={drop.label} count={drop.count} color={drop.color} pct={Math.round((drop.count / max) * 100)} />
+                  <DropPill label={drop.label} count={drop.count} tone="neutral" pct={Math.round((drop.count / max) * 100)} />
                 )}
                 {noShowDrop && (
-                  <DropPill label={noShowDrop.label} count={noShowDrop.count} color={noShowDrop.color} pct={Math.round((noShowDrop.count / max) * 100)} />
+                  <DropPill label={noShowDrop.label} count={noShowDrop.count} tone="danger" pct={Math.round((noShowDrop.count / max) * 100)} />
                 )}
               </div>
             )}
@@ -284,7 +269,7 @@ function FunnelView({
             {/* Arrow entre steps */}
             {!isLast && (
               <div style={{ paddingLeft: "calc(50% - 6px)", color: "var(--text-4)" }}>
-                <ArrowRight size={14} aria-hidden style={{ transform: "rotate(90deg)" }} />
+                <ArrowRight size={14} strokeWidth={1.75} aria-hidden style={{ transform: "rotate(90deg)" }} />
               </div>
             )}
           </div>
@@ -294,7 +279,10 @@ function FunnelView({
   );
 }
 
-function DropPill({ label, count, color, pct }: { label: string; count: number; color: string; pct: number }) {
+function DropPill({ label, count, tone, pct }: { label: string; count: number; tone: "neutral" | "danger"; pct: number }) {
+  const c = tone === "danger"
+    ? { bg: "var(--danger-soft)", border: "var(--danger-border-strong)", fg: "var(--danger)" }
+    : { bg: "var(--bg-elev-2)", border: "var(--border-strong)", fg: "var(--text-2)" };
   return (
     <span
       style={{
@@ -302,12 +290,12 @@ function DropPill({ label, count, color, pct }: { label: string; count: number; 
         alignItems: "center",
         gap: 5,
         padding: "3px 9px",
-        background: `${color}15`,
-        border: `1px solid ${color}40`,
+        background: c.bg,
+        border: `1px solid ${c.border}`,
         borderRadius: 999,
         fontSize: 11,
         fontWeight: 600,
-        color,
+        color: c.fg,
       }}
     >
       ↳ {label}: {count} ({pct}%)
@@ -320,7 +308,8 @@ function Box({ children }: { children: React.ReactNode }) {
     <div style={{
       background: "var(--bg-elev)",
       border: "1px solid var(--border-soft)",
-      borderRadius: 14,
+      borderRadius: "var(--radius-lg)",
+      boxShadow: "var(--shadow-1)",
       padding: 40,
       textAlign: "center",
       color: "var(--text-3)",

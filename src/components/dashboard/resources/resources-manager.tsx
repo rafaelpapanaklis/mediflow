@@ -273,7 +273,7 @@ export function ResourcesManager({
               disabled={busy}
               aria-pressed={showArchived}
             >
-              {showArchived ? <Eye size={14} /> : <EyeOff size={14} />}
+              {showArchived ? <Eye size={16} strokeWidth={1.75} /> : <EyeOff size={16} strokeWidth={1.75} />}
               {showArchived ? t("procurement.resourcesManager.hideArchived") : t("procurement.resourcesManager.showArchived")}
             </button>
           </div>
@@ -289,7 +289,7 @@ export function ResourcesManager({
             disabled={busy}
             aria-pressed={showArchived}
           >
-            {showArchived ? <Eye size={14} /> : <EyeOff size={14} />}
+            {showArchived ? <Eye size={16} strokeWidth={1.75} /> : <EyeOff size={16} strokeWidth={1.75} />}
             {showArchived ? t("procurement.resourcesManager.hideArchived") : t("procurement.resourcesManager.showArchived")}
           </button>
         </div>
@@ -347,7 +347,7 @@ export function ResourcesManager({
               className={styles.addBtn}
               onClick={() => setAdding(true)}
             >
-              <Plus size={12} /> {t("procurement.resourcesManager.addResource")}
+              <Plus size={16} strokeWidth={1.75} /> {t("procurement.resourcesManager.addResource")}
             </button>
           )
         )}
@@ -419,7 +419,7 @@ function ResourceRow({
         className={`${styles.dragHandle} ${!draggable ? styles.disabled : ""}`}
         aria-hidden
       >
-        <GripVertical size={12} />
+        <GripVertical size={16} strokeWidth={1.75} />
       </span>
       <span style={{ position: "relative" }}>
         <span
@@ -474,7 +474,7 @@ function ResourceRow({
         ))}
       </select>
       {archived ? (
-        <span className={styles.archivedBadge}>{t("procurement.resourcesManager.archivedBadge")}</span>
+        <span className="badge-new badge-new--neutral">{t("procurement.resourcesManager.archivedBadge")}</span>
       ) : (
         <span />
       )}
@@ -486,7 +486,7 @@ function ResourceRow({
           aria-label={t("procurement.resourcesManager.scheduleAria", { name: resource.name })}
           title={t("procurement.resourcesManager.scheduleTitle")}
         >
-          <Clock size={12} />
+          <Clock size={16} strokeWidth={1.75} />
         </button>
       )}
       {canEdit && (
@@ -498,17 +498,17 @@ function ResourceRow({
             aria-label={t("procurement.resourcesManager.restoreAria", { name: resource.name })}
             title={t("procurement.resourcesManager.restoreTitle")}
           >
-            <RotateCcw size={12} />
+            <RotateCcw size={16} strokeWidth={1.75} />
           </button>
         ) : (
           <button
             type="button"
-            className={styles.rowAction}
+            className={`${styles.rowAction} ${styles.rowActionDanger}`}
             onClick={onArchive}
             aria-label={t("procurement.resourcesManager.archiveAria", { name: resource.name })}
             title={t("procurement.resourcesManager.archiveTitle")}
           >
-            <Archive size={12} />
+            <Archive size={16} strokeWidth={1.75} />
           </button>
         )
       )}
@@ -603,7 +603,7 @@ function ResourceAddForm({ onCancel, onSave }: ResourceAddFormProps) {
       <div className={styles.addFormActions}>
         <button
           type="button"
-          className={styles.addBtnCancel}
+          className="btn-new btn-new--ghost btn-new--sm"
           onClick={onCancel}
           disabled={saving}
         >
@@ -611,7 +611,7 @@ function ResourceAddForm({ onCancel, onSave }: ResourceAddFormProps) {
         </button>
         <button
           type="submit"
-          className={styles.addBtnSave}
+          className="btn-new btn-new--primary btn-new--sm"
           disabled={!name.trim() || saving}
         >
           {saving ? t("common.saving") : t("common.add")}
