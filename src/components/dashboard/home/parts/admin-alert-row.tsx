@@ -10,10 +10,11 @@ const TONE_ICON: Record<HomeAdminAlert["tone"], React.ElementType> = {
   info:    Info,
 };
 
+// Tinta *-strong sobre fondo *-soft (AA en light y dark).
 const TONE_COLOR: Record<HomeAdminAlert["tone"], string> = {
-  warning: "var(--warning)",
-  danger:  "var(--danger)",
-  info:    "var(--info)",
+  warning: "var(--warning-strong)",
+  danger:  "var(--danger-strong)",
+  info:    "var(--info-strong)",
 };
 
 const TONE_BG: Record<HomeAdminAlert["tone"], string> = {
@@ -38,7 +39,7 @@ export function AdminAlertRow({ alert }: { alert: HomeAdminAlert }) {
           flexShrink: 0,
         }}
       >
-        <Icon size={14} style={{ color: TONE_COLOR[alert.tone] }} aria-hidden />
+        <Icon size={16} strokeWidth={1.75} style={{ color: TONE_COLOR[alert.tone] }} aria-hidden />
       </div>
       <div style={{ flex: 1, minWidth: 0 }}>
         <div
@@ -54,8 +55,8 @@ export function AdminAlertRow({ alert }: { alert: HomeAdminAlert }) {
         {alert.detail && (
           <div
             style={{
-              fontSize: 11,
-              color: "var(--text-2)",
+              fontSize: 12,
+              color: "var(--text-3)",
               marginTop: 2,
               lineHeight: 1.45,
             }}

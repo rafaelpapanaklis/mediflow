@@ -27,7 +27,7 @@ export function WaitlistCard({ items, onAdd }: Props) {
         <ButtonNew
           size="sm"
           variant="secondary"
-          icon={<Plus size={12} />}
+          icon={<Plus size={14} strokeWidth={1.75} />}
           onClick={onAdd}
         >
           {t("common.add")}
@@ -49,24 +49,27 @@ export function WaitlistCard({ items, onAdd }: Props) {
                 gap: 12,
                 padding: "11px 18px",
                 borderBottom: "1px solid var(--border-soft)",
+                transition: "background var(--dur-1) var(--ease)",
               }}
+              onMouseEnter={(e) => (e.currentTarget.style.background = "var(--bg-hover)")}
+              onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
             >
               <div style={{ minWidth: 0 }}>
-                <div style={{ fontSize: 13, fontWeight: 500, color: "var(--text-1)" }}>
+                <div style={{ fontSize: 13.5, fontWeight: 600, color: "var(--text-1)" }}>
                   {it.patient.name}
                 </div>
                 {it.reason && (
-                  <div style={{ fontSize: 11, color: "var(--text-2)", marginTop: 2 }}>
+                  <div style={{ fontSize: 12, color: "var(--text-3)", marginTop: 2 }}>
                     {it.reason}
                   </div>
                 )}
               </div>
               <span
                 style={{
-                  fontSize: 11,
+                  fontSize: 12,
                   color: "var(--text-3)",
                   flexShrink: 0,
-                  fontFamily: "var(--font-mono, monospace)",
+                  fontVariantNumeric: "tabular-nums",
                 }}
               >
                 {formatRelative(it.since)}
