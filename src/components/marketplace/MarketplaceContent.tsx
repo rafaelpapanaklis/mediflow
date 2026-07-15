@@ -15,7 +15,7 @@
  */
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Search } from "lucide-react";
+import { Search, SearchX } from "lucide-react";
 import toast from "react-hot-toast";
 import type { Module, ClinicModule } from "@prisma/client";
 import { addToCart, removeFromCart } from "@/app/actions/cart";
@@ -156,10 +156,10 @@ export function MarketplaceContent({
   return (
     <div className="px-2 sm:px-4 lg:px-6 max-w-[1400px]">
       <header className="mb-6">
-        <h1 className="text-[28px] font-semibold text-[var(--text-1)] tracking-tight leading-tight">
+        <h1 className="text-[22px] font-bold text-[var(--text-1)] tracking-tight leading-tight">
           {t("pages.marketplace.title")}
         </h1>
-        <p className="text-[var(--text-2)] mt-1 text-[15px]">
+        <p className="text-[var(--text-3)] mt-1 text-[13.5px]">
           {trialStatus?.isExpired
             ? t("pages.marketplace.subtitleExpired")
             : trialStatus
@@ -174,27 +174,30 @@ export function MarketplaceContent({
         <div
           role="tablist"
           aria-label={t("pages.marketplace.filterByCategory")}
-          className="flex items-center gap-1 bg-[var(--bg-hover)] p-1 rounded-lg overflow-x-auto"
+          className="flex items-center gap-2 overflow-x-auto -mx-1 px-1 py-0.5"
         >
-          {TABS.map((tab) => (
-            <button
-              key={tab}
-              type="button"
-              role="tab"
-              aria-selected={activeTab === tab}
-              onClick={() => setActiveTab(tab)}
-              className={`px-3.5 py-1.5 text-sm rounded-md whitespace-nowrap transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] ${
-                activeTab === tab
-                  ? "bg-[var(--bg-elev)] text-[var(--text-1)] font-medium shadow-sm"
-                  : "text-[var(--text-2)] hover:text-[var(--text-1)]"
-              }`}
-            >
-              {t(TAB_LABEL_KEYS[tab])}
-            </button>
-          ))}
+          {TABS.map((tab) => {
+            const active = activeTab === tab;
+            return (
+              <button
+                key={tab}
+                type="button"
+                role="tab"
+                aria-selected={active}
+                onClick={() => setActiveTab(tab)}
+                className={`inline-flex items-center h-[30px] px-3 rounded-full text-[12.5px] whitespace-nowrap border transition-[background-color,border-color,color] duration-150 ease-[cubic-bezier(.2,.8,.4,1)] focus-visible:outline-none focus-visible:[box-shadow:var(--ring)] ${
+                  active
+                    ? "bg-[var(--brand-soft)] border-[var(--border-brand)] text-[var(--brand)] font-semibold"
+                    : "bg-[var(--bg-elev)] border-[var(--border-soft)] text-[var(--text-2)] font-medium hover:bg-[var(--bg-hover)] hover:text-[var(--text-1)]"
+                }`}
+              >
+                {t(TAB_LABEL_KEYS[tab])}
+              </button>
+            );
+          })}
         </div>
         <div className="relative flex-shrink-0">
-          <Search className="w-4 h-4 text-[var(--text-3)] absolute left-3 top-1/2 -translate-y-1/2" aria-hidden />
+          <Search className="w-4 h-4 text-[var(--text-3)] absolute left-3 top-1/2 -translate-y-1/2" strokeWidth={1.75} aria-hidden />
           <label htmlFor="mp-search" className="sr-only">
             {t("pages.marketplace.searchLabel")}
           </label>
@@ -204,7 +207,7 @@ export function MarketplaceContent({
             placeholder={t("pages.marketplace.searchPlaceholder")}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="pl-9 pr-4 py-2 bg-[var(--bg-elev)] border border-[var(--border-soft)] text-[var(--text-1)] placeholder:text-[var(--text-3)] rounded-md text-sm w-64 focus:outline-none focus:border-[var(--brand)] focus:ring-2 focus:ring-[var(--brand-soft)]"
+            className="h-10 pl-9 pr-4 bg-[var(--bg-elev)] border border-[var(--border-soft)] text-[var(--text-1)] placeholder:text-[var(--text-3)] rounded-[var(--radius)] text-sm w-64 max-w-full shadow-[var(--shadow-1)] focus:outline-none focus:border-[var(--brand)] focus:ring-2 focus:ring-[var(--brand-soft)]"
           />
         </div>
       </div>
@@ -225,8 +228,11 @@ export function MarketplaceContent({
           );
         })}
         {filtered.length === 0 && (
-          <div className="col-span-full text-center text-[var(--text-3)] py-16 text-sm">
-            {t("pages.marketplace.noModulesMatch")}
+          <div className="col-span-full flex flex-col items-center justify-center text-center py-16 px-6">
+            <span className="flex h-11 w-11 items-center justify-center rounded-full mb-3 bg-[var(--bg-elev-2)] text-[var(--text-3)]" aria-hidden>
+              <SearchX size={20} strokeWidth={1.75} />
+            </span>
+            <p className="text-sm font-medium text-[var(--text-3)]">{t("pages.marketplace.noModulesMatch")}</p>
           </div>
         )}
       </div>

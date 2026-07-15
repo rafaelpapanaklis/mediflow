@@ -108,6 +108,24 @@
     --dur-2: 250ms;
     --ease: cubic-bezier(.2,.8,.4,1);
 
+    /* ── Rampa brand-* de Tailwind (bg-brand-600, text-brand-*, …) ──
+       Triplets HSL que consume tailwind.config (hsl(var(--brand-N) / α)).
+       DEFAULT = AZUL del funnel público (landing, login/signup, marketing —
+       el funnel azul es a propósito). Los paneles internos remapean la rampa
+       a violeta más abajo (body:has(.dashboard-shell)). Rampa fija: no
+       cambia entre light/dark (igual que --violet-*). */
+    --brand-50:  213.8 100% 96.9%;
+    --brand-100: 214.3 94.6% 92.7%;
+    --brand-200: 213.3 96.9% 87.3%;
+    --brand-300: 211.7 96.4% 78.4%;
+    --brand-400: 213.1 93.9% 67.8%;
+    --brand-500: 217.2 91.2% 59.8%;
+    --brand-600: 221.2 83.2% 53.3%;
+    --brand-700: 224.3 76.3% 48%;
+    --brand-800: 225.9 70.7% 40.2%;
+    --brand-900: 224.4 64.3% 32.9%;
+    --brand-950: 226.2 57% 21%;
+
     /* ── Patient Context Bar (consulta activa) — brand tint neutro ── */
     --consult-active-bg:     rgba(124,58,237,0.06);
     --consult-active-border: rgba(124,58,237,0.25);
@@ -224,6 +242,28 @@
     --sidebar-accent-foreground: 240 12% 92%;
     --surface:           255 25% 10%;
     --surface-elevated:  255 20% 14%;
+  }
+
+  /* ── Panel interno = marca VIOLETA (decisión Rafael 14-jul) ──────────
+     Remapea la rampa brand-* SOLO dentro de los paneles que llevan
+     .dashboard-shell (dashboard, laboratorios, proveedores, afiliados).
+     Va sobre <body> vía :has() para que los portales de Radix
+     (Dialog/Popover/Dropdown montan en <body>, FUERA del shell) hereden
+     el mismo violeta — lección radix-portal. El funnel público (landing,
+     login/signup, marketing) no lleva la clase → conserva el azul de
+     :root. Misma rampa en dark (marca fija, como --violet-*). */
+  body:has(.dashboard-shell) {
+    --brand-50:  250 100% 97.6%;
+    --brand-100: 251.4 91.3% 95.5%;
+    --brand-200: 250.5 95.2% 91.8%;
+    --brand-300: 252.5 94.7% 85.1%;
+    --brand-400: 255.1 91.7% 76.3%;
+    --brand-500: 258.3 89.5% 66.3%;
+    --brand-600: 262.1 83.3% 57.8%;
+    --brand-700: 263.4 70% 50.4%;
+    --brand-800: 263.4 69.3% 42.2%;
+    --brand-900: 263.5 67.4% 34.9%;
+    --brand-950: 261.2 72.6% 22.9%;
   }
 
   * { border-color: hsl(var(--border)); }

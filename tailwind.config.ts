@@ -49,18 +49,22 @@ const config: Config = {
         teal:             { ...colors.teal,   DEFAULT: "hsl(var(--teal) / <alpha-value>)" },
         surface:          "hsl(var(--surface))",
         "surface-elevated": "hsl(var(--surface-elevated))",
+        // brand-* resuelve vía variables (globals.css): :root = AZUL del funnel
+        // público (landing, login/signup, marketing); body:has(.dashboard-shell)
+        // remapea la rampa a VIOLETA de marca en los paneles internos (decisión
+        // 14-jul). Triplets HSL + <alpha-value> para conservar bg-brand-950/40.
         brand: {
-          50:  "#eff6ff",
-          100: "#dbeafe",
-          200: "#bfdbfe",
-          300: "#93c5fd",
-          400: "#60a5fa",
-          500: "#3b82f6",
-          600: "#2563eb",
-          700: "#1d4ed8",
-          800: "#1e40af",
-          900: "#1e3a8a",
-          950: "#172554",
+          50:  "hsl(var(--brand-50) / <alpha-value>)",
+          100: "hsl(var(--brand-100) / <alpha-value>)",
+          200: "hsl(var(--brand-200) / <alpha-value>)",
+          300: "hsl(var(--brand-300) / <alpha-value>)",
+          400: "hsl(var(--brand-400) / <alpha-value>)",
+          500: "hsl(var(--brand-500) / <alpha-value>)",
+          600: "hsl(var(--brand-600) / <alpha-value>)",
+          700: "hsl(var(--brand-700) / <alpha-value>)",
+          800: "hsl(var(--brand-800) / <alpha-value>)",
+          900: "hsl(var(--brand-900) / <alpha-value>)",
+          950: "hsl(var(--brand-950) / <alpha-value>)",
         },
       },
       borderRadius: {

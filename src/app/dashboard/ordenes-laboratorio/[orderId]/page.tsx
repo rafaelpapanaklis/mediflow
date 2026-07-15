@@ -391,26 +391,61 @@ export default async function Page({ params }: { params: { orderId: string } }) 
             {timeline.map((ev, i) => {
               const meta = DENTAL_LAB_ORDER_STATUS[ev.status as DentalLabOrderStatus];
               const reached = ev.at != null;
+              const isLast = i === timeline.length - 1;
               return (
-                <div
-                  key={ev.id}
-                  style={{
-                    display: "flex",
-                    alignItems: "flex-start",
-                    gap: 12,
-                    padding: "12px 0",
-                    borderBottom:
-                      i < timeline.length - 1 ? "1px solid var(--border-soft)" : "none",
-                    opacity: reached ? 1 : 0.55,
-                  }}
-                >
-                  <div style={{ flexShrink: 0, marginTop: 2 }}>
+                <div key={ev.id} style={{ display: "flex", gap: 14 }}>
+                  {/* Rail: conector + nodo de estado (completado = --success,
+                      pendiente = hueco --text-4). */}
+                  <div
+                    style={{
+                      position: "relative",
+                      width: 14,
+                      flexShrink: 0,
+                      display: "flex",
+                      justifyContent: "center",
+                    }}
+                  >
+                    {!isLast && (
+                      <span
+                        aria-hidden
+                        style={{
+                          position: "absolute",
+                          top: 16,
+                          bottom: 0,
+                          left: "50%",
+                          width: 2,
+                          transform: "translateX(-50%)",
+                          background: "var(--border-soft)",
+                        }}
+                      />
+                    )}
+                    <span
+                      aria-hidden
+                      style={{
+                        position: "relative",
+                        zIndex: 1,
+                        marginTop: 5,
+                        width: 12,
+                        height: 12,
+                        borderRadius: "50%",
+                        background: reached ? "var(--success)" : "var(--bg-elev)",
+                        border: reached ? "2px solid var(--bg-elev)" : "2px solid var(--text-4)",
+                        boxShadow: reached ? "0 0 0 3px var(--success-soft)" : "none",
+                      }}
+                    />
+                  </div>
+                  <div
+                    style={{
+                      flex: 1,
+                      minWidth: 0,
+                      paddingBottom: isLast ? 0 : 18,
+                      opacity: reached ? 1 : 0.6,
+                    }}
+                  >
                     <BadgeNew tone={meta.tone} dot>
                       {meta.label}
                     </BadgeNew>
-                  </div>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 13, color: "var(--text-1)" }}>
+                    <div style={{ fontSize: 13, color: "var(--text-1)", marginTop: 6 }}>
                       {ev.at
                         ? fmtFullDateTime(ev.at.toISOString())
                         : ev.eta

@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { Clock, User } from "lucide-react";
+import { useEffect, useState, type ReactNode } from "react";
+import { Armchair, Clock, Stethoscope } from "lucide-react";
 
 interface QueueItem {
   appointmentId: string;
@@ -60,16 +60,23 @@ export function TvOperationalView({ clinicName, clinicLogo, clinicId }: Props) {
 
   return (
     <div
+      className="dark"
       style={{
+        position: "relative",
         minHeight: "100vh",
-        background: "linear-gradient(135deg, #0F1A2E 0%, #1a2f4f 100%)",
-        color: "#fff",
+        background: "linear-gradient(135deg, var(--bg) 0%, var(--bg-elev-2) 100%)",
+        color: "var(--text-1)",
         fontFamily: "var(--font-sans, system-ui, sans-serif)",
         padding: "32px 40px",
         display: "flex",
         flexDirection: "column",
       }}
     >
+      {/* Acento de marca "105" — única aparición del degradado */}
+      <div
+        aria-hidden
+        style={{ position: "absolute", top: 0, left: 0, right: 0, height: 4, background: "var(--brand-grad)" }}
+      />
       <header style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 32 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
           {clinicLogo && (
@@ -77,17 +84,17 @@ export function TvOperationalView({ clinicName, clinicLogo, clinicId }: Props) {
             <img src={clinicLogo} alt={clinicName} style={{ height: 56, borderRadius: 12 }} />
           )}
           <div>
-            <h1 style={{ fontSize: 36, fontWeight: 700, margin: 0, letterSpacing: "-0.02em" }}>{clinicName}</h1>
-            <div style={{ fontSize: 14, color: "rgba(255,255,255,0.7)", marginTop: 4 }}>
+            <h1 style={{ fontSize: 40, fontWeight: 700, margin: 0, letterSpacing: "-0.02em", color: "var(--text-1)" }}>{clinicName}</h1>
+            <div style={{ fontSize: 16, fontWeight: 500, color: "var(--text-2)", marginTop: 4 }}>
               Turnos en tiempo real
             </div>
           </div>
         </div>
         <div style={{ textAlign: "right" }}>
-          <div style={{ fontSize: 56, fontWeight: 700, fontVariantNumeric: "tabular-nums", letterSpacing: "-0.04em", lineHeight: 1 }}>
+          <div style={{ fontSize: 56, fontWeight: 700, fontVariantNumeric: "tabular-nums", letterSpacing: "-0.04em", lineHeight: 1, color: "var(--text-1)" }}>
             {now.toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit", hour12: false })}
           </div>
-          <div style={{ fontSize: 14, color: "rgba(255,255,255,0.7)", textTransform: "capitalize", marginTop: 6 }}>
+          <div style={{ fontSize: 16, fontWeight: 500, color: "var(--text-2)", textTransform: "capitalize", marginTop: 6 }}>
             {now.toLocaleDateString("es-MX", { weekday: "long", day: "numeric", month: "long" })}
           </div>
         </div>
@@ -95,12 +102,12 @@ export function TvOperationalView({ clinicName, clinicLogo, clinicId }: Props) {
 
       {data ? (
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 20, flex: 1 }}>
-          <Column title="EN CONSULTA" tone="success" items={data.inProgress} accent="🩺" />
-          <Column title="EN SILLÓN" tone="info" items={data.upNext} accent="✨" />
-          <Column title="EN SALA" tone="warning" items={data.waiting} accent="⏳" showWait />
+          <Column title="EN CONSULTA" tone="success" items={data.inProgress} accent={<Stethoscope size={20} strokeWidth={1.75} aria-hidden />} />
+          <Column title="EN SILLÓN" tone="info" items={data.upNext} accent={<Armchair size={20} strokeWidth={1.75} aria-hidden />} />
+          <Column title="EN SALA" tone="warning" items={data.waiting} accent={<Clock size={20} strokeWidth={1.75} aria-hidden />} showWait />
         </div>
       ) : (
-        <div style={{ flex: 1, display: "grid", placeItems: "center", color: "rgba(255,255,255,0.5)" }}>
+        <div style={{ flex: 1, display: "grid", placeItems: "center", color: "var(--text-3)", fontSize: 18 }}>
           Cargando turnos…
         </div>
       )}
@@ -112,13 +119,15 @@ function Column({ title, items, tone, accent, showWait }: {
   title: string;
   items: QueueItem[];
   tone: "success" | "info" | "warning";
-  accent: string;
+  accent: React.ReactNode;
   showWait?: boolean;
 }) {
+  // Tokens del sistema (resueltos en dark por el wrapper .dark). El borde
+  // success 0.30 no tiene token equivalente — se conserva el rgba original.
   const colors = {
-    success: { bg: "rgba(16, 185, 129, 0.10)", border: "rgba(16, 185, 129, 0.30)", fg: "#10b981" },
-    info:    { bg: "rgba(124, 58, 237, 0.12)", border: "rgba(124, 58, 237, 0.30)", fg: "#a78bfa" },
-    warning: { bg: "rgba(217, 119, 6, 0.12)",  border: "rgba(217, 119, 6, 0.30)",  fg: "#f59e0b" },
+    success: { bg: "var(--success-soft)", border: "rgba(16, 185, 129, 0.30)", fg: "var(--success)", chip: "var(--success-soft)" },
+    info:    { bg: "var(--brand-soft)", border: "var(--border-brand)", fg: "var(--violet-400)", chip: "var(--brand-soft)" },
+    warning: { bg: "var(--warning-soft)", border: "var(--warning-border-strong)", fg: "var(--warning)", chip: "var(--warning-soft)" },
   }[tone];
 
   return (
@@ -159,7 +168,7 @@ function Column({ title, items, tone, accent, showWait }: {
             >
               <div style={{
                 width: 40, height: 40, borderRadius: 10,
-                background: colors.fg + "22", color: colors.fg,
+                background: colors.chip, color: colors.fg,
                 display: "grid", placeItems: "center",
                 fontSize: 14, fontWeight: 700,
                 flexShrink: 0,
@@ -176,7 +185,7 @@ function Column({ title, items, tone, accent, showWait }: {
               </div>
               {showWait && item.waitedMin != null && (
                 <div style={{
-                  fontSize: 18, fontWeight: 700, color: item.waitedMin > 20 ? "#dc2626" : colors.fg,
+                  fontSize: 18, fontWeight: 700, color: item.waitedMin > 20 ? "var(--danger)" : colors.fg,
                   fontFamily: "var(--font-mono, monospace)",
                   fontVariantNumeric: "tabular-nums",
                 }}>

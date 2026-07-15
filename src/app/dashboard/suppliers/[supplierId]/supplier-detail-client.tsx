@@ -182,7 +182,7 @@ function ProductCard({
         position: "relative",
         borderColor: hover ? "var(--border-brand)" : undefined,
         transform: hover ? "translateY(-2px)" : "translateY(0)",
-        boxShadow: hover ? "0 12px 28px -16px rgba(124,58,237,0.55)" : undefined,
+        boxShadow: hover ? "0 12px 28px -16px color-mix(in srgb, var(--brand) 55%, transparent)" : undefined,
         transition: "transform .14s ease, box-shadow .14s ease, border-color .14s ease",
       }}
     >
@@ -551,7 +551,7 @@ export function SupplierDetailClient({ supplier, products }: SupplierDetailClien
               background: showLogo
                 ? "var(--bg-elev-2)"
                 : "linear-gradient(135deg, var(--violet-400), var(--brand))",
-              boxShadow: showLogo ? undefined : "0 8px 20px -10px rgba(124,58,237,0.6)",
+              boxShadow: showLogo ? undefined : "0 8px 20px -10px color-mix(in srgb, var(--brand) 60%, transparent)",
               display: "flex",
               alignItems: "center",
               justifyContent: "center",

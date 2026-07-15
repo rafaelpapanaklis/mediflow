@@ -1,7 +1,7 @@
 "use client";
 import { useState } from "react";
 import toast from "react-hot-toast";
-import { ExternalLink, Copy, Eye, Plus, Trash2, Upload, Check, Sparkles, RefreshCw, Users, ImagePlus, ChevronLeft, ChevronRight, Star } from "lucide-react";
+import { ExternalLink, Copy, Eye, Plus, Trash2, Check, Sparkles, RefreshCw, Users, ImagePlus, ChevronLeft, ChevronRight, Star, HelpCircle, Stethoscope, Share2 } from "lucide-react";
 import { useT } from "@/i18n/i18n-provider";
 
 interface Clinic {
@@ -33,6 +33,20 @@ const TEMPLATES = [
   { id:"healthtech", nameKey:"pages.landing.templateHealthtechName", descKey:"pages.landing.templateHealthtechDesc" },
   { id:"calido",     nameKey:"pages.landing.templateWarmName",       descKey:"pages.landing.templateWarmDesc" },
 ];
+
+// ── Clases visuales compartidas (rediseño Variante A — solo presentación) ──
+const CARD_CLS  = "bg-card border border-[color:var(--border-soft)] rounded-[var(--radius-lg)] shadow-[var(--shadow-1)]";
+const ITEM_CLS  = "border border-[color:var(--border-soft)] rounded-[var(--radius-lg)] p-4 space-y-3";
+const INPUT_CLS = "w-full bg-[color:var(--bg-elev)] text-sm text-[color:var(--text-1)] border border-[color:var(--border-soft)] rounded-[var(--radius)] px-3 py-2.5 placeholder:text-[color:var(--text-4)] transition-colors duration-150";
+const LABEL_CLS = "text-[13px] font-medium text-[color:var(--text-2)] block mb-1";
+const HELP_CLS  = "text-xs text-[color:var(--text-3)]";
+const H_SECTION = "text-[15px] font-semibold text-[color:var(--text-1)]";
+const EMPTY_CLS = "flex flex-col items-center gap-2 border border-dashed border-[color:var(--border-strong)] rounded-[var(--radius-lg)] py-10 px-4 text-center";
+const BTN_PRIMARY    = "inline-flex items-center justify-center gap-1.5 h-10 px-4 rounded-[var(--radius)] text-sm font-semibold text-white bg-brand-600 shadow-[var(--shadow-1)] hover:bg-brand-700 hover:shadow-[var(--shadow-2)] active:scale-[0.98] transition disabled:opacity-[.45] disabled:cursor-not-allowed";
+const BTN_PRIMARY_SM = "inline-flex items-center justify-center gap-1.5 h-9 px-3.5 rounded-[var(--radius-sm)] text-[12.5px] font-semibold text-white bg-brand-600 shadow-[var(--shadow-1)] hover:bg-brand-700 hover:shadow-[var(--shadow-2)] active:scale-[0.98] transition disabled:opacity-[.45] disabled:cursor-not-allowed";
+const BTN_SECONDARY  = "inline-flex items-center justify-center gap-1.5 h-10 px-4 rounded-[var(--radius)] text-sm font-semibold text-[color:var(--text-2)] bg-card border border-[color:var(--border-soft)] shadow-[var(--shadow-1)] hover:bg-[color:var(--bg-hover)] hover:text-[color:var(--text-1)] active:scale-[0.98] transition";
+const BTN_SAVE_FULL  = "w-full inline-flex items-center justify-center h-11 rounded-[var(--radius)] text-sm font-semibold text-white bg-brand-600 shadow-[var(--shadow-1)] hover:bg-brand-700 hover:shadow-[var(--shadow-2)] active:scale-[0.99] transition disabled:opacity-[.45] disabled:cursor-not-allowed";
+const BTN_ICON_DANGER = "inline-flex items-center justify-center w-9 h-9 shrink-0 rounded-[var(--radius-sm)] text-[color:var(--text-3)] hover:text-[color:var(--danger)] hover:bg-[color:var(--danger-soft)] active:scale-[0.98] transition-colors";
 
 // Mini-mock CSS de cada plantilla (no usa fotos reales) para el selector.
 function TemplateThumb({ variant }: { variant: string }) {
@@ -158,60 +172,67 @@ export function LandingConfigClient({ clinic: initial, appUrl }: Props) {
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-xl font-bold">{t("pages.landing.title")}</h1>
-          <p className="text-sm text-muted-foreground">{t("pages.landing.subtitle")}</p>
+          <h1 className="text-xl font-bold text-[color:var(--text-1)]">{t("pages.landing.title")}</h1>
+          <p className="text-sm text-[color:var(--text-3)] mt-0.5">{t("pages.landing.subtitle")}</p>
         </div>
         <div className="flex items-center gap-2">
           {/* Active toggle */}
-          <div className="flex items-center gap-2 bg-card border border-border rounded-xl px-3 py-2">
-            <span className="text-sm font-semibold">{clinic.landingActive ? t("pages.landing.statusPublished") : t("pages.landing.statusHidden")}</span>
-            <button onClick={async () => {
+          <div className="flex items-center gap-2.5 bg-card border border-[color:var(--border-soft)] rounded-[var(--radius)] shadow-[var(--shadow-1)] h-10 pl-3 pr-2.5">
+            <span className={`text-[11px] font-bold uppercase tracking-wide rounded-full px-2 py-0.5 ${clinic.landingActive ? "bg-[color:var(--success-soft)] text-[color:var(--success-strong)]" : "bg-[color:var(--bg-elev-2)] text-[color:var(--text-2)]"}`}>
+              {clinic.landingActive ? t("pages.landing.statusPublished") : t("pages.landing.statusHidden")}
+            </span>
+            <button role="switch" aria-checked={clinic.landingActive}
+              aria-label={clinic.landingActive ? t("pages.landing.statusPublished") : t("pages.landing.statusHidden")}
+              onClick={async () => {
               const newVal = !clinic.landingActive;
               updateLocal("landingActive", newVal);
               await save({ landingActive: newVal });
-            }} className={`w-10 h-5 rounded-full relative transition-colors ${clinic.landingActive ? "bg-emerald-500" : "bg-muted"}`}>
-              <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-card shadow transition-all ${clinic.landingActive ? "left-[22px]" : "left-0.5"}`} />
+            }} className={`w-10 h-5 rounded-full relative transition-colors duration-150 ${clinic.landingActive ? "bg-brand-600" : "bg-[color:var(--border-strong)]"}`}>
+              <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow-[var(--shadow-1)] transition-all duration-150 ${clinic.landingActive ? "left-[22px]" : "left-0.5"}`} />
             </button>
           </div>
           {/* View link */}
-          <a href={landingUrl} target="_blank" rel="noreferrer"
-            className="flex items-center gap-1.5 text-sm font-semibold text-brand-600 border border-brand-300 px-3 py-2 rounded-xl hover:bg-brand-600/15">
-            <ExternalLink size={14}/> {t("pages.landing.viewPage")}
+          <a href={landingUrl} target="_blank" rel="noreferrer" className={BTN_SECONDARY}>
+            <ExternalLink size={16} strokeWidth={1.75}/> {t("pages.landing.viewPage")}
           </a>
           {/* Copy link */}
           <button onClick={() => { navigator.clipboard.writeText(landingUrl); toast.success(t("pages.landing.linkCopied")); }}
-            className="flex items-center gap-1.5 text-sm font-semibold border border-border px-3 py-2 rounded-xl hover:bg-muted">
-            <Copy size={14}/> {t("pages.landing.copyLink")}
+            className={BTN_SECONDARY}>
+            <Copy size={16} strokeWidth={1.75}/> {t("pages.landing.copyLink")}
           </button>
         </div>
       </div>
 
       {/* Link preview */}
-      <div className="bg-brand-600/15 border border-brand-200 dark:border-brand-800 rounded-xl px-4 py-3 flex items-center justify-between gap-3">
-        <div>
-          <div className="text-xs text-brand-600 font-semibold mb-0.5">{t("pages.landing.publicLink")}</div>
-          <div className="text-sm font-mono font-bold">{landingUrl}</div>
+      <div className="bg-[color:var(--brand-soft)] border border-[color:var(--border-brand)] rounded-[var(--radius)] px-4 py-3 flex items-center justify-between gap-3">
+        <div className="min-w-0">
+          <div className="text-[11px] uppercase tracking-wide text-[color:var(--brand)] font-bold mb-0.5">{t("pages.landing.publicLink")}</div>
+          <div className="text-sm font-mono font-semibold text-[color:var(--text-1)] truncate">{landingUrl}</div>
         </div>
         <button onClick={() => { navigator.clipboard.writeText(landingUrl); toast.success(t("pages.landing.linkCopied")); }}
-          className="shrink-0 text-xs font-semibold text-brand-600 hover:underline">{t("pages.landing.copy")}</button>
+          className="shrink-0 inline-flex items-center gap-1.5 h-9 px-3 rounded-[var(--radius-sm)] text-[12.5px] font-semibold text-[color:var(--brand)] hover:bg-brand-600/10 active:scale-[0.98] transition">
+          <Copy size={15} strokeWidth={1.75}/> {t("pages.landing.copy")}
+        </button>
       </div>
 
-      {/* Tabs */}
-      <div className="flex gap-1 flex-wrap border-b border-border">
-        {TABS.map(tb => (
-          <button key={tb.id} onClick={() => setTab(tb.id)}
-            className={`px-4 py-2 text-sm font-semibold rounded-t-xl transition-colors ${tab===tb.id ? "bg-card border border-b-0 border-border text-foreground" : "text-muted-foreground hover:text-foreground"}`}>
-            {t(tb.labelKey)}
-          </button>
-        ))}
+      {/* Tabs → control segmentado del sistema */}
+      <div className="overflow-x-auto -mx-1 px-1 pb-0.5">
+        <div className="segment-new min-w-max" role="tablist" aria-label={t("pages.landing.title")}>
+          {TABS.map(tb => (
+            <button key={tb.id} role="tab" aria-selected={tab===tb.id} onClick={() => setTab(tb.id)}
+              className={`segment-new__btn ${tab===tb.id ? "segment-new__btn--active" : ""}`}>
+              {t(tb.labelKey)}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* ── PLANTILLA ── */}
       {tab === "plantilla" && (
-        <div className="bg-card border border-border rounded-2xl p-5 space-y-4">
+        <div className={`${CARD_CLS} p-5 space-y-4`}>
           <div>
-            <h3 className="font-bold flex items-center gap-1.5"><Sparkles size={16} className="text-brand-600"/> {t("pages.landing.templateHeading")}</h3>
-            <p className="text-xs text-muted-foreground">{t("pages.landing.templateHelp")}</p>
+            <h3 className={`${H_SECTION} flex items-center gap-1.5`}><Sparkles size={16} strokeWidth={1.75} className="text-[color:var(--brand)]"/> {t("pages.landing.templateHeading")}</h3>
+            <p className={`${HELP_CLS} mt-0.5`}>{t("pages.landing.templateHelp")}</p>
           </div>
 
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
@@ -221,25 +242,25 @@ export function LandingConfigClient({ clinic: initial, appUrl }: Props) {
                 <div key={tpl.id} role="button" tabIndex={0} aria-pressed={selected}
                   onClick={() => setTemplateSel(tpl.id)}
                   onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setTemplateSel(tpl.id); } }}
-                  className={`cursor-pointer rounded-2xl border p-2.5 transition-all outline-none focus-visible:ring-2 focus-visible:ring-brand-500/60 ${selected ? "border-brand-500 ring-2 ring-brand-500/40 bg-brand-600/5" : "border-border hover:border-brand-300"}`}>
+                  className={`cursor-pointer rounded-[var(--radius-lg)] border p-2.5 transition-all outline-none focus-visible:ring-2 focus-visible:ring-brand-500/60 ${selected ? "border-[color:var(--brand)] ring-2 ring-brand-500/40 bg-[color:var(--brand-softer)]" : "border-[color:var(--border-soft)] hover:border-[color:var(--border-brand)]"}`}>
                   <div className="relative">
                     <TemplateThumb variant={tpl.id} />
                     {selected && (
-                      <div className="absolute top-1.5 right-1.5 bg-brand-600 text-white rounded-full p-0.5 shadow">
-                        <Check size={12}/>
+                      <div className="absolute top-1.5 right-1.5 bg-brand-600 text-white rounded-full p-0.5 shadow-[var(--shadow-2)]">
+                        <Check size={12} strokeWidth={2}/>
                       </div>
                     )}
                   </div>
                   <div className="mt-2 flex items-center justify-between gap-2">
-                    <span className="text-sm font-bold">{t(tpl.nameKey)}</span>
+                    <span className="text-sm font-semibold text-[color:var(--text-1)]">{t(tpl.nameKey)}</span>
                     {clinic.landingTemplate === tpl.id && (
-                      <span className="text-[10px] font-semibold text-emerald-600 bg-emerald-500/15 px-1.5 py-0.5 rounded-full">{t("pages.landing.templateActive")}</span>
+                      <span className="text-[10px] font-bold uppercase tracking-wide text-[color:var(--success-strong)] bg-[color:var(--success-soft)] px-1.5 py-0.5 rounded-full">{t("pages.landing.templateActive")}</span>
                     )}
                   </div>
-                  <p className="text-[11px] text-muted-foreground mt-0.5 leading-snug">{t(tpl.descKey)}</p>
+                  <p className="text-[11px] text-[color:var(--text-3)] mt-0.5 leading-snug">{t(tpl.descKey)}</p>
                   <button type="button" onClick={e => { e.stopPropagation(); previewTemplate(tpl.id); }}
-                    className="mt-2 w-full flex items-center justify-center gap-1 text-[11px] font-semibold text-brand-600 border border-brand-300 rounded-lg py-1 hover:bg-brand-600/10">
-                    <Eye size={12}/> {t("pages.landing.preview")}
+                    className="mt-2 w-full flex items-center justify-center gap-1 text-[11px] font-semibold text-[color:var(--brand)] border border-[color:var(--border-brand)] rounded-[var(--radius-sm)] py-1.5 hover:bg-brand-600/10 active:scale-[0.98] transition">
+                    <Eye size={14} strokeWidth={1.75}/> {t("pages.landing.preview")}
                   </button>
                 </div>
               );
@@ -247,16 +268,14 @@ export function LandingConfigClient({ clinic: initial, appUrl }: Props) {
           </div>
 
           <div className="flex flex-wrap items-center gap-2 pt-1">
-            <button type="button" onClick={() => previewTemplate()}
-              className="flex items-center gap-1.5 text-sm font-semibold border border-border px-4 py-2.5 rounded-xl hover:bg-muted">
-              <Eye size={15}/> {t("pages.landing.previewSelection")}
+            <button type="button" onClick={() => previewTemplate()} className={BTN_SECONDARY}>
+              <Eye size={16} strokeWidth={1.75}/> {t("pages.landing.previewSelection")}
             </button>
-            <button type="button" onClick={applyTemplate} disabled={saving}
-              className="flex items-center gap-1.5 text-sm font-bold text-white bg-brand-600 px-4 py-2.5 rounded-xl disabled:opacity-50">
-              <Check size={15}/> {saving ? t("pages.landing.applying") : t("pages.landing.applyTemplate")}
+            <button type="button" onClick={applyTemplate} disabled={saving} className={BTN_PRIMARY}>
+              <Check size={16} strokeWidth={1.75}/> {saving ? t("pages.landing.applying") : t("pages.landing.applyTemplate")}
             </button>
             {!clinic.landingActive && (
-              <span className="text-xs text-amber-600">{t("pages.landing.applyWillPublish")}</span>
+              <span className="text-xs text-[color:var(--warning-strong)]">{t("pages.landing.applyWillPublish")}</span>
             )}
           </div>
         </div>
@@ -264,79 +283,82 @@ export function LandingConfigClient({ clinic: initial, appUrl }: Props) {
 
       {/* ── GENERAL ── */}
       {tab === "general" && (
-        <div className="bg-card border border-border rounded-2xl p-5 space-y-5">
+        <div className={`${CARD_CLS} p-5 divide-y divide-[color:var(--border-soft)]`}>
           {/* Theme color */}
-          <div>
-            <label className="text-sm font-semibold block mb-2">{t("pages.landing.primaryColor")}</label>
-            <div className="flex items-center gap-3">
+          <div className="py-6 first:pt-0 last:pb-0">
+            <label className={LABEL_CLS}>{t("pages.landing.primaryColor")}</label>
+            <div className="flex items-center gap-3 flex-wrap">
               <input type="color" value={clinic.landingThemeColor ?? "#2563eb"}
                 onChange={e => updateLocal("landingThemeColor", e.target.value)}
-                className="h-10 w-20 rounded-lg cursor-pointer border border-border" />
-              <span className="text-sm text-muted-foreground">{clinic.landingThemeColor ?? "#2563eb"}</span>
-              <button onClick={() => save({ landingThemeColor: clinic.landingThemeColor })}
-                className="text-xs font-semibold bg-brand-600 text-white px-3 py-1.5 rounded-lg">{t("common.save")}</button>
+                aria-label={t("pages.landing.primaryColor")}
+                className="h-10 w-16 rounded-[var(--radius)] cursor-pointer border border-[color:var(--border-soft)] bg-transparent p-1" />
+              <span className="text-sm font-mono text-[color:var(--text-3)]">{clinic.landingThemeColor ?? "#2563eb"}</span>
+              <button onClick={() => save({ landingThemeColor: clinic.landingThemeColor })} className={BTN_PRIMARY_SM}>
+                <Check size={16} strokeWidth={1.75}/> {t("common.save")}
+              </button>
             </div>
           </div>
 
           {/* Tagline */}
-          <div>
-            <label className="text-sm font-semibold block mb-1">{t("pages.landing.taglineLabel")}</label>
-            <p className="text-xs text-muted-foreground mb-2">{t("pages.landing.taglineHelp")}</p>
+          <div className="py-6 first:pt-0 last:pb-0">
+            <label className={LABEL_CLS}>{t("pages.landing.taglineLabel")}</label>
+            <p className={`${HELP_CLS} -mt-0.5 mb-2`}>{t("pages.landing.taglineHelp")}</p>
             <input value={clinic.landingTagline ?? ""}
               onChange={e => updateLocal("landingTagline", e.target.value)}
               placeholder={t("pages.landing.taglinePlaceholder")}
-              className="w-full border border-border rounded-xl px-3 py-2.5 text-sm bg-background" />
-            <button onClick={() => save({ landingTagline: clinic.landingTagline })}
-              className="mt-2 text-xs font-semibold bg-brand-600 text-white px-3 py-1.5 rounded-lg">{t("common.save")}</button>
+              className={INPUT_CLS} />
+            <button onClick={() => save({ landingTagline: clinic.landingTagline })} className={`${BTN_PRIMARY_SM} mt-2`}>
+              <Check size={16} strokeWidth={1.75}/> {t("common.save")}
+            </button>
           </div>
 
           {/* Sobre la clínica + estadísticas */}
-          <div className="border-t border-border pt-5">
-            <label className="text-sm font-semibold block mb-1">{t("pages.landing.aboutClinic")}</label>
-            <p className="text-xs text-muted-foreground mb-2">{t("pages.landing.aboutClinicHelp")}</p>
+          <div className="py-6 first:pt-0 last:pb-0">
+            <label className={LABEL_CLS}>{t("pages.landing.aboutClinic")}</label>
+            <p className={`${HELP_CLS} -mt-0.5 mb-2`}>{t("pages.landing.aboutClinicHelp")}</p>
             <textarea value={clinic.description ?? ""}
               onChange={e => updateLocal("description", e.target.value)}
               placeholder={t("pages.landing.aboutClinicPlaceholder")} rows={3}
-              className="w-full border border-border rounded-xl px-3 py-2.5 text-sm bg-background resize-none" />
+              className={`${INPUT_CLS} resize-none`} />
             <div className="grid grid-cols-2 gap-3 mt-3">
               <div>
-                <label className="text-sm font-semibold block mb-1">{t("pages.landing.yearsExperience")}</label>
+                <label className={LABEL_CLS}>{t("pages.landing.yearsExperience")}</label>
                 <input type="number" min={0} value={clinic.landingYearsExperience ?? ""}
                   onChange={e => updateLocal("landingYearsExperience", e.target.value === "" ? null : Math.trunc(Number(e.target.value)))}
                   placeholder="12"
-                  className="w-full border border-border rounded-xl px-3 py-2.5 text-sm bg-background" />
+                  className={INPUT_CLS} />
               </div>
               <div>
-                <label className="text-sm font-semibold block mb-1">{t("pages.landing.patientsServed")}</label>
+                <label className={LABEL_CLS}>{t("pages.landing.patientsServed")}</label>
                 <input value={clinic.landingPatients ?? ""}
                   onChange={e => updateLocal("landingPatients", e.target.value)}
                   placeholder="8,500+"
-                  className="w-full border border-border rounded-xl px-3 py-2.5 text-sm bg-background" />
+                  className={INPUT_CLS} />
               </div>
             </div>
             <button onClick={() => save({
               description: clinic.description,
               landingYearsExperience: clinic.landingYearsExperience,
               landingPatients: clinic.landingPatients,
-            })} disabled={saving}
-              className="mt-3 text-xs font-semibold bg-brand-600 text-white px-3 py-1.5 rounded-lg disabled:opacity-50">
-              {t("pages.landing.saveInfo")}
+            })} disabled={saving} className={`${BTN_PRIMARY_SM} mt-3`}>
+              <Check size={16} strokeWidth={1.75}/> {t("pages.landing.saveInfo")}
             </button>
           </div>
 
           {/* Cover photo */}
-          <div>
-            <label className="text-sm font-semibold block mb-1">{t("pages.landing.coverPhoto")}</label>
-            <p className="text-xs text-muted-foreground mb-2">{t("pages.landing.coverPhotoHelp")}</p>
+          <div className="py-6 first:pt-0 last:pb-0">
+            <label className={LABEL_CLS}>{t("pages.landing.coverPhoto")}</label>
+            <p className={`${HELP_CLS} -mt-0.5 mb-2`}>{t("pages.landing.coverPhotoHelp")}</p>
             {clinic.landingCoverUrl && (
               <div className="relative mb-3">
-                <img src={clinic.landingCoverUrl} alt={t("pages.landing.coverAlt")} className="w-full h-32 object-cover rounded-xl" />
-                <button onClick={() => { updateLocal("landingCoverUrl", null); save({ landingCoverUrl: null }); }}
-                  className="absolute top-2 right-2 bg-red-500 text-white p-1 rounded-lg"><Trash2 size={12}/></button>
+                <img src={clinic.landingCoverUrl} alt={t("pages.landing.coverAlt")} className="w-full h-32 object-cover rounded-[var(--radius)] border border-[color:var(--border-soft)]" />
+                <button aria-label={t("common.delete")} onClick={() => { updateLocal("landingCoverUrl", null); save({ landingCoverUrl: null }); }}
+                  className="absolute top-2 right-2 inline-flex items-center justify-center w-9 h-9 rounded-[var(--radius-sm)] bg-[color:var(--danger)] text-white shadow-[var(--shadow-2)] hover:bg-[color:var(--danger-strong)] active:scale-[0.98] transition"><Trash2 size={16} strokeWidth={1.75}/></button>
               </div>
             )}
-            <label className="flex items-center gap-2 text-sm font-semibold border border-border rounded-xl px-4 py-3 cursor-pointer hover:bg-muted w-fit">
-              <Upload size={16}/> {clinic.landingCoverUrl ? t("pages.landing.replacePhoto") : t("pages.landing.uploadCoverPhoto")}
+            <label className="flex flex-col items-center justify-center gap-2 text-center border border-dashed border-[color:var(--border-strong)] rounded-[var(--radius-lg)] py-8 px-4 cursor-pointer text-[color:var(--text-2)] hover:border-[color:var(--border-brand)] hover:bg-[color:var(--brand-softer)] transition-colors">
+              <ImagePlus size={20} strokeWidth={1.75} className="text-[color:var(--brand)]"/>
+              <span className="text-sm font-semibold">{clinic.landingCoverUrl ? t("pages.landing.replacePhoto") : t("pages.landing.uploadCoverPhoto")}</span>
               <input type="file" accept="image/*" className="hidden" onChange={async e => {
                 const file = e.target.files?.[0]; if (!file) return;
                 try {
@@ -349,72 +371,73 @@ export function LandingConfigClient({ clinic: initial, appUrl }: Props) {
           </div>
 
           {/* Map embed */}
-          <div>
-            <label className="text-sm font-semibold block mb-1">{t("pages.landing.mapEmbedLabel")}</label>
-            <p className="text-xs text-muted-foreground mb-2">
+          <div className="py-6 first:pt-0 last:pb-0">
+            <label className={LABEL_CLS}>{t("pages.landing.mapEmbedLabel")}</label>
+            <p className={`${HELP_CLS} -mt-0.5 mb-2`}>
               {t("pages.landing.mapEmbedHelp")}
             </p>
             <input value={clinic.landingMapEmbed ?? ""}
               onChange={e => updateLocal("landingMapEmbed", e.target.value)}
               placeholder="https://www.google.com/maps/embed?pb=..."
-              className="w-full border border-border rounded-xl px-3 py-2.5 text-sm bg-background" />
-            <button onClick={() => save({ landingMapEmbed: clinic.landingMapEmbed })}
-              className="mt-2 text-xs font-semibold bg-brand-600 text-white px-3 py-1.5 rounded-lg">{t("common.save")}</button>
+              className={INPUT_CLS} />
+            <button onClick={() => save({ landingMapEmbed: clinic.landingMapEmbed })} className={`${BTN_PRIMARY_SM} mt-2`}>
+              <Check size={16} strokeWidth={1.75}/> {t("common.save")}
+            </button>
           </div>
         </div>
       )}
 
       {/* ── SERVICIOS ── */}
       {tab === "servicios" && (
-        <div className="bg-card border border-border rounded-2xl p-5 space-y-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <h3 className="font-bold">{t("pages.landing.servicesHeading")}</h3>
-              <p className="text-xs text-muted-foreground">{t("pages.landing.servicesHelp")}</p>
+        <div className={`${CARD_CLS} p-5 space-y-4`}>
+          <div className="flex items-center justify-between gap-3">
+            <div className="min-w-0">
+              <h3 className={`${H_SECTION} flex items-center gap-1.5`}><Stethoscope size={16} strokeWidth={1.75} className="text-[color:var(--brand)]"/> {t("pages.landing.servicesHeading")}</h3>
+              <p className={`${HELP_CLS} mt-0.5`}>{t("pages.landing.servicesHelp")}</p>
             </div>
-            <button onClick={addService} className="flex items-center gap-1.5 text-sm font-semibold bg-brand-600 text-white px-3 py-2 rounded-xl">
-              <Plus size={14}/> {t("common.add")}
+            <button onClick={addService} className={`${BTN_PRIMARY_SM} shrink-0`}>
+              <Plus size={16} strokeWidth={1.75}/> {t("common.add")}
             </button>
           </div>
           {services.length === 0 && (
-            <div className="text-center py-8 text-muted-foreground text-sm">
-              {t("pages.landing.servicesEmpty")}
+            <div className={EMPTY_CLS}>
+              <Stethoscope size={24} strokeWidth={1.5} className="text-[color:var(--text-4)]"/>
+              <p className="text-sm text-[color:var(--text-3)]">{t("pages.landing.servicesEmpty")}</p>
             </div>
           )}
           {services.map((svc, i) => (
-            <div key={i} className="border border-border rounded-xl p-4 space-y-3">
+            <div key={i} className={ITEM_CLS}>
               <div className="flex items-center justify-between">
-                <span className="text-sm font-semibold text-muted-foreground">{t("pages.landing.serviceN", { n: i+1 })}</span>
-                <button onClick={() => removeService(i)} className="text-red-500 hover:text-red-700"><Trash2 size={14}/></button>
+                <span className="text-[12.5px] font-semibold text-[color:var(--text-3)]">{t("pages.landing.serviceN", { n: i+1 })}</span>
+                <button aria-label={t("common.delete")} onClick={() => removeService(i)} className={BTN_ICON_DANGER}><Trash2 size={16} strokeWidth={1.75}/></button>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="text-xs text-muted-foreground block mb-1">{t("pages.landing.emojiIcon")}</label>
+                  <label className={LABEL_CLS}>{t("pages.landing.emojiIcon")}</label>
                   <input value={svc.icon} onChange={e => updateService(i,"icon",e.target.value)}
-                    placeholder="🦷" className="w-full border border-border rounded-lg px-3 py-2 text-sm bg-background" />
+                    placeholder="🦷" className={INPUT_CLS} />
                 </div>
                 <div>
-                  <label className="text-xs text-muted-foreground block mb-1">{t("pages.landing.priceOptional")}</label>
+                  <label className={LABEL_CLS}>{t("pages.landing.priceOptional")}</label>
                   <input value={svc.price} onChange={e => updateService(i,"price",e.target.value)}
-                    placeholder={t("pages.landing.priceFromPlaceholder")} className="w-full border border-border rounded-lg px-3 py-2 text-sm bg-background" />
+                    placeholder={t("pages.landing.priceFromPlaceholder")} className={INPUT_CLS} />
                 </div>
               </div>
               <div>
-                <label className="text-xs text-muted-foreground block mb-1">{t("pages.landing.serviceName")}</label>
+                <label className={LABEL_CLS}>{t("pages.landing.serviceName")}</label>
                 <input value={svc.name} onChange={e => updateService(i,"name",e.target.value)}
-                  placeholder={t("pages.landing.serviceNamePlaceholder")} className="w-full border border-border rounded-lg px-3 py-2 text-sm bg-background" />
+                  placeholder={t("pages.landing.serviceNamePlaceholder")} className={INPUT_CLS} />
               </div>
               <div>
-                <label className="text-xs text-muted-foreground block mb-1">{t("common.description")}</label>
+                <label className={LABEL_CLS}>{t("common.description")}</label>
                 <textarea value={svc.desc} onChange={e => updateService(i,"desc",e.target.value)}
                   placeholder={t("pages.landing.serviceDescPlaceholder")} rows={2}
-                  className="w-full border border-border rounded-lg px-3 py-2 text-sm bg-background resize-none" />
+                  className={`${INPUT_CLS} resize-none`} />
               </div>
             </div>
           ))}
           {services.length > 0 && (
-            <button onClick={() => save({ landingServices: services })} disabled={saving}
-              className="w-full py-3 rounded-xl font-bold text-white bg-brand-600 disabled:opacity-50">
+            <button onClick={() => save({ landingServices: services })} disabled={saving} className={BTN_SAVE_FULL}>
               {saving ? t("common.saving") : t("pages.landing.saveServices")}
             </button>
           )}
@@ -423,55 +446,57 @@ export function LandingConfigClient({ clinic: initial, appUrl }: Props) {
 
       {/* ── TESTIMONIOS ── */}
       {tab === "testimonios" && (
-        <div className="bg-card border border-border rounded-2xl p-5 space-y-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <h3 className="font-bold">{t("pages.landing.testimonialsHeading")}</h3>
-              <p className="text-xs text-muted-foreground">{t("pages.landing.testimonialsHelp")}</p>
+        <div className={`${CARD_CLS} p-5 space-y-4`}>
+          <div className="flex items-center justify-between gap-3">
+            <div className="min-w-0">
+              <h3 className={`${H_SECTION} flex items-center gap-1.5`}><Star size={16} strokeWidth={1.75} className="text-[color:var(--brand)]"/> {t("pages.landing.testimonialsHeading")}</h3>
+              <p className={`${HELP_CLS} mt-0.5`}>{t("pages.landing.testimonialsHelp")}</p>
             </div>
-            <button onClick={addTestimonial} className="flex items-center gap-1.5 text-sm font-semibold bg-brand-600 text-white px-3 py-2 rounded-xl">
-              <Plus size={14}/> {t("common.add")}
+            <button onClick={addTestimonial} className={`${BTN_PRIMARY_SM} shrink-0`}>
+              <Plus size={16} strokeWidth={1.75}/> {t("common.add")}
             </button>
           </div>
           {testimonials.length === 0 && (
-            <div className="text-center py-8 text-muted-foreground text-sm">{t("pages.landing.testimonialsEmpty")}</div>
+            <div className={EMPTY_CLS}>
+              <Star size={24} strokeWidth={1.5} className="text-[color:var(--text-4)]"/>
+              <p className="text-sm text-[color:var(--text-3)]">{t("pages.landing.testimonialsEmpty")}</p>
+            </div>
           )}
           {testimonials.map((item, i) => (
-            <div key={i} className="border border-border rounded-xl p-4 space-y-3">
+            <div key={i} className={ITEM_CLS}>
               <div className="flex items-center justify-between">
-                <span className="text-sm font-semibold text-muted-foreground">{t("pages.landing.testimonialN", { n: i+1 })}</span>
-                <button onClick={() => removeTestimonial(i)} className="text-red-500 hover:text-red-700"><Trash2 size={14}/></button>
+                <span className="text-[12.5px] font-semibold text-[color:var(--text-3)]">{t("pages.landing.testimonialN", { n: i+1 })}</span>
+                <button aria-label={t("common.delete")} onClick={() => removeTestimonial(i)} className={BTN_ICON_DANGER}><Trash2 size={16} strokeWidth={1.75}/></button>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="text-xs text-muted-foreground block mb-1">{t("pages.landing.testimonialPatientName")}</label>
+                  <label className={LABEL_CLS}>{t("pages.landing.testimonialPatientName")}</label>
                   <input value={item.name} onChange={e => updateTestimonial(i,"name",e.target.value)}
-                    placeholder="María García" className="w-full border border-border rounded-lg px-3 py-2 text-sm bg-background" />
+                    placeholder="María García" className={INPUT_CLS} />
                 </div>
                 <div>
-                  <label className="text-xs text-muted-foreground block mb-1">{t("pages.landing.rating")}</label>
+                  <label className={LABEL_CLS}>{t("pages.landing.rating")}</label>
                   <select value={item.rating} onChange={e => updateTestimonial(i,"rating",parseInt(e.target.value))}
-                    className="w-full border border-border rounded-lg px-3 py-2 text-sm bg-background">
+                    className={INPUT_CLS}>
                     {[5,4,3,2,1].map(n => <option key={n} value={n}>{"⭐".repeat(n)}</option>)}
                   </select>
                 </div>
               </div>
               <div>
-                <label className="text-xs text-muted-foreground block mb-1">{t("pages.landing.comment")}</label>
+                <label className={LABEL_CLS}>{t("pages.landing.comment")}</label>
                 <textarea value={item.text} onChange={e => updateTestimonial(i,"text",e.target.value)}
                   placeholder={t("pages.landing.commentPlaceholder")} rows={2}
-                  className="w-full border border-border rounded-lg px-3 py-2 text-sm bg-background resize-none" />
+                  className={`${INPUT_CLS} resize-none`} />
               </div>
               <div>
-                <label className="text-xs text-muted-foreground block mb-1">{t("pages.landing.dateOptional")}</label>
+                <label className={LABEL_CLS}>{t("pages.landing.dateOptional")}</label>
                 <input value={item.date ?? ""} onChange={e => updateTestimonial(i,"date",e.target.value)}
-                  placeholder={t("pages.landing.datePlaceholder")} className="w-full border border-border rounded-lg px-3 py-2 text-sm bg-background" />
+                  placeholder={t("pages.landing.datePlaceholder")} className={INPUT_CLS} />
               </div>
             </div>
           ))}
           {testimonials.length > 0 && (
-            <button onClick={() => save({ landingTestimonials: testimonials })} disabled={saving}
-              className="w-full py-3 rounded-xl font-bold text-white bg-brand-600 disabled:opacity-50">
+            <button onClick={() => save({ landingTestimonials: testimonials })} disabled={saving} className={BTN_SAVE_FULL}>
               {saving ? t("common.saving") : t("pages.landing.saveTestimonials")}
             </button>
           )}
@@ -480,41 +505,43 @@ export function LandingConfigClient({ clinic: initial, appUrl }: Props) {
 
       {/* ── FAQs ── */}
       {tab === "faqs" && (
-        <div className="bg-card border border-border rounded-2xl p-5 space-y-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <h3 className="font-bold">{t("pages.landing.faqsHeading")}</h3>
-              <p className="text-xs text-muted-foreground">{t("pages.landing.faqsHelp")}</p>
+        <div className={`${CARD_CLS} p-5 space-y-4`}>
+          <div className="flex items-center justify-between gap-3">
+            <div className="min-w-0">
+              <h3 className={`${H_SECTION} flex items-center gap-1.5`}><HelpCircle size={16} strokeWidth={1.75} className="text-[color:var(--brand)]"/> {t("pages.landing.faqsHeading")}</h3>
+              <p className={`${HELP_CLS} mt-0.5`}>{t("pages.landing.faqsHelp")}</p>
             </div>
-            <button onClick={addFaq} className="flex items-center gap-1.5 text-sm font-semibold bg-brand-600 text-white px-3 py-2 rounded-xl">
-              <Plus size={14}/> {t("common.add")}
+            <button onClick={addFaq} className={`${BTN_PRIMARY_SM} shrink-0`}>
+              <Plus size={16} strokeWidth={1.75}/> {t("common.add")}
             </button>
           </div>
           {faqs.length === 0 && (
-            <div className="text-center py-8 text-muted-foreground text-sm">{t("pages.landing.faqsEmpty")}</div>
+            <div className={EMPTY_CLS}>
+              <HelpCircle size={24} strokeWidth={1.5} className="text-[color:var(--text-4)]"/>
+              <p className="text-sm text-[color:var(--text-3)]">{t("pages.landing.faqsEmpty")}</p>
+            </div>
           )}
           {faqs.map((faq, i) => (
-            <div key={i} className="border border-border rounded-xl p-4 space-y-3">
+            <div key={i} className={ITEM_CLS}>
               <div className="flex items-center justify-between">
-                <span className="text-sm font-semibold text-muted-foreground">{t("pages.landing.questionN", { n: i+1 })}</span>
-                <button onClick={() => removeFaq(i)} className="text-red-500 hover:text-red-700"><Trash2 size={14}/></button>
+                <span className="text-[12.5px] font-semibold text-[color:var(--text-3)]">{t("pages.landing.questionN", { n: i+1 })}</span>
+                <button aria-label={t("common.delete")} onClick={() => removeFaq(i)} className={BTN_ICON_DANGER}><Trash2 size={16} strokeWidth={1.75}/></button>
               </div>
               <div>
-                <label className="text-xs text-muted-foreground block mb-1">{t("pages.landing.question")}</label>
+                <label className={LABEL_CLS}>{t("pages.landing.question")}</label>
                 <input value={faq.question} onChange={e => updateFaq(i,"question",e.target.value)}
-                  placeholder={t("pages.landing.questionPlaceholder")} className="w-full border border-border rounded-lg px-3 py-2 text-sm bg-background" />
+                  placeholder={t("pages.landing.questionPlaceholder")} className={INPUT_CLS} />
               </div>
               <div>
-                <label className="text-xs text-muted-foreground block mb-1">{t("pages.landing.answer")}</label>
+                <label className={LABEL_CLS}>{t("pages.landing.answer")}</label>
                 <textarea value={faq.answer} onChange={e => updateFaq(i,"answer",e.target.value)}
                   placeholder={t("pages.landing.answerPlaceholder")} rows={2}
-                  className="w-full border border-border rounded-lg px-3 py-2 text-sm bg-background resize-none" />
+                  className={`${INPUT_CLS} resize-none`} />
               </div>
             </div>
           ))}
           {faqs.length > 0 && (
-            <button onClick={() => save({ landingFaqs: faqs })} disabled={saving}
-              className="w-full py-3 rounded-xl font-bold text-white bg-brand-600 disabled:opacity-50">
+            <button onClick={() => save({ landingFaqs: faqs })} disabled={saving} className={BTN_SAVE_FULL}>
               {saving ? t("common.saving") : t("pages.landing.saveFaqs")}
             </button>
           )}
@@ -523,14 +550,14 @@ export function LandingConfigClient({ clinic: initial, appUrl }: Props) {
 
       {/* ── GALERÍA ── */}
       {tab === "galeria" && (
-        <div className="bg-card border border-border rounded-2xl p-5 space-y-4">
+        <div className={`${CARD_CLS} p-5 space-y-4`}>
           <div className="flex items-start justify-between gap-3">
-            <div>
-              <h3 className="font-bold">{t("pages.landing.galleryHeading")}</h3>
-              <p className="text-xs text-muted-foreground">{t("pages.landing.galleryHelp")}</p>
+            <div className="min-w-0">
+              <h3 className={`${H_SECTION} flex items-center gap-1.5`}><ImagePlus size={16} strokeWidth={1.75} className="text-[color:var(--brand)]"/> {t("pages.landing.galleryHeading")}</h3>
+              <p className={`${HELP_CLS} mt-0.5`}>{t("pages.landing.galleryHelp")}</p>
             </div>
-            <label className={`flex items-center gap-1.5 text-sm font-semibold rounded-xl px-3 py-2 cursor-pointer shrink-0 ${clinic.landingGallery.length >= 12 ? "opacity-50 pointer-events-none border border-border" : "bg-brand-600 text-white"}`}>
-              <ImagePlus size={15}/> {t("pages.landing.addPhoto")}
+            <label className={`inline-flex items-center gap-1.5 h-9 px-3.5 rounded-[var(--radius-sm)] text-[12.5px] font-semibold cursor-pointer shrink-0 transition ${clinic.landingGallery.length >= 12 ? "opacity-[.45] pointer-events-none border border-[color:var(--border-soft)] text-[color:var(--text-3)]" : "bg-brand-600 text-white shadow-[var(--shadow-1)] hover:bg-brand-700 hover:shadow-[var(--shadow-2)] active:scale-[0.98]"}`}>
+              <ImagePlus size={16} strokeWidth={1.75}/> {t("pages.landing.addPhoto")}
               <input type="file" accept="image/*" className="hidden" disabled={clinic.landingGallery.length >= 12}
                 onChange={async e => {
                   const file = e.target.files?.[0];
@@ -548,17 +575,17 @@ export function LandingConfigClient({ clinic: initial, appUrl }: Props) {
           </div>
 
           {/* Nota: las fotos de los doctores viven en Equipo */}
-          <div className="flex items-center gap-2 text-xs bg-brand-600/10 border border-brand-200 dark:border-brand-800 rounded-xl px-3 py-2">
-            <Users size={14} className="text-brand-600 shrink-0"/>
-            <span className="text-muted-foreground">
+          <div className="flex items-center gap-2 text-xs bg-[color:var(--brand-soft)] border border-[color:var(--border-brand)] rounded-[var(--radius)] px-3 py-2.5">
+            <Users size={16} strokeWidth={1.75} className="text-[color:var(--brand)] shrink-0"/>
+            <span className="text-[color:var(--text-2)]">
               {t("pages.landing.doctorPhotosNote")}{" "}
-              <a href="/dashboard/team" className="font-semibold text-brand-600 hover:underline">{t("pages.landing.teamLink")}</a>.
+              <a href="/dashboard/team" className="font-semibold text-[color:var(--brand)] hover:underline">{t("pages.landing.teamLink")}</a>.
             </span>
           </div>
 
           {/* Ayuda: cómo ordenar y qué es la portada */}
           {clinic.landingGallery.length > 0 && (
-            <p className="text-xs text-muted-foreground">
+            <p className={HELP_CLS}>
               {t("pages.landing.galleryOrderHelp")}
             </p>
           )}
@@ -571,7 +598,7 @@ export function LandingConfigClient({ clinic: initial, appUrl }: Props) {
                 const isLast  = i === clinic.landingGallery.length - 1;
                 return (
                   <div key={i}
-                    className={`relative aspect-square rounded-xl overflow-hidden border ${isCover ? "border-brand-500 ring-2 ring-brand-500/50" : "border-border"}`}>
+                    className={`relative aspect-square rounded-[var(--radius)] overflow-hidden border ${isCover ? "border-[color:var(--brand)] ring-2 ring-brand-500/50" : "border-[color:var(--border-soft)]"}`}>
                     <img src={url} alt={t("pages.landing.photoN", { n: i+1 })} className="w-full h-full object-cover" />
 
                     {/* Badge de posición — SIEMPRE visible */}
@@ -581,14 +608,14 @@ export function LandingConfigClient({ clinic: initial, appUrl }: Props) {
 
                     {/* Portada — badge si ya lo es, botón "Usar como portada" si no */}
                     {isCover ? (
-                      <span className="absolute top-1.5 right-1.5 flex items-center gap-1 bg-brand-600 text-white text-[10px] font-bold rounded-md px-1.5 py-0.5 leading-none shadow">
-                        <Star size={10} className="fill-current"/> {t("pages.landing.cover")}
+                      <span className="absolute top-1.5 right-1.5 flex items-center gap-1 bg-brand-600 text-white text-[10px] font-bold rounded-md px-1.5 py-0.5 leading-none shadow-[var(--shadow-2)]">
+                        <Star size={10} strokeWidth={1.75} className="fill-current"/> {t("pages.landing.cover")}
                       </span>
                     ) : (
                       <button type="button" onClick={() => setGalleryCover(url)} disabled={saving}
                         aria-label={t("pages.landing.useAsCover")} title={t("pages.landing.useAsCover")}
-                        className="absolute top-1.5 right-1.5 flex items-center gap-1 bg-black/65 hover:bg-brand-600 text-white text-[10px] font-semibold rounded-md px-1.5 py-0.5 leading-none transition-colors disabled:opacity-50">
-                        <Star size={10}/> {t("pages.landing.cover")}
+                        className="absolute top-1.5 right-1.5 flex items-center gap-1 bg-black/65 hover:bg-brand-600 text-white text-[10px] font-semibold rounded-md px-1.5 py-0.5 leading-none transition-colors disabled:opacity-[.45]">
+                        <Star size={10} strokeWidth={1.75}/> {t("pages.landing.cover")}
                       </button>
                     )}
 
@@ -597,20 +624,20 @@ export function LandingConfigClient({ clinic: initial, appUrl }: Props) {
                       <button type="button" onClick={() => moveGalleryPhoto(i, -1)} disabled={saving || isFirst}
                         aria-label={t("pages.landing.moveLeftAria")} title={t("pages.landing.moveLeft")}
                         className="pointer-events-auto bg-black/55 hover:bg-black/85 text-white rounded-full p-1 transition-colors disabled:opacity-30 disabled:pointer-events-none disabled:cursor-not-allowed">
-                        <ChevronLeft size={16}/>
+                        <ChevronLeft size={16} strokeWidth={1.75}/>
                       </button>
                       <button type="button" onClick={() => moveGalleryPhoto(i, 1)} disabled={saving || isLast}
                         aria-label={t("pages.landing.moveRightAria")} title={t("pages.landing.moveRight")}
                         className="pointer-events-auto bg-black/55 hover:bg-black/85 text-white rounded-full p-1 transition-colors disabled:opacity-30 disabled:pointer-events-none disabled:cursor-not-allowed">
-                        <ChevronRight size={16}/>
+                        <ChevronRight size={16} strokeWidth={1.75}/>
                       </button>
                     </div>
 
                     {/* Barra de acciones — SIEMPRE visible */}
                     <div className="absolute inset-x-0 bottom-0 flex divide-x divide-white/20 bg-black/65">
                       <label aria-label={t("pages.landing.replacePhotoAria")} title={t("pages.landing.replace")}
-                        className="flex-1 flex items-center justify-center gap-1 text-[11px] font-semibold text-white py-1.5 cursor-pointer hover:bg-white/15">
-                        <RefreshCw size={12}/> <span className="hidden sm:inline">{t("pages.landing.replace")}</span>
+                        className="flex-1 flex items-center justify-center gap-1 text-[11px] font-semibold text-white py-1.5 cursor-pointer hover:bg-white/15 transition-colors">
+                        <RefreshCw size={14} strokeWidth={1.75}/> <span className="hidden sm:inline">{t("pages.landing.replace")}</span>
                         <input type="file" accept="image/*" className="hidden" onChange={async e => {
                           const file = e.target.files?.[0];
                           e.target.value = "";
@@ -629,8 +656,8 @@ export function LandingConfigClient({ clinic: initial, appUrl }: Props) {
                           updateLocal("landingGallery", newGallery);
                           await save({ landingGallery: newGallery });
                         }}
-                        className="flex-1 flex items-center justify-center gap-1 text-[11px] font-semibold text-white py-1.5 hover:bg-red-600/70">
-                        <Trash2 size={12}/> <span className="hidden sm:inline">{t("common.delete")}</span>
+                        className="flex-1 flex items-center justify-center gap-1 text-[11px] font-semibold text-white py-1.5 hover:bg-[color:var(--danger)] transition-colors">
+                        <Trash2 size={14} strokeWidth={1.75}/> <span className="hidden sm:inline">{t("common.delete")}</span>
                       </button>
                     </div>
                   </div>
@@ -638,15 +665,18 @@ export function LandingConfigClient({ clinic: initial, appUrl }: Props) {
               })}
             </div>
           ) : (
-            <div className="text-center py-8 text-muted-foreground text-sm">{t("pages.landing.galleryEmpty")}</div>
+            <div className={EMPTY_CLS}>
+              <ImagePlus size={24} strokeWidth={1.5} className="text-[color:var(--text-4)]"/>
+              <p className="text-sm text-[color:var(--text-3)]">{t("pages.landing.galleryEmpty")}</p>
+            </div>
           )}
         </div>
       )}
 
       {/* ── REDES Y CONTACTO ── */}
       {tab === "redes" && (
-        <div className="bg-card border border-border rounded-2xl p-5 space-y-4">
-          <h3 className="font-bold">{t("pages.landing.socialHeading")}</h3>
+        <div className={`${CARD_CLS} p-5 space-y-4`}>
+          <h3 className={`${H_SECTION} flex items-center gap-1.5`}><Share2 size={16} strokeWidth={1.75} className="text-[color:var(--brand)]"/> {t("pages.landing.socialHeading")}</h3>
           {[
             { key:"landingWhatsapp",  label:"WhatsApp",  placeholder:"+52 999 123 4567", descKey:"pages.landing.whatsappDesc" },
             { key:"landingInstagram", label:"Instagram",  placeholder:"@tuclinica",      descKey:"pages.landing.handleDesc" },
@@ -654,12 +684,12 @@ export function LandingConfigClient({ clinic: initial, appUrl }: Props) {
             { key:"landingTiktok",    label:"TikTok",     placeholder:"@tuclinica",      descKey:"pages.landing.handleDesc" },
           ].map(field => (
             <div key={field.key}>
-              <label className="text-sm font-semibold block mb-0.5">{field.label}</label>
-              <p className="text-xs text-muted-foreground mb-1.5">{t(field.descKey)}</p>
+              <label className={LABEL_CLS}>{field.label}</label>
+              <p className={`${HELP_CLS} -mt-0.5 mb-1.5`}>{t(field.descKey)}</p>
               <input value={(clinic as any)[field.key] ?? ""}
                 onChange={e => updateLocal(field.key, e.target.value)}
                 placeholder={field.placeholder}
-                className="w-full border border-border rounded-xl px-3 py-2.5 text-sm bg-background" />
+                className={INPUT_CLS} />
             </div>
           ))}
           <button onClick={() => save({
@@ -667,8 +697,7 @@ export function LandingConfigClient({ clinic: initial, appUrl }: Props) {
             landingInstagram: clinic.landingInstagram,
             landingFacebook: clinic.landingFacebook,
             landingTiktok: clinic.landingTiktok,
-          })} disabled={saving}
-            className="w-full py-3 rounded-xl font-bold text-white bg-brand-600 disabled:opacity-50">
+          })} disabled={saving} className={BTN_SAVE_FULL}>
             {saving ? t("common.saving") : t("pages.landing.saveSocial")}
           </button>
         </div>

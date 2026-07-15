@@ -36,7 +36,7 @@
   width: 44px;
   height: 44px;
   border-radius: 12px;
-  background: linear-gradient(135deg, #7C3AED, #4A90E2);
+  background: linear-gradient(135deg, #7C3AED, #2563EB);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -136,10 +136,10 @@
 .laneRail {
   flex: 1;
   height: 28px;
-  background: rgba(74, 144, 226, 0.07);
+  background: rgba(124, 58, 237, 0.07);
   border-radius: 6px;
   position: relative;
-  border: 1px solid rgba(74, 144, 226, 0.18);
+  border: 1px solid rgba(124, 58, 237, 0.18);
   overflow: hidden;
 }
 .laneTick {
@@ -153,7 +153,7 @@
   position: absolute;
   top: 2px;
   bottom: 2px;
-  background: #4A90E2;
+  background: #7C3AED;
   border-radius: 4px;
   display: flex;
   align-items: center;
@@ -261,8 +261,8 @@
 }
 .stat_green { background: rgba(16, 185, 129, 0.07); border-color: rgba(16, 185, 129, 0.25); }
 .stat_green .statValue { color: #10B981; }
-.stat_blue { background: rgba(74, 144, 226, 0.07); border-color: rgba(74, 144, 226, 0.25); }
-.stat_blue .statValue { color: #4A90E2; }
+.stat_blue { background: rgba(124, 58, 237, 0.07); border-color: rgba(124, 58, 237, 0.25); }
+.stat_blue .statValue { color: #7C3AED; }
 .stat_violet { background: rgba(124, 58, 237, 0.07); border-color: rgba(124, 58, 237, 0.25); }
 .stat_violet .statValue { color: #7C3AED; }
 
@@ -364,7 +364,7 @@
   padding: 0 22px;
   border: none;
   border-radius: 8px;
-  background: linear-gradient(135deg, #7C3AED, #4A90E2);
+  background: linear-gradient(135deg, #7C3AED, #2563EB);
   color: white;
   font-size: 13px;
   font-weight: 700;
