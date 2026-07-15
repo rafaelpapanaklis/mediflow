@@ -59,7 +59,8 @@ const nextConfig = {
               "default-src 'self'",
               // embed.tawk.to / *.tawk.to = livechat Tawk.to de la landing (script + iframe + fuentes).
               // googleadservices/googleads.g.doubleclick = tag de conversiones de Google Ads (gtag ya permitido vía googletagmanager).
-              "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://js.stripe.com https://www.paypal.com https://www.paypalobjects.com https://www.googletagmanager.com https://www.googleadservices.com https://googleads.g.doubleclick.net https://embed.tawk.to https://*.tawk.to",
+              // connect.facebook.net = SDK JS de Meta (WhatsApp Embedded Signup: botón "Conectar WhatsApp").
+              "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://js.stripe.com https://www.paypal.com https://www.paypalobjects.com https://www.googletagmanager.com https://www.googleadservices.com https://googleads.g.doubleclick.net https://embed.tawk.to https://*.tawk.to https://connect.facebook.net",
               // *.tawk.to también en style-src: el widget carga sus CSS desde embed.tawk.to (sin esto no monta).
               "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://embed.tawk.to https://*.tawk.to",
               "font-src 'self' https://fonts.gstatic.com data: https://*.tawk.to",
@@ -67,7 +68,8 @@ const nextConfig = {
               "media-src 'self' blob: https:",
               "connect-src 'self' https: wss:",
               // td.doubleclick / googleads.g.doubleclick = iframes del tag de conversiones de Google Ads.
-              "frame-src 'self' https://js.stripe.com https://www.paypal.com https://www.google.com https://td.doubleclick.net https://googleads.g.doubleclick.net https://daily.co https://*.daily.co https://*.tawk.to",
+              // www.facebook.com / staticxx.facebook.com = iframe de comunicación del SDK de Meta (xd_arbiter); sin esto el popup del Embedded Signup no puede devolver el resultado.
+              "frame-src 'self' https://js.stripe.com https://www.paypal.com https://www.google.com https://td.doubleclick.net https://googleads.g.doubleclick.net https://daily.co https://*.daily.co https://*.tawk.to https://www.facebook.com https://staticxx.facebook.com",
               "frame-ancestors 'none'",
               "base-uri 'self'",
               "form-action 'self'",
