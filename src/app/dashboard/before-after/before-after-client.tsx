@@ -1,11 +1,12 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Plus, Image, X } from "lucide-react";
+import { Plus, ImageOff, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import toast from "react-hot-toast";
 import { useT } from "@/i18n/i18n-provider";
+import styles from "./before-after.module.css";
 
 interface Patient {
   id: string;
@@ -67,22 +68,22 @@ export function BeforeAfterClient({ patients }: { patients: Patient[] }) {
   const afterPhotos = photos.filter(p => p.category === "after");
 
   return (
-    <div>
-      <div className="flex items-center justify-between mb-6">
+    <div className={styles.page}>
+      <div className={styles.head}>
         <div>
-          <h1 className="text-2xl font-extrabold">{t("pages.beforeAfter.title")}</h1>
-          <p className="text-sm text-muted-foreground mt-0.5">{t("pages.beforeAfter.subtitle")}</p>
+          <h1 className={styles.title}>{t("pages.beforeAfter.title")}</h1>
+          <p className={styles.subtitle}>{t("pages.beforeAfter.subtitle")}</p>
         </div>
         <Button onClick={() => setShowAdd(true)} disabled={!selectedPatient}>
-          <Plus className="w-5 h-5 mr-2" /> {t("pages.beforeAfter.addPhoto")}
+          <Plus className="w-5 h-5 mr-2" strokeWidth={1.75} /> {t("pages.beforeAfter.addPhoto")}
         </Button>
       </div>
 
       {/* Patient selector */}
-      <div className="mb-6 space-y-1.5">
-        <Label className="text-sm">{t("pages.beforeAfter.patient")}</Label>
+      <div className={styles.selector}>
+        <Label className={styles.fieldLabel}>{t("pages.beforeAfter.patient")}</Label>
         <select
-          className="flex h-11 w-full max-w-md rounded-xl border border-border bg-card px-4 text-base focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+          className={styles.select}
           value={selectedPatient}
           onChange={e => setSelectedPatient(e.target.value)}
         >
@@ -95,48 +96,56 @@ export function BeforeAfterClient({ patients }: { patients: Patient[] }) {
         </select>
       </div>
 
-      {loading && <p className="text-sm text-muted-foreground">{t("pages.beforeAfter.loadingPhotos")}</p>}
+      {loading && <p className={styles.loading}>{t("pages.beforeAfter.loadingPhotos")}</p>}
 
       {!loading && selectedPatient && photos.length === 0 && (
-        <div className="text-center py-16 text-muted-foreground">
-          <Image className="w-12 h-12 mx-auto mb-3 opacity-20" />
-          <p className="text-base font-semibold">{t("pages.beforeAfter.noPhotos")}</p>
+        <div className={styles.empty}>
+          <span className={styles.emptyIcon} aria-hidden="true">
+            <ImageOff size={22} strokeWidth={1.75} />
+          </span>
+          <p className={styles.emptyTitle}>{t("pages.beforeAfter.noPhotos")}</p>
         </div>
       )}
 
       {/* Side-by-side comparison */}
       {photos.length > 0 && (
-        <div className="grid grid-cols-2 gap-6">
+        <div className={styles.compareGrid}>
           <div>
-            <h2 className="text-lg font-bold mb-3">{t("pages.beforeAfter.before")}</h2>
-            <div className="space-y-3">
+            <div className={styles.colHead}>
+              <h2 className={styles.colTitle}>{t("pages.beforeAfter.before")}</h2>
+              <span className={styles.colCount}>{beforePhotos.length}</span>
+            </div>
+            <div className={styles.colStack}>
               {beforePhotos.map(photo => (
-                <div key={photo.id} className="bg-card border border-border rounded-xl overflow-hidden">
-                  <img src={photo.url} alt={t("pages.beforeAfter.before")} className="w-full h-48 object-cover" />
-                  <div className="p-3">
-                    <p className="text-sm font-medium">{photo.angle}</p>
-                    {photo.notes && <p className="text-sm text-muted-foreground">{photo.notes}</p>}
-                    <p className="text-xs text-muted-foreground mt-1">{new Date(photo.takenAt).toLocaleDateString("es-MX")}</p>
+                <div key={photo.id} className={styles.mediaCard}>
+                  <img src={photo.url} alt={t("pages.beforeAfter.before")} className={styles.mediaImg} />
+                  <div className={styles.mediaBody}>
+                    <p className={styles.mediaAngle}>{photo.angle}</p>
+                    {photo.notes && <p className={styles.mediaNotes}>{photo.notes}</p>}
+                    <p className={styles.mediaDate}>{new Date(photo.takenAt).toLocaleDateString("es-MX")}</p>
                   </div>
                 </div>
               ))}
-              {beforePhotos.length === 0 && <p className="text-sm text-muted-foreground">{t("pages.beforeAfter.noBeforePhotos")}</p>}
+              {beforePhotos.length === 0 && <p className={styles.colEmpty}>{t("pages.beforeAfter.noBeforePhotos")}</p>}
             </div>
           </div>
           <div>
-            <h2 className="text-lg font-bold mb-3">{t("pages.beforeAfter.after")}</h2>
-            <div className="space-y-3">
+            <div className={styles.colHead}>
+              <h2 className={styles.colTitle}>{t("pages.beforeAfter.after")}</h2>
+              <span className={styles.colCount}>{afterPhotos.length}</span>
+            </div>
+            <div className={styles.colStack}>
               {afterPhotos.map(photo => (
-                <div key={photo.id} className="bg-card border border-border rounded-xl overflow-hidden">
-                  <img src={photo.url} alt={t("pages.beforeAfter.after")} className="w-full h-48 object-cover" />
-                  <div className="p-3">
-                    <p className="text-sm font-medium">{photo.angle}</p>
-                    {photo.notes && <p className="text-sm text-muted-foreground">{photo.notes}</p>}
-                    <p className="text-xs text-muted-foreground mt-1">{new Date(photo.takenAt).toLocaleDateString("es-MX")}</p>
+                <div key={photo.id} className={styles.mediaCard}>
+                  <img src={photo.url} alt={t("pages.beforeAfter.after")} className={styles.mediaImg} />
+                  <div className={styles.mediaBody}>
+                    <p className={styles.mediaAngle}>{photo.angle}</p>
+                    {photo.notes && <p className={styles.mediaNotes}>{photo.notes}</p>}
+                    <p className={styles.mediaDate}>{new Date(photo.takenAt).toLocaleDateString("es-MX")}</p>
                   </div>
                 </div>
               ))}
-              {afterPhotos.length === 0 && <p className="text-sm text-muted-foreground">{t("pages.beforeAfter.noAfterPhotos")}</p>}
+              {afterPhotos.length === 0 && <p className={styles.colEmpty}>{t("pages.beforeAfter.noAfterPhotos")}</p>}
             </div>
           </div>
         </div>
@@ -144,24 +153,26 @@ export function BeforeAfterClient({ patients }: { patients: Patient[] }) {
 
       {/* Add Photo Modal */}
       {showAdd && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
-          <div className="bg-card border border-border rounded-2xl shadow-xl w-full max-w-lg max-h-[90vh] flex flex-col overflow-hidden">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-border shrink-0">
-              <h2 className="text-lg font-bold">{t("pages.beforeAfter.addPhoto")}</h2>
-              <button onClick={() => setShowAdd(false)} className="p-2 rounded-lg hover:bg-muted text-muted-foreground"><X className="w-5 h-5" /></button>
+        <div className={styles.modalOverlay}>
+          <div className={styles.modal}>
+            <div className={styles.modalHead}>
+              <h2 className={styles.modalTitle}>{t("pages.beforeAfter.addPhoto")}</h2>
+              <button onClick={() => setShowAdd(false)} className={styles.modalClose} aria-label={t("common.close")}>
+                <X size={18} strokeWidth={1.75} />
+              </button>
             </div>
-            <div className="px-6 py-5 space-y-4 flex-1 overflow-y-auto min-h-0">
-              <div className="space-y-1.5">
-                <Label className="text-sm">{t("pages.beforeAfter.category")}</Label>
-                <select className="flex h-11 w-full rounded-xl border border-border bg-card px-4 text-base focus:outline-none"
+            <div className={styles.modalBody}>
+              <div className={styles.field}>
+                <Label className={styles.fieldLabel}>{t("pages.beforeAfter.category")}</Label>
+                <select className={styles.input}
                   value={form.category} onChange={e => setForm(f => ({ ...f, category: e.target.value }))}>
                   <option value="before">{t("pages.beforeAfter.before")}</option>
                   <option value="after">{t("pages.beforeAfter.after")}</option>
                 </select>
               </div>
-              <div className="space-y-1.5">
-                <Label className="text-sm">{t("pages.beforeAfter.angle")}</Label>
-                <select className="flex h-11 w-full rounded-xl border border-border bg-card px-4 text-base focus:outline-none"
+              <div className={styles.field}>
+                <Label className={styles.fieldLabel}>{t("pages.beforeAfter.angle")}</Label>
+                <select className={styles.input}
                   value={form.angle} onChange={e => setForm(f => ({ ...f, angle: e.target.value }))}>
                   <option value="front">{t("pages.beforeAfter.angleFront")}</option>
                   <option value="left">{t("pages.beforeAfter.angleLeft")}</option>
@@ -169,20 +180,20 @@ export function BeforeAfterClient({ patients }: { patients: Patient[] }) {
                   <option value="top">{t("pages.beforeAfter.angleTop")}</option>
                 </select>
               </div>
-              <div className="space-y-1.5">
-                <Label className="text-sm">{t("pages.beforeAfter.imageUrl")}</Label>
-                <input className="flex h-11 w-full rounded-xl border border-border bg-card px-4 text-base focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+              <div className={styles.field}>
+                <Label className={styles.fieldLabel}>{t("pages.beforeAfter.imageUrl")}</Label>
+                <input className={styles.input}
                   placeholder="https://ejemplo.com/foto.jpg"
                   value={form.url} onChange={e => setForm(f => ({ ...f, url: e.target.value }))} />
               </div>
-              <div className="space-y-1.5">
-                <Label className="text-sm">{t("common.notes")}</Label>
-                <input className="flex h-11 w-full rounded-xl border border-border bg-card px-4 text-base focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+              <div className={styles.field}>
+                <Label className={styles.fieldLabel}>{t("common.notes")}</Label>
+                <input className={styles.input}
                   placeholder={t("pages.beforeAfter.optional")}
                   value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} />
               </div>
             </div>
-            <div className="px-6 py-4 flex gap-3 shrink-0 border-t border-border">
+            <div className={styles.modalFoot}>
               <Button variant="outline" onClick={() => setShowAdd(false)} className="flex-1 h-11 text-base">{t("common.cancel")}</Button>
               <Button onClick={handleAdd} className="flex-1 h-11 text-base">{t("common.add")}</Button>
             </div>

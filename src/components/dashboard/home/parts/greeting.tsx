@@ -34,7 +34,7 @@ export function Greeting({
       <h1
         style={{
           fontSize: "clamp(18px, 1.6vw, 22px)",
-          fontWeight: 600,
+          fontWeight: 700,
           color: "var(--text-1)",
           margin: 0,
           letterSpacing: "-0.01em",
@@ -46,9 +46,9 @@ export function Greeting({
       <p
         style={{
           fontSize: 13,
-          color: "var(--text-2)",
-          marginTop: 4,
+          color: "var(--text-3)",
           margin: 0,
+          marginTop: 3,
         }}
         suppressHydrationWarning={!mounted}
       >

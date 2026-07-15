@@ -23,14 +23,14 @@ export function HomeQuickActions() {
     >
       <ButtonNew
         variant="primary"
-        icon={<CalendarPlus size={14} />}
+        icon={<CalendarPlus size={16} strokeWidth={1.75} />}
         onClick={() => openAppt({ openAgendaAfter: true })}
       >
         {t("home.quickActions.newAppointment")}
       </ButtonNew>
       <ButtonNew
         variant="secondary"
-        icon={<UserPlus size={14} />}
+        icon={<UserPlus size={16} strokeWidth={1.75} />}
         onClick={() => openPatient()}
       >
         {t("home.quickActions.newPatient")}

@@ -105,17 +105,36 @@ export function HeroNextPatient({ appt }: { appt: NextAppt }) {
           )}
           <div
             style={{
+              display: "flex",
+              alignItems: "center",
+              flexWrap: "wrap",
+              gap: 8,
               fontSize: 13,
               color: "var(--text-1)",
               marginTop: 8,
               lineHeight: 1.5,
             }}
           >
-            <strong style={{ fontFamily: "var(--font-mono, monospace)", fontWeight: 500 }}>
+            <span
+              style={{
+                flex: "none",
+                minWidth: 72,
+                textAlign: "center",
+                padding: "4px 8px",
+                borderRadius: 8,
+                background: "var(--brand-soft)",
+                color: "var(--trial-accent-calm)",
+                fontSize: 12,
+                fontWeight: 600,
+                fontVariantNumeric: "tabular-nums",
+                whiteSpace: "nowrap",
+              }}
+            >
               {formatShortTime(appt.startsAt)}
-            </strong>{" "}
-            ·{" "}
-            {appt.reason ?? t("home.heroNextPatient.defaultReason")}
+            </span>
+            <span style={{ minWidth: 0 }}>
+              {appt.reason ?? t("home.heroNextPatient.defaultReason")}
+            </span>
           </div>
 
           {(firstAllergy || firstMed) && (
@@ -131,7 +150,7 @@ export function HeroNextPatient({ appt }: { appt: NextAppt }) {
                         count: totalAlerts,
                       })}
                     >
-                      <AlertTriangle size={11} aria-hidden />
+                      <AlertTriangle size={12} strokeWidth={1.75} aria-hidden />
                       {t("home.heroNextPatient.allergyLabel")}: {firstAllergy}
                       {totalAlerts > 1 ? ` +${totalAlerts - 1}` : ""}
                     </button>
@@ -143,7 +162,7 @@ export function HeroNextPatient({ appt }: { appt: NextAppt }) {
                   alerts={appt.patientAlerts ?? {}}
                   trigger={
                     <button type="button" style={alertChipStyle("warning")}>
-                      <Pill size={11} aria-hidden />
+                      <Pill size={12} strokeWidth={1.75} aria-hidden />
                       {firstMed}
                     </button>
                   }
@@ -181,13 +200,15 @@ export function HeroNextPatient({ appt }: { appt: NextAppt }) {
             border: "none",
             cursor: "pointer",
             fontFamily: "inherit",
+            transition:
+              "background var(--dur-1) var(--ease), box-shadow var(--dur-1) var(--ease)",
             boxShadow:
               "0 0 0 1px rgba(124,58,237,0.5), 0 4px 16px -4px rgba(124,58,237,0.5), inset 0 1px 0 rgba(255,255,255,0.15)",
           }}
           onMouseEnter={(e) => (e.currentTarget.style.background = "#8b5cf6")}
           onMouseLeave={(e) => (e.currentTarget.style.background = "var(--brand)")}
         >
-          <Play size={14} />
+          <Play size={16} strokeWidth={1.75} />
           {isAlreadyActive
             ? t("home.heroNextPatient.consultInProgress")
             : t("home.heroNextPatient.startConsult")}
@@ -207,7 +228,7 @@ export function HeroNextPatient({ appt }: { appt: NextAppt }) {
             e.currentTarget.style.borderColor = "var(--border-strong)";
           }}
         >
-          <FileText size={14} />
+          <FileText size={16} strokeWidth={1.75} />
           {t("home.heroNextPatient.viewRecord")}
         </button>
         <button
@@ -225,7 +246,7 @@ export function HeroNextPatient({ appt }: { appt: NextAppt }) {
             e.currentTarget.style.borderColor = "var(--border-strong)";
           }}
         >
-          <Sparkles size={14} />
+          <Sparkles size={16} strokeWidth={1.75} />
           {t("home.heroNextPatient.aiAssist")}
         </button>
       </div>
@@ -281,5 +302,6 @@ const secondaryCtaStyle: React.CSSProperties = {
   border: "1px solid var(--border-strong)",
   cursor: "pointer",
   fontFamily: "inherit",
-  transition: "all 0.15s",
+  transition:
+    "background var(--dur-1) var(--ease), border-color var(--dur-1) var(--ease)",
 };

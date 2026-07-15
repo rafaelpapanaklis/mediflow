@@ -44,23 +44,27 @@ export function RecentPatientsCarousel({ patients }: { patients: Patient[] }) {
             alignItems: "center",
             gap: 8,
             scrollSnapAlign: "start",
-            transition: "border-color 0.15s, background 0.15s",
+            boxShadow: "var(--shadow-1)",
+            transition:
+              "border-color var(--dur-1) var(--ease), background var(--dur-1) var(--ease), box-shadow var(--dur-1) var(--ease)",
             textAlign: "center",
           }}
           onMouseEnter={(e) => {
             e.currentTarget.style.borderColor = "var(--border-brand)";
-            e.currentTarget.style.background = "var(--bg-elev-2)";
+            e.currentTarget.style.background = "var(--bg-hover)";
+            e.currentTarget.style.boxShadow = "var(--shadow-2)";
           }}
           onMouseLeave={(e) => {
             e.currentTarget.style.borderColor = "var(--border-soft)";
             e.currentTarget.style.background = "var(--bg-elev)";
+            e.currentTarget.style.boxShadow = "var(--shadow-1)";
           }}
         >
           <AvatarNew name={p.name} size="lg" />
           <div
             style={{
-              fontSize: 12,
-              fontWeight: 500,
+              fontSize: 13.5,
+              fontWeight: 600,
               color: "var(--text-1)",
               whiteSpace: "nowrap",
               overflow: "hidden",
@@ -71,7 +75,13 @@ export function RecentPatientsCarousel({ patients }: { patients: Patient[] }) {
           >
             {p.name}
           </div>
-          <div style={{ fontSize: 10, color: "var(--text-2)" }}>
+          <div
+            style={{
+              fontSize: 12,
+              color: "var(--text-3)",
+              fontVariantNumeric: "tabular-nums",
+            }}
+          >
             {formatRelative(p.lastVisitAt)}
           </div>
         </Link>

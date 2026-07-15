@@ -1,10 +1,11 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
-import { Search, FlaskConical } from "lucide-react";
+import { Search, FlaskConical, ChevronRight, ArrowLeft } from "lucide-react";
 import { Label } from "@/components/ui/label";
 import toast from "react-hot-toast";
 import { useT } from "@/i18n/i18n-provider";
+import styles from "./formulas.module.css";
 
 interface Patient {
   id: string;
@@ -57,11 +58,11 @@ export function FormulasClient({ patients }: { patients: Patient[] }) {
 
   function renderFormula(formula: Record<string, unknown>) {
     return (
-      <div className="bg-muted rounded-lg p-3 mt-2">
+      <div className={styles.formulaBox}>
         {Object.entries(formula).map(([key, value]) => (
-          <div key={key} className="flex justify-between text-sm py-0.5">
-            <span className="font-medium text-muted-foreground">{key}:</span>
-            <span>{String(value)}</span>
+          <div key={key} className={styles.formulaRow}>
+            <span className={styles.formulaKey}>{key}:</span>
+            <span className={styles.formulaVal}>{String(value)}</span>
           </div>
         ))}
       </div>
@@ -69,19 +70,21 @@ export function FormulasClient({ patients }: { patients: Patient[] }) {
   }
 
   return (
-    <div>
-      <div className="mb-6">
-        <h1 className="text-2xl font-extrabold">{t("pages.formulas.title")}</h1>
-        <p className="text-sm text-muted-foreground mt-0.5">{t("pages.formulas.subtitle")}</p>
+    <div className={styles.page}>
+      <div className={styles.head}>
+        <div>
+          <h1 className={styles.title}>{t("pages.formulas.title")}</h1>
+          <p className={styles.subtitle}>{t("pages.formulas.subtitle")}</p>
+        </div>
       </div>
 
       {/* Patient search */}
-      <div className="mb-6 space-y-1.5">
-        <Label className="text-sm">{t("pages.formulas.searchPatient")}</Label>
-        <div className="relative max-w-md">
-          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+      <div className={styles.section}>
+        <Label className={styles.fieldLabel}>{t("pages.formulas.searchPatient")}</Label>
+        <div className={styles.searchWrap}>
+          <Search size={16} strokeWidth={1.75} className={styles.searchIcon} aria-hidden="true" />
           <input
-            className="flex h-11 w-full rounded-xl border border-border bg-card pl-11 pr-4 text-base focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+            className={styles.searchInput}
             placeholder={t("pages.formulas.patientNamePlaceholder")}
             value={search}
             onChange={e => setSearch(e.target.value)}
@@ -91,58 +94,61 @@ export function FormulasClient({ patients }: { patients: Patient[] }) {
 
       {/* Patient list */}
       {!selectedPatient && (
-        <div className="bg-card border border-border rounded-xl overflow-hidden">
-          {filteredPatients.slice(0, 20).map((p, idx) => (
+        <div className={styles.patientList}>
+          {filteredPatients.slice(0, 20).map((p) => (
             <button
               key={p.id}
               onClick={() => { setSelectedPatient(p.id); setSearch(""); }}
-              className={`w-full text-left px-5 py-3 hover:bg-muted/10 transition-colors ${idx > 0 ? "border-t border-border/50" : ""}`}
+              className={styles.patientRow}
             >
-              <span className="text-sm font-medium">{p.firstName} {p.lastName}</span>
+              <span className={styles.patientRowName}>{p.firstName} {p.lastName}</span>
+              <ChevronRight size={16} strokeWidth={1.75} className={styles.patientRowChevron} aria-hidden="true" />
             </button>
           ))}
           {filteredPatients.length === 0 && (
-            <div className="text-center py-8 text-muted-foreground text-sm">{t("common.noResults")}</div>
+            <div className={styles.emptyRow}>{t("common.noResults")}</div>
           )}
         </div>
       )}
 
       {/* Selected patient header */}
       {selectedPatient && (
-        <div className="mb-4">
+        <div className={styles.selectedHead}>
           <button
             onClick={() => setSelectedPatient("")}
-            className="text-sm text-brand-600 hover:underline mb-2"
+            className={styles.backBtn}
           >
-            &larr; {t("pages.formulas.backToList")}
+            <ArrowLeft size={16} strokeWidth={1.75} aria-hidden="true" /> {t("pages.formulas.backToList")}
           </button>
-          <h2 className="text-lg font-bold">
+          <h2 className={styles.selectedName}>
             {patients.find(p => p.id === selectedPatient)?.firstName}{" "}
             {patients.find(p => p.id === selectedPatient)?.lastName}
           </h2>
         </div>
       )}
 
-      {loading && <p className="text-sm text-muted-foreground">{t("pages.formulas.loading")}</p>}
+      {loading && <p className={styles.loading}>{t("pages.formulas.loading")}</p>}
 
       {/* Formula records */}
       {selectedPatient && !loading && (
-        <div className="space-y-3">
+        <div className={styles.recordList}>
           {records.map(record => (
-            <div key={record.id} className="bg-card border border-border rounded-xl p-5">
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-bold">{TYPE_LABEL_KEYS[record.type] ? t(TYPE_LABEL_KEYS[record.type]) : record.type}</span>
-                <span className="text-xs text-muted-foreground">{new Date(record.appliedAt).toLocaleDateString("es-MX")}</span>
+            <div key={record.id} className={styles.recordCard}>
+              <div className={styles.recordHead}>
+                <span className={styles.recordType}>{TYPE_LABEL_KEYS[record.type] ? t(TYPE_LABEL_KEYS[record.type]) : record.type}</span>
+                <span className={styles.recordDate}>{new Date(record.appliedAt).toLocaleDateString("es-MX")}</span>
               </div>
-              {record.appliedBy && <p className="text-xs text-muted-foreground mt-1">{t("pages.formulas.appliedBy")}: {record.appliedBy}</p>}
-              {record.notes && <p className="text-sm text-muted-foreground mt-1">{record.notes}</p>}
+              {record.appliedBy && <p className={styles.recordMeta}>{t("pages.formulas.appliedBy")}: {record.appliedBy}</p>}
+              {record.notes && <p className={styles.recordNotes}>{record.notes}</p>}
               {renderFormula(record.formula as Record<string, unknown>)}
             </div>
           ))}
           {records.length === 0 && (
-            <div className="text-center py-16 text-muted-foreground">
-              <FlaskConical className="w-12 h-12 mx-auto mb-3 opacity-20" />
-              <p className="text-base font-semibold">{t("pages.formulas.emptyState")}</p>
+            <div className={styles.emptyCard}>
+              <span className={styles.emptyIcon} aria-hidden="true">
+                <FlaskConical size={22} strokeWidth={1.75} />
+              </span>
+              <p className={styles.emptyTitle}>{t("pages.formulas.emptyState")}</p>
             </div>
           )}
         </div>

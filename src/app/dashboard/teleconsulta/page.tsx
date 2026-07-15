@@ -4,6 +4,8 @@ import { prisma } from "@/lib/prisma";
 import { timeHHMMInTz } from "@/lib/agenda/legacy-helpers";
 import { getServerT } from "@/i18n/server";
 import Link from "next/link";
+import { ArrowRight, Plus, Video } from "lucide-react";
+import styles from "./teleconsulta.module.css";
 
 export default async function TeleconsultaPage() {
   const { t } = await getServerT();
@@ -20,53 +22,57 @@ export default async function TeleconsultaPage() {
   });
 
   return (
-    <div>
-      <div className="flex items-center justify-between mb-6">
+    <div className={styles.page}>
+      <div className={styles.header}>
         <div>
-          <h1 className="text-2xl font-extrabold flex items-center gap-2">📹 {t("pages.teleconsulta.title")}</h1>
-          <p className="text-base text-muted-foreground mt-0.5">{t("pages.teleconsulta.registeredCount", { count: appointments.length })}</p>
+          <h1 className={styles.title}>
+            <span className={styles.titleIcon}><Video size={20} strokeWidth={1.75} aria-hidden /></span>
+            {t("pages.teleconsulta.title")}
+          </h1>
+          <p className={styles.subtitle}>{t("pages.teleconsulta.registeredCount", { count: appointments.length })}</p>
         </div>
-        <Link href="/dashboard/appointments?new=1" className="flex items-center gap-2 px-4 py-2.5 bg-brand-600 hover:bg-brand-700 text-white rounded-xl font-semibold text-sm transition-colors">
-          + {t("pages.teleconsulta.newTeleconsultation")}
+        <Link href="/dashboard/appointments?new=1" className={styles.newBtn}>
+          <Plus size={16} strokeWidth={1.75} aria-hidden /> {t("pages.teleconsulta.newTeleconsultation")}
         </Link>
       </div>
 
-      <div className="bg-card border border-border rounded-2xl shadow-card overflow-hidden">
-        <table className="w-full text-sm">
+      <div className={styles.card}>
+        <div className={styles.scroll}>
+        <table className={styles.table}>
           <thead>
-            <tr className="border-b border-border bg-muted/30">
+            <tr>
               {[t("pages.teleconsulta.colPatient"),t("pages.teleconsulta.colDoctor"),t("common.date"),t("pages.teleconsulta.colTime"),t("pages.teleconsulta.colPayment"),t("common.status"),""].map(h => (
-                <th key={h} className="text-left px-4 py-3 text-xs font-bold text-muted-foreground uppercase tracking-wide">{h}</th>
+                <th key={h}>{h}</th>
               ))}
             </tr>
           </thead>
           <tbody>
             {appointments.length === 0 ? (
-              <tr><td colSpan={7} className="px-5 py-16 text-center text-muted-foreground">
-                <div className="text-4xl mb-3">📹</div>
-                <div className="text-base font-semibold mb-1">{t("pages.teleconsulta.emptyTitle")}</div>
-                <div className="text-sm">{t("pages.teleconsulta.emptyHint")}</div>
+              <tr><td colSpan={7} className={styles.empty}>
+                <div className={styles.emptyIcon}><Video size={20} strokeWidth={1.75} aria-hidden /></div>
+                <div className={styles.emptyTitle}>{t("pages.teleconsulta.emptyTitle")}</div>
+                <div className={styles.emptyHint}>{t("pages.teleconsulta.emptyHint")}</div>
               </td></tr>
             ) : appointments.map(a => (
-              <tr key={a.id} className="border-b border-border/60 hover:bg-muted/20 transition-colors">
-                <td className="px-4 py-3 font-semibold">{a.patient.firstName} {a.patient.lastName}</td>
-                <td className="px-4 py-3 text-muted-foreground">{t("pages.teleconsulta.doctorPrefix")} {a.doctor.firstName} {a.doctor.lastName}</td>
-                <td className="px-4 py-3 text-muted-foreground">{new Intl.DateTimeFormat("es-MX", { timeZone: tz, day: "numeric", month: "short" }).format(a.startsAt)}</td>
-                <td className="px-4 py-3 font-mono">{timeHHMMInTz(a.startsAt, tz)}</td>
-                <td className="px-4 py-3">
-                  <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${a.paymentStatus === "paid" ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300" : "bg-amber-50 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300"}`}>
+              <tr key={a.id}>
+                <td className={styles.cellStrong}>{a.patient.firstName} {a.patient.lastName}</td>
+                <td className={styles.cellMuted}>{t("pages.teleconsulta.doctorPrefix")} {a.doctor.firstName} {a.doctor.lastName}</td>
+                <td className={styles.cellMuted}>{new Intl.DateTimeFormat("es-MX", { timeZone: tz, day: "numeric", month: "short" }).format(a.startsAt)}</td>
+                <td className={styles.cellTime}>{timeHHMMInTz(a.startsAt, tz)}</td>
+                <td>
+                  <span className={`${styles.pill} ${a.paymentStatus === "paid" ? styles.pillPaid : styles.pillPending}`}>
                     {a.paymentStatus === "paid" ? t("pages.teleconsulta.paid") : t("pages.teleconsulta.pending")}
                   </span>
                 </td>
-                <td className="px-4 py-3">
-                  <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${a.status === "COMPLETED" ? "bg-muted text-muted-foreground" : "bg-brand-600/15 text-brand-700"}`}>
+                <td>
+                  <span className={`${styles.pill} ${a.status === "COMPLETED" ? styles.pillDone : styles.pillActive}`}>
                     {a.status === "COMPLETED" ? t("pages.teleconsulta.completed") : a.status}
                   </span>
                 </td>
-                <td className="px-4 py-3">
+                <td>
                   {a.paymentStatus === "paid" && a.status !== "COMPLETED" && (
-                    <Link href={`/teleconsulta/${a.id}?role=doctor`} target="_blank" className="text-xs font-semibold text-violet-600 hover:underline">
-                      {t("pages.teleconsulta.join")} →
+                    <Link href={`/teleconsulta/${a.id}?role=doctor`} target="_blank" className={styles.joinLink}>
+                      {t("pages.teleconsulta.join")} <ArrowRight size={14} strokeWidth={1.75} aria-hidden />
                     </Link>
                   )}
                 </td>
@@ -74,6 +80,7 @@ export default async function TeleconsultaPage() {
             ))}
           </tbody>
         </table>
+        </div>
       </div>
     </div>
   );

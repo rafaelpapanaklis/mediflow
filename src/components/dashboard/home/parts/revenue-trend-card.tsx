@@ -119,7 +119,7 @@ export function RevenueTrendCard({ initialData }: { initialData: SeriesPoint[] }
           <div
             style={{
               opacity: loading ? 0.45 : 1,
-              transition: "opacity 0.18s ease",
+              transition: "opacity var(--dur-1) var(--ease)",
             }}
           >
             <RevenueAreaChart data={series} />
