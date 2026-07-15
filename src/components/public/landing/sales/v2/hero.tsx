@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { HERO } from "./landing-data";
 import { HeroDashboardMock } from "./mockups";
 
@@ -14,9 +13,9 @@ export function Hero() {
           <h1 style={{ fontSize: "clamp(34px,4.6vw,54px)", lineHeight: 1.08, fontWeight: 800, letterSpacing: "-0.03em", margin: "0 0 18px" }}>{HERO.title}</h1>
           <p style={{ fontSize: 18, lineHeight: 1.6, color: "#475569", margin: "0 0 28px", maxWidth: 520 }}>{HERO.subtitle}</p>
           <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
-            <Link href="/signup" className="dcv2-btn-primary" style={{ fontSize: 16, padding: "15px 28px", borderRadius: 12, boxShadow: "0 10px 26px rgba(37,99,235,.32)" }}>
+            <a href="#precios" className="dcv2-btn-primary" style={{ fontSize: 16, padding: "15px 28px", borderRadius: 12, boxShadow: "0 10px 26px rgba(37,99,235,.32)", textDecoration: "none" }}>
               {HERO.ctaPrimary}
-            </Link>
+            </a>
             <a href="#precios" className="dcv2-btn-hero-sec" style={{ fontSize: 16, fontWeight: 700, padding: "15px 28px", borderRadius: 12, background: "#fff", color: "#1d4ed8", border: "1.5px solid #bfdbfe", textDecoration: "none" }}>
               {HERO.ctaSecondary}
             </a>
