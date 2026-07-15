@@ -11,6 +11,8 @@ import { HomeReceptionist } from "@/components/dashboard/home/home-receptionist"
 import { HomeDoctor } from "@/components/dashboard/home/home-doctor";
 import { HomeAdmin } from "@/components/dashboard/home/home-admin";
 import { HomeClientSwitch } from "./home-client-switch";
+import { OnboardingChecklist } from "@/components/dashboard/onboarding-checklist";
+import { getOnboardingCompleted } from "@/lib/onboarding-steps-server";
 
 export const dynamic = "force-dynamic";
 
@@ -59,16 +61,22 @@ export default async function DashboardHomePage({ searchParams }: PageProps) {
     role === "ADMIN" || role === "SUPER_ADMIN";
 
   if (isAdminLike) {
-    // hybridCheck y adminData no dependen entre sí — una sola ronda en
-    // paralelo; solo doctorData queda condicionado al resultado del check.
-    const [hybridCheck, adminData] = await Promise.all([
+    // hybridCheck, adminData y el estado de onboarding no dependen entre sí —
+    // una sola ronda en paralelo; solo doctorData queda condicionado al check.
+    // getOnboardingCompleted ya corrió en el layout (React.cache) ⇒ 0 queries
+    // extra aquí: solo alimenta el checklist "Primeros pasos" del home (admins).
+    const [hybridCheck, adminData, onboardingCompleted] = await Promise.all([
       fetchHybridRoleCheck(),
       fetchAdminData(period),
+      getOnboardingCompleted(clinic.id, clinic.waConnected),
     ]);
     const doctorData = hybridCheck.canBeDoctor ? await fetchDoctorData() : null;
 
     return (
       <HomeShell>
+        {/* Checklist de primeros pasos — solo admins; se auto-oculta al 100%
+            o si el usuario lo descartó (localStorage por clinicId). */}
+        <OnboardingChecklist completed={onboardingCompleted} clinicId={clinic.id} />
         <HomeClientSwitch
           user={homeUser}
           clinic={homeClinic}

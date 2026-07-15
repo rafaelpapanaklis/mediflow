@@ -33,7 +33,7 @@ export function OnboardingChecklist({ completed: initial, clinicId }: Props) {
   if (dismissed || done) return null;
 
   return (
-    <div className="bg-card border border-border rounded-2xl overflow-hidden shadow-sm">
+    <div className="mb-6 bg-card border border-border rounded-2xl overflow-hidden shadow-sm">
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-border">
         <div className="flex items-center gap-2">
