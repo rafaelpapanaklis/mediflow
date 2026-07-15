@@ -402,6 +402,17 @@ export function pageview(path: string): void {
 
 export function start(): void {
   if (started || typeof window === "undefined") return;
+  // NO arrancar dentro de un <iframe>: el visor del heatmap (/admin/analytics) embebe
+  // páginas REALES de la app para dibujar el mapa de calor encima del layout. Si el
+  // tracker corriera ahí, generaría pageviews/clicks FALSOS que ensuciarían la
+  // analítica. Fuera de un iframe self === top; si comparar lanza (frame cross-origin)
+  // también asumimos enmarcado y no arrancamos. Es el único punto de entrada: pageview()
+  // y stop() ya checan `started`, así que con no marcarlo, todo queda inerte.
+  try {
+    if (window.self !== window.top) return;
+  } catch {
+    return;
+  }
   started = true;
   vid = ensureVisitor();
   sid = ensureSession();
