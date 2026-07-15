@@ -54,6 +54,19 @@ export async function middleware(request: NextRequest) {
     }
   }
 
+  // x-pathname para TODA ruta /api: getAuthContext / getCurrentUser (runtime
+  // Node) lo leen con headers() para aplicar el gate de plan vencido por-ruta
+  // (allowlist de pago/auth en @/lib/plan-status). Se RE-ESCRIBE siempre con el
+  // pathname real, así un cliente no puede spoofear el header. NO corremos
+  // updateSession aquí: las rutas /api hacen su propia auth (leen cookies
+  // directo) y los webhooks/crons no deben pagar el refresh de sesión Supabase.
+  // /api/live ya salió arriba (público, sin gate).
+  if (pathname.startsWith("/api")) {
+    const requestHeaders = new Headers(request.headers);
+    requestHeaders.set("x-pathname", pathname);
+    return NextResponse.next({ request: { headers: requestHeaders } });
+  }
+
   if (pathname.startsWith("/admin") && pathname !== "/admin/login") {
     // Edge runtime: NO puede consultar Prisma. Aquí sólo se valida PRESENCIA de
     // la cookie (gate barato anti-flash). La validación REAL de la sesión —viva,
@@ -109,5 +122,7 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/dashboard/:path*", "/admin/:path*", "/api/admin/:path*", "/proveedores/:path*"],
+  // /api/:path* (superset de /api/admin) para inyectar x-pathname en toda ruta
+  // /api y habilitar el gate de plan vencido en getAuthContext/getCurrentUser.
+  matcher: ["/dashboard/:path*", "/admin/:path*", "/api/:path*", "/proveedores/:path*"],
 };

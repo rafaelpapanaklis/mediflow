@@ -24,8 +24,7 @@ import {
   TWO_FA_CHALLENGE_PATH,
   TWO_FA_SETUP_PATH,
 } from "@/lib/auth/two-factor-constants";
-
-const ACTIVE_SUBSCRIPTION_STATUSES = new Set(["active", "trialing", "paid"]);
+import { ACTIVE_SUBSCRIPTION_STATUSES, isPlanExpired } from "@/lib/plan-status";
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const user = await getCurrentUser();
@@ -99,8 +98,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
   const subscriptionStatus = (clinic as { subscriptionStatus?: string | null }).subscriptionStatus ?? null;
   const subscriptionActive =
     subscriptionStatus !== null && ACTIVE_SUBSCRIPTION_STATUSES.has(subscriptionStatus);
-  const trialExpired = !!trialEndsAt && trialEndsAt < now;
-  const isExpired = trialExpired && !subscriptionActive;
+  const isExpired = isPlanExpired(clinic);
   const isInTrial = !!trialEndsAt && trialEndsAt > now && !subscriptionActive;
 
   // Redirect server-side a la pantalla de pago. Excepción: la propia

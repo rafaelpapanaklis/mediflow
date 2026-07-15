@@ -1,7 +1,9 @@
 import { createClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
 import { NextRequest, NextResponse } from "next/server";
+import { headers } from "next/headers";
 import { readActiveClinicCookie, logClinicFallback } from "@/lib/active-clinic";
+import { isPlanExpired, isApiPathBlockedForExpiredPlan } from "@/lib/plan-status";
 
 export interface AuthContext {
   userId:       string;
@@ -15,6 +17,9 @@ export interface AuthContext {
   // denyIfMissingPermission(ctx, "billing.refund").
   permissionsOverride: string[];
   clinicCategory: string; // ClinicCategory enum value
+  // Plan vencido (trial expirado y suscripción no activa). Ver isPlanExpired
+  // en @/lib/plan-status. Expuesto para callers que quieran degradar la UI/UX.
+  isPlanExpired: boolean;
   // Role helpers
   isSuperAdmin: boolean;  // Platform owner — global access
   isAdmin:      boolean;  // Clinic admin — full access to their clinic
@@ -84,6 +89,23 @@ export async function getAuthContext(): Promise<AuthContext | null> {
     const permissionsOverride: string[] =
       ((finalUser as any).permissionsOverride as string[] | null | undefined) ?? [];
 
+    // Gate central de plan vencido a nivel API. Si la clínica está vencida
+    // (trial expirado + suscripción no activa) y la request va a una ruta
+    // /api NO exenta (allowlist de pago/auth en @/lib/plan-status), cortamos
+    // devolviendo null → la ruta responde 401, igual que con sesión inválida.
+    // El pathname lo inyecta el middleware en x-pathname para TODA ruta /api;
+    // si falta (páginas server, callers no-API) NO bloqueamos — el layout de
+    // /dashboard ya redirige esas navegaciones a /dashboard/suspended. El
+    // gate aplica a TODOS los roles (un SUPER_ADMIN destraba desde /admin,
+    // ruta con su propia auth, no cubierta por este check).
+    const planExpired = isPlanExpired(finalUser.clinic);
+    if (planExpired) {
+      const pathname = (() => {
+        try { return headers().get("x-pathname"); } catch { return null; }
+      })();
+      if (isApiPathBlockedForExpiredPlan(pathname)) return null;
+    }
+
     return {
       userId:         finalUser.id,
       clinicId:       finalUser.clinicId,
@@ -93,6 +115,7 @@ export async function getAuthContext(): Promise<AuthContext | null> {
       user:           { ...finalUser, permissionsOverride },
       permissionsOverride,
       clinicCategory: (finalUser.clinic as any).category ?? "OTHER",
+      isPlanExpired:  planExpired,
       isSuperAdmin,
       isAdmin,
       isDoctor,

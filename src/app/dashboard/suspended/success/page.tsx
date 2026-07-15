@@ -2,14 +2,13 @@ import Link from "next/link";
 import { CheckCircle2, Loader2 } from "lucide-react";
 import { getCurrentUser } from "@/lib/auth";
 import { getServerT } from "@/i18n/server";
+import { ACTIVE_SUBSCRIPTION_STATUSES } from "@/lib/plan-status";
 
 export const dynamic = "force-dynamic";
 
 interface PageProps {
   searchParams?: { session_id?: string };
 }
-
-const ACTIVE_SUBSCRIPTION_STATUSES = new Set(["active", "trialing", "paid"]);
 
 export default async function SuspendedSuccessPage({ searchParams }: PageProps) {
   const { t } = await getServerT();

@@ -1,8 +1,10 @@
 import { cache } from "react";
+import { headers } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
 import { redirect } from "next/navigation";
 import { readActiveClinicCookie, logClinicFallback } from "@/lib/active-clinic";
+import { isPlanExpired, isApiPathBlockedForExpiredPlan } from "@/lib/plan-status";
 
 // getSession/getCurrentUser/getUserClinics van memoizadas por request con
 // React cache(): layout, page y route handlers invocados in-process dentro
@@ -30,6 +32,21 @@ function normalizeUser<T extends { permissionsOverride?: string[] | null } & obj
   return { ...u, permissionsOverride: (u.permissionsOverride as string[] | null | undefined) ?? [] };
 }
 
+// Gate de plan vencido para los route handlers que autentican vía
+// getCurrentUser (segundo camino además de getAuthContext). Si el plan venció
+// y la request va a una ruta /api NO exenta (allowlist de pago/auth), cortamos
+// con redirect a /dashboard/suspended — getCurrentUser no puede devolver null,
+// pero el redirect impide que el handler corra y el dato salga. Sólo dispara
+// en /api: las páginas server (pathname /dashboard/*) las cubre el layout, y
+// para callers sin x-pathname es no-op. Mismo criterio que getAuthContext.
+function enforceApiPlanGate(clinic: unknown): void {
+  if (!isPlanExpired(clinic as { trialEndsAt?: Date | string | null; subscriptionStatus?: string | null } | null)) return;
+  const pathname = (() => {
+    try { return headers().get("x-pathname"); } catch { return null; }
+  })();
+  if (isApiPathBlockedForExpiredPlan(pathname)) redirect("/dashboard/suspended");
+}
+
 export const getCurrentUser = cache(async () => {
   const supabaseUser = await requireAuth();
   const activeClinicId = readActiveClinicCookie();
@@ -39,7 +56,10 @@ export const getCurrentUser = cache(async () => {
       where: { supabaseId: supabaseUser.id, clinicId: activeClinicId, isActive: true },
       include: { clinic: true },
     });
-    if (user) return normalizeUser(user);
+    if (user) {
+      enforceApiPlanGate(user.clinic);
+      return normalizeUser(user);
+    }
   }
 
   const candidates = await prisma.user.findMany({
@@ -84,6 +104,7 @@ export const getCurrentUser = cache(async () => {
     }));
   }
 
+  enforceApiPlanGate(user.clinic);
   return normalizeUser(user);
 });
 
