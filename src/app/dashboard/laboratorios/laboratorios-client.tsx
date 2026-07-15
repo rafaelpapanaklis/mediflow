@@ -14,6 +14,7 @@ import {
   Gauge,
   Building2,
   ChevronRight,
+  ClipboardList,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { BadgeNew, KpiCard } from "@/components/ui/design-system";
@@ -431,40 +432,55 @@ export function LaboratoriosClient({ initialLabs }: { initialLabs: Lab[] }) {
             zIndex: 1,
             display: "flex",
             alignItems: "center",
-            gap: 14,
+            justifyContent: "space-between",
+            flexWrap: "wrap",
+            gap: 16,
           }}
         >
-          <div
-            style={{
-              width: 40,
-              height: 40,
-              borderRadius: 12,
-              flexShrink: 0,
-              display: "grid",
-              placeItems: "center",
-              color: "#fff",
-              background: "linear-gradient(135deg, var(--violet-400), var(--brand))",
-              boxShadow: "0 8px 20px -8px rgba(124,58,237,0.6)",
-            }}
-          >
-            <FlaskConical size={22} />
-          </div>
-          <div>
-            <h1
+          <div style={{ display: "flex", alignItems: "center", gap: 14, minWidth: 0 }}>
+            <div
               style={{
-                fontSize: 22,
-                color: "var(--text-1)",
-                fontWeight: 600,
-                letterSpacing: "-0.02em",
-                margin: 0,
+                width: 40,
+                height: 40,
+                borderRadius: 12,
+                flexShrink: 0,
+                display: "grid",
+                placeItems: "center",
+                color: "#fff",
+                background: "linear-gradient(135deg, var(--violet-400), var(--brand))",
+                boxShadow: "0 8px 20px -8px rgba(124,58,237,0.6)",
               }}
             >
-              {t("procurement.labsClient.heroTitle")}
-            </h1>
-            <p style={{ color: "var(--text-3)", fontSize: 14, marginTop: 4 }}>
-              {t("procurement.labsClient.heroSubtitle")}
-            </p>
+              <FlaskConical size={22} />
+            </div>
+            <div>
+              <h1
+                style={{
+                  fontSize: 22,
+                  color: "var(--text-1)",
+                  fontWeight: 600,
+                  letterSpacing: "-0.02em",
+                  margin: 0,
+                }}
+              >
+                {t("procurement.labsClient.heroTitle")}
+              </h1>
+              <p style={{ color: "var(--text-3)", fontSize: 14, marginTop: 4 }}>
+                {t("procurement.labsClient.heroSubtitle")}
+              </p>
+            </div>
           </div>
+          {/* CTA primario al historial de órdenes (espejo de "Explorar laboratorios"
+              del lado de órdenes). Crear una orden concreta ocurre dentro de la ficha
+              del lab, así que aquí el primario lleva a "Órdenes". */}
+          <Link
+            href="/dashboard/ordenes-laboratorio"
+            className="btn-new btn-new--primary"
+            style={{ flexShrink: 0, textDecoration: "none" }}
+          >
+            <ClipboardList size={16} />
+            {t("procurement.ordenesClient.kpiOrders")}
+          </Link>
         </div>
       </div>
 

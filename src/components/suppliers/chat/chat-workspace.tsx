@@ -61,6 +61,25 @@ function fmtThreadTime(iso: string): string {
     ? fmtClock(iso)
     : d.toLocaleDateString("es-MX", { day: "2-digit", month: "2-digit" });
 }
+// Separadores de día (chip centrado): comparación/format puros, sin estado.
+function sameDay(a: string, b: string): boolean {
+  const x = new Date(a);
+  const y = new Date(b);
+  return (
+    x.getFullYear() === y.getFullYear() &&
+    x.getMonth() === y.getMonth() &&
+    x.getDate() === y.getDate()
+  );
+}
+function fmtDayLabel(iso: string): string {
+  const d = new Date(iso);
+  const now = new Date();
+  const startOf = (t: Date) => new Date(t.getFullYear(), t.getMonth(), t.getDate()).getTime();
+  const diff = Math.round((startOf(now) - startOf(d)) / 86400000);
+  if (diff === 0) return "Hoy";
+  if (diff === 1) return "Ayer";
+  return d.toLocaleDateString("es-MX", { weekday: "long", day: "numeric", month: "long" });
+}
 function initials(name: string): string {
   return (
     name
@@ -355,7 +374,7 @@ export function ChatWorkspace({
   const selected = threads.find((t) => t.id === selectedId) ?? null;
 
   return (
-    <div className="flex h-[calc(100dvh-8.5rem)] min-h-[460px] w-full overflow-hidden rounded-xl border border-border bg-card shadow-sm">
+    <div className="flex h-[calc(100dvh-8.5rem)] min-h-[460px] w-full overflow-hidden rounded-[var(--radius-lg)] border border-border bg-card shadow-[var(--shadow-1)]">
       {/* ── Bandeja de hilos ── */}
       <aside
         className={cn(
@@ -374,7 +393,7 @@ export function ChatWorkspace({
             <p className="p-4 text-sm text-muted-foreground">Cargando…</p>
           ) : threads.length === 0 ? (
             <div className="px-6 py-10 text-center text-sm text-muted-foreground">
-              <MessageCircle className="mx-auto mb-2 opacity-40" size={28} />
+              <MessageCircle className="mx-auto mb-3" size={20} />
               {side === "CLINIC"
                 ? "Aún no tienes conversaciones. Abre el chat desde el perfil de un proveedor."
                 : "Aún no tienes conversaciones. Las clínicas iniciarán el contacto."}
@@ -392,7 +411,7 @@ export function ChatWorkspace({
                       onClick={() => selectThread(t.id)}
                       className={cn(
                         "flex w-full items-center gap-3 border-b border-border/60 px-4 py-3 text-left transition-colors hover:bg-muted",
-                        active && "bg-brand-50"
+                        active && "bg-brand-50 shadow-[inset_3px_0_0_0_var(--brand)]"
                       )}
                     >
                       <Avatar name={counterpartName(t, side)} logoUrl={counterpartLogo(t, side)} />
@@ -412,7 +431,7 @@ export function ChatWorkspace({
                               : "Sin mensajes aún"}
                           </span>
                           {unread > 0 && (
-                            <span className="ml-auto inline-flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-brand-600 px-1.5 text-[11px] font-semibold text-white">
+                            <span className="ml-auto inline-flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-brand-600 px-1.5 text-[11px] font-semibold tabular-nums text-white">
                               {unread > 99 ? "99+" : unread}
                             </span>
                           )}
@@ -432,17 +451,19 @@ export function ChatWorkspace({
         {selected ? (
           <>
             <header className="flex items-center gap-3 border-b border-border px-4 py-3">
-              <button
+              <Button
                 type="button"
+                variant="ghost"
+                size="icon"
                 onClick={() => {
                   setSelectedId(null);
                   selectedIdRef.current = null;
                 }}
-                className="rounded-md p-1 text-muted-foreground hover:bg-muted md:hidden"
+                className="h-10 w-10 shrink-0 text-muted-foreground md:hidden"
                 aria-label="Volver a la bandeja"
               >
                 <ArrowLeft size={18} />
-              </button>
+              </Button>
               <Avatar
                 name={counterpartName(selected, side)}
                 logoUrl={counterpartLogo(selected, side)}
@@ -458,35 +479,46 @@ export function ChatWorkspace({
               </div>
             </header>
 
-            <div className="scrollbar-thin flex-1 space-y-2 overflow-y-auto bg-muted/30 px-4 py-4">
+            <div className="scrollbar-thin flex-1 space-y-2 overflow-y-auto bg-card px-4 py-4">
               {loadingMessages && messages.length === 0 ? (
                 <p className="text-center text-sm text-muted-foreground">Cargando mensajes…</p>
               ) : messages.length === 0 ? (
-                <p className="py-8 text-center text-sm text-muted-foreground">
-                  No hay mensajes. Escribe el primero.
-                </p>
+                <div className="flex flex-col items-center gap-2 py-10 text-center text-sm text-muted-foreground">
+                  <MessageCircle size={20} />
+                  <p>No hay mensajes. Escribe el primero.</p>
+                </div>
               ) : (
-                messages.map((m) => {
+                messages.map((m, i) => {
                   const mine = m.sender === side;
+                  const showDay = i === 0 || !sameDay(messages[i - 1].createdAt, m.createdAt);
                   return (
-                    <div key={m.id} className={cn("flex", mine ? "justify-end" : "justify-start")}>
-                      <div
-                        className={cn(
-                          "max-w-[78%] rounded-2xl px-3 py-2 text-sm shadow-sm",
-                          mine
-                            ? "rounded-br-sm bg-brand-600 text-white"
-                            : "rounded-bl-sm bg-white text-foreground"
-                        )}
-                      >
-                        <p className="whitespace-pre-wrap break-words">{m.body}</p>
-                        <span
+                    <div key={m.id}>
+                      {showDay && (
+                        <div className="my-3 flex justify-center">
+                          <span className="rounded-full bg-[var(--bg-elev-2)] px-3 py-1 text-[12px] font-medium text-muted-foreground">
+                            {fmtDayLabel(m.createdAt)}
+                          </span>
+                        </div>
+                      )}
+                      <div className={cn("flex", mine ? "justify-end" : "justify-start")}>
+                        <div
                           className={cn(
-                            "mt-1 block text-right text-[10px]",
-                            mine ? "text-white/70" : "text-muted-foreground"
+                            "max-w-[78%] rounded-[var(--radius-lg)] px-3 py-2 text-sm shadow-[var(--shadow-1)]",
+                            mine
+                              ? "rounded-br-[var(--radius-sm)] bg-brand-600 text-white"
+                              : "rounded-bl-[var(--radius-sm)] border border-[var(--border-soft)] bg-[var(--bg-elev-2)] text-foreground"
                           )}
                         >
-                          {fmtClock(m.createdAt)}
-                        </span>
+                          <p className="whitespace-pre-wrap break-words">{m.body}</p>
+                          <span
+                            className={cn(
+                              "mt-1 block text-right text-[11px] tabular-nums",
+                              mine ? "text-white/70" : "text-muted-foreground"
+                            )}
+                          >
+                            {fmtClock(m.createdAt)}
+                          </span>
+                        </div>
                       </div>
                     </div>
                   );
@@ -496,7 +528,7 @@ export function ChatWorkspace({
             </div>
 
             <footer className="border-t border-border p-3">
-              {error && <p className="mb-2 text-xs text-rose-600">{error}</p>}
+              {error && <p className="mb-2 text-xs text-[var(--danger)]">{error}</p>}
               <form
                 onSubmit={(e) => {
                   e.preventDefault();
@@ -504,29 +536,32 @@ export function ChatWorkspace({
                 }}
                 className="flex items-end gap-2"
               >
-                <textarea
-                  ref={taRef}
-                  value={draft}
-                  onChange={(e) => setDraft(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && !e.shiftKey) {
-                      e.preventDefault();
-                      void sendMessage();
-                    }
-                  }}
-                  rows={1}
-                  placeholder="Escribe un mensaje…"
-                  className="max-h-[120px] flex-1 resize-none rounded-lg border border-border bg-white px-3 py-2 text-sm placeholder:text-muted-foreground focus:border-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-600/20"
-                />
-                <Button type="submit" size="icon" disabled={!draft.trim() || sending} aria-label="Enviar">
-                  <Send size={16} />
+                <div className="flex flex-1 items-end rounded-[var(--radius-lg)] border border-[var(--border-soft)] bg-[var(--bg-elev)] px-3 py-2 focus-within:shadow-[var(--ring)] motion-safe:transition-shadow">
+                  <textarea
+                    ref={taRef}
+                    value={draft}
+                    onChange={(e) => setDraft(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && !e.shiftKey) {
+                        e.preventDefault();
+                        void sendMessage();
+                      }
+                    }}
+                    rows={1}
+                    placeholder="Escribe un mensaje…"
+                    className="max-h-[120px] w-full resize-none bg-transparent text-sm leading-6 text-foreground placeholder:text-muted-foreground focus:outline-none"
+                  />
+                </div>
+                <Button type="submit" size="icon" className="h-10 w-10 shrink-0" disabled={!draft.trim() || sending} aria-label="Enviar">
+                  <Send size={18} />
                 </Button>
               </form>
             </footer>
           </>
         ) : (
-          <div className="hidden flex-1 items-center justify-center text-sm text-muted-foreground md:flex">
-            Selecciona una conversación
+          <div className="hidden flex-1 flex-col items-center justify-center gap-2 text-sm text-muted-foreground md:flex">
+            <MessageCircle size={20} />
+            <span>Selecciona una conversación</span>
           </div>
         )}
       </section>

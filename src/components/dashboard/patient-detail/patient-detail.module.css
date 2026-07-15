@@ -8,7 +8,8 @@
 .hero {
   background: var(--bg-elev);
   border: 1px solid var(--border-soft);
-  border-radius: 14px;
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-1);
   padding: 18px 22px 16px;
   margin-bottom: 14px;
   font-family: var(--font-sans, system-ui, sans-serif);
@@ -19,21 +20,23 @@
   gap: 18px;
   align-items: center;
 }
+/* Avatar iniciales — rampa violeta SUAVE plana (Variante A: violet-100 fondo /
+   violet-700 texto, igual que la tabla de pacientes del piloto). */
 .heroAvatar {
   width: 72px; height: 72px;
-  border-radius: 50%;
-  background: linear-gradient(135deg, #c4b5fd, var(--brand) 100%);
-  color: #fff;
+  border-radius: var(--radius-lg);
+  background: var(--violet-100);
+  color: var(--violet-700);
   font-size: 24px; font-weight: 700;
   letter-spacing: -0.02em;
   display: grid; place-items: center;
   flex-shrink: 0;
-  box-shadow: 0 0 0 1px rgba(124,58,237,0.15), 0 6px 16px -6px rgba(124,58,237,0.4);
+  box-shadow: var(--shadow-1);
   font-family: inherit;
 }
 .heroInfo { min-width: 0; }
 .heroName {
-  font-size: clamp(20px, 1.8vw, 24px);
+  font-size: clamp(20px, 1.6vw, 22px);
   font-weight: 700;
   color: var(--text-1);
   letter-spacing: -0.025em;
@@ -72,10 +75,11 @@
   font-family: var(--font-mono, ui-monospace, monospace);
   font-variant-numeric: tabular-nums;
 }
+/* Cifras semánticas: par *-strong para AA 4.5:1 sobre bg-elev (spec). */
 .metricValue.brand   { color: var(--brand); }
-.metricValue.warning { color: var(--warning); }
+.metricValue.warning { color: var(--warning-strong); }
 .metricValue.danger  { color: var(--danger); }
-.metricValue.success { color: var(--success); }
+.metricValue.success { color: var(--success-strong); }
 .metricSub {
   font-size: 10px; color: var(--text-3);
   margin-top: 2px;
@@ -96,21 +100,26 @@
   display: inline-flex; align-items: center; gap: 6px;
   cursor: pointer;
   font-family: inherit;
-  transition: all 0.12s;
+  box-shadow: var(--shadow-1);
+  transition: background var(--dur-1) var(--ease), border-color var(--dur-1) var(--ease),
+    color var(--dur-1) var(--ease), box-shadow var(--dur-1) var(--ease),
+    transform var(--dur-1) var(--ease);
   white-space: nowrap;
 }
 .btn:hover:not(:disabled) {
   border-color: var(--border-brand);
   background: var(--bg-hover);
 }
-.btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.btn:focus-visible { outline: none; box-shadow: var(--ring); }
+.btn:active:not(:disabled) { transform: scale(0.98); }
+.btn:disabled { opacity: 0.45; cursor: not-allowed; }
 .btnPrimary {
   background: var(--brand); color: #fff;
   border-color: var(--brand);
   font-weight: 600;
-  box-shadow: 0 0 0 1px rgba(124,58,237,0.5), 0 4px 12px -4px rgba(124,58,237,0.4);
+  box-shadow: var(--shadow-1);
 }
-.btnPrimary:hover:not(:disabled) { background: #8b5cf6; color: #fff; }
+.btnPrimary:hover:not(:disabled) { background: var(--violet-700); color: #fff; }
 .btnSuccess {
   background: var(--success); color: #fff;
   border-color: var(--success);
@@ -129,7 +138,7 @@
   background: var(--bg-elev);
   border: 1px solid var(--border-soft);
   border-radius: 8px;
-  box-shadow: 0 12px 28px -6px rgba(15,10,30,0.18);
+  box-shadow: var(--shadow-3);
   padding: 4px;
   z-index: 250;
   min-width: 200px;
@@ -148,7 +157,8 @@
   font-family: inherit;
   text-align: left;
 }
-.heroMenuItem:hover { background: var(--bg-elev-2); }
+.heroMenuItem:hover { background: var(--bg-hover); }
+.heroMenuItem:focus-visible { outline: none; box-shadow: var(--ring); }
 
 .heroAlerts {
   display: flex; flex-wrap: wrap; gap: 6px;
@@ -295,8 +305,9 @@
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  padding: 7px 12px;
-  font-size: 12px;
+  min-height: 40px; /* target táctil ≥40px (spec §Estados) */
+  padding: 0 14px;
+  font-size: 12.5px;
   font-weight: 600;
   color: var(--text-2);
   background: var(--bg-elev);
@@ -306,23 +317,30 @@
   white-space: nowrap;
   font-family: inherit;
   flex-shrink: 0;
-  transition: background 0.12s, border-color 0.12s, color 0.12s;
+  box-shadow: var(--shadow-1);
+  transition: background var(--dur-1) var(--ease), border-color var(--dur-1) var(--ease),
+    color var(--dur-1) var(--ease), transform var(--dur-1) var(--ease);
 }
-.mobileTabBtn:hover { background: var(--brand-softer); }
+.mobileTabBtn:hover { background: var(--bg-hover); color: var(--text-1); }
+.mobileTabBtn:focus-visible { outline: none; box-shadow: var(--ring); }
+.mobileTabBtn:active { transform: scale(0.98); }
+/* Chip activo — Variante A: fondo --brand-soft + texto --brand (como el
+   nav-item activo del prototipo; antes era violeta sólido con texto blanco). */
 .mobileTabBtnActive {
-  background: var(--brand);
-  border-color: var(--brand);
-  color: #fff;
+  background: var(--brand-soft);
+  border-color: var(--border-brand);
+  color: var(--brand);
 }
-.mobileTabBtnActive:hover { background: var(--brand); }
+.mobileTabBtnActive:hover { background: var(--brand-soft); color: var(--brand); }
 .mobileTabCount {
-  font-family: var(--font-mono, monospace);
-  font-size: 10px;
+  font-family: inherit;
+  font-variant-numeric: tabular-nums;
+  font-size: 10.5px;
   font-weight: 700;
   padding: 1px 6px;
   border-radius: 10px;
-  background: rgba(255, 255, 255, 0.22);
-  color: inherit;
+  background: var(--bg-elev);
+  color: var(--brand);
   min-width: 18px;
   text-align: center;
 }
@@ -332,7 +350,7 @@
 }
 .mobileTabBtnDisabled,
 .mobileTabBtnDisabled:hover {
-  opacity: 0.55;
+  opacity: 0.45;
   cursor: not-allowed;
   color: var(--text-3);
   background: var(--bg-elev);
@@ -482,7 +500,7 @@
   letter-spacing: 0.01em;
   box-shadow: 0 0 0 1px rgba(124,58,237,0.45), 0 4px 14px -4px rgba(124,58,237,0.4);
 }
-.treatmentsCreate:hover:not(:disabled) { background: #8b5cf6; }
+.treatmentsCreate:hover:not(:disabled) { background: var(--violet-700); }
 .treatmentsCreate:disabled { opacity: 0.5; cursor: not-allowed; }
 @media (max-width: 1024px) {
   .mobileTabBar { display: flex; }
@@ -547,6 +565,7 @@
   background: var(--bg-hover);
   color: var(--text-1);
 }
+.navItem:focus-visible { outline: none; box-shadow: var(--ring); }
 .navItem.active {
   background: var(--brand-soft);
   color: var(--brand);
@@ -555,7 +574,7 @@
 }
 .navItemDisabled,
 .navItemDisabled:hover {
-  opacity: 0.55;
+  opacity: 0.45;
   cursor: not-allowed;
   color: var(--text-3);
   background: transparent;
@@ -711,7 +730,7 @@
   border-color: var(--brand);
   font-weight: 600;
 }
-.sideBtn.primary:hover:not(:disabled) { background: #8b5cf6; }
+.sideBtn.primary:hover:not(:disabled) { background: var(--violet-700); }
 .sideBtn.danger {
   color: var(--danger);
   border-color: color-mix(in srgb, var(--danger) 25%, transparent);
@@ -855,7 +874,7 @@
   font-weight: 700;
   box-shadow: 0 0 0 1px rgba(124,58,237,0.45), 0 4px 14px -4px rgba(124,58,237,0.4);
 }
-.consultBtnComplete:hover:not(:disabled) { background: #8b5cf6; color: #fff; }
+.consultBtnComplete:hover:not(:disabled) { background: var(--violet-700); color: #fff; }
 .consultClose {
   width: 26px; height: 26px;
   display: grid; place-items: center;
@@ -1103,7 +1122,7 @@
   font-weight: 700;
   box-shadow: 0 0 0 1px rgba(124,58,237,0.45), 0 4px 14px -4px rgba(124,58,237,0.4);
 }
-.soapBtnPrimary:hover:not(:disabled) { background: #8b5cf6; color: #fff; }
+.soapBtnPrimary:hover:not(:disabled) { background: var(--violet-700); color: #fff; }
 
 /* ─────── Note row clickeable (timeline tab Notas SOAP) ─────── */
 .noteRow {
@@ -1440,7 +1459,7 @@
   box-shadow: 0 4px 14px -4px rgba(124, 58, 237, 0.45);
 }
 .noteBtnPrimary:hover:not(:disabled) {
-  background: #8b5cf6;
+  background: var(--violet-700);
   transform: translateY(-1px);
 }
 .noteBtnGhost:disabled,
@@ -1448,4 +1467,73 @@
 .noteBtnPrimary:disabled {
   opacity: 0.55;
   cursor: not-allowed;
+}
+
+/* ═══ OLA1-A — cabecera/tabs/resumen del expediente · SOLO el agente A escribe en esta sección ═══ */
+
+/* OLA1-A no requirió clases nuevas: la cabecera (hero, metricValue), la tab
+   bar móvil (mobileTab), el quick-nav (navItem) y los botones compartidos
+   (btn, hover violeta-700) se ajustaron EN SUS CLASES EXISTENTES arriba; el
+   tab Resumen y las constantes de chips usan Tailwind con tokens var(--x)
+   directamente en patient-detail-client.tsx (zona 1-1414). */
+
+/* ═══ OLA1-B — expediente/historial/tratamiento/facturación · SOLO el agente B escribe en esta sección ═══ */
+
+/* Tabla patrón del sistema (spec §Componentes 4) — tabs Agenda y Facturación
+   del expediente. Solo tokens semánticos → dark mode automático. */
+.tableScrollB {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+.tableB {
+  width: 100%;
+  min-width: 560px;
+  border-collapse: collapse;
+  font-size: 13px;
+  color: var(--text-1);
+}
+.tableB thead th {
+  text-align: left;
+  padding: 9px 16px;
+  background: var(--bg-elev-2);
+  font-size: 11.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-3);
+  border-bottom: 1px solid var(--border-soft);
+  white-space: nowrap;
+}
+.tableB tbody tr {
+  border-bottom: 1px solid var(--border-soft);
+  transition: background var(--dur-1) var(--ease);
+}
+.tableB tbody tr:last-child { border-bottom: none; }
+.tableB tbody tr:hover { background: var(--bg-hover); }
+.tableB tbody td {
+  padding: 10px 16px;
+  vertical-align: middle;
+}
+/* Celda de estado vacío (colSpan) — padding amplio y centrado */
+.tableB tbody td.tdEmptyB {
+  padding: 40px 16px;
+  text-align: center;
+  color: var(--text-3);
+}
+/* Facturación: columnas 3-5 (importe / pagado / saldo) numéricas a la derecha */
+.tableInv thead th:nth-child(3),
+.tableInv thead th:nth-child(4),
+.tableInv thead th:nth-child(5),
+.tableInv tbody td:nth-child(3),
+.tableInv tbody td:nth-child(4),
+.tableInv tbody td:nth-child(5) {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+/* Cifras de dinero sobre fila clara — par strong para AA */
+.moneyPaidB { color: var(--success-strong); font-weight: 600; }
+.moneyDebtB { color: var(--danger); font-weight: 700; }
+.moneyZeroB { color: var(--text-4); font-weight: 500; }
+@media (prefers-reduced-motion: reduce) {
+  .tableB tbody tr { transition: none; }
 }

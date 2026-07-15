@@ -42,28 +42,29 @@ export function FloatingCart({ prices, billingCycle, onClick }: FloatingCartProp
         type="button"
         onClick={onClick}
         aria-label={t("pages.floatingCart.ariaLabel", { count: prices.length, total: totals.final.toLocaleString("es-MX") })}
-        className="bg-slate-900 dark:bg-slate-100 hover:bg-slate-800 dark:hover:bg-white text-white dark:text-slate-900 rounded-2xl shadow-2xl shadow-slate-900/20 dark:shadow-black/40 ring-1 ring-white/5 dark:ring-slate-900/10 px-5 py-4 flex items-center gap-4 transition-all duration-200 hover:scale-[1.03] active:scale-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-elev)]"
+        className="text-white rounded-[var(--radius-lg)] shadow-[var(--shadow-3)] px-5 py-4 flex items-center gap-4 transition-transform duration-150 ease-[cubic-bezier(.2,.8,.4,1)] hover:scale-[1.03] active:scale-[.98] focus-visible:outline-none focus-visible:[box-shadow:var(--ring)]"
+        style={{ background: "var(--brand-grad)" }}
       >
         <div className="relative">
-          <ShoppingCart className="w-5 h-5" strokeWidth={2} aria-hidden />
+          <ShoppingCart className="w-5 h-5" strokeWidth={1.75} aria-hidden />
           <span
             key={prices.length}
-            className="absolute -top-2 -right-2 w-5 h-5 bg-blue-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center motion-safe:animate-[mp-cart-pop_300ms_cubic-bezier(0.34,1.56,0.64,1)_forwards]"
+            className="absolute -top-2 -right-2 min-w-[20px] h-5 px-1 bg-white text-[var(--brand)] text-[10px] font-bold rounded-full flex items-center justify-center tabular-nums motion-safe:animate-[mp-cart-pop_300ms_cubic-bezier(0.34,1.56,0.64,1)_forwards]"
           >
             {prices.length}
           </span>
         </div>
         <div className="text-left">
-          <div className="text-xs text-slate-400 dark:text-slate-500">
+          <div className="text-[11px] font-medium uppercase tracking-wide text-white">
             {tier
               ? t("pages.floatingCart.discountApplied", { discount: tier.discount })
               : t("pages.floatingCart.modulesCount", { count: prices.length })}
           </div>
-          <div className="text-sm font-semibold">
+          <div className="text-sm font-bold tabular-nums">
             ${totals.final.toLocaleString("es-MX")} MXN/{billingCycle === "annual" ? t("pages.floatingCart.year") : t("pages.floatingCart.month")}
           </div>
         </div>
-        <ChevronRight className="w-4 h-4 text-slate-400 dark:text-slate-500" aria-hidden />
+        <ChevronRight className="w-4 h-4 text-white/80" strokeWidth={1.75} aria-hidden />
       </button>
     </div>
   );

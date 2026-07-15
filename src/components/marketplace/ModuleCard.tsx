@@ -30,18 +30,8 @@ interface ModuleCardProps {
   onRemoveFromCart: () => void;
 }
 
-// Categorías con bg en alpha (10% opacidad) — funcionan idénticos en ambos
-// modos porque el alpha toma del fondo subyacente. El text-* mantiene
-// contraste tanto sobre claro (saturado oscuro) como sobre oscuro (claro).
-const CATEGORY_BADGE: Record<string, string> = {
-  Dental:       "bg-blue-500/10 text-blue-700 dark:text-blue-300",
-  Pediatría:    "bg-pink-500/10 text-pink-700 dark:text-pink-300",
-  Cardiología:  "bg-red-500/10 text-red-700 dark:text-red-300",
-  Dermatología: "bg-orange-500/10 text-orange-700 dark:text-orange-300",
-  Ginecología:  "bg-purple-500/10 text-purple-700 dark:text-purple-300",
-  Nutrición:    "bg-green-500/10 text-green-700 dark:text-green-300",
-  Estética:     "bg-fuchsia-500/10 text-fuchsia-700 dark:text-fuchsia-300",
-};
+// La categoría se muestra como tag neutral tokenizado; el color de identidad
+// de cada módulo lo aporta el icono (iconBg/iconColor de la BD, ver render).
 
 interface BadgeStyle {
   classes: string;
@@ -52,18 +42,18 @@ interface BadgeStyle {
 
 const STATUS_BADGE: Record<ModuleStatus, BadgeStyle | null> = {
   purchased: {
-    classes: "bg-blue-500/10 text-blue-700 dark:text-blue-300 ring-1 ring-inset ring-blue-500/20",
-    dot:     "bg-blue-500",
+    classes: "bg-[var(--info-soft)] text-[var(--info-strong)]",
+    dot:     "bg-[var(--info)]",
     labelKey: "pages.moduleCard.badgePurchased",
   },
   trial: {
-    classes: "bg-violet-500/10 text-violet-700 dark:text-violet-300 ring-1 ring-inset ring-violet-500/20",
-    dot:     "bg-violet-500",
+    classes: "bg-[var(--brand-soft)] text-[var(--brand)]",
+    dot:     "bg-[var(--brand)]",
     labelKey: "pages.moduleCard.badgeTrial",
   },
   available: {
-    classes: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 ring-1 ring-inset ring-emerald-500/20",
-    dot:     "bg-emerald-500",
+    classes: "bg-[var(--success-soft)] text-[var(--success-strong)]",
+    dot:     "bg-[var(--success)]",
     labelKey: "pages.moduleCard.badgeAvailable",
   },
   locked: null, // muestra candado en lugar de badge
@@ -85,15 +75,15 @@ export function ModuleCard({
 
   return (
     <div
-      className={`bg-[var(--bg-elev)] border rounded-xl p-5 transition-all flex flex-col relative ${
+      className={`bg-[var(--bg-elev)] border rounded-[var(--radius-lg)] p-5 flex flex-col relative transition-[box-shadow,border-color] duration-150 ease-[cubic-bezier(.2,.8,.4,1)] ${
         inCart
-          ? "border-blue-500/60 ring-2 ring-blue-500/15 shadow-md dark:shadow-none"
-          : "border-[var(--border-soft)] hover:border-[var(--border-strong)] hover:shadow-md dark:hover:shadow-none dark:hover:bg-[var(--bg-hover)]"
+          ? "border-[var(--brand)] shadow-[var(--shadow-2)] ring-1 ring-[var(--brand-soft)]"
+          : "border-[var(--border-soft)] shadow-[var(--shadow-1)] hover:border-[var(--border-strong)] hover:shadow-[var(--shadow-2)]"
       } ${isLocked ? "opacity-75" : ""}`}
     >
       {isLocked && (
-        <div className="absolute top-3 right-3 w-7 h-7 rounded-full bg-red-500/10 ring-1 ring-inset ring-red-500/20 flex items-center justify-center">
-          <Lock className="w-3.5 h-3.5 text-red-600 dark:text-red-400" />
+        <div className="absolute top-3 right-3 w-7 h-7 rounded-full bg-[var(--danger-soft)] flex items-center justify-center">
+          <Lock className="w-4 h-4 text-[var(--danger)]" strokeWidth={1.75} aria-hidden />
         </div>
       )}
 
@@ -102,7 +92,7 @@ export function ModuleCard({
           <Icon className={`w-5 h-5 ${m.iconColor}`} strokeWidth={2} aria-hidden />
         </div>
         {badge && (
-          <div className={`flex items-center gap-1.5 px-2 py-1 rounded-md text-xs font-medium ${badge.classes}`}>
+          <div className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold ${badge.classes}`}>
             <span className={`w-1.5 h-1.5 rounded-full ${badge.dot}`} aria-hidden />
             {t(badge.labelKey)}
           </div>
@@ -110,10 +100,10 @@ export function ModuleCard({
       </div>
 
       <div className="mb-2">
-        <h3 className={`font-semibold text-[15px] ${isLocked ? "text-[var(--text-3)]" : "text-[var(--text-1)]"}`}>
+        <h3 className={`font-semibold text-[15px] leading-snug ${isLocked ? "text-[var(--text-3)]" : "text-[var(--text-1)]"}`}>
           {m.name}
         </h3>
-        <span className={`inline-block mt-1.5 text-[11px] px-1.5 py-0.5 rounded ${CATEGORY_BADGE[m.category] ?? "bg-[var(--bg-hover)] text-[var(--text-2)]"}`}>
+        <span className="inline-flex items-center mt-1.5 text-[10.5px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full bg-[var(--bg-elev-2)] text-[var(--text-3)]">
           {m.category}
         </span>
       </div>
@@ -122,32 +112,30 @@ export function ModuleCard({
         {m.description}
       </p>
 
-      <ul className="space-y-1.5 mb-4 flex-1">
+      <ul className="space-y-2 mb-4 flex-1">
         {m.features.map((f, i) => (
-          <li key={i} className={`flex items-start gap-2 text-xs ${isLocked ? "text-[var(--text-3)]" : "text-[var(--text-2)]"}`}>
-            <Check className={`w-3.5 h-3.5 mt-0.5 flex-shrink-0 ${isLocked ? "text-[var(--text-3)]" : "text-emerald-500"}`} strokeWidth={2.5} aria-hidden />
+          <li key={i} className={`flex items-start gap-2 text-[13px] ${isLocked ? "text-[var(--text-3)]" : "text-[var(--text-2)]"}`}>
+            <Check className={`w-4 h-4 mt-px flex-shrink-0 ${isLocked ? "text-[var(--text-3)]" : "text-[var(--success)]"}`} strokeWidth={1.75} aria-hidden />
             <span>{f}</span>
           </li>
         ))}
       </ul>
 
-      <div className="pt-3 border-t border-[var(--border-soft)]">
-        <div className="flex items-center justify-between mb-2.5">
-          <div>
-            <span className={`text-lg font-semibold ${isLocked ? "text-[var(--text-3)]" : "text-[var(--text-1)]"}`}>
-              ${m.priceMxnMonthly}
-            </span>
-            <span className="text-xs text-[var(--text-3)] ml-1">{t("pages.moduleCard.perMonth")}</span>
-          </div>
+      <div className="pt-4 border-t border-[var(--border-soft)]">
+        <div className="flex items-baseline gap-1 mb-3">
+          <span className={`text-[22px] font-bold tabular-nums leading-none ${isLocked ? "text-[var(--text-3)]" : "text-[var(--text-1)]"}`}>
+            ${m.priceMxnMonthly}
+          </span>
+          <span className="text-xs text-[var(--text-3)]">{t("pages.moduleCard.perMonth")}</span>
         </div>
 
         {isPurchased ? (
           <div
             role="status"
             aria-live="polite"
-            className="w-full text-sm font-medium px-3 py-2 rounded-md bg-blue-500/10 text-blue-700 dark:text-blue-300 ring-1 ring-inset ring-blue-500/20 flex items-center justify-center gap-2 cursor-not-allowed"
+            className="w-full text-[13px] font-semibold px-3 py-2.5 rounded-[var(--radius)] bg-[var(--info-soft)] text-[var(--info-strong)] flex items-center justify-center gap-2 cursor-not-allowed"
           >
-            <Check className="w-4 h-4" strokeWidth={2.5} aria-hidden />
+            <Check className="w-4 h-4" strokeWidth={1.75} aria-hidden />
             {t("pages.moduleCard.alreadyPurchased")}
           </div>
         ) : inCart ? (
@@ -156,9 +144,9 @@ export function ModuleCard({
             onClick={onRemoveFromCart}
             disabled={pending}
             aria-label={t("pages.moduleCard.removeAria", { name: m.name })}
-            className="w-full text-sm font-medium px-3 py-2 rounded-md bg-blue-500/10 text-blue-700 dark:text-blue-300 ring-1 ring-inset ring-blue-500/20 hover:bg-blue-500/15 transition-all duration-150 active:scale-[0.97] flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-wait focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40"
+            className="w-full text-[13px] font-semibold px-3 py-2.5 rounded-[var(--radius)] bg-[var(--brand-soft)] text-[var(--brand)] hover:bg-[var(--danger-soft)] hover:text-[var(--danger)] transition-[background-color,color,transform] duration-150 ease-[cubic-bezier(.2,.8,.4,1)] active:scale-[.98] flex items-center justify-center gap-2 disabled:opacity-45 disabled:cursor-wait focus-visible:outline-none focus-visible:[box-shadow:var(--ring)]"
           >
-            <Check className="w-4 h-4" strokeWidth={2.5} aria-hidden />
+            <Check className="w-4 h-4" strokeWidth={1.75} aria-hidden />
             {t("pages.moduleCard.inCart")}
           </button>
         ) : (
@@ -167,13 +155,9 @@ export function ModuleCard({
             onClick={onAddToCart}
             disabled={pending}
             aria-label={isLocked ? t("pages.moduleCard.buyToUnlockAria", { name: m.name }) : t("pages.moduleCard.addAria", { name: m.name })}
-            className={`w-full text-sm font-medium px-3 py-2 rounded-md transition-all duration-150 active:scale-[0.97] flex items-center justify-center gap-1.5 disabled:opacity-60 disabled:cursor-wait focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-elev)] ${
-              isLocked
-                ? "bg-red-600 text-white hover:bg-red-700 focus-visible:ring-red-500/50"
-                : "bg-[var(--text-1)] text-[var(--bg-elev)] hover:opacity-90 focus-visible:ring-[var(--brand)]"
-            }`}
+            className="w-full text-[13px] font-semibold px-3 py-2.5 rounded-[var(--radius)] bg-brand-600 text-white hover:bg-brand-700 transition-[background-color,transform] duration-150 ease-[cubic-bezier(.2,.8,.4,1)] active:scale-[.98] flex items-center justify-center gap-1.5 disabled:opacity-45 disabled:cursor-wait focus-visible:outline-none focus-visible:[box-shadow:var(--ring)]"
           >
-            <Plus className="w-4 h-4" strokeWidth={2.5} aria-hidden />
+            <Plus className="w-4 h-4" strokeWidth={1.75} aria-hidden />
             {isLocked ? t("pages.moduleCard.buyToUnlock") : t("pages.moduleCard.addToCart")}
           </button>
         )}

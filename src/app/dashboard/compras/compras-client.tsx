@@ -188,7 +188,7 @@ export function ComprasClient({ carts, orders }: Props) {
             height: 180,
             pointerEvents: "none",
             background:
-              "radial-gradient(60% 70% at 20% 30%, rgba(124,58,237,0.18), transparent 70%)",
+              "radial-gradient(60% 70% at 20% 30%, color-mix(in srgb, var(--brand) 18%, transparent), transparent 70%)",
           }}
         />
         <div style={{ position: "relative", display: "flex", alignItems: "center", gap: 14 }}>
@@ -202,7 +202,7 @@ export function ComprasClient({ carts, orders }: Props) {
               placeItems: "center",
               color: "#fff",
               background: "linear-gradient(135deg, var(--violet-400), var(--brand))",
-              boxShadow: "0 8px 20px -8px rgba(124,58,237,0.6)",
+              boxShadow: "0 8px 20px -8px color-mix(in srgb, var(--brand) 60%, transparent)",
             }}
           >
             <ShoppingCart size={22} />
@@ -315,7 +315,7 @@ export function ComprasClient({ carts, orders }: Props) {
                 icon={<Store size={14} />}
                 onClick={() => router.push("/dashboard/suppliers")}
               >
-                Explorar proveedores
+                {t("procurement.comprasClient.exploreSuppliers")}
               </ButtonNew>
             </div>
           </CardNew>
@@ -828,12 +828,12 @@ function CheckoutModal({
                     gap: 10,
                     padding: "10px 12px",
                     background: "var(--warning-soft)",
-                    border: "1px solid rgba(245,158,11,0.25)",
+                    border: "1px solid var(--warning-border-strong)",
                     borderRadius: 10,
                   }}
                 >
-                  <Info size={16} style={{ color: "#fcd34d", flexShrink: 0, marginTop: 1 }} />
-                  <span style={{ fontSize: 12, color: "#fcd34d", lineHeight: 1.5 }}>
+                  <Info size={16} style={{ color: "var(--warning-strong)", flexShrink: 0, marginTop: 1 }} />
+                  <span style={{ fontSize: 12, color: "var(--warning-strong)", lineHeight: 1.5 }}>
                     {t("procurement.comprasClient.noPaymentMethods")}
                   </span>
                 </div>

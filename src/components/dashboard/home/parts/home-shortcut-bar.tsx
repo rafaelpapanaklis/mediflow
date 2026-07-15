@@ -25,21 +25,21 @@ export function HomeShortcutBar() {
     >
       <ButtonNew
         variant="primary"
-        icon={<CalendarPlus size={14} />}
+        icon={<CalendarPlus size={16} strokeWidth={1.75} />}
         onClick={() => openAppt({ openAgendaAfter: true })}
       >
         {t("home.shortcutBar.newAppointment")}
       </ButtonNew>
       <ButtonNew
         variant="secondary"
-        icon={<UserPlus size={14} />}
+        icon={<UserPlus size={16} strokeWidth={1.75} />}
         onClick={() => openPatient()}
       >
         {t("home.shortcutBar.newPatient")}
       </ButtonNew>
       <ButtonNew
         variant="ghost"
-        icon={<Search size={14} />}
+        icon={<Search size={16} strokeWidth={1.75} />}
         onClick={openPalette}
       >
         {t("home.shortcutBar.searchPatient")}

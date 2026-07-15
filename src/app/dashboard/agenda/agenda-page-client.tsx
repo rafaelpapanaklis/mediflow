@@ -239,7 +239,7 @@ const AGX_CSS = `
   border-radius: var(--radius-sm);
   box-shadow: var(--shadow-1);
 }
-:where(.agx-agenda) [data-appt-id]:not([aria-selected="true"]):hover { box-shadow: var(--shadow-2); }
+:where(.agx-agenda) [data-appt-id]:not([data-selected="true"]):hover { box-shadow: var(--shadow-2); }
 
 /* Hora 10.5/700 con el color fuerte del estado; el 22% de --text-1 lo
    oscurece en claro y lo aclara en oscuro → contraste AA en ambos temas */

@@ -2,11 +2,11 @@
 
 import { useState } from "react";
 import { Plus, X, ChevronRight, Footprints } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import toast from "react-hot-toast";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import { useT } from "@/i18n/i18n-provider";
+import styles from "./orthotics.module.css";
 
 interface PipelineItem {
   id: string;
@@ -29,13 +29,14 @@ const STAGES = [
   { key: "ajuste",        labelKey: "pages.orthotics.stageAdjustment" },
 ];
 
+// Cada etapa mapea a su clase de columna (fija --stage/--stage-soft/--stage-strong)
 const STAGE_COLORS: Record<string, string> = {
-  evaluacion:  "border-amber-400 bg-amber-50 dark:bg-amber-950/30",
-  molde:       "border-blue-400 bg-blue-50 dark:bg-blue-950/30",
-  laboratorio: "border-purple-400 bg-purple-50 dark:bg-purple-950/30",
-  listo:       "border-emerald-400 bg-emerald-50 dark:bg-emerald-950/30",
-  entregado:   "border-slate-400 bg-muted/50",
-  ajuste:      "border-rose-400 bg-rose-50 dark:bg-rose-950/30",
+  evaluacion:  styles.stageEvaluacion,
+  molde:       styles.stageMolde,
+  laboratorio: styles.stageLaboratorio,
+  listo:       styles.stageListo,
+  entregado:   styles.stageEntregado,
+  ajuste:      styles.stageAjuste,
 };
 
 function getStage(category: string): string {
@@ -123,60 +124,64 @@ export function OrthoticsClient({ initialItems }: { initialItems: PipelineItem[]
   }
 
   return (
-    <div>
-      <div className="flex items-center justify-between mb-6">
+    <div className={styles.page}>
+      <div className={styles.head}>
         <div>
-          <h1 className="text-2xl font-extrabold">{t("pages.orthotics.title")}</h1>
-          <p className="text-sm text-muted-foreground mt-0.5">{t("pages.orthotics.ordersInProgress", { count: items.length })}</p>
+          <h1 className={styles.title}>{t("pages.orthotics.title")}</h1>
+          <p className={styles.subtitle}>{t("pages.orthotics.ordersInProgress", { count: items.length })}</p>
         </div>
-        <Button onClick={() => setShowAdd(true)}>
-          <Plus className="w-5 h-5 mr-2" /> {t("pages.orthotics.newOrder")}
-        </Button>
+        <button type="button" onClick={() => setShowAdd(true)} className={styles.btnPrimary}>
+          <Plus size={16} strokeWidth={1.75} /> {t("pages.orthotics.newOrder")}
+        </button>
       </div>
 
       {/* Kanban columns */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
+      <div className={styles.board}>
         {STAGES.map(stage => {
           const stageItems = items.filter(i => getStage(i.category) === stage.key);
           return (
-            <div key={stage.key} className="min-h-[200px]">
-              <div className="flex items-center justify-between mb-2">
-                <h3 className="text-sm font-bold">{t(stage.labelKey)}</h3>
-                <span className="text-xs font-bold bg-muted px-2 py-0.5 rounded-full">{stageItems.length}</span>
+            <div key={stage.key} className={`${styles.col} ${STAGE_COLORS[stage.key] || ""}`}>
+              <div className={styles.colHead}>
+                <h3 className={styles.colTitle}>{t(stage.labelKey)}</h3>
+                <span className={styles.colCount}>{stageItems.length}</span>
               </div>
-              <div className="space-y-2">
+              <div className={styles.colStack}>
                 {stageItems.map(item => {
                   const days = getDaysInStage(item.createdAt);
                   const currentIdx = STAGES.findIndex(s => s.key === stage.key);
                   const isLast = currentIdx >= STAGES.length - 1;
 
                   return (
-                    <div key={item.id} className={`border-2 rounded-xl p-3 group ${STAGE_COLORS[stage.key] || "border-border"}`}>
-                      <div className="flex items-start justify-between">
-                        <p className="text-sm font-bold leading-tight">{item.name}</p>
-                        <button onClick={() => handleDelete(item.id)} className="text-muted-foreground hover:text-rose-500 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
-                          <X className="w-3.5 h-3.5" />
+                    <div key={item.id} className={styles.card}>
+                      <div className={styles.cardHead}>
+                        <p className={styles.cardName}>{item.name}</p>
+                        <button
+                          type="button"
+                          onClick={() => handleDelete(item.id)}
+                          className={styles.cardDelete}
+                          aria-label={t("common.delete")}
+                        >
+                          <X size={16} strokeWidth={1.75} />
                         </button>
                       </div>
-                      {item.description && <p className="text-xs text-muted-foreground mt-1">{item.description}</p>}
-                      <p className="text-xs text-muted-foreground mt-1">
+                      {item.description && <p className={styles.cardType}>{item.description}</p>}
+                      <p className={styles.cardDays}>
                         {days === 0 ? t("pages.orthotics.todayInStage") : t("pages.orthotics.daysInStage", { count: days })}
                       </p>
                       {!isLast && (
                         <button
+                          type="button"
                           onClick={() => advanceStage(item)}
-                          className="mt-2 flex items-center gap-1 text-xs font-bold text-brand-600 hover:text-brand-700 transition-colors"
+                          className={styles.advanceBtn}
                         >
-                          {t("pages.orthotics.advance")} <ChevronRight className="w-3.5 h-3.5" />
+                          {t("pages.orthotics.advance")} <ChevronRight size={16} strokeWidth={1.75} />
                         </button>
                       )}
                     </div>
                   );
                 })}
                 {stageItems.length === 0 && (
-                  <div className="text-center py-6 text-muted-foreground">
-                    <p className="text-xs">{t("pages.orthotics.empty")}</p>
-                  </div>
+                  <div className={styles.colEmpty}>{t("pages.orthotics.empty")}</div>
                 )}
               </div>
             </div>
@@ -185,43 +190,47 @@ export function OrthoticsClient({ initialItems }: { initialItems: PipelineItem[]
       </div>
 
       {items.length === 0 && (
-        <div className="text-center py-16 text-muted-foreground mt-4">
-          <Footprints className="w-12 h-12 mx-auto mb-3 opacity-20" />
-          <p className="text-base font-semibold">{t("pages.orthotics.noOrders")}</p>
+        <div className={styles.emptyCard}>
+          <span className={styles.emptyIcon} aria-hidden="true">
+            <Footprints size={22} strokeWidth={1.75} />
+          </span>
+          <p className={styles.emptyTitle}>{t("pages.orthotics.noOrders")}</p>
         </div>
       )}
 
       {/* Add Modal */}
       {showAdd && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
-          <div className="bg-card border border-border rounded-2xl shadow-xl w-full max-w-md max-h-[90vh] flex flex-col overflow-hidden">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-border shrink-0">
-              <h2 className="text-lg font-bold">{t("pages.orthotics.newOrderModalTitle")}</h2>
-              <button onClick={() => setShowAdd(false)} className="p-2 rounded-lg hover:bg-muted text-muted-foreground"><X className="w-5 h-5" /></button>
+        <div className={styles.modalOverlay}>
+          <div className={styles.modal}>
+            <div className={styles.modalHead}>
+              <h2 className={styles.modalTitle}>{t("pages.orthotics.newOrderModalTitle")}</h2>
+              <button type="button" onClick={() => setShowAdd(false)} className={styles.modalClose} aria-label={t("common.close")}>
+                <X size={18} strokeWidth={1.75} />
+              </button>
             </div>
-            <div className="px-6 py-5 space-y-4 flex-1 overflow-y-auto min-h-0">
-              <div className="space-y-1.5">
-                <Label className="text-sm">{t("pages.orthotics.patientNameLabel")}</Label>
-                <input className="flex h-11 w-full rounded-xl border border-border bg-card px-4 text-base focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+            <div className={styles.modalBody}>
+              <div className={styles.field}>
+                <Label className={styles.fieldLabel}>{t("pages.orthotics.patientNameLabel")}</Label>
+                <input className={styles.input}
                   placeholder={t("pages.orthotics.fullNamePlaceholder")}
                   value={form.patientName} onChange={e => setForm(f => ({ ...f, patientName: e.target.value }))} />
               </div>
-              <div className="space-y-1.5">
-                <Label className="text-sm">{t("pages.orthotics.orthoticTypeLabel")}</Label>
-                <input className="flex h-11 w-full rounded-xl border border-border bg-card px-4 text-base focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+              <div className={styles.field}>
+                <Label className={styles.fieldLabel}>{t("pages.orthotics.orthoticTypeLabel")}</Label>
+                <input className={styles.input}
                   placeholder={t("pages.orthotics.orthoticTypePlaceholder")}
                   value={form.type} onChange={e => setForm(f => ({ ...f, type: e.target.value }))} />
               </div>
-              <div className="space-y-1.5">
-                <Label className="text-sm">{t("common.notes")}</Label>
-                <textarea className="flex min-h-[70px] w-full rounded-xl border border-border bg-card px-4 py-3 text-base focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none"
+              <div className={styles.field}>
+                <Label className={styles.fieldLabel}>{t("common.notes")}</Label>
+                <textarea className={styles.textarea}
                   placeholder={t("pages.orthotics.notesPlaceholder")}
                   value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} />
               </div>
             </div>
-            <div className="px-6 py-4 flex gap-3 shrink-0 border-t border-border">
-              <Button variant="outline" onClick={() => setShowAdd(false)} className="flex-1 h-11 text-base">{t("common.cancel")}</Button>
-              <Button onClick={handleAdd} className="flex-1 h-11 text-base">{t("pages.orthotics.createOrder")}</Button>
+            <div className={styles.modalFoot}>
+              <button type="button" onClick={() => setShowAdd(false)} className={styles.btnGhost}>{t("common.cancel")}</button>
+              <button type="button" onClick={handleAdd} className={styles.btnPrimary}>{t("pages.orthotics.createOrder")}</button>
             </div>
           </div>
         </div>

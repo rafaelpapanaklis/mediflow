@@ -39,7 +39,7 @@ export function TaskRow({
         borderBottom: "1px solid var(--border-soft)",
         textDecoration: "none",
         color: "inherit",
-        transition: "background 0.12s",
+        transition: "background var(--dur-1) var(--ease)",
       }}
       onMouseEnter={(e) => (e.currentTarget.style.background = "var(--bg-hover)")}
       onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
@@ -56,14 +56,14 @@ export function TaskRow({
           border: "1px solid rgba(124,58,237,0.15)",
         }}
       >
-        <Icon size={14} style={{ color: toneColor[tone] }} aria-hidden />
+        <Icon size={16} strokeWidth={1.75} style={{ color: toneColor[tone] }} aria-hidden />
       </div>
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontSize: 13, fontWeight: 500, color: "var(--text-1)" }}>
           <span
             style={{
-              fontFamily: "var(--font-mono, monospace)",
               fontWeight: 600,
+              fontVariantNumeric: "tabular-nums",
               color: toneColor[tone],
               marginRight: 4,
             }}
@@ -74,7 +74,8 @@ export function TaskRow({
         </div>
         <div
           style={{
-            fontSize: 11,
+            fontSize: 12,
+            fontWeight: 600,
             color: "var(--brand)",
             marginTop: 2,
             display: "inline-flex",
@@ -83,7 +84,7 @@ export function TaskRow({
           }}
         >
           {ctaLabel}
-          <ChevronRight size={11} aria-hidden />
+          <ChevronRight size={12} strokeWidth={1.75} aria-hidden />
         </div>
       </div>
     </Link>

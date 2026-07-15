@@ -13,7 +13,7 @@ import { Label } from "@/components/ui/label";
 import { ButtonNew } from "@/components/ui/design-system/button-new";
 import { KpiCard }   from "@/components/ui/design-system/kpi-card";
 import { BadgeNew }  from "@/components/ui/design-system/badge-new";
-import { getApptColors } from "@/lib/appointment-colors";
+import styles from "./appointments.module.css";
 import toast from "react-hot-toast";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import { DateField } from "@/components/ui/date-field";
@@ -44,14 +44,17 @@ const DURATIONS = [15, 20, 30, 45, 60, 90, 120];
 const APPT_TYPES = ["Consulta general","Primera vez","Revisión / Control","Limpieza dental","Extracción","Endodoncia","Ortodoncia","Implante","Cirugía","Nutrición","Psicología","Seguimiento","Otro"];
 
 // label = id de traducción (resuelto con t() al renderizar), no el texto visible.
-const STATUS_CONFIG: Record<string, { label: string; bg: string; text: string; dot: string; border: string }> = {
-  PENDING:     { label:"appointments.status.pending",    bg:"bg-amber-100 dark:bg-amber-900/30",    text:"text-amber-700 dark:text-amber-300",    dot:"bg-amber-500",   border:"border-amber-300"   },
-  SCHEDULED:   { label:"appointments.status.scheduled",  bg:"bg-amber-100 dark:bg-amber-900/30",    text:"text-amber-700 dark:text-amber-300",    dot:"bg-amber-500",   border:"border-amber-300"   },
-  CONFIRMED:   { label:"appointments.status.confirmed",  bg:"bg-emerald-100 dark:bg-emerald-900/30",text:"text-emerald-700 dark:text-emerald-300",dot:"bg-emerald-500", border:"border-emerald-300" },
-  IN_PROGRESS: { label:"appointments.status.inProgress", bg:"bg-blue-100 dark:bg-blue-900/30",      text:"text-blue-700 dark:text-blue-300",      dot:"bg-blue-500",    border:"border-blue-300"    },
-  COMPLETED:   { label:"appointments.status.completed",  bg:"bg-muted",       text:"text-muted-foreground",    dot:"bg-muted",   border:"border-border"   },
-  CANCELLED:   { label:"appointments.status.cancelled",  bg:"bg-rose-100 dark:bg-rose-900/30",      text:"text-rose-700 dark:text-rose-300",      dot:"bg-rose-500",    border:"border-rose-300"    },
-  NO_SHOW:     { label:"appointments.status.noShow",     bg:"bg-orange-100 dark:bg-orange-900/30",  text:"text-orange-700 dark:text-orange-300",  dot:"bg-orange-500",  border:"border-orange-300"  },
+// Colores por estado = mapeo canónico de la agenda (STATUS_COLOR de
+// agenda-appointment-card) vía tokens semánticos: fondo *-soft + texto *-strong
+// (dark-mode automático, AA en ambos temas). CANCELLED en itálica neutra.
+const STATUS_CONFIG: Record<string, { label: string; bg: string; text: string; dot: string; border: string; italic?: boolean }> = {
+  PENDING:     { label:"appointments.status.pending",    bg:"var(--warning-soft)", text:"var(--warning-strong)", dot:"var(--warning)", border:"var(--warning)" },
+  SCHEDULED:   { label:"appointments.status.scheduled",  bg:"var(--warning-soft)", text:"var(--warning-strong)", dot:"var(--warning)", border:"var(--warning)" },
+  CONFIRMED:   { label:"appointments.status.confirmed",  bg:"var(--info-soft)",    text:"var(--info-strong)",    dot:"var(--info)",    border:"var(--info)" },
+  IN_PROGRESS: { label:"appointments.status.inProgress", bg:"var(--success-soft)", text:"var(--success-strong)", dot:"var(--success)", border:"var(--success)" },
+  COMPLETED:   { label:"appointments.status.completed",  bg:"var(--bg-elev-2)",    text:"var(--text-3)",         dot:"var(--text-3)",  border:"var(--border-strong)" },
+  CANCELLED:   { label:"appointments.status.cancelled",  bg:"var(--bg-elev-2)",    text:"var(--text-4)",         dot:"var(--text-4)",  border:"var(--border-strong)", italic:true },
+  NO_SHOW:     { label:"appointments.status.noShow",     bg:"var(--danger-soft)",  text:"var(--danger-strong)",  dot:"var(--danger)",  border:"var(--danger)" },
 };
 
 const DOC_COLORS = [
@@ -468,7 +471,7 @@ export function AppointmentsClient({ appointments: initialAppts, patients, docto
 
   // Pill usada en MonthView y WeekView — colorea según status (DS tokens).
   const ApptPill = ({ appt, compact = false }: { appt: Appt; compact?: boolean }) => {
-    const c = getApptColors(appt.status);
+    const c = STATUS_CONFIG[appt.status] ?? STATUS_CONFIG.PENDING;
     return (
       <button
         onClick={e => { e.stopPropagation(); setShowDetail(appt); }}
@@ -477,8 +480,8 @@ export function AppointmentsClient({ appointments: initialAppts, patients, docto
           width: "100%",
           textAlign: "left",
           background: c.bg,
-          border: `1px solid ${c.border}`,
-          borderLeft: `3px solid ${c.dot}`,
+          border: "1px solid var(--border-soft)",
+          borderLeft: `2px solid ${c.dot}`,
           color: c.text,
           padding: compact ? "3px 6px" : "5px 8px",
           borderRadius: 4,
@@ -491,13 +494,13 @@ export function AppointmentsClient({ appointments: initialAppts, patients, docto
           transition: "transform .12s, box-shadow .12s",
           overflow: "hidden",
         }}
-        onMouseEnter={e => { e.currentTarget.style.boxShadow = `0 0 12px ${c.border}`; }}
+        onMouseEnter={e => { e.currentTarget.style.boxShadow = "var(--shadow-2)"; }}
         onMouseLeave={e => { e.currentTarget.style.boxShadow = "none"; }}
       >
         <div style={{ display: "flex", alignItems: "center", gap: 4, minWidth: 0 }}>
           <span style={{ width: 4, height: 4, borderRadius: "50%", background: c.dot, flexShrink: 0 }} />
           <span className="mono" style={{ color: "var(--text-3)", fontSize: 9, flexShrink: 0 }}>{appt.startTime}</span>
-          <span style={{ fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          <span style={{ fontWeight: 600, fontStyle: c.italic ? "italic" : undefined, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
             {appt.patient.firstName}
           </span>
           {appt.mode === "TELECONSULTATION" && <span style={{ fontSize: 9, flexShrink: 0 }} title={t("appointments.form.teleconsultation")}>📹</span>}
@@ -517,7 +520,7 @@ export function AppointmentsClient({ appointments: initialAppts, patients, docto
       <div style={{
         display: "grid",
         gridTemplateColumns: "repeat(7, 1fr)",
-        background: "rgba(255,255,255,0.015)",
+        background: "var(--bg-elev-2)",
         borderBottom: "1px solid var(--border-soft)",
       }}>
         {DAY_KEYS.map(dayKey => (
@@ -548,7 +551,7 @@ export function AppointmentsClient({ appointments: initialAppts, patients, docto
                 minHeight: 110,
                 borderRight: "1px solid var(--border-soft)",
                 borderBottom: "1px solid var(--border-soft)",
-                background: "rgba(255,255,255,0.01)",
+                background: "var(--bg-elev-2)",
               }}
             />
           );
@@ -584,7 +587,7 @@ export function AppointmentsClient({ appointments: initialAppts, patients, docto
                     background: "var(--brand)", color: "#fff",
                     display: "grid", placeItems: "center",
                     fontSize: 12, fontWeight: 600,
-                    boxShadow: "0 0 12px rgba(124,58,237,0.4)",
+                    boxShadow: "var(--shadow-1)",
                   }}>
                     {day.getDate()}
                   </span>
@@ -624,7 +627,7 @@ export function AppointmentsClient({ appointments: initialAppts, patients, docto
             display: "grid",
             gridTemplateColumns: "60px repeat(7, 1fr)",
             borderBottom: "1px solid var(--border-soft)",
-            background: "rgba(10,10,15,0.8)",
+            background: "var(--bg-elev)",
             backdropFilter: "blur(8px)",
             position: "sticky",
             top: 0,
@@ -756,7 +759,7 @@ export function AppointmentsClient({ appointments: initialAppts, patients, docto
                 onMouseLeave={e => { e.currentTarget.style.background = "transparent"; }}
               >
                 {slotAppts.map(a => {
-                  const c = getApptColors(a.status);
+                  const c = STATUS_CONFIG[a.status] ?? STATUS_CONFIG.PENDING;
                   return (
                     <button
                       key={a.id}
@@ -766,8 +769,8 @@ export function AppointmentsClient({ appointments: initialAppts, patients, docto
                         width: "100%",
                         textAlign: "left",
                         background: c.bg,
-                        border: `1px solid ${c.border}`,
-                        borderLeft: `3px solid ${c.dot}`,
+                        border: "1px solid var(--border-soft)",
+                        borderLeft: `2px solid ${c.dot}`,
                         color: c.text,
                         borderRadius: 6,
                         padding: "10px 14px",
@@ -775,17 +778,18 @@ export function AppointmentsClient({ appointments: initialAppts, patients, docto
                         cursor: "pointer",
                         transition: "transform .12s, box-shadow .12s",
                       }}
-                      onMouseEnter={e => { e.currentTarget.style.boxShadow = `0 4px 16px -4px ${c.border}`; }}
+                      onMouseEnter={e => { e.currentTarget.style.boxShadow = "var(--shadow-2)"; }}
                       onMouseLeave={e => { e.currentTarget.style.boxShadow = "none"; }}
                     >
                       <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 4 }}>
                         <span style={{ width: 6, height: 6, borderRadius: "50%", background: c.dot }} />
                         <span className="mono" style={{ fontSize: 12, fontWeight: 600 }}>{a.startTime} – {a.endTime}</span>
                         <BadgeNew tone={
-                          a.status === "CONFIRMED"   ? "success" :
-                          a.status === "IN_PROGRESS" ? "brand" :
-                          a.status === "COMPLETED"   ? "info" :
-                          a.status === "CANCELLED" || a.status === "NO_SHOW" ? "danger" : "warning"
+                          a.status === "CONFIRMED"   ? "info" :
+                          a.status === "IN_PROGRESS" ? "success" :
+                          a.status === "COMPLETED"   ? "neutral" :
+                          a.status === "CANCELLED"   ? "neutral" :
+                          a.status === "NO_SHOW"     ? "danger" : "warning"
                         }>{t((STATUS_CONFIG[a.status] ?? STATUS_CONFIG.PENDING).label)}</BadgeNew>
                         {a.mode === "TELECONSULTATION" && <BadgeNew tone="brand">{t("appointments.form.teleconsultation")}</BadgeNew>}
                         <span style={{ marginLeft: "auto", display: "flex", gap: 6 }}>
@@ -832,17 +836,17 @@ export function AppointmentsClient({ appointments: initialAppts, patients, docto
                        t("appointments.period.day", { day: currentDate.getDate(), month: t(MONTH_KEYS[currentDate.getMonth()]), year: currentDate.getFullYear() });
 
   return (
-    <div style={{ padding: "clamp(14px, 1.6vw, 28px)", maxWidth: 1400, margin: "0 auto" }}>
+    <div className={styles.page} style={{ padding: "clamp(14px, 1.6vw, 28px)", maxWidth: 1400, margin: "0 auto" }}>
       {/* Header: title + period nav + actions */}
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 22, gap: 24, flexWrap: "wrap" }}>
         <div>
-          <h1 style={{ fontSize: "clamp(16px, 1.4vw, 22px)", letterSpacing: "-0.02em", color: "var(--text-1)", fontWeight: 600, margin: 0 }}>{t("appointments.header.title")}</h1>
+          <h1 style={{ fontSize: "clamp(20px, 1.6vw, 22px)", letterSpacing: "-0.01em", color: "var(--text-1)", fontWeight: 700, margin: 0 }}>{t("appointments.header.title")}</h1>
           <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 6 }}>
             <button onClick={prevPeriod} className="icon-btn-new" type="button" aria-label={t("appointments.header.prevPeriod")}>
-              <ChevronLeft size={14} />
+              <ChevronLeft size={16} strokeWidth={1.75} />
             </button>
             <button onClick={nextPeriod} className="icon-btn-new" type="button" aria-label={t("appointments.header.nextPeriod")}>
-              <ChevronRight size={14} />
+              <ChevronRight size={16} strokeWidth={1.75} />
             </button>
             <p style={{ color: "var(--text-3)", fontSize: 13, margin: 0, textTransform: "capitalize" }}>{periodTitle}</p>
             <button
@@ -931,9 +935,9 @@ export function AppointmentsClient({ appointments: initialAppts, patients, docto
                 <button key={appt.id} onClick={() => setShowDetail(appt)}
                   className="w-full text-left px-4 py-3 hover:bg-muted/20 transition-colors">
                   <div className="flex items-center gap-2 mb-1">
-                    <div className={`w-2 h-2 rounded-full ${cfg.dot}`} />
-                    <span className="mono text-base font-bold">{appt.startTime}</span>
-                    <span className={`ml-auto text-xs font-bold px-2 py-0.5 rounded-full ${cfg.bg} ${cfg.text}`}>{t(cfg.label)}</span>
+                    <div className="w-2 h-2 rounded-full" style={{ background: cfg.dot }} />
+                    <span className={styles.horaChip}>{appt.startTime}</span>
+                    <span className={`ml-auto ${styles.statusPill}`} style={{ background: cfg.bg, color: cfg.text, fontStyle: cfg.italic ? "italic" : undefined }}>{t(cfg.label)}</span>
                   </div>
                   <div className="text-base font-bold truncate">{appt.patient.firstName} {appt.patient.lastName}</div>
                   <div className="text-sm text-muted-foreground">{appt.type} · <span className="mono">{appt.durationMins}</span> {t("appointments.minLabel")}</div>
@@ -989,7 +993,7 @@ export function AppointmentsClient({ appointments: initialAppts, patients, docto
             <div className="modal" onClick={e => e.stopPropagation()} style={{ borderLeftWidth: 4, borderLeftColor: color.border }}>
               <div className="modal__header">
                 <div className="flex items-center gap-2">
-                  <div className={`w-3 h-3 rounded-full ${cfg.dot}`} />
+                  <div className="w-3 h-3 rounded-full" style={{ background: cfg.dot }} />
                   <div className="modal__title">{appt.type}</div>
                 </div>
                 <div className="flex items-center gap-1">
@@ -1084,8 +1088,9 @@ export function AppointmentsClient({ appointments: initialAppts, patients, docto
                   <div className="flex flex-wrap gap-2">
                     {Object.entries(STATUS_CONFIG).map(([s,c]) => (
                       <button key={s} onClick={() => updateStatus(appt.id,s)}
-                        className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-bold border-2 transition-all ${appt.status===s?`${c.bg} ${c.text} ${c.border}`:"border-border hover:bg-muted"}`}>
-                        <div className={`w-2 h-2 rounded-full ${c.dot}`}/>{t(c.label)}
+                        className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-bold border-2 transition-all ${appt.status===s?"":"border-border hover:bg-muted"}`}
+                        style={appt.status===s?{ background:c.bg, color:c.text, borderColor:c.border, fontStyle:c.italic?"italic":undefined }:undefined}>
+                        <div className="w-2 h-2 rounded-full" style={{ background: c.dot }}/>{t(c.label)}
                       </button>
                     ))}
                   </div>

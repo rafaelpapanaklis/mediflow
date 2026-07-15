@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Beaker, Package, ChevronRight, Loader } from "lucide-react";
 import toast from "react-hot-toast";
@@ -126,98 +127,118 @@ export function OrdenesClient({ orders }: Props) {
       {/* ── Mis órdenes ── */}
       {orders.length === 0 ? (
         <CardNew>
-            <div style={{ padding: 48, textAlign: "center", color: "var(--text-3)" }}>
-              <Package size={32} style={{ color: "var(--text-4)", margin: "0 auto 12px" }} />
-              <div
-                style={{
-                  color: "var(--text-2)",
-                  fontSize: 14,
-                  fontWeight: 500,
-                  marginBottom: 4,
-                }}
-              >
-                {t("procurement.ordenesClient.emptyTitle")}
-              </div>
-              <div style={{ fontSize: 12 }}>
-                {t("procurement.ordenesClient.emptyBody")}
-              </div>
+          <div
+            style={{
+              padding: "40px 24px",
+              textAlign: "center",
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              gap: 10,
+            }}
+          >
+            <Package size={20} style={{ color: "var(--text-3)" }} />
+            <div style={{ color: "var(--text-2)", fontSize: 14, fontWeight: 600 }}>
+              {t("procurement.ordenesClient.emptyTitle")}
             </div>
-          </CardNew>
-        ) : (
-          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-            {orders.map((order) => {
-              const labName = order.lab?.name ?? t("procurement.ordenesClient.labFallback");
-              const detail = order.patientName ?? order.internalRef ?? t("procurement.ordenesClient.noReference");
-              return (
-                <button
-                  key={order.id}
-                  type="button"
-                  onClick={() => router.push(`/dashboard/ordenes-laboratorio/${order.id}`)}
-                  className="card"
-                  style={{
-                    textAlign: "left",
-                    cursor: "pointer",
-                    padding: "14px 18px",
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 14,
-                    border: "1px solid var(--border-soft)",
-                    background: "var(--bg-elev)",
-                    color: "inherit",
-                    transition: "border-color .15s",
-                  }}
-                >
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: 8,
-                        flexWrap: "wrap",
-                        marginBottom: 4,
-                      }}
-                    >
-                      <span
-                        className="mono"
-                        style={{ fontSize: 13, fontWeight: 600, color: "var(--text-1)" }}
-                      >
-                        {order.orderNumber}
-                      </span>
-                      <BadgeNew tone={DENTAL_LAB_ORDER_STATUS[order.status].tone} dot>
-                        {DENTAL_LAB_ORDER_STATUS[order.status].label}
-                      </BadgeNew>
-                      <BadgeNew tone={PAYMENT_STATUS_TONE[order.paymentStatus]} dot>
-                        {t(PAYMENT_STATUS_LABEL_KEYS[order.paymentStatus])}
-                      </BadgeNew>
-                    </div>
-                    <div style={{ fontSize: 11, color: "var(--text-3)" }}>
-                      {labName}
-                      <span style={{ margin: "0 6px" }}>·</span>
-                      {formatRelativeDate(order.createdAt)}
-                      <span style={{ margin: "0 6px" }}>·</span>
-                      {detail}
-                    </div>
-                  </div>
-
-                  <div
-                    className="mono"
-                    style={{
-                      fontSize: 14,
-                      fontWeight: 600,
-                      color: "var(--text-1)",
-                      flexShrink: 0,
-                      textAlign: "right",
-                    }}
-                  >
-                    {fmtMXNdec(order.total)}
-                  </div>
-
-                  <ChevronRight size={14} style={{ color: "var(--text-3)", flexShrink: 0 }} />
-                </button>
-              );
-            })}
+            <p style={{ color: "var(--text-3)", fontSize: 13, margin: 0, maxWidth: 340, lineHeight: 1.5 }}>
+              {t("procurement.ordenesClient.emptyBody")}
+            </p>
+            <ButtonNew
+              variant="primary"
+              icon={<Beaker size={14} />}
+              onClick={() => router.push("/dashboard/laboratorios")}
+              style={{ marginTop: 4 }}
+            >
+              {t("procurement.ordenesClient.exploreLabs")}
+            </ButtonNew>
           </div>
-        )}
+        </CardNew>
+      ) : (
+        <CardNew noPad>
+          <div style={{ overflowX: "auto" }}>
+            <table className="table-new" style={{ minWidth: 720 }}>
+              <thead>
+                <tr>
+                  <th>{t("procurement.ordenesClient.kpiOrders")}</th>
+                  <th>{t("procurement.ordenesClient.labFallback")}</th>
+                  <th>{t("common.status")}</th>
+                  <th>{t("common.date")}</th>
+                  <th style={{ textAlign: "right" }}>{t("common.total")}</th>
+                  <th aria-hidden="true" style={{ width: 40 }} />
+                </tr>
+              </thead>
+              <tbody>
+                {orders.map((order) => {
+                  const labName = order.lab?.name ?? t("procurement.ordenesClient.labFallback");
+                  const detail =
+                    order.patientName ?? order.internalRef ?? t("procurement.ordenesClient.noReference");
+                  return (
+                    <tr
+                      key={order.id}
+                      onClick={() => router.push(`/dashboard/ordenes-laboratorio/${order.id}`)}
+                      style={{ cursor: "pointer" }}
+                    >
+                      <td>
+                        <Link
+                          href={`/dashboard/ordenes-laboratorio/${order.id}`}
+                          className="mono"
+                          style={{
+                            fontSize: 13,
+                            fontWeight: 600,
+                            color: "var(--text-1)",
+                            textDecoration: "none",
+                          }}
+                        >
+                          {order.orderNumber}
+                        </Link>
+                        <div style={{ fontSize: 11, color: "var(--text-3)", marginTop: 2 }}>{detail}</div>
+                      </td>
+                      <td style={{ color: "var(--text-2)", fontSize: 13 }}>{labName}</td>
+                      <td>
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                          <BadgeNew tone={DENTAL_LAB_ORDER_STATUS[order.status].tone} dot>
+                            {DENTAL_LAB_ORDER_STATUS[order.status].label}
+                          </BadgeNew>
+                          <BadgeNew tone={PAYMENT_STATUS_TONE[order.paymentStatus]} dot>
+                            {t(PAYMENT_STATUS_LABEL_KEYS[order.paymentStatus])}
+                          </BadgeNew>
+                        </div>
+                      </td>
+                      <td
+                        style={{
+                          color: "var(--text-3)",
+                          fontSize: 12.5,
+                          whiteSpace: "nowrap",
+                          fontVariantNumeric: "tabular-nums",
+                        }}
+                      >
+                        {formatRelativeDate(order.createdAt)}
+                      </td>
+                      <td
+                        className="mono"
+                        style={{
+                          textAlign: "right",
+                          fontSize: 13,
+                          fontWeight: 600,
+                          color: "var(--text-1)",
+                          whiteSpace: "nowrap",
+                          fontVariantNumeric: "tabular-nums",
+                        }}
+                      >
+                        {fmtMXNdec(order.total)}
+                      </td>
+                      <td style={{ textAlign: "right", width: 40 }}>
+                        <ChevronRight size={14} aria-hidden="true" style={{ color: "var(--text-3)" }} />
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </CardNew>
+      )}
     </div>
   );
 }

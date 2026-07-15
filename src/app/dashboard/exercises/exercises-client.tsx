@@ -2,11 +2,11 @@
 
 import { useState } from "react";
 import { Plus, X, Search, Dumbbell } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import toast from "react-hot-toast";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import { useT } from "@/i18n/i18n-provider";
+import styles from "./exercises.module.css";
 
 interface Exercise {
   id: string;
@@ -76,22 +76,22 @@ export function ExercisesClient({ initialExercises }: { initialExercises: Exerci
   }
 
   return (
-    <div>
-      <div className="flex items-center justify-between mb-6">
+    <div className={styles.page}>
+      <div className={styles.head}>
         <div>
-          <h1 className="text-2xl font-extrabold">{t("pages.exercises.title")}</h1>
-          <p className="text-sm text-muted-foreground mt-0.5">{t("pages.exercises.registeredCount", { count: exercises.length })}</p>
+          <h1 className={styles.title}>{t("pages.exercises.title")}</h1>
+          <p className={styles.subtitle}>{t("pages.exercises.registeredCount", { count: exercises.length })}</p>
         </div>
-        <Button onClick={() => setShowAdd(true)}>
-          <Plus className="w-5 h-5 mr-2" /> {t("pages.exercises.addExercise")}
-        </Button>
+        <button type="button" onClick={() => setShowAdd(true)} className={styles.btnPrimary}>
+          <Plus size={16} strokeWidth={1.75} /> {t("pages.exercises.addExercise")}
+        </button>
       </div>
 
       {/* Search */}
-      <div className="relative mb-5 max-w-md">
-        <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+      <div className={styles.searchWrap}>
+        <Search size={16} strokeWidth={1.75} className={styles.searchIcon} aria-hidden="true" />
         <input
-          className="flex h-11 w-full rounded-xl border border-border bg-card pl-11 pr-4 text-base focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+          className={styles.searchInput}
           placeholder={t("pages.exercises.searchPlaceholder")}
           value={search} onChange={e => setSearch(e.target.value)}
         />
@@ -99,21 +99,24 @@ export function ExercisesClient({ initialExercises }: { initialExercises: Exerci
 
       {/* Grid */}
       {filtered.length > 0 ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className={styles.grid}>
           {filtered.map(exercise => (
-            <div key={exercise.id} className="bg-card border border-border rounded-xl p-5 group">
-              <div className="flex items-start justify-between">
-                <h3 className="text-base font-bold">{exercise.name}</h3>
-                <button onClick={() => handleDelete(exercise.id)} className="text-muted-foreground hover:text-rose-500 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <X className="w-4 h-4" />
+            <div key={exercise.id} className={styles.card}>
+              <div className={styles.cardHead}>
+                <h3 className={styles.cardName}>{exercise.name}</h3>
+                <button
+                  type="button"
+                  onClick={() => handleDelete(exercise.id)}
+                  className={styles.cardDelete}
+                  aria-label={t("common.delete")}
+                >
+                  <X size={16} strokeWidth={1.75} />
                 </button>
               </div>
-              {exercise.description && <p className="text-sm text-muted-foreground mt-1">{exercise.description}</p>}
-              <div className="mt-3 flex items-center gap-3">
-                <span className="px-2.5 py-1 rounded-lg text-xs font-bold bg-brand-500/15 text-brand-700 border border-brand-300">
-                  {exercise.unit}
-                </span>
-                <span className="text-sm text-muted-foreground">
+              {exercise.description && <p className={styles.cardDesc}>{exercise.description}</p>}
+              <div className={styles.cardMeta}>
+                <span className={styles.muscleTag}>{exercise.unit}</span>
+                <span className={styles.cardStat}>
                   {t("pages.exercises.setsReps", { sets: exercise.quantity, reps: exercise.minQuantity })}
                 </span>
               </div>
@@ -121,9 +124,11 @@ export function ExercisesClient({ initialExercises }: { initialExercises: Exerci
           ))}
         </div>
       ) : (
-        <div className="text-center py-16 text-muted-foreground">
-          <Dumbbell className="w-12 h-12 mx-auto mb-3 opacity-20" />
-          <p className="text-base font-semibold">
+        <div className={styles.emptyCard}>
+          <span className={styles.emptyIcon} aria-hidden="true">
+            <Dumbbell size={22} strokeWidth={1.75} />
+          </span>
+          <p className={styles.emptyTitle}>
             {search ? t("common.noResults") : t("pages.exercises.emptyState")}
           </p>
         </div>
@@ -131,49 +136,49 @@ export function ExercisesClient({ initialExercises }: { initialExercises: Exerci
 
       {/* Add Modal */}
       {showAdd && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
-          <div className="bg-card border border-border rounded-2xl shadow-xl w-full max-w-lg max-h-[90vh] flex flex-col overflow-hidden">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-border shrink-0">
-              <h2 className="text-lg font-bold">{t("pages.exercises.addExercise")}</h2>
-              <button onClick={() => setShowAdd(false)} className="p-2 rounded-lg hover:bg-muted text-muted-foreground"><X className="w-5 h-5" /></button>
+        <div className={styles.modalOverlay}>
+          <div className={styles.modal}>
+            <div className={styles.modalHead}>
+              <h2 className={styles.modalTitle}>{t("pages.exercises.addExercise")}</h2>
+              <button type="button" onClick={() => setShowAdd(false)} className={styles.modalClose} aria-label={t("common.close")}>
+                <X size={18} strokeWidth={1.75} />
+              </button>
             </div>
-            <div className="px-6 py-5 space-y-4 flex-1 overflow-y-auto min-h-0">
-              <div className="space-y-1.5">
-                <Label className="text-sm">{t("pages.exercises.nameLabel")}</Label>
-                <input className="flex h-11 w-full rounded-xl border border-border bg-card px-4 text-base focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+            <div className={styles.modalBody}>
+              <div className={styles.field}>
+                <Label className={styles.fieldLabel}>{t("pages.exercises.nameLabel")}</Label>
+                <input className={styles.input}
                   placeholder={t("pages.exercises.namePlaceholder")}
                   value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} />
               </div>
-              <div className="space-y-1.5">
-                <Label className="text-sm">{t("common.description")}</Label>
-                <textarea className="flex min-h-[70px] w-full rounded-xl border border-border bg-card px-4 py-3 text-base focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none"
+              <div className={styles.field}>
+                <Label className={styles.fieldLabel}>{t("common.description")}</Label>
+                <textarea className={styles.textarea}
                   placeholder={t("pages.exercises.descriptionPlaceholder")}
                   value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} />
               </div>
-              <div className="space-y-1.5">
-                <Label className="text-sm">{t("pages.exercises.muscleGroupLabel")}</Label>
-                <input className="flex h-11 w-full rounded-xl border border-border bg-card px-4 text-base focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+              <div className={styles.field}>
+                <Label className={styles.fieldLabel}>{t("pages.exercises.muscleGroupLabel")}</Label>
+                <input className={styles.input}
                   placeholder={t("pages.exercises.muscleGroupPlaceholder")}
                   value={form.muscleGroup} onChange={e => setForm(f => ({ ...f, muscleGroup: e.target.value }))} />
               </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1.5">
-                  <Label className="text-sm">{t("pages.exercises.setsLabel")}</Label>
-                  <input type="number" min="1"
-                    className="flex h-11 w-full rounded-xl border border-border bg-card px-4 text-base focus:outline-none"
+              <div className={styles.formRow}>
+                <div className={styles.field}>
+                  <Label className={styles.fieldLabel}>{t("pages.exercises.setsLabel")}</Label>
+                  <input type="number" min="1" className={styles.input}
                     value={form.sets} onChange={e => setForm(f => ({ ...f, sets: parseInt(e.target.value) || 1 }))} />
                 </div>
-                <div className="space-y-1.5">
-                  <Label className="text-sm">{t("pages.exercises.repsLabel")}</Label>
-                  <input type="number" min="1"
-                    className="flex h-11 w-full rounded-xl border border-border bg-card px-4 text-base focus:outline-none"
+                <div className={styles.field}>
+                  <Label className={styles.fieldLabel}>{t("pages.exercises.repsLabel")}</Label>
+                  <input type="number" min="1" className={styles.input}
                     value={form.reps} onChange={e => setForm(f => ({ ...f, reps: parseInt(e.target.value) || 1 }))} />
                 </div>
               </div>
             </div>
-            <div className="px-6 py-4 flex gap-3 shrink-0 border-t border-border">
-              <Button variant="outline" onClick={() => setShowAdd(false)} className="flex-1 h-11 text-base">{t("common.cancel")}</Button>
-              <Button onClick={handleAdd} className="flex-1 h-11 text-base">{t("common.add")}</Button>
+            <div className={styles.modalFoot}>
+              <button type="button" onClick={() => setShowAdd(false)} className={styles.btnGhost}>{t("common.cancel")}</button>
+              <button type="button" onClick={handleAdd} className={styles.btnPrimary}>{t("common.add")}</button>
             </div>
           </div>
         </div>

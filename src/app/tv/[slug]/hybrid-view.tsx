@@ -21,11 +21,12 @@ interface Props {
 export function TvHybridView(props: Props) {
   return (
     <div
+      className="dark"
       style={{
         minHeight: "100vh",
         display: "grid",
         gridTemplateRows: "60% 40%",
-        background: "#0F1A2E",
+        background: "var(--bg)",
       }}
     >
       <div style={{ overflow: "hidden", position: "relative" }}>

@@ -21,16 +21,22 @@ interface UpcomingItem {
 }
 
 // Mismo color-coding de estatus que la agenda / today-appointment-row.
-const STATUS_DOT: Record<AppointmentStatus, string> = {
-  SCHEDULED:   "var(--warning)",
-  CONFIRMED:   "var(--info)",
-  CHECKED_IN:  "var(--brand)",
-  IN_CHAIR:    "var(--brand)",
-  IN_PROGRESS: "var(--success)",
-  COMPLETED:   "var(--text-3)",
-  CHECKED_OUT: "var(--text-3)",
-  NO_SHOW:     "var(--danger)",
-  CANCELLED:   "var(--text-4)",
+// Pills del sistema (prototipo variante-a): fondo *-soft + dot currentColor
+// + tinta *-strong 11/600. Texto sobre --brand-soft usa --trial-accent-calm
+// (violet-700 en light / violet-300 en dark — AA en ambos).
+const STATUS_PILL: Record<
+  AppointmentStatus,
+  { bg: string; fg: string; italic?: boolean }
+> = {
+  SCHEDULED:   { bg: "var(--warning-soft)", fg: "var(--warning-strong)" },
+  CONFIRMED:   { bg: "var(--info-soft)",    fg: "var(--info-strong)" },
+  CHECKED_IN:  { bg: "var(--brand-soft)",   fg: "var(--trial-accent-calm)" },
+  IN_CHAIR:    { bg: "var(--brand-soft)",   fg: "var(--trial-accent-calm)" },
+  IN_PROGRESS: { bg: "var(--success-soft)", fg: "var(--success-strong)" },
+  COMPLETED:   { bg: "var(--bg-elev-2)",    fg: "var(--text-3)" },
+  CHECKED_OUT: { bg: "var(--bg-elev-2)",    fg: "var(--text-3)" },
+  NO_SHOW:     { bg: "var(--danger-soft)",  fg: "var(--danger-strong)" },
+  CANCELLED:   { bg: "var(--bg-elev-2)",    fg: "var(--text-4)", italic: true },
 };
 
 const STATUS_LABEL_KEY: Record<AppointmentStatus, string> = {
@@ -116,7 +122,6 @@ function Row({
   onOpen: () => void;
   onPatient: () => void;
 }) {
-  const color = STATUS_DOT[item.status];
   const when = formatWhen(item.startsAt, t);
 
   return (
@@ -136,12 +141,12 @@ function Row({
       }}
       style={{
         display: "flex",
-        alignItems: "flex-start",
+        alignItems: "center",
         gap: 12,
         padding: "12px 16px",
         borderBottom: last ? "none" : "1px solid var(--border-soft)",
         cursor: "pointer",
-        transition: "background 0.12s",
+        transition: "background var(--dur-1) var(--ease)",
         outline: "none",
       }}
       onMouseEnter={(e) => (e.currentTarget.style.background = "var(--bg-hover)")}
@@ -150,52 +155,24 @@ function Row({
       onBlur={(e) => (e.currentTarget.style.background = "transparent")}
     >
       <span
-        aria-hidden
         style={{
-          width: 9,
-          height: 9,
-          borderRadius: "50%",
-          background: color,
-          marginTop: 5,
-          flexShrink: 0,
-          boxShadow: item.status === "IN_PROGRESS" ? "0 0 6px var(--success)" : "none",
+          flex: "none",
+          minWidth: 82,
+          textAlign: "center",
+          padding: "4px 8px",
+          borderRadius: 8,
+          background: "var(--brand-soft)",
+          color: "var(--trial-accent-calm)",
+          fontSize: 12,
+          fontWeight: 600,
+          fontVariantNumeric: "tabular-nums",
+          whiteSpace: "nowrap",
         }}
-      />
+      >
+        {when}
+      </span>
 
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            gap: 8,
-          }}
-        >
-          <span
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 6,
-              minWidth: 0,
-              fontSize: 12,
-              fontWeight: 600,
-              color: "var(--brand)",
-              fontVariantNumeric: "tabular-nums",
-              whiteSpace: "nowrap",
-            }}
-          >
-            {when}
-            {item.isTeleconsult && (
-              <Video
-                size={11}
-                aria-label={t("home.upcoming.teleconsult")}
-                style={{ color: "var(--info)", flexShrink: 0 }}
-              />
-            )}
-          </span>
-          <span style={chipStyle(color)}>{t(STATUS_LABEL_KEY[item.status])}</span>
-        </div>
-
         <button
           type="button"
           onClick={(e) => {
@@ -215,7 +192,6 @@ function Row({
             background: "transparent",
             border: "none",
             padding: 0,
-            marginTop: 3,
             cursor: "pointer",
             textAlign: "left",
             fontSize: 13.5,
@@ -227,7 +203,7 @@ function Row({
             whiteSpace: "nowrap",
             overflow: "hidden",
             textOverflow: "ellipsis",
-            transition: "color 0.12s",
+            transition: "color var(--dur-1) var(--ease)",
           }}
           onMouseEnter={(e) => (e.currentTarget.style.color = "var(--brand)")}
           onMouseLeave={(e) => (e.currentTarget.style.color = "var(--text-1)")}
@@ -237,33 +213,64 @@ function Row({
 
         <div
           style={{
-            fontSize: 11.5,
-            color: "var(--text-2)",
-            marginTop: 2,
+            fontSize: 12,
+            color: "var(--text-3)",
+            marginTop: 1,
+            display: "flex",
+            alignItems: "center",
+            gap: 5,
             whiteSpace: "nowrap",
             overflow: "hidden",
             textOverflow: "ellipsis",
           }}
         >
-          {[item.reason ?? t("home.upcoming.defaultReason"), item.doctorShortName]
-            .filter(Boolean)
-            .join(" · ")}
+          {item.isTeleconsult && (
+            <Video
+              size={12}
+              strokeWidth={1.75}
+              aria-label={t("home.upcoming.teleconsult")}
+              style={{ color: "var(--info)", flexShrink: 0 }}
+            />
+          )}
+          <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>
+            {[item.reason ?? t("home.upcoming.defaultReason"), item.doctorShortName]
+              .filter(Boolean)
+              .join(" · ")}
+          </span>
         </div>
       </div>
+
+      <span style={chipStyle(item.status)}>
+        <span
+          aria-hidden
+          style={{
+            width: 6,
+            height: 6,
+            borderRadius: 999,
+            background: "currentColor",
+            flexShrink: 0,
+          }}
+        />
+        {t(STATUS_LABEL_KEY[item.status])}
+      </span>
     </div>
   );
 }
 
-function chipStyle(color: string): CSSProperties {
+function chipStyle(status: AppointmentStatus): CSSProperties {
+  const c = STATUS_PILL[status];
   return {
     flexShrink: 0,
-    fontSize: 10,
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 5,
+    fontSize: 11,
     fontWeight: 600,
-    padding: "2px 8px",
+    padding: "3px 9px",
     borderRadius: 999,
-    color,
-    background: "var(--bg-elev-2)",
-    border: "1px solid var(--border-soft)",
+    color: c.fg,
+    background: c.bg,
+    fontStyle: c.italic ? "italic" : "normal",
     whiteSpace: "nowrap",
     letterSpacing: "0.01em",
   };
@@ -314,9 +321,9 @@ function Skeleton() {
         >
           <span
             style={{
-              width: 9,
-              height: 9,
-              borderRadius: "50%",
+              width: 82,
+              height: 24,
+              borderRadius: 8,
               background: "var(--bg-elev-2)",
               flexShrink: 0,
             }}
@@ -359,7 +366,7 @@ function EmptyMsg({ text }: { text: string }) {
         gap: 8,
       }}
     >
-      <Calendar size={20} aria-hidden style={{ color: "var(--text-4)" }} />
+      <Calendar size={20} strokeWidth={1.75} aria-hidden style={{ color: "var(--text-4)" }} />
       {text}
     </div>
   );

@@ -145,7 +145,7 @@ export default async function Page({ params }: { params: { orderId: string } }) 
             height: 180,
             pointerEvents: "none",
             background:
-              "radial-gradient(60% 70% at 20% 30%, rgba(124,58,237,0.18), transparent 70%)",
+              "radial-gradient(60% 70% at 20% 30%, color-mix(in srgb, var(--brand) 18%, transparent), transparent 70%)",
           }}
         />
         <div
@@ -160,7 +160,7 @@ export default async function Page({ params }: { params: { orderId: string } }) 
             placeItems: "center",
             color: "#fff",
             background: "linear-gradient(135deg, var(--violet-400), var(--brand))",
-            boxShadow: "0 8px 20px -8px rgba(124,58,237,0.6)",
+            boxShadow: "0 8px 20px -8px color-mix(in srgb, var(--brand) 60%, transparent)",
           }}
         >
           <Receipt size={22} />
@@ -222,7 +222,7 @@ export default async function Page({ params }: { params: { orderId: string } }) 
               padding: "12px 14px",
               borderRadius: "var(--radius)",
               background: "var(--danger-soft)",
-              border: "1px solid rgba(239,68,68,0.25)",
+              border: "1px solid var(--danger-border-strong)",
             }}
           >
             <span
@@ -233,7 +233,7 @@ export default async function Page({ params }: { params: { orderId: string } }) 
                 flexShrink: 0,
                 display: "grid",
                 placeItems: "center",
-                background: "rgba(239,68,68,0.15)",
+                background: "var(--danger-soft-strong)",
                 color: "var(--danger)",
               }}
             >
@@ -552,7 +552,7 @@ export default async function Page({ params }: { params: { orderId: string } }) 
               padding: "12px 14px",
               borderRadius: "var(--radius)",
               background: "var(--success-soft)",
-              border: "1px solid rgba(34,197,94,0.22)",
+              border: "1px solid color-mix(in srgb, var(--success) 28%, transparent)",
             }}
           >
             <span
@@ -563,7 +563,7 @@ export default async function Page({ params }: { params: { orderId: string } }) 
                 flexShrink: 0,
                 display: "grid",
                 placeItems: "center",
-                background: "rgba(34,197,94,0.15)",
+                background: "color-mix(in srgb, var(--success) 16%, transparent)",
                 color: "var(--success)",
               }}
             >

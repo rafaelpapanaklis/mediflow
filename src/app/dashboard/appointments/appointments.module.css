@@ -1,0 +1,54 @@
+/* ═══════════════════════════════════════════════════════════════
+   /dashboard/appointments — rediseño Ola 1 (Variante A "Refinada")
+   Contrato: docs/design/PANEL_REDESIGN_SPEC.md
+   Patrón clonado del piloto: src/app/dashboard/patients/patients.module.css
+   Solo tokens semánticos de globals.css; dark mode vía :global(.dark).
+   El calendario (mes/semana/día) colorea las citas POR ESTADO con el
+   mapeo canónico (STATUS_COLOR de agenda-appointment-card): fondo *-soft
+   + texto *-strong; los valores por estado se pasan inline desde
+   STATUS_CONFIG (fuente única) y estas clases aportan sólo la forma.
+   ═══════════════════════════════════════════════════════════════ */
+
+.page {
+  font-family: var(--font-sans, system-ui, sans-serif);
+  color: var(--text-1);
+}
+
+/* ─── Status pill (patrón del sistema: forma; color inline vía token) ───
+   Igual que statusActive/Inactive/Archived del piloto de pacientes:
+   fondo *-soft + texto *-strong. Texto 12px (≥ mínimo). */
+.statusPill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 22px;
+  padding: 0 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ─── Chip de hora (destaca; brand-soft + violet-700 = par AA) ─── */
+.horaChip {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 9px;
+  border-radius: var(--radius-sm);
+  background: var(--brand-soft);
+  color: var(--violet-700);
+  font-size: 13px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ─── Motion: respetar prefers-reduced-motion (spec §Motion) ─── */
+@media (prefers-reduced-motion: reduce) {
+  .page *,
+  .page *::before,
+  .page *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}

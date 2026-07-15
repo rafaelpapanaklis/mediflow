@@ -51,7 +51,8 @@ function StarRating({ rating, count }: { rating: number; count: number }) {
           return (
             <Star
               key={i}
-              size={13}
+              size={14}
+              strokeWidth={1.75}
               fill={on ? STAR_COLOR : "none"}
               style={{ color: on ? STAR_COLOR : "var(--text-3)", flexShrink: 0 }}
             />
@@ -99,12 +100,11 @@ function SupplierLogo({ supplier }: { supplier: Supplier }) {
         width: 52,
         height: 52,
         borderRadius: 12,
-        background: "linear-gradient(135deg, var(--violet-400), var(--brand))",
-        border: "1px solid var(--border-brand)",
-        boxShadow: "0 6px 16px -8px rgba(124,58,237,0.55)",
+        background: "var(--violet-100)",
+        border: "1px solid var(--border-soft)",
         display: "grid",
         placeItems: "center",
-        color: "#fff",
+        color: "var(--violet-600)",
         fontWeight: 700,
         fontSize: 20,
         flexShrink: 0,
@@ -144,23 +144,24 @@ function SupplierCard({
         }}
         style={{
           position: "absolute",
-          top: 10,
-          right: 10,
+          top: 8,
+          right: 8,
           zIndex: 2,
-          width: 34,
-          height: 34,
+          width: 40,
+          height: 40,
           borderRadius: 999,
           display: "grid",
           placeItems: "center",
           cursor: busy ? "default" : "pointer",
           border: `1px solid ${supplier.isFavorite ? "var(--border-brand)" : "var(--border-soft)"}`,
           background: supplier.isFavorite ? "var(--brand-soft)" : "var(--bg-elev)",
-          color: supplier.isFavorite ? "var(--violet-400)" : "var(--text-3)",
+          color: supplier.isFavorite ? "var(--brand)" : "var(--text-3)",
           opacity: busy ? 0.55 : 1,
-          transition: "all .12s",
+          transition:
+            "background var(--dur-1) var(--ease), color var(--dur-1) var(--ease), border-color var(--dur-1) var(--ease)",
         }}
       >
-        <Heart size={16} fill={supplier.isFavorite ? "currentColor" : "none"} />
+        <Heart size={16} strokeWidth={1.75} fill={supplier.isFavorite ? "currentColor" : "none"} />
       </button>
 
       <Link
@@ -177,33 +178,18 @@ function SupplierCard({
             position: "relative",
             overflow: "hidden",
             transition:
-              "transform .14s ease, box-shadow .14s ease, border-color .14s ease",
+              "transform var(--dur-1) var(--ease), box-shadow var(--dur-1) var(--ease), border-color var(--dur-1) var(--ease)",
             borderColor: hover ? "var(--border-brand)" : undefined,
             transform: hover ? "translateY(-2px)" : undefined,
-            boxShadow: hover ? "0 12px 28px -16px rgba(124,58,237,0.55)" : undefined,
+            boxShadow: hover ? "var(--shadow-2)" : undefined,
           }}
         >
-          {/* Acento superior de la card */}
-          <div
-            aria-hidden
-            style={{
-              position: "absolute",
-              top: 0,
-              left: 0,
-              right: 0,
-              height: 3,
-              background: "linear-gradient(90deg, var(--violet-400), var(--brand))",
-              opacity: hover ? 1 : 0.85,
-              transition: "opacity .14s ease",
-            }}
-          />
-
           <div
             className="card__body"
             style={{ display: "flex", flexDirection: "column", gap: 12 }}
           >
             {/* paddingRight reserva el hueco del corazón superpuesto */}
-            <div style={{ display: "flex", alignItems: "center", gap: 12, paddingRight: 30 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 12, paddingRight: 40 }}>
               <SupplierLogo supplier={supplier} />
               <div style={{ minWidth: 0, flex: 1 }}>
                 <div
@@ -230,7 +216,7 @@ function SupplierCard({
                       fontSize: 12,
                     }}
                   >
-                    <MapPin size={12} style={{ color: "var(--violet-400)", flexShrink: 0 }} />
+                    <MapPin size={16} strokeWidth={1.75} style={{ color: "var(--brand)", flexShrink: 0 }} />
                     <span
                       style={{
                         overflow: "hidden",
@@ -296,7 +282,7 @@ function SupplierCard({
                 fontSize: 12,
               }}
             >
-              <Package size={12} style={{ color: "var(--violet-400)" }} />
+              <Package size={16} strokeWidth={1.75} style={{ color: "var(--brand)" }} />
               {t("procurement.suppliersClient.productCount", { count: supplier.productCount })}
             </span>
             {/* CTA visual: <span> (no <button>) para no anidar interactivos
@@ -307,7 +293,7 @@ function SupplierCard({
               style={{ flexShrink: 0 }}
             >
               {t("procurement.suppliersClient.viewSupplier")}
-              <ChevronRight size={14} />
+              <ChevronRight size={16} strokeWidth={1.75} />
             </span>
           </div>
         </div>
@@ -408,28 +394,9 @@ export function SuppliersClient({ initialSuppliers }: { initialSuppliers: Suppli
   return (
     <div style={{ padding: "clamp(14px, 1.6vw, 28px)", maxWidth: 1400, margin: "0 auto" }}>
       {/* HERO */}
-      <div style={{ position: "relative", marginBottom: 22 }}>
-        {/* Glow violeta de fondo */}
-        <div
-          aria-hidden
-          style={{
-            position: "absolute",
-            top: -40,
-            left: -20,
-            width: 320,
-            height: 180,
-            borderRadius: "50%",
-            pointerEvents: "none",
-            background:
-              "radial-gradient(closest-side, rgba(124,58,237,0.16), transparent)",
-            filter: "blur(8px)",
-            zIndex: 0,
-          }}
-        />
+      <div style={{ position: "relative", marginBottom: 24 }}>
         <div
           style={{
-            position: "relative",
-            zIndex: 1,
             display: "flex",
             alignItems: "center",
             gap: 14,
@@ -443,19 +410,19 @@ export function SuppliersClient({ initialSuppliers }: { initialSuppliers: Suppli
               flexShrink: 0,
               display: "grid",
               placeItems: "center",
-              color: "#fff",
-              background: "linear-gradient(135deg, var(--violet-400), var(--brand))",
-              boxShadow: "0 8px 20px -8px rgba(124,58,237,0.6)",
+              color: "var(--brand)",
+              background: "var(--brand-soft)",
+              border: "1px solid var(--border-brand)",
             }}
           >
-            <Store size={22} />
+            <Store size={20} strokeWidth={1.75} />
           </div>
           <div>
             <h1
               style={{
                 fontSize: 22,
                 color: "var(--text-1)",
-                fontWeight: 600,
+                fontWeight: 700,
                 letterSpacing: "-0.02em",
                 margin: 0,
               }}
@@ -498,7 +465,7 @@ export function SuppliersClient({ initialSuppliers }: { initialSuppliers: Suppli
             }}
           >
             <div className="search-field" style={{ maxWidth: 380, flex: "1 1 240px" }}>
-              <Search size={14} />
+              <Search size={16} strokeWidth={1.75} />
               <input
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
@@ -516,19 +483,21 @@ export function SuppliersClient({ initialSuppliers }: { initialSuppliers: Suppli
                   display: "inline-flex",
                   alignItems: "center",
                   gap: 6,
-                  padding: "7px 12px",
+                  height: 30,
+                  padding: "0 12px",
                   borderRadius: 999,
-                  fontSize: 12,
+                  fontSize: 12.5,
                   fontWeight: onlyFavorites ? 600 : 500,
                   cursor: "pointer",
-                  color: onlyFavorites ? "var(--violet-400)" : "var(--text-2)",
+                  color: onlyFavorites ? "var(--brand)" : "var(--text-2)",
                   background: onlyFavorites ? "var(--brand-soft)" : "var(--bg-elev)",
                   border: `1px solid ${onlyFavorites ? "var(--border-brand)" : "var(--border-soft)"}`,
-                  boxShadow: onlyFavorites ? "0 0 0 3px var(--brand-softer)" : undefined,
-                  transition: "all .12s",
+                  boxShadow: "var(--shadow-1)",
+                  transition:
+                    "background var(--dur-1) var(--ease), color var(--dur-1) var(--ease), border-color var(--dur-1) var(--ease)",
                 }}
               >
-                <Heart size={13} fill={onlyFavorites ? "currentColor" : "none"} />
+                <Heart size={16} strokeWidth={1.75} fill={onlyFavorites ? "currentColor" : "none"} />
                 {t("procurement.suppliersClient.onlyFavorites")}
                 {favoriteCount > 0 ? ` (${favoriteCount})` : ""}
               </button>

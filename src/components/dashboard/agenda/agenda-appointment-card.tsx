@@ -244,6 +244,7 @@ export function AgendaAppointmentCard({
       ref={setNodeRef}
       data-appt-id={appointment.id}
       data-status={appointment.status}
+      data-selected={isSelected ? "true" : undefined}
       data-column-mode={columnMode}
       className={className}
       style={
@@ -276,7 +277,7 @@ export function AgendaAppointmentCard({
         name: appointment.patient.name,
         time: formatTimeInTz(appointment.startsAt, timezone),
       })}
-      aria-selected={isSelected}
+      aria-pressed={isSelected}
       {...listeners}
       {...attributes}
     >

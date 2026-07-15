@@ -44,16 +44,23 @@ export function TvMarketingView({ clinicName, clinicLogo, config }: Props) {
 
   return (
     <div
+      className="dark"
       style={{
+        position: "relative",
         minHeight: "100vh",
-        background: `linear-gradient(135deg, ${brandColor} 0%, ${brandColor}cc 100%)`,
-        color: "#fff",
+        background: "linear-gradient(135deg, var(--bg) 0%, var(--bg-elev-2) 100%)",
+        color: "var(--text-1)",
         fontFamily: "var(--font-sans, system-ui, sans-serif)",
         padding: 48,
         display: "flex",
         flexDirection: "column",
       }}
     >
+      {/* Acento de marca "105" — barra superior (único degradado de marca) */}
+      <div
+        aria-hidden
+        style={{ position: "absolute", top: 0, left: 0, right: 0, height: 4, background: "var(--brand-grad)" }}
+      />
       <header style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 48 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 20 }}>
           {clinicLogo && (
@@ -66,7 +73,7 @@ export function TvMarketingView({ clinicName, clinicLogo, config }: Props) {
           <div style={{ fontSize: 80, fontWeight: 700, fontVariantNumeric: "tabular-nums", letterSpacing: "-0.04em", lineHeight: 1 }}>
             {now.toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit", hour12: false })}
           </div>
-          <div style={{ fontSize: 18, color: "rgba(255,255,255,0.85)", textTransform: "capitalize", marginTop: 8 }}>
+          <div style={{ fontSize: 18, color: "var(--text-2)", textTransform: "capitalize", marginTop: 8 }}>
             {now.toLocaleDateString("es-MX", { weekday: "long", day: "numeric", month: "long" })}
           </div>
         </div>
@@ -77,12 +84,14 @@ export function TvMarketingView({ clinicName, clinicLogo, config }: Props) {
           <div
             key={promoIdx}
             style={{
-              background: "rgba(255, 255, 255, 0.10)",
-              border: "1px solid rgba(255, 255, 255, 0.20)",
+              background: `linear-gradient(135deg, ${brandColor} 0%, ${brandColor}cc 100%)`,
+              border: "1px solid var(--border-soft)",
               borderRadius: 24,
               padding: "60px 80px",
               maxWidth: 1100,
               textAlign: "center",
+              color: "#fff",
+              boxShadow: "var(--shadow-3)",
               animation: "promoFade 0.6s ease-out",
             }}
           >
@@ -102,7 +111,7 @@ export function TvMarketingView({ clinicName, clinicLogo, config }: Props) {
             `}</style>
           </div>
         ) : (
-          <div style={{ fontSize: 28, color: "rgba(255,255,255,0.5)", textAlign: "center" }}>
+          <div style={{ fontSize: 28, color: "var(--text-3)", textAlign: "center" }}>
             Bienvenido. Configura promociones desde el panel admin.
           </div>
         )}
@@ -119,7 +128,7 @@ export function TvMarketingView({ clinicName, clinicLogo, config }: Props) {
                   width: 10,
                   height: 10,
                   borderRadius: "50%",
-                  background: i === promoIdx ? "#fff" : "rgba(255,255,255,0.3)",
+                  background: i === promoIdx ? brandColor : "var(--text-4)",
                   transition: "background 0.3s",
                 }}
               />
@@ -128,16 +137,17 @@ export function TvMarketingView({ clinicName, clinicLogo, config }: Props) {
         )}
         {testimonials.length > 0 && (
           <div style={{
-            background: "rgba(255, 255, 255, 0.10)",
+            background: "var(--bg-elev)",
+            border: "1px solid var(--border-soft)",
             borderRadius: 12,
             padding: 18,
             maxWidth: 480,
             fontSize: 14,
           }}>
-            <div style={{ fontStyle: "italic", lineHeight: 1.5, color: "rgba(255,255,255,0.9)" }}>
+            <div style={{ fontStyle: "italic", lineHeight: 1.5, color: "var(--text-2)" }}>
               &ldquo;{testimonials[(promoIdx) % testimonials.length]?.text}&rdquo;
             </div>
-            <div style={{ fontSize: 12, color: "rgba(255,255,255,0.7)", marginTop: 8 }}>
+            <div style={{ fontSize: 12, color: "var(--text-3)", marginTop: 8 }}>
               — {testimonials[(promoIdx) % testimonials.length]?.author}
             </div>
           </div>
