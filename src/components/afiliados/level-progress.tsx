@@ -121,7 +121,7 @@ export function LevelProgress({ info }: { info: LevelInfo }) {
                 height: "100%",
                 width: `${progressPct}%`,
                 borderRadius: 999,
-                background: styles.gradient,
+                background: "var(--brand-grad)",
               }}
             />
           </div>

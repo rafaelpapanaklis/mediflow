@@ -69,7 +69,7 @@ export default async function SupplierHomePage() {
             display: "grid",
             placeItems: "center",
             color: "#fff",
-            background: "linear-gradient(135deg, var(--violet-400), var(--brand))",
+            background: "var(--brand-grad)",
             boxShadow: "0 8px 20px -8px rgba(124,58,237,0.6)",
           }}
         >
@@ -134,7 +134,7 @@ export default async function SupplierHomePage() {
                 placeItems: "center",
                 background: "var(--brand-soft)",
                 border: "1px solid var(--border-brand)",
-                color: "var(--violet-400)",
+                color: "var(--brand)",
               }}
             >
               <Package size={26} />
@@ -184,7 +184,7 @@ export default async function SupplierHomePage() {
                             placeItems: "center",
                             background: "var(--brand-soft)",
                             border: "1px solid var(--border-brand)",
-                            color: "var(--violet-400)",
+                            color: "var(--brand)",
                           }}
                         >
                           <Package size={15} />

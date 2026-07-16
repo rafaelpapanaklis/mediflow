@@ -156,7 +156,7 @@ export function EstadisticasClient() {
                 const conv = s.prev === null ? null : pct(s.value, s.prev);
                 return (
                   <div key={s.label} style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-                    <div style={{ fontSize: 26, fontWeight: 600, letterSpacing: "-0.02em", color: "var(--text-1)" }}>
+                    <div style={{ fontSize: 26, fontWeight: 600, letterSpacing: "-0.02em", color: "var(--text-1)", fontVariantNumeric: "tabular-nums" }}>
                       {s.value.toLocaleString("es-MX")}
                     </div>
                     <div style={{ fontSize: 12, color: "var(--text-3)" }}>{s.label}</div>

@@ -411,7 +411,7 @@ export function ChatWorkspace({
                       onClick={() => selectThread(t.id)}
                       className={cn(
                         "flex w-full items-center gap-3 border-b border-border/60 px-4 py-3 text-left transition-colors hover:bg-muted",
-                        active && "bg-brand-50 shadow-[inset_3px_0_0_0_var(--brand)]"
+                        active && "bg-[var(--brand-soft)] shadow-[inset_3px_0_0_0_var(--brand)]"
                       )}
                     >
                       <Avatar name={counterpartName(t, side)} logoUrl={counterpartLogo(t, side)} />

@@ -115,7 +115,7 @@ export default async function SupplierOrderDetailPage({
             display: "grid",
             placeItems: "center",
             color: "#fff",
-            background: "linear-gradient(135deg, var(--violet-400), var(--brand))",
+            background: "var(--brand-grad)",
             boxShadow: "0 8px 20px -8px rgba(124,58,237,0.6)",
           }}
         >
@@ -175,7 +175,7 @@ export default async function SupplierOrderDetailPage({
                 flexShrink: 0,
                 display: "grid",
                 placeItems: "center",
-                background: "rgba(239,68,68,0.15)",
+                background: "var(--danger-soft-strong)",
                 color: "var(--danger)",
               }}
             >
@@ -209,11 +209,11 @@ export default async function SupplierOrderDetailPage({
                         flexShrink: 0,
                         background: reached
                           ? active
-                            ? "linear-gradient(135deg, var(--violet-400), var(--brand))"
+                            ? "var(--brand-grad)"
                             : "var(--brand-soft)"
                           : "var(--bg-elev-2)",
                         border: reached ? "1px solid var(--border-brand)" : "1px solid var(--border-soft)",
-                        color: active ? "#fff" : reached ? "var(--violet-400)" : "var(--text-3)",
+                        color: active ? "#fff" : reached ? "var(--brand)" : "var(--text-3)",
                         boxShadow: active ? "0 8px 20px -8px rgba(124,58,237,0.6)" : undefined,
                       }}
                     >
@@ -265,7 +265,7 @@ export default async function SupplierOrderDetailPage({
                   placeItems: "center",
                   background: "var(--brand-soft)",
                   border: "1px solid var(--border-brand)",
-                  color: "var(--violet-400)",
+                  color: "var(--brand)",
                 }}
               >
                 <Building2 size={18} />
@@ -339,7 +339,7 @@ export default async function SupplierOrderDetailPage({
                           placeItems: "center",
                           background: "var(--brand-soft)",
                           border: "1px solid var(--border-brand)",
-                          color: "var(--violet-400)",
+                          color: "var(--brand)",
                         }}
                       >
                         <Package size={18} />
@@ -381,7 +381,7 @@ export default async function SupplierOrderDetailPage({
                   className="mono"
                   style={{
                     textAlign: "right",
-                    color: "var(--violet-400)",
+                    color: "var(--brand)",
                     fontWeight: 700,
                     fontSize: 16,
                     background: "var(--brand-soft)",
@@ -412,7 +412,7 @@ export default async function SupplierOrderDetailPage({
                     marginBottom: 2,
                   }}
                 >
-                  <Receipt size={12} style={{ color: "var(--violet-400)" }} />
+                  <Receipt size={12} style={{ color: "var(--brand)" }} />
                   Método de pago
                 </div>
                 <div style={{ color: "var(--text-1)" }}>{order.paymentMethod}</div>
@@ -430,7 +430,7 @@ export default async function SupplierOrderDetailPage({
                     marginBottom: 2,
                   }}
                 >
-                  <FileText size={12} style={{ color: "var(--violet-400)" }} />
+                  <FileText size={12} style={{ color: "var(--brand)" }} />
                   Notas
                 </div>
                 <p style={{ color: "var(--text-1)", whiteSpace: "pre-wrap", margin: 0 }}>{order.notes}</p>

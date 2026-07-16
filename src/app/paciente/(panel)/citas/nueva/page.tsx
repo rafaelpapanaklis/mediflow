@@ -368,6 +368,7 @@ export default function PacienteNuevaCitaPage() {
                 onChange={(e) => handleClinicChange(e.target.value)}
                 disabled={submitting}
                 style={FIELD_STYLE}
+                className="focus-visible:[box-shadow:var(--ring)]"
               >
                 <option value="">Elige una clínica…</option>
                 {clinics.map((c) => (
@@ -396,6 +397,7 @@ export default function PacienteNuevaCitaPage() {
                 onChange={(e) => handleDoctorChange(e.target.value)}
                 disabled={submitting || !clinicId}
                 style={{ ...FIELD_STYLE, opacity: clinicId ? 1 : 0.6 }}
+                className="focus-visible:[box-shadow:var(--ring)]"
               >
                 <option value="">
                   {clinicId ? "Elige un doctor/a…" : "Primero elige una clínica"}
@@ -423,6 +425,7 @@ export default function PacienteNuevaCitaPage() {
               onChange={handleDateChange}
               disabled={submitting || !doctorId}
               style={{ ...FIELD_STYLE, opacity: doctorId ? 1 : 0.6 }}
+              className="focus-visible:[box-shadow:var(--ring)]"
             />
             {!doctorId && (
               <p style={HINT_STYLE}>Elige un doctor/a para ver los horarios disponibles.</p>
@@ -526,6 +529,7 @@ export default function PacienteNuevaCitaPage() {
                   disabled={submitting}
                   placeholder="Ej. Consulta general, revisión, limpieza…"
                   style={FIELD_STYLE}
+                  className="focus-visible:[box-shadow:var(--ring)]"
                 />
               </div>
               <div>
@@ -541,6 +545,7 @@ export default function PacienteNuevaCitaPage() {
                   disabled={submitting}
                   placeholder="Cuéntanos cualquier detalle que debamos saber"
                   style={{ ...FIELD_STYLE, resize: "vertical", minHeight: 64, lineHeight: 1.45 }}
+                  className="focus-visible:[box-shadow:var(--ring)]"
                 />
                 <div style={{ textAlign: "right", fontSize: 11, color: FAINT, marginTop: 2 }}>
                   {reason.length}/500

@@ -54,13 +54,13 @@ export default async function AffiliatePendingPage() {
       }}
     >
       <div
-        className="shadow-card"
         style={{
           width: "100%",
           maxWidth: 460,
           background: "var(--bg-elev)",
           border: "1px solid var(--border-soft)",
           borderRadius: 16,
+          boxShadow: "var(--shadow-2)",
           padding: "clamp(24px, 4vw, 36px)",
           display: "flex",
           flexDirection: "column",

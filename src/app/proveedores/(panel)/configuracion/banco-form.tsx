@@ -117,7 +117,7 @@ export function BancoForm({
         }}
       />
       <div className="form-section__title">
-        <Landmark size={13} style={{ color: "var(--violet-400)" }} /> Cuentas bancarias (SPEI){" "}
+        <Landmark size={13} style={{ color: "var(--brand)" }} /> Cuentas bancarias (SPEI){" "}
         <span className="form-section__rule" />
       </div>
       <p style={{ color: "var(--text-3)", fontSize: 12, marginTop: -4, marginBottom: 14 }}>
@@ -147,7 +147,7 @@ export function BancoForm({
               placeItems: "center",
               background: "var(--brand-soft)",
               border: "1px solid var(--border-brand)",
-              color: "var(--violet-400)",
+              color: "var(--brand)",
             }}
           >
             <CreditCard size={26} />
@@ -197,7 +197,7 @@ export function BancoForm({
                       flexShrink: 0,
                     }}
                   >
-                    <Landmark size={16} style={{ color: "var(--violet-400)" }} />
+                    <Landmark size={16} style={{ color: "var(--brand)" }} />
                   </div>
                   <div style={{ minWidth: 0 }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -257,7 +257,7 @@ export function BancoForm({
                   placeItems: "center",
                   background: "var(--brand-soft)",
                   border: "1px solid var(--border-brand)",
-                  color: "var(--violet-400)",
+                  color: "var(--brand)",
                   flexShrink: 0,
                 }}
               >

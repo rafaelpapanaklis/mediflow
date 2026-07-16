@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { getSupplierContext } from "@/lib/supplier-auth";
 import { SupplierSidebar } from "@/components/proveedores/supplier-sidebar";
 import { SupplierTopbar } from "@/components/proveedores/supplier-topbar";
+import "@/app/panel-chrome-va.css";
 
 export default async function SupplierPanelLayout({
   children,
@@ -15,7 +16,7 @@ export default async function SupplierPanelLayout({
   if (ctx.status !== "APPROVED") redirect("/proveedores/pendiente");
 
   return (
-    <div className="dashboard-shell flex min-h-screen font-sans">
+    <div className="mf-extpanel dashboard-shell flex min-h-screen font-sans">
       <SupplierSidebar
         businessName={ctx.supplier.businessName}
         logoUrl={ctx.supplier.logoUrl ?? null}

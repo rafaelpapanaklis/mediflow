@@ -73,8 +73,8 @@ export function CouponCard({
         style={{
           padding: "12px 16px",
           borderRadius: 12,
-          border: "1px solid rgba(245,158,11,0.35)",
-          background: "rgba(245,158,11,0.08)",
+          border: "1px solid var(--warning-border-strong)",
+          background: "var(--warning-soft)",
           color: "var(--text-2)",
           fontSize: 13,
           lineHeight: 1.5,

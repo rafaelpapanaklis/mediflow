@@ -98,7 +98,7 @@ export default async function HerramientasPage() {
             display: "grid",
             placeItems: "center",
             color: "#fff",
-            background: "linear-gradient(135deg, var(--violet-400), var(--brand))",
+            background: "var(--brand-grad)",
             boxShadow: "0 8px 20px -8px rgba(124,58,237,0.6)",
           }}
         >
@@ -119,8 +119,8 @@ export default async function HerramientasPage() {
           style={{
             padding: "12px 16px",
             borderRadius: 12,
-            border: "1px solid rgba(245,158,11,0.35)",
-            background: "rgba(245,158,11,0.08)",
+            border: "1px solid var(--warning-border-strong)",
+            background: "var(--warning-soft)",
             color: "var(--text-2)",
             fontSize: 13,
             lineHeight: 1.5,

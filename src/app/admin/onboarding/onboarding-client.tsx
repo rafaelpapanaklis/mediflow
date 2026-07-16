@@ -137,7 +137,7 @@ export function OnboardingClient({ rows, steps }: { rows: Row[]; steps: Step[] }
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <Link
                       href={`/admin/clinics/${r.id}`}
-                      style={{ fontSize: 13, fontWeight: 600, color: "#c4b5fd", textDecoration: "none", display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+                      style={{ fontSize: 13, fontWeight: 600, color: "var(--brand)", textDecoration: "none", display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
                     >
                       {r.name}
                     </Link>

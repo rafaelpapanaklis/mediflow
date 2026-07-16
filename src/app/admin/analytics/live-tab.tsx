@@ -75,8 +75,8 @@ export function LiveTab(_: TabProps) {
       {/* Header en vivo */}
       <div className="card" style={{ padding: 16, display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
         <span style={{ position: "relative", display: "inline-flex", width: 12, height: 12 }}>
-          <span style={{ position: "absolute", inset: 0, borderRadius: 999, background: "#22c55e", opacity: 0.4, animation: "daPing 1.6s cubic-bezier(0,0,.2,1) infinite" }} />
-          <span style={{ position: "relative", width: 12, height: 12, borderRadius: 999, background: "#22c55e" }} />
+          <span style={{ position: "absolute", inset: 0, borderRadius: 999, background: "var(--success)", opacity: 0.4, animation: "daPing 1.6s cubic-bezier(0,0,.2,1) infinite" }} />
+          <span style={{ position: "relative", width: 12, height: 12, borderRadius: 999, background: "var(--success)" }} />
         </span>
         <style dangerouslySetInnerHTML={{ __html: `@keyframes daPing{75%,100%{transform:scale(2.2);opacity:0}}` }} />
         <div>

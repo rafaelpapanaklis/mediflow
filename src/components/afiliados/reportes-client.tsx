@@ -40,7 +40,8 @@ const fieldStyle: React.CSSProperties = {
   fontSize: 13,
   outline: "none",
   fontFamily: "inherit",
-  colorScheme: "dark", // picker nativo en dark
+  // color-scheme se hereda del tema (root claro / .dark) para que el picker
+  // nativo siga la Variante A en claro y el modo oscuro cuando aplique.
 };
 
 const labelStyle: React.CSSProperties = {

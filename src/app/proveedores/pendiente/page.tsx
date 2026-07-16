@@ -60,8 +60,8 @@ export default async function SupplierPendingPage() {
       }}
     >
       <div
-        className="shadow-card"
         style={{
+          boxShadow: "var(--shadow-2)",
           width: "100%",
           maxWidth: 460,
           background: "var(--bg-elev)",

@@ -69,7 +69,7 @@ export default async function VendedorInicioPage() {
             display: "grid",
             placeItems: "center",
             color: "#fff",
-            background: "linear-gradient(135deg, var(--violet-400), var(--brand))",
+            background: "var(--brand-grad)",
             boxShadow: "0 8px 20px -8px rgba(124,58,237,0.6)",
           }}
         >
@@ -94,7 +94,7 @@ export default async function VendedorInicioPage() {
             left: 0,
             right: 0,
             height: 3,
-            background: "linear-gradient(90deg, var(--violet-400), var(--brand))",
+            background: "var(--brand-grad)",
           }}
         />
         <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>

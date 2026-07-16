@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { getDentalLabContext } from "@/lib/lab-auth";
 import { LabSidebar } from "@/components/laboratorios/lab-sidebar";
 import { LabTopbar } from "@/components/laboratorios/lab-topbar";
+import "@/app/panel-chrome-va.css";
 
 export default async function LabPanelLayout({
   children,
@@ -15,7 +16,7 @@ export default async function LabPanelLayout({
   if (ctx.status !== "APPROVED") redirect("/laboratorios/pendiente");
 
   return (
-    <div className="dashboard-shell flex min-h-screen font-sans">
+    <div className="mf-extpanel dashboard-shell flex min-h-screen font-sans">
       <LabSidebar
         labName={ctx.lab.name}
         logoUrl={ctx.lab.logoUrl ?? null}

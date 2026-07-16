@@ -7,6 +7,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
 import { LayoutDashboard, Settings, LogOut, Menu, X, Handshake, Megaphone } from "lucide-react";
+import "@/app/panel-chrome-va.css";
 
 type NavItem = {
   href: string;
@@ -45,7 +46,7 @@ export function SellerShell({
   }
 
   return (
-    <div className="dashboard-shell flex min-h-screen font-sans">
+    <div className="mf-extpanel dashboard-shell flex min-h-screen font-sans">
       {/* Mobile hamburger */}
       <button
         type="button"

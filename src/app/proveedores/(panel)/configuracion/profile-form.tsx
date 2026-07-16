@@ -223,7 +223,7 @@ export function ProfileForm({ canEdit, initial }: { canEdit: boolean; initial: P
     opacity: canEdit ? 1 : 0.7,
     fontFamily: "inherit",
     ...(active
-      ? { background: "var(--brand-soft)", color: "#c4b5fd", borderColor: "rgba(124,58,237,0.4)" }
+      ? { background: "var(--brand-soft)", color: "var(--brand)", borderColor: "var(--border-brand)" }
       : {}),
   });
 
@@ -273,7 +273,7 @@ export function ProfileForm({ canEdit, initial }: { canEdit: boolean; initial: P
             <span
               className="mono"
               style={{
-                color: "var(--violet-400)",
+                color: "var(--brand)",
                 background: "var(--brand-soft)",
                 border: "1px solid var(--border-brand)",
                 borderRadius: 8,
@@ -291,7 +291,7 @@ export function ProfileForm({ canEdit, initial }: { canEdit: boolean; initial: P
       <CardNew>
         <CardAccent />
         <div className="form-section__title">
-          <Building2 size={13} style={{ color: "var(--violet-400)" }} /> Datos del negocio{" "}
+          <Building2 size={13} style={{ color: "var(--brand)" }} /> Datos del negocio{" "}
           <span className="form-section__rule" />
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
@@ -418,7 +418,7 @@ export function ProfileForm({ canEdit, initial }: { canEdit: boolean; initial: P
       <CardNew>
         <CardAccent />
         <div className="form-section__title">
-          <Truck size={13} style={{ color: "var(--violet-400)" }} /> Pedido y envío{" "}
+          <Truck size={13} style={{ color: "var(--brand)" }} /> Pedido y envío{" "}
           <span className="form-section__rule" />
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
@@ -457,7 +457,7 @@ export function ProfileForm({ canEdit, initial }: { canEdit: boolean; initial: P
       <CardNew>
         <CardAccent />
         <div className="form-section__title">
-          <Tag size={13} style={{ color: "var(--violet-400)" }} /> Categorías{" "}
+          <Tag size={13} style={{ color: "var(--brand)" }} /> Categorías{" "}
           <span className="form-section__rule" />
         </div>
         <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
@@ -480,7 +480,7 @@ export function ProfileForm({ canEdit, initial }: { canEdit: boolean; initial: P
       <CardNew>
         <CardAccent />
         <div className="form-section__title">
-          <Wallet size={13} style={{ color: "var(--violet-400)" }} /> Cobros (pagos de clínicas){" "}
+          <Wallet size={13} style={{ color: "var(--brand)" }} /> Cobros (pagos de clínicas){" "}
           <span className="form-section__rule" />
         </div>
         <p style={{ color: "var(--text-3)", fontSize: 12, marginTop: -4, marginBottom: 14 }}>
@@ -489,7 +489,7 @@ export function ProfileForm({ canEdit, initial }: { canEdit: boolean; initial: P
         </p>
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
           <PayToggle
-            icon={<Landmark size={16} style={{ color: "var(--violet-400)" }} />}
+            icon={<Landmark size={16} style={{ color: "var(--brand)" }} />}
             title="Transferencia (SPEI)"
             subtitle="La clínica transfiere a tus cuentas CLABE."
             checked={payTransferEnabled}
@@ -497,7 +497,7 @@ export function ProfileForm({ canEdit, initial }: { canEdit: boolean; initial: P
             onChange={setPayTransferEnabled}
           />
           <PayToggle
-            icon={<Wallet size={16} style={{ color: "var(--violet-400)" }} />}
+            icon={<Wallet size={16} style={{ color: "var(--brand)" }} />}
             title="MercadoPago"
             subtitle="Cobro en línea directo a tu cuenta de MercadoPago."
             checked={payMercadoPagoEnabled}
@@ -505,7 +505,7 @@ export function ProfileForm({ canEdit, initial }: { canEdit: boolean; initial: P
             onChange={setPayMercadoPagoEnabled}
           />
           <PayToggle
-            icon={<Banknote size={16} style={{ color: "var(--violet-400)" }} />}
+            icon={<Banknote size={16} style={{ color: "var(--brand)" }} />}
             title="Efectivo"
             subtitle="La clínica paga en efectivo al recibir el pedido."
             checked={payCashEnabled}
@@ -529,7 +529,7 @@ export function ProfileForm({ canEdit, initial }: { canEdit: boolean; initial: P
             >
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
                 <div style={{ display: "inline-flex", alignItems: "center", gap: 8, fontSize: 13, fontWeight: 600, color: "var(--text-1)" }}>
-                  <CreditCard size={15} style={{ color: "var(--violet-400)" }} />
+                  <CreditCard size={15} style={{ color: "var(--brand)" }} />
                   Conexión con MercadoPago
                 </div>
                 <BadgeNew tone={mpConnected ? "success" : "warning"} dot>
@@ -658,7 +658,7 @@ function PayToggle({
           width: 38,
           height: 22,
           borderRadius: 999,
-          background: checked ? "var(--violet-500, #7c3aed)" : "var(--border-strong)",
+          background: checked ? "var(--brand)" : "var(--border-strong)",
           position: "relative",
           flexShrink: 0,
           transition: "background .15s",
