@@ -27,6 +27,8 @@ import {
 } from "@/lib/specialties/keys";
 import { setSidebarSectionCollapsed } from "@/app/actions/sidebar";
 import { useT } from "@/i18n/i18n-provider";
+import { NewBranchDialog } from "@/components/dashboard/new-branch-dialog";
+import type { SidebarBranchInfo } from "@/lib/branches-shared";
 
 // ═══════════════════════════════════════════════════════════════════
 // Tipos
@@ -78,6 +80,12 @@ export interface SidebarProps {
   plan: ClinicPlan;
   clinicCategory: ClinicCategory;
   allClinics?: SidebarClinicRef[];
+  /**
+   * Multi-Clínica Fase 1 — cupo de sucursales del DUEÑO y prefills del form
+   * "Nueva sucursal". Lo resuelve el layout con getBranchQuota; si viene
+   * undefined el switcher se comporta como siempre (solo lista/cambia sedes).
+   */
+  branches?: SidebarBranchInfo;
   onboardingCompleted?: string[];
   /** Para el mini-status de trial. Null si la clínica nunca tuvo trial. */
   trialEndsAt?: Date | string | null;
@@ -665,6 +673,7 @@ export function Sidebar(props: SidebarProps) {
         clinicId={props.clinicId}
         plan={props.plan}
         allClinics={props.allClinics ?? []}
+        branches={props.branches}
       />
 
       {canCreateAppt && (
@@ -895,17 +904,26 @@ export function Sidebar(props: SidebarProps) {
 // ═══════════════════════════════════════════════════════════════════
 
 function ClinicSwitcher({
-  collapsed, clinicName, clinicId, plan, allClinics,
+  collapsed, clinicName, clinicId, plan, allClinics, branches,
 }: {
   collapsed: boolean;
   clinicName: string;
   clinicId: string;
   plan: ClinicPlan;
   allClinics: SidebarClinicRef[];
+  branches?: SidebarBranchInfo;
 }) {
   const t = useT();
   const router = useRouter();
+  const [branchOpen, setBranchOpen] = useState(false);
   const hasOthers = allClinics.filter((c) => c.clinicId !== clinicId).length > 0;
+  // Sección de sucursales: sólo para el DUEÑO cuyo plan contempla multi-sede
+  // (maxClinics ≠ 1). Con un plan sin sucursales no se menciona el tema — el
+  // upsell a CLINIC es trabajo de la página de precios, no del sidebar.
+  const showBranches = !!branches?.quota.planAllowsBranches && branches.quota.blockedReason !== "ROLE";
+  // Sin otras sedes NI acción de sucursal no hay nada que desplegar: se queda
+  // como la tarjeta estática de marca de siempre.
+  const hasMenu = hasOthers || showBranches;
   const initials = clinicName
     .split(" ").map((w) => w[0]).filter(Boolean).slice(0, 2).join("").toUpperCase();
 
@@ -968,7 +986,7 @@ function ClinicSwitcher({
           </span>
         </div>
       )}
-      {!collapsed && hasOthers && (
+      {!collapsed && hasMenu && (
         <ChevronDown size={14} style={{ color: "var(--text-3)", flexShrink: 0 }} aria-hidden />
       )}
     </>
@@ -986,17 +1004,18 @@ function ClinicSwitcher({
     border: "1px solid var(--border-soft)",
     borderRadius: 10,
     boxShadow: "var(--shadow-1)",
-    cursor: hasOthers ? "pointer" : "default",
+    cursor: hasMenu ? "pointer" : "default",
     fontFamily: "var(--font-sans, system-ui, sans-serif)",
     textAlign: "left",
     transition: "background var(--dur-1) var(--ease), box-shadow var(--dur-1) var(--ease)",
   };
 
-  if (!hasOthers) {
+  if (!hasMenu) {
     return <div style={brandStyle}>{brandContent}</div>;
   }
 
   return (
+    <>
     <DropdownMenu.Root>
       <DropdownMenu.Trigger
         aria-label={t("sidebar.clinicSwitcherAria", { name: clinicName })}
@@ -1079,9 +1098,72 @@ function ClinicSwitcher({
               </DropdownMenu.Item>
             );
           })}
+
+          {showBranches && branches && (
+            <>
+              <DropdownMenu.Separator style={{ height: 1, background: "var(--border-soft)", margin: "4px 0" }} />
+              {branches.quota.canCreate ? (
+                <DropdownMenu.Item
+                  // SIN preventDefault: que el menú cierre solo. El diálogo vive
+                  // FUERA de DropdownMenu.Root (abajo), así que cerrar el menú no
+                  // lo desmonta, y dejar los dos abiertos pelearía el foco.
+                  onSelect={() => setBranchOpen(true)}
+                  style={{
+                    padding: "8px 10px",
+                    fontSize: 13,
+                    fontWeight: 600,
+                    color: "var(--brand)",
+                    borderRadius: 6,
+                    cursor: "pointer",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 8,
+                    outline: "none",
+                  }}
+                >
+                  <Plus size={14} aria-hidden />
+                  {t("sidebar.branches.new")}
+                </DropdownMenu.Item>
+              ) : (
+                // Tope alcanzado (o suscripción no al día): estado informativo,
+                // no accionable. El cobro de la sede extra es follow-up (b).
+                <div
+                  style={{
+                    padding: "8px 10px",
+                    fontSize: 11,
+                    color: "var(--text-3)",
+                    lineHeight: 1.45,
+                  }}
+                >
+                  {branches.quota.blockedReason === "LIMIT"
+                    ? t("sidebar.branches.limitReached", {
+                        used: String(branches.quota.used),
+                        max: String(branches.quota.max),
+                      })
+                    : t("sidebar.branches.needsSubscription")}
+                </div>
+              )}
+            </>
+          )}
         </DropdownMenu.Content>
       </DropdownMenu.Portal>
     </DropdownMenu.Root>
+
+    {showBranches && branches && (
+      <NewBranchDialog
+        open={branchOpen}
+        onClose={() => setBranchOpen(false)}
+        defaults={branches.defaults}
+        quota={branches.quota}
+        onCreated={() => {
+          // El endpoint ya movió la cookie de clínica activa a la sede nueva:
+          // refrescar deja al dueño trabajando dentro de ella.
+          setBranchOpen(false);
+          router.refresh();
+        }}
+      />
+    )}
+    </>
   );
 }
 

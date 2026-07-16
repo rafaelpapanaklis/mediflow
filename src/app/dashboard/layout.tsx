@@ -25,6 +25,7 @@ import {
   TWO_FA_SETUP_PATH,
 } from "@/lib/auth/two-factor-constants";
 import { ACTIVE_SUBSCRIPTION_STATUSES, isPlanExpired } from "@/lib/plan-status";
+import { getBranchQuota } from "@/lib/branches";
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const user = await getCurrentUser();
@@ -126,6 +127,17 @@ export default async function DashboardLayout({ children }: { children: React.Re
     getOnboardingCompleted(clinic.id, clinic.waConnected),
   ]);
 
+  // Multi-Clínica Fase 1 — cupo de sucursales para el switcher del sidebar.
+  // Sin queries extra: las sedes que este dueño ya tiene salen de allClinics
+  // (getUserClinics trae el rol POR clínica) y la config de planes va con caché
+  // en memoria. Esto es sólo para PINTAR: el gate que manda es el de
+  // POST /api/clinics, que recuenta contra la BD con el supabaseId de la sesión.
+  const branchQuota = await getBranchQuota({
+    clinic,
+    isOwner: user.role === "SUPER_ADMIN",
+    ownedCount: allClinics.filter((c) => c.role === "SUPER_ADMIN").length,
+  });
+
   return (
     <I18nProvider locale={locale} dict={dict}>
     <ActiveConsultProvider>
@@ -157,6 +169,14 @@ export default async function DashboardLayout({ children }: { children: React.Re
         plan={clinic.plan}
         clinicCategory={(clinic as any).category ?? "OTHER"}
         allClinics={allClinics}
+        branches={{
+          quota: branchQuota,
+          defaults: {
+            category: (clinic as any).category ?? "OTHER",
+            city: clinic.city ?? "",
+            state: clinic.state ?? "",
+          },
+        }}
         onboardingCompleted={onboardingCompleted}
         trialEndsAt={trialEndsAt}
         isInTrial={isInTrial}

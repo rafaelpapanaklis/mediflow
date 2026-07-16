@@ -6943,6 +6943,10 @@ model PlanConfig {
   whatsappMonthly Int
   maxPatients     Int?
   maxUsers        Int?
+  // Máximo de sucursales (clínicas) que el dueño puede tener con este plan.
+  // NULL = ilimitado. Seed: BASIC=1, PRO=1, CLINIC=3. Requiere
+  // sql/plan_configs_max_clinics.sql APLICADO antes de deployar.
+  maxClinics      Int?
   features        Json
   updatedAt       DateTime @updatedAt
 

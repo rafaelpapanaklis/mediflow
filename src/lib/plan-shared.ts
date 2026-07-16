@@ -30,6 +30,12 @@ export interface PlanLimits {
   maxPatients: number | null;
   /** Máximo de usuarios/profesionales; null = ilimitado */
   maxUsers: number | null;
+  /**
+   * Máximo de SUCURSALES (clínicas) por dueño; null = ilimitado. Se cuenta por
+   * supabaseId con rol SUPER_ADMIN, no por clínica. 1 = sin multi-sucursal.
+   * Enforcement en POST /api/clinics vía getBranchQuota (@/lib/branches).
+   */
+  maxClinics: number | null;
   label: string;
 }
 
@@ -51,6 +57,8 @@ export interface ResolvedPlan {
   whatsappMonthly: number;
   maxPatients: number | null;
   maxUsers: number | null;
+  /** Máximo de sucursales por dueño; null = ilimitado (1 = sin multi-sucursal). */
+  maxClinics: number | null;
   /** Bullets de marketing para las tarjetas (display). */
   features: string[];
   /** Permisos por módulo del panel: { moduleKey: boolean }. */
@@ -99,15 +107,16 @@ export interface PlanConfigShape {
   whatsappMonthly: number;
   maxPatients: number | null;
   maxUsers: number | null;
+  maxClinics: number | null;
   features: Record<string, boolean>;
 }
 
 /**
  * FALLBACK = SEED. Precios 419/689/1719 (anual = 35% de descuento →
  * 3264/5376/13404, equivalentes a 272/448/1117 al mes). Límites finales:
- * pacientes 500/∞/∞; usuarios 2/6/∞; storage 5/15/75 GB; IA 0/200k/1M;
- * WhatsApp 300/1500/6000; BASIC SIN IA/analytics/tv-modes; PRO y CLINIC con
- * todo. Editable en /admin sin redeploy.
+ * pacientes 500/∞/∞; usuarios 2/6/∞; sucursales 1/1/3; storage 5/15/75 GB;
+ * IA 0/200k/1M; WhatsApp 300/1500/6000; BASIC SIN IA/analytics/tv-modes; PRO y
+ * CLINIC con todo. Editable en /admin sin redeploy.
  */
 export const FALLBACK_PLAN_CONFIG: Record<PlanId, PlanConfigShape> = {
   BASIC: {
@@ -119,6 +128,7 @@ export const FALLBACK_PLAN_CONFIG: Record<PlanId, PlanConfigShape> = {
     whatsappMonthly: 300,
     maxPatients: 500,
     maxUsers: 2,
+    maxClinics: 1,
     features: { ...allModules(true), "ai-assistant": false, analytics: false, "tv-modes": false },
   },
   PRO: {
@@ -130,6 +140,7 @@ export const FALLBACK_PLAN_CONFIG: Record<PlanId, PlanConfigShape> = {
     whatsappMonthly: 1500,
     maxPatients: null,
     maxUsers: 6,
+    maxClinics: 1,
     features: allModules(true),
   },
   CLINIC: {
@@ -141,6 +152,9 @@ export const FALLBACK_PLAN_CONFIG: Record<PlanId, PlanConfigShape> = {
     whatsappMonthly: 6000,
     maxPatients: null,
     maxUsers: null,
+    // Multi-sucursal: el precio de CLINIC incluye hasta 3 sedes bajo el mismo
+    // dueño (sin suscripción Stripe propia). La 4.ª+ = add-on aparte (pendiente).
+    maxClinics: 3,
     features: allModules(true),
   },
 };
