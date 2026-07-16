@@ -120,14 +120,22 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  // Respetamos el INTERVALO de la suscripción actual: si es ANUAL debe seguir
+  // anual al cambiar de plan (antes se creaba siempre mensual → una suscripción
+  // anual quedaba convertida a price mensual: bug). Mensual sigue mensual.
+  // Default defensivo a mensual si Stripe no reporta `recurring` (no debería
+  // ocurrir en una suscripción viva). El monto sale del ciclo del plan nuevo.
+  const isAnnual = item.price.recurring?.interval === "year";
+  const unitAmount = (isAnnual ? targetPlan.priceMxnAnnual : targetPlan.priceMxn) * 100;
+
   // Creamos el price nuevo on-the-fly (mismo patrón que el checkout
   // self-service) para evitar mantener Price IDs pre-creados.
   const newPrice = await stripe.prices.create({
     currency: "mxn",
-    unit_amount: targetPlan.priceMxn * 100,
-    recurring: { interval: "month" },
+    unit_amount: unitAmount,
+    recurring: { interval: isAnnual ? "year" : "month" },
     product_data: {
-      name: `DaleControl ${targetPlan.name} — Suscripción mensual`,
+      name: `DaleControl ${targetPlan.name} — Suscripción ${isAnnual ? "anual" : "mensual"}`,
       metadata: { plan: targetPlan.id },
     },
   });
@@ -165,7 +173,7 @@ export async function POST(req: NextRequest) {
     action: "update",
     changes: {
       plan: { before: clinic.plan, after: targetPlanId },
-      _source: { before: null, after: { event: "self-service-change-plan", priceMxn: targetPlan.priceMxn } },
+      _source: { before: null, after: { event: "self-service-change-plan", billing: isAnnual ? "annual" : "monthly", priceMxn: unitAmount / 100 } },
     },
     ipAddress,
     userAgent,
