@@ -83,6 +83,8 @@ function PlanCardEditor({ plan }: { plan: ResolvedPlan }) {
   const [unlimitedPatients, setUnlimitedPatients] = useState(plan.maxPatients == null);
   const [maxUsers, setMaxUsers] = useState(plan.maxUsers == null ? "" : String(plan.maxUsers));
   const [unlimitedUsers, setUnlimitedUsers] = useState(plan.maxUsers == null);
+  const [maxClinics, setMaxClinics] = useState(plan.maxClinics == null ? "" : String(plan.maxClinics));
+  const [unlimitedClinics, setUnlimitedClinics] = useState(plan.maxClinics == null);
   const [features, setFeatures] = useState<Record<string, boolean>>(() => {
     const f: Record<string, boolean> = {};
     for (const m of PLAN_MODULES) f[m.key] = plan.moduleFeatures[m.key] !== false;
@@ -105,6 +107,7 @@ function PlanCardEditor({ plan }: { plan: ResolvedPlan }) {
           whatsappMonthly: Number(whatsapp),
           maxPatients: unlimitedPatients ? null : Number(maxPatients),
           maxUsers: unlimitedUsers ? null : Number(maxUsers),
+          maxClinics: unlimitedClinics ? null : Number(maxClinics),
           features,
         }),
       });
@@ -151,6 +154,7 @@ function PlanCardEditor({ plan }: { plan: ResolvedPlan }) {
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(230px, 1fr))", gap: 10 }}>
         <LimitField label="Máximo de pacientes" value={maxPatients} onChange={setMaxPatients} unlimited={unlimitedPatients} onUnlimited={setUnlimitedPatients} />
         <LimitField label="Máximo de usuarios" value={maxUsers} onChange={setMaxUsers} unlimited={unlimitedUsers} onUnlimited={setUnlimitedUsers} />
+        <LimitField label="Máximo de sucursales" value={maxClinics} onChange={setMaxClinics} unlimited={unlimitedClinics} onUnlimited={setUnlimitedClinics} />
       </div>
 
       <div>

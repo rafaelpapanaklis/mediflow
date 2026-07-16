@@ -23,7 +23,7 @@ export const runtime = "nodejs";
  */
 
 const INT_FIELDS = ["priceMxnMonthly", "priceMxnAnnual", "aiTokensDefault", "whatsappMonthly"] as const;
-const NULLABLE_INT_FIELDS = ["maxPatients", "maxUsers"] as const;
+const NULLABLE_INT_FIELDS = ["maxPatients", "maxUsers", "maxClinics"] as const;
 
 /** Aplana BigInt → number para poder serializar la fila a JSON. */
 function serialize(row: any) {
@@ -107,6 +107,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { planId: st
     whatsappMonthly: update.whatsappMonthly ?? fb.whatsappMonthly,
     maxPatients: "maxPatients" in update ? update.maxPatients : fb.maxPatients,
     maxUsers: "maxUsers" in update ? update.maxUsers : fb.maxUsers,
+    maxClinics: "maxClinics" in update ? update.maxClinics : fb.maxClinics,
     features: update.features ?? fb.features,
   };
 

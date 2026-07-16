@@ -54,6 +54,12 @@ function buildResolved(planId: PlanId, row: PlanConfigShape | null): ResolvedPla
     whatsappMonthly: src.whatsappMonthly,
     maxPatients: src.maxPatients,
     maxUsers: src.maxUsers,
+    // NULL = ilimitado, igual que maxPatients/maxUsers. Que un NULL accidental
+    // (columna recién agregada, fila sin sembrar) NO abra sucursales infinitas
+    // en BASIC es responsabilidad del DEFAULT 1 de la columna — ver
+    // sql/plan_configs_max_clinics.sql. Aquí un NULL sí es intención explícita
+    // del admin ("Ilimitado" en /admin/settings → Planes).
+    maxClinics: src.maxClinics,
     features: PLAN_MARKETING[planId].features,
     moduleFeatures,
   };
@@ -72,6 +78,7 @@ function rowToShape(row: any): PlanConfigShape {
     whatsappMonthly: row.whatsappMonthly,
     maxPatients: row.maxPatients ?? null,
     maxUsers: row.maxUsers ?? null,
+    maxClinics: row.maxClinics ?? null,
     features:
       row.features && typeof row.features === "object" ? (row.features as Record<string, boolean>) : {},
   };
@@ -121,6 +128,7 @@ export async function getPlanLimits(plan: string | null | undefined): Promise<Pl
     monthlyPrice: r.priceMxnMonthly,
     maxPatients: r.maxPatients,
     maxUsers: r.maxUsers,
+    maxClinics: r.maxClinics,
     label: r.label,
   };
 }
