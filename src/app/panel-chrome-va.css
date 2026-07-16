@@ -1,0 +1,118 @@
+/* ═══════════════════════════════════════════════════════════════════
+   Panel chrome — Variante A (OLA 4 · rediseño DaleControl)
+   Overrides de .sidebar-new / .topbar-new / .nav-item-new* para los
+   paneles EXTERNOS (laboratorios, proveedores, afiliados, admin).
+
+   Se scopean bajo .mf-extpanel — clase que SOLO llevan los wrappers de
+   esos paneles — para NO tocar el sidebar/topbar del dashboard, que
+   comparte estas mismas clases pero ya se restyleó inline en el piloto.
+
+   Las definiciones base viven en globals.css (prohibido tocar esta ola);
+   aquí subimos especificidad: `.mf-extpanel …` vence al base (0,1,0) y
+   `:root:not(.dark) .mf-extpanel …` (0,4,0) vence a los overrides light
+   (0,3,0). Todo vía tokens semánticos. Alineado al look del sidebar del
+   dashboard (.mf-sidebar-item*). CERO lógica.
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* Sidebar: claro sólido (Variante A), sin blur ni translúcido. */
+.mf-extpanel .sidebar-new {
+  background: var(--bg-elev);
+  border-right: 1px solid var(--border-soft);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+:root:not(.dark) .mf-extpanel .sidebar-new { background: var(--bg-elev); }
+
+/* Topbar: mismo fondo sólido, sin translúcido. */
+.mf-extpanel .topbar-new {
+  background: var(--bg-elev);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+:root:not(.dark) .mf-extpanel .topbar-new { background: var(--bg-elev); }
+
+/* Marca: calmar el glow neón del cuadro-logo (labs/proveedores usan el
+   fondo base; afiliados/admin lo pintan inline y conservan su identidad). */
+.mf-extpanel .sidebar-new__logo { box-shadow: var(--shadow-1); }
+.mf-extpanel .sidebar-new__brandname { font-weight: 600; letter-spacing: -0.01em; }
+
+/* Eyebrow de sección — 11px/700 uppercase --text-3, ritmo entre grupos. */
+.mf-extpanel .nav-section-new {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-3);
+  letter-spacing: 0.08em;
+  padding: 18px 10px 6px;
+}
+
+/* Ítems de nav — target táctil 40px, iconos lucide 18/1.75 vía CSS
+   (evita tocar los tipos JSX de los componentes). */
+.mf-extpanel .nav-item-new {
+  min-height: 40px;
+  padding: 0 10px 0 12px;
+  gap: 10px;
+  font-size: 13.5px;
+  border-radius: 8px;
+  transition: background var(--dur-1) var(--ease), color var(--dur-1) var(--ease);
+}
+.mf-extpanel .nav-item-new > svg {
+  width: 18px;
+  height: 18px;
+  stroke-width: 1.75;
+  flex-shrink: 0;
+}
+.mf-extpanel .nav-item-new:focus-visible {
+  outline: none;
+  box-shadow: var(--ring);
+}
+
+/* Ítem activo — --brand-soft + texto brand AA (mirror del dashboard),
+   sin glow ni borde; barra 3px con degradado de marca a la izquierda. */
+.mf-extpanel .nav-item-new--active {
+  background: var(--brand-soft);
+  border-color: transparent;
+  box-shadow: none;
+  font-weight: 600;
+}
+:root:not(.dark) .mf-extpanel .nav-item-new--active {
+  color: #6d28d9;            /* brand-700 · 5.23:1 sobre brand-soft light */
+  border-color: transparent;
+  box-shadow: none;
+}
+.dark .mf-extpanel .nav-item-new--active {
+  color: #c4b5fd;            /* violet-300 · 8.54:1 sobre brand-soft dark */
+}
+.mf-extpanel .nav-item-new--active::before {
+  left: 0;
+  top: 50%;
+  margin-top: -10px;
+  transform: none;
+  width: 3px;
+  height: 20px;
+  background: var(--brand-grad-v);
+  border-radius: 99px;
+  box-shadow: none;
+}
+
+/* Contador del nav — pill --brand-soft, texto AA en ambos temas. */
+.mf-extpanel .nav-item-new__count {
+  background: var(--brand-soft);
+  color: #6d28d9;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.dark .mf-extpanel .nav-item-new__count { color: #c4b5fd; }
+:root:not(.dark) .mf-extpanel .nav-item-new__count {
+  background: var(--brand-soft);
+  color: #6d28d9;
+}
+
+/* Icon buttons — foco visible con el ring del sistema. */
+.mf-extpanel .icon-btn-new:focus-visible {
+  outline: none;
+  box-shadow: var(--ring);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mf-extpanel .nav-item-new { transition: none; }
+}

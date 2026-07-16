@@ -155,8 +155,8 @@ export function LinksManager({
           style={{
             padding: "10px 14px",
             borderRadius: 10,
-            border: "1px solid rgba(245,158,11,0.35)",
-            background: "rgba(245,158,11,0.08)",
+            border: "1px solid var(--warning-border-strong)",
+            background: "var(--warning-soft)",
             color: "var(--text-2)",
             fontSize: 12.5,
             lineHeight: 1.5,
@@ -258,10 +258,10 @@ export function LinksManager({
                         flexShrink: 0,
                         borderRadius: 10,
                         border: confirming
-                          ? "1px solid rgba(239,68,68,0.55)"
+                          ? "1px solid var(--danger-border-strong)"
                           : "1px solid var(--border-soft)",
-                        background: confirming ? "rgba(239,68,68,0.12)" : "var(--bg-elev-2)",
-                        color: confirming ? "#f87171" : "var(--text-3)",
+                        background: confirming ? "var(--danger-soft)" : "var(--bg-elev-2)",
+                        color: confirming ? "var(--danger)" : "var(--text-3)",
                         fontSize: 12.5,
                         fontWeight: 600,
                         cursor: deleting ? "not-allowed" : "pointer",
@@ -277,7 +277,7 @@ export function LinksManager({
                   </div>
                 </div>
                 {confirming && (
-                  <p style={{ fontSize: 11.5, color: "#fbbf24", margin: 0, lineHeight: 1.4 }}>
+                  <p style={{ fontSize: 11.5, color: "var(--warning-strong)", margin: 0, lineHeight: 1.4 }}>
                     Se perderán los clics y registros de este link. Pulsa &quot;¿Eliminar?&quot; otra vez
                     para confirmar.
                   </p>

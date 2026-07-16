@@ -110,7 +110,7 @@ export function IdentifiedTab({ query, onClinicSelect }: TabProps) {
                     <td className="mono" style={{ textAlign: "right", color: "var(--text-2)" }}>{formatNumber(c.dashboardVisits)}</td>
                     <td className="mono" style={{ textAlign: "right", color: "var(--text-3)" }}>{formatNumber(c.distinctUsers)}</td>
                     <td className="mono" style={{ textAlign: "right", color: "var(--text-3)" }}>{formatRelative(c.lastSeenAt)}</td>
-                    <td style={{ textAlign: "right", color: "var(--text-3)" }}>{clickable && <ChevronRight size={14} />}</td>
+                    <td style={{ textAlign: "right", color: "var(--text-3)" }}>{clickable && <ChevronRight size={14} strokeWidth={1.75} />}</td>
                   </tr>
                 );
               })}

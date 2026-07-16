@@ -2984,7 +2984,7 @@ export function PatientDetailClient({
               <div className="space-y-1.5"><Label>{t("patients.edit.phone")}</Label><Input value={editForm.phone} onChange={e => setEditForm(f => ({ ...f, phone: e.target.value }))} /></div>
             </div>
             <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5"><Label>{t("patients.edit.dob")}</Label><DateField className="flex h-10 w-full rounded-lg border border-border bg-white px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 focus:border-brand-600 disabled:opacity-50 transition-colors" value={editForm.dob} onChange={e => setEditForm(f => ({ ...f, dob: e.target.value }))} /></div>
+              <div className="space-y-1.5"><Label>{t("patients.edit.dob")}</Label><DateField className="flex h-10 w-full rounded-lg border border-border bg-card px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 focus:border-brand-600 disabled:opacity-50 transition-colors" value={editForm.dob} onChange={e => setEditForm(f => ({ ...f, dob: e.target.value }))} /></div>
               <div className="space-y-1.5"><Label>{t("patients.edit.gender")}</Label>
                 <select className="flex h-10 w-full rounded-lg border border-border bg-card px-3 py-2 text-sm" value={editForm.gender} onChange={e => setEditForm(f => ({ ...f, gender: e.target.value }))}>
                   <option value="M">{t("patients.edit.genderMale")}</option><option value="F">{t("patients.edit.genderFemale")}</option><option value="OTHER">{t("patients.edit.genderOther")}</option>

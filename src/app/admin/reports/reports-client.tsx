@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import toast from "react-hot-toast";
-import { Download, Calendar, TrendingUp, DollarSign, Users, Activity } from "lucide-react";
+import { Download, Calendar, TrendingUp, DollarSign, Users, Activity, BarChart3 } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, LineChart, Line, Legend } from "recharts";
 import { formatCurrency } from "@/lib/utils";
 import { CardNew }   from "@/components/ui/design-system/card-new";
@@ -185,8 +185,10 @@ export function ReportsClient() {
         </CardNew>
       ) : !data || !hasData ? (
         <CardNew>
-          <div style={{ padding: "40px 18px", textAlign: "center", display: "flex", flexDirection: "column", gap: 8, alignItems: "center" }}>
-            <div style={{ fontSize: 32 }}>📊</div>
+          <div style={{ padding: "40px 18px", textAlign: "center", display: "flex", flexDirection: "column", gap: 10, alignItems: "center" }}>
+            <div style={{ width: 44, height: 44, borderRadius: 12, background: "var(--bg-elev-2)", border: "1px solid var(--border-soft)", display: "inline-flex", alignItems: "center", justifyContent: "center" }}>
+              <BarChart3 size={20} strokeWidth={1.75} style={{ color: "var(--text-3)" }} />
+            </div>
             <h3 style={{ fontSize: 14, fontWeight: 600, color: "var(--text-1)", margin: 0 }}>
               Sin datos todavía
             </h3>

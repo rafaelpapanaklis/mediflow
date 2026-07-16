@@ -165,7 +165,7 @@ export function PerfilForm({ canEdit, initial }: { canEdit: boolean; initial: Pe
             borderRadius: 10,
             background: "var(--warning-soft)",
             border: "1px solid rgba(245,158,11,0.25)",
-            color: "#fcd34d",
+            color: "var(--warning-strong)",
             fontSize: 12,
           }}
         >

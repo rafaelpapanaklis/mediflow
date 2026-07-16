@@ -22,7 +22,7 @@ const inputStyle: React.CSSProperties = {
   border: "1px solid rgba(255,255,255,0.1)",
   borderRadius: 10,
   padding: 12,
-  color: "var(--text-1, #f5f5f7)",
+  color: "#f5f5f7",
   fontSize: 14,
   outline: "none",
 };
@@ -31,7 +31,7 @@ const labelStyle: React.CSSProperties = {
   display: "block",
   fontSize: 12,
   fontWeight: 500,
-  color: "var(--text-2, #a1a1aa)",
+  color: "#a1a1aa",
   marginBottom: 6,
 };
 
@@ -48,7 +48,7 @@ const primaryBtnStyle: React.CSSProperties = {
 
 const ghostBtnStyle: React.CSSProperties = {
   background: "rgba(255,255,255,0.04)",
-  color: "var(--text-1, #f5f5f7)",
+  color: "#f5f5f7",
   border: "1px solid rgba(255,255,255,0.1)",
   borderRadius: 10,
   padding: "10px 16px",
@@ -209,10 +209,10 @@ export default function PacientePerfilPage() {
   if (isLoading && !data) {
     return (
       <div style={{ width: "100%", maxWidth: 640 }}>
-        <h1 style={{ margin: "0 0 16px", fontSize: 22, fontWeight: 700, color: "var(--text-1, #f5f5f7)" }}>
+        <h1 style={{ margin: "0 0 16px", fontSize: 22, fontWeight: 700, color: "#f5f5f7" }}>
           Tu perfil
         </h1>
-        <p style={{ color: "var(--text-2, #a1a1aa)", fontSize: 14 }}>Cargando tu perfil…</p>
+        <p style={{ color: "#a1a1aa", fontSize: 14 }}>Cargando tu perfil…</p>
       </div>
     );
   }
@@ -220,7 +220,7 @@ export default function PacientePerfilPage() {
   if (error && !data) {
     return (
       <div style={{ width: "100%", maxWidth: 640 }}>
-        <h1 style={{ margin: "0 0 16px", fontSize: 22, fontWeight: 700, color: "var(--text-1, #f5f5f7)" }}>
+        <h1 style={{ margin: "0 0 16px", fontSize: 22, fontWeight: 700, color: "#f5f5f7" }}>
           Tu perfil
         </h1>
         <div style={errorBoxStyle}>No pudimos cargar tu perfil. Intenta de nuevo en unos segundos.</div>
@@ -232,7 +232,7 @@ export default function PacientePerfilPage() {
 
   return (
     <div style={{ width: "100%", maxWidth: 640, display: "grid", gap: 16 }}>
-      <h1 style={{ margin: 0, fontSize: 22, fontWeight: 700, color: "var(--text-1, #f5f5f7)" }}>Tu perfil</h1>
+      <h1 style={{ margin: 0, fontSize: 22, fontWeight: 700, color: "#f5f5f7" }}>Tu perfil</h1>
 
       {/* ── Datos de contacto ── */}
       <PacienteCard title="Datos de contacto" style={{ width: "100%" }}>
@@ -250,6 +250,7 @@ export default function PacientePerfilPage() {
               autoComplete="name"
               maxLength={120}
               style={inputStyle}
+              className="focus-visible:[box-shadow:var(--ring)]"
             />
           </div>
 
@@ -266,6 +267,7 @@ export default function PacientePerfilPage() {
               placeholder="10 dígitos"
               autoComplete="tel"
               style={inputStyle}
+              className="focus-visible:[box-shadow:var(--ring)]"
             />
           </div>
 
@@ -281,7 +283,7 @@ export default function PacientePerfilPage() {
               autoComplete="email"
               style={{ ...inputStyle, opacity: 0.55, cursor: "not-allowed" }}
             />
-            <p style={{ margin: "6px 0 0", fontSize: 11, color: "var(--text-2, #a1a1aa)" }}>
+            <p style={{ margin: "6px 0 0", fontSize: 11, color: "#a1a1aa" }}>
               El correo es tu identidad y no se puede cambiar
             </p>
           </div>
@@ -325,6 +327,7 @@ export default function PacientePerfilPage() {
                   onChange={(e) => setCurrentPassword(e.target.value)}
                   autoComplete="current-password"
                   style={inputStyle}
+                  className="focus-visible:[box-shadow:var(--ring)]"
                 />
               </div>
 
@@ -340,6 +343,7 @@ export default function PacientePerfilPage() {
                   autoComplete="new-password"
                   minLength={8}
                   style={inputStyle}
+                  className="focus-visible:[box-shadow:var(--ring)]"
                 />
               </div>
 
@@ -355,6 +359,7 @@ export default function PacientePerfilPage() {
                   autoComplete="new-password"
                   minLength={8}
                   style={inputStyle}
+                  className="focus-visible:[box-shadow:var(--ring)]"
                 />
               </div>
 
@@ -395,11 +400,11 @@ export default function PacientePerfilPage() {
                 }}
               >
                 <div style={{ minWidth: 0 }}>
-                  <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text-1, #f5f5f7)" }}>
+                  <div style={{ fontSize: 14, fontWeight: 600, color: "#f5f5f7" }}>
                     {clinic.clinicName}
                   </div>
                   {clinic.city && (
-                    <div style={{ fontSize: 12, color: "var(--text-2, #a1a1aa)", marginTop: 2 }}>
+                    <div style={{ fontSize: 12, color: "#a1a1aa", marginTop: 2 }}>
                       {clinic.city}
                     </div>
                   )}
@@ -407,7 +412,7 @@ export default function PacientePerfilPage() {
                 <div
                   style={{
                     fontSize: 12,
-                    color: "var(--text-2, #a1a1aa)",
+                    color: "#a1a1aa",
                     background: "rgba(255,255,255,0.04)",
                     border: "1px solid rgba(255,255,255,0.1)",
                     borderRadius: 999,
@@ -421,7 +426,7 @@ export default function PacientePerfilPage() {
             ))}
           </div>
         )}
-        <p style={{ margin: "12px 0 0", fontSize: 12, color: "var(--text-2, #a1a1aa)" }}>
+        <p style={{ margin: "12px 0 0", fontSize: 12, color: "#a1a1aa" }}>
           Cuenta creada el {formatFecha(data.createdAt)}
         </p>
       </PacienteCard>

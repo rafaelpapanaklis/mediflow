@@ -141,7 +141,7 @@ export function ProductosClient({ initialProducts }: { initialProducts: Supplier
               display: "grid",
               placeItems: "center",
               color: "#fff",
-              background: "linear-gradient(135deg, var(--violet-400), var(--brand))",
+              background: "var(--brand-grad)",
               boxShadow: "0 8px 20px -8px rgba(124,58,237,0.6)",
             }}
           >
@@ -197,7 +197,7 @@ export function ProductosClient({ initialProducts }: { initialProducts: Supplier
               type="button"
               onClick={() => setTab(t.id)}
               className={`segment-new__btn ${tab === t.id ? "segment-new__btn--active" : ""}`}
-              style={tab === t.id ? { color: "var(--violet-400)", fontWeight: 600 } : undefined}
+              style={tab === t.id ? { color: "var(--text-1)", fontWeight: 600 } : undefined}
             >
               {t.label}
             </button>
@@ -240,7 +240,7 @@ export function ProductosClient({ initialProducts }: { initialProducts: Supplier
                   placeItems: "center",
                   background: "var(--brand-soft)",
                   border: "1px solid var(--border-brand)",
-                  color: "var(--violet-400)",
+                  color: "var(--brand)",
                 }}
               >
                 <Package size={26} />
@@ -291,7 +291,7 @@ export function ProductosClient({ initialProducts }: { initialProducts: Supplier
                       onMouseLeave={() => setHoverId((id) => (id === p.id ? null : id))}
                       style={{
                         background: hovered ? "var(--brand-soft)" : undefined,
-                        boxShadow: hovered ? "inset 3px 0 0 var(--violet-400)" : "inset 3px 0 0 transparent",
+                        boxShadow: hovered ? "inset 3px 0 0 var(--brand)" : "inset 3px 0 0 transparent",
                         transition: "background .14s ease, box-shadow .14s ease",
                       }}
                     >
@@ -316,7 +316,7 @@ export function ProductosClient({ initialProducts }: { initialProducts: Supplier
                                 flexShrink: 0,
                               }}
                             >
-                              <Package size={16} style={{ color: "var(--violet-400)" }} />
+                              <Package size={16} style={{ color: "var(--brand)" }} />
                             </div>
                           )}
                           <div style={{ minWidth: 0 }}>
@@ -355,7 +355,7 @@ export function ProductosClient({ initialProducts }: { initialProducts: Supplier
                               borderRadius: 999,
                               fontSize: 11,
                               fontWeight: 500,
-                              color: "var(--violet-400)",
+                              color: "var(--brand)",
                               background: "var(--brand-soft)",
                               border: "1px solid var(--border-brand)",
                             }}

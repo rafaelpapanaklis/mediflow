@@ -161,7 +161,7 @@ export default async function LabOrdersPage({
                 ...(isActive
                   ? {
                       background: "var(--brand-soft)",
-                      color: "#c4b5fd",
+                      color: "var(--brand)",
                       borderColor: "var(--border-brand)",
                       fontWeight: 600,
                       boxShadow: "0 0 0 1px var(--border-brand), 0 4px 12px -6px rgba(124,58,237,0.5)",

@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { Search, DollarSign, Activity, Clock, XCircle, Download } from "lucide-react";
+import { Search, DollarSign, Activity, Clock, XCircle, Download, AlertTriangle } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
 import { formatRelativeDate } from "@/lib/format";
 import toast from "react-hot-toast";
@@ -300,10 +300,14 @@ export function AdminClinicsClient({ clinics: initial }: Props) {
                       <div style={{
                         marginTop: 4,
                         fontSize: 10,
-                        color: "#fca5a5",
-                        fontWeight: 500,
+                        color: "var(--danger)",
+                        fontWeight: 600,
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 4,
                       }}>
-                        ⚠ Cancelación solicitada
+                        <AlertTriangle size={11} strokeWidth={1.75} style={{ flexShrink: 0 }} />
+                        Cancelación solicitada
                       </div>
                     )}
 

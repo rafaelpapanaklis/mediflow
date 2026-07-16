@@ -52,7 +52,7 @@ export default async function PaymentsPage() {
               <p style={{ color: "var(--text-3)", margin: 0, marginBottom: 8 }}>
                 Aplica estos SQL en Supabase → SQL Editor (en orden):
               </p>
-              <ul className="mono" style={{ fontSize: 11, color: "#c4b5fd", paddingLeft: 18, margin: 0 }}>
+              <ul className="mono" style={{ fontSize: 11, color: "var(--brand)", paddingLeft: 18, margin: 0 }}>
                 <li>sql/admin-notes.sql</li>
                 <li>sql/admin-announcements.sql</li>
                 <li>sql/coupons.sql</li>
@@ -61,7 +61,7 @@ export default async function PaymentsPage() {
           )}
           <Link
             href="/admin"
-            style={{ display: "inline-block", marginTop: 14, fontSize: 12, fontWeight: 600, color: "#c4b5fd", textDecoration: "none" }}
+            style={{ display: "inline-block", marginTop: 14, fontSize: 12, fontWeight: 600, color: "var(--brand)", textDecoration: "none" }}
           >
             ← Volver al dashboard
           </Link>

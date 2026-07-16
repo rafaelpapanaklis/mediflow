@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, Eye, EyeOff, Shield, Clock, Users, FileText, CreditCard, Activity, Trash2, BarChart3, MessageCircle, Mail, Download, Layers, KeyRound, X } from "lucide-react";
+import { ArrowLeft, Eye, EyeOff, Shield, Clock, Users, FileText, CreditCard, Activity, Trash2, BarChart3, MessageCircle, Mail, Download, Layers, KeyRound, X, AlertTriangle } from "lucide-react";
 import toast from "react-hot-toast";
 import { ClinicActivityTab } from "@/components/admin/clinic-activity-tab";
 import { ClinicUsageTab } from "@/components/admin/clinic-usage-tab";
@@ -620,7 +620,7 @@ export function AdminClinicDetailClient({
                 <BadgeNew tone="success" dot>Capturado</BadgeNew>
               </div>
             ) : (
-              <div style={{ padding: 14, background: "rgba(251,191,36,0.08)", border: "1px solid rgba(251,191,36,0.25)", borderRadius: 10, fontSize: 13, color: "#fcd34d" }}>
+              <div style={{ padding: 14, background: "var(--warning-soft)", border: "1px solid color-mix(in oklab, var(--warning) 25%, transparent)", borderRadius: 10, fontSize: 13, color: "var(--warning)" }}>
                 Esta clínica no capturó un método de pago al registrarse.
               </div>
             )}
@@ -629,16 +629,16 @@ export function AdminClinicDetailClient({
               <div style={{
                 marginTop: 12,
                 padding: 12,
-                background: "rgba(239,68,68,0.08)",
-                border: "1px solid rgba(239,68,68,0.3)",
+                background: "var(--danger-soft)",
+                border: "1px solid color-mix(in oklab, var(--danger) 30%, transparent)",
                 borderRadius: 10,
                 display: "flex",
                 alignItems: "center",
                 gap: 10,
               }}>
-                <span style={{ fontSize: 16 }}>⚠</span>
+                <AlertTriangle size={16} strokeWidth={1.75} style={{ color: "var(--danger)", flexShrink: 0 }} />
                 <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 13, fontWeight: 600, color: "#fca5a5" }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: "var(--danger)" }}>
                     Cancelación solicitada
                   </div>
                   <div style={{ fontSize: 11, color: "var(--text-3)", marginTop: 2 }}>

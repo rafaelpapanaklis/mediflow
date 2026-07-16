@@ -64,7 +64,7 @@ function LimitField({
           style={{ flex: 1, minWidth: 0 }}
         />
         <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: "var(--text-2)", whiteSpace: "nowrap", cursor: "pointer" }}>
-          <input type="checkbox" checked={unlimited} onChange={(e) => onUnlimited(e.target.checked)} style={{ width: 14, height: 14, accentColor: "#7c3aed" }} />
+          <input type="checkbox" checked={unlimited} onChange={(e) => onUnlimited(e.target.checked)} style={{ width: 14, height: 14, accentColor: "var(--brand)" }} />
           Ilimitado
         </label>
       </div>
@@ -164,7 +164,7 @@ function PlanCardEditor({ plan }: { plan: ResolvedPlan }) {
                 type="checkbox"
                 checked={features[m.key] !== false}
                 onChange={(e) => setFeatures((prev) => ({ ...prev, [m.key]: e.target.checked }))}
-                style={{ width: 15, height: 15, accentColor: "#7c3aed" }}
+                style={{ width: 15, height: 15, accentColor: "var(--brand)" }}
               />
               {m.label}
             </label>

@@ -156,7 +156,7 @@ export function PayoutForm({
                     type="checkbox"
                     checked={prefs[opt.key]}
                     onChange={(e) => setPrefs({ ...prefs, [opt.key]: e.target.checked })}
-                    style={{ width: 16, height: 16, accentColor: "#8b5cf6", cursor: "pointer" }}
+                    style={{ width: 16, height: 16, accentColor: "var(--brand)", cursor: "pointer" }}
                   />
                   <span>{opt.label}</span>
                 </label>

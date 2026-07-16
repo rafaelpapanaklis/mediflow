@@ -183,7 +183,7 @@ export function TeamManager({
           style={{
             padding: 16,
             borderBottom: "1px solid var(--border-soft)",
-            background: "var(--bg-elev-1)",
+            background: "var(--bg-elev-2)",
           }}
         >
           <div

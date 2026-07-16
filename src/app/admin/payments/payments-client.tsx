@@ -786,7 +786,7 @@ export function PaymentsClient({
                           </span>
                           <Link
                             href={`/admin/payments/${inv.id}/cfdi`}
-                            style={{ fontSize: 11, fontWeight: 600, color: "#c4b5fd", textDecoration: "none" }}
+                            style={{ fontSize: 11, fontWeight: 600, color: "var(--brand)", textDecoration: "none" }}
                           >
                             CFDI
                           </Link>

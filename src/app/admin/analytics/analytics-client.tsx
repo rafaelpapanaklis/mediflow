@@ -38,7 +38,7 @@ export interface TabProps {
 
 type TabKey = "overview" | "live" | "sources" | "geo" | "pages" | "heatmap" | "identified";
 
-const TABS: { k: TabKey; label: string; icon: React.ComponentType<{ size?: number | string }> }[] = [
+const TABS: { k: TabKey; label: string; icon: React.ComponentType<{ size?: number | string; strokeWidth?: number | string }> }[] = [
   { k: "overview", label: "Resumen", icon: Activity },
   { k: "live", label: "En vivo", icon: Radio },
   { k: "sources", label: "Fuentes", icon: Compass },
@@ -135,7 +135,7 @@ export function AnalyticsClient() {
         style={{ marginBottom: 14, display: "flex", flexWrap: "wrap", alignItems: "center", gap: 12, padding: 14 }}
       >
         <div style={{ display: "inline-flex", alignItems: "center", gap: 6, color: "var(--text-3)", fontSize: 12 }}>
-          <Calendar size={14} />
+          <Calendar size={14} strokeWidth={1.75} />
           <span>Periodo</span>
         </div>
         <Segmented options={presets} value={preset} onChange={applyPreset} />
@@ -162,16 +162,16 @@ export function AnalyticsClient() {
               fontSize: 12,
               fontWeight: 600,
               color: "var(--brand)",
-              border: "1px solid rgba(124,58,237,0.3)",
-              background: "rgba(124,58,237,0.08)",
+              border: "1px solid var(--border-brand)",
+              background: "var(--brand-soft)",
               borderRadius: 999,
               padding: "4px 10px",
               cursor: "pointer",
             }}
           >
-            <Building2 size={13} />
+            <Building2 size={13} strokeWidth={1.75} />
             {clinicName || "Clínica"}
-            <X size={13} />
+            <X size={13} strokeWidth={1.75} />
           </button>
         )}
       </div>
@@ -179,41 +179,37 @@ export function AnalyticsClient() {
       {/* Tabs */}
       <div
         className="scrollbar-thin"
-        style={{ display: "flex", gap: 4, marginBottom: 18, overflowX: "auto", paddingBottom: 4, borderBottom: "1px solid var(--border-soft)" }}
+        style={{ marginBottom: 18, overflowX: "auto", paddingBottom: 4 }}
       >
-        {TABS.map((t) => {
-          const Icon = t.icon;
-          const active = tab === t.k;
-          return (
-            <button
-              key={t.k}
-              type="button"
-              onClick={() => setTab(t.k)}
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: 7,
-                padding: "9px 14px",
-                borderRadius: "8px 8px 0 0",
-                border: "none",
-                borderBottom: active ? "2px solid var(--brand)" : "2px solid transparent",
-                background: active ? "var(--bg-hover)" : "transparent",
-                color: active ? "var(--text-1)" : "var(--text-3)",
-                fontSize: 13,
-                fontWeight: active ? 600 : 500,
-                cursor: "pointer",
-                whiteSpace: "nowrap",
-                flexShrink: 0,
-              }}
-            >
-              <Icon size={14} />
-              {t.label}
-              {t.k === "live" && (
-                <span style={{ width: 7, height: 7, borderRadius: 999, background: "#22c55e", boxShadow: "0 0 6px #22c55e" }} />
-              )}
-            </button>
-          );
-        })}
+        <div className="segment-new" style={{ width: "max-content" }}>
+          {TABS.map((t) => {
+            const Icon = t.icon;
+            const active = tab === t.k;
+            return (
+              <button
+                key={t.k}
+                type="button"
+                onClick={() => setTab(t.k)}
+                className={`segment-new__btn ${active ? "segment-new__btn--active" : ""}`}
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 7,
+                  height: 36,
+                  whiteSpace: "nowrap",
+                  flexShrink: 0,
+                  ...(active ? { background: "var(--bg-elev)", boxShadow: "var(--shadow-1)" } : null),
+                }}
+              >
+                <Icon size={14} strokeWidth={1.75} />
+                {t.label}
+                {t.k === "live" && (
+                  <span style={{ width: 7, height: 7, borderRadius: 999, background: "var(--success)", boxShadow: "0 0 6px var(--success)" }} />
+                )}
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       {/* Contenido */}

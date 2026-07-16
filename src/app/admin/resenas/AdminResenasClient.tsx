@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { Loader2, Flag, EyeOff, Eye, ExternalLink } from "lucide-react";
 import { ReviewStars } from "@/components/reviews/ReviewStars";
+import { BadgeNew } from "@/components/ui/design-system/badge-new";
+import { ButtonNew } from "@/components/ui/design-system/button-new";
 import { formatReviewDate, type AdminReviewDTO, type AdminReviewsResponse } from "@/lib/reviews/types";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -65,21 +67,18 @@ export function AdminResenasClient() {
       </header>
 
       <div style={{ display: "flex", gap: 6, marginBottom: 16, flexWrap: "wrap" }}>
-        {TABS.map((t) => (
-          <button
-            key={t.id}
-            type="button"
-            onClick={() => setFilter(t.id)}
-            style={{
-              padding: "7px 14px", borderRadius: 999, fontSize: 13, fontWeight: 600, cursor: "pointer",
-              border: "1px solid var(--border-soft)",
-              background: filter === t.id ? "var(--brand)" : "transparent",
-              color: filter === t.id ? "#fff" : "var(--text-2)",
-            }}
-          >
-            {t.label}
-          </button>
-        ))}
+        <div className="segment-new" style={{ display: "inline-flex", gap: 2, flexWrap: "wrap" }}>
+          {TABS.map((t) => (
+            <button
+              key={t.id}
+              type="button"
+              onClick={() => setFilter(t.id)}
+              className={`segment-new__btn ${filter === t.id ? "segment-new__btn--active" : ""}`}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
       </div>
 
       {loading ? (
@@ -87,7 +86,7 @@ export function AdminResenasClient() {
           <Loader2 size={18} className="animate-spin" /> Cargando…
         </div>
       ) : !data || data.items.length === 0 ? (
-        <div style={{ textAlign: "center", padding: "48px 16px", background: "var(--bg-elev)", border: "1px solid var(--border-soft)", borderRadius: 14, color: "var(--text-3)" }}>
+        <div className="card" style={{ textAlign: "center", padding: "48px 16px", color: "var(--text-3)", fontSize: 13 }}>
           No hay reseñas en esta vista.
         </div>
       ) : (
@@ -98,9 +97,9 @@ export function AdminResenasClient() {
 
           {data.totalPages > 1 && (
             <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 12, paddingTop: 8 }}>
-              <PagerBtn disabled={page <= 1} onClick={() => load(filter, page - 1)}>Anterior</PagerBtn>
+              <ButtonNew size="sm" variant="secondary" disabled={page <= 1} onClick={() => load(filter, page - 1)}>Anterior</ButtonNew>
               <span style={{ fontSize: 13, color: "var(--text-3)" }}>{page} / {data.totalPages}</span>
-              <PagerBtn disabled={page >= data.totalPages} onClick={() => load(filter, page + 1)}>Siguiente</PagerBtn>
+              <ButtonNew size="sm" variant="secondary" disabled={page >= data.totalPages} onClick={() => load(filter, page + 1)}>Siguiente</ButtonNew>
             </div>
           )}
         </div>
@@ -120,7 +119,7 @@ function AdminRow({
 }) {
   const hidden = review.status === "hidden";
   return (
-    <article style={{ padding: 16, background: "var(--bg-elev)", border: "1px solid var(--border-soft)", borderRadius: 14 }}>
+    <article className="card" style={{ padding: 16 }}>
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
         <div style={{ minWidth: 0 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
@@ -139,9 +138,9 @@ function AdminRow({
             {review.clinicName} <ExternalLink size={11} />
           </a>
         </div>
-        <div style={{ display: "flex", gap: 6 }}>
-          {review.reported && <Badge color="#b45309" bg="rgba(245,158,11,0.14)" icon={<Flag size={11} />}>Reportada</Badge>}
-          {hidden && <Badge color="var(--text-3)" bg="var(--bg-hover)" icon={<EyeOff size={11} />}>Oculta</Badge>}
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+          {review.reported && <BadgeNew tone="warning"><Flag size={11} strokeWidth={1.75} />Reportada</BadgeNew>}
+          {hidden && <BadgeNew tone="neutral"><EyeOff size={11} strokeWidth={1.75} />Oculta</BadgeNew>}
         </div>
       </div>
 
@@ -149,7 +148,7 @@ function AdminRow({
         <p style={{ marginTop: 10, fontSize: 14, lineHeight: 1.55, color: "var(--text-2)" }}>{review.comment}</p>
       )}
       {review.reportedReason && (
-        <p style={{ marginTop: 6, fontSize: 12, color: "#b45309" }}>Motivo del reporte: {review.reportedReason}</p>
+        <p style={{ marginTop: 6, fontSize: 12, color: "var(--text-2)" }}>Motivo del reporte: {review.reportedReason}</p>
       )}
       {review.response && (
         <div style={{ marginTop: 10, padding: 10, borderRadius: 10, background: "var(--brand-soft)", borderLeft: "3px solid var(--brand)" }}>
@@ -160,63 +159,31 @@ function AdminRow({
 
       <div style={{ marginTop: 12, display: "flex", gap: 8 }}>
         {hidden ? (
-          <ActionBtn onClick={() => onModerate(review.id, "publish")} busy={busy} icon={<Eye size={14} />}>
+          <ButtonNew
+            size="sm"
+            variant="secondary"
+            onClick={() => onModerate(review.id, "publish")}
+            disabled={busy}
+            icon={busy ? <Loader2 size={14} className="animate-spin" /> : <Eye size={14} strokeWidth={1.75} />}
+          >
             Re-publicar
-          </ActionBtn>
+          </ButtonNew>
         ) : (
-          <ActionBtn onClick={() => onModerate(review.id, "hide")} busy={busy} icon={<EyeOff size={14} />} danger>
+          <ButtonNew
+            size="sm"
+            variant="secondary"
+            onClick={() => onModerate(review.id, "hide")}
+            disabled={busy}
+            icon={busy ? <Loader2 size={14} className="animate-spin" /> : <EyeOff size={14} strokeWidth={1.75} />}
+            style={{ color: "var(--danger)" }}
+          >
             Ocultar
-          </ActionBtn>
+          </ButtonNew>
         )}
       </div>
     </article>
   );
 }
 
-function ActionBtn({
-  children, onClick, busy, icon, danger,
-}: {
-  children: React.ReactNode; onClick: () => void; busy?: boolean; icon?: React.ReactNode; danger?: boolean;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={busy}
-      style={{
-        display: "inline-flex", alignItems: "center", gap: 6, padding: "8px 14px", borderRadius: 9, fontSize: 13,
-        fontWeight: 600, cursor: busy ? "default" : "pointer", opacity: busy ? 0.6 : 1,
-        border: "1px solid var(--border-soft)",
-        background: danger ? "rgba(220,38,38,0.08)" : "var(--brand-soft)",
-        color: danger ? "#dc2626" : "var(--brand)",
-      }}
-    >
-      {busy ? <Loader2 size={14} className="animate-spin" /> : icon}
-      {children}
-    </button>
-  );
-}
-
-function Badge({ children, color, bg, icon }: { children: React.ReactNode; color: string; bg: string; icon?: React.ReactNode }) {
-  return (
-    <span style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "3px 8px", borderRadius: 999, background: bg, color, fontSize: 11, fontWeight: 700 }}>
-      {icon}{children}
-    </span>
-  );
-}
-
-function PagerBtn({ children, disabled, onClick }: { children: React.ReactNode; disabled?: boolean; onClick: () => void }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled}
-      style={{
-        padding: "7px 14px", borderRadius: 9, background: "var(--bg-elev)", color: "var(--text-1)", fontSize: 13,
-        fontWeight: 600, border: "1px solid var(--border-soft)", cursor: disabled ? "default" : "pointer", opacity: disabled ? 0.5 : 1,
-      }}
-    >
-      {children}
-    </button>
-  );
-}
+// Badges (Reportada/Oculta), botones de acción (Ocultar/Re-publicar) y paginación
+// usan el sistema de diseño (BadgeNew / ButtonNew) directo en el markup de arriba.

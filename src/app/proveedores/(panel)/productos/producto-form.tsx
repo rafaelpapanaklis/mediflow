@@ -281,7 +281,7 @@ export function ProductoForm(props: Props) {
             display: "grid",
             placeItems: "center",
             color: "#fff",
-            background: "linear-gradient(135deg, var(--violet-400), var(--brand))",
+            background: "var(--brand-grad)",
             boxShadow: "0 8px 20px -8px rgba(124,58,237,0.6)",
           }}
         >
@@ -304,7 +304,7 @@ export function ProductoForm(props: Props) {
         <CardNew>
           <CardAccent />
           <div className="form-section__title">
-            <Package size={13} style={{ color: "var(--violet-400)" }} /> Información del producto
+            <Package size={13} style={{ color: "var(--brand)" }} /> Información del producto
             <span className="form-section__rule" />
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: "14px" }}>
@@ -417,7 +417,7 @@ export function ProductoForm(props: Props) {
                   color: "var(--text-1)",
                 }}
               >
-                <Eye size={14} style={{ color: isActive ? "var(--violet-400)" : "var(--text-3)", transition: "color .15s" }} />
+                <Eye size={14} style={{ color: isActive ? "var(--brand)" : "var(--text-3)", transition: "color .15s" }} />
                 Visible en el marketplace
               </div>
               <div style={{ fontSize: 12, color: "var(--text-3)", marginTop: 2 }}>
@@ -514,7 +514,7 @@ export function ProductoForm(props: Props) {
                 placeItems: "center",
                 background: "var(--brand-soft)",
                 border: "1px solid var(--border-brand)",
-                color: "var(--violet-400)",
+                color: "var(--brand)",
               }}
             >
               {uploading ? <Loader2 className="animate-spin" size={20} /> : <Upload size={20} />}

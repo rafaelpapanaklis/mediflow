@@ -21,7 +21,7 @@ export const TOOLTIP_STYLE = {
 export function LoadingState({ label = "Cargando…" }: { label?: string }) {
   return (
     <div style={{ padding: "44px 18px", textAlign: "center", color: "var(--text-3)", fontSize: 13, display: "flex", flexDirection: "column", alignItems: "center", gap: 10 }}>
-      <Loader2 size={22} className="animate-spin" style={{ color: "var(--brand)" }} />
+      <Loader2 size={22} strokeWidth={1.75} className="animate-spin" style={{ color: "var(--brand)" }} />
       {label}
     </div>
   );
@@ -32,8 +32,8 @@ export function ErrorState({ message, onRetry }: { message: string; onRetry?: ()
     <div
       style={{
         padding: 18,
-        background: "rgba(239,68,68,0.08)",
-        border: "1px solid rgba(239,68,68,0.25)",
+        background: "var(--danger-soft)",
+        border: "1px solid var(--danger-border-strong)",
         borderRadius: 10,
         display: "flex",
         flexDirection: "column",
@@ -105,10 +105,8 @@ export function StatTile({
     tone === "good" ? "var(--success)" : tone === "bad" ? "var(--danger)" : tone === "warn" ? "var(--warning)" : "var(--text-1)";
   return (
     <div
+      className="card"
       style={{
-        background: "var(--bg-elev)",
-        border: "1px solid var(--border-soft)",
-        borderRadius: 12,
         padding: 14,
         minWidth: 0,
       }}
@@ -193,7 +191,7 @@ export function Sparkline({ data, color = "var(--brand)", height = 36 }: { data:
 export function Chip({ children, tone = "neutral" }: { children: ReactNode; tone?: "neutral" | "brand" | "good" | "warn" | "bad" }) {
   const map: Record<string, [string, string]> = {
     neutral: ["var(--text-3)", "var(--border-soft)"],
-    brand: ["var(--brand)", "rgba(124,58,237,0.3)"],
+    brand: ["var(--brand)", "var(--border-brand)"],
     good: ["var(--success)", "rgba(16,185,129,0.3)"],
     warn: ["var(--warning)", "rgba(245,158,11,0.3)"],
     bad: ["var(--danger)", "rgba(239,68,68,0.3)"],

@@ -480,6 +480,7 @@ export function ReagendarModal({
                 onChange={handleDateChange}
                 disabled={submitting}
                 style={FIELD_STYLE}
+                className="focus-visible:[box-shadow:var(--ring)]"
               />
             </div>
 
@@ -589,6 +590,7 @@ export function ReagendarModal({
                 disabled={submitting}
                 placeholder="Cuéntanos por qué necesitas el cambio"
                 style={{ ...FIELD_STYLE, resize: "vertical", minHeight: 64, lineHeight: 1.45 }}
+                className="focus-visible:[box-shadow:var(--ring)]"
               />
               <div style={{ textAlign: "right", fontSize: 11, color: FAINT, marginTop: 2 }}>
                 {reason.length}/500

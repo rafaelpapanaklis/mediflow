@@ -57,63 +57,102 @@ export function AdminLoginForm() {
   }
 
   return (
-    <div className="bg-slate-900 border border-slate-700 rounded-2xl p-6">
+    <div className="card" style={{ padding: 24 }}>
       {error && (
-        <div className="bg-rose-900/50 border border-rose-700 text-rose-300 text-sm rounded-xl px-4 py-3 mb-4">
+        <div
+          style={{
+            background: "var(--danger-soft)",
+            border: "1px solid color-mix(in oklab, var(--danger) 30%, transparent)",
+            color: "var(--danger)",
+            fontSize: 13,
+            borderRadius: 10,
+            padding: "10px 14px",
+            marginBottom: 16,
+          }}
+        >
           {error}
         </div>
       )}
 
       {step === "password" ? (
-        <form onSubmit={handlePassword} className="space-y-4">
+        <form onSubmit={handlePassword} style={{ display: "flex", flexDirection: "column", gap: 16 }}>
           <div>
-            <label className="text-sm font-semibold text-slate-300 mb-1.5 block">Contraseña maestra</label>
-            <div className="relative">
+            <label style={{ fontSize: 13, fontWeight: 600, color: "var(--text-2)", display: "block", marginBottom: 6 }}>
+              Contraseña maestra
+            </label>
+            <div style={{ position: "relative" }}>
               <input
                 type={showPwd ? "text" : "password"}
-                className="w-full h-11 bg-slate-800 border border-slate-600 rounded-xl px-4 pr-10 text-white text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/50 focus:border-brand-600"
+                className="input-new"
+                style={{ height: 44, paddingRight: 42 }}
                 placeholder="••••••••••••"
                 value={password}
                 onChange={e => setPassword(e.target.value)}
                 required
               />
-              <button type="button" onClick={() => setShowPwd(!showPwd)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white">
-                {showPwd ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              <button
+                type="button"
+                onClick={() => setShowPwd(!showPwd)}
+                aria-label={showPwd ? "Ocultar contraseña" : "Ver contraseña"}
+                style={{
+                  position: "absolute", right: 6, top: "50%", transform: "translateY(-50%)",
+                  background: "transparent", border: "none", cursor: "pointer",
+                  color: "var(--text-3)", padding: 8, display: "grid", placeItems: "center", borderRadius: 8,
+                }}
+              >
+                {showPwd ? <EyeOff size={16} strokeWidth={1.75} /> : <Eye size={16} strokeWidth={1.75} />}
               </button>
             </div>
           </div>
-          <button type="submit" disabled={loading || !password}
-            className="w-full h-11 bg-brand-600 text-white font-bold rounded-xl hover:bg-brand-700 disabled:opacity-50 transition-colors">
+          <button
+            type="submit"
+            disabled={loading || !password}
+            className="btn-new btn-new--primary"
+            style={{ width: "100%", height: 44, justifyContent: "center" }}
+          >
             {loading ? "Verificando…" : "Continuar →"}
           </button>
         </form>
       ) : (
-        <form onSubmit={handleTotp} className="space-y-4">
-          <div className="flex items-center gap-2 text-emerald-400 text-sm font-semibold mb-2">
-            <Shield className="w-4 h-4" />
+        <form onSubmit={handleTotp} style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, color: "var(--success)", fontSize: 13, fontWeight: 600 }}>
+            <Shield size={16} strokeWidth={1.75} />
             Contraseña verificada. Ingresa el código 2FA.
           </div>
           <div>
-            <label className="text-sm font-semibold text-slate-300 mb-1.5 block">Código de Google Authenticator</label>
+            <label style={{ fontSize: 13, fontWeight: 600, color: "var(--text-2)", display: "block", marginBottom: 6 }}>
+              Código de Google Authenticator
+            </label>
             <input
               type="text"
               inputMode="numeric"
               maxLength={6}
-              className="w-full h-11 bg-slate-800 border border-slate-600 rounded-xl px-4 text-white text-xl font-mono text-center tracking-[0.5em] focus:outline-none focus:ring-2 focus:ring-brand-600/50 focus:border-brand-600"
+              className="input-new mono"
+              style={{ height: 52, fontSize: 22, textAlign: "center", letterSpacing: "0.5em", fontWeight: 600 }}
               placeholder="000000"
               value={totp}
               onChange={e => setTotp(e.target.value.replace(/\D/g, "").slice(0, 6))}
               required
               autoFocus
             />
-            <p className="text-xs text-slate-500 mt-1.5 text-center">Abre Google Authenticator y escribe el código de 6 dígitos</p>
+            <p style={{ fontSize: 11, color: "var(--text-3)", margin: "6px 0 0", textAlign: "center" }}>
+              Abre Google Authenticator y escribe el código de 6 dígitos
+            </p>
           </div>
-          <button type="submit" disabled={loading || totp.length !== 6}
-            className="w-full h-11 bg-brand-600 text-white font-bold rounded-xl hover:bg-brand-700 disabled:opacity-50 transition-colors">
+          <button
+            type="submit"
+            disabled={loading || totp.length !== 6}
+            className="btn-new btn-new--primary"
+            style={{ width: "100%", height: 44, justifyContent: "center" }}
+          >
             {loading ? "Verificando…" : "Acceder al panel"}
           </button>
-          <button type="button" onClick={() => { setStep("password"); setTotp(""); setError(""); }}
-            className="w-full text-sm text-slate-400 hover:text-white transition-colors">
+          <button
+            type="button"
+            onClick={() => { setStep("password"); setTotp(""); setError(""); }}
+            className="btn-new btn-new--ghost"
+            style={{ width: "100%", justifyContent: "center" }}
+          >
             ← Volver
           </button>
         </form>

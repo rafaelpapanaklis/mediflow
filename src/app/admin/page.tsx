@@ -47,7 +47,7 @@ export default async function AdminPage() {
                 </p>
                 <p style={{ color: "var(--text-3)", margin: 0 }}>
                   Ve a tu Supabase SQL Editor y ejecuta el archivo{" "}
-                  <code className="mono" style={{ color: "#c4b5fd" }}>sql/migration_multi_category.sql</code>
+                  <code className="mono" style={{ color: "var(--brand)" }}>sql/migration_multi_category.sql</code>
                 </p>
               </div>
             ) : null}
