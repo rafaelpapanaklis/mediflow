@@ -13,8 +13,7 @@ import { BadgeNew }  from "@/components/ui/design-system/badge-new";
 import { AvatarNew } from "@/components/ui/design-system/avatar-new";
 import { KpiCard }   from "@/components/ui/design-system/kpi-card";
 import { useConfirm } from "@/components/ui/confirm-dialog";
-
-const PLAN_PRICES: Record<string, number> = { BASIC: 419, PRO: 689, CLINIC: 1719 };
+import { FALLBACK_PLAN_PRICES_MXN } from "@/lib/plan-shared";
 
 interface Props { clinics: any[] }
 
@@ -31,7 +30,7 @@ export function AdminClinicsClient({ clinics: initial }: Props) {
     const active  = clinics.filter(c => !c.trialEndsAt || new Date(c.trialEndsAt).getTime() >= now).length;
     const trial   = clinics.filter(c => c.trialEndsAt && new Date(c.trialEndsAt).getTime() > now).length;
     const expired = clinics.filter(c => c.trialEndsAt && new Date(c.trialEndsAt).getTime() < now).length;
-    const mrr     = clinics.reduce((s, c) => s + (PLAN_PRICES[c.plan] ?? 0), 0);
+    const mrr     = clinics.reduce((s, c) => s + (FALLBACK_PLAN_PRICES_MXN[c.plan] ?? 0), 0);
     return { all: clinics.length, active, trial, expired, mrr };
   }, [clinics]);
 
@@ -220,7 +219,7 @@ export function AdminClinicsClient({ clinics: initial }: Props) {
                       {clinic.plan}
                     </BadgeNew>
                     <div className="mono" style={{ fontSize: 11, color: "var(--text-3)", marginTop: 4 }}>
-                      {formatCurrency(PLAN_PRICES[clinic.plan] ?? 0, "MXN")}/mes
+                      {formatCurrency(FALLBACK_PLAN_PRICES_MXN[clinic.plan] ?? 0, "MXN")}/mes
                     </div>
                     <select
                       value={clinic.plan}
@@ -229,9 +228,11 @@ export function AdminClinicsClient({ clinics: initial }: Props) {
                       className="input-new"
                       style={{ marginTop: 6, fontSize: 11, padding: "4px 6px", height: "auto" }}
                     >
-                      <option value="BASIC">BASIC — $49/mes</option>
-                      <option value="PRO">PRO — $99/mes</option>
-                      <option value="CLINIC">CLINIC — $249/mes</option>
+                      {(["BASIC", "PRO", "CLINIC"] as const).map(p => (
+                        <option key={p} value={p}>
+                          {p} — ${FALLBACK_PLAN_PRICES_MXN[p].toLocaleString("es-MX")}/mes
+                        </option>
+                      ))}
                     </select>
                   </td>
                   <td>

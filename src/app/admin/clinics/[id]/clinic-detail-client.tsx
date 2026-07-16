@@ -18,6 +18,7 @@ import { KpiCard } from "@/components/ui/design-system/kpi-card";
 import { fmtMXN, formatRelativeDate } from "@/lib/format";
 import type { TemplateChannel } from "@/lib/admin-templates";
 import { useConfirm } from "@/components/ui/confirm-dialog";
+import { FALLBACK_PLAN_PRICES_MXN } from "@/lib/plan-shared";
 
 interface AdminNote {
   id: string;
@@ -400,9 +401,11 @@ export function AdminClinicDetailClient({
                     onChange={e => setEditPlan(e.target.value)}
                     className="input-new"
                   >
-                    <option value="BASIC">BASIC — $49/mes</option>
-                    <option value="PRO">PRO — $99/mes</option>
-                    <option value="CLINIC">CLINIC — $249/mes</option>
+                    {(["BASIC", "PRO", "CLINIC"] as const).map(p => (
+                      <option key={p} value={p}>
+                        {p} — ${FALLBACK_PLAN_PRICES_MXN[p].toLocaleString("es-MX")}/mes
+                      </option>
+                    ))}
                   </select>
                 </div>
 
