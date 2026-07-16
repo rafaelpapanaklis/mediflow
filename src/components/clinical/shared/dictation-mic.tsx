@@ -34,6 +34,29 @@ function pickMimeType(): string {
   return "";
 }
 
+/**
+ * Traduce el error de getUserMedia a la llave del mensaje concreto. Los nombres
+ * son los de la spec de MediaDevices; cualquier otro cae al mensaje genérico.
+ */
+function micErrorKey(err: unknown): string {
+  const name =
+    typeof err === "object" && err !== null && "name" in err
+      ? String((err as { name?: unknown }).name ?? "")
+      : "";
+  switch (name) {
+    case "NotAllowedError":
+    case "SecurityError":
+      return "clinical.dictation.micPermission";
+    case "NotFoundError":
+    case "OverconstrainedError":
+      return "clinical.dictation.micNotFound";
+    case "NotReadableError":
+      return "clinical.dictation.micInUse";
+    default:
+      return "clinical.dictation.micDenied";
+  }
+}
+
 function fmt(secs: number): string {
   const m = Math.floor(secs / 60);
   const s = secs % 60;
@@ -113,8 +136,8 @@ export function DictationMic({ onText, disabled }: Props) {
     let stream: MediaStream;
     try {
       stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    } catch {
-      toast.error(t("clinical.dictation.micDenied"));
+    } catch (err) {
+      toast.error(t(micErrorKey(err)));
       return;
     }
     if (!mountedRef.current || someoneRecording) {
