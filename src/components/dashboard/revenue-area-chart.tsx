@@ -15,19 +15,20 @@ export function RevenueAreaChart({ data }: { data: Point[] }) {
               <stop offset="100%" stopColor="#7c3aed" stopOpacity={0}   />
             </linearGradient>
           </defs>
-          <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" />
+          <CartesianGrid strokeDasharray="3 3" stroke="var(--border-soft)" />
           <XAxis dataKey="label" stroke="var(--text-4)" tick={{ fontSize: 10, fill: "var(--text-4)" }} axisLine={false} tickLine={false} />
           <YAxis stroke="var(--text-4)" tick={{ fontSize: 10, fill: "var(--text-4)" }} axisLine={false} tickLine={false} width={50}
             tickFormatter={(v: number) => v >= 1000 ? `$${Math.round(v / 1000)}k` : `$${v}`} />
           <Tooltip
             contentStyle={{
               background: "var(--bg-elev)",
-              border: "1px solid var(--border-strong)",
+              border: "1px solid var(--border-soft)",
               borderRadius: 8,
               fontSize: 12,
               color: "var(--text-1)",
+              boxShadow: "var(--shadow-2)",
             }}
-            cursor={{ stroke: "rgba(124,58,237,0.35)" }}
+            cursor={{ stroke: "var(--brand)", strokeOpacity: 0.35 }}
             formatter={(v: number) => [`$${Number(v).toLocaleString("es-MX")}`, "Ingresos"]}
           />
           <Area type="monotone" dataKey="value" stroke="#7c3aed" strokeWidth={2} fill="url(#mfRevenueFill)" />

@@ -8,7 +8,7 @@ import {
   Home, Calendar, Users, MessageCircle, Inbox as InboxIcon,
   Sparkles, Camera, FlaskConical, Dumbbell, Footprints,
   Activity, Gift, DoorOpen, Package, Building2,
-  CreditCard, Wallet, BarChart3, Monitor, UserCog, Globe, ClipboardList, Settings,
+  CreditCard, Wallet, PiggyBank, BarChart3, Monitor, UserCog, Globe, ClipboardList, Settings,
   ShoppingBag, Baby, Zap, Smile, Anchor, Truck, ShoppingCart,
   ChevronDown, Moon, Sun, LogOut, PanelLeftClose, PanelLeft,
   X, Plus, LifeBuoy, Star, ScrollText, type LucideIcon,
@@ -212,6 +212,7 @@ const NAV_ITEMS: NavItemDef[] = [
     icon: ClipboardList, permission: "suppliers.view" },
 
   { id: "billing",        section: "admin", label: "Caja",              href: "/dashboard/caja",          icon: Wallet,         permission: "billing.view" },
+  { id: "finanzas",       section: "admin", label: "Finanzas",          href: "/dashboard/finanzas",      icon: PiggyBank, adminOnly: true, permission: "analytics.view" },
   { id: "analytics",      section: "admin", label: "Analytics",         href: "/dashboard/analytics",     icon: BarChart3, adminOnly: true, permission: "analytics.view", moduleKey: "analytics" },
   { id: "tv-modes",       section: "admin", label: "Pantallas TV",      href: "/dashboard/tv-modes",      icon: Monitor, adminOnly: true, permission: "tvModes.view", moduleKey: "tv-modes" },
   { id: "reports",        section: "admin", label: "Reportes",          href: "/dashboard/reports",       icon: BarChart3,     permission: "reports.view", moduleKey: "reports" },

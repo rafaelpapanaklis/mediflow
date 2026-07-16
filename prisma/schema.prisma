@@ -306,6 +306,9 @@ model Clinic {
 
   patientUploads PatientUpload[]
 
+  // Finanzas — gastos operativos de la clínica (dirección financiera).
+  expenses Expense[]
+
   @@map("clinics")
 }
 
@@ -1841,6 +1844,28 @@ model Payment {
 
   @@index([invoiceId])
   @@map("payments")
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// FINANZAS — gastos operativos de la clínica (dirección financiera). La Caja
+// NO se toca: Finanzas solo LEE payments/invoices y registra SUS gastos aquí.
+// Mismo tipo de dinero que Payment.amount (Float). Ver sql/expenses.sql
+// (aplicar en Supabase ANTES del merge — patrón sql/caja.sql).
+// ═══════════════════════════════════════════════════════════════════════
+model Expense {
+  id          String   @id @default(cuid())
+  clinicId    String
+  date        DateTime @default(now())
+  category    String // "Renta" | "Insumos" | "Nómina" | "Servicios" | "Marketing" | "Otro" | libre
+  amount      Float
+  note        String?
+  createdById String // User.id que registró el gasto (sin relación — se resuelve al mostrar)
+  createdAt   DateTime @default(now())
+
+  clinic Clinic @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+
+  @@index([clinicId, date])
+  @@map("expenses")
 }
 
 // ═══════════════════════════════════════════════════════════════════════

@@ -105,6 +105,13 @@ export async function POST(req: NextRequest) {
   const method = parsed.data.method;
   const billing = parsed.data.billing;
 
+  // Rail de IVA (Stripe Tax): SOLO se activa si el env STRIPE_AUTOMATIC_TAX === "true".
+  // Sin el env, el comportamiento es idéntico al actual (no se cobra IVA; se cobra
+  // el precio anunciado tal cual). Stripe exige dirección del cliente para calcular
+  // el impuesto — ya la recolectamos con `customer_update: { address: "auto" }` en
+  // ambas sesiones. Antes de prender el flag, ver la guía de Stripe Tax en ORQUESTA.
+  const automaticTax = process.env.STRIPE_AUTOMATIC_TAX === "true";
+
   // Tarjeta: si la clínica YA tiene una suscripción de tarjeta viva en Stripe,
   // NO crear una segunda (evita doble cobro recurrente). La mandamos al billing
   // portal para gestionar la existente (cambiar tarjeta, plan o cancelar).
@@ -171,6 +178,7 @@ export async function POST(req: NextRequest) {
       mode: "subscription",
       customer: customerId,
       customer_update: { address: "auto" },
+      ...(automaticTax ? { automatic_tax: { enabled: true } } : {}),
       payment_method_types: ["card"],
       line_items: [
         {
@@ -204,6 +212,7 @@ export async function POST(req: NextRequest) {
       mode: "payment",
       customer: customerId,
       customer_update: { address: "auto" },
+      ...(automaticTax ? { automatic_tax: { enabled: true } } : {}),
       payment_method_types: [isSpei ? "customer_balance" : "oxxo"],
       ...(isSpei
         ? {
