@@ -272,7 +272,7 @@ function MemberForm({
           {DOCTOR_COLORS.map(c => (
             <button key={c} type="button" onClick={() => set("color", c)}
               aria-label={c}
-              className={`w-10 h-10 transition-all hover:scale-110 ${form.color === c ? "scale-110" : ""}`}
+              className={`w-10 h-10 transition-transform hover:scale-110 ${form.color === c ? "scale-110" : ""}`}
               style={{
                 background: c,
                 borderRadius: "var(--radius-sm)",
