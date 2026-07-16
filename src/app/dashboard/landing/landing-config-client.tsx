@@ -242,7 +242,7 @@ export function LandingConfigClient({ clinic: initial, appUrl }: Props) {
                 <div key={tpl.id} role="button" tabIndex={0} aria-pressed={selected}
                   onClick={() => setTemplateSel(tpl.id)}
                   onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setTemplateSel(tpl.id); } }}
-                  className={`cursor-pointer rounded-[var(--radius-lg)] border p-2.5 transition-all outline-none focus-visible:ring-2 focus-visible:ring-brand-500/60 ${selected ? "border-[color:var(--brand)] ring-2 ring-brand-500/40 bg-[color:var(--brand-softer)]" : "border-[color:var(--border-soft)] hover:border-[color:var(--border-brand)]"}`}>
+                  className={`cursor-pointer rounded-[var(--radius-lg)] border p-2.5 transition-colors outline-none focus-visible:ring-2 focus-visible:ring-brand-500/60 ${selected ? "border-[color:var(--brand)] ring-2 ring-brand-500/40 bg-[color:var(--brand-softer)]" : "border-[color:var(--border-soft)] hover:border-[color:var(--border-brand)]"}`}>
                   <div className="relative">
                     <TemplateThumb variant={tpl.id} />
                     {selected && (

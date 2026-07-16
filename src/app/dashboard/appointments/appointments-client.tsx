@@ -7,6 +7,7 @@ import {
   Phone, MessageCircle, Ban,
   Calendar, List, CalendarDays, Search,
   Edit, CalendarCheck,
+  Video, FileText, Clock, ClipboardList,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -503,7 +504,7 @@ export function AppointmentsClient({ appointments: initialAppts, patients, docto
           <span style={{ fontWeight: 600, fontStyle: c.italic ? "italic" : undefined, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
             {appt.patient.firstName}
           </span>
-          {appt.mode === "TELECONSULTATION" && <span style={{ fontSize: 9, flexShrink: 0 }} title={t("appointments.form.teleconsultation")}>📹</span>}
+          {appt.mode === "TELECONSULTATION" && <span style={{ display: "inline-flex", flexShrink: 0, color: "var(--text-3)" }} title={t("appointments.form.teleconsultation")}><Video size={12} strokeWidth={1.75} aria-hidden /></span>}
         </div>
         {!compact && appt.notes && (
           <div style={{ fontSize: 9, color: "var(--text-3)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
@@ -809,7 +810,7 @@ export function AppointmentsClient({ appointments: initialAppts, patients, docto
                       </div>
                       {a.notes && (
                         <div style={{ fontSize: 11, color: "var(--text-3)", fontStyle: "italic", marginTop: 4 }}>
-                          📝 {a.notes}
+                          <FileText size={12} strokeWidth={1.75} aria-hidden style={{ display: "inline", verticalAlign: "-0.15em", marginRight: 4 }} />{a.notes}
                         </div>
                       )}
                     </button>
@@ -941,7 +942,7 @@ export function AppointmentsClient({ appointments: initialAppts, patients, docto
                   </div>
                   <div className="text-base font-bold truncate">{appt.patient.firstName} {appt.patient.lastName}</div>
                   <div className="text-sm text-muted-foreground">{appt.type} · <span className="mono">{appt.durationMins}</span> {t("appointments.minLabel")}</div>
-                  {appt.notes && <div className="text-sm text-muted-foreground/70 truncate italic mt-0.5">📝 {appt.notes}</div>}
+                  {appt.notes && <div className="text-sm text-muted-foreground/70 truncate italic mt-0.5"><FileText size={12} strokeWidth={1.75} aria-hidden style={{ display: "inline", verticalAlign: "-0.15em", marginRight: 4 }} />{appt.notes}</div>}
                   <div className="flex gap-2 mt-1 flex-wrap">
                     {appt.googleCalendarEventId && <span className="text-xs text-brand-600 font-semibold flex items-center gap-1"><CalendarCheck className="w-3 h-3"/>{t("appointments.badge.googleCal")}</span>}
                     {appt.reminderSent && <span className="text-xs text-emerald-600 font-semibold flex items-center gap-1"><MessageCircle className="w-3 h-3"/>{t("appointments.badge.waSent")}</span>}
@@ -1047,7 +1048,7 @@ export function AppointmentsClient({ appointments: initialAppts, patients, docto
                   )}
                   {appt.mode === "TELECONSULTATION" && (
                     <div className="flex items-center gap-1.5 text-sm font-semibold text-violet-600 bg-violet-50 dark:bg-violet-950/30 border border-violet-200 px-3 py-1.5 rounded-full">
-                      📹 {t("appointments.form.teleconsultation")}
+                      <Video className="w-4 h-4" strokeWidth={1.75} aria-hidden />{t("appointments.form.teleconsultation")}
                     </div>
                   )}
                 </div>
@@ -1056,16 +1057,16 @@ export function AppointmentsClient({ appointments: initialAppts, patients, docto
                     {appt.paymentStatus === "paid" ? (
                       <a href={`/teleconsulta/${appt.id}?role=doctor`} target="_blank" rel="noopener noreferrer"
                         className="flex items-center justify-center gap-2 w-full h-11 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold transition-colors">
-                        📹 {t("appointments.teleconsult.join")}
+                        <Video className="w-4 h-4" strokeWidth={1.75} aria-hidden />{t("appointments.teleconsult.join")}
                       </a>
                     ) : (
                       <div className="space-y-2">
                         <div className="flex items-center gap-1.5 text-sm font-semibold text-amber-600 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 px-3 py-1.5 rounded-full w-fit">
-                          ⏳ {t("appointments.teleconsult.paymentPending")}
+                          <Clock className="w-4 h-4" strokeWidth={1.75} aria-hidden />{t("appointments.teleconsult.paymentPending")}
                         </div>
                         <button onClick={() => { navigator.clipboard.writeText(`${window.location.origin}/pago/${appt.id}`); toast.success(t("appointments.teleconsult.paymentLinkCopied")); }}
                           className="flex items-center justify-center gap-2 w-full h-11 rounded-xl border border-border hover:bg-muted text-sm font-bold transition-colors">
-                          📋 {t("appointments.teleconsult.copyPaymentLink")}
+                          <ClipboardList className="w-4 h-4" strokeWidth={1.75} aria-hidden />{t("appointments.teleconsult.copyPaymentLink")}
                         </button>
                       </div>
                     )}
@@ -1079,7 +1080,7 @@ export function AppointmentsClient({ appointments: initialAppts, patients, docto
                 )}
                 {appt.notes && (
                   <div className="bg-muted/20 rounded-xl p-4">
-                    <div className="text-xs font-bold text-muted-foreground uppercase tracking-wide mb-1">📝 {t("common.notes")}</div>
+                    <div className="text-xs font-bold text-muted-foreground uppercase tracking-wide mb-1 flex items-center gap-1.5"><FileText size={12} strokeWidth={1.75} aria-hidden />{t("common.notes")}</div>
                     <div className="text-base">{appt.notes}</div>
                   </div>
                 )}
@@ -1088,7 +1089,7 @@ export function AppointmentsClient({ appointments: initialAppts, patients, docto
                   <div className="flex flex-wrap gap-2">
                     {Object.entries(STATUS_CONFIG).map(([s,c]) => (
                       <button key={s} onClick={() => updateStatus(appt.id,s)}
-                        className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-bold border-2 transition-all ${appt.status===s?"":"border-border hover:bg-muted"}`}
+                        className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-bold border-2 transition-colors ${appt.status===s?"":"border-border hover:bg-muted"}`}
                         style={appt.status===s?{ background:c.bg, color:c.text, borderColor:c.border, fontStyle:c.italic?"italic":undefined }:undefined}>
                         <div className="w-2 h-2 rounded-full" style={{ background: c.dot }}/>{t(c.label)}
                       </button>

@@ -644,6 +644,10 @@
 .btn-new--danger:hover    { background: #b91c1c; box-shadow: var(--shadow-2); }
 .btn-new--sm { height: 32px; font-size: 12.5px; padding: 0 12px; border-radius: var(--radius-sm); }
 .btn-new:disabled { opacity: 0.45; cursor: not-allowed; }
+/* Ring tokenizado sin capa: las variantes --primary/--secondary/--danger
+   (unlayered) pisan el box-shadow del :focus-visible en @layer, dejando el
+   ring invisible. Esta regla lo restaura para todas las variantes. */
+.btn-new:focus-visible { box-shadow: var(--ring); }
 
 /* Tag ------------------------------------------------------------- */
 .tag-new {
@@ -769,6 +773,9 @@
 @keyframes shimmer-new {
   0%   { background-position:  200% 0 }
   100% { background-position: -200% 0 }
+}
+@media (prefers-reduced-motion: reduce) {
+  .skel-new { animation: none; }
 }
 
 /* Sidebar --------------------------------------------------------- */
@@ -1139,7 +1146,7 @@
   display: flex;
   justify-content: flex-end;
   gap: 8px;
-  background: rgba(0,0,0,0.2);
+  background: var(--bg-elev-2);
 }
 @keyframes fadeIn  { from { opacity: 0 } to { opacity: 1 } }
 @keyframes slideUp { from { opacity: 0; transform: translateY(8px) scale(0.98); } to { opacity: 1; transform: translateY(0) scale(1); } }
