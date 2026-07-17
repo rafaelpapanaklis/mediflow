@@ -4,6 +4,7 @@ import { X } from "lucide-react";
 import * as Dialog from "@radix-ui/react-dialog";
 import { ButtonNew } from "@/components/ui/design-system/button-new";
 import { DateField } from "@/components/ui/date-field";
+import { PatientVisibilityPicker } from "@/components/dashboard/patient-visibility-picker";
 import toast from "react-hot-toast";
 import { useT } from "@/i18n/i18n-provider";
 
@@ -56,6 +57,8 @@ export function NewPatientModal({ open, onClose, onCreated, initialName, initial
   const [form, setForm] = useState(emptyForm);
   const [errors, setErrors] = useState<Record<string, boolean>>({});
   const [noAllergies, setNoAllergies] = useState(false);
+  // Visibilidad por paciente. [] = todos lo ven (default, sin restricción).
+  const [visibleUserIds, setVisibleUserIds] = useState<string[]>([]);
   const set = (k: string, v: string | boolean) => {
     setForm(f => ({ ...f, [k]: v }));
     if (errors[k]) setErrors(e => { const next = { ...e }; delete next[k]; return next; });
@@ -80,6 +83,7 @@ export function NewPatientModal({ open, onClose, onCreated, initialName, initial
     if (initialEmail) next.email = initialEmail;
     setForm(next);
     setNoAllergies(false);
+    setVisibleUserIds([]);
     setErrors({});
   }, [open, initialName, initialPhone, initialEmail]);
 
@@ -125,6 +129,8 @@ export function NewPatientModal({ open, onClose, onCreated, initialName, initial
           curp:        form.curpStatus === "COMPLETE" ? form.curp.toUpperCase() : null,
           curpStatus:  form.curpStatus,
           passportNo:  form.curpStatus === "FOREIGN" ? form.passportNo : null,
+          // Solo si quedó restringida: omitido = todos lo ven (default).
+          ...(visibleUserIds.length > 0 && { visibleUserIds }),
         }),
       });
       if (!res.ok) throw new Error((await res.json()).error);
@@ -392,11 +398,21 @@ export function NewPatientModal({ open, onClose, onCreated, initialName, initial
             </div>
           </div>
 
-          <div className="modal__footer" style={{ flexShrink: 0 }}>
-            <ButtonNew variant="ghost" onClick={onClose} type="button">{t("common.cancel")}</ButtonNew>
-            <ButtonNew variant="primary" type="submit" disabled={loading}>
-              {loading ? t("common.saving") : t("shell.newPatient.createPatient")}
-            </ButtonNew>
+          {/* justify-content: space-between pisa el flex-end de .modal__footer
+              para dejar la visibilidad a la IZQUIERDA y las acciones a la
+              derecha, sin tocar la clase compartida en globals.css. */}
+          <div className="modal__footer" style={{ flexShrink: 0, justifyContent: "space-between", flexWrap: "wrap" }}>
+            <PatientVisibilityPicker
+              value={visibleUserIds}
+              onChange={setVisibleUserIds}
+              disabled={loading}
+            />
+            <div style={{ display: "flex", gap: 8, marginLeft: "auto" }}>
+              <ButtonNew variant="ghost" onClick={onClose} type="button">{t("common.cancel")}</ButtonNew>
+              <ButtonNew variant="primary" type="submit" disabled={loading}>
+                {loading ? t("common.saving") : t("shell.newPatient.createPatient")}
+              </ButtonNew>
+            </div>
           </div>
         </form>
         </Dialog.Content>

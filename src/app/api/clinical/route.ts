@@ -6,6 +6,7 @@ import { revalidatePath } from "next/cache";
 import { readActiveClinicCookie } from "@/lib/active-clinic";
 import { logMutation } from "@/lib/audit";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
+import { assertPatientVisible } from "@/lib/patient-visibility";
 import {
   EMPTY_NOTE_ERROR,
   isClinicalNoteEmpty,
@@ -49,6 +50,14 @@ export async function GET(req: NextRequest) {
   if (denied) return denied;
   const patientId = req.nextUrl.searchParams.get("patientId");
   if (!patientId) return NextResponse.json({ error: "patientId required" }, { status: 400 });
+  // Visibilidad por paciente: el where de abajo es clinicId + patientId, así que
+  // sin este gate se leía el expediente de un paciente restringido con solo su id.
+  const hidden = await assertPatientVisible(patientId, {
+    userId: dbUser.id,
+    role: dbUser.role,
+    clinicId: dbUser.clinicId,
+  });
+  if (hidden) return hidden;
   const records = await prisma.medicalRecord.findMany({
     where: { clinicId: dbUser.clinicId, patientId },
     include: { doctor: { select: { id: true, firstName: true, lastName: true } } },

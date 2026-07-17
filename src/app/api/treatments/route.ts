@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthContext } from "@/lib/auth-context";
+import { relatedPatientVisibilityAnd } from "@/lib/patient-visibility";
 import { prisma } from "@/lib/prisma";
 import { revalidateAfter } from "@/lib/cache/revalidate";
 import { logMutation } from "@/lib/audit";
@@ -21,6 +22,14 @@ export async function GET(req: NextRequest) {
       ...(patientId ? { patientId } : {}),
       ...(ctx.isDoctor ? { doctorId: ctx.userId } : {}),
       ...(status ? { status: status as any } : {}),
+      // Visibilidad por paciente. Va como filtro de RELACIÓN (no un assert)
+      // porque `patientId` es opcional: sin él, esto listaba los planes de TODA
+      // la clínica, restringidos incluidos.
+      AND: relatedPatientVisibilityAnd({
+        userId: ctx.userId,
+        role: ctx.role,
+        clinicId: ctx.clinicId,
+      }),
     },
     include: {
       patient:  { select: { id: true, firstName: true, lastName: true, phone: true } },

@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
+import { assertPatientVisible } from "@/lib/patient-visibility";
 import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
@@ -48,12 +49,14 @@ export async function GET(req: NextRequest, { params }: Params) {
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
   }
 
-  // Validar que el paciente pertenece a la clínica del usuario.
-  const patient = await prisma.patient.findFirst({
-    where: { id: params.id, clinicId: user.clinicId },
-    select: { id: true },
+  // Validar que el paciente pertenece a la clínica del usuario Y que este
+  // usuario puede verlo (visibilidad por paciente). Mismo 404 en ambos casos.
+  const denied = await assertPatientVisible(params.id, {
+    userId: user.id,
+    role: user.role,
+    clinicId: user.clinicId,
   });
-  if (!patient) return NextResponse.json({ error: "patient_not_found" }, { status: 404 });
+  if (denied) return denied;
 
   const sp = req.nextUrl.searchParams;
   const fromParam = sp.get("from");

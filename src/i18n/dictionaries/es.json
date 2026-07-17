@@ -523,6 +523,20 @@
       "conditions": "Condiciones",
       "source": "Fuente: expediente del paciente. Verifica antes de cualquier prescripción."
     },
+    "patientVisibility": {
+      "aria": "Elegir quién puede ver a este paciente",
+      "title": "¿Quién puede ver a este paciente?",
+      "hint": "Por defecto lo ve todo el equipo. Puedes limitarlo a ciertas personas.",
+      "allLabel": "Visibilidad: Todos",
+      "someLabel": "Visibilidad: {count} de {total}",
+      "restrictedLabel": "Visibilidad: Restringida",
+      "adminAlways": "El administrador siempre tiene acceso",
+      "atLeastOne": "Debe quedar al menos una persona",
+      "searchPlaceholder": "Buscar en el equipo…",
+      "empty": "Sin miembros del equipo.",
+      "reset": "Que lo vea todo el equipo",
+      "restrictedBadge": "Visibilidad restringida ({count})"
+    },
     "quickActions": {
       "todayAgenda": "Agenda de hoy",
       "patients": "Pacientes",

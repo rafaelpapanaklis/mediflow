@@ -8,6 +8,7 @@ import {
   isOverlapError,
 } from "@/lib/agenda/api-helpers";
 import { appointmentToDTO } from "@/lib/agenda/server";
+import { ensureUserCanSeePatient } from "@/lib/patient-visibility";
 import { canOverrideOverlap } from "@/lib/agenda/transitions";
 import { validateResourceSchedule } from "@/lib/agenda/resource-schedule";
 import { loadResourceSchedule } from "@/lib/agenda/resource-schedule.server";
@@ -198,10 +199,19 @@ export async function PATCH(
   }
 
   try {
-    const updated = await prisma.appointment.update({
-      where: { id: params.id },
-      data,
-      include: APPT_INCLUDE,
+    // Auto-inclusión de visibilidad en la MISMA transacción: si esta cita se
+    // reasigna a otro doctor y el paciente está restringido, ese doctor entra a
+    // la lista — si no, atendería a alguien que no puede ver.
+    const updated = await prisma.$transaction(async (tx) => {
+      const row = await tx.appointment.update({
+        where: { id: params.id },
+        data,
+        include: APPT_INCLUDE,
+      });
+      if (body.doctorId) {
+        await ensureUserCanSeePatient(tx, row.patientId, body.doctorId, session.clinic.id);
+      }
+      return row;
     });
 
     // TODO(M3.b): if body.notifyPatient → trigger WA notification (waConnected).

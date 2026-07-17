@@ -18,6 +18,8 @@ export async function GET() {
         clinicId: session.clinic.id,
         clinicCategory: session.clinic.category,
         doctorIdScope: doctorId,
+        // Enmascara pacientes restringidos que este doctor no puede ver.
+        viewer: { userId: session.user.id, role: session.user.role, clinicId: session.clinic.id },
       }),
       countDraftNotes(session.clinic.id, doctorId),
       countUnanalyzedXrays(session.clinic.id, doctorId),

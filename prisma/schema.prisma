@@ -1154,6 +1154,18 @@ model Patient {
   isChild            Boolean       @default(false) // true = dentición temporal
   primaryDoctorId    String?
 
+  // Visibilidad por paciente. Semántica (ver src/lib/patient-visibility.ts):
+  //   []       = TODOS lo ven (comportamiento histórico; los doctores siguen
+  //              sujetos a las heurísticas de buildPatientWhere).
+  //   NO vacío = lo ven SOLO estos userIds + CUALQUIER admin (ADMIN /
+  //              SUPER_ADMIN). La lista concede Y restringe: manda sobre las
+  //              heurísticas primaryDoctor/cita/record.
+  // Los admins NO se guardan en la lista — la regla los cubre implícito.
+  // Columna real en sql/patient-visibility.sql (ADD COLUMN IF NOT EXISTS +
+  // índice GIN). APLICARLA ANTES del deploy: si Prisma la lee sin que exista,
+  // CUALQUIER lectura de patients revienta.
+  visibleUserIds String[] @default([])
+
   // Portal del paciente
   portalToken       String?   @unique
   portalTokenExpiry DateTime?
@@ -1305,6 +1317,9 @@ model Patient {
   @@index([clinicId, status])
   @@index([clinicId, createdAt(sort: Desc)])
   @@index([primaryDoctorId])
+  // GIN: el filtro de visibilidad hace `has`/`isEmpty` sobre el array en CADA
+  // lectura de patients de un no-admin. Índice real en sql/patient-visibility.sql.
+  @@index([visibleUserIds], type: Gin)
   @@map("patients")
 }
 

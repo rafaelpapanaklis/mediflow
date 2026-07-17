@@ -21,6 +21,7 @@ import {
   todayInTz,
 } from "@/lib/agenda/time-utils";
 import { canOverrideOverlap } from "@/lib/agenda/transitions";
+import { ensureUserCanSeePatient } from "@/lib/patient-visibility";
 import { validateResourceSchedule } from "@/lib/agenda/resource-schedule";
 import { loadResourceSchedule } from "@/lib/agenda/resource-schedule.server";
 import { logMutation } from "@/lib/audit";
@@ -101,6 +102,14 @@ export async function GET(req: NextRequest) {
 
   const range = dayRangeUtc(dateISO, session.timeConfig);
 
+  // Visibilidad por paciente: la cita SIEMPRE se ve (el hueco del día es real),
+  // pero a quien no puede ver a un paciente restringido le llega enmascarado.
+  const viewer = {
+    userId: session.user.id,
+    role: session.user.role,
+    clinicId: session.clinic.id,
+  };
+
   const [appointments, doctors, resources, pendingValidation, waitlistCount] =
     await Promise.all([
       fetchAppointmentsForDay(dateISO, session.timeConfig, {
@@ -110,6 +119,7 @@ export async function GET(req: NextRequest) {
         doctorId,
         resourceId,
         statuses,
+        viewer,
       }),
       fetchActiveDoctors(session.clinic.id, session.clinic.category),
       fetchResources(session.clinic.id),
@@ -118,6 +128,7 @@ export async function GET(req: NextRequest) {
         session.timeConfig,
         session.clinic.id,
         session.clinic.category,
+        viewer,
       ),
       fetchWaitlistCount(session.clinic.id),
     ]);
@@ -264,24 +275,31 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const created = await prisma.appointment.create({
-      data: {
-        clinicId: session.clinic.id,
-        patientId: body.patientId,
-        doctorId: body.doctorId,
-        resourceId: body.resourceId ?? null,
-        startsAt,
-        endsAt,
-        status: "SCHEDULED",
-        type: body.reason ?? "Consulta general",
-        mode: body.isTeleconsult ? "TELECONSULTATION" : "IN_PERSON",
-        source: "STAFF",
-        requiresValidation: false,
-        overrideReason: body.overrideReason ?? null,
-        overriddenBy: body.overrideReason ? session.user.id : null,
-        overriddenAt: body.overrideReason ? new Date() : null,
-      },
-      include: APPT_INCLUDE,
+    // Auto-inclusión de visibilidad en la MISMA transacción que la cita: si el
+    // paciente está restringido y el doctor no está en la lista, se agrega. Sin
+    // esto quedaría "el doctor atiende a un paciente que no puede ver".
+    const created = await prisma.$transaction(async (tx) => {
+      const appt = await tx.appointment.create({
+        data: {
+          clinicId: session.clinic.id,
+          patientId: body.patientId,
+          doctorId: body.doctorId,
+          resourceId: body.resourceId ?? null,
+          startsAt,
+          endsAt,
+          status: "SCHEDULED",
+          type: body.reason ?? "Consulta general",
+          mode: body.isTeleconsult ? "TELECONSULTATION" : "IN_PERSON",
+          source: "STAFF",
+          requiresValidation: false,
+          overrideReason: body.overrideReason ?? null,
+          overriddenBy: body.overrideReason ? session.user.id : null,
+          overriddenAt: body.overrideReason ? new Date() : null,
+        },
+        include: APPT_INCLUDE,
+      });
+      await ensureUserCanSeePatient(tx, body.patientId, body.doctorId, session.clinic.id);
+      return appt;
     });
 
     // TODO(M3.b): notifyPatient via WhatsApp si body.notifyPatient

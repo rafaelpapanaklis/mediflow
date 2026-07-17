@@ -523,6 +523,20 @@
       "conditions": "Conditions",
       "source": "Source: patient record. Verify before any prescription."
     },
+    "patientVisibility": {
+      "aria": "Choose who can see this patient",
+      "title": "Who can see this patient?",
+      "hint": "By default the whole team sees them. You can limit it to certain people.",
+      "allLabel": "Visibility: Everyone",
+      "someLabel": "Visibility: {count} of {total}",
+      "restrictedLabel": "Visibility: Restricted",
+      "adminAlways": "Admins always have access",
+      "atLeastOne": "At least one person must remain",
+      "searchPlaceholder": "Search the team…",
+      "empty": "No team members.",
+      "reset": "Let the whole team see them",
+      "restrictedBadge": "Restricted visibility ({count})"
+    },
     "quickActions": {
       "todayAgenda": "Today's agenda",
       "patients": "Patients",

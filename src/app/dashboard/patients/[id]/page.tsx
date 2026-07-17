@@ -4,6 +4,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { getServerT } from "@/i18n/server";
 import { prisma } from "@/lib/prisma";
 import { getPatientCreditBalance } from "@/lib/patient-credit";
+import { patientVisibilityAnd } from "@/lib/patient-visibility";
 import { notFound } from "next/navigation";
 import { headers } from "next/headers";
 import { logAudit } from "@/lib/audit";
@@ -41,7 +42,15 @@ export default async function PatientDetailPage({ params }: { params: { id: stri
 
   const [patient, doctors] = await Promise.all([
     prisma.patient.findFirst({
-      where: { id: params.id, clinicId: user.clinicId },
+      // Visibilidad por paciente: esta página arma el expediente en el server,
+      // así que el gate del GET /api/patients/[id] NO la cubre — sin este AND,
+      // la URL directa renderizaba el expediente de un paciente restringido.
+      // Si no lo puede ver, para él no existe → notFound() (404), nunca 403.
+      where: {
+        id: params.id,
+        clinicId: user.clinicId,
+        AND: patientVisibilityAnd({ userId: user.id, role: user.role, clinicId: user.clinicId }),
+      },
       include: {
         primaryDoctor: { select: { id: true, firstName: true, lastName: true, color: true } },
         appointments: {
@@ -291,6 +300,8 @@ export default async function PatientDetailPage({ params }: { params: { id: stri
             firstName:          user.firstName,
             lastName:           user.lastName,
             cedulaProfesional:  user.cedulaProfesional ?? null,
+            // El picker de visibilidad y el badge "restringida" son solo de admin.
+            role:               user.role,
           }}
           specialty={user.clinic.specialty}
           portalUrl={portalUrl}

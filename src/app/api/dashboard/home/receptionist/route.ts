@@ -24,12 +24,15 @@ export async function GET() {
       fetchAppointmentsForDay(dateISO, session.timeConfig, {
         clinicId: session.clinic.id,
         clinicCategory: session.clinic.category,
+        // Enmascara pacientes restringidos que este usuario no puede ver.
+        viewer: { userId: session.user.id, role: session.user.role, clinicId: session.clinic.id },
       }),
       fetchPendingValidation(
         dateISO,
         session.timeConfig,
         session.clinic.id,
         session.clinic.category,
+        { userId: session.user.id, role: session.user.role, clinicId: session.clinic.id },
       ),
       prisma.waitlistEntry.findMany({
         where: { clinicId: session.clinic.id, resolvedAt: null },

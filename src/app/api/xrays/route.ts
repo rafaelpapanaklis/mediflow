@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthContext } from "@/lib/auth-context";
+import { assertPatientVisible } from "@/lib/patient-visibility";
 import { prisma } from "@/lib/prisma";
 import { createClient as createAdmin } from "@supabase/supabase-js";
 import { BUCKETS, signMaybeUrl, signMaybeUrls } from "@/lib/storage";
@@ -20,6 +21,16 @@ export async function GET(req: NextRequest) {
 
   const patientId = new URL(req.url).searchParams.get("patientId");
   if (!patientId) return NextResponse.json({ error: "patientId required" }, { status: 400 });
+
+  // Visibilidad por paciente: el filtro de abajo es solo por clinicId, así que
+  // sin este gate un usuario fuera de la lista podía leer las radiografías de un
+  // paciente restringido pasando su id.
+  const denied = await assertPatientVisible(patientId, {
+    userId: ctx.userId,
+    role: ctx.role,
+    clinicId: ctx.clinicId,
+  });
+  if (denied) return denied;
 
   // Los modelos 3D (SCAN_STL + mallas/DICOM por extensión) viven SOLO en la
   // pestaña "Modelos 3D" (GET /api/patients/[id]/models-3d). Excluimos aquí el

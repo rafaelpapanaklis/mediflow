@@ -131,18 +131,55 @@ export async function getAuthContext(): Promise<AuthContext | null> {
 /**
  * Build patient WHERE clause based on role.
  * Admins see all clinic patients. Doctors only see their own.
+ *
+ * Visibilidad por paciente (patients.visibleUserIds, ver @/lib/patient-visibility):
+ *   - lista VACÍA  → comportamiento histórico intacto: lo ve todo el equipo, y
+ *                    a los doctores se les siguen aplicando las heurísticas de
+ *                    abajo (primaryDoctor / cita / record).
+ *   - lista LLENA  → SUSTITUYE las heurísticas: lo ven SOLO los userIds de la
+ *                    lista (+ cualquier admin, que no pasa por este filtro).
+ *                    Un doctor con cita del paciente NO lo ve si no está.
+ *
+ * Todo va dentro de `AND` a propósito. Antes las heurísticas vivían en un `OR`
+ * de primer nivel y `...extra` podía pisarlo: el handler legacy de
+ * GET /api/patients manda su búsqueda como `extra.OR` y borraba el scope del
+ * doctor (fuga). Con `AND` ambas condiciones coexisten con cualquier `extra`.
  */
 export function buildPatientWhere(ctx: AuthContext, extra: Record<string, any> = {}) {
+  const { AND: extraAnd, ...restExtra } = extra;
+  const extraAndList: any[] = extraAnd
+    ? Array.isArray(extraAnd) ? extraAnd : [extraAnd]
+    : [];
+
+  const scope: any[] = [];
+  if (!ctx.isAdmin) {
+    const legacyDoctorScope = ctx.isDoctor
+      ? {
+          OR: [
+            { primaryDoctorId: ctx.userId },
+            { appointments: { some: { doctorId: ctx.userId } } },
+            { records: { some: { doctorId: ctx.userId } } },
+          ],
+        }
+      : null;
+
+    scope.push({
+      OR: [
+        // Sin lista → como siempre (heurísticas de doctor si aplica).
+        legacyDoctorScope
+          ? { AND: [{ visibleUserIds: { isEmpty: true } }, legacyDoctorScope] }
+          : { visibleUserIds: { isEmpty: true } },
+        // Con lista que me incluye → manda la lista, ignora heurísticas.
+        { visibleUserIds: { has: ctx.userId } },
+      ],
+    });
+  }
+
+  const AND = [...scope, ...extraAndList];
   return {
     clinicId: ctx.clinicId, // ALWAYS — prevents cross-clinic access
-    ...(ctx.isDoctor && {   // Doctors only see their patients
-      OR: [
-        { primaryDoctorId: ctx.userId },
-        { appointments: { some: { doctorId: ctx.userId } } },
-        { records: { some: { doctorId: ctx.userId } } },
-      ],
-    }),
-    ...extra,
+    ...(AND.length ? { AND } : {}),
+    ...restExtra,
   };
 }
 
