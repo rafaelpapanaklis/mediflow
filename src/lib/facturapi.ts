@@ -264,15 +264,21 @@ export async function downloadInvoiceFile(
   return res.arrayBuffer();
 }
 
-// Validate RFC with SAT via Facturapi
-export async function validateRfc(rfc: string): Promise<{ valid: boolean; name?: string }> {
+// Valida el RFC contra la lista negra EFOS del SAT (art. 69-B) vía Facturapi.
+// Endpoint real: GET /tools/tax_id_validation?tax_id= con la key de la ORG.
+// FAIL-OPEN: solo bloquea si el SAT lo marca explícito en la lista negra; si la
+// herramienta falla o responde distinto, se permite — el timbrado es el juez
+// final del RFC (Facturapi lo rechaza con mensaje claro si no es válido).
+export async function validateRfc(orgApiKey: string, rfc: string): Promise<{ ok: boolean; blacklisted?: boolean }> {
   try {
-    const res = await fetch(`${FACTURAPI_BASE}/tools/validate_rfc?rfc=${rfc}`, {
-      headers: { "Authorization": `Bearer ${USER_KEY}` },
+    const res = await fetch(`${FACTURAPI_BASE}/tools/tax_id_validation?tax_id=${encodeURIComponent(rfc)}`, {
+      headers: { "Authorization": `Bearer ${orgApiKey}` },
     });
+    if (!res.ok) return { ok: true };
     const data = await res.json();
-    return { valid: data.is_valid, name: data.sat_name };
+    if (data?.efos?.is_valid === false) return { ok: false, blacklisted: true };
+    return { ok: true };
   } catch {
-    return { valid: false };
+    return { ok: true };
   }
 }

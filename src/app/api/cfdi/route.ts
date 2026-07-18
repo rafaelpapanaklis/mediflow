@@ -43,14 +43,15 @@ export async function POST(req: NextRequest) {
   if (!invoice) return NextResponse.json({ error: "Factura no encontrada" }, { status: 404 });
   if (invoice.cfdiUuid) return NextResponse.json({ error: "Esta factura ya tiene CFDI timbrado" }, { status: 400 });
 
-  // Validate RFC with SAT
-  const rfcValidation = await validateRfc(receptor.rfc);
-  if (!rfcValidation.valid) {
-    return NextResponse.json({ error: `RFC inválido ante el SAT: ${receptor.rfc}` }, { status: 400 });
-  }
-
   try {
     const orgApiKey = await getOrgApiKey(clinic.facturApiOrgId);
+
+    // Chequeo lista negra EFOS del SAT (fail-open: solo bloquea si el SAT lo
+    // marca explícito; un RFC inexistente lo rechaza el propio timbrado).
+    const rfcValidation = await validateRfc(orgApiKey, receptor.rfc);
+    if (!rfcValidation.ok) {
+      return NextResponse.json({ error: `El RFC ${receptor.rfc} aparece en la lista negra del SAT (EFOS, art. 69-B); no es posible facturarle.` }, { status: 400 });
+    }
 
     const customerId = await createOrUpdateCustomer(orgApiKey, {
       legal_name: receptor.nombre,
