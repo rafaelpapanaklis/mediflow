@@ -100,7 +100,6 @@ export interface CreateInvoiceParams {
   usoCfdi: string;
   items: InvoiceItem[];
   paymentForm?: string; // 01=efectivo, 03=transferencia, 04=tarjeta crédito, 28=tarjeta débito
-  notes?: string;
 }
 
 export interface InvoiceResult {
@@ -118,6 +117,8 @@ export async function createInvoice(params: CreateInvoiceParams): Promise<Invoic
       "Authorization": `Bearer ${params.orgApiKey}`,
       "Content-Type": "application/json",
     },
+    // OJO: el payload de POST /invoices NO acepta "notes" — Facturapi lo
+    // rechaza con 400 "El campo notes no está permitido".
     body: JSON.stringify({
       type: "I", // Ingreso
       customer: params.customerId,
@@ -125,7 +126,6 @@ export async function createInvoice(params: CreateInvoiceParams): Promise<Invoic
       payment_form: params.paymentForm ?? "03", // Transferencia por defecto
       payment_method: "PUE", // Pago en una sola exhibición
       items: params.items,
-      notes: params.notes,
     }),
   });
   const data = await res.json();

@@ -85,7 +85,6 @@ export async function POST(req: NextRequest) {
       usoCfdi:     usoCfdi ?? "D01",
       paymentForm: paymentForm ?? "03",
       items,
-      notes: `Clínica: ${clinic.name}${clinic.rfcEmisor ? ` | RFC: ${clinic.rfcEmisor}` : ""}`,
     });
 
     const [cfdiRecord] = await prisma.$transaction([
