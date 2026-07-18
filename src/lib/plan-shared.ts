@@ -24,6 +24,10 @@ export interface PlanLimits {
   aiTokensDefault: number;
   /** WhatsApps salientes por mes estimados para el plan */
   whatsappMonthly: number;
+  /** Facturas CFDI (timbres) incluidas por mes calendario (reset día 1) */
+  cfdiMonthly: number;
+  /** Precio por timbre CFDI excedente, en CENTAVOS MXN (200 = $2.00) */
+  cfdiOverageCents: number;
   /** Precio mensual en MXN (compat — el cobro real sale de getResolvedPlan) */
   monthlyPrice: number;
   /** Máximo de pacientes; null = ilimitado */
@@ -55,6 +59,10 @@ export interface ResolvedPlan {
   storageBytes: number;
   aiTokensDefault: number;
   whatsappMonthly: number;
+  /** Facturas CFDI incluidas por mes calendario (reset día 1). */
+  cfdiMonthly: number;
+  /** Precio por timbre CFDI excedente, en CENTAVOS MXN (200 = $2.00). */
+  cfdiOverageCents: number;
   maxPatients: number | null;
   maxUsers: number | null;
   /** Máximo de sucursales por dueño; null = ilimitado (1 = sin multi-sucursal). */
@@ -105,6 +113,8 @@ export interface PlanConfigShape {
   storageBytes: number;
   aiTokensDefault: number;
   whatsappMonthly: number;
+  cfdiMonthly: number;
+  cfdiOverageCents: number;
   maxPatients: number | null;
   maxUsers: number | null;
   maxClinics: number | null;
@@ -126,6 +136,8 @@ export const FALLBACK_PLAN_CONFIG: Record<PlanId, PlanConfigShape> = {
     storageBytes: 5 * GB,
     aiTokensDefault: 0,
     whatsappMonthly: 300,
+    cfdiMonthly: 25,
+    cfdiOverageCents: 200,
     maxPatients: 500,
     maxUsers: 2,
     maxClinics: 1,
@@ -138,6 +150,8 @@ export const FALLBACK_PLAN_CONFIG: Record<PlanId, PlanConfigShape> = {
     storageBytes: 15 * GB,
     aiTokensDefault: 200_000,
     whatsappMonthly: 1500,
+    cfdiMonthly: 50,
+    cfdiOverageCents: 200,
     maxPatients: null,
     maxUsers: 6,
     maxClinics: 1,
@@ -150,6 +164,8 @@ export const FALLBACK_PLAN_CONFIG: Record<PlanId, PlanConfigShape> = {
     storageBytes: 75 * GB,
     aiTokensDefault: 1_000_000,
     whatsappMonthly: 6000,
+    cfdiMonthly: 150,
+    cfdiOverageCents: 125,
     maxPatients: null,
     maxUsers: null,
     // Multi-sucursal: el precio de CLINIC incluye hasta 3 sedes bajo el mismo

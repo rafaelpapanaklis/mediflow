@@ -16,6 +16,7 @@ import {
   AI_SETUP_KIND,
 } from "@/lib/ai-billing/recharge";
 import { PATIENT_INVOICE_KIND, applyInvoiceOnlinePayment } from "@/lib/patient-portal/online-payment";
+import { CFDI_OVERAGE_KIND, reconcileOverageFromWebhook } from "@/lib/cfdi-overage";
 import { getPlanLimits } from "@/lib/plans";
 import { isPlanId } from "@/lib/billing/plans";
 import { sendPlanActivatedEmail, sendPlanRenewedEmail } from "@/lib/email";
@@ -447,6 +448,11 @@ export async function POST(req: NextRequest) {
       //    llega inline desde chargeOffSession y por este webhook).
       case "payment_intent.succeeded": {
         const pi = event.data.object as Stripe.PaymentIntent;
+        // Excedente CFDI (cobro off-session anual): backstop idempotente del cron.
+        if (pi.metadata?.kind === CFDI_OVERAGE_KIND) {
+          await reconcileOverageFromWebhook(pi, true);
+          break;
+        }
         if (pi.metadata?.kind !== AI_TOPUP_KIND) break;
         const clinicId = pi.metadata?.clinicId;
         if (!clinicId) break;
@@ -463,6 +469,11 @@ export async function POST(req: NextRequest) {
 
       case "payment_intent.payment_failed": {
         const pi = event.data.object as Stripe.PaymentIntent;
+        // Excedente CFDI: marca el fallo (el cron ya deja adeudo manual visible).
+        if (pi.metadata?.kind === CFDI_OVERAGE_KIND) {
+          await reconcileOverageFromWebhook(pi, false);
+          break;
+        }
         if (pi.metadata?.kind !== AI_TOPUP_KIND) break;
         const clinicId = pi.metadata?.clinicId;
         if (!clinicId) break;

@@ -6,6 +6,7 @@ import toast from "react-hot-toast";
 import { Check, CreditCard, Download, ExternalLink, Loader2, Receipt, Sparkles } from "lucide-react";
 import { type PlanId, isPlanId } from "@/lib/billing/plans";
 import { PaymentMethodModal } from "./payment-method-modal";
+import { CfdiUsageCard } from "./cfdi-usage-card";
 import { useT } from "@/i18n/i18n-provider";
 
 interface ClinicData {
@@ -480,6 +481,9 @@ export function SubscriptionTab({ clinic }: Props) {
           )}
         </div>
       </section>
+
+      {/* ── Facturación CFDI (cupo del mes + excedente + adeudo) ──── */}
+      <CfdiUsageCard />
 
       {/* ── Facturación ──────────────────────────────────────────── */}
       <section className="bg-card border border-border rounded-2xl p-6" style={{ display: "flex", flexDirection: "column", gap: 14 }}>

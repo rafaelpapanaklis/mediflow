@@ -88,6 +88,8 @@ export function InvoiceDetailModal({ open, invoice, patientName, onClose, onMuta
   const [fiscal, setFiscal] = useState({ rfc: "", nombre: "", regimen: "612", cp: "", uso: "D01", email: "" });
   const [stampedUuid, setStampedUuid] = useState<string | null>(null);
   const [cfdiId, setCfdiId] = useState<string | null>(null);
+  // Consumo CFDI del mes (contador discreto en el sub-form + aviso de excedente).
+  const [cfdiQuota, setCfdiQuota] = useState<{ used: number; included: number } | null>(null);
 
   // El modal no se desmonta entre facturas: al cambiar de factura limpia el
   // estado de timbrado para no arrastrarlo a otra factura.
@@ -130,6 +132,12 @@ export function InvoiceDetailModal({ open, invoice, patientName, onClose, onMuta
       uso:     "D01",
       email:   "",
     });
+    // Carga el consumo del mes para el indicador "CFDI este mes: N/M" (best-effort).
+    setCfdiQuota(null);
+    fetch("/api/cfdi/usage")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => { if (d) setCfdiQuota({ used: d.used, included: d.included }); })
+      .catch(() => {});
     setSub("cfdi");
   }
 
@@ -173,6 +181,15 @@ export function InvoiceDetailModal({ open, invoice, patientName, onClose, onMuta
       setCfdiId(data.cfdiId ?? null);
       setSub(null);
       toast.success(t("clinical.invoiceDetail.cfdiStampedToast"));
+      // Al superar el cupo del mes: se timbra igual y se avisa que es adicional.
+      if (data.quota && data.quota.overage > 0) {
+        toast(
+          t("clinical.invoiceDetail.cfdiOverageToast", {
+            price: formatCurrency((data.quota.overagePriceCents ?? 0) / 100),
+          }),
+          { icon: "🧾", duration: 6000 },
+        );
+      }
       await onMutated(); // refresca la lista del parent sin cerrar el modal
     } catch (err: any) {
       toast.error(err.message ?? t("common.genericError"));
@@ -589,7 +606,14 @@ export function InvoiceDetailModal({ open, invoice, patientName, onClose, onMuta
             <DialogTitle className="text-foreground font-bold">{t("clinical.invoiceDetail.cfdiFormTitle")}</DialogTitle>
           </DialogHeader>
           <div className="px-6 py-4 space-y-3 flex-1 overflow-y-auto min-h-0">
-            <p className="text-xs text-muted-foreground">{t("clinical.invoiceDetail.cfdiFormHelp")}</p>
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-xs text-muted-foreground">{t("clinical.invoiceDetail.cfdiFormHelp")}</p>
+              {cfdiQuota && (
+                <span className="text-[11px] whitespace-nowrap" style={{ color: "var(--text-3)" }}>
+                  {t("clinical.invoiceDetail.cfdiMonthCounter", { used: cfdiQuota.used, included: cfdiQuota.included })}
+                </span>
+              )}
+            </div>
             {invoice.balance > 0 && (
               <div
                 className="rounded-lg px-3 py-2 text-[11px]"

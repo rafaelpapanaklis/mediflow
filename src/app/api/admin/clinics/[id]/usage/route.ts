@@ -25,7 +25,7 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
   monthStart.setDate(1);
   monthStart.setHours(0, 0, 0, 0);
 
-  const [storageAgg, whatsappCount, xrayAnalysesMonth] = await Promise.all([
+  const [storageAgg, whatsappCount, xrayAnalysesMonth, cfdiCount] = await Promise.all([
     prisma.patientFile.aggregate({
       where: { clinicId },
       _sum:  { size: true },
@@ -35,6 +35,9 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
       where: { clinicId, sentAt: { gte: monthStart } },
     }),
     prisma.xrayAnalysis.count({
+      where: { clinicId, createdAt: { gte: monthStart } },
+    }),
+    prisma.cfdiRecord.count({
       where: { clinicId, createdAt: { gte: monthStart } },
     }),
   ]);
@@ -60,6 +63,10 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
     whatsapp: {
       sentThisMonth: whatsappCount,
       limit: limits.whatsappMonthly,
+    },
+    cfdi: {
+      stampedThisMonth: cfdiCount,
+      limit: limits.cfdiMonthly,
     },
     xray: {
       analysesThisMonth: xrayAnalysesMonth,

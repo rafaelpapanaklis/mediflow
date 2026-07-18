@@ -166,6 +166,13 @@ export function BillingClient({ invoices: initial, patients, totalPaid, totalPen
       ));
       setCfdiFor(null);
       toast.success(t("billing.billingClient.toastCfdiStamped"));
+      // Al superar el cupo del mes: se timbra igual y se avisa que es adicional.
+      if (data.quota && data.quota.overage > 0) {
+        toast(
+          t("billing.billingClient.toastCfdiOverage", { price: fmtMXNdec((data.quota.overagePriceCents ?? 0) / 100) }),
+          { icon: "🧾", duration: 6000 },
+        );
+      }
       if (data.pdfUrl) window.open(data.pdfUrl, "_blank");
     } catch (err: any) {
       toast.error(err.message ?? t("billing.billingClient.toastCfdiStampError"));

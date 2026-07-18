@@ -6,6 +6,8 @@ import {
   createInvoice, createOrUpdateCustomer, getOrgApiKey,
   validateRfc, CLAVES_SAT_MEDICOS, UNIDAD_SAT,
 } from "@/lib/facturapi";
+import { getResolvedPlan } from "@/lib/plans";
+import { cfdiPeriodFor, cfdiOverage } from "@/lib/cfdi-quota";
 
 export async function POST(req: NextRequest) {
   const rl = rateLimit(req, 5, 60 * 60 * 1000);
@@ -27,7 +29,7 @@ export async function POST(req: NextRequest) {
 
   const clinic = await prisma.clinic.findUnique({
     where:  { id: ctx!.clinicId },
-    select: { facturApiOrgId: true, facturApiEnabled: true, name: true, rfcEmisor: true },
+    select: { facturApiOrgId: true, facturApiEnabled: true, name: true, rfcEmisor: true, plan: true, timezone: true },
   });
 
   if (!clinic?.facturApiEnabled || !clinic.facturApiOrgId) {
@@ -87,7 +89,12 @@ export async function POST(req: NextRequest) {
       notes: `Clínica: ${clinic.name}${clinic.rfcEmisor ? ` | RFC: ${clinic.rfcEmisor}` : ""}`,
     });
 
-    const [cfdiRecord] = await prisma.$transaction([
+    // Metering del cupo CFDI: SOLO tras timbrado exitoso. El contador del mes
+    // (period en la zona horaria de la clínica) sube +1 en la MISMA transacción
+    // que el CfdiRecord — jamás bloquea el timbrado; el excedente se cobra a fin
+    // de mes (cron /api/cron/cfdi-overage).
+    const period = cfdiPeriodFor(new Date(), clinic.timezone);
+    const [cfdiRecord, , usage] = await prisma.$transaction([
       prisma.cfdiRecord.create({
         data: {
           clinicId:       ctx!.clinicId,
@@ -107,13 +114,28 @@ export async function POST(req: NextRequest) {
         where: { id: invoiceId },
         data:  { cfdiUuid: result.uuid },
       }),
+      prisma.cfdiUsage.upsert({
+        where:  { clinicId_period: { clinicId: ctx!.clinicId, period } },
+        create: { clinicId: ctx!.clinicId, period, stamped: 1 },
+        update: { stamped: { increment: 1 } },
+      }),
     ]);
+
+    // Cupo del plan vigente para avisar a la UI (used/incluidas/excedente).
+    const plan = await getResolvedPlan(clinic.plan);
+    const q = cfdiOverage(usage.stamped, plan.cfdiMonthly, plan.cfdiOverageCents);
 
     return NextResponse.json({
       cfdiId: cfdiRecord.id, // para descargar PDF/XML vía /api/cfdi/[cfdiId]/pdf|xml
       uuid:   result.uuid,
       pdfUrl: result.pdf_url,
       xmlUrl: result.xml_url,
+      quota: {
+        used:              q.used,
+        included:          q.included,
+        overage:           q.overage,
+        overagePriceCents: q.overageCents,
+      },
     });
 
   } catch (err: any) {

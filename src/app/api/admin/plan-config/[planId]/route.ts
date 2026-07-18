@@ -22,7 +22,7 @@ export const runtime = "nodejs";
  * editor de precios de IA (admin/ai-billing/pricing).
  */
 
-const INT_FIELDS = ["priceMxnMonthly", "priceMxnAnnual", "aiTokensDefault", "whatsappMonthly"] as const;
+const INT_FIELDS = ["priceMxnMonthly", "priceMxnAnnual", "aiTokensDefault", "whatsappMonthly", "cfdiMonthly", "cfdiOverageCents"] as const;
 const NULLABLE_INT_FIELDS = ["maxPatients", "maxUsers", "maxClinics"] as const;
 
 /** Aplana BigInt → number para poder serializar la fila a JSON. */
@@ -105,6 +105,8 @@ export async function PATCH(req: NextRequest, { params }: { params: { planId: st
     storageBytes: update.storageBytes ?? BigInt(fb.storageBytes),
     aiTokensDefault: update.aiTokensDefault ?? fb.aiTokensDefault,
     whatsappMonthly: update.whatsappMonthly ?? fb.whatsappMonthly,
+    cfdiMonthly: update.cfdiMonthly ?? fb.cfdiMonthly,
+    cfdiOverageCents: update.cfdiOverageCents ?? fb.cfdiOverageCents,
     maxPatients: "maxPatients" in update ? update.maxPatients : fb.maxPatients,
     maxUsers: "maxUsers" in update ? update.maxUsers : fb.maxUsers,
     maxClinics: "maxClinics" in update ? update.maxClinics : fb.maxClinics,
