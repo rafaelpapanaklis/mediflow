@@ -33,10 +33,13 @@ export async function createOrganization(name: string): Promise<string> {
   return data.id;
 }
 
+// Payload real de PUT /organizations/{id}/legal: legal_name + tax_system (+ name
+// comercial opcional). El RFC de la org NO va aquí — lo determina el CSD al subirlo
+// (en TEST, Facturapi timbra con su certificado de prueba EKU9003173C9).
 export async function updateOrgLegal(orgId: string, legalData: {
-  name: string; rfc: string; regimen_fiscal: string; address: {
+  name?: string; legal_name: string; tax_system: string; address: {
     street?: string; exterior?: string; zip: string;
-    city?: string; state?: string; country?: string;
+    city?: string; state?: string;
   }
 }) {
   const res = await fetch(`${FACTURAPI_BASE}/organizations/${orgId}/legal`, {
@@ -56,11 +59,11 @@ export async function updateOrgLegal(orgId: string, legalData: {
 // ── Customer (receptor) management ────────────────────────────────────────────
 
 export async function createOrUpdateCustomer(orgApiKey: string, customer: {
-  legal_name: string; rfc: string; tax_system: string; email?: string;
+  legal_name: string; tax_id: string; tax_system: string; email?: string;
   address: { zip: string }
 }): Promise<string> {
   // Try to find existing
-  const searchRes = await fetch(`${FACTURAPI_BASE}/customers?q=${customer.rfc}`, {
+  const searchRes = await fetch(`${FACTURAPI_BASE}/customers?q=${customer.tax_id}`, {
     headers: { "Authorization": `Bearer ${orgApiKey}` },
   });
   const searchData = await searchRes.json();

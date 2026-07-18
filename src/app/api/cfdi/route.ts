@@ -54,7 +54,7 @@ export async function POST(req: NextRequest) {
 
     const customerId = await createOrUpdateCustomer(orgApiKey, {
       legal_name: receptor.nombre,
-      rfc:        receptor.rfc,
+      tax_id:     receptor.rfc,
       tax_system: receptor.regimenFiscal,
       email:      receptor.email ?? invoice.patient.email ?? undefined,
       address:    { zip: receptor.cp },
