@@ -166,18 +166,18 @@ const CFDI_ENV: "test" | "live" = "test";
  * TEST (actual): GET /v2/organizations/{id}/test-api-key → Test Secret Key.
  *   Facturapi devuelve la llave como string JSON directo (no un objeto);
  *   parseamos defensivamente por si algún entorno la envolviera.
- * LIVE (futuro): GET /v2/organizations/{id}/keys lista las Live API Keys
- *   (arreglo de objetos); tomar la key activa. Sin usar por ahora.
+ * LIVE (futuro): GET /v2/organizations/{id}/apikeys/live lista las Live API
+ *   Keys; PUT /apikeys/live genera una nueva (invalida la anterior).
  *
  * Se autentica con la USER_KEY (llave de cuenta), NO con la org key.
  */
 export async function getOrgApiKey(orgId: string): Promise<string> {
   if (CFDI_ENV !== "test") {
-    // Switch a Live: GET /organizations/{id}/keys y tomar la llave activa.
+    // Switch a Live: GET /organizations/{id}/apikeys/live y tomar la llave activa.
     throw new Error("CFDI Live aún no está habilitado");
   }
 
-  const res = await fetch(`${FACTURAPI_BASE}/organizations/${orgId}/test-api-key`, {
+  const res = await fetch(`${FACTURAPI_BASE}/organizations/${orgId}/apikeys/test`, {
     headers: { "Authorization": `Bearer ${USER_KEY}` },
   });
   if (!res.ok) {
