@@ -63,17 +63,23 @@ export async function POST(req: NextRequest) {
 
     // FIX: safe cast with fallback for invoice items
     const invoiceItems = Array.isArray(invoice.items) ? invoice.items as any[] : [];
-    const items = invoiceItems.map((item: any) => ({
-      quantity: item.quantity ?? 1,
-      product: {
-        description: item.description ?? "Servicio médico",
-        product_key: item.claveSat ?? CLAVES_SAT_MEDICOS.consulta.clave,
-        unit_key:    UNIDAD_SAT,
-        price:       item.unitPrice ?? item.price ?? item.total ?? 0,
-        tax_included: true,
-      },
-      discount: item.discount ?? 0,
-    }));
+    const items = invoiceItems.map((item: any) => {
+      // La clave del ítem solo se usa si es una clave SAT bien formada (8
+      // dígitos); "" u otra basura caían al payload tal cual ("" ?? x === "")
+      // y Facturapi rechazaba: "No se encontró la clave de producto o servicio".
+      const rawKey = typeof item.claveSat === "string" ? item.claveSat.trim() : "";
+      return {
+        quantity: item.quantity ?? 1,
+        product: {
+          description: item.description ?? "Servicio médico",
+          product_key: /^\d{8}$/.test(rawKey) ? rawKey : CLAVES_SAT_MEDICOS.consulta.clave,
+          unit_key:    UNIDAD_SAT,
+          price:       item.unitPrice ?? item.price ?? item.total ?? 0,
+          tax_included: true,
+        },
+        discount: item.discount ?? 0,
+      };
+    });
 
     if (items.length === 0) {
       return NextResponse.json({ error: "La factura no tiene conceptos" }, { status: 400 });
