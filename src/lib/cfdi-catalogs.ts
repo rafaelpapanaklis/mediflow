@@ -8,17 +8,21 @@
  * no romper los imports server-side existentes.
  */
 
-// Claves SAT para servicios médicos
+// Claves SAT para servicios médicos.
+// OJO: usar claves HOJA del catálogo c_ClaveProdServ. Las terminadas en 00 son
+// a veces solo "clase" no facturable (85101500 no existe como clave → Facturapi
+// respondía "No se encontró la clave de producto o servicio"). 85121502
+// (medicina general) y 85121600 (especialistas) están confirmadas en Anexo 20.
 export const CLAVES_SAT_MEDICOS = {
   // Servicios médicos generales
-  consulta:        { clave: "85101500", descripcion: "Servicios de consulta médica" },
-  dental:          { clave: "85121500", descripcion: "Servicios de odontología" },
-  psicologia:      { clave: "85122200", descripcion: "Servicios de psicología" },
-  nutricion:       { clave: "85181600", descripcion: "Servicios de nutriología" },
-  laboratorio:     { clave: "85101700", descripcion: "Servicios de laboratorio clínico" },
-  radiologia:      { clave: "85101800", descripcion: "Servicios de radiología" },
-  cirugia:         { clave: "85102200", descripcion: "Servicios quirúrgicos" },
-  otro:            { clave: "85101500", descripcion: "Servicios médicos" },
+  consulta:        { clave: "85121502", descripcion: "Servicios de consulta médica general" },
+  dental:          { clave: "85121600", descripcion: "Servicios médicos especializados (odontología)" },
+  psicologia:      { clave: "85121600", descripcion: "Servicios médicos especializados (psicología)" },
+  nutricion:       { clave: "85121600", descripcion: "Servicios médicos especializados (nutrición)" },
+  laboratorio:     { clave: "85121600", descripcion: "Servicios médicos especializados (laboratorio)" },
+  radiologia:      { clave: "85121600", descripcion: "Servicios médicos especializados (radiología)" },
+  cirugia:         { clave: "85121600", descripcion: "Servicios médicos especializados (cirugía)" },
+  otro:            { clave: "85121502", descripcion: "Servicios médicos" },
 };
 
 export const UNIDAD_SAT = "E48"; // Unidad de servicio
