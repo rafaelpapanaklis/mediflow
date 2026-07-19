@@ -13,8 +13,8 @@
 -- EXISTS, FK y RLS con guard sobre pg_constraint/pg_policies. Re-ejecutable sin
 -- efectos colaterales. Delimitadores nombrados ($cq$), nunca $$ pelado.
 --
--- POLÍTICA (Rafael, 14-jul): incluidas por MES CALENDARIO BASIC=25 (provisional)
--- / PRO=50 / CLINIC=150. Excedente por timbre (centavos MXN) BASIC=200 / PRO=200
+-- POLÍTICA (Rafael, 18-jul): incluidas por MES CALENDARIO BASIC=25 (provisional)
+-- / PRO=50 / CLINIC=150. Excedente por timbre (centavos MXN) BASIC=300 / PRO=200
 -- / CLINIC=125. JAMÁS se bloquea el timbrado: se timbra y el excedente se cobra
 -- a fin de mes (mensual+Stripe → InvoiceItem; anual+tarjeta → cobro off-session
 -- día 1; sin método → adeudo manual visible en el panel).
@@ -32,11 +32,11 @@ ALTER TABLE "plan_configs"
 ALTER TABLE "plan_configs"
   ADD COLUMN IF NOT EXISTS "cfdiOverageCents" integer NOT NULL DEFAULT 200;
 
-UPDATE "plan_configs" SET "cfdiMonthly" = 25,  "cfdiOverageCents" = 200 WHERE "planId" = 'BASIC';
+UPDATE "plan_configs" SET "cfdiMonthly" = 25,  "cfdiOverageCents" = 300 WHERE "planId" = 'BASIC';
 UPDATE "plan_configs" SET "cfdiMonthly" = 50,  "cfdiOverageCents" = 200 WHERE "planId" = 'PRO';
 UPDATE "plan_configs" SET "cfdiMonthly" = 150, "cfdiOverageCents" = 125 WHERE "planId" = 'CLINIC';
 
--- Verificación (debe devolver BASIC=25/200, PRO=50/200, CLINIC=150/125):
+-- Verificación (debe devolver BASIC=25/300, PRO=50/200, CLINIC=150/125):
 -- SELECT "planId", "cfdiMonthly", "cfdiOverageCents" FROM "plan_configs" ORDER BY "planId";
 
 -- ── 2. Tabla cfdi_usage: contador mensual + estado de cobro del excedente ────

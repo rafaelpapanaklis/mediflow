@@ -137,7 +137,7 @@ export const FALLBACK_PLAN_CONFIG: Record<PlanId, PlanConfigShape> = {
     aiTokensDefault: 0,
     whatsappMonthly: 300,
     cfdiMonthly: 25,
-    cfdiOverageCents: 200,
+    cfdiOverageCents: 300,
     maxPatients: 500,
     maxUsers: 2,
     maxClinics: 1,
