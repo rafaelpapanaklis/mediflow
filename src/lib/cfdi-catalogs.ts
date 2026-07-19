@@ -57,3 +57,15 @@ export const USOS_CFDI = [
   { clave: "S01", descripcion: "Sin efectos fiscales" },
   { clave: "CP01", descripcion: "Pagos" },
 ];
+
+// Formas de pago SAT (c_FormaPago) que puede cobrar una clínica. Fuente única
+// para los selectores de los dos modales de timbrado y la validación del
+// endpoint POST /api/cfdi.
+export const FORMAS_PAGO_SAT = [
+  { clave: "01", descripcion: "Efectivo" },
+  { clave: "02", descripcion: "Cheque nominativo" },
+  { clave: "03", descripcion: "Transferencia electrónica de fondos" },
+  { clave: "04", descripcion: "Tarjeta de crédito" },
+  { clave: "05", descripcion: "Monedero electrónico" },
+  { clave: "28", descripcion: "Tarjeta de débito" },
+];

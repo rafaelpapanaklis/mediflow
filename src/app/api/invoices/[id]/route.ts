@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { readActiveClinicCookie } from "@/lib/active-clinic";
 import { logMutation } from "@/lib/audit";
 import { revalidateAfter } from "@/lib/cache/revalidate";
+import { sumInvoiceItems, computeInvoiceTotal, round2 } from "@/lib/invoice-totals";
 
 async function getCtx() {
   const supabase = createClient();
@@ -95,14 +96,19 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   if (body.notes !== undefined) updateData.notes = body.notes;
   if (body.items) {
     const items = body.items;
-    const subtotal = items.reduce((s: number, i: any) => s + (i.total ?? 0), 0);
-    const discount = Number(body.discount ?? invoice.discount ?? 0);
-    const total = subtotal - discount;
+    // Misma aritmética que el timbrado (qty × unitPrice − desc. de línea) para
+    // que total = Σ(conceptos) − descuento se sostenga también con IVA agregado.
+    const subtotal = sumInvoiceItems(items);
+    const discount = round2(Number(body.discount ?? invoice.discount ?? 0));
+    if (discount > subtotal) {
+      return NextResponse.json({ error: "El descuento excede el subtotal" }, { status: 400 });
+    }
+    const { total } = computeInvoiceTotal(subtotal, discount, invoice.taxRate ?? 16, invoice.taxIncluded !== false);
     updateData.items = items;
     updateData.subtotal = subtotal;
     updateData.discount = discount;
     updateData.total = total;
-    updateData.balance = total - invoice.paid;
+    updateData.balance = round2(total - invoice.paid);
   }
 
   await prisma.invoice.updateMany({ where: { id: params.id, clinicId }, data: updateData });

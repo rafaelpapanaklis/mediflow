@@ -6,6 +6,9 @@ import { readActiveClinicCookie } from "@/lib/active-clinic";
 import { logMutation } from "@/lib/audit";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { revalidateAfter } from "@/lib/cache/revalidate";
+import {
+  sumInvoiceItems, computeInvoiceTotal, round2, PRICE_ADJUST_FLAG,
+} from "@/lib/invoice-totals";
 
 async function getCtx() {
   const supabase = createClient();
@@ -63,32 +66,59 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     return NextResponse.json({ error: "No se puede modificar una factura cerrada" }, { status: 400 });
   }
 
-  // Cálculo: el invoice tiene subtotal y discount → total. Mantenemos
-  // coherencia recalculando lo que cambia.
-  let newSubtotal = invoice.subtotal;
+  // INVARIANTE: total = Σ(conceptos) − descuento (+IVA si va agregado). Antes,
+  // la rama {total} escribía el total del body y "cuadraba" subtotal = total +
+  // discount SIN tocar los conceptos → el CFDI (que se emite por conceptos)
+  // salía por la suma vieja (caso F-000155: total $100, conceptos $3,052).
+  // Ahora el nuevo precio se representa SIEMPRE contra los conceptos reales:
+  // bajar precio → descuento explícito; subir precio → línea de ajuste.
+  const rawItems  = Array.isArray(invoice.items) ? (invoice.items as any[]) : [];
+  // Las líneas de ajuste de ediciones anteriores se descartan y recalculan.
+  const baseItems = rawItems.filter((it: any) => !it?.[PRICE_ADJUST_FLAG]);
+  const itemsSum  = sumInvoiceItems(baseItems);
+  const taxIncluded = invoice.taxIncluded !== false;
+  const taxRate     = invoice.taxRate ?? 16;
+
+  let newItems    = baseItems;
+  let newSubtotal = itemsSum;
   let newDiscount = invoice.discount;
   let newTotal    = invoice.total;
 
   if (totalIn !== undefined) {
-    // Si edita total directo, conservamos discount actual y derivamos subtotal.
-    newTotal    = totalIn;
-    newDiscount = discountIn !== undefined ? discountIn : invoice.discount;
-    newSubtotal = newTotal + newDiscount;
+    // "Editar precio" fija el total FINAL. Con IVA agregado, lo capturado es el
+    // bruto: se deriva la base antes de compararla con los conceptos.
+    const targetBase = taxIncluded ? round2(totalIn) : round2(totalIn / (1 + taxRate / 100));
+    if (targetBase <= itemsSum) {
+      newDiscount = round2(itemsSum - targetBase);
+    } else {
+      const delta = round2(targetBase - itemsSum);
+      newItems = [...baseItems, {
+        description: "Ajuste de precio",
+        quantity: 1,
+        unitPrice: delta,
+        total: delta,
+        [PRICE_ADJUST_FLAG]: true,
+      }];
+      newDiscount = 0;
+      newSubtotal = round2(itemsSum + delta);
+    }
+    newTotal = computeInvoiceTotal(newSubtotal, newDiscount, taxRate, taxIncluded).total;
   } else if (discountIn !== undefined) {
-    // Solo discount → recalcular total = subtotal - discount.
-    newDiscount = discountIn;
-    if (newDiscount > invoice.subtotal) {
+    // Solo descuento → total = Σ(conceptos) − descuento. El subtotal se
+    // recalcula desde los conceptos reales (sana facturas legadas desincronizadas).
+    newDiscount = round2(discountIn);
+    if (newDiscount > itemsSum) {
       return NextResponse.json({ error: "El descuento excede el subtotal" }, { status: 400 });
     }
-    newTotal    = invoice.subtotal - newDiscount;
-    newSubtotal = invoice.subtotal;
+    newTotal = computeInvoiceTotal(itemsSum, newDiscount, taxRate, taxIncluded).total;
   }
 
-  const newBalance = newTotal - invoice.paid;
+  const newBalance = round2(newTotal - invoice.paid);
 
   await prisma.invoice.updateMany({
     where: { id: params.id, clinicId },
     data: {
+      items:    newItems,
       subtotal: newSubtotal,
       discount: newDiscount,
       total:    newTotal,

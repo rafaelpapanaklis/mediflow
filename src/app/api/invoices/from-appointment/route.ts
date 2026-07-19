@@ -5,6 +5,7 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { loadClinicSession } from "@/lib/agenda/api-helpers";
 import { revalidateAfter } from "@/lib/cache/revalidate";
+import { round2 } from "@/lib/quotes/compute";
 
 export const dynamic = "force-dynamic";
 
@@ -62,12 +63,12 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const subtotal = parsed.data.lineItems.reduce(
+  const subtotal = round2(parsed.data.lineItems.reduce(
     (s, li) => s + li.unitPrice * li.quantity,
     0,
-  );
-  const discount = parsed.data.discount;
-  const total = Math.max(0, subtotal - discount);
+  ));
+  const discount = round2(parsed.data.discount);
+  const total = round2(Math.max(0, subtotal - discount));
 
   // Generación simple de invoiceNumber: INV-YYYY-#### (count + 1 en clínica).
   const year = new Date().getFullYear();
