@@ -4,7 +4,7 @@ import { useCallback, useState, useEffect, useMemo } from "react";
 import { useT } from "@/i18n/i18n-provider";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ArrowLeft, Phone, Mail, Calendar, AlertTriangle, Check, Plus, Printer, Edit, Download, Pill, HeartPulse, Play, Trash2, X as XIcon, XCircle } from "lucide-react";
+import { ArrowLeft, Phone, Mail, Calendar, AlertTriangle, Check, Plus, Printer, Edit, Download, Pill, Play, Trash2, X as XIcon, XCircle } from "lucide-react";
 import { formatCurrency, formatDate, getInitials, avatarColor } from "@/lib/utils";
 import { ageFromDob, fmtMXN } from "@/lib/format";
 import { OdontogramV2 } from "@/components/dashboard/odontogram-v2/App";
@@ -31,6 +31,7 @@ import { Models3DTab } from "@/components/patient-3d/Models3DTab";
 import { QuotesTab } from "@/components/quotes/quotes-tab";
 import { PrescriptionsTab } from "@/components/dashboard/patient-detail/prescriptions-tab";
 import { PatientUploadsSection } from "@/components/patients/patient-uploads-section";
+import { PatientPhotosTab, RecentPhotosStrip } from "@/components/dashboard/patient-detail/patient-photos-tab";
 import { InvoiceEditorModal } from "@/components/billing/invoice-editor-modal";
 import toast from "react-hot-toast";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
@@ -308,8 +309,14 @@ interface Props {
   /** Estado del cuestionario de salud para el aviso (anamnesis WS1-T2). */
   questionnaireStatus?: "none" | "stale" | "ok";
   questionnaireFilledAt?: string | null;
+  /** Banderas de riesgo del cuestionario vigente — chips rojos de la
+   *  cabecera única (ficha v3, ex-PatientContextPanel). */
+  questionnaireRiskFlags?: string[];
   /** Saldo a favor (crédito) del paciente = SUM(patient_credits.amount). 0 si no tiene. */
   creditBalance?: number;
+  /** Count server-side de fotos clínicas (módulo `general`) para el badge
+   *  del menú; el tab lo mantiene vivo vía onCountChange. */
+  fotosCount?: number;
 }
 
 export function PatientDetailClient({
@@ -326,7 +333,9 @@ export function PatientDetailClient({
   orthoRedesignBundle,
   activityCounts,
   questionnaireStatus,
+  questionnaireRiskFlags = [],
   creditBalance = 0,
+  fotosCount: initialFotosCount = 0,
 }: Props) {
   const t = useT();
   const router = useRouter();
@@ -414,6 +423,12 @@ export function PatientDetailClient({
   useEffect(() => {
     setInvoices(initialInvoices);
   }, [initialInvoices]);
+  // Fotos clínicas (ficha v3): count vivo para el badge del menú/tab bar.
+  // Nace del count server-side y el tab lo actualiza al subir/borrar.
+  const [fotosCount, setFotosCount] = useState(initialFotosCount);
+  useEffect(() => {
+    setFotosCount(initialFotosCount);
+  }, [initialFotosCount]);
   // Sincroniza el snapshot del modal con la versión fresca de invoices tras
   // router.refresh(). Sin esto, el InvoiceDetailModal queda con un invoice
   // stale (ej. status=DRAFT cuando el server ya pasó a PENDING/PAID),
@@ -780,6 +795,7 @@ export function PatientDetailClient({
     historia: records.length,
     agenda: appointments.length,
     facturacion: invoices.length,
+    fotos: fotosCount,
   };
 
   // ─── Consulta activa (audit Opción C ajustes 2, 5 y 6) ─────────────
@@ -1058,6 +1074,15 @@ export function PatientDetailClient({
             email: patient.email ?? null,
             bloodType: patient.bloodType ?? null,
             status: patient.status ?? "ACTIVE",
+            allergies: patient.allergies ?? [],
+            chronicConditions: patient.chronicConditions ?? [],
+            currentMedications: patient.currentMedications ?? [],
+          }}
+          riskFlags={questionnaireRiskFlags}
+          emergencyContact={{
+            name: patient.emergencyContactName ?? null,
+            phone: patient.emergencyContactPhone ?? null,
+            relation: patient.emergencyContactRelation ?? null,
           }}
           nextAppointment={nextAppt ? {
             id: nextAppt.id,
@@ -1118,6 +1143,7 @@ export function PatientDetailClient({
             historialConsultas: records.length,
             evolucion: records.length,
             radiografias: filesLoaded ? files.length : undefined,
+            fotos: fotosCount,
             tratamiento: treatments.length,
             agenda: appointments.length,
             facturacion: invoices.length,
@@ -1265,6 +1291,54 @@ export function PatientDetailClient({
                     </div>
                   </div>
                 )}
+
+                {/* Tratamiento activo — una sola representación con progreso;
+                    el detalle vive en el tab Plan de tratamiento. */}
+                {(() => {
+                  const activePlan = treatments.find((p: any) => p.status === "ACTIVE");
+                  if (!activePlan) return null;
+                  const done = activePlan.sessions?.length ?? 0;
+                  const pctPlan = activePlan.totalSessions > 0 ? Math.round((done / activePlan.totalSessions) * 100) : 0;
+                  return (
+                    <div className="mt-3 pt-3 border-t border-[var(--border-soft)]">
+                      <div className="flex items-center justify-between mb-1.5">
+                        <div className="text-[11px] font-semibold text-[var(--text-3)] uppercase tracking-wide flex items-center gap-1.5">
+                          <Pill size={12} strokeWidth={1.75} aria-hidden /> {t("patients.summary.activeTreatment")}
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setTab("tratamiento")}
+                          className="text-[11px] font-semibold text-[var(--brand)] hover:underline rounded-[4px] focus-visible:outline-none focus-visible:shadow-[var(--ring)]"
+                        >
+                          {t("patients.summary.viewPlan")} →
+                        </button>
+                      </div>
+                      <div className="text-xs font-semibold text-foreground truncate">{activePlan.name}</div>
+                      <div className="flex items-center gap-3 mt-1.5">
+                        <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden">
+                          <div className="h-full bg-[var(--brand)] rounded-full" style={{ width: `${pctPlan}%` }} />
+                        </div>
+                        <span className="text-[11px] font-bold text-muted-foreground tabular-nums">
+                          {t("patients.summary.sessionsOf", { done, total: activePlan.totalSessions })}
+                        </span>
+                      </div>
+                      {activePlan.nextExpectedDate && (
+                        <div className="text-[11px] text-muted-foreground mt-1 tabular-nums">
+                          {t("patients.summary.nextSessionDate", { date: new Date(activePlan.nextExpectedDate).toLocaleDateString("es-MX", { day: "numeric", month: "short" }) })}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
+
+                {/* Mini-grid de fotos clínicas recientes → tab Fotos. */}
+                <div className="mt-3 pt-3 border-t border-[var(--border-soft)]">
+                  <RecentPhotosStrip
+                    patientId={patient.id}
+                    count={fotosCount}
+                    onOpenTab={() => setTab("fotos")}
+                  />
+                </div>
               </div>
 
               <div className="bg-card border border-border rounded-[var(--radius-lg)] shadow-[var(--shadow-1)] p-4">
@@ -1272,31 +1346,14 @@ export function PatientDetailClient({
                   <div className="w-2 h-2 rounded-full bg-[var(--success)]" />
                   <span className="text-[15px] font-semibold text-[var(--text-1)]">{t("patients.summary.medicalHistory")}</span>
                 </div>
-                {(patient.allergies?.length || patient.currentMedications?.length || patient.chronicConditions?.length) ? (
-                  <div className="flex flex-wrap gap-1.5 mb-3">
-                    {patient.allergies?.map((a: string) => (
-                      <span key={`a-${a}`} className="inline-flex items-center gap-1 rounded-full bg-[var(--danger-soft)] px-2 py-0.5 text-[11px] font-semibold text-[var(--danger-strong)]">
-                        <AlertTriangle size={11} strokeWidth={1.75} aria-hidden /> {a}
-                      </span>
-                    ))}
-                    {patient.currentMedications?.map((m: string) => (
-                      <span key={`m-${m}`} className="inline-flex items-center gap-1 rounded-full bg-[var(--info-soft)] px-2 py-0.5 text-[11px] font-semibold text-[var(--info-strong)]">
-                        <Pill size={11} strokeWidth={1.75} aria-hidden /> {m}
-                      </span>
-                    ))}
-                    {patient.chronicConditions?.map((c: string) => (
-                      <span key={`c-${c}`} className="inline-flex items-center gap-1 rounded-full bg-[var(--warning-soft)] px-2 py-0.5 text-[11px] font-semibold text-[var(--warning-strong)]">
-                        <HeartPulse size={11} strokeWidth={1.75} aria-hidden /> {c}
-                      </span>
-                    ))}
-                  </div>
-                ) : null}
+                {/* Ficha v3: alergias/medicamentos/crónicas viven SOLO en los
+                    chips de la cabecera única — aquí quedan los datos duros. */}
                 <div className="space-y-1.5 text-xs">
                   {[
                     { label: t("patients.summary.bloodType"), val: patient.bloodType || t("patients.summary.notRegistered") },
                     { label: t("patients.summary.insurance"),  val: patient.insuranceProvider || t("patients.summary.noInsurance") },
                     { label: t("common.notes"),                val: patient.notes?.slice(0, 60) || "—" },
-                    { label: "Contacto de emergencia",         val: patient.emergencyContactName ? [patient.emergencyContactName, patient.emergencyContactPhone, patient.emergencyContactRelation].filter(Boolean).join(" · ") : "—" },
+                    { label: t("patients.summary.emergencyContact"), val: patient.emergencyContactName ? [patient.emergencyContactName, patient.emergencyContactPhone, patient.emergencyContactRelation].filter(Boolean).join(" · ") : "—" },
                   ].map(r => (
                     <div key={r.label} className="flex justify-between items-start py-1.5 border-b border-[var(--border-soft)]">
                       <span className="text-muted-foreground">{r.label}</span>
@@ -1306,52 +1363,9 @@ export function PatientDetailClient({
                 </div>
               </div>
 
-              {/* Próxima cita */}
-              {nextAppt && (
-                <div className="bg-card border border-border rounded-[var(--radius-lg)] shadow-[var(--shadow-1)] p-4">
-                  <div className="flex items-center gap-2 mb-3">
-                    <div className="w-2 h-2 rounded-full bg-[var(--brand)]" />
-                    <span className="text-[15px] font-semibold text-[var(--text-1)]">{t("patients.summary.nextAppointment")}</span>
-                  </div>
-                  <div className="bg-[var(--brand-softer)] border border-[var(--border-brand)] rounded-[10px] p-3">
-                    <div className="text-sm font-bold text-[var(--violet-700)] tabular-nums">{formatDate(nextAppt.date)}</div>
-                    <div className="text-xs text-foreground mt-1">{nextAppt.type}</div>
-                    <div className="text-[11px] text-muted-foreground tabular-nums">{nextAppt.startTime}h · {t("patients.doctorPrefix")} {nextAppt.doctor?.firstName} {nextAppt.doctor?.lastName}</div>
-                  </div>
-                </div>
-              )}
-
-              {/* Finanzas resumen */}
-              <div className="bg-card border border-border rounded-[var(--radius-lg)] shadow-[var(--shadow-1)] p-4">
-                <div className="flex items-center gap-2 mb-3">
-                  <div className="w-2 h-2 rounded-full bg-[var(--warning)]" />
-                  <span className="text-[15px] font-semibold text-[var(--text-1)]">{t("patients.summary.finance")}</span>
-                </div>
-                <div className="space-y-1.5 text-xs mb-3">
-                  <div className="flex justify-between py-1.5 border-b border-[var(--border-soft)]">
-                    <span className="text-muted-foreground">{t("patients.summary.totalPlan")}</span>
-                    <span className="font-bold tabular-nums">{formatCurrency(totalPlan)}</span>
-                  </div>
-                  <div className="flex justify-between py-1.5 border-b border-[var(--border-soft)]">
-                    <span className="text-muted-foreground">{t("patients.summary.paid")}</span>
-                    <span className="font-bold tabular-nums text-[var(--success-strong)]">{formatCurrency(totalPaid)}</span>
-                  </div>
-                  <div className="flex justify-between py-1.5">
-                    <span className="text-muted-foreground">{t("patients.summary.pending")}</span>
-                    <span className="font-bold tabular-nums text-[var(--danger)]">{formatCurrency(totalBalance)}</span>
-                  </div>
-                  {creditBalance > 0 && (
-                    <div className="flex justify-between py-1.5 border-t border-[var(--border-soft)]">
-                      <span className="text-muted-foreground">{t("patients.summary.credit")}</span>
-                      <span className="font-bold tabular-nums text-[var(--success-strong)]">{formatCurrency(creditBalance)}</span>
-                    </div>
-                  )}
-                </div>
-                <div className="h-1.5 bg-muted rounded-full overflow-hidden">
-                  <div className="h-full bg-[var(--success)] rounded-full transition-all" style={{ width: `${pctPaid}%` }} />
-                </div>
-                <div className="text-[11px] text-muted-foreground text-right mt-1 tabular-nums">{t("patients.summary.pctCovered", { pct: pctPaid })}</div>
-              </div>
+              {/* Ficha v3 — dedupe: "Próxima cita" vive en la métrica de la
+                  cabecera y "Finanzas" en el Estado de cuenta del rail
+                  derecho. Una sola representación por dato. */}
             </div>
           )}
 
@@ -2865,6 +2879,11 @@ export function PatientDetailClient({
             );
           })()}
 
+          {/* ===== TAB: FOTOS CLÍNICAS (ficha v3) ===== */}
+          {tab === "fotos" && (
+            <PatientPhotosTab patientId={patient.id} onCountChange={setFotosCount} />
+          )}
+
           {tab === "modelos-3d" && (
             <Models3DTab patientId={patient.id} />
           )}
@@ -2935,13 +2954,9 @@ export function PatientDetailClient({
           </div>
         </div>
 
+        {/* Ficha v3: la card "Próxima cita" salió del rail (la cabecera ya
+            la muestra); el rail queda con Estado de cuenta + reglas + WA. */}
         <SideCards
-          nextAppointment={nextAppt ? {
-            date: nextAppt.date,
-            startTime: nextAppt.startTime ?? "",
-            type: nextAppt.type,
-            doctorName: nextAppt.doctor ? `${t("patients.doctorPrefix")} ${nextAppt.doctor.firstName} ${nextAppt.doctor.lastName}` : undefined,
-          } : null}
           finance={{
             total: totalPlan,
             paid: totalPaid,
@@ -2952,9 +2967,8 @@ export function PatientDetailClient({
           patientId={patient.id}
           patientName={fullName}
           patientPhone={patient.phone ?? null}
-          onReschedule={openNewAppointmentForPatient}
-          onCancelAppt={() => setTab("agenda")}
           onCharge={openChargeShortcut}
+          onOpenBilling={() => setTab("facturacion")}
         />
       </div>
 

@@ -14,9 +14,14 @@ import {
   Calendar,
   Phone,
   Mail,
+  AlertTriangle,
+  HeartPulse,
+  Pill,
+  Check,
 } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
 import { ageFromDob } from "@/lib/format";
+import { RISK_FLAG_LABELS } from "@/lib/health-questionnaire";
 import { useT } from "@/i18n/i18n-provider";
 import styles from "./patient-detail.module.css";
 
@@ -32,6 +37,9 @@ export interface HeroCardProps {
     email: string | null;
     bloodType: string | null;
     status: string;
+    allergies: string[];
+    chronicConditions: string[];
+    currentMedications: string[];
   };
   nextAppointment: {
     id: string;
@@ -48,6 +56,8 @@ export interface HeroCardProps {
   onStartConsult: () => void;
   onReschedule: () => void;
   onCharge: () => void;
+  riskFlags?: string[];
+  emergencyContact?: { name?: string | null; phone?: string | null; relation?: string | null } | null;
 }
 
 function fmtShortDate(iso: string): string {
@@ -71,6 +81,8 @@ export function HeroCard({
   onStartConsult,
   onReschedule,
   onCharge,
+  riskFlags = [],
+  emergencyContact,
 }: HeroCardProps) {
   const t = useT();
   const router = useRouter();
@@ -106,7 +118,7 @@ export function HeroCard({
               <>
                 <span className={styles.heroMetaSep}>·</span>
                 <span className={styles.metaItem}>
-                  <Phone size={11} aria-hidden /> {patient.phone}
+                  <Phone size={11} strokeWidth={1.75} aria-hidden /> {patient.phone}
                 </span>
               </>
             )}
@@ -114,7 +126,7 @@ export function HeroCard({
               <>
                 <span className={styles.heroMetaSep}>·</span>
                 <span className={styles.metaItem}>
-                  <Mail size={11} aria-hidden /> {patient.email}
+                  <Mail size={11} strokeWidth={1.75} aria-hidden /> {patient.email}
                 </span>
               </>
             )}
@@ -139,6 +151,9 @@ export function HeroCard({
                   <div className={styles.metricSub}>
                     {t("patients.heroCard.timeSuffix", { time: nextAppointment!.startTime })}{nextAppointment!.doctorName ? ` · ${nextAppointment!.doctorName}` : ""}
                   </div>
+                )}
+                {nextAppointment!.type && (
+                  <div className={styles.metricSub}>{nextAppointment!.type}</div>
                 )}
               </>
             ) : (
@@ -187,7 +202,7 @@ export function HeroCard({
             disabled={!hasNextAppt}
             title={hasNextAppt ? t("patients.heroCard.startConsultTitle") : t("patients.heroCard.startConsultDisabledTitle")}
           >
-            <Play size={13} aria-hidden /> {t("patients.heroCard.startConsult")}
+            <Play size={13} strokeWidth={1.75} aria-hidden /> {t("patients.heroCard.startConsult")}
           </button>
           <button
             type="button"
@@ -195,7 +210,7 @@ export function HeroCard({
             onClick={onReschedule}
             title={hasNextAppt ? t("patients.heroCard.rescheduleTitle") : t("patients.heroCard.scheduleNextTitle")}
           >
-            <CalendarClock size={13} aria-hidden /> {hasNextAppt ? t("patients.heroCard.rescheduleNext") : t("patients.heroCard.scheduleNext")}
+            <CalendarClock size={13} strokeWidth={1.75} aria-hidden /> {hasNextAppt ? t("patients.heroCard.rescheduleNext") : t("patients.heroCard.scheduleNext")}
           </button>
           <button
             type="button"
@@ -203,7 +218,7 @@ export function HeroCard({
             onClick={onCharge}
             disabled={!hasBalance}
           >
-            <CreditCard size={13} aria-hidden /> {hasBalance ? t("patients.heroCard.chargeAmount", { amount: formatCurrency(pendingBalance) }) : t("patients.heroCard.charge")}
+            <CreditCard size={13} strokeWidth={1.75} aria-hidden /> {hasBalance ? t("patients.heroCard.chargeAmount", { amount: formatCurrency(pendingBalance) }) : t("patients.heroCard.charge")}
           </button>
 
           <Popover.Root open={moreOpen} onOpenChange={setMoreOpen}>
@@ -214,7 +229,7 @@ export function HeroCard({
                 aria-label={t("patients.heroCard.moreActionsAria")}
                 title={t("patients.heroCard.moreActions")}
               >
-                <MoreHorizontal size={14} aria-hidden />
+                <MoreHorizontal size={14} strokeWidth={1.75} aria-hidden />
               </button>
             </Popover.Trigger>
             <Popover.Portal>
@@ -227,7 +242,7 @@ export function HeroCard({
                     onEdit();
                   }}
                 >
-                  <Edit size={12} aria-hidden /> {t("patients.heroCard.editPatient")}
+                  <Edit size={12} strokeWidth={1.75} aria-hidden /> {t("patients.heroCard.editPatient")}
                 </button>
                 {portalUrl ? (
                   <button
@@ -238,7 +253,7 @@ export function HeroCard({
                       navigator.clipboard.writeText(portalUrl);
                     }}
                   >
-                    <ExternalLink size={12} aria-hidden /> {t("patients.heroCard.copyPortalLink")}
+                    <ExternalLink size={12} strokeWidth={1.75} aria-hidden /> {t("patients.heroCard.copyPortalLink")}
                   </button>
                 ) : (
                   <button
@@ -249,7 +264,7 @@ export function HeroCard({
                       onEdit();
                     }}
                   >
-                    <ExternalLink size={12} aria-hidden /> {t("patients.heroCard.generatePatientPortal")}
+                    <ExternalLink size={12} strokeWidth={1.75} aria-hidden /> {t("patients.heroCard.generatePatientPortal")}
                   </button>
                 )}
                 <button
@@ -260,7 +275,7 @@ export function HeroCard({
                     window.print();
                   }}
                 >
-                  <Printer size={12} aria-hidden /> {t("patients.heroCard.printSummary")}
+                  <Printer size={12} strokeWidth={1.75} aria-hidden /> {t("patients.heroCard.printSummary")}
                 </button>
                 <button
                   type="button"
@@ -274,7 +289,7 @@ export function HeroCard({
                     );
                   }}
                 >
-                  <Calendar size={12} aria-hidden /> {t("patients.heroCard.viewInAgenda")}
+                  <Calendar size={12} strokeWidth={1.75} aria-hidden /> {t("patients.heroCard.viewInAgenda")}
                 </button>
               </Popover.Content>
             </Popover.Portal>
@@ -282,6 +297,54 @@ export function HeroCard({
         </div>
       </div>
 
+      <div className={styles.heroAlerts} role="group" aria-label={t("patients.heroCard.alertsAria")}>
+        {riskFlags.map((f) => (
+          <span key={`r-${f}`} className={`${styles.alertChip} ${styles.danger}`}>
+            <AlertTriangle size={11} strokeWidth={1.75} aria-hidden /> {RISK_FLAG_LABELS[f] ?? f}
+          </span>
+        ))}
+        {patient.allergies.map((a) => (
+          <span key={`a-${a}`} className={`${styles.alertChip} ${styles.danger}`}>
+            <AlertTriangle size={11} strokeWidth={1.75} aria-hidden /> {a}
+          </span>
+        ))}
+        {riskFlags.length === 0 && patient.allergies.length === 0 && (
+          <span className={`${styles.alertChip} ${styles.success}`}>
+            <Check size={11} strokeWidth={1.75} aria-hidden /> {t("patients.heroCard.noAllergies")}
+          </span>
+        )}
+        {patient.chronicConditions.slice(0, 3).map((c) => (
+          <span key={`c-${c}`} className={`${styles.alertChip} ${styles.warning}`}>
+            <HeartPulse size={11} strokeWidth={1.75} aria-hidden /> {c}
+          </span>
+        ))}
+        {patient.chronicConditions.length > 3 && (
+          <span
+            className={styles.alertChip}
+            title={patient.chronicConditions.slice(3).join(", ")}
+          >
+            {t("patients.heroCard.moreCount", { count: patient.chronicConditions.length - 3 })}
+          </span>
+        )}
+        {patient.currentMedications.slice(0, 3).map((m) => (
+          <span key={`m-${m}`} className={`${styles.alertChip} ${styles.brand}`}>
+            <Pill size={11} strokeWidth={1.75} aria-hidden /> {m}
+          </span>
+        ))}
+        {patient.currentMedications.length > 3 && (
+          <span
+            className={styles.alertChip}
+            title={patient.currentMedications.slice(3).join(", ")}
+          >
+            {t("patients.heroCard.moreCount", { count: patient.currentMedications.length - 3 })}
+          </span>
+        )}
+        {emergencyContact && (emergencyContact.name || emergencyContact.phone) && (
+          <span className={styles.alertChip} title={emergencyContact.relation ?? undefined}>
+            <Phone size={11} strokeWidth={1.75} aria-hidden /> {t("patients.heroCard.emergencyLabel")}: {[emergencyContact.name, emergencyContact.phone].filter(Boolean).join(" · ")}
+          </span>
+        )}
+      </div>
     </section>
   );
 }

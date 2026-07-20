@@ -571,6 +571,19 @@
   color: var(--brand);
   border-color: var(--border-brand);
   font-weight: 600;
+  /* Barra indicadora 3px con --brand-grad (Variante A, spec §Sidebar):
+     el degradado de marca SOLO como acento del item activo. */
+  position: relative;
+}
+.navItem.active::before {
+  content: "";
+  position: absolute;
+  left: -1px;
+  top: 5px;
+  bottom: 5px;
+  width: 3px;
+  border-radius: 3px;
+  background: var(--brand-grad, var(--brand));
 }
 .navItemDisabled,
 .navItemDisabled:hover {
