@@ -2368,7 +2368,13 @@
       "toastInvoiceCreateError": "Error creating invoice",
       "toastCfdiReceptorRequired": "Patient RFC, name and ZIP code are required",
       "toastCfdiStamped": "CFDI stamped successfully with SAT",
-      "toastCfdiStampError": "Error stamping"
+      "toastCfdiStampError": "Error stamping",
+      "cfdiTaxesLabel": "Taxes",
+      "cfdiTaxExempt": "Exempt (medical services)",
+      "cfdiTaxIva16": "16% VAT",
+      "cfdiBalanceWarning": "This invoice has a pending balance. It is usually invoiced once paid.",
+      "cfdiUnpaidConfirm": "Stamp anyway as PUE (single-payment)",
+      "cfdiOpenInvoice": "Open invoice to fix"
     }
   },
   "appointments": {
@@ -6581,6 +6587,12 @@
       "cfdiFormTitle": "Recipient tax details",
       "cfdiFormHelp": "The CFDI will be stamped with the SAT (test environment).",
       "cfdiBalanceWarning": "This invoice has a pending balance. It is usually invoiced once paid.",
+      "cfdiUnpaidConfirm": "Stamp anyway as PUE (single-payment)",
+      "cfdiMismatchReview": "Review invoice",
+      "cfdiPaymentFormLabel": "Payment form",
+      "cfdiTaxesLabel": "Taxes",
+      "cfdiTaxExempt": "Exempt (medical services)",
+      "cfdiTaxIva16": "16% VAT",
       "fiscalRfc": "RFC",
       "fiscalName": "Legal name / Name",
       "fiscalRegimen": "Tax regime",

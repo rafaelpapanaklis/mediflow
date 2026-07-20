@@ -15,7 +15,7 @@ const USER_KEY = process.env.FACTURAPI_USER_KEY!;
 
 // Catálogos SAT (client-safe) — definidos en ./cfdi-catalogs y re-exportados aquí
 // para no romper los imports server-side existentes (`@/lib/facturapi`).
-export { CLAVES_SAT_MEDICOS, UNIDAD_SAT, REGIMENES_FISCALES, USOS_CFDI } from "./cfdi-catalogs";
+export { CLAVES_SAT_MEDICOS, UNIDAD_SAT, REGIMENES_FISCALES, USOS_CFDI, FORMAS_PAGO_SAT } from "./cfdi-catalogs";
 
 // ── Organization management ────────────────────────────────────────────────────
 
@@ -89,6 +89,12 @@ export interface InvoiceItem {
     unit_key?: string;    // E48 = servicio
     price: number;
     tax_included?: boolean;
+    // Impuestos del concepto (referencia oficial, guía de Productos):
+    //   IVA 16% → [{ type: "IVA", rate: 0.16 }] (con tax_included según el caso)
+    //   Exento  → [{ type: "IVA", factor: "Exento", rate: 0 }] + tax_included:false
+    // Sin `taxes`, Facturapi desglosa IVA 16% por default — por eso ahora se
+    // manda SIEMPRE explícito desde el timbrado.
+    taxes?: { type: string; rate?: number; factor?: string; withholding?: boolean }[];
   };
   quantity: number;
   discount?: number;
