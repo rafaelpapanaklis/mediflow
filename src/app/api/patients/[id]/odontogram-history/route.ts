@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
 import { readActiveClinicCookie } from "@/lib/active-clinic";
+import { assertPatientVisible } from "@/lib/patient-visibility";
 
 export const dynamic = "force-dynamic";
 
@@ -37,6 +38,9 @@ export async function GET(req: NextRequest, { params }: Params) {
   try {
     const dbUser = await getDbUser();
     if (!dbUser) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+    // Visibilidad por paciente: 404 si el viewer no puede ver este paciente.
+    const denied = await assertPatientVisible(params.id, { userId: dbUser.id, role: dbUser.role, clinicId: dbUser.clinicId });
+    if (denied) return denied;
     // Aislamiento multi-tenant: el snapshot no tiene clinicId, así que el gate
     // es que el paciente pertenezca a la clínica del usuario.
     const patient = await prisma.patient.findFirst({

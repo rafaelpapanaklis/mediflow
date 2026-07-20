@@ -7,6 +7,7 @@ import { readActiveClinicCookie } from "@/lib/active-clinic";
 import { logMutation } from "@/lib/audit";
 import { revalidateAfter } from "@/lib/cache/revalidate";
 import { round2 } from "@/lib/quotes/compute";
+import { relatedPatientVisibilityAnd } from "@/lib/patient-visibility";
 
 async function getCtx() {
   const supabase = createClient();
@@ -15,10 +16,10 @@ async function getCtx() {
   const activeClinicId = readActiveClinicCookie();
   if (activeClinicId) {
     const u = await prisma.user.findFirst({ where: { supabaseId: user.id, clinicId: activeClinicId, isActive: true } });
-    if (u) return { clinicId: u.clinicId, userId: u.id };
+    if (u) return { clinicId: u.clinicId, userId: u.id, role: u.role };
   }
   const dbUser = await prisma.user.findFirst({ where: { supabaseId: user.id, isActive: true }, orderBy: { createdAt: "asc" } });
-  return dbUser ? { clinicId: dbUser.clinicId, userId: dbUser.id } : null;
+  return dbUser ? { clinicId: dbUser.clinicId, userId: dbUser.id, role: dbUser.role } : null;
 }
 
 async function nextInvoiceNumber(clinicId: string) {
@@ -36,6 +37,10 @@ export async function GET(req: NextRequest) {
   const limit = 20;
   const where: any = { clinicId };
   if (search) { where.OR = [{ invoiceNumber: { contains: search, mode: "insensitive" } }, { patient: { firstName: { contains: search, mode: "insensitive" } } }]; }
+  // Visibilidad por paciente. Filtro de RELACIÓN (lista de toda la clínica) y va
+  // en AND porque `where.OR` de arriba (búsqueda por texto) lo volvería permisivo.
+  const visibility = relatedPatientVisibilityAnd({ userId: ctx.userId, role: ctx.role, clinicId });
+  if (visibility.length) where.AND = visibility;
   const [total, invoices] = await Promise.all([
     prisma.invoice.count({ where }),
     prisma.invoice.findMany({ where, orderBy: { createdAt: "desc" }, skip: (page-1)*limit, take: limit, include: { patient: { select: { id: true, firstName: true, lastName: true } }, payments: true } }),

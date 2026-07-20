@@ -11,6 +11,7 @@ import { PERIODONTICS_MODULE_KEY } from "@/lib/specialties/keys";
 import { computePerioMetrics } from "@/lib/periodontics/periodontogram-math";
 import type { Site, ToothLevel } from "@/lib/periodontics/schemas";
 import { PerioReportPDF } from "@/lib/periodontics/pdf-templates/perio-report";
+import { assertPatientVisible } from "@/lib/patient-visibility";
 
 export const dynamic = "force-dynamic";
 
@@ -27,6 +28,15 @@ export async function GET(
   if (!access.hasAccess) {
     return NextResponse.json({ error: "Módulo no activo" }, { status: 403 });
   }
+
+  // Visibilidad por paciente: sin este gate se generaría el informe PDF de un
+  // paciente restringido con solo su id en la ruta.
+  const hidden = await assertPatientVisible(params.patientId, {
+    userId: ctx.userId,
+    role: ctx.role,
+    clinicId: ctx.clinicId,
+  });
+  if (hidden) return hidden;
 
   const patient = await prisma.patient.findFirst({
     where: { id: params.patientId, clinicId: ctx.clinicId, deletedAt: null },

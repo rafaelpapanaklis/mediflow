@@ -10,6 +10,7 @@ import { PERIODONTICS_MODULE_KEY } from "@/lib/specialties/keys";
 import { computePerioMetrics } from "@/lib/periodontics/periodontogram-math";
 import type { Site, ToothLevel } from "@/lib/periodontics/schemas";
 import { PrePostComparePDF } from "@/lib/periodontics/pdf-templates/pre-post-compare";
+import { relatedPatientVisibilityAnd } from "@/lib/patient-visibility";
 
 export const dynamic = "force-dynamic";
 
@@ -30,13 +31,21 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "initial y post requeridos" }, { status: 400 });
   }
 
+  // Visibilidad por paciente: el reporte se pide por ids de sondaje, no por
+  // patientId, pero expone nombre y métricas del paciente. Filtramos por la
+  // relación `patient` para no comparar sondajes de un paciente restringido.
+  const vis = relatedPatientVisibilityAnd({
+    userId: ctx.userId,
+    role: ctx.role,
+    clinicId: ctx.clinicId,
+  });
   const [initial, post] = await Promise.all([
     prisma.periodontalRecord.findFirst({
-      where: { id: initialId, clinicId: ctx.clinicId, deletedAt: null },
+      where: { id: initialId, clinicId: ctx.clinicId, deletedAt: null, ...(vis.length ? { AND: vis } : {}) },
       include: { patient: { select: { firstName: true, lastName: true } } },
     }),
     prisma.periodontalRecord.findFirst({
-      where: { id: postId, clinicId: ctx.clinicId, deletedAt: null },
+      where: { id: postId, clinicId: ctx.clinicId, deletedAt: null, ...(vis.length ? { AND: vis } : {}) },
     }),
   ]);
   if (!initial || !post) {

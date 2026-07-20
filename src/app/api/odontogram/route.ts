@@ -6,6 +6,7 @@ import {
   getDbUser,
   isMissingTableError,
 } from "@/lib/odontogram/api-auth";
+import { assertPatientVisible } from "@/lib/patient-visibility";
 
 export const dynamic = "force-dynamic";
 
@@ -81,6 +82,9 @@ export async function GET(req: NextRequest) {
     if (!(await ensurePatientInClinic(patientId, dbUser.clinicId))) {
       return jsonError("patient_not_found", 404);
     }
+    // Visibilidad por paciente: lee un solo paciente por id → 404 si no lo puede ver.
+    const denied = await assertPatientVisible(patientId, { userId: dbUser.id, role: dbUser.role, clinicId: dbUser.clinicId });
+    if (denied) return denied;
     const rows = await prisma.odontogramEntry.findMany({
       where: { patientId },
       orderBy: [{ toothNumber: "asc" }, { surface: "asc" }],

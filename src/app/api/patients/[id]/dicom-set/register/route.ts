@@ -3,6 +3,7 @@ import { getAuthContext } from "@/lib/auth-context";
 import { prisma } from "@/lib/prisma";
 import { signMaybeUrl } from "@/lib/storage";
 import { storageQuotaError } from "@/lib/storage-quota";
+import { assertPatientVisible } from "@/lib/patient-visibility";
 import { createClient as createAdmin } from "@supabase/supabase-js";
 
 // Registra como PatientFile un set CBCT (.zip) ya subido a Storage vía la signed
@@ -18,6 +19,10 @@ import { createClient as createAdmin } from "@supabase/supabase-js";
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
+
+  // Visibilidad por paciente: 404 si el viewer no puede ver este paciente.
+  const denied = await assertPatientVisible(params.id, { userId: ctx.userId, role: ctx.role, clinicId: ctx.clinicId });
+  if (denied) return denied;
 
   const patient = await prisma.patient.findFirst({
     where: { id: params.id, clinicId: ctx.clinicId },

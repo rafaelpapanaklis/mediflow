@@ -9,6 +9,7 @@ import { getAuthContext } from "@/lib/auth-context";
 import { canAccessModule } from "@/lib/marketplace/access-control";
 import { PERIODONTICS_MODULE_KEY } from "@/lib/specialties/keys";
 import { suggestPerioAppointmentDuration } from "@/lib/helpers/perioAppointmentDurations";
+import { assertPatientVisible } from "@/lib/patient-visibility";
 
 export const dynamic = "force-dynamic";
 
@@ -29,6 +30,15 @@ export async function GET(req: NextRequest) {
   if (!access.hasAccess) {
     return NextResponse.json({ perio: false });
   }
+
+  // Visibilidad por paciente: sin este gate se leería el contexto perio de un
+  // paciente restringido con solo su id.
+  const hidden = await assertPatientVisible(patientId, {
+    userId: ctx.userId,
+    role: ctx.role,
+    clinicId: ctx.clinicId,
+  });
+  if (hidden) return hidden;
 
   const patient = await prisma.patient.findFirst({
     where: { id: patientId, clinicId: ctx.clinicId, deletedAt: null },

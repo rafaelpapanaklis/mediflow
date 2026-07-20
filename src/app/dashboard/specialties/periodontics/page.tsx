@@ -17,7 +17,9 @@ export default async function PeriodonticsIndexPage() {
     redirect(`/dashboard/marketplace?expired=${PERIODONTICS_MODULE_KEY}`);
   }
 
-  const data = await loadPeriodonticPatients(user.clinicId);
+  // Visibilidad por paciente: viewer de sesión para filtrar los reads.
+  const viewer = { userId: user.id, role: user.role, clinicId: user.clinicId };
+  const data = await loadPeriodonticPatients(user.clinicId, viewer);
 
   const rowsSerializable = data.rows.map((r) => ({
     ...r,

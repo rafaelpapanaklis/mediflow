@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { hasPermission } from "@/lib/auth/permissions";
+import { assertPatientVisible } from "@/lib/patient-visibility";
 import { buildCdaXml } from "@/lib/hl7/cda";
 import { logAudit, extractAuditMeta } from "@/lib/audit";
 
@@ -23,6 +24,10 @@ export async function GET(req: NextRequest, { params }: Params) {
   if (!hasPermission(user.role as "DOCTOR" | "ADMIN" | "SUPER_ADMIN" | "RECEPTIONIST" | "READONLY", "medicalRecord.read")) {
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
   }
+
+  // Visibilidad por paciente: 404 si el viewer no puede ver este paciente.
+  const denied = await assertPatientVisible(params.id, { userId: user.id, role: user.role, clinicId: user.clinicId });
+  if (denied) return denied;
 
   const patient = await prisma.patient.findFirst({
     where: { id: params.id, clinicId: user.clinicId },

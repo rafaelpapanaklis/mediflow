@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { randomBytes } from "crypto";
 import { logMutation } from "@/lib/audit";
 import { signMaybeUrls } from "@/lib/storage";
+import { assertPatientVisible } from "@/lib/patient-visibility";
 
 const CONSENT_TEMPLATES: Record<string, string> = {
   "Extracción simple": `CONSENTIMIENTO INFORMADO PARA EXTRACCIÓN DENTAL
@@ -79,6 +80,15 @@ export async function GET(req: NextRequest) {
   const patientId = new URL(req.url).searchParams.get("patientId");
   if (!patientId) return NextResponse.json({ error: "patientId required" }, { status: 400 });
 
+  // Visibilidad por paciente: sin este gate se leían los consentimientos de un
+  // paciente restringido con solo su id.
+  const hidden = await assertPatientVisible(patientId, {
+    userId: ctx.userId,
+    role: ctx.role,
+    clinicId: ctx.clinicId,
+  });
+  if (hidden) return hidden;
+
   const forms = await prisma.consentForm.findMany({
     where: { patientId, clinicId: ctx.clinicId },
     orderBy: { createdAt: "desc" },
@@ -108,6 +118,14 @@ export async function POST(req: NextRequest) {
     where: { id: patientId, clinicId: ctx.clinicId },
   });
   if (!patient) return NextResponse.json({ error: "Paciente no encontrado" }, { status: 404 });
+
+  // Visibilidad por paciente: no generar consentimientos sobre un paciente restringido.
+  const hidden = await assertPatientVisible(patientId, {
+    userId: ctx.userId,
+    role: ctx.role,
+    clinicId: ctx.clinicId,
+  });
+  if (hidden) return hidden;
 
   const clinic = await prisma.clinic.findUnique({
     where:  { id: ctx.clinicId },

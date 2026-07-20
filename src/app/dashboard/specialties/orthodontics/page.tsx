@@ -19,8 +19,11 @@ export default async function OrthodonticsIndexPage() {
     redirect(`/dashboard/marketplace?expired=${ORTHODONTICS_MODULE_KEY}`);
   }
 
+  // Visibilidad por paciente: viewer de sesión para filtrar los reads.
+  const viewer = { userId: user.id, role: user.role, clinicId: user.clinicId };
+
   const [data, kanbanCards] = await Promise.all([
-    loadOrthodonticPatients(user.clinicId),
+    loadOrthodonticPatients(user.clinicId, viewer),
     buildKanbanData(user.clinicId),
   ]);
 

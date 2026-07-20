@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { logMutation } from "@/lib/audit";
+import { assertPatientVisible, relatedPatientVisibilityAnd } from "@/lib/patient-visibility";
 
 export const dynamic = "force-dynamic";
 
@@ -20,6 +21,16 @@ export async function GET(req: NextRequest) {
   const patientId = req.nextUrl.searchParams.get("patientId");
   const where: Record<string, unknown> = { clinicId: user.clinicId };
   if (patientId) where.patientId = patientId;
+
+  // Visibilidad por paciente. Filtro de RELACIÓN (no un assert) porque
+  // patientId es opcional: sin él, esto listaba las referencias de TODA la
+  // clínica, restringidas incluidas.
+  const vis = relatedPatientVisibilityAnd({
+    userId: user.id,
+    role: user.role,
+    clinicId: user.clinicId,
+  });
+  if (vis.length) where.AND = vis;
 
   const list = await prisma.referral.findMany({
     where,
@@ -76,6 +87,14 @@ export async function POST(req: NextRequest) {
     select: { id: true },
   });
   if (!patient) return NextResponse.json({ error: "patient_not_found" }, { status: 404 });
+
+  // Visibilidad por paciente: no crear referencias sobre un paciente restringido.
+  const hidden = await assertPatientVisible(body.patientId, {
+    userId: user.id,
+    role: user.role,
+    clinicId: user.clinicId,
+  });
+  if (hidden) return hidden;
 
   const referral = await prisma.referral.create({
     data: {

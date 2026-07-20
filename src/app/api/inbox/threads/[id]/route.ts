@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
 import { readActiveClinicCookie } from "@/lib/active-clinic";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
+import { assertPatientVisible } from "@/lib/patient-visibility";
 
 export const dynamic = "force-dynamic";
 
@@ -59,6 +60,17 @@ export async function GET(_req: NextRequest, { params }: Params) {
       },
     });
     if (!thread) return NextResponse.json({ error: "not_found" }, { status: 404 });
+    // Visibilidad por paciente: si el hilo tiene paciente y está restringido,
+    // 404 (mismo status que not_found — no revela su existencia). Hilos sin
+    // paciente se permiten.
+    if (thread.patientId) {
+      const hidden = await assertPatientVisible(thread.patientId, {
+        userId: dbUser.id,
+        role: dbUser.role,
+        clinicId: dbUser.clinicId,
+      });
+      if (hidden) return hidden;
+    }
     return NextResponse.json({ thread });
   } catch (err) {
     if ((err as { code?: string }).code === "P2021") {
@@ -88,9 +100,20 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     }
     const existing = await prisma.inboxThread.findFirst({
       where: { id: params.id, clinicId: dbUser.clinicId },
-      select: { id: true },
+      select: { id: true, patientId: true },
     });
     if (!existing) return NextResponse.json({ error: "not_found" }, { status: 404 });
+
+    // Visibilidad por paciente: si el hilo ya tiene un paciente restringido, no
+    // permitir modificarlo (404, no revela su existencia).
+    if (existing.patientId) {
+      const hidden = await assertPatientVisible(existing.patientId, {
+        userId: dbUser.id,
+        role: dbUser.role,
+        clinicId: dbUser.clinicId,
+      });
+      if (hidden) return hidden;
+    }
 
     // FK del body acotados a la clínica de la sesión (mismo patrón que el
     // POST de threads): un patientId ajeno vinculado aquí filtraría su PII
@@ -145,6 +168,20 @@ export async function DELETE(_req: NextRequest, { params }: Params) {
     // enviar (inbox.send) pero no borrar.
     const denied = denyIfMissingPermission(dbUser, "inbox.delete");
     if (denied) return denied;
+    // Visibilidad por paciente: cargamos el hilo primero; si tiene un paciente
+    // restringido, 404 antes de borrar (no revela su existencia).
+    const existing = await prisma.inboxThread.findFirst({
+      where: { id: params.id, clinicId: dbUser.clinicId },
+      select: { id: true, patientId: true },
+    });
+    if (existing?.patientId) {
+      const hidden = await assertPatientVisible(existing.patientId, {
+        userId: dbUser.id,
+        role: dbUser.role,
+        clinicId: dbUser.clinicId,
+      });
+      if (hidden) return hidden;
+    }
     await prisma.inboxThread.deleteMany({
       where: { id: params.id, clinicId: dbUser.clinicId },
     });

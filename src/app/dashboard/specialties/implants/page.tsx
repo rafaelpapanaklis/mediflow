@@ -7,6 +7,7 @@ export const dynamic = "force-dynamic";
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { patientVisibilityFilter } from "@/lib/patient-visibility";
 import { canAccessModule } from "@/lib/marketplace/access-control";
 import { IMPLANTS_MODULE_KEY } from "@/lib/implants/permissions";
 import { loadImplantPatients } from "@/lib/implants/load-patients";
@@ -31,13 +32,19 @@ export default async function ImplantsIndexPage() {
 
   const now = new Date();
 
+  // Visibilidad por paciente: viewer de sesión para filtrar los reads.
+  const viewer = { userId: user.id, role: user.role, clinicId: user.clinicId };
+  const visFilter = patientVisibilityFilter(viewer);
+
   const [aggregate, overdueRaw, complicationsRaw] = await Promise.all([
-    loadImplantPatients(user.clinicId),
+    loadImplantPatients(user.clinicId, viewer),
     prisma.implantFollowUp.findMany({
       where: {
         clinicId: user.clinicId,
         scheduledAt: { not: null, lt: now },
         performedAt: null,
+        // Visibilidad por paciente: el follow-up llega al paciente vía `implant`.
+        ...(visFilter ? { implant: { is: { patient: { is: visFilter } } } } : {}),
       },
       include: {
         implant: {
@@ -53,6 +60,8 @@ export default async function ImplantsIndexPage() {
       where: {
         clinicId: user.clinicId,
         resolvedAt: null,
+        // Visibilidad por paciente: la complicación llega al paciente vía `implant`.
+        ...(visFilter ? { implant: { is: { patient: { is: visFilter } } } } : {}),
       },
       include: {
         implant: {

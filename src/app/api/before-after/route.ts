@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthContext } from "@/lib/auth-context";
 import { prisma } from "@/lib/prisma";
+import { assertPatientVisible } from "@/lib/patient-visibility";
 import { BUCKETS, extractStoragePath, signMaybeUrl, signMaybeUrls } from "@/lib/storage";
 
 export async function GET(req: NextRequest) {
@@ -12,6 +13,15 @@ export async function GET(req: NextRequest) {
   if (!patientId) {
     return NextResponse.json({ error: "patientId is required" }, { status: 400 });
   }
+
+  // Visibilidad por paciente: sin este gate se leían las fotos de un paciente
+  // restringido con solo su id.
+  const hidden = await assertPatientVisible(patientId, {
+    userId: ctx.userId,
+    role: ctx.role,
+    clinicId: ctx.clinicId,
+  });
+  if (hidden) return hidden;
 
   const photos = await prisma.beforeAfterPhoto.findMany({
     where: { clinicId: ctx.clinicId, patientId },
@@ -71,6 +81,14 @@ export async function POST(req: NextRequest) {
   if (!patient) {
     return NextResponse.json({ error: "Patient not found in this clinic" }, { status: 404 });
   }
+
+  // Visibilidad por paciente: no crear fotos sobre un paciente restringido.
+  const hidden = await assertPatientVisible(patientId, {
+    userId: ctx.userId,
+    role: ctx.role,
+    clinicId: ctx.clinicId,
+  });
+  if (hidden) return hidden;
 
   const photo = await prisma.beforeAfterPhoto.create({
     data: {

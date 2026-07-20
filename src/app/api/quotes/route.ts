@@ -5,6 +5,7 @@ import { logAudit } from "@/lib/audit";
 import { createQuoteWithFolio, parseValidUntil } from "@/lib/quotes/service";
 import { serializeQuote } from "@/lib/quotes/serialize";
 import { createInvoiceFromQuote } from "@/lib/quotes/create-invoice-from-quote";
+import { assertPatientVisible } from "@/lib/patient-visibility";
 
 export const dynamic = "force-dynamic";
 
@@ -19,6 +20,10 @@ export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const patientId = searchParams.get("patientId");
   if (!patientId) return NextResponse.json({ error: "patientId requerido" }, { status: 400 });
+
+  // Visibilidad por paciente: lee un solo paciente por id → 404 si no lo puede ver.
+  const denied = await assertPatientVisible(patientId, { userId: ctx.userId, role: ctx.role, clinicId: ctx.clinicId });
+  if (denied) return denied;
 
   const patient = await prisma.patient.findFirst({
     where: { id: patientId, clinicId: ctx.clinicId },

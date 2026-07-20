@@ -4,6 +4,7 @@ import {
   loadClinicSession,
   requireRole,
 } from "@/lib/agenda/api-helpers";
+import { assertPatientVisible, relatedPatientVisibilityAnd } from "@/lib/patient-visibility";
 import type {
   CreateWaitlistInput,
   WaitlistEntryDTO,
@@ -45,6 +46,13 @@ export async function GET(req: NextRequest) {
       ...(session.user.role === "DOCTOR"
         ? { preferredDoctorId: session.user.id }
         : {}),
+      // Visibilidad por paciente. Filtro de RELACIÓN porque esto lista las
+      // entradas de TODA la clínica, restringidas incluidas.
+      AND: relatedPatientVisibilityAnd({
+        userId: session.user.id,
+        role: session.user.role,
+        clinicId: session.clinic.id,
+      }),
     },
     include: {
       patient: { select: { id: true, firstName: true, lastName: true } },
@@ -116,6 +124,14 @@ export async function POST(req: NextRequest) {
   if (!patient) {
     return NextResponse.json({ error: "patient_not_found" }, { status: 404 });
   }
+
+  // Visibilidad por paciente: no agregar a la lista de espera un paciente restringido.
+  const hidden = await assertPatientVisible(body.patientId, {
+    userId: session.user.id,
+    role: session.user.role,
+    clinicId: session.clinic.id,
+  });
+  if (hidden) return hidden;
 
   if (body.preferredDoctorId) {
     const d = await prisma.user.findFirst({

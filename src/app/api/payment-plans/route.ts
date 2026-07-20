@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getAuthContext } from "@/lib/auth-context";
 import { prisma } from "@/lib/prisma";
 import { PLAN_FREQUENCY, PLAN_FREQUENCY_DAYS, PLAN_STATUS } from "@/lib/payment-plans/status";
+import { assertPatientVisible, relatedPatientVisibilityAnd } from "@/lib/patient-visibility";
 
 // GET /api/payment-plans?patientId=xxx
 export async function GET(req: NextRequest) {
@@ -14,6 +15,14 @@ export async function GET(req: NextRequest) {
     where: {
       clinicId:  ctx.clinicId,
       ...(patientId ? { patientId } : {}),
+      // Visibilidad por paciente. Filtro de RELACIÓN (no un assert) porque
+      // patientId es opcional: sin él, esto listaba los planes de TODA la
+      // clínica, restringidos incluidos.
+      AND: relatedPatientVisibilityAnd({
+        userId: ctx.userId,
+        role: ctx.role,
+        clinicId: ctx.clinicId,
+      }),
     },
     include: {
       patient:  { select: { id: true, firstName: true, lastName: true } },
@@ -45,6 +54,14 @@ export async function POST(req: NextRequest) {
   if (!patient) {
     return NextResponse.json({ error: "Paciente no encontrado" }, { status: 404 });
   }
+
+  // Visibilidad por paciente: no crear planes sobre un paciente restringido.
+  const hidden = await assertPatientVisible(patientId, {
+    userId: ctx.userId,
+    role: ctx.role,
+    clinicId: ctx.clinicId,
+  });
+  if (hidden) return hidden;
 
   if (invoiceId) {
     const invoice = await prisma.invoice.findFirst({
