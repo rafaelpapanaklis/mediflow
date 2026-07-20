@@ -61,6 +61,10 @@ export const invoiceSchema = z.object({
     description: z.string().min(1),
     quantity:    z.number().min(1),
     unitPrice:   z.number().min(0),
+    // Descuento por línea del editor. Sin esta llave, zod la STRIPEA del item
+    // y el JSON guardado pierde el descuento → la guarda del CFDI (que calcula
+    // qty × unitPrice − discount) vería el bruto y bloquearía el timbrado.
+    discount:    z.number().min(0).optional(),
     total:       z.number(),
   })).min(1),
   discount:      z.number().default(0),

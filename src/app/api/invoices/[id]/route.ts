@@ -95,6 +95,12 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   if (body.status) updateData.status = body.status;
   if (body.notes !== undefined) updateData.notes = body.notes;
   if (body.items) {
+    // Sin esta validación, un body.items no-arreglo se guardaría tal cual en el
+    // JSON (sumInvoiceItems devuelve 0 para no-arreglos) dejando la factura con
+    // conceptos basura y total 0.
+    if (!Array.isArray(body.items) || body.items.length === 0) {
+      return NextResponse.json({ error: "items debe ser una lista con al menos un concepto" }, { status: 400 });
+    }
     const items = body.items;
     // Misma aritmética que el timbrado (qty × unitPrice − desc. de línea) para
     // que total = Σ(conceptos) − descuento se sostenga también con IVA agregado.

@@ -165,6 +165,10 @@ function InvoiceEditorBody({
         description: String(it.name).trim(),
         quantity: it.quantity,
         unitPrice: it.unitPrice,
+        // El descuento POR LÍNEA viaja con el concepto (clamp a importe): el
+        // server y la guarda del CFDI calculan qty × unitPrice − discount; sin
+        // él, el total interno (neto) no cuadraría con los conceptos (bruto).
+        ...(it.discount > 0 ? { discount: Math.min(it.discount, round2(it.unitPrice * it.quantity)) } : {}),
         total: round2(it.lineTotal),
       })),
       discount: round2(normalized.discountAmount),

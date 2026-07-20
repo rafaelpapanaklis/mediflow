@@ -83,7 +83,10 @@ export async function POST(req: NextRequest) {
   const tolerance = taxMode === "iva16" && !taxIncludedInv
     ? 0.01 + 0.01 * invoiceItems.length
     : 0.01;
-  if (Math.abs(cfdiTotal - invoice.total) > tolerance) {
+  // round2 en la diferencia: sin él, una diferencia legítima de exactamente
+  // 1¢ excede la tolerancia por ruido de punto flotante (31.00 − 30.99 =
+  // 0.010000000000001563 > 0.01) y bloquearía un caso que debe pasar.
+  if (round2(Math.abs(cfdiTotal - invoice.total)) > tolerance) {
     return NextResponse.json({
       error: `El total de la factura ($${invoice.total.toFixed(2)}) no coincide con la suma de sus conceptos ($${cfdiTotal.toFixed(2)}). Corrige el precio, el descuento o los conceptos antes de timbrar — el CFDI se emitiría por un monto distinto al cobrado.`,
       code: "CFDI_TOTAL_MISMATCH",

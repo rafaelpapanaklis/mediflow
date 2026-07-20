@@ -6,7 +6,7 @@ import { invoiceSchema } from "@/lib/validations";
 import { readActiveClinicCookie } from "@/lib/active-clinic";
 import { logMutation } from "@/lib/audit";
 import { revalidateAfter } from "@/lib/cache/revalidate";
-import { round2 } from "@/lib/quotes/compute";
+import { sumInvoiceItems, computeInvoiceTotal, round2 } from "@/lib/invoice-totals";
 
 async function getCtx() {
   const supabase = createClient();
@@ -68,16 +68,20 @@ export async function POST(req: NextRequest) {
       doctorId = doc.id;
     }
 
-    const subtotal = round2(data.items.reduce((s, i) => s + i.total, 0));
-    const base = round2(subtotal - (data.discount ?? 0));
-    // IVA incluido → el total NO cambia (impuesto embebido en el precio).
-    // IVA agregado → se suma sobre la base.
-    const tax = taxIncluded ? 0 : round2(base * (taxRate / 100));
-    const total = round2(base + tax);
+    // Misma aritmética canónica que el timbrado y el PATCH (invoice-totals):
+    // subtotal = Σ(qty × unitPrice − desc. de línea). Antes se sumaba i.total
+    // tal cual del cliente: una línea con descuento (o un total inconsistente)
+    // dejaba invoice.total ≠ lo que la guarda del CFDI calcula por unitPrice.
+    const subtotal = sumInvoiceItems(data.items);
+    const discount = round2(Math.max(0, data.discount ?? 0));
+    if (discount > subtotal) {
+      return NextResponse.json({ error: "El descuento excede el subtotal" }, { status: 400 });
+    }
+    const { total } = computeInvoiceTotal(subtotal, discount, taxRate, taxIncluded);
 
     const invoice = await prisma.invoice.create({
       data: { clinicId, patientId: data.patientId, appointmentId: data.appointmentId ?? undefined,
-        invoiceNumber: await nextInvoiceNumber(clinicId), items: data.items, subtotal, discount: data.discount ?? 0,
+        invoiceNumber: await nextInvoiceNumber(clinicId), items: data.items, subtotal, discount,
         total, paid: 0, balance: total, status: "PENDING", paymentMethod: data.paymentMethod, notes: data.notes,
         dueDate: data.dueDate ? new Date(data.dueDate) : undefined,
         doctorId, taxRate, taxIncluded },
