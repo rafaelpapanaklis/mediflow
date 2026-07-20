@@ -4,76 +4,125 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* ─────── HERO ─────── */
+/* ─────── HERO (cabecera única — prototipo ficha-zip) ───────
+   Consolida la identidad (antes PatientContextPanel) + métricas + acciones
+   en UNA card: avatar 56 · nombre+meta en una línea · contacto · pills de
+   alergias/medicamentos/riesgos · stats (Próxima cita resaltada en
+   brand-soft) · CTA degradado. */
 .hero {
   background: var(--bg-elev);
   border: 1px solid var(--border-soft);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-1);
-  padding: 18px 22px 16px;
-  margin-bottom: 14px;
+  padding: 18px 20px;
+  margin-bottom: 20px;
   font-family: var(--font-sans, system-ui, sans-serif);
 }
 .heroMain {
-  display: grid;
-  grid-template-columns: auto 1fr auto auto;
-  gap: 18px;
+  display: flex;
+  flex-wrap: wrap;
   align-items: center;
+  gap: 18px;
 }
-/* Avatar iniciales — rampa violeta SUAVE plana (Variante A: violet-100 fondo /
-   violet-700 texto, igual que la tabla de pacientes del piloto). */
+.heroIdentity {
+  display: flex; align-items: center; gap: 14px;
+  min-width: 0;
+  flex: 1 1 300px;
+}
 .heroAvatar {
-  width: 72px; height: 72px;
+  width: 56px; height: 56px;
   border-radius: var(--radius-lg);
-  background: var(--violet-100);
-  color: var(--violet-700);
-  font-size: 24px; font-weight: 700;
+  background: var(--brand-soft);
+  border: 1px solid var(--border-brand);
+  color: var(--brand);
+  font-size: 20px; font-weight: 800;
   letter-spacing: -0.02em;
   display: grid; place-items: center;
   flex-shrink: 0;
-  box-shadow: var(--shadow-1);
   font-family: inherit;
 }
-.heroInfo { min-width: 0; }
+.heroInfo { min-width: 0; display: flex; flex-direction: column; gap: 5px; }
+.heroTitleRow {
+  display: flex; align-items: baseline; gap: 10px;
+  flex-wrap: wrap;
+}
 .heroName {
-  font-size: clamp(20px, 1.6vw, 22px);
+  font-size: 19px;
   font-weight: 700;
   color: var(--text-1);
-  letter-spacing: -0.025em;
-  margin: 0 0 4px;
-  line-height: 1.15;
+  letter-spacing: -0.01em;
+  margin: 0;
+  line-height: 1.2;
 }
 .heroMeta {
   display: flex; align-items: center; gap: 4px;
-  font-size: 12px; color: var(--text-3);
+  font-size: 12.5px; font-weight: 600;
+  color: var(--text-3);
   flex-wrap: wrap;
 }
-.heroMetaSep { color: var(--text-4); margin: 0 4px; }
+.heroMetaSep { color: var(--text-4); margin: 0 2px; }
+.heroContact {
+  display: flex; align-items: center; gap: 12px;
+  font-size: 12.5px; color: var(--text-2);
+  flex-wrap: wrap;
+}
 .metaItem {
-  display: inline-flex; align-items: center; gap: 4px;
-  color: var(--text-3);
+  display: inline-flex; align-items: center; gap: 5px;
+  white-space: nowrap;
 }
-.metaItem svg { color: var(--text-4); }
+.metaItem svg { color: var(--text-3); flex-shrink: 0; }
+/* Pills clínicas de la cabecera (antes vivían en el PatientContextPanel). */
+.heroBadges {
+  display: flex; align-items: center; gap: 6px;
+  flex-wrap: wrap;
+}
+.heroBadge {
+  display: inline-flex; align-items: center; gap: 5px;
+  height: 23px; padding: 0 9px;
+  white-space: nowrap;
+  border-radius: 999px;
+  font-size: 11.5px; font-weight: 700;
+  background: var(--bg-elev-2);
+  color: var(--text-2);
+  cursor: default;
+}
+.heroBadge svg { flex-shrink: 0; }
+.heroBadge.danger  { background: var(--danger-soft);  color: var(--danger-strong); }
+.heroBadge.info    { background: var(--info-soft);    color: var(--info-strong); }
+.heroBadge.warning { background: var(--warning-soft); color: var(--warning-strong); }
+.heroBadge.success { background: var(--success-soft); color: var(--success-strong); }
 
-.heroMetrics {
-  display: flex; gap: 22px;
-  align-items: stretch;
-  padding: 0 12px;
-  border-left: 1px solid var(--border-soft);
+.heroSide {
+  display: flex; align-items: center; gap: 16px;
+  margin-left: auto;
+  flex-wrap: wrap;
 }
-.metric { min-width: 80px; }
+.heroMetrics {
+  display: flex; gap: 16px;
+  align-items: center;
+}
+.metric { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+/* Próxima cita — único stat resaltado (brand-soft), como en el prototipo. */
+.metricHighlight {
+  padding: 8px 12px;
+  border-radius: 11px;
+  background: var(--brand-soft);
+  border: 1px solid var(--border-brand);
+}
+.metricHighlight .metricLabel { color: var(--brand); opacity: 0.8; }
+.metricHighlight .metricValue,
+.metricHighlight .metricSub { color: var(--brand); }
 .metricLabel {
-  font-size: 9px; font-weight: 700;
+  font-size: 10.5px; font-weight: 700;
   color: var(--text-3);
-  letter-spacing: 0.08em; text-transform: uppercase;
-  margin-bottom: 4px;
+  letter-spacing: 0.04em; text-transform: uppercase;
 }
 .metricValue {
-  font-size: 18px; font-weight: 700;
+  font-size: 13px; font-weight: 700;
   color: var(--text-1);
-  letter-spacing: -0.02em;
-  font-family: var(--font-mono, ui-monospace, monospace);
+  letter-spacing: -0.01em;
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 /* Cifras semánticas: par *-strong para AA 4.5:1 sobre bg-elev (spec). */
 .metricValue.brand   { color: var(--brand); }
@@ -81,26 +130,30 @@
 .metricValue.danger  { color: var(--danger); }
 .metricValue.success { color: var(--success-strong); }
 .metricSub {
-  font-size: 10px; color: var(--text-3);
-  margin-top: 2px;
+  font-size: 10.5px; color: var(--text-3);
   font-weight: 500;
+  white-space: nowrap;
+}
+.heroDivider {
+  width: 1px; height: 34px;
+  background: var(--border-soft);
+  flex-shrink: 0;
 }
 
 .heroActions {
-  display: flex; gap: 6px; align-items: center;
+  display: flex; gap: 8px; align-items: center;
 }
 .btn {
-  height: 34px;
-  padding: 0 12px;
-  font-size: 12px; font-weight: 500;
+  height: 38px;
+  padding: 0 14px;
+  font-size: 13px; font-weight: 600;
   background: var(--bg-elev);
-  border: 1px solid var(--border-soft);
-  border-radius: 7px;
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
   color: var(--text-1);
-  display: inline-flex; align-items: center; gap: 6px;
+  display: inline-flex; align-items: center; gap: 7px;
   cursor: pointer;
   font-family: inherit;
-  box-shadow: var(--shadow-1);
   transition: background var(--dur-1) var(--ease), border-color var(--dur-1) var(--ease),
     color var(--dur-1) var(--ease), box-shadow var(--dur-1) var(--ease),
     transform var(--dur-1) var(--ease);
@@ -113,45 +166,53 @@
 .btn:focus-visible { outline: none; box-shadow: var(--ring); }
 .btn:active:not(:disabled) { transform: scale(0.98); }
 .btn:disabled { opacity: 0.45; cursor: not-allowed; }
+/* CTA principal — degradado de marca (spec: uno de los 4 lugares permitidos). */
 .btnPrimary {
-  background: var(--brand); color: #fff;
-  border-color: var(--brand);
-  font-weight: 600;
-  box-shadow: var(--shadow-1);
+  background: var(--brand-grad);
+  color: #fff;
+  border: none;
+  padding: 0 16px;
+  font-weight: 700;
+  box-shadow: 0 4px 14px rgba(124, 58, 237, 0.35);
 }
-.btnPrimary:hover:not(:disabled) { background: var(--violet-700); color: #fff; }
-.btnSuccess {
-  background: var(--success); color: #fff;
-  border-color: var(--success);
-  font-weight: 600;
+.btnPrimary:hover:not(:disabled) {
+  color: #fff;
+  transform: translateY(-1px);
+  box-shadow: 0 6px 18px rgba(124, 58, 237, 0.45);
 }
-.btnSuccess:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--success) 92%, #000);
+.btnPrimary:active:not(:disabled) { transform: scale(0.98); }
+/* Punto ámbar del botón Cobrar (saldo pendiente) — prototipo ficha-zip. */
+.heroDot {
+  width: 7px; height: 7px;
+  border-radius: 999px;
+  background: var(--warning);
+  flex-shrink: 0;
 }
 .btnIcon {
-  width: 34px; height: 34px;
+  width: 38px; height: 38px;
   padding: 0;
   justify-content: center;
+  color: var(--text-2);
 }
 
 .heroMenuPopover {
   background: var(--bg-elev);
   border: 1px solid var(--border-soft);
-  border-radius: 8px;
+  border-radius: 12px;
   box-shadow: var(--shadow-3);
-  padding: 4px;
+  padding: 5px;
   z-index: 250;
-  min-width: 200px;
+  min-width: 230px;
   font-family: var(--font-sans, system-ui, sans-serif);
 }
 .heroMenuItem {
   display: flex; align-items: center; gap: 8px;
   width: 100%;
-  padding: 8px 10px;
-  font-size: 12px; font-weight: 500;
+  padding: 9px 11px;
+  font-size: 12.5px; font-weight: 600;
   background: transparent;
   border: none;
-  border-radius: 5px;
+  border-radius: 8px;
   color: var(--text-1);
   cursor: pointer;
   font-family: inherit;
@@ -160,81 +221,50 @@
 .heroMenuItem:hover { background: var(--bg-hover); }
 .heroMenuItem:focus-visible { outline: none; box-shadow: var(--ring); }
 
-.heroAlerts {
-  display: flex; flex-wrap: wrap; gap: 6px;
-  margin-top: 14px;
-  padding-top: 12px;
-  border-top: 1px solid var(--border-soft);
-}
 .alertChip {
   display: inline-flex; align-items: center; gap: 5px;
   padding: 4px 10px;
   font-size: 11px; font-weight: 600;
-  border-radius: 12px;
+  border-radius: 999px;
   border: 1px solid var(--border-soft);
   background: var(--bg-elev-2);
   color: var(--text-2);
   cursor: default;
   letter-spacing: 0.01em;
-  transition: transform 0.12s;
-}
-.alertChip:hover { transform: translateY(-1px); }
-.alertChip.danger {
-  background: var(--danger-soft); color: var(--danger);
-  border-color: color-mix(in srgb, var(--danger) 30%, transparent);
-}
-.alertChip.warning {
-  background: var(--warning-soft); color: var(--warning);
-  border-color: color-mix(in srgb, var(--warning) 30%, transparent);
-}
-.alertChip.brand {
-  background: var(--brand-soft); color: var(--brand);
-  border-color: var(--border-brand);
-}
-.alertChip.success {
-  background: var(--success-soft); color: var(--success);
-  border-color: color-mix(in srgb, var(--success) 30%, transparent);
 }
 
 /* Responsive del hero */
 @media (max-width: 1100px) {
-  .heroMain {
-    grid-template-columns: auto 1fr auto;
-    grid-template-areas:
-      "avatar info menu"
-      "metrics metrics metrics"
-      "actions actions actions";
-    gap: 14px;
-  }
-  .heroAvatar { grid-area: avatar; }
-  .heroInfo { grid-area: info; }
-  .heroMetrics {
-    grid-area: metrics;
-    border-left: none;
-    border-top: 1px solid var(--border-soft);
-    padding: 12px 0 0;
-  }
-  .heroActions {
-    grid-area: actions;
-    flex-wrap: wrap;
-  }
-  .heroActions > .btnIcon { grid-area: menu; }
+  .heroMain { gap: 14px; }
+  .heroIdentity { flex-basis: 100%; }
+  .heroSide { margin-left: 0; }
 }
 @media (max-width: 700px) {
-  .heroMetrics { gap: 14px; flex-wrap: wrap; }
+  .heroMetrics { gap: 12px; flex-wrap: wrap; }
+  .heroActions { flex-wrap: wrap; }
+  .heroDivider { display: none; }
+}
+
+/* ─────── MARCO DE PÁGINA (prototipo: main 22/26 + gap 20) ─────── */
+.page {
+  padding: 20px 26px 60px;
+  margin: 0 auto;
+}
+@media (max-width: 1024px) {
+  .page { padding: 14px 14px 40px; }
 }
 
 /* ─────── LAYOUT 3 COLUMNAS ─────── */
 .layout {
   display: grid;
-  grid-template-columns: 220px 1fr 320px;
-  gap: 16px;
+  grid-template-columns: 246px minmax(0, 1fr) 336px;
+  gap: 20px;
   align-items: start;
 }
 /* Modifier para tabs que necesitan ancho completo (e.g. Odontograma con
-   16 dientes en 1 fila). Oculta el side-panel y libera 320px+gap. */
+   16 dientes en 1 fila). Oculta el side-panel y libera 336px+gap. */
 .layoutWide {
-  grid-template-columns: 220px 1fr;
+  grid-template-columns: 246px minmax(0, 1fr);
 }
 .layoutWide .sidePanel { display: none; }
 
@@ -248,7 +278,7 @@
   position: sticky;
   top: 16px;
   display: flex; flex-direction: column;
-  gap: 12px;
+  gap: 20px;
 }
 /* Laptop ≤1366px: el side-panel cae al flujo normal, en una fila nueva
    DEBAJO del contenido (NO se oculta — Reglas 2 y 3). Las cards se
@@ -261,7 +291,7 @@
    el quick-nav además abarca ambas filas para que el sticky siga vivo a la
    altura de las cards. */
 @media (max-width: 1366px) {
-  .layout { grid-template-columns: 200px 1fr; }
+  .layout { grid-template-columns: 216px minmax(0, 1fr); }
   .quickNav { grid-row: 1 / span 2; }
   .sidePanel {
     grid-column: 2 / -1;
@@ -283,18 +313,19 @@
 
 .mainColumn { min-width: 0; }
 
-/* Tab bar móvil — sticky horizontal scrollable. Sólo visible <1024
-   donde el quick-nav lateral está oculto. iOS-style: el usuario hace
-   swipe horizontal para descubrir secciones con counts/badges visibles. */
+/* Tab bar móvil — sticky horizontal scrollable. Sólo visible <1024 donde el
+   quick-nav lateral está oculto. Patrón del prototipo ficha-zip: tabs planas
+   (icono + label) sobre superficie card con subrayado degradado 3px en la
+   activa — ya no chips pill. Full-bleed contra el padding 14px de .page. */
 .mobileTabBar {
   display: none;
   position: sticky;
   top: 0;
   z-index: 10;
-  gap: 6px;
-  margin: 0 -16px 14px;
-  padding: 10px 16px;
-  background: var(--bg);
+  gap: 2px;
+  margin: 0 -14px 16px;
+  padding: 2px 8px 0;
+  background: var(--bg-elev);
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
   scrollbar-width: none;
@@ -302,59 +333,55 @@
 }
 .mobileTabBar::-webkit-scrollbar { display: none; }
 .mobileTabBtn {
+  position: relative;
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  min-height: 40px; /* target táctil ≥40px (spec §Estados) */
-  padding: 0 14px;
+  gap: 6px;
+  min-height: 44px; /* target táctil ≥40px (spec §Estados) */
+  padding: 0 11px;
   font-size: 12.5px;
   font-weight: 600;
   color: var(--text-2);
-  background: var(--bg-elev);
-  border: 1px solid var(--border-soft);
-  border-radius: 999px;
+  background: transparent;
+  border: none;
   cursor: pointer;
   white-space: nowrap;
   font-family: inherit;
   flex-shrink: 0;
-  box-shadow: var(--shadow-1);
-  transition: background var(--dur-1) var(--ease), border-color var(--dur-1) var(--ease),
-    color var(--dur-1) var(--ease), transform var(--dur-1) var(--ease);
+  transition: color var(--dur-1) var(--ease);
 }
-.mobileTabBtn:hover { background: var(--bg-hover); color: var(--text-1); }
-.mobileTabBtn:focus-visible { outline: none; box-shadow: var(--ring); }
-.mobileTabBtn:active { transform: scale(0.98); }
-/* Chip activo — Variante A: fondo --brand-soft + texto --brand (como el
-   nav-item activo del prototipo; antes era violeta sólido con texto blanco). */
+.mobileTabBtn svg { flex-shrink: 0; }
+.mobileTabBtn:hover { color: var(--text-1); }
+.mobileTabBtn:focus-visible { outline: none; box-shadow: var(--ring); border-radius: 8px; }
+/* Tab activa — texto brand + subrayado degradado (indicador activo: uno de
+   los 4 usos permitidos de --brand-grad según el spec). */
 .mobileTabBtnActive {
-  background: var(--brand-soft);
-  border-color: var(--border-brand);
   color: var(--brand);
 }
-.mobileTabBtnActive:hover { background: var(--brand-soft); color: var(--brand); }
+.mobileTabBtnActive:hover { color: var(--brand); }
+.mobileTabBtnActive::after {
+  content: "";
+  position: absolute;
+  left: 10px; right: 10px; bottom: 0;
+  height: 3px;
+  border-radius: 3px 3px 0 0;
+  background: var(--brand-grad);
+}
 .mobileTabCount {
   font-family: inherit;
   font-variant-numeric: tabular-nums;
   font-size: 10.5px;
   font-weight: 700;
-  padding: 1px 6px;
-  border-radius: 10px;
-  background: var(--bg-elev);
-  color: var(--brand);
-  min-width: 18px;
+  color: var(--text-3);
+  min-width: 0;
   text-align: center;
 }
-.mobileTabBtn:not(.mobileTabBtnActive) .mobileTabCount {
-  background: var(--brand-soft);
-  color: var(--brand);
-}
+.mobileTabBtnActive .mobileTabCount { color: var(--brand); }
 .mobileTabBtnDisabled,
 .mobileTabBtnDisabled:hover {
   opacity: 0.45;
   cursor: not-allowed;
   color: var(--text-3);
-  background: var(--bg-elev);
-  border-color: var(--border-soft);
 }
 
 /* ─────── TREATMENTS MODAL (post-firmar consulta) ─────── */
@@ -516,8 +543,9 @@
   top: 68px;
   background: var(--bg-elev);
   border: 1px solid var(--border-soft);
-  border-radius: 12px;
-  padding: 10px 8px;
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-1);
+  padding: 4px 10px 16px;
   font-family: var(--font-sans, system-ui, sans-serif);
   /* Scroll vertical dedicado: en laptops de pantalla corta el menú (13+ items)
      excedía el alto del viewport y "Facturación" quedaba inalcanzable. Lo
@@ -538,28 +566,30 @@
 @media (max-width: 1024px) {
   .quickNav { display: none; }
 }
-.navSection { margin-bottom: 12px; }
+.navSection { margin-bottom: 4px; }
 .navSection:last-child { margin-bottom: 0; }
 .navSectionLabel {
-  font-size: 9px; font-weight: 700;
+  font-size: 10.5px; font-weight: 700;
   color: var(--text-3);
-  letter-spacing: 0.08em; text-transform: uppercase;
-  padding: 6px 10px 4px;
+  letter-spacing: 0.09em; text-transform: uppercase;
+  padding: 12px 10px 5px;
 }
 .navItem {
-  display: flex; align-items: center; gap: 8px;
+  position: relative;
+  display: flex; align-items: center; gap: 10px;
   width: 100%;
-  padding: 7px 10px;
-  font-size: 12px; font-weight: 500;
+  padding: 8px 10px 8px 14px;
+  font-size: 13px; font-weight: 600;
   background: transparent;
-  border: 1px solid transparent;
-  border-radius: 6px;
+  border: none;
+  border-radius: 9px;
   color: var(--text-2);
   cursor: pointer;
   font-family: inherit;
   text-align: left;
   letter-spacing: -0.01em;
-  transition: background 0.12s, color 0.12s, border-color 0.12s;
+  transition: background var(--dur-1) var(--ease), color var(--dur-1) var(--ease);
+  margin-bottom: 1px;
 }
 .navItem:hover {
   background: var(--bg-hover);
@@ -569,8 +599,16 @@
 .navItem.active {
   background: var(--brand-soft);
   color: var(--brand);
-  border-color: var(--border-brand);
-  font-weight: 600;
+}
+/* Barra activa 3px con degradado de marca (spec: uno de los 4 usos
+   permitidos de --brand-grad), como el sidebar del panel. */
+.navItem.active::before {
+  content: "";
+  position: absolute;
+  left: 0; top: 8px; bottom: 8px;
+  width: 3px;
+  border-radius: 3px;
+  background: var(--brand-grad);
 }
 .navItemDisabled,
 .navItemDisabled:hover {
@@ -578,7 +616,6 @@
   cursor: not-allowed;
   color: var(--text-3);
   background: transparent;
-  border-color: transparent;
 }
 /* Item del quick-nav atenuado: módulo activo en la clínica pero sin
  * registros del paciente. Sigue siendo clickable — el usuario entra al
@@ -590,14 +627,11 @@
 }
 .navItemDimmed:hover { opacity: 1; }
 .navItem.active.navItemDimmed { opacity: 1; }
-/* Subhead "ESPECIALIDADES" dentro del bloque Clínico — más sutil que el
- * label de sección principal, con un tono brand para diferenciarlo. */
+/* Subhead "ESPECIALIDADES" dentro del bloque Clínico — en el prototipo
+ * ficha-zip es un label de sección igual que los principales. */
 .navSubhead {
-  margin-top: 8px;
-  color: var(--brand);
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  opacity: 0.85;
+  margin-top: 6px;
+  color: var(--text-3);
 }
 .navItem svg { color: inherit; flex-shrink: 0; }
 .navItemLabel {
@@ -606,21 +640,19 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
+/* Contador — texto plano a la derecha (prototipo), ya no badge con fondo. */
 .navItemCount {
-  display: inline-grid; place-items: center;
-  min-width: 18px; height: 16px;
-  padding: 0 5px;
-  font-size: 9px; font-weight: 700;
-  font-family: var(--font-mono, ui-monospace, monospace);
-  border-radius: 8px;
-  background: var(--bg-elev-2);
+  margin-left: auto;
+  font-size: 11px; font-weight: 700;
+  font-variant-numeric: tabular-nums;
   color: var(--text-3);
   letter-spacing: 0.02em;
+  flex-shrink: 0;
 }
-.tone-danger { background: var(--danger-soft); color: var(--danger); }
-.tone-warning { background: var(--warning-soft); color: var(--warning); }
-.tone-success { background: var(--success-soft); color: var(--success); }
-.tone-brand { background: var(--brand-soft); color: var(--brand); }
+.tone-danger { color: var(--danger-strong); }
+.tone-warning { color: var(--warning-strong); }
+.tone-success { color: var(--success-strong); }
+.tone-brand { color: var(--brand); }
 /* Icono "+" en items dimmed — affordance visual de "agregar primer
  * registro". Reemplaza al counter cuando count === 0 (mutuamente
  * exclusivos vía render). */
@@ -640,23 +672,26 @@
 .sideCard {
   background: var(--bg-elev);
   border: 1px solid var(--border-soft);
-  border-radius: 12px;
-  padding: 12px 14px;
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-1);
+  padding: 16px 18px;
   font-family: var(--font-sans, system-ui, sans-serif);
 }
-.sideCardHead { margin-bottom: 8px; }
+/* Título de card del rail — prototipo ficha-zip: 13.5/750 en text-1 con
+   icono en brand (ya no eyebrow uppercase). */
+.sideCardHead { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
 .sideCardTitle {
-  display: inline-flex; align-items: center; gap: 6px;
-  font-size: 11px; font-weight: 700;
-  color: var(--text-2);
-  letter-spacing: 0.04em; text-transform: uppercase;
+  display: inline-flex; align-items: center; gap: 8px;
+  font-size: 13.5px; font-weight: 700;
+  color: var(--text-1);
+  letter-spacing: -0.01em;
   margin: 0;
 }
-.sideCardTitle svg { color: var(--text-3); }
+.sideCardTitle svg { color: var(--brand); }
 
 .sideCardEmpty {
-  font-size: 12px; color: var(--text-3);
-  padding: 6px 0;
+  font-size: 12.5px; color: var(--text-3);
+  padding: 2px 0;
 }
 .sideCardLink {
   background: none; border: none;
@@ -669,118 +704,125 @@
 }
 .sideCardLink:hover { text-decoration: underline; }
 
-/* Próxima cita date block */
+/* Próxima cita — tile de fecha 48px + info al lado (prototipo ficha-zip). */
+.apptRow { display: flex; align-items: center; gap: 12px; }
 .dateBlock {
-  display: inline-flex; flex-direction: column; align-items: center;
-  background: var(--brand-softer);
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  width: 48px; height: 48px;
+  background: var(--brand-soft);
   border: 1px solid var(--border-brand);
-  border-radius: 10px;
-  padding: 8px 14px;
-  margin-bottom: 6px;
+  border-radius: 12px;
+  flex-shrink: 0;
 }
 .dateBlockDay {
-  font-family: var(--font-mono, ui-monospace, monospace);
-  font-size: 22px; font-weight: 700;
+  font-size: 16px; font-weight: 800;
+  font-variant-numeric: tabular-nums;
   color: var(--brand);
   letter-spacing: -0.02em;
-  line-height: 1;
+  line-height: 1.1;
 }
 .dateBlockMonth {
-  font-size: 9px; font-weight: 700;
+  font-size: 9.5px; font-weight: 700;
   color: var(--brand);
-  letter-spacing: 0.08em;
-  margin-top: 2px;
+  opacity: 0.75;
+  letter-spacing: 0.05em;
 }
+.apptInfo { min-width: 0; }
+.dateBlockReason { font-size: 13.5px; color: var(--text-1); font-weight: 700; }
 .dateBlockMeta {
   display: flex; align-items: center; gap: 4px;
-  font-size: 12px; color: var(--text-1);
-  font-family: var(--font-mono, ui-monospace, monospace);
+  flex-wrap: wrap;
+  font-size: 12px; color: var(--text-3);
   font-variant-numeric: tabular-nums;
+  margin-top: 2px;
 }
-.dateBlockMeta strong { color: var(--text-1); font-weight: 700; }
+.dateBlockMeta strong { color: var(--text-3); font-weight: 600; }
 .dateBlockMeta span { color: var(--text-3); font-weight: 500; }
-.dateBlockReason { font-size: 12px; color: var(--text-1); margin-top: 4px; font-weight: 500; }
-.dateBlockSub { font-size: 10px; color: var(--text-3); margin-top: 1px; }
+.dateBlockSub { font-size: 12px; color: var(--text-3); margin-top: 1px; }
 
 .sideCardActions {
-  display: flex; gap: 6px; margin-top: 10px;
+  display: flex; gap: 8px; margin-top: 12px;
 }
 
-/* Side buttons */
+/* Side buttons — outline transparente 32px (prototipo). */
 .sideBtn {
-  display: inline-flex; align-items: center; justify-content: center; gap: 4px;
-  padding: 6px 10px;
-  font-size: 11px; font-weight: 500;
-  background: var(--bg-elev);
-  border: 1px solid var(--border-soft);
-  border-radius: 6px;
-  color: var(--text-1);
+  display: inline-flex; align-items: center; justify-content: center; gap: 5px;
+  height: 32px;
+  padding: 0 10px;
+  font-size: 12px; font-weight: 600;
+  background: transparent;
+  border: 1px solid var(--border-strong);
+  border-radius: 9px;
+  color: var(--text-2);
   cursor: pointer;
   font-family: inherit;
   flex: 1;
-  transition: background 0.12s, border-color 0.12s, color 0.12s;
+  transition: background var(--dur-1) var(--ease), border-color var(--dur-1) var(--ease),
+    color var(--dur-1) var(--ease);
 }
 .sideBtn:hover:not(:disabled) {
-  border-color: var(--border-brand);
   background: var(--bg-hover);
+  color: var(--text-1);
 }
+.sideBtn:focus-visible { outline: none; box-shadow: var(--ring); }
 .sideBtn:disabled { opacity: 0.55; cursor: not-allowed; }
 .sideBtn.primary {
   background: var(--brand); color: #fff;
   border-color: var(--brand);
-  font-weight: 600;
+  height: 36px;
+  border-radius: 10px;
+  font-size: 12.5px; font-weight: 700;
 }
-.sideBtn.primary:hover:not(:disabled) { background: var(--violet-700); }
+.sideBtn.primary:hover:not(:disabled) { background: var(--violet-700); color: #fff; }
 .sideBtn.danger {
   color: var(--danger);
   border-color: color-mix(in srgb, var(--danger) 25%, transparent);
 }
-.sideBtn.danger:hover:not(:disabled) { background: var(--danger-soft); }
-.sideBtn.fullWidth { width: 100%; margin-top: 10px; }
+.sideBtn.danger:hover:not(:disabled) { background: var(--danger-soft); color: var(--danger); }
+.sideBtn.fullWidth { width: 100%; margin-top: 12px; }
 
-/* Estado de cuenta rows */
+/* Estado de cuenta — filas limpias sin divisores (prototipo). */
 .financeRow {
   display: flex; justify-content: space-between;
-  padding: 5px 0;
-  font-size: 12px; color: var(--text-2);
-  border-bottom: 1px solid var(--border-soft);
+  padding: 4px 0;
+  font-size: 12.5px; color: var(--text-2);
 }
-.financeRow:last-of-type { border-bottom: none; }
-.financeRow strong { color: var(--text-1); font-weight: 700; font-family: var(--font-mono, ui-monospace, monospace); }
-.financeRow.success strong { color: var(--success); }
-.financeRow.danger strong  { color: var(--danger); }
+.financeRow strong { color: var(--text-1); font-weight: 700; font-variant-numeric: tabular-nums; }
+.financeRow.success strong { color: var(--success-strong); }
+.financeRow.danger strong  { color: var(--danger); font-weight: 750; }
 .financeBar {
-  height: 6px;
+  flex: 1;
+  height: 8px;
   background: var(--bg-elev-2);
-  border-radius: 3px;
+  border-radius: 999px;
   overflow: hidden;
-  margin-top: 6px;
 }
 .financeBarFill {
-  height: 100%; background: var(--success); border-radius: 3px;
+  height: 100%; background: var(--success); border-radius: 999px;
+}
+.financeBarRow {
+  display: flex; align-items: center; gap: 10px;
+  margin-top: 12px;
 }
 .financeBarLabel {
-  font-size: 10px; color: var(--text-3);
-  text-align: right; margin-top: 4px;
-  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 11px; font-weight: 700;
+  color: var(--text-3);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
 }
 
-/* AI card */
-.aiCard {
-  background: linear-gradient(135deg,
-    color-mix(in srgb, var(--brand) 6%, var(--bg-elev)) 0%,
-    var(--bg-elev) 100%);
-  border-color: var(--border-brand);
-}
+/* Reglas automáticas — card normal en el prototipo (sin degradado). */
+.aiCard { background: var(--bg-elev); }
 .aiText {
-  font-size: 12px; color: var(--text-1);
+  font-size: 12px; color: var(--text-2);
   line-height: 1.5;
-  margin: 4px 0 4px;
+  margin: 0;
+  text-wrap: pretty;
 }
 
 .waEmpty {
-  font-size: 12px; color: var(--text-3);
-  padding: 6px 0;
+  font-size: 12.5px; color: var(--text-3);
+  padding: 2px 0;
 }
 
 /* ─────── CONSULT BAR (sticky) ─────── */
