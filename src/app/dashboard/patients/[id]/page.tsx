@@ -8,7 +8,6 @@ import { notFound } from "next/navigation";
 import { headers } from "next/headers";
 import { logAudit } from "@/lib/audit";
 import { PatientDetailClient } from "./patient-detail-client";
-import { PatientContextPanel } from "@/components/dashboard/patient-context";
 import { ErrorBoundary } from "@/components/ui/error-boundary";
 import { dateISOInTz, timeHHMMInTz, durationMinutes } from "@/lib/agenda/legacy-helpers";
 import { canSeePediatrics, PEDIATRICS_MODULE_KEY } from "@/lib/pediatrics/permissions";
@@ -217,9 +216,6 @@ export default async function PatientDetailPage({ params }: { params: { id: stri
   // ante mutaciones (cobrar/cancelar/editar/reembolsar) sin depender de un
   // round-trip al server component.
 
-  const lastVisit  = patient.appointments[0]?.startsAt?.toISOString() ?? null;
-  const visitCount = patient.appointments.filter(a => a.status === "COMPLETED").length;
-
   // Serialize + override legacy strings derivados de startsAt/endsAt en clinic tz.
   const serializedAppts = patient.appointments.map(a => ({
     ...a,
@@ -257,27 +253,9 @@ export default async function PatientDetailPage({ params }: { params: { id: stri
 
   return (
     <div>
-      <PatientContextPanel patient={{
-        firstName:          patient.firstName,
-        lastName:           patient.lastName,
-        patientNumber:      patient.patientNumber,
-        bloodType:          patient.bloodType,
-        dob:                patient.dob?.toISOString() ?? null,
-        gender:             patient.gender,
-        allergies:          patient.allergies,
-        chronicConditions:  patient.chronicConditions,
-        currentMedications: patient.currentMedications,
-        lastVisit,
-        visitCount,
-      }}
-      riskFlags={questionnaireRiskFlags}
-      emergencyContact={{
-        name:     patient.emergencyContactName,
-        phone:    patient.emergencyContactPhone,
-        relation: patient.emergencyContactRelation,
-      }}
-      />
-
+      {/* Prototipo ficha-zip: el PatientContextPanel se consolidó en la
+          cabecera única (HeroCard) — alergias/medicamentos/crónicos viajan en
+          `patient` y las banderas de riesgo como prop dedicada. */}
       <ErrorBoundary fallbackTitle={t("patients.page.loadError")}>
         <PatientDetailClient
           patient={patient as any}
@@ -306,6 +284,7 @@ export default async function PatientDetailPage({ params }: { params: { id: stri
           activityCounts={activityCounts}
           questionnaireStatus={questionnaireStatus}
           questionnaireFilledAt={questionnaireFilledAt}
+          questionnaireRiskFlags={questionnaireRiskFlags}
           creditBalance={creditBalance}
         />
       </ErrorBoundary>

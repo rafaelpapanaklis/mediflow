@@ -4,7 +4,7 @@ import { useCallback, useState, useEffect, useMemo } from "react";
 import { useT } from "@/i18n/i18n-provider";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ArrowLeft, Phone, Mail, Calendar, AlertTriangle, Check, Plus, Printer, Edit, Download, Pill, HeartPulse, Play, Trash2, X as XIcon, XCircle } from "lucide-react";
+import { ArrowLeft, Phone, Mail, Calendar, AlertTriangle, Check, Plus, Printer, Edit, Download, Pill, HeartPulse, Play, Trash2, X as XIcon, XCircle, ClipboardCheck, History, CreditCard, Droplet, Shield, PenLine } from "lucide-react";
 import { formatCurrency, formatDate, getInitials, avatarColor } from "@/lib/utils";
 import { ageFromDob, fmtMXN } from "@/lib/format";
 import { OdontogramV2 } from "@/components/dashboard/odontogram-v2/App";
@@ -308,6 +308,9 @@ interface Props {
   /** Estado del cuestionario de salud para el aviso (anamnesis WS1-T2). */
   questionnaireStatus?: "none" | "stale" | "ok";
   questionnaireFilledAt?: string | null;
+  /** Banderas de riesgo del cuestionario vigente — pills rojas de la
+   *  cabecera única (antes vivían en el PatientContextPanel). */
+  questionnaireRiskFlags?: string[];
   /** Saldo a favor (crédito) del paciente = SUM(patient_credits.amount). 0 si no tiene. */
   creditBalance?: number;
 }
@@ -326,6 +329,7 @@ export function PatientDetailClient({
   orthoRedesignBundle,
   activityCounts,
   questionnaireStatus,
+  questionnaireRiskFlags = [],
   creditBalance = 0,
 }: Props) {
   const t = useT();
@@ -379,21 +383,28 @@ export function PatientDetailClient({
   const [expandedConsultas, setExpandedConsultas] = useState<Set<string>>(new Set());
 
   // Aviso de cuestionario de salud faltante/vencido (anamnesis WS1-T2).
+  // Look del prototipo ficha-zip: card CTA punteada con chip redondo brand,
+  // título + detalle y botón violeta — mismo texto y handler de siempre.
   const showQuestionnaireWarning = questionnaireStatus === "none" || questionnaireStatus === "stale";
   const questionnaireBanner = (
-    <div className="flex items-center justify-between gap-3 flex-wrap rounded-[var(--radius-lg)] border border-[var(--warning-border-strong)] bg-[var(--warning-soft)] px-4 py-3">
-      <div className="flex items-center gap-2 text-sm text-[var(--warning-strong)]">
-        <AlertTriangle className="w-4 h-4 flex-shrink-0" strokeWidth={1.75} aria-hidden />
-        <span>
+    <div className="flex items-center gap-3.5 flex-wrap rounded-[var(--radius-lg)] border-[1.5px] border-dashed border-[var(--border-strong)] bg-[var(--bg-elev-2)] px-[18px] py-3.5">
+      <span className="w-10 h-10 rounded-full bg-[var(--brand-soft)] text-[var(--brand)] grid place-items-center flex-shrink-0">
+        <ClipboardCheck size={18} strokeWidth={1.75} aria-hidden />
+      </span>
+      <div className="flex-1 min-w-[200px]">
+        <div className="text-[13.5px] font-bold text-[var(--text-1)]">
+          {questionnaireStatus === "stale" ? "Cuestionario de salud vencido" : "Sin cuestionario de salud"}
+        </div>
+        <div className="text-xs text-[var(--text-3)] mt-0.5 [text-wrap:pretty]">
           {questionnaireStatus === "stale"
             ? "El cuestionario de salud tiene más de 12 meses. Conviene actualizarlo."
             : "Este paciente aún no tiene cuestionario de salud."}
-        </span>
+        </div>
       </div>
       <button
         type="button"
         onClick={() => setTab("cuestionario")}
-        className="text-xs font-bold px-3.5 py-2.5 rounded-lg bg-[var(--brand)] text-white hover:bg-[var(--violet-700)] focus-visible:outline-none focus-visible:[box-shadow:var(--ring)] active:scale-[.98] transition duration-150 flex-shrink-0"
+        className="h-8 px-3.5 text-xs font-bold rounded-[9px] bg-[var(--brand)] text-white hover:bg-[var(--violet-700)] focus-visible:outline-none focus-visible:[box-shadow:var(--ring)] active:scale-[.98] transition duration-150 flex-shrink-0"
       >
         Llenar cuestionario
       </button>
@@ -1015,14 +1026,14 @@ export function PatientDetailClient({
       : null;
 
   // El módulo Ortodoncia rediseño usa max-width 1920px (mockup verbatim:
-  // viewport 1920+ aprovechado con sub-sidebar + sections + right rail).
-  // Otros tabs usan 1760 para aprovechar monitores grandes sin estirar laptops
-  // (que no llegan a ese ancho, así que ahí no cambia nada).
+  // viewport 1920+ aprovechado con sub-sidebar + sections + right rail) y
+  // Odontograma 1760 (32 dientes en fila). El resto usa 1560 — marco centrado
+  // más contenido, proporción del prototipo ficha-zip (nav 246 + main + rail 336).
   const isOrthoTab = tab === "ortodoncia" && Boolean(orthoRedesignVM);
-  const outerMaxWidth = isOrthoTab ? 1920 : 1760;
+  const outerMaxWidth = isOrthoTab ? 1920 : tab === "odontograma" ? 1760 : 1560;
 
   return (
-    <div style={{ padding: "20px 28px 28px", maxWidth: outerMaxWidth, margin: "0 auto" }}>
+    <div className={patientDetailStyles.page} style={{ maxWidth: outerMaxWidth }}>
       <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, color: "var(--text-3)", marginBottom: 12 }}>
         <Link href="/dashboard/patients" className="inline-flex items-center gap-1 rounded-md text-[var(--text-3)] no-underline transition-colors duration-150 hover:text-[var(--text-1)] focus-visible:outline-none focus-visible:[box-shadow:var(--ring)]">
           <ArrowLeft size={12} strokeWidth={1.75} aria-hidden /> {t("patients.breadcrumb.patients")}
@@ -1058,7 +1069,11 @@ export function PatientDetailClient({
             email: patient.email ?? null,
             bloodType: patient.bloodType ?? null,
             status: patient.status ?? "ACTIVE",
+            allergies: patient.allergies ?? [],
+            currentMedications: patient.currentMedications ?? [],
+            chronicConditions: patient.chronicConditions ?? [],
           }}
+          riskFlags={questionnaireRiskFlags}
           nextAppointment={nextAppt ? {
             id: nextAppt.id,
             date: nextAppt.date,
@@ -1180,6 +1195,7 @@ export function PatientDetailClient({
               const isActive = tab === tabItem.id;
               const count = tabCounts[tabItem.id];
               const isDisabled = tabItem.disabled === true;
+              const TabIcon = tabItem.icon;
               return (
                 <button
                   key={tabItem.id}
@@ -1196,6 +1212,7 @@ export function PatientDetailClient({
                   } ${isDisabled ? patientDetailStyles.mobileTabBtnDisabled : ""}`}
                   onClick={() => { if (!isDisabled) setTab(tabItem.id); }}
                 >
+                  <TabIcon size={14} strokeWidth={1.75} aria-hidden />
                   {t(tabItem.labelKey)}
                   {count !== undefined && count > 0 && (
                     <span className={patientDetailStyles.mobileTabCount}>{count}</span>
@@ -1205,16 +1222,28 @@ export function PatientDetailClient({
             })}
           </div>
 
-          <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
 
           {/* ===== TAB: RESUMEN ===== */}
+          {/* Look del prototipo ficha-zip: pila de una columna (el rail vive en
+              SideCards), cards con header de chip de icono brand-soft + título
+              15/750 + link violeta a la derecha. */}
           {tab === "resumen" && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {showQuestionnaireWarning && <div className="md:col-span-2">{questionnaireBanner}</div>}
-              <div className="bg-card border border-border rounded-[var(--radius-lg)] shadow-[var(--shadow-1)] p-4">
-                <div className="flex items-center gap-2 mb-3">
-                  <div className="w-2 h-2 rounded-full bg-[var(--brand)]" />
-                  <span className="text-[15px] font-semibold text-[var(--text-1)]">{t("patients.summary.clinicalSummary")}</span>
+            <div className="flex flex-col gap-5">
+              {showQuestionnaireWarning && questionnaireBanner}
+              <div className="bg-card border border-border rounded-[var(--radius-lg)] shadow-[var(--shadow-1)] p-5">
+                <div className="flex items-center gap-2.5 mb-3.5">
+                  <span className="w-7 h-7 rounded-lg bg-[var(--brand-soft)] text-[var(--brand)] grid place-items-center flex-shrink-0">
+                    <History size={15} strokeWidth={1.75} aria-hidden />
+                  </span>
+                  <span className="text-[15px] font-bold tracking-[-0.01em] text-[var(--text-1)]">{t("patients.summary.clinicalSummary")}</span>
+                  <button
+                    type="button"
+                    onClick={() => setTab("historia")}
+                    className="ml-auto text-[12.5px] font-semibold text-[var(--brand)] px-2 py-1 rounded-lg hover:bg-[var(--brand-soft)] focus-visible:outline-none focus-visible:[box-shadow:var(--ring)] transition duration-150"
+                  >
+                    {t("patients.summary.viewHistory")} →
+                  </button>
                 </div>
                 <HistoriaTimeline
                   patientId={patient.id}
@@ -1267,90 +1296,119 @@ export function PatientDetailClient({
                 )}
               </div>
 
-              <div className="bg-card border border-border rounded-[var(--radius-lg)] shadow-[var(--shadow-1)] p-4">
-                <div className="flex items-center gap-2 mb-3">
-                  <div className="w-2 h-2 rounded-full bg-[var(--success)]" />
-                  <span className="text-[15px] font-semibold text-[var(--text-1)]">{t("patients.summary.medicalHistory")}</span>
+              <div className="bg-card border border-border rounded-[var(--radius-lg)] shadow-[var(--shadow-1)] p-5">
+                <div className="flex items-center gap-2.5 mb-3.5">
+                  <span className="w-7 h-7 rounded-lg bg-[var(--brand-soft)] text-[var(--brand)] grid place-items-center flex-shrink-0">
+                    <HeartPulse size={15} strokeWidth={1.75} aria-hidden />
+                  </span>
+                  <span className="text-[15px] font-bold tracking-[-0.01em] text-[var(--text-1)]">{t("patients.summary.medicalHistory")}</span>
                 </div>
                 {(patient.allergies?.length || patient.currentMedications?.length || patient.chronicConditions?.length) ? (
-                  <div className="flex flex-wrap gap-1.5 mb-3">
+                  <div className="flex flex-wrap gap-1.5 mb-3.5">
                     {patient.allergies?.map((a: string) => (
-                      <span key={`a-${a}`} className="inline-flex items-center gap-1 rounded-full bg-[var(--danger-soft)] px-2 py-0.5 text-[11px] font-semibold text-[var(--danger-strong)]">
+                      <span key={`a-${a}`} className="inline-flex items-center gap-1 rounded-full bg-[var(--danger-soft)] px-2.5 h-[23px] text-[11.5px] font-bold text-[var(--danger-strong)]">
                         <AlertTriangle size={11} strokeWidth={1.75} aria-hidden /> {a}
                       </span>
                     ))}
                     {patient.currentMedications?.map((m: string) => (
-                      <span key={`m-${m}`} className="inline-flex items-center gap-1 rounded-full bg-[var(--info-soft)] px-2 py-0.5 text-[11px] font-semibold text-[var(--info-strong)]">
+                      <span key={`m-${m}`} className="inline-flex items-center gap-1 rounded-full bg-[var(--info-soft)] px-2.5 h-[23px] text-[11.5px] font-bold text-[var(--info-strong)]">
                         <Pill size={11} strokeWidth={1.75} aria-hidden /> {m}
                       </span>
                     ))}
                     {patient.chronicConditions?.map((c: string) => (
-                      <span key={`c-${c}`} className="inline-flex items-center gap-1 rounded-full bg-[var(--warning-soft)] px-2 py-0.5 text-[11px] font-semibold text-[var(--warning-strong)]">
+                      <span key={`c-${c}`} className="inline-flex items-center gap-1 rounded-full bg-[var(--warning-soft)] px-2.5 h-[23px] text-[11.5px] font-bold text-[var(--warning-strong)]">
                         <HeartPulse size={11} strokeWidth={1.75} aria-hidden /> {c}
                       </span>
                     ))}
                   </div>
                 ) : null}
-                <div className="space-y-1.5 text-xs">
+                {/* Grid de datos con chip de icono coloreado (prototipo ficha-zip). */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-5 gap-y-3.5">
                   {[
-                    { label: t("patients.summary.bloodType"), val: patient.bloodType || t("patients.summary.notRegistered") },
-                    { label: t("patients.summary.insurance"),  val: patient.insuranceProvider || t("patients.summary.noInsurance") },
-                    { label: t("common.notes"),                val: patient.notes?.slice(0, 60) || "—" },
-                    { label: "Contacto de emergencia",         val: patient.emergencyContactName ? [patient.emergencyContactName, patient.emergencyContactPhone, patient.emergencyContactRelation].filter(Boolean).join(" · ") : "—" },
-                  ].map(r => (
-                    <div key={r.label} className="flex justify-between items-start py-1.5 border-b border-[var(--border-soft)]">
-                      <span className="text-muted-foreground">{r.label}</span>
-                      <span className="font-semibold text-right max-w-[55%]">{r.val}</span>
-                    </div>
-                  ))}
+                    { label: t("patients.summary.bloodType"), val: patient.bloodType || t("patients.summary.notRegistered"), icon: Droplet,  chip: "bg-[var(--danger-soft)] text-[var(--danger-strong)]" },
+                    { label: t("patients.summary.insurance"),  val: patient.insuranceProvider || t("patients.summary.noInsurance"), icon: Shield, chip: "bg-[var(--info-soft)] text-[var(--info-strong)]" },
+                    { label: "Contacto de emergencia",         val: patient.emergencyContactName ? [patient.emergencyContactName, patient.emergencyContactPhone, patient.emergencyContactRelation].filter(Boolean).join(" · ") : "—", icon: Phone, chip: "bg-[var(--success-soft)] text-[var(--success-strong)]" },
+                    { label: t("common.notes"),                val: patient.notes?.slice(0, 60) || "—", icon: PenLine, chip: "bg-[var(--warning-soft)] text-[var(--warning-strong)]" },
+                  ].map(r => {
+                    const RowIcon = r.icon;
+                    return (
+                      <div key={r.label} className="flex items-start gap-2.5 min-w-0">
+                        <span className={`w-[30px] h-[30px] rounded-[9px] grid place-items-center flex-shrink-0 ${r.chip}`}>
+                          <RowIcon size={14} strokeWidth={1.75} aria-hidden />
+                        </span>
+                        <div className="min-w-0">
+                          <div className="text-[11px] font-bold tracking-[0.04em] uppercase text-[var(--text-3)]">{r.label}</div>
+                          <div className="text-[13.5px] font-semibold text-[var(--text-1)] mt-0.5 [text-wrap:pretty]">{r.val}</div>
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
 
               {/* Próxima cita */}
               {nextAppt && (
-                <div className="bg-card border border-border rounded-[var(--radius-lg)] shadow-[var(--shadow-1)] p-4">
-                  <div className="flex items-center gap-2 mb-3">
-                    <div className="w-2 h-2 rounded-full bg-[var(--brand)]" />
-                    <span className="text-[15px] font-semibold text-[var(--text-1)]">{t("patients.summary.nextAppointment")}</span>
+                <div className="bg-card border border-border rounded-[var(--radius-lg)] shadow-[var(--shadow-1)] p-5">
+                  <div className="flex items-center gap-2.5 mb-3.5">
+                    <span className="w-7 h-7 rounded-lg bg-[var(--brand-soft)] text-[var(--brand)] grid place-items-center flex-shrink-0">
+                      <Calendar size={15} strokeWidth={1.75} aria-hidden />
+                    </span>
+                    <span className="text-[15px] font-bold tracking-[-0.01em] text-[var(--text-1)]">{t("patients.summary.nextAppointment")}</span>
                   </div>
-                  <div className="bg-[var(--brand-softer)] border border-[var(--border-brand)] rounded-[10px] p-3">
-                    <div className="text-sm font-bold text-[var(--violet-700)] tabular-nums">{formatDate(nextAppt.date)}</div>
-                    <div className="text-xs text-foreground mt-1">{nextAppt.type}</div>
-                    <div className="text-[11px] text-muted-foreground tabular-nums">{nextAppt.startTime}h · {t("patients.doctorPrefix")} {nextAppt.doctor?.firstName} {nextAppt.doctor?.lastName}</div>
+                  <div className="flex items-center gap-3">
+                    <div className="w-12 h-12 rounded-xl bg-[var(--brand-soft)] border border-[var(--border-brand)] flex flex-col items-center justify-center flex-shrink-0">
+                      <span className="text-base font-extrabold text-[var(--brand)] leading-tight tabular-nums">{new Date(nextAppt.date + "T00:00:00").getDate()}</span>
+                      <span className="text-[9.5px] font-bold text-[var(--brand)] opacity-75 tracking-[0.05em] uppercase">{new Date(nextAppt.date + "T00:00:00").toLocaleDateString("es-MX", { month: "short" }).replace(".", "")}</span>
+                    </div>
+                    <div className="min-w-0">
+                      <div className="text-[13.5px] font-bold text-[var(--text-1)]">{nextAppt.type}</div>
+                      <div className="text-xs text-[var(--text-3)] mt-0.5 tabular-nums">{nextAppt.startTime}h · {t("patients.doctorPrefix")} {nextAppt.doctor?.firstName} {nextAppt.doctor?.lastName}</div>
+                    </div>
                   </div>
                 </div>
               )}
 
               {/* Finanzas resumen */}
-              <div className="bg-card border border-border rounded-[var(--radius-lg)] shadow-[var(--shadow-1)] p-4">
-                <div className="flex items-center gap-2 mb-3">
-                  <div className="w-2 h-2 rounded-full bg-[var(--warning)]" />
-                  <span className="text-[15px] font-semibold text-[var(--text-1)]">{t("patients.summary.finance")}</span>
+              <div className="bg-card border border-border rounded-[var(--radius-lg)] shadow-[var(--shadow-1)] p-5">
+                <div className="flex items-center gap-2.5 mb-3.5">
+                  <span className="w-7 h-7 rounded-lg bg-[var(--brand-soft)] text-[var(--brand)] grid place-items-center flex-shrink-0">
+                    <CreditCard size={15} strokeWidth={1.75} aria-hidden />
+                  </span>
+                  <span className="text-[15px] font-bold tracking-[-0.01em] text-[var(--text-1)]">{t("patients.summary.finance")}</span>
+                  <button
+                    type="button"
+                    onClick={() => setTab("facturacion")}
+                    className="ml-auto text-[12.5px] font-semibold text-[var(--brand)] px-2 py-1 rounded-lg hover:bg-[var(--brand-soft)] focus-visible:outline-none focus-visible:[box-shadow:var(--ring)] transition duration-150"
+                  >
+                    {t("patients.summary.viewBilling")} →
+                  </button>
                 </div>
-                <div className="space-y-1.5 text-xs mb-3">
-                  <div className="flex justify-between py-1.5 border-b border-[var(--border-soft)]">
-                    <span className="text-muted-foreground">{t("patients.summary.totalPlan")}</span>
-                    <span className="font-bold tabular-nums">{formatCurrency(totalPlan)}</span>
+                <div className="flex flex-col gap-2 text-[12.5px] mb-3">
+                  <div className="flex justify-between">
+                    <span className="text-[var(--text-2)]">{t("patients.summary.totalPlan")}</span>
+                    <span className="font-bold tabular-nums text-[var(--text-1)]">{formatCurrency(totalPlan)}</span>
                   </div>
-                  <div className="flex justify-between py-1.5 border-b border-[var(--border-soft)]">
-                    <span className="text-muted-foreground">{t("patients.summary.paid")}</span>
+                  <div className="flex justify-between">
+                    <span className="text-[var(--text-2)]">{t("patients.summary.paid")}</span>
                     <span className="font-bold tabular-nums text-[var(--success-strong)]">{formatCurrency(totalPaid)}</span>
                   </div>
-                  <div className="flex justify-between py-1.5">
-                    <span className="text-muted-foreground">{t("patients.summary.pending")}</span>
+                  <div className="flex justify-between">
+                    <span className="text-[var(--text-2)]">{t("patients.summary.pending")}</span>
                     <span className="font-bold tabular-nums text-[var(--danger)]">{formatCurrency(totalBalance)}</span>
                   </div>
                   {creditBalance > 0 && (
-                    <div className="flex justify-between py-1.5 border-t border-[var(--border-soft)]">
-                      <span className="text-muted-foreground">{t("patients.summary.credit")}</span>
+                    <div className="flex justify-between">
+                      <span className="text-[var(--text-2)]">{t("patients.summary.credit")}</span>
                       <span className="font-bold tabular-nums text-[var(--success-strong)]">{formatCurrency(creditBalance)}</span>
                     </div>
                   )}
                 </div>
-                <div className="h-1.5 bg-muted rounded-full overflow-hidden">
-                  <div className="h-full bg-[var(--success)] rounded-full transition-all" style={{ width: `${pctPaid}%` }} />
+                <div className="flex items-center gap-2.5">
+                  <div className="flex-1 h-2 bg-[var(--bg-elev-2)] rounded-full overflow-hidden">
+                    <div className="h-full bg-[var(--success)] rounded-full transition-all" style={{ width: `${pctPaid}%` }} />
+                  </div>
+                  <span className="text-[11px] font-bold text-[var(--text-3)] whitespace-nowrap tabular-nums">{t("patients.summary.pctCovered", { pct: pctPaid })}</span>
                 </div>
-                <div className="text-[11px] text-muted-foreground text-right mt-1 tabular-nums">{t("patients.summary.pctCovered", { pct: pctPaid })}</div>
               </div>
             </div>
           )}
