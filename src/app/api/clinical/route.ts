@@ -6,6 +6,7 @@ import { revalidatePath } from "next/cache";
 import { readActiveClinicCookie } from "@/lib/active-clinic";
 import { logMutation } from "@/lib/audit";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
+import { getVisiblePatientClinicIds, clinicScopeFilter } from "@/lib/branches";
 import { round2 } from "@/lib/quotes/compute";
 import {
   EMPTY_NOTE_ERROR,
@@ -50,8 +51,12 @@ export async function GET(req: NextRequest) {
   if (denied) return denied;
   const patientId = req.nextUrl.searchParams.get("patientId");
   if (!patientId) return NextResponse.json({ error: "patientId required" }, { status: 400 });
+  // MULTI-CLÍNICA · FASE 2 — consultas/expediente legibles desde una sede
+  // vinculada. Sólo LECTURA: el POST de más abajo sigue creando y validando
+  // contra dbUser.clinicId (una consulta nace siempre en la sede activa).
+  const visibleClinicIds = await getVisiblePatientClinicIds(dbUser.clinicId);
   const records = await prisma.medicalRecord.findMany({
-    where: { clinicId: dbUser.clinicId, patientId },
+    where: { clinicId: clinicScopeFilter(visibleClinicIds), patientId },
     include: { doctor: { select: { id: true, firstName: true, lastName: true } } },
     orderBy: { visitDate: "desc" },
   });

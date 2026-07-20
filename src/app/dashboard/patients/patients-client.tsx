@@ -37,6 +37,7 @@ import {
   ChevronRight,
   ChevronsLeft,
   ChevronsRight,
+  Building2,
   type LucideIcon,
 } from "lucide-react";
 import toast from "react-hot-toast";
@@ -70,8 +71,50 @@ interface PatientRow {
   assignedDoctor: { id: string; firstName: string; lastName: string; color: string | null } | null;
   source: string | null;
   lifecycleStage: string | null;
+  /**
+   * MULTI-CLÍNICA · FASE 2 — nombre de la sede de ORIGEN cuando el paciente
+   * viene prestado de otra sucursal vinculada. null para los propios. Lo
+   * resuelve el server (/api/patients?v=2); el cliente sólo lo pinta.
+   */
+  originClinicName?: string | null;
   createdAt: string;
 }
+
+/**
+ * MULTI-CLÍNICA · FASE 2 — chip "este paciente es de la sede X".
+ *
+ * Sólo aparece cuando el paciente viene prestado de otra sucursal vinculada,
+ * para que el doctor sepa de dónde salió el expediente que está viendo.
+ * Estilo alineado con el chip "Prospecto" de la vista grid; responsive por
+ * `maxWidth: 100%` + ellipsis (los nombres de sede pueden ser largos).
+ */
+function BranchOriginBadge({ name }: { name: string }) {
+  return (
+    <span
+      title={`Paciente de la sede ${name}`}
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 3,
+        marginTop: 3,
+        maxWidth: "100%",
+        fontSize: 10,
+        fontWeight: 700,
+        color: "var(--text-3)",
+        border: "1px solid var(--border-strong)",
+        borderRadius: 6,
+        padding: "1px 6px",
+        lineHeight: 1.5,
+        overflow: "hidden",
+        whiteSpace: "nowrap",
+      }}
+    >
+      <Building2 size={9} style={{ flexShrink: 0 }} aria-hidden />
+      <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>{name}</span>
+    </span>
+  );
+}
+
 interface Stats {
   total: number;
   active: number;
@@ -1194,6 +1237,10 @@ function PatientRowComp({
                 {p.age != null && ` · ${t("patients.row.yearsOld", { age: p.age })}`}
                 {p.gender !== "OTHER" && ` · ${p.gender === "MALE" ? "M" : "F"}`}
               </span>
+              {/* FASE 2 — el paciente vive en otra sede vinculada. Va en su
+                  propia línea (patientInfo apila) para no romper el ellipsis
+                  del nombre en pantallas chicas. */}
+              {p.originClinicName && <BranchOriginBadge name={p.originClinicName} />}
             </span>
           </div>
         </td>
@@ -1373,6 +1420,8 @@ function PatientsGrid({
                   {p.gender !== "OTHER" && ` · ${p.gender === "MALE" ? "M" : "F"}`}
                   {p.source && ` · ${p.source}`}
                 </span>
+                {/* FASE 2 — sede de origen del paciente prestado. */}
+                {p.originClinicName && <BranchOriginBadge name={p.originClinicName} />}
               </div>
               <span
                 className={`${styles.checkbox} ${isSelected ? styles.checkboxChecked : ""}`}

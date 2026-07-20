@@ -5,6 +5,7 @@ import { z } from "zod";
 import { readActiveClinicCookie } from "@/lib/active-clinic";
 import { logAudit, logMutation, extractAuditMeta } from "@/lib/audit";
 import { hasPermission } from "@/lib/auth/permissions";
+import { getVisiblePatientClinicIds, clinicScopeFilter } from "@/lib/branches";
 
 const recordSchema = z.object({
   patientId:     z.string().min(1),
@@ -41,7 +42,11 @@ export async function GET(req: NextRequest) {
   const patientId = searchParams.get("patientId");
   const limit = Math.min(Math.max(parseInt(searchParams.get("limit") ?? "200"), 1), 500);
   const skip  = Math.max(parseInt(searchParams.get("skip") ?? "0"), 0);
-  const where: any = { clinicId: dbUser.clinicId };
+  // MULTI-CLÍNICA · FASE 2 — el expediente se LEE también desde una sede
+  // vinculada. La bitácora NOM-024 de abajo sigue registrándose contra la
+  // clínica que LEE (dbUser.clinicId), que es quien accedió al dato.
+  const visibleClinicIds = await getVisiblePatientClinicIds(dbUser.clinicId);
+  const where: any = { clinicId: clinicScopeFilter(visibleClinicIds) };
   if (patientId) where.patientId = patientId;
   const records = await prisma.medicalRecord.findMany({
     where: { ...where, OR: [{ isPrivate: false }, { isPrivate: true, doctorId: dbUser.id }] },

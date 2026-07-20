@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
 import { readActiveClinicCookie } from "@/lib/active-clinic";
+import { getVisiblePatientClinicIds, clinicScopeFilter } from "@/lib/branches";
 
 /**
  * Resuelve el usuario de la clínica activa a partir de la sesión de Supabase.
@@ -23,13 +24,25 @@ export async function getDbUser() {
   });
 }
 
-/** Verifica que el paciente pertenezca a la clínica (aislamiento multi-tenant). */
+/**
+ * Verifica que el paciente pertenezca a la clínica (aislamiento multi-tenant).
+ *
+ * MULTI-CLÍNICA · FASE 2: con `sharedRead: true` el gate acepta además a los
+ * pacientes de las sedes VINCULADAS. Es OPT-IN y sólo lo pasa la LECTURA del
+ * odontograma (GET /api/odontogram): escribir, sincronizar o resetear el
+ * odontograma de un paciente prestado sigue prohibido, porque esas rutas
+ * llaman sin la opción y siguen exigiendo la sede activa.
+ */
 export async function ensurePatientInClinic(
   patientId: string,
   clinicId: string,
+  opts?: { sharedRead?: boolean },
 ): Promise<boolean> {
+  const clinicFilter = opts?.sharedRead
+    ? clinicScopeFilter(await getVisiblePatientClinicIds(clinicId))
+    : clinicId;
   const p = await prisma.patient.findFirst({
-    where: { id: patientId, clinicId },
+    where: { id: patientId, clinicId: clinicFilter },
     select: { id: true },
   });
   return p !== null;

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { Prisma, PatientStatus, Gender } from "@prisma/client";
 import { getAuthContext, buildPatientWhere } from "@/lib/auth-context";
 import { prisma } from "@/lib/prisma";
+import { getPatientVisibility } from "@/lib/branches";
 import { patientSchema } from "@/lib/validations";
 import { validateCurpRecord } from "@/lib/validators/curp";
 import { logMutation } from "@/lib/audit";
@@ -11,17 +12,32 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
+  // MULTI-CLÍNICA · FASE 2 — la ficha se puede LEER desde una sede vinculada.
+  // Con el flag apagado, clinicIds = [ctx.clinicId] y esto es la query de hoy.
+  const visibility = await getPatientVisibility(ctx.clinicId);
+
   // Use buildPatientWhere so doctors can only see their own patients
   const patient = await prisma.patient.findFirst({
-    where: { ...buildPatientWhere(ctx), id: params.id },
+    where: { ...buildPatientWhere(ctx, {}, visibility.clinicIds), id: params.id },
     include: {
-      appointments: { orderBy: { startsAt: "desc" }, include: { doctor: true } },
+      // Citas y facturas SIEMPRE de la sede activa, aunque el paciente venga
+      // prestado: cada sucursal agenda y cobra por separado. Para un paciente
+      // propio el filtro no cambia nada.
+      appointments: { where: { clinicId: ctx.clinicId }, orderBy: { startsAt: "desc" }, include: { doctor: true } },
+      // El expediente SÍ viaja: es el contenido clínico que se comparte.
       records:      { orderBy: { visitDate: "desc" }, include: { doctor: true } },
-      invoices:     { include: { payments: true } },
+      invoices:     { where: { clinicId: ctx.clinicId }, include: { payments: true } },
     },
   });
   if (!patient) return NextResponse.json({ error: "Paciente no encontrado" }, { status: 404 });
-  return NextResponse.json(patient);
+
+  return NextResponse.json({
+    ...patient,
+    originClinicName:
+      patient.clinicId === ctx.clinicId
+        ? null
+        : visibility.otherClinicNames[patient.clinicId] ?? null,
+  });
 }
 
 export async function PUT(req: NextRequest, { params }: { params: { id: string } }) {
