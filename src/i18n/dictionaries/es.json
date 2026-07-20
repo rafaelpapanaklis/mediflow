@@ -1616,7 +1616,9 @@
       "paid": "Pagado",
       "pending": "Pendiente",
       "credit": "Saldo a favor",
-      "pctCovered": "{pct}% cubierto"
+      "pctCovered": "{pct}% cubierto",
+      "viewHistory": "Ver historia",
+      "viewBilling": "Ver facturación"
     },
     "history": {
       "title": "Historia clínica",
@@ -1985,7 +1987,8 @@
       "copyPortalLink": "Copiar link del portal",
       "generatePatientPortal": "Generar portal paciente",
       "printSummary": "Imprimir resumen",
-      "viewInAgenda": "Ver en agenda"
+      "viewInAgenda": "Ver en agenda",
+      "noAllergies": "Sin alergias"
     },
     "historiaTimeline": {
       "typeSoap": "Notas",

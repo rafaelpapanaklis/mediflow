@@ -1616,7 +1616,9 @@
       "paid": "Paid",
       "pending": "Pending",
       "credit": "Credit balance",
-      "pctCovered": "{pct}% covered"
+      "pctCovered": "{pct}% covered",
+      "viewHistory": "View history",
+      "viewBilling": "View billing"
     },
     "history": {
       "title": "Medical history",
@@ -1985,7 +1987,8 @@
       "copyPortalLink": "Copy portal link",
       "generatePatientPortal": "Generate patient portal",
       "printSummary": "Print summary",
-      "viewInAgenda": "View in agenda"
+      "viewInAgenda": "View in agenda",
+      "noAllergies": "No allergies"
     },
     "historiaTimeline": {
       "typeSoap": "Notes",

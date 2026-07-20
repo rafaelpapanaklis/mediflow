@@ -203,7 +203,7 @@ export function QuickNav({
                     }
                     aria-current={isActive ? "page" : undefined}
                   >
-                    <Icon size={14} aria-hidden />
+                    <Icon size={16} strokeWidth={1.75} aria-hidden />
                     <span className={styles.navItemLabel}>{item.label}</span>
                     {item.count !== undefined && item.count > 0 && (
                       <span

@@ -14,9 +14,14 @@ import {
   Calendar,
   Phone,
   Mail,
+  AlertTriangle,
+  Pill,
+  HeartPulse,
+  Check,
 } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
 import { ageFromDob } from "@/lib/format";
+import { RISK_FLAG_LABELS } from "@/lib/health-questionnaire";
 import { useT } from "@/i18n/i18n-provider";
 import styles from "./patient-detail.module.css";
 
@@ -32,7 +37,13 @@ export interface HeroCardProps {
     email: string | null;
     bloodType: string | null;
     status: string;
+    /** Pills clínicas de la cabecera única (antes PatientContextPanel). */
+    allergies?: string[];
+    currentMedications?: string[];
+    chronicConditions?: string[];
   };
+  /** Banderas de riesgo del cuestionario de salud vigente (pills rojas). */
+  riskFlags?: string[];
   nextAppointment: {
     id: string;
     date: string;
@@ -62,6 +73,7 @@ function patientInitials(first: string, last: string): string {
 
 export function HeroCard({
   patient,
+  riskFlags = [],
   nextAppointment,
   lastVisitDate,
   visitCount,
@@ -83,103 +95,139 @@ export function HeroCard({
   const hasBalance = pendingBalance > 0;
   const hasNextAppt = nextAppointment !== null;
 
+  const allergies = patient.allergies ?? [];
+  const medications = patient.currentMedications ?? [];
+  const chronic = patient.chronicConditions ?? [];
+  // Pills con tope visual: alergias y riesgos completos (seguridad clínica);
+  // medicamentos/crónicos truncados a 2 con "+N" para no desbordar la cabecera.
+  const shownMedications = medications.slice(0, 2);
+  const shownChronic = chronic.slice(0, 2);
+  const hiddenPills = (medications.length - shownMedications.length) + (chronic.length - shownChronic.length);
+
   return (
     <section className={styles.hero} aria-label={t("patients.heroCard.summaryAria")}>
       <div className={styles.heroMain}>
-        <div className={styles.heroAvatar} aria-hidden>
-          {initials}
-        </div>
-
-        <div className={styles.heroInfo}>
-          <h1 className={styles.heroName}>{fullName}</h1>
-          <div className={styles.heroMeta}>
-            <span className={styles.mono}>#{patient.patientNumber}</span>
-            <span className={styles.heroMetaSep}>·</span>
-            {age !== null && (
-              <>
-                <span className={styles.mono}>{t("patients.heroCard.ageSuffix", { age })}</span>
-                <span className={styles.heroMetaSep}>·</span>
-              </>
-            )}
-            <span className={styles.mono}>{genderShort}</span>
-            {patient.phone && (
-              <>
-                <span className={styles.heroMetaSep}>·</span>
-                <span className={styles.metaItem}>
-                  <Phone size={11} aria-hidden /> {patient.phone}
-                </span>
-              </>
-            )}
-            {patient.email && (
-              <>
-                <span className={styles.heroMetaSep}>·</span>
-                <span className={styles.metaItem}>
-                  <Mail size={11} aria-hidden /> {patient.email}
-                </span>
-              </>
-            )}
-            {patient.bloodType && (
-              <>
-                <span className={styles.heroMetaSep}>·</span>
-                <span className={styles.mono}>{patient.bloodType}</span>
-              </>
-            )}
+        <div className={styles.heroIdentity}>
+          <div className={styles.heroAvatar} aria-hidden>
+            {initials}
           </div>
-        </div>
 
-        <div className={styles.heroMetrics}>
-          <div className={styles.metric}>
-            <div className={styles.metricLabel}>{t("patients.heroCard.nextAppointment")}</div>
-            {hasNextAppt ? (
-              <>
-                <div className={`${styles.metricValue} ${styles.brand}`}>
-                  {fmtShortDate(nextAppointment!.date)}
-                </div>
-                {nextAppointment!.startTime && (
-                  <div className={styles.metricSub}>
-                    {t("patients.heroCard.timeSuffix", { time: nextAppointment!.startTime })}{nextAppointment!.doctorName ? ` · ${nextAppointment!.doctorName}` : ""}
-                  </div>
+          <div className={styles.heroInfo}>
+            <div className={styles.heroTitleRow}>
+              <h1 className={styles.heroName}>{fullName}</h1>
+              <span className={styles.heroMeta}>
+                <span className={styles.mono}>#{patient.patientNumber}</span>
+                {age !== null && (
+                  <>
+                    <span className={styles.heroMetaSep}>·</span>
+                    <span className={styles.mono}>{t("patients.heroCard.ageSuffix", { age })}</span>
+                  </>
                 )}
-              </>
-            ) : (
-              <>
-                <div className={styles.metricValue}>
-                  <span
-                    className={styles.alertChip}
-                    style={{
-                      background: "var(--surface-2)",
-                      color: "var(--text-2)",
-                      border: "1px solid var(--border)",
-                    }}
-                  >
-                    {t("patients.heroCard.noAppointment")}
+                <span className={styles.heroMetaSep}>·</span>
+                <span className={styles.mono}>{genderShort}</span>
+                {patient.bloodType && (
+                  <>
+                    <span className={styles.heroMetaSep}>·</span>
+                    <span className={styles.mono}>{patient.bloodType}</span>
+                  </>
+                )}
+              </span>
+            </div>
+            {(patient.phone || patient.email) && (
+              <div className={styles.heroContact}>
+                {patient.phone && (
+                  <span className={styles.metaItem}>
+                    <Phone size={13} aria-hidden /> {patient.phone}
                   </span>
-                </div>
-                <div className={styles.metricSub}>
-                  <button
-                    type="button"
-                    onClick={onReschedule}
-                    className={styles.sideCardLink}
-                  >
-                    {t("patients.heroCard.schedule")} →
-                  </button>
-                </div>
-              </>
+                )}
+                {patient.email && (
+                  <span className={styles.metaItem}>
+                    <Mail size={13} aria-hidden /> {patient.email}
+                  </span>
+                )}
+              </div>
             )}
-          </div>
-          <div className={styles.metric}>
-            <div className={styles.metricLabel}>{t("patients.heroCard.lastVisit")}</div>
-            <div className={styles.metricValue}>{lastVisitDate ? fmtShortDate(lastVisitDate) : "—"}</div>
-            <div className={styles.metricSub}>{lastVisitDate ? "" : t("patients.heroCard.noVisits")}</div>
-          </div>
-          <div className={styles.metric}>
-            <div className={styles.metricLabel}>{t("patients.heroCard.totalVisits")}</div>
-            <div className={styles.metricValue}>{visitCount}</div>
-            <div className={styles.metricSub}>{t("patients.heroCard.consultationsLabel", { count: visitCount })}</div>
+            <div className={styles.heroBadges}>
+              {allergies.map((a) => (
+                <span key={`al-${a}`} className={`${styles.heroBadge} ${styles.danger}`}>
+                  <AlertTriangle size={12} aria-hidden /> {a}
+                </span>
+              ))}
+              {allergies.length === 0 && (
+                <span className={`${styles.heroBadge} ${styles.success}`}>
+                  <Check size={12} aria-hidden /> {t("patients.heroCard.noAllergies")}
+                </span>
+              )}
+              {riskFlags.map((f) => (
+                <span key={`rf-${f}`} className={`${styles.heroBadge} ${styles.danger}`}>
+                  <AlertTriangle size={12} aria-hidden /> {RISK_FLAG_LABELS[f] ?? f}
+                </span>
+              ))}
+              {shownMedications.map((m) => (
+                <span key={`med-${m}`} className={`${styles.heroBadge} ${styles.info}`}>
+                  <Pill size={12} aria-hidden /> {m}
+                </span>
+              ))}
+              {shownChronic.map((c) => (
+                <span key={`cc-${c}`} className={`${styles.heroBadge} ${styles.warning}`}>
+                  <HeartPulse size={12} aria-hidden /> {c}
+                </span>
+              ))}
+              {hiddenPills > 0 && (
+                <span className={styles.heroBadge}>+{hiddenPills}</span>
+              )}
+            </div>
           </div>
         </div>
 
-        <div className={styles.heroActions}>
+        <div className={styles.heroSide}>
+          <div className={styles.heroMetrics}>
+            <div className={`${styles.metric} ${hasNextAppt ? styles.metricHighlight : ""}`}>
+              <div className={styles.metricLabel}>{t("patients.heroCard.nextAppointment")}</div>
+              {hasNextAppt ? (
+                <>
+                  <div className={`${styles.metricValue} ${styles.brand}`}>
+                    {fmtShortDate(nextAppointment!.date)}
+                    {nextAppointment!.startTime ? ` · ${nextAppointment!.startTime}` : ""}
+                  </div>
+                  {nextAppointment!.doctorName && (
+                    <div className={styles.metricSub}>{nextAppointment!.doctorName}</div>
+                  )}
+                </>
+              ) : (
+                <>
+                  <div className={styles.metricValue}>
+                    <span className={styles.alertChip}>
+                      {t("patients.heroCard.noAppointment")}
+                    </span>
+                  </div>
+                  <div className={styles.metricSub}>
+                    <button
+                      type="button"
+                      onClick={onReschedule}
+                      className={styles.sideCardLink}
+                    >
+                      {t("patients.heroCard.schedule")} →
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+            <div className={styles.metric}>
+              <div className={styles.metricLabel}>{t("patients.heroCard.lastVisit")}</div>
+              <div className={styles.metricValue}>{lastVisitDate ? fmtShortDate(lastVisitDate) : "—"}</div>
+              <div className={styles.metricSub}>{lastVisitDate ? "" : t("patients.heroCard.noVisits")}</div>
+            </div>
+            <div className={styles.metric}>
+              <div className={styles.metricLabel}>{t("patients.heroCard.totalVisits")}</div>
+              <div className={styles.metricValue}>{visitCount}</div>
+              <div className={styles.metricSub}>{t("patients.heroCard.consultationsLabel", { count: visitCount })}</div>
+            </div>
+          </div>
+
+          <div className={styles.heroDivider} aria-hidden />
+
+          <div className={styles.heroActions}>
           <button
             type="button"
             className={`${styles.btn} ${styles.btnPrimary}`}
@@ -195,15 +243,18 @@ export function HeroCard({
             onClick={onReschedule}
             title={hasNextAppt ? t("patients.heroCard.rescheduleTitle") : t("patients.heroCard.scheduleNextTitle")}
           >
-            <CalendarClock size={13} aria-hidden /> {hasNextAppt ? t("patients.heroCard.rescheduleNext") : t("patients.heroCard.scheduleNext")}
+            <CalendarClock size={15} aria-hidden /> {hasNextAppt ? t("patients.heroCard.rescheduleNext") : t("patients.heroCard.scheduleNext")}
           </button>
           <button
             type="button"
-            className={`${styles.btn} ${hasBalance ? styles.btnSuccess : ""}`}
+            className={styles.btn}
             onClick={onCharge}
             disabled={!hasBalance}
           >
-            <CreditCard size={13} aria-hidden /> {hasBalance ? t("patients.heroCard.chargeAmount", { amount: formatCurrency(pendingBalance) }) : t("patients.heroCard.charge")}
+            {hasBalance
+              ? <span className={styles.heroDot} aria-hidden />
+              : <CreditCard size={15} aria-hidden />}
+            {hasBalance ? t("patients.heroCard.chargeAmount", { amount: formatCurrency(pendingBalance) }) : t("patients.heroCard.charge")}
           </button>
 
           <Popover.Root open={moreOpen} onOpenChange={setMoreOpen}>
@@ -279,6 +330,7 @@ export function HeroCard({
               </Popover.Content>
             </Popover.Portal>
           </Popover.Root>
+          </div>
         </div>
       </div>
 

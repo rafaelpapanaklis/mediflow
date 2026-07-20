@@ -76,27 +76,31 @@ export function SideCards({
       <section className={styles.sideCard}>
         <header className={styles.sideCardHead}>
           <h3 className={styles.sideCardTitle}>
-            <CalendarClock size={13} aria-hidden /> {t("patients.sideCards.nextAppointment")}
+            <CalendarClock size={15} strokeWidth={1.75} aria-hidden /> {t("patients.sideCards.nextAppointment")}
           </h3>
         </header>
         {nextAppointment ? (
           <>
-            <div className={styles.dateBlock}>
-              <span className={styles.dateBlockDay}>{fmtDayNum(nextAppointment.date)}</span>
-              <span className={styles.dateBlockMonth}>{fmtMonthShort(nextAppointment.date)}</span>
-            </div>
-            <div className={styles.dateBlockMeta}>
-              <strong>{nextAppointment.startTime}h</strong>
-              <span>· {fmtDateLong(nextAppointment.date)}</span>
-            </div>
-            {nextAppointment.type && (
-              <div className={styles.dateBlockReason}>{nextAppointment.type}</div>
-            )}
-            {(nextAppointment.doctorName || nextAppointment.resourceName) && (
-              <div className={styles.dateBlockSub}>
-                {[nextAppointment.doctorName, nextAppointment.resourceName].filter(Boolean).join(" · ")}
+            <div className={styles.apptRow}>
+              <div className={styles.dateBlock}>
+                <span className={styles.dateBlockDay}>{fmtDayNum(nextAppointment.date)}</span>
+                <span className={styles.dateBlockMonth}>{fmtMonthShort(nextAppointment.date)}</span>
               </div>
-            )}
+              <div className={styles.apptInfo}>
+                {nextAppointment.type && (
+                  <div className={styles.dateBlockReason}>{nextAppointment.type}</div>
+                )}
+                <div className={styles.dateBlockMeta}>
+                  <strong>{nextAppointment.startTime}h</strong>
+                  <span>· {fmtDateLong(nextAppointment.date)}</span>
+                </div>
+                {(nextAppointment.doctorName || nextAppointment.resourceName) && (
+                  <div className={styles.dateBlockSub}>
+                    {[nextAppointment.doctorName, nextAppointment.resourceName].filter(Boolean).join(" · ")}
+                  </div>
+                )}
+              </div>
+            </div>
             <div className={styles.sideCardActions}>
               <button type="button" className={styles.sideBtn} onClick={onReschedule}>
                 <RefreshCcw size={11} aria-hidden /> {t("patients.sideCards.reschedule")}
@@ -124,7 +128,7 @@ export function SideCards({
       <section className={styles.sideCard}>
         <header className={styles.sideCardHead}>
           <h3 className={styles.sideCardTitle}>
-            <Receipt size={13} aria-hidden /> {t("patients.sideCards.accountStatement")}
+            <Receipt size={15} strokeWidth={1.75} aria-hidden /> {t("patients.sideCards.accountStatement")}
           </h3>
         </header>
         <div className={styles.financeRow}>
@@ -145,10 +149,12 @@ export function SideCards({
             <strong>{formatCurrency(finance.credit ?? 0)}</strong>
           </div>
         )}
-        <div className={styles.financeBar}>
-          <div className={styles.financeBarFill} style={{ width: `${finance.pct}%` }} />
+        <div className={styles.financeBarRow}>
+          <div className={styles.financeBar}>
+            <div className={styles.financeBarFill} style={{ width: `${finance.pct}%` }} />
+          </div>
+          <span className={styles.financeBarLabel}>{t("patients.sideCards.pctCovered", { pct: finance.pct })}</span>
         </div>
-        <div className={styles.financeBarLabel}>{t("patients.sideCards.pctCovered", { pct: finance.pct })}</div>
         {finance.balance > 0 && (
           <button
             type="button"
@@ -164,7 +170,7 @@ export function SideCards({
       <section className={`${styles.sideCard} ${styles.aiCard}`}>
         <header className={styles.sideCardHead}>
           <h3 className={styles.sideCardTitle}>
-            <Sparkles size={13} aria-hidden /> {t("patients.sideCards.autoRules")}
+            <Sparkles size={15} strokeWidth={1.75} aria-hidden /> {t("patients.sideCards.autoRules")}
           </h3>
         </header>
         <p className={styles.aiText}>
@@ -176,7 +182,7 @@ export function SideCards({
       <section className={styles.sideCard}>
         <header className={styles.sideCardHead}>
           <h3 className={styles.sideCardTitle}>
-            <MessageCircle size={13} aria-hidden /> {t("patients.sideCards.recentWhatsApp")}
+            <MessageCircle size={15} strokeWidth={1.75} aria-hidden /> {t("patients.sideCards.recentWhatsApp")}
           </h3>
         </header>
         <div className={styles.waEmpty}>
