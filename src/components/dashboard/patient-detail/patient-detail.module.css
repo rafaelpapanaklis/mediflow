@@ -4,15 +4,43 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* ─────── HERO ─────── */
+/* ─────── HERO (pasada estética v3: banda + wash de marca) ─────── */
 .hero {
+  position: relative;
+  /* z-index 0 crea stacking context propio: así el wash ::after (z -1)
+     queda ENCIMA del fondo del hero pero debajo del contenido. Sin esto,
+     el pseudo negativo se iría detrás del background opaco (invisible). */
+  z-index: 0;
+  overflow: hidden;
   background: var(--bg-elev);
   border: 1px solid var(--border-soft);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-1);
-  padding: 18px 22px 16px;
+  padding: 20px 22px 16px;
   margin-bottom: 14px;
   font-family: var(--font-sans, system-ui, sans-serif);
+}
+/* Banda superior 3px con el degradado de marca — firma visual de la ficha. */
+.hero::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 3px;
+  background: var(--brand-grad);
+}
+/* Wash violeta sutil desde la esquina del avatar. z-index -1 = encima del
+   fondo del hero pero SIEMPRE debajo del contenido (contraste AA intacto). */
+.hero::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background: radial-gradient(
+    120% 90% at 0% 0%,
+    color-mix(in srgb, var(--brand) 7%, transparent),
+    transparent 55%
+  );
 }
 .heroMain {
   display: grid;
@@ -20,28 +48,34 @@
   gap: 18px;
   align-items: center;
 }
-/* Avatar iniciales — rampa violeta SUAVE plana (Variante A: violet-100 fondo /
-   violet-700 texto, igual que la tabla de pacientes del piloto). */
+/* Avatar con ring degradado de marca (vertical) alrededor del tile violeta. */
+.heroAvatarRing {
+  padding: 2.5px;
+  border-radius: calc(var(--radius-lg) + 3px);
+  background: var(--brand-grad-v, var(--brand-grad));
+  display: inline-flex;
+  flex-shrink: 0;
+  box-shadow: 0 6px 18px -8px color-mix(in srgb, var(--brand) 45%, transparent);
+}
 .heroAvatar {
-  width: 72px; height: 72px;
+  width: 70px; height: 70px;
   border-radius: var(--radius-lg);
   background: var(--violet-100);
   color: var(--violet-700);
-  font-size: 24px; font-weight: 700;
+  font-size: 24px; font-weight: 800;
   letter-spacing: -0.02em;
   display: grid; place-items: center;
   flex-shrink: 0;
-  box-shadow: var(--shadow-1);
   font-family: inherit;
 }
 .heroInfo { min-width: 0; }
 .heroName {
-  font-size: clamp(20px, 1.6vw, 22px);
-  font-weight: 700;
+  font-size: clamp(21px, 1.8vw, 24px);
+  font-weight: 800;
   color: var(--text-1);
-  letter-spacing: -0.025em;
-  margin: 0 0 4px;
-  line-height: 1.15;
+  letter-spacing: -0.03em;
+  margin: 0 0 5px;
+  line-height: 1.12;
 }
 .heroMeta {
   display: flex; align-items: center; gap: 4px;
@@ -55,25 +89,48 @@
 }
 .metaItem svg { color: var(--text-4); }
 
+/* Stats como PÍLDORAS con icono (pasada v3) — antes columnas planas. */
 .heroMetrics {
-  display: flex; gap: 22px;
+  display: flex; gap: 10px;
   align-items: stretch;
-  padding: 0 12px;
-  border-left: 1px solid var(--border-soft);
+  padding: 0;
 }
-.metric { min-width: 80px; }
+.metric {
+  min-width: 118px;
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 12px;
+  background: var(--bg-elev-2);
+  border: 1px solid var(--border-soft);
+  border-radius: 12px;
+  transition: border-color var(--dur-1) var(--ease), box-shadow var(--dur-1) var(--ease);
+}
+.metric:hover { border-color: var(--border-brand); box-shadow: var(--shadow-1); }
+.metricIcon {
+  width: 30px; height: 30px;
+  flex-shrink: 0;
+  display: grid; place-items: center;
+  border-radius: 9px;
+  background: var(--bg-elev);
+  color: var(--text-3);
+  border: 1px solid var(--border-soft);
+}
+.metricIcon.brand   { background: var(--brand-soft);   color: var(--brand);          border-color: var(--border-brand); }
+.metricIcon.success { background: var(--success-soft); color: var(--success-strong); border-color: transparent; }
+.metricBody { min-width: 0; }
 .metricLabel {
   font-size: 9px; font-weight: 700;
   color: var(--text-3);
   letter-spacing: 0.08em; text-transform: uppercase;
-  margin-bottom: 4px;
+  margin-bottom: 2px;
+  white-space: nowrap;
 }
 .metricValue {
-  font-size: 18px; font-weight: 700;
+  font-size: 16px; font-weight: 700;
   color: var(--text-1);
   letter-spacing: -0.02em;
   font-family: var(--font-mono, ui-monospace, monospace);
   font-variant-numeric: tabular-nums;
+  line-height: 1.15;
 }
 /* Cifras semánticas: par *-strong para AA 4.5:1 sobre bg-elev (spec). */
 .metricValue.brand   { color: var(--brand); }
@@ -89,18 +146,19 @@
 .heroActions {
   display: flex; gap: 6px; align-items: center;
 }
+/* CTAs con jerarquía (pasada v3): primario = degradado de marca;
+   secundarios = ghost que se encienden al hover. */
 .btn {
-  height: 34px;
-  padding: 0 12px;
-  font-size: 12px; font-weight: 500;
-  background: var(--bg-elev);
+  height: 36px;
+  padding: 0 13px;
+  font-size: 12px; font-weight: 600;
+  background: transparent;
   border: 1px solid var(--border-soft);
-  border-radius: 7px;
-  color: var(--text-1);
+  border-radius: 9px;
+  color: var(--text-2);
   display: inline-flex; align-items: center; gap: 6px;
   cursor: pointer;
   font-family: inherit;
-  box-shadow: var(--shadow-1);
   transition: background var(--dur-1) var(--ease), border-color var(--dur-1) var(--ease),
     color var(--dur-1) var(--ease), box-shadow var(--dur-1) var(--ease),
     transform var(--dur-1) var(--ease);
@@ -108,18 +166,27 @@
 }
 .btn:hover:not(:disabled) {
   border-color: var(--border-brand);
-  background: var(--bg-hover);
+  background: var(--brand-softer);
+  color: var(--text-1);
 }
 .btn:focus-visible { outline: none; box-shadow: var(--ring); }
 .btn:active:not(:disabled) { transform: scale(0.98); }
 .btn:disabled { opacity: 0.45; cursor: not-allowed; }
 .btnPrimary {
-  background: var(--brand); color: #fff;
-  border-color: var(--brand);
-  font-weight: 600;
-  box-shadow: var(--shadow-1);
+  background: var(--brand-grad); color: #fff;
+  border: none;
+  padding: 0 15px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  box-shadow: 0 4px 14px -6px color-mix(in srgb, var(--brand) 60%, transparent);
 }
-.btnPrimary:hover:not(:disabled) { background: var(--violet-700); color: #fff; }
+.btnPrimary:hover:not(:disabled) {
+  color: #fff;
+  background: var(--brand-grad);
+  box-shadow: 0 8px 22px -8px color-mix(in srgb, var(--brand) 70%, transparent);
+  transform: translateY(-1px);
+}
+.btnPrimary:active:not(:disabled) { transform: scale(0.98); }
 .btnSuccess {
   background: var(--success); color: #fff;
   border-color: var(--success);
@@ -167,17 +234,18 @@
   border-top: 1px solid var(--border-soft);
 }
 .alertChip {
-  display: inline-flex; align-items: center; gap: 5px;
-  padding: 4px 10px;
-  font-size: 11px; font-weight: 600;
-  border-radius: 12px;
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 4.5px 11px;
+  font-size: 11.5px; font-weight: 600;
+  border-radius: 999px;
   border: 1px solid var(--border-soft);
   background: var(--bg-elev-2);
   color: var(--text-2);
   cursor: default;
   letter-spacing: 0.01em;
-  transition: transform 0.12s;
+  transition: transform var(--dur-1) var(--ease), box-shadow var(--dur-1) var(--ease);
 }
+.alertChip:hover { box-shadow: var(--shadow-1); }
 .alertChip:hover { transform: translateY(-1px); }
 .alertChip.danger {
   background: var(--danger-soft); color: var(--danger);
@@ -538,32 +606,35 @@
 @media (max-width: 1024px) {
   .quickNav { display: none; }
 }
-.navSection { margin-bottom: 12px; }
+.navSection { margin-bottom: 16px; }
 .navSection:last-child { margin-bottom: 0; }
 .navSectionLabel {
-  font-size: 9px; font-weight: 700;
+  font-size: 9.5px; font-weight: 700;
   color: var(--text-3);
-  letter-spacing: 0.08em; text-transform: uppercase;
-  padding: 6px 10px 4px;
+  letter-spacing: 0.09em; text-transform: uppercase;
+  padding: 8px 10px 5px;
 }
 .navItem {
-  display: flex; align-items: center; gap: 8px;
+  display: flex; align-items: center; gap: 9px;
   width: 100%;
-  padding: 7px 10px;
-  font-size: 12px; font-weight: 500;
+  padding: 7.5px 10px;
+  margin-bottom: 1px;
+  font-size: 12.5px; font-weight: 500;
   background: transparent;
   border: 1px solid transparent;
-  border-radius: 6px;
+  border-radius: 8px;
   color: var(--text-2);
   cursor: pointer;
   font-family: inherit;
   text-align: left;
   letter-spacing: -0.01em;
-  transition: background 0.12s, color 0.12s, border-color 0.12s;
+  transition: background var(--dur-1) var(--ease), color var(--dur-1) var(--ease),
+    border-color var(--dur-1) var(--ease), transform var(--dur-1) var(--ease);
 }
 .navItem:hover {
   background: var(--bg-hover);
   color: var(--text-1);
+  transform: translateX(2px);
 }
 .navItem:focus-visible { outline: none; box-shadow: var(--ring); }
 .navItem.active {
@@ -612,20 +683,24 @@
   letter-spacing: 0.08em;
   opacity: 0.85;
 }
-.navItem svg { color: inherit; flex-shrink: 0; }
+/* Iconos del menú: apagados en reposo, se encienden en brand al hover/activo
+   (pasada v3 — el estado activo es protagonista). */
+.navItem svg { color: var(--text-3); flex-shrink: 0; transition: color var(--dur-1) var(--ease); }
+.navItem:hover svg, .navItem.active svg { color: var(--brand); }
 .navItemLabel {
   flex: 1;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
+/* Counts como badges redondos. */
 .navItemCount {
   display: inline-grid; place-items: center;
-  min-width: 18px; height: 16px;
-  padding: 0 5px;
-  font-size: 9px; font-weight: 700;
+  min-width: 20px; height: 18px;
+  padding: 0 6px;
+  font-size: 10px; font-weight: 700;
   font-family: var(--font-mono, ui-monospace, monospace);
-  border-radius: 8px;
+  border-radius: 999px;
   background: var(--bg-elev-2);
   color: var(--text-3);
   letter-spacing: 0.02em;
@@ -653,9 +728,17 @@
 .sideCard {
   background: var(--bg-elev);
   border: 1px solid var(--border-soft);
-  border-radius: 12px;
-  padding: 12px 14px;
+  border-radius: 14px;
+  padding: 13px 15px;
   font-family: var(--font-sans, system-ui, sans-serif);
+  box-shadow: var(--shadow-1);
+  transition: box-shadow var(--dur-1) var(--ease), border-color var(--dur-1) var(--ease),
+    transform var(--dur-1) var(--ease);
+}
+.sideCard:hover {
+  box-shadow: var(--shadow-2);
+  border-color: var(--border-brand);
+  transform: translateY(-1px);
 }
 .sideCardHead { margin-bottom: 8px; }
 .sideCardTitle {
@@ -1549,4 +1632,23 @@
 .moneyZeroB { color: var(--text-4); font-weight: 500; }
 @media (prefers-reduced-motion: reduce) {
   .tableB tbody tr { transition: none; }
+}
+
+/* ═══ Pasada estética v3 — guard global de reduced-motion ═══ */
+@media (prefers-reduced-motion: reduce) {
+  .navItem,
+  .navItem svg,
+  .sideCard,
+  .btn,
+  .btnPrimary,
+  .metric,
+  .alertChip {
+    transition: none;
+  }
+  .navItem:hover,
+  .sideCard:hover,
+  .btnPrimary:hover:not(:disabled),
+  .alertChip:hover {
+    transform: none;
+  }
 }

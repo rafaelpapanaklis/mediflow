@@ -47,6 +47,14 @@ const STAGE_DOT: Record<ClinicalPhotoStage, string> = {
   control: "var(--brand)",
 };
 
+/** Pill de etapa (subheads de la galería) — soft + strong por estado. */
+const STAGE_PILL: Record<ClinicalPhotoStage, string> = {
+  pre: "bg-[var(--info-soft)] text-[var(--info-strong)]",
+  during: "bg-[var(--warning-soft)] text-[var(--warning-strong)]",
+  post: "bg-[var(--success-soft)] text-[var(--success-strong)]",
+  control: "bg-[var(--brand-soft)] text-[var(--brand)]",
+};
+
 // Espejo de MAX_PHOTO_BYTES de lib/clinical-shared/photos/storage.ts (NO se
 // importa: ese módulo instancia el client admin de Supabase, solo-server).
 const MAX_BYTES = 25 * 1024 * 1024;
@@ -299,14 +307,18 @@ export function PatientPhotosTab({ patientId, onCountChange }: PatientPhotosTabP
     <div className="space-y-4">
       {/* Header del tab */}
       <div className="bg-card border border-border rounded-xl p-4 shadow-[var(--shadow-1)] flex items-center justify-between gap-3 flex-wrap">
-        <div>
-          <h2 className="text-[15px] font-semibold tracking-[-0.01em] flex items-center gap-2">
-            <Camera size={16} strokeWidth={1.75} className="text-[var(--brand)]" aria-hidden />
-            {t("patients.fotosTab.title")}
-          </h2>
-          <p className="text-xs text-muted-foreground tabular-nums mt-0.5">
-            {t("patients.fotosTab.count", { count: photos.length })} · {t("patients.fotosTab.subtitle")}
-          </p>
+        <div className="flex items-center gap-3">
+          <span className="grid h-9 w-9 flex-shrink-0 place-items-center rounded-xl bg-[var(--brand-soft)] text-[var(--brand)]">
+            <Camera size={17} strokeWidth={1.75} aria-hidden />
+          </span>
+          <div>
+            <h2 className="text-[15px] font-bold tracking-[-0.01em]">
+              {t("patients.fotosTab.title")}
+            </h2>
+            <p className="text-xs text-muted-foreground tabular-nums mt-0.5">
+              {t("patients.fotosTab.count", { count: photos.length })} · {t("patients.fotosTab.subtitle")}
+            </p>
+          </div>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           <div className="inline-flex rounded-lg border border-border bg-[var(--bg-elev-2)] p-0.5">
@@ -337,7 +349,8 @@ export function PatientPhotosTab({ patientId, onCountChange }: PatientPhotosTabP
             type="button"
             onClick={() => setUploadOpen((v) => !v)}
             aria-expanded={uploadOpen}
-            className="inline-flex items-center gap-1.5 text-xs font-semibold bg-[var(--brand)] text-white px-3 h-9 rounded-lg hover:bg-[var(--violet-700)] shadow-[var(--shadow-1)] transition-colors focus-visible:outline-none focus-visible:shadow-[var(--ring)] active:scale-[0.98]"
+            style={{ background: "var(--brand-grad)" }}
+            className="inline-flex items-center gap-1.5 text-xs font-bold text-white px-3.5 h-9 rounded-lg shadow-[var(--shadow-1)] hover:shadow-[var(--shadow-2)] motion-safe:hover:-translate-y-px transition duration-150 focus-visible:outline-none focus-visible:shadow-[var(--ring)] active:scale-[0.98]"
           >
             <ImagePlus size={14} strokeWidth={1.75} aria-hidden /> {t("patients.fotosTab.upload")}
           </button>
@@ -524,7 +537,7 @@ export function PatientPhotosTab({ patientId, onCountChange }: PatientPhotosTabP
           aria-label={t("patients.fotosTab.loading")}
         >
           {Array.from({ length: 8 }).map((_, i) => (
-            <div key={i} className="aspect-square rounded-xl bg-muted animate-pulse" />
+            <div key={i} className="aspect-square rounded-2xl bg-muted animate-pulse" />
           ))}
         </div>
       ) : loadError ? (
@@ -532,16 +545,19 @@ export function PatientPhotosTab({ patientId, onCountChange }: PatientPhotosTabP
           {loadError}
         </div>
       ) : photos.length === 0 ? (
-        <div className="bg-card border border-dashed border-border rounded-xl px-5 py-12 text-center">
-          <Camera size={22} strokeWidth={1.75} className="mx-auto mb-2 text-[var(--text-3)]" aria-hidden />
-          <p className="text-sm font-semibold text-foreground">{t("patients.fotosTab.empty")}</p>
-          <p className="text-xs text-muted-foreground mt-1 max-w-sm mx-auto">
+        <div className="rounded-2xl bg-[var(--brand-softer)] border border-[var(--border-brand)] px-5 py-14 text-center">
+          <span className="mx-auto mb-3 grid h-14 w-14 place-items-center rounded-2xl bg-[var(--brand-soft)] text-[var(--brand)] shadow-[var(--shadow-1)]">
+            <Camera size={24} strokeWidth={1.75} aria-hidden />
+          </span>
+          <p className="text-sm font-bold text-foreground">{t("patients.fotosTab.empty")}</p>
+          <p className="text-xs text-muted-foreground mt-1.5 max-w-sm mx-auto">
             {t("patients.fotosTab.emptyHint")}
           </p>
           <button
             type="button"
             onClick={() => setUploadOpen(true)}
-            className="mt-4 inline-flex items-center gap-1.5 px-3.5 py-2.5 text-xs font-semibold rounded-lg bg-[var(--brand)] text-white hover:bg-[var(--violet-700)] focus-visible:outline-none focus-visible:[box-shadow:var(--ring)] active:scale-[.98] transition duration-150"
+            style={{ background: "var(--brand-grad)" }}
+            className="mt-4 inline-flex items-center gap-1.5 px-4 py-2.5 text-xs font-bold rounded-lg text-white shadow-[var(--shadow-1)] hover:shadow-[var(--shadow-2)] motion-safe:hover:-translate-y-px focus-visible:outline-none focus-visible:[box-shadow:var(--ring)] active:scale-[.98] transition duration-150"
           >
             <ImagePlus size={13} strokeWidth={1.75} aria-hidden /> {t("patients.fotosTab.upload")}
           </button>
@@ -564,45 +580,53 @@ export function PatientPhotosTab({ patientId, onCountChange }: PatientPhotosTabP
         <div className="space-y-5">
           {STAGE_ORDER.filter((s) => grouped[s].length > 0).map((stage) => (
             <section key={stage} aria-label={STAGE_LABELS[stage]}>
-              <div className="flex items-center gap-2 mb-2">
+              <div className="flex items-center gap-2 mb-2.5">
                 <span
-                  className="inline-block w-2 h-2 rounded-full"
-                  style={{ background: STAGE_DOT[stage] }}
-                  aria-hidden
-                />
-                <h3 className="text-[13px] font-semibold text-[var(--text-1)]">
+                  className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-bold ${STAGE_PILL[stage]}`}
+                >
+                  <span
+                    className="inline-block w-1.5 h-1.5 rounded-full"
+                    style={{ background: STAGE_DOT[stage] }}
+                    aria-hidden
+                  />
                   {STAGE_LABELS[stage]}
-                </h3>
-                <span className="text-[10.5px] font-bold tabular-nums rounded-full bg-[var(--bg-elev-2)] text-[var(--text-3)] px-2 py-0.5">
-                  {grouped[stage].length}
+                  <span className="tabular-nums opacity-75">{grouped[stage].length}</span>
                 </span>
+                <span className="h-px flex-1 bg-[var(--border-soft)]" aria-hidden />
               </div>
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2.5">
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
                 {grouped[stage].map((photo) => {
                   const flatIndex = orderedPhotos.findIndex((p) => p.id === photo.id);
                   const label = typeLabelFor(photo.photoType);
                   return (
                     <figure
                       key={photo.id}
-                      className="group relative m-0 overflow-hidden rounded-xl border border-border bg-card shadow-[var(--shadow-1)] transition-shadow duration-150 hover:shadow-[var(--shadow-2)]"
+                      className="group relative m-0 overflow-hidden rounded-2xl border border-border bg-card shadow-[var(--shadow-1)] transition-all duration-200 hover:shadow-[var(--shadow-2)] hover:border-[var(--border-brand)] motion-safe:hover:-translate-y-0.5"
                     >
                       <button
                         type="button"
                         onClick={() => setLightboxIndex(flatIndex)}
                         aria-label={t("patients.fotosTab.photoAlt", { type: label })}
-                        className="block w-full focus-visible:outline-none focus-visible:shadow-[var(--ring)]"
+                        className="block w-full overflow-hidden focus-visible:outline-none focus-visible:shadow-[var(--ring)]"
                       >
                         {/* eslint-disable-next-line @next/next/no-img-element */}
                         <img
                           src={photo.thumbnailUrl ?? photo.blobUrl}
                           alt={photo.notes ?? label}
                           loading="lazy"
-                          className="aspect-square w-full object-cover"
+                          className="aspect-square w-full object-cover transition-transform duration-200 motion-safe:group-hover:scale-[1.04]"
                         />
                       </button>
-                      <figcaption className="flex items-center justify-between gap-1 px-2 py-1.5">
-                        <span className="min-w-0 truncate text-[11px] font-medium text-[var(--text-2)]" title={label}>
-                          {label}
+                      <figcaption className="flex items-center justify-between gap-1 px-2.5 py-2">
+                        <span className="flex min-w-0 items-center gap-1.5">
+                          <span
+                            className="inline-block h-1.5 w-1.5 flex-shrink-0 rounded-full"
+                            style={{ background: STAGE_DOT[photo.stage] }}
+                            aria-hidden
+                          />
+                          <span className="min-w-0 truncate text-[11px] font-semibold text-[var(--text-2)]" title={label}>
+                            {label}
+                          </span>
                         </span>
                         <span className="flex-shrink-0 text-[10px] tabular-nums text-[var(--text-3)]">
                           {new Date(photo.capturedAt).toLocaleDateString("es-MX", {
@@ -615,7 +639,7 @@ export function PatientPhotosTab({ patientId, onCountChange }: PatientPhotosTabP
                         type="button"
                         onClick={() => void handleDelete(photo)}
                         aria-label={t("patients.fotosTab.deleteAria")}
-                        className="absolute right-1.5 top-1.5 grid h-7 w-7 place-items-center rounded-lg bg-black/45 text-white opacity-0 transition-opacity duration-150 group-hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:shadow-[var(--ring)] hover:bg-[var(--danger)]"
+                        className="absolute right-2 top-2 grid h-7 w-7 place-items-center rounded-lg bg-black/50 text-white opacity-0 backdrop-blur-[2px] transition-opacity duration-150 group-hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:shadow-[var(--ring)] hover:bg-[var(--danger)]"
                       >
                         <Trash2 size={13} strokeWidth={1.75} aria-hidden />
                       </button>
@@ -684,12 +708,15 @@ export function RecentPhotosStrip({
         )}
       </div>
       {count <= 0 ? (
-        <div className="flex items-center justify-between gap-2 rounded-lg border border-dashed border-border bg-[var(--bg-elev-2)] px-3 py-2.5">
-          <span className="text-xs text-muted-foreground">{t("patients.summary.noPhotosYet")}</span>
+        <div className="flex items-center gap-2.5 rounded-xl bg-[var(--brand-softer)] border border-[var(--border-brand)] px-3 py-2.5">
+          <span className="grid h-8 w-8 flex-shrink-0 place-items-center rounded-lg bg-[var(--brand-soft)] text-[var(--brand)]">
+            <Camera size={14} strokeWidth={1.75} aria-hidden />
+          </span>
+          <span className="min-w-0 flex-1 text-xs text-muted-foreground">{t("patients.summary.noPhotosYet")}</span>
           <button
             type="button"
             onClick={onOpenTab}
-            className="flex-shrink-0 text-[11px] font-semibold text-[var(--brand)] hover:underline rounded-[4px] focus-visible:outline-none focus-visible:shadow-[var(--ring)]"
+            className="flex-shrink-0 text-[11px] font-bold text-[var(--brand)] hover:underline rounded-[4px] focus-visible:outline-none focus-visible:shadow-[var(--ring)]"
           >
             {t("patients.summary.uploadPhotos")} →
           </button>

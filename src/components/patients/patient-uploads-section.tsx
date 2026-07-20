@@ -74,14 +74,16 @@ export function PatientUploadsSection({ patientId }: { patientId: string }) {
   return (
     <div className="space-y-4">
       <div className="bg-card border border-border rounded-xl p-4 shadow-[var(--shadow-1)] flex items-center justify-between gap-3 flex-wrap">
-        <div>
-          <h2 className="text-[15px] font-semibold tracking-[-0.01em] flex items-center gap-2">
-            <Upload size={16} strokeWidth={1.75} className="text-[var(--brand)]" aria-hidden />
-            Subidos por el paciente
-          </h2>
-          <p className="text-xs text-muted-foreground tabular-nums mt-0.5">
-            {items.length} archivos · subidos desde el portal del paciente
-          </p>
+        <div className="flex items-center gap-3">
+          <span className="grid h-9 w-9 flex-shrink-0 place-items-center rounded-xl bg-[var(--brand-soft)] text-[var(--brand)]">
+            <Upload size={17} strokeWidth={1.75} aria-hidden />
+          </span>
+          <div>
+            <h2 className="text-[15px] font-bold tracking-[-0.01em]">Subidos por el paciente</h2>
+            <p className="text-xs text-muted-foreground tabular-nums mt-0.5">
+              {items.length} archivos · subidos desde el portal del paciente
+            </p>
+          </div>
         </div>
         <button
           type="button"
@@ -122,12 +124,14 @@ export function PatientUploadsSection({ patientId }: { patientId: string }) {
           ))}
         </div>
       ) : items.length === 0 ? (
-        <div className="bg-card border border-dashed border-border rounded-xl px-5 py-12 text-center">
-          <Inbox size={22} strokeWidth={1.75} className="mx-auto mb-2 text-[var(--text-3)]" aria-hidden />
-          <p className="text-sm font-semibold text-foreground">
+        <div className="rounded-2xl bg-[var(--brand-softer)] border border-[var(--border-brand)] px-5 py-14 text-center">
+          <span className="mx-auto mb-3 grid h-14 w-14 place-items-center rounded-2xl bg-[var(--brand-soft)] text-[var(--brand)] shadow-[var(--shadow-1)]">
+            <Inbox size={24} strokeWidth={1.75} aria-hidden />
+          </span>
+          <p className="text-sm font-bold text-foreground">
             El paciente aún no ha subido archivos.
           </p>
-          <p className="text-xs text-muted-foreground mt-1">
+          <p className="text-xs text-muted-foreground mt-1.5 max-w-sm mx-auto">
             El paciente puede subirlos desde su portal — aparecerán aquí al instante.
           </p>
         </div>
@@ -141,7 +145,7 @@ export function PatientUploadsSection({ patientId }: { patientId: string }) {
             return (
               <div
                 key={it.id}
-                className="bg-card border border-border rounded-xl p-3 flex flex-col gap-2 shadow-[var(--shadow-1)] hover:shadow-[var(--shadow-2)] hover:border-[var(--border-brand)] transition-all duration-150"
+                className="bg-card border border-border rounded-2xl p-3 flex flex-col gap-2 shadow-[var(--shadow-1)] hover:shadow-[var(--shadow-2)] hover:border-[var(--border-brand)] motion-safe:hover:-translate-y-0.5 transition-all duration-200"
               >
                 <div className="flex items-start gap-2">
                   {isImage ? (

@@ -149,7 +149,7 @@ export function PhotoCompareSlider({ photos, labels }: PhotoCompareSliderProps) 
           </div>
         ) : null}
 
-        {/* Divisor */}
+        {/* Divisor + handle circular (pasada v3 — agarradera visible). */}
         <div
           aria-hidden
           className="absolute top-0 bottom-0"
@@ -160,6 +160,21 @@ export function PhotoCompareSlider({ photos, labels }: PhotoCompareSliderProps) 
             boxShadow: "0 0 8px rgba(0,0,0,0.6)",
           }}
         />
+        <div
+          aria-hidden
+          className="pointer-events-none absolute grid h-9 w-9 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full text-white shadow-[var(--shadow-3)]"
+          style={{
+            left: `${splitPct}%`,
+            top: "50%",
+            background: "var(--brand-grad)",
+            border: "2px solid #fff",
+          }}
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+            <path d="m9 7-5 5 5 5" />
+            <path d="m15 7 5 5-5 5" />
+          </svg>
+        </div>
 
         {/* Etiquetas overlay */}
         {left ? (

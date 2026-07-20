@@ -18,6 +18,8 @@ import {
   HeartPulse,
   Pill,
   Check,
+  History,
+  Activity,
 } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
 import { ageFromDob } from "@/lib/format";
@@ -98,8 +100,8 @@ export function HeroCard({
   return (
     <section className={styles.hero} aria-label={t("patients.heroCard.summaryAria")}>
       <div className={styles.heroMain}>
-        <div className={styles.heroAvatar} aria-hidden>
-          {initials}
+        <div className={styles.heroAvatarRing} aria-hidden>
+          <div className={styles.heroAvatar}>{initials}</div>
         </div>
 
         <div className={styles.heroInfo}>
@@ -139,58 +141,63 @@ export function HeroCard({
           </div>
         </div>
 
+        {/* Stats como píldoras con icono (pasada estética v3). */}
         <div className={styles.heroMetrics}>
           <div className={styles.metric}>
-            <div className={styles.metricLabel}>{t("patients.heroCard.nextAppointment")}</div>
-            {hasNextAppt ? (
-              <>
-                <div className={`${styles.metricValue} ${styles.brand}`}>
-                  {fmtShortDate(nextAppointment!.date)}
-                </div>
-                {nextAppointment!.startTime && (
-                  <div className={styles.metricSub}>
-                    {t("patients.heroCard.timeSuffix", { time: nextAppointment!.startTime })}{nextAppointment!.doctorName ? ` · ${nextAppointment!.doctorName}` : ""}
+            <span className={`${styles.metricIcon} ${styles.brand}`}>
+              <CalendarClock size={15} strokeWidth={1.75} aria-hidden />
+            </span>
+            <div className={styles.metricBody}>
+              <div className={styles.metricLabel}>{t("patients.heroCard.nextAppointment")}</div>
+              {hasNextAppt ? (
+                <>
+                  <div className={`${styles.metricValue} ${styles.brand}`}>
+                    {fmtShortDate(nextAppointment!.date)}
                   </div>
-                )}
-                {nextAppointment!.type && (
-                  <div className={styles.metricSub}>{nextAppointment!.type}</div>
-                )}
-              </>
-            ) : (
-              <>
-                <div className={styles.metricValue}>
-                  <span
-                    className={styles.alertChip}
-                    style={{
-                      background: "var(--surface-2)",
-                      color: "var(--text-2)",
-                      border: "1px solid var(--border)",
-                    }}
-                  >
-                    {t("patients.heroCard.noAppointment")}
-                  </span>
-                </div>
-                <div className={styles.metricSub}>
-                  <button
-                    type="button"
-                    onClick={onReschedule}
-                    className={styles.sideCardLink}
-                  >
-                    {t("patients.heroCard.schedule")} →
-                  </button>
-                </div>
-              </>
-            )}
+                  {nextAppointment!.startTime && (
+                    <div className={styles.metricSub}>
+                      {t("patients.heroCard.timeSuffix", { time: nextAppointment!.startTime })}{nextAppointment!.doctorName ? ` · ${nextAppointment!.doctorName}` : ""}
+                    </div>
+                  )}
+                  {nextAppointment!.type && (
+                    <div className={styles.metricSub}>{nextAppointment!.type}</div>
+                  )}
+                </>
+              ) : (
+                <>
+                  <div className={styles.metricValue}>—</div>
+                  <div className={styles.metricSub}>
+                    <button
+                      type="button"
+                      onClick={onReschedule}
+                      className={styles.sideCardLink}
+                    >
+                      {t("patients.heroCard.schedule")} →
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
           </div>
           <div className={styles.metric}>
-            <div className={styles.metricLabel}>{t("patients.heroCard.lastVisit")}</div>
-            <div className={styles.metricValue}>{lastVisitDate ? fmtShortDate(lastVisitDate) : "—"}</div>
-            <div className={styles.metricSub}>{lastVisitDate ? "" : t("patients.heroCard.noVisits")}</div>
+            <span className={styles.metricIcon}>
+              <History size={15} strokeWidth={1.75} aria-hidden />
+            </span>
+            <div className={styles.metricBody}>
+              <div className={styles.metricLabel}>{t("patients.heroCard.lastVisit")}</div>
+              <div className={styles.metricValue}>{lastVisitDate ? fmtShortDate(lastVisitDate) : "—"}</div>
+              <div className={styles.metricSub}>{lastVisitDate ? "" : t("patients.heroCard.noVisits")}</div>
+            </div>
           </div>
           <div className={styles.metric}>
-            <div className={styles.metricLabel}>{t("patients.heroCard.totalVisits")}</div>
-            <div className={styles.metricValue}>{visitCount}</div>
-            <div className={styles.metricSub}>{t("patients.heroCard.consultationsLabel", { count: visitCount })}</div>
+            <span className={`${styles.metricIcon} ${styles.success}`}>
+              <Activity size={15} strokeWidth={1.75} aria-hidden />
+            </span>
+            <div className={styles.metricBody}>
+              <div className={styles.metricLabel}>{t("patients.heroCard.totalVisits")}</div>
+              <div className={styles.metricValue}>{visitCount}</div>
+              <div className={styles.metricSub}>{t("patients.heroCard.consultationsLabel", { count: visitCount })}</div>
+            </div>
           </div>
         </div>
 

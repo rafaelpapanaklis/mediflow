@@ -4,7 +4,7 @@ import { useCallback, useState, useEffect, useMemo } from "react";
 import { useT } from "@/i18n/i18n-provider";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ArrowLeft, Phone, Mail, Calendar, AlertTriangle, Check, Plus, Printer, Edit, Download, Pill, Play, Trash2, X as XIcon, XCircle } from "lucide-react";
+import { ArrowLeft, Phone, Mail, Calendar, AlertTriangle, Check, Plus, Printer, Edit, Download, Pill, Play, Trash2, X as XIcon, XCircle, ClipboardList, Stethoscope } from "lucide-react";
 import { formatCurrency, formatDate, getInitials, avatarColor } from "@/lib/utils";
 import { ageFromDob, fmtMXN } from "@/lib/format";
 import { OdontogramV2 } from "@/components/dashboard/odontogram-v2/App";
@@ -1237,9 +1237,11 @@ export function PatientDetailClient({
           {tab === "resumen" && (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {showQuestionnaireWarning && <div className="md:col-span-2">{questionnaireBanner}</div>}
-              <div className="bg-card border border-border rounded-[var(--radius-lg)] shadow-[var(--shadow-1)] p-4">
-                <div className="flex items-center gap-2 mb-3">
-                  <div className="w-2 h-2 rounded-full bg-[var(--brand)]" />
+              <div className="bg-card border border-border rounded-[var(--radius-lg)] shadow-[var(--shadow-1)] p-4 transition-all duration-200 hover:shadow-[var(--shadow-2)] hover:border-[var(--border-brand)] motion-safe:hover:-translate-y-0.5">
+                <div className="flex items-center gap-2.5 mb-3">
+                  <span className="grid h-7 w-7 flex-shrink-0 place-items-center rounded-lg bg-[var(--brand-soft)] text-[var(--brand)]">
+                    <ClipboardList size={15} strokeWidth={1.75} aria-hidden />
+                  </span>
                   <span className="text-[15px] font-semibold text-[var(--text-1)]">{t("patients.summary.clinicalSummary")}</span>
                 </div>
                 <HistoriaTimeline
@@ -1267,13 +1269,17 @@ export function PatientDetailClient({
                       clinicSpecialty: specialty ?? "",
                     });
                     return (
-                      <div className="bg-card border border-dashed border-border rounded-[var(--radius-lg)] p-4 text-center">
-                        <p className="text-xs font-semibold text-foreground mb-1">{suggestion.headline}</p>
-                        <p className="text-xs text-muted-foreground mb-3">{suggestion.hint}</p>
+                      <div className="rounded-[var(--radius-lg)] bg-[var(--brand-softer)] border border-[var(--border-brand)] px-4 py-6 text-center">
+                        <span className="mx-auto mb-2.5 grid h-11 w-11 place-items-center rounded-2xl bg-[var(--brand-soft)] text-[var(--brand)]">
+                          <Play size={18} strokeWidth={1.75} aria-hidden />
+                        </span>
+                        <p className="text-[13px] font-bold text-foreground mb-1">{suggestion.headline}</p>
+                        <p className="text-xs text-muted-foreground mb-3.5 max-w-xs mx-auto">{suggestion.hint}</p>
                         <button
                           type="button"
                           onClick={() => setTab("expediente")}
-                          className="inline-flex items-center gap-1.5 px-3.5 py-2.5 text-xs font-semibold rounded-lg bg-[var(--brand)] text-white hover:bg-[var(--violet-700)] focus-visible:outline-none focus-visible:[box-shadow:var(--ring)] active:scale-[.98] transition duration-150"
+                          style={{ background: "var(--brand-grad)" }}
+                          className="inline-flex items-center gap-1.5 px-4 py-2.5 text-xs font-bold rounded-lg text-white shadow-[var(--shadow-1)] hover:shadow-[var(--shadow-2)] focus-visible:outline-none focus-visible:[box-shadow:var(--ring)] active:scale-[.98] motion-safe:hover:-translate-y-px transition duration-150"
                         >
                           <Play size={12} strokeWidth={1.75} aria-hidden /> {t("patients.summary.startConsult")}
                         </button>
@@ -1341,9 +1347,11 @@ export function PatientDetailClient({
                 </div>
               </div>
 
-              <div className="bg-card border border-border rounded-[var(--radius-lg)] shadow-[var(--shadow-1)] p-4">
-                <div className="flex items-center gap-2 mb-3">
-                  <div className="w-2 h-2 rounded-full bg-[var(--success)]" />
+              <div className="bg-card border border-border rounded-[var(--radius-lg)] shadow-[var(--shadow-1)] p-4 transition-all duration-200 hover:shadow-[var(--shadow-2)] hover:border-[var(--border-brand)] motion-safe:hover:-translate-y-0.5">
+                <div className="flex items-center gap-2.5 mb-3">
+                  <span className="grid h-7 w-7 flex-shrink-0 place-items-center rounded-lg bg-[var(--success-soft)] text-[var(--success-strong)]">
+                    <Stethoscope size={15} strokeWidth={1.75} aria-hidden />
+                  </span>
                   <span className="text-[15px] font-semibold text-[var(--text-1)]">{t("patients.summary.medicalHistory")}</span>
                 </div>
                 {/* Ficha v3: alergias/medicamentos/crónicas viven SOLO en los
