@@ -13,8 +13,10 @@ import { useT } from "@/i18n/i18n-provider";
  * los admins salen marcados y DESHABILITADOS (siempre ven todo, y por eso
  * tampoco se guardan en la lista — ver src/lib/patient-visibility.ts).
  *
- * `value` = [] significa "todos" (default, sin restricción). El padre manda la
- * lista al server SOLO si quedó restringida.
+ * `value` = [] significa "todos" (default, sin restricción). Una lista con ids
+ * de no-admin restringe a esas personas (+ admins). Una lista con SOLO ids de
+ * admin = "solo administradores": ningún no-admin lo ve. El padre manda la
+ * lista al server SOLO si quedó restringida. Ver src/lib/patient-visibility.ts.
  *
  * Radix Popover a propósito: los dos montajes viven dentro de un Radix Dialog y
  * Popover.Content se registra como capa HIJA del Dialog → ni cierra el modal ni
@@ -89,11 +91,22 @@ export function PatientVisibilityPicker({ value, onChange, disabled, team: teamP
   const admins = useMemo(() => team.filter((m) => isAdminRole(m.role)), [team]);
   const selectable = useMemo(() => team.filter((m) => !isAdminRole(m.role)), [team]);
 
+  const adminIds = useMemo(() => admins.map((a) => a.id), [admins]);
+
   // "Todos" = lista vacía. Con lista, los admins cuentan igual porque SIEMPRE
   // ven: mostrar "1 de 8" cuando en realidad lo ven 1 + los admins mentiría.
   const restricted = value.length > 0;
+
+  // "Solo administradores": lista restringida sin ningún no-admin seleccionado
+  // (value trae solo ids de admin). Ver src/lib/patient-visibility.ts.
+  const selectedNonAdmin = useMemo(
+    () => (restricted ? selectable.filter((s) => value.includes(s.id)) : selectable),
+    [restricted, selectable, value],
+  );
+  const adminsOnly = restricted && selectedNonAdmin.length === 0;
+
   const selectedCount = restricted
-    ? new Set([...value, ...admins.map((a) => a.id)]).size
+    ? new Set([...value, ...adminIds]).size
     : team.length;
 
   // Sin el equipo cargado (fetch perezoso: el popover puede no haberse abierto
@@ -101,9 +114,11 @@ export function PatientVisibilityPicker({ value, onChange, disabled, team: teamP
   // que mentiría.
   const label = !restricted
     ? t("shell.patientVisibility.allLabel")
-    : team.length > 0
-      ? t("shell.patientVisibility.someLabel", { count: selectedCount, total: team.length })
-      : t("shell.patientVisibility.restrictedLabel");
+    : adminsOnly
+      ? t("shell.patientVisibility.adminsOnlyLabel")
+      : team.length > 0
+        ? t("shell.patientVisibility.someLabel", { count: selectedCount, total: team.length })
+        : t("shell.patientVisibility.restrictedLabel");
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -111,25 +126,28 @@ export function PatientVisibilityPicker({ value, onChange, disabled, team: teamP
     return team.filter((m) => `${m.firstName} ${m.lastName}`.toLowerCase().includes(q));
   }, [team, query]);
 
-  // El ÚLTIMO no-admin de una lista restringida no se puede destildar: dejar la
-  // lista vacía significa "todos" (ver patient-visibility.ts), así que quitarlo
-  // volvería PÚBLICO al paciente justo cuando el usuario quería esconderlo más
-  // — el error se pagaría en la dirección peligrosa. Para quitar la restricción
-  // está el botón "Que lo vea todo el equipo".
-  const isLastSelected = (m: VisibilityTeamMember) =>
-    restricted && value.length === 1 && value[0] === m.id;
-
   function toggle(m: VisibilityTeamMember) {
     if (isAdminRole(m.role)) return; // siempre ven: no se togglea
-    if (isLastSelected(m)) return;
-    // Primer clic sobre el estado "todos": materializamos la lista con TODO el
-    // equipo no-admin y quitamos al que se destildó. Así "excluir a una persona"
-    // es un solo clic, que es el caso de uso real.
-    const base = restricted ? value : selectable.map((s) => s.id);
-    const next = base.includes(m.id) ? base.filter((id) => id !== m.id) : [...base, m.id];
-    // Si vuelven a quedar todos → "todos" ([]), no una lista redundante que
-    // habría que mantener al alta de un compañero nuevo.
-    onChange(next.length === selectable.length ? [] : next);
+    // Trabajamos SOLO con la selección de no-admins. Al primer clic desde
+    // "todos" materializamos toda la lista no-admin y quitamos al destildado;
+    // así "excluir a una persona" es un solo clic (el caso de uso real).
+    const currentNonAdmin = restricted
+      ? selectable.filter((s) => value.includes(s.id)).map((s) => s.id)
+      : selectable.map((s) => s.id);
+    const nextNonAdmin = currentNonAdmin.includes(m.id)
+      ? currentNonAdmin.filter((id) => id !== m.id)
+      : [...currentNonAdmin, m.id];
+
+    if (nextNonAdmin.length === selectable.length) {
+      onChange([]); // vuelven todos → "todos" ([]), sin lista redundante
+    } else if (nextNonAdmin.length === 0) {
+      // Ningún no-admin → "solo administradores". Guardamos ids de admin para que
+      // la lista quede NO vacía (vacía = "todos"). Sin admins en el equipo no es
+      // representable → dejamos la selección como estaba.
+      if (adminIds.length > 0) onChange(adminIds);
+    } else {
+      onChange(nextNonAdmin);
+    }
   }
 
   const isChecked = (m: VisibilityTeamMember) =>
@@ -230,21 +248,14 @@ export function PatientVisibilityPicker({ value, onChange, disabled, team: teamP
             {!loading &&
               filtered.map((m) => {
                 const admin = isAdminRole(m.role);
-                const last = isLastSelected(m);
-                const locked = admin || last;
+                const locked = admin;
                 return (
                   <button
                     key={m.id}
                     type="button"
                     onClick={() => toggle(m)}
                     disabled={locked}
-                    title={
-                      admin
-                        ? t("shell.patientVisibility.adminAlways")
-                        : last
-                          ? t("shell.patientVisibility.atLeastOne")
-                          : undefined
-                    }
+                    title={admin ? t("shell.patientVisibility.adminAlways") : undefined}
                     style={{
                       display: "flex",
                       alignItems: "center",
@@ -302,27 +313,42 @@ export function PatientVisibilityPicker({ value, onChange, disabled, team: teamP
                           {t("shell.patientVisibility.adminAlways")}
                         </span>
                       )}
-                      {last && (
-                        <span style={{ display: "block", fontSize: 10, color: "var(--text-3)" }}>
-                          {t("shell.patientVisibility.atLeastOne")}
-                        </span>
-                      )}
                     </span>
                   </button>
                 );
               })}
           </div>
 
-          {restricted && (
-            <div style={{ padding: 8, borderTop: "1px solid var(--border-soft)" }}>
-              <button
-                type="button"
-                onClick={() => onChange([])}
-                className="btn-new btn-new--ghost btn-new--sm"
-                style={{ width: "100%" }}
-              >
-                {t("shell.patientVisibility.reset")}
-              </button>
+          {(restricted || (adminIds.length > 0 && !adminsOnly)) && (
+            <div
+              style={{
+                padding: 8,
+                borderTop: "1px solid var(--border-soft)",
+                display: "flex",
+                flexDirection: "column",
+                gap: 6,
+              }}
+            >
+              {adminIds.length > 0 && !adminsOnly && (
+                <button
+                  type="button"
+                  onClick={() => onChange(adminIds)}
+                  className="btn-new btn-new--ghost btn-new--sm"
+                  style={{ width: "100%" }}
+                >
+                  {t("shell.patientVisibility.adminsOnlyAction")}
+                </button>
+              )}
+              {restricted && (
+                <button
+                  type="button"
+                  onClick={() => onChange([])}
+                  className="btn-new btn-new--ghost btn-new--sm"
+                  style={{ width: "100%" }}
+                >
+                  {t("shell.patientVisibility.reset")}
+                </button>
+              )}
             </div>
           )}
         </Popover.Content>

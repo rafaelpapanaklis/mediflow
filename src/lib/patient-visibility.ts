@@ -16,8 +16,11 @@ import type { Prisma } from "@prisma/client";
  *              restringe: manda sobre las heurísticas (un doctor con cita del
  *              paciente NO lo ve si no está en la lista).
  *
- * Los admins (ADMIN / SUPER_ADMIN) NO se guardan en la lista: la regla los
- * cubre implícito, así que "admin nuevo" ve todo sin backfill.
+ * Los admins (ADMIN / SUPER_ADMIN) normalmente NO se guardan en la lista: la
+ * regla los cubre implícito, así que "admin nuevo" ve todo sin backfill. ÚNICA
+ * excepción: "solo administradores" — si el creador restringe a puros admins,
+ * se guardan ids de admin para que la lista quede NO vacía (vacía = "todos");
+ * todo no-admin queda excluido y los demás admins siguen viéndolo por la regla.
  *
  * La columna vive en sql/patient-visibility.sql — APLICARLA ANTES del deploy.
  *
@@ -156,14 +159,16 @@ export async function assertPatientVisible(
 /**
  * Normaliza la lista que llega del cliente al crear/editar un paciente:
  *  - solo ids de usuarios ACTIVOS de la MISMA clínica (multi-tenant),
- *  - sin admins (la regla ya los cubre; guardarlos sería ruido que se
- *    desincroniza cuando alguien cambia de rol),
+ *  - normalmente sin admins (la regla ya los cubre); EXCEPCIÓN: "solo
+ *    administradores" (ver abajo), donde sí se guardan ids de admin para que la
+ *    lista no quede vacía,
  *  - sin duplicados,
  *  - auto-incluye al actor si NO es admin: sin esto, un doctor o
  *    recepcionista podría crear un paciente que él mismo no puede ver.
  *
- * Devuelve `[]` cuando la lista queda "todos" (vacía, o todos los elegidos
- * eran admins) → semántica default, sin restricción.
+ * Devuelve `[]` SOLO cuando la lista llega vacía → "todos", semántica default.
+ * Si el cliente restringió a puros admins (destildó a todo el staff no-admin),
+ * devuelve los ids de admin: lista NO vacía = "solo administradores".
  *
  * Lanza si algún id no pertenece a la clínica (mismo patrón que la validación
  * de primaryDoctorId en PATCH /api/patients/[id]).
@@ -188,16 +193,23 @@ export async function normalizeVisibleUserIds(
     throw new Error("visibleUserIds inválido: usuario fuera de la clínica o inactivo");
   }
 
-  // Los admins no se guardan. Si SOLO se eligieron admins, la lista queda
-  // vacía = "todos": es lo correcto, "solo los admins" no es expresable y
-  // pedirlo por accidente no debe ocultarle el paciente a la clínica entera.
-  const ids = users.filter((u) => !isVisibilityAdmin(u.role)).map((u) => u.id);
-  if (ids.length === 0) return [];
+  const nonAdminIds = users.filter((u) => !isVisibilityAdmin(u.role)).map((u) => u.id);
 
-  if (!isVisibilityAdmin(actor.role) && !ids.includes(actor.userId)) {
-    ids.push(actor.userId);
+  // "Solo administradores": el cliente mandó una lista restringida pero sin
+  // ningún no-admin (el creador destildó a todo el staff no-admin). Guardamos
+  // los ids de admin para que la lista quede NO vacía (vacía = "todos"): como la
+  // regla ya da acceso a CUALQUIER admin, esto excluye a TODO no-admin sin tocar
+  // ningún filtro de enforcement (todos usan has(userId) / isEmpty).
+  if (nonAdminIds.length === 0) {
+    return users.filter((u) => isVisibilityAdmin(u.role)).map((u) => u.id);
   }
-  return ids;
+
+  // Auto-inclusión del actor no-admin: sin esto crearía un paciente que él
+  // mismo no puede ver.
+  if (!isVisibilityAdmin(actor.role) && !nonAdminIds.includes(actor.userId)) {
+    nonAdminIds.push(actor.userId);
+  }
+  return nonAdminIds;
 }
 
 /**

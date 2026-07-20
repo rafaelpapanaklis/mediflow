@@ -530,11 +530,13 @@
       "allLabel": "Visibility: Everyone",
       "someLabel": "Visibility: {count} of {total}",
       "restrictedLabel": "Visibility: Restricted",
+      "adminsOnlyLabel": "Visibility: Admins only",
       "adminAlways": "Admins always have access",
       "atLeastOne": "At least one person must remain",
       "searchPlaceholder": "Search the team…",
       "empty": "No team members.",
       "reset": "Let the whole team see them",
+      "adminsOnlyAction": "Admins only",
       "restrictedBadge": "Restricted visibility ({count})"
     },
     "quickActions": {
