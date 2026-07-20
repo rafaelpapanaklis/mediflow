@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthContext } from "@/lib/auth-context";
 import { prisma } from "@/lib/prisma";
+import { assertPatientVisible } from "@/lib/patient-visibility";
 import { createRoom, createMeetingToken } from "@/lib/daily";
 
 export async function POST(req: NextRequest) {
@@ -20,6 +21,13 @@ export async function POST(req: NextRequest) {
 
     if (!appointment) {
       return NextResponse.json({ error: "Cita no encontrada" }, { status: 404 });
+    }
+
+    // Visibilidad por paciente: no crear la sala (nombre del paciente en los
+    // tokens) para quien no puede ver a ese paciente.
+    if (appointment.patientId) {
+      const denied = await assertPatientVisible(appointment.patientId, { userId: ctx.userId, role: ctx.role, clinicId: ctx.clinicId });
+      if (denied) return denied;
     }
 
     if (appointment.mode !== "TELECONSULTATION") {

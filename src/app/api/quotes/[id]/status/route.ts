@@ -4,6 +4,7 @@ import { getAuthContext } from "@/lib/auth-context";
 import { prisma } from "@/lib/prisma";
 import { logAudit } from "@/lib/audit";
 import { serializeQuote } from "@/lib/quotes/serialize";
+import { assertPatientVisible } from "@/lib/patient-visibility";
 
 export const dynamic = "force-dynamic";
 
@@ -36,9 +37,16 @@ export async function POST(req: NextRequest, { params }: Params) {
 
   const quote = await prisma.quote.findFirst({
     where: { id: params.id, clinicId: ctx.clinicId },
-    select: { id: true, status: true, acceptToken: true, validUntil: true },
+    select: { id: true, status: true, acceptToken: true, validUntil: true, patientId: true },
   });
   if (!quote) return NextResponse.json({ error: "Presupuesto no encontrado" }, { status: 404 });
+
+  // Visibilidad por paciente: no permitir cambiar el estado (ni recibir el
+  // presupuesto con nombre del paciente) a quien no puede ver a ese paciente.
+  if (quote.patientId) {
+    const denied = await assertPatientVisible(quote.patientId, { userId: ctx.userId, role: ctx.role, clinicId: ctx.clinicId });
+    if (denied) return denied;
+  }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const data: any = {};

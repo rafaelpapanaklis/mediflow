@@ -6,6 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { sendWhatsAppMessage } from "@/lib/whatsapp";
 import { sendEmail } from "@/lib/email";
 import { logMutation } from "@/lib/audit";
+import { assertPatientVisible } from "@/lib/patient-visibility";
 
 export const dynamic = "force-dynamic";
 
@@ -37,6 +38,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     where: { id: params.id, clinicId: ctx.clinicId },
     select: {
       id: true,
+      patientId: true,
       issuedAt: true,
       verifyUrl: true,
       patient: { select: { firstName: true, lastName: true, phone: true, email: true } },
@@ -44,6 +46,13 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     },
   });
   if (!rx) return NextResponse.json({ error: "Receta no encontrada" }, { status: 404 });
+
+  // Visibilidad por paciente: no enviar (ni exponer datos de) la receta de un
+  // paciente que este usuario no puede ver.
+  if (rx.patientId) {
+    const denied = await assertPatientVisible(rx.patientId, { userId: ctx.userId, role: ctx.role, clinicId: ctx.clinicId });
+    if (denied) return denied;
+  }
 
   // Fallback por si la receta quedó sin verifyUrl persistida.
   const proto = req.headers.get("x-forwarded-proto") ?? "https";

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getAuthContext } from "@/lib/auth-context";
 import { prisma } from "@/lib/prisma";
 import { PLAN_STATUS } from "@/lib/payment-plans/status";
+import { assertPatientVisible } from "@/lib/patient-visibility";
 
 // PATCH /api/payment-plans/[id] — register a payment on an installment
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
@@ -13,6 +14,13 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     include: { payments: true },
   });
   if (!plan) return NextResponse.json({ error: "Plan no encontrado" }, { status: 404 });
+
+  // Visibilidad por paciente: no permitir registrar pagos (ni recibir el plan
+  // con nombre del paciente) a quien no puede ver a ese paciente.
+  if (plan.patientId) {
+    const denied = await assertPatientVisible(plan.patientId, { userId: ctx.userId, role: ctx.role, clinicId: ctx.clinicId });
+    if (denied) return denied;
+  }
 
   const body = await req.json();
   const { installmentId, method, notes } = body;
@@ -56,6 +64,13 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
     where: { id: params.id, clinicId: ctx.clinicId },
   });
   if (!plan) return NextResponse.json({ error: "Plan no encontrado" }, { status: 404 });
+
+  // Visibilidad por paciente: no permitir cancelar el plan de un paciente que
+  // este usuario no puede ver.
+  if (plan.patientId) {
+    const denied = await assertPatientVisible(plan.patientId, { userId: ctx.userId, role: ctx.role, clinicId: ctx.clinicId });
+    if (denied) return denied;
+  }
 
   await prisma.paymentPlan.updateMany({ where: { id: params.id, clinicId: ctx.clinicId }, data: { status: PLAN_STATUS.CANCELLED } });
   return NextResponse.json({ success: true });

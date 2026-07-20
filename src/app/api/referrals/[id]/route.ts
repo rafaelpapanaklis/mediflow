@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { logMutation } from "@/lib/audit";
+import { assertPatientVisible } from "@/lib/patient-visibility";
 
 export const dynamic = "force-dynamic";
 
@@ -19,6 +20,14 @@ export async function GET(_req: NextRequest, { params }: Params) {
     },
   });
   if (!ref) return NextResponse.json({ error: "not_found" }, { status: 404 });
+
+  // Visibilidad por paciente: no exponer la referencia (nombre + patientNumber)
+  // a quien no puede ver a ese paciente.
+  if (ref.patientId) {
+    const denied = await assertPatientVisible(ref.patientId, { userId: user.id, role: user.role, clinicId: user.clinicId });
+    if (denied) return denied;
+  }
+
   return NextResponse.json(ref);
 }
 
@@ -36,6 +45,13 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     where: { id: params.id, clinicId: user.clinicId },
   });
   if (!existing) return NextResponse.json({ error: "not_found" }, { status: 404 });
+
+  // Visibilidad por paciente: no permitir actualizar la referencia de un
+  // paciente que este usuario no puede ver.
+  if (existing.patientId) {
+    const denied = await assertPatientVisible(existing.patientId, { userId: user.id, role: user.role, clinicId: user.clinicId });
+    if (denied) return denied;
+  }
 
   let body: { status?: string; response?: string };
   try { body = await req.json(); } catch {
