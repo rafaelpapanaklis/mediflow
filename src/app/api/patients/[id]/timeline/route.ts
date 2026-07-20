@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { getVisiblePatientClinicIds, clinicScopeFilter } from "@/lib/branches";
+import { getVisiblePatientClinicIds, clinicScopeFilter, sharedRecordScope } from "@/lib/branches";
 
 export const dynamic = "force-dynamic";
 
@@ -116,7 +116,10 @@ export async function GET(req: NextRequest, { params }: Params) {
   // Promise.all con max 7 entidades (regla DaleControl).
   const [soapRows, apptRows, rxRows, xrayRows, treatmentRows, referralRows, dxRows] = await Promise.all([
     wantSoap ? prisma.medicalRecord.findMany({
-      where: { clinicId: clinicalScope, patientId: params.id, ...dateRange<"visitDate">("visitDate") },
+      // sharedRecordScope (no clinicalScope pelado): de una sede AJENA nunca se
+      // leen notas privadas de otro doctor. El timeline lo ven además los
+      // RECEPTIONIST, así que aquí importa doblemente.
+      where: { ...sharedRecordScope(user.clinicId, visibleClinicIds), patientId: params.id, ...dateRange<"visitDate">("visitDate") },
       select: {
         id: true, visitDate: true, subjective: true, assessment: true, plan: true,
         specialtyData: true,

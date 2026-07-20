@@ -89,9 +89,10 @@ interface PatientRow {
  * `maxWidth: 100%` + ellipsis (los nombres de sede pueden ser largos).
  */
 function BranchOriginBadge({ name }: { name: string }) {
+  const t = useT();
   return (
     <span
-      title={`Paciente de la sede ${name}`}
+      title={t("patients.row.fromBranch", { name })}
       style={{
         display: "inline-flex",
         alignItems: "center",

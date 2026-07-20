@@ -235,20 +235,57 @@ export async function getOwnedBranches(
 }
 
 /**
- * Vínculos existentes ENTRE las sedes del dueño. Filtra por `in` en ambos
- * lados: aunque quedara una fila huérfana apuntando a una clínica que ya no
- * es suya, no se la devolvemos.
+ * Vínculos donde participa AL MENOS UNA sede del dueño.
+ *
+ * ⚠️ Ojo con la asimetría (bug encontrado en revisión adversarial): exigir que
+ * AMBOS lados fueran suyos hacía que un vínculo se volviera INVISIBLE —y por
+ * tanto IRREVOCABLE— en cuanto el dueño dejaba de serlo de una de las dos
+ * sedes (un socio que se va, un SUPER_ADMIN desactivado). La sede ajena seguía
+ * leyendo pacientes para siempre y nadie podía cortar el vínculo desde la UI.
+ *
+ * Con "al menos uno" el dueño SIEMPRE ve —y puede cortar— todo lo que exponga
+ * a sus propias sedes. Es la propiedad que importa: cerrar la puerta de tu casa
+ * nunca debe depender de que el vecino coopere.
  */
 export async function listPatientLinks(ownedClinicIds: string[]) {
-  if (ownedClinicIds.length < 2) return [];
+  if (ownedClinicIds.length === 0) return [];
   return prisma.clinicPatientLink.findMany({
     where: {
-      clinicAId: { in: ownedClinicIds },
-      clinicBId: { in: ownedClinicIds },
+      OR: [
+        { clinicAId: { in: ownedClinicIds } },
+        { clinicBId: { in: ownedClinicIds } },
+      ],
     },
     select: { id: true, clinicAId: true, clinicBId: true },
     orderBy: { createdAt: "asc" },
   });
+}
+
+/**
+ * Scope de MedicalRecord para las superficies compartidas.
+ *
+ * Las notas marcadas `isPrivate` son del doctor que las escribió: /api/records
+ * ya las oculta a los demás dentro de la misma clínica. Al compartir entre
+ * sedes hay que ser MÁS estricto, no menos: de una sede AJENA nunca se leen
+ * notas privadas, porque el doctor que las escribió no tiene siquiera fila
+ * User en la sede que las está leyendo (los ids de doctor son por clínica, así
+ * que "es mía" es indecidible cruzando la frontera).
+ *
+ * Devuelve el filtro de clínica pelado cuando no hay nada compartido, así la
+ * query queda idéntica a la de hoy.
+ */
+export function sharedRecordScope(
+  activeClinicId: string,
+  visibleClinicIds: string[],
+): Record<string, unknown> {
+  const others = visibleClinicIds.filter((id) => id !== activeClinicId);
+  if (others.length === 0) return { clinicId: activeClinicId };
+  return {
+    OR: [
+      { clinicId: activeClinicId },
+      { clinicId: { in: others }, isPrivate: false },
+    ],
+  };
 }
 
 /**

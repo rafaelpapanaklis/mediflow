@@ -43,8 +43,15 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
     // existencia de vínculos ajenos.
     if (!link) return NextResponse.json({ error: "Vínculo no encontrado" }, { status: 404 });
 
+    // Basta con ser dueño de UNA de las dos sedes para cortar el vínculo.
+    //
+    // ⚠️ Exigir AMBAS (como estaba) crea un vínculo IRREVOCABLE: si el dueño
+    // deja de serlo de una de las dos sedes —socio que se va, SUPER_ADMIN
+    // desactivado—, nadie puede volver a cerrarlo y la sede ajena sigue
+    // leyendo pacientes indefinidamente. Revocar el acceso A TUS PROPIOS datos
+    // tiene que ser siempre unilateral; vincular sí exige las dos (ver POST).
     const owned = await getOwnedClinicIds(ctx.user.supabaseId);
-    if (owned.indexOf(link.clinicAId) === -1 || owned.indexOf(link.clinicBId) === -1) {
+    if (owned.indexOf(link.clinicAId) === -1 && owned.indexOf(link.clinicBId) === -1) {
       return NextResponse.json({ error: "Vínculo no encontrado" }, { status: 404 });
     }
 

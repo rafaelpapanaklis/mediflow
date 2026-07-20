@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { Prisma, PatientStatus, Gender } from "@prisma/client";
 import { getAuthContext, buildPatientWhere } from "@/lib/auth-context";
 import { prisma } from "@/lib/prisma";
-import { getPatientVisibility } from "@/lib/branches";
+import { getPatientVisibility, sharedRecordScope } from "@/lib/branches";
 import { patientSchema } from "@/lib/validations";
 import { validateCurpRecord } from "@/lib/validators/curp";
 import { logMutation } from "@/lib/audit";
@@ -24,8 +24,13 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
       // prestado: cada sucursal agenda y cobra por separado. Para un paciente
       // propio el filtro no cambia nada.
       appointments: { where: { clinicId: ctx.clinicId }, orderBy: { startsAt: "desc" }, include: { doctor: true } },
-      // El expediente SÍ viaja: es el contenido clínico que se comparte.
-      records:      { orderBy: { visitDate: "desc" }, include: { doctor: true } },
+      // El expediente SÍ viaja: es el contenido clínico que se comparte. El
+      // scope explícito es defensa en profundidad — hoy medicalRecord.clinicId
+      // SIEMPRE coincide con el del paciente (todos los writers lo validan),
+      // así que para un paciente propio es no-op; queda puesto para que el día
+      // que exista una escritura sobre paciente prestado esto no se vuelva una
+      // fuga transitiva. Además excluye notas privadas de sedes ajenas.
+      records:      { where: sharedRecordScope(ctx.clinicId, visibility.clinicIds), orderBy: { visitDate: "desc" }, include: { doctor: true } },
       invoices:     { where: { clinicId: ctx.clinicId }, include: { payments: true } },
     },
   });

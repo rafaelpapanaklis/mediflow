@@ -9,11 +9,13 @@
 --     CRM / afiliados — ver MEMORY: lesson_ortho_schema_drift).
 --     https://supabase.com/dashboard/project/_/sql/new
 --
---     MATIZ de esta tabla: el feature sale detrás del flag
---     PATIENT_SHARING_ENABLED = false (src/lib/branches-shared.ts). Con el
---     flag apagado NADIE consulta esta tabla, así que mergear sin correr el
---     SQL no tumba producción. Igual hay que correrlo ANTES de encender el
---     flag, y correrlo antes del merge es gratis (aditivo, no toca datos).
+--     ⚠️ ES OBLIGATORIO ANTES DEL MERGE, no sólo antes de encender el flag.
+--     El flag PATIENT_SHARING_ENABLED (src/lib/branches-shared.ts, hoy false)
+--     apaga la LECTURA de pacientes compartidos, pero NO apaga la pantalla
+--     /dashboard/settings/sucursales ni los endpoints /api/clinics/links:
+--     esos consultan la tabla SIEMPRE. Sin este SQL, esa página revienta con
+--     P2021 (500 en un server component) y los endpoints devuelven 500.
+--     Correrlo antes del merge es gratis: es aditivo y no toca datos.
 --
 -- ADITIVO e IDEMPOTENTE: seguro de re-correr. No borra ni modifica datos.
 -- Columnas camelCase entrecomilladas (espejo exacto de Prisma; sin @map).

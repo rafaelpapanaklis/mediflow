@@ -329,6 +329,7 @@
       "sharePatients": "Compartir pacientes con otra sede",
       "comingSoon": "Próximamente",
       "sharePatientsHint": "Por ahora cada sucursal tiene su propio expediente, agenda y facturación, totalmente separados.",
+      "manage": "Administrar sucursales",
       "sharePatientsWith": "Compartir pacientes con:",
       "sharePatientsSelectHint": "Elige con qué sedes compartirá el expediente. La agenda y la facturación siguen separadas por sucursal. Puedes cambiarlo después en Configuración → Sucursales."
     },
@@ -1994,6 +1995,7 @@
     },
     "row": {
       "selectPatient": "Seleccionar paciente {name}",
+      "fromBranch": "Paciente de la sede {name}",
       "yearsOld": "{age} años",
       "doctorPrefix": "Dr/a.",
       "whatsapp": "WhatsApp",

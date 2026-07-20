@@ -1143,6 +1143,30 @@ function ClinicSwitcher({
                     : t("sidebar.branches.needsSubscription")}
                 </div>
               )}
+              {/* MULTI-CLÍNICA · FASE 2 — única entrada a la pantalla de
+                  sucursales (compartir pacientes entre sedes). Sin esto la
+                  página queda huérfana: no se llega más que tecleando la URL.
+                  Sólo tiene sentido con 2+ sedes; el guard real (SUPER_ADMIN)
+                  vive en la página y en la API. */}
+              {branches.quota.used > 1 && (
+                <DropdownMenu.Item
+                  onSelect={() => router.push("/dashboard/settings/sucursales")}
+                  style={{
+                    padding: "8px 10px",
+                    fontSize: 12,
+                    color: "var(--text-2)",
+                    borderRadius: 6,
+                    cursor: "pointer",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 8,
+                    outline: "none",
+                  }}
+                >
+                  <Settings size={13} aria-hidden />
+                  {t("sidebar.branches.manage")}
+                </DropdownMenu.Item>
+              )}
             </>
           )}
         </DropdownMenu.Content>

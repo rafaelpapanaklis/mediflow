@@ -6,7 +6,7 @@ import { revalidatePath } from "next/cache";
 import { readActiveClinicCookie } from "@/lib/active-clinic";
 import { logMutation } from "@/lib/audit";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
-import { getVisiblePatientClinicIds, clinicScopeFilter } from "@/lib/branches";
+import { getVisiblePatientClinicIds, sharedRecordScope } from "@/lib/branches";
 import { round2 } from "@/lib/quotes/compute";
 import {
   EMPTY_NOTE_ERROR,
@@ -56,7 +56,10 @@ export async function GET(req: NextRequest) {
   // contra dbUser.clinicId (una consulta nace siempre en la sede activa).
   const visibleClinicIds = await getVisiblePatientClinicIds(dbUser.clinicId);
   const records = await prisma.medicalRecord.findMany({
-    where: { clinicId: clinicScopeFilter(visibleClinicIds), patientId },
+    // sharedRecordScope excluye las notas privadas de las sedes AJENAS: cruzando
+    // la frontera "esta nota es mía" no se puede decidir (los ids de doctor son
+    // por clínica), así que se cierra.
+    where: { ...sharedRecordScope(dbUser.clinicId, visibleClinicIds), patientId },
     include: { doctor: { select: { id: true, firstName: true, lastName: true } } },
     orderBy: { visitDate: "desc" },
   });

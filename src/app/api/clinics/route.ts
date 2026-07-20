@@ -194,8 +194,10 @@ export async function POST(req: NextRequest) {
     // tiramos — el dueño puede reintentar desde /dashboard/settings/sucursales.
     //
     // Anti-IDOR: cada id del body se coteja contra las sedes del supabaseId de
-    // la SESIÓN. `owned` se calcula ANTES de meter la nueva, así que un id
-    // ajeno (o la propia sede recién creada) simplemente no pasa el filtro.
+    // la SESIÓN. OJO — `owned` se calcula DESPUÉS del create, así que YA
+    // incluye la sede recién nacida; quien impide el auto-vínculo es el
+    // `targetId === clinic.id` explícito de abajo (y, en el fondo, el CHECK
+    // clinicAId < clinicBId de la tabla). No quitar ninguno de los dos.
     if (PATIENT_SHARING_ENABLED && data.sharePatientsWith && data.sharePatientsWith.length > 0) {
       try {
         const owned = await getOwnedClinicIds(supabaseId);
@@ -203,10 +205,22 @@ export async function POST(req: NextRequest) {
           const targetId = data.sharePatientsWith[i];
           if (targetId === clinic.id) continue;
           if (owned.indexOf(targetId) === -1) continue;
-          await createPatientLink({
+          const link = await createPatientLink({
             clinicXId: clinic.id,
             clinicYId: targetId,
             createdById: ctx.userId,
+          });
+          // Abrir el expediente de una sede a otra es un evento auditable por
+          // sí mismo: sin esto, los vínculos creados en el alta no dejaban
+          // ningún rastro (los de /api/clinics/links sí).
+          await logMutation({
+            req,
+            clinicId: ctx.clinicId,
+            userId: ctx.userId,
+            entityType: "clinic",
+            entityId: link.id,
+            action: "create",
+            after: { patientLink: true, clinicAId: link.clinicAId, clinicBId: link.clinicBId },
           });
         }
       } catch (linkErr: any) {

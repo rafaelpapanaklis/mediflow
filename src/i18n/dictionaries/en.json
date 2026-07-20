@@ -329,6 +329,7 @@
       "sharePatients": "Share patients with another location",
       "comingSoon": "Coming soon",
       "sharePatientsHint": "For now each branch keeps its own records, schedule and billing, fully separate.",
+      "manage": "Manage branches",
       "sharePatientsWith": "Share patients with:",
       "sharePatientsSelectHint": "Pick which locations will share the patient record. Schedule and billing stay separate per branch. You can change this later in Settings → Branches."
     },
@@ -1994,6 +1995,7 @@
     },
     "row": {
       "selectPatient": "Select patient {name}",
+      "fromBranch": "Patient from the {name} location",
       "yearsOld": "{age} yrs",
       "doctorPrefix": "Dr.",
       "whatsapp": "WhatsApp",

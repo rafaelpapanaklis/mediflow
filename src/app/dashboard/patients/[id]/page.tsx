@@ -3,7 +3,7 @@ export const dynamic = "force-dynamic";
 import { getCurrentUser } from "@/lib/auth";
 import { getServerT } from "@/i18n/server";
 import { prisma } from "@/lib/prisma";
-import { getPatientVisibility, clinicScopeFilter } from "@/lib/branches";
+import { getPatientVisibility, clinicScopeFilter, sharedRecordScope } from "@/lib/branches";
 import { getPatientCreditBalance } from "@/lib/patient-credit";
 import { notFound } from "next/navigation";
 import { headers } from "next/headers";
@@ -59,7 +59,10 @@ export default async function PatientDetailPage({ params }: { params: { id: stri
           include: { doctor: { select: { id: true, firstName: true, lastName: true } } },
         },
         // El expediente SÍ se comparte: es el contenido clínico de la Fase 2.
+        // Scope explícito = defensa en profundidad (no-op para paciente propio)
+        // + excluye notas privadas de otro doctor cuando la sede es ajena.
         records: {
+          where: sharedRecordScope(user.clinicId, visibility.clinicIds),
           orderBy: { visitDate: "desc" },
           take: 20,
           include: { doctor: { select: { id: true, firstName: true, lastName: true } } },

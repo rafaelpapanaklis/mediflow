@@ -37,7 +37,10 @@ const createSchema = z.object({
   clinicBId: z.string().trim().min(1).max(40),
 });
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  const rl = await persistentRateLimit(req, LINKS_RATE_LIMIT);
+  if (rl) return rl;
+
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
   if (ctx.role !== "SUPER_ADMIN") {
