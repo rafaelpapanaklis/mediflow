@@ -7,6 +7,8 @@ import { ClinicalModule, ClinicalPhotoStage, ClinicalPhotoType } from "@prisma/c
 import { prisma } from "@/lib/prisma";
 import { getAuthContext } from "@/lib/auth-context";
 import { signMaybeUrls } from "@/lib/storage";
+import { storageQuotaError } from "@/lib/storage-quota";
+import { validateMagicNumber } from "@/lib/validate-upload";
 import { auditClinicalShared, guardPatient } from "@/lib/clinical-shared/auth/guard";
 import {
   ALLOWED_PHOTO_MIME,
@@ -45,7 +47,13 @@ export type UploadClinicalPhotoInput = z.infer<typeof uploadSchema> & {
   body: ArrayBuffer | Uint8Array;
 };
 
-/** Sube binario + crea row ClinicalPhoto. */
+/** Sube binario + crea row ClinicalPhoto.
+ *
+ * Ficha v3: comprime con sharp (patrón del upload de ortodoncia: 2400px
+ * jpeg q85 mozjpeg + thumbnail 300px webp q80) en modo best-effort — si
+ * sharp no decodifica (ej. HEIC según plataforma) sube el original y deja
+ * thumbnailUrl null. Aplica la cuota de storage del plan ANTES de subir y
+ * registra sizeBytes (bytes realmente almacenados) para esa misma cuota. */
 export async function uploadClinicalPhotoAction(
   input: UploadClinicalPhotoInput,
 ): Promise<ActionResult<{ id: string }>> {
@@ -55,7 +63,7 @@ export async function uploadClinicalPhotoAction(
     return fail("Tipo de archivo no permitido");
   }
   if (parsed.data.size > MAX_PHOTO_BYTES) {
-    return fail("La foto excede el tamaño máximo (8MB)");
+    return fail("La foto excede el tamaño máximo (25MB)");
   }
 
   const ctx = await getAuthContext();
@@ -64,14 +72,92 @@ export async function uploadClinicalPhotoAction(
   const guard = await guardPatient({ ctx, patientId: parsed.data.patientId });
   if (isFailure(guard)) return fail(guard.error);
 
+  // Blindaje: firma real del contenido (no la extensión/MIME declarado),
+  // mismo patrón que /api/orthodontics/photos/upload.
+  const rawBytes =
+    input.body instanceof Uint8Array ? input.body : new Uint8Array(input.body);
+  // Array.from (no spread): el tsconfig no baja iteradores de Set (target).
+  const magicErr = await validateMagicNumber(rawBytes, Array.from(ALLOWED_PHOTO_MIME));
+  if (magicErr) {
+    return fail(`Archivo no válido: ${magicErr}`);
+  }
+
+  // Cuota de almacenamiento del plan — ANTES de subir bytes. storageQuotaError
+  // devuelve una NextResponse 402 (contrato de las API routes); aquí se
+  // traduce al ActionResult con code PLAN_LIMIT_STORAGE para que la UI
+  // muestre el CTA de plan.
+  const quotaRes = await storageQuotaError(ctx.clinicId, parsed.data.size);
+  if (quotaRes) {
+    let msg = "Llegaste al límite de almacenamiento de tu plan. Libera espacio o sube de plan.";
+    try {
+      const body = (await quotaRes.json()) as { error?: string };
+      if (body?.error) msg = body.error;
+    } catch {
+      /* usa el mensaje default */
+    }
+    return fail(msg, "PLAN_LIMIT_STORAGE");
+  }
+
+  // Compresión + thumbnail (best-effort). HEIC/HEIF pueden fallar según la
+  // plataforma de sharp → se sube el original tal cual y sin thumbnail (la
+  // UI cae al blobUrl).
+  let mainBody: Buffer = Buffer.from(rawBytes);
+  let mainContentType = parsed.data.contentType;
+  let mainFileName = parsed.data.fileName;
+  let thumbBody: Buffer | null = null;
+  try {
+    const sharp = (await import("sharp")).default;
+    const compressed = await sharp(mainBody)
+      .rotate()
+      .resize(2400, 2400, { fit: "inside", withoutEnlargement: true })
+      .jpeg({ quality: 85, mozjpeg: true })
+      .toBuffer();
+    thumbBody = await sharp(mainBody)
+      .rotate()
+      .resize(300, 300, { fit: "cover" })
+      .webp({ quality: 80 })
+      .toBuffer();
+    mainBody = compressed;
+    mainContentType = "image/jpeg";
+    mainFileName = `${parsed.data.fileName.replace(/\.[^.]+$/, "")}.jpg`;
+  } catch (e) {
+    console.warn(
+      "[clinical-photos] compresión sharp falló; se sube el original:",
+      e instanceof Error ? e.message : e,
+    );
+    thumbBody = null;
+  }
+
   const { storagePath } = await uploadClinicalPhoto({
     clinicId: ctx.clinicId,
     patientId: parsed.data.patientId,
     module: parsed.data.module,
-    fileName: parsed.data.fileName,
-    contentType: parsed.data.contentType,
-    body: input.body,
+    fileName: mainFileName,
+    contentType: mainContentType,
+    body: mainBody,
   });
+
+  // Thumbnail best-effort: si su subida falla, la foto queda sin thumb
+  // (la UI usa blobUrl) en vez de tumbar la action completa.
+  let thumbPath: string | null = null;
+  if (thumbBody) {
+    try {
+      const thumbUpload = await uploadClinicalPhoto({
+        clinicId: ctx.clinicId,
+        patientId: parsed.data.patientId,
+        module: parsed.data.module,
+        fileName: `thumb_${mainFileName.replace(/\.[^.]+$/, "")}.webp`,
+        contentType: "image/webp",
+        body: thumbBody,
+      });
+      thumbPath = thumbUpload.storagePath;
+    } catch (e) {
+      console.warn(
+        "[clinical-photos] subida de thumbnail falló:",
+        e instanceof Error ? e.message : e,
+      );
+    }
+  }
 
   const created = await prisma.clinicalPhoto.create({
     data: {
@@ -83,7 +169,8 @@ export async function uploadClinicalPhotoAction(
       toothFdi: parsed.data.toothFdi ?? null,
       capturedBy: ctx.userId,
       blobUrl: storagePath,
-      thumbnailUrl: null,
+      thumbnailUrl: thumbPath,
+      sizeBytes: mainBody.length,
       notes: parsed.data.notes ?? null,
       annotations: parsed.data.annotations
         ? (parsed.data.annotations as unknown as object)
@@ -112,10 +199,15 @@ export async function deleteClinicalPhotoAction(
   if (!parsed.success) return fail("Datos inválidos");
   const ctx = await getAuthContext();
   if (!ctx) return fail("No autenticado");
+  // El rol de solo lectura puede ver la galería pero no destruir evidencia
+  // clínica (el soft-delete además borra el binario del bucket).
+  if (ctx.role === "READONLY") {
+    return fail("Tu rol de solo lectura no permite eliminar fotos");
+  }
 
   const photo = await prisma.clinicalPhoto.findUnique({
     where: { id: parsed.data.id },
-    select: { id: true, clinicId: true, patientId: true, blobUrl: true, deletedAt: true },
+    select: { id: true, clinicId: true, patientId: true, blobUrl: true, thumbnailUrl: true, deletedAt: true },
   });
   if (!photo || photo.deletedAt) return fail("Foto no encontrada");
   if (photo.clinicId !== ctx.clinicId) return fail("Sin acceso a esta foto");
@@ -125,6 +217,7 @@ export async function deleteClinicalPhotoAction(
     data: { deletedAt: new Date() },
   });
   await removeClinicalPhotoBinary(photo.blobUrl);
+  if (photo.thumbnailUrl) await removeClinicalPhotoBinary(photo.thumbnailUrl);
 
   await auditClinicalShared({
     ctx,

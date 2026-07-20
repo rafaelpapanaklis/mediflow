@@ -83,6 +83,25 @@ export function clinicalPhotoTypeLabel(type: ClinicalPhotoType): string {
       return "Post-tratamiento";
     case "oral_general":
       return "Oral general";
+    // fotos clínicas generales (módulo `general`, ficha v3)
+    case "extraoral_front":
+      return "Extraoral frontal";
+    case "extraoral_smile":
+      return "Extraoral sonrisa";
+    case "extraoral_profile_right":
+      return "Perfil derecho";
+    case "extraoral_profile_left":
+      return "Perfil izquierdo";
+    case "intraoral_front":
+      return "Intraoral frontal";
+    case "intraoral_lateral_right":
+      return "Intraoral lateral derecha";
+    case "intraoral_lateral_left":
+      return "Intraoral lateral izquierda";
+    case "occlusal_upper":
+      return "Oclusal superior";
+    case "occlusal_lower":
+      return "Oclusal inferior";
     case "other":
       return "Otra";
     default:
@@ -241,6 +260,19 @@ export function allowedPhotoTypesForModule(
         "sealant_post",
         "fluoride_app",
         "behavior_documentation",
+        "other",
+      ];
+    case "general":
+      return [
+        "extraoral_front",
+        "extraoral_smile",
+        "extraoral_profile_right",
+        "extraoral_profile_left",
+        "intraoral_front",
+        "intraoral_lateral_right",
+        "intraoral_lateral_left",
+        "occlusal_upper",
+        "occlusal_lower",
         "other",
       ];
     default:

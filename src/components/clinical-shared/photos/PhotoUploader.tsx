@@ -114,7 +114,7 @@ export function PhotoUploader(props: PhotoUploaderProps) {
           <span style={{ fontSize: 14, color: "var(--text-1)" }}>
             Arrastra fotos o haz clic para seleccionar
           </span>
-          <span style={{ fontSize: 12 }}>JPG / PNG / WEBP — máx 8MB</span>
+          <span style={{ fontSize: 12 }}>JPG / PNG / WEBP — máx 25MB</span>
         </>
       )}
       {error ? (
