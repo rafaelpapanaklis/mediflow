@@ -5,6 +5,7 @@ import {
   Stethoscope,
   HeartPulse,
   FileImage,
+  Camera,
   Upload,
   Pill,
   Calendar,
@@ -96,6 +97,9 @@ export function buildPatientNavItems(opts: BuildPatientNavOpts): PatientNavItem[
     // Herramientas transversales — imagen, documentos y plan.
     { id: "odontograma",  labelKey: "patients.tabs.odontograma",  icon: Bone,         section: "imagen-docs" },
     { id: "radiografias", labelKey: "patients.tabs.radiografias", icon: FileImage,    section: "imagen-docs" },
+    // Fotos clínicas (ficha v3) — extraorales/intraorales por etapa,
+    // módulo ClinicalPhoto `general`. Junto a Radiografías por afinidad.
+    { id: "fotos",        labelKey: "patients.tabs.fotos",        icon: Camera,       section: "imagen-docs" },
     { id: "subidos",      labelKey: "patients.tabs.subidos",      icon: Upload,       section: "imagen-docs" },
     { id: "modelos-3d",   labelKey: "patients.tabs.modelos3d",    icon: Box,          section: "imagen-docs" },
     { id: "tratamiento",  labelKey: "patients.tabs.tratamiento",  icon: Pill,         section: "imagen-docs" },

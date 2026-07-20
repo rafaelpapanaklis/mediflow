@@ -1353,6 +1353,7 @@
       "cuestionario": "Health questionnaire",
       "evolucion": "SOAP notes",
       "radiografias": "X-rays",
+      "fotos": "Clinical photos",
       "subidos": "Patient uploads",
       "modelos3d": "3D models",
       "tratamiento": "Treatment plan",
@@ -1367,6 +1368,49 @@
       "ortodoncia": "Orthodontics",
       "recetas": "Prescriptions",
       "sectionsAria": "Patient sections"
+    },
+    "fotosTab": {
+      "title": "Clinical photos",
+      "subtitle": "Extraoral and intraoral photos by treatment stage",
+      "count": {
+        "one": "{count} photo",
+        "other": "{count} photos"
+      },
+      "upload": "Upload photos",
+      "takePhoto": "Take photo",
+      "stageLabel": "Stage",
+      "typeLabel": "View",
+      "typeExtraoralGroup": "Extraoral",
+      "typeIntraoralGroup": "Intraoral",
+      "typeOther": "Other",
+      "filterAllStages": "All",
+      "filterAllTypes": "All views",
+      "viewGallery": "Gallery",
+      "viewCompare": "Compare",
+      "empty": "No clinical photos yet",
+      "emptyHint": "Document the before and after of the treatment: upload photos or take them with the phone camera.",
+      "loading": "Loading photos…",
+      "uploadingProgress": "Uploading {done}/{total}…",
+      "uploadSuccess": {
+        "one": "{count} photo uploaded",
+        "other": "{count} photos uploaded"
+      },
+      "uploadPartial": "{ok} uploaded · {failed} failed",
+      "uploadErrorGeneric": "Could not upload {name}",
+      "quotaTitle": "Plan storage limit reached",
+      "quotaCta": "Upgrade plan",
+      "deleteConfirm": "Delete this clinical photo? It is removed from the record and the gallery.",
+      "deleted": "Photo deleted",
+      "compareNeedTwo": "At least 2 photos are needed to compare.",
+      "sideA": "Before",
+      "sideB": "After",
+      "sliderAria": "Before-after slider position",
+      "groupEmptyHint": "No photos in this stage",
+      "dropHint": "Drag images here or click to select",
+      "maxSize": "JPG · PNG · WEBP · HEIC — max 25MB each",
+      "photoAlt": "Clinical photo {type}",
+      "deleteAria": "Delete photo",
+      "noMatches": "No photos match the filters."
     },
     "prescriptionsTab": {
       "title": "Patient prescriptions",
@@ -1605,7 +1649,7 @@
       "cariesModerate": "Moderate",
       "perio": "Perio",
       "noData": "No data",
-      "medicalHistory": "Medical history",
+      "medicalHistory": "Background",
       "bloodType": "Blood type",
       "notRegistered": "Not registered",
       "insurance": "Insurance",
@@ -1616,7 +1660,16 @@
       "paid": "Paid",
       "pending": "Pending",
       "credit": "Credit balance",
-      "pctCovered": "{pct}% covered"
+      "pctCovered": "{pct}% covered",
+      "activeTreatment": "Active treatment",
+      "sessionsOf": "{done}/{total} sessions",
+      "viewPlan": "View plan",
+      "nextSessionDate": "Next: {date}",
+      "recentPhotos": "Recent photos",
+      "viewAllPhotos": "View all",
+      "noPhotosYet": "Document the before and after with clinical photos.",
+      "uploadPhotos": "Upload photos",
+      "emergencyContact": "Emergency contact"
     },
     "history": {
       "title": "Medical history",
@@ -1985,7 +2038,11 @@
       "copyPortalLink": "Copy portal link",
       "generatePatientPortal": "Generate patient portal",
       "printSummary": "Print summary",
-      "viewInAgenda": "View in agenda"
+      "viewInAgenda": "View in agenda",
+      "alertsAria": "Patient clinical alerts",
+      "noAllergies": "No known allergies",
+      "emergencyLabel": "Emergency",
+      "moreCount": "+{count}"
     },
     "historiaTimeline": {
       "typeSoap": "Notes",
@@ -2104,7 +2161,8 @@
       "recentWhatsApp": "Recent WhatsApp",
       "noRecentMessages": "No recent messages with {name}.",
       "noPhone": "Patient has no phone on file.",
-      "openChat": "Open chat"
+      "openChat": "Open chat",
+      "viewBilling": "View billing"
     },
     "soapEditor": {
       "editorAria": "Consultation notes editor",

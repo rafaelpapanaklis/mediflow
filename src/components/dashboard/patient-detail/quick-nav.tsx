@@ -50,6 +50,7 @@ interface QuickNavProps {
     historialConsultas?: number;
     evolucion?: number;
     radiografias?: number;
+    fotos?: number;
     tratamiento?: number;
     referencias?: number;
     agenda?: number;
@@ -109,6 +110,7 @@ export function QuickNav({
     "historial-consultas": counts.historialConsultas,
     odontograma:           counts.odontograma,
     radiografias:          counts.radiografias,
+    fotos:                 counts.fotos,
     tratamiento:           counts.tratamiento,
     referencias:           counts.referencias,
     agenda:                counts.agenda,
@@ -203,7 +205,7 @@ export function QuickNav({
                     }
                     aria-current={isActive ? "page" : undefined}
                   >
-                    <Icon size={14} aria-hidden />
+                    <Icon size={16} strokeWidth={1.75} aria-hidden />
                     <span className={styles.navItemLabel}>{item.label}</span>
                     {item.count !== undefined && item.count > 0 && (
                       <span
