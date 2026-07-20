@@ -45,6 +45,8 @@ export interface PatientNavItem {
   disabled?: boolean;
   /** Texto del tooltip (`title` HTML) cuando `disabled=true`. */
   disabledReason?: string;
+  /** Pill "NUEVO" con degradado de marca (features recién lanzadas). */
+  isNew?: boolean;
 }
 
 export interface BuildPatientNavOpts {
@@ -99,7 +101,7 @@ export function buildPatientNavItems(opts: BuildPatientNavOpts): PatientNavItem[
     { id: "radiografias", labelKey: "patients.tabs.radiografias", icon: FileImage,    section: "imagen-docs" },
     // Fotos clínicas (ficha v3) — extraorales/intraorales por etapa,
     // módulo ClinicalPhoto `general`. Junto a Radiografías por afinidad.
-    { id: "fotos",        labelKey: "patients.tabs.fotos",        icon: Camera,       section: "imagen-docs" },
+    { id: "fotos",        labelKey: "patients.tabs.fotos",        icon: Camera,       section: "imagen-docs", isNew: true },
     { id: "subidos",      labelKey: "patients.tabs.subidos",      icon: Upload,       section: "imagen-docs" },
     { id: "modelos-3d",   labelKey: "patients.tabs.modelos3d",    icon: Box,          section: "imagen-docs" },
     { id: "tratamiento",  labelKey: "patients.tabs.tratamiento",  icon: Pill,         section: "imagen-docs" },
