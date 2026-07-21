@@ -317,6 +317,8 @@ interface Props {
   /** Count server-side de fotos clínicas (módulo `general`) para el badge
    *  del menú; el tab lo mantiene vivo vía onCountChange. */
   fotosCount?: number;
+  /** Sede de origen si el paciente viene prestado de otra sede vinculada (Fase 2); null = propio. Se pasa a HeroCard. */
+  originClinicName?: string | null;
 }
 
 export function PatientDetailClient({
@@ -336,6 +338,7 @@ export function PatientDetailClient({
   questionnaireRiskFlags = [],
   creditBalance = 0,
   fotosCount: initialFotosCount = 0,
+  originClinicName = null,
 }: Props) {
   const t = useT();
   const router = useRouter();
@@ -1079,6 +1082,7 @@ export function PatientDetailClient({
             currentMedications: patient.currentMedications ?? [],
           }}
           riskFlags={questionnaireRiskFlags}
+          originClinicName={originClinicName}
           emergencyContact={{
             name: patient.emergencyContactName ?? null,
             phone: patient.emergencyContactPhone ?? null,

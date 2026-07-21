@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { Prisma, PatientStatus, Gender } from "@prisma/client";
 import { getAuthContext, buildPatientWhere } from "@/lib/auth-context";
 import { prisma } from "@/lib/prisma";
+import { getPatientVisibility } from "@/lib/branches";
 import { getPlanLimits } from "@/lib/plans";
 import { validateCurpRecord, type CurpStatusValue } from "@/lib/validators/curp";
 import { logMutation } from "@/lib/audit";
@@ -80,7 +81,11 @@ async function v2Handler(
     ? (statusRaw.toUpperCase() as PatientStatus)
     : null;
 
-  const where: Prisma.PatientWhereInput = buildPatientWhere(ctx, {});
+  // MULTI-CLÍNICA · FASE 2 — sedes cuyos pacientes puede LEER esta sesión.
+  // Con el flag apagado es [ctx.clinicId] y la query queda igual que siempre.
+  const visibility = await getPatientVisibility(ctx.clinicId);
+
+  const where: Prisma.PatientWhereInput = buildPatientWhere(ctx, {}, visibility.clinicIds);
   if (status && ["ACTIVE", "INACTIVE", "ARCHIVED"].includes(status)) {
     where.status = status;
   }
@@ -181,8 +186,16 @@ async function v2Handler(
       primaryDoctor: {
         select: { id: true, firstName: true, lastName: true, color: true },
       },
+      // ⚠️ FASE 2: citas y facturas se filtran por la sede ACTIVA aunque el
+      // paciente venga prestado de otra sede. Antes no hacía falta el
+      // clinicId (un paciente sólo podía tener citas/facturas de su única
+      // clínica); al compartir pacientes esa suposición se rompe y sin este
+      // filtro la lista mostraría la próxima cita y el saldo de la OTRA sede.
+      // Cada sucursal cobra y agenda por separado. Para un paciente propio el
+      // filtro es no-op.
       appointments: {
         where: {
+          clinicId: ctx.clinicId,
           startsAt: { gte: today },
           status: { notIn: ["CANCELLED", "NO_SHOW"] },
         },
@@ -190,13 +203,15 @@ async function v2Handler(
         take: 1,
         select: { id: true, startsAt: true, status: true, type: true },
       },
+      // Los expedientes SÍ son contenido clínico compartido: la última visita
+      // puede haber sido en la otra sede y eso es justo lo que se quiere ver.
       records: {
         orderBy: { visitDate: "desc" },
         take: 1,
         select: { visitDate: true },
       },
       invoices: {
-        where: { balance: { gt: 0 } },
+        where: { clinicId: ctx.clinicId, balance: { gt: 0 } },
         select: { balance: true },
       },
     },
@@ -220,7 +235,10 @@ async function v2Handler(
   }
 
   /* ─── 2ª query: stats agregadas ─── */
-  const baseStatsWhere = buildPatientWhere(ctx, {});
+  // Los conteos de PACIENTES siguen al mismo set que la lista (si no, el
+  // "total" del encabezado no cuadraría con las filas). Los agregados de
+  // facturas/citas de más abajo se quedan en ctx.clinicId a propósito.
+  const baseStatsWhere = buildPatientWhere(ctx, {}, visibility.clinicIds);
   const monthStart = new Date();
   monthStart.setDate(1);
   monthStart.setHours(0, 0, 0, 0);
@@ -346,6 +364,11 @@ async function v2Handler(
             color: p.primaryDoctor.color,
           }
         : null,
+      // FASE 2 — sede de ORIGEN cuando el paciente viene prestado de otra
+      // sucursal vinculada. null para los propios (el badge no se pinta).
+      // El nombre sale del server: el cliente nunca resuelve ids de clínica.
+      originClinicName:
+        p.clinicId === ctx.clinicId ? null : visibility.otherClinicNames[p.clinicId] ?? null,
       createdAt: p.createdAt.toISOString(),
     };
   });
@@ -423,6 +446,14 @@ async function v2Handler(
 /* ──────────────────────────────────────────────────────────────────────
  * Handler legacy — devuelve array de patients tal cual estaba antes.
  * Lo usan combobox, modales de creación, etc.
+ *
+ * ⛔ FASE 2 — este handler NO se amplía a las sedes vinculadas, a propósito.
+ * Alimenta flujos de CREACIÓN (combobox de nueva cita, chequeo de duplicados
+ * al dar de alta), y crear sigue siendo estrictamente local a la sede: una
+ * cita/factura nace en la clínica activa y su POST valida que el paciente sea
+ * de ella. Si aquí devolviéramos pacientes prestados, el usuario los vería en
+ * el selector y el alta reventaría con "paciente no encontrado".
+ * La regla de la Fase 2: se comparte NAVEGAR el expediente, no crear sobre él.
  * ────────────────────────────────────────────────────────────────────── */
 async function legacyHandler(
   ctx: NonNullable<Awaited<ReturnType<typeof getAuthContext>>>,

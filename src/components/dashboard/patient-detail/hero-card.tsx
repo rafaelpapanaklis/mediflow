@@ -20,6 +20,7 @@ import {
   Check,
   History,
   Activity,
+  Building2,
 } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
 import { ageFromDob } from "@/lib/format";
@@ -60,6 +61,8 @@ export interface HeroCardProps {
   onCharge: () => void;
   riskFlags?: string[];
   emergencyContact?: { name?: string | null; phone?: string | null; relation?: string | null } | null;
+  /** Sede de origen cuando el paciente viene prestado de otra sucursal (Fase 2). null = paciente propio. */
+  originClinicName?: string | null;
 }
 
 function fmtShortDate(iso: string): string {
@@ -85,6 +88,7 @@ export function HeroCard({
   onCharge,
   riskFlags = [],
   emergencyContact,
+  originClinicName = null,
 }: HeroCardProps) {
   const t = useT();
   const router = useRouter();
@@ -106,6 +110,15 @@ export function HeroCard({
 
         <div className={styles.heroInfo}>
           <h1 className={styles.heroName}>{fullName}</h1>
+          {originClinicName && (
+            <span
+              className={`${styles.alertChip} ${styles.brand}`}
+              title={t("patients.row.fromBranch", { name: originClinicName })}
+              style={{ marginBottom: 6 }}
+            >
+              <Building2 size={11} strokeWidth={1.75} aria-hidden /> {originClinicName}
+            </span>
+          )}
           <div className={styles.heroMeta}>
             <span className={styles.mono}>#{patient.patientNumber}</span>
             <span className={styles.heroMetaSep}>·</span>

@@ -6,7 +6,8 @@ import { ButtonNew } from "@/components/ui/design-system/button-new";
 import toast from "react-hot-toast";
 import { useT } from "@/i18n/i18n-provider";
 import { DIRECTORY_CATEGORIES } from "@/lib/directory/types";
-import type { BranchDefaults, BranchQuota } from "@/lib/branches-shared";
+import { PATIENT_SHARING_ENABLED } from "@/lib/branches-shared";
+import type { BranchDefaults, BranchQuota, OwnedBranchRow } from "@/lib/branches-shared";
 
 interface Props {
   open: boolean;
@@ -29,14 +30,37 @@ export function NewBranchDialog({ open, onClose, defaults, quota, onCreated }: P
   const [loading, setLoading] = useState(false);
   const [form, setForm] = useState({ name: "", category: defaults.category, city: defaults.city, state: defaults.state, phone: "" });
   const [nameError, setNameError] = useState(false);
+  // FASE 2 — sedes existentes del dueño y cuáles compartirán pacientes con la
+  // sucursal nueva. Se cargan al abrir el diálogo (no en cada render).
+  const [branches, setBranches] = useState<OwnedBranchRow[]>([]);
+  const [shareWith, setShareWith] = useState<string[]>([]);
 
   useEffect(() => {
     if (!open) return;
     setForm({ name: "", category: defaults.category, city: defaults.city, state: defaults.state, phone: "" });
     setNameError(false);
+    setShareWith([]);
   }, [open, defaults.category, defaults.city, defaults.state]);
 
+  useEffect(() => {
+    if (!open || !PATIENT_SHARING_ENABLED) return;
+    let cancelled = false;
+    fetch("/api/clinics/links", { credentials: "include", cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((payload) => {
+        if (cancelled || !payload) return;
+        setBranches(Array.isArray(payload.branches) ? payload.branches : []);
+      })
+      .catch(() => { /* el selector simplemente no aparece */ });
+    return () => { cancelled = true; };
+  }, [open]);
+
   const set = (k: string, v: string) => setForm((f) => ({ ...f, [k]: v }));
+
+  const toggleShare = (clinicId: string) =>
+    setShareWith((prev) =>
+      prev.indexOf(clinicId) === -1 ? [...prev, clinicId] : prev.filter((id) => id !== clinicId),
+    );
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -57,6 +81,7 @@ export function NewBranchDialog({ open, onClose, defaults, quota, onCreated }: P
           city: form.city.trim() || undefined,
           state: form.state.trim() || undefined,
           phone: form.phone.trim() || undefined,
+          sharePatientsWith: shareWith.length > 0 ? shareWith : undefined,
         }),
       });
       const payload = await res.json().catch(() => ({}));
@@ -161,35 +186,90 @@ export function NewBranchDialog({ open, onClose, defaults, quota, onCreated }: P
                 <input id="branch-phone" className="input-new" maxLength={30} placeholder="999 123 4567" value={form.phone} onChange={(e) => set("phone", e.target.value)} />
               </div>
 
-              {/* FASE 2 (compartir pacientes selectivo entre sedes) — hueco
-                  reservado a propósito: NO implementado. Cada sede nace 100%
-                  aislada. Ver ORQUESTA.md, follow-up (c). */}
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "flex-start",
-                  gap: 10,
-                  marginTop: 6,
-                  padding: "10px 12px",
-                  border: "1px dashed var(--border-strong)",
-                  borderRadius: 10,
-                  background: "var(--bg-subtle, transparent)",
-                  opacity: 0.75,
-                }}
-              >
-                <Users size={15} style={{ color: "var(--text-3)", flexShrink: 0, marginTop: 1 }} aria-hidden />
-                <div style={{ minWidth: 0 }}>
-                  <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text-2)" }}>
-                    {t("sidebar.branches.sharePatients")}{" "}
-                    <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--text-3)" }}>
-                      {t("sidebar.branches.comingSoon")}
-                    </span>
-                  </div>
-                  <div style={{ fontSize: 11, color: "var(--text-3)", lineHeight: 1.45, marginTop: 2 }}>
-                    {t("sidebar.branches.sharePatientsHint")}
+              {/* MULTI-CLÍNICA · FASE 2 — compartir pacientes selectivo.
+                  Con PATIENT_SHARING_ENABLED apagado se pinta EXACTAMENTE el
+                  aviso "próximamente" de siempre, así que mergear no cambia
+                  nada en producción. Encendido, se vuelve un selector real. */}
+              {!PATIENT_SHARING_ENABLED || branches.length === 0 ? (
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "flex-start",
+                    gap: 10,
+                    marginTop: 6,
+                    padding: "10px 12px",
+                    border: "1px dashed var(--border-strong)",
+                    borderRadius: 10,
+                    background: "var(--bg-subtle, transparent)",
+                    opacity: 0.75,
+                  }}
+                >
+                  <Users size={15} style={{ color: "var(--text-3)", flexShrink: 0, marginTop: 1 }} aria-hidden />
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text-2)" }}>
+                      {t("sidebar.branches.sharePatients")}{" "}
+                      {!PATIENT_SHARING_ENABLED && (
+                        <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--text-3)" }}>
+                          {t("sidebar.branches.comingSoon")}
+                        </span>
+                      )}
+                    </div>
+                    <div style={{ fontSize: 11, color: "var(--text-3)", lineHeight: 1.45, marginTop: 2 }}>
+                      {t("sidebar.branches.sharePatientsHint")}
+                    </div>
                   </div>
                 </div>
-              </div>
+              ) : (
+                <div
+                  style={{
+                    marginTop: 6,
+                    padding: "10px 12px",
+                    border: "1px solid var(--border-strong)",
+                    borderRadius: 10,
+                    background: "var(--bg-subtle, transparent)",
+                  }}
+                >
+                  <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
+                    <Users size={15} style={{ color: "var(--text-3)", flexShrink: 0, marginTop: 1 }} aria-hidden />
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text-2)" }}>
+                        {t("sidebar.branches.sharePatientsWith")}
+                      </div>
+                      <div style={{ fontSize: 11, color: "var(--text-3)", lineHeight: 1.45, marginTop: 2 }}>
+                        {t("sidebar.branches.sharePatientsSelectHint")}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div style={{ display: "flex", flexDirection: "column", gap: 2, marginTop: 8 }}>
+                    {branches.map((b) => (
+                      <label
+                        key={b.clinicId}
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 8,
+                          padding: "6px 4px",
+                          fontSize: 12,
+                          color: "var(--text-1)",
+                          cursor: "pointer",
+                          minWidth: 0,
+                        }}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={shareWith.indexOf(b.clinicId) !== -1}
+                          onChange={() => toggleShare(b.clinicId)}
+                          style={{ flexShrink: 0, width: 15, height: 15, cursor: "pointer" }}
+                        />
+                        <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                          {b.clinicName}
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
 
             <div className="modal__footer" style={{ flexShrink: 0 }}>

@@ -328,7 +328,10 @@
       "errCreate": "No se pudo crear la sucursal",
       "sharePatients": "Compartir pacientes con otra sede",
       "comingSoon": "Próximamente",
-      "sharePatientsHint": "Por ahora cada sucursal tiene su propio expediente, agenda y facturación, totalmente separados."
+      "sharePatientsHint": "Por ahora cada sucursal tiene su propio expediente, agenda y facturación, totalmente separados.",
+      "manage": "Administrar sucursales",
+      "sharePatientsWith": "Compartir pacientes con:",
+      "sharePatientsSelectHint": "Elige con qué sedes compartirá el expediente. La agenda y la facturación siguen separadas por sucursal. Puedes cambiarlo después en Configuración → Sucursales."
     },
     "switchToLight": "Cambiar a modo claro",
     "switchToDark": "Cambiar a modo oscuro",
@@ -1992,6 +1995,7 @@
     },
     "row": {
       "selectPatient": "Seleccionar paciente {name}",
+      "fromBranch": "Paciente de la sede {name}",
       "yearsOld": "{age} años",
       "doctorPrefix": "Dr/a.",
       "whatsapp": "WhatsApp",
@@ -2747,6 +2751,23 @@
       "requesterReason": "Razón del solicitante",
       "internalNotes": "Notas internas / respuesta",
       "notesPlaceholder": "Acciones tomadas, fundamento de rechazo, datos entregados…"
+    },
+    "branches": {
+      "back": "Configuración",
+      "title": "Sucursales",
+      "subtitle": "Administra tus sedes y decide cuáles comparten el expediente de sus pacientes.",
+      "disabledNotice": "El compartir pacientes entre sedes todavía no está activo en tu cuenta. Puedes dejar marcadas las sedes: la configuración se guarda y empieza a aplicar en cuanto se habilite.",
+      "myBranches": "Mis sedes",
+      "sharingTitle": "Compartir pacientes",
+      "needTwo": "Necesitas al menos dos sedes para compartir pacientes. Crea una sucursal desde el selector de clínica del menú lateral.",
+      "sharePatients": "Compartir",
+      "stateShared": "Comparten expediente: cada sede ve y busca a los pacientes de la otra.",
+      "stateIsolated": "Separadas: cada sede solo ve a sus propios pacientes.",
+      "linked": "Sedes vinculadas. Ya comparten pacientes.",
+      "unlinked": "Vínculo eliminado. Cada sede vuelve a ver solo a sus pacientes.",
+      "errLink": "No se pudo vincular las sedes",
+      "errUnlink": "No se pudo quitar el vínculo",
+      "footnote": "Compartir aplica solo a la LECTURA del expediente: lista, búsqueda, ficha, historia, radiografías y consultas. Las citas, la facturación, la caja y las finanzas siguen separadas por sucursal. Los vínculos no son transitivos: si A comparte con B y B con C, A no ve a los pacientes de C."
     },
     "integrations": {
       "backToSettings": "Configuración",

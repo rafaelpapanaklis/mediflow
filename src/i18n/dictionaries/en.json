@@ -328,7 +328,10 @@
       "errCreate": "Couldn't create the branch",
       "sharePatients": "Share patients with another location",
       "comingSoon": "Coming soon",
-      "sharePatientsHint": "For now each branch keeps its own records, schedule and billing, fully separate."
+      "sharePatientsHint": "For now each branch keeps its own records, schedule and billing, fully separate.",
+      "manage": "Manage branches",
+      "sharePatientsWith": "Share patients with:",
+      "sharePatientsSelectHint": "Pick which locations will share the patient record. Schedule and billing stay separate per branch. You can change this later in Settings → Branches."
     },
     "switchToLight": "Switch to light mode",
     "switchToDark": "Switch to dark mode",
@@ -1992,6 +1995,7 @@
     },
     "row": {
       "selectPatient": "Select patient {name}",
+      "fromBranch": "Patient from the {name} location",
       "yearsOld": "{age} yrs",
       "doctorPrefix": "Dr.",
       "whatsapp": "WhatsApp",
@@ -2747,6 +2751,23 @@
       "requesterReason": "Requester's reason",
       "internalNotes": "Internal notes / response",
       "notesPlaceholder": "Actions taken, grounds for rejection, data provided…"
+    },
+    "branches": {
+      "back": "Settings",
+      "title": "Branches",
+      "subtitle": "Manage your locations and choose which ones share their patient records.",
+      "disabledNotice": "Patient sharing between locations isn't active on your account yet. You can still tick the locations: the setting is saved and takes effect as soon as it's enabled.",
+      "myBranches": "My locations",
+      "sharingTitle": "Patient sharing",
+      "needTwo": "You need at least two locations to share patients. Create a branch from the clinic switcher in the sidebar.",
+      "sharePatients": "Share",
+      "stateShared": "Sharing records: each location can see and search the other's patients.",
+      "stateIsolated": "Separate: each location only sees its own patients.",
+      "linked": "Locations linked. They now share patients.",
+      "unlinked": "Link removed. Each location sees only its own patients again.",
+      "errLink": "Couldn't link the locations",
+      "errUnlink": "Couldn't remove the link",
+      "footnote": "Sharing applies only to READING the record: list, search, patient page, history, X-rays and consultations. Appointments, billing, cash register and finance stay separate per branch. Links are not transitive: if A shares with B and B with C, A does not see C's patients."
     },
     "integrations": {
       "backToSettings": "Settings",

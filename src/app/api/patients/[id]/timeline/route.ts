@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { getVisiblePatientClinicIds, clinicScopeFilter, sharedRecordScope } from "@/lib/branches";
 
 export const dynamic = "force-dynamic";
 
@@ -48,9 +49,16 @@ export async function GET(req: NextRequest, { params }: Params) {
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
   }
 
-  // Validar que el paciente pertenece a la clínica del usuario.
+  // MULTI-CLÍNICA · FASE 2 — la historia se puede LEER desde una sede
+  // vinculada. `clinicalScope` es el filtro ampliado que usan las fuentes
+  // CLÍNICAS de abajo; con el flag apagado equivale a user.clinicId pelado.
+  const visibleClinicIds = await getVisiblePatientClinicIds(user.clinicId);
+  const clinicalScope = clinicScopeFilter(visibleClinicIds);
+
+  // Validar que el paciente pertenece a la clínica del usuario (o a una sede
+  // vinculada con ella).
   const patient = await prisma.patient.findFirst({
-    where: { id: params.id, clinicId: user.clinicId },
+    where: { id: params.id, clinicId: clinicalScope },
     select: { id: true },
   });
   if (!patient) return NextResponse.json({ error: "patient_not_found" }, { status: 404 });
@@ -108,7 +116,10 @@ export async function GET(req: NextRequest, { params }: Params) {
   // Promise.all con max 7 entidades (regla DaleControl).
   const [soapRows, apptRows, rxRows, xrayRows, treatmentRows, referralRows, dxRows] = await Promise.all([
     wantSoap ? prisma.medicalRecord.findMany({
-      where: { clinicId: user.clinicId, patientId: params.id, ...dateRange<"visitDate">("visitDate") },
+      // sharedRecordScope (no clinicalScope pelado): de una sede AJENA nunca se
+      // leen notas privadas de otro doctor. El timeline lo ven además los
+      // RECEPTIONIST, así que aquí importa doblemente.
+      where: { ...sharedRecordScope(user.clinicId, visibleClinicIds), patientId: params.id, ...dateRange<"visitDate">("visitDate") },
       select: {
         id: true, visitDate: true, subjective: true, assessment: true, plan: true,
         specialtyData: true,
@@ -119,6 +130,7 @@ export async function GET(req: NextRequest, { params }: Params) {
     }) : Promise.resolve([]),
     wantAppt ? prisma.appointment.findMany({
       where: {
+        // FASE 2: la AGENDA no se comparte — sólo las citas de la sede activa.
         clinicId: user.clinicId, patientId: params.id,
         // Incluir TODAS las citas excepto canceladas/no-show, para que el
         // historial muestre consultas previas (PENDING/SCHEDULED tambien
@@ -134,7 +146,7 @@ export async function GET(req: NextRequest, { params }: Params) {
       take: limit + 1,
     }) : Promise.resolve([]),
     wantRx ? prisma.prescription.findMany({
-      where: { clinicId: user.clinicId, patientId: params.id, status: "ACTIVE", ...dateRange<"issuedAt">("issuedAt") },
+      where: { clinicId: clinicalScope, patientId: params.id, status: "ACTIVE", ...dateRange<"issuedAt">("issuedAt") },
       select: {
         id: true, issuedAt: true, qrCode: true, verifyUrl: true, cofeprisGroup: true,
         items: { select: { cums: { select: { descripcion: true } } } },
@@ -148,7 +160,7 @@ export async function GET(req: NextRequest, { params }: Params) {
       // categorías XRAY_* para excluir fotos intraorales/consents/etc.
       // El xrayAnalysis (1:1 opcional) enriquece el summary cuando existe.
       where: {
-        clinicId: user.clinicId,
+        clinicId: clinicalScope,
         patientId: params.id,
         deletedAt: null,
         category: { in: ["XRAY_PERIAPICAL", "XRAY_PANORAMIC", "XRAY_BITEWING", "XRAY_OCCLUSAL"] },
@@ -162,6 +174,7 @@ export async function GET(req: NextRequest, { params }: Params) {
       take: limit + 1,
     }) : Promise.resolve([]),
     wantTreatment ? prisma.treatmentPlan.findMany({
+      // FASE 2: los planes de tratamiento llevan costo → sede activa.
       where: { clinicId: user.clinicId, patientId: params.id, ...dateRange<"startDate">("startDate") },
       select: {
         id: true, startDate: true, name: true, status: true,
@@ -171,7 +184,7 @@ export async function GET(req: NextRequest, { params }: Params) {
       take: limit + 1,
     }) : Promise.resolve([]),
     wantReferral ? prisma.referral.findMany({
-      where: { clinicId: user.clinicId, patientId: params.id, ...dateRange<"sentAt">("sentAt") },
+      where: { clinicId: clinicalScope, patientId: params.id, ...dateRange<"sentAt">("sentAt") },
       select: {
         id: true, sentAt: true, type: true, status: true,
         toClinicName: true, toSpecialty: true, reason: true,
@@ -182,7 +195,7 @@ export async function GET(req: NextRequest, { params }: Params) {
     }) : Promise.resolve([]),
     wantDiagnosis ? prisma.medicalRecordDiagnosis.findMany({
       where: {
-        medicalRecord: { clinicId: user.clinicId, patientId: params.id },
+        medicalRecord: { clinicId: clinicalScope, patientId: params.id },
         ...dateRange<"createdAt">("createdAt"),
       },
       select: {

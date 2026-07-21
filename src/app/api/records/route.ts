@@ -5,6 +5,7 @@ import { z } from "zod";
 import { readActiveClinicCookie } from "@/lib/active-clinic";
 import { logAudit, logMutation, extractAuditMeta } from "@/lib/audit";
 import { hasPermission } from "@/lib/auth/permissions";
+import { getVisiblePatientClinicIds, sharedRecordScope } from "@/lib/branches";
 
 const recordSchema = z.object({
   patientId:     z.string().min(1),
@@ -41,8 +42,24 @@ export async function GET(req: NextRequest) {
   const patientId = searchParams.get("patientId");
   const limit = Math.min(Math.max(parseInt(searchParams.get("limit") ?? "200"), 1), 500);
   const skip  = Math.max(parseInt(searchParams.get("skip") ?? "0"), 0);
-  const where: any = { clinicId: dbUser.clinicId };
-  if (patientId) where.patientId = patientId;
+  // MULTI-CLÍNICA · FASE 2 — el expediente se LEE también desde una sede
+  // vinculada, pero SÓLO consultándolo POR PACIENTE.
+  //
+  // ⚠️ Sin `patientId` este endpoint vuelca el expediente COMPLETO de la
+  // clínica (hasta 500 por página). Ampliar ESE volcado equivaldría a
+  // exfiltrar la base clínica entera de la sucursal vecina: sin gate por
+  // paciente y, encima, sin bitácora — el logAudit de abajo sólo corre cuando
+  // hay patientId. Así que el volcado se queda estrictamente en la sede activa.
+  //
+  // `sharedRecordScope` devuelve un OR cuando hay sedes ajenas; se compone con
+  // AND para no pisar el OR de `isPrivate` del findMany (dos claves OR en el
+  // mismo objeto se sobreescriben).
+  const visibleClinicIds = patientId
+    ? await getVisiblePatientClinicIds(dbUser.clinicId)
+    : [dbUser.clinicId];
+  const where: any = patientId
+    ? { AND: [sharedRecordScope(dbUser.clinicId, visibleClinicIds), { patientId }] }
+    : { clinicId: dbUser.clinicId };
   const records = await prisma.medicalRecord.findMany({
     where: { ...where, OR: [{ isPrivate: false }, { isPrivate: true, doctorId: dbUser.id }] },
     include: { doctor: { select: { id: true, firstName: true, lastName: true } } },

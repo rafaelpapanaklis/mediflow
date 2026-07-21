@@ -129,12 +129,37 @@ export async function getAuthContext(): Promise<AuthContext | null> {
 }
 
 /**
+ * Resuelve el filtro de clínica de una query de PACIENTES.
+ *
+ * MULTI-CLÍNICA · FASE 2: `visibleClinicIds` llega SÓLO desde
+ * getVisiblePatientClinicIds(ctx.clinicId) (@/lib/branches), que a su vez sale
+ * de la sesión — nunca de un parámetro del cliente. Si no llega, o si trae una
+ * sola sede, la query queda EXACTAMENTE como estaba (id pelado).
+ *
+ * Defensa en profundidad: aunque un caller pasara una lista manipulada, se
+ * exige que la sede activa esté dentro; si no, se ignora la lista entera.
+ */
+function clinicFilterFor(ctx: AuthContext, visibleClinicIds?: string[]): string | { in: string[] } {
+  if (!visibleClinicIds || visibleClinicIds.length <= 1) return ctx.clinicId;
+  if (visibleClinicIds.indexOf(ctx.clinicId) === -1) return ctx.clinicId;
+  return { in: visibleClinicIds };
+}
+
+/**
  * Build patient WHERE clause based on role.
  * Admins see all clinic patients. Doctors only see their own.
+ *
+ * `visibleClinicIds` (opcional, Fase 2) amplía el scope a las sedes vinculadas
+ * para compartir pacientes. Es OPT-IN por superficie: quien no lo pasa sigue
+ * viendo sólo su sede, así que ninguna pantalla se amplía por accidente.
  */
-export function buildPatientWhere(ctx: AuthContext, extra: Record<string, any> = {}) {
+export function buildPatientWhere(
+  ctx: AuthContext,
+  extra: Record<string, any> = {},
+  visibleClinicIds?: string[],
+) {
   return {
-    clinicId: ctx.clinicId, // ALWAYS — prevents cross-clinic access
+    clinicId: clinicFilterFor(ctx, visibleClinicIds), // ALWAYS — prevents cross-clinic access
     ...(ctx.isDoctor && {   // Doctors only see their patients
       OR: [
         { primaryDoctorId: ctx.userId },
