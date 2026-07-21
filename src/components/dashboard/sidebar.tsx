@@ -903,6 +903,32 @@ export function Sidebar(props: SidebarProps) {
 // Clinic Switcher
 // ═══════════════════════════════════════════════════════════════════
 
+// Al cambiar de clínica (o crear una sede nueva) la ruta actual puede apuntar a
+// una entidad de la sede anterior; en el nuevo tenant no existe y el server
+// responde 404. safeSwitchDestination() decide a dónde ir: raíz de la sección
+// si tiene listado propio, /dashboard si no, o null para quedarse y refrescar.
+const SWITCH_SAFE_ROOTS = new Set([
+  "patients", "xrays", "suppliers", "laboratorios",
+  "compras", "ordenes-laboratorio", "soporte",
+]);
+const CUID_RE = /^c[a-z0-9]{20,}$/i;
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+// Un segmento parece ID de entidad si es UUID, o un cuid (que siempre trae
+// dígitos → no confundimos palabras de ruta como "orthodontics" o "settings").
+const looksLikeEntityId = (seg: string) =>
+  UUID_RE.test(seg) || (CUID_RE.test(seg) && /[0-9]/.test(seg));
+
+function safeSwitchDestination(pathname: string | null): string | null {
+  if (!pathname) return null;
+  const parts = pathname.split(/[?#]/)[0].split("/").filter(Boolean);
+  if (parts[0] !== "dashboard") return null;
+  if (!parts.some(looksLikeEntityId)) return null; // sin ID → refrescar en sitio
+  const section = parts[1];
+  return section && SWITCH_SAFE_ROOTS.has(section)
+    ? `/dashboard/${section}`
+    : "/dashboard";
+}
+
 function ClinicSwitcher({
   collapsed, clinicName, clinicId, plan, allClinics, branches,
 }: {
@@ -915,6 +941,7 @@ function ClinicSwitcher({
 }) {
   const t = useT();
   const router = useRouter();
+  const pathname = usePathname();
   const [branchOpen, setBranchOpen] = useState(false);
   const hasOthers = allClinics.filter((c) => c.clinicId !== clinicId).length > 0;
   // Sección de sucursales: sólo para el DUEÑO cuyo plan contempla multi-sede
@@ -936,6 +963,12 @@ function ClinicSwitcher({
         body: JSON.stringify({ clinicId: id }),
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      // La ruta actual puede apuntar a una entidad (paciente, factura, orden…)
+      // de la sede anterior, inexistente en el nuevo tenant → el server haría
+      // notFound() (404). Si la ruta lleva un ID salimos a un destino seguro;
+      // si no, refrescar en sitio basta.
+      const safe = safeSwitchDestination(pathname);
+      if (safe) router.push(safe);
       router.refresh();
     } catch {
       window.location.href = "/dashboard";
@@ -1180,9 +1213,12 @@ function ClinicSwitcher({
         defaults={branches.defaults}
         quota={branches.quota}
         onCreated={() => {
-          // El endpoint ya movió la cookie de clínica activa a la sede nueva:
-          // refrescar deja al dueño trabajando dentro de ella.
+          // El endpoint ya movió la cookie de clínica activa a la sede nueva
+          // (vacía). Si veníamos de una ruta con ID de la sede anterior, esa
+          // entidad no existe en la nueva → mismo 404: salir a destino seguro.
           setBranchOpen(false);
+          const safe = safeSwitchDestination(pathname);
+          if (safe) router.push(safe);
           router.refresh();
         }}
       />
