@@ -26,6 +26,8 @@ interface NavItem {
    *  para la clínica pero el paciente no tiene registros aún. Al clickar
    *  el usuario entra al tab vacío para crear el primer registro. */
   dimmed?: boolean;
+  /** Pill "NUEVO" con degradado de marca (features recién lanzadas). */
+  isNew?: boolean;
 }
 
 interface NavGroup {
@@ -50,6 +52,7 @@ interface QuickNavProps {
     historialConsultas?: number;
     evolucion?: number;
     radiografias?: number;
+    fotos?: number;
     tratamiento?: number;
     referencias?: number;
     agenda?: number;
@@ -109,6 +112,7 @@ export function QuickNav({
     "historial-consultas": counts.historialConsultas,
     odontograma:           counts.odontograma,
     radiografias:          counts.radiografias,
+    fotos:                 counts.fotos,
     tratamiento:           counts.tratamiento,
     referencias:           counts.referencias,
     agenda:                counts.agenda,
@@ -127,6 +131,7 @@ export function QuickNav({
       count:          countFor[item.id],
       disabled:       item.disabled,
       disabledReason: item.disabledReason,
+      isNew:          item.isNew,
     };
     if (item.section === "dental") {
       navItem.badgeTone = "brand";
@@ -203,8 +208,11 @@ export function QuickNav({
                     }
                     aria-current={isActive ? "page" : undefined}
                   >
-                    <Icon size={14} aria-hidden />
+                    <Icon size={16} strokeWidth={1.75} aria-hidden />
                     <span className={styles.navItemLabel}>{item.label}</span>
+                    {item.isNew && (
+                      <span className={styles.navNewBadge}>{t("patients.quickNav.newBadge")}</span>
+                    )}
                     {item.count !== undefined && item.count > 0 && (
                       <span
                         className={`${styles.navItemCount} ${styles[`tone-${item.badgeTone ?? "neutral"}`] ?? ""}`}

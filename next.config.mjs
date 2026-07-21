@@ -21,6 +21,15 @@ const nextConfig = {
         "./node_modules/@cornerstonejs/**/*.wasm",
       ],
     },
+    // Las fotos clínicas (uploadClinicalPhotoAction, ficha v3) viajan como
+    // server action con MAX_PHOTO_BYTES = 25MB; el default de Next (1MB)
+    // rechazaba cualquier foto real de cámara (afectaba también a las
+    // galerías de especialidades que ya usaban esta action). 30mb = 25MB
+    // + margen de serialización. Solo sube el TOPE aceptado: cada action
+    // sigue validando su propio tamaño.
+    serverActions: {
+      bodySizeLimit: "30mb",
+    },
   },
   // Los codecs DICOM comprimidos (@cornerstonejs/dicom-codec -> glue Emscripten de
   // OpenJPEG/CharLS/libjpeg-turbo, que descomprime JPEG2000/JPEG-LS/HTJ2K/RLE en el
