@@ -286,7 +286,9 @@ export function PatientPhotosTab({ patientId, onCountChange }: PatientPhotosTabP
         await reload();
         if (errors.length === 0) {
           toast.success(t("patients.fotosTab.uploadSuccess", { count: okCount }));
+          setUploadOpen(false); // tanda 100% OK → cierra el modal (el toast confirma)
         } else {
+          // Con errores/cuota el modal SE QUEDA ABIERTO mostrando la lista.
           toast(t("patients.fotosTab.uploadPartial", { ok: okCount, failed: errors.length }));
         }
       } else if (errors.length > 0 && !quotaHit) {
@@ -295,6 +297,13 @@ export function PatientPhotosTab({ patientId, onCountChange }: PatientPhotosTabP
     },
     [patientId, uploadStage, uploadType, uploading, quotaHit, reload, t],
   );
+
+  // Al abrir el modal, descarta los errores/cuota de la tanda anterior.
+  const openUploadModal = useCallback(() => {
+    setUploadErrors([]);
+    setQuotaHit(false);
+    setUploadOpen(true);
+  }, []);
 
   const handleDelete = useCallback(
     async (photo: ClinicalPhotoDTO) => {
@@ -346,7 +355,7 @@ export function PatientPhotosTab({ patientId, onCountChange }: PatientPhotosTabP
       <div className="bg-card border border-border rounded-2xl shadow-[var(--shadow-1)] px-4 py-3 flex items-center gap-3 flex-wrap">
         <button
           type="button"
-          onClick={() => setUploadOpen(true)}
+          onClick={openUploadModal}
           aria-haspopup="dialog"
           className={`${solidBtnCls} h-9 px-3.5`}
         >
@@ -522,7 +531,7 @@ export function PatientPhotosTab({ patientId, onCountChange }: PatientPhotosTabP
               </div>
               <button
                 type="button"
-                onClick={() => setUploadOpen(true)}
+                onClick={openUploadModal}
                 className={`${solidBtnCls} mt-1 h-9 px-4`}
               >
                 <Upload size={14} strokeWidth={2} aria-hidden /> {t("patients.fotosTab.emptyCta")}
