@@ -2384,7 +2384,13 @@
       "toastInvoiceCreateError": "Error al crear factura",
       "toastCfdiReceptorRequired": "RFC, nombre y CP del paciente son requeridos",
       "toastCfdiStamped": "CFDI timbrado correctamente ante el SAT",
-      "toastCfdiStampError": "Error al timbrar"
+      "toastCfdiStampError": "Error al timbrar",
+      "cfdiTaxesLabel": "Impuestos",
+      "cfdiTaxExempt": "Exento (servicios médicos)",
+      "cfdiTaxIva16": "IVA 16%",
+      "cfdiBalanceWarning": "Esta factura tiene saldo pendiente. Normalmente se factura cuando ya está pagada.",
+      "cfdiUnpaidConfirm": "Timbrar de todos modos como PUE (pago en una sola exhibición)",
+      "cfdiOpenInvoice": "Abrir factura para corregir"
     }
   },
   "appointments": {
@@ -6597,6 +6603,12 @@
       "cfdiFormTitle": "Datos fiscales del receptor",
       "cfdiFormHelp": "Se timbrará el CFDI ante el SAT (ambiente de pruebas).",
       "cfdiBalanceWarning": "Esta factura tiene saldo pendiente. Normalmente se factura cuando ya está pagada.",
+      "cfdiUnpaidConfirm": "Timbrar de todos modos como PUE (pago en una sola exhibición)",
+      "cfdiMismatchReview": "Revisar factura",
+      "cfdiPaymentFormLabel": "Forma de pago",
+      "cfdiTaxesLabel": "Impuestos",
+      "cfdiTaxExempt": "Exento (servicios médicos)",
+      "cfdiTaxIva16": "IVA 16%",
       "fiscalRfc": "RFC",
       "fiscalName": "Razón social / Nombre",
       "fiscalRegimen": "Régimen fiscal",

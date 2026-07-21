@@ -7,6 +7,7 @@ import { readActiveClinicCookie } from "@/lib/active-clinic";
 import { logMutation } from "@/lib/audit";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { assertPatientVisible } from "@/lib/patient-visibility";
+import { round2 } from "@/lib/quotes/compute";
 import {
   EMPTY_NOTE_ERROR,
   isClinicalNoteEmpty,
@@ -158,9 +159,9 @@ export async function POST(req: NextRequest) {
           description: p.name,
           quantity: p.quantity || 1,
           unitPrice: p.price,
-          total: (p.quantity || 1) * p.price,
+          total: round2((p.quantity || 1) * p.price),
         }));
-        const subtotal = items.reduce((s, i) => s + i.total, 0);
+        const subtotal = round2(items.reduce((s, i) => s + i.total, 0));
 
         // Generate invoice number (clinic-scoped)
         const lastInvoice = await prisma.invoice.findFirst({

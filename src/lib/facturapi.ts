@@ -15,7 +15,7 @@ const USER_KEY = process.env.FACTURAPI_USER_KEY!;
 
 // Catálogos SAT (client-safe) — definidos en ./cfdi-catalogs y re-exportados aquí
 // para no romper los imports server-side existentes (`@/lib/facturapi`).
-export { CLAVES_SAT_MEDICOS, UNIDAD_SAT, REGIMENES_FISCALES, USOS_CFDI } from "./cfdi-catalogs";
+export { CLAVES_SAT_MEDICOS, UNIDAD_SAT, REGIMENES_FISCALES, USOS_CFDI, FORMAS_PAGO_SAT } from "./cfdi-catalogs";
 
 // ── Organization management ────────────────────────────────────────────────────
 
@@ -33,10 +33,13 @@ export async function createOrganization(name: string): Promise<string> {
   return data.id;
 }
 
+// Payload real de PUT /organizations/{id}/legal: legal_name + tax_system (+ name
+// comercial opcional). El RFC de la org NO va aquí — lo determina el CSD al subirlo
+// (en TEST, Facturapi timbra con su certificado de prueba EKU9003173C9).
 export async function updateOrgLegal(orgId: string, legalData: {
-  name: string; rfc: string; regimen_fiscal: string; address: {
+  name?: string; legal_name: string; tax_system: string; address: {
     street?: string; exterior?: string; zip: string;
-    city?: string; state?: string; country?: string;
+    city?: string; state?: string;
   }
 }) {
   const res = await fetch(`${FACTURAPI_BASE}/organizations/${orgId}/legal`, {
@@ -56,11 +59,11 @@ export async function updateOrgLegal(orgId: string, legalData: {
 // ── Customer (receptor) management ────────────────────────────────────────────
 
 export async function createOrUpdateCustomer(orgApiKey: string, customer: {
-  legal_name: string; rfc: string; tax_system: string; email?: string;
+  legal_name: string; tax_id: string; tax_system: string; email?: string;
   address: { zip: string }
 }): Promise<string> {
   // Try to find existing
-  const searchRes = await fetch(`${FACTURAPI_BASE}/customers?q=${customer.rfc}`, {
+  const searchRes = await fetch(`${FACTURAPI_BASE}/customers?q=${customer.tax_id}`, {
     headers: { "Authorization": `Bearer ${orgApiKey}` },
   });
   const searchData = await searchRes.json();
@@ -86,6 +89,12 @@ export interface InvoiceItem {
     unit_key?: string;    // E48 = servicio
     price: number;
     tax_included?: boolean;
+    // Impuestos del concepto (referencia oficial, guía de Productos):
+    //   IVA 16% → [{ type: "IVA", rate: 0.16 }] (con tax_included según el caso)
+    //   Exento  → [{ type: "IVA", factor: "Exento", rate: 0 }] + tax_included:false
+    // Sin `taxes`, Facturapi desglosa IVA 16% por default — por eso ahora se
+    // manda SIEMPRE explícito desde el timbrado.
+    taxes?: { type: string; rate?: number; factor?: string; withholding?: boolean }[];
   };
   quantity: number;
   discount?: number;
@@ -97,7 +106,6 @@ export interface CreateInvoiceParams {
   usoCfdi: string;
   items: InvoiceItem[];
   paymentForm?: string; // 01=efectivo, 03=transferencia, 04=tarjeta crédito, 28=tarjeta débito
-  notes?: string;
 }
 
 export interface InvoiceResult {
@@ -115,6 +123,8 @@ export async function createInvoice(params: CreateInvoiceParams): Promise<Invoic
       "Authorization": `Bearer ${params.orgApiKey}`,
       "Content-Type": "application/json",
     },
+    // OJO: el payload de POST /invoices NO acepta "notes" — Facturapi lo
+    // rechaza con 400 "El campo notes no está permitido".
     body: JSON.stringify({
       type: "I", // Ingreso
       customer: params.customerId,
@@ -122,7 +132,6 @@ export async function createInvoice(params: CreateInvoiceParams): Promise<Invoic
       payment_form: params.paymentForm ?? "03", // Transferencia por defecto
       payment_method: "PUE", // Pago en una sola exhibición
       items: params.items,
-      notes: params.notes,
     }),
   });
   const data = await res.json();
@@ -163,18 +172,18 @@ const CFDI_ENV: "test" | "live" = "test";
  * TEST (actual): GET /v2/organizations/{id}/test-api-key → Test Secret Key.
  *   Facturapi devuelve la llave como string JSON directo (no un objeto);
  *   parseamos defensivamente por si algún entorno la envolviera.
- * LIVE (futuro): GET /v2/organizations/{id}/keys lista las Live API Keys
- *   (arreglo de objetos); tomar la key activa. Sin usar por ahora.
+ * LIVE (futuro): GET /v2/organizations/{id}/apikeys/live lista las Live API
+ *   Keys; PUT /apikeys/live genera una nueva (invalida la anterior).
  *
  * Se autentica con la USER_KEY (llave de cuenta), NO con la org key.
  */
 export async function getOrgApiKey(orgId: string): Promise<string> {
   if (CFDI_ENV !== "test") {
-    // Switch a Live: GET /organizations/{id}/keys y tomar la llave activa.
+    // Switch a Live: GET /organizations/{id}/apikeys/live y tomar la llave activa.
     throw new Error("CFDI Live aún no está habilitado");
   }
 
-  const res = await fetch(`${FACTURAPI_BASE}/organizations/${orgId}/test-api-key`, {
+  const res = await fetch(`${FACTURAPI_BASE}/organizations/${orgId}/apikeys/test`, {
     headers: { "Authorization": `Bearer ${USER_KEY}` },
   });
   if (!res.ok) {
@@ -261,15 +270,21 @@ export async function downloadInvoiceFile(
   return res.arrayBuffer();
 }
 
-// Validate RFC with SAT via Facturapi
-export async function validateRfc(rfc: string): Promise<{ valid: boolean; name?: string }> {
+// Valida el RFC contra la lista negra EFOS del SAT (art. 69-B) vía Facturapi.
+// Endpoint real: GET /tools/tax_id_validation?tax_id= con la key de la ORG.
+// FAIL-OPEN: solo bloquea si el SAT lo marca explícito en la lista negra; si la
+// herramienta falla o responde distinto, se permite — el timbrado es el juez
+// final del RFC (Facturapi lo rechaza con mensaje claro si no es válido).
+export async function validateRfc(orgApiKey: string, rfc: string): Promise<{ ok: boolean; blacklisted?: boolean }> {
   try {
-    const res = await fetch(`${FACTURAPI_BASE}/tools/validate_rfc?rfc=${rfc}`, {
-      headers: { "Authorization": `Bearer ${USER_KEY}` },
+    const res = await fetch(`${FACTURAPI_BASE}/tools/tax_id_validation?tax_id=${encodeURIComponent(rfc)}`, {
+      headers: { "Authorization": `Bearer ${orgApiKey}` },
     });
+    if (!res.ok) return { ok: true };
     const data = await res.json();
-    return { valid: data.is_valid, name: data.sat_name };
+    if (data?.efos?.is_valid === false) return { ok: false, blacklisted: true };
+    return { ok: true };
   } catch {
-    return { valid: false };
+    return { ok: true };
   }
 }

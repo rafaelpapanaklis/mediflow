@@ -14,6 +14,8 @@ import { fmtMXN, fmtMXNdec, formatRelativeDate } from "@/lib/format";
 import { PaymentModal, type PaymentInvoice } from "@/components/dashboard/billing/payment-modal";
 import { InvoiceDetailModal } from "@/components/dashboard/billing/invoice-detail-modal";
 import { useT } from "@/i18n/i18n-provider";
+import { REGIMENES_FISCALES, USOS_CFDI, FORMAS_PAGO_SAT } from "@/lib/cfdi-catalogs";
+import { derivePaymentForm, defaultTaxMode, type CfdiTaxMode } from "@/lib/invoice-totals";
 
 type Tone = "success" | "warning" | "danger" | "info" | "brand" | "neutral";
 const STATUS_BADGE: Record<string, { tone: Tone; labelKey: string }> = {
@@ -75,9 +77,31 @@ export function BillingClient({ invoices: initial, patients, totalPaid, totalPen
   // CFDI form
   const [cfdiLoading, setCfdiLoading] = useState(false);
   const [cfdiForm, setCfdiForm] = useState({
-    rfc: "", nombre: "", regimenFiscal: "616", cp: "", usoCfdi: "D01", formaPago: "01",
+    rfc: "", nombre: "", regimenFiscal: "616", cp: "", usoCfdi: "D01", formaPago: "03",
+    impuestos: "exento" as CfdiTaxMode,
   });
   const setCfdiF = (k: string, v: string) => setCfdiForm(f => ({ ...f, [k]: v }));
+  // Saldo pendiente → confirmación explícita PUE; mismatch → aviso con CTA.
+  const [cfdiPueOk, setCfdiPueOk] = useState(false);
+  const [cfdiMismatch, setCfdiMismatch] = useState<string | null>(null);
+
+  // Abre el modal de timbrado pre-llenado: fiscales del paciente si existen,
+  // forma de pago derivada de los pagos reales (editable) e impuestos según el
+  // modelo de la factura (exento por default — servicios médicos).
+  function openCfdiModal(inv: any) {
+    setCfdiForm({
+      rfc:           inv.patient?.rfcPaciente ?? "",
+      nombre:        inv.patient?.razonSocialPac ?? "",
+      regimenFiscal: inv.patient?.regimenFiscalPac || "616",
+      cp:            inv.patient?.cpPaciente ?? "",
+      usoCfdi:       "D01",
+      formaPago:     derivePaymentForm(inv.payments, inv.paymentMethod),
+      impuestos:     defaultTaxMode(inv),
+    });
+    setCfdiPueOk(false);
+    setCfdiMismatch(null);
+    setCfdiFor(inv);
+  }
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -157,10 +181,20 @@ export function BillingClient({ invoices: initial, patients, totalPaid, totalPen
           },
           usoCfdi: cfdiForm.usoCfdi,
           paymentForm: cfdiForm.formaPago,
+          taxMode: cfdiForm.impuestos,
+          confirmUnpaidPue: cfdiPueOk === true ? true : undefined,
         }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
+      if (!res.ok) {
+        // Total ≠ suma de conceptos → el server bloquea; aviso con CTA para
+        // abrir la factura y corregir en vez de un toast fugaz.
+        if (data.code === "CFDI_TOTAL_MISMATCH") {
+          setCfdiMismatch(data.error ?? t("billing.billingClient.toastCfdiStampError"));
+          return;
+        }
+        throw new Error(data.error);
+      }
       setInvoices(prev => prev.map(inv =>
         inv.id === cfdiFor.id ? { ...inv, cfdiUuid: data.uuid } : inv,
       ));
@@ -298,7 +332,7 @@ export function BillingClient({ invoices: initial, patients, totalPaid, totalPen
                       ) : clinic.facturApiEnabled ? (
                         <button
                           type="button"
-                          onClick={() => { setCfdiFor(inv); setCfdiForm(f => ({ ...f, rfc: "", nombre: "", cp: "" })); }}
+                          onClick={() => openCfdiModal(inv)}
                           className="btn-new btn-new--ghost btn-new--sm"
                         >
                           {t("billing.billingClient.cfdiStamp")}
@@ -460,41 +494,66 @@ export function BillingClient({ invoices: initial, patients, totalPaid, totalPen
 
               <div>
                 <div className="form-section__title">Régimen, uso y forma de pago<span className="form-section__rule" /></div>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "12px 14px" }}>
+                {/* Catálogos compartidos con el modal de detalle (cfdi-catalogs):
+                    mismas opciones en ambos flujos de timbrado. */}
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px 14px" }}>
                   <div className="field-new">
                     <label className="field-new__label">Régimen fiscal</label>
                     <select className="input-new" value={cfdiForm.regimenFiscal} onChange={e => setCfdiF("regimenFiscal", e.target.value)}>
-                      <option value="616">616 — Sin obligaciones fiscales</option>
-                      <option value="605">605 — Sueldos y salarios</option>
-                      <option value="612">612 — Personas físicas con actividad</option>
-                      <option value="626">626 — Régimen simplificado de confianza</option>
+                      {REGIMENES_FISCALES.map(r => <option key={r.clave} value={r.clave}>{r.clave} — {r.descripcion}</option>)}
                     </select>
                   </div>
                   <div className="field-new">
                     <label className="field-new__label">Uso CFDI</label>
                     <select className="input-new" value={cfdiForm.usoCfdi} onChange={e => setCfdiF("usoCfdi", e.target.value)}>
-                      <option value="D01">D01 — Honorarios médicos</option>
-                      <option value="D07">D07 — Primas seguros</option>
-                      <option value="G03">G03 — Gastos en general</option>
-                      <option value="S01">S01 — Sin efectos fiscales</option>
+                      {USOS_CFDI.map(u => <option key={u.clave} value={u.clave}>{u.clave} — {u.descripcion}</option>)}
                     </select>
                   </div>
                   <div className="field-new">
                     <label className="field-new__label">Forma de pago</label>
                     <select className="input-new" value={cfdiForm.formaPago} onChange={e => setCfdiF("formaPago", e.target.value)}>
-                      <option value="01">01 — Efectivo</option>
-                      <option value="02">02 — Cheque</option>
-                      <option value="03">03 — Transferencia</option>
-                      <option value="04">04 — Tarjeta de crédito</option>
-                      <option value="28">28 — Tarjeta de débito</option>
+                      {FORMAS_PAGO_SAT.map(fp => <option key={fp.clave} value={fp.clave}>{fp.clave} — {fp.descripcion}</option>)}
+                    </select>
+                  </div>
+                  <div className="field-new">
+                    <label className="field-new__label">{t("billing.billingClient.cfdiTaxesLabel")}</label>
+                    <select className="input-new" value={cfdiForm.impuestos} onChange={e => setCfdiF("impuestos", e.target.value)}>
+                      <option value="exento">{t("billing.billingClient.cfdiTaxExempt")}</option>
+                      <option value="iva16">{t("billing.billingClient.cfdiTaxIva16")}</option>
                     </select>
                   </div>
                 </div>
               </div>
+
+              {cfdiMismatch && (
+                <div style={{ marginTop: 16, padding: "10px 12px", borderRadius: 10, fontSize: 12, background: "var(--danger-soft, rgba(225,29,72,0.08))", border: "1px solid var(--danger)", color: "var(--danger)" }}>
+                  <p style={{ margin: 0 }}>{cfdiMismatch}</p>
+                  <button
+                    type="button"
+                    className="btn-new btn-new--ghost btn-new--sm"
+                    style={{ marginTop: 8 }}
+                    onClick={() => { const inv = cfdiFor; setCfdiFor(null); setDetailInvoice(inv); }}
+                  >
+                    {t("billing.billingClient.cfdiOpenInvoice")}
+                  </button>
+                </div>
+              )}
+
+              {cfdiFor.balance > 0 && (
+                <div style={{ marginTop: 16, padding: "10px 12px", borderRadius: 10, fontSize: 12, background: "var(--warning-soft)", border: "1px solid var(--warning-border-strong)", color: "var(--warning-strong)" }}>
+                  <p style={{ margin: 0 }}>{t("billing.billingClient.cfdiBalanceWarning")}</p>
+                  {/* Bloqueo suave: sin esta confirmación el server rechaza el
+                      timbrado de facturas con saldo (409 CFDI_UNPAID_PUE). */}
+                  <label style={{ display: "flex", alignItems: "flex-start", gap: 8, marginTop: 8, cursor: "pointer", fontWeight: 600 }}>
+                    <input type="checkbox" style={{ marginTop: 2 }} checked={cfdiPueOk} onChange={e => setCfdiPueOk(e.target.checked)} />
+                    <span>{t("billing.billingClient.cfdiUnpaidConfirm")}</span>
+                  </label>
+                </div>
+              )}
             </div>
             <div className="modal__footer">
               <ButtonNew variant="ghost" type="button" onClick={() => setCfdiFor(null)}>{t("common.cancel")}</ButtonNew>
-              <ButtonNew variant="primary" onClick={timbraCfdi} disabled={cfdiLoading}>
+              <ButtonNew variant="primary" onClick={timbraCfdi} disabled={cfdiLoading || (cfdiFor.balance > 0 && !cfdiPueOk)}>
                 {cfdiLoading ? t("billing.billingClient.stampingEllipsis") : t("billing.billingClient.stampAtSat")}
               </ButtonNew>
             </div>
