@@ -6381,6 +6381,9 @@ enum ClinicalModule {
   periodontics
   implants
   orthodontics
+  // Fotos clínicas de la ficha del paciente (tab "Fotos clínicas"),
+  // sin especialidad — extraorales/intraorales por etapa.
+  general
 }
 
 enum ClinicalPhotoStage {
@@ -6432,6 +6435,16 @@ enum ClinicalPhotoType {
   ortho_extraoral_profile
   ortho_intraoral
   ortho_progress
+  // Fotos clínicas generales (módulo `general` — ficha del paciente)
+  extraoral_front
+  extraoral_smile
+  extraoral_profile_right
+  extraoral_profile_left
+  intraoral_front
+  intraoral_lateral_right
+  intraoral_lateral_left
+  occlusal_upper
+  occlusal_lower
   // Cross
   other
 }
@@ -6532,6 +6545,9 @@ model ClinicalPhoto {
   capturedBy   String
   blobUrl      String
   thumbnailUrl String?
+  // Bytes del binario principal ALMACENADO (post-compresión). Nullable:
+  // fotos previas a la ficha v3 no lo registran y no suman a la cuota.
+  sizeBytes    Int?
   notes        String?
   // Anotaciones libres sobre la foto (eg. "diente 51 erupcionando").
   annotations  Json?

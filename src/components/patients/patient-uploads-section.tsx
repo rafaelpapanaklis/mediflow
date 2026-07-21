@@ -5,7 +5,8 @@
 // con signed URL de corta duración. Aislado por clinicId en el endpoint
 // GET /api/patients/[id]/uploads.
 import { useCallback, useEffect, useState } from "react";
-import { Download, FileText, RefreshCw } from "lucide-react";
+import { Download, FileText, Inbox, RefreshCw, Upload } from "lucide-react";
+import { BadgeNew } from "@/components/ui/design-system/badge-new";
 
 interface UploadItem {
   id: string;
@@ -21,6 +22,13 @@ const KIND_LABEL: Record<UploadItem["kind"], string> = {
   ESTUDIO: "Estudio",
   IDENTIFICACION: "Identificación",
   OTRO: "Otro",
+};
+
+// Tono visual del badge por tipo de archivo (solo presentación).
+const KIND_TONE: Record<UploadItem["kind"], "info" | "brand" | "neutral"> = {
+  ESTUDIO: "info",
+  IDENTIFICACION: "brand",
+  OTRO: "neutral",
 };
 
 function formatSize(bytes: number): string {
@@ -65,46 +73,66 @@ export function PatientUploadsSection({ patientId }: { patientId: string }) {
 
   return (
     <div className="space-y-4">
-      <div className="bg-card border border-border rounded-xl p-4 flex items-center justify-between gap-3 flex-wrap">
-        <div>
-          <h2 className="text-sm font-bold">Subidos por el paciente</h2>
-          <p className="text-xs text-muted-foreground">
-            Archivos que el paciente subió desde su portal ({items.length})
-          </p>
+      <div className="bg-card border border-border rounded-xl p-4 shadow-[var(--shadow-1)] flex items-center justify-between gap-3 flex-wrap">
+        <div className="flex items-center gap-3">
+          <span className="grid h-9 w-9 flex-shrink-0 place-items-center rounded-xl bg-[var(--brand-soft)] text-[var(--brand)]">
+            <Upload size={17} strokeWidth={1.75} aria-hidden />
+          </span>
+          <div>
+            <h2 className="text-[15px] font-bold tracking-[-0.01em]">Subidos por el paciente</h2>
+            <p className="text-xs text-muted-foreground tabular-nums mt-0.5">
+              {items.length} archivos · subidos desde el portal del paciente
+            </p>
+          </div>
         </div>
         <button
           type="button"
           onClick={load}
           disabled={loading}
-          className="flex items-center gap-1.5 text-xs font-semibold border border-border px-3 py-2 rounded-lg hover:bg-muted transition-colors disabled:opacity-50"
+          className="flex items-center gap-1.5 text-xs font-semibold border border-border px-3 py-2 min-h-[40px] rounded-lg hover:bg-[var(--bg-hover)] hover:border-[var(--border-brand)] transition-colors focus-visible:outline-none focus-visible:shadow-[var(--ring)] disabled:opacity-[.45] disabled:cursor-not-allowed"
         >
-          <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} />
+          <RefreshCw size={14} strokeWidth={1.75} className={loading ? "animate-spin" : ""} aria-hidden />
           Actualizar
         </button>
       </div>
 
       {err ? (
-        <div className="bg-card border border-border rounded-xl p-8 text-center">
-          <p className="text-sm font-semibold text-muted-foreground">
+        <div
+          className="bg-[var(--danger-soft)] border rounded-xl p-8 text-center"
+          style={{ borderColor: "color-mix(in srgb, var(--danger) 30%, transparent)" }}
+        >
+          <p className="text-sm font-semibold text-[var(--danger-strong)]">
             No se pudieron cargar los archivos.
           </p>
           <button
             type="button"
             onClick={load}
-            className="mt-3 text-xs font-semibold text-brand-600 hover:underline"
+            className="mt-2 inline-flex items-center justify-center min-h-[40px] px-3 rounded-lg text-xs font-semibold text-[var(--brand)] hover:underline focus-visible:outline-none focus-visible:shadow-[var(--ring)]"
           >
             Reintentar
           </button>
         </div>
       ) : loading && items.length === 0 ? (
-        <div className="bg-card border border-border rounded-xl p-8 text-center">
-          <p className="text-sm text-muted-foreground">Cargando…</p>
+        // Skeleton de carga con el mismo template de columnas del grid real.
+        <div
+          className="grid gap-3"
+          style={{ gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 280px), 1fr))" }}
+          aria-busy="true"
+        >
+          {[0, 1, 2, 3].map((i) => (
+            <div key={i} className="h-24 rounded-xl bg-muted animate-pulse" />
+          ))}
         </div>
       ) : items.length === 0 ? (
-        <div className="bg-card border border-border rounded-xl p-10 text-center">
-          <div className="text-3xl mb-2">📁</div>
-          <p className="text-sm font-semibold text-muted-foreground">
+        <div className="rounded-2xl bg-[var(--brand-softer)] border border-[var(--border-brand)] px-5 py-14 text-center">
+          <span className="mx-auto mb-3 grid h-14 w-14 place-items-center rounded-2xl bg-[var(--brand-soft)] text-[var(--brand)] shadow-[var(--shadow-1)]">
+            <Inbox size={24} strokeWidth={1.75} aria-hidden />
+          </span>
+          <p className="text-sm font-bold text-foreground">
             El paciente aún no ha subido archivos.
+          </p>
+          <p className="text-xs text-muted-foreground mt-1.5 max-w-sm mx-auto">
+            El paciente puede subirlos desde su portal — aparecerán aquí al instante.
           </p>
         </div>
       ) : (
@@ -117,19 +145,28 @@ export function PatientUploadsSection({ patientId }: { patientId: string }) {
             return (
               <div
                 key={it.id}
-                className="bg-card border border-border rounded-xl p-3 flex flex-col gap-2"
+                className="bg-card border border-border rounded-2xl p-3 flex flex-col gap-2 shadow-[var(--shadow-1)] hover:shadow-[var(--shadow-2)] hover:border-[var(--border-brand)] motion-safe:hover:-translate-y-0.5 transition-all duration-200"
               >
                 <div className="flex items-start gap-2">
                   {isImage ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      src={it.url}
-                      alt={it.fileName}
-                      className="w-12 h-12 rounded-lg object-cover bg-muted flex-shrink-0"
-                    />
+                    // La miniatura abre el archivo (misma signed URL de descarga).
+                    <a
+                      href={it.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      aria-label={`Ver ${it.fileName}`}
+                      className="flex-shrink-0 rounded-lg focus-visible:outline-none focus-visible:shadow-[var(--ring)]"
+                    >
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={it.url}
+                        alt={it.fileName}
+                        className="w-14 h-14 rounded-lg object-cover bg-muted"
+                      />
+                    </a>
                   ) : (
-                    <div className="w-12 h-12 rounded-lg bg-muted flex items-center justify-center flex-shrink-0">
-                      <FileText className="w-5 h-5 text-muted-foreground" />
+                    <div className="w-14 h-14 rounded-lg bg-muted flex items-center justify-center flex-shrink-0">
+                      <FileText size={20} strokeWidth={1.75} className="text-[var(--text-3)]" />
                     </div>
                   )}
                   <div className="min-w-0 flex-1">
@@ -137,11 +174,9 @@ export function PatientUploadsSection({ patientId }: { patientId: string }) {
                       {it.fileName}
                     </p>
                     <p className="mt-1">
-                      <span className="inline-block px-1.5 py-0.5 rounded bg-muted text-[10px] font-bold uppercase tracking-wide text-muted-foreground">
-                        {KIND_LABEL[it.kind]}
-                      </span>
+                      <BadgeNew tone={KIND_TONE[it.kind]}>{KIND_LABEL[it.kind]}</BadgeNew>
                     </p>
-                    <p className="text-[11px] text-muted-foreground mt-1">
+                    <p className="text-[11px] text-muted-foreground tabular-nums mt-1">
                       {formatSize(it.sizeBytes)} · {formatFecha(it.createdAt)}
                     </p>
                   </div>
@@ -150,9 +185,9 @@ export function PatientUploadsSection({ patientId }: { patientId: string }) {
                   href={it.url}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="flex items-center justify-center gap-1.5 text-xs font-semibold bg-brand-600 text-white px-3 py-2 rounded-lg hover:bg-brand-700 transition-colors"
+                  className="flex items-center justify-center gap-1.5 text-xs font-semibold bg-[var(--brand)] text-white px-3 py-2 min-h-[40px] rounded-lg hover:bg-[var(--violet-700)] active:scale-[.98] transition duration-150 focus-visible:outline-none focus-visible:shadow-[var(--ring)]"
                 >
-                  <Download className="w-3.5 h-3.5" />
+                  <Download size={14} strokeWidth={1.75} aria-hidden />
                   Descargar
                 </a>
               </div>

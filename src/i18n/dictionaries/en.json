@@ -1369,6 +1369,7 @@
       "cuestionario": "Health questionnaire",
       "evolucion": "SOAP notes",
       "radiografias": "X-rays",
+      "fotos": "Clinical photos",
       "subidos": "Patient uploads",
       "modelos3d": "3D models",
       "tratamiento": "Treatment plan",
@@ -1383,6 +1384,69 @@
       "ortodoncia": "Orthodontics",
       "recetas": "Prescriptions",
       "sectionsAria": "Patient sections"
+    },
+    "fotosTab": {
+      "title": "Clinical photos",
+      "subtitle": "Extraoral and intraoral photos by treatment stage",
+      "count": {
+        "one": "{count} photo",
+        "other": "{count} photos"
+      },
+      "upload": "Upload photos",
+      "uploadModalTitle": "Upload clinical photos",
+      "uploadModalSub": "Set the stage and view, then drag or choose the photos.",
+      "takePhoto": "Take photo",
+      "stageLabel": "Stage",
+      "typeLabel": "View",
+      "typeExtraoralGroup": "Extraoral",
+      "typeIntraoralGroup": "Intraoral",
+      "typeOther": "Other",
+      "filterAllStages": "All",
+      "filterAllTypes": "All views",
+      "filterAllTypeGroups": "All types",
+      "filterExtraoral": "Extraoral",
+      "filterIntraoral": "Intraoral",
+      "rangeAll": "All history",
+      "rangeM3": "Last 3 months",
+      "rangeM6": "Last 6 months",
+      "rangeM12": "Last 12 months",
+      "shownOf": "{shown} of {total} photos",
+      "clearFilters": "Clear filters",
+      "compareTitle": "Before / after comparator",
+      "compareSub": "Drag the handle to reveal the change",
+      "modeSlider": "Slider",
+      "modeSide": "Side by side",
+      "swapAria": "Swap A and B",
+      "compareTip": "Tip: compare photos of the same view and framing to better see the evolution.",
+      "noResultsTitle": "No results with these filters",
+      "noResultsHint": "Try another stage, type or date range.",
+      "emptyCta": "Upload the first photos",
+      "viewGallery": "Gallery",
+      "viewCompare": "Compare",
+      "empty": "No clinical photos yet",
+      "emptyHint": "Document the evolution with extraoral and intraoral photos. You will be able to compare them before and after treatment.",
+      "loading": "Loading photos…",
+      "uploadingProgress": "Uploading {done}/{total}…",
+      "uploadSuccess": {
+        "one": "{count} photo uploaded",
+        "other": "{count} photos uploaded"
+      },
+      "uploadPartial": "{ok} uploaded · {failed} failed",
+      "uploadErrorGeneric": "Could not upload {name}",
+      "quotaTitle": "Plan storage limit reached",
+      "quotaCta": "Upgrade plan",
+      "deleteConfirm": "Delete this clinical photo? It is removed from the record and the gallery.",
+      "deleted": "Photo deleted",
+      "compareNeedTwo": "At least 2 photos are needed to compare.",
+      "sideA": "Before",
+      "sideB": "After",
+      "sliderAria": "Before-after slider position",
+      "groupEmptyHint": "No photos in this stage",
+      "dropHint": "Drag images here or click to select",
+      "maxSize": "JPG · PNG · WEBP · HEIC — max 25MB each",
+      "photoAlt": "Clinical photo {type}",
+      "deleteAria": "Delete photo",
+      "noMatches": "No photos match the filters."
     },
     "prescriptionsTab": {
       "title": "Patient prescriptions",
@@ -1621,7 +1685,7 @@
       "cariesModerate": "Moderate",
       "perio": "Perio",
       "noData": "No data",
-      "medicalHistory": "Medical history",
+      "medicalHistory": "Background",
       "bloodType": "Blood type",
       "notRegistered": "Not registered",
       "insurance": "Insurance",
@@ -1632,7 +1696,16 @@
       "paid": "Paid",
       "pending": "Pending",
       "credit": "Credit balance",
-      "pctCovered": "{pct}% covered"
+      "pctCovered": "{pct}% covered",
+      "activeTreatment": "Active treatment",
+      "sessionsOf": "{done}/{total} sessions",
+      "viewPlan": "View plan",
+      "nextSessionDate": "Next: {date}",
+      "recentPhotos": "Recent photos",
+      "viewAllPhotos": "View all",
+      "noPhotosYet": "Document the before and after with clinical photos.",
+      "uploadPhotos": "Upload photos",
+      "emergencyContact": "Emergency contact"
     },
     "history": {
       "title": "Medical history",
@@ -2001,7 +2074,11 @@
       "copyPortalLink": "Copy portal link",
       "generatePatientPortal": "Generate patient portal",
       "printSummary": "Print summary",
-      "viewInAgenda": "View in agenda"
+      "viewInAgenda": "View in agenda",
+      "alertsAria": "Patient clinical alerts",
+      "noAllergies": "No known allergies",
+      "emergencyLabel": "Emergency",
+      "moreCount": "+{count}"
     },
     "historiaTimeline": {
       "typeSoap": "Notes",
@@ -2100,7 +2177,8 @@
       "appointments": "Appointments",
       "billing": "Billing",
       "ariaLabel": "Patient quick navigation",
-      "noRecordsYet": "No records yet in this module"
+      "noRecordsYet": "No records yet in this module",
+      "newBadge": "NEW"
     },
     "sideCards": {
       "panelAria": "Side panel",
@@ -2120,7 +2198,8 @@
       "recentWhatsApp": "Recent WhatsApp",
       "noRecentMessages": "No recent messages with {name}.",
       "noPhone": "Patient has no phone on file.",
-      "openChat": "Open chat"
+      "openChat": "Open chat",
+      "viewBilling": "View billing"
     },
     "soapEditor": {
       "editorAria": "Consultation notes editor",

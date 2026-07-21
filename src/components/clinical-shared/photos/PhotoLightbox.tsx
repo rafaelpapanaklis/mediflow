@@ -34,6 +34,7 @@ export function PhotoLightbox(props: PhotoLightboxProps) {
       role="dialog"
       aria-modal="true"
       aria-label="Foto clínica"
+      data-dc-lightbox-anim
       style={{
         position: "fixed",
         inset: 0,
@@ -41,8 +42,18 @@ export function PhotoLightbox(props: PhotoLightboxProps) {
         background: "rgba(0,0,0,0.92)",
         display: "flex",
         flexDirection: "column",
+        animation: "dcLightboxFade 180ms ease-out",
       }}
     >
+      {/* Keyframes scoped del lightbox (entrada fade + zoom sutil).
+          Con guard de prefers-reduced-motion. */}
+      <style>{`
+        @keyframes dcLightboxFade { from { opacity: 0 } to { opacity: 1 } }
+        @keyframes dcLightboxZoom { from { opacity: 0; transform: scale(0.97) } to { opacity: 1; transform: scale(1) } }
+        @media (prefers-reduced-motion: reduce) {
+          [data-dc-lightbox-anim] { animation: none !important }
+        }
+      `}</style>
       <header
         style={{
           display: "flex",
@@ -95,7 +106,15 @@ export function PhotoLightbox(props: PhotoLightboxProps) {
           <div style={{ width: 48 }} />
         )}
 
-        <div style={{ position: "relative", maxWidth: "85vw", maxHeight: "78vh" }}>
+        <div
+          data-dc-lightbox-anim
+          style={{
+            position: "relative",
+            maxWidth: "85vw",
+            maxHeight: "78vh",
+            animation: "dcLightboxZoom 200ms ease-out",
+          }}
+        >
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={photo.blobUrl}
