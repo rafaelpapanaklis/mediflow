@@ -77,6 +77,7 @@ export default async function AnalyticsOverviewPage() {
 
   return (
     <OverviewClient
+      key={clinicId}
       data={{
         monthAppts,
         prevAppts,

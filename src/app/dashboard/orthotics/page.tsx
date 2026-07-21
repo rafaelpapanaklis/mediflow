@@ -18,5 +18,5 @@ export default async function OrthoticsPage() {
     orderBy: { createdAt: "asc" },
   });
 
-  return <OrthoticsClient initialItems={items as any} />;
+  return <OrthoticsClient key={clinicId} initialItems={items as any} />;
 }

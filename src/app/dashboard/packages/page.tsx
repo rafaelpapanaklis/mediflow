@@ -26,5 +26,5 @@ export default async function PackagesPage() {
     orderBy: { purchasedAt: "desc" },
   });
 
-  return <PackagesClient initialPackages={packages as any} initialRedemptions={redemptions as any} />;
+  return <PackagesClient key={clinicId} initialPackages={packages as any} initialRedemptions={redemptions as any} />;
 }

@@ -16,5 +16,5 @@ export default async function ExercisesPage() {
     orderBy: { name: "asc" },
   });
 
-  return <ExercisesClient initialExercises={exercises as any} />;
+  return <ExercisesClient key={clinicId} initialExercises={exercises as any} />;
 }

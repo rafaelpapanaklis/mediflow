@@ -37,6 +37,7 @@ export default async function TeamPage() {
 
   return (
     <TeamClient
+      key={user.clinicId}
       team={team as any}
       currentUserId={user.id}
       currentUserRole={user.role}

@@ -13,5 +13,5 @@ export default async function WaitingRoomAnalyticsPage() {
   if (!["SUPER_ADMIN", "ADMIN"].includes(user.role)) {
     return <div style={{ padding: 32, color: "var(--text-3)" }}>{t("analytics.waitingRoomPage.adminOnly")}</div>;
   }
-  return <WaitingRoomClient />;
+  return <WaitingRoomClient key={user.clinicId} />;
 }

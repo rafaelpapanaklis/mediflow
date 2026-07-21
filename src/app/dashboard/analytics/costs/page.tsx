@@ -13,5 +13,5 @@ export default async function CostsAnalyticsPage() {
   if (!["SUPER_ADMIN", "ADMIN"].includes(user.role)) {
     return <div style={{ padding: 32, color: "var(--text-3)" }}>{t("analytics.costs.adminOnly")}</div>;
   }
-  return <CostsClient />;
+  return <CostsClient key={user.clinicId} />;
 }

@@ -16,5 +16,5 @@ export default async function ProceduresPage() {
     orderBy: [{ isActive: "desc" }, { category: "asc" }, { name: "asc" }],
   });
 
-  return <ProceduresClient initialProcedures={procedures as any} />;
+  return <ProceduresClient key={user.clinicId} initialProcedures={procedures as any} />;
 }

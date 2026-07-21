@@ -10,5 +10,5 @@ export const metadata: Metadata = { title: "Saldo de IA — DaleControl" };
 export default async function AiWalletSaldoPage() {
   const user = await getCurrentUser();
   requirePermissionOrRedirect(user, "whatsapp.view");
-  return <SaldoClient />;
+  return <SaldoClient key={user.clinicId} />;
 }

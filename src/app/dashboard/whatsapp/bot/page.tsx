@@ -10,5 +10,5 @@ export const metadata: Metadata = { title: "Bot de WhatsApp — DaleControl" };
 export default async function WhatsAppBotPage() {
   const user = await getCurrentUser();
   requirePermissionOrRedirect(user, "whatsapp.view");
-  return <BotClient />;
+  return <BotClient key={user.clinicId} />;
 }

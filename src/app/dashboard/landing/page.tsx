@@ -11,5 +11,5 @@ export default async function LandingConfigPage() {
     where:   { id: user.clinicId },
     include: { schedules: { orderBy: { dayOfWeek: "asc" } } },
   });
-  return <LandingConfigClient clinic={clinic as any} appUrl={process.env.NEXT_PUBLIC_APP_URL ?? ""} />;
+  return <LandingConfigClient key={user.clinicId} clinic={clinic as any} appUrl={process.env.NEXT_PUBLIC_APP_URL ?? ""} />;
 }

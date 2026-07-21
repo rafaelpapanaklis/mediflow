@@ -19,6 +19,7 @@ export default async function ResourcesPage() {
   return (
     <div style={{ padding: "8px 4px 32px" }}>
       <ResourcesManager
+        key={user.clinicId}
         initialResources={resources}
         clinicId={user.clinicId}
         canEdit={canEdit}

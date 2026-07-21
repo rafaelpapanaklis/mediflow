@@ -29,5 +29,5 @@ export default async function OccupancyPage() {
     }),
   ]);
 
-  return <OccupancyClient resources={resources} doctors={doctors} />;
+  return <OccupancyClient key={user.clinicId} resources={resources} doctors={doctors} />;
 }

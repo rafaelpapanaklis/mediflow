@@ -24,5 +24,5 @@ export default async function WalkInPage() {
     orderBy: [{ priority: "desc" }, { joinedAt: "asc" }],
   });
 
-  return <WalkInClient initialQueue={queue as any} />;
+  return <WalkInClient key={clinicId} initialQueue={queue as any} />;
 }

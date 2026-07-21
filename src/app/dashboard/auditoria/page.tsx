@@ -8,5 +8,5 @@ import { AuditoriaClient } from "./auditoria-client";
 export default async function DashboardAuditoriaPage() {
   const ctx = await getAuthContext();
   if (!ctx || !ctx.isAdmin) redirect("/dashboard");
-  return <AuditoriaClient />;
+  return <AuditoriaClient key={ctx.clinicId} />;
 }

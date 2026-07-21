@@ -46,6 +46,7 @@ export default async function ClinicLayoutPage() {
     return (
       <ErrorBoundary fallbackTitle="No se pudo cargar el editor de plano">
         <ClinicLayoutClient
+          key={user.clinicId}
           clinic={{
             id: clinic?.id ?? "",
             name: clinic?.name ?? "",

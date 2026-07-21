@@ -58,5 +58,5 @@ export default async function SuppliersPage() {
     isFavorite: favSet.has(s.id),
   }));
 
-  return <SuppliersClient initialSuppliers={data} />;
+  return <SuppliersClient key={user.clinicId} initialSuppliers={data} />;
 }

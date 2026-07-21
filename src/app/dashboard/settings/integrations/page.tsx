@@ -35,6 +35,7 @@ export default async function IntegrationsPage() {
 
   return (
     <IntegrationsClient
+      key={user.clinicId}
       clinic={{
         id: clinic?.id ?? "",
         name: clinic?.name ?? "",

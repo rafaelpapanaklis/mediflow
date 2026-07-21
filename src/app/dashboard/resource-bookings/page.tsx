@@ -24,5 +24,5 @@ export default async function ResourceBookingsPage() {
     orderBy: { startTime: "asc" },
   });
 
-  return <ResourceBookingsClient initialBookings={bookings as any} />;
+  return <ResourceBookingsClient key={clinicId} initialBookings={bookings as any} />;
 }

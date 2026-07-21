@@ -13,5 +13,5 @@ export default async function JourneyAnalyticsPage() {
   if (!["SUPER_ADMIN", "ADMIN"].includes(user.role)) {
     return <div style={{ padding: 32, color: "var(--text-3)" }}>{t("analytics.journeyPage.adminOnly")}</div>;
   }
-  return <JourneyClient />;
+  return <JourneyClient key={user.clinicId} />;
 }
