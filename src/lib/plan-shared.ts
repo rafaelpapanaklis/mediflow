@@ -203,3 +203,14 @@ export function formatBytes(bytes: number): string {
   const value = bytes / Math.pow(1024, i);
   return `${value.toFixed(value >= 10 || i === 0 ? 0 : 1)} ${units[i]}`;
 }
+
+/**
+ * Bullet de marketing del cupo CFDI para las tarjetas de plan. FUENTE ÚNICA
+ * del copy (no repetir la cadena en ninguna otra superficie): p. ej.
+ * "25 facturas CFDI al mes ($3.00 c/u adicional)". El precio del excedente se
+ * formatea a pesos con 2 decimales desde los centavos (300 → $3.00).
+ */
+export function cfdiBullet(p: { cfdiMonthly: number; cfdiOverageCents: number }): string {
+  const overage = (p.cfdiOverageCents / 100).toFixed(2);
+  return `${p.cfdiMonthly} facturas CFDI al mes ($${overage} c/u adicional)`;
+}

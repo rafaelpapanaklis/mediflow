@@ -25,6 +25,8 @@ export default async function SuspendedPage({
     priceMxn: p.priceMxn,
     priceMxnAnnual: p.priceMxnAnnual,
     features: [...p.features],
+    cfdiMonthly: p.cfdiMonthly,
+    cfdiOverageCents: p.cfdiOverageCents,
   }));
 
   // Plan elegido en el registro (Clinic.plan): preselección + base del upsell.

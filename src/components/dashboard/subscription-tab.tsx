@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
 import { Check, CreditCard, Download, ExternalLink, Loader2, Receipt, Sparkles } from "lucide-react";
 import { type PlanId, isPlanId } from "@/lib/billing/plans";
+import { cfdiBullet } from "@/lib/plan-shared";
 import { PaymentMethodModal } from "./payment-method-modal";
 import { CfdiUsageCard } from "./cfdi-usage-card";
 import { useT } from "@/i18n/i18n-provider";
@@ -50,6 +51,8 @@ interface ApiPlan {
   priceMxn: number;
   priceMxnAnnual: number;
   features: string[];
+  cfdiMonthly: number;
+  cfdiOverageCents: number;
 }
 
 const TRIAL_DAYS_TOTAL = 14;
@@ -367,7 +370,7 @@ export function SubscriptionTab({ clinic }: Props) {
                   </div>
                 )}
                 <ul style={{ listStyle: "none", padding: 0, margin: 0, display: "flex", flexDirection: "column", gap: 4, flex: 1 }}>
-                  {plan.features.map((f) => (
+                  {[...plan.features, cfdiBullet(plan)].map((f) => (
                     <li key={f} style={{ fontSize: 11, color: "var(--text-2)", display: "flex", alignItems: "center", gap: 6 }}>
                       <Check size={11} aria-hidden style={{ color: "var(--brand)" }} />
                       {f}

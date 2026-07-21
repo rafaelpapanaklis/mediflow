@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import toast from "react-hot-toast";
 import { CreditCard, Loader2, Lock, Check } from "lucide-react";
 import type { PlanId } from "@/lib/billing/plans";
-import { FIRST_MONTH_PROMO_MXN } from "@/lib/plan-shared";
+import { FIRST_MONTH_PROMO_MXN, cfdiBullet } from "@/lib/plan-shared";
 import { useT } from "@/i18n/i18n-provider";
 
 export interface PlanCardData {
@@ -14,6 +14,10 @@ export interface PlanCardData {
   /** Total anual (35% de descuento) — viene de plan_configs vía getResolvedPlans. */
   priceMxnAnnual: number;
   features: string[];
+  /** Facturas CFDI incluidas por mes (para el bullet de cupo). */
+  cfdiMonthly: number;
+  /** Precio del timbre CFDI excedente, en centavos MXN. */
+  cfdiOverageCents: number;
 }
 
 type PayMethod = "card" | "spei" | "oxxo";
@@ -308,7 +312,7 @@ export function SuspendedPlanCards({ plans, currentPlan = null, firstMonthEligib
                 <div className="my-0.5 h-px bg-border" />
 
                 <div className="flex flex-col gap-[9px]">
-                  {plan.features.map((f) => (
+                  {[...plan.features, cfdiBullet(plan)].map((f) => (
                     <div key={f} className="flex items-center gap-2.5 text-[13.5px] text-muted-foreground">
                       <Check size={16} strokeWidth={2.4} className="flex-shrink-0 text-green-600 dark:text-emerald-400" aria-hidden />
                       {f}

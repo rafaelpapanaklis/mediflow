@@ -51,6 +51,8 @@ export const PLANS: Plan[] = [
       { text: 'Agenda + recordatorios por WhatsApp', included: true },
       { text: 'Expediente clínico + odontograma', included: true },
       { text: 'Presupuestos, cobros y factura automática', included: true },
+      // mantener en sincronía con plan_configs (cfdiMonthly/cfdiOverageCents).
+      { text: '25 facturas CFDI al mes ($3.00 c/u adicional)', included: true },
       { text: 'Portal del paciente y recetas digitales', included: true },
       { text: 'Radiografías 3D en la nube con IA', included: false },
       { text: 'Modelos 3D y clínica virtual', included: false },
@@ -76,6 +78,8 @@ export const PLANS: Plan[] = [
       { text: 'Asistente clínico con IA · 200 mil tokens/mes', included: true },
       { text: 'Modelos 3D dentales y clínica virtual 3D', included: true },
       { text: 'Analytics, reportes y TV de sala de espera', included: true },
+      // mantener en sincronía con plan_configs (cfdiMonthly/cfdiOverageCents).
+      { text: '50 facturas CFDI al mes ($2.00 c/u adicional)', included: true },
       { text: 'Varias sucursales en una cuenta', included: false },
       { text: 'Roles avanzados y soporte prioritario', included: false },
     ],
@@ -98,6 +102,8 @@ export const PLANS: Plan[] = [
       { text: 'Varias sucursales en una cuenta', included: true },
       { text: 'Roles y permisos avanzados', included: true },
       { text: 'IA ampliada · 1 millón de tokens/mes', included: true },
+      // mantener en sincronía con plan_configs (cfdiMonthly/cfdiOverageCents).
+      { text: '150 facturas CFDI al mes ($1.25 c/u adicional)', included: true },
       { text: 'Soporte prioritario', included: true },
       { text: 'Onboarding y migración dedicados', included: true },
     ],
