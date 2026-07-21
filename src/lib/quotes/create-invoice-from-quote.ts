@@ -6,6 +6,7 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { logAudit } from "@/lib/audit";
+import { round2 } from "./compute";
 import type {
   BillingInvoiceItem,
   BillingInvoiceLite,
@@ -24,6 +25,7 @@ interface QuoteItemLike {
   toothFdi: string | null;
   quantity: number;
   unitPrice: Prisma.Decimal | number;
+  discount?: Prisma.Decimal | number;
   lineTotal: Prisma.Decimal | number;
 }
 interface QuoteLike {
@@ -122,12 +124,23 @@ export async function createInvoiceFromQuote(
     if (existing) return { invoice: serializeInvoice(existing), already: true };
   }
 
-  const items = quote.items.map((it) => ({
-    description: it.toothFdi ? `${it.name} (${it.toothFdi})` : it.name,
-    quantity: num(it.quantity) || 1,
-    unitPrice: num(it.unitPrice),
-    total: num(it.lineTotal),
-  }));
+  const items = quote.items.map((it) => {
+    const quantity = num(it.quantity) || 1;
+    const unitPrice = num(it.unitPrice);
+    // El descuento POR LÍNEA del presupuesto viaja con el concepto: la guarda
+    // del timbrado (POST /api/cfdi) y el payload a Facturapi calculan
+    // qty × unitPrice − discount; sin él, una línea con descuento dejaría
+    // total < Σconceptos y el timbrado se bloquearía con un 409 falso.
+    // Clamp a importe de línea (regla SAT: descuento ≤ importe).
+    const discount = Math.min(round2(num(it.discount)), round2(unitPrice * quantity));
+    return {
+      description: it.toothFdi ? `${it.name} (${it.toothFdi})` : it.name,
+      quantity,
+      unitPrice,
+      ...(discount > 0 ? { discount } : {}),
+      total: num(it.lineTotal),
+    };
+  });
   const subtotal = num(quote.subtotal);
   const discount = num(quote.discountAmount);
   const total = num(quote.total);

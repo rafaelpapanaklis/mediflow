@@ -328,7 +328,10 @@
       "errCreate": "No se pudo crear la sucursal",
       "sharePatients": "Compartir pacientes con otra sede",
       "comingSoon": "Próximamente",
-      "sharePatientsHint": "Por ahora cada sucursal tiene su propio expediente, agenda y facturación, totalmente separados."
+      "sharePatientsHint": "Por ahora cada sucursal tiene su propio expediente, agenda y facturación, totalmente separados.",
+      "manage": "Administrar sucursales",
+      "sharePatientsWith": "Compartir pacientes con:",
+      "sharePatientsSelectHint": "Elige con qué sedes compartirá el expediente. La agenda y la facturación siguen separadas por sucursal. Puedes cambiarlo después en Configuración → Sucursales."
     },
     "switchToLight": "Cambiar a modo claro",
     "switchToDark": "Cambiar a modo oscuro",
@@ -1365,6 +1368,7 @@
       "cuestionario": "Cuestionario de salud",
       "evolucion": "Notas SOAP",
       "radiografias": "Radiografías",
+      "fotos": "Fotos clínicas",
       "subidos": "Subidos por el paciente",
       "modelos3d": "Modelos 3D",
       "tratamiento": "Plan de tratamiento",
@@ -1379,6 +1383,69 @@
       "ortodoncia": "Ortodoncia",
       "recetas": "Recetas",
       "sectionsAria": "Secciones del paciente"
+    },
+    "fotosTab": {
+      "title": "Fotos clínicas",
+      "subtitle": "Extraorales e intraorales por etapa del tratamiento",
+      "count": {
+        "one": "{count} foto",
+        "other": "{count} fotos"
+      },
+      "upload": "Subir fotos",
+      "uploadModalTitle": "Subir fotos clínicas",
+      "uploadModalSub": "Asigna etapa y vista, luego arrastra o elige las fotos.",
+      "takePhoto": "Tomar foto",
+      "stageLabel": "Etapa",
+      "typeLabel": "Vista",
+      "typeExtraoralGroup": "Extraorales",
+      "typeIntraoralGroup": "Intraorales",
+      "typeOther": "Otra",
+      "filterAllStages": "Todas",
+      "filterAllTypes": "Todas las vistas",
+      "filterAllTypeGroups": "Todos los tipos",
+      "filterExtraoral": "Extraoral",
+      "filterIntraoral": "Intraoral",
+      "rangeAll": "Todo el historial",
+      "rangeM3": "Últimos 3 meses",
+      "rangeM6": "Últimos 6 meses",
+      "rangeM12": "Últimos 12 meses",
+      "shownOf": "{shown} de {total} fotos",
+      "clearFilters": "Limpiar filtros",
+      "compareTitle": "Comparador antes / después",
+      "compareSub": "Arrastra el control para revelar el cambio",
+      "modeSlider": "Deslizador",
+      "modeSide": "Lado a lado",
+      "swapAria": "Intercambiar A y B",
+      "compareTip": "Consejo: compara fotos de la misma vista y encuadre para ver mejor la evolución.",
+      "noResultsTitle": "Sin resultados con estos filtros",
+      "noResultsHint": "Prueba con otra etapa, tipo o rango de fechas.",
+      "emptyCta": "Subir las primeras fotos",
+      "viewGallery": "Galería",
+      "viewCompare": "Comparar",
+      "empty": "Aún no hay fotos clínicas",
+      "emptyHint": "Documenta la evolución con fotos extraorales e intraorales. Podrás compararlas antes y después del tratamiento.",
+      "loading": "Cargando fotos…",
+      "uploadingProgress": "Subiendo {done}/{total}…",
+      "uploadSuccess": {
+        "one": "{count} foto subida",
+        "other": "{count} fotos subidas"
+      },
+      "uploadPartial": "{ok} subidas · {failed} con error",
+      "uploadErrorGeneric": "No se pudo subir {name}",
+      "quotaTitle": "Límite de almacenamiento del plan alcanzado",
+      "quotaCta": "Mejorar plan",
+      "deleteConfirm": "¿Eliminar esta foto clínica? Se quita del expediente y de la galería.",
+      "deleted": "Foto eliminada",
+      "compareNeedTwo": "Se necesitan al menos 2 fotos para comparar.",
+      "sideA": "Antes",
+      "sideB": "Después",
+      "sliderAria": "Posición del comparador antes-después",
+      "groupEmptyHint": "Sin fotos en esta etapa",
+      "dropHint": "Arrastra imágenes aquí o haz clic para seleccionar",
+      "maxSize": "JPG · PNG · WEBP · HEIC — máx 25MB c/u",
+      "photoAlt": "Foto clínica {type}",
+      "deleteAria": "Eliminar foto",
+      "noMatches": "Ninguna foto coincide con los filtros."
     },
     "prescriptionsTab": {
       "title": "Recetas del paciente",
@@ -1617,7 +1684,7 @@
       "cariesModerate": "Moderado",
       "perio": "Perio",
       "noData": "Sin datos",
-      "medicalHistory": "Historia clínica",
+      "medicalHistory": "Antecedentes",
       "bloodType": "Tipo de sangre",
       "notRegistered": "No registrado",
       "insurance": "Seguro",
@@ -1628,7 +1695,16 @@
       "paid": "Pagado",
       "pending": "Pendiente",
       "credit": "Saldo a favor",
-      "pctCovered": "{pct}% cubierto"
+      "pctCovered": "{pct}% cubierto",
+      "activeTreatment": "Tratamiento activo",
+      "sessionsOf": "{done}/{total} sesiones",
+      "viewPlan": "Ver plan",
+      "nextSessionDate": "Próxima: {date}",
+      "recentPhotos": "Fotos recientes",
+      "viewAllPhotos": "Ver todas",
+      "noPhotosYet": "Documenta el antes y después con fotos clínicas.",
+      "uploadPhotos": "Subir fotos",
+      "emergencyContact": "Contacto de emergencia"
     },
     "history": {
       "title": "Historia clínica",
@@ -1931,6 +2007,7 @@
     },
     "row": {
       "selectPatient": "Seleccionar paciente {name}",
+      "fromBranch": "Paciente de la sede {name}",
       "yearsOld": "{age} años",
       "doctorPrefix": "Dr/a.",
       "whatsapp": "WhatsApp",
@@ -1997,7 +2074,11 @@
       "copyPortalLink": "Copiar link del portal",
       "generatePatientPortal": "Generar portal paciente",
       "printSummary": "Imprimir resumen",
-      "viewInAgenda": "Ver en agenda"
+      "viewInAgenda": "Ver en agenda",
+      "alertsAria": "Alertas clínicas del paciente",
+      "noAllergies": "Sin alergias registradas",
+      "emergencyLabel": "Emergencia",
+      "moreCount": "+{count}"
     },
     "historiaTimeline": {
       "typeSoap": "Notas",
@@ -2096,7 +2177,8 @@
       "appointments": "Citas",
       "billing": "Facturación",
       "ariaLabel": "Navegación rápida del paciente",
-      "noRecordsYet": "Sin registros aún en este módulo"
+      "noRecordsYet": "Sin registros aún en este módulo",
+      "newBadge": "NUEVO"
     },
     "sideCards": {
       "panelAria": "Panel lateral",
@@ -2116,7 +2198,8 @@
       "recentWhatsApp": "WhatsApp recientes",
       "noRecentMessages": "Sin mensajes recientes con {name}.",
       "noPhone": "Paciente sin teléfono registrado.",
-      "openChat": "Abrir chat"
+      "openChat": "Abrir chat",
+      "viewBilling": "Ver facturación"
     },
     "soapEditor": {
       "editorAria": "Editor de notas de consulta",
@@ -2381,7 +2464,13 @@
       "toastCfdiReceptorRequired": "RFC, nombre y CP del paciente son requeridos",
       "toastCfdiStamped": "CFDI timbrado correctamente ante el SAT",
       "toastCfdiOverage": "Esta factura es adicional ({price})",
-      "toastCfdiStampError": "Error al timbrar"
+      "toastCfdiStampError": "Error al timbrar",
+      "cfdiTaxesLabel": "Impuestos",
+      "cfdiTaxExempt": "Exento (servicios médicos)",
+      "cfdiTaxIva16": "IVA 16%",
+      "cfdiBalanceWarning": "Esta factura tiene saldo pendiente. Normalmente se factura cuando ya está pagada.",
+      "cfdiUnpaidConfirm": "Timbrar de todos modos como PUE (pago en una sola exhibición)",
+      "cfdiOpenInvoice": "Abrir factura para corregir"
     }
   },
   "appointments": {
@@ -2675,6 +2764,23 @@
       "requesterReason": "Razón del solicitante",
       "internalNotes": "Notas internas / respuesta",
       "notesPlaceholder": "Acciones tomadas, fundamento de rechazo, datos entregados…"
+    },
+    "branches": {
+      "back": "Configuración",
+      "title": "Sucursales",
+      "subtitle": "Administra tus sedes y decide cuáles comparten el expediente de sus pacientes.",
+      "disabledNotice": "El compartir pacientes entre sedes todavía no está activo en tu cuenta. Puedes dejar marcadas las sedes: la configuración se guarda y empieza a aplicar en cuanto se habilite.",
+      "myBranches": "Mis sedes",
+      "sharingTitle": "Compartir pacientes",
+      "needTwo": "Necesitas al menos dos sedes para compartir pacientes. Crea una sucursal desde el selector de clínica del menú lateral.",
+      "sharePatients": "Compartir",
+      "stateShared": "Comparten expediente: cada sede ve y busca a los pacientes de la otra.",
+      "stateIsolated": "Separadas: cada sede solo ve a sus propios pacientes.",
+      "linked": "Sedes vinculadas. Ya comparten pacientes.",
+      "unlinked": "Vínculo eliminado. Cada sede vuelve a ver solo a sus pacientes.",
+      "errLink": "No se pudo vincular las sedes",
+      "errUnlink": "No se pudo quitar el vínculo",
+      "footnote": "Compartir aplica solo a la LECTURA del expediente: lista, búsqueda, ficha, historia, radiografías y consultas. Las citas, la facturación, la caja y las finanzas siguen separadas por sucursal. Los vínculos no son transitivos: si A comparte con B y B con C, A no ve a los pacientes de C."
     },
     "integrations": {
       "backToSettings": "Configuración",
@@ -6594,6 +6700,12 @@
       "cfdiFormTitle": "Datos fiscales del receptor",
       "cfdiFormHelp": "Se timbrará el CFDI ante el SAT (ambiente de pruebas).",
       "cfdiBalanceWarning": "Esta factura tiene saldo pendiente. Normalmente se factura cuando ya está pagada.",
+      "cfdiUnpaidConfirm": "Timbrar de todos modos como PUE (pago en una sola exhibición)",
+      "cfdiMismatchReview": "Revisar factura",
+      "cfdiPaymentFormLabel": "Forma de pago",
+      "cfdiTaxesLabel": "Impuestos",
+      "cfdiTaxExempt": "Exento (servicios médicos)",
+      "cfdiTaxIva16": "IVA 16%",
       "fiscalRfc": "RFC",
       "fiscalName": "Razón social / Nombre",
       "fiscalRegimen": "Régimen fiscal",

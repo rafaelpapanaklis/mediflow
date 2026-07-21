@@ -10,8 +10,9 @@ import { BUCKETS, type BucketName } from "@/lib/storage";
 
 const PHOTO_PREFIX = "clinical-photos";
 
-/** Tamaño máximo aceptado para una foto clínica: 8 MB. */
-export const MAX_PHOTO_BYTES = 8 * 1024 * 1024;
+/** Tamaño máximo aceptado para una foto clínica: 25 MB (holgado para una
+ *  foto de cámara/celular; el server la comprime con sharp antes de subir). */
+export const MAX_PHOTO_BYTES = 25 * 1024 * 1024;
 
 /** Tipos MIME permitidos. */
 export const ALLOWED_PHOTO_MIME = new Set([

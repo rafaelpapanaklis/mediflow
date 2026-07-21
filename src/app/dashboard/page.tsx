@@ -39,11 +39,17 @@ export default async function DashboardHomePage({ searchParams }: PageProps) {
     ? (searchParams!.period as AdminPeriod)
     : "month";
 
+  // MULTI-CLÍNICA: `key={clinic.id}` en cada vista del home. Al cambiar de
+  // sucursal el server ya re-renderiza con los datos correctos, pero React
+  // REUTILIZA los componentes cliente y conserva su estado interno — la
+  // gráfica de ingresos (useState(initialData) + fetch sólo al montar) seguía
+  // pintando la serie de la clínica ANTERIOR mientras los KPIs ya iban en $0.
+  // Con la key, el árbol se re-monta al cambiar de clínica y el estado muere.
   if (role === "RECEPTIONIST") {
     const data = await fetchReceptionistData();
     return (
       <HomeShell>
-        <HomeReceptionist user={homeUser} clinic={homeClinic} data={data} />
+        <HomeReceptionist key={clinic.id} user={homeUser} clinic={homeClinic} data={data} />
       </HomeShell>
     );
   }
@@ -52,7 +58,7 @@ export default async function DashboardHomePage({ searchParams }: PageProps) {
     const data = await fetchDoctorData();
     return (
       <HomeShell>
-        <HomeDoctor user={homeUser} clinic={homeClinic} data={data} />
+        <HomeDoctor key={clinic.id} user={homeUser} clinic={homeClinic} data={data} />
       </HomeShell>
     );
   }
@@ -81,11 +87,11 @@ export default async function DashboardHomePage({ searchParams }: PageProps) {
           user={homeUser}
           clinic={homeClinic}
           adminContent={
-            <HomeAdmin user={homeUser} clinic={homeClinic} data={adminData} period={period} />
+            <HomeAdmin key={clinic.id} user={homeUser} clinic={homeClinic} data={adminData} period={period} />
           }
           doctorContent={
             doctorData ? (
-              <HomeDoctor user={homeUser} clinic={homeClinic} data={doctorData} />
+              <HomeDoctor key={clinic.id} user={homeUser} clinic={homeClinic} data={doctorData} />
             ) : null
           }
           canBeDoctor={hybridCheck.canBeDoctor}
@@ -98,7 +104,7 @@ export default async function DashboardHomePage({ searchParams }: PageProps) {
   const adminData = await fetchAdminData(period);
   return (
     <HomeShell>
-      <HomeAdmin user={homeUser} clinic={homeClinic} data={adminData} period={period} />
+      <HomeAdmin key={clinic.id} user={homeUser} clinic={homeClinic} data={adminData} period={period} />
     </HomeShell>
   );
 }

@@ -78,7 +78,11 @@ export async function GET(req: NextRequest) {
     if (!dbUser) return jsonError("unauthorized", 401);
     const patientId = req.nextUrl.searchParams.get("patientId");
     if (!patientId) return jsonError("missing_patientId", 400);
-    if (!(await ensurePatientInClinic(patientId, dbUser.clinicId))) {
+    // FASE 2 — sharedRead: el odontograma es contenido clínico, así que se LEE
+    // también si el paciente vive en una sede vinculada. PUT/DELETE/sync/reset
+    // llaman a ensurePatientInClinic SIN esta opción → siguen exigiendo que el
+    // paciente sea de la sede activa (compartir es solo-lectura).
+    if (!(await ensurePatientInClinic(patientId, dbUser.clinicId, { sharedRead: true }))) {
       return jsonError("patient_not_found", 404);
     }
     const rows = await prisma.odontogramEntry.findMany({

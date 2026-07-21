@@ -328,7 +328,10 @@
       "errCreate": "Couldn't create the branch",
       "sharePatients": "Share patients with another location",
       "comingSoon": "Coming soon",
-      "sharePatientsHint": "For now each branch keeps its own records, schedule and billing, fully separate."
+      "sharePatientsHint": "For now each branch keeps its own records, schedule and billing, fully separate.",
+      "manage": "Manage branches",
+      "sharePatientsWith": "Share patients with:",
+      "sharePatientsSelectHint": "Pick which locations will share the patient record. Schedule and billing stay separate per branch. You can change this later in Settings → Branches."
     },
     "switchToLight": "Switch to light mode",
     "switchToDark": "Switch to dark mode",
@@ -1365,6 +1368,7 @@
       "cuestionario": "Health questionnaire",
       "evolucion": "SOAP notes",
       "radiografias": "X-rays",
+      "fotos": "Clinical photos",
       "subidos": "Patient uploads",
       "modelos3d": "3D models",
       "tratamiento": "Treatment plan",
@@ -1379,6 +1383,69 @@
       "ortodoncia": "Orthodontics",
       "recetas": "Prescriptions",
       "sectionsAria": "Patient sections"
+    },
+    "fotosTab": {
+      "title": "Clinical photos",
+      "subtitle": "Extraoral and intraoral photos by treatment stage",
+      "count": {
+        "one": "{count} photo",
+        "other": "{count} photos"
+      },
+      "upload": "Upload photos",
+      "uploadModalTitle": "Upload clinical photos",
+      "uploadModalSub": "Set the stage and view, then drag or choose the photos.",
+      "takePhoto": "Take photo",
+      "stageLabel": "Stage",
+      "typeLabel": "View",
+      "typeExtraoralGroup": "Extraoral",
+      "typeIntraoralGroup": "Intraoral",
+      "typeOther": "Other",
+      "filterAllStages": "All",
+      "filterAllTypes": "All views",
+      "filterAllTypeGroups": "All types",
+      "filterExtraoral": "Extraoral",
+      "filterIntraoral": "Intraoral",
+      "rangeAll": "All history",
+      "rangeM3": "Last 3 months",
+      "rangeM6": "Last 6 months",
+      "rangeM12": "Last 12 months",
+      "shownOf": "{shown} of {total} photos",
+      "clearFilters": "Clear filters",
+      "compareTitle": "Before / after comparator",
+      "compareSub": "Drag the handle to reveal the change",
+      "modeSlider": "Slider",
+      "modeSide": "Side by side",
+      "swapAria": "Swap A and B",
+      "compareTip": "Tip: compare photos of the same view and framing to better see the evolution.",
+      "noResultsTitle": "No results with these filters",
+      "noResultsHint": "Try another stage, type or date range.",
+      "emptyCta": "Upload the first photos",
+      "viewGallery": "Gallery",
+      "viewCompare": "Compare",
+      "empty": "No clinical photos yet",
+      "emptyHint": "Document the evolution with extraoral and intraoral photos. You will be able to compare them before and after treatment.",
+      "loading": "Loading photos…",
+      "uploadingProgress": "Uploading {done}/{total}…",
+      "uploadSuccess": {
+        "one": "{count} photo uploaded",
+        "other": "{count} photos uploaded"
+      },
+      "uploadPartial": "{ok} uploaded · {failed} failed",
+      "uploadErrorGeneric": "Could not upload {name}",
+      "quotaTitle": "Plan storage limit reached",
+      "quotaCta": "Upgrade plan",
+      "deleteConfirm": "Delete this clinical photo? It is removed from the record and the gallery.",
+      "deleted": "Photo deleted",
+      "compareNeedTwo": "At least 2 photos are needed to compare.",
+      "sideA": "Before",
+      "sideB": "After",
+      "sliderAria": "Before-after slider position",
+      "groupEmptyHint": "No photos in this stage",
+      "dropHint": "Drag images here or click to select",
+      "maxSize": "JPG · PNG · WEBP · HEIC — max 25MB each",
+      "photoAlt": "Clinical photo {type}",
+      "deleteAria": "Delete photo",
+      "noMatches": "No photos match the filters."
     },
     "prescriptionsTab": {
       "title": "Patient prescriptions",
@@ -1617,7 +1684,7 @@
       "cariesModerate": "Moderate",
       "perio": "Perio",
       "noData": "No data",
-      "medicalHistory": "Medical history",
+      "medicalHistory": "Background",
       "bloodType": "Blood type",
       "notRegistered": "Not registered",
       "insurance": "Insurance",
@@ -1628,7 +1695,16 @@
       "paid": "Paid",
       "pending": "Pending",
       "credit": "Credit balance",
-      "pctCovered": "{pct}% covered"
+      "pctCovered": "{pct}% covered",
+      "activeTreatment": "Active treatment",
+      "sessionsOf": "{done}/{total} sessions",
+      "viewPlan": "View plan",
+      "nextSessionDate": "Next: {date}",
+      "recentPhotos": "Recent photos",
+      "viewAllPhotos": "View all",
+      "noPhotosYet": "Document the before and after with clinical photos.",
+      "uploadPhotos": "Upload photos",
+      "emergencyContact": "Emergency contact"
     },
     "history": {
       "title": "Medical history",
@@ -1931,6 +2007,7 @@
     },
     "row": {
       "selectPatient": "Select patient {name}",
+      "fromBranch": "Patient from the {name} location",
       "yearsOld": "{age} yrs",
       "doctorPrefix": "Dr.",
       "whatsapp": "WhatsApp",
@@ -1997,7 +2074,11 @@
       "copyPortalLink": "Copy portal link",
       "generatePatientPortal": "Generate patient portal",
       "printSummary": "Print summary",
-      "viewInAgenda": "View in agenda"
+      "viewInAgenda": "View in agenda",
+      "alertsAria": "Patient clinical alerts",
+      "noAllergies": "No known allergies",
+      "emergencyLabel": "Emergency",
+      "moreCount": "+{count}"
     },
     "historiaTimeline": {
       "typeSoap": "Notes",
@@ -2096,7 +2177,8 @@
       "appointments": "Appointments",
       "billing": "Billing",
       "ariaLabel": "Patient quick navigation",
-      "noRecordsYet": "No records yet in this module"
+      "noRecordsYet": "No records yet in this module",
+      "newBadge": "NEW"
     },
     "sideCards": {
       "panelAria": "Side panel",
@@ -2116,7 +2198,8 @@
       "recentWhatsApp": "Recent WhatsApp",
       "noRecentMessages": "No recent messages with {name}.",
       "noPhone": "Patient has no phone on file.",
-      "openChat": "Open chat"
+      "openChat": "Open chat",
+      "viewBilling": "View billing"
     },
     "soapEditor": {
       "editorAria": "Consultation notes editor",
@@ -2381,7 +2464,13 @@
       "toastCfdiReceptorRequired": "Patient RFC, name and ZIP code are required",
       "toastCfdiStamped": "CFDI stamped successfully with SAT",
       "toastCfdiOverage": "This invoice is additional ({price})",
-      "toastCfdiStampError": "Error stamping"
+      "toastCfdiStampError": "Error stamping",
+      "cfdiTaxesLabel": "Taxes",
+      "cfdiTaxExempt": "Exempt (medical services)",
+      "cfdiTaxIva16": "16% VAT",
+      "cfdiBalanceWarning": "This invoice has a pending balance. It is usually invoiced once paid.",
+      "cfdiUnpaidConfirm": "Stamp anyway as PUE (single-payment)",
+      "cfdiOpenInvoice": "Open invoice to fix"
     }
   },
   "appointments": {
@@ -2675,6 +2764,23 @@
       "requesterReason": "Requester's reason",
       "internalNotes": "Internal notes / response",
       "notesPlaceholder": "Actions taken, grounds for rejection, data provided…"
+    },
+    "branches": {
+      "back": "Settings",
+      "title": "Branches",
+      "subtitle": "Manage your locations and choose which ones share their patient records.",
+      "disabledNotice": "Patient sharing between locations isn't active on your account yet. You can still tick the locations: the setting is saved and takes effect as soon as it's enabled.",
+      "myBranches": "My locations",
+      "sharingTitle": "Patient sharing",
+      "needTwo": "You need at least two locations to share patients. Create a branch from the clinic switcher in the sidebar.",
+      "sharePatients": "Share",
+      "stateShared": "Sharing records: each location can see and search the other's patients.",
+      "stateIsolated": "Separate: each location only sees its own patients.",
+      "linked": "Locations linked. They now share patients.",
+      "unlinked": "Link removed. Each location sees only its own patients again.",
+      "errLink": "Couldn't link the locations",
+      "errUnlink": "Couldn't remove the link",
+      "footnote": "Sharing applies only to READING the record: list, search, patient page, history, X-rays and consultations. Appointments, billing, cash register and finance stay separate per branch. Links are not transitive: if A shares with B and B with C, A does not see C's patients."
     },
     "integrations": {
       "backToSettings": "Settings",
@@ -6594,6 +6700,12 @@
       "cfdiFormTitle": "Recipient tax details",
       "cfdiFormHelp": "The CFDI will be stamped with the SAT (test environment).",
       "cfdiBalanceWarning": "This invoice has a pending balance. It is usually invoiced once paid.",
+      "cfdiUnpaidConfirm": "Stamp anyway as PUE (single-payment)",
+      "cfdiMismatchReview": "Review invoice",
+      "cfdiPaymentFormLabel": "Payment form",
+      "cfdiTaxesLabel": "Taxes",
+      "cfdiTaxExempt": "Exempt (medical services)",
+      "cfdiTaxIva16": "16% VAT",
       "fiscalRfc": "RFC",
       "fiscalName": "Legal name / Name",
       "fiscalRegimen": "Tax regime",

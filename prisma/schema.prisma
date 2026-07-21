@@ -310,6 +310,13 @@ model Clinic {
   // Finanzas — gastos operativos de la clínica (dirección financiera).
   expenses Expense[]
 
+  // Multi-Clínica Fase 2 — sedes con las que ESTA comparte pacientes. El par se
+  // guarda normalizado (menor→mayor por id), así que una misma sede aparece a
+  // veces como A y a veces como B: para saber con quién comparte hay que mirar
+  // las DOS relaciones. Ver getVisiblePatientClinicIds en @/lib/branches.
+  patientLinksAsA ClinicPatientLink[] @relation("ClinicPatientLinkA")
+  patientLinksAsB ClinicPatientLink[] @relation("ClinicPatientLinkB")
+
   @@map("clinics")
 }
 
@@ -1118,6 +1125,9 @@ model User {
   // Caja / corte de caja (WS1-T2)
   cashRegistersOpened     CashRegister[]   @relation("CashRegisterOperator")
   cashWithdrawalsRecorded CashWithdrawal[] @relation("CashWithdrawalRecordedBy")
+
+  // Multi-Clínica Fase 2 — vínculos de pacientes que este dueño creó.
+  patientLinksCreated ClinicPatientLink[] @relation("ClinicPatientLinkCreatedBy")
 
   @@unique([supabaseId, clinicId])
   @@index([supabaseId])
@@ -6398,6 +6408,9 @@ enum ClinicalModule {
   periodontics
   implants
   orthodontics
+  // Fotos clínicas de la ficha del paciente (tab "Fotos clínicas"),
+  // sin especialidad — extraorales/intraorales por etapa.
+  general
 }
 
 enum ClinicalPhotoStage {
@@ -6449,6 +6462,16 @@ enum ClinicalPhotoType {
   ortho_extraoral_profile
   ortho_intraoral
   ortho_progress
+  // Fotos clínicas generales (módulo `general` — ficha del paciente)
+  extraoral_front
+  extraoral_smile
+  extraoral_profile_right
+  extraoral_profile_left
+  intraoral_front
+  intraoral_lateral_right
+  intraoral_lateral_left
+  occlusal_upper
+  occlusal_lower
   // Cross
   other
 }
@@ -6549,6 +6572,9 @@ model ClinicalPhoto {
   capturedBy   String
   blobUrl      String
   thumbnailUrl String?
+  // Bytes del binario principal ALMACENADO (post-compresión). Nullable:
+  // fotos previas a la ficha v3 no lo registran y no suman a la cuota.
+  sizeBytes    Int?
   notes        String?
   // Anotaciones libres sobre la foto (eg. "diente 51 erupcionando").
   annotations  Json?
@@ -7657,4 +7683,36 @@ model AnalyticsEvent {
   @@index([path, createdAt])
   @@index([createdAt])
   @@map("analytics_events")
+}
+
+// MULTI-CLÍNICA · FASE 2 — vínculo de PACIENTES COMPARTIDOS entre dos sedes
+// del mismo dueño.
+//
+// Reglas del modelo (deliberadas, no accidentales):
+//  - SIMÉTRICO y NORMALIZADO: el par se guarda siempre menor→mayor por id
+//    (clinicAId < clinicBId). Así "A comparte con B" y "B comparte con A" son
+//    LA MISMA fila y el @@unique impide duplicados invertidos.
+//  - SIN TRANSITIVIDAD: si A↔B y B↔C, A NO ve los pacientes de C. Solo cuentan
+//    los pares explícitos — el dueño ve exactamente lo que marcó.
+//  - Solo habilita LECTURA de pacientes (lista/búsqueda/ficha/expediente). Las
+//    citas, facturas, pagos, caja y finanzas siguen 100% aisladas por sede.
+//
+// La visibilidad se deriva SIEMPRE en el server desde estas filas + la sesión
+// (getVisiblePatientClinicIds en @/lib/branches), nunca de un id del cliente.
+// Requiere sql/clinic-patient-links.sql aplicado en Supabase.
+model ClinicPatientLink {
+  id          String   @id @default(cuid())
+  clinicAId   String
+  clinicBId   String
+  createdAt   DateTime @default(now())
+  createdById String?
+
+  clinicA   Clinic @relation("ClinicPatientLinkA", fields: [clinicAId], references: [id], onDelete: Cascade)
+  clinicB   Clinic @relation("ClinicPatientLinkB", fields: [clinicBId], references: [id], onDelete: Cascade)
+  createdBy User?  @relation("ClinicPatientLinkCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@unique([clinicAId, clinicBId])
+  @@index([clinicAId])
+  @@index([clinicBId])
+  @@map("clinic_patient_links")
 }

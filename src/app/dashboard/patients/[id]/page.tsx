@@ -3,12 +3,12 @@ export const dynamic = "force-dynamic";
 import { getCurrentUser } from "@/lib/auth";
 import { getServerT } from "@/i18n/server";
 import { prisma } from "@/lib/prisma";
+import { getPatientVisibility, clinicScopeFilter, sharedRecordScope } from "@/lib/branches";
 import { getPatientCreditBalance } from "@/lib/patient-credit";
 import { notFound } from "next/navigation";
 import { headers } from "next/headers";
 import { logAudit } from "@/lib/audit";
 import { PatientDetailClient } from "./patient-detail-client";
-import { PatientContextPanel } from "@/components/dashboard/patient-context";
 import { ErrorBoundary } from "@/components/ui/error-boundary";
 import { dateISOInTz, timeHHMMInTz, durationMinutes } from "@/lib/agenda/legacy-helpers";
 import { canSeePediatrics, PEDIATRICS_MODULE_KEY } from "@/lib/pediatrics/permissions";
@@ -39,24 +39,40 @@ export default async function PatientDetailPage({ params }: { params: { id: stri
   const { t } = await getServerT();
   const tz = user.clinic.timezone;
 
+  // MULTI-CLÍNICA · FASE 2 — sedes cuyo expediente puede LEER esta sesión.
+  // Con el flag apagado devuelve [user.clinicId] sin tocar la BD, así que la
+  // query de abajo queda exactamente como estaba.
+  const visibility = await getPatientVisibility(user.clinicId);
+
   const [patient, doctors] = await Promise.all([
     prisma.patient.findFirst({
-      where: { id: params.id, clinicId: user.clinicId },
+      where: { id: params.id, clinicId: clinicScopeFilter(visibility.clinicIds) },
       include: {
         primaryDoctor: { select: { id: true, firstName: true, lastName: true, color: true } },
+        // Citas y facturas SIEMPRE de la sede activa: aunque el paciente venga
+        // prestado de otra sucursal, cada sede agenda y cobra por separado.
+        // No-op para un paciente propio.
         appointments: {
+          where: { clinicId: user.clinicId },
           orderBy: { startsAt: "desc" },
           take: 30,
           include: { doctor: { select: { id: true, firstName: true, lastName: true } } },
         },
+        // El expediente SÍ se comparte: es el contenido clínico de la Fase 2.
+        // Scope explícito = defensa en profundidad (no-op para paciente propio)
+        // + excluye notas privadas de otro doctor cuando la sede es ajena.
         records: {
+          where: sharedRecordScope(user.clinicId, visibility.clinicIds),
           orderBy: { visitDate: "desc" },
           take: 20,
           include: { doctor: { select: { id: true, firstName: true, lastName: true } } },
         },
-        invoices: { include: { payments: true, patient: { select: { rfcPaciente: true, razonSocialPac: true, regimenFiscalPac: true, cpPaciente: true } } } },
+        invoices: { where: { clinicId: user.clinicId }, include: { payments: true, patient: { select: { rfcPaciente: true, razonSocialPac: true, regimenFiscalPac: true, cpPaciente: true } } } },
         // FIX: fetch treatment plans for the Tratamientos tab
+        // FASE 2: scopeado a la sede activa — un plan de tratamiento lleva
+        // costo y sesiones que se cobran en la sede donde se pactó.
         treatments: {
+          where: { clinicId: user.clinicId },
           orderBy: { createdAt: "desc" },
           include: {
             doctor:   { select: { id: true, firstName: true, lastName: true, color: true } },
@@ -104,7 +120,7 @@ export default async function PatientDetailPage({ params }: { params: { id: stri
   // activas (o todas, si la clínica está en trial vigente) y reusamos esa
   // lista para Pediatría / Periodoncia / prefill endo. Reemplaza tres
   // llamadas previas a canAccessModule() — mismo contrato, una query.
-  const [clinicModuleKeys, activityCounts, latestQuestionnaire, creditBalance] = await Promise.all([
+  const [clinicModuleKeys, activityCounts, latestQuestionnaire, creditBalance, fotosCount] = await Promise.all([
     getActiveClinicModuleKeys(user.clinicId),
     getPatientActivityCounts({ clinicId: user.clinicId, patientId: patient.id }),
     // Cuestionario de salud vigente (anamnesis WS1-T2). .catch(()=>null) lo
@@ -118,6 +134,12 @@ export default async function PatientDetailPage({ params }: { params: { id: stri
     // Saldo a favor (crédito) del paciente. El helper ya es resiliente si la
     // tabla patient_credits aún no está migrada (devuelve 0).
     getPatientCreditBalance(user.clinicId, patient.id),
+    // Fotos clínicas (ficha v3) — count para el badge del menú. .catch(()=>0):
+    // si el enum `general` aún no corrió en la DB (sql/fotos-clinicas-general.sql),
+    // la ficha NO se cae; solo el tab Fotos falla al listar.
+    prisma.clinicalPhoto.count({
+      where: { clinicId: user.clinicId, patientId: patient.id, module: "general", deletedAt: null },
+    }).catch(() => 0),
   ]);
   const questionnaireRiskFlags = latestQuestionnaire?.riskFlags ?? [];
   const questionnaireFilledAt  = latestQuestionnaire?.filledAt ? latestQuestionnaire.filledAt.toISOString() : null;
@@ -217,9 +239,6 @@ export default async function PatientDetailPage({ params }: { params: { id: stri
   // ante mutaciones (cobrar/cancelar/editar/reembolsar) sin depender de un
   // round-trip al server component.
 
-  const lastVisit  = patient.appointments[0]?.startsAt?.toISOString() ?? null;
-  const visitCount = patient.appointments.filter(a => a.status === "COMPLETED").length;
-
   // Serialize + override legacy strings derivados de startsAt/endsAt en clinic tz.
   const serializedAppts = patient.appointments.map(a => ({
     ...a,
@@ -255,31 +274,18 @@ export default async function PatientDetailPage({ params }: { params: { id: stri
     })),
   }));
 
+  // Ficha v3: la cabecera es ÚNICA — HeroCard (dentro del cliente) absorbe
+  // las alertas clínicas que antes duplicaba PatientContextPanel aquí.
   return (
     <div>
-      <PatientContextPanel patient={{
-        firstName:          patient.firstName,
-        lastName:           patient.lastName,
-        patientNumber:      patient.patientNumber,
-        bloodType:          patient.bloodType,
-        dob:                patient.dob?.toISOString() ?? null,
-        gender:             patient.gender,
-        allergies:          patient.allergies,
-        chronicConditions:  patient.chronicConditions,
-        currentMedications: patient.currentMedications,
-        lastVisit,
-        visitCount,
-      }}
-      riskFlags={questionnaireRiskFlags}
-      emergencyContact={{
-        name:     patient.emergencyContactName,
-        phone:    patient.emergencyContactPhone,
-        relation: patient.emergencyContactRelation,
-      }}
-      />
-
       <ErrorBoundary fallbackTitle={t("patients.page.loadError")}>
         <PatientDetailClient
+          key={user.clinicId}
+          originClinicName={
+            patient.clinicId === user.clinicId
+              ? null
+              : visibility.otherClinicNames[patient.clinicId] ?? null
+          }
           patient={patient as any}
           records={serializedRecords as any}
           appointments={serializedAppts as any}
@@ -306,7 +312,9 @@ export default async function PatientDetailPage({ params }: { params: { id: stri
           activityCounts={activityCounts}
           questionnaireStatus={questionnaireStatus}
           questionnaireFilledAt={questionnaireFilledAt}
+          questionnaireRiskFlags={questionnaireRiskFlags}
           creditBalance={creditBalance}
+          fotosCount={fotosCount}
         />
       </ErrorBoundary>
     </div>

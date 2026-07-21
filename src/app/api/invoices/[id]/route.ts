@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { readActiveClinicCookie } from "@/lib/active-clinic";
 import { logMutation } from "@/lib/audit";
 import { revalidateAfter } from "@/lib/cache/revalidate";
+import { sumInvoiceItems, computeInvoiceTotal, round2 } from "@/lib/invoice-totals";
 
 async function getCtx() {
   const supabase = createClient();
@@ -94,15 +95,26 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   if (body.status) updateData.status = body.status;
   if (body.notes !== undefined) updateData.notes = body.notes;
   if (body.items) {
+    // Sin esta validación, un body.items no-arreglo se guardaría tal cual en el
+    // JSON (sumInvoiceItems devuelve 0 para no-arreglos) dejando la factura con
+    // conceptos basura y total 0.
+    if (!Array.isArray(body.items) || body.items.length === 0) {
+      return NextResponse.json({ error: "items debe ser una lista con al menos un concepto" }, { status: 400 });
+    }
     const items = body.items;
-    const subtotal = items.reduce((s: number, i: any) => s + (i.total ?? 0), 0);
-    const discount = Number(body.discount ?? invoice.discount ?? 0);
-    const total = subtotal - discount;
+    // Misma aritmética que el timbrado (qty × unitPrice − desc. de línea) para
+    // que total = Σ(conceptos) − descuento se sostenga también con IVA agregado.
+    const subtotal = sumInvoiceItems(items);
+    const discount = round2(Number(body.discount ?? invoice.discount ?? 0));
+    if (discount > subtotal) {
+      return NextResponse.json({ error: "El descuento excede el subtotal" }, { status: 400 });
+    }
+    const { total } = computeInvoiceTotal(subtotal, discount, invoice.taxRate ?? 16, invoice.taxIncluded !== false);
     updateData.items = items;
     updateData.subtotal = subtotal;
     updateData.discount = discount;
     updateData.total = total;
-    updateData.balance = total - invoice.paid;
+    updateData.balance = round2(total - invoice.paid);
   }
 
   await prisma.invoice.updateMany({ where: { id: params.id, clinicId }, data: updateData });

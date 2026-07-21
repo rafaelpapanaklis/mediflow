@@ -35,12 +35,13 @@ export async function POST(req: NextRequest) {
       orgId = await createOrganization(clinic.name);
     }
 
-    // Update legal data on Facturapi
+    // Update legal data on Facturapi. El RFC capturado se guarda solo en nuestra
+    // BD: Facturapi lo toma del CSD (en TEST usa su certificado de prueba).
     await updateOrgLegal(orgId, {
-      name:          razonSocial.trim().toUpperCase(),
-      rfc:           rfcEmisor.trim().toUpperCase(),
-      regimen_fiscal:regimenFiscal,
-      address:       { zip: cpEmisor.trim(), country:"MEX" },
+      name:       razonSocial.trim().toUpperCase(),
+      legal_name: razonSocial.trim().toUpperCase(),
+      tax_system: regimenFiscal,
+      address:    { zip: cpEmisor.trim() },
     });
 
     // Save to our DB

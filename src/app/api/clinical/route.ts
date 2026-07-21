@@ -6,6 +6,8 @@ import { revalidatePath } from "next/cache";
 import { readActiveClinicCookie } from "@/lib/active-clinic";
 import { logMutation } from "@/lib/audit";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
+import { getVisiblePatientClinicIds, sharedRecordScope } from "@/lib/branches";
+import { round2 } from "@/lib/quotes/compute";
 import {
   EMPTY_NOTE_ERROR,
   isClinicalNoteEmpty,
@@ -49,8 +51,15 @@ export async function GET(req: NextRequest) {
   if (denied) return denied;
   const patientId = req.nextUrl.searchParams.get("patientId");
   if (!patientId) return NextResponse.json({ error: "patientId required" }, { status: 400 });
+  // MULTI-CLÍNICA · FASE 2 — consultas/expediente legibles desde una sede
+  // vinculada. Sólo LECTURA: el POST de más abajo sigue creando y validando
+  // contra dbUser.clinicId (una consulta nace siempre en la sede activa).
+  const visibleClinicIds = await getVisiblePatientClinicIds(dbUser.clinicId);
   const records = await prisma.medicalRecord.findMany({
-    where: { clinicId: dbUser.clinicId, patientId },
+    // sharedRecordScope excluye las notas privadas de las sedes AJENAS: cruzando
+    // la frontera "esta nota es mía" no se puede decidir (los ids de doctor son
+    // por clínica), así que se cierra.
+    where: { ...sharedRecordScope(dbUser.clinicId, visibleClinicIds), patientId },
     include: { doctor: { select: { id: true, firstName: true, lastName: true } } },
     orderBy: { visitDate: "desc" },
   });
@@ -149,9 +158,9 @@ export async function POST(req: NextRequest) {
           description: p.name,
           quantity: p.quantity || 1,
           unitPrice: p.price,
-          total: (p.quantity || 1) * p.price,
+          total: round2((p.quantity || 1) * p.price),
         }));
-        const subtotal = items.reduce((s, i) => s + i.total, 0);
+        const subtotal = round2(items.reduce((s, i) => s + i.total, 0));
 
         // Generate invoice number (clinic-scoped)
         const lastInvoice = await prisma.invoice.findFirst({
