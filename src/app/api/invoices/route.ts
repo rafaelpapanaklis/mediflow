@@ -7,7 +7,7 @@ import { readActiveClinicCookie } from "@/lib/active-clinic";
 import { logMutation } from "@/lib/audit";
 import { revalidateAfter } from "@/lib/cache/revalidate";
 import { sumInvoiceItems, computeInvoiceTotal, round2 } from "@/lib/invoice-totals";
-import { relatedPatientVisibilityAnd } from "@/lib/patient-visibility";
+import { relatedPatientVisibilityAnd, assertPatientVisible } from "@/lib/patient-visibility";
 
 async function getCtx() {
   const supabase = createClient();
@@ -83,6 +83,16 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "El descuento excede el subtotal" }, { status: 400 });
     }
     const { total } = computeInvoiceTotal(subtotal, discount, taxRate, taxIncluded);
+
+    // Visibilidad + tenant: el paciente debe pertenecer a la clínica Y ser visible
+    // para este usuario. Sin esto, un excluido POSTea {patientId: restringido} y el
+    // include:{patient:true} de abajo le devuelve la fila COMPLETA (identidad +
+    // RFC/razón social) en el eco 201. assertPatientVisible cubre tenant + visibilidad
+    // en un query (mismo patrón que quotes/treatments/payment-plans POST).
+    const denied = await assertPatientVisible(data.patientId, {
+      userId: ctx.userId, role: ctx.role, clinicId,
+    });
+    if (denied) return denied;
 
     const invoice = await prisma.invoice.create({
       data: { clinicId, patientId: data.patientId, appointmentId: data.appointmentId ?? undefined,

@@ -9,6 +9,7 @@
 "use server";
 
 import { prisma } from "@/lib/prisma";
+import { canSeePatient, canViewPatient } from "@/lib/patient-visibility";
 import {
   PERIO_AUDIT_ACTIONS,
   auditPerio,
@@ -33,9 +34,14 @@ export async function exportPerioPatientReportPdf(
 
   const patient = await prisma.patient.findUnique({
     where: { id: patientId },
-    select: { id: true, clinicId: true, deletedAt: true },
+    select: { id: true, clinicId: true, deletedAt: true, visibleUserIds: true },
   });
   if (!patient || patient.deletedAt || patient.clinicId !== ctx.clinicId) {
+    return fail("Paciente no encontrado");
+  }
+  // Visibilidad por paciente: no confirmar existencia (URL vs "no encontrado") ni
+  // auditar el export de un paciente restringido a quien no está en su lista.
+  if (!canSeePatient({ userId: ctx.userId, role: ctx.role, clinicId: ctx.clinicId }, patient.visibleUserIds)) {
     return fail("Paciente no encontrado");
   }
 
@@ -65,9 +71,14 @@ export async function exportPerioReferrerReportPdf(
 
   const patient = await prisma.patient.findUnique({
     where: { id: patientId },
-    select: { id: true, clinicId: true, deletedAt: true },
+    select: { id: true, clinicId: true, deletedAt: true, visibleUserIds: true },
   });
   if (!patient || patient.deletedAt || patient.clinicId !== ctx.clinicId) {
+    return fail("Paciente no encontrado");
+  }
+  // Visibilidad por paciente: no confirmar existencia (URL vs "no encontrado") ni
+  // auditar el export de un paciente restringido a quien no está en su lista.
+  if (!canSeePatient({ userId: ctx.userId, role: ctx.role, clinicId: ctx.clinicId }, patient.visibleUserIds)) {
     return fail("Paciente no encontrado");
   }
 
@@ -110,6 +121,12 @@ export async function exportPerioPrePostComparePdf(args: {
     }),
   ]);
   if (!initial || !post) return fail("Registros no encontrados");
+
+  // Visibilidad por paciente: los records son de un paciente; si es restringido y
+  // este usuario no lo puede ver, no confirmar existencia ni auditar el export.
+  if (initial.patientId && !(await canViewPatient(initial.patientId, { userId: ctx.userId, role: ctx.role, clinicId: ctx.clinicId }))) {
+    return fail("Registros no encontrados");
+  }
 
   await auditPerio({
     ctx,

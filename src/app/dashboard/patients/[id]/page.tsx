@@ -155,7 +155,7 @@ export default async function PatientDetailPage({ params }: { params: { id: stri
     pediatricsData = await loadPediatricsData({
       clinicId: user.clinicId,
       patientId: patient.id,
-    });
+    }, { userId: user.id, role: user.role, clinicId: user.clinicId });
   }
 
   // Periodoncia — solo DENTAL con el módulo activo. Sin gate por edad
@@ -165,7 +165,7 @@ export default async function PatientDetailPage({ params }: { params: { id: stri
     perioData = await loadPerioData({
       clinicId: user.clinicId,
       patientId: patient.id,
-    });
+    }, { userId: user.id, role: user.role, clinicId: user.clinicId });
   }
 
   // Endodoncia — solo DENTAL con el módulo activo. Sin gate por edad.
@@ -217,7 +217,7 @@ export default async function PatientDetailPage({ params }: { params: { id: stri
     const redesign = await loadOrthoRedesignData({
       clinicId: user.clinicId,
       patientId: patient.id,
-    });
+    }, { userId: user.id, role: user.role, clinicId: user.clinicId });
     if (redesign) {
       orthoData = redesign.legacy;
       orthoRedesignVM = redesign.viewModel;

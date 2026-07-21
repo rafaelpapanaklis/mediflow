@@ -3,6 +3,7 @@ export const dynamic = "force-dynamic";
 import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
+import { patientVisibilityAnd } from "@/lib/patient-visibility";
 import { prisma } from "@/lib/prisma";
 import { toPublicFileUrl } from "@/lib/storage";
 import { XraysClient } from "../xrays-client";
@@ -17,9 +18,15 @@ interface Props {
 export default async function XraysPatientPage({ params, searchParams }: Props) {
   const user = await getCurrentUser();
   const clinicId = user.clinicId;
+  const viewer = { userId: user.id, role: user.role, clinicId: user.clinicId };
 
   const patient = await prisma.patient.findFirst({
-    where: { id: params.patientId, clinicId },
+    where: {
+      id: params.patientId,
+      clinicId,
+      // Visibilidad por paciente: no listar/mostrar pacientes restringidos a quien no está en su visibleUserIds.
+      AND: [...patientVisibilityAnd(viewer)],
+    },
     select: {
       id: true,
       firstName: true,

@@ -117,6 +117,10 @@ export async function listClinicalReminders(
   const ctx = await getAuthContext();
   if (!ctx) return fail("No autenticado");
 
+  // Visibilidad por paciente: no listar recordatorios de un paciente restringido.
+  const guard = await guardPatient({ ctx, patientId: parsed.data.patientId });
+  if (isFailure(guard)) return fail(guard.error);
+
   const rows = await prisma.clinicalReminder.findMany({
     where: {
       clinicId: ctx.clinicId,

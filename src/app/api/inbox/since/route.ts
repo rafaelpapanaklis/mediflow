@@ -174,7 +174,18 @@ export async function GET(req: NextRequest) {
     const threadId = sp.get("threadId");
     if (threadId) {
       const owned = await prisma.inboxThread.findFirst({
-        where: { id: threadId, clinicId: dbUser.clinicId },
+        where: {
+          id: threadId,
+          clinicId: dbUser.clinicId,
+          // Visibilidad: si el hilo es de un paciente restringido que este usuario
+          // no puede ver, owned=null y NO se sirven sus mensajes. El listado ya
+          // filtra, pero ?threadId=<restringido>&ts= los entregaba (IDOR).
+          // patientNullable: los hilos sin paciente (WhatsApp/EMAIL) siguen ok.
+          AND: relatedPatientVisibilityAnd(
+            { userId: dbUser.id, role: dbUser.role, clinicId: dbUser.clinicId },
+            { patientNullable: true },
+          ),
+        },
         select: { id: true },
       });
       if (owned) {

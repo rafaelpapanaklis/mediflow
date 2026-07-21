@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthContext } from "@/lib/auth-context";
+import { assertPatientVisible } from "@/lib/patient-visibility";
 import { prisma } from "@/lib/prisma";
 
 export async function GET(
@@ -30,6 +31,15 @@ export async function GET(
       if (!ctx) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
       if (ctx.userId !== appointment.doctorId) {
         return NextResponse.json({ error: "No autorizado" }, { status: 403 });
+      }
+      // Visibilidad: si a este doctor le restringieron el paciente DESPUÉS de
+      // asignarle la cita, ya no puede ver su identidad aunque siga siendo el
+      // doctorId. assertPatientVisible además scopea por clínica (el findUnique no).
+      if (appointment.patientId) {
+        const denied = await assertPatientVisible(appointment.patientId, {
+          userId: ctx.userId, role: ctx.role, clinicId: ctx.clinicId,
+        });
+        if (denied) return denied;
       }
     } else if (role === "patient") {
       if (!token || token !== appointment.telePatientToken) {

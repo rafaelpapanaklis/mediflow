@@ -5,6 +5,7 @@ export const dynamic = "force-dynamic";
 
 import { notFound, redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
+import { patientVisibilityAnd } from "@/lib/patient-visibility";
 import { prisma } from "@/lib/prisma";
 import { canAccessModule } from "@/lib/marketplace/access-control";
 import { IMPLANTS_MODULE_KEY } from "@/lib/implants/permissions";
@@ -18,6 +19,7 @@ interface PageProps {
 export default async function ImplantsPatientPage({ params }: PageProps) {
   const { patientId } = await params;
   const user = await getCurrentUser();
+  const viewer = { userId: user.id, role: user.role, clinicId: user.clinicId };
 
   if (user.clinic.category !== "DENTAL") {
     redirect("/dashboard");
@@ -28,7 +30,13 @@ export default async function ImplantsPatientPage({ params }: PageProps) {
   }
 
   const patient = await prisma.patient.findFirst({
-    where: { id: patientId, clinicId: user.clinicId, deletedAt: null },
+    where: {
+      id: patientId,
+      clinicId: user.clinicId,
+      deletedAt: null,
+      // Visibilidad por paciente: no listar/mostrar pacientes restringidos a quien no está en su visibleUserIds.
+      AND: [...patientVisibilityAnd(viewer)],
+    },
     select: { id: true, firstName: true, lastName: true },
   });
   if (!patient) notFound();

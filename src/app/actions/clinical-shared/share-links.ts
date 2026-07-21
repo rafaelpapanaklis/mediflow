@@ -126,6 +126,10 @@ export async function listPatientShareLinks(
   const ctx = await getAuthContext();
   if (!ctx) return fail("No autenticado");
 
+  // Visibilidad por paciente: no listar los share-links de un paciente restringido.
+  const guard = await guardPatient({ ctx, patientId: parsed.data.patientId });
+  if (isFailure(guard)) return fail(guard.error);
+
   const rows = await prisma.patientShareLink.findMany({
     where: { clinicId: ctx.clinicId, patientId: parsed.data.patientId },
     orderBy: { createdAt: "desc" },

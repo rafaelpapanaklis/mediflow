@@ -2,6 +2,7 @@
 
 import { prisma } from "@/lib/prisma";
 import type { AuthContext } from "@/lib/auth-context";
+import { canSeePatient } from "@/lib/patient-visibility";
 import { canAccessModule } from "@/lib/marketplace/access-control";
 import { isPediatric } from "@/lib/pediatrics/age";
 import { DEFAULT_PEDIATRICS_CUTOFF_YEARS, PEDIATRICS_MODULE_KEY } from "@/lib/pediatrics/permissions";
@@ -61,10 +62,21 @@ export async function loadPatientForPediatrics(args: {
       clinicId: true,
       dob: true,
       deletedAt: true,
+      visibleUserIds: true,
     },
   });
   if (!patient || patient.deletedAt) return fail("Paciente no encontrado");
   if (patient.clinicId !== args.ctx.clinicId) return fail("Sin acceso a este paciente");
+  // Visibilidad por paciente: espeja loadPatientForImplant — un paciente
+  // restringido no existe para quien no está en su visibleUserIds (mismo mensaje
+  // que "no encontrado", sin confirmar existencia). Cierra el bypass de escritura
+  // de las actions de pediatría sobre un paciente restringido.
+  if (!canSeePatient(
+    { userId: args.ctx.userId, role: args.ctx.role, clinicId: args.ctx.clinicId },
+    patient.visibleUserIds,
+  )) {
+    return fail("Paciente no encontrado");
+  }
 
   if (!ELIGIBLE_CATEGORIES.has(args.ctx.clinicCategory)) {
     return fail("Categoría de clínica no soportada por el módulo");

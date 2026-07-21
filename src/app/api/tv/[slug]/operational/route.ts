@@ -55,7 +55,7 @@ export async function GET(req: NextRequest, { params }: { params: { slug: string
       startsAt: true,
       type: true,
       status: true,
-      patient: { select: { firstName: true, lastName: true } },
+      patient: { select: { firstName: true, lastName: true, visibleUserIds: true } },
       doctor: { select: { firstName: true, lastName: true } },
       timeline: { select: { arrivedAt: true } },
     },
@@ -68,6 +68,9 @@ export async function GET(req: NextRequest, { params }: { params: { slug: string
       ? `${(a.patient.firstName[0] ?? "").toUpperCase()}${(a.patient.lastName[0] ?? "").toUpperCase()}`
       : "—";
     const masked = a.patient ? initials.split("").join(".") + "." : "Paciente";
+    // Visibilidad por paciente: un paciente RESTRINGIDO (visibleUserIds no vacío)
+    // en el tablero TV público jamás muestra nombre NI iniciales, ni con showFull.
+    const restricted = (a.patient?.visibleUserIds?.length ?? 0) > 0;
     const doctor = a.doctor ? `Dr/a. ${a.doctor.lastName}` : "";
     const arrivedAt = a.timeline?.arrivedAt;
     const waitedMin = arrivedAt
@@ -75,8 +78,8 @@ export async function GET(req: NextRequest, { params }: { params: { slug: string
       : null;
     return {
       appointmentId: a.id,
-      patient: showFull ? fullName : masked,
-      initials,
+      patient: restricted ? "Paciente privado" : (showFull ? fullName : masked),
+      initials: restricted ? "—" : initials,
       type: a.type,
       doctor,
       status: a.status,

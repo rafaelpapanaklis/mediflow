@@ -44,16 +44,23 @@ export async function GET() {
 
   let nextAppointment: HomeDoctorData["nextAppointment"] = null;
   if (nextRaw) {
-    const patient = await prisma.patient.findUnique({
-      where: { id: nextRaw.patient.id },
-      select: {
-        dob: true,
-        gender: true,
-        allergies: true,
-        currentMedications: true,
-        chronicConditions: true,
-      },
-    });
+    // maskedPatient (lib/agenda/server) pone id:null en un paciente restringido
+    // que este doctor NO puede ver. Sin este guard, findUnique({where:{id:null}})
+    // lanza PrismaClientValidationError → 500 del home del doctor. Además evita
+    // filtrar sus alertas (alergias/medicación) en la tarjeta de "próxima cita":
+    // la cita sigue visible, pero enmascarada y sin PHI.
+    const patient = nextRaw.patient.id
+      ? await prisma.patient.findUnique({
+          where: { id: nextRaw.patient.id },
+          select: {
+            dob: true,
+            gender: true,
+            allergies: true,
+            currentMedications: true,
+            chronicConditions: true,
+          },
+        })
+      : null;
 
     const age = patient?.dob ? computeAge(patient.dob) : undefined;
     const gender = mapGender(patient?.gender);

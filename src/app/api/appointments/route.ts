@@ -21,7 +21,12 @@ import {
   todayInTz,
 } from "@/lib/agenda/time-utils";
 import { canOverrideOverlap } from "@/lib/agenda/transitions";
-import { ensureUserCanSeePatient } from "@/lib/patient-visibility";
+import {
+  ensureUserCanSeePatient,
+  assertPatientVisible,
+  canSeePatient,
+  type VisibilityViewer,
+} from "@/lib/patient-visibility";
 import { validateResourceSchedule } from "@/lib/agenda/resource-schedule";
 import { loadResourceSchedule } from "@/lib/agenda/resource-schedule.server";
 import { logMutation } from "@/lib/audit";
@@ -245,6 +250,17 @@ export async function POST(req: NextRequest) {
   if (!patient) {
     return NextResponse.json({ error: "patient_not_found" }, { status: 404 });
   }
+  // Visibilidad: el ACTOR debe poder ver al paciente ANTES de crear la cita. Sin
+  // este assert, un DOCTOR excluido agenda {patientId: restringido, doctorId: él}
+  // y el ensureUserCanSeePatient de abajo lo mete a visibleUserIds = acceso
+  // permanente (escalada de privilegios). 404 idéntico a patient_not_found — no
+  // revelar existencia.
+  const visDenied = await assertPatientVisible(body.patientId, {
+    userId: session.user.id,
+    role: session.user.role,
+    clinicId: session.clinic.id,
+  });
+  if (visDenied) return visDenied;
   if (!doctor) {
     return NextResponse.json({ error: "doctor_not_found" }, { status: 404 });
   }
@@ -354,6 +370,7 @@ export async function POST(req: NextRequest) {
         body.resourceId ?? null,
         startsAt,
         endsAt,
+        { userId: session.user.id, role: session.user.role, clinicId: session.clinic.id },
       );
       const payload: AppointmentConflictError = {
         error: "appointment_overlap",
@@ -393,6 +410,7 @@ async function findConflictingAppointment(
   resourceId: string | null,
   startsAt: Date,
   endsAt: Date,
+  viewer?: VisibilityViewer | null,
 ) {
   const candidates = await prisma.appointment.findMany({
     where: {
@@ -403,13 +421,19 @@ async function findConflictingAppointment(
       startsAt: { lt: endsAt },
       endsAt: { gt: startsAt },
     },
-    include: { patient: { select: { firstName: true, lastName: true } } },
+    include: { patient: { select: { firstName: true, lastName: true, visibleUserIds: true } } },
     take: 1,
   });
 
   if (candidates.length === 0) return null;
   const a = candidates[0];
-  const name = [a.patient.firstName, a.patient.lastName].filter(Boolean).join(" ").trim();
+  // El paciente en conflicto puede ser uno RESTRINGIDO distinto al que se agenda
+  // (mismo doctor/recurso, otro paciente). Si el viewer no puede verlo, no
+  // revelamos su nombre en el 409 de solape.
+  const visible = !viewer || canSeePatient(viewer, (a.patient as { visibleUserIds?: string[] }).visibleUserIds);
+  const name = visible
+    ? [a.patient.firstName, a.patient.lastName].filter(Boolean).join(" ").trim()
+    : "Paciente privado";
   return {
     id: a.id,
     patientName: name || "—",

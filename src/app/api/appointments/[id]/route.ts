@@ -8,7 +8,12 @@ import {
   isOverlapError,
 } from "@/lib/agenda/api-helpers";
 import { appointmentToDTO } from "@/lib/agenda/server";
-import { ensureUserCanSeePatient } from "@/lib/patient-visibility";
+import {
+  ensureUserCanSeePatient,
+  assertPatientVisible,
+  canSeePatient,
+  type VisibilityViewer,
+} from "@/lib/patient-visibility";
 import { canOverrideOverlap } from "@/lib/agenda/transitions";
 import { validateResourceSchedule } from "@/lib/agenda/resource-schedule";
 import { loadResourceSchedule } from "@/lib/agenda/resource-schedule.server";
@@ -25,7 +30,9 @@ import type {
 } from "@/lib/agenda/types";
 
 const APPT_INCLUDE = {
-  patient: { select: { id: true, firstName: true, lastName: true } },
+  // visibleUserIds viaja en el include para que appointmentToDTO pueda enmascarar
+  // (defensa en profundidad: el actor ya pasó el assert de visibilidad abajo).
+  patient: { select: { id: true, firstName: true, lastName: true, visibleUserIds: true } },
   doctor:  { select: { id: true, firstName: true, lastName: true } },
 } as const;
 
@@ -69,6 +76,22 @@ export async function PATCH(
   });
   if (!existing) {
     return NextResponse.json({ error: "not_found" }, { status: 404 });
+  }
+
+  // Visibilidad: quien no puede ver al paciente NO puede tocar su cita. 404 (no
+  // 403) para no revelar existencia. Cierra la escalada de un DOCTOR excluido que
+  // se auto-reasigna un paciente restringido vía ensureUserCanSeePatient (abajo).
+  const visDenied = await assertPatientVisible(existing.patientId, {
+    userId: session.user.id,
+    role: session.user.role,
+    clinicId: session.clinic.id,
+  });
+  if (visDenied) return visDenied;
+  // Un DOCTOR solo edita SUS citas (rol "solo sus datos"): sin esto podría tomar
+  // la cita de otro doctor y reasignársela. Va DESPUÉS del assert de visibilidad
+  // para que un paciente restringido siga devolviendo 404, no 403.
+  if (session.user.role === "DOCTOR" && existing.doctorId !== session.user.id) {
+    return NextResponse.json({ error: "not_your_appointment" }, { status: 403 });
   }
 
   let body: UpdateAppointmentInput;
@@ -255,7 +278,9 @@ export async function PATCH(
     revalidateAfter("appointments");
     revalidatePatientProfile(updated.patientId);
     return NextResponse.json(
-      { appointment: appointmentToDTO(updated, session.clinic.category) },
+      { appointment: appointmentToDTO(updated, session.clinic.category, {
+        userId: session.user.id, role: session.user.role, clinicId: session.clinic.id,
+      }) },
     );
   } catch (err) {
     if (isOverlapError(err)) {
@@ -268,6 +293,7 @@ export async function PATCH(
           : body.resourceId,
         newStarts,
         newEnds,
+        { userId: session.user.id, role: session.user.role, clinicId: session.clinic.id },
       );
       const payload: AppointmentConflictError = {
         error: "appointment_overlap",
@@ -360,6 +386,7 @@ async function findConflictingAppointment(
   resourceId: string | null,
   startsAt: Date,
   endsAt: Date,
+  viewer?: VisibilityViewer | null,
 ) {
   const candidates = await prisma.appointment.findMany({
     where: {
@@ -371,13 +398,18 @@ async function findConflictingAppointment(
       startsAt: { lt: endsAt },
       endsAt: { gt: startsAt },
     },
-    include: { patient: { select: { firstName: true, lastName: true } } },
+    include: { patient: { select: { firstName: true, lastName: true, visibleUserIds: true } } },
     take: 1,
   });
 
   if (candidates.length === 0) return null;
   const a = candidates[0];
-  const name = [a.patient.firstName, a.patient.lastName].filter(Boolean).join(" ").trim();
+  // El paciente en conflicto puede ser un RESTRINGIDO distinto (mismo doctor/recurso,
+  // otro paciente). Si el viewer no puede verlo, no revelamos su nombre en el 409.
+  const visible = !viewer || canSeePatient(viewer, (a.patient as { visibleUserIds?: string[] }).visibleUserIds);
+  const name = visible
+    ? [a.patient.firstName, a.patient.lastName].filter(Boolean).join(" ").trim()
+    : "Paciente privado";
   return {
     id: a.id,
     patientName: name || "—",

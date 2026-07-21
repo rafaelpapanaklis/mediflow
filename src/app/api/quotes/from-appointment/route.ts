@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { getAuthContext } from "@/lib/auth-context";
 import { prisma } from "@/lib/prisma";
+import { assertPatientVisible } from "@/lib/patient-visibility";
 import { logAudit } from "@/lib/audit";
 import { createQuoteWithFolio } from "@/lib/quotes/service";
 import { serializeQuote } from "@/lib/quotes/serialize";
@@ -45,6 +46,12 @@ export async function POST(req: NextRequest) {
   if (!appt || !appt.patientId) {
     return NextResponse.json({ error: "Cita o paciente no encontrado" }, { status: 404 });
   }
+
+  // Visibilidad: la respuesta (serializeQuote) echa el nombre del paciente
+  // resuelto desde la cita. Sin assert, un excluido lo obtiene creando el
+  // presupuesto desde la cita.
+  const denied = await assertPatientVisible(appt.patientId, { userId: ctx.userId, role: ctx.role, clinicId: ctx.clinicId });
+  if (denied) return denied;
 
   const lineItems = Array.isArray(body.lineItems) ? body.lineItems : [];
   const items: QuoteItemInput[] = lineItems

@@ -575,8 +575,11 @@ export async function POST(req: NextRequest) {
       firstName: patient.firstName,
       lastName: patient.lastName,
       patientNumber: patient.patientNumber,
-      // Solo cuando queda restringido: quién puede verlo es dato auditable.
-      ...(visibleUserIds.length > 0 && { visibleUserIds }),
+      // Solo cuando queda restringido: auditamos el CONTEO, no la lista de userIds.
+      // No grabar la lista de "quién puede verlo" en el AuditLog — defensa en
+      // profundidad (el GET de /api/audit-log ya va gateado por visibilidad, pero
+      // la irónica fuga era que la auditoría de la feature filtraba la feature).
+      ...(visibleUserIds.length > 0 && { visibleUserIdsCount: visibleUserIds.length }),
     },
   });
 

@@ -30,6 +30,23 @@ import type { Prisma } from "@prisma/client";
  * pueden construir ese objeto sin refactor.
  */
 
+/**
+ * ⚠️ REGLA DURA (ola 3, 2026-07-21) — NO consultar `prisma.patient` directo fuera
+ * de estos helpers. Todo acceso a la tabla `patients` (o a la relación `patient`
+ * de otra tabla) que sirva datos a un usuario del panel DEBE pasar por uno de:
+ *   - buildPatientWhere(ctx, extra)        (@/lib/auth-context) — listados raíz
+ *   - patientVisibilityAnd(viewer)         — spread en where.AND de queries raíz
+ *   - relatedPatientVisibilityAnd(viewer)  — tablas que relacionan con Patient
+ *   - assertPatientVisible(id, viewer) / canViewPatient(id, viewer) — un registro
+ *   - canSeePatient(viewer, visibleUserIds) — enmascarado en memoria (agenda, caja)
+ * Un `prisma.patient.findX` "pelado" (solo clinicId) vuelve a filtrar al paciente
+ * restringido: es exactamente la clase de fuga por-satélite que costó las olas
+ * 1–4 (parcheo ruta-por-ruta). Excepciones legítimas y ya auditadas: contextos de
+ * SISTEMA sin viewer interactivo (webhooks con firma, crons con secret, import
+ * admin, portal por token del propio paciente, rutas admin-only con requireAdmin).
+ * Si agregas una, deja el porqué en un comentario junto al query.
+ */
+
 /** Lo mínimo que necesitamos de la sesión para decidir visibilidad. */
 export interface VisibilityViewer {
   userId: string;

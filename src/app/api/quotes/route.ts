@@ -78,6 +78,12 @@ export async function POST(req: NextRequest) {
   });
   if (!patient) return NextResponse.json({ error: "Paciente no encontrado" }, { status: 404 });
 
+  // Visibilidad: la respuesta (serializeQuote de createQuoteWithFolio) incluye el
+  // nombre del paciente. Sin este assert, un usuario excluido crea un presupuesto
+  // y recibe el nombre del paciente restringido en el eco de la respuesta.
+  const denied = await assertPatientVisible(patientId, { userId: ctx.userId, role: ctx.role, clinicId: ctx.clinicId });
+  if (denied) return denied;
+
   const items = Array.isArray(body.items) ? (body.items as never[]) : [];
   if (items.length === 0) {
     return NextResponse.json({ error: "Agrega al menos un concepto" }, { status: 400 });

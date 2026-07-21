@@ -2,6 +2,7 @@ export const dynamic = "force-dynamic";
 
 import type { Metadata } from "next";
 import { getCurrentUser } from "@/lib/auth";
+import { patientVisibilityAnd } from "@/lib/patient-visibility";
 import { prisma } from "@/lib/prisma";
 import { XraysPatientsList } from "./patients-list-client";
 
@@ -10,9 +11,15 @@ export const metadata: Metadata = { title: "Radiografías — DaleControl" };
 export default async function XraysPage() {
   const user = await getCurrentUser();
   const clinicId = user.clinicId;
+  const viewer = { userId: user.id, role: user.role, clinicId: user.clinicId };
 
   const patients = await prisma.patient.findMany({
-    where: { clinicId, status: "ACTIVE" },
+    where: {
+      clinicId,
+      status: "ACTIVE",
+      // Visibilidad por paciente: no listar/mostrar pacientes restringidos a quien no está en su visibleUserIds.
+      AND: [...patientVisibilityAnd(viewer)],
+    },
     orderBy: { firstName: "asc" },
     select: {
       id: true,

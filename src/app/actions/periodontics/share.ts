@@ -5,6 +5,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
+import { canViewPatient } from "@/lib/patient-visibility";
 import {
   defaultShareExpiry,
   generateShareToken,
@@ -44,6 +45,12 @@ export async function createPerioShareLink(
     patientId: parsed.data.patientId,
   });
   if (isFailure(patient)) return patient;
+
+  // Visibilidad por paciente: no acuñar un token público para un paciente
+  // restringido (escalada tipo portal — el token da acceso sin auth).
+  if (!(await canViewPatient(parsed.data.patientId, { userId: ctx.userId, role: ctx.role, clinicId: ctx.clinicId }))) {
+    return fail("Paciente no encontrado");
+  }
 
   const expiresAt = parsed.data.expiresAt ?? defaultShareExpiry();
   if (expiresAt.getTime() <= Date.now()) {

@@ -3,6 +3,7 @@
 // Carga datos para que el route handler renderToBuffer arme el PDF.
 
 import { prisma } from "@/lib/prisma";
+import { canViewPatient } from "@/lib/patient-visibility";
 import { exportTreatmentPlanPdfSchema } from "@/lib/validation/orthodontics";
 import { auditOrtho, getOrthoActionContext } from "./_helpers";
 import { ORTHO_AUDIT_ACTIONS } from "./audit-actions";
@@ -66,6 +67,11 @@ export async function exportTreatmentPlanPdf(
     },
   });
   if (!plan) return fail("Plan no encontrado");
+
+  // Visibilidad por paciente: no exponer el plan de un paciente restringido.
+  if (!(await canViewPatient(plan.patientId, { userId: ctx.userId, role: ctx.role, clinicId: ctx.clinicId }))) {
+    return fail("Paciente no encontrado");
+  }
 
   const [clinic, doctor] = await Promise.all([
     prisma.clinic.findUnique({

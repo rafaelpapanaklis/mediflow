@@ -2,6 +2,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
+import { patientVisibilityAnd } from "@/lib/patient-visibility";
 import { DEFAULT_PEDIATRICS_CUTOFF_YEARS } from "@/lib/pediatrics/permissions";
 
 export type SpecialtySlug =
@@ -46,14 +47,17 @@ export async function searchPatientsForSpecialty(
   input: SearchPatientsInput,
 ): Promise<SearchPatientsOutput> {
   const user = await getCurrentUser();
+  const viewer = { userId: user.id, role: user.role, clinicId: user.clinicId };
   const q = (input.q ?? "").trim();
 
   const baseWhere = { clinicId: user.clinicId, deletedAt: null } as const;
+  // Visibilidad por paciente: no listar/mostrar pacientes restringidos a quien no está en su visibleUserIds.
   const where =
     q.length === 0
-      ? baseWhere
+      ? { ...baseWhere, AND: [...patientVisibilityAnd(viewer)] }
       : {
           ...baseWhere,
+          AND: [...patientVisibilityAnd(viewer)],
           OR: [
             { firstName: { contains: q, mode: "insensitive" as const } },
             { lastName: { contains: q, mode: "insensitive" as const } },

@@ -31,7 +31,7 @@ export default async function PediatricsPatientDetailPage({
   const data = await loadPediatricsData({
     clinicId: user.clinicId,
     patientId: params.patientId,
-  });
+  }, { userId: user.id, role: user.role, clinicId: user.clinicId });
 
   if (!data) {
     redirect("/dashboard/specialties/pediatrics");

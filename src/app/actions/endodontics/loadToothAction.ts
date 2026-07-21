@@ -34,5 +34,5 @@ export async function loadToothAction(
     clinicId: ctx.clinicId,
     patientId,
     toothFdi,
-  });
+  }, { userId: ctx.userId, role: ctx.role, clinicId: ctx.clinicId });
 }

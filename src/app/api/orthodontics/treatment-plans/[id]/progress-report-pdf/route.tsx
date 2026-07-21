@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 import { differenceInMonths } from "date-fns";
 import { renderToBuffer } from "@react-pdf/renderer";
 import { prisma } from "@/lib/prisma";
+import { assertPatientVisible } from "@/lib/patient-visibility";
 import { getAuthContext } from "@/lib/auth-context";
 import { canAccessModule } from "@/lib/marketplace/access-control";
 import { ORTHODONTICS_MODULE_KEY } from "@/lib/specialties/keys";
@@ -54,6 +55,14 @@ export async function GET(
   if (!plan) {
     return NextResponse.json({ error: "Plan no encontrado" }, { status: 404 });
   }
+
+  // Visibilidad por paciente: no renderizar el reporte de un paciente restringido.
+  const denied = await assertPatientVisible(plan.patientId, {
+    userId: ctx.userId,
+    role: ctx.role,
+    clinicId: ctx.clinicId,
+  });
+  if (denied) return denied;
 
   const t0 = plan.photoSets.find((s) => s.setType === "T0");
   const after =

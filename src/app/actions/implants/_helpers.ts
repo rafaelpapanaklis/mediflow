@@ -115,11 +115,21 @@ export async function loadPatientForImplant(args: {
 }): Promise<ActionResult<{ id: string; clinicId: string }>> {
   const patient = await prisma.patient.findUnique({
     where: { id: args.patientId },
-    select: { id: true, clinicId: true, deletedAt: true },
+    select: { id: true, clinicId: true, deletedAt: true, visibleUserIds: true },
   });
   if (!patient || patient.deletedAt) return fail("Paciente no encontrado");
   if (patient.clinicId !== args.ctx.clinicId) {
     return fail("Sin acceso a este paciente");
+  }
+  // Visibilidad por paciente: espeja loadImplantForCtx — un paciente restringido
+  // no existe para quien no está en su visibleUserIds (mismo mensaje que "no
+  // encontrado" para no confirmar su existencia). Cierra el leak de identidad de
+  // exportImplantPlanPdf y el bypass de escritura de createImplant.
+  if (!canSeePatient(
+    { userId: args.ctx.userId, role: args.ctx.role, clinicId: args.ctx.clinicId },
+    patient.visibleUserIds,
+  )) {
+    return fail("Paciente no encontrado");
   }
   return ok({ id: patient.id, clinicId: patient.clinicId });
 }

@@ -27,7 +27,7 @@ export default async function PeriodonticsPatientDetailPage({
   const data = await loadPerioData({
     clinicId: user.clinicId,
     patientId: params.patientId,
-  });
+  }, { userId: user.id, role: user.role, clinicId: user.clinicId });
   if (!data) redirect("/dashboard/specialties/periodontics");
 
   const initials = data.patientName
