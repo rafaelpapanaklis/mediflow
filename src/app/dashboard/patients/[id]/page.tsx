@@ -281,6 +281,11 @@ export default async function PatientDetailPage({ params }: { params: { id: stri
       <ErrorBoundary fallbackTitle={t("patients.page.loadError")}>
         <PatientDetailClient
           key={user.clinicId}
+          originClinicName={
+            patient.clinicId === user.clinicId
+              ? null
+              : visibility.otherClinicNames[patient.clinicId] ?? null
+          }
           patient={patient as any}
           records={serializedRecords as any}
           appointments={serializedAppts as any}
