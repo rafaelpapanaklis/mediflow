@@ -20,6 +20,7 @@ import { getPlanLimits } from "@/lib/plans";
 import { isPlanId } from "@/lib/billing/plans";
 import { sendPlanActivatedEmail, sendPlanRenewedEmail } from "@/lib/email";
 import { PLAN_MARKETING } from "@/lib/plan-shared";
+import { syncCoveredBranches } from "@/lib/branches-billing";
 
 // Next.js App Router: no hace body-parsing automático aquí porque leemos el
 // raw body para verificar la firma de Stripe.
@@ -178,6 +179,15 @@ export async function POST(req: NextRequest) {
               _source: { before: null, after: { event: event.type, subscriptionId: sub.id } },
             },
           });
+
+          // MULTI-CLÍNICA — propaga estado/plan de la madre a sus sucursales
+          // cubiertas (suspende por impago/cancelación o por downgrade de cupo;
+          // restaura al volver a estar al día). Best-effort: no debe tumbar el ack.
+          try {
+            await syncCoveredBranches(clinicId, sub.status);
+          } catch (e) {
+            console.error("[stripe webhook] syncCoveredBranches (subscription.updated):", e);
+          }
         }
         break;
       }
@@ -202,6 +212,12 @@ export async function POST(req: NextRequest) {
               _source: { before: null, after: { event: event.type, subscriptionId: sub.id } },
             },
           });
+
+          try {
+            await syncCoveredBranches(clinicId, "cancelled");
+          } catch (e) {
+            console.error("[stripe webhook] syncCoveredBranches (subscription.deleted):", e);
+          }
         }
         break;
       }
@@ -229,6 +245,12 @@ export async function POST(req: NextRequest) {
               _source: { before: null, after: { event: event.type, invoiceId: invoice.id } },
             },
           });
+
+          try {
+            await syncCoveredBranches(clinicId, "past_due");
+          } catch (e) {
+            console.error("[stripe webhook] syncCoveredBranches (payment_failed):", e);
+          }
         }
         break;
       }
@@ -337,6 +359,21 @@ export async function POST(req: NextRequest) {
             }
           } catch (err) {
             console.error("[stripe webhook] billing email section:", err);
+          }
+        }
+
+        // MULTI-CLÍNICA — factura de suscripción pagada ⇒ la madre está al día:
+        // restaura el acceso de sus sucursales cubiertas. Va ANTES del break por
+        // afiliado para cubrir a TODAS las clínicas, no solo a las referidas.
+        if (
+          clinic &&
+          (invoice.billing_reason === "subscription_create" ||
+            invoice.billing_reason === "subscription_cycle")
+        ) {
+          try {
+            await syncCoveredBranches(clinic.id, "active");
+          } catch (e) {
+            console.error("[stripe webhook] syncCoveredBranches (invoice.paid):", e);
           }
         }
 
@@ -588,4 +625,13 @@ async function activatePlatformSubscription(
       _source: { before: null, after: source },
     },
   });
+
+  // MULTI-CLÍNICA — reactivación de la madre (tarjeta o SPEI/OXXO): restaura sus
+  // sucursales cubiertas. Cubre el ÚNICO camino de reactivación de SPEI/OXXO,
+  // que no emite customer.subscription.* ni invoice.paid. Idempotente.
+  try {
+    await syncCoveredBranches(clinicId, "active");
+  } catch (e) {
+    console.error("[stripe webhook] syncCoveredBranches (activate):", e);
+  }
 }
