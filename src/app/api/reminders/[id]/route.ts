@@ -3,6 +3,7 @@ import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
 import { readActiveClinicCookie } from "@/lib/active-clinic";
+import { assertPatientVisible } from "@/lib/patient-visibility";
 
 export const dynamic = "force-dynamic";
 
@@ -49,9 +50,16 @@ export async function PATCH(req: NextRequest, { params }: Params) {
 
     const existing = await prisma.reminder.findFirst({
       where: { id: params.id, clinicId: dbUser.clinicId },
-      select: { id: true, status: true },
+      select: { id: true, status: true, patientId: true },
     });
     if (!existing) return NextResponse.json({ error: "not_found" }, { status: 404 });
+
+    // Visibilidad por paciente: el recordatorio devuelve el paciente en la
+    // respuesta; no permitir editarlo a quien no puede ver a ese paciente.
+    if (existing.patientId) {
+      const denied = await assertPatientVisible(existing.patientId, { userId: dbUser.id, role: dbUser.role, clinicId: dbUser.clinicId });
+      if (denied) return denied;
+    }
 
     if (parsed.data.assignedToId) {
       const assignee = await prisma.user.findFirst({

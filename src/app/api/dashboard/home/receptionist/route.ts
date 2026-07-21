@@ -6,6 +6,7 @@ import {
   fetchPendingValidation,
 } from "@/lib/agenda/server";
 import { todayInTz } from "@/lib/agenda/time-utils";
+import { relatedPatientVisibilityAnd } from "@/lib/patient-visibility";
 import type {
   HomeActionItem,
   HomeReceptionistData,
@@ -35,7 +36,14 @@ export async function GET() {
         { userId: session.user.id, role: session.user.role, clinicId: session.clinic.id },
       ),
       prisma.waitlistEntry.findMany({
-        where: { clinicId: session.clinic.id, resolvedAt: null },
+        // Visibilidad por paciente: la waitlist devuelve nombres. Enmascara
+        // (excluye) entradas de pacientes restringidos que este usuario no puede
+        // ver, igual que fetchAppointmentsForDay ya hace con las citas. Admins → [].
+        where: {
+          clinicId: session.clinic.id,
+          resolvedAt: null,
+          AND: relatedPatientVisibilityAnd({ userId: session.user.id, role: session.user.role, clinicId: session.clinic.id }),
+        },
         include: {
           patient: { select: { id: true, firstName: true, lastName: true } },
         },

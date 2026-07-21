@@ -16,6 +16,7 @@ import {
 import { sendReviewInvitation } from "@/lib/reviews/invite";
 import { logMutation } from "@/lib/audit";
 import { EMPTY_NOTE_ERROR, isClinicalNoteEmpty } from "@/lib/clinical/note-validation";
+import { assertPatientVisible } from "@/lib/patient-visibility";
 
 export const dynamic = "force-dynamic";
 
@@ -53,6 +54,13 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   });
   if (!existing) {
     return NextResponse.json({ error: "not_found" }, { status: 404 });
+  }
+  // Visibilidad por paciente: el cierre lee clínica del paciente (odontograma) y
+  // devuelve su nombre vía appointmentToDTO. Un paciente restringido no debe ser
+  // cerrado ni revelado a quien no puede verlo (404 = ocultar existencia).
+  if (existing.patientId) {
+    const denied = await assertPatientVisible(existing.patientId, { userId: session.user.id, role: session.user.role, clinicId: session.clinic.id });
+    if (denied) return denied;
   }
   if (
     session.user.role === "DOCTOR" &&

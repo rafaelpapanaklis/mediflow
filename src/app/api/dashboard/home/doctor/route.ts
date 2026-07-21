@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { loadClinicSession } from "@/lib/agenda/api-helpers";
 import { fetchAppointmentsForDay } from "@/lib/agenda/server";
 import { todayInTz } from "@/lib/agenda/time-utils";
+import { relatedPatientVisibilityAnd, type VisibilityViewer } from "@/lib/patient-visibility";
 import type { HomeDoctorData, PatientAlerts } from "@/lib/home/types";
 
 export async function GET() {
@@ -24,7 +25,11 @@ export async function GET() {
       countDraftNotes(session.clinic.id, doctorId),
       countUnanalyzedXrays(session.clinic.id, doctorId),
       countUnsignedConsents(session.clinic.id, doctorId),
-      fetchRecentPatients(session.clinic.id, doctorId),
+      fetchRecentPatients(session.clinic.id, doctorId, {
+        userId: session.user.id,
+        role: session.user.role,
+        clinicId: session.clinic.id,
+      }),
     ]);
 
   // Próxima cita = primera con startsAt >= now y status no terminal
@@ -155,14 +160,17 @@ async function countUnsignedConsents(
   return 0;
 }
 
-async function fetchRecentPatients(clinicId: string, doctorId: string) {
+async function fetchRecentPatients(clinicId: string, doctorId: string, viewer: VisibilityViewer) {
   const since = new Date(Date.now() - 30 * 86_400_000);
   const rows = await prisma.appointment.findMany({
+    // Visibilidad por paciente: cierra el borde en que a este doctor se le quitó
+    // el acceso a un paciente que antes atendió (visibleUserIds sin su id). Admins → [].
     where: {
       clinicId,
       doctorId,
       status: "COMPLETED",
       startsAt: { gte: since },
+      AND: relatedPatientVisibilityAnd(viewer),
     },
     select: {
       startsAt: true,

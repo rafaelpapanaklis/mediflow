@@ -17,6 +17,7 @@ import { getAuthContext } from "@/lib/auth-context";
 import { canAccessModule } from "@/lib/marketplace/access-control";
 import { IMPLANTS_MODULE_KEY } from "@/lib/implants/permissions";
 import { hasPermission } from "@/lib/auth/permissions";
+import { canSeePatient } from "@/lib/patient-visibility";
 import type { ImplantStatus } from "@prisma/client";
 import { ok, fail, type ActionResult } from "./result";
 
@@ -82,13 +83,26 @@ export async function loadImplantForCtx(args: {
       brand: true,
       lotNumber: true,
       placedAt: true,
+      patient: { select: { visibleUserIds: true } },
     },
   });
   if (!implant) return fail("Implante no encontrado");
   if (implant.clinicId !== args.ctx.clinicId) {
     return fail("Sin acceso a este implante");
   }
-  return ok(implant);
+  // Visibilidad por paciente: chokepoint de TODAS las actions de implante
+  // (reporte quirúrgico, ficha, plan, cambios de estado…). Un implante de un
+  // paciente restringido no existe para quien no puede verlo (mismo mensaje que
+  // "no encontrado" para no confirmar su existencia). canSeePatient exime admins
+  // y trata lista vacía como "todos" (comportamiento histórico intacto).
+  if (!canSeePatient(
+    { userId: args.ctx.userId, role: args.ctx.role, clinicId: args.ctx.clinicId },
+    implant.patient?.visibleUserIds,
+  )) {
+    return fail("Implante no encontrado");
+  }
+  const { patient: _patient, ...rest } = implant;
+  return ok(rest);
 }
 
 /**

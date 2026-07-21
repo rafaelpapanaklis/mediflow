@@ -6,6 +6,7 @@ import { readActiveClinicCookie } from "@/lib/active-clinic";
 import { logMutation } from "@/lib/audit";
 import { revalidateAfter } from "@/lib/cache/revalidate";
 import { sumInvoiceItems, computeInvoiceTotal, round2 } from "@/lib/invoice-totals";
+import { assertPatientVisible } from "@/lib/patient-visibility";
 
 async function getCtx() {
   const supabase = createClient();
@@ -14,10 +15,10 @@ async function getCtx() {
   const activeClinicId = readActiveClinicCookie();
   if (activeClinicId) {
     const u = await prisma.user.findFirst({ where: { supabaseId: user.id, clinicId: activeClinicId, isActive: true } });
-    if (u) return { clinicId: u.clinicId, userId: u.id };
+    if (u) return { clinicId: u.clinicId, userId: u.id, role: u.role };
   }
   const dbUser = await prisma.user.findFirst({ where: { supabaseId: user.id, isActive: true }, orderBy: { createdAt: "asc" } });
-  return dbUser ? { clinicId: dbUser.clinicId, userId: dbUser.id } : null;
+  return dbUser ? { clinicId: dbUser.clinicId, userId: dbUser.id, role: dbUser.role } : null;
 }
 
 export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
@@ -26,6 +27,12 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
   const { clinicId } = ctx;
   const invoice = await prisma.invoice.findFirst({ where: { id: params.id, clinicId }, include: { patient: true, payments: true } });
   if (!invoice) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  // Visibilidad por paciente: la factura incluye el paciente COMPLETO (PII). No
+  // exponerla a quien no puede ver a ese paciente (solo si está ligada a uno).
+  if (invoice.patientId) {
+    const denied = await assertPatientVisible(invoice.patientId, { userId: ctx.userId, role: ctx.role, clinicId });
+    if (denied) return denied;
+  }
   return NextResponse.json(invoice);
 }
 
@@ -33,6 +40,14 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   const ctx = await getCtx();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const { clinicId } = ctx;
+  // Visibilidad por paciente: no registrar pagos sobre la factura de un paciente
+  // que este usuario no puede ver. Pre-check antes de la transacción para no
+  // mutar-y-luego-denegar.
+  const pre = await prisma.invoice.findFirst({ where: { id: params.id, clinicId }, select: { patientId: true } });
+  if (pre?.patientId) {
+    const denied = await assertPatientVisible(pre.patientId, { userId: ctx.userId, role: ctx.role, clinicId });
+    if (denied) return denied;
+  }
   const { amount: rawAmount, method, reference, notes, paidAt } = await req.json();
   const amount = Number(rawAmount);
   if (!isFinite(amount) || amount <= 0) return NextResponse.json({ error: "El monto debe ser mayor a 0" }, { status: 400 });
@@ -85,6 +100,10 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   const body = await req.json();
   const invoice = await prisma.invoice.findFirst({ where: { id: params.id, clinicId } });
   if (!invoice) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  if (invoice.patientId) {
+    const denied = await assertPatientVisible(invoice.patientId, { userId: ctx.userId, role: ctx.role, clinicId });
+    if (denied) return denied;
+  }
 
   // Can edit items/amounts on DRAFT invoices
   if (body.items && invoice.status !== "DRAFT") {
@@ -142,6 +161,10 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
   const { clinicId } = ctx;
   const invoice = await prisma.invoice.findFirst({ where: { id: params.id, clinicId } });
   if (!invoice) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  if (invoice.patientId) {
+    const denied = await assertPatientVisible(invoice.patientId, { userId: ctx.userId, role: ctx.role, clinicId });
+    if (denied) return denied;
+  }
   if (invoice.status !== "DRAFT" && invoice.paid === 0) {
     // Non-draft without payments — mark cancelled instead of delete
     await prisma.invoice.updateMany({ where: { id: params.id, clinicId }, data: { status: "CANCELLED" } });

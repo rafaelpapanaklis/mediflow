@@ -8,6 +8,7 @@ import {
   timelineFieldFor,
 } from "@/lib/agenda/transitions";
 import { revalidateAfter, revalidatePatientProfile } from "@/lib/cache/revalidate";
+import { assertPatientVisible } from "@/lib/patient-visibility";
 import type { StatusChangeInput } from "@/lib/agenda/types";
 
 const APPT_INCLUDE = {
@@ -35,10 +36,18 @@ export async function PATCH(
 
   const existing = await prisma.appointment.findFirst({
     where: { id: params.id, clinicId: session.clinic.id },
-    select: { id: true, status: true, startsAt: true, doctorId: true },
+    select: { id: true, status: true, startsAt: true, doctorId: true, patientId: true },
   });
   if (!existing) {
     return NextResponse.json({ error: "not_found" }, { status: 404 });
+  }
+
+  // Visibilidad por paciente: la respuesta devuelve el paciente (nombre) vía
+  // appointmentToDTO. Un paciente restringido no debe ser transicionable ni
+  // revelado a quien no puede verlo (404 = ocultar existencia, igual que agenda).
+  if (existing.patientId) {
+    const denied = await assertPatientVisible(existing.patientId, { userId: session.user.id, role: session.user.role, clinicId: session.clinic.id });
+    if (denied) return denied;
   }
 
   if (

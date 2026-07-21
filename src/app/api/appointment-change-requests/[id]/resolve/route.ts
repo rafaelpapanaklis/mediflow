@@ -21,6 +21,7 @@ import {
 } from "@/lib/appointment-change/slots";
 import { notifyPatientChangeResolution } from "@/lib/appointment-change/notify";
 import { revalidateAfter } from "@/lib/cache/revalidate";
+import { assertPatientVisible } from "@/lib/patient-visibility";
 
 export const dynamic = "force-dynamic";
 
@@ -74,6 +75,14 @@ export async function POST(
   });
   if (!cr) {
     return NextResponse.json({ error: "not_found" }, { status: 404 });
+  }
+
+  // Visibilidad por paciente: no resolver (aprobar/rechazar, mutando la cita y
+  // notificando al paciente) solicitudes de un paciente restringido para quien
+  // no puede verlo. 404 = ocultar existencia, igual que la lista.
+  if (cr.patientId) {
+    const denied = await assertPatientVisible(cr.patientId, { userId: session.user.id, role: session.user.role, clinicId: session.clinic.id });
+    if (denied) return denied;
   }
 
   // DOCTOR solo puede resolver solicitudes de SUS citas.
