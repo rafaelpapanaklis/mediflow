@@ -79,19 +79,13 @@ const MAX_BYTES = 25 * 1024 * 1024;
 const CLIENT_COMPRESS_THRESHOLD = 3.5 * 1024 * 1024;
 
 interface PreparedUpload {
-  body: ArrayBuffer;
-  contentType: string;
+  blob: Blob; // File original o Blob comprimido — se manda tal cual en el FormData
   fileName: string;
   size: number;
 }
 
 async function passthrough(file: File): Promise<PreparedUpload> {
-  return {
-    body: await file.arrayBuffer(),
-    contentType: file.type || "image/jpeg",
-    fileName: file.name,
-    size: file.size,
-  };
+  return { blob: file, fileName: file.name, size: file.size };
 }
 
 async function prepareUpload(file: File): Promise<PreparedUpload> {
@@ -117,8 +111,7 @@ async function prepareUpload(file: File): Promise<PreparedUpload> {
     );
     if (!blob || blob.size >= file.size) return passthrough(file);
     return {
-      body: await blob.arrayBuffer(),
-      contentType: "image/jpeg",
+      blob,
       fileName: `${file.name.replace(/\.[^.]+$/, "")}.jpg`,
       size: blob.size,
     };
@@ -258,18 +251,13 @@ export function PatientPhotosTab({ patientId, onCountChange }: PatientPhotosTabP
             setUploading({ done: i + 1, total: files.length });
             continue;
           }
-          const res = await uploadClinicalPhotoAction({
-            patientId,
-            module: "general",
-            photoType: uploadType,
-            stage: uploadStage,
-            toothFdi: null,
-            notes: null,
-            contentType: prepared.contentType,
-            fileName: prepared.fileName,
-            size: prepared.size,
-            body: prepared.body,
-          });
+          const fd = new FormData();
+          fd.append("file", prepared.blob, prepared.fileName);
+          fd.append("patientId", patientId);
+          fd.append("module", "general");
+          fd.append("photoType", uploadType);
+          fd.append("stage", uploadStage);
+          const res = await uploadClinicalPhotoAction(fd);
           if (isFailure(res)) {
             if (res.code === "PLAN_LIMIT_STORAGE") {
               setQuotaHit(true);
@@ -281,8 +269,8 @@ export function PatientPhotosTab({ patientId, onCountChange }: PatientPhotosTabP
           } else {
             okCount += 1;
           }
-        } catch {
-          errors.push(t("patients.fotosTab.uploadErrorGeneric", { name: file.name }));
+        } catch (e) {
+          errors.push(`${file.name}: ${e instanceof Error ? e.message : String(e)}`);
         }
         setUploading({ done: i + 1, total: files.length });
       }

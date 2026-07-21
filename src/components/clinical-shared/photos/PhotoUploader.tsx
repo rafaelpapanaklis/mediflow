@@ -34,19 +34,14 @@ export function PhotoUploader(props: PhotoUploaderProps) {
       setUploading(true);
       try {
         for (const f of arr) {
-          const buffer = await f.arrayBuffer();
-          const res = await uploadClinicalPhotoAction({
-            patientId: props.patientId,
-            module: props.module,
-            photoType: props.defaultPhotoType,
-            stage: props.defaultStage ?? "pre",
-            toothFdi: props.toothFdi ?? null,
-            notes: null,
-            contentType: f.type || "image/jpeg",
-            fileName: f.name,
-            size: f.size,
-            body: buffer,
-          });
+          const fd = new FormData();
+          fd.append("file", f, f.name);
+          fd.append("patientId", props.patientId);
+          fd.append("module", props.module);
+          fd.append("photoType", props.defaultPhotoType);
+          fd.append("stage", props.defaultStage ?? "pre");
+          if (props.toothFdi != null) fd.append("toothFdi", String(props.toothFdi));
+          const res = await uploadClinicalPhotoAction(fd);
           if (isFailure(res)) {
             setError(res.error);
             break;

@@ -30,7 +30,7 @@ const annotationSchema = z.object({
   color: z.string().max(20).optional(),
 });
 
-const uploadSchema = z.object({
+const uploadScalarsSchema = z.object({
   patientId: z.string().min(1),
   module: moduleEnum,
   photoType: photoTypeEnum,
@@ -38,156 +38,193 @@ const uploadSchema = z.object({
   toothFdi: z.number().int().nullable().optional(),
   notes: z.string().max(500).nullable().optional(),
   annotations: z.array(annotationSchema).max(20).optional(),
-  contentType: z.string().min(1),
-  fileName: z.string().min(1).max(120),
-  size: z.number().int().positive(),
 });
-
-export type UploadClinicalPhotoInput = z.infer<typeof uploadSchema> & {
-  body: ArrayBuffer | Uint8Array;
-};
 
 /** Sube binario + crea row ClinicalPhoto.
  *
- * Ficha v3: comprime con sharp (patrón del upload de ortodoncia: 2400px
- * jpeg q85 mozjpeg + thumbnail 300px webp q80) en modo best-effort — si
- * sharp no decodifica (ej. HEIC según plataforma) sube el original y deja
- * thumbnailUrl null. Aplica la cuota de storage del plan ANTES de subir y
- * registra sizeBytes (bytes realmente almacenados) para esa misma cuota. */
+ * Transporte: **FormData** (patrón nativo de server actions para binarios, el
+ * mismo de /api/orthodontics/photos/upload). El File llega dentro del multipart
+ * — a diferencia de pasar un ArrayBuffer como argumento de la action, cuya
+ * serialización NO es confiable en Next 14.2 / React 18 y hacía fallar TODA
+ * subida en runtime. contentType/fileName/size se derivan del propio File.
+ *
+ * Ficha v3: comprime con sharp (2400px jpeg q85 mozjpeg + thumbnail 300px webp
+ * q80) en modo best-effort — si sharp no decodifica (ej. HEIC según plataforma)
+ * sube el original y deja thumbnailUrl null. Aplica la cuota de storage del plan
+ * ANTES de subir y registra sizeBytes (bytes realmente almacenados). Todo el
+ * cuerpo va en try/catch: cualquier fallo se reporta con su mensaje real (+ stack
+ * en logs de Vercel) en vez del error genérico. */
 export async function uploadClinicalPhotoAction(
-  input: UploadClinicalPhotoInput,
+  formData: FormData,
 ): Promise<ActionResult<{ id: string }>> {
-  const parsed = uploadSchema.safeParse(input);
-  if (!parsed.success) return fail(parsed.error.errors[0]?.message ?? "Datos inválidos");
-  if (!ALLOWED_PHOTO_MIME.has(parsed.data.contentType)) {
-    return fail("Tipo de archivo no permitido");
-  }
-  if (parsed.data.size > MAX_PHOTO_BYTES) {
-    return fail("La foto excede el tamaño máximo (25MB)");
-  }
-
-  const ctx = await getAuthContext();
-  if (!ctx) return fail("No autenticado");
-
-  const guard = await guardPatient({ ctx, patientId: parsed.data.patientId });
-  if (isFailure(guard)) return fail(guard.error);
-
-  // Blindaje: firma real del contenido (no la extensión/MIME declarado),
-  // mismo patrón que /api/orthodontics/photos/upload.
-  const rawBytes =
-    input.body instanceof Uint8Array ? input.body : new Uint8Array(input.body);
-  // Array.from (no spread): el tsconfig no baja iteradores de Set (target).
-  const magicErr = await validateMagicNumber(rawBytes, Array.from(ALLOWED_PHOTO_MIME));
-  if (magicErr) {
-    return fail(`Archivo no válido: ${magicErr}`);
-  }
-
-  // Cuota de almacenamiento del plan — ANTES de subir bytes. storageQuotaError
-  // devuelve una NextResponse 402 (contrato de las API routes); aquí se
-  // traduce al ActionResult con code PLAN_LIMIT_STORAGE para que la UI
-  // muestre el CTA de plan.
-  const quotaRes = await storageQuotaError(ctx.clinicId, parsed.data.size);
-  if (quotaRes) {
-    let msg = "Llegaste al límite de almacenamiento de tu plan. Libera espacio o sube de plan.";
-    try {
-      const body = (await quotaRes.json()) as { error?: string };
-      if (body?.error) msg = body.error;
-    } catch {
-      /* usa el mensaje default */
-    }
-    return fail(msg, "PLAN_LIMIT_STORAGE");
-  }
-
-  // Compresión + thumbnail (best-effort). HEIC/HEIF pueden fallar según la
-  // plataforma de sharp → se sube el original tal cual y sin thumbnail (la
-  // UI cae al blobUrl).
-  let mainBody: Buffer = Buffer.from(rawBytes);
-  let mainContentType = parsed.data.contentType;
-  let mainFileName = parsed.data.fileName;
-  let thumbBody: Buffer | null = null;
   try {
-    const sharp = (await import("sharp")).default;
-    const compressed = await sharp(mainBody)
-      .rotate()
-      .resize(2400, 2400, { fit: "inside", withoutEnlargement: true })
-      .jpeg({ quality: 85, mozjpeg: true })
-      .toBuffer();
-    thumbBody = await sharp(mainBody)
-      .rotate()
-      .resize(300, 300, { fit: "cover" })
-      .webp({ quality: 80 })
-      .toBuffer();
-    mainBody = compressed;
-    mainContentType = "image/jpeg";
-    mainFileName = `${parsed.data.fileName.replace(/\.[^.]+$/, "")}.jpg`;
-  } catch (e) {
-    console.warn(
-      "[clinical-photos] compresión sharp falló; se sube el original:",
-      e instanceof Error ? e.message : e,
-    );
-    thumbBody = null;
-  }
+    const file = formData.get("file");
+    if (!(file instanceof Blob)) return fail("No se recibió la imagen");
 
-  const { storagePath } = await uploadClinicalPhoto({
-    clinicId: ctx.clinicId,
-    patientId: parsed.data.patientId,
-    module: parsed.data.module,
-    fileName: mainFileName,
-    contentType: mainContentType,
-    body: mainBody,
-  });
+    // FormData entrega strings → se normalizan antes de zod.
+    const toothFdiRaw = formData.get("toothFdi");
+    const notesRaw = formData.get("notes");
+    const annotationsRaw = formData.get("annotations");
+    let annotations: unknown = undefined;
+    if (typeof annotationsRaw === "string" && annotationsRaw.length > 0) {
+      try {
+        annotations = JSON.parse(annotationsRaw);
+      } catch {
+        return fail("Anotaciones inválidas");
+      }
+    }
+    const parsed = uploadScalarsSchema.safeParse({
+      patientId: formData.get("patientId"),
+      module: formData.get("module"),
+      photoType: formData.get("photoType"),
+      stage: formData.get("stage"),
+      toothFdi:
+        typeof toothFdiRaw === "string" && toothFdiRaw.length > 0 ? Number(toothFdiRaw) : null,
+      notes: typeof notesRaw === "string" && notesRaw.length > 0 ? notesRaw : null,
+      annotations,
+    });
+    if (!parsed.success) return fail(parsed.error.errors[0]?.message ?? "Datos inválidos");
 
-  // Thumbnail best-effort: si su subida falla, la foto queda sin thumb
-  // (la UI usa blobUrl) en vez de tumbar la action completa.
-  let thumbPath: string | null = null;
-  if (thumbBody) {
+    // contentType/fileName/size derivados del File (ya no viajan como escalares).
+    const contentType = file.type || "image/jpeg";
+    const fileName = ((file as File).name || "foto.jpg").slice(0, 120);
+    const size = file.size;
+
+    if (!ALLOWED_PHOTO_MIME.has(contentType)) {
+      return fail("Tipo de archivo no permitido");
+    }
+    if (size > MAX_PHOTO_BYTES) {
+      return fail("La foto excede el tamaño máximo (25MB)");
+    }
+
+    const ctx = await getAuthContext();
+    if (!ctx) return fail("No autenticado");
+
+    const guard = await guardPatient({ ctx, patientId: parsed.data.patientId });
+    if (isFailure(guard)) return fail(guard.error);
+
+    // Blindaje: firma real del contenido (no la extensión/MIME declarado),
+    // mismo patrón que /api/orthodontics/photos/upload.
+    const rawBytes = new Uint8Array(await file.arrayBuffer());
+    // Array.from (no spread): el tsconfig no baja iteradores de Set (target).
+    const magicErr = await validateMagicNumber(rawBytes, Array.from(ALLOWED_PHOTO_MIME));
+    if (magicErr) {
+      return fail(`Archivo no válido: ${magicErr}`);
+    }
+
+    // Cuota de almacenamiento del plan — ANTES de subir bytes. storageQuotaError
+    // devuelve una NextResponse 402 (contrato de las API routes); aquí se
+    // traduce al ActionResult con code PLAN_LIMIT_STORAGE para que la UI
+    // muestre el CTA de plan.
+    const quotaRes = await storageQuotaError(ctx.clinicId, size);
+    if (quotaRes) {
+      let msg = "Llegaste al límite de almacenamiento de tu plan. Libera espacio o sube de plan.";
+      try {
+        const body = (await quotaRes.json()) as { error?: string };
+        if (body?.error) msg = body.error;
+      } catch {
+        /* usa el mensaje default */
+      }
+      return fail(msg, "PLAN_LIMIT_STORAGE");
+    }
+
+    // Compresión + thumbnail (best-effort). HEIC/HEIF pueden fallar según la
+    // plataforma de sharp → se sube el original tal cual y sin thumbnail (la
+    // UI cae al blobUrl).
+    let mainBody: Buffer = Buffer.from(rawBytes);
+    let mainContentType = contentType;
+    let mainFileName = fileName;
+    let thumbBody: Buffer | null = null;
     try {
-      const thumbUpload = await uploadClinicalPhoto({
-        clinicId: ctx.clinicId,
-        patientId: parsed.data.patientId,
-        module: parsed.data.module,
-        fileName: `thumb_${mainFileName.replace(/\.[^.]+$/, "")}.webp`,
-        contentType: "image/webp",
-        body: thumbBody,
-      });
-      thumbPath = thumbUpload.storagePath;
+      const sharp = (await import("sharp")).default;
+      const compressed = await sharp(mainBody)
+        .rotate()
+        .resize(2400, 2400, { fit: "inside", withoutEnlargement: true })
+        .jpeg({ quality: 85, mozjpeg: true })
+        .toBuffer();
+      thumbBody = await sharp(mainBody)
+        .rotate()
+        .resize(300, 300, { fit: "cover" })
+        .webp({ quality: 80 })
+        .toBuffer();
+      mainBody = compressed;
+      mainContentType = "image/jpeg";
+      mainFileName = `${fileName.replace(/\.[^.]+$/, "")}.jpg`;
     } catch (e) {
       console.warn(
-        "[clinical-photos] subida de thumbnail falló:",
+        "[clinical-photos] compresión sharp falló; se sube el original:",
         e instanceof Error ? e.message : e,
       );
+      thumbBody = null;
     }
-  }
 
-  const created = await prisma.clinicalPhoto.create({
-    data: {
+    const { storagePath } = await uploadClinicalPhoto({
       clinicId: ctx.clinicId,
       patientId: parsed.data.patientId,
       module: parsed.data.module,
-      photoType: parsed.data.photoType,
-      stage: parsed.data.stage,
-      toothFdi: parsed.data.toothFdi ?? null,
-      capturedBy: ctx.userId,
-      blobUrl: storagePath,
-      thumbnailUrl: thumbPath,
-      sizeBytes: mainBody.length,
-      notes: parsed.data.notes ?? null,
-      annotations: parsed.data.annotations
-        ? (parsed.data.annotations as unknown as object)
-        : undefined,
-    },
-    select: { id: true },
-  });
+      fileName: mainFileName,
+      contentType: mainContentType,
+      body: mainBody,
+    });
 
-  await auditClinicalShared({
-    ctx,
-    action: "clinical-shared.photo.uploaded",
-    entityType: "clinical-photo",
-    entityId: created.id,
-    changes: { module: parsed.data.module, photoType: parsed.data.photoType },
-  });
-  revalidatePath(`/dashboard/patients/${parsed.data.patientId}`);
-  return ok({ id: created.id });
+    // Thumbnail best-effort: si su subida falla, la foto queda sin thumb
+    // (la UI usa blobUrl) en vez de tumbar la action completa.
+    let thumbPath: string | null = null;
+    if (thumbBody) {
+      try {
+        const thumbUpload = await uploadClinicalPhoto({
+          clinicId: ctx.clinicId,
+          patientId: parsed.data.patientId,
+          module: parsed.data.module,
+          fileName: `thumb_${mainFileName.replace(/\.[^.]+$/, "")}.webp`,
+          contentType: "image/webp",
+          body: thumbBody,
+        });
+        thumbPath = thumbUpload.storagePath;
+      } catch (e) {
+        console.warn(
+          "[clinical-photos] subida de thumbnail falló:",
+          e instanceof Error ? e.message : e,
+        );
+      }
+    }
+
+    const created = await prisma.clinicalPhoto.create({
+      data: {
+        clinicId: ctx.clinicId,
+        patientId: parsed.data.patientId,
+        module: parsed.data.module,
+        photoType: parsed.data.photoType,
+        stage: parsed.data.stage,
+        toothFdi: parsed.data.toothFdi ?? null,
+        capturedBy: ctx.userId,
+        blobUrl: storagePath,
+        thumbnailUrl: thumbPath,
+        sizeBytes: mainBody.length,
+        notes: parsed.data.notes ?? null,
+        annotations: parsed.data.annotations
+          ? (parsed.data.annotations as unknown as object)
+          : undefined,
+      },
+      select: { id: true },
+    });
+
+    await auditClinicalShared({
+      ctx,
+      action: "clinical-shared.photo.uploaded",
+      entityType: "clinical-photo",
+      entityId: created.id,
+      changes: { module: parsed.data.module, photoType: parsed.data.photoType },
+    });
+    revalidatePath(`/dashboard/patients/${parsed.data.patientId}`);
+    return ok({ id: created.id });
+  } catch (e) {
+    console.error(
+      "[clinical-photos] uploadClinicalPhotoAction falló:",
+      e instanceof Error ? e.stack : e,
+    );
+    return fail("Error al subir: " + (e instanceof Error ? e.message : String(e)));
+  }
 }
 
 const deleteSchema = z.object({ id: z.string().min(1) });
