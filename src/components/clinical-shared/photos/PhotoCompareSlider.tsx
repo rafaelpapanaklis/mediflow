@@ -75,14 +75,6 @@ export function PhotoCompareSlider({ photos, mode, labels }: PhotoCompareSliderP
   const left = sorted.find((p) => p.id === leftId) ?? defaultA;
   const right = sorted.find((p) => p.id === rightId) ?? defaultB;
 
-  if (sorted.length < 2) {
-    return (
-      <div className="rounded-xl border border-dashed border-border bg-[var(--bg-elev-2)] px-5 py-8 text-center text-xs text-muted-foreground">
-        {labels?.needTwo ?? "Se necesitan al menos 2 fotos para comparar."}
-      </div>
-    );
-  }
-
   const pctFromPointer = (clientX: number) => {
     const rect = frameRef.current?.getBoundingClientRect();
     if (!rect || rect.width === 0) return;
@@ -148,7 +140,12 @@ export function PhotoCompareSlider({ photos, mode, labels }: PhotoCompareSliderP
         </select>
       </div>
 
-      {mode === "slider" ? (
+      {sorted.length < 2 ? (
+        /* 0-1 fotos: la card NO colapsa — el aviso va dentro del área de imagen. */
+        <div className="flex h-[280px] w-full items-center justify-center rounded-xl border border-dashed border-border bg-[var(--bg-elev-2)] px-5 text-center text-xs font-medium text-muted-foreground sm:h-[360px] lg:h-[430px]">
+          {labels?.needTwo ?? "Se necesitan al menos 2 fotos para comparar."}
+        </div>
+      ) : mode === "slider" ? (
         <>
           <div
             ref={frameRef}

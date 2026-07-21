@@ -1377,6 +1377,8 @@
         "other": "{count} photos"
       },
       "upload": "Upload photos",
+      "uploadModalTitle": "Upload clinical photos",
+      "uploadModalSub": "Set the stage and view, then drag or choose the photos.",
       "takePhoto": "Take photo",
       "stageLabel": "Stage",
       "typeLabel": "View",

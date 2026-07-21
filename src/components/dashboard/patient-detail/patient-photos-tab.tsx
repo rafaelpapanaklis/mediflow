@@ -41,6 +41,12 @@ import {
 } from "@/lib/clinical-shared/photos/types";
 import { PhotoLightbox } from "@/components/clinical-shared/photos/PhotoLightbox";
 import { PhotoCompareSlider } from "@/components/clinical-shared/photos/PhotoCompareSlider";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 const STAGE_ORDER: ClinicalPhotoStage[] = ["pre", "during", "post", "control"];
 
@@ -340,8 +346,8 @@ export function PatientPhotosTab({ patientId, onCountChange }: PatientPhotosTabP
       <div className="bg-card border border-border rounded-2xl shadow-[var(--shadow-1)] px-4 py-3 flex items-center gap-3 flex-wrap">
         <button
           type="button"
-          onClick={() => setUploadOpen((v) => !v)}
-          aria-expanded={uploadOpen}
+          onClick={() => setUploadOpen(true)}
+          aria-haspopup="dialog"
           className={`${solidBtnCls} h-9 px-3.5`}
         >
           <Upload size={14} strokeWidth={2} aria-hidden /> {t("patients.fotosTab.upload")}
@@ -420,141 +426,6 @@ export function PatientPhotosTab({ patientId, onCountChange }: PatientPhotosTabP
         </div>
       </div>
 
-      {/* Cuota de storage alcanzada → CTA de plan */}
-      {quotaHit && (
-        <div className="flex items-center justify-between gap-3 flex-wrap rounded-[var(--radius-lg)] border border-[var(--warning-border-strong)] bg-[var(--warning-soft)] px-4 py-3">
-          <div className="flex items-center gap-2 text-sm text-[var(--warning-strong)]">
-            <AlertTriangle size={16} strokeWidth={1.75} className="flex-shrink-0" aria-hidden />
-            <span>{t("patients.fotosTab.quotaTitle")}</span>
-          </div>
-          <Link
-            href="/dashboard/settings?tab=subscription"
-            className="text-xs font-bold px-3.5 py-2.5 rounded-lg bg-[var(--brand)] text-white hover:bg-[var(--violet-700)] focus-visible:outline-none focus-visible:[box-shadow:var(--ring)] active:scale-[.98] transition duration-150 flex-shrink-0 no-underline"
-          >
-            {t("patients.fotosTab.quotaCta")}
-          </Link>
-        </div>
-      )}
-
-      {/* Panel de subida */}
-      {uploadOpen && (
-        <div className="bg-card border border-border rounded-2xl p-4 shadow-[var(--shadow-1)] space-y-3">
-          <div className="flex items-end gap-3 flex-wrap">
-            <label className="flex flex-col gap-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-              {t("patients.fotosTab.stageLabel")}
-              <select
-                className={selectCls}
-                value={uploadStage}
-                onChange={(e) => setUploadStage(e.target.value as ClinicalPhotoStage)}
-              >
-                {STAGE_ORDER.map((s) => (
-                  <option key={s} value={s}>
-                    {STAGE_LABELS[s]}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="flex flex-col gap-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-              {t("patients.fotosTab.typeLabel")}
-              <select
-                className={selectCls}
-                value={uploadType}
-                onChange={(e) => setUploadType(e.target.value as ClinicalPhotoType)}
-              >
-                {viewSelectOptions}
-              </select>
-            </label>
-            <button
-              type="button"
-              onClick={() => cameraInputRef.current?.click()}
-              disabled={uploading !== null}
-              className="inline-flex items-center gap-1.5 h-[34px] px-3 text-xs font-semibold rounded-[10px] border border-border bg-card text-foreground hover:bg-[var(--bg-hover)] hover:border-[var(--border-brand)] transition-colors focus-visible:outline-none focus-visible:shadow-[var(--ring)] disabled:opacity-[.45] disabled:cursor-not-allowed"
-            >
-              <Camera size={14} strokeWidth={1.75} aria-hidden /> {t("patients.fotosTab.takePhoto")}
-            </button>
-          </div>
-
-          <div
-            role="button"
-            tabIndex={0}
-            onClick={() => fileInputRef.current?.click()}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" || e.key === " ") {
-                e.preventDefault();
-                fileInputRef.current?.click();
-              }
-            }}
-            onDragOver={(e) => {
-              e.preventDefault();
-              setDragOver(true);
-            }}
-            onDragLeave={() => setDragOver(false)}
-            onDrop={(e) => {
-              e.preventDefault();
-              setDragOver(false);
-              if (e.dataTransfer.files) void handleFiles(Array.from(e.dataTransfer.files));
-            }}
-            aria-busy={uploading !== null}
-            className={`flex flex-col items-center gap-1.5 rounded-xl border-2 border-dashed px-6 py-7 text-center transition-colors duration-150 focus-visible:outline-none focus-visible:shadow-[var(--ring)] ${
-              dragOver
-                ? "border-[var(--brand)] bg-[var(--brand-softer)]"
-                : "border-border bg-[var(--bg-elev-2)] hover:border-[var(--border-brand)]"
-            } ${uploading ? "cursor-wait opacity-70" : "cursor-pointer"}`}
-          >
-            <ImagePlus size={20} strokeWidth={1.75} className="text-[var(--text-3)]" aria-hidden />
-            <span className="text-sm font-medium text-foreground">
-              {uploading
-                ? t("patients.fotosTab.uploadingProgress", {
-                    done: uploading.done,
-                    total: uploading.total,
-                  })
-                : t("patients.fotosTab.dropHint")}
-            </span>
-            <span className="text-[11px] text-muted-foreground">{t("patients.fotosTab.maxSize")}</span>
-            {uploading && (
-              <div className="mt-1 h-1.5 w-48 max-w-full overflow-hidden rounded-full bg-muted">
-                <div
-                  className="h-full rounded-full bg-[var(--brand)] transition-all duration-200"
-                  style={{ width: `${Math.round((uploading.done / uploading.total) * 100)}%` }}
-                />
-              </div>
-            )}
-          </div>
-
-          {uploadErrors.length > 0 && (
-            <ul className="space-y-1 text-xs text-[var(--danger)]">
-              {uploadErrors.map((err) => (
-                <li key={err}>{err}</li>
-              ))}
-            </ul>
-          )}
-
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="image/*"
-            multiple
-            className="hidden"
-            onChange={(e) => {
-              if (e.target.files) void handleFiles(Array.from(e.target.files));
-              e.target.value = "";
-            }}
-          />
-          {/* capture="environment" abre directo la cámara trasera en móvil */}
-          <input
-            ref={cameraInputRef}
-            type="file"
-            accept="image/*"
-            capture="environment"
-            className="hidden"
-            onChange={(e) => {
-              if (e.target.files) void handleFiles(Array.from(e.target.files));
-              e.target.value = "";
-            }}
-          />
-        </div>
-      )}
-
       {/* ── Contenido ─────────────────────────────────────────────────── */}
       {loading ? (
         <div
@@ -570,27 +441,9 @@ export function PatientPhotosTab({ patientId, onCountChange }: PatientPhotosTabP
         <div className="rounded-xl border border-[var(--danger-border-strong)] bg-[var(--danger-soft)] px-4 py-3 text-sm text-[var(--danger-strong)]" role="alert">
           {loadError}
         </div>
-      ) : photos.length === 0 ? (
-        /* Empty total (prototipo): circle violeta + copy + CTA sólido. */
-        <section className="flex flex-col items-center gap-2.5 rounded-2xl border-[1.5px] border-dashed border-[var(--border-strong)] bg-[var(--bg-elev-2)] px-8 py-12 text-center">
-          <span className="grid h-[52px] w-[52px] place-items-center rounded-full bg-[var(--brand-soft)] text-[var(--brand)]">
-            <Camera size={22} strokeWidth={1.75} aria-hidden />
-          </span>
-          <div className="text-[15px] font-bold text-foreground">{t("patients.fotosTab.empty")}</div>
-          <div className="max-w-[380px] text-xs text-muted-foreground">
-            {t("patients.fotosTab.emptyHint")}
-          </div>
-          <button
-            type="button"
-            onClick={() => setUploadOpen(true)}
-            className={`${solidBtnCls} mt-1 h-9 px-4`}
-          >
-            <Upload size={14} strokeWidth={2} aria-hidden /> {t("patients.fotosTab.emptyCta")}
-          </button>
-        </section>
       ) : (
         <>
-          {/* ── Card Comparador antes / después (prototipo) ───────────── */}
+          {/* ── Card Comparador antes / después (prototipo) — SIEMPRE visible ─ */}
           <section className="bg-card border border-border rounded-2xl shadow-[var(--shadow-1)] p-4 sm:px-5">
             <div className="mb-3 flex items-center gap-2.5 flex-wrap">
               <span className="grid h-7 w-7 flex-shrink-0 place-items-center rounded-lg bg-[var(--brand-soft)] text-[var(--brand)]">
@@ -657,7 +510,25 @@ export function PatientPhotosTab({ patientId, onCountChange }: PatientPhotosTabP
           </section>
 
           {/* ── Galería agrupada por etapa (prototipo) ────────────────── */}
-          {filtered.length === 0 ? (
+          {photos.length === 0 ? (
+            /* Empty total (prototipo): circle violeta + copy + CTA que abre el modal. */
+            <section className="flex flex-col items-center gap-2.5 rounded-2xl border-[1.5px] border-dashed border-[var(--border-strong)] bg-[var(--bg-elev-2)] px-8 py-12 text-center">
+              <span className="grid h-[52px] w-[52px] place-items-center rounded-full bg-[var(--brand-soft)] text-[var(--brand)]">
+                <Camera size={22} strokeWidth={1.75} aria-hidden />
+              </span>
+              <div className="text-[15px] font-bold text-foreground">{t("patients.fotosTab.empty")}</div>
+              <div className="max-w-[380px] text-xs text-muted-foreground">
+                {t("patients.fotosTab.emptyHint")}
+              </div>
+              <button
+                type="button"
+                onClick={() => setUploadOpen(true)}
+                className={`${solidBtnCls} mt-1 h-9 px-4`}
+              >
+                <Upload size={14} strokeWidth={2} aria-hidden /> {t("patients.fotosTab.emptyCta")}
+              </button>
+            </section>
+          ) : filtered.length === 0 ? (
             <section className="flex flex-col items-center gap-2.5 rounded-2xl border-[1.5px] border-dashed border-[var(--border-strong)] bg-[var(--bg-elev-2)] px-8 py-9 text-center">
               <span className="grid h-11 w-11 place-items-center rounded-full bg-[var(--brand-soft)] text-[var(--brand)]">
                 <Search size={19} strokeWidth={1.75} aria-hidden />
@@ -751,6 +622,152 @@ export function PatientPhotosTab({ patientId, onCountChange }: PatientPhotosTabP
           )}
         </>
       )}
+
+      {/* ── Modal de subida (Radix Dialog, sin stopPropagation) ───────── */}
+      <Dialog open={uploadOpen} onOpenChange={setUploadOpen}>
+        <DialogContent className="max-w-xl border border-border bg-card">
+          <DialogHeader className="border-b border-border px-5 pb-4 pt-5">
+            <DialogTitle className="mb-0 text-[15px]">
+              {t("patients.fotosTab.uploadModalTitle")}
+            </DialogTitle>
+            <p className="mt-0.5 text-[11.5px] text-muted-foreground">
+              {t("patients.fotosTab.uploadModalSub")}
+            </p>
+          </DialogHeader>
+
+          <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-5 py-4">
+            <div className="flex items-end gap-3 flex-wrap">
+              <label className="flex flex-col gap-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                {t("patients.fotosTab.stageLabel")}
+                <select
+                  className={selectCls}
+                  value={uploadStage}
+                  onChange={(e) => setUploadStage(e.target.value as ClinicalPhotoStage)}
+                >
+                  {STAGE_ORDER.map((s) => (
+                    <option key={s} value={s}>
+                      {STAGE_LABELS[s]}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="flex flex-col gap-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                {t("patients.fotosTab.typeLabel")}
+                <select
+                  className={selectCls}
+                  value={uploadType}
+                  onChange={(e) => setUploadType(e.target.value as ClinicalPhotoType)}
+                >
+                  {viewSelectOptions}
+                </select>
+              </label>
+              <button
+                type="button"
+                onClick={() => cameraInputRef.current?.click()}
+                disabled={uploading !== null}
+                className="inline-flex items-center gap-1.5 h-[34px] px-3 text-xs font-semibold rounded-[10px] border border-border bg-card text-foreground hover:bg-[var(--bg-hover)] hover:border-[var(--border-brand)] transition-colors focus-visible:outline-none focus-visible:shadow-[var(--ring)] disabled:opacity-[.45] disabled:cursor-not-allowed"
+              >
+                <Camera size={14} strokeWidth={1.75} aria-hidden /> {t("patients.fotosTab.takePhoto")}
+              </button>
+            </div>
+
+            <div
+              role="button"
+              tabIndex={0}
+              onClick={() => fileInputRef.current?.click()}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  fileInputRef.current?.click();
+                }
+              }}
+              onDragOver={(e) => {
+                e.preventDefault();
+                setDragOver(true);
+              }}
+              onDragLeave={() => setDragOver(false)}
+              onDrop={(e) => {
+                e.preventDefault();
+                setDragOver(false);
+                if (e.dataTransfer.files) void handleFiles(Array.from(e.dataTransfer.files));
+              }}
+              aria-busy={uploading !== null}
+              className={`flex flex-col items-center gap-1.5 rounded-xl border-2 border-dashed px-6 py-7 text-center transition-colors duration-150 focus-visible:outline-none focus-visible:shadow-[var(--ring)] ${
+                dragOver
+                  ? "border-[var(--brand)] bg-[var(--brand-softer)]"
+                  : "border-border bg-[var(--bg-elev-2)] hover:border-[var(--border-brand)]"
+              } ${uploading ? "cursor-wait opacity-70" : "cursor-pointer"}`}
+            >
+              <ImagePlus size={20} strokeWidth={1.75} className="text-[var(--text-3)]" aria-hidden />
+              <span className="text-sm font-medium text-foreground">
+                {uploading
+                  ? t("patients.fotosTab.uploadingProgress", {
+                      done: uploading.done,
+                      total: uploading.total,
+                    })
+                  : t("patients.fotosTab.dropHint")}
+              </span>
+              <span className="text-[11px] text-muted-foreground">{t("patients.fotosTab.maxSize")}</span>
+              {uploading && (
+                <div className="mt-1 h-1.5 w-48 max-w-full overflow-hidden rounded-full bg-muted">
+                  <div
+                    className="h-full rounded-full bg-[var(--brand)] transition-all duration-200"
+                    style={{ width: `${Math.round((uploading.done / uploading.total) * 100)}%` }}
+                  />
+                </div>
+              )}
+            </div>
+
+            {uploadErrors.length > 0 && (
+              <ul className="space-y-1 text-xs text-[var(--danger)]">
+                {uploadErrors.map((err) => (
+                  <li key={err}>{err}</li>
+                ))}
+              </ul>
+            )}
+
+            {/* Cuota de storage alcanzada → CTA de plan (dentro del modal) */}
+            {quotaHit && (
+              <div className="flex items-center justify-between gap-3 flex-wrap rounded-[var(--radius-lg)] border border-[var(--warning-border-strong)] bg-[var(--warning-soft)] px-4 py-3">
+                <div className="flex items-center gap-2 text-sm text-[var(--warning-strong)]">
+                  <AlertTriangle size={16} strokeWidth={1.75} className="flex-shrink-0" aria-hidden />
+                  <span>{t("patients.fotosTab.quotaTitle")}</span>
+                </div>
+                <Link
+                  href="/dashboard/settings?tab=subscription"
+                  className="text-xs font-bold px-3.5 py-2.5 rounded-lg bg-[var(--brand)] text-white hover:bg-[var(--violet-700)] focus-visible:outline-none focus-visible:[box-shadow:var(--ring)] active:scale-[.98] transition duration-150 flex-shrink-0 no-underline"
+                >
+                  {t("patients.fotosTab.quotaCta")}
+                </Link>
+              </div>
+            )}
+
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              multiple
+              className="hidden"
+              onChange={(e) => {
+                if (e.target.files) void handleFiles(Array.from(e.target.files));
+                e.target.value = "";
+              }}
+            />
+            {/* capture="environment" abre directo la cámara trasera en móvil */}
+            <input
+              ref={cameraInputRef}
+              type="file"
+              accept="image/*"
+              capture="environment"
+              className="hidden"
+              onChange={(e) => {
+                if (e.target.files) void handleFiles(Array.from(e.target.files));
+                e.target.value = "";
+              }}
+            />
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {lightboxIndex !== null && (
         <PhotoLightbox

@@ -1377,6 +1377,8 @@
         "other": "{count} fotos"
       },
       "upload": "Subir fotos",
+      "uploadModalTitle": "Subir fotos clínicas",
+      "uploadModalSub": "Asigna etapa y vista, luego arrastra o elige las fotos.",
       "takePhoto": "Tomar foto",
       "stageLabel": "Etapa",
       "typeLabel": "Vista",
