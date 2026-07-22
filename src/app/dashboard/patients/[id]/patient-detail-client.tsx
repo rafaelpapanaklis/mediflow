@@ -4,7 +4,7 @@ import { useCallback, useState, useEffect, useMemo } from "react";
 import { useT } from "@/i18n/i18n-provider";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ArrowLeft, Phone, Mail, Calendar, AlertTriangle, Check, Plus, Printer, Edit, Download, Pill, Play, Trash2, X as XIcon, XCircle, ClipboardList, Stethoscope } from "lucide-react";
+import { ArrowLeft, Phone, Mail, Calendar, AlertTriangle, Check, Plus, Printer, Edit, Download, Pill, Play, Trash2, X as XIcon, XCircle, ClipboardList, Stethoscope, Lock } from "lucide-react";
 import { formatCurrency, formatDate, getInitials, avatarColor } from "@/lib/utils";
 import { ageFromDob, fmtMXN } from "@/lib/format";
 import { OdontogramV2 } from "@/components/dashboard/odontogram-v2/App";
@@ -41,6 +41,7 @@ import { Label } from "@/components/ui/label";
 import { DateField } from "@/components/ui/date-field";
 import { AvatarNew } from "@/components/ui/design-system/avatar-new";
 import { BadgeNew }  from "@/components/ui/design-system/badge-new";
+import { PatientVisibilityPicker } from "@/components/dashboard/patient-visibility-picker";
 import { ButtonNew } from "@/components/ui/design-system/button-new";
 import dynamicImport from "next/dynamic";
 import type { PediatricsTabData } from "@/components/patient-detail/pediatrics/PediatricsTab";
@@ -251,7 +252,7 @@ interface Props {
   doctors:      { id: string; firstName: string; lastName: string }[];
   /** El doctor logueado. cedulaProfesional es necesaria para el carnet
    *  de implantes (NOM-024 — firma legal del responsable de la cirugía). */
-  currentUser:  { id: string; firstName: string; lastName: string; cedulaProfesional?: string | null };
+  currentUser:  { id: string; firstName: string; lastName: string; cedulaProfesional?: string | null; role?: string };
   specialty:    string;
   treatments:   any[];
   portalUrl?:   string | null;
@@ -656,6 +657,13 @@ export function PatientDetailClient({
     emergencyContactRelation: patient.emergencyContactRelation ?? "",
   });
   const [editSaving, setEditSaving] = useState(false);
+  // Visibilidad por paciente — solo admin la ve y la edita (el server la ignora
+  // para el resto, ver PUT/PATCH de /api/patients/[id]). [] = todos lo ven.
+  const isVisibilityAdmin = currentUser.role === "ADMIN" || currentUser.role === "SUPER_ADMIN";
+  const [editVisibleUserIds, setEditVisibleUserIds] = useState<string[]>(patient.visibleUserIds ?? []);
+  useEffect(() => {
+    setEditVisibleUserIds(patient.visibleUserIds ?? []);
+  }, [patient.visibleUserIds]);
   const [portalLink, setPortalLink] = useState<string | null>(portalUrl ?? null);
   const [generatingPortal, setGeneratingPortal] = useState(false);
   // Radiografias state
@@ -1109,6 +1117,19 @@ export function PatientDetailClient({
           onReschedule={openNewAppointmentForPatient}
           onCharge={openChargeShortcut}
         />
+      )}
+
+      {/* Visibilidad restringida — señal discreta SOLO para admin (el resto del
+          equipo no debería ni enterarse de que la lista existe; quien no está
+          en ella nunca llega a esta página). El conteo excluye a los admins,
+          que ven todo sin estar en la lista. */}
+      {isVisibilityAdmin && editVisibleUserIds.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2 px-1 -mt-2 mb-2">
+          <BadgeNew tone="warning" dot>
+            <Lock size={11} style={{ marginRight: 4 }} />
+            {t("shell.patientVisibility.restrictedBadge", { count: editVisibleUserIds.length })}
+          </BadgeNew>
+        </div>
       )}
 
       {/* Pediatrics — chips informativos cuando aplica el módulo (spec §1.3) */}
@@ -3091,7 +3112,17 @@ export function PatientDetailClient({
               />
             </div>
           </div>
-          <DialogFooter>
+          <DialogFooter style={{ justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
+            {/* Cambiar la visibilidad después de creado es SOLO de admin (el
+                server lo vuelve a validar en el PUT). */}
+            {isVisibilityAdmin ? (
+              <PatientVisibilityPicker
+                value={editVisibleUserIds}
+                onChange={setEditVisibleUserIds}
+                disabled={editSaving}
+              />
+            ) : <span />}
+            <div style={{ display: "flex", gap: 8, marginLeft: "auto" }}>
             <Button variant="outline" onClick={() => setShowEdit(false)}>{t("common.cancel")}</Button>
             <Button disabled={editSaving || !editForm.firstName || !editForm.lastName} onClick={async () => {
               setEditSaving(true);
@@ -3104,6 +3135,8 @@ export function PatientDetailClient({
                     curp:        editForm.curpStatus === "COMPLETE" ? editForm.curp.toUpperCase() : null,
                     curpStatus:  editForm.curpStatus,
                     passportNo:  editForm.curpStatus === "FOREIGN" ? editForm.passportNo : null,
+                    // Solo el admin la manda; el server igual la ignora al resto.
+                    ...(isVisibilityAdmin && { visibleUserIds: editVisibleUserIds }),
                   }),
                 });
                 if (!res.ok) throw new Error((await res.json()).error);
@@ -3113,6 +3146,7 @@ export function PatientDetailClient({
               } catch (err: any) { toast.error(err.message ?? t("patients.edit.saveError")); }
               finally { setEditSaving(false); }
             }}>{editSaving ? t("common.saving") : t("common.saveChanges")}</Button>
+            </div>
           </DialogFooter>
         </DialogContent>
       </Dialog>

@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
+import { patientVisibilityFilter } from "@/lib/patient-visibility";
 
 export const dynamic = "force-dynamic";
 
@@ -121,9 +122,14 @@ export async function GET(req: NextRequest) {
   const now = new Date();
   const thresholdAgo = new Date(now.getTime() - threshold * 60_000);
 
+  // Visibilidad por paciente: este listado expone nombres de pacientes que
+  // esperan AHORA. Va anidado bajo `appointment` (el timeline no relaciona con
+  // patient directo). null = admin, no filtra.
+  const vis = patientVisibilityFilter({ userId: user.id, role: user.role, clinicId });
+
   const longWaits = await prisma.appointmentTimeline.findMany({
     where: {
-      appointment: { clinicId },
+      appointment: { clinicId, ...(vis ? { patient: vis } : {}) },
       arrivedAt: { lte: thresholdAgo, not: null },
       inChairAt: null,
       consultStartAt: null,

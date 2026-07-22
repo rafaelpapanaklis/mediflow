@@ -3,6 +3,7 @@
 // signed URLs de corta duración (TTL 5 min); NUNCA expone el storageKey.
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthContext } from "@/lib/auth-context";
+import { assertPatientVisible } from "@/lib/patient-visibility";
 import { prisma } from "@/lib/prisma";
 import { signMaybeUrls } from "@/lib/storage";
 
@@ -11,6 +12,16 @@ export const dynamic = "force-dynamic";
 export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  // Visibilidad por paciente: sin esto, un usuario fuera de la lista podía leer
+  // los archivos (y sus signed URLs) de un paciente restringido con solo tener
+  // el id. 404 = "para ti no existe".
+  const denied = await assertPatientVisible(params.id, {
+    userId: ctx.userId,
+    role: ctx.role,
+    clinicId: ctx.clinicId,
+  });
+  if (denied) return denied;
 
   // Aislamiento por clínica: solo subidas del paciente que pertenecen a ESTA
   // clínica (el endpoint del paciente las guardó con su clinicId del link).

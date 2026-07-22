@@ -5,6 +5,7 @@ import { z } from "zod";
 import { readActiveClinicCookie } from "@/lib/active-clinic";
 import { logAudit, logMutation, extractAuditMeta } from "@/lib/audit";
 import { hasPermission } from "@/lib/auth/permissions";
+import { relatedPatientVisibilityAnd } from "@/lib/patient-visibility";
 import { getVisiblePatientClinicIds, sharedRecordScope } from "@/lib/branches";
 
 const recordSchema = z.object({
@@ -42,26 +43,38 @@ export async function GET(req: NextRequest) {
   const patientId = searchParams.get("patientId");
   const limit = Math.min(Math.max(parseInt(searchParams.get("limit") ?? "200"), 1), 500);
   const skip  = Math.max(parseInt(searchParams.get("skip") ?? "0"), 0);
-  // MULTI-CLÍNICA · FASE 2 — el expediente se LEE también desde una sede
-  // vinculada, pero SÓLO consultándolo POR PACIENTE.
+  // Visibilidad por paciente. Filtro de RELACIÓN (no un assert) porque `patientId`
+  // es opcional: sin él, esto devolvía los records de TODA la clínica, restringidos
+  // incluidos.
+  const visibility = relatedPatientVisibilityAnd({
+    userId: dbUser.id,
+    role: dbUser.role,
+    clinicId: dbUser.clinicId,
+  });
+  // MULTI-CLÍNICA · FASE 2 — el expediente se LEE también desde una sede vinculada,
+  // pero SÓLO consultándolo POR PACIENTE. Sin `patientId` el volcado (hasta 500) se
+  // queda estrictamente en la sede activa: ampliarlo exfiltraría la base clínica de
+  // la vecina, sin gate por paciente ni bitácora.
   //
-  // ⚠️ Sin `patientId` este endpoint vuelca el expediente COMPLETO de la
-  // clínica (hasta 500 por página). Ampliar ESE volcado equivaldría a
-  // exfiltrar la base clínica entera de la sucursal vecina: sin gate por
-  // paciente y, encima, sin bitácora — el logAudit de abajo sólo corre cuando
-  // hay patientId. Así que el volcado se queda estrictamente en la sede activa.
-  //
-  // `sharedRecordScope` devuelve un OR cuando hay sedes ajenas; se compone con
-  // AND para no pisar el OR de `isPrivate` del findMany (dos claves OR en el
-  // mismo objeto se sobreescriben).
+  // sharedRecordScope (scope de sede/s) + patientId + visibilidad van TODOS en UN
+  // solo AND: dos claves `AND` en el mismo objeto se pisan, y el OR de `isPrivate`
+  // del findMany ya ocupa `where.OR`.
   const visibleClinicIds = patientId
     ? await getVisiblePatientClinicIds(dbUser.clinicId)
     : [dbUser.clinicId];
-  const where: any = patientId
-    ? { AND: [sharedRecordScope(dbUser.clinicId, visibleClinicIds), { patientId }] }
-    : { clinicId: dbUser.clinicId };
+  const recordAnd: any[] = [
+    ...(patientId
+      ? [sharedRecordScope(dbUser.clinicId, visibleClinicIds), { patientId }]
+      : []),
+    ...visibility,
+  ];
+  const where: any = patientId ? {} : { clinicId: dbUser.clinicId };
   const records = await prisma.medicalRecord.findMany({
-    where: { ...where, OR: [{ isPrivate: false }, { isPrivate: true, doctorId: dbUser.id }] },
+    where: {
+      ...where,
+      OR: [{ isPrivate: false }, { isPrivate: true, doctorId: dbUser.id }],
+      ...(recordAnd.length ? { AND: recordAnd } : {}),
+    },
     include: { doctor: { select: { id: true, firstName: true, lastName: true } } },
     orderBy: { visitDate: "desc" },
     take: limit,

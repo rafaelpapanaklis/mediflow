@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getAuthContext } from "@/lib/auth-context";
 import { prisma } from "@/lib/prisma";
+import { patientVisibilityAnd, relatedPatientVisibilityAnd } from "@/lib/patient-visibility";
 
 export const dynamic = "force-dynamic";
 
@@ -9,6 +10,15 @@ export async function GET() {
     const ctx = await getAuthContext();
     if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     const { clinicId } = ctx;
+
+    // Visibilidad por paciente: este endpoint NO tiene gate de rol (lo ven
+    // doctores y recepción) y lista nombres de pacientes en el widget "Hoy",
+    // próximos 7 días y pacientes recientes. Filtramos SOLO los queries que
+    // exponen identidad; los contadores/aggregates siguen siendo de toda la
+    // clínica. Va en AND; vacío/[] para admins = sin filtro.
+    const viewer = { userId: ctx.userId, role: ctx.role, clinicId };
+    const patientVis = patientVisibilityAnd(viewer);
+    const relatedVis = relatedPatientVisibilityAnd(viewer);
 
     const now            = new Date();
     const today          = new Date(now); today.setHours(0,0,0,0);
@@ -23,7 +33,7 @@ export async function GET() {
     const [todayAppts, monthAppts, prevMonthAppts, monthPatients, prevMonthPatients, monthRevenue, prevMonthRevenue] =
       await Promise.all([
         prisma.appointment.findMany({
-          where:   { clinicId, startsAt:{ gte:today, lte:todayEnd } },
+          where:   { clinicId, startsAt:{ gte:today, lte:todayEnd }, ...(relatedVis.length?{AND:relatedVis}:{}) },
           include: { patient:{select:{id:true,firstName:true,lastName:true,phone:true}},
                      doctor:{select:{id:true,firstName:true,lastName:true,color:true}} },
           orderBy: { startsAt:"asc" },
@@ -42,7 +52,7 @@ export async function GET() {
         prisma.invoice.aggregate({ where:{ clinicId, status:{in:["PENDING","PARTIAL"]} }, _sum:{balance:true}, _count:true }),
         prisma.appointment.count({ where:{ clinicId, startsAt:{gte:today}, status:"PENDING" } }),
         prisma.appointment.findMany({
-          where:   { clinicId, startsAt:{gt:todayEnd,lte:nextSevenDays}, status:{not:"CANCELLED"} },
+          where:   { clinicId, startsAt:{gt:todayEnd,lte:nextSevenDays}, status:{not:"CANCELLED"}, ...(relatedVis.length?{AND:relatedVis}:{}) },
           include: { patient:{select:{firstName:true,lastName:true}}, doctor:{select:{firstName:true,lastName:true,color:true}} },
           orderBy: { startsAt:"asc" }, take:20,
         }),
@@ -51,7 +61,7 @@ export async function GET() {
           select:  {id:true,name:true,quantity:true,minQuantity:true,unit:true,emoji:true},
         }),
         prisma.patient.findMany({
-          where:   { clinicId }, orderBy:{createdAt:"desc"}, take:5,
+          where:   { clinicId, ...(patientVis.length?{AND:patientVis}:{}) }, orderBy:{createdAt:"desc"}, take:5,
           select:  {id:true,firstName:true,lastName:true,createdAt:true},
         }),
         prisma.appointment.groupBy({

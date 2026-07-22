@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import type { Prisma } from "@prisma/client";
 import { getAuthContext } from "@/lib/auth-context";
 import { prisma } from "@/lib/prisma";
+import { assertPatientVisible } from "@/lib/patient-visibility";
 import type { DentalLabOrderDTO } from "@/lib/laboratorios/types";
 import { canTransition, isTerminalLabStatus } from "@/lib/laboratorios/orders-shared";
 
@@ -80,6 +81,13 @@ export async function GET(_req: NextRequest, { params }: { params: { orderId: st
   });
   if (!order) return NextResponse.json({ error: "Orden no encontrada" }, { status: 404 });
 
+  // Visibilidad por paciente: la orden expone el nombre del paciente; no
+  // mostrarla a quien no puede verlo (solo si está ligada a un paciente real).
+  if (order.patientId) {
+    const denied = await assertPatientVisible(order.patientId, { userId: ctx.userId, role: ctx.role, clinicId: ctx.clinicId });
+    if (denied) return denied;
+  }
+
   return NextResponse.json(toDentalLabOrderDTO(order));
 }
 
@@ -93,9 +101,16 @@ export async function PATCH(_req: NextRequest, { params }: { params: { orderId: 
 
   const order = await prisma.dentalLabOrder.findFirst({
     where: { id: params.orderId, clinicId: ctx.clinicId },
-    select: { id: true, status: true },
+    select: { id: true, status: true, patientId: true },
   });
   if (!order) return NextResponse.json({ error: "Orden no encontrada" }, { status: 404 });
+
+  // Visibilidad por paciente: no permitir cancelar la orden de un paciente que
+  // este usuario no puede ver (solo si está ligada a un paciente real).
+  if (order.patientId) {
+    const denied = await assertPatientVisible(order.patientId, { userId: ctx.userId, role: ctx.role, clinicId: ctx.clinicId });
+    if (denied) return denied;
+  }
 
   if (isTerminalLabStatus(order.status) || !canTransition(order.status, "CANCELADA")) {
     return NextResponse.json(

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthContext, requireAdmin } from "@/lib/auth-context";
+import { assertPatientVisible } from "@/lib/patient-visibility";
 import { prisma } from "@/lib/prisma";
 import { rateLimit } from "@/lib/rate-limit";
 import { logMutation } from "@/lib/audit";
@@ -232,14 +233,41 @@ export async function GET(req: NextRequest) {
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  // ?invoiceId= devuelve el CFDI de una factura puntual (lo usa el modal para
-  // resolver el cfdiId de una factura ya timbrada y ofrecer descarga PDF/XML).
   const invoiceId = req.nextUrl.searchParams.get("invoiceId");
 
+  // ?invoiceId= devuelve el CFDI de UNA factura (lo usa el modal para resolver el
+  // cfdiId de una factura timbrada). Permitido a cualquiera que PUEDA VER al
+  // paciente de esa factura — misma regla que abrir la factura — para no romper el
+  // flujo de recepción con pacientes NO restringidos (regresión con '{}').
+  if (invoiceId) {
+    const invoice = await prisma.invoice.findFirst({
+      where:  { id: invoiceId, clinicId: ctx.clinicId },
+      select: { patientId: true },
+    });
+    if (!invoice) return NextResponse.json([]);
+    if (invoice.patientId) {
+      const denied = await assertPatientVisible(invoice.patientId, {
+        userId: ctx.userId, role: ctx.role, clinicId: ctx.clinicId,
+      });
+      if (denied) return denied;
+    }
+    const cfdis = await prisma.cfdiRecord.findMany({
+      where:   { clinicId: ctx.clinicId, invoiceId },
+      orderBy: { createdAt: "desc" },
+      take:    1,
+    });
+    return NextResponse.json(cfdis);
+  }
+
+  // Listado completo (sin invoiceId): cada CfdiRecord lleva receptor (RFC + razón
+  // social = identidad fiscal) y el modelo NO tiene relación con Patient para
+  // filtrar registro a registro → el padrón fiscal completo es admin-only.
+  const err = requireAdmin(ctx);
+  if (err) return err;
   const cfdis = await prisma.cfdiRecord.findMany({
-    where:   { clinicId: ctx.clinicId, ...(invoiceId ? { invoiceId } : {}) },
+    where:   { clinicId: ctx.clinicId },
     orderBy: { createdAt: "desc" },
-    take:    invoiceId ? 1 : 50,
+    take:    50,
   });
   return NextResponse.json(cfdis);
 }

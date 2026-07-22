@@ -6,6 +6,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { ArrowLeft, FileText } from "lucide-react";
 import { getCurrentUser } from "@/lib/auth";
+import { patientVisibilityAnd } from "@/lib/patient-visibility";
 import { prisma } from "@/lib/prisma";
 import { canAccessModule } from "@/lib/marketplace/access-control";
 import { ENDODONTICS_MODULE_KEY } from "@/lib/specialties/keys";
@@ -23,6 +24,7 @@ export default async function EndodonticsPatientDetailPage({
   searchParams?: { tooth?: string };
 }) {
   const user = await getCurrentUser();
+  const viewer = { userId: user.id, role: user.role, clinicId: user.clinicId };
   if (user.clinic.category !== "DENTAL") redirect("/dashboard");
   const access = await canAccessModule(user.clinicId, ENDODONTICS_MODULE_KEY);
   if (!access.hasAccess) {
@@ -30,7 +32,13 @@ export default async function EndodonticsPatientDetailPage({
   }
 
   const patient = await prisma.patient.findFirst({
-    where: { id: params.patientId, clinicId: user.clinicId, deletedAt: null },
+    where: {
+      id: params.patientId,
+      clinicId: user.clinicId,
+      deletedAt: null,
+      // Visibilidad por paciente: no listar/mostrar pacientes restringidos a quien no está en su visibleUserIds.
+      AND: [...patientVisibilityAnd(viewer)],
+    },
     select: { id: true, firstName: true, lastName: true },
   });
   if (!patient) redirect("/dashboard/specialties/endodontics");
@@ -47,7 +55,7 @@ export default async function EndodonticsPatientDetailPage({
         clinicId: user.clinicId,
         patientId: patient.id,
         toothFdi: initialFdi,
-      })
+      }, viewer)
     : null;
 
   const fullName = `${patient.firstName} ${patient.lastName}`.trim();

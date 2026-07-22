@@ -1,6 +1,7 @@
 // Pediatrics — loader agregado para el panel de la especialidad. Spec §7.
 
 import { prisma } from "@/lib/prisma";
+import { patientVisibilityAnd, type VisibilityViewer } from "@/lib/patient-visibility";
 import { calculateAge } from "@/lib/pediatrics/age";
 import { DEFAULT_PEDIATRICS_CUTOFF_YEARS } from "@/lib/pediatrics/permissions";
 import type { CambraCategory } from "@/lib/pediatrics/cambra";
@@ -34,6 +35,7 @@ export interface LoadPediatricPatientsResult {
 
 export async function loadPediatricPatients(
   clinicId: string,
+  viewer: VisibilityViewer,
   cutoffYears: number = DEFAULT_PEDIATRICS_CUTOFF_YEARS,
 ): Promise<LoadPediatricPatientsResult> {
   const now = new Date();
@@ -45,6 +47,8 @@ export async function loadPediatricPatients(
       clinicId,
       deletedAt: null,
       dob: { not: null, gt: cutoffDate },
+      // Visibilidad por paciente: query directo sobre la tabla `patient`.
+      AND: patientVisibilityAnd(viewer),
     },
     select: {
       id: true,

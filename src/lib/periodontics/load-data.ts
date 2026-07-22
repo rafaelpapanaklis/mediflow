@@ -9,6 +9,7 @@
 // validado por el caller — esta función solo carga datos.
 
 import { prisma } from "@/lib/prisma";
+import { patientVisibilityAnd, type VisibilityViewer } from "@/lib/patient-visibility";
 import { computePerioMetrics } from "./periodontogram-math";
 import { MAINTENANCE_REMINDER_TYPES } from "./maintenance-reminders";
 import type { Site, ToothLevel } from "./schemas";
@@ -30,9 +31,16 @@ export type PerioTabData = Omit<PeriodonticsClientProps, never> & {
  */
 export async function loadPerioData(
   input: LoadPerioDataInput,
+  viewer: VisibilityViewer,
 ): Promise<PerioTabData | null> {
   const patient = await prisma.patient.findFirst({
-    where: { id: input.patientId, clinicId: input.clinicId, deletedAt: null },
+    where: {
+      id: input.patientId,
+      clinicId: input.clinicId,
+      deletedAt: null,
+      // Visibilidad por paciente: un paciente restringido no existe para quien no está en su visibleUserIds.
+      AND: [...patientVisibilityAnd(viewer)],
+    },
     select: {
       id: true,
       firstName: true,

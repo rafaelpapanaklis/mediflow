@@ -1,6 +1,7 @@
 export const dynamic = "force-dynamic";
 import type { Metadata } from "next";
 import { getCurrentUser } from "@/lib/auth";
+import { patientVisibilityAnd, relatedPatientVisibilityAnd } from "@/lib/patient-visibility";
 import { prisma } from "@/lib/prisma";
 import { TreatmentsClient } from "./treatments-client";
 
@@ -8,11 +9,14 @@ export const metadata: Metadata = { title: "Tratamientos — DaleControl" };
 
 export default async function TreatmentsPage() {
   const user = await getCurrentUser();
+  const viewer = { userId: user.id, role: user.role, clinicId: user.clinicId };
 
   const treatments = await prisma.treatmentPlan.findMany({
     where: {
       clinicId: user.clinicId,
       ...(user.role === "DOCTOR" ? { doctorId: user.id } : {}),
+      // Visibilidad por paciente: no listar/mostrar pacientes restringidos a quien no está en su visibleUserIds.
+      AND: [...relatedPatientVisibilityAnd(viewer)],
     },
     include: {
       patient:  { select: { id: true, firstName: true, lastName: true, phone: true } },
@@ -27,6 +31,8 @@ export default async function TreatmentsPage() {
       clinicId: user.clinicId,
       status:   "ACTIVE",
       ...(user.role === "DOCTOR" ? { primaryDoctorId: user.id } : {}),
+      // Visibilidad por paciente: no listar/mostrar pacientes restringidos a quien no está en su visibleUserIds.
+      AND: [...patientVisibilityAnd(viewer)],
     },
     select: { id: true, firstName: true, lastName: true },
     orderBy: { firstName: "asc" },

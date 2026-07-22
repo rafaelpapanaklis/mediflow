@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
+import { assertPatientVisible } from "@/lib/patient-visibility";
 import { prisma } from "@/lib/prisma";
 import { getVisiblePatientClinicIds, clinicScopeFilter, sharedRecordScope } from "@/lib/branches";
 
@@ -49,19 +50,22 @@ export async function GET(req: NextRequest, { params }: Params) {
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
   }
 
-  // MULTI-CLÍNICA · FASE 2 — la historia se puede LEER desde una sede
-  // vinculada. `clinicalScope` es el filtro ampliado que usan las fuentes
-  // CLÍNICAS de abajo; con el flag apagado equivale a user.clinicId pelado.
+  // MULTI-CLÍNICA · FASE 2 — la historia se puede LEER desde una sede vinculada.
+  // clinicalScope es el filtro ampliado que usan las fuentes CLÍNICAS de abajo;
+  // con el flag apagado equivale a user.clinicId pelado.
   const visibleClinicIds = await getVisiblePatientClinicIds(user.clinicId);
   const clinicalScope = clinicScopeFilter(visibleClinicIds);
 
-  // Validar que el paciente pertenece a la clínica del usuario (o a una sede
-  // vinculada con ella).
-  const patient = await prisma.patient.findFirst({
-    where: { id: params.id, clinicId: clinicalScope },
-    select: { id: true },
+  // Validar que el paciente pertenece a la clínica del usuario Y que este usuario
+  // puede verlo (visibilidad por paciente). Mismo 404. El assert scopea a
+  // user.clinicId (= clinicalScope con el flag apagado) y cubre existencia, así que
+  // sustituye al findFirst que traía main.
+  const denied = await assertPatientVisible(params.id, {
+    userId: user.id,
+    role: user.role,
+    clinicId: user.clinicId,
   });
-  if (!patient) return NextResponse.json({ error: "patient_not_found" }, { status: 404 });
+  if (denied) return denied;
 
   const sp = req.nextUrl.searchParams;
   const fromParam = sp.get("from");

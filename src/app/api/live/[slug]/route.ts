@@ -131,7 +131,7 @@ export async function GET(req: NextRequest, { params }: Params) {
               type: true,
               status: true,
               notes: true,
-              patient: { select: { firstName: true, lastName: true } },
+              patient: { select: { firstName: true, lastName: true, visibleUserIds: true } },
               doctor: { select: { firstName: true, lastName: true } },
             },
           }),
@@ -144,7 +144,7 @@ export async function GET(req: NextRequest, { params }: Params) {
           type: string;
           status: string;
           notes: string | null;
-          patient: { firstName: string; lastName: string } | null;
+          patient: { firstName: string; lastName: string; visibleUserIds?: string[] } | null;
           doctor: { firstName: string; lastName: string } | null;
         }>,
       ),
@@ -175,11 +175,14 @@ export async function GET(req: NextRequest, { params }: Params) {
       .filter((a) => a.resourceId)
       .map((a) => {
         const fullName = `${a.patient?.firstName ?? ""} ${a.patient?.lastName ?? ""}`.trim() || "Paciente";
+        // Visibilidad por paciente: un paciente RESTRINGIDO (visibleUserIds no vacío)
+        // NUNCA muestra nombre ni iniciales en el tablero público, ni con showFull.
+        const restricted = (a.patient?.visibleUserIds?.length ?? 0) > 0;
         return {
           id: a.id,
           resourceId: a.resourceId,
-          patient: showFull ? fullName : maskInitials(fullName),
-          ...(showFull ? { patientFull: fullName } : {}),
+          patient: restricted ? "Paciente privado" : (showFull ? fullName : maskInitials(fullName)),
+          ...(!restricted && showFull ? { patientFull: fullName } : {}),
           treatment: resolveTreatment(a),
           doctor: `${a.doctor?.firstName ?? ""} ${a.doctor?.lastName ?? ""}`.trim() || "—",
           start: a.startsAt.toISOString(),
@@ -197,9 +200,10 @@ export async function GET(req: NextRequest, { params }: Params) {
       })
       .map((a) => {
         const fullName = `${a.patient?.firstName ?? ""} ${a.patient?.lastName ?? ""}`.trim() || "Paciente";
+        const restricted = (a.patient?.visibleUserIds?.length ?? 0) > 0;
         return {
           id: a.id,
-          patient: showFull ? fullName : maskInitials(fullName),
+          patient: restricted ? "Paciente privado" : (showFull ? fullName : maskInitials(fullName)),
           treatment: resolveTreatment(a),
           doctor: `${a.doctor?.firstName ?? ""} ${a.doctor?.lastName ?? ""}`.trim() || "—",
           checkedInAt: a.checkedInAt?.toISOString() ?? null,

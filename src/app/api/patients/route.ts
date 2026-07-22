@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { getPatientVisibility } from "@/lib/branches";
 import { getPlanLimits } from "@/lib/plans";
 import { validateCurpRecord, type CurpStatusValue } from "@/lib/validators/curp";
+import { normalizeVisibleUserIds } from "@/lib/patient-visibility";
 import { logMutation } from "@/lib/audit";
 import { revalidateAfter } from "@/lib/cache/revalidate";
 
@@ -94,9 +95,10 @@ async function v2Handler(
   // COMPLETO en cada campo, así que ninguna columna sola contenía la frase entera
   // (pero "Perez Lopez" sí). Ahora cada token debe matchear en ALGÚN campo (AND de
   // ORs) → el orden da igual ("Lopez Juan" también encuentra). Se usa where.AND y
-  // NO where.OR a propósito: así no se pisa el OR de visibilidad que
-  // buildPatientWhere fija a los doctores (solo ven sus pacientes); Prisma combina
-  // clinicId + (OR visibilidad) + (AND tokens) todos con AND.
+  // NO where.OR a propósito: así no se pisa el scope de visibilidad que
+  // buildPatientWhere fija en where.AND (doctores + visibleUserIds); el spread de
+  // `prev` de abajo lo conserva. Prisma combina clinicId + (AND scope) +
+  // (AND tokens) todos con AND.
   const tokens = search.split(/\s+/).filter(Boolean);
   if (tokens.length) {
     const prev = Array.isArray(where.AND) ? where.AND : where.AND ? [where.AND] : [];
@@ -544,6 +546,21 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: curpCheck.error }, { status: 400 });
   }
 
+  // Visibilidad por paciente: el creador elige quién del equipo lo ve.
+  // Omitido / [] = todos (default histórico). normalizeVisibleUserIds valida
+  // que cada id sea usuario ACTIVO de ESTA clínica, quita a los admins (la
+  // regla ya los cubre) y auto-incluye al creador si no es admin.
+  let visibleUserIds: string[];
+  try {
+    visibleUserIds = await normalizeVisibleUserIds(body.visibleUserIds, {
+      userId: ctx.userId,
+      role: ctx.role,
+      clinicId: ctx.clinicId,
+    });
+  } catch (err: any) {
+    return NextResponse.json({ error: err?.message ?? "visibleUserIds inválido" }, { status: 400 });
+  }
+
   const patient = await prisma.patient.create({
     data: {
       clinicId: ctx.clinicId,
@@ -574,6 +591,7 @@ export async function POST(req: NextRequest) {
       // CRM — fuente de adquisición + etapa de ciclo de vida.
       source:         body.source ? String(body.source).trim() : null,
       lifecycleStage: body.lifecycleStage === "prospect" ? "prospect" : "patient",
+      visibleUserIds,
     },
   });
 
@@ -584,7 +602,16 @@ export async function POST(req: NextRequest) {
     entityType: "patient",
     entityId: patient.id,
     action: "create",
-    after: { firstName: patient.firstName, lastName: patient.lastName, patientNumber: patient.patientNumber },
+    after: {
+      firstName: patient.firstName,
+      lastName: patient.lastName,
+      patientNumber: patient.patientNumber,
+      // Solo cuando queda restringido: auditamos el CONTEO, no la lista de userIds.
+      // No grabar la lista de "quién puede verlo" en el AuditLog — defensa en
+      // profundidad (el GET de /api/audit-log ya va gateado por visibilidad, pero
+      // la irónica fuga era que la auditoría de la feature filtraba la feature).
+      ...(visibleUserIds.length > 0 && { visibleUserIdsCount: visibleUserIds.length }),
+    },
   });
 
   revalidateAfter("patients");

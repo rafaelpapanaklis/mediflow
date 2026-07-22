@@ -190,6 +190,10 @@ export async function listLabOrders(
   const ctx = await getAuthContext();
   if (!ctx) return fail("No autenticado");
 
+  // Visibilidad por paciente: el pdfUrl de cada orden embebe nombre+dob del paciente.
+  const guard = await guardPatient({ ctx, patientId: parsed.data.patientId });
+  if (isFailure(guard)) return fail(guard.error);
+
   const rows = await prisma.labOrder.findMany({
     where: {
       clinicId: ctx.clinicId,

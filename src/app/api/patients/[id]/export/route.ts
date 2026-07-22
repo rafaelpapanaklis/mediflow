@@ -3,6 +3,7 @@ import { getAuthContext } from "@/lib/auth-context";
 import { prisma } from "@/lib/prisma";
 import { signMaybeUrls } from "@/lib/storage";
 import { logMutation } from "@/lib/audit";
+import { assertPatientVisible } from "@/lib/patient-visibility";
 
 export const dynamic = "force-dynamic";
 
@@ -25,6 +26,10 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
   if (!ctx.isAdmin) {
     return NextResponse.json({ error: "Solo administradores pueden exportar" }, { status: 403 });
   }
+
+  // Visibilidad por paciente: 404 si el viewer no puede ver este paciente.
+  const denied = await assertPatientVisible(params.id, { userId: ctx.userId, role: ctx.role, clinicId: ctx.clinicId });
+  if (denied) return denied;
 
   const patient = await prisma.patient.findFirst({
     where: { id: params.id, clinicId: ctx.clinicId },

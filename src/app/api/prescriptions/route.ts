@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { logMutation } from "@/lib/audit";
 import { hasPermission } from "@/lib/auth/permissions";
+import { assertPatientVisible } from "@/lib/patient-visibility";
 
 export const dynamic = "force-dynamic";
 
@@ -40,6 +41,10 @@ export async function GET(req: NextRequest) {
   }
   const patientId = req.nextUrl.searchParams.get("patientId");
   if (!patientId) return NextResponse.json({ error: "patientId required" }, { status: 400 });
+
+  // Visibilidad por paciente: lee un solo paciente por id → 404 si no lo puede ver.
+  const denied = await assertPatientVisible(patientId, { userId: ctx.userId, role: ctx.role, clinicId: ctx.clinicId });
+  if (denied) return denied;
 
   // NOM-004 conservación / NOM-024 §7: las recetas ANULADAS (status=VOIDED) se
   // conservan y se MUESTRAN marcadas — nunca se ocultan. Devolvemos todas las del

@@ -3,6 +3,7 @@ import { getAuthContext } from "@/lib/auth-context";
 import { rateLimit } from "@/lib/rate-limit";
 import { prisma } from "@/lib/prisma";
 import { dateISOInTz, timeHHMMInTz } from "@/lib/agenda/legacy-helpers";
+import { patientVisibilityAnd, relatedPatientVisibilityAnd } from "@/lib/patient-visibility";
 
 export const dynamic = "force-dynamic";
 
@@ -26,6 +27,14 @@ export async function GET(req: NextRequest) {
   });
   const tz = clinicTz?.timezone ?? "America/Mexico_City";
 
+  // Visibilidad por paciente: la búsqueda global es una puerta lateral que
+  // listaba pacientes/citas/facturas de TODA la clínica, restringidos incluidos.
+  // Va en AND (nunca en OR) porque el OR de cada query ya lo ocupa el texto —
+  // meterlo ahí lo volvería permisivo. Vacío para admins (no filtra).
+  const viewer = { userId: ctx.userId, role: ctx.role, clinicId: ctx.clinicId };
+  const patientVis = patientVisibilityAnd(viewer);
+  const relatedVis = relatedPatientVisibilityAnd(viewer);
+
   const [patients, appointments, invoices] = await Promise.all([
     prisma.patient.findMany({
       where: {
@@ -36,6 +45,7 @@ export async function GET(req: NextRequest) {
           { phone: { contains: q } },
           { email: ci },
         ],
+        ...(patientVis.length ? { AND: patientVis } : {}),
       },
       select: { id: true, firstName: true, lastName: true, patientNumber: true, phone: true },
       take: 5,
@@ -48,6 +58,7 @@ export async function GET(req: NextRequest) {
           { patient: { firstName: ci } },
           { patient: { lastName: ci } },
         ],
+        ...(relatedVis.length ? { AND: relatedVis } : {}),
       },
       select: {
         id: true, startsAt: true, status: true,
@@ -65,6 +76,7 @@ export async function GET(req: NextRequest) {
           { patient: { firstName: ci } },
           { patient: { lastName: ci } },
         ],
+        ...(relatedVis.length ? { AND: relatedVis } : {}),
       },
       select: {
         id: true, invoiceNumber: true, total: true, status: true, createdAt: true,

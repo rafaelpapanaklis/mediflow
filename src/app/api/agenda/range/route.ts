@@ -91,6 +91,8 @@ export async function GET(req: Request) {
       doctorIds: doctorIds.length > 0 ? doctorIds : undefined,
       resourceIds: resourceIds.length > 0 ? resourceIds : undefined,
       statuses: statuses.length > 0 ? statuses : undefined,
+      // Enmascara pacientes restringidos que este usuario no puede ver.
+      viewer: { userId: session.user.id, role: session.user.role, clinicId: session.clinic.id },
     }),
     fetchActiveDoctors(session.clinic.id, session.clinic.category),
     fetchResources(session.clinic.id),

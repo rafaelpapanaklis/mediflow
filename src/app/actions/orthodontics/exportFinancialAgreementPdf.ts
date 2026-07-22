@@ -2,6 +2,7 @@
 // Orthodontics — action 15/15: exportFinancialAgreementPdf. SPEC §9.2.
 
 import { prisma } from "@/lib/prisma";
+import { canViewPatient } from "@/lib/patient-visibility";
 import { exportFinancialAgreementPdfSchema } from "@/lib/validation/orthodontics";
 import { auditOrtho, getOrthoActionContext } from "./_helpers";
 import { ORTHO_AUDIT_ACTIONS } from "./audit-actions";
@@ -49,6 +50,11 @@ export async function exportFinancialAgreementPdf(
     },
   });
   if (!plan) return fail("Plan de pagos no encontrado");
+
+  // Visibilidad por paciente: no exponer el convenio de un paciente restringido.
+  if (!(await canViewPatient(plan.patientId, { userId: ctx.userId, role: ctx.role, clinicId: ctx.clinicId }))) {
+    return fail("Paciente no encontrado");
+  }
 
   const clinic = await prisma.clinic.findUnique({
     where: { id: ctx.clinicId },

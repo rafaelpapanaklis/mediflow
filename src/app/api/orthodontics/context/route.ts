@@ -8,6 +8,7 @@ import { getAuthContext } from "@/lib/auth-context";
 import { canAccessModule } from "@/lib/marketplace/access-control";
 import { ORTHODONTICS_MODULE_KEY } from "@/lib/specialties/keys";
 import { suggestOrthoAppointmentDuration } from "@/lib/orthodontics/appointment-durations";
+import { assertPatientVisible } from "@/lib/patient-visibility";
 
 export const dynamic = "force-dynamic";
 
@@ -34,6 +35,15 @@ export async function GET(req: NextRequest) {
       appointmentDuration: suggestOrthoAppointmentDuration(reason),
     });
   }
+
+  // Visibilidad por paciente: solo a partir de aquí se lee data del paciente;
+  // sin este gate se expondría su plan ortodóntico con solo su id.
+  const hidden = await assertPatientVisible(patientId, {
+    userId: ctx.userId,
+    role: ctx.role,
+    clinicId: ctx.clinicId,
+  });
+  if (hidden) return hidden;
 
   const patient = await prisma.patient.findFirst({
     where: { id: patientId, clinicId: ctx.clinicId, deletedAt: null },

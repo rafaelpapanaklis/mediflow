@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { getAuthContext } from "@/lib/auth-context";
 import { prisma } from "@/lib/prisma";
+import { assertPatientVisible } from "@/lib/patient-visibility";
 import { logAudit } from "@/lib/audit";
 import { createQuoteWithFolio } from "@/lib/quotes/service";
 import { serializeQuote } from "@/lib/quotes/serialize";
@@ -20,6 +21,14 @@ export async function POST(_req: NextRequest, { params }: Params) {
     include: { items: { orderBy: { sortOrder: "asc" } } },
   });
   if (!src) return NextResponse.json({ error: "Presupuesto no encontrado" }, { status: 404 });
+
+  // Visibilidad: la respuesta (serializeQuote) echa el nombre del paciente. Un
+  // usuario excluido duplicaría el presupuesto y recibiría el nombre del paciente
+  // restringido en el eco.
+  if (src.patientId) {
+    const denied = await assertPatientVisible(src.patientId, { userId: ctx.userId, role: ctx.role, clinicId: ctx.clinicId });
+    if (denied) return denied;
+  }
 
   const items: QuoteItemInput[] = src.items.map((it) => ({
     procedureId: it.procedureId ?? null,

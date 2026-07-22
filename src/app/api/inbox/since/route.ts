@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
 import { readActiveClinicCookie } from "@/lib/active-clinic";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
+import { relatedPatientVisibilityAnd } from "@/lib/patient-visibility";
 
 export const dynamic = "force-dynamic";
 
@@ -131,6 +132,15 @@ export async function GET(req: NextRequest) {
     andClauses.push({
       OR: [{ lastMessageAt: { gt: since } }, { updatedAt: { gt: since } }],
     });
+    // Visibilidad por paciente: mismo filtro que GET /api/inbox/threads. Va en
+    // AND (nunca OR) y con patientNullable para que los hilos sin paciente
+    // (WhatsApp/EMAIL sin ligar) sigan visibles.
+    andClauses.push(
+      ...relatedPatientVisibilityAnd(
+        { userId: dbUser.id, role: dbUser.role, clinicId: dbUser.clinicId },
+        { patientNullable: true },
+      ),
+    );
     where.AND = andClauses;
 
     const threads = await prisma.inboxThread.findMany({
@@ -164,7 +174,18 @@ export async function GET(req: NextRequest) {
     const threadId = sp.get("threadId");
     if (threadId) {
       const owned = await prisma.inboxThread.findFirst({
-        where: { id: threadId, clinicId: dbUser.clinicId },
+        where: {
+          id: threadId,
+          clinicId: dbUser.clinicId,
+          // Visibilidad: si el hilo es de un paciente restringido que este usuario
+          // no puede ver, owned=null y NO se sirven sus mensajes. El listado ya
+          // filtra, pero ?threadId=<restringido>&ts= los entregaba (IDOR).
+          // patientNullable: los hilos sin paciente (WhatsApp/EMAIL) siguen ok.
+          AND: relatedPatientVisibilityAnd(
+            { userId: dbUser.id, role: dbUser.role, clinicId: dbUser.clinicId },
+            { patientNullable: true },
+          ),
+        },
         select: { id: true },
       });
       if (owned) {

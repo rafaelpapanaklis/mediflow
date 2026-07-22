@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { getAuthContext } from "@/lib/auth-context";
+import { assertPatientVisible } from "@/lib/patient-visibility";
 import { prisma } from "@/lib/prisma";
 import { logMutation } from "@/lib/audit";
 
@@ -91,6 +92,11 @@ export async function GET(req: NextRequest) {
     select: { id: true },
   });
   if (!patient) return NextResponse.json({ error: "Paciente no encontrado" }, { status: 404 });
+
+  // Visibilidad por paciente: no exponer las solicitudes ARCO de un paciente
+  // que este usuario no puede ver.
+  const denied = await assertPatientVisible(patientId, { userId: ctx.userId, role: ctx.role, clinicId: ctx.clinicId });
+  if (denied) return denied;
 
   const requests = await prisma.arcoRequest.findMany({
     where: { patientId, clinicId: ctx.clinicId },

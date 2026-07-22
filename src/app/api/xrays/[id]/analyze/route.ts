@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthContext } from "@/lib/auth-context";
 import { prisma } from "@/lib/prisma";
+import { assertPatientVisible } from "@/lib/patient-visibility";
 import { createClient as createAdmin } from "@supabase/supabase-js";
 import { rateLimit } from "@/lib/rate-limit";
 import { BUCKETS, extractStoragePath } from "@/lib/storage";
@@ -176,9 +177,16 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
   // Verifica que el archivo pertenece a la clínica del ctx
   const file = await prisma.patientFile.findFirst({
     where: { id: params.id, clinicId: ctx.clinicId },
-    select: { id: true },
+    select: { id: true, patientId: true },
   });
   if (!file) return NextResponse.json({ error: "Archivo no encontrado" }, { status: 404 });
+
+  // Visibilidad por paciente: no exponer el análisis de la radiografía de un
+  // paciente que este usuario no puede ver.
+  if (file.patientId) {
+    const denied = await assertPatientVisible(file.patientId, { userId: ctx.userId, role: ctx.role, clinicId: ctx.clinicId });
+    if (denied) return denied;
+  }
 
   const existing = await prisma.xrayAnalysis.findUnique({
     where: { fileId: params.id },
@@ -239,6 +247,13 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     where: { id: params.id, clinicId: ctx.clinicId },
   });
   if (!file) return NextResponse.json({ error: "Archivo no encontrado" }, { status: 404 });
+
+  // Visibilidad por paciente: no analizar (ni usar el contexto clínico de) la
+  // radiografía de un paciente que este usuario no puede ver.
+  if (file.patientId) {
+    const denied = await assertPatientVisible(file.patientId, { userId: ctx.userId, role: ctx.role, clinicId: ctx.clinicId });
+    if (denied) return denied;
+  }
 
   if (!file.mimeType?.startsWith("image/")) {
     return NextResponse.json({ error: "Solo se pueden analizar imágenes" }, { status: 400 });

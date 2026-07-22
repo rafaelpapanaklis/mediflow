@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { loadClinicSession } from "@/lib/agenda/api-helpers";
 import { fetchAppointmentsForDay } from "@/lib/agenda/server";
 import { todayInTz } from "@/lib/agenda/time-utils";
+import { relatedPatientVisibilityAnd, type VisibilityViewer } from "@/lib/patient-visibility";
 import type { HomeDoctorData, PatientAlerts } from "@/lib/home/types";
 
 export async function GET() {
@@ -18,11 +19,17 @@ export async function GET() {
         clinicId: session.clinic.id,
         clinicCategory: session.clinic.category,
         doctorIdScope: doctorId,
+        // Enmascara pacientes restringidos que este doctor no puede ver.
+        viewer: { userId: session.user.id, role: session.user.role, clinicId: session.clinic.id },
       }),
       countDraftNotes(session.clinic.id, doctorId),
       countUnanalyzedXrays(session.clinic.id, doctorId),
       countUnsignedConsents(session.clinic.id, doctorId),
-      fetchRecentPatients(session.clinic.id, doctorId),
+      fetchRecentPatients(session.clinic.id, doctorId, {
+        userId: session.user.id,
+        role: session.user.role,
+        clinicId: session.clinic.id,
+      }),
     ]);
 
   // Próxima cita = primera con startsAt >= now y status no terminal
@@ -37,16 +44,23 @@ export async function GET() {
 
   let nextAppointment: HomeDoctorData["nextAppointment"] = null;
   if (nextRaw) {
-    const patient = await prisma.patient.findUnique({
-      where: { id: nextRaw.patient.id },
-      select: {
-        dob: true,
-        gender: true,
-        allergies: true,
-        currentMedications: true,
-        chronicConditions: true,
-      },
-    });
+    // maskedPatient (lib/agenda/server) pone id:null en un paciente restringido
+    // que este doctor NO puede ver. Sin este guard, findUnique({where:{id:null}})
+    // lanza PrismaClientValidationError → 500 del home del doctor. Además evita
+    // filtrar sus alertas (alergias/medicación) en la tarjeta de "próxima cita":
+    // la cita sigue visible, pero enmascarada y sin PHI.
+    const patient = nextRaw.patient.id
+      ? await prisma.patient.findUnique({
+          where: { id: nextRaw.patient.id },
+          select: {
+            dob: true,
+            gender: true,
+            allergies: true,
+            currentMedications: true,
+            chronicConditions: true,
+          },
+        })
+      : null;
 
     const age = patient?.dob ? computeAge(patient.dob) : undefined;
     const gender = mapGender(patient?.gender);
@@ -153,14 +167,17 @@ async function countUnsignedConsents(
   return 0;
 }
 
-async function fetchRecentPatients(clinicId: string, doctorId: string) {
+async function fetchRecentPatients(clinicId: string, doctorId: string, viewer: VisibilityViewer) {
   const since = new Date(Date.now() - 30 * 86_400_000);
   const rows = await prisma.appointment.findMany({
+    // Visibilidad por paciente: cierra el borde en que a este doctor se le quitó
+    // el acceso a un paciente que antes atendió (visibleUserIds sin su id). Admins → [].
     where: {
       clinicId,
       doctorId,
       status: "COMPLETED",
       startsAt: { gte: since },
+      AND: relatedPatientVisibilityAnd(viewer),
     },
     select: {
       startsAt: true,

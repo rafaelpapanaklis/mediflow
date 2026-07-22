@@ -9,6 +9,11 @@ import type {
   PeriodontalStage,
 } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import {
+  patientVisibilityAnd,
+  relatedPatientVisibilityAnd,
+  type VisibilityViewer,
+} from "@/lib/patient-visibility";
 import { classifyPerioPlans } from "./specialty-kpis";
 
 export { classifyPerioPlans };
@@ -48,6 +53,7 @@ export interface LoadPeriodonticPatientsResult {
 
 export async function loadPeriodonticPatients(
   clinicId: string,
+  viewer: VisibilityViewer,
 ): Promise<LoadPeriodonticPatientsResult> {
   const now = new Date();
 
@@ -57,6 +63,8 @@ export async function loadPeriodonticPatients(
         clinicId,
         deletedAt: null,
         periodontalRecords: { some: { deletedAt: null } },
+        // Visibilidad por paciente: query directo sobre la tabla `patient`.
+        AND: patientVisibilityAnd(viewer),
       },
       select: {
         id: true,
@@ -85,7 +93,12 @@ export async function loadPeriodonticPatients(
       take: 500,
     }),
     prisma.periodontalTreatmentPlan.findMany({
-      where: { clinicId, deletedAt: null },
+      where: {
+        clinicId,
+        deletedAt: null,
+        // Visibilidad por paciente: el plan tiene relación `patient`.
+        AND: relatedPatientVisibilityAnd(viewer),
+      },
       select: {
         id: true,
         patientId: true,
@@ -94,7 +107,12 @@ export async function loadPeriodonticPatients(
       },
     }),
     prisma.periodontalRiskAssessment.findMany({
-      where: { clinicId, deletedAt: null },
+      where: {
+        clinicId,
+        deletedAt: null,
+        // Visibilidad por paciente: el risk assessment tiene relación `patient`.
+        AND: relatedPatientVisibilityAnd(viewer),
+      },
       orderBy: { evaluatedAt: "desc" },
       select: { patientId: true, riskCategory: true },
       take: 500,
@@ -104,6 +122,8 @@ export async function loadPeriodonticPatients(
         clinicId,
         deletedAt: null,
         surgeryDate: { gt: now },
+        // Visibilidad por paciente: la cirugía tiene relación `patient`.
+        AND: relatedPatientVisibilityAnd(viewer),
       },
     }),
   ]);

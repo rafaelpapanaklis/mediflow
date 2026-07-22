@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getAuthContext } from "@/lib/auth-context";
 import { prisma } from "@/lib/prisma";
 import { logMutation } from "@/lib/audit";
+import { assertPatientVisible } from "@/lib/patient-visibility";
 import { computeRiskFlags, deriveSyncArrays, mergeAdditive } from "@/lib/health-questionnaire";
 
 export const dynamic = "force-dynamic";
@@ -15,6 +16,10 @@ export const dynamic = "force-dynamic";
 export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  // Visibilidad por paciente: 404 si el viewer no puede ver este paciente.
+  const denied = await assertPatientVisible(params.id, { userId: ctx.userId, role: ctx.role, clinicId: ctx.clinicId });
+  if (denied) return denied;
 
   const patient = await prisma.patient.findFirst({
     where: { id: params.id, clinicId: ctx.clinicId },
@@ -57,6 +62,10 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  // Visibilidad por paciente: 404 si el viewer no puede ver este paciente.
+  const denied = await assertPatientVisible(params.id, { userId: ctx.userId, role: ctx.role, clinicId: ctx.clinicId });
+  if (denied) return denied;
 
   const patient = await prisma.patient.findFirst({
     where: { id: params.id, clinicId: ctx.clinicId },

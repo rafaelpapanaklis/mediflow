@@ -9,6 +9,7 @@ import { canAccessModule } from "@/lib/marketplace/access-control";
 import { IMPLANTS_MODULE_KEY } from "@/lib/implants/permissions";
 import { suggestImplantAppointmentDuration } from "@/lib/implants/appointment-types";
 import { buildImplantSoapPrefill } from "@/lib/implants/soap-prefill";
+import { assertPatientVisible } from "@/lib/patient-visibility";
 
 export const dynamic = "force-dynamic";
 
@@ -31,6 +32,15 @@ export async function GET(req: NextRequest) {
   if (!access.hasAccess) {
     return NextResponse.json({ implants: false });
   }
+
+  // Visibilidad por paciente: sin este gate se leería el contexto de implantes
+  // de un paciente restringido con solo su id.
+  const hidden = await assertPatientVisible(patientId, {
+    userId: ctx.userId,
+    role: ctx.role,
+    clinicId: ctx.clinicId,
+  });
+  if (hidden) return hidden;
 
   const patient = await prisma.patient.findFirst({
     where: { id: patientId, clinicId: ctx.clinicId, deletedAt: null },

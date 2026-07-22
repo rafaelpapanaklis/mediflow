@@ -1,6 +1,7 @@
 // Endodontics — helper compartido que arma ToothCenterViewData. Spec §6.
 
 import { prisma } from "@/lib/prisma";
+import { patientVisibilityAnd, type VisibilityViewer } from "@/lib/patient-visibility";
 import type {
   ToothCenterViewData,
   EndoToothSummary,
@@ -22,13 +23,22 @@ const PERMANENT_FDIS = [
  * Devuelve el centerData para un diente específico de un paciente.
  * Devuelve null si paciente no existe o no pertenece al clinicId.
  */
-export async function loadEndoToothData(args: {
-  clinicId: string;
-  patientId: string;
-  toothFdi: number;
-}): Promise<ToothCenterViewData | null> {
+export async function loadEndoToothData(
+  args: {
+    clinicId: string;
+    patientId: string;
+    toothFdi: number;
+  },
+  viewer: VisibilityViewer,
+): Promise<ToothCenterViewData | null> {
   const patient = await prisma.patient.findFirst({
-    where: { id: args.patientId, clinicId: args.clinicId, deletedAt: null },
+    where: {
+      id: args.patientId,
+      clinicId: args.clinicId,
+      deletedAt: null,
+      // Visibilidad por paciente: un paciente restringido no existe para quien no está en su visibleUserIds.
+      AND: [...patientVisibilityAnd(viewer)],
+    },
     select: { id: true, firstName: true, lastName: true },
   });
   if (!patient) return null;

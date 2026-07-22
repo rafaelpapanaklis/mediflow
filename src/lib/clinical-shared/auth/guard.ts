@@ -6,6 +6,7 @@
 import { prisma } from "@/lib/prisma";
 import type { AuthContext } from "@/lib/auth-context";
 import { fail, ok, type ActionResult } from "@/lib/clinical-shared/result";
+import { canSeePatient } from "@/lib/patient-visibility";
 
 export type ClinicalShareModule =
   | "pediatrics"
@@ -30,13 +31,27 @@ export async function guardPatient(args: {
   }
   const patient = await prisma.patient.findUnique({
     where: { id: args.patientId },
-    select: { id: true, clinicId: true, deletedAt: true },
+    select: { id: true, clinicId: true, deletedAt: true, visibleUserIds: true },
   });
   if (!patient || patient.deletedAt) {
     return fail("Paciente no encontrado");
   }
   if (patient.clinicId !== args.ctx.clinicId) {
     return fail("Sin acceso a este paciente");
+  }
+  // Visibilidad por paciente (visibleUserIds, ver @/lib/patient-visibility): si el
+  // paciente está restringido y este usuario NO está en la lista (ni es admin),
+  // para él el paciente NO existe. Mismo mensaje que "no encontrado" — jamás
+  // revelar existencia. Centralizarlo aquí cierra de un tiro TODOS los callers de
+  // guardPatient: fotos clínicas (ficha v3), export-module, share-links,
+  // reminders, referrals, lab-orders — sin un assert por cada uno.
+  if (
+    !canSeePatient(
+      { userId: args.ctx.userId, role: args.ctx.role, clinicId: args.ctx.clinicId },
+      (patient as { visibleUserIds?: string[] }).visibleUserIds,
+    )
+  ) {
+    return fail("Paciente no encontrado");
   }
   return ok({ id: patient.id, clinicId: patient.clinicId });
 }

@@ -4,6 +4,7 @@ import { createElement } from "react";
 import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
+import { assertPatientVisible } from "@/lib/patient-visibility";
 import {
   ClinicalNoteDocument,
   type ClinicalNoteDxRow,
@@ -31,6 +32,7 @@ export async function GET(_req: NextRequest, { params }: Params) {
     where: { id: params.id, clinicId: user.clinicId },
     select: {
       id: true,
+      patientId: true,
       visitDate: true,
       subjective: true,
       objective: true,
@@ -54,6 +56,11 @@ export async function GET(_req: NextRequest, { params }: Params) {
   if (!record) {
     return NextResponse.json({ error: "not_found" }, { status: 404 });
   }
+
+  // Visibilidad por paciente: no generar el PDF de la nota clínica (SOAP +
+  // datos del paciente) para quien no puede ver a ese paciente.
+  const visDenied = await assertPatientVisible(record.patientId, { userId: user.id, role: user.role, clinicId: user.clinicId });
+  if (visDenied) return visDenied;
 
   const sd = (record.specialtyData ?? {}) as {
     status?: "DRAFT" | "SIGNED";

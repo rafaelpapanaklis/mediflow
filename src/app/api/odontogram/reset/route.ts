@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { extractAuditMeta } from "@/lib/audit";
 import { getDbUser, isMissingTableError } from "@/lib/odontogram/api-auth";
+import { assertPatientVisible } from "@/lib/patient-visibility";
 
 export const dynamic = "force-dynamic";
 
@@ -20,13 +21,15 @@ export async function POST(req: NextRequest) {
     if (!patientId) {
       return NextResponse.json({ error: "missing_patientId" }, { status: 400 });
     }
-    const patient = await prisma.patient.findFirst({
-      where: { id: patientId, clinicId: dbUser.clinicId },
-      select: { id: true },
+    // Visibilidad + existencia + tenant en un solo query: un paciente restringido
+    // que este usuario no puede ver da 404 (igual que su GET hermano en
+    // /api/odontogram) — no revelar existencia ni permitir el borrado destructivo.
+    const denied = await assertPatientVisible(patientId, {
+      userId: dbUser.id,
+      role: dbUser.role,
+      clinicId: dbUser.clinicId,
     });
-    if (!patient) {
-      return NextResponse.json({ error: "patient_not_found" }, { status: 404 });
-    }
+    if (denied) return denied;
 
     const { ipAddress, userAgent } = extractAuditMeta(req);
     // Borrado + snapshot defensivo + audit en UNA transacción: las filas

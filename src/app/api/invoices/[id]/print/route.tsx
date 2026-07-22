@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { rateLimit } from "@/lib/rate-limit";
 import { getAuthContext } from "@/lib/auth-context";
+import { assertPatientVisible } from "@/lib/patient-visibility";
 import {
   renderToBuffer,
   Document,
@@ -249,6 +250,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
   const invoice = await prisma.invoice.findFirst({
     where: { id: params.id, clinicId: ctx.clinicId }, // scope multi-tenant
     select: {
+      patientId: true,
       invoiceNumber: true, createdAt: true, status: true,
       subtotal: true, discount: true, total: true, paid: true, balance: true, cfdiUuid: true,
       items: true,
@@ -258,6 +260,13 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     },
   });
   if (!invoice) return NextResponse.json({ error: "Factura no encontrada" }, { status: 404 });
+
+  // Visibilidad: el comprobante PDF renderiza nombre + RFC + razón social del
+  // paciente. Si este usuario no puede verlo, 404 — no generar el PDF.
+  if (invoice.patientId) {
+    const denied = await assertPatientVisible(invoice.patientId, { userId: ctx.userId, role: ctx.role, clinicId: ctx.clinicId });
+    if (denied) return denied;
+  }
 
   try {
     const rawItems = Array.isArray(invoice.items) ? (invoice.items as any[]) : [];

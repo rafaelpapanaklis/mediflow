@@ -27,7 +27,7 @@ export default async function PatientOrthodonticsPage({
   }
   const pediAccess = await canAccessModule(user.clinicId, PEDIATRICS_MODULE_KEY);
 
-  const data = await loadOrthoData({ clinicId: user.clinicId, patientId: params.id });
+  const data = await loadOrthoData({ clinicId: user.clinicId, patientId: params.id }, { userId: user.id, role: user.role, clinicId: user.clinicId });
   if (!data) redirect(`/dashboard/patients/${params.id}`);
 
   const resolveFileUrl = (fileId: string) => `/api/patient-files/${fileId}`;

@@ -5,6 +5,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { loadClinicSession, requireRole } from "@/lib/agenda/api-helpers";
+import { relatedPatientVisibilityAnd } from "@/lib/patient-visibility";
 
 export const dynamic = "force-dynamic";
 
@@ -37,6 +38,10 @@ export async function GET(req: NextRequest) {
   if (session.user.role === "DOCTOR") {
     where.appointment = { doctorId: session.user.id };
   }
+  // Visibilidad por paciente: la lista devuelve nombre + teléfono del paciente.
+  // Filtro de relación en AND (nunca pisa where.appointment del DOCTOR). Admins → [].
+  const visibility = relatedPatientVisibilityAnd({ userId: session.user.id, role: session.user.role, clinicId: session.clinic.id });
+  if (visibility.length) where.AND = visibility;
 
   try {
     const rows = await prisma.appointmentChangeRequest.findMany({

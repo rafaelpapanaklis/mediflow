@@ -9,6 +9,7 @@
 //   handler invoca el template @react-pdf/renderer.
 
 import { prisma } from "@/lib/prisma";
+import { canViewPatient } from "@/lib/patient-visibility";
 import {
   ENDO_AUDIT_ACTIONS,
   auditEndo,
@@ -112,6 +113,11 @@ export async function exportTreatmentReportPdf(
   });
   if (!tx || tx.clinicId !== ctx.clinicId) return fail("Tratamiento no encontrado");
 
+  // Visibilidad por paciente: no exponer el informe de un paciente restringido.
+  if (!(await canViewPatient(tx.patientId, { userId: ctx.userId, role: ctx.role, clinicId: ctx.clinicId }))) {
+    return fail("Paciente no encontrado");
+  }
+
   const clinic = await prisma.clinic.findUnique({
     where: { id: ctx.clinicId },
     select: { name: true },
@@ -208,6 +214,11 @@ export async function exportLegalReportPdf(
     },
   });
   if (!tx) return fail("Tratamiento no encontrado");
+
+  // Visibilidad por paciente: no exponer el informe legal de un paciente restringido.
+  if (!(await canViewPatient(tx.patientId, { userId: ctx.userId, role: ctx.role, clinicId: ctx.clinicId }))) {
+    return fail("Paciente no encontrado");
+  }
 
   const vitalityTests = await prisma.vitalityTest.findMany({
     where: {

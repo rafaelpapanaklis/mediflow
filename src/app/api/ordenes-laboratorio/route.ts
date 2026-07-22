@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import type { Prisma } from "@prisma/client";
 import { getAuthContext } from "@/lib/auth-context";
 import { prisma } from "@/lib/prisma";
+import { patientVisibilityFilter } from "@/lib/patient-visibility";
 import type { DentalLabOrderDTO } from "@/lib/laboratorios/types";
 
 // Include canónico para las órdenes de laboratorio del lado clínica: trae el
@@ -73,8 +74,29 @@ export async function GET() {
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
 
+  // Visibilidad por paciente: DentalLabOrder NO tiene relación `patient` (solo el
+  // escalar nullable patientId), así que relatedPatientVisibilityAnd no aplica.
+  // Resolvemos los pacientes de la clínica que este viewer NO puede ver y
+  // excluimos sus órdenes; las órdenes sin paciente (patientId=null) se conservan.
+  const visFilter = patientVisibilityFilter({
+    userId: ctx.userId,
+    role: ctx.role,
+    clinicId: ctx.clinicId,
+  });
+  let visibilityWhere: Prisma.DentalLabOrderWhereInput = {};
+  if (visFilter) {
+    const hidden = await prisma.patient.findMany({
+      where: { clinicId: ctx.clinicId, NOT: visFilter },
+      select: { id: true },
+    });
+    const hiddenIds = hidden.map((p) => p.id);
+    if (hiddenIds.length) {
+      visibilityWhere = { OR: [{ patientId: null }, { patientId: { notIn: hiddenIds } }] };
+    }
+  }
+
   const orders = await prisma.dentalLabOrder.findMany({
-    where: { clinicId: ctx.clinicId },
+    where: { clinicId: ctx.clinicId, ...visibilityWhere },
     include: orderInclude,
     orderBy: { createdAt: "desc" },
   });

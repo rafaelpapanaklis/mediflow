@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { logAudit } from "@/lib/audit";
 import { replaceQuoteContent, parseValidUntil } from "@/lib/quotes/service";
 import { serializeQuote } from "@/lib/quotes/serialize";
+import { assertPatientVisible } from "@/lib/patient-visibility";
 
 export const dynamic = "force-dynamic";
 
@@ -24,6 +25,13 @@ export async function GET(_req: NextRequest, { params }: Params) {
   });
   if (!quote) return NextResponse.json({ error: "Presupuesto no encontrado" }, { status: 404 });
 
+  // Visibilidad por paciente: no exponer el presupuesto (incluye nombre del
+  // paciente) a quien no puede ver a ese paciente. Solo aplica si tiene paciente.
+  if (quote.patientId) {
+    const denied = await assertPatientVisible(quote.patientId, { userId: ctx.userId, role: ctx.role, clinicId: ctx.clinicId });
+    if (denied) return denied;
+  }
+
   return NextResponse.json(serializeQuote(quote));
 }
 
@@ -37,9 +45,16 @@ export async function PATCH(req: NextRequest, { params }: Params) {
 
   const existing = await prisma.quote.findFirst({
     where: { id: params.id, clinicId: ctx.clinicId },
-    select: { id: true, status: true, total: true },
+    select: { id: true, status: true, total: true, patientId: true },
   });
   if (!existing) return NextResponse.json({ error: "Presupuesto no encontrado" }, { status: 404 });
+
+  // Visibilidad por paciente: no permitir editar el presupuesto de un paciente
+  // que este usuario no puede ver.
+  if (existing.patientId) {
+    const denied = await assertPatientVisible(existing.patientId, { userId: ctx.userId, role: ctx.role, clinicId: ctx.clinicId });
+    if (denied) return denied;
+  }
 
   if (existing.status !== "DRAFT" && existing.status !== "PRESENTED") {
     return NextResponse.json(
@@ -96,9 +111,17 @@ export async function DELETE(_req: NextRequest, { params }: Params) {
 
   const existing = await prisma.quote.findFirst({
     where: { id: params.id, clinicId: ctx.clinicId },
-    select: { id: true, status: true, folio: true },
+    select: { id: true, status: true, folio: true, patientId: true },
   });
   if (!existing) return NextResponse.json({ error: "Presupuesto no encontrado" }, { status: 404 });
+
+  // Visibilidad por paciente: no permitir borrar el presupuesto de un paciente
+  // que este usuario no puede ver.
+  if (existing.patientId) {
+    const denied = await assertPatientVisible(existing.patientId, { userId: ctx.userId, role: ctx.role, clinicId: ctx.clinicId });
+    if (denied) return denied;
+  }
+
   if (existing.status !== "DRAFT") {
     return NextResponse.json(
       { error: "Solo se pueden eliminar presupuestos en borrador" },

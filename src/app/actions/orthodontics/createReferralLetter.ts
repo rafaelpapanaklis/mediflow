@@ -7,7 +7,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
-import { auditOrtho, getOrthoActionContext } from "./_helpers";
+import { auditOrtho, getOrthoActionContext, loadPatientForOrtho } from "./_helpers";
 import { fail, isFailure, ok, type ActionResult } from "./result";
 
 const inputSchema = z.object({
@@ -33,11 +33,12 @@ export async function createReferralLetter(
     return fail(parsed.error.issues[0]?.message ?? "Datos inválidos");
   const data = parsed.data;
 
-  const patient = await prisma.patient.findFirst({
-    where: { id: data.patientId, clinicId: ctx.clinicId, deletedAt: null },
-    select: { id: true },
-  });
-  if (!patient) return fail("Paciente no encontrado");
+  // Visibilidad + tenant vía el helper gateado (no prisma.patient crudo): un
+  // doctor excluido de visibleUserIds no puede crear una carta de referencia
+  // (que persiste reason/clinicalSummary) para un paciente restringido.
+  const patientRes = await loadPatientForOrtho({ ctx, patientId: data.patientId });
+  if (isFailure(patientRes)) return patientRes;
+  const patient = patientRes.data;
 
   try {
     const created = await prisma.referral.create({

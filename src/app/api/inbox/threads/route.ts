@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
 import { readActiveClinicCookie } from "@/lib/active-clinic";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
+import { relatedPatientVisibilityAnd } from "@/lib/patient-visibility";
 
 export const dynamic = "force-dynamic";
 
@@ -68,6 +69,17 @@ export async function GET(req: NextRequest) {
     const sp = req.nextUrl.searchParams;
     const where: Prisma.InboxThreadWhereInput = {
       clinicId: dbUser.clinicId,
+      // Visibilidad por paciente: los hilos de un paciente restringido solo los
+      // ve quien está en su lista (+ admins). Los hilos SIN paciente se ven
+      // siempre. Va en AND porque `where.OR` lo ocupa la búsqueda por texto de
+      // más abajo — meterlo ahí lo volvería permisivo en vez de restrictivo.
+      ...(() => {
+        const v = relatedPatientVisibilityAnd(
+          { userId: dbUser.id, role: dbUser.role, clinicId: dbUser.clinicId },
+          { patientNullable: true },
+        );
+        return v.length ? { AND: v } : {};
+      })(),
     };
     const status = sp.get("status");
     if (status && ["UNREAD", "READ", "ARCHIVED", "SNOOZED"].includes(status)) {

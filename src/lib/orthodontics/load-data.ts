@@ -2,6 +2,7 @@
 
 import { differenceInMonths, differenceInYears } from "date-fns";
 import { prisma } from "@/lib/prisma";
+import { patientVisibilityAnd, type VisibilityViewer } from "@/lib/patient-visibility";
 import type {
   OrthodonticDiagnosisRow,
   OrthodonticTreatmentPlanRow,
@@ -39,9 +40,16 @@ export interface OrthoTabData {
 
 export async function loadOrthoData(
   input: LoadOrthoDataInput,
+  viewer: VisibilityViewer,
 ): Promise<OrthoTabData | null> {
   const patient = await prisma.patient.findFirst({
-    where: { id: input.patientId, clinicId: input.clinicId, deletedAt: null },
+    where: {
+      id: input.patientId,
+      clinicId: input.clinicId,
+      deletedAt: null,
+      // Visibilidad por paciente: un paciente restringido no existe para quien no está en su visibleUserIds.
+      AND: [...patientVisibilityAnd(viewer)],
+    },
     select: {
       id: true,
       firstName: true,

@@ -7,6 +7,7 @@ import { getAuthContext } from "@/lib/auth-context";
 import { canAccessModule } from "@/lib/marketplace/access-control";
 import { ENDODONTICS_MODULE_KEY } from "@/lib/specialties/keys";
 import { suggestEndoAppointmentDuration } from "@/lib/helpers/endoAppointmentDurations";
+import { assertPatientVisible } from "@/lib/patient-visibility";
 
 export const dynamic = "force-dynamic";
 
@@ -27,6 +28,15 @@ export async function GET(req: NextRequest) {
   if (!access.hasAccess) {
     return NextResponse.json({ endo: false });
   }
+
+  // Visibilidad por paciente: sin este gate se leería el contexto endo de un
+  // paciente restringido con solo su id.
+  const hidden = await assertPatientVisible(patientId, {
+    userId: ctx.userId,
+    role: ctx.role,
+    clinicId: ctx.clinicId,
+  });
+  if (hidden) return hidden;
 
   const patient = await prisma.patient.findFirst({
     where: { id: patientId, clinicId: ctx.clinicId, deletedAt: null },

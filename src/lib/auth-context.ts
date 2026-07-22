@@ -149,25 +149,62 @@ function clinicFilterFor(ctx: AuthContext, visibleClinicIds?: string[]): string 
  * Build patient WHERE clause based on role.
  * Admins see all clinic patients. Doctors only see their own.
  *
- * `visibleClinicIds` (opcional, Fase 2) amplía el scope a las sedes vinculadas
- * para compartir pacientes. Es OPT-IN por superficie: quien no lo pasa sigue
- * viendo sólo su sede, así que ninguna pantalla se amplía por accidente.
+ * Visibilidad por paciente (patients.visibleUserIds, ver @/lib/patient-visibility):
+ *   - lista VACÍA  → comportamiento histórico intacto: lo ve todo el equipo, y
+ *                    a los doctores se les siguen aplicando las heurísticas de
+ *                    abajo (primaryDoctor / cita / record).
+ *   - lista LLENA  → SUSTITUYE las heurísticas: lo ven SOLO los userIds de la
+ *                    lista (+ cualquier admin, que no pasa por este filtro).
+ *
+ * Todo va dentro de `AND` a propósito: antes las heurísticas vivían en un `OR`
+ * de primer nivel y `...extra` podía pisarlo (el handler legacy mandaba su
+ * búsqueda como `extra.OR` y borraba el scope del doctor = fuga). Con `AND`
+ * coexisten con cualquier `extra`.
+ *
+ * `visibleClinicIds` (opcional, multi-clínica Fase 2) amplía el scope de CLÍNICAS
+ * a las sedes vinculadas (vía clinicFilterFor). OPT-IN por superficie: quien no lo
+ * pasa sigue viendo sólo su sede. Compone con la visibilidad por-paciente: las
+ * sedes deciden QUÉ clínicas entran; visibleUserIds, QUÉ pacientes dentro de ellas.
  */
 export function buildPatientWhere(
   ctx: AuthContext,
   extra: Record<string, any> = {},
   visibleClinicIds?: string[],
 ) {
-  return {
-    clinicId: clinicFilterFor(ctx, visibleClinicIds), // ALWAYS — prevents cross-clinic access
-    ...(ctx.isDoctor && {   // Doctors only see their patients
+  const { AND: extraAnd, ...restExtra } = extra;
+  const extraAndList: any[] = extraAnd
+    ? Array.isArray(extraAnd) ? extraAnd : [extraAnd]
+    : [];
+
+  const scope: any[] = [];
+  if (!ctx.isAdmin) {
+    const legacyDoctorScope = ctx.isDoctor
+      ? {
+          OR: [
+            { primaryDoctorId: ctx.userId },
+            { appointments: { some: { doctorId: ctx.userId } } },
+            { records: { some: { doctorId: ctx.userId } } },
+          ],
+        }
+      : null;
+
+    scope.push({
       OR: [
-        { primaryDoctorId: ctx.userId },
-        { appointments: { some: { doctorId: ctx.userId } } },
-        { records: { some: { doctorId: ctx.userId } } },
+        // Sin lista → como siempre (heurísticas de doctor si aplica).
+        legacyDoctorScope
+          ? { AND: [{ visibleUserIds: { isEmpty: true } }, legacyDoctorScope] }
+          : { visibleUserIds: { isEmpty: true } },
+        // Con lista que me incluye → manda la lista, ignora heurísticas.
+        { visibleUserIds: { has: ctx.userId } },
       ],
-    }),
-    ...extra,
+    });
+  }
+
+  const AND = [...scope, ...extraAndList];
+  return {
+    clinicId: clinicFilterFor(ctx, visibleClinicIds), // ALWAYS — cross-clinic guard + multi-clínica opt-in
+    ...(AND.length ? { AND } : {}),
+    ...restExtra,
   };
 }
 

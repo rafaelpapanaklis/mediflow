@@ -3,6 +3,7 @@ import { getAuthContext } from "@/lib/auth-context";
 import { prisma } from "@/lib/prisma";
 import { createClient as createAdmin } from "@supabase/supabase-js";
 import { randomUUID } from "crypto";
+import { assertPatientVisible } from "@/lib/patient-visibility";
 
 // Subida DIRECTA a Storage de un set CBCT (.zip de cortes DICOM). Como los CBCT
 // pesan cientos de MB, no pasan por el route handler (límite de body): el cliente
@@ -27,6 +28,10 @@ function getAdminSupabase() {
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
+
+  // Visibilidad por paciente: 404 si el viewer no puede ver este paciente.
+  const denied = await assertPatientVisible(params.id, { userId: ctx.userId, role: ctx.role, clinicId: ctx.clinicId });
+  if (denied) return denied;
 
   // Multi-tenant: el paciente debe ser de la clínica de la sesión.
   const patient = await prisma.patient.findFirst({

@@ -5,6 +5,7 @@ import { getServerT } from "@/i18n/server";
 import { prisma } from "@/lib/prisma";
 import { getPatientVisibility, clinicScopeFilter, sharedRecordScope } from "@/lib/branches";
 import { getPatientCreditBalance } from "@/lib/patient-credit";
+import { patientVisibilityAnd } from "@/lib/patient-visibility";
 import { notFound } from "next/navigation";
 import { headers } from "next/headers";
 import { logAudit } from "@/lib/audit";
@@ -46,7 +47,16 @@ export default async function PatientDetailPage({ params }: { params: { id: stri
 
   const [patient, doctors] = await Promise.all([
     prisma.patient.findFirst({
-      where: { id: params.id, clinicId: clinicScopeFilter(visibility.clinicIds) },
+      // MULTI-CLÍNICA: clinicScopeFilter permite el expediente de una sede vinculada
+      // (con el flag apagado = user.clinicId pelado). Visibilidad por paciente: esta
+      // página arma el expediente en el server, así que el gate de GET
+      // /api/patients/[id] NO la cubre — sin este AND, la URL directa renderizaba el
+      // expediente de un restringido. Si no lo puede ver, no existe → notFound() (404).
+      where: {
+        id: params.id,
+        clinicId: clinicScopeFilter(visibility.clinicIds),
+        AND: patientVisibilityAnd({ userId: user.id, role: user.role, clinicId: user.clinicId }),
+      },
       include: {
         primaryDoctor: { select: { id: true, firstName: true, lastName: true, color: true } },
         // Citas y facturas SIEMPRE de la sede activa: aunque el paciente venga
@@ -163,7 +173,7 @@ export default async function PatientDetailPage({ params }: { params: { id: stri
     pediatricsData = await loadPediatricsData({
       clinicId: user.clinicId,
       patientId: patient.id,
-    });
+    }, { userId: user.id, role: user.role, clinicId: user.clinicId });
   }
 
   // Periodoncia — solo DENTAL con el módulo activo. Sin gate por edad
@@ -173,7 +183,7 @@ export default async function PatientDetailPage({ params }: { params: { id: stri
     perioData = await loadPerioData({
       clinicId: user.clinicId,
       patientId: patient.id,
-    });
+    }, { userId: user.id, role: user.role, clinicId: user.clinicId });
   }
 
   // Endodoncia — solo DENTAL con el módulo activo. Sin gate por edad.
@@ -225,7 +235,7 @@ export default async function PatientDetailPage({ params }: { params: { id: stri
     const redesign = await loadOrthoRedesignData({
       clinicId: user.clinicId,
       patientId: patient.id,
-    });
+    }, { userId: user.id, role: user.role, clinicId: user.clinicId });
     if (redesign) {
       orthoData = redesign.legacy;
       orthoRedesignVM = redesign.viewModel;
@@ -297,6 +307,8 @@ export default async function PatientDetailPage({ params }: { params: { id: stri
             firstName:          user.firstName,
             lastName:           user.lastName,
             cedulaProfesional:  user.cedulaProfesional ?? null,
+            // El picker de visibilidad y el badge "restringida" son solo de admin.
+            role:               user.role,
           }}
           specialty={user.clinic.specialty}
           portalUrl={portalUrl}

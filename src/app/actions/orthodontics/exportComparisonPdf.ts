@@ -6,6 +6,7 @@
 
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
+import { canViewPatient } from "@/lib/patient-visibility";
 import { auditOrtho, getOrthoActionContext } from "./_helpers";
 import { fail, isFailure, ok, type ActionResult } from "./result";
 import {
@@ -52,6 +53,11 @@ export async function exportComparisonPdf(
     },
   });
   if (!plan) return fail("Plan no encontrado");
+
+  // Visibilidad por paciente: no exponer el comparativo de un paciente restringido.
+  if (!(await canViewPatient(plan.patientId, { userId: ctx.userId, role: ctx.role, clinicId: ctx.clinicId }))) {
+    return fail("Paciente no encontrado");
+  }
 
   const doctor = await prisma.user.findUnique({
     where: { id: plan.diagnosis.diagnosedById },

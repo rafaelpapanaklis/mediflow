@@ -9,6 +9,7 @@ import { prisma } from "@/lib/prisma";
 import { getAuthContext } from "@/lib/auth-context";
 import { canAccessModule } from "@/lib/marketplace/access-control";
 import { PERIODONTICS_MODULE_KEY } from "@/lib/specialties/keys";
+import { patientVisibilityAnd } from "@/lib/patient-visibility";
 
 export const dynamic = "force-dynamic";
 
@@ -47,6 +48,9 @@ export async function GET(req: NextRequest) {
       { patientNumber: { contains: q, mode: "insensitive" } },
     ];
   }
+  // Visibilidad por paciente: este picker listaba TODOS los pacientes activos.
+  // Va en AND porque el OR de arriba ya lo ocupa el texto. Vacío para admins.
+  where.AND = patientVisibilityAnd({ userId: ctx.userId, role: ctx.role, clinicId: ctx.clinicId });
 
   const patients = await prisma.patient.findMany({
     where,

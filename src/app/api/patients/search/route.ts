@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { loadClinicSession } from "@/lib/agenda/api-helpers";
+import { patientVisibilityAnd } from "@/lib/patient-visibility";
 
 export async function GET(req: NextRequest) {
   const session = await loadClinicSession();
@@ -16,14 +17,27 @@ export async function GET(req: NextRequest) {
   const tokens = q.split(/\s+/).filter(Boolean);
   const where = {
     clinicId: session.clinic.id,
-    AND: tokens.map((t) => ({
-      OR: [
-        { firstName: { contains: t, mode: "insensitive" as const } },
-        { lastName:  { contains: t, mode: "insensitive" as const } },
-        { phone:     { contains: t } },
-        { email:     { contains: t, mode: "insensitive" as const } },
-      ],
-    })),
+    AND: [
+      // Visibilidad por paciente: la búsqueda rápida filtraba SOLO por clinicId,
+      // así que un paciente restringido se encontraba igual por nombre/teléfono.
+      // Se aplica la regla PURA de visibleUserIds (sin las heurísticas de doctor
+      // de buildPatientWhere) a propósito: un paciente sin lista se sigue
+      // encontrando desde cualquier rol, que es como funciona hoy — agendar
+      // exige poder buscar a quien todavía no es "tuyo".
+      ...patientVisibilityAnd({
+        userId: session.user.id,
+        role: session.user.role,
+        clinicId: session.clinic.id,
+      }),
+      ...tokens.map((t) => ({
+        OR: [
+          { firstName: { contains: t, mode: "insensitive" as const } },
+          { lastName:  { contains: t, mode: "insensitive" as const } },
+          { phone:     { contains: t } },
+          { email:     { contains: t, mode: "insensitive" as const } },
+        ],
+      })),
+    ],
   };
 
   const rows = await prisma.patient.findMany({

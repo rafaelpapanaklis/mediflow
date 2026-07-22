@@ -8,6 +8,7 @@ import { createElement } from "react";
 import QRCode from "qrcode";
 import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { assertPatientVisible } from "@/lib/patient-visibility";
 import { canAccessModule } from "@/lib/marketplace/access-control";
 import { IMPLANTS_MODULE_KEY } from "@/lib/implants/permissions";
 import {
@@ -48,6 +49,13 @@ export async function GET(_req: NextRequest, ctx: Params) {
 
   if (!implant) {
     return NextResponse.json({ error: "not_found" }, { status: 404 });
+  }
+
+  // Visibilidad por paciente: no generar el carnet (nombre + dob del paciente)
+  // para quien no puede ver a ese paciente.
+  if (implant.patientId) {
+    const denied = await assertPatientVisible(implant.patientId, { userId: user.id, role: user.role, clinicId: user.clinicId });
+    if (denied) return denied;
   }
 
   // QR opt-in: solo si el carnet existe Y qrPublicEnabled=true

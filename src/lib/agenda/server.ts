@@ -1,5 +1,6 @@
 import "server-only";
 import { prisma } from "@/lib/prisma";
+import { canSeePatient, type VisibilityViewer } from "@/lib/patient-visibility";
 import type { Prisma, ClinicCategory } from "@prisma/client";
 import type {
   AgendaAppointmentDTO,
@@ -17,13 +18,26 @@ import {
 } from "./time-utils";
 
 const APPT_INCLUDE = {
-  patient: { select: { id: true, firstName: true, lastName: true } },
+  // visibleUserIds viaja en el MISMO include para poder enmascarar en una sola
+  // pasada (sin un query por cita). Ver maskedPatient() abajo.
+  patient: { select: { id: true, firstName: true, lastName: true, visibleUserIds: true } },
   doctor:  { select: { id: true, firstName: true, lastName: true } },
 } satisfies Prisma.AppointmentInclude;
 
-type ApptWithIncludes = Prisma.AppointmentGetPayload<{
-  include: typeof APPT_INCLUDE;
-}>;
+// `visibleUserIds` va OPCIONAL a propósito: las rutas de mutación
+// (POST/PATCH/status/complete) arman su propio include SIN ese campo y llaman a
+// appointmentToDTO igual. Sin viewer no hay enmascarado, así que no lo necesitan.
+type ApptWithIncludes = Omit<
+  Prisma.AppointmentGetPayload<{ include: typeof APPT_INCLUDE }>,
+  "patient"
+> & {
+  patient: {
+    id: string;
+    firstName: string;
+    lastName: string;
+    visibleUserIds?: string[];
+  };
+};
 
 const NON_MEDICAL_CATEGORIES: ClinicCategory[] = [
   "SPA",
@@ -47,19 +61,33 @@ function professionalShortName(
   return NON_MEDICAL_CATEGORIES.includes(category) ? first : `Dr. ${first}`;
 }
 
+/**
+ * Visibilidad por paciente en la agenda: a un usuario que NO puede ver a un
+ * paciente restringido NO le ocultamos la cita — se rompería la operación del
+ * día (el hueco existe, hay que respetarlo) — sino que le enmascaramos QUIÉN es.
+ * Sin `id` para no filtrar el identificador; el expediente igual daría 404.
+ */
+function maskedPatient(
+  p: { id: string; firstName: string; lastName: string; visibleUserIds?: string[] },
+  viewer: VisibilityViewer | null | undefined,
+): { id: string; name: string } {
+  if (viewer && !canSeePatient(viewer, p.visibleUserIds)) {
+    return { id: null as any, name: "Paciente privado" };
+  }
+  return { id: p.id, name: patientName(p) };
+}
+
 export function appointmentToDTO(
   a: ApptWithIncludes,
   category: ClinicCategory,
+  viewer?: VisibilityViewer | null,
 ): AgendaAppointmentDTO {
   return {
     id: a.id,
     startsAt: a.startsAt.toISOString(),
     endsAt: a.endsAt.toISOString(),
     status: a.status as AppointmentStatus,
-    patient: {
-      id: a.patient.id,
-      name: patientName(a.patient),
-    },
+    patient: maskedPatient(a.patient, viewer),
     doctor: a.doctor
       ? { id: a.doctor.id, shortName: professionalShortName(a.doctor, category) }
       : undefined,
@@ -87,6 +115,12 @@ export interface AgendaQueryFilter {
   resourceId?: string;
   resourceIds?: string[];
   statuses?: AppointmentStatus[];
+  /**
+   * Quién está mirando. Si viene, los pacientes restringidos que este usuario
+   * no puede ver salen enmascarados ("Paciente privado"). Omitirlo = sin
+   * enmascarado (comportamiento previo) — para callers que ya son admin-only.
+   */
+  viewer?: VisibilityViewer | null;
 }
 
 export async function fetchAppointmentsForDay(
@@ -120,7 +154,7 @@ export async function fetchAppointmentsForDay(
     orderBy: { startsAt: "asc" },
   });
 
-  return rows.map((r) => appointmentToDTO(r, filter.clinicCategory));
+  return rows.map((r) => appointmentToDTO(r, filter.clinicCategory, filter.viewer));
 }
 
 export async function fetchAppointmentsForRange(
@@ -150,7 +184,7 @@ export async function fetchAppointmentsForRange(
     orderBy: { startsAt: "asc" },
   });
 
-  return rows.map((r) => appointmentToDTO(r, filter.clinicCategory));
+  return rows.map((r) => appointmentToDTO(r, filter.clinicCategory, filter.viewer));
 }
 
 export async function fetchPendingValidation(
@@ -158,6 +192,7 @@ export async function fetchPendingValidation(
   config: ClinicTimeConfig,
   clinicId: string,
   category: ClinicCategory,
+  viewer?: VisibilityViewer | null,
 ): Promise<AgendaAppointmentDTO[]> {
   const range = dayRangeUtc(dateISO, config);
 
@@ -173,7 +208,7 @@ export async function fetchPendingValidation(
     orderBy: { startsAt: "asc" },
   });
 
-  return rows.map((r) => appointmentToDTO(r, category));
+  return rows.map((r) => appointmentToDTO(r, category, viewer));
 }
 
 export async function fetchActiveDoctors(

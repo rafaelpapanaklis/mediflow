@@ -8,6 +8,7 @@ import { getAuthContext } from "@/lib/auth-context";
 import { calculateAge, isPediatric } from "@/lib/pediatrics/age";
 import { canAccessModule } from "@/lib/marketplace/access-control";
 import { PEDIATRICS_MODULE_KEY, DEFAULT_PEDIATRICS_CUTOFF_YEARS } from "@/lib/pediatrics/permissions";
+import { assertPatientVisible } from "@/lib/patient-visibility";
 
 export const dynamic = "force-dynamic";
 
@@ -17,6 +18,15 @@ export async function GET(req: NextRequest) {
 
   const patientId = req.nextUrl.searchParams.get("patientId");
   if (!patientId) return NextResponse.json({ error: "patientId requerido" }, { status: 400 });
+
+  // Visibilidad por paciente: sin este gate se leería el contexto pediátrico
+  // (edad, tutor) de un paciente restringido con solo su id.
+  const hidden = await assertPatientVisible(patientId, {
+    userId: ctx.userId,
+    role: ctx.role,
+    clinicId: ctx.clinicId,
+  });
+  if (hidden) return hidden;
 
   const patient = await prisma.patient.findFirst({
     where: { id: patientId, clinicId: ctx.clinicId, deletedAt: null },

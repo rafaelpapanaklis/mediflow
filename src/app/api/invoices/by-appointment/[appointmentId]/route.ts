@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
 import { readActiveClinicCookie } from "@/lib/active-clinic";
+import { assertPatientVisible } from "@/lib/patient-visibility";
 
 export const dynamic = "force-dynamic";
 
@@ -12,10 +13,10 @@ async function getCtx() {
   const activeClinicId = readActiveClinicCookie();
   if (activeClinicId) {
     const u = await prisma.user.findFirst({ where: { supabaseId: user.id, clinicId: activeClinicId, isActive: true } });
-    if (u) return { clinicId: u.clinicId, userId: u.id };
+    if (u) return { clinicId: u.clinicId, userId: u.id, role: u.role };
   }
   const dbUser = await prisma.user.findFirst({ where: { supabaseId: user.id, isActive: true }, orderBy: { createdAt: "asc" } });
-  return dbUser ? { clinicId: dbUser.clinicId, userId: dbUser.id } : null;
+  return dbUser ? { clinicId: dbUser.clinicId, userId: dbUser.id, role: dbUser.role } : null;
 }
 
 // GET /api/invoices/by-appointment/[appointmentId]
@@ -45,6 +46,14 @@ export async function GET(_req: NextRequest, { params }: { params: { appointment
     },
   });
   if (!invoice) return NextResponse.json({ error: "invoice_not_found" }, { status: 404 });
+
+  // Visibilidad: la factura trae la identidad fiscal del paciente (RFC, razón
+  // social, régimen, CP). Si este usuario no puede ver al paciente, 404 — no
+  // servir sus datos fiscales desde la agenda.
+  if (invoice.patientId) {
+    const denied = await assertPatientVisible(invoice.patientId, { userId: ctx.userId, role: ctx.role, clinicId });
+    if (denied) return denied;
+  }
 
   return NextResponse.json({ invoice });
 }

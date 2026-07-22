@@ -3,6 +3,7 @@ import { getAuthContext } from "@/lib/auth-context";
 import { prisma } from "@/lib/prisma";
 import { revalidateAfter } from "@/lib/cache/revalidate";
 import { logMutation } from "@/lib/audit";
+import { assertPatientVisible } from "@/lib/patient-visibility";
 
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
   const ctx = await getAuthContext();
@@ -13,6 +14,10 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     include: { sessions: { orderBy: { sessionNumber: "asc" } } },
   });
   if (!plan) return NextResponse.json({ error: "Plan no encontrado" }, { status: 404 });
+  if (plan.patientId) {
+    const denied = await assertPatientVisible(plan.patientId, { userId: ctx.userId, role: ctx.role, clinicId: ctx.clinicId });
+    if (denied) return denied;
+  }
   if (ctx.isDoctor && plan.doctorId !== ctx.userId) {
     return NextResponse.json({ error: "No autorizado" }, { status: 403 });
   }
@@ -150,6 +155,10 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const plan = await prisma.treatmentPlan.findFirst({ where: { id: params.id, clinicId: ctx.clinicId } });
   if (!plan) return NextResponse.json({ error: "Plan no encontrado" }, { status: 404 });
+  if (plan.patientId) {
+    const denied = await assertPatientVisible(plan.patientId, { userId: ctx.userId, role: ctx.role, clinicId: ctx.clinicId });
+    if (denied) return denied;
+  }
   if (ctx.isDoctor && plan.doctorId !== ctx.userId) {
     return NextResponse.json({ error: "No autorizado" }, { status: 403 });
   }

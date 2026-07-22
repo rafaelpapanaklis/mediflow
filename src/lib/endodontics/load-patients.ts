@@ -3,6 +3,11 @@
 
 import type { EndoOutcomeStatus, EndoTreatmentType } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import {
+  patientVisibilityFilter,
+  relatedPatientVisibilityAnd,
+  type VisibilityViewer,
+} from "@/lib/patient-visibility";
 import { computeEndoCountsFromRows } from "./specialty-kpis";
 
 export { computeEndoCountsFromRows };
@@ -47,9 +52,15 @@ export interface LoadEndodonticPatientsResult {
 
 export async function loadEndodonticPatients(
   clinicId: string,
+  viewer: VisibilityViewer,
 ): Promise<LoadEndodonticPatientsResult> {
   const treatments = await prisma.endodonticTreatment.findMany({
-    where: { clinicId, deletedAt: null },
+    where: {
+      clinicId,
+      deletedAt: null,
+      // Visibilidad por paciente: endodonticTreatment tiene relación `patient`.
+      AND: relatedPatientVisibilityAnd(viewer),
+    },
     include: {
       patient: { select: { id: true, firstName: true, lastName: true } },
       doctor: { select: { id: true, firstName: true, lastName: true } },
@@ -88,9 +99,15 @@ export async function loadEndodonticPatients(
 
   const partialKpis = computeEndoCountsFromRows(rows);
 
+  // Visibilidad por paciente: el follow-up llega al paciente vía `treatment`.
+  const visFilter = patientVisibilityFilter(viewer);
   const pendingFollowUpsAgg = await prisma.endodonticFollowUp.count({
     where: {
-      treatment: { clinicId, deletedAt: null },
+      treatment: {
+        clinicId,
+        deletedAt: null,
+        ...(visFilter ? { patient: { is: visFilter } } : {}),
+      },
       performedAt: null,
       deletedAt: null,
     },

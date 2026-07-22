@@ -4,6 +4,7 @@ import { Prisma } from "@prisma/client";
 import { createClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
 import { readActiveClinicCookie } from "@/lib/active-clinic";
+import { assertPatientVisible, relatedPatientVisibilityAnd } from "@/lib/patient-visibility";
 
 export const dynamic = "force-dynamic";
 
@@ -64,6 +65,14 @@ export async function GET(req: NextRequest) {
       if (dueAfter) (where.dueAt as Prisma.DateTimeFilter).gte = new Date(dueAfter);
     }
 
+    // Visibilidad por paciente. Filtro de RELACIÓN sobre la lista; patientNullable
+    // conserva los recordatorios SIN paciente (patientId es opcional).
+    const vis = relatedPatientVisibilityAnd(
+      { userId: dbUser.id, role: dbUser.role, clinicId: dbUser.clinicId },
+      { patientNullable: true },
+    );
+    if (vis.length) where.AND = vis as Prisma.ReminderWhereInput[];
+
     const reminders = await prisma.reminder.findMany({
       where,
       orderBy: [{ status: "asc" }, { dueAt: "asc" }],
@@ -121,6 +130,14 @@ export async function POST(req: NextRequest) {
         select: { id: true },
       });
       if (!patient) return NextResponse.json({ error: "patient_not_found" }, { status: 404 });
+
+      // Visibilidad por paciente: no vincular un recordatorio a un paciente restringido.
+      const hidden = await assertPatientVisible(parsed.data.patientId, {
+        userId: dbUser.id,
+        role: dbUser.role,
+        clinicId: dbUser.clinicId,
+      });
+      if (hidden) return hidden;
     }
 
     if (parsed.data.threadId) {

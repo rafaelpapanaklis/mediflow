@@ -2,6 +2,7 @@
 
 import { prisma } from "@/lib/prisma";
 import type { AuthContext } from "@/lib/auth-context";
+import { canSeePatient } from "@/lib/patient-visibility";
 import { getAuthContext } from "@/lib/auth-context";
 import { canAccessModule } from "@/lib/marketplace/access-control";
 import { hasPermission } from "@/lib/auth/permissions";
@@ -56,10 +57,20 @@ export async function loadPatientForPerio(args: {
 }): Promise<ActionResult<{ id: string; clinicId: string; dob: Date }>> {
   const patient = await prisma.patient.findUnique({
     where: { id: args.patientId },
-    select: { id: true, clinicId: true, deletedAt: true, dob: true },
+    select: { id: true, clinicId: true, deletedAt: true, dob: true, visibleUserIds: true },
   });
   if (!patient || patient.deletedAt) return fail("Paciente no encontrado");
   if (patient.clinicId !== args.ctx.clinicId) return fail("Sin acceso a este paciente");
+  // Visibilidad por paciente: espeja loadPatientForImplant — un paciente
+  // restringido no existe para quien no está en su visibleUserIds (mismo mensaje
+  // que "no encontrado", sin confirmar existencia). Cierra el bypass de escritura
+  // de las actions de periodoncia sobre un paciente restringido.
+  if (!canSeePatient(
+    { userId: args.ctx.userId, role: args.ctx.role, clinicId: args.ctx.clinicId },
+    patient.visibleUserIds,
+  )) {
+    return fail("Paciente no encontrado");
+  }
   return {
     ok: true,
     data: { id: patient.id, clinicId: patient.clinicId, dob: patient.dob },

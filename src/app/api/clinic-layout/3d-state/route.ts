@@ -68,6 +68,7 @@ import { createClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
 import { readActiveClinicCookie } from "@/lib/active-clinic";
 import { activeClinicSecret } from "@/lib/active-clinic-core";
+import { relatedPatientVisibilityAnd } from "@/lib/patient-visibility";
 import { TREATMENT_KINDS } from "@/lib/agenda/types";
 import { getChairStatus, getChairAppointment } from "@/lib/floor-plan/live-mode";
 import { sanitizeElements, sanitizeMetadata } from "@/lib/floor-plan/sanitize";
@@ -130,10 +131,15 @@ export async function GET() {
         orderBy: [{ orderIndex: "asc" }, { name: "asc" }],
       }),
       prisma.appointment.findMany({
+        // Visibilidad por paciente: el visor 3D expone nombre del paciente en el
+        // sillón ocupado y en la sala de espera. Cualquier usuario de la clínica
+        // (no solo el dueño) abre este endpoint, así que excluimos las citas de
+        // pacientes restringidos que este usuario no puede ver. Admins → [].
         where: {
           clinicId,
           startsAt: { gte: dayStart, lte: dayEnd },
           status: { notIn: ["CANCELLED", "NO_SHOW"] },
+          AND: relatedPatientVisibilityAnd({ userId: dbUser.id, role: dbUser.role, clinicId }),
         },
         orderBy: { startsAt: "asc" },
         select: {

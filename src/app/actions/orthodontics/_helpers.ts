@@ -4,6 +4,7 @@
 
 import { prisma } from "@/lib/prisma";
 import type { AuthContext } from "@/lib/auth-context";
+import { canSeePatient } from "@/lib/patient-visibility";
 import { getAuthContext } from "@/lib/auth-context";
 import { canAccessModule } from "@/lib/marketplace/access-control";
 import { ORTHODONTICS_MODULE_KEY } from "@/lib/specialties/keys";
@@ -56,10 +57,21 @@ export async function loadPatientForOrtho(args: {
       firstName: true,
       lastName: true,
       dob: true,
+      visibleUserIds: true,
     },
   });
   if (!patient || patient.deletedAt) return fail("Paciente no encontrado");
   if (patient.clinicId !== args.ctx.clinicId) return fail("Sin acceso a este paciente");
+  // Visibilidad por paciente: espeja loadPatientForImplant — un paciente
+  // restringido no existe para quien no está en su visibleUserIds (mismo mensaje
+  // que "no encontrado", sin confirmar existencia). Cierra el bypass de escritura
+  // de las actions de ortodoncia sobre un paciente restringido.
+  if (!canSeePatient(
+    { userId: args.ctx.userId, role: args.ctx.role, clinicId: args.ctx.clinicId },
+    patient.visibleUserIds,
+  )) {
+    return fail("Paciente no encontrado");
+  }
   return {
     ok: true,
     data: {

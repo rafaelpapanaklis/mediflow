@@ -4,6 +4,7 @@ import { getAuthContext } from "@/lib/auth-context";
 import { prisma } from "@/lib/prisma";
 import { rateLimit } from "@/lib/rate-limit";
 import { hasPermission } from "@/lib/auth/permissions";
+import { assertPatientVisible } from "@/lib/patient-visibility";
 
 export const dynamic = "force-dynamic";
 
@@ -191,6 +192,15 @@ export async function POST(req: NextRequest) {
     },
   });
   if (!patient) return NextResponse.json({ error: "Paciente no encontrado" }, { status: 404 });
+
+  // Visibilidad por paciente: sin este gate se filtraba el contexto clínico
+  // (alergias, padecimientos, medicación) de un paciente restringido.
+  const hidden = await assertPatientVisible(patientId, {
+    userId: ctx.userId,
+    role: ctx.role,
+    clinicId: ctx.clinicId,
+  });
+  if (hidden) return hidden;
 
   const age = patient.dob
     ? new Date().getFullYear() - new Date(patient.dob).getFullYear()

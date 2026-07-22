@@ -27,7 +27,7 @@ export default async function OrthodonticsPatientDetailPage({
   const data = await loadOrthoData({
     clinicId: user.clinicId,
     patientId: params.patientId,
-  });
+  }, { userId: user.id, role: user.role, clinicId: user.clinicId });
   if (!data) redirect("/dashboard/specialties/orthodontics");
 
   const initials = data.patientName

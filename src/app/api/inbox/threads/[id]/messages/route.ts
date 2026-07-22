@@ -8,6 +8,7 @@ import { sendWhatsAppMessage } from "@/lib/whatsapp";
 import { resolveWhatsappSendChannel, isWithin24hWindow } from "@/lib/inbox/send-core";
 import { sendEmail } from "@/lib/email";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
+import { assertPatientVisible } from "@/lib/patient-visibility";
 
 export const dynamic = "force-dynamic";
 
@@ -64,9 +65,16 @@ export async function GET(_req: NextRequest, { params }: Params) {
 
     const thread = await prisma.inboxThread.findFirst({
       where: { id: params.id, clinicId: dbUser.clinicId },
-      select: { id: true },
+      select: { id: true, patientId: true },
     });
     if (!thread) return NextResponse.json({ error: "not_found" }, { status: 404 });
+    // Visibilidad por paciente: los mensajes son la conversación del paciente. Un
+    // hilo ligado a un paciente restringido no se lee sin autorización (hilos sin
+    // paciente —WhatsApp/EMAIL sueltos— siguen visibles: patientId null salta).
+    if (thread.patientId) {
+      const denied = await assertPatientVisible(thread.patientId, { userId: dbUser.id, role: dbUser.role, clinicId: dbUser.clinicId });
+      if (denied) return denied;
+    }
 
     const messages = await prisma.inboxMessage.findMany({
       where: { threadId: params.id },
@@ -124,6 +132,12 @@ export async function POST(req: NextRequest, { params }: Params) {
       },
     });
     if (!thread) return NextResponse.json({ error: "not_found" }, { status: 404 });
+    // Visibilidad por paciente: no enviar mensajes (WhatsApp/email) a un paciente
+    // restringido desde quien no puede verlo. Hilos sin paciente siguen abiertos.
+    if (thread.patientId) {
+      const denied = await assertPatientVisible(thread.patientId, { userId: dbUser.id, role: dbUser.role, clinicId: dbUser.clinicId });
+      if (denied) return denied;
+    }
 
     const now = new Date();
     let externalId: string | null = null;

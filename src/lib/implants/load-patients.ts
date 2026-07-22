@@ -2,6 +2,11 @@
 
 import type { ImplantBrand, ImplantFollowUpMilestone, ImplantStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import {
+  patientVisibilityFilter,
+  relatedPatientVisibilityAnd,
+  type VisibilityViewer,
+} from "@/lib/patient-visibility";
 import { computeImplantCountsFromRows } from "./specialty-kpis";
 
 export { computeImplantCountsFromRows };
@@ -47,12 +52,21 @@ const ANNUAL_MILESTONES: ImplantFollowUpMilestone[] = [
   "M_10_YEARS",
 ];
 
-export async function loadImplantPatients(clinicId: string): Promise<LoadImplantPatientsResult> {
+export async function loadImplantPatients(
+  clinicId: string,
+  viewer: VisibilityViewer,
+): Promise<LoadImplantPatientsResult> {
   const now = new Date();
+  // Visibilidad por paciente: el follow-up llega al paciente vía `implant`.
+  const visFilter = patientVisibilityFilter(viewer);
 
   const [implants, pendingAnnualControls] = await Promise.all([
     prisma.implant.findMany({
-      where: { clinicId },
+      where: {
+        clinicId,
+        // Visibilidad por paciente: implant tiene relación `patient`.
+        AND: relatedPatientVisibilityAnd(viewer),
+      },
       include: {
         patient: { select: { id: true, firstName: true, lastName: true } },
         placedByDoctor: { select: { id: true, firstName: true, lastName: true } },
@@ -71,6 +85,7 @@ export async function loadImplantPatients(clinicId: string): Promise<LoadImplant
         clinicId,
         performedAt: null,
         milestone: { in: ANNUAL_MILESTONES },
+        ...(visFilter ? { implant: { is: { patient: { is: visFilter } } } } : {}),
       },
     }),
   ]);

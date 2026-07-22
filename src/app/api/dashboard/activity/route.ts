@@ -3,6 +3,7 @@ import { cookies } from "next/headers";
 import { getAuthContext } from "@/lib/auth-context";
 import { rateLimit } from "@/lib/rate-limit";
 import { prisma } from "@/lib/prisma";
+import { patientVisibilityAnd, relatedPatientVisibilityAnd } from "@/lib/patient-visibility";
 
 export const dynamic = "force-dynamic";
 
@@ -23,22 +24,30 @@ export async function GET(req: NextRequest) {
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
+  // Visibilidad por paciente: el feed de actividad NO tiene gate de rol (lo ven
+  // doctores y recepción) y expone nombres de pacientes en pagos, altas y citas
+  // completadas. Filtramos por relación con patientNullable (las filas sin
+  // paciente no están restringidas). Va en AND; vacío/null para admins = sin filtro.
+  const viewer = { userId: ctx.userId, role: ctx.role, clinicId: ctx.clinicId };
+  const patientVis = patientVisibilityAnd(viewer);
+  const relatedVis = relatedPatientVisibilityAnd(viewer, { patientNullable: true });
+
   const [paidInvoices, newPatients, doneAppointments] = await Promise.all([
     prisma.invoice.findMany({
-      where: { clinicId: ctx.clinicId, status: { in: ["PAID", "PARTIAL"] } },
+      where: { clinicId: ctx.clinicId, status: { in: ["PAID", "PARTIAL"] }, ...(relatedVis.length ? { AND: relatedVis } : {}) },
       select: { id: true, paid: true, paymentMethod: true, paidAt: true, updatedAt: true,
         patient: { select: { firstName: true, lastName: true } } },
       orderBy: { paidAt: "desc" },
       take: 10,
     }),
     prisma.patient.findMany({
-      where: { clinicId: ctx.clinicId },
+      where: { clinicId: ctx.clinicId, ...(patientVis.length ? { AND: patientVis } : {}) },
       select: { id: true, firstName: true, lastName: true, createdAt: true },
       orderBy: { createdAt: "desc" },
       take: 10,
     }),
     prisma.appointment.findMany({
-      where: { clinicId: ctx.clinicId, status: "COMPLETED" },
+      where: { clinicId: ctx.clinicId, status: "COMPLETED", ...(relatedVis.length ? { AND: relatedVis } : {}) },
       select: { id: true, updatedAt: true,
         patient: { select: { firstName: true, lastName: true } } },
       orderBy: { updatedAt: "desc" },

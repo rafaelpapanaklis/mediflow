@@ -11,6 +11,10 @@ import type {
   OrthoTreatmentStatus,
 } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import {
+  relatedPatientVisibilityAnd,
+  type VisibilityViewer,
+} from "@/lib/patient-visibility";
 import { PHASE_ORDER } from "./phase-machine";
 import { computePaymentStatus } from "./payment-status";
 import { computeOrthoKpis } from "./specialty-kpis";
@@ -57,12 +61,18 @@ export interface LoadOrthodonticPatientsResult {
 
 export async function loadOrthodonticPatients(
   clinicId: string,
+  viewer: VisibilityViewer,
 ): Promise<LoadOrthodonticPatientsResult> {
   const now = new Date();
 
   const [diagnoses, todayAppointmentsCount] = await Promise.all([
     prisma.orthodonticDiagnosis.findMany({
-      where: { clinicId, deletedAt: null },
+      where: {
+        clinicId,
+        deletedAt: null,
+        // Visibilidad por paciente: orthodonticDiagnosis tiene relación `patient`.
+        AND: relatedPatientVisibilityAnd(viewer),
+      },
       include: {
         patient: { select: { id: true, firstName: true, lastName: true } },
         diagnosedBy: { select: { id: true, firstName: true, lastName: true } },
@@ -90,6 +100,8 @@ export async function loadOrthodonticPatients(
       where: {
         clinicId,
         scheduledAt: { gte: startOfDay(now), lte: endOfDay(now) },
+        // Visibilidad por paciente: el control tiene relación `patient`.
+        AND: relatedPatientVisibilityAnd(viewer),
       },
     }),
   ]);

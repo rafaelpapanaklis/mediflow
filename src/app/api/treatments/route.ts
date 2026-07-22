@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthContext } from "@/lib/auth-context";
+import { relatedPatientVisibilityAnd, assertPatientVisible } from "@/lib/patient-visibility";
 import { prisma } from "@/lib/prisma";
 import { revalidateAfter } from "@/lib/cache/revalidate";
 import { logMutation } from "@/lib/audit";
@@ -21,6 +22,14 @@ export async function GET(req: NextRequest) {
       ...(patientId ? { patientId } : {}),
       ...(ctx.isDoctor ? { doctorId: ctx.userId } : {}),
       ...(status ? { status: status as any } : {}),
+      // Visibilidad por paciente. Va como filtro de RELACIÓN (no un assert)
+      // porque `patientId` es opcional: sin él, esto listaba los planes de TODA
+      // la clínica, restringidos incluidos.
+      AND: relatedPatientVisibilityAnd({
+        userId: ctx.userId,
+        role: ctx.role,
+        clinicId: ctx.clinicId,
+      }),
     },
     include: {
       patient:  { select: { id: true, firstName: true, lastName: true, phone: true } },
@@ -59,6 +68,12 @@ export async function POST(req: NextRequest) {
     where: { id: patientId, clinicId: ctx.clinicId },
   });
   if (!patient) return NextResponse.json({ error: "Paciente no encontrado" }, { status: 404 });
+
+  // Visibilidad: la respuesta incluye patient (include → nombre) en el eco. Sin
+  // este assert, un usuario excluido crea un plan y recibe el nombre del paciente
+  // restringido. El GET ya filtra vía relatedPatientVisibilityAnd; el POST faltaba.
+  const denied = await assertPatientVisible(patientId, { userId: ctx.userId, role: ctx.role, clinicId: ctx.clinicId });
+  if (denied) return denied;
 
   // Doctors can only create plans for themselves
   const assignedDoctorId = ctx.isDoctor ? ctx.userId : (doctorId ?? ctx.userId);

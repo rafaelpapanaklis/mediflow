@@ -12,6 +12,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { loadOrthoData, type OrthoTabData } from "@/lib/orthodontics/load-data";
+import type { VisibilityViewer } from "@/lib/patient-visibility";
 import { signMaybeUrls } from "@/lib/storage";
 import {
   adaptToOrthoRedesignViewModel,
@@ -96,8 +97,10 @@ export interface LoadOrthoRedesignResult {
 
 export async function loadOrthoRedesignData(
   input: LoadOrthoRedesignInput,
+  viewer: VisibilityViewer,
 ): Promise<LoadOrthoRedesignResult | null> {
-  const legacy = await loadOrthoData(input);
+  // Visibilidad por paciente: propaga el viewer al loader legacy, que filtra su query raíz.
+  const legacy = await loadOrthoData(input, viewer);
   if (!legacy) return null;
 
   const planId = legacy.plan?.id ?? null;

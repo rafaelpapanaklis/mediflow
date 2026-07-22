@@ -57,10 +57,18 @@ export default async function AgendaPage({ searchParams }: PageProps) {
         clinicId: clinic.id,
         clinicCategory: clinic.category,
         doctorIdScope,
+        // Visibilidad por paciente: esta SSR pinta la agenda del día, así que
+        // sin viewer los pacientes restringidos saldrían con nombre completo
+        // hasta el primer refetch del cliente.
+        viewer: { userId: user.id, role: user.role, clinicId: clinic.id },
       }),
       fetchActiveDoctors(clinic.id, clinic.category),
       fetchResources(clinic.id),
-      fetchPendingValidation(dayISO, timeConfig, clinic.id, clinic.category),
+      fetchPendingValidation(dayISO, timeConfig, clinic.id, clinic.category, {
+        userId: user.id,
+        role: user.role,
+        clinicId: clinic.id,
+      }),
       fetchWaitlistCount(clinic.id),
     ]);
 

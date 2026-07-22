@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
 import { readActiveClinicCookie } from "@/lib/active-clinic";
+import { relatedPatientVisibilityAnd } from "@/lib/patient-visibility";
 
 export const dynamic = "force-dynamic";
 
@@ -55,10 +56,13 @@ export async function GET(req: NextRequest) {
     }
 
     const allDayAppointments = await prisma.appointment.findMany({
+      // Visibilidad por paciente: el canvas + sala de espera exponen nombres.
+      // Excluye citas de pacientes restringidos que este usuario no puede ver.
       where: {
         clinicId: dbUser.clinicId,
         startsAt: { gte: dayStart, lte: dayEnd },
         status: { notIn: ["CANCELLED", "NO_SHOW"] },
+        AND: relatedPatientVisibilityAnd({ userId: dbUser.id, role: dbUser.role, clinicId: dbUser.clinicId }),
       },
       orderBy: { startsAt: "asc" },
       select: {

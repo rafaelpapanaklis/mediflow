@@ -7,6 +7,10 @@ export const dynamic = "force-dynamic";
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import {
+  patientVisibilityFilter,
+  relatedPatientVisibilityAnd,
+} from "@/lib/patient-visibility";
 import { canAccessModule } from "@/lib/marketplace/access-control";
 import { ENDODONTICS_MODULE_KEY } from "@/lib/specialties/keys";
 import {
@@ -36,14 +40,20 @@ export default async function EndodonticsIndexPage() {
 
   const now = new Date();
 
+  // Visibilidad por paciente: viewer de sesión para filtrar los reads.
+  const viewer = { userId: user.id, role: user.role, clinicId: user.clinicId };
+  const visFilter = patientVisibilityFilter(viewer);
+
   const [aggregate, completedNoRestoration, allTreatments, allFollowUps] = await Promise.all([
-    loadEndodonticPatients(user.clinicId),
+    loadEndodonticPatients(user.clinicId, viewer),
     prisma.endodonticTreatment.findMany({
       where: {
         clinicId: user.clinicId,
         completedAt: { not: null, lt: now },
         postOpRestorationCompletedAt: null,
         deletedAt: null,
+        // Visibilidad por paciente: endodonticTreatment tiene relación `patient`.
+        AND: relatedPatientVisibilityAnd(viewer),
       },
       include: {
         patient: { select: { id: true, firstName: true, lastName: true } },
@@ -52,12 +62,22 @@ export default async function EndodonticsIndexPage() {
       take: 30,
     }),
     prisma.endodonticTreatment.findMany({
-      where: { clinicId: user.clinicId, deletedAt: null },
+      where: {
+        clinicId: user.clinicId,
+        deletedAt: null,
+        // Visibilidad por paciente: endodonticTreatment tiene relación `patient`.
+        AND: relatedPatientVisibilityAnd(viewer),
+      },
       take: 200,
     }),
     prisma.endodonticFollowUp.findMany({
       where: {
-        treatment: { clinicId: user.clinicId, deletedAt: null },
+        // Visibilidad por paciente: el follow-up llega al paciente vía `treatment`.
+        treatment: {
+          clinicId: user.clinicId,
+          deletedAt: null,
+          ...(visFilter ? { patient: { is: visFilter } } : {}),
+        },
         deletedAt: null,
       },
       include: {

@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
+import { assertPatientVisible } from "@/lib/patient-visibility";
 import { chat } from "@/lib/integrations/claude";
 import { aiTokenLimitError, addAiTokens } from "@/lib/ai-tokens";
 
@@ -49,6 +50,13 @@ export async function POST(req: NextRequest) {
   });
   if (!appt) {
     return NextResponse.json({ error: "appointment_not_found" }, { status: 404 });
+  }
+
+  // Visibilidad por paciente: doctores/recepción pueden llegar aquí; no exponer
+  // nombre/dob ni el historial de un paciente que este usuario no puede ver.
+  if (appt.patientId) {
+    const denied = await assertPatientVisible(appt.patientId, { userId: user.id, role: user.role, clinicId });
+    if (denied) return denied;
   }
 
   // Histórico del paciente (mismo clinicId por defecto vía where).
