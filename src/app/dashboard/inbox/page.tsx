@@ -11,5 +11,15 @@ export default async function InboxPage() {
   // polling /api/inbox/since) que NO se re-disparan al cambiar de sede; sin
   // re-montar mostraría/mezclaría hilos y PHI de la clínica anterior.
   const user = await getCurrentUser();
-  return <InboxClient key={user.clinicId} />;
+  return (
+    <InboxClient
+      key={user.clinicId}
+      viewer={{
+        id: user.id,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        clinicName: user.clinic?.name ?? "",
+      }}
+    />
+  );
 }
