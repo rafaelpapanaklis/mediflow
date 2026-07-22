@@ -554,6 +554,9 @@ export interface AddSupportMessageInput {
   internalNote?: boolean;
   /** Nombre visible del agente (default "Soporte DaleControl"). */
   authorName?: string | null;
+  /** Metadatos devueltos por POST /api/admin/support/tickets/[id]/attachments
+   *  (sin signedUrl). Se re-validan contra el clinicId del ticket. */
+  attachments?: unknown;
 }
 
 /**
@@ -568,8 +571,13 @@ export async function addSupportMessage(
   const ticket = await prisma.supportTicket.findUnique({ where: { id: ticketId } });
   if (!ticket) throw new SupportError("Ticket no encontrado", 404);
 
+  // Adjuntos: mismo validador anti cross-tenant que la clínica; el clinicId
+  // sale del ticket cargado aquí, jamás del request.
+  const atts = validateAttachmentsMeta(input.attachments, ticket.clinicId);
+  // body puede venir vacío ("" — sanitizeSupportText ya normaliza) si el
+  // mensaje lleva SOLO archivos.
   const body = sanitizeSupportText(input.body, SUPPORT_MAX_BODY_CHARS);
-  if (!body) throw new SupportError("El mensaje no puede estar vacío");
+  if (!body && atts.length === 0) throw new SupportError("El mensaje no puede estar vacío");
   const internalNote = Boolean(input.internalNote);
   const authorName = sanitizeSupportText(input.authorName ?? "", 120) || "Soporte DaleControl";
 
@@ -594,6 +602,7 @@ export async function addSupportMessage(
           authorType: "support",
           authorName,
           body,
+          attachments: atts.length ? (atts as any) : undefined,
           internalNote,
         },
       },
@@ -621,6 +630,7 @@ export async function addSupportMessage(
       bodyPreview: bodyPreview(body),
       authorName,
       toEmail,
+      attachmentCount: atts.length,
     });
   }
 

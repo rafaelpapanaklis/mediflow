@@ -2,12 +2,13 @@
 
 // ═══════════════════════════════════════════════════════════════════════════
 // /admin/soporte/[id] — detalle admin del ticket: hilo completo (con notas
-// internas en ámbar bien diferenciadas), responder o guardar nota interna,
-// y cambiar estado/prioridad. El cambio de estado genera el mensaje system
-// y el email a la clínica DEL LADO DEL SERVER (aquí solo se hace re-fetch,
-// no se duplica nada).
+// internas en ámbar bien diferenciadas), responder o guardar nota interna
+// (ambas con adjuntos imagen/PDF, 5MB, máx 5), y cambiar estado/prioridad.
+// El cambio de estado genera el mensaje system y el email a la clínica DEL
+// LADO DEL SERVER (aquí solo se hace re-fetch, no se duplica nada).
 // API: GET/PATCH /api/admin/support/tickets/[id]
-//      POST /api/admin/support/tickets/[id]/messages { body, internalNote? }
+//      POST /api/admin/support/tickets/[id]/messages { body, internalNote?, attachments? }
+//      POST /api/admin/support/tickets/[id]/attachments (subir adjunto antes de enviar)
 // Contrato: src/lib/support/types.ts (AdminTicketDetailDTO).
 // ═══════════════════════════════════════════════════════════════════════════
 
@@ -15,7 +16,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
 import Link from "next/link";
 import toast from "react-hot-toast";
-import { ArrowLeft, FileText, Lock, Paperclip } from "lucide-react";
+import { ArrowLeft, FileText, Image as ImageIcon, Lock, Paperclip, X } from "lucide-react";
 import { CardNew } from "@/components/ui/design-system/card-new";
 import { BadgeNew } from "@/components/ui/design-system/badge-new";
 import { ButtonNew } from "@/components/ui/design-system/button-new";
@@ -26,6 +27,9 @@ import {
   SUPPORT_PRIORITY_LABELS,
   SUPPORT_CATEGORY_LABELS,
   SUPPORT_MAX_BODY_CHARS,
+  SUPPORT_ALLOWED_MIME,
+  SUPPORT_MAX_FILE_BYTES,
+  SUPPORT_MAX_FILES_PER_MESSAGE,
   type AdminTicketDetailDTO,
   type SupportAttachment,
   type SupportMessageDTO,
@@ -61,6 +65,14 @@ function formatDate(iso: string | null | undefined): string {
     hour: "2-digit",
     minute: "2-digit",
   });
+}
+
+const ACCEPT_ATTR = SUPPORT_ALLOWED_MIME.join(",");
+
+function formatBytes(n: number): string {
+  if (!n || n <= 0) return "";
+  if (n < 1024 * 1024) return `${Math.max(1, Math.round(n / 1024))} KB`;
+  return `${(n / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 function Stars({ rating }: { rating: number }) {
@@ -286,7 +298,10 @@ export function AdminTicketClient({ ticketId }: { ticketId: string }) {
   const [replyBody, setReplyBody] = useState("");
   const [internalNote, setInternalNote] = useState(false);
   const [sending, setSending] = useState(false);
+  const [pendingFiles, setPendingFiles] = useState<SupportAttachment[]>([]);
+  const [uploading, setUploading] = useState(false);
   const hasDataRef = useRef(false);
+  const fileRef = useRef<HTMLInputElement | null>(null);
 
   const fetchTicket = useCallback(async () => {
     try {
@@ -323,6 +338,7 @@ export function AdminTicketClient({ ticketId }: { ticketId: string }) {
   const isClosed = ticket?.status === "CERRADO";
   // En ticket cerrado el composer queda SOLO para notas internas.
   const effectiveInternal = isClosed ? true : internalNote;
+  const canAttachMore = pendingFiles.length < SUPPORT_MAX_FILES_PER_MESSAGE;
 
   async function patchTicket(payload: { status?: string; priority?: string }, okMsg: string, failMsg: string) {
     setSaving(payload.status !== undefined ? "status" : "priority");
@@ -346,21 +362,85 @@ export function AdminTicketClient({ ticketId }: { ticketId: string }) {
     }
   }
 
+  // ── Adjuntos del composer (mismo patrón que dashboard/soporte/[id]) ────────
+  async function handleFiles(list: FileList | null) {
+    if (!list || list.length === 0) return;
+    const files = Array.from(list);
+    const slots = SUPPORT_MAX_FILES_PER_MESSAGE - pendingFiles.length;
+    if (slots <= 0) {
+      toast.error(`Máximo ${SUPPORT_MAX_FILES_PER_MESSAGE} archivos por mensaje.`);
+      return;
+    }
+    if (files.length > slots) {
+      toast.error(`Solo puedes adjuntar ${slots} archivo${slots === 1 ? "" : "s"} más.`);
+    }
+    setUploading(true);
+    try {
+      for (const file of files.slice(0, slots)) {
+        if (!(SUPPORT_ALLOWED_MIME as readonly string[]).includes(file.type)) {
+          toast.error(`"${file.name}": tipo no permitido (solo imágenes o PDF).`);
+          continue;
+        }
+        if (file.size > SUPPORT_MAX_FILE_BYTES) {
+          toast.error(`"${file.name}" supera el límite de 5MB.`);
+          continue;
+        }
+        try {
+          const fd = new FormData();
+          fd.append("file", file);
+          const res = await fetch(`/api/admin/support/tickets/${ticketId}/attachments`, {
+            method: "POST",
+            body: fd,
+          });
+          let data: any = null;
+          try { data = await res.json(); } catch {}
+          if (!res.ok || !data || !data.path) {
+            toast.error((data && data.error) || `No se pudo subir "${file.name}".`);
+            continue;
+          }
+          const uploaded: SupportAttachment = {
+            path: data.path,
+            name: data.name || file.name,
+            size: typeof data.size === "number" ? data.size : file.size,
+            type: data.type || file.type,
+          };
+          setPendingFiles((prev) =>
+            prev.length >= SUPPORT_MAX_FILES_PER_MESSAGE ? prev : [...prev, uploaded]
+          );
+        } catch {
+          toast.error(`Error de red al subir "${file.name}".`);
+        }
+      }
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  function removePending(index: number) {
+    setPendingFiles((prev) => prev.filter((_, i) => i !== index));
+  }
+
   async function sendMessage() {
     const body = replyBody.trim();
-    if (!body || sending) return;
+    // Se permite enviar SOLO archivos sin texto (el service ya lo acepta).
+    if ((!body && pendingFiles.length === 0) || sending || uploading) return;
     setSending(true);
     try {
       const res = await fetch(`/api/admin/support/tickets/${ticketId}/messages`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ body, internalNote: effectiveInternal }),
+        body: JSON.stringify({
+          body,
+          internalNote: effectiveInternal,
+          ...(pendingFiles.length > 0 ? { attachments: pendingFiles } : {}),
+        }),
       });
       if (!res.ok) {
         const j = await res.json().catch(() => null);
         throw new Error(j?.error || "");
       }
       setReplyBody("");
+      setPendingFiles([]);
       toast.success(effectiveInternal ? "Nota interna guardada" : "Respuesta enviada");
       await fetchTicket();
     } catch (e) {
@@ -622,7 +702,94 @@ export function AdminTicketClient({ ticketId }: { ticketId: string }) {
               fontSize: 13,
             }}
           />
+          {/* Chips de adjuntos pendientes (aún no enviados) */}
+          {pendingFiles.length > 0 && (
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 8 }}>
+              {pendingFiles.map((f, i) => (
+                <span key={`${f.path}-${i}`} style={chipStyle}>
+                  {f.type && f.type.startsWith("image/") ? (
+                    <ImageIcon size={12} style={{ flexShrink: 0 }} />
+                  ) : (
+                    <FileText size={12} style={{ flexShrink: 0 }} />
+                  )}
+                  <span
+                    style={{
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      whiteSpace: "nowrap",
+                      color: "var(--text-1)",
+                    }}
+                  >
+                    {f.name}
+                  </span>
+                  {formatBytes(f.size) && (
+                    <span style={{ color: "var(--text-3)", flexShrink: 0 }}>{formatBytes(f.size)}</span>
+                  )}
+                  <button
+                    type="button"
+                    aria-label={`Quitar ${f.name}`}
+                    onClick={() => removePending(i)}
+                    disabled={sending}
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      background: "transparent",
+                      border: "none",
+                      padding: 0,
+                      cursor: sending ? "not-allowed" : "pointer",
+                      color: "var(--text-3)",
+                      flexShrink: 0,
+                    }}
+                  >
+                    <X size={13} />
+                  </button>
+                </span>
+              ))}
+            </div>
+          )}
+
           <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", marginTop: 8 }}>
+            <input
+              ref={fileRef}
+              type="file"
+              multiple
+              accept={ACCEPT_ATTR}
+              style={{ display: "none" }}
+              onChange={(e) => {
+                handleFiles(e.target.files);
+                e.target.value = "";
+              }}
+            />
+            <button
+              type="button"
+              onClick={() => {
+                if (fileRef.current) fileRef.current.click();
+              }}
+              disabled={uploading || sending || !canAttachMore}
+              aria-label="Adjuntar archivo (imagen o PDF, máximo 5MB)"
+              title="Imágenes o PDF · máx. 5MB · hasta 5 por mensaje"
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 6,
+                fontSize: 12.5,
+                padding: "5px 10px",
+                borderRadius: 8,
+                border: "1px solid var(--border-soft)",
+                background: "transparent",
+                color: "var(--text-2)",
+                cursor: uploading || sending || !canAttachMore ? "not-allowed" : "pointer",
+                opacity: uploading || sending || !canAttachMore ? 0.6 : 1,
+              }}
+            >
+              <Paperclip size={13} style={{ flexShrink: 0 }} />
+              {uploading ? "Subiendo…" : "Adjuntar"}
+            </button>
+            {pendingFiles.length > 0 && (
+              <span className="mono" style={{ fontSize: 10.5, color: "var(--text-3)" }}>
+                {pendingFiles.length}/{SUPPORT_MAX_FILES_PER_MESSAGE}
+              </span>
+            )}
             <label
               style={{
                 display: "inline-flex",
@@ -648,7 +815,11 @@ export function AdminTicketClient({ ticketId }: { ticketId: string }) {
               <span className="mono" style={{ fontSize: 10.5, color: "var(--text-3)" }}>
                 {replyBody.length}/{SUPPORT_MAX_BODY_CHARS}
               </span>
-              <ButtonNew variant="primary" onClick={sendMessage} disabled={sending || !replyBody.trim()}>
+              <ButtonNew
+                variant="primary"
+                onClick={sendMessage}
+                disabled={sending || uploading || (!replyBody.trim() && pendingFiles.length === 0)}
+              >
                 {sending ? "Enviando…" : effectiveInternal ? "Guardar nota" : "Responder"}
               </ButtonNew>
             </div>

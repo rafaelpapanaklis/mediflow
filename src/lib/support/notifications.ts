@@ -29,6 +29,9 @@ export interface SupportEmailContext {
   status?: string;
   /** Primeros ~300 chars del mensaje, texto plano. */
   bodyPreview?: string;
+  /** Nº de archivos adjuntos del mensaje (solo notifySupportReply). El email
+   *  NUNCA adjunta el archivo (las signed URLs expiran en 1h); solo avisa. */
+  attachmentCount?: number;
   authorName?: string | null;
   /** Email del usuario de la clínica que creó el ticket (destino de los
    *  correos hacia la clínica). Puede ser null → se omite el envío. */
@@ -215,12 +218,18 @@ export async function notifySupportReply(ctx: SupportEmailContext): Promise<void
   try {
     const author = (ctx.authorName ?? "").trim();
     const url = clinicTicketUrl(ctx.ticketId);
+    const attCount = ctx.attachmentCount ?? 0;
+    const attLine =
+      attCount > 0
+        ? `📎 ${attCount} archivo${attCount === 1 ? "" : "s"} adjunto${attCount === 1 ? "" : "s"} — descárgalo${attCount === 1 ? "" : "s"} desde tu panel.`
+        : "";
 
     const html = darkShell(`
     ${heading("Soporte respondió tu ticket")}
     ${metaLine(ctx)}
     ${paragraph(`${author ? `<strong style="color: #f5f5f7;">${escapeHtml(author)}</strong>, del equipo de soporte de DaleControl,` : "El equipo de soporte de DaleControl"} te respondió:`)}
     ${previewBlock(ctx.bodyPreview)}
+    ${attLine ? paragraph(escapeHtml(attLine)) : ""}
     ${paragraph("Puedes contestar directamente desde tu panel; ahí también verás el hilo completo.")}
     ${ctaButton(url, "Ver mi ticket →")}`);
 
@@ -228,8 +237,9 @@ export async function notifySupportReply(ctx: SupportEmailContext): Promise<void
       `Soporte respondió tu ticket ${formatFolio(ctx.folio)}\n` +
       `Asunto: ${ctx.subject}\n` +
       (author ? `Te respondió: ${author}\n` : "") +
-      `\n${(ctx.bodyPreview ?? "").trim()}\n\n` +
-      `Ver mi ticket: ${url}`;
+      `\n${(ctx.bodyPreview ?? "").trim()}\n` +
+      (attLine ? `\n${attLine}\n` : "") +
+      `\nVer mi ticket: ${url}`;
 
     await sendEmail({
       to: ctx.toEmail,

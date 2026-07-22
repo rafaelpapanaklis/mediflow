@@ -5,7 +5,9 @@ import { addSupportMessage } from "@/lib/support/service";
 
 // ═══════════════════════════════════════════════════════════════════════════
 // /api/admin/support/tickets/[id]/messages — respuesta de soporte ADMIN.
-//   POST → { body, internalNote? } → addSupportMessage(params.id, {...}) → 201
+//   POST → { body, internalNote?, attachments? } → addSupportMessage(...) → 201
+// attachments = metadatos de POST /api/admin/support/tickets/[id]/attachments;
+// el service los re-valida contra el clinicId del ticket (aquí NO se validan).
 // internalNote=true NUNCA notifica ni cambia estado (lo maneja el service).
 // El service hace toda la lógica; aquí solo: guard admin, parsear, delegar.
 // ═══════════════════════════════════════════════════════════════════════════
@@ -23,6 +25,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       body: payload.body,
       internalNote: Boolean(payload.internalNote),
       authorName: "Soporte DaleControl",
+      attachments: payload.attachments,
     });
     return NextResponse.json({ message }, { status: 201 });
   } catch (err) {
