@@ -219,17 +219,29 @@ export async function notifySupportReply(ctx: SupportEmailContext): Promise<void
     const author = (ctx.authorName ?? "").trim();
     const url = clinicTicketUrl(ctx.ticketId);
     const attCount = ctx.attachmentCount ?? 0;
+    const preview = (ctx.bodyPreview ?? "").trim();
+    const plural = attCount === 1 ? "" : "s";
     const attLine =
       attCount > 0
-        ? `📎 ${attCount} archivo${attCount === 1 ? "" : "s"} adjunto${attCount === 1 ? "" : "s"} — descárgalo${attCount === 1 ? "" : "s"} desde tu panel.`
+        ? `📎 ${attCount} archivo${plural} adjunto${plural} — descárgalo${plural} desde tu panel.`
         : "";
+    // Mensaje SOLO-archivos (sin cuerpo): "te respondió:" quedaba colgando sin
+    // nada después; el intro absorbe el aviso del adjunto y la línea 📎 no se
+    // repite en el HTML (en el texto plano sí va, ahí no hay redundancia).
+    const attachmentsOnly = !preview && attCount > 0;
+    const authorHtml = author
+      ? `<strong style="color: #f5f5f7;">${escapeHtml(author)}</strong>, del equipo de soporte de DaleControl,`
+      : "El equipo de soporte de DaleControl";
+    const introHtml = attachmentsOnly
+      ? `${authorHtml} te envió ${attCount === 1 ? "un archivo adjunto" : `${attCount} archivos adjuntos`} — descárgalo${plural} desde tu panel.`
+      : `${authorHtml} te respondió:`;
 
     const html = darkShell(`
     ${heading("Soporte respondió tu ticket")}
     ${metaLine(ctx)}
-    ${paragraph(`${author ? `<strong style="color: #f5f5f7;">${escapeHtml(author)}</strong>, del equipo de soporte de DaleControl,` : "El equipo de soporte de DaleControl"} te respondió:`)}
+    ${paragraph(introHtml)}
     ${previewBlock(ctx.bodyPreview)}
-    ${attLine ? paragraph(escapeHtml(attLine)) : ""}
+    ${attLine && !attachmentsOnly ? paragraph(escapeHtml(attLine)) : ""}
     ${paragraph("Puedes contestar directamente desde tu panel; ahí también verás el hilo completo.")}
     ${ctaButton(url, "Ver mi ticket →")}`);
 
@@ -237,7 +249,7 @@ export async function notifySupportReply(ctx: SupportEmailContext): Promise<void
       `Soporte respondió tu ticket ${formatFolio(ctx.folio)}\n` +
       `Asunto: ${ctx.subject}\n` +
       (author ? `Te respondió: ${author}\n` : "") +
-      `\n${(ctx.bodyPreview ?? "").trim()}\n` +
+      (preview ? `\n${preview}\n` : "") +
       (attLine ? `\n${attLine}\n` : "") +
       `\nVer mi ticket: ${url}`;
 
