@@ -28,7 +28,12 @@ export default async function PatientsPage() {
   });
 
   return (
+    // key por clínica: al cambiar de sucursal el switcher hace router.refresh()
+    // (soft), que reconcilia en vez de re-montar; sin key, el estado cliente
+    // (lista cacheada, filtros, selección) sobrevive y muestra pacientes de la
+    // sede anterior. Ver lección clinic-switch-stale-client-state.
     <PatientsClient
+      key={user.clinicId}
       currentUser={{ id: user.id, role: user.role }}
       doctors={doctors}
     />

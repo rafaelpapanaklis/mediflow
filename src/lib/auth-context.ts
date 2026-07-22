@@ -129,6 +129,23 @@ export async function getAuthContext(): Promise<AuthContext | null> {
 }
 
 /**
+ * Resuelve el filtro de clínica de una query de PACIENTES.
+ *
+ * MULTI-CLÍNICA · FASE 2: `visibleClinicIds` llega SÓLO desde
+ * getVisiblePatientClinicIds(ctx.clinicId) (@/lib/branches), que a su vez sale
+ * de la sesión — nunca de un parámetro del cliente. Si no llega, o si trae una
+ * sola sede, la query queda EXACTAMENTE como estaba (id pelado).
+ *
+ * Defensa en profundidad: aunque un caller pasara una lista manipulada, se
+ * exige que la sede activa esté dentro; si no, se ignora la lista entera.
+ */
+function clinicFilterFor(ctx: AuthContext, visibleClinicIds?: string[]): string | { in: string[] } {
+  if (!visibleClinicIds || visibleClinicIds.length <= 1) return ctx.clinicId;
+  if (visibleClinicIds.indexOf(ctx.clinicId) === -1) return ctx.clinicId;
+  return { in: visibleClinicIds };
+}
+
+/**
  * Build patient WHERE clause based on role.
  * Admins see all clinic patients. Doctors only see their own.
  *
@@ -138,14 +155,22 @@ export async function getAuthContext(): Promise<AuthContext | null> {
  *                    abajo (primaryDoctor / cita / record).
  *   - lista LLENA  → SUSTITUYE las heurísticas: lo ven SOLO los userIds de la
  *                    lista (+ cualquier admin, que no pasa por este filtro).
- *                    Un doctor con cita del paciente NO lo ve si no está.
  *
- * Todo va dentro de `AND` a propósito. Antes las heurísticas vivían en un `OR`
- * de primer nivel y `...extra` podía pisarlo: el handler legacy de
- * GET /api/patients manda su búsqueda como `extra.OR` y borraba el scope del
- * doctor (fuga). Con `AND` ambas condiciones coexisten con cualquier `extra`.
+ * Todo va dentro de `AND` a propósito: antes las heurísticas vivían en un `OR`
+ * de primer nivel y `...extra` podía pisarlo (el handler legacy mandaba su
+ * búsqueda como `extra.OR` y borraba el scope del doctor = fuga). Con `AND`
+ * coexisten con cualquier `extra`.
+ *
+ * `visibleClinicIds` (opcional, multi-clínica Fase 2) amplía el scope de CLÍNICAS
+ * a las sedes vinculadas (vía clinicFilterFor). OPT-IN por superficie: quien no lo
+ * pasa sigue viendo sólo su sede. Compone con la visibilidad por-paciente: las
+ * sedes deciden QUÉ clínicas entran; visibleUserIds, QUÉ pacientes dentro de ellas.
  */
-export function buildPatientWhere(ctx: AuthContext, extra: Record<string, any> = {}) {
+export function buildPatientWhere(
+  ctx: AuthContext,
+  extra: Record<string, any> = {},
+  visibleClinicIds?: string[],
+) {
   const { AND: extraAnd, ...restExtra } = extra;
   const extraAndList: any[] = extraAnd
     ? Array.isArray(extraAnd) ? extraAnd : [extraAnd]
@@ -177,7 +202,7 @@ export function buildPatientWhere(ctx: AuthContext, extra: Record<string, any> =
 
   const AND = [...scope, ...extraAndList];
   return {
-    clinicId: ctx.clinicId, // ALWAYS — prevents cross-clinic access
+    clinicId: clinicFilterFor(ctx, visibleClinicIds), // ALWAYS — cross-clinic guard + multi-clínica opt-in
     ...(AND.length ? { AND } : {}),
     ...restExtra,
   };

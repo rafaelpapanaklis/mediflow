@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getAuthContext } from "@/lib/auth-context";
 import { assertPatientVisible } from "@/lib/patient-visibility";
 import { prisma } from "@/lib/prisma";
+import { getVisiblePatientClinicIds, clinicScopeFilter } from "@/lib/branches";
 import { createClient as createAdmin } from "@supabase/supabase-js";
 import { BUCKETS, signMaybeUrl, signMaybeUrls } from "@/lib/storage";
 import { storageQuotaError } from "@/lib/storage-quota";
@@ -37,10 +38,17 @@ export async function GET(req: NextRequest) {
   // ESPEJO EXACTO de ese filtro para que un archivo nunca aparezca en ambas
   // vistas: /api/xrays devuelve justo el complemento. Una sola fuente de verdad.
   // (No toca la subida ni el aislamiento por clinicId.)
+  // MULTI-CLÍNICA · FASE 2 — las radiografías son contenido clínico del
+  // paciente, así que se leen también desde una sede vinculada. El aislamiento
+  // sigue viviendo en este where compuesto (patientId + clinicId ∈ visibles):
+  // un patientId de una clínica NO vinculada no devuelve nada.
+  // Con el flag apagado, clinicScopeFilter devuelve ctx.clinicId pelado.
+  const visibleClinicIds = await getVisiblePatientClinicIds(ctx.clinicId);
+
   const files = await prisma.patientFile.findMany({
     where: {
       patientId,
-      clinicId: ctx.clinicId,
+      clinicId: clinicScopeFilter(visibleClinicIds),
       deletedAt: null, // NOM-024 §7 — oculta radiografías borradas lógicamente
       NOT: {
         OR: [

@@ -4,7 +4,14 @@ import { prisma } from "@/lib/prisma";
 import { getAuthContext } from "@/lib/auth-context";
 import { getPlanLimits } from "@/lib/plans";
 import { writeActiveClinicCookie } from "@/lib/active-clinic";
-import { getBranchQuota, countOwnedClinics, generateClinicSlug } from "@/lib/branches";
+import {
+  getBranchQuota,
+  countOwnedClinics,
+  generateClinicSlug,
+  getOwnedClinicIds,
+  createPatientLink,
+  PATIENT_SHARING_ENABLED,
+} from "@/lib/branches";
 import { persistentRateLimit } from "@/lib/failban";
 import { logMutation } from "@/lib/audit";
 import { logError } from "@/lib/safe-log";
@@ -44,6 +51,11 @@ const schema = z.object({
   city: z.string().trim().max(60).optional(),
   state: z.string().trim().max(60).optional(),
   phone: z.string().trim().max(30).optional(),
+  // MULTI-CLÍNICA · FASE 2 — sedes YA EXISTENTES con las que la sucursal nueva
+  // compartirá pacientes. Opcional; el tope de 20 es sólo anti-abuso (el cupo
+  // real de sedes lo impone maxClinics). Cada id se valida contra las sedes
+  // del dueño ANTES de escribir nada: nunca se confía en el body.
+  sharePatientsWith: z.array(z.string().trim().min(1).max(40)).max(20).optional(),
 });
 
 /** Mensaje al dueño según por qué NO puede crear la sede. */
@@ -175,6 +187,46 @@ export async function POST(req: NextRequest) {
       },
       select: { id: true, name: true, slug: true, plan: true, category: true },
     });
+
+    // MULTI-CLÍNICA · FASE 2 — vincular la sede nueva con las que eligió el
+    // dueño en el diálogo. Va DESPUÉS de crear la clínica (necesitamos su id)
+    // y en best-effort: si un vínculo falla, la sucursal YA existe y no la
+    // tiramos — el dueño puede reintentar desde /dashboard/settings/sucursales.
+    //
+    // Anti-IDOR: cada id del body se coteja contra las sedes del supabaseId de
+    // la SESIÓN. OJO — `owned` se calcula DESPUÉS del create, así que YA
+    // incluye la sede recién nacida; quien impide el auto-vínculo es el
+    // `targetId === clinic.id` explícito de abajo (y, en el fondo, el CHECK
+    // clinicAId < clinicBId de la tabla). No quitar ninguno de los dos.
+    if (PATIENT_SHARING_ENABLED && data.sharePatientsWith && data.sharePatientsWith.length > 0) {
+      try {
+        const owned = await getOwnedClinicIds(supabaseId);
+        for (let i = 0; i < data.sharePatientsWith.length; i++) {
+          const targetId = data.sharePatientsWith[i];
+          if (targetId === clinic.id) continue;
+          if (owned.indexOf(targetId) === -1) continue;
+          const link = await createPatientLink({
+            clinicXId: clinic.id,
+            clinicYId: targetId,
+            createdById: ctx.userId,
+          });
+          // Abrir el expediente de una sede a otra es un evento auditable por
+          // sí mismo: sin esto, los vínculos creados en el alta no dejaban
+          // ningún rastro (los de /api/clinics/links sí).
+          await logMutation({
+            req,
+            clinicId: ctx.clinicId,
+            userId: ctx.userId,
+            entityType: "clinic",
+            entityId: link.id,
+            action: "create",
+            after: { patientLink: true, clinicAId: link.clinicAId, clinicBId: link.clinicBId },
+          });
+        }
+      } catch (linkErr: any) {
+        logError("[api/clinics POST] vínculos de pacientes", linkErr);
+      }
+    }
 
     // Auditoría en la clínica DESDE la que se creó (ahí vive el actor).
     await logMutation({

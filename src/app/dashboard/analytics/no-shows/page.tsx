@@ -13,5 +13,5 @@ export default async function NoShowsPage() {
   if (!["SUPER_ADMIN", "ADMIN"].includes(user.role)) {
     return <div style={{ padding: 32, color: "var(--text-3)" }}>{t("analytics.noShows.adminOnly")}</div>;
   }
-  return <NoShowsClient />;
+  return <NoShowsClient key={user.clinicId} />;
 }

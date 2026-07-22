@@ -27,6 +27,7 @@ export default async function MarketplacePage() {
 
   return (
     <MarketplaceContent
+      key={ctx.clinicId}
       modules={modules}
       clinicModules={clinicModules}
       trialStatus={trialStatus}

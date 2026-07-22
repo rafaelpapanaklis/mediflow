@@ -13,5 +13,5 @@ export default async function DoctorsAnalyticsPage() {
   if (!["SUPER_ADMIN", "ADMIN"].includes(user.role)) {
     return <div style={{ padding: 32, color: "var(--text-3)" }}>{t("analytics.doctorsPage.adminOnly")}</div>;
   }
-  return <DoctorsClient />;
+  return <DoctorsClient key={user.clinicId} />;
 }

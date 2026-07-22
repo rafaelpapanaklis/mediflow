@@ -33,6 +33,7 @@ export default async function SettingsPage({ searchParams }: Props) {
   return (
     <ErrorBoundary fallbackTitle={t("settings.page.errorBoundaryTitle")}>
       <SettingsClient
+        key={user.clinicId}
         user={user as any}
         clinic={clinic as any}
         initialTab={searchParams.tab}

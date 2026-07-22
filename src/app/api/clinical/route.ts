@@ -7,6 +7,7 @@ import { readActiveClinicCookie } from "@/lib/active-clinic";
 import { logMutation } from "@/lib/audit";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { assertPatientVisible } from "@/lib/patient-visibility";
+import { getVisiblePatientClinicIds, sharedRecordScope } from "@/lib/branches";
 import { round2 } from "@/lib/quotes/compute";
 import {
   EMPTY_NOTE_ERROR,
@@ -51,16 +52,25 @@ export async function GET(req: NextRequest) {
   if (denied) return denied;
   const patientId = req.nextUrl.searchParams.get("patientId");
   if (!patientId) return NextResponse.json({ error: "patientId required" }, { status: 400 });
-  // Visibilidad por paciente: el where de abajo es clinicId + patientId, así que
-  // sin este gate se leía el expediente de un paciente restringido con solo su id.
+  // Visibilidad por paciente: el where de abajo filtra por patientId + sede(s), así
+  // que sin este gate se leía el expediente de un restringido con solo su id.
+  // Scoped a la sede activa (con PATIENT_SHARING off = comportamiento actual; la
+  // interacción visibilidad×sedes-compartidas queda como follow-up al encender flag).
   const hidden = await assertPatientVisible(patientId, {
     userId: dbUser.id,
     role: dbUser.role,
     clinicId: dbUser.clinicId,
   });
   if (hidden) return hidden;
+  // MULTI-CLÍNICA · FASE 2 — consultas/expediente legibles desde una sede
+  // vinculada. Sólo LECTURA: el POST de más abajo sigue creando y validando
+  // contra dbUser.clinicId (una consulta nace siempre en la sede activa).
+  const visibleClinicIds = await getVisiblePatientClinicIds(dbUser.clinicId);
   const records = await prisma.medicalRecord.findMany({
-    where: { clinicId: dbUser.clinicId, patientId },
+    // sharedRecordScope excluye las notas privadas de las sedes AJENAS: cruzando
+    // la frontera "esta nota es mía" no se puede decidir (los ids de doctor son
+    // por clínica), así que se cierra.
+    where: { ...sharedRecordScope(dbUser.clinicId, visibleClinicIds), patientId },
     include: { doctor: { select: { id: true, firstName: true, lastName: true } } },
     orderBy: { visitDate: "desc" },
   });

@@ -15,5 +15,5 @@ export default async function CrmPage() {
       </div>
     );
   }
-  return <CrmClient />;
+  return <CrmClient key={user.clinicId} />;
 }

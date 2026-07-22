@@ -18,5 +18,5 @@ export default async function TvModesPage() {
   const activeModules = await getActiveClinicModuleKeys(user.clinicId);
   if (!activeModules.includes("tv-modes")) return <ModuleLocked name="Pantallas TV" />;
 
-  return <TvModesClient />;
+  return <TvModesClient key={user.clinicId} />;
 }

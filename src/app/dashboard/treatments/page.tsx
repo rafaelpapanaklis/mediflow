@@ -61,6 +61,7 @@ export default async function TreatmentsPage() {
 
   return (
     <TreatmentsClient
+      key={user.clinicId}
       treatments={serialized as any}
       patients={patients}
       doctors={doctors}

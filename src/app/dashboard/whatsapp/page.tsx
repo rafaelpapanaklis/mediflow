@@ -10,6 +10,7 @@ export default async function WhatsAppPage() {
   const user = await getCurrentUser();
   return (
     <WhatsAppClient
+      key={user.clinicId}
       connected={user.clinic.waConnected ?? false}
       phoneNumberId={user.clinic.waPhoneNumberId ?? ""}
       wabaId={user.clinic.waBusinessAccountId ?? ""}

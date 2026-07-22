@@ -161,5 +161,5 @@ export default async function InventoryPage() {
     }
   }
 
-  return <InventoryClient initialItems={items as any} specialty={user.clinic.specialty} />;
+  return <InventoryClient key={clinicId} initialItems={items as any} specialty={user.clinic.specialty} />;
 }

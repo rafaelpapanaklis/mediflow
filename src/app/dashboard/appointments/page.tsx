@@ -75,6 +75,7 @@ export default async function AppointmentsPage() {
   return (
     <ErrorBoundary fallbackTitle={t("appointments.page.loadError")}>
       <AppointmentsClient
+        key={user.clinicId}
         appointments={serializedAppts as any}
         patients={patients}
         doctors={doctors}

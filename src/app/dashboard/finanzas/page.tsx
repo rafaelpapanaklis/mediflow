@@ -25,5 +25,5 @@ export default async function FinanzasPage() {
     );
   }
 
-  return <FinanzasClient />;
+  return <FinanzasClient key={user.clinicId} />;
 }

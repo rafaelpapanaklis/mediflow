@@ -3,6 +3,7 @@ export const dynamic = "force-dynamic";
 import { getCurrentUser } from "@/lib/auth";
 import { getServerT } from "@/i18n/server";
 import { prisma } from "@/lib/prisma";
+import { getPatientVisibility, clinicScopeFilter, sharedRecordScope } from "@/lib/branches";
 import { getPatientCreditBalance } from "@/lib/patient-credit";
 import { patientVisibilityAnd } from "@/lib/patient-visibility";
 import { notFound } from "next/navigation";
@@ -39,32 +40,49 @@ export default async function PatientDetailPage({ params }: { params: { id: stri
   const { t } = await getServerT();
   const tz = user.clinic.timezone;
 
+  // MULTI-CLÍNICA · FASE 2 — sedes cuyo expediente puede LEER esta sesión.
+  // Con el flag apagado devuelve [user.clinicId] sin tocar la BD, así que la
+  // query de abajo queda exactamente como estaba.
+  const visibility = await getPatientVisibility(user.clinicId);
+
   const [patient, doctors] = await Promise.all([
     prisma.patient.findFirst({
-      // Visibilidad por paciente: esta página arma el expediente en el server,
-      // así que el gate del GET /api/patients/[id] NO la cubre — sin este AND,
-      // la URL directa renderizaba el expediente de un paciente restringido.
-      // Si no lo puede ver, para él no existe → notFound() (404), nunca 403.
+      // MULTI-CLÍNICA: clinicScopeFilter permite el expediente de una sede vinculada
+      // (con el flag apagado = user.clinicId pelado). Visibilidad por paciente: esta
+      // página arma el expediente en el server, así que el gate de GET
+      // /api/patients/[id] NO la cubre — sin este AND, la URL directa renderizaba el
+      // expediente de un restringido. Si no lo puede ver, no existe → notFound() (404).
       where: {
         id: params.id,
-        clinicId: user.clinicId,
+        clinicId: clinicScopeFilter(visibility.clinicIds),
         AND: patientVisibilityAnd({ userId: user.id, role: user.role, clinicId: user.clinicId }),
       },
       include: {
         primaryDoctor: { select: { id: true, firstName: true, lastName: true, color: true } },
+        // Citas y facturas SIEMPRE de la sede activa: aunque el paciente venga
+        // prestado de otra sucursal, cada sede agenda y cobra por separado.
+        // No-op para un paciente propio.
         appointments: {
+          where: { clinicId: user.clinicId },
           orderBy: { startsAt: "desc" },
           take: 30,
           include: { doctor: { select: { id: true, firstName: true, lastName: true } } },
         },
+        // El expediente SÍ se comparte: es el contenido clínico de la Fase 2.
+        // Scope explícito = defensa en profundidad (no-op para paciente propio)
+        // + excluye notas privadas de otro doctor cuando la sede es ajena.
         records: {
+          where: sharedRecordScope(user.clinicId, visibility.clinicIds),
           orderBy: { visitDate: "desc" },
           take: 20,
           include: { doctor: { select: { id: true, firstName: true, lastName: true } } },
         },
-        invoices: { include: { payments: true, patient: { select: { rfcPaciente: true, razonSocialPac: true, regimenFiscalPac: true, cpPaciente: true } } } },
+        invoices: { where: { clinicId: user.clinicId }, include: { payments: true, patient: { select: { rfcPaciente: true, razonSocialPac: true, regimenFiscalPac: true, cpPaciente: true } } } },
         // FIX: fetch treatment plans for the Tratamientos tab
+        // FASE 2: scopeado a la sede activa — un plan de tratamiento lleva
+        // costo y sesiones que se cobran en la sede donde se pactó.
         treatments: {
+          where: { clinicId: user.clinicId },
           orderBy: { createdAt: "desc" },
           include: {
             doctor:   { select: { id: true, firstName: true, lastName: true, color: true } },
@@ -272,6 +290,12 @@ export default async function PatientDetailPage({ params }: { params: { id: stri
     <div>
       <ErrorBoundary fallbackTitle={t("patients.page.loadError")}>
         <PatientDetailClient
+          key={user.clinicId}
+          originClinicName={
+            patient.clinicId === user.clinicId
+              ? null
+              : visibility.otherClinicNames[patient.clinicId] ?? null
+          }
           patient={patient as any}
           records={serializedRecords as any}
           appointments={serializedAppts as any}
