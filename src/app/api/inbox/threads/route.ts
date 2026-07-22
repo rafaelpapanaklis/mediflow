@@ -6,6 +6,8 @@ import { prisma } from "@/lib/prisma";
 import { readActiveClinicCookie } from "@/lib/active-clinic";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { relatedPatientVisibilityAnd } from "@/lib/patient-visibility";
+import { DEFAULT_TZ, calendarDayISO } from "@/lib/agenda/date-ranges";
+import { tzLocalToUtc } from "@/lib/agenda/time-utils";
 
 export const dynamic = "force-dynamic";
 
@@ -67,19 +69,19 @@ export async function GET(req: NextRequest) {
     });
 
     const sp = req.nextUrl.searchParams;
+    // Visibilidad por paciente: los hilos de un paciente restringido solo los
+    // ve quien está en su lista (+ admins). Los hilos SIN paciente se ven
+    // siempre. Compartido entre la lista y las stats (?include=stats) para que
+    // ambas cuenten exactamente lo que este usuario puede ver.
+    const visibilityAnd = relatedPatientVisibilityAnd(
+      { userId: dbUser.id, role: dbUser.role, clinicId: dbUser.clinicId },
+      { patientNullable: true },
+    );
     const where: Prisma.InboxThreadWhereInput = {
       clinicId: dbUser.clinicId,
-      // Visibilidad por paciente: los hilos de un paciente restringido solo los
-      // ve quien está en su lista (+ admins). Los hilos SIN paciente se ven
-      // siempre. Va en AND porque `where.OR` lo ocupa la búsqueda por texto de
-      // más abajo — meterlo ahí lo volvería permisivo en vez de restrictivo.
-      ...(() => {
-        const v = relatedPatientVisibilityAnd(
-          { userId: dbUser.id, role: dbUser.role, clinicId: dbUser.clinicId },
-          { patientNullable: true },
-        );
-        return v.length ? { AND: v } : {};
-      })(),
+      // Va en AND porque `where.OR` lo ocupa la búsqueda por texto de más
+      // abajo — meterlo ahí lo volvería permisivo en vez de restrictivo.
+      ...(visibilityAnd.length ? { AND: visibilityAnd } : {}),
     };
     const status = sp.get("status");
     if (status && ["UNREAD", "READ", "ARCHIVED", "SNOOZED"].includes(status)) {
@@ -126,7 +128,46 @@ export async function GET(req: NextRequest) {
         patient: { select: { id: true, firstName: true, lastName: true } },
         assignedTo: { select: { id: true, firstName: true, lastName: true } },
         _count: { select: { messages: true } },
+        // Último mensaje visible (no nota interna) para el preview de la
+        // lista. Prisma resuelve el take:1 por hilo en batch — no hay N+1.
+        messages: {
+          where: { isInternal: false },
+          orderBy: { sentAt: "desc" },
+          take: 1,
+          select: { direction: true, sentAt: true, body: true },
+        },
       },
+    });
+
+    // lastInboundAt (último mensaje IN por hilo) en UNA query agregada: el
+    // include de arriba no puede filtrar la misma relación dos veces.
+    const threadIds = threads.map((t) => t.id);
+    const inboundMax = threadIds.length
+      ? await prisma.inboxMessage.groupBy({
+          by: ["threadId"],
+          where: { threadId: { in: threadIds }, direction: "IN" },
+          _max: { sentAt: true },
+        })
+      : [];
+    const lastInboundByThread = new Map<string, Date | null>();
+    inboundMax.forEach((g) => lastInboundByThread.set(g.threadId, g._max.sentAt));
+
+    // Shape retrocompatible: los campos de siempre + lastMessage/lastInboundAt.
+    // El array crudo `messages` (take:1) no se expone al cliente.
+    const threadsPayload = threads.map(({ messages, ...t }) => {
+      const last = messages[0];
+      return {
+        ...t,
+        lastMessage: last
+          ? {
+              direction: last.direction,
+              sentAt: last.sentAt,
+              excerpt: last.body.slice(0, 140),
+              isInternal: false,
+            }
+          : null,
+        lastInboundAt: lastInboundByThread.get(t.id) ?? null,
+      };
     });
 
     // Counts agregados por canal + status para los folders del sidebar.
@@ -142,7 +183,74 @@ export async function GET(req: NextRequest) {
       ) as Record<string, number>,
     };
 
-    return NextResponse.json({ threads, counts, serverTime: serverTime.toISOString() });
+    // Stats para el header del rediseño — opt-in (?include=stats) para no
+    // encarecer el polling actual. Globales por clínica (ignoran los filtros
+    // de la lista) y con la MISMA visibilidad por paciente que la lista.
+    let stats:
+      | { waitingOver20m: number; resolvedToday: number; botAuto: number }
+      | undefined;
+    if ((sp.get("include") ?? "").split(",").map((s) => s.trim()).includes("stats")) {
+      const twentyMinAgo = new Date(serverTime.getTime() - 20 * 60 * 1000);
+      // "Hoy" = día calendario en la tz de la clínica (mismos helpers que la
+      // agenda). resolvedToday usa el criterio simple updatedAt del ARCHIVED
+      // (no hay resolvedAt dedicado y no tocamos schema).
+      const clinic = await prisma.clinic.findUnique({
+        where: { id: dbUser.clinicId },
+        select: { timezone: true },
+      });
+      const tz = clinic?.timezone && clinic.timezone.length > 0 ? clinic.timezone : DEFAULT_TZ;
+      const startOfToday = tzLocalToUtc(
+        calendarDayISO(serverTime.toISOString(), tz), 0, 0, tz,
+      );
+      const [openThreads, resolvedToday, botAuto] = await Promise.all([
+        prisma.inboxThread.findMany({
+          where: {
+            clinicId: dbUser.clinicId,
+            status: { in: ["UNREAD", "READ"] },
+            ...(visibilityAnd.length ? { AND: visibilityAnd } : {}),
+          },
+          select: {
+            messages: {
+              where: { isInternal: false },
+              orderBy: { sentAt: "desc" },
+              take: 1,
+              select: { direction: true, sentAt: true },
+            },
+          },
+        }),
+        prisma.inboxThread.count({
+          where: {
+            clinicId: dbUser.clinicId,
+            status: "ARCHIVED",
+            updatedAt: { gte: startOfToday },
+            ...(visibilityAnd.length ? { AND: visibilityAnd } : {}),
+          },
+        }),
+        prisma.inboxThread.count({
+          where: {
+            clinicId: dbUser.clinicId,
+            channel: "WHATSAPP",
+            botActive: true,
+            status: { not: "ARCHIVED" },
+            ...(visibilityAnd.length ? { AND: visibilityAnd } : {}),
+          },
+        }),
+      ]);
+      // Esperando respuesta: el último mensaje visible del hilo es del
+      // paciente (IN) y lleva más de 20 min sin contestarse.
+      const waitingOver20m = openThreads.filter((t) => {
+        const last = t.messages[0];
+        return !!last && last.direction === "IN" && last.sentAt < twentyMinAgo;
+      }).length;
+      stats = { waitingOver20m, resolvedToday, botAuto };
+    }
+
+    return NextResponse.json({
+      threads: threadsPayload,
+      counts,
+      serverTime: serverTime.toISOString(),
+      ...(stats ? { stats } : {}),
+    });
   } catch (err) {
     if (isMissingTable(err)) {
       return jsonError("schema_not_migrated", 503, {
