@@ -64,6 +64,10 @@ export async function POST(req: NextRequest) {
         { status: 409 },
       );
     }
+    // Cuenta INVITADA por la clínica (emailVerified=false, passwordHash=null) o
+    // un registro previo sin verificar: NO se responde 409 — cae al update de
+    // abajo, que fija la contraseña + código nuevo. Así el paciente reclama la
+    // cuenta invitada por OTP sin chocar con "correo ya registrado".
 
     const code = generateVerifyCode();
     const passwordHash = await hashPassword(password);

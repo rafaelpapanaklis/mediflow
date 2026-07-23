@@ -50,6 +50,21 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Correo o contraseña incorrectos" }, { status: 401 });
     }
 
+    // Cuenta INVITADA por la clínica que aún no fija su contraseña (passwordHash
+    // null). NO es una credencial inválida: damos un mensaje claro para que
+    // active desde el correo de invitación. No cuenta como fallo (no bump) —
+    // evita que se pueda lockear una cuenta que ni siquiera tiene contraseña.
+    if (account.passwordHash === null) {
+      return NextResponse.json(
+        {
+          error:
+            "Aún no activas tu cuenta. Revisa el correo de invitación de tu clínica o pide que te reenvíen el acceso.",
+          needsActivation: true,
+        },
+        { status: 403 },
+      );
+    }
+
     const passwordOk = await verifyPassword(password, account.passwordHash);
     if (!passwordOk) {
       await recordAuthFailure(req, { scope: "paciente-login", account: email });
