@@ -10,6 +10,8 @@ import {
   MoreHorizontal,
   Edit,
   ExternalLink,
+  Send,
+  UserCheck,
   Printer,
   Calendar,
   Phone,
@@ -54,7 +56,17 @@ export interface HeroCardProps {
   lastVisitDate: string | null;
   visitCount: number;
   pendingBalance: number;
+  /** Link LEGACY de solo lectura (portalToken). Independiente de la cuenta real. */
   portalUrl: string | null;
+  /** Estado del portal con CUENTA REAL: "none" sin cuenta, "invited" invitación
+   *  pendiente, "active" ya tiene acceso. Default "none". */
+  portalAccountStatus?: "none" | "invited" | "active";
+  /** true mientras se envía/reenvía la invitación (deshabilita la acción). */
+  invitingPortal?: boolean;
+  /** Invita/reenvía al portal con cuenta real (correo para fijar contraseña). */
+  onInvitePortal?: () => void;
+  /** Genera/copia el link LEGACY de solo lectura (portalToken, POST /api/portal). */
+  onGeneratePortal?: () => void;
   onEdit: () => void;
   onStartConsult: () => void;
   onReschedule: () => void;
@@ -82,6 +94,10 @@ export function HeroCard({
   visitCount,
   pendingBalance,
   portalUrl,
+  portalAccountStatus = "none",
+  invitingPortal = false,
+  onInvitePortal,
+  onGeneratePortal,
   onEdit,
   onStartConsult,
   onReschedule,
@@ -264,6 +280,38 @@ export function HeroCard({
                 >
                   <Edit size={12} strokeWidth={1.75} aria-hidden /> {t("patients.heroCard.editPatient")}
                 </button>
+                {/* Acceso al portal con CUENTA REAL: el paciente define su
+                    propia contraseña desde un correo (la clínica nunca la ve). */}
+                {portalAccountStatus === "active" ? (
+                  <div
+                    className={styles.heroMenuItem}
+                    aria-disabled
+                    style={{ opacity: 0.65, cursor: "default", pointerEvents: "none" }}
+                  >
+                    <UserCheck size={12} strokeWidth={1.75} aria-hidden /> {t("patients.heroCard.portalActive")}
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    className={styles.heroMenuItem}
+                    disabled={invitingPortal}
+                    onClick={() => {
+                      setMoreOpen(false);
+                      onInvitePortal?.();
+                    }}
+                  >
+                    <Send size={12} strokeWidth={1.75} aria-hidden />{" "}
+                    {portalAccountStatus === "invited"
+                      ? t("patients.heroCard.portalResend")
+                      : t("patients.heroCard.portalInvite")}
+                  </button>
+                )}
+                {portalAccountStatus === "invited" && (
+                  <div className={styles.heroMenuHint}>{t("patients.heroCard.portalInvitedHint")}</div>
+                )}
+
+                {/* Link LEGACY de SOLO LECTURA (portalToken) — opción aparte,
+                    sin cuenta ni contraseña. */}
                 {portalUrl ? (
                   <button
                     type="button"
@@ -273,7 +321,7 @@ export function HeroCard({
                       navigator.clipboard.writeText(portalUrl);
                     }}
                   >
-                    <ExternalLink size={12} strokeWidth={1.75} aria-hidden /> {t("patients.heroCard.copyPortalLink")}
+                    <ExternalLink size={12} strokeWidth={1.75} aria-hidden /> {t("patients.heroCard.copyReadonlyLink")}
                   </button>
                 ) : (
                   <button
@@ -281,10 +329,10 @@ export function HeroCard({
                     className={styles.heroMenuItem}
                     onClick={() => {
                       setMoreOpen(false);
-                      onEdit();
+                      onGeneratePortal?.();
                     }}
                   >
-                    <ExternalLink size={12} strokeWidth={1.75} aria-hidden /> {t("patients.heroCard.generatePatientPortal")}
+                    <ExternalLink size={12} strokeWidth={1.75} aria-hidden /> {t("patients.heroCard.generateReadonlyLink")}
                   </button>
                 )}
                 <button

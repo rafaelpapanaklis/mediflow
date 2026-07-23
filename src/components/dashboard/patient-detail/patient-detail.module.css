@@ -226,6 +226,16 @@
 }
 .heroMenuItem:hover { background: var(--bg-hover); }
 .heroMenuItem:focus-visible { outline: none; box-shadow: var(--ring); }
+.heroMenuItem:disabled { opacity: 0.55; cursor: default; }
+.heroMenuItem:disabled:hover { background: transparent; }
+/* Caption bajo la acción de invitar cuando ya hay una invitación pendiente. */
+.heroMenuHint {
+  padding: 1px 10px 6px;
+  font-size: 10.5px;
+  line-height: 1.35;
+  color: var(--text-2);
+  letter-spacing: 0.01em;
+}
 
 .heroAlerts {
   display: flex; flex-wrap: wrap; gap: 6px;

@@ -256,6 +256,10 @@ interface Props {
   specialty:    string;
   treatments:   any[];
   portalUrl?:   string | null;
+  /** Estado del portal con CUENTA REAL del paciente (independiente del link
+   *  legacy de solo lectura `portalUrl`): "none" sin cuenta, "invited"
+   *  invitación pendiente (sin contraseña), "active" ya con acceso. */
+  portalAccountStatus?: "none" | "invited" | "active";
   pediatricsData?: PediatricsTabData | null;
   /**
    * True si la clínica tiene el módulo Odontopediatría activo (o trial
@@ -325,6 +329,7 @@ interface Props {
 export function PatientDetailClient({
   patient, records: initialRecords, appointments, invoices: initialInvoices,
   doctors, currentUser, specialty, treatments, portalUrl,
+  portalAccountStatus = "none",
   pediatricsData,
   pediatricsModuleActive = false,
   perioData,
@@ -666,6 +671,10 @@ export function PatientDetailClient({
   }, [patient.visibleUserIds]);
   const [portalLink, setPortalLink] = useState<string | null>(portalUrl ?? null);
   const [generatingPortal, setGeneratingPortal] = useState(false);
+  // Estado del portal con CUENTA REAL (invitación por email). Local para
+  // reflejar de inmediato el resultado de invitar/reenviar sin recargar.
+  const [portalStatus, setPortalStatus] = useState<"none" | "invited" | "active">(portalAccountStatus);
+  const [invitingPortal, setInvitingPortal] = useState(false);
   // Radiografias state
   const [files, setFiles]             = useState<any[]>([]);
   const [filesLoaded, setFilesLoaded] = useState(false);
@@ -741,6 +750,36 @@ export function PatientDetailClient({
       toast.error(err.message ?? t("patients.portal.error"));
     } finally {
       setGeneratingPortal(false);
+    }
+  }
+
+  // Invita al paciente al portal con CUENTA REAL: crea/liga la PatientAccount y
+  // le manda un correo para que fije SU contraseña. La clínica nunca la ve.
+  async function invitePortal() {
+    if (invitingPortal) return;
+    if (!patient.email) {
+      toast.error(t("patients.portal.needsEmail"));
+      return;
+    }
+    setInvitingPortal(true);
+    try {
+      const res = await fetch(`/api/patients/${patient.id}/portal-invite`, { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      if (data.status === "already_active") {
+        setPortalStatus("active");
+        toast.success(t("patients.portal.alreadyActive"));
+      } else if (data.status === "resent") {
+        setPortalStatus("invited");
+        toast.success(t("patients.portal.inviteResent"));
+      } else {
+        setPortalStatus("invited");
+        toast.success(t("patients.portal.inviteSent"));
+      }
+    } catch (err: any) {
+      toast.error(err.message ?? t("patients.portal.inviteError"));
+    } finally {
+      setInvitingPortal(false);
     }
   }
 
@@ -1107,6 +1146,10 @@ export function PatientDetailClient({
           visitCount={completedCount}
           pendingBalance={totalBalance}
           portalUrl={portalLink}
+          portalAccountStatus={portalStatus}
+          invitingPortal={invitingPortal}
+          onInvitePortal={invitePortal}
+          onGeneratePortal={generatePortalLink}
           onEdit={() => setShowEdit(true)}
           onStartConsult={() => {
             if (nextAppt) {
