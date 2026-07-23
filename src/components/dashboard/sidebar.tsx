@@ -105,6 +105,14 @@ export interface SidebarProps {
    * con la server action. Valores: clinico | catalogo | specialties | admin.
    */
   sidebarCollapsed?: string[];
+  /**
+   * Clínica suspendida / sin plan activo (isPlanExpired en el layout). Cuando
+   * es true el sidebar deja el menú normal y muestra SOLO el menú reducido de
+   * suspensión (Facturación + Soporte). El layout ya redirige toda navegación
+   * que no sea /dashboard/suspended o /dashboard/soporte(/*), así que el menú
+   * completo no tendría a dónde llevar.
+   */
+  isExpired?: boolean;
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -142,6 +150,10 @@ interface NavItemDef {
   // "Próximamente": si es true el item se muestra pero NO navega (sin Link).
   // renderItem lo pinta como <div> deshabilitado con badge "Próximamente".
   comingSoon?: boolean;
+  // Exclusivo del menú reducido de clínica suspendida (isExpired). shouldShowItem
+  // lo oculta SIEMPRE en el flujo normal; el sidebar lo renderiza sólo cuando
+  // isExpired vía SUSPENDED_NAV_IDS. Se usa para "Facturación".
+  suspendedOnly?: boolean;
 }
 
 const NAV_ITEMS: NavItemDef[] = [
@@ -231,11 +243,21 @@ const NAV_ITEMS: NavItemDef[] = [
   { id: "settings",       section: "admin", label: "Configuración",     href: "/dashboard/settings",      icon: Settings,       permission: "settings.view" },
   // Bitácora/Actividad: auditoría de la clínica. Solo ADMIN/dueño (adminOnly).
   { id: "auditoria",      section: "admin", label: "Bitácora",          href: "/dashboard/auditoria",     icon: ScrollText, adminOnly: true },
+  // Facturación: EXCLUSIVA del menú reducido de clínica suspendida (suspendedOnly
+  // → shouldShowItem la oculta en el flujo normal). Lleva a la pantalla de pago /
+  // activación. Sin `permission`: cualquier rol la ve, igual que Soporte.
+  { id: "facturacion",    section: "admin", label: "Facturación",       href: "/dashboard/suspended",     icon: CreditCard, suspendedOnly: true },
   // Soporte Técnico: sin `permission` a propósito — cualquier usuario de la
   // clínica puede levantar tickets hacia DaleControl.
   { id: "soporte",        section: "admin", label: "Soporte Técnico",   href: "/dashboard/soporte",       icon: LifeBuoy },
   { id: "resenas",        section: "admin", label: "Reseñas",           href: "/dashboard/resenas",       icon: Star, adminOnly: true },
 ];
+
+// IDs (en orden de render) de los únicos items visibles cuando la clínica está
+// suspendida: Facturación primero (acción principal), Soporte después. El
+// sidebar los saca de NAV_ITEMS por id cuando isExpired; el resto del menú se
+// oculta porque el layout ya rebota toda otra navegación a /dashboard/suspended.
+const SUSPENDED_NAV_IDS = ["facturacion", "soporte"] as const;
 
 // ═══════════════════════════════════════════════════════════════════
 // Hooks locales
@@ -283,6 +305,9 @@ function shouldShowItem(
   category: ClinicCategory,
   clinicModuleKeys: string[],
 ): boolean {
+  // Items exclusivos del menú de suspensión (Facturación) NUNCA salen en el
+  // flujo normal; el sidebar los renderiza aparte cuando isExpired.
+  if (item.suspendedOnly) return false;
   // Oculta toda la sección de especialidades (aún en desarrollo). Ver HIDE_SPECIALTIES.
   if (HIDE_SPECIALTIES && item.section === "specialties") return false;
   if (item.adminOnly && user.role !== "SUPER_ADMIN" && user.role !== "ADMIN") return false;
@@ -426,6 +451,18 @@ export function Sidebar(props: SidebarProps) {
     visibleItems.forEach((it) => map[it.section].push(it));
     return map;
   }, [visibleItems]);
+
+  // Clínica suspendida: el sidebar cambia al menú reducido (Facturación +
+  // Soporte). Los items se sacan de NAV_ITEMS por id, en orden fijo (ver
+  // SUSPENDED_NAV_IDS); Facturación es suspendedOnly, así que sólo aparece aquí.
+  const isExpired = props.isExpired ?? false;
+  const suspendedItems = useMemo(
+    () =>
+      SUSPENDED_NAV_IDS
+        .map((id) => NAV_ITEMS.find((it) => it.id === id))
+        .filter((it): it is NavItemDef => Boolean(it)),
+    [],
+  );
 
   const getCount = useCallback((key?: NavItemDef["countKey"]): number => key ? counts[key] : 0, [counts]);
 
@@ -667,6 +704,41 @@ export function Sidebar(props: SidebarProps) {
         )}
       </div>
 
+      {isExpired ? (
+        // ── Menú reducido de clínica suspendida ──────────────────────────
+        // Sólo Facturación + Soporte. Sin CTA de cita, sin secciones/headers,
+        // sin especialidades ni onboarding. El switcher SÓLO si el dueño tiene
+        // más de una clínica (para poder salir a una activa); con una sola
+        // clínica el menú queda mínimo: logo + 2 items + bloque de usuario.
+        <>
+          {(props.allClinics?.length ?? 0) > 1 && (
+            <ClinicSwitcher
+              collapsed={collapsed}
+              clinicName={props.clinicName}
+              clinicId={props.clinicId}
+              plan={props.plan}
+              allClinics={props.allClinics ?? []}
+              branches={props.branches}
+            />
+          )}
+          <nav
+            aria-label={t("sidebar.navAria")}
+            className="scrollbar-thin"
+            style={{
+              flex: 1,
+              overflowY: "auto",
+              overflowX: "hidden",
+              display: "flex",
+              flexDirection: "column",
+              gap: 2,
+              paddingInline: collapsed ? 8 : 0,
+            }}
+          >
+            {suspendedItems.map((it) => renderItem(it))}
+          </nav>
+        </>
+      ) : (
+      <>
       <ClinicSwitcher
         collapsed={collapsed}
         clinicName={props.clinicName}
@@ -808,6 +880,8 @@ export function Sidebar(props: SidebarProps) {
               ) : null,
             )}
       </nav>
+      </>
+      )}
 
       <SidebarFooter
         collapsed={collapsed}

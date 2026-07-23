@@ -24,7 +24,7 @@ import {
   TWO_FA_CHALLENGE_PATH,
   TWO_FA_SETUP_PATH,
 } from "@/lib/auth/two-factor-constants";
-import { ACTIVE_SUBSCRIPTION_STATUSES, isPlanExpired } from "@/lib/plan-status";
+import { ACTIVE_SUBSCRIPTION_STATUSES, isPlanExpired, isAllowedWhileSuspended } from "@/lib/plan-status";
 import { getBranchQuota } from "@/lib/branches";
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
@@ -102,11 +102,14 @@ export default async function DashboardLayout({ children }: { children: React.Re
   const isExpired = isPlanExpired(clinic);
   const isInTrial = !!trialEndsAt && trialEndsAt > now && !subscriptionActive;
 
-  // Redirect server-side a la pantalla de pago. Excepción: la propia
-  // /dashboard/suspended (ahí se completa el pago) — sin esta guarda habría
-  // loop. x-pathname lo inyecta el middleware (updateSession) en TODA ruta
-  // /dashboard, así que es fiable; si faltara, el guard de cliente cubre.
-  if (isExpired && pathname && pathname !== "/dashboard/suspended") {
+  // Redirect server-side a la pantalla de pago. Excepciones: la propia
+  // /dashboard/suspended (ahí se completa el pago) y /dashboard/soporte(/*)
+  // (la clínica suspendida debe poder pedir ayuda) — ver isAllowedWhileSuspended,
+  // fuente única compartida con el guard de cliente. Sin estas guardas habría
+  // loop o soporte inaccesible. x-pathname lo inyecta el middleware
+  // (updateSession) en TODA ruta /dashboard, así que es fiable; si faltara, el
+  // guard de cliente cubre.
+  if (isExpired && pathname && !isAllowedWhileSuspended(pathname)) {
     redirect("/dashboard/suspended");
   }
   // allClinics (switcher), módulos activos y estado de onboarding no dependen
@@ -182,6 +185,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
         isInTrial={isInTrial}
         clinicModuleKeys={clinicModuleKeys}
         sidebarCollapsed={(user as { sidebarCollapsed?: string[] }).sidebarCollapsed ?? []}
+        isExpired={isExpired}
       />
       <div className="flex min-h-screen flex-1 flex-col lg:max-h-screen lg:overflow-y-auto">
         <GlobalAnnouncementBanner />

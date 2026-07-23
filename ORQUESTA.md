@@ -1269,3 +1269,29 @@ Paciente firstName="Juan", lastName="Perez Lopez":
 - **Handler legacy** (`legacyHandler`, ~líneas 439-444): combobox/modales siguen con el OR del
   término completo → MISMO bug latente al teclear nombre+apellido. No tocado por scope; fix trivial
   idéntico si se quiere. (`/api/patients/search` ya está bien.)
+
+---
+
+## [Menu-Suspendido] — 2026-07-23
+
+**Commit en main:** (tip de `feat/suspended-menu`, pusheado con `git push origin HEAD:main`)
+**Build:** `npx next build` → EXIT 0 (Generating static pages 308/308; los `prisma:error` del log son por falta de `DATABASE_URL` en build, esperado y no fatal).
+
+### Qué hace
+Cuando la clínica está suspendida (`isPlanExpired === true`), el sidebar deja el menú normal y muestra SOLO **Facturación** (→ `/dashboard/suspended`, ícono `CreditCard`) y **Soporte** (→ `/dashboard/soporte`). Soporte quedó NAVEGABLE estando suspendida. Clínica NO suspendida: todo idéntico a hoy (cero cambios de comportamiento).
+
+### Archivos tocados (6)
+- `src/lib/plan-status.ts` — nuevo helper compartido `isAllowedWhileSuspended(pathname)` (permite `/dashboard/suspended` + `/dashboard/soporte(/*)`), usado por el layout Y el modal para no desincronizarse. Además `/api/support` y `/api/switch-clinic` agregados a `PLAN_GATE_ALLOWLIST_BASES`.
+- `src/app/dashboard/layout.tsx` — el redirect server-side usa `!isAllowedWhileSuspended(pathname)`; pasa `isExpired` al `<Sidebar>`.
+- `src/components/dashboard/expired-plan-modal.tsx` — el guard de cliente (soft-nav) usa el MISMO helper.
+- `src/components/dashboard/sidebar.tsx` — prop `isExpired`; item `facturacion` (`suspendedOnly`) en `NAV_ITEMS` + constante `SUSPENDED_NAV_IDS`; `shouldShowItem` oculta `suspendedOnly` en el flujo normal; `sidebarInner` bifurca al menú reducido cuando `isExpired` (logo + [switcher condicional] + 2 items + bloque de usuario).
+- `src/i18n/dictionaries/{es,en}.json` — label `sidebar.nav.facturacion` ("Facturación" / "Billing").
+
+### Los gates: eran 5, no 3
+El prompt listaba 3 (layout redirect, modal cliente, sidebar). Había 2 más de API: `auth-context.ts:106` (getAuthContext → 401) y `auth.ts:47` (getCurrentUser → redirect). Las pantallas `/dashboard/soporte` son **client components** que hacen `fetch` a `/api/support/*` (tickets, messages, attachments); ese `/api` NO estaba exento → 401 estando suspendida → soporte se veía pero no cargaba/enviaba nada. Fix: exentar `/api/support`. Multi-tenant intacto: las rutas de support sacan `clinicId` de la sesión (getAuthContext), exentar el plan-gate NO afecta el aislamiento.
+
+### Switcher de clínicas (caso SUPER_ADMIN multi-clínica)
+El `SidebarFooter` (bloque de usuario) solo tiene logout, NO cambia de clínica; el cambio vive únicamente en `ClinicSwitcher`. Para no dejar varado a un dueño con varias sedes y UNA suspendida, en el menú reducido se CONSERVA el `ClinicSwitcher` **solo si `allClinics.length > 1`**. Con una sola clínica el menú queda mínimo y limpio (logo + 2 items + bloque de usuario). Para que el switch funcione bajo suspensión se exentó `/api/switch-clinic`. Al cambiar a una clínica activa, `isExpired=false` y vuelve el menú normal. NO se puso redirect-guard en `/dashboard/suspended` a propósito: `subscription-tab.tsx:305` manda clínicas ACTIVAS ahí para cambiar/pagar plan; un guard rompería ese flujo.
+
+### Notas
+- Sin SQL, sin cambios de schema. Responsive OK: el menú reducido reusa `renderItem` + `SidebarFooter`, así que funciona igual en sidebar colapsado (icon-only) y en drawer móvil.
