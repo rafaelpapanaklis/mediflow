@@ -787,6 +787,13 @@ export function PatientDetailClient({
     });
   }, []);
 
+  // Sincroniza SOLO el aiAssist de una consulta en el estado local, SIN colapsar la
+  // fila (a diferencia de handleRecordUpdated). Así, al re-expandir la consulta el
+  // panel de IA re-deriva de un prop fresco y la cajita morada no se borra/resucita.
+  const handleAiAssistChange = useCallback((recordId: string, aiAssist: any) => {
+    setRecords(prev => prev.map(r => (r.id === recordId ? { ...r, aiAssist } : r)));
+  }, []);
+
   const openNewAppointmentForPatient = useCallback(() => {
     openNewAppointment({
       initialPatient: { id: patient.id, name: `${patient.firstName} ${patient.lastName}`.trim() },
@@ -2235,6 +2242,7 @@ export function PatientDetailClient({
                               aiAssist: record.aiAssist ?? null,
                             }}
                             onSaved={handleRecordUpdated}
+                            onAiAssistChange={handleAiAssistChange}
                           />
                         ) : (
                           <div className="bg-amber-50 border border-amber-200 dark:bg-amber-950/30 dark:border-amber-800 rounded-lg p-4 text-sm">

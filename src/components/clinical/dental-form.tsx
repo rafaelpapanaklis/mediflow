@@ -45,6 +45,11 @@ interface SelectedProcedure { id: string; name: string; price: number; quantity:
 interface Props {
   patientId: string;
   onSaved: (record: any) => void;
+  /** Sincroniza SOLO el aiAssist del record en el padre SIN colapsar el acordeón
+   *  (a diferencia de onSaved/handleRecordUpdated, que además colapsa la fila). Así,
+   *  al re-expandir la consulta el form re-deriva el estado del prop ya fresco y la
+   *  cajita morada no se borra/resucita desde un valor stale. */
+  onAiAssistChange?: (recordId: string, aiAssist: any) => void;
   isChild?: boolean;
   /**
    * Cuando se pasa un record existente, el form arranca en modo EDIT:
@@ -62,7 +67,7 @@ interface Props {
   };
 }
 
-export function DentalForm({ patientId, onSaved, initialRecord }: Props) {
+export function DentalForm({ patientId, onSaved, onAiAssistChange, initialRecord }: Props) {
   const t = useT();
   const isEditing = !!initialRecord;
   // Dx CIE-10 codificados (NOM-024 §6.3 / NOM-004). Edición: en vivo contra el
@@ -258,15 +263,30 @@ export function DentalForm({ patientId, onSaved, initialRecord }: Props) {
   }
 
   // ── Asistente IA: aplicar / quitar la procedencia sobre el record ──────────
+  // En historial persiste vía PATCH y sincroniza el aiAssist en el padre con
+  // onAiAssistChange (mergea por id SIN colapsar el acordeón) → al re-expandir la
+  // consulta el form re-deriva del prop fresco, no de uno stale. En fallo LANZA para
+  // que el panel NO limpie el análisis (se re-Aplica sin re-gastar tokens de IA).
   async function handleAiApply(a: { result: any; model?: string; generatedAt?: string; disclaimer?: string }) {
     if (initialRecord?.id) {
-      const res = await fetch("/api/consult/ai-assist", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ recordId: initialRecord.id, apply: true, result: a.result, model: a.model, generatedAt: a.generatedAt }),
-      });
-      if (res.ok) { const d = await res.json(); setAiAssist(d.aiAssist); }
-      else { toast.error(t("clinical.aiConsult.genericError")); }
+      let res: Response;
+      try {
+        res = await fetch("/api/consult/ai-assist", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ recordId: initialRecord.id, apply: true, result: a.result, model: a.model, generatedAt: a.generatedAt }),
+        });
+      } catch (e) {
+        toast.error(t("clinical.aiConsult.genericError"));
+        throw e;
+      }
+      if (!res.ok) {
+        toast.error(t("clinical.aiConsult.genericError"));
+        throw new Error("ai-apply failed");
+      }
+      const d = await res.json();
+      setAiAssist(d.aiAssist);
+      onAiAssistChange?.(initialRecord.id, d.aiAssist);
     } else {
       // Consulta nueva sin guardar: estado local; se adjunta tras el primer guardado.
       setAiAssist({ applied: true, appliedAt: new Date().toISOString(), generatedAt: a.generatedAt, result: a.result, disclaimer: a.disclaimer });
@@ -274,11 +294,22 @@ export function DentalForm({ patientId, onSaved, initialRecord }: Props) {
   }
   async function handleAiRemove() {
     if (initialRecord?.id && aiAssist) {
-      const res = await fetch("/api/consult/ai-assist", {
-        method: "PATCH", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ recordId: initialRecord.id, apply: false }),
-      });
-      if (res.ok) setAiAssist(null);
+      let res: Response;
+      try {
+        res = await fetch("/api/consult/ai-assist", {
+          method: "PATCH", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ recordId: initialRecord.id, apply: false }),
+        });
+      } catch (e) {
+        toast.error(t("clinical.aiConsult.genericError"));
+        throw e;
+      }
+      if (!res.ok) {
+        toast.error(t("clinical.aiConsult.genericError"));
+        throw new Error("ai-remove failed");
+      }
+      setAiAssist(null);
+      onAiAssistChange?.(initialRecord.id, null);
     } else {
       setAiAssist(null);
     }
@@ -382,14 +413,18 @@ export function DentalForm({ patientId, onSaved, initialRecord }: Props) {
         } else {
           toast.success(t("clinical.dentalForm.savedToast"));
         }
-        // Si aplicaron IA en la consulta NUEVA, adjúntala al record recién creado.
+        // Si aplicaron IA en la consulta NUEVA, adjúntala al record recién creado y
+        // mergea el aiAssist devuelto a `record` para que onSaved(record) deje la
+        // cajita morada ✨ en el estado del padre sin esperar un reload.
         if (aiAssist?.applied && record?.id) {
           try {
-            await fetch("/api/consult/ai-assist", {
+            const res = await fetch("/api/consult/ai-assist", {
               method: "PATCH", headers: { "Content-Type": "application/json" },
               body: JSON.stringify({ recordId: record.id, apply: true, result: aiAssist.result, generatedAt: aiAssist.generatedAt }),
             });
-          } catch { /* la consulta ya se guardó; el adjunto se puede reintentar desde historial */ }
+            if (res.ok) { const d = await res.json(); record = { ...record, aiAssist: d.aiAssist }; }
+            else { toast.error(t("clinical.aiConsult.genericError")); }
+          } catch { toast.error(t("clinical.aiConsult.genericError")); }
         }
       }
       onSaved(record);

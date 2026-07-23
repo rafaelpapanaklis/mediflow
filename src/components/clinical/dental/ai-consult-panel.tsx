@@ -44,6 +44,9 @@ export function AiConsultPanel({ patientId, currentInput, value, onApply, onRemo
   async function analyze() {
     setLoading(true);
     setError(null);
+    // Al re-analizar, soltamos el resultado previo para caer al branch idle (que sí
+    // muestra spinner y error); si no, el card neutro se queda mudo ante 429/503/5xx.
+    setAnalysis(null);
     try {
       const res = await fetch("/api/consult/ai-assist", {
         method: "POST",
@@ -64,11 +67,18 @@ export function AiConsultPanel({ patientId, currentInput, value, onApply, onRemo
   async function apply() {
     if (!analysis) return;
     setBusy(true);
-    try { await onApply(analysis); setAnalysis(null); } finally { setBusy(false); }
+    // Solo limpiamos el análisis si onApply tuvo ÉXITO. Si falla (lanza), lo dejamos
+    // en pantalla para re-Aplicar sin re-analizar (no re-gastar tokens); el handler ya
+    // mostró el toast de error.
+    try { await onApply(analysis); setAnalysis(null); }
+    catch { /* dejar el análisis visible para reintentar */ }
+    finally { setBusy(false); }
   }
   async function remove() {
     setBusy(true);
-    try { await onRemove(); } finally { setBusy(false); }
+    try { await onRemove(); }
+    catch { /* el handler ya mostró el toast de error */ }
+    finally { setBusy(false); }
   }
 
   function Sections({ r }: { r: AiConsultResult }) {

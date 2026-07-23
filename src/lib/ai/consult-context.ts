@@ -18,6 +18,16 @@ function genderEs(g: any): string {
   return "no especificado";
 }
 
+/** Edad en años cumplidos: resta años y decrementa si el cumpleaños de este año aún
+ *  no ha pasado (evitar el off-by-one que sesga los "riesgos por edad" del prompt). */
+function calcAge(dob: Date): number {
+  const today = new Date();
+  let age = today.getFullYear() - dob.getFullYear();
+  const m = today.getMonth() - dob.getMonth();
+  if (m < 0 || (m === 0 && today.getDate() < dob.getDate())) age--;
+  return age;
+}
+
 /**
  * Arma un texto clínico compacto en español desde la BD, filtrado por clinicId.
  * El caller (route) YA validó que el paciente pertenece a la clínica y es visible,
@@ -46,7 +56,7 @@ export async function buildConsultContext(args: Args): Promise<string> {
       },
     });
     if (p) {
-      const age = p.dob ? new Date().getFullYear() - new Date(p.dob).getFullYear() : null;
+      const age = p.dob ? calcAge(new Date(p.dob)) : null;
       L.push("== PACIENTE ==");
       L.push(`Edad: ${age ?? "?"}${p.isChild ? " (pediátrico)" : ""} · Sexo: ${genderEs(p.gender)}${p.bloodType ? ` · Tipo de sangre: ${p.bloodType}` : ""}`);
       if (p.allergies?.length) L.push(`Alergias: ${p.allergies.join(", ")}`);
