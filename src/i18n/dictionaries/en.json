@@ -4245,6 +4245,21 @@
     }
   },
   "clinical": {
+    "aiConsult": {
+      "analyze": "Analyze with AI",
+      "analyzing": "Analyzing…",
+      "reanalyze": "Re-analyze",
+      "applyToConsult": "Apply to consult",
+      "remove": "Remove",
+      "generatedWithAi": "AI-generated",
+      "sectionFindings": "What they have",
+      "sectionAlerts": "Points to consider",
+      "sectionPlan": "How to approach it",
+      "disclaimer": "Diagnostic support; does not replace clinical judgment.",
+      "notConfigured": "AI not configured. Contact your administrator.",
+      "monthlyLimit": "You've reached this month's AI limit.",
+      "genericError": "Could not generate the analysis. Try again."
+    },
     "dictation": {
       "dictate": "Voice dictation",
       "stop": "Stop and transcribe",
