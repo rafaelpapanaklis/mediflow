@@ -370,7 +370,7 @@ export function SubscriptionTab({ clinic }: Props) {
                   </div>
                 )}
                 <ul style={{ listStyle: "none", padding: 0, margin: 0, display: "flex", flexDirection: "column", gap: 4, flex: 1 }}>
-                  {[...plan.features, cfdiBullet(plan)].map((f) => (
+                  {(plan.features.length < 2 ? [...plan.features, cfdiBullet(plan)] : [...plan.features.slice(0, 2), cfdiBullet(plan), ...plan.features.slice(2)]).map((f) => (
                     <li key={f} style={{ fontSize: 11, color: "var(--text-2)", display: "flex", alignItems: "center", gap: 6 }}>
                       <Check size={11} aria-hidden style={{ color: "var(--brand)" }} />
                       {f}

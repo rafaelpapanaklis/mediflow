@@ -88,7 +88,7 @@ export function Step3PlanPayment({ values, onChange, onBack, onSubmit, loading }
             priceMonthly={p.priceMxn}
             priceAnnual={p.priceMxnAnnual}
             billing="monthly"
-            features={[...p.features, cfdiBullet(p)]}
+            features={p.features.length < 2 ? [...p.features, cfdiBullet(p)] : [...p.features.slice(0, 2), cfdiBullet(p), ...p.features.slice(2)]}
             popular={p.id === "PRO"}
             mostComplete={p.id === "CLINIC"}
             selected={values.plan === p.id}

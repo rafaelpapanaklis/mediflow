@@ -312,7 +312,7 @@ export function SuspendedPlanCards({ plans, currentPlan = null, firstMonthEligib
                 <div className="my-0.5 h-px bg-border" />
 
                 <div className="flex flex-col gap-[9px]">
-                  {[...plan.features, cfdiBullet(plan)].map((f) => (
+                  {(plan.features.length < 2 ? [...plan.features, cfdiBullet(plan)] : [...plan.features.slice(0, 2), cfdiBullet(plan), ...plan.features.slice(2)]).map((f) => (
                     <div key={f} className="flex items-center gap-2.5 text-[13.5px] text-muted-foreground">
                       <Check size={16} strokeWidth={2.4} className="flex-shrink-0 text-green-600 dark:text-emerald-400" aria-hidden />
                       {f}
