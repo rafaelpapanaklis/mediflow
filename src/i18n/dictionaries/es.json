@@ -4245,6 +4245,21 @@
     }
   },
   "clinical": {
+    "aiConsult": {
+      "analyze": "Analizar con IA",
+      "analyzing": "Analizando…",
+      "reanalyze": "Re-analizar",
+      "applyToConsult": "Aplicar a la consulta",
+      "remove": "Quitar",
+      "generatedWithAi": "Generado con IA",
+      "sectionFindings": "Qué tiene",
+      "sectionAlerts": "Puntos a considerar",
+      "sectionPlan": "Cómo abordarlo",
+      "disclaimer": "Apoyo diagnóstico, no sustituye el juicio clínico.",
+      "notConfigured": "IA no configurada. Contacta al administrador.",
+      "monthlyLimit": "Alcanzaste el límite de IA de este mes.",
+      "genericError": "No se pudo generar el análisis. Intenta de nuevo."
+    },
     "dictation": {
       "dictate": "Dictar por voz",
       "stop": "Detener y transcribir",

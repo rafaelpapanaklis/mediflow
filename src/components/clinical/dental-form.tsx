@@ -14,6 +14,7 @@ import type { Records, ToothRecord } from "@/components/dashboard/odontogram-v2/
 import { Cie10Selector } from "@/components/dashboard/clinical/cie10-selector";
 import { useCodedDiagnoses } from "@/components/clinical/use-coded-diagnoses";
 import { DictationMic } from "@/components/clinical/shared/dictation-mic";
+import { AiConsultPanel, type AiAssistValue } from "./dental/ai-consult-panel";
 
 /** ¿El registro de un diente trae algo marcado? (superficies, hallazgos o nota) */
 function toothRecordHasContent(rec: ToothRecord | undefined): boolean {
@@ -57,6 +58,7 @@ interface Props {
     assessment: string | null;
     plan: string | null;
     specialtyData?: any;
+    aiAssist?: any;
   };
 }
 
@@ -68,6 +70,8 @@ export function DentalForm({ patientId, onSaved, initialRecord }: Props) {
   const { dxs, onAdd: onAddDx, onRemove: onRemoveDx, flush: flushDx } = useCodedDiagnoses(initialRecord?.id ?? null);
   const initialSpec = (initialRecord?.specialtyData ?? {}) as any;
   const [saving,     setSaving]     = useState(false);
+  // Asistente IA de consulta — procedencia separada del texto clínico firmado.
+  const [aiAssist, setAiAssist] = useState<AiAssistValue | null>(initialRecord?.aiAssist ?? null);
   const [catalog, setCatalog] = useState<CatalogProcedure[]>([]);
   const [selectedProcs, setSelectedProcs] = useState<SelectedProcedure[]>(() => {
     const raw = initialSpec.procedures;
@@ -253,6 +257,33 @@ export function DentalForm({ patientId, onSaved, initialRecord }: Props) {
     setSelectedProcs(prev => prev.filter(p => p.id !== id));
   }
 
+  // ── Asistente IA: aplicar / quitar la procedencia sobre el record ──────────
+  async function handleAiApply(a: { result: any; model?: string; generatedAt?: string; disclaimer?: string }) {
+    if (initialRecord?.id) {
+      const res = await fetch("/api/consult/ai-assist", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ recordId: initialRecord.id, apply: true, result: a.result, model: a.model, generatedAt: a.generatedAt }),
+      });
+      if (res.ok) { const d = await res.json(); setAiAssist(d.aiAssist); }
+      else { toast.error(t("clinical.aiConsult.genericError")); }
+    } else {
+      // Consulta nueva sin guardar: estado local; se adjunta tras el primer guardado.
+      setAiAssist({ applied: true, appliedAt: new Date().toISOString(), generatedAt: a.generatedAt, result: a.result, disclaimer: a.disclaimer });
+    }
+  }
+  async function handleAiRemove() {
+    if (initialRecord?.id && aiAssist) {
+      const res = await fetch("/api/consult/ai-assist", {
+        method: "PATCH", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ recordId: initialRecord.id, apply: false }),
+      });
+      if (res.ok) setAiAssist(null);
+    } else {
+      setAiAssist(null);
+    }
+  }
+
   async function handleSave() {
     if (!form.subjective && !form.assessment && dxs.length === 0) {
       toast.error(t("clinical.dentalForm.reasonOrDiagnosisRequired"));
@@ -351,6 +382,15 @@ export function DentalForm({ patientId, onSaved, initialRecord }: Props) {
         } else {
           toast.success(t("clinical.dentalForm.savedToast"));
         }
+        // Si aplicaron IA en la consulta NUEVA, adjúntala al record recién creado.
+        if (aiAssist?.applied && record?.id) {
+          try {
+            await fetch("/api/consult/ai-assist", {
+              method: "PATCH", headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ recordId: record.id, apply: true, result: aiAssist.result, generatedAt: aiAssist.generatedAt }),
+            });
+          } catch { /* la consulta ya se guardó; el adjunto se puede reintentar desde historial */ }
+        }
       }
       onSaved(record);
     } catch (err: any) {
@@ -376,6 +416,15 @@ export function DentalForm({ patientId, onSaved, initialRecord }: Props) {
           <TreatmentTimeline milestones={orthoMilestones.months} />
         </CardNew>
       )}
+
+      {/* ASISTENTE IA DE CONSULTA — apoyo diagnóstico (procedencia separada del texto firmado) */}
+      <AiConsultPanel
+        patientId={patientId}
+        currentInput={{ subjective: form.subjective, objective: form.objective }}
+        value={aiAssist}
+        onApply={handleAiApply}
+        onRemove={handleAiRemove}
+      />
 
       {/* ANAMNESIS */}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>

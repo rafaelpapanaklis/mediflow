@@ -2232,6 +2232,7 @@ export function PatientDetailClient({
                               assessment: record.assessment ?? null,
                               plan: record.plan ?? null,
                               specialtyData: record.specialtyData ?? {},
+                              aiAssist: record.aiAssist ?? null,
                             }}
                             onSaved={handleRecordUpdated}
                           />

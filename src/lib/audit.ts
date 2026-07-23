@@ -31,6 +31,7 @@ export type AuditEntityType =
   | "periodontal"
   | "body-map"
   | "xray-analysis"
+  | "ai-consult"
   | "patient-file"
   | "prescription"
   | "user"

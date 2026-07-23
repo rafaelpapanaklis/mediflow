@@ -1,0 +1,71 @@
+.wrap { margin: 12px 0; }
+
+.trigger {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 8px 14px; border-radius: 10px; cursor: pointer;
+  font-size: 14px; font-weight: 600;
+  color: #6d28d9; background: rgba(139, 92, 246, 0.10);
+  border: 1px solid rgba(139, 92, 246, 0.35);
+  transition: background .15s ease, transform .1s ease;
+}
+.trigger:hover { background: rgba(139, 92, 246, 0.18); }
+.trigger:active { transform: translateY(1px); }
+.trigger:disabled { opacity: .55; cursor: not-allowed; }
+
+/* Caja NEUTRA (resultado sin aplicar) */
+.card {
+  margin-top: 10px; border-radius: 14px; padding: 16px;
+  border: 1px solid var(--border, #e5e7eb);
+  background: var(--surface-2, #f9fafb);
+  color: var(--text-1, #111827);
+}
+
+/* Caja MORADA MÁGICA (aplicada / procedencia IA) */
+.magic {
+  position: relative; margin-top: 10px; border-radius: 14px; padding: 16px 16px 14px;
+  color: #f5f3ff;
+  background:
+    radial-gradient(120% 140% at 0% 0%, rgba(167,139,250,.35), transparent 55%),
+    linear-gradient(135deg, #4c1d95 0%, #6d28d9 45%, #7c3aed 100%);
+  border: 1px solid rgba(196, 181, 253, 0.6);
+  box-shadow: 0 0 0 1px rgba(124, 58, 237, .35), 0 8px 30px -8px rgba(124, 58, 237, .55);
+  overflow: hidden;
+}
+.magic::before {
+  content: ""; position: absolute; inset: -1px; border-radius: 14px; padding: 1px;
+  background: linear-gradient(120deg, #a78bfa, #e9d5ff, #7c3aed, #a78bfa);
+  background-size: 300% 300%;
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor; mask-composite: exclude;
+  animation: shimmer 6s linear infinite; pointer-events: none;
+}
+@keyframes shimmer { to { background-position: 300% 0; } }
+@media (prefers-reduced-motion: reduce) { .magic::before { animation: none; } }
+
+.chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 12px; font-weight: 700; letter-spacing: .2px;
+  padding: 3px 10px; border-radius: 999px;
+  background: rgba(255,255,255,.16); color: #f5f3ff;
+  border: 1px solid rgba(255,255,255,.28);
+}
+
+.head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px; }
+.section { margin: 10px 0; }
+.section h4 { font-size: 13px; font-weight: 700; margin: 0 0 4px; opacity: .95; }
+.section p { font-size: 14px; line-height: 1.5; margin: 0; white-space: pre-wrap; }
+.alerts { margin: 4px 0 0; padding-left: 18px; }
+.alerts li { font-size: 14px; line-height: 1.5; margin: 2px 0; }
+.disclaimer { margin-top: 12px; font-size: 12px; opacity: .8; font-style: italic; }
+.actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+.apply, .remove, .retry {
+  padding: 7px 14px; border-radius: 9px; font-size: 13px; font-weight: 600; cursor: pointer; border: 1px solid transparent;
+}
+.apply { background: #7c3aed; color: #fff; }
+.apply:hover { background: #6d28d9; }
+.remove { background: rgba(255,255,255,.14); color: #f5f3ff; border-color: rgba(255,255,255,.3); }
+.remove:hover { background: rgba(255,255,255,.22); }
+.retry { background: transparent; color: #6d28d9; border-color: rgba(139,92,246,.4); }
+.error { margin-top: 10px; font-size: 13px; color: #b91c1c; }
+.spinner { display: inline-block; width: 15px; height: 15px; border: 2px solid rgba(139,92,246,.35); border-top-color: #7c3aed; border-radius: 50%; animation: spin .7s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
