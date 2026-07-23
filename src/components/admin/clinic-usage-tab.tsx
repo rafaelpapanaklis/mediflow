@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Zap, HardDrive, MessageCircle, Scan } from "lucide-react";
+import { Zap, HardDrive, MessageCircle, Scan, Receipt } from "lucide-react";
 import { formatBytes, type PlanLimits } from "@/lib/plan-shared";
 import { CardNew } from "@/components/ui/design-system/card-new";
 
@@ -12,6 +12,7 @@ interface Usage {
   ai:       { used: number;  limit: number; lastResetAt: string };
   storage:  { used: number;  limit: number; files: number };
   whatsapp: { sentThisMonth: number; limit: number };
+  cfdi:     { stampedThisMonth: number; limit: number };
   xray:     { analysesThisMonth: number };
 }
 
@@ -98,6 +99,7 @@ export function ClinicUsageTab({ clinicId }: { clinicId: string }) {
   const aiPct = pct(data.ai.used, data.ai.limit);
   const stPct = pct(data.storage.used, data.storage.limit);
   const waPct = pct(data.whatsapp.sentThisMonth, data.whatsapp.limit);
+  const cfdiPct = pct(data.cfdi.stampedThisMonth, data.cfdi.limit);
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
@@ -147,6 +149,15 @@ export function ClinicUsageTab({ clinicId }: { clinicId: string }) {
         used={data.whatsapp.sentThisMonth.toLocaleString()}
         limit={data.whatsapp.limit.toLocaleString()}
         pctValue={waPct}
+      />
+
+      <UsageRow
+        icon={<Receipt size={20} />}
+        title="Facturas CFDI timbradas este mes"
+        subtitle="Al superar el cupo se timbra igual y el excedente se cobra a fin de mes."
+        used={data.cfdi.stampedThisMonth.toLocaleString()}
+        limit={data.cfdi.limit.toLocaleString()}
+        pctValue={cfdiPct}
       />
 
       {/* XRay (no limit) */}

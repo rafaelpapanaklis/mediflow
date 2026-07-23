@@ -901,7 +901,19 @@
       "statusPending": "Pending",
       "statusOverdue": "Overdue",
       "statusFailed": "Failed",
-      "statusVoid": "Void"
+      "statusVoid": "Void",
+      "cfdiTitle": "CFDI invoicing",
+      "cfdiLoading": "Loading usage…",
+      "cfdiSubtitle": "CFDI invoices stamped this month",
+      "cfdiUsedOf": "{used} of {included} invoices stamped",
+      "cfdiRemaining": "You have {n} invoices left this month",
+      "cfdiRemainingOne": "You have 1 invoice left this month",
+      "cfdiOverLine": "{overage} extra × {price} = {total}",
+      "cfdiOverOne": "1 extra × {price} = {total}",
+      "cfdiCollectMonthly": "Charged with your next monthly bill.",
+      "cfdiCollectAnnual": "Charged on the 1st of next month.",
+      "cfdiCollectManual": "Recorded as an amount due at month-end.",
+      "cfdiDebt": "Amount due: {amount}"
     },
     "onboardingChecklist": {
       "title": "First steps",
@@ -2467,6 +2479,7 @@
       "toastInvoiceCreateError": "Error creating invoice",
       "toastCfdiReceptorRequired": "Patient RFC, name and ZIP code are required",
       "toastCfdiStamped": "CFDI stamped successfully with SAT",
+      "toastCfdiOverage": "This invoice is additional ({price})",
       "toastCfdiStampError": "Error stamping",
       "cfdiTaxesLabel": "Taxes",
       "cfdiTaxExempt": "Exempt (medical services)",
@@ -6792,6 +6805,8 @@
       "stampCfdiBtn": "Stamp with SAT",
       "stamping": "Stamping…",
       "cfdiStampedToast": "CFDI stamped successfully with SAT",
+      "cfdiMonthCounter": "CFDI this month: {used}/{included}",
+      "cfdiOverageToast": "This invoice is additional ({price})",
       "cfdiDownloadError": "Could not retrieve the CFDI to download"
     },
     "paymentModal": {

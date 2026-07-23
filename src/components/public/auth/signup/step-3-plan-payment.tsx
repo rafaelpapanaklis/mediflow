@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { PlanCard, type Billing, type PlanId } from "./plan-card";
+import { cfdiBullet } from "@/lib/plan-shared";
 
 interface ApiPlan {
   id: PlanId;
@@ -10,6 +11,8 @@ interface ApiPlan {
   priceMxn: number;
   priceMxnAnnual: number;
   features: string[];
+  cfdiMonthly: number;
+  cfdiOverageCents: number;
 }
 
 // Compat: el wizard (signup-form) aún tipa `card`/`payMethod` en su estado. Se
@@ -85,7 +88,7 @@ export function Step3PlanPayment({ values, onChange, onBack, onSubmit, loading }
             priceMonthly={p.priceMxn}
             priceAnnual={p.priceMxnAnnual}
             billing="monthly"
-            features={[...p.features]}
+            features={p.features.length < 2 ? [...p.features, cfdiBullet(p)] : [...p.features.slice(0, 2), cfdiBullet(p), ...p.features.slice(2)]}
             popular={p.id === "PRO"}
             mostComplete={p.id === "CLINIC"}
             selected={values.plan === p.id}

@@ -52,6 +52,8 @@ function buildResolved(planId: PlanId, row: PlanConfigShape | null): ResolvedPla
     storageBytes: src.storageBytes,
     aiTokensDefault: src.aiTokensDefault,
     whatsappMonthly: src.whatsappMonthly,
+    cfdiMonthly: src.cfdiMonthly,
+    cfdiOverageCents: src.cfdiOverageCents,
     maxPatients: src.maxPatients,
     maxUsers: src.maxUsers,
     // NULL = ilimitado, igual que maxPatients/maxUsers. Que un NULL accidental
@@ -76,6 +78,10 @@ function rowToShape(row: any): PlanConfigShape {
     storageBytes: Number(row.storageBytes),
     aiTokensDefault: row.aiTokensDefault,
     whatsappMonthly: row.whatsappMonthly,
+    // ?? por si la fila viene de un deploy previo a la migración de cupos CFDI
+    // (columna aún sin sembrar): el @default del schema es 50/200.
+    cfdiMonthly: row.cfdiMonthly ?? 50,
+    cfdiOverageCents: row.cfdiOverageCents ?? 200,
     maxPatients: row.maxPatients ?? null,
     maxUsers: row.maxUsers ?? null,
     maxClinics: row.maxClinics ?? null,
@@ -125,6 +131,8 @@ export async function getPlanLimits(plan: string | null | undefined): Promise<Pl
     storageBytes: r.storageBytes,
     aiTokensDefault: r.aiTokensDefault,
     whatsappMonthly: r.whatsappMonthly,
+    cfdiMonthly: r.cfdiMonthly,
+    cfdiOverageCents: r.cfdiOverageCents,
     monthlyPrice: r.priceMxnMonthly,
     maxPatients: r.maxPatients,
     maxUsers: r.maxUsers,

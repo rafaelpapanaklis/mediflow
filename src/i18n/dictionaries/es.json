@@ -901,7 +901,19 @@
       "statusPending": "Pendiente",
       "statusOverdue": "Vencida",
       "statusFailed": "Fallida",
-      "statusVoid": "Anulada"
+      "statusVoid": "Anulada",
+      "cfdiTitle": "Facturación CFDI",
+      "cfdiLoading": "Cargando consumo…",
+      "cfdiSubtitle": "Facturas CFDI timbradas este mes",
+      "cfdiUsedOf": "{used} de {included} facturas timbradas",
+      "cfdiRemaining": "Te quedan {n} facturas este mes",
+      "cfdiRemainingOne": "Te queda 1 factura este mes",
+      "cfdiOverLine": "{overage} adicionales × {price} = {total}",
+      "cfdiOverOne": "1 adicional × {price} = {total}",
+      "cfdiCollectMonthly": "Se cobra con tu próxima mensualidad.",
+      "cfdiCollectAnnual": "Se cobra el 1.º del próximo mes.",
+      "cfdiCollectManual": "Se registrará como adeudo a fin de mes.",
+      "cfdiDebt": "Adeudo pendiente: {amount}"
     },
     "onboardingChecklist": {
       "title": "Primeros pasos",
@@ -2467,6 +2479,7 @@
       "toastInvoiceCreateError": "Error al crear factura",
       "toastCfdiReceptorRequired": "RFC, nombre y CP del paciente son requeridos",
       "toastCfdiStamped": "CFDI timbrado correctamente ante el SAT",
+      "toastCfdiOverage": "Esta factura es adicional ({price})",
       "toastCfdiStampError": "Error al timbrar",
       "cfdiTaxesLabel": "Impuestos",
       "cfdiTaxExempt": "Exento (servicios médicos)",
@@ -6792,6 +6805,8 @@
       "stampCfdiBtn": "Timbrar ante SAT",
       "stamping": "Timbrando…",
       "cfdiStampedToast": "CFDI timbrado correctamente ante el SAT",
+      "cfdiMonthCounter": "CFDI este mes: {used}/{included}",
+      "cfdiOverageToast": "Esta factura es adicional ({price})",
       "cfdiDownloadError": "No se pudo obtener el CFDI para descargar"
     },
     "paymentModal": {

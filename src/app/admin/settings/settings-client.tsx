@@ -79,6 +79,9 @@ function PlanCardEditor({ plan }: { plan: ResolvedPlan }) {
   const [storageGb, setStorageGb] = useState(String(Math.round((plan.storageBytes / GB) * 100) / 100));
   const [aiTokens, setAiTokens] = useState(String(plan.aiTokensDefault));
   const [whatsapp, setWhatsapp] = useState(String(plan.whatsappMonthly));
+  const [cfdiIncluded, setCfdiIncluded] = useState(String(plan.cfdiMonthly));
+  // Excedente se edita en PESOS ($2.00) y se guarda en centavos.
+  const [cfdiOveragePesos, setCfdiOveragePesos] = useState(String(plan.cfdiOverageCents / 100));
   const [maxPatients, setMaxPatients] = useState(plan.maxPatients == null ? "" : String(plan.maxPatients));
   const [unlimitedPatients, setUnlimitedPatients] = useState(plan.maxPatients == null);
   const [maxUsers, setMaxUsers] = useState(plan.maxUsers == null ? "" : String(plan.maxUsers));
@@ -105,6 +108,8 @@ function PlanCardEditor({ plan }: { plan: ResolvedPlan }) {
           storageBytes: Math.round(Number(storageGb) * GB),
           aiTokensDefault: Number(aiTokens),
           whatsappMonthly: Number(whatsapp),
+          cfdiMonthly: Number(cfdiIncluded),
+          cfdiOverageCents: Math.round(Number(cfdiOveragePesos) * 100),
           maxPatients: unlimitedPatients ? null : Number(maxPatients),
           maxUsers: unlimitedUsers ? null : Number(maxUsers),
           maxClinics: unlimitedClinics ? null : Number(maxClinics),
@@ -149,6 +154,8 @@ function PlanCardEditor({ plan }: { plan: ResolvedPlan }) {
         <NumField label="Almacenamiento (GB)" value={storageGb} onChange={setStorageGb} />
         <NumField label="Tokens IA / mes" value={aiTokens} onChange={setAiTokens} />
         <NumField label="WhatsApp / mes" value={whatsapp} onChange={setWhatsapp} />
+        <NumField label="CFDI incluidos / mes" value={cfdiIncluded} onChange={setCfdiIncluded} />
+        <NumField label="Costo timbre extra (MXN)" value={cfdiOveragePesos} onChange={setCfdiOveragePesos} />
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(230px, 1fr))", gap: 10 }}>

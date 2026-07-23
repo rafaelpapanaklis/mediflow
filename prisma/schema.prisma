@@ -184,6 +184,7 @@ model Clinic {
   inventory            InventoryItem[]
   reminders            WhatsAppReminder[]
   cfdis                CfdiRecord[]
+  cfdiUsages           CfdiUsage[]
   treatments           TreatmentPlan[]
   paymentPlans         PaymentPlan[]
   patientCredits       PatientCredit[]
@@ -1808,6 +1809,37 @@ model CfdiRecord {
   clinic Clinic @relation(fields: [clinicId], references: [id], onDelete: Cascade)
 
   @@map("cfdi_records")
+}
+
+/// Contador mensual de timbres CFDI por clínica (cupo incluido por plan +
+/// excedente cobrado a fin de mes). Una fila por (clinicId, period "YYYY-MM").
+/// `stamped` sube +1 en cada timbrado exitoso (POST /api/cfdi), en la MISMA
+/// transacción que el CfdiRecord. El cron mensual (/api/cron/cfdi-overage) cierra
+/// cada periodo: calcula el excedente, lo cobra según el modo de pago de la
+/// clínica y marca `billedAt` (idempotencia: un periodo se cobra una sola vez).
+/// Requiere sql/cfdi-quotas.sql APLICADO antes de deployar.
+model CfdiUsage {
+  id            String @id @default(cuid())
+  clinicId      String
+  period        String // "YYYY-MM" en la zona horaria de la clínica
+  stamped       Int    @default(0)
+  // ── Estado de cobro del excedente del periodo (lo escribe el cron) ──
+  // null = sin procesar aún · "none" = sin excedente · "invoice_item" = sumado a
+  // la próxima mensualidad de Stripe · "charged" = cobro off-session pagado ·
+  // "pending" = adeudo manual (SPEI/sin método automático) · "failed" = cobro
+  // rechazado (queda como adeudo manual visible).
+  billingStatus String?
+  overageCents  Int? // excedente cobrado/registrado del periodo (centavos MXN)
+  billedAt      DateTime? // marca de idempotencia: periodo ya cerrado por el cron
+  stripeRef     String? // InvoiceItem id / PaymentIntent id / SubscriptionInvoice id
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  clinic Clinic @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+
+  @@unique([clinicId, period])
+  @@index([billedAt])
+  @@map("cfdi_usage")
 }
 
 model Invoice {
@@ -6982,6 +7014,13 @@ model PlanConfig {
   storageBytes    BigInt
   aiTokensDefault Int
   whatsappMonthly Int
+  // Facturas CFDI (timbres) incluidas por MES CALENDARIO y precio del excedente.
+  // Seed: incluidas BASIC=25 (provisional) / PRO=50 / CLINIC=150; excedente por
+  // timbre (centavos MXN) BASIC=200 / PRO=200 / CLINIC=125. Jamás bloquea el
+  // timbrado; el excedente se cobra a fin de mes (ver CfdiUsage + cron). Requiere
+  // sql/cfdi-quotas.sql APLICADO antes de deployar.
+  cfdiMonthly      Int      @default(50)
+  cfdiOverageCents Int      @default(200)
   maxPatients     Int?
   maxUsers        Int?
   // Máximo de sucursales (clínicas) que el dueño puede tener con este plan.
