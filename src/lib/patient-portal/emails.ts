@@ -113,3 +113,59 @@ export function buildResetPasswordEmail(args: { name: string; resetUrl: string }
 
   return { subject, html, text };
 }
+
+/**
+ * Email de invitación al portal: la clínica dio de alta la cuenta y el paciente
+ * define SU propia contraseña desde el link (reusa /paciente/recuperar?token=...).
+ * Clon de buildResetPasswordEmail con tono de bienvenida. El link expira en 7
+ * días (INVITE_TOKEN_TTL_DAYS). clinicName es opcional (personaliza el saludo).
+ */
+export function buildInviteEmail(args: {
+  name: string;
+  inviteUrl: string;
+  clinicName?: string | null;
+}): EmailContent {
+  const name = typeof args.name === "string" ? args.name.trim() : "";
+  const clinicName = typeof args.clinicName === "string" ? args.clinicName.trim() : "";
+  const inviteUrl = args.inviteUrl;
+  const safeName = name ? escapeHtml(name) : "";
+  const safeClinic = clinicName ? escapeHtml(clinicName) : "";
+  const safeUrl = escapeHtml(inviteUrl);
+
+  const subject = "Tu clínica te dio acceso al portal — define tu contraseña";
+
+  const byClinic = safeClinic
+    ? `<strong style="color: #f5f5f7;">${safeClinic}</strong>`
+    : "Tu clínica";
+
+  const html = darkShell(`
+    <h1 style="font-size: 24px; font-weight: 600; letter-spacing: -0.02em; margin: 0 0 12px 0; color: #f5f5f7;">
+      Te damos acceso a tu portal${safeName ? `, ${safeName}` : ""}
+    </h1>
+    <p style="font-size: 15px; color: rgba(245,245,247,0.7); line-height: 1.55; margin: 0 0 24px 0;">
+      ${byClinic} te invitó al portal de pacientes de DaleControl, donde puedes ver
+      tus citas, recetas, pagos y expediente. Solo falta que definas tu contraseña
+      — la clínica nunca la conoce:
+    </p>
+    <a href="${safeUrl}" style="display: inline-block; padding: 14px 28px; background: linear-gradient(180deg, #8b5cf6, #7c3aed); color: #fff; font-weight: 600; text-decoration: none; border-radius: 10px; font-size: 15px; margin: 8px 0 24px 0;">
+      Definir mi contraseña →
+    </a>
+    <p style="font-size: 13px; color: rgba(245,245,247,0.6); line-height: 1.6; margin: 0 0 16px 0;">
+      Si el botón no funciona, copia y pega este enlace en tu navegador:
+      <br />
+      <a href="${safeUrl}" style="color: #a78bfa; word-break: break-all;">${safeUrl}</a>
+    </p>
+    <p style="font-size: 13px; color: rgba(245,245,247,0.6); line-height: 1.6; margin: 0;">
+      El enlace expira en 7 días. Si no esperabas esta invitación, ignora este correo.
+    </p>`);
+
+  const text =
+    `Te damos acceso a tu portal${name ? `, ${name}` : ""}\n\n` +
+    `${clinicName || "Tu clínica"} te invitó al portal de pacientes de DaleControl. ` +
+    `Ahí puedes ver tus citas, recetas, pagos y expediente.\n\n` +
+    `Define tu contraseña (la clínica nunca la conoce) desde este enlace:\n${inviteUrl}\n\n` +
+    `El enlace expira en 7 días. Si no esperabas esta invitación, ignora este correo.\n\n` +
+    `DaleControl — Portal del paciente MX`;
+
+  return { subject, html, text };
+}
