@@ -7060,7 +7060,15 @@ model PatientAccount {
   emailVerified Boolean @default(false)
   name          String
   phone         String?
-  passwordHash  String
+  // null = cuenta INVITADA por la clínica que aún no fija su contraseña. El
+  // paciente la define desde el correo de invitación (reusa /paciente/recuperar).
+  // login rechaza null con mensaje de activación; reset la setea + verifica email.
+  passwordHash  String?
+
+  // Invitación al portal desde la ficha (staff). invitedAt/invitedByUserId solo
+  // se pueblan mientras la cuenta está pendiente de activar; el reset las limpia.
+  invitedByUserId String?
+  invitedAt       DateTime?
 
   // Verificación de email por código de 6 dígitos (se guarda sha256 del código)
   verifyCodeHash   String?

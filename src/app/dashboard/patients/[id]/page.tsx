@@ -130,7 +130,7 @@ export default async function PatientDetailPage({ params }: { params: { id: stri
   // activas (o todas, si la clínica está en trial vigente) y reusamos esa
   // lista para Pediatría / Periodoncia / prefill endo. Reemplaza tres
   // llamadas previas a canAccessModule() — mismo contrato, una query.
-  const [clinicModuleKeys, activityCounts, latestQuestionnaire, creditBalance, fotosCount] = await Promise.all([
+  const [clinicModuleKeys, activityCounts, latestQuestionnaire, creditBalance, fotosCount, portalAccountLink] = await Promise.all([
     getActiveClinicModuleKeys(user.clinicId),
     getPatientActivityCounts({ clinicId: user.clinicId, patientId: patient.id }),
     // Cuestionario de salud vigente (anamnesis WS1-T2). .catch(()=>null) lo
@@ -150,7 +150,25 @@ export default async function PatientDetailPage({ params }: { params: { id: stri
     prisma.clinicalPhoto.count({
       where: { clinicId: user.clinicId, patientId: patient.id, module: "general", deletedAt: null },
     }).catch(() => 0),
+    // Estado del portal con CUENTA REAL (PatientAccount) para la ficha: sin
+    // cuenta / invitada pendiente / activa. Se deriva del link de la sesión y
+    // del passwordHash (null = invitada). .catch(()=>null): si la tabla/relación
+    // no está disponible, la ficha degrada a "sin cuenta" sin caerse.
+    prisma.patientAccountLink.findFirst({
+      where: { patientId: patient.id, clinicId: user.clinicId },
+      select: { account: { select: { passwordHash: true } } },
+      orderBy: { createdAt: "asc" },
+    }).catch(() => null),
   ]);
+  // Estado del portal con cuenta real: "none" sin cuenta ligada; "invited" ligada
+  // pero sin contraseña (invitación pendiente); "active" ya con contraseña.
+  const linkedPortalAccount = portalAccountLink?.account ?? null;
+  const portalAccountStatus: "none" | "invited" | "active" = !linkedPortalAccount
+    ? "none"
+    : linkedPortalAccount.passwordHash === null
+      ? "invited"
+      : "active";
+
   const questionnaireRiskFlags = latestQuestionnaire?.riskFlags ?? [];
   const questionnaireFilledAt  = latestQuestionnaire?.filledAt ? latestQuestionnaire.filledAt.toISOString() : null;
   const questionnaireStatus    = questionnaireFreshness(latestQuestionnaire?.filledAt ?? null, Date.now());
@@ -312,6 +330,7 @@ export default async function PatientDetailPage({ params }: { params: { id: stri
           }}
           specialty={user.clinic.specialty}
           portalUrl={portalUrl}
+          portalAccountStatus={portalAccountStatus}
           pediatricsData={pediatricsData}
           pediatricsModuleActive={pediatricsModuleActive}
           perioData={perioData}

@@ -1623,7 +1623,12 @@
     },
     "portal": {
       "copied": "🔗 Portal link copied to clipboard",
-      "error": "Error generating portal"
+      "error": "Error generating portal",
+      "inviteSent": "✉️ Portal invitation sent",
+      "inviteResent": "✉️ Invitation resent",
+      "alreadyActive": "The patient already has portal access",
+      "needsEmail": "The patient needs an email to be invited",
+      "inviteError": "Couldn't send the invitation"
     },
     "chart": {
       "weight": "Weight",
@@ -2090,6 +2095,12 @@
       "editPatient": "Edit patient",
       "copyPortalLink": "Copy portal link",
       "generatePatientPortal": "Generate patient portal",
+      "portalInvite": "Invite to portal",
+      "portalResend": "Resend invitation",
+      "portalInvitedHint": "Invitation sent — pending activation",
+      "portalActive": "Has portal access ✓",
+      "copyReadonlyLink": "Copy read-only link",
+      "generateReadonlyLink": "Generate read-only link",
       "printSummary": "Print summary",
       "viewInAgenda": "View in agenda",
       "alertsAria": "Patient clinical alerts",

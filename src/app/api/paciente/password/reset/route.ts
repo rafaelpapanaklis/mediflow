@@ -43,17 +43,27 @@ export async function POST(req: NextRequest) {
         resetTokenHash: sha256(token),
         resetTokenExpiry: { gt: new Date() },
       },
-      select: { id: true },
+      select: { id: true, passwordHash: true },
     });
 
     if (!account) {
       return NextResponse.json({ error: "El enlace expiró o no es válido" }, { status: 400 });
     }
 
+    // Si la cuenta venía INVITADA (sin contraseña), al fijarla el paciente probó
+    // que controla el email → la verificamos y limpiamos la marca de invitación.
+    // En un reset normal (passwordHash ya seteado) NO tocamos esos campos.
+    const wasInvited = account.passwordHash === null;
+
     const passwordHash = await hashPassword(password);
     await prisma.patientAccount.update({
       where: { id: account.id },
-      data: { passwordHash, resetTokenHash: null, resetTokenExpiry: null },
+      data: {
+        passwordHash,
+        resetTokenHash: null,
+        resetTokenExpiry: null,
+        ...(wasInvited ? { emailVerified: true, invitedAt: null } : {}),
+      },
     });
 
     // Cierra todas las sesiones viejas; la UI manda a login.

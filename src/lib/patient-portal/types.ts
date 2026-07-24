@@ -70,6 +70,10 @@ export const PATIENT_SESSION_DAYS = 30;
 export const VERIFY_CODE_TTL_MIN = 15;
 export const VERIFY_MAX_ATTEMPTS = 5;
 export const RESET_TOKEN_TTL_MIN = 60;
+// Invitación al portal desde la ficha (staff): la clínica crea/liga la cuenta y
+// el paciente fija SU contraseña desde el correo. Ventana amplia (7 días, no los
+// 60 min del reset) porque no es una acción que el paciente esté esperando.
+export const INVITE_TOKEN_TTL_DAYS = 7;
 
 // ── Auth ────────────────────────────────────────────────────────────────────
 

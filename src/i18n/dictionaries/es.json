@@ -1623,7 +1623,12 @@
     },
     "portal": {
       "copied": "🔗 Link del portal copiado al portapapeles",
-      "error": "Error al generar portal"
+      "error": "Error al generar portal",
+      "inviteSent": "✉️ Invitación al portal enviada",
+      "inviteResent": "✉️ Invitación reenviada",
+      "alreadyActive": "El paciente ya tiene acceso al portal",
+      "needsEmail": "El paciente necesita un email para invitarlo",
+      "inviteError": "No se pudo enviar la invitación"
     },
     "chart": {
       "weight": "Peso",
@@ -2090,6 +2095,12 @@
       "editPatient": "Editar paciente",
       "copyPortalLink": "Copiar link del portal",
       "generatePatientPortal": "Generar portal paciente",
+      "portalInvite": "Invitar al portal",
+      "portalResend": "Reenviar invitación",
+      "portalInvitedHint": "Invitación enviada — pendiente de activar",
+      "portalActive": "Tiene acceso al portal ✓",
+      "copyReadonlyLink": "Copiar link de solo lectura",
+      "generateReadonlyLink": "Generar link de solo lectura",
       "printSummary": "Imprimir resumen",
       "viewInAgenda": "Ver en agenda",
       "alertsAria": "Alertas clínicas del paciente",

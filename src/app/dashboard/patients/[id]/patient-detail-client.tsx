@@ -256,6 +256,10 @@ interface Props {
   specialty:    string;
   treatments:   any[];
   portalUrl?:   string | null;
+  /** Estado del portal con CUENTA REAL del paciente (independiente del link
+   *  legacy de solo lectura `portalUrl`): "none" sin cuenta, "invited"
+   *  invitación pendiente (sin contraseña), "active" ya con acceso. */
+  portalAccountStatus?: "none" | "invited" | "active";
   pediatricsData?: PediatricsTabData | null;
   /**
    * True si la clínica tiene el módulo Odontopediatría activo (o trial
@@ -325,6 +329,7 @@ interface Props {
 export function PatientDetailClient({
   patient, records: initialRecords, appointments, invoices: initialInvoices,
   doctors, currentUser, specialty, treatments, portalUrl,
+  portalAccountStatus = "none",
   pediatricsData,
   pediatricsModuleActive = false,
   perioData,
@@ -666,6 +671,10 @@ export function PatientDetailClient({
   }, [patient.visibleUserIds]);
   const [portalLink, setPortalLink] = useState<string | null>(portalUrl ?? null);
   const [generatingPortal, setGeneratingPortal] = useState(false);
+  // Estado del portal con CUENTA REAL (invitación por email). Local para
+  // reflejar de inmediato el resultado de invitar/reenviar sin recargar.
+  const [portalStatus, setPortalStatus] = useState<"none" | "invited" | "active">(portalAccountStatus);
+  const [invitingPortal, setInvitingPortal] = useState(false);
   // Radiografias state
   const [files, setFiles]             = useState<any[]>([]);
   const [filesLoaded, setFilesLoaded] = useState(false);
@@ -741,6 +750,42 @@ export function PatientDetailClient({
       toast.error(err.message ?? t("patients.portal.error"));
     } finally {
       setGeneratingPortal(false);
+    }
+  }
+
+  // Invita al paciente al portal con CUENTA REAL: crea/liga la PatientAccount y
+  // le manda un correo para que fije SU contraseña. La clínica nunca la ve.
+  async function invitePortal() {
+    if (invitingPortal) return;
+    if (!patient.email) {
+      toast.error(t("patients.portal.needsEmail"));
+      return;
+    }
+    setInvitingPortal(true);
+    try {
+      const res = await fetch(`/api/patients/${patient.id}/portal-invite`, { method: "POST" });
+      // Nunca `res.json()` a pelo: un 500 con cuerpo vacío reventaba el parse
+      // con "Unexpected end of JSON input" y tapaba el error real. Guardamos el
+      // parse y caemos al mensaje i18n si el server no mandó `error`.
+      const data = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        status?: "invited" | "resent" | "already_active";
+      };
+      if (!res.ok) throw new Error(data.error ?? t("patients.portal.inviteError"));
+      if (data.status === "already_active") {
+        setPortalStatus("active");
+        toast.success(t("patients.portal.alreadyActive"));
+      } else if (data.status === "resent") {
+        setPortalStatus("invited");
+        toast.success(t("patients.portal.inviteResent"));
+      } else {
+        setPortalStatus("invited");
+        toast.success(t("patients.portal.inviteSent"));
+      }
+    } catch (err: any) {
+      toast.error(err.message ?? t("patients.portal.inviteError"));
+    } finally {
+      setInvitingPortal(false);
     }
   }
 
@@ -1048,6 +1093,16 @@ export function PatientDetailClient({
   const isOrthoTab = tab === "ortodoncia" && Boolean(orthoRedesignVM);
   const outerMaxWidth = isOrthoTab ? 1920 : 1760;
 
+  // El rail derecho (Estado de cuenta + reglas automáticas + WhatsApp) solo
+  // aporta en las vistas administrativas/financieras. En el resto (imagen,
+  // documentos, expediente, especialidades) le roba ancho al contenido —Rafael
+  // lo quiere fuera para que Fotos clínicas y Radiografías respiren. Fuera de
+  // este whitelist NO renderizamos el rail y el grid colapsa a 2 columnas vía
+  // `layoutWide`, así el contenido usa el ancho completo sin dejar el hueco de
+  // 320px+gap del tercer track.
+  const RAIL_TABS = ["resumen", "agenda", "presupuestos", "facturacion"];
+  const showRail = RAIL_TABS.includes(tab);
+
   return (
     <div style={{ padding: "20px 28px 28px", maxWidth: outerMaxWidth, margin: "0 auto" }}>
       <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, color: "var(--text-3)", marginBottom: 12 }}>
@@ -1107,6 +1162,10 @@ export function PatientDetailClient({
           visitCount={completedCount}
           pendingBalance={totalBalance}
           portalUrl={portalLink}
+          portalAccountStatus={portalStatus}
+          invitingPortal={invitingPortal}
+          onInvitePortal={invitePortal}
+          onGeneratePortal={generatePortalLink}
           onEdit={() => setShowEdit(true)}
           onStartConsult={() => {
             if (nextAppt) {
@@ -1151,13 +1210,13 @@ export function PatientDetailClient({
       )}
 
       {/* Layout 3 columnas — audit Opción C ajuste 3.
-          tab=ortodoncia y odontograma usan layoutWide (oculta SideCards
-          genéricas) porque el orchestrator de ortodoncia ya provee su
-          propia RightRail (M2 IA + M5 WhatsApp + estado de cuenta), y
-          odontograma usa todo el ancho para los 32 dientes. */}
+          El grid colapsa a 2 columnas (layoutWide) en todo tab SIN rail
+          (ver showRail): así el contenido ocupa el ancho completo y no queda
+          el hueco del tercer track. Incluye ortodoncia (su orchestrator ya
+          trae su propia RightRail) y odontograma (32 dientes a lo ancho). */}
       <div
         className={`${patientDetailStyles.layout} ${
-          tab === "odontograma" || isOrthoTab ? patientDetailStyles.layoutWide : ""
+          showRail ? "" : patientDetailStyles.layoutWide
         }`}
       >
         <QuickNav
@@ -2988,21 +3047,25 @@ export function PatientDetailClient({
         </div>
 
         {/* Ficha v3: la card "Próxima cita" salió del rail (la cabecera ya
-            la muestra); el rail queda con Estado de cuenta + reglas + WA. */}
-        <SideCards
-          finance={{
-            total: totalPlan,
-            paid: totalPaid,
-            balance: totalBalance,
-            credit: creditBalance,
-            pct: pctPaid,
-          }}
-          patientId={patient.id}
-          patientName={fullName}
-          patientPhone={patient.phone ?? null}
-          onCharge={openChargeShortcut}
-          onOpenBilling={() => setTab("facturacion")}
-        />
+            la muestra); el rail queda con Estado de cuenta + reglas + WA.
+            Solo se monta en los tabs con rail (ver showRail); en los demás el
+            grid ya colapsó a 2 columnas y el contenido usa el ancho completo. */}
+        {showRail && (
+          <SideCards
+            finance={{
+              total: totalPlan,
+              paid: totalPaid,
+              balance: totalBalance,
+              credit: creditBalance,
+              pct: pctPaid,
+            }}
+            patientId={patient.id}
+            patientName={fullName}
+            patientPhone={patient.phone ?? null}
+            onCharge={openChargeShortcut}
+            onOpenBilling={() => setTab("facturacion")}
+          />
+        )}
       </div>
 
       {/* Treatments detected modal — post-firmar consulta */}
