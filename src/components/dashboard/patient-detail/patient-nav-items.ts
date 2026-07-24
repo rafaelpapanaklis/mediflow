@@ -59,6 +59,22 @@ export interface BuildPatientNavOpts {
 }
 
 /**
+ * Especialidades OCULTAS del menú de la ficha. Rafael las quiere fuera por
+ * completo mientras los módulos no estén listos (antes salían como chips
+ * `disabled: "Próximamente"`). Se filtran al final de `buildPatientNavItems`,
+ * así que desaparecen a la vez del QuickNav (escritorio) y de la tab bar móvil
+ * —ambos consumen esta única función— sin dejar subhead "ESPECIALIDADES" vacío
+ * (QuickNav ya lo condiciona a que haya items). Para REACTIVAR una, quítala de
+ * este set: no hay que tocar nada más.
+ */
+const HIDDEN_SPECIALTY_IDS = new Set<string>([
+  "pediatria",
+  "periodoncia",
+  "endodoncia",
+  "ortodoncia",
+]);
+
+/**
  * ÚNICA fuente de verdad del menú de secciones de la ficha del paciente.
  * La consumen QuickNav (escritorio, agrupado por `section`) y la tab bar
  * móvil de patient-detail-client (lista plana, chips disabled al final).
@@ -113,5 +129,10 @@ export function buildPatientNavItems(opts: BuildPatientNavOpts): PatientNavItem[
     { id: "facturacion",  labelKey: "patients.tabs.facturacion",  icon: CreditCard,   section: "admin" },
   );
 
-  return items;
+  // Filtro final de especialidades ocultas (ver HIDDEN_SPECIALTY_IDS): al
+  // hacerlo aquí, escritorio y móvil quedan sincronizados y no se cuela ningún
+  // count ni subhead colgando.
+  return HIDDEN_SPECIALTY_IDS.size
+    ? items.filter((i) => !HIDDEN_SPECIALTY_IDS.has(i.id))
+    : items;
 }
