@@ -764,8 +764,14 @@ export function PatientDetailClient({
     setInvitingPortal(true);
     try {
       const res = await fetch(`/api/patients/${patient.id}/portal-invite`, { method: "POST" });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
+      // Nunca `res.json()` a pelo: un 500 con cuerpo vacío reventaba el parse
+      // con "Unexpected end of JSON input" y tapaba el error real. Guardamos el
+      // parse y caemos al mensaje i18n si el server no mandó `error`.
+      const data = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        status?: "invited" | "resent" | "already_active";
+      };
+      if (!res.ok) throw new Error(data.error ?? t("patients.portal.inviteError"));
       if (data.status === "already_active") {
         setPortalStatus("active");
         toast.success(t("patients.portal.alreadyActive"));
