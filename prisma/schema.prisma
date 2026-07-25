@@ -1690,6 +1690,9 @@ model MedicalRecord {
   vitals        Json?
   specialtyData Json?
   isPrivate     Boolean  @default(false)
+  // Asistente IA de consulta (procedencia IA). Anotación separada del texto
+  // clínico firmado (nunca toca S/O/A/P). Forma en sql/consult-ai-assist.sql.
+  aiAssist      Json?
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 

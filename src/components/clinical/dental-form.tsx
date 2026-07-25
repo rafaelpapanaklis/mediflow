@@ -14,6 +14,7 @@ import type { Records, ToothRecord } from "@/components/dashboard/odontogram-v2/
 import { Cie10Selector } from "@/components/dashboard/clinical/cie10-selector";
 import { useCodedDiagnoses } from "@/components/clinical/use-coded-diagnoses";
 import { DictationMic } from "@/components/clinical/shared/dictation-mic";
+import { AiConsultPanel, type AiAssistValue } from "./dental/ai-consult-panel";
 
 /** ¿El registro de un diente trae algo marcado? (superficies, hallazgos o nota) */
 function toothRecordHasContent(rec: ToothRecord | undefined): boolean {
@@ -44,6 +45,11 @@ interface SelectedProcedure { id: string; name: string; price: number; quantity:
 interface Props {
   patientId: string;
   onSaved: (record: any) => void;
+  /** Sincroniza SOLO el aiAssist del record en el padre SIN colapsar el acordeón
+   *  (a diferencia de onSaved/handleRecordUpdated, que además colapsa la fila). Así,
+   *  al re-expandir la consulta el form re-deriva el estado del prop ya fresco y la
+   *  cajita morada no se borra/resucita desde un valor stale. */
+  onAiAssistChange?: (recordId: string, aiAssist: any) => void;
   isChild?: boolean;
   /**
    * Cuando se pasa un record existente, el form arranca en modo EDIT:
@@ -57,10 +63,11 @@ interface Props {
     assessment: string | null;
     plan: string | null;
     specialtyData?: any;
+    aiAssist?: any;
   };
 }
 
-export function DentalForm({ patientId, onSaved, initialRecord }: Props) {
+export function DentalForm({ patientId, onSaved, onAiAssistChange, initialRecord }: Props) {
   const t = useT();
   const isEditing = !!initialRecord;
   // Dx CIE-10 codificados (NOM-024 §6.3 / NOM-004). Edición: en vivo contra el
@@ -68,6 +75,8 @@ export function DentalForm({ patientId, onSaved, initialRecord }: Props) {
   const { dxs, onAdd: onAddDx, onRemove: onRemoveDx, flush: flushDx } = useCodedDiagnoses(initialRecord?.id ?? null);
   const initialSpec = (initialRecord?.specialtyData ?? {}) as any;
   const [saving,     setSaving]     = useState(false);
+  // Asistente IA de consulta — procedencia separada del texto clínico firmado.
+  const [aiAssist, setAiAssist] = useState<AiAssistValue | null>(initialRecord?.aiAssist ?? null);
   const [catalog, setCatalog] = useState<CatalogProcedure[]>([]);
   const [selectedProcs, setSelectedProcs] = useState<SelectedProcedure[]>(() => {
     const raw = initialSpec.procedures;
@@ -253,6 +262,59 @@ export function DentalForm({ patientId, onSaved, initialRecord }: Props) {
     setSelectedProcs(prev => prev.filter(p => p.id !== id));
   }
 
+  // ── Asistente IA: aplicar / quitar la procedencia sobre el record ──────────
+  // En historial persiste vía PATCH y sincroniza el aiAssist en el padre con
+  // onAiAssistChange (mergea por id SIN colapsar el acordeón) → al re-expandir la
+  // consulta el form re-deriva del prop fresco, no de uno stale. En fallo LANZA para
+  // que el panel NO limpie el análisis (se re-Aplica sin re-gastar tokens de IA).
+  async function handleAiApply(a: { result: any; model?: string; generatedAt?: string; disclaimer?: string }) {
+    if (initialRecord?.id) {
+      let res: Response;
+      try {
+        res = await fetch("/api/consult/ai-assist", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ recordId: initialRecord.id, apply: true, result: a.result, model: a.model, generatedAt: a.generatedAt }),
+        });
+      } catch (e) {
+        toast.error(t("clinical.aiConsult.genericError"));
+        throw e;
+      }
+      if (!res.ok) {
+        toast.error(t("clinical.aiConsult.genericError"));
+        throw new Error("ai-apply failed");
+      }
+      const d = await res.json();
+      setAiAssist(d.aiAssist);
+      onAiAssistChange?.(initialRecord.id, d.aiAssist);
+    } else {
+      // Consulta nueva sin guardar: estado local; se adjunta tras el primer guardado.
+      setAiAssist({ applied: true, appliedAt: new Date().toISOString(), generatedAt: a.generatedAt, result: a.result, disclaimer: a.disclaimer });
+    }
+  }
+  async function handleAiRemove() {
+    if (initialRecord?.id && aiAssist) {
+      let res: Response;
+      try {
+        res = await fetch("/api/consult/ai-assist", {
+          method: "PATCH", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ recordId: initialRecord.id, apply: false }),
+        });
+      } catch (e) {
+        toast.error(t("clinical.aiConsult.genericError"));
+        throw e;
+      }
+      if (!res.ok) {
+        toast.error(t("clinical.aiConsult.genericError"));
+        throw new Error("ai-remove failed");
+      }
+      setAiAssist(null);
+      onAiAssistChange?.(initialRecord.id, null);
+    } else {
+      setAiAssist(null);
+    }
+  }
+
   async function handleSave() {
     if (!form.subjective && !form.assessment && dxs.length === 0) {
       toast.error(t("clinical.dentalForm.reasonOrDiagnosisRequired"));
@@ -351,6 +413,19 @@ export function DentalForm({ patientId, onSaved, initialRecord }: Props) {
         } else {
           toast.success(t("clinical.dentalForm.savedToast"));
         }
+        // Si aplicaron IA en la consulta NUEVA, adjúntala al record recién creado y
+        // mergea el aiAssist devuelto a `record` para que onSaved(record) deje la
+        // cajita morada ✨ en el estado del padre sin esperar un reload.
+        if (aiAssist?.applied && record?.id) {
+          try {
+            const res = await fetch("/api/consult/ai-assist", {
+              method: "PATCH", headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ recordId: record.id, apply: true, result: aiAssist.result, generatedAt: aiAssist.generatedAt }),
+            });
+            if (res.ok) { const d = await res.json(); record = { ...record, aiAssist: d.aiAssist }; }
+            else { toast.error(t("clinical.aiConsult.genericError")); }
+          } catch { toast.error(t("clinical.aiConsult.genericError")); }
+        }
       }
       onSaved(record);
     } catch (err: any) {
@@ -376,6 +451,15 @@ export function DentalForm({ patientId, onSaved, initialRecord }: Props) {
           <TreatmentTimeline milestones={orthoMilestones.months} />
         </CardNew>
       )}
+
+      {/* ASISTENTE IA DE CONSULTA — apoyo diagnóstico (procedencia separada del texto firmado) */}
+      <AiConsultPanel
+        patientId={patientId}
+        currentInput={{ subjective: form.subjective, objective: form.objective }}
+        value={aiAssist}
+        onApply={handleAiApply}
+        onRemove={handleAiRemove}
+      />
 
       {/* ANAMNESIS */}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
