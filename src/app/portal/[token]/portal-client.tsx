@@ -17,6 +17,19 @@ const STATUS_MAP: Record<string, { label:string; color:string }> = {
   IN_PROGRESS: { label:"En curso",   color:"#3b82f6" },
 };
 
+/* Estados de FACTURA (los 6 del enum InvoiceStatus). Antes era un ternario que
+   solo distinguía PAID/PARTIAL y mandaba TODO lo demás a "Pendiente" en rojo,
+   así que una factura cancelada le aparecía al paciente como deuda. Cancelada
+   va en gris: es un estado normal, no un error. */
+const INVOICE_STATUS_MAP: Record<string, { label:string; cls:string }> = {
+  PAID:      { label:"Pagado",    cls:"bg-emerald-900/50 text-emerald-400" },
+  PARTIAL:   { label:"Parcial",   cls:"bg-amber-900/50 text-amber-400" },
+  PENDING:   { label:"Pendiente", cls:"bg-red-900/50 text-red-400" },
+  OVERDUE:   { label:"Vencida",   cls:"bg-red-900/50 text-red-400" },
+  CANCELLED: { label:"Cancelada", cls:"bg-slate-800 text-slate-400" },
+  DRAFT:     { label:"Borrador",  cls:"bg-slate-800 text-slate-400" },
+};
+
 const TABS = [
   { id:"inicio",        label:"Inicio",        icon:User },
   { id:"citas",         label:"Citas",         icon:Calendar },
@@ -34,8 +47,12 @@ export function PatientPortalClient({ patient }: { patient: any }) {
   const clinic    = patient.clinic;
   const upcoming  = patient.appointments.filter((a: any) => new Date(a.date) >= new Date() && a.status !== "CANCELLED");
   const past      = patient.appointments.filter((a: any) => new Date(a.date) < new Date() || a.status === "CANCELLED");
-  const totalPaid = patient.invoices.reduce((s: number, i: any) => s + i.paid, 0);
-  const totalOwed = patient.invoices.reduce((s: number, i: any) => s + i.balance, 0);
+  // Las facturas CANCELADAS no cuentan: cancelar solo cambia el status en BD y
+  // deja el balance intacto, así que sin este filtro el paciente veía en SU
+  // portal una deuda que ya no debe. Reembolsada ≠ cancelada.
+  const activeInvoices = patient.invoices.filter((i: any) => i.status !== "CANCELLED");
+  const totalPaid = activeInvoices.reduce((s: number, i: any) => s + i.paid, 0);
+  const totalOwed = activeInvoices.reduce((s: number, i: any) => s + i.balance, 0);
   const images    = patient.files.filter((f: any) => f.mimeType?.startsWith("image/") || f.url?.match(/\.(jpg|jpeg|png|gif|webp)/i));
 
   return (
@@ -287,8 +304,8 @@ export function PatientPortalClient({ patient }: { patient: any }) {
                     <div className="font-bold">{inv.concept ?? "Tratamiento"}</div>
                     <div className="text-slate-500 text-xs">{formatDate(inv.createdAt)}</div>
                   </div>
-                  <span className={`text-xs font-bold px-2.5 py-1 rounded-xl ${inv.status==="PAID"?"bg-emerald-900/50 text-emerald-400":inv.status==="PARTIAL"?"bg-amber-900/50 text-amber-400":"bg-red-900/50 text-red-400"}`}>
-                    {inv.status==="PAID"?"Pagado":inv.status==="PARTIAL"?"Parcial":"Pendiente"}
+                  <span className={`text-xs font-bold px-2.5 py-1 rounded-xl ${(INVOICE_STATUS_MAP[inv.status] ?? INVOICE_STATUS_MAP.PENDING).cls}`}>
+                    {(INVOICE_STATUS_MAP[inv.status] ?? INVOICE_STATUS_MAP.PENDING).label}
                   </span>
                 </div>
                 <div className="grid grid-cols-3 gap-2 mt-3 pt-3 border-t border-slate-800 text-center">
@@ -302,7 +319,11 @@ export function PatientPortalClient({ patient }: { patient: any }) {
                   </div>
                   <div>
                     <div className="text-xs text-slate-500">Pendiente</div>
-                    <div className={`text-sm font-bold ${inv.balance > 0 ? "text-amber-400" : "text-slate-400"}`}>{formatCurrency(inv.balance)}</div>
+                    {/* Cancelar no pone balance a 0 en BD: en una cancelada el
+                        saldo mostrado sería el monto completo. No se debe nada. */}
+                    <div className={`text-sm font-bold ${inv.status !== "CANCELLED" && inv.balance > 0 ? "text-amber-400" : "text-slate-400"}`}>
+                      {inv.status === "CANCELLED" ? "—" : formatCurrency(inv.balance)}
+                    </div>
                   </div>
                 </div>
               </div>

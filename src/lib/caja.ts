@@ -139,9 +139,12 @@ export async function deriveWindow(clinicId: string, from: Date, to: Date) {
       },
       orderBy: { paidAt: "asc" },
     }),
+    // Descuentos del turno. Mismo filtro que `issuedToday` en computeDayBilling:
+    // un descuento solo existe si la factura se emitió. Una CANCELADA (anulada)
+    // o un DRAFT (sin emitir) inflaban la línea "Descuentos" del corte.
     prisma.invoice.aggregate({
       _sum:  { discount: true },
-      where: { clinicId, createdAt: { gte: from, lte: to } },
+      where: { clinicId, status: { notIn: ["DRAFT", "CANCELLED"] }, createdAt: { gte: from, lte: to } },
     }),
   ]);
 

@@ -1374,7 +1374,9 @@
       "pending": "Pending",
       "partial": "Partial",
       "paid": "Paid",
-      "overdue": "Overdue"
+      "overdue": "Overdue",
+      "cancelled": "Cancelled",
+      "draft": "Draft"
     },
     "tabs": {
       "resumen": "Summary",

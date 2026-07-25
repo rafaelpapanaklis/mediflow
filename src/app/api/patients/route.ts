@@ -212,8 +212,12 @@ async function v2Handler(
         take: 1,
         select: { visitDate: true },
       },
+      // Saldo del paciente para la columna "Saldo", el filtro "Con deuda",
+      // hasDebt y el sort por balance. Se excluyen las CANCELADAS: el endpoint
+      // de cancelar solo cambia status y DEJA el balance intacto, así que sin
+      // este filtro una factura anulada seguía contando como deuda.
       invoices: {
-        where: { clinicId: ctx.clinicId, balance: { gt: 0 } },
+        where: { clinicId: ctx.clinicId, balance: { gt: 0 }, status: { not: "CANCELLED" } },
         select: { balance: true },
       },
     },
@@ -278,12 +282,14 @@ async function v2Handler(
         createdAt: { gte: prevMonthStart, lt: monthStart },
       },
     }),
+    // KPIs "pacientes con deuda" / "monto adeudado": mismo criterio que el
+    // include de arriba — las canceladas no son deuda.
     prisma.invoice.aggregate({
-      where: { clinicId: ctx.clinicId, balance: { gt: 0 } },
+      where: { clinicId: ctx.clinicId, balance: { gt: 0 }, status: { not: "CANCELLED" } },
       _sum: { balance: true },
     }),
     prisma.invoice.findMany({
-      where: { clinicId: ctx.clinicId, balance: { gt: 0 } },
+      where: { clinicId: ctx.clinicId, balance: { gt: 0 }, status: { not: "CANCELLED" } },
       select: { patientId: true },
       distinct: ["patientId"],
     }),

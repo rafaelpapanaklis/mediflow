@@ -222,12 +222,26 @@ const APPT_STATUS: Record<string, { labelKey: string; cls: string }> = {
   NO_SHOW:   { labelKey: "patients.apptStatus.noShow",    cls: "bg-[var(--bg-elev-2)] text-[var(--text-2)]" },
 };
 
+/* Cubre los 6 valores del enum InvoiceStatus. Si falta alguno, el render cae a
+   `?? INV_STATUS.PENDING` y una factura CANCELLED se pintaba de amarillo
+   "Pendiente" — el bug de MF-0151. Los estilos espejan los de las otras dos
+   superficies que ya mostraban estos badges bien (billing-client STATUS_BADGE e
+   invoice-detail-modal INV_STATUS): cancelada = neutro (cancelar es un estado
+   normal, NO un error → nada de rojo de peligro) y borrador = brand. */
 const INV_STATUS: Record<string, { labelKey: string; cls: string }> = {
-  PENDING: { labelKey: "patients.invStatus.pending", cls: "bg-[var(--warning-soft)] text-[var(--warning-strong)]" },
-  PARTIAL: { labelKey: "patients.invStatus.partial", cls: "bg-[var(--info-soft)] text-[var(--info-strong)]" },
-  PAID:    { labelKey: "patients.invStatus.paid",    cls: "bg-[var(--success-soft)] text-[var(--success-strong)]" },
-  OVERDUE: { labelKey: "patients.invStatus.overdue", cls: "bg-[var(--danger-soft)] text-[var(--danger-strong)]" },
+  PENDING:   { labelKey: "patients.invStatus.pending",   cls: "bg-[var(--warning-soft)] text-[var(--warning-strong)]" },
+  PARTIAL:   { labelKey: "patients.invStatus.partial",   cls: "bg-[var(--info-soft)] text-[var(--info-strong)]" },
+  PAID:      { labelKey: "patients.invStatus.paid",      cls: "bg-[var(--success-soft)] text-[var(--success-strong)]" },
+  OVERDUE:   { labelKey: "patients.invStatus.overdue",   cls: "bg-[var(--danger-soft)] text-[var(--danger-strong)]" },
+  CANCELLED: { labelKey: "patients.invStatus.cancelled", cls: "bg-[var(--bg-elev-2)] text-[var(--text-2)]" },
+  DRAFT:     { labelKey: "patients.invStatus.draft",     cls: "bg-[var(--brand-soft)] text-[var(--brand)]" },
 };
+
+/* Una factura CANCELLED está anulada: no es plan de tratamiento, no es dinero
+   cobrado y no es saldo por cobrar. El endpoint de cancelar NO pone balance a 0
+   (solo cambia status), así que cualquier suma que no la excluya la cuenta como
+   deuda. Ojo: reembolsada ≠ cancelada — un reembolso NO pasa por aquí. */
+const isVoidedInvoice = (inv: { status?: string | null }) => inv.status === "CANCELLED";
 
 /* `bg` incluye border-color porque los consumidores aplican la clase `border`.
    alta/media llevan borde semántico (tokens *-border-strong existentes);
@@ -768,15 +782,22 @@ export function PatientDetailClient({
   // Derivamos totales del state local `invoices` para que el card "Finanzas"
   // y el sidebar "Estado de cuenta" reflejen mutaciones (cobrar/cancelar/
   // editar/reembolsar) sin esperar al re-fetch del server component.
+  // Las CANCELADAS se excluyen ANTES de sumar: una factura anulada no es plan
+  // de tratamiento, ni dinero cobrado, ni saldo por cobrar. Sin este filtro el
+  // card "Estado de cuenta" y el botón "Cobrar ahora" mostraban la deuda de una
+  // factura que ya no se debe. Los DRAFT SÍ suman a propósito: en la ficha son
+  // facturas en curso y son justo lo que `openChargeShortcut` prioriza cobrar.
   const { totalPlan, totalPaid, totalBalance } = useMemo(() => {
-    return (invoices as any[]).reduce(
-      (acc, inv) => ({
-        totalPlan:    acc.totalPlan    + (inv.total   ?? 0),
-        totalPaid:    acc.totalPaid    + (inv.paid    ?? 0),
-        totalBalance: acc.totalBalance + (inv.balance ?? 0),
-      }),
-      { totalPlan: 0, totalPaid: 0, totalBalance: 0 },
-    );
+    return (invoices as any[])
+      .filter((inv) => !isVoidedInvoice(inv))
+      .reduce(
+        (acc, inv) => ({
+          totalPlan:    acc.totalPlan    + (inv.total   ?? 0),
+          totalPaid:    acc.totalPaid    + (inv.paid    ?? 0),
+          totalBalance: acc.totalBalance + (inv.balance ?? 0),
+        }),
+        { totalPlan: 0, totalPaid: 0, totalBalance: 0 },
+      );
   }, [invoices]);
   const pctPaid  = totalPlan > 0 ? Math.round((totalPaid / totalPlan) * 100) : 0;
 
@@ -2978,6 +2999,10 @@ export function PatientDetailClient({
                     <tr><td colSpan={6} className="px-4 py-10 text-center text-muted-foreground">{t("patients.billing.empty")}</td></tr>
                   ) : invoices.map(inv => {
                     const s = INV_STATUS[inv.status] ?? INV_STATUS.PENDING;
+                    // Cancelar NO pone balance a 0 en BD, así que la columna
+                    // Saldo mostraría el monto en rojo en una fila que dice
+                    // "Cancelada". Se muestra "—": no hay nada que cobrar.
+                    const voided = isVoidedInvoice(inv);
                     return (
                       <tr
                         key={inv.id}
@@ -2988,7 +3013,9 @@ export function PatientDetailClient({
                         <td className="px-4 py-2 text-muted-foreground">{formatDate(inv.createdAt)}</td>
                         <td className="px-4 py-2 font-bold">{formatCurrency(inv.total)}</td>
                         <td className="px-4 py-2 text-emerald-600 font-bold">{formatCurrency(inv.paid)}</td>
-                        <td className="px-4 py-2 text-rose-600 font-bold">{formatCurrency(inv.balance)}</td>
+                        <td className={voided ? "px-4 py-2 text-muted-foreground" : "px-4 py-2 text-rose-600 font-bold"}>
+                          {voided ? "—" : formatCurrency(inv.balance)}
+                        </td>
                         <td className="px-4 py-2"><span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${s.cls}`}>{t(s.labelKey)}</span></td>
                       </tr>
                     );

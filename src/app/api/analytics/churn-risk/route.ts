@@ -82,7 +82,9 @@ function getChurnRisk(clinicId: string): Promise<ChurnResp> {
         inv AS (
           SELECT "patientId", COALESCE(SUM("balance"), 0) AS balance
           FROM "invoices"
-          WHERE "clinicId" = ${clinicId} AND "balance" > 0
+          -- Sin excluir CANCELLED, una factura anulada (que conserva su balance
+          -- en BD) marcaba al paciente con deuda y le subía el score de riesgo.
+          WHERE "clinicId" = ${clinicId} AND "balance" > 0 AND "status" <> 'CANCELLED'
           GROUP BY "patientId"
         )
         SELECT p."id", p."firstName", p."lastName", p."phone", p."createdAt",

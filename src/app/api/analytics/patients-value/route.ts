@@ -82,7 +82,10 @@ function getPatientsValue(clinicId: string): Promise<ValueResp> {
                  COALESCE(SUM("paid"), 0)    AS paid,
                  COALESCE(SUM("balance"), 0) AS balance
           FROM "invoices"
-          WHERE "clinicId" = ${clinicId}
+          -- Las CANCELADAS quedan fuera: cancelar solo cambia el status y DEJA
+          -- el balance intacto, así que sin esto una factura anulada inflaba
+          -- lo facturado y el saldo del paciente (y los totales de la vista).
+          WHERE "clinicId" = ${clinicId} AND "status" <> 'CANCELLED'
           GROUP BY "patientId"
         ),
         appt AS (

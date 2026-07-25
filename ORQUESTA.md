@@ -1348,3 +1348,49 @@ Multi-tenant estricto en los tres: el `where` SIEMPRE lleva `clinicId: ctx.clini
 - **`PatientCredit` NO bloquea** (decisión consciente). Cascadea igual que las facturas y es dinero (saldo a favor del paciente), pero el spec enumeró explícitamente qué bloquea y no lo incluía. Si se quiere, agregarlo es **una línea** en `getPatientDeleteBlockers`. En la práctica un crédito sin ninguna factura es raro.
 - **Log de intento**: `logMutation` se escribe ANTES del DELETE (como pedía el spec, para que el snapshot `before` exista). Si el borrado falla por una FK que el precheck no vio, queda un registro de intento en la bitácora. Asumido a propósito: preferible un log de más que un borrado sin rastro.
 - **A un SUPER_ADMIN no se le puede quitar `patients.delete`** — `PATCH /api/team/[id]/permissions` rechaza editar permisos de otro SUPER_ADMIN (anti-lockout, preexistente, no tocado).
+
+---
+
+## [Fix-Factura-Cancelada] — 2026-07-25
+
+**Commit en main:** tip de `fix/factura-cancelada`, pusheado con `git push origin HEAD:main`
+**Build:** `npx next build` → **EXIT 0** (`Generating static pages 308/308`, type-check sin errores). Sin SQL, sin cambios en `prisma/schema.prisma`, sin dependencias nuevas.
+
+### El dato que explica TODO el bug
+`POST /api/invoices/[id]/cancel` marca `status: "CANCELLED"` pero **NO pone `balance` en 0** — deja la columna intacta. Y como `cancel` exige `paid === 0`, una factura cancelada queda con **`balance === total`** en BD. Resultado: **cualquier suma de `balance` que no filtre por status cuenta la factura anulada como deuda viva**. No es un bug de un archivo, es ese patrón repetido.
+
+### Causa raíz confirmada (lo reportado)
+- `INV_STATUS` (patient-detail-client.tsx) solo mapeaba 4 de los 6 valores del enum `InvoiceStatus`. Con `INV_STATUS[inv.status] ?? INV_STATUS.PENDING`, CANCELLED y DRAFT caían a **"Pendiente" amarillo**.
+- El `useMemo` de `totalPlan/totalPaid/totalBalance` reducía sobre TODAS las facturas → el card "Estado de cuenta", el botón "Cobrar ahora · $1,800", `pendingBalance` del hero y `pctPaid` contaban MF-0151.
+
+### Dónde MÁS estaba el mismo bug (esto es lo importante)
+| # | Superficie | Qué se veía mal |
+|---|---|---|
+| 1 | `patients/[id]/patient-detail-client.tsx` | badge "Pendiente" + Estado de cuenta + Cobrar ahora + % cobertura (lo reportado) |
+| 2 | ídem, columna **Saldo** de la tabla | la fila decía "Cancelada" y al lado $1,800 **en rojo** |
+| 3 | `api/patients/route.ts` (**3 queries**) | columna Saldo de la **LISTA** de pacientes, KPI "pacientes con deuda" + "monto adeudado", filtro rápido "Con deuda", `hasDebt` y el sort por balance |
+| 4 | `portal/[token]/portal-client.tsx` | **el paciente veía la deuda fantasma en SU portal**; el badge era un ternario que mandaba CANCELLED a "Pendiente" **en rojo**; y la columna "Pendiente" por factura |
+| 5 | `api/analytics/patients-value/route.ts` | CTE `inv` sin filtro → facturado/saldo por paciente y totales. Alimenta el KPI **"Saldo pendiente" del CRM** (`analytics/crm`) |
+| 6 | `api/analytics/churn-risk/route.ts` | CTE `inv` sin filtro → marcaba deuda falsa y **subía el score de riesgo de fuga** del paciente |
+| 7 | `lib/caja.ts` → `deriveWindow` `discountAgg` | la línea **"Descuentos" del corte** sumaba descuentos de facturas canceladas/borrador |
+
+### Lo que YA estaba bien (verificado uno por uno, NO tocado)
+`api/finanzas` (porCobrar/vencido/ventas/porDoctor) · `lib/caja.ts` → `computeDayBilling` (billedToday/pendingToday/overdueToday) · `dashboard/caja/page.tsx` (totalPaid/Pending/Overdue) · `dashboard/reports` · `api/dashboard` · `api/dashboard/home/{admin,receptionist}` (vencidas) · `api/dashboard/home/revenue` · `api/analytics/{doctor-performance,payroll-pdf}` · `api/analytics/cohorts` · `admin/clinics/[id]` · `api/paciente/summary` · `api/paciente/payments`.
+
+Dato revelador: **`billing-client.tsx` y `invoice-detail-modal.tsx` YA tenían los 6 estados bien mapeados** (CANCELLED neutro, DRAFT brand). O sea: el modal que se abre al hacer clic en la fila mostraba "Cancelada" correctamente mientras la fila de atrás decía "Pendiente". `INV_STATUS` de la ficha simplemente se quedó atrás.
+
+### Dejado a propósito (incluye canceladas, y está bien)
+- `dashboard/caja/page.tsx:65` `monthInvoices` — es un **conteo de documentos emitidos** en el mes, no dinero. Una cancelada sí se emitió.
+- `patient-detail-client.tsx` `facturacion: invoices.length` — badge de conteo del nav; el tab las lista todas a propósito.
+- `api/paciente/payments` **lista** las canceladas (`status: { not: "DRAFT" }`) — correcto: el paciente debe VER que se canceló. Sus totales ya las excluyen explícitamente.
+- `openChargeShortcut` — verificado: busca DRAFT/PENDING/PARTIAL/OVERDUE, excluye CANCELLED por construcción. **No tocado**, como pedía el prompt.
+- `POST /api/invoices/[id]/cancel` — **no tocado**.
+
+### Archivos tocados (8)
+`src/app/dashboard/patients/[id]/patient-detail-client.tsx` · `src/app/api/patients/route.ts` · `src/app/portal/[token]/portal-client.tsx` · `src/app/api/analytics/patients-value/route.ts` · `src/app/api/analytics/churn-risk/route.ts` · `src/lib/caja.ts` · `src/i18n/dictionaries/{es,en}.json`
+
+### Criterio de filtrado (por qué CANCELLED y no DRAFT)
+En la ficha se excluye **solo CANCELLED**. Los DRAFT SÍ suman a propósito: en el expediente son facturas en curso y son justo lo que `openChargeShortcut` prioriza cobrar — excluirlos habría hecho desaparecer el botón "Cobrar ahora" de un paciente cuya única factura es borrador. Mismo criterio en `api/patients` para que la LISTA y la FICHA den el mismo número. En `caja.ts` sí se usa `notIn: ["DRAFT","CANCELLED"]` porque es el filtro que ya usaba el resto de ese archivo (`issuedToday`). **Reembolsada ≠ cancelada**: un reembolso no pasa por `status = CANCELLED`, así que ningún filtro de estos lo toca.
+
+### 🔴 Nota de estilo para Rafael (decisión que se aparta del prompt)
+El prompt pedía **DRAFT en estilo neutro**. Lo puse en **brand** (violeta) porque `billing-client.tsx` y `invoice-detail-modal.tsx` ya lo pintan así — y el modal del borrador se abre **desde esa misma fila**, así que en gris se vería un badge distinto antes y después del clic. CANCELLED sí quedó **neutro**, que coincide con el prompt y con las otras dos superficies. Si lo prefieres gris, es una línea en `INV_STATUS`.
