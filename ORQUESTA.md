@@ -1439,3 +1439,70 @@ Las 5 tablas de endodoncia/implantes **no** aplican el criterio de "ignorar anul
 
 ### NO tocado (como pedía el prompt)
 `POST /api/invoices/[id]/cancel` · `DELETE /api/patients/[id]` (el handler no cambia: sigue llamando al mismo precheck) · `GET /api/patients/[id]/deletable` · el modal `delete-patient-modal.tsx` (los tipos de blocker y sus textos i18n siguen igual). **Reembolsada ≠ cancelada.**
+
+---
+
+## [Fix-Edad-IA] — 2026-07-25
+
+**Commit en main:** `4512bc7a`, tip de `fix/ai-age-offbyone`, pusheado con `git push origin HEAD:main` sobre `6c903357`.
+**Build:** `npm run build` (`prisma generate && next build`) en worktree limpio desde `origin/main` → **EXIT 0** (`Generating static pages 308/308`, type-check sin errores; ambas rutas listadas como `ƒ`). Los `prisma:error DATABASE_URL` y los `DYNAMIC_SERVER_USAGE` de `[admin-auth]` en el log son el ruido conocido del SSG sin `.env` en el worktree. **Sin SQL**, sin cambios en `prisma/schema.prisma`, sin dependencias nuevas.
+
+### El bug
+Los dos endpoints que le mandan contexto clínico del paciente a la IA calculaban la edad así:
+
+```ts
+const age = patient.dob
+  ? new Date().getFullYear() - new Date(patient.dob).getFullYear()
+  : null;
+```
+
+Restar años a secas no da la edad: da **la edad que el paciente va a cumplir este año**.
+
+### El error no es ±1, es siempre +1 (siempre hacia "más viejo")
+Vale la pena precisarlo porque cambia la lectura clínica del riesgo. La resta de años solo puede dar dos resultados:
+
+- Cumpleaños **ya pasado** este año → edad correcta.
+- Cumpleaños **aún no pasado** → **edad + 1**.
+
+Nunca subestima. O sea: durante la fracción del año anterior a su cumpleaños — en promedio **la mitad de los pacientes en cualquier día dado** — la IA veía al paciente **un año mayor de lo que es**, que es justo la dirección peligrosa:
+
+- Un paciente de **17 años y 11 meses** se enviaba como de **18** → cruza el umbral pediátrico/adulto.
+- Un niño de **5 años nacido en noviembre** se enviaba como de **6** de enero a octubre → sube el escalón de dosis.
+
+La IA usa la edad para banderas de dosis pediátrica y contraindicaciones por rango etario, así que el off-by-one no era cosmético: alteraba el análisis devuelto.
+
+### El fix
+Se reemplazó por la lógica de cumpleaños en ambos archivos, extraída a un helper local `calcAge(dob)` junto a los demás helpers de cada ruta (misma convención `/** */` que ya usaban):
+
+```ts
+function calcAge(dob: Date): number {
+  const today = new Date();
+  const dobD = new Date(dob);
+  let age = today.getFullYear() - dobD.getFullYear();
+  const mo = today.getMonth() - dobD.getMonth();
+  if (mo < 0 || (mo === 0 && today.getDate() < dobD.getDate())) age--;
+  return age;
+}
+```
+
+Los call sites quedan en una línea: `const age = patient.dob ? calcAge(patient.dob) : null;`
+
+### Nota sobre la referencia del prompt
+El prompt mandaba copiar `calcAge` de `src/lib/ai/consult-context.ts`. **Ese archivo no existe en `main`**: vive en `feat/consult-ai-assist` (PR #115, aún sin mergear). La versión canónica que **sí** está en main es `src/app/api/patients/route.ts:508` — lógica idéntica, y es la que se replicó. No se tocó ese archivo ni se creó un helper compartido en `src/lib/`: duplicar el helper por ruta es el patrón que ya sigue el repo, y centralizarlo se salía del "no cambies nada más".
+
+### `dob` en el select: ya estaba en las dos
+Verificado, no hizo falta tocar ninguna query:
+- `check-contraindications` → `prisma.patient.findFirst` ya seleccionaba `dob` (junto a `gender`, `isChild`, `allergies`, `chronicConditions`, `currentMedications`).
+- `xrays/[id]/analyze` → `prisma.patient.findUnique` ya seleccionaba `dob`.
+
+### Efecto colateral bueno: la cache se auto-invalida
+En `check-contraindications` la edad entra en `ctxNorm`, que es lo que se hashea para la cache de `prescription_ai_checks`. Al cambiar la edad cambia el hash, así que **las respuestas cacheadas con la edad inflada dejan de reusarse solas** — no hizo falta ningún borrado manual de cache.
+
+### Conocido y NO corregido (fuera de alcance)
+`dob` viene de Prisma como `Date` en UTC-medianoche, y `getMonth()/getDate()` leen en hora local. En UTC-6 eso hace que el cumpleaños "caiga" un día antes. Es un desfase de **1 día**, es el comportamiento que ya tiene todo el resto de la app (incluido el `calcAge` de `patients/route.ts`), y arreglarlo aquí solo habría dejado estos dos endpoints fuera de fase con el resto. El bug reportado era de **1 año**; eso es lo que se arregló.
+
+### Archivos tocados (2)
+`src/app/api/prescriptions/check-contraindications/route.ts` · `src/app/api/xrays/[id]/analyze/route.ts`
+
+### NO tocado
+Nada más de esos dos endpoints: ni prompts al modelo, ni wallet de tokens IA, ni el gate `assertPatientVisible`, ni la cache, ni el parseo de respuesta. Tampoco `patients/route.ts` ni la rama de PR #115.
