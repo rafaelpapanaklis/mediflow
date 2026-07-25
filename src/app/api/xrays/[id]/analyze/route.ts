@@ -149,6 +149,16 @@ function topSeverity(findings: Finding[]): Severity {
   return "informational";
 }
 
+/** Edad cumplida: resta 1 si el paciente todavía no cumple años este año. */
+function calcAge(dob: Date): number {
+  const today = new Date();
+  const dobD  = new Date(dob);
+  let age     = today.getFullYear() - dobD.getFullYear();
+  const mo    = today.getMonth() - dobD.getMonth();
+  if (mo < 0 || (mo === 0 && today.getDate() < dobD.getDate())) age--;
+  return age;
+}
+
 /** Avg confidence en findings, clamp 0-100 */
 function avgConfidence(findings: Finding[]): number {
   if (findings.length === 0) return 0;
@@ -351,9 +361,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     },
   });
 
-  const age = patient?.dob
-    ? new Date().getFullYear() - new Date(patient.dob).getFullYear()
-    : null;
+  const age = patient?.dob ? calcAge(patient.dob) : null;
 
   const clinicalContextLines: string[] = [];
   if (patient) {

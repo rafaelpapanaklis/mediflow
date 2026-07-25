@@ -115,6 +115,16 @@ function genderLabel(g?: string | null): string {
   return "no especificado";
 }
 
+/** Edad cumplida: resta 1 si el paciente todavía no cumple años este año. */
+function calcAge(dob: Date): number {
+  const today = new Date();
+  const dobD = new Date(dob);
+  let age = today.getFullYear() - dobD.getFullYear();
+  const mo = today.getMonth() - dobD.getMonth();
+  if (mo < 0 || (mo === 0 && today.getDate() < dobD.getDate())) age--;
+  return age;
+}
+
 /** Recalcula saldo de tokens con el estado actual de la clínica. */
 async function computeRemaining(clinicId: string): Promise<{ remaining: number; limit: number }> {
   const c = await prisma.clinic.findUnique({
@@ -202,9 +212,7 @@ export async function POST(req: NextRequest) {
   });
   if (hidden) return hidden;
 
-  const age = patient.dob
-    ? new Date().getFullYear() - new Date(patient.dob).getFullYear()
-    : null;
+  const age = patient.dob ? calcAge(patient.dob) : null;
 
   // Contexto normalizado (ordenado) para el hash de cache — determinista.
   const allergies = (patient.allergies ?? []).slice().sort();
