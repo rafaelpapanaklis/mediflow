@@ -9,6 +9,7 @@ import { formatCurrency, formatDate, getInitials, avatarColor } from "@/lib/util
 import { ageFromDob, fmtMXN } from "@/lib/format";
 import { OdontogramV2 } from "@/components/dashboard/odontogram-v2/App";
 import { HeroCard } from "@/components/dashboard/patient-detail/hero-card";
+import { DeletePatientModal } from "@/components/dashboard/patient-detail/delete-patient-modal";
 import { TreatmentsModal, type SuggestedTreatment } from "@/components/dashboard/patient-detail/treatments-modal";
 import { QuickNav } from "@/components/dashboard/patient-detail/quick-nav";
 import { buildPatientNavItems } from "@/components/dashboard/patient-detail/patient-nav-items";
@@ -320,6 +321,13 @@ interface Props {
   fotosCount?: number;
   /** Sede de origen si el paciente viene prestado de otra sede vinculada (Fase 2); null = propio. Se pasa a HeroCard. */
   originClinicName?: string | null;
+  /**
+   * ¿La sesión tiene el permiso "patients.delete"? Lo resuelve page.tsx en el
+   * server con hasPermission(user, ...) — el cliente NO lo deduce del rol,
+   * porque el permiso es configurable por persona desde el modal de equipo.
+   * Controla que aparezca "Eliminar paciente" en el menú del hero card.
+   */
+  canDeletePatient?: boolean;
 }
 
 export function PatientDetailClient({
@@ -340,6 +348,7 @@ export function PatientDetailClient({
   creditBalance = 0,
   fotosCount: initialFotosCount = 0,
   originClinicName = null,
+  canDeletePatient = false,
 }: Props) {
   const t = useT();
   const router = useRouter();
@@ -639,6 +648,9 @@ export function PatientDetailClient({
     setRecords(initialRecords);
   }, [initialRecords]);
   const [showEdit, setShowEdit] = useState(false);
+  // Modal de "Eliminar paciente" (archivar vs. borrado definitivo). Solo se
+  // puede abrir desde el menú del hero card, que ya exige "patients.delete".
+  const [showDelete, setShowDelete] = useState(false);
   const [editForm, setEditForm] = useState({
     firstName: patient.firstName, lastName: patient.lastName,
     email: patient.email ?? "", phone: patient.phone ?? "",
@@ -1116,6 +1128,8 @@ export function PatientDetailClient({
           }}
           onReschedule={openNewAppointmentForPatient}
           onCharge={openChargeShortcut}
+          canDelete={canDeletePatient}
+          onDelete={() => setShowDelete(true)}
         />
       )}
 
@@ -3016,6 +3030,20 @@ export function PatientDetailClient({
           router.refresh();
         }}
       />
+
+      {/* Eliminar paciente — archivar (seguro) vs. borrado definitivo. */}
+      {canDeletePatient && (
+        <DeletePatientModal
+          open={showDelete}
+          onOpenChange={setShowDelete}
+          patient={{
+            id: patient.id,
+            firstName: patient.firstName,
+            lastName: patient.lastName,
+            patientNumber: patient.patientNumber,
+          }}
+        />
+      )}
 
       {/* Edit patient modal */}
       <Dialog open={showEdit} onOpenChange={setShowEdit}>

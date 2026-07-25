@@ -227,6 +227,20 @@
 .heroMenuItem:hover { background: var(--bg-hover); }
 .heroMenuItem:focus-visible { outline: none; box-shadow: var(--ring); }
 
+/* Separador antes de la acción destructiva del menú. Los márgenes negativos
+ * compensan el padding de 4px del popover para que la línea llegue a los bordes. */
+.heroMenuDivider {
+  height: 1px;
+  margin: 4px -4px;
+  background: var(--border-soft);
+}
+/* Variante destructiva ("Eliminar paciente"). El rojo sale de los tokens
+ * semánticos del proyecto, nunca de un hex suelto — así respeta el tema oscuro.
+ * Se califica con .heroMenuItem para ganarle al :hover de la base sin depender
+ * del orden de las reglas. */
+.heroMenuItem.heroMenuItemDanger { color: var(--danger); }
+.heroMenuItem.heroMenuItemDanger:hover { background: var(--danger-soft); }
+
 .heroAlerts {
   display: flex; flex-wrap: wrap; gap: 6px;
   margin-top: 14px;

@@ -2095,7 +2095,50 @@
       "alertsAria": "Patient clinical alerts",
       "noAllergies": "No known allergies",
       "emergencyLabel": "Emergency",
-      "moreCount": "+{count}"
+      "moreCount": "+{count}",
+      "deletePatient": "Delete patient"
+    },
+    "deleteModal": {
+      "title": "You're about to delete {name}",
+      "intro": "Patient #{number}. Choose what to do with their record.",
+      "archiveTitle": "Archive",
+      "archiveHint": "Removes them from the active patient list but keeps their history, appointments and invoices. You can restore them any time from the \"Archived\" filter.",
+      "archiveAction": "Archive patient",
+      "archivedToast": "{name} was archived",
+      "archiveError": "Could not archive the patient",
+      "deleteTitle": "Delete permanently",
+      "deleteHint": "Deletes the patient and everything stored with them. This cannot be undone.",
+      "checking": "Checking whether this can be deleted…",
+      "confirmWord": "DELETE",
+      "confirmLabel": "Type {word} to confirm",
+      "deleteAction": "Delete permanently",
+      "deletedToast": "{name} was permanently deleted",
+      "deleteError": "Could not delete the patient",
+      "blockedIntro": "This patient cannot be deleted:",
+      "blockedHint": "You can archive them instead: they leave the active list and all their information is kept.",
+      "reasons": {
+        "invoices": {
+          "one": "Has 1 invoice on record",
+          "other": "Has {count} invoices on record"
+        },
+        "payments": {
+          "one": "Has 1 payment on record",
+          "other": "Has {count} payments on record"
+        },
+        "cfdi": {
+          "one": "Has 1 invoice stamped with the tax authority",
+          "other": "Has {count} invoices stamped with the tax authority"
+        },
+        "endodontics": {
+          "one": "Has 1 endodontics record",
+          "other": "Has {count} endodontics records"
+        },
+        "implants": {
+          "one": "Has 1 implants record",
+          "other": "Has {count} implants records"
+        },
+        "related": "Has linked information that must be kept"
+      }
     },
     "historiaTimeline": {
       "typeSoap": "Notes",

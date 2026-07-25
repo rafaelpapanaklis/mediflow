@@ -12,6 +12,8 @@ import {
 } from "@/lib/patient-visibility";
 import { logMutation } from "@/lib/audit";
 import { revalidateAfter } from "@/lib/cache/revalidate";
+import { denyIfMissingPermission } from "@/lib/auth/require-permission";
+import { getPatientDeleteBlockers } from "@/lib/patient-deletion";
 
 export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
   const ctx = await getAuthContext();
@@ -204,9 +206,14 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     }
     if (has("status")) {
       if (!["ACTIVE", "INACTIVE", "ARCHIVED"].includes(body.status as string)) throw new Error("status inválido");
-      // Archivar es admin-only, igual que el handler DELETE.
-      if (body.status === "ARCHIVED" && !ctx.isAdmin) {
-        return NextResponse.json({ error: "Solo administradores pueden archivar pacientes" }, { status: 403 });
+      // Archivar exige "patients.delete", igual que el handler DELETE. Antes era
+      // `ctx.isAdmin` a secas: el permiso del modal de equipo existía pero no
+      // mandaba (no se le podía conceder a una recepcionista ni retirar a un
+      // admin). Por default ADMIN/SUPER_ADMIN lo tienen, así que el archivado
+      // masivo de la lista de pacientes sigue funcionando igual que hoy.
+      if (body.status === "ARCHIVED") {
+        const deniedArchive = denyIfMissingPermission(ctx, "patients.delete");
+        if (deniedArchive) return deniedArchive;
       }
       data.status = body.status as PatientStatus;
     }
@@ -273,25 +280,46 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   return NextResponse.json(updated);
 }
 
+/**
+ * DELETE — DOS modos, ambos detrás del permiso "patients.delete":
+ *
+ *   DELETE /api/patients/:id              → ARCHIVA (status = ARCHIVED).
+ *                                           Comportamiento histórico, intacto.
+ *   DELETE /api/patients/:id?mode=hard    → BORRADO DEFINITIVO de la fila.
+ *
+ * El borrado definitivo solo procede si el paciente no tiene nada que obligue a
+ * conservarlo (facturas/pagos/CFDI + las 5 tablas con `onDelete: Restrict`, ver
+ * @/lib/patient-deletion). Si lo tiene responde 409 con
+ * `{ blocked: true, reasons: [{ type, count }] }` para que la UI lo explique en
+ * español y ofrezca archivar.
+ */
 export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  // Only admins can archive patients
-  if (!ctx.isAdmin) return NextResponse.json({ error: "Solo administradores pueden archivar pacientes" }, { status: 403 });
+  // Permiso granular, NO `ctx.isAdmin`: así el toggle "Archivar/eliminar
+  // pacientes" del modal de equipo manda de verdad sobre quién puede hacerlo.
+  const denied = denyIfMissingPermission(ctx, "patients.delete");
+  if (denied) return denied;
 
-  // Capturamos before para audit log
-  const beforeArchive = await prisma.patient.findFirst({
-    where: { id: params.id, clinicId: ctx.clinicId },
-    select: { firstName: true, lastName: true, status: true },
+  const hardDelete = req.nextUrl.searchParams.get("mode") === "hard";
+
+  // Scope multi-tenant + visibilidad por paciente, mismo criterio que PUT/PATCH:
+  // si no es de esta clínica, o este usuario no lo puede ver, para él no existe
+  // → 404. Nunca 403 con datos: un 403 confirmaría que el paciente existe.
+  const before = await prisma.patient.findFirst({
+    where: { id: params.id, clinicId: ctx.clinicId, AND: patientVisibilityAnd(ctx) },
+    select: { id: true, firstName: true, lastName: true, patientNumber: true, status: true },
   });
+  if (!before) return NextResponse.json({ error: "Paciente no encontrado" }, { status: 404 });
 
-  await prisma.patient.updateMany({
-    where: { id: params.id, clinicId: ctx.clinicId },
-    data:  { status: "ARCHIVED" },
-  });
+  // ── Modo ARCHIVAR (default) ────────────────────────────────────────────
+  if (!hardDelete) {
+    await prisma.patient.updateMany({
+      where: { id: params.id, clinicId: ctx.clinicId },
+      data:  { status: "ARCHIVED" },
+    });
 
-  if (beforeArchive) {
     await logMutation({
       req,
       clinicId: ctx.clinicId,
@@ -299,10 +327,61 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
       entityType: "patient",
       entityId: params.id,
       action: "delete",
-      before: beforeArchive as any,
+      before: before as any,
     });
+
+    revalidateAfter("patients");
+    return NextResponse.json({ success: true, archived: true });
+  }
+
+  // ── Modo BORRADO DEFINITIVO ────────────────────────────────────────────
+  const reasons = await getPatientDeleteBlockers(params.id, ctx.clinicId);
+  if (reasons.length > 0) {
+    return NextResponse.json({ blocked: true, reasons }, { status: 409 });
+  }
+
+  // La bitácora se escribe ANTES del DELETE, a propósito. AuditLog cuelga de
+  // clinicId/userId (entityId es un string suelto, sin FK al paciente), así que
+  // la fila sobrevive al borrado; pero el snapshot `before` solo se puede leer
+  // mientras el paciente exista. Contrapartida asumida: si el DELETE de abajo
+  // falla por una FK que el precheck no vio, queda un registro de intento.
+  // Preferimos un log de más a un borrado sin rastro (conservación NOM-024).
+  await logMutation({
+    req,
+    clinicId: ctx.clinicId,
+    userId: ctx.userId,
+    entityType: "patient",
+    entityId: params.id,
+    action: "delete",
+    before: { ...before, hardDelete: true } as any,
+  });
+
+  try {
+    // El borrado va en transacción: el `deleteMany` repite el scope de clínica
+    // (defensa en profundidad) y las filas hijas las arrastra la BD en cascada
+    // — el schema no declara relationMode, así que las FK son reales. Las 5
+    // tablas con Restrict revientan aquí si el precheck se quedó corto.
+    // timeout holgado: sin facturas el expediente igual puede traer cientos de
+    // citas/notas/fotos colgando, y la cascada las borra todas en el mismo statement.
+    await prisma.$transaction(
+      async (tx) => {
+        await tx.patient.deleteMany({ where: { id: params.id, clinicId: ctx.clinicId } });
+      },
+      { timeout: 20000 },
+    );
+  } catch (err: any) {
+    // P2003 = foreign key constraint, P2014 = relación requerida. Algo quedó
+    // colgando que el precheck no cubre: se responde como bloqueo (409) para
+    // que la UI lo explique, en vez de un 500 sin sentido para el usuario.
+    if (err?.code === "P2003" || err?.code === "P2014") {
+      return NextResponse.json(
+        { blocked: true, reasons: [{ type: "related", count: 0 }] },
+        { status: 409 },
+      );
+    }
+    throw err;
   }
 
   revalidateAfter("patients");
-  return NextResponse.json({ success: true });
+  return NextResponse.json({ success: true, deleted: true });
 }

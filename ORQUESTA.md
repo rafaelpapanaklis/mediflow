@@ -1295,3 +1295,56 @@ El `SidebarFooter` (bloque de usuario) solo tiene logout, NO cambia de clínica;
 
 ### Notas
 - Sin SQL, sin cambios de schema. Responsive OK: el menú reducido reusa `renderItem` + `SidebarFooter`, así que funciona igual en sidebar colapsado (icon-only) y en drawer móvil.
+
+---
+
+## [Eliminar-Paciente] — 2026-07-25
+
+**Commit en main:** tip de `feat/eliminar-paciente`, pusheado con `git push origin HEAD:main`
+**Build:** `npx next build` → **EXIT 0** (`Generating static pages 308/308`, type-check sin errores). Los `prisma:error DATABASE_URL` del log son el ruido conocido del SSG sin `.env` en el worktree, no fatales. Sin SQL, sin cambios en `prisma/schema.prisma`.
+
+### Qué hace
+El ticket era "no se pueden eliminar pacientes ya creados". El menú de 3 puntitos de la ficha del paciente ahora tiene, **como última opción y en rojo**, "Eliminar paciente" (ícono `Trash2`, separado por un divisor). Abre un modal con **dos salidas**:
+
+- **Archivar** (seguro, siempre disponible) → `PATCH { status: "ARCHIVED" }`. Sale de la lista activa, conserva historial/citas/facturas, se recupera desde el filtro "Archivados" que ya existía.
+- **Eliminar definitivamente** → `DELETE /api/patients/:id?mode=hard`. Borra la fila de verdad. Exige escribir la palabra `ELIMINAR` (localizada: `DELETE` en inglés) — no es un solo clic.
+
+El ítem solo se renderiza si la sesión tiene el permiso **`patients.delete`** ("Archivar/eliminar pacientes"), que ya existía en el catálogo y en el modal de permisos del equipo.
+
+### Por qué DOS niveles (decisión de diseño)
+`patientId` cuelga de ~200 relaciones. Un borrado duro arrastra en cascada expediente, radiografías, facturas y consentimientos. Por eso el borrado real está condicionado y el default es archivar.
+
+### Qué BLOQUEA el borrado duro, y por qué
+El precheck vive en `src/lib/patient-deletion.ts` (`getPatientDeleteBlockers`). Dos familias, por razones distintas:
+
+1. **Fiscal / contable** — facturas, pagos y CFDI. En el schema `Invoice → Patient` es **`Cascade`**: la BD SÍ los borraría **en silencio**. El bloqueo es de **negocio, no técnico**. Un CFDI timbrado ante el SAT no se puede desaparecer (conservación NOM-024 + cuadre contable) y `CfdiRecord` ni siquiera cuelga del paciente: apunta a la factura por `invoiceId` **sin relación Prisma**, así que borrar dejaría el timbre huérfano apuntando a la nada.
+2. **Clínico con `onDelete: Restrict`** — las 5 tablas confirmadas en el schema: `EndodonticDiagnosis` (:4015), `VitalityTest` (:4043), `EndodonticTreatment` (:4102), `Implant` (:4444), `ImplantConsent` (:4709). Aquí el bloqueo **ya existe a nivel BD**; se cuentan ANTES solo para poder explicarlo en español en vez de reventar con un error de foreign key.
+
+Si algo bloquea → **409** con `{ blocked: true, reasons: [{ type, count }] }`. La UI lo traduce a lenguaje humano ("Tiene 3 facturas registradas"), **sin nombres de tabla**, y ofrece archivar.
+
+### Endpoints
+- `DELETE /api/patients/:id` → **archiva** (comportamiento histórico, intacto; hoy no lo llamaba nadie en el repo).
+- `DELETE /api/patients/:id?mode=hard` → **borra**. Precheck → 409 si hay bloqueos; si pasa, `logMutation` (action `delete`, `before` con nombre + folio) y `$transaction` con `deleteMany` scopeado a la clínica. `catch` de `P2003`/`P2014` → 409 `type: "related"` (no un 500) por si el precheck se queda corto en una carrera.
+- **NUEVO** `GET /api/patients/:id/deletable` → `{ deletable, reasons }`. Solo lectura, mismo permiso. Existe para que el modal explique el bloqueo **de entrada** en vez de hacer que el usuario escriba ELIMINAR para recibir un 409 en la cara. **No es la autoridad**: el DELETE reejecuta el mismo precheck.
+
+Multi-tenant estricto en los tres: el `where` SIEMPRE lleva `clinicId: ctx.clinicId` **+ `patientVisibilityAnd(ctx)`** (mismo criterio que PUT/PATCH). Si no es de la clínica o el usuario no lo puede ver → **404, nunca 403 con datos**.
+
+### El permiso ahora manda de verdad
+`ctx.isAdmin` → `denyIfMissingPermission(ctx, "patients.delete")` en los **dos** caminos que archivan (había 2, no 1): el handler `DELETE` y la rama `status === "ARCHIVED"` del `PATCH`. **No rompe el archivado masivo de la lista de pacientes**: ADMIN y SUPER_ADMIN tienen `patients.delete` por default, así que para ellos el comportamiento es idéntico; la diferencia es que ahora se le puede **conceder a una recepcionista** o **retirar a un admin** desde el modal de equipo. El modal de permisos ya reflejaba bien la key (`PERMISSION_GROUPS` → "Pacientes") — **no hizo falta arreglarlo**.
+
+### Archivos tocados (9 · 3 nuevos)
+- **NUEVO** `src/lib/patient-deletion.ts` — precheck compartido (tipos `PatientDeleteBlockerType` + `getPatientDeleteBlockers`).
+- **NUEVO** `src/app/api/patients/[id]/deletable/route.ts` — GET del precheck.
+- **NUEVO** `src/components/dashboard/patient-detail/delete-patient-modal.tsx` — modal de 2 acciones (Radix `Dialog` + `Button`/`Input`/`Label` + `react-hot-toast` ya del proyecto; **cero dependencias nuevas**).
+- `src/app/api/patients/[id]/route.ts` — DELETE con `?mode=hard`; gate por permiso en DELETE y en el PATCH→ARCHIVED.
+- `src/components/dashboard/patient-detail/hero-card.tsx` — props `canDelete` + `onDelete`; ítem rojo al final del popover.
+- `src/components/dashboard/patient-detail/patient-detail.module.css` — `.heroMenuDivider` + `.heroMenuItemDanger` (tokens `var(--danger)` / `var(--danger-soft)`, **ningún hex suelto**; calificado con `.heroMenuItem` para ganarle al `:hover` base sin depender del orden).
+- `src/app/dashboard/patients/[id]/patient-detail-client.tsx` — prop `canDeletePatient`, estado `showDelete`, montaje del modal.
+- `src/app/dashboard/patients/[id]/page.tsx` — resuelve el permiso en el **server** con `hasPermission(user, "patients.delete")` y lo baja como prop (el cliente NO lo deduce del rol).
+- `src/i18n/dictionaries/{es,en}.json` — `patients.heroCard.deletePatient` + el nodo `patients.deleteModal.*` (incluye `reasons.*` con formas plurales `one`/`other`).
+
+### 🔴 Pendiente de Rafael / followups
+- **QA con datos reales**: la verificación es por forma de query + build (en build NO hay `DATABASE_URL`). Probar los 4 casos: admin ve la opción · recepcionista sin el permiso no la ve y recibe 403 · paciente con facturas → 409 con motivo claro · paciente recién creado → se borra y redirige a `/dashboard/patients`.
+- **`PatientCredit` NO bloquea** (decisión consciente). Cascadea igual que las facturas y es dinero (saldo a favor del paciente), pero el spec enumeró explícitamente qué bloquea y no lo incluía. Si se quiere, agregarlo es **una línea** en `getPatientDeleteBlockers`. En la práctica un crédito sin ninguna factura es raro.
+- **Log de intento**: `logMutation` se escribe ANTES del DELETE (como pedía el spec, para que el snapshot `before` exista). Si el borrado falla por una FK que el precheck no vio, queda un registro de intento en la bitácora. Asumido a propósito: preferible un log de más que un borrado sin rastro.
+- **A un SUPER_ADMIN no se le puede quitar `patients.delete`** — `PATCH /api/team/[id]/permissions` rechaza editar permisos de otro SUPER_ADMIN (anti-lockout, preexistente, no tocado).

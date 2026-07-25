@@ -2095,7 +2095,50 @@
       "alertsAria": "Alertas clínicas del paciente",
       "noAllergies": "Sin alergias registradas",
       "emergencyLabel": "Emergencia",
-      "moreCount": "+{count}"
+      "moreCount": "+{count}",
+      "deletePatient": "Eliminar paciente"
+    },
+    "deleteModal": {
+      "title": "Vas a eliminar a {name}",
+      "intro": "Paciente #{number}. Elige qué quieres hacer con su expediente.",
+      "archiveTitle": "Archivar",
+      "archiveHint": "Sale de la lista de pacientes activos, pero conserva su historial, citas y facturas. Lo puedes recuperar cuando quieras desde el filtro «Archivados».",
+      "archiveAction": "Archivar paciente",
+      "archivedToast": "{name} quedó archivado",
+      "archiveError": "No se pudo archivar el paciente",
+      "deleteTitle": "Eliminar definitivamente",
+      "deleteHint": "Borra al paciente y todo lo que tenga guardado. No se puede deshacer.",
+      "checking": "Revisando si se puede eliminar…",
+      "confirmWord": "ELIMINAR",
+      "confirmLabel": "Escribe {word} para confirmar",
+      "deleteAction": "Eliminar definitivamente",
+      "deletedToast": "{name} se eliminó definitivamente",
+      "deleteError": "No se pudo eliminar el paciente",
+      "blockedIntro": "Este paciente no se puede eliminar:",
+      "blockedHint": "Puedes archivarlo: sale de la lista activa y toda su información queda guardada.",
+      "reasons": {
+        "invoices": {
+          "one": "Tiene 1 factura registrada",
+          "other": "Tiene {count} facturas registradas"
+        },
+        "payments": {
+          "one": "Tiene 1 pago registrado",
+          "other": "Tiene {count} pagos registrados"
+        },
+        "cfdi": {
+          "one": "Tiene 1 factura timbrada ante el SAT",
+          "other": "Tiene {count} facturas timbradas ante el SAT"
+        },
+        "endodontics": {
+          "one": "Tiene 1 registro de endodoncia",
+          "other": "Tiene {count} registros de endodoncia"
+        },
+        "implants": {
+          "one": "Tiene 1 registro de implantes",
+          "other": "Tiene {count} registros de implantes"
+        },
+        "related": "Tiene información ligada que debe conservarse"
+      }
     },
     "historiaTimeline": {
       "typeSoap": "Notas",

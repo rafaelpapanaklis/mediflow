@@ -21,6 +21,7 @@ import {
   History,
   Activity,
   Building2,
+  Trash2,
 } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
 import { ageFromDob } from "@/lib/format";
@@ -59,6 +60,15 @@ export interface HeroCardProps {
   onStartConsult: () => void;
   onReschedule: () => void;
   onCharge: () => void;
+  /** Abre el modal de eliminar. Solo se llama si `canDelete` es true. */
+  onDelete?: () => void;
+  /**
+   * ¿El usuario tiene el permiso "patients.delete"? Lo resuelve el server
+   * component de la ficha (page.tsx) — el cliente NO lo deduce del rol. Si es
+   * false, el ítem "Eliminar paciente" ni siquiera se renderiza; el endpoint
+   * vuelve a validarlo por su cuenta con 403.
+   */
+  canDelete?: boolean;
   riskFlags?: string[];
   emergencyContact?: { name?: string | null; phone?: string | null; relation?: string | null } | null;
   /** Sede de origen cuando el paciente viene prestado de otra sucursal (Fase 2). null = paciente propio. */
@@ -86,6 +96,8 @@ export function HeroCard({
   onStartConsult,
   onReschedule,
   onCharge,
+  onDelete,
+  canDelete = false,
   riskFlags = [],
   emergencyContact,
   originClinicName = null,
@@ -311,6 +323,21 @@ export function HeroCard({
                 >
                   <Calendar size={12} strokeWidth={1.75} aria-hidden /> {t("patients.heroCard.viewInAgenda")}
                 </button>
+                {canDelete && onDelete && (
+                  <>
+                    <div className={styles.heroMenuDivider} role="separator" />
+                    <button
+                      type="button"
+                      className={`${styles.heroMenuItem} ${styles.heroMenuItemDanger}`}
+                      onClick={() => {
+                        setMoreOpen(false);
+                        onDelete();
+                      }}
+                    >
+                      <Trash2 size={12} strokeWidth={1.75} aria-hidden /> {t("patients.heroCard.deletePatient")}
+                    </button>
+                  </>
+                )}
               </Popover.Content>
             </Popover.Portal>
           </Popover.Root>

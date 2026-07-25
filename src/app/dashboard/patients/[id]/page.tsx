@@ -12,6 +12,7 @@ import { logAudit } from "@/lib/audit";
 import { PatientDetailClient } from "./patient-detail-client";
 import { ErrorBoundary } from "@/components/ui/error-boundary";
 import { dateISOInTz, timeHHMMInTz, durationMinutes } from "@/lib/agenda/legacy-helpers";
+import { hasPermission } from "@/lib/auth/permissions";
 import { canSeePediatrics, PEDIATRICS_MODULE_KEY } from "@/lib/pediatrics/permissions";
 import { loadPediatricsData } from "@/lib/pediatrics/load-data";
 import type { PediatricsTabData } from "@/components/patient-detail/pediatrics/PediatricsTab";
@@ -311,6 +312,13 @@ export default async function PatientDetailPage({ params }: { params: { id: stri
             role:               user.role,
           }}
           specialty={user.clinic.specialty}
+          // Permiso granular (no el rol): el SUPER_ADMIN puede dárselo o
+          // quitárselo a cualquier miembro desde el modal de equipo. Controla el
+          // ítem "Eliminar paciente" del menú; el endpoint lo revalida con 403.
+          canDeletePatient={hasPermission(
+            { role: user.role, permissionsOverride: user.permissionsOverride ?? [] },
+            "patients.delete",
+          )}
           portalUrl={portalUrl}
           pediatricsData={pediatricsData}
           pediatricsModuleActive={pediatricsModuleActive}
