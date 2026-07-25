@@ -353,7 +353,20 @@ export function InvoiceDetailModal({ open, invoice, patientName, onClose, onMuta
               )}
               <div className="flex justify-between"><span className="text-muted-foreground">{t("common.total")}</span><span className="font-bold">{formatCurrency(invoice.total)}</span></div>
               <div className="flex justify-between"><span className="text-muted-foreground">{t("clinical.invoiceDetail.paid")}</span><span className="font-bold" style={{ color: "var(--success)" }}>{formatCurrency(invoice.paid)}</span></div>
-              <div className="flex justify-between"><span className="text-muted-foreground">{t("clinical.invoiceDetail.balance")}</span><span className="font-bold" style={{ color: "var(--danger)" }}>{formatCurrency(invoice.balance)}</span></div>
+              {/* Saldo. Cancelar NO pone `balance` a 0 en BD (solo cambia el
+                  status y exige paid == 0), así que una factura anulada llega
+                  aquí con balance == total y se pintaba en rojo como si se
+                  debiera. En cancelada el saldo exigible es 0: se muestra $0 en
+                  neutro. El Total de arriba sigue diciendo lo que se facturó. */}
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">{t("clinical.invoiceDetail.balance")}</span>
+                <span
+                  className={isCancelled ? "font-bold text-muted-foreground" : "font-bold"}
+                  style={isCancelled ? undefined : { color: "var(--danger)" }}
+                >
+                  {formatCurrency(isCancelled ? 0 : invoice.balance)}
+                </span>
+              </div>
               {invoice.paymentMethod && (
                 <div className="flex justify-between"><span className="text-muted-foreground">{t("clinical.invoiceDetail.method")}</span><span className="capitalize">{METHOD_LABEL_KEYS[invoice.paymentMethod] ? t(METHOD_LABEL_KEYS[invoice.paymentMethod]) : invoice.paymentMethod}</span></div>
               )}

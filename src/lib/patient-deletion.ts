@@ -35,6 +35,9 @@ export interface PatientDeleteBlocker {
  *    (conservación NOM-024 + cuadre contable), y `CfdiRecord` ni siquiera cuelga
  *    del paciente — apunta a la factura por `invoiceId` SIN relación Prisma, así
  *    que borrar dejaría el timbre huérfano apuntando a la nada.
+ *    Con UNA excepción: las facturas CANCELADAS no cuentan como bloqueo. Una
+ *    factura anulada no es dinero ni obligación. Sus pagos y su timbre SÍ se
+ *    siguen revisando (ver el comentario de `activeInvoices`).
  *
  * 2) CLÍNICO CON `Restrict` — las 5 tablas de endodoncia/implantes declaran
  *    `onDelete: Restrict`, o sea que la BD ya rechaza el DELETE por su cuenta.
@@ -47,13 +50,25 @@ export async function getPatientDeleteBlockers(
   patientId: string,
   clinicId: string,
 ): Promise<PatientDeleteBlocker[]> {
-  // Las facturas se traen (no se cuentan) porque sus ids son la llave para
-  // llegar a pagos y timbres, que no tienen patientId propio.
+  // Se traen TODAS (canceladas incluidas), no se cuentan: sus ids son la llave
+  // para llegar a pagos y timbres, que no tienen patientId propio. El filtro por
+  // status va DESPUÉS y solo sobre el blocker de facturas — ver abajo.
   const invoices = await prisma.invoice.findMany({
     where: { patientId, clinicId },
-    select: { id: true, cfdiUuid: true },
+    select: { id: true, cfdiUuid: true, status: true },
   });
   const invoiceIds = invoices.map((i) => i.id);
+
+  // Una factura CANCELLED está anulada: no es dinero ni obligación de cobro, así
+  // que NO debe bloquear el borrado. Ojo con el matiz: el filtro se aplica aquí,
+  // sobre el conteo del blocker, y NO en el `findMany` de arriba. Si las
+  // canceladas se excluyeran de la query se perderían sus `invoiceIds` y
+  // dejaríamos de detectar sus pagos y —sobre todo— sus timbres: un CFDI
+  // timbrado ante el SAT y cancelado después SIGUE siendo un documento fiscal
+  // que hay que conservar (NOM-024/SAT) y SIGUE bloqueando.
+  // Reembolsada ≠ cancelada: un reembolso vive como Payment con method="refund"
+  // sobre una factura que sigue activa, y esa sí cuenta.
+  const activeInvoices = invoices.filter((i) => i.status !== "CANCELLED");
 
   const [payments, cfdiRows, endoDiagnoses, vitalityTests, endoTreatments, implants, implantConsents] =
     await Promise.all([
@@ -65,6 +80,12 @@ export async function getPatientDeleteBlockers(
       invoiceIds.length
         ? prisma.cfdiRecord.count({ where: { clinicId, invoiceId: { in: invoiceIds } } })
         : Promise.resolve(0),
+      // Endodoncia/implantes: aquí NO se aplica el criterio de "ignorar
+      // anulados" que sí vale para las facturas. Estas 5 tablas son `Restrict`:
+      // la fila soft-borrada (deletedAt) o el implante REMOVED siguen existiendo
+      // en la BD y Postgres rechaza el DELETE igual. Descontarlas daría un "sí
+      // se puede borrar" falso que revienta después como FK y cae al bloqueo
+      // genérico `related`, sin explicación útil. Se cuentan todas, a propósito.
       prisma.endodonticDiagnosis.count({ where: { patientId, clinicId } }),
       prisma.vitalityTest.count({ where: { patientId, clinicId } }),
       prisma.endodonticTreatment.count({ where: { patientId, clinicId } }),
@@ -76,6 +97,8 @@ export async function getPatientDeleteBlockers(
 
   // Timbres: las filas reales de cfdi_records y, como respaldo, las facturas
   // que quedaron marcadas con cfdiUuid (timbrados viejos sin fila propia).
+  // Sobre `invoices` (todas), NO sobre `activeInvoices`: el timbre de una
+  // factura cancelada es justamente el caso que hay que seguir conservando.
   const stampedInvoices = invoices.filter((i) => i.cfdiUuid).length;
   const cfdi = Math.max(cfdiRows, stampedInvoices);
 
@@ -83,7 +106,7 @@ export async function getPatientDeleteBlockers(
   const implantRecords = implants + implantConsents;
 
   const blockers: PatientDeleteBlocker[] = [];
-  if (invoices.length) blockers.push({ type: "invoices",   count: invoices.length });
+  if (activeInvoices.length) blockers.push({ type: "invoices", count: activeInvoices.length });
   if (payments)        blockers.push({ type: "payments",   count: payments });
   if (cfdi)            blockers.push({ type: "cfdi",       count: cfdi });
   if (endodontics)     blockers.push({ type: "endodontics", count: endodontics });

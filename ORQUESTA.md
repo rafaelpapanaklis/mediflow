@@ -1394,3 +1394,48 @@ En la ficha se excluye **solo CANCELLED**. Los DRAFT SÍ suman a propósito: en 
 
 ### 🔴 Nota de estilo para Rafael (decisión que se aparta del prompt)
 El prompt pedía **DRAFT en estilo neutro**. Lo puse en **brand** (violeta) porque `billing-client.tsx` y `invoice-detail-modal.tsx` ya lo pintan así — y el modal del borrador se abre **desde esa misma fila**, así que en gris se vería un badge distinto antes y después del clic. CANCELLED sí quedó **neutro**, que coincide con el prompt y con las otras dos superficies. Si lo prefieres gris, es una línea en `INV_STATUS`.
+
+---
+
+## [Fix-Borrar-Cancelada] — 2026-07-25
+
+**Commit en main:** tip de `fix/borrar-paciente-factura-cancelada`, pusheado con `git push origin HEAD:main`
+**Build:** `npx next build` → **EXIT 0** (`Generating static pages 308/308`, type-check sin errores). Los `prisma:error DATABASE_URL` del log son el ruido conocido del SSG sin `.env` en el worktree. **Sin SQL**, sin cambios en `prisma/schema.prisma`, sin dependencias nuevas.
+
+### El bug
+Patricia Mendoza Lara **#P0118** tiene una sola factura, **MF-0151 de $1,800 CANCELADA**, y el modal "Eliminar paciente" la seguía declarando no eliminable: *"Tiene 1 factura registrada"*. Una factura anulada no es dinero ni obligación: no debe bloquear nada.
+
+Es la continuación directa de **[Fix-Factura-Cancelada]** (88484652): el mismo `balance`/conteo sin filtrar por `status`, ahora en el precheck de borrado en vez de en las sumas de deuda.
+
+### Causa
+`src/lib/patient-deletion.ts` → `getPatientDeleteBlockers()` hacía
+`prisma.invoice.findMany({ where: { patientId, clinicId } })` **sin filtrar por status**, y ese array alimentaba directamente el blocker `invoices` (`if (invoices.length)`).
+
+### El matiz que hace que NO sea un one-liner
+La tentación es meter `status: { not: "CANCELLED" }` en el `where` del `findMany`. **Sería un bug fiscal.** Ese mismo array aporta los `invoiceIds` que son la única llave para llegar a `Payment` y a `CfdiRecord` (ninguno de los dos tiene `patientId` propio). Si las canceladas salen de la query, se pierden sus ids y **dejaríamos de detectar su timbre**: un CFDI timbrado ante el SAT y cancelado después **sigue siendo un documento fiscal conservable (NOM-024 / SAT)** y **sí debe seguir bloqueando** el borrado.
+
+La solución separa las dos preguntas:
+- `invoices` (**todas**, canceladas incluidas) → de aquí salen `invoiceIds` para pagos/CFDI y el respaldo `cfdiUuid`.
+- `activeInvoices = invoices.filter(i => i.status !== "CANCELLED")` → **solo esto** cuenta como blocker `invoices`.
+
+Los **pagos** se siguen contando sobre todas: aunque `cancel` exige `paid === 0`, el camino "reembolsar → cancelar" deja `paid` en 0 pero **las filas `Payment` siguen ahí** (el reembolso vive como `method: "refund"`), y ese movimiento de dinero sí es historia contable. No se asumió nada.
+
+### Los otros blockers: revisados, y a propósito NO se tocan
+Las 5 tablas de endodoncia/implantes **no** aplican el criterio de "ignorar anulados", aunque `EndodonticDiagnosis`/`VitalityTest`/`EndodonticTreatment` tengan `deletedAt` (soft-delete real, el resto del módulo filtra `deletedAt: null`) y `Implant` tenga `removedAt`/`currentStatus: REMOVED`. Razón: son **`onDelete: Restrict`**. La fila soft-borrada **sigue existiendo en la BD** y Postgres rechaza el DELETE igual. Descontarlas daría un "sí se puede borrar" falso que revienta después como FK y cae al bloqueo genérico `related` — peor UX y encima un `logMutation` de un borrado que no ocurrió. Diferencia de fondo: en facturas el bloqueo es **de negocio** (Cascade, la BD sí borraría), en clínico es **técnico** (la BD manda).
+
+### Cosmético — Saldo de una factura cancelada
+`src/components/dashboard/billing/invoice-detail-modal.tsx`: el resumen mostraba **Saldo $1,800 en rojo** (`var(--danger)`) en una factura cuyo badge decía "Cancelada", porque `cancel` no pone `balance` a 0 en BD. Ahora, con `isCancelled`, el saldo sale **$0 en neutro** (`text-muted-foreground`). El **Total sigue diciendo $1,800**: eso sí se facturó; lo que es 0 es el **saldo exigible**. Mismo criterio que la columna Saldo de la ficha y del portal (que en 88484652 quedaron en "—").
+
+### Repaso de los 4 casos
+| Caso | Antes | Ahora |
+|---|---|---|
+| Única factura **CANCELADA**, sin pagos ni timbre | ❌ bloqueado *"Tiene 1 factura registrada"* | ✅ **se puede eliminar** |
+| Factura **activa** (DRAFT/PENDING/PARTIAL/PAID/OVERDUE) | bloqueado | **sigue bloqueado** por `invoices` |
+| Factura **cancelada PERO timbrada** (`cfdiUuid` / fila `CfdiRecord`) | bloqueado | **sigue bloqueado** por `cfdi` (NOM-024/SAT) |
+| Paciente con **pagos** (incluye reembolsados) | bloqueado | **sigue bloqueado** por `payments` |
+
+### Archivos tocados (2)
+`src/lib/patient-deletion.ts` · `src/components/dashboard/billing/invoice-detail-modal.tsx`
+
+### NO tocado (como pedía el prompt)
+`POST /api/invoices/[id]/cancel` · `DELETE /api/patients/[id]` (el handler no cambia: sigue llamando al mismo precheck) · `GET /api/patients/[id]/deletable` · el modal `delete-patient-modal.tsx` (los tipos de blocker y sus textos i18n siguen igual). **Reembolsada ≠ cancelada.**
