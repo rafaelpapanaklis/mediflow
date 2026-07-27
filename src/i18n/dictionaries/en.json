@@ -4333,6 +4333,8 @@
       "micNotFound": "No microphone was found on this device.",
       "micInUse": "The microphone is in use by another app.",
       "notConfigured": "Voice dictation is not configured on this server.",
+      "aiNoPlan": "Your plan does not include AI. Upgrade to use voice dictation.",
+      "aiNoTokens": "No AI tokens left this month. Dictation comes back on the 1st or when you upgrade.",
       "failed": "The audio could not be transcribed.",
       "busy": "A recording is already in progress.",
       "unsupported": "Your browser does not support audio recording."
@@ -7061,6 +7063,8 @@
       "newConversation": "New conversation",
       "errorQuery": "Error querying AI",
       "voicePending": "Voice transcription pending setup",
+      "voiceNoPlan": "Your plan does not include AI. Upgrade to use voice dictation.",
+      "voiceNoTokens": "No AI tokens left this month. Dictation comes back on the 1st or when you upgrade.",
       "voiceError": "Transcription error",
       "micError": "Could not access the microphone",
       "closeHistory": "Close history",

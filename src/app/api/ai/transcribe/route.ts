@@ -2,12 +2,54 @@ import { NextRequest, NextResponse } from "next/server";
 import { getAuthContext } from "@/lib/auth-context";
 import { rateLimit } from "@/lib/rate-limit";
 import { transcribeAudio } from "@/lib/integrations/whisper";
+import { aiTokenLimitError, addAiTokens } from "@/lib/ai-tokens";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
 // Vercel corta el body en 4.5MB; 60s de opus a 64kbps pesan ~0.5MB.
 const MAX_AUDIO_BYTES = 4 * 1024 * 1024;
+
+/** Tope por grabación en el cliente (dictation-mic.tsx). Solo para acotar el cobro. */
+const MAX_SECONDS = 60;
+
+/**
+ * TARIFA DEL DICTADO EN TOKENS DEL MONEDERO DE IA.
+ *
+ * Whisper cobra por MINUTO de audio ($0.006 USD/min en whisper-1), no por
+ * tokens de Claude. Para que el dictado entre en el MISMO contador que el resto
+ * de la IA (Clinic.aiTokensUsed / aiTokensLimit) se convierte usando el precio
+ * de referencia que ya vive en el repo para tokens de entrada:
+ * `inputUsdPerMtok = 3` USD por millón (src/lib/ai-billing/pricing.ts).
+ *
+ *   0.006 USD/min ÷ (3 USD / 1 000 000 tok) = 2 000 tokens por minuto de audio
+ *
+ * ⇒ ~33 tokens por segundo. Una grabación completa (60 s, el máximo del
+ * producto) cuesta 2 000 tokens, así que un plan Profesional (200 mil/mes) da
+ * para ~100 minutos de dictado. El plan Básico tiene 0 tokens ⇒ queda
+ * bloqueado, coherente con el "Sin IA" de su tarifa.
+ *
+ * Si cambia el precio de Whisper o el de referencia, se ajusta AQUÍ y el número
+ * sigue siendo explicable con la división de arriba.
+ */
+const AUDIO_TOKENS_PER_MINUTE = 2000;
+
+/** Bitrate nominal con el que graba el cliente: 64 kbps = 8 KB/s. */
+const AUDIO_BYTES_PER_SECOND = 8 * 1024;
+
+/**
+ * Segundos de audio a cobrar. Whisper responde en verbose_json y trae
+ * `duration`; si faltara, se estima por tamaño al bitrate nominal del cliente.
+ * Se acota a [1, MAX_SECONDS]: ni un clip mínimo sale gratis ni un dato raro
+ * cobra de más.
+ */
+function billableSeconds(duration: number | undefined, bytes: number): number {
+  const raw =
+    typeof duration === "number" && isFinite(duration) && duration > 0
+      ? duration
+      : bytes / AUDIO_BYTES_PER_SECOND;
+  return Math.min(MAX_SECONDS, Math.max(1, raw));
+}
 
 // MIME normalizado (sin ";codecs="). "" = algunos navegadores no reportan tipo;
 // video/mp4 = etiqueta que pone iOS/Safari al audio de MediaRecorder.
@@ -62,6 +104,18 @@ export async function POST(req: NextRequest) {
   const langRaw = formData.get("language");
   const language = typeof langRaw === "string" && LANGUAGES.has(langRaw) ? langRaw : "es";
 
+  // Cupo de IA del plan (mismo patrón que /api/analytics/ai-insight y
+  // /api/clinic-layout/optimize). FAIL-OPEN: si la lectura del cupo revienta se
+  // deja pasar y se loguea — un bug de contador no puede dejar sin dictado a
+  // una clínica que paga.
+  let aiErr: Awaited<ReturnType<typeof aiTokenLimitError>> = null;
+  try {
+    aiErr = await aiTokenLimitError(ctx.clinicId);
+  } catch (e) {
+    console.error("[api/ai/transcribe] no se pudo leer el cupo de IA, se deja pasar:", e);
+  }
+  if (aiErr) return NextResponse.json(aiErr, { status: 429 });
+
   const isMp4 = mime === "audio/mp4" || mime === "video/mp4";
   const result = await transcribeAudio({
     audio,
@@ -77,6 +131,17 @@ export async function POST(req: NextRequest) {
   if (result.error) {
     console.error("[api/ai/transcribe]", result.error);
     return NextResponse.json({ error: "No se pudo transcribir el audio" }, { status: 502 });
+  }
+
+  // Solo se cobra la transcripción que SÍ ocurrió: mock (sin API key) y error
+  // de Whisper ya salieron arriba y no generan costo. FAIL-OPEN igual que el
+  // check: si el incremento falla, se responde el texto y se loguea.
+  const seconds = billableSeconds(result.duration, audio.size);
+  const tokens = Math.max(1, Math.round((seconds * AUDIO_TOKENS_PER_MINUTE) / 60));
+  try {
+    await addAiTokens(ctx.clinicId, tokens);
+  } catch (e) {
+    console.error("[api/ai/transcribe] no se pudo cobrar el dictado:", e);
   }
 
   return NextResponse.json({ text: (result.text || "").trim(), duration: result.duration });

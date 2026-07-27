@@ -244,6 +244,20 @@ export function DictationMic({ onText, disabled }: Props) {
         toast.error(t("clinical.dictation.notConfigured"));
         return;
       }
+      if (res.status === 429) {
+        // Cupo de IA del plan (el dictado consume tokens como el resto de la
+        // IA). Reintentar tampoco ayuda: se distingue "plan sin IA" (límite 0,
+        // p. ej. Básico) de "se acabaron los tokens del mes".
+        const body = await res.json().catch(() => ({} as { limit?: number }));
+        retryBlobRef.current = null;
+        setPhase("idle");
+        toast.error(
+          t(body && body.limit === 0
+            ? "clinical.dictation.aiNoPlan"
+            : "clinical.dictation.aiNoTokens"),
+        );
+        return;
+      }
       if (!res.ok) {
         retryBlobRef.current = { blob, filename };
         setPhase("error");

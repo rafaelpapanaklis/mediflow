@@ -4333,6 +4333,8 @@
       "micNotFound": "No se encontró un micrófono en este dispositivo.",
       "micInUse": "El micrófono está en uso por otra app.",
       "notConfigured": "El dictado por voz no está configurado en este servidor.",
+      "aiNoPlan": "Tu plan no incluye IA. Sube de plan para usar el dictado por voz.",
+      "aiNoTokens": "Sin tokens de IA disponibles este mes. El dictado se reactiva el día 1 o al subir de plan.",
       "failed": "No se pudo transcribir el audio.",
       "busy": "Ya hay una grabación en curso.",
       "unsupported": "Tu navegador no soporta grabación de audio."
@@ -7061,6 +7063,8 @@
       "newConversation": "Nueva conversación",
       "errorQuery": "Error al consultar IA",
       "voicePending": "Transcripción de voz pendiente de configurar",
+      "voiceNoPlan": "Tu plan no incluye IA. Sube de plan para dictar por voz.",
+      "voiceNoTokens": "Sin tokens de IA disponibles este mes. El dictado se reactiva el día 1 o al subir de plan.",
       "voiceError": "Error de transcripción",
       "micError": "No se pudo acceder al micrófono",
       "closeHistory": "Cerrar historial",

@@ -405,6 +405,18 @@ export default function AIAssistantPage() {
         form.append("audio", blob, "voice.webm");
         try {
           const res = await fetch("/api/ai/transcribe", { method: "POST", body: form });
+          if (res.status === 429) {
+            // Mismo endpoint (y mismo monedero de tokens) que el dictado de la
+            // ficha: si el plan no incluye IA o se acabó el cupo, hay que
+            // decirlo claro en vez de caer al mensaje genérico de abajo.
+            const body = await res.json().catch(() => ({} as { limit?: number }));
+            toast.error(
+              t(body && body.limit === 0
+                ? "pages.aiAssistant.voiceNoPlan"
+                : "pages.aiAssistant.voiceNoTokens"),
+            );
+            return;
+          }
           if (!res.ok) {
             // Endpoint puede no existir todavía — degradación silenciosa
             toast(t("pages.aiAssistant.voicePending"), { icon: "🎙️" });
