@@ -162,6 +162,46 @@ export async function signMaybeUrls(
 }
 
 /**
+ * Tamaño REAL en bytes de un objeto ya subido, preguntándoselo al storage.
+ *
+ * Existe para las cuotas: cuando el archivo sube DIRECTO del navegador al
+ * bucket (signed upload URL), el único tamaño que llega al servidor es el que
+ * dice el cliente — y un cliente puede mentir o no mandarlo. Nunca valides
+ * cuota contra ese número; usa este.
+ *
+ * Devuelve `null` si no se pudo determinar (objeto aún no visible, error de
+ * red, bucket sin metadata). El caller decide qué hacer con ese null.
+ */
+export async function getStorageObjectSize(
+  path: string,
+  bucket: BucketName = BUCKETS.PATIENT_FILES,
+): Promise<number | null> {
+  const slash = path.lastIndexOf("/");
+  const dir = slash >= 0 ? path.slice(0, slash) : "";
+  const file = slash >= 0 ? path.slice(slash + 1) : path;
+  if (!file) return null;
+  try {
+    // `search` es substring, no igualdad: pedimos varios y buscamos el exacto.
+    const { data, error } = await admin()
+      .storage.from(bucket)
+      .list(dir, { limit: 100, search: file });
+    if (error || !data) {
+      console.warn(
+        `[storage.getStorageObjectSize] list falló para ${bucket}/${path}:`,
+        error?.message ?? "sin data",
+      );
+      return null;
+    }
+    const hit = data.filter((o) => o.name === file)[0];
+    const size = hit && hit.metadata ? (hit.metadata as { size?: unknown }).size : undefined;
+    return typeof size === "number" && isFinite(size) && size >= 0 ? size : null;
+  } catch (e) {
+    console.warn("[storage.getStorageObjectSize] excepción:", (e as Error).message);
+    return null;
+  }
+}
+
+/**
  * Sube un binario al bucket privado. `path` es el storageKey interno (nunca se
  * expone al cliente: se firma on-demand con signMaybeUrl). `upsert: false` → no
  * pisa un objeto existente. Lanza si Supabase devuelve error.

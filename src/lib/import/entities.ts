@@ -6,10 +6,12 @@
 // resoluciones de paciente/doctor SOLO buscan dentro de esa clínica.
 
 import { prisma } from "@/lib/prisma";
+import { getPlanLimits } from "@/lib/plans";
 import type { PreviewRow } from "./types";
 import {
   BATCH,
   EMAIL_RE,
+  ImportError,
   VALID_BLOOD,
   type EntityHandler,
   last10,
@@ -300,6 +302,36 @@ export const patientsHandler: EntityHandler = {
   async commit(rows, clinicId, skipDuplicates) {
     const toInsert = pickInsertable(rows, skipDuplicates);
     if (toInsert.length === 0) return { created: 0, skipped: 0 };
+
+    // Tope de pacientes del plan. El createMany de abajo lo saltaba por
+    // completo: un Básico (500) podía subir un Excel de 5 000 y quedarse con
+    // todos. Mismo código de error que POST /api/patients
+    // ("PLAN_LIMIT_PATIENTS", 402) y se rechaza el lote ENTERO antes de
+    // insertar nada — mejor decir cuántos caben que importar a medias.
+    // FAIL-OPEN: si no se puede leer el plan o contar, se deja pasar y se
+    // loguea; una migración no puede morir por un error del gate.
+    try {
+      const clinic = await prisma.clinic.findUnique({ where: { id: clinicId }, select: { plan: true } });
+      const { maxPatients } = await getPlanLimits(clinic?.plan);
+      if (maxPatients != null) {
+        const current = await prisma.patient.count({ where: { clinicId } });
+        const room = Math.max(0, maxPatients - current);
+        if (toInsert.length > room) {
+          throw new ImportError(
+            402,
+            room === 0
+              ? `Tu plan incluye hasta ${maxPatients} pacientes y ya los tienes todos. Sube de plan para importar más.`
+              : `Tu plan incluye hasta ${maxPatients} pacientes y ya tienes ${current}: solo caben ${room} más, y el archivo trae ${toInsert.length}. Sube de plan o recorta el archivo.`,
+            undefined,
+            "PLAN_LIMIT_PATIENTS",
+          );
+        }
+      }
+    } catch (e) {
+      if (e instanceof ImportError) throw e;
+      console.error("[import/patients] no se pudo validar el tope de pacientes, se deja pasar:", e);
+    }
+
     const created = await insertNumbered({
       rows: toInsert,
       count: () => prisma.patient.count({ where: { clinicId } }),

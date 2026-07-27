@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthContext, requireAdmin } from "@/lib/auth-context";
 import { prisma } from "@/lib/prisma";
+import { getPlanLimits } from "@/lib/plans";
 import { createClient as createAdminClient } from "@supabase/supabase-js";
 import { logMutation } from "@/lib/audit";
 import { revalidateAfter } from "@/lib/cache/revalidate";
@@ -64,6 +65,30 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     where: { id: params.id, clinicId: ctx!.clinicId },
   });
   if (!member) return NextResponse.json({ error: "No encontrado" }, { status: 404 });
+
+  // Tope de usuarios por plan al REACTIVAR. El POST de /api/team ya lo valida,
+  // pero este PATCH aplicaba isActive a ciegas: crear 2 → desactivar 1 → crear
+  // el 3º → PATCH {isActive:true} dejaba 3 activos en un plan de 2. Solo se
+  // valida el paso inactivo→activo (desactivar siempre se permite).
+  // FAIL-OPEN: si no se puede leer el plan o contar, se deja pasar y se loguea
+  // — un error del gate no puede impedirle a un admin reactivar a su equipo.
+  if (body.isActive === true && member.isActive === false) {
+    try {
+      const clinicPlan = await prisma.clinic.findUnique({ where: { id: ctx!.clinicId }, select: { plan: true } });
+      const { maxUsers } = await getPlanLimits(clinicPlan?.plan);
+      if (maxUsers != null) {
+        const activeUsers = await prisma.user.count({ where: { clinicId: ctx!.clinicId, isActive: true } });
+        if (activeUsers >= maxUsers) {
+          return NextResponse.json(
+            { error: `Tu plan incluye ${maxUsers} usuario(s) activo(s). Desactiva a alguien más o sube de plan para reactivar a este miembro.`, code: "PLAN_LIMIT_USERS", limit: maxUsers },
+            { status: 402 },
+          );
+        }
+      }
+    } catch (e) {
+      console.error("[api/team/[id] PATCH] no se pudo validar el tope de usuarios, se deja pasar:", e);
+    }
+  }
 
   const updated = await prisma.user.update({
     where: { id: params.id },

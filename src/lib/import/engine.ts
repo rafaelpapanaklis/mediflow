@@ -32,11 +32,14 @@ export const BATCH = 200;
 export class ImportError extends Error {
   status: number;
   detalle?: string;
-  constructor(status: number, message: string, detalle?: string) {
+  /** Código de error de máquina (p. ej. "PLAN_LIMIT_PATIENTS"), opcional. */
+  code?: string;
+  constructor(status: number, message: string, detalle?: string, code?: string) {
     super(message);
     this.name = "ImportError";
     this.status = status;
     this.detalle = detalle;
+    this.code = code;
   }
 }
 
@@ -44,7 +47,11 @@ export class ImportError extends Error {
 export function importErrorResponse(e: unknown): NextResponse {
   if (e instanceof ImportError) {
     return NextResponse.json(
-      e.detalle ? { error: e.message, detalle: e.detalle } : { error: e.message },
+      {
+        error: e.message,
+        ...(e.detalle ? { detalle: e.detalle } : {}),
+        ...(e.code ? { code: e.code } : {}),
+      },
       { status: e.status },
     );
   }

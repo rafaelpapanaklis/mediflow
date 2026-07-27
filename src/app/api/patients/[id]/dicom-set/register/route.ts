@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthContext } from "@/lib/auth-context";
 import { prisma } from "@/lib/prisma";
-import { signMaybeUrl } from "@/lib/storage";
+import { signMaybeUrl, getStorageObjectSize } from "@/lib/storage";
 import { storageQuotaError } from "@/lib/storage-quota";
 import { assertPatientVisible } from "@/lib/patient-visibility";
 import { createClient as createAdmin } from "@supabase/supabase-js";
@@ -33,7 +33,8 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   const body = await req.json().catch(() => ({}));
   const path = String(body?.path ?? "");
   const name = String(body?.name ?? "estudio.zip").slice(0, 120);
-  const size = Number(body?.size) || null;
+  // Solo informativo: NUNCA se valida cuota contra esto (ver abajo).
+  const clientSize = Number(body?.size) || null;
 
   // Seguridad: el path debe pertenecer EXACTAMENTE a esta clínica + paciente
   // (evita registrar un archivo de otra clínica conociendo su path).
@@ -44,8 +45,26 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
 
   // Tope de almacenamiento del plan. El .zip ya está en el bucket (subida
   // directa), así que si excede la cuota lo borramos para no dejar huérfano.
-  if (size) {
-    const quotaErr = await storageQuotaError(ctx.clinicId, size);
+  //
+  // El tamaño se pregunta AL STORAGE, no al cliente: antes se usaba
+  // `Number(body.size) || null` dentro de un `if (size)`, así que mandar
+  // `size: 0` (o no mandarlo) saltaba la cuota por completo — justo en los
+  // archivos más pesados del sistema.
+  //
+  // FAIL-OPEN documentado: si el storage no devuelve el tamaño (objeto todavía
+  // no visible, error de red), NO se bloquea el registro y NO se evalúa la
+  // cuota contra el número del cliente; se loguea y se sigue. Lo que nunca
+  // ocurre es tomar una decisión de cuota con un dato que el cliente controla.
+  const realSize = await getStorageObjectSize(path);
+  if (realSize == null) {
+    console.warn("[dicom-set/register] sin tamaño real del objeto; cuota NO evaluada", { path, clientSize });
+  } else {
+    let quotaErr: Awaited<ReturnType<typeof storageQuotaError>> = null;
+    try {
+      quotaErr = await storageQuotaError(ctx.clinicId, realSize);
+    } catch (e) {
+      console.error("[dicom-set/register] no se pudo evaluar la cuota, se deja pasar:", e);
+    }
     if (quotaErr) {
       try {
         const admin = createAdmin(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!, { auth: { persistSession: false } });
@@ -54,6 +73,10 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       return quotaErr;
     }
   }
+
+  // Se guarda el tamaño REAL si lo hay; el del cliente solo como último recurso
+  // para que el listado no quede sin dato (no influye en ninguna cuota).
+  const size = realSize ?? clientSize;
 
   const record = await prisma.patientFile.create({
     data: {

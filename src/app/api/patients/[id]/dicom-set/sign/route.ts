@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { createClient as createAdmin } from "@supabase/supabase-js";
 import { randomUUID } from "crypto";
 import { assertPatientVisible } from "@/lib/patient-visibility";
+import { storageQuotaError } from "@/lib/storage-quota";
 
 // Subida DIRECTA a Storage de un set CBCT (.zip de cortes DICOM). Como los CBCT
 // pesan cientos de MB, no pasan por el route handler (límite de body): el cliente
@@ -16,6 +17,10 @@ import { assertPatientVisible } from "@/lib/patient-visibility";
 // pasa por el servidor, así que aquí NO se puede validar la firma del contenido
 // (no tenemos los bytes). La defensa contra un archivo enorme o disfrazado es el
 // LÍMITE DE TAMAÑO del bucket en Supabase Storage. No se bloquea aquí a propósito.
+//
+// CUOTA: sí se corta el caso "la clínica ya está sobre su límite de storage"
+// antes de firmar. El cobro real (con el tamaño del objeto medido en el
+// servidor) lo hace /register.
 
 function getAdminSupabase() {
   return createAdmin(
@@ -44,6 +49,18 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   const name = String(body?.name ?? "estudio.zip");
   if (!/\.zip$/i.test(name)) {
     return NextResponse.json({ error: "El set debe subirse como un .zip" }, { status: 400 });
+  }
+
+  // Guard de cuota ANTES de entregar la signed upload URL: si la clínica YA
+  // está sobre su límite, no tiene sentido dejarla subir cientos de MB para
+  // borrarlos en /register. El tamaño del estudio todavía no existe aquí, así
+  // que esto solo corta el caso "ya no cabe nada"; el cobro exacto lo hace
+  // /register con el tamaño REAL del objeto. FAIL-OPEN ante error.
+  try {
+    const quotaErr = await storageQuotaError(ctx.clinicId, 0);
+    if (quotaErr) return quotaErr;
+  } catch (e) {
+    console.error("[dicom-set/sign] no se pudo evaluar la cuota, se deja pasar:", e);
   }
 
   const path = `${ctx.clinicId}/dicom-sets/${params.id}/${randomUUID()}.zip`;
