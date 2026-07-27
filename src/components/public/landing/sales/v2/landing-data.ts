@@ -59,9 +59,15 @@ export const PLANS: Plan[] = [
       // sea image/*, y no existe ningún path de IA sobre CBCT/DICOM. El visor
       // CBCT es cortes + mediciones, sin IA. Cualquier bullet del tipo
       // "radiografías 3D con IA" es una promesa incumplible.
-      { text: 'CBCT 3D en la nube · visor con cortes y mediciones', included: false },
+      // El visor 3D (CBCT + modelos STL/PLY/OBJ) y "Mi Clínica Visual" NO tienen
+      // gate de plan: /dashboard/clinic-layout y la pestaña modelos-3d solo
+      // exigen rol ADMIN, y las APIs models-3d / dicom-set tampoco miran el plan.
+      // Un Básico ya los usa hoy, así que la landing los marca como incluidos en
+      // vez de prometer un ✗ que el producto no cumple. Si alguna vez se decide
+      // gatearlos de verdad, hay que volver a poner included:false AQUÍ.
+      { text: 'CBCT 3D en la nube · visor con cortes y mediciones', included: true },
       { text: 'Análisis de radiografías 2D con IA', included: false },
-      { text: 'Modelos 3D y clínica virtual', included: false },
+      { text: 'Modelos 3D y clínica virtual', included: true },
       { text: 'Varias sucursales', included: false },
     ],
   },
