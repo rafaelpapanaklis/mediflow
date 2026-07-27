@@ -54,7 +54,13 @@ export const PLANS: Plan[] = [
       { text: '25 facturas CFDI al mes ($3.00 c/u adicional)', included: true },
       { text: 'Presupuestos, cobros y factura automática', included: true },
       { text: 'Portal del paciente y recetas digitales', included: true },
-      { text: 'Radiografías 3D en la nube con IA', included: false },
+      // OJO — NO volver a fusionar estos dos bullets. La IA de imagen SOLO
+      // procesa radiografías 2D: /api/xrays/[id]/analyze rechaza todo lo que no
+      // sea image/*, y no existe ningún path de IA sobre CBCT/DICOM. El visor
+      // CBCT es cortes + mediciones, sin IA. Cualquier bullet del tipo
+      // "radiografías 3D con IA" es una promesa incumplible.
+      { text: 'CBCT 3D en la nube · visor con cortes y mediciones', included: false },
+      { text: 'Análisis de radiografías 2D con IA', included: false },
       { text: 'Modelos 3D y clínica virtual', included: false },
       { text: 'Varias sucursales', included: false },
     ],
@@ -74,7 +80,10 @@ export const PLANS: Plan[] = [
       { text: 'Tokens IA', value: '200 mil', included: true },
     ],
     features: [
-      { text: 'Radiografías CBCT en la nube con IA', included: true },
+      // Ver la nota del plan Básico: CBCT (3D, sin IA) y análisis con IA (2D)
+      // son dos cosas distintas y no deben volver a fusionarse.
+      { text: 'CBCT 3D en la nube · visor con cortes y mediciones', included: true },
+      { text: 'Análisis de radiografías 2D con IA', included: true },
       { text: 'Asistente clínico con IA · 200 mil tokens/mes', included: true },
       // mantener en sincronía con plan_configs (cfdiMonthly/cfdiOverageCents).
       { text: '50 facturas CFDI al mes ($2.00 c/u adicional)', included: true },
@@ -142,7 +151,8 @@ export const PRICING_COPY = {
 export const HERO = {
   badge: 'Datos cifrados y respaldos diarios',
   title: 'El control total de tu clínica dental, en un solo lugar',
-  subtitle: 'Agenda, cobros, radiografías 3D con IA y WhatsApp — todo desde tu navegador, en español y en pesos.',
+  // La IA analiza radiografías 2D; el CBCT 3D es visor. No volver a juntarlos.
+  subtitle: 'Agenda, cobros, WhatsApp, CBCT 3D y análisis de radiografías con IA — todo desde tu navegador, en español y en pesos.',
   ctaPrimary: 'Empieza hoy',    // → registro
   ctaSecondary: 'Ver Precios!', // botón AZUL SÓLIDO (igual que el primario) → #precios
   bullets: ['Tu primer mes desde $19', 'Sin permanencia', 'Sin instalar nada'], // el 1º en verde #15803d
@@ -209,12 +219,14 @@ export const SPOTLIGHTS = [
     mockup: 'presupuesto',
   },
   {
-    id: 'imagenes3d', badge: 'Radiografías + Modelos 3D con IA',
+    // El badge separa a propósito lo 3D (visor) de la IA (2D): no hay IA sobre
+    // CBCT/DICOM en el producto.
+    id: 'imagenes3d', badge: 'CBCT y modelos 3D · IA en radiografías 2D',
     title: 'Radiografías CBCT y modelos 3D, en tu navegador',
     desc: 'Sube el DICOM de tu tomógrafo o el STL de tu escáner y míralos desde cualquier dispositivo — sin instalar nada.',
     bullets: [
       'Cortes axial, coronal y sagital + panorámica automática',
-      'IA que resalta hallazgos en el estudio',
+      'IA que resalta hallazgos en tus radiografías 2D (periapical, panorámica)',
       'Modelos STL, PLY u OBJ girables dentro del expediente',
       'Compártelos con el paciente para cerrar el tratamiento',
     ],

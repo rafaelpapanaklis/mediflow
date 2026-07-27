@@ -98,10 +98,16 @@ function allModules(value: boolean): Record<string, boolean> {
   return out;
 }
 
-/** Copy de marketing por plan (bullets para tarjetas de precio). */
+/**
+ * Copy de marketing por plan (bullets para tarjetas de precio).
+ *
+ * La IA de imagen solo procesa radiografías 2D (/api/xrays/[id]/analyze rechaza
+ * lo que no sea image/*): NO existe IA sobre CBCT/DICOM. Cualquier bullet que
+ * junte "3D" con "IA" es una promesa incumplible — mantenerlos separados.
+ */
 export const PLAN_MARKETING: Record<PlanId, { name: string; features: string[] }> = {
   BASIC:  { name: "Básico",      features: ["2 usuarios", "500 pacientes", "Agenda + WhatsApp", "CFDI + Portal"] },
-  PRO:    { name: "Profesional", features: ["6 usuarios", "IA radiografías", "Analytics + reportes", "Mi Clínica 3D"] },
+  PRO:    { name: "Profesional", features: ["6 usuarios", "IA en radiografías 2D", "Analytics + reportes", "Mi Clínica 3D"] },
   CLINIC: { name: "Clínica",     features: ["Usuarios ilimitados", "Multi-sucursal", "Soporte prioritario", "Onboarding dedicado"] },
 };
 

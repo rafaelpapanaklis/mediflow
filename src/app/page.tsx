@@ -77,8 +77,9 @@ const JSON_LD = {
       applicationCategory: "BusinessApplication",
       operatingSystem: "Web",
       inLanguage: "es-MX",
+      // La IA solo analiza radiografías 2D; el CBCT 3D es visor (sin IA).
       description:
-        "Plataforma todo-en-uno para clínicas dentales: agenda con WhatsApp, expediente con odontograma, radiografías 3D con IA y facturación.",
+        "Plataforma todo-en-uno para clínicas dentales: agenda con WhatsApp, expediente con odontograma, CBCT 3D, análisis de radiografías con IA y facturación.",
       offers: [
         { "@type": "Offer", name: "Básico", price: "419", priceCurrency: "MXN", category: "Suscripción mensual" },
         { "@type": "Offer", name: "Profesional", price: "689", priceCurrency: "MXN", category: "Suscripción mensual" },
