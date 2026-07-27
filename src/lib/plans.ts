@@ -51,7 +51,8 @@ function buildResolved(planId: PlanId, row: PlanConfigShape | null): ResolvedPla
     priceMxnAnnual: src.priceMxnAnnual,
     storageBytes: src.storageBytes,
     aiTokensDefault: src.aiTokensDefault,
-    whatsappMonthly: src.whatsappMonthly,
+    // whatsappMonthly NO se propaga a propósito: cupo retirado del producto
+    // (ver PlanConfigShape en @/lib/plan-shared). La columna sigue en la DB.
     cfdiMonthly: src.cfdiMonthly,
     cfdiOverageCents: src.cfdiOverageCents,
     maxPatients: src.maxPatients,
@@ -77,6 +78,7 @@ function rowToShape(row: any): PlanConfigShape {
     // de sobra en Number.MAX_SAFE_INTEGER: 100GB ≈ 1.07e11).
     storageBytes: Number(row.storageBytes),
     aiTokensDefault: row.aiTokensDefault,
+    // Deprecado: se copia solo para no perder el valor de la fila; nadie lo usa.
     whatsappMonthly: row.whatsappMonthly,
     // ?? por si la fila viene de un deploy previo a la migración de cupos CFDI
     // (columna aún sin sembrar): el @default del schema es 50/200.
@@ -130,7 +132,6 @@ export async function getPlanLimits(plan: string | null | undefined): Promise<Pl
   return {
     storageBytes: r.storageBytes,
     aiTokensDefault: r.aiTokensDefault,
-    whatsappMonthly: r.whatsappMonthly,
     cfdiMonthly: r.cfdiMonthly,
     cfdiOverageCents: r.cfdiOverageCents,
     monthlyPrice: r.priceMxnMonthly,

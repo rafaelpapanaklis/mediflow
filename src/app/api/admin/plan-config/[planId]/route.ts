@@ -22,7 +22,10 @@ export const runtime = "nodejs";
  * editor de precios de IA (admin/ai-billing/pricing).
  */
 
-const INT_FIELDS = ["priceMxnMonthly", "priceMxnAnnual", "aiTokensDefault", "whatsappMonthly", "cfdiMonthly", "cfdiOverageCents"] as const;
+// whatsappMonthly YA NO es configurable: el cupo se retiró del producto (nunca
+// bloqueó ni cobró nada; cada clínica paga su propio número a Meta). La columna
+// sigue en la DB, huérfana — ver PlanConfigShape en @/lib/plan-shared.
+const INT_FIELDS = ["priceMxnMonthly", "priceMxnAnnual", "aiTokensDefault", "cfdiMonthly", "cfdiOverageCents"] as const;
 const NULLABLE_INT_FIELDS = ["maxPatients", "maxUsers", "maxClinics"] as const;
 
 /** Aplana BigInt → number para poder serializar la fila a JSON. */
@@ -104,7 +107,9 @@ export async function PATCH(req: NextRequest, { params }: { params: { planId: st
     priceMxnAnnual: update.priceMxnAnnual ?? fb.priceMxnAnnual,
     storageBytes: update.storageBytes ?? BigInt(fb.storageBytes),
     aiTokensDefault: update.aiTokensDefault ?? fb.aiTokensDefault,
-    whatsappMonthly: update.whatsappMonthly ?? fb.whatsappMonthly,
+    // Relleno inerte: la columna es NOT NULL sin DEFAULT y el INSERT tiene que
+    // mandarle algo. No es un límite — nada lo lee (ver comentario de INT_FIELDS).
+    whatsappMonthly: fb.whatsappMonthly,
     cfdiMonthly: update.cfdiMonthly ?? fb.cfdiMonthly,
     cfdiOverageCents: update.cfdiOverageCents ?? fb.cfdiOverageCents,
     maxPatients: "maxPatients" in update ? update.maxPatients : fb.maxPatients,

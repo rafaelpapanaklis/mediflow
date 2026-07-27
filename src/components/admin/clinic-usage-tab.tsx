@@ -11,7 +11,9 @@ interface Usage {
   limits: PlanLimits;
   ai:       { used: number;  limit: number; lastResetAt: string };
   storage:  { used: number;  limit: number; files: number };
-  whatsapp: { sentThisMonth: number; limit: number };
+  // Sin `limit`: el cupo de WhatsApp se retiró del producto; esto es solo un
+  // conteo informativo del mes.
+  whatsapp: { sentThisMonth: number };
   cfdi:     { stampedThisMonth: number; limit: number };
   xray:     { analysesThisMonth: number };
 }
@@ -98,7 +100,6 @@ export function ClinicUsageTab({ clinicId }: { clinicId: string }) {
 
   const aiPct = pct(data.ai.used, data.ai.limit);
   const stPct = pct(data.storage.used, data.storage.limit);
-  const waPct = pct(data.whatsapp.sentThisMonth, data.whatsapp.limit);
   const cfdiPct = pct(data.cfdi.stampedThisMonth, data.cfdi.limit);
 
   return (
@@ -142,14 +143,27 @@ export function ClinicUsageTab({ clinicId }: { clinicId: string }) {
         pctValue={stPct}
       />
 
-      <UsageRow
-        icon={<MessageCircle size={20} />}
-        title="WhatsApps enviados este mes"
-        subtitle="Recordatorios de cita + recalls + manuales."
-        used={data.whatsapp.sentThisMonth.toLocaleString()}
-        limit={data.whatsapp.limit.toLocaleString()}
-        pctValue={waPct}
-      />
+      {/* WhatsApp (sin límite): la clínica conecta SU propio número y Meta le
+          cobra a ella, así que no hay cupo que mostrar — solo el conteo. */}
+      <CardNew>
+        <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+          <div style={{ color: "var(--brand)", display: "grid", placeItems: "center" }}>
+            <MessageCircle size={20} />
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <h3 style={{ fontSize: 13, fontWeight: 700, color: "var(--text-1)", margin: 0 }}>
+              WhatsApps enviados este mes
+            </h3>
+            <p style={{ fontSize: 12, color: "var(--text-3)", margin: "2px 0 0 0" }}>
+              Recordatorios de cita + recalls + manuales. Sin cupo: la clínica usa su
+              propio número de WhatsApp Business y Meta le factura a ella.
+            </p>
+          </div>
+          <div style={{ fontSize: 26, fontWeight: 800, color: "var(--text-1)" }}>
+            {data.whatsapp.sentThisMonth.toLocaleString()}
+          </div>
+        </div>
+      </CardNew>
 
       <UsageRow
         icon={<Receipt size={20} />}

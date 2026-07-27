@@ -60,9 +60,11 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
       limit: limits.storageBytes,
       files: filesCount,
     },
+    // WhatsApp: solo CONTEO informativo, sin límite. El cupo mensual se retiró
+    // del producto (nunca bloqueó nada y cada clínica paga su propio número a
+    // Meta con su waAccessToken) — ver PlanConfigShape en @/lib/plan-shared.
     whatsapp: {
       sentThisMonth: whatsappCount,
-      limit: limits.whatsappMonthly,
     },
     cfdi: {
       stampedThisMonth: cfdiCount,

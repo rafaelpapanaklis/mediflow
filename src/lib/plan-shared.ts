@@ -22,8 +22,6 @@ export interface PlanLimits {
   storageBytes: number;
   /** Tokens IA por mes (refleja el default de Clinic.aiTokensLimit) */
   aiTokensDefault: number;
-  /** WhatsApps salientes por mes estimados para el plan */
-  whatsappMonthly: number;
   /** Facturas CFDI (timbres) incluidas por mes calendario (reset día 1) */
   cfdiMonthly: number;
   /** Precio por timbre CFDI excedente, en CENTAVOS MXN (200 = $2.00) */
@@ -58,7 +56,6 @@ export interface ResolvedPlan {
   priceMxnAnnual: number;
   storageBytes: number;
   aiTokensDefault: number;
-  whatsappMonthly: number;
   /** Facturas CFDI incluidas por mes calendario (reset día 1). */
   cfdiMonthly: number;
   /** Precio por timbre CFDI excedente, en CENTAVOS MXN (200 = $2.00). */
@@ -118,6 +115,18 @@ export interface PlanConfigShape {
   priceMxnAnnual: number;
   storageBytes: number;
   aiTokensDefault: number;
+  /**
+   * @deprecated RETIRADO DEL PRODUCTO (2026-07-27). Nunca bloqueó ni cobró nada:
+   * cada clínica conecta SU propio número (Clinic.waPhoneNumberId +
+   * waAccessToken) y Meta le factura a ella, así que el cupo no protegía ningún
+   * costo nuestro. Ya no aparece en PlanLimits/ResolvedPlan, no se puede editar
+   * desde /admin y nada lo aplica.
+   *
+   * Sobrevive SOLO aquí porque la columna plan_configs."whatsappMonthly" sigue
+   * siendo NOT NULL sin DEFAULT (no se hace DROP COLUMN) y el upsert de
+   * /api/admin/plan-config tiene que mandarle un valor al crear la fila.
+   * NO leerlo para nada más.
+   */
   whatsappMonthly: number;
   cfdiMonthly: number;
   cfdiOverageCents: number;
@@ -131,8 +140,11 @@ export interface PlanConfigShape {
  * FALLBACK = SEED. Precios 419/689/1719 (anual = 35% de descuento →
  * 3264/5376/13404, equivalentes a 272/448/1117 al mes). Límites finales:
  * pacientes 500/∞/∞; usuarios 2/6/∞; sucursales 1/1/3; storage 5/15/75 GB;
- * IA 0/200k/1M; WhatsApp 300/1500/6000; BASIC SIN IA/analytics/tv-modes; PRO y
- * CLINIC con todo. Editable en /admin sin redeploy.
+ * IA 0/200k/1M; BASIC SIN IA/analytics/tv-modes; PRO y CLINIC con todo.
+ * Editable en /admin sin redeploy.
+ *
+ * `whatsappMonthly` está DEPRECADO (ver PlanConfigShape): se conserva solo como
+ * relleno del INSERT en plan_configs, no es un límite de nada.
  */
 export const FALLBACK_PLAN_CONFIG: Record<PlanId, PlanConfigShape> = {
   BASIC: {

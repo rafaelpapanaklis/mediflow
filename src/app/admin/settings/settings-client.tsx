@@ -78,7 +78,8 @@ function PlanCardEditor({ plan }: { plan: ResolvedPlan }) {
   const [priceAnnual, setPriceAnnual] = useState(String(plan.priceMxnAnnual));
   const [storageGb, setStorageGb] = useState(String(Math.round((plan.storageBytes / GB) * 100) / 100));
   const [aiTokens, setAiTokens] = useState(String(plan.aiTokensDefault));
-  const [whatsapp, setWhatsapp] = useState(String(plan.whatsappMonthly));
+  // Sin campo de WhatsApp: el cupo mensual se retiró del producto (nunca
+  // bloqueó ni cobró nada; cada clínica paga su propio número a Meta).
   const [cfdiIncluded, setCfdiIncluded] = useState(String(plan.cfdiMonthly));
   // Excedente se edita en PESOS ($2.00) y se guarda en centavos.
   const [cfdiOveragePesos, setCfdiOveragePesos] = useState(String(plan.cfdiOverageCents / 100));
@@ -107,7 +108,6 @@ function PlanCardEditor({ plan }: { plan: ResolvedPlan }) {
           priceMxnAnnual: Number(priceAnnual),
           storageBytes: Math.round(Number(storageGb) * GB),
           aiTokensDefault: Number(aiTokens),
-          whatsappMonthly: Number(whatsapp),
           cfdiMonthly: Number(cfdiIncluded),
           cfdiOverageCents: Math.round(Number(cfdiOveragePesos) * 100),
           maxPatients: unlimitedPatients ? null : Number(maxPatients),
@@ -153,7 +153,6 @@ function PlanCardEditor({ plan }: { plan: ResolvedPlan }) {
         <NumField label="Precio anual (MXN)" value={priceAnnual} onChange={setPriceAnnual} />
         <NumField label="Almacenamiento (GB)" value={storageGb} onChange={setStorageGb} />
         <NumField label="Tokens IA / mes" value={aiTokens} onChange={setAiTokens} />
-        <NumField label="WhatsApp / mes" value={whatsapp} onChange={setWhatsapp} />
         <NumField label="CFDI incluidos / mes" value={cfdiIncluded} onChange={setCfdiIncluded} />
         <NumField label="Costo timbre extra (MXN)" value={cfdiOveragePesos} onChange={setCfdiOveragePesos} />
       </div>
