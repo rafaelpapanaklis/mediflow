@@ -2272,7 +2272,9 @@
       "noRecentMessages": "Sin mensajes recientes con {name}.",
       "noPhone": "Paciente sin teléfono registrado.",
       "openChat": "Abrir chat",
-      "viewBilling": "Ver facturación"
+      "viewBilling": "Ver facturación",
+      "invoiced": "Facturado",
+      "moreInvoiced": "+{count} facturadas más"
     },
     "soapEditor": {
       "editorAria": "Editor de notas de consulta",
@@ -2508,6 +2510,7 @@
       "thBalance": "Saldo",
       "thCfdi": "CFDI",
       "cfdiStamped": "Timbrado",
+      "cfdiInvoiced": "Facturado (CFDI)",
       "cfdiStamp": "Timbrar",
       "satNotConfigured": "SAT no configurado",
       "registerPayment": "Registrar pago",
@@ -6856,6 +6859,7 @@
       "confirmCancellation": "Confirmar cancelación",
       "cfdiInvoiceBtn": "Facturar (CFDI)",
       "cfdiStampedLabel": "CFDI timbrado",
+      "viewCfdi": "Ver CFDI",
       "downloadPdf": "Descargar PDF",
       "downloadXml": "Descargar XML",
       "cfdiFormTitle": "Datos fiscales del receptor",

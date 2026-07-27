@@ -75,6 +75,9 @@ interface QuickNavProps {
   showImplants?: boolean;
   /** Ortodoncia — visible cuando la clínica tiene el módulo activo. */
   showOrthodontics?: boolean;
+  /** Facturación — requiere el permiso "billing.view". `false` esconde el ítem
+   *  (mismo gate que Caja); lo resuelve el server y baja como prop. */
+  showBilling?: boolean;
   /** Conteo por módulo del paciente actual. Cuando una key vale 0 el ítem
    *  de especialidad se renderiza atenuado (no escondido) para
    *  des-priorizarlo sin perder la posibilidad de entrar a crear el
@@ -92,6 +95,7 @@ export function QuickNav({
   showEndodontics,
   showImplants,
   showOrthodontics,
+  showBilling,
   activityCounts,
 }: QuickNavProps) {
   const t = useT();
@@ -105,6 +109,7 @@ export function QuickNav({
     showEndodontics:  Boolean(showEndodontics),
     showImplants:     Boolean(showImplants),
     showOrthodontics: Boolean(showOrthodontics),
+    showBilling,
   });
 
   const countFor: Record<string, number | undefined> = {

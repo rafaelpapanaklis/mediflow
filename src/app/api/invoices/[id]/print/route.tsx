@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { rateLimit } from "@/lib/rate-limit";
 import { getAuthContext } from "@/lib/auth-context";
+import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { assertPatientVisible } from "@/lib/patient-visibility";
 import {
   renderToBuffer,
@@ -246,6 +247,10 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
 
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
+  // El comprobante es un documento de facturación: exige "billing.view" además
+  // del clinicId de sesión y de la visibilidad por paciente de abajo.
+  const deniedPerm = denyIfMissingPermission(ctx, "billing.view");
+  if (deniedPerm) return deniedPerm;
 
   const invoice = await prisma.invoice.findFirst({
     where: { id: params.id, clinicId: ctx.clinicId }, // scope multi-tenant

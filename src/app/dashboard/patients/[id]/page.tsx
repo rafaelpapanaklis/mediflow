@@ -170,6 +170,16 @@ export default async function PatientDetailPage({ params }: { params: { id: stri
       ? "invited"
       : "active";
 
+  // FACTURACIÓN — permiso granular "billing.view" (el mismo que gatea Caja y el
+  // link del sidebar). Sin él la ficha NO muestra la pestaña Facturación ni el
+  // card "Estado de cuenta", y las facturas ni siquiera salen del server: se
+  // manda [] en vez de patient.invoices, así que el payload del cliente no lleva
+  // folios, montos ni UUIDs. Los endpoints de lectura lo revalidan con 403.
+  const canViewBilling = hasPermission(
+    { role: user.role, permissionsOverride: user.permissionsOverride ?? [] },
+    "billing.view",
+  );
+
   const questionnaireRiskFlags = latestQuestionnaire?.riskFlags ?? [];
   const questionnaireFilledAt  = latestQuestionnaire?.filledAt ? latestQuestionnaire.filledAt.toISOString() : null;
   const questionnaireStatus    = questionnaireFreshness(latestQuestionnaire?.filledAt ?? null, Date.now());
@@ -318,7 +328,7 @@ export default async function PatientDetailPage({ params }: { params: { id: stri
           patient={patient as any}
           records={serializedRecords as any}
           appointments={serializedAppts as any}
-          invoices={patient.invoices as any}
+          invoices={canViewBilling ? (patient.invoices as any) : []}
           treatments={serializedTreatments as any}
           doctors={doctors}
           currentUser={{
@@ -337,6 +347,8 @@ export default async function PatientDetailPage({ params }: { params: { id: stri
             { role: user.role, permissionsOverride: user.permissionsOverride ?? [] },
             "patients.delete",
           )}
+          canViewBilling={canViewBilling}
+          facturApiEnabled={Boolean((user.clinic as any).facturApiEnabled)}
           portalUrl={portalUrl}
           portalAccountStatus={portalAccountStatus}
           pediatricsData={pediatricsData}

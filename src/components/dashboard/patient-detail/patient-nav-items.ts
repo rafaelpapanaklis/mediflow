@@ -56,6 +56,15 @@ export interface BuildPatientNavOpts {
   showEndodontics: boolean;
   showImplants: boolean;
   showOrthodontics: boolean;
+  /**
+   * Facturación — requiere el permiso UI "billing.view" (el mismo que gatea
+   * Caja). `false` la saca del menú por completo; `undefined` la deja visible
+   * para no cambiar el comportamiento de callers que no la gatean.
+   * Lo resuelve el server (page.tsx con hasPermission) y baja como prop: el
+   * cliente NO lo deduce del rol, porque el permiso es configurable persona a
+   * persona desde el modal de equipo.
+   */
+  showBilling?: boolean;
 }
 
 /**
@@ -129,10 +138,11 @@ export function buildPatientNavItems(opts: BuildPatientNavOpts): PatientNavItem[
     { id: "facturacion",  labelKey: "patients.tabs.facturacion",  icon: CreditCard,   section: "admin" },
   );
 
-  // Filtro final de especialidades ocultas (ver HIDDEN_SPECIALTY_IDS): al
-  // hacerlo aquí, escritorio y móvil quedan sincronizados y no se cuela ningún
-  // count ni subhead colgando.
-  return HIDDEN_SPECIALTY_IDS.size
-    ? items.filter((i) => !HIDDEN_SPECIALTY_IDS.has(i.id))
-    : items;
+  // Filtro final — especialidades ocultas (ver HIDDEN_SPECIALTY_IDS) y
+  // Facturación sin permiso "billing.view". Al hacerlo aquí, escritorio y móvil
+  // quedan sincronizados y no se cuela ningún count ni subhead colgando.
+  const hideBilling = opts.showBilling === false;
+  return items.filter(
+    (i) => !HIDDEN_SPECIALTY_IDS.has(i.id) && !(hideBilling && i.id === "facturacion"),
+  );
 }

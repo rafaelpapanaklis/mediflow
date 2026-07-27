@@ -8,6 +8,7 @@ import { logMutation } from "@/lib/audit";
 import { revalidateAfter } from "@/lib/cache/revalidate";
 import { sumInvoiceItems, computeInvoiceTotal, round2 } from "@/lib/invoice-totals";
 import { relatedPatientVisibilityAnd, assertPatientVisible } from "@/lib/patient-visibility";
+import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 
 async function getCtx() {
   const supabase = createClient();
@@ -16,10 +17,10 @@ async function getCtx() {
   const activeClinicId = readActiveClinicCookie();
   if (activeClinicId) {
     const u = await prisma.user.findFirst({ where: { supabaseId: user.id, clinicId: activeClinicId, isActive: true } });
-    if (u) return { clinicId: u.clinicId, userId: u.id, role: u.role };
+    if (u) return { clinicId: u.clinicId, userId: u.id, role: u.role, permissionsOverride: u.permissionsOverride ?? [] };
   }
   const dbUser = await prisma.user.findFirst({ where: { supabaseId: user.id, isActive: true }, orderBy: { createdAt: "asc" } });
-  return dbUser ? { clinicId: dbUser.clinicId, userId: dbUser.id, role: dbUser.role } : null;
+  return dbUser ? { clinicId: dbUser.clinicId, userId: dbUser.id, role: dbUser.role, permissionsOverride: dbUser.permissionsOverride ?? [] } : null;
 }
 
 async function nextInvoiceNumber(clinicId: string) {
@@ -30,6 +31,11 @@ async function nextInvoiceNumber(clinicId: string) {
 export async function GET(req: NextRequest) {
   const ctx = await getCtx();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  // Ver facturación es un permiso granular (configurable persona a persona en
+  // /dashboard/team). Sin él, ni la lista de la clínica ni la de un paciente:
+  // el gate va ADEMÁS del clinicId de sesión y de la visibilidad por paciente.
+  const deniedPerm = denyIfMissingPermission(ctx, "billing.view");
+  if (deniedPerm) return deniedPerm;
   const { clinicId } = ctx;
   const { searchParams } = new URL(req.url);
   const search = searchParams.get("search") ?? "";

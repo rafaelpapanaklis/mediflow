@@ -19,6 +19,7 @@ import { ConsultBar } from "@/components/dashboard/patient-detail/consult-bar";
 import { SoapEditorInline, type SoapDraft } from "@/components/dashboard/patient-detail/soap-editor-inline";
 import { NoteDetailModal, type ClinicalNote } from "@/components/dashboard/patient-detail/note-detail-modal";
 import { InvoiceDetailModal } from "@/components/dashboard/billing/invoice-detail-modal";
+import { InvoiceCfdiBadge } from "@/components/dashboard/billing/invoice-cfdi-badge";
 import { HistoriaTimeline } from "@/components/dashboard/patient-detail/historia-timeline";
 import { PatientAuditHistory } from "@/components/dashboard/patient-detail/patient-audit-history";
 import patientDetailStyles from "@/components/dashboard/patient-detail/patient-detail.module.css";
@@ -346,6 +347,18 @@ interface Props {
    * Controla que aparezca "Eliminar paciente" en el menú del hero card.
    */
   canDeletePatient?: boolean;
+  /**
+   * ¿La sesión tiene el permiso "billing.view" (el mismo que gatea Caja)? Lo
+   * resuelve page.tsx en el server con hasPermission — el cliente NO lo deduce
+   * del rol, porque el permiso se enciende/apaga por persona desde el modal de
+   * equipo. En false: sin pestaña Facturación (ni en QuickNav ni en la tab bar
+   * móvil), sin card "Estado de cuenta" y sin datos de facturas — el server ni
+   * siquiera manda `invoices`, y los endpoints revalidan con 403.
+   */
+  canViewBilling?: boolean;
+  /** ¿La clínica tiene el SAT (Facturapi) configurado? Decide si la columna
+   *  CFDI ofrece "Timbrar" o el estado neutro "SAT no configurado". */
+  facturApiEnabled?: boolean;
 }
 
 export function PatientDetailClient({
@@ -368,6 +381,8 @@ export function PatientDetailClient({
   fotosCount: initialFotosCount = 0,
   originClinicName = null,
   canDeletePatient = false,
+  canViewBilling = false,
+  facturApiEnabled = false,
 }: Props) {
   const t = useT();
   const router = useRouter();
@@ -395,9 +410,10 @@ export function PatientDetailClient({
       showEndodontics,
       showImplants,
       showOrthodontics,
+      showBilling: canViewBilling,
     });
     return [...items.filter((i) => !i.disabled), ...items.filter((i) => i.disabled)];
-  }, [pediatricsState, showPeriodontics, showEndodontics, showImplants, showOrthodontics]);
+  }, [pediatricsState, showPeriodontics, showEndodontics, showImplants, showOrthodontics, canViewBilling]);
   const tabFromUrl = searchParams.get("tab");
   const initialTab =
     tabFromUrl === "pediatria" && showPediatrics
@@ -410,7 +426,7 @@ export function PatientDetailClient({
             ? "implantes"
             : tabFromUrl === "ortodoncia" && showOrthodontics
               ? "ortodoncia"
-              : tabFromUrl === "facturacion"
+              : tabFromUrl === "facturacion" && canViewBilling
                 ? "facturacion"
                 : "resumen";
   const [tab, setTab]         = useState(initialTab);
@@ -450,6 +466,9 @@ export function PatientDetailClient({
     });
   }
   const [invoiceDetailOpen, setInvoiceDetailOpen] = useState<any | null>(null);
+  // Acción con la que se abre el detalle: "cfdi" cuando el usuario viene del
+  // botón "Timbrar" de la lista (el modal despliega directo el formulario SAT).
+  const [invoiceDetailAction, setInvoiceDetailAction] = useState<"cfdi" | null>(null);
   const [invoices, setInvoices] = useState(initialInvoices);
   const [showNewInvoice, setShowNewInvoice] = useState(false);
   useEffect(() => {
@@ -472,18 +491,27 @@ export function PatientDetailClient({
       setInvoiceDetailOpen(fresh);
     }
   }, [invoices]);
+  // Abre la pestaña Facturación. No-op sin permiso "billing.view": la pestaña
+  // no existe en el menú y su contenido tampoco se renderiza, así que los
+  // atajos (SideCards, presupuestos, hero de ortodoncia) no deben dejar al
+  // usuario en una vista vacía.
+  const openBillingTab = () => {
+    if (!canViewBilling) return;
+    setTab("facturacion");
+  };
   // Shortcut: cuando el usuario hace click en "Cobrar" desde HeroCard /
   // SideCards, abrir directo el InvoiceDetailModal con la factura más
   // relevante (DRAFT > PENDING/PARTIAL/OVERDUE). Si no hay ninguna
   // procesable, fallback al tab Facturación para que pueda crear una.
   const openChargeShortcut = () => {
+    if (!canViewBilling) return;
     const draft = invoices.find((inv: any) => inv.status === "DRAFT");
     const pendingLike = invoices.find((inv: any) =>
       inv.status === "PENDING" || inv.status === "PARTIAL" || inv.status === "OVERDUE",
     );
     const target = draft ?? pendingLike;
     if (target) setInvoiceDetailOpen(target);
-    else setTab("facturacion");
+    else openBillingTab();
   };
 
   async function handleDeleteRecord(record: { id: string; specialtyData?: any }) {
@@ -845,6 +873,15 @@ export function PatientDetailClient({
       );
   }, [invoices]);
   const pctPaid  = totalPlan > 0 ? Math.round((totalPaid / totalPlan) * 100) : 0;
+  // Cobros ya timbrados ante el SAT — el card "Estado de cuenta" los marca con
+  // ✓ "Facturado". Las canceladas quedan fuera (igual que en los totales): su
+  // CFDI, si existe, corresponde a una factura anulada.
+  const stampedInvoices = useMemo(
+    () => (invoices as any[])
+      .filter((inv) => inv.cfdiUuid && !isVoidedInvoice(inv))
+      .map((inv) => ({ id: inv.id, invoiceNumber: inv.invoiceNumber, total: inv.total ?? 0 })),
+    [invoices],
+  );
 
   function handleRecordSaved(record: any) {
     setRecords(prev => [record, ...prev]);
@@ -1285,6 +1322,7 @@ export function PatientDetailClient({
           showEndodontics={showEndodontics}
           showImplants={showImplants}
           showOrthodontics={showOrthodontics}
+          showBilling={canViewBilling}
           activityCounts={activityCounts}
         />
 
@@ -1682,7 +1720,7 @@ export function PatientDetailClient({
                   else toast(t("patients.ortho.scheduleApptFirst"));
                 },
                 onScheduleNext: () => setTab("agenda"),
-                onCollect: () => setTab("facturacion"),
+                onCollect: openBillingTab,
                 onMore: undefined,
               }}
               onStartDiagnosisWizard={() => {
@@ -3030,7 +3068,7 @@ export function PatientDetailClient({
               onViewInvoice={(invoiceId) => {
                 const inv = (invoices as any[]).find((i) => i.id === invoiceId);
                 if (inv) setInvoiceDetailOpen(inv);
-                else setTab("facturacion"); // factura recién creada aún no en el snapshot
+                else openBillingTab(); // factura recién creada aún no en el snapshot
               }}
               onViewPlan={() => setTab("tratamiento")}
               onInvoiceCreated={(inv) =>
@@ -3041,12 +3079,16 @@ export function PatientDetailClient({
             />
           )}
 
-          {tab === "facturacion" && (
+          {/* Pestaña gateada por "billing.view" (mismo permiso que Caja). El
+              ítem del menú tampoco existe sin el permiso — ver buildPatientNavItems
+              — y el server ni siquiera manda las facturas. */}
+          {tab === "facturacion" && canViewBilling && (
             <div className="bg-card border border-border rounded-xl overflow-hidden">
               <div className="px-5 py-4 border-b border-border flex items-center justify-between">
                 <h2 className="text-sm font-bold">{t("patients.billing.title")}</h2>
                 <button type="button" onClick={() => setShowNewInvoice(true)} className="text-xs font-bold px-3 py-1.5 rounded-lg bg-brand-600 text-white hover:bg-brand-700 transition-colors">+ Nueva factura</button>
               </div>
+              <div className="overflow-x-auto">
               <table className="w-full text-xs">
                 <thead>
                   <tr className="bg-muted/30 border-b border-border">
@@ -3057,14 +3099,15 @@ export function PatientDetailClient({
                       { id: "paid", label: t("patients.billing.colPaid") },
                       { id: "balance", label: t("patients.billing.colBalance") },
                       { id: "status", label: t("common.status") },
+                      { id: "cfdi", label: t("billing.billingClient.thCfdi") },
                     ].map(h => (
-                      <th key={h.id} className="text-left px-4 py-2.5 text-[10px] font-bold text-muted-foreground uppercase tracking-wide">{h.label}</th>
+                      <th key={h.id} className="text-left px-4 py-2.5 text-[10px] font-bold text-muted-foreground uppercase tracking-wide whitespace-nowrap">{h.label}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
                   {invoices.length === 0 ? (
-                    <tr><td colSpan={6} className="px-4 py-10 text-center text-muted-foreground">{t("patients.billing.empty")}</td></tr>
+                    <tr><td colSpan={7} className="px-4 py-10 text-center text-muted-foreground">{t("patients.billing.empty")}</td></tr>
                   ) : invoices.map(inv => {
                     const s = INV_STATUS[inv.status] ?? INV_STATUS.PENDING;
                     // Cancelar NO pone balance a 0 en BD, así que la columna
@@ -3085,11 +3128,23 @@ export function PatientDetailClient({
                           {voided ? "—" : formatCurrency(inv.balance)}
                         </td>
                         <td className="px-4 py-2"><span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${s.cls}`}>{t(s.labelKey)}</span></td>
+                        {/* CFDI — mismo indicador que la lista de Caja: badge ✓
+                            "Facturado (CFDI)" si ya se timbró, "Timbrar" si el SAT
+                            está configurado, o el estado neutro. Timbrar/descargar
+                            viven en el detalle (InvoiceDetailModal). */}
+                        <td className="px-4 py-2 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+                          <InvoiceCfdiBadge
+                            cfdiUuid={inv.cfdiUuid}
+                            facturApiEnabled={facturApiEnabled}
+                            onStamp={voided ? undefined : () => { setInvoiceDetailAction("cfdi"); setInvoiceDetailOpen(inv); }}
+                          />
+                        </td>
                       </tr>
                     );
                   })}
                 </tbody>
               </table>
+              </div>
             </div>
           )}
 
@@ -3113,7 +3168,9 @@ export function PatientDetailClient({
             patientName={fullName}
             patientPhone={patient.phone ?? null}
             onCharge={openChargeShortcut}
-            onOpenBilling={() => setTab("facturacion")}
+            onOpenBilling={openBillingTab}
+            canViewBilling={canViewBilling}
+            stampedInvoices={stampedInvoices}
           />
         )}
       </div>
@@ -3312,8 +3369,9 @@ export function PatientDetailClient({
         open={invoiceDetailOpen !== null}
         invoice={invoiceDetailOpen}
         patientName={fullName}
-        onClose={() => setInvoiceDetailOpen(null)}
+        onClose={() => { setInvoiceDetailOpen(null); setInvoiceDetailAction(null); }}
         onMutated={() => router.refresh()}
+        initialAction={invoiceDetailAction}
       />
     </div>
   );

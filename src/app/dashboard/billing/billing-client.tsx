@@ -13,6 +13,7 @@ import { ButtonNew } from "@/components/ui/design-system/button-new";
 import { fmtMXN, fmtMXNdec, formatRelativeDate } from "@/lib/format";
 import { PaymentModal, type PaymentInvoice } from "@/components/dashboard/billing/payment-modal";
 import { InvoiceDetailModal } from "@/components/dashboard/billing/invoice-detail-modal";
+import { InvoiceCfdiBadge } from "@/components/dashboard/billing/invoice-cfdi-badge";
 import { useT } from "@/i18n/i18n-provider";
 import { REGIMENES_FISCALES, USOS_CFDI, FORMAS_PAGO_SAT } from "@/lib/cfdi-catalogs";
 import { derivePaymentForm, defaultTaxMode, type CfdiTaxMode } from "@/lib/invoice-totals";
@@ -334,19 +335,13 @@ export function BillingClient({ invoices: initial, patients, totalPaid, totalPen
                       <BadgeNew tone={badge.tone} dot>{t(badge.labelKey)}</BadgeNew>
                     </td>
                     <td onClick={(e) => e.stopPropagation()}>
-                      {inv.cfdiUuid ? (
-                        <BadgeNew tone="success">{t("billing.billingClient.cfdiStamped")}</BadgeNew>
-                      ) : clinic.facturApiEnabled ? (
-                        <button
-                          type="button"
-                          onClick={() => openCfdiModal(inv)}
-                          className="btn-new btn-new--ghost btn-new--sm"
-                        >
-                          {t("billing.billingClient.cfdiStamp")}
-                        </button>
-                      ) : (
-                        <span style={{ fontSize: 10, color: "var(--text-4)" }}>{t("billing.billingClient.satNotConfigured")}</span>
-                      )}
+                      {/* Indicador compartido con la ficha del paciente — ver
+                          invoice-cfdi-badge.tsx (mismo badge/botón en ambas). */}
+                      <InvoiceCfdiBadge
+                        cfdiUuid={inv.cfdiUuid}
+                        facturApiEnabled={clinic.facturApiEnabled}
+                        onStamp={() => openCfdiModal(inv)}
+                      />
                     </td>
                     <td
                       style={{ textAlign: "right", whiteSpace: "nowrap" }}

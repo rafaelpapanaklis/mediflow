@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthContext, requireAdmin } from "@/lib/auth-context";
+import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { assertPatientVisible } from "@/lib/patient-visibility";
 import { prisma } from "@/lib/prisma";
 import { rateLimit } from "@/lib/rate-limit";
@@ -254,6 +255,11 @@ export async function POST(req: NextRequest) {
 export async function GET(req: NextRequest) {
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  // Consultar CFDIs = leer facturación: exige "billing.view" (permiso granular
+  // que el dueño enciende/apaga por persona en /dashboard/team). Aplica a las
+  // dos ramas de abajo; timbrar (POST) sigue siendo admin-only.
+  const deniedPerm = denyIfMissingPermission(ctx, "billing.view");
+  if (deniedPerm) return deniedPerm;
 
   const invoiceId = req.nextUrl.searchParams.get("invoiceId");
 

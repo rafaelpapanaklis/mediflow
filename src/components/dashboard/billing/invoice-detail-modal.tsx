@@ -11,6 +11,7 @@ import { Label } from "@/components/ui/label";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { useT } from "@/i18n/i18n-provider";
 import { PaymentModal, type PaymentInvoice } from "./payment-modal";
+import { InvoiceCfdiBadge } from "./invoice-cfdi-badge";
 import { REGIMENES_FISCALES, USOS_CFDI, FORMAS_PAGO_SAT } from "@/lib/cfdi-catalogs";
 import { derivePaymentForm, defaultTaxMode, type CfdiTaxMode } from "@/lib/invoice-totals";
 
@@ -64,11 +65,18 @@ interface InvoiceDetailModalProps {
   onClose: () => void;
   // Re-fetch invoices in parent. Llamado tras cualquier acción exitosa.
   onMutated: () => Promise<void> | void;
+  /**
+   * Acción a abrir junto con el modal. "cfdi" despliega directo el formulario
+   * de timbrado — lo usa el botón "Timbrar" de las listas de facturas (Caja y
+   * ficha del paciente) para no obligar a un segundo click. Se ignora si la
+   * factura ya está timbrada, es borrador o está cancelada.
+   */
+  initialAction?: "cfdi" | null;
 }
 
 type SubAction = null | "refund" | "edit-price" | "discount" | "cancel" | "cfdi";
 
-export function InvoiceDetailModal({ open, invoice, patientName, onClose, onMutated }: InvoiceDetailModalProps) {
+export function InvoiceDetailModal({ open, invoice, patientName, onClose, onMutated, initialAction = null }: InvoiceDetailModalProps) {
   const t = useT();
   const router = useRouter();
   const [paymentOpen, setPaymentOpen] = useState(false);
@@ -96,6 +104,17 @@ export function InvoiceDetailModal({ open, invoice, patientName, onClose, onMuta
   // El modal no se desmonta entre facturas: al cambiar de factura limpia el
   // estado de timbrado para no arrastrarlo a otra factura.
   useEffect(() => { setStampedUuid(null); setCfdiId(null); setPueOk(false); setCfdiMismatch(null); }, [invoice?.id]);
+
+  // initialAction="cfdi" → abre el sub-form de timbrado al montar. Corre después
+  // del reset de arriba (mismo orden de declaración) y se auto-descarta si la
+  // factura ya está timbrada, es borrador o está cancelada. openCfdiForm es una
+  // function declaration (hoisted), así que es válida aquí.
+  useEffect(() => {
+    if (!open || initialAction !== "cfdi" || !invoice) return;
+    if (invoice.cfdiUuid || invoice.status === "DRAFT" || invoice.status === "CANCELLED") return;
+    openCfdiForm();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, initialAction, invoice?.id]);
 
   if (!invoice) return null;
 
@@ -337,6 +356,9 @@ export function InvoiceDetailModal({ open, invoice, patientName, onClose, onMuta
             <DialogTitle className="text-foreground font-bold flex items-center gap-3 flex-wrap">
               <span className="font-mono">{invoice.invoiceNumber}</span>
               <span className={s.cls}>{t(s.labelKey)}</span>
+              {/* Timbrada: el mismo badge de la lista (Caja y ficha) para que el
+                  estado fiscal se lea de inmediato al abrir la factura. */}
+              {effectiveUuid && <InvoiceCfdiBadge cfdiUuid={effectiveUuid} />}
             </DialogTitle>
           </DialogHeader>
 
@@ -371,9 +393,21 @@ export function InvoiceDetailModal({ open, invoice, patientName, onClose, onMuta
                 <div className="flex justify-between"><span className="text-muted-foreground">{t("clinical.invoiceDetail.method")}</span><span className="capitalize">{METHOD_LABEL_KEYS[invoice.paymentMethod] ? t(METHOD_LABEL_KEYS[invoice.paymentMethod]) : invoice.paymentMethod}</span></div>
               )}
               {effectiveUuid && (
-                <div className="flex justify-between gap-2">
+                <div className="flex justify-between gap-2 items-center">
                   <span className="text-muted-foreground">CFDI UUID</span>
-                  <span className="font-mono text-[10px] truncate">{effectiveUuid}</span>
+                  <span className="flex items-center gap-2 min-w-0">
+                    <span className="font-mono text-[10px] truncate">{effectiveUuid}</span>
+                    {/* Enlace directo: el CFDI se ve sin tener que buscar los
+                        botones de descarga del pie del modal. */}
+                    <button
+                      type="button"
+                      onClick={() => downloadCfdi("pdf")}
+                      disabled={busy}
+                      className="flex-shrink-0 inline-flex items-center gap-1 text-[10px] font-bold underline underline-offset-2 text-blue-700 dark:text-blue-300 hover:opacity-80 disabled:opacity-50"
+                    >
+                      <Download size={11} aria-hidden /> {t("clinical.invoiceDetail.viewCfdi")}
+                    </button>
+                  </span>
                 </div>
               )}
               {isCancelled && invoice.notes && (

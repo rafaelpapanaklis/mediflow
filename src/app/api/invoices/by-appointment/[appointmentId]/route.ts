@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
 import { readActiveClinicCookie } from "@/lib/active-clinic";
 import { assertPatientVisible } from "@/lib/patient-visibility";
+import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 
 export const dynamic = "force-dynamic";
 
@@ -13,10 +14,10 @@ async function getCtx() {
   const activeClinicId = readActiveClinicCookie();
   if (activeClinicId) {
     const u = await prisma.user.findFirst({ where: { supabaseId: user.id, clinicId: activeClinicId, isActive: true } });
-    if (u) return { clinicId: u.clinicId, userId: u.id, role: u.role };
+    if (u) return { clinicId: u.clinicId, userId: u.id, role: u.role, permissionsOverride: u.permissionsOverride ?? [] };
   }
   const dbUser = await prisma.user.findFirst({ where: { supabaseId: user.id, isActive: true }, orderBy: { createdAt: "asc" } });
-  return dbUser ? { clinicId: dbUser.clinicId, userId: dbUser.id, role: dbUser.role } : null;
+  return dbUser ? { clinicId: dbUser.clinicId, userId: dbUser.id, role: dbUser.role, permissionsOverride: dbUser.permissionsOverride ?? [] } : null;
 }
 
 // GET /api/invoices/by-appointment/[appointmentId]
@@ -29,6 +30,10 @@ async function getCtx() {
 export async function GET(_req: NextRequest, { params }: { params: { appointmentId: string } }) {
   const ctx = await getCtx();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  // Mismo gate que la pestaña Facturación de la ficha y que Caja: leer la
+  // factura de una cita (folio, montos e identidad fiscal) exige "billing.view".
+  const deniedPerm = denyIfMissingPermission(ctx, "billing.view");
+  if (deniedPerm) return deniedPerm;
   const { clinicId } = ctx;
 
   // La cita debe ser de esta clínica (evita fuga cross-tenant del invoiceId).
