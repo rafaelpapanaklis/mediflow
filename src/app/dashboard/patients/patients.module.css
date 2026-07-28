@@ -351,28 +351,46 @@
   border: 1px solid var(--border-soft);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-1);
-  overflow: hidden;
+  /* overflow-x AUTO en la BASE, no `overflow: hidden`.
+     Antes era `hidden` y el scroll horizontal solo se activaba dentro de los
+     @media de abajo (≤1366px). Pero la tabla completa (10 columnas) mide
+     1313px de min-content medidos en Chrome, y el ancho útil del panel es
+     1120px a 1367px, 1180px a 1440px y 1260px a 1536px: entre 1367px y
+     ~1600px la última columna (WhatsApp / llamar / agendar) quedaba CORTADA
+     y, al ser `hidden`, sin barra para alcanzarla.
+     Con `auto` la barra aparece sola cuando hace falta y jamás se recorta
+     contenido; en ≥1600px no aparece porque la tabla ya cabe.
+     overflow-y sigue en hidden para que el border-radius siga recortando las
+     esquinas de la tabla (ambos ejes no-visibles). */
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
 }
-/* En tablet/mobile la tabla tiene 7+ columnas que no caben.
-   Habilitamos scroll horizontal con un min-width del table para
-   forzar el overflow. La sticky checkbox (col 1) queda fija a la
-   izquierda para que el usuario sepa de qué fila está viendo
-   las acciones cuando hace scroll. */
+/* En tablet/mobile la tabla tiene 7+ columnas que no caben. El scroll
+   horizontal ya lo da .tableWrap en la base; aquí solo fijamos el min-width
+   del table. La sticky checkbox (col 1) queda fija a la izquierda para que el
+   usuario sepa de qué fila está viendo las acciones cuando hace scroll. */
 @media (max-width: 1024px) {
-  .tableWrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
   .table { min-width: 920px; }
 }
 
-/* Laptops 1025-1366px: la tabla con 7+ columnas y la barra lateral del
-   dashboard no caben juntas. Activamos scroll horizontal y reducimos
-   padding de celdas para ganar espacio sin sacrificar legibilidad.
+/* Laptops 1025-1639px: la tabla con 7+ columnas y la barra lateral del
+   dashboard no caben juntas. Reducimos padding de celdas para ganar espacio
+   sin sacrificar legibilidad (el scroll horizontal ya vive en la base).
+   El tope SUBIÓ de 1366px a 1639.98px: medido en Chrome, la tabla completa
+   necesita 1313px y el ancho útil del panel no llega a esa cifra hasta
+   ~1620px de viewport (1180px a 1440px, 1260px a 1536px, 1313px justos a
+   1600px). Con el tope viejo, 1367-1639px caía en la forma ANCHA sin caber —
+   la franja muerta que dejaba las acciones fuera de vista. La forma compacta
+   baja el min-content a 1273px, así que también acorta el scroll donde sigue
+   habiéndolo. 1640px deja ~35px de holgura sobre los 1313px medidos, margen
+   para emails o nombres más largos que los de la muestra.
    Nota de cascada: los overrides de padding/colActions/actions se scopean
    bajo .tableWrap para ganar especificidad sobre las reglas base
    (.table thead th, .table tbody td, .colActions, .actions) que aparecen
    MÁS ABAJO en este archivo; con igual especificidad el orden de fuente
    las anularía. El media query las limita a este rango de ancho. */
-@media (min-width: 1025px) and (max-width: 1366px) {
-  .tableWrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+@media (min-width: 1025px) and (max-width: 1639.98px) {
   .table { min-width: 1080px; }
   .tableWrap .table thead th { padding: 8px 10px; }
   .tableWrap .table tbody td { padding: 8px 10px; }
@@ -382,7 +400,8 @@
   .tableWrap .actions { opacity: 1; }
 }
 
-/* Desktop >=1367px: comportamiento actual. */
+/* Desktop >=1600px: forma ancha (padding holgado, columna de acciones 220px).
+   Es el único rango donde la tabla completa (1313px) entra sin scroll. */
 .table {
   width: 100%;
   border-collapse: collapse;

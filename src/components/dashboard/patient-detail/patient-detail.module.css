@@ -12,6 +12,16 @@
      el pseudo negativo se iría detrás del background opaco (invisible). */
   z-index: 0;
   overflow: hidden;
+  /* QUERY CONTAINER de la cabecera. El layout del hero se decide por el ancho
+     REAL del hero, no por el del viewport — que es lo que rompía la ficha:
+     el ancho útil depende del sidebar (232px expandido vs 68px colapsado), del
+     padding del <main> (clamp 12→28px) y del escalado de Windows, así que
+     ningún @media podía acertar en todos los casos a la vez. Con @container la
+     cabecera se mide a sí misma y siempre acierta.
+     inline-size (no size): solo contiene el eje horizontal; el alto sigue
+     creciendo con el contenido (chips de alertas, nombre en 2 líneas). */
+  container-type: inline-size;
+  container-name: patientHero;
   background: var(--bg-elev);
   border: 1px solid var(--border-soft);
   border-radius: var(--radius-lg);
@@ -42,14 +52,24 @@
     transparent 55%
   );
 }
+/* BASE = layout APILADO (avatar+datos / métricas / acciones). Es el layout que
+   NO se puede desbordar: cada fila ocupa el ancho completo y sus hijos saben
+   envolver. La fila de escritorio (4 columnas) se activa más abajo, en el
+   @container, solo cuando el hero mide lo suficiente para contenerla.
+   El orden importa: base primero, override después (misma especificidad). */
 .heroMain {
   display: grid;
-  grid-template-columns: auto 1fr auto auto;
-  gap: 18px;
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-areas:
+    "avatar info"
+    "metrics metrics"
+    "actions actions";
+  gap: 14px;
   align-items: center;
 }
 /* Avatar con ring degradado de marca (vertical) alrededor del tile violeta. */
 .heroAvatarRing {
+  grid-area: avatar;
   padding: 2.5px;
   border-radius: calc(var(--radius-lg) + 3px);
   background: var(--brand-grad-v, var(--brand-grad));
@@ -68,7 +88,7 @@
   flex-shrink: 0;
   font-family: inherit;
 }
-.heroInfo { min-width: 0; }
+.heroInfo { grid-area: info; min-width: 0; }
 .heroName {
   font-size: clamp(21px, 1.8vw, 24px);
   font-weight: 800;
@@ -76,11 +96,20 @@
   letter-spacing: -0.03em;
   margin: 0 0 5px;
   line-height: 1.12;
+  /* El nombre puede ocupar 2 líneas, pero NUNCA empujar la grilla: sin esto un
+     apellido largo fija el min-content de la columna y desplaza métricas y
+     acciones fuera del hero. Con `anywhere` el min-content del bloque es ~1
+     carácter, así que la columna se adapta y el nombre envuelve dentro. */
+  overflow-wrap: anywhere;
 }
 .heroMeta {
   display: flex; align-items: center; gap: 4px;
   font-size: 12px; color: var(--text-3);
   flex-wrap: wrap;
+  /* Mismo motivo que .heroName: un email largo es UN solo token de ~250px y
+     era el que más inflaba el min-content de la columna de datos. */
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 .heroMetaSep { color: var(--text-4); margin: 0 4px; }
 .metaItem {
@@ -91,9 +120,18 @@
 
 /* Stats como PÍLDORAS con icono (pasada v3) — antes columnas planas. */
 .heroMetrics {
+  grid-area: metrics;
   display: flex; gap: 10px;
   align-items: stretch;
-  padding: 0;
+  /* Red de seguridad: si las 3 píldoras no caben en su fila, BAJAN de línea en
+     vez de encogerse por debajo de su contenido (con min-width:118px se
+     encogían y la etiqueta nowrap se salía de la píldora). Sin efecto visual
+     mientras quepan. */
+  flex-wrap: wrap;
+  /* Separador de la fila de métricas en el layout apilado; el @container de
+     escritorio lo quita al volver a la fila única. */
+  border-top: 1px solid var(--border-soft);
+  padding: 12px 0 0;
 }
 .metric {
   min-width: 118px;
@@ -144,7 +182,13 @@
 }
 
 .heroActions {
+  grid-area: actions;
   display: flex; gap: 6px; align-items: center;
+  /* Red de seguridad: los 3 botones son white-space:nowrap y no tienen
+     min-width, así que al apretarse se cortaban (era el caso del botón
+     "Cobrar", que quedaba mitad fuera del hero). Envolviendo, el botón entero
+     baja de línea y sigue completo y clickable. */
+  flex-wrap: wrap;
 }
 /* CTAs con jerarquía (pasada v3): primario = degradado de marca;
    secundarios = ghost que se encienden al hover. */
@@ -288,32 +332,47 @@
   border-color: color-mix(in srgb, var(--success) 30%, transparent);
 }
 
-/* Responsive del hero */
-@media (max-width: 1100px) {
+/* ─── Responsive del hero — @container, NO @media ───────────────────────
+ *
+ * ANTES: el único breakpoint era @media (max-width:1100px), pero la fila de
+ * escritorio necesita ~1130px SOLO de contenido que no encoge:
+ *     avatar 75 + gaps 54 + 3 píldoras 522 + 4 botones 479 = 1130px
+ * más la columna de datos. Medido en Chrome sobre la ficha real (paciente con
+ * nombre largo, teléfono, email y saldo de 5 cifras) el hero se rompía por
+ * debajo de 1440px de ancho PROPIO — y a 1366px de viewport el hero sólo mide
+ * ~1073px. De ahí la franja rota de 1101px a ~1740px de viewport: la columna
+ * 1fr colapsaba a 0, el nombre y los datos se encimaban con las píldoras y el
+ * botón "Cobrar" quedaba cortado por el overflow:hidden del hero.
+ *
+ * AHORA la condición se evalúa contra el ancho del propio hero (ver
+ * container-type en .hero). 1380px es el ancho de CONTENIDO del hero a partir
+ * del cual la fila entra cómoda: 1130px de contenido rígido + ~250px para el
+ * nombre y los datos. Equivalencias aproximadas de viewport (el hero se lleva
+ * 46px de padding+borde y el <main> 2×clamp(12,1.5vw,28)):
+ *     · sidebar expandido (clamp 180–232px):  ≈ 1740px de viewport
+ *     · sidebar colapsado (68px):             ≈ 1580px de viewport
+ * Justo eso es lo que un @media no podía expresar: el mismo viewport cabe o no
+ * según el estado del sidebar. Por debajo del umbral manda el layout apilado
+ * de la base, que es el mismo que ya se usaba en móvil.
+ *
+ * Ojo con la cascada: este bloque va DESPUÉS de las reglas base para ganarles
+ * (misma especificidad → decide el orden de fuente). */
+@container patientHero (min-width: 1380px) {
   .heroMain {
-    grid-template-columns: auto 1fr auto;
-    grid-template-areas:
-      "avatar info menu"
-      "metrics metrics metrics"
-      "actions actions actions";
-    gap: 14px;
+    grid-template-columns: auto minmax(0, 1fr) auto auto;
+    grid-template-areas: "avatar info metrics actions";
+    gap: 18px;
   }
-  .heroAvatar { grid-area: avatar; }
-  .heroInfo { grid-area: info; }
+  /* En fila única las métricas van sueltas, sin el separador de la versión
+     apilada. */
   .heroMetrics {
-    grid-area: metrics;
-    border-left: none;
-    border-top: 1px solid var(--border-soft);
-    padding: 12px 0 0;
+    border-top: none;
+    padding: 0;
   }
-  .heroActions {
-    grid-area: actions;
-    flex-wrap: wrap;
-  }
-  .heroActions > .btnIcon { grid-area: menu; }
 }
-@media (max-width: 700px) {
-  .heroMetrics { gap: 14px; flex-wrap: wrap; }
+/* Hero muy angosto (móvil): más aire entre píldoras ya envueltas. */
+@container patientHero (max-width: 640px) {
+  .heroMetrics { gap: 14px; }
 }
 
 /* ─────── LAYOUT 3 COLUMNAS ─────── */

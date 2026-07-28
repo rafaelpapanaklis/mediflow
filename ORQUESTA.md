@@ -1506,3 +1506,141 @@ En `check-contraindications` la edad entra en `ctxNorm`, que es lo que se hashea
 
 ### NO tocado
 Nada más de esos dos endpoints: ni prompts al modelo, ni wallet de tokens IA, ni el gate `assertPatientVisible`, ni la cache, ni el parseo de respuesta. Tampoco `patients/route.ts` ni la rama de PR #115.
+
+═══════════════════════════════════════════════════════════════════════════
+## Fix-Ficha-Responsive — cabecera del expediente rota en laptops ✅ (2026-07-28)
+═══════════════════════════════════════════════════════════════════════════
+BUILD EXIT 0 (`npx next build`, 320 rutas). Sin SQL, sin dependencias nuevas, sin cambios de diseño.
+Archivos: `patient-detail.module.css` · `patients.module.css` (solo CSS, 0 .tsx).
+
+### El bug (reportado por una clienta, con captura)
+En la ficha del paciente la cabecera se desarmaba: el nombre partido en varias líneas, el
+`#P0118 · edad · sexo · teléfono · email` encimado sobre las píldoras de métricas y el botón
+"Cobrar" cortado por el borde derecho. Reproducido y medido en Chrome con el componente real
+(`HeroCard`) dentro de una réplica del shell del dashboard.
+
+### Causa raíz — confirmada con números
+`.heroMain` era `grid-template-columns: auto 1fr auto auto` y su único breakpoint era
+`@media (max-width: 1100px)`. Medido en Chrome con un paciente realista (nombre largo, teléfono,
+email, saldo de 5 cifras), el contenido que **no encoge** de esa fila suma **1130px**:
+
+| bloque | ancho |
+|---|---|
+| avatar + ring | 75px |
+| 3 gaps de la grilla | 54px |
+| 3 píldoras `.metric` (max-content) | 522px |
+| 4 botones `.heroActions` (`white-space: nowrap`) | 479px |
+| **total rígido** | **1130px** |
+
+Debajo de eso la columna `1fr` colapsaba a **0px** (verificado: `heroInfo.clientWidth === 0`), el
+nombre y los datos se salían de su caja y se pintaban ENCIMA de las píldoras, y el resto quedaba
+recortado por el `overflow: hidden` del `.hero` — sin barra para alcanzarlo. Medido: la fila se
+rompía por debajo de **1440px de ancho propio del hero**, y a 1366px de viewport el hero solo mide
+**1073px**. Franja rota real: **de 1101px a ~1740px de viewport**, no de 1101 a 1500.
+
+Extra encontrado leyendo el bloque viejo: `.heroAvatar { grid-area: avatar }` y
+`.heroActions > .btnIcon { grid-area: menu }` no hacían NADA — el hijo directo del grid es
+`.heroAvatarRing`, y `.btnIcon` es hijo del flex, no del grid. La celda "menu" nunca se usó.
+
+### La solución: `@container`, no un breakpoint más alto
+El ancho útil del hero NO se deduce del viewport: depende del sidebar
+(`clamp(180px,14vw,232px)` expandido vs **68px** colapsado — 164px de diferencia), del padding del
+`<main>` (`clamp(12px,1.5vw,28px)`) y del escalado de Windows. **Ningún `@media` puede acertar en
+los dos estados del sidebar a la vez**: el número que evita el desborde con el sidebar abierto apila
+la cabecera de más cuando está colapsado. Por eso `.hero` es ahora un query container
+(`container-type: inline-size; container-name: patientHero`) y la cabecera se mide a sí misma.
+
+- **Base = layout APILADO** (avatar+datos / métricas / acciones). Es el que no puede desbordar, y
+  además es el que se degrada bien si un navegador ignorara `@container`.
+- **`@container patientHero (min-width: 1380px)` = fila de escritorio** (la de siempre).
+  El número sale de la medición: 1130px de contenido rígido + ~250px para nombre y datos.
+  Verificado que a 1380px exactos la fila entra sin envolver (`metricsH` 90px, `actionsH` 36px).
+  Equivalencias de viewport: **≈1740px con el sidebar expandido, ≈1580px colapsado.**
+
+### Red de seguridad — que no dependa del número
+Aunque el umbral fallara, el hero ya no puede romperse:
+- `.heroName` / `.heroMeta`: `overflow-wrap: anywhere`. El email largo es UN token de ~250px y era
+  el que más inflaba el min-content de la columna. Se decidió **envolver, no truncar**: en una ficha
+  clínica esconder parte del nombre detrás de un `title` es peor.
+- `.heroMetrics` / `.heroActions`: `flex-wrap: wrap`. Si no caben, la píldora o el botón entero
+  BAJAN de línea en vez de encogerse por debajo de su contenido (que es lo que cortaba "Cobrar").
+  Sin efecto visual mientras quepan. Se descartó colapsar los secundarios dentro del menú "…":
+  el CTA que la clienta necesita es justamente "Cobrar", esconderlo sería peor que bajarlo de fila.
+- `minmax(0, 1fr)` en la columna de datos y `grid-area` explícito en los 4 hijos reales.
+
+### Verificación (Chrome, componentes reales)
+Barrido automático de **346 anchos de hero, de 320px a 1700px de 4 en 4**, buscando cualquier hijo
+con `scrollWidth > clientWidth` (overflow visible) o cuyo borde derecho pasara del content-box del
+hero: **0 roturas en los 346**. Conmutación fila↔apilado exactamente en el umbral (1428px de
+border-box = 1382px de contenido).
+
+Matriz **5 anchos × 2 estados del sidebar**, midiendo escapes / píxeles fuera de vista / scroll
+horizontal de página. En las 10 combinaciones: **ninguno, ninguno, 0**.
+
+| viewport | ancho del hero (expandido) | layout | ancho del hero (sidebar 68px) | layout |
+|---|---|---|---|---|
+| 1280×720 | 984px | apilado | 1112px | apilado |
+| 1366×768 | 1073px | apilado | 1196px | apilado |
+| 1440×900 | 1134px | apilado | 1268px | apilado |
+| 1536×864 | 1214px | apilado | 1361px | apilado |
+| 1920×1080 | 1571px | **fila** | 1735px | **fila** |
+
+A 1920 la columna de datos recibe 439px ≥ 426px que mide el nombre → **nombre en 1 línea, diseño
+idéntico al de hoy**. En 1440/1536 la fila NO cabe de verdad (1130px rígidos contra 1134/1214px de
+hero): apilar es la respuesta correcta, no un capricho del umbral.
+
+Capturas en `C:\Users\Rafael\Documents\GitHub\capturas-ficha-responsive\`:
+`ANTES-1280.png` · `ANTES-1366.png` · `DESPUES-1280.png` · `DESPUES-1366.png` · `DESPUES-1920.png`.
+
+### Barrido — la MISMA falla en la lista de pacientes (arreglada)
+Auditadas todas las reglas `grid-template-columns` de pistas fijas del repo + los `grid-cols-[...]`
+de Tailwind. Un solo hallazgo real, y grave:
+
+**`/dashboard/patients` — la tabla se recortaba SIN barra entre 1367px y ~1600px.**
+`.tableWrap` tenía `overflow: hidden` en la base y solo activaba `overflow-x: auto` dentro del
+`@media (max-width: 1366px)`. Medido en Chrome con la tabla real (10 columnas): min-content
+**1313px** en su forma ancha. Ancho útil del panel: 1120px a 1367, **1180px a 1440**, **1260px a
+1536**. Resultado: **la última columna (WhatsApp / llamar / agendar) quedaba fuera y sin forma de
+llegar a ella** — y afectaba justo a 1440 y 1536, los más comunes.
+
+Fix (mismo patrón que el hero: primero que no pueda romperse, después el número):
+1. `.tableWrap` en la BASE → `overflow-x: auto; overflow-y: hidden` (el `y` sigue recortando las
+   esquinas contra el `border-radius`). Ya no se recorta nada a ningún ancho.
+2. Tope de la forma compacta **1366px → 1639.98px**: la forma ancha solo cabe desde ~1620px
+   (1313px justos a 1600px). 1640px deja ~35px de holgura para emails/nombres más largos.
+   De paso, en 1367-1639 las acciones vuelven a ser visibles sin hover (`opacity: 1`).
+
+Verificado a 1024/1280/1366/1367/1440/1536/1600/1640/1700/1920: `overflow-x: auto` en todos y
+**cero recortes sin salida**; sin barra horizontal a partir de 1600.
+
+### Revisado y SANO (no se tocó)
+- **`.layout` de la ficha (220px 1fr 320px, `@media 1366`)** — probado en el borde exacto: a 1367px
+  la columna central queda en 547px y lo único que pasa es que la tabla de Facturación scrollea
+  14px dentro de su `.tableScrollB` (`overflow-x: auto`, por diseño). A 1400+ ni eso. **No hay zona
+  muerta entre el hero y el layout**: el hero ya no depende del viewport, así que la coordinación
+  de breakpoints que pedía el prompt deja de existir como problema.
+- **Rail derecho (`.sidePanel`) y quick-nav de 220px** — 0 desbordes en las 10 combinaciones.
+- **Agenda** — la grilla de días (`minmax(160px,1fr)` × N) vive dentro de `.scrollArea
+  { overflow: auto }`; el `.page` es `1fr + 320/280px`. Sin recortes.
+- **Caja** — sus 3 tablas ya van envueltas en `<div style={{overflowX:"auto"}}>`.
+- **Dashboard de inicio** — Tailwind fluido, cero pistas fijas.
+- **Odontograma** — `.odo-chart` es `width:100%` con dientes `flex:1 1 0; min-width:0` y
+  `svg{width:100%}`. Encoge solo, no recorta.
+- **Tablas de la ficha (`.tableB`)** — ya iban en `.tableScrollB` con `overflow-x: auto`.
+
+### Limitación honesta de la verificación
+No hay `.env` local ni token de Vercel vigente (`vercel whoami` → "The specified token is not
+valid"), así que el dev server no puede levantar las páginas que tocan la BD. La cabecera y la tabla
+de pacientes se verificaron con **los componentes y el CSS reales** montados en un banco de pruebas
+temporal que replica el shell del dashboard (sidebar + padding del `<main>`), emulando cada viewport
+con su ancho de sidebar/padding exactos y activando las media queries reales vía CSSOM. El banco de
+pruebas **se borró antes de commitear** (`src/app/dev-responsive/`, no está en el commit). Agenda,
+Caja y el home se auditaron por código, no en pantalla.
+
+### Ojo para quien siga
+`@container` exige que el contenedor esté declarado en un ANCESTRO (`.hero`), no en el elemento que
+consulta (`.heroMain`), y el bloque `@container` debe ir DESPUÉS de las reglas base: misma
+especificidad, gana el orden de fuente (es el mismo tropiezo que documenta el comentario de
+`.sidePanel` en la línea ~334 de ese archivo). Verificado que sobrevive a la minificación de
+producción: `@container patientHero (min-width: 1380px){...}` aparece literal en
+`.next/static/css/*.css`.
