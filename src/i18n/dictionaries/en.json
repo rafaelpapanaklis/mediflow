@@ -1,5 +1,17 @@
 {
   "common": {
+    "aiFeature": {
+      "chat": "Chat",
+      "xrayAnalysis": "X-ray analysis",
+      "dictation": "Voice dictation",
+      "consultAssist": "Consult assistant",
+      "contraindications": "Contraindications",
+      "homeopathy": "Homeopathy",
+      "aiInsight": "Data insights",
+      "noShowPrediction": "No-show prediction",
+      "clinicLayout": "Clinic layout",
+      "other": "Other"
+    },
     "skipToContent": "Skip to main content",
     "save": "Save",
     "saveChanges": "Save changes",
@@ -431,6 +443,14 @@
     },
     "announcementBanner": {
       "dismiss": "Dismiss announcement"
+    },
+    "aiQuotaBanner": {
+      "warnTitle": "You have used {percent}% of your AI quota this month",
+      "warnBody": "Once it runs out, the assistant, voice dictation and X-ray analysis stop responding until the 1st.",
+      "fullTitle": "You ran out of AI quota this month",
+      "fullBody": "The assistant, voice dictation and X-ray analysis come back on the 1st or when you upgrade.",
+      "cta": "View usage",
+      "dismiss": "Dismiss notice"
     },
     "expiredPlanModal": {
       "title": "Activate your plan",
@@ -3017,6 +3037,11 @@
       "aiStatTokensRemaining": "Tokens remaining",
       "aiStatConsultations": "Approx. queries",
       "aiStatEstimatedCost": "Estimated cost",
+      "aiBreakdownTitle": "Where did your AI go this month?",
+      "aiBreakdownEmpty": "No AI usage yet this month.",
+      "aiBreakdownTokens": "{count} tokens",
+      "aiBreakdownUntracked": "Other usage without detail",
+      "aiNoPlanNotice": "Your plan does not include AI. Upgrade to use the assistant, voice dictation and X-ray analysis.",
       "aiHowItWorksTitle": "How does it work?",
       "aiHowItWorksBody": " Each query with the assistant uses approximately 800 tokens. The limit renews automatically on the first day of each month. It uses Claude Haiku — Anthropic's most efficient model.",
       "gcalSubtitle": "Sync your appointments automatically",
@@ -4335,6 +4360,7 @@
       "notConfigured": "Voice dictation is not configured on this server.",
       "aiNoPlan": "Your plan does not include AI. Upgrade to use voice dictation.",
       "aiNoTokens": "No AI tokens left this month. Dictation comes back on the 1st or when you upgrade.",
+      "tokensSpent": "Dictation: ~{used} tokens · {remaining} left",
       "failed": "The audio could not be transcribed.",
       "busy": "A recording is already in progress.",
       "unsupported": "Your browser does not support audio recording."
@@ -7065,6 +7091,11 @@
       "voicePending": "Voice transcription pending setup",
       "voiceNoPlan": "Your plan does not include AI. Upgrade to use voice dictation.",
       "voiceNoTokens": "No AI tokens left this month. Dictation comes back on the 1st or when you upgrade.",
+      "quotaTitle": "AI usage this month",
+      "quotaPercent": "{percent}% used",
+      "quotaRemaining": "{count} remaining",
+      "quotaNoPlan": "Your plan does not include AI",
+      "quotaDictation": "Dictation: ~{used} tokens · {remaining} left",
       "voiceError": "Transcription error",
       "micError": "Could not access the microphone",
       "closeHistory": "Close history",

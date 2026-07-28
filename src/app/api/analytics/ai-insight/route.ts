@@ -55,7 +55,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: result.error }, { status: 502 });
   }
 
-  await addAiTokens(user.clinicId, (result.inputTokens ?? 0) + (result.outputTokens ?? 0));
+  await addAiTokens(user.clinicId, (result.inputTokens ?? 0) + (result.outputTokens ?? 0), "ai_insight", user.id);
 
   return NextResponse.json({
     insight: result.text,

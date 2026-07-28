@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthContext } from "@/lib/auth-context";
 import { prisma } from "@/lib/prisma";
+import { addAiTokens } from "@/lib/ai-tokens";
 import { assertPatientVisible } from "@/lib/patient-visibility";
 import { createClient as createAdmin } from "@supabase/supabase-js";
 import { rateLimit } from "@/lib/rate-limit";
@@ -445,10 +446,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     });
 
     // Update token usage (incluye tokens de cache creation/read que también se cobran)
-    await prisma.clinic.update({
-      where: { id: ctx.clinicId },
-      data:  { aiTokensUsed: { increment: totalTokens } },
-    });
+    await addAiTokens(ctx.clinicId, totalTokens, "xray_analysis", ctx.userId);
 
     /* ─── Extract tool_use (happy path) o fallback a texto ─── */
     const contentBlocks: any[] = Array.isArray(data.content) ? data.content : [];

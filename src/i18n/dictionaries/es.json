@@ -1,5 +1,17 @@
 {
   "common": {
+    "aiFeature": {
+      "chat": "Chat",
+      "xrayAnalysis": "Análisis de radiografías",
+      "dictation": "Dictado por voz",
+      "consultAssist": "Asistente de consulta",
+      "contraindications": "Contraindicaciones",
+      "homeopathy": "Homeopatía",
+      "aiInsight": "Análisis de datos",
+      "noShowPrediction": "Predicción de inasistencias",
+      "clinicLayout": "Distribución de la clínica",
+      "other": "Otros"
+    },
     "skipToContent": "Saltar al contenido principal",
     "save": "Guardar",
     "saveChanges": "Guardar cambios",
@@ -431,6 +443,14 @@
     },
     "announcementBanner": {
       "dismiss": "Descartar anuncio"
+    },
+    "aiQuotaBanner": {
+      "warnTitle": "Llevas {percent}% de tu cupo de IA de este mes",
+      "warnBody": "Cuando se agote, el asistente, el dictado por voz y el análisis de radiografías dejan de responder hasta el día 1.",
+      "fullTitle": "Se agotó tu cupo de IA de este mes",
+      "fullBody": "El asistente, el dictado por voz y el análisis de radiografías se reactivan el día 1 o al subir de plan.",
+      "cta": "Ver consumo",
+      "dismiss": "Descartar aviso"
     },
     "expiredPlanModal": {
       "title": "Activa tu plan",
@@ -3017,6 +3037,11 @@
       "aiStatTokensRemaining": "Tokens restantes",
       "aiStatConsultations": "Consultas aprox.",
       "aiStatEstimatedCost": "Costo estimado",
+      "aiBreakdownTitle": "¿En qué se fue tu IA este mes?",
+      "aiBreakdownEmpty": "Todavía no hay consumo de IA este mes.",
+      "aiBreakdownTokens": "{count} tokens",
+      "aiBreakdownUntracked": "Otro consumo sin detalle",
+      "aiNoPlanNotice": "Tu plan no incluye IA. Sube de plan para usar el asistente, el dictado por voz y el análisis de radiografías.",
       "aiHowItWorksTitle": "¿Cómo funciona?",
       "aiHowItWorksBody": " Cada consulta con el asistente usa aproximadamente 800 tokens. El límite se renueva automáticamente el primer día de cada mes. Usa Claude Haiku — el modelo más eficiente de Anthropic.",
       "gcalSubtitle": "Sincroniza tus citas automáticamente",
@@ -4335,6 +4360,7 @@
       "notConfigured": "El dictado por voz no está configurado en este servidor.",
       "aiNoPlan": "Tu plan no incluye IA. Sube de plan para usar el dictado por voz.",
       "aiNoTokens": "Sin tokens de IA disponibles este mes. El dictado se reactiva el día 1 o al subir de plan.",
+      "tokensSpent": "Dictado: ~{used} tokens · quedan {remaining}",
       "failed": "No se pudo transcribir el audio.",
       "busy": "Ya hay una grabación en curso.",
       "unsupported": "Tu navegador no soporta grabación de audio."
@@ -7065,6 +7091,11 @@
       "voicePending": "Transcripción de voz pendiente de configurar",
       "voiceNoPlan": "Tu plan no incluye IA. Sube de plan para dictar por voz.",
       "voiceNoTokens": "Sin tokens de IA disponibles este mes. El dictado se reactiva el día 1 o al subir de plan.",
+      "quotaTitle": "Consumo de IA de este mes",
+      "quotaPercent": "{percent}% usado",
+      "quotaRemaining": "{count} restantes",
+      "quotaNoPlan": "Tu plan no incluye IA",
+      "quotaDictation": "Dictado: ~{used} tokens · quedan {remaining}",
       "voiceError": "Error de transcripción",
       "micError": "No se pudo acceder al micrófono",
       "closeHistory": "Cerrar historial",

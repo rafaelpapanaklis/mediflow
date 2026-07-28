@@ -261,6 +261,77 @@
 .iconBtn:hover { background: var(--brand-softer); color: var(--brand); border-color: var(--brand-soft); }
 .iconBtn:focus-visible { outline: none; box-shadow: var(--ring); }
 
+/* ─── Cupo de IA (banner + medidor del mes) ─────────────────
+   Banda secundaria bajo el header del chat, no scrollea con los
+   mensajes. Sin anchos fijos: todo fluye y el texto largo elide. */
+.quotaStrip {
+  flex-shrink: 0;
+  padding: 10px 22px 11px;
+  background: var(--bg-elev);
+  border-bottom: 1px solid var(--border-soft);
+}
+.quotaInner {
+  width: 100%;
+  max-width: 800px;
+  min-width: 0;
+  margin: 0 auto;
+}
+.quotaHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+.quotaLabel {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-2);
+}
+.quotaLabelText {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.quotaNumbers {
+  flex-shrink: 0;
+  font-family: var(--font-mono, monospace);
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-1);
+  white-space: nowrap;
+}
+.quotaSubRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 5px;
+}
+.quotaSub {
+  font-size: 10.5px;
+  color: var(--text-3);
+}
+.quotaSubStrong {
+  flex-shrink: 0;
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--brand);
+  white-space: nowrap;
+}
+.quotaNoPlan {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-3);
+}
+
 .messagesScroll {
   flex: 1;
   overflow-y: auto;
@@ -715,6 +786,9 @@
     display: block;
   }
   .mobileMenuBtn { display: inline-flex; }
+  /* Medidor de cupo: un poco más compacto en alto, pero conserva el aire
+     lateral del header para que su borde izquierdo siga alineado con él. */
+  .quotaStrip { padding: 9px 22px 10px; }
 }
 
 /* ─── Motion: respetar prefers-reduced-motion (spec §Motion) ─── */

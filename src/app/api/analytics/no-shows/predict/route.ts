@@ -194,7 +194,7 @@ export async function POST(req: NextRequest) {
     maxTokens: 300,
   });
 
-  await addAiTokens(clinicId, (aiResult.inputTokens ?? 0) + (aiResult.outputTokens ?? 0));
+  await addAiTokens(clinicId, (aiResult.inputTokens ?? 0) + (aiResult.outputTokens ?? 0), "no_show_prediction", user.id);
 
   let probability = baselineProb;
   let aiFactors: Array<{ label: string; weight: number; reason: string }> = [];

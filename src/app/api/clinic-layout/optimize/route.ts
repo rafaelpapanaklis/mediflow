@@ -200,7 +200,7 @@ Responde SOLO con un JSON válido (sin markdown, sin texto extra) con esta estru
       );
     }
 
-    await addAiTokens(dbUser.clinicId, (result.inputTokens ?? 0) + (result.outputTokens ?? 0));
+    await addAiTokens(dbUser.clinicId, (result.inputTokens ?? 0) + (result.outputTokens ?? 0), "clinic_layout", dbUser.id);
 
     if (result.mock) {
       return NextResponse.json({

@@ -116,11 +116,100 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
   const [csdPassword, setCsdPassword] = useState("");
   const [csdUploading, setCsdUploading] = useState(false);
 
-  // AI usage info
-  const aiUsed      = clinic.aiTokensUsed  ?? 0;
-  const aiLimit     = clinic.aiTokensLimit ?? 50000;
-  const aiPercent   = Math.min(100, Math.round((aiUsed / aiLimit) * 100));
-  const aiRemaining = Math.max(0, aiLimit - aiUsed);
+  // AI usage info — los props del servidor pintan el tab de inmediato, pero el
+  // contador de la clínica puede venir de un mes anterior (el reseteo del cupo
+  // es perezoso: lo escribe la siguiente llamada de IA, no el render). GET
+  // /api/ai/usage ya aplica ese corte mensual y además trae el desglose por
+  // feature, así que sus números mandan en cuanto resuelve.
+  const [aiUsage, setAiUsage] = useState<{
+    used: number; limit: number; remaining: number; percent: number;
+    byFeature: { feature: string; label: string; tokens: number; percent: number }[];
+    byFeatureTotal: number;
+  } | null>(null);
+
+  useEffect(() => {
+    // Solo cuesta la consulta si el usuario está mirando el tab de IA — no en
+    // cada carga de Configuración.
+    if (tab !== "ia") return;
+    let alive = true;
+    // Fail-open: si la red o el endpoint fallan NO tocamos el estado y el tab
+    // se sigue rindiendo con los props del servidor.
+    const num = (v: any, fb: number) => (typeof v === "number" && isFinite(v) ? v : fb);
+    (async () => {
+      try {
+        const res = await fetch("/api/ai/usage");
+        if (!res.ok) return;
+        const d = await res.json();
+        // Exige used+limit numéricos: con un payload raro preferimos quedarnos
+        // con los props del servidor antes que pintar un límite 0 falso (que se
+        // vería como "tu plan no incluye IA" en una clínica que sí la tiene).
+        if (!alive || !d || typeof d.used !== "number" || typeof d.limit !== "number") return;
+        const used  = Math.max(0, num(d.used, 0));
+        const limit = Math.max(0, num(d.limit, 0));
+        const rows: { feature: string; label: string; tokens: number; percent: number }[] = [];
+        const raw = Array.isArray(d.byFeature) ? d.byFeature : [];
+        // El endpoint ya las manda ordenadas desc y con el label traducido: se
+        // conserva el orden tal cual (índices, sin re-ordenar ni iterables).
+        for (let i = 0; i < raw.length; i++) {
+          const r = raw[i] || {};
+          rows.push({
+            feature: typeof r.feature === "string" ? r.feature : `f${i}`,
+            label:   typeof r.label   === "string" ? r.label   : "",
+            tokens:  Math.max(0, num(r.tokens, 0)),
+            percent: Math.max(0, Math.min(100, Math.round(num(r.percent, 0)))),
+          });
+        }
+        setAiUsage({
+          used, limit,
+          remaining: Math.max(0, num(d.remaining, Math.max(0, limit - used))),
+          percent:   limit > 0 ? Math.max(0, Math.min(100, Math.round(num(d.percent, 0)))) : 0,
+          byFeature: rows,
+          byFeatureTotal: Math.max(0, num(d.byFeatureTotal, 0)),
+        });
+      } catch { /* silencioso: el tab ya está pintado con los props del servidor */ }
+    })();
+    return () => { alive = false; };
+  }, [tab]);
+
+  const aiUsed      = aiUsage ? aiUsage.used  : (clinic.aiTokensUsed  ?? 0);
+  // `?? 50000` solo atrapa null/undefined: un plan BÁSICO trae 0 y debe quedarse
+  // en 0 (es la señal de "sin IA"), por eso el porcentaje se calcula únicamente
+  // cuando el límite es > 0 — si no, 0/0 daba NaN y pintaba `width: NaN%`.
+  const aiLimit     = aiUsage ? aiUsage.limit : (clinic.aiTokensLimit ?? 50000);
+  const aiRemaining = aiUsage ? aiUsage.remaining : Math.max(0, aiLimit - aiUsed);
+  const aiPercent   = aiUsage
+    ? aiUsage.percent
+    : (aiLimit > 0 ? Math.min(100, Math.round((aiUsed / aiLimit) * 100)) : 0);
+
+  // Filas del desglose. La diferencia entre lo consumido y la suma del desglose
+  // (IA gastada antes de que el desglose existiera) se muestra como una fila
+  // "sin detalle".
+  //
+  // TODOS los porcentajes se recalculan aquí sobre el MISMO denominador. El
+  // `percent` que manda el endpoint va sobre el total del desglose, y la fila
+  // "sin detalle" no está en ese total: mezclarlos hacía que las barras
+  // sumaran >100% y que una fila de 500 tokens se dibujara más larga que una
+  // de 5,000. El denominador es max(consumido, suma del desglose) — el max
+  // cubre el caso de un contador reseteado con filas del mes ya escritas.
+  const aiBreakdownRows: { key: string; label: string; tokens: number; percent: number }[] = [];
+  if (aiUsage) {
+    const aiTotal = Math.max(aiUsage.used, aiUsage.byFeatureTotal);
+    const pctOf = (n: number) =>
+      aiTotal > 0 ? Math.max(0, Math.min(100, Math.round((n / aiTotal) * 100))) : 0;
+    for (let i = 0; i < aiUsage.byFeature.length; i++) {
+      const r = aiUsage.byFeature[i];
+      aiBreakdownRows.push({ key: r.feature, label: r.label, tokens: r.tokens, percent: pctOf(r.tokens) });
+    }
+    const aiUntracked = aiUsage.used - aiUsage.byFeatureTotal;
+    if (aiUntracked > 0) {
+      aiBreakdownRows.push({
+        key: "__untracked",
+        label: t("settings.client.aiBreakdownUntracked"),
+        tokens: aiUntracked,
+        percent: pctOf(aiUntracked),
+      });
+    }
+  }
 
   // Google Calendar status
   const gcalConnected = !!user.googleCalendarEnabled;
@@ -839,37 +928,73 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
             </div>
             <div className="card__body">
 
-            {/* Usage bar */}
-            <div className="mb-5">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-sm font-semibold text-muted-foreground flex items-center gap-1.5">
-                  <Zap size={16} strokeWidth={1.75} style={{ color: "var(--brand)" }} /> {t("settings.client.aiTokensUsedThisMonth")}
-                </span>
-                <span className="text-sm font-bold" style={{ fontVariantNumeric: "tabular-nums" }}>{aiUsed.toLocaleString()} / {aiLimit.toLocaleString()}</span>
-              </div>
-              <div className="h-2 rounded-full overflow-hidden" style={{ background: "var(--bg-elev-2)" }}>
-                <div className="h-full rounded-full"
-                  style={{ width:`${aiPercent}%`, background: aiPercent > 80 ? "var(--danger)" : aiPercent > 60 ? "var(--warning)" : "var(--brand)", transition: "width var(--dur-2) var(--ease)" }} />
-              </div>
-              <div className="flex items-center justify-between mt-1.5">
-                <span className="text-sm text-muted-foreground">{t("settings.client.aiPercentUsed", { percent: aiPercent })}</span>
-                <span className="text-sm font-semibold text-violet-600 dark:text-violet-300">{t("settings.client.aiTokensRemaining", { count: aiRemaining.toLocaleString() })}</span>
-              </div>
-            </div>
-
-            {/* Stats */}
-            <div className="grid grid-cols-3 gap-3 mb-5">
-              {[
-                { label:t("settings.client.aiStatTokensRemaining"), val:aiRemaining.toLocaleString(), color:"text-violet-600 dark:text-violet-300" },
-                { label:t("settings.client.aiStatConsultations"), val:Math.floor(aiRemaining/800).toString(), color:"text-foreground" },
-                { label:t("settings.client.aiStatEstimatedCost"),   val:`~$${((aiUsed/1_000_000)*1).toFixed(4)} USD`, color:"text-emerald-600 dark:text-emerald-300" },
-              ].map(s => (
-                <div key={s.label} className="text-center" style={{ background: "var(--bg-elev-2)", borderRadius: "var(--radius)", padding: 12 }}>
-                  <div className={`text-xl font-bold ${s.color}`} style={{ fontVariantNumeric: "tabular-nums" }}>{s.val}</div>
-                  <div className="text-xs text-muted-foreground mt-0.5">{s.label}</div>
+            {/* Un plan sin IA (BÁSICO) tiene límite 0: en vez de un medidor 0/0
+                se explica por qué no hay nada que medir. */}
+            {aiLimit > 0 ? (
+              <>
+              {/* Usage bar */}
+              <div className="mb-5">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm font-semibold text-muted-foreground flex items-center gap-1.5">
+                    <Zap size={16} strokeWidth={1.75} style={{ color: "var(--brand)" }} /> {t("settings.client.aiTokensUsedThisMonth")}
+                  </span>
+                  <span className="text-sm font-bold" style={{ fontVariantNumeric: "tabular-nums" }}>{aiUsed.toLocaleString()} / {aiLimit.toLocaleString()}</span>
                 </div>
-              ))}
-            </div>
+                <div className="h-2 rounded-full overflow-hidden" style={{ background: "var(--bg-elev-2)" }}>
+                  <div className="h-full rounded-full"
+                    style={{ width:`${aiPercent}%`, background: aiPercent > 80 ? "var(--danger)" : aiPercent > 60 ? "var(--warning)" : "var(--brand)", transition: "width var(--dur-2) var(--ease)" }} />
+                </div>
+                <div className="flex items-center justify-between mt-1.5">
+                  <span className="text-sm text-muted-foreground">{t("settings.client.aiPercentUsed", { percent: aiPercent })}</span>
+                  <span className="text-sm font-semibold text-violet-600 dark:text-violet-300">{t("settings.client.aiTokensRemaining", { count: aiRemaining.toLocaleString() })}</span>
+                </div>
+              </div>
+
+              {/* Stats */}
+              <div className="grid grid-cols-3 gap-3 mb-5">
+                {[
+                  { label:t("settings.client.aiStatTokensRemaining"), val:aiRemaining.toLocaleString(), color:"text-violet-600 dark:text-violet-300" },
+                  { label:t("settings.client.aiStatConsultations"), val:Math.floor(aiRemaining/800).toString(), color:"text-foreground" },
+                  { label:t("settings.client.aiStatEstimatedCost"),   val:`~$${((aiUsed/1_000_000)*1).toFixed(4)} USD`, color:"text-emerald-600 dark:text-emerald-300" },
+                ].map(s => (
+                  <div key={s.label} className="text-center" style={{ background: "var(--bg-elev-2)", borderRadius: "var(--radius)", padding: 12 }}>
+                    <div className={`text-xl font-bold ${s.color}`} style={{ fontVariantNumeric: "tabular-nums" }}>{s.val}</div>
+                    <div className="text-xs text-muted-foreground mt-0.5">{s.label}</div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Desglose por feature — el orden desc y el label ya vienen del endpoint */}
+              <div className="mb-5">
+                <div className="text-sm font-semibold text-muted-foreground mb-2">{t("settings.client.aiBreakdownTitle")}</div>
+                {aiBreakdownRows.length === 0 ? (
+                  <div className="text-xs text-muted-foreground">{t("settings.client.aiBreakdownEmpty")}</div>
+                ) : (
+                  <div className="space-y-2.5">
+                    {aiBreakdownRows.map(row => (
+                      <div key={row.key}>
+                        <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 mb-1">
+                          <span className="text-sm flex-1 min-w-0">{row.label}</span>
+                          <span className="text-xs text-muted-foreground" style={{ fontVariantNumeric: "tabular-nums" }}>
+                            {t("settings.client.aiBreakdownTokens", { count: row.tokens.toLocaleString() })}
+                          </span>
+                          <span className="text-xs font-semibold" style={{ fontVariantNumeric: "tabular-nums" }}>{row.percent}%</span>
+                        </div>
+                        <div className="h-2 rounded-full overflow-hidden" style={{ background: "var(--bg-elev-2)" }}>
+                          <div className="h-full rounded-full"
+                            style={{ width: `${row.percent}%`, background: "var(--brand)", transition: "width var(--dur-2) var(--ease)" }} />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+              </>
+            ) : (
+              <div className="text-sm mb-5" style={{ background: "var(--warning-soft)", border: "1px solid var(--warning-border-strong)", color: "var(--warning-strong)", borderRadius: "var(--radius)", padding: 14 }}>
+                {t("settings.client.aiNoPlanNotice")}
+              </div>
+            )}
 
             <div className="text-sm" style={{ background: "var(--brand-softer)", border: "1px solid var(--brand-soft)", color: "var(--text-2)", borderRadius: "var(--radius)", padding: 14 }}>
               <strong style={{ color: "var(--text-1)" }}>{t("settings.client.aiHowItWorksTitle")}</strong>{t("settings.client.aiHowItWorksBody")}

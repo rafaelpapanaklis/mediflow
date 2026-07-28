@@ -29,10 +29,12 @@ import {
   Receipt,
   X,
   Menu,
+  Zap,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { useT } from "@/i18n/i18n-provider";
 import type { TFunction } from "@/i18n/t";
+import { AiQuotaBanner, type AiUsageSnapshot } from "@/components/dashboard/ai-quota-banner";
 import styles from "./ai-assistant.module.css";
 
 interface Message {
@@ -118,6 +120,15 @@ function makeId() {
   return Math.random().toString(36).slice(2) + Date.now().toString(36);
 }
 
+/**
+ * Number finito o null. Los endpoints de IA pueden mandar el cupo como null
+ * (lectura fallida en el server) o no mandarlo, y el medidor jamás debe pintar
+ * NaN: todo lo que no sea un número real se descarta aquí.
+ */
+function finiteOrNull(value: unknown): number | null {
+  return typeof value === "number" && isFinite(value) ? value : null;
+}
+
 function formatTime(ts: number): string {
   const date = new Date(ts);
   return new Intl.DateTimeFormat("es-MX", {
@@ -148,6 +159,9 @@ export default function AIAssistantPage() {
   const [slashOpen, setSlashOpen] = useState(false);
   const [slashIndex, setSlashIndex] = useState(0);
   const [search, setSearch] = useState("");
+  // Consumo de IA del mes (GET /api/ai/usage). Alimenta el medidor de arriba y
+  // el aviso proactivo del banner sin que este último tenga que pedirlo otra vez.
+  const [quota, setQuota] = useState<AiUsageSnapshot | null>(null);
   // Mobile drawer del sidebar (lista de conversaciones). En desktop el
   // aside ya está visible permanentemente; en mobile pasa a off-canvas.
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
@@ -175,6 +189,73 @@ export default function AIAssistantPage() {
   useEffect(() => {
     if (conversations.length > 0) saveConversations(conversations);
   }, [conversations]);
+
+  // Lectura inicial del cupo. El medidor es SECUNDARIO: si el endpoint falla o
+  // tarda, se traga el error y el chat sigue funcionando exactamente igual.
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const res = await fetch("/api/ai/usage");
+        if (!res.ok) return;
+        const data = (await res.json()) as AiUsageSnapshot;
+        if (alive && data && finiteOrNull(data.limit) !== null) setQuota(data);
+      } catch {
+        /* silencioso: un medidor nunca debe tumbar la pantalla */
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  /**
+   * Fusiona en el medidor lo que devuelven los endpoints de IA. Ojo: el 200 de
+   * /api/ai manda `tokensUsed` de ESA llamada (no el acumulado del mes), así
+   * que `used` se DERIVA siempre de limit - remaining; el `used` del cuerpo 429
+   * sí es acumulado y se usa como fallback. Barra, % y "restantes" salen todos
+   * del mismo cálculo (idéntico al de /api/ai/usage) para que no se contradigan,
+   * y con limit 0 (plan sin IA) el porcentaje es 0 — nunca una división por cero.
+   */
+  const applyQuota = useCallback(
+    (patch: { limit?: unknown; remaining?: unknown; used?: unknown }) => {
+      setQuota((prev) => {
+        const nextLimit = finiteOrNull(patch.limit) ?? (prev ? finiteOrNull(prev.limit) : null);
+        if (nextLimit === null) return prev; // sin límite conocido no hay medidor
+
+        const limit = Math.max(0, nextLimit);
+        const patchRemaining = finiteOrNull(patch.remaining);
+        const rawUsed =
+          patchRemaining !== null && limit > 0
+            ? limit - patchRemaining
+            : (finiteOrNull(patch.used) ?? (prev ? finiteOrNull(prev.used) : null));
+        if (rawUsed === null) return prev;
+
+        const used = Math.max(0, rawUsed);
+        return {
+          ...(prev ?? {}),
+          limit,
+          used,
+          remaining: Math.max(0, limit - used),
+          percent: limit > 0 ? Math.min(100, Math.round((used / limit) * 100)) : 0,
+        };
+      });
+    },
+    [],
+  );
+
+  // Números ya saneados para pintar: se re-derivan del snapshot (venga del
+  // fetch inicial o de applyQuota) para que el render sea imposible de romper.
+  const meter = useMemo(() => {
+    const limit = Math.max(0, finiteOrNull(quota?.limit) ?? 0);
+    const used = Math.max(0, finiteOrNull(quota?.used) ?? 0);
+    return {
+      limit,
+      used,
+      remaining: Math.max(0, limit - used),
+      percent: limit > 0 ? Math.min(100, Math.round((used / limit) * 100)) : 0,
+    };
+  }, [quota]);
 
   const activeConv = useMemo(
     () => conversations.find((c) => c.id === activeId) ?? null,
@@ -307,6 +388,14 @@ export default function AIAssistantPage() {
         }),
       });
       const data = await res.json();
+      // Medidor en vivo. El 200 trae tokensLimit/tokensRemaining y el 429 trae
+      // used/limit: se aplica ANTES del throw para que, al toparse el cupo, la
+      // barra ya se vea llena cuando aparezca el error.
+      applyQuota({
+        limit: data?.tokensLimit ?? data?.limit,
+        remaining: data?.tokensRemaining,
+        used: data?.used,
+      });
       if (!res.ok) {
         throw new Error(data.error ?? t("pages.aiAssistant.errorQuery"));
       }
@@ -354,7 +443,7 @@ export default function AIAssistantPage() {
     } finally {
       setLoading(false);
     }
-  }, [activeId, input, loading, messages, t]);
+  }, [activeId, input, loading, messages, t, applyQuota]);
 
   const handleKey = useCallback((e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (slashOpen) {
@@ -410,6 +499,9 @@ export default function AIAssistantPage() {
             // ficha: si el plan no incluye IA o se acabó el cupo, hay que
             // decirlo claro en vez de caer al mensaje genérico de abajo.
             const body = await res.json().catch(() => ({} as { limit?: number }));
+            // El 429 trae used/limit acumulados: aprovecha para dejar el
+            // medidor al día en vez de que se quede con el valor anterior.
+            applyQuota({ limit: body?.limit, used: body?.used });
             toast.error(
               t(body && body.limit === 0
                 ? "pages.aiAssistant.voiceNoPlan"
@@ -424,6 +516,21 @@ export default function AIAssistantPage() {
           }
           const data = await res.json();
           if (data.text) setInput((prev) => `${prev}${prev ? " " : ""}${data.text}`);
+          // Feedback discreto del cobro del dictado. Los campos pueden llegar
+          // null (lectura de cupo fallida en el server) o no llegar: en ese
+          // caso se comporta exactamente como antes — ni toast ni medidor.
+          const charged = finiteOrNull(data?.tokensCharged);
+          const left = finiteOrNull(data?.tokensRemaining);
+          if (charged !== null && left !== null) {
+            applyQuota({ limit: data?.tokensLimit, remaining: left });
+            toast(
+              t("pages.aiAssistant.quotaDictation", {
+                used: charged.toLocaleString(),
+                remaining: left.toLocaleString(),
+              }),
+              { icon: "🎙️" },
+            );
+          }
         } catch {
           toast(t("pages.aiAssistant.voiceError"), { icon: "⚠️" });
         }
@@ -434,7 +541,7 @@ export default function AIAssistantPage() {
     } catch {
       toast.error(t("pages.aiAssistant.micError"));
     }
-  }, [recording, t]);
+  }, [recording, t, applyQuota]);
 
   const insertCommand = useCallback((cmd: string) => {
     setInput((prev) => {
@@ -596,6 +703,62 @@ export default function AIAssistantPage() {
             </button>
           </div>
         </header>
+
+        {/* ── Cupo de IA: aviso proactivo + medidor del mes ──
+            Va en la columna principal (no en el aside, que en mobile es un
+            drawer oculto) para que se vea igual en desktop y en teléfono.
+            Sin snapshot no se pinta nada: ni banda vacía ni medidor a medias. */}
+        {quota && (
+          <div className={styles.quotaStrip}>
+            <div className={styles.quotaInner}>
+              <AiQuotaBanner usage={quota} />
+              {meter.limit > 0 ? (
+                <div>
+                  <div className={styles.quotaHead}>
+                    <span className={styles.quotaLabel}>
+                      <Zap size={12} strokeWidth={2} aria-hidden style={{ color: "var(--brand)", flexShrink: 0 }} />
+                      <span className={styles.quotaLabelText}>{t("pages.aiAssistant.quotaTitle")}</span>
+                    </span>
+                    <span className={styles.quotaNumbers} style={{ fontVariantNumeric: "tabular-nums" }}>
+                      {meter.used.toLocaleString()} / {meter.limit.toLocaleString()}
+                    </span>
+                  </div>
+                  <div
+                    className="h-2 rounded-full overflow-hidden"
+                    style={{ background: "var(--bg-elev-2)" }}
+                    role="progressbar"
+                    aria-label={t("pages.aiAssistant.quotaTitle")}
+                    aria-valuenow={meter.percent}
+                    aria-valuemin={0}
+                    aria-valuemax={100}
+                  >
+                    <div
+                      className="h-full rounded-full"
+                      style={{
+                        width: `${meter.percent}%`,
+                        background: meter.percent > 80 ? "var(--danger)" : meter.percent > 60 ? "var(--warning)" : "var(--brand)",
+                        transition: "width var(--dur-2) var(--ease)",
+                      }}
+                    />
+                  </div>
+                  <div className={styles.quotaSubRow}>
+                    <span className={styles.quotaSub} style={{ fontVariantNumeric: "tabular-nums" }}>
+                      {t("pages.aiAssistant.quotaPercent", { percent: meter.percent })}
+                    </span>
+                    <span className={styles.quotaSubStrong} style={{ fontVariantNumeric: "tabular-nums" }}>
+                      {t("pages.aiAssistant.quotaRemaining", { count: meter.remaining.toLocaleString() })}
+                    </span>
+                  </div>
+                </div>
+              ) : (
+                <div className={styles.quotaNoPlan}>
+                  <Zap size={12} strokeWidth={2} aria-hidden style={{ flexShrink: 0 }} />
+                  {t("pages.aiAssistant.quotaNoPlan")}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
 
         <div className={styles.messagesScroll}>
           <div className={styles.messagesInner}>

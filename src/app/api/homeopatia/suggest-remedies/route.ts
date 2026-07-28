@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthContext } from "@/lib/auth-context";
-import { prisma } from "@/lib/prisma";
+import { addAiTokens, aiTokenLimitError } from "@/lib/ai-tokens";
 import { rateLimit } from "@/lib/rate-limit";
 
 const SYSTEM_PROMPT = `Eres un homeópata experto basado en Boericke, Kent y el Organon de Hahnemann. Dado un conjunto de síntomas rúbricos (mentales, generales y locales), sugieres los remedios más probables con su score de coincidencia (0-100) y la potencia inicial recomendada.
@@ -33,13 +33,14 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "symptoms debe ser un array no vacío" }, { status: 400 });
   }
 
-  const clinic = await prisma.clinic.findUnique({
-    where: { id: ctx.clinicId },
-    select: { aiTokensUsed: true, aiTokensLimit: true },
-  });
-  if (clinic && clinic.aiTokensUsed >= clinic.aiTokensLimit) {
-    return NextResponse.json({ error: "Límite mensual de IA alcanzado" }, { status: 429 });
-  }
+  // Mismo gate que el resto de la IA. Antes esta ruta era la ÚNICA que leía el
+  // contador crudo sin aplicar el reseteo mensual perezoso: el día 1 cobraba
+  // contra el mes viejo (falso 429 con el cupo agotado de ayer, y el desglose
+  // del mes nuevo descuadrado contra aiTokensUsed). aiTokenLimitError resetea
+  // si cambió el mes y devuelve además used/limit, así que el cliente puede
+  // distinguir "plan sin IA" (limit 0) de "se acabó el cupo".
+  const aiErr = await aiTokenLimitError(ctx.clinicId);
+  if (aiErr) return NextResponse.json(aiErr, { status: 429 });
 
   const userMsg = `Síntomas rúbricos:\n${symptoms.map((s: string, i: number) => `${i + 1}. ${s}`).join("\n")}${constitutional ? `\n\nConstitucional: ${constitutional}` : ""}\n\nResponde con el JSON exacto.`;
 
@@ -62,10 +63,7 @@ export async function POST(req: NextRequest) {
     if (!response.ok) throw new Error(data.error?.message ?? "Error API");
 
     const totalTokens = (data.usage?.input_tokens ?? 0) + (data.usage?.output_tokens ?? 0);
-    await prisma.clinic.update({
-      where: { id: ctx.clinicId },
-      data: { aiTokensUsed: { increment: totalTokens } },
-    });
+    await addAiTokens(ctx.clinicId, totalTokens, "homeopathy", ctx.userId);
 
     const text = data.content?.[0]?.text ?? "{}";
     const match = text.match(/\{[\s\S]*\}/);

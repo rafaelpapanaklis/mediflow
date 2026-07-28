@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthContext } from "@/lib/auth-context";
 import { prisma } from "@/lib/prisma";
+import { addAiTokens } from "@/lib/ai-tokens";
 import { rateLimit } from "@/lib/rate-limit";
 
 const AI_SYSTEM_PROMPT = `Eres un asistente clínico de apoyo para médicos en México. 
@@ -104,10 +105,7 @@ export async function POST(req: NextRequest) {
     const outputTokens = data.usage?.output_tokens ?? 0;
     const totalTokens  = inputTokens + outputTokens;
 
-    await prisma.clinic.update({
-      where: { id: ctx.clinicId },
-      data:  { aiTokensUsed: { increment: totalTokens } },
-    });
+    await addAiTokens(ctx.clinicId, totalTokens, "chat", ctx.userId);
 
     const reply           = data.content?.[0]?.text ?? "";
     const tokensRemaining = Math.max(0, clinic.aiTokensLimit - currentTokensUsed - totalTokens);

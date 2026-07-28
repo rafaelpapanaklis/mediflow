@@ -12,6 +12,7 @@ import { HomeDoctor } from "@/components/dashboard/home/home-doctor";
 import { HomeAdmin } from "@/components/dashboard/home/home-admin";
 import { HomeClientSwitch } from "./home-client-switch";
 import { OnboardingChecklist } from "@/components/dashboard/onboarding-checklist";
+import { AiQuotaBanner } from "@/components/dashboard/ai-quota-banner";
 import { getOnboardingCompleted } from "@/lib/onboarding-steps-server";
 
 export const dynamic = "force-dynamic";
@@ -80,6 +81,10 @@ export default async function DashboardHomePage({ searchParams }: PageProps) {
 
     return (
       <HomeShell>
+        {/* Aviso de cupo de IA — se pinta solo si la clínica pasó el 80% del
+            cupo mensual. Se auto-gatea (admin + límite > 0) y se descarta por
+            sesión; en planes sin IA (límite 0) no aparece nunca. */}
+        <AiQuotaBanner />
         {/* Checklist de primeros pasos — solo admins; se auto-oculta al 100%
             o si el usuario lo descartó (localStorage por clinicId). */}
         <OnboardingChecklist completed={onboardingCompleted} clinicId={clinic.id} />

@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import type { CSSProperties } from "react";
-import { Loader2, Mic, RotateCcw, Square, X } from "lucide-react";
+import { Coins, Loader2, Mic, RotateCcw, Square, X } from "lucide-react";
 import toast from "react-hot-toast";
 import { useT } from "@/i18n/i18n-provider";
 
@@ -13,6 +13,9 @@ import { useT } from "@/i18n/i18n-provider";
 
 /** Máximo por grabación: 60s (límite del producto; mantiene el audio <1MB). */
 const MAX_SECONDS = 60;
+
+/** Cuánto se queda visible el aviso de tokens gastados por el dictado. */
+const COST_VISIBLE_MS = 5000;
 
 /** Guard a nivel módulo: solo UNA grabación activa a la vez en toda la app. */
 let someoneRecording = false;
@@ -57,6 +60,11 @@ function micErrorKey(err: unknown): string {
   }
 }
 
+/** Número solo si vino como número finito de verdad; si no, null. */
+function numOrNull(v: unknown): number | null {
+  return typeof v === "number" && isFinite(v) ? v : null;
+}
+
 function fmt(secs: number): string {
   const m = Math.floor(secs / 60);
   const s = secs % 60;
@@ -81,11 +89,14 @@ export function DictationMic({ onText, disabled }: Props) {
   const t = useT();
   const [phase, setPhase] = useState<Phase>("idle");
   const [seconds, setSeconds] = useState(0);
+  // Aviso efímero del costo del último dictado ("" = oculto).
+  const [costMsg, setCostMsg] = useState("");
 
   const recorderRef = useRef<MediaRecorder | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const costTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const cancelledRef = useRef(false);
   const owningRef = useRef(false);
   const mimeRef = useRef("");
@@ -99,6 +110,7 @@ export function DictationMic({ onText, disabled }: Props) {
       // Limpieza dura al desmontar: descartar lo grabado sin subir nada.
       mountedRef.current = false;
       stopTimer();
+      clearCostTimer();
       const rec = recorderRef.current;
       if (rec && rec.state !== "inactive") {
         cancelledRef.current = true;
@@ -112,6 +124,27 @@ export function DictationMic({ onText, disabled }: Props) {
 
   function stopTimer() {
     if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
+  }
+
+  function clearCostTimer() {
+    if (costTimerRef.current) { clearTimeout(costTimerRef.current); costTimerRef.current = null; }
+  }
+
+  /**
+   * El dictado consume cupo de IA y hasta ahora lo gastaba EN SILENCIO: se avisa
+   * lo que costó la grabación y lo que queda, pegado al micrófono (sin quitarlo)
+   * y solo unos segundos, para no estorbar la consulta.
+   */
+  function showCost(used: number, remaining: number) {
+    clearCostTimer();
+    setCostMsg(t("clinical.dictation.tokensSpent", {
+      used: used.toLocaleString(),
+      remaining: remaining.toLocaleString(),
+    }));
+    costTimerRef.current = setTimeout(() => {
+      costTimerRef.current = null;
+      if (mountedRef.current) setCostMsg("");
+    }, COST_VISIBLE_MS);
   }
 
   function releaseStream() {
@@ -145,6 +178,8 @@ export function DictationMic({ onText, disabled }: Props) {
       return;
     }
 
+    clearCostTimer();
+    setCostMsg("");              // grabación nueva: el aviso de costo anterior ya no aplica
     retryBlobRef.current = null; // nueva grabación descarta el reintento previo
     cancelledRef.current = false;
     chunksRef.current = [];
@@ -266,9 +301,14 @@ export function DictationMic({ onText, disabled }: Props) {
       }
       const data = await res.json();
       const text = data && typeof data.text === "string" ? data.text.trim() : "";
+      // Cupo de IA que cobró el server por este dictado. Puede venir null/ausente
+      // (lectura fallida o server viejo): en ese caso no se muestra nada.
+      const used = numOrNull(data?.tokensCharged);
+      const left = numOrNull(data?.tokensRemaining);
       retryBlobRef.current = null;
       setPhase("idle");
       if (!text) { toast(t("clinical.dictation.noSpeech")); return; }
+      if (used !== null && left !== null) showCost(used, left);
       onText(text);
     } catch {
       if (!mountedRef.current) return;
@@ -363,17 +403,43 @@ export function DictationMic({ onText, disabled }: Props) {
     );
   }
 
+  // El aviso de costo va PEGADO al micrófono, nunca en su lugar: el usuario debe
+  // poder volver a dictar de inmediato. Si hay poco ancho se encoge este bloque
+  // (flexShrink alto + ellipsis) y no la etiqueta del campo, que va al lado.
   return (
-    <button
-      type="button"
-      onClick={startRecording}
-      disabled={disabled}
-      title={t("clinical.dictation.dictate")}
-      aria-label={t("clinical.dictation.dictate")}
-      className="hover:bg-muted/10 transition-colors"
-      style={{ ...btnStyle, opacity: disabled ? 0.45 : 1, cursor: disabled ? "not-allowed" : "pointer" }}
-    >
-      <Mic size={14} aria-hidden />
-    </button>
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 6, minWidth: 0, flexShrink: 8 }}>
+      {costMsg ? (
+        <span
+          role="status"
+          aria-live="polite"
+          title={costMsg}
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 5,
+            fontSize: 11,
+            color: "var(--text-3)",
+            maxWidth: 210,
+            minWidth: 0,
+          }}
+        >
+          <Coins size={12} aria-hidden style={{ flexShrink: 0 }} />
+          <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            {costMsg}
+          </span>
+        </span>
+      ) : null}
+      <button
+        type="button"
+        onClick={startRecording}
+        disabled={disabled}
+        title={t("clinical.dictation.dictate")}
+        aria-label={t("clinical.dictation.dictate")}
+        className="hover:bg-muted/10 transition-colors"
+        style={{ ...btnStyle, flexShrink: 0, opacity: disabled ? 0.45 : 1, cursor: disabled ? "not-allowed" : "pointer" }}
+      >
+        <Mic size={14} aria-hidden />
+      </button>
+    </span>
   );
 }

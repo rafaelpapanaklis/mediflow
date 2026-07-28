@@ -317,6 +317,12 @@ model Clinic {
   patientLinksAsA ClinicPatientLink[] @relation("ClinicPatientLinkA")
   patientLinksAsB ClinicPatientLink[] @relation("ClinicPatientLinkB")
 
+  // Desglose del cupo mensual de IA (aiTokensUsed) por tipo de función. Es la
+  // MISMA bolsa que aiTokensUsed/aiTokensLimit, solo que con detalle por
+  // feature. NO confundir con AiUsageEvent, que pertenece al monedero prepago
+  // del bot de WhatsApp. Requiere sql/ai-quota-usage.sql aplicado en Supabase.
+  aiQuotaUsage AiQuotaUsage[]
+
   @@map("clinics")
 }
 
@@ -7796,4 +7802,35 @@ model BlogPost {
   @@index([category])
   @@index([cluster])
   @@map("blog_posts")
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// DESGLOSE DEL CUPO MENSUAL DE IA — "¿en qué se fue tu IA este mes?"
+//
+// Una fila por cobro de tokens contra el cupo del plan
+// (clinics."aiTokensUsed"/"aiTokensLimit"). La escribe addAiTokens() en
+// @/lib/ai-tokens, que es el ÚNICO punto de cobro: el contador y este
+// desglose se mueven siempre juntos, así que sumar tokens de un mes debe dar
+// ~= aiTokensUsed de ese mes.
+//
+// ⚠️ NO es el monedero prepago del bot de WhatsApp (AiWallet/AiUsageEvent,
+// MXN en centavos): son dos bolsas distintas y no se mezclan.
+//
+// El insert es FAIL-OPEN: si falla, se loguea y la operación de IA del cliente
+// sigue. Nunca debe poder bloquear una respuesta de IA.
+//
+// Requiere sql/ai-quota-usage.sql aplicado en Supabase.
+// ═══════════════════════════════════════════════════════════════════════
+model AiQuotaUsage {
+  id        String   @id @default(cuid())
+  clinicId  String
+  feature   String // slug estable: chat | xray_analysis | dictation | ... | other
+  tokens    Int
+  userId    String? // quién lo consumió; se guarda pero NO se expone en la API v1
+  createdAt DateTime @default(now())
+
+  clinic Clinic @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+
+  @@index([clinicId, createdAt])
+  @@map("ai_quota_usage")
 }

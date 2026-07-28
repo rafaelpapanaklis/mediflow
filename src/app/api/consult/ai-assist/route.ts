@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
 import { getAuthContext } from "@/lib/auth-context";
 import { prisma } from "@/lib/prisma";
+import { addAiTokens } from "@/lib/ai-tokens";
 import { rateLimit } from "@/lib/rate-limit";
 import { hasPermission } from "@/lib/auth/permissions";
 import { assertPatientVisible } from "@/lib/patient-visibility";
@@ -169,7 +170,7 @@ export async function POST(req: NextRequest) {
       (usage.cache_creation_input_tokens ?? 0) +
       (usage.cache_read_input_tokens ?? 0);
 
-    await prisma.clinic.update({ where: { id: ctx.clinicId }, data: { aiTokensUsed: { increment: totalTokens } } });
+    await addAiTokens(ctx.clinicId, totalTokens, "consult_assist", ctx.userId);
 
     const contentBlocks: any[] = Array.isArray(data.content) ? data.content : [];
     const toolUseBlock = contentBlocks.find((b) => b?.type === "tool_use" && b?.name === REPORT_TOOL.name);

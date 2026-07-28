@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthContext } from "@/lib/auth-context";
+import { prisma } from "@/lib/prisma";
 import { rateLimit } from "@/lib/rate-limit";
 import { transcribeAudio } from "@/lib/integrations/whisper";
 import { aiTokenLimitError, addAiTokens } from "@/lib/ai-tokens";
@@ -139,10 +140,37 @@ export async function POST(req: NextRequest) {
   const seconds = billableSeconds(result.duration, audio.size);
   const tokens = Math.max(1, Math.round((seconds * AUDIO_TOKENS_PER_MINUTE) / 60));
   try {
-    await addAiTokens(ctx.clinicId, tokens);
+    await addAiTokens(ctx.clinicId, tokens, "dictation", ctx.userId);
   } catch (e) {
     console.error("[api/ai/transcribe] no se pudo cobrar el dictado:", e);
   }
 
-  return NextResponse.json({ text: (result.text || "").trim(), duration: result.duration });
+  // El dictado cobraba en silencio: la respuesta no decía nada del gasto. Se
+  // devuelve el cupo para que el cliente muestre el aviso discreto "gastaste ~N
+  // tokens, quedan M". Relectura del contador YA incrementado (addAiTokens
+  // corrió arriba), no del valor previo. FAIL-OPEN: la transcripción ya está
+  // hecha y cobrada; si esta lectura revienta, los campos van en null y el
+  // dictado sale igual.
+  let tokensRemaining: number | null = null;
+  let tokensLimit: number | null = null;
+  try {
+    const c = await prisma.clinic.findUnique({
+      where: { id: ctx.clinicId },
+      select: { aiTokensUsed: true, aiTokensLimit: true },
+    });
+    if (c) {
+      tokensLimit = c.aiTokensLimit;
+      tokensRemaining = Math.max(0, c.aiTokensLimit - c.aiTokensUsed);
+    }
+  } catch (e) {
+    console.error("[api/ai/transcribe] no se pudo leer el cupo tras cobrar:", e);
+  }
+
+  return NextResponse.json({
+    text: (result.text || "").trim(),
+    duration: result.duration,
+    tokensCharged: tokens,
+    tokensRemaining,
+    tokensLimit,
+  });
 }
