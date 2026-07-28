@@ -170,10 +170,23 @@ export const NAV = {
     { label: 'Precios', href: '#precios' },
     { label: 'Comparativa', href: '#comparativa' },
     { label: 'FAQ', href: '#faq' },
+    // Ruta real, no ancla: los consumidores normalizan con navHref().
+    { label: 'Blog', href: '/blog' },
   ],
   login: 'Iniciar sesión',
   signup: 'Crear cuenta',
 };
+
+/**
+ * NAV.links mezcla anclas de la landing ("#precios") con rutas ("/blog").
+ * Las anclas se sirven desde cualquier ruta como "/#precios"; las rutas van tal
+ * cual — prefijarlas daría "//blog", que el navegador lee como URL
+ * protocol-relative y manda a otro host.
+ */
+export function navHref(href: string): string {
+  if (href.startsWith('/') || /^[a-z][a-z0-9+.-]*:/i.test(href)) return href;
+  return `/${href}`;
+}
 
 /** Banda azul degradada (#1e3a8a→#2563eb), números blancos gigantes */
 export const STATS = [
@@ -355,11 +368,10 @@ export const FINAL_CTA = {
 
 export const FOOTER = {
   blurb: 'El software de gestión para clínicas dentales en México. Todo en un solo lugar, en español y en pesos.',
-  // El footer renderiza href={`/${l.href}`}, por eso las anclas van sin "/"
-  // ("#precios" → "/#precios") y el blog va como "blog" → "/blog". Se añade
-  // sólo aquí y no en NAV.links para no meter un link de ruta entre las
-  // anclas del nav superior.
-  product: [...NAV.links, { label: 'Blog', href: 'blog' }],
+  // Nav y footer comparten los mismos links y los normalizan con navHref():
+  // las anclas salen como "/#precios" y las rutas ("/blog") tal cual. Blog ya
+  // vive en NAV.links, por eso aquí no se vuelve a añadir.
+  product: [...NAV.links],
   legal: [
     { label: 'Aviso de privacidad', href: '/privacidad' },
     { label: 'Términos y condiciones', href: '/terminos' },

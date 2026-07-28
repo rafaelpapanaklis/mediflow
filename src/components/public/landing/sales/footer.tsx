@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { FOOTER } from "./v2/landing-data";
+import { FOOTER, navHref } from "./v2/landing-data";
 import { BrandGlyph } from "../primitives/logo";
 import "./v2/landing-v2.css";
 
@@ -27,7 +27,7 @@ export function SalesFooter() {
               <div style={colTitle}>Producto</div>
               <div style={col}>
                 {FOOTER.product.map((l) => (
-                  <a key={l.href} href={`/${l.href}`} className="dcv2-footer-link">{l.label}</a>
+                  <a key={l.href} href={navHref(l.href)} className="dcv2-footer-link">{l.label}</a>
                 ))}
               </div>
             </div>

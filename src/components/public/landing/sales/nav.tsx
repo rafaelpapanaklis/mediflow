@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { NAV } from "./v2/landing-data";
+import { NAV, navHref } from "./v2/landing-data";
 import { BrandGlyph, BRAND } from "../primitives/logo";
 import "./v2/landing-v2.css";
 
@@ -26,7 +26,7 @@ export function SalesNav({ isLoggedIn = false }: { isLoggedIn?: boolean }) {
         </Link>
         <div className="dcv2-nav-anchors" style={{ display: "flex", alignItems: "center", gap: 4, flexWrap: "wrap", marginLeft: "auto" }}>
           {NAV.links.map((l) => (
-            <a key={l.href} href={`/${l.href}`} className="dcv2-navlink">{l.label}</a>
+            <a key={l.href} href={navHref(l.href)} className="dcv2-navlink">{l.label}</a>
           ))}
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 10, marginLeft: "auto" }}>
