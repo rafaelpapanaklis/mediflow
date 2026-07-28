@@ -1,0 +1,493 @@
+/* ═══════════════════════════════════════════════════════════════════════
+   DaleControl · Blog SEO público — estilos scoped a `.blog-*`
+   ───────────────────────────────────────────────────────────────────────
+   NO toca globals.css. Todo va bajo clases `blog-*` y `.blog-prose` define
+   SUS PROPIAS variables con colores explícitos, sin heredar tokens de
+   `.mfh` ni del panel: así el mismo renderer se ve idéntico en la ficha
+   pública (fondo blanco, sales.css) y en la vista previa del editor del
+   admin (chrome oscuro). Un solo markdown, un solo resultado.
+
+   Responsive por construcción: grids con auto-fill + minmax, tipografía en
+   clamp(), cero anchos fijos, y las tablas/bloques de código hacen scroll
+   dentro de su caja — el body nunca se desborda en horizontal.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* ── Chips de categoría ──────────────────────────────────────────────── */
+.blog-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.blog-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--line, #e9e7f3);
+  background: #fff;
+  color: var(--body, #475569);
+  font-size: 13.5px;
+  font-weight: 600;
+  line-height: 1.2;
+  text-decoration: none;
+  transition: border-color .15s ease, color .15s ease, background .15s ease;
+}
+.blog-chip:hover {
+  border-color: var(--b, #7c3aed);
+  color: var(--b2, #6d28d9);
+  background: var(--v50, #f5f3ff);
+}
+.blog-chip--active {
+  background: var(--b, #7c3aed);
+  border-color: var(--b, #7c3aed);
+  color: #fff;
+}
+.blog-chip--active:hover {
+  background: var(--b2, #6d28d9);
+  border-color: var(--b2, #6d28d9);
+  color: #fff;
+}
+.blog-chip__n {
+  font-size: 12px;
+  font-weight: 600;
+  opacity: .6;
+}
+
+/* ── Rejilla de tarjetas ─────────────────────────────────────────────── */
+.blog-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr));
+  gap: 22px;
+}
+
+.blog-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 22px;
+  border: 1px solid var(--line, #e9e7f3);
+  border-radius: var(--r, 16px);
+  background: #fff;
+  text-decoration: none;
+  color: inherit;
+  min-width: 0;
+  transition: transform .16s ease, box-shadow .16s ease, border-color .16s ease;
+}
+.blog-card:hover {
+  transform: translateY(-3px);
+  border-color: var(--v200, #ddd6fe);
+  box-shadow: 0 18px 40px -22px rgba(76, 29, 149, .35);
+}
+.blog-card__cat {
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+  color: var(--b2, #6d28d9);
+}
+.blog-card__title {
+  margin: 0;
+  font-size: 18.5px;
+  line-height: 1.32;
+  letter-spacing: -0.015em;
+  font-weight: 700;
+  color: var(--ink, #0f172a);
+  overflow-wrap: anywhere;
+}
+.blog-card__excerpt {
+  margin: 0;
+  font-size: 14.5px;
+  line-height: 1.6;
+  color: var(--body, #475569);
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.blog-card__meta {
+  margin-top: auto;
+  padding-top: 6px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+  color: var(--muted, #64748b);
+}
+.blog-card__dot {
+  width: 3px;
+  height: 3px;
+  border-radius: 999px;
+  background: currentColor;
+  opacity: .55;
+}
+
+/* ── Estado vacío ────────────────────────────────────────────────────── */
+.blog-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  text-align: center;
+  padding: clamp(48px, 9vw, 88px) 24px;
+  border: 1px dashed var(--line, #e9e7f3);
+  border-radius: var(--r-lg, 22px);
+  background: var(--tint2, #faf8ff);
+}
+.blog-empty__title {
+  margin: 0;
+  font-size: clamp(20px, 3vw, 26px);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--ink, #0f172a);
+}
+.blog-empty__text {
+  margin: 0;
+  max-width: 46ch;
+  font-size: 15px;
+  line-height: 1.65;
+  color: var(--body, #475569);
+}
+
+/* ── Paginación ──────────────────────────────────────────────────────── */
+.blog-pager {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+.blog-pager__link,
+.blog-pager__state {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 9px 16px;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 600;
+  text-decoration: none;
+  border: 1px solid var(--line, #e9e7f3);
+  background: #fff;
+  color: var(--b2, #6d28d9);
+}
+.blog-pager__link:hover {
+  border-color: var(--b, #7c3aed);
+  background: var(--v50, #f5f3ff);
+}
+.blog-pager__state {
+  border-color: transparent;
+  background: transparent;
+  color: var(--muted, #64748b);
+  font-weight: 500;
+}
+
+/* ── Cabecera del artículo ───────────────────────────────────────────── */
+.blog-article {
+  width: 100%;
+  max-width: 760px;
+  margin: 0 auto;
+  min-width: 0;
+}
+.blog-breadcrumb {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--muted, #64748b);
+}
+.blog-breadcrumb a {
+  color: var(--muted, #64748b);
+  text-decoration: none;
+}
+.blog-breadcrumb a:hover { color: var(--b2, #6d28d9); }
+.blog-breadcrumb__current { color: var(--ink, #0f172a); }
+
+.blog-article__title {
+  margin: 16px 0 0;
+  font-size: clamp(29px, 4.4vw, 44px);
+  line-height: 1.14;
+  letter-spacing: -0.028em;
+  font-weight: 700;
+  color: var(--ink, #0f172a);
+  overflow-wrap: anywhere;
+}
+.blog-article__lede {
+  margin: 14px 0 0;
+  font-size: clamp(16.5px, 2vw, 19px);
+  line-height: 1.62;
+  color: var(--body, #475569);
+}
+.blog-article__meta {
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line, #e9e7f3);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  font-size: 13.5px;
+  color: var(--muted, #64748b);
+}
+.blog-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-top: 22px;
+}
+.blog-tag {
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--muted, #64748b);
+  background: var(--v50, #f5f3ff);
+  border: 1px solid var(--line, #e9e7f3);
+  border-radius: 999px;
+  padding: 4px 11px;
+}
+
+/* ══ Tipografía del contenido ═════════════════════════════════════════ */
+/* Autónoma: define sus propios colores y no depende de `.mfh` ni del panel. */
+.blog-prose {
+  --bp-ink: #0f172a;
+  --bp-body: #334155;
+  --bp-muted: #64748b;
+  --bp-line: #e5e7eb;
+  --bp-accent: #6d28d9;
+  --bp-soft: #f8fafc;
+  --bp-code-bg: #f1f5f9;
+
+  color: var(--bp-body);
+  font-size: clamp(16px, 1.15vw, 17.5px);
+  line-height: 1.78;
+  letter-spacing: -0.003em;
+  overflow-wrap: break-word;
+  color-scheme: light;
+}
+.blog-prose > *:first-child { margin-top: 0; }
+.blog-prose > *:last-child  { margin-bottom: 0; }
+
+.blog-prose h2,
+.blog-prose h3,
+.blog-prose h4 {
+  color: var(--bp-ink);
+  font-weight: 700;
+  letter-spacing: -0.021em;
+  line-height: 1.28;
+  scroll-margin-top: 90px;
+}
+.blog-prose h2 { font-size: clamp(22px, 2.6vw, 28px); margin: 2.1em 0 .7em; }
+.blog-prose h3 { font-size: clamp(18.5px, 2.1vw, 21px); margin: 1.8em 0 .6em; }
+.blog-prose h4 { font-size: 17px; margin: 1.5em 0 .5em; }
+
+.blog-prose p { margin: 0 0 1.15em; }
+
+.blog-prose a {
+  color: var(--bp-accent);
+  text-decoration: underline;
+  text-underline-offset: 2.5px;
+  text-decoration-thickness: 1px;
+}
+.blog-prose a:hover { text-decoration-thickness: 2px; }
+
+.blog-prose strong { color: var(--bp-ink); font-weight: 650; }
+
+.blog-prose ul,
+.blog-prose ol { margin: 0 0 1.15em; padding-left: 1.4em; }
+.blog-prose li { margin: .38em 0; }
+.blog-prose li::marker { color: var(--bp-accent); }
+.blog-prose ul ul,
+.blog-prose ol ol,
+.blog-prose ul ol,
+.blog-prose ol ul { margin-bottom: .3em; }
+
+.blog-prose blockquote {
+  margin: 1.5em 0;
+  padding: 2px 0 2px 18px;
+  border-left: 3px solid var(--bp-accent);
+  color: var(--bp-muted);
+  font-style: italic;
+}
+.blog-prose blockquote p:last-child { margin-bottom: 0; }
+
+.blog-prose hr {
+  border: 0;
+  height: 1px;
+  background: var(--bp-line);
+  margin: 2.2em 0;
+}
+
+.blog-prose code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: .88em;
+  background: var(--bp-code-bg);
+  border: 1px solid var(--bp-line);
+  border-radius: 5px;
+  padding: 1.5px 5px;
+  overflow-wrap: anywhere;
+}
+.blog-prose pre {
+  margin: 1.5em 0;
+  padding: 16px 18px;
+  background: #0f172a;
+  border-radius: 12px;
+  overflow-x: auto;
+  max-width: 100%;
+}
+.blog-prose pre code {
+  background: transparent;
+  border: 0;
+  padding: 0;
+  color: #e2e8f0;
+  font-size: 13.5px;
+  line-height: 1.65;
+  overflow-wrap: normal;
+  white-space: pre;
+}
+
+.blog-prose img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  border-radius: 12px;
+  margin: 1.6em 0;
+}
+
+/* GFM: la tabla hace scroll DENTRO de su caja (ver components.table). */
+.blog-prose__tablewrap {
+  margin: 1.6em 0;
+  overflow-x: auto;
+  max-width: 100%;
+  border: 1px solid var(--bp-line);
+  border-radius: 12px;
+}
+.blog-prose table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14.5px;
+}
+.blog-prose th,
+.blog-prose td {
+  padding: 10px 14px;
+  text-align: left;
+  border-bottom: 1px solid var(--bp-line);
+  vertical-align: top;
+}
+.blog-prose thead th {
+  background: var(--bp-soft);
+  color: var(--bp-ink);
+  font-weight: 650;
+  white-space: nowrap;
+}
+.blog-prose tbody tr:last-child td { border-bottom: 0; }
+
+/* GFM task lists */
+.blog-prose input[type="checkbox"] { margin-right: .5em; }
+.blog-prose li.task-list-item { list-style: none; margin-left: -1.2em; }
+
+/* ── FAQ (acordeón nativo <details>) ─────────────────────────────────── */
+.blog-faq {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.blog-faq__item {
+  border: 1px solid var(--line, #e9e7f3);
+  border-radius: 12px;
+  background: #fff;
+  overflow: hidden;
+}
+.blog-faq__item[open] { border-color: var(--v200, #ddd6fe); }
+.blog-faq__q {
+  cursor: pointer;
+  list-style: none;
+  padding: 15px 18px;
+  font-size: 15.5px;
+  font-weight: 650;
+  color: var(--ink, #0f172a);
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+}
+.blog-faq__q::-webkit-details-marker { display: none; }
+.blog-faq__q:hover { color: var(--b2, #6d28d9); }
+.blog-faq__sign {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  margin-top: 2px;
+  position: relative;
+  color: var(--b, #7c3aed);
+}
+.blog-faq__sign::before,
+.blog-faq__sign::after {
+  content: "";
+  position: absolute;
+  background: currentColor;
+  border-radius: 2px;
+  transition: transform .18s ease, opacity .18s ease;
+}
+.blog-faq__sign::before { top: 8px; left: 2px; width: 14px; height: 2px; }
+.blog-faq__sign::after  { top: 2px; left: 8px; width: 2px; height: 14px; }
+.blog-faq__item[open] .blog-faq__sign::after { transform: rotate(90deg); opacity: 0; }
+.blog-faq__a {
+  padding: 0 18px 16px;
+  font-size: 14.8px;
+  line-height: 1.7;
+  color: var(--body, #475569);
+  white-space: pre-wrap;
+}
+
+/* ── CTA final (SIN cifras: los precios viven sólo en la landing) ────── */
+.blog-cta {
+  margin-top: 40px;
+  padding: clamp(26px, 4vw, 38px);
+  border-radius: var(--r-lg, 22px);
+  border: 1px solid var(--v200, #ddd6fe);
+  background:
+    radial-gradient(120% 140% at 0% 0%, var(--v50, #f5f3ff) 0%, transparent 60%),
+    #fff;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+}
+.blog-cta__title {
+  margin: 0 0 6px;
+  font-size: clamp(19px, 2.4vw, 24px);
+  font-weight: 700;
+  letter-spacing: -0.022em;
+  color: var(--ink, #0f172a);
+}
+.blog-cta__text {
+  margin: 0;
+  font-size: 14.8px;
+  line-height: 1.6;
+  color: var(--body, #475569);
+  max-width: 52ch;
+}
+
+/* ── Relacionados ────────────────────────────────────────────────────── */
+.blog-related__title {
+  margin: 0 0 18px;
+  font-size: clamp(19px, 2.4vw, 23px);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--ink, #0f172a);
+}
+
+/* ── Vista previa del editor (admin) ─────────────────────────────────── */
+/* Caja blanca sobre el chrome oscuro del panel para que el markdown se lea
+   igual que en producción. */
+.blog-preview-surface {
+  background: #fff;
+  border-radius: 12px;
+  padding: 22px;
+  max-height: 620px;
+  overflow-y: auto;
+  overflow-x: hidden;
+}

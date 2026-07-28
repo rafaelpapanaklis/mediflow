@@ -355,7 +355,11 @@ export const FINAL_CTA = {
 
 export const FOOTER = {
   blurb: 'El software de gestión para clínicas dentales en México. Todo en un solo lugar, en español y en pesos.',
-  product: NAV.links,
+  // El footer renderiza href={`/${l.href}`}, por eso las anclas van sin "/"
+  // ("#precios" → "/#precios") y el blog va como "blog" → "/blog". Se añade
+  // sólo aquí y no en NAV.links para no meter un link de ruta entre las
+  // anclas del nav superior.
+  product: [...NAV.links, { label: 'Blog', href: 'blog' }],
   legal: [
     { label: 'Aviso de privacidad', href: '/privacidad' },
     { label: 'Términos y condiciones', href: '/terminos' },

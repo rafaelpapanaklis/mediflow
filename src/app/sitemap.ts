@@ -3,6 +3,8 @@ import { SPECIALTY_SLUGS } from "@/lib/specialty-data";
 import { SITE_URL } from "@/lib/seo";
 import { getCategoryCityCombos, getListedClinicSlugs } from "@/lib/directory/query";
 import { DIRECTORY_CATEGORIES } from "@/lib/directory/types";
+import { BLOG_CATEGORIES } from "@/lib/blog/categories";
+import { listPublishedForSitemap } from "@/lib/blog/queries";
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const now = new Date();
@@ -11,6 +13,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     { url: `${SITE_URL}/`,         lastModified: now, changeFrequency: "weekly", priority: 1.0 },
     { url: `${SITE_URL}/clinicas`, lastModified: now, changeFrequency: "weekly", priority: 0.7 },
     { url: `${SITE_URL}/descubre`, lastModified: now, changeFrequency: "weekly", priority: 0.8 },
+    { url: `${SITE_URL}/blog`,     lastModified: now, changeFrequency: "daily",  priority: 0.8 },
   ];
 
   const specialtyEntries: MetadataRoute.Sitemap = SPECIALTY_SLUGS.map((slug) => ({
@@ -56,11 +59,37 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     clinicEntries = [];
   }
 
+  // Categorías del blog — lista ESTÁTICA, sin DB (siempre segura).
+  const blogCategoryEntries: MetadataRoute.Sitemap = BLOG_CATEGORIES.map((c) => ({
+    url: `${SITE_URL}/blog/categoria/${c.slug}`,
+    lastModified: now,
+    changeFrequency: "weekly",
+    priority: 0.5,
+  }));
+
+  // Artículos PUBLICADOS (DB, cap 5000). Los borradores y los programados no
+  // salen: listPublishedForSitemap filtra por status en el where. En build sin
+  // DATABASE_URL → [].
+  let blogPostEntries: MetadataRoute.Sitemap = [];
+  try {
+    const posts = await listPublishedForSitemap();
+    blogPostEntries = posts.map((p) => ({
+      url: `${SITE_URL}/blog/${p.slug}`,
+      lastModified: p.lastModified,
+      changeFrequency: "monthly",
+      priority: 0.7,
+    }));
+  } catch {
+    blogPostEntries = [];
+  }
+
   return [
     ...staticEntries,
     ...specialtyEntries,
     ...categoryEntries,
     ...comboEntries,
     ...clinicEntries,
+    ...blogCategoryEntries,
+    ...blogPostEntries,
   ];
 }

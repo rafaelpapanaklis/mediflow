@@ -7742,3 +7742,58 @@ model ClinicPatientLink {
   @@index([clinicBId])
   @@map("clinic_patient_links")
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BLOG SEO PÚBLICO — contenido GLOBAL de marca (dalecontrol.com/blog).
+//
+// Sin `clinicId` A PROPÓSITO: no es multi-tenant. Los artículos los publica
+// DaleControl y los ve todo internet; no hay aislamiento por clínica que
+// respetar. El admin de plataforma (/admin/blog) es el único que escribe.
+//
+// Los artículos llegan YA REDACTADOS por el importador JSON (no se generan
+// aquí: cero llamadas a IA en este módulo) y se publican en goteo con el cron
+// /api/cron/blog-publish, que promueve `scheduled` → `published`.
+//
+// Timestamps con timezone (@db.Timestamptz) — a diferencia del resto del
+// schema, que usa timestamp(3) sin tz: la programación del drip razona en
+// horario absoluto (13:00 UTC) y una columna naive dejaría la hora ambigua.
+//
+// Requiere sql/blog.sql aplicado a mano en Supabase (no usamos prisma migrate).
+model BlogPost {
+  id              String    @id @default(cuid())
+  // slug: ^[a-z0-9]+(-[a-z0-9]+)*$, máx 90 — validado en la app y con CHECK en BD.
+  slug            String    @unique
+  title           String
+  metaTitle       String
+  metaDescription String
+  excerpt         String
+  // Markdown PURO. Se renderiza con react-markdown + remark-gfm; el HTML crudo
+  // NO se interpreta (sin rehype-raw, sin dangerouslySetInnerHTML).
+  contentMd       String
+  // Slug de la lista fija de src/lib/blog/categories.ts (sin enum a propósito).
+  category        String
+  // Cluster temático para el interlinking. Nullable: un artículo suelto creado
+  // a mano no pertenece a ningún cluster, y '' arruinaría el fallback de
+  // "artículos relacionados" (agruparía a todos los huérfanos entre sí).
+  cluster         String?
+  tags            String[]  @default([])
+  // Array de { q, a } — se renderiza como acordeón + JSON-LD FAQPage.
+  faq             Json?
+  relatedSlugs    String[]  @default([])
+  // draft | scheduled | published | archived (ver BLOG_STATUSES).
+  status          String    @default("draft")
+  scheduledAt     DateTime? @db.Timestamptz(3)
+  publishedAt     DateTime? @db.Timestamptz(3)
+  author          String    @default("Equipo DaleControl")
+  readingMinutes  Int       @default(0)
+  createdAt       DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAt       DateTime  @updatedAt @db.Timestamptz(3)
+
+  // (status, scheduledAt) → barrido del cron. (status, publishedAt DESC) → índice
+  // público y RSS. category/cluster → filtrado y relacionados.
+  @@index([status, scheduledAt])
+  @@index([status, publishedAt(sort: Desc)])
+  @@index([category])
+  @@index([cluster])
+  @@map("blog_posts")
+}
