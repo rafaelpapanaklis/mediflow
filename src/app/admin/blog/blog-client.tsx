@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
-import { Archive, ExternalLink, Pencil, Plus, Search, Send, Trash2 } from "lucide-react";
+import { Archive, ExternalLink, Eye, Pencil, Plus, Search, Send, Trash2 } from "lucide-react";
 import { CardNew } from "@/components/ui/design-system/card-new";
 import { ButtonNew } from "@/components/ui/design-system/button-new";
 import { BadgeNew } from "@/components/ui/design-system/badge-new";
@@ -329,6 +329,22 @@ export function BlogClient({ initial }: { initial: ListPayload }) {
                                 Archivar
                               </ButtonNew>
                             )}
+                            {/* Vistas: indicador, no acción — no es clickeable. */}
+                            <span
+                              title="Vistas"
+                              aria-label="Vistas"
+                              style={{
+                                display: "inline-flex",
+                                alignItems: "center",
+                                gap: 4,
+                                fontSize: 11.5,
+                                color: "var(--text-3)",
+                                padding: "0 6px",
+                                whiteSpace: "nowrap",
+                              }}
+                            >
+                              <Eye size={13} /> {(p.views ?? 0).toLocaleString("es-MX")}
+                            </span>
                             <ButtonNew
                               size="sm"
                               variant="ghost"

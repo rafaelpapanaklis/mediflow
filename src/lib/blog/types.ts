@@ -154,6 +154,8 @@ export interface BlogPostDTO {
   publishedAt: string | null;
   author: string;
   readingMinutes: number;
+  /** Vistas públicas acumuladas. 0 en los selects que no la traen (tarjetas). */
+  views: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -186,6 +188,7 @@ export function toBlogPostDTO(row: any): BlogPostDTO {
     publishedAt: iso(row.publishedAt),
     author: row.author ?? "Equipo DaleControl",
     readingMinutes: row.readingMinutes ?? 1,
+    views: row.views ?? 0,
     createdAt: iso(row.createdAt) ?? "",
     updatedAt: iso(row.updatedAt) ?? "",
   };

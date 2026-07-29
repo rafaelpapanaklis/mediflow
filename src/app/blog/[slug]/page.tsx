@@ -6,6 +6,7 @@ import { SalesNavSession } from "@/components/public/landing/nav-session";
 import { SalesFooter } from "@/components/public/landing/sales";
 import { buildMetadata, SITE_URL } from "@/lib/seo";
 import { JsonLd } from "@/components/blog/json-ld";
+import { ViewTracker } from "@/components/blog/view-tracker";
 import { BlogMarkdown } from "@/components/blog/markdown";
 import { BlogCta, BlogFaq, BlogRelated } from "@/components/blog/ui";
 import { getPublishedPostBySlug, getRelatedPosts } from "@/lib/blog/queries";
@@ -176,6 +177,7 @@ export default async function BlogPostPage({ params }: Props) {
         </section>
       </main>
       <SalesFooter />
+      <ViewTracker slug={post.slug} />
       <JsonLd data={articleLd} />
       <JsonLd data={breadcrumbLd} />
       {faqLd ? <JsonLd data={faqLd} /> : null}

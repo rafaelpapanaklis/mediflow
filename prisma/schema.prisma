@@ -7792,6 +7792,9 @@ model BlogPost {
   publishedAt     DateTime? @db.Timestamptz(3)
   author          String    @default("Equipo DaleControl")
   readingMinutes  Int       @default(0)
+  // Vistas de la página pública. Se incrementa vía /api/blog/view (los bots se
+  // excluyen por User-Agent); nunca desde el render del server, que es ISR.
+  views           Int       @default(0)
   createdAt       DateTime  @default(now()) @db.Timestamptz(3)
   updatedAt       DateTime  @updatedAt @db.Timestamptz(3)
 
