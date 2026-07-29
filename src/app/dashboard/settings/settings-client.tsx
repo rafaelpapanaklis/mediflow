@@ -70,6 +70,13 @@ const REGIMENES   = [
   { clave:"616", desc:"Sin obligaciones fiscales" },
 ];
 
+/** Tokens promedio de un análisis de consulta con IA (lee expediente completo: paciente,
+ *  odontograma, consultas previas, recetas, tratamientos). Medido ~3k-8k; usamos 5k como
+ *  promedio conservador para NO inflar la estimación que ve la clínica. El chat corto
+ *  (~800) es mucho más barato, así que este número subestima a propósito el total de
+ *  interacciones posibles: es la cota realista para la función que más consume. */
+const AVG_CONSULT_TOKENS = 5000;
+
 interface TeamMember { id: string; firstName: string; lastName: string; role: string; services: string[] }
 interface Props { user: any; clinic: any; initialTab?: string; gcalStatus?: string; teamMembers?: TeamMember[] }
 
@@ -954,7 +961,7 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
               <div className="grid grid-cols-3 gap-3 mb-5">
                 {[
                   { label:t("settings.client.aiStatTokensRemaining"), val:aiRemaining.toLocaleString(), color:"text-violet-600 dark:text-violet-300" },
-                  { label:t("settings.client.aiStatConsultations"), val:Math.floor(aiRemaining/800).toString(), color:"text-foreground" },
+                  { label:t("settings.client.aiStatConsultations"), val:Math.floor(aiRemaining/AVG_CONSULT_TOKENS).toString(), color:"text-foreground" },
                   { label:t("settings.client.aiStatEstimatedCost"),   val:`~$${((aiUsed/1_000_000)*1).toFixed(4)} USD`, color:"text-emerald-600 dark:text-emerald-300" },
                 ].map(s => (
                   <div key={s.label} className="text-center" style={{ background: "var(--bg-elev-2)", borderRadius: "var(--radius)", padding: 12 }}>
