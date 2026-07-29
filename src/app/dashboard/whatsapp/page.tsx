@@ -14,6 +14,7 @@ export default async function WhatsAppPage() {
       connected={user.clinic.waConnected ?? false}
       phoneNumberId={user.clinic.waPhoneNumberId ?? ""}
       wabaId={user.clinic.waBusinessAccountId ?? ""}
+      connMethod={user.clinic.waConnMethod ?? ""}
       reminderMsg={user.clinic.waReminderMsg ?? ""}
       reminder24h={user.clinic.waReminder24h ?? true}
       reminder1h={user.clinic.waReminder1h ?? false}

@@ -1,0 +1,476 @@
+/* ═══════════════════════════════════════════════════════════════════
+   /dashboard/whatsapp — conexión por coexistence (Embedded Signup)
+   Todo el color sale de los tokens semánticos de globals.css, así que
+   dark mode es automático. Las dos únicas excepciones son las tintas de
+   texto sobre fondos "soft" (--wa-*-ink), que siguen el mismo patrón que
+   .badge-new--brand/--success en globals.css: claro = tinta profunda,
+   oscuro = tinta pastel.
+   ═══════════════════════════════════════════════════════════════════ */
+
+.page {
+  padding: clamp(14px, 1.6vw, 28px);
+  max-width: 1400px;
+  margin: 0 auto;
+
+  --wa-brand-ink: #6d28d9;
+  --wa-success-ink: #047857;
+}
+:global(.dark) .page {
+  --wa-brand-ink: #c4b5fd;
+  --wa-success-ink: #6ee7b7;
+}
+
+/* ── Cabecera ─────────────────────────────────────────────────── */
+.header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 22px;
+}
+.headerId {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+.headerIcon {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  background: var(--success-soft);
+  border: 1px solid var(--border-soft);
+  color: var(--wa-success-ink);
+}
+.title {
+  margin: 0;
+  font-size: clamp(17px, 1.4vw, 22px);
+  letter-spacing: -0.02em;
+  font-weight: 600;
+  color: var(--text-1);
+}
+.subtitle {
+  margin: 4px 0 0;
+  font-size: 13px;
+  color: var(--text-3);
+}
+.headerActions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+/* ── Desconectado ─────────────────────────────────────────────── */
+.intro {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.hero {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-lg);
+  background:
+    radial-gradient(130% 150% at 0% 0%, var(--brand-soft) 0%, transparent 62%),
+    var(--bg-elev);
+  box-shadow: var(--shadow-1);
+  padding: clamp(20px, 3vw, 32px);
+}
+.heroTitle {
+  margin: 0;
+  font-size: clamp(20px, 2.2vw, 28px);
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+  font-weight: 700;
+  color: var(--text-1);
+}
+.heroSub {
+  margin: 10px 0 0;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--text-2);
+  max-width: 62ch;
+}
+
+/* El CTA primario manda: alto 48 y ancho completo en móvil. */
+.heroCta {
+  margin-top: 22px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 12px;
+}
+.heroCta :global(.btn-new--primary) {
+  height: 48px;
+  padding: 0 24px;
+  font-size: 14.5px;
+  border-radius: 12px;
+}
+@media (max-width: 560px) {
+  .heroCta {
+    align-items: stretch;
+  }
+  .heroCta :global(.btn-new--primary) {
+    width: 100%;
+    justify-content: center;
+  }
+}
+
+.manualLink {
+  align-self: flex-start;
+  background: none;
+  border: none;
+  padding: 2px 0;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-3);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+.manualLink:hover {
+  color: var(--wa-brand-ink);
+}
+
+/* ── Tarjetas "Cómo funciona" / "Lo que necesitas" ────────────── */
+.cards {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 14px;
+}
+@media (min-width: 900px) {
+  .cards {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.steps {
+  display: flex;
+  flex-direction: column;
+}
+.step {
+  position: relative;
+  display: flex;
+  gap: 12px;
+  padding-bottom: 18px;
+}
+.step:last-child {
+  padding-bottom: 0;
+}
+/* Hilo que une los 3 pasos (decorativo). */
+.step:not(:last-child)::before {
+  content: "";
+  position: absolute;
+  left: 17px;
+  top: 40px;
+  bottom: 6px;
+  width: 1px;
+  background: var(--border-soft);
+}
+.stepIcon {
+  width: 36px;
+  height: 36px;
+  border-radius: 11px;
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  background: var(--brand-soft);
+  border: 1px solid var(--border-soft);
+  color: var(--wa-brand-ink);
+}
+.stepBody {
+  min-width: 0;
+  padding-top: 2px;
+}
+.stepTitle {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--text-1);
+}
+.stepDesc {
+  margin-top: 3px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-3);
+}
+
+.needs {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.need {
+  display: flex;
+  gap: 11px;
+}
+.needIcon {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  margin-top: 1px;
+  display: grid;
+  place-items: center;
+  background: var(--success-soft);
+  border: 1px solid var(--border-soft);
+  color: var(--wa-success-ink);
+}
+.needTitle {
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.45;
+  color: var(--text-1);
+}
+.needDesc {
+  margin-top: 3px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-3);
+}
+.needsHelp {
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border-soft);
+}
+.helpLink {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--wa-brand-ink);
+  text-decoration: none;
+}
+.helpLink:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+/* ── Nota de facturación de Meta (neutra, sin alarmar) ────────── */
+.billing {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  background: var(--bg-elev-2);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-lg);
+  padding: 14px 16px;
+}
+.billingCompact {
+  padding: 12px 14px;
+  border-radius: var(--radius);
+}
+.billingIcon {
+  flex-shrink: 0;
+  margin-top: 1px;
+  color: var(--text-3);
+}
+.billingLabel {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-1);
+}
+.billingBody {
+  margin-top: 3px;
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--text-2);
+}
+.billingCta {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--wa-brand-ink);
+  text-decoration: none;
+}
+.billingCta:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+/* ── Conexión manual (avanzada) ───────────────────────────────── */
+.manualPane {
+  max-width: 720px;
+}
+.formStack {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.hint {
+  font-size: 10px;
+  color: var(--text-4);
+}
+.tokenWrap {
+  position: relative;
+}
+.tokenToggle {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: grid;
+  place-items: center;
+  background: transparent;
+  border: none;
+  padding: 4px;
+  color: var(--text-3);
+  cursor: pointer;
+}
+.tokenToggle:hover {
+  color: var(--text-1);
+}
+.formActions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* ── Conectado ────────────────────────────────────────────────── */
+.doneGrid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 14px;
+  max-width: 1200px;
+}
+@media (min-width: 1024px) {
+  .doneGrid {
+    grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+  }
+}
+.col {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.toggles {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.toggle {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--border-soft);
+  transition: background 0.15s, border-color 0.15s;
+}
+.toggleOn {
+  border-color: rgba(16, 185, 129, 0.28);
+  background: var(--success-soft);
+}
+
+.msgTextarea {
+  height: 120px;
+  padding-top: 10px;
+  resize: vertical;
+}
+.resetMsg {
+  margin-top: 8px;
+  background: transparent;
+  border: none;
+  padding: 0;
+  font: inherit;
+  font-size: 11px;
+  color: var(--text-3);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+.resetMsg:hover {
+  color: var(--text-1);
+}
+.previewBox {
+  margin-top: 14px;
+  background: var(--bg-elev-2);
+  border: 1px solid var(--border-soft);
+  border-radius: 10px;
+  padding: 12px;
+}
+.previewLabel {
+  margin-bottom: 8px;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-3);
+}
+.previewBubble {
+  background: var(--success);
+  color: #fff;
+  font-size: 12px;
+  border-radius: 16px;
+  border-top-left-radius: 0;
+  padding: 8px 12px;
+  max-width: 280px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+.doneActions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 14px;
+}
+
+.statusList {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.statusRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--text-1);
+}
+.statusIcon {
+  flex-shrink: 0;
+  color: var(--success);
+}
+.statusValue {
+  min-width: 0;
+  word-break: break-all;
+}
+
+/* El chip de modo de conexión lleva una frase, no una etiqueta: se deja
+   crecer y en caja baja. Doble clase para ganarle a .badge-new (misma
+   especificidad) sin depender del orden de las hojas. */
+.connChip.connChip {
+  height: auto;
+  min-height: 20px;
+  align-items: flex-start;
+  padding: 4px 10px;
+  font-size: 10.5px;
+  line-height: 1.35;
+  letter-spacing: 0.01em;
+  text-transform: none;
+  text-align: left;
+}
+.connChip.connChip :global(.badge-new__dot) {
+  flex-shrink: 0;
+  margin-top: 4px;
+}
+
+.howSent {
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--text-2);
+}
+.howSentStrong {
+  color: var(--text-1);
+}
