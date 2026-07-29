@@ -1644,3 +1644,76 @@ especificidad, gana el orden de fuente (es el mismo tropiezo que documenta el co
 `.sidePanel` en la línea ~334 de ese archivo). Verificado que sobrevive a la minificación de
 producción: `@container patientHero (min-width: 1380px){...}` aparece literal en
 `.next/static/css/*.css`.
+
+---
+
+## Fix-AI-Usage-Copy — el panel de IA prometía 6× más de lo que da ✅ (2026-07-29)
+
+**Rama:** `fix/ai-usage-copy` → push directo a main (`3ef3e885..96a597f0`). Sin PR, sin SQL.
+**Archivos:** `src/i18n/dictionaries/es.json`, `src/i18n/dictionaries/en.json`,
+`src/app/dashboard/settings/settings-client.tsx` (3 archivos, +12/−5).
+
+### Antes vs ahora
+
+**1. `settings.client.aiHowItWorksBody`** (el callout "¿Cómo funciona?")
+
+- ANTES: _"Cada consulta con el asistente usa aproximadamente 800 tokens. El límite se renueva
+  automáticamente el primer día de cada mes. **Usa Claude Haiku — el modelo más eficiente de
+  Anthropic.**"_
+- AHORA: _"El consumo depende de la función: una pregunta al chat gasta ~800 tokens, mientras que un
+  análisis completo de consulta (que lee todo el expediente) gasta entre 3,000 y 8,000. El límite se
+  renueva automáticamente el primer día de cada mes. El chat usa Claude Haiku (rápido y económico) y
+  los análisis clínicos usan Claude Sonnet, el modelo de mayor capacidad de razonamiento."_
+
+Por qué era falso: **Haiku solo lo usan 2 de los 9 endpoints que cobran cupo** — `/api/ai` (chat,
+`claude-haiku-4-5-20251001`) y `/api/homeopatia/suggest-remedies`. Los que más consumen van con
+**Sonnet** (`claude-sonnet-4-6`): `consult/ai-assist:14`, `xrays/[id]/analyze:388`,
+`prescriptions/check-contraindications:25`, `clinic-layout/optimize:191`.
+
+**2. Tarjeta del medidor** (`settings-client.tsx`, hoy línea ~964)
+
+- ANTES: `Math.floor(aiRemaining/800)` bajo la etiqueta **"Consultas aprox."**
+- AHORA: `Math.floor(aiRemaining/AVG_CONSULT_TOKENS)` bajo **"Análisis aprox."** / _"Approx.
+  analyses"_, con `const AVG_CONSULT_TOKENS = 5000` documentado arriba del componente.
+
+Con 992,608 tokens restantes la tarjeta pasa de **1240 → 198** (6.3× menos). 800 es lo que cuesta un
+chat corto de Haiku; el análisis de consulta lee expediente + odontograma + consultas previas +
+recetas + tratamientos y gasta ~3k–8k. La clínica planeaba con un número inflado y chocaba con el
+límite mucho antes de lo prometido. 5k es promedio conservador a propósito: subestima el total de
+interacciones posibles en vez de inflarlo.
+
+### Lo que NO se tocó (decisión de Rafael)
+**Sonnet se queda.** Cero cambios de `model:`/`MODEL` en ningún route, ni en la lógica del wallet,
+ni en `/api/ai/usage`. Esto fue solo texto + un divisor.
+
+### ⚠️ El punto 3 del prompt ya estaba resuelto — NO se tocó
+El prompt pedía (opcionalmente) suavizar "Otro consumo sin detalle" hacia algo como _"desglose por
+función próximamente"_, partiendo de que **los endpoints no registraban `feature` y todo caía en
+"otros"**. Eso **ya no es cierto desde `938524bf`**: existe la tabla `AiQuotaUsage`, la lista cerrada
+`AI_FEATURES` en `src/lib/ai-tokens.ts`, y **los 9 callers de `addAiTokens` pasan su slug real**
+(`chat`, `consult_assist`, `xray_analysis`, `dictation`, `contraindications`, `homeopathy`,
+`ai_insight`, `no_show_prediction`, `clinic_layout`). El desglose se pinta en
+`settings-client.tsx:967-991` desde `byFeature`.
+
+Y `aiBreakdownUntracked` ("Otro consumo sin detalle") **no es un placeholder**: es la fila de
+reconciliación entre `aiTokensUsed` y la suma del desglose, o sea la IA gastada *antes* de que el
+desglose existiera (ver el comentario en `settings-client.tsx:184-193`). Cambiarla a "próximamente"
+habría metido una mentira nueva justo en el commit que venía a quitar mentiras, así que se dejó
+como está. **Si en producción esa fila sale al 100%, la causa es otra: falta aplicar
+`sql/ai-quota-usage.sql` en Supabase** (el insert del desglose es fail-open y se pierde en silencio).
+
+### Follow-up pendiente
+- **Verificar que `sql/ai-quota-usage.sql` esté aplicado en Supabase.** Es lo que decide si el
+  desglose por función se ve real o si todo el consumo se acumula en la fila "sin detalle".
+- El corte **por usuario** sigue pendiente: `AiQuotaUsage.userId` ya se guarda pero `/api/ai/usage`
+  no lo expone (marcado como follow-up en el propio endpoint).
+- `AVG_CONSULT_TOKENS = 5000` es una estimación, no telemetría. Con el desglose real ya en la BD se
+  puede sustituir por el promedio medido de `consult_assist` del mes.
+
+### Verificación
+`npx next build` completo en el worktree → **exit code 0**, cero errores de tipos (los
+`prisma:error DATABASE_URL` son el ruido esperado de no tener `.env` en el worktree). Ambos
+diccionarios parsean y las 2 claves existen **en es.json y en.json con el mismo nombre**. Render
+comprobado string por string: menciona Haiku para chat ✓, Sonnet para análisis clínicos ✓, el rango
+3,000–8,000 ✓, el espacio inicial del string sobrevive a la concatenación tras el `<strong>` ✓,
+1240 → 198 ✓, español neutro con "tú" sin voseo ✓.
