@@ -86,6 +86,30 @@ export function defaultTaxMode(inv: { taxIncluded?: boolean | null; taxRate?: nu
 }
 
 /**
+ * Igual que defaultTaxMode, pero tomando en cuenta la preferencia de la clínica
+ * (Clinic.cfdiTaxMode: "exempt" = servicios exentos | "iva16" = IVA 16%). Con eso
+ * una clínica que SÍ causa IVA no tiene que corregir el selector factura por
+ * factura, y la odontología —que es el caso común— sigue saliendo exenta.
+ *
+ * La FACTURA manda sobre la preferencia: si internamente ya se le agregó IVA al
+ * paciente, timbrar exento no cuadraría nunca (la guarda de integridad total ↔
+ * conceptos lo bloquea), así que ahí se respeta "iva16" sin importar la clínica.
+ * El selector del modal sigue pudiendo sobreescribir esto por factura.
+ */
+export function resolveTaxMode(
+  inv: { taxIncluded?: boolean | null; taxRate?: number | null },
+  clinicTaxMode?: string | null,
+): CfdiTaxMode {
+  if (defaultTaxMode(inv) === "iva16") return "iva16";
+  // La factura NO trae IVA incluido en el precio y tampoco se le agregó ninguno:
+  // timbrar iva16 aquí lo agregaría sobre la base (base × 1.16) y el total ya no
+  // cuadraría con lo cobrado — la guarda de integridad daría un 409 que culpa a
+  // los conceptos en vez de a este ajuste. Se respeta lo que pagó el paciente.
+  if (inv?.taxIncluded === false) return "exento";
+  return clinicTaxMode === "iva16" ? "iva16" : "exento";
+}
+
+/**
  * Total que Facturapi va a timbrar con los conceptos actuales y el modo de
  * impuestos elegido. Espeja el payload real:
  *  - exento           → precios tal cual, sin impuesto → base.

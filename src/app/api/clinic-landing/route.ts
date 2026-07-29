@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthContext } from "@/lib/auth-context";
 import { prisma } from "@/lib/prisma";
+import { stripClinicSecrets } from "@/lib/clinic-secrets";
 
 const ALLOWED = [
   "landingActive","landingThemeColor","landingCoverUrl","landingGallery",
@@ -27,12 +28,14 @@ export async function PATCH(req: NextRequest) {
     where: { id: ctx.clinicId },
     data,
   });
-  return NextResponse.json(clinic);
+  // Se devuelve la fila completa: se filtran las credenciales (Live Secret Key de
+  // Facturapi, tokens de WhatsApp/Twilio/Google…) antes de llegar al navegador.
+  return NextResponse.json(stripClinicSecrets(clinic));
 }
 
 export async function GET(req: NextRequest) {
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const clinic = await prisma.clinic.findUnique({ where: { id: ctx.clinicId } });
-  return NextResponse.json(clinic);
+  return NextResponse.json(stripClinicSecrets(clinic));
 }

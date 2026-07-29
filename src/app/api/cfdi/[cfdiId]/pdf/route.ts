@@ -4,7 +4,7 @@ import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { assertPatientVisible } from "@/lib/patient-visibility";
 import { prisma } from "@/lib/prisma";
 import { rateLimit } from "@/lib/rate-limit";
-import { getOrgApiKey, downloadInvoiceFile } from "@/lib/facturapi";
+import { downloadInvoiceFileForOrg } from "@/lib/facturapi";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -47,8 +47,9 @@ export async function GET(req: NextRequest, { params }: { params: { cfdiId: stri
   }
 
   try {
-    const orgApiKey = await getOrgApiKey(record.clinic!.facturApiOrgId!);
-    const buf = await downloadInvoiceFile(orgApiKey, record.facturapiId, "pdf");
+    // Resuelve la llave según el ambiente y, en live, reintenta con la de pruebas
+    // para que los CFDI timbrados antes de encender Live sigan descargándose.
+    const buf = await downloadInvoiceFileForOrg(record.clinic!.facturApiOrgId!, record.facturapiId, "pdf");
     return new NextResponse(new Uint8Array(buf), {
       status: 200,
       headers: {

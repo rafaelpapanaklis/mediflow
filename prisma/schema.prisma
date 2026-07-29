@@ -74,6 +74,17 @@ model Clinic {
   facturApiEnabled Boolean @default(false)
   csdUploaded      Boolean   @default(false) // CSD (Certificado de Sello Digital) cargado en Facturapi
   csdValidUntil    DateTime? // Vigencia del CSD (expires_at que reporta Facturapi)
+  // Impuestos con los que se pre-llena el timbrado de esta clínica:
+  // "exempt" = servicios médicos/dentales exentos (art. 15 LIVA, lo más común)
+  // "iva16"  = IVA 16%. El modal de timbrado puede sobreescribirlo por factura.
+  cfdiTaxMode      String    @default("exempt")
+  // Live Secret Key de la organización en Facturapi. HAY que guardarla: la API
+  // solo la devuelve completa al crearla (PUT /apikeys/live); el GET lista
+  // metadatos (first_12), nunca la llave usable. Ese PUT no invalida las
+  // anteriores, así que regenerar es seguro (ver getOrgApiKey en lib/facturapi.ts).
+  // Cifrada con el envelope AES-256-GCM si DATA_ENCRYPTION_KEY está configurada;
+  // en claro si no (con warning en el log). Jamás sale al cliente.
+  facturApiLiveKey String?
 
   // Identificación NOM-024 — CLUES Sector Salud (Compliance Fase A)
   clues String? @db.VarChar(11)

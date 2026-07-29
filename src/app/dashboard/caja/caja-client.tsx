@@ -24,7 +24,9 @@ interface BillingProps {
   totalOverdue:  number;
   monthInvoices: number;
   creditTotal:   number;
-  clinic:        { facturApiEnabled: boolean; rfcEmisor: string | null };
+  clinic:        { facturApiEnabled: boolean; rfcEmisor: string | null; cfdiTaxMode?: string | null };
+  /** true = FACTURAPI_ENV=live → el timbrado va al SAT con validez fiscal. */
+  cfdiLive?:     boolean;
 }
 
 interface Props {
@@ -323,6 +325,7 @@ export function CajaClient({ caja, history, timezone, hasPin: hasPinInitial, bil
           monthInvoices={billing.monthInvoices}
           creditTotal={billing.creditTotal}
           clinic={billing.clinic}
+          cfdiLive={billing.cfdiLive}
         />
       ) : (
         <div style={{ padding: "clamp(14px, 1.6vw, 28px)" }}>

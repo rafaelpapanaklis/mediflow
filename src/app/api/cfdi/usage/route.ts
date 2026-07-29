@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { getResolvedPlan } from "@/lib/plans";
 import { cfdiPeriodFor, cfdiOverage } from "@/lib/cfdi-quota";
 import { resolveOverageBilling, CFDI_OVERAGE_METHOD } from "@/lib/cfdi-overage";
+import { isFacturapiLive } from "@/lib/facturapi-env";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -29,6 +30,11 @@ export async function GET(_req: NextRequest) {
       stripeSubscriptionId: true,
       stripeCustomerId: true,
       stripePaymentMethodId: true,
+      // Impuestos por default de la clínica: el modal de timbrado ya pide este
+      // endpoint al abrir el sub-form, así lo usa para pre-llenar el selector sin
+      // un round-trip extra ni pasar la clínica por props a los 4 sitios donde se
+      // monta InvoiceDetailModal.
+      cfdiTaxMode: true,
     },
   });
   if (!clinic) return NextResponse.json({ error: "Clínica no encontrada" }, { status: 404 });
@@ -68,5 +74,9 @@ export async function GET(_req: NextRequest) {
     debtCents,
     debtCount: debtRows.length,
     billingMode: billing?.mode ?? "manual",
+    taxMode: clinic.cfdiTaxMode ?? "exempt",
+    // Solo el boolean del ambiente (nunca la env): el modal de timbrado lo usa
+    // para no prometer validez fiscal en pruebas ni hablar de pruebas en Live.
+    live: isFacturapiLive(),
   });
 }

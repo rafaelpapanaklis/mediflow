@@ -16,7 +16,7 @@ import { InvoiceDetailModal } from "@/components/dashboard/billing/invoice-detai
 import { InvoiceCfdiBadge } from "@/components/dashboard/billing/invoice-cfdi-badge";
 import { useT } from "@/i18n/i18n-provider";
 import { REGIMENES_FISCALES, USOS_CFDI, FORMAS_PAGO_SAT } from "@/lib/cfdi-catalogs";
-import { derivePaymentForm, defaultTaxMode, type CfdiTaxMode } from "@/lib/invoice-totals";
+import { derivePaymentForm, resolveTaxMode, type CfdiTaxMode } from "@/lib/invoice-totals";
 
 type Tone = "success" | "warning" | "danger" | "info" | "brand" | "neutral";
 const STATUS_BADGE: Record<string, { tone: Tone; labelKey: string }> = {
@@ -45,14 +45,16 @@ interface Props {
   monthInvoices: number;
   /** Saldo a favor total de la clínica (SUM patient_credits). 0 si no hay. */
   creditTotal?:  number;
-  clinic:        { facturApiEnabled: boolean; rfcEmisor: string | null };
+  clinic:        { facturApiEnabled: boolean; rfcEmisor: string | null; cfdiTaxMode?: string | null };
+  /** true = FACTURAPI_ENV=live → el timbrado va al SAT con validez fiscal. */
+  cfdiLive?:     boolean;
 }
 
 function patientNameOf(inv: any): string {
   return `${inv.patient?.firstName ?? ""} ${inv.patient?.lastName ?? ""}`.trim() || "—";
 }
 
-export function BillingClient({ invoices: initial, patients, totalPaid, totalPending, totalOverdue, monthInvoices, creditTotal = 0, clinic }: Props) {
+export function BillingClient({ invoices: initial, patients, totalPaid, totalPending, totalOverdue, monthInvoices, creditTotal = 0, clinic, cfdiLive = false }: Props) {
   const t = useT();
   const router = useRouter();
   const [invoices, setInvoices] = useState(initial);
@@ -79,7 +81,7 @@ export function BillingClient({ invoices: initial, patients, totalPaid, totalPen
   const [cfdiLoading, setCfdiLoading] = useState(false);
   const [cfdiForm, setCfdiForm] = useState({
     rfc: "", nombre: "", regimenFiscal: "616", cp: "", usoCfdi: "D01", formaPago: "03",
-    impuestos: "exento" as CfdiTaxMode,
+    impuestos: (clinic.cfdiTaxMode === "iva16" ? "iva16" : "exento") as CfdiTaxMode,
   });
   const setCfdiF = (k: string, v: string) => setCfdiForm(f => ({ ...f, [k]: v }));
   // Saldo pendiente → confirmación explícita PUE; mismatch → aviso con CTA.
@@ -88,7 +90,8 @@ export function BillingClient({ invoices: initial, patients, totalPaid, totalPen
 
   // Abre el modal de timbrado pre-llenado: fiscales del paciente si existen,
   // forma de pago derivada de los pagos reales (editable) e impuestos según el
-  // modelo de la factura (exento por default — servicios médicos).
+  // modelo de la factura y la preferencia de la clínica (exento por default —
+  // servicios médicos). Todo sigue siendo editable factura por factura.
   function openCfdiModal(inv: any) {
     setCfdiForm({
       rfc:           inv.patient?.rfcPaciente ?? "",
@@ -97,7 +100,7 @@ export function BillingClient({ invoices: initial, patients, totalPaid, totalPen
       cp:            inv.patient?.cpPaciente ?? "",
       usoCfdi:       "D01",
       formaPago:     derivePaymentForm(inv.payments, inv.paymentMethod),
-      impuestos:     defaultTaxMode(inv),
+      impuestos:     resolveTaxMode(inv, clinic.cfdiTaxMode),
     });
     setCfdiPueOk(false);
     setCfdiMismatch(null);
@@ -190,7 +193,10 @@ export function BillingClient({ invoices: initial, patients, totalPaid, totalPen
       if (!res.ok) {
         // Total ≠ suma de conceptos → el server bloquea; aviso con CTA para
         // abrir la factura y corregir en vez de un toast fugaz.
-        if (data.code === "CFDI_TOTAL_MISMATCH") {
+        // CFDI_LIVE_NOT_READY = en producción falta un paso de la organización
+        // (CSD, Carta Manifiesto, datos fiscales). El mensaje es accionable, así
+        // que va en el mismo aviso persistente y no en un toast fugaz.
+        if (data.code === "CFDI_TOTAL_MISMATCH" || data.code === "CFDI_LIVE_NOT_READY") {
           setCfdiMismatch(data.error ?? t("billing.billingClient.toastCfdiStampError"));
           return;
         }
@@ -469,6 +475,7 @@ export function BillingClient({ invoices: initial, patients, totalPaid, totalPen
               <div style={{ fontSize: 12, color: "var(--text-3)", marginBottom: 18 }}>
                 {t("billing.billingClient.cfdiInvoiceFor")} <strong className="mono" style={{ color: "var(--text-1)" }}>{fmtMXNdec(cfdiFor.total)}</strong>.
                 {" "}{t("billing.billingClient.cfdiIssuer", { rfc: clinic.rfcEmisor ?? "—" })}
+                {" "}{cfdiLive ? t("billing.billingClient.cfdiEnvLive") : t("billing.billingClient.cfdiEnvTest")}
               </div>
 
               <div style={{ marginBottom: 22 }}>

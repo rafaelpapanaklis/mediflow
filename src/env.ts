@@ -82,6 +82,11 @@ const envSchema = z.object({
   GOOGLE_PLACES_API_KEY: z.string().optional(),
   DAILY_API_KEY: z.string().optional(),
   FACTURAPI_USER_KEY: z.string().optional(),
+  // Ambiente de timbrado CFDI: "live" = ante el SAT con validez fiscal.
+  // Ausente, vacía o cualquier otro valor = pruebas (ver lib/facturapi-env.ts).
+  // A propósito NO es z.enum: un valor raro (o una var vacía en Vercel) haría
+  // fallar el parse de TODA la env, y aquí degradar a pruebas es lo seguro.
+  FACTURAPI_ENV: z.string().optional(),
   FACTURAMA_USER: z.string().optional(),
   FACTURAMA_PASS: z.string().optional(),
   COOKIE_SECRET: z.string().min(16).optional(),

@@ -3,6 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { isStripeConfigured, STRIPE_SETUP_INSTRUCTIONS } from "@/lib/stripe";
+import { stripClinicSecrets } from "@/lib/clinic-secrets";
 import { AdminClinicDetailClient } from "./clinic-detail-client";
 
 export const metadata: Metadata = { title: "Detalle Clínica — Admin DaleControl" };
@@ -73,7 +74,7 @@ export default async function AdminClinicDetailPage({ params }: { params: { id: 
 
   return (
     <AdminClinicDetailClient
-      clinic={clinic as any}
+      clinic={stripClinicSecrets(clinic) as any}
       recentActivity={recentActivity as any}
       totalRevenue={revenueStats._sum.paid ?? 0}
       totalInvoices={revenueStats._count.id}

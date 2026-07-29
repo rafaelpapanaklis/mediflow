@@ -7,6 +7,7 @@ import { requirePermissionOrRedirect } from "@/lib/auth/require-permission";
 import { getCajaState, getCajaHistory } from "@/lib/caja";
 import { canUseCaja } from "@/lib/caja-pin";
 import { ModuleLocked } from "@/components/dashboard/module-locked";
+import { isFacturapiLive } from "@/lib/facturapi-env";
 import { CajaClient } from "./caja-client";
 
 // Caja = corte de caja diario. Reemplaza la página general /dashboard/billing.
@@ -35,7 +36,7 @@ export default async function CajaPage() {
     }),
     prisma.clinic.findUnique({
       where:  { id: user.clinicId },
-      select: { facturApiEnabled: true, rfcEmisor: true, timezone: true },
+      select: { facturApiEnabled: true, rfcEmisor: true, timezone: true, cfdiTaxMode: true },
     }),
     getClinicCreditTotal(user.clinicId),
   ]);
@@ -78,7 +79,15 @@ export default async function CajaPage() {
         totalOverdue,
         monthInvoices,
         creditTotal,
-        clinic: { facturApiEnabled: clinic?.facturApiEnabled ?? false, rfcEmisor: clinic?.rfcEmisor ?? null },
+        clinic: {
+          facturApiEnabled: clinic?.facturApiEnabled ?? false,
+          rfcEmisor:        clinic?.rfcEmisor ?? null,
+          // Impuestos por default del timbrado de esta clínica ("exempt" | "iva16").
+          cfdiTaxMode:      clinic?.cfdiTaxMode ?? "exempt",
+        },
+        // Solo el boolean del ambiente CFDI (jamás la env) para que el modal de
+        // timbrado no prometa validez fiscal en pruebas.
+        cfdiLive: isFacturapiLive(),
       }}
     />
   );

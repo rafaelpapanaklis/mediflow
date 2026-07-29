@@ -7,6 +7,8 @@ import { SettingsClient } from "./settings-client";
 import { ErrorBoundary } from "@/components/ui/error-boundary";
 import { requirePermissionOrRedirect } from "@/lib/auth/require-permission";
 import { getServerT } from "@/i18n/server";
+import { isFacturapiLive } from "@/lib/facturapi-env";
+import { stripClinicSecrets } from "@/lib/clinic-secrets";
 
 export const metadata: Metadata = { title: "Configuración — DaleControl" };
 
@@ -24,6 +26,11 @@ export default async function SettingsPage({ searchParams }: Props) {
     include: { schedules: { orderBy: { dayOfWeek: "asc" } } },
   });
 
+  // La fila COMPLETA de la clínica viaja al cliente (include, sin select): las
+  // credenciales — Live Secret Key de Facturapi, tokens de WhatsApp/Twilio/
+  // Google… — se sacan del payload antes de serializarlo al navegador.
+  const clinicSafe = stripClinicSecrets((clinic ?? {}) as Record<string, any>);
+
   const teamMembers = await prisma.user.findMany({
     where:   { clinicId: user.clinicId, isActive: true, role: { in: ["DOCTOR","ADMIN","SUPER_ADMIN"] } },
     select:  { id: true, firstName: true, lastName: true, role: true, services: true },
@@ -35,9 +42,10 @@ export default async function SettingsPage({ searchParams }: Props) {
       <SettingsClient
         key={user.clinicId}
         user={user as any}
-        clinic={clinic as any}
+        clinic={clinicSafe as any}
         initialTab={searchParams.tab}
         gcalStatus={searchParams.gcal}
+        cfdiLive={isFacturapiLive()}
         teamMembers={teamMembers as any}
       />
     </ErrorBoundary>

@@ -6,16 +6,78 @@ import { prisma } from "@/lib/prisma";
 import { rateLimit } from "@/lib/rate-limit";
 import { logMutation } from "@/lib/audit";
 import {
-  createInvoice, createOrUpdateCustomer, getOrgApiKey,
+  createInvoice, createOrUpdateCustomer, getOrgApiKey, getOrganizationStatus,
   validateRfc, CLAVES_SAT_MEDICOS, UNIDAD_SAT, FORMAS_PAGO_SAT,
 } from "@/lib/facturapi";
+import { isFacturapiLive } from "@/lib/facturapi-env";
 import { getResolvedPlan } from "@/lib/plans";
 import { cfdiPeriodFor, cfdiOverage } from "@/lib/cfdi-quota";
 import {
   expectedCfdiTotal, spreadInvoiceDiscount,
-  derivePaymentForm, defaultTaxMode, itemQuantity, itemUnitPrice,
+  derivePaymentForm, resolveTaxMode, itemQuantity, itemUnitPrice,
   itemDiscount, round2, type CfdiTaxMode,
 } from "@/lib/invoice-totals";
+
+/**
+ * Gate de producción. Con FACTURAPI_ENV=live el CFDI se timbra ante el SAT y ya
+ * no se puede "deshacer": si la organización de la clínica todavía no puede
+ * emitir, JAMÁS se intenta timbrar — se devuelve 409 con el paso que falta.
+ *
+ * La fuente de verdad es la organización en Facturapi (`is_production_ready` /
+ * `pending_steps`). El boolean local `csdUploaded` solo se usa como respaldo
+ * cuando Facturapi no responde — así un CSD subido fuera de MediFlow no bloquea,
+ * y un `csdUploaded` viejo tampoco.
+ */
+async function liveReadinessBlock(orgId: string, csdUploaded: boolean): Promise<NextResponse | null> {
+  let status;
+  try {
+    status = await getOrganizationStatus(orgId);
+  } catch {
+    // Facturapi no respondió: se cae al único dato local que hay. Sin CSD no hay
+    // timbrado posible en Live; con CSD se deja pasar (no se bloquea una
+    // operación válida por una falla ajena y el timbrado es el juez final).
+    if (!csdUploaded) {
+      return NextResponse.json({
+        error: "Falta subir tus certificados CSD (.cer y .key del SAT) en Configuración → Facturación antes de timbrar con validez fiscal.",
+        code:  "CFDI_LIVE_NOT_READY",
+      }, { status: 409 });
+    }
+    return null;
+  }
+
+  // A partir de aquí manda Facturapi, NO el boolean local: si la org está lista
+  // para producción se timbra aunque `csdUploaded` esté desactualizado (p. ej. el
+  // CSD se subió desde el panel de Facturapi).
+  if (!status.exists) {
+    return NextResponse.json({
+      error: "Tu organización fiscal ya no existe en Facturapi. Vuelve a guardar tu configuración fiscal en Configuración → Facturación.",
+      code:  "CFDI_LIVE_NOT_READY",
+    }, { status: 409 });
+  }
+  if (status.isProductionReady) return null;
+
+  const faltan: string[] = [];
+  if (status.hasLegal       === false) faltan.push("Completa tus datos fiscales (razón social, régimen y código postal).");
+  if (status.hasCertificate === false) faltan.push("Falta subir tus certificados CSD.");
+  if (status.manifestSigned === false) faltan.push("Falta firmar la Carta Manifiesto con tu e.firma.");
+  if (status.hasLogo        === false) faltan.push("Falta subir el logo de tu organización en Facturapi.");
+  // pending_steps puede traer un paso que no mapeamos: se muestra su propia
+  // descripción antes que un mensaje vacío.
+  if (faltan.length === 0) {
+    faltan.push(...status.pendingSteps.map((s) => s.description || s.type).filter(Boolean));
+  }
+  // Facturapi dice que no está lista pero no dijo por qué: se manda al panel en vez
+  // de devolver un mensaje sin contenido.
+  if (faltan.length === 0) {
+    faltan.push("Facturapi reporta tu organización como no lista para producción pero no detalló el motivo. Revisa Configuración → Facturación → «Listo para facturar ante el SAT».");
+  }
+
+  return NextResponse.json({
+    error: `Todavía no puedes timbrar con validez fiscal. ${faltan.join(" ")}`,
+    code:  "CFDI_LIVE_NOT_READY",
+    pendingSteps: status.pendingSteps,
+  }, { status: 409 });
+}
 
 export async function POST(req: NextRequest) {
   const rl = rateLimit(req, 5, 60 * 60 * 1000);
@@ -37,13 +99,23 @@ export async function POST(req: NextRequest) {
 
   const clinic = await prisma.clinic.findUnique({
     where:  { id: ctx!.clinicId },
-    select: { facturApiOrgId: true, facturApiEnabled: true, name: true, rfcEmisor: true, plan: true, timezone: true },
+    select: {
+      facturApiOrgId: true, facturApiEnabled: true, name: true, rfcEmisor: true,
+      plan: true, timezone: true, cfdiTaxMode: true, csdUploaded: true,
+    },
   });
 
   if (!clinic?.facturApiEnabled || !clinic.facturApiOrgId) {
     return NextResponse.json({
       error: "Configura tu RFC y certificados en Configuración → Facturación antes de timbrar"
     }, { status: 400 });
+  }
+
+  // En PRUEBAS todo sigue permitido como hasta hoy (Facturapi timbra con sus
+  // propios certificados de prueba y nada llega al SAT).
+  if (isFacturapiLive()) {
+    const blocked = await liveReadinessBlock(clinic.facturApiOrgId, clinic.csdUploaded);
+    if (blocked) return blocked;
   }
 
   const invoice = await prisma.invoice.findFirst({
@@ -70,9 +142,22 @@ export async function POST(req: NextRequest) {
   // ── Impuestos del CFDI ─────────────────────────────────────────────────────
   // Exento (servicios médicos, art. 15 LIVA) o IVA 16%. Sin taxes explícitos,
   // Facturapi desglosaba IVA 16% por default aunque el servicio fuera exento.
+  // El modal manda el modo elegido (override manual por factura); si no viene, se
+  // deriva de la factura y de la preferencia de la clínica (Clinic.cfdiTaxMode).
+  //
+  // Un valor DESCONOCIDO se rechaza en vez de adivinarse: la columna de la clínica
+  // usa "exempt" y el modo por factura "exento", así que un "exempt" que llegara
+  // aquí por un refactor caería al default y podría timbrarse con IVA 16% — lo
+  // contrario de lo pedido — sin que la guarda de totales lo note.
+  if (taxModeIn !== undefined && taxModeIn !== null && taxModeIn !== ""
+      && taxModeIn !== "iva16" && taxModeIn !== "exento") {
+    return NextResponse.json({
+      error: `Modo de impuestos inválido: ${String(taxModeIn)}. Se espera "exento" o "iva16".`,
+    }, { status: 400 });
+  }
   const taxMode: CfdiTaxMode = taxModeIn === "iva16" || taxModeIn === "exento"
     ? taxModeIn
-    : defaultTaxMode(invoice);
+    : resolveTaxMode(invoice, clinic.cfdiTaxMode);
   const taxIncludedInv = invoice.taxIncluded !== false;
 
   // ── GUARDA DE INTEGRIDAD total ↔ conceptos ────────────────────────────────

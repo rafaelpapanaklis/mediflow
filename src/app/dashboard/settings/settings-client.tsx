@@ -5,6 +5,7 @@ import { Building, User, Clock, Shield, Receipt, Bot, CalendarCheck, ExternalLin
 import { SubscriptionTab } from "@/components/dashboard/subscription-tab";
 import { RemindersSection } from "./reminders-section";
 import { TwoFactorCard } from "@/components/dashboard/security/two-factor-card";
+import { CfdiReadinessCard } from "@/components/dashboard/settings/cfdi-readiness-card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { createClient } from "@/lib/supabase/client";
@@ -78,9 +79,14 @@ const REGIMENES   = [
 const AVG_CONSULT_TOKENS = 5000;
 
 interface TeamMember { id: string; firstName: string; lastName: string; role: string; services: string[] }
-interface Props { user: any; clinic: any; initialTab?: string; gcalStatus?: string; teamMembers?: TeamMember[] }
+interface Props {
+  user: any; clinic: any; initialTab?: string; gcalStatus?: string; teamMembers?: TeamMember[];
+  /** true = FACTURAPI_ENV=live → el timbrado va al SAT con validez fiscal. Es el
+   *  ÚNICO dato del ambiente que llega al cliente (nunca la env completa). */
+  cfdiLive?: boolean;
+}
 
-export function SettingsClient({ user: initUser, clinic: initClinic, initialTab, gcalStatus, teamMembers: initTeam = [] }: Props) {
+export function SettingsClient({ user: initUser, clinic: initClinic, initialTab, gcalStatus, teamMembers: initTeam = [], cfdiLive = false }: Props) {
   const t = useT();
   const [tab,      setTab]      = useState(() => {
     const requested = initialTab || "clinica";
@@ -115,7 +121,12 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
     regimenFiscal:clinic.regimenFiscal ?? "612",
     cpEmisor:     clinic.cpEmisor     ?? "",
     razonSocial:  clinic.name         ?? "",
+    // "exempt" (servicios médicos/dentales exentos, art. 15 LIVA) | "iva16".
+    cfdiTaxMode:  clinic.cfdiTaxMode  ?? "exempt",
   });
+  // Sube al guardar datos fiscales o subir el CSD → el checklist de Facturapi
+  // se vuelve a consultar sin recargar la página.
+  const [cfdiStatusKey, setCfdiStatusKey] = useState(0);
 
   // CSD (Certificado de Sello Digital) — subida a Facturapi
   const [cerFile, setCerFile]         = useState<File | null>(null);
@@ -353,6 +364,7 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
       if (!res.ok) throw new Error(data.error ?? "Error");
       toast.success(t("settings.client.cfdiSavedToast"));
       setClinic((c: any) => ({ ...c, facturApiEnabled: true, ...cfdiForm }));
+      setCfdiStatusKey((k) => k + 1);
     } catch (err: any) { toast.error(err.message); } finally { setSaving(false); }
   }
 
@@ -375,6 +387,7 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
       if (!res.ok) throw new Error(data.error ?? "Error");
       toast.success(t("settings.client.csdUploadedToast"));
       setClinic((c: any) => ({ ...c, csdUploaded: true, csdValidUntil: data.csdValidUntil ?? null }));
+      setCfdiStatusKey((k) => k + 1);
       setCerFile(null); setKeyFile(null); setCsdPassword("");
     } catch (err: any) {
       toast.error(err.message ?? t("settings.client.csdUploadError"));
@@ -781,7 +794,10 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
       )}
 
       {/* ── FACTURACIÓN CFDI ── */}
-      {tab === "facturacion" && (
+      {/* isAdminUser explícito además del filtro de TABS: ?tab=facturacion se
+          puede escribir a mano y el inicializador de `tab` solo protegía
+          "subscription". La configuración fiscal es solo del dueño/admin. */}
+      {tab === "facturacion" && isAdminUser && (
         <div className="space-y-5 max-w-lg">
           <div className="card">
             <div className="card__header">
@@ -843,6 +859,33 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
                   className="font-mono"
                 />
               </div>
+
+              {/* Impuestos por default del timbrado. La odontología es exenta de
+                  IVA (art. 15 LIVA) y es el caso común, así que ese es el default;
+                  el modal de timbrado lo puede sobreescribir factura por factura
+                  (p. ej. venta de productos al 16% en una clínica exenta). */}
+              <div className="field-new">
+                <label className="field-new__label">{t("settings.client.taxModeLabel")}</label>
+                <div className="space-y-2 pt-1">
+                  {[
+                    { value: "exempt", label: t("settings.client.taxModeExempt") },
+                    { value: "iva16",  label: t("settings.client.taxModeIva16")  },
+                  ].map(opt => (
+                    <label key={opt.value} className="flex items-start gap-2.5 cursor-pointer text-sm">
+                      <input
+                        type="radio"
+                        name="cfdiTaxMode"
+                        value={opt.value}
+                        checked={cfdiForm.cfdiTaxMode === opt.value}
+                        onChange={() => setCfdiForm(f => ({ ...f, cfdiTaxMode: opt.value }))}
+                        className="mt-0.5 flex-shrink-0"
+                      />
+                      <span style={{ color: "var(--text-1)" }}>{opt.label}</span>
+                    </label>
+                  ))}
+                </div>
+                <p className="text-xs text-muted-foreground">{t("settings.client.taxModeHelp")}</p>
+              </div>
             </div>
 
             <div className="pt-2 flex gap-3">
@@ -856,10 +899,17 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
             </div>
 
             <div className="text-xs" style={{ color: "var(--text-3)", background: "var(--bg-elev-2)", borderRadius: "var(--radius)", padding: 12 }}>
-              <strong>{t("settings.client.cfdiNoteLabel")}</strong>{t("settings.client.cfdiNoteBody")}
+              <strong>{t("settings.client.cfdiNoteLabel")}</strong>
+              {cfdiLive ? t("settings.client.cfdiNoteBodyLive") : t("settings.client.cfdiNoteBody")}
             </div>
             </div>
           </div>
+
+          {/* ── LISTO PARA FACTURAR ANTE EL SAT ──
+              Checklist real de la organización en Facturapi (is_production_ready /
+              pending_steps). Va entre la captura fiscal y la subida del CSD: dice
+              qué falta justo antes de la card que resuelve el paso más común. */}
+          <CfdiReadinessCard refreshKey={cfdiStatusKey} />
 
           {/* ── CERTIFICADOS CSD ── */}
           <div className="card">
@@ -911,7 +961,7 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
             </div>
 
             <div className="text-xs" style={{ background: "var(--info-soft)", border: "1px solid var(--info-soft)", color: "var(--info-strong)", borderRadius: "var(--radius)", padding: 12 }}>
-              {t("settings.client.csdTestNote")}
+              {cfdiLive ? t("settings.client.csdLiveNote") : t("settings.client.csdTestNote")}
             </div>
             </div>
           </div>

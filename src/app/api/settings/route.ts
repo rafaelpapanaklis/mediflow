@@ -4,6 +4,7 @@ import { getAuthContext } from "@/lib/auth-context";
 import { prisma } from "@/lib/prisma";
 import { revalidateAfter } from "@/lib/cache/revalidate";
 import { encryptField, isEnvelope } from "@/lib/crypto/envelope";
+import { stripClinicSecrets } from "@/lib/clinic-secrets";
 import { sanitizeReminderSettings, sanitizeRecallSettings } from "@/lib/reminders/config";
 
 export async function PATCH(req: NextRequest) {
@@ -99,7 +100,10 @@ export async function PATCH(req: NextRequest) {
   });
 
   revalidateAfter("clinic");
-  return NextResponse.json(clinic);
+  // La fila completa incluye credenciales (Live Secret Key de Facturapi, tokens
+  // de WhatsApp/Twilio/Google…) y esta ruta la puede llamar CUALQUIER usuario
+  // autenticado de la clínica: se filtran antes de responder.
+  return NextResponse.json(stripClinicSecrets(clinic));
 }
 
 export async function GET(req: NextRequest) {
@@ -110,5 +114,5 @@ export async function GET(req: NextRequest) {
     where: { id: ctx.clinicId },
   });
 
-  return NextResponse.json(clinic);
+  return NextResponse.json(stripClinicSecrets(clinic));
 }

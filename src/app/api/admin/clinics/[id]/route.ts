@@ -2,6 +2,7 @@ import { getAdminSession } from "@/lib/admin-auth";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { logAdminClinicMutation } from "@/lib/admin-audit";
+import { stripClinicSecrets } from "@/lib/clinic-secrets";
 
 
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
@@ -30,7 +31,9 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     after: { plan: clinic.plan, trialEndsAt: clinic.trialEndsAt, name: clinic.name },
   });
 
-  return NextResponse.json(clinic);
+  // Sin `select`, el update devuelve la fila completa con credenciales dentro
+  // (Live Secret Key de Facturapi, tokens de WhatsApp/Twilio/Google…).
+  return NextResponse.json(stripClinicSecrets(clinic));
 }
 
 export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {

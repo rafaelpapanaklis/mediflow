@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
 import { Printer, FileText, CreditCard, CheckCircle2, Pencil, Tag, XCircle, Undo2, Trash2, Receipt, Download } from "lucide-react";
@@ -13,7 +13,7 @@ import { useT } from "@/i18n/i18n-provider";
 import { PaymentModal, type PaymentInvoice } from "./payment-modal";
 import { InvoiceCfdiBadge } from "./invoice-cfdi-badge";
 import { REGIMENES_FISCALES, USOS_CFDI, FORMAS_PAGO_SAT } from "@/lib/cfdi-catalogs";
-import { derivePaymentForm, defaultTaxMode, type CfdiTaxMode } from "@/lib/invoice-totals";
+import { derivePaymentForm, defaultTaxMode, resolveTaxMode, type CfdiTaxMode } from "@/lib/invoice-totals";
 
 // labelKey -> translation key resolved via t() at render time.
 // cls = badge-new semántico del sistema (mismo mapa de tonos que BillingClient).
@@ -96,10 +96,23 @@ export function InvoiceDetailModal({ open, invoice, patientName, onClose, onMuta
   const [cfdiId, setCfdiId] = useState<string | null>(null);
   // Consumo CFDI del mes (contador discreto en el sub-form + aviso de excedente).
   const [cfdiQuota, setCfdiQuota] = useState<{ used: number; included: number } | null>(null);
+  // Ambiente de timbrado (boolean que expone /api/cfdi/usage). null = todavía no
+  // se sabe: no se afirma nada sobre validez fiscal hasta tenerlo.
+  const [cfdiLive, setCfdiLive] = useState<boolean | null>(null);
+  // El default de impuestos de la clínica llega por fetch, así que no debe pisar
+  // al usuario si ya movió el selector…
+  const taxTouchedRef = useRef(false);
+  // …ni aplicarse a OTRA factura: si se cierra el sub-form y se abre el de una
+  // factura distinta mientras el fetch viaja, la respuesta vieja no debe pintar
+  // impuestos derivados de la factura anterior.
+  const cfdiInvoiceRef = useRef<string | null>(null);
   // Saldo pendiente → el CFDI sale como PUE; exige confirmación explícita.
   const [pueOk, setPueOk] = useState(false);
   // Error de integridad total↔conceptos (409 del server) → aviso con CTA.
   const [cfdiMismatch, setCfdiMismatch] = useState<string | null>(null);
+  // Qué bloqueó el timbrado: cambia solo la acción del aviso (corregir la factura
+  // vs. sólo cerrar cuando lo que falta se resuelve en Configuración).
+  const [cfdiBlockCode, setCfdiBlockCode] = useState<string | null>(null);
 
   // El modal no se desmonta entre facturas: al cambiar de factura limpia el
   // estado de timbrado para no arrastrarlo a otra factura.
@@ -157,14 +170,32 @@ export function InvoiceDetailModal({ open, invoice, patientName, onClose, onMuta
       formaPago: derivePaymentForm(invoice?.payments, invoice?.paymentMethod),
       impuestos: defaultTaxMode(invoice ?? {}),
     });
-    // Carga el consumo del mes para el indicador "CFDI este mes: N/M" (best-effort).
+    // Un solo GET trae el consumo del mes ("CFDI este mes: N/M"), los impuestos
+    // por default de la clínica y el ambiente de timbrado (best-effort: si falla,
+    // queda el default derivado de la factura). Se hace por fetch y no por props
+    // porque este modal se monta en 4 pantallas distintas.
     setCfdiQuota(null);
+    setCfdiLive(null);
+    taxTouchedRef.current = false;
+    const openedFor = invoice?.id ?? null;
+    const openedInvoice = invoice;
+    cfdiInvoiceRef.current = openedFor;
     fetch("/api/cfdi/usage")
       .then((r) => (r.ok ? r.json() : null))
-      .then((d) => { if (d) setCfdiQuota({ used: d.used, included: d.included }); })
+      .then((d) => {
+        if (!d || cfdiInvoiceRef.current !== openedFor) return;
+        setCfdiQuota({ used: d.used, included: d.included });
+        if (typeof d.live === "boolean") setCfdiLive(d.live);
+        // resolveTaxMode respeta la factura por encima de la clínica: si
+        // internamente ya se le agregó IVA al paciente, sigue en iva16.
+        if (!taxTouchedRef.current) {
+          setFiscal((f) => ({ ...f, impuestos: resolveTaxMode(openedInvoice ?? {}, d.taxMode) }));
+        }
+      })
       .catch(() => {});
     setPueOk(false);
     setCfdiMismatch(null);
+    setCfdiBlockCode(null);
     setSub("cfdi");
   }
 
@@ -208,6 +239,15 @@ export function InvoiceDetailModal({ open, invoice, patientName, onClose, onMuta
         // Total ≠ suma de conceptos: el server bloquea el timbrado. Se muestra
         // el aviso con CTA para corregir la factura en vez de un toast fugaz.
         if (data.code === "CFDI_TOTAL_MISMATCH") {
+          setCfdiBlockCode(data.code);
+          setCfdiMismatch(data.error ?? t("clinical.invoiceDetail.operationError"));
+          return;
+        }
+        // Live sin la organización lista (CSD / Carta Manifiesto / datos
+        // fiscales): el mensaje dice qué falta y es accionable, así que va en el
+        // aviso persistente y no en un toast que se va en 4 segundos.
+        if (data.code === "CFDI_LIVE_NOT_READY") {
+          setCfdiBlockCode(data.code);
           setCfdiMismatch(data.error ?? t("clinical.invoiceDetail.operationError"));
           return;
         }
@@ -672,7 +712,13 @@ export function InvoiceDetailModal({ open, invoice, patientName, onClose, onMuta
           </DialogHeader>
           <div className="px-6 py-4 space-y-3 flex-1 overflow-y-auto min-h-0">
             <div className="flex items-center justify-between gap-2">
-              <p className="text-xs text-muted-foreground">{t("clinical.invoiceDetail.cfdiFormHelp")}</p>
+              <p className="text-xs text-muted-foreground">
+                {cfdiLive === null
+                  ? t("clinical.invoiceDetail.cfdiFormHelpNeutral")
+                  : cfdiLive
+                    ? t("clinical.invoiceDetail.cfdiFormHelpLive")
+                    : t("clinical.invoiceDetail.cfdiFormHelp")}
+              </p>
               {cfdiQuota && (
                 <span className="text-[11px] whitespace-nowrap" style={{ color: "var(--text-3)" }}>
                   {t("clinical.invoiceDetail.cfdiMonthCounter", { used: cfdiQuota.used, included: cfdiQuota.included })}
@@ -689,8 +735,10 @@ export function InvoiceDetailModal({ open, invoice, patientName, onClose, onMuta
                 }}
               >
                 <p>{cfdiMismatch}</p>
-                <Button variant="outline" size="sm" onClick={() => { setCfdiMismatch(null); setSub(null); }}>
-                  {t("clinical.invoiceDetail.cfdiMismatchReview")}
+                <Button variant="outline" size="sm" onClick={() => { setCfdiMismatch(null); setCfdiBlockCode(null); setSub(null); }}>
+                  {cfdiBlockCode === "CFDI_LIVE_NOT_READY"
+                    ? t("clinical.invoiceDetail.cfdiNotReadyDismiss")
+                    : t("clinical.invoiceDetail.cfdiMismatchReview")}
                 </Button>
               </div>
             )}
@@ -753,7 +801,8 @@ export function InvoiceDetailModal({ open, invoice, patientName, onClose, onMuta
               <div className="space-y-1.5">
                 <Label>{t("clinical.invoiceDetail.cfdiTaxesLabel")}</Label>
                 <select className="flex h-10 w-full rounded-lg border border-border bg-card px-3 text-sm focus:outline-none"
-                  value={fiscal.impuestos} onChange={(e) => setFiscal(f => ({ ...f, impuestos: e.target.value as CfdiTaxMode }))}>
+                  value={fiscal.impuestos}
+                  onChange={(e) => { taxTouchedRef.current = true; setFiscal(f => ({ ...f, impuestos: e.target.value as CfdiTaxMode })); }}>
                   <option value="exento">{t("clinical.invoiceDetail.cfdiTaxExempt")}</option>
                   <option value="iva16">{t("clinical.invoiceDetail.cfdiTaxIva16")}</option>
                 </select>

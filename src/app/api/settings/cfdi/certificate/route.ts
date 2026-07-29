@@ -51,8 +51,10 @@ export async function POST(req: NextRequest) {
     await prisma.clinic.update({
       where: { id: ctx!.clinicId },
       data: {
-        csdUploaded:   true,
-        csdValidUntil: status.validUntil ? new Date(status.validUntil) : null,
+        csdUploaded: true,
+        // Solo se escribe la vigencia si Facturapi la reportó: antes un response
+        // sin expires_at borraba una fecha válida que ya estaba guardada.
+        ...(status.validUntil ? { csdValidUntil: new Date(status.validUntil) } : {}),
       },
     });
 
