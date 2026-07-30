@@ -20,7 +20,7 @@ const PLAN_TO_SIGNUP: Record<Plan["key"], "basic" | "pro" | "clinic"> = {
 
 /** Sombra del badge flotante, a juego con su fondo (reference badgeSh). */
 const BADGE_SHADOW: Record<string, string> = {
-  "#0d9488": "rgba(13,148,136,.35)",
+  "#0f766e": "rgba(15,118,110,.35)",
   "#2563eb": "rgba(37,99,235,.35)",
   "#1e3a8a": "rgba(30,58,138,.35)",
 };
@@ -105,7 +105,8 @@ export function PricingSection() {
                   <span style={{ fontSize: 46, fontWeight: 800, letterSpacing: "-0.03em", lineHeight: 1 }}>{fmtMXN(big)}</span>
                   <span style={{ fontSize: 14, fontWeight: 600, color: "#64748b", paddingBottom: 8 }}>MXN<br />/mes</span>
                 </div>
-                <div style={{ marginTop: 6, fontSize: 13, color: "#94a3b8" }}>{PRICING_COPY.noContract}</div>
+                {/* slate-500, no slate-400: sobre blanco el 400 daba 2.56:1 y no pasa AA. */}
+                <div style={{ marginTop: 6, fontSize: 13, color: "#64748b" }}>{PRICING_COPY.noContract}</div>
                 {/* Promo primer mes: caja SUTIL, SOLO en mensual (CAMBIOS §3) */}
                 {!anual && (
                   <div style={{ marginTop: 14, background: "#f6fdf8", border: "1px solid #d9f3e1", borderRadius: 10, padding: "8px 12px", fontSize: 13, color: "#3f6e51" }}>
@@ -130,7 +131,8 @@ export function PricingSection() {
                       </span>
                       <span style={srOnly}>{c.included ? "Incluido:" : "No incluido:"}</span>
                       <span style={{ flex: 1, color: c.included ? "#334155" : "#64748b", fontSize: 14.5 }}>{c.text}</span>
-                      <span style={{ flex: "0 0 auto", fontSize: 13, fontWeight: 700, color: c.included ? "#1e40af" : "#64748b", background: c.included ? "#eff6ff" : "#f1f5f9", padding: "3px 11px", borderRadius: 999 }}>{c.value}</span>
+                      {/* La pill "no incluido" va en slate-600: el 500 sobre #f1f5f9 se queda en 4.34:1. */}
+                      <span style={{ flex: "0 0 auto", fontSize: 13, fontWeight: 700, color: c.included ? "#1e40af" : "#475569", background: c.included ? "#eff6ff" : "#f1f5f9", padding: "3px 11px", borderRadius: 999 }}>{c.value}</span>
                     </li>
                   ))}
                 </ul>
@@ -165,8 +167,10 @@ export function PricingSection() {
                   style={{ marginTop: "auto", display: "block", textAlign: "center", textDecoration: "none", width: "100%", padding: "12px 14px", borderRadius: 13, border: "none", background: "#2563eb", color: "#fff", boxShadow: "0 10px 24px rgba(37,99,235,.35)" }}
                 >
                   <span style={{ display: "block", fontSize: 16, fontWeight: 800, letterSpacing: "-0.01em" }}>{PRICING_COPY.cta}</span>
+                  {/* El velo blanco baja de .16 a .06: con .16 el texto blanco sobre
+                      el azul aclarado se quedaba en 3.89:1 (AA pide 4.5:1). */}
                   {!anual && (
-                    <span style={{ display: "block", marginTop: 4, fontSize: 12.5, fontWeight: 800, color: "#fff", background: "rgba(255,255,255,.16)", borderRadius: 999, padding: "3px 10px", width: "fit-content", marginLeft: "auto", marginRight: "auto" }}>
+                    <span style={{ display: "block", marginTop: 4, fontSize: 12.5, fontWeight: 800, color: "#fff", background: "rgba(255,255,255,.06)", borderRadius: 999, padding: "3px 10px", width: "fit-content", marginLeft: "auto", marginRight: "auto" }}>
                       {PRICING_COPY.ctaSub(first)}
                     </span>
                   )}

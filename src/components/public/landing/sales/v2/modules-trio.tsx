@@ -1,11 +1,12 @@
 import type { ReactNode } from "react";
 import { MODULES_TRIO } from "./landing-data";
-import { AnalyticsMock, EquipoMock, PaginaWebMock } from "./mockups";
+import { LazyMockup } from "./lazy-mockup";
 
+/* Los 3 van muy por debajo del pliegue: se montan al acercarse (lazy-mockup.tsx). */
 const MOCKUPS: Record<string, ReactNode> = {
-  "analytics": <AnalyticsMock />,
-  "equipo": <EquipoMock />,
-  "pagina-web": <PaginaWebMock />,
+  "analytics": <LazyMockup name="analytics" />,
+  "equipo": <LazyMockup name="equipo" />,
+  "pagina-web": <LazyMockup name="pagina-web" />,
 };
 
 export function ModulesTrio() {

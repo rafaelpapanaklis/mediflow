@@ -37,7 +37,8 @@ export const PLANS: Plan[] = [
     key: 'basico',
     name: 'Básico',
     tagline: 'Para ordenar tu clínica desde el día uno',
-    badge: 'Clínica nueva', badgeColor: '#0d9488',
+    // teal-700, no teal-600: el blanco sobre #0d9488 se queda en 3.74:1 (AA pide 4.5:1).
+    badge: 'Clínica nueva', badgeColor: '#0f766e',
     monthly: 419, firstMonth: 19, yearly: 3264, yearlyPerMonth: 272, yearlySavings: 1764,
     recommended: false,
     addendum: null,

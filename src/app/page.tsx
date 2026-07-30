@@ -8,9 +8,12 @@ import { SalesFooter } from "@/components/public/landing/sales/footer";
 import { SalesNavSession } from "@/components/public/landing/nav-session";
 import "@/components/public/landing/sales/v2/landing-v2.css";
 
+// Solo los pesos que la landing usa de verdad: un grep de fontWeight sobre
+// v2 + footer + nav no encuentra ni un 900 (el máximo es 800), así que ese
+// @font-face sobraba.
 const inter = Inter({
   subsets: ["latin"],
-  weight: ["400", "500", "600", "700", "800", "900"],
+  weight: ["400", "500", "600", "700", "800"],
   variable: "--font-inter",
   display: "swap",
 });

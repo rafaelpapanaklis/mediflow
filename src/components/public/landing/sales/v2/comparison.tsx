@@ -21,8 +21,8 @@ export function Comparison() {
             {COMPARISON.rows.map((row) => (
               <div key={row.label} style={{ display: "grid", gridTemplateColumns: "1.6fr 1fr 1fr 1.15fr", borderBottom: "1px solid #eef2f7", background: "#fff" }}>
                 <div style={{ padding: "13px 18px", fontSize: 14, fontWeight: 600, color: "#334155", display: "flex", alignItems: "center" }}>{row.label}</div>
-                <div style={{ padding: "13px 10px", textAlign: "center", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12.5, color: "#94a3b8", fontWeight: 600 }}>{row.paper}</div>
-                <div style={{ padding: "13px 10px", textAlign: "center", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12.5, color: "#94a3b8", fontWeight: 600 }}>{row.traditional}</div>
+                <div style={{ padding: "13px 10px", textAlign: "center", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12.5, color: "#64748b", fontWeight: 600 }}>{row.paper}</div>
+                <div style={{ padding: "13px 10px", textAlign: "center", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12.5, color: "#64748b", fontWeight: 600 }}>{row.traditional}</div>
                 <div style={{ padding: "13px 10px", textAlign: "center", display: "flex", alignItems: "center", justifyContent: "center", background: "#eff6ff" }}>
                   <span style={{ display: "flex", width: 24, height: 24, borderRadius: "50%", background: "#dcfce7", color: "#15803d", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: 13 }} aria-label="Incluido">✓</span>
                 </div>

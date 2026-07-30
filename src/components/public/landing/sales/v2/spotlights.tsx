@@ -1,18 +1,18 @@
 import type { ReactNode } from "react";
 import { SPOTLIGHTS, SPOTLIGHTS_HEADER } from "./landing-data";
-import {
-  AgendaMock, PacientesMock, PresupuestoMock,
-  DicomStlMock, ClinicaIsometricaMock, InboxIaSplitMock,
-} from "./mockups";
+import { PacientesMock } from "./mockups";
+import { LazyMockup } from "./lazy-mockup";
 
-/* 6 spotlights (CAMBIOS §1): DICOM+STL y WhatsApp+IA fusionados; clínica isométrica nueva. */
+/* 6 spotlights (CAMBIOS §1): DICOM+STL y WhatsApp+IA fusionados; clínica isométrica nueva.
+   Todos van diferidos (fuera del pliegue) salvo la tabla de pacientes, cuyo alto
+   no se puede reservar sin arriesgar CLS — ver lazy-mockup.tsx. */
 const MOCKUPS: Record<string, ReactNode> = {
-  "agenda-semanal": <AgendaMock />,
+  "agenda-semanal": <LazyMockup name="agenda-semanal" />,
   "tabla-pacientes": <PacientesMock />,
-  "presupuesto": <PresupuestoMock />,
-  "visor-dicom-stl": <DicomStlMock />,
-  "clinica-isometrica": <ClinicaIsometricaMock />,
-  "inbox-ia-split": <InboxIaSplitMock />,
+  "presupuesto": <LazyMockup name="presupuesto" />,
+  "visor-dicom-stl": <LazyMockup name="visor-dicom-stl" />,
+  "clinica-isometrica": <LazyMockup name="clinica-isometrica" />,
+  "inbox-ia-split": <LazyMockup name="inbox-ia-split" />,
 };
 
 export function Spotlights() {
@@ -55,8 +55,9 @@ export function Spotlights() {
                     </li>
                   ))}
                 </ul>
+                {/* slate-500, no slate-400: sobre #f8fafc el 400 daba 2.45:1 y no pasa AA. */}
                 {"disclaimer" in s && s.disclaimer && (
-                  <p style={{ fontSize: 13, color: "#94a3b8", margin: "14px 0 0" }}>{s.disclaimer}</p>
+                  <p style={{ fontSize: 13, color: "#64748b", margin: "14px 0 0" }}>{s.disclaimer}</p>
                 )}
               </div>
               {!mockupFirst && (

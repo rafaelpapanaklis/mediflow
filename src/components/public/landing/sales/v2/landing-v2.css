@@ -34,6 +34,79 @@
   }
 }
 
+/* ── Mockups diferidos (lazy-mockup.tsx) ─────────────────────────────────
+   Los mockups por debajo del pliegue NO viajan en el HTML inicial: se montan
+   al acercarse. Mientras tanto .dcv2-lazy__ph reserva su alto EXACTO, para
+   que CLS siga en 0.
+
+   El alto de cada mockup depende SOLO del ancho de su caja (ninguno lleva
+   media queries propias), así que la tabla se declara con container queries
+   sobre .dcv2-lazy y vale igual en móvil que en desktop. Anchos reales en
+   producción: 300-740px los de spotlights, 300-620px los del trío.
+
+   OJO: tabla MEDIDA en Chrome con Inter ya cargada, devicePixelRatio 1.875
+   (30-jul-2026) — el mismo DPR que emula Lighthouse en móvil. El alto de un
+   mockup depende del DPR porque las cajas de línea se ajustan a píxeles del
+   dispositivo: a DPR 1.25 los mismos mockups miden 1-4px más. Es un desfase
+   de ~1% y, como el montaje siempre ocurre con el mockup fuera de pantalla
+   (rootMargin 400px), no computa como layout shift. Si cambia el marcado o
+   el copy de un mockup hay que volver a medir SU columna. Dentro de cada
+   mockup la regla más estrecha va LA ÚLTIMA (misma especificidad → gana el
+   orden de aparición). */
+.dcv2-lazy { container-type: inline-size; display: flex; flex-direction: column; flex: 1; }
+.dcv2-lazy__ph { flex: 1 0 auto; }
+
+/* AgendaMock */
+.dcv2-lazy--agenda-semanal { min-height: 293.27px; }
+@container (max-width: 477px) { .dcv2-lazy--agenda-semanal { min-height: 324.94px; } }
+@container (max-width: 465px) { .dcv2-lazy--agenda-semanal { min-height: 343.14px; } }
+@container (max-width: 435px) { .dcv2-lazy--agenda-semanal { min-height: 353.27px; } }
+@container (max-width: 403px) { .dcv2-lazy--agenda-semanal { min-height: 364.27px; } }
+@container (max-width: 391px) { .dcv2-lazy--agenda-semanal { min-height: 393.18px; } }
+@container (max-width: 368px) { .dcv2-lazy--agenda-semanal { min-height: 403.31px; } }
+@container (max-width: 358px) { .dcv2-lazy--agenda-semanal { min-height: 410.03px; } }
+
+/* PresupuestoMock */
+.dcv2-lazy--presupuesto { min-height: 387.08px; }
+@container (max-width: 486px) { .dcv2-lazy--presupuesto { min-height: 401.93px; } }
+@container (max-width: 313px) { .dcv2-lazy--presupuesto { min-height: 421.51px; } }
+
+/* DicomStlMock */
+.dcv2-lazy--visor-dicom-stl { min-height: 551.64px; }
+@container (max-width: 374px) { .dcv2-lazy--visor-dicom-stl { min-height: 578.04px; } }
+@container (max-width: 364px) { .dcv2-lazy--visor-dicom-stl { min-height: 604.44px; } }
+@container (max-width: 319px) { .dcv2-lazy--visor-dicom-stl { min-height: 618.47px; } }
+
+/* ClinicaIsometricaMock: el SVG es width:100%/height:auto sobre un viewBox
+   480×274 (= 57.0833%), así que aquí el alto es LINEAL en el ancho y se
+   reserva con padding porcentual en vez de una tabla de escalones. El sumando
+   fijo es el cromo (barra del navegador + cabecera); por debajo de 334px esa
+   cabecera pasa a dos líneas y crece 22.85px. */
+.dcv2-lazy--clinica-isometrica { padding-top: calc(57.0833% + 83.58px); }
+@container (max-width: 333px) { .dcv2-lazy--clinica-isometrica { padding-top: calc(57.0833% + 106.43px); } }
+
+/* InboxIaSplitMock: por debajo de ~392px los dos paneles dejan de caber en
+   una fila y se apilan — de ahí el salto de 327px a 472px. */
+.dcv2-lazy--inbox-ia-split { min-height: 265.93px; }
+@container (max-width: 590px) { .dcv2-lazy--inbox-ia-split { min-height: 282.43px; } }
+@container (max-width: 534px) { .dcv2-lazy--inbox-ia-split { min-height: 296.46px; } }
+@container (max-width: 431px) { .dcv2-lazy--inbox-ia-split { min-height: 312.96px; } }
+@container (max-width: 422px) { .dcv2-lazy--inbox-ia-split { min-height: 326.98px; } }
+@container (max-width: 391px) { .dcv2-lazy--inbox-ia-split { min-height: 472.30px; } }
+@container (max-width: 369px) { .dcv2-lazy--inbox-ia-split { min-height: 488.80px; } }
+@container (max-width: 300px) { .dcv2-lazy--inbox-ia-split { min-height: 505.30px; } }
+
+/* AnalyticsMock */
+.dcv2-lazy--analytics { min-height: 217.72px; }
+@container (max-width: 386px) { .dcv2-lazy--analytics { min-height: 241.98px; } }
+
+/* EquipoMock: mismo alto en todo el rango. */
+.dcv2-lazy--equipo { min-height: 302.17px; }
+
+/* PaginaWebMock */
+.dcv2-lazy--pagina-web { min-height: 271.14px; }
+@container (max-width: 316px) { .dcv2-lazy--pagina-web { min-height: 292.58px; } }
+
 /* ── Nav ── */
 .dcv2-navlink {
   text-decoration: none;
