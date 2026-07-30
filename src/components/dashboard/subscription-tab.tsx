@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
 import { Check, CreditCard, Download, ExternalLink, Loader2, Receipt, Sparkles } from "lucide-react";
@@ -55,6 +55,31 @@ interface ApiPlan {
   cfdiOverageCents: number;
 }
 
+type BillingInterval = "month" | "year";
+
+/** GET /api/billing/change-plan/preview — intervalo REAL de la suscripción. */
+interface BillingContext {
+  hasSubscription: boolean;
+  interval: BillingInterval | null;
+  status: string | null;
+  live?: boolean;
+  nextBillingDate: string | null;
+}
+
+/** POST /api/billing/change-plan/preview — lo que se cobrará al confirmar. */
+interface ChangePlanPreview {
+  mode: "subscription" | "manual" | "in-place";
+  direction: "upgrade" | "downgrade" | "same";
+  interval: BillingInterval;
+  currency: string;
+  amountDueNow: number;
+  daysRemaining: number;
+  nextBillingDate: string | null;
+  nextAmount: number;
+  lines: { description: string; amount: number }[];
+  unavailable: boolean;
+}
+
 const TRIAL_DAYS_TOTAL = 14;
 
 function formatFecha(d: Date) {
@@ -91,6 +116,12 @@ export function SubscriptionTab({ clinic }: Props) {
   const [invoices, setInvoices] = useState<BillingInvoiceRow[] | null>(null);
   const [stripeUnavailable, setStripeUnavailable] = useState(false);
   const [plans, setPlans] = useState<ApiPlan[] | null>(null);
+  const [billingCtx, setBillingCtx] = useState<BillingContext | null>(null);
+  const [preview, setPreview] = useState<ChangePlanPreview | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewFailed, setPreviewFailed] = useState(false);
+  // Descarta respuestas de previews que ya no corresponden al plan abierto.
+  const previewReq = useRef(0);
 
   const trialEndsAt = clinic.trialEndsAt ? new Date(clinic.trialEndsAt) : null;
   const now = new Date();
@@ -133,6 +164,36 @@ export function SubscriptionTab({ clinic }: Props) {
     };
   }, []);
 
+  // Intervalo REAL de la suscripción (mensual/anual) + próxima fecha de cobro.
+  // Sin esto el tab mostraba SIEMPRE el precio mensual, así que a una clínica
+  // con suscripción anual le mentía el precio y el delta al cambiar de plan.
+  // Si el endpoint falla, billingCtx queda null → se muestra mensual (como antes).
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/billing/change-plan/preview")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data: BillingContext | null) => {
+        if (!cancelled && data) setBillingCtx(data);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Vuelta del Checkout del diferencial (SPEI/OXXO): el plan se aplica cuando
+  // Stripe confirma el pago, así que avisamos que está en camino.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("upgrade") !== "pending") return;
+    toast.success(t("shell.subscriptionTab.upgradePendingToast"));
+    params.delete("upgrade");
+    const qs = params.toString();
+    window.history.replaceState(null, "", `${window.location.pathname}${qs ? `?${qs}` : ""}`);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Planes resueltos (precio/nombre/features) desde el endpoint público — sin
   // precios hardcodeados en el cliente.
   useEffect(() => {
@@ -165,6 +226,33 @@ export function SubscriptionTab({ clinic }: Props) {
     }
   }
 
+  /** Abre el modal y pide el preview del cobro para ese plan (sin efectos). */
+  function openConfirm(targetPlan: PlanId) {
+    setConfirmPlan(targetPlan);
+    setPreview(null);
+    setPreviewFailed(false);
+    setPreviewLoading(true);
+    const reqId = ++previewReq.current;
+    fetch("/api/billing/change-plan/preview", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ plan: targetPlan }),
+    })
+      .then(async (r) => {
+        if (!r.ok) throw new Error("preview");
+        return (await r.json()) as ChangePlanPreview;
+      })
+      .then((data) => {
+        if (previewReq.current === reqId) setPreview(data);
+      })
+      .catch(() => {
+        if (previewReq.current === reqId) setPreviewFailed(true);
+      })
+      .finally(() => {
+        if (previewReq.current === reqId) setPreviewLoading(false);
+      });
+  }
+
   async function applyPlanChange(targetPlan: PlanId) {
     if (changingPlan) return;
     setChangingPlan(targetPlan);
@@ -176,15 +264,33 @@ export function SubscriptionTab({ clinic }: Props) {
         body: JSON.stringify({ plan: targetPlan }),
       });
       const data = (await res.json().catch(() => ({}))) as {
-        mode?: "in-place";
+        mode?: "in-place" | "checkout";
+        url?: string;
         plan?: PlanId;
         error?: string;
+        code?: string;
       };
       if (!res.ok) {
-        throw new Error(data.error ?? t("shell.subscriptionTab.errChangePlan"));
+        // Códigos con copy propio: el cobro del diferencial fue rechazado (el
+        // plan NO cambió), o la suscripción de Stripe ya no se puede modificar.
+        const byCode =
+          data.code === "UPGRADE_PAYMENT_FAILED"
+            ? t("shell.subscriptionTab.errUpgradePayment")
+            : data.code === "SUBSCRIPTION_NOT_LIVE" || data.code === "SUBSCRIPTION_MISSING"
+              ? t("shell.subscriptionTab.errSubscriptionNotLive")
+              : data.code === "MANUAL_DOWNGRADE_NOT_SUPPORTED"
+                ? t("shell.subscriptionTab.errManualDowngrade")
+                : null;
+        throw new Error(byCode ?? data.error ?? t("shell.subscriptionTab.errChangePlan"));
       }
-      // Tanto con suscripción de Stripe como en trial el cambio es in-place:
-      // toast de éxito + refresh para repintar "TU PLAN" y el upsell.
+      // Clínica SPEI/OXXO subiendo de plan: primero paga el diferencial en
+      // Stripe; el plan se aplica cuando el webhook confirma el pago.
+      if (data.mode === "checkout" && data.url) {
+        window.location.href = data.url;
+        return;
+      }
+      // Con suscripción de tarjeta el cambio ya quedó aplicado (y cobrado si era
+      // upgrade): toast de éxito + refresh para repintar "TU PLAN" y el upsell.
       toast.success(t("shell.subscriptionTab.planUpdatedToast", { plan: targetPlan }));
       router.refresh();
     } catch (err) {
@@ -210,6 +316,97 @@ export function SubscriptionTab({ clinic }: Props) {
 
   const hasStripeCustomer = !!clinic.stripeCustomerId;
   const hasStripeSubscription = !!clinic.stripeSubscriptionId;
+
+  // Intervalo de facturación REAL. Sin dato confirmado se asume mensual (que es
+  // el ciclo por defecto del checkout y el comportamiento previo del tab).
+  const isAnnualBilling = billingCtx?.interval === "year";
+  const planPrice = (p: ApiPlan) => (isAnnualBilling ? p.priceMxnAnnual : p.priceMxn);
+  const perIntervalSuffix = isAnnualBilling
+    ? t("shell.subscriptionTab.mxnPerYear")
+    : t("shell.subscriptionTab.mxnPerMonth");
+
+  /** Cuerpo del modal de confirmación: el cobro exacto ANTES de confirmar. */
+  function renderConfirmBody() {
+    if (previewLoading) {
+      return (
+        <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+          <Loader2 size={14} className="animate-spin" aria-hidden />
+          {t("shell.subscriptionTab.previewLoading")}
+        </span>
+      );
+    }
+
+    // El preview no se pudo calcular: aviso genérico honesto + descripción del
+    // comportamiento, y el usuario decide (puede cancelar). NUNCA bloqueamos el
+    // cambio de plan por no haber podido previsualizar.
+    if (previewFailed || !preview || preview.unavailable) {
+      return hasStripeSubscription
+        ? `${t("shell.subscriptionTab.previewUnavailable")} ${t("shell.subscriptionTab.confirmChangeBodySub")}`
+        : t("shell.subscriptionTab.confirmChangeBodyCheckout");
+    }
+
+    if (preview.mode === "in-place") {
+      return t("shell.subscriptionTab.confirmChangeBodyCheckout");
+    }
+
+    if (preview.direction === "downgrade") {
+      return preview.mode === "manual"
+        ? t("shell.subscriptionTab.previewManualDowngrade")
+        : t("shell.subscriptionTab.previewDowngrade");
+    }
+
+    const dateLabel = preview.nextBillingDate ? formatFecha(new Date(preview.nextBillingDate)) : "—";
+    const nextLabel = `${formatMoney(preview.nextAmount, preview.currency)}${
+      preview.interval === "year"
+        ? t("shell.subscriptionTab.perYearShort")
+        : t("shell.subscriptionTab.perMonthShort")
+    }`;
+
+    if (preview.amountDueNow <= 0) {
+      return t("shell.subscriptionTab.previewNoCharge", { date: dateLabel, next: nextLabel });
+    }
+
+    const sentenceKey =
+      preview.mode === "manual"
+        ? "shell.subscriptionTab.previewChargeNowManual"
+        : "shell.subscriptionTab.previewChargeNow";
+
+    return (
+      <>
+        {t(sentenceKey, {
+          count: preview.daysRemaining,
+          amount: formatMoney(preview.amountDueNow, preview.currency),
+          days: preview.daysRemaining,
+          date: dateLabel,
+          next: nextLabel,
+        })}
+        {preview.lines.length > 0 && (
+          <span style={{ display: "block", marginTop: 12 }}>
+            <span style={{ display: "block", fontSize: 11, textTransform: "uppercase", letterSpacing: 0.5, color: "var(--text-3)", fontWeight: 600, marginBottom: 6 }}>
+              {t("shell.subscriptionTab.previewBreakdown")}
+            </span>
+            {preview.lines.map((line, i) => (
+              <span
+                key={`${line.description}-${i}`}
+                style={{ display: "flex", justifyContent: "space-between", gap: 12, fontSize: 12, padding: "3px 0", color: "var(--text-2)" }}
+              >
+                <span>{line.description}</span>
+                <span style={{ fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>
+                  {formatMoney(line.amount, preview.currency)}
+                </span>
+              </span>
+            ))}
+            <span style={{ display: "flex", justifyContent: "space-between", gap: 12, fontSize: 12.5, fontWeight: 700, paddingTop: 6, marginTop: 4, borderTop: "1px solid var(--border-soft, hsl(var(--border)))", color: "var(--text-1)" }}>
+              <span>{t("shell.subscriptionTab.previewTotalNow")}</span>
+              <span style={{ fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>
+                {formatMoney(preview.amountDueNow, preview.currency)}
+              </span>
+            </span>
+          </span>
+        )}
+      </>
+    );
+  }
 
   return (
     <div className="space-y-5 max-w-3xl">
@@ -238,7 +435,13 @@ export function SubscriptionTab({ clinic }: Props) {
                 {statusLabel}
               </div>
               <div style={{ fontSize: 15, fontWeight: 600, color: "var(--text-1)" }}>
-                {t("shell.subscriptionTab.planLine", { name: currentPlan?.name ?? currentPlanId, price: currentPlan?.priceMxn ?? 0 })}
+                {t(
+                  isAnnualBilling ? "shell.subscriptionTab.planLineAnnual" : "shell.subscriptionTab.planLine",
+                  {
+                    name: currentPlan?.name ?? currentPlanId,
+                    price: (currentPlan ? planPrice(currentPlan) : 0),
+                  },
+                )}
               </div>
             </div>
           </div>
@@ -359,14 +562,14 @@ export function SubscriptionTab({ clinic }: Props) {
                   )}
                 </div>
                 <div style={{ fontSize: 22, fontWeight: 800, color: "var(--brand)" }}>
-                  ${plan.priceMxn}
-                  <span style={{ fontSize: 11, fontWeight: 500, color: "var(--text-3)", marginLeft: 4 }}>{t("shell.subscriptionTab.mxnPerMonth")}</span>
+                  ${planPrice(plan)}
+                  <span style={{ fontSize: 11, fontWeight: 500, color: "var(--text-3)", marginLeft: 4 }}>{perIntervalSuffix}</span>
                 </div>
-                {!isCurrent && currentPlan && plan.priceMxn !== currentPlan.priceMxn && (
-                  <div style={{ fontSize: 11, fontWeight: 600, color: plan.priceMxn > currentPlan.priceMxn ? "var(--brand)" : "var(--text-3)" }}>
-                    {plan.priceMxn > currentPlan.priceMxn
-                      ? t("shell.subscriptionTab.priceDeltaUp", { delta: plan.priceMxn - currentPlan.priceMxn })
-                      : t("shell.subscriptionTab.priceDeltaDown", { delta: currentPlan.priceMxn - plan.priceMxn })}
+                {!isCurrent && currentPlan && planPrice(plan) !== planPrice(currentPlan) && (
+                  <div style={{ fontSize: 11, fontWeight: 600, color: planPrice(plan) > planPrice(currentPlan) ? "var(--brand)" : "var(--text-3)" }}>
+                    {planPrice(plan) > planPrice(currentPlan)
+                      ? t(isAnnualBilling ? "shell.subscriptionTab.priceDeltaUpAnnual" : "shell.subscriptionTab.priceDeltaUp", { delta: planPrice(plan) - planPrice(currentPlan) })
+                      : t(isAnnualBilling ? "shell.subscriptionTab.priceDeltaDownAnnual" : "shell.subscriptionTab.priceDeltaDown", { delta: planPrice(currentPlan) - planPrice(plan) })}
                   </div>
                 )}
                 <ul style={{ listStyle: "none", padding: 0, margin: 0, display: "flex", flexDirection: "column", gap: 4, flex: 1 }}>
@@ -379,7 +582,7 @@ export function SubscriptionTab({ clinic }: Props) {
                 </ul>
                 <button
                   type="button"
-                  onClick={() => setConfirmPlan(plan.id)}
+                  onClick={() => openConfirm(plan.id)}
                   disabled={isCurrent || changingPlan !== null}
                   style={{
                     marginTop: 4,
@@ -424,7 +627,7 @@ export function SubscriptionTab({ clinic }: Props) {
                     {t("shell.subscriptionTab.cardEndingIn", { last4: clinic.paymentMethodLast4 ?? "••••" })}
                   </div>
                   <div style={{ fontSize: 11, color: "var(--text-3)" }}>
-                    {t("shell.subscriptionTab.autoMonthlyCharge")}
+                    {t(isAnnualBilling ? "shell.subscriptionTab.autoAnnualCharge" : "shell.subscriptionTab.autoMonthlyCharge")}
                   </div>
                 </div>
               </>
@@ -642,9 +845,7 @@ export function SubscriptionTab({ clinic }: Props) {
               {t("shell.subscriptionTab.confirmChangeTitle", { name: plans?.find((p) => p.id === confirmPlan)?.name ?? "" })}
             </h3>
             <p style={{ margin: 0, fontSize: 13, color: "var(--text-2)", lineHeight: 1.55, marginBottom: 18 }}>
-              {hasStripeSubscription
-                ? t("shell.subscriptionTab.confirmChangeBodySub")
-                : t("shell.subscriptionTab.confirmChangeBodyCheckout")}
+              {renderConfirmBody()}
             </p>
             <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
               <button type="button" onClick={() => setConfirmPlan(null)} className="btn-new btn-new--ghost">
@@ -653,10 +854,14 @@ export function SubscriptionTab({ clinic }: Props) {
               <button
                 type="button"
                 onClick={() => applyPlanChange(confirmPlan)}
-                disabled={changingPlan !== null}
+                disabled={changingPlan !== null || previewLoading}
                 className="btn-new btn-new--primary"
               >
-                {changingPlan ? t("shell.subscriptionTab.applying") : t("shell.subscriptionTab.continue")}
+                {changingPlan
+                  ? t("shell.subscriptionTab.applying")
+                  : preview?.mode === "manual" && preview.direction === "upgrade" && preview.amountDueNow > 0
+                    ? t("shell.subscriptionTab.payAndChange")
+                    : t("shell.subscriptionTab.continue")}
               </button>
             </div>
           </div>
