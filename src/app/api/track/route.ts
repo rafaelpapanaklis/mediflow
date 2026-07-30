@@ -25,6 +25,7 @@ const EventSchema = z
     name: z.string().max(80).optional(),
     x: z.number().optional(),
     y: z.number().optional(),
+    yFixed: z.boolean().optional(),
     vw: z.number().int().optional(),
     vh: z.number().int().optional(),
     docH: z.number().int().optional(),
@@ -242,27 +243,39 @@ async function ingest(req: NextRequest, p: Payload): Promise<void> {
   if (persistable.length === 0) return; // batch sólo de pings: lastSeenAt ya refrescado
 
   const clinicIdForEvents = identity?.clinicId ?? existing?.clinicId ?? null;
-  await prismaAdmin.analyticsEvent.createMany({
-    data: persistable.map((e) => ({
-      sessionId: p.sid,
-      visitorId: p.vid,
-      clinicId: clinicIdForEvents,
-      surface,
-      type: e.type,
-      path: e.path,
-      title: e.title ?? null,
-      referrer: e.referrer ?? null,
-      name: e.name ?? null,
-      x: e.x ?? null,
-      y: e.y ?? null,
-      vw: e.vw ?? null,
-      vh: e.vh ?? null,
-      docH: e.docH ?? null,
-      scrollPct: e.scrollPct ?? null,
-      selector: e.selector ?? null,
-      text: e.text ?? null,
-      durationMs: e.durationMs ?? null,
-      createdAt: now,
-    })),
-  });
+  const rows = persistable.map((e) => ({
+    sessionId: p.sid,
+    visitorId: p.vid,
+    clinicId: clinicIdForEvents,
+    surface,
+    type: e.type,
+    path: e.path,
+    title: e.title ?? null,
+    referrer: e.referrer ?? null,
+    name: e.name ?? null,
+    x: e.x ?? null,
+    y: e.y ?? null,
+    yFixed: e.yFixed ?? false,
+    vw: e.vw ?? null,
+    vh: e.vh ?? null,
+    docH: e.docH ?? null,
+    scrollPct: e.scrollPct ?? null,
+    selector: e.selector ?? null,
+    text: e.text ?? null,
+    durationMs: e.durationMs ?? null,
+    createdAt: now,
+  }));
+
+  try {
+    await prismaAdmin.analyticsEvent.createMany({ data: rows });
+  } catch (err: any) {
+    // Ventana de despliegue: el código puede llegar antes que
+    // sql/analytics_events_yfixed.sql. Si la columna aún no existe (P2022),
+    // reintenta sin ella en vez de perder el batch entero (y con él, toda la
+    // analítica hasta que se aplique el SQL). Se puede borrar una vez aplicado.
+    if (err?.code !== "P2022") throw err;
+    await prismaAdmin.analyticsEvent.createMany({
+      data: rows.map(({ yFixed: _drop, ...rest }) => rest),
+    });
+  }
 }

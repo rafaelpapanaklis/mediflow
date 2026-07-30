@@ -251,6 +251,22 @@ function describeTarget(el: Element, publicSurface: boolean): { selector: string
   return { selector, text };
 }
 
+// ¿El click cayó dentro de una capa fixed/sticky (sidebar, header pegajoso)? Esos
+// elementos NO se mueven con el scroll, así que pageY (= clientY + scrollY) los
+// registraría cientos de px más abajo de donde se ven. Tope de niveles: esto corre en
+// cada click y getComputedStyle fuerza recálculo de estilo.
+const FIXED_SCAN_DEPTH = 8;
+
+function inFixedLayer(el: Element | null): boolean {
+  let node: Element | null = el;
+  for (let i = 0; node && i < FIXED_SCAN_DEPTH; i += 1) {
+    const pos = window.getComputedStyle(node).position;
+    if (pos === "fixed" || pos === "sticky") return true;
+    node = node.parentElement;
+  }
+  return false;
+}
+
 function onClick(e: MouseEvent): void {
   try {
     const target = e.target as Element | null;
@@ -263,10 +279,16 @@ function onClick(e: MouseEvent): void {
       1,
     );
     const x = Math.min(1, Math.max(0, e.clientX / vw));
-    const y = Math.round(e.pageY || e.clientY + (window.scrollY || 0));
+    // Capa fija → clientY (posición real en pantalla). Resto → pageY (px absolutos
+    // del documento). El visor del heatmap dibuja ambos tal cual: ver
+    // src/app/admin/analytics/heatmap-geom.ts.
+    const yFixed = inFixedLayer(target);
+    const y = yFixed
+      ? Math.round(e.clientY)
+      : Math.round(e.pageY || e.clientY + (window.scrollY || 0));
     const publicSurface = surfaceFromPath(curPath) === "public";
     const { selector, text } = describeTarget(target, publicSurface);
-    enqueue({ type: "click", path: curPath, t: now(), x: round3(x), y, vw, vh, docH, selector, text });
+    enqueue({ type: "click", path: curPath, t: now(), x: round3(x), y, yFixed, vw, vh, docH, selector, text });
     scheduleClickFlush(); // envío pronto: no perder clicks de visitas de rebote
     detectRage(e.clientX, e.clientY);
   } catch {

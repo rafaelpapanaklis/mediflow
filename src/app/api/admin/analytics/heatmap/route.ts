@@ -12,6 +12,25 @@ export const dynamic = "force-dynamic";
 
 const MAX_POINTS = 8000;
 
+const CLICK_SELECT = {
+  x: true,
+  y: true,
+  docH: true,
+  vw: true,
+  selector: true,
+  text: true,
+} as const;
+
+type ClickRow = {
+  x: number | null;
+  y: number | null;
+  docH: number | null;
+  vw: number | null;
+  selector: string | null;
+  text: string | null;
+  yFixed: boolean;
+};
+
 export async function GET(req: NextRequest) {
   if (!(await isAdminAuthed())) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
@@ -34,18 +53,34 @@ export async function GET(req: NextRequest) {
 
     const path = requestedPath || (paths[0]?.path ?? "/");
 
-    const clicks = await prismaAdmin.analyticsEvent.findMany({
+    const clickQuery = {
       where: eventWhere(filters, { type: "click", path }),
-      select: { x: true, y: true, docH: true, vw: true, selector: true, text: true },
       take: MAX_POINTS,
-      orderBy: { createdAt: "desc" },
-    });
+      orderBy: { createdAt: "desc" as const },
+    };
+
+    let clicks: ClickRow[];
+    try {
+      clicks = await prismaAdmin.analyticsEvent.findMany({
+        ...clickQuery,
+        select: { ...CLICK_SELECT, yFixed: true },
+      });
+    } catch (err: any) {
+      // Ventana de despliegue: sql/analytics_events_yfixed.sql aún sin aplicar
+      // (P2022 = la columna no existe). Se lee sin ella en vez de romper la pestaña.
+      if (err?.code !== "P2022") throw err;
+      const legacy = await prismaAdmin.analyticsEvent.findMany({
+        ...clickQuery,
+        select: CLICK_SELECT,
+      });
+      clicks = legacy.map((c) => ({ ...c, yFixed: false }));
+    }
 
     const points: HeatPoint[] = [];
     const elements = new Map<string, { count: number; text: string | null }>();
     clicks.forEach((c) => {
       if (c.x != null && c.y != null) {
-        points.push({ x: c.x, y: c.y, docH: c.docH ?? 0, vw: c.vw ?? 0 });
+        points.push({ x: c.x, y: c.y, docH: c.docH ?? 0, vw: c.vw ?? 0, yFixed: c.yFixed });
       }
       const sel = c.selector || "(desconocido)";
       let el = elements.get(sel);

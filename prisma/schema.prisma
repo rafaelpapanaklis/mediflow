@@ -7712,6 +7712,10 @@ model AnalyticsEvent {
   name       String?
   x          Float?
   y          Float?
+  // y se capturó sobre un elemento fixed/sticky (sidebar, header pegajoso): guarda
+  // clientY —relativo al viewport, donde de verdad se ve— en vez de pageY.
+  // Requiere sql/analytics_events_yfixed.sql aplicado en Supabase.
+  yFixed     Boolean  @default(false)
   vw         Int?
   vh         Int?
   docH       Int?
