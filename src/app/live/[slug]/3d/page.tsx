@@ -1,3 +1,6 @@
+// NO cachear (ni ISR ni CDN): igual que /live/[slug], el recorrido depende de
+// la cookie de unlock por clínica; cachearlo lo abriría a quien no puso la
+// contraseña.
 export const dynamic = "force-dynamic";
 
 import { cookies } from "next/headers";

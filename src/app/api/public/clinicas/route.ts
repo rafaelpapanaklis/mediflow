@@ -1,9 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { persistentRateLimit } from "@/lib/failban";
 
 // GET /api/public/clinicas?q=dental&city=merida&service=ortodoncia
 // No auth required — public search endpoint
 export async function GET(req: NextRequest) {
+  // Búsqueda pública sin auth: cada llamada es un findMany con hasta 4 LIKE
+  // insensibles + joins. 60/min por IP no estorba a nadie buscando y evita
+  // que se use el directorio como fuente de scraping barata.
+  const rl = await persistentRateLimit(req, { limit: 60, windowSec: 60 });
+  if (rl) return rl;
+
   const { searchParams } = new URL(req.url);
   const q       = searchParams.get("q")?.trim().toLowerCase() ?? "";
   const city    = searchParams.get("city")?.trim().toLowerCase() ?? "";

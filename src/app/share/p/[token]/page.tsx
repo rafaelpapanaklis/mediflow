@@ -15,6 +15,9 @@ import { PerioShareView } from "./PerioShareView";
 import { OrthoSharePage } from "@/components/share/OrthoSharePage";
 import { OrthoElasticsCalendar } from "@/components/share/OrthoElasticsCalendar";
 
+// NO cachear (ni ISR ni CDN): el token abre el expediente compartido de UN
+// paciente. Una copia en caché sería dato clínico servido desde el CDN, y
+// además seguiría viva tras revocar o caducar el link.
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 

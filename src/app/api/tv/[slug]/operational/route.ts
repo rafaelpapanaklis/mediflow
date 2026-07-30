@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { rateLimit } from "@/lib/rate-limit";
+import { persistentRateLimit } from "@/lib/failban";
 
 export const dynamic = "force-dynamic";
 
@@ -19,11 +19,19 @@ export const dynamic = "force-dynamic";
  * (configurable vía PATCH /api/tv-displays/[id]) se expone el nombre
  * completo — mismo criterio que liveModeShowPatientNames en /api/live/[slug].
  *
- * Rate limit por IP: la TV refresca cada 15s (~4 req/min por pantalla);
- * 60/min tolera varias pantallas tras la misma IP y frena scraping.
+ * Rate limit POR SLUG (no por IP) y persistente (Upstash, compartido entre
+ * instancias serverless — el Map en memoria no limitaba nada en Vercel). Por
+ * IP era peor: las pantallas de una misma clínica salen por la misma IP de la
+ * sala y se pisaban entre sí. La TV refresca cada 15 s (~4 req/min por
+ * pantalla), así que 60/min por slug deja margen de sobra a un display que se
+ * reinicie en bucle y frena el scraping de la pantalla de turnos.
  */
 export async function GET(req: NextRequest, { params }: { params: { slug: string } }) {
-  const rl = rateLimit(req, 60);
+  const rl = await persistentRateLimit(req, {
+    id: `tv:${params.slug}`,
+    limit: 60,
+    windowSec: 60,
+  });
   if (rl) return rl;
 
   // Resuelve clinicId desde el slug (NO confía en query params).

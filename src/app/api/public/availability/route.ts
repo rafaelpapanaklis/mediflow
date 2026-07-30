@@ -1,11 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { persistentRateLimit } from "@/lib/failban";
 import { tzLocalToUtc, getTzParts } from "@/lib/agenda/time-utils";
 import { timeHHMMInTz } from "@/lib/agenda/legacy-helpers";
 
 // GET /api/public/availability?slug=my-clinic&date=2026-04-10&doctorId=xxx
 // No authentication required — public endpoint
 export async function GET(req: NextRequest) {
+  // Sin auth y con 2 queries a Prisma por llamada: es una puerta directa al
+  // pooler de Supabase. 60/min por IP es holgadísimo para el flujo real
+  // (elegir día → ver horarios) y frena el scraping de agendas.
+  const rl = await persistentRateLimit(req, { limit: 60, windowSec: 60 });
+  if (rl) return rl;
+
   const { searchParams } = new URL(req.url);
   const slug     = searchParams.get("slug");
   const dateStr  = searchParams.get("date");

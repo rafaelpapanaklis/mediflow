@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getAuthContext } from "@/lib/auth-context";
 import { prisma } from "@/lib/prisma";
 import { addAiTokens } from "@/lib/ai-tokens";
-import { rateLimit } from "@/lib/rate-limit";
+import { persistentRateLimit } from "@/lib/failban";
 
 const AI_SYSTEM_PROMPT = `Eres un asistente clínico de apoyo para médicos en México. 
 Tu función es ayudar al doctor a:
@@ -21,11 +21,15 @@ IMPORTANTE:
 - Máximo 300 palabras por respuesta para ser eficiente`;
 
 export async function POST(req: NextRequest) {
-  const rl = rateLimit(req, 10, 5 * 60 * 1000);
-  if (rl) return rl;
-
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  // Freno de gasto (la factura es de Anthropic) POR CLÍNICA, no por IP: la
+  // clínica entera sale por la misma IP y se pisaban entre sí. Persistente
+  // (Upstash) porque el Map en memoria no limita nada en serverless. Misma
+  // ventana de siempre: 10 / 5 min.
+  const rl = await persistentRateLimit(req, { id: `ai:${ctx.clinicId}`, limit: 10, windowSec: 300 });
+  if (rl) return rl;
 
   // Check API key is configured
   const apiKey = process.env.ANTHROPIC_API_KEY;

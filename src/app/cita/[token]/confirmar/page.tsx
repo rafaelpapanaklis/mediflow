@@ -7,6 +7,9 @@ import { prisma } from "@/lib/prisma";
 import { formatApptDateParts } from "@/lib/reminders/config";
 import { ConfirmClient } from "./confirm-client";
 
+// NO cachear (ni ISR ni CDN): el token identifica la cita de UN paciente y la
+// página refleja su estatus en vivo; una versión cacheada filtraría sus datos
+// al CDN y mostraría "sin confirmar" una cita ya confirmada.
 export const dynamic = "force-dynamic";
 
 export const metadata = { title: "Confirmar cita — DaleControl" };

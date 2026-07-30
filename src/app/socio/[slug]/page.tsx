@@ -22,6 +22,16 @@ import "@/components/public/landing/sales/sales.css";
 // TODOS los CTA apuntan a /signup?ref=<referralCode> (+ &c=<campaña> si llegó
 // un ?c= válido, para atribuir el alta a la campaña del socio).
 // Dynamic: depende del slug + estado del afiliado (no SSG).
+//
+// NO se pasa a ISR a propósito (evaluado en la ola de cache de públicas). El
+// `?c=<campaña>` no solo cuenta clicks: se propaga a los 6 CTA como
+// /signup?ref=…&c=…, y en el alta ese `c` resuelve el AffiliateLink → sellerId
+// que crea AffiliateSellerAttribution (comisión del vendedor, dinero real).
+// Prerenderizar la página congelaría los href SIN campaña, y el href de <Link>
+// es una prop de React: parchear el atributo del DOM desde el cliente no
+// cambiaría a dónde navega. Moverlo al cliente exigiría convertir los 6 CTA a
+// componentes con useSearchParams + su Suspense (el HTML estático saldría con
+// el fallback), demasiada superficie para lo que ahorra esta landing.
 export const dynamic = "force-dynamic";
 
 const inter = Inter({

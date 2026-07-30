@@ -161,6 +161,12 @@ export interface RateLimitOptions {
   id?: string;
   limit: number;
   windowSec?: number;
+  /**
+   * Sustituye al pathname en la llave. Necesario en rutas con segmentos
+   * dinámicos (`/api/patients/[id]/…`): sin esto la llave cambia con cada
+   * recurso y un límite "por clínica" acabaría siendo "por clínica y archivo".
+   */
+  scope?: string;
 }
 
 /**
@@ -188,7 +194,7 @@ export async function persistentRateLimit(
   sweep();
   const windowSec = opts.windowSec ?? 60;
   const id = opts.id ?? getClientIp(req);
-  const key = `${req.nextUrl.pathname}:${id}`;
+  const key = `${opts.scope ?? req.nextUrl.pathname}:${id}`;
 
   const redis = getRedis();
   if (redis) {
@@ -205,6 +211,57 @@ export async function persistentRateLimit(
   }
   const allowed = rateLimitKey(`fb:rl:${key}`, opts.limit, windowSec * 1000);
   return allowed ? null : tooMany(windowSec);
+}
+
+// ─────────────────────────── Lock de trabajo caro ──────────────────────────
+/**
+ * Candado de exclusión mutua para trabajos CAROS e idempotentes (generar el
+ * CBCT lite: 3 GB de RAM × hasta 300 s por invocación). Dos peticiones
+ * simultáneas sobre el mismo recurso pagarían la factura dos veces para
+ * escribir el mismo objeto.
+ *
+ * Semántica: SET NX EX → true si el candado quedó tomado por ESTA llamada,
+ * false si ya lo tenía otra. El TTL es la red de seguridad si el proceso muere
+ * sin soltarlo (ponlo un poco por encima del maxDuration de la función).
+ *
+ * Sin Upstash degrada a un Map en memoria: dentro de una misma instancia
+ * serverless sigue evitando el duplicado; entre instancias no. Ante error de
+ * Redis, fail-OPEN (devuelve true): el trabajo se hace, nunca se bloquea al
+ * usuario por un problema de infraestructura.
+ */
+export async function acquireLock(key: string, ttlSec: number): Promise<boolean> {
+  sweep();
+  const lockKey = `fb:job:${key}`;
+  const redis = getRedis();
+  if (redis) {
+    try {
+      const res = await redis.set(lockKey, "1", { nx: true, ex: ttlSec });
+      return res === "OK";
+    } catch (err) {
+      warnRuntime(err);
+      return true; // fail-open
+    }
+  }
+  const now = Date.now();
+  const until = memLocks.get(lockKey);
+  if (until && until > now) return false;
+  memLocks.set(lockKey, now + ttlSec * 1000);
+  return true;
+}
+
+/** Suelta el candado de acquireLock (llámalo SIEMPRE al terminar, ok o error). */
+export async function releaseLock(key: string): Promise<void> {
+  const lockKey = `fb:job:${key}`;
+  const redis = getRedis();
+  if (redis) {
+    try {
+      await redis.del(lockKey);
+      return;
+    } catch (err) {
+      warnRuntime(err); // el TTL lo acabará soltando
+    }
+  }
+  memLocks.delete(lockKey);
 }
 
 // ─────────────────────────── Lockout (punto 3) ─────────────────────────────

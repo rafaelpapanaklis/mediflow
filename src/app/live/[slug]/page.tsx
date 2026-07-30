@@ -1,3 +1,6 @@
+// NO cachear (ni ISR ni CDN): el contenido depende de la cookie de unlock por
+// clínica que se valida abajo — una versión cacheada serviría la vista
+// desbloqueada a quien no puso la contraseña.
 export const dynamic = "force-dynamic";
 
 import { cookies } from "next/headers";

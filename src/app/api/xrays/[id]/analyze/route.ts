@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { addAiTokens } from "@/lib/ai-tokens";
 import { assertPatientVisible } from "@/lib/patient-visibility";
 import { createClient as createAdmin } from "@supabase/supabase-js";
-import { rateLimit } from "@/lib/rate-limit";
+import { persistentRateLimit } from "@/lib/failban";
 import { BUCKETS, extractStoragePath } from "@/lib/storage";
 import { getModeConfig, isValidMode } from "@/lib/xray/analysis-modes";
 import type { XrayAnalysisMode } from "@prisma/client";
@@ -230,11 +230,21 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
 /* ═══════════════════════════════════════════════════════════════════ */
 
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
-  const rl = rateLimit(req, 10, 5 * 60 * 1000);
-  if (rl) return rl;
-
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  // Freno de gasto POR CLÍNICA (no por IP: todo el consultorio comparte IP) y
+  // persistente en Upstash — el Map en memoria no limita en serverless. `scope`
+  // fijo porque el pathname lleva el id de la radiografía: sin él el límite
+  // sería por archivo y bastaría cambiar de imagen para saltárselo (esta ruta
+  // es visión, la llamada más cara de las 6). Misma ventana: 10 / 5 min.
+  const rl = await persistentRateLimit(req, {
+    id: `ai:${ctx.clinicId}`,
+    scope: "ai:xray-analyze",
+    limit: 10,
+    windowSec: 300,
+  });
+  if (rl) return rl;
 
   const url = new URL(req.url);
   const refresh = url.searchParams.get("refresh") === "true";

@@ -4,10 +4,10 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "//build": "prisma generate va SOLO aquí, NO en postinstall: Vercel restaura node_modules de caché y entonces npm se salta postinstall (cliente Prisma viejo). En local, tras un npm install limpio: npm run build o npx prisma generate.",
     "build": "prisma generate && next build",
     "start": "next start",
     "lint": "next lint",
-    "postinstall": "prisma generate",
     "seed": "tsx prisma/seed.ts",
     "db:seed": "tsx prisma/seed.ts",
     "smoke:dental": "tsx scripts/smoke-test-dental.ts",

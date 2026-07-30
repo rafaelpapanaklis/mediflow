@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthContext } from "@/lib/auth-context";
 import { addAiTokens, aiTokenLimitError } from "@/lib/ai-tokens";
-import { rateLimit } from "@/lib/rate-limit";
+import { persistentRateLimit } from "@/lib/failban";
 
 const SYSTEM_PROMPT = `Eres un homeópata experto basado en Boericke, Kent y el Organon de Hahnemann. Dado un conjunto de síntomas rúbricos (mentales, generales y locales), sugieres los remedios más probables con su score de coincidencia (0-100) y la potencia inicial recomendada.
 
@@ -17,11 +17,14 @@ Formato de salida:
 {"remedies":[{"name":"...","score":...,"potency":"...","rationale":"..."}]}`;
 
 export async function POST(req: NextRequest) {
-  const rl = rateLimit(req, 10, 5 * 60 * 1000);
-  if (rl) return rl;
-
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  // Freno de gasto POR CLÍNICA (no por IP: todo el consultorio comparte IP) y
+  // persistente en Upstash — el Map en memoria no limita en serverless.
+  // Misma ventana de siempre: 10 / 5 min.
+  const rl = await persistentRateLimit(req, { id: `ai:${ctx.clinicId}`, limit: 10, windowSec: 300 });
+  if (rl) return rl;
 
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {

@@ -3,7 +3,7 @@ import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
 import { readActiveClinicCookie } from "@/lib/active-clinic";
-import { rateLimit } from "@/lib/rate-limit";
+import { persistentRateLimit } from "@/lib/failban";
 import { chat } from "@/lib/integrations/claude";
 import { aiTokenLimitError, addAiTokens } from "@/lib/ai-tokens";
 import { TREATMENT_KINDS } from "@/lib/agenda/types";
@@ -71,14 +71,21 @@ interface OptimizerResult {
  */
 export async function POST(req: NextRequest) {
   try {
-    const rl = rateLimit(req, 5, 5 * 60 * 1000);
-    if (rl) return rl;
-
     const dbUser = await getDbUser();
     if (!dbUser) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
     if (!["SUPER_ADMIN", "ADMIN"].includes(dbUser.role)) {
       return NextResponse.json({ error: "forbidden" }, { status: 403 });
     }
+
+    // Freno de gasto POR CLÍNICA (no por IP: los admins de la clínica salen
+    // por la misma) y persistente en Upstash — el Map en memoria no limita en
+    // serverless. Misma ventana de siempre: 5 / 5 min.
+    const rl = await persistentRateLimit(req, {
+      id: `ai:${dbUser.clinicId}`,
+      limit: 5,
+      windowSec: 300,
+    });
+    if (rl) return rl;
 
     const body = await req.json().catch(() => null);
     const parsed = PostSchema.safeParse(body);

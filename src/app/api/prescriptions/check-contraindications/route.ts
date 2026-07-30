@@ -3,7 +3,7 @@ import { createHash } from "crypto";
 import { getAuthContext } from "@/lib/auth-context";
 import { prisma } from "@/lib/prisma";
 import { addAiTokens } from "@/lib/ai-tokens";
-import { rateLimit } from "@/lib/rate-limit";
+import { persistentRateLimit } from "@/lib/failban";
 import { hasPermission } from "@/lib/auth/permissions";
 import { assertPatientVisible } from "@/lib/patient-visibility";
 
@@ -152,14 +152,17 @@ function normalizeSeverity(v: unknown): "leve" | "moderada" | "grave" {
 }
 
 export async function POST(req: NextRequest) {
-  const rl = rateLimit(req, 10, 5 * 60 * 1000);
-  if (rl) return rl;
-
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (!hasPermission(ctx.role as "DOCTOR" | "ADMIN" | "SUPER_ADMIN" | "RECEPTIONIST" | "READONLY", "prescription.create")) {
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
   }
+
+  // Freno de gasto POR CLÍNICA (no por IP: todo el consultorio comparte IP) y
+  // persistente en Upstash — el Map en memoria no limita en serverless.
+  // Misma ventana de siempre: 10 / 5 min.
+  const rl = await persistentRateLimit(req, { id: `ai:${ctx.clinicId}`, limit: 10, windowSec: 300 });
+  if (rl) return rl;
 
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
