@@ -1785,3 +1785,82 @@ El endpoint `/api/admin/support/tickets?metrics=1` no se tocó: reenvía lo que 
   los 11 `Dynamic server usage` y el `Critical dependency` de `file-type` son el ruido preexistente
   de correr sin `.env` local, no de este cambio.
 - **Sin SQL**: no hay columnas ni tablas nuevas; todo sale de `SupportTicket` tal como está.
+
+---
+
+## [Admin cobrado-del-mes $0 / pagos Stripe no registrados]
+
+**Commits:** `1e4e460d` (webhook) + `73587155` (admin) — push directo a `main`.
+
+### El bug
+Stripe ya había cobrado el primer mes de $19 a un cliente real y el panel `/admin` marcaba
+**"Cobrado este mes: $0"**. La causa: el webhook de `invoice.paid` / `invoice.payment_succeeded`
+mandaba los correos de ciclo de vida y calculaba la comisión de afiliado, pero **nunca creaba un
+`SubscriptionInvoice`** — ese archivo no mencionaba `subscriptionInvoice` en ninguna línea. Y
+`subscription_invoices` es la **única** fuente de "Cobrado este mes" (`src/app/admin/page.tsx`), de
+`/admin/payments` y de `/admin/reports`. Resultado: los únicos cobros visibles eran los registrados
+a mano por `/api/admin/subscriptions`; **todo** lo cobrado por Stripe era invisible.
+
+### Qué se hizo
+1. **`src/lib/billing/record-stripe-invoice.ts`** (nuevo) — `recordStripeInvoice(invoice, clinicId)`.
+   Mapea `amount_paid/100`, `currency` en mayúsculas, `status: "paid"`, `method: "stripe"`,
+   `reference: invoice.id`, el periodo de `lines.data[0].period` (fallback `created` + 1 mes, con el
+   mismo `ONE_MONTH_MS` que ya usa el webhook), `paidAt` de `status_transitions.paid_at` y
+   `notes: "Stripe <billing_reason> <number>"`. **Idempotente** por `reference` (upsert con
+   `update: {}` — Stripe dispara los DOS eventos para la misma factura). **Nunca lanza**: todo va en
+   try/catch con `console.error`.
+2. **`src/app/api/webhooks/stripe/route.ts`** — llama al helper justo después de resolver `clinic`
+   y **antes** del `break` por afiliado, así que cubre a TODAS las clínicas (no solo a las
+   referidas). Un fallo ahí no rompe el 200 ni los correos ni la comisión.
+3. **`prisma/schema.prisma`** — `SubscriptionInvoice.reference` pasa a `@unique`. Prisma exige el
+   unique **en el schema** para poder hacer `upsert({ where: { reference } })`; no basta el índice
+   en la BD.
+4. **`src/app/admin/page.tsx`** — `paidMonth` medía por `createdAt` (fecha de alta de la fila) y
+   ahora mide por `(paidAt ?? createdAt)`. La query pasó a `OR` de `createdAt`/`paidAt >= prev1`
+   para que una factura creada el mes pasado y **pagada este mes** no quede fuera del cálculo.
+5. **`src/app/admin/page.tsx`** — fuera el hardcode `PLAN_PRICES = { BASIC: 419, PRO: 689,
+   CLINIC: 1719 }`. Los precios salen de `plan_configs` vía `getPlanLimits` (el mismo helper que ya
+   usa `/api/admin/billing`), que trae su propio fallback a `plan-shared` si la tabla no responde.
+   Afecta MRR, MRR potencial **y** el `$/mes` de cada fila de la tabla de clínicas (había un tercer
+   uso del hardcode en la línea 372 que el diagnóstico no listaba).
+6. **`POST /api/admin/billing/backfill-stripe`** (nuevo, `isAdminAuthed`) — importa lo ya cobrado.
+   Body `{ months? }` (default 6, tope 36). Pagina con `autoPagingEach` sobre
+   `invoices.list({ status: "paid" })`, resuelve la clínica con un mapa `stripeCustomerId → clinicId`
+   precargado (una sola query, no una por factura) e inserta con **el mismo** `recordStripeInvoice`.
+   Devuelve `{ scanned, inserted, skipped, unmatched, months, truncated }`.
+   **SOLO LECTURA sobre Stripe**: la única llamada es `invoices.list`.
+7. **`src/app/admin/payments/payments-client.tsx`** — botón **"Importar pagos de Stripe"** en el
+   header, con `useConfirm` (el mismo patrón del resto de `/admin`) y toast con el resumen; hace
+   `router.refresh()` solo si se insertó algo.
+
+### Detalles que valen recordarse
+- **El índice va COMPLETO, no parcial.** El prompt pedía `WHERE reference IS NOT NULL`, pero un
+  índice **parcial no lo infiere `ON CONFLICT (reference)`** (Postgres exigiría repetir el
+  predicado y Prisma no lo emite) → el upsert habría fallado igual en producción. En Postgres los
+  NULL nunca chocan entre sí en un índice único, así que el índice completo es **igual de
+  permisivo** con los cobros manuales sin referencia (efectivo, depósito) y sí funciona con el
+  upsert. El nombre es el que Prisma genera para `@unique`, para que no haya drift.
+- **Orden obligatorio**: el SQL va **antes** del deploy. Si el código llega sin el índice, el upsert
+  truena — pero el helper nunca lanza, así que el webhook seguiría respondiendo 200 y el cobro solo
+  no se registraría (falla suave, no caída).
+- Se registran también las facturas con `billing_reason: "subscription_update"` (los prorrateos de
+  upgrade del PR #117): son dinero real cobrado y deben contar en "Cobrado este mes".
+- El backfill tiene un tope duro de **1000 facturas** por corrida; cuando lo alcanza devuelve
+  `truncated: true` y el toast lo dice — nada de truncado silencioso.
+- **Queda un hardcode fuera de alcance**: `src/app/admin/payments/payments-client.tsx:15` tiene su
+  propio `PLAN_PRICES` literal, usado solo como fallback del autorrelleno del monto cuando la
+  clínica no tiene `monthlyPrice`. Es un client component, no puede llamar a `getPlanLimits`: para
+  matarlo hay que bajarle los precios por props desde `page.tsx`. No se tocó en este cambio.
+
+### Verificación
+- `npx prisma generate` → OK (v5.22.0).
+- `npx tsc --noEmit` → **0 errores**.
+- `npm run build` → **exit 0**, output completo leído (sin `| tail`): `✓ Generating static pages
+  (347/347)`, `/api/admin/billing/backfill-stripe` presente en la tabla de rutas, `/admin` compila
+  en 212 B / 98.2 kB. Cero `Failed to compile` / `Type error` / `Module not found`. Los 117
+  `prisma:error` son `Environment variable not found: DATABASE_URL` — el ruido preexistente de
+  correr sin `.env` local.
+
+### SQL pendiente (lo aplica Rafael a mano, ANTES del deploy)
+`sql/subscription_invoices_stripe_ref.sql` — el PASO 1 lista `reference` duplicadas; si devuelve
+filas hay que resolverlas antes, porque el `CREATE UNIQUE INDEX` fallaría.
