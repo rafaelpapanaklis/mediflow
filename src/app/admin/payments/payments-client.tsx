@@ -2,8 +2,10 @@
 
 import { useState, useMemo } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
-import { X, DollarSign, TrendingUp, AlertCircle, XCircle, CheckCircle2, Plus } from "lucide-react";
+import { X, DollarSign, TrendingUp, AlertCircle, XCircle, CheckCircle2, Plus, DownloadCloud } from "lucide-react";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 import { CardNew }   from "@/components/ui/design-system/card-new";
 import { ButtonNew } from "@/components/ui/design-system/button-new";
 import { BadgeNew }  from "@/components/ui/design-system/badge-new";
@@ -67,8 +69,12 @@ export function PaymentsClient({
   overdueClinics: initOverdue,
   clinics,
 }: Props) {
+  const router = useRouter();
+  const askConfirm = useConfirm();
+
   /* State */
   const [tab, setTab] = useState<"pending" | "all" | "overdue">("pending");
+  const [importingStripe, setImportingStripe] = useState(false);
   const [payments, setPayments] = useState(initPayments);
   const [pending, setPending] = useState(initPending);
   const [overdue, setOverdue] = useState(initOverdue);
@@ -303,6 +309,47 @@ export function PaymentsClient({
     }
   }
 
+  /* Importa de Stripe los cobros históricos que el webhook no registró.
+     Solo LEE de Stripe; escribe en subscription_invoices de forma idempotente
+     (upsert por reference), así que repetirlo no duplica nada. */
+  async function importStripePayments() {
+    const ok = await askConfirm({
+      title: "Importar pagos de Stripe",
+      description:
+        "Se leerán las facturas PAGADAS de Stripe de los últimos 6 meses y se registrarán " +
+        "las que falten en el panel. Solo lectura sobre Stripe: no cobra, no reembolsa ni " +
+        "modifica nada allá. Puede tardar algunos segundos.",
+      confirmText: "Importar",
+    });
+    if (!ok) return;
+
+    setImportingStripe(true);
+    try {
+      const res = await fetch("/api/admin/billing/backfill-stripe", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ months: 6 }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "No se pudo importar");
+
+      const partes = [
+        `${data.inserted} importado${data.inserted === 1 ? "" : "s"}`,
+        `${data.scanned} revisado${data.scanned === 1 ? "" : "s"}`,
+        `${data.skipped} omitido${data.skipped === 1 ? "" : "s"}`,
+      ];
+      if (data.unmatched?.length) partes.push(`${data.unmatched.length} sin clínica`);
+      if (data.truncated) partes.push("tope alcanzado, vuelve a correrlo");
+      toast.success(`Stripe: ${partes.join(" · ")}`);
+
+      if (data.inserted > 0) router.refresh();
+    } catch (e: any) {
+      toast.error(e.message);
+    } finally {
+      setImportingStripe(false);
+    }
+  }
+
   /* ── Render ───────────────────────────────────────────────────────────── */
 
   const tabs = [
@@ -330,13 +377,23 @@ export function PaymentsClient({
             Gestiona pagos, verifica transferencias y activa clínicas
           </p>
         </div>
-        <ButtonNew
-          variant="primary"
-          onClick={() => setShowNewPayment(!showNewPayment)}
-          icon={<Plus size={14} />}
-        >
-          Registrar pago
-        </ButtonNew>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <ButtonNew
+            variant="secondary"
+            onClick={importStripePayments}
+            disabled={importingStripe}
+            icon={<DownloadCloud size={14} />}
+          >
+            {importingStripe ? "Importando…" : "Importar pagos de Stripe"}
+          </ButtonNew>
+          <ButtonNew
+            variant="primary"
+            onClick={() => setShowNewPayment(!showNewPayment)}
+            icon={<Plus size={14} />}
+          >
+            Registrar pago
+          </ButtonNew>
+        </div>
       </div>
 
       {/* ── KPI row ─────────────────────────────────────────────────────── */}

@@ -6,6 +6,8 @@ import {
   AlertTriangle, Clock, XCircle, Plus, FileText,
 } from "lucide-react";
 import { prisma } from "@/lib/prisma";
+import { getPlanLimits } from "@/lib/plans";
+import { PLAN_IDS } from "@/lib/billing/plans";
 import { formatCurrency } from "@/lib/utils";
 import { formatRelativeDate } from "@/lib/format";
 import { CardNew }   from "@/components/ui/design-system/card-new";
@@ -16,7 +18,20 @@ import { KpiCard }   from "@/components/ui/design-system/kpi-card";
 
 export const metadata: Metadata = { title: "Super Admin — DaleControl" };
 
-const PLAN_PRICES: Record<string, number> = { BASIC: 419, PRO: 689, CLINIC: 1719 };
+/**
+ * Precios mensuales desde plan_configs — MISMA fuente que el checkout y que
+ * /api/admin/billing (getPlanLimits). Nada de números literales en este
+ * archivo: getPlanLimits ya cae solo al fallback compartido de plan-shared si
+ * la tabla no responde.
+ */
+async function loadPlanPrices(): Promise<Record<string, number>> {
+  const rows = await Promise.all(
+    PLAN_IDS.map(async (id) => ({ id, price: (await getPlanLimits(id)).monthlyPrice })),
+  );
+  const out: Record<string, number> = {};
+  for (const r of rows) out[r.id] = r.price;
+  return out;
+}
 
 export default async function AdminPage() {
   try {
@@ -64,7 +79,7 @@ async function renderAdminDashboard() {
   const prev1  = new Date(now.getFullYear(), now.getMonth() - 1, 1);
   const prev7  = new Date(now); prev7.setDate(prev7.getDate() - 7);
 
-  const [allClinics, newClinicsMonth, newClinicsPrev, subInvoices] = await Promise.all([
+  const [allClinics, newClinicsMonth, newClinicsPrev, subInvoices, planPrices] = await Promise.all([
     prisma.clinic.findMany({
       include: {
         users:  { select: { id:true, email:true, firstName:true, lastName:true, lastLogin:true } },
@@ -74,11 +89,15 @@ async function renderAdminDashboard() {
     }),
     prisma.clinic.count({ where: { createdAt: { gte: month1 } } }),
     prisma.clinic.count({ where: { createdAt: { gte: prev1, lt: month1 } } }),
+    // OR createdAt/paidAt: una factura CREADA el mes pasado pero PAGADA este
+    // mes cuenta para "Cobrado este mes" (que mide por paidAt) y quedaría
+    // fuera si filtráramos solo por createdAt.
     prisma.subscriptionInvoice.findMany({
-      where:   { createdAt: { gte: prev1 } },
+      where:   { OR: [{ createdAt: { gte: prev1 } }, { paidAt: { gte: prev1 } }] },
       include: { clinic: { select: { name:true } } },
       orderBy: { createdAt: "desc" },
     }),
+    loadPlanPrices(),
   ]);
 
   const trialClinics   = allClinics.filter(c => c.trialEndsAt && new Date(c.trialEndsAt) > now);
@@ -93,9 +112,11 @@ async function renderAdminDashboard() {
     return !last || new Date(last) < prev7;
   });
 
-  const mrr          = activeClinics.reduce((s,c) => s + (PLAN_PRICES[c.plan] ?? 0), 0);
-  const mrrPotential = mrr + trialClinics.reduce((s,c) => s + (PLAN_PRICES[c.plan] ?? 0), 0);
-  const paidMonth    = subInvoices.filter(i => i.status==="paid" && i.createdAt>=month1).reduce((s,i)=>s+i.amount,0);
+  const mrr          = activeClinics.reduce((s,c) => s + (planPrices[c.plan] ?? 0), 0);
+  const mrrPotential = mrr + trialClinics.reduce((s,c) => s + (planPrices[c.plan] ?? 0), 0);
+  // Se mide por FECHA DE PAGO (paidAt), no por alta de la fila: los cobros de
+  // Stripe se registran con el paid_at real de la factura.
+  const paidMonth    = subInvoices.filter(i => i.status==="paid" && (i.paidAt ?? i.createdAt)>=month1).reduce((s,i)=>s+i.amount,0);
   const pendingPay   = subInvoices.filter(i => i.status==="pending").reduce((s,i)=>s+i.amount,0);
   const growthRate   = newClinicsPrev > 0 ? Math.round(((newClinicsMonth-newClinicsPrev)/newClinicsPrev)*100) : 0;
 
@@ -348,7 +369,7 @@ async function renderAdminDashboard() {
                       {clinic.plan}
                     </BadgeNew>
                     <div className="mono" style={{ fontSize: 11, color: "var(--text-3)", marginTop: 2 }}>
-                      {formatCurrency(PLAN_PRICES[clinic.plan] ?? 0)}/mes
+                      {formatCurrency(planPrices[clinic.plan] ?? 0)}/mes
                     </div>
                   </td>
                   <td className="mono" style={{ color: "var(--text-2)" }}>{clinic._count.patients}</td>
