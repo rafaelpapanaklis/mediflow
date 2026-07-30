@@ -6,7 +6,7 @@
 // resoluciones de paciente/doctor SOLO buscan dentro de esa clínica.
 
 import { prisma } from "@/lib/prisma";
-import { getPlanLimits } from "@/lib/plans";
+import { getPatientQuota } from "@/lib/patient-quota";
 import type { PreviewRow } from "./types";
 import {
   BATCH,
@@ -310,18 +310,18 @@ export const patientsHandler: EntityHandler = {
     // insertar nada — mejor decir cuántos caben que importar a medias.
     // FAIL-OPEN: si no se puede leer el plan o contar, se deja pasar y se
     // loguea; una migración no puede morir por un error del gate.
+    // Cuenta y tope salen de getPatientQuota (@/lib/patient-quota), el mismo
+    // helper del contador de la lista y del POST — un solo criterio de cupo.
     try {
-      const clinic = await prisma.clinic.findUnique({ where: { id: clinicId }, select: { plan: true } });
-      const { maxPatients } = await getPlanLimits(clinic?.plan);
-      if (maxPatients != null) {
-        const current = await prisma.patient.count({ where: { clinicId } });
-        const room = Math.max(0, maxPatients - current);
+      const quota = await getPatientQuota(clinicId);
+      if (!quota.unlimited) {
+        const room = quota.remaining ?? 0;
         if (toInsert.length > room) {
           throw new ImportError(
             402,
             room === 0
-              ? `Tu plan incluye hasta ${maxPatients} pacientes y ya los tienes todos. Sube de plan para importar más.`
-              : `Tu plan incluye hasta ${maxPatients} pacientes y ya tienes ${current}: solo caben ${room} más, y el archivo trae ${toInsert.length}. Sube de plan o recorta el archivo.`,
+              ? `Tu plan incluye hasta ${quota.max} pacientes y ya los tienes todos. Sube de plan para importar más.`
+              : `Tu plan incluye hasta ${quota.max} pacientes y ya tienes ${quota.used}: solo caben ${room} más, y el archivo trae ${toInsert.length}. Sube de plan o recorta el archivo.`,
             undefined,
             "PLAN_LIMIT_PATIENTS",
           );

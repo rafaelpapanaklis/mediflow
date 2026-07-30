@@ -3,7 +3,7 @@ import { Prisma, PatientStatus, Gender } from "@prisma/client";
 import { getAuthContext, buildPatientWhere } from "@/lib/auth-context";
 import { prisma } from "@/lib/prisma";
 import { getPatientVisibility } from "@/lib/branches";
-import { getPlanLimits } from "@/lib/plans";
+import { getPatientQuota } from "@/lib/patient-quota";
 import { validateCurpRecord, type CurpStatusValue } from "@/lib/validators/curp";
 import { normalizeVisibleUserIds } from "@/lib/patient-visibility";
 import { logMutation } from "@/lib/audit";
@@ -257,6 +257,55 @@ async function v2Handler(
   const weekEnd = new Date(todayStart);
   weekEnd.setDate(weekEnd.getDate() + 7);
 
+  // El cupo del plan va en su PROPIO batch (el de stats ya trae 10 queries) y
+  // arranca en paralelo con ellas. Es clinic-wide a propósito: NO puede salir de
+  // `stats.total`, que pasa por buildPatientWhere y se recorta por la
+  // visibilidad del usuario — a un DOCTOR le mostraría un número menor y el
+  // contador mentiría sobre el consumo real de la clínica.
+  const [statCounts, quota] = await Promise.all([
+    Promise.all([
+      prisma.patient.count({ where: baseStatsWhere }),
+      prisma.patient.count({ where: { ...baseStatsWhere, status: "ACTIVE" } }),
+      prisma.patient.count({ where: { ...baseStatsWhere, status: "INACTIVE" } }),
+      prisma.patient.count({ where: { ...baseStatsWhere, status: "ARCHIVED" } }),
+      prisma.patient.count({
+        where: { ...baseStatsWhere, createdAt: { gte: monthStart } },
+      }),
+      prisma.patient.count({
+        where: {
+          ...baseStatsWhere,
+          createdAt: { gte: prevMonthStart, lt: monthStart },
+        },
+      }),
+      // KPIs "pacientes con deuda" / "monto adeudado": mismo criterio que el
+      // include de arriba — las canceladas no son deuda.
+      prisma.invoice.aggregate({
+        where: { clinicId: ctx.clinicId, balance: { gt: 0 }, status: { not: "CANCELLED" } },
+        _sum: { balance: true },
+      }),
+      prisma.invoice.findMany({
+        where: { clinicId: ctx.clinicId, balance: { gt: 0 }, status: { not: "CANCELLED" } },
+        select: { patientId: true },
+        distinct: ["patientId"],
+      }),
+      prisma.appointment.count({
+        where: {
+          clinicId: ctx.clinicId,
+          startsAt: { gte: todayStart, lt: todayEnd },
+          status: { notIn: ["CANCELLED", "NO_SHOW"] },
+        },
+      }),
+      prisma.appointment.count({
+        where: {
+          clinicId: ctx.clinicId,
+          startsAt: { gte: todayStart, lt: weekEnd },
+          status: { notIn: ["CANCELLED", "NO_SHOW"] },
+        },
+      }),
+    ]),
+    getPatientQuota(ctx.clinicId),
+  ]);
+
   const [
     totalCount,
     activeCount,
@@ -268,46 +317,7 @@ async function v2Handler(
     distinctDebtPatients,
     nextApptToday,
     nextApptWeek,
-  ] = await Promise.all([
-    prisma.patient.count({ where: baseStatsWhere }),
-    prisma.patient.count({ where: { ...baseStatsWhere, status: "ACTIVE" } }),
-    prisma.patient.count({ where: { ...baseStatsWhere, status: "INACTIVE" } }),
-    prisma.patient.count({ where: { ...baseStatsWhere, status: "ARCHIVED" } }),
-    prisma.patient.count({
-      where: { ...baseStatsWhere, createdAt: { gte: monthStart } },
-    }),
-    prisma.patient.count({
-      where: {
-        ...baseStatsWhere,
-        createdAt: { gte: prevMonthStart, lt: monthStart },
-      },
-    }),
-    // KPIs "pacientes con deuda" / "monto adeudado": mismo criterio que el
-    // include de arriba — las canceladas no son deuda.
-    prisma.invoice.aggregate({
-      where: { clinicId: ctx.clinicId, balance: { gt: 0 }, status: { not: "CANCELLED" } },
-      _sum: { balance: true },
-    }),
-    prisma.invoice.findMany({
-      where: { clinicId: ctx.clinicId, balance: { gt: 0 }, status: { not: "CANCELLED" } },
-      select: { patientId: true },
-      distinct: ["patientId"],
-    }),
-    prisma.appointment.count({
-      where: {
-        clinicId: ctx.clinicId,
-        startsAt: { gte: todayStart, lt: todayEnd },
-        status: { notIn: ["CANCELLED", "NO_SHOW"] },
-      },
-    }),
-    prisma.appointment.count({
-      where: {
-        clinicId: ctx.clinicId,
-        startsAt: { gte: todayStart, lt: weekEnd },
-        status: { notIn: ["CANCELLED", "NO_SHOW"] },
-      },
-    }),
-  ]);
+  ] = statCounts;
 
   const stats = {
     total: totalCount,
@@ -446,6 +456,9 @@ async function v2Handler(
     pageSize: limit,
     totalPages,
     stats,
+    // Cupo de pacientes del PLAN (clinic-wide, ver comentario del batch). El
+    // cliente pinta el chip "X/N pacientes" sólo si `unlimited` es false.
+    quota,
     hasMore,
     nextCursor: null,
   });
@@ -526,20 +539,31 @@ export async function POST(req: NextRequest) {
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  // Tope de pacientes por plan (enforcement). maxPatients null = ilimitado.
-  const clinicPlanRow = await prisma.clinic.findUnique({ where: { id: ctx.clinicId }, select: { plan: true } });
-  const { maxPatients } = await getPlanLimits(clinicPlanRow?.plan);
-  if (maxPatients != null) {
-    const patientCount = await prisma.patient.count({ where: { clinicId: ctx.clinicId } });
-    if (patientCount >= maxPatients) {
-      return NextResponse.json(
-        { error: `Tu plan incluye hasta ${maxPatients} pacientes. Sube de plan para seguir creciendo.`, code: "PLAN_LIMIT_PATIENTS", limit: maxPatients },
-        { status: 402 },
-      );
-    }
+  // Tope de pacientes del plan (enforcement real: la UI es sólo un espejo).
+  // Cuenta y tope salen de getPatientQuota — el MISMO helper que alimenta el
+  // contador "X/N" de la lista y el gate de la importación masiva, así que el
+  // chip y este 402 nunca pueden discrepar. `unlimited` = plan sin tope.
+  const quota = await getPatientQuota(ctx.clinicId);
+  if (!quota.canCreate) {
+    return NextResponse.json(
+      {
+        error: `Tu plan incluye hasta ${quota.max} pacientes. Sube de plan para seguir creciendo.`,
+        code: "PLAN_LIMIT_PATIENTS",
+        limit: quota.max,
+        used: quota.used,
+        // El banner del modal ofrece "Ver planes y mejorar" SOLO al admin:
+        // /dashboard/settings?tab=subscription es admin-only y un rol operativo
+        // caería en otra pestaña. El rol sale de la SESIÓN, nunca del cliente.
+        isAdmin: ctx.isAdmin,
+      },
+      { status: 402 },
+    );
   }
 
   const body = await req.json();
+  // OJO: este count NO es el del cupo (ese es quota.used, que excluye borrados).
+  // Es el folio secuencial P0001, P0002… y cuenta TODAS las filas de la clínica
+  // a propósito, para no reasignar un número ya emitido.
   const count = await prisma.patient.count({ where: { clinicId: ctx.clinicId } });
   const patientNumber = `P${String(count + 1).padStart(4, "0")}`;
 
