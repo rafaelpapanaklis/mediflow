@@ -137,12 +137,24 @@ function lastActivityAt(t: TicketRow): Date {
   return new Date(Math.max(...times));
 }
 
-/** La pelota está del lado de soporte (nadie respondió aún o la clínica habló al último). */
-function clinicIsWaiting(t: TicketRow): boolean {
-  if (!(SUPPORT_OPEN_STATUSES as readonly string[]).includes(t.status)) return false;
+/**
+ * Regla ÚNICA de "espera respuesta de soporte", solo sobre las 2 fechas:
+ * nadie respondió aún, o la clínica habló al último. El estado del ticket lo
+ * filtra quien llama (where de Prisma o `clinicIsWaiting`).
+ */
+function awaitingSupportReply(t: {
+  lastClinicMessageAt: Date | null;
+  lastSupportMessageAt: Date | null;
+}): boolean {
   if (!t.lastSupportMessageAt) return true;
   if (!t.lastClinicMessageAt) return false;
   return t.lastClinicMessageAt.getTime() > t.lastSupportMessageAt.getTime();
+}
+
+/** La pelota está del lado de soporte (nadie respondió aún o la clínica habló al último). */
+function clinicIsWaiting(t: TicketRow): boolean {
+  if (!(SUPPORT_OPEN_STATUSES as readonly string[]).includes(t.status)) return false;
+  return awaitingSupportReply(t);
 }
 
 function toSummary(t: TicketRow): SupportTicketSummary {
@@ -737,13 +749,12 @@ export async function getAdminMetrics(): Promise<SupportAdminMetrics> {
     }),
   ]);
 
+  // Misma pasada para las 2 métricas de espera: `pendingReply` = todos los que
+  // esperan respuesta; `unanswered24h` = los que además ya pasaron las 24 h.
   const cutoff = Date.now() - 24 * 36e5;
-  const unanswered24h = openTickets.filter((t) => {
-    const waiting =
-      !t.lastSupportMessageAt ||
-      (t.lastClinicMessageAt &&
-        t.lastClinicMessageAt.getTime() > t.lastSupportMessageAt.getTime());
-    if (!waiting) return false;
+  const waitingTickets = openTickets.filter(awaitingSupportReply);
+  const pendingReply = waitingTickets.length;
+  const unanswered24h = waitingTickets.filter((t) => {
     const since = t.lastClinicMessageAt ?? t.createdAt;
     return since.getTime() < cutoff;
   }).length;
@@ -762,9 +773,27 @@ export async function getAdminMetrics(): Promise<SupportAdminMetrics> {
 
   return {
     open: openTickets.length,
+    pendingReply,
     unanswered24h,
     avgFirstResponseHours,
     avgRating,
     ratedCount: ratingAgg._count.rating ?? 0,
   };
+}
+
+/**
+ * Tickets abiertos que esperan respuesta de soporte — badge del sidebar admin.
+ * MISMA regla que `unanswered24h` pero SIN el corte de 24 h: cuentan todos.
+ * Nunca lanza: un fallo de DB devuelve 0 en vez de tumbar el panel entero.
+ */
+export async function countAdminPendingReply(): Promise<number> {
+  try {
+    const openTickets = await prisma.supportTicket.findMany({
+      where: { status: { in: [...SUPPORT_OPEN_STATUSES] } },
+      select: { lastClinicMessageAt: true, lastSupportMessageAt: true },
+    });
+    return openTickets.filter(awaitingSupportReply).length;
+  } catch {
+    return 0;
+  }
 }

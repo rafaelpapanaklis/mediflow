@@ -138,6 +138,7 @@ export interface AdminTicketDetailDTO {
 
 export interface SupportAdminMetrics {
   open: number; // tickets en SUPPORT_OPEN_STATUSES
+  pendingReply: number; // abiertos esperando respuesta de soporte (sin corte de tiempo)
   unanswered24h: number; // abiertos con la clínica esperando >24h
   avgFirstResponseHours: number | null; // promedio de primera respuesta (últimos 200)
   avgRating: number | null; // promedio de rating 1-5

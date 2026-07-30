@@ -12,7 +12,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
-import { AlertTriangle, Building2, Clock, Inbox, LifeBuoy, Search, Star } from "lucide-react";
+import { AlertTriangle, Building2, Clock, Hourglass, Inbox, LifeBuoy, Search, Star } from "lucide-react";
 import { CardNew } from "@/components/ui/design-system/card-new";
 import { BadgeNew } from "@/components/ui/design-system/badge-new";
 import { ButtonNew } from "@/components/ui/design-system/button-new";
@@ -172,12 +172,26 @@ export function AdminSoporteClient() {
       </div>
 
       {/* KPI row */}
-      <div className="grid grid-cols-2 xl:grid-cols-4" style={{ gap: 14, marginBottom: 20 }}>
+      <div className="grid grid-cols-2 xl:grid-cols-5" style={{ gap: 14, marginBottom: 20 }}>
         <KpiCard
           label="Abiertos"
           value={metrics ? String(metrics.open) : "—"}
           icon={Inbox}
           delta={metrics ? { value: "Tickets activos", direction: "up" } : undefined}
+        />
+        {/* Mismo número que el badge del sidebar (countAdminPendingReply). */}
+        <KpiCard
+          label="Sin responder"
+          value={metrics ? String(metrics.pendingReply) : "—"}
+          icon={Hourglass}
+          tone={metrics && metrics.pendingReply > 0 ? "danger" : undefined}
+          delta={
+            metrics
+              ? metrics.pendingReply > 0
+                ? { value: "Esperan tu respuesta", direction: "down" }
+                : { value: "Bandeja al día", direction: "up" }
+              : undefined
+          }
         />
         <KpiCard
           label="Sin responder >24h"

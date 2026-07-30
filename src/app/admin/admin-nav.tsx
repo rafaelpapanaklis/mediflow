@@ -43,7 +43,11 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/admin/settings",     label: "Configuración",icon: Settings,        section: "system" },
 ];
 
-export function AdminSidebar({ counts }: { counts?: { clinics?: number; atRisk?: number } }) {
+export function AdminSidebar({
+  counts,
+}: {
+  counts?: { clinics?: number; atRisk?: number; supportPending?: number };
+}) {
   const pathname = usePathname();
   const router = useRouter();
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -71,8 +75,11 @@ export function AdminSidebar({ counts }: { counts?: { clinics?: number; atRisk?:
     const active = isActive(item.href);
     const Icon   = item.icon;
     let count: number | undefined;
+    // Soporte es el único badge de ALERTA: tickets esperando MI respuesta.
+    const alert = item.href === "/admin/soporte";
     if (item.href === "/admin/clinics") count = counts?.clinics;
     if (item.href === "/admin/churn")   count = counts?.atRisk;
+    if (alert)                          count = counts?.supportPending;
     return (
       <Link
         key={item.href}
@@ -83,7 +90,12 @@ export function AdminSidebar({ counts }: { counts?: { clinics?: number; atRisk?:
         <Icon size={14} />
         <span>{item.label}</span>
         {typeof count === "number" && count > 0 && (
-          <span className="nav-item-new__count">{count}</span>
+          <span
+            className={`nav-item-new__count ${alert ? "nav-item-new__count--alert" : ""}`}
+            title={alert ? `${count} ticket${count === 1 ? "" : "s"} sin responder` : undefined}
+          >
+            {count}
+          </span>
         )}
       </Link>
     );

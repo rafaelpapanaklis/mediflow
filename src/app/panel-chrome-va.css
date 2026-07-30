@@ -107,6 +107,22 @@
   color: #6d28d9;
 }
 
+/* Modificador de ALERTA (soporte sin responder) — mismo pill en rojo.
+   Se repite en `:root:not(.dark)` (0,4,0) para ganarle al override light de
+   arriba, que tiene esa misma especificidad y solo pierde por orden. */
+.mf-extpanel .nav-item-new__count--alert {
+  background: var(--danger-soft);
+  color: #b91c1c;            /* red-700 · 6.4:1 sobre danger-soft light */
+}
+:root:not(.dark) .mf-extpanel .nav-item-new__count--alert {
+  background: var(--danger-soft);
+  color: #b91c1c;
+}
+.dark .mf-extpanel .nav-item-new__count--alert {
+  background: var(--danger-soft);
+  color: #fca5a5;            /* red-300 · AA sobre danger-soft dark */
+}
+
 /* Icon buttons — foco visible con el ring del sistema. */
 .mf-extpanel .icon-btn-new:focus-visible {
   outline: none;

@@ -1,22 +1,24 @@
 import { AdminSidebar } from "./admin-nav";
 import { prisma } from "@/lib/prisma";
 import { isAdminAuthed } from "@/lib/admin-auth";
+import { countAdminPendingReply } from "@/lib/support/service";
 import AdminLoginPage from "./login/page";
 import "@/app/panel-chrome-va.css";
 
 async function getNavCounts() {
   try {
-    const [clinics, atRisk] = await Promise.all([
+    const [clinics, atRisk, supportPending] = await Promise.all([
       prisma.clinic.count().catch(() => 0),
       prisma.clinic.count({
         where: {
           subscriptionStatus: { in: ["trialing", "past_due"] },
         },
       }).catch(() => 0),
+      countAdminPendingReply(), // ya trae su propio try/catch → 0 si falla
     ]);
-    return { clinics, atRisk };
+    return { clinics, atRisk, supportPending };
   } catch {
-    return { clinics: 0, atRisk: 0 };
+    return { clinics: 0, atRisk: 0, supportPending: 0 };
   }
 }
 
