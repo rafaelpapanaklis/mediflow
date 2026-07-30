@@ -950,6 +950,7 @@
       "errUpgradePayment": "No se pudo cobrar la diferencia: tu plan NO cambió. Revisa tu método de pago e inténtalo de nuevo.",
       "errSubscriptionNotLive": "Tu suscripción no está activa en Stripe. Usa “Activar / pagar mi plan” para reactivarla y elegir tu plan.",
       "errManualDowngrade": "Ya pagaste el periodo en curso, así que no bajamos el plan a medio periodo. Elige el plan menor al pagar tu próximo periodo.",
+      "errManualPeriodExpired": "Tu periodo pagado ya venció, así que no hay días que prorratear. Usa \"Activar / pagar mi plan\" para contratar el periodo nuevo con el plan que quieres.",
       "continue": "Continuar",
       "statusPaid": "Pagada",
       "statusPending": "Pendiente",

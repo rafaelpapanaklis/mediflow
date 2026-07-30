@@ -7,11 +7,20 @@ import { getStripeSafe, stripeUnavailableResponse } from "@/lib/stripe";
 import { PLAN_IDS, type PlanId } from "@/lib/billing/plans";
 import { getResolvedPlan } from "@/lib/plans";
 import {
+  buildPreviewSubscriptionItems,
   changeDirection,
   daysRemainingUntil,
+  hasProrationLines,
   isLiveSubscriptionStatus,
+  manualPaidUntil,
+  mapPreviewLines,
   planAmountCents,
+  previewAmountDueNow,
+  resolveChangeDirection,
+  subscriptionItemInterval,
+  subscriptionPeriodEndSeconds,
   type BillingInterval,
+  type ChangePlanPreviewLine,
 } from "@/lib/billing/proration";
 import { buildManualUpgradeQuote } from "@/lib/billing/manual-upgrade";
 import { isClinicBillingAdmin, notClinicBillingAdminResponse } from "@/lib/billing/authz";
@@ -21,11 +30,7 @@ export const dynamic = "force-dynamic";
 
 const BodySchema = z.object({ plan: z.enum(PLAN_IDS) });
 
-export interface ChangePlanPreviewLine {
-  description: string;
-  /** MXN (no centavos). Negativo = crédito a favor. */
-  amount: number;
-}
+export type { ChangePlanPreviewLine };
 
 export interface ChangePlanPreview {
   /** "subscription" = tarjeta viva | "manual" = SPEI/OXXO pagado | "in-place" = aún no paga. */
@@ -76,7 +81,9 @@ export async function GET() {
       hasSubscription: false,
       interval: null,
       status: clinic.subscriptionStatus ?? null,
-      nextBillingDate: (clinic.nextBillingDate ?? clinic.trialEndsAt)?.toISOString() ?? null,
+      // MISMO "pagado-hasta" que usa el POST para cotizar: el panel decide con
+      // esta fecha si ofrecer el CTA de pagar el periodo nuevo.
+      nextBillingDate: manualPaidUntil(clinic)?.toISOString() ?? null,
     });
   }
 
@@ -100,7 +107,7 @@ export async function GET() {
     const periodEnd = subscriptionPeriodEnd(sub);
     return NextResponse.json({
       hasSubscription: true,
-      interval: item?.price.recurring?.interval === "year" ? "year" : "month",
+      interval: subscriptionItemInterval(item),
       status: sub.status,
       live: isLiveSubscriptionStatus(sub.status),
       nextBillingDate: periodEnd
@@ -192,7 +199,9 @@ export async function POST(req: NextRequest) {
 
     const quote = await buildManualUpgradeQuote({
       clinicId: clinic.id,
-      paidUntil: clinic.trialEndsAt,
+      // Misma definición de "pagado-hasta" que el POST que cobra: si divergen,
+      // el modal cotiza un periodo distinto del que se factura.
+      paidUntil: manualPaidUntil(clinic),
       currentPlan,
       targetPlan,
     });
@@ -252,10 +261,17 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ code: "NO_ITEMS", error: "Suscripción sin items" }, { status: 409 });
   }
 
-  const interval: BillingInterval = item.price.recurring?.interval === "year" ? "year" : "month";
+  const interval: BillingInterval = subscriptionItemInterval(item);
   const targetCents = planAmountCents(targetPlan, interval);
   const currentCents = item.price.unit_amount ?? planAmountCents(currentPlan, interval);
-  const direction = changeDirection(currentCents, targetCents);
+  // MISMO criterio que el POST que cobra (tier como veto): si divergen, el modal
+  // anuncia un cobro inmediato que no ocurre, o al revés.
+  const direction = resolveChangeDirection({
+    currentCents,
+    targetCents,
+    currentPlanId: clinic.plan,
+    targetPlanId,
+  });
 
   const periodEnd = subscriptionPeriodEnd(sub);
   const nextBillingDate = periodEnd
@@ -298,18 +314,14 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ...baseline, unavailable: true });
   }
 
-  const previewItems = [
-    {
-      id: item.id,
-      quantity: item.quantity ?? 1,
-      price_data: {
-        currency: item.price.currency ?? "mxn",
-        product: productId,
-        recurring: { interval },
-        unit_amount: targetCents,
-      },
-    },
-  ];
+  const previewItems = buildPreviewSubscriptionItems({
+    itemId: item.id,
+    quantity: item.quantity ?? 1,
+    currency: item.price.currency ?? "mxn",
+    productId,
+    interval,
+    targetCents,
+  });
 
   let invoice: any = null;
   let previewError: string | null = null;
@@ -354,38 +366,37 @@ export async function POST(req: NextRequest) {
   // del plan nuevo). Si no hay ninguna, lo que devolvió Stripe no es el cobro
   // inmediato que vamos a hacer (p. ej. es la factura del próximo ciclo) y
   // mostrar ese importe engañaría al cliente: preferimos "no disponible".
-  if (!rawLines.some((line) => line.proration)) {
+  if (!hasProrationLines(rawLines)) {
     console.warn("[change-plan preview] la simulación no trae líneas de prorrateo; no se muestra importe");
     return NextResponse.json({ ...baseline, unavailable: true });
   }
 
-  const lines: ChangePlanPreviewLine[] = rawLines.map((line) => {
-    const amount = (line.amount ?? 0) / 100;
-    if (line.proration) {
-      return {
-        description:
-          amount < 0
-            ? `Crédito por el tiempo no usado del plan ${currentPlan.name}`
-            : `Plan ${targetPlan.name} por los ${daysRemaining} día(s) que te quedan`,
-        amount,
-      };
-    }
-    return { description: line.description ?? "Concepto", amount };
+  const lines: ChangePlanPreviewLine[] = mapPreviewLines(rawLines, {
+    currentPlanName: currentPlan.name,
+    targetPlanName: targetPlan.name,
+    daysRemaining,
   });
+
+  // `amount_due` trae el prorrateo + los InvoiceItems pendientes del customer
+  // (excedentes CFDI) + el saldo a favor: es lo que se cobrará hoy... SIEMPRE
+  // QUE la factura simulada sea la del cobro inmediato. Si Stripe devolvió la
+  // del próximo ciclo (trae la renovación completa además del prorrateo),
+  // `amount_due` está inflado por un periodo entero y NO se muestra importe.
+  const amountDueNow = previewAmountDueNow(invoice, periodEnd);
+  if (amountDueNow === null) {
+    console.warn("[change-plan preview] la simulación incluye la renovación; no se muestra importe");
+    return NextResponse.json({ ...baseline, unavailable: true });
+  }
 
   return NextResponse.json({
     ...baseline,
     currency: (invoice.currency ?? item.price.currency ?? "mxn").toUpperCase(),
-    // `amount_due` ya trae el prorrateo + los InvoiceItems pendientes del
-    // customer (excedentes CFDI) + el saldo a favor: es EXACTAMENTE lo que se
-    // cobrará hoy.
-    amountDueNow: Math.max(0, (invoice.amount_due ?? 0) / 100),
+    amountDueNow,
     lines,
   } satisfies ChangePlanPreview);
 }
 
 /** Fin del periodo en curso: en la suscripción o, en versiones nuevas de la API, en el item. */
 function subscriptionPeriodEnd(sub: Stripe.Subscription): number | undefined {
-  return ((sub as any).current_period_end
-    ?? (sub as any).items?.data?.[0]?.current_period_end) as number | undefined;
+  return subscriptionPeriodEndSeconds(sub);
 }

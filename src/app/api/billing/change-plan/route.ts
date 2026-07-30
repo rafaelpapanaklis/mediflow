@@ -9,11 +9,15 @@ import { getResolvedPlan, getPlanLimits } from "@/lib/plans";
 import { logAudit, extractAuditMeta } from "@/lib/audit";
 import {
   PLAN_UPGRADE_DIFF_KIND,
-  changeDirection,
+  buildSubscriptionUpdateParams,
+  buildTargetPriceParams,
   chargeFailureMessage,
   isLiveSubscriptionStatus,
   isStripeChargeFailure,
+  manualPaidUntil,
   planAmountCents,
+  resolveChangeDirection,
+  subscriptionItemInterval,
 } from "@/lib/billing/proration";
 import { buildManualUpgradeQuote } from "@/lib/billing/manual-upgrade";
 import { isClinicBillingAdmin, notClinicBillingAdminResponse } from "@/lib/billing/authz";
@@ -99,6 +103,9 @@ export async function POST(req: NextRequest) {
       plan: true,
       subscriptionStatus: true,
       trialEndsAt: true,
+      // El "pagado-hasta" de una clínica manual puede vivir en cualquiera de los
+      // dos campos según cómo se haya activado (ver `manualPaidUntil`).
+      nextBillingDate: true,
       stripeCustomerId: true,
       stripeSubscriptionId: true,
     },
@@ -160,7 +167,7 @@ export async function POST(req: NextRequest) {
     // periodo (fuga de ingresos).
     const quote = await buildManualUpgradeQuote({
       clinicId: clinic.id,
-      paidUntil: clinic.trialEndsAt,
+      paidUntil: manualPaidUntil(clinic),
       currentPlan,
       targetPlan,
     });
@@ -181,13 +188,37 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Nada que cobrar: periodo ya vencido (0 días), planes del mismo precio o
-    // diferencial por debajo del mínimo que Stripe acepta. Aplicamos el plan.
+    // SIN PERIODO VIGENTE → 409. Es un UPGRADE (el downgrade ya salió arriba) de
+    // una clínica cuyo periodo pagado ya venció: prorratear 0 días da 0 y antes
+    // se aplicaba el plan superior GRATIS, para siempre.
+    //
+    // El agujero es real porque a un pagador manual NADA lo saca de
+    // `subscriptionStatus: "active"` al vencer (no hay cron de renovación) y
+    // `isPlanExpired` solo bloquea si el status NO está activo: la clínica sigue
+    // trabajando con el periodo vencido y desde ahí se auto-promovía al plan más
+    // caro sin pagar un peso. Se le pide comprar el periodo nuevo, que ya cobra
+    // el plan elegido completo.
+    if (quote.daysRemaining <= 0) {
+      return NextResponse.json(
+        {
+          code: "MANUAL_PERIOD_EXPIRED",
+          error:
+            "Tu periodo pagado ya venció, así que no podemos prorratear el cambio. " +
+            'Usa "Activar / pagar mi plan" para contratar el periodo nuevo eligiendo el plan que quieres.',
+        },
+        { status: 409 },
+      );
+    }
+
+    // Con periodo vigente pero nada que cobrar: planes del mismo precio o
+    // diferencial por debajo del mínimo que Stripe acepta (~$10 MXN). El costo
+    // de la fricción supera el ingreso: aplicamos el plan.
     if (!quote.chargeable) {
       return applyInPlace("self-service-change-plan-manual-free", {
-        reason: quote.diffCents > 0 ? "below-stripe-minimum" : "no-days-remaining",
+        reason: "below-stripe-minimum",
         daysRemaining: quote.daysRemaining,
         diffMxn: quote.diffCents / 100,
+        intervalKnown: quote.intervalKnown,
       });
     }
 
@@ -408,28 +439,27 @@ export async function POST(req: NextRequest) {
   // anual quedaba convertida a price mensual: bug). Mensual sigue mensual.
   // Default defensivo a mensual si Stripe no reporta `recurring` (no debería
   // ocurrir en una suscripción viva). El monto sale del ciclo del plan nuevo.
-  const isAnnual = item.price.recurring?.interval === "year";
-  const interval = isAnnual ? "year" : "month";
+  const interval = subscriptionItemInterval(item);
+  const isAnnual = interval === "year";
   const unitAmount = planAmountCents(targetPlan, interval);
 
   // Dirección del cambio comparando el importe del plan destino contra el del
   // price ACTUAL de la suscripción (mismo intervalo). Si el price no expone
   // `unit_amount` (tarifas por tramos), caemos al precio configurado del plan.
   const currentUnitAmount = item.price.unit_amount ?? planAmountCents(currentPlan, interval);
-  const direction = changeDirection(currentUnitAmount, unitAmount);
+  // El TIER vetea: bajar de plan nunca se cobra hoy, aunque el precio congelado
+  // en la suscripción sea menor que el del plan destino (ver resolveChangeDirection).
+  const direction = resolveChangeDirection({
+    currentCents: currentUnitAmount,
+    targetCents: unitAmount,
+    currentPlanId: clinic.plan,
+    targetPlanId: targetPlanId,
+  });
   const isUpgrade = direction === "upgrade";
 
   // Creamos el price nuevo on-the-fly (mismo patrón que el checkout
   // self-service) para evitar mantener Price IDs pre-creados.
-  const newPrice = await stripe.prices.create({
-    currency: "mxn",
-    unit_amount: unitAmount,
-    recurring: { interval: isAnnual ? "year" : "month" },
-    product_data: {
-      name: `DaleControl ${targetPlan.name} — Suscripción ${isAnnual ? "anual" : "mensual"}`,
-      metadata: { plan: targetPlan.id },
-    },
-  });
+  const newPrice = await stripe.prices.create(buildTargetPriceParams(targetPlan, interval));
 
   // UPGRADE: "always_invoice" factura y COBRA el prorrateo de inmediato (antes
   // era "create_prorations", que lo posponía a la factura de la renovación), y
@@ -448,17 +478,20 @@ export async function POST(req: NextRequest) {
   // un segundo update no genera prorrateo.
   let updated: Stripe.Subscription;
   try {
-    updated = await stripe.subscriptions.update(clinic.stripeSubscriptionId, {
-      items: [{ id: item.id, price: newPrice.id }],
-      proration_behavior: isUpgrade ? "always_invoice" : "create_prorations",
-      ...(isUpgrade ? { payment_behavior: "error_if_incomplete" as const } : {}),
-      metadata: {
-        ...(sub.metadata ?? {}),
-        clinicId: clinic.id,
-        plan: targetPlan.id,
-        kind: "platform-subscription",
-      },
-    });
+    updated = await stripe.subscriptions.update(
+      clinic.stripeSubscriptionId,
+      buildSubscriptionUpdateParams({
+        itemId: item.id,
+        priceId: newPrice.id,
+        direction,
+        metadata: {
+          ...(sub.metadata ?? {}),
+          clinicId: clinic.id,
+          plan: targetPlan.id,
+          kind: "platform-subscription",
+        },
+      }),
+    );
   } catch (err: any) {
     // El cobro del diferencial falló → Stripe NO aplicó el price nuevo. No
     // escribimos clinic.plan: la clínica se queda en su plan actual.

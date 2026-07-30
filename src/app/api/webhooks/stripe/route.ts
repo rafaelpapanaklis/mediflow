@@ -18,8 +18,13 @@ import {
 import { PATIENT_INVOICE_KIND, applyInvoiceOnlinePayment } from "@/lib/patient-portal/online-payment";
 import { CFDI_OVERAGE_KIND, reconcileOverageFromWebhook } from "@/lib/cfdi-overage";
 import { getPlanLimits } from "@/lib/plans";
-import { PLAN_IDS, isPlanId } from "@/lib/billing/plans";
-import { PLAN_UPGRADE_DIFF_KIND, canSuspendForFailedInvoice } from "@/lib/billing/proration";
+import { isPlanId } from "@/lib/billing/plans";
+import {
+  PLAN_UPGRADE_DIFF_KIND,
+  canSuspendForFailedInvoice,
+  isPlanTierUpgrade,
+  nextBillingDateFields,
+} from "@/lib/billing/proration";
 import { sendPlanActivatedEmail, sendPlanRenewedEmail } from "@/lib/email";
 import { PLAN_MARKETING } from "@/lib/plan-shared";
 
@@ -179,12 +184,6 @@ export async function POST(req: NextRequest) {
         const clinicId = (sub.metadata?.clinicId as string | undefined)
           ?? await resolveClinicIdByCustomer(sub.customer as string);
         if (clinicId) {
-          // current_period_end no siempre está tipado en las últimas versiones
-          // del SDK; lo leemos como campo opcional. En las versiones nuevas de la
-          // API el fin de periodo vive en el item, no en la suscripción — de ahí
-          // el fallback (sin él el campo llegaba undefined y borrábamos la fecha).
-          const periodEnd = ((sub as any).current_period_end
-            ?? (sub as any).items?.data?.[0]?.current_period_end) as number | undefined;
           // Plan en la metadata de la suscripción (cambios hechos desde el
           // dashboard/portal de Stripe). Si es válido, sincroniza plan + cupo IA.
           const subPlan = sub.metadata?.plan;
@@ -198,9 +197,11 @@ export async function POST(req: NextRequest) {
               subscriptionStatus:   sub.status,
               subscriptionId:       sub.id,
               // Si Stripe NO reporta el fin de periodo, NO se toca la fecha de
-              // renovación. Antes se escribía `null` y el dato se BORRABA (el
-              // panel dejaba de mostrar cuándo se renueva).
-              ...(periodEnd ? { nextBillingDate: new Date(periodEnd * 1000) } : {}),
+              // renovación (`nextBillingDateFields` devuelve {}). Antes se
+              // escribía `null` y el dato se BORRABA: el panel dejaba de mostrar
+              // cuándo se renueva. En las versiones nuevas de la API el fin de
+              // periodo vive en el item, no en la suscripción.
+              ...nextBillingDateFields(sub),
               ...subPlanFields,
             },
           });
@@ -604,12 +605,48 @@ async function applyPlanUpgradeDiff(
   plan: string | null,
   source: { event: string; sessionId?: string },
 ): Promise<void> {
-  if (!isPlanId(plan)) return;
+  // Todo descarte se REGISTRA: en los tres casos el cliente YA pagó el
+  // diferencial. Un return mudo dejaba un cobro acreditado sin plan aplicado y
+  // sin rastro para detectarlo ni devolverlo.
+  const drop = async (reason: string, extra: Record<string, unknown>) => {
+    console.error(
+      `[stripe webhook] plan-upgrade-diff PAGADO pero NO aplicado (${reason}):`,
+      JSON.stringify({ clinicId, incomingPlan: plan, ...extra, ...source }),
+    );
+    await logAudit({
+      clinicId,
+      userId: clinicId,
+      entityType: "subscription",
+      entityId: source.sessionId ?? clinicId,
+      action: "update",
+      changes: {
+        _source: {
+          before: null,
+          after: {
+            ...source,
+            kind: PLAN_UPGRADE_DIFF_KIND,
+            result: "not_applied",
+            reason,
+            incomingPlan: plan,
+            ...extra,
+          },
+        },
+      },
+    }).catch(() => {});
+  };
+
+  if (!isPlanId(plan)) {
+    await drop("invalid-plan", {});
+    return;
+  }
   const before = await prisma.clinic.findUnique({
     where: { id: clinicId },
     select: { plan: true },
   });
-  if (!before) return;
+  if (!before) {
+    await drop("clinic-not-found", {});
+    return;
+  }
 
   // Este pago SOLO puede SUBIR de plan. Un voucher SPEI/OXXO tarda horas o días
   // y puede llegar cuando la clínica ya está en un plan MAYOR por otra vía (un
@@ -617,11 +654,12 @@ async function applyPlanUpgradeDiff(
   // desde Stripe). Sin esta guarda, escribir metadata.plan a ciegas la BAJABA de
   // plan en silencio, cobrada y todo. PLAN_IDS es el orden canónico de tiers
   // (BASIC → PRO → CLINIC).
-  if (PLAN_IDS.indexOf(plan) <= PLAN_IDS.indexOf(before.plan as (typeof PLAN_IDS)[number])) {
-    console.warn(
-      "[stripe webhook] plan-upgrade-diff ignorado (no es un upgrade):",
-      JSON.stringify({ clinicId, currentPlan: before.plan, incomingPlan: plan, ...source }),
-    );
+  //
+  // OJO: un reenvío del MISMO evento cae aquí y es correcto (no-op idempotente),
+  // pero un SEGUNDO voucher pagado por el mismo upgrade también — ahí sí hay
+  // dinero cobrado dos veces. La fila de bitácora es la que permite detectarlo.
+  if (!isPlanTierUpgrade(before.plan, plan)) {
+    await drop("not-a-tier-upgrade", { currentPlan: before.plan });
     return;
   }
 

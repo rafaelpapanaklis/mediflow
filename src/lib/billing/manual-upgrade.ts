@@ -1,14 +1,10 @@
 import "server-only";
 import { prisma } from "@/lib/prisma";
 import {
-  MANUAL_PERIOD_DAYS,
-  MIN_CHARGEABLE_CENTS,
-  changeDirection,
-  daysRemainingUntil,
-  manualUpgradeDiffCents,
+  computeManualUpgradeQuote,
   pickPurchasedInterval,
-  planAmountCents,
   type BillingInterval,
+  type ManualUpgradeQuote,
 } from "@/lib/billing/proration";
 
 /**
@@ -17,22 +13,11 @@ import {
  * null y `subscriptionStatus` quedó en "active").
  *
  * Sin suscripción no hay prorrateo de Stripe: lo calculamos nosotros sobre los
- * días que le quedan del periodo pagado (`trialEndsAt` = "pagado-hasta").
+ * días que le quedan del periodo pagado (`trialEndsAt` = "pagado-hasta"). La
+ * aritmética vive en `computeManualUpgradeQuote` (puro, testeable); aquí solo se
+ * resuelve el ciclo comprado, que sí necesita la BD.
  */
-export interface ManualUpgradeQuote {
-  interval: BillingInterval;
-  periodDays: number;
-  daysRemaining: number;
-  currentCents: number;
-  targetCents: number;
-  direction: "upgrade" | "downgrade" | "same";
-  /** Diferencial a cobrar en centavos MXN (0 si no hay nada que cobrar). */
-  diffCents: number;
-  /** true si el diferencial supera el mínimo que Stripe acepta cobrar. */
-  chargeable: boolean;
-  /** Fin del periodo pagado (no se mueve al mejorar el plan). */
-  periodEnd: Date | null;
-}
+export type { ManualUpgradeQuote };
 
 type PlanPrices = { priceMxn: number; priceMxnAnnual: number };
 
@@ -45,17 +30,24 @@ type PlanPrices = { priceMxn: number; priceMxnAnnual: number };
 const AUDIT_LOOKBACK = 50;
 
 /**
- * Ciclo (mensual/anual) que compró una clínica que paga por SPEI/OXXO.
+ * Ciclo (mensual/anual) que compró una clínica que paga por SPEI/OXXO, o `null`
+ * si NO se pudo confirmar.
  *
  * `Clinic` no guarda el ciclo, pero `/api/billing/checkout` deja el `billing`
  * elegido en la bitácora (`entityType: "subscription"`, `action: "create"`,
  * `changes._created.after.billing`). Se busca la última fila que SÍ lo registre
  * (ver `pickPurchasedInterval`: las filas sin `billing` se saltan, no se toman
- * como mensuales). Ante cualquier duda cae a "month", que es el ciclo por
- * defecto del checkout y el que menos cobra por día — nunca sobre-cobramos por
- * un dato que no pudimos confirmar.
+ * como mensuales).
+ *
+ * Cuando no hay dato NO se asume "month": eso sobre-cobraba ~56% a las clínicas
+ * anuales (el anual cuesta mucho menos por día). Se devuelve null y
+ * `computeManualUpgradeQuote` cotiza por el criterio conservador. Hay clínicas
+ * que legítimamente no tienen la fila: las que activó un admin a mano
+ * (`/api/admin/billing`, que audita con otro `entityType`).
  */
-export async function inferManualInterval(clinicId: string): Promise<BillingInterval> {
+export async function inferManualInterval(clinicId: string): Promise<BillingInterval | null> {
+  // Sin clinicId, Prisma DESCARTA el filtro y leería bitácora de otras clínicas.
+  if (!clinicId) return null;
   try {
     const rows = await prisma.auditLog.findMany({
       where: { clinicId, entityType: "subscription", action: "create" },
@@ -63,9 +55,9 @@ export async function inferManualInterval(clinicId: string): Promise<BillingInte
       take: AUDIT_LOOKBACK,
       select: { changes: true },
     });
-    return pickPurchasedInterval(rows.map((r) => r.changes)) ?? "month";
+    return pickPurchasedInterval(rows.map((r) => r.changes));
   } catch {
-    return "month";
+    return null;
   }
 }
 
@@ -77,28 +69,12 @@ export async function buildManualUpgradeQuote(args: {
   targetPlan: PlanPrices;
   now?: Date;
 }): Promise<ManualUpgradeQuote> {
-  const now = args.now ?? new Date();
   const interval = await inferManualInterval(args.clinicId);
-  const periodDays = MANUAL_PERIOD_DAYS[interval];
-  const daysRemaining = daysRemainingUntil(args.paidUntil, now);
-  const currentCents = planAmountCents(args.currentPlan, interval);
-  const targetCents = planAmountCents(args.targetPlan, interval);
-  const direction = changeDirection(currentCents, targetCents);
-
-  const diffCents =
-    direction === "upgrade"
-      ? manualUpgradeDiffCents({ currentCents, targetCents, daysRemaining, periodDays })
-      : 0;
-
-  return {
+  return computeManualUpgradeQuote({
     interval,
-    periodDays,
-    daysRemaining,
-    currentCents,
-    targetCents,
-    direction,
-    diffCents,
-    chargeable: diffCents >= MIN_CHARGEABLE_CENTS,
-    periodEnd: args.paidUntil ? new Date(args.paidUntil) : null,
-  };
+    paidUntil: args.paidUntil,
+    currentPlan: args.currentPlan,
+    targetPlan: args.targetPlan,
+    now: args.now,
+  });
 }

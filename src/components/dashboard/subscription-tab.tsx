@@ -133,6 +133,19 @@ export function SubscriptionTab({ clinic }: Props) {
   const isInTrial = !!trialEndsAt && trialEndsAt > now && !subscriptionActive;
   const trialExpired = !!trialEndsAt && trialEndsAt < now && !subscriptionActive;
 
+  // Clínica que paga a mano (SPEI/OXXO o activada por un admin) cuyo periodo YA
+  // venció. Su `subscriptionStatus` se queda en "active" para siempre —nada la
+  // renueva ni la bloquea— así que sin esto no veía ningún camino para pagar el
+  // periodo siguiente: el CTA de abajo se ocultaba y el cambio de plan le
+  // responde 409 MANUAL_PERIOD_EXPIRED pidiéndole justo eso.
+  const manualPeriodExpired =
+    !clinic.stripeSubscriptionId &&
+    subscriptionActive &&
+    !!billingCtx &&
+    !billingCtx.hasSubscription &&
+    !!billingCtx.nextBillingDate &&
+    new Date(billingCtx.nextBillingDate) < now;
+
   const currentPlanId: PlanId = isPlanId(clinic.plan) ? clinic.plan : "PRO";
   const currentPlan = plans?.find((p) => p.id === currentPlanId) ?? null;
 
@@ -280,7 +293,9 @@ export function SubscriptionTab({ clinic }: Props) {
               ? t("shell.subscriptionTab.errSubscriptionNotLive")
               : data.code === "MANUAL_DOWNGRADE_NOT_SUPPORTED"
                 ? t("shell.subscriptionTab.errManualDowngrade")
-                : null;
+                : data.code === "MANUAL_PERIOD_EXPIRED"
+                  ? t("shell.subscriptionTab.errManualPeriodExpired")
+                  : null;
         throw new Error(byCode ?? data.error ?? t("shell.subscriptionTab.errChangePlan"));
       }
       // Clínica SPEI/OXXO subiendo de plan: primero paga el diferencial en
@@ -483,10 +498,12 @@ export function SubscriptionTab({ clinic }: Props) {
         )}
 
         {/* CTA activar/pagar — visible cuando NO hay suscripción activa (trial,
-            prueba expirada o sin plan). Lleva a la pantalla de pago existente
+            prueba expirada o sin plan) y también cuando el periodo de un pago
+            manual ya venció (esa clínica sigue "active" y antes no tenía por
+            dónde renovar). Lleva a la pantalla de pago existente
             (/dashboard/suspended) con tarjeta/SPEI/OXXO, preseleccionando el
             plan actual de la clínica. Permite pagar ANTES de expirar. */}
-        {!subscriptionActive && (
+        {(!subscriptionActive || manualPeriodExpired) && (
           <div
             style={{
               display: "flex", alignItems: "center", justifyContent: "space-between",

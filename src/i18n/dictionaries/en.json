@@ -950,6 +950,7 @@
       "errUpgradePayment": "We couldn't charge the difference: your plan did NOT change. Check your payment method and try again.",
       "errSubscriptionNotLive": "Your subscription isn't active in Stripe. Use “Activate / pay my plan” to reactivate it and pick your plan.",
       "errManualDowngrade": "You already paid the current period, so we don't downgrade the plan mid-period. Pick the lower plan when you pay your next period.",
+      "errManualPeriodExpired": "Your paid period already ended, so there are no days left to prorate. Use \"Activate / pay my plan\" to buy the new period with the plan you want.",
       "continue": "Continue",
       "statusPaid": "Paid",
       "statusPending": "Pending",
