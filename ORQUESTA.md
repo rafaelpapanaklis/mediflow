@@ -1717,3 +1717,71 @@ diccionarios parsean y las 2 claves existen **en es.json y en.json con el mismo 
 comprobado string por string: menciona Haiku para chat ✓, Sonnet para análisis clínicos ✓, el rango
 3,000–8,000 ✓, el espacio inicial del string sobrevive a la concatenación tras el `<strong>` ✓,
 1240 → 198 ✓, español neutro con "tú" sin voseo ✓.
+
+---
+
+## [Admin badge soporte sin responder] — el sidebar de DaleControl ya avisa ✅ EN MAIN (2026-07-30, `24f8f347`)
+
+**Qué se pedía:** que el panel `/admin` muestre en el sidebar cuántos tickets de soporte esperan MI
+respuesta, sin entrar a la bandeja. Sin SQL.
+
+### La regla (una sola, en un solo lugar)
+"Espera respuesta de soporte" = el ticket está en `SUPPORT_OPEN_STATUSES`
+(`ABIERTO` · `EN_PROGRESO` · `ESPERANDO_RESPUESTA`) **y** (`!lastSupportMessageAt` ||
+`lastClinicMessageAt > lastSupportMessageAt`).
+
+Es la MISMA regla de `unanswered24h` pero **sin el corte de 24 h**: aquí cuentan todos, no solo los
+que ya se pasaron de tiempo. Para que no quedara escrita por tercera vez en el archivo, se extrajo a
+`awaitingSupportReply({ lastClinicMessageAt, lastSupportMessageAt })` y ahora la usan los tres
+consumidores: el `clinicIsWaiting` que ya existía (que además chequea el estado), `unanswered24h` y
+el contador nuevo. Cero cambio de comportamiento — la expresión inline vieja de `unanswered24h` era
+literalmente equivalente.
+
+### Archivos tocados (6)
+1. **`src/lib/support/service.ts`** — nuevo `awaitingSupportReply()` (helper privado, fuente única
+   de la regla); `clinicIsWaiting()` ahora delega en él; `getAdminMetrics()` calcula `pendingReply`
+   **en la misma pasada de `openTickets`** (`waitingTickets` se filtra una vez y `unanswered24h`
+   sale de ese subconjunto — **ninguna query nueva**); nuevo export
+   `countAdminPendingReply(): Promise<number>` con `findMany` de select mínimo
+   (`lastClinicMessageAt`, `lastSupportMessageAt`) y `try/catch → 0`.
+2. **`src/lib/support/types.ts`** — `pendingReply: number` en `SupportAdminMetrics`.
+3. **`src/app/admin/layout.tsx`** — `getNavCounts()` mete `countAdminPendingReply()` **dentro del
+   `Promise.all` que ya existía** (en paralelo con los 2 counts de clínicas, no en serie) y devuelve
+   `supportPending`; el `catch` externo también lo devuelve en 0.
+4. **`src/app/admin/admin-nav.tsx`** — `counts?: { clinics?, atRisk?, supportPending? }`; en
+   `renderItem`, `/admin/soporte` toma `counts?.supportPending` y es el único ítem con el
+   modificador de alerta; el badge lleva `title="N tickets sin responder"`.
+5. **`src/app/panel-chrome-va.css`** — nuevo `.nav-item-new__count--alert` (rojo `--danger-soft` +
+   `#b91c1c` light / `#fca5a5` dark). Va aquí porque **la clase base vive en dos lados**: la
+   definición neutra está en `globals.css` (prohibido tocarla) y el override del panel externo está
+   en este archivo, scopeado bajo `.mf-extpanel`. Se repite la regla bajo `:root:not(.dark)` a
+   propósito: el override light existente tiene especificidad (0,4,0) y solo se le gana empatando y
+   yendo después.
+6. **`src/app/admin/soporte/soporte-admin-client.tsx`** — KPI **"Sin responder"** con
+   `metrics.pendingReply`, icono `Hourglass`, `tone="danger"` (número en rojo) cuando es > 0 y delta
+   _"Esperan tu respuesta" / "Bandeja al día"_. El KPI de **>24 h se dejó intacto**; la fila pasó de
+   `xl:grid-cols-4` a `xl:grid-cols-5`.
+
+El endpoint `/api/admin/support/tickets?metrics=1` no se tocó: reenvía lo que devuelve
+`getAdminMetrics()`, así que `pendingReply` viaja solo.
+
+### Detalles que valen recordarse
+- El badge del sidebar y el KPI "Sin responder" **siempre muestran el mismo número** (misma regla,
+  distinta query) — si algún día divergen, es que alguien tocó una de las dos y no la otra.
+- `countAdminPendingReply()` **nunca lanza**: el sidebar se renderiza en TODAS las páginas de
+  `/admin`, así que un fallo de DB devuelve 0 en vez de tumbar el panel entero.
+- Se dejó **sin `take`** a propósito (a diferencia del `take: 2000` de `getAdminMetrics`): es un
+  conteo, y un tope silencioso mentiría en el badge. La query es de 2 columnas de fecha sobre
+  tickets abiertos.
+- El badge se calcula en el Server Component del layout → se refresca en cada navegación del panel,
+  no hay polling ni estado cliente.
+
+### Verificación
+- `npx tsc --noEmit` → **0 errores** (antes y después del rebase sobre `origin/main`, que venía 9
+  commits adelante con el merge de PR #117).
+- `npm run build` → **exit 0**, output completo leído: `✓ Generating static pages (347/347)`, tabla
+  de rutas completa, `/admin/soporte` compila en 6.02 kB / 100 kB First Load. **Cero**
+  `Failed to compile`, `Type error` o `Module not found`. Los 41 `PrismaClientInitializationError`,
+  los 11 `Dynamic server usage` y el `Critical dependency` de `file-type` son el ruido preexistente
+  de correr sin `.env` local, no de este cambio.
+- **Sin SQL**: no hay columnas ni tablas nuevas; todo sale de `SupportTicket` tal como está.
