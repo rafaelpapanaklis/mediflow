@@ -12,6 +12,7 @@ import { KpiCard } from "@/components/ui/design-system/kpi-card";
 import { formatCurrency } from "@/lib/utils";
 import { formatRelativeDate } from "@/lib/format";
 import type { ClienteRow, ClienteAggStatus, ClienteTag } from "@/lib/admin/clientes";
+import { formatPatientQuota, patientQuotaLevel, type PatientQuota } from "@/lib/patient-quota-shared";
 
 type Tone = "success" | "warning" | "danger" | "info" | "brand" | "neutral";
 
@@ -38,6 +39,18 @@ function healthColor(score: number): string {
   if (score >= 70) return "var(--success)";
   if (score >= 40) return "var(--warning)";
   return "var(--danger)";
+}
+
+/**
+ * Semáforo del cupo de pacientes (≥80% advertencia, sin lugar peligro) para
+ * cazar de un vistazo a las clínicas cerca de su tope. El umbral lo decide
+ * patientQuotaLevel, el mismo que colorea el chip del panel de la clínica.
+ */
+function quotaColor(quota: PatientQuota): string {
+  const level = patientQuotaLevel(quota);
+  if (level === "full") return "var(--danger)";
+  if (level === "warn") return "var(--warning)";
+  return "var(--text-1)";
 }
 
 const ESTADOS: { id: string; label: string }[] = [
@@ -223,7 +236,19 @@ export function ClientesClient({ clientes }: { clientes: ClienteRow[] }) {
                     </div>
                   </td>
                   <td>
-                    <div className="mono" style={{ fontSize: 13, color: "var(--text-1)", fontWeight: 500 }}>{c.totalPatients}</div>
+                    {/* Consumo / tope del plan ("15/500"). Sin "/N" si alguna de
+                        sus clínicas es ilimitada: no hay tope que sumar. */}
+                    <div
+                      className="mono"
+                      style={{ fontSize: 13, color: quotaColor(c.patientQuota), fontWeight: 500 }}
+                      title={
+                        c.patientQuota.unlimited
+                          ? "Plan sin tope de pacientes"
+                          : `${c.patientQuota.remaining ?? 0} de cupo libre en su plan`
+                      }
+                    >
+                      {formatPatientQuota(c.patientQuota)}
+                    </div>
                     <div style={{ fontSize: 11, color: "var(--text-3)" }}>{c.totalAppointments} citas</div>
                   </td>
                   <td className="mono" style={{ fontSize: 11, color: "var(--text-3)" }}>
