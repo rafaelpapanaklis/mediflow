@@ -1864,3 +1864,113 @@ a mano por `/api/admin/subscriptions`; **todo** lo cobrado por Stripe era invisi
 ### SQL pendiente (lo aplica Rafael a mano, ANTES del deploy)
 `sql/subscription_invoices_stripe_ref.sql` — el PASO 1 lista `reference` duplicadas; si devuelve
 filas hay que resolverlas antes, porque el `CREATE UNIQUE INDEX` fallaría.
+
+---
+
+## [Admin cobros fallidos + heatmap con pagina de fondo]
+
+Rama `feat/admin-fallidos-heatmap` (worktree, desde `origin/main` = `42506d2a`). Tres commits:
+`d4cb89a6` (parte A), `e9fdc487` (parte B rescatada) y `e90beddb` (fix de alineación encontrado
+al verificar B en el navegador).
+
+### PARTE A — los cobros FALLIDOS de Stripe dejan de ser invisibles
+
+1. **`src/lib/billing/record-stripe-invoice.ts`** — tercer parámetro
+   `outcome: "paid" | "failed" = "paid"`. En `failed` el monto sale de `amount_due` (en una
+   factura rechazada `amount_paid` es **0**, así que con el campo de antes el panel habría
+   mostrado "$0 por cobrar"), `paidAt` queda `null` y las notas añaden el intento
+   (`… — cobro fallido (intento N)`).
+2. **La trampa del reintento**, que es el motivo real de que esto no fuera un cambio de una
+   línea: Stripe reintenta la **MISMA** factura (mismo `invoice.id`), así que un cobro primero
+   falla y días después se paga. Con el `update: {}` de antes, la fila se habría quedado clavada
+   en `failed` para siempre y ese ingreso **nunca** habría contado en "Cobrado este mes". Reglas
+   implementadas:
+   - `failed → paid`: **SÍ** promueve — `UPDATE` explícito de `status`/`paidAt`/`amount`.
+   - `paid → failed`: **JAMÁS** degrada — un webhook fuera de orden no puede borrar un ingreso real.
+   - `notes` **nunca** se pisa al actualizar (puede tener notas del admin).
+   - El alta nueva **sigue siendo `upsert`**, no `create`: la lectura previa no es atómica y
+     `invoice.paid` + `invoice.payment_succeeded` pueden llegar a la vez. El candado real sigue
+     siendo `reference` `@unique`.
+   - Devuelve `{ created, promoted }` y sigue sin lanzar nunca.
+3. **`src/app/api/webhooks/stripe/route.ts`** — el caso `invoice.payment_failed` ya resolvía la
+   clínica con `resolveClinicIdByCustomer(customerId)` (misma búsqueda por `stripeCustomerId` que
+   usa `invoice.paid`), así que **no hizo falta cambiar la resolución**. Solo se añade la llamada
+   `recordStripeInvoice(invoice, clinicId, "failed")` al final del bloque, en su propio try/catch:
+   ni toca la suspensión por `past_due` ni el audit log ni el 200.
+4. **`src/app/admin/page.tsx`** — el KPI dejaba de contar lo rechazado. Ahora `pendingPay` suma
+   `pending` **+** `failed` y el delta se lee `"$1,234 por cobrar · 2 fallidos"` (sin el sufijo
+   cuando no hay fallidos). Todo sale de las filas de `subscription_invoices`, sin inventar precios.
+5. **`POST /api/admin/billing/backfill-stripe`** — importa también lo rechazado del rango. Sigue
+   siendo **SOLO LECTURA** sobre Stripe (`invoices.list`), respeta `MAX_INVOICES` y `maxDuration`
+   **compartidos entre pasadas** (si la primera agota el tope, las demás ni arrancan y sale
+   `truncated: true`). Suma `insertedFailed` al resumen; `promoted` va al `console.log`.
+6. **`src/app/admin/payments/payments-client.tsx`** — el botón no se movió; el toast ahora dice
+   también los fallidos importados y el `router.refresh()` se dispara si entró cualquiera de los dos.
+   La tabla ya pintaba el badge "Fallido" (tone danger) — no se tocó.
+
+**Qué status de Stripe se usó para detectar las fallidas** (la pregunta explícita): la API fijada
+en `src/lib/stripe.ts` es **`2024-06-20`**, que **no tiene un status `failed`**. Una factura cuyo
+cargo se rechaza se queda en **`open`** (Stripe sigue reintentando) o acaba en **`uncollectible`**
+(se dio por perdida). El backfill hace una pasada por cada uno de esos dos y descarta en código las
+que no son un cobro rechazado de verdad: exige **`invoice.attempted === true`** (si Stripe nunca
+intentó cobrarla es una factura recién emitida, no dinero rechazado) y `amount_due > 0`. No se
+inventó ningún status que esa versión no acepte.
+
+### PARTE B — heatmap sobre la página real
+
+`git cherry-pick ecf8443c` → **un solo conflicto: `next.config.mjs`**. Los otros 4 archivos
+entraron limpios y el commit resultante tiene las mismas **367 inserciones / 16 borrados** que el
+original: **no se descartó nada del commit viejo**.
+
+- **Conflicto resuelto conservando main**: main había añadido `https://www.facebook.com` y
+  `https://staticxx.facebook.com` a `frame-src` (SDK de Meta). Se quedó **la línea de main** y
+  encima se montó el único cambio del commit viejo en esa zona: `frame-ancestors 'none'` → `'self'`.
+- **Revisión de seguridad del cambio de CSP**: `X-Frame-Options: SAMEORIGIN` y
+  `frame-ancestors 'self'` habilitan **solo el propio origen**. Terceros siguen sin poder
+  enmarcarnos (clickjacking cubierto). No afloja nada más. **No hay ningún dominio hardcodeado**
+  que corregir (mediflow vs dalecontrol.com): `heatmap-stage.tsx` construye el `src` con
+  `window.location.origin`, así que funciona en cualquier dominio.
+- **Guard anti-tracking verificado contra el tracker de hoy**, no asumido: `tracker-core.ts` solo
+  exporta `start`, `pageview` y `stop`; `pageview()` y `stop()` arrancan con `if (!started) return`
+  y el único sitio que pone `started = true` es `start()`, que ahora sale antes si
+  `window.self !== window.top`. Comprobado en el navegador: en los 3 iframes la condición del guard
+  da `true`. `AnalyticsTracker` (root layout) solo llama a esos tres. El tracker de afiliados
+  tampoco se dispara: exige un `?ref=`, y el iframe carga un pathname pelado.
+
+### BUG encontrado al verificar B (commit `e90beddb`)
+
+El commit rescatado **medía mal el alto del contenido** y los puntos caían muy por debajo de su
+elemento — justo lo que la tarea pedía arreglar. `measure()` tomaba el máximo incluyendo
+`documentElement.scrollHeight`, que **nunca baja del alto del propio iframe** (es el viewport del
+frame). Medido en el navegador con una página de 874px dentro de un lienzo de 1472px
+(el placeholder `refW * 1.15`): `body.scrollHeight` = 874 pero `documentElement.scrollHeight` = 1472.
+El canvas se estiraba a 1472 → cada punto caía **1.68x más abajo**, y se realimentaba (el iframe ya
+medía eso, así que la siguiente medición devolvía lo mismo).
+
+Arreglo: se mide por `body.scrollHeight` / `body.offsetHeight` / `documentElement.offsetHeight`
+(los tres content-driven; el `offsetHeight` del `<html>` sí daba 874) y el alto de sondeo inicial
+baja de `refW*1.15` a **320px**, para que un `min-height: 100vh` —habitual en la app— no vuelva a
+falsear la medida. Converge: al fijar el alto real, viewport = contenido.
+
+### Verificación en navegador (banco de pruebas temporal, ya borrado)
+
+La ventana real es de 2752px, así que `resize_window` no sirve para probar anchos: los viewports se
+emularon por CSSOM con contenedores de ancho fijo. Se montó una página con elementos en posiciones
+**medidas** y clusters de clicks apuntando a su centro exacto.
+
+- Antes del fix: los clusters caían en la "zona media", ~130px por debajo de los botones.
+- Después: caen **centrados** en el logo del navbar, en los 3 botones y en el botón del pie.
+- **1280 / 1366 / 1536 x sidebar abierto y colapsado** (las 6 combinaciones): `canvas.height` ==
+  `iframe.height` == 874 en todas, y la escala se recalcula sola (panel 736 / 794 / 907 px con el
+  sidebar colapsado → `scale` 0.574 / 0.619 / 0.707). El bloque responde al **ancho del contenedor**
+  vía `ResizeObserver`, no a media queries, así que el sidebar lo reajusta sin recargar.
+
+### Verificación
+- `npx tsc --noEmit` → **0 errores**.
+- `npm run build` → **exit 0**, output completo leído (sin `| tail`).
+- Sin SQL nuevo: `reference @unique` y su índice ya están en producción.
+
+### Ojo al pushear
+El `main` **local** tiene un commit que no está en `origin/main`: `a882e874`
+("perf(costos): ISR en /tv + rate limit…"). Esta rama sale de `origin/main`, así que al pushear
+`HEAD:main` ese commit local queda divergido — no se pierde, pero hay que rebasarlo o pushearlo aparte.
