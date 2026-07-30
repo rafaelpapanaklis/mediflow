@@ -1974,3 +1974,96 @@ emularon por CSSOM con contenedores de ancho fijo. Se montó una página con ele
 El `main` **local** tiene un commit que no está en `origin/main`: `a882e874`
 ("perf(costos): ISR en /tv + rate limit…"). Esta rama sale de `origin/main`, así que al pushear
 `HEAD:main` ese commit local queda divergido — no se pierde, pero hay que rebasarlo o pushearlo aparte.
+
+---
+
+## [Heatmap alineacion de clicks] — 2026-07-30
+
+**Estado:** EN MAIN (`66e2fe32` + `8ca10438`, pusheados a `origin/main`).
+**Rama:** `fix/heatmap-align` (worktree `mediflow-worktrees/heatmap-align`).
+**Pendiente de Rafael:** aplicar `sql/analytics_events_yfixed.sql` en Supabase (hoy mismo).
+
+La página real ya se veía de fondo, pero los clicks no caían sobre los elementos. Los 4 puntos del
+diagnóstico se confirmaron en el código antes de tocar nada.
+
+### FIX 1 — La Y se dibuja en píxeles absolutos
+
+`heatmap-canvas.tsx` proyectaba `y = (p.y / p.docH) * H`. El tracker guarda `y = pageY`, un **píxel
+absoluto**: esa fórmula lo convertía en una *proporción* del alto de la página **el día del click** y
+la re-multiplicaba por el alto de la página **hoy**. Con contenido dinámico (un dashboard con más
+pacientes es más alto) el mapa entero se estira o se comprime. La Y no necesita reproyección: el
+iframe se renderiza al ancho de referencia, así que las posiciones absolutas ya coinciden.
+
+- El punto se dibuja en `y = p.y` (solo se lleva a la resolución interna del lienzo, que sigue
+  acotada por `MAX_PX`). `x = p.x · refW` no cambia.
+- El alto del escenario pasa a ser `max(frameH, p95(points[].y) + 120)`. **P95 y no el máximo**: un
+  solo outlier no debe estirar el lienzo entero.
+- **El iframe conserva su alto real** (`frameH`); el que crece es el escenario. Estirar el iframe
+  haría crecer su `min-height:100vh` y **realimentaría la medición** — justo el bug que arregló
+  `85b71d38`. El excedente queda como fondo del escenario.
+- Aviso discreto sobre el mapa si el alto de la página hoy difiere **>40%** del `docH` mediano de los
+  clicks ("la alineación vertical es aproximada"). Es honesto y evita perseguir un bug inexistente.
+- El comentario de cabecera de los 3 archivos ya no documenta la fórmula proporcional.
+
+### FIX 2 — No mezclar viewports
+
+Selector **Dispositivo** junto al de página: Escritorio (`vw >= 1024`) · Tablet (640–1023) ·
+Móvil (`< 640`), con el conteo en cada opción. Default = grupo con **más clicks**; se re-calcula al
+cambiar de página y respeta la elección manual. `refW` pasa a ser la mediana de los `vw` **de ese
+grupo**, así el iframe se renderiza al ancho representativo real (antes, un click de móvil con
+`vw~375` se dibujaba sobre un layout de ~1280 y caía donde no existe nada). Chip
+`"N de M clicks"` para que se note que hay datos en los otros grupos. **Filtrado en cliente**: los
+puntos ya vienen todos, el endpoint no se tocó para esto.
+
+### FIX 3 — Elementos fixed / sticky
+
+`a.mf-sidebar-item` es `position:fixed`. Con `pageY = clientY + scrollY`, un click en el menú
+después de scrollear quedaba cientos de px más abajo de donde se ve.
+
+- `onClick()` recorre el target y hasta **8 ancestros** (`getComputedStyle().position`); si alguno es
+  `fixed`/`sticky` guarda `y = clientY` y `yFixed = true`. Dentro del `try/catch` que ya existía.
+- Nueva columna `AnalyticsEvent.yFixed` (Boolean, default false), presente en `TrackEvent`, en el
+  schema de `/api/track`, en el `select` del endpoint de heatmap y en `HeatPoint`.
+- El visor dibuja esos puntos en `y = p.y` tal cual (el iframe muestra la página desde arriba, así
+  que el elemento fijo está en su posición natural) y los excluye del p95 del escenario.
+- **Solo arregla los clicks NUEVOS.** Los ya guardados no se pueden recuperar: se anotó un `pageY`
+  que no corresponde a lo que se veía.
+
+### Extra no pedido: ventana de despliegue
+
+El deploy de Vercel entra antes que el SQL manual. Sin la columna, `createMany` con `yFixed` tira
+**P2022** y se pierde **toda** la analítica hasta que se aplique (y el `select` rompe la pestaña).
+Ambos sitios reintentan sin la columna al ver P2022, con comentario de que ese fallback se puede
+borrar una vez aplicado el SQL.
+
+### Verificación
+
+Sin `.env` local no hay BD (`.env.e2e` no trae `DATABASE_URL`), así que **no se pudo comprobar con
+los 438 clicks reales de `/dashboard`**. En su lugar se montó un banco de pruebas temporal (ya
+borrado, nunca commiteado): una página con sidebar `position:fixed` y marcadores en coordenadas
+absolutas conocidas, con clicks sintéticos apuntando a su centro. La comprobación es **numérica**,
+no a ojo: se leen los picos del perfil de intensidad del canvas y se comparan con el rect **medido
+en vivo** dentro del iframe.
+
+| Objetivo (medido en el iframe) | Pico del mapa | Delta |
+|---|---|---|
+| `Menú 2` del sidebar, capa fixed, y=322 | 319.5 | 2.5 px |
+| marcador y=1430 | 1429.2 | 0.8 px |
+| marcador y=2430 | 2429.3 | 0.7 px |
+| click bajo el contenido, y=3000 | 2999.2 | 0.8 px |
+| x sidebar 120 / x marcadores 500 | 118.8 / 499.3 | <= 1.2 px |
+
+Los deltas son del orden del jitter que se le metió a los puntos (+-2px). **La prueba clave**: los
+picos salen **idénticos** con `docH=2600` (igual al alto real) y con `docH=1000` (muy distinto). Con
+la fórmula vieja, el segundo caso mandaba el click de y=1430 a `(1430/1000)*2600 = 3718`, **2288px
+por debajo de su elemento**. Visualmente confirmado también: la mancha cae centrada sobre `Menú 2`.
+El aviso de tamaño aparece solo en el caso `docH=1000`, y el escenario se extendió a 3118px
+(`p95 = 2998 + 120`) para no recortar el click de y=3000.
+
+Nada ensució la analítica real: sin `DATABASE_URL` los `POST /api/track` del banco de pruebas
+murieron en Prisma y devolvieron 204 (verificado en el log del dev server).
+
+- `npx prisma generate` → ok.
+- `npx tsc --noEmit` → **0 errores**.
+- `npx eslint` sobre los 7 archivos tocados → **0 errores**.
+- `npm run build` → **exit 0**, output completo leído (sin `| tail`), 347/347 páginas.
