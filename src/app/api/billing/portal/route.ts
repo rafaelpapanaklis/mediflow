@@ -3,6 +3,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getStripeSafe, stripeUnavailableResponse } from "@/lib/stripe";
 import { logAudit, extractAuditMeta } from "@/lib/audit";
+import { isClinicBillingAdmin, notClinicBillingAdminResponse } from "@/lib/billing/authz";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -16,10 +17,22 @@ export const dynamic = "force-dynamic";
  * (se crea en el primer checkout).
  *
  * Multi-tenant: clinicId del ctx.
+ *
+ * Solo dueño/admin: la sesión del portal permite CANCELAR la suscripción,
+ * cambiar la tarjeta y ver el historial de facturas con importes. Sin este
+ * check, cualquier usuario logueado de la clínica (recepción, doctor, un rol de
+ * solo lectura) podía abrirlo con un fetch a mano — el botón está oculto para
+ * ellos, pero eso es autorización de UI, no de API. Mismo criterio que
+ * change-plan y que `/api/clinic/subscription/cancel-request`, que ya exigía
+ * admin para cancelar desde NUESTRA interfaz.
  */
 export async function POST(req: NextRequest) {
   const user = await getCurrentUser();
   const clinicId = user.clinicId;
+
+  if (!isClinicBillingAdmin(user.role)) {
+    return NextResponse.json(notClinicBillingAdminResponse(), { status: 403 });
+  }
 
   const clinic = await prisma.clinic.findUnique({
     where: { id: clinicId },
