@@ -14,6 +14,7 @@ import { KpiCard } from "@/components/ui/design-system/kpi-card";
 import { RevenueAreaChart } from "@/components/dashboard/revenue-area-chart";
 import { formatCurrency } from "@/lib/utils";
 import { formatRelativeDate } from "@/lib/format";
+import { formatPatientQuota, patientQuotaLevel, type PatientQuota } from "@/lib/patient-quota-shared";
 import type {
   ClienteDetalle, ClienteClinica, ClienteAggStatus, ClienteTag, ClinicNormStatus,
 } from "@/lib/admin/clientes";
@@ -44,6 +45,24 @@ function healthColor(score: number): string {
   if (score >= 70) return "var(--success)";
   if (score >= 40) return "var(--warning)";
   return "var(--danger)";
+}
+
+/**
+ * Semáforo del cupo de pacientes: ≥80% advertencia, sin lugar peligro. El umbral
+ * NO se decide aquí — sale de patientQuotaLevel (mismo que usa el panel de la
+ * clínica), así el admin y la clínica nunca pintan distinto el mismo consumo.
+ */
+function quotaTone(quota: PatientQuota): "warning" | "danger" | undefined {
+  const level = patientQuotaLevel(quota);
+  if (level === "full") return "danger";
+  if (level === "warn") return "warning";
+  return undefined;
+}
+function quotaColor(quota: PatientQuota): string {
+  const tone = quotaTone(quota);
+  if (tone === "danger") return "var(--danger)";
+  if (tone === "warning") return "var(--warning)";
+  return "var(--text-1)";
 }
 
 export function ClienteDetalleClient({
@@ -147,7 +166,15 @@ export function ClienteDetalleClient({
         <KpiCard label="MRR" value={formatCurrency(cliente.mrr, "MXN")} icon={DollarSign} />
         <KpiCard label="Ingresos históricos" value={formatCurrency(cliente.ingresosTotales, "MXN")} icon={Wallet} />
         <KpiCard label="LTV estimado" value={formatCurrency(cliente.ltv, "MXN")} icon={TrendingUp} />
-        <KpiCard label="Pacientes" value={String(cliente.totalPatients)} icon={Users} />
+        {/* Pacientes CONSUMIDOS / tope del plan (ej. "15/500"). Si alguna sede es
+            ilimitada no hay tope que mostrar → sólo el número. El tope sale de
+            plan_configs.maxPatients, nunca de una constante. */}
+        <KpiCard
+          label="Pacientes"
+          value={formatPatientQuota(cliente.patientQuota)}
+          icon={Users}
+          tone={quotaTone(cliente.patientQuota)}
+        />
         <KpiCard label="Citas" value={String(cliente.totalAppointments)} icon={CalendarDays} />
       </div>
 
@@ -179,7 +206,9 @@ export function ClienteDetalleClient({
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))", gap: 14 }}>
           {cliente.clinics.map((c) => (
-            <ClinicCard key={c.id} clinic={c} />
+            // El cupo POR SEDE sólo aporta si hay varias (cada una con su plan):
+            // con una sola clínica el KPI de arriba ya dice exactamente eso.
+            <ClinicCard key={c.id} clinic={c} showQuota={cliente.clinics.length > 1} />
           ))}
         </div>
       </div>
@@ -189,7 +218,7 @@ export function ClienteDetalleClient({
   );
 }
 
-function ClinicCard({ clinic }: { clinic: ClienteClinica }) {
+function ClinicCard({ clinic, showQuota }: { clinic: ClienteClinica; showQuota?: boolean }) {
   const status = STATUS_META[clinic.status];
   const tokenPct = clinic.aiTokensLimit > 0
     ? Math.min(100, Math.round((clinic.aiTokensUsed / clinic.aiTokensLimit) * 100))
@@ -218,7 +247,16 @@ function ClinicCard({ clinic }: { clinic: ClienteClinica }) {
         </div>
 
         <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8, fontSize: 12 }}>
-          <Metric label="Pacientes" value={String(clinic.patients)} />
+          <Metric
+            label="Pacientes"
+            value={showQuota ? formatPatientQuota(clinic.patientQuota) : clinic.patients.toLocaleString("es-MX")}
+            color={showQuota ? quotaColor(clinic.patientQuota) : undefined}
+            title={
+              showQuota && !clinic.patientQuota.unlimited
+                ? `${clinic.plan} · ${clinic.patientQuota.remaining ?? 0} de cupo libre`
+                : undefined
+            }
+          />
           <Metric label="Citas" value={String(clinic.appointments)} />
           <Metric label="Ingresos" value={formatCurrency(clinic.ingresos, "MXN")} />
         </div>
@@ -248,11 +286,22 @@ function ClinicCard({ clinic }: { clinic: ClienteClinica }) {
   );
 }
 
-function Metric({ label, value }: { label: string; value: string }) {
+function Metric({
+  label,
+  value,
+  color,
+  title,
+}: {
+  label: string;
+  value: string;
+  /** Token de color para el número (semáforo del cupo); por defecto var(--text-1). */
+  color?: string;
+  title?: string;
+}) {
   return (
-    <div>
+    <div title={title}>
       <div style={{ fontSize: 10, color: "var(--text-3)", textTransform: "uppercase", letterSpacing: "0.04em" }}>{label}</div>
-      <div className="mono" style={{ fontSize: 13, color: "var(--text-1)", fontWeight: 600 }}>{value}</div>
+      <div className="mono" style={{ fontSize: 13, color: color ?? "var(--text-1)", fontWeight: 600 }}>{value}</div>
     </div>
   );
 }

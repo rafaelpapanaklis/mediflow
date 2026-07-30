@@ -12,9 +12,20 @@ type KpiCardProps = {
   icon?: LucideIcon;
   /** KPI primario del grupo: chip del icono con degradado de marca (solo UNO por fila). */
   hero?: boolean;
+  /**
+   * Tiñe SOLO el número, para señalar un consumo alto (cupo del plan al 80%/100%).
+   * Sin tone el valor conserva var(--text-1); son tokens, así que funciona en
+   * light y en dark sin tocar globals.css.
+   */
+  tone?: "warning" | "danger";
 };
 
-export function KpiCard({ label, value, delta, icon: Icon, hero }: KpiCardProps) {
+const TONE_COLOR: Record<"warning" | "danger", string> = {
+  warning: "var(--warning)",
+  danger: "var(--danger)",
+};
+
+export function KpiCard({ label, value, delta, icon: Icon, hero, tone }: KpiCardProps) {
   return (
     <div className={hero ? "kpi kpi--hero" : "kpi"}>
       <div className="kpi__top">
@@ -25,7 +36,7 @@ export function KpiCard({ label, value, delta, icon: Icon, hero }: KpiCardProps)
           </div>
         )}
       </div>
-      <div className="kpi__value">{value}</div>
+      <div className="kpi__value" style={tone ? { color: TONE_COLOR[tone] } : undefined}>{value}</div>
       {delta && (
         <div className={`kpi__delta kpi__delta--${delta.direction}`}>
           {delta.direction === "up"
