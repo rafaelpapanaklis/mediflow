@@ -170,9 +170,9 @@ export const NAV = {
     { label: 'Precios', href: '#precios' },
     { label: 'Comparativa', href: '#comparativa' },
     { label: 'FAQ', href: '#faq' },
-    // Rutas reales, no anclas: los consumidores normalizan con navHref().
-    { label: 'Casos de uso', href: '/casos-de-uso' },
-    { label: 'Herramientas gratuitas', href: '/herramientas' },
+    // Ruta real, no ancla: los consumidores normalizan con navHref().
+    // Blog es el único destino externo que sube al menú; /casos-de-uso y
+    // /herramientas son SEO de cola larga y viven sólo en FOOTER.product.
     { label: 'Blog', href: '/blog' },
   ],
   login: 'Iniciar sesión',
@@ -370,10 +370,17 @@ export const FINAL_CTA = {
 
 export const FOOTER = {
   blurb: 'El software de gestión para clínicas dentales en México. Todo en un solo lugar, en español y en pesos.',
-  // Nav y footer comparten los mismos links y los normalizan con navHref():
-  // las anclas salen como "/#precios" y las rutas ("/blog", "/casos-de-uso")
-  // tal cual. Ambas viven en NAV.links, por eso aquí no se vuelven a añadir.
-  product: [...NAV.links],
+  // El footer es un superconjunto del nav, no un espejo: arranca de NAV.links
+  // (anclas + Blog) y añade las rutas de SEO que a propósito NO están en el
+  // menú para no alargarlo. Si algún día vuelven a NAV.links hay que quitarlas
+  // de aquí, o el footer las pintaría dos veces (key={l.href} en footer.tsx).
+  // Ambos consumidores normalizan con navHref(): las anclas salen como
+  // "/#precios" y las rutas ("/blog", "/casos-de-uso") tal cual.
+  product: [
+    ...NAV.links,
+    { label: 'Casos de uso', href: '/casos-de-uso' },
+    { label: 'Herramientas gratuitas', href: '/herramientas' },
+  ],
   legal: [
     { label: 'Aviso de privacidad', href: '/privacidad' },
     { label: 'Términos y condiciones', href: '/terminos' },
