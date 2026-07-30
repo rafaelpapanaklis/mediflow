@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
-import { X } from "lucide-react";
+import Link from "next/link";
+import { AlertTriangle, X } from "lucide-react";
 import * as Dialog from "@radix-ui/react-dialog";
 import { ButtonNew } from "@/components/ui/design-system/button-new";
 import { DateField } from "@/components/ui/date-field";
@@ -57,6 +58,15 @@ export function NewPatientModal({ open, onClose, onCreated, initialName, initial
   const [form, setForm] = useState(emptyForm);
   const [errors, setErrors] = useState<Record<string, boolean>>({});
   const [noAllergies, setNoAllergies] = useState(false);
+  /**
+   * Cupo de pacientes agotado (402 PLAN_LIMIT_PATIENTS del POST). Vive DENTRO
+   * del modal a propósito: éste se monta en dos lugares (la lista de pacientes y
+   * el NewPatientProvider global que usan sidebar/paleta/atajo N), así que el
+   * bloqueo y su CTA tienen que viajar con el modal, no con cada opener.
+   * `isAdmin` lo dicta el server en la respuesta: el tab de suscripción es
+   * admin-only y a un rol operativo no le sirve el link.
+   */
+  const [limitInfo, setLimitInfo] = useState<{ limit: number | null; isAdmin: boolean } | null>(null);
   // Visibilidad por paciente. [] = todos lo ven (default, sin restricción).
   const [visibleUserIds, setVisibleUserIds] = useState<string[]>([]);
   const set = (k: string, v: string | boolean) => {
@@ -85,6 +95,7 @@ export function NewPatientModal({ open, onClose, onCreated, initialName, initial
     setNoAllergies(false);
     setVisibleUserIds([]);
     setErrors({});
+    setLimitInfo(null);
   }, [open, initialName, initialPhone, initialEmail]);
 
   async function handleSubmit(e: React.FormEvent) {
@@ -133,8 +144,22 @@ export function NewPatientModal({ open, onClose, onCreated, initialName, initial
           ...(visibleUserIds.length > 0 && { visibleUserIds }),
         }),
       });
-      if (!res.ok) throw new Error((await res.json()).error);
-      const patient = await res.json();
+      // Un solo json(): leerlo dos veces (uno para el error, otro para el
+      // paciente) consume el body y perdía `code`/`limit` del 402.
+      const data = await res.json().catch(() => ({} as any));
+      if (!res.ok) {
+        if (data?.code === "PLAN_LIMIT_PATIENTS") {
+          // NO cerramos el modal ni tiramos toast: el banner explica el tope y
+          // ofrece el upgrade sin que el usuario pierda lo que ya capturó.
+          setLimitInfo({
+            limit: typeof data.limit === "number" ? data.limit : null,
+            isAdmin: data.isAdmin === true,
+          });
+          return;
+        }
+        throw new Error(data?.error ?? t("shell.newPatient.errCreate"));
+      }
+      const patient = data;
       onCreated(patient);
       setForm(emptyForm);
       toast.success(t("shell.newPatient.created", { name: patient.firstName }));
@@ -398,6 +423,51 @@ export function NewPatientModal({ open, onClose, onCreated, initialName, initial
             </div>
           </div>
 
+          {/* Cupo de pacientes del plan agotado → explicación + CTA de upgrade.
+              Va FUERA del cuerpo scrolleable (justo sobre las acciones) para que
+              se vea sin scrollear después de darle a "Crear paciente". Mismo
+              patrón visual que la cuota de storage en patient-photos-tab. */}
+          {limitInfo && (
+            <div style={{ flexShrink: 0, padding: "0 22px 14px" }}>
+              <div className="flex items-start justify-between gap-3 flex-wrap rounded-[var(--radius-lg)] border border-[var(--warning-border-strong)] bg-[var(--warning-soft)] px-4 py-3">
+                <div
+                  className="flex items-start gap-2 text-sm text-[var(--warning-strong)]"
+                  style={{ flex: "1 1 240px", minWidth: 0 }}
+                >
+                  <AlertTriangle size={16} strokeWidth={1.75} className="flex-shrink-0" style={{ marginTop: 2 }} aria-hidden />
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontWeight: 700 }}>
+                      {limitInfo.limit != null
+                        ? t("shell.newPatient.limitTitle", { limit: limitInfo.limit.toLocaleString() })
+                        : t("shell.newPatient.limitTitleGeneric")}
+                    </div>
+                    <div style={{ marginTop: 2, fontSize: 12, lineHeight: 1.45 }}>
+                      {t("shell.newPatient.limitBodyLead")}{" "}
+                      <strong>{t("shell.newPatient.limitBodyHighlight")}</strong>
+                    </div>
+                  </div>
+                </div>
+                {limitInfo.isAdmin ? (
+                  <Link
+                    href="/dashboard/settings?tab=subscription"
+                    // Cierra el modal al navegar: cuando se monta desde el
+                    // NewPatientProvider (sidebar/paleta/atajo N) el provider vive
+                    // en el layout del dashboard y sobrevive al cambio de ruta, así
+                    // que sin esto el modal quedaría encima de Configuración.
+                    onClick={onClose}
+                    className="text-xs font-bold px-3.5 py-2.5 rounded-lg bg-[var(--brand)] text-white hover:bg-[var(--violet-700)] focus-visible:outline-none focus-visible:[box-shadow:var(--ring)] active:scale-[.98] transition duration-150 flex-shrink-0 no-underline"
+                  >
+                    {t("shell.newPatient.limitCta")}
+                  </Link>
+                ) : (
+                  <span style={{ fontSize: 11.5, fontWeight: 600, color: "var(--warning-strong)", flex: "1 1 200px" }}>
+                    {t("shell.newPatient.limitAskAdmin")}
+                  </span>
+                )}
+              </div>
+            </div>
+          )}
+
           {/* justify-content: space-between pisa el flex-end de .modal__footer
               para dejar la visibilidad a la IZQUIERDA y las acciones a la
               derecha, sin tocar la clase compartida en globals.css. */}
@@ -409,7 +479,9 @@ export function NewPatientModal({ open, onClose, onCreated, initialName, initial
             />
             <div style={{ display: "flex", gap: 8, marginLeft: "auto" }}>
               <ButtonNew variant="ghost" onClick={onClose} type="button">{t("common.cancel")}</ButtonNew>
-              <ButtonNew variant="primary" type="submit" disabled={loading}>
+              {/* Con el cupo agotado el submit queda muerto: reintentar sólo
+                  volvería a chocar con el 402 de la API. */}
+              <ButtonNew variant="primary" type="submit" disabled={loading || limitInfo !== null}>
                 {loading ? t("common.saving") : t("shell.newPatient.createPatient")}
               </ButtonNew>
             </div>

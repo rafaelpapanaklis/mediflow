@@ -236,6 +236,9 @@
 }
 .btn:focus-visible { outline: none; box-shadow: var(--ring); }
 .btn:active:not(:disabled) { transform: scale(0.98); }
+/* Mismo criterio que .pageBtn:disabled — un botón inerte tiene que verse inerte
+   (hoy el único caso es "Nuevo paciente" al agotarse el cupo del plan). */
+.btn:disabled { opacity: 0.5; cursor: not-allowed; }
 .btnPrimary {
   background: var(--brand);
   color: #fff;
@@ -265,6 +268,42 @@
   padding: 0;
   display: grid;
   place-items: center;
+}
+
+/* ─── Cupo de pacientes del plan ───
+   Chip "X/500 pacientes" junto a "Nuevo paciente". Sólo se pinta si el plan
+   tiene tope (maxPatients != null en plan_configs); los planes ilimitados no
+   renderizan nada. Color por umbral: normal → ≥80% → 100%.
+   `white-space: nowrap` + el flex-wrap de .toolbar: en móvil el chip salta de
+   línea completo en vez de desbordar la barra. */
+.quotaChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex-shrink: 0;
+  max-width: 100%;
+  height: 32px;
+  padding: 0 10px;
+  background: var(--bg-elev);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm);
+  color: var(--text-3);
+  font-size: 12px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  cursor: default;
+  box-shadow: var(--shadow-1);
+}
+.quotaChipWarn {
+  background: var(--warning-soft);
+  border-color: var(--warning-border-strong);
+  color: var(--warning);
+}
+.quotaChipFull {
+  background: var(--danger-soft);
+  border-color: var(--danger-border-strong);
+  color: var(--danger);
 }
 
 .viewToggle {

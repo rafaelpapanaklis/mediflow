@@ -620,7 +620,13 @@
       "noAllergies": "N/A (no presenta alergias)",
       "allergiesPlaceholder": "Penicilina, Látex…",
       "notesPlaceholder": "Motivo de consulta, antecedentes…",
-      "createPatient": "Crear paciente"
+      "createPatient": "Crear paciente",
+      "limitTitle": "Alcanzaste el límite de tu plan ({limit} pacientes)",
+      "limitTitleGeneric": "Alcanzaste el límite de pacientes de tu plan",
+      "limitBodyLead": "Los planes Profesional y Clínica incluyen",
+      "limitBodyHighlight": "pacientes ilimitados.",
+      "limitCta": "Ver planes y mejorar",
+      "limitAskAdmin": "Pídele a un administrador de la clínica que mejore el plan"
     },
     "importClinic": {
       "fields": {
@@ -1982,7 +1988,13 @@
       "moreFilters": "Más filtros",
       "moreFiltersTitle": "Más filtros (F)",
       "newPatient": "Nuevo paciente",
-      "newPatientTitle": "Nuevo paciente (N)"
+      "newPatientTitle": "Nuevo paciente (N)",
+      "quotaChip": "{used}/{max} pacientes",
+      "quotaRemaining": {
+        "one": "Te queda 1 paciente en tu plan",
+        "other": "Te quedan {count} pacientes en tu plan"
+      },
+      "quotaFull": "Alcanzaste el límite de tu plan"
     },
     "bulk": {
       "selectedCount": {

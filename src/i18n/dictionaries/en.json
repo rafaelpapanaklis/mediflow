@@ -620,7 +620,13 @@
       "noAllergies": "N/A (no allergies)",
       "allergiesPlaceholder": "Penicillin, Latex…",
       "notesPlaceholder": "Reason for visit, medical history…",
-      "createPatient": "Create patient"
+      "createPatient": "Create patient",
+      "limitTitle": "You've reached your plan limit ({limit} patients)",
+      "limitTitleGeneric": "You've reached your plan's patient limit",
+      "limitBodyLead": "The Professional and Clinic plans include",
+      "limitBodyHighlight": "unlimited patients.",
+      "limitCta": "See plans and upgrade",
+      "limitAskAdmin": "Ask a clinic administrator to upgrade the plan"
     },
     "importClinic": {
       "fields": {
@@ -1982,7 +1988,13 @@
       "moreFilters": "More filters",
       "moreFiltersTitle": "More filters (F)",
       "newPatient": "New patient",
-      "newPatientTitle": "New patient (N)"
+      "newPatientTitle": "New patient (N)",
+      "quotaChip": "{used}/{max} patients",
+      "quotaRemaining": {
+        "one": "1 patient left on your plan",
+        "other": "{count} patients left on your plan"
+      },
+      "quotaFull": "You've reached your plan limit"
     },
     "bulk": {
       "selectedCount": {

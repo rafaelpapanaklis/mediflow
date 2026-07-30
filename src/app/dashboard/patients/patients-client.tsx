@@ -47,6 +47,7 @@ import { useConfirm } from "@/components/ui/confirm-dialog";
 import { NewPatientModal } from "@/components/dashboard/new-patient-modal";
 import { ImportWizard } from "@/components/import/import-wizard";
 import { DateField } from "@/components/ui/date-field";
+import { patientQuotaLevel, type PatientQuota } from "@/lib/patient-quota-shared";
 import styles from "./patients.module.css";
 
 /* ─── Types ─── */
@@ -139,6 +140,13 @@ interface ApiResponse {
   patients: PatientRow[];
   total: number;
   stats: Stats;
+  /**
+   * Cupo de pacientes del PLAN, clinic-wide. Opcional para no romper si el
+   * endpoint responde de un deploy previo. OJO: nunca usar `stats.total` para
+   * esto — está filtrado por la visibilidad del usuario (un DOCTOR vería menos)
+   * y el contador mentiría sobre el consumo real de la clínica.
+   */
+  quota?: PatientQuota | null;
   hasMore: boolean;
   nextCursor: string | null;
 }
@@ -532,6 +540,13 @@ export function PatientsClient({ doctors }: Props) {
         }
       } else if (e.key === "n" || e.key === "N") {
         e.preventDefault();
+        // Mismo gate que el botón: sin cupo no se abre el formulario para nada
+        // (el bloqueo de verdad sigue viviendo en el modal y en la API).
+        const q = data?.quota;
+        if (q && !q.unlimited && !q.canCreate) {
+          toast.error(t("patients.toolbar.quotaFull"));
+          return;
+        }
         setNewPatientOpen(true);
       } else if (e.key === "g" || e.key === "G") {
         e.preventDefault();
@@ -548,9 +563,16 @@ export function PatientsClient({ doctors }: Props) {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [drawerOpen, colsDropdownOpen, selected.size, search, data, focusedIdx, router, toggleView, toggleOne, advAgeMin, advAgeMax, advGenders, advDoctorId, advTags, advHasDebt, advVisitFrom, advVisitTo, advSource]);
+  }, [drawerOpen, colsDropdownOpen, selected.size, search, data, focusedIdx, router, toggleView, toggleOne, advAgeMin, advAgeMax, advGenders, advDoctorId, advTags, advHasDebt, advVisitFrom, advVisitTo, advSource, t]);
 
   const stats = data?.stats;
+  /**
+   * Cupo del plan. `null` mientras carga o si el plan es ilimitado (maxPatients
+   * null en plan_configs) → no se pinta chip ni se bloquea nada.
+   */
+  const quota = data?.quota && !data.quota.unlimited && data.quota.max != null ? data.quota : null;
+  const quotaLevel = quota ? patientQuotaLevel(quota) : "ok";
+  const quotaBlocked = quota !== null && !quota.canCreate;
   const total = data?.total ?? 0;
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const pageStart = total === 0 ? 0 : (page - 1) * PAGE_SIZE + 1;
@@ -799,11 +821,36 @@ export function PatientsClient({ doctors }: Props) {
           <Upload size={13} strokeWidth={1.75} aria-hidden /> {t("shell.importClinic.launch")}
         </button>
 
+        {/* Consumo del cupo de pacientes del plan. Sólo existe si el plan tiene
+            tope (los ilimitados no ven nada). Va pegado al botón que limita.
+            El número es CLINIC-WIDE: no cambia según el rol que mire. */}
+        {quota && (
+          <span
+            className={`${styles.quotaChip} ${
+              quotaLevel === "full" ? styles.quotaChipFull : quotaLevel === "warn" ? styles.quotaChipWarn : ""
+            }`}
+            title={
+              quotaBlocked
+                ? t("patients.toolbar.quotaFull")
+                : t("patients.toolbar.quotaRemaining", { count: quota.remaining ?? 0 })
+            }
+          >
+            <Users size={12} strokeWidth={1.75} aria-hidden />
+            {t("patients.toolbar.quotaChip", {
+              used: quota.used.toLocaleString(),
+              max: (quota.max as number).toLocaleString(),
+            })}
+          </span>
+        )}
+
         <button
           type="button"
           className={`${styles.btn} ${styles.btnPrimary}`}
           onClick={() => setNewPatientOpen(true)}
-          title={t("patients.toolbar.newPatientTitle")}
+          // Prevención de error (Nielsen #5): al tope no se ofrece una acción que
+          // la API va a rechazar. El bloqueo real vive en el modal y en el POST.
+          disabled={quotaBlocked}
+          title={quotaBlocked ? t("patients.toolbar.quotaFull") : t("patients.toolbar.newPatientTitle")}
         >
           <Plus size={13} strokeWidth={1.75} aria-hidden /> {t("patients.toolbar.newPatient")}
         </button>
