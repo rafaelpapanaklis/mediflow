@@ -117,7 +117,16 @@ async function renderAdminDashboard() {
   // Se mide por FECHA DE PAGO (paidAt), no por alta de la fila: los cobros de
   // Stripe se registran con el paid_at real de la factura.
   const paidMonth    = subInvoices.filter(i => i.status==="paid" && (i.paidAt ?? i.createdAt)>=month1).reduce((s,i)=>s+i.amount,0);
-  const pendingPay   = subInvoices.filter(i => i.status==="pending").reduce((s,i)=>s+i.amount,0);
+  // "Por cobrar" = pendientes (registradas a mano) + FALLIDAS de Stripe. Un
+  // cobro rechazado es dinero que sigue debiéndose: si solo sumáramos las
+  // "pending" el KPI marcaría $0 aunque haya clientes reales sin cobrar.
+  const failedInv    = subInvoices.filter(i => i.status==="failed");
+  const pendingPay   = subInvoices
+    .filter(i => i.status==="pending" || i.status==="failed")
+    .reduce((s,i)=>s+i.amount,0);
+  const porCobrarStr = failedInv.length
+    ? `${formatCurrency(pendingPay)} por cobrar · ${failedInv.length} fallido${failedInv.length===1?"":"s"}`
+    : `${formatCurrency(pendingPay)} por cobrar`;
   const growthRate   = newClinicsPrev > 0 ? Math.round(((newClinicsMonth-newClinicsPrev)/newClinicsPrev)*100) : 0;
 
   const fechaStr = now.toLocaleDateString("es-MX", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
@@ -151,7 +160,7 @@ async function renderAdminDashboard() {
         <KpiCard label="MRR Potencial" value={formatCurrency(mrrPotential)} icon={TrendingUp}
           delta={{ value: `+${trialClinics.length} en trial`, direction: "up" }} />
         <KpiCard label="Cobrado este mes" value={formatCurrency(paidMonth)} icon={CheckCircle}
-          delta={{ value: `${formatCurrency(pendingPay)} pendiente`, direction: "down" }} />
+          delta={{ value: porCobrarStr, direction: "down" }} />
         <KpiCard label="Nuevas clínicas" value={String(newClinicsMonth)} icon={Building2}
           delta={{ value: `${Math.abs(growthRate)}% vs mes anterior`, direction: growthRate >= 0 ? "up" : "down" }} />
       </div>

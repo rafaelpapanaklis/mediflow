@@ -338,11 +338,14 @@ export function PaymentsClient({
         `${data.scanned} revisado${data.scanned === 1 ? "" : "s"}`,
         `${data.skipped} omitido${data.skipped === 1 ? "" : "s"}`,
       ];
+      if (data.insertedFailed > 0) {
+        partes.splice(1, 0, `${data.insertedFailed} fallido${data.insertedFailed === 1 ? "" : "s"}`);
+      }
       if (data.unmatched?.length) partes.push(`${data.unmatched.length} sin clínica`);
       if (data.truncated) partes.push("tope alcanzado, vuelve a correrlo");
       toast.success(`Stripe: ${partes.join(" · ")}`);
 
-      if (data.inserted > 0) router.refresh();
+      if (data.inserted > 0 || data.insertedFailed > 0) router.refresh();
     } catch (e: any) {
       toast.error(e.message);
     } finally {

@@ -292,6 +292,18 @@ export async function POST(req: NextRequest) {
               },
             },
           });
+
+          // REGISTRO DEL COBRO RECHAZADO — sin esto un cobro fallido de un
+          // cliente real no aparece en NINGÚN lado del panel (ni en
+          // /admin/payments ni en el "por cobrar" del /admin). La fila queda
+          // en status "failed" y se promueve sola a "paid" si el reintento de
+          // Stripe acaba cobrando (ver recordStripeInvoice). Defensivo: ni un
+          // fallo aquí rompe el 200 al webhook ni la suspensión de arriba.
+          try {
+            await recordStripeInvoice(invoice, clinicId, "failed");
+          } catch (e) {
+            console.error("[stripe webhook] no se pudo registrar el cobro fallido:", e);
+          }
         }
         break;
       }
