@@ -33,6 +33,9 @@ function clamp(n: number, lo: number, hi: number): number {
 
 type Status = "loading" | "ok" | "failed";
 
+/** Alto de sondeo del iframe antes de tener medida real (ver stageH). */
+const PROBE_H = 320;
+
 export function HeatmapStage({ points, path }: { points: HeatPoint[]; path: string }) {
   const viewportRef = useRef<HTMLDivElement | null>(null);
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
@@ -101,9 +104,16 @@ export function HeatmapStage({ points, path }: { points: HeatPoint[]; path: stri
         retry();
         return;
       }
+      // OJO con `documentElement.scrollHeight`: NO sirve para medir aquí porque
+      // nunca baja del alto del PROPIO iframe (es el viewport del frame). Con una
+      // página más corta que el lienzo devolvía el alto del lienzo, el canvas se
+      // estiraba a ese alto inflado y los puntos caían MUY por debajo de su
+      // elemento (y se realimentaba: el iframe ya medía eso). El alto real del
+      // contenido sale del <body> y del offsetHeight del <html>, que sí son
+      // content-driven.
       const h = Math.max(
         doc.body ? doc.body.scrollHeight : 0,
-        doc.documentElement ? doc.documentElement.scrollHeight : 0,
+        doc.body ? doc.body.offsetHeight : 0,
         doc.documentElement ? doc.documentElement.offsetHeight : 0,
       );
       if (h < 40) {
@@ -150,7 +160,12 @@ export function HeatmapStage({ points, path }: { points: HeatPoint[]; path: stri
   }, [src]);
 
   const scale = panelW > 0 && refW > 0 ? panelW / refW : 1;
-  const stageH = frameH > 0 ? frameH : Math.round(refW * 1.15); // placeholder mientras carga
+  // Alto mientras no hay medida. Va BAJO a propósito: es el viewport del iframe, y
+  // media app usa `min-height: 100vh` — con un placeholder alto, el contenido se
+  // estiraría hasta él y mediríamos el placeholder en vez de la página. Al medir se
+  // sustituye por el alto real y converge (viewport = contenido). No se ve: mientras
+  // carga el iframe va en opacity 0 sobre el contenedor de 460px.
+  const stageH = frameH > 0 ? frameH : PROBE_H;
   const scaledH = Math.round(stageH * scale);
 
   // ── Fallback: iframe no cargó / bloqueado / en blanco. Nunca rompe la pestaña. ──
