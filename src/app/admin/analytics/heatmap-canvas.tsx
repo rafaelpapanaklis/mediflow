@@ -1,13 +1,14 @@
 "use client";
 
-// Render de heatmap de clicks sobre canvas (sin dependencias). Los puntos vienen
-// normalizados: x = fracción del ancho del viewport (0..1); y = px absoluto que
-// normalizamos por el docH de cada click a una altura de referencia. Densidad
-// aditiva → rampa de color (azul→cian→verde→amarillo→rojo).
+// Render de heatmap de clicks sobre canvas (sin dependencias). Coordenadas:
+// x = fracción del ancho del viewport (0..1) → x·ancho del lienzo; y = PÍXEL
+// ABSOLUTO desde el tope del documento → se dibuja TAL CUAL, sin reproyectar por
+// docH (ver el bloque de coordenadas en ./heatmap-geom.ts). Densidad aditiva →
+// rampa de color (azul→cian→verde→amarillo→rojo).
 //
 // Dos modos:
-//  - Autónomo (sin width/height): dibuja a lo ancho del contenedor y a una altura de
-//    referencia fija (REF_HEIGHT). Es la vista "simple"/fallback sobre fondo gris.
+//  - Autónomo (sin width/height): dibuja a lo ancho del contenedor y a un alto que
+//    cubre los clicks (mínimo REF_HEIGHT). Es la vista "simple"/fallback sin página.
 //  - Controlado (width y height dados): dibuja EXACTAMENTE a ese lienzo para
 //    superponerse 1:1 sobre el <iframe> de la página real (mismo sistema de coords).
 //    La resolución interna se acota por área (MAX_PX) y se estira por CSS → sin jank en
@@ -15,8 +16,9 @@
 
 import { useEffect, useRef } from "react";
 import type { HeatPoint } from "@/lib/analytics/types";
+import { stageHeight } from "./heatmap-geom";
 
-const REF_HEIGHT = 1400; // altura de referencia del "documento" en px de canvas (modo autónomo)
+const REF_HEIGHT = 1400; // alto mínimo del lienzo en modo autónomo (px de documento)
 const RADIUS = 28;
 const MAX_PX = 3_000_000; // techo de píxeles del lienzo interno (acota getImageData en páginas largas)
 
@@ -61,9 +63,13 @@ export function HeatmapCanvas({
     if (!controlled && !wrap) return;
 
     function draw() {
-      // Tamaño lógico (espacio de coordenadas donde caen los clicks).
+      // Tamaño lógico (espacio de coordenadas donde caen los clicks). En autónomo el
+      // alto lo fijan los propios puntos (p95) con REF_HEIGHT de piso: la Y es
+      // absoluta, así que un lienzo corto recortaría los clicks del pie de página.
       const cssW = controlled ? (width as number) : Math.max(320, Math.floor(wrap!.clientWidth));
-      const cssH = controlled ? (height as number) : REF_HEIGHT;
+      const cssH = controlled
+        ? (height as number)
+        : Math.max(REF_HEIGHT, stageHeight(points, 0));
       // Resolución interna: en controlado acotamos por área para no reventar CPU/memoria
       // con páginas largas (getImageData es O(W·H)); CSS estira el lienzo a cssW×cssH.
       const q = controlled ? Math.min(1, Math.sqrt(MAX_PX / (cssW * cssH))) : 1;
@@ -79,10 +85,12 @@ export function HeatmapCanvas({
       if (!points.length) return;
 
       // 1) Capa de intensidad en escala de grises (alfa aditiva).
+      //    x es fracción → x·W. y ya es un píxel de documento → sólo se lleva a la
+      //    resolución interna del lienzo (q). NADA de dividir por docH.
       points.forEach((p) => {
-        const docH = p.docH && p.docH > 0 ? p.docH : cssH;
         const x = Math.min(1, Math.max(0, p.x)) * W;
-        const y = Math.min(1, Math.max(0, p.y / docH)) * H;
+        const y = p.y * q;
+        if (y < -radius || y > H + radius) return; // fuera del lienzo: nada que pintar
         const grd = ctx.createRadialGradient(x, y, 0, x, y, radius);
         grd.addColorStop(0, "rgba(0,0,0,0.14)");
         grd.addColorStop(1, "rgba(0,0,0,0)");

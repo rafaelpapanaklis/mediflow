@@ -27,8 +27,14 @@ export interface TrackEvent {
   name?: string;
   /** Click: x como fracción del ancho del viewport (0..1). */
   x?: number;
-  /** Click: y absoluto en px desde el tope del documento (pageY). */
+  /** Click: y en px. Absoluto desde el tope del documento (pageY), salvo yFixed. */
   y?: number;
+  /**
+   * Click sobre un elemento fixed/sticky (sidebar, header pegajoso): `y` guarda
+   * clientY —relativo al VIEWPORT—, que es donde de verdad se ve. Con pageY quedaría
+   * cientos de px más abajo tras hacer scroll.
+   */
+  yFixed?: boolean;
   /** Viewport / documento al momento del click (para normalizar el heatmap). */
   vw?: number;
   vh?: number;
@@ -162,9 +168,11 @@ export interface PagesResponse {
 /* --- Heatmap --- */
 export interface HeatPoint {
   x: number; // fracción viewport 0..1
-  y: number; // px absoluto
+  y: number; // px absoluto del documento (o del viewport si yFixed)
   docH: number;
   vw: number;
+  /** El click cayó en un elemento fixed/sticky → y es relativo al viewport. */
+  yFixed?: boolean;
 }
 export interface HeatElement {
   selector: string;

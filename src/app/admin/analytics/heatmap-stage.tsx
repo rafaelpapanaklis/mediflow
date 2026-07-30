@@ -4,12 +4,17 @@
 // (mismo origen) y superpone el mapa de calor EXACTAMENTE encima, para que los clicks
 // se lean sobre el layout real (estilo Clarity).
 //
-// Alineación de coordenadas:
+// Alineación de coordenadas (detalle completo en ./heatmap-geom.ts):
 //  - El iframe se renderiza a un ANCHO DE REFERENCIA fijo = mediana de points[].vw
-//    (fallback 1280). Es el ancho representativo donde se capturaron los clicks, así el
-//    layout del iframe coincide con dónde cayeron.
-//  - El canvas (modo controlado) se dibuja al MISMO ancho (refW) y al alto real del
-//    contenido del iframe (frameH). x·refW y (y/docH)·frameH → caen sobre los elementos.
+//    del GRUPO DE VIEWPORT activo (fallback 1280). Es el ancho representativo donde se
+//    capturaron los clicks, así el layout del iframe coincide con dónde cayeron. La
+//    pestaña ya filtra los puntos por dispositivo: aquí nunca se mezclan viewports.
+//  - El canvas (modo controlado) se dibuja al MISMO ancho (refW): x·refW. La Y va en
+//    PÍXELES ABSOLUTOS tal cual (y), sin reproyectar por docH — el iframe está al ancho
+//    de captura, así que las posiciones absolutas ya coinciden con los elementos.
+//  - El alto del escenario es el del contenido del iframe (frameH) pero nunca menor que
+//    el p95 de las Y, para no recortar los clicks que quedaron bajo el contenido actual.
+//    El iframe conserva su alto real; el excedente queda como fondo del escenario.
 //  - Todo el escenario (iframe + canvas) se escala junto con CSS transform:scale para
 //    caber en el ancho del panel, conservando proporción → siguen alineados.
 //
@@ -19,17 +24,8 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { HeatmapCanvas } from "./heatmap-canvas";
+import { referenceWidth, sizeMismatch, stageHeight } from "./heatmap-geom";
 import type { HeatPoint } from "@/lib/analytics/types";
-
-function median(nums: number[]): number {
-  const arr = nums.filter((n) => n > 0).sort((a, b) => a - b);
-  if (!arr.length) return 0;
-  const mid = Math.floor(arr.length / 2);
-  return arr.length % 2 ? arr[mid] : Math.round((arr[mid - 1] + arr[mid]) / 2);
-}
-function clamp(n: number, lo: number, hi: number): number {
-  return Math.min(hi, Math.max(lo, n));
-}
 
 type Status = "loading" | "ok" | "failed";
 
@@ -46,7 +42,7 @@ export function HeatmapStage({ points, path }: { points: HeatPoint[]; path: stri
   const [status, setStatus] = useState<Status>("loading");
 
   // Ancho de referencia = mediana de los vw de los clicks (donde de verdad se capturaron).
-  const refW = useMemo(() => clamp(median(points.map((p) => p.vw)) || 1280, 320, 2560), [points]);
+  const refW = useMemo(() => referenceWidth(points), [points]);
   const src = origin ? origin + path : "";
 
   // origin sólo en cliente.
@@ -160,13 +156,18 @@ export function HeatmapStage({ points, path }: { points: HeatPoint[]; path: stri
   }, [src]);
 
   const scale = panelW > 0 && refW > 0 ? panelW / refW : 1;
-  // Alto mientras no hay medida. Va BAJO a propósito: es el viewport del iframe, y
-  // media app usa `min-height: 100vh` — con un placeholder alto, el contenido se
-  // estiraría hasta él y mediríamos el placeholder en vez de la página. Al medir se
+  // Alto del IFRAME. Mientras no hay medida va BAJO a propósito: es el viewport del
+  // iframe, y media app usa `min-height: 100vh` — con un placeholder alto, el contenido
+  // se estiraría hasta él y mediríamos el placeholder en vez de la página. Al medir se
   // sustituye por el alto real y converge (viewport = contenido). No se ve: mientras
   // carga el iframe va en opacity 0 sobre el contenedor de 460px.
-  const stageH = frameH > 0 ? frameH : PROBE_H;
+  const frameBoxH = frameH > 0 ? frameH : PROBE_H;
+  // Alto del ESCENARIO (canvas + caja): el del iframe, extendido si hay clicks por
+  // debajo del contenido de hoy. OJO: no se le da al iframe — estirarlo haría que su
+  // `min-height:100vh` creciera y la medición se realimentaría.
+  const stageH = frameH > 0 ? stageHeight(points, frameH) : PROBE_H;
   const scaledH = Math.round(stageH * scale);
+  const mismatch = frameH > 0 && sizeMismatch(points, frameH);
 
   // ── Fallback: iframe no cargó / bloqueado / en blanco. Nunca rompe la pestaña. ──
   if (status === "failed") {
@@ -218,74 +219,94 @@ export function HeatmapStage({ points, path }: { points: HeatPoint[]; path: stri
 
   // ── Escenario: iframe de fondo + overlay alineado, escalado a lo ancho del panel. ──
   return (
-    <div
-      ref={viewportRef}
-      style={{
-        position: "relative",
-        width: "100%",
-        overflow: "hidden",
-        borderRadius: 12,
-        border: "1px solid var(--border-soft)",
-        background: "linear-gradient(180deg, rgba(30,58,138,0.06), rgba(11,16,32,0.25))",
-        height: status === "ok" && scaledH ? scaledH : 460,
-        transition: "height .25s ease",
-      }}
-    >
-      {src && (
+    <div>
+      {mismatch && (
         <div
           style={{
-            display: "flex",
-            justifyContent: "center",
-            opacity: status === "ok" ? 1 : 0,
-            transition: "opacity .25s ease",
+            marginBottom: 10,
+            padding: "8px 12px",
+            borderRadius: 8,
+            border: "1px solid var(--border-soft)",
+            background: "rgba(234,179,8,0.10)",
+            fontSize: 12,
+            color: "var(--text-2)",
           }}
         >
+          La página cambió de tamaño desde que se capturaron estos clicks; la alineación
+          vertical es aproximada.
+        </div>
+      )}
+      <div
+        ref={viewportRef}
+        style={{
+          position: "relative",
+          width: "100%",
+          overflow: "hidden",
+          borderRadius: 12,
+          border: "1px solid var(--border-soft)",
+          background: "linear-gradient(180deg, rgba(30,58,138,0.06), rgba(11,16,32,0.25))",
+          height: status === "ok" && scaledH ? scaledH : 460,
+          transition: "height .25s ease",
+        }}
+      >
+        {src && (
           <div
             style={{
-              position: "relative",
-              flex: "none",
-              width: refW,
-              height: stageH,
-              transform: `scale(${scale})`,
-              transformOrigin: "top center",
+              display: "flex",
+              justifyContent: "center",
+              opacity: status === "ok" ? 1 : 0,
+              transition: "opacity .25s ease",
             }}
           >
-            <iframe
-              key={src}
-              ref={iframeRef}
-              src={src}
-              title="Vista de la página"
-              sandbox="allow-same-origin allow-scripts"
-              scrolling="no"
-              loading="lazy"
+            <div
               style={{
-                display: "block",
+                position: "relative",
+                flex: "none",
                 width: refW,
                 height: stageH,
-                border: 0,
-                background: "#fff",
-                pointerEvents: "none",
+                transform: `scale(${scale})`,
+                transformOrigin: "top center",
               }}
-            />
-            {status === "ok" && frameH > 0 && <HeatmapCanvas points={points} width={refW} height={frameH} />}
+            >
+              <iframe
+                key={src}
+                ref={iframeRef}
+                src={src}
+                title="Vista de la página"
+                sandbox="allow-same-origin allow-scripts"
+                scrolling="no"
+                loading="lazy"
+                style={{
+                  display: "block",
+                  width: refW,
+                  height: frameBoxH,
+                  border: 0,
+                  background: "#fff",
+                  pointerEvents: "none",
+                }}
+              />
+              {status === "ok" && frameH > 0 && (
+                <HeatmapCanvas points={points} width={refW} height={stageH} />
+              )}
+            </div>
           </div>
-        </div>
-      )}
+        )}
 
-      {status === "loading" && (
-        <div
-          style={{
-            position: "absolute",
-            inset: 0,
-            display: "grid",
-            placeItems: "center",
-            color: "var(--text-3)",
-            fontSize: 13,
-          }}
-        >
-          Cargando vista de la página…
-        </div>
-      )}
+        {status === "loading" && (
+          <div
+            style={{
+              position: "absolute",
+              inset: 0,
+              display: "grid",
+              placeItems: "center",
+              color: "var(--text-3)",
+              fontSize: 13,
+            }}
+          >
+            Cargando vista de la página…
+          </div>
+        )}
+      </div>
     </div>
   );
 }
