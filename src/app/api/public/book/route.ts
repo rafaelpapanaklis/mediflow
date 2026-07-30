@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { sendWhatsAppMessage } from "@/lib/whatsapp";
+import { sendWhatsAppLogged } from "@/lib/whatsapp/send-and-log";
 import { createCalendarEvent, refreshAccessToken, getOrCreateClinicCalendar } from "@/lib/google-calendar";
 import { rateLimit } from "@/lib/rate-limit";
 import { tzLocalToUtc } from "@/lib/agenda/time-utils";
@@ -159,12 +159,12 @@ export async function POST(req: NextRequest) {
         + `📋 *Motivo:* ${type?.trim() || "Consulta general"}\n\n`
         + `Para cambios o cancelaciones contáctanos: ${contactNum}`;
 
-      await sendWhatsAppMessage(
-        clinic.waPhoneNumberId,
-        clinic.waAccessToken,
-        cleanPhone,
-        msg
-      );
+      await sendWhatsAppLogged({
+        clinic,
+        to: cleanPhone,
+        body: msg,
+        kind: "booking",
+      });
     } catch (e) {
       console.error("WhatsApp confirmation failed:", e);
       // Don't fail the booking — WhatsApp is best-effort

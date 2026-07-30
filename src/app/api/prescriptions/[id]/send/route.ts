@@ -3,7 +3,7 @@ import type { Role } from "@prisma/client";
 import { getAuthContext } from "@/lib/auth-context";
 import { hasPermission } from "@/lib/auth/permissions";
 import { prisma } from "@/lib/prisma";
-import { sendWhatsAppMessage } from "@/lib/whatsapp";
+import { sendWhatsAppLogged } from "@/lib/whatsapp/send-and-log";
 import { sendEmail } from "@/lib/email";
 import { logMutation } from "@/lib/audit";
 import { assertPatientVisible } from "@/lib/patient-visibility";
@@ -78,7 +78,16 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       `Hola ${rx.patient.firstName}, te enviamos tu receta médica de ${rx.clinic.name}, ` +
       `emitida el ${issuedDate}. Puedes verla, verificar su validez y descargar el PDF aquí: ${verifyUrl}`;
     try {
-      await sendWhatsAppMessage(rx.clinic.waPhoneNumberId, rx.clinic.waAccessToken, rx.patient.phone, message);
+      await sendWhatsAppLogged({
+        clinic: {
+          id: ctx.clinicId,
+          waPhoneNumberId: rx.clinic.waPhoneNumberId,
+          waAccessToken: rx.clinic.waAccessToken,
+        },
+        to: rx.patient.phone,
+        body: message,
+        kind: "prescription",
+      });
     } catch (err) {
       return NextResponse.json(
         { error: "send_failed", detail: err instanceof Error ? err.message : "Error al enviar por WhatsApp" },

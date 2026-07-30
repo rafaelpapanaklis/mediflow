@@ -1,7 +1,7 @@
 import "server-only";
 import crypto from "crypto";
 import { prisma } from "@/lib/prisma";
-import { sendWhatsAppMessage } from "@/lib/whatsapp";
+import { sendWhatsAppLogged } from "@/lib/whatsapp/send-and-log";
 import { sendEmail } from "@/lib/email";
 import { buildAuthorName, REVIEW_STATUS, REVIEW_TOKEN_TTL_DAYS } from "./types";
 
@@ -109,12 +109,17 @@ export async function sendReviewInvitation(appointmentId: string): Promise<void>
       appt.patient.phone
     ) {
       try {
-        await sendWhatsAppMessage(
-          appt.clinic.waPhoneNumberId,
-          appt.clinic.waAccessToken,
-          appt.patient.phone,
-          message,
-        );
+        await sendWhatsAppLogged({
+          clinic: {
+            id: appt.clinicId,
+            waPhoneNumberId: appt.clinic.waPhoneNumberId,
+            waAccessToken: appt.clinic.waAccessToken,
+            waConnected: appt.clinic.waConnected,
+          },
+          to: appt.patient.phone,
+          body: message,
+          kind: "review",
+        });
         channels.push("whatsapp");
       } catch (e) {
         console.error("[reviews/invite] whatsapp", e);

@@ -44,6 +44,7 @@ import {
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { useT } from "@/i18n/i18n-provider";
+import { parseSystemKind } from "@/lib/whatsapp/system-message";
 import styles from "./inbox.module.css";
 
 type Channel = "WHATSAPP" | "EMAIL" | "PORTAL_FORM" | "VALIDATION" | "REMINDER" | "PORTAL";
@@ -1659,9 +1660,17 @@ export function InboxClient({ viewer }: { viewer: Viewer }) {
                           </div>
                         );
                       }
-                      // OUT: staff desde el panel (sentBy) vs bot/celular (sin sentBy —
-                      // v1 no los distingue: label genérico "DaleControl").
+                      // OUT: staff desde el panel (sentBy) vs automático (sin sentBy).
+                      // Dentro de los automáticos, los envíos de la plataforma
+                      // (recordatorios, reseñas, recetas…) traen su origen en el
+                      // externalId `sys:<kind>:…` y llevan etiqueta precisa; el
+                      // resto (respuestas del bot, echo del celular) queda con el
+                      // label genérico "DaleControl".
                       const fromStaff = m.sentBy !== null;
+                      const autoKind = fromStaff ? null : parseSystemKind(m.externalId);
+                      const autoLabel = autoKind
+                        ? t(`inbox.client.autoLabel.${autoKind}`)
+                        : t("inbox.client.genericOutLabel");
                       return (
                         <div key={m.id} className={`${styles.msgGroup} ${styles.msgGroupOut}`}>
                           <span className={styles.msgLabel}>
@@ -1677,10 +1686,10 @@ export function InboxClient({ viewer }: { viewer: Viewer }) {
                                 <span className={styles.msgLabelIconBot}>
                                   <Bot size={12} strokeWidth={2.2} aria-hidden />
                                 </span>
-                                {t("inbox.client.genericOutLabel")}
+                                {autoLabel}
                               </>
                             ) : (
-                              t("inbox.client.genericOutLabel")
+                              autoLabel
                             )}
                           </span>
                           <div className={`${styles.bubble} ${fromStaff ? styles.bubbleStaff : styles.bubbleBot}`}>

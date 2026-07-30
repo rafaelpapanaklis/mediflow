@@ -15,7 +15,7 @@ import { prisma } from "@/lib/prisma";
 import { getPatientPortalContext, pacienteUnauthorized } from "@/lib/patient-portal/guard";
 import { rateLimit } from "@/lib/rate-limit";
 import { tzLocalToUtc, todayInTz } from "@/lib/agenda/time-utils";
-import { sendWhatsAppMessage } from "@/lib/whatsapp";
+import { sendWhatsAppLogged } from "@/lib/whatsapp/send-and-log";
 import {
   createCalendarEvent,
   refreshAccessToken,
@@ -389,7 +389,7 @@ export async function POST(req: NextRequest) {
           `👨‍⚕️ *Doctor/a:* Dr/a. ${doctor.firstName} ${doctor.lastName}\n` +
           `📋 *Motivo:* ${cleanType}\n\n` +
           `La clínica confirmará tu cita pronto. Para cambios: ${contactNum}`;
-        await sendWhatsAppMessage(clinic.waPhoneNumberId, clinic.waAccessToken, cleanPhone, msg);
+        await sendWhatsAppLogged({ clinic, to: cleanPhone, body: msg, kind: "booking" });
       } catch (e) {
         console.error("[paciente/appointments POST] WhatsApp confirm failed:", e);
       }

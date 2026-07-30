@@ -3,7 +3,7 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { triggerAutoRechargeIfNeeded } from "@/lib/ai-billing/recharge";
 import { GRACE_OVERDRAFT_CENTS } from "@/lib/ai-billing/types";
-import { sendWhatsAppMessage } from "@/lib/whatsapp";
+import { sendWhatsAppLogged } from "@/lib/whatsapp/send-and-log";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -133,7 +133,10 @@ export async function GET(req: NextRequest) {
                 ? `⚠️ *${c.name}*: tu asistente de IA se pausó por falta de saldo (${fmtMXN(balance)}). Recarga en tu panel, en *Saldo de IA*, para que el bot de WhatsApp vuelva a responder solo.`
                 : `⚠️ *${c.name}*: el saldo de tu asistente de IA está bajo (${fmtMXN(balance)}). Recárgalo en tu panel, en *Saldo de IA*, para que el bot de WhatsApp siga respondiendo automáticamente.`;
             try {
-              await sendWhatsAppMessage(c.waPhoneNumberId, c.waAccessToken, c.phone, msg);
+              // kind "system": este aviso va a la PROPIA clínica (c.phone), no a
+              // un paciente. El helper no vincula paciente en "system", así que
+              // un clinic.phone que coincida con el de un paciente no lo enlaza.
+              await sendWhatsAppLogged({ clinic: c, to: c.phone, body: msg, kind: "system" });
               waSent++;
               await new Promise((r) => setTimeout(r, 150)); // ritmo amable con Meta
             } catch (e) {

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { sendWhatsAppMessage } from "@/lib/whatsapp";
+import { sendWhatsAppLogged } from "@/lib/whatsapp/send-and-log";
 import { getAuthContext, requireAdmin } from "@/lib/auth-context";
 import { timeHHMMInTz } from "@/lib/agenda/legacy-helpers";
 import { WA_REMINDER_STATUS } from "@/lib/whatsapp/reminder-status";
@@ -34,7 +34,12 @@ export async function POST(req: NextRequest) {
     `Hola ${appt.patient.firstName} 👋, te recordamos que tienes una cita en *${clinic.name}* el *${date}* a las *${timeHHMMInTz(appt.startsAt, clinic.timezone)}h*.\n\nDr/a. ${appt.doctor.firstName} ${appt.doctor.lastName}\n\n✅ Responde *CONFIRMAR* para confirmar tu cita\n❌ Responde *CANCELAR* si no podrás asistir`;
 
   try {
-    await sendWhatsAppMessage(clinic.waPhoneNumberId, clinic.waAccessToken, appt.patient.phone, defaultMsg);
+    await sendWhatsAppLogged({
+      clinic,
+      to: appt.patient.phone,
+      body: defaultMsg,
+      kind: "manual_api",
+    });
     await prisma.appointment.update({ where: { id: appointmentId }, data: { reminderSent: true } });
     await prisma.whatsAppReminder.create({
       data: { clinicId, appointmentId, type: "MANUAL", status: WA_REMINDER_STATUS.SENT, sentAt: new Date(), scheduledFor: new Date() },

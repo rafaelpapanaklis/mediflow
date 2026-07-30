@@ -4250,6 +4250,15 @@
       "staff": "Equipo",
       "staffFromPanel": "{name} · desde el panel",
       "genericOutLabel": "DaleControl",
+      "autoLabel": {
+        "reminder": "Recordatorio automático",
+        "review": "Invitación a reseña",
+        "prescription": "Receta enviada",
+        "booking": "Confirmación de cita",
+        "appointment_change": "Aviso de cambio de cita",
+        "system": "Aviso del sistema",
+        "manual_api": "Recordatorio manual"
+      },
       "internalNote": "Nota interna",
       "internalNoteFoot": "Solo visible para el equipo — el paciente no la ve",
       "tabReply": "Respuesta",

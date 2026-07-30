@@ -5,7 +5,8 @@ import { sendWhatsAppMessage } from "@/lib/whatsapp";
 import { timeHHMMInTz } from "@/lib/agenda/legacy-helpers";
 import { runBotTurn } from "@/lib/whatsapp/bot/engine";
 import { classifyReminderReply } from "@/lib/whatsapp/reminder-reply";
-import { normalizeLast10 } from "@/lib/whatsapp/bot/booking-parse";
+import { findPatientByWhatsAppPhone, upsertWhatsAppThread } from "@/lib/whatsapp/inbox-log";
+import { SYSTEM_EXTERNAL_ID_PREFIX, buildSystemExternalId } from "@/lib/whatsapp/system-message";
 import { rateLimitKey } from "@/lib/rate-limit";
 import type { BotHistoryItem } from "@/lib/whatsapp/bot/types";
 import { Prisma } from "@prisma/client";
@@ -106,67 +107,27 @@ export async function POST(req: NextRequest) {
       if (duplicate) return NextResponse.json({ ok: true });
     }
 
-    // Empareja al paciente por teléfono comparando los últimos 10 dígitos
-    // NORMALIZADOS en ambos lados (no `contains` crudo, que da falsos positivos
-    // cuando esos 10 dígitos aparecen como substring de otro número). El
-    // `contains` solo pre-filtra en la BD; el match real lo hace normalizeLast10.
-    const fromLast10 = normalizeLast10(from);
-    const phoneCandidates = fromLast10.length === 10
-      ? await prisma.patient.findMany({
-          where: { clinicId: clinic.id, phone: { contains: fromLast10 } },
-          select: { id: true, phone: true },
-          take: 25,
-        })
-      : [];
-    const patient =
-      phoneCandidates.find((p) => normalizeLast10(p.phone ?? "") === fromLast10) ?? null;
+    // Empareja al paciente por teléfono (últimos 10 dígitos normalizados en
+    // ambos lados; el `contains` de la query solo pre-filtra en la BD).
+    const patient = await findPatientByWhatsAppPhone(clinic.id, from);
 
     // ── Ingest al Inbox unificado (generalizado para Meta, igual que Twilio) ──
     const profileName = value?.contacts?.[0]?.profile?.name as string | undefined;
     const now = new Date();
     const externalThreadKey = from; // teléfono del remitente: estable por contacto
 
-    let thread = await prisma.inboxThread.findFirst({
-      where: { clinicId: clinic.id, channel: "WHATSAPP", externalId: externalThreadKey },
-      select: { id: true, botActive: true, botState: true, patientId: true },
+    // Upsert compartido con los envíos automáticos (lib/whatsapp/inbox-log):
+    // mismo criterio de hilo, misma captura de P2002 ante reintentos de Meta y
+    // misma vinculación perezosa del paciente.
+    const thread = await upsertWhatsAppThread({
+      clinicId: clinic.id,
+      externalId: externalThreadKey,
+      now,
+      createSubject: profileName ? `WhatsApp · ${profileName}` : `WhatsApp · ${from}`,
+      createStatus: "UNREAD",
+      patientId: patient?.id ?? null,
+      markUnread: true,
     });
-    if (!thread) {
-      try {
-        thread = await prisma.inboxThread.create({
-          data: {
-            clinicId: clinic.id,
-            channel: "WHATSAPP",
-            externalId: externalThreadKey,
-            patientId: patient?.id ?? null,
-            subject: profileName ? `WhatsApp · ${profileName}` : `WhatsApp · ${from}`,
-            status: "UNREAD",
-            lastMessageAt: now,
-          },
-          select: { id: true, botActive: true, botState: true, patientId: true },
-        });
-      } catch (err) {
-        // Carrera entre reintentos de Meta: otro request creó el hilo entre el
-        // findFirst y el create (@@unique [clinicId, channel, externalId]) →
-        // re-busca el hilo existente y úsalo.
-        if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
-          thread = await prisma.inboxThread.findFirst({
-            where: { clinicId: clinic.id, channel: "WHATSAPP", externalId: externalThreadKey },
-            select: { id: true, botActive: true, botState: true, patientId: true },
-          });
-        }
-        if (!thread) throw err;
-      }
-    } else {
-      await prisma.inboxThread.update({
-        where: { id: thread.id },
-        data: {
-          status: "UNREAD",
-          lastMessageAt: now,
-          // si identificamos al paciente y el hilo no lo tenía, lo vinculamos.
-          ...(patient && !thread.patientId ? { patientId: patient.id } : {}),
-        },
-      });
-    }
 
     let inMsg: { id: string };
     try {
@@ -219,9 +180,9 @@ export async function POST(req: NextRequest) {
         await prisma.$executeRaw`UPDATE whatsapp_reminders SET "patientReply"=${text}, "repliedAt"=NOW() WHERE id=${reminder.id}`;
 
         if (clinic.waAccessToken && clinic.waPhoneNumberId) {
-          await sendWhatsAppMessage(clinic.waPhoneNumberId, clinic.waAccessToken, from,
-            `❌ Tu cita ha sido *cancelada*. Si deseas reagendar, comunícate con nosotros. ¡Hasta pronto!`
-          );
+          const body = `❌ Tu cita ha sido *cancelada*. Si deseas reagendar, comunícate con nosotros. ¡Hasta pronto!`;
+          await sendWhatsAppMessage(clinic.waPhoneNumberId, clinic.waAccessToken, from, body);
+          await logAutoReply(thread.id, body);
         }
       } else if (reply === "confirm") {
         await prisma.appointment.update({
@@ -235,9 +196,9 @@ export async function POST(req: NextRequest) {
           const dateStr = new Intl.DateTimeFormat("es-MX", {
             timeZone: clinic.timezone, weekday: "long", day: "numeric", month: "long",
           }).format(appt.startsAt);
-          await sendWhatsAppMessage(clinic.waPhoneNumberId, clinic.waAccessToken, from,
-            `✅ ¡Perfecto! Tu cita del ${dateStr} a las ${timeHHMMInTz(appt.startsAt, clinic.timezone)} está *confirmada*. Te esperamos. 😊`
-          );
+          const body = `✅ ¡Perfecto! Tu cita del ${dateStr} a las ${timeHHMMInTz(appt.startsAt, clinic.timezone)} está *confirmada*. Te esperamos. 😊`;
+          await sendWhatsAppMessage(clinic.waPhoneNumberId, clinic.waAccessToken, from, body);
+          await logAutoReply(thread.id, body);
         }
       } else {
         // Guarda la respuesta sin cambiar el estado de la cita.
@@ -277,6 +238,16 @@ export async function POST(req: NextRequest) {
         direction: "OUT",
         sentById: null,
         sentAt: { gte: dayAgo },
+        // Los envíos automáticos de la plataforma (recordatorios, reseñas,
+        // recetas, avisos…) también son OUT con sentById null desde que quedan
+        // registrados en el Inbox, pero NO son respuestas del bot y no gastan
+        // Claude: se excluyen por el prefijo `sys:` de su externalId. El OR con
+        // `externalId: null` es imprescindible — un `NOT LIKE` en SQL descarta
+        // las filas NULL, que es justo como se guardan las respuestas del bot.
+        OR: [
+          { externalId: null },
+          { NOT: { externalId: { startsWith: SYSTEM_EXTERNAL_ID_PREFIX } } },
+        ],
       },
     });
     if (botRepliesToday >= BOT_DAILY_REPLY_CAP) {
@@ -347,6 +318,31 @@ export async function POST(req: NextRequest) {
 }
 
 /**
+ * Registra en el Inbox una respuesta automática del flujo de recordatorios
+ * (confirmar / cancelar cita). Best-effort: si falla, el WhatsApp ya salió y el
+ * webhook debe seguir respondiendo 200 a Meta.
+ *
+ * Va marcada con `sys:reminder:` para quedar FUERA del tope diario del bot
+ * (BOT_DAILY_REPLY_CAP), que es exactamente como se comportaba antes: estas dos
+ * respuestas no se registraban y por tanto nunca consumieron ese presupuesto.
+ */
+async function logAutoReply(threadId: string, body: string): Promise<void> {
+  try {
+    await prisma.inboxMessage.create({
+      data: {
+        threadId,
+        direction: "OUT",
+        body,
+        sentAt: new Date(),
+        externalId: buildSystemExternalId("reminder"),
+      },
+    });
+  } catch (e) {
+    console.error("[whatsapp/webhook] no se pudo registrar la respuesta automática:", e);
+  }
+}
+
+/**
  * Coexistence: ingesta los mensajes que la clínica envió al paciente DESDE su
  * app de WhatsApp Business del celular (mismo número conectado al panel). Meta
  * los entrega como `smb_message_echoes` (field hermano de `value`), con
@@ -376,56 +372,18 @@ async function ingestBusinessAppEchoes(value: any) {
 
     // Empareja al paciente por los últimos 10 dígitos normalizados (igual que el
     // flujo entrante). El `contains` solo pre-filtra en la BD; el match es exacto.
-    const toLast10 = normalizeLast10(to);
-    const candidates = toLast10.length === 10
-      ? await prisma.patient.findMany({
-          where: { clinicId: clinic.id, phone: { contains: toLast10 } },
-          select: { id: true, phone: true },
-          take: 25,
-        })
-      : [];
-    const patient = candidates.find((p) => normalizeLast10(p.phone ?? "") === toLast10) ?? null;
+    const patient = await findPatientByWhatsAppPhone(clinic.id, to);
 
     const now = new Date();
-    let thread = await prisma.inboxThread.findFirst({
-      where: { clinicId: clinic.id, channel: "WHATSAPP", externalId: to },
-      select: { id: true, patientId: true },
+    const thread = await upsertWhatsAppThread({
+      clinicId: clinic.id,
+      externalId: to,
+      now,
+      createSubject: `WhatsApp · ${to}`,
+      createStatus: "READ",   // saliente de la clínica: no es algo "sin leer"
+      patientId: patient?.id ?? null,
+      pauseBot: true,         // un humano está atendiendo este hilo
     });
-    if (!thread) {
-      try {
-        thread = await prisma.inboxThread.create({
-          data: {
-            clinicId: clinic.id,
-            channel: "WHATSAPP",
-            externalId: to,
-            patientId: patient?.id ?? null,
-            subject: `WhatsApp · ${to}`,
-            status: "READ",   // saliente de la clínica: no es algo "sin leer"
-            lastMessageAt: now,
-            botActive: false, // un humano está atendiendo este hilo
-          },
-          select: { id: true, patientId: true },
-        });
-      } catch (err) {
-        // Carrera entre reintentos de Meta (@@unique [clinicId, channel, externalId]).
-        if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
-          thread = await prisma.inboxThread.findFirst({
-            where: { clinicId: clinic.id, channel: "WHATSAPP", externalId: to },
-            select: { id: true, patientId: true },
-          });
-        }
-        if (!thread) throw err;
-      }
-    } else {
-      await prisma.inboxThread.update({
-        where: { id: thread.id },
-        data: {
-          botActive: false, // el staff tomó el control → el bot calla
-          lastMessageAt: now,
-          ...(patient && !thread.patientId ? { patientId: patient.id } : {}),
-        },
-      });
-    }
 
     try {
       await prisma.inboxMessage.create({

@@ -15,8 +15,9 @@
 //   - status REJECTED → "no fue posible {reagendar|cancelar} tu cita" + resolutionNote
 //     si existe + "tu cita sigue en pie".
 //   - PENDING o CR inexistente → return silencioso.
-//   - WhatsApp: sendWhatsAppMessage de src/lib/whatsapp.ts (maneja descifrado del
-//     token y normalización del teléfono) SOLO si clinic.waConnected &&
+//   - WhatsApp: sendWhatsAppLogged de src/lib/whatsapp/send-and-log.ts (envía con
+//     el helper de siempre —descifrado del token y normalización del teléfono— y
+//     además deja el mensaje registrado en el Inbox) SOLO si clinic.waConnected &&
 //     waPhoneNumberId && waAccessToken && patient.phone.
 //   - Email: sendEmail de src/lib/email.ts SOLO si patient.email — HTML con el
 //     estilo dark de src/lib/reminders/email.ts (sin CTA de confirmación).
@@ -25,7 +26,7 @@
 //   - Español neutro con tú. Nunca voseo.
 
 import { prisma } from "@/lib/prisma";
-import { sendWhatsAppMessage } from "@/lib/whatsapp";
+import { sendWhatsAppLogged } from "@/lib/whatsapp/send-and-log";
 import { sendEmail } from "@/lib/email";
 import { formatApptDateParts } from "@/lib/reminders/config";
 import { createPatientNotification } from "@/lib/patient-notifications/create";
@@ -103,12 +104,17 @@ export async function notifyPatientChangeResolution(changeRequestId: string): Pr
     // Canal WhatsApp: solo con Meta conectado y teléfono del paciente.
     if (clinic.waConnected && clinic.waPhoneNumberId && clinic.waAccessToken && patient.phone) {
       try {
-        await sendWhatsAppMessage(
-          clinic.waPhoneNumberId,
-          clinic.waAccessToken,
-          patient.phone,
-          message,
-        );
+        await sendWhatsAppLogged({
+          clinic: {
+            id: cr.clinicId,
+            waPhoneNumberId: clinic.waPhoneNumberId,
+            waAccessToken: clinic.waAccessToken,
+            waConnected: clinic.waConnected,
+          },
+          to: patient.phone,
+          body: message,
+          kind: "appointment_change",
+        });
       } catch (e) {
         console.error("[appointment-change notify]", e);
       }

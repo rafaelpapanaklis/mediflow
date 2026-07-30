@@ -4250,6 +4250,15 @@
       "staff": "Team",
       "staffFromPanel": "{name} · from the panel",
       "genericOutLabel": "DaleControl",
+      "autoLabel": {
+        "reminder": "Automatic reminder",
+        "review": "Review invitation",
+        "prescription": "Prescription sent",
+        "booking": "Appointment confirmation",
+        "appointment_change": "Appointment change notice",
+        "system": "System notice",
+        "manual_api": "Manual reminder"
+      },
       "internalNote": "Internal note",
       "internalNoteFoot": "Only visible to the team — the patient can't see it",
       "tabReply": "Reply",

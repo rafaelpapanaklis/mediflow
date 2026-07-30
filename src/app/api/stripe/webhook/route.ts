@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import getStripe from "@/lib/stripe";
 import { prisma } from "@/lib/prisma";
 import { createRoom, createMeetingToken } from "@/lib/daily";
-import { sendWhatsAppMessage } from "@/lib/whatsapp";
+import { sendWhatsAppLogged } from "@/lib/whatsapp/send-and-log";
 import { timeHHMMInTz } from "@/lib/agenda/legacy-helpers";
 import { PATIENT_INVOICE_KIND, applyInvoiceOnlinePayment } from "@/lib/patient-portal/online-payment";
 
@@ -112,12 +112,16 @@ export async function POST(req: NextRequest) {
         try {
           const patientMsg = `✅ Pago confirmado — Teleconsulta con Dr/a. ${appointment.doctor.firstName} ${appointment.doctor.lastName}\n📅 ${fecha}\n🕐 ${hora}\n💻 Únete aquí: ${appUrl}/teleconsulta/${appointmentId}?role=patient&token=${patientToken}\n\nRecomendaciones:\n- Usa conexión estable\n- Usa audífonos\n- Entra 5 min antes`;
 
-          await sendWhatsAppMessage(
-            appointment.clinic.waPhoneNumberId,
-            appointment.clinic.waAccessToken,
-            appointment.patient.phone,
-            patientMsg
-          );
+          // Este SÍ va al paciente: se vincula el hilo (linkPatient) aunque el
+          // kind sea "system" — el default de "system" es no vincular porque
+          // sus otros avisos hablan con la propia clínica o con el doctor.
+          await sendWhatsAppLogged({
+            clinic: appointment.clinic,
+            to: appointment.patient.phone,
+            body: patientMsg,
+            kind: "system",
+            linkPatient: true,
+          });
         } catch (e) {
           console.error("WhatsApp to patient failed:", e);
         }
@@ -128,12 +132,14 @@ export async function POST(req: NextRequest) {
         try {
           const doctorMsg = `📹 Nueva teleconsulta pagada\n👤 Paciente: ${appointment.patient.firstName} ${appointment.patient.lastName}\n📅 ${fecha} a las ${hora}\n💻 Únete: ${appUrl}/teleconsulta/${appointmentId}?role=doctor\n💰 Recibirás $${doctorAmount} después de la sesión`;
 
-          await sendWhatsAppMessage(
-            appointment.clinic.waPhoneNumberId,
-            appointment.clinic.waAccessToken,
-            appointment.doctor.phone,
-            doctorMsg
-          );
+          // Va al DOCTOR, no a un paciente: sin vinculación (default de
+          // "system") para no enlazar el hilo a un paciente por coincidencia.
+          await sendWhatsAppLogged({
+            clinic: appointment.clinic,
+            to: appointment.doctor.phone,
+            body: doctorMsg,
+            kind: "system",
+          });
         } catch (e) {
           console.error("WhatsApp to doctor failed:", e);
         }

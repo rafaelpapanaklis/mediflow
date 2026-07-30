@@ -17,7 +17,7 @@
 // /api/whatsapp/send) se envían tal cual el campo `message`.
 
 import { prisma } from "@/lib/prisma";
-import { sendWhatsAppMessage } from "@/lib/whatsapp";
+import { sendWhatsAppLogged } from "@/lib/whatsapp/send-and-log";
 import { sendEmail } from "@/lib/email";
 import { buildAppointmentReminderEmail } from "@/lib/reminders/email";
 import {
@@ -50,6 +50,7 @@ interface PatientCtx {
   phone: string;
 }
 interface ClinicCtx {
+  id: string;
   name: string;
   timezone: string;
   waPhoneNumberId: string;
@@ -248,6 +249,7 @@ export async function processWhatsAppQueue(opts?: {
         continue;
       }
       const clinicCtx: ClinicCtx = {
+        id: r.clinic.id,
         name: r.clinic.name,
         timezone: r.clinic.timezone,
         waPhoneNumberId: r.clinic.waPhoneNumberId,
@@ -306,12 +308,20 @@ export async function processWhatsAppQueue(opts?: {
         continue;
       }
 
-      await sendWhatsAppMessage(
-        clinicCtx.waPhoneNumberId,
-        clinicCtx.waAccessToken,
-        patientCtx.phone,
+      // Envía Y deja rastro en el Inbox (la clínica ve "recordatorio enviado").
+      // El registro es best-effort dentro del helper: si falla, el envío ya
+      // salió y la corrida del cron sigue igual que antes.
+      await sendWhatsAppLogged({
+        clinic: {
+          id: clinicCtx.id,
+          waPhoneNumberId: clinicCtx.waPhoneNumberId,
+          waAccessToken: clinicCtx.waAccessToken,
+          waConnected: true,
+        },
+        to: patientCtx.phone,
         body,
-      );
+        kind: "reminder",
+      });
       // El row ya quedó SENT por el claim; no hay update post-send.
       summary.sent++;
       // Pausa breve para respetar rate limits.
