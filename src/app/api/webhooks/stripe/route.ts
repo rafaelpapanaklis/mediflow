@@ -19,6 +19,7 @@ import { PATIENT_INVOICE_KIND, applyInvoiceOnlinePayment } from "@/lib/patient-p
 import { CFDI_OVERAGE_KIND, reconcileOverageFromWebhook } from "@/lib/cfdi-overage";
 import { getPlanLimits } from "@/lib/plans";
 import { isPlanId } from "@/lib/billing/plans";
+import { PLAN_UPGRADE_DIFF_KIND, canSuspendForFailedInvoice } from "@/lib/billing/proration";
 import { sendPlanActivatedEmail, sendPlanRenewedEmail } from "@/lib/email";
 import { PLAN_MARKETING } from "@/lib/plan-shared";
 
@@ -76,6 +77,21 @@ export async function POST(req: NextRequest) {
           break;
         }
 
+        // Diferencial prorrateado de un UPGRADE de clínica que paga SPEI/OXXO
+        // (no tiene suscripción de tarjeta). Solo aplica el plan; NO extiende el
+        // periodo. Con tarjeta el pago ya está acreditado aquí; con SPEI/OXXO
+        // llega por async_payment_succeeded.
+        if (session.metadata?.kind === PLAN_UPGRADE_DIFF_KIND) {
+          const diffClinicId = session.metadata?.clinicId;
+          if (diffClinicId && session.payment_status === "paid") {
+            await applyPlanUpgradeDiff(diffClinicId, session.metadata?.plan ?? null, {
+              event: event.type,
+              sessionId: session.id,
+            });
+          }
+          break;
+        }
+
         if (session.metadata?.kind !== "platform-subscription") break;
 
         const clinicId = session.metadata?.clinicId;
@@ -109,6 +125,18 @@ export async function POST(req: NextRequest) {
       // otro periodo (la renovación automática es backlog, no se construye cron).
       case "checkout.session.async_payment_succeeded": {
         const session = event.data.object as Stripe.Checkout.Session;
+        // Diferencial de upgrade pagado por SPEI/OXXO: aplica el plan SIN mover
+        // trialEndsAt/nextBillingDate (el periodo no se extiende).
+        if (session.metadata?.kind === PLAN_UPGRADE_DIFF_KIND) {
+          const diffClinicId = session.metadata?.clinicId;
+          if (diffClinicId) {
+            await applyPlanUpgradeDiff(diffClinicId, session.metadata?.plan ?? null, {
+              event: event.type,
+              sessionId: session.id,
+            });
+          }
+          break;
+        }
         if (session.metadata?.kind !== "platform-subscription") break;
         const clinicId = session.metadata?.clinicId;
         if (!clinicId) break;
@@ -125,7 +153,10 @@ export async function POST(req: NextRequest) {
       case "checkout.session.async_payment_failed":
       case "checkout.session.expired": {
         const session = event.data.object as Stripe.Checkout.Session;
-        if (session.metadata?.kind !== "platform-subscription") break;
+        const kind = session.metadata?.kind;
+        // El diferencial de upgrade también se audita: si no se pagó, el plan
+        // simplemente NO se aplicó (nada que revertir).
+        if (kind !== "platform-subscription" && kind !== PLAN_UPGRADE_DIFF_KIND) break;
         const clinicId = session.metadata?.clinicId;
         if (clinicId) {
           await logAudit({
@@ -135,7 +166,7 @@ export async function POST(req: NextRequest) {
             entityId: session.id,
             action: "update",
             changes: {
-              _source: { before: null, after: { event: event.type, sessionId: session.id, result: "not_activated" } },
+              _source: { before: null, after: { event: event.type, kind, sessionId: session.id, result: "not_activated" } },
             },
           });
         }
@@ -149,8 +180,11 @@ export async function POST(req: NextRequest) {
           ?? await resolveClinicIdByCustomer(sub.customer as string);
         if (clinicId) {
           // current_period_end no siempre está tipado en las últimas versiones
-          // del SDK; lo leemos como campo opcional.
-          const periodEnd = (sub as any).current_period_end as number | undefined;
+          // del SDK; lo leemos como campo opcional. En las versiones nuevas de la
+          // API el fin de periodo vive en el item, no en la suscripción — de ahí
+          // el fallback (sin él el campo llegaba undefined y borrábamos la fecha).
+          const periodEnd = ((sub as any).current_period_end
+            ?? (sub as any).items?.data?.[0]?.current_period_end) as number | undefined;
           // Plan en la metadata de la suscripción (cambios hechos desde el
           // dashboard/portal de Stripe). Si es válido, sincroniza plan + cupo IA.
           const subPlan = sub.metadata?.plan;
@@ -163,7 +197,10 @@ export async function POST(req: NextRequest) {
               stripeSubscriptionId: sub.id,
               subscriptionStatus:   sub.status,
               subscriptionId:       sub.id,
-              nextBillingDate:      periodEnd ? new Date(periodEnd * 1000) : null,
+              // Si Stripe NO reporta el fin de periodo, NO se toca la fecha de
+              // renovación. Antes se escribía `null` y el dato se BORRABA (el
+              // panel dejaba de mostrar cuándo se renueva).
+              ...(periodEnd ? { nextBillingDate: new Date(periodEnd * 1000) } : {}),
               ...subPlanFields,
             },
           });
@@ -215,10 +252,23 @@ export async function POST(req: NextRequest) {
             : invoice.customer?.id ?? null;
         const clinicId = customerId ? await resolveClinicIdByCustomer(customerId) : null;
         if (clinicId) {
-          await prisma.clinic.update({
-            where: { id: clinicId },
-            data: { subscriptionStatus: "past_due" },
-          });
+          // SOLO la mensualidad/anualidad puede SUSPENDER (ver
+          // canSuspendForFailedInvoice): un prorrateo rechazado llega con
+          // billing_reason "subscription_update" y NO debe costarle a la clínica
+          // el acceso al plan que ya paga por haber intentado subir de plan.
+          const reason = invoice.billing_reason;
+          const canSuspend = canSuspendForFailedInvoice(reason);
+          if (canSuspend) {
+            await prisma.clinic.update({
+              where: { id: clinicId },
+              data: { subscriptionStatus: "past_due" },
+            });
+          } else {
+            console.warn(
+              "[stripe webhook] invoice.payment_failed sin suspender:",
+              JSON.stringify({ clinicId, invoiceId: invoice.id, billingReason: reason ?? null }),
+            );
+          }
           await logAudit({
             clinicId,
             userId: clinicId,
@@ -226,8 +276,18 @@ export async function POST(req: NextRequest) {
             entityId: invoice.id ?? customerId ?? clinicId,
             action: "update",
             changes: {
-              subscriptionStatus: { before: null, after: "past_due" },
-              _source: { before: null, after: { event: event.type, invoiceId: invoice.id } },
+              ...(canSuspend
+                ? { subscriptionStatus: { before: null, after: "past_due" } }
+                : {}),
+              _source: {
+                before: null,
+                after: {
+                  event: event.type,
+                  invoiceId: invoice.id,
+                  billingReason: reason ?? null,
+                  suspended: canSuspend,
+                },
+              },
             },
           });
         }
@@ -527,6 +587,47 @@ function addYears(date: Date, n: number): Date {
   d.setFullYear(d.getFullYear() + n);
   if (d.getMonth() !== m) d.setDate(0);
   return d;
+}
+
+/**
+ * Aplica el plan superior cuando se CONFIRMA el pago del diferencial prorrateado
+ * de una clínica que paga SPEI/OXXO (sin suscripción de tarjeta).
+ *
+ * Deliberadamente NO toca `trialEndsAt`, `nextBillingDate` ni
+ * `subscriptionStatus`: la clínica pagó solo la DIFERENCIA por los días que le
+ * quedaban, no un periodo nuevo — el periodo no se extiende, solo mejora el plan.
+ * Idempotente: escribir el mismo plan dos veces es un no-op (Stripe puede
+ * reenviar el evento).
+ */
+async function applyPlanUpgradeDiff(
+  clinicId: string,
+  plan: string | null,
+  source: { event: string; sessionId?: string },
+): Promise<void> {
+  if (!isPlanId(plan)) return;
+  const before = await prisma.clinic.findUnique({
+    where: { id: clinicId },
+    select: { plan: true },
+  });
+  if (!before) return;
+
+  const limits = await getPlanLimits(plan);
+  await prisma.clinic.update({
+    where: { id: clinicId },
+    data: { plan, aiTokensLimit: limits.aiTokensDefault },
+  });
+
+  await logAudit({
+    clinicId,
+    userId: clinicId, // sin user en webhook context — usamos clinicId como placeholder
+    entityType: "subscription",
+    entityId: source.sessionId ?? clinicId,
+    action: "update",
+    changes: {
+      plan: { before: before.plan, after: plan },
+      _source: { before: null, after: { ...source, kind: PLAN_UPGRADE_DIFF_KIND, periodExtended: false } },
+    },
+  });
 }
 
 /**
