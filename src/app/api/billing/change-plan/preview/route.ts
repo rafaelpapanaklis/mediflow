@@ -13,6 +13,7 @@ import {
   planAmountCents,
   type BillingInterval,
 } from "@/lib/billing/proration";
+import { buildManualUpgradeQuote } from "@/lib/billing/manual-upgrade";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -174,19 +175,48 @@ export async function POST(req: NextRequest) {
   const currentPlan = await getResolvedPlan(clinic.plan);
 
   // ── Sin suscripción de tarjeta ────────────────────────────────────────────
-  // El plan es solo una preferencia hasta que la clínica activa/paga: no hay
-  // cobro inmediato que previsualizar.
   if (!clinic.stripeSubscriptionId) {
+    const manualPaid = clinic.subscriptionStatus === "active" || clinic.subscriptionStatus === "paid";
+    if (!manualPaid) {
+      // Aún no paga: el plan es solo preferencia, no hay cobro que previsualizar.
+      const payload: ChangePlanPreview = {
+        mode: "in-place",
+        direction: changeDirection(currentPlan.priceMxn * 100, targetPlan.priceMxn * 100),
+        interval: "month",
+        currency: "MXN",
+        amountDueNow: 0,
+        daysRemaining: 0,
+        nextBillingDate: null,
+        nextAmount: targetPlan.priceMxn,
+        lines: [],
+        unavailable: false,
+      };
+      return NextResponse.json(payload);
+    }
+
+    const quote = await buildManualUpgradeQuote({
+      clinicId: clinic.id,
+      paidUntil: clinic.trialEndsAt,
+      currentPlan,
+      targetPlan,
+    });
     const payload: ChangePlanPreview = {
-      mode: "in-place",
-      direction: changeDirection(currentPlan.priceMxn * 100, targetPlan.priceMxn * 100),
-      interval: "month",
+      mode: "manual",
+      direction: quote.direction,
+      interval: quote.interval,
       currency: "MXN",
-      amountDueNow: 0,
-      daysRemaining: 0,
-      nextBillingDate: null,
-      nextAmount: targetPlan.priceMxn,
-      lines: [],
+      amountDueNow: quote.chargeable ? quote.diffCents / 100 : 0,
+      daysRemaining: quote.daysRemaining,
+      nextBillingDate: quote.periodEnd?.toISOString() ?? null,
+      nextAmount: quote.targetCents / 100,
+      lines: quote.chargeable
+        ? [
+            {
+              description: `Diferencia al plan ${targetPlan.name} por ${quote.daysRemaining} día(s) restantes`,
+              amount: quote.diffCents / 100,
+            },
+          ]
+        : [],
       unavailable: false,
     };
     return NextResponse.json(payload);
