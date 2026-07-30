@@ -5,6 +5,7 @@ import { getCategoryCityCombos, getListedClinicSlugs } from "@/lib/directory/que
 import { DIRECTORY_CATEGORIES } from "@/lib/directory/types";
 import { BLOG_CATEGORIES } from "@/lib/blog/categories";
 import { listPublishedForSitemap } from "@/lib/blog/queries";
+import { CASOS_DE_USO, CASOS_PUBLISHED_AT } from "@/lib/casos/data";
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const now = new Date();
@@ -14,6 +15,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     { url: `${SITE_URL}/clinicas`, lastModified: now, changeFrequency: "weekly", priority: 0.7 },
     { url: `${SITE_URL}/descubre`, lastModified: now, changeFrequency: "weekly", priority: 0.8 },
     { url: `${SITE_URL}/blog`,     lastModified: now, changeFrequency: "daily",  priority: 0.8 },
+    { url: `${SITE_URL}/casos-de-uso`, lastModified: now, changeFrequency: "monthly", priority: 0.8 },
   ];
 
   const specialtyEntries: MetadataRoute.Sitemap = SPECIALTY_SLUGS.map((slug) => ({
@@ -67,6 +69,14 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     priority: 0.5,
   }));
 
+  // Casos de uso — data ESTÁTICA en el repo (src/lib/casos/data.ts), sin DB.
+  const casoEntries: MetadataRoute.Sitemap = CASOS_DE_USO.map((c) => ({
+    url: `${SITE_URL}/casos-de-uso/${c.slug}`,
+    lastModified: new Date(CASOS_PUBLISHED_AT),
+    changeFrequency: "monthly",
+    priority: 0.7,
+  }));
+
   // Artículos PUBLICADOS (DB, cap 5000). Los borradores y los programados no
   // salen: listPublishedForSitemap filtra por status en el where. En build sin
   // DATABASE_URL → [].
@@ -91,5 +101,6 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     ...clinicEntries,
     ...blogCategoryEntries,
     ...blogPostEntries,
+    ...casoEntries,
   ];
 }

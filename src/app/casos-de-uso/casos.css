@@ -1,0 +1,278 @@
+/* ═══════════════════════════════════════════════════════════════════════
+   DaleControl · Casos de uso — estilos scoped a `.caso-*`
+   ───────────────────────────────────────────────────────────────────────
+   NO toca globals.css. La sección monta sales.css (shell `.mfh`) y blog.css
+   (tipografía `.blog-prose`, FAQ, CTA y tarjetas del blog); aquí sólo vive
+   lo propio de casos de uso: el bloque visual con gradiente por especialidad
+   (cero imágenes: gradiente + ícono de lucide), los chips de módulos y la
+   nota de escenario ilustrativo.
+
+   Responsive por construcción: grid con auto-fill + minmax, tipografía en
+   clamp(), cero anchos fijos.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* ── Rejilla del índice ──────────────────────────────────────────────── */
+.caso-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr));
+  gap: 22px;
+}
+
+.caso-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 18px;
+  border: 1px solid var(--line, #e9e7f3);
+  border-radius: var(--r, 16px);
+  background: #fff;
+  text-decoration: none;
+  color: inherit;
+  min-width: 0;
+  transition: transform .16s ease, box-shadow .16s ease, border-color .16s ease;
+}
+.caso-card:hover {
+  transform: translateY(-3px);
+  border-color: var(--v200, #ddd6fe);
+  box-shadow: 0 18px 40px -22px rgba(76, 29, 149, .35);
+}
+.caso-card__badges {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+  color: var(--b2, #6d28d9);
+}
+.caso-card__city {
+  color: var(--muted, #64748b);
+  font-weight: 600;
+  letter-spacing: .04em;
+}
+.caso-card__title {
+  margin: 0;
+  font-size: 18px;
+  line-height: 1.34;
+  letter-spacing: -0.015em;
+  font-weight: 700;
+  color: var(--ink, #0f172a);
+  overflow-wrap: anywhere;
+}
+.caso-card__problem {
+  margin: 0;
+  display: flex;
+  gap: 8px;
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--body, #475569);
+}
+.caso-card__problem::before {
+  content: "";
+  flex: none;
+  width: 3px;
+  border-radius: 999px;
+  background: var(--v200, #ddd6fe);
+}
+.caso-card__excerpt {
+  margin: 0;
+  font-size: 14.5px;
+  line-height: 1.6;
+  color: var(--body, #475569);
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.caso-card__more {
+  margin-top: auto;
+  padding-top: 4px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13.5px;
+  font-weight: 650;
+  color: var(--b2, #6d28d9);
+}
+.caso-card:hover .caso-card__more { gap: 10px; }
+
+/* ── Bloque visual: gradiente + ícono, sin un solo archivo binario ───── */
+.caso-visual {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 13px;
+  overflow: hidden;
+  color: #fff;
+  /* Fallback por si llegara una especialidad sin variante propia. */
+  background-image: linear-gradient(135deg, #7c3aed, #2563eb);
+}
+/* Brillo suave arriba a la izquierda — da profundidad sin textura ni imagen. */
+.caso-visual::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(120% 130% at 8% 0%, rgba(255, 255, 255, .30) 0%, transparent 55%),
+    radial-gradient(80% 120% at 100% 100%, rgba(0, 0, 0, .18) 0%, transparent 60%);
+  pointer-events: none;
+}
+.caso-visual svg {
+  position: relative;
+  z-index: 1;
+  stroke-width: 1.6;
+  filter: drop-shadow(0 2px 6px rgba(15, 23, 42, .28));
+}
+.caso-visual--card { height: 104px; width: 100%; }
+.caso-visual--hero {
+  height: 64px;
+  width: 64px;
+  border-radius: 16px;
+  flex: none;
+}
+
+.caso-visual--ortodoncia      { background-image: linear-gradient(135deg, #7c3aed, #2563eb); }
+.caso-visual--implantes       { background-image: linear-gradient(135deg, #4338ca, #0f172a); }
+.caso-visual--odontopediatria { background-image: linear-gradient(135deg, #f59e0b, #fb7185); }
+.caso-visual--endodoncia      { background-image: linear-gradient(135deg, #db2777, #7c3aed); }
+.caso-visual--estetica        { background-image: linear-gradient(135deg, #a855f7, #ec4899); }
+.caso-visual--general         { background-image: linear-gradient(135deg, #2563eb, #06b6d4); }
+.caso-visual--periodoncia     { background-image: linear-gradient(135deg, #0d9488, #22c55e); }
+.caso-visual--protesis        { background-image: linear-gradient(135deg, #0891b2, #6366f1); }
+.caso-visual--multisede       { background-image: linear-gradient(135deg, #4f46e5, #0ea5e9); }
+
+/* ── Cabecera de la ficha ────────────────────────────────────────────── */
+.caso-hero {
+  display: flex;
+  align-items: flex-start;
+  gap: 18px;
+  flex-wrap: wrap;
+}
+.caso-hero__body { flex: 1 1 320px; min-width: 0; }
+.caso-hero__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 16px;
+  font-size: 13px;
+  color: var(--muted, #64748b);
+}
+.caso-hero__pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--line, #e9e7f3);
+  background: #fff;
+  font-size: 12.5px;
+  font-weight: 650;
+  color: var(--b2, #6d28d9);
+}
+.caso-hero__pill svg { width: 14px; height: 14px; }
+
+/* ── Nota de escenario ilustrativo (obligatoria bajo el hero) ────────── */
+.caso-note {
+  display: flex;
+  gap: 10px;
+  margin: 22px 0 0;
+  padding: 12px 15px;
+  border-radius: 12px;
+  border: 1px dashed var(--v200, #ddd6fe);
+  background: var(--v50, #f5f3ff);
+  font-size: 13.2px;
+  line-height: 1.55;
+  color: var(--body, #475569);
+}
+.caso-note svg {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  margin-top: 2px;
+  color: var(--b, #7c3aed);
+}
+
+/* ── Chips de módulos que intervienen ────────────────────────────────── */
+.caso-modules {
+  margin-top: 44px;
+  padding: clamp(20px, 3vw, 28px);
+  border-radius: var(--r-lg, 22px);
+  border: 1px solid var(--line, #e9e7f3);
+  background: var(--tint2, #faf8ff);
+}
+.caso-modules__title {
+  margin: 0 0 6px;
+  font-size: clamp(18px, 2.2vw, 21px);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--ink, #0f172a);
+}
+.caso-modules__text {
+  margin: 0 0 16px;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--muted, #64748b);
+}
+.caso-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.caso-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 13px;
+  border-radius: 999px;
+  border: 1px solid var(--v200, #ddd6fe);
+  background: #fff;
+  color: var(--b2, #6d28d9);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.2;
+}
+.caso-chip__dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 999px;
+  background: currentColor;
+  opacity: .55;
+}
+
+/* ── Enlaces al blog (fallback sin BD: lista, no tarjetas) ───────────── */
+.caso-bloglist {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.caso-bloglink {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 15px 18px;
+  border: 1px solid var(--line, #e9e7f3);
+  border-radius: 12px;
+  background: #fff;
+  color: var(--ink, #0f172a);
+  font-size: 15px;
+  font-weight: 650;
+  line-height: 1.45;
+  text-decoration: none;
+  transition: border-color .15s ease, color .15s ease, background .15s ease;
+}
+.caso-bloglink:hover {
+  border-color: var(--v200, #ddd6fe);
+  background: var(--v50, #f5f3ff);
+  color: var(--b2, #6d28d9);
+}
+.caso-bloglink svg {
+  flex: none;
+  width: 17px;
+  height: 17px;
+  color: var(--b, #7c3aed);
+}

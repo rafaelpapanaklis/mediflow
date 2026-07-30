@@ -170,7 +170,8 @@ export const NAV = {
     { label: 'Precios', href: '#precios' },
     { label: 'Comparativa', href: '#comparativa' },
     { label: 'FAQ', href: '#faq' },
-    // Ruta real, no ancla: los consumidores normalizan con navHref().
+    // Rutas reales, no anclas: los consumidores normalizan con navHref().
+    { label: 'Casos de uso', href: '/casos-de-uso' },
     { label: 'Blog', href: '/blog' },
   ],
   login: 'Iniciar sesión',
@@ -369,8 +370,8 @@ export const FINAL_CTA = {
 export const FOOTER = {
   blurb: 'El software de gestión para clínicas dentales en México. Todo en un solo lugar, en español y en pesos.',
   // Nav y footer comparten los mismos links y los normalizan con navHref():
-  // las anclas salen como "/#precios" y las rutas ("/blog") tal cual. Blog ya
-  // vive en NAV.links, por eso aquí no se vuelve a añadir.
+  // las anclas salen como "/#precios" y las rutas ("/blog", "/casos-de-uso")
+  // tal cual. Ambas viven en NAV.links, por eso aquí no se vuelven a añadir.
   product: [...NAV.links],
   legal: [
     { label: 'Aviso de privacidad', href: '/privacidad' },
