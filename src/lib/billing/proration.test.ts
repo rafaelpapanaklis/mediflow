@@ -25,8 +25,10 @@ import {
   isLiveSubscriptionStatus,
   isStripeChargeFailure,
   manualUpgradeDiffCents,
+  pickPurchasedInterval,
   planAmountCents,
 } from "./proration";
+import { isClinicBillingAdmin } from "./authz";
 
 // ── invoice.payment_failed → ¿suspender? ────────────────────────────────────
 
@@ -173,6 +175,57 @@ test("isStripeChargeFailure: un request inválido NO es fallo de cobro", () => {
   assert.equal(isStripeChargeFailure({ type: "StripeAPIError" }), false);
   assert.equal(isStripeChargeFailure(null), false);
   assert.equal(isStripeChargeFailure(undefined), false);
+});
+
+// ── Ciclo comprado desde la bitácora (regresión del review de PR #117) ──────
+
+/** Fila como la graba /api/billing/checkout (la ÚNICA que registra la compra). */
+const purchaseRow = (billing: "monthly" | "annual") => ({
+  _created: { before: null, after: { plan: "BASIC", priceMxn: 499, billing, sessionId: "cs_1" } },
+});
+
+/** Fila del Checkout del diferencial: MISMO entityType/action, SIN `billing`. */
+const diffRow = (interval: "month" | "year") => ({
+  _created: {
+    before: null,
+    after: { event: "self-service-change-plan-manual-diff", plan: "PRO", interval, diffMxn: 333 },
+  },
+});
+
+test("pickPurchasedInterval: lee el ciclo comprado", () => {
+  assert.equal(pickPurchasedInterval([purchaseRow("annual")]), "year");
+  assert.equal(pickPurchasedInterval([purchaseRow("monthly")]), "month");
+});
+
+test("pickPurchasedInterval: SALTA la fila del diferencial y no la lee como mensual", () => {
+  // El caso que sobre-cobraba: la fila más reciente es la del diff (sin
+  // `billing`), pero la compra real fue ANUAL. Leerla como "month" prorrateaba
+  // sobre 30 días con los díasRestantes de un periodo anual.
+  assert.equal(pickPurchasedInterval([diffRow("year"), purchaseRow("annual")]), "year");
+  // Varios intentos de upgrade acumulados tampoco tapan la compra.
+  assert.equal(
+    pickPurchasedInterval([diffRow("year"), diffRow("year"), diffRow("year"), purchaseRow("annual")]),
+    "year",
+  );
+});
+
+test("pickPurchasedInterval: null cuando ninguna fila registra la compra", () => {
+  assert.equal(pickPurchasedInterval([]), null);
+  assert.equal(pickPurchasedInterval([diffRow("year")]), null);
+  assert.equal(pickPurchasedInterval([null, undefined, {}, { _created: {} }]), null);
+});
+
+// ── Quién puede cambiar el plan ─────────────────────────────────────────────
+
+test("isClinicBillingAdmin: solo dueño/admin de la clínica", () => {
+  assert.equal(isClinicBillingAdmin("SUPER_ADMIN"), true);
+  assert.equal(isClinicBillingAdmin("ADMIN"), true);
+  // Recepción tiene billing.charge (cobrar a PACIENTES) y aun así no contrata plan.
+  for (const role of ["RECEPTIONIST", "DOCTOR", "ASSISTANT", "VIEWER", ""]) {
+    assert.equal(isClinicBillingAdmin(role), false, `role=${role}`);
+  }
+  assert.equal(isClinicBillingAdmin(null), false);
+  assert.equal(isClinicBillingAdmin(undefined), false);
 });
 
 test("chargeFailureMessage: siempre aclara que el plan NO cambió", () => {

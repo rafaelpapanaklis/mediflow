@@ -6,6 +6,7 @@ import {
   changeDirection,
   daysRemainingUntil,
   manualUpgradeDiffCents,
+  pickPurchasedInterval,
   planAmountCents,
   type BillingInterval,
 } from "@/lib/billing/proration";
@@ -36,23 +37,33 @@ export interface ManualUpgradeQuote {
 type PlanPrices = { priceMxn: number; priceMxnAnnual: number };
 
 /**
+ * Cuántas filas de bitácora se revisan hacia atrás buscando la última COMPRA.
+ * Entre una compra y otra pueden acumularse filas de `entityType: "subscription"`
+ * / `action: "create"` que no son compras (cada intento de Checkout del
+ * diferencial deja una), así que no alcanza con mirar la más reciente.
+ */
+const AUDIT_LOOKBACK = 50;
+
+/**
  * Ciclo (mensual/anual) que compró una clínica que paga por SPEI/OXXO.
  *
  * `Clinic` no guarda el ciclo, pero `/api/billing/checkout` deja el `billing`
  * elegido en la bitácora (`entityType: "subscription"`, `action: "create"`,
- * `changes._created.after.billing`). Leemos el más reciente; ante cualquier duda
- * caemos a "month", que es el ciclo por defecto del checkout y el que menos
- * cobra por día (nunca sobre-cobramos por un dato que no pudimos confirmar).
+ * `changes._created.after.billing`). Se busca la última fila que SÍ lo registre
+ * (ver `pickPurchasedInterval`: las filas sin `billing` se saltan, no se toman
+ * como mensuales). Ante cualquier duda cae a "month", que es el ciclo por
+ * defecto del checkout y el que menos cobra por día — nunca sobre-cobramos por
+ * un dato que no pudimos confirmar.
  */
 export async function inferManualInterval(clinicId: string): Promise<BillingInterval> {
   try {
-    const row = await prisma.auditLog.findFirst({
+    const rows = await prisma.auditLog.findMany({
       where: { clinicId, entityType: "subscription", action: "create" },
       orderBy: { createdAt: "desc" },
+      take: AUDIT_LOOKBACK,
       select: { changes: true },
     });
-    const billing = (row?.changes as any)?._created?.after?.billing;
-    return billing === "annual" ? "year" : "month";
+    return pickPurchasedInterval(rows.map((r) => r.changes)) ?? "month";
   } catch {
     return "month";
   }

@@ -14,6 +14,7 @@ import {
   type BillingInterval,
 } from "@/lib/billing/proration";
 import { buildManualUpgradeQuote } from "@/lib/billing/manual-upgrade";
+import { isClinicBillingAdmin, notClinicBillingAdminResponse } from "@/lib/billing/authz";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -43,11 +44,6 @@ export interface ChangePlanPreview {
   unavailable: boolean;
 }
 
-/** Solo el dueño/admin de la clínica ve importes de facturación. */
-function isClinicAdmin(role: string | null | undefined): boolean {
-  return role === "ADMIN" || role === "SUPER_ADMIN";
-}
-
 /**
  * GET /api/billing/change-plan/preview
  *
@@ -57,8 +53,8 @@ function isClinicAdmin(role: string | null | undefined): boolean {
  */
 export async function GET() {
   const user = await getCurrentUser();
-  if (!isClinicAdmin(user.role)) {
-    return NextResponse.json({ error: "No autorizado" }, { status: 403 });
+  if (!isClinicBillingAdmin(user.role)) {
+    return NextResponse.json(notClinicBillingAdminResponse(), { status: 403 });
   }
 
   const clinic = await prisma.clinic.findUnique({
@@ -136,8 +132,8 @@ export async function GET() {
  */
 export async function POST(req: NextRequest) {
   const user = await getCurrentUser();
-  if (!isClinicAdmin(user.role)) {
-    return NextResponse.json({ error: "No autorizado" }, { status: 403 });
+  if (!isClinicBillingAdmin(user.role)) {
+    return NextResponse.json(notClinicBillingAdminResponse(), { status: 403 });
   }
 
   let body: unknown;

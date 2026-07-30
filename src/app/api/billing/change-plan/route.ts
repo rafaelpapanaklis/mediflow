@@ -16,6 +16,7 @@ import {
   planAmountCents,
 } from "@/lib/billing/proration";
 import { buildManualUpgradeQuote } from "@/lib/billing/manual-upgrade";
+import { isClinicBillingAdmin, notClinicBillingAdminResponse } from "@/lib/billing/authz";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -64,6 +65,13 @@ const MANUAL_PAID_STATUSES = ["active", "paid"];
 export async function POST(req: NextRequest) {
   const user = await getCurrentUser();
   const clinicId = user.clinicId;
+
+  // Este endpoint COBRA (el upgrade con tarjeta factura de inmediato). Solo
+  // dueño/admin, igual que el preview y que el tab de Suscripción: sin esto
+  // cualquier usuario logueado de la clínica podía dispararlo con un fetch.
+  if (!isClinicBillingAdmin(user.role)) {
+    return NextResponse.json(notClinicBillingAdminResponse(), { status: 403 });
+  }
 
   let body: unknown;
   try {
@@ -299,6 +307,12 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // OJO: esta fila comparte `entityType`/`action` con la del checkout, que es
+    // de donde `inferManualInterval` deduce el ciclo comprado. NO agregues aquí
+    // una llave `billing`: el ciclo de esta fila es INFERIDO, no comprado, y
+    // grabarlo cementaría una inferencia equivocada para siempre. Se llama
+    // `interval` a propósito, y `pickPurchasedInterval` salta las filas sin
+    // `billing` justo para no leer esta como si fuera una compra mensual.
     await logAudit({
       clinicId: clinic.id,
       userId: user.id,

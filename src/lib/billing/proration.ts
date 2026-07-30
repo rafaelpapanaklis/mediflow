@@ -104,6 +104,29 @@ export function canSuspendForFailedInvoice(billingReason: string | null | undefi
   return billingReason === "subscription_cycle" || billingReason === "subscription_create";
 }
 
+/**
+ * Ciclo COMPRADO a partir de filas de bitácora ordenadas de la más reciente a la
+ * más antigua. Devuelve null si ninguna lo registra.
+ *
+ * Solo `/api/billing/checkout` graba el ciclo comprado (`_created.after.billing`
+ * = "monthly" | "annual"). Hay OTRAS filas con el mismo `entityType`/`action`
+ * ("subscription"/"create") que NO lo traen — p. ej. el Checkout del diferencial
+ * de plan — y esas deben IGNORARSE, no interpretarse como mensuales: leer una
+ * fila sin `billing` como "monthly" hacía que a una clínica ANUAL se le
+ * prorrateara sobre 30 días con `daysRemaining` de un periodo anual, cobrándole
+ * de más. Por eso este helper SALTA las filas sin dato en vez de rendirse en la
+ * primera.
+ */
+export function pickPurchasedInterval(changesNewestFirst: unknown[]): BillingInterval | null {
+  for (const changes of changesNewestFirst) {
+    const billing = (changes as { _created?: { after?: { billing?: unknown } } } | null)?._created
+      ?.after?.billing;
+    if (billing === "annual") return "year";
+    if (billing === "monthly") return "month";
+  }
+  return null;
+}
+
 /** Dirección del cambio comparando importes del MISMO intervalo. */
 export function changeDirection(
   currentCents: number,

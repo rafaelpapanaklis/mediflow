@@ -18,7 +18,7 @@ import {
 import { PATIENT_INVOICE_KIND, applyInvoiceOnlinePayment } from "@/lib/patient-portal/online-payment";
 import { CFDI_OVERAGE_KIND, reconcileOverageFromWebhook } from "@/lib/cfdi-overage";
 import { getPlanLimits } from "@/lib/plans";
-import { isPlanId } from "@/lib/billing/plans";
+import { PLAN_IDS, isPlanId } from "@/lib/billing/plans";
 import { PLAN_UPGRADE_DIFF_KIND, canSuspendForFailedInvoice } from "@/lib/billing/proration";
 import { sendPlanActivatedEmail, sendPlanRenewedEmail } from "@/lib/email";
 import { PLAN_MARKETING } from "@/lib/plan-shared";
@@ -610,6 +610,20 @@ async function applyPlanUpgradeDiff(
     select: { plan: true },
   });
   if (!before) return;
+
+  // Este pago SOLO puede SUBIR de plan. Un voucher SPEI/OXXO tarda horas o días
+  // y puede llegar cuando la clínica ya está en un plan MAYOR por otra vía (un
+  // segundo voucher pagado antes, un alta con tarjeta, un reenvío del evento
+  // desde Stripe). Sin esta guarda, escribir metadata.plan a ciegas la BAJABA de
+  // plan en silencio, cobrada y todo. PLAN_IDS es el orden canónico de tiers
+  // (BASIC → PRO → CLINIC).
+  if (PLAN_IDS.indexOf(plan) <= PLAN_IDS.indexOf(before.plan as (typeof PLAN_IDS)[number])) {
+    console.warn(
+      "[stripe webhook] plan-upgrade-diff ignorado (no es un upgrade):",
+      JSON.stringify({ clinicId, currentPlan: before.plan, incomingPlan: plan, ...source }),
+    );
+    return;
+  }
 
   const limits = await getPlanLimits(plan);
   await prisma.clinic.update({
