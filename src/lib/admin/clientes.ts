@@ -13,6 +13,8 @@
 
 import { prisma } from "@/lib/prisma";
 import { FALLBACK_PLAN_PRICES_MXN } from "@/lib/plan-shared";
+import { getPatientQuotaMany } from "@/lib/patient-quota";
+import { aggregatePatientQuotas, type PatientQuota } from "@/lib/patient-quota-shared";
 
 const DAY = 86_400_000;
 
@@ -46,7 +48,9 @@ export interface ClienteRow {
   aggStatus: ClienteAggStatus;
   createdAt: string;            // ISO — alta (min createdAt de sus clínicas)
   lastAccess: string | null;    // ISO — último acceso (max lastLogin)
-  totalPatients: number;
+  totalPatients: number;        // = patientQuota.used (excluye borrados ARCO)
+  /** Cupo agregado de sus clínicas; max null = alguna sede es ilimitada. */
+  patientQuota: PatientQuota;
   totalAppointments: number;
   affiliateName: string | null;
   healthScore: number;          // 0-100
@@ -84,7 +88,9 @@ export interface ClienteClinica {
   trialEndsAt: string | null;
   createdAt: string;
   monthlyPrice: number;
-  patients: number;
+  patients: number;             // = patientQuota.used (excluye borrados ARCO)
+  /** Cupo de ESTA sede (su propio plan): used / max / unlimited. */
+  patientQuota: PatientQuota;
   appointments: number;
   aiTokensUsed: number;
   aiTokensLimit: number;
@@ -114,7 +120,12 @@ export interface ClienteDetalle {
   aggStatus: ClienteAggStatus;
   healthScore: number;
   tags: ClienteTag[];
-  totalPatients: number;
+  totalPatients: number;        // = patientQuota.used (excluye borrados ARCO)
+  /**
+   * Cupo agregado de TODAS sus clínicas (lo que pinta el KPI "Pacientes"):
+   * `max` null = alguna sede es ilimitada → se muestra sin "/N".
+   */
+  patientQuota: PatientQuota;
   totalAppointments: number;
   ingresosTotales: number;      // suma histórica de pagos de suscripción
   ltv: number;                  // estimado (MRR × 24)
@@ -244,7 +255,10 @@ type OwnerClinicRow = {
     paymentMethodCollected: boolean;
     preferredPaymentMethod: string | null;
     affiliate: { name: string } | null;
-    _count: { patients: number; appointments: number };
+    // OJO: pacientes NO se cuenta aquí. `_count.patients` incluye los borrados
+    // (deletedAt != null) y no sabe del tope del plan, así que mentiría contra el
+    // chip de la clínica; el consumo sale de getPatientQuotaMany.
+    _count: { appointments: number };
   } | null;
 };
 
@@ -276,7 +290,7 @@ const OWNER_CLINIC_SELECT = {
       paymentMethodCollected: true,
       preferredPaymentMethod: true,
       affiliate: { select: { name: true } },
-      _count: { select: { patients: true, appointments: true } },
+      _count: { select: { appointments: true } },
     },
   },
 };
@@ -292,10 +306,15 @@ export async function getClientesList(): Promise<ClienteRow[]> {
 
   // Agrupar por supabaseId. Usamos objeto plano (no Map) por el target < ES2015.
   const groups: Record<string, OwnerClinicRow[]> = {};
+  const allClinicIds: string[] = [];
   rows.forEach((r) => {
     if (!r.clinic) return;
     (groups[r.supabaseId] = groups[r.supabaseId] || []).push(r);
+    allClinicIds.push(r.clinic.id);
   });
+
+  // Cupo de TODAS las clínicas de la lista en 2 queries (no una por clínica).
+  const quotaByClinic = await getPatientQuotaMany(allClinicIds);
 
   const result: ClienteRow[] = Object.keys(groups).map((supabaseId) => {
     const grp = groups[supabaseId];
@@ -313,7 +332,9 @@ export async function getClientesList(): Promise<ClienteRow[]> {
     let createdAt: Date | null = null;
     clinics.forEach((c) => { createdAt = minDate(createdAt, c.createdAt); });
 
-    const totalPatients = clinics.reduce((s, c) => s + c._count.patients, 0);
+    const patientQuota = aggregatePatientQuotas(
+      clinics.map((c) => quotaByClinic[c.id]).filter(Boolean) as PatientQuota[],
+    );
     const totalAppointments = clinics.reduce((s, c) => s + c._count.appointments, 0);
 
     let affiliateName: string | null = null;
@@ -340,7 +361,8 @@ export async function getClientesList(): Promise<ClienteRow[]> {
       aggStatus: agg,
       createdAt: (createdAt ?? new Date()).toISOString(),
       lastAccess: lastAccess ? (lastAccess as Date).toISOString() : null,
-      totalPatients,
+      totalPatients: patientQuota.used,
+      patientQuota,
       totalAppointments,
       affiliateName,
       healthScore,
@@ -365,6 +387,18 @@ export async function getClienteDetalle(supabaseId: string): Promise<ClienteDeta
 
   const clinicsRaw = withClinic.map((r) => r.clinic!);
   const clinicIds = clinicsRaw.map((c) => c.id);
+
+  /**
+   * Cupo por SEDE. Un cliente multi-sede tiene un plan por clínica, así que el
+   * tope se resuelve clínica por clínica (y luego se agrega para el KPI). 2
+   * queries en total: no crece con el número de sedes.
+   */
+  const quotaByClinic = await getPatientQuotaMany(clinicIds);
+  const clinicQuota = (id: string): PatientQuota =>
+    quotaByClinic[id] ?? { used: 0, max: null, remaining: null, unlimited: true, canCreate: true };
+  const patientQuota = aggregatePatientQuotas(
+    clinicIds.map((id) => quotaByClinic[id]).filter(Boolean) as PatientQuota[],
+  );
 
   const subInvoices = await prisma.subscriptionInvoice.findMany({
     where: { clinicId: { in: clinicIds } },
@@ -455,7 +489,6 @@ export async function getClienteDetalle(supabaseId: string): Promise<ClienteDeta
   let createdAt: Date | null = null;
   clinicsRaw.forEach((c) => { createdAt = minDate(createdAt, c.createdAt); });
 
-  const totalPatients = clinicsRaw.reduce((s, c) => s + c._count.patients, 0);
   const totalAppointments = clinicsRaw.reduce((s, c) => s + c._count.appointments, 0);
 
   let affiliateName: string | null = null;
@@ -480,7 +513,8 @@ export async function getClienteDetalle(supabaseId: string): Promise<ClienteDeta
     trialEndsAt: c.trialEndsAt ? c.trialEndsAt.toISOString() : null,
     createdAt: c.createdAt.toISOString(),
     monthlyPrice: c.monthlyPrice || 0,
-    patients: c._count.patients,
+    patients: clinicQuota(c.id).used,
+    patientQuota: clinicQuota(c.id),
     appointments: c._count.appointments,
     aiTokensUsed: c.aiTokensUsed,
     aiTokensLimit: c.aiTokensLimit,
@@ -504,9 +538,10 @@ export async function getClienteDetalle(supabaseId: string): Promise<ClienteDeta
   });
   const planDistribution = Object.keys(planDistMap).map((k) => planDistMap[k]);
 
+  // Mismo consumo que los KPIs/tarjetas: la gráfica no puede decir otro número.
   const activityPerClinic = clinicsRaw.map((c) => ({
     name: c.name,
-    pacientes: c._count.patients,
+    pacientes: clinicQuota(c.id).used,
     citas: c._count.appointments,
   }));
 
@@ -525,7 +560,8 @@ export async function getClienteDetalle(supabaseId: string): Promise<ClienteDeta
     aggStatus: agg,
     healthScore,
     tags,
-    totalPatients,
+    totalPatients: patientQuota.used,
+    patientQuota,
     totalAppointments,
     ingresosTotales,
     ltv,
