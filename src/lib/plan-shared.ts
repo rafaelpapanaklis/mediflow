@@ -101,9 +101,15 @@ function allModules(value: boolean): Record<string, boolean> {
  * La IA de imagen solo procesa radiografías 2D (/api/xrays/[id]/analyze rechaza
  * lo que no sea image/*): NO existe IA sobre CBCT/DICOM. Cualquier bullet que
  * junte "3D" con "IA" es una promesa incumplible — mantenerlos separados.
+ *
+ * ⚠️ El cupo de PACIENTES no se escribe aquí: lo inyecta `getResolvedPlan`
+ * (src/lib/plans.ts) con `patientsBullet(maxPatients)` a partir del valor REAL
+ * de plan_configs. Antes BASIC decía "500 pacientes" a mano y quedaba mintiendo
+ * en cuanto el admin editaba el tope. Igual que el cupo CFDI (cfdiBullet), que
+ * las superficies insertan en la posición 3.
  */
 export const PLAN_MARKETING: Record<PlanId, { name: string; features: string[] }> = {
-  BASIC:  { name: "Básico",      features: ["2 usuarios", "500 pacientes", "Agenda + WhatsApp", "CFDI + Portal"] },
+  BASIC:  { name: "Básico",      features: ["2 usuarios", "Agenda + WhatsApp", "CFDI + Portal"] },
   PRO:    { name: "Profesional", features: ["6 usuarios", "IA en radiografías 2D", "Analytics + reportes", "Mi Clínica 3D"] },
   CLINIC: { name: "Clínica",     features: ["Usuarios ilimitados", "Multi-sucursal", "Soporte prioritario", "Onboarding dedicado"] },
 };
@@ -231,4 +237,30 @@ export function formatBytes(bytes: number): string {
 export function cfdiBullet(p: { cfdiMonthly: number; cfdiOverageCents: number }): string {
   const overage = (p.cfdiOverageCents / 100).toFixed(2);
   return `${p.cfdiMonthly} facturas CFDI al mes ($${overage} c/u adicional)`;
+}
+
+/**
+ * Bullet del cupo de PACIENTES para las tarjetas de plan. FUENTE ÚNICA del copy:
+ * "500 pacientes" cuando hay tope, "Pacientes ilimitados" cuando `maxPatients`
+ * es null (PRO y CLINIC en el seed). El número JAMÁS se escribe a mano — sale de
+ * plan_configs.maxPatients, editable desde /admin sin redeploy.
+ */
+export function patientsBullet(maxPatients: number | null): string {
+  return maxPatients == null
+    ? "Pacientes ilimitados"
+    : `${maxPatients.toLocaleString("es-MX")} pacientes`;
+}
+
+/**
+ * Inserta el bullet de pacientes en la 2.ª posición de los bullets de marketing
+ * (justo tras el de usuarios, que es el otro límite duro del plan).
+ *
+ * Se aplica en getResolvedPlan, así que las 3 superficies que pintan tarjetas
+ * (signup paso 3, ajustes → suscripción, /dashboard/suspended) lo reciben ya
+ * puesto y siguen insertando el cupo CFDI en el índice 2 → el bullet de CFDI
+ * conserva la posición 3 que fijó el fix de cupos.
+ */
+export function withPatientsBullet(features: string[], maxPatients: number | null): string[] {
+  const bullet = patientsBullet(maxPatients);
+  return features.length === 0 ? [bullet] : [features[0], bullet, ...features.slice(1)];
 }

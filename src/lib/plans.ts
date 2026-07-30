@@ -4,6 +4,7 @@ import { PLAN_IDS, type PlanId } from "@/lib/billing/plans";
 import {
   FALLBACK_PLAN_CONFIG,
   PLAN_MARKETING,
+  withPatientsBullet,
   type PlanConfigShape,
   type PlanLimits,
   type ResolvedPlan,
@@ -63,7 +64,10 @@ function buildResolved(planId: PlanId, row: PlanConfigShape | null): ResolvedPla
     // sql/plan_configs_max_clinics.sql. Aquí un NULL sí es intención explícita
     // del admin ("Ilimitado" en /admin/settings → Planes).
     maxClinics: src.maxClinics,
-    features: PLAN_MARKETING[planId].features,
+    // El bullet del cupo de pacientes se DERIVA de maxPatients (número real de
+    // plan_configs, o "Pacientes ilimitados" si es null) en vez de vivir escrito
+    // a mano en PLAN_MARKETING. Ver withPatientsBullet en @/lib/plan-shared.
+    features: withPatientsBullet(PLAN_MARKETING[planId].features, src.maxPatients),
     moduleFeatures,
   };
 }
