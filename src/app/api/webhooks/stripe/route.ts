@@ -25,6 +25,7 @@ import {
   isPlanTierUpgrade,
   nextBillingDateFields,
 } from "@/lib/billing/proration";
+import { recordStripeInvoice } from "@/lib/billing/record-stripe-invoice";
 import { sendPlanActivatedEmail, sendPlanRenewedEmail } from "@/lib/email";
 import { PLAN_MARKETING } from "@/lib/plan-shared";
 
@@ -329,6 +330,17 @@ export async function POST(req: NextRequest) {
             affiliate: { select: { commissionPct: true, status: true } },
           },
         });
+
+        // ──────────────────────────────────────────────────────────────────
+        // REGISTRO DEL COBRO — va ANTES del break por afiliado para que TODA
+        // factura pagada quede en subscription_invoices (la fuente de
+        // "Cobrado este mes" del /admin, de /admin/payments y de
+        // /admin/reports). Idempotente por reference=invoice.id y NUNCA lanza
+        // (mismo criterio que el bloque de correos: ni un fallo aquí rompe el
+        // 200 al webhook ni la lógica de correos/afiliado).
+        if (clinic) {
+          await recordStripeInvoice(invoice, clinic.id);
+        }
 
         // ──────────────────────────────────────────────────────────────────
         // CORREOS DE CICLO DE VIDA DEL PLAN — van ANTES del break por afiliado

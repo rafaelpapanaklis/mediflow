@@ -2301,7 +2301,11 @@ model SubscriptionInvoice {
   currency    String    @default("MXN")
   status      String    @default("pending") // pending, paid, failed
   method      String? // stripe, mercadopago, transfer, deposit
-  reference   String? // payment reference/ID
+  // @unique: es el candado de idempotencia del webhook de Stripe (una fila por
+  // invoice.id) — Stripe dispara invoice.paid + invoice.payment_succeeded para
+  // la MISMA factura. Requiere el índice único parcial de
+  // sql/subscription_invoices_stripe_ref.sql aplicado en la BD.
+  reference   String?   @unique // payment reference/ID
   periodStart DateTime
   periodEnd   DateTime
   paidAt      DateTime?
