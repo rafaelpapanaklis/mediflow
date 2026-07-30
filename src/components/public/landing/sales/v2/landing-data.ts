@@ -172,6 +172,7 @@ export const NAV = {
     { label: 'FAQ', href: '#faq' },
     // Rutas reales, no anclas: los consumidores normalizan con navHref().
     { label: 'Casos de uso', href: '/casos-de-uso' },
+    { label: 'Herramientas gratuitas', href: '/herramientas' },
     { label: 'Blog', href: '/blog' },
   ],
   login: 'Iniciar sesión',

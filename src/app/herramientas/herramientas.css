@@ -1,0 +1,650 @@
+/* ═══════════════════════════════════════════════════════════════════════
+   DaleControl · Herramientas gratuitas — estilos scoped a `.tool-*`
+   ───────────────────────────────────────────────────────────────────────
+   NO toca globals.css. La sección monta sales.css (shell `.mfh`, tokens
+   --b/--ink/--line/--r) y blog.css (tipografía `.blog-prose`, FAQ, CTA,
+   breadcrumb); aquí sólo vive lo propio de las herramientas: las tarjetas
+   del índice, los campos y resultados de las calculadoras, las barras
+   comparativas en CSS puro (cero librerías de gráficas) y la vista de
+   impresión de los generadores.
+
+   Responsive por construcción: grids con auto-fill + minmax, tipografía en
+   clamp(), cero anchos fijos. Las tablas hacen scroll dentro de su caja.
+
+   El bloque @media print del final SÓLO se carga en estas páginas (App
+   Router mete el CSS en el bundle de la ruta que lo importa), así que no
+   afecta al resto del sitio.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* ── Índice: rejilla de tarjetas ─────────────────────────────────────── */
+.tool-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr));
+  gap: 22px;
+}
+
+.tool-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 22px;
+  border: 1px solid var(--line, #e9e7f3);
+  border-radius: var(--r, 16px);
+  background: #fff;
+  text-decoration: none;
+  color: inherit;
+  min-width: 0;
+  transition: transform .16s ease, box-shadow .16s ease, border-color .16s ease;
+}
+.tool-card:hover {
+  transform: translateY(-3px);
+  border-color: var(--v200, #ddd6fe);
+  box-shadow: 0 18px 40px -22px rgba(76, 29, 149, .35);
+}
+.tool-card__icon {
+  width: 44px;
+  height: 44px;
+  flex: none;
+  border-radius: 13px;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  background-image: linear-gradient(135deg, #7c3aed, #2563eb);
+  box-shadow: 0 10px 22px -12px rgba(76, 29, 149, .55);
+}
+.tool-card__icon svg { width: 21px; height: 21px; stroke-width: 1.7; }
+.tool-card__icon--citas-perdidas    { background-image: linear-gradient(135deg, #db2777, #7c3aed); }
+.tool-card__icon--punto-equilibrio  { background-image: linear-gradient(135deg, #0d9488, #2563eb); }
+.tool-card__icon--aviso-privacidad  { background-image: linear-gradient(135deg, #4338ca, #0f172a); }
+.tool-card__icon--consentimiento    { background-image: linear-gradient(135deg, #2563eb, #06b6d4); }
+.tool-card__icon--precio-tratamiento{ background-image: linear-gradient(135deg, #f59e0b, #db2777); }
+
+.tool-card__kind {
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+  color: var(--b2, #6d28d9);
+}
+.tool-card__title {
+  margin: 0;
+  font-size: 18.5px;
+  line-height: 1.32;
+  letter-spacing: -0.015em;
+  font-weight: 700;
+  color: var(--ink, #0f172a);
+  overflow-wrap: anywhere;
+}
+.tool-card__text {
+  margin: 0;
+  font-size: 14.5px;
+  line-height: 1.6;
+  color: var(--body, #475569);
+}
+.tool-card__more {
+  margin-top: auto;
+  padding-top: 4px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13.5px;
+  font-weight: 650;
+  color: var(--b2, #6d28d9);
+}
+.tool-card:hover .tool-card__more { gap: 10px; }
+
+/* ── Nota de privacidad (obligatoria y siempre visible) ──────────────── */
+.tool-privacy {
+  display: flex;
+  gap: 10px;
+  margin: 22px 0 0;
+  padding: 12px 15px;
+  border-radius: 12px;
+  border: 1px dashed var(--v200, #ddd6fe);
+  background: var(--v50, #f5f3ff);
+  font-size: 13.2px;
+  line-height: 1.55;
+  color: var(--body, #475569);
+}
+.tool-privacy svg {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  margin-top: 2px;
+  color: var(--b, #7c3aed);
+}
+
+/* ── Caja de la herramienta ──────────────────────────────────────────── */
+.tool-panel {
+  margin: 8px 0 0;
+  border: 1px solid var(--line, #e9e7f3);
+  border-radius: var(--r-lg, 22px);
+  background: #fff;
+  box-shadow: 0 24px 60px -40px rgba(76, 29, 149, .35);
+  overflow: hidden;
+}
+.tool-panel__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  padding: 16px clamp(16px, 3vw, 26px);
+  border-bottom: 1px solid var(--line, #e9e7f3);
+  background: var(--tint2, #faf8ff);
+}
+.tool-panel__title {
+  margin: 0;
+  font-size: 15.5px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--ink, #0f172a);
+}
+.tool-panel__badge {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 11px;
+  border-radius: 999px;
+  border: 1px solid var(--v200, #ddd6fe);
+  background: #fff;
+  font-size: 12px;
+  font-weight: 650;
+  color: var(--b2, #6d28d9);
+  white-space: nowrap;
+}
+.tool-panel__badge svg { width: 13px; height: 13px; }
+.tool-panel__body { padding: clamp(16px, 3vw, 26px); }
+
+/* ── Campos ──────────────────────────────────────────────────────────── */
+.tool-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr));
+  gap: 18px;
+}
+.tool-field {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  min-width: 0;
+}
+.tool-field--wide { grid-column: 1 / -1; }
+.tool-label {
+  font-size: 13.5px;
+  font-weight: 650;
+  color: var(--ink, #0f172a);
+  line-height: 1.4;
+}
+.tool-hint {
+  font-size: 12.3px;
+  line-height: 1.5;
+  color: var(--muted, #64748b);
+}
+.tool-inputwrap { position: relative; display: flex; align-items: center; }
+.tool-inputwrap__prefix,
+.tool-inputwrap__suffix {
+  position: absolute;
+  font-size: 13.5px;
+  font-weight: 650;
+  color: var(--muted, #64748b);
+  pointer-events: none;
+}
+.tool-inputwrap__prefix { left: 13px; }
+.tool-inputwrap__suffix { right: 13px; }
+.tool-input,
+.tool-select {
+  width: 100%;
+  min-width: 0;
+  height: 44px;
+  padding: 0 13px;
+  border-radius: 11px;
+  border: 1px solid var(--line, #e9e7f3);
+  background: #fff;
+  color: var(--ink, #0f172a);
+  font-size: 15px;
+  font-weight: 600;
+  font-family: inherit;
+  transition: border-color .15s ease, box-shadow .15s ease;
+}
+.tool-input--money { padding-left: 28px; }
+.tool-input--unit  { padding-right: 62px; }
+.tool-input:focus,
+.tool-select:focus,
+.tool-textarea:focus {
+  outline: none;
+  border-color: var(--b, #7c3aed);
+  box-shadow: 0 0 0 3px rgba(124, 58, 237, .15);
+}
+.tool-select { cursor: pointer; }
+.tool-textarea {
+  width: 100%;
+  min-width: 0;
+  min-height: 84px;
+  padding: 11px 13px;
+  border-radius: 11px;
+  border: 1px solid var(--line, #e9e7f3);
+  background: #fff;
+  color: var(--ink, #0f172a);
+  font-size: 14.5px;
+  font-family: inherit;
+  line-height: 1.55;
+  resize: vertical;
+}
+
+/* Slider — pinta igual en Chrome y Firefox sin librerías. */
+.tool-slider {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+.tool-range {
+  flex: 1 1 160px;
+  min-width: 0;
+  height: 6px;
+  appearance: none;
+  -webkit-appearance: none;
+  border-radius: 999px;
+  background: var(--v100, #ede9fe);
+  cursor: pointer;
+}
+.tool-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--b, #7c3aed);
+  border: 3px solid #fff;
+  box-shadow: 0 2px 8px rgba(76, 29, 149, .45);
+  cursor: pointer;
+}
+.tool-range::-moz-range-thumb {
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  background: var(--b, #7c3aed);
+  border: 3px solid #fff;
+  box-shadow: 0 2px 8px rgba(76, 29, 149, .45);
+  cursor: pointer;
+}
+.tool-range:focus-visible { outline: 2px solid var(--b, #7c3aed); outline-offset: 3px; }
+.tool-slider__value {
+  flex: none;
+  min-width: 62px;
+  text-align: center;
+  padding: 6px 10px;
+  border-radius: 10px;
+  background: var(--v50, #f5f3ff);
+  border: 1px solid var(--v200, #ddd6fe);
+  font-size: 14.5px;
+  font-weight: 700;
+  color: var(--b2, #6d28d9);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Checkboxes de los generadores */
+.tool-checks {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 230px), 1fr));
+  gap: 10px;
+}
+.tool-check {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 11px 13px;
+  border: 1px solid var(--line, #e9e7f3);
+  border-radius: 11px;
+  background: #fff;
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1.45;
+  color: var(--body, #475569);
+  transition: border-color .15s ease, background .15s ease;
+}
+.tool-check:hover { border-color: var(--v200, #ddd6fe); background: var(--tint2, #faf8ff); }
+.tool-check input {
+  flex: none;
+  width: 17px;
+  height: 17px;
+  margin: 1px 0 0;
+  accent-color: var(--b, #7c3aed);
+  cursor: pointer;
+}
+.tool-check__body { min-width: 0; }
+.tool-check__name { font-weight: 650; color: var(--ink, #0f172a); display: block; }
+.tool-check__note { font-size: 12.3px; color: var(--muted, #64748b); }
+
+.tool-fieldset {
+  margin: 22px 0 0;
+  padding: 0;
+  border: 0;
+}
+.tool-fieldset__legend {
+  padding: 0;
+  margin: 0 0 10px;
+  font-size: 13.5px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--ink, #0f172a);
+}
+
+/* ── Resultados ──────────────────────────────────────────────────────── */
+.tool-out {
+  margin-top: 24px;
+  padding-top: 22px;
+  border-top: 1px dashed var(--line, #e9e7f3);
+}
+.tool-kpis {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 190px), 1fr));
+  gap: 14px;
+}
+.tool-kpi {
+  padding: 15px 17px;
+  border-radius: 14px;
+  border: 1px solid var(--line, #e9e7f3);
+  background: var(--tint2, #faf8ff);
+  min-width: 0;
+}
+.tool-kpi__label {
+  margin: 0 0 6px;
+  font-size: 12.3px;
+  font-weight: 650;
+  letter-spacing: .02em;
+  text-transform: uppercase;
+  color: var(--muted, #64748b);
+}
+.tool-kpi__value {
+  margin: 0;
+  font-size: clamp(21px, 3vw, 26px);
+  font-weight: 700;
+  letter-spacing: -0.028em;
+  color: var(--ink, #0f172a);
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+.tool-kpi__foot {
+  margin: 6px 0 0;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--muted, #64748b);
+}
+/* El número que duele — el que se comparte en captura de pantalla. */
+.tool-kpi--hero {
+  border-color: var(--v200, #ddd6fe);
+  background:
+    radial-gradient(130% 150% at 0% 0%, var(--v50, #f5f3ff) 0%, transparent 62%),
+    #fff;
+}
+.tool-kpi--hero .tool-kpi__value {
+  font-size: clamp(30px, 6.4vw, 46px);
+  color: var(--b-ink, #5b21b6);
+  line-height: 1.05;
+}
+.tool-kpi--hero .tool-kpi__label { color: var(--b2, #6d28d9); }
+.tool-kpi--bad .tool-kpi__value { color: #b91c1c; }
+.tool-kpi--ok .tool-kpi__value { color: #047857; }
+
+/* ── Barras comparativas (CSS puro, sin librerías de gráficas) ───────── */
+.tool-bars {
+  margin-top: 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.tool-bars__title {
+  margin: 0;
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--ink, #0f172a);
+}
+.tool-bar { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.tool-bar__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 13.2px;
+  color: var(--body, #475569);
+}
+.tool-bar__amount { font-weight: 700; color: var(--ink, #0f172a); font-variant-numeric: tabular-nums; }
+.tool-bar__track {
+  height: 15px;
+  border-radius: 999px;
+  background: var(--v50, #f5f3ff);
+  border: 1px solid var(--line, #e9e7f3);
+  overflow: hidden;
+}
+.tool-bar__fill {
+  height: 100%;
+  border-radius: 999px;
+  background-image: linear-gradient(90deg, #7c3aed, #2563eb);
+  transition: width .25s ease;
+  min-width: 2px;
+}
+.tool-bar__fill--muted { background-image: linear-gradient(90deg, #cbd5e1, #94a3b8); }
+.tool-bar__fill--bad { background-image: linear-gradient(90deg, #f87171, #dc2626); }
+
+/* ── Bloque destacado (el "si redujeras a la mitad…") ────────────────── */
+.tool-callout {
+  margin-top: 22px;
+  padding: clamp(16px, 3vw, 22px);
+  border-radius: 16px;
+  border: 1px solid var(--v200, #ddd6fe);
+  background:
+    radial-gradient(120% 140% at 100% 0%, var(--v50, #f5f3ff) 0%, transparent 60%),
+    #fff;
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+.tool-callout svg { flex: none; width: 20px; height: 20px; color: var(--b, #7c3aed); margin-top: 2px; }
+.tool-callout__body { flex: 1 1 260px; min-width: 0; }
+.tool-callout__title {
+  margin: 0 0 6px;
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: -0.015em;
+  color: var(--ink, #0f172a);
+}
+.tool-callout__text { margin: 0; font-size: 14.3px; line-height: 1.6; color: var(--body, #475569); }
+.tool-callout__amount { color: var(--b-ink, #5b21b6); font-weight: 700; }
+.tool-callout__cta { margin-top: 14px; }
+
+/* ── Avisos / validación ─────────────────────────────────────────────── */
+.tool-alert {
+  margin-top: 20px;
+  display: flex;
+  gap: 10px;
+  padding: 13px 15px;
+  border-radius: 12px;
+  font-size: 13.6px;
+  line-height: 1.55;
+}
+.tool-alert svg { flex: none; width: 17px; height: 17px; margin-top: 1px; }
+.tool-alert--warn {
+  border: 1px solid #fcd34d;
+  background: #fffbeb;
+  color: #92400e;
+}
+.tool-alert--warn svg { color: #b45309; }
+.tool-alert--info {
+  border: 1px solid var(--line, #e9e7f3);
+  background: var(--tint2, #faf8ff);
+  color: var(--body, #475569);
+}
+.tool-alert--info svg { color: var(--b, #7c3aed); }
+/* El disclaimer legal de los generadores: SIEMPRE visible, no es letra chica. */
+.tool-alert--legal {
+  border: 1px solid #fca5a5;
+  background: #fef2f2;
+  color: #991b1b;
+  font-weight: 500;
+}
+.tool-alert--legal svg { color: #dc2626; }
+
+/* ── Tabla comparativa ───────────────────────────────────────────────── */
+.tool-tablewrap {
+  margin-top: 22px;
+  overflow-x: auto;
+  max-width: 100%;
+  border: 1px solid var(--line, #e9e7f3);
+  border-radius: 14px;
+}
+.tool-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14.2px;
+}
+.tool-table th,
+.tool-table td {
+  padding: 11px 14px;
+  text-align: right;
+  border-bottom: 1px solid var(--line, #e9e7f3);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.tool-table th:first-child,
+.tool-table td:first-child { text-align: left; }
+.tool-table thead th {
+  background: var(--tint2, #faf8ff);
+  color: var(--ink, #0f172a);
+  font-weight: 700;
+  font-size: 13px;
+}
+.tool-table tbody tr:last-child td { border-bottom: 0; }
+.tool-table tbody tr[data-active="true"] {
+  background: var(--v50, #f5f3ff);
+}
+.tool-table tbody tr[data-active="true"] td { color: var(--b-ink, #5b21b6); font-weight: 650; }
+
+/* ── Acciones (copiar / imprimir) ────────────────────────────────────── */
+.tool-actions {
+  margin-top: 20px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+.tool-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 42px;
+  padding: 0 16px;
+  border-radius: 11px;
+  border: 1px solid var(--line, #e9e7f3);
+  background: #fff;
+  color: var(--ink, #0f172a);
+  font-size: 14px;
+  font-weight: 650;
+  font-family: inherit;
+  cursor: pointer;
+  transition: border-color .15s ease, background .15s ease, transform .15s ease;
+}
+.tool-btn svg { width: 16px; height: 16px; }
+.tool-btn:hover { border-color: var(--v200, #ddd6fe); background: var(--tint2, #faf8ff); transform: translateY(-1px); }
+.tool-btn--primary {
+  border-color: transparent;
+  background-image: linear-gradient(135deg, #7c3aed, #6d28d9);
+  color: #fff;
+  box-shadow: 0 10px 24px -12px rgba(124, 58, 237, .7);
+}
+.tool-btn--primary:hover { background-image: linear-gradient(135deg, #6d28d9, #5b21b6); }
+.tool-actions__state {
+  font-size: 13.2px;
+  font-weight: 650;
+  color: #047857;
+}
+.tool-actions__state[data-error="true"] { color: #b91c1c; }
+
+/* ── Vista previa del documento generado ─────────────────────────────── */
+.tool-doc {
+  margin-top: 20px;
+  padding: clamp(18px, 3.4vw, 30px);
+  border: 1px solid var(--line, #e9e7f3);
+  border-radius: 14px;
+  background: #fff;
+  max-height: 520px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  font-family: "Iowan Old Style", Georgia, "Times New Roman", serif;
+  font-size: 14.6px;
+  line-height: 1.72;
+  color: #1f2937;
+  tab-size: 2;
+}
+
+/* ── Enlaces al blog ─────────────────────────────────────────────────── */
+.tool-bloglist {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.tool-bloglink {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 15px 18px;
+  border: 1px solid var(--line, #e9e7f3);
+  border-radius: 12px;
+  background: #fff;
+  color: var(--ink, #0f172a);
+  font-size: 15px;
+  font-weight: 650;
+  line-height: 1.45;
+  text-decoration: none;
+  transition: border-color .15s ease, color .15s ease, background .15s ease;
+}
+.tool-bloglink:hover {
+  border-color: var(--v200, #ddd6fe);
+  background: var(--v50, #f5f3ff);
+  color: var(--b2, #6d28d9);
+}
+.tool-bloglink svg { flex: none; width: 17px; height: 17px; color: var(--b, #7c3aed); }
+
+/* ═══ Impresión ══════════════════════════════════════════════════════════
+   Sólo se imprime `.tool-doc` (el aviso o el consentimiento). Todo lo demás
+   —nav, hero, campos, botones, FAQ, footer— se oculta con visibility, y el
+   documento se re-ancla al inicio de la hoja. Se usa position:absolute (no
+   fixed) para que un documento de varias páginas fluya en lugar de cortarse,
+   y se neutraliza el position:relative de las secciones de sales.css para
+   que el ancla sea la hoja y no la sección.
+   ══════════════════════════════════════════════════════════════════════ */
+@media print {
+  @page { margin: 18mm 16mm; }
+
+  .mfh { visibility: hidden; }
+  .mfh,
+  .mfh-section,
+  .mfh-section--tight,
+  .mfh-hero { position: static !important; background: #fff !important; }
+
+  .tool-doc,
+  .tool-doc * { visibility: visible; }
+
+  .tool-doc {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    max-width: none;
+    max-height: none;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+    overflow: visible;
+    background: #fff;
+    color: #000;
+    font-size: 11.5pt;
+    line-height: 1.6;
+  }
+}
