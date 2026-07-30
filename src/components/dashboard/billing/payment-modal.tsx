@@ -172,7 +172,11 @@ export function PaymentModal({ open, invoice, onClose, onSuccess }: PaymentModal
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
               <Label>{t("common.date")}</Label>
-              <DateField className="flex h-10 w-full rounded-lg border border-border bg-card px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 focus:border-brand-600 disabled:opacity-50 transition-colors" value={paidAt} onChange={(e) => setPaidAt(e.target.value)} />
+              {/* max = hoy: el pago se registra cuando OCURRE. Sin este tope se
+                  podía capturar una fecha futura, que el servidor ahora rechaza
+                  con 400. Misma expresión que el valor por defecto de arriba
+                  para que el valor inicial nunca quede por encima del tope. */}
+              <DateField max={new Date().toISOString().slice(0, 10)} className="flex h-10 w-full rounded-lg border border-border bg-card px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 focus:border-brand-600 disabled:opacity-50 transition-colors" value={paidAt} onChange={(e) => setPaidAt(e.target.value)} />
             </div>
             <div className="space-y-1.5">
               <Label>{t("clinical.paymentModal.reference")}</Label>

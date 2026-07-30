@@ -60,6 +60,13 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   // viene inválido, ignoramos y usamos default(now()).
   const paidAtDate = paidAt ? new Date(paidAt) : null;
   const validPaidAt = paidAtDate && !isNaN(paidAtDate.getTime()) ? paidAtDate : undefined;
+  // ...pero NUNCA a futuro: el pago se registra cuando OCURRE. Un paidAt futuro
+  // encabeza el feed de actividad reciente (se lee como si ya hubiera pasado) y
+  // adelanta el ingreso a un periodo que aún no cierra. El margen absorbe el
+  // desfase de reloj entre el navegador y el servidor.
+  if (validPaidAt && validPaidAt.getTime() > Date.now() + 60_000) {
+    return NextResponse.json({ error: "La fecha de pago no puede ser futura" }, { status: 400 });
+  }
 
   // Lectura + escritura en la MISMA transacción con lock de fila (FOR UPDATE):
   // serializa contra el webhook de pago en línea del portal del paciente

@@ -55,6 +55,16 @@ export async function GET(req: NextRequest) {
     }),
   ]);
 
+  // El feed es de actividad OCURRIDA. Un evento con fecha futura (p. ej. una
+  // factura cuyo paidAt se capturó a futuro) encabeza la lista y se lee como si
+  // ya hubiera pasado ("en alrededor de 2 meses"). Lo descartamos DESPUÉS de
+  // normalizar los tres orígenes: la fecha del evento no siempre es la columna
+  // por la que ordena Prisma (las facturas usan paidAt ?? updatedAt), así que no
+  // se puede filtrar en el WHERE sin perder el fallback. El margen absorbe el
+  // desfase de reloj entre el servidor de la app y el de la base de datos.
+  const CLOCK_SKEW_MS = 60_000;
+  const horizon = Date.now() + CLOCK_SKEW_MS;
+
   const events: ActivityEvent[] = [
     ...paidInvoices.map(i => ({
       id: `inv-${i.id}`,
@@ -80,6 +90,7 @@ export async function GET(req: NextRequest) {
       at: a.updatedAt,
     })),
   ]
+    .filter(e => e.at.getTime() <= horizon)
     .sort((a, b) => b.at.getTime() - a.at.getTime())
     .slice(0, 20);
 

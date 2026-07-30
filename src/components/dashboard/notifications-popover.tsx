@@ -122,7 +122,13 @@ export function NotificationsPopover() {
             ) : (
               events.map(ev => {
                 const conf = TYPE_ICON[ev.type];
-                const when = formatDistanceToNow(new Date(ev.at), { addSuffix: true, locale: es });
+                // El feed sólo trae actividad OCURRIDA (el API descarta fechas
+                // futuras), pero addSuffix rendería "en X" si el reloj DEL
+                // NAVEGADOR va adelantado del servidor. Clampamos a ahora para
+                // que un evento pasado nunca se lea como futuro.
+                const at = new Date(ev.at);
+                const now = new Date();
+                const when = formatDistanceToNow(at > now ? now : at, { addSuffix: true, locale: es });
                 return (
                   <Link
                     key={ev.id}
