@@ -281,7 +281,11 @@ export function Hero({ firstMonthFrom }: { firstMonthFrom: string }) {
           <Face deg={288}><AsistenteFace /></Face>
         </HeroStage>
 
-        <p style={{ marginTop: 14, fontSize: 12.5, color: "#94a3b8", maxWidth: "52ch" }}>
+        {/* Pie del prisma. Va en flujo y SIN alto reservado: el alto del hero lo
+            fija el prisma (min-height de HeroStage), no esta línea, así que el
+            copy puede acortarse sin dejar hueco. La medida se ajustó a 40ch
+            cuando el pie pasó de 3 líneas a una. */}
+        <p style={{ marginTop: 14, fontSize: 12.5, color: "#94a3b8", maxWidth: "40ch" }}>
           {HERO.caption}
           <span style={{ color: "#cbd5e1" }}>{HERO.captionAccent}</span>
         </p>

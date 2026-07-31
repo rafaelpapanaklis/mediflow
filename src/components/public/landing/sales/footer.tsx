@@ -59,9 +59,21 @@ export function SalesFooter() {
         <nav aria-label="Contacto" style={{ flex: "1 1 150px", minWidth: 0 }}>
           <h3 style={colTitle}>Contacto</h3>
           <div style={col}>
-            {FOOTER.contact.map((l) => (
-              <a key={l.label} href={l.href} className="dcv2-footer-link">{l.label}</a>
-            ))}
+            {FOOTER.contact.map((l) => {
+              // Los mailto se quedan en la pestaña; las redes salen del sitio y
+              // van con noopener (sin él, la página destino recibe window.opener).
+              const external = l.href.startsWith("http");
+              return (
+                <a
+                  key={l.label}
+                  href={l.href}
+                  className="dcv2-footer-link"
+                  {...(external ? { target: "_blank", rel: "noopener noreferrer" } : {})}
+                >
+                  {l.label}
+                </a>
+              );
+            })}
           </div>
         </nav>
       </div>

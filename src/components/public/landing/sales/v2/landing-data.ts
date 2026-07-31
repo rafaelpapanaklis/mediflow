@@ -47,8 +47,12 @@ export const HERO = {
   ctaSecondary: 'Ver precios',
   /** El 1.º lleva el precio del primer mes y se inyecta en el componente. */
   bullets: ['Sin permanencia', 'Sin instalar nada'],
-  caption: 'Agenda inteligente · WhatsApp con bot IA · Modelos 3D · Cobros · Asistente IA — ',
-  captionAccent: 'girando en vivo, todo desde tu navegador',
+  /**
+   * Pie del prisma. Cabe SIEMPRE en una línea (antes eran 2-3), así que el <p>
+   * de hero.tsx ya no reserva alto para varias — ver el comentario de ahí.
+   */
+  caption: 'El mejor y más avanzado ',
+  captionAccent: 'panel en 2026',
 };
 
 /** Banda de prueba social: contadores que suben al entrar en pantalla. */
@@ -143,7 +147,7 @@ export const PRICING_COPY = {
   toggleMonthly: 'Mensual',
   toggleYearly: 'Anual',
   noContract: 'Sin permanencia · cancela cuando quieras',
-  cta: 'Contratar Ahora!',
+  cta: '¡Contratar ahora!',
   trustChips: [
     'Sin permanencia ni contratos anuales',
     'Precios en MXN + IVA',
@@ -321,10 +325,14 @@ export const FOOTER = {
     { label: 'Aviso de privacidad', href: '/privacidad' },
     { label: 'Términos y condiciones', href: '/terminos' },
   ],
+  // Sin href="#": los dos placeholders (WhatsApp / Facebook) no tenían destino
+  // real y un ancla vacía deja al usuario dando un salto al inicio de la
+  // página. Sólo se listan canales que existen de verdad; el handle de
+  // Instagram es el mismo que ya declara landing/footer.tsx.
   contact: [
     { label: 'hola@dalecontrol.com', href: 'mailto:hola@dalecontrol.com' },
-    { label: 'WhatsApp', href: '#' },
-    { label: 'Facebook · Instagram', href: '#' },
+    { label: 'soporte@dalecontrol.com', href: 'mailto:soporte@dalecontrol.com' },
+    { label: 'Instagram', href: 'https://instagram.com/dalecontrol' },
   ],
   copyright: '© 2026 DaleControl. Todos los derechos reservados.',
   madeIn: 'Hecho en México 🇲🇽',
