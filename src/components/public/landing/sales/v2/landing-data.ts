@@ -3,6 +3,8 @@
  * Actualizado 2026-07-14. NO cambiar precios, límites ni textos sin aprobación de negocio.
  */
 
+import { PRODUCTO_MODULES, PRODUCTO_SLUGS } from '@/lib/producto/data';
+
 export interface Feature {
   text: string;
   included: boolean;
@@ -382,6 +384,15 @@ export const FOOTER = {
     { label: 'Casos de uso', href: '/casos-de-uso' },
     { label: 'Herramientas gratuitas', href: '/herramientas' },
   ],
+  // Grupo "Funciones": las 8 páginas de producto por módulo
+  // (/software-agenda-dental, /expediente-clinico-dental, …). Viven SÓLO aquí a
+  // propósito: el menú de navegación NO cambia (NAV.links se queda igual) para
+  // no alargarlo. El nombre y el slug salen de src/lib/producto/data.ts, así que
+  // no hay copia que se desincronice.
+  funciones: PRODUCTO_SLUGS.map((slug) => ({
+    label: PRODUCTO_MODULES[slug].name,
+    href: `/${slug}`,
+  })),
   legal: [
     { label: 'Aviso de privacidad', href: '/privacidad' },
     { label: 'Términos y condiciones', href: '/terminos' },

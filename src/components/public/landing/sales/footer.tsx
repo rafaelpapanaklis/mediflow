@@ -32,6 +32,16 @@ export function SalesFooter() {
               </div>
             </div>
             <div>
+              {/* Las 8 páginas de producto por módulo. Sólo en el footer: el
+                  menú de navegación se queda como está. */}
+              <div style={colTitle}>Funciones</div>
+              <div style={col}>
+                {FOOTER.funciones.map((l) => (
+                  <Link key={l.href} href={l.href} className="dcv2-footer-link">{l.label}</Link>
+                ))}
+              </div>
+            </div>
+            <div>
               <div style={colTitle}>Legal</div>
               <div style={col}>
                 {FOOTER.legal.map((l) => (

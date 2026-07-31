@@ -7,6 +7,7 @@ import { BLOG_CATEGORIES } from "@/lib/blog/categories";
 import { listPublishedForSitemap } from "@/lib/blog/queries";
 import { CASOS_DE_USO, CASOS_PUBLISHED_AT } from "@/lib/casos/data";
 import { HERRAMIENTAS, HERRAMIENTAS_PUBLISHED_AT } from "@/lib/herramientas/data";
+import { PRODUCTO_SLUGS } from "@/lib/producto/data";
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const now = new Date();
@@ -19,6 +20,15 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     { url: `${SITE_URL}/casos-de-uso`, lastModified: now, changeFrequency: "monthly", priority: 0.8 },
     { url: `${SITE_URL}/herramientas`, lastModified: now, changeFrequency: "monthly", priority: 0.8 },
   ];
+
+  // Páginas de producto por módulo — data ESTÁTICA (src/lib/producto/data.ts).
+  // Prioridad alta: son las landings de intención comercial de cada función.
+  const productoEntries: MetadataRoute.Sitemap = PRODUCTO_SLUGS.map((slug) => ({
+    url: `${SITE_URL}/${slug}`,
+    lastModified: now,
+    changeFrequency: "monthly",
+    priority: 0.9,
+  }));
 
   const specialtyEntries: MetadataRoute.Sitemap = SPECIALTY_SLUGS.map((slug) => ({
     url: `${SITE_URL}/${slug}`,
@@ -105,6 +115,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
 
   return [
     ...staticEntries,
+    ...productoEntries,
     ...specialtyEntries,
     ...categoryEntries,
     ...comboEntries,
