@@ -1,11 +1,13 @@
 export { Hero } from "./hero";
 export { SocialProofBar } from "./social-proof-bar";
-export { Spotlights } from "./spotlights";
+export { Funciones } from "./funciones";
+export { PricingSection } from "./pricing-section";
 export { ModulesTrio } from "./modules-trio";
 export { FeaturesGrid } from "./features-grid";
+export { ModulePages } from "./module-pages";
 export { Comparison } from "./comparison";
 export { Testimonials } from "./testimonials";
-export { PricingSection } from "./pricing-section";
 export { TrustFaq } from "./trust-faq";
 export { FinalCta } from "./final-cta";
+export { ScrollReveal } from "./scroll-reveal";
 export { TawkChat } from "./tawk-chat";

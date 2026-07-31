@@ -1,36 +1,44 @@
-import type { CSSProperties } from "react";
 import { TESTIMONIALS } from "./landing-data";
 
 /**
- * Carrusel infinito de testimonios (CAMBIOS §4): lista duplicada ×2 con
- * testiScroll (translateX(-50%)), pausa al hover y degradados laterales.
- * Fotos como background-image (nunca <img> dinámico). Los retratos de
- * randomuser.me son PLACEHOLDER — sustituir por fotos licenciadas.
+ * Carrusel infinito de testimonios. La pista lleva las 6 tarjetas DUPLICADAS y
+ * se desplaza -50%, así que el bucle es continuo. Sólo anima `transform` y se
+ * pausa al pasar el mouse (`.dcv4-marquee` en landing-v2.css).
+ *
+ * La copia duplicada va `aria-hidden` para no leer los testimonios dos veces.
  */
-const fade: CSSProperties = { position: "absolute", top: 0, bottom: 0, width: 90, zIndex: 2, pointerEvents: "none" };
-
 export function Testimonials() {
-  const doubled = [...TESTIMONIALS.items, ...TESTIMONIALS.items];
+  const cards = TESTIMONIALS.items;
   return (
-    <section aria-label="Testimonios" style={{ background: "#f8fafc", padding: "76px 0", overflow: "hidden" }}>
-      <h2 style={{ textAlign: "center", fontSize: "clamp(28px,3.4vw,40px)", fontWeight: 800, letterSpacing: "-0.02em", margin: "0 20px 40px" }}>{TESTIMONIALS.title}</h2>
-      <div style={{ position: "relative" }}>
-        <div style={{ ...fade, left: 0, background: "linear-gradient(90deg,#f8fafc,rgba(248,250,252,0))" }} />
-        <div style={{ ...fade, right: 0, background: "linear-gradient(270deg,#f8fafc,rgba(248,250,252,0))" }} />
-        <div className="dcv2-testi-track" style={{ display: "flex", gap: 18, width: "max-content" }}>
-          {doubled.map((t, i) => (
-            <figure key={`${t.name}-${i}`} aria-hidden={i >= TESTIMONIALS.items.length || undefined} style={{ width: 330, flex: "0 0 auto", background: "#fff", border: "1px solid #e8edf5", borderRadius: 18, padding: 24, margin: 0, display: "flex", flexDirection: "column", gap: 14 }}>
-              <div style={{ color: "#f59e0b", fontSize: 15, letterSpacing: 2 }} aria-label="5 estrellas">★★★★★</div>
-              <blockquote style={{ margin: 0, fontSize: 14.5, lineHeight: 1.6, color: "#334155" }}>&ldquo;{t.quote}&rdquo;</blockquote>
-              <figcaption style={{ display: "flex", alignItems: "center", gap: 12, marginTop: "auto" }}>
-                <span
-                  aria-hidden="true"
-                  style={{ display: "block", width: 46, height: 46, borderRadius: "50%", flex: "0 0 auto", border: "2px solid #dbeafe", background: "#dbeafe center/cover no-repeat", backgroundImage: `url(https://randomuser.me/api/portraits/${t.photo}.jpg)` }}
-                />
-                <span><b style={{ fontSize: 14.5, display: "block" }}>{t.name}</b><span style={{ fontSize: 12.5, color: "#64748b", lineHeight: 1.4, display: "block" }}>{t.role}</span></span>
-              </figcaption>
-            </figure>
-          ))}
+    <section aria-label="Testimonios" style={{ background: "#ffffff", overflow: "hidden" }}>
+      <div style={{ maxWidth: 1200, margin: "0 auto", padding: "clamp(56px,7vw,88px) 20px 0" }}>
+        <h2 data-reveal="" className="dcv4-balance" style={{ textAlign: "center", fontSize: "clamp(26px,3.2vw,40px)", lineHeight: 1.1, letterSpacing: "-0.032em", fontWeight: 800 }}>
+          {TESTIMONIALS.title}
+        </h2>
+      </div>
+      <div style={{ position: "relative", marginTop: "clamp(28px,3.6vw,44px)", paddingBottom: "clamp(56px,7vw,88px)" }}>
+        <div className="dcv4-marquee" style={{ display: "flex", gap: 18, width: "max-content", padding: "0 9px" }}>
+          {[0, 1].map((copy) =>
+            cards.map((t) => (
+              <article
+                key={`${copy}-${t.initials}`}
+                aria-hidden={copy === 1 ? true : undefined}
+                style={{ width: 300, flex: "0 0 auto", background: "#ffffff", border: "1px solid #e2e8f0", borderRadius: 16, padding: 22, boxShadow: "0 18px 38px -30px rgba(15,23,42,0.4)" }}
+              >
+                <span aria-hidden="true" style={{ color: "#f59e0b", fontSize: 13, letterSpacing: 2 }}>★★★★★</span>
+                <p style={{ marginTop: 12, fontSize: 14, lineHeight: 1.6, color: "#334155" }}>&ldquo;{t.quote}&rdquo;</p>
+                <div style={{ marginTop: 14, display: "flex", alignItems: "center", gap: 10 }}>
+                  <span aria-hidden="true" style={{ width: 34, height: 34, borderRadius: "50%", background: t.bg, color: t.fg, fontSize: 12, fontWeight: 800, display: "grid", placeItems: "center", flex: "0 0 auto" }}>
+                    {t.initials}
+                  </span>
+                  <span>
+                    <span style={{ display: "block", fontSize: 13, fontWeight: 700, color: "#0f172a" }}>{t.role}</span>
+                    <span style={{ display: "block", fontSize: 12, color: "#64748b" }}>{t.place}</span>
+                  </span>
+                </div>
+              </article>
+            )),
+          )}
         </div>
       </div>
     </section>

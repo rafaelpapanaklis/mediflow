@@ -4,64 +4,71 @@ import { BrandGlyph } from "../primitives/logo";
 import "./v2/landing-v2.css";
 
 /**
- * Footer oscuro de la landing v2 (handoff). Mantiene el export SalesFooter
- * porque también lo montan las páginas de /descubre. Las anclas de producto
- * van con "/#…" para funcionar desde cualquier ruta.
+ * Footer oscuro (diseño v4, fondo #080d1a). Se mantiene el export SalesFooter
+ * porque lo montan también blog, /descubre, /casos-de-uso, /herramientas y las
+ * 8 páginas de módulo — y con él sus grupos de enlaces:
+ *  · Producto  = anclas + Blog + Casos de uso + Herramientas
+ *  · Funciones = las 8 páginas de producto por módulo (de producto/data.ts)
+ *  · Legal / Contacto
+ * Las anclas van con "/#…" para funcionar desde cualquier ruta.
  */
+const colTitle = { fontSize: 12, fontWeight: 700, letterSpacing: "0.1em", color: "#cbd5e1", textTransform: "uppercase" as const };
+const col = { marginTop: 14, display: "flex", flexDirection: "column" as const, gap: 9, fontSize: 14 };
+
 export function SalesFooter() {
-  const colTitle = { fontSize: 13, fontWeight: 700, color: "#fff", textTransform: "uppercase" as const, letterSpacing: ".06em", marginBottom: 14 };
-  const col = { display: "flex", flexDirection: "column" as const, gap: 10, fontSize: 14 };
   return (
-    <footer style={{ background: "#0f172a", color: "#94a3b8", padding: "56px 20px 32px" }}>
-      <div style={{ maxWidth: 1180, margin: "0 auto" }}>
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 40, justifyContent: "space-between", paddingBottom: 36, borderBottom: "1px solid #1e293b" }}>
-          <div style={{ maxWidth: 280 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 9, marginBottom: 14 }}>
-              <BrandGlyph size={30} mono="#fff" />
-              <span style={{ fontFamily: "var(--font-logo, var(--font-sans, system-ui, sans-serif))", fontWeight: 700, fontSize: 18, letterSpacing: "-0.025em", color: "#fff" }}>DaleControl</span>
-            </div>
-            <p style={{ fontSize: 13.5, lineHeight: 1.6, margin: 0 }}>{FOOTER.blurb}</p>
-          </div>
-          <div style={{ display: "flex", gap: 56, flexWrap: "wrap" }}>
-            <div>
-              <div style={colTitle}>Producto</div>
-              <div style={col}>
-                {FOOTER.product.map((l) => (
-                  <a key={l.href} href={navHref(l.href)} className="dcv2-footer-link">{l.label}</a>
-                ))}
-              </div>
-            </div>
-            <div>
-              {/* Las 8 páginas de producto por módulo. Sólo en el footer: el
-                  menú de navegación se queda como está. */}
-              <div style={colTitle}>Funciones</div>
-              <div style={col}>
-                {FOOTER.funciones.map((l) => (
-                  <Link key={l.href} href={l.href} className="dcv2-footer-link">{l.label}</Link>
-                ))}
-              </div>
-            </div>
-            <div>
-              <div style={colTitle}>Legal</div>
-              <div style={col}>
-                {FOOTER.legal.map((l) => (
-                  <Link key={l.href} href={l.href} className="dcv2-footer-link">{l.label}</Link>
-                ))}
-              </div>
-            </div>
-            <div>
-              <div style={colTitle}>Contacto</div>
-              <div style={col}>
-                {FOOTER.contact.map((l) => (
-                  <a key={l.label} href={l.href} className="dcv2-footer-link">{l.label}</a>
-                ))}
-              </div>
-            </div>
-          </div>
+    <footer style={{ background: "#080d1a" }}>
+      <div style={{ maxWidth: 1200, margin: "0 auto", padding: "clamp(40px,5vw,64px) 20px 28px", display: "flex", flexWrap: "wrap", gap: "36px 56px" }}>
+        <div style={{ flex: "1 1 260px", minWidth: 0 }}>
+          <span style={{ display: "flex", alignItems: "center", gap: 9 }}>
+            <BrandGlyph size={24} mono="#a78bfa" />
+            <span style={{ fontFamily: "var(--font-logo, var(--font-sans, system-ui, sans-serif))", fontWeight: 800, fontSize: 16, letterSpacing: "-0.025em" }}>
+              <span style={{ color: "#a78bfa" }}>Dale</span><span style={{ color: "#ffffff" }}>Control</span>
+            </span>
+          </span>
+          <p style={{ marginTop: 14, fontSize: 14, lineHeight: 1.6, color: "#94a3b8", maxWidth: "30ch" }}>{FOOTER.blurb}</p>
         </div>
-        <div style={{ paddingTop: 24, fontSize: 13, display: "flex", flexWrap: "wrap", gap: 12, justifyContent: "space-between" }}>
-          <span>{FOOTER.copyright}</span>
-          <span>{FOOTER.madeIn}</span>
+
+        <nav aria-label="Producto" style={{ flex: "1 1 150px", minWidth: 0 }}>
+          <h3 style={colTitle}>Producto</h3>
+          <div style={col}>
+            {FOOTER.product.map((l) => (
+              <a key={l.href} href={navHref(l.href)} className="dcv2-footer-link">{l.label}</a>
+            ))}
+          </div>
+        </nav>
+
+        <nav aria-label="Funciones" style={{ flex: "1 1 150px", minWidth: 0 }}>
+          <h3 style={colTitle}>Funciones</h3>
+          <div style={col}>
+            {FOOTER.funciones.map((l) => (
+              <Link key={l.href} href={l.href} className="dcv2-footer-link">{l.label}</Link>
+            ))}
+          </div>
+        </nav>
+
+        <nav aria-label="Legal" style={{ flex: "1 1 150px", minWidth: 0 }}>
+          <h3 style={colTitle}>Legal</h3>
+          <div style={col}>
+            {FOOTER.legal.map((l) => (
+              <Link key={l.href} href={l.href} className="dcv2-footer-link">{l.label}</Link>
+            ))}
+          </div>
+        </nav>
+
+        <nav aria-label="Contacto" style={{ flex: "1 1 150px", minWidth: 0 }}>
+          <h3 style={colTitle}>Contacto</h3>
+          <div style={col}>
+            {FOOTER.contact.map((l) => (
+              <a key={l.label} href={l.href} className="dcv2-footer-link">{l.label}</a>
+            ))}
+          </div>
+        </nav>
+      </div>
+      <div style={{ borderTop: "1px solid rgba(255,255,255,0.1)" }}>
+        <div style={{ maxWidth: 1200, margin: "0 auto", padding: "18px 20px", display: "flex", flexWrap: "wrap", gap: "8px 24px", justifyContent: "space-between" }}>
+          <span style={{ fontSize: 13, color: "#94a3b8" }}>{FOOTER.copyright}</span>
+          <span style={{ fontSize: 13, color: "#94a3b8" }}>{FOOTER.madeIn}</span>
         </div>
       </div>
     </footer>

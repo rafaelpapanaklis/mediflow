@@ -3,191 +3,184 @@
 import { useState } from "react";
 import Link from "next/link";
 import type { CSSProperties } from "react";
-import { PLANS, PRICING_COPY, fmtMXN, type Plan } from "./landing-data";
+import { PRICING_COPY, fmtMXN } from "./landing-data";
+import type { PlanCard } from "./plan-cards";
 
 /**
- * Sección de precios (CAMBIOS §2-§3): toggle Mensual/Anual (35% off), promo
- * de primer mes SOLO en mensual, badges flotantes en las 3 tarjetas y los 3
- * CTAs "Contratar Ahora!" en el MISMO azul sólido, anclados abajo.
- * CTA → /signup?plan=basic|pro|clinic&billing=monthly|annual — el signup
- * valida ?plan= contra PlanId (BASIC|PRO|CLINIC), ver signup-form.tsx.
+ * Sección de precios. NINGUNA cifra se escribe aquí: `cards` llega desde
+ * `plan_configs` (page.tsx → getResolvedPlans → buildPlanCards). Importe
+ * mensual, equivalente del anual, ahorro, % de descuento, promo del primer mes
+ * y cupos salen todos de la base de datos.
+ *
+ * CTA → /signup?plan=basic|pro|clinic&billing=monthly|annual (el signup valida
+ * ?plan= contra PlanId — ver signup-form.tsx).
  */
-const PLAN_TO_SIGNUP: Record<Plan["key"], "basic" | "pro" | "clinic"> = {
-  basico: "basic",
-  profesional: "pro",
-  clinica: "clinic",
-};
 
-/** Sombra del badge flotante, a juego con su fondo (reference badgeSh). */
 const BADGE_SHADOW: Record<string, string> = {
-  "#0f766e": "rgba(15,118,110,.35)",
+  "#047857": "rgba(4,120,87,.35)",
   "#2563eb": "rgba(37,99,235,.35)",
   "#1e3a8a": "rgba(30,58,138,.35)",
 };
 
 const srOnly: CSSProperties = { position: "absolute", width: 1, height: 1, overflow: "hidden", clip: "rect(0 0 0 0)", whiteSpace: "nowrap" };
 
-function CrossIcon({ size = 19, width = 2.2 }: { size?: number; width?: number }) {
+const capRow: CSSProperties = { display: "flex", justifyContent: "space-between", gap: 8, fontSize: 14 };
+const featRow: CSSProperties = { display: "flex", gap: 9, fontSize: 13.5, lineHeight: 1.45 };
+
+export function PricingSection({ cards, firstMonthFrom, yearlyDiscountPct }: { cards: PlanCard[]; firstMonthFrom: string; yearlyDiscountPct: number }) {
+  const [anual, setAnual] = useState(false);
+
+  const toggle = (active: boolean): CSSProperties => ({
+    border: 0,
+    cursor: "pointer",
+    fontSize: 14,
+    fontWeight: 700,
+    borderRadius: 999,
+    padding: "9px 20px",
+    background: active ? "#2563eb" : "transparent",
+    color: active ? "#ffffff" : "#475569",
+  });
+
   return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      <path d="M7 7l10 10M17 7L7 17" stroke="#cbd5e1" strokeWidth={width} strokeLinecap="round" />
-    </svg>
-  );
-}
-
-export function PricingSection() {
-  const [period, setPeriod] = useState<"mensual" | "anual">("mensual");
-  const anual = period === "anual";
-
-  const toggleActive: CSSProperties = { background: "#2563eb", color: "#fff", boxShadow: "0 2px 8px rgba(37,99,235,.32)" };
-  const toggleIdle: CSSProperties = { background: "transparent", color: "#475569" };
-
-  return (
-    <section id="precios" style={{ scrollMarginTop: 80, background: "radial-gradient(1000px 480px at 50% -60px,#dbeafe 0%,#fff 60%)", padding: "76px 20px" }}>
-      <div style={{ maxWidth: 1180, margin: "0 auto" }}>
-        <div style={{ textAlign: "center", maxWidth: 660, margin: "0 auto 28px" }}>
-          <div style={{ fontSize: 13, fontWeight: 700, letterSpacing: ".08em", textTransform: "uppercase", color: "#2563eb", marginBottom: 12 }}>{PRICING_COPY.eyebrow}</div>
-          {/* Título SIEMPRE en una sola línea centrada: se escala, no se parte (CAMBIOS §3). */}
-          <h2 style={{ fontSize: "clamp(16px,4.4vw,36px)", lineHeight: 1.15, fontWeight: 800, letterSpacing: "-0.02em", margin: "0 auto 12px", whiteSpace: "nowrap", width: "max-content", maxWidth: "100%" }}>{PRICING_COPY.title}</h2>
-          {/* Copy de landing-data; el "$19" va en verde como en el reference. */}
-          <p style={{ fontSize: 17, lineHeight: 1.55, color: "#475569", margin: 0 }}>
-            {PRICING_COPY.subtitle.split("$19").map((part, i, arr) =>
-              i < arr.length - 1
-                ? <span key={i}>{part}<b style={{ color: "#15803d" }}>$19</b></span>
-                : <span key={i}>{part}</span>
-            )}
+    <section id="precios" style={{ scrollMarginTop: 72, background: "radial-gradient(900px 480px at 50% 0%,#eff6ff,rgba(239,246,255,0) 70%),#f8fafc" }}>
+      <div style={{ maxWidth: 1200, margin: "0 auto", padding: "clamp(56px,7vw,92px) 20px" }}>
+        <div data-reveal="" style={{ textAlign: "center", maxWidth: 680, margin: "0 auto" }}>
+          <span style={{ display: "inline-block", background: "#eff6ff", border: "1px solid #dbeafe", color: "#1d4ed8", fontSize: 12.5, fontWeight: 700, letterSpacing: "0.1em", borderRadius: 999, padding: "7px 15px", textTransform: "uppercase" }}>
+            {PRICING_COPY.eyebrow}
+          </span>
+          <h2 className="dcv4-balance" style={{ marginTop: 18, fontSize: "clamp(27px,3.4vw,42px)", lineHeight: 1.08, letterSpacing: "-0.035em", fontWeight: 800 }}>
+            {PRICING_COPY.title}
+          </h2>
+          {/* precio dinámico: plan_configs */}
+          <p style={{ marginTop: 14, fontSize: "clamp(15.5px,1.45vw,18px)", color: "#475569" }}>
+            Regístrate hoy: tu primer mes cuesta desde <strong style={{ color: "#1d4ed8", fontWeight: 800 }}>{firstMonthFrom}</strong> y no hay permanencia.
           </p>
-        </div>
-
-        {/* Toggle Mensual / Anual */}
-        <div role="group" aria-label="Periodo de facturación" style={{ display: "flex", justifyContent: "center", marginBottom: 36 }}>
-          <div style={{ display: "inline-flex", alignItems: "center", gap: 4, background: "#fff", border: "1px solid #dbe4f3", borderRadius: 999, padding: 5, boxShadow: "0 2px 14px rgba(30,64,175,.07)" }}>
-            <button
-              type="button"
-              className="dcv2-toggle-btn"
-              onClick={() => setPeriod("mensual")}
-              aria-pressed={!anual}
-              style={{ padding: "11px 26px", border: "none", borderRadius: 999, fontFamily: "inherit", fontWeight: 600, fontSize: 15, cursor: "pointer", ...(anual ? toggleIdle : toggleActive) }}
-            >
+          <div role="group" aria-label="Periodo de facturación" style={{ marginTop: 22, display: "inline-flex", alignItems: "center", gap: 6, background: "#ffffff", border: "1px solid #e2e8f0", borderRadius: 999, padding: 5, boxShadow: "0 8px 22px -14px rgba(15,23,42,0.3)" }}>
+            <button type="button" className="dcv2-toggle-btn" onClick={() => setAnual(false)} aria-pressed={!anual} style={toggle(!anual)}>
               {PRICING_COPY.toggleMonthly}
             </button>
-            <button
-              type="button"
-              className="dcv2-toggle-btn"
-              onClick={() => setPeriod("anual")}
-              aria-pressed={anual}
-              style={{ display: "inline-flex", alignItems: "center", gap: 9, padding: "11px 22px", border: "none", borderRadius: 999, fontFamily: "inherit", fontWeight: 600, fontSize: 15, cursor: "pointer", ...(anual ? toggleActive : toggleIdle) }}
-            >
+            <button type="button" className="dcv2-toggle-btn" onClick={() => setAnual(true)} aria-pressed={anual} style={toggle(anual)}>
               {PRICING_COPY.toggleYearly}
-              <span style={{ fontSize: 12, fontWeight: 700, color: "#15803d", background: "#dcfce7", padding: "3px 9px", borderRadius: 999, whiteSpace: "nowrap" }}>{PRICING_COPY.yearlyBadge}</span>
             </button>
+            {/* el % sale del precio anual real de plan_configs */}
+            <span style={{ fontSize: 12, fontWeight: 700, color: "#15803d", background: "#dcfce7", borderRadius: 999, padding: "5px 11px", marginRight: 4, whiteSpace: "nowrap" }}>
+              {yearlyDiscountPct}% de descuento
+            </span>
           </div>
         </div>
 
-        {/* Tarjetas — misma altura; el CTA se ancla abajo (marginTop:auto) */}
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(290px,1fr))", gap: 22 }}>
-          {PLANS.map((p) => {
-            const big = anual ? p.yearlyPerMonth : p.monthly;
-            const billing = anual ? "annual" : "monthly";
-            const first = fmtMXN(p.firstMonth);
-            const cardStyle: CSSProperties = p.recommended
-              ? { position: "relative", background: "#fff", border: "2px solid #2563eb", borderRadius: 22, padding: "34px 26px 28px", display: "flex", flexDirection: "column", boxShadow: "0 18px 44px rgba(37,99,235,.18)" }
-              : { position: "relative", background: "#fff", border: "1px solid #e8edf5", borderRadius: 22, padding: "30px 26px 28px", display: "flex", flexDirection: "column", boxShadow: "0 4px 22px rgba(30,64,175,.05)" };
-            return (
-              <article key={p.key} style={cardStyle}>
-                {/* Badge flotante en las TRES tarjetas (CAMBIOS §3) */}
-                <div style={{ position: "absolute", top: -14, left: "50%", transform: "translateX(-50%)", background: p.badgeColor, color: "#fff", fontSize: 12.5, fontWeight: 700, letterSpacing: ".03em", padding: "7px 18px", borderRadius: 999, boxShadow: `0 6px 16px ${BADGE_SHADOW[p.badgeColor] ?? "rgba(15,23,42,.25)"}`, whiteSpace: "nowrap" }}>
-                  {p.badge}
-                </div>
-                <div style={{ fontSize: 14, fontWeight: 700, letterSpacing: ".04em", textTransform: "uppercase", color: "#1d4ed8" }}>{p.name}</div>
-                <p style={{ fontSize: 15, color: "#475569", margin: "8px 0 0", lineHeight: 1.45, minHeight: 42 }}>{p.tagline}</p>
-                <div style={{ marginTop: 18, display: "flex", alignItems: "flex-end", gap: 8 }}>
-                  <span style={{ fontSize: 46, fontWeight: 800, letterSpacing: "-0.03em", lineHeight: 1 }}>{fmtMXN(big)}</span>
-                  <span style={{ fontSize: 14, fontWeight: 600, color: "#64748b", paddingBottom: 8 }}>MXN<br />/mes</span>
-                </div>
-                {/* slate-500, no slate-400: sobre blanco el 400 daba 2.56:1 y no pasa AA. */}
-                <div style={{ marginTop: 6, fontSize: 13, color: "#64748b" }}>{PRICING_COPY.noContract}</div>
-                {/* Promo primer mes: caja SUTIL, SOLO en mensual (CAMBIOS §3) */}
-                {!anual && (
-                  <div style={{ marginTop: 14, background: "#f6fdf8", border: "1px solid #d9f3e1", borderRadius: 10, padding: "8px 12px", fontSize: 13, color: "#3f6e51" }}>
-                    Tu primer mes: <b style={{ color: "#15803d" }}>solo {first}</b> · ahorras {fmtMXN(p.monthly - p.firstMonth)}
-                  </div>
-                )}
-                {anual && (
-                  <div style={{ marginTop: 14, background: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: 10, padding: "9px 12px", fontSize: 13, color: "#334155" }}>
-                    {PRICING_COPY.billedYearly(fmtMXN(p.yearly))} · <span style={{ color: "#15803d", fontWeight: 700 }}>{PRICING_COPY.savings(fmtMXN(p.yearlySavings))}</span>
-                  </div>
-                )}
-                <div style={{ height: 1, background: "#e8edf5", margin: "20px 0 14px" }} />
+        <div style={{ marginTop: "clamp(34px,4.2vw,52px)", display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(292px,1fr))", gap: "clamp(16px,2vw,24px)", alignItems: "stretch" }}>
+          {cards.map((p) => (
+            <article
+              key={p.id}
+              data-reveal=""
+              className={p.recommended ? "dcv4-plan dcv4-plan--featured" : "dcv4-plan"}
+              style={{
+                position: "relative",
+                background: "#ffffff",
+                border: p.recommended ? "2px solid #2563eb" : "1px solid #e2e8f0",
+                borderRadius: 18,
+                padding: "26px 24px",
+                display: "flex",
+                flexDirection: "column",
+                boxShadow: p.recommended ? "0 34px 64px -36px rgba(37,99,235,0.6)" : "0 24px 48px -36px rgba(15,23,42,0.45)",
+              }}
+            >
+              <span
+                style={{
+                  position: "absolute",
+                  top: -13,
+                  ...(p.recommended ? { left: "50%", transform: "translateX(-50%)" } : { left: 24 }),
+                  fontSize: 12,
+                  fontWeight: 700,
+                  color: "#ffffff",
+                  background: p.badgeColor,
+                  borderRadius: 999,
+                  padding: "5px 13px",
+                  whiteSpace: "nowrap",
+                  boxShadow: `0 6px 16px ${BADGE_SHADOW[p.badgeColor] ?? "rgba(15,23,42,.25)"}`,
+                }}
+              >
+                {p.badge}
+              </span>
 
-                {/* Capacidades con pill (Tokens IA en Básico = ✗ gris, CAMBIOS §2) */}
-                <ul style={{ listStyle: "none", margin: "0 0 14px", padding: "0 0 14px", borderBottom: "1px solid #e8edf5", display: "flex", flexDirection: "column", gap: 1 }}>
-                  {p.capacity.map((c) => (
-                    <li key={c.text} style={{ display: "flex", gap: 11, alignItems: "center", padding: "6px 0" }}>
-                      <span style={{ flex: "0 0 auto", display: "flex" }}>
-                        {c.included
-                          ? <span style={{ color: "#2563eb", fontWeight: 800, fontSize: 14 }} aria-hidden="true">✓</span>
-                          : <CrossIcon size={16} width={2.4} />}
-                      </span>
-                      <span style={srOnly}>{c.included ? "Incluido:" : "No incluido:"}</span>
-                      <span style={{ flex: 1, color: c.included ? "#334155" : "#64748b", fontSize: 14.5 }}>{c.text}</span>
-                      {/* La pill "no incluido" va en slate-600: el 500 sobre #f1f5f9 se queda en 4.34:1. */}
-                      <span style={{ flex: "0 0 auto", fontSize: 13, fontWeight: 700, color: c.included ? "#1e40af" : "#475569", background: c.included ? "#eff6ff" : "#f1f5f9", padding: "3px 11px", borderRadius: 999 }}>{c.value}</span>
-                    </li>
-                  ))}
-                </ul>
+              <h3 style={{ fontSize: 14, fontWeight: 800, letterSpacing: "0.08em", color: "#1d4ed8", textTransform: "uppercase" }}>{p.name}</h3>
+              <p style={{ marginTop: 6, fontSize: 14, color: "#475569" }}>{p.tagline}</p>
 
-                {p.addendum && (
-                  <div style={{ fontSize: 14, fontWeight: 700, color: "#0f172a", marginBottom: 6 }}>{p.addendum}</div>
-                )}
+              {/* precio dinámico: plan_configs */}
+              <p style={{ marginTop: 16 }}>
+                <span style={{ fontSize: 42, fontWeight: 800, letterSpacing: "-0.03em", color: "#0f172a" }}>{fmtMXN(anual ? p.yearlyPerMonth : p.monthly)}</span>
+                <span style={{ fontSize: 13, fontWeight: 600, color: "#64748b" }}> MXN /mes</span>
+              </p>
+              {anual && (
+                <p style={{ marginTop: 4, fontSize: 12.5, fontWeight: 700, color: "#15803d" }}>
+                  −{p.yearlyDiscountPct}% al pagar anual · {fmtMXN(p.yearly)} al año ({fmtMXN(p.yearlySavings)} de ahorro)
+                </p>
+              )}
+              <p style={{ marginTop: 6, fontSize: 12.5, color: "#64748b" }}>{PRICING_COPY.noContract}</p>
 
-                {/* Features ✓/✗ */}
-                <ul style={{ listStyle: "none", margin: "0 0 22px", padding: 0, display: "flex", flexDirection: "column", gap: 1 }}>
-                  {p.features.map((f) => (
-                    <li key={f.text} style={{ display: "flex", gap: 11, alignItems: "flex-start", padding: "7px 0" }}>
-                      <span style={{ flex: "0 0 auto", marginTop: 1 }}>
-                        {f.included ? (
-                          <svg width="19" height="19" viewBox="0 0 24 24" fill="none" aria-hidden="true" style={{ color: "#2563eb" }}>
-                            <path d="M5 12.5l4.5 4.5L19 7" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
-                          </svg>
-                        ) : (
-                          <CrossIcon />
-                        )}
-                      </span>
-                      <span style={srOnly}>{f.included ? "Incluido:" : "No incluido:"}</span>
-                      <span style={{ color: f.included ? "#334155" : "#64748b", fontSize: 14.5, lineHeight: 1.5 }}>{f.text}</span>
-                    </li>
-                  ))}
-                </ul>
+              {/* Promo del primer mes: SOLO en mensual. La regla de negocio
+                  (lib/billing/first-month-promo.ts) excluye el plan anual, así
+                  que anunciarla ahí sería falso. */}
+              {!anual && (
+                <p style={{ marginTop: 12, fontSize: 13, color: "#334155", background: "#f0fdf4", border: "1px solid #dcfce7", borderRadius: 10, padding: "10px 12px" }}>
+                  Tu primer mes: <strong style={{ color: "#15803d", fontWeight: 800 }}>solo {fmtMXN(p.firstMonth)}</strong> · ahorras {fmtMXN(p.monthly - p.firstMonth)}
+                </p>
+              )}
 
-                {/* CTA: los 3 planes con el MISMO azul sólido, 2 líneas, anclado abajo */}
-                <Link
-                  href={`/signup?plan=${PLAN_TO_SIGNUP[p.key]}&billing=${billing}`}
-                  className="dcv2-btn-plan"
-                  style={{ marginTop: "auto", display: "block", textAlign: "center", textDecoration: "none", width: "100%", padding: "12px 14px", borderRadius: 13, border: "none", background: "#2563eb", color: "#fff", boxShadow: "0 10px 24px rgba(37,99,235,.35)" }}
-                >
-                  <span style={{ display: "block", fontSize: 16, fontWeight: 800, letterSpacing: "-0.01em" }}>{PRICING_COPY.cta}</span>
-                  {/* El velo blanco baja de .16 a .06: con .16 el texto blanco sobre
-                      el azul aclarado se quedaba en 3.89:1 (AA pide 4.5:1). */}
-                  {!anual && (
-                    <span style={{ display: "block", marginTop: 4, fontSize: 12.5, fontWeight: 800, color: "#fff", background: "rgba(255,255,255,.06)", borderRadius: 999, padding: "3px 10px", width: "fit-content", marginLeft: "auto", marginRight: "auto" }}>
-                      {PRICING_COPY.ctaSub(first)}
+              {/* Cupos: pacientes/usuarios/almacenamiento/tokens de plan_configs */}
+              <ul style={{ marginTop: 16, display: "flex", flexDirection: "column", gap: 9, borderBottom: "1px solid #f1f5f9", paddingBottom: 16 }}>
+                {p.capacity.map((c) => (
+                  <li key={c.text} style={{ ...capRow, color: c.included ? "#334155" : "#64748b" }}>
+                    <span>
+                      <span aria-hidden="true">{c.included ? "✓" : "✗"}</span>
+                      <span style={srOnly}>{c.included ? "Incluido:" : "No incluido:"}</span> {c.text}
                     </span>
-                  )}
-                </Link>
-              </article>
-            );
-          })}
-        </div>
+                    <span style={{ fontWeight: 700, color: c.included ? "#1d4ed8" : "#475569", background: c.included ? "#eff6ff" : "#f1f5f9", borderRadius: 999, padding: "2px 10px", fontSize: 12.5, whiteSpace: "nowrap" }}>
+                      {c.value}
+                    </span>
+                  </li>
+                ))}
+              </ul>
 
-        {/* 8 chips de confianza compactos: caben en 2 líneas en desktop (CAMBIOS §3) */}
-        <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "center", gap: 9, marginTop: 34 }}>
-          {PRICING_COPY.trustChips.map((chip) => (
-            <div key={chip} style={{ display: "inline-flex", alignItems: "center", gap: 7, background: "#fff", border: "1px solid #e8edf5", borderRadius: 999, padding: "8px 13px", fontSize: 13, fontWeight: 600, color: "#334155", whiteSpace: "nowrap" }}>
-              <span style={{ color: "#2563eb", fontWeight: 800 }}>✓</span> {chip}
-            </div>
+              {p.addendum && <p style={{ marginTop: 16, fontSize: 13.5, fontWeight: 800, color: "#0f172a" }}>{p.addendum}</p>}
+
+              <ul style={{ marginTop: p.addendum ? 10 : 16, display: "flex", flexDirection: "column", gap: 9 }}>
+                {/* Los bullets NO incluidos van en slate-500, no slate-400:
+                    sobre blanco el #94a3b8 se queda en 2.8:1 y no pasa AA. */}
+                {p.features.map((f) => (
+                  <li key={f.text} style={{ ...featRow, color: f.included ? "#334155" : "#64748b" }}>
+                    <span aria-hidden="true" style={{ color: f.included ? "#15803d" : undefined, fontWeight: 800, flex: "0 0 auto" }}>{f.included ? "✓" : "✗"}</span>
+                    <span style={srOnly}>{f.included ? "Incluido:" : "No incluido:"}</span>
+                    <span>{f.text}</span>
+                  </li>
+                ))}
+              </ul>
+
+              <span aria-hidden="true" style={{ display: "block", minHeight: 22, flex: "1 1 auto" }} />
+
+              {/* precio dinámico: plan_configs */}
+              <Link
+                href={`/signup?plan=${p.signupParam}&billing=${anual ? "annual" : "monthly"}`}
+                className="dcv2-btn-plan"
+                style={{ marginTop: "auto", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 2, minHeight: 56, background: "#2563eb", color: "#ffffff", borderRadius: 12, fontWeight: 700, fontSize: 15.5 }}
+              >
+                {PRICING_COPY.cta}
+                {!anual && (
+                  <span style={{ fontSize: 11.5, fontWeight: 600, color: "#dbeafe" }}>Empieza hoy por solo {fmtMXN(p.firstMonth)} MXN</span>
+                )}
+              </Link>
+            </article>
           ))}
         </div>
+
+        <ul data-reveal="" style={{ marginTop: "clamp(28px,3.6vw,44px)", display: "flex", flexWrap: "wrap", gap: 9, justifyContent: "center" }}>
+          {PRICING_COPY.trustChips.map((chip) => (
+            <li key={chip} style={{ fontSize: 13, fontWeight: 600, color: "#334155", background: "#ffffff", border: "1px solid #e2e8f0", borderRadius: 999, padding: "8px 15px" }}>
+              ✓ {chip}
+            </li>
+          ))}
+        </ul>
       </div>
     </section>
   );

@@ -1,11 +1,14 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import {
-  Hero, SocialProofBar, Spotlights, ModulesTrio, FeaturesGrid,
-  Comparison, Testimonials, PricingSection, TrustFaq, FinalCta, TawkChat,
+  Hero, SocialProofBar, Funciones, PricingSection, ModulesTrio, FeaturesGrid,
+  ModulePages, Comparison, Testimonials, TrustFaq, FinalCta, ScrollReveal, TawkChat,
 } from "@/components/public/landing/sales/v2";
+import { buildPlanCards, cheapestFirstMonthLabel, headlineYearlyDiscount } from "@/components/public/landing/sales/v2/plan-cards";
+import { FAQ_ITEMS } from "@/components/public/landing/sales/v2/landing-data";
 import { SalesFooter } from "@/components/public/landing/sales/footer";
 import { SalesNavSession } from "@/components/public/landing/nav-session";
+import { getResolvedPlans } from "@/lib/plans";
 import "@/components/public/landing/sales/v2/landing-v2.css";
 
 // Solo los pesos que la landing usa de verdad: un grep de fontWeight sobre
@@ -54,76 +57,82 @@ export const metadata: Metadata = {
   },
 };
 
-// JSON-LD: Organización + producto SaaS con planes en MXN + FAQ (copy real de la landing).
-const JSON_LD = {
-  "@context": "https://schema.org",
-  "@graph": [
-    {
-      "@type": "Organization",
-      "@id": `${SITE_URL}/#organization`,
-      name: "DaleControl",
-      url: SITE_URL,
-      description: "Software de gestión para clínicas dentales en México.",
-      areaServed: "MX",
-    },
-    {
-      "@type": "WebSite",
-      "@id": `${SITE_URL}/#website`,
-      url: SITE_URL,
-      name: "DaleControl",
-      inLanguage: "es-MX",
-      publisher: { "@id": `${SITE_URL}/#organization` },
-    },
-    {
-      "@type": "SoftwareApplication",
-      name: "DaleControl",
-      applicationCategory: "BusinessApplication",
-      operatingSystem: "Web",
-      inLanguage: "es-MX",
-      // La IA solo analiza radiografías 2D; el CBCT 3D es visor (sin IA).
-      description:
-        "Plataforma todo-en-uno para clínicas dentales: agenda con WhatsApp, expediente con odontograma, CBCT 3D, análisis de radiografías con IA y facturación.",
-      offers: [
-        { "@type": "Offer", name: "Básico", price: "419", priceCurrency: "MXN", category: "Suscripción mensual" },
-        { "@type": "Offer", name: "Profesional", price: "689", priceCurrency: "MXN", category: "Suscripción mensual" },
-        { "@type": "Offer", name: "Clínica", price: "1719", priceCurrency: "MXN", category: "Suscripción mensual" },
-      ],
-    },
-    {
-      "@type": "FAQPage",
-      mainEntity: [
-        {
-          "@type": "Question",
-          name: "¿Mis datos y los de mis pacientes están seguros?",
-          acceptedAnswer: { "@type": "Answer", text: "Sí. Toda la información viaja y se guarda cifrada, hacemos respaldos diarios automáticos y cada movimiento del staff queda registrado en una bitácora de auditoría. Además puedes activar verificación en dos pasos (2FA) para tu equipo." },
-        },
-        {
-          "@type": "Question",
-          name: "¿Puedo migrar desde mi sistema anterior o desde Excel?",
-          acceptedAnswer: { "@type": "Answer", text: "Sí. Con \"Importar mi clínica\" traes tus pacientes, citas e historiales desde tu software anterior o desde hojas de Excel, con nuestro acompañamiento durante la migración." },
-        },
-        {
-          "@type": "Question",
-          name: "¿Hay permanencia o contrato anual?",
-          acceptedAnswer: { "@type": "Answer", text: "No. Los planes son mes a mes y puedes cancelar cuando quieras. Si eliges el plan anual solo es para obtener el 35% de descuento, no por obligación contractual." },
-        },
-        {
-          "@type": "Question",
-          name: "¿Necesito instalar algo o comprar equipo?",
-          acceptedAnswer: { "@type": "Answer", text: "No. DaleControl funciona 100% en el navegador — incluso el visor de radiografías CBCT y los modelos 3D. Solo necesitas internet y el equipo que ya tienes." },
-        },
-      ],
-    },
-  ],
-};
+/**
+ * La página sigue siendo ESTÁTICA (SSG): la sesión sólo afecta al nav y se
+ * detecta en cliente tras hidratar (nav-session.tsx). No llamar getSession()
+ * aquí — leer cookies en el server volvería dynamic toda la landing.
+ *
+ * `revalidate`: los precios salen de `plan_configs`, que el admin edita sin
+ * redeploy. Con ISR el HTML se regenera cada 10 minutos y la landing recoge el
+ * cambio sola, sin perder el HTML estático que le da el CLS 0 y el LCP actual.
+ */
+export const revalidate = 600;
 
-// Página 100% estática (SSG): la sesión solo afecta al nav y se detecta
-// client-side tras hidratar (nav-session.tsx). No llamar getSession() aquí —
-// leer cookies en el server volvería dynamic toda la landing.
-export default function HomePage() {
+export default async function HomePage() {
+  // FUENTE ÚNICA de precios/cupos: tabla plan_configs (caché 60s + fallback al
+  // seed de plan-shared.ts). En la landing NO se escribe ninguna cifra a mano.
+  const cards = buildPlanCards(await getResolvedPlans());
+  const firstMonthFrom = cheapestFirstMonthLabel(cards);
+  const yearlyDiscountPct = headlineYearlyDiscount(cards);
+
+  // JSON-LD: Organización + producto SaaS con planes en MXN + FAQ.
+  // Se conserva tal cual estaba; lo único que cambia es de DÓNDE salen los
+  // datos — las ofertas leen plan_configs y el FAQPage se genera del MISMO
+  // array que pinta el acordeón, para que el marcado nunca declare preguntas
+  // que no estén visibles en la página (requisito de Google para FAQPage).
+  const jsonLd = {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "Organization",
+        "@id": `${SITE_URL}/#organization`,
+        name: "DaleControl",
+        url: SITE_URL,
+        description: "Software de gestión para clínicas dentales en México.",
+        areaServed: "MX",
+      },
+      {
+        "@type": "WebSite",
+        "@id": `${SITE_URL}/#website`,
+        url: SITE_URL,
+        name: "DaleControl",
+        inLanguage: "es-MX",
+        publisher: { "@id": `${SITE_URL}/#organization` },
+      },
+      {
+        "@type": "SoftwareApplication",
+        name: "DaleControl",
+        applicationCategory: "BusinessApplication",
+        operatingSystem: "Web",
+        inLanguage: "es-MX",
+        // La IA solo analiza radiografías 2D; el CBCT 3D es visor (sin IA).
+        description:
+          "Plataforma todo-en-uno para clínicas dentales: agenda con WhatsApp, expediente con odontograma, CBCT 3D, análisis de radiografías con IA y facturación.",
+        offers: cards.map((c) => ({
+          "@type": "Offer",
+          name: c.name,
+          price: String(c.monthly),
+          priceCurrency: "MXN",
+          category: "Suscripción mensual",
+        })),
+      },
+      {
+        "@type": "FAQPage",
+        mainEntity: FAQ_ITEMS.map((item) => ({
+          "@type": "Question",
+          name: item.q,
+          acceptedAnswer: {
+            "@type": "Answer",
+            text: typeof item.a === "function" ? item.a(firstMonthFrom) : item.a,
+          },
+        })),
+      },
+    ],
+  };
+
   return (
     <div
-      className={inter.variable}
+      className={`dcv4-root ${inter.variable}`}
       style={{
         minHeight: "100dvh",
         fontFamily: "var(--font-inter), Inter, system-ui, -apple-system, sans-serif",
@@ -135,23 +144,24 @@ export default function HomePage() {
       <a href="#mfh-main" className="mf-skip-link">Saltar al contenido</a>
       <SalesNavSession />
       <main id="mfh-main">
-        {/* Orden CAMBIOS §1: precios va ANTES del trío de módulos. */}
-        <Hero />
+        <Hero firstMonthFrom={firstMonthFrom} />
         <SocialProofBar />
-        <Spotlights />
-        <PricingSection />
+        <Funciones />
+        <PricingSection cards={cards} firstMonthFrom={firstMonthFrom} yearlyDiscountPct={yearlyDiscountPct} />
         <ModulesTrio />
         <FeaturesGrid />
+        <ModulePages />
         <Comparison />
         <Testimonials />
-        <TrustFaq />
-        <FinalCta />
+        <TrustFaq firstMonthFrom={firstMonthFrom} />
+        <FinalCta firstMonthFrom={firstMonthFrom} />
       </main>
       <SalesFooter />
+      <ScrollReveal />
       <TawkChat />
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(JSON_LD) }}
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
       />
     </div>
   );

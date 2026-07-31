@@ -1,132 +1,81 @@
-/* DaleControl — Landing v2 (handoff high-fidelity).
-   Keyframes copiados del reference + estados hover/focus que el inline style
-   no puede expresar. Todo namespaced dcv2- para no chocar con sales.css. */
+/* DaleControl — Landing v4 (diseño Landing-DaleControl.dc.html).
+   Aquí viven SOLO: (1) los keyframes del diseño, (2) los estados hover/focus
+   que el style inline no puede expresar, (3) el reset acotado a la landing y
+   (4) la reserva de alto de los mockups diferidos.
+   Todo va namespaced `dcv2-`/`dcv4-` para no chocar con sales.css ni con
+   globals.css (que NO se toca). */
 
-@keyframes dcKen { 0%, 100% { transform: scale(1.05) translateY(0); } 50% { transform: scale(1.18) translateY(-3%); } }
-@keyframes dcScanY { 0%, 100% { top: 28%; } 50% { top: 68%; } }
-@keyframes dcSlide { 0%, 100% { left: 16%; } 50% { left: 74%; } }
-@keyframes dcSlideB { 0%, 100% { left: 68%; } 50% { left: 20%; } }
-/* dcOrbit del reference nuevo (CAMBIOS §5): giro 3D ±20° con rotateX ±3°, no paneo. */
-@keyframes dcOrbit { 0%, 100% { transform: perspective(600px) rotateY(-20deg) rotateX(3deg) scale(1.08); } 50% { transform: perspective(600px) rotateY(20deg) rotateX(-3deg) scale(1.16); } }
-@keyframes stlWobble { 0%, 100% { transform: perspective(720px) rotateX(12deg) rotateY(-32deg) scale(1); } 50% { transform: perspective(720px) rotateX(3deg) rotateY(32deg) scale(1.06); } }
-@keyframes clinicFloat { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
-@keyframes testiScroll { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+/* ── Reset acotado a la landing (equivale al <style> del diseño) ─────────
+   TODO va dentro de `:where()` → especificidad 0. Sin eso, `.dcv4-root a`
+   (0,2,0) le ganaba a `.dcv2-btn-primary` (0,1,0) y los botones azules salían
+   con el texto azul sobre azul (invisibles), igual que los links del nav y del
+   footer. Con `:where()` cualquier clase manda sobre el reset. */
+.dcv4-root { -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; }
+:where(.dcv4-root) :where(h1, h2, h3, h4, p, ul, ol, figure) { margin: 0; }
+:where(.dcv4-root) :where(ul, ol) { padding: 0; list-style: none; }
+:where(.dcv4-root) :where(a) { color: #2563eb; text-decoration: none; }
+:where(.dcv4-root) :where(button) { font-family: inherit; }
+.dcv4-root ::selection { background: #ddd6fe; }
+/* `scroll-behavior` tiene que ir en el scroller del documento (html), no en el
+   contenedor: se aplica sólo en las páginas que montan la landing. */
+html:has(.dcv4-root) { scroll-behavior: smooth; }
 
-.dcv2-ken-9 { animation: dcKen 9s ease-in-out infinite; }
-.dcv2-ken-12 { animation: dcKen 12s ease-in-out infinite; }
-.dcv2-ken-14 { animation: dcKen 14s ease-in-out infinite; }
-.dcv2-scan-9 { animation: dcScanY 9s ease-in-out infinite; }
-.dcv2-scan-14 { animation: dcScanY 14s ease-in-out infinite; }
-.dcv2-slide-9 { animation: dcSlide 9s ease-in-out infinite; }
-.dcv2-slideb-12 { animation: dcSlideB 12s ease-in-out infinite; }
-.dcv2-orbit-9 { animation: dcOrbit 9s ease-in-out infinite; }
-.dcv2-stl { animation: stlWobble 9s ease-in-out infinite; }
-.dcv2-clinic { animation: clinicFloat 7s ease-in-out infinite; }
-/* Carrusel de testimonios: 55s lineal infinito, se PAUSA al hover (CAMBIOS §4). */
-.dcv2-testi-track { animation: testiScroll 55s linear infinite; }
-.dcv2-testi-track:hover { animation-play-state: paused; }
+/* `text-wrap` va en CSS y no inline: csstype aún no lo declara en
+   React.CSSProperties y el type-check del build lo rechazaría. */
+.dcv4-balance { text-wrap: balance; }
+.dcv4-pretty { text-wrap: pretty; }
+
+/* ── Keyframes del diseño ────────────────────────────────────────────────── */
+@keyframes dcPulse { 0%, 100% { opacity: 1; } 50% { opacity: .45; } }
+@keyframes dcSpinB { 0% { transform: rotateX(-14deg) rotateY(0deg); } 100% { transform: rotateX(-14deg) rotateY(360deg); } }
+@keyframes dcMarquee { 0% { transform: translateX(0); } 100% { transform: translateX(-50%); } }
+
+.dcv4-pulse { animation: dcPulse 2.2s ease-in-out infinite; }
+/* Prisma 3D del hero: 5 caras girando. Sólo anima `transform`, nunca layout. */
+.dcv4-prism { animation: dcSpinB 30s linear infinite; }
+.dcv4-marquee { animation: dcMarquee 46s linear infinite; }
 
 @media (prefers-reduced-motion: reduce) {
-  .dcv2-ken-9, .dcv2-ken-12, .dcv2-ken-14, .dcv2-scan-9, .dcv2-scan-14,
-  .dcv2-slide-9, .dcv2-slideb-12, .dcv2-orbit-9, .dcv2-stl,
-  .dcv2-clinic, .dcv2-testi-track {
-    animation: none !important;
+  .dcv4-root *,
+  .dcv4-root *::before,
+  .dcv4-root *::after {
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
   }
+  html:has(.dcv4-root) { scroll-behavior: auto; }
 }
 
-/* ── Mockups diferidos (lazy-mockup.tsx) ─────────────────────────────────
-   Los mockups por debajo del pliegue NO viajan en el HTML inicial: se montan
-   al acercarse. Mientras tanto .dcv2-lazy__ph reserva su alto EXACTO, para
-   que CLS siga en 0.
+/* ── Reveal al hacer scroll (scroll-reveal.tsx) ───────────────────────────
+   El JS pone el estado inicial y lo quita al entrar en pantalla; sólo toca
+   opacity/transform, así que no puede provocar layout shift. Sin JS todo se
+   ve normal porque el estado inicial lo pone el propio script. */
+.dcv4-reveal-init { opacity: 0; transform: translateY(22px); }
+.dcv4-reveal-on { opacity: 1; transform: none; transition: opacity .6s ease, transform .6s ease; }
+@media (prefers-reduced-motion: reduce) {
+  .dcv4-reveal-init { opacity: 1; transform: none; }
+  .dcv4-reveal-on { transition: none; }
+}
 
-   El alto de cada mockup depende SOLO del ancho de su caja (ninguno lleva
-   media queries propias), así que la tabla se declara con container queries
-   sobre .dcv2-lazy y vale igual en móvil que en desktop. Anchos reales en
-   producción: 300-740px los de spotlights, 300-620px los del trío.
-
-   OJO: tabla MEDIDA en Chrome con Inter ya cargada, devicePixelRatio 1.875
-   (30-jul-2026) — el mismo DPR que emula Lighthouse en móvil. El alto de un
-   mockup depende del DPR porque las cajas de línea se ajustan a píxeles del
-   dispositivo: a DPR 1.25 los mismos mockups miden 1-4px más. Es un desfase
-   de ~1% y, como el montaje siempre ocurre con el mockup fuera de pantalla
-   (rootMargin 400px), no computa como layout shift. Si cambia el marcado o
-   el copy de un mockup hay que volver a medir SU columna. Dentro de cada
-   mockup la regla más estrecha va LA ÚLTIMA (misma especificidad → gana el
-   orden de aparición). */
-.dcv2-lazy { container-type: inline-size; display: flex; flex-direction: column; flex: 1; }
-.dcv2-lazy__ph { flex: 1 0 auto; }
-
-/* AgendaMock */
-.dcv2-lazy--agenda-semanal { min-height: 293.27px; }
-@container (max-width: 477px) { .dcv2-lazy--agenda-semanal { min-height: 324.94px; } }
-@container (max-width: 465px) { .dcv2-lazy--agenda-semanal { min-height: 343.14px; } }
-@container (max-width: 435px) { .dcv2-lazy--agenda-semanal { min-height: 353.27px; } }
-@container (max-width: 403px) { .dcv2-lazy--agenda-semanal { min-height: 364.27px; } }
-@container (max-width: 391px) { .dcv2-lazy--agenda-semanal { min-height: 393.18px; } }
-@container (max-width: 368px) { .dcv2-lazy--agenda-semanal { min-height: 403.31px; } }
-@container (max-width: 358px) { .dcv2-lazy--agenda-semanal { min-height: 410.03px; } }
-
-/* PresupuestoMock */
-.dcv2-lazy--presupuesto { min-height: 387.08px; }
-@container (max-width: 486px) { .dcv2-lazy--presupuesto { min-height: 401.93px; } }
-@container (max-width: 313px) { .dcv2-lazy--presupuesto { min-height: 421.51px; } }
-
-/* DicomStlMock */
-.dcv2-lazy--visor-dicom-stl { min-height: 551.64px; }
-@container (max-width: 374px) { .dcv2-lazy--visor-dicom-stl { min-height: 578.04px; } }
-@container (max-width: 364px) { .dcv2-lazy--visor-dicom-stl { min-height: 604.44px; } }
-@container (max-width: 319px) { .dcv2-lazy--visor-dicom-stl { min-height: 618.47px; } }
-
-/* ClinicaIsometricaMock: el SVG es width:100%/height:auto sobre un viewBox
-   480×274 (= 57.0833%), así que aquí el alto es LINEAL en el ancho y se
-   reserva con padding porcentual en vez de una tabla de escalones. El sumando
-   fijo es el cromo (barra del navegador + cabecera); por debajo de 334px esa
-   cabecera pasa a dos líneas y crece 22.85px. */
-.dcv2-lazy--clinica-isometrica { padding-top: calc(57.0833% + 83.58px); }
-@container (max-width: 333px) { .dcv2-lazy--clinica-isometrica { padding-top: calc(57.0833% + 106.43px); } }
-
-/* InboxIaSplitMock: por debajo de ~392px los dos paneles dejan de caber en
-   una fila y se apilan — de ahí el salto de 327px a 472px. */
-.dcv2-lazy--inbox-ia-split { min-height: 265.93px; }
-@container (max-width: 590px) { .dcv2-lazy--inbox-ia-split { min-height: 282.43px; } }
-@container (max-width: 534px) { .dcv2-lazy--inbox-ia-split { min-height: 296.46px; } }
-@container (max-width: 431px) { .dcv2-lazy--inbox-ia-split { min-height: 312.96px; } }
-@container (max-width: 422px) { .dcv2-lazy--inbox-ia-split { min-height: 326.98px; } }
-@container (max-width: 391px) { .dcv2-lazy--inbox-ia-split { min-height: 472.30px; } }
-@container (max-width: 369px) { .dcv2-lazy--inbox-ia-split { min-height: 488.80px; } }
-@container (max-width: 300px) { .dcv2-lazy--inbox-ia-split { min-height: 505.30px; } }
-
-/* AnalyticsMock */
-.dcv2-lazy--analytics { min-height: 217.72px; }
-@container (max-width: 386px) { .dcv2-lazy--analytics { min-height: 241.98px; } }
-
-/* EquipoMock: mismo alto en todo el rango. */
-.dcv2-lazy--equipo { min-height: 302.17px; }
-
-/* PaginaWebMock */
-.dcv2-lazy--pagina-web { min-height: 271.14px; }
-@container (max-width: 316px) { .dcv2-lazy--pagina-web { min-height: 292.58px; } }
-
-/* ── Nav ── */
+/* ── Nav ─────────────────────────────────────────────────────────────────── */
 .dcv2-navlink {
   text-decoration: none;
-  color: #475569;
-  font-size: 14.5px;
+  color: #334155;
+  font-size: clamp(13px, 1.2vw, 15px);
   font-weight: 600;
-  padding: 10px 12px;
-  border-radius: 9px;
-  transition: background .15s, color .15s;
+  padding: 6px 0;
+  transition: color .15s;
 }
-.dcv2-navlink:hover { background: #eff6ff; color: #1d4ed8; }
-.dcv2-navlink:focus-visible { outline: 2px solid #2563eb; outline-offset: 2px; }
+.dcv2-navlink:hover { color: #1d4ed8; }
+.dcv2-navlink:focus-visible { outline: 2px solid #2563eb; outline-offset: 3px; }
 
 .dcv2-nav-ghost {
   text-decoration: none;
   color: #334155;
-  font-size: 14.5px;
+  font-size: clamp(13px, 1.2vw, 15px);
   font-weight: 600;
-  padding: 10px 14px;
-  border-radius: 10px;
+  padding: 8px 10px;
+  border-radius: 9px;
   white-space: nowrap;
   transition: background .15s;
 }
@@ -135,79 +84,190 @@
 
 /* En pantallas chicas las anclas se ocultan (siguen en el footer);
    quedan logo + sesión/CTA en una sola fila. */
-@media (max-width: 700px) {
+@media (max-width: 760px) {
   .dcv2-nav-anchors { display: none !important; }
 }
-/* "Soy paciente" se oculta en móvil chico: el grupo de sesión no cabe en 375px. */
-@media (max-width: 520px) {
+/* "Soy paciente" no cabe en el grupo de sesión a 375px. */
+@media (max-width: 560px) {
   .dcv2-nav-patient { display: none !important; }
 }
-/* La sidebar decorativa del mockup del hero se oculta en móvil chico para que
-   los 4 KPIs quepan sin desbordar la página. */
+/* Móvil: el grupo de sesión son DOS botones (el diseño sólo dibuja "Ir al
+   panel"), así que a 375px hay que compactar o se sale de la página. Medido:
+   con esto la barra ocupa ~358px de los 375 y sigue en una sola fila. El
+   `flex-wrap` es la red de seguridad para 320px. */
+.dcv4-navbar { flex-wrap: wrap; }
 @media (max-width: 480px) {
-  .dcv2-hero-side { display: none !important; }
+  .dcv4-navbar { padding-left: 14px !important; padding-right: 14px !important; gap: 8px !important; }
+  .dcv4-navbar .dcv4-brandtext { font-size: 15px !important; }
+  .dcv4-navbar .dcv2-btn-primary { padding: 9px 12px !important; font-size: 13px !important; }
+  .dcv4-navbar .dcv2-nav-ghost { padding: 8px 6px !important; font-size: 13px !important; }
 }
 
-/* ── Botones azules (hero, nav CTA, pricing, CTA final) ── */
+/* ── Botones ─────────────────────────────────────────────────────────────── */
 .dcv2-btn-primary {
   text-decoration: none;
   background: #2563eb;
   color: #fff;
   font-weight: 700;
-  transition: background .16s, transform .16s;
+  transition: background .16s, transform .18s;
 }
-.dcv2-btn-primary:hover { background: #1d4ed8; transform: translateY(-1px); }
+.dcv2-btn-primary:hover { background: #1d4ed8; color: #fff; transform: translateY(-2px); }
 .dcv2-btn-primary:focus-visible { outline: 2px solid #0f172a; outline-offset: 2px; }
 
-/* CTA de precios (los 3 iguales): hover con rebote scale(1.05) + anillo azul (CAMBIOS §3). */
-.dcv2-btn-plan {
-  transition: all .22s cubic-bezier(.34,1.56,.64,1);
-}
-.dcv2-btn-plan:hover {
-  background: #1d4ed8 !important;
-  transform: scale(1.05);
-  box-shadow: 0 14px 30px rgba(37,99,235,.42), 0 0 0 3px rgba(59,130,246,.5) !important;
-}
-.dcv2-btn-plan:focus-visible { outline: 2px solid #0f172a; outline-offset: 2px; }
-@media (prefers-reduced-motion: reduce) {
-  .dcv2-btn-plan:hover { transform: none; }
-}
-
-/* Hero: "Ver Precios!" blanco con borde (reference). */
-.dcv2-btn-hero-sec {
-  transition: background .16s, border-color .16s;
-}
-.dcv2-btn-hero-sec:hover { border-color: #2563eb !important; background: #eff6ff !important; }
-.dcv2-btn-hero-sec:focus-visible { outline: 2px solid #2563eb; outline-offset: 2px; }
-
-.dcv2-toggle-btn { transition: all .18s; }
-.dcv2-toggle-btn:focus-visible { outline: 2px solid #2563eb; outline-offset: 2px; }
-
-/* ── Grid de features ── */
-.dcv2-gridcard { transition: box-shadow .18s, transform .18s; }
-.dcv2-gridcard:hover { box-shadow: 0 10px 26px rgba(15,23,42,.08); transform: translateY(-2px); }
-
-/* ── FAQ ── */
-.dcv2-faq-btn { transition: background .15s; }
-.dcv2-faq-btn:hover { background: #f8fafc; }
-.dcv2-faq-btn:focus-visible { outline: 2px solid #2563eb; outline-offset: -2px; }
-
-/* ── CTA final (botón blanco) ── */
-.dcv2-btn-white {
+/* Secundario del hero (vidrio sobre el degradado oscuro). */
+.dcv4-btn-glass {
   text-decoration: none;
-  transition: transform .16s;
+  transition: background .16s, transform .18s;
 }
-.dcv2-btn-white:hover { transform: translateY(-1px); }
+.dcv4-btn-glass:hover { background: rgba(255,255,255,.14) !important; color: #fff; transform: translateY(-2px); }
+.dcv4-btn-glass:focus-visible { outline: 2px solid #fff; outline-offset: 3px; }
+
+/* Píldora "Más información" de cada función. */
+.dcv4-pill-solid { text-decoration: none; transition: background .16s; }
+.dcv4-pill-solid:hover { background: #1d4ed8; color: #fff; }
+.dcv4-pill-solid:focus-visible { outline: 2px solid #0f172a; outline-offset: 2px; }
+
+.dcv4-pill-ghost { text-decoration: none; transition: background .16s, color .16s; }
+.dcv4-pill-ghost:hover { background: #eff6ff; color: #1d4ed8; }
+.dcv4-pill-ghost:focus-visible { outline: 2px solid #2563eb; outline-offset: 2px; }
+
+.dcv4-pill-ghost-dark { text-decoration: none; transition: background .16s, color .16s; }
+.dcv4-pill-ghost-dark:hover { background: rgba(147,197,253,.12); color: #fff; }
+.dcv4-pill-ghost-dark:focus-visible { outline: 2px solid #bfdbfe; outline-offset: 2px; }
+
+/* CTA final: botón blanco sobre el degradado oscuro. */
+.dcv2-btn-white { text-decoration: none; transition: background .16s, transform .18s; }
+.dcv2-btn-white:hover { background: #eff6ff; color: #1d4ed8; transform: translateY(-2px); }
 .dcv2-btn-white:focus-visible { outline: 2px solid #fff; outline-offset: 3px; }
 
-.dcv2-btn-glass {
-  text-decoration: none;
-  transition: background .16s;
-}
-.dcv2-btn-glass:hover { background: rgba(255,255,255,.2) !important; }
-.dcv2-btn-glass:focus-visible { outline: 2px solid #fff; outline-offset: 3px; }
+/* ── Precios ─────────────────────────────────────────────────────────────── */
+.dcv2-toggle-btn { transition: background .18s, color .18s; }
+.dcv2-toggle-btn:focus-visible { outline: 2px solid #2563eb; outline-offset: 2px; }
 
-/* ── Footer ── */
+.dcv4-plan { transition: transform .2s ease, border-color .2s ease, box-shadow .2s ease; }
+.dcv4-plan:hover { border-color: #2563eb; transform: scale(1.025); box-shadow: 0 34px 64px -34px rgba(37,99,235,.55); }
+.dcv4-plan--featured:hover { transform: scale(1.035); box-shadow: 0 42px 72px -34px rgba(37,99,235,.7); }
+
+.dcv2-btn-plan { text-decoration: none; transition: background .16s, transform .18s; }
+.dcv2-btn-plan:hover { background: #1d4ed8; color: #fff; transform: translateY(-2px); }
+.dcv2-btn-plan:focus-visible { outline: 2px solid #0f172a; outline-offset: 2px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .dcv4-plan:hover, .dcv4-plan--featured:hover,
+  .dcv2-btn-plan:hover, .dcv2-btn-primary:hover,
+  .dcv2-btn-white:hover, .dcv4-btn-glass:hover { transform: none; }
+}
+
+/* ── Tarjetas ────────────────────────────────────────────────────────────── */
+.dcv4-figure { transition: transform .3s ease; }
+.dcv4-figure:hover { transform: translateY(-4px); }
+
+.dcv4-trio { transition: transform .25s ease; }
+.dcv4-trio:hover { transform: translateY(-5px); }
+
+.dcv2-gridcard { transition: transform .22s ease, border-color .22s ease; }
+.dcv2-gridcard:hover { transform: translateY(-4px); border-color: #c4b5fd; }
+
+.dcv4-modlink { text-decoration: none; transition: transform .22s ease, border-color .22s ease; }
+.dcv4-modlink:hover { transform: translateY(-4px); border-color: #93c5fd; }
+.dcv4-modlink:focus-visible { outline: 2px solid #2563eb; outline-offset: 2px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .dcv4-figure:hover, .dcv4-trio:hover, .dcv2-gridcard:hover, .dcv4-modlink:hover { transform: none; }
+}
+
+/* El marquee de testimonios se pausa al pasar el mouse. */
+.dcv4-marquee:hover { animation-play-state: paused; }
+
+/* ── FAQ ─────────────────────────────────────────────────────────────────── */
+.dcv2-faq-btn { transition: color .15s; }
+.dcv2-faq-btn:hover { color: #1d4ed8; }
+.dcv2-faq-btn:focus-visible { outline: 2px solid #2563eb; outline-offset: -2px; border-radius: 10px; }
+
+/* ── Footer ──────────────────────────────────────────────────────────────── */
 .dcv2-footer-link { color: #94a3b8; text-decoration: none; transition: color .15s; }
 .dcv2-footer-link:hover { color: #fff; }
 .dcv2-footer-link:focus-visible { outline: 2px solid #2563eb; outline-offset: 2px; }
+
+/* ── Mockups diferidos (lazy-mockup.tsx) ─────────────────────────────────
+   Los 6 mockups de "Funciones" NO viajan en el HTML inicial: se montan al
+   acercarse. `.dcv2-lazy__h` reserva su alto para que CLS siga en 0.
+
+   POR QUÉ NO SE MUEVE NADA: el `min-height` está en la caja que envuelve
+   SIEMPRE al mockup (montado o no) y se redondea hacia ARRIBA sobre lo medido.
+   Si el alto real acaba siendo 1-3 px menor (otro devicePixelRatio, scrollbar
+   overlay en móvil…), la caja sigue valiendo el `min-height` y el mockup
+   simplemente cae dentro: cero desplazamiento, no "casi cero".
+
+   El alto de cada mockup depende SOLO del ancho de su caja (ninguno lleva
+   media queries propias), así que la tabla va con container queries sobre
+   `.dcv2-lazy` y vale igual en móvil que en desktop. Anchos reales en
+   producción: 244 px (viewport 320) → 513 px (viewport ≥ 1280).
+
+   MEDIDO en Chrome con Inter ya cargada (30-jul-2026), barriendo el ancho de
+   520 a 240 px de píxel en píxel. Si cambia el marcado o el copy de un mockup
+   hay que volver a medir SU bloque. Dentro de cada mockup la regla más
+   estrecha va LA ÚLTIMA (misma especificidad → gana el orden de aparición). */
+.dcv2-lazy { container-type: inline-size; display: block; }
+.dcv2-lazy__h { display: block; }
+
+/* AgendaMock */
+.dcv2-lazy--agenda .dcv2-lazy__h { min-height: 259px; }
+@container (max-width: 476px) { .dcv2-lazy--agenda .dcv2-lazy__h { min-height: 274px; } }
+@container (max-width: 441px) { .dcv2-lazy--agenda .dcv2-lazy__h { min-height: 284px; } }
+@container (max-width: 392px) { .dcv2-lazy--agenda .dcv2-lazy__h { min-height: 301px; } }
+@container (max-width: 256px) { .dcv2-lazy--agenda .dcv2-lazy__h { min-height: 335px; } }
+
+/* PacientesMock — por debajo de ~292px las filas de pacientes reenvuelven
+   nombre/saldo/estado y el alto salta en escalones muy finos. */
+.dcv2-lazy--pacientes .dcv2-lazy__h { min-height: 340px; }
+@container (max-width: 322px) { .dcv2-lazy--pacientes .dcv2-lazy__h { min-height: 355px; } }
+@container (max-width: 291px) { .dcv2-lazy--pacientes .dcv2-lazy__h { min-height: 374px; } }
+@container (max-width: 281px) { .dcv2-lazy--pacientes .dcv2-lazy__h { min-height: 393px; } }
+@container (max-width: 279px) { .dcv2-lazy--pacientes .dcv2-lazy__h { min-height: 425px; } }
+@container (max-width: 277px) { .dcv2-lazy--pacientes .dcv2-lazy__h { min-height: 444px; } }
+@container (max-width: 276px) { .dcv2-lazy--pacientes .dcv2-lazy__h { min-height: 460px; } }
+@container (max-width: 253px) { .dcv2-lazy--pacientes .dcv2-lazy__h { min-height: 475px; } }
+@container (max-width: 246px) { .dcv2-lazy--pacientes .dcv2-lazy__h { min-height: 494px; } }
+@container (max-width: 245px) { .dcv2-lazy--pacientes .dcv2-lazy__h { min-height: 513px; } }
+@container (max-width: 243px) { .dcv2-lazy--pacientes .dcv2-lazy__h { min-height: 529px; } }
+
+/* PresupuestoMock */
+.dcv2-lazy--presupuesto .dcv2-lazy__h { min-height: 418px; }
+@container (max-width: 323px) { .dcv2-lazy--presupuesto .dcv2-lazy__h { min-height: 434px; } }
+@container (max-width: 309px) { .dcv2-lazy--presupuesto .dcv2-lazy__h { min-height: 451px; } }
+@container (max-width: 276px) { .dcv2-lazy--presupuesto .dcv2-lazy__h { min-height: 476px; } }
+@container (max-width: 257px) { .dcv2-lazy--presupuesto .dcv2-lazy__h { min-height: 492px; } }
+@container (max-width: 242px) { .dcv2-lazy--presupuesto .dcv2-lazy__h { min-height: 529px; } }
+
+/* CbctMock: aquí el alto es LINEAL en el ancho, no escalonado — las 4 imágenes
+   son `aspect-ratio: 16/9` en dos columnas, así que crecen 0.5625 px por cada
+   píxel de ancho (56.25cqi). Lo único escalonado es el cromo: por debajo de
+   355px la cabecera pasa a dos líneas y por debajo de 260px, el pie. */
+.dcv2-lazy--cbct .dcv2-lazy__h { min-height: calc(56.25cqi + 115px); }
+@container (max-width: 354px) { .dcv2-lazy--cbct .dcv2-lazy__h { min-height: calc(56.25cqi + 131px); } }
+@container (max-width: 259px) { .dcv2-lazy--cbct .dcv2-lazy__h { min-height: calc(56.25cqi + 158px); } }
+
+/* ImportarMock — el salto grande de 407→406px es la rejilla de 8 orígenes
+   pasando de 4 a 3 columnas (minmax(88px,1fr)). */
+.dcv2-lazy--importar .dcv2-lazy__h { min-height: 497px; }
+@container (max-width: 436px) { .dcv2-lazy--importar .dcv2-lazy__h { min-height: 515px; } }
+@container (max-width: 414px) { .dcv2-lazy--importar .dcv2-lazy__h { min-height: 534px; } }
+@container (max-width: 407px) { .dcv2-lazy--importar .dcv2-lazy__h { min-height: 550px; } }
+@container (max-width: 406px) { .dcv2-lazy--importar .dcv2-lazy__h { min-height: 639px; } }
+@container (max-width: 404px) { .dcv2-lazy--importar .dcv2-lazy__h { min-height: 647px; } }
+@container (max-width: 311px) { .dcv2-lazy--importar .dcv2-lazy__h { min-height: 736px; } }
+@container (max-width: 286px) { .dcv2-lazy--importar .dcv2-lazy__h { min-height: 755px; } }
+@container (max-width: 279px) { .dcv2-lazy--importar .dcv2-lazy__h { min-height: 772px; } }
+@container (max-width: 250px) { .dcv2-lazy--importar .dcv2-lazy__h { min-height: 791px; } }
+@container (max-width: 243px) { .dcv2-lazy--importar .dcv2-lazy__h { min-height: 807px; } }
+
+/* InboxIaMock — por debajo de ~382px los dos paneles dejan de caber en una
+   fila y se apilan: de ahí el salto de 327 a 462px. */
+.dcv2-lazy--inbox .dcv2-lazy__h { min-height: 297px; }
+@container (max-width: 431px) { .dcv2-lazy--inbox .dcv2-lazy__h { min-height: 311px; } }
+@container (max-width: 404px) { .dcv2-lazy--inbox .dcv2-lazy__h { min-height: 327px; } }
+@container (max-width: 381px) { .dcv2-lazy--inbox .dcv2-lazy__h { min-height: 462px; } }
+@container (max-width: 353px) { .dcv2-lazy--inbox .dcv2-lazy__h { min-height: 478px; } }
+@container (max-width: 288px) { .dcv2-lazy--inbox .dcv2-lazy__h { min-height: 493px; } }
+@container (max-width: 275px) { .dcv2-lazy--inbox .dcv2-lazy__h { min-height: 507px; } }

@@ -1,171 +1,16 @@
 /**
- * DaleControl — Landing page: datos y copy (fuente de verdad).
- * Actualizado 2026-07-14. NO cambiar precios, límites ni textos sin aprobación de negocio.
+ * DaleControl — Landing page (v4): copy y datos estáticos.
+ *
+ * ⚠️ AQUÍ NO VIVE NINGÚN PRECIO. Los importes, cupos y límites de plan salen de
+ * `plan_configs` (editable en /admin sin redeploy) vía `getResolvedPlans()` y se
+ * arman en `buildPlanCards()` (plan-cards.ts). Si vuelves a escribir "$419" o
+ * "500 pacientes" a mano en un .tsx de la landing, está mal.
+ *
+ * Fuente de verdad del diseño: disenos-landing/Landing-DaleControl.dc.html.
  */
 
 import { PRODUCTO_MODULES, PRODUCTO_SLUGS } from '@/lib/producto/data';
-
-export interface Feature {
-  text: string;
-  included: boolean;
-}
-
-export interface CapacityRow {
-  text: string;
-  value: string;
-  /** false → fila con ✗ gris y pill gris (ej. "Tokens IA · 0" en Básico) */
-  included: boolean;
-}
-
-export interface Plan {
-  key: 'basico' | 'profesional' | 'clinica';
-  name: string;
-  tagline: string;
-  badge: string;          // etiqueta flotante sobre la tarjeta
-  badgeColor: string;     // fondo del badge
-  monthly: number;        // MXN/mes
-  firstMonth: number;     // PROMO: precio del primer mes (solo en modo mensual)
-  yearly: number;         // MXN/año (35% off)
-  yearlyPerMonth: number; // equivalente mensual del anual
-  yearlySavings: number;  // ahorro anual vs mensual
-  recommended: boolean;   // tarjeta destacada (borde azul + sombra)
-  addendum: string | null;
-  capacity: CapacityRow[];
-  features: Feature[];
-}
-
-export const PLANS: Plan[] = [
-  {
-    key: 'basico',
-    name: 'Básico',
-    tagline: 'Para ordenar tu clínica desde el día uno',
-    // teal-700, no teal-600: el blanco sobre #0d9488 se queda en 3.74:1 (AA pide 4.5:1).
-    badge: 'Clínica nueva', badgeColor: '#0f766e',
-    monthly: 419, firstMonth: 19, yearly: 3264, yearlyPerMonth: 272, yearlySavings: 1764,
-    recommended: false,
-    addendum: null,
-    capacity: [
-      { text: 'Pacientes', value: '500', included: true },
-      { text: 'Usuarios', value: '2', included: true },
-      { text: 'Almacenamiento', value: '5 GB', included: true },
-      { text: 'Tokens IA', value: '0 · Sin IA', included: false },
-    ],
-    features: [
-      { text: 'Agenda + recordatorios por WhatsApp', included: true },
-      { text: 'Expediente clínico + odontograma', included: true },
-      // mantener en sincronía con plan_configs (cfdiMonthly/cfdiOverageCents).
-      { text: '25 facturas CFDI al mes ($3.00 c/u adicional)', included: true },
-      { text: 'Presupuestos, cobros y factura automática', included: true },
-      { text: 'Portal del paciente y recetas digitales', included: true },
-      // OJO — NO volver a fusionar estos dos bullets. La IA de imagen SOLO
-      // procesa radiografías 2D: /api/xrays/[id]/analyze rechaza todo lo que no
-      // sea image/*, y no existe ningún path de IA sobre CBCT/DICOM. El visor
-      // CBCT es cortes + mediciones, sin IA. Cualquier bullet del tipo
-      // "radiografías 3D con IA" es una promesa incumplible.
-      // El visor 3D (CBCT + modelos STL/PLY/OBJ) y "Mi Clínica Visual" NO tienen
-      // gate de plan: /dashboard/clinic-layout y la pestaña modelos-3d solo
-      // exigen rol ADMIN, y las APIs models-3d / dicom-set tampoco miran el plan.
-      // Un Básico ya los usa hoy, así que la landing los marca como incluidos en
-      // vez de prometer un ✗ que el producto no cumple. Si alguna vez se decide
-      // gatearlos de verdad, hay que volver a poner included:false AQUÍ.
-      { text: 'CBCT 3D en la nube · visor con cortes y mediciones', included: true },
-      { text: 'Análisis de radiografías 2D con IA', included: false },
-      { text: 'Modelos 3D y clínica virtual', included: true },
-      { text: 'Varias sucursales', included: false },
-    ],
-  },
-  {
-    key: 'profesional',
-    name: 'Profesional',
-    tagline: 'La favorita de las clínicas dentales',
-    badge: '★ Más popular', badgeColor: '#2563eb',
-    monthly: 689, firstMonth: 29, yearly: 5376, yearlyPerMonth: 448, yearlySavings: 2892,
-    recommended: true,
-    addendum: 'Todo lo de Básico, y además:',
-    capacity: [
-      { text: 'Pacientes', value: 'Ilimitados', included: true },
-      { text: 'Usuarios', value: '6', included: true },
-      { text: 'Almacenamiento', value: '15 GB', included: true },
-      { text: 'Tokens IA', value: '200 mil', included: true },
-    ],
-    features: [
-      // Ver la nota del plan Básico: CBCT (3D, sin IA) y análisis con IA (2D)
-      // son dos cosas distintas y no deben volver a fusionarse.
-      { text: 'CBCT 3D en la nube · visor con cortes y mediciones', included: true },
-      { text: 'Análisis de radiografías 2D con IA', included: true },
-      { text: 'Asistente clínico con IA · 200 mil tokens/mes', included: true },
-      // mantener en sincronía con plan_configs (cfdiMonthly/cfdiOverageCents).
-      { text: '50 facturas CFDI al mes ($2.00 c/u adicional)', included: true },
-      { text: 'Modelos 3D dentales y clínica virtual 3D', included: true },
-      { text: 'Analytics, reportes y TV de sala de espera', included: true },
-      { text: 'Varias sucursales en una cuenta', included: false },
-      { text: 'Roles avanzados y soporte prioritario', included: false },
-    ],
-  },
-  {
-    key: 'clinica',
-    name: 'Clínica',
-    tagline: 'Para clínicas con varios consultorios',
-    badge: 'Clínica Grande', badgeColor: '#1e3a8a',
-    monthly: 1719, firstMonth: 39, yearly: 13404, yearlyPerMonth: 1117, yearlySavings: 7224,
-    recommended: false,
-    addendum: 'Todo lo de Profesional, y además:',
-    capacity: [
-      { text: 'Pacientes', value: 'Ilimitados', included: true },
-      { text: 'Usuarios', value: 'Ilimitados', included: true },
-      { text: 'Almacenamiento', value: '75 GB', included: true },
-      { text: 'Tokens IA', value: '1 millón', included: true },
-    ],
-    features: [
-      { text: 'Varias sucursales en una cuenta', included: true },
-      { text: 'Roles y permisos avanzados', included: true },
-      // mantener en sincronía con plan_configs (cfdiMonthly/cfdiOverageCents).
-      { text: '150 facturas CFDI al mes ($1.25 c/u adicional)', included: true },
-      { text: 'IA ampliada · 1 millón de tokens/mes', included: true },
-      { text: 'Soporte prioritario', included: true },
-      { text: 'Onboarding y migración dedicados', included: true },
-    ],
-  },
-];
-
-export const PRICING_COPY = {
-  eyebrow: 'Precios',
-  // El título va en UNA sola línea centrada (white-space:nowrap + font clamp)
-  title: 'Un precio transparente y sin contratos',
-  subtitle: 'Regístrate hoy: tu primer mes cuesta desde $19 y no hay permanencia.',
-  toggleMonthly: 'Mensual',
-  toggleYearly: 'Anual',
-  yearlyBadge: '35% de descuento',
-  perMonth: 'MXN /mes',
-  noContract: 'Sin permanencia · cancela cuando quieras',
-  // Caja promo sutil (solo modo mensual): fondo #f6fdf8, borde #d9f3e1
-  promo: (first: string, save: string) => `Tu primer mes: solo ${first} · ahorras ${save}`,
-  billedYearly: (total: string) => `Facturado anualmente: ${total}`,
-  savings: (amount: string) => `ahorras ${amount}`,
-  // CTA de 2 líneas — los 3 planes usan el MISMO botón azul sólido (#2563eb)
-  cta: 'Contratar Ahora!',
-  ctaSub: (first: string) => `Empieza hoy por solo ${first} MXN`, // pill blanca translúcida dentro del botón
-  trustChips: [
-    'Sin permanencia ni contratos anuales',
-    'Precios en MXN + IVA',
-    'Soporte en español e inglés',
-    'Página web gratuita incluida en cualquier plan',
-    'Última tecnología de software en IA',
-    'Datos respaldados con alta seguridad',
-    'CRM incluido de tus clientes',
-    'Facturación directa desde DaleControl',
-  ], // 8 chips compactos (13px) que caben en 2 líneas en desktop
-};
-
-export const HERO = {
-  badge: 'Datos cifrados y respaldos diarios',
-  title: 'El control total de tu clínica dental, en un solo lugar',
-  // La IA analiza radiografías 2D; el CBCT 3D es visor. No volver a juntarlos.
-  subtitle: 'Agenda, cobros, WhatsApp, CBCT 3D y análisis de radiografías con IA — todo desde tu navegador, en español y en pesos.',
-  ctaPrimary: 'Empieza hoy',    // → registro
-  ctaSecondary: 'Ver Precios!', // botón AZUL SÓLIDO (igual que el primario) → #precios
-  bullets: ['Tu primer mes desde $19', 'Sin permanencia', 'Sin instalar nada'], // el 1º en verde #15803d
-};
+import type { ProductoSlug } from '@/lib/producto/types';
 
 export const NAV = {
   links: [
@@ -174,8 +19,6 @@ export const NAV = {
     { label: 'Comparativa', href: '#comparativa' },
     { label: 'FAQ', href: '#faq' },
     // Ruta real, no ancla: los consumidores normalizan con navHref().
-    // Blog es el único destino externo que sube al menú; /casos-de-uso y
-    // /herramientas son SEO de cola larga y viven sólo en FOOTER.product.
     { label: 'Blog', href: '/blog' },
   ],
   login: 'Iniciar sesión',
@@ -193,121 +36,189 @@ export function navHref(href: string): string {
   return `/${href}`;
 }
 
-/** Banda azul degradada (#1e3a8a→#2563eb), números blancos gigantes */
-export const STATS = [
-  { value: '350+', label: 'clínicas nuevas en solo este mes' },
-  { value: '+500,000', label: 'pacientes gestionados', trend: '▲ 35% este año' },
-  { value: '+10M', label: 'tokens de IA utilizados' },
+export const HERO = {
+  badge: 'Datos cifrados y respaldos diarios',
+  titleLead: 'El control total de tu clínica dental,',
+  titleAccent: 'en un solo lugar',
+  // La IA analiza radiografías 2D; el CBCT 3D es visor. No volver a juntarlos.
+  subtitle:
+    'Agenda, cobros, WhatsApp, CBCT 3D y análisis de radiografías con IA — todo desde tu navegador, en español y en pesos.',
+  ctaPrimary: 'Empieza hoy',
+  ctaSecondary: 'Ver precios',
+  /** El 1.º lleva el precio del primer mes y se inyecta en el componente. */
+  bullets: ['Sin permanencia', 'Sin instalar nada'],
+  caption: 'Agenda inteligente · WhatsApp con bot IA · Modelos 3D · Cobros · Asistente IA — ',
+  captionAccent: 'girando en vivo, todo desde tu navegador',
+};
+
+/** Banda de prueba social: contadores que suben al entrar en pantalla. */
+export const STATS: { to: number; format: 'plus-suffix' | 'plus-thousands' | 'plus-millions'; label: string }[] = [
+  { to: 350, format: 'plus-suffix', label: 'clínicas nuevas en solo este mes' },
+  { to: 500_000, format: 'plus-thousands', label: 'pacientes gestionados' },
+  { to: 10, format: 'plus-millions', label: 'tokens de IA utilizados' },
 ];
 
-export const SPOTLIGHTS_HEADER = {
+export const FUNCIONES_HEADER = {
   eyebrow: 'Funciones',
   title: 'El software de clínicas más completo del mundo',
   subtitle: 'No te lo contamos: míralo. Así se ve el panel real de DaleControl por dentro.',
 };
 
-/** 6 spotlights (radiografías+modelos3D fusionados; whatsapp+IA fusionados) */
-export const SPOTLIGHTS = [
+export type FuncionMockup =
+  | 'agenda'
+  | 'pacientes'
+  | 'presupuesto'
+  | 'cbct'
+  | 'importar'
+  | 'inbox';
+
+export interface Funcion {
+  id: string;
+  /** Tarjeta con fondo oscuro (#0b1220) en vez del degradado claro. */
+  dark: boolean;
+  title: string;
+  desc: string;
+  /** Página de producto por módulo (las 8 rutas reales). */
+  href: string;
+  note?: string;
+  mockup: FuncionMockup;
+}
+
+export const FUNCIONES: Funcion[] = [
   {
-    id: 'agenda', badge: 'Agenda inteligente',
-    title: 'Llena tu agenda y olvídate de las citas perdidas',
-    desc: 'Citas por doctor, sillón y consultorio, con recordatorios automáticos que tus pacientes sí leen.',
-    bullets: [
-      'Vista por día, semana, mes o lista — filtra por doctor, sillón y estado',
-      'Recordatorios automáticos por WhatsApp; el paciente confirma con un toque',
-      'Reservas en línea 24/7 y alerta de sala de espera (">20 min")',
-    ],
-    mockup: 'agenda-semanal',
+    id: 'agenda',
+    dark: false,
+    title: 'Agenda inteligente',
+    desc: 'Llena tu agenda y olvídate de las citas perdidas: recordatorios por WhatsApp que tus pacientes sí leen.',
+    href: '/software-agenda-dental',
+    mockup: 'agenda',
   },
   {
-    id: 'pacientes', badge: 'Pacientes y expedientes',
-    title: 'Todos tus pacientes, con su saldo a la vista',
-    desc: 'Encuentra a cualquiera en segundos y deja de perder dinero en cuentas olvidadas.',
-    bullets: [
-      'Filtros listos: con deuda, VIP, cumpleaños, sin contacto en 6 meses',
-      'Saldo pendiente visible en la lista — nada se te escapa',
-      '"Importar mi clínica": trae tus pacientes de Excel o tu sistema anterior',
-    ],
-    mockup: 'tabla-pacientes',
+    id: 'pacientes',
+    dark: true,
+    title: 'Pacientes y expedientes',
+    desc: 'Todos tus pacientes, con su saldo a la vista y filtros listos para cobrar lo olvidado.',
+    href: '/expediente-clinico-dental',
+    mockup: 'pacientes',
   },
   {
-    id: 'finanzas', badge: 'Finanzas completas',
-    title: 'Cobra más rápido, sin perseguir pagos',
-    desc: 'Del presupuesto a la factura en un clic, con la firma del paciente y su estado de cuenta siempre al día.',
-    bullets: [
-      'Presupuestos con firma digital del paciente',
-      'Factura automática al crear el presupuesto',
-      'Pagos parciales y descuentos por línea o globales (% o $)',
-      'KPIs de ingresos en vivo y reglas automáticas de cobro',
-    ],
+    id: 'finanzas',
+    dark: false,
+    title: 'Finanzas completas',
+    desc: 'Del presupuesto a la factura en un clic, con la firma del paciente y su estado de cuenta al día.',
+    href: '/caja-y-cobros-clinica-dental',
     mockup: 'presupuesto',
   },
   {
-    // El badge separa a propósito lo 3D (visor) de la IA (2D): no hay IA sobre
-    // CBCT/DICOM en el producto.
-    id: 'imagenes3d', badge: 'CBCT y modelos 3D · IA en radiografías 2D',
-    title: 'Radiografías CBCT y modelos 3D, en tu navegador',
-    desc: 'Sube el DICOM de tu tomógrafo o el STL de tu escáner y míralos desde cualquier dispositivo — sin instalar nada.',
-    bullets: [
-      'Cortes axial, coronal y sagital + panorámica automática',
-      'IA que resalta hallazgos en tus radiografías 2D (periapical, panorámica)',
-      'Modelos STL, PLY u OBJ girables dentro del expediente',
-      'Compártelos con el paciente para cerrar el tratamiento',
-    ],
-    mockup: 'visor-dicom-stl', // 4 imágenes reales public/landing/cbct/* (142px, object-fit:contain) + tira STL animada
+    id: 'cbct',
+    dark: true,
+    title: 'Radiografías CBCT y modelos 3D',
+    desc: 'Sube el DICOM de tu tomógrafo o el STL de tu escáner y míralos desde cualquier dispositivo.',
+    href: '/radiografias-3d-cbct-dental',
+    note: 'La IA asiste; la lectura y el diagnóstico los decide el doctor.',
+    mockup: 'cbct',
   },
   {
-    id: 'clinica3d', badge: 'Tu clínica en 3D',
-    title: 'Un recorrido virtual que convierte curiosos en pacientes',
-    desc: 'Tu clínica en tercera dimensión, con cada sillón y consultorio en vivo. Los pacientes la recorren desde su celular antes de agendar.',
-    bullets: [
-      'Recórrela como si estuvieras adentro: sillones, consultorios y recepción',
-      'Modo "En Vivo": qué silla está ocupada y quién espera, en tiempo real',
-      'Compártela en redes y en tu página pública',
-    ],
-    mockup: 'clinica-isometrica', // escena SVG isométrica: 3 sillones dentales, recepción, sala de espera, chips de estado
+    id: 'importar',
+    dark: false,
+    title: 'Importa tu clínica en 1 clic',
+    desc: 'Desde Excel o tu panel anterior, con migración asistida gratis por nuestro equipo.',
+    href: '/expediente-clinico-dental',
+    mockup: 'importar',
   },
   {
-    id: 'whatsapp-ia', badge: 'WhatsApp + Asistente IA',
-    title: 'Un bot que agenda citas y una IA que trabaja contigo',
-    desc: 'El WhatsApp de tu clínica y tu asistente clínico viven dentro del panel — atienden mientras tú trabajas.',
-    bullets: [
-      'Bot que agenda citas solo, 24/7, con recordatorios y confirmaciones',
-      'Recall automático de pacientes inactivos',
-      'Diagnóstico diferencial, dosis y notas SOAP con /comandos',
-    ],
-    disclaimer: 'Las sugerencias de la IA no reemplazan el criterio clínico.',
-    mockup: 'inbox-ia-split', // ventana dividida: chat WhatsApp | tarjetas IA + /comandos
+    id: 'whatsapp-ia',
+    dark: true,
+    title: 'WhatsApp + Asistente IA',
+    desc: 'Un bot que agenda citas 24/7 y una IA que redacta notas mientras tú atiendes.',
+    href: '/software-agenda-dental',
+    note: 'Las sugerencias de la IA no reemplazan el criterio clínico.',
+    mockup: 'inbox',
   },
 ];
+
+export const PRICING_COPY = {
+  eyebrow: 'Precios',
+  title: 'Un precio transparente y sin contratos',
+  toggleMonthly: 'Mensual',
+  toggleYearly: 'Anual',
+  noContract: 'Sin permanencia · cancela cuando quieras',
+  cta: 'Contratar Ahora!',
+  trustChips: [
+    'Sin permanencia ni contratos anuales',
+    'Precios en MXN + IVA',
+    'Soporte en español e inglés',
+    'Página web gratuita incluida en cualquier plan',
+    'Última tecnología de software en IA',
+    'Datos respaldados con alta seguridad',
+    'CRM incluido de tus clientes',
+    'Facturación directa desde DaleControl',
+  ],
+};
 
 export const MODULES_TRIO = {
   title: 'Y también dominas los números, tu equipo y tu presencia en línea',
   subtitle: 'Tres módulos más, directo del panel.',
-  // Los 3 mockups se estiran a la MISMA altura (flex column + flex:1)
   items: [
-    { id: 'analytics', title: 'Analytics que hablan claro', desc: 'Ocupación, doctores, procedimientos, no-shows, costos y margen — por día, mes, trimestre o año.', mockup: 'analytics' },
-    { id: 'equipo', title: 'Tu equipo, con roles y permisos', desc: 'Invita doctores y admins, controla qué ve cada quien y mide citas e ingresos por doctor.', mockup: 'equipo' }, // usuario "Rafael Martinez"
-    { id: 'web', title: 'Tu página web, lista en minutos', desc: 'Elige entre 4 plantillas, publica con un clic y capta pacientes con tu link propio y reseñas post-cita.', mockup: 'pagina-web' },
+    {
+      id: 'analytics',
+      title: 'Analytics que hablan claro',
+      desc: 'Ocupación, doctores, procedimientos, no-shows, costos y margen — por día, mes, trimestre o año.',
+    },
+    {
+      id: 'equipo',
+      title: 'Tu equipo, con roles y permisos',
+      desc: 'Invita doctores y admins, controla qué ve cada quien y mide citas e ingresos por doctor.',
+    },
+    {
+      id: 'web',
+      title: 'Tu página web, lista en minutos',
+      desc: 'Elige entre 4 plantillas, publica con un clic y capta pacientes con tu link propio y reseñas post-cita.',
+    },
   ],
 };
 
-export const GRID_FEATURES = [
-  { glyph: '⌗', title: 'Expediente + odontograma', desc: 'Historia clínica completa con odontograma interactivo.' },
-  { glyph: '◫', title: 'Portal del paciente', desc: 'Agenda, paga, chatea y descarga sus documentos.' },
+export const GRID_TITLE = 'Y todo lo demás, incluido';
+
+export const GRID_FEATURES: { glyph: string; title: string; desc: string; warm?: boolean }[] = [
+  { glyph: '♯', title: 'Expediente + odontograma', desc: 'Historia clínica completa con odontograma interactivo.' },
+  { glyph: '▥', title: 'Portal del paciente', desc: 'Agenda, paga, chatea y descarga sus documentos.' },
   { glyph: '℞', title: 'Recetas digitales', desc: 'Recetas listas para imprimir o enviar al paciente.' },
   { glyph: '✎', title: 'Consentimientos firmados', desc: 'Firma digital de consentimientos informados.' },
   { glyph: '◈', title: 'Módulos por especialidad', desc: 'Ortodoncia, endodoncia, periodoncia, implantes y pediatría.' },
-  { glyph: '☆', title: 'Directorio + reseñas', desc: 'Perfil público para captar pacientes y reseñas post-cita.' },
+  { glyph: '★', title: 'Directorio + reseñas', desc: 'Perfil público para captar pacientes y reseñas post-cita.' },
   { glyph: '▶', title: 'TV para sala de espera', desc: 'Pantalla con turnos y contenido de tu clínica.' },
   { glyph: '⧉', title: 'Multi-sucursal', desc: 'Varias clínicas administradas desde una sola cuenta.' },
   { glyph: '⇅', title: 'Importa tus datos', desc: 'Migración asistida desde tu sistema anterior o Excel.' },
-  { glyph: '🔒', title: 'Seguridad de verdad', desc: '2FA para tu staff, bitácora de auditoría y respaldos diarios.' },
+  { glyph: '🔒', title: 'Seguridad de verdad', desc: '2FA para tu staff, bitácora de auditoría y respaldos diarios.', warm: true },
   { glyph: '¢', title: 'Pagos en línea', desc: 'Tus pacientes pagan desde su celular, tú lo ves al momento.' },
   { glyph: '▣', title: 'Inventario e insumos', desc: 'Controla existencias y recibe alertas de stock bajo.' },
   { glyph: '⇄', title: 'Proveedores y compras', desc: 'Proveedores, órdenes y compras de tu clínica en un solo módulo.' },
   { glyph: '⚗', title: 'Laboratorios y órdenes', desc: 'Envía y da seguimiento a tus órdenes de laboratorio.' },
   { glyph: '⌘', title: 'Rápido de usar', desc: 'Búsqueda global Ctrl+K para ejecutar todo al instante. Con modo oscuro.' },
+  { glyph: '◷', title: 'Reservas en línea 24/7', desc: 'Tus pacientes agendan solos desde tu página, a cualquier hora.' },
+];
+
+export const MODULE_PAGES_HEADER = {
+  eyebrow: 'Módulos',
+  title: 'Conoce cada módulo a fondo',
+  subtitle: 'Cada función tiene su propia página con el detalle completo, capturas y preguntas frecuentes.',
+};
+
+/**
+ * Las 8 páginas de producto por módulo. Los slugs van tipados como
+ * `ProductoSlug`, así que el type-check revienta si alguien inventa una ruta
+ * que no existe en src/lib/producto/data.ts.
+ */
+export const MODULE_PAGES: { slug: ProductoSlug; glyph: string; color: string; title: string; desc: string }[] = [
+  { slug: 'software-agenda-dental', glyph: '▦', color: '#7c3aed', title: 'Agenda y recordatorios por WhatsApp', desc: 'Citas, confirmaciones y lista de espera' },
+  { slug: 'expediente-clinico-dental', glyph: '♯', color: '#1d4ed8', title: 'Expediente clínico y odontograma', desc: 'Historia completa, diente por diente' },
+  { slug: 'portal-del-paciente-dental', glyph: '▥', color: '#6d28d9', title: 'Portal del paciente', desc: 'Sus citas, presupuestos y estado de cuenta' },
+  { slug: 'caja-y-cobros-clinica-dental', glyph: '$', color: '#047857', title: 'Caja y cobros', desc: 'Caja con PIN, pagos y corte diario' },
+  { slug: 'facturacion-dental-cfdi', glyph: '▤', color: '#4338ca', title: 'Facturación', desc: 'CFDI ligado al tratamiento y al paciente' },
+  { slug: 'radiografias-3d-cbct-dental', glyph: '3D', color: '#0e7490', title: 'Radiografías y estudios 3D/CBCT', desc: 'Visor en el navegador con apoyo de IA' },
+  { slug: 'reportes-clinica-dental', glyph: '▲', color: '#b45309', title: 'Reportes e indicadores', desc: 'Ingresos, ocupación y productividad' },
+  { slug: 'software-multiclinica-dental', glyph: '⧉', color: '#1e3a8a', title: 'Multi-sede, roles y permisos', desc: 'Varias sucursales en una sola cuenta' },
 ];
 
 export const COMPARISON = {
@@ -329,43 +240,61 @@ export const COMPARISON = {
   ],
 };
 
-/** Carrusel infinito derecha→izquierda (55s, pausa al hover, respeta prefers-reduced-motion).
- *  Fotos: usar assets propios o un servicio de avatares licenciado. En el reference se usan
- *  retratos de randomuser.me SOLO como placeholder — reemplazar por fotos reales/licenciadas
- *  antes de producción. Van como background-image (no <img>). */
+/** Marquee infinito (46s). Las 6 tarjetas se duplican en el componente. */
 export const TESTIMONIALS = {
   title: 'Doctores que ya tomaron el control',
   items: [
-    { photo: 'women/44', name: 'Dra. Mariana Gutiérrez', role: 'Clínica Dental Sonría · Guadalajara', quote: 'Antes perdía 3 o 4 citas por semana. Con los recordatorios de WhatsApp mis pacientes confirman solos y mi agenda está llena.' },
-    { photo: 'men/32', name: 'Dr. Luis Hernández', role: 'Dental Vega Implantes · Monterrey', quote: 'Ver el CBCT desde el navegador, sin instalar nada, me cambió la consulta. Se lo muestro al paciente en 3D y el tratamiento se vende solo.' },
-    { photo: 'women/65', name: 'Dra. Karla Ríos', role: 'Sonrisitas Kids · CDMX', quote: 'Dejé el Excel en una semana. Presupuesto, firma y factura salen juntos, y por fin sé cuánto ingresa mi clínica cada día.' },
-    { photo: 'men/52', name: 'Dr. Andrés Salazar', role: 'Centro Dental Alameda · Puebla', quote: 'El bot de WhatsApp me agendó 14 citas el primer mes, varias en domingo por la noche. Es como tener recepcionista 24/7.' },
-    { photo: 'women/21', name: 'Dra. Fernanda Olvera', role: 'Odontología Integral Roma · CDMX', quote: 'La migración fue lo que más miedo me daba y tardó una tarde. Importaron mis 1,800 pacientes desde Excel sin perder nada.' },
-    { photo: 'men/76', name: 'Dr. Ricardo Peña', role: 'Dental Care Del Valle · Querétaro', quote: 'Con los saldos a la vista recuperé más de $40,000 en cuentas que tenía olvidadas. Solo eso ya pagó el año completo.' },
-    { photo: 'women/58', name: 'Dra. Paulina Cervantes', role: 'Ortodoncia Cervantes · Tijuana', quote: 'Mis pacientes de brackets ven su avance en el portal y pagan en línea. Bajé los no-shows a la mitad en dos meses.' },
-    { photo: 'men/18', name: 'Dr. Emilio Ramos', role: 'Clínica Ramos & Asociados · Mérida', quote: 'Tengo dos sucursales y por fin veo todo en una sola cuenta: ingresos por doctor, ocupación y no-shows en tiempo real.' },
-    { photo: 'women/33', name: 'Dra. Sofía Ibarra', role: 'Dental Boutique Ibarra · León', quote: 'La IA me redacta las notas SOAP mientras termino con el paciente. Me ahorro una hora de papeleo todos los días.' },
-    { photo: 'men/61', name: 'Dr. Héctor Fuentes', role: 'Odontología Fuentes · Toluca', quote: 'Publiqué mi página con el recorrido 3D de la clínica y ahora llegan pacientes diciendo "quiero atenderme ahí". Impresiona de verdad.' },
+    { initials: 'AS', bg: '#ede9fe', fg: '#6d28d9', role: 'Dentista general', place: 'Clínica en Puebla', quote: 'El bot de WhatsApp me agenda citas hasta en domingo por la noche. Es como tener recepcionista 24/7.' },
+    { initials: 'FO', bg: '#dbeafe', fg: '#1e40af', role: 'Odontóloga', place: 'Consultorio en CDMX', quote: 'La migración era lo que más miedo me daba y tardó una tarde. Mis pacientes llegaron desde Excel sin perder nada.' },
+    { initials: 'RP', bg: '#dcfce7', fg: '#15803d', role: 'Dueño de clínica', place: 'Querétaro', quote: 'Con los saldos a la vista recuperé cuentas que tenía olvidadas. Solo eso ya pagó el año completo.' },
+    { initials: 'PC', bg: '#fef3c7', fg: '#b45309', role: 'Ortodoncista', place: 'Tijuana', quote: 'Mis pacientes de brackets ven su avance en el portal y pagan en línea. Los no-shows bajaron a la mitad en dos meses.' },
+    { initials: 'ER', bg: '#cffafe', fg: '#0e7490', role: 'Director de clínica', place: 'Mérida', quote: 'Tengo dos sucursales y por fin veo todo en una sola cuenta: ingresos por doctor, ocupación y no-shows en tiempo real.' },
+    { initials: 'SI', bg: '#fce7f3', fg: '#9d174d', role: 'Odontóloga', place: 'León', quote: 'La IA me redacta las notas SOAP mientras termino con el paciente. Me ahorro una hora de papeleo todos los días.' },
   ],
 };
 
-export const FAQ = {
+export const FAQ_HEADER = {
   eyebrow: 'Preguntas frecuentes',
   title: 'Lo que todos preguntan antes de empezar',
-  items: [
-    { q: '¿Mis datos y los de mis pacientes están seguros?', a: 'Sí. Toda la información viaja y se guarda cifrada, hacemos respaldos diarios automáticos y cada movimiento del staff queda registrado en una bitácora de auditoría. Además puedes activar verificación en dos pasos (2FA) para tu equipo.' },
-    { q: '¿Puedo migrar desde mi sistema anterior o desde Excel?', a: 'Sí. Con "Importar mi clínica" traes tus pacientes, citas e historiales desde tu software anterior o desde hojas de Excel, con nuestro acompañamiento durante la migración.' },
-    { q: '¿Necesito instalar algo o comprar equipo?', a: 'No. DaleControl funciona 100% en el navegador — incluso el visor de radiografías CBCT y los modelos 3D. Solo necesitas internet y el equipo que ya tienes.' },
-    { q: '¿Funciona en el celular?', a: 'Sí. El panel es completamente responsive: puedes revisar tu agenda, contestar WhatsApp y ver tus ingresos desde el celular o la tablet.' },
-    { q: '¿Hay permanencia o contrato anual?', a: 'No. Los planes son mes a mes y puedes cancelar cuando quieras. Si eliges el plan anual solo es para obtener el 35% de descuento, no por obligación contractual.' },
-    { q: '¿Cómo funciona el pago?', a: 'Creas tu cuenta, eliges tu plan y pagas directamente desde el panel con tarjeta. Tu primer mes cuesta desde $19 y después se cobra el precio normal de tu plan. Los precios están en pesos mexicanos y recibes tu factura.' },
-    { q: '¿Qué pasa si necesito ayuda?', a: 'Tienes soporte en español por chat y WhatsApp. En el plan Clínica además cuentas con soporte prioritario y un onboarding dedicado para tu equipo.' },
-  ],
 };
+
+/**
+ * El texto de la 4.ª respuesta lleva el precio del primer mes: se compone en el
+ * componente con `firstMonthFrom` (plan_configs), NO escrito a mano.
+ * `a` puede ser función para eso.
+ */
+export const FAQ_ITEMS: { q: string; a: string | ((firstMonthFrom: string) => string) }[] = [
+  {
+    q: '¿Mis datos y los de mis pacientes están seguros?',
+    a: 'Sí. Tus datos viajan y se guardan cifrados, con respaldos diarios automáticos, verificación en dos pasos (2FA) para tu equipo y bitácora de auditoría para saber quién hizo qué.',
+  },
+  {
+    q: 'Hoy llevo todo en libreta o Excel, ¿es difícil migrar?',
+    a: 'No. Con "Importar mi clínica" subes tu Excel, revisas cómo se acomodan las columnas y confirmas; también hay migración asistida desde tu sistema anterior. En el plan Clínica el onboarding y la migración son dedicados.',
+  },
+  {
+    q: '¿Necesito instalar algo o comprar equipo especial?',
+    a: 'No. Todo funciona desde el navegador de cualquier computadora, tablet o celular — incluido el visor de radiografías CBCT y los modelos 3D. Sin instalaciones ni servidores propios.',
+  },
+  {
+    q: '¿Hay permanencia o contrato forzoso?',
+    a: (first) =>
+      `No. Pagas mes a mes en pesos y cancelas cuando quieras. Tu primer mes cuesta desde ${first} según el plan que elijas, y el plan anual tiene 35% de descuento si te conviene.`,
+  },
+  {
+    q: '¿Cómo funciona el bot de WhatsApp?',
+    a: 'Conectas el WhatsApp de tu clínica y el bot atiende 24/7: agenda citas en los espacios realmente libres, manda recordatorios, registra confirmaciones y hace recall de pacientes inactivos. Tú ves todo en el inbox del panel.',
+  },
+  {
+    q: '¿La IA hace diagnósticos por mí?',
+    a: 'No. La IA asiste: resalta hallazgos en radiografías, propone diagnósticos diferenciales y redacta notas para que tú las revises. La decisión clínica siempre es del doctor.',
+  },
+];
 
 export const FINAL_CTA = {
   title: 'Toma el control de tu clínica hoy mismo',
-  subtitle: 'Crea tu cuenta en minutos, importa tus pacientes y empieza a llenar tu agenda. Tu primer mes desde $19.',
+  /** El "$19" lo inyecta el componente desde plan_configs. */
+  subtitleLead: 'Crea tu cuenta en minutos, importa tus pacientes y empieza a llenar tu agenda. Tu primer mes desde ',
   ctaPrimary: 'Crear mi cuenta',
   ctaSecondary: 'Ver funciones',
   bullets: '✓ Datos cifrados · ✓ Respaldos diarios · ✓ Soporte en español',
@@ -375,20 +304,15 @@ export const FOOTER = {
   blurb: 'El software de gestión para clínicas dentales en México. Todo en un solo lugar, en español y en pesos.',
   // El footer es un superconjunto del nav, no un espejo: arranca de NAV.links
   // (anclas + Blog) y añade las rutas de SEO que a propósito NO están en el
-  // menú para no alargarlo. Si algún día vuelven a NAV.links hay que quitarlas
-  // de aquí, o el footer las pintaría dos veces (key={l.href} en footer.tsx).
-  // Ambos consumidores normalizan con navHref(): las anclas salen como
-  // "/#precios" y las rutas ("/blog", "/casos-de-uso") tal cual.
+  // menú para no alargarlo. Ambos consumidores normalizan con navHref().
   product: [
     ...NAV.links,
     { label: 'Casos de uso', href: '/casos-de-uso' },
     { label: 'Herramientas gratuitas', href: '/herramientas' },
   ],
-  // Grupo "Funciones": las 8 páginas de producto por módulo
-  // (/software-agenda-dental, /expediente-clinico-dental, …). Viven SÓLO aquí a
-  // propósito: el menú de navegación NO cambia (NAV.links se queda igual) para
-  // no alargarlo. El nombre y el slug salen de src/lib/producto/data.ts, así que
-  // no hay copia que se desincronice.
+  // Grupo "Funciones": las 8 páginas de producto por módulo. El nombre y el
+  // slug salen de src/lib/producto/data.ts, así que no hay copia que se
+  // desincronice.
   funciones: PRODUCTO_SLUGS.map((slug) => ({
     label: PRODUCTO_MODULES[slug].name,
     href: `/${slug}`,

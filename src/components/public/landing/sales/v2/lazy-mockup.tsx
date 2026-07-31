@@ -3,80 +3,46 @@
 import dynamic from "next/dynamic";
 import { useEffect, useRef, useState } from "react";
 import type { ComponentType } from "react";
+import { MOCK_BOX } from "./mock-box";
 
 /**
  * Mockups del panel montados SOLO cuando el usuario se acerca a ellos.
  *
- * POR QUÉ: los mockups son server components y su DOM completo viajaba en el
- * HTML inicial y ADEMÁS duplicado dentro del payload RSC (self.__next_f), que
- * era el 54% de los 353 KB del home. Con `ssr: false` desaparecen de los dos
- * sitios y bajan en un chunk aparte al hacer scroll.
+ * POR QUÉ: los 6 mockups de "Funciones" son server components y su DOM completo
+ * viajaba en el HTML inicial y ADEMÁS duplicado dentro del payload RSC
+ * (self.__next_f), que es más de la mitad del peso del home. Con `ssr: false`
+ * desaparecen de los dos sitios y bajan en un chunk aparte al hacer scroll.
  *
- * EL DEL HERO NO SE DIFIERE: HeroDashboardMock es el elemento LCP y se queda
- * renderizado en el servidor (hero.tsx no se toca).
+ * EL PRISMA DEL HERO NO SE DIFIERE: es el bloque LCP y se queda en SSR.
  *
- * TAMPOCO PacientesMock: su alto salta en 13 escalones entre 300 y 760 px de
- * ancho (tres de ellos de 1 px) porque las barras de filtros reenvuelven el
- * texto; no hay forma de reservar el hueco exacto, así que sigue en SSR.
- *
- * CLS = 0: mientras no está montado, `<Reserve>` deja un hueco con el alto
- * EXACTO que ocupará el mockup real (tabla medida en Chrome, .dcv2-lazy--* en
- * landing-v2.css). El mismo hueco se reutiliza como `loading` de next/dynamic
- * para que tampoco se colapse en el intervalo entre "empieza el import" y
- * "el chunk ya está". Encima el rootMargin de 400px hace que el montaje
- * ocurra siempre con el mockup fuera de pantalla.
+ * CLS = 0: mientras no está montado, la propia caja (`.dcv2-lazy`) fija el alto
+ * EXACTO que ocupará el mockup real — tabla medida en Chrome, `.dcv2-lazy--*`
+ * en landing-v2.css. El mismo hueco se reutiliza como `loading` de next/dynamic
+ * para que tampoco se colapse entre "empieza el import" y "el chunk ya está".
+ * Encima el rootMargin de 400px hace que el montaje ocurra siempre con el
+ * mockup fuera de pantalla.
  */
 
-export type LazyMockupName =
-  | "agenda-semanal"
-  | "presupuesto"
-  | "visor-dicom-stl"
-  | "clinica-isometrica"
-  | "inbox-ia-split"
-  | "analytics"
-  | "equipo"
-  | "pagina-web";
-
-/** Hueco con el alto reservado del mockup (ver landing-v2.css). */
-function Reserve({ name }: { name: LazyMockupName }) {
-  return <div className={`dcv2-lazy__ph dcv2-lazy--${name}`} />;
-}
+export type LazyMockupName = "agenda" | "pacientes" | "presupuesto" | "cbct" | "importar" | "inbox";
 
 const LAZY: Record<LazyMockupName, ComponentType> = {
-  "agenda-semanal": dynamic(() => import("./mockups").then((m) => m.AgendaMock), {
-    ssr: false,
-    loading: () => <Reserve name="agenda-semanal" />,
-  }),
-  "presupuesto": dynamic(() => import("./mockups").then((m) => m.PresupuestoMock), {
-    ssr: false,
-    loading: () => <Reserve name="presupuesto" />,
-  }),
-  "visor-dicom-stl": dynamic(() => import("./mockups").then((m) => m.DicomStlMock), {
-    ssr: false,
-    loading: () => <Reserve name="visor-dicom-stl" />,
-  }),
-  "clinica-isometrica": dynamic(() => import("./mockups").then((m) => m.ClinicaIsometricaMock), {
-    ssr: false,
-    loading: () => <Reserve name="clinica-isometrica" />,
-  }),
-  "inbox-ia-split": dynamic(() => import("./mockups").then((m) => m.InboxIaSplitMock), {
-    ssr: false,
-    loading: () => <Reserve name="inbox-ia-split" />,
-  }),
-  "analytics": dynamic(() => import("./mockups").then((m) => m.AnalyticsMock), {
-    ssr: false,
-    loading: () => <Reserve name="analytics" />,
-  }),
-  "equipo": dynamic(() => import("./mockups").then((m) => m.EquipoMock), {
-    ssr: false,
-    loading: () => <Reserve name="equipo" />,
-  }),
-  "pagina-web": dynamic(() => import("./mockups").then((m) => m.PaginaWebMock), {
-    ssr: false,
-    loading: () => <Reserve name="pagina-web" />,
-  }),
+  agenda: dynamic(() => import("./mockups").then((m) => m.AgendaMock), { ssr: false }),
+  pacientes: dynamic(() => import("./mockups").then((m) => m.PacientesMock), { ssr: false }),
+  presupuesto: dynamic(() => import("./mockups").then((m) => m.PresupuestoMock), { ssr: false }),
+  cbct: dynamic(() => import("./mockups").then((m) => m.CbctMock), { ssr: false }),
+  importar: dynamic(() => import("./mockups").then((m) => m.ImportarMock), { ssr: false }),
+  inbox: dynamic(() => import("./mockups").then((m) => m.InboxIaMock), { ssr: false }),
 };
 
+/**
+ * Caja del mockup.
+ *
+ * `.dcv2-lazy` es el CONTENEDOR de las container queries; `.dcv2-lazy__h`
+ * lleva el `min-height` reservado y envuelve SIEMPRE al mockup (montado o no).
+ * Como el alto reservado se redondea hacia ARRIBA, al montar el mockup la caja
+ * ya medía lo mismo o más → no se mueve ni un píxel, ni siquiera si el alto
+ * real varía un poco con el devicePixelRatio o con el ancho del scrollbar.
+ */
 export function LazyMockup({ name }: { name: LazyMockupName }) {
   const ref = useRef<HTMLDivElement>(null);
   const [show, setShow] = useState(false);
@@ -97,7 +63,7 @@ export function LazyMockup({ name }: { name: LazyMockupName }) {
         }
       },
       // 400px de margen: cuando el mockup entra en pantalla ya está pintado,
-      // y el cambio de alto (si lo hubiera) ocurre fuera del viewport.
+      // y cualquier ajuste de alto ocurre fuera del viewport.
       { rootMargin: "400px 0px" },
     );
     io.observe(el);
@@ -106,8 +72,8 @@ export function LazyMockup({ name }: { name: LazyMockupName }) {
 
   const Mock = LAZY[name];
   return (
-    <div ref={ref} className="dcv2-lazy">
-      {show ? <Mock /> : <Reserve name={name} />}
+    <div ref={ref} className={`dcv2-lazy dcv2-lazy--${name}`} style={MOCK_BOX}>
+      <div className="dcv2-lazy__h">{show ? <Mock /> : null}</div>
     </div>
   );
 }
