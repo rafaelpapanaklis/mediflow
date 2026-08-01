@@ -4,6 +4,7 @@
 // Solo se vincula: (a) por email VERIFICADO idéntico, o (b) el Patient que la
 // propia sesión crea al reservar.
 import { prisma } from "@/lib/prisma";
+import { nextPatientNumber, withPatientNumberRetry } from "@/lib/patients/next-patient-number";
 
 /**
  * Auto-vincula todos los Patient (no borrados) cuyo email coincida exacto
@@ -114,10 +115,11 @@ export async function resolveBookingPatient(
 
   // 3. Crear Patient nuevo. Transacción CORTA con el mismo row-lock y formato
   //    de patientNumber que /api/public/book (serializa creates por clínica).
-  const patient = await prisma.$transaction(async (tx) => {
+  // El retry envuelve al $transaction (no al revés): una tx abortada por P2002
+  // ya no admite queries, así que cada intento abre transacción nueva.
+  const patient = await withPatientNumberRetry(() => prisma.$transaction(async (tx) => {
     await tx.$executeRaw`SELECT 1 FROM clinics WHERE id = ${clinicId} FOR UPDATE`;
-    const count = await tx.patient.count({ where: { clinicId } });
-    const patientNumber = `P${String(count + 1).padStart(4, "0")}`;
+    const patientNumber = await nextPatientNumber(clinicId, tx);
     return tx.patient.create({
       data: {
         clinicId,
@@ -129,7 +131,7 @@ export async function resolveBookingPatient(
         primaryDoctorId: primaryDoctorId ?? null,
       },
     });
-  });
+  }));
 
   await createLinkIgnoringDuplicate(accountId, patient.id, clinicId);
   return { patientId: patient.id, created: true };

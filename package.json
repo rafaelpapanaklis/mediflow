@@ -21,6 +21,7 @@
     "test:wa-booking": "tsx --test src/lib/whatsapp/bot/__tests__/booking.test.ts",
     "test:inbox": "tsx --test src/lib/inbox/__tests__/inbox-send.test.ts",
     "test:audit": "tsx --test src/lib/admin/audit-core.test.ts",
+    "test:patient-number": "tsx --test src/lib/patients/__tests__/next-patient-number-core.test.ts",
     "test:proration": "tsx --test src/lib/billing/proration.test.ts",
     "test:billing": "tsx --test src/lib/billing/proration.test.ts src/lib/billing/stripe-contract.test.ts src/lib/billing/webhook-decisions.test.ts src/lib/billing/manual-upgrade-diff.test.ts src/lib/billing/billing-guards.test.ts"
   },

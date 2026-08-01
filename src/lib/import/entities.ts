@@ -7,6 +7,8 @@
 
 import { prisma } from "@/lib/prisma";
 import { getPatientQuota } from "@/lib/patient-quota";
+import { lastPatientFolio } from "@/lib/patients/next-patient-number";
+import { formatPatientNumber } from "@/lib/patients/next-patient-number-core";
 import type { PreviewRow } from "./types";
 import {
   BATCH,
@@ -85,18 +87,22 @@ function resolveByName(value: any, byName: Map<string, string[]>, label: string)
 /**
  * Inserción por lotes con numeración secuencial (patientNumber / invoiceNumber) y
  * reintento ante carrera de unicidad (P2002). Devuelve el total creado.
+ *
+ * `lastSeq` devuelve el ÚLTIMO número ya emitido (no el conteo de filas): en un
+ * lote de N el i-ésimo toma `lastSeq + 1 + i`, así que ni colisiona consigo
+ * mismo ni reasigna folios liberados por bajas definitivas.
  */
 async function insertNumbered(args: {
   rows: PreviewRow[];
-  count: () => Promise<number>;
+  lastSeq: () => Promise<number>;
   numberField: string;
   format: (seq: number) => string;
   build: (slice: PreviewRow[]) => any[];
   create: (data: any[]) => Promise<{ count: number }>;
 }): Promise<number> {
-  const { rows, count, numberField, format, build, create } = args;
+  const { rows, lastSeq, numberField, format, build, create } = args;
   let created = 0;
-  const base = await count();
+  const base = await lastSeq();
   rows.forEach((r, i) => { r.data[numberField] = format(base + 1 + i); });
   for (let i = 0; i < rows.length; i += BATCH) {
     const slice = rows.slice(i, i + BATCH);
@@ -105,18 +111,18 @@ async function insertNumbered(args: {
     } catch (e: any) {
       if (e?.code === "P2002") {
         // Carrera de numeración: renumera el slice y reintenta una vez en bloque.
-        const fresh = await count();
+        const fresh = await lastSeq();
         slice.forEach((r, j) => { r.data[numberField] = format(fresh + 1 + j); });
         try {
           created += (await create(build(slice))).count;
         } catch {
-          created += await insertSliceByRow(slice, { count, numberField, format, build, create });
+          created += await insertSliceByRow(slice, { lastSeq, numberField, format, build, create });
         }
       } else {
         // Error de DB ≠ P2002 (p. ej. FK P2003 si borraron patient/doctorId entre
         // dry-run y commit): NO abortamos el lote. Aislamos fila por fila para
         // insertar las válidas y marcar SOLO la mala como error (se reporta).
-        created += await insertSliceByRow(slice, { count, numberField, format, build, create });
+        created += await insertSliceByRow(slice, { lastSeq, numberField, format, build, create });
       }
     }
   }
@@ -149,14 +155,14 @@ function markRowError(r: PreviewRow, e: any) {
 async function insertSliceByRow(
   slice: PreviewRow[],
   args: {
-    count: () => Promise<number>;
+    lastSeq: () => Promise<number>;
     numberField: string;
     format: (seq: number) => string;
     build: (slice: PreviewRow[]) => any[];
     create: (data: any[]) => Promise<{ count: number }>;
   },
 ): Promise<number> {
-  const { count, numberField, format, build, create } = args;
+  const { lastSeq, numberField, format, build, create } = args;
   let made = 0;
   for (const r of slice) {
     try {
@@ -164,7 +170,7 @@ async function insertSliceByRow(
     } catch (e: any) {
       if (e?.code === "P2002") {
         try {
-          const fresh = await count();
+          const fresh = await lastSeq();
           r.data[numberField] = format(fresh + 1);
           made += (await create(build([r]))).count;
         } catch (e2: any) {
@@ -334,9 +340,11 @@ export const patientsHandler: EntityHandler = {
 
     const created = await insertNumbered({
       rows: toInsert,
-      count: () => prisma.patient.count({ where: { clinicId } }),
+      // Máximo folio emitido, NO el conteo: con huecos por bajas definitivas el
+      // count+1 reasignaba un folio ya usado y el lote entero moría en P2002.
+      lastSeq: async () => (await lastPatientFolio(clinicId)) ?? 0,
       numberField: "patientNumber",
-      format: (seq) => `P${String(seq).padStart(4, "0")}`,
+      format: formatPatientNumber,
       build: (slice) => slice.map((r) => ({
         clinicId,
         patientNumber: r.data.patientNumber,
@@ -540,7 +548,7 @@ export const balancesHandler: EntityHandler = {
     if (debtRows.length > 0) {
       created += await insertNumbered({
         rows: debtRows,
-        count: () => prisma.invoice.count({ where: { clinicId } }),
+        lastSeq: () => prisma.invoice.count({ where: { clinicId } }),
         numberField: "invoiceNumber",
         format: (seq) => `MF-${String(seq).padStart(4, "0")}`,
         build: (slice) => slice.map((r) => {

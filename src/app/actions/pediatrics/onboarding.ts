@@ -6,6 +6,11 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { getAuthContext } from "@/lib/auth-context";
 import { isPediatric } from "@/lib/pediatrics/age";
+import {
+  nextPatientNumber,
+  withPatientNumberRetry,
+  PatientNumberExhaustedError,
+} from "@/lib/patients/next-patient-number";
 import { DEFAULT_PEDIATRICS_CUTOFF_YEARS } from "@/lib/pediatrics/permissions";
 import { PEDIATRIC_AUDIT_ACTIONS } from "@/lib/pediatrics/audit";
 import { auditPediatric, fail, isFailure, ok, type ActionResult } from "./_helpers";
@@ -91,9 +96,10 @@ export async function createPediatricPatient(
   }
 
   try {
-    const result = await prisma.$transaction(async (tx) => {
-      const count = await tx.patient.count({ where: { clinicId: ctx.clinicId } });
-      const patientNumber = `P${String(count + 1).padStart(4, "0")}`;
+    // El retry envuelve al $transaction (no al revés): una tx abortada por P2002
+    // ya no admite queries, así que cada intento abre transacción nueva.
+    const result = await withPatientNumberRetry(() => prisma.$transaction(async (tx) => {
+      const patientNumber = await nextPatientNumber(ctx.clinicId, tx);
 
       const patient = await tx.patient.create({
         data: {
@@ -159,7 +165,7 @@ export async function createPediatricPatient(
       }
 
       return { patientId: patient.id, guardianId: guardian.id, pediatricRecordId };
-    });
+    }));
 
     // Audit logs fuera de la transacción (no son críticos al rollback).
     await Promise.all([
@@ -186,6 +192,8 @@ export async function createPediatricPatient(
     return ok(result);
   } catch (e) {
     console.error("[createPediatricPatient]", e);
+    // Carrera de folio agotada: el mensaje concreto ayuda más que el genérico.
+    if (e instanceof PatientNumberExhaustedError) return fail(e.message);
     return fail("No se pudo crear el paciente. Intenta de nuevo.");
   }
 }

@@ -157,7 +157,12 @@ export function NewPatientModal({ open, onClose, onCreated, initialName, initial
           });
           return;
         }
-        throw new Error(data?.error ?? t("shell.newPatient.errCreate"));
+        // Si el backend no mandó `error` (500 con cuerpo vacío), al menos el
+        // status: "Error al crear paciente" a secas no dice NADA y el usuario
+        // no puede reportar qué pasó.
+        throw new Error(
+          data?.error ?? `${t("shell.newPatient.errCreate")} (HTTP ${res.status})`,
+        );
       }
       const patient = data;
       onCreated(patient);

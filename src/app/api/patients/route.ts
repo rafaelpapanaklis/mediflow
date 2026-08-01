@@ -4,6 +4,11 @@ import { getAuthContext, buildPatientWhere } from "@/lib/auth-context";
 import { prisma } from "@/lib/prisma";
 import { getPatientVisibility } from "@/lib/branches";
 import { getPatientQuota } from "@/lib/patient-quota";
+import {
+  nextPatientNumber,
+  withPatientNumberRetry,
+  PatientNumberExhaustedError,
+} from "@/lib/patients/next-patient-number";
 import { validateCurpRecord, type CurpStatusValue } from "@/lib/validators/curp";
 import { normalizeVisibleUserIds } from "@/lib/patient-visibility";
 import { logMutation } from "@/lib/audit";
@@ -561,11 +566,6 @@ export async function POST(req: NextRequest) {
   }
 
   const body = await req.json();
-  // OJO: este count NO es el del cupo (ese es quota.used, que excluye borrados).
-  // Es el folio secuencial P0001, P0002… y cuenta TODAS las filas de la clínica
-  // a propósito, para no reasignar un número ya emitido.
-  const count = await prisma.patient.count({ where: { clinicId: ctx.clinicId } });
-  const patientNumber = `P${String(count + 1).padStart(4, "0")}`;
 
   // NOM-024 identificación: validar coherencia curp/curpStatus/passportNo.
   const curpStatusRaw = body.curpStatus ?? "PENDING";
@@ -591,39 +591,64 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: err?.message ?? "visibleUserIds inválido" }, { status: 400 });
   }
 
-  const patient = await prisma.patient.create({
-    data: {
+  // El folio sale del MÁXIMO emitido, no de un COUNT: con huecos por bajas
+  // definitivas el count+1 apuntaba a un número ya usado → P2002 → 500 mudo.
+  // El retry cubre además dos altas simultáneas de la misma clínica.
+  let patient;
+  try {
+    patient = await withPatientNumberRetry(async () => {
+      const patientNumber = await nextPatientNumber(ctx.clinicId);
+      return prisma.patient.create({
+        data: {
+          clinicId: ctx.clinicId,
+          patientNumber,
+          firstName: body.firstName,
+          lastName: body.lastName,
+          email: body.email ?? null,
+          phone: body.phone ?? null,
+          dob: body.dob ? new Date(body.dob) : null,
+          gender: body.gender ?? "OTHER",
+          bloodType: body.bloodType ?? null,
+          address: body.address ?? null,
+          notes: body.notes ?? null,
+          allergies: body.allergies ?? [],
+          chronicConditions: body.chronicConditions ?? [],
+          tags: body.tags ?? [],
+          isChild: body.isChild ?? false,
+          primaryDoctorId: body.primaryDoctorId ?? (ctx.isDoctor ? ctx.userId : null),
+          curp:        body.curp ? String(body.curp).toUpperCase().trim() : null,
+          curpStatus,
+          passportNo:  body.passportNo ? String(body.passportNo).trim() : null,
+          familyHistory:                  body.familyHistory ?? null,
+          personalNonPathologicalHistory: body.personalNonPathologicalHistory ?? null,
+          // Contacto de emergencia (anamnesis WS1-T2)
+          emergencyContactName:     body.emergencyContactName ? String(body.emergencyContactName).trim() : null,
+          emergencyContactPhone:    body.emergencyContactPhone ? String(body.emergencyContactPhone).trim() : null,
+          emergencyContactRelation: body.emergencyContactRelation ? String(body.emergencyContactRelation).trim() : null,
+          // CRM — fuente de adquisición + etapa de ciclo de vida.
+          source:         body.source ? String(body.source).trim() : null,
+          lifecycleStage: body.lifecycleStage === "prospect" ? "prospect" : "patient",
+          visibleUserIds,
+        },
+      });
+    });
+  } catch (err: any) {
+    // NUNCA un 500 con cuerpo vacío: el modal mostraba "Error al crear paciente"
+    // sin decir nada y el folio duplicado era invisible desde el navegador.
+    console.error("[api/patients][POST] create failed", {
       clinicId: ctx.clinicId,
-      patientNumber,
-      firstName: body.firstName,
-      lastName: body.lastName,
-      email: body.email ?? null,
-      phone: body.phone ?? null,
-      dob: body.dob ? new Date(body.dob) : null,
-      gender: body.gender ?? "OTHER",
-      bloodType: body.bloodType ?? null,
-      address: body.address ?? null,
-      notes: body.notes ?? null,
-      allergies: body.allergies ?? [],
-      chronicConditions: body.chronicConditions ?? [],
-      tags: body.tags ?? [],
-      isChild: body.isChild ?? false,
-      primaryDoctorId: body.primaryDoctorId ?? (ctx.isDoctor ? ctx.userId : null),
-      curp:        body.curp ? String(body.curp).toUpperCase().trim() : null,
-      curpStatus,
-      passportNo:  body.passportNo ? String(body.passportNo).trim() : null,
-      familyHistory:                  body.familyHistory ?? null,
-      personalNonPathologicalHistory: body.personalNonPathologicalHistory ?? null,
-      // Contacto de emergencia (anamnesis WS1-T2)
-      emergencyContactName:     body.emergencyContactName ? String(body.emergencyContactName).trim() : null,
-      emergencyContactPhone:    body.emergencyContactPhone ? String(body.emergencyContactPhone).trim() : null,
-      emergencyContactRelation: body.emergencyContactRelation ? String(body.emergencyContactRelation).trim() : null,
-      // CRM — fuente de adquisición + etapa de ciclo de vida.
-      source:         body.source ? String(body.source).trim() : null,
-      lifecycleStage: body.lifecycleStage === "prospect" ? "prospect" : "patient",
-      visibleUserIds,
-    },
-  });
+      code: err?.code,
+      meta: err?.meta,
+      stack: err?.stack,
+    });
+    if (err instanceof PatientNumberExhaustedError) {
+      return NextResponse.json({ error: err.message, code: err.code }, { status: 409 });
+    }
+    return NextResponse.json(
+      { error: err?.message ?? "No se pudo crear el paciente", code: err?.code ?? null },
+      { status: 500 },
+    );
+  }
 
   await logMutation({
     req,
