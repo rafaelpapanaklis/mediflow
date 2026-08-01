@@ -6,7 +6,7 @@ import { useState } from "react";
 import {
   LayoutDashboard, Building2, CreditCard, TrendingDown, CheckSquare,
   BarChart3, Megaphone, Ticket, Settings, LogOut, Menu, X, Bug, Truck, Handshake, Coins, Star,
-  LifeBuoy, FlaskConical, Users, KeyRound, ScrollText, LineChart, Newspaper,
+  LifeBuoy, FlaskConical, Users, KeyRound, ScrollText, LineChart, Newspaper, UserRound,
 } from "lucide-react";
 import { BadgeNew } from "@/components/ui/design-system/badge-new";
 import { AvatarNew } from "@/components/ui/design-system/avatar-new";
@@ -29,6 +29,7 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/admin/payments",     label: "Pagos",        icon: CreditCard,      section: "main"   },
   { href: "/admin/ai-billing",   label: "Tesorería IA", icon: Coins,           section: "main"   },
   { href: "/admin/soporte",      label: "Soporte",      icon: LifeBuoy,        section: "main"   },
+  { href: "/admin/account-managers", label: "Managers",  icon: UserRound,      section: "main"   },
   { href: "/admin/churn",        label: "Retención",    icon: TrendingDown,    section: "main"   },
   { href: "/admin/onboarding",   label: "Onboarding",   icon: CheckSquare,     section: "main"   },
   { href: "/admin/analytics",    label: "Analytics",    icon: LineChart,       section: "growth" },

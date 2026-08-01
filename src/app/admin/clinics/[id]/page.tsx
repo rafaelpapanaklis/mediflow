@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { isStripeConfigured, STRIPE_SETUP_INSTRUCTIONS } from "@/lib/stripe";
 import { stripClinicSecrets } from "@/lib/clinic-secrets";
+import { formatWhatsappDisplay, type AccountManagerDTO } from "@/lib/account-manager/types";
 import { AdminClinicDetailClient } from "./clinic-detail-client";
 
 export const metadata: Metadata = { title: "Detalle Clínica — Admin DaleControl" };
@@ -29,6 +30,34 @@ export default async function AdminClinicDetailPage({ params }: { params: { id: 
   });
 
   if (!clinic) notFound();
+
+  // Manager de cuenta asignado. Query APARTE y en try/catch: si
+  // sql/account-managers.sql todavía no está aplicado, la ficha de la clínica
+  // se sigue viendo entera y el bloque cae al estado "sin manager".
+  let accountManager: AccountManagerDTO | null = null;
+  try {
+    const withManager = await prisma.clinic.findUnique({
+      where: { id: params.id },
+      select: {
+        accountManager: {
+          select: {
+            id: true, name: true, photoUrl: true, whatsappE164: true, whatsappDisplay: true,
+            days: true, startMinutes: true, endMinutes: true, timezone: true, status: true,
+          },
+        },
+      },
+    });
+    const m = withManager?.accountManager;
+    if (m) {
+      accountManager = {
+        ...m,
+        photoUrl: m.photoUrl ?? null,
+        whatsappDisplay: m.whatsappDisplay || formatWhatsappDisplay(m.whatsappE164),
+      };
+    }
+  } catch (e) {
+    console.warn("[admin/clinics/:id] manager de cuenta no disponible:", e);
+  }
 
   // Para la modal de eliminar — total de clínicas para decidir si está permitido.
   const totalClinics = await prisma.clinic.count();
@@ -83,6 +112,7 @@ export default async function AdminClinicDetailPage({ params }: { params: { id: 
       totalClinicsInSystem={totalClinics}
       moduleCatalog={moduleCatalog}
       clinicModuleRows={clinicModuleRows}
+      accountManager={accountManager}
     />
   );
 }

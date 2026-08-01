@@ -19,6 +19,8 @@ import { fmtMXN, formatRelativeDate } from "@/lib/format";
 import type { TemplateChannel } from "@/lib/admin-templates";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import { FALLBACK_PLAN_PRICES_MXN } from "@/lib/plan-shared";
+import { ClinicAccountManagerBlock } from "@/components/admin/clinic-account-manager-block";
+import type { AccountManagerDTO } from "@/lib/account-manager/types";
 
 interface AdminNote {
   id: string;
@@ -48,6 +50,8 @@ interface Props {
   totalClinicsInSystem: number;
   moduleCatalog:        ModuleCatalogRow[];
   clinicModuleRows:     ClinicModuleRow[];
+  /** Manager de cuenta asignado. null = sin asignar (o SQL aún sin aplicar). */
+  accountManager:       AccountManagerDTO | null;
 }
 
 export function AdminClinicDetailClient({
@@ -60,6 +64,7 @@ export function AdminClinicDetailClient({
   totalClinicsInSystem,
   moduleCatalog,
   clinicModuleRows,
+  accountManager,
 }: Props) {
   const askConfirm = useConfirm();
   const [saving, setSaving]   = useState(false);
@@ -462,6 +467,11 @@ export function AdminClinicDetailClient({
               </div>
             </CardNew>
           </div>
+
+          {/* Manager de cuenta — a quién le escribe esta clínica por WhatsApp.
+              Va en Resumen (no en un tab propio) para que se vea de entrada:
+              es un dato de un vistazo, no una pantalla de configuración. */}
+          <ClinicAccountManagerBlock clinicId={clinic.id} initialManager={accountManager} />
 
           {/* Zona de peligro */}
           <div
