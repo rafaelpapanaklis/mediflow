@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { generateReferralCode } from "@/lib/affiliates";
+import {
+  sendAffiliateApplicationAdminEmail,
+  sendAffiliateApplicationReceivedEmail,
+} from "@/lib/affiliate-emails";
 import { createClient as createAdminClient } from "@supabase/supabase-js";
 
 // Admin client (mismo patrón que src/app/api/laboratorios/auth/register/route.ts
@@ -122,8 +126,9 @@ export async function POST(req: Request) {
   const referralCode = await generateReferralCode();
 
   // g) Crear Affiliate + AffiliateUser en una transacción.
+  let newAffiliateId = "";
   try {
-    await prisma.$transaction(async (tx) => {
+    newAffiliateId = await prisma.$transaction(async (tx) => {
       const affiliate = await tx.affiliate.create({
         data: {
           name,
@@ -143,6 +148,8 @@ export async function POST(req: Request) {
           isActive: true,
         },
       });
+
+      return affiliate.id;
     });
   } catch (err) {
     // h) Rollback del usuario de Supabase (best-effort) si Prisma falló.
@@ -157,6 +164,20 @@ export async function POST(req: Request) {
     );
   }
 
-  // i) Éxito.
+  // i) Avisos por correo. Fire-and-forget (mismo patrón que el resto del
+  // programa): las funciones ya llevan su try/catch interno y jamás tiran, y
+  // el `.catch()` cubre además el rechazo de la promesa. Un fallo de Resend no
+  // puede tumbar un registro que ya quedó guardado.
+  if (newAffiliateId) {
+    void sendAffiliateApplicationAdminEmail({
+      affiliateId: newAffiliateId,
+      name,
+      email,
+      payoutMethod: payoutMethod || null,
+    }).catch(() => {});
+  }
+  void sendAffiliateApplicationReceivedEmail({ name, email }).catch(() => {});
+
+  // j) Éxito.
   return NextResponse.json({ ok: true }, { status: 201 });
 }

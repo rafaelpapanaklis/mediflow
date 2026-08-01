@@ -2900,3 +2900,97 @@ ingresos: lo que ganas depende de cuántas clínicas recomiendes y de que sigan 
   paciente" y el selector de idioma). Con el panel en inglés se verá en español, como ellas.
 - `SELLER_PAYOUT_METHODS` admite un tercer método `"OTHER"` que ni la landing ni los términos
   mencionan (sólo SPEI y PayPal). Si se usa de verdad, hay que añadirlo a los términos §5.
+
+---
+
+## [Afiliados · Correos del alta] — 2026-08-01
+
+Con `/afiliados` recién publicada (`5bb37799`) el hueco empezaba a costar altas reales: nadie se
+enteraba de nada. Rafael tenía que entrar a `/admin/affiliates` de casualidad para ver si alguien se
+había registrado, y el afiliado no recibía **ningún** correo — ni al registrarse, ni al ser aprobado,
+ni al ser rechazado. Se registraba, veía `/afiliados/pendiente` y quedaba en silencio para siempre.
+
+Ola chica: **sin SQL, sin cambios de schema, sin campos nuevos en `Affiliate`**. Los 4 correos viven
+en `src/lib/affiliate-emails.ts` siguiendo el patrón de los 5 que ya existían.
+
+### Los 4 correos
+
+| # | Función | Se dispara | Destinatario |
+|---|---|---|---|
+| 1 | `sendAffiliateApplicationAdminEmail` | POST `/api/afiliados/auth/register` | `ADMIN_NOTIFY_EMAIL` |
+| 2 | `sendAffiliateApplicationReceivedEmail` | el mismo registro | el solicitante |
+| 3 | `sendAffiliateApprovedEmail` | PATCH `/api/admin/affiliates/[id]` → `APPROVED` | el afiliado |
+| 4 | `sendAffiliateRejectedEmail` | el mismo PATCH → `REJECTED` | el afiliado |
+
+**1. "Nuevo afiliado esperando aprobación: <nombre>"** — nombre, correo, método de pago declarado,
+fecha en hora de Ciudad de México, y **cuántas solicitudes hay en cola** (`count` de PENDING; si el
+count falla el correo sale igual sin ese dato). Botón directo a `/admin/affiliates/<id>`.
+
+**2. "Recibimos tu solicitud ✅"** — dice explícitamente que la revisión es **a mano** y no
+automática, que la respuesta llega por correo **"en los próximos días hábiles"** (sin prometer un
+plazo que no se cumple) y que si lo aprobamos, en ese correo van su enlace y su código. Enlaza
+`/terminos-afiliados` en el cuerpo y `/afiliados` en el botón.
+
+**3. "¡Tu cuenta de afiliado está aprobada! 🎉"** — el que decide si el afiliado empieza a vender.
+Es accionable, no un aviso: su enlace `/socio/<slug>`, su código de referido en monoespaciada, los
+montos por plan **leídos en vivo** de `affiliate_payout_config`, el recordatorio de que la comisión
+arranca en el **segundo cobro** (ordinal derivado de `startAtInvoiceNo`, no escrito) y botón a
+`/afiliados/login`.
+
+**4. "Sobre tu solicitud de afiliado"** — corto y respetuoso, sin humillar y **sin inventar un
+motivo**: `Affiliate` no tiene `rejectedReason` y no se agregó ninguna columna. Deja
+`hola@dalecontrol.com` para quien quiera preguntar. Es el único sin botón.
+
+### Detalles que importan
+
+- **Ni un monto escrito a mano.** El correo de aprobación usa `getPublicOffer()`, la misma fuente que
+  la landing. Y va más lejos: los montos **sólo se imprimen si `getPayoutConfig()` devolvió config
+  real Y el programa está en modo `"fixed"`**. Si la tabla no está aplicada (fallback a los defaults
+  del motor) o el programa está en `"pct"` (se paga un % del nivel, no los fijos), el correo sale
+  igual —con enlace y código— pero remite a `/afiliados` en vez de prometer montos que quizá no se
+  pagan. Es el riesgo que quedó anotado en la ola anterior, cerrado en el punto donde más dolería.
+- **Idempotencia.** El PATCH lee el `status` anterior en un `findUnique` propio y sólo manda correo
+  cuando `status !== prevStatus`. Un doble clic o un reintento no manda tres veces "tu cuenta está
+  aprobada". Ese select va **aparte** del de `payoutMode` a propósito: `status` es columna de siempre
+  y no puede caerse junto con `payout_mode` si esa columna faltara.
+- **Nada puede romper el flujo.** Las 4 funciones llevan su `try/catch` interno y jamás tiran; los
+  callers usan `void fn().catch(() => {})`, el mismo patrón que `sendAffiliatePayoutPaidEmail`. Un
+  fallo de Resend no tumba un registro ya guardado ni una aprobación ya escrita. Sin
+  `RESEND_API_KEY`, `sendEmail` cae a su stub que sólo loguea.
+- **Estos 4 NO consultan `AffiliatePrefs`.** Esas preferencias (`notifySignup` / `notifyConversion` /
+  `notifyPayout`) son para la actividad de referidos; un acuse de solicitud o un aviso de aprobación
+  son transaccionales —nadie se da de baja de saber si lo aprobaron— y además el afiliado ni siquiera
+  tiene panel donde configurarlas hasta que se le aprueba.
+- **`affiliateEmailHtml` creció de forma aditiva**: `extraBox` (segunda caja) y `cta` opcional. Al
+  omitirlos, el CTA histórico ("Ir a mi panel →") se conserva, así que **los 5 correos que ya existían
+  salen exactamente igual que antes**. No se refactorizó nada más.
+- **`SUSPENDED` no manda correo**, decisión deliberada: es una acción que Rafael toma sabiendo lo que
+  hace, y avisarla por correo automático invita a una discusión que conviene tener a mano. Si algún
+  día se quiere, el hueco está justo al lado del `REJECTED` en el PATCH.
+
+### Env var nueva
+
+**`ADMIN_NOTIFY_EMAIL`** — a dónde llega el aviso #1. **Es opcional**: sin ella el correo cae en
+`hola@dalecontrol.com`, así que **no hay que tocar Vercel para que funcione**. Agrégala sólo si
+quieres que las solicitudes lleguen a otra dirección (o a varias, si el proveedor lo permite).
+
+### Verificación
+
+- `npm run build` completo, **SIN pipe**, output entero leído → **verde**, sin errores de tipos.
+- Los `DATABASE_URL not found` del build son los de siempre (no hay `.env` local).
+
+### Cómo probar cada uno
+
+1. **#1 y #2 juntos** — regístrate en `/afiliados/registro` con un correo real. Deben llegar dos:
+   el aviso a `ADMIN_NOTIFY_EMAIL` (o a `hola@`) y el acuse al solicitante. Comprueba que el botón
+   del aviso abre la ficha correcta y que el contador de pendientes cuadra con `/admin/affiliates`.
+2. **#3** — en `/admin/affiliates`, aprueba esa solicitud. Revisa en el correo que **el enlace
+   `/socio/<slug>` abra de verdad**, que el código coincida con el de la ficha, y **que los montos
+   sean los tuyos y no los defaults** (40/90/250 y 350/650/1400 son la señal de que la config no se
+   está leyendo — ver la ola anterior).
+3. **Idempotencia** — vuelve a mandar el mismo PATCH de aprobación (o dale doble clic al botón). **No
+   debe llegar un segundo correo.** Es la prueba que más vale la pena hacer.
+4. **#4** — rechaza otra solicitud de prueba. Correo corto, sin motivo, sin botón.
+5. **A prueba de fallos** — con `RESEND_API_KEY` ausente o inválida, el registro y la aprobación
+   deben seguir funcionando igual (en los logs sale `[email stub]` o el error de Resend, pero la
+   operación se completa).

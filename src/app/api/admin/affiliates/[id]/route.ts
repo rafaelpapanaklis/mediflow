@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { logAdminGlobalEvent } from "@/lib/admin-audit";
 import { normalizePayoutMode, type PayoutMode } from "@/lib/affiliates/payout";
+import { sendAffiliateApprovedEmail, sendAffiliateRejectedEmail } from "@/lib/affiliate-emails";
 
 
 // Estados que el admin asigna a mano desde el panel. PENDING no se asigna
@@ -76,6 +77,19 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     before = prev ? normalizePayoutMode(prev.payoutMode) : null;
   }
 
+  // Estado ANTERIOR, en un select aparte del de payoutMode a propósito: `status`
+  // es columna de siempre y no puede caerse con ella si payout_mode faltara.
+  // Sirve para que el correo salga SOLO cuando el status cambia de verdad — un
+  // PATCH repetido (doble clic, reintento del cliente) no debe mandar tres veces
+  // "tu cuenta está aprobada".
+  let prevStatus: string | null = null;
+  if (wantsStatus) {
+    const prev = await prisma.affiliate
+      .findUnique({ where: { id: params.id }, select: { status: true } })
+      .catch(() => null);
+    prevStatus = prev?.status ?? null;
+  }
+
   try {
     const updated = await prisma.affiliate.update({ where: { id: params.id }, data });
 
@@ -85,6 +99,17 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
         action: status === "APPROVED" ? "approve" : status === "REJECTED" ? "reject" : "suspend",
         after: { status: updated.status, approvedAt: updated.approvedAt ?? null },
       });
+    }
+
+    // Aviso al afiliado, SOLO en la transición real de estado. Fire-and-forget:
+    // las funciones nunca tiran y el PATCH no puede fallar porque Resend falle.
+    // SUSPENDED no manda nada a propósito (ver ORQUESTA.md).
+    if (status && status !== prevStatus) {
+      if (status === "APPROVED") {
+        void sendAffiliateApprovedEmail({ affiliateId: params.id }).catch(() => {});
+      } else if (status === "REJECTED") {
+        void sendAffiliateRejectedEmail({ affiliateId: params.id }).catch(() => {});
+      }
     }
 
     if (payoutMode) {
