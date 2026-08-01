@@ -154,6 +154,12 @@ interface NavItemDef {
   // lo oculta SIEMPRE en el flujo normal; el sidebar lo renderiza sólo cuando
   // isExpired vía SUSPENDED_NAV_IDS. Se usa para "Facturación".
   suspendedOnly?: boolean;
+  // Color propio del ICONO (solo el icono; la etiqueta sigue el tratamiento
+  // normal). Debe ser un token del sistema, nunca un hex crudo. Al ir en el
+  // <svg> gana sobre el `color` heredado del item, así que se mantiene igual
+  // en reposo, hover y activo. Hoy solo lo usa "Soporte Técnico" para
+  // destacarlo del gris del resto.
+  iconColor?: string;
 }
 
 const NAV_ITEMS: NavItemDef[] = [
@@ -240,6 +246,11 @@ const NAV_ITEMS: NavItemDef[] = [
   { id: "landing",        section: "admin", label: "Página web",        href: "/dashboard/landing",       icon: Globe,          permission: "landing.view", moduleKey: "landing" },
   { id: "procedures",     section: "admin", label: "Procedimientos",    href: "/dashboard/procedures",    icon: ClipboardList,  permission: "procedures.view" },
   { id: "clinic-layout",  section: "admin", label: "Mi Clínica Visual", href: "/dashboard/clinic-layout", icon: Building2, adminOnly: true, permission: "clinicLayout.view" },
+  // Soporte Técnico: sin `permission` a propósito — cualquier usuario de la
+  // clínica puede levantar tickets hacia DaleControl. Va JUSTO ARRIBA de
+  // Configuración (y con `iconColor`) porque ahí vive el acceso directo al
+  // Manager de cuenta por WhatsApp: tiene que encontrarse de un vistazo.
+  { id: "soporte",        section: "admin", label: "Soporte Técnico",   href: "/dashboard/soporte",       icon: LifeBuoy, iconColor: "var(--success-strong)" },
   { id: "settings",       section: "admin", label: "Configuración",     href: "/dashboard/settings",      icon: Settings,       permission: "settings.view" },
   // Bitácora/Actividad: auditoría de la clínica. Solo ADMIN/dueño (adminOnly).
   { id: "auditoria",      section: "admin", label: "Bitácora",          href: "/dashboard/auditoria",     icon: ScrollText, adminOnly: true },
@@ -247,9 +258,6 @@ const NAV_ITEMS: NavItemDef[] = [
   // → shouldShowItem la oculta en el flujo normal). Lleva a la pantalla de pago /
   // activación. Sin `permission`: cualquier rol la ve, igual que Soporte.
   { id: "facturacion",    section: "admin", label: "Facturación",       href: "/dashboard/suspended",     icon: CreditCard, suspendedOnly: true },
-  // Soporte Técnico: sin `permission` a propósito — cualquier usuario de la
-  // clínica puede levantar tickets hacia DaleControl.
-  { id: "soporte",        section: "admin", label: "Soporte Técnico",   href: "/dashboard/soporte",       icon: LifeBuoy },
   { id: "resenas",        section: "admin", label: "Reseñas",           href: "/dashboard/resenas",       icon: Star, adminOnly: true },
 ];
 
@@ -562,7 +570,10 @@ export function Sidebar(props: SidebarProps) {
             e.currentTarget.style.color = "var(--text-2)";
           }}
         >
-          <Icon size={18} strokeWidth={1.75} aria-hidden style={{ flexShrink: 0 }} />
+          {/* item.iconColor (token, no hex) pinta SOLO el icono y va en el
+              propio <svg>, así que no lo pisan ni el hover ni el `color` del
+              estado activo — el item destaca siempre, no solo al pasar. */}
+          <Icon size={18} strokeWidth={1.75} aria-hidden style={{ flexShrink: 0, color: item.iconColor }} />
           {!collapsed && (
             <>
               <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis" }}>
