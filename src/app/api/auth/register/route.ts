@@ -8,6 +8,7 @@ import { sendWelcomeEmail } from "@/lib/email";
 import { SITE_URL } from "@/lib/seo";
 import { logError } from "@/lib/safe-log";
 import { resolveApprovedAffiliateByCode } from "@/lib/affiliates";
+import { ensureClinicTerms, effectiveAffiliateMode, getPayoutConfig } from "@/lib/affiliates/payout";
 import { sendAffiliateNewReferralEmail } from "@/lib/affiliate-emails";
 
 const CATEGORY_MAP: Record<string, string> = {
@@ -164,7 +165,7 @@ export async function POST(req: NextRequest) {
         if (ac) {
           const affiliate = await prisma.affiliate.findUnique({
             where: { id: ac.affiliateId },
-            select: { id: true, status: true, commissionPct: true, email: true },
+            select: { id: true, status: true, commissionPct: true, email: true, payoutMode: true },
           });
           if (
             affiliate &&
@@ -175,6 +176,7 @@ export async function POST(req: NextRequest) {
               id: affiliate.id,
               commissionPct: affiliate.commissionPct,
               email: affiliate.email,
+              payoutMode: affiliate.payoutMode,
             };
             conversionSource = "coupon";
           }
@@ -218,6 +220,20 @@ export async function POST(req: NextRequest) {
             couponId: couponValid ? couponRow.id : null,
           },
         });
+      } catch {}
+
+      // Términos CONGELADOS de la clínica (motor de comisiones): con qué
+      // modalidad se le pagará al afiliado por ESTA clínica. Se fija aquí y ya
+      // no cambia aunque el afiliado cambie la suya después. Best-effort: si
+      // sql/afiliados-comisiones.sql aún no corre, el webhook los crea como
+      // backstop. Nunca rompe el alta.
+      try {
+        const payoutCfg = await getPayoutConfig();
+        await ensureClinicTerms(
+          clinic.id,
+          referringAffiliate.id,
+          effectiveAffiliateMode(referringAffiliate.payoutMode, payoutCfg),
+        );
       } catch {}
     }
 

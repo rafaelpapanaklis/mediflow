@@ -11,6 +11,15 @@
  */
 
 import { createHash } from "crypto";
+// Matemática PURA del motor de comisiones (sin Prisma → este archivo sigue
+// siendo importable desde client components).
+import {
+  fixedAmountFor,
+  normalizePlanKey,
+  type PayoutConfig,
+  type PayoutMode,
+  type ProgramMode,
+} from "./payout-core";
 
 // ── Rango de la serie temporal ───────────────────────────────────────────
 
@@ -85,9 +94,24 @@ export interface AffiliateCommissionsSummary {
   totalCount: number;
   /** MRR estimado de sus clínicas referidas pagando (precio mensual). */
   mrrMxn: number;
-  /** Proyección simple: mrrMxn * commissionPct / 100. */
+  /**
+   * Lo que el afiliado gana al mes con sus clínicas pagando de hoy.
+   * Según `projectionBasis`: suma de los fijos recurrentes ("fixed") o
+   * mrrMxn * commissionPct / 100 ("pct", el cálculo histórico).
+   */
   projectedMonthlyMxn: number;
+  /** % del nivel vigente. Solo manda cuando programMode === "pct". */
   commissionPct: number;
+  /** "fixed" = el programa paga montos fijos por plan; "pct" = % por nivel. */
+  programMode: ProgramMode;
+  /** Modalidad vigente del afiliado para sus PRÓXIMOS referidos. */
+  payoutMode: PayoutMode;
+  /** De dónde sale projectedMonthlyMxn: "fixed" (suma de fijos) o "pct" (mrr × %). */
+  projectionBasis: ProgramMode;
+  /** Clínicas pagando con modalidad congelada recurrente (suman cada mes). */
+  recurringClinics: number;
+  /** Clínicas pagando con modalidad congelada de pago único (no suman al mes). */
+  onetimeClinics: number;
 }
 
 export interface AffiliateStatsResponse {
@@ -132,6 +156,31 @@ export function clinicMonthlyMxn(
 
 export function roundMxn(n: number): number {
   return Math.round(n * 100) / 100;
+}
+
+// ── Proyección con montos fijos ──────────────────────────────────────────
+// En modo "fixed" la proyección NO es un % del MRR: es la suma de lo que el
+// programa paga por cada clínica, según la modalidad CONGELADA de cada una.
+
+/**
+ * Proyección mensual real: suma del fijo recurrente del plan de cada clínica
+ * pagando cuya modalidad congelada es "recurring". Las de pago único NO
+ * aportan (su comisión se entregó una sola vez, no se repite cada mes).
+ *
+ * `cfg` sale de getPayoutConfig(): los montos SIEMPRE vienen de la config
+ * editable en /admin, jamás escritos a mano aquí. Sin cfg → 0.
+ */
+export function projectFixedMonthlyMxn(
+  clinics: Array<{ plan: string | null; mode: PayoutMode }>,
+  cfg: PayoutConfig,
+): number {
+  if (!cfg || !clinics) return 0;
+  let total = 0;
+  for (const c of clinics) {
+    if (!c || c.mode !== "recurring") continue;
+    total += fixedAmountFor(normalizePlanKey(c.plan), "recurring", cfg);
+  }
+  return roundMxn(total);
 }
 
 // ── Privacidad de clicks ─────────────────────────────────────────────────

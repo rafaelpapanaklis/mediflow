@@ -2479,3 +2479,178 @@ page servida bajo el layout de `/admin` (que sí valida). Ninguno necesitó arre
 ### Sin SQL
 
 Nada que aplicar en Supabase.
+## [Afiliados · Motor de comisiones configurable] — 2026-08-01
+
+El programa de afiliados ya no sabe solo multiplicar un porcentaje. Ahora paga **montos fijos por
+plan**, con dos modalidades por afiliado (**fijo recurrente** o **pago único**), y **todo se edita
+desde /admin/affiliates sin tocar código**. El modo de % por niveles no se borró: sigue disponible,
+solo dejó de ser el default.
+
+### Tabla que quedó cargada (fila id=1 de `affiliate_payout_config`)
+
+| Plan | Precio real | Fijo recurrente (MXN/mes) | Pago único (MXN) |
+|---|---|---|---|
+| Básico | $419 | $40 | $350 |
+| Profesional | $689 | $90 | $650 |
+| Clínica | $1,719 | $250 | $1,400 |
+
+La columna "Precio real" NO está escrita en ningún lado del código nuevo: sale de `plan_configs` vía
+`getResolvedPlans()`. Si mañana subes el Profesional a $749, la equivalencia "$90 = 13.1%" se
+recalcula sola en el admin.
+
+### Las 6 reglas del motor
+
+1. **El primer cobro no paga.** El mes promocional ($19/$29/$39) no comisiona: arranca en
+   `startAtInvoiceNo` (default 2, editable 1–12).
+2. **Modalidad elegible por el afiliado** (`recurring` | `onetime`) desde su panel, solo si
+   `allowAffiliateChoice` está encendido.
+3. **La modalidad se CONGELA por clínica** al alta (`affiliate_clinic_terms`), igual que
+   `AffiliateSellerAttribution.sellerPct`. Cambiarla afecta únicamente a clínicas futuras.
+4. **Los montos NO se congelan**: se lee el valor vigente al generarse cada comisión (mismo criterio
+   que el % de nivel). Si la clínica sube de BASIC a PRO, la comisión sigue al plan de esa factura.
+5. **Anual = 12 meses de golpe**: `fijo × round((periodEnd − periodStart)/30.44)`, clamp [1,12].
+6. **El pago único se entrega una sola vez por clínica**, en el cobro `oneTimeAtInvoiceNo` exacto,
+   con candado atómico `oneTimePaidAt`.
+
+### Arquitectura
+
+`src/lib/affiliates/payout-core.ts` — **matemática pura, sin Prisma** (client-safe, testeable):
+`monthsCovered`, `fixedAmountFor`, `resolveCommission`, `equivalentPct`, `paybackMonths`,
+`simulateProgram`. Mismo corte que `plan-shared.ts` / `plans.ts`: el simulador del admin es un client
+component y no puede arrastrar Prisma al bundle.
+
+`src/lib/affiliates/payout.ts` — helpers con BD (`getPayoutConfig`, `getInvoiceNo`,
+`getClinicTerms`, `ensureClinicTerms`, `claimOneTimePayout`, `effectiveAffiliateMode`) +
+`export * from "./payout-core"`, así el server importa de un solo lugar.
+
+**Degradación (lesson_ortho_schema_drift):** si `affiliate_payout_config` no existiera,
+`getPayoutConfig()` devuelve `null` y TODO cae al comportamiento anterior (% del nivel). Ni un 500.
+
+### Webhook (`invoice.paid` / `invoice.payment_succeeded`)
+
+Sustituye el `pct` único por: meses cubiertos → `getPayoutConfig` → `getInvoiceNo` → términos
+congelados (con backstop `ensureClinicTerms` para las clínicas referidas ANTES de esta ola) →
+`resolveCommission`. Si el motor no puede decidir (config ausente, número de cobro indeterminable),
+usa la ruta histórica EXACTA — se verificó que `calcCommissionMxn` y la rama `pct` dan el mismo
+número al centavo.
+
+El **candado del pago único** es la primera sentencia de la `$transaction`: `claimOneTimePayout` hace
+`updateMany where oneTimePaidAt: null`; si otro proceso ya lo reclamó, lanza un sentinela que aborta
+la transacción y el `catch` lo trata como no-op (igual que el P2002). No basta con el `@unique` de la
+factura: la misma clínica puede pagar muchas facturas.
+
+**Vendedores:** con montos fijos el % ya no aplica al monto de la factura, así que se reparte por
+PROPORCIÓN con `computeSellerSplitFromTotal(total, parentLevelPct, frozenSellerPct)` y el override se
+calcula por RESTA. `computeSellerSplit` queda intacta para el modo pct. La regla de oro
+`sellerMxn + overrideMxn === totalMxn` se comprueba con `===` exacto (sin tolerancia) en 9 casos,
+incluidos los feos (1080/12%/5% → 450+630; 1080/7%/3% → 462.86+617.14).
+
+### /admin/affiliates
+
+- **Sección "Esquema de pago"**: los 6 montos, cada uno con su equivalencia VIVA leída de
+  `plan_configs` ("Profesional · $90/mes = 13.1% de $689" y "$650 = 0.9 meses de $689"); `defaultMode`,
+  `defaultPayoutMode`, `allowAffiliateChoice`, y los dos "cobro #". Warning ámbar NO bloqueante cuando
+  el pago único supera lo cobrado hasta su cobro de disparo. Auditado con `logAdminGlobalEvent`.
+- **Simulador**: "X básicos, Y profesionales, Z clínicas" → ingreso mensual y anual, y las DOS
+  modalidades lado a lado (cuánto pagas, qué % del ingreso representa, en cuántos meses se recupera
+  el único). Usa los valores del FORMULARIO, no los guardados, para ver el efecto antes de guardar.
+- **Métricas globales**: costo mensual comprometido (suma de los fijos recurrentes de las clínicas
+  activas referidas), el % que representa del MRR referido, desglose por modalidad y por tipo de
+  comisión generada.
+- **Ficha por afiliado (`/admin/affiliates/[id]`, nueva)**: datos, nivel, links, cupón, datos de pago;
+  su modalidad con cambio desde admin; tabla de clínicas referidas (plan, estado, alta, **en qué
+  cobro va**, modalidad congelada, comisión acumulada, si el único ya se pagó); historial completo de
+  comisiones con tipo, meses cubiertos, filtro por estado y **export CSV**; bloque de dinero con
+  proyección mensual SEGÚN LA MODALIDAD REAL; y sus vendedores.
+
+### Panel del afiliado
+
+- `/afiliados/configuracion`: selector de modalidad con los montos reales por plan, cuántos meses del
+  fijo equivale cada pago único, y la advertencia de que solo aplica a clínicas nuevas. Solo-lectura
+  si el programa no permite elegir.
+- `projectedMonthlyMxn` deja de ser `mrr × pct/100`: ahora suma el fijo de cada clínica pagando según
+  SU modalidad congelada (las de pago único no aportan al mensual).
+- `LevelProgress` en modo "fixed" ya no pinta la escalera de porcentajes: muestra la tabla de montos
+  por plan. Se aplicó en **/inicio y en /herramientas** (las dos superficies que lo renderizan).
+- El pie de estadísticas decía siempre "la proyección equivale a ≈ X% del MRR"; ahora explica la suma
+  de fijos cuando corresponde.
+- Reportes: Excel y PDF de estado de cuenta llevan **Tipo** y **Meses cubiertos**; el PDF además
+  desglosa el total por tipo. Privacidad intacta: `affiliateId` siempre de la sesión, de las clínicas
+  solo el nombre.
+
+### Bugs REALES encontrados y arreglados durante la ola
+
+1. **Prorrateo de upgrade pagaba un mes fijo completo y movía la numeración.** Una factura
+   `billing_reason: "subscription_update"` cubre días sueltos de un periodo YA comisionado. Además
+   contaba como cobro, así que un upgrade en el mes 1 hacía que el pago único se disparara sobre un
+   cargo de $50 (o que se perdiera para siempre al correr la numeración). Ahora `resolveCommission`
+   la ignora en modo fijo y `getInvoiceNo` la excluye (por el prefijo de `notes` que escribe
+   `recordStripeInvoice`). En modo pct no cambia nada.
+2. **`getInvoiceNo` descartaba los cobros con `reference` NULL** (los manuales): `{ not: ref }` no
+   matchea NULL en Postgres. Rama `OR` explícita — misma lección que el filtro de WhatsApp.
+3. **El fallback de `startAtInvoiceNo` era 1**: con la columna nula, el cobro promocional de $19
+   habría pagado $90. Ahora cae al default del programa (2), que es el propósito de la regla.
+4. **El admin podía guardar una config que apagaba el pago único en silencio**: con
+   `oneTimeAtInvoiceNo < startAtInvoiceNo` no se paga NUNCA (el arranque corta ese cobro y la
+   igualdad exacta corta los siguientes) y la pantalla se veía válida. Ahora se rechaza con 400 y el
+   cliente avisa antes de gastar el viaje.
+
+### RIESGOS ABIERTOS (decisiones de negocio, NO se tocaron)
+
+- **El pago único es una igualdad exacta (`!==`), tal como se especificó.** Consecuencia: una clínica
+  que NO pase exactamente por el cobro `oneTimeAtInvoiceNo` con el motor vivo no cobra nunca. Aplica a
+  las clínicas referidas antes de esta ola que ya van en el cobro #5, #9, etc.: si su afiliado está en
+  modalidad `onetime`, ese pago único es $0 para siempre. Cambiar `!==` por `<` lo volvería
+  "en su cobro o después, mientras no se haya pagado" (el doble pago ya lo impiden `oneTimePaidAt` y
+  el candado atómico, no la igualdad). **Es una línea; dime si lo quieres.**
+- **Plan ANUAL**: la factura #1 cubre 12 meses y no comisiona (regla 1); la #2 llega un año después.
+  En la práctica, un afiliado que trae clínicas anuales espera 12 meses para su primera comisión.
+  Se resuelve poniendo `startAtInvoiceNo = 1` o exceptuando las facturas de 12 meses.
+- **Vendedores en modo fijo**: el reparto usa el % del nivel del padre como referencia. Si ese % es 0
+  (legacy `commissionPct = 0`), el padre cobra el fijo completo y el vendedor $0.
+- `monthsCovered` clampa a 12: un prepago de 2-3 años comisiona un año.
+
+### Verificación
+
+- `npx prisma generate` → ok. **Ojo Windows**: el `next start -p 3112` que corría desde el 30/jul
+  mantenía bloqueado `query_engine-windows.dll.node` y hacía fallar el generate con EPERM; encima
+  dejó el cliente a medio escribir y el primer `npm run build` falló con un type error fantasma
+  (`payoutMode` "inexistente"). Se detuvo ese proceso, se limpiaron 6 `.tmp` huérfanos y se
+  regeneró. **Si quieres el servidor local de vuelta: `npm start`.**
+- `npx tsc --noEmit` → **0 errores** en todo el repo.
+- `npm run test:afiliados` (nuevo) → **53/53**. `npm run test:billing` → **94/94** (sin regresión).
+- `npm run build` completo, SIN pipe → **exit 0**, 357/357 páginas. Verificado en el manifiesto que
+  compilaron `/admin/affiliates/[id]`, `/api/admin/affiliates/[id]/detail`,
+  `/api/admin/affiliates/payout-config` y `/api/afiliados/payout-mode`.
+- **No se pudo correr `npx prisma db pull`**: no hay `DATABASE_URL` local y el token del CLI de Vercel
+  está caducado (`vercel whoami` → "The specified token is not valid"). El schema se verificó columna
+  por columna contra `sql/afiliados-comisiones.sql` (que es lo que ya corriste): 13 columnas de
+  `affiliate_payout_config`, 6 de `affiliate_clinic_terms` y las 4 aditivas, con sus tipos
+  (`double precision`→`Float`, `timestamp(3)`→`DateTime`, `text`→`String`), el `@unique` de
+  `clinicId` y el índice de `affiliateId`. Coinciden al carácter.
+
+### QUÉ PROBAR EN PROD (lista exacta)
+
+1. **/admin/affiliates → sección "Esquema de pago"**: que cargue con 40/90/250 y 350/650/1400 y que
+   cada monto muestre su equivalencia contra el precio real ($90 ≈ 13.1% de $689).
+2. Cambia un monto (p. ej. Profesional a $100), **Guardar**, recarga: debe persistir y el KPI de
+   "Costo mensual comprometido" debe moverse. Déjalo en $90 después.
+3. **Simulador**: mete 10 profesionales → ingreso $6,890/mes, recurrente $900/mes (13.1%), único
+   $6,500 recuperable en ~0.9 meses.
+4. **Validación**: pon "el pago único se entrega en el cobro #1" con arranque en 2 → debe rechazarlo
+   con el mensaje de que no se pagaría nunca.
+5. **/admin/affiliates → "Ver ficha"** en cualquier afiliado: que abra, cargue clínicas referidas con
+   su "cobro #N" y modalidad, el historial con Tipo/Meses, y que el **Export CSV** baje el archivo.
+6. En la ficha, **cambia la modalidad** del afiliado y recarga: debe persistir (y NO debe cambiar la
+   modalidad de sus clínicas ya referidas — se ve en la columna "modalidad congelada").
+7. **Panel del afiliado → Configuración**: que aparezca el selector con los montos reales y la
+   advertencia; cámbialo y verifica que el admin lo ve reflejado.
+8. **Panel → Inicio**: el hero ya no debe prometer un %; el KPI debe decir "Tu modalidad"; la tarjeta
+   de nivel debe listar montos por plan, no la escalera de porcentajes. Lo mismo en **Herramientas**.
+9. **Reportes**: baja el Excel de comisiones (columnas Tipo y Meses cubiertos) y el PDF de estado de
+   cuenta (7 columnas, sin desbordes).
+10. **La prueba de fuego (dinero)**: cuando entre el **segundo** cobro real de una clínica referida,
+    revisa que la comisión sea el MONTO FIJO del plan (no un %) y que `kind = "recurring"`. En una
+    clínica de afiliado con modalidad `onetime`, que llegue el pago único UNA vez y que
+    `oneTimePaidAt` quede sellado.
+11. **Regresión**: que el primer cobro de una clínica nueva NO genere comisión.

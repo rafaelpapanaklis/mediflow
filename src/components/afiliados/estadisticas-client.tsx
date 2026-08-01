@@ -39,6 +39,24 @@ function tooltipDay(iso: string): string {
   return dt.toLocaleDateString("es-MX", { day: "numeric", month: "short", timeZone: "UTC" });
 }
 
+/**
+ * De dónde sale la proyección mensual. Con el programa en montos fijos NO es un
+ * % del MRR: es la suma de los fijos de las clínicas con modalidad recurrente
+ * (las de pago único ya cobraron su comisión una sola vez).
+ */
+function projectionCaption(c: AffiliateStatsResponse["commissions"]): string {
+  if (c.projectionBasis !== "fixed") {
+    return `La proyección mensual equivale a ≈ ${c.commissionPct}% del MRR referido.`;
+  }
+  const onetimeNote =
+    c.onetimeClinics > 0 ? ` Las de pago único (${c.onetimeClinics}) no suman cada mes.` : "";
+  if (c.recurringClinics === 0) {
+    return `Con montos fijos solo suman cada mes las clínicas de pago recurrente.${onetimeNote}`;
+  }
+  const plural = c.recurringClinics === 1 ? "clínica" : "clínicas";
+  return `Suma de los montos fijos de tus ${c.recurringClinics} ${plural} con pago recurrente.${onetimeNote}`;
+}
+
 function LegendDot({ color, label }: { color: string; label: string }) {
   return (
     <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12, color: "var(--text-3)" }}>
@@ -249,7 +267,7 @@ export function EstadisticasClient() {
               <KpiCard label="Proyección mensual" value={formatCurrency(data.commissions.projectedMonthlyMxn)} icon={Sparkles} />
             </div>
             <div style={{ fontSize: 12, color: "var(--text-3)" }}>
-              La proyección mensual equivale a ≈ {data.commissions.commissionPct}% del MRR referido.
+              {projectionCaption(data.commissions)}
             </div>
           </div>
 

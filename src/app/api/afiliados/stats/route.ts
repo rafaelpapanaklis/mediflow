@@ -10,8 +10,16 @@ import {
   activeClinicWhere,
   payingClinicWhere,
   clinicMonthlyMxn,
+  projectFixedMonthlyMxn,
   roundMxn,
 } from "@/lib/affiliates/stats";
+import {
+  getPayoutConfig,
+  effectiveAffiliateMode,
+  normalizePayoutMode,
+  type PayoutMode,
+  type ProgramMode,
+} from "@/lib/affiliates/payout";
 
 export const dynamic = "force-dynamic";
 
@@ -21,10 +29,12 @@ export const dynamic = "force-dynamic";
  *
  * Queries agregadas (groupBy / $queryRaw con date_trunc), sin N+1 y
  * PgBouncer-safe (solo tagged templates). affiliateId SIEMPRE de la sesión
- * (getAffiliateContext), jamás del request. 2 batches de Promise.all (5 + 4).
+ * (getAffiliateContext), jamás del request. 2 batches de Promise.all (5 + 5)
+ * más una query suelta de términos congelados (necesita los ids del batch 1).
  * Las queries sobre affiliate_clicks degradan a 0/[]/null si la tabla aún no
- * existe en prod (SQL pendiente). Privacidad: solo agregados — nunca nombres
- * de clínicas en esta respuesta.
+ * existe en prod (SQL pendiente); lo mismo el motor de comisiones fijas, que
+ * sin su config deja la proyección exactamente como estaba (mrr × %).
+ * Privacidad: solo agregados — nunca nombres ni planes por clínica.
  */
 export async function GET(req: NextRequest) {
   const ctx = await getAffiliateContext();
@@ -42,7 +52,9 @@ export async function GET(req: NextRequest) {
     prisma.clinic.count({ where: { affiliateId, ...activeClinicWhere(now) } }),
     prisma.clinic.findMany({
       where: { affiliateId, ...payingClinicWhere() },
-      select: { plan: true, monthlyPrice: true },
+      // `id` solo para cruzar los términos congelados; NUNCA sale en la
+      // respuesta (privacidad: el afiliado ve conteos, no clínicas).
+      select: { id: true, plan: true, monthlyPrice: true },
     }),
     prisma.affiliateCommission.groupBy({
       by: ["status"],
@@ -59,10 +71,11 @@ export async function GET(req: NextRequest) {
       .catch(() => null),
   ]);
 
-  // Batch 2: clicks (total, serie diaria, desglose por ref) + serie de altas.
+  // Batch 2: clicks (total, serie diaria, desglose por ref) + serie de altas
+  // + config del motor de comisiones.
   // tsconfig no es strict: anotamos el shape de los $queryRaw a mano.
   const emptySeries: Array<{ d: string; n: bigint }> = [];
-  const [clicksTotal, clickRows, signupRows, byRefGroups] = await Promise.all([
+  const [clicksTotal, clickRows, signupRows, byRefGroups, payoutCfg] = await Promise.all([
     prisma.affiliateClick.count({ where: { affiliateId } }).catch(() => 0),
     prisma.$queryRaw<Array<{ d: string; n: bigint }>>`
       SELECT to_char(date_trunc('day', "createdAt"), 'YYYY-MM-DD') AS d, count(*)::bigint AS n
@@ -85,7 +98,24 @@ export async function GET(req: NextRequest) {
         take: 20,
       })
       .catch(() => []),
+    // null = sql/afiliados-comisiones.sql sin correr → motor inactivo y la
+    // proyección se queda EXACTAMENTE en el % de siempre. Nunca lanza.
+    getPayoutConfig(),
   ]);
+
+  // Batch 3: términos CONGELADOS de las clínicas que hoy pagan (depende de los
+  // ids del batch 1). Solo si el motor está activo: sin config no hay nada que
+  // cruzar y nos ahorramos la query.
+  const payingIds = payingList.map((c) => c.id);
+  const termsRows =
+    payoutCfg && payingIds.length
+      ? await prisma.affiliateClinicTerms
+          .findMany({
+            where: { clinicId: { in: payingIds } },
+            select: { clinicId: true, payoutMode: true },
+          })
+          .catch(() => [] as Array<{ clinicId: string; payoutMode: string }>)
+      : [];
 
   // Series zero-filled del rango (bigint de Postgres → Number).
   const clicksByDay = new Map<string, number>();
@@ -129,6 +159,35 @@ export async function GET(req: NextRequest) {
   );
   const commissionPct = ctx.affiliate.commissionPct;
 
+  // Modalidad congelada de cada clínica pagando. Sin términos (clínica anterior
+  // al motor) vale la del programa — mismo criterio que /api/admin/affiliates/metrics.
+  const modeByClinic = new Map<string, string>();
+  for (const t of termsRows) modeByClinic.set(t.clinicId, t.payoutMode);
+
+  const clinicTerms: Array<{ plan: string | null; mode: PayoutMode }> = [];
+  let recurringClinics = 0;
+  let onetimeClinics = 0;
+  if (payoutCfg) {
+    for (const c of payingList) {
+      const raw = modeByClinic.get(c.id);
+      const mode = raw === undefined ? payoutCfg.defaultPayoutMode : normalizePayoutMode(raw);
+      clinicTerms.push({ plan: c.plan, mode });
+      if (mode === "onetime") onetimeClinics += 1;
+      else recurringClinics += 1;
+    }
+  }
+
+  // Proyección: con el motor en "fixed" es la SUMA de los montos fijos de las
+  // clínicas recurrentes; en cualquier otro caso (incluido el motor inactivo)
+  // se conserva la fórmula histórica mrr × % — cero regresión sin el SQL.
+  const programMode: ProgramMode = payoutCfg ? payoutCfg.defaultMode : "pct";
+  let projectedMonthlyMxn = roundMxn((mrrMxn * commissionPct) / 100);
+  let projectionBasis: ProgramMode = "pct";
+  if (payoutCfg && payoutCfg.defaultMode === "fixed") {
+    projectedMonthlyMxn = projectFixedMonthlyMxn(clinicTerms, payoutCfg);
+    projectionBasis = "fixed";
+  }
+
   const payload: AffiliateStatsResponse = {
     range,
     funnel: { clicks: clicksTotal, signups, active, paying: payingList.length },
@@ -142,8 +201,15 @@ export async function GET(req: NextRequest) {
       totalMxn: roundMxn(totalMxn),
       totalCount,
       mrrMxn,
-      projectedMonthlyMxn: roundMxn((mrrMxn * commissionPct) / 100),
+      projectedMonthlyMxn,
       commissionPct,
+      programMode,
+      // Modalidad que se le congelará a sus PRÓXIMOS referidos: la suya si el
+      // programa deja elegir, si no la del programa.
+      payoutMode: effectiveAffiliateMode(ctx.affiliate.payoutMode, payoutCfg),
+      projectionBasis,
+      recurringClinics,
+      onetimeClinics,
     },
     clicksTrackedSince: firstClick ? firstClick.createdAt.toISOString() : null,
   };

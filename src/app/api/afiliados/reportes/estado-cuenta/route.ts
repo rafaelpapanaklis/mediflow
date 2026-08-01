@@ -57,10 +57,22 @@ export async function GET(req: NextRequest) {
       timeZone: "UTC",
     }),
     clinicName: clinicNameById.get(c.clinicId) ?? "Clínica",
+    // Las filas viejas pueden no traer kind/monthsCovered: siempre con fallback
+    // (el documento etiqueta con commissionKindLabel, que tolera null).
+    kind: c.kind,
+    monthsCovered: c.monthsCovered ?? 1,
     baseMxn: c.amountMxn,
     commissionMxn: c.commissionMxn,
     status: c.status,
   }));
+
+  // Desglose del generado por tipo. Mismo criterio que commissionKindLabel:
+  // cualquier kind desconocido o ausente cuenta como "% del nivel".
+  const byKind = { pct: 0, recurring: 0, onetime: 0 };
+  commissions.forEach((c) => {
+    const kind = c.kind === "recurring" || c.kind === "onetime" ? c.kind : "pct";
+    byKind[kind] += c.commissionMxn;
+  });
 
   const totals = {
     count: commissions.length,
@@ -71,6 +83,11 @@ export async function GET(req: NextRequest) {
     pendingMxn: roundMxn(
       commissions.filter((c) => c.status === "pending").reduce((s, c) => s + c.commissionMxn, 0),
     ),
+    byKind: {
+      pct: roundMxn(byKind.pct),
+      recurring: roundMxn(byKind.recurring),
+      onetime: roundMxn(byKind.onetime),
+    },
   };
 
   // renderToBuffer espera un ReactElement<DocumentProps>. AffiliateStatementDocument

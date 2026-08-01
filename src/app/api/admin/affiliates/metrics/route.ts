@@ -8,6 +8,12 @@ import {
   clinicMonthlyMxn,
   roundMxn,
 } from "@/lib/affiliates/stats";
+import {
+  getPayoutConfig,
+  fixedAmountFor,
+  normalizePlanKey,
+  normalizePayoutMode,
+} from "@/lib/affiliates/payout";
 
 export const dynamic = "force-dynamic";
 
@@ -34,6 +40,23 @@ export interface AdminAffiliateInactiveRow {
   lastClickAt: string | null;
 }
 
+export interface AdminAffiliatePayoutMetrics {
+  /** false = tabla del motor inexistente (todo lo demás va en 0/null). */
+  enabled: boolean;
+  mode: "fixed" | "pct";
+  /** COSTO MENSUAL COMPROMETIDO: suma del fijo recurrente de TODAS las clínicas activas referidas cuya modalidad congelada es "recurring". */
+  committedMonthlyMxn: number;
+  /** committedMonthlyMxn / mrrReferredMxn × 100; null si el MRR es 0. */
+  committedPctOfMrr: number | null;
+  /** Desglose por modalidad congelada (solo clínicas referidas PAGANDO). */
+  recurringClinics: number;
+  onetimeClinics: number;
+  /** Clínicas cuyo pago único ya se entregó (oneTimePaidAt != null). */
+  onetimePaidClinics: number;
+  /** Comisiones ya generadas por tipo (histórico, todos los estados). */
+  byKindMxn: { pct: number; recurring: number; onetime: number };
+}
+
 export interface AdminAffiliateMetricsResponse {
   program: {
     affiliatesTotal: number;
@@ -50,6 +73,8 @@ export interface AdminAffiliateMetricsResponse {
   };
   top: AdminAffiliateTopRow[]; // top 10 por clínicas pagando, luego conversión
   inactive: AdminAffiliateInactiveRow[]; // APPROVED sin clicks en 30 días
+  /** Motor de comisiones fijas (enabled=false si el SQL aún no se corrió). */
+  payout: AdminAffiliatePayoutMetrics;
 }
 
 /**
@@ -82,9 +107,10 @@ export async function GET() {
           _count: { _all: true },
         }),
         // Clínicas referidas pagando hoy (base de paying por afiliado + MRR).
+        // `id` se selecciona para cruzar con los términos congelados del motor.
         prisma.clinic.findMany({
           where: { affiliateId: { not: null }, ...payingClinicWhere() },
-          select: { affiliateId: true, plan: true, monthlyPrice: true },
+          select: { id: true, affiliateId: true, plan: true, monthlyPrice: true },
         }),
         // activeClinicWhere() devuelve { OR: [...] }: va dentro de AND para
         // no pisar el filtro de affiliateId al combinarlos.
@@ -97,8 +123,8 @@ export async function GET() {
         }),
       ]);
 
-    // ── Batch 2: clicks (tabla nueva — degradar si aún no existe) ────────
-    const [clicksAllTime, clicks30d, clickGroups, lastClickRows] = await Promise.all([
+    // ── Batch 2: clicks + config del motor (tablas nuevas — degradan) ────
+    const [clicksAllTime, clicks30d, clickGroups, lastClickRows, payoutCfg] = await Promise.all([
       prisma.affiliateClick.count().catch(() => 0),
       prisma.affiliateClick.count({ where: { createdAt: { gte: since30 } } }).catch(() => 0),
       prisma.affiliateClick
@@ -110,6 +136,9 @@ export async function GET() {
         FROM "affiliate_clicks"
         GROUP BY 1
       `.catch(() => [] as Array<{ id: string; last: Date }>),
+      // Config del motor de comisiones fijas. null = sql/afiliados-comisiones.sql
+      // sin correr → el bloque `payout` sale apagado. Nunca lanza.
+      getPayoutConfig(),
     ]);
 
     // ── Merge en código ──────────────────────────────────────────────────
@@ -163,6 +192,93 @@ export async function GET() {
       active: Number(activeReferred),
       paying: payingClinics.length,
     };
+
+    // ── Batch 3: motor de comisiones fijas ───────────────────────────────
+    // Todo el bloque es OPCIONAL: si la config no existe (SQL sin correr) o
+    // cualquier query falla, `payout` queda apagado y el resto de las métricas
+    // se devuelven igual. Este endpoint nunca debe empezar a dar 500 por esto.
+    let payout: AdminAffiliatePayoutMetrics = {
+      enabled: false,
+      mode: "pct",
+      committedMonthlyMxn: 0,
+      committedPctOfMrr: null,
+      recurringClinics: 0,
+      onetimeClinics: 0,
+      onetimePaidClinics: 0,
+      byKindMxn: { pct: 0, recurring: 0, onetime: 0 },
+    };
+
+    if (payoutCfg) {
+      try {
+        const [termsRows, kindGroups] = await Promise.all([
+          // Términos CONGELADOS de las clínicas que hoy pagan. Panel de admin:
+          // el `in` directo basta (no hay paginación que valga la pena aquí).
+          prisma.affiliateClinicTerms
+            .findMany({
+              where: { clinicId: { in: payingClinics.map((c) => c.id) } },
+              select: { clinicId: true, payoutMode: true, oneTimePaidAt: true },
+            })
+            .catch(
+              () => [] as Array<{ clinicId: string; payoutMode: string; oneTimePaidAt: Date | null }>,
+            ),
+          // Comisiones ya generadas por tipo (histórico, todos los estados).
+          prisma.affiliateCommission
+            .groupBy({ by: ["kind"], _sum: { commissionMxn: true } })
+            .catch(() => [] as Array<{ kind: string; _sum: { commissionMxn: number | null } }>),
+        ]);
+
+        const termsByClinic = new Map<string, { payoutMode: string; oneTimePaidAt: Date | null }>();
+        for (const t of termsRows) termsByClinic.set(t.clinicId, t);
+
+        let committedMonthlyMxn = 0;
+        let recurringClinics = 0;
+        let onetimeClinics = 0;
+        let onetimePaidClinics = 0;
+        for (const c of payingClinics) {
+          const terms = termsByClinic.get(c.id);
+          // Sin términos congelados (clínica anterior al motor) → cuenta con la
+          // modalidad por defecto del programa.
+          const mode = terms ? normalizePayoutMode(terms.payoutMode) : payoutCfg.defaultPayoutMode;
+          if (mode === "onetime") {
+            onetimeClinics += 1;
+            if (terms?.oneTimePaidAt) onetimePaidClinics += 1;
+          } else {
+            recurringClinics += 1;
+            committedMonthlyMxn += fixedAmountFor(normalizePlanKey(c.plan), "recurring", payoutCfg);
+          }
+        }
+
+        let kindPct = 0;
+        let kindRecurring = 0;
+        let kindOnetime = 0;
+        for (const g of kindGroups) {
+          const sum = g._sum.commissionMxn ?? 0;
+          if (g.kind === "recurring") kindRecurring += sum;
+          else if (g.kind === "onetime") kindOnetime += sum;
+          else kindPct += sum; // "pct" y cualquier valor viejo/desconocido
+        }
+
+        payout = {
+          enabled: true,
+          mode: payoutCfg.defaultMode,
+          committedMonthlyMxn: roundMxn(committedMonthlyMxn),
+          committedPctOfMrr:
+            mrrReferredMxn > 0 ? roundMxn((committedMonthlyMxn / mrrReferredMxn) * 100) : null,
+          recurringClinics,
+          onetimeClinics,
+          onetimePaidClinics,
+          byKindMxn: {
+            pct: roundMxn(kindPct),
+            recurring: roundMxn(kindRecurring),
+            onetime: roundMxn(kindOnetime),
+          },
+        };
+      } catch (err) {
+        // El bloque queda apagado (todo en 0/null); el resto de las métricas
+        // sigue siendo válido y el endpoint responde 200.
+        console.error("[admin/affiliates/metrics] payout", err);
+      }
+    }
 
     // Top 10: clínicas pagando desc → conversión desc (null al final).
     const top: AdminAffiliateTopRow[] = affiliateList
@@ -227,6 +343,7 @@ export async function GET() {
       },
       top,
       inactive,
+      payout,
     };
     return NextResponse.json(body);
   } catch (err) {

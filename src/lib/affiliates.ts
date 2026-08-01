@@ -47,18 +47,24 @@ export async function generateReferralCode(): Promise<string> {
  */
 export async function resolveApprovedAffiliateByCode(
   code: string | null | undefined,
-): Promise<{ id: string; commissionPct: number; email: string } | null> {
+): Promise<{ id: string; commissionPct: number; email: string; payoutMode: string } | null> {
   if (!code || typeof code !== "string") return null;
   const normalized = code.trim().toUpperCase();
   if (!normalized) return null;
   try {
     const affiliate = await prisma.affiliate.findUnique({
       where: { referralCode: normalized },
-      select: { id: true, status: true, commissionPct: true, email: true },
+      select: { id: true, status: true, commissionPct: true, email: true, payoutMode: true },
     });
     if (!affiliate || affiliate.status !== "APPROVED") return null;
-    // email expuesto para el chequeo anti self-referral del alta.
-    return { id: affiliate.id, commissionPct: affiliate.commissionPct, email: affiliate.email };
+    // email expuesto para el chequeo anti self-referral del alta;
+    // payoutMode para CONGELAR la modalidad de la clínica en el alta.
+    return {
+      id: affiliate.id,
+      commissionPct: affiliate.commissionPct,
+      email: affiliate.email,
+      payoutMode: affiliate.payoutMode,
+    };
   } catch {
     return null;
   }

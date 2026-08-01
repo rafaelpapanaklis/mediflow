@@ -1,7 +1,7 @@
 export const dynamic = "force-dynamic";
 
 import { redirect } from "next/navigation";
-import { Users, DollarSign, Clock, Wallet, Handshake, Percent } from "lucide-react";
+import { Users, DollarSign, Clock, Wallet, Handshake, Percent, Repeat, Coins } from "lucide-react";
 import { getAffiliateContext } from "@/lib/affiliate-auth";
 import { prisma } from "@/lib/prisma";
 import { formatCurrency } from "@/lib/utils";
@@ -11,7 +11,17 @@ import { KpiCard } from "@/components/ui/design-system/kpi-card";
 import { BadgeNew } from "@/components/ui/design-system/badge-new";
 import { ReferralLinks } from "@/components/afiliados/referral-links";
 import { getAffiliateLevelInfo } from "@/lib/affiliate-levels";
-import { LevelProgress } from "@/components/afiliados/level-progress";
+import { LevelProgress, type LevelAmountRow } from "@/components/afiliados/level-progress";
+import { getResolvedPlans } from "@/lib/plans";
+import {
+  getPayoutConfig,
+  effectiveAffiliateMode,
+  fixedAmountFor,
+  normalizePlanKey,
+  commissionKindLabel,
+  PAYOUT_MODE_LABELS,
+  type ProgramMode,
+} from "@/lib/affiliates/payout";
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://www.dalecontrol.com";
 
@@ -22,7 +32,9 @@ export default async function AffiliateHomePage() {
   const affiliateId = ctx.affiliateId;
 
   // affiliateId SIEMPRE de la sesión, nunca del request. Promise.all ≤ 6.
-  const [referredClinics, byStatus, recent] = await Promise.all([
+  // payoutCfg = null si sql/afiliados-comisiones.sql no está aplicado (motor
+  // inactivo → todo se queda en el % del nivel). getPayoutConfig nunca lanza.
+  const [referredClinics, byStatus, recent, payoutCfg, plans] = await Promise.all([
     prisma.clinic.count({ where: { affiliateId } }),
     prisma.affiliateCommission.groupBy({
       by: ["status"],
@@ -35,6 +47,8 @@ export default async function AffiliateHomePage() {
       orderBy: { createdAt: "desc" },
       take: 8,
     }),
+    getPayoutConfig(),
+    getResolvedPlans(),
   ]);
 
   const pendingTotal = byStatus.find((g) => g.status === "pending")?._sum.commissionMxn ?? 0;
@@ -53,6 +67,28 @@ export default async function AffiliateHomePage() {
   // Nivel bronce/plata/oro y % vigente (fuera del Promise.all: tiene sus
   // propios try/catch internos y cae a legacy si la tabla de config no existe).
   const levelInfo = await getAffiliateLevelInfo(affiliateId, ctx.affiliate.commissionPct);
+
+  // Motor de comisiones: modo del programa + modalidad vigente del afiliado y
+  // los montos reales por plan (labels de plan_configs, montos de la config —
+  // ni un precio ni un monto escrito a mano aquí).
+  const programMode: ProgramMode = payoutCfg ? payoutCfg.defaultMode : "pct";
+  const payoutMode = effectiveAffiliateMode(ctx.affiliate.payoutMode, payoutCfg);
+  const amounts: LevelAmountRow[] = payoutCfg
+    ? plans.map((p) => ({
+        plan: p.id,
+        label: p.label,
+        recurringMxn: fixedAmountFor(normalizePlanKey(p.id), "recurring", payoutCfg),
+        oneTimeMxn: fixedAmountFor(normalizePlanKey(p.id), "onetime", payoutCfg),
+      }))
+    : [];
+
+  // Copy del hero: con montos fijos prometer un % sería falso.
+  const heroCopy =
+    programMode === "fixed"
+      ? payoutMode === "onetime"
+        ? "Comparte tu enlace y gana un monto fijo, una sola vez, por cada clínica que se suscriba — mira tus montos abajo."
+        : "Comparte tu enlace y gana un monto fijo cada mes por cada clínica que se suscriba — mira tus montos abajo."
+      : `Comparte tu enlace y gana ${levelInfo.pct}% recurrente por cada clínica que se suscriba.`;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
@@ -91,13 +127,13 @@ export default async function AffiliateHomePage() {
             Hola, {ctx.affiliate.name}
           </h1>
           <p style={{ color: "var(--text-3)", fontSize: 13, marginTop: 4, marginBottom: 0 }}>
-            Comparte tu enlace y gana {levelInfo.pct}% recurrente por cada clínica que se suscriba.
+            {heroCopy}
           </p>
         </div>
       </div>
 
-      {/* Nivel y comisión */}
-      <LevelProgress info={levelInfo} />
+      {/* Nivel y comisión (en modo "fixed" muestra los montos por plan) */}
+      <LevelProgress info={levelInfo} mode={programMode} payoutMode={payoutMode} amounts={amounts} />
 
       {/* Enlaces de referido */}
       <CardNew>
@@ -148,7 +184,16 @@ export default async function AffiliateHomePage() {
         <KpiCard label="Comisión acumulada" value={formatCurrency(accrued)} icon={DollarSign} />
         <KpiCard label="Pendiente de pago" value={formatCurrency(pendingTotal)} icon={Clock} />
         <KpiCard label="Pagado" value={formatCurrency(paidTotal)} icon={Wallet} />
-        <KpiCard label="Tu comisión" value={`${levelInfo.pct}%`} icon={Percent} />
+        {/* Con montos fijos el % del nivel no aplica: mostramos la modalidad. */}
+        {programMode === "fixed" ? (
+          <KpiCard
+            label="Tu modalidad"
+            value={PAYOUT_MODE_LABELS[payoutMode]}
+            icon={payoutMode === "onetime" ? Coins : Repeat}
+          />
+        ) : (
+          <KpiCard label="Tu comisión" value={`${levelInfo.pct}%`} icon={Percent} />
+        )}
       </div>
 
       {/* Comisiones recientes */}
@@ -181,7 +226,9 @@ export default async function AffiliateHomePage() {
             <div style={{ color: "var(--text-1)", fontWeight: 600, fontSize: 14 }}>Aún no tienes comisiones</div>
             <p style={{ color: "var(--text-3)", fontSize: 13, margin: 0, maxWidth: 360, lineHeight: 1.5 }}>
               Cuando una clínica se suscriba con tu enlace y pague su primera factura, tu comisión aparecerá aquí —
-              y se repetirá cada mes mientras siga activa.
+              {programMode === "fixed" && payoutMode === "onetime"
+                ? " es un solo pago por clínica."
+                : " y se repetirá cada mes mientras siga activa."}
             </p>
           </div>
         ) : (
@@ -192,6 +239,7 @@ export default async function AffiliateHomePage() {
                   <th>Clínica</th>
                   <th>Factura pagada</th>
                   <th>Tu comisión</th>
+                  <th>Tipo</th>
                   <th>Estado</th>
                   <th>Fecha</th>
                 </tr>
@@ -203,6 +251,11 @@ export default async function AffiliateHomePage() {
                     <td className="mono" style={{ color: "var(--text-2)" }}>{formatCurrency(c.amountMxn)}</td>
                     <td className="mono" style={{ color: "var(--text-1)", fontWeight: 600 }}>
                       {formatCurrency(c.commissionMxn)}
+                    </td>
+                    {/* Cómo se calculó; el anual cubre 12 meses de una sola factura. */}
+                    <td style={{ color: "var(--text-2)", whiteSpace: "nowrap" }}>
+                      {commissionKindLabel(c.kind)}
+                      {c.monthsCovered > 1 ? ` · ${c.monthsCovered} meses` : ""}
                     </td>
                     <td>
                       <BadgeNew tone={c.status === "paid" ? "success" : "warning"}>

@@ -62,6 +62,39 @@ export function computeSellerSplit(
 }
 
 /**
+ * Reparte una comisión YA CALCULADA (monto fijo del motor de comisiones) entre
+ * vendedor y padre. Con montos fijos el % del vendedor ya no aplica al monto
+ * de la factura, así que se reparte por PROPORCIÓN del nivel del padre:
+ *
+ *     sellerMxn   = total × min(frozenSellerPct, parentLevelPct) / parentLevelPct
+ *     overrideMxn = total − sellerMxn        (por resta: siempre cuadra)
+ *
+ * Se conserva la REGLA DE ORO intacta: sellerMxn + overrideMxn === totalMxn.
+ * Si el padre no tiene % de nivel utilizable (≤ 0) el vendedor no puede ganar
+ * una proporción de nada → todo queda como override del padre.
+ * `computeSellerSplit` (arriba) sigue intacta para el modo pct.
+ */
+export function computeSellerSplitFromTotal(
+  totalMxn: number,
+  parentLevelPct: number,
+  frozenSellerPct: number,
+): CommissionSplit {
+  const total = roundMxn(totalMxn);
+  const totalPct = Number.isFinite(parentLevelPct) && parentLevelPct > 0 ? parentLevelPct : 0;
+  const sellerPct = clampSellerPct(frozenSellerPct, totalPct);
+  const sellerMxn = totalPct > 0 ? roundMxn((total * sellerPct) / totalPct) : 0;
+  const overrideMxn = Math.max(0, roundMxn(total - sellerMxn));
+  return {
+    totalPct,
+    sellerPct,
+    overridePct: roundMxn(totalPct - sellerPct),
+    totalMxn: total,
+    sellerMxn,
+    overrideMxn,
+  };
+}
+
+/**
  * % del nivel VIGENTE del afiliado padre (para el cap del vendedor y el split).
  * Cae a `legacyPct` (Affiliate.commissionPct) si la tabla de config no existe.
  * Nunca lanza.

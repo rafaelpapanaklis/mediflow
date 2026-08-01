@@ -3342,6 +3342,10 @@ model Affiliate {
   approvedAt    DateTime?
   referralCode  String          @unique
   commissionPct Float           @default(20)
+  /// Modalidad de pago para sus PRÓXIMOS referidos: "recurring" | "onetime".
+  /// Se CONGELA por clínica en AffiliateClinicTerms al atribuirse el alta, así
+  /// que cambiarla nunca afecta a las clínicas ya referidas.
+  payoutMode    String          @default("recurring")
   payoutMethod  String?
   payoutDetails String?
   createdAt     DateTime        @default(now())
@@ -3365,6 +3369,11 @@ model AffiliateCommission {
   stripeInvoiceId String    @unique
   amountMxn       Float
   commissionMxn   Float
+  /// Cómo se calculó: "pct" (% del nivel) | "recurring" (fijo por plan y mes)
+  /// | "onetime" (pago único de la clínica). Ver @/lib/affiliates/payout-core.
+  kind            String    @default("pct")
+  /// Meses que cubre la factura (anual = 12). Multiplica el fijo recurrente.
+  monthsCovered   Int       @default(1)
   status          String    @default("pending")
   createdAt       DateTime  @default(now())
   paidAt          DateTime?
@@ -7459,6 +7468,7 @@ model AffiliateSellerCommission {
   stripeInvoiceId String    @unique
   amountMxn       Float // factura pagada (igual que la del padre)
   commissionMxn   Float // porción del VENDEDOR (amount × min(%congelado, nivel%))
+  kind            String    @default("pct") // pct | recurring | onetime (espejo del padre)
   status          String    @default("pending") // pending | paid
   createdAt       DateTime  @default(now())
   paidAt          DateTime?
@@ -7855,4 +7865,62 @@ model AiQuotaUsage {
 
   @@index([clinicId, createdAt])
   @@map("ai_quota_usage")
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// AFILIADOS — MOTOR DE COMISIONES CONFIGURABLE (ago 2026)
+//
+// El programa deja de pagar SOLO un % sobre la factura: ahora paga MONTOS
+// FIJOS por plan (recurrentes por mes cubierto) o un PAGO ÚNICO por clínica,
+// todo editable desde /admin/affiliates sin tocar código. El modo "pct"
+// (niveles bronce/plata/oro) sigue disponible, ya no es el default.
+//
+// Requiere sql/afiliados-comisiones.sql aplicado en Supabase. Sin él, el motor
+// cae al modo % por nivel (comportamiento anterior, cero regresión) — patrón
+// lesson_ortho_schema_drift. Al FINAL del schema para no chocar con ramas
+// paralelas de la ola.
+// ═══════════════════════════════════════════════════════════════════════════
+
+/// Config GLOBAL del motor de comisiones (fila única id=1), editable en
+/// /admin/affiliates. Los 6 montos + las reglas de disparo. Si la tabla no
+/// existe, el motor cae al modo % por nivel (comportamiento actual).
+model AffiliatePayoutConfig {
+  id                   Int      @id @default(1)
+  // Modo del programa: "fixed" (montos por plan) | "pct" (niveles).
+  defaultMode          String   @default("fixed")
+  // Modalidad por defecto de un afiliado nuevo: "recurring" | "onetime".
+  defaultPayoutMode    String   @default("recurring")
+  // ¿El afiliado puede elegir su modalidad desde su panel?
+  allowAffiliateChoice Boolean  @default(true)
+  // Fijo recurrente por plan (MXN por mes cubierto).
+  recurringBasicMxn    Float    @default(40)
+  recurringProMxn      Float    @default(90)
+  recurringClinicMxn   Float    @default(250)
+  // Pago único por plan (MXN, una sola vez por clínica).
+  oneTimeBasicMxn      Float    @default(350)
+  oneTimeProMxn        Float    @default(650)
+  oneTimeClinicMxn     Float    @default(1400)
+  // Desde qué número de cobro empieza a pagarse (1 = desde el primero).
+  startAtInvoiceNo     Int      @default(2)
+  // En qué número de cobro se dispara el pago único.
+  oneTimeAtInvoiceNo   Int      @default(2)
+  updatedAt            DateTime @updatedAt
+
+  @@map("affiliate_payout_config")
+}
+
+/// Términos CONGELADOS de una clínica referida: con qué modalidad se le paga
+/// al afiliado por esta clínica. Se crea al atribuirse el alta. Sin relación
+/// Prisma a Clinic/Affiliate (FKs en el SQL, mismo patrón que
+/// AffiliateSellerAttribution).
+model AffiliateClinicTerms {
+  id            String    @id @default(cuid())
+  clinicId      String    @unique
+  affiliateId   String
+  payoutMode    String    @default("recurring") // congelado al alta
+  oneTimePaidAt DateTime? // candado: el pago único ya se generó
+  createdAt     DateTime  @default(now())
+
+  @@index([affiliateId])
+  @@map("affiliate_clinic_terms")
 }

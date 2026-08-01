@@ -1,10 +1,12 @@
 "use client";
 
-import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useState, type CSSProperties } from "react";
+import Link from "next/link";
 import toast from "react-hot-toast";
 import {
   Clock, CheckCircle2, XCircle, Ban,
   MousePointerClick, Wallet, DollarSign, TrendingUp,
+  Coins, Percent, Repeat,
 } from "lucide-react";
 import { CardNew } from "@/components/ui/design-system/card-new";
 import { ButtonNew } from "@/components/ui/design-system/button-new";
@@ -13,6 +15,19 @@ import { KpiCard } from "@/components/ui/design-system/kpi-card";
 import { formatRelativeDate } from "@/lib/format";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { useConfirm } from "@/components/ui/confirm-dialog";
+// Motor de comisiones: matemática PURA (sin Prisma) → se puede importar aquí.
+import {
+  DEFAULT_PAYOUT_CONFIG,
+  PAYOUT_MODE_LABELS,
+  PLAN_KEYS,
+  equivalentPct,
+  paybackMonths,
+  simulateProgram,
+  type PayoutConfig,
+  type PayoutMode,
+  type PlanKey,
+  type ProgramMode,
+} from "@/lib/affiliates/payout-core";
 // Type-only: se borra al compilar (mismo patrón que SearchablePatient).
 import type { AdminAffiliateMetricsResponse } from "@/app/api/admin/affiliates/metrics/route";
 
@@ -145,6 +160,170 @@ const DEFAULT_CONFIG_FORM: Record<ConfigFieldKey, string> = {
   goldMinActive: "10",
 };
 
+// ── Esquema de pago (GET/PUT /api/admin/affiliates/payout-config) ─────────
+// Los tipos van declarados aquí a propósito (mismo criterio que SellerRow):
+// así este archivo compila sin depender de la ruta del API.
+
+/** Precio REAL del plan (plan_configs). Jamás se escribe un precio a mano. */
+type PayoutPlanRow = { id: PlanKey; label: string; priceMxn: number };
+
+type PayoutConfigResponse = {
+  config: PayoutConfig;
+  exists: boolean;
+  plans: PayoutPlanRow[];
+};
+
+/** Bloque `payout` que /metrics agrega con el estado del motor de comisiones. */
+type PayoutMetrics = {
+  enabled: boolean;
+  mode: ProgramMode;
+  committedMonthlyMxn: number;
+  committedPctOfMrr: number | null;
+  recurringClinics: number;
+  onetimeClinics: number;
+  onetimePaidClinics: number;
+  byKindMxn: { pct: number; recurring: number; onetime: number };
+};
+
+/** Campos numéricos del esquema: viven como string (inputs controlados). */
+type PayoutNumberKey =
+  | "recurringBasicMxn"
+  | "recurringProMxn"
+  | "recurringClinicMxn"
+  | "oneTimeBasicMxn"
+  | "oneTimeProMxn"
+  | "oneTimeClinicMxn"
+  | "startAtInvoiceNo"
+  | "oneTimeAtInvoiceNo";
+
+interface PayoutForm {
+  defaultMode: ProgramMode;
+  defaultPayoutMode: PayoutMode;
+  allowAffiliateChoice: boolean;
+  recurringBasicMxn: string;
+  recurringProMxn: string;
+  recurringClinicMxn: string;
+  oneTimeBasicMxn: string;
+  oneTimeProMxn: string;
+  oneTimeClinicMxn: string;
+  startAtInvoiceNo: string;
+  oneTimeAtInvoiceNo: string;
+}
+
+const RECURRING_FIELD: Record<PlanKey, PayoutNumberKey> = {
+  BASIC: "recurringBasicMxn",
+  PRO: "recurringProMxn",
+  CLINIC: "recurringClinicMxn",
+};
+
+const ONETIME_FIELD: Record<PlanKey, PayoutNumberKey> = {
+  BASIC: "oneTimeBasicMxn",
+  PRO: "oneTimeProMxn",
+  CLINIC: "oneTimeClinicMxn",
+};
+
+// Nombre de respaldo mientras `plans[]` no llega. Es solo el NOMBRE del plan:
+// el precio siempre sale del API (si no llegó, se muestra un guion).
+const PLAN_FALLBACK_LABELS: Record<PlanKey, string> = {
+  BASIC: "Básico",
+  PRO: "Profesional",
+  CLINIC: "Clínica",
+};
+
+const SIM_COUNT_LABELS: Record<PlanKey, string> = {
+  BASIC: "Básicos",
+  PRO: "Profesionales",
+  CLINIC: "Clínicas",
+};
+
+const PROGRAM_MODE_LABELS: Record<ProgramMode, string> = {
+  fixed: "Montos fijos por plan",
+  pct: "% por nivel (bronce/plata/oro)",
+};
+
+// Valores iniciales = los DEFAULT del motor (los mismos del DDL), nunca
+// inventados aquí. Se reemplazan en cuanto responde el GET.
+const DEFAULT_PAYOUT_FORM: PayoutForm = {
+  defaultMode: DEFAULT_PAYOUT_CONFIG.defaultMode,
+  defaultPayoutMode: DEFAULT_PAYOUT_CONFIG.defaultPayoutMode,
+  allowAffiliateChoice: DEFAULT_PAYOUT_CONFIG.allowAffiliateChoice,
+  recurringBasicMxn: String(DEFAULT_PAYOUT_CONFIG.recurringBasicMxn),
+  recurringProMxn: String(DEFAULT_PAYOUT_CONFIG.recurringProMxn),
+  recurringClinicMxn: String(DEFAULT_PAYOUT_CONFIG.recurringClinicMxn),
+  oneTimeBasicMxn: String(DEFAULT_PAYOUT_CONFIG.oneTimeBasicMxn),
+  oneTimeProMxn: String(DEFAULT_PAYOUT_CONFIG.oneTimeProMxn),
+  oneTimeClinicMxn: String(DEFAULT_PAYOUT_CONFIG.oneTimeClinicMxn),
+  startAtInvoiceNo: String(DEFAULT_PAYOUT_CONFIG.startAtInvoiceNo),
+  oneTimeAtInvoiceNo: String(DEFAULT_PAYOUT_CONFIG.oneTimeAtInvoiceNo),
+};
+
+const DEFAULT_SIM_COUNTS: Record<PlanKey, string> = { BASIC: "10", PRO: "20", CLINIC: "5" };
+
+// Aviso ámbar: mismo look que el de "Niveles y comisiones del programa".
+const AMBER_NOTE: CSSProperties = {
+  padding: "12px 16px",
+  borderRadius: 12,
+  border: "1px solid rgba(245,158,11,0.35)",
+  background: "rgba(245,158,11,0.08)",
+  color: "var(--text-2)",
+  fontSize: 13,
+  lineHeight: 1.5,
+};
+
+const SIM_PANEL: CSSProperties = {
+  border: "1px solid var(--border-soft)",
+  borderRadius: 12,
+  padding: "14px 16px",
+  background: "var(--surface-2, rgba(255,255,255,0.02))",
+};
+
+/** Config del API → formulario (strings). Tolerante a campos faltantes. */
+function toPayoutForm(cfg: Partial<PayoutConfig> | null | undefined): PayoutForm {
+  const c = cfg ?? {};
+  return {
+    defaultMode: c.defaultMode === "pct" ? "pct" : "fixed",
+    defaultPayoutMode: c.defaultPayoutMode === "onetime" ? "onetime" : "recurring",
+    allowAffiliateChoice: c.allowAffiliateChoice !== false,
+    recurringBasicMxn: String(c.recurringBasicMxn ?? DEFAULT_PAYOUT_FORM.recurringBasicMxn),
+    recurringProMxn: String(c.recurringProMxn ?? DEFAULT_PAYOUT_FORM.recurringProMxn),
+    recurringClinicMxn: String(c.recurringClinicMxn ?? DEFAULT_PAYOUT_FORM.recurringClinicMxn),
+    oneTimeBasicMxn: String(c.oneTimeBasicMxn ?? DEFAULT_PAYOUT_FORM.oneTimeBasicMxn),
+    oneTimeProMxn: String(c.oneTimeProMxn ?? DEFAULT_PAYOUT_FORM.oneTimeProMxn),
+    oneTimeClinicMxn: String(c.oneTimeClinicMxn ?? DEFAULT_PAYOUT_FORM.oneTimeClinicMxn),
+    startAtInvoiceNo: String(c.startAtInvoiceNo ?? DEFAULT_PAYOUT_FORM.startAtInvoiceNo),
+    oneTimeAtInvoiceNo: String(c.oneTimeAtInvoiceNo ?? DEFAULT_PAYOUT_FORM.oneTimeAtInvoiceNo),
+  };
+}
+
+/** Lee un campo numérico del formulario; lo no finito cuenta como 0. */
+function amountOf(form: PayoutForm, key: PayoutNumberKey): number {
+  const n = Number(form[key]);
+  return Number.isFinite(n) ? n : 0;
+}
+
+/** "$90/mes = 13.1% de $689". Sin precio del plan → guion (no se inventa). */
+function recurringHint(amountMxn: number, planPriceMxn: number | undefined): string {
+  const pct = planPriceMxn ? equivalentPct(amountMxn, planPriceMxn) : null;
+  if (pct === null || !planPriceMxn) return `${formatCurrency(amountMxn)}/mes · equivalencia —`;
+  return `${formatCurrency(amountMxn)}/mes = ${pct}% de ${formatCurrency(planPriceMxn)}`;
+}
+
+/** "$650 = 0.9 meses de $689". Sin precio del plan → guion. */
+function onetimeHint(amountMxn: number, planPriceMxn: number | undefined): string {
+  const months = planPriceMxn ? paybackMonths(amountMxn, planPriceMxn) : null;
+  if (months === null || !planPriceMxn) return `${formatCurrency(amountMxn)} · equivalencia —`;
+  return `${formatCurrency(amountMxn)} = ${months} ${months === 1 ? "mes" : "meses"} de ${formatCurrency(planPriceMxn)}`;
+}
+
+function pctLabel(value: number | null | undefined): string {
+  return value == null || !Number.isFinite(value) ? "—" : `${value}%`;
+}
+
+function monthsLabel(value: number | null | undefined): string {
+  if (value == null || !Number.isFinite(value)) return "—";
+  return `${value} ${value === 1 ? "mes" : "meses"}`;
+}
+
 export function AffiliatesClient({ initial }: { initial: AffiliateRow[] }) {
   const askConfirm = useConfirm();
   const [list, setList] = useState<AffiliateRow[]>(initial);
@@ -235,6 +414,174 @@ export function AffiliatesClient({ initial }: { initial: AffiliateRow[] }) {
       toast.error(e?.message ?? "No se pudo guardar la configuración");
     } finally {
       setCfgSaving(false);
+    }
+  }
+
+  // ── Esquema de pago (motor de comisiones) ──────────────────────────────
+  const [payForm, setPayForm] = useState<PayoutForm>(DEFAULT_PAYOUT_FORM);
+  const [payPlans, setPayPlans] = useState<PayoutPlanRow[]>([]);
+  const [payExists, setPayExists] = useState(true);
+  const [payLoading, setPayLoading] = useState(true);
+  const [paySaving, setPaySaving] = useState(false);
+  const [simCounts, setSimCounts] = useState<Record<PlanKey, string>>(DEFAULT_SIM_COUNTS);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/admin/affiliates/payout-config")
+      .then((res) => (res.ok ? res.json() : Promise.reject()))
+      .then((data: PayoutConfigResponse) => {
+        if (cancelled) return;
+        setPayExists(data?.exists !== false);
+        setPayPlans(Array.isArray(data?.plans) ? data.plans : []);
+        if (data?.config) setPayForm(toPayoutForm(data.config));
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (!cancelled) setPayLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Precio vigente de cada plan (plan_configs). Sin entrada = sin precio.
+  const planPrices = useMemo(() => {
+    const map: Record<string, number> = {};
+    for (const p of payPlans) {
+      const price = Number(p?.priceMxn);
+      if (Number.isFinite(price) && price > 0) map[p.id] = price;
+    }
+    return map;
+  }, [payPlans]);
+
+  const planLabels = useMemo(() => {
+    const map: Record<string, string> = { ...PLAN_FALLBACK_LABELS };
+    for (const p of payPlans) if (p?.label) map[p.id] = p.label;
+    return map;
+  }, [payPlans]);
+
+  // El formulario visto como PayoutConfig: es lo que alimenta al simulador
+  // (así Rafael ve el efecto ANTES de guardar).
+  const payFormConfig: PayoutConfig = useMemo(
+    () => ({
+      defaultMode: payForm.defaultMode,
+      defaultPayoutMode: payForm.defaultPayoutMode,
+      allowAffiliateChoice: payForm.allowAffiliateChoice,
+      recurringBasicMxn: amountOf(payForm, "recurringBasicMxn"),
+      recurringProMxn: amountOf(payForm, "recurringProMxn"),
+      recurringClinicMxn: amountOf(payForm, "recurringClinicMxn"),
+      oneTimeBasicMxn: amountOf(payForm, "oneTimeBasicMxn"),
+      oneTimeProMxn: amountOf(payForm, "oneTimeProMxn"),
+      oneTimeClinicMxn: amountOf(payForm, "oneTimeClinicMxn"),
+      startAtInvoiceNo: amountOf(payForm, "startAtInvoiceNo"),
+      oneTimeAtInvoiceNo: amountOf(payForm, "oneTimeAtInvoiceNo"),
+    }),
+    [payForm]
+  );
+
+  // Aviso NO bloqueante: el pago único supera lo que la clínica habrá pagado
+  // cuando se dispara. Aproximado porque el primer cobro es promocional.
+  const oneTimeWarnings = useMemo(() => {
+    const out: string[] = [];
+    const at = payFormConfig.oneTimeAtInvoiceNo;
+    if (!Number.isFinite(at) || at < 1) return out;
+    for (const plan of PLAN_KEYS) {
+      const price = planPrices[plan];
+      if (!price) continue;
+      const amount = amountOf(payForm, ONETIME_FIELD[plan]);
+      const billed = price * at;
+      if (amount > billed) {
+        out.push(
+          `Ojo: el pago único de ${planLabels[plan]} (${formatCurrency(amount)}) supera lo cobrado hasta el cobro #${at} (${formatCurrency(billed)} aprox.).`
+        );
+      }
+    }
+    return out;
+  }, [payForm, payFormConfig, planPrices, planLabels]);
+
+  const simulation = useMemo(() => {
+    const counts: Record<PlanKey, number> = { BASIC: 0, PRO: 0, CLINIC: 0 };
+    const prices: Record<PlanKey, number> = { BASIC: 0, PRO: 0, CLINIC: 0 };
+    for (const plan of PLAN_KEYS) {
+      const n = Number(simCounts[plan]);
+      counts[plan] = Number.isFinite(n) && n > 0 ? Math.floor(n) : 0;
+      prices[plan] = planPrices[plan] ?? 0;
+    }
+    return simulateProgram(counts, prices, payFormConfig);
+  }, [simCounts, planPrices, payFormConfig]);
+
+  // El bloque `payout` de /metrics puede no existir todavía (lo agrega el
+  // motor de comisiones): se lee tolerante y solo se pinta si viene.
+  const payoutMetrics: PayoutMetrics | null = (metrics as any)?.payout ?? null;
+
+  function setPayNum(key: PayoutNumberKey, value: string) {
+    setPayForm((prev) => {
+      const next: PayoutForm = { ...prev };
+      next[key] = value;
+      return next;
+    });
+  }
+
+  async function savePayoutConfig() {
+    // Validación en cliente: al motor de comisiones no le mandamos basura.
+    for (const plan of PLAN_KEYS) {
+      for (const key of [RECURRING_FIELD[plan], ONETIME_FIELD[plan]]) {
+        const n = Number(payForm[key]);
+        if (!Number.isFinite(n) || n < 0) {
+          toast.error(`El monto de ${planLabels[plan]} debe ser un número mayor o igual a 0.`);
+          return;
+        }
+      }
+    }
+    const startAt = Number(payForm.startAtInvoiceNo);
+    if (!Number.isInteger(startAt) || startAt < 1 || startAt > 12) {
+      toast.error('"La comisión empieza en el cobro #" debe ser un entero entre 1 y 12.');
+      return;
+    }
+    const oneTimeAt = Number(payForm.oneTimeAtInvoiceNo);
+    if (!Number.isInteger(oneTimeAt) || oneTimeAt < 1 || oneTimeAt > 12) {
+      toast.error('"El pago único se entrega en el cobro #" debe ser un entero entre 1 y 12.');
+      return;
+    }
+    // Si el pago único cae ANTES del arranque de la comisión no se paga nunca:
+    // el arranque corta ese cobro y la igualdad exacta corta los siguientes.
+    // El servidor lo rechaza igual; aquí se avisa sin gastar el viaje.
+    if (oneTimeAt < startAt) {
+      toast.error(
+        "El pago único no se pagaría nunca: su cobro debe ser igual o posterior al cobro en el que arranca la comisión.",
+      );
+      return;
+    }
+
+    setPaySaving(true);
+    try {
+      const res = await fetch("/api/admin/affiliates/payout-config", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          defaultMode: payForm.defaultMode,
+          defaultPayoutMode: payForm.defaultPayoutMode,
+          allowAffiliateChoice: payForm.allowAffiliateChoice,
+          recurringBasicMxn: Number(payForm.recurringBasicMxn),
+          recurringProMxn: Number(payForm.recurringProMxn),
+          recurringClinicMxn: Number(payForm.recurringClinicMxn),
+          oneTimeBasicMxn: Number(payForm.oneTimeBasicMxn),
+          oneTimeProMxn: Number(payForm.oneTimeProMxn),
+          oneTimeClinicMxn: Number(payForm.oneTimeClinicMxn),
+          startAtInvoiceNo: startAt,
+          oneTimeAtInvoiceNo: oneTimeAt,
+        }),
+      });
+      const data = await res.json().catch(() => ({} as any));
+      if (!res.ok) throw new Error(data?.error ?? "No se pudo guardar el esquema de pago");
+      if (data?.config) setPayForm(toPayoutForm(data.config));
+      toast.success("Esquema de pago guardado");
+      // El costo comprometido del motor depende de estos montos.
+      void loadMetrics();
+    } catch (e: any) {
+      toast.error(e?.message ?? "No se pudo guardar el esquema de pago");
+    } finally {
+      setPaySaving(false);
     }
   }
 
@@ -381,6 +728,45 @@ export function AffiliatesClient({ initial }: { initial: AffiliateRow[] }) {
     } finally {
       setBusySellerId(null);
     }
+  }
+
+  // Input de monto + su equivalencia viva contra el precio real del plan.
+  function renderAmountField(plan: PlanKey, mode: PayoutMode) {
+    const key = mode === "onetime" ? ONETIME_FIELD[plan] : RECURRING_FIELD[plan];
+    const amount = amountOf(payForm, key);
+    const price = planPrices[plan];
+    const hint = mode === "onetime" ? onetimeHint(amount, price) : recurringHint(amount, price);
+    const id = `payout-${key}`;
+    return (
+      <div className="field-new" key={key}>
+        <label className="field-new__label" htmlFor={id}>{planLabels[plan]}</label>
+        <input
+          id={id}
+          type="number"
+          className="input-new"
+          min={0}
+          step={10}
+          value={payForm[key]}
+          disabled={payLoading}
+          onChange={(e) => setPayNum(key, e.target.value)}
+        />
+        <span className="mono" style={{ fontSize: 11, color: "var(--text-3)", lineHeight: 1.4 }}>
+          {hint}
+        </span>
+      </div>
+    );
+  }
+
+  // Renglón "etiqueta ····· valor" de las columnas del simulador.
+  function renderSimRow(label: string, value: string) {
+    return (
+      <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 10, padding: "5px 0" }}>
+        <span style={{ fontSize: 12, color: "var(--text-3)" }}>{label}</span>
+        <span className="mono" style={{ fontSize: 13, fontWeight: 600, color: "var(--text-1)", whiteSpace: "nowrap" }}>
+          {value}
+        </span>
+      </div>
+    );
   }
 
   // Panel expandible con el equipo de vendedores de un afiliado.
@@ -769,6 +1155,14 @@ export function AffiliatesClient({ initial }: { initial: AffiliateRow[] }) {
                         >
                           {expandedTeam === a.id ? "Ocultar equipo" : "Ver equipo"}
                         </ButtonNew>
+                        {/* Ficha completa del afiliado (clínicas, comisiones, modalidad). */}
+                        <Link
+                          href={`/admin/affiliates/${a.id}`}
+                          className="btn-new btn-new--secondary btn-new--sm"
+                          style={{ textDecoration: "none" }}
+                        >
+                          Ver ficha
+                        </Link>
                       </div>
                     </td>
                   </tr>
@@ -845,6 +1239,343 @@ export function AffiliatesClient({ initial }: { initial: AffiliateRow[] }) {
             >
               {cfgSaving ? "Guardando…" : "Guardar"}
             </ButtonNew>
+          </div>
+        </CardNew>
+      </div>
+
+      {/* Esquema de pago (motor de comisiones) */}
+      <div style={{ marginTop: 20 }}>
+        <CardNew
+          title="Esquema de pago"
+          sub="Cuánto gana el afiliado por cada clínica: un fijo cada mes mientras pague, o un solo pago."
+        >
+          {!payLoading && !payExists && (
+            <div style={{ ...AMBER_NOTE, marginBottom: 14 }}>
+              Esquema de pago inactivo: corre <span className="mono">sql/afiliados-comisiones.sql</span> en Supabase.
+            </div>
+          )}
+
+          {/* Estado del motor con las clínicas que ya están corriendo */}
+          {payoutMetrics?.enabled && (
+            <>
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))",
+                  gap: 14,
+                  marginBottom: 12,
+                }}
+              >
+                <KpiCard
+                  label="Costo mensual comprometido"
+                  value={formatCurrency(payoutMetrics.committedMonthlyMxn ?? 0)}
+                  icon={Coins}
+                />
+                <KpiCard
+                  label="% del MRR referido"
+                  value={
+                    payoutMetrics.committedPctOfMrr == null
+                      ? "—"
+                      : `${Number(payoutMetrics.committedPctOfMrr).toFixed(1)}%`
+                  }
+                  icon={Percent}
+                />
+                <div className="kpi">
+                  <div className="kpi__top">
+                    <span className="kpi__label">Clínicas por modalidad</span>
+                    <div className="kpi__icon">
+                      <Repeat size={17} strokeWidth={1.75} />
+                    </div>
+                  </div>
+                  <div
+                    className="mono"
+                    style={{
+                      fontSize: 16,
+                      fontWeight: 600,
+                      color: "var(--text-1)",
+                      whiteSpace: "nowrap",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                    }}
+                    title={`${payoutMetrics.recurringClinics ?? 0} en fijo recurrente · ${payoutMetrics.onetimeClinics ?? 0} en pago único · ${payoutMetrics.onetimePaidClinics ?? 0} con el pago único ya entregado`}
+                  >
+                    {payoutMetrics.recurringClinics ?? 0} / {payoutMetrics.onetimeClinics ?? 0} /{" "}
+                    {payoutMetrics.onetimePaidClinics ?? 0}
+                  </div>
+                  <div style={{ fontSize: 10, color: "var(--text-3)", marginTop: 6 }}>
+                    recurrente / único / único ya pagado
+                  </div>
+                </div>
+              </div>
+
+              {payoutMetrics.byKindMxn && (
+                <p style={{ color: "var(--text-3)", fontSize: 12, lineHeight: 1.5, margin: "0 0 16px" }}>
+                  Comisiones generadas por tipo: % del nivel{" "}
+                  {formatCurrency(payoutMetrics.byKindMxn.pct ?? 0)} · fijo recurrente{" "}
+                  {formatCurrency(payoutMetrics.byKindMxn.recurring ?? 0)} · pago único{" "}
+                  {formatCurrency(payoutMetrics.byKindMxn.onetime ?? 0)}.
+                </p>
+              )}
+            </>
+          )}
+
+          {/* Montos por plan. La equivalencia sale del precio REAL del plan. */}
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 300px), 1fr))",
+              gap: 20,
+            }}
+          >
+            <div>
+              <div className="form-section__title">
+                Fijo recurrente (MXN por mes)
+                <span className="form-section__rule" />
+              </div>
+              <div style={{ display: "grid", gap: 12 }}>
+                {PLAN_KEYS.map((plan) => renderAmountField(plan, "recurring"))}
+              </div>
+            </div>
+            <div>
+              <div className="form-section__title">
+                Pago único (MXN, una sola vez)
+                <span className="form-section__rule" />
+              </div>
+              <div style={{ display: "grid", gap: 12 }}>
+                {PLAN_KEYS.map((plan) => renderAmountField(plan, "onetime"))}
+              </div>
+            </div>
+          </div>
+
+          {/* Aviso NO bloqueante: se puede guardar igual. */}
+          {oneTimeWarnings.length > 0 && (
+            <div style={{ ...AMBER_NOTE, marginTop: 14 }}>
+              {oneTimeWarnings.map((w) => (
+                <div key={w}>{w}</div>
+              ))}
+            </div>
+          )}
+
+          {/* Reglas del programa */}
+          <div style={{ marginTop: 22 }}>
+            <div className="form-section__title">
+              Reglas del programa
+              <span className="form-section__rule" />
+            </div>
+
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 230px), 1fr))",
+                gap: 12,
+              }}
+            >
+              <div className="field-new">
+                <label className="field-new__label" htmlFor="payout-default-mode">
+                  Cómo paga el programa
+                </label>
+                <select
+                  id="payout-default-mode"
+                  className="input-new"
+                  value={payForm.defaultMode}
+                  disabled={payLoading}
+                  onChange={(e) =>
+                    setPayForm((prev) => ({
+                      ...prev,
+                      defaultMode: e.target.value === "pct" ? "pct" : "fixed",
+                    }))
+                  }
+                >
+                  <option value="fixed">{PROGRAM_MODE_LABELS.fixed}</option>
+                  <option value="pct">{PROGRAM_MODE_LABELS.pct}</option>
+                </select>
+              </div>
+
+              <div className="field-new">
+                <label className="field-new__label" htmlFor="payout-default-payout-mode">
+                  Modalidad por defecto
+                </label>
+                <select
+                  id="payout-default-payout-mode"
+                  className="input-new"
+                  value={payForm.defaultPayoutMode}
+                  disabled={payLoading}
+                  onChange={(e) =>
+                    setPayForm((prev) => ({
+                      ...prev,
+                      defaultPayoutMode: e.target.value === "onetime" ? "onetime" : "recurring",
+                    }))
+                  }
+                >
+                  <option value="recurring">{PAYOUT_MODE_LABELS.recurring}</option>
+                  <option value="onetime">{PAYOUT_MODE_LABELS.onetime}</option>
+                </select>
+              </div>
+
+              <div className="field-new">
+                <label className="field-new__label" htmlFor="payout-start-at">
+                  La comisión empieza en el cobro #
+                </label>
+                <input
+                  id="payout-start-at"
+                  type="number"
+                  className="input-new"
+                  min={1}
+                  max={12}
+                  step={1}
+                  value={payForm.startAtInvoiceNo}
+                  disabled={payLoading}
+                  onChange={(e) => setPayNum("startAtInvoiceNo", e.target.value)}
+                />
+              </div>
+
+              <div className="field-new">
+                <label className="field-new__label" htmlFor="payout-onetime-at">
+                  El pago único se entrega en el cobro #
+                </label>
+                <input
+                  id="payout-onetime-at"
+                  type="number"
+                  className="input-new"
+                  min={1}
+                  max={12}
+                  step={1}
+                  value={payForm.oneTimeAtInvoiceNo}
+                  disabled={payLoading}
+                  onChange={(e) => setPayNum("oneTimeAtInvoiceNo", e.target.value)}
+                />
+              </div>
+            </div>
+
+            <label
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 8,
+                fontSize: 13,
+                color: "var(--text-2)",
+                marginTop: 14,
+                cursor: "pointer",
+              }}
+            >
+              <input
+                type="checkbox"
+                checked={payForm.allowAffiliateChoice}
+                disabled={payLoading}
+                onChange={(e) =>
+                  setPayForm((prev) => ({ ...prev, allowAffiliateChoice: e.target.checked }))
+                }
+                style={{ width: 15, height: 15, accentColor: "var(--brand)" }}
+              />
+              El afiliado puede elegir su modalidad desde su panel
+            </label>
+
+            <p style={{ color: "var(--text-3)", fontSize: 12, lineHeight: 1.5, margin: "12px 0 0" }}>
+              El primer cobro de la clínica es el mes promocional, por eso el default es 2: la comisión arranca hasta
+              el segundo cobro y el pago único se entrega ahí mismo. La modalidad se congela por clínica cuando se da
+              de alta, así que cambiarla solo afecta a las clínicas nuevas.
+            </p>
+          </div>
+
+          <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 16 }}>
+            <ButtonNew
+              variant="primary"
+              disabled={!payExists || payLoading || paySaving}
+              onClick={savePayoutConfig}
+            >
+              {paySaving ? "Guardando…" : "Guardar esquema"}
+            </ButtonNew>
+          </div>
+        </CardNew>
+      </div>
+
+      {/* Simulador: usa los montos del formulario, no los guardados */}
+      <div style={{ marginTop: 14 }}>
+        <CardNew
+          title="Simulador del esquema"
+          sub="Con los montos que estás editando arriba (aunque todavía no los guardes)."
+        >
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 160px), 1fr))",
+              gap: 12,
+            }}
+          >
+            {PLAN_KEYS.map((plan) => {
+              const price = planPrices[plan];
+              return (
+                <div className="field-new" key={plan}>
+                  <label className="field-new__label" htmlFor={`sim-${plan}`}>
+                    {SIM_COUNT_LABELS[plan]}
+                  </label>
+                  <input
+                    id={`sim-${plan}`}
+                    type="number"
+                    className="input-new"
+                    min={0}
+                    step={1}
+                    value={simCounts[plan]}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      setSimCounts((prev) => ({ ...prev, [plan]: v }));
+                    }}
+                  />
+                  <span className="mono" style={{ fontSize: 11, color: "var(--text-3)" }}>
+                    {planLabels[plan]} · {price ? `${formatCurrency(price)}/mes` : "—"}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 250px), 1fr))",
+              gap: 14,
+              marginTop: 18,
+            }}
+          >
+            <div style={SIM_PANEL}>
+              <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text-1)", marginBottom: 6 }}>
+                {simulation.clinics === 1 ? "1 clínica genera" : `${simulation.clinics} clínicas generan`}
+              </div>
+              {renderSimRow("Ingreso mensual", formatCurrency(simulation.revenueMonthlyMxn))}
+              {renderSimRow("Ingreso del primer año", formatCurrency(simulation.revenueYearlyMxn))}
+              <p style={{ fontSize: 11, color: "var(--text-3)", lineHeight: 1.5, margin: "8px 0 0" }}>
+                Con los precios vigentes de cada plan.
+              </p>
+            </div>
+
+            <div style={SIM_PANEL}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginBottom: 6 }}>
+                <span style={{ fontSize: 13, fontWeight: 600, color: "var(--text-1)" }}>
+                  {PAYOUT_MODE_LABELS.recurring}
+                </span>
+                {payForm.defaultPayoutMode === "recurring" && <BadgeNew tone="brand">Por defecto</BadgeNew>}
+              </div>
+              {renderSimRow("Pagas al mes", formatCurrency(simulation.recurring.costMxn))}
+              {renderSimRow("% del ingreso mensual", pctLabel(simulation.recurring.effectivePct))}
+              <p style={{ fontSize: 11, color: "var(--text-3)", lineHeight: 1.5, margin: "8px 0 0" }}>
+                Costo continuo: se paga mes con mes mientras la clínica siga pagando.
+              </p>
+            </div>
+
+            <div style={SIM_PANEL}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginBottom: 6 }}>
+                <span style={{ fontSize: 13, fontWeight: 600, color: "var(--text-1)" }}>
+                  {PAYOUT_MODE_LABELS.onetime}
+                </span>
+                {payForm.defaultPayoutMode === "onetime" && <BadgeNew tone="brand">Por defecto</BadgeNew>}
+              </div>
+              {renderSimRow("Pagas una vez", formatCurrency(simulation.onetime.costMxn))}
+              {renderSimRow("% del ingreso del primer año", pctLabel(simulation.onetime.effectivePct))}
+              {renderSimRow("Se recupera en", monthsLabel(simulation.onetime.paybackMonths))}
+              <p style={{ fontSize: 11, color: "var(--text-3)", lineHeight: 1.5, margin: "8px 0 0" }}>
+                Meses de ingreso de esas mismas clínicas que cuesta el pago único.
+              </p>
+            </div>
           </div>
         </CardNew>
       </div>

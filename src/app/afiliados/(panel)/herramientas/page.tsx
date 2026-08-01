@@ -17,7 +17,15 @@ import { LinksManager, type ToolLink } from "@/components/afiliados/tools/links-
 import { CouponCard, type AffiliateCouponInfo } from "@/components/afiliados/tools/coupon-card";
 import { MarketingKit } from "@/components/afiliados/tools/marketing-kit";
 import { ProspectTemplates } from "@/components/afiliados/tools/prospect-templates";
-import { LevelProgress } from "@/components/afiliados/level-progress";
+import { LevelProgress, type LevelAmountRow } from "@/components/afiliados/level-progress";
+import { getResolvedPlans } from "@/lib/plans";
+import {
+  getPayoutConfig,
+  effectiveAffiliateMode,
+  fixedAmountFor,
+  normalizePlanKey,
+  type ProgramMode,
+} from "@/lib/affiliates/payout";
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://www.dalecontrol.com";
 
@@ -85,6 +93,23 @@ export default async function HerramientasPage() {
 
   const levelInfo = await getAffiliateLevelInfo(affiliateId, ctx.affiliate.commissionPct);
 
+  // Motor de comisiones: la misma tarjeta de nivel que /inicio. Si el programa
+  // paga MONTOS FIJOS, aquí tampoco se puede pintar la escalera de porcentajes
+  // (sería el mismo número falso en dos pantallas). Labels de plan_configs y
+  // montos de la config: nada escrito a mano. payoutCfg = null → todo se queda
+  // como estaba (% del nivel).
+  const [payoutCfg, plans] = await Promise.all([getPayoutConfig(), getResolvedPlans()]);
+  const programMode: ProgramMode = payoutCfg ? payoutCfg.defaultMode : "pct";
+  const payoutMode = effectiveAffiliateMode(ctx.affiliate.payoutMode, payoutCfg);
+  const amounts: LevelAmountRow[] = payoutCfg
+    ? plans.map((p) => ({
+        plan: p.id,
+        label: p.label,
+        recurringMxn: fixedAmountFor(normalizePlanKey(p.id), "recurring", payoutCfg),
+        oneTimeMxn: fixedAmountFor(normalizePlanKey(p.id), "onetime", payoutCfg),
+      }))
+    : [];
+
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
       {/* Header */}
@@ -132,7 +157,7 @@ export default async function HerramientasPage() {
       )}
 
       {/* Nivel y comisión */}
-      <LevelProgress info={levelInfo} />
+      <LevelProgress info={levelInfo} mode={programMode} payoutMode={payoutMode} amounts={amounts} />
 
       {/* Multi-links con campaña */}
       <CardNew

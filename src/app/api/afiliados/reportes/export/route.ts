@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getAffiliateContext } from "@/lib/affiliate-auth";
 import { roundMxn } from "@/lib/affiliates/stats";
+import { commissionKindLabel } from "@/lib/affiliates/payout-core";
 import * as XLSX from "xlsx";
 
 export const runtime = "nodejs";
@@ -113,8 +114,26 @@ export async function GET(req: NextRequest) {
     }));
   } else {
     sheetName = "Comisiones";
-    header = ["Fecha", "Clínica", "Factura base (MXN)", "Comisión (MXN)", "Estado", "Fecha de pago"];
-    cols = [{ wch: 12 }, { wch: 34 }, { wch: 18 }, { wch: 16 }, { wch: 12 }, { wch: 14 }];
+    header = [
+      "Fecha",
+      "Clínica",
+      "Tipo",
+      "Meses cubiertos",
+      "Factura base (MXN)",
+      "Comisión (MXN)",
+      "Estado",
+      "Fecha de pago",
+    ];
+    cols = [
+      { wch: 12 },
+      { wch: 34 },
+      { wch: 17 },
+      { wch: 16 },
+      { wch: 18 },
+      { wch: 16 },
+      { wch: 12 },
+      { wch: 14 },
+    ];
     const commissions = await prisma.affiliateCommission.findMany({
       where: { affiliateId, createdAt },
       orderBy: { createdAt: "desc" },
@@ -129,6 +148,9 @@ export async function GET(req: NextRequest) {
     rows = commissions.map((c) => ({
       "Fecha": fmtDayMx(c.createdAt),
       "Clínica": nameById.get(c.clinicId) ?? "Clínica",
+      // Filas viejas pueden no traer kind/monthsCovered: siempre con fallback.
+      "Tipo": commissionKindLabel(c.kind),
+      "Meses cubiertos": c.monthsCovered ?? 1,
       "Factura base (MXN)": roundMxn(c.amountMxn),
       "Comisión (MXN)": roundMxn(c.commissionMxn),
       "Estado": c.status === "paid" ? "Pagada" : "Pendiente",

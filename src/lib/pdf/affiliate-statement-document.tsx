@@ -1,4 +1,5 @@
 import { Document, Page, Text, View, StyleSheet } from "@react-pdf/renderer";
+import { commissionKindLabel } from "@/lib/affiliates/payout-core";
 
 /**
  * Estado de cuenta mensual del afiliado (PDF).
@@ -7,7 +8,8 @@ import { Document, Page, Text, View, StyleSheet } from "@react-pdf/renderer";
  *  - Header con marca "DaleControl" violeta #7c3aed + borde inferior violeta 2pt
  *  - Secciones con títulos uppercase pequeños
  *  - Tabla con View flexDirection row + anchos por flex, filas zebra (#f7f6fb)
- *  - Card de totales (generado / pagado / pendiente — pendiente en violeta)
+ *  - Card de totales (generado / pagado / pendiente — pendiente en violeta),
+ *    con desglose opcional del generado por tipo de comisión
  *  - Footer fijo con fecha de generación
  *
  * Fuentes: Helvetica/Helvetica-Bold built-in de @react-pdf (sin Font.register).
@@ -17,6 +19,10 @@ import { Document, Page, Text, View, StyleSheet } from "@react-pdf/renderer";
 export interface AffiliateStatementRow {
   date: string; // dd/mm/yyyy
   clinicName: string;
+  /** AffiliateCommission.kind: "pct" | "recurring" | "onetime" (viejas: null). */
+  kind: string;
+  /** Meses que cubre la factura (anual = 12). Las filas viejas valen 1. */
+  monthsCovered: number;
   baseMxn: number;
   commissionMxn: number;
   status: "pending" | "paid" | string;
@@ -33,6 +39,15 @@ export interface AffiliateStatementProps {
     totalMxn: number;
     paidMxn: number;
     pendingMxn: number;
+    /**
+     * Desglose opcional del generado por tipo de comisión. Solo se pinta si
+     * hay más de un tipo con monto: con uno solo repetiría el total.
+     */
+    byKind?: {
+      pct: number;
+      recurring: number;
+      onetime: number;
+    };
   };
 }
 
@@ -117,11 +132,13 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: "#d4d4dc",
   },
+  // 7.5pt (antes 8.5) para que "Comisión MXN" quepa en una línea ahora que la
+  // tabla tiene 7 columnas: el header es `fixed` y se repite en cada página.
   th: {
-    fontSize: 8.5,
+    fontSize: 7.5,
     color: "#6b6b78",
     textTransform: "uppercase",
-    letterSpacing: 0.5,
+    letterSpacing: 0.4,
     fontFamily: "Helvetica-Bold",
   },
   tableRow: {
@@ -147,11 +164,19 @@ const styles = StyleSheet.create({
   tdPending: {
     color: "#7c3aed",
   },
+  // Anchos de la tabla — 7 columnas, suma de flex = 7.55. En A4 (595.3pt) con
+  // padding de página 40 y paddingHorizontal 6 de la fila quedan ~503pt de
+  // contenido: ~66.6pt por unidad de flex. Como todo es flex (base 0) nada
+  // puede desbordar horizontalmente; el reparto se calculó para que el texto
+  // más largo de cada celda ("Fijo recurrente", "$123,456.78") entre en una
+  // sola línea. Si tocas un flex, recalcula el resto para conservar la suma.
   colDate: { flex: 1 },
-  colClinic: { flex: 2.2, paddingRight: 6 },
-  colBase: { flex: 1, textAlign: "right" },
-  colCommission: { flex: 1, textAlign: "right" },
-  colStatus: { flex: 0.9, textAlign: "right" },
+  colClinic: { flex: 1.95, paddingRight: 6 },
+  colKind: { flex: 1.15, paddingRight: 6 },
+  colMonths: { flex: 0.6, textAlign: "right", paddingRight: 4 },
+  colBase: { flex: 0.95, textAlign: "right" },
+  colCommission: { flex: 1.05, textAlign: "right" },
+  colStatus: { flex: 0.85, textAlign: "right" },
   emptyRow: {
     paddingVertical: 24,
     alignItems: "center",
@@ -184,6 +209,22 @@ const styles = StyleSheet.create({
     fontSize: 9.5,
     color: "#14101f",
     fontFamily: "Helvetica-Bold",
+  },
+  // Desglose por tipo: sangrado y en gris, colgando de "Generado".
+  totalRowKind: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "baseline",
+    marginTop: 2,
+    paddingLeft: 10,
+  },
+  totalLabelKind: {
+    fontSize: 8.5,
+    color: "#6b6b78",
+  },
+  totalValueKind: {
+    fontSize: 8.5,
+    color: "#6b6b78",
   },
   totalRowPending: {
     borderTopWidth: 0.5,
@@ -238,6 +279,18 @@ export function AffiliateStatementDocument({
   rows,
   totals,
 }: AffiliateStatementProps) {
+  // Desglose del generado por tipo. Solo se muestra si hay dos o más tipos con
+  // monto: con uno solo la línea repetiría el total y ensuciaría la tarjeta.
+  const byKind = totals.byKind;
+  const kindBreakdown = byKind
+    ? [
+        { kind: "recurring", amountMxn: byKind.recurring },
+        { kind: "onetime", amountMxn: byKind.onetime },
+        { kind: "pct", amountMxn: byKind.pct },
+      ].filter((k) => k.amountMxn > 0)
+    : [];
+  const showKindBreakdown = kindBreakdown.length > 1;
+
   return (
     <Document>
       <Page size="A4" style={styles.page} wrap>
@@ -278,6 +331,8 @@ export function AffiliateStatementDocument({
         <View style={styles.tableHeader} fixed>
           <Text style={[styles.th, styles.colDate]}>Fecha</Text>
           <Text style={[styles.th, styles.colClinic]}>Clínica</Text>
+          <Text style={[styles.th, styles.colKind]}>Tipo</Text>
+          <Text style={[styles.th, styles.colMonths]}>Meses</Text>
           <Text style={[styles.th, styles.colBase]}>Base MXN</Text>
           <Text style={[styles.th, styles.colCommission]}>Comisión MXN</Text>
           <Text style={[styles.th, styles.colStatus]}>Estado</Text>
@@ -287,6 +342,8 @@ export function AffiliateStatementDocument({
           <View key={i} style={i % 2 === 1 ? [styles.tableRow, styles.rowZebra] : styles.tableRow} wrap={false}>
             <Text style={[styles.td, styles.colDate]}>{r.date}</Text>
             <Text style={[styles.td, styles.colClinic]}>{r.clinicName}</Text>
+            <Text style={[styles.td, styles.colKind, styles.tdMuted]}>{commissionKindLabel(r.kind)}</Text>
+            <Text style={[styles.td, styles.colMonths, styles.tdMuted]}>{r.monthsCovered ?? 1}</Text>
             <Text style={[styles.td, styles.colBase, styles.tdMuted]}>{fmtMxn(r.baseMxn)}</Text>
             <Text style={[styles.td, styles.colCommission, styles.tdBold]}>{fmtMxn(r.commissionMxn)}</Text>
             <Text style={[styles.td, styles.colStatus, r.status === "paid" ? styles.tdMuted : styles.tdPending]}>
@@ -312,6 +369,13 @@ export function AffiliateStatementDocument({
               <Text style={styles.totalLabel}>Generado</Text>
               <Text style={styles.totalValue}>{fmtMxn(totals.totalMxn)}</Text>
             </View>
+            {showKindBreakdown &&
+              kindBreakdown.map((k) => (
+                <View key={k.kind} style={styles.totalRowKind}>
+                  <Text style={styles.totalLabelKind}>{commissionKindLabel(k.kind)}</Text>
+                  <Text style={styles.totalValueKind}>{fmtMxn(k.amountMxn)}</Text>
+                </View>
+              ))}
             <View style={styles.totalRow}>
               <Text style={styles.totalLabel}>Pagado</Text>
               <Text style={styles.totalValue}>{fmtMxn(totals.paidMxn)}</Text>
