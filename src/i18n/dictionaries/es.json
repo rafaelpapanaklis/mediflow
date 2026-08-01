@@ -2484,7 +2484,7 @@
     "openedBy": "Abierta por {name}",
     "openedAt": "Apertura {time}",
     "kpiOpening": "Apertura",
-    "kpiIncome": "Ingresos del día",
+    "kpiIncome": "Ingresos del turno",
     "kpiDiscounts": "Descuentos",
     "kpiTax": "IVA estimado (incluido)",
     "kpiWithdrawals": "Retiros",
@@ -2508,6 +2508,7 @@
     "closeSubmit": "Cerrar caja",
     "listTitle": "Movimientos del turno",
     "thTime": "Hora",
+    "thDateTime": "Fecha y hora",
     "thPatient": "Paciente",
     "thConcept": "Tratamiento / concepto",
     "thAmount": "Costo",
@@ -2535,7 +2536,15 @@
     "toastClosed": "Caja cerrada",
     "errorGeneric": "Ocurrió un error",
     "amountInvalid": "Monto inválido",
-    "reasonRequired": "Escribe un motivo"
+    "reasonRequired": "Escribe un motivo",
+    "shiftSalesTitle": "Finanzas · ventas del turno",
+    "shiftSalesSince": "Abierto desde el {date}",
+    "dayGroupMeta": {
+      "one": "{count} movimiento · {amount}",
+      "other": "{count} movimientos · {amount}"
+    },
+    "staleShiftTitle": "Esta caja lleva abierta desde el {date} ({hours} h).",
+    "staleShiftDesc": "Te recomendamos cerrar el turno para cuadrar el efectivo. Mientras tanto, los totales y las ventas de abajo son de todo el turno, no solo de hoy."
   },
   "billing": {
     "billingClient": {

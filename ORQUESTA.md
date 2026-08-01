@@ -2067,3 +2067,87 @@ murieron en Prisma y devolvieron 204 (verificado en el log del dev server).
 - `npx tsc --noEmit` → **0 errores**.
 - `npx eslint` sobre los 7 archivos tocados → **0 errores**.
 - `npm run build` → **exit 0**, output completo leído (sin `| tail`), 347/347 páginas.
+
+═══════════════════════════════════════════════════════════════════════════
+## Fix-Caja-Fecha — "ventas del día" que en realidad eran del TURNO ✅ (2026-07-31) · rama fix/caja-fecha-turno
+═══════════════════════════════════════════════════════════════════════════
+BUILD EXIT 0 (output completo leído, sin pipes) · `npx tsc --noEmit` 0 errores · sin SQL · sin
+dependencias nuevas · **los totales del arqueo NO se tocaron**.
+
+### El reporte
+
+En `/dashboard/caja`, la tabla "Finanzas · ventas del día" mostraba solo la HORA de cada
+movimiento. En prod se veía "06:00 p.m." ARRIBA de "03:09 p.m." aunque el servidor ordena
+`paidAt: "asc"` y el cliente no invierte nada: eran de días distintos. La caja llevaba días
+abierta ("Historial de cortes (0)").
+
+### La causa
+
+`src/lib/caja.ts` deriva la ventana desde `reg.openedAt`, no desde medianoche. **Eso es correcto
+para un corte de turno** y no se cambió. El problema era de etiquetado y de formato:
+
+- El título decía "del día" cuando los datos son del turno. El comentario del código y el de la
+  exportación ya decían "turno": quien lo escribió lo sabía, la etiqueta visible quedó mal.
+- Con solo la hora, un turno que cruza días vuelve imposible saber de qué día es cada cobro. En un
+  arqueo eso descuadra dinero real.
+
+### Qué cambió (4 archivos)
+
+**`src/app/dashboard/caja/caja-client.tsx`**
+1. **Título honesto**: "Finanzas · ventas del turno" + subtítulo "Abierto desde el 30-jul,
+   09:00 a.m." (de `reg.openedAt`). El KPI `kpiIncome` también decía "Ingresos del día" siendo del
+   turno → "Ingresos del turno" (se usa en 4 puntos, todos de turno).
+2. **Fecha en las filas, solo cuando hace falta**. `daySpan()` cuenta los días naturales de la
+   clínica que toca el turno — contando también `openedAt`, porque un turno abierto ayer que solo
+   cobró hoy TAMBIÉN cruza días. Si son >1:
+   - fila separadora por día dentro de la tabla ("Jueves 30 de jul" + "3 movimientos · $2,450.00"),
+   - y la fecha apilada sobre la hora en cada fila ("30-jul" / "03:09 p.m."), no al lado: así la
+     columna NO se ensancha y la tabla no desborda,
+   - el encabezado pasa de "Hora" a "Fecha y hora".
+   Con un turno de un solo día no aparece nada de esto: se ve igual que siempre.
+3. **CSV**: ahora "Fecha" y "Hora" en columnas separadas (`dd/mm/aaaa` + 24 h), SIEMPRE, cruce o no
+   días. Antes iba `fmtDateTime` ("27-jul, 06:00 p.m.": sin año y como texto, Excel no lo parsea).
+4. **`summary.list`** (modal post-cierre) y **`printSummary`**: mismo criterio, con `openedAt` y
+   `closedAt` como anclas del turno.
+5. **Aviso de caja sin cortar**: banner ámbar cuando la caja lleva >= 18 h abierta **o** cruzó a
+   otro día natural. "Esta caja lleva abierta desde el 30-jul, 09:00 a.m. (38 h)." + recomendación
+   de cerrar el turno. **No cierra nada ni bloquea nada.**
+6. **Zona horaria**: se respeta `timeZone` en todos los formatos nuevos. Además, si `timezone`
+   llegara inválida, `Intl` lanzaba `RangeError` y tumbaba la página entera; ahora degrada a la
+   zona del navegador.
+
+**`src/i18n/dictionaries/{es,en}.json`** — `thDateTime`, `shiftSalesTitle`, `shiftSalesSince`,
+`dayGroupMeta` (con plural one/other), `staleShiftTitle`, `staleShiftDesc`; y `kpiIncome`
+recalibrado. **`src/lib/caja.ts`** — solo un comentario en `getCajaState` explicando que la ventana
+arranca en `openedAt` a propósito y que por eso la UI debe fechar las filas.
+
+### Gotchas
+
+- **Hidratación**: el aviso depende de la hora actual. Calcularlo en el render daría distinto en el
+  servidor y en el navegador. Se resuelve en un `useEffect` (`nowMs`), y se refresca cada 60 s.
+- **Clave de día**: `Intl.DateTimeFormat(...).formatToParts()` en vez del truco de pedir locale
+  `en-CA`, para que el formato "AAAA-MM-DD" no dependa de los locales del navegador.
+- El subtotal por día del separador es **solo presentación** (agrupa las mismas filas de la tabla);
+  el arqueo sigue viniendo entero del servidor.
+
+### Verificación
+
+Lógica de fechas comprobada con un script aparte (turno de 1 día, turno que cruza, turno abierto
+ayer con cobros solo hoy, CSV, umbral del aviso, zona horaria inválida) — todo como se esperaba.
+
+Render comprobado en Chrome con el **componente real** (`CajaClient` montado en una página temporal
+fuera del matcher del middleware, ya borrada, nunca commiteada), porque sin `.env` no hay BD:
+
+| Escenario | Resultado |
+|---|---|
+| Turno de 1 día | encabezado "Hora", solo hora, sin separadores, **sin banner** |
+| Turno que cruza días | "Fecha y hora", separadores "Jueves 30 de jul" / "Viernes 31 de jul", fecha en cada fila |
+| Modal post-cierre (fetch stubbeado) | "Fecha y hora" + las 5 filas fechadas |
+| CSV en turno de 1 día | `"31/07/2026","09:40",...` — la fecha va igual |
+| Ancho útil 1180px (laptop 1440 con sidebar) | tabla 1122px: **no desborda**, sin scroll horizontal de página |
+
+No hizo falta `@container`: la fecha va apilada sobre la hora, así que la tabla no crece de ancho, y
+el contenedor ya tenía `overflow-x:auto`.
+
+**Pendiente de QA en prod**: que el aviso aparezca en la caja real que lleva días abierta, y que el
+Excel descargado abra con las columnas Fecha/Hora bien parseadas.

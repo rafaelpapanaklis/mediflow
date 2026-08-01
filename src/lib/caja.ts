@@ -270,6 +270,11 @@ export async function getCajaState(clinicId: string): Promise<CajaState> {
 
   if (!reg) return { register: null, totals: null, withdrawals: [], list: [], ...day };
 
+  // Ventana del TURNO: arranca en la apertura de la caja, NO a medianoche. Es lo
+  // correcto para un corte (el arqueo cuadra contra el efectivo desde que se
+  // abrió), pero implica que `list` y `totals` pueden abarcar varios días
+  // naturales si la caja no se cierra: la UI debe etiquetarlos como del turno y
+  // fechar las filas cuando cruzan de día (ver caja-client.tsx).
   const from = reg.openedAt;
   const derived = await deriveWindow(clinicId, from, now);
 

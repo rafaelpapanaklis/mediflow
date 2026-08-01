@@ -1,10 +1,10 @@
 "use client";
-import React, { useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   Wallet, TrendingUp, Percent, Receipt, ArrowDownCircle, Banknote,
   Lock, Printer, X, ChevronDown, ChevronRight, History,
-  CreditCard, Download, AlertTriangle, KeyRound,
+  CreditCard, Download, AlertTriangle, KeyRound, Clock,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { KpiCard }   from "@/components/ui/design-system/kpi-card";
@@ -57,6 +57,9 @@ interface CloseSummary {
 
 const PIN_RE = /^\d{6}$/;
 
+/** A partir de estas horas abiertas sugerimos hacer el corte (solo aviso). */
+const STALE_SHIFT_HOURS = 18;
+
 export function CajaClient({ caja, history, timezone, hasPin: hasPinInitial, billing }: Props) {
   const t = useT();
   const router = useRouter();
@@ -104,10 +107,98 @@ export function CajaClient({ caja, history, timezone, hasPin: hasPinInitial, bil
   };
   const methodLabel = (m: string) => METHOD_LABEL[m] ?? m;
 
+  // ── Fechas, SIEMPRE en la zona horaria de la clínica ──────────────────
+  // Si `timezone` llegara inválida, Intl lanza RangeError y tumba la página
+  // entera; se degrada a la zona del navegador en vez de romper el corte.
+  const tz = useMemo(() => {
+    try { new Intl.DateTimeFormat("es-MX", { timeZone: timezone }); return timezone; }
+    catch { return undefined; }
+  }, [timezone]);
+
   const fmtTime = (iso: string) =>
-    new Date(iso).toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit", timeZone: timezone });
+    new Date(iso).toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit", timeZone: tz });
   const fmtDateTime = (iso: string) =>
-    new Date(iso).toLocaleString("es-MX", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit", timeZone: timezone });
+    new Date(iso).toLocaleString("es-MX", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit", timeZone: tz });
+  /** "27 jul" — prefijo de día en las filas cuando el turno cruza días. */
+  const fmtDayShort = (iso: string) =>
+    new Date(iso).toLocaleDateString("es-MX", { day: "2-digit", month: "short", timeZone: tz });
+  /** "Jueves, 27 de jul" — encabezado del grupo de día dentro de la tabla. */
+  const fmtDayLong = (iso: string) => {
+    const s = new Date(iso).toLocaleDateString("es-MX", { weekday: "long", day: "numeric", month: "short", timeZone: tz });
+    return s.charAt(0).toUpperCase() + s.slice(1);
+  };
+  /** dd/mm/aaaa y hh:mm de 24 h — para el CSV: Excel sí los parsea como fecha y hora. */
+  const fmtDayNumeric = (iso: string) =>
+    new Date(iso).toLocaleDateString("es-MX", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: tz });
+  const fmtClock24 = (iso: string) =>
+    new Date(iso).toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: tz });
+
+  // Día natural de la clínica como clave comparable ("2026-07-27"). Se arma con
+  // formatToParts y no con un locale prestado (en-CA) para que el formato no
+  // dependa de los locales que tenga instalados el navegador.
+  const dayKeyFmt = useMemo(
+    () => new Intl.DateTimeFormat("en-US", { timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit" }),
+    [tz],
+  );
+  const dayKey = useCallback((at: string | number | Date) => {
+    const parts = dayKeyFmt.formatToParts(new Date(at));
+    const get = (type: string) => parts.find(p => p.type === type)?.value ?? "";
+    return `${get("year")}-${get("month")}-${get("day")}`;
+  }, [dayKeyFmt]);
+
+  /**
+   * Días naturales distintos que toca un turno. Cuenta también las anclas
+   * (apertura / cierre): un turno abierto ayer que solo cobró hoy TAMBIÉN cruza
+   * días, y sus filas deben decir de qué día son.
+   */
+  const daySpan = useCallback(
+    (rows: CajaState["list"], ...anchors: (string | null | undefined)[]) => {
+      const days = new Set<string>();
+      for (const a of anchors) if (a) days.add(dayKey(a));
+      for (const r of rows) days.add(dayKey(r.at));
+      return days;
+    },
+    [dayKey],
+  );
+
+  // La lista es del TURNO, no del día: solo si cruza más de un día natural las
+  // filas muestran fecha. Un turno de un solo día se sigue viendo con la hora sola.
+  const listMultiDay = daySpan(caja.list, reg?.openedAt).size > 1;
+  // Mismo criterio para el resumen congelado que se muestra tras cerrar.
+  const summaryMultiDay = summary != null && daySpan(summary.list, summary.openedAt, summary.closedAt).size > 1;
+
+  // Conteo y suma por día — SOLO para el encabezado de grupo de la tabla. No
+  // interviene en el arqueo: los totales del turno siguen viniendo del servidor.
+  const dayAgg = useMemo(() => {
+    const m = new Map<string, { count: number; total: number }>();
+    for (const r of caja.list) {
+      const k = dayKey(r.at);
+      const cur = m.get(k) ?? { count: 0, total: 0 };
+      cur.count += 1;
+      cur.total += r.amount;
+      m.set(k, cur);
+    }
+    return m;
+  }, [caja.list, dayKey]);
+
+  // ── Aviso de caja sin cortar ──────────────────────────────────────────
+  // `now` se resuelve DESPUÉS de montar: calcularlo en el render lo haría
+  // distinto en el servidor y en el navegador y rompería la hidratación.
+  const [nowMs, setNowMs] = useState<number | null>(null);
+  useEffect(() => {
+    setNowMs(Date.now());
+    const id = setInterval(() => setNowMs(Date.now()), 60_000);
+    return () => clearInterval(id);
+  }, []);
+
+  const staleShift = useMemo(() => {
+    if (!reg || nowMs == null) return null;
+    const hours = (nowMs - new Date(reg.openedAt).getTime()) / 3_600_000;
+    // Cruzar a otro día natural también amerita el aviso aunque lleve pocas horas.
+    const crossedDay = dayKey(reg.openedAt) !== dayKey(nowMs);
+    if (hours < STALE_SHIFT_HOURS && !crossedDay) return null;
+    return { hours: Math.max(0, Math.floor(hours)) };
+  }, [reg, nowMs, dayKey]);
 
   // Facturación del día (siempre disponible, con o sin caja abierta).
   const collectedToday = Math.max(0, caja.billedToday - caja.pendingToday);
@@ -225,15 +316,18 @@ export function CajaClient({ caja, history, timezone, hasPin: hasPinInitial, bil
 
   // Exporta las ventas del turno a CSV (abre en Excel). Sigue el patrón cliente
   // del repo (Blob + createObjectURL); BOM para acentos + CRLF para Excel.
+  // Fecha y hora van SIEMPRE y en columnas separadas (dd/mm/aaaa + hh:mm de 24 h):
+  // un archivo contable con solo la hora no sirve, y el turno puede cruzar días.
   function downloadVentasCsv() {
     const rows = caja.list;
     if (rows.length === 0) { toast.error("No hay ventas para exportar."); return; }
     const cell = (v: string | number) => `"${String(v ?? "").replace(/"/g, '""')}"`;
-    const header = ["Fecha", "Paciente", "Procedimiento", "Método", "Total", "Descuento", "Profesional"];
+    const header = ["Fecha", "Hora", "Paciente", "Procedimiento", "Método", "Total", "Descuento", "Profesional"];
     const lines = [
       header.join(","),
       ...rows.map(r => [
-        cell(fmtDateTime(r.at)),
+        cell(fmtDayNumeric(r.at)),
+        cell(fmtClock24(r.at)),
         cell(r.patientName),
         cell(r.concept),
         cell(methodLabel(r.method)),
@@ -254,8 +348,11 @@ export function CajaClient({ caja, history, timezone, hasPin: hasPinInitial, bil
   }
 
   function printSummary(s: CloseSummary) {
+    // El corte impreso es un documento de arqueo: si el turno cruzó días, cada
+    // línea lleva la fecha completa, no solo la hora.
+    const multiDay = daySpan(s.list, s.openedAt, s.closedAt).size > 1;
     const rows = s.list.map(r =>
-      `<tr><td>${fmtTime(r.at)}</td><td>${esc(r.patientName)}</td><td>${esc(r.concept)}</td><td style="text-align:right">${fmtMXNdec(r.amount)}</td><td>${esc(methodLabel(r.method))}</td><td>${esc(r.doctorName)}</td></tr>`,
+      `<tr><td>${multiDay ? fmtDateTime(r.at) : fmtTime(r.at)}</td><td>${esc(r.patientName)}</td><td>${esc(r.concept)}</td><td style="text-align:right">${fmtMXNdec(r.amount)}</td><td>${esc(methodLabel(r.method))}</td><td>${esc(r.doctorName)}</td></tr>`,
     ).join("");
     const line = (label: string, val: string) =>
       `<tr><td style="padding:2px 12px 2px 0;color:#555">${label}</td><td style="text-align:right;font-weight:600">${val}</td></tr>`;
@@ -280,7 +377,7 @@ export function CajaClient({ caja, history, timezone, hasPin: hasPinInitial, bil
       </table>
       <h2>${t("cashRegister.listTitle")}</h2>
       <table class="mov"><thead><tr>
-        <th>${t("cashRegister.thTime")}</th><th>${t("cashRegister.thPatient")}</th><th>${t("cashRegister.thConcept")}</th>
+        <th>${multiDay ? t("cashRegister.thDateTime") : t("cashRegister.thTime")}</th><th>${t("cashRegister.thPatient")}</th><th>${t("cashRegister.thConcept")}</th>
         <th style="text-align:right">${t("cashRegister.thAmount")}</th><th>${t("cashRegister.thMethod")}</th><th>${t("cashRegister.thDoctor")}</th>
       </tr></thead><tbody>${rows || `<tr><td colspan="6" style="color:#999">${t("cashRegister.emptyList")}</td></tr>`}</tbody></table>
       <script>window.onload=function(){window.print();}</script>
@@ -357,6 +454,28 @@ export function CajaClient({ caja, history, timezone, hasPin: hasPinInitial, bil
             </CardNew>
           ) : (
             <>
+              {/* Aviso de turno sin cortar. Solo informa: no cierra la caja ni
+               *  bloquea nada. Aparece a las STALE_SHIFT_HOURS o al cruzar de día. */}
+              {staleShift && (
+                <div style={{
+                  display: "flex", alignItems: "flex-start", gap: 10,
+                  background: "var(--warning-soft)",
+                  border: "1px solid var(--warning-border-strong)",
+                  borderRadius: "var(--radius-lg)",
+                  padding: "12px 14px", marginBottom: 14,
+                }}>
+                  <Clock size={16} strokeWidth={1.75} style={{ color: "var(--warning-strong)", flexShrink: 0, marginTop: 1 }} />
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: "var(--warning-strong)" }}>
+                      {t("cashRegister.staleShiftTitle", { date: fmtDateTime(reg.openedAt), hours: staleShift.hours })}
+                    </div>
+                    <div style={{ fontSize: 12, color: "var(--warning-strong)", opacity: 0.85, marginTop: 3 }}>
+                      {t("cashRegister.staleShiftDesc")}
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* Barra de estado + acciones */}
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap", marginBottom: 16 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
@@ -412,7 +531,14 @@ export function CajaClient({ caja, history, timezone, hasPin: hasPinInitial, bil
               <div style={{ marginTop: 18 }}>
                 <CardNew noPad>
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap", padding: "14px 16px", borderBottom: "1px solid var(--border-soft)" }}>
-                    <span style={{ color: "var(--text-1)", fontSize: 14, fontWeight: 600 }}>Finanzas · ventas del día</span>
+                    {/* La lista es de TODO el turno (desde openedAt), no del día:
+                     *  el título lo dice y muestra desde cuándo. */}
+                    <div style={{ display: "flex", flexDirection: "column", gap: 2, minWidth: 0 }}>
+                      <span style={{ color: "var(--text-1)", fontSize: 14, fontWeight: 600 }}>{t("cashRegister.shiftSalesTitle")}</span>
+                      <span style={{ color: "var(--text-3)", fontSize: 12 }}>
+                        {t("cashRegister.shiftSalesSince", { date: fmtDateTime(reg.openedAt) })}
+                      </span>
+                    </div>
                     <ButtonNew variant="secondary" icon={<Download size={16} strokeWidth={1.75} />} onClick={downloadVentasCsv} disabled={caja.list.length === 0}>
                       Descargar Excel
                     </ButtonNew>
@@ -426,7 +552,7 @@ export function CajaClient({ caja, history, timezone, hasPin: hasPinInitial, bil
                       <table className="table-new">
                         <thead>
                           <tr>
-                            <th>{t("cashRegister.thTime")}</th>
+                            <th>{listMultiDay ? t("cashRegister.thDateTime") : t("cashRegister.thTime")}</th>
                             <th>{t("cashRegister.thPatient")}</th>
                             <th>{t("cashRegister.thConcept")}</th>
                             <th>{t("cashRegister.thMethod")}</th>
@@ -436,17 +562,47 @@ export function CajaClient({ caja, history, timezone, hasPin: hasPinInitial, bil
                           </tr>
                         </thead>
                         <tbody>
-                          {caja.list.map(r => (
-                            <tr key={r.paymentId}>
-                              <td style={{ whiteSpace: "nowrap", color: "var(--text-3)" }}>{fmtTime(r.at)}</td>
-                              <td style={{ color: "var(--text-1)" }}>{r.patientName}</td>
-                              <td style={{ color: "var(--text-2)" }}>{r.concept}</td>
-                              <td><BadgeNew tone={r.method === "cash" ? "success" : "info"}>{methodLabel(r.method)}</BadgeNew></td>
-                              <td style={{ textAlign: "right", fontWeight: 600, color: "var(--text-1)", whiteSpace: "nowrap", fontFamily: "var(--font-mono, monospace)", fontVariantNumeric: "tabular-nums" }}>{fmtMXNdec(r.amount)}</td>
-                              <td style={{ textAlign: "right", color: r.discount > 0 ? "var(--danger)" : "var(--text-3)", whiteSpace: "nowrap", fontFamily: "var(--font-mono, monospace)", fontVariantNumeric: "tabular-nums", fontWeight: r.discount > 0 ? 600 : 400 }}>{r.discount > 0 ? `−${fmtMXNdec(r.discount)}` : "—"}</td>
-                              <td style={{ color: "var(--text-2)" }}>{r.doctorName}</td>
-                            </tr>
-                          ))}
+                          {caja.list.map((r, i) => {
+                            // Turno que cruza días: fila separadora al abrir cada día
+                            // natural + fecha en la propia fila. La fecha va apilada
+                            // sobre la hora, así la columna no se ensancha y la tabla
+                            // no desborda en laptop. Turno de un día: nada de esto.
+                            const k = dayKey(r.at);
+                            const newDay = listMultiDay && (i === 0 || dayKey(caja.list[i - 1].at) !== k);
+                            const agg = dayAgg.get(k);
+                            return (
+                              <React.Fragment key={r.paymentId}>
+                                {newDay && (
+                                  <tr>
+                                    <td colSpan={7} style={{ background: "var(--bg-elev-2)", padding: "7px 14px" }}>
+                                      <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
+                                        <span style={{ color: "var(--text-2)", fontSize: 12, fontWeight: 600 }}>{fmtDayLong(r.at)}</span>
+                                        {agg && (
+                                          <span style={{ color: "var(--text-3)", fontSize: 11.5, fontVariantNumeric: "tabular-nums" }}>
+                                            {t("cashRegister.dayGroupMeta", { count: agg.count, amount: fmtMXNdec(agg.total) })}
+                                          </span>
+                                        )}
+                                      </div>
+                                    </td>
+                                  </tr>
+                                )}
+                                <tr>
+                                  <td style={{ whiteSpace: "nowrap", color: "var(--text-3)" }}>
+                                    {listMultiDay && (
+                                      <span style={{ display: "block", fontSize: 11, opacity: 0.85 }}>{fmtDayShort(r.at)}</span>
+                                    )}
+                                    {fmtTime(r.at)}
+                                  </td>
+                                  <td style={{ color: "var(--text-1)" }}>{r.patientName}</td>
+                                  <td style={{ color: "var(--text-2)" }}>{r.concept}</td>
+                                  <td><BadgeNew tone={r.method === "cash" ? "success" : "info"}>{methodLabel(r.method)}</BadgeNew></td>
+                                  <td style={{ textAlign: "right", fontWeight: 600, color: "var(--text-1)", whiteSpace: "nowrap", fontFamily: "var(--font-mono, monospace)", fontVariantNumeric: "tabular-nums" }}>{fmtMXNdec(r.amount)}</td>
+                                  <td style={{ textAlign: "right", color: r.discount > 0 ? "var(--danger)" : "var(--text-3)", whiteSpace: "nowrap", fontFamily: "var(--font-mono, monospace)", fontVariantNumeric: "tabular-nums", fontWeight: r.discount > 0 ? 600 : 400 }}>{r.discount > 0 ? `−${fmtMXNdec(r.discount)}` : "—"}</td>
+                                  <td style={{ color: "var(--text-2)" }}>{r.doctorName}</td>
+                                </tr>
+                              </React.Fragment>
+                            );
+                          })}
                         </tbody>
                       </table>
                     </div>
@@ -694,14 +850,21 @@ export function CajaClient({ caja, history, timezone, hasPin: hasPinInitial, bil
                   <table className="table-new">
                     <thead>
                       <tr>
-                        <th>{t("cashRegister.thTime")}</th><th>{t("cashRegister.thPatient")}</th><th>{t("cashRegister.thConcept")}</th>
+                        <th>{summaryMultiDay ? t("cashRegister.thDateTime") : t("cashRegister.thTime")}</th><th>{t("cashRegister.thPatient")}</th><th>{t("cashRegister.thConcept")}</th>
                         <th style={{ textAlign: "right" }}>{t("cashRegister.thAmount")}</th><th>{t("cashRegister.thMethod")}</th><th>{t("cashRegister.thDoctor")}</th>
                       </tr>
                     </thead>
                     <tbody>
                       {summary.list.map(r => (
                         <tr key={r.paymentId}>
-                          <td style={{ whiteSpace: "nowrap", color: "var(--text-3)" }}>{fmtTime(r.at)}</td>
+                          {/* Mismo criterio que la tabla del turno: la fecha solo
+                            * aparece si el corte abarcó más de un día natural. */}
+                          <td style={{ whiteSpace: "nowrap", color: "var(--text-3)" }}>
+                            {summaryMultiDay && (
+                              <span style={{ display: "block", fontSize: 11, opacity: 0.85 }}>{fmtDayShort(r.at)}</span>
+                            )}
+                            {fmtTime(r.at)}
+                          </td>
                           <td>{r.patientName}</td>
                           <td style={{ color: "var(--text-2)" }}>{r.concept}</td>
                           <td style={{ textAlign: "right", fontWeight: 600, whiteSpace: "nowrap", fontFamily: "var(--font-mono, monospace)", fontVariantNumeric: "tabular-nums" }}>{fmtMXNdec(r.amount)}</td>

@@ -2484,7 +2484,7 @@
     "openedBy": "Opened by {name}",
     "openedAt": "Opened {time}",
     "kpiOpening": "Opening",
-    "kpiIncome": "Income today",
+    "kpiIncome": "Shift income",
     "kpiDiscounts": "Discounts",
     "kpiTax": "Estimated VAT (incl.)",
     "kpiWithdrawals": "Withdrawals",
@@ -2508,6 +2508,7 @@
     "closeSubmit": "Close register",
     "listTitle": "Shift movements",
     "thTime": "Time",
+    "thDateTime": "Date & time",
     "thPatient": "Patient",
     "thConcept": "Treatment / item",
     "thAmount": "Amount",
@@ -2535,7 +2536,15 @@
     "toastClosed": "Register closed",
     "errorGeneric": "Something went wrong",
     "amountInvalid": "Invalid amount",
-    "reasonRequired": "Enter a reason"
+    "reasonRequired": "Enter a reason",
+    "shiftSalesTitle": "Finance · shift sales",
+    "shiftSalesSince": "Open since {date}",
+    "dayGroupMeta": {
+      "one": "{count} movement · {amount}",
+      "other": "{count} movements · {amount}"
+    },
+    "staleShiftTitle": "This register has been open since {date} ({hours} h).",
+    "staleShiftDesc": "We recommend closing the shift to reconcile the cash. Until then, the totals and sales below cover the whole shift, not just today."
   },
   "billing": {
     "billingClient": {
