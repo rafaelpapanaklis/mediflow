@@ -473,10 +473,12 @@
       "groupGoTo": "GO TO",
       "dialogLabel": "Search or run a command",
       "dialogDesc": "Type to search patients, appointments, or invoices. Navigate with the arrow keys, press Enter to open.",
-      "searchPlaceholder": "Search patients, appointments, actions…",
+      "searchPlaceholder": "Search patient, invoice, or appointment…",
       "resultsLabel": "Results",
       "searching": "Searching…",
-      "noResultsFor": "No results for \"{query}\".",
+      "noResultsFor": "No results for “{query}”.",
+      "noResultsHint": "Try the patient's name, the invoice number, or their phone number.",
+      "scopeHint": "Type a name, an invoice number (MF-0072), or a phone number.",
       "emptyHint": "Start typing or select an action.",
       "hintNavigate": "navigate",
       "hintOpen": "open",
@@ -486,7 +488,8 @@
     },
     "cmdHint": {
       "ariaOpen": "Open search and commands ({key}+K)",
-      "searchOrRun": "Search or run…"
+      "searchOrRun": "Search patient, invoice, or appointment…",
+      "searchShort": "Search patient or invoice…"
     },
     "shortcuts": {
       "title": "Keyboard shortcuts",

@@ -473,10 +473,12 @@
       "groupGoTo": "IR A",
       "dialogLabel": "Buscar o ejecutar comando",
       "dialogDesc": "Escribe para buscar pacientes, citas o facturas. Navega con flechas, presiona Enter para abrir.",
-      "searchPlaceholder": "Buscar pacientes, citas, acciones…",
+      "searchPlaceholder": "Buscar paciente, factura o cita…",
       "resultsLabel": "Resultados",
       "searching": "Buscando…",
-      "noResultsFor": "Sin resultados para \"{query}\".",
+      "noResultsFor": "Sin resultados para «{query}».",
+      "noResultsHint": "Prueba con el nombre del paciente, el folio de la factura o el teléfono.",
+      "scopeHint": "Escribe un nombre, un folio (MF-0072) o un teléfono.",
       "emptyHint": "Empieza a escribir o selecciona una acción.",
       "hintNavigate": "navegar",
       "hintOpen": "abrir",
@@ -486,7 +488,8 @@
     },
     "cmdHint": {
       "ariaOpen": "Abrir búsqueda y comandos ({key}+K)",
-      "searchOrRun": "Buscar o ejecutar…"
+      "searchOrRun": "Buscar paciente, factura o cita…",
+      "searchShort": "Buscar paciente o factura…"
     },
     "shortcuts": {
       "title": "Atajos de teclado",
