@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Monitor, Smartphone, ShieldCheck, RefreshCw } from "lucide-react";
 import toast from "react-hot-toast";
@@ -50,6 +50,16 @@ function fmtDate(iso: string): string {
   }
 }
 
+/** "en 11 h" / "en 45 min". Sólo se pinta tras montar (evita desfase de hidratación). */
+function fmtRemaining(iso: string): string | null {
+  const ms = new Date(iso).getTime() - Date.now();
+  if (isNaN(ms)) return null;
+  if (ms <= 0) return "vencida";
+  const mins = Math.round(ms / 60000);
+  if (mins < 60) return `en ${mins} min`;
+  return `en ${Math.round(mins / 60)} h`;
+}
+
 export function SesionesClient({
   initial,
   adminEmail,
@@ -70,6 +80,10 @@ export function SesionesClient({
   const [sessions, setSessions] = useState<SessionRow[]>(initial);
   const [busy, setBusy] = useState<string | null>(null);
   const [confirmAll, setConfirmAll] = useState(false);
+  // El tiempo restante se calcula con Date.now(): sólo tras montar, o el SSR y
+  // la hidratación pueden diferir.
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
 
   const refresh = useCallback(async () => {
     try {
@@ -141,9 +155,18 @@ export function SesionesClient({
     <div style={{ maxWidth: 920, margin: "0 auto", padding: "8px 0 40px" }}>
       {/* Header */}
       <div style={{ marginBottom: 22 }}>
-        <h1 style={{ fontSize: 22, letterSpacing: "-0.02em", color: "var(--text-1)", fontWeight: 600, margin: 0 }}>
-          {tr("admin.sessions.title", "Sesiones de administrador")}
-        </h1>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+          <h1 style={{ fontSize: 22, letterSpacing: "-0.02em", color: "var(--text-1)", fontWeight: 600, margin: 0 }}>
+            {tr("admin.sessions.title", "Sesiones de administrador")}
+          </h1>
+          {/* Contador de sesiones vivas: si se acumulan decenas, la sesión no
+              está expirando — lo que falla es la cookie o la validación. */}
+          <BadgeNew tone={sessions.length >= 10 ? "warning" : "brand"}>
+            {sessions.length} {sessions.length === 1
+              ? tr("admin.sessions.aliveOne", "sesión viva")
+              : tr("admin.sessions.aliveMany", "sesiones vivas")}
+          </BadgeNew>
+        </div>
         <p style={{ color: "var(--text-3)", fontSize: 13, marginTop: 4 }}>
           {tr(
             "admin.sessions.subtitle",
@@ -151,6 +174,14 @@ export function SesionesClient({
           )}{" "}
           <span className="mono" style={{ color: "var(--text-2)" }}>{adminEmail}</span>
         </p>
+        {sessions.length >= 10 && (
+          <p style={{ color: "var(--warning)", fontSize: 12, marginTop: 6 }}>
+            {tr(
+              "admin.sessions.tooMany",
+              "Muchas sesiones vivas a la vez: si no reconoces tantos inicios, el navegador está perdiendo la cookie y se abre una sesión nueva en cada login.",
+            )}
+          </p>
+        )}
       </div>
 
       <CardNew
@@ -243,7 +274,10 @@ export function SesionesClient({
                     <div style={{ fontSize: 11, color: "var(--text-3)", marginTop: 3, display: "flex", gap: 10, flexWrap: "wrap" }}>
                       <span className="mono">{s.ipAddress ?? "IP desconocida"}</span>
                       <span>· {tr("admin.sessions.started", "Inició")}: {fmtDate(s.createdAt)}</span>
-                      <span>· {tr("admin.sessions.expires", "Expira")}: {fmtDate(s.expiresAt)}</span>
+                      <span>
+                        · {tr("admin.sessions.expires", "Expira")}: {fmtDate(s.expiresAt)}
+                        {mounted && fmtRemaining(s.expiresAt) ? ` (${fmtRemaining(s.expiresAt)})` : ""}
+                      </span>
                     </div>
                   </div>
 
@@ -277,7 +311,7 @@ export function SesionesClient({
           <span>
             {tr(
               "admin.sessions.note",
-              "Las sesiones expiran solas a las 8 horas. Si pierdes un dispositivo, revoca su sesión aquí: el token deja de funcionar al instante.",
+              "Las sesiones duran 12 horas y se renuevan solas mientras trabajas; si dejas de usar el panel, expiran. Si pierdes un dispositivo, revoca su sesión aquí: el token deja de funcionar al instante.",
             )}
           </span>
         </div>
