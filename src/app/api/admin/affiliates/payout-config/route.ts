@@ -138,14 +138,14 @@ export async function PUT(req: NextRequest) {
   }
 
   // Cruce de las dos reglas: si el pago único se dispara ANTES de que arranque
-  // la comisión, no se paga nunca (el arranque corta ese cobro y la igualdad
-  // exacta corta los siguientes) y la pantalla se vería perfectamente válida.
-  // Es una config rota en silencio, así que se rechaza.
+  // la comisión, el arranque lo corre en silencio (el motor lo entrega en el
+  // primer cobro que sí comisiona) y la pantalla prometería un cobro que no es
+  // el real. Se rechaza para que el número guardado sea el que manda.
   if (oneTimeAtInvoiceNo < startAtInvoiceNo) {
     return NextResponse.json(
       {
         error:
-          "El pago único no se pagaría nunca: su cobro debe ser igual o posterior al cobro en el que arranca la comisión",
+          "El pago único no se entregaría en ese cobro: debe ser igual o posterior al cobro en el que arranca la comisión",
       },
       { status: 400 }
     );

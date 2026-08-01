@@ -32,14 +32,19 @@ interface PayoutModeFormProps {
   amounts: PayoutModeAmount[];
 }
 
-const OPTIONS: { value: PayoutMode; blurb: string }[] = [
+const OPTIONS: { value: PayoutMode; blurb: string; annual: string }[] = [
   {
     value: "recurring",
     blurb: "Ganas un monto fijo cada mes mientras la clínica siga pagando.",
+    // Argumento de venta, no letra chica: el plan anual se cobra completo desde
+    // el día uno (no lleva mes promocional), así que su primera factura ya
+    // comisiona los 12 meses juntos.
+    annual: "Si vendes el plan ANUAL cobras los 12 meses de golpe, en su primera factura.",
   },
   {
     value: "onetime",
     blurb: "Ganas un solo pago por clínica y ya.",
+    annual: "Si vendes el plan ANUAL cobras tu pago único de inmediato, en su primera factura.",
   },
 ];
 
@@ -78,6 +83,18 @@ const blurbStyle: CSSProperties = {
   lineHeight: 1.5,
 };
 
+// La venta anual paga por adelantado: se destaca en vez de esconderse.
+const annualStyle: CSSProperties = {
+  display: "block",
+  fontSize: 12,
+  lineHeight: 1.45,
+  color: "var(--text-2)",
+  background: "var(--brand-soft)",
+  border: "1px solid var(--border-brand)",
+  borderRadius: 8,
+  padding: "7px 10px",
+};
+
 /** Formato MXN sin decimales cuando el monto es entero ($40, $1,400, $37.50). */
 function mxn(value: number): string {
   const n = Number.isFinite(value) ? value : 0;
@@ -107,6 +124,18 @@ export function PayoutModeForm({
   function rowsFor(target: PayoutMode): PayoutModeAmount[] {
     if (!engineEnabled) return [];
     return amounts.filter((a) => (target === "onetime" ? a.oneTimeMxn > 0 : a.recurringMxn > 0));
+  }
+
+  /**
+   * Qué gana el afiliado con una venta ANUAL en esa modalidad. Solo con el
+   * motor vivo: sin él las comisiones siguen saliendo del % por nivel y esta
+   * regla no aplica.
+   */
+  function renderAnnual(target: PayoutMode) {
+    if (!engineEnabled) return null;
+    const opt = OPTIONS.find((o) => o.value === target);
+    if (!opt) return null;
+    return <span style={annualStyle}>{opt.annual}</span>;
   }
 
   function renderAmounts(target: PayoutMode) {
@@ -175,6 +204,7 @@ export function PayoutModeForm({
           </div>
           <p style={blurbStyle}>{active.blurb}</p>
           {renderAmounts(saved)}
+          {renderAnnual(saved)}
           <p style={{ ...blurbStyle, color: "var(--text-4)" }}>
             Tu modalidad la define el programa; escríbenos si necesitas cambiarla.
           </p>
@@ -241,6 +271,7 @@ export function PayoutModeForm({
                   </span>
                   <span style={blurbStyle}>{opt.blurb}</span>
                   {renderAmounts(opt.value)}
+                  {renderAnnual(opt.value)}
                 </label>
               );
             })}

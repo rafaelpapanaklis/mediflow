@@ -16,9 +16,14 @@
  *    afecta a clínicas futuras.
  *  - Los MONTOS no se congelan: se lee el valor vigente de la config al
  *    generarse cada comisión (mismo criterio que el % del nivel).
- *  - El primer cobro NO paga (es el mes promocional): la comisión arranca en
- *    `startAtInvoiceNo` (default 2) y el pago único se dispara exactamente en
- *    `oneTimeAtInvoiceNo` (default 2).
+ *  - El primer cobro MENSUAL no paga (es el mes promocional de $19/$29/$39):
+ *    la comisión arranca en `startAtInvoiceNo` (default 2). Una factura que
+ *    cubre 2 o más meses (la ANUAL) no lleva promoción — se cobró el precio
+ *    completo del año — así que comisiona desde la primera.
+ *  - El pago único se entrega en `oneTimeAtInvoiceNo` (default 2) O DESPUÉS,
+ *    y de inmediato si la factura es multi-mes. Lo que impide el doble pago es
+ *    `oneTimePaidAt` + el candado atómico `claimOneTimePayout`, nunca el
+ *    número de cobro.
  */
 
 /** Modalidad de pago de un afiliado por una clínica. */
@@ -183,11 +188,13 @@ export interface ResolvedCommission {
  * Decide la comisión de UNA factura. `null` = NO se genera comisión.
  *
  * Orden de las reglas (importa):
- *  1. Cobro anterior a `startAtInvoiceNo` → null (el 1er mes es promocional).
+ *  1. Cobro anterior a `startAtInvoiceNo` Y factura de un solo mes → null (ese
+ *     primer mes es el promocional). Una factura multi-mes sí comisiona.
  *  2. programMode "pct" → % del nivel sobre lo pagado (comportamiento
  *     histórico, intacto: incluso un total de 0 devuelve fila, como antes).
  *  3. "recurring" → fijo del plan × meses cubiertos.
- *  4. "onetime"  → el fijo, UNA sola vez, y solo en `oneTimeAtInvoiceNo`.
+ *  4. "onetime"  → el fijo, UNA sola vez, desde `oneTimeAtInvoiceNo` en
+ *     adelante (o ya mismo si la factura cubre 2+ meses).
  *
  * Un monto fijo de 0 (el admin apagó ese plan) devuelve null: no tiene
  * sentido escribir comisiones de $0.
@@ -205,7 +212,14 @@ export function resolveCommission(input: ResolveCommissionInput): ResolvedCommis
   const startAt = Number.isFinite(cfg.startAtInvoiceNo)
     ? cfg.startAtInvoiceNo
     : DEFAULT_PAYOUT_CONFIG.startAtInvoiceNo;
-  if (invoiceNo < startAt) return null;
+  // …pero el arranque SOLO tiene sentido en facturas de UN mes. Una factura
+  // multi-mes (la ANUAL: 12 meses de golpe) cobró el precio completo, sin
+  // promoción, así que la razón de ser de `startAtInvoiceNo` no aplica y
+  // comisiona aunque sea la #1. Sin esta excepción el afiliado que vende anual
+  // no cobra nada hasta la factura #2… doce meses después.
+  // Verificado: una mensualidad normal jamás da 2 — el ciclo más largo son 31
+  // días y 31 / 30.44 = 1.018 → round 1 (hay tests de 30, 31 y 28 días).
+  if (invoiceNo < startAt && months < 2) return null;
 
   // Modo histórico: % del nivel sobre el monto pagado. Se conserva tal cual
   // para que un deploy sin la tabla nueva no cambie ni un centavo.
@@ -223,8 +237,20 @@ export function resolveCommission(input: ResolveCommissionInput): ResolvedCommis
 
   if (input.mode === "onetime") {
     if (input.oneTimeAlreadyPaid) return null;
-    // Ni antes ni después: el pago único vive en un cobro exacto.
-    if (invoiceNo !== cfg.oneTimeAtInvoiceNo) return null;
+    // Mismo respaldo que el arranque: con la columna corrupta se usa el default
+    // del programa, nunca un NaN (que con la comparación `<` dejaría pasar
+    // cualquier cobro).
+    const oneTimeAt = Number.isFinite(cfg.oneTimeAtInvoiceNo)
+      ? cfg.oneTimeAtInvoiceNo
+      : DEFAULT_PAYOUT_CONFIG.oneTimeAtInvoiceNo;
+    // "En su cobro o después", NO una igualdad exacta: si la clínica no pasa
+    // justo por ese cobro (términos congelados tarde, un ciclo saltado), el
+    // pago único quedaba en $0 para siempre. Esto no lo ADELANTA — en el caso
+    // normal se sigue pagando en el #2 — solo evita perderlo. Contra el doble
+    // pago están `oneTimeAlreadyPaid` y el candado atómico de la $transaction.
+    // Excepción multi-mes: la factura anual ya cobró el año completo, así que
+    // el pago único se entrega ahí mismo sin esperar al cobro de disparo.
+    if (invoiceNo < oneTimeAt && months < 2) return null;
     const fixed = fixedAmountFor(input.plan, "onetime", cfg);
     if (fixed <= 0) return null;
     return { kind: "onetime", totalMxn: roundMxn(fixed), months: 1 };

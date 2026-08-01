@@ -225,14 +225,13 @@ test("con el pago único ya entregado NUNCA se vuelve a pagar", () => {
   );
 });
 
-test("el pago único fuera de su cobro no paga: ni antes ni después", () => {
-  // Con el default (disparo en el #2) todo lo posterior queda fuera.
-  assert.equal(resolveCommission(input({ mode: "onetime", invoiceNo: 3 })), null);
-  assert.equal(resolveCommission(input({ mode: "onetime", invoiceNo: 7 })), null);
-  // Y con el disparo movido al #5 tampoco paga el #3, que ya pasó el arranque.
+test("el pago único ANTES de su cobro no paga", () => {
+  // La mitad que sigue viva de la regla: por debajo del cobro de disparo no hay
+  // pago único. Con el disparo movido al #5, el #3 y el #4 quedan fuera aunque
+  // ya hayan pasado el arranque.
   const c = cfg({ startAtInvoiceNo: 2, oneTimeAtInvoiceNo: 5 });
   assert.equal(resolveCommission(input({ mode: "onetime", invoiceNo: 3, cfg: c })), null);
-  assert.equal(resolveCommission(input({ mode: "onetime", invoiceNo: 7, cfg: c })), null);
+  assert.equal(resolveCommission(input({ mode: "onetime", invoiceNo: 4, cfg: c })), null);
   assert.deepEqual(resolveCommission(input({ mode: "onetime", invoiceNo: 5, cfg: c })), {
     kind: "onetime",
     totalMxn: 650,
@@ -240,32 +239,75 @@ test("el pago único fuera de su cobro no paga: ni antes ni después", () => {
   });
 });
 
-test("el pago único es una igualdad exacta: si su cobro ya pasó, NO se recupera", () => {
-  // ⚠️ COMPORTAMIENTO ACTUAL, documentado a propósito (no es un test de deseo).
-  // Una clínica que ya iba en su cobro #9 cuando se le congelaron los términos
+test("el pago único se recupera si su cobro exacto ya pasó", () => {
+  // ANTES era una igualdad (`!==`) y esto devolvía null para siempre: una
+  // clínica que ya iba en su cobro #9 cuando se le congelaron los términos
   // (backstop del webhook para las referidas antes de esta ola, o el periodo en
   // que sql/afiliados-comisiones.sql aún no estaba aplicado) nunca vuelve a
-  // pasar por el #2 → su afiliado cobra $0 para siempre. El candado real contra
-  // el doble pago es oneTimePaidAt + claimOneTimePayout, no esta igualdad.
-  for (const invoiceNo of [3, 4, 9, 12, 40]) {
-    assert.equal(resolveCommission(input({ mode: "onetime", invoiceNo })), null, `invoiceNo=${invoiceNo}`);
-  }
-});
-
-test("el pago único queda INALCANZABLE si su cobro es anterior al arranque", () => {
-  // ⚠️ COMPORTAMIENTO ACTUAL. /api/admin/affiliates/payout-config valida
-  // startAtInvoiceNo y oneTimeAtInvoiceNo por separado (enteros 1-12) y no
-  // compara uno con otro, así que el admin puede guardar arranque=4 con
-  // disparo=2: el #2 lo corta el arranque y el #4 lo corta la igualdad. Ningún
-  // cobro paga nunca y la pantalla no avisa.
-  const trampa = cfg({ startAtInvoiceNo: 4, oneTimeAtInvoiceNo: 2 });
-  for (const invoiceNo of [1, 2, 3, 4, 5, 12]) {
-    assert.equal(
-      resolveCommission(input({ mode: "onetime", invoiceNo, cfg: trampa })),
-      null,
+  // pasar por el #2 → su afiliado cobraba $0 para siempre. Ahora es "en su
+  // cobro o después". NO lo adelanta: el #1 lo sigue cortando el arranque.
+  for (const invoiceNo of [2, 3, 4, 9, 12, 40]) {
+    assert.deepEqual(
+      resolveCommission(input({ mode: "onetime", invoiceNo })),
+      { kind: "onetime", totalMxn: 650, months: 1 },
       `invoiceNo=${invoiceNo}`,
     );
   }
+  // Y sigue siendo UNO: en cuanto el candado sella oneTimePaidAt, se acabó.
+  assert.equal(resolveCommission(input({ mode: "onetime", invoiceNo: 10, oneTimeAlreadyPaid: true })), null);
+});
+
+test("el pago único recuperado se entrega UNA sola vez (#7 sí, #8 no)", () => {
+  // Simulación del webhook cobro a cobro: el disparo era el #2, la clínica va
+  // en el #7. Paga en el #7 y, en cuanto la $transaction sella oneTimePaidAt,
+  // el #8 ya no ve nada. El "una sola vez" NUNCA dependió del número de cobro.
+  let oneTimeAlreadyPaid = false;
+  const cobrados: number[] = [];
+  for (const invoiceNo of [7, 8, 9]) {
+    const r = resolveCommission(input({ mode: "onetime", invoiceNo, oneTimeAlreadyPaid }));
+    if (r) {
+      cobrados.push(r.totalMxn);
+      oneTimeAlreadyPaid = true; // claimOneTimePayout dentro de la $transaction
+    }
+  }
+  assert.deepEqual(cobrados, [650], "un solo pago de $650 en toda la vida de la clínica");
+});
+
+test("con el disparo por debajo del arranque, el pago único cae en el arranque", () => {
+  // /api/admin/affiliates/payout-config rechaza guardar disparo < arranque, pero
+  // una fila vieja (o un UPDATE a mano en Supabase) puede tenerlo. ANTES esa
+  // config no pagaba NUNCA: el arranque cortaba el #2 y la igualdad los
+  // siguientes. Ahora el arranque manda y el pago único sale en el #4.
+  const trampa = cfg({ startAtInvoiceNo: 4, oneTimeAtInvoiceNo: 2 });
+  for (const invoiceNo of [1, 2, 3]) {
+    assert.equal(
+      resolveCommission(input({ mode: "onetime", invoiceNo, cfg: trampa })),
+      null,
+      `invoiceNo=${invoiceNo} (por debajo del arranque)`,
+    );
+  }
+  for (const invoiceNo of [4, 5, 12]) {
+    assert.deepEqual(
+      resolveCommission(input({ mode: "onetime", invoiceNo, cfg: trampa })),
+      { kind: "onetime", totalMxn: 650, months: 1 },
+      `invoiceNo=${invoiceNo}`,
+    );
+  }
+});
+
+test("un cobro de disparo corrupto cae al default, no deja pasar cualquier cobro", () => {
+  // Con `<` en vez de `!==`, un NaN en la columna haría verdadera la condición
+  // contraria y pagaría en el primer cobro que pase el arranque. El respaldo es
+  // el default del programa (2), igual que en startAtInvoiceNo.
+  const roto = cfg({ startAtInvoiceNo: 1, oneTimeAtInvoiceNo: NaN });
+  assert.equal(resolveCommission(input({ mode: "onetime", invoiceNo: 1, cfg: roto })), null);
+  assert.deepEqual(resolveCommission(input({ mode: "onetime", invoiceNo: 2, cfg: roto })), {
+    kind: "onetime",
+    totalMxn: 650,
+    months: 1,
+  });
+  const nulo = cfg({ startAtInvoiceNo: 1, oneTimeAtInvoiceNo: null as unknown as number });
+  assert.equal(resolveCommission(input({ mode: "onetime", invoiceNo: 1, cfg: nulo })), null);
 });
 
 test("el pago único NO se multiplica por los meses de una factura anual", () => {
@@ -275,6 +317,112 @@ test("el pago único NO se multiplica por los meses de una factura anual", () =>
     totalMxn: 650,
     months: 1,
   });
+});
+
+// ── 5-bis. El plan ANUAL comisiona desde su PRIMERA factura ─────────────────
+// `startAtInvoiceNo` existe para no pagar comisión sobre el MES PROMOCIONAL
+// ($19/$29/$39 del primer mes en facturación mensual). El plan anual no tiene
+// promoción: se cobra el año completo de golpe ($3,264 / $5,376 / $13,404), así
+// que esa razón no aplica y la factura #1 sí comisiona. Sin esta excepción, el
+// afiliado que vende anual espera 12 meses a que llegue la factura #2.
+
+test("anual recurrente: la factura #1 de 12 meses paga el fijo × 12", () => {
+  assert.deepEqual(resolveCommission(input({ invoiceNo: 1, months: 12 })), {
+    kind: "recurring",
+    totalMxn: 1080, // 90 × 12, Profesional
+    months: 12,
+  });
+  // Y con los otros dos planes, con SUS montos de la config.
+  assert.equal(resolveCommission(input({ invoiceNo: 1, months: 12, plan: "BASIC" }))!.totalMxn, 480);
+  assert.equal(resolveCommission(input({ invoiceNo: 1, months: 12, plan: "CLINIC" }))!.totalMxn, 3000);
+});
+
+test("anual pago único: la factura #1 entrega el pago único completo", () => {
+  // El kind "onetime" es lo que hace que el webhook corra claimOneTimePayout
+  // dentro de la $transaction y selle oneTimePaidAt; por eso se asegura el kind
+  // exacto, no solo el monto.
+  const r = resolveCommission(input({ invoiceNo: 1, months: 12, mode: "onetime" }));
+  assert.deepEqual(r, { kind: "onetime", totalMxn: 650, months: 1 });
+  // Sellado el pago (oneTimePaidAt ya no es null), la anual tampoco repite.
+  assert.equal(
+    resolveCommission(input({ invoiceNo: 1, months: 12, mode: "onetime", oneTimeAlreadyPaid: true })),
+    null,
+  );
+  // Ni en la renovación del año siguiente (factura #2, otros 12 meses).
+  assert.equal(
+    resolveCommission(input({ invoiceNo: 2, months: 12, mode: "onetime", oneTimeAlreadyPaid: true })),
+    null,
+  );
+});
+
+test("la excepción anual NO rompe la regla del mes promocional", () => {
+  // ⚠️ EL TEST QUE PROTEGE EL ARREGLO. Una mensualidad normal cubre 1 mes: su
+  // cobro #1 es el promocional de $19/$29/$39 y NO puede comisionar $90.
+  assert.equal(resolveCommission(input({ invoiceNo: 1, months: 1 })), null);
+  assert.equal(resolveCommission(input({ invoiceNo: 1, months: 1, mode: "onetime" })), null);
+  assert.equal(resolveCommission(input({ invoiceNo: 1, months: 1, plan: "BASIC" })), null);
+  assert.equal(resolveCommission(input({ invoiceNo: 1, months: 1, plan: "CLINIC" })), null);
+  // Un mes "raro" de 1.4 meses redondea a 1: sigue siendo promocional.
+  assert.equal(resolveCommission(input({ invoiceNo: 1, months: 1.4 })), null);
+  // Y basura en months tampoco abre la puerta (clamp a 1).
+  assert.equal(resolveCommission(input({ invoiceNo: 1, months: NaN })), null);
+  assert.equal(resolveCommission(input({ invoiceNo: 1, months: 0 })), null);
+  assert.equal(resolveCommission(input({ invoiceNo: 1, months: -5 })), null);
+});
+
+test("un ciclo mensual de 31 días da months = 1 y no comisiona en el #1", () => {
+  // La verificación que sostiene la excepción: el mes de calendario más largo
+  // son 31 días y 31 / 30.44 = 1.018 → round 1. Ningún ciclo mensual real puede
+  // colarse por la puerta del multi-mes. Se calcula con monthsCovered (lo mismo
+  // que hace el webhook con el periodo de Stripe), no con un número a mano.
+  const enero = monthsCovered(utc("2026-01-01T00:00:00.000Z"), utc("2026-02-01T00:00:00.000Z"));
+  assert.equal(enero, 1, "31 días");
+  assert.equal(resolveCommission(input({ invoiceNo: 1, months: enero })), null);
+  assert.equal(resolveCommission(input({ invoiceNo: 1, months: enero, mode: "onetime" })), null);
+  // Febrero (28) y un ciclo de 30 días, por completitud.
+  for (const [desde, hasta] of [
+    ["2026-02-01T00:00:00.000Z", "2026-03-01T00:00:00.000Z"],
+    ["2026-04-01T00:00:00.000Z", "2026-05-01T00:00:00.000Z"],
+  ]) {
+    const m = monthsCovered(utc(desde), utc(hasta));
+    assert.equal(m, 1, `${desde} → ${hasta}`);
+    assert.equal(resolveCommission(input({ invoiceNo: 1, months: m })), null);
+  }
+  // El ciclo ANUAL real sí cruza el umbral: 12 meses.
+  const anual = monthsCovered(utc("2026-01-01T00:00:00.000Z"), utc("2027-01-01T00:00:00.000Z"));
+  assert.equal(anual, 12);
+  assert.equal(resolveCommission(input({ invoiceNo: 1, months: anual }))!.totalMxn, 1080);
+});
+
+test("anual: la excepción también vale con el arranque movido y en semestral", () => {
+  // La excepción mira los MESES de la factura, no el número de cobro: con el
+  // arranque en el #4 una anual #1 comisiona igual.
+  assert.equal(
+    resolveCommission(input({ invoiceNo: 1, months: 12, cfg: cfg({ startAtInvoiceNo: 4 }) }))!.totalMxn,
+    1080,
+  );
+  // Semestral (6 meses) también cuenta como multi-mes: 90 × 6.
+  assert.deepEqual(resolveCommission(input({ invoiceNo: 1, months: 6 })), {
+    kind: "recurring",
+    totalMxn: 540,
+    months: 6,
+  });
+  // El umbral son 2 meses exactos.
+  assert.deepEqual(resolveCommission(input({ invoiceNo: 1, months: 2 })), {
+    kind: "recurring",
+    totalMxn: 180,
+    months: 2,
+  });
+});
+
+test("anual: un PRORRATEO multi-mes sigue sin comisionar en modo fijo", () => {
+  // La excepción no le abre la puerta al prorrateo: ese periodo ya lo comisionó
+  // el cobro del ciclo, y con montos fijos pagaría un año entero de más.
+  assert.equal(resolveCommission(input({ invoiceNo: 1, months: 12, isProration: true })), null);
+  assert.equal(
+    resolveCommission(input({ invoiceNo: 1, months: 12, isProration: true, mode: "onetime" })),
+    null,
+  );
 });
 
 // ── 6. El plan VIGENTE manda (los montos no se congelan) ────────────────────
@@ -336,6 +484,54 @@ test("modo pct: conserva los meses cubiertos de la factura", () => {
     totalMxn: 892.8, // 7440 × 12%
     months: 12,
   });
+});
+
+test("modo pct: el mes promocional sigue sin pagar, la anual #1 sí paga", () => {
+  // La excepción multi-mes vive en el guard COMPARTIDO del arranque, encima de
+  // la rama pct: una sola regla en un solo lugar. Consecuencia querida: en pct
+  // la anual #1 también comisiona, y no puede pagar de más porque el % se
+  // aplica sobre lo que la clínica REALMENTE pagó (el año completo).
+  assert.equal(resolveCommission(input({ programMode: "pct", invoiceNo: 1 })), null, "mensual #1");
+  assert.equal(
+    resolveCommission(input({ programMode: "pct", invoiceNo: 1, months: 1.4 })),
+    null,
+    "1.4 meses redondea a 1: sigue siendo promocional",
+  );
+  assert.deepEqual(
+    resolveCommission(input({ programMode: "pct", invoiceNo: 1, months: 12, amountMxn: 5376 })),
+    { kind: "pct", totalMxn: 645.12, months: 12 }, // 5376 × 12%
+  );
+});
+
+test("modo pct: el resto del comportamiento histórico no se movió", () => {
+  // Los mismos casos que las correcciones tocaron en modo fijo, comprobados en
+  // pct: el % ni mira el cobro de disparo, ni la modalidad, ni el candado.
+  for (const invoiceNo of [2, 3, 7, 25]) {
+    assert.deepEqual(
+      resolveCommission(input({ programMode: "pct", invoiceNo })),
+      { kind: "pct", totalMxn: 82.68, months: 1 },
+      `invoiceNo=${invoiceNo}`,
+    );
+  }
+  // Con modalidad onetime, con el único ya pagado y con el disparo movido: el
+  // % se paga igual, en todos los cobros.
+  assert.deepEqual(
+    resolveCommission(
+      input({
+        programMode: "pct",
+        mode: "onetime",
+        oneTimeAlreadyPaid: true,
+        invoiceNo: 9,
+        cfg: cfg({ oneTimeAtInvoiceNo: 5 }),
+      }),
+    ),
+    { kind: "pct", totalMxn: 82.68, months: 1 },
+  );
+  // Y el prorrateo en pct sigue pagando el % de lo cobrado.
+  assert.deepEqual(
+    resolveCommission(input({ programMode: "pct", isProration: true, amountMxn: 200 })),
+    { kind: "pct", totalMxn: 24, months: 1 },
+  );
 });
 
 test("modo pct: un total de $0 SÍ devuelve fila (histórico intacto)", () => {

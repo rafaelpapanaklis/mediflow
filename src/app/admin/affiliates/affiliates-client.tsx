@@ -540,15 +540,16 @@ export function AffiliatesClient({ initial }: { initial: AffiliateRow[] }) {
     }
     const oneTimeAt = Number(payForm.oneTimeAtInvoiceNo);
     if (!Number.isInteger(oneTimeAt) || oneTimeAt < 1 || oneTimeAt > 12) {
-      toast.error('"El pago único se entrega en el cobro #" debe ser un entero entre 1 y 12.');
+      toast.error('"El pago único se entrega desde el cobro #" debe ser un entero entre 1 y 12.');
       return;
     }
-    // Si el pago único cae ANTES del arranque de la comisión no se paga nunca:
-    // el arranque corta ese cobro y la igualdad exacta corta los siguientes.
-    // El servidor lo rechaza igual; aquí se avisa sin gastar el viaje.
+    // Si el pago único cae ANTES del arranque de la comisión, el arranque lo
+    // corre en silencio: el valor guardado deja de ser el que manda. Se rechaza
+    // para que la pantalla no prometa un cobro que no es el real. El servidor lo
+    // valida igual; aquí se avisa sin gastar el viaje.
     if (oneTimeAt < startAt) {
       toast.error(
-        "El pago único no se pagaría nunca: su cobro debe ser igual o posterior al cobro en el que arranca la comisión.",
+        "El pago único no se entregaría en ese cobro: debe ser igual o posterior al cobro en el que arranca la comisión.",
       );
       return;
     }
@@ -1427,11 +1428,16 @@ export function AffiliatesClient({ initial }: { initial: AffiliateRow[] }) {
                   disabled={payLoading}
                   onChange={(e) => setPayNum("startAtInvoiceNo", e.target.value)}
                 />
+                <span style={{ display: "block", fontSize: 11.5, color: "var(--text-4)", lineHeight: 1.5, marginTop: 6 }}>
+                  Solo aplica a las facturas de un mes. Las <strong>anuales</strong> se cobran a precio
+                  completo (no llevan mes promocional), así que comisionan desde la primera: 12 meses
+                  del fijo de golpe, o el pago único de inmediato.
+                </span>
               </div>
 
               <div className="field-new">
                 <label className="field-new__label" htmlFor="payout-onetime-at">
-                  El pago único se entrega en el cobro #
+                  El pago único se entrega desde el cobro #
                 </label>
                 <input
                   id="payout-onetime-at"
@@ -1444,6 +1450,10 @@ export function AffiliatesClient({ initial }: { initial: AffiliateRow[] }) {
                   disabled={payLoading}
                   onChange={(e) => setPayNum("oneTimeAtInvoiceNo", e.target.value)}
                 />
+                <span style={{ display: "block", fontSize: 11.5, color: "var(--text-4)", lineHeight: 1.5, marginTop: 6 }}>
+                  Es un piso, no una cita exacta: si la clínica no pasa por ese cobro, el pago único se
+                  entrega en el siguiente y no se pierde. Sigue siendo uno solo por clínica.
+                </span>
               </div>
             </div>
 
@@ -1471,9 +1481,10 @@ export function AffiliatesClient({ initial }: { initial: AffiliateRow[] }) {
             </label>
 
             <p style={{ color: "var(--text-3)", fontSize: 12, lineHeight: 1.5, margin: "12px 0 0" }}>
-              El primer cobro de la clínica es el mes promocional, por eso el default es 2: la comisión arranca hasta
-              el segundo cobro y el pago único se entrega ahí mismo. La modalidad se congela por clínica cuando se da
-              de alta, así que cambiarla solo afecta a las clínicas nuevas.
+              El primer cobro MENSUAL de la clínica es el mes promocional, por eso el default es 2: la comisión
+              arranca hasta el segundo cobro y el pago único se entrega ahí mismo. Las ventas ANUALES quedan fuera de
+              esa espera (se cobran completas desde el día uno) y comisionan en su primera factura. La modalidad se
+              congela por clínica cuando se da de alta, así que cambiarla solo afecta a las clínicas nuevas.
             </p>
           </div>
 

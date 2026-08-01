@@ -2597,15 +2597,10 @@ incluidos los feos (1080/12%/5% → 450+630; 1080/7%/3% → 462.86+617.14).
 
 ### RIESGOS ABIERTOS (decisiones de negocio, NO se tocaron)
 
-- **El pago único es una igualdad exacta (`!==`), tal como se especificó.** Consecuencia: una clínica
-  que NO pase exactamente por el cobro `oneTimeAtInvoiceNo` con el motor vivo no cobra nunca. Aplica a
-  las clínicas referidas antes de esta ola que ya van en el cobro #5, #9, etc.: si su afiliado está en
-  modalidad `onetime`, ese pago único es $0 para siempre. Cambiar `!==` por `<` lo volvería
-  "en su cobro o después, mientras no se haya pagado" (el doble pago ya lo impiden `oneTimePaidAt` y
-  el candado atómico, no la igualdad). **Es una línea; dime si lo quieres.**
-- **Plan ANUAL**: la factura #1 cubre 12 meses y no comisiona (regla 1); la #2 llega un año después.
-  En la práctica, un afiliado que trae clínicas anuales espera 12 meses para su primera comisión.
-  Se resuelve poniendo `startAtInvoiceNo = 1` o exceptuando las facturas de 12 meses.
+- ~~**El pago único es una igualdad exacta (`!==`), tal como se especificó.**~~ **CERRADO** — ver
+  "Correcciones del motor" al final de este documento.
+- ~~**Plan ANUAL**: la factura #1 cubre 12 meses y no comisiona (regla 1).~~ **CERRADO** — ver
+  "Correcciones del motor" al final de este documento.
 - **Vendedores en modo fijo**: el reparto usa el % del nivel del padre como referencia. Si ese % es 0
   (legacy `commissionPct = 0`), el padre cobra el fijo completo y el vendedor $0.
 - `monthsCovered` clampa a 12: un prepago de 2-3 años comisiona un año.
@@ -2654,3 +2649,115 @@ incluidos los feos (1080/12%/5% → 450+630; 1080/7%/3% → 462.86+617.14).
     clínica de afiliado con modalidad `onetime`, que llegue el pago único UNA vez y que
     `oneTimePaidAt` quede sellado.
 11. **Regresión**: que el primer cobro de una clínica nueva NO genere comisión.
+
+---
+
+## Correcciones del motor de comisiones (sobre d2c494f6)
+
+Los dos primeros RIESGOS ABIERTOS de la lista de arriba, cerrados por decisión de Rafael. Cirugía en
+`resolveCommission` + tests + las superficies que explican la regla. **Sin cambios de schema ni SQL
+nuevo.**
+
+### 1. El plan ANUAL comisiona desde su PRIMERA factura
+
+`startAtInvoiceNo` existe para no pagar sobre el **mes promocional** ($19/$29/$39 del primer mes en
+facturación mensual). El plan anual no tiene promoción: se cobra el año completo de golpe
+($3,264 / $5,376 / $13,404). Como esa es la factura #1, no comisionaba, y la #2 llegaba 12 meses
+después: el afiliado que vendía anual no cobraba nada durante un año.
+
+El arranque ahora **solo aplica a facturas de un mes**:
+
+```ts
+if (invoiceNo < startAt && months < 2) return null;
+```
+
+Y en modalidad `onetime`, la misma excepción: una factura multi-mes entrega el pago único ahí mismo,
+sin esperar a `oneTimeAtInvoiceNo`.
+
+**Números** (montos default, Profesional): anual recurrente #1 → **$1,080** (90 × 12) donde antes
+daba $0; Básico **$480**, Clínica **$3,000**. Anual `onetime` #1 → **$650** completos (Básico $350,
+Clínica $1,400), sellando `oneTimePaidAt`. Semestral (6 meses) → $540. El umbral son 2 meses.
+
+**La verificación que sostiene la excepción**: una mensualidad normal nunca da `months = 2`. El mes
+de calendario más largo son 31 días y 31 / 30.44 = 1.018 → `round` 1. Está como comentario en el
+motor y como test que lo calcula con `monthsCovered` (30, 31 y 28 días), no con un número a mano.
+
+**El prorrateo NO se cuela por esta puerta**: `isProration` sigue cortando antes, así que un upgrade
+que cubriera varios meses tampoco comisiona en modo fijo.
+
+**Modo `pct`**: la excepción vive en el guard COMPARTIDO del arranque, encima de la rama pct — una
+regla en un solo lugar. Consecuencia querida y explícita: en `pct` la anual #1 **también** comisiona
+ahora (antes daba $0). No puede pagar de más porque el % se aplica sobre lo que la clínica realmente
+pagó. Todo lo demás de `pct` quedó intacto, con test propio.
+
+### 2. El pago único ya no se pierde si se salta su cobro
+
+Era una igualdad exacta (`invoiceNo !== cfg.oneTimeAtInvoiceNo → null`): una clínica que no pasara
+justo por ese cobro dejaba el pago único en $0 para siempre. Ahora es **"en ese cobro o después"**:
+
+```ts
+if (invoiceNo < oneTimeAt && months < 2) return null;
+```
+
+**No adelanta nada**: el momento sigue siendo el cobro #2 y en el caso normal el comportamiento es
+idéntico. Solo evita perderlo. El candado atómico (`oneTimePaidAt` + `claimOneTimePayout` dentro de
+la `$transaction`) **no se tocó** — nunca fue la igualdad lo que protegía del doble pago, y hay un
+test que simula el webhook cobro a cobro (#7 paga $650, #8 y #9 ya no).
+
+**Efecto lateral de cambiar `!==` por `<`**: un `NaN` en la columna (fila vieja, UPDATE a mano)
+volvía la condición contraria verdadera y habría pagado en el primer cobro disponible. Se le puso el
+mismo respaldo que ya tenía `startAtInvoiceNo` (default del programa), con test.
+
+**Config `disparo < arranque`**: ya no es la trampa silenciosa que documentaba el bug #4 — el
+arranque manda y el pago único sale en el primer cobro que sí comisiona. La validación de
+`/api/admin/affiliates/payout-config` se conserva (para que el número guardado sea el que manda),
+pero su mensaje ya no dice "no se pagaría nunca", que había dejado de ser cierto.
+
+### Superficies
+
+- **/admin/affiliates → "Esquema de pago"**: nota bajo *"La comisión empieza en el cobro #"* con la
+  excepción anual. El otro campo pasó a llamarse *"El pago único se entrega **desde** el cobro #"*
+  con su propia nota ("es un piso, no una cita exacta"). El párrafo de cierre explica las dos reglas.
+- **/afiliados/configuracion**: cada modalidad muestra su argumento de venta anual destacado (no
+  escondido): recurrente → *"cobras los 12 meses de golpe, en su primera factura"*; pago único →
+  *"cobras tu pago único de inmediato"*. Se pinta en las dos vistas (editable y solo-lectura) y solo
+  con el motor vivo.
+
+### Lo que NO se hizo (a propósito)
+
+- **Simulador del admin distinguiendo mensual/anual**: se evaluó y se descartó por tamaño (el
+  presupuesto era ~40 líneas). Los precios anuales existen (`priceMxnAnnual` en `plan-shared`), pero
+  haría falta pasarlos por `/api/admin/affiliates/payout-config` (que hoy mapea solo
+  `{id, label, priceMxn}`), 3 inputs de conteo más, y sobre todo **un modelo de costo distinto**: una
+  venta anual recurrente paga 12× el fijo por adelantado y luego nada en 12 meses, así que el KPI
+  "costo mensual comprometido" deja de significar algo. Son ~80-120 líneas. El simulador sigue
+  cotizando en mensual.
+
+### Riesgos de la lista original que SIGUEN VIVOS
+
+- **Vendedores en modo fijo**: el reparto usa el % del nivel del padre como referencia. Si ese % es 0
+  (legacy `commissionPct = 0`), el padre cobra el fijo completo y el vendedor $0.
+- **`monthsCovered` clampa a 12**: un prepago de 2-3 años comisiona un año. Ahora pesa un poco más,
+  porque esas facturas multi-mes sí entran desde la #1.
+- **Nuevo, menor**: una factura de ~46+ días (46 / 30.44 = 1.51 → `round` 2) cuenta como multi-mes y
+  comisionaría en la #1. Ningún ciclo mensual de Stripe llega ahí; solo un periodo alargado a mano.
+
+### Verificación
+
+- `npm run test:afiliados` → **63/63** (53 previos + 10; **3 se reescribieron**: eran los que
+  documentaban a propósito la igualdad exacta y la config inalcanzable, justo el comportamiento que
+  estas correcciones cambian).
+- `npm run test:billing` → **94/94**, sin regresión.
+- `npx tsc --noEmit` → 0 errores. `npm run build` completo, SIN pipe → **verde, 357/357 páginas**;
+  compilaron `/admin/affiliates`, `/afiliados/configuracion` y `/api/admin/affiliates/payout-config`.
+
+### Qué probar en prod
+
+1. **Regresión (lo más importante)**: el primer cobro MENSUAL de una clínica nueva sigue sin generar
+   comisión.
+2. Una clínica que contrate **anual**: su primera factura debe generar comisión ya — `kind`
+   `recurring` con `monthsCovered = 12` y monto = fijo × 12, o `onetime` con el pago único completo.
+3. Una clínica de afiliado `onetime` que ya iba en el cobro #5/#9: en su siguiente cobro debe llegar
+   el pago único **una vez**, y `oneTimePaidAt` quedar sellado.
+4. **/admin/affiliates → "Esquema de pago"**: que se lean las dos notas nuevas y que guardar con
+   "desde el cobro #1" y arranque en 2 siga rechazándose (con el mensaje nuevo).
