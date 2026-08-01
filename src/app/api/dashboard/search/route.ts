@@ -35,7 +35,38 @@ export async function GET(req: NextRequest) {
   const patientVis = patientVisibilityAnd(viewer);
   const relatedVis = relatedPatientVisibilityAnd(viewer);
 
-  const [patients, appointments, invoices] = await Promise.all([
+  // Folio escrito sin prefijo: "72" tiene que traer MF-0072 como PRIMER
+  // resultado y no perderse entre los `contains` (que también matchean 1720,
+  // 720…). Los generadores del repo rellenan a 4 dígitos — MF-#### y
+  // INV-AAAA-#### — así que probamos el crudo, el de 4 y el de 6 (por si el
+  // padding crece). El `endsWith` se afina luego en JS comparando la cola
+  // numérica exacta, para que "72" NO se quede con MF-10072.
+  const numericQ = /^\d+$/.test(q) ? q : null;
+  const folioVariants = numericQ
+    ? Array.from(new Set([numericQ, numericQ.padStart(4, "0"), numericQ.padStart(6, "0")]))
+    : [];
+
+  const invoiceSelect = {
+    id: true, invoiceNumber: true, total: true, status: true, createdAt: true,
+    patient: { select: { firstName: true, lastName: true } },
+  } as const;
+
+  // Mismo clinicId y mismo relatedVis que la query de facturas de abajo: esto
+  // solo reordena/complementa, no abre ninguna puerta de visibilidad.
+  const folioPromise = numericQ
+    ? prisma.invoice.findMany({
+        where: {
+          clinicId: ctx.clinicId,
+          OR: folioVariants.map((v) => ({ invoiceNumber: { endsWith: v } })),
+          ...(relatedVis.length ? { AND: relatedVis } : {}),
+        },
+        select: invoiceSelect,
+        take: 5,
+        orderBy: { createdAt: "desc" as const },
+      })
+    : Promise.resolve([]);
+
+  const [patients, appointments, invoices, folioHits] = await Promise.all([
     prisma.patient.findMany({
       where: {
         clinicId: ctx.clinicId,
@@ -78,14 +109,27 @@ export async function GET(req: NextRequest) {
         ],
         ...(relatedVis.length ? { AND: relatedVis } : {}),
       },
-      select: {
-        id: true, invoiceNumber: true, total: true, status: true, createdAt: true,
-        patient: { select: { firstName: true, lastName: true } },
-      },
+      select: invoiceSelect,
       take: 5,
       orderBy: { createdAt: "desc" },
     }),
+    folioPromise,
   ]);
+
+  // Solo los que de verdad SON ese folio (cola numérica == número escrito).
+  const exactFolio = folioHits.filter((i) => {
+    const tail = /(\d+)$/.exec(i.invoiceNumber ?? "")?.[1];
+    return tail != null && numericQ != null && Number(tail) === Number(numericQ);
+  });
+
+  const seenInvoice = new Set<string>();
+  const rankedInvoices: typeof invoices = [];
+  for (const inv of [...exactFolio, ...invoices]) {
+    if (seenInvoice.has(inv.id)) continue;
+    seenInvoice.add(inv.id);
+    rankedInvoices.push(inv);
+    if (rankedInvoices.length === 5) break;
+  }
 
   return NextResponse.json({
     patients: patients.map(p => ({
@@ -103,7 +147,7 @@ export async function GET(req: NextRequest) {
       doctorName: `${a.doctor.firstName} ${a.doctor.lastName}`,
       status: a.status,
     })),
-    invoices: invoices.map(i => ({
+    invoices: rankedInvoices.map(i => ({
       id: i.id,
       folio: i.invoiceNumber,
       amount: Number(i.total),
