@@ -2761,3 +2761,142 @@ pero su mensaje ya no dice "no se pagaría nunca", que había dejado de ser cier
    el pago único **una vez**, y `oneTimePaidAt` quedar sellado.
 4. **/admin/affiliates → "Esquema de pago"**: que se lean las dos notas nuevas y que guardar con
    "desde el cobro #1" y arranque en 2 siga rechazándose (con el mensaje nuevo).
+
+---
+
+## [Afiliados · Puerta de entrada pública] — 2026-08-01
+
+El programa estaba completo por dentro (motor, panel, equipos, estadísticas, PDF) y era **invisible**
+por fuera: cero páginas que lo vendieran, cero enlaces desde la web pública, fuera del sitemap. Un
+afiliado sólo entraba si Rafael le pasaba la URL a mano. Esta ola es **puro frontend público**: no se
+tocó el motor de comisiones ni el webhook, y **no hay SQL ni cambios de schema**.
+
+### La regla que ordena todo
+
+Los montos de comisión se tratan **igual que los precios de los planes**: no se escriben, se leen.
+`src/lib/affiliates/public-offer.ts` (nuevo) es la fuente única — resuelve `getPayoutConfig()`
+(affiliate_payout_config) + `getResolvedPlans()` (plan_configs) y nunca lanza. Si Rafael cambia $90 a
+$100 desde /admin, `/afiliados` lo publica en ≤5 min **sin deploy** (ISR 300, verificado en
+`prerender-manifest.json`: `initialRevalidateSeconds: 300`).
+
+El corte server/client se respetó: `public-offer.ts` y `payout.ts` arrastran Prisma y viven sólo en
+server components; la calculadora es `"use client"` e importa **sólo** `payout-core` (matemática
+pura). Los montos le llegan como props. Mismo corte que plan-shared / plans.
+
+### Qué se construyó
+
+| Archivo | Qué es |
+|---|---|
+| `src/lib/affiliates/public-offer.ts` | **NUEVO.** Fuente única de la oferta pública: 3 planes con precio real + fijo recurrente + pago único + equivalencia en meses, `topRecurringMxn`, `startAtInvoiceNo`. Degrada a `DEFAULT_PAYOUT_CONFIG` si la tabla no existe. |
+| `src/app/afiliados/page.tsx` | **NUEVO.** Landing pública, server component, `revalidate = 300`. Shell de `/herramientas` (SalesNavSession + SalesFooter + Inter + `.mfh` + sales.css). 7 secciones: hero, comisiones, calculadora, cómo funciona, para quién es, FAQ, CTA. |
+| `src/app/afiliados/afiliados.css` | **NUEVO.** Todo scoped a `.afi-*`. No toca globals.css. Grids `auto-fit + minmax(min(100%,…))`, tipografía en `clamp()`, cero anchos fijos, cero animaciones nuevas. |
+| `src/components/afiliados/landing/calculadora.tsx` | **NUEVO.** Client. `simulateProgram` de payout-core; steppers −/+ accesibles; 3 resultados (al mes / acumulado 12 meses / pago único de golpe). |
+| `src/components/afiliados/landing/faq-afiliados.tsx` | **NUEVO.** Client. Acordeón con las mismas clases `.mfh-faq*` de la home; las preguntas llegan por prop. |
+| `src/app/terminos-afiliados/page.tsx` | **NUEVO.** Copia el patrón exacto de `/terminos` (mismo `Section`, mismo `PROVIDER`, mismo layout). 9 secciones. |
+
+### Decisiones que vale la pena conocer
+
+- **El FAQ vive en `page.tsx` (server)** y alimenta a la vez el acordeón y el JSON-LD `FAQPage`. Es
+  imposible que lo que ve Google y lo que ve el visitante se desincronicen.
+- **El aviso del mes promocional NO está escondido.** Es un bloque destacado con icono, no letra
+  chica: "La comisión arranca en el segundo cobro de la clínica". El ordinal se **deriva** de
+  `startAtInvoiceNo` (helper `cobroOrdinal`): si el admin lo mueve a 3, la página dice "tercer cobro"
+  sola. Lo mismo en la calculadora: el acumulado a 12 meses son `12 − (startAt − 1)` pagos, y el
+  texto explica por qué son 11 y no 12. Ningún "11" escrito a mano.
+- **Se menciona la excepción del plan anual** (comisiona desde su primera factura porque no hay mes
+  promocional) — verificado contra `resolveCommission`: `if (invoiceNo < startAt && months < 2)`.
+- **Degradación sin ceros feos.** Si un plan está apagado en la config no se lista ni entra en la
+  calculadora; si `topRecurringMxn` es 0 el H1 cambia a "Gana una comisión recurrente…" en vez de
+  imprimir "$0".
+- **`.mfh-fgrid` es de 3 columnas y los pasos son 4** → `.mfh .afi-steps` lo pasa a `auto-fit`
+  (especificidad 0,2,0 para ganarle a los `@media` de sales.css, sin `!important`).
+
+### Cada afirmación de la página, verificada contra el código de hoy
+
+| Se dice en /afiliados | Dónde está en el código |
+|---|---|
+| Comisión recurrente sin límite de tiempo | `resolveCommission` → `kind: "recurring"` en cada `invoice.paid`, sin tope |
+| Dos modalidades, la modalidad se congela por clínica | `AffiliateClinicTerms` + `ensureClinicTerms` (inmutable por diseño) |
+| Arranca en el segundo cobro (mes promocional) | `startAtInvoiceNo` (default 2) en `payout-core` |
+| Link propio + links por campaña | `affiliate_links` con `campaign` (`@@unique([affiliateId, campaign])`) |
+| Cupón con su código | tabla `affiliate_coupons` |
+| Panel con clics/altas/comisiones en vivo | `/afiliados/estadisticas`, `/api/afiliados/stats` |
+| Estado de cuenta en PDF | `/api/afiliados/reportes/estado-cuenta` |
+| Equipo de vendedores con su propio % | `AffiliateSeller.commissionPct` + `/afiliados/equipo` |
+| El autorreferido está bloqueado | `src/app/api/auth/register/route.ts:116` — anula la atribución, así que no se genera comisión |
+| SPEI o PayPal | `PAYOUT_METHODS` del registro / `payoutMethod` |
+| Aprobación **manual**, no instantánea | el alta queda en revisión (`/afiliados/pendiente`) |
+
+Nada del Marketplace. Sin ingresos garantizados: la calculadora cierra con "Es una estimación con los
+montos vigentes hoy. No es una promesa de ingresos." y la sección de perfiles con "No garantizamos
+ingresos: lo que ganas depende de cuántas clínicas recomiendes y de que sigan suscritas."
+
+### Dónde quedaron los enlaces (esto es lo que rompe la invisibilidad)
+
+1. **`sales/v2/landing-data.ts`** (el footer que montan home, blog, /descubre, /casos-de-uso,
+   /herramientas y las 8 páginas de módulo):
+   - `FOOTER.product` → "Programa de afiliados" → `/afiliados`
+   - `FOOTER.legal` → "Términos del programa de afiliados" → `/terminos-afiliados`
+   - `navHref()` deja pasar intactas las rutas absolutas (sólo prefija las anclas), verificado.
+2. **`public/landing/footer.tsx`** (footer v4 con `COLUMNS`) — **sigue montándose**, en 3 rutas:
+   `/roadmap`, `/[slug]` y `specialty-page.tsx`. Se añadió el enlace en la columna "Producto".
+3. **`sitemap.ts`** → `/afiliados` (priority 0.8, monthly) y `/terminos-afiliados` (priority 0.3,
+   yearly).
+4. **Panel de la clínica** → tarjeta discreta al final de **Configuración → Clínica**
+   (`settings-client.tsx`, 25 líneas), hermana de la tarjeta "Portal del paciente". Icono `Handshake`,
+   sin montos, abre `/afiliados` en pestaña nueva. **Sin gate de plan**: la pantalla sólo pide el
+   permiso `settings.view`, así que se ve en todos los planes. Nada de banners ni modales.
+5. **`/afiliados/registro`** → ahora es server component: resumen de lo que gana con los montos leídos
+   de la config, enlace "← Conoce el programa" y **checkbox obligatorio** de
+   `/terminos-afiliados` + `/privacidad` (patrón del signup de clínicas).
+6. **`/afiliados/login`** → enlace "Conoce el programa →" bajo el de registro.
+
+### Verificación
+
+- `npm run build` completo, **SIN pipe**, output entero leído → **verde**.
+- En el manifiesto compilaron **`○ /afiliados`** (5.66 kB / 205 kB First Load, ISR 300) y
+  **`○ /terminos-afiliados`** (215 B / 98.3 kB, estático puro).
+- Cero montos escritos a mano en toda la ola (grep de `$<dígito>` sobre los archivos nuevos: sin
+  hits fuera de comentarios).
+- Los errores `DATABASE_URL not found` del build son los de siempre (no hay `.env` local) y no
+  rompen: `getPublicOffer()` cae a los defaults por diseño.
+
+### ⚠️ QUÉ DEBE REVISAR RAFAEL EN PROD
+
+1. **`affiliate_payout_config.defaultMode` TIENE que estar en `"fixed"`.** Es lo más importante de
+   esta lista. La página publica montos fijos por plan; si el programa está en modo `"pct"` (niveles
+   bronce/plata/oro, el comportamiento histórico), el motor paga un % y **la página estaría
+   publicando números que no se pagan**. `/afiliados` no cubre el modo `pct` — no se construyó una
+   segunda variante porque el modelo de negocio de esta ola es el fijo. Míralo en /admin →
+   "Esquema de pago".
+2. **Que `sql/afiliados-comisiones.sql` esté aplicado.** Si la tabla no existe, `getPayoutConfig()`
+   devuelve null y la página muestra los **defaults del motor** (40 / 90 / 250 y 350 / 650 / 1400).
+   Se ve perfecta y no truena — pero publicaría montos que quizá no son los tuyos.
+3. **Abrir `/afiliados` y confirmar que los 6 montos y los 3 precios son los reales**, no los
+   defaults. Es la prueba de fuego de los puntos 1 y 2.
+4. **Cambiar un monto en /admin y esperar ≤5 min**: la página debe reflejarlo sin deploy (ISR 300).
+5. **La afirmación de los 10 días.** "Las comisiones de un mes se pagan dentro de los primeros 10 días
+   del mes siguiente" aparece en la página, en el FAQ y en los términos. **No hay nada en el código
+   que lo automatice** — es una promesa operativa tuya. Si el calendario real es otro, cámbialo en
+   los 3 lugares (`page.tsx` PASOS + faq, `terminos-afiliados/page.tsx` §5).
+6. **El checkbox de términos del registro es un gate de UI**, no viaja a la API: no se tocó el body
+   del `fetch` a `/api/afiliados/auth/register` para no romper su validación. Es el mismo criterio
+   que el signup de clínicas. Si quieres constancia de aceptación, hace falta una columna y una ola
+   aparte.
+7. **`hola@dalecontrol.com`** es el contacto que quedó en los términos del programa (los de servicio
+   usan `soporte@`). Confirma que es el buzón correcto.
+
+### Anotado para después (fuera del alcance de esta ola)
+
+- **`public/landing/footer.tsx` tiene 9 enlaces muertos**: `/integrations`, `/about`, `/contact`,
+  `/docs`, `/status`, `/support` y los cuatro `/legal/*` (`/legal/terms`, `/legal/privacy`,
+  `/legal/cfdi`, `/legal/nom-024` — los reales son `/terminos` y `/privacidad`). Además sus anclas
+  `#features`, `#pricing` y `#specialties` no existen en la home v4 (que usa `#funciones`,
+  `#precios`, `#comparativa`). Se montó el enlace nuevo porque el footer **sí sigue vivo** en 3
+  rutas, pero esa columna "Legal" no se amplió: arreglar ese footer merece su propia ola.
+- En `sales/footer.tsx` la columna "Producto" usa `<a href>` (recarga dura) mientras Legal y Funciones
+  usan `<Link>`. Es preexistente; el enlace a `/afiliados` hereda ese comportamiento.
+- La tarjeta del panel está en español fijo, sin `t()`, igual que sus dos vecinas ("Portal del
+  paciente" y el selector de idioma). Con el panel en inglés se verá en español, como ellas.
+- `SELLER_PAYOUT_METHODS` admite un tercer método `"OTHER"` que ni la landing ni los términos
+  mencionan (sólo SPEI y PayPal). Si se usa de verdad, hay que añadirlo a los términos §5.

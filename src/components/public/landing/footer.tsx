@@ -14,6 +14,7 @@ const COLUMNS: FooterColumn[] = [
       { label: "Precios", href: "#pricing" },
       { label: "Especialidades", href: "#specialties" },
       { label: "Integrations", href: "/integrations" },
+      { label: "Programa de afiliados", href: "/afiliados" },
     ],
   },
   {

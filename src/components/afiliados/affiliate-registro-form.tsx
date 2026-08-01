@@ -13,6 +13,24 @@ const PAYOUT_METHODS: { value: string; label: string; placeholder: string }[] = 
   { value: "OTHER", label: "Otro", placeholder: "Describe cómo quieres recibir tus pagos" },
 ];
 
+/**
+ * Formato local a propósito: el `fmtMxn` de `@/lib/affiliates/public-offer`
+ * arrastra Prisma y este componente es "use client".
+ */
+const fmtMxn = (n: number) => "$" + Math.round(n).toLocaleString("es-MX");
+
+const offerLineStyle: React.CSSProperties = {
+  margin: 0,
+  fontSize: 13,
+  lineHeight: 1.5,
+  color: "var(--ld-fg)",
+};
+
+const offerAmountStyle: React.CSSProperties = {
+  color: "var(--ld-brand-light)",
+  fontWeight: 600,
+};
+
 const selectStyle: React.CSSProperties = {
   height: 42,
   padding: "0 14px",
@@ -25,12 +43,19 @@ const selectStyle: React.CSSProperties = {
   outline: "none",
 };
 
-export function AffiliateRegistroForm() {
+export function AffiliateRegistroForm({
+  topRecurringMxn = 0,
+  topOneTimeMxn = 0,
+}: {
+  topRecurringMxn?: number;
+  topOneTimeMxn?: number;
+}) {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [payoutMethod, setPayoutMethod] = useState("");
   const [payoutDetails, setPayoutDetails] = useState("");
+  const [acceptedTerms, setAcceptedTerms] = useState(false);
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -46,6 +71,7 @@ export function AffiliateRegistroForm() {
     if (!name.trim()) return setError("Tu nombre o el de tu empresa es requerido.");
     if (!email.trim()) return setError("El correo electrónico es requerido.");
     if (password.length < 8) return setError("La contraseña debe tener al menos 8 caracteres.");
+    if (!acceptedTerms) return setError("Debes aceptar los términos del programa para continuar.");
 
     setLoading(true);
     try {
@@ -132,7 +158,10 @@ export function AffiliateRegistroForm() {
     );
   }
 
+  // Los campos sólo se bloquean mientras se envía; el botón además exige el check.
   const inputDisabled = loading;
+  const isDisabled = loading || !acceptedTerms;
+  const hasOffer = topRecurringMxn > 0 || topOneTimeMxn > 0;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
@@ -156,6 +185,47 @@ export function AffiliateRegistroForm() {
         </h1>
         <p style={{ fontSize: 14, color: "var(--ld-fg-muted)", margin: 0 }}>
           Recomienda DaleControl y gana comisión recurrente por cada clínica que se suscriba
+        </p>
+        <Link
+          href="/afiliados"
+          style={{
+            display: "inline-block",
+            marginTop: 10,
+            color: "var(--ld-fg-muted)",
+            fontSize: 13,
+            textDecoration: "none",
+          }}
+        >
+          ← Conoce el programa
+        </Link>
+      </div>
+
+      <div
+        style={{
+          padding: "14px 16px",
+          borderRadius: 12,
+          border: "1px solid var(--ld-border)",
+          background: "rgba(139,92,246,0.06)",
+          display: "flex",
+          flexDirection: "column",
+          gap: 6,
+        }}
+      >
+        {topRecurringMxn > 0 && (
+          <p style={offerLineStyle}>
+            Hasta <strong style={offerAmountStyle}>{fmtMxn(topRecurringMxn)} al mes</strong> por cada
+            clínica, mientras siga suscrita
+          </p>
+        )}
+        {topOneTimeMxn > 0 && (
+          <p style={offerLineStyle}>
+            {topRecurringMxn > 0 ? "o " : "Hasta "}
+            <strong style={offerAmountStyle}>{fmtMxn(topOneTimeMxn)} de un solo pago</strong>, tú
+            eliges la modalidad
+          </p>
+        )}
+        <p style={{ ...offerLineStyle, color: hasOffer ? "var(--ld-fg-muted)" : "var(--ld-fg)" }}>
+          Entrar es gratis. Te pagamos por SPEI o PayPal.
         </p>
       </div>
 
@@ -234,22 +304,45 @@ export function AffiliateRegistroForm() {
           />
         )}
 
+        <label style={{ display: "flex", gap: 10, alignItems: "flex-start", cursor: "pointer" }}>
+          <input
+            type="checkbox"
+            checked={acceptedTerms}
+            onChange={e => setAcceptedTerms(e.target.checked)}
+            style={{ marginTop: 2, width: 16, height: 16, accentColor: "#7c3aed" }}
+          />
+          <span style={{ fontSize: 12, color: "var(--ld-fg-muted)", lineHeight: 1.5 }}>
+            Acepto los{" "}
+            <Link
+              href="/terminos-afiliados"
+              style={{ color: "var(--ld-brand-light)", textDecoration: "none" }}
+            >
+              términos del programa de afiliados
+            </Link>{" "}
+            y el{" "}
+            <Link href="/privacidad" style={{ color: "var(--ld-brand-light)", textDecoration: "none" }}>
+              aviso de privacidad
+            </Link>
+            .
+          </span>
+        </label>
+
         <button
           type="submit"
-          disabled={loading}
+          disabled={isDisabled}
           style={{
             width: "100%",
             height: 44,
             borderRadius: 10,
-            background: loading
+            background: isDisabled
               ? "rgba(124,58,237,0.4)"
               : "linear-gradient(180deg, #8b5cf6, #7c3aed)",
             color: "#fff",
             fontSize: 14,
             fontWeight: 600,
             border: "none",
-            cursor: loading ? "not-allowed" : "pointer",
-            boxShadow: loading
+            cursor: isDisabled ? "not-allowed" : "pointer",
+            boxShadow: isDisabled
               ? "none"
               : "0 8px 20px -6px rgba(124,58,237,0.5), inset 0 1px 0 rgba(255,255,255,0.15)",
             fontFamily: "inherit",

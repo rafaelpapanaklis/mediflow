@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Building, User, Clock, Shield, Receipt, Bot, CalendarCheck, ExternalLink, Zap, CreditCard, Bell, MessageCircle } from "lucide-react";
+import { Building, User, Clock, Shield, Receipt, Bot, CalendarCheck, ExternalLink, Zap, CreditCard, Bell, MessageCircle, Handshake } from "lucide-react";
 import { SubscriptionTab } from "@/components/dashboard/subscription-tab";
 import { RemindersSection } from "./reminders-section";
 import { TwoFactorCard } from "@/components/dashboard/security/two-factor-card";
@@ -696,6 +696,31 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
             </div>
           </div>
         )}
+
+        {/* Programa de afiliados — punto de entrada discreto a la landing
+            pública. A propósito SIN gate de plan ni de rol: cualquier clínica,
+            en cualquier plan, puede recomendar DaleControl. No lee montos: las
+            cifras viven en la config del programa y escribirlas aquí a mano se
+            desincronizaría. */}
+        <div className="card max-w-lg mt-5">
+          <div className="card__header">
+            <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
+              <Handshake size={16} strokeWidth={1.75} style={{ color: "var(--text-3)", flexShrink: 0, marginTop: 1 }} aria-hidden />
+              <div>
+                <div className="card__title">Programa de afiliados</div>
+                <div className="card__sub">
+                  Recomienda DaleControl a otras clínicas y gana una comisión recurrente por cada una que se suscriba.
+                </div>
+              </div>
+            </div>
+          </div>
+          <div className="card__body">
+            <a href="/afiliados" target="_blank" rel="noopener noreferrer"
+              className="btn-new btn-new--secondary">
+              Conocer el programa →
+            </a>
+          </div>
+        </div>
         </>
       )}
 

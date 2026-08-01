@@ -129,14 +129,30 @@ export function AffiliateLoginForm() {
         </button>
       </form>
 
-      <div style={{ textAlign: "center", fontSize: 13, color: "var(--ld-fg-muted)" }}>
-        ¿Quieres ser afiliado?{" "}
-        <Link
-          href="/afiliados/registro"
-          style={{ color: "var(--ld-brand-light)", fontWeight: 500, textDecoration: "none" }}
-        >
-          Regístrate →
-        </Link>
+      <div
+        style={{
+          textAlign: "center",
+          fontSize: 13,
+          color: "var(--ld-fg-muted)",
+          display: "flex",
+          flexDirection: "column",
+          gap: 6,
+        }}
+      >
+        <div>
+          ¿Quieres ser afiliado?{" "}
+          <Link
+            href="/afiliados/registro"
+            style={{ color: "var(--ld-brand-light)", fontWeight: 500, textDecoration: "none" }}
+          >
+            Regístrate →
+          </Link>
+        </div>
+        <div>
+          <Link href="/afiliados" style={{ color: "var(--ld-fg-muted)", textDecoration: "none" }}>
+            Conoce el programa →
+          </Link>
+        </div>
       </div>
     </div>
   );

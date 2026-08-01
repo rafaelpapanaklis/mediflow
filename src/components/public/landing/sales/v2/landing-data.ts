@@ -313,6 +313,7 @@ export const FOOTER = {
     ...NAV.links,
     { label: 'Casos de uso', href: '/casos-de-uso' },
     { label: 'Herramientas gratuitas', href: '/herramientas' },
+    { label: 'Programa de afiliados', href: '/afiliados' },
   ],
   // Grupo "Funciones": las 8 páginas de producto por módulo. El nombre y el
   // slug salen de src/lib/producto/data.ts, así que no hay copia que se
@@ -324,6 +325,7 @@ export const FOOTER = {
   legal: [
     { label: 'Aviso de privacidad', href: '/privacidad' },
     { label: 'Términos y condiciones', href: '/terminos' },
+    { label: 'Términos del programa de afiliados', href: '/terminos-afiliados' },
   ],
   // Sin href="#": los dos placeholders (WhatsApp / Facebook) no tenían destino
   // real y un ancla vacía deja al usuario dando un salto al inicio de la

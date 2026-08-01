@@ -19,6 +19,8 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     { url: `${SITE_URL}/blog`,     lastModified: now, changeFrequency: "daily",  priority: 0.8 },
     { url: `${SITE_URL}/casos-de-uso`, lastModified: now, changeFrequency: "monthly", priority: 0.8 },
     { url: `${SITE_URL}/herramientas`, lastModified: now, changeFrequency: "monthly", priority: 0.8 },
+    { url: `${SITE_URL}/afiliados`, lastModified: now, changeFrequency: "monthly", priority: 0.8 },
+    { url: `${SITE_URL}/terminos-afiliados`, lastModified: now, changeFrequency: "yearly", priority: 0.3 },
   ];
 
   // Páginas de producto por módulo — data ESTÁTICA (src/lib/producto/data.ts).
