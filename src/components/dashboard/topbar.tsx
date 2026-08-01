@@ -130,7 +130,11 @@ export function Topbar({
           <Menu size={16} />
         </button>
 
-        <div className="topbar-new__crumbs hidden lg:flex">
+        {/* `!` obligatorio: .topbar-new__crumbs (globals.css) declara
+            display:flex con la MISMA especificidad que .hidden y gana por
+            orden de fuente, así que sin !important las migas nunca se
+            ocultaban y le comían ~194px al buscador en móvil. */}
+        <div className="topbar-new__crumbs !hidden lg:!flex">
           {crumbs.map((c, i) => (
             <Fragment key={`${i}-${c}`}>
               {i > 0 && (
@@ -151,6 +155,15 @@ export function Topbar({
           />
         )}
 
+        {/* Buscador — elemento central del topbar. Vive FUERA del cluster
+            `hidden lg:flex` de la derecha a propósito: ahí desaparecía por
+            completo bajo 1024px. Ancho fluido (flex-1) con techo por
+            breakpoint para no comerse los botones; bajo md colapsa solo al
+            icono. min-w-0 en la base para que pueda encogerse en móvil. */}
+        <div className="flex min-w-0 flex-1 justify-end md:min-w-[240px] md:max-w-[380px] md:justify-start lg:max-w-[460px] xl:min-w-[320px] xl:max-w-[560px]">
+          <CommandPaletteHint onClick={() => setPaletteOpen(true)} />
+        </div>
+
         <div className="hidden lg:flex" style={{ marginLeft: "auto", alignItems: "center", gap: 8 }}>
           {/* Alert de tiempos de espera — solo recepcionista/admin que
               monitorean la sala. El componente self-renders condicional
@@ -161,7 +174,6 @@ export function Topbar({
             <WaitingRoomAlert />
           )}
           {right}
-          <CommandPaletteHint onClick={() => setPaletteOpen(true)} />
           {/* Insights semanales — solo admin/owner ven analytics → solo
               ellos reciben WeeklyInsight. El popover self-hides badge si
               no hay unread. */}
