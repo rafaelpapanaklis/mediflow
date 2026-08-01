@@ -334,7 +334,48 @@ model Clinic {
   // del bot de WhatsApp. Requiere sql/ai-quota-usage.sql aplicado en Supabase.
   aiQuotaUsage AiQuotaUsage[]
 
+  // Manager de cuenta — la persona real de DaleControl que atiende a esta
+  // clínica por WhatsApp (se asigna desde /admin/account-managers). Nullable:
+  // sin manager la clínica solo tiene soporte por tickets. onDelete SetNull —
+  // borrar un manager NUNCA borra clínicas, solo las deja sin asignar.
+  // Requiere sql/account-managers.sql aplicado en Supabase.
+  accountManagerId String?
+  accountManager   AccountManager? @relation(fields: [accountManagerId], references: [id], onDelete: SetNull)
+
+  @@index([accountManagerId])
   @@map("clinics")
+}
+
+// Manager de cuenta — persona de DaleControl que atiende clínicas por WhatsApp.
+// Es un catálogo GLOBAL (no multi-tenant): lo administra el owner desde /admin.
+// El panel de la clínica sólo ve el manager que tiene asignado, nunca el resto.
+//
+// Horario: `days` son días de la semana con 0=Domingo … 6=Sábado (mismo criterio
+// que Date.getDay() y que getTzParts), Lun–Vie = [1,2,3,4,5]. `startMinutes` y
+// `endMinutes` son minutos desde medianoche (9:00 = 540, 18:00 = 1080) y se
+// evalúan SIEMPRE en `timezone`, no en la del visitante.
+// Ver src/lib/account-manager/availability.ts.
+model AccountManager {
+  id              String   @id @default(cuid())
+  name            String
+  photoUrl        String?
+  /// E.164 SIN el "+": "529992602093". Es lo que consume wa.me/<numero>.
+  whatsappE164    String
+  /// Formateado para leerse ("999 260 2093"). Si es null se deriva del E.164.
+  whatsappDisplay String?
+  days            Int[]    @default([1, 2, 3, 4, 5])
+  startMinutes    Int      @default(540)
+  endMinutes      Int      @default(1080)
+  timezone        String   @default("America/Mexico_City")
+  /// "active" | "paused". Un manager pausado nunca aparece "en línea".
+  status          String   @default("active")
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  clinics Clinic[]
+
+  @@index([status])
+  @@map("account_managers")
 }
 
 enum ClinicCategory {
