@@ -2197,3 +2197,114 @@ que ya existía en el repo.
 - Cero cambios de `model:`/`MODEL` en ningún endpoint (Sonnet se queda), ni en la lógica del wallet,
   ni en `/api/ai/usage`. El único `model:` tocado es el de `/api/ai`, y solo para leer **el mismo id**
   desde la constante compartida.
+## [Admin sesion se cae cada pocos minutos] — 2026-07-31 (`8a5a8f15` + `0c17c10f`)
+
+Nada revocaba las sesiones: el panel expulsaba al admin porque **un fallo de infraestructura se
+renderizaba como "no estás logueado"**, y porque la cookie llegaba a faltar aunque la sesión
+siguiera viva en BD.
+
+### FIX 1 — Un fallo de BD ya no pide credenciales
+
+`getAdminSession()` envolvía todo en `try/catch` y devolvía `null` ante **cualquier** error, así que
+un timeout del pooler o un cold start de Prisma era indistinguible de un visitante sin cookie, y el
+layout renderizaba el login.
+
+`src/lib/admin-auth.ts` ahora tiene `getAdminSessionResult()` con tres estados:
+
+| estado | cuándo | qué se ve |
+|---|---|---|
+| `ok` | sesión viva + AdminUser activo | panel normal |
+| `anonymous` | `no-cookie` / `not-found` / `revoked` / `expired` / `user-inactive` | login |
+| `error` | la consulta **lanzó** (conexión/timeout) | pantalla de reintento, **sin pedir nada** |
+
+- **Reintento único** a los 150 ms ante `error` antes de darlo por malo.
+- **`console.warn` con el motivo exacto en cada rechazo** (`[admin-auth] rechazado: expired`,
+  `[admin-auth] rechazado: error de BD <PrismaClientInitializationError>`). La próxima vez los logs
+  de Vercel dicen la causa en vez de adivinarla.
+- `getAdminSession()` e `isAdminAuthed()` **conservan su firma** y siguen fail-closed (`null` en
+  `anonymous` y en `error`): `/api/admin/*` no cambió de comportamiento, ahí fail-closed está bien.
+- `src/app/admin/layout.tsx` distingue los tres estados. `error` → `<AdminSessionError />`:
+  "No pudimos verificar tu sesión (problema de conexión)" + botón Reintentar. **No borra la cookie.**
+
+Detalle que importa: `cookies()` se lee **fuera** del `try`. Si se traga lo que lanza ahí, el
+bail-out de render estático de Next se disfrazaría de error de BD.
+
+### FIX 2 — Renovación deslizante (12h) y cómo se refresca la cookie
+
+- `SESSION_TTL_MS` 8h → **12h**.
+- `touchAdminSession(sessionId, currentExpiresAt)`: extiende `expiresAt` a `now + TTL` **solo si le
+  queda menos de la mitad del TTL**; si le sobra vida devuelve `null` **sin tocar la BD**. Con TTL de
+  12h eso es como mucho un UPDATE cada ~6h de uso, no uno por request. El `where` exige
+  `revokedAt: null` y `expiresAt > now`, así que nunca resucita una sesión muerta.
+- Se llama desde `getAdminSessionResult()` en fire-and-forget (`void … .catch(()=>{})`): no añade
+  latencia ni puede tumbar la petición.
+
+**Mecanismo elegido para la cookie: `POST /api/admin/session/touch` + `<AdminSessionKeepalive />`**
+montado en el layout (dispara al montar, cada 5 min y al volver a la pestaña). Por qué éste y no
+otro: un Server Component **no puede escribir cookies**, así que extender `expiresAt` en BD sin
+refrescar el `maxAge` dejaría al navegador tirando la cookie con la sesión aún viva — exactamente el
+síntoma que se quería matar. Las alternativas eran peores: colgarlo de una respuesta existente de
+`/api/admin/*` depende de qué pantalla visites (hay secciones que no llaman a ninguna) y meterlo en
+el middleware es imposible (Edge no ve Prisma). El endpoint re-emite la **misma** cookie con el
+`maxAge` alineado a la expiración vigente, y es `POST` para heredar el CSRF origin-check del
+middleware. Fail-closed: sin sesión válida devuelve 401 y no toca la cookie.
+
+### FIX 3 — `sameSite: strict` → `lax`
+
+Con `strict` la cookie **no viaja** al entrar desde ningún enlace externo (correo, marcador abierto
+desde otro sitio, el panel de Vercel): la primera carga llega sin cookie y se ve como cierre de
+sesión aleatorio. `lax` sigue sin mandarla en POST cross-site y las mutaciones de `/api/admin/*` ya
+están cubiertas por `csrfOriginMismatch` del middleware. `httpOnly` y `secure` intactos.
+
+### FIX 4 — /admin/sesiones sirve para diagnosticar
+
+Contador de **sesiones vivas** arriba (ámbar a partir de 10, con el aviso de que entonces lo que
+falla es la cookie y no la expiración), fecha de creación y de expiración legibles por sesión — y el
+**tiempo restante** al lado ("en 11 h"), calculado solo tras montar para no desfasar la hidratación.
+El pie ya no miente: 12h que se renuevan mientras trabajas.
+
+### Verificación
+
+**Guard de seguridad confirmado explícitamente**: ningún caller de `isAdminAuthed()` se quedó sin
+`await`. Grep de todas las apariciones filtrando `await isAdminAuthed`: solo quedan imports,
+comentarios, la definición, y `src/app/api/admin/auditoria/route.ts`, que declara su **propia**
+`isAdminAuthed()` local **síncrona** (no importa la compartida) — ahí `!isAdminAuthed()` es correcto.
+Igual para `getAdminSession()`: los ~40 call sites usan `await`.
+
+> Hallazgo aparte, **no tocado** (fuera del alcance): esa `isAdminAuthed()` local de
+> `/api/admin/auditoria` es legado — compara la cookie contra `ADMIN_SECRET_TOKEN`, pero desde las
+> sesiones en BD la cookie lleva un token aleatorio, así que esa ruta responde 401 siempre.
+
+Sin `.env` local no hay BD (`.env.e2e` no trae `DATABASE_URL`), así que **no se pudo entrar al panel
+con login real**. Pero la BD ausente **es** el escenario del bug, y se reprodujo apuntando
+`DATABASE_URL` a un host inalcanzable en `next dev`:
+
+| escenario | resultado | log |
+|---|---|---|
+| cookie `admin_token` presente + BD caída | **200 con "No pudimos verificar tu sesión" + Reintentar** (antes: login) | `[admin-auth] rechazado: error de BD PrismaClientInitializationError: Can't reach database server` |
+| sin cookie | 307 → `/admin/login`, login renderizado | `[admin-auth] rechazado: no-cookie` |
+| `POST /api/admin/session/touch` sin sesión | `401 {"error":"Unauthorized"}` | idem error de BD |
+
+**El motivo que aparece en los logs al reproducirlo es `error de BD`** — justo el caso que antes
+acababa en la pantalla de contraseña.
+
+Umbral de la renovación comprobado sin BD (la rama que no escribe sale antes de tocar Prisma):
+
+| vida restante | resultado |
+|---|---|
+| 12h (recién creada) | `null`, **no escribió** |
+| 6.5h | `null`, **no escribió** |
+| 5.5h | intenta el UPDATE |
+| 0.5h | intenta el UPDATE |
+
+- `npx tsc --noEmit` → **0 errores**.
+- `npx next build` → **exit 0**, output completo leído (2566 líneas, sin `| tail`), 355/355 páginas.
+  `/api/admin/session/touch` aparece como ƒ. Los únicos errores del log son 41
+  `PrismaClientInitializationError` por el `DATABASE_URL` ausente en local — preexistentes, de
+  páginas públicas, no de este cambio. (`npm run build` falla antes, en `prisma generate`, por un
+  EPERM de Windows: otro proceso node tiene tomado `query_engine-windows.dll.node`. El schema no se
+  tocó, así que el client ya generado sirve.)
+
+### Sin SQL
+
+`expiresAt` ya existe. Nada que aplicar en Supabase.
