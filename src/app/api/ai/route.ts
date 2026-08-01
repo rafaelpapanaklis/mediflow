@@ -3,6 +3,7 @@ import { getAuthContext } from "@/lib/auth-context";
 import { prisma } from "@/lib/prisma";
 import { addAiTokens } from "@/lib/ai-tokens";
 import { persistentRateLimit } from "@/lib/failban";
+import { AI_CHAT_MODEL } from "@/lib/ai/models";
 
 const AI_SYSTEM_PROMPT = `Eres un asistente clínico de apoyo para médicos en México. 
 Tu función es ayudar al doctor a:
@@ -92,7 +93,7 @@ export async function POST(req: NextRequest) {
         "anthropic-version": "2023-06-01",         // required by Anthropic API
       },
       body: JSON.stringify({
-        model:      "claude-haiku-4-5-20251001",
+        model:      AI_CHAT_MODEL,   // mismo id de siempre, ahora compartido con la UI
         max_tokens: 600,
         system:     systemPrompt,
         messages,

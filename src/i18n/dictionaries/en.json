@@ -4439,6 +4439,9 @@
       "disclaimer": "Diagnostic support; does not replace clinical judgment.",
       "notConfigured": "AI not configured. Contact your administrator.",
       "monthlyLimit": "You've reached this month's AI limit.",
+      "noPlan": "Your plan does not include AI. Upgrade to analyze consults with the assistant.",
+      "noPlanCta": "See plans and upgrade",
+      "noPlanAskAdmin": "Ask a clinic administrator to upgrade the plan",
       "genericError": "Could not generate the analysis. Try again."
     },
     "dictation": {

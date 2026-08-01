@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { Sparkles } from "lucide-react";
+import Link from "next/link";
+import { ArrowRight, Sparkles } from "lucide-react";
 import { useT } from "@/i18n/i18n-provider";
 import styles from "./ai-consult-panel.module.css";
 
@@ -39,11 +40,16 @@ export function AiConsultPanel({ patientId, currentInput, value, onApply, onRemo
   const [analysis, setAnalysis] = useState<AnalyzeResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Plan sin IA: NO es un error rojo, es un gancho de venta. Estado aparte de
+  // `error` para que se pinte como oferta y no como falla. isAdmin viene del
+  // servidor: solo el admin puede entrar al tab de suscripción.
+  const [noPlan, setNoPlan] = useState<{ isAdmin: boolean } | null>(null);
   const [busy, setBusy] = useState(false);
 
   async function analyze() {
     setLoading(true);
     setError(null);
+    setNoPlan(null);
     // Al re-analizar, soltamos el resultado previo para caer al branch idle (que sí
     // muestra spinner y error); si no, el card neutro se queda mudo ante 429/503/5xx.
     setAnalysis(null);
@@ -54,6 +60,14 @@ export function AiConsultPanel({ patientId, currentInput, value, onApply, onRemo
         body: JSON.stringify({ patientId, currentInput }),
       });
       if (res.status === 503) { setError(t("clinical.aiConsult.notConfigured")); return; }
+      // 403 + noPlan = el plan no incluye IA (nunca tuvo cupo). El otro 403 del
+      // endpoint es el de permisos: ese sí cae al genérico.
+      if (res.status === 403) {
+        const body = await res.json().catch(() => null);
+        if (body?.noPlan) { setNoPlan({ isAdmin: body.isAdmin === true }); return; }
+        setError(t("clinical.aiConsult.genericError"));
+        return;
+      }
       if (res.status === 429) { setError(t("clinical.aiConsult.monthlyLimit")); return; }
       if (!res.ok) { setError(t("clinical.aiConsult.genericError")); return; }
       setAnalysis((await res.json()) as AnalyzeResponse);
@@ -148,6 +162,19 @@ export function AiConsultPanel({ patientId, currentInput, value, onApply, onRemo
         {loading ? <span className={styles.spinner} /> : <Sparkles size={16} />}
         {loading ? t("clinical.aiConsult.analyzing") : t("clinical.aiConsult.analyze")}
       </button>
+      {noPlan && (
+        <div className={styles.upsell} role="status">
+          <span className={styles.upsellText}>{t("clinical.aiConsult.noPlan")}</span>
+          {noPlan.isAdmin ? (
+            <Link href="/dashboard/settings?tab=subscription" className={styles.upsellCta}>
+              {t("clinical.aiConsult.noPlanCta")}
+              <ArrowRight size={14} aria-hidden />
+            </Link>
+          ) : (
+            <span className={styles.upsellAskAdmin}>{t("clinical.aiConsult.noPlanAskAdmin")}</span>
+          )}
+        </div>
+      )}
       {error && <div className={styles.error}>{error}</div>}
     </div>
   );

@@ -4439,6 +4439,9 @@
       "disclaimer": "Apoyo diagnóstico, no sustituye el juicio clínico.",
       "notConfigured": "IA no configurada. Contacta al administrador.",
       "monthlyLimit": "Alcanzaste el límite de IA de este mes.",
+      "noPlan": "Tu plan no incluye IA. Sube de plan para analizar consultas con el asistente.",
+      "noPlanCta": "Ver planes y mejorar",
+      "noPlanAskAdmin": "Pídele a un administrador de la clínica que mejore el plan",
       "genericError": "No se pudo generar el análisis. Intenta de nuevo."
     },
     "dictation": {

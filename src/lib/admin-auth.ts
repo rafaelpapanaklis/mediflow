@@ -10,8 +10,8 @@ import { prisma } from "@/lib/prisma";
  * Antes: una sola cookie global cuyo valor == env ADMIN_SECRET_TOKEN. Sin
  * identidad, sin revocación, sin atribución. Ahora:
  *  - La cookie `admin_token` lleva un token ALEATORIO por sesión (32 bytes).
- *  - En BD (AdminSession) vive solo su sha256, con ip/UA, expiración (8h) y
- *    revokedAt. Validar = buscar la sesión VIVA + cargar el AdminUser activo.
+ *  - En BD (AdminSession) vive solo su sha256, con ip/UA, expiración (12h,
+ *    deslizante) y revokedAt. Validar = sesión VIVA + AdminUser activo.
  *  - El login valida contra AdminUser (bcrypt) + TOTP por usuario.
  *
  * Runtime: TODO esto corre en Node (route handlers + el layout server de
@@ -21,7 +21,12 @@ import { prisma } from "@/lib/prisma";
  */
 
 export const ADMIN_COOKIE = "admin_token";
-const SESSION_TTL_MS = 8 * 60 * 60 * 1000; // 8 horas
+/** Vida de la sesión. Deslizante: se renueva con el uso (ver touchAdminSession). */
+export const SESSION_TTL_MS = 12 * 60 * 60 * 1000; // 12 horas
+/** Umbral de renovación: sólo se extiende cuando le queda MENOS de la mitad. */
+const SESSION_TOUCH_THRESHOLD_MS = SESSION_TTL_MS / 2;
+/** Espera antes del único reintento cuando la consulta de sesión falla. */
+const DB_RETRY_DELAY_MS = 150;
 const BCRYPT_ROUNDS = 10;
 
 export interface AdminUserLite {
@@ -35,18 +40,50 @@ export interface AdminUserLite {
 export interface AdminAuthContext {
   user: AdminUserLite;
   sessionId: string;
+  /** Expiración vigente en BD (la usa /api/admin/session/touch para la cookie). */
+  expiresAt: Date;
 }
+
+/** Motivo por el que la petición NO tiene sesión (nada que ver con fallos de BD). */
+export type AdminAnonymousReason =
+  | "no-cookie"
+  | "not-found"
+  | "revoked"
+  | "expired"
+  | "user-inactive";
+
+/**
+ * Resultado de validar la sesión, con los dos casos que antes eran el MISMO
+ * `null`: "anonymous" (de verdad no hay sesión) vs "error" (no pudimos saberlo
+ * porque la BD falló). Quien renderiza UI debe tratarlos distinto: pedir
+ * credenciales por un timeout del pooler es lo que hacía que el panel expulsara
+ * al admin cada pocos minutos.
+ */
+export type AdminSessionResult =
+  | { state: "ok"; ctx: AdminAuthContext }
+  | { state: "anonymous"; reason: AdminAnonymousReason }
+  | { state: "error"; error: unknown };
 
 function sha256(value: string): string {
   return createHash("sha256").update(value).digest("hex");
 }
 
-/** Opciones de la cookie de sesión admin (httpOnly, secure en prod, 8h). */
+/**
+ * Opciones de la cookie de sesión admin (httpOnly, secure en prod, 12h).
+ *
+ * sameSite "lax" (antes "strict"): con "strict" la cookie NO viaja al entrar
+ * desde CUALQUIER enlace externo —correo, marcador abierto desde otro sitio, el
+ * panel de Vercel—, así que la primera carga llega sin cookie y se ve como un
+ * cierre de sesión aleatorio. "lax" la sigue reteniendo en peticiones POST
+ * cross-site, y las mutaciones de /api/admin/* ya están protegidas por el
+ * CSRF origin-check del middleware (src/middleware.ts, csrfOriginMismatch).
+ * httpOnly y secure NO se tocan.
+ */
 export function adminCookieOptions(maxAgeMs: number = SESSION_TTL_MS) {
   return {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
-    sameSite: "strict" as const,
+    sameSite: "lax" as const,
     maxAge: Math.floor(maxAgeMs / 1000),
     path: "/",
   };
@@ -54,29 +91,72 @@ export function adminCookieOptions(maxAgeMs: number = SESSION_TTL_MS) {
 
 // ── Validación de sesión (Node; DB-backed) ────────────────────────────────
 
+function sleep(ms: number): Promise<void> {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
+function findSessionByHash(tokenHash: string) {
+  return prisma.adminSession.findUnique({
+    where: { tokenHash },
+    include: { adminUser: true },
+  });
+}
+
+/** Rechazo por ausencia real de sesión. Se loguea SIEMPRE el motivo exacto. */
+function anonymous(reason: AdminAnonymousReason): AdminSessionResult {
+  console.warn(`[admin-auth] rechazado: ${reason}`);
+  return { state: "anonymous", reason };
+}
+
 /**
+ * Valida la sesión distinguiendo "no hay sesión" de "no pudimos comprobarlo".
+ *
  * Lee la cookie, busca la AdminSession VIVA (no revocada, no expirada) por
- * sha256(token) y carga el AdminUser activo. Devuelve el contexto admin o null.
- * Fail-closed: cualquier error → null (no autenticado).
+ * sha256(token) y carga el AdminUser activo:
+ *  - "ok"        → contexto admin.
+ *  - "anonymous" → no hay sesión, con el motivo (sirve para el login y el log).
+ *  - "error"     → la consulta LANZÓ (conexión/timeout del pooler). NO es un
+ *                  visitante anónimo; quien renderice UI no debe pedir
+ *                  credenciales por esto.
+ *
+ * Reintenta UNA vez ante "error": casi todo fallo de pooler (cold start,
+ * conexión reciclada) es transitorio y el reintento lo absorbe sin que el
+ * usuario note nada.
  */
-export async function getAdminSession(): Promise<AdminAuthContext | null> {
+export async function getAdminSessionResult(): Promise<AdminSessionResult> {
+  // cookies() FUERA del try: si Next lanza aquí (bail-out de render estático)
+  // debe propagar, no disfrazarse de "error de BD".
+  const token = cookies().get(ADMIN_COOKIE)?.value;
+  if (!token) return anonymous("no-cookie");
+
+  const tokenHash = sha256(token);
+  let session: Awaited<ReturnType<typeof findSessionByHash>>;
   try {
-    const token = cookies().get(ADMIN_COOKIE)?.value;
-    if (!token) return null;
+    session = await findSessionByHash(tokenHash);
+  } catch {
+    await sleep(DB_RETRY_DELAY_MS);
+    try {
+      session = await findSessionByHash(tokenHash);
+    } catch (e) {
+      console.warn("[admin-auth] rechazado: error de BD", e);
+      return { state: "error", error: e };
+    }
+  }
 
-    const session = await prisma.adminSession.findUnique({
-      where: { tokenHash: sha256(token) },
-      include: { adminUser: true },
-    });
+  if (!session) return anonymous("not-found");
+  if (session.revokedAt) return anonymous("revoked");
+  if (session.expiresAt.getTime() <= Date.now()) return anonymous("expired");
 
-    if (!session) return null;
-    if (session.revokedAt) return null;
-    if (session.expiresAt.getTime() <= Date.now()) return null;
+  const u = session.adminUser;
+  if (!u || !u.isActive) return anonymous("user-inactive");
 
-    const u = session.adminUser;
-    if (!u || !u.isActive) return null;
+  // Renovación deslizante en fire-and-forget: NO puede añadir latencia ni tumbar
+  // la petición. Sólo escribe si cruzó el umbral (ver touchAdminSession).
+  void touchAdminSession(session.id, session.expiresAt).catch(() => {});
 
-    return {
+  return {
+    state: "ok",
+    ctx: {
       user: {
         id: u.id,
         email: u.email,
@@ -85,11 +165,20 @@ export async function getAdminSession(): Promise<AdminAuthContext | null> {
         totpEnabled: u.totpEnabled,
       },
       sessionId: session.id,
-    };
-  } catch (e) {
-    console.error("[admin-auth] getAdminSession error:", e);
-    return null;
-  }
+      expiresAt: session.expiresAt,
+    },
+  };
+}
+
+/**
+ * Misma firma de siempre (la usan muchas rutas): null tanto si no hay sesión
+ * como si la BD falló. Fail-closed, correcto para /api/admin/*. La UI que SÍ
+ * necesita distinguir ambos casos (el layout de /admin) usa
+ * getAdminSessionResult().
+ */
+export async function getAdminSession(): Promise<AdminAuthContext | null> {
+  const result = await getAdminSessionResult();
+  return result.state === "ok" ? result.ctx : null;
 }
 
 /**
@@ -99,6 +188,29 @@ export async function getAdminSession(): Promise<AdminAuthContext | null> {
  */
 export async function isAdminAuthed(): Promise<boolean> {
   return (await getAdminSession()) !== null;
+}
+
+/**
+ * Renovación deslizante: si a la sesión le queda MENOS de la mitad del TTL,
+ * extiende expiresAt a now + TTL y devuelve la nueva fecha. Si aún le sobra
+ * vida devuelve null SIN tocar la BD — es lo que evita un UPDATE por request
+ * (con TTL de 12h se escribe como mucho una vez cada ~6h de uso).
+ *
+ * Nunca resucita una sesión revocada ni una ya expirada: el where lo acota.
+ */
+export async function touchAdminSession(
+  sessionId: string,
+  currentExpiresAt: Date,
+): Promise<Date | null> {
+  const now = Date.now();
+  if (currentExpiresAt.getTime() - now > SESSION_TOUCH_THRESHOLD_MS) return null;
+
+  const expiresAt = new Date(now + SESSION_TTL_MS);
+  const { count } = await prisma.adminSession.updateMany({
+    where: { id: sessionId, revokedAt: null, expiresAt: { gt: new Date(now) } },
+    data: { expiresAt },
+  });
+  return count > 0 ? expiresAt : null;
 }
 
 // ── Ciclo de vida de la sesión ─────────────────────────────────────────────

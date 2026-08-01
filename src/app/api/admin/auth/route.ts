@@ -61,7 +61,7 @@ function verifyTOTP(token: string, secret: string): boolean {
  * delay anti-bruteforce. La UI no pide email: se
  * identifica al admin por contraseña (bcrypt) entre los admins activos. Al éxito
  * se crea una AdminSession y la cookie admin_token lleva el token ALEATORIO en
- * claro (httpOnly, 8h) — su sha256 vive en BD.
+ * claro (httpOnly, 12h deslizantes) — su sha256 vive en BD.
  */
 export async function POST(req: NextRequest) {
   try {

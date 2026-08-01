@@ -2151,3 +2151,243 @@ el contenedor ya tenía `overflow-x:auto`.
 
 **Pendiente de QA en prod**: que el aviso aparezca en la caja real que lleva días abierta, y que el
 Excel descargado abra con las columnas Fecha/Hora bien parseadas.
+---
+
+## [Fix-AI-Copy-Upsell] — el chat decía Sonnet corriendo en Haiku, y el plan sin IA decía "límite alcanzado" ✅ (2026-07-31)
+
+**Rama:** `fix/ai-copy-y-upsell` (worktree desde `origin/main` @ `5b0721cb`) → push directo a main. Sin PR, **sin SQL**.
+**Archivos:** 7 modificados + 1 nuevo (+80/−4):
+`src/lib/ai/models.ts` (nuevo), `src/app/api/ai/route.ts`, `src/app/api/consult/ai-assist/route.ts`,
+`src/app/dashboard/ai-assistant/page.tsx`, `src/components/clinical/dental/ai-consult-panel.tsx`,
+`src/components/clinical/dental/ai-consult-panel.module.css`, `src/i18n/dictionaries/es.json`, `.../en.json`.
+
+### TAREA A — copy de Configuración → Asistente IA: **ya estaba hecha, no se tocó**
+
+`settings.client.aiHowItWorksBody` en es.json/en.json **ya dice exactamente** el texto pedido
+(espacio inicial incluido) desde `96a597f0` (2026-07-29, ver la entrada _Fix-AI-Usage-Copy_ más
+arriba). Se comparó string por string contra el prompt: **idéntico**, no había nada que cambiar.
+
+- Estado hoy (es.json:3115): _" El consumo depende de la función: una pregunta al chat gasta ~800
+  tokens, mientras que un análisis completo de consulta (que lee todo el expediente) gasta entre
+  3,000 y 8,000. El límite se renueva automáticamente el primer día de cada mes. El chat usa Claude
+  Haiku (rápido y económico) y los análisis clínicos usan Claude Sonnet, el modelo de mayor
+  capacidad de razonamiento."_ · en.json:3115 con la traducción fiel.
+- Lo FALSO que menciona el prompt ("...usa aproximadamente 800 tokens... Usa Claude Haiku — el
+  modelo más eficiente de Anthropic") **ya no existe en main**. Las líneas del prompt (es.json:3046)
+  quedaron corridas: la clave vive en la 3115.
+
+### TAREA B — "Consultas aprox.": **ya estaba hecha, no se tocó**
+
+Mismo commit `96a597f0`. `settings-client.tsx:79` ya declara `const AVG_CONSULT_TOKENS = 5000` con
+el comentario de por qué 5k (y una frase extra sobre que subestima a propósito), la tarjeta ya usa
+`Math.floor(aiRemaining/AVG_CONSULT_TOKENS)` (línea 1014) y la etiqueta
+`settings.client.aiStatConsultations` ya es **"Análisis aprox." / "Approx. analyses"** (es/en.json:3107).
+Con 992,608 restantes da **198**, no 1240. Verificado leyendo el código, no asumido.
+
+### TAREA C — el badge del chat decía Sonnet, pero el chat es Haiku ✅ ARREGLADO
+
+- ANTES: `dashboard/ai-assistant/page.tsx` imprimía la cadena literal **`claude-sonnet-4-6`** en DOS
+  sitios (cabecera del chat, línea 682; badge de cada mensaje del asistente, línea 804), mientras
+  `POST /api/ai` responde con **`claude-haiku-4-5-20251001`**. La pantalla mentía sobre qué modelo
+  contestaba.
+- AHORA: **nuevo `src/lib/ai/models.ts`** con `export const AI_CHAT_MODEL = "claude-haiku-4-5-20251001"`.
+  Lo importan el route (`model: AI_CHAT_MODEL`, **mismo id de siempre**) y las dos etiquetas de la UI.
+  Si algún día cambia el modelo del chat, la etiqueta se mueve sola: ya no pueden divergir.
+- El id largo cabe: `.modelBadge` es mono de 9px y `.chatMeta` de 11px.
+- **No se centralizaron los modelos clínicos** (Sonnet): tocar sus `MODEL` estaba prohibido y
+  ninguna pantalla los muestra todavía. Queda dicho en el docblock del archivo nuevo.
+
+### TAREA D — el bloqueo por plan ahora VENDE ✅
+
+**D1 · `POST /api/consult/ai-assist`** (justo después del `findUnique` de la clínica, **antes** del
+reseteo mensual y del gate de cupo):
+
+- ANTES: una clínica BÁSICO (`aiTokensLimit = 0`) caía en el mismo 429 que una que sí agotó su cupo:
+  _"Límite mensual de IA alcanzado (0 tokens). Se renueva el 1 de …"_ — confuso, nunca tuvo IA.
+- AHORA: `if (clinic.aiTokensLimit <= 0)` → **403** con
+  `{ error: "Tu plan no incluye IA. Sube de plan para analizar consultas con el asistente.", noPlan: true, isAdmin }`.
+  El **429 de cupo agotado queda intacto** (solo se alcanza con `aiTokensLimit > 0`), igual que el
+  **503** de `ANTHROPIC_API_KEY` ausente.
+- `<= 0` en vez de `=== 0`: mismo criterio que ya usa `ai-quota-banner.tsx:80`
+  (`if (!usage.limit || usage.limit <= 0)`) — un límite negativo no debe caer en el mensaje de cupo.
+- Va **antes** del reseteo mensual a propósito: sin cupo que resetear, no hay por qué escribir en la BD.
+- `isAdmin` sale de la **sesión** (`ctx.isAdmin`), nunca del cliente — mismo patrón que el 402 de
+  cupo de pacientes (`api/patients/route.ts:557`).
+
+**D2 · i18n** (`clinical.aiConsult`, en **es.json Y en.json**, mismos nombres):
+
+| clave | es | en |
+|---|---|---|
+| `noPlan` | Tu plan no incluye IA. Sube de plan para analizar consultas con el asistente. | Your plan does not include AI. Upgrade to analyze consults with the assistant. |
+| `noPlanCta` | Ver planes y mejorar | See plans and upgrade |
+| `noPlanAskAdmin` | Pídele a un administrador de la clínica que mejore el plan | Ask a clinic administrator to upgrade the plan |
+
+Voz calcada de lo que ya existe (`aiNoPlanNotice` :3113, `aiNoPlan` :4448, `voiceNoPlan` :7182,
+`quotaNoPlan` :7187 → todos "Tu plan no incluye IA. Sube de plan para…"). `noPlanCta`/`noPlanAskAdmin`
+reusan literalmente el texto de `shell.newPatient.limitCta`/`limitAskAdmin`, que es el CTA de upgrade
+que ya existía en el repo.
+
+**D3 · `components/clinical/dental/ai-consult-panel.tsx`** (única superficie: la monta `dental-form.tsx:456`):
+
+- ANTES: `503 → notConfigured`, `429 → monthlyLimit`, `!ok → genericError`. El 403 caía en el genérico
+  _"No se pudo generar el análisis. Intenta de nuevo."_
+- AHORA: caso **403** ANTES del genérico. Lee el body: si trae `noPlan` pinta la caja de venta; si no
+  (403 de **permisos**, `medicalRecord.create`) sigue cayendo en el genérico — no se le vende un plan
+  a quien solo le falta permiso.
+- Estado `noPlan` **separado de `error`** para que se pinte como oferta y no como fallo rojo: caja de
+  marca (`--border-brand` / `--brand-softer`) con el texto + CTA morado a
+  **`/dashboard/settings?tab=subscription`** (la MISMA ruta del trial-banner, el modal de cupo de
+  pacientes y patient-photos-tab) y flecha `ArrowRight`.
+- **Ese tab es admin-only**: `settings-client.tsx:91-98` redirige a "clinica" si el rol no es
+  ADMIN/SUPER_ADMIN. Por eso el CTA solo se le muestra al admin y un doctor ve
+  `noPlanAskAdmin` — mismo criterio documentado en `api/patients/route.ts:554-556`. Sin esto, el
+  gancho mandaba al doctor (el usuario típico del panel) a una pestaña que no es.
+- **El botón "Analizar con IA" sigue visible para BÁSICO**: es el gancho, tal como se decidió.
+- CSS nuevo (`.upsell`, `.upsellText`, `.upsellCta`, `.upsellAskAdmin`) **en el module.css del panel**,
+  no en globals.css, con tokens `var(--*)` y fallback.
+
+### Fuera de alcance (anotado, NO implementado)
+
+1. **Misma distinción noPlan/cupo en `xrays/[id]/analyze` y `prescriptions/check-contraindications`.**
+   Nota: esos dos NO inlinean el gate, usan el helper `aiTokenLimitError` (`src/lib/ai-tokens.ts:63`),
+   que hoy devuelve un mensaje **fusionado** — _"Tu plan no incluye esta función de IA o agotaste el
+   cupo mensual. Sube de plan."_ — con 429. Arreglarlos = partir ese helper en dos (403 noPlan / 429
+   cupo) y ajustar a todos sus callers de golpe, no copiar el bloque de aquí.
+2. **Desglose real por función en "¿En qué se fue tu IA?".** ⚠️ Ojo, el supuesto del prompt ya no es
+   cierto: **los 9 callers de `addAiTokens` YA pasan su `feature`** (lista cerrada `AI_FEATURES`,
+   `ai-tokens.ts:11`) y este endpoint cobra con `"consult_assist"` (línea 176). Si en producción todo
+   sale como "otro consumo sin detalle", la causa es que **falta aplicar `sql/ai-quota-usage.sql`** en
+   Supabase: el insert del desglose es fail-open y se pierde en silencio. Verificar eso primero; ahí
+   no hay nada que programar.
+3. **El menú "IA asistente" se le muestra a BÁSICO** porque `plan_configs` (editable en /admin) trae
+   `ai-assistant` activo para ese plan, desincronizado de `plan-shared.ts:168` (`false`). **No se tocó
+   por código**: es dato de Rafael en /admin.
+
+### Verificación
+
+- `npx next build` **completo** en el worktree (sin `| tail`) → **exit code 0**, `Checking validity of
+  types` pasado, 355 páginas, `/api/consult/ai-assist` y `/dashboard/ai-assistant` compilados. Los
+  `prisma:error … DATABASE_URL` durante "Collecting page data" son el ruido esperado de un worktree
+  sin `.env`.
+- Ambos diccionarios parsean (`require()` de es.json y en.json) y las **3 claves nuevas existen en los
+  dos con el mismo nombre** — si faltara en uno, `t()` imprimiría la clave literal.
+- (a) y (b) comprobados leyendo el código: el copy menciona Haiku para chat y Sonnet para análisis
+  clínicos con el rango 3,000–8,000 ✓; 992,608/5,000 = **198** ✓; no queda ni una cadena
+  `claude-sonnet-4-6` en la pantalla del chat (solo en un comentario que explica por qué se quitó) ✓.
+- (c) **verificado por código, no en runtime**: sin `.env` local no hay BD ni clínica BÁSICO contra la
+  que pulsar el botón. La ruta del 403 → `noPlan` → caja de venta está trazada línea por línea, pero
+  la comprobación en vivo queda para el deploy.
+- Cero cambios de `model:`/`MODEL` en ningún endpoint (Sonnet se queda), ni en la lógica del wallet,
+  ni en `/api/ai/usage`. El único `model:` tocado es el de `/api/ai`, y solo para leer **el mismo id**
+  desde la constante compartida.
+## [Admin sesion se cae cada pocos minutos] — 2026-07-31 (`8a5a8f15` + `0c17c10f`)
+
+Nada revocaba las sesiones: el panel expulsaba al admin porque **un fallo de infraestructura se
+renderizaba como "no estás logueado"**, y porque la cookie llegaba a faltar aunque la sesión
+siguiera viva en BD.
+
+### FIX 1 — Un fallo de BD ya no pide credenciales
+
+`getAdminSession()` envolvía todo en `try/catch` y devolvía `null` ante **cualquier** error, así que
+un timeout del pooler o un cold start de Prisma era indistinguible de un visitante sin cookie, y el
+layout renderizaba el login.
+
+`src/lib/admin-auth.ts` ahora tiene `getAdminSessionResult()` con tres estados:
+
+| estado | cuándo | qué se ve |
+|---|---|---|
+| `ok` | sesión viva + AdminUser activo | panel normal |
+| `anonymous` | `no-cookie` / `not-found` / `revoked` / `expired` / `user-inactive` | login |
+| `error` | la consulta **lanzó** (conexión/timeout) | pantalla de reintento, **sin pedir nada** |
+
+- **Reintento único** a los 150 ms ante `error` antes de darlo por malo.
+- **`console.warn` con el motivo exacto en cada rechazo** (`[admin-auth] rechazado: expired`,
+  `[admin-auth] rechazado: error de BD <PrismaClientInitializationError>`). La próxima vez los logs
+  de Vercel dicen la causa en vez de adivinarla.
+- `getAdminSession()` e `isAdminAuthed()` **conservan su firma** y siguen fail-closed (`null` en
+  `anonymous` y en `error`): `/api/admin/*` no cambió de comportamiento, ahí fail-closed está bien.
+- `src/app/admin/layout.tsx` distingue los tres estados. `error` → `<AdminSessionError />`:
+  "No pudimos verificar tu sesión (problema de conexión)" + botón Reintentar. **No borra la cookie.**
+
+Detalle que importa: `cookies()` se lee **fuera** del `try`. Si se traga lo que lanza ahí, el
+bail-out de render estático de Next se disfrazaría de error de BD.
+
+### FIX 2 — Renovación deslizante (12h) y cómo se refresca la cookie
+
+- `SESSION_TTL_MS` 8h → **12h**.
+- `touchAdminSession(sessionId, currentExpiresAt)`: extiende `expiresAt` a `now + TTL` **solo si le
+  queda menos de la mitad del TTL**; si le sobra vida devuelve `null` **sin tocar la BD**. Con TTL de
+  12h eso es como mucho un UPDATE cada ~6h de uso, no uno por request. El `where` exige
+  `revokedAt: null` y `expiresAt > now`, así que nunca resucita una sesión muerta.
+- Se llama desde `getAdminSessionResult()` en fire-and-forget (`void … .catch(()=>{})`): no añade
+  latencia ni puede tumbar la petición.
+
+**Mecanismo elegido para la cookie: `POST /api/admin/session/touch` + `<AdminSessionKeepalive />`**
+montado en el layout (dispara al montar, cada 5 min y al volver a la pestaña). Por qué éste y no
+otro: un Server Component **no puede escribir cookies**, así que extender `expiresAt` en BD sin
+refrescar el `maxAge` dejaría al navegador tirando la cookie con la sesión aún viva — exactamente el
+síntoma que se quería matar. Las alternativas eran peores: colgarlo de una respuesta existente de
+`/api/admin/*` depende de qué pantalla visites (hay secciones que no llaman a ninguna) y meterlo en
+el middleware es imposible (Edge no ve Prisma). El endpoint re-emite la **misma** cookie con el
+`maxAge` alineado a la expiración vigente, y es `POST` para heredar el CSRF origin-check del
+middleware. Fail-closed: sin sesión válida devuelve 401 y no toca la cookie.
+
+### FIX 3 — `sameSite: strict` → `lax`
+
+Con `strict` la cookie **no viaja** al entrar desde ningún enlace externo (correo, marcador abierto
+desde otro sitio, el panel de Vercel): la primera carga llega sin cookie y se ve como cierre de
+sesión aleatorio. `lax` sigue sin mandarla en POST cross-site y las mutaciones de `/api/admin/*` ya
+están cubiertas por `csrfOriginMismatch` del middleware. `httpOnly` y `secure` intactos.
+
+### FIX 4 — /admin/sesiones sirve para diagnosticar
+
+Contador de **sesiones vivas** arriba (ámbar a partir de 10, con el aviso de que entonces lo que
+falla es la cookie y no la expiración), fecha de creación y de expiración legibles por sesión — y el
+**tiempo restante** al lado ("en 11 h"), calculado solo tras montar para no desfasar la hidratación.
+El pie ya no miente: 12h que se renuevan mientras trabajas.
+
+### Verificación
+
+**Guard de seguridad confirmado explícitamente**: ningún caller de `isAdminAuthed()` se quedó sin
+`await`. Grep de todas las apariciones filtrando `await isAdminAuthed`: solo quedan imports,
+comentarios, la definición, y `src/app/api/admin/auditoria/route.ts`, que declara su **propia**
+`isAdminAuthed()` local **síncrona** (no importa la compartida) — ahí `!isAdminAuthed()` es correcto.
+Igual para `getAdminSession()`: los ~40 call sites usan `await`.
+
+> Hallazgo aparte, **no tocado** (fuera del alcance): esa `isAdminAuthed()` local de
+> `/api/admin/auditoria` es legado — compara la cookie contra `ADMIN_SECRET_TOKEN`, pero desde las
+> sesiones en BD la cookie lleva un token aleatorio, así que esa ruta responde 401 siempre.
+
+Sin `.env` local no hay BD (`.env.e2e` no trae `DATABASE_URL`), así que **no se pudo entrar al panel
+con login real**. Pero la BD ausente **es** el escenario del bug, y se reprodujo apuntando
+`DATABASE_URL` a un host inalcanzable en `next dev`:
+
+| escenario | resultado | log |
+|---|---|---|
+| cookie `admin_token` presente + BD caída | **200 con "No pudimos verificar tu sesión" + Reintentar** (antes: login) | `[admin-auth] rechazado: error de BD PrismaClientInitializationError: Can't reach database server` |
+| sin cookie | 307 → `/admin/login`, login renderizado | `[admin-auth] rechazado: no-cookie` |
+| `POST /api/admin/session/touch` sin sesión | `401 {"error":"Unauthorized"}` | idem error de BD |
+
+**El motivo que aparece en los logs al reproducirlo es `error de BD`** — justo el caso que antes
+acababa en la pantalla de contraseña.
+
+Umbral de la renovación comprobado sin BD (la rama que no escribe sale antes de tocar Prisma):
+
+| vida restante | resultado |
+|---|---|
+| 12h (recién creada) | `null`, **no escribió** |
+| 6.5h | `null`, **no escribió** |
+| 5.5h | intenta el UPDATE |
+| 0.5h | intenta el UPDATE |
+
+- `npx tsc --noEmit` → **0 errores**.
+- `npx next build` → **exit 0**, output completo leído (2566 líneas, sin `| tail`), 355/355 páginas.
+  `/api/admin/session/touch` aparece como ƒ. Los únicos errores del log son 41
+  `PrismaClientInitializationError` por el `DATABASE_URL` ausente en local — preexistentes, de
+  páginas públicas, no de este cambio. (`npm run build` falla antes, en `prisma generate`, por un
+  EPERM de Windows: otro proceso node tiene tomado `query_engine-windows.dll.node`. El schema no se
+  tocó, así que el client ya generado sirve.)
+
+### Sin SQL
+
+`expiresAt` ya existe. Nada que aplicar en Supabase.

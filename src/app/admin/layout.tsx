@@ -1,8 +1,10 @@
 import { AdminSidebar } from "./admin-nav";
 import { prisma } from "@/lib/prisma";
-import { isAdminAuthed } from "@/lib/admin-auth";
+import { getAdminSessionResult } from "@/lib/admin-auth";
 import { countAdminPendingReply } from "@/lib/support/service";
 import AdminLoginPage from "./login/page";
+import { AdminSessionError } from "./session-error";
+import { AdminSessionKeepalive } from "./session-keepalive";
 import "@/app/panel-chrome-va.css";
 
 async function getNavCounts() {
@@ -27,7 +29,15 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   // /admin/login vive BAJO este layout, así que redirect("/admin/login") aquí
   // haría loop infinito para el visitante sin cookie; en su lugar se renderiza
   // el login y children (las páginas admin) nunca llega al cliente.
-  if (!(await isAdminAuthed())) {
+  //
+  // Tres estados, no dos: un fallo de BD NO puede pedir credenciales (era la
+  // causa de que el panel expulsara al admin cada pocos minutos). Ojo con el
+  // orden: sólo "anonymous" muestra el login.
+  const session = await getAdminSessionResult();
+  if (session.state === "error") {
+    return <AdminSessionError />;
+  }
+  if (session.state === "anonymous") {
     return <AdminLoginPage />;
   }
 
@@ -35,6 +45,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
 
   return (
     <div className="mf-extpanel" style={{ display: "flex", minHeight: "100vh", color: "var(--text-1)" }}>
+      <AdminSessionKeepalive />
       <AdminSidebar counts={counts} />
       <main style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column" }}>
         <div style={{ flex: 1, padding: "28px 28px 40px" }}>

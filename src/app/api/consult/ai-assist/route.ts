@@ -118,6 +118,25 @@ export async function POST(req: NextRequest) {
   });
   if (!clinic) return NextResponse.json({ error: "Clínica no encontrada" }, { status: 404 });
 
+  // Plan SIN IA (límite 0) ≠ cupo agotado. Los dos casos caían en el mismo 429
+  // ("Límite mensual de IA alcanzado (0 tokens). Se renueva el 1 de …"), que a
+  // una clínica Básica —que nunca tuvo IA— no le explica nada. Va ANTES del
+  // reseteo mensual: sin cupo que resetear, no hay por qué escribir en la BD.
+  // El botón "Analizar con IA" sigue visible a propósito: es el gancho de venta
+  // y este 403 es el que vende. `isAdmin` sale de la SESIÓN (nunca del cliente)
+  // porque /dashboard/settings?tab=subscription es admin-only: a un rol
+  // operativo el CTA lo dejaría en otra pestaña.
+  if (clinic.aiTokensLimit <= 0) {
+    return NextResponse.json(
+      {
+        error: "Tu plan no incluye IA. Sube de plan para analizar consultas con el asistente.",
+        noPlan: true,
+        isAdmin: ctx.isAdmin,
+      },
+      { status: 403 },
+    );
+  }
+
   let currentTokensUsed = clinic.aiTokensUsed;
   const lastReset = new Date(clinic.aiLastResetAt);
   const now = new Date();

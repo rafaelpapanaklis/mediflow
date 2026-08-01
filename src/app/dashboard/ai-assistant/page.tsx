@@ -35,6 +35,9 @@ import toast from "react-hot-toast";
 import { useT } from "@/i18n/i18n-provider";
 import type { TFunction } from "@/i18n/t";
 import { AiQuotaBanner, type AiUsageSnapshot } from "@/components/dashboard/ai-quota-banner";
+// El id sale del MISMO sitio que consume /api/ai: este badge decía
+// "claude-sonnet-4-6" mientras el chat corría en Haiku.
+import { AI_CHAT_MODEL } from "@/lib/ai/models";
 import styles from "./ai-assistant.module.css";
 
 interface Message {
@@ -679,7 +682,7 @@ export default function AIAssistantPage() {
               {activeConv?.title ?? t("pages.aiAssistant.clinicalAssistant")}
             </h1>
             <div className={styles.chatMeta}>
-              claude-sonnet-4-6 · {t("pages.aiAssistant.messageCount", { count: messages.length })}
+              {AI_CHAT_MODEL} · {t("pages.aiAssistant.messageCount", { count: messages.length })}
             </div>
           </div>
           <div className={styles.chatHeaderActions}>
@@ -801,7 +804,7 @@ export default function AIAssistantPage() {
                       </span>
                       <span className={styles.messageTimestamp}>{formatTime(m.timestamp)}</span>
                       {m.role === "assistant" && (
-                        <span className={styles.modelBadge}>claude-sonnet-4-6</span>
+                        <span className={styles.modelBadge}>{AI_CHAT_MODEL}</span>
                       )}
                     </div>
                     <div className={`${styles.messageContent} ${m.streaming ? styles.streamingCursor : ""}`}>
