@@ -1,18 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
-import { cookies } from "next/headers";
+import { isAdminAuthed } from "@/lib/admin-auth";
 import { queryAuditLogs } from "@/lib/admin/audit";
 
 export const dynamic = "force-dynamic";
 
-// Super admin de plataforma: token global. NO hay aislamiento por clínica aquí
-// — puede ver TODAS o filtrar por `clinicId` opcional.
-function isAdminAuthed() {
-  const token = cookies().get("admin_token")?.value;
-  return !!token && token === process.env.ADMIN_SECRET_TOKEN;
-}
-
+// Super admin de plataforma: auth = sesión en BD vía isAdminAuthed() (cookie
+// admin_token → AdminSession viva + AdminUser activo). NO hay aislamiento por
+// clínica aquí — puede ver TODAS o filtrar por `clinicId` opcional.
 export async function GET(req: NextRequest) {
-  if (!isAdminAuthed()) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!(await isAdminAuthed())) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const sp = req.nextUrl.searchParams;
   const result = await queryAuditLogs({

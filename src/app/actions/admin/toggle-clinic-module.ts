@@ -14,8 +14,8 @@
  *    reemplaza este "admin grant".
  *  - Desactivar = update a status='cancelled' + cancelledAt=now (NO
  *    delete — preservamos historia y FKs como stripeSubscriptionId).
- *  - Auth = isAdminAuthed() (admin_token cookie + ADMIN_SECRET_TOKEN
- *    env). Mismo patrón que /api/admin/clinics/[id]/route.ts.
+ *  - Auth = isAdminAuthed() (sesión en BD: cookie admin_token → AdminSession
+ *    viva + AdminUser activo). Mismo patrón que /api/admin/clinics/[id]/route.ts.
  *  - Audit = console.log JSON estructurado a Vercel Logs (los SUPER_ADMIN
  *    no tienen User row, mismo patrón que DELETE /api/admin/clinics/[id]).
  *

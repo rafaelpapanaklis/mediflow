@@ -2391,3 +2391,91 @@ Umbral de la renovación comprobado sin BD (la rama que no escribe sale antes de
 ### Sin SQL
 
 `expiresAt` ya existe. Nada que aplicar en Supabase.
+
+---
+
+## [Admin auditoria guard viejo] — la ruta de Auditoría devolvía 401 siempre ✅ (2026-08-01)
+
+Rama `fix/auditoria-guard` → **main**. Sin SQL.
+
+### El bug
+
+`src/app/api/admin/auditoria/route.ts` definía una función **local** homónima que tapaba al guard
+real por sombreado de nombre:
+
+```ts
+function isAdminAuthed() {                                   // ← local, síncrona
+  const token = cookies().get("admin_token")?.value;
+  return !!token && token === process.env.ADMIN_SECRET_TOKEN;
+}
+...
+if (!isAdminAuthed()) return 401;                            // ← sin await (no hacía falta: era la local)
+```
+
+Es el modelo **anterior** a las sesiones en BD. Desde WS2-T3 la cookie `admin_token` lleva un token
+aleatorio de 32 bytes por sesión, no el valor de la env → la comparación **nunca** daba `true` y
+`GET /api/admin/auditoria` respondía **401 siempre**. La pantalla `/admin/auditoria` no podía
+cargar datos para ningún admin.
+
+Segundo problema, más grave que el 401: era una **puerta lateral**. Quien tuviera
+`ADMIN_SECRET_TOKEN` entraba poniéndose la cookie a mano — sin pasar por bcrypt, sin TOTP, y sin
+quedar sujeto a la revocación de sesiones ni a la expiración de 12h.
+
+### El arreglo
+
+`src/app/api/admin/auditoria/route.ts`:
+- Borrada la función local y el import de `cookies` (quedó sin uso).
+- `import { isAdminAuthed } from "@/lib/admin-auth"` + `if (!(await isAdminAuthed())) → 401`.
+
+El `await` no es cosmético: `isAdminAuthed` es `async`, y una Promise es **truthy**, así que
+`if (!isAdminAuthed())` con el guard real dejaría pasar a cualquiera. Se verificó explícitamente
+(ver abajo).
+
+### Comentarios desactualizados
+
+Describían el modelo viejo (`cookie admin_token === ADMIN_SECRET_TOKEN`). **Solo comentarios: en
+los 5 archivos el CÓDIGO ya usaba el guard correcto** — `toggle-clinic-module.ts` y
+`bug-audit/run/route.ts` con `await isAdminAuthed()`, `plan-config/[planId]` con
+`getAdminSession()`, `affiliates/config` con `await isAdminAuthed()`, y `bug-audit/page.tsx` es una
+page servida bajo el layout de `/admin` (que sí valida). Ninguno necesitó arreglo de código.
+
+- `src/app/actions/admin/toggle-clinic-module.ts`
+- `src/app/admin/bug-audit/page.tsx`
+- `src/app/api/admin/affiliates/config/route.ts`
+- `src/app/api/admin/bug-audit/run/route.ts`
+- `src/app/api/admin/plan-config/[planId]/route.ts`
+- `src/app/admin/ai-billing/page.tsx` ← **fuera de la lista del encargo**, mismo defecto: afirmaba
+  "la auth admin la maneja el middleware". El middleware solo hace un *presence gate* de la cookie
+  (no toca BD: Prisma no corre en Edge); la validación real la hacen el layout y cada ruta.
+
+### Barrido de seguridad — no hay más guards caseros
+
+- **Definiciones locales de un guard admin**: la de `auditoria/route.ts` era la **única** en todo
+  `src/`. Buscado `function (isAdminAuthed|isAdmin|requireAdmin|checkAdmin|assertAdmin)`.
+  El único otro resultado es `requireAdmin()` en `src/lib/auth-context.ts:248`, que es **otra cosa
+  y es legítima**: comprueba `ctx.isAdmin` del `AuthContext` de la app de clínicas (rol dentro de
+  una clínica), no el panel de plataforma.
+- **Comparaciones cookie ↔ `process.env`**: cero fuera de la ruta arreglada.
+- **Las 12 menciones de `ADMIN_SECRET_TOKEN` en `src/`** quedan así: 5 eran los comentarios de
+  arriba + el de `admin-auth.ts` (histórico, correcto: dice "Antes: ..."), y los usos vivos son
+  legítimos — `env.ts` (schema zod, opcional), `admin/settings` (checklist de envs presentes) y
+  `lib/affiliates/stats.ts:140` (fallback de salt para hashear IPs de clicks, nada que ver con
+  auth).
+
+### Verificación
+
+- **`isAdminAuthed()` sin `await` en `src/`: NINGUNO.** Confirmado con lookbehind de .NET
+  (`Select-String '(?<!await\s*\(?\s*)...'`, ripgrep no soporta look-around): los 10 aciertos que
+  quedan son **todos líneas de comentario**, ni una sola llamada ejecutable. Los ~50 call sites
+  reales usan `await isAdminAuthed()`.
+- `npx tsc --noEmit` → **0 errores**.
+- `npm run build` → **exit 0** (`BUILD_EXIT=0`), output completo leído (2554 líneas, sin `| tail`),
+  355/355 páginas. Los únicos errores del log son `PrismaClientInitializationError` por
+  `DATABASE_URL` ausente en el worktree — preexistentes y ambientales, de páginas públicas que ya
+  los capturan; no vienen de este cambio.
+- El worktree se creó desde `origin/main` sin `node_modules` → `npm ci` + `npx prisma generate`
+  antes de compilar.
+
+### Sin SQL
+
+Nada que aplicar en Supabase.

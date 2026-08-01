@@ -15,9 +15,10 @@ export const maxDuration = 180; // 3 min hard cap.
 
 const VALID_SECTIONS: ScannerSection[] = ["backend", "security", "performance", "quality", "frontend"];
 
-/** Auth idéntica al resto de /api/admin/* — cookie `admin_token` contra
- *  `ADMIN_SECRET_TOKEN`. La capa middleware ya redirige el navegador en
- *  /admin/*; aquí defendemos el endpoint contra llamadas directas. */
+/** Auth idéntica al resto de /api/admin/* — sesión en BD vía isAdminAuthed()
+ *  (cookie `admin_token` → AdminSession viva + AdminUser activo). El middleware
+ *  sólo comprueba la presencia de la cookie y redirige el navegador en /admin/*;
+ *  aquí defendemos el endpoint contra llamadas directas. */
 
 /**
  * POST /api/admin/bug-audit/run

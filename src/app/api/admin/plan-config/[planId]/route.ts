@@ -14,7 +14,8 @@ export const runtime = "nodejs";
  *
  * Editor de la config GLOBAL de un plan (precio mensual/anual, límites,
  * máximos y permisos por módulo). Protegido por el guard admin existente
- * (cookie admin_token === ADMIN_SECRET_TOKEN). Tras guardar invalida la caché
+ * (getAdminSession(): cookie admin_token → AdminSession viva + AdminUser
+ * activo). Tras guardar invalida la caché
  * en memoria para que el próximo checkout/gating use los valores nuevos.
  *
  * plan_configs es config global (sin clinicId/userId) → `logAudit` (FK a

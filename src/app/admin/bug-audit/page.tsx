@@ -7,8 +7,10 @@ export const metadata: Metadata = { title: "Auditoría de bugs · Admin DaleCont
 
 /**
  * Panel de auditoría de bugs — zona /admin/* (platform owner).
- * Auth la enforcea el middleware vía cookie `admin_token` comparada con
- * `ADMIN_SECRET_TOKEN`. No requiere getCurrentUser/Supabase aquí.
+ * Auth = sesión en BD vía isAdminAuthed(): el middleware sólo comprueba que la
+ * cookie `admin_token` esté presente; la validación real (sesión viva, no
+ * revocada, AdminUser activo) la hacen el layout de /admin y cada ruta de
+ * /api/admin/*. No requiere getCurrentUser/Supabase aquí.
  */
 export default function BugAuditPage() {
   return <BugAuditClient />;

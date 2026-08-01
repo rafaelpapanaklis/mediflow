@@ -4,8 +4,8 @@ import { isAdminAuthed, getAdminSession } from "@/lib/admin-auth";
 //   crear: el front muestra "corre sql/afiliados-ventas.sql" y modo legacy).
 // PUT { bronzePct, silverPct, goldPct, silverMinActive, goldMinActive } →
 //   upsert fila id=1.
-// Auth: cookie admin_token === ADMIN_SECRET_TOKEN (mismo patrón que
-// /api/admin/coupons).
+// Auth: sesión en BD vía isAdminAuthed() (cookie admin_token → AdminSession
+// viva + AdminUser activo). Mismo patrón que /api/admin/coupons.
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { DEFAULT_PROGRAM_CONFIG } from "@/lib/affiliate-levels";
