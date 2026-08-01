@@ -67,5 +67,25 @@
 .remove:hover { background: rgba(255,255,255,.22); }
 .retry { background: transparent; color: #6d28d9; border-color: rgba(139,92,246,.4); }
 .error { margin-top: 10px; font-size: 13px; color: #b91c1c; }
+
+/* Plan sin IA → oferta, no error: caja de marca (mismo par de tokens que los
+   callouts del panel) en vez del rojo de .error. */
+.upsell {
+  margin-top: 10px; display: flex; flex-wrap: wrap; align-items: center; gap: 10px;
+  padding: 12px 14px; border-radius: 12px;
+  border: 1px solid var(--border-brand, rgba(139, 92, 246, 0.35));
+  background: var(--brand-softer, rgba(139, 92, 246, 0.08));
+  color: var(--text-2, #4b5563);
+  font-size: 13px; line-height: 1.45;
+}
+.upsellText { flex: 1 1 220px; min-width: 0; font-weight: 600; }
+.upsellCta {
+  display: inline-flex; align-items: center; gap: 6px; flex-shrink: 0;
+  padding: 7px 14px; border-radius: 9px;
+  background: var(--brand, #7c3aed); color: #fff;
+  font-size: 13px; font-weight: 700; text-decoration: none;
+}
+.upsellCta:hover { background: var(--violet-700, #6d28d9); }
+.upsellAskAdmin { flex: 1 1 180px; font-size: 12px; font-weight: 600; opacity: .8; }
 .spinner { display: inline-block; width: 15px; height: 15px; border: 2px solid rgba(139,92,246,.35); border-top-color: #7c3aed; border-radius: 50%; animation: spin .7s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
