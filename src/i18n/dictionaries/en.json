@@ -1,4 +1,26 @@
 {
+  "accountManager": {
+    "eyebrow": "YOUR ACCOUNT MANAGER",
+    "role": "Your account manager",
+    "quote": "“I'm here to help with whatever you need.”",
+    "online": "ONLINE",
+    "offline": "OUTSIDE HOURS",
+    "soon": "COMING SOON",
+    "attends": "Available {schedule}",
+    "writeWhatsapp": "Message on WhatsApp",
+    "directChat": "Direct chat with {name}",
+    "orOpenTicketPrefix": "or ",
+    "orOpenTicketLink": "open a ticket",
+    "orOpenTicketSuffix": " to leave a written record",
+    "preferWritten": "Prefer a written record?",
+    "openTicketLink": "Open a ticket",
+    "writeNowReplyLater": "You can write now; they'll reply during their hours.",
+    "emptyTitle": "You don't have an account manager yet",
+    "emptyBody": "We'll soon introduce you to the person who will look after your clinic. In the meantime, we're here for you through tickets as always.",
+    "emptyCta": "Open a ticket",
+    "emptyFootnote": "First reply in under 24 h",
+    "prefilledMessage": "Hi {manager}, I'm from {clinic}."
+  },
   "common": {
     "aiFeature": {
       "chat": "Chat",

@@ -1,4 +1,26 @@
 {
+  "accountManager": {
+    "eyebrow": "TU MANAGER DE CUENTA",
+    "role": "Manager de tu cuenta",
+    "quote": "«Estoy para ayudarte con lo que necesites.»",
+    "online": "EN LÍNEA",
+    "offline": "FUERA DE HORARIO",
+    "soon": "PRÓXIMAMENTE",
+    "attends": "Atiende {schedule}",
+    "writeWhatsapp": "Escribir por WhatsApp",
+    "directChat": "Chat directo con {name}",
+    "orOpenTicketPrefix": "o ",
+    "orOpenTicketLink": "abre un ticket",
+    "orOpenTicketSuffix": " para dejar constancia",
+    "preferWritten": "¿Prefieres dejar constancia escrita?",
+    "openTicketLink": "Abre un ticket",
+    "writeNowReplyLater": "Puedes escribirle ahora; te contesta en su horario.",
+    "emptyTitle": "Aún no tienes manager asignado",
+    "emptyBody": "Muy pronto te presentaremos a la persona que acompañará a tu clínica. Mientras tanto, te atendemos por tickets como siempre.",
+    "emptyCta": "Abrir un ticket",
+    "emptyFootnote": "Primera respuesta en menos de 24 h",
+    "prefilledMessage": "Hola {manager}, soy de {clinic}."
+  },
   "common": {
     "aiFeature": {
       "chat": "Chat",

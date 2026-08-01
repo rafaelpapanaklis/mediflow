@@ -26,6 +26,8 @@ import {
   SUPPORT_STATUS_LABELS_CLINIC,
 } from "@/lib/support/types";
 import type { SupportAttachment, SupportTicketSummary } from "@/lib/support/types";
+import { AccountManagerCard } from "@/components/dashboard/account-manager-card";
+import type { AccountManagerCardData } from "@/lib/account-manager/get-for-clinic";
 
 // Tono visual del badge de estado: ABIERTO azul/info, EN_PROGRESO violeta/brand,
 // ESPERANDO_RESPUESTA ámbar, RESUELTO verde, CERRADO gris.
@@ -62,7 +64,14 @@ function formatBytes(n: number): string {
   return `${n} B`;
 }
 
-export function SoporteClient() {
+interface SoporteClientProps {
+  /** Manager asignado a la clínica, resuelto en el servidor. null = sin manager. */
+  accountManager: AccountManagerCardData | null;
+  /** Va en el mensaje pre-escrito de WhatsApp ("…soy de {clinicName}"). */
+  clinicName: string;
+}
+
+export function SoporteClient({ accountManager, clinicName }: SoporteClientProps) {
   const router = useRouter();
 
   // ── Lista ──────────────────────────────────────────────────────────────────
@@ -212,6 +221,17 @@ export function SoporteClient() {
         <ButtonNew variant="primary" type="button" icon={<Plus size={16} strokeWidth={1.75} />} onClick={() => setShowNew(true)}>
           Nuevo ticket
         </ButtonNew>
+      </div>
+
+      {/* Manager de cuenta — va ARRIBA de los tickets: la clínica ya llegó aquí
+          con una duda, así que ve a su manager justo antes de abrir un ticket.
+          "Abre un ticket" reusa el modal de abajo, no duplica el flujo. */}
+      <div style={{ marginBottom: 20 }}>
+        <AccountManagerCard
+          data={accountManager}
+          clinicName={clinicName}
+          onOpenTicket={() => setShowNew(true)}
+        />
       </div>
 
       {/* Lista de tickets / skeleton / estado vacío */}

@@ -1,0 +1,280 @@
+/* ═══════════════════════════════════════════════════════════════════
+   Tarjeta "Tu manager de cuenta" — variante HORIZONTAL (prototipo 1f).
+   Vive arriba de la lista de tickets en /dashboard/soporte.
+
+   Los tokens del sistema (globals.css) fluyen directo, así que el tema
+   oscuro sale solo vía .dark global. Cero hex crudos… con UNA excepción
+   deliberada, documentada abajo: el verde de WhatsApp.
+   ═══════════════════════════════════════════════════════════════════ */
+
+.card {
+  /* ── EXCEPCIÓN AL DESIGN SYSTEM ────────────────────────────────────
+     #16a34a es el verde de marca de WhatsApp (un tercero). Es justo lo
+     que hace el botón reconocible de un vistazo, así que NO se mapea a
+     --brand ni a --success: se declara como variable propia del
+     componente. Es el único color literal del archivo; todo lo demás
+     usa tokens. Decisión tomada por Rafael (prototipo, opción 1a).   */
+  --wa-green:       #16a34a;
+  --wa-green-hover: #148c40;
+
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 16px 20px;
+  background: var(--bg-elev);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-1);
+}
+
+/* Avatar + textos van juntos: en escritorio ocupan el centro; en móvil, al
+   pasar .card a columna, quedan arriba y el botón abajo a todo lo ancho. */
+.headRow {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex: 1;
+  min-width: 0;
+}
+
+/* ─── Avatar + badge de "en línea" ─────────────────────────────── */
+.avatarWrap {
+  position: relative;
+  width: 54px;
+  height: 54px;
+  flex-shrink: 0;
+}
+.avatar,
+.avatarFallback {
+  width: 54px;
+  height: 54px;
+  border-radius: 50%;
+  object-fit: cover;
+  display: block;
+}
+/* Respaldo cuando el manager no tiene foto: iniciales sobre gradiente. */
+.avatarFallback {
+  display: grid;
+  place-items: center;
+  background: linear-gradient(135deg, var(--violet-400, #a855f7), var(--brand));
+  color: #fff;
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  user-select: none;
+}
+.presenceDot {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--success);
+  border: 2px solid var(--bg-elev);
+}
+
+/* ─── Bloque central ───────────────────────────────────────────── */
+.body {
+  flex: 1;
+  min-width: 0;
+}
+.topRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.eyebrow {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  color: var(--text-3);
+}
+.name {
+  font-size: 16.5px;
+  font-weight: 700;
+  color: var(--text-1);
+  margin-top: 3px;
+  letter-spacing: -0.01em;
+}
+.quote {
+  font-size: 12.5px;
+  font-weight: 400;
+  color: var(--text-2);
+}
+.meta {
+  font-size: 12px;
+  color: var(--text-3);
+  margin-top: 3px;
+}
+.phone {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-weight: 600;
+  color: var(--text-2);
+}
+
+/* ─── Chips de estado ──────────────────────────────────────────── */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+}
+.chipOnline {
+  background: var(--success-soft);
+  color: var(--success-strong, var(--success));
+}
+.chipOffline {
+  background: var(--bg-elev-2);
+  color: var(--text-3);
+}
+.chipSoon {
+  background: var(--brand-soft);
+  color: var(--brand);
+}
+.chipDot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.chipDotOnline { background: var(--success); }
+.chipDotOffline { background: var(--text-4); }
+
+/* El pulso sólo en el chip "EN LÍNEA" y sólo si el usuario no pidió
+   reducir movimiento (prefers-reduced-motion). */
+@media (prefers-reduced-motion: no-preference) {
+  .chipDotOnline {
+    animation: amPulse 2s infinite;
+  }
+}
+@keyframes amPulse {
+  0%   { box-shadow: 0 0 0 0 var(--success-soft); }
+  70%  { box-shadow: 0 0 0 6px transparent; }
+  100% { box-shadow: 0 0 0 0 transparent; }
+}
+
+/* ─── Columna de acción ────────────────────────────────────────── */
+.actions {
+  width: 224px;
+  flex-shrink: 0;
+}
+.waButton {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 42px;
+  border-radius: var(--radius);
+  background: var(--wa-green);
+  color: #fff;
+  font-size: 13.5px;
+  font-weight: 700;
+  text-decoration: none;
+  box-shadow: var(--shadow-1), inset 0 -1.5px 0 rgba(0, 0, 0, 0.12);
+  transition: background 0.15s ease;
+}
+.waButton:hover { background: var(--wa-green-hover); color: #fff; }
+.waButton:focus-visible {
+  outline: none;
+  box-shadow: var(--ring);
+}
+.waIcon { flex-shrink: 0; }
+
+.ticketHint {
+  text-align: center;
+  font-size: 11px;
+  color: var(--text-3);
+  margin-top: 6px;
+}
+/* El "abre un ticket" es un <button> real (abre el modal existente), así
+   que hay que devolverle la apariencia de enlace. */
+.ticketLink {
+  font-weight: 600;
+  color: var(--brand);
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+.ticketLink:hover { text-decoration: underline; }
+.ticketLink:focus-visible {
+  outline: none;
+  border-radius: var(--radius-sm);
+  box-shadow: var(--ring);
+}
+
+/* ═══ Estado vacío — sin manager asignado (prototipo 1c) ═══════════ */
+.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 22px;
+  /* Ocupa toda la tarjeta: .emptyHeader necesita el ancho completo para
+     separar el eyebrow del chip. */
+  flex: 1;
+  width: 100%;
+  min-width: 0;
+}
+.emptyIcon {
+  width: 54px;
+  height: 54px;
+  border-radius: 50%;
+  background: var(--brand-soft);
+  color: var(--brand);
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+}
+.emptyTitle {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-1);
+  margin-top: 12px;
+}
+.emptyBody {
+  font-size: 12.5px;
+  color: var(--text-3);
+  line-height: 1.55;
+  margin-top: 5px;
+  max-width: 44ch;
+}
+.emptyActions { margin-top: 16px; }
+.emptyFootnote {
+  font-size: 11.5px;
+  color: var(--text-4);
+  margin-top: 9px;
+}
+/* La cabecera del estado vacío mantiene la fila eyebrow + chip. */
+.emptyHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+}
+
+/* ═══ Móvil — la tarjeta pasa a columna (prototipo 1e) ════════════ */
+@media (max-width: 640px) {
+  .card {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 14px;
+    padding: 18px;
+  }
+  .headRow { gap: 14px; }
+  .actions { width: 100%; }
+  .waButton { height: 48px; font-size: 15px; }
+  .name { font-size: 17px; }
+  /* En columna la frase larga estorba: se guarda para ≥640px. */
+  .quote { display: none; }
+}
