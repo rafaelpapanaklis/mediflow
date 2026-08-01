@@ -1,7 +1,7 @@
 "use client";
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { useT } from "@/i18n/i18n-provider";
+import { useT, useLocale } from "@/i18n/i18n-provider";
 import * as Dialog from "@radix-ui/react-dialog";
 import {
   Search, CornerDownLeft, User as UserIcon,
@@ -10,6 +10,8 @@ import {
 import type {
   CommandItem, CommandGroup, RemoteSearchResult, CommandContext,
 } from "@/lib/command-palette/types";
+import { BadgeNew } from "@/components/ui/design-system/badge-new";
+import { fmtMXN } from "@/lib/format";
 import { buildGlobalActions, buildActiveConsultActions } from "@/lib/command-palette/actions";
 import { fuzzyScore } from "@/lib/command-palette/fuzzy";
 import { useActiveConsult } from "@/hooks/use-active-consult";
@@ -32,6 +34,33 @@ const GROUP_LABEL_KEYS: Record<CommandGroup, string> = {
   "ir-a": "shell.commandPalette.groupGoTo",
 };
 
+// Mismo par tono/etiqueta que la tabla de Facturación, para que el estado se
+// lea igual en el palette que en la lista.
+const INVOICE_STATUS: Record<
+  string,
+  { tone: "success" | "warning" | "danger" | "info" | "brand" | "neutral"; labelKey: string }
+> = {
+  DRAFT:     { tone: "brand",   labelKey: "billing.billingClient.statusDraft"     },
+  PENDING:   { tone: "warning", labelKey: "billing.billingClient.statusPending"   },
+  PARTIAL:   { tone: "info",    labelKey: "billing.billingClient.statusPartial"   },
+  PAID:      { tone: "success", labelKey: "billing.billingClient.statusPaid"      },
+  OVERDUE:   { tone: "danger",  labelKey: "billing.billingClient.statusOverdue"   },
+  CANCELLED: { tone: "neutral", labelKey: "billing.billingClient.statusCancelled" },
+};
+
+/** "YYYY-MM-DD" → "31 jul". Se arma y se formatea en UTC a propósito: la fecha
+ *  ya viene resuelta en la zona de la clínica, y pasarla por la zona local del
+ *  navegador la correría un día en offsets negativos. */
+function fmtDayMonth(iso: string, locale: string): string {
+  const [y, m, d] = iso.slice(0, 10).split("-").map(Number);
+  if (!y || !m || !d) return iso;
+  return new Date(Date.UTC(y, m - 1, d)).toLocaleDateString(locale, {
+    day: "numeric",
+    month: "short",
+    timeZone: "UTC",
+  });
+}
+
 const GROUP_ORDER: CommandGroup[] = [
   "paciente-activo",
   "pacientes",
@@ -43,6 +72,7 @@ const GROUP_ORDER: CommandGroup[] = [
 
 export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
   const t = useT();
+  const locale = useLocale();
   const router = useRouter();
   const { consult: activeConsult } = useActiveConsult();
   const { open: openAppt } = useNewAppointmentDialog();
@@ -130,33 +160,80 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
 
     if (remoteResults) {
       remoteResults.patients?.forEach((p) => {
+        const name = `${p.firstName ?? ""} ${p.lastName ?? ""}`.trim();
+        const sub = [p.patientNumber, p.phone].filter(Boolean).join(" · ");
         all.push({
           id: `patient-${p.id}`,
           group: "pacientes",
-          label: p.name,
-          sub: p.sub,
+          label: name || (p.patientNumber ?? "—"),
+          sub: sub || undefined,
           icon: UserIcon,
-          run: (c) => c.push(p.href),
+          run: (c) => c.push(`/dashboard/patients/${p.id}`),
         });
       });
       remoteResults.appointments?.forEach((a) => {
         all.push({
           id: `appt-${a.id}`,
           group: "citas",
-          label: a.title,
-          sub: a.sub,
+          label: a.patientName,
+          sub: [`${fmtDayMonth(a.date, locale)} · ${a.startTime}`, a.doctorName]
+            .filter(Boolean)
+            .join(" · "),
           icon: CalendarIcon,
-          run: (c) => c.push(a.href),
+          // /dashboard/appointments/[id] no existe: la cita se abre en la
+          // agenda del día, que resalta la fila con ?highlight=.
+          run: (c) => c.push(`/dashboard/agenda?date=${a.date}&highlight=${a.id}`),
         });
       });
       remoteResults.invoices?.forEach((inv) => {
+        const badge = INVOICE_STATUS[inv.status];
         all.push({
           id: `inv-${inv.id}`,
           group: "facturas",
-          label: inv.title,
-          sub: inv.sub,
+          // Texto plano para lector de pantalla; el render va en labelNode.
+          label: `${inv.folio} · ${inv.patientName}`,
+          labelNode: (
+            <span style={{ display: "flex", alignItems: "baseline", gap: 8, minWidth: 0 }}>
+              <span
+                style={{
+                  fontFamily: "var(--font-mono, monospace)",
+                  fontVariantNumeric: "tabular-nums",
+                  color: "var(--text-1)",
+                  flexShrink: 0,
+                }}
+              >
+                {inv.folio}
+              </span>
+              <span
+                style={{
+                  color: "var(--text-2)",
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                {inv.patientName}
+              </span>
+            </span>
+          ),
+          sub: fmtDayMonth(inv.date, locale),
+          trailing: (
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+              <span
+                style={{
+                  fontSize: 12,
+                  fontWeight: 600,
+                  color: "var(--text-1)",
+                  fontVariantNumeric: "tabular-nums",
+                }}
+              >
+                {fmtMXN(inv.amount)}
+              </span>
+              {badge && <BadgeNew tone={badge.tone}>{t(badge.labelKey)}</BadgeNew>}
+            </span>
+          ),
           icon: FileTextIcon,
-          run: (c) => c.push(inv.href),
+          run: (c) => c.push(`/dashboard/billing?focus=${inv.id}`),
         });
       });
     }
@@ -173,7 +250,7 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
     all.push(...filteredGlobals);
 
     return all;
-  }, [activeConsult, remoteResults, query]);
+  }, [activeConsult, remoteResults, query, locale, t]);
 
   useEffect(() => {
     setHighlightedIndex(0);
@@ -361,6 +438,25 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
             </button>
           </div>
 
+          {/* Con el input vacío la lista solo trae acciones rápidas; esta línea
+              dice QUÉ se puede buscar, que es justo lo que no se entendía desde
+              el trigger del topbar. Va FUERA del listbox: un div suelto entre
+              los role="option" ensucia el árbol de accesibilidad. */}
+          {query.trim() === "" && (
+            <div
+              style={{
+                padding: "10px 16px",
+                fontSize: 11,
+                lineHeight: 1.5,
+                color: "var(--text-3)",
+                borderBottom: "1px solid var(--border-soft)",
+                flexShrink: 0,
+              }}
+            >
+              {t("shell.commandPalette.scopeHint")}
+            </div>
+          )}
+
           <div
             ref={listRef}
             id="cmd-list"
@@ -372,9 +468,19 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
             {loading && total === 0 && <EmptyMessage>{t("shell.commandPalette.searching")}</EmptyMessage>}
             {!loading && total === 0 && (
               <EmptyMessage>
-                {query ? t("shell.commandPalette.noResultsFor", { query }) : t("shell.commandPalette.emptyHint")}
+                {query ? (
+                  <>
+                    <div>{t("shell.commandPalette.noResultsFor", { query })}</div>
+                    <div style={{ marginTop: 6, color: "var(--text-3)" }}>
+                      {t("shell.commandPalette.noResultsHint")}
+                    </div>
+                  </>
+                ) : (
+                  t("shell.commandPalette.emptyHint")
+                )}
               </EmptyMessage>
             )}
+
 
             {grouped.ordered.map(({ group, entries }) => (
               <div key={group} role="group" aria-label={t(GROUP_LABEL_KEYS[group])}>
@@ -499,7 +605,7 @@ function CommandRow({
         <div style={{
           fontSize: 13, fontWeight: 500, color: "var(--text-1)",
           whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
-        }}>{item.label}</div>
+        }}>{item.labelNode ?? item.label}</div>
         {item.sub && (
           <div style={{
             fontSize: 11, color: "var(--text-2)",
@@ -508,6 +614,7 @@ function CommandRow({
           }}>{item.sub}</div>
         )}
       </div>
+      {item.trailing}
       {item.shortcut && (
         <kbd style={{
           fontSize: 10, padding: "2px 6px", borderRadius: 4,
