@@ -3236,3 +3236,91 @@ el valor nuevo sin esperar. Ojo con dos detalles al probarlo:
 
 Para los precios, el mismo ejercicio en `/admin/settings` → Planes: guarda y recarga la home;
 el precio nuevo debe aparecer en ≤60 s (el TTL en memoria de `lib/plans.ts`), no en 10 minutos.
+
+---
+
+## [Calculadora de afiliados · horizonte por escalones] — 2026-08-02
+
+El horizonte de la calculadora de `/afiliados` era un slider continuo de 1 a 10 años. Ahora son
+**seis escalones** —1 mes · 6 meses · 1 año · 3 años · 5 años · 10 años— manejables con chips o
+con el slider. Arranca en **1 año** (antes 5).
+
+Un solo archivo de lógica: `src/components/afiliados/landing/calculadora.tsx`, más el hover de
+los chips y el alto del slider en `src/app/afiliados/afiliados.css` y el call site en
+`page.tsx` (que ya no pasa horizonte: el default vive en el componente).
+
+### El estado es el ÍNDICE, no los meses
+
+`<input type="range" min="0" max="5" step="1">` corre sobre el índice del escalón, así que los
+saltos del slider son parejos aunque los valores no lo sean (de 1 a 6 meses mide lo mismo que de
+5 a 10 años). Los seis chips son `<button type="button">` con `aria-pressed`, y **chips y slider
+son dos caras del mismo estado**: mover uno marca el otro — verificado en las dos direcciones.
+
+### La matemática
+
+`cobros = max(0, mesesDelEscalón − skip)` y `acumulado = mensual × cobros`. El `skip` sigue
+saliendo de `startAtInvoiceNo − 1` (prop `cobrosSinComision`), nunca de un literal: si el admin
+mueve el arranque, el "−1" lo sigue solo.
+
+La fórmula visible habla en la unidad del escalón: **"6 meses − 1"** cuando se eligieron 6 meses
+y **"12 × 3 − 1"** cuando se eligieron 3 años. Ya no dice "12 × 1 − 1" para horizontes cortos.
+
+**El escalón de 1 mes da $0 y así se publica**, pero explicado en positivo: *"Todavía $0 en 1 mes
+— tu primera comisión llega con el segundo cobro de la clínica. A partir de ahí, $X al mes con
+todas activas."* El ordinal se deriva de la config (`skip + 1`), no está escrito. El ingreso
+mensual y el pago único se muestran normales: ninguno depende del horizonte.
+
+### La gráfica se adapta
+
+1 mes → 1 barra; 6 meses → 6; 1 año → **12 barras por mes**; 3 / 5 / 10 años → 3, 5 y 10 barras
+por año, como antes. Nunca pasan de 12, así que no hace falta agrupar ni se encima ninguna. El
+pie del eje cambia entre "meses del horizonte" y "años del horizonte", y cada barra usa la misma
+fórmula (`mensual × max(0, mesesHastaAhí − skip)`).
+
+Dos arreglos visuales que sólo aparecen con los escalones cortos nuevos:
+
+- **La etiqueta "Pago único" chocaba con la leyenda.** Cuando el pago único va arriba (todo
+  escalón corto), su línea punteada queda pegada al borde superior y la píldora se encimaba con
+  "Recurrente acumulado". Ahora, por encima del 80%, la etiqueta baja al otro lado de la línea.
+- **Una sola barra se estiraba de lado a lado** y parecía una regla, no una barra. Con
+  `bars.length === 1` se limita a 96px y se centra; con dos o más no cambia nada.
+
+### Texto de cierre que compara las dos modalidades
+
+Habla siempre del horizonte elegido. Y cuando la diferencia sale negativa —cosa que ahora pasa
+seguido con 1 mes o 6 meses— en vez de dejar el número solo dice **en qué mes lo alcanza**:
+*"En 6 meses el pago único todavía va arriba. El fijo recurrente lo alcanza en el mes 9 y de ahí
+en adelante nunca se detiene."* El cruce se calcula (`skip + ceil(único / mensual)`), no se
+teclea.
+
+### Accesibilidad y móvil (medido en el navegador)
+
+- Chips: `<button>` reales de **115×44** en escritorio y **90×44** a 375px, con `aria-pressed` y
+  dentro de un `role="group"` etiquetado.
+- Slider: `aria-valuetext="3 años"` (nunca el índice crudo) y franja táctil de **44px** de alto,
+  con el pulgar a 32px.
+- A 375px los seis chips caen en **dos filas de tres** exactas, sin texto recortado y sin
+  desbordar: `scrollWidth − clientWidth = 0` en el documento, en la rejilla y en cada chip.
+
+### Verificación
+
+`npm run build` completo y verde: 360/360 páginas, 0 errores de tipos. `/afiliados` sigue
+estática (`○`), 7.24 kB de ruta y 207 kB de First Load JS (+0.7 kB por los chips).
+
+Los seis escalones se probaron **en el navegador** contra la página real (`next start`). Ahí no
+hay BD, así que los montos son los defaults del motor (40/90/250) → mensual $310. Lo que importa
+es el multiplicador, y salió exacto:
+
+| Escalón | Cobros | Acumulado (mensual $310) | Con los montos vivos (mensual $500) |
+|---|---|---|---|
+| 1 mes | 0 | $0 | **$0** |
+| 6 meses | 5 | $1,550 | **$2,500** |
+| 1 año | 11 | $3,410 | **$5,500** |
+| 3 años | 35 | $10,850 | **$17,500** |
+| 5 años | 59 | $18,290 | **$29,500** |
+| 10 años | 119 | $36,890 | **$59,500** |
+
+La columna de la derecha es la tabla pedida (1 Básico + 3 Profesional = 1×80 + 3×140 = $500 con
+los montos de hoy en la BD): mismos cobros verificados, otro multiplicando. Los montos siguen
+llegando por props desde `getPublicOffer()` — ni uno escrito a mano — y el componente sigue
+importando sólo de `payout-core`.

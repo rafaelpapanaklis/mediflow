@@ -87,12 +87,21 @@ details[open] .dcaf-chev { transform: rotate(45deg); }
 .dcaf-root input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
 .dcaf-root input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
 
-.dcaf-range { -webkit-appearance: none; appearance: none; width: 100%; height: 28px; background: transparent; cursor: pointer; }
+/* El input mide 44px de alto: toda esa franja es zona táctil (tocar la pista
+   mueve el pulgar al escalón más cercano), y el pulgar sube a 32px. Los seis
+   chips de arriba son además objetivos de 44px por su cuenta. */
+.dcaf-range { -webkit-appearance: none; appearance: none; width: 100%; height: 44px; background: transparent; cursor: pointer; }
 .dcaf-range::-webkit-slider-runnable-track { height: 8px; border-radius: 999px; background: #dbeafe; }
-.dcaf-range::-webkit-slider-thumb { -webkit-appearance: none; width: 28px; height: 28px; border-radius: 50%; background: #2563eb; border: 3px solid #ffffff; box-shadow: 0 1px 5px rgba(15, 23, 42, .35); margin-top: -10px; }
+.dcaf-range::-webkit-slider-thumb { -webkit-appearance: none; width: 32px; height: 32px; border-radius: 50%; background: #2563eb; border: 3px solid #ffffff; box-shadow: 0 1px 5px rgba(15, 23, 42, .35); margin-top: -12px; }
 .dcaf-range::-moz-range-track { height: 8px; border-radius: 999px; background: #dbeafe; }
-.dcaf-range::-moz-range-thumb { width: 22px; height: 22px; border-radius: 50%; background: #2563eb; border: 3px solid #ffffff; box-shadow: 0 1px 5px rgba(15, 23, 42, .35); }
+.dcaf-range::-moz-range-thumb { width: 30px; height: 30px; border-radius: 50%; background: #2563eb; border: 3px solid #ffffff; box-shadow: 0 1px 5px rgba(15, 23, 42, .35); }
 .dcaf-range:focus-visible { outline: 3px solid #1d4ed8; outline-offset: 4px; border-radius: 999px; }
+
+/* Chips del horizonte. Sus colores viven inline porque dependen del estado
+   activo, y un `style` le gana a cualquier regla de aquí: por eso el hover
+   necesita `!important`, y se acota al chip NO seleccionado para no pisar el
+   azul del activo. */
+.dcaf-chip[aria-pressed="false"]:hover { background: #dbeafe !important; }
 
 /* ── Los tres grids que cambian por breakpoint ────────────────────────────
    Van aquí (y no inline) para no necesitar `!important` contra el style. */

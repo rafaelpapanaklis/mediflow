@@ -2,9 +2,10 @@
 
 /**
  * Calculadora pública del programa de afiliados (diseño
- * Afiliados-DaleControl.dc.html): clínicas por plan + horizonte de 1 a 10
- * años, con el acumulado del fijo recurrente contra el pago único y una
- * barra por año.
+ * Afiliados-DaleControl.dc.html): clínicas por plan + horizonte por
+ * ESCALONES (1 mes · 6 meses · 1 año · 3 años · 5 años · 10 años), con el
+ * acumulado del fijo recurrente contra el pago único y una barra por mes o
+ * por año según el escalón.
  *
  * CORTE SERVER/CLIENT (la razón de que exista payout-core):
  * este componente importa SÓLO de `@/lib/affiliates/payout-core` —módulo
@@ -43,13 +44,47 @@ export interface CalculadoraAfiliadosProps {
    * fórmula lo sigue solo.
    */
   cobrosSinComision: number;
-  /** Horizonte inicial del slider, en años. */
-  aniosIniciales?: number;
+  /**
+   * Horizonte inicial en MESES. Se ajusta al escalón más cercano; por defecto
+   * 1 año, que es el más creíble de entrada y deja que la persona descubra el
+   * efecto acumulado moviendo el control.
+   */
+  mesesIniciales?: number;
 }
 
 const MAX_CLINICAS = 99;
-const MIN_ANIOS = 1;
-const MAX_ANIOS = 10;
+
+/**
+ * Los seis escalones del horizonte. El estado es el ÍNDICE de este array, no
+ * los meses: así los saltos del slider son PAREJOS aunque los valores no lo
+ * sean (de 1 a 6 meses y de 5 a 10 años miden lo mismo en la barra).
+ */
+const PASOS = [
+  { meses: 1, label: "1 mes" },
+  { meses: 6, label: "6 meses" },
+  { meses: 12, label: "1 año" },
+  { meses: 36, label: "3 años" },
+  { meses: 60, label: "5 años" },
+  { meses: 120, label: "10 años" },
+] as const;
+
+/** Índice de "1 año". */
+const PASO_DEFAULT = 2;
+
+/** Escalón más cercano a unos meses dados (el prop nunca tiene que ser exacto). */
+function indiceDePaso(meses: number): number {
+  if (!Number.isFinite(meses)) return PASO_DEFAULT;
+  let best = PASO_DEFAULT;
+  let bestDiff = Infinity;
+  for (let i = 0; i < PASOS.length; i++) {
+    const d = Math.abs(PASOS[i].meses - meses);
+    if (d < bestDiff) {
+      bestDiff = d;
+      best = i;
+    }
+  }
+  return best;
+}
 
 /** Conteo inicial del diseño: 1 Básico, 3 Profesional, 0 Clínica. */
 const SEMILLA: Record<PlanKey, number> = { BASIC: 1, PRO: 3, CLINIC: 0 };
@@ -58,6 +93,17 @@ const SEMILLA: Record<PlanKey, number> = { BASIC: 1, PRO: 3, CLINIC: 0 };
 function fmtMxn(n: number): string {
   const value = Number.isFinite(n) ? n : 0;
   return "$" + Math.round(value).toLocaleString("es-MX");
+}
+
+/**
+ * "El cobro en el que arranca la comisión", en palabras. Se deriva del arranque
+ * configurado (`cobrosSinComision + 1`): el número jamás se escribe a mano.
+ */
+function cobroOrdinal(n: number): string {
+  if (n <= 1) return "primer cobro";
+  if (n === 2) return "segundo cobro";
+  if (n === 3) return "tercer cobro";
+  return `cobro número ${n}`;
 }
 
 function clampN(v: number, min: number, max: number): number {
@@ -74,7 +120,7 @@ const cardBase: React.CSSProperties = {
 export function CalculadoraAfiliados({
   plans,
   cobrosSinComision,
-  aniosIniciales = 5,
+  mesesIniciales = PASOS[PASO_DEFAULT].meses,
 }: CalculadoraAfiliadosProps) {
   // Un plan sin comisión en ninguna de las dos modalidades está apagado en la
   // config: sumarlo sólo produciría ceros confusos.
@@ -86,9 +132,7 @@ export function CalculadoraAfiliados({
     for (const p of rows) base[p.key] = SEMILLA[p.key] ?? 0;
     return base;
   });
-  const [years, setYears] = useState<number>(() =>
-    clampN(aniosIniciales, MIN_ANIOS, MAX_ANIOS),
-  );
+  const [pasoIdx, setPasoIdx] = useState<number>(() => indiceDePaso(mesesIniciales));
 
   function setCount(key: PlanKey, raw: number) {
     setCounts((prev) => ({ ...prev, [key]: clampN(raw, 0, MAX_CLINICAS) }));
@@ -112,35 +156,80 @@ export function CalculadoraAfiliados({
     unico += n * p.oneTimeMxn;
   }
 
-  const months = Math.max(0, 12 * years - skip);
-  const acum = monthly * months;
+  // El horizonte llega en MESES desde el escalón; el acumulado sale de los
+  // cobros que de verdad comisionan.
+  const paso = PASOS[pasoIdx] ?? PASOS[PASO_DEFAULT];
+  const horizonteMeses = paso.meses;
+  const horizonteLabel = paso.label;
+  const cobros = Math.max(0, horizonteMeses - skip);
+  const acum = monthly * cobros;
   const diff = acum - unico;
   const max = Math.max(acum, unico, 1);
 
-  const bars: { y: number; pct: string; title: string }[] = [];
+  // Unidad de las barras según el escalón: hasta 1 año una por MES (1, 6 o 12
+  // barras), de 3 años en adelante una por AÑO (3, 5 o 10). Nunca pasan de 12,
+  // así que ninguna se encima ni hay que agrupar.
+  const barPorMes = horizonteMeses <= 12;
+  const nBars = barPorMes ? horizonteMeses : Math.round(horizonteMeses / 12);
+  const bars: { i: number; pct: string; title: string }[] = [];
   if (monthly > 0) {
-    for (let y = 1; y <= years; y++) {
-      const v = monthly * Math.max(0, 12 * y - skip);
+    for (let i = 1; i <= nBars; i++) {
+      const mesesHasta = barPorMes ? i : i * 12;
+      const v = monthly * Math.max(0, mesesHasta - skip);
       bars.push({
-        y,
+        i,
         pct: Math.max((v / max) * 100, 2).toFixed(1),
-        title: `Año ${y}: ${fmtMxn(v)} acumulados`,
+        title: barPorMes
+          ? `Mes ${i}: ${fmtMxn(v)} acumulados`
+          : `Año ${i}: ${fmtMxn(v)} acumulados`,
       });
     }
   }
 
   const linePct = Math.min((unico / max) * 100, 100).toFixed(1);
-  const yearsLabel = `${years} ${years === 1 ? "año" : "años"}`;
+  // Con horizontes cortos el pago único va arriba y su línea queda pegada al
+  // borde superior: ahí la etiqueta se encimaría con la leyenda, así que baja
+  // al otro lado de la línea.
+  const etiquetaUnicoArriba = Number(linePct) < 80;
   const hasData = monthly > 0 || unico > 0;
+  // Horizonte tan corto que ningún cobro comisiona todavía (con el arranque de
+  // hoy, el escalón de 1 mes). El $0 es real y no se maquilla, pero se explica.
+  const sinCobros = cobros === 0;
+  const primerCobroLabel = cobroOrdinal(skip + 1);
+
+  // Mes en el que el fijo recurrente alcanza al pago único. Es lo que convierte
+  // una diferencia negativa en información útil en vez de un "vas perdiendo".
+  const mesCruce =
+    monthly > 0 && unico > 0 ? skip + Math.ceil(unico / monthly) : null;
+  const cruceLabel =
+    mesCruce === null
+      ? null
+      : mesCruce > 12
+        ? `mes ${mesCruce} (año ${Math.ceil(mesCruce / 12)})`
+        : `mes ${mesCruce}`;
+
+  // La fórmula habla en la unidad del escalón elegido: "6 meses − 1" cuando se
+  // eligieron 6 meses, "12 × 3 − 1" cuando se eligieron 3 años.
+  const baseFormula =
+    horizonteMeses < 12
+      ? `${horizonteMeses} ${horizonteMeses === 1 ? "mes" : "meses"}`
+      : horizonteMeses === 12
+        ? "12 meses"
+        : `12 × ${Math.round(horizonteMeses / 12)}`;
 
   // La nota tiene que seguir al arranque configurado: con 0 no hay "−0" que
   // explicar, y con 2 o más el plural cambia.
+  const notaSkip =
+    skip === 1
+      ? "El −1 es el primer cobro de cada clínica, que no comisiona por ser su mes promocional."
+      : `Los −${skip} son los primeros cobros de cada clínica, que no comisionan por ser promocionales.`;
+
   const formulaNota =
     skip === 0
-      ? `Cálculo: ${fmtMxn(monthly)} × ${months} cobros por clínica (12 × ${years}). Cada cobro de la clínica comisiona.`
-      : skip === 1
-        ? `Cálculo: ${fmtMxn(monthly)} × ${months} cobros por clínica (12 × ${years} − 1). El −1 es el primer cobro de cada clínica, que no comisiona por ser su mes promocional.`
-        : `Cálculo: ${fmtMxn(monthly)} × ${months} cobros por clínica (12 × ${years} − ${skip}). Los −${skip} son los primeros cobros de cada clínica, que no comisionan por ser promocionales.`;
+      ? `Cálculo: ${fmtMxn(monthly)} × ${cobros} cobros por clínica (${baseFormula}). Cada cobro de la clínica comisiona.`
+      : sinCobros
+        ? `Cálculo: ${baseFormula} − ${skip} = 0 cobros que comisionen. ${notaSkip}`
+        : `Cálculo: ${fmtMxn(monthly)} × ${cobros} cobros por clínica (${baseFormula} − ${skip}). ${notaSkip}`;
 
   return (
     <div className="dcaf-calcgrid" style={{ marginTop: 40 }}>
@@ -218,29 +307,65 @@ export function CalculadoraAfiliados({
 
         <div style={{ marginTop: 14, paddingTop: 18, borderTop: "1px solid #f1f5f9" }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
-            <label htmlFor="dcaf-anios" style={{ fontWeight: 700, fontSize: 15, cursor: "pointer" }}>
+            <label htmlFor="dcaf-horizonte" style={{ fontWeight: 700, fontSize: 15, cursor: "pointer" }}>
               Horizonte
             </label>
             <span style={{ background: "#2563eb", color: "#ffffff", fontWeight: 700, fontSize: 14, padding: "6px 14px", borderRadius: 999 }}>
-              {yearsLabel}
+              {horizonteLabel}
             </span>
           </div>
+
+          {/* Chips y slider son dos caras del MISMO estado (`pasoIdx`): mover
+              uno marca el otro. Rejilla fija de 3 columnas —dos filas de tres—
+              porque a 375px los seis en un renglón no caben y esta página no
+              puede scrollear en horizontal. */}
+          <div
+            role="group"
+            aria-label="Horizonte de la proyección"
+            style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 8, marginTop: 12 }}
+          >
+            {PASOS.map((p, i) => {
+              const activo = i === pasoIdx;
+              return (
+                <button
+                  key={p.meses}
+                  type="button"
+                  className="dcaf-chip"
+                  aria-pressed={activo}
+                  onClick={() => setPasoIdx(i)}
+                  style={{
+                    minHeight: 44,
+                    padding: "10px 6px",
+                    borderRadius: 12,
+                    fontSize: 13.5,
+                    fontWeight: 700,
+                    whiteSpace: "nowrap",
+                    minWidth: 0,
+                    border: activo ? "1px solid #2563eb" : "1px solid #bfdbfe",
+                    background: activo ? "#2563eb" : "#eff6ff",
+                    color: activo ? "#ffffff" : "#1d4ed8",
+                    boxShadow: activo ? "0 4px 12px rgba(37,99,235,.25)" : undefined,
+                  }}
+                >
+                  {p.label}
+                </button>
+              );
+            })}
+          </div>
+
           <input
-            id="dcaf-anios"
+            id="dcaf-horizonte"
             className="dcaf-range"
             type="range"
-            min={MIN_ANIOS}
-            max={MAX_ANIOS}
+            min={0}
+            max={PASOS.length - 1}
             step={1}
-            value={years}
-            aria-valuetext={yearsLabel}
-            onChange={(e) => setYears(clampN(Number(e.target.value), MIN_ANIOS, MAX_ANIOS))}
-            style={{ marginTop: 12 }}
+            value={pasoIdx}
+            // El lector de pantalla anuncia "3 años", no el índice crudo.
+            aria-valuetext={horizonteLabel}
+            onChange={(e) => setPasoIdx(clampN(Number(e.target.value), 0, PASOS.length - 1))}
+            style={{ marginTop: 14 }}
           />
-          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: "#94a3b8" }}>
-            <span>1 año</span>
-            <span>10 años</span>
-          </div>
         </div>
       </div>
 
@@ -255,7 +380,17 @@ export function CalculadoraAfiliados({
               {fmtMxn(acum)}
             </div>
             <div style={{ fontSize: 13, color: "#475569", marginTop: 2 }}>
-              acumulado en {yearsLabel} · {fmtMxn(monthly)} al mes con todas activas
+              {sinCobros && monthly > 0 ? (
+                <>
+                  Todavía $0 en {horizonteLabel} — tu primera comisión llega con el{" "}
+                  {primerCobroLabel} de la clínica. A partir de ahí, {fmtMxn(monthly)} al mes
+                  con todas activas.
+                </>
+              ) : (
+                <>
+                  acumulado en {horizonteLabel} · {fmtMxn(monthly)} al mes con todas activas
+                </>
+              )}
             </div>
             <div style={{ fontSize: 12, color: "#64748b", marginTop: 12, borderTop: "1px dashed #bfdbfe", paddingTop: 10, lineHeight: 1.55 }}>
               {formulaNota}
@@ -277,7 +412,7 @@ export function CalculadoraAfiliados({
 
           <div style={{ ...cardBase, background: "#dcfce7", border: "1px solid #bbf7d0" }}>
             <span style={{ fontSize: 11.5, fontWeight: 700, letterSpacing: ".06em", textTransform: "uppercase", color: "#15803d" }}>
-              Diferencia en {yearsLabel}
+              Diferencia en {horizonteLabel}
             </span>
             <div style={{ fontSize: "clamp(28px,3vw,34px)", fontWeight: 800, letterSpacing: "-0.02em", color: "#15803d", marginTop: 6, overflowWrap: "anywhere" }}>
               {(diff >= 0 ? "+" : "−") + fmtMxn(Math.abs(diff))}
@@ -285,13 +420,36 @@ export function CalculadoraAfiliados({
             <div style={{ fontSize: 13, color: "#15803d", marginTop: 2 }}>
               {diff >= 0 ? "a favor del fijo recurrente" : "a favor del pago único"}
             </div>
+            {/* La comparación habla SIEMPRE del horizonte elegido: en escalones
+                cortos el pago único va arriba, y decir en qué mes lo alcanza el
+                fijo recurrente es más útil que dejar el número negativo solo. */}
+            {hasData && (
+              <div style={{ fontSize: 12, color: "#15803d", marginTop: 12, borderTop: "1px dashed #bbf7d0", paddingTop: 10, lineHeight: 1.55 }}>
+                {diff >= 0 ? (
+                  <>
+                    En {horizonteLabel} el fijo recurrente ya va arriba, y sigue corriendo
+                    mientras esas clínicas sigan activas. El pago único termina donde lo ves.
+                  </>
+                ) : cruceLabel ? (
+                  <>
+                    En {horizonteLabel} el pago único todavía va arriba. El fijo recurrente lo
+                    alcanza en el {cruceLabel} y de ahí en adelante nunca se detiene.
+                  </>
+                ) : (
+                  <>
+                    En {horizonteLabel} el pago único todavía va arriba; el fijo recurrente
+                    sigue sumando mientras esas clínicas sigan activas.
+                  </>
+                )}
+              </div>
+            )}
           </div>
         </div>
 
         {/* ── Gráfica: acumulado por año contra el pago único ───────────── */}
         <div style={{ background: "#ffffff", border: "1px solid #e2e8f0", borderRadius: 16, padding: 20, marginTop: 14, minWidth: 0 }}>
           <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
-            <h3 style={{ fontSize: 15, fontWeight: 800, letterSpacing: "-0.01em" }}>Cómo crece en {yearsLabel}</h3>
+            <h3 style={{ fontSize: 15, fontWeight: 800, letterSpacing: "-0.01em" }}>Cómo crece en {horizonteLabel}</h3>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 14, fontSize: 12, color: "#64748b" }}>
               <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
                 <span style={{ width: 10, height: 10, borderRadius: 3, background: "#2563eb", display: "inline-block" }} />
@@ -305,9 +463,13 @@ export function CalculadoraAfiliados({
           </div>
 
           <div style={{ position: "relative", height: 200, marginTop: 14 }}>
-            <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "flex-end", gap: 6 }}>
+            {/* `justifyContent: center` + el tope de ancho sólo hacen algo con
+                UNA barra (escalón de 1 mes): sin ellos, esa única barra se
+                estira de lado a lado y parece una regla, no una barra. Con dos
+                o más, `flex: 1 1 0` las reparte igual que siempre. */}
+            <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "flex-end", justifyContent: "center", gap: 6 }}>
               {bars.map((bar) => (
-                <div key={bar.y} title={bar.title} style={{ flex: "1 1 0", height: "100%", display: "flex", alignItems: "flex-end", minWidth: 0 }}>
+                <div key={bar.i} title={bar.title} style={{ flex: "1 1 0", maxWidth: bars.length === 1 ? 96 : undefined, height: "100%", display: "flex", alignItems: "flex-end", minWidth: 0 }}>
                   <div style={{ width: "100%", height: `${bar.pct}%`, background: "linear-gradient(180deg,#60a5fa,#2563eb)", borderRadius: "6px 6px 2px 2px", transition: "height .25s ease" }} />
                 </div>
               ))}
@@ -315,7 +477,7 @@ export function CalculadoraAfiliados({
 
             {hasData && (
               <div style={{ position: "absolute", left: 0, right: 0, bottom: `${linePct}%`, borderTop: "2px dashed #15803d", transition: "bottom .25s ease" }}>
-                <span style={{ position: "absolute", right: 0, top: -26, fontSize: 11, fontWeight: 700, color: "#15803d", background: "#dcfce7", border: "1px solid #bbf7d0", padding: "2px 9px", borderRadius: 999, whiteSpace: "nowrap" }}>
+                <span style={{ position: "absolute", right: 0, top: etiquetaUnicoArriba ? -26 : 6, fontSize: 11, fontWeight: 700, color: "#15803d", background: "#dcfce7", border: "1px solid #bbf7d0", padding: "2px 9px", borderRadius: 999, whiteSpace: "nowrap" }}>
                   Pago único: {fmtMxn(unico)}
                 </span>
               </div>
@@ -330,14 +492,17 @@ export function CalculadoraAfiliados({
 
           {bars.length > 0 && (
             <>
-              <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
+              {/* Mismo reparto que las barras para que cada número caiga bajo la suya. */}
+              <div style={{ display: "flex", gap: 6, marginTop: 8, justifyContent: "center" }}>
                 {bars.map((bar) => (
-                  <div key={bar.y} style={{ flex: "1 1 0", textAlign: "center", fontSize: 11, color: "#94a3b8", minWidth: 0 }}>
-                    {bar.y}
+                  <div key={bar.i} style={{ flex: "1 1 0", maxWidth: bars.length === 1 ? 96 : undefined, textAlign: "center", fontSize: 11, color: "#94a3b8", minWidth: 0 }}>
+                    {bar.i}
                   </div>
                 ))}
               </div>
-              <div style={{ textAlign: "center", fontSize: 11, color: "#cbd5e1", marginTop: 2 }}>años del horizonte</div>
+              <div style={{ textAlign: "center", fontSize: 11, color: "#cbd5e1", marginTop: 2 }}>
+                {barPorMes ? "meses del horizonte" : "años del horizonte"}
+              </div>
             </>
           )}
         </div>

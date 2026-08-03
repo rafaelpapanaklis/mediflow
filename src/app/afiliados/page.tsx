@@ -640,7 +640,9 @@ export default async function AfiliadosPage() {
               titulo="Saca tus propias cuentas"
               lede="Ajusta las clínicas y el horizonte. Todo se recalcula en vivo."
             />
-            <CalculadoraAfiliados plans={offer.plans} cobrosSinComision={skip} aniosIniciales={5} />
+            {/* El horizonte arranca en el escalón de 1 año (default del propio
+                componente): es el más creíble de entrada. */}
+            <CalculadoraAfiliados plans={offer.plans} cobrosSinComision={skip} />
           </div>
         </section>
 
