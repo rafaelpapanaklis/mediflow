@@ -73,6 +73,27 @@ export function computeInvoiceTotal(
 
 export type CfdiTaxMode = "exento" | "iva16";
 
+/** Tasa de IVA que el CFDI sabe desglosar (Facturapi recibe rate 0.16 fijo). */
+export const IVA_RATE = 16;
+
+/**
+ * Impuestos con los que NACE una factura nueva, según la preferencia fiscal de
+ * la clínica (Clinic.cfdiTaxMode: "exempt" | "iva16"). Es la contraparte de
+ * resolveTaxMode: lo que aquí se guarda en la factura es lo que allá se lee al
+ * timbrar, así el desglose interno y el CFDI no pueden contradecirse.
+ *
+ *   "exempt" (default, odontología/servicios médicos) → 0%, sin desglose.
+ *   "iva16"                                           → 16% ya incluido en el precio.
+ *
+ * El usuario lo puede cambiar factura por factura (venta de producto gravado en
+ * una clínica exenta, por ejemplo).
+ */
+export function clinicInvoiceTaxDefaults(clinicTaxMode?: string | null): { taxRate: number; taxIncluded: boolean } {
+  return clinicTaxMode === "iva16"
+    ? { taxRate: IVA_RATE, taxIncluded: true }
+    : { taxRate: 0, taxIncluded: true };
+}
+
 /**
  * Modo de impuestos con el que se pre-llena el timbrado. Los servicios
  * médicos/dentales son mayormente EXENTOS de IVA (art. 15 LIVA) → default
@@ -106,6 +127,19 @@ export function resolveTaxMode(
   // cuadraría con lo cobrado — la guarda de integridad daría un 409 que culpa a
   // los conceptos en vez de a este ajuste. Se respeta lo que pagó el paciente.
   if (inv?.taxIncluded === false) return "exento";
+  // Tasa 0 = la factura se emitió SIN IVA a propósito (el editor guarda 0 cuando
+  // se elige "Exento"). Es una señal explícita —la columna nace en 16—, así que
+  // manda sobre la preferencia de la clínica: una clínica que causa IVA puede
+  // facturar un servicio exento y el CFDI debe salir exento, no desglosado.
+  // Se exige un 0 NUMÉRICO: Number(null) también es 0, y un DTO que normalice el
+  // campo ausente a null volvería exentas facturas que nadie marcó como tales.
+  if (typeof inv?.taxRate === "number" && inv.taxRate === 0) return "exento";
+  // Queda (tasa >0, incluido), que es también la forma por DEFECTO de la columna:
+  // no distingue "el usuario eligió IVA incluido" de "factura anterior a la
+  // columna". Se resuelve con la preferencia de la clínica — comportamiento
+  // histórico, para no volver gravadas de golpe las facturas viejas de una
+  // clínica exenta. El total no cambia en ningún caso: con IVA incluido el CFDI
+  // timbra el mismo importe, solo cambia si lo desglosa.
   return clinicTaxMode === "iva16" ? "iva16" : "exento";
 }
 
@@ -159,6 +193,19 @@ export function spreadInvoiceDiscount(items: any[], discountTotal: number): numb
     const add = Math.min(room, residue);
     out[i] = round2(out[i] + add);
     residue = round2(residue - add);
+  }
+  // SOBRE-asignación: la cuota de la última línea es la corrección `target −
+  // assigned`, y cuando las cuotas proporcionales previas redondearon hacia
+  // arriba sale NEGATIVA — el Math.max(0, …) de arriba la descartaba y el
+  // prorrateo terminaba repartiendo hasta 6¢ MÁS que el descuento real. Como el
+  // CFDI se timbra con estos descuentos por concepto y la guarda de integridad
+  // compara contra `Σitems − descuento` (sin prorratear), el desajuste era
+  // invisible: el comprobante salía por unos centavos MENOS de lo cobrado.
+  for (let i = lines.length - 1; i >= 0 && residue < 0; i--) {
+    const take = Math.min(out[i], -residue);
+    if (take <= 0) continue;
+    out[i] = round2(out[i] - take);
+    residue = round2(residue + take);
   }
   return out;
 }

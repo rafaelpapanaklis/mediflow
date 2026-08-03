@@ -45,7 +45,7 @@ export interface CajaListRow {
   amount:      number;
   method:      string;
   discount:    number; // invoice.discount de la factura de este pago
-  doctorName:  string; // vía invoice.appointment.doctor, o "—"
+  doctorName:  string; // vía invoice.appointment.doctor → Invoice.doctorId → "—"
 }
 
 export interface CajaTotals {
@@ -132,6 +132,10 @@ export async function deriveWindow(clinicId: string, from: Date, to: Date) {
           select: {
             items:       true,
             discount:    true,
+            // Doctor atribuido a mano en el editor de facturas. Es un String
+            // suelto (sin relación Prisma), así que se resuelve abajo con una
+            // segunda query en vez de un include.
+            doctorId:    true,
             patient:     { select: { firstName: true, lastName: true } },
             appointment: { select: { doctor: { select: { firstName: true, lastName: true } } } },
           },
@@ -147,6 +151,21 @@ export async function deriveWindow(clinicId: string, from: Date, to: Date) {
       where: { clinicId, status: { notIn: ["DRAFT", "CANCELLED"] }, createdAt: { gte: from, lte: to } },
     }),
   ]);
+
+  // Nombres de los doctores atribuidos a mano (facturas creadas desde Caja, que
+  // no nacen de una cita y por tanto no tienen invoice.appointment.doctor).
+  // Acotado a la clínica: el doctorId de la factura nunca se muestra a ciegas.
+  const attributedIds = Array.from(new Set(
+    payments.map((p) => (p.invoice as any)?.doctorId).filter(Boolean) as string[],
+  ));
+  const attributedById = new Map<string, { firstName: string | null; lastName: string | null }>();
+  if (attributedIds.length > 0) {
+    const docs = await prisma.user.findMany({
+      where:  { id: { in: attributedIds }, clinicId },
+      select: { id: true, firstName: true, lastName: true },
+    });
+    for (const d of docs) attributedById.set(d.id, { firstName: d.firstName, lastName: d.lastName });
+  }
 
   let cashIncome = 0;
   let cardDebitIncome = 0;
@@ -169,7 +188,9 @@ export async function deriveWindow(clinicId: string, from: Date, to: Date) {
       amount,
       method:      p.method,
       discount:    p.invoice?.discount ?? 0,
-      doctorName:  fullName(p.invoice?.appointment?.doctor),
+      // La cita manda (es el dato clínico); si la factura se creó suelta desde
+      // Caja, se cae al doctor que el usuario eligió en el editor.
+      doctorName:  fullName(p.invoice?.appointment?.doctor ?? attributedById.get((p.invoice as any)?.doctorId ?? "")),
     };
   });
 

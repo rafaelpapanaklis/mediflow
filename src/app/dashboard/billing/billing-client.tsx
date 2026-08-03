@@ -14,6 +14,7 @@ import { fmtMXN, fmtMXNdec, formatRelativeDate } from "@/lib/format";
 import { PaymentModal, type PaymentInvoice } from "@/components/dashboard/billing/payment-modal";
 import { InvoiceDetailModal } from "@/components/dashboard/billing/invoice-detail-modal";
 import { InvoiceCfdiBadge } from "@/components/dashboard/billing/invoice-cfdi-badge";
+import { InvoiceEditorModal } from "@/components/billing/invoice-editor-modal";
 import { useT } from "@/i18n/i18n-provider";
 import { REGIMENES_FISCALES, USOS_CFDI, FORMAS_PAGO_SAT } from "@/lib/cfdi-catalogs";
 import { derivePaymentForm, resolveTaxMode, type CfdiTaxMode } from "@/lib/invoice-totals";
@@ -72,11 +73,6 @@ export function BillingClient({ invoices: initial, patients, totalPaid, totalPen
   const [detailInvoice, setDetailInvoice]         = useState<any | null>(null);
   const [cfdiFor, setCfdiFor]                     = useState<any | null>(null);
 
-  // New invoice form
-  const [form, setForm] = useState({ patientId: "", description: "", quantity: "1", unitPrice: "", notes: "" });
-  const setF = (k: string, v: string) => setForm(f => ({ ...f, [k]: v }));
-  const [loadingNew, setLoadingNew] = useState(false);
-
   // CFDI form
   const [cfdiLoading, setCfdiLoading] = useState(false);
   const [cfdiForm, setCfdiForm] = useState({
@@ -129,39 +125,6 @@ export function BillingClient({ invoices: initial, patients, totalPaid, totalPen
   // useEffect arriba propaga el prop nuevo al state local.
   function refresh() {
     router.refresh();
-  }
-
-  async function createInvoice() {
-    if (!form.patientId || !form.description || !form.unitPrice) {
-      toast.error(t("billing.billingClient.toastRequiredFields"));
-      return;
-    }
-    setLoadingNew(true);
-    try {
-      const qty = Number(form.quantity) || 1;
-      const price = Number(form.unitPrice) || 0;
-      const total = Math.round(qty * price * 100) / 100;
-      const res = await fetch("/api/invoices", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          patientId: form.patientId,
-          notes: form.notes,
-          items: [{ description: form.description, quantity: qty, unitPrice: price, total }],
-        }),
-      });
-      if (!res.ok) throw new Error((await res.json()).error);
-      const inv = await res.json();
-      setInvoices(prev => [inv, ...prev]);
-      toast.success(t("billing.billingClient.toastInvoiceCreated", { number: inv.invoiceNumber }));
-      setShowNew(false);
-      setForm({ patientId: "", description: "", quantity: "1", unitPrice: "", notes: "" });
-      refresh();
-    } catch (err: any) {
-      toast.error(err.message ?? t("billing.billingClient.toastInvoiceCreateError"));
-    } finally {
-      setLoadingNew(false);
-    }
   }
 
   async function timbraCfdi() {
@@ -230,8 +193,6 @@ export function BillingClient({ invoices: initial, patients, totalPaid, totalPen
       patientName: patientNameOf(inv),
     });
   }
-
-  const newFormTotal = (Number(form.quantity) || 1) * (Number(form.unitPrice) || 0);
 
   return (
     <div style={{ padding: "clamp(14px, 1.6vw, 28px)", maxWidth: 1400, margin: "0 auto" }}>
@@ -371,73 +332,20 @@ export function BillingClient({ invoices: initial, patients, totalPaid, totalPen
         )}
       </CardNew>
 
-      {/* Modal: Nueva factura — sigue siendo custom porque tiene flujo de
-       *  selección de paciente y conceptos que no aplica al PaymentModal. */}
-      {showNew && (
-        <div className="modal-overlay" onClick={() => setShowNew(false)}>
-          <div className="modal modal--wide" onClick={e => e.stopPropagation()}>
-            <div className="modal__header">
-              <div className="modal__title">{t("billing.billingClient.newInvoice")}</div>
-              <button onClick={() => setShowNew(false)} type="button" className="btn-new btn-new--ghost btn-new--sm" aria-label={t("common.close")}>
-                <X size={14} />
-              </button>
-            </div>
-            <form onSubmit={e => { e.preventDefault(); createInvoice(); }}>
-              <div className="modal__body">
-                <div style={{ marginBottom: 22 }}>
-                  <div className="form-section__title">{t("billing.billingClient.sectionPatientDetail")}<span className="form-section__rule" /></div>
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px 14px" }}>
-                    <div className="field-new" style={{ gridColumn: "1 / -1" }}>
-                      <label className="field-new__label">{t("billing.billingClient.labelPatient")} <span className="req">*</span></label>
-                      <select className="input-new" value={form.patientId} onChange={e => setF("patientId", e.target.value)}>
-                        <option value="">{t("billing.billingClient.optionSelect")}</option>
-                        {patients.map(p => (
-                          <option key={p.id} value={p.id}>#{p.patientNumber} — {p.firstName} {p.lastName}</option>
-                        ))}
-                      </select>
-                    </div>
-                    <div className="field-new" style={{ gridColumn: "1 / -1" }}>
-                      <label className="field-new__label">{t("billing.billingClient.labelDescription")} <span className="req">*</span></label>
-                      <input className="input-new" placeholder={t("billing.billingClient.placeholderDescription")} value={form.description} onChange={e => setF("description", e.target.value)} />
-                    </div>
-                  </div>
-                </div>
-
-                <div style={{ marginBottom: 22 }}>
-                  <div className="form-section__title">{t("billing.billingClient.sectionItemsTotals")}<span className="form-section__rule" /></div>
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "12px 14px" }}>
-                    <div className="field-new">
-                      <label className="field-new__label">{t("billing.billingClient.labelQuantity")}</label>
-                      <input type="number" min={1} className="input-new" value={form.quantity} onChange={e => setF("quantity", e.target.value)} />
-                    </div>
-                    <div className="field-new">
-                      <label className="field-new__label">{t("billing.billingClient.labelUnitPrice")} <span className="req">*</span></label>
-                      <input type="number" min={0} className="input-new" placeholder="500" value={form.unitPrice} onChange={e => setF("unitPrice", e.target.value)} />
-                    </div>
-                    <div className="field-new">
-                      <label className="field-new__label">{t("common.total")}</label>
-                      <div className="input-new mono" style={{ display: "flex", alignItems: "center", color: "var(--text-1)", fontWeight: 600 }}>
-                        {fmtMXNdec(newFormTotal)}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="field-new">
-                  <label className="field-new__label">{t("billing.billingClient.labelNotes")}</label>
-                  <input className="input-new" placeholder={t("billing.billingClient.placeholderOptional")} value={form.notes} onChange={e => setF("notes", e.target.value)} />
-                </div>
-              </div>
-              <div className="modal__footer">
-                <ButtonNew variant="ghost" type="button" onClick={() => setShowNew(false)}>{t("common.cancel")}</ButtonNew>
-                <ButtonNew variant="primary" type="submit" disabled={loadingNew}>
-                  {loadingNew ? t("billing.billingClient.savingEllipsis") : t("billing.billingClient.createInvoice")}
-                </ButtonNew>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+      {/* Nueva factura — MISMO editor que la ficha del paciente (tarifario,
+       *  descuento por línea y global, doctor atribuido, IVA). Aquí además elige
+       *  paciente porque Caja no parte de una ficha. */}
+      <InvoiceEditorModal
+        open={showNew}
+        patients={patients}
+        clinicTaxMode={clinic.cfdiTaxMode}
+        onClose={() => setShowNew(false)}
+        onCreated={(inv) => {
+          setInvoices(prev => [inv, ...prev]);
+          setShowNew(false);
+          refresh();
+        }}
+      />
 
       {/* Detalle de factura — mismo componente que en /dashboard/patients/[id]
        *  Acciones: Cobrar, Marcar pagada, Editar precio, Aplicar descuento,

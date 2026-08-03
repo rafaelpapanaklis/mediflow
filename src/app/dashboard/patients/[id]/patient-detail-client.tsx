@@ -359,11 +359,14 @@ interface Props {
   /** ¿La clínica tiene el SAT (Facturapi) configurado? Decide si la columna
    *  CFDI ofrece "Timbrar" o el estado neutro "SAT no configurado". */
   facturApiEnabled?: boolean;
+  /** Clinic.cfdiTaxMode ("exempt" | "iva16"): impuestos con los que nace una
+   *  factura nueva, para que el desglose interno y el CFDI no se contradigan. */
+  clinicTaxMode?: string | null;
 }
 
 export function PatientDetailClient({
   patient, records: initialRecords, appointments, invoices: initialInvoices,
-  doctors, currentUser, specialty, treatments, portalUrl,
+  doctors, currentUser, specialty, treatments, portalUrl, clinicTaxMode,
   portalAccountStatus = "none",
   pediatricsData,
   pediatricsModuleActive = false,
@@ -3340,6 +3343,7 @@ export function PatientDetailClient({
         open={showNewInvoice}
         patientId={patient.id}
         patientName={fullName}
+        clinicTaxMode={clinicTaxMode}
         onClose={() => setShowNewInvoice(false)}
         onCreated={(inv) => {
           setInvoices((prev: any[]) => (prev.some((i: any) => i.id === inv.id) ? prev : [inv, ...prev]));

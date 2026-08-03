@@ -1,17 +1,22 @@
 "use client";
 
-// Editor de factura con la MISMA riqueza que el editor de presupuestos
-// (QuoteEditor): tarifario + línea libre, descuento por línea y descuento
-// global (% / monto), totales en vivo. Reusa la matemática autoritativa de
+// ÚNICO editor de facturas del panel: lo usan la ficha del paciente y Caja.
+// Tiene la misma riqueza que el editor de presupuestos (QuoteEditor): tarifario
+// + línea libre, descuento por línea y descuento global (% / monto), doctor
+// atribuido, impuestos y totales en vivo. Reusa la matemática autoritativa de
 // `@/lib/quotes/compute` (computeTotals/round2) y mapea al contrato de
-// POST /api/invoices = { patientId, items:[{description,quantity,unitPrice,total}],
+// POST /api/invoices = { patientId, items:[{description,quantity,unitPrice,discount?,total}],
 // discount, notes?, doctorId?, taxRate?, taxIncluded? }.
 // El servidor recalcula subtotal/total/balance (y aplica IVA agregado si taxIncluded=false).
+//
+// El paciente puede venir FIJO (ficha) o elegirse aquí con el buscador (Caja):
+// ver `patientId` vs `patients` en las props.
 
 import { useState, useEffect, useMemo } from "react";
-import { Plus, Loader2, Trash2, Check, Search } from "lucide-react";
+import { Plus, Loader2, Trash2, Check, Search, User } from "lucide-react";
 import toast from "react-hot-toast";
 import { computeTotals, round2 } from "@/lib/quotes/compute";
+import { clinicInvoiceTaxDefaults, IVA_RATE, type CfdiTaxMode } from "@/lib/invoice-totals";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 
 function money(n: number): string {
@@ -21,6 +26,14 @@ function money(n: number): string {
 
 interface CatalogProcedure { id: string; name: string; basePrice: number; category?: string }
 interface DoctorOption { id: string; name: string }
+
+/** Paciente del buscador. Lo provee el server ya filtrado por clínica y visibilidad. */
+export interface InvoiceEditorPatient {
+  id: string;
+  firstName: string;
+  lastName: string;
+  patientNumber?: number | string | null;
+}
 
 interface EditorItem {
   key: string;
@@ -34,31 +47,50 @@ interface EditorItem {
 let _seq = 0;
 function newKey(): string { _seq += 1; return `inv-it-${_seq}`; }
 
+function patientLabel(p: InvoiceEditorPatient): string {
+  const name = `${p.firstName ?? ""} ${p.lastName ?? ""}`.trim() || "—";
+  return p.patientNumber ? `#${p.patientNumber} — ${name}` : name;
+}
+
 export interface InvoiceEditorModalProps {
   open: boolean;
-  patientId: string;
-  patientName: string;
+  /** Paciente FIJO (ficha del paciente). Omitir para que el editor muestre el buscador. */
+  patientId?: string;
+  patientName?: string;
+  /** Catálogo del buscador cuando no hay paciente fijo (Caja). Ya viene acotado por clínica. */
+  patients?: InvoiceEditorPatient[];
+  /** Clinic.cfdiTaxMode ("exempt" | "iva16"): impuestos con los que NACE la factura. */
+  clinicTaxMode?: string | null;
   onClose: () => void;
   /** Recibe la factura creada (shape de POST /api/invoices) para insertarla sin recargar. */
   onCreated: (invoice: any) => void;
 }
 
-export function InvoiceEditorModal({ open, patientId, patientName, onClose, onCreated }: InvoiceEditorModalProps) {
+export function InvoiceEditorModal({ open, patientId, patientName, patients, clinicTaxMode, onClose, onCreated }: InvoiceEditorModalProps) {
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
       <DialogContent className="max-w-2xl">
         {/* El cuerpo se monta de cero en cada apertura → el formulario nunca queda con estado viejo. */}
-        <InvoiceEditorBody patientId={patientId} patientName={patientName} onClose={onClose} onCreated={onCreated} />
+        <InvoiceEditorBody
+          patientId={patientId}
+          patientName={patientName}
+          patients={patients}
+          clinicTaxMode={clinicTaxMode}
+          onClose={onClose}
+          onCreated={onCreated}
+        />
       </DialogContent>
     </Dialog>
   );
 }
 
 function InvoiceEditorBody({
-  patientId, patientName, onClose, onCreated,
+  patientId, patientName, patients, clinicTaxMode, onClose, onCreated,
 }: {
-  patientId: string;
-  patientName: string;
+  patientId?: string;
+  patientName?: string;
+  patients?: InvoiceEditorPatient[];
+  clinicTaxMode?: string | null;
   onClose: () => void;
   onCreated: (invoice: any) => void;
 }) {
@@ -68,13 +100,26 @@ function InvoiceEditorBody({
   const [notes, setNotes] = useState("");
   const [saving, setSaving] = useState(false);
 
-  // Doctor atribuido (Invoice.doctorId, OLA 1) — opcional.
+  // Paciente: fijo por prop (ficha) o elegido aquí con el buscador (Caja).
+  const fixedPatient = Boolean(patientId);
+  const [pickedPatient, setPickedPatient] = useState<InvoiceEditorPatient | null>(null);
+  const [patientQuery, setPatientQuery] = useState("");
+  const effectivePatientId = patientId ?? pickedPatient?.id ?? "";
+  const effectivePatientName = patientId
+    ? (patientName ?? "")
+    : (pickedPatient ? `${pickedPatient.firstName ?? ""} ${pickedPatient.lastName ?? ""}`.trim() : "");
+
+  // Doctor atribuido (Invoice.doctorId) — opcional, alimenta los reportes por médico de Caja.
   const [doctors, setDoctors] = useState<DoctorOption[]>([]);
   const [doctorId, setDoctorId] = useState("");
 
-  // IVA (Invoice.taxRate / taxIncluded, OLA 1). Default: 16% ya incluido en el precio.
-  const [taxRate, setTaxRate] = useState<number>(16);
-  const [taxIncluded, setTaxIncluded] = useState<boolean>(true);
+  // Impuestos (Invoice.taxRate / taxIncluded). Nacen según la preferencia fiscal
+  // de la clínica: exenta (odontología, lo común) = 0% sin desglose; iva16 = 16%
+  // ya incluido en el precio. Cambiable por factura.
+  const initialTax = useMemo(() => clinicInvoiceTaxDefaults(clinicTaxMode), [clinicTaxMode]);
+  const [taxRate, setTaxRate] = useState<number>(initialTax.taxRate);
+  const [taxIncluded, setTaxIncluded] = useState<boolean>(initialTax.taxIncluded);
+  const taxMode: CfdiTaxMode = taxRate > 0 ? "iva16" : "exento";
 
   // Tarifario para el autocomplete (mismo endpoint que presupuestos).
   const [catalog, setCatalog] = useState<CatalogProcedure[]>([]);
@@ -101,6 +146,15 @@ function InvoiceEditorBody({
     return base.slice(0, 30);
   }, [catalog, search]);
 
+  const patientMatches = useMemo(() => {
+    const list = patients ?? [];
+    const q = patientQuery.toLowerCase().trim();
+    const base = q
+      ? list.filter((p) => `${p.firstName ?? ""} ${p.lastName ?? ""} ${p.patientNumber ?? ""}`.toLowerCase().includes(q))
+      : list;
+    return base.slice(0, 30);
+  }, [patients, patientQuery]);
+
   const totals = useMemo(() => {
     const asInput = items.map((it) => ({ name: it.name, quantity: it.quantity, unitPrice: it.unitPrice, discount: it.discount }));
     return computeTotals(asInput, {
@@ -112,6 +166,7 @@ function InvoiceEditorBody({
   // IVA en vivo sobre la base (subtotal − descuento):
   //   incluido → IVA = base − base/(1+r); total = base.
   //   agregado → IVA = base·r;            total = base + IVA.
+  //   exento (r=0) → IVA = 0;             total = base.
   const { tax, grandTotal } = useMemo(() => {
     const base = totals.total;
     const r = Math.min(100, Math.max(0, taxRate)) / 100;
@@ -144,8 +199,10 @@ function InvoiceEditorBody({
 
   const num = (v: string) => { const n = Number(v); return isFinite(n) ? n : 0; };
   const inputCls = "w-full bg-background border border-border rounded-lg px-2 py-1.5 text-sm";
+  const selectCls = "mt-1 w-full bg-background border border-border rounded-lg px-2 py-2 text-sm";
 
   async function save() {
+    if (!effectivePatientId) { toast.error("Elige un paciente."); return; }
     const clean = items.filter((it) => it.name.trim().length > 0);
     if (clean.length === 0) { toast.error("Agrega al menos un concepto."); return; }
     setSaving(true);
@@ -160,7 +217,7 @@ function InvoiceEditorBody({
       },
     );
     const payload: any = {
-      patientId,
+      patientId: effectivePatientId,
       items: normalized.items.map((it) => ({
         description: String(it.name).trim(),
         quantity: it.quantity,
@@ -172,6 +229,8 @@ function InvoiceEditorBody({
         total: round2(it.lineTotal),
       })),
       discount: round2(normalized.discountAmount),
+      // Exento viaja como tasa 0: es la señal explícita que lee resolveTaxMode al
+      // timbrar (la columna nace en 16, así que 0 solo puede venir de esta elección).
       taxRate: Math.min(100, Math.max(0, taxRate)),
       taxIncluded,
     };
@@ -197,10 +256,59 @@ function InvoiceEditorBody({
   return (
     <>
       <DialogHeader>
-        <DialogTitle>Nueva factura · {patientName}</DialogTitle>
+        <DialogTitle>
+          Nueva factura{effectivePatientName ? ` · ${effectivePatientName}` : ""}
+        </DialogTitle>
       </DialogHeader>
 
       <div className="flex-1 overflow-y-auto min-h-0 px-6 pb-4 space-y-4">
+        {/* Paciente — solo cuando NO viene fijo desde la ficha */}
+        {!fixedPatient && (
+          <div className="bg-card border border-border rounded-xl p-4 space-y-3">
+            <div className="flex items-center justify-between gap-2">
+              <h3 className="text-xs font-bold">Paciente</h3>
+              {pickedPatient && (
+                <button type="button" onClick={() => { setPickedPatient(null); setPatientQuery(""); }}
+                  className="text-[11px] font-semibold text-brand-700 dark:text-brand-300">
+                  Cambiar
+                </button>
+              )}
+            </div>
+
+            {pickedPatient ? (
+              <div className="flex items-center gap-2 border border-border rounded-lg px-3 py-2 bg-background">
+                <User size={14} className="text-muted-foreground flex-shrink-0" />
+                <span className="text-sm font-medium truncate">{patientLabel(pickedPatient)}</span>
+              </div>
+            ) : (
+              <>
+                <input
+                  value={patientQuery}
+                  onChange={(e) => setPatientQuery(e.target.value)}
+                  placeholder="Buscar paciente por nombre o número…"
+                  className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm"
+                />
+                <div className="max-h-48 overflow-y-auto divide-y divide-border border border-border rounded-lg">
+                  {patientMatches.length === 0 ? (
+                    <p className="text-xs text-muted-foreground py-3 text-center">
+                      {(patients ?? []).length === 0 ? "No hay pacientes disponibles." : "Sin coincidencias."}
+                    </p>
+                  ) : patientMatches.map((p) => (
+                    <button
+                      key={p.id}
+                      type="button"
+                      onClick={() => { setPickedPatient(p); setPatientQuery(""); }}
+                      className="w-full text-left px-3 py-2 hover:bg-muted/50 text-xs font-medium truncate"
+                    >
+                      {patientLabel(p)}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+        )}
+
         {/* Conceptos */}
         <div className="bg-card border border-border rounded-xl p-4 space-y-3">
           <div className="flex items-center justify-between">
@@ -295,13 +403,12 @@ function InvoiceEditorBody({
           )}
         </div>
 
-        {/* Doctor + Descuento global + IVA + Notas */}
+        {/* Doctor + Descuento global + Impuestos + Notas */}
         <div className="bg-card border border-border rounded-xl p-4 space-y-4">
           <div className="grid sm:grid-cols-2 gap-4">
             <div>
               <label className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground">Doctor</label>
-              <select value={doctorId} onChange={(e) => setDoctorId(e.target.value)}
-                className="mt-1 w-full bg-background border border-border rounded-lg px-2 py-2 text-sm">
+              <select value={doctorId} onChange={(e) => setDoctorId(e.target.value)} className={selectCls}>
                 <option value="">Sin asignar</option>
                 {doctors.map((d) => (
                   <option key={d.id} value={d.id}>{d.name}</option>
@@ -312,7 +419,7 @@ function InvoiceEditorBody({
               <label className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground">Descuento global</label>
               <div className="flex items-center gap-1.5 mt-1">
                 <select value={discountMode} onChange={(e) => setDiscountMode(e.target.value as "none" | "pct" | "amount")}
-                  className="bg-background border border-border rounded-lg px-2 py-2 text-sm">
+                  className="min-w-0 flex-1 bg-background border border-border rounded-lg px-2 py-2 text-sm">
                   <option value="none">Sin descuento</option>
                   <option value="pct">Porcentaje %</option>
                   <option value="amount">Monto $</option>
@@ -320,27 +427,49 @@ function InvoiceEditorBody({
                 {discountMode !== "none" && (
                   <input type="number" min={0} step="0.01" value={discountValue}
                     onChange={(e) => setDiscountValue(num(e.target.value))}
-                    className="w-28 bg-background border border-border rounded-lg px-3 py-2 text-sm" />
+                    className="w-24 flex-shrink-0 bg-background border border-border rounded-lg px-3 py-2 text-sm" />
                 )}
               </div>
             </div>
           </div>
 
+          {/* Impuestos: solo los dos modos que el CFDI sabe timbrar (Facturapi
+              desglosa 16% fijo). Una tasa intermedia se vería bien aquí y luego
+              rebotaría al timbrar con el 409 de descuadre. */}
           <div className="grid sm:grid-cols-2 gap-4">
             <div>
-              <label className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground">IVA (%)</label>
-              <input type="number" min={0} max={100} step="0.01" value={taxRate}
-                onChange={(e) => setTaxRate(Math.min(100, Math.max(0, num(e.target.value))))}
-                className="mt-1 w-full bg-background border border-border rounded-lg px-3 py-2 text-sm" />
+              <label className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground">Impuestos</label>
+              <select
+                value={taxMode}
+                onChange={(e) => {
+                  const iva = e.target.value === "iva16";
+                  setTaxRate(iva ? IVA_RATE : 0);
+                  // Al volver a Exento hay que resetear la modalidad: el select de
+                  // abajo se desmonta y dejaría un "IVA agregado" residual, o sea
+                  // una factura con tasa 0 que dice desglosar. Cuadra igual, pero
+                  // si al timbrar alguien fuerza "IVA 16%" la guarda ve base×1.16
+                  // y bloquea con un 409 que culpa a los conceptos.
+                  if (!iva) setTaxIncluded(true);
+                }}
+                className={selectCls}
+              >
+                <option value="exento">Exento (servicios médicos)</option>
+                <option value="iva16">IVA {IVA_RATE}%</option>
+              </select>
             </div>
-            <div className="flex sm:items-end">
-              <label className="inline-flex items-center gap-2 text-sm font-medium cursor-pointer select-none py-2">
-                <input type="checkbox" checked={taxIncluded}
-                  onChange={(e) => setTaxIncluded(e.target.checked)}
-                  className="h-4 w-4 rounded border-border accent-brand-600" />
-                El precio ya incluye IVA
-              </label>
-            </div>
+            {taxMode === "iva16" && (
+              <div>
+                <label className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground">Modalidad</label>
+                <select
+                  value={taxIncluded ? "included" : "added"}
+                  onChange={(e) => setTaxIncluded(e.target.value === "included")}
+                  className={selectCls}
+                >
+                  <option value="included">El precio ya incluye IVA</option>
+                  <option value="added">Agregar IVA al precio</option>
+                </select>
+              </div>
+            )}
           </div>
 
           <div>
@@ -364,7 +493,15 @@ function InvoiceEditorBody({
             </div>
           )}
           <div className="flex justify-between w-full max-w-xs text-xs text-muted-foreground">
-            <span>IVA {round2(taxRate)}%{taxIncluded ? " (incluido)" : ""}</span><span>{money(tax)}</span>
+            {taxMode === "iva16" ? (
+              <>
+                <span>IVA {round2(taxRate)}%{taxIncluded ? " (incluido)" : ""}</span><span>{money(tax)}</span>
+              </>
+            ) : (
+              <>
+                <span>Impuestos</span><span>Exento</span>
+              </>
+            )}
           </div>
           <div className="flex justify-between w-full max-w-xs text-base font-bold text-brand-700 dark:text-brand-300 pt-1">
             <span>Total</span><span>{money(grandTotal)}</span>

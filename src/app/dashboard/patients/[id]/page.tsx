@@ -349,6 +349,9 @@ export default async function PatientDetailPage({ params }: { params: { id: stri
           )}
           canViewBilling={canViewBilling}
           facturApiEnabled={Boolean((user.clinic as any).facturApiEnabled)}
+          // Solo el modo fiscal (no la fila de Clinic): con qué impuestos nace
+          // una factura nueva desde la ficha — igual que en Caja.
+          clinicTaxMode={(user.clinic as any).cfdiTaxMode ?? "exempt"}
           portalUrl={portalUrl}
           portalAccountStatus={portalAccountStatus}
           pediatricsData={pediatricsData}
