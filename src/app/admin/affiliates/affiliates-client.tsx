@@ -576,7 +576,16 @@ export function AffiliatesClient({ initial }: { initial: AffiliateRow[] }) {
       const data = await res.json().catch(() => ({} as any));
       if (!res.ok) throw new Error(data?.error ?? "No se pudo guardar el esquema de pago");
       if (data?.config) setPayForm(toPayoutForm(data.config));
-      toast.success("Esquema de pago guardado");
+      // El mensaje dice explícitamente que la landing pública YA quedó al día:
+      // /afiliados es una página cacheada y sin este aviso un guardado correcto
+      // parecía fallido al recargarla y ver los montos viejos. `revalidated` lo
+      // reporta el endpoint — si la invalidación falló, se avisa en vez de
+      // prometer algo que no pasó.
+      toast.success(
+        data?.revalidated === false
+          ? "Esquema de pago guardado. La página pública /afiliados puede tardar hasta 1 minuto en mostrarlo."
+          : "Esquema de pago guardado · la página pública /afiliados ya muestra estos montos",
+      );
       // El costo comprometido del motor depende de estos montos.
       void loadMetrics();
     } catch (e: any) {

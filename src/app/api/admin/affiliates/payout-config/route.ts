@@ -9,6 +9,7 @@ import { isAdminAuthed, getAdminSession } from "@/lib/admin-auth";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { logAdminGlobalEvent } from "@/lib/admin-audit";
+import { revalidateAffiliateLanding } from "@/lib/cache/public-pricing";
 import { getResolvedPlans } from "@/lib/plans";
 import {
   DEFAULT_PAYOUT_CONFIG,
@@ -176,7 +177,13 @@ export async function PUT(req: NextRequest) {
       req, admin: admin.user, entity: "affiliate-payout-config", entityId: "1",
       action: "update", before: prev ? toPayoutConfig(prev) : null, after: data,
     });
-    return NextResponse.json({ ok: true, config: toPayoutConfig(row) });
+    // La landing /afiliados es ISR: sin esto seguía publicando los montos viejos
+    // hasta que venciera su temporizador. Aquí es donde de verdad se arregla.
+    // Fire-and-forget en el mismo criterio que los correos del webhook: si la
+    // revalidación falla, la config YA está guardada y no puede romperse por
+    // eso — se reporta en `revalidated` y el admin lo dice sin mentir.
+    const revalidated = revalidateAffiliateLanding();
+    return NextResponse.json({ ok: true, config: toPayoutConfig(row), revalidated });
   } catch {
     // Tabla inexistente: el admin ve el aviso y sabe qué correr.
     return NextResponse.json({ error: "Corre sql/afiliados-comisiones.sql en Supabase" }, { status: 503 });

@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { getAdminSession } from "@/lib/admin-auth";
 import { isPlanId } from "@/lib/billing/plans";
 import { clearPlanConfigCache } from "@/lib/plans";
+import { revalidatePublicPricing } from "@/lib/cache/public-pricing";
 import { logAdminGlobalEvent } from "@/lib/admin-audit";
 import { FALLBACK_PLAN_CONFIG, PLAN_MODULE_KEYS } from "@/lib/plan-shared";
 
@@ -131,7 +132,13 @@ export async function PATCH(req: NextRequest, { params }: { params: { planId: st
       req, admin: admin.user, entity: "plan-config", entityId: planId,
       action: "update", before: serialize(before), after: serialize(saved),
     });
-    return NextResponse.json(serialize(saved));
+    // clearPlanConfigCache() sólo limpia la caché en memoria de ESTA instancia;
+    // las páginas públicas con ISR (home, las 17 landings de especialidad y
+    // /afiliados) seguirían sirviendo el precio viejo desde su caché hasta que
+    // venciera su temporizador. Los precios son la regla dura del proyecto: se
+    // invalidan aquí, no se esperan. Nunca puede tumbar el guardado.
+    const revalidated = revalidatePublicPricing();
+    return NextResponse.json({ ...serialize(saved), revalidated });
   } catch (err: any) {
     console.error("[admin/plan-config PATCH]", err?.message ?? err);
     return NextResponse.json({ error: err?.message ?? "Error" }, { status: 500 });

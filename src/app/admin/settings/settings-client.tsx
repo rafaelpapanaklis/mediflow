@@ -116,11 +116,19 @@ function PlanCardEditor({ plan }: { plan: ResolvedPlan }) {
           features,
         }),
       });
+      const d = await res.json().catch(() => ({} as any));
       if (!res.ok) {
-        const d = await res.json().catch(() => ({}));
         throw new Error(d.error ?? "Error al guardar");
       }
-      toast.success(`Plan ${label} guardado`);
+      // Igual que en el esquema de comisiones: las páginas públicas (home, las
+      // 17 landings de especialidad y /afiliados) son ISR y el endpoint acaba de
+      // invalidarlas. Decirlo evita la duda de "¿se guardó o no?" al ver el
+      // precio viejo en la landing.
+      toast.success(
+        d?.revalidated === false
+          ? `Plan ${label} guardado. Las páginas públicas pueden tardar un momento en mostrar el precio.`
+          : `Plan ${label} guardado · las páginas públicas ya muestran este precio`,
+      );
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Error al guardar");
     } finally {

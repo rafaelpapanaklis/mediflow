@@ -3120,3 +3120,119 @@ que ese texto se conservó y se detalló.
    en el código que dispare el pago en esa ventana; el admin lo marca a mano.
 5. La rama de trabajo era `feat/landing-v4`; Vercel **no compila ramas `feat/*`**, así que la
    verificación se hizo en local con `next start` y el push fue directo a `main`.
+
+---
+
+## [Fix-Cache-Afiliados] — la landing publicaba comisiones viejas ✅ (2026-08-02)
+
+Bug REAL en producción: la BD ya tenía los montos nuevos (80/140/300 y 400/680/1450, guardados
+desde `/admin/affiliates`), `/afiliados/registro` los mostraba bien, y `/afiliados` seguía
+publicando 40/90/250 y 350/650/1400 aunque se le cambiara el query string.
+
+### La causa
+
+No era la lectura: `getPublicOffer()` funciona y no tiene caché propia
+(`getPayoutConfig()` va directo a Prisma en cada llamada). Era el **caché de página**:
+
+```
+src/app/afiliados/page.tsx  →  export const revalidate = 300
+```
+
+Con ISR, la página se sirve del HTML ya generado y **sólo se regenera cuando vence su
+temporizador**. Guardar en el admin escribía en `affiliate_payout_config` pero no tocaba ese
+HTML, así que la landing publicaba la foto vieja hasta que el temporizador expiraba. Por eso
+`/afiliados/registro` sí estaba al día: es `force-dynamic`, se renderiza en cada request.
+Confirmado en `.next/prerender-manifest.json`, donde `/afiliados` aparece con
+`initialRevalidateSeconds`.
+
+### El arreglo — revalidación bajo demanda
+
+Nuevo helper `src/lib/cache/public-pricing.ts` (hermano de `@/lib/blog/revalidate`, mismo
+criterio de try/catch por ruta: **la revalidación jamás puede tumbar el guardado**, la config ya
+está en la BD y el peor caso es esperar el temporizador). Expone dos funciones y devuelve un
+booleano para que el endpoint pueda reportar la verdad:
+
+| Función | Rutas que invalida | Quién la llama |
+|---|---|---|
+| `revalidateAffiliateLanding()` | `/afiliados` | `PUT /api/admin/affiliates/payout-config` |
+| `revalidatePublicPricing()` | `/`, las 17 landings de especialidad, `/afiliados` | `PATCH /api/admin/plan-config/[planId]` |
+
+Y como red de seguridad, `revalidate` de `/afiliados` baja de **300 → 60 s**: cubre el caso de
+cambiar la config por SQL directo en Supabase sin pasar por el admin. No cuesta rendimiento —
+la regeneración son dos SELECT y las visitas se siguen sirviendo del caché; la página quedó
+igual en el build (`○ /afiliados`, 6.51 kB / 206 kB First Load JS, idéntico a antes).
+
+**La página NO se puso en `force-dynamic`**: eso habría tirado el rendimiento que costó llegar
+a 94 en PageSpeed. Sigue siendo estática.
+
+### Sí, el mismo patrón afectaba a los precios de los planes
+
+Se revisó y **el problema existía**, no era hipotético. Las tres superficies públicas que
+muestran precios de `plan_configs` son ISR (verificado en el `prerender-manifest.json` del
+build):
+
+| Ruta | `initialRevalidateSeconds` | Qué muestra |
+|---|---|---|
+| `/` | 600 | tarjetas de precio de la landing v4 (`buildPlanCards`) |
+| `/<especialidad>` × 17 | 300 | `SpecPricing` (`getResolvedPlans`) |
+| `/afiliados` | 60 (antes 300) | rótulo "plan de $689/mes" en cada tarjeta de comisión |
+
+O sea: cambiar un precio en `/admin/settings` → Planes se congelaba hasta **10 minutos** en la
+home. `clearPlanConfigCache()` ya estaba en ese endpoint, pero sólo limpia la caché **en memoria
+de la instancia que atendió el PATCH** — no tiene nada que ver con el HTML cacheado de la
+página. Ahora el PATCH también llama a `revalidatePublicPricing()`.
+
+Las **17 landings se enumeran una por una** (desde `SPECIALTY_SLUGS`) en vez de invalidar el
+patrón `/[slug]` completo: esa misma ruta sirve las landings de clínica, que no muestran precios
+y no hay razón para regenerarlas.
+
+**Fuera del alcance a propósito**: las 8 páginas de producto (`/software-agenda-dental` y
+compañía, `revalidate = 3600`) **no listan ningún precio** — se comprobó por grep, no se tocan.
+
+**Límite conocido que queda**: `getResolvedPlans()` tiene además una caché en memoria de 60 s por
+instancia. La regeneración disparada por `revalidatePath` puede caer en otra instancia con hasta
+60 s de precio viejo. Es el TTL documentado de `lib/plans.ts`, no se tocó: el salto real es de
+10 minutos a ≤60 s.
+
+### El admin ya no deja la duda
+
+Rafael perdió tiempo creyendo que el guardado había fallado. Los dos editores ahora lo dicen, y
+lo dicen **con la verdad**: los endpoints devuelven `revalidated` y el toast cambia si la
+invalidación falló, en vez de prometer algo que no pasó.
+
+- `/admin/affiliates` → *"Esquema de pago guardado · la página pública /afiliados ya muestra
+  estos montos"*.
+- `/admin/settings` → Planes → *"Plan X guardado · las páginas públicas ya muestran este
+  precio"*.
+
+### Archivos
+
+- `src/lib/cache/public-pricing.ts` — **nuevo**, los dos helpers.
+- `src/app/api/admin/affiliates/payout-config/route.ts` — `revalidateAffiliateLanding()` tras el
+  upsert; responde `revalidated`.
+- `src/app/api/admin/plan-config/[planId]/route.ts` — `revalidatePublicPricing()` tras el upsert;
+  responde `revalidated`.
+- `src/app/afiliados/page.tsx` — `revalidate` 300 → 60 (sólo red de seguridad).
+- `src/app/admin/affiliates/affiliates-client.tsx`, `src/app/admin/settings/settings-client.tsx`
+  — mensajes de éxito.
+
+Sin SQL, sin cambios de schema, sin tocar el motor de comisiones ni el diseño de la landing.
+Ningún monto vive en el código: siguen todos en la BD.
+
+### Verificación
+
+`npm run build` completo y **verde**: 360/360 páginas estáticas, 0 errores de tipos. Los
+warnings (`file-type` critical dependency, clases ambiguas de Tailwind) son preexistentes.
+
+**Cómo comprobarlo en prod** — cambia un monto en `/admin/affiliates` (por ejemplo el fijo del
+plan Profesional), guarda, y recarga `dalecontrol.com/afiliados` **de inmediato**: debe mostrar
+el valor nuevo sin esperar. Ojo con dos detalles al probarlo:
+
+1. La primera visita después de guardar es la que dispara la regeneración. Si Vercel te devuelve
+   el HTML viejo en ese primer golpe, **recarga una segunda vez** — es cómo funciona
+   `revalidatePath` (stale-while-revalidate), no es que el arreglo falle.
+2. Cambian a la vez las 6 tarjetas de comisión, el prisma del hero, la pila, la comparación a 3
+   años, los 3 perfiles y la calculadora: todos salen del mismo `getPublicOffer()`.
+
+Para los precios, el mismo ejercicio en `/admin/settings` → Planes: guarda y recarga la home;
+el precio nuevo debe aparecer en ≤60 s (el TTL en memoria de `lib/plans.ts`), no en 10 minutos.

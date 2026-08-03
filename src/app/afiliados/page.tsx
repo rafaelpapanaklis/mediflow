@@ -57,10 +57,18 @@ export const metadata: Metadata = buildMetadata({
 // ejemplo: todos se calculan, ninguno se teclea. `getPublicOffer()` nunca
 // lanza: sin BD cae a los defaults del motor.
 //
-// ISR de 5 minutos: los montos cambian poquísimo, pero cuando cambian no
-// queremos esperar un deploy para publicarlos.
+// CACHÉ: la página es estática con ISR, y quien de verdad la mantiene al día es
+// la revalidación BAJO DEMANDA — guardar en /admin/affiliates dispara
+// `revalidateAffiliateLanding()` (ver @/lib/cache/public-pricing) y esta página
+// se regenera en la siguiente visita. Lo mismo hace el editor de planes cuando
+// cambia un precio.
+//
+// El temporizador de 60 s es sólo la RED DE SEGURIDAD para los cambios que NO
+// pasan por el admin (un UPDATE directo en Supabase). Bajarlo de 300 a 60 no
+// cuesta rendimiento: la regeneración son dos SELECT (payout config + planes) y
+// las visitas siguen sirviéndose siempre desde el caché.
 // ─────────────────────────────────────────────────────────────────────────────
-export const revalidate = 300;
+export const revalidate = 60;
 
 /**
  * "El cobro en el que arranca la comisión", en palabras. El ordinal se deriva
