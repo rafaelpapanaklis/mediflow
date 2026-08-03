@@ -1,574 +1,140 @@
 /* ═══════════════════════════════════════════════════════════════════════
-   DaleControl · Programa de afiliados (landing pública) — scoped a `.afi-*`
+   DaleControl · /afiliados — landing pública del programa (diseño
+   Afiliados-DaleControl.dc.html).
    ───────────────────────────────────────────────────────────────────────
-   NO toca globals.css. La página monta sales.css (shell `.mfh`, tokens
-   --b/--b2/--b-ink/--v50/--v100/--v200/--ink/--body/--muted/--faint/
-   --line/--card/--r/--r-lg/--sh/--sh-sm) y aquí sólo vive lo propio del
-   programa de afiliados: las tarjetas de comisión por plan, el aviso
-   honesto del arranque de la comisión, la calculadora y los perfiles.
+   Mismo reparto que la landing v4: el estilo ESTÁTICO va inline en el JSX
+   y aquí sólo vive lo que un `style` no puede expresar —keyframes, hover /
+   focus, los tres grids que cambian por breakpoint y el reset acotado—.
 
-   Reglas de la casa:
-    · Cero colores a mano donde exista token de sales.css.
-    · Responsive por construcción: grids con auto-fit + minmax(min(100%,…)),
-      tipografía en clamp(), cero anchos fijos.
-    · Cero animaciones nuevas (la landing está en 94 de PageSpeed móvil):
-      sólo transiciones baratas de color/borde en hover.
+   NAMESPACE `dcaf-`: esta página monta también landing-v2.css (lo importan
+   SalesNav y SalesFooter), que ya define dcSpinB, dcPulse y dcMarquee. Todo
+   lo de aquí lleva prefijo propio para que los dos archivos convivan sin
+   pisarse. NO se toca globals.css ni landing-v2.css.
    ═══════════════════════════════════════════════════════════════════════ */
 
-/* ── Hero: micro-pruebas bajo los CTA ────────────────────────────────── */
-.afi-trust {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 10px 22px;
-  padding-top: 4px;
+/* ── Reset acotado a la página ────────────────────────────────────────────
+   TODO dentro de `:where()` → especificidad 0. Sin eso `.dcaf-root a`
+   (0,2,0) le ganaría a `.dcv2-btn-primary` (0,1,0) del nav/footer y los
+   botones azules saldrían con el texto azul sobre azul. */
+.dcaf-root { -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; }
+:where(.dcaf-root) :where(h1, h2, h3, h4, p, ul, ol, figure) { margin: 0; padding: 0; }
+:where(.dcaf-root) :where(ul, ol) { list-style: none; }
+:where(.dcaf-root) :where(a) { color: #2563eb; text-decoration: none; }
+:where(.dcaf-root) :where(button, input) { font: inherit; }
+:where(.dcaf-root) :where(button) { cursor: pointer; }
+.dcaf-root ::selection { background: #dbeafe; }
+
+/* `scroll-behavior` tiene que ir en el scroller del documento, no en el
+   contenedor: se activa sólo en las páginas que montan esta landing. */
+html:has(.dcaf-root) { scroll-behavior: smooth; }
+
+/* `text-wrap` va en CSS y no inline: csstype aún no lo declara en
+   React.CSSProperties y el type-check del build lo rechazaría. */
+.dcaf-balance { text-wrap: balance; }
+.dcaf-pretty { text-wrap: pretty; }
+
+/* El nav compartido es sticky: sin esto, saltar a #comisiones / #calculadora
+   / #como-funciona / #faq deja el encabezado de la sección bajo la barra. */
+.dcaf-anchor { scroll-margin-top: 88px; }
+
+/* ── Keyframes del diseño (prefijo dcaf) ──────────────────────────────────
+   Las tres escenas 3D sólo animan `transform`: nunca provocan reflow. */
+@keyframes dcafSpin { 0% { transform: rotateX(-14deg) rotateY(0deg); } 100% { transform: rotateX(-14deg) rotateY(360deg); } }
+@keyframes dcafSway { 0%, 100% { transform: rotateX(9deg) rotateY(-8deg); } 50% { transform: rotateX(9deg) rotateY(8deg); } }
+@keyframes dcafRing { 0% { transform: rotateX(72deg) rotateZ(0deg); } 100% { transform: rotateX(72deg) rotateZ(360deg); } }
+@keyframes dcafRingRev { 0% { transform: rotateX(72deg) rotateZ(360deg); } 100% { transform: rotateX(72deg) rotateZ(0deg); } }
+@keyframes dcafFloat { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-16px); } }
+
+.dcaf-spin { animation: dcafSpin 32s linear infinite; }
+.dcaf-sway { animation: dcafSway 14s ease-in-out infinite; }
+.dcaf-ring { animation: dcafRing 28s linear infinite; }
+.dcaf-ring-rev { animation: dcafRingRev 40s linear infinite; }
+.dcaf-ring-slow { animation: dcafRing 52s linear infinite; }
+.dcaf-ring-rev-slow { animation: dcafRingRev 74s linear infinite; }
+.dcaf-float { animation: dcafFloat 7s ease-in-out infinite; }
+.dcaf-float--b { animation: dcafFloat 9s ease-in-out infinite; animation-delay: -3s; }
+.dcaf-float--c { animation: dcafFloat 8s ease-in-out infinite; animation-delay: -5s; }
+.dcaf-float--d { animation: dcafFloat 10s ease-in-out infinite; animation-delay: -1.5s; }
+
+/* ── Focus visible ────────────────────────────────────────────────────────
+   Acotado a `.dcaf-main`: el nav y el footer compartidos traen el suyo en
+   landing-v2.css y no hay por qué duplicárselo. */
+.dcaf-main a:focus-visible,
+.dcaf-main button:focus-visible,
+.dcaf-main summary:focus-visible,
+.dcaf-main input:focus-visible { outline: 3px solid #2563eb; outline-offset: 2px; }
+/* Sobre el fondo #080d1a el azul base casi no se ve. */
+.dcaf-dark a:focus-visible,
+.dcaf-dark button:focus-visible { outline-color: #93c5fd; }
+
+/* ── Botones y enlaces (lo que el style inline no expresa) ────────────── */
+.dcaf-btn-blue:hover { background: #1d4ed8; color: #ffffff; }
+.dcaf-btn-ghostdark:hover { border-color: rgba(96, 165, 250, .6); color: #ffffff; }
+.dcaf-btn-outline:hover { background: #eff6ff; color: #1d4ed8; }
+.dcaf-btn-white:hover { background: #eff6ff; color: #1d4ed8; }
+.dcaf-linkdim:hover { color: #94a3b8; }
+.dcaf-step:hover { background: #dbeafe; }
+
+/* ── FAQ nativo (<details>/<summary>) ─────────────────────────────────── */
+.dcaf-summary { list-style: none; cursor: pointer; }
+.dcaf-summary::-webkit-details-marker { display: none; }
+.dcaf-chev { display: inline-flex; flex-shrink: 0; transition: transform .2s ease; }
+/* El icono es un "+" que gira 45° hasta convertirse en "×" al abrir. */
+details[open] .dcaf-chev { transform: rotate(45deg); }
+
+/* ── Calculadora: inputs ──────────────────────────────────────────────── */
+.dcaf-root input[type="number"]::-webkit-inner-spin-button,
+.dcaf-root input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+.dcaf-root input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
+
+.dcaf-range { -webkit-appearance: none; appearance: none; width: 100%; height: 28px; background: transparent; cursor: pointer; }
+.dcaf-range::-webkit-slider-runnable-track { height: 8px; border-radius: 999px; background: #dbeafe; }
+.dcaf-range::-webkit-slider-thumb { -webkit-appearance: none; width: 28px; height: 28px; border-radius: 50%; background: #2563eb; border: 3px solid #ffffff; box-shadow: 0 1px 5px rgba(15, 23, 42, .35); margin-top: -10px; }
+.dcaf-range::-moz-range-track { height: 8px; border-radius: 999px; background: #dbeafe; }
+.dcaf-range::-moz-range-thumb { width: 22px; height: 22px; border-radius: 50%; background: #2563eb; border: 3px solid #ffffff; box-shadow: 0 1px 5px rgba(15, 23, 42, .35); }
+.dcaf-range:focus-visible { outline: 3px solid #1d4ed8; outline-offset: 4px; border-radius: 999px; }
+
+/* ── Los tres grids que cambian por breakpoint ────────────────────────────
+   Van aquí (y no inline) para no necesitar `!important` contra el style. */
+.dcaf-herogrid { display: grid; grid-template-columns: 1fr; gap: 44px; align-items: center; }
+.dcaf-howgrid { display: grid; grid-template-columns: 1fr; gap: 48px; align-items: start; }
+.dcaf-calcgrid { display: grid; grid-template-columns: 1fr; gap: 22px; align-items: start; }
+
+@media (min-width: 960px) {
+  .dcaf-herogrid { grid-template-columns: 1.05fr .95fr; }
+  .dcaf-howgrid { grid-template-columns: 1fr 400px; }
 }
-.afi-trust span {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  font-size: 13.5px;
-  font-weight: 500;
-  color: var(--body);
-}
-.afi-trust svg {
-  flex: none;
-  width: 16px;
-  height: 16px;
-  color: var(--ok);
+@media (min-width: 1024px) {
+  .dcaf-calcgrid { grid-template-columns: 410px 1fr; }
 }
 
-.afi-cta-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
-  justify-content: center;
+/* La píldora "Afiliados" del nav (nav.tsx, variante `affiliate`) es lo
+   primero que sobra cuando el ancho aprieta: sin ella el nav cabe en un solo
+   renglón hasta bien abajo. Se estiliza desde aquí —y no desde
+   landing-v2.css— porque es exclusiva de esta página. */
+@media (max-width: 640px) {
+  .dcaf-root .dcv4-navtag { display: none; }
 }
 
-/* ── Las dos modalidades (prosa antes de las tarjetas) ───────────────── */
-.afi-modes {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
-  gap: 16px;
-  margin-top: 40px;
+/* La escena del hero mide 340px de caja: a 375px de viewport se sale del
+   contenedor, pero la sección tiene `overflow:hidden` y aquí además se
+   encoge para que quepa entera. */
+@media (max-width: 520px) {
+  .dcaf-scene1 { transform: scale(.72); }
 }
-.afi-mode {
-  display: flex;
-  gap: 14px;
-  align-items: flex-start;
-  padding: 20px;
-  border: 1px solid var(--line);
-  border-radius: var(--r);
-  background: var(--card);
-  box-shadow: var(--sh-sm);
-  min-width: 0;
-}
-.afi-mode__icon {
-  width: 40px;
-  height: 40px;
-  flex: none;
-  border-radius: 12px;
-  display: grid;
-  place-items: center;
-  color: var(--b);
-  background: var(--v50);
-  border: 1px solid var(--v200);
-}
-.afi-mode__icon svg { width: 19px; height: 19px; }
-.afi-mode__body { min-width: 0; }
-.afi-mode__t {
-  margin: 0 0 5px;
-  font-size: 15.5px;
-  font-weight: 700;
-  letter-spacing: -0.015em;
-  color: var(--ink);
-}
-.afi-mode__d {
-  margin: 0;
-  font-size: 13.8px;
-  line-height: 1.6;
-  color: var(--body);
+/* Los anillos del cierre son puro adorno de fondo: en móvil estorban más
+   de lo que aportan. */
+@media (max-width: 767px) {
+  .dcaf-scene3 { display: none; }
 }
 
-/* ── Tarjetas de comisión por plan ───────────────────────────────────── */
-.afi-plans {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr));
-  gap: 18px;
-  margin-top: 22px;
+/* ── Movimiento reducido: las tres escenas se congelan ─────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  html:has(.dcaf-root) { scroll-behavior: auto; }
+  .dcaf-root *,
+  .dcaf-root *::before,
+  .dcaf-root *::after {
+    animation: none !important;
+    transition: none !important;
+  }
 }
-.afi-plan {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  padding: 22px;
-  border: 1px solid var(--line);
-  border-radius: var(--r-lg);
-  background: var(--card);
-  box-shadow: var(--sh-sm);
-  min-width: 0;
-  transition: border-color .16s ease, box-shadow .16s ease;
-}
-.afi-plan:hover {
-  border-color: var(--v200);
-  box-shadow: var(--sh);
-}
-.afi-plan__name {
-  margin: 0;
-  font-size: 19px;
-  font-weight: 700;
-  letter-spacing: -0.02em;
-  color: var(--ink);
-  overflow-wrap: anywhere;
-}
-.afi-plan__price {
-  margin: 4px 0 0;
-  font-size: 12.6px;
-  color: var(--muted);
-}
-.afi-plan__price b {
-  color: var(--ink);
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
-}
-.afi-plan__box {
-  padding: 15px 16px;
-  border: 1px solid var(--line);
-  border-radius: var(--r);
-  background: var(--tint2);
-  min-width: 0;
-}
-.afi-plan__box--main {
-  border-color: var(--v200);
-  background:
-    radial-gradient(130% 150% at 0% 0%, var(--v50) 0%, transparent 62%),
-    var(--card);
-}
-.afi-plan__kicker {
-  font-size: 11.4px;
-  font-weight: 700;
-  letter-spacing: .06em;
-  text-transform: uppercase;
-  color: var(--muted);
-}
-.afi-plan__box--main .afi-plan__kicker { color: var(--b2); }
-.afi-plan__amount {
-  margin: 6px 0 0;
-  font-size: clamp(23px, 4.2vw, 29px);
-  font-weight: 700;
-  letter-spacing: -0.03em;
-  line-height: 1.1;
-  color: var(--ink);
-  font-variant-numeric: tabular-nums;
-  overflow-wrap: anywhere;
-}
-.afi-plan__box--main .afi-plan__amount { color: var(--b-ink); }
-.afi-plan__amount small {
-  font-size: 14px;
-  font-weight: 600;
-  letter-spacing: -0.01em;
-  color: var(--muted);
-}
-.afi-plan__note {
-  margin: 6px 0 0;
-  font-size: 12.5px;
-  line-height: 1.5;
-  color: var(--muted);
-}
-.afi-plan__or {
-  text-align: center;
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: .12em;
-  text-transform: uppercase;
-  color: var(--faint);
-}
-
-/* ── Aviso honesto (el arranque de la comisión) ──────────────────────── */
-.afi-notice {
-  margin-top: 26px;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 14px;
-  align-items: flex-start;
-  padding: clamp(16px, 3vw, 24px);
-  border: 1px solid var(--v200);
-  border-radius: var(--r);
-  background:
-    radial-gradient(120% 140% at 100% 0%, var(--v50) 0%, transparent 60%),
-    var(--card);
-  box-shadow: var(--sh-sm);
-}
-.afi-notice svg {
-  flex: none;
-  width: 22px;
-  height: 22px;
-  margin-top: 2px;
-  color: var(--b);
-}
-.afi-notice__body { flex: 1 1 260px; min-width: 0; }
-.afi-notice__t {
-  margin: 0 0 6px;
-  font-size: 16px;
-  font-weight: 700;
-  letter-spacing: -0.015em;
-  color: var(--ink);
-}
-.afi-notice__p {
-  margin: 0;
-  font-size: 14.2px;
-  line-height: 1.6;
-  color: var(--body);
-}
-
-/* ── Calculadora ─────────────────────────────────────────────────────── */
-/* El nav es sticky (68px de alto): sin este margen el ancla #calculadora
-   deja el encabezado de la sección escondido debajo de la barra. */
-.afi-calc-section { scroll-margin-top: 88px; }
-
-.afi-calc {
-  margin: 40px auto 0;
-  max-width: 940px;
-  border: 1px solid var(--line);
-  border-radius: var(--r-lg);
-  background: var(--card);
-  box-shadow: var(--sh);
-  overflow: hidden;
-}
-.afi-calc__head {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 10px;
-  padding: 16px clamp(16px, 3vw, 26px);
-  border-bottom: 1px solid var(--line);
-  background: var(--tint2);
-}
-.afi-calc__headicon {
-  flex: none;
-  width: 18px;
-  height: 18px;
-  color: var(--b);
-}
-.afi-calc__title {
-  margin: 0;
-  font-size: 15.5px;
-  font-weight: 700;
-  letter-spacing: -0.01em;
-  color: var(--ink);
-}
-.afi-calc__badge {
-  margin-left: auto;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 5px 11px;
-  border-radius: 999px;
-  border: 1px solid var(--v200);
-  background: var(--card);
-  font-size: 12px;
-  font-weight: 650;
-  color: var(--b2);
-  white-space: nowrap;
-}
-.afi-calc__badge svg { width: 13px; height: 13px; }
-.afi-calc__body { padding: clamp(16px, 3vw, 26px); }
-
-.afi-calc__rows {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-.afi-calc__row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 12px;
-  padding: 13px 15px;
-  border: 1px solid var(--line);
-  border-radius: var(--r);
-  background: var(--card);
-  min-width: 0;
-}
-.afi-calc__rowinfo { flex: 1 1 190px; min-width: 0; }
-.afi-calc__rowname {
-  display: block;
-  font-size: 15px;
-  font-weight: 650;
-  letter-spacing: -0.01em;
-  color: var(--ink);
-  cursor: pointer;
-}
-.afi-calc__rowmeta {
-  display: block;
-  margin-top: 2px;
-  font-size: 12.5px;
-  line-height: 1.5;
-  color: var(--muted);
-  font-variant-numeric: tabular-nums;
-}
-
-.afi-stepper {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex: none;
-  margin-left: auto;
-}
-.afi-stepper__btn {
-  width: 38px;
-  height: 38px;
-  flex: none;
-  display: grid;
-  place-items: center;
-  border-radius: 11px;
-  border: 1px solid var(--line);
-  background: var(--card);
-  color: var(--ink);
-  cursor: pointer;
-  transition: border-color .15s ease, background .15s ease, color .15s ease;
-}
-.afi-stepper__btn svg { width: 17px; height: 17px; }
-.afi-stepper__btn:hover:not(:disabled) {
-  border-color: var(--v200);
-  background: var(--v50);
-  color: var(--b2);
-}
-.afi-stepper__btn:disabled { opacity: .45; cursor: not-allowed; }
-.afi-stepper__btn:focus-visible {
-  outline: none;
-  border-color: var(--b);
-  box-shadow: 0 0 0 3px rgba(124, 58, 237, .15);
-}
-.afi-stepper__input {
-  width: 74px;
-  height: 38px;
-  min-width: 0;
-  padding: 0 6px;
-  text-align: center;
-  border-radius: 11px;
-  border: 1px solid var(--line);
-  background: var(--card);
-  color: var(--ink);
-  font-size: 15px;
-  font-weight: 700;
-  font-family: inherit;
-  font-variant-numeric: tabular-nums;
-  transition: border-color .15s ease, box-shadow .15s ease;
-}
-.afi-stepper__input:focus {
-  outline: none;
-  border-color: var(--b);
-  box-shadow: 0 0 0 3px rgba(124, 58, 237, .15);
-}
-
-.afi-results {
-  margin-top: 22px;
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
-  gap: 14px;
-}
-.afi-result {
-  padding: 16px 18px;
-  border-radius: var(--r);
-  border: 1px solid var(--line);
-  background: var(--tint2);
-  min-width: 0;
-}
-.afi-result--hero {
-  border-color: var(--v200);
-  background:
-    radial-gradient(130% 150% at 0% 0%, var(--v50) 0%, transparent 62%),
-    var(--card);
-}
-.afi-result__label {
-  margin: 0 0 6px;
-  font-size: 12.2px;
-  font-weight: 650;
-  letter-spacing: .02em;
-  text-transform: uppercase;
-  color: var(--muted);
-}
-.afi-result--hero .afi-result__label { color: var(--b2); }
-.afi-result__value {
-  margin: 0;
-  font-size: clamp(23px, 4.4vw, 30px);
-  font-weight: 700;
-  letter-spacing: -0.03em;
-  line-height: 1.08;
-  color: var(--ink);
-  font-variant-numeric: tabular-nums;
-  overflow-wrap: anywhere;
-}
-.afi-result--hero .afi-result__value {
-  font-size: clamp(28px, 6vw, 42px);
-  color: var(--b-ink);
-}
-.afi-result__sub {
-  margin: 7px 0 0;
-  font-size: 12.6px;
-  line-height: 1.5;
-  color: var(--muted);
-}
-
-.afi-calc__empty {
-  margin-top: 22px;
-  padding: 28px 20px;
-  text-align: center;
-  border: 1px dashed var(--v200);
-  border-radius: var(--r);
-  background: var(--v50);
-  color: var(--body);
-  font-size: 14.2px;
-  line-height: 1.6;
-}
-.afi-calc__foot {
-  margin-top: 18px;
-  display: flex;
-  flex-direction: column;
-  gap: 9px;
-}
-.afi-note {
-  margin: 0;
-  font-size: 13.4px;
-  line-height: 1.6;
-  color: var(--body);
-}
-.afi-note b { color: var(--ink); font-weight: 700; }
-.afi-disclaimer {
-  margin: 0;
-  font-size: 12.5px;
-  line-height: 1.55;
-  color: var(--faint);
-}
-.afi-calc__cta {
-  margin-top: 20px;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 12px;
-}
-
-/* ── Cómo funciona ───────────────────────────────────────────────────
-   `.mfh-fgrid` es de 3 columnas fijas y aquí son 4 pasos: el cuarto se
-   quedaba solo en su renglón. Se reemplaza por auto-fit; el prefijo `.mfh`
-   sube la especificidad (0,2,0) para ganarle también a los @media de
-   sales.css sin recurrir a !important. */
-.mfh .afi-steps {
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 232px), 1fr));
-}
-
-/* Numerito de fondo dentro de `.mfh-feature` (ya es position:relative). */
-.afi-step__n {
-  position: absolute;
-  top: 14px;
-  right: 18px;
-  font-size: 34px;
-  font-weight: 800;
-  letter-spacing: -0.05em;
-  line-height: 1;
-  color: var(--v100);
-  pointer-events: none;
-}
-
-/* ── Lista de lo que ya existe en el panel ───────────────────────────── */
-.afi-list {
-  margin: 34px auto 0;
-  max-width: 880px;
-  padding: 0;
-  list-style: none;
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
-  gap: 11px 24px;
-}
-.afi-list li {
-  display: flex;
-  gap: 10px;
-  align-items: flex-start;
-  font-size: 14.2px;
-  line-height: 1.55;
-  color: var(--body);
-  min-width: 0;
-}
-.afi-list svg {
-  flex: none;
-  width: 18px;
-  height: 18px;
-  margin-top: 2px;
-  color: var(--b);
-}
-.afi-list b { color: var(--ink); font-weight: 650; }
-
-/* ── Para quién es ───────────────────────────────────────────────────── */
-.afi-who {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr));
-  gap: 16px;
-  margin-top: 40px;
-}
-.afi-who__item {
-  display: flex;
-  gap: 13px;
-  align-items: flex-start;
-  padding: 20px;
-  border: 1px solid var(--line);
-  border-radius: var(--r);
-  background: var(--card);
-  box-shadow: var(--sh-sm);
-  min-width: 0;
-}
-.afi-who__icon {
-  width: 40px;
-  height: 40px;
-  flex: none;
-  border-radius: 12px;
-  display: grid;
-  place-items: center;
-  color: var(--b);
-  background: var(--v50);
-  border: 1px solid var(--v200);
-}
-.afi-who__icon svg { width: 19px; height: 19px; }
-.afi-who__body { min-width: 0; }
-.afi-who__t {
-  margin: 0 0 4px;
-  font-size: 14.8px;
-  font-weight: 700;
-  letter-spacing: -0.01em;
-  color: var(--ink);
-}
-.afi-who__d {
-  margin: 0;
-  font-size: 13px;
-  line-height: 1.55;
-  color: var(--muted);
-}
-.afi-honest {
-  margin: 26px auto 0;
-  max-width: 720px;
-  text-align: center;
-  font-size: 13.6px;
-  line-height: 1.6;
-  color: var(--muted);
-}
-
-/* ── FAQ ─────────────────────────────────────────────────────────────
-   Las respuestas del programa son más largas que las de la home y el
-   max-height de 320px de sales.css las cortaba a media frase. La
-   especificidad extra del wrapper `.afi-faq` gana sin `!important`. */
-.afi-faq .mfh-faq__item[data-open="true"] .mfh-faq__a { max-height: 480px; }
-
-/* ── Enlace a los términos, bajo el CTA final ────────────────────────── */
-.afi-terms {
-  margin: 18px 0 0;
-  text-align: center;
-  font-size: 13.4px;
-  line-height: 1.6;
-  color: var(--muted);
-}
-.afi-terms a {
-  color: var(--b2);
-  font-weight: 650;
-  text-decoration: none;
-}
-.afi-terms a:hover { text-decoration: underline; }

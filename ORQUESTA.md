@@ -2994,3 +2994,129 @@ quieres que las solicitudes lleguen a otra dirección (o a varias, si el proveed
 5. **A prueba de fallos** — con `RESEND_API_KEY` ausente o inválida, el registro y la aprobación
    deben seguir funcionando igual (en los logs sale `[email stub]` o el error de Resend, pero la
    operación se completa).
+
+---
+
+# Landing pública de afiliados — rediseño (diseño `Afiliados-DaleControl.dc.html`)
+
+Se reemplazó **el contenido visual completo** de `/afiliados` por el diseño que aprobó Rafael.
+Sin SQL, sin cambios de schema, sin dependencias nuevas. Build verde y en `main`.
+
+## Qué se reemplazó y dónde quedó cada pieza
+
+| Pieza | Archivo |
+|---|---|
+| Página entera (10 secciones, JSON-LD, FAQ nativo) | `src/app/afiliados/page.tsx` |
+| Calculadora con slider de horizonte (client) | `src/components/afiliados/landing/calculadora.tsx` |
+| Las 3 escenas 3D en CSS puro | `src/components/afiliados/landing/escenas.tsx` *(nuevo)* |
+| Keyframes, hover/focus, media queries, reset | `src/app/afiliados/afiliados.css` *(reescrito)* |
+| Variante `affiliate` del nav compartido | `src/components/public/landing/sales/nav.tsx` + `nav-session.tsx` |
+| Acordeón viejo (`.mfh-faq`) | **borrado** — `faq-afiliados.tsx` quedó huérfano al pasar a `<details>` nativo |
+
+El orden de las secciones es el del diseño: hero → "No es cuánto pagamos" → #comisiones →
+#calculadora → tres perfiles → #como-funciona → qué recibes → para quién es → #faq → cierre.
+Los cuatro ids de ancla se conservan tal cual.
+
+### Lo que se preservó de la página anterior
+`revalidate = 300`, el `buildMetadata` completo (title/description/keywords/ogImage),
+los tres bloques de JSON-LD, `getPublicOffer()` como única fuente de montos, `SalesNavSession`
+y `SalesFooter`, y los 6 CTAs a `/afiliados/registro` + 2 a `/afiliados/login` + los enlaces a
+`/terminos-afiliados`. Verificado en el DOM ya renderizado: 6 / 2 / 3 (el tercero de términos lo
+aporta la columna Legal del footer compartido, como antes).
+
+### Nav
+El diseño traía nav propio. En vez de duplicarlo se le agregó a `SalesNav` una bandera
+**opcional** `affiliate` que sólo usa esta página: cambia el grupo de la derecha por
+"Ya soy afiliado" + "Registrarme gratis" y agrega la píldora "Afiliados" junto al logo.
+Sin la bandera el nav es idéntico al de siempre — verificado en `/` después del cambio:
+anclas, "Soy paciente", "Iniciar sesión" y "Crear cuenta" intactos.
+
+## Cero montos escritos a mano
+
+Éste era el requisito duro y se cumplió al 100%. Auditoría: no existe **ni un solo** literal
+`$<dígito>` en los tres archivos nuevos (los dos únicos hits del grep son comentarios).
+Las 23 cifras distintas que la página imprime salen todas de `getPublicOffer()`:
+
+- **Tarjetas de plan** — los 6 montos y los 3 precios, directo de la config.
+- **Escena 3D #1 (prisma)** — las caras `$40 / $90 / $250` se construyen recorriendo
+  `offer.plans`; si un plan se apaga, esa cara se sustituye sola por una de herramienta.
+- **Escena 3D #2 (pila)** — las 4 tarjetas y el total "$470" se suman de la config.
+- **"No es cuánto pagamos"** — `$650` vs `$3,150` calculados; **la altura de las dos barras
+  también** (31px y 150px salen de la proporción, no del diseño).
+- **Los 3 perfiles** — `$880 / $1,250 / $540`, los chips de desglose y los acumulados
+  `$30,800 / $43,750 / $18,900` se calculan desde `mix` + config. Cada total cuadra con su
+  propia composición (8×Pro+4×Básico = 880 ✓, 5×Clínica = 1250 ✓, 6×Pro = 540 ✓).
+- **Calculadora** — fórmula del diseño íntegra, con los montos parametrizados.
+
+**El "−1" tampoco está escrito.** Sale de `startAtInvoiceNo − 1`, así que si mueves el arranque
+en /admin cambian a la vez la fórmula de la calculadora, la nota "(12 × 5 − 1)", el pie de los
+perfiles, el texto de "35 cobros" y la redacción del FAQ — y si lo pones en 1, las frases pasan
+solas a "cada cobro comisiona", sin `− 0` huérfano.
+
+## Textos que hubo que ajustar para que coincidan con el sistema
+
+Se auditaron las 13 afirmaciones del diseño contra el código. Nueve eran correctas tal cual.
+Estas cuatro se corrigieron:
+
+1. **Cupón** — el diseño decía que el código "cuenta la venta aunque no usen tu link", a secas.
+   En realidad el afiliado lo *solicita* y nace **inactivo** hasta que un admin lo activa
+   (`api/afiliados/coupon/route.ts:101`). Ahora dice *"Al activarlo, tu código acredita la
+   venta…"*, tanto en la tarjeta de herramientas como en el paso 3.
+2. **Método de cobro** — el diseño afirmaba que se elige SPEI o PayPal al registrarse. El campo
+   es **opcional** y trae "Lo defino después". El paso 1 ahora dice *"…o lo defines después"*, y
+   el FAQ agrega que se puede cambiar cuando quieras desde el panel (sí existe: PATCH
+   `/api/afiliados/me`).
+3. **Autorreferido** — "el sistema bloquea el autorreferido" era más fuerte que la
+   implementación: la validación compara **el correo**. El FAQ ahora dice *"Si el alta usa tu
+   propio correo, el sistema anula la atribución y esa venta no genera comisión"*.
+4. **Cambio de modalidad** — el diseño lo daba por hecho, pero depende de
+   `cfg.allowAffiliateChoice`; con la bandera apagada el endpoint responde 403. El FAQ y el
+   aviso de la sección de comisiones ahora se redactan solos según esa bandera.
+
+Además, el paso 5 ("Sigues todo desde tu panel") dejó de prometer *"en tiempo real"* —los datos
+se refrescan al cargar, no hay push— y ahora enumera lo que el panel sí muestra
+(clics, altas, activas, pagando, PDF y proyección).
+
+Nota: **el kit de materiales sí existe** y es más completo de lo que decía el diseño
+(`src/lib/affiliates-marketing-content.ts`: 8 copys, 6 objeciones, 6 plantillas, logo SVG), así
+que ese texto se conservó y se detalló.
+
+**El JSON-LD se actualizó junto con la FAQ.** El diseño cambió preguntas y respuestas, así que el
+`FAQPage` se regeneró del mismo array que pinta el acordeón. Verificado en el DOM renderizado:
+11 preguntas y 11 respuestas, coincidencia carácter por carácter entre el marcado y lo visible.
+
+## Rendimiento y responsive
+
+- `/afiliados` sigue siendo **estática (`○`)** con ISR: 6.51 kB de ruta, **206 kB** de First Load
+  JS — por debajo de la home (213 kB). Al quitar los ~22 iconos de `lucide-react` y pasar todo a
+  SVG inline, la página pesa menos que antes del rediseño.
+- Sin librerías nuevas, sin WebGL, sin imágenes remotas, sin fuentes extra: `Inter` se declara
+  con **los mismos pesos que la landing v4 (400–800)**, así que next/font sirve el archivo que
+  la home ya tiene en caché.
+- Las 3 escenas animan **sólo `transform`** (cero reflow), llevan `aria-hidden` y se congelan
+  enteras bajo `prefers-reduced-motion`.
+- **Verificado a 375px en el navegador**: `scrollWidth === clientWidth`, o sea **cero
+  desbordamiento horizontal**. Los 3 breakpoints disparan bien (escena 1 a `scale(.72)`, escena 3
+  oculta, píldora del nav oculta), las 3 tarjetas de plan se apilan y la calculadora cae a una
+  columna. Los 6 botones ± miden **exactamente 44×44**, y las 4 etiquetas de la calculadora
+  apuntan a un input real.
+- Namespace `dcaf-` en todas las clases y keyframes (`dcafSpin/Sway/Ring/RingRev/Float`): no
+  choca con los `dcSpinB/dcPulse/dcMarquee` de `landing-v2.css`, que convive en la misma página.
+  No se tocó `globals.css` ni `landing-v2.css`.
+
+## Qué debe revisar Rafael en prod
+
+1. **Que los montos vivos se vean bien.** El build corrió sin BD, así que todo lo que verifiqué
+   usa los defaults del motor (40/90/250, 350/650/1400) y los precios de respaldo
+   (419/689/1719) — que resultan idénticos a los del diseño. En prod los lee de
+   `affiliate_payout_config` y `plan_configs`: vale la pena mirar que las 23 cifras cuadren.
+2. **Mover un monto en /admin** y confirmar que en ≤5 min (ISR) cambian a la vez las tarjetas,
+   el prisma, la pila, la comparación, los 3 perfiles y la calculadora.
+3. **Migraciones**: la página afirma cosas que dependen de `sql/afiliados-ventas.sql`,
+   `afiliados-equipo.sql` y `afiliados-comisiones.sql`. Si alguna no está aplicada en prod, esas
+   promesas (links por campaña, cupón, equipo, elegir modalidad) son ciertas en el código pero
+   no en la práctica. Conviene confirmarlo contra la BD.
+4. **Los 10 días de pago** son un compromiso de los términos, no una automatización: no hay nada
+   en el código que dispare el pago en esa ventana; el admin lo marca a mano.
+5. La rama de trabajo era `feat/landing-v4`; Vercel **no compila ramas `feat/*`**, así que la
+   verificación se hizo en local con `next start` y el push fue directo a `main`.
