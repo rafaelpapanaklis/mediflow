@@ -3324,3 +3324,71 @@ La columna de la derecha es la tabla pedida (1 Básico + 3 Profesional = 1×80 +
 los montos de hoy en la BD): mismos cobros verificados, otro multiplicando. Los montos siguen
 llegando por props desde `getPublicOffer()` — ni uno escrito a mano — y el componente sigue
 importando sólo de `payout-core`.
+
+---
+
+## [Calculadora de afiliados · el eje cuenta meses COBRANDO] — 2026-08-02
+
+Cambio de **semántica del horizonte**, no de diseño. Antes el escalón medía tiempo desde el alta
+de la clínica y por eso la fórmula restaba un cobro (`meses − 1`): el primer mes de la clínica es
+promocional y no comisiona. Efecto feo: el escalón de "1 mes" daba **$0**.
+
+Ahora el escalón mide **cuántos meses lleva cobrando el afiliado**. El mes 1 del eje ya es su
+primer cobro real (que en la vida de la clínica es el segundo). Las etiquetas visibles no
+cambian; lo que cambió es dónde empieza a contar el eje.
+
+    acumulado = mensual × mesesDelEscalón        (antes: mensual × (meses − 1))
+
+Un solo archivo: `src/components/afiliados/landing/calculadora.tsx`.
+
+### Qué se movió
+
+- **Fuera el −1** del acumulado y de cada barra del gráfico. La granularidad no cambia: barras
+  por mes hasta 1 año (1, 6 y 12) y por año de 3 en adelante (3, 5 y 10).
+- **Fuera el caso especial de $0** ("Todavía $0 — tu primera comisión llega con el segundo
+  cobro"): con la fórmula nueva ningún escalón da cero, así que sobraba.
+- **Default: 6 meses** (antes 1 año).
+- **La fórmula visible es directa**: *"Cálculo: $500 al mes × 6 cobros = $3,000."* Ya no habla de
+  "12 × años − 1".
+- **El pie del eje dice "meses cobrando" / "años cobrando"**, para que el origen no quede a
+  interpretación.
+
+### La regla se sigue diciendo
+
+Correrle el origen al eje no puede servir para esconder que el mes promocional no comisiona.
+Debajo del resultado, a la vista: *"El conteo empieza en tu primer cobro, que llega con el
+segundo mes de la clínica: el primero entra con precio promocional y no comisiona."*
+
+El texto sale de `cobrosSinComision` (`startAtInvoiceNo − 1`), que ya no entra en la fórmula pero
+sigue mandando en la nota: con el arranque en 1 la nota desaparece sola, y con 2 o más el plural
+se ajusta. El ordinal ("segundo mes") se deriva, no se teclea.
+
+### ⚠️ Esto es la landing, no el motor
+
+`payout-core.ts` y el webhook **no se tocaron**: ahí el primer cobro de cada clínica sigue sin
+comisionar. Lo que cambió es dónde arranca el eje de una estimación para el visitante. Queda
+anotado en la cabecera del componente para que nadie confunda las dos cosas.
+
+### Verificación
+
+`npm run build` completo y verde: 360/360 páginas, 0 errores de tipos. `/afiliados` sigue
+estática, 7.09 kB de ruta / 207 kB First Load (bajó 0.15 kB al quitar el caso especial).
+
+Los seis escalones, probados en la página real con `next start` (sin BD → montos por defecto del
+motor, mensual $310). Lo verificado es el **multiplicador**, que salió exacto —1, 6, 12, 36, 60 y
+120, sin restas—:
+
+| Escalón | Cobros | Local (mensual $310) | Con los montos vivos (mensual $500) |
+|---|---|---|---|
+| 1 mes | 1 | $310 | **$500** |
+| 6 meses ← default | 6 | $1,860 | **$3,000** |
+| 1 año | 12 | $3,720 | **$6,000** |
+| 3 años | 36 | $11,160 | **$18,000** |
+| 5 años | 60 | $18,600 | **$30,000** |
+| 10 años | 120 | $37,200 | **$60,000** |
+
+También verificado: el pago único NO cambia entre escalones ($2,300 en los seis), la frase que
+compara ambas modalidades sigue hablando del horizonte elegido (y el mes de cruce ahora se
+calcula sobre el eje nuevo: `ceil(único / mensual)`, sin el arranque), y ya no aparece ningún
+"$0" en toda la calculadora. Los chips, el slider, su sincronización y la accesibilidad quedaron
+intactos.

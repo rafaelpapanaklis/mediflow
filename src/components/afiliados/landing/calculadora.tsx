@@ -7,6 +7,17 @@
  * acumulado del fijo recurrente contra el pago único y una barra por mes o
  * por año según el escalón.
  *
+ * QUÉ MIDE EL EJE: meses que el AFILIADO lleva COBRANDO, no meses desde que
+ * la clínica se dio de alta. El mes 1 del eje ya es su primer cobro real (que
+ * en la vida de la clínica es su segundo mes, porque el primero entra con
+ * precio promocional). Por eso aquí no hay ningún "−1": el descuento ya está
+ * hecho en el punto de partida del eje. La regla se dice igual, en la nota
+ * bajo el resultado — correrle el origen al eje no sirve para esconderla.
+ *
+ * ESTO NO ES EL MOTOR. Es la estimación que ve un visitante. Las comisiones
+ * reales las calcula `payout-core`/el webhook, donde el primer cobro de cada
+ * clínica sigue sin comisionar. Cambiar esta pantalla no mueve un peso.
+ *
  * CORTE SERVER/CLIENT (la razón de que exista payout-core):
  * este componente importa SÓLO de `@/lib/affiliates/payout-core` —módulo
  * puro, sin Prisma—. Importar `payout.ts` o `public-offer.ts` desde aquí
@@ -40,14 +51,15 @@ export interface CalculadoraAfiliadosProps {
   plans: PlanRow[];
   /**
    * Cobros de cada clínica que NO comisionan (el mes promocional). Sale de
-   * `startAtInvoiceNo − 1`: si el admin mueve el arranque, el "−1" de la
-   * fórmula lo sigue solo.
+   * `startAtInvoiceNo − 1`. Ya NO entra en la fórmula —el eje arranca en el
+   * primer cobro que sí comisiona—, pero sigue mandando en la nota: si el
+   * admin mueve el arranque, el texto lo sigue solo.
    */
   cobrosSinComision: number;
   /**
-   * Horizonte inicial en MESES. Se ajusta al escalón más cercano; por defecto
-   * 1 año, que es el más creíble de entrada y deja que la persona descubra el
-   * efecto acumulado moviendo el control.
+   * Horizonte inicial en MESES COBRADOS. Se ajusta al escalón más cercano; por
+   * defecto 6 meses, un plazo corto y creíble que deja descubrir el efecto
+   * acumulado moviendo el control.
    */
   mesesIniciales?: number;
 }
@@ -55,9 +67,10 @@ export interface CalculadoraAfiliadosProps {
 const MAX_CLINICAS = 99;
 
 /**
- * Los seis escalones del horizonte. El estado es el ÍNDICE de este array, no
- * los meses: así los saltos del slider son PAREJOS aunque los valores no lo
- * sean (de 1 a 6 meses y de 5 a 10 años miden lo mismo en la barra).
+ * Los seis escalones del horizonte, en MESES COBRADOS. El estado es el ÍNDICE
+ * de este array, no los meses: así los saltos del slider son PAREJOS aunque
+ * los valores no lo sean (de 1 a 6 meses y de 5 a 10 años miden lo mismo en la
+ * barra). Las etiquetas no cambian: lo que cambió es dónde empieza a contar.
  */
 const PASOS = [
   { meses: 1, label: "1 mes" },
@@ -68,8 +81,8 @@ const PASOS = [
   { meses: 120, label: "10 años" },
 ] as const;
 
-/** Índice de "1 año". */
-const PASO_DEFAULT = 2;
+/** Índice de "6 meses". */
+const PASO_DEFAULT = 1;
 
 /** Escalón más cercano a unos meses dados (el prop nunca tiene que ser exacto). */
 function indiceDePaso(meses: number): number {
@@ -96,14 +109,15 @@ function fmtMxn(n: number): string {
 }
 
 /**
- * "El cobro en el que arranca la comisión", en palabras. Se deriva del arranque
- * configurado (`cobrosSinComision + 1`): el número jamás se escribe a mano.
+ * "El mes de la clínica en el que llega tu primer cobro", en palabras. Se
+ * deriva del arranque configurado (`cobrosSinComision + 1`): el número jamás
+ * se escribe a mano.
  */
-function cobroOrdinal(n: number): string {
-  if (n <= 1) return "primer cobro";
-  if (n === 2) return "segundo cobro";
-  if (n === 3) return "tercer cobro";
-  return `cobro número ${n}`;
+function mesOrdinal(n: number): string {
+  if (n <= 1) return "primer mes";
+  if (n === 2) return "segundo mes";
+  if (n === 3) return "tercer mes";
+  return `mes número ${n}`;
 }
 
 function clampN(v: number, min: number, max: number): number {
@@ -141,8 +155,10 @@ export function CalculadoraAfiliados({
   if (rows.length === 0) return null;
 
   // ── Matemática del diseño, con los montos de la config ──────────────────
-  // El "−cobrosSinComision" es el mes promocional de cada clínica: ese cobro
-  // entra con precio de promoción y por eso no genera comisión.
+  // `cobrosSinComision` es el mes promocional de cada clínica: ese cobro entra
+  // con precio de promoción y no genera comisión. NO se resta del acumulado —
+  // el eje ya arranca en el primer cobro que sí comisiona—, pero es lo que
+  // manda en la nota que lo explica.
   const skip =
     Number.isFinite(cobrosSinComision) && cobrosSinComision > 0
       ? Math.round(cobrosSinComision)
@@ -156,12 +172,12 @@ export function CalculadoraAfiliados({
     unico += n * p.oneTimeMxn;
   }
 
-  // El horizonte llega en MESES desde el escalón; el acumulado sale de los
-  // cobros que de verdad comisionan.
+  // El escalón YA viene en meses cobrando, así que cada mes del horizonte es un
+  // cobro: sin restas.
   const paso = PASOS[pasoIdx] ?? PASOS[PASO_DEFAULT];
   const horizonteMeses = paso.meses;
   const horizonteLabel = paso.label;
-  const cobros = Math.max(0, horizonteMeses - skip);
+  const cobros = horizonteMeses;
   const acum = monthly * cobros;
   const diff = acum - unico;
   const max = Math.max(acum, unico, 1);
@@ -175,7 +191,7 @@ export function CalculadoraAfiliados({
   if (monthly > 0) {
     for (let i = 1; i <= nBars; i++) {
       const mesesHasta = barPorMes ? i : i * 12;
-      const v = monthly * Math.max(0, mesesHasta - skip);
+      const v = monthly * mesesHasta;
       bars.push({
         i,
         pct: Math.max((v / max) * 100, 2).toFixed(1),
@@ -192,15 +208,11 @@ export function CalculadoraAfiliados({
   // al otro lado de la línea.
   const etiquetaUnicoArriba = Number(linePct) < 80;
   const hasData = monthly > 0 || unico > 0;
-  // Horizonte tan corto que ningún cobro comisiona todavía (con el arranque de
-  // hoy, el escalón de 1 mes). El $0 es real y no se maquilla, pero se explica.
-  const sinCobros = cobros === 0;
-  const primerCobroLabel = cobroOrdinal(skip + 1);
 
-  // Mes en el que el fijo recurrente alcanza al pago único. Es lo que convierte
-  // una diferencia negativa en información útil en vez de un "vas perdiendo".
-  const mesCruce =
-    monthly > 0 && unico > 0 ? skip + Math.ceil(unico / monthly) : null;
+  // Mes —del eje, o sea cobrando— en el que el fijo recurrente alcanza al pago
+  // único. Es lo que convierte una diferencia negativa en información útil en
+  // vez de un "vas perdiendo".
+  const mesCruce = monthly > 0 && unico > 0 ? Math.ceil(unico / monthly) : null;
   const cruceLabel =
     mesCruce === null
       ? null
@@ -208,28 +220,22 @@ export function CalculadoraAfiliados({
         ? `mes ${mesCruce} (año ${Math.ceil(mesCruce / 12)})`
         : `mes ${mesCruce}`;
 
-  // La fórmula habla en la unidad del escalón elegido: "6 meses − 1" cuando se
-  // eligieron 6 meses, "12 × 3 − 1" cuando se eligieron 3 años.
-  const baseFormula =
-    horizonteMeses < 12
-      ? `${horizonteMeses} ${horizonteMeses === 1 ? "mes" : "meses"}`
-      : horizonteMeses === 12
-        ? "12 meses"
-        : `12 × ${Math.round(horizonteMeses / 12)}`;
+  // Sin restas que explicar: la cuenta es directa.
+  const formulaNota = `Cálculo: ${fmtMxn(monthly)} al mes × ${cobros} ${
+    cobros === 1 ? "cobro" : "cobros"
+  } = ${fmtMxn(acum)}.`;
 
-  // La nota tiene que seguir al arranque configurado: con 0 no hay "−0" que
-  // explicar, y con 2 o más el plural cambia.
-  const notaSkip =
-    skip === 1
-      ? "El −1 es el primer cobro de cada clínica, que no comisiona por ser su mes promocional."
-      : `Los −${skip} son los primeros cobros de cada clínica, que no comisionan por ser promocionales.`;
-
-  const formulaNota =
+  // El origen del eje NO sirve para esconder la regla: se dice aquí, corta y a
+  // la vista. Con el arranque en el primer cobro (skip 0) no hay nada que
+  // advertir; con 2 o más, el plural cambia.
+  const notaArranque =
     skip === 0
-      ? `Cálculo: ${fmtMxn(monthly)} × ${cobros} cobros por clínica (${baseFormula}). Cada cobro de la clínica comisiona.`
-      : sinCobros
-        ? `Cálculo: ${baseFormula} − ${skip} = 0 cobros que comisionen. ${notaSkip}`
-        : `Cálculo: ${fmtMxn(monthly)} × ${cobros} cobros por clínica (${baseFormula} − ${skip}). ${notaSkip}`;
+      ? null
+      : `El conteo empieza en tu primer cobro, que llega con el ${mesOrdinal(skip + 1)} de la clínica: ${
+          skip === 1
+            ? "el primero entra con precio promocional y no comisiona"
+            : `los primeros ${skip} entran con precio promocional y no comisionan`
+        }.`;
 
   return (
     <div className="dcaf-calcgrid" style={{ marginTop: 40 }}>
@@ -380,20 +386,11 @@ export function CalculadoraAfiliados({
               {fmtMxn(acum)}
             </div>
             <div style={{ fontSize: 13, color: "#475569", marginTop: 2 }}>
-              {sinCobros && monthly > 0 ? (
-                <>
-                  Todavía $0 en {horizonteLabel} — tu primera comisión llega con el{" "}
-                  {primerCobroLabel} de la clínica. A partir de ahí, {fmtMxn(monthly)} al mes
-                  con todas activas.
-                </>
-              ) : (
-                <>
-                  acumulado en {horizonteLabel} · {fmtMxn(monthly)} al mes con todas activas
-                </>
-              )}
+              cobrando {horizonteLabel} · {fmtMxn(monthly)} al mes con todas activas
             </div>
             <div style={{ fontSize: 12, color: "#64748b", marginTop: 12, borderTop: "1px dashed #bfdbfe", paddingTop: 10, lineHeight: 1.55 }}>
-              {formulaNota}
+              <p>{formulaNota}</p>
+              {notaArranque && <p style={{ marginTop: 6 }}>{notaArranque}</p>}
             </div>
           </div>
 
@@ -500,8 +497,10 @@ export function CalculadoraAfiliados({
                   </div>
                 ))}
               </div>
+              {/* El eje cuenta meses COBRANDO, no meses desde el alta de la
+                  clínica: el pie lo dice para que no quede a interpretación. */}
               <div style={{ textAlign: "center", fontSize: 11, color: "#cbd5e1", marginTop: 2 }}>
-                {barPorMes ? "meses del horizonte" : "años del horizonte"}
+                {barPorMes ? "meses cobrando" : "años cobrando"}
               </div>
             </>
           )}
