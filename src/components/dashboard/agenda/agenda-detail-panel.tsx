@@ -83,7 +83,15 @@ function patientInitials(name: string): string {
   return (parts[0]![0] + parts[parts.length - 1]![0]).toUpperCase();
 }
 
-export function AgendaDetailPanel() {
+interface AgendaDetailPanelProps {
+  /** Clinic.cfdiTaxMode ("exempt" | "iva16"), threaded desde el server component
+   *  de la agenda. Va hasta InvoiceDetailModal, que pre-llena con él el régimen
+   *  fiscal del timbrado de forma síncrona (obligatoria allá a propósito: sin
+   *  esto el cobro inline de la agenda timbraría con el default "exento"). */
+  clinicTaxMode: string | null;
+}
+
+export function AgendaDetailPanel({ clinicTaxMode }: AgendaDetailPanelProps) {
   const t = useT();
   const { state, selectAppointment, dispatch, invalidateRangeCache } = useAgenda();
   const router = useRouter();
@@ -504,6 +512,7 @@ export function AgendaDetailPanel() {
         patientName={appt.patient.name}
         onClose={() => setChargingInvoice(null)}
         onMutated={() => { invalidateRangeCache(); }}
+        clinicTaxMode={clinicTaxMode}
       />
     </aside>
   );

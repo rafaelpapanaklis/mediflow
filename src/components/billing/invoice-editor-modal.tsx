@@ -16,8 +16,9 @@ import { useState, useEffect, useMemo } from "react";
 import { Plus, Loader2, Trash2, Check, Search, User } from "lucide-react";
 import toast from "react-hot-toast";
 import { computeTotals, round2 } from "@/lib/quotes/compute";
-import { clinicInvoiceTaxDefaults, IVA_RATE, type CfdiTaxMode } from "@/lib/invoice-totals";
+import { clinicInvoiceTaxDefaults, IVA_RATE_PCT, type CfdiTaxMode } from "@/lib/invoice-totals";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { useT } from "@/i18n/i18n-provider";
 
 function money(n: number): string {
   const v = isFinite(Number(n)) ? Number(n) : 0;
@@ -94,6 +95,7 @@ function InvoiceEditorBody({
   onClose: () => void;
   onCreated: (invoice: any) => void;
 }) {
+  const t = useT();
   const [items, setItems] = useState<EditorItem[]>([]);
   const [discountMode, setDiscountMode] = useState<"none" | "pct" | "amount">("none");
   const [discountValue, setDiscountValue] = useState<number>(0);
@@ -202,9 +204,9 @@ function InvoiceEditorBody({
   const selectCls = "mt-1 w-full bg-background border border-border rounded-lg px-2 py-2 text-sm";
 
   async function save() {
-    if (!effectivePatientId) { toast.error("Elige un paciente."); return; }
+    if (!effectivePatientId) { toast.error(t("billing.invoiceEditor.errorNoPatient")); return; }
     const clean = items.filter((it) => it.name.trim().length > 0);
-    if (clean.length === 0) { toast.error("Agrega al menos un concepto."); return; }
+    if (clean.length === 0) { toast.error(t("billing.invoiceEditor.errorNoItems")); return; }
     setSaving(true);
     // Reusa la matemática autoritativa: normaliza líneas (lineTotal con descuento
     // de línea) y resuelve el descuento global %→monto. Así el server obtiene
@@ -243,12 +245,12 @@ function InvoiceEditorBody({
         body: JSON.stringify(payload),
       });
       const out = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(out.error || "No se pudo crear la factura");
-      toast.success("Factura creada: " + (out.invoiceNumber ?? ""));
+      if (!res.ok) throw new Error(out.error || t("billing.invoiceEditor.errorCreate"));
+      toast.success(t("billing.invoiceEditor.createdToast", { number: out.invoiceNumber ?? "" }));
       onCreated(out);
       // No reseteamos `saving`: el modal se cierra (open=false) y este cuerpo se desmonta.
     } catch (e) {
-      toast.error((e as Error).message || "No se pudo crear la factura");
+      toast.error((e as Error).message || t("billing.invoiceEditor.errorCreate"));
       setSaving(false);
     }
   }
@@ -257,7 +259,9 @@ function InvoiceEditorBody({
     <>
       <DialogHeader>
         <DialogTitle>
-          Nueva factura{effectivePatientName ? ` · ${effectivePatientName}` : ""}
+          {effectivePatientName
+            ? t("billing.invoiceEditor.titleWithPatient", { patient: effectivePatientName })
+            : t("billing.invoiceEditor.title")}
         </DialogTitle>
       </DialogHeader>
 
@@ -266,11 +270,11 @@ function InvoiceEditorBody({
         {!fixedPatient && (
           <div className="bg-card border border-border rounded-xl p-4 space-y-3">
             <div className="flex items-center justify-between gap-2">
-              <h3 className="text-xs font-bold">Paciente</h3>
+              <h3 className="text-xs font-bold">{t("billing.invoiceEditor.patient")}</h3>
               {pickedPatient && (
                 <button type="button" onClick={() => { setPickedPatient(null); setPatientQuery(""); }}
                   className="text-[11px] font-semibold text-brand-700 dark:text-brand-300">
-                  Cambiar
+                  {t("billing.invoiceEditor.changePatient")}
                 </button>
               )}
             </div>
@@ -285,13 +289,15 @@ function InvoiceEditorBody({
                 <input
                   value={patientQuery}
                   onChange={(e) => setPatientQuery(e.target.value)}
-                  placeholder="Buscar paciente por nombre o número…"
+                  placeholder={t("billing.invoiceEditor.patientSearchPlaceholder")}
                   className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm"
                 />
                 <div className="max-h-48 overflow-y-auto divide-y divide-border border border-border rounded-lg">
                   {patientMatches.length === 0 ? (
                     <p className="text-xs text-muted-foreground py-3 text-center">
-                      {(patients ?? []).length === 0 ? "No hay pacientes disponibles." : "Sin coincidencias."}
+                      {(patients ?? []).length === 0
+                        ? t("billing.invoiceEditor.noPatients")
+                        : t("billing.invoiceEditor.noPatientMatches")}
                     </p>
                   ) : patientMatches.map((p) => (
                     <button
@@ -312,15 +318,15 @@ function InvoiceEditorBody({
         {/* Conceptos */}
         <div className="bg-card border border-border rounded-xl p-4 space-y-3">
           <div className="flex items-center justify-between">
-            <h3 className="text-xs font-bold">Conceptos</h3>
+            <h3 className="text-xs font-bold">{t("billing.invoiceEditor.items")}</h3>
             <div className="flex items-center gap-2">
               <button type="button" onClick={() => setShowSearch((s) => !s)}
                 className="text-[11px] font-semibold text-brand-700 dark:text-brand-300 inline-flex items-center gap-1">
-                <Search size={13} /> Del tarifario
+                <Search size={13} aria-hidden /> {t("billing.invoiceEditor.fromCatalog")}
               </button>
               <button type="button" onClick={addBlank}
                 className="text-[11px] font-semibold text-muted-foreground hover:text-foreground inline-flex items-center gap-1">
-                <Plus size={13} /> Línea libre
+                <Plus size={13} aria-hidden /> {t("billing.invoiceEditor.freeLine")}
               </button>
             </div>
           </div>
@@ -331,12 +337,12 @@ function InvoiceEditorBody({
                 autoFocus
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="Buscar procedimiento…"
+                placeholder={t("billing.invoiceEditor.procedureSearchPlaceholder")}
                 className="w-full bg-background border border-border rounded-lg px-3 py-1.5 text-sm"
               />
               <div className="mt-2 max-h-56 overflow-y-auto divide-y divide-border">
                 {filtered.length === 0 ? (
-                  <p className="text-xs text-muted-foreground py-3 text-center">Sin coincidencias en el tarifario.</p>
+                  <p className="text-xs text-muted-foreground py-3 text-center">{t("billing.invoiceEditor.noCatalogMatches")}</p>
                 ) : filtered.map((p) => (
                   <button
                     key={p.id}
@@ -354,7 +360,7 @@ function InvoiceEditorBody({
 
           {items.length === 0 ? (
             <p className="text-xs text-muted-foreground py-4 text-center">
-              Agrega conceptos desde el tarifario o como línea libre.
+              {t("billing.invoiceEditor.emptyItems")}
             </p>
           ) : (
             <div className="space-y-2">
@@ -368,26 +374,28 @@ function InvoiceEditorBody({
                       <input
                         value={it.name}
                         onChange={(e) => patchItem(it.key, { name: e.target.value })}
-                        placeholder="Concepto"
+                        placeholder={t("billing.invoiceEditor.itemPlaceholder")}
                         className="flex-1 min-w-0 bg-transparent border-b border-border px-1 py-1 text-sm font-medium focus:border-brand-500 outline-none"
                       />
                       <button type="button" onClick={() => removeItem(it.key)}
+                        aria-label={t("billing.invoiceEditor.removeItem")}
+                        title={t("billing.invoiceEditor.removeItem")}
                         className="p-1 rounded text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/30 flex-shrink-0">
-                        <Trash2 size={14} />
+                        <Trash2 size={14} aria-hidden />
                       </button>
                     </div>
                     <div className="grid grid-cols-3 gap-2 mt-2">
-                      <Field label="Cant.">
+                      <Field label={t("billing.invoiceEditor.qty")}>
                         <input type="number" min={1} value={it.quantity}
                           onChange={(e) => patchItem(it.key, { quantity: Math.max(1, Math.floor(num(e.target.value))) })}
                           className={inputCls} />
                       </Field>
-                      <Field label="P. unitario">
+                      <Field label={t("billing.invoiceEditor.unitPrice")}>
                         <input type="number" min={0} step="0.01" value={it.unitPrice}
                           onChange={(e) => patchItem(it.key, { unitPrice: num(e.target.value) })}
                           className={inputCls} />
                       </Field>
-                      <Field label="Descuento">
+                      <Field label={t("billing.invoiceEditor.discount")}>
                         <input type="number" min={0} step="0.01" value={it.discount}
                           onChange={(e) => patchItem(it.key, { discount: num(e.target.value) })}
                           className={inputCls} />
@@ -407,22 +415,22 @@ function InvoiceEditorBody({
         <div className="bg-card border border-border rounded-xl p-4 space-y-4">
           <div className="grid sm:grid-cols-2 gap-4">
             <div>
-              <label className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground">Doctor</label>
+              <label className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground">{t("billing.invoiceEditor.doctor")}</label>
               <select value={doctorId} onChange={(e) => setDoctorId(e.target.value)} className={selectCls}>
-                <option value="">Sin asignar</option>
+                <option value="">{t("billing.invoiceEditor.doctorUnassigned")}</option>
                 {doctors.map((d) => (
                   <option key={d.id} value={d.id}>{d.name}</option>
                 ))}
               </select>
             </div>
             <div>
-              <label className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground">Descuento global</label>
+              <label className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground">{t("billing.invoiceEditor.globalDiscount")}</label>
               <div className="flex items-center gap-1.5 mt-1">
                 <select value={discountMode} onChange={(e) => setDiscountMode(e.target.value as "none" | "pct" | "amount")}
                   className="min-w-0 flex-1 bg-background border border-border rounded-lg px-2 py-2 text-sm">
-                  <option value="none">Sin descuento</option>
-                  <option value="pct">Porcentaje %</option>
-                  <option value="amount">Monto $</option>
+                  <option value="none">{t("billing.invoiceEditor.discountNone")}</option>
+                  <option value="pct">{t("billing.invoiceEditor.discountPct")}</option>
+                  <option value="amount">{t("billing.invoiceEditor.discountAmount")}</option>
                 </select>
                 {discountMode !== "none" && (
                   <input type="number" min={0} step="0.01" value={discountValue}
@@ -438,12 +446,12 @@ function InvoiceEditorBody({
               rebotaría al timbrar con el 409 de descuadre. */}
           <div className="grid sm:grid-cols-2 gap-4">
             <div>
-              <label className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground">Impuestos</label>
+              <label className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground">{t("billing.invoiceEditor.taxes")}</label>
               <select
                 value={taxMode}
                 onChange={(e) => {
                   const iva = e.target.value === "iva16";
-                  setTaxRate(iva ? IVA_RATE : 0);
+                  setTaxRate(iva ? IVA_RATE_PCT : 0);
                   // Al volver a Exento hay que resetear la modalidad: el select de
                   // abajo se desmonta y dejaría un "IVA agregado" residual, o sea
                   // una factura con tasa 0 que dice desglosar. Cuadra igual, pero
@@ -453,29 +461,29 @@ function InvoiceEditorBody({
                 }}
                 className={selectCls}
               >
-                <option value="exento">Exento (servicios médicos)</option>
-                <option value="iva16">IVA {IVA_RATE}%</option>
+                <option value="exento">{t("billing.invoiceEditor.taxExempt")}</option>
+                <option value="iva16">{t("billing.invoiceEditor.taxIva", { rate: IVA_RATE_PCT })}</option>
               </select>
             </div>
             {taxMode === "iva16" && (
               <div>
-                <label className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground">Modalidad</label>
+                <label className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground">{t("billing.invoiceEditor.taxMode")}</label>
                 <select
                   value={taxIncluded ? "included" : "added"}
                   onChange={(e) => setTaxIncluded(e.target.value === "included")}
                   className={selectCls}
                 >
-                  <option value="included">El precio ya incluye IVA</option>
-                  <option value="added">Agregar IVA al precio</option>
+                  <option value="included">{t("billing.invoiceEditor.taxIncludedOption")}</option>
+                  <option value="added">{t("billing.invoiceEditor.taxAddedOption")}</option>
                 </select>
               </div>
             )}
           </div>
 
           <div>
-            <label className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground">Notas</label>
+            <label className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground">{t("billing.invoiceEditor.notes")}</label>
             <input value={notes} onChange={(e) => setNotes(e.target.value)}
-              placeholder="Opcional"
+              placeholder={t("billing.invoiceEditor.notesPlaceholder")}
               className="mt-1 w-full bg-background border border-border rounded-lg px-3 py-2 text-sm" />
           </div>
         </div>
@@ -485,36 +493,36 @@ function InvoiceEditorBody({
       <DialogFooter className="flex-col items-stretch gap-3">
         <div className="flex flex-col items-end gap-0.5">
           <div className="flex justify-between w-full max-w-xs text-xs text-muted-foreground">
-            <span>Subtotal</span><span>{money(totals.subtotal)}</span>
+            <span>{t("billing.invoiceEditor.subtotal")}</span><span>{money(totals.subtotal)}</span>
           </div>
           {totals.discountAmount > 0 && (
             <div className="flex justify-between w-full max-w-xs text-xs text-muted-foreground">
-              <span>Descuento</span><span>-{money(totals.discountAmount)}</span>
+              <span>{t("billing.invoiceEditor.discount")}</span><span>-{money(totals.discountAmount)}</span>
             </div>
           )}
           <div className="flex justify-between w-full max-w-xs text-xs text-muted-foreground">
             {taxMode === "iva16" ? (
               <>
-                <span>IVA {round2(taxRate)}%{taxIncluded ? " (incluido)" : ""}</span><span>{money(tax)}</span>
+                <span>{t(taxIncluded ? "billing.invoiceEditor.taxIvaIncluded" : "billing.invoiceEditor.taxIva", { rate: round2(taxRate) })}</span><span>{money(tax)}</span>
               </>
             ) : (
               <>
-                <span>Impuestos</span><span>Exento</span>
+                <span>{t("billing.invoiceEditor.taxes")}</span><span>{t("billing.invoiceEditor.exempt")}</span>
               </>
             )}
           </div>
           <div className="flex justify-between w-full max-w-xs text-base font-bold text-brand-700 dark:text-brand-300 pt-1">
-            <span>Total</span><span>{money(grandTotal)}</span>
+            <span>{t("billing.invoiceEditor.total")}</span><span>{money(grandTotal)}</span>
           </div>
         </div>
         <div className="flex items-center justify-end gap-2">
           <button type="button" onClick={onClose} className="text-xs font-semibold px-4 py-2 rounded-lg border border-border text-muted-foreground hover:bg-muted/50">
-            Cancelar
+            {t("billing.invoiceEditor.cancel")}
           </button>
           <button type="button" onClick={save} disabled={saving}
             className="text-xs font-semibold px-4 py-2 rounded-lg bg-brand-600 text-white hover:bg-brand-700 disabled:opacity-50 inline-flex items-center gap-1.5">
-            {saving ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
-            Crear factura
+            {saving ? <Loader2 size={14} className="animate-spin" aria-hidden /> : <Check size={14} aria-hidden />}
+            {saving ? t("billing.invoiceEditor.creating") : t("billing.invoiceEditor.createInvoice")}
           </button>
         </div>
       </DialogFooter>

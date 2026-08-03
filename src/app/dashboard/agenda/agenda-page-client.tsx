@@ -59,6 +59,10 @@ interface Props {
   clinicCategory: string;
   clinicName: string;
   highlightId: string | null;
+  /** Clinic.cfdiTaxMode ("exempt" | "iva16") — SOLO ese escalar, nunca la fila
+   *  Clinic. Baja hasta el cobro inline del panel de detalle para que el CFDI se
+   *  timbre con el régimen de la clínica sin depender de ningún fetch. */
+  clinicTaxMode: string | null;
 }
 
 export function AgendaPageClient(props: Props) {
@@ -68,7 +72,7 @@ export function AgendaPageClient(props: Props) {
       initialDayISO={props.initialDayISO}
       clinicCategory={props.clinicCategory}
     >
-      <AgendaShell highlightId={props.highlightId} />
+      <AgendaShell highlightId={props.highlightId} clinicTaxMode={props.clinicTaxMode} />
     </AgendaProvider>
   );
 }
@@ -305,7 +309,7 @@ const AGX_CSS = `
 }
 `;
 
-function AgendaShell({ highlightId }: { highlightId: string | null }) {
+function AgendaShell({ highlightId, clinicTaxMode }: { highlightId: string | null; clinicTaxMode: string | null }) {
   const { state, dispatch, setDay, invalidateRangeCache } = useAgenda();
   const router = useRouter();
   const t = useT();
@@ -706,7 +710,7 @@ function AgendaShell({ highlightId }: { highlightId: string | null }) {
           <AgendaWaitlistSidebar />
         </DndContext>
       </DragOverlapContext.Provider>
-      <AgendaDetailPanel />
+      <AgendaDetailPanel clinicTaxMode={clinicTaxMode} />
       <AgendaResourcesModal />
       {pendingReschedule && (
         <AgendaRescheduleConfirmModal

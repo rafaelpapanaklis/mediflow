@@ -5,6 +5,7 @@ import toast from "react-hot-toast";
 import { Trash2, X, FileText } from "lucide-react";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { formatCurrency } from "@/lib/utils";
+import { sumInvoiceItems, itemLineTotal } from "@/lib/invoice-totals";
 import { useT } from "@/i18n/i18n-provider";
 import styles from "./patient-detail.module.css";
 
@@ -58,10 +59,10 @@ export function TreatmentsModal({
     if (open) setRows(buildRows(initialTreatments));
   }, [open, initialTreatments]);
 
-  const subtotal = useMemo(
-    () => rows.reduce((s, r) => s + r.unitPrice * r.quantity, 0),
-    [rows],
-  );
+  // Misma aritmética que el servidor (invoice-totals): Σ round2(qty × precio),
+  // no round2(Σ …). Con precios sub-centavo los dos difieren en centavos y el
+  // botón anunciaría un total distinto al que se guarda.
+  const subtotal = useMemo(() => sumInvoiceItems(rows), [rows]);
   const total = Math.max(0, subtotal - discount);
 
   function updateRow(idx: number, patch: Partial<Row>) {
@@ -204,7 +205,7 @@ export function TreatmentsModal({
                       />
                     </td>
                     <td className={`${styles.mono} ${styles.treatmentsSubtotalCell}`}>
-                      {formatCurrency(r.unitPrice * r.quantity)}
+                      {formatCurrency(itemLineTotal(r))}
                     </td>
                     <td>
                       <button

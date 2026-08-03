@@ -356,6 +356,7 @@ export function BillingClient({ invoices: initial, patients, totalPaid, totalPen
         patientName={detailInvoice ? patientNameOf(detailInvoice) : ""}
         onClose={() => setDetailInvoice(null)}
         onMutated={refresh}
+        clinicTaxMode={clinic.cfdiTaxMode ?? null}
       />
 
       {/* PaymentModal compartido — atajo "Registrar pago" inline en cada row. */}

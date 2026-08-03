@@ -8,7 +8,13 @@ import { logMutation } from "@/lib/audit";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { assertPatientVisible } from "@/lib/patient-visibility";
 import { getVisiblePatientClinicIds, sharedRecordScope } from "@/lib/branches";
-import { round2 } from "@/lib/quotes/compute";
+import {
+  sumInvoiceItems,
+  computeInvoiceTotal,
+  itemLineTotal,
+  clinicInvoiceTaxDefaults,
+  round2,
+} from "@/lib/invoice-totals";
 import {
   EMPTY_NOTE_ERROR,
   isClinicalNoteEmpty,
@@ -162,16 +168,32 @@ export async function POST(req: NextRequest) {
   if (data.autoInvoice && Array.isArray((cleanSpec as any).procedures) && (cleanSpec as any).procedures.length > 0) {
     try {
       const procedures = (cleanSpec as any).procedures as Array<{ id?: string; name: string; price: number; quantity: number }>;
-      const validProcs = procedures.filter(p => p.name && typeof p.price === "number" && p.price > 0);
 
-      if (validProcs.length > 0) {
-        const items = validProcs.map(p => ({
-          description: p.name,
-          quantity: p.quantity || 1,
-          unitPrice: p.price,
-          total: round2((p.quantity || 1) * p.price),
-        }));
-        const subtotal = round2(items.reduce((s, i) => s + i.total, 0));
+      // `procedures` viaja dentro de specialtyData (z.record(z.any())): NADA lo
+      // valida. Se sanea aquí con la MISMA regla que itemQuantity() del
+      // timbrado (cantidad finita >0, si no 1): una cantidad negativa o NaN
+      // guardaba un importe de línea negativo/roto mientras la guarda calcula
+      // con 1 → descuadre garantizado (409 al timbrar) y `balance` negativo.
+      const items = procedures
+        .map((p) => {
+          const rawQty = Number(p?.quantity);
+          const quantity = isFinite(rawQty) && rawQty > 0 ? rawQty : 1;
+          const unitPrice = round2(p?.price);
+          return {
+            description: typeof p?.name === "string" ? p.name.trim() : "",
+            quantity,
+            unitPrice,
+            total: itemLineTotal({ quantity, unitPrice }),
+          };
+        })
+        .filter((it) => it.description.length > 0 && it.unitPrice > 0);
+
+      if (items.length > 0) {
+        // Aritmética canónica (invoice-totals), la misma que verifica el
+        // timbrado: subtotal = Σ round2(qty × unitPrice).
+        const subtotal = sumInvoiceItems(items);
+        const { taxRate, taxIncluded } = clinicInvoiceTaxDefaults((dbUser as any).clinic?.cfdiTaxMode);
+        const { total } = computeInvoiceTotal(subtotal, 0, taxRate, taxIncluded);
 
         // Generate invoice number (clinic-scoped)
         const lastInvoice = await prisma.invoice.findFirst({
@@ -190,10 +212,12 @@ export async function POST(req: NextRequest) {
             items: items as any,
             subtotal,
             discount: 0,
-            total: subtotal,
+            total,
             paid: 0,
-            balance: subtotal,
+            balance: total,
             status: "DRAFT",
+            taxRate,
+            taxIncluded,
             notes: `Auto-generada desde expediente clínico del ${new Date().toLocaleDateString("es-MX")}`,
           },
         });

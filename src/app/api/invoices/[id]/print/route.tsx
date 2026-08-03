@@ -4,6 +4,7 @@ import { rateLimit } from "@/lib/rate-limit";
 import { getAuthContext } from "@/lib/auth-context";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { assertPatientVisible } from "@/lib/patient-visibility";
+import { itemQuantity, itemUnitPrice, itemLineTotal, round2 } from "@/lib/invoice-totals";
 import {
   renderToBuffer,
   Document,
@@ -275,11 +276,29 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
 
   try {
     const rawItems = Array.isArray(invoice.items) ? (invoice.items as any[]) : [];
+    // Cantidad/precio/importe con los MISMOS fallbacks que el mapeo de conceptos
+    // del CFDI (invoice-totals). Los que había aquí eran propios y no espejaban
+    // itemLineTotal: una línea con cantidad ≠ 1 o con descuento de línea se
+    // imprimía por un importe distinto al que se timbra.
     const items = rawItems.map((it: any) => {
-      const quantity  = Number(it.quantity ?? 1) || 1;
-      const total     = Number(it.total ?? it.unitPrice ?? it.price ?? 0) || 0;
-      const unitPrice = Number(it.unitPrice ?? it.price ?? (quantity ? total / quantity : total)) || 0;
-      return { description: String(it.description ?? it.name ?? "Servicio médico"), quantity, unitPrice, total };
+      // Facturas ANTERIORES al descuento de línea explícito: zod stripeaba la
+      // llave `discount` del item y el cliente mandaba `total` ya NETO, así que
+      // el importe histórico de esa línea solo vive en `total` y no se puede
+      // recomputar (su `invoice.total` también se sumó de esos netos). Solo en
+      // ese caso —sin descuento propio y con un `total` guardado MENOR al
+      // bruto— se respeta lo guardado, para que el comprobante impreso de una
+      // factura vieja siga cuadrando con su total. El resto usa itemLineTotal,
+      // que es exactamente lo que se timbra.
+      const gross  = round2(itemQuantity(it) * itemUnitPrice(it));
+      const stored = Number(it?.total);
+      const legacyNet = it?.discount == null && isFinite(stored) && stored >= 0 && stored < gross;
+      return {
+        // Las facturas viejas guardaban el concepto en `name`; se sigue leyendo.
+        description: String(it.description ?? it.name ?? "Servicio médico"),
+        quantity:  itemQuantity(it),
+        unitPrice: itemUnitPrice(it),
+        total:     legacyNet ? round2(stored) : itemLineTotal(it),
+      };
     });
 
     const props: ComprobanteProps = {

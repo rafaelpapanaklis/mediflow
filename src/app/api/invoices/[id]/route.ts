@@ -6,6 +6,7 @@ import { readActiveClinicCookie } from "@/lib/active-clinic";
 import { logMutation } from "@/lib/audit";
 import { revalidateAfter } from "@/lib/cache/revalidate";
 import { sumInvoiceItems, computeInvoiceTotal, round2 } from "@/lib/invoice-totals";
+import { findInvalidLineDiscount, LINE_DISCOUNT_ERROR } from "@/lib/validations";
 import { assertPatientVisible } from "@/lib/patient-visibility";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 
@@ -133,10 +134,23 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
       return NextResponse.json({ error: "items debe ser una lista con al menos un concepto" }, { status: 400 });
     }
     const items = body.items;
+    // Mismo clamp de línea que el schema del POST (findInvalidLineDiscount es la
+    // ÚNICA regla, aquí no hay zod que la aplique): un descuento mayor al importe
+    // deja `itemLineTotal` NEGATIVO y ese concepto en rojo encoge el subtotal, el
+    // total y el balance de la factura. El editor lo acota en el cliente, pero un
+    // PATCH fabricado a mano no pasa por el editor.
+    const badLine = findInvalidLineDiscount(items);
+    if (badLine >= 0) {
+      return NextResponse.json({ error: `${LINE_DISCOUNT_ERROR} (concepto ${badLine + 1})` }, { status: 400 });
+    }
     // Misma aritmética que el timbrado (qty × unitPrice − desc. de línea) para
     // que total = Σ(conceptos) − descuento se sostenga también con IVA agregado.
     const subtotal = sumInvoiceItems(items);
-    const discount = round2(Number(body.discount ?? invoice.discount ?? 0));
+    // El piso en 0 espeja al POST: sin él, un descuento NEGATIVO se persistía tal
+    // cual mientras computeInvoiceTotal lo trataba como 0, y la factura quedaba
+    // con total ≠ Σconceptos − descuento (la guarda de integridad del timbrado
+    // culpaba luego a los conceptos).
+    const discount = round2(Math.max(0, Number(body.discount ?? invoice.discount ?? 0)));
     if (discount > subtotal) {
       return NextResponse.json({ error: "El descuento excede el subtotal" }, { status: 400 });
     }
@@ -145,7 +159,11 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     updateData.subtotal = subtotal;
     updateData.discount = discount;
     updateData.total = total;
-    updateData.balance = round2(total - invoice.paid);
+    // Piso en 0 como en TODOS los demás escritores de balance (POST de pago,
+    // edit-price, mark-paid, portal). Sin él, bajar el total de una factura ya
+    // cobrada deja un saldo NEGATIVO que se resta de los "por cobrar" de la
+    // clínica: $500 pagados y un PATCH a $100 dejaba balance −400.
+    updateData.balance = round2(Math.max(0, total - invoice.paid));
   }
 
   await prisma.invoice.updateMany({ where: { id: params.id, clinicId }, data: updateData });

@@ -9,6 +9,7 @@ import { prisma } from "@/lib/prisma";
 import { getPatientQuota } from "@/lib/patient-quota";
 import { lastPatientFolio } from "@/lib/patients/next-patient-number";
 import { formatPatientNumber } from "@/lib/patients/next-patient-number-core";
+import { sumInvoiceItems, computeInvoiceTotal, round2 } from "@/lib/invoice-totals";
 import type { PreviewRow } from "./types";
 import {
   BATCH,
@@ -552,17 +553,25 @@ export const balancesHandler: EntityHandler = {
         numberField: "invoiceNumber",
         format: (seq) => `MF-${String(seq).padStart(4, "0")}`,
         build: (slice) => slice.map((r) => {
-          const amount = r.data.amount as number;
+          // La factura de apertura pasa por la MISMA aritmética que el resto
+          // (invoice-totals): ningún creador de facturas debe tener matemática
+          // propia. El importe del CSV se redondea a centavos antes de guardarse
+          // — la guarda del timbrado suma round2 por línea y un monto con 3+
+          // decimales dejaba las columnas y los conceptos en números distintos.
+          const amount = round2(r.data.amount as number);
+          const items = [{ description: OPENING_BALANCE_NOTE, quantity: 1, unitPrice: amount, total: amount }];
+          const subtotal = sumInvoiceItems(items);
+          const { total } = computeInvoiceTotal(subtotal, 0, 0, true);
           return {
             clinicId,
             patientId: r.data.patientId,
             invoiceNumber: r.data.invoiceNumber,
-            items: [{ description: OPENING_BALANCE_NOTE, quantity: 1, unitPrice: amount, total: amount }],
-            subtotal: amount,
+            items,
+            subtotal,
             discount: 0,
-            total: amount,
+            total,
             paid: 0,
-            balance: amount,
+            balance: total,
             status: "PENDING" as any,
             notes: OPENING_BALANCE_NOTE,
           };

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { ZodError } from "zod";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
@@ -6,7 +7,7 @@ import { invoiceSchema } from "@/lib/validations";
 import { readActiveClinicCookie } from "@/lib/active-clinic";
 import { logMutation } from "@/lib/audit";
 import { revalidateAfter } from "@/lib/cache/revalidate";
-import { sumInvoiceItems, computeInvoiceTotal, round2 } from "@/lib/invoice-totals";
+import { sumInvoiceItems, computeInvoiceTotal, round2, IVA_RATE_PCT } from "@/lib/invoice-totals";
 import { relatedPatientVisibilityAnd, assertPatientVisible } from "@/lib/patient-visibility";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 
@@ -64,9 +65,23 @@ export async function POST(req: NextRequest) {
 
     // Campos IVA/doctor de la OLA 1 — no viven en invoiceSchema: se leen del body crudo.
     const taxIncluded = body.taxIncluded !== false; // default: el precio ya incluye IVA
-    let taxRate = Number(body.taxRate);
-    if (!isFinite(taxRate) || taxRate < 0) taxRate = 16;
-    taxRate = Math.min(100, taxRate);
+    // Solo 0 (exento) o 16. El CFDI SIEMPRE desglosa 16% (Facturapi recibe
+    // rate 0.16 fijo), así que una tasa intermedia nace rota en los dos modos:
+    // con IVA AGREGADO la guarda de integridad da un 409 permanente (tasa 8 →
+    // total 1080 contra los 1160 que espera el timbrado) y con IVA INCLUIDO
+    // pasa la guarda pero se timbra un desglose distinto al que reporta el
+    // corte de Caja. Antes se aceptaba cualquier valor 0-100: el editor ya solo
+    // ofrece las dos opciones válidas, esto cierra la puerta al POST directo.
+    const rawRate = body.taxRate === undefined || body.taxRate === null
+      ? IVA_RATE_PCT
+      : Number(body.taxRate);
+    if (!isFinite(rawRate) || (rawRate !== 0 && rawRate !== IVA_RATE_PCT)) {
+      return NextResponse.json(
+        { error: `La tasa de IVA debe ser 0 (exento) o ${IVA_RATE_PCT}%.` },
+        { status: 400 },
+      );
+    }
+    const taxRate = rawRate;
 
     // Doctor atribuido (opcional). Se valida que sea un DOCTOR de ESTA clínica (aislamiento).
     let doctorId: string | null = null;
@@ -85,6 +100,12 @@ export async function POST(req: NextRequest) {
     // dejaba invoice.total ≠ lo que la guarda del CFDI calcula por unitPrice.
     const subtotal = sumInvoiceItems(data.items);
     const discount = round2(Math.max(0, data.discount ?? 0));
+    // El descuento GLOBAL sigue necesitando su propio tope: el clamp por línea
+    // del schema solo garantiza que cada concepto sea ≥ 0 (y por tanto que este
+    // subtotal sea el real, no uno encogido por un importe negativo). Sin él, un
+    // descuento mayor a la suma de conceptos se persistiría mientras
+    // computeInvoiceTotal lo trata contra un base con piso 0 → total ≠ Σconceptos
+    // − descuento.
     if (discount > subtotal) {
       return NextResponse.json({ error: "El descuento excede el subtotal" }, { status: 400 });
     }
@@ -122,5 +143,15 @@ export async function POST(req: NextRequest) {
     revalidateAfter("invoices");
     revalidatePath(`/dashboard/patients/${invoice.patientId}`);
     return NextResponse.json(invoice, { status: 201 });
-  } catch (err: any) { return NextResponse.json({ error: err.message }, { status: 400 }); }
+  } catch (err: any) {
+    // Un fallo de zod llega con `message` = el JSON crudo de TODOS los issues, y
+    // el editor lo pinta tal cual en el toast. Se surfacea el primero con su ruta
+    // ("items.1.discount") para que se vea qué línea corregir.
+    if (err instanceof ZodError) {
+      const issue = err.issues[0];
+      const where = issue && issue.path.length ? ` (${issue.path.join(".")})` : "";
+      return NextResponse.json({ error: `${issue ? issue.message : "Datos inválidos"}${where}` }, { status: 400 });
+    }
+    return NextResponse.json({ error: err.message }, { status: 400 });
+  }
 }

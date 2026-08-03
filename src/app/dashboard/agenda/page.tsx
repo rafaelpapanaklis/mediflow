@@ -95,6 +95,10 @@ export default async function AgendaPage({ searchParams }: PageProps) {
       clinicCategory={clinic.category}
       clinicName={clinic.name}
       highlightId={searchParams?.highlight ?? null}
+      // Solo el escalar del régimen fiscal (la fila Clinic NUNCA se serializa al
+      // navegador): el cobro inline del panel de detalle timbra con él ya
+      // resuelto, sin que un fetch en vuelo pueda decidir el régimen fiscal.
+      clinicTaxMode={clinic.cfdiTaxMode ?? "exempt"}
     />
   );
 }

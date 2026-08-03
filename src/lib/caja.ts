@@ -8,13 +8,16 @@
 //
 // Caja solo LEE de invoices/payments — nunca modifica la facturación por
 // paciente. Payment no tiene clinicId: se filtra por invoice.clinicId.
+//
+// El IVA del corte NO se asume: se suma pago por pago con `invoiceTaxPortion`
+// a partir del desglose REAL de cada factura (taxRate/taxIncluded) resuelto con
+// la preferencia fiscal de la clínica — el mismo criterio con el que se timbra.
+// Una clínica exenta (Clinic.cfdiTaxMode = "exempt", el default de la
+// odontología) reporta 0, no un IVA fantasma del 16%.
 // ═══════════════════════════════════════════════════════════════════
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-
-/** IVA embebido asumido. Invoice no tiene campo de impuesto (ver schema);
- *  el IVA se estima como monto incluido al 16%. */
-export const IVA_RATE = 0.16;
+import { invoiceTaxPortion } from "@/lib/invoice-totals";
 
 // Métodos de pago (PaymentMethod en payment-modal.tsx):
 // "cash" | "debit" | "credit" | "transfer" | "check" | "other".
@@ -24,6 +27,8 @@ export const CASH_METHOD   = "cash";
 export const DEBIT_METHOD  = "debit";
 /** Tarjeta de crédito. */
 export const CREDIT_METHOD = "credit";
+/** Reembolso. Se guarda con monto POSITIVO: es un movimiento, no un ingreso. */
+export const REFUND_METHOD = "refund";
 
 /** Offset fijo de México (America/Mexico_City = UTC-6, sin horario de verano
  *  desde 2023), igual que analytics/query.ts. Ancla "hoy" al día natural de la
@@ -56,7 +61,7 @@ export interface CajaTotals {
   otherIncome:      number; // transfer / check / other (NO tarjeta)
   totalIncome:      number; // cash + débito + crédito + other
   discounts:        number; // SUM invoice.discount de facturas creadas en la ventana
-  tax:              number; // IVA estimado (incluido) sobre el ingreso del turno
+  tax:              number; // IVA realmente contenido en lo cobrado del turno (0 si exenta)
   withdrawals:      number; // SUM retiros de la caja
   expectedCash:     number; // opening + cashIncome − withdrawals
 }
@@ -124,7 +129,7 @@ export async function getOpenRegister(clinicId: string) {
  * cardDebitIncome + cardCreditIncome para CajaTotals.otherIncome.
  */
 export async function deriveWindow(clinicId: string, from: Date, to: Date) {
-  const [payments, discountAgg] = await Promise.all([
+  const [payments, discountAgg, clinic] = await Promise.all([
     prisma.payment.findMany({
       where: { paidAt: { gte: from, lte: to }, invoice: { clinicId } },
       include: {
@@ -132,6 +137,11 @@ export async function deriveWindow(clinicId: string, from: Date, to: Date) {
           select: {
             items:       true,
             discount:    true,
+            // Desglose fiscal REAL de la factura: es lo que decide cuánto IVA
+            // trae cada pago (ver invoiceTaxPortion). Sin esto el corte tendría
+            // que asumir una tasa, que es justo lo que ya no hace.
+            taxRate:     true,
+            taxIncluded: true,
             // Doctor atribuido a mano en el editor de facturas. Es un String
             // suelto (sin relación Prisma), así que se resuelve abajo con una
             // segunda query en vez de un include.
@@ -150,7 +160,12 @@ export async function deriveWindow(clinicId: string, from: Date, to: Date) {
       _sum:  { discount: true },
       where: { clinicId, status: { notIn: ["DRAFT", "CANCELLED"] }, createdAt: { gte: from, lte: to } },
     }),
+    // Preferencia fiscal de la clínica — desempata las facturas que no traen una
+    // señal propia (ver resolveTaxMode). SOLO esa columna: serializar la fila
+    // Clinic completa filtra columnas secretas.
+    prisma.clinic.findUnique({ where: { id: clinicId }, select: { cfdiTaxMode: true } }),
   ]);
+  const clinicTaxMode = clinic?.cfdiTaxMode ?? null;
 
   // Nombres de los doctores atribuidos a mano (facturas creadas desde Caja, que
   // no nacen de una cita y por tanto no tienen invoice.appointment.doctor).
@@ -171,8 +186,21 @@ export async function deriveWindow(clinicId: string, from: Date, to: Date) {
   let cardDebitIncome = 0;
   let cardCreditIncome = 0;
   let otherIncome = 0; // todo lo no-efectivo (incluye tarjeta)
+  let tax = 0;         // IVA contenido en lo cobrado, sumado pago por pago
   const list: CajaListRow[] = payments.map((p) => {
     const amount = p.amount ?? 0;
+    // Pago por pago y no sobre el total del turno: así un día MIXTO (facturas
+    // exentas y gravadas) solo suma la parte gravada, y un abono parcial aporta
+    // su proporción de IVA.
+    //
+    // Los reembolsos NO aportan IVA cobrado: /refund guarda el Payment con
+    // method "refund" y monto POSITIVO (es un movimiento, no un ingreso), así
+    // que sumarle IVA reportaba impuesto sobre dinero que se devolvió — cobrar
+    // $1,000 y reembolsar $500 declaraba el IVA de $1,500. Mismo criterio que
+    // /api/dashboard/home/revenue, que ya excluye "refund".
+    if (p.method !== REFUND_METHOD) {
+      tax += invoiceTaxPortion(amount, p.invoice, clinicTaxMode);
+    }
     if (p.method === CASH_METHOD) {
       cashIncome += amount;
     } else {
@@ -196,10 +224,8 @@ export async function deriveWindow(clinicId: string, from: Date, to: Date) {
 
   const totalIncome = cashIncome + otherIncome;
   const discounts = discountAgg._sum.discount ?? 0;
-  // IVA estimado (incluido) sobre el ingreso del turno: total − total/1.16.
-  const tax = totalIncome > 0 ? totalIncome - totalIncome / (1 + IVA_RATE) : 0;
 
-  return { cashIncome, cardDebitIncome, cardCreditIncome, otherIncome, totalIncome, discounts, tax, list };
+  return { cashIncome, cardDebitIncome, cardCreditIncome, otherIncome, totalIncome, discounts, tax: money(tax), list };
 }
 
 /** Redondea a 2 decimales para evitar ruido de punto flotante en dinero. */

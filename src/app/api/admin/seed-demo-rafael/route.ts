@@ -3,6 +3,7 @@ import { isAdminAuthed } from "@/lib/admin-auth";
 import { prisma } from "@/lib/prisma";
 import { Prisma } from "@prisma/client";
 import { TREATMENT_KINDS } from "@/lib/agenda/types";
+import { sumInvoiceItems, computeInvoiceTotal, round2 } from "@/lib/invoice-totals";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -811,11 +812,16 @@ export async function POST(req: NextRequest) {
           }
           if (!payProfile || !chance(probTiene)) continue;
 
-          const total = a.status === "NO_SHOW" ? randInt(200, 500) : (a.price ?? 500);
+          // Mismos helpers que el resto de creadores (invoice-totals): el seed
+          // no puede tener su propia aritmética o generaría demos que no timbran.
+          const unitPrice = round2(a.status === "NO_SHOW" ? randInt(200, 500) : (a.price ?? 500));
+          const items = [{ description: a.type, quantity: 1, unitPrice, total: unitPrice }];
+          const subtotal = sumInvoiceItems(items);
+          const { total } = computeInvoiceTotal(subtotal, 0, 0, true);
           let paid = 0;
           if (payProfile === "PAID") paid = total;
           else if (payProfile === "PARTIAL") paid = Math.round(total * randFloat(0.30, 0.70, 2));
-          const balance = total - paid;
+          const balance = round2(total - paid);
           const status: "PAID" | "PARTIAL" | "PENDING" = paid >= total ? "PAID" : paid > 0 ? "PARTIAL" : "PENDING";
           const invoiceNumber = await nextInvoiceNumber();
 
@@ -825,8 +831,8 @@ export async function POST(req: NextRequest) {
               patientId: a.patientId,
               appointmentId: a.id,
               invoiceNumber,
-              items: [{ description: a.type, quantity: 1, unitPrice: total, total }],
-              subtotal: total,
+              items,
+              subtotal,
               discount: 0,
               total,
               paid,
@@ -966,21 +972,30 @@ export async function POST(req: NextRequest) {
 
               try {
                 const invNumber = await nextInvoiceNumber();
+                // Aritmética canónica (invoice-totals), igual que el resto.
+                const sessionItems = [{
+                  description: `${planType.name} · sesión ${s + 1}`,
+                  quantity: 1,
+                  unitPrice: round2(sessionCost),
+                  total: round2(sessionCost),
+                }];
+                const sessionSubtotal = sumInvoiceItems(sessionItems);
+                const { total: sessionTotal } = computeInvoiceTotal(sessionSubtotal, 0, 0, true);
                 const isPaid = isCompleted && chance(0.5);
-                const paidAmt = isPaid ? sessionCost : (isCompleted && chance(0.3) ? Math.round(sessionCost * randFloat(0.4, 0.7, 2)) : 0);
-                const invStatus: "PAID" | "PARTIAL" | "PENDING" = paidAmt >= sessionCost ? "PAID" : paidAmt > 0 ? "PARTIAL" : "PENDING";
+                const paidAmt = isPaid ? sessionTotal : (isCompleted && chance(0.3) ? Math.round(sessionTotal * randFloat(0.4, 0.7, 2)) : 0);
+                const invStatus: "PAID" | "PARTIAL" | "PENDING" = paidAmt >= sessionTotal ? "PAID" : paidAmt > 0 ? "PARTIAL" : "PENDING";
 
                 const inv = await prisma.invoice.create({
                   data: {
                     clinicId: clinic.id,
                     patientId: patient.id,
                     invoiceNumber: invNumber,
-                    items: [{ description: `${planType.name} · sesión ${s + 1}`, quantity: 1, unitPrice: sessionCost, total: sessionCost }],
-                    subtotal: sessionCost,
+                    items: sessionItems,
+                    subtotal: sessionSubtotal,
                     discount: 0,
-                    total: sessionCost,
+                    total: sessionTotal,
                     paid: paidAmt,
-                    balance: sessionCost - paidAmt,
+                    balance: round2(sessionTotal - paidAmt),
                     status: invStatus,
                     paidAt: invStatus === "PAID" ? sessionDate : null,
                     notes: `Plan: ${planType.name} (${s + 1}/${totalSessions})`,

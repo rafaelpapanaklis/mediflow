@@ -73,8 +73,16 @@ export function computeInvoiceTotal(
 
 export type CfdiTaxMode = "exento" | "iva16";
 
-/** Tasa de IVA que el CFDI sabe desglosar (Facturapi recibe rate 0.16 fijo). */
-export const IVA_RATE = 16;
+/**
+ * Tasa de IVA que el CFDI sabe desglosar (Facturapi recibe rate 0.16 fijo).
+ *
+ * El sufijo `_PCT` es deliberado: se expresa en PUNTOS PORCENTUALES (16), igual
+ * que `Invoice.taxRate`, no como fracción (0.16). Antes convivía con un
+ * `IVA_RATE = 0.16` en `src/lib/caja.ts` — dos constantes homónimas con un
+ * factor 100 de diferencia, cada una correcta en su archivo y catastrófica en el
+ * otro. Ésta es la ÚNICA fuente; la de caja.ts se eliminó.
+ */
+export const IVA_RATE_PCT = 16;
 
 /**
  * Impuestos con los que NACE una factura nueva, según la preferencia fiscal de
@@ -90,7 +98,7 @@ export const IVA_RATE = 16;
  */
 export function clinicInvoiceTaxDefaults(clinicTaxMode?: string | null): { taxRate: number; taxIncluded: boolean } {
   return clinicTaxMode === "iva16"
-    ? { taxRate: IVA_RATE, taxIncluded: true }
+    ? { taxRate: IVA_RATE_PCT, taxIncluded: true }
     : { taxRate: 0, taxIncluded: true };
 }
 
@@ -141,6 +149,42 @@ export function resolveTaxMode(
   // clínica exenta. El total no cambia en ningún caso: con IVA incluido el CFDI
   // timbra el mismo importe, solo cambia si lo desglosa.
   return clinicTaxMode === "iva16" ? "iva16" : "exento";
+}
+
+/**
+ * IVA realmente contenido en un importe COBRADO de una factura.
+ *
+ * Se usa para reportes de dinero cobrado (corte de Caja, Finanzas), donde lo que
+ * se tiene es un `Payment.amount` — una fracción del total de la factura — y hay
+ * que decir cuánto de eso es IVA. NO se asume ninguna tasa: sale del desglose
+ * REAL de esa factura (`taxRate`/`taxIncluded`) resuelto con la preferencia
+ * fiscal de la clínica, exactamente con el mismo criterio con el que se timbra
+ * (`resolveTaxMode`). Una clínica exenta —el default— o una factura marcada sin
+ * IVA devuelven 0, no un IVA fantasma.
+ *
+ * La fórmula es la misma en los dos modos porque en ambos el TOTAL ya contiene
+ * el impuesto:
+ *   - IVA incluido (taxIncluded=true):  total = base            → iva = total·r/(1+r)
+ *   - IVA agregado (taxIncluded=false): total = base·(1+r)      → iva = total·r/(1+r)
+ * Es proporcional al importe, así que un abono parcial aporta su parte de IVA.
+ */
+export function invoiceTaxPortion(
+  amount: number,
+  inv: { taxRate?: number | null; taxIncluded?: boolean | null } | null | undefined,
+  clinicTaxMode?: string | null,
+): number {
+  const amt = Number(amount);
+  if (!isFinite(amt) || amt === 0) return 0;
+  if (!inv) return 0;
+  if (resolveTaxMode(inv, clinicTaxMode) !== "iva16") return 0;
+  // Tasa del desglose interno de ESTA factura. El input libre 0-100 que existió
+  // antes pudo dejar tasas intermedias en facturas viejas y el corte debe
+  // reflejar lo que se desglosó, no un 16% de oficio. Sin tasa propia (columna
+  // nula) cae a la única que el sistema sabe emitir.
+  const own = Number(inv.taxRate);
+  const rate = isFinite(own) && own > 0 ? own : IVA_RATE_PCT;
+  const r = rate / 100;
+  return round2(amt * (r / (1 + r)));
 }
 
 /**

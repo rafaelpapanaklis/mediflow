@@ -13,7 +13,7 @@ import { useT } from "@/i18n/i18n-provider";
 import { PaymentModal, type PaymentInvoice } from "./payment-modal";
 import { InvoiceCfdiBadge } from "./invoice-cfdi-badge";
 import { REGIMENES_FISCALES, USOS_CFDI, FORMAS_PAGO_SAT } from "@/lib/cfdi-catalogs";
-import { derivePaymentForm, defaultTaxMode, resolveTaxMode, type CfdiTaxMode } from "@/lib/invoice-totals";
+import { derivePaymentForm, resolveTaxMode, type CfdiTaxMode } from "@/lib/invoice-totals";
 
 // labelKey -> translation key resolved via t() at render time.
 // cls = badge-new semántico del sistema (mismo mapa de tonos que BillingClient).
@@ -72,11 +72,33 @@ interface InvoiceDetailModalProps {
    * factura ya está timbrada, es borrador o está cancelada.
    */
   initialAction?: "cfdi" | null;
+  /**
+   * Clinic.cfdiTaxMode ("exempt" | "iva16") del server component que monta el
+   * modal. Pre-llena el selector de impuestos del timbrado de forma SÍNCRONA.
+   *
+   * Antes se resolvía en DOS fases: el primer render ponía "exento" y solo el
+   * .then() de GET /api/cfdi/usage lo corregía. Eso era una CARRERA: en una
+   * clínica "iva16", quien llenaba los datos fiscales y pulsaba Timbrar antes
+   * de que respondiera ese GET —o con la red caída, porque el .catch() vacío
+   * dejaba el "exento" para siempre— mandaba taxMode:"exento" explícito, y el
+   * server respeta el valor explícito por encima de su propia derivación
+   * (api/cfdi/route.ts). Resultado: CFDI emitido EXENTO en una clínica que
+   * causa IVA. Un dato de pantalla jamás debe decidir el régimen fiscal.
+   *
+   * (El endpoint es admin-only, pero eso NO agrava el caso: POST /api/cfdi usa
+   * el MISMO requireAdmin, así que quien recibe 403 en usage tampoco puede
+   * timbrar. La carrera era real para el admin, que es justo quien timbra.)
+   *
+   * OBLIGATORIA a propósito (sin `?`): tsconfig no está en strict, así que esto
+   * garantiza que un montaje nuevo no pueda OMITIRLA — no protege de pasarle un
+   * valor undefined, que sin strictNullChecks compila igual.
+   */
+  clinicTaxMode: string | null;
 }
 
 type SubAction = null | "refund" | "edit-price" | "discount" | "cancel" | "cfdi";
 
-export function InvoiceDetailModal({ open, invoice, patientName, onClose, onMutated, initialAction = null }: InvoiceDetailModalProps) {
+export function InvoiceDetailModal({ open, invoice, patientName, onClose, onMutated, initialAction = null, clinicTaxMode }: InvoiceDetailModalProps) {
   const t = useT();
   const router = useRouter();
   const [paymentOpen, setPaymentOpen] = useState(false);
@@ -99,12 +121,9 @@ export function InvoiceDetailModal({ open, invoice, patientName, onClose, onMuta
   // Ambiente de timbrado (boolean que expone /api/cfdi/usage). null = todavía no
   // se sabe: no se afirma nada sobre validez fiscal hasta tenerlo.
   const [cfdiLive, setCfdiLive] = useState<boolean | null>(null);
-  // El default de impuestos de la clínica llega por fetch, así que no debe pisar
-  // al usuario si ya movió el selector…
-  const taxTouchedRef = useRef(false);
-  // …ni aplicarse a OTRA factura: si se cierra el sub-form y se abre el de una
-  // factura distinta mientras el fetch viaja, la respuesta vieja no debe pintar
-  // impuestos derivados de la factura anterior.
+  // La respuesta del contador puede llegar tarde: si para entonces el sub-form
+  // se cerró o se abrió el de otra factura, se descarta en vez de pintar cifras
+  // de una apertura anterior.
   const cfdiInvoiceRef = useRef<string | null>(null);
   // Saldo pendiente → el CFDI sale como PUE; exige confirmación explícita.
   const [pueOk, setPueOk] = useState(false);
@@ -157,7 +176,9 @@ export function InvoiceDetailModal({ open, invoice, patientName, onClose, onMuta
 
   // Abre el sub-form de datos fiscales, pre-llenado con los del paciente si
   // existen. Forma de pago = derivada de los pagos reales (editable); impuestos
-  // = exento (servicios médicos) salvo factura con IVA agregado.
+  // = resueltos de una sola vez con la factura y la preferencia de la clínica
+  // (`clinicTaxMode`, prop del server), igual que hace BillingClient. Todo queda
+  // editable factura por factura desde el selector.
   function openCfdiForm() {
     const p = invoice?.patient;
     setFiscal({
@@ -168,17 +189,21 @@ export function InvoiceDetailModal({ open, invoice, patientName, onClose, onMuta
       uso:     "D01",
       email:   "",
       formaPago: derivePaymentForm(invoice?.payments, invoice?.paymentMethod),
-      impuestos: defaultTaxMode(invoice ?? {}),
+      // resolveTaxMode respeta la factura por encima de la clínica: si
+      // internamente ya se le agregó IVA al paciente, sale iva16 pase lo que
+      // pase. El `?? null` es cinturón y tirantes: si la prop faltara en runtime
+      // (montaje viejo que se escapara del type-check) el resultado sigue siendo
+      // determinista — el del propio desglose de la factura, exento si no trae.
+      impuestos: resolveTaxMode(invoice ?? {}, clinicTaxMode ?? null),
     });
-    // Un solo GET trae el consumo del mes ("CFDI este mes: N/M"), los impuestos
-    // por default de la clínica y el ambiente de timbrado (best-effort: si falla,
-    // queda el default derivado de la factura). Se hace por fetch y no por props
-    // porque este modal se monta en 4 pantallas distintas.
+    // Este GET es SOLO informativo: consumo del mes ("CFDI este mes: N/M") y
+    // ambiente de timbrado. Best-effort — si tarda, falla o contesta 403, no se
+    // pinta el contador y ya. Los impuestos NO salen de aquí: nada asíncrono
+    // puede tocar el régimen fiscal del comprobante (antes este .then() era el
+    // que lo corregía, y quien timbraba antes de su respuesta emitía exento).
     setCfdiQuota(null);
     setCfdiLive(null);
-    taxTouchedRef.current = false;
     const openedFor = invoice?.id ?? null;
-    const openedInvoice = invoice;
     cfdiInvoiceRef.current = openedFor;
     fetch("/api/cfdi/usage")
       .then((r) => (r.ok ? r.json() : null))
@@ -186,11 +211,6 @@ export function InvoiceDetailModal({ open, invoice, patientName, onClose, onMuta
         if (!d || cfdiInvoiceRef.current !== openedFor) return;
         setCfdiQuota({ used: d.used, included: d.included });
         if (typeof d.live === "boolean") setCfdiLive(d.live);
-        // resolveTaxMode respeta la factura por encima de la clínica: si
-        // internamente ya se le agregó IVA al paciente, sigue en iva16.
-        if (!taxTouchedRef.current) {
-          setFiscal((f) => ({ ...f, impuestos: resolveTaxMode(openedInvoice ?? {}, d.taxMode) }));
-        }
       })
       .catch(() => {});
     setPueOk(false);
@@ -802,7 +822,7 @@ export function InvoiceDetailModal({ open, invoice, patientName, onClose, onMuta
                 <Label>{t("clinical.invoiceDetail.cfdiTaxesLabel")}</Label>
                 <select className="flex h-10 w-full rounded-lg border border-border bg-card px-3 text-sm focus:outline-none"
                   value={fiscal.impuestos}
-                  onChange={(e) => { taxTouchedRef.current = true; setFiscal(f => ({ ...f, impuestos: e.target.value as CfdiTaxMode })); }}>
+                  onChange={(e) => setFiscal(f => ({ ...f, impuestos: e.target.value as CfdiTaxMode }))}>
                   <option value="exento">{t("clinical.invoiceDetail.cfdiTaxExempt")}</option>
                   <option value="iva16">{t("clinical.invoiceDetail.cfdiTaxIva16")}</option>
                 </select>

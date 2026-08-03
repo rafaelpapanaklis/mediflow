@@ -6,7 +6,9 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { logAudit } from "@/lib/audit";
-import { round2 } from "./compute";
+// round2 sale de invoice-totals (que la re-exporta desde ./compute): una sola
+// ruta de módulo para toda la aritmética de la factura.
+import { sumInvoiceItems, computeInvoiceTotal, itemLineTotal, round2 } from "@/lib/invoice-totals";
 import type {
   BillingInvoiceItem,
   BillingInvoiceLite,
@@ -125,7 +127,11 @@ export async function createInvoiceFromQuote(
   }
 
   const items = quote.items.map((it) => {
-    const quantity = num(it.quantity) || 1;
+    // Misma regla que itemQuantity() del timbrado (finita >0, si no 1). El
+    // `|| 1` anterior dejaba pasar cantidades negativas y ahí los dos lados
+    // calculaban importes distintos.
+    const rawQty = num(it.quantity);
+    const quantity = rawQty > 0 ? rawQty : 1;
     const unitPrice = num(it.unitPrice);
     // El descuento POR LÍNEA del presupuesto viaja con el concepto: la guarda
     // del timbrado (POST /api/cfdi) y el payload a Facturapi calculan
@@ -138,12 +144,25 @@ export async function createInvoiceFromQuote(
       quantity,
       unitPrice,
       ...(discount > 0 ? { discount } : {}),
-      total: num(it.lineTotal),
+      // El importe de línea se DERIVA de los campos ya normalizados, no se copia
+      // el `lineTotal` del presupuesto: así el JSON del concepto dice lo mismo
+      // que calculan la guarda del timbrado y el comprobante impreso.
+      total: itemLineTotal({ quantity, unitPrice, discount }),
     };
   });
-  const subtotal = num(quote.subtotal);
-  const discount = num(quote.discountAmount);
-  const total = num(quote.total);
+  // Los totales de la FACTURA se derivan de SUS conceptos con la aritmética
+  // canónica (invoice-totals) — no se copian las columnas del presupuesto, que
+  // salen de otra implementación (quotes/compute). Hoy los dos números
+  // coinciden, pero es una coincidencia entre dos matemáticas paralelas: lo que
+  // la guarda del timbrado verifica es Σ round2(qty × unitPrice − desc.línea),
+  // así que ése es el que manda para lo que se va a timbrar. Si algún día
+  // divergen, el presupuesto conserva su importe (no se toca) y la factura sale
+  // por el derivado de sus conceptos.
+  const subtotal = sumInvoiceItems(items);
+  // Clamp al subtotal derivado: un descuento mayor dejaría base 0 y un `total`
+  // que ya no es Σconceptos − descuento (regla SAT: descuento ≤ importe).
+  const discount = round2(Math.min(Math.max(0, num(quote.discountAmount)), subtotal));
+  const { total } = computeInvoiceTotal(subtotal, discount, 0, true);
 
   // Folio MF-XXXX por clínica, con reintento ante carrera (unique compuesto).
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

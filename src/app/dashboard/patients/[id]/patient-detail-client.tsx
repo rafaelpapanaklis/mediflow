@@ -3376,6 +3376,7 @@ export function PatientDetailClient({
         onClose={() => { setInvoiceDetailOpen(null); setInvoiceDetailAction(null); }}
         onMutated={() => router.refresh()}
         initialAction={invoiceDetailAction}
+        clinicTaxMode={clinicTaxMode ?? null}
       />
     </div>
   );
