@@ -3883,3 +3883,96 @@ entero. Si hiciera falta regenerar, hay que cerrar antes ese servidor.
 No se tocó el motor de comisiones, la calculadora ni `globals.css`. No hay librerías nuevas, ni
 SQL, ni cambios de schema. **Nadie calcula ni paga nada distinto por esto**: es sólo una
 superficie de lectura.
+
+## [Afiliados — segundo tipo de aviso flotante: el sueldo mensual] — 2026-08-04
+
+El widget de la esquina de `/afiliados` ya no dice sólo cómo funciona el programa: ahora
+alterna con mensajes que dicen **cuánto se cobra al mes** con tantas clínicas activas. Ola
+chica: **sin SQL, sin schema, sin tocar el motor de comisiones ni la calculadora**.
+
+- `src/lib/affiliates/public-activity.ts` — la tabla `SUELDOS` y `avisosSueldo()` (server).
+- `src/components/afiliados/landing/avisos.tsx` — el tipo `AvisoTipo`, el icono `grafica` y
+  `intercala()`, que es quien hace la mezcla (client).
+
+### Los DOS tipos de mensaje y de dónde salen los números
+
+| | `regla` | `sueldo` |
+|---|---|---|
+| Qué dice | una condición del programa | lo que se cobra al mes |
+| Ejemplo | «Se paga dentro de los primeros 10 días del mes siguiente» | «Una persona con 18 clínicas del plan Profesional cobra $2,520 al mes» |
+| Icono | moneda / regalo / calendario / escudo / personas | **barras ascendentes** (nuevo) |
+| Cuántos | hasta 10 (3 planes + 2 hitos + 5 fijos) | hasta 10 recetas |
+
+**Ni una cifra escrita a mano, en ninguno de los dos.** Todo sale de `getPublicOffer()` —
+precios de `plan_configs`, montos de `affiliate_payout_config`—, así que si Rafael mueve el
+fijo del Profesional de $140 a $160 en `/admin`, **los diez sueldos se recalculan solos** en la
+siguiente regeneración de la página (ISR, 60 s, o al instante si el cambio pasa por el admin,
+que revalida).
+
+Cada receta es una **mezcla** (`18 × PRO`, `15 × PRO + 10 × BASIC`) y el monto es
+`Σ cantidad × fijo recurrente del plan`. La frase **tampoco teclea la cantidad**: la lee del
+mismo contexto que calculó el monto, así que texto y número no se pueden desincronizar. Si un
+plan de la receta está **apagado** en `/admin` (fijo en 0), la receta se descarta **entera** —
+quitar sólo esa parte dejaría «25 clínicas» al lado del monto de 15.
+
+Verificado contra el `.rsc` prerenderizado (config por defecto, 40/90/250): los 10 cuadran —
+`18×90=1,620`, `30×40=1,200`, `12×250=3,000`, `1×90=90`, `45×40=1,800`, `5×250=1,250`,
+`8×90=720`, `15×90+10×40=1,750`, `10×90+6×250=2,400`, `20×40=800`.
+
+### Cómo están redactados (y por qué así)
+
+- **Presente genérico y sujeto indefinido**: «cobra», «se cobran», «deja». Describen la
+  mecánica del programa, no algo que le pasó a alguien.
+- **Sin marcas temporales** («hace 28 minutos», «hoy») y **sin nombres, correos, iniciales ni
+  ciudades**. No son eventos: son la tabla de comisiones dicha en pesos.
+- Tono de dato: ni un signo de exclamación.
+- **Largo medido**, igual que las reglas: el más largo son **68 caracteres** con las etiquetas
+  de plan de hoy, por debajo de los 71 que caben en los dos renglones de la tarjeta (236px de
+  columna, ver el bloque `dcaf-aviso*` de `afiliados.css`). Alargar uno no rompe nada, pero el
+  clamp lo corta a media palabra.
+
+### La mezcla: `intercala()` en vez de la baraja a secas
+
+El widget barajaba la lista y ya. Con dos tipos eso encadena tres reglas seguidas cada dos por
+tres, así que cada tarjeta trae ahora su `tipo` y la cola se arma con el **voraz de
+«reorganizar sin adyacentes iguales»**: en cada paso se toma del montón más grande que no sea
+el del tipo recién usado. Detalles que importan:
+
+- **La costura entre vueltas cuenta.** El tipo de la última tarjeta mostrada (`ultimoTipo`)
+  entra como semilla de la vuelta siguiente; sin eso, la repetición aparece justo en el punto
+  que nadie mira al probarlo.
+- **Degrada, no rompe.** El **modo real es de un solo tipo**: ahí no hay alternancia posible y
+  el voraz cae a la baraja de siempre en vez de quedarse sin tarjetas.
+- Con los **10 y 10** de hoy la alternancia es perfecta (comprobado: 10.000 tarjetas simuladas,
+  **0** del mismo tipo seguidas). Si el admin apaga los hitos (8 reglas + 10 sueldos) salen 2
+  adyacentes por vuelta, que es el **mínimo teórico** de ese reparto (`2M − n`), no un fallo.
+- El tope pasó a ser **por tipo** (`MAX_POR_TIPO = 10`) y no sobre el total: un tope común
+  dejaría pasar 9 reglas y 1 sueldo, y la mezcla se iría al garete. El modo real conserva el
+  suyo (`MAX_REALES = 10`).
+
+Total del ciclo en modo info: **20 tarjetas** (antes 10). Son ~6 min de vuelta completa, así
+que un visitante normal **no ve ninguna repetida**.
+
+### Alcance heredado: esto publica los montos FIJOS
+
+Como **toda** la landing, estos mensajes asumen el programa en modo `fixed` (montos por plan).
+En modo `pct` (% del nivel) la página entera diría otra cosa, no sólo estas tarjetas — la
+limitación es la de siempre, no se amplía ni se arregla aquí.
+
+### Build
+
+`next build` verde, sin pipe. `/afiliados` sigue **estático** (`○`), 9.56 kB / 209 kB de First
+Load JS. **`prisma generate` se saltó otra vez a propósito**: el `next start` de Rafael en el
+puerto 3131 tiene tomado `query_engine-windows.dll.node` y el paso muere con EPERM. Esta ola no
+toca el schema, así que el cliente ya era el bueno y `next build` —tipos + compilación +
+prerender de las 360 páginas— corrió entero. Los `prisma:error` de `DATABASE_URL` durante el
+prerender son los de siempre (no hay `.env` local) y los come el `try/catch`, que es
+justamente lo que deja la página en modo info.
+
+### Lo que NO cambia
+
+El **modo real** sigue igual: con 3+ comisiones en `affiliate_commissions` el widget cambia
+solo a datos verdaderos, con sus reglas de privacidad intactas (nada de ids, estado sólo con
+5+ afiliados, máximo 2 por afiliado). Los **ajustes de ritmo** (6-8 s la primera, 5-6 s de
+vida, 9-18 s de hueco) y el **tope de retención por hover** quedaron sin tocar, igual que
+`globals.css`, el motor de comisiones, la calculadora y los hitos.

@@ -12,6 +12,15 @@
  *  · INFO — mientras no haya tantas. Mensajes que son VERDAD sobre cómo
  *    funciona el programa: sin personas, sin eventos, sin nadie cobrando.
  *
+ * El modo info trae DOS TIPOS de tarjeta y se publican mezclados —el widget los
+ * alterna, ver `intercala` en avisos.tsx—:
+ *
+ *  · "regla"  — una condición del programa ("se paga en los primeros 10 días").
+ *  · "sueldo" — cuánto cobra AL MES quien tiene tantas clínicas activas ("una
+ *    persona con 18 clínicas del plan Profesional cobra $2,520 al mes"). No es
+ *    un evento ni un caso: es la mecánica del programa dicha en pesos, en
+ *    presente y sin sujeto, y el monto SIEMPRE es cantidad × fijo del plan.
+ *
  * REGLA QUE NO SE NEGOCIA: ninguna tarjeta puede decir que alguien cobró si no
  * cobró. En modo real el verbo sale del `status` de la fila —"cobró" sólo con
  * status "paid"; lo demás "generó una comisión de"— y en modo info no se
@@ -42,6 +51,7 @@
  */
 import { prisma } from "@/lib/prisma";
 import { fmtMxn, type PublicOffer } from "./public-offer";
+import type { PlanKey } from "./payout-core";
 import type { AvisoAfiliado } from "@/components/afiliados/landing/avisos";
 
 /** Ventana de actividad que se considera "reciente". */
@@ -52,8 +62,15 @@ const MIN_REALES = 3;
 const MIN_AFILIADOS_ESTADO = 5;
 /** Tarjetas máximas de un mismo afiliado dentro del ciclo. */
 const MAX_POR_AFILIADO = 2;
-/** Tope de tarjetas en cualquiera de los dos modos. */
-const MAX_AVISOS = 10;
+/** Tope de tarjetas del modo real. */
+const MAX_REALES = 10;
+/**
+ * Tope POR TIPO en modo info. Se cuenta por separado, no sobre el total, y esa
+ * es la clave de la mezcla: el widget alterna reglas y sueldos, y la alternancia
+ * sólo se sostiene mientras ningún tipo pase de la mitad de la lista. Un tope
+ * común dejaría pasar 9 reglas y 1 sueldo.
+ */
+const MAX_POR_TIPO = 10;
 /** Filas que se leen como mucho: el ciclo nunca necesita más. */
 const MAX_FILAS = 200;
 
@@ -132,7 +149,7 @@ async function avisosReales(offer: PublicOffer): Promise<AvisoAfiliado[]> {
   const avisos: AvisoAfiliado[] = [];
 
   for (const fila of filas) {
-    if (avisos.length >= MAX_AVISOS) break;
+    if (avisos.length >= MAX_REALES) break;
 
     const usados = porAfiliado.get(fila.affiliateId) ?? 0;
     if (usados >= MAX_POR_AFILIADO) continue;
@@ -166,7 +183,7 @@ async function avisosReales(offer: PublicOffer): Promise<AvisoAfiliado[]> {
     vistas.add(clave);
 
     porAfiliado.set(fila.affiliateId, usados + 1);
-    avisos.push({ k: `r${avisos.length}`, texto, pie, icono: "moneda" });
+    avisos.push({ k: `r${avisos.length}`, texto, pie, icono: "moneda", tipo: "real" });
   }
 
   // Puede quedar por debajo del mínimo tras el tope por afiliado (p. ej. cinco
@@ -176,11 +193,11 @@ async function avisosReales(offer: PublicOffer): Promise<AvisoAfiliado[]> {
 }
 
 /**
- * Modo INFO. Afirmaciones sobre el programa, todas ciertas y todas con sus
- * cifras salidas de la config. No hay eventos ni personas, así que tampoco hay
- * nada que etiquetar como ejemplo.
+ * Modo INFO, tipo REGLA. Afirmaciones sobre el programa, todas ciertas y todas
+ * con sus cifras salidas de la config. No hay eventos ni personas, así que
+ * tampoco hay nada que etiquetar como ejemplo.
  */
-function avisosInformativos(offer: PublicOffer): AvisoAfiliado[] {
+function avisosReglas(offer: PublicOffer): AvisoAfiliado[] {
   const avisos: AvisoAfiliado[] = [];
 
   // Uno por plan con fijo recurrente encendido.
@@ -190,6 +207,7 @@ function avisosInformativos(offer: PublicOffer): AvisoAfiliado[] {
       k: `p-${plan.key}`,
       texto: `${fmtMxn(plan.recurringMxn)} al mes por cada clínica del plan ${plan.label}, mientras siga activa`,
       icono: "moneda",
+      tipo: "regla",
     });
   }
 
@@ -204,12 +222,13 @@ function avisosInformativos(offer: PublicOffer): AvisoAfiliado[] {
         k: `h-${hito.n}`,
         texto: `Al llegar a ${hito.clinics} clínicas activas recibes un bono de ${fmtMxn(hito.mxn)}`,
         icono: "regalo",
+        tipo: "regla",
       });
     }
   }
 
   // Los cinco fijos, en orden de importancia: si algún día sobran mensajes, el
-  // recorte de `MAX_AVISOS` muerde por el final.
+  // recorte de `MAX_POR_TIPO` muerde por el final.
   //
   // Van todos MEDIDOS para caber en dos renglones de la tarjeta (236px de
   // columna). Alargar uno no rompe nada, pero el clamp lo corta a media frase:
@@ -218,29 +237,184 @@ function avisosInformativos(offer: PublicOffer): AvisoAfiliado[] {
     k: "s-pago",
     texto: "Se paga dentro de los primeros 10 días del mes siguiente",
     icono: "calendario",
+    tipo: "regla",
   });
   avisos.push({
     k: "s-anual",
     texto: "Si la clínica contrata el plan anual, cobras los 12 meses de golpe",
     icono: "calendario",
+    tipo: "regla",
   });
   avisos.push({
     k: "s-gratis",
     texto: "Entrar al programa es gratis y sin exclusividad",
     icono: "escudo",
+    tipo: "regla",
   });
   avisos.push({
     k: "s-equipo",
     texto: "Registra a tus propios vendedores y asígnales su porcentaje",
     icono: "personas",
+    tipo: "regla",
   });
   avisos.push({
     k: "s-cobro",
     texto: "Cobras por SPEI o PayPal, tú eliges",
     icono: "escudo",
+    tipo: "regla",
   });
 
-  return avisos.slice(0, MAX_AVISOS);
+  return avisos.slice(0, MAX_POR_TIPO);
+}
+
+/** Lo que el redactor de un sueldo tiene a mano. Todo sale de la config. */
+interface SueldoCtx {
+  /** Clínicas de la receta (la suma de la mezcla). */
+  total: number;
+  /** Cuántas de cada plan, en el orden de la mezcla. */
+  ns: number[];
+  /** Etiqueta comercial de cada plan, en el orden de la mezcla. */
+  planes: string[];
+  /** El sueldo mensual ya formateado. Es Σ (n × fijo recurrente del plan). */
+  monto: string;
+}
+
+/**
+ * Las diez recetas del tipo SUELDO: una cantidad de clínicas, sus planes y cómo
+ * se dice. El monto NO está aquí —se calcula— y el `frase` tampoco teclea las
+ * cantidades: las lee del contexto, para que texto y número no se puedan
+ * desincronizar.
+ *
+ * REGLAS DE REDACCIÓN, que son el motivo de que esto exista:
+ *  · PRESENTE genérico y sujeto indefinido. Describen la mecánica del programa
+ *    ("una persona con 18 clínicas cobra…"), no algo que le pasó a alguien: ni
+ *    pasado, ni nombres, ni correos, ni ciudades, ni marcas de tiempo.
+ *  · El monto es cantidad × fijo del plan, leído de `getPublicOffer()`. Si el
+ *    admin mueve un fijo, estas frases cambian solas.
+ *
+ * LARGO: igual que las reglas, van medidos para caber en los dos renglones de
+ * la tarjeta (236px de columna, ver afiliados.css). El más largo anda por 68
+ * caracteres con las etiquetas de plan de hoy; pasarse de ahí no rompe nada,
+ * pero el clamp corta la frase a media palabra.
+ */
+const SUELDOS: {
+  k: string;
+  mezcla: { key: PlanKey; n: number }[];
+  frase: (c: SueldoCtx) => string;
+}[] = [
+  {
+    k: "g-pro-18",
+    mezcla: [{ key: "PRO", n: 18 }],
+    frase: (c) => `Una persona con ${c.ns[0]} clínicas del plan ${c.planes[0]} cobra ${c.monto} al mes`,
+  },
+  {
+    k: "g-basic-30",
+    mezcla: [{ key: "BASIC", n: 30 }],
+    frase: (c) => `Quien tiene ${c.ns[0]} clínicas del plan ${c.planes[0]} cobra ${c.monto} cada mes`,
+  },
+  {
+    k: "g-clinic-12",
+    mezcla: [{ key: "CLINIC", n: 12 }],
+    frase: (c) => `Una persona con ${c.ns[0]} clínicas del plan ${c.planes[0]} cobra ${c.monto} mensuales`,
+  },
+  {
+    // La única de una sola clínica: es el ladrillo con el que se arma el resto.
+    k: "g-pro-1",
+    mezcla: [{ key: "PRO", n: 1 }],
+    frase: (c) => `Quien trae una clínica del plan ${c.planes[0]} cobra ${c.monto} cada mes`,
+  },
+  {
+    k: "g-basic-45",
+    mezcla: [{ key: "BASIC", n: 45 }],
+    frase: (c) => `Quien mantiene ${c.ns[0]} clínicas del plan ${c.planes[0]} cobra ${c.monto} al mes`,
+  },
+  {
+    k: "g-clinic-5",
+    mezcla: [{ key: "CLINIC", n: 5 }],
+    frase: (c) => `Con ${c.ns[0]} clínicas del plan ${c.planes[0]} activas se cobran ${c.monto} al mes`,
+  },
+  {
+    k: "g-pro-8",
+    mezcla: [{ key: "PRO", n: 8 }],
+    frase: (c) => `${c.ns[0]} clínicas activas del plan ${c.planes[0]} dan ${c.monto} al mes`,
+  },
+  {
+    k: "g-mix-25",
+    mezcla: [{ key: "PRO", n: 15 }, { key: "BASIC", n: 10 }],
+    frase: (c) =>
+      `Quien tiene ${c.ns[0]} clínicas ${c.planes[0]} y ${c.ns[1]} ${c.planes[1]} cobra ${c.monto} al mes`,
+  },
+  {
+    k: "g-mix-16",
+    mezcla: [{ key: "PRO", n: 10 }, { key: "CLINIC", n: 6 }],
+    frase: (c) =>
+      `Con ${c.ns[0]} clínicas ${c.planes[0]} y ${c.ns[1]} ${c.planes[1]} se cobran ${c.monto} al mes`,
+  },
+  {
+    k: "g-basic-20",
+    mezcla: [{ key: "BASIC", n: 20 }],
+    frase: (c) => `Una cartera de ${c.total} clínicas del plan ${c.planes[0]} deja ${c.monto} al mes`,
+  },
+];
+
+/**
+ * Modo INFO, tipo SUELDO. Cuánto se cobra al mes con tantas clínicas activas.
+ *
+ * Una receta cuyo plan esté APAGADO en /admin (fijo recurrente en 0) se descarta
+ * ENTERA: quitar sólo esa parte de la mezcla dejaría una frase que dice "25
+ * clínicas" al lado de un monto de 15, y la tarjeta mentiría.
+ *
+ * Alcance heredado de la página: como toda la landing, esto publica los montos
+ * FIJOS por plan. En un programa configurado en modo "pct" (% del nivel) la
+ * landing entera diría otra cosa — ver ORQUESTA.md.
+ */
+function avisosSueldo(offer: PublicOffer): AvisoAfiliado[] {
+  const fijo = new Map<string, { label: string; mxn: number }>();
+  for (const p of offer.plans) fijo.set(p.key, { label: p.label, mxn: p.recurringMxn });
+
+  const avisos: AvisoAfiliado[] = [];
+  for (const receta of SUELDOS) {
+    if (avisos.length >= MAX_POR_TIPO) break;
+
+    let mxn = 0;
+    let total = 0;
+    const ns: number[] = [];
+    const planes: string[] = [];
+    let completa = true;
+
+    for (const parte of receta.mezcla) {
+      const plan = fijo.get(parte.key);
+      if (!plan || !(plan.mxn > 0)) {
+        completa = false;
+        break;
+      }
+      mxn += parte.n * plan.mxn;
+      total += parte.n;
+      ns.push(parte.n);
+      planes.push(plan.label);
+    }
+
+    if (!completa || mxn <= 0) continue;
+
+    avisos.push({
+      k: receta.k,
+      texto: receta.frase({ total, ns, planes, monto: fmtMxn(mxn) }),
+      icono: "grafica",
+      tipo: "sueldo",
+    });
+  }
+
+  return avisos;
+}
+
+/**
+ * Modo INFO completo: reglas + sueldos, en una sola lista. El ORDEN de aquí no
+ * es el de la pantalla —el widget baraja y alterna por tipo—, así que se
+ * entregan agrupados y con su tope por tipo, que es lo que deja la mezcla
+ * pareja.
+ */
+function avisosInformativos(offer: PublicOffer): AvisoAfiliado[] {
+  return avisosReglas(offer).concat(avisosSueldo(offer));
 }
 
 /**

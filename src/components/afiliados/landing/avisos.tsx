@@ -13,6 +13,10 @@
  * mensajes informativos del programa, y quien aplica las reglas de privacidad.
  * Al navegador no baja ni un id ni una fecha exacta, sólo la frase.
  *
+ * ORDEN: la lista se baraja, pero NO a ciegas. Cada tarjeta trae su `tipo` y el
+ * ciclo los alterna (ver `intercala`), así que dos reglas del programa —o dos
+ * sueldos— nunca salen seguidas.
+ *
  * RITMO IRREGULAR A PROPÓSITO: un intervalo fijo delata al widget en tres
  * apariciones. La primera tarjeta tarda 6-8 s, cada una dura 5-6 s y entre una
  * y otra pasan 9-18 s, todo sorteado tarjeta por tarjeta.
@@ -41,8 +45,18 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
-/** Los cinco iconos del diseño. El tipo de mensaje elige cuál sale. */
-export type AvisoIcono = "moneda" | "regalo" | "calendario" | "escudo" | "personas";
+/** Los seis iconos del diseño. El tipo de mensaje elige cuál sale. */
+export type AvisoIcono = "moneda" | "regalo" | "calendario" | "escudo" | "personas" | "grafica";
+
+/**
+ * De qué habla la tarjeta. No cambia cómo se pinta: es lo que usa `intercala`
+ * para que el ciclo vaya alternando y no encadene tres reglas seguidas.
+ *
+ *  · "real"   — un evento de `affiliate_commissions` (modo real, tipo único).
+ *  · "regla"  — cómo funciona el programa.
+ *  · "sueldo" — cuánto cobra al mes quien tiene tantas clínicas activas.
+ */
+export type AvisoTipo = "real" | "regla" | "sueldo";
 
 /**
  * Espejo local del DTO, igual que hace `PlanRow` en la calculadora: el server
@@ -59,6 +73,7 @@ export interface AvisoAfiliado {
   /** Segunda línea: la fecha relativa. Sólo la traen los eventos reales. */
   pie?: string;
   icono: AvisoIcono;
+  tipo: AvisoTipo;
 }
 
 export interface AvisosFlotantesProps {
@@ -104,6 +119,64 @@ function baraja<T>(xs: T[]): T[] {
   return a;
 }
 
+/**
+ * Baraja la lista y la reordena para que NO salgan dos tarjetas del mismo tipo
+ * seguidas: una regla del programa, un sueldo, una regla…
+ *
+ * Es el voraz de "reorganizar sin adyacentes iguales": en cada paso se toma del
+ * montón más grande que no sea el del tipo recién usado. Sirve porque el montón
+ * grande es justo el que se queda sin pareja al final, y sostiene la alternancia
+ * siempre que sea posible —o sea, mientras ningún tipo pase de la mitad de la
+ * lista—. Cuando no lo es (el modo real, que es de un solo tipo) degrada a la
+ * baraja de siempre en vez de tirar tarjetas.
+ *
+ * `previo` es el tipo de la ÚLTIMA tarjeta mostrada: sin él, la vuelta nueva
+ * podría arrancar con el mismo tipo con el que terminó la anterior, que es
+ * exactamente la costura que nadie mira.
+ *
+ * Nada de `for...of` sobre un Map: sin `target` en tsconfig, TypeScript no baja
+ * iteradores y el type-check truena.
+ */
+function intercala(xs: AvisoAfiliado[], previo: AvisoTipo | null): AvisoAfiliado[] {
+  const tipos: AvisoTipo[] = [];
+  const montones: AvisoAfiliado[][] = [];
+  for (const x of baraja(xs)) {
+    let i = tipos.indexOf(x.tipo);
+    if (i < 0) {
+      i = tipos.length;
+      tipos.push(x.tipo);
+      montones.push([]);
+    }
+    montones[i].push(x);
+  }
+
+  const salida: AvisoAfiliado[] = [];
+  let ultimoTipo = previo;
+  while (salida.length < xs.length) {
+    let elegido = -1;
+    for (let i = 0; i < montones.length; i++) {
+      if (montones[i].length === 0 || tipos[i] === ultimoTipo) continue;
+      if (elegido < 0 || montones[i].length > montones[elegido].length) elegido = i;
+    }
+    // Sólo queda el tipo que se acaba de usar: se repite antes que perder
+    // tarjetas.
+    if (elegido < 0) {
+      for (let i = 0; i < montones.length; i++) {
+        if (montones[i].length > 0) {
+          elegido = i;
+          break;
+        }
+      }
+    }
+    if (elegido < 0) break;
+    const x = montones[elegido].shift();
+    if (!x) break;
+    salida.push(x);
+    ultimoTipo = tipos[elegido];
+  }
+  return salida;
+}
+
 /** Trazos de los iconos, al estilo del resto de la página: SVG inline. */
 const TRAZOS: Record<AvisoIcono, React.ReactNode> = {
   moneda: (
@@ -146,6 +219,17 @@ const TRAZOS: Record<AvisoIcono, React.ReactNode> = {
       <path d="M17.6 13.4A6.4 6.4 0 0 1 21.4 19" />
     </>
   ),
+  // Barras que suben — el de los sueldos. A 19px hay que leerlo de un vistazo,
+  // así que sin flecha ni ejes: tres trazos y la base bastan para que no se
+  // confunda con la moneda de las reglas.
+  grafica: (
+    <>
+      <path d="M3.5 20.5h17" />
+      <path d="M7 20.5v-4.5" />
+      <path d="M12 20.5V11" />
+      <path d="M17 20.5V5.5" />
+    </>
+  ),
 };
 
 export function AvisosFlotantes({ avisos }: AvisosFlotantesProps) {
@@ -161,6 +245,8 @@ export function AvisosFlotantes({ avisos }: AvisosFlotantesProps) {
   const retenido = useRef(false);
   const cola = useRef<AvisoAfiliado[]>([]);
   const ultimo = useRef<string | null>(null);
+  /** Tipo de la última mostrada: sostiene la alternancia entre vueltas. */
+  const ultimoTipo = useRef<AvisoTipo | null>(null);
   const lista = useRef<AvisoAfiliado[]>(avisos);
   lista.current = avisos;
 
@@ -215,8 +301,10 @@ export function AvisosFlotantes({ avisos }: AvisosFlotantesProps) {
 
     const siguiente = (): AvisoAfiliado | null => {
       if (cola.current.length === 0) {
-        const nueva = baraja(lista.current);
-        // Al reordenar, que la primera no sea la que se acaba de ver.
+        const nueva = intercala(lista.current, ultimoTipo.current);
+        // Al reordenar, que la primera no sea la que se acaba de ver. Con dos
+        // tipos esto ya lo garantiza `intercala` —la de arriba es del otro
+        // tipo—; queda para el modo real, que es de un tipo solo.
         if (nueva.length > 1 && ultimo.current && nueva[0].k === ultimo.current) {
           const t = nueva[0];
           nueva[0] = nueva[1];
@@ -225,7 +313,10 @@ export function AvisosFlotantes({ avisos }: AvisosFlotantesProps) {
         cola.current = nueva;
       }
       const x = cola.current.shift() ?? null;
-      if (x) ultimo.current = x.k;
+      if (x) {
+        ultimo.current = x.k;
+        ultimoTipo.current = x.tipo;
+      }
       return x;
     };
 
