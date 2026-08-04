@@ -20,13 +20,18 @@ import { SPECIALTY_SLUGS } from "@/lib/specialty-data";
 
 /**
  * Superficies que dependen de `affiliate_payout_config` (los 6 montos, el
- * arranque y si el afiliado puede elegir modalidad).
+ * arranque, si el afiliado puede elegir modalidad y los 3 bonos por hitos).
  *
- * Sólo /afiliados: es la única ruta con ISR que lee esa config.
+ *  · "/afiliados"           → la landing del programa.
+ *  · "/terminos-afiliados"  → publica los MISMOS umbrales y montos de los bonos
+ *    (sección "Bonos por hitos"). Si se quedara con el ISR viejo, los términos
+ *    prometerían una cifra distinta a la de la landing — y esa es la página que
+ *    se cita cuando alguien reclama.
+ *
  * /afiliados/registro es `force-dynamic` y /afiliados/(panel)/* pide sesión, así
  * que ninguna se cachea.
  */
-const AFFILIATE_PATHS: readonly string[] = ["/afiliados"];
+const AFFILIATE_PATHS: readonly string[] = ["/afiliados", "/terminos-afiliados"];
 
 /**
  * Superficies que muestran el PRECIO de los planes (`plan_configs`):
@@ -40,12 +45,13 @@ const AFFILIATE_PATHS: readonly string[] = ["/afiliados"];
  *    ("plan de $689/mes"), así que un cambio de precio también la desactualiza.
  *
  * Las 8 páginas de producto (/software-agenda-dental y compañía) NO listan
- * precios: se dejan fuera a propósito.
+ * precios: se dejan fuera a propósito. /terminos-afiliados tampoco: publica
+ * comisiones y bonos, nunca el precio de un plan.
  */
 const PRICING_PATHS: readonly string[] = [
   "/",
   ...SPECIALTY_SLUGS.map((slug) => `/${slug}`),
-  ...AFFILIATE_PATHS,
+  "/afiliados",
 ];
 
 /**

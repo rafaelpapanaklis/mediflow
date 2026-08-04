@@ -17,12 +17,14 @@ import { formatCurrency, formatDate } from "@/lib/utils";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 // Motor de comisiones: matemática PURA (sin Prisma) → se puede importar aquí.
 import {
+  DEFAULT_MILESTONES,
   DEFAULT_PAYOUT_CONFIG,
   PAYOUT_MODE_LABELS,
   PLAN_KEYS,
   equivalentPct,
   paybackMonths,
   simulateProgram,
+  type MilestonesConfig,
   type PayoutConfig,
   type PayoutMode,
   type PlanKey,
@@ -169,6 +171,8 @@ type PayoutPlanRow = { id: PlanKey; label: string; priceMxn: number };
 
 type PayoutConfigResponse = {
   config: PayoutConfig;
+  /** Bonos por hitos: se guardan en la misma fila, fuera de `config`. */
+  milestones?: MilestonesConfig;
   exists: boolean;
   plans: PayoutPlanRow[];
 };
@@ -256,6 +260,51 @@ const DEFAULT_PAYOUT_FORM: PayoutForm = {
   startAtInvoiceNo: String(DEFAULT_PAYOUT_CONFIG.startAtInvoiceNo),
   oneTimeAtInvoiceNo: String(DEFAULT_PAYOUT_CONFIG.oneTimeAtInvoiceNo),
 };
+
+// ── Bonos por hitos ───────────────────────────────────────────────────────
+// Se guardan en la MISMA fila que el esquema de pago y se mandan en el mismo
+// PUT, pero son otra cosa: una promoción que hoy sólo se ANUNCIA. Nada en el
+// sistema cuenta clínicas ni paga estos bonos — el seguimiento es manual.
+
+type MilestoneNumberKey =
+  | "milestone1Clinics" | "milestone1Mxn"
+  | "milestone2Clinics" | "milestone2Mxn"
+  | "milestone3Clinics" | "milestone3Mxn";
+
+interface MilestoneForm extends Record<MilestoneNumberKey, string> {
+  milestonesEnabled: boolean;
+}
+
+const MILESTONE_ROWS: { n: number; clinics: MilestoneNumberKey; mxn: MilestoneNumberKey }[] = [
+  { n: 1, clinics: "milestone1Clinics", mxn: "milestone1Mxn" },
+  { n: 2, clinics: "milestone2Clinics", mxn: "milestone2Mxn" },
+  { n: 3, clinics: "milestone3Clinics", mxn: "milestone3Mxn" },
+];
+
+/** Valores iniciales = los DEFAULT del DDL. Se reemplazan con el GET. */
+const DEFAULT_MILESTONE_FORM: MilestoneForm = {
+  milestonesEnabled: DEFAULT_MILESTONES.milestonesEnabled,
+  milestone1Clinics: String(DEFAULT_MILESTONES.milestone1Clinics),
+  milestone1Mxn: String(DEFAULT_MILESTONES.milestone1Mxn),
+  milestone2Clinics: String(DEFAULT_MILESTONES.milestone2Clinics),
+  milestone2Mxn: String(DEFAULT_MILESTONES.milestone2Mxn),
+  milestone3Clinics: String(DEFAULT_MILESTONES.milestone3Clinics),
+  milestone3Mxn: String(DEFAULT_MILESTONES.milestone3Mxn),
+};
+
+/** Config del API → formulario (strings). Tolerante a campos faltantes. */
+function toMilestoneForm(cfg: Partial<MilestonesConfig> | null | undefined): MilestoneForm {
+  const c = cfg ?? {};
+  return {
+    milestonesEnabled: c.milestonesEnabled !== false,
+    milestone1Clinics: String(c.milestone1Clinics ?? DEFAULT_MILESTONE_FORM.milestone1Clinics),
+    milestone1Mxn: String(c.milestone1Mxn ?? DEFAULT_MILESTONE_FORM.milestone1Mxn),
+    milestone2Clinics: String(c.milestone2Clinics ?? DEFAULT_MILESTONE_FORM.milestone2Clinics),
+    milestone2Mxn: String(c.milestone2Mxn ?? DEFAULT_MILESTONE_FORM.milestone2Mxn),
+    milestone3Clinics: String(c.milestone3Clinics ?? DEFAULT_MILESTONE_FORM.milestone3Clinics),
+    milestone3Mxn: String(c.milestone3Mxn ?? DEFAULT_MILESTONE_FORM.milestone3Mxn),
+  };
+}
 
 const DEFAULT_SIM_COUNTS: Record<PlanKey, string> = { BASIC: "10", PRO: "20", CLINIC: "5" };
 
@@ -419,6 +468,7 @@ export function AffiliatesClient({ initial }: { initial: AffiliateRow[] }) {
 
   // ── Esquema de pago (motor de comisiones) ──────────────────────────────
   const [payForm, setPayForm] = useState<PayoutForm>(DEFAULT_PAYOUT_FORM);
+  const [milForm, setMilForm] = useState<MilestoneForm>(DEFAULT_MILESTONE_FORM);
   const [payPlans, setPayPlans] = useState<PayoutPlanRow[]>([]);
   const [payExists, setPayExists] = useState(true);
   const [payLoading, setPayLoading] = useState(true);
@@ -434,6 +484,7 @@ export function AffiliatesClient({ initial }: { initial: AffiliateRow[] }) {
         setPayExists(data?.exists !== false);
         setPayPlans(Array.isArray(data?.plans) ? data.plans : []);
         if (data?.config) setPayForm(toPayoutForm(data.config));
+        if (data?.milestones) setMilForm(toMilestoneForm(data.milestones));
       })
       .catch(() => {})
       .finally(() => {
@@ -522,6 +573,24 @@ export function AffiliatesClient({ initial }: { initial: AffiliateRow[] }) {
     });
   }
 
+  function setMilNum(key: MilestoneNumberKey, value: string) {
+    setMilForm((prev) => {
+      const next: MilestoneForm = { ...prev };
+      next[key] = value;
+      return next;
+    });
+  }
+
+  /** Suma de los tres bonos: son acumulables y así se publican. */
+  const milestonesTotal = useMemo(() => {
+    let total = 0;
+    for (const row of MILESTONE_ROWS) {
+      const mxn = Number(milForm[row.mxn]);
+      if (Number.isFinite(mxn) && mxn > 0) total += mxn;
+    }
+    return total;
+  }, [milForm]);
+
   async function savePayoutConfig() {
     // Validación en cliente: al motor de comisiones no le mandamos basura.
     for (const plan of PLAN_KEYS) {
@@ -541,6 +610,27 @@ export function AffiliatesClient({ initial }: { initial: AffiliateRow[] }) {
     const oneTimeAt = Number(payForm.oneTimeAtInvoiceNo);
     if (!Number.isInteger(oneTimeAt) || oneTimeAt < 1 || oneTimeAt > 12) {
       toast.error('"El pago único se entrega desde el cobro #" debe ser un entero entre 1 y 12.');
+      return;
+    }
+    // Bonos por hitos: umbrales enteros CRECIENTES y montos ≥ 0. El servidor lo
+    // valida igual (y responde 400); aquí se avisa sin gastar el viaje.
+    const hitos = MILESTONE_ROWS.map((row) => ({
+      n: row.n,
+      clinics: Number(milForm[row.clinics]),
+      mxn: Number(milForm[row.mxn]),
+    }));
+    for (const hito of hitos) {
+      if (!Number.isInteger(hito.clinics) || hito.clinics < 1) {
+        toast.error(`Hito ${hito.n}: las clínicas deben ser un entero mayor o igual a 1.`);
+        return;
+      }
+      if (!Number.isFinite(hito.mxn) || hito.mxn < 0) {
+        toast.error(`Hito ${hito.n}: el bono debe ser un número mayor o igual a 0.`);
+        return;
+      }
+    }
+    if (!(hitos[0].clinics < hitos[1].clinics && hitos[1].clinics < hitos[2].clinics)) {
+      toast.error("Los umbrales de los hitos deben ir en aumento: hito 1 < hito 2 < hito 3.");
       return;
     }
     // Si el pago único cae ANTES del arranque de la comisión, el arranque lo
@@ -571,11 +661,19 @@ export function AffiliatesClient({ initial }: { initial: AffiliateRow[] }) {
           oneTimeClinicMxn: Number(payForm.oneTimeClinicMxn),
           startAtInvoiceNo: startAt,
           oneTimeAtInvoiceNo: oneTimeAt,
+          milestonesEnabled: milForm.milestonesEnabled,
+          milestone1Clinics: hitos[0].clinics,
+          milestone1Mxn: hitos[0].mxn,
+          milestone2Clinics: hitos[1].clinics,
+          milestone2Mxn: hitos[1].mxn,
+          milestone3Clinics: hitos[2].clinics,
+          milestone3Mxn: hitos[2].mxn,
         }),
       });
       const data = await res.json().catch(() => ({} as any));
       if (!res.ok) throw new Error(data?.error ?? "No se pudo guardar el esquema de pago");
       if (data?.config) setPayForm(toPayoutForm(data.config));
+      if (data?.milestones) setMilForm(toMilestoneForm(data.milestones));
       // El mensaje dice explícitamente que la landing pública YA quedó al día:
       // /afiliados es una página cacheada y sin este aviso un guardado correcto
       // parecía fallido al recargarla y ver los montos viejos. `revalidated` lo
@@ -760,6 +858,70 @@ export function AffiliatesClient({ initial }: { initial: AffiliateRow[] }) {
           disabled={payLoading}
           onChange={(e) => setPayNum(key, e.target.value)}
         />
+        <span className="mono" style={{ fontSize: 11, color: "var(--text-3)", lineHeight: 1.4 }}>
+          {hint}
+        </span>
+      </div>
+    );
+  }
+
+  // Un escalón de los bonos por hitos: umbral + monto + su equivalencia viva.
+  // La equivalencia se calcula con los datos REALES que ya están en pantalla
+  // (el propio monto y el fijo recurrente del plan más común), igual que las
+  // comisiones: aquí no se teclea ningún número.
+  function renderMilestoneRow(row: (typeof MILESTONE_ROWS)[number]) {
+    const clinics = Number(milForm[row.clinics]);
+    const mxn = Number(milForm[row.mxn]);
+    const okClinics = Number.isInteger(clinics) && clinics > 0;
+    const okMxn = Number.isFinite(mxn) && mxn >= 0;
+    const perClinic = okClinics && okMxn ? mxn / clinics : null;
+    // Referencia: el fijo recurrente del plan más común (Profesional). Sin él
+    // configurado no se inventa nada: se muestra sólo el "por clínica".
+    const refRecurring = amountOf(payForm, RECURRING_FIELD.PRO);
+    const months = perClinic !== null && refRecurring > 0 ? paybackMonths(perClinic, refRecurring) : null;
+
+    const hint =
+      perClinic === null
+        ? "equivalencia —"
+        : `${formatCurrency(mxn)} ÷ ${clinics} = ${formatCurrency(perClinic)} por clínica` +
+          (months === null
+            ? ""
+            : ` · ${months} ${months === 1 ? "mes" : "meses"} del fijo de ${planLabels.PRO} (${formatCurrency(refRecurring)})`);
+
+    return (
+      <div key={row.n} style={{ display: "grid", gap: 4 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) minmax(0,1.3fr)", gap: 12 }}>
+          <div className="field-new">
+            <label className="field-new__label" htmlFor={`milestone-${row.n}-clinics`}>
+              Hito {row.n} · clínicas activas
+            </label>
+            <input
+              id={`milestone-${row.n}-clinics`}
+              type="number"
+              className="input-new"
+              min={1}
+              step={1}
+              value={milForm[row.clinics]}
+              disabled={payLoading}
+              onChange={(e) => setMilNum(row.clinics, e.target.value)}
+            />
+          </div>
+          <div className="field-new">
+            <label className="field-new__label" htmlFor={`milestone-${row.n}-mxn`}>
+              Bono (MXN, pago único)
+            </label>
+            <input
+              id={`milestone-${row.n}-mxn`}
+              type="number"
+              className="input-new"
+              min={0}
+              step={500}
+              value={milForm[row.mxn]}
+              disabled={payLoading}
+              onChange={(e) => setMilNum(row.mxn, e.target.value)}
+            />
+          </div>
+        </div>
         <span className="mono" style={{ fontSize: 11, color: "var(--text-3)", lineHeight: 1.4 }}>
           {hint}
         </span>
@@ -1495,6 +1657,59 @@ export function AffiliatesClient({ initial }: { initial: AffiliateRow[] }) {
               esa espera (se cobran completas desde el día uno) y comisionan en su primera factura. La modalidad se
               congela por clínica cuando se da de alta, así que cambiarla solo afecta a las clínicas nuevas.
             </p>
+
+            {/* Bonos por hitos: se anuncian en /afiliados, NADIE los calcula. */}
+            <div style={{ marginTop: 22 }}>
+              <div className="form-section__title">
+                Bonos por hitos
+                <span className="form-section__rule" />
+              </div>
+
+              <label
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 8,
+                  fontSize: 13,
+                  color: "var(--text-2)",
+                  marginBottom: 14,
+                  cursor: "pointer",
+                }}
+              >
+                <input
+                  type="checkbox"
+                  checked={milForm.milestonesEnabled}
+                  disabled={payLoading}
+                  onChange={(e) =>
+                    setMilForm((prev) => ({ ...prev, milestonesEnabled: e.target.checked }))
+                  }
+                  style={{ width: 15, height: 15, accentColor: "var(--brand)" }}
+                />
+                Anunciar los bonos por hitos en la página pública
+              </label>
+
+              <div
+                style={{
+                  display: "grid",
+                  gap: 14,
+                  // Apagados siguen siendo editables (se pueden dejar listos
+                  // antes de encender la promoción), pero se ven apagados.
+                  opacity: milForm.milestonesEnabled ? 1 : 0.55,
+                }}
+              >
+                {MILESTONE_ROWS.map((row) => renderMilestoneRow(row))}
+              </div>
+
+              <p style={{ color: "var(--text-3)", fontSize: 12, lineHeight: 1.5, margin: "12px 0 0" }}>
+                Son <strong>acumulables</strong>: quien llega al último habrá cobrado los tres,{" "}
+                <strong>{formatCurrency(milestonesTotal)}</strong> en total. Se suman al fijo recurrente,
+                no lo reemplazan. Los umbrales tienen que ir en aumento (1 &lt; 2 &lt; 3).{" "}
+                <strong>El sistema no los calcula ni los paga</strong>: no hay contador de hitos ni
+                registro de bonos entregados, el seguimiento es manual. Con el interruptor apagado el
+                bloque desaparece de <span className="mono">/afiliados</span> y de{" "}
+                <span className="mono">/terminos-afiliados</span>.
+              </p>
+            </div>
           </div>
 
           <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 16 }}>

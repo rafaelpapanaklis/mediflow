@@ -14,9 +14,12 @@
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import {
+  DEFAULT_MILESTONES,
   DEFAULT_PAYOUT_CONFIG,
+  normalizeMilestones,
   normalizePayoutMode,
   normalizeProgramMode,
+  type MilestonesConfig,
   type PayoutConfig,
   type PayoutMode,
 } from "./payout-core";
@@ -66,6 +69,33 @@ export async function getPayoutConfig(): Promise<PayoutConfig | null> {
   } catch {
     // Tabla inexistente (sql/afiliados-comisiones.sql sin correr) u otro error.
     return null;
+  }
+}
+
+/**
+ * Config del motor + BONOS POR HITOS en UNA sola lectura de la fila id=1.
+ *
+ * Existe para las superficies públicas, que necesitan las dos mitades a la vez
+ * (/afiliados y /terminos-afiliados): llamar a `getPayoutConfig()` y a un
+ * hipotético `getMilestones()` costaría dos SELECT por regeneración. El motor de
+ * comisiones sigue usando `getPayoutConfig()` tal cual — no sabe de hitos.
+ *
+ * Misma degradación: tabla inexistente → los dos en null; tabla sin fila →
+ * los defaults de cada mitad. Nunca lanza.
+ */
+export async function getPayoutSettings(): Promise<{
+  cfg: PayoutConfig | null;
+  milestones: MilestonesConfig | null;
+}> {
+  try {
+    const row = await prisma.affiliatePayoutConfig.findUnique({ where: { id: 1 } });
+    if (!row) return { cfg: { ...DEFAULT_PAYOUT_CONFIG }, milestones: { ...DEFAULT_MILESTONES } };
+    return { cfg: toPayoutConfig(row), milestones: normalizeMilestones(row) };
+  } catch {
+    // Tabla inexistente (sql/afiliados-comisiones.sql sin correr) u otro error.
+    // Ojo: las COLUMNAS de hitos sin crear (sql/afiliados-hitos.sql sin correr)
+    // caen aquí también, porque Prisma las pide en el SELECT.
+    return { cfg: null, milestones: null };
   }
 }
 

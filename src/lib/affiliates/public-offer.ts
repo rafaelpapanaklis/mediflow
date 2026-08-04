@@ -4,11 +4,11 @@
  *
  * Misma regla que los precios de los planes, aplicada a las comisiones: aquí
  * no se escribe ni un monto a mano. Los precios salen de plan_configs
- * (`getResolvedPlans`) y los montos de affiliate_payout_config
- * (`getPayoutConfig`), así que si el admin cambia $90 a $100 la página pública
- * lo refleja sin deploy.
+ * (`getResolvedPlans`) y los montos —las seis comisiones y los tres bonos por
+ * hitos— de affiliate_payout_config (`getPayoutSettings`, una sola lectura),
+ * así que si el admin cambia $90 a $100 la página pública lo refleja sin deploy.
  *
- * DEGRADACIÓN: `getPayoutConfig()` devuelve null cuando sql/afiliados-comisiones.sql
+ * DEGRADACIÓN: `getPayoutSettings()` devuelve null cuando sql/afiliados-comisiones.sql
  * no está aplicado → se usan los DEFAULT del motor (los mismos que declara el
  * SQL). `getResolvedPlans()` ya trae su propio fallback de precios. Nada aquí
  * lanza: en el peor caso la página muestra los defaults en vez de romperse.
@@ -19,12 +19,17 @@
  */
 import type { ResolvedPlan } from "@/lib/plan-shared";
 import { getResolvedPlans } from "@/lib/plans";
-import { getPayoutConfig } from "./payout";
+import { getPayoutSettings } from "./payout";
 import {
+  DEFAULT_MILESTONES,
   DEFAULT_PAYOUT_CONFIG,
   fixedAmountFor,
+  milestonesTotalMxn,
+  milestoneTiers,
   paybackMonths,
   PLAN_KEYS,
+  type MilestonesConfig,
+  type MilestoneTier,
   type PayoutConfig,
   type PlanKey,
 } from "./payout-core";
@@ -46,8 +51,24 @@ export interface PublicOfferPlan {
   oneTimeAsMonths: number | null;
 }
 
+/**
+ * Bonos por hitos, listos para publicar. `enabled` es el switch del admin: en
+ * false NINGUNA superficie pública menciona la promoción (Rafael la apaga sin
+ * deploy). `tiers` viene ordenado por umbral y sin escalones apagados.
+ *
+ * OJO: esto es una PROMESA COMERCIAL, no un cálculo del sistema. Nada cuenta
+ * clínicas ni paga estos bonos todavía; el seguimiento es manual.
+ */
+export interface PublicOfferMilestones {
+  enabled: boolean;
+  tiers: MilestoneTier[];
+  /** Suma de los tres (son acumulables): el "$112,500 en total" de la página. */
+  totalMxn: number;
+}
+
 export interface PublicOffer {
   cfg: PayoutConfig;
+  milestones: PublicOfferMilestones;
   plans: PublicOfferPlan[];
   /** El mayor de los fijos recurrentes — el número grande del hero. */
   topRecurringMxn: number;
@@ -75,12 +96,21 @@ const FALLBACK_LABELS: Record<PlanKey, string> = {
  * defaults del motor y a los precios de respaldo de plan-shared.
  */
 export async function getPublicOffer(): Promise<PublicOffer> {
-  const [cfgOrNull, resolvedPlans] = await Promise.all([
-    getPayoutConfig().catch((): PayoutConfig | null => null),
+  const [settings, resolvedPlans] = await Promise.all([
+    getPayoutSettings().catch(() => ({ cfg: null, milestones: null })),
     getResolvedPlans().catch((): ResolvedPlan[] => []),
   ]);
 
-  const cfg: PayoutConfig = cfgOrNull ?? { ...DEFAULT_PAYOUT_CONFIG };
+  const cfg: PayoutConfig = settings.cfg ?? { ...DEFAULT_PAYOUT_CONFIG };
+  const milestonesCfg: MilestonesConfig = settings.milestones ?? { ...DEFAULT_MILESTONES };
+  const tiers = milestoneTiers(milestonesCfg);
+  const milestones: PublicOfferMilestones = {
+    // Sin un solo escalón utilizable no hay nada que anunciar, dé lo que dé el
+    // switch: así el bloque no sale vacío si alguien pone los tres montos en 0.
+    enabled: milestonesCfg.milestonesEnabled && tiers.length > 0,
+    tiers,
+    totalMxn: milestonesTotalMxn(tiers),
+  };
 
   // Map explícitamente tipado: `new Map(arr.map(p => [k, p]))` infiere el
   // literal como array y no como tupla, y el Map cae a <unknown, unknown>.
@@ -111,6 +141,7 @@ export async function getPublicOffer(): Promise<PublicOffer> {
 
   return {
     cfg,
+    milestones,
     plans,
     topRecurringMxn: Math.max(0, ...plans.map((p) => p.recurringMxn)),
     topOneTimeMxn: Math.max(0, ...plans.map((p) => p.oneTimeMxn)),

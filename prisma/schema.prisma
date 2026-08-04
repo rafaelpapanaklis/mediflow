@@ -7945,6 +7945,17 @@ model AffiliatePayoutConfig {
   startAtInvoiceNo     Int      @default(2)
   // En qué número de cobro se dispara el pago único.
   oneTimeAtInvoiceNo   Int      @default(2)
+  // ── Bonos por hitos (sql/afiliados-hitos.sql) ────────────────────────────
+  // Sólo se ANUNCIAN y se configuran: el sistema NO los calcula ni los paga
+  // (no hay contador de hitos ni registro de bonos entregados). Apagar el
+  // switch retira la promoción de /afiliados y /terminos-afiliados sin deploy.
+  milestonesEnabled    Boolean  @default(true)
+  milestone1Clinics    Int      @default(5)
+  milestone1Mxn        Float    @default(2500)
+  milestone2Clinics    Int      @default(25)
+  milestone2Mxn        Float    @default(10000)
+  milestone3Clinics    Int      @default(50)
+  milestone3Mxn        Float    @default(100000)
   updatedAt            DateTime @updatedAt
 
   @@map("affiliate_payout_config")

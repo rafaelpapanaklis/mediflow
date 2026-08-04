@@ -1,17 +1,50 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { getPayoutSettings } from "@/lib/affiliates/payout";
+import { DEFAULT_MILESTONES, milestonesTotalMxn, milestoneTiers } from "@/lib/affiliates/payout-core";
+import { fmtMxn } from "@/lib/affiliates/public-offer";
 
 export const metadata: Metadata = {
   title: "Términos del Programa de Afiliados — DaleControl",
   description:
-    "Términos del Programa de Afiliados de DaleControl: cómo se aprueba una cuenta, atribución de clínicas, modalidades de comisión, calendario de pagos, uso de marca y causales de cancelación.",
+    "Términos del Programa de Afiliados de DaleControl: cómo se aprueba una cuenta, atribución de clínicas, modalidades de comisión, bonos por hitos, calendario de pagos, uso de marca y causales de cancelación.",
 };
 
-const LAST_UPDATED = "1 de agosto de 2026";
+// Los umbrales y montos de los bonos SE LEEN de affiliate_payout_config, igual
+// que en /afiliados: dos páginas que prometen cifras distintas serían un
+// problema legal, no un descuido de copy. Por eso esta página también es ISR y
+// el PUT del admin la revalida (ver @/lib/cache/public-pricing).
+export const revalidate = 600;
+
+const LAST_UPDATED = "4 de agosto de 2026";
 const PROVIDER = "DaleControl, marca operada por Efthymios Rafail Papanaklis (persona física)";
 const CONTACT_EMAIL = "hola@dalecontrol.com";
 
-export default function TerminosAfiliadosPage() {
+export default async function TerminosAfiliadosPage() {
+  // Nunca lanza: sin BD (o con el SQL sin correr) caen los defaults del DDL.
+  const settings = await getPayoutSettings().catch(() => ({ cfg: null, milestones: null }));
+  const milestonesCfg = settings.milestones ?? { ...DEFAULT_MILESTONES };
+  const hitos = milestoneTiers(milestonesCfg);
+  const hitosOn = milestonesCfg.milestonesEnabled && hitos.length > 0;
+  const hitoMayor = hitos.length > 0 ? hitos[hitos.length - 1] : null;
+
+  // Numeración de las secciones. Va calculada porque la de bonos aparece y
+  // desaparece con la promoción: un documento legal no puede saltar del 4 al 6,
+  // y las referencias cruzadas ("conforme al calendario de la sección N") deben
+  // seguir apuntando a donde apuntan.
+  const S = {
+    quien: 1,
+    alta: 2,
+    atribucion: 3,
+    comisiones: 4,
+    hitos: 5,
+    pagos: hitosOn ? 6 : 5,
+    invalida: hitosOn ? 7 : 6,
+    marca: hitosOn ? 8 : 7,
+    fin: hitosOn ? 9 : 8,
+    contacto: hitosOn ? 10 : 9,
+  };
+
   return (
     <main
       style={{
@@ -32,7 +65,7 @@ export default function TerminosAfiliadosPage() {
         </p>
       </header>
 
-      <Section title="1. Quién opera el Programa y qué es">
+      <Section title={`${S.quien}. Quién opera el Programa y qué es`}>
         <p>
           {PROVIDER} (&quot;DaleControl&quot;) opera la plataforma DaleControl y su Programa de
           Afiliados (el &quot;Programa&quot;). El Programa permite a personas físicas o morales
@@ -51,7 +84,7 @@ export default function TerminosAfiliadosPage() {
         </p>
       </Section>
 
-      <Section title="2. Cómo se es afiliado">
+      <Section title={`${S.alta}. Cómo se es afiliado`}>
         <p>
           La participación se solicita desde el formulario de registro en{" "}
           <Link href="/afiliados/registro">/afiliados/registro</Link>. Cada solicitud pasa por una{" "}
@@ -65,7 +98,7 @@ export default function TerminosAfiliadosPage() {
         </p>
       </Section>
 
-      <Section title="3. Atribución de clínicas">
+      <Section title={`${S.atribucion}. Atribución de clínicas`}>
         <p>
           Cada clínica queda ligada al afiliado cuyo <b>link de referido o cupón</b> haya utilizado
           al momento de registrarse.
@@ -81,7 +114,7 @@ export default function TerminosAfiliadosPage() {
         </p>
       </Section>
 
-      <Section title="4. Comisiones">
+      <Section title={`${S.comisiones}. Comisiones`}>
         <p>El Programa opera con dos modalidades de comisión:</p>
         <ul>
           <li>
@@ -112,7 +145,78 @@ export default function TerminosAfiliadosPage() {
         <p>Las comisiones se calculan y se muestran en pesos mexicanos (MXN).</p>
       </Section>
 
-      <Section title="5. Pagos">
+      {/* Los bonos son una PROMOCIÓN vigente: si se apaga en /admin, esta
+          sección desaparece de los términos igual que de /afiliados. Ni un
+          umbral ni un monto se escriben aquí. */}
+      {hitosOn && hitoMayor && (
+        <Section title={`${S.hitos}. Bonos por hitos`}>
+          <p>
+            Además de las comisiones de la sección {S.comisiones} —que siguen corriendo igual—, el Programa
+            paga un <b>bono de una sola vez</b> al alcanzar cada uno de estos hitos de clínicas
+            activas:
+          </p>
+          <ul>
+            {hitos.map((hito) => (
+              <li key={hito.n}>
+                <b>{hito.clinics} clínicas activas</b> al mismo tiempo: {fmtMxn(hito.mxn)}.
+              </li>
+            ))}
+          </ul>
+          <p>
+            Los bonos son <b>acumulables</b>: un afiliado que llega a {hitoMayor.clinics} clínicas
+            activas habrá cobrado los {hitos.length}, {fmtMxn(milestonesTotalMxn(hitos))} en total.
+            Los bonos son <b>adicionales</b> a las comisiones mensuales y no las sustituyen ni las
+            interrumpen.
+          </p>
+
+          <p>Para que un bono se pague deben cumplirse todas estas condiciones:</p>
+          <ul>
+            <li>
+              Cuentan las clínicas <b>activas al mismo tiempo</b>, no el total histórico de clínicas
+              que el afiliado haya traído.
+            </li>
+            <li>
+              Una clínica cuenta como activa cuando lleva <b>al menos 3 mensualidades pagadas</b> y
+              su suscripción sigue vigente.
+            </li>
+            <li>
+              El número de clínicas activas debe <b>sostenerse durante 3 meses consecutivos</b>{" "}
+              antes de que el bono se pague.
+            </li>
+            <li>
+              Cada clínica debe ser un <b>negocio distinto, con su propio titular</b>. Varias
+              sucursales o razones sociales de un mismo grupo cuentan como una sola.
+            </li>
+            <li>
+              Cada bono se entrega <b>una sola vez</b> por afiliado, aunque el número de clínicas
+              baje y vuelva a subir.
+            </li>
+          </ul>
+          <p>
+            DaleControl <b>verifica el cumplimiento antes de pagar</b> cada bono: revisa las
+            clínicas contabilizadas, sus pagos y su titularidad. La verificación puede tomar hasta
+            el cierre del ciclo de pago siguiente al mes en que se cumplió la ventana.
+          </p>
+          <p>
+            El bono de mayor monto ({fmtMxn(hitoMayor.mxn)}) <b>puede entregarse en dos partes</b>:
+            la mitad al cumplirse la ventana de 3 meses y la otra mitad tres meses después, si el
+            número de clínicas activas se sostiene.
+          </p>
+          <p>
+            Las <b>altas fraudulentas, duplicadas, con datos falsos o de negocios relacionados entre
+            sí</b> —o con el propio afiliado— no cuentan para los hitos e <b>invalidan el bono</b>,
+            aunque ya se haya solicitado. Aplican además las causales de la sección {S.invalida}.
+          </p>
+          <p>
+            Los <b>montos y umbrales vigentes son los publicados</b> en esta página y en{" "}
+            <Link href="/afiliados">/afiliados</Link>. Son una <b>promoción</b>: DaleControl puede
+            modificarla o darla por terminada en cualquier momento, sin afectar los bonos ya
+            pagados ni los hitos ya cumplidos y verificados.
+          </p>
+        </Section>
+      )}
+
+      <Section title={`${S.pagos}. Pagos`}>
         <p>
           Las comisiones generadas durante un mes se pagan <b>dentro de los primeros 10 días
           naturales del mes siguiente</b>.
@@ -132,7 +236,7 @@ export default function TerminosAfiliadosPage() {
         </p>
       </Section>
 
-      <Section title="6. Qué invalida una comisión">
+      <Section title={`${S.invalida}. Qué invalida una comisión`}>
         <p>No se genera comisión en los siguientes casos:</p>
         <ul>
           <li>Autorreferido.</li>
@@ -155,7 +259,7 @@ export default function TerminosAfiliadosPage() {
         </p>
       </Section>
 
-      <Section title="7. Uso de marca y materiales">
+      <Section title={`${S.marca}. Uso de marca y materiales`}>
         <p>
           El afiliado puede usar el logotipo, los textos y los materiales que DaleControl le
           proporcione para promover el servicio, <b>sin modificarlos</b>.
@@ -171,14 +275,14 @@ export default function TerminosAfiliadosPage() {
         </p>
       </Section>
 
-      <Section title="8. Terminación y modificaciones">
+      <Section title={`${S.fin}. Terminación y modificaciones`}>
         <p>
           Cualquiera de las partes puede terminar la participación en el Programa <b>en cualquier
           momento y sin responsabilidad</b>.
         </p>
         <p>
           Si el afiliado termina su participación, <b>se le pagan las comisiones ya generadas</b>{" "}
-          conforme al calendario de la sección 5.
+          conforme al calendario de la sección {S.pagos}.
         </p>
         <p>
           A partir de la terminación, el afiliado deja de percibir comisiones por las clínicas
@@ -191,7 +295,7 @@ export default function TerminosAfiliadosPage() {
         </p>
       </Section>
 
-      <Section title="9. Contacto">
+      <Section title={`${S.contacto}. Contacto`}>
         <p>
           Dudas sobre el Programa: <a href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a>.
         </p>

@@ -14,6 +14,7 @@ import {
   type CaraPrisma,
   type TarjetaPila,
 } from "@/components/afiliados/landing/escenas";
+import { IconoHito } from "@/components/afiliados/landing/hitos";
 import { fmtMxn, getPublicOffer } from "@/lib/affiliates/public-offer";
 import type { PlanKey } from "@/lib/affiliates/payout-core";
 import "./afiliados.css";
@@ -50,12 +51,16 @@ export const metadata: Metadata = buildMetadata({
 // /afiliados — landing pública del programa de afiliados.
 //
 // NINGÚN monto está escrito en este archivo. Todo sale de `getPublicOffer()`:
-// los precios de los planes de plan_configs y las seis comisiones de
-// affiliate_payout_config, así que si el admin mueve un monto la página lo
-// refleja sin deploy. Eso incluye las cifras que aparecen DENTRO de las
-// escenas 3D, la prosa de la comparación a 3 años y los tres perfiles de
-// ejemplo: todos se calculan, ninguno se teclea. `getPublicOffer()` nunca
+// los precios de los planes de plan_configs y, de affiliate_payout_config, las
+// seis comisiones y los tres bonos por hitos (umbral y monto). Si el admin mueve
+// un número la página lo refleja sin deploy. Eso incluye las cifras que aparecen
+// DENTRO de las escenas 3D, el total acumulado de los bonos y los tres perfiles
+// de ejemplo: todos se calculan, ninguno se teclea. `getPublicOffer()` nunca
 // lanza: sin BD cae a los defaults del motor.
+//
+// Los bonos por hitos son una PROMOCIÓN: con `milestonesEnabled` en false el
+// bloque entero desaparece. Y son sólo un anuncio — nada en el sistema cuenta
+// clínicas ni los paga todavía (ver ORQUESTA.md).
 //
 // CACHÉ: la página es estática con ISR, y quien de verdad la mantiene al día es
 // la revalidación BAJO DEMANDA — guardar en /admin/affiliates dispara
@@ -243,21 +248,15 @@ export default async function AfiliadosPage() {
   // El prisma es hexagonal: con menos de seis caras quedaría abierto.
   while (caras.length < 6) caras.push(CARAS_DATO[caras.length % 3]);
 
-  // ── La idea en una frase: una clínica, las dos modalidades, a 3 años ────
+  // ── Horizonte de los acumulados (perfiles de ejemplo) ──────────────────
+  // Los cobros que comisionan en 3 años: el "−1" sale de `skip`, nunca de un
+  // literal.
   const ANIOS_REF = 3;
   const mesesRef = Math.max(0, 12 * ANIOS_REF - skip);
-  const ref =
-    offer.plans.find((p) => p.key === "PRO" && p.recurringMxn > 0 && p.oneTimeMxn > 0) ??
-    offer.plans.find((p) => p.recurringMxn > 0 && p.oneTimeMxn > 0);
-  const refAcum = ref ? ref.recurringMxn * mesesRef : 0;
-  const refUnico = ref ? ref.oneTimeMxn : 0;
-  const refMax = Math.max(refAcum, refUnico, 1);
-  const ALTO_BARRA = 150;
-  const altoAcum = Math.max(6, Math.round((refAcum / refMax) * ALTO_BARRA));
-  const altoUnico = Math.max(6, Math.round((refUnico / refMax) * ALTO_BARRA));
-  const formulaRef = hayMesPromocional
-    ? `${mesesRef} cobros = 12 × ${ANIOS_REF} − ${skip}. El primer mes de la clínica tiene precio promocional y no comisiona.`
-    : `${mesesRef} cobros = 12 × ${ANIOS_REF}: cada cobro de la clínica comisiona.`;
+
+  // ── Bonos por hitos: acumulables, así que el total es la suma ───────────
+  const hitos = offer.milestones;
+  const hitoMayor = hitos.tiers.length > 0 ? hitos.tiers[hitos.tiers.length - 1] : null;
 
   // ── Escena 2: la pila de clínicas y su fijo mensual ─────────────────────
   const tarjetasPila: TarjetaPila[] = [];
@@ -486,55 +485,7 @@ export default async function AfiliadosPage() {
           </div>
         </section>
 
-        {/* ── 2. La idea en una frase ──────────────────────────────────── */}
-        {ref && (
-          <section style={{ background: "#eff6ff", borderTop: "1px solid #dbeafe", borderBottom: "1px solid #dbeafe" }}>
-            <div style={{ ...WRAP, padding: "clamp(48px,7vw,80px) 20px" }}>
-              <Encabezado
-                kicker="La idea en una frase"
-                titulo="No es cuánto pagamos: es que se repite"
-                lede={`El mismo ejemplo — una clínica del plan ${ref.label} — visto a ${ANIOS_REF} años.`}
-              />
-
-              <div style={{ maxWidth: 820, margin: "36px auto 0", background: "#ffffff", border: "1px solid #dbeafe", borderRadius: 20, padding: "clamp(22px,4vw,36px)", display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(min(100%,240px),1fr))", gap: 28 }}>
-                <div style={{ display: "flex", flexDirection: "column", justifyContent: "flex-end", gap: 12, textAlign: "center", minWidth: 0 }}>
-                  <span style={{ fontSize: 13, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: ".05em" }}>
-                    Comisión de una sola vez
-                  </span>
-                  <span style={{ fontSize: "clamp(34px,4.5vw,46px)", fontWeight: 800, letterSpacing: "-0.02em", color: "#64748b", overflowWrap: "anywhere" }}>
-                    {fmtMxn(refUnico)}
-                  </span>
-                  <div style={{ height: ALTO_BARRA, display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
-                    <div style={{ width: "min(160px,70%)", height: altoUnico, background: "#cbd5e1", borderRadius: "8px 8px 3px 3px" }} />
-                  </div>
-                  <span style={{ fontSize: 14, color: "#64748b" }}>
-                    A los {ANIOS_REF} años… sigue siendo <strong style={{ color: "#475569" }}>{fmtMxn(refUnico)}</strong>.
-                  </span>
-                </div>
-
-                <div style={{ display: "flex", flexDirection: "column", justifyContent: "flex-end", gap: 12, textAlign: "center", minWidth: 0 }}>
-                  <span style={{ fontSize: 13, fontWeight: 700, color: "#1d4ed8", textTransform: "uppercase", letterSpacing: ".05em" }}>
-                    Fijo recurrente de {fmtMxn(ref.recurringMxn)} al mes
-                  </span>
-                  <span style={{ fontSize: "clamp(34px,4.5vw,46px)", fontWeight: 800, letterSpacing: "-0.02em", color: "#1d4ed8", overflowWrap: "anywhere" }}>
-                    {fmtMxn(refAcum)}
-                  </span>
-                  <div style={{ height: ALTO_BARRA, display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
-                    <div style={{ width: "min(160px,70%)", height: altoAcum, background: "linear-gradient(180deg,#60a5fa,#2563eb)", borderRadius: "8px 8px 3px 3px", boxShadow: "0 8px 20px rgba(37,99,235,.25)" }} />
-                  </div>
-                  <span style={{ fontSize: 14, color: "#475569" }}>
-                    A los {ANIOS_REF} años ya llevas <strong style={{ color: "#1d4ed8" }}>{fmtMxn(refAcum)}</strong> — y
-                    sigue corriendo.
-                  </span>
-                </div>
-              </div>
-
-              <p style={{ textAlign: "center", fontSize: 13, color: "#64748b", marginTop: 16 }}>{formulaRef}</p>
-            </div>
-          </section>
-        )}
-
-        {/* ── 3. Comisiones ────────────────────────────────────────────── */}
+        {/* ── 2. Comisiones ────────────────────────────────────────────── */}
         <section id="comisiones" className="dcaf-anchor" style={{ background: "#ffffff" }}>
           <div style={WRAP}>
             <Encabezado
@@ -629,10 +580,134 @@ export default async function AfiliadosPage() {
                 </p>
               </div>
             </div>
+
+            {/* ── Bonos por hitos ──────────────────────────────────────────
+                Se apagan desde /admin (`milestonesEnabled`) y el bloque entero
+                deja de renderizarse: es una promoción, no una promesa fija.
+                Los seis números salen de affiliate_payout_config. */}
+            {hitos.enabled && hitoMayor && (
+              <div style={{ marginTop: 64 }}>
+                <div style={{ textAlign: "center", maxWidth: 680, margin: "0 auto" }}>
+                  <span style={{ ...KICKER, color: "#6d28d9" }}>Bonos por hitos</span>
+                  <h3 className="dcaf-balance" style={{ ...H2, fontSize: "clamp(23px,3vw,31px)" }}>
+                    Y cuando tu cartera crece, hay bono
+                  </h3>
+                  <p style={LEDE}>
+                    Son <strong style={{ color: "#0f172a" }}>adicionales</strong> a tus comisiones
+                    mensuales —que siguen corriendo igual— y{" "}
+                    <strong style={{ color: "#0f172a" }}>acumulables</strong>: quien llega a{" "}
+                    {hitoMayor.clinics} clínicas habrá cobrado los {hitos.tiers.length},{" "}
+                    <strong style={{ color: "#6d28d9" }}>{fmtMxn(hitos.totalMxn)}</strong> en total.
+                  </p>
+                </div>
+
+                <div className="dcaf-hitos" style={{ marginTop: 36 }}>
+                  {hitos.tiers.map((hito, i) => {
+                    const grande = i === hitos.tiers.length - 1;
+                    const acento = grande ? "#6d28d9" : "#2563eb";
+                    return (
+                      <div
+                        key={hito.n}
+                        style={{
+                          ...TARJETA,
+                          padding: grande ? "28px 24px" : "24px 22px",
+                          display: "flex",
+                          flexDirection: "column",
+                          alignItems: "center",
+                          textAlign: "center",
+                          gap: 10,
+                          border: grande ? "2px solid #c4b5fd" : "1px solid #e2e8f0",
+                          background: grande
+                            ? "linear-gradient(180deg,#faf5ff,#ffffff 55%)"
+                            : "#ffffff",
+                          boxShadow: grande
+                            ? "0 14px 40px rgba(109,40,217,.16)"
+                            : "0 1px 3px rgba(15,23,42,.05)",
+                        }}
+                      >
+                        <IconoHito orden={i} />
+
+                        <span style={{ fontSize: 13, fontWeight: 700, color: "#475569" }}>
+                          <strong style={{ color: acento, fontSize: 17 }}>{hito.clinics}</strong>{" "}
+                          clínicas activas
+                        </span>
+
+                        <span
+                          style={{
+                            fontSize: grande ? "clamp(34px,4.6vw,46px)" : "clamp(28px,3.6vw,34px)",
+                            fontWeight: 800,
+                            letterSpacing: "-0.02em",
+                            color: acento,
+                            lineHeight: 1.05,
+                            overflowWrap: "anywhere",
+                          }}
+                        >
+                          {fmtMxn(hito.mxn)}
+                        </span>
+
+                        <span
+                          style={{
+                            fontSize: 12,
+                            fontWeight: 700,
+                            textTransform: "uppercase",
+                            letterSpacing: ".06em",
+                            color: grande ? "#6d28d9" : "#1d4ed8",
+                            background: grande ? "#f3e8ff" : "#eff6ff",
+                            border: `1px solid ${grande ? "#e9d5ff" : "#dbeafe"}`,
+                            padding: "3px 11px",
+                            borderRadius: 999,
+                          }}
+                        >
+                          Pago único
+                        </span>
+
+                        <p style={{ fontSize: 13.5, color: "#64748b", lineHeight: 1.55, marginTop: 2 }}>
+                          {grande
+                            ? "El grande. Se paga aparte de tus comisiones mensuales, que siguen corriendo cada mes."
+                            : "Un bono extra al llegar, además de tus comisiones mensuales, que siguen corriendo."}
+                        </p>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Condiciones: visibles, no escondidas. Es una promesa
+                    comercial, así que se publica con sus reglas al lado. */}
+                <div style={{ maxWidth: 820, margin: "22px auto 0", background: "#f8fafc", border: "1px solid #e8edf4", borderRadius: 14, padding: "18px 22px" }}>
+                  <span style={{ display: "block", fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: ".06em", color: "#475569" }}>
+                    Cómo se cuentan los bonos
+                  </span>
+                  <ul style={{ marginTop: 10, display: "grid", gap: 7 }}>
+                    {[
+                      "Cuentan las clínicas que tengas activas AL MISMO TIEMPO, no las que hayas traído en total.",
+                      "Una clínica cuenta cuando lleva al menos 3 mensualidades pagadas.",
+                      "El conteo tiene que sostenerse 3 meses seguidos antes de que se pague el bono.",
+                      "Cada clínica debe ser un negocio distinto, con su propio titular.",
+                      "Cada bono se entrega una sola vez.",
+                      "Los bonos son adicionales a tus comisiones mensuales, que siguen corriendo.",
+                    ].map((regla) => (
+                      <li key={regla} style={{ display: "flex", gap: 9, alignItems: "flex-start", fontSize: 13, color: "#64748b", lineHeight: 1.55 }}>
+                        <span style={{ flexShrink: 0, marginTop: 4 }}>
+                          <Palomita color="#6d28d9" size={13} />
+                        </span>
+                        <span style={{ minWidth: 0 }}>{regla}</span>
+                      </li>
+                    ))}
+                  </ul>
+                  <p style={{ fontSize: 13, color: "#64748b", marginTop: 12 }}>
+                    Las reglas completas están en{" "}
+                    <Link href="/terminos-afiliados" style={{ color: "#1d4ed8", textDecoration: "underline" }}>
+                      los términos del programa
+                    </Link>
+                    .
+                  </p>
+                </div>
+              </div>
+            )}
           </div>
         </section>
 
-        {/* ── 4. Calculadora ───────────────────────────────────────────── */}
+        {/* ── 3. Calculadora ───────────────────────────────────────────── */}
         <section id="calculadora" className="dcaf-anchor" style={{ background: "#f8fafc", borderTop: "1px solid #e8edf4", borderBottom: "1px solid #e8edf4" }}>
           <div style={WRAP}>
             <Encabezado
@@ -646,7 +721,7 @@ export default async function AfiliadosPage() {
           </div>
         </section>
 
-        {/* ── 5. Perfiles de ejemplo ───────────────────────────────────── */}
+        {/* ── 4. Perfiles de ejemplo ───────────────────────────────────── */}
         {perfiles.length > 0 && (
           <section style={{ background: "#ffffff" }}>
             <div style={WRAP}>
@@ -710,7 +785,7 @@ export default async function AfiliadosPage() {
           </section>
         )}
 
-        {/* ── 6. Cómo funciona ─────────────────────────────────────────── */}
+        {/* ── 5. Cómo funciona ─────────────────────────────────────────── */}
         <section id="como-funciona" className="dcaf-anchor" style={{ background: "#f8fafc", borderTop: "1px solid #e8edf4", borderBottom: "1px solid #e8edf4" }}>
           <div style={WRAP}>
             <div className="dcaf-howgrid">
@@ -774,7 +849,7 @@ export default async function AfiliadosPage() {
           </div>
         </section>
 
-        {/* ── 7. Qué recibes ───────────────────────────────────────────── */}
+        {/* ── 6. Qué recibes ───────────────────────────────────────────── */}
         <section style={{ background: "#ffffff" }}>
           <div style={WRAP}>
             <Encabezado kicker="Herramientas" titulo="Qué recibes al entrar" />
@@ -793,7 +868,7 @@ export default async function AfiliadosPage() {
           </div>
         </section>
 
-        {/* ── 8. Para quién es ─────────────────────────────────────────── */}
+        {/* ── 7. Para quién es ─────────────────────────────────────────── */}
         <section style={{ background: "#f8fafc", borderTop: "1px solid #e8edf4", borderBottom: "1px solid #e8edf4" }}>
           <div style={WRAP}>
             <Encabezado kicker="Perfiles" titulo="Hecho para quien ya habla con clínicas" />
@@ -817,7 +892,7 @@ export default async function AfiliadosPage() {
           </div>
         </section>
 
-        {/* ── 9. FAQ ───────────────────────────────────────────────────── */}
+        {/* ── 8. FAQ ───────────────────────────────────────────────────── */}
         <section id="faq" className="dcaf-anchor" style={{ background: "#ffffff" }}>
           <div style={{ maxWidth: 760, margin: "0 auto", padding: "clamp(52px,7vw,88px) 20px" }}>
             <div style={{ textAlign: "center" }}>
@@ -844,7 +919,7 @@ export default async function AfiliadosPage() {
           </div>
         </section>
 
-        {/* ── 10. Cierre ───────────────────────────────────────────────── */}
+        {/* ── 9. Cierre ───────────────────────────────────────────────── */}
         <section className="dcaf-dark" style={{ position: "relative", background: "#080d1a", overflow: "hidden" }}>
           <EscenaAnillos />
 

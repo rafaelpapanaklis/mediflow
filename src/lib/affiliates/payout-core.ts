@@ -75,6 +75,102 @@ export const DEFAULT_PAYOUT_CONFIG: PayoutConfig = {
   oneTimeAtInvoiceNo: 2,
 };
 
+// ── Bonos por hitos ───────────────────────────────────────────────────────
+// Viven en la MISMA fila que el esquema de pago (affiliate_payout_config) pero
+// FUERA de `PayoutConfig` a propósito: `resolveCommission` no los toca y el
+// motor de comisiones no sabe que existen. Hoy los hitos SÓLO se anuncian y se
+// configuran — no hay contador, ni aviso, ni registro de bonos pagados: el
+// seguimiento es manual. Mezclarlos con la config del motor invitaría a creer
+// que algo los calcula.
+
+/** Espejo plano de las 7 columnas de sql/afiliados-hitos.sql. */
+export interface MilestonesConfig {
+  milestonesEnabled: boolean;
+  milestone1Clinics: number;
+  milestone1Mxn: number;
+  milestone2Clinics: number;
+  milestone2Mxn: number;
+  milestone3Clinics: number;
+  milestone3Mxn: number;
+}
+
+/** Defaults = los mismos DEFAULT del DDL (sql/afiliados-hitos.sql). */
+export const DEFAULT_MILESTONES: MilestonesConfig = {
+  milestonesEnabled: true,
+  milestone1Clinics: 5,
+  milestone1Mxn: 2500,
+  milestone2Clinics: 25,
+  milestone2Mxn: 10000,
+  milestone3Clinics: 50,
+  milestone3Mxn: 100000,
+};
+
+/** Un escalón ya resuelto: "5 clínicas activas → $2,500 de bono". */
+export interface MilestoneTier {
+  /** 1 | 2 | 3 — el orden EN LA CONFIG, no en la pantalla. */
+  n: number;
+  clinics: number;
+  mxn: number;
+}
+
+/** Las 3 parejas (umbral, monto) tal como están guardadas, sin filtrar. */
+const MILESTONE_KEYS: { n: number; clinics: keyof MilestonesConfig; mxn: keyof MilestonesConfig }[] = [
+  { n: 1, clinics: "milestone1Clinics", mxn: "milestone1Mxn" },
+  { n: 2, clinics: "milestone2Clinics", mxn: "milestone2Mxn" },
+  { n: 3, clinics: "milestone3Clinics", mxn: "milestone3Mxn" },
+];
+
+/**
+ * Normaliza cualquier fila/objeto al shape MilestonesConfig. Un campo ausente o
+ * no finito cae a su default (mismo criterio que el resto del módulo: nunca
+ * lanza, nunca inventa un número que no esté en el DDL).
+ */
+export function normalizeMilestones(row: Partial<MilestonesConfig> | null | undefined): MilestonesConfig {
+  const r = row ?? {};
+  const num = (value: unknown, fallback: number): number => {
+    const n = Number(value);
+    return Number.isFinite(n) && n >= 0 ? n : fallback;
+  };
+  return {
+    milestonesEnabled: r.milestonesEnabled !== false,
+    milestone1Clinics: Math.round(num(r.milestone1Clinics, DEFAULT_MILESTONES.milestone1Clinics)),
+    milestone1Mxn: num(r.milestone1Mxn, DEFAULT_MILESTONES.milestone1Mxn),
+    milestone2Clinics: Math.round(num(r.milestone2Clinics, DEFAULT_MILESTONES.milestone2Clinics)),
+    milestone2Mxn: num(r.milestone2Mxn, DEFAULT_MILESTONES.milestone2Mxn),
+    milestone3Clinics: Math.round(num(r.milestone3Clinics, DEFAULT_MILESTONES.milestone3Clinics)),
+    milestone3Mxn: num(r.milestone3Mxn, DEFAULT_MILESTONES.milestone3Mxn),
+  };
+}
+
+/**
+ * Escalones publicables: se descarta el que tenga umbral o monto en 0 (así se
+ * apaga UN hito sin apagar los tres) y se ordenan por umbral ascendente, que es
+ * como se leen en la página. El switch `milestonesEnabled` NO se mira aquí: eso
+ * lo decide cada superficie.
+ */
+export function milestoneTiers(cfg: MilestonesConfig): MilestoneTier[] {
+  const tiers: MilestoneTier[] = [];
+  for (const key of MILESTONE_KEYS) {
+    const clinics = Math.round(Number(cfg[key.clinics]));
+    const mxn = Number(cfg[key.mxn]);
+    if (!Number.isFinite(clinics) || clinics <= 0) continue;
+    if (!Number.isFinite(mxn) || mxn <= 0) continue;
+    tiers.push({ n: key.n, clinics, mxn });
+  }
+  return tiers.sort((a, b) => a.clinics - b.clinics);
+}
+
+/**
+ * Suma de todos los bonos: los hitos son ACUMULABLES, así que quien llega al
+ * último habrá cobrado los tres. Es la cifra que la landing promete y por eso
+ * se calcula, jamás se teclea.
+ */
+export function milestonesTotalMxn(tiers: MilestoneTier[]): number {
+  let total = 0;
+  for (const t of tiers) total += t.mxn;
+  return roundMxn(total);
+}
+
 export const PAYOUT_MODE_LABELS: Record<PayoutMode, string> = {
   recurring: "Fijo recurrente",
   onetime: "Pago único",
