@@ -1,17 +1,22 @@
 /**
- * Los tres íconos 3D de los BONOS POR HITOS de /afiliados.
+ * Los íconos 3D del BONO POR CLÍNICAS ACTIVAS de /afiliados.
  *
  * Mismo lenguaje que `escenas.tsx`: CSS PURO —`perspective` +
  * `transform-style: preserve-3d`— sin WebGL, sin librerías y sin una sola
- * imagen. Las tres piezas animan SÓLO `transform`, así que no provocan reflow,
- * y van `aria-hidden` porque son decoración: el número de clínicas y el monto
- * del bono están escritos en texto real justo al lado.
+ * imagen. Las piezas animan SÓLO `transform`, así que no provocan reflow, y van
+ * `aria-hidden` porque son decoración: el número de clínicas y el monto del
+ * bono están escritos en texto real justo al lado.
  *
- * MUY LENTAS a propósito (16–24 s): son un acento junto a una tarjeta, no
- * pueden competir con las tres escenas grandes de la página ni marear a quien
- * hace scroll. Los keyframes viven en `src/app/afiliados/afiliados.css` con
- * prefijo `dcafHito` y el bloque `prefers-reduced-motion: reduce` de ese mismo
- * archivo las congela enteras (apaga toda animación dentro de `.dcaf-root`).
+ * Dos piezas para tres escalones: los dos primeros comparten el regalo (el
+ * segundo con el moño en violeta y un 12 % más grande) y el tercero se lleva el
+ * trofeo. A 86 px, una pila de monedas se leía como unas rayas sueltas: mejor
+ * repetir una silueta que SÍ se reconoce en pequeño.
+ *
+ * LENTAS a propósito (10–12 s): son un acento junto a una tarjeta, no pueden
+ * competir con las tres escenas grandes de la página ni marear a quien hace
+ * scroll. Los keyframes viven en `src/app/afiliados/afiliados.css` con prefijo
+ * `dcafHito` y el bloque `prefers-reduced-motion: reduce` de ese mismo archivo
+ * las congela enteras (apaga toda animación dentro de `.dcaf-root`).
  *
  * NINGÚN monto se escribe aquí: las piezas son geometría, los números los pone
  * la tarjeta desde `getPublicOffer()`.
@@ -57,12 +62,12 @@ function CaraCubo({ cara, fondo, children }: { cara: string; fondo: string; chil
 }
 
 /** Listón: una banda que cruza la cara de lado a lado. */
-function Liston({ vertical }: { vertical?: boolean }) {
+function Liston({ vertical, fondo }: { vertical?: boolean; fondo: string }) {
   return (
     <span
       style={{
         position: "absolute",
-        background: "linear-gradient(180deg,#eff6ff,#bfdbfe)",
+        background: fondo,
         ...(vertical
           ? { left: "50%", top: 0, bottom: 0, width: 10, marginLeft: -5 }
           : { top: "50%", left: 0, right: 0, height: 10, marginTop: -5 }),
@@ -72,77 +77,47 @@ function Liston({ vertical }: { vertical?: boolean }) {
 }
 
 /**
- * Regalo: cubo de 4 caras (la de atrás y la de abajo nunca se ven con este
- * balanceo) con listones cruzados y un moño de dos lazos sobre la tapa.
+ * Los dos tonos del regalo. El cubo NO cambia (los dos escalones son azules en
+ * la tarjeta): lo único que se mueve es el listón, el moño y el tamaño, lo justo
+ * para que las dos tarjetas no se lean como copia-pega.
  */
-export function HitoRegalo() {
-  return (
-    <div aria-hidden="true" style={CAJA}>
-      <div className="dcaf-hito-sway" style={{ position: "absolute", inset: 0, transformStyle: "preserve-3d" }}>
-        <CaraCubo cara={`translateZ(${MEDIO}px)`} fondo="linear-gradient(155deg,#3b82f6,#1d4ed8)">
-          <Liston vertical />
-        </CaraCubo>
-        <CaraCubo cara={`rotateY(90deg) translateZ(${MEDIO}px)`} fondo="linear-gradient(155deg,#1d4ed8,#1e3a8a)">
-          <Liston vertical />
-        </CaraCubo>
-        <CaraCubo cara={`rotateY(-90deg) translateZ(${MEDIO}px)`} fondo="linear-gradient(155deg,#1e40af,#172554)">
-          <Liston vertical />
-        </CaraCubo>
-        <CaraCubo cara={`rotateX(90deg) translateZ(${MEDIO}px)`} fondo="linear-gradient(155deg,#60a5fa,#2563eb)">
-          <Liston vertical />
-          <Liston />
-          {/* Moño: dos lazos y el nudo, planos sobre la tapa. */}
-          <span style={{ position: "absolute", left: "50%", top: "50%", width: 22, height: 13, marginLeft: -23, marginTop: -6.5, borderRadius: "60% 30% 60% 30%", background: "linear-gradient(180deg,#eff6ff,#93c5fd)", transform: "rotate(-16deg)" }} />
-          <span style={{ position: "absolute", left: "50%", top: "50%", width: 22, height: 13, marginLeft: 1, marginTop: -6.5, borderRadius: "30% 60% 30% 60%", background: "linear-gradient(180deg,#eff6ff,#93c5fd)", transform: "rotate(16deg)" }} />
-          <span style={{ position: "absolute", left: "50%", top: "50%", width: 9, height: 9, margin: "-4.5px 0 0 -4.5px", borderRadius: "50%", background: "#dbeafe" }} />
-        </CaraCubo>
-      </div>
-    </div>
-  );
-}
-
-// ── Hito 2 · pila de monedas ───────────────────────────────────────────────
-
-const MONEDAS = 4;
+const TONOS = {
+  azul: { liston: "linear-gradient(180deg,#eff6ff,#bfdbfe)", lazo: "linear-gradient(180deg,#eff6ff,#93c5fd)", nudo: "#dbeafe", escala: 1 },
+  violeta: { liston: "linear-gradient(180deg,#f5f3ff,#ddd6fe)", lazo: "linear-gradient(180deg,#f5f3ff,#a78bfa)", nudo: "#ede9fe", escala: 1.12 },
+} as const;
 
 /**
- * Pila de monedas girando sobre su eje (22 s, lineal).
+ * Regalo: cubo de 4 caras (la de atrás y la de abajo nunca se ven con este
+ * balanceo) con listones cruzados y un moño de dos lazos sobre la tapa.
  *
- * Cada moneda es un disco tumbado —`rotateX(62deg)`— apilado con `translateZ`
- * sobre su propia normal. El giro se NOTA porque la cara es un
- * `conic-gradient`: al rotar la pila, el degradado barre el disco. Sin ese
- * truco, un círculo liso girando sobre su eje parece quieto.
- *
- * La inclinación es 62° y no 75°: más tumbadas, las monedas se aplastan hasta
- * parecer un resorte en vez de una pila. Con cuatro y 10 px de separación cada
- * canto se distingue del siguiente (verificado en Chrome).
+ * `tono` es la ÚNICA variación entre el primer y el segundo escalón. El escalado
+ * va en la caja exterior y no en la que anima: el keyframe `dcafHitoSway`
+ * reescribe `transform` entero y se comería cualquier `scale()` puesto ahí.
+ * Como `transform` no provoca reflow, crecer un 12 % no mueve nada de la
+ * tarjeta.
  */
-export function HitoMonedas() {
+export function HitoRegalo({ tono = "azul" }: { tono?: keyof typeof TONOS }) {
+  const t = TONOS[tono];
   return (
-    <div aria-hidden="true" style={CAJA}>
-      <div className="dcaf-hito-spin" style={{ position: "absolute", inset: 0, transformStyle: "preserve-3d" }}>
-        {Array.from({ length: MONEDAS }, (_, i) => (
-          <div
-            key={i}
-            style={{
-              position: "absolute",
-              left: "50%",
-              top: "58%",
-              width: 50,
-              height: 50,
-              margin: "-25px 0 0 -25px",
-              borderRadius: "50%",
-              background:
-                "conic-gradient(from 0deg,#dbeafe,#2563eb 25%,#93c5fd 50%,#1d4ed8 75%,#dbeafe)",
-              border: "1px solid rgba(239,246,255,.85)",
-              // El box-shadow se dibuja en el plano del disco: inclinado hace de canto.
-              boxShadow: "0 5px 0 rgba(23,37,84,.6)",
-              transform: `rotateX(62deg) translateZ(${i * 10}px)`,
-            }}
-          >
-            <span style={{ position: "absolute", inset: 13, borderRadius: "50%", border: "1.5px solid rgba(239,246,255,.6)" }} />
-          </div>
-        ))}
+    <div aria-hidden="true" style={{ ...CAJA, transform: `scale(${t.escala})` }}>
+      <div className="dcaf-hito-sway" style={{ position: "absolute", inset: 0, transformStyle: "preserve-3d" }}>
+        <CaraCubo cara={`translateZ(${MEDIO}px)`} fondo="linear-gradient(155deg,#3b82f6,#1d4ed8)">
+          <Liston vertical fondo={t.liston} />
+        </CaraCubo>
+        <CaraCubo cara={`rotateY(90deg) translateZ(${MEDIO}px)`} fondo="linear-gradient(155deg,#1d4ed8,#1e3a8a)">
+          <Liston vertical fondo={t.liston} />
+        </CaraCubo>
+        <CaraCubo cara={`rotateY(-90deg) translateZ(${MEDIO}px)`} fondo="linear-gradient(155deg,#1e40af,#172554)">
+          <Liston vertical fondo={t.liston} />
+        </CaraCubo>
+        <CaraCubo cara={`rotateX(90deg) translateZ(${MEDIO}px)`} fondo="linear-gradient(155deg,#60a5fa,#2563eb)">
+          <Liston vertical fondo={t.liston} />
+          <Liston fondo={t.liston} />
+          {/* Moño: dos lazos y el nudo, planos sobre la tapa. */}
+          <span style={{ position: "absolute", left: "50%", top: "50%", width: 22, height: 13, marginLeft: -23, marginTop: -6.5, borderRadius: "60% 30% 60% 30%", background: t.lazo, transform: "rotate(-16deg)" }} />
+          <span style={{ position: "absolute", left: "50%", top: "50%", width: 22, height: 13, marginLeft: 1, marginTop: -6.5, borderRadius: "30% 60% 30% 60%", background: t.lazo, transform: "rotate(16deg)" }} />
+          <span style={{ position: "absolute", left: "50%", top: "50%", width: 9, height: 9, margin: "-4.5px 0 0 -4.5px", borderRadius: "50%", background: t.nudo }} />
+        </CaraCubo>
       </div>
     </div>
   );
@@ -223,6 +198,6 @@ export function HitoTrofeo() {
 /** Despacha la pieza que le toca a cada escalón (1º, 2º, 3º). */
 export function IconoHito({ orden }: { orden: number }) {
   if (orden === 0) return <HitoRegalo />;
-  if (orden === 1) return <HitoMonedas />;
+  if (orden === 1) return <HitoRegalo tono="violeta" />;
   return <HitoTrofeo />;
 }

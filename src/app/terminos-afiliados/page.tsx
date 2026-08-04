@@ -7,7 +7,7 @@ import { fmtMxn } from "@/lib/affiliates/public-offer";
 export const metadata: Metadata = {
   title: "Términos del Programa de Afiliados — DaleControl",
   description:
-    "Términos del Programa de Afiliados de DaleControl: cómo se aprueba una cuenta, atribución de clínicas, modalidades de comisión, bonos por hitos, calendario de pagos, uso de marca y causales de cancelación.",
+    "Términos del Programa de Afiliados de DaleControl: cómo se aprueba una cuenta, atribución de clínicas, modalidades de comisión, bono por clínicas activas, calendario de pagos, uso de marca y causales de cancelación.",
 };
 
 // Los umbrales y montos de los bonos SE LEEN de affiliate_payout_config, igual
@@ -149,7 +149,7 @@ export default async function TerminosAfiliadosPage() {
           sección desaparece de los términos igual que de /afiliados. Ni un
           umbral ni un monto se escriben aquí. */}
       {hitosOn && hitoMayor && (
-        <Section title={`${S.hitos}. Bonos por hitos`}>
+        <Section title={`${S.hitos}. Bono por Clínicas Activas`}>
           <p>
             Además de las comisiones de la sección {S.comisiones} —que siguen corriendo igual—, el Programa
             paga un <b>bono de una sola vez</b> al alcanzar cada uno de estos hitos de clínicas

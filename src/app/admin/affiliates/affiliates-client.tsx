@@ -171,7 +171,7 @@ type PayoutPlanRow = { id: PlanKey; label: string; priceMxn: number };
 
 type PayoutConfigResponse = {
   config: PayoutConfig;
-  /** Bonos por hitos: se guardan en la misma fila, fuera de `config`. */
+  /** Bono por Clínicas Activas: se guarda en la misma fila, fuera de `config`. */
   milestones?: MilestonesConfig;
   exists: boolean;
   plans: PayoutPlanRow[];
@@ -261,7 +261,7 @@ const DEFAULT_PAYOUT_FORM: PayoutForm = {
   oneTimeAtInvoiceNo: String(DEFAULT_PAYOUT_CONFIG.oneTimeAtInvoiceNo),
 };
 
-// ── Bonos por hitos ───────────────────────────────────────────────────────
+// ── Bono por Clínicas Activas ─────────────────────────────────────────────
 // Se guardan en la MISMA fila que el esquema de pago y se mandan en el mismo
 // PUT, pero son otra cosa: una promoción que hoy sólo se ANUNCIA. Nada en el
 // sistema cuenta clínicas ni paga estos bonos — el seguimiento es manual.
@@ -612,7 +612,7 @@ export function AffiliatesClient({ initial }: { initial: AffiliateRow[] }) {
       toast.error('"El pago único se entrega desde el cobro #" debe ser un entero entre 1 y 12.');
       return;
     }
-    // Bonos por hitos: umbrales enteros CRECIENTES y montos ≥ 0. El servidor lo
+    // Bono por clínicas activas: umbrales enteros CRECIENTES y montos ≥ 0. El servidor lo
     // valida igual (y responde 400); aquí se avisa sin gastar el viaje.
     const hitos = MILESTONE_ROWS.map((row) => ({
       n: row.n,
@@ -865,7 +865,7 @@ export function AffiliatesClient({ initial }: { initial: AffiliateRow[] }) {
     );
   }
 
-  // Un escalón de los bonos por hitos: umbral + monto + su equivalencia viva.
+  // Un escalón del bono por clínicas activas: umbral + monto + su equivalencia viva.
   // La equivalencia se calcula con los datos REALES que ya están en pantalla
   // (el propio monto y el fijo recurrente del plan más común), igual que las
   // comisiones: aquí no se teclea ningún número.
@@ -1658,10 +1658,11 @@ export function AffiliatesClient({ initial }: { initial: AffiliateRow[] }) {
               congela por clínica cuando se da de alta, así que cambiarla solo afecta a las clínicas nuevas.
             </p>
 
-            {/* Bonos por hitos: se anuncian en /afiliados, NADIE los calcula. */}
+            {/* Bono por Clínicas Activas: se anuncia en /afiliados con ESTE
+                mismo nombre, y NADIE lo calcula todavía. */}
             <div style={{ marginTop: 22 }}>
               <div className="form-section__title">
-                Bonos por hitos
+                Bono por Clínicas Activas
                 <span className="form-section__rule" />
               </div>
 
@@ -1685,7 +1686,7 @@ export function AffiliatesClient({ initial }: { initial: AffiliateRow[] }) {
                   }
                   style={{ width: 15, height: 15, accentColor: "var(--brand)" }}
                 />
-                Anunciar los bonos por hitos en la página pública
+                Anunciar el bono por clínicas activas en la página pública
               </label>
 
               <div

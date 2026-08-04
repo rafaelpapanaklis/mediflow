@@ -3614,3 +3614,115 @@ librerías, cero imágenes, cero WebGL.
 relinkeados, sin tocar `package-lock.json`: el único cambio que metió se revirtió). Además,
 un `next start -p 3131` del 2 de agosto tenía tomado el query engine y hacía fallar
 `prisma generate` con EPERM; se detuvo, se generó el cliente y se volvió a levantar.
+
+## [Afiliados — el bloque de bonos: regalo, ritmo, serpentina y nombre] — 2026-08-04
+
+**Commit:** ver `git log` de esta fecha → pusheado a `main`.
+**SQL:** ninguno. No se tocó el schema, ni el motor de comisiones, ni la calculadora.
+**Build:** `npx next build` **exit 0**, log completo revisado (360/360 páginas estáticas; los
+`Environment variable not found: DATABASE_URL` son el ruido conocido de no tener BD local).
+Se corrió sin `prisma generate` a propósito: el `next start -p 3131` del usuario tenía tomado
+el query engine (EPERM conocido) y el cliente generado ya era más nuevo que `schema.prisma`,
+así que regenerarlo no aportaba nada y habría exigido matar su servidor.
+
+### 1. El segundo hito ya no son monedas
+
+`HitoMonedas` **se borró entero**, junto con su keyframe `dcafHitoSpin` y la clase
+`.dcaf-hito-spin`. A 86 px la pila se leía como unas rayas sueltas: no se entendía qué era.
+
+Los dos primeros escalones comparten ahora `HitoRegalo`, parametrizado con **una sola prop**
+(`tono: "azul" | "violeta"`) en vez de duplicar el componente. La variación es mínima a
+propósito, para que las dos tarjetas no se lean como copia-pega: el segundo lleva el listón y
+el moño en violeta (`#f5f3ff → #ddd6fe`) y un **12 % más de escala**. El cubo NO cambia de
+color, porque en la tarjeta los dos escalones son azules.
+
+⚠️ El `scale()` va en la caja EXTERIOR, no en la que anima: `dcafHitoSway` reescribe
+`transform` entero y se comería cualquier `scale()` puesto ahí. Como `transform` no provoca
+reflow, crecer un 12 % no mueve nada de la tarjeta.
+
+### 2. Ritmo de los íconos: ~40 % más rápidos
+
+Sólo los del bloque de hitos. Las escenas grandes (`.dcaf-spin`, `.dcaf-sway`, `.dcaf-ring*`,
+`.dcaf-float*` — hero, pasos y cierre) **conservan su ritmo lento**, que es intencional.
+
+| clase | antes | ahora |
+|---|---|---|
+| `.dcaf-hito-sway` | 18s | **11s** |
+| `.dcaf-hito-float` | 20s | **12s** |
+| `.dcaf-hito-sparkle` | 15s | **9s** |
+| `.dcaf-hito-sparkle--b` | 19s (delay -7s) | **11.5s** (delay -4.2s) |
+
+Los dos `sparkle` no venían en la lista explícita del encargo, pero llevan el prefijo
+`.dcaf-hito-*` y son los destellos del trofeo: dejarlos a 15/19 s mientras su flotación baja a
+12 s los descoordinaba. Bajan en la misma proporción.
+
+### 3. Serpentina — `src/components/afiliados/landing/serpentina.tsx` (NUEVO)
+
+La primera vez que la tarjeta grande entra en pantalla, estalla confeti. **Una sola vez por
+carga**: el `IntersectionObserver` hace `disconnect()` dentro de su propio callback, así que
+subir y bajar no la repite. Es el único `"use client"` del bloque; el resto sigue siendo
+server component.
+
+Decisiones que conviene no deshacer:
+
+- **CSS puro.** 38 tiras que animan **sólo** `transform` y `opacity`. Cero librerías, cero
+  canvas, cero imágenes.
+- **Cero `Math.random()`.** La tabla de tiras sale de tres secuencias deterministas (pasos 17,
+  29 y 7, coprimos con 38, así que cada una recorre los 38 valores en desorden). Mismo
+  resultado en servidor y cliente → imposible el error de hidratación. Visualmente no se
+  distingue del azar.
+- **Cero `calc()` en el keyframe.** Las tres paradas del vuelo (arranque, punto más alto,
+  caída) se calculan en JS y viajan ya resueltas a nueve custom properties; el centrado lo
+  hacen `margin` negativos estáticos. El keyframe queda en
+  `translate3d(var(--dcaf-xa), var(--dcaf-ya), 0)` pelado.
+- **`isIntersecting` NO basta.** Se pone en `true` con un solo píxel visible, sin importar el
+  `threshold`: sin mirar también `intersectionRatio`, la serpentina salía al asomar el borde
+  superior de la tarjeta. El callback exige `ratio >= 0.38`.
+- **`prefers-reduced-motion: reduce` la cancela ENTERA**, ni atenuada: se comprueba antes de
+  observar, así que no se dispara nunca. El reset de `afiliados.css` ya apaga toda animación
+  dentro de `.dcaf-root`, pero eso habría dejado 38 nodos congelados a media pantalla.
+- **Se vacía al terminar** (2 600 ms): no quedan 38 nodos animando de fondo.
+- El contenedor es `position: absolute` + `pointer-events: none` + `aria-hidden`.
+
+### Verificación en Chrome (`next start` en un puerto aparte, sin BD)
+
+El `IntersectionObserver` **no se pudo disparar de verdad**: la pestaña del automatismo se
+queda en `visibilityState: "hidden"` y Chrome no la pinta, así que ni un IO de prueba dispara
+(gotcha ya conocido). Se verificó todo lo demás inyectando las mismas 38 tiras y midiendo:
+
+- Keyframe `dcafSerpentina` resuelto; vuelo muestreado con la Web Animations API:
+  `0% (0,0) op 0 escala .3` → `14% (32,-25) op 1` → `46% (84,-63)` = el punto más alto, que
+  coincide **exacto** con `--dcaf-xb/yb` → `80% (92,2)` → `100% (106,112) op .09`. La caída
+  acelera, como debe.
+- Duración total **1.45–2.28 s** (delay incluido).
+- **Excursión horizontal máxima: 112 px** contra los 165.5 px de media tarjeta a 375 px de
+  viewport → ninguna tira se sale por los costados. `scrollWidth` **2737 → 2737**: cero scroll
+  horizontal.
+- **CLS 0**: alto de la tarjeta **331 → 331 px** con las 38 tiras dentro.
+- Íconos: 2 × `dcaf-hito-sway` a 11 s (el segundo con `matrix(1.12,…)` y el listón violeta),
+  1 × `dcaf-hito-float` a 12 s, y **0** `dcaf-hito-spin`.
+
+### 4 y 5. El rótulo: «Bonos por hitos» → «Bono por Clínicas Activas»
+
+Ni un monto ni un umbral se escribieron a mano: el «3» sigue saliendo de
+`hitos.tiers.length` y el total de la suma calculada. Sólo se agregó la palabra «bonos»
+después del número («…habrá cobrado los **3 bonos**, $112,500 en total»).
+
+El rótulo aparecía en más sitios de los cuatro archivos del encargo, y se dejó consistente:
+
+- `src/app/afiliados/page.tsx` — kicker de la sección.
+- `src/app/admin/affiliates/affiliates-client.tsx` — título de la sección y el checkbox
+  («Anunciar el bono por clínicas activas en la página pública»).
+- `src/app/terminos-afiliados/page.tsx` — encabezado de la sección 5 y la `description` del
+  metadata. Va con los otros porque el bloque de la landing **enlaza ahí**: el rótulo tenía
+  que coincidir al llegar. No hay ancla ni id derivados del título, así que no rompe enlaces.
+- Comentarios de código de esos archivos, más `afiliados.css`.
+
+El kicker se sigue **renderizando** en mayúsculas (`BONO POR CLÍNICAS ACTIVAS`): el
+`textTransform: uppercase` es del estilo `KICKER` compartido por todas las secciones de la
+landing, igual que antes con «Bonos por hitos». En el código el texto está tal cual se pidió.
+
+### Lo que sigue sin existir
+
+Igual que en la ola anterior: **nadie calcula ni paga estos bonos**. Sigue siendo un anuncio
+configurable desde `/admin/affiliates` y el seguimiento es manual.

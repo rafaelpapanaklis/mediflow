@@ -15,6 +15,7 @@ import {
   type TarjetaPila,
 } from "@/components/afiliados/landing/escenas";
 import { IconoHito } from "@/components/afiliados/landing/hitos";
+import { SerpentinaHito } from "@/components/afiliados/landing/serpentina";
 import { fmtMxn, getPublicOffer } from "@/lib/affiliates/public-offer";
 import type { PlanKey } from "@/lib/affiliates/payout-core";
 import "./afiliados.css";
@@ -52,15 +53,15 @@ export const metadata: Metadata = buildMetadata({
 //
 // NINGÚN monto está escrito en este archivo. Todo sale de `getPublicOffer()`:
 // los precios de los planes de plan_configs y, de affiliate_payout_config, las
-// seis comisiones y los tres bonos por hitos (umbral y monto). Si el admin mueve
-// un número la página lo refleja sin deploy. Eso incluye las cifras que aparecen
-// DENTRO de las escenas 3D, el total acumulado de los bonos y los tres perfiles
-// de ejemplo: todos se calculan, ninguno se teclea. `getPublicOffer()` nunca
-// lanza: sin BD cae a los defaults del motor.
+// seis comisiones y los tres escalones del bono por clínicas activas (umbral y
+// monto). Si el admin mueve un número la página lo refleja sin deploy. Eso
+// incluye las cifras que aparecen DENTRO de las escenas 3D, el total acumulado
+// de los bonos y los tres perfiles de ejemplo: todos se calculan, ninguno se
+// teclea. `getPublicOffer()` nunca lanza: sin BD cae a los defaults del motor.
 //
-// Los bonos por hitos son una PROMOCIÓN: con `milestonesEnabled` en false el
-// bloque entero desaparece. Y son sólo un anuncio — nada en el sistema cuenta
-// clínicas ni los paga todavía (ver ORQUESTA.md).
+// El bono por clínicas activas es una PROMOCIÓN: con `milestonesEnabled` en
+// false el bloque entero desaparece. Y es sólo un anuncio — nada en el sistema
+// cuenta clínicas ni lo paga todavía (ver ORQUESTA.md).
 //
 // CACHÉ: la página es estática con ISR, y quien de verdad la mantiene al día es
 // la revalidación BAJO DEMANDA — guardar en /admin/affiliates dispara
@@ -254,7 +255,7 @@ export default async function AfiliadosPage() {
   const ANIOS_REF = 3;
   const mesesRef = Math.max(0, 12 * ANIOS_REF - skip);
 
-  // ── Bonos por hitos: acumulables, así que el total es la suma ───────────
+  // ── Bono por Clínicas Activas: acumulable, así que el total es la suma ──
   const hitos = offer.milestones;
   const hitoMayor = hitos.tiers.length > 0 ? hitos.tiers[hitos.tiers.length - 1] : null;
 
@@ -581,14 +582,14 @@ export default async function AfiliadosPage() {
               </div>
             </div>
 
-            {/* ── Bonos por hitos ──────────────────────────────────────────
-                Se apagan desde /admin (`milestonesEnabled`) y el bloque entero
+            {/* ── Bono por Clínicas Activas ────────────────────────────────
+                Se apaga desde /admin (`milestonesEnabled`) y el bloque entero
                 deja de renderizarse: es una promoción, no una promesa fija.
                 Los seis números salen de affiliate_payout_config. */}
             {hitos.enabled && hitoMayor && (
               <div style={{ marginTop: 64 }}>
                 <div style={{ textAlign: "center", maxWidth: 680, margin: "0 auto" }}>
-                  <span style={{ ...KICKER, color: "#6d28d9" }}>Bonos por hitos</span>
+                  <span style={{ ...KICKER, color: "#6d28d9" }}>Bono por Clínicas Activas</span>
                   <h3 className="dcaf-balance" style={{ ...H2, fontSize: "clamp(23px,3vw,31px)" }}>
                     Y cuando tu cartera crece, hay bono
                   </h3>
@@ -596,7 +597,7 @@ export default async function AfiliadosPage() {
                     Son <strong style={{ color: "#0f172a" }}>adicionales</strong> a tus comisiones
                     mensuales —que siguen corriendo igual— y{" "}
                     <strong style={{ color: "#0f172a" }}>acumulables</strong>: quien llega a{" "}
-                    {hitoMayor.clinics} clínicas habrá cobrado los {hitos.tiers.length},{" "}
+                    {hitoMayor.clinics} clínicas habrá cobrado los {hitos.tiers.length} bonos,{" "}
                     <strong style={{ color: "#6d28d9" }}>{fmtMxn(hitos.totalMxn)}</strong> en total.
                   </p>
                 </div>
@@ -610,6 +611,9 @@ export default async function AfiliadosPage() {
                         key={hito.n}
                         style={{
                           ...TARJETA,
+                          // Ancla de la serpentina del hito grande. En las otras
+                          // dos no cambia nada: `relative` sin desplazamiento.
+                          position: "relative",
                           padding: grande ? "28px 24px" : "24px 22px",
                           display: "flex",
                           flexDirection: "column",
@@ -625,6 +629,9 @@ export default async function AfiliadosPage() {
                             : "0 1px 3px rgba(15,23,42,.05)",
                         }}
                       >
+                        {/* Sólo el hito grande celebra, y una vez por carga. */}
+                        {grande && <SerpentinaHito />}
+
                         <IconoHito orden={i} />
 
                         <span style={{ fontSize: 13, fontWeight: 700, color: "#475569" }}>

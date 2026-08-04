@@ -56,19 +56,42 @@ html:has(.dcaf-root) { scroll-behavior: smooth; }
 .dcaf-float--c { animation: dcafFloat 8s ease-in-out infinite; animation-delay: -5s; }
 .dcaf-float--d { animation: dcafFloat 10s ease-in-out infinite; animation-delay: -1.5s; }
 
-/* Los tres íconos 3D de los bonos por hitos (hitos.tsx). Son ACENTO al lado de
-   una tarjeta, no espectáculo: van entre 16 y 24 s para no competir con las
-   escenas grandes de arriba. También animan sólo `transform`. */
+/* Los íconos 3D del bono por clínicas activas (hitos.tsx). Son ACENTO al lado
+   de una tarjeta, no espectáculo: van entre 9 y 12 s —un 40 % más rápidas que
+   al principio, que quietas parecían rotas— y aun así muy por debajo de las
+   escenas grandes de arriba, que conservan su ritmo lento a propósito. También
+   animan sólo `transform`. */
 @keyframes dcafHitoSway { 0%, 100% { transform: rotateX(-18deg) rotateY(-24deg); } 50% { transform: rotateX(-18deg) rotateY(16deg); } }
-@keyframes dcafHitoSpin { 0% { transform: rotateY(0deg); } 100% { transform: rotateY(360deg); } }
 @keyframes dcafHitoFloat { 0%, 100% { transform: translateY(3px) rotateY(-13deg); } 50% { transform: translateY(-3px) rotateY(13deg); } }
 @keyframes dcafSparkle { 0%, 100% { transform: rotate(0deg) scale(.55); } 50% { transform: rotate(180deg) scale(1.1); } }
 
-.dcaf-hito-sway { animation: dcafHitoSway 18s ease-in-out infinite; }
-.dcaf-hito-spin { animation: dcafHitoSpin 22s linear infinite; }
-.dcaf-hito-float { animation: dcafHitoFloat 20s ease-in-out infinite; }
-.dcaf-hito-sparkle { animation: dcafSparkle 15s ease-in-out infinite; }
-.dcaf-hito-sparkle--b { animation: dcafSparkle 19s ease-in-out infinite; animation-delay: -7s; }
+.dcaf-hito-sway { animation: dcafHitoSway 11s ease-in-out infinite; }
+.dcaf-hito-float { animation: dcafHitoFloat 12s ease-in-out infinite; }
+.dcaf-hito-sparkle { animation: dcafSparkle 9s ease-in-out infinite; }
+.dcaf-hito-sparkle--b { animation: dcafSparkle 11.5s ease-in-out infinite; animation-delay: -4.2s; }
+
+/* ── Serpentina del bono grande (serpentina.tsx) ──────────────────────────
+   Estalla UNA vez, cuando el bloque entra en pantalla, y luego el componente
+   se vacía. El contenedor está FUERA DEL FLUJO (absolute): no empuja nada y el
+   CLS de la página sigue en 0. Las tiras salen todas del mismo punto —el
+   centro de la tarjeta, a la altura del ícono— y ninguna se desplaza más de
+   ~131 px, así que ni a 375 px se salen por los costados: cero scroll
+   horizontal. Sólo se animan `transform` y `opacity`.
+
+   Las nueve variables (tres paradas × x, y, giro) las escribe el componente
+   tira por tira, YA RESUELTAS: aquí no hay un solo `calc()`. Cada tira se
+   centra sobre el origen con `margin` negativos, que no se animan. */
+.dcaf-serpentina { position: absolute; inset: 0; pointer-events: none; overflow: visible; }
+.dcaf-tira { position: absolute; left: 50%; top: 30%; display: block; animation-name: dcafSerpentina; animation-fill-mode: both; animation-iteration-count: 1; will-change: transform, opacity; }
+
+@keyframes dcafSerpentina {
+  /* Lanzamiento: sale disparada y va frenando. */
+  0% { opacity: 0; transform: translate3d(0, 0, 0) scale(.3) rotate(0deg); animation-timing-function: cubic-bezier(.1, .75, .4, 1); }
+  14% { opacity: 1; transform: translate3d(var(--dcaf-xa), var(--dcaf-ya), 0) scale(1) rotate(var(--dcaf-ra)); animation-timing-function: cubic-bezier(.24, .7, .45, 1); }
+  /* Punto más alto, y de ahí la caída ACELERA (la curva se invierte). */
+  46% { opacity: 1; transform: translate3d(var(--dcaf-xb), var(--dcaf-yb), 0) scale(1) rotate(var(--dcaf-rb)); animation-timing-function: cubic-bezier(.45, 0, .75, .55); }
+  100% { opacity: 0; transform: translate3d(var(--dcaf-xc), var(--dcaf-yc), 0) scale(.9) rotate(var(--dcaf-rc)); }
+}
 
 /* ── Focus visible ────────────────────────────────────────────────────────
    Acotado a `.dcaf-main`: el nav y el footer compartidos traen el suyo en
@@ -122,7 +145,7 @@ details[open] .dcaf-chev { transform: rotate(45deg); }
 .dcaf-herogrid { display: grid; grid-template-columns: 1fr; gap: 44px; align-items: center; }
 .dcaf-howgrid { display: grid; grid-template-columns: 1fr; gap: 48px; align-items: start; }
 .dcaf-calcgrid { display: grid; grid-template-columns: 1fr; gap: 22px; align-items: start; }
-/* Bonos por hitos: una columna en móvil y, a partir de 900px, tres — con la
+/* Bono por clínicas activas: una columna en móvil y, a partir de 900px, tres — con la
    TERCERA más ancha. El hito grande tiene que verse como el importante, y su
    jerarquía no puede depender sólo del color. */
 .dcaf-hitos { display: grid; grid-template-columns: 1fr; gap: 18px; align-items: stretch; }
