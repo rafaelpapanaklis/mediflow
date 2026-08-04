@@ -3477,7 +3477,7 @@ WHERE "paymentMethodCollected" = false
 
 ## [Afiliados — bonos por hitos + fuera "La idea en una frase"]
 
-**Commit:** `b5e748d5` → pusheado a `main`.
+**Commit:** `210d6e7e` (+ este reporte en `5d0af78c`) → pusheado a `main`.
 **SQL:** `sql/afiliados-hitos.sql` — **YA APLICADO** en Supabase antes de este commit. El
 archivo queda para el histórico (aditivo e idempotente: `ADD COLUMN IF NOT EXISTS`).
 **Build:** `npm run build` **exit 0**, log completo revisado (360/360 páginas estáticas; los
