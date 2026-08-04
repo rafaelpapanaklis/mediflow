@@ -3392,3 +3392,225 @@ compara ambas modalidades sigue hablando del horizonte elegido (y el mes de cruc
 calcula sobre el eje nuevo: `ceil(único / mensual)`, sin el arranque), y ya no aparece ningún
 "$0" en toda la calculadora. Los chips, el slider, su sincronización y la accesibilidad quedaron
 intactos.
+
+---
+
+## [Admin metodo de pago real vs signup]
+
+**Rama:** `fix/metodo-pago-real` → pusheada a `main` (`724a9c92` + `66c2bafd`).
+**SQL:** ninguno. No hay columnas nuevas: el dato vivo se lee de Stripe en cada carga.
+
+### El engaño
+
+`Clinic.paymentMethodCollected` / `paymentMethodType` / `paymentMethodLast4` **solo** se
+escriben en el alta — `src/app/api/auth/register/route.ts` (~202) y
+`register-oauth/route.ts` (~134) — con lo que mandó el formulario. Nada más los vuelve a
+tocar: ni el webhook de Stripe, ni el checkout, ni el portal de cliente. Una clínica que se
+registró sin tarjeta y después pagó por Stripe Checkout se queda en `false` **para siempre**,
+y el panel afirmaba sobre ella "esta clínica no capturó un método de pago". Caso real:
+*Menta Dental*, activa y pagando.
+
+### Cambios
+
+**1. Método de pago real (`src/lib/admin/stripe-payment-method.ts`, nuevo).**
+`getLivePaymentMethod()` consulta `default_payment_method` de la suscripción y, si no lo
+tiene, `invoice_settings.default_payment_method` del customer; extrae marca, últimos 4 y
+vencimiento. Solo lectura: no crea, no cobra, no modifica. Timeout de 4 s y
+`maxNetworkRetries: 0` por request (el cliente compartido de `@/lib/stripe` trae 15 s × 2
+reintentos = hasta 45 s, demasiado para un render) más un plazo duro con `Promise.race`.
+**Nunca lanza**: devuelve tres estados — `found`, `none` y `unavailable`. Stripe sin
+configurar cae en `unavailable`, no en "sin método". La consulta solo se dispara si hay
+`stripeCustomerId`.
+
+**2. Bloque rediseñado (`src/components/admin/clinic-payment-method-card.tsx`, nuevo).**
+Se llama "Método de pago" y tiene dos filas que no significan lo mismo:
+- *Cobro actual (Stripe)*: "Visa •••• 4242 · vence 11/28" con badge Vigente/Vencida; o
+  "Sin método de pago en Stripe" en **ámbar** (la próxima renovación va a fallar); o
+  "No se pudo consultar Stripe" en tono **neutro** — no saber no es negar.
+- *Capturado en el registro*: lo que mostraba antes, etiquetado como dato del formulario de
+  alta, con la nota de que se escribe una sola vez y no implica nada sobre el cobro vigente.
+Sin `stripeCustomerId` solo se muestra la segunda fila y se dice que no hay cliente en Stripe.
+Salió a su propio archivo para poder renderizarlo aislado (así se verificó) y para no seguir
+engordando el `clinic-detail-client.tsx`.
+
+**3. Otras superficies.** La lista (`clinics-client.tsx`) **no** consulta Stripe por fila —
+sería una llamada por clínica: el chip del alta ahora dice "· del alta" con `title`
+explicativo, y cuando el campo viene vacío se sigue sin pintar nada. En
+`/admin/clientes` el campo pasó a "Método de pago (alta)" y ya no responde "No registrado"
+cuando hay `stripeCustomerId` (dice "Se cobra por Stripe").
+
+**4. KPIs.** `KpiCard` acepta un `hint` opcional (estilo inline con tokens, sin tocar
+`globals.css`). "Ingresos" y "Facturas" llevan subtítulo aclarando que son de la clínica **a
+sus pacientes**. Además la pestaña Facturación muestra lo que esa clínica **te ha pagado a
+ti**, leyendo `subscription_invoices`: suma de los `paid`, cuántos son, y fecha/monto/método
+del último. En `try/catch` y filtrando `paidAt` no nulo (en Postgres un `ORDER BY DESC`
+pondría los nulos primero y el "último pago" saldría mal).
+
+### Verificación
+
+- `npx tsc --noEmit` → 0 errores (también sobre el estado intermedio del primer commit).
+- `npm run build` → **exit 0**, output completo revisado. Los 162 mensajes
+  `Environment variable not found: DATABASE_URL` son el ruido conocido de no tener BD local;
+  cero `Failed to compile`, `Type error` o `Error occurred prerendering`.
+  Nota: `prisma generate` truena con EPERM porque otro proceso tiene tomado el query engine;
+  como `prisma/schema.prisma` no se tocó, el gate se corrió con `npx next build`.
+- Render real de los 5 estados en Chrome (página temporal, ya borrada), en tema oscuro:
+  tarjeta vigente con signup en `false` (el caso Menta Dental), tarjeta vencida, sin método
+  en Stripe, Stripe caído, y clínica sin `stripeCustomerId`. Ninguno rompe la página y el
+  único error de consola es el de Vercel Analytics sin red. Los tres KpiCard con `hint`
+  miden lo mismo (135 px): el subtítulo no descuadra la fila.
+
+### Pendiente
+
+Medir cuánto engañaba el panel. No hay `DATABASE_URL` en local (ni en el entorno ni en
+`.env*`), así que la query quedó sin correr:
+
+```sql
+SELECT COUNT(*) AS clinicas_mal_reportadas
+FROM clinics
+WHERE "paymentMethodCollected" = false
+  AND "stripeCustomerId" IS NOT NULL
+  AND "subscriptionStatus" IN ('active', 'trialing', 'paid');
+```
+
+---
+
+## [Afiliados — bonos por hitos + fuera "La idea en una frase"]
+
+**Commit:** `b5e748d5` → pusheado a `main`.
+**SQL:** `sql/afiliados-hitos.sql` — **YA APLICADO** en Supabase antes de este commit. El
+archivo queda para el histórico (aditivo e idempotente: `ADD COLUMN IF NOT EXISTS`).
+**Build:** `npm run build` **exit 0**, log completo revisado (360/360 páginas estáticas; los
+166 `Environment variable not found: DATABASE_URL` son el ruido conocido de no tener BD
+local). `npm run test:afiliados` **63/63**.
+
+### 🚨 LO QUE NO EXISTE: el cálculo de los hitos
+
+**Esta ola SOLO anuncia los bonos y los deja configurables. El sistema no los calcula, no
+avisa cuando alguien llega y no registra los bonos pagados. El seguimiento es MANUAL.**
+
+Para construir el motor haría falta, como mínimo:
+
+1. **Definir "clínica activa" en código.** Hoy la promesa dice "3 mensualidades pagadas y
+   suscripción vigente". Eso es un `COUNT` sobre `subscription_invoices` con
+   `status = 'paid'` por clínica (ojo: los prorrateos van etiquetados
+   `Stripe subscription_update` en `notes` y no deberían contar) cruzado con el
+   `subscriptionStatus` de la clínica. `getInvoiceNo()` en `payout.ts` ya resuelve la mitad
+   difícil de ese conteo.
+2. **Una foto mensual por afiliado.** El bono exige que el número **se sostenga 3 meses
+   seguidos**, así que no basta con consultar el presente: hace falta una tabla tipo
+   `affiliate_active_snapshot (affiliateId, mes, clinicasActivas)` escrita por un cron
+   mensual. Sin histórico, un afiliado que sube a 50 y baja a 40 en el mismo mes es
+   indistinguible de uno que se sostuvo.
+3. **Registro de bonos entregados**, con el mismo candado atómico que el pago único
+   (`claimOneTimePayout` es el patrón): `affiliate_milestone_payout (affiliateId, hito,
+   claimedAt, paidAt, mitad)`, porque el hito grande puede pagarse en dos partes. Cada bono
+   se entrega **una sola vez** aunque el conteo baje y vuelva a subir.
+4. **Verificación de titularidad.** "Cada clínica debe ser un negocio distinto, con su
+   propio titular" no es computable con lo que hay: RFC, razón social y titular no están
+   normalizados entre clínicas. Por eso la promesa pública dice que DaleControl **verifica
+   antes de pagar** — a mano.
+
+Mientras tanto: **si alguien reclama un bono, se revisa y se paga a mano.** No hay nada en
+el panel del afiliado que lo prometa ni que lo cuente.
+
+### Cambio 1 — Fuera la sección "La idea en una frase"
+
+Se borró completa la banda azul con "No es cuánto pagamos: es que se repite": las dos
+columnas comparando pago único contra recurrente a 3 años, las dos barras y la nota de los
+35 cobros. Con ella se fue todo el cálculo que sólo ella usaba (`ref`, `refAcum`,
+`refUnico`, `refMax`, `ALTO_BARRA`, `altoAcum`, `altoUnico`, `formulaRef`). `ANIOS_REF` y
+`mesesRef` **se quedan**: los usan los tres perfiles de ejemplo y su nota al pie. No había
+CSS propio en `afiliados.css` que borrar — la sección sólo usaba `dcaf-balance`, que sigue
+vivo en todos los encabezados.
+
+**Ritmo visual verificado en Chrome** (no a ojo): recorriendo `#dcaf-main > section` y
+leyendo el `backgroundColor` computado, la página va oscuro → blanco → `#f8fafc` → blanco →
+`#f8fafc` → blanco → `#f8fafc` → blanco → oscuro. Ninguna pareja de secciones consecutivas
+comparte fondo.
+
+### Cambio 2 — Bonos por hitos en /afiliados
+
+Bajo las tres tarjetas de plan y el recuadro azul del arranque. Tres tarjetas (una columna
+en móvil, `1fr 1fr 1.24fr` desde 900px: la de 50 clínicas es **más ancha**, morada
+`#6d28d9`, con más sombra y el monto más grande; las otras dos, azules). Cada una lleva
+ícono 3D, número de clínicas, monto, "pago único" y una línea de qué significa.
+
+**Ni un número está escrito.** Los seis salen de `affiliate_payout_config` vía
+`getPublicOffer().milestones`, incluido el total acumulado ($112,500 = la suma de los tres,
+porque son acumulables). Con `milestonesEnabled` en false el bloque entero desaparece.
+
+Debajo, las seis condiciones visibles (no en letra escondida) y el enlace a
+`/terminos-afiliados`.
+
+### Cambio 3 — /admin/affiliates
+
+Sub-bloque "Bonos por hitos" dentro de "Esquema de pago": el switch y los seis campos. Al
+lado de cada monto, la equivalencia calculada con datos reales — `$100,000 ÷ 50 = $2,000 por
+clínica · 22.2 meses del fijo de Profesional ($90)` — igual que las comisiones. Apagado, los
+campos siguen editables pero se ven al 55% de opacidad: se puede dejar la promoción lista
+antes de encenderla.
+
+Validación en cliente y en el `PUT`: umbrales **enteros y crecientes** (1 &lt; 2 &lt; 3; si no,
+**400**) y montos entre 0 y 1,000,000. Auditado con `logAdminGlobalEvent`, con los hitos
+también en el `before` (si no, el log diría que aparecieron de la nada en cada guardado).
+
+### Cambio 4 — /terminos-afiliados
+
+Sección nueva con las reglas: las seis condiciones, que DaleControl verifica antes de pagar,
+que el bono mayor **puede entregarse en dos partes** (mitad al cumplirse la ventana de 3
+meses y mitad tres meses después si el conteo se sostiene) y que las altas fraudulentas o de
+negocios relacionados entre sí lo invalidan. Los montos y umbrales se **leen** de la config,
+igual que en la landing.
+
+La página pasó de estática a `async` con `revalidate = 600`, y **la numeración de las
+secciones se calcula** (`const S = {...}`): con la promoción apagada la sección desaparece y
+los términos van del 4 al 5 sin saltos, con las referencias cruzadas ("conforme al
+calendario de la sección N") apuntando a donde deben.
+
+### Dónde viven los hitos en el código
+
+En la **misma fila** que el esquema de pago (`affiliate_payout_config`, id=1) pero **fuera
+de `PayoutConfig`**, a propósito: `resolveCommission` no los conoce y el motor de comisiones
+quedó intacto (de ahí que `test:afiliados` siga en 63/63 sin tocar un test). Contrato nuevo
+en `payout-core.ts` (puro, client-safe): `MilestonesConfig`, `DEFAULT_MILESTONES`,
+`normalizeMilestones()`, `milestoneTiers()` —ordena por umbral y descarta el escalón con
+umbral o monto en 0— y `milestonesTotalMxn()`. En `payout.ts`, `getPayoutSettings()` trae
+las dos mitades en **una sola** lectura (las superficies públicas necesitan ambas;
+`getPayoutConfig()` sigue igual para el motor).
+
+Degradación intacta: sin la tabla —o sin las columnas nuevas, que Prisma pide en el mismo
+SELECT— todo cae a los defaults del DDL y nada lanza.
+
+### Íconos 3D (`src/components/afiliados/landing/hitos.tsx`)
+
+CSS puro, mismo lenguaje que `escenas.tsx`: `perspective` + `preserve-3d`, keyframes
+`dcafHito*` en `afiliados.css`, **sólo** `transform` (cero reflow), `aria-hidden`, y el
+bloque `prefers-reduced-motion: reduce` que ya existía los congela sin tocar nada. Cero
+librerías, cero imágenes, cero WebGL.
+
+- **Regalo** (hito 1): cubo de 4 caras con listones cruzados y moño, balanceo de 18 s.
+- **Monedas** (hito 2): 4 discos con `conic-gradient` girando 22 s. Nacieron a `rotateX(74deg)`
+  y con 5 discos: en Chrome se veían como un **resorte**, no como una pila. A 62° y con 10 px
+  de separación cada canto se distingue.
+- **Trofeo** (hito 3): copa con asas, pie y base morada, con dos destellos que giran y
+  laten. Es la más llamativa, pero sigue a 20 s: son acento, no espectáculo.
+
+### Verificación
+
+- `npm run build` → **exit 0**, sin `Failed to compile`, `Type error` ni
+  `Error occurred prerendering`. `prerender-manifest.json` confirma el ISR de las dos
+  páginas: `/afiliados` 60 s, `/terminos-afiliados` 600 s.
+- `npm run test:afiliados` → **63/63**.
+- Render real en Chrome contra `next start` (sin BD, o sea con los defaults del DDL):
+  las tres tarjetas con sus tres íconos, anchos 328/328/**407** px, `$112,500` en el lede,
+  las seis condiciones, y `/terminos-afiliados` con las secciones 1→10 sin saltos y los tres
+  umbrales impresos desde la config. Sin scroll horizontal.
+
+### Nota de entorno (no del código)
+
+`node_modules/.bin` no existía —restos del clobber del junction del worktree—, así que ni
+`npx` ni `npm run` encontraban binarios. Se restauró con `npm install` (38 paquetes
+relinkeados, sin tocar `package-lock.json`: el único cambio que metió se revirtió). Además,
+un `next start -p 3131` del 2 de agosto tenía tomado el query engine y hacía fallar
+`prisma generate` con EPERM; se detuvo, se generó el cliente y se volvió a levantar.
