@@ -5,6 +5,7 @@ import { SalesNavSession } from "@/components/public/landing/nav-session";
 import { SalesFooter } from "@/components/public/landing/sales";
 import { buildMetadata, SITE_URL } from "@/lib/seo";
 import { JsonLd } from "@/components/blog/json-ld";
+import { AvisosFlotantes } from "@/components/afiliados/landing/avisos";
 import { CalculadoraAfiliados } from "@/components/afiliados/landing/calculadora";
 import {
   EscenaAnillos,
@@ -16,6 +17,7 @@ import {
 } from "@/components/afiliados/landing/escenas";
 import { IconoHito } from "@/components/afiliados/landing/hitos";
 import { SerpentinaHito } from "@/components/afiliados/landing/serpentina";
+import { getAvisosAfiliados } from "@/lib/affiliates/public-activity";
 import { fmtMxn, getPublicOffer } from "@/lib/affiliates/public-offer";
 import type { PlanKey } from "@/lib/affiliates/payout-core";
 import "./afiliados.css";
@@ -205,6 +207,11 @@ const PILA_NOMBRES = ["Dental Río Lerma", "Clínica Sonrisa Norte", "Odonto Int
 
 export default async function AfiliadosPage() {
   const offer = await getPublicOffer();
+
+  // Avisos flotantes de la esquina. Reciben la oferta ya resuelta (una lectura,
+  // no dos) y eligen solos entre las comisiones reales y los mensajes del
+  // programa. Nunca lanza: sin BD devuelve los informativos.
+  const avisos = await getAvisosAfiliados(offer);
 
   // Índice por plan. Con un `new Map(arr.map(...))` TS infiere el literal como
   // array y no como tupla, y el Map cae a <unknown, unknown>.
@@ -968,6 +975,12 @@ export default async function AfiliadosPage() {
       </main>
 
       <SalesFooter />
+
+      {/* Va DENTRO de `.dcaf-root` a propósito: es lo que hace que el bloque de
+          `prefers-reduced-motion` de afiliados.css le apague la animación de
+          entrada. Es `position: fixed`, así que el sitio en el DOM no cambia
+          dónde se ve ni puede provocar layout shift. */}
+      <AvisosFlotantes avisos={avisos.avisos} />
 
       <JsonLd data={faqLd} />
       <JsonLd data={webPageLd} />

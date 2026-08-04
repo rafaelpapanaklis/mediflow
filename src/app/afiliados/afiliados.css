@@ -93,6 +93,122 @@ html:has(.dcaf-root) { scroll-behavior: smooth; }
   100% { opacity: 0; transform: translate3d(var(--dcaf-xc), var(--dcaf-yc), 0) scale(.9) rotate(var(--dcaf-rc)); }
 }
 
+/* ── Avisos flotantes (avisos.tsx) ────────────────────────────────────────
+   Tarjeta chica abajo a la izquierda que entra, se queda unos segundos y se
+   va. El contenedor es `fixed`: está FUERA DEL FLUJO, así que no empuja nada
+   y el CLS de la página sigue en 0. Sólo se animan `transform` y `opacity`.
+
+   z-index 40: por debajo del nav sticky (60) y de cualquier modal. Un aviso
+   decorativo jamás debe quedar encima de algo con lo que hay que interactuar.
+
+   El estado BASE de `.dcaf-aviso` es el visible y la entrada es un keyframe
+   que la trae desde fuera. Ese reparto es lo que hace que el bloque de
+   `prefers-reduced-motion` del final —que apaga toda animación bajo
+   `.dcaf-root`— deje la tarjeta apareciendo en su sitio, en vez de congelada
+   en `opacity: 0`. */
+.dcaf-avisos {
+  position: fixed;
+  left: 20px;
+  bottom: 20px;
+  width: min(330px, calc(100vw - 40px));
+  z-index: 40;
+  /* El contenedor no intercepta clics; la tarjeta sí. */
+  pointer-events: none;
+}
+
+/* Las medidas de dentro están AJUSTADAS AL TEXTO, no elegidas a ojo: con
+   icono de 34, gap de 11 y fuente de 13.5 la columna de texto se quedaba en
+   223px y cinco de los diez mensajes se cortaban a media frase. Así son 236px
+   y entran todos en dos renglones. Tocar cualquiera de estos cuatro números
+   vuelve a recortar mensajes. */
+.dcaf-aviso {
+  pointer-events: auto;
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  padding: 12px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  box-shadow: 0 10px 30px rgba(15, 23, 42, .13), 0 2px 6px rgba(15, 23, 42, .06);
+  animation: dcafAvisoIn .42s cubic-bezier(.16, .84, .44, 1) both;
+  will-change: transform, opacity;
+}
+.dcaf-aviso--out { animation: dcafAvisoOut .42s ease-in both; }
+
+@keyframes dcafAvisoIn {
+  from { opacity: 0; transform: translate3d(-18px, 10px, 0) scale(.97); }
+  to   { opacity: 1; transform: translate3d(0, 0, 0) scale(1); }
+}
+@keyframes dcafAvisoOut {
+  from { opacity: 1; transform: translate3d(0, 0, 0) scale(1); }
+  to   { opacity: 0; transform: translate3d(-16px, 8px, 0) scale(.98); }
+}
+
+.dcaf-aviso-ico {
+  flex-shrink: 0;
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.dcaf-aviso-txt { min-width: 0; flex: 1; }
+
+/* Dos líneas como máximo: una tarjeta que crece se come la esquina. */
+.dcaf-aviso-linea {
+  font-size: 13px;
+  line-height: 1.42;
+  color: #0f172a;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+}
+.dcaf-aviso-pie {
+  display: block;
+  margin-top: 3px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: #475569;
+}
+
+.dcaf-aviso-x {
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  margin: -2px -2px 0 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: #94a3b8;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.dcaf-aviso-x:hover { background: #f1f5f9; color: #475569; }
+/* El foco visible de la página está acotado a `.dcaf-main` y esto vive fuera. */
+.dcaf-aviso-x:focus-visible { outline: 3px solid #2563eb; outline-offset: 2px; }
+
+/* Móvil: ancho casi completo, pegado abajo. Entre 480 y 767px el componente
+   además vigila los botones "Registrarme gratis" y se quita si uno cae en la
+   franja de abajo. */
+@media (max-width: 767px) {
+  .dcaf-avisos { left: 12px; right: 12px; bottom: 12px; width: auto; }
+}
+/* Por debajo de 480px no sale. En esa franja la tarjeta ocupa casi un tercio
+   del alto útil y no hay forma de garantizar que no tape lo que se está
+   leyendo: un aviso decorativo no vale eso. El componente tampoco programa su
+   reloj ahí (comprueba el mismo breakpoint con matchMedia). */
+@media (max-width: 479px) {
+  .dcaf-avisos { display: none; }
+}
+
 /* ── Focus visible ────────────────────────────────────────────────────────
    Acotado a `.dcaf-main`: el nav y el footer compartidos traen el suyo en
    landing-v2.css y no hay por qué duplicárselo. */

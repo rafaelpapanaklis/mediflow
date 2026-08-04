@@ -3726,3 +3726,160 @@ landing, igual que antes con «Bonos por hitos». En el código el texto está t
 
 Igual que en la ola anterior: **nadie calcula ni paga estos bonos**. Sigue siendo un anuncio
 configurable desde `/admin/affiliates` y el seguimiento es manual.
+
+---
+
+## Avisos flotantes en la landing de afiliados (`/afiliados`)
+
+Tarjeta chica en la **esquina inferior izquierda** que entra deslizándose, se queda unos
+segundos y se va. Luego otra, con ritmo irregular. Ola chica: **sin SQL, sin schema, sin tocar
+el motor de comisiones**.
+
+- `src/lib/affiliates/public-activity.ts` — decide el modo y redacta los mensajes (server).
+- `src/components/afiliados/landing/avisos.tsx` — pinta y cronometra (client).
+- `src/app/afiliados/afiliados.css` — bloque `dcaf-aviso*` (namespace propio, como el resto).
+- `src/app/afiliados/page.tsx` — una llamada y un `<AvisosFlotantes>` dentro de `.dcaf-root`.
+
+### Qué modo está activo hoy: INFORMATIVO
+
+El widget elige solo, en el servidor, y hoy sale **modo informativo**: el modo real necesita
+**3 o más comisiones en `affiliate_commissions` de los últimos 90 días** y todavía no las hay.
+No hay nada que encender ni configurar — en cuanto existan tres comisiones recientes, la
+siguiente regeneración de la página (ISR, 60 s) empieza a publicar eventos reales sola.
+
+| | Modo INFO (hoy) | Modo REAL |
+|---|---|---|
+| Se activa | por defecto | ≥ 3 comisiones en 90 días |
+| Qué dice | cómo funciona el programa | comisiones que existen de verdad |
+| Segunda línea | no tiene | fecha relativa (+ estado, si se puede) |
+
+Son **10 mensajes** en modo info y hasta **10** en modo real.
+
+### Reglas de privacidad aplicadas (modo real)
+
+- **Al navegador no baja ni un id, correo, nombre ni fecha exacta.** El server manda la frase
+  ya redactada y nada más; `affiliateId`/`clinicId` no salen de `public-activity.ts`.
+- **El estado sólo aparece con 5+ afiliados distintos** comisionando en la ventana. Con dos
+  afiliados en el programa, decir «Jalisco» es señalar con el dedo. Por debajo de ese umbral
+  la tarjeta dice sólo «Un afiliado».
+- **Fechas relativas y redondeadas** («esta semana», «hace unas semanas»), nunca el día.
+- **Máximo 2 tarjetas por afiliado**, para que el ciclo entero no permita reconstruir la
+  actividad de una sola persona. Si tras ese tope quedan menos de 3, se cae a modo info.
+- **Ninguna tarjeta afirma que alguien cobró si no cobró**: el verbo lo manda el `status` de
+  la fila. `paid` → «Un afiliado cobró $140 por una clínica del plan Profesional»; cualquier
+  otro status → «Comisión de $140 por una clínica del plan Profesional», sin sujeto cobrando.
+
+### GOTCHA: `Affiliate` no tiene estado; el que se publica es el de la CLÍNICA
+
+El encargo pedía «Un afiliado **en Jalisco** cobró…», pero **`Affiliate` no tiene columna de
+ubicación** — sólo `Clinic` tiene `state`/`city`. Atribuirle al afiliado el estado de la
+clínica sería inventar un dato que la BD no guarda, así que la frase publica **el estado de la
+clínica** y el estado viaja en la **segunda línea**, no en la principal:
+
+```
+Un afiliado cobró $140 por una clínica del plan Profesional
+Jalisco · esta semana
+```
+
+Si algún día se le pide el estado al afiliado en el registro, el cambio es de una línea.
+
+### Los montos: ni uno escrito a mano
+
+Todo sale de `getPublicOffer()` (plan_configs + affiliate_payout_config), igual que el resto
+de la página: si Rafael cambia $140 por $160 en `/admin`, estas tarjetas cambian solas. Los
+mensajes de bono **sólo salen con `milestonesEnabled` encendido**, y de más de dos escalones
+se publican el primero y el grande, para no comerse el ciclo con bonos.
+
+### Comportamiento
+
+- Primera tarjeta a los **6–8 s**; cada una dura **5–6 s**; pausa **variable de 9–18 s**.
+  Todo sorteado tarjeta por tarjeta: un intervalo fijo delata el widget en tres apariciones.
+- **Una sola a la vez**, ciclo infinito, sin repetir el mismo mensaje dos veces seguidas; al
+  agotar la lista se rebaraja (y si la primera de la nueva ronda es la que se acaba de ver, se
+  cambia por la siguiente).
+- Se **congela con `document.hidden`** y sigue al volver a la pestaña.
+- **Hover o foco dentro** detienen el temporizador de salida. El foco cuenta además para que
+  la tarjeta no se desmonte con el botón de cerrar enfocado y el foco se caiga al `body`.
+- La **×** la apaga para el resto de la sesión (`sessionStorage: dcaf-avisos-off`).
+
+### Decisión de móvil: por debajo de 480px NO se muestra
+
+Evaluado y descartado a propósito. En esa franja la tarjeta ocupa casi un tercio del alto útil
+y **no hay forma de garantizar que no tape lo que se está leyendo**; un aviso decorativo no
+vale eso. Lo esconde el CSS (`@media (max-width: 479px) { display: none }`) y además el
+componente **ni programa su reloj** ahí (mismo breakpoint por `matchMedia`, con listener por si
+se rota el aparato).
+
+Entre **480 y 767px** sí sale, a ancho casi completo (12px de margen), y ahí vigila los botones
+«Registrarme gratis»: mide `a[href^="/afiliados/registro"]` y, si uno cae en la franja de 132px
+de abajo, la tarjeta se va o no llega a salir. Se busca por `href` y no por una marca en el
+JSX para no depender de que alguien recuerde etiquetar cada botón nuevo.
+
+### Movimiento reducido, CLS y accesibilidad
+
+- **`prefers-reduced-motion: reduce` → aparición directa, sin deslizamiento.** No hizo falta
+  una regla nueva: el reset de `afiliados.css` ya apaga toda animación bajo `.dcaf-root`. La
+  clave es que **el estado base de la tarjeta es el visible** y la entrada es un keyframe que
+  la trae desde fuera; al revés se quedaría congelada en `opacity: 0`.
+- **CLS 0**: el contenedor es `position: fixed`, está fuera del flujo y no puede empujar nada.
+  Sólo se animan `transform` y `opacity`.
+- `role="status"` + `aria-live="polite"` en un contenedor que **vive siempre en el DOM** aunque
+  esté vacío: un `aria-live` que se inserta junto con su contenido no se anuncia.
+- Cerrar tiene `aria-label`, foco visible propio (el de la página está acotado a `.dcaf-main`
+  y esto vive fuera) y **nunca se roba el foco**.
+- `z-index: 40`: por debajo del nav sticky (60) y de cualquier modal.
+- Nada de `Math.random()` en el render: el sorteo, el `sessionStorage` y el `matchMedia` viven
+  todos dentro de `useEffect`. El primer render —servidor y cliente— es el contenedor vacío.
+- La consulta a Prisma va en try/catch: si falla, cae a modo informativo y la página carga
+  normal. Importa, porque **la landing se prerenderiza en el build, donde no hay BD**.
+
+### GOTCHA: la columna de texto son 236px, y los mensajes están MEDIDOS
+
+Con icono de 34, gap de 11 y fuente de 13.5 la columna se quedaba en **223px** y **5 de los 10
+mensajes se cortaban a media frase** («…y asignarles su…»). El clamp de dos líneas hacía su
+trabajo, pero el resultado se leía como un bug. Se corrigió por los dos lados:
+
+- Medidas de dentro: icono 30, gap 9, padding 12, botón 22, fuente 13px/1.42 → **236px**.
+- Copy más corto («Se paga dentro de los primeros 10 días…», «Registra a tus propios
+  vendedores…») y el estado movido a la segunda línea en modo real.
+
+Verificado en el navegador contra la caja real: **0 de 12 mensajes** (los 10 informativos más
+las dos variantes del modo real) desbordan. **Si tocas cualquiera de esos cuatro números o
+alargas un mensaje, vuelve a comprobarlo en pantalla.**
+
+### Verificación en Chrome (`next dev` en un puerto aparte, sin BD)
+
+- Tarjeta a 20px del borde izquierdo y 20px del inferior, 330px de ancho, `z-index` 40,
+  `position: fixed`. Fondo blanco, radio 14px, icono azul a la izquierda, × a la derecha.
+- **Hover congela la salida**: la tarjeta siguió viva **13 s** (contra los 5–6 s de vida).
+- **Cerrar**: desaparece el contenedor entero, `sessionStorage` queda en `"1"`, no revive a los
+  9 s y **sigue apagada tras recargar**.
+- **Franja de CTA**: la geometría detecta en los dos sentidos (CTA dentro de los 132px de abajo
+  → `true`; lejos o quitado → `false`).
+- **El ciclo**, con un `MutationObserver` durante 112 s: **4 tarjetas, las 4 distintas**, cero
+  repeticiones seguidas y **nunca más de una en pantalla** (`maxSimultáneas: 1`).
+- Las tres reglas CSS confirmadas desde el CSSOM (base / ≤767px / ≤479px) y el selector de
+  CTAs encuentra los **6** «Registrarme gratis» de la página.
+
+**GOTCHA de verificación** (primo del ya conocido con `IntersectionObserver`): la pestaña del
+automatismo se queda en `visibilityState: "hidden"` y Chrome **no la pinta**, así que el
+`document.hidden` del propio widget lo congela y no sale ni una tarjeta. Hay que parchear
+`Object.defineProperty(document,'hidden',{get:()=>false})` — y aun así Chrome **estrangula los
+timers a ~1/s**, con lo que los tiempos se ven al doble de lo que son. El `.html` prerenderizado
+de `.next/server/app/` **no sirve para comprobar esto**: está desactualizado (tampoco tiene la
+serpentina, que lleva en `main` desde antes).
+
+### Build
+
+`next build` verde, sin pipe. `/afiliados` sigue **estático** (`○`), 9.34 kB / 209 kB de First
+Load JS. **`prisma generate` se saltó a propósito**: un `next start` del propio Rafael en el
+puerto 3131 tiene tomado `query_engine-windows.dll.node` y el paso muere con EPERM (gotcha ya
+conocido). Esta ola **no toca el schema**, así que el cliente generado ya era el bueno y
+`next build` —que es el gate real: tipos + compilación + prerender de las 360 páginas— corrió
+entero. Si hiciera falta regenerar, hay que cerrar antes ese servidor.
+
+### Lo que NO se hizo
+
+No se tocó el motor de comisiones, la calculadora ni `globals.css`. No hay librerías nuevas, ni
+SQL, ni cambios de schema. **Nadie calcula ni paga nada distinto por esto**: es sólo una
+superficie de lectura.
