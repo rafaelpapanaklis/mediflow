@@ -311,18 +311,28 @@ export function AdminClinicsClient({ clinics: initial }: Props) {
                       </div>
                     )}
 
-                    {/* Método de pago */}
+                    {/* Método de pago capturado en el ALTA.
+                        paymentMethodCollected solo lo escribe el registro y ya
+                        nadie lo actualiza: no es el método que se cobra. Aquí NO
+                        se consulta Stripe (sería una llamada por fila), así que
+                        cuando el campo viene vacío no se pinta nada — muchas de
+                        esas clínicas sí tienen tarjeta viva en Stripe. El método
+                        real se ve en la ficha de la clínica. */}
                     {(clinic as any).paymentMethodCollected && (
-                      <div style={{
-                        marginTop: 4,
-                        fontSize: 11,
-                        color: "var(--text-3)",
-                      }}>
+                      <div
+                        title="Dato del formulario de alta; no refleja el método vigente en Stripe"
+                        style={{
+                          marginTop: 4,
+                          fontSize: 11,
+                          color: "var(--text-3)",
+                        }}
+                      >
                         {(clinic as any).paymentMethodType === "card"
                           ? `💳 •••• ${(clinic as any).paymentMethodLast4 ?? "••••"}`
                           : (clinic as any).paymentMethodType === "paypal"
                             ? "💠 PayPal"
                             : "🏦 Transferencia"}
+                        <span style={{ opacity: 0.7 }}> · del alta</span>
                       </div>
                     )}
 

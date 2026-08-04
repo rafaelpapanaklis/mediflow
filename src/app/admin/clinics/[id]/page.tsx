@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { isStripeConfigured, STRIPE_SETUP_INSTRUCTIONS } from "@/lib/stripe";
 import { stripClinicSecrets } from "@/lib/clinic-secrets";
 import { formatWhatsappDisplay, type AccountManagerDTO } from "@/lib/account-manager/types";
+import { getLivePaymentMethod, type StripeLivePaymentMethod } from "@/lib/admin/stripe-payment-method";
 import { AdminClinicDetailClient } from "./clinic-detail-client";
 
 export const metadata: Metadata = { title: "Detalle Clínica — Admin DaleControl" };
@@ -75,6 +76,16 @@ export default async function AdminClinicDetailPage({ params }: { params: { id: 
     _count: { id: true },
   });
 
+  // Método de pago VIGENTE en Stripe (solo lectura). El campo del alta
+  // (paymentMethodCollected) no se actualiza nunca, así que no sirve para saber
+  // qué tarjeta se va a cobrar. getLivePaymentMethod nunca lanza.
+  const livePaymentMethod: StripeLivePaymentMethod | null = clinic.stripeCustomerId
+    ? await getLivePaymentMethod({
+        stripeCustomerId:     clinic.stripeCustomerId,
+        stripeSubscriptionId: clinic.stripeSubscriptionId ?? null,
+      })
+    : null;
+
   // Catálogo de módulos del marketplace para el tab "Módulos". Filtramos
   // por isActive=true y category="Dental" (los 6 dentales del seed).
   const moduleCatalog = await prisma.module.findMany({
@@ -113,6 +124,7 @@ export default async function AdminClinicDetailPage({ params }: { params: { id: 
       moduleCatalog={moduleCatalog}
       clinicModuleRows={clinicModuleRows}
       accountManager={accountManager}
+      livePaymentMethod={livePaymentMethod}
     />
   );
 }

@@ -20,7 +20,9 @@ import type { TemplateChannel } from "@/lib/admin-templates";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import { FALLBACK_PLAN_PRICES_MXN } from "@/lib/plan-shared";
 import { ClinicAccountManagerBlock } from "@/components/admin/clinic-account-manager-block";
+import { ClinicPaymentMethodCard } from "@/components/admin/clinic-payment-method-card";
 import type { AccountManagerDTO } from "@/lib/account-manager/types";
+import type { StripeLivePaymentMethod } from "@/lib/admin/stripe-payment-method";
 
 interface AdminNote {
   id: string;
@@ -52,6 +54,8 @@ interface Props {
   clinicModuleRows:     ClinicModuleRow[];
   /** Manager de cuenta asignado. null = sin asignar (o SQL aún sin aplicar). */
   accountManager:       AccountManagerDTO | null;
+  /** Método de pago vivo en Stripe. null = la clínica no tiene cliente en Stripe. */
+  livePaymentMethod:    StripeLivePaymentMethod | null;
 }
 
 export function AdminClinicDetailClient({
@@ -65,6 +69,7 @@ export function AdminClinicDetailClient({
   moduleCatalog,
   clinicModuleRows,
   accountManager,
+  livePaymentMethod,
 }: Props) {
   const askConfirm = useConfirm();
   const [saving, setSaving]   = useState(false);
@@ -592,74 +597,19 @@ export function AdminClinicDetailClient({
             <KpiCard label="Total facturas"   value={String(totalInvoices)} icon={FileText}  />
           </div>
 
-          {/* Método de pago del signup */}
-          <CardNew>
-            <div className="form-section__title">
-              Método de pago del signup <span className="form-section__rule" />
-            </div>
-            {(clinic as any).paymentMethodCollected ? (
-              <div style={{ display: "flex", alignItems: "center", gap: 14, padding: 14, background: "var(--bg-elev)", border: "1px solid var(--border-soft)", borderRadius: 10 }}>
-                <div style={{
-                  width: 48, height: 32, borderRadius: 4,
-                  background: (clinic as any).paymentMethodType === "paypal" ? "#003087"
-                    : (clinic as any).paymentMethodType === "card" ? "linear-gradient(135deg, #1a1f3a, #0d1026)"
-                      : "rgba(251,191,36,0.2)",
-                  display: "grid", placeItems: "center",
-                  fontSize: 10, fontWeight: 700,
-                  color: (clinic as any).paymentMethodType === "card" ? "#a78bfa"
-                    : (clinic as any).paymentMethodType === "paypal" ? "#fff"
-                      : "#fbbf24",
-                  flexShrink: 0,
-                }}>
-                  {(clinic as any).paymentMethodType === "card" ? "CARD"
-                    : (clinic as any).paymentMethodType === "paypal" ? "PayPal"
-                      : "SPEI"}
-                </div>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 13, color: "var(--text-1)", fontWeight: 500 }}>
-                    {(clinic as any).paymentMethodType === "card"
-                      ? `Tarjeta •••• ${(clinic as any).paymentMethodLast4 ?? "••••"}`
-                      : (clinic as any).paymentMethodType === "paypal"
-                        ? "PayPal (pendiente de vinculación)"
-                        : "Transferencia bancaria"}
-                  </div>
-                  <div style={{ fontSize: 11, color: "var(--text-3)", marginTop: 2 }}>
-                    Capturado al registro · paymentMethodCollected = true
-                  </div>
-                </div>
-                <BadgeNew tone="success" dot>Capturado</BadgeNew>
-              </div>
-            ) : (
-              <div style={{ padding: 14, background: "var(--warning-soft)", border: "1px solid color-mix(in oklab, var(--warning) 25%, transparent)", borderRadius: 10, fontSize: 13, color: "var(--warning)" }}>
-                Esta clínica no capturó un método de pago al registrarse.
-              </div>
-            )}
-
-            {(clinic as any).cancelRequested && (
-              <div style={{
-                marginTop: 12,
-                padding: 12,
-                background: "var(--danger-soft)",
-                border: "1px solid color-mix(in oklab, var(--danger) 30%, transparent)",
-                borderRadius: 10,
-                display: "flex",
-                alignItems: "center",
-                gap: 10,
-              }}>
-                <AlertTriangle size={16} strokeWidth={1.75} style={{ color: "var(--danger)", flexShrink: 0 }} />
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 13, fontWeight: 600, color: "var(--danger)" }}>
-                    Cancelación solicitada
-                  </div>
-                  <div style={{ fontSize: 11, color: "var(--text-3)", marginTop: 2 }}>
-                    El cliente solicitó cancelar el {(clinic as any).cancelRequestedAt
-                      ? new Date((clinic as any).cancelRequestedAt).toLocaleDateString("es-MX", { day: "numeric", month: "long", year: "numeric" })
-                      : "—"}. No cobrar al terminar el trial.
-                  </div>
-                </div>
-              </div>
-            )}
-          </CardNew>
+          <ClinicPaymentMethodCard
+            stripeCustomerId={clinic.stripeCustomerId ?? null}
+            live={livePaymentMethod}
+            signup={{
+              collected: Boolean((clinic as any).paymentMethodCollected),
+              type:      (clinic as any).paymentMethodType ?? null,
+              last4:     (clinic as any).paymentMethodLast4 ?? null,
+            }}
+            cancelRequested={Boolean((clinic as any).cancelRequested)}
+            cancelRequestedAt={(clinic as any).cancelRequestedAt
+              ? new Date((clinic as any).cancelRequestedAt).toISOString()
+              : null}
+          />
 
           <CardNew>
             <div className="form-section__title">

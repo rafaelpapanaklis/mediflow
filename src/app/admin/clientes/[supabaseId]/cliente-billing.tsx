@@ -48,12 +48,19 @@ function methodLabel(m: string | null): string {
   return METHOD_LABEL[m] ?? m;
 }
 
+/**
+ * Método capturado en el ALTA. Los campos paymentMethod* solo los escribe el
+ * registro y nadie los actualiza después, así que su ausencia NO prueba que la
+ * clínica no tenga método: si hay cliente en Stripe, el vigente vive allá (se
+ * ve en la ficha de la clínica).
+ */
 function paymentMethodDisplay(c: ClienteClinica): string {
-  if (!c.paymentMethodCollected && !c.paymentMethodType) return "No registrado";
   if (c.paymentMethodType === "card") return `Tarjeta ••${c.paymentMethodLast4 ?? "••••"}`;
   if (c.paymentMethodType === "paypal") return "PayPal";
   if (c.paymentMethodType === "transfer") return "Transferencia";
-  return c.preferredPaymentMethod ? methodLabel(c.preferredPaymentMethod) : "No registrado";
+  if (c.preferredPaymentMethod) return methodLabel(c.preferredPaymentMethod);
+  if (c.stripeCustomerId) return "Se cobra por Stripe";
+  return "No registrado";
 }
 
 function nextBillingLabel(iso: string | null): string {
@@ -293,7 +300,7 @@ export function ClienteBilling({
               {/* Datos de billing */}
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 12 }}>
                 <Field label="Próximo cobro" value={nextBillingLabel(clinic.nextBillingDate)} />
-                <Field label="Método de pago" value={paymentMethodDisplay(clinic)} />
+                <Field label="Método de pago (alta)" value={paymentMethodDisplay(clinic)} />
                 <Field label="Precio mensual" value={`${formatCurrency(clinic.planPrice, "MXN")}/mes`} />
                 <Field label="Suscripción Stripe" value={clinic.stripeSubscriptionId ?? "—"} mono />
               </div>
