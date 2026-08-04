@@ -6,7 +6,7 @@ import { isStripeConfigured, STRIPE_SETUP_INSTRUCTIONS } from "@/lib/stripe";
 import { stripClinicSecrets } from "@/lib/clinic-secrets";
 import { formatWhatsappDisplay, type AccountManagerDTO } from "@/lib/account-manager/types";
 import { getLivePaymentMethod, type StripeLivePaymentMethod } from "@/lib/admin/stripe-payment-method";
-import { AdminClinicDetailClient } from "./clinic-detail-client";
+import { AdminClinicDetailClient, type PlatformPayments } from "./clinic-detail-client";
 
 export const metadata: Metadata = { title: "Detalle Clínica — Admin DaleControl" };
 
@@ -70,11 +70,46 @@ export default async function AdminClinicDetailPage({ params }: { params: { id: 
     include: { doctor: { select: { firstName: true, lastName: true } } },
   });
 
+  // OJO: esto es prisma.invoice = lo que la clínica le factura A SUS PACIENTES.
+  // No es lo que la clínica nos paga a nosotros (eso vive en
+  // subscription_invoices, más abajo).
   const revenueStats = await prisma.invoice.aggregate({
     where: { clinicId: params.id, status: { in: ["PAID", "PARTIAL"] } },
     _sum:  { paid: true },
     _count: { id: true },
   });
+
+  // Lo que ESTA clínica nos ha pagado a nosotros por su suscripción. En
+  // try/catch para que un problema con subscription_invoices no tire la ficha.
+  let platformPayments: PlatformPayments = {
+    total: 0, count: 0, lastPaidAt: null, lastAmount: null, lastMethod: null,
+  };
+  try {
+    const [agg, last] = await Promise.all([
+      prisma.subscriptionInvoice.aggregate({
+        where:  { clinicId: params.id, status: "paid" },
+        _sum:   { amount: true },
+        _count: { id: true },
+      }),
+      // paidAt puede venir null en filas viejas y en Postgres un ORDER BY DESC
+      // las pondría primero: filtrarlas es lo que hace que "último pago" sea el
+      // último de verdad.
+      prisma.subscriptionInvoice.findFirst({
+        where:   { clinicId: params.id, status: "paid", paidAt: { not: null } },
+        orderBy: { paidAt: "desc" },
+        select:  { paidAt: true, amount: true, method: true },
+      }),
+    ]);
+    platformPayments = {
+      total:      agg._sum.amount ?? 0,
+      count:      agg._count.id,
+      lastPaidAt: last?.paidAt ? last.paidAt.toISOString() : null,
+      lastAmount: last?.amount ?? null,
+      lastMethod: last?.method ?? null,
+    };
+  } catch (e) {
+    console.warn("[admin/clinics/:id] pagos de suscripción no disponibles:", e);
+  }
 
   // Método de pago VIGENTE en Stripe (solo lectura). El campo del alta
   // (paymentMethodCollected) no se actualiza nunca, así que no sirve para saber
@@ -125,6 +160,7 @@ export default async function AdminClinicDetailPage({ params }: { params: { id: 
       clinicModuleRows={clinicModuleRows}
       accountManager={accountManager}
       livePaymentMethod={livePaymentMethod}
+      platformPayments={platformPayments}
     />
   );
 }

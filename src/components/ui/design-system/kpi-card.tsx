@@ -18,6 +18,12 @@ type KpiCardProps = {
    * light y en dark sin tocar globals.css.
    */
   tone?: "warning" | "danger";
+  /**
+   * Aclaración corta bajo el número, para KPIs que se malinterpretan solos
+   * (ej. "Ingresos" de una clínica = lo que ella cobra a SUS pacientes).
+   * Va con estilo inline a propósito: no toca globals.css.
+   */
+  hint?: string;
 };
 
 const TONE_COLOR: Record<"warning" | "danger", string> = {
@@ -25,7 +31,7 @@ const TONE_COLOR: Record<"warning" | "danger", string> = {
   danger: "var(--danger)",
 };
 
-export function KpiCard({ label, value, delta, icon: Icon, hero, tone }: KpiCardProps) {
+export function KpiCard({ label, value, delta, icon: Icon, hero, tone, hint }: KpiCardProps) {
   return (
     <div className={hero ? "kpi kpi--hero" : "kpi"}>
       <div className="kpi__top">
@@ -37,6 +43,11 @@ export function KpiCard({ label, value, delta, icon: Icon, hero, tone }: KpiCard
         )}
       </div>
       <div className="kpi__value" style={tone ? { color: TONE_COLOR[tone] } : undefined}>{value}</div>
+      {hint && (
+        <div style={{ fontSize: 11, color: "var(--text-3)", marginTop: 6, lineHeight: 1.3 }}>
+          {hint}
+        </div>
+      )}
       {delta && (
         <div className={`kpi__delta kpi__delta--${delta.direction}`}>
           {delta.direction === "up"

@@ -24,6 +24,15 @@ import { ClinicPaymentMethodCard } from "@/components/admin/clinic-payment-metho
 import type { AccountManagerDTO } from "@/lib/account-manager/types";
 import type { StripeLivePaymentMethod } from "@/lib/admin/stripe-payment-method";
 
+/** Lo que ESTA clínica nos ha pagado por su suscripción (subscription_invoices). */
+export interface PlatformPayments {
+  total:      number;
+  count:      number;
+  lastPaidAt: string | null;
+  lastAmount: number | null;
+  lastMethod: string | null;
+}
+
 interface AdminNote {
   id: string;
   content: string;
@@ -56,7 +65,13 @@ interface Props {
   accountManager:       AccountManagerDTO | null;
   /** Método de pago vivo en Stripe. null = la clínica no tiene cliente en Stripe. */
   livePaymentMethod:    StripeLivePaymentMethod | null;
+  platformPayments:     PlatformPayments;
 }
+
+const SUB_PAYMENT_METHOD_LABEL: Record<string, string> = {
+  stripe: "Stripe", transfer: "Transferencia", spei: "SPEI", deposit: "Depósito",
+  oxxo: "OXXO", paypal: "PayPal", cash: "Efectivo", mercadopago: "MercadoPago",
+};
 
 export function AdminClinicDetailClient({
   clinic,
@@ -70,6 +85,7 @@ export function AdminClinicDetailClient({
   clinicModuleRows,
   accountManager,
   livePaymentMethod,
+  platformPayments,
 }: Props) {
   const askConfirm = useConfirm();
   const [saving, setSaving]   = useState(false);
@@ -341,8 +357,10 @@ export function AdminClinicDetailClient({
         <KpiCard label="Pacientes"   value={String(clinic._count.patients)}     icon={Users}    />
         <KpiCard label="Citas"       value={String(clinic._count.appointments)} icon={Clock}    />
         <KpiCard label="Expedientes" value={String(clinic._count.records)}      icon={FileText} />
-        <KpiCard label="Facturas"    value={String(totalInvoices)}              icon={CreditCard} />
-        <KpiCard label="Ingresos"    value={fmtMXN(totalRevenue)}               icon={BarChart3}  />
+        {/* Ojo: estos dos salen de prisma.invoice = la facturación de la
+            clínica a SUS pacientes, no lo que la clínica nos paga a nosotros. */}
+        <KpiCard label="Facturas"    value={String(totalInvoices)}              icon={CreditCard} hint="Emitidas a sus pacientes" />
+        <KpiCard label="Ingresos"    value={fmtMXN(totalRevenue)}               icon={BarChart3}  hint="Cobrado a sus pacientes" />
       </div>
 
       {/* Tabs */}
@@ -592,10 +610,52 @@ export function AdminClinicDetailClient({
       {tab === "billing" && (
         <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12 }}>
-            <KpiCard label="Plan"             value={clinic.plan}         icon={CreditCard} />
-            <KpiCard label="Ingresos totales" value={fmtMXN(totalRevenue)} icon={BarChart3}  />
-            <KpiCard label="Total facturas"   value={String(totalInvoices)} icon={FileText}  />
+            <KpiCard label="Plan"             value={clinic.plan}           icon={CreditCard} />
+            <KpiCard label="Ingresos totales" value={fmtMXN(totalRevenue)}  icon={BarChart3} hint="Cobrado por la clínica a sus pacientes" />
+            <KpiCard label="Total facturas"   value={String(totalInvoices)} icon={FileText}  hint="Emitidas por la clínica a sus pacientes" />
           </div>
+
+          {/* Lo que la clínica NOS paga a nosotros (subscription_invoices), que
+              es lo que los KPIs de arriba NO dicen. */}
+          <CardNew>
+            <div className="form-section__title">
+              Lo que esta clínica te ha pagado <span className="form-section__rule" />
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 16 }}>
+              <div>
+                <div style={{ fontSize: 11, color: "var(--text-3)", marginBottom: 4 }}>Total cobrado</div>
+                <div style={{ fontSize: 22, fontWeight: 700, color: "var(--success)", fontVariantNumeric: "tabular-nums" }}>
+                  {fmtMXN(platformPayments.total)}
+                </div>
+              </div>
+              <div>
+                <div style={{ fontSize: 11, color: "var(--text-3)", marginBottom: 4 }}>Pagos registrados</div>
+                <div style={{ fontSize: 22, fontWeight: 700, color: "var(--text-1)", fontVariantNumeric: "tabular-nums" }}>
+                  {platformPayments.count}
+                </div>
+              </div>
+              <div>
+                <div style={{ fontSize: 11, color: "var(--text-3)", marginBottom: 4 }}>Último pago</div>
+                <div style={{ fontSize: 13, fontWeight: 500, color: "var(--text-1)", marginTop: 6 }}>
+                  {platformPayments.lastPaidAt
+                    ? new Date(platformPayments.lastPaidAt).toLocaleDateString("es-MX", { day: "numeric", month: "long", year: "numeric" })
+                    : "Sin pagos registrados"}
+                </div>
+                {platformPayments.lastPaidAt && (
+                  <div style={{ fontSize: 11, color: "var(--text-3)", marginTop: 2 }}>
+                    {platformPayments.lastAmount != null ? fmtMXN(platformPayments.lastAmount) : "—"}
+                    {platformPayments.lastMethod
+                      ? ` · ${SUB_PAYMENT_METHOD_LABEL[platformPayments.lastMethod] ?? platformPayments.lastMethod}`
+                      : ""}
+                  </div>
+                )}
+              </div>
+            </div>
+            <div style={{ marginTop: 12, fontSize: 11, color: "var(--text-3)" }}>
+              Pagos de suscripción con estado «paid» (tabla subscription_invoices). Es lo que la
+              clínica te paga a ti; no tiene relación con los KPIs de arriba.
+            </div>
+          </CardNew>
 
           <ClinicPaymentMethodCard
             stripeCustomerId={clinic.stripeCustomerId ?? null}
