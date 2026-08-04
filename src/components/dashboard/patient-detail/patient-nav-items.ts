@@ -38,6 +38,16 @@ export interface PatientNavItem {
   id: string;
   /** Key i18n `patients.tabs.*` — misma etiqueta en escritorio y móvil. */
   labelKey: string;
+  /**
+   * Key i18n `patients.tabsShort.*` — etiqueta abreviada EXCLUSIVA de la barra
+   * horizontal (`patient-nav-bar`), donde el ancho es el recurso escaso y
+   * "Historial de consultas" se comía el espacio de dos items. El resto de
+   * superficies (tab bar móvil, quick-nav vertical) siguen usando `labelKey`,
+   * y la barra la expone completa en el `title`/tooltip: acortar es una
+   * decisión de PRESENTACIÓN, no un renombre del módulo.
+   * `undefined` = el label completo ya es corto y se usa tal cual.
+   */
+  shortLabelKey?: string;
   icon: LucideIcon;
   section: PatientNavSection;
   /** Item visible pero no clickable — feedback duro (ej. Pediatría con
@@ -97,9 +107,9 @@ export function buildPatientNavItems(opts: BuildPatientNavOpts): PatientNavItem[
   const items: PatientNavItem[] = [
     { id: "resumen",             labelKey: "patients.tabs.resumen",            icon: ClipboardList,  section: "clinico" },
     { id: "historia",            labelKey: "patients.tabs.historia",           icon: History,        section: "clinico" },
-    { id: "cuestionario",        labelKey: "patients.tabs.cuestionario",       icon: ClipboardCheck, section: "clinico" },
+    { id: "cuestionario",        labelKey: "patients.tabs.cuestionario",       shortLabelKey: "patients.tabsShort.cuestionario",       icon: ClipboardCheck, section: "clinico" },
     { id: "expediente",          labelKey: "patients.tabs.expediente",         icon: Stethoscope,    section: "clinico" },
-    { id: "historial-consultas", labelKey: "patients.tabs.historialConsultas", icon: ClipboardList,  section: "clinico" },
+    { id: "historial-consultas", labelKey: "patients.tabs.historialConsultas", shortLabelKey: "patients.tabsShort.historialConsultas", icon: ClipboardList,  section: "clinico" },
   ];
 
   // Especialidades — visibles según gating por módulo activo en la clínica.
@@ -127,9 +137,9 @@ export function buildPatientNavItems(opts: BuildPatientNavOpts): PatientNavItem[
     // Fotos clínicas (ficha v3) — extraorales/intraorales por etapa,
     // módulo ClinicalPhoto `general`. Junto a Radiografías por afinidad.
     { id: "fotos",        labelKey: "patients.tabs.fotos",        icon: Camera,       section: "imagen-docs", isNew: true },
-    { id: "subidos",      labelKey: "patients.tabs.subidos",      icon: Upload,       section: "imagen-docs" },
+    { id: "subidos",      labelKey: "patients.tabs.subidos",      shortLabelKey: "patients.tabsShort.subidos",     icon: Upload,       section: "imagen-docs" },
     { id: "modelos-3d",   labelKey: "patients.tabs.modelos3d",    icon: Box,          section: "imagen-docs" },
-    { id: "tratamiento",  labelKey: "patients.tabs.tratamiento",  icon: Pill,         section: "imagen-docs" },
+    { id: "tratamiento",  labelKey: "patients.tabs.tratamiento",  shortLabelKey: "patients.tabsShort.tratamiento", icon: Pill,         section: "imagen-docs" },
     { id: "recetas",      labelKey: "patients.tabs.recetas",      icon: FileText,     section: "imagen-docs" },
     { id: "referencias",  labelKey: "patients.tabs.referencias",  icon: ArrowUpRight, section: "imagen-docs" },
     // Administrativo.

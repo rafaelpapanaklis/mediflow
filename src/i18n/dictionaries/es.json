@@ -1482,6 +1482,18 @@
       "recetas": "Recetas",
       "sectionsAria": "Secciones del paciente"
     },
+    "tabsShort": {
+      "cuestionario": "Cuestionario",
+      "historialConsultas": "Historial",
+      "subidos": "Subidos",
+      "tratamiento": "Plan"
+    },
+    "navBar": {
+      "more": "Más",
+      "moreAria": "Más secciones",
+      "adminAria": "Secciones administrativas",
+      "pendingAria": "{count} pendientes en secciones administrativas"
+    },
     "fotosTab": {
       "title": "Fotos clínicas",
       "subtitle": "Extraorales e intraorales por etapa del tratamiento",
