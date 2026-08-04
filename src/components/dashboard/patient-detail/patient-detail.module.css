@@ -375,17 +375,20 @@
   .heroMetrics { gap: 14px; }
 }
 
-/* ─────── LAYOUT 3 COLUMNAS ─────── */
+/* ─────── LAYOUT 2 COLUMNAS ─────── */
+/* La columna izquierda de 220px (quick-nav vertical) DESAPARECIÓ: el menú de
+   secciones es ahora la barra horizontal .patientNavBar, que va fuera de este
+   grid. El contenido se queda con todo el ancho que sobraba. */
 .layout {
   display: grid;
-  grid-template-columns: 220px 1fr 320px;
+  grid-template-columns: minmax(0, 1fr) 320px;
   gap: 16px;
   align-items: start;
 }
 /* Modifier para tabs que necesitan ancho completo (e.g. Odontograma con
    16 dientes en 1 fila). Oculta el side-panel y libera 320px+gap. */
 .layoutWide {
-  grid-template-columns: 220px 1fr;
+  grid-template-columns: minmax(0, 1fr);
 }
 .layoutWide .sidePanel { display: none; }
 
@@ -397,25 +400,23 @@
    tarjetas siguen en la sección SIDE CARDS, más abajo. */
 .sidePanel {
   position: sticky;
-  top: 16px;
+  /* 52px del topbar + 47px de la barra de secciones (34px del botón + 2×6px de
+     padding + borde) + 12px de respiro. Antes eran 16px y el rail se metía
+     debajo del topbar; ahora además tenía encima la barra horizontal. */
+  top: 111px;
   display: flex; flex-direction: column;
   gap: 12px;
 }
 /* Laptop ≤1366px: el side-panel cae al flujo normal, en una fila nueva
    DEBAJO del contenido (NO se oculta — Reglas 2 y 3). Las cards se
    reparten en grid auto-fit para no apilarse demasiado alto.
-   ⚠️ La fila arranca en la COLUMNA 2 (no 1/-1): Chrome NO limita un grid
-   item sticky a su celda sino al contenedor completo, así que el quick-nav
-   (sticky) se deslizaba hacia abajo al scrollear y se encimaba sobre las
-   cards que pasaban por debajo de su columna (tapaba Próxima cita /
-   WhatsApp en laptops). Al no compartir columna, el overlap es imposible;
-   el quick-nav además abarca ambas filas para que el sticky siga vivo a la
-   altura de las cards. */
+   Sin la columna del quick-nav ya no hay ningún sticky compartiendo grid con
+   las cards, así que la fila puede abarcar todo el ancho (1/-1): el overlap
+   que obligaba a arrancarla en la columna 2 desapareció con el menú lateral. */
 @media (max-width: 1366px) {
-  .layout { grid-template-columns: 200px 1fr; }
-  .quickNav { grid-row: 1 / span 2; }
+  .layout { grid-template-columns: minmax(0, 1fr); }
   .sidePanel {
-    grid-column: 2 / -1;
+    grid-column: 1 / -1;
     position: static;
     top: auto;
     display: grid;
@@ -425,11 +426,7 @@
 }
 @media (max-width: 1024px) {
   .layout { grid-template-columns: 1fr; }
-  /* El quick-nav está oculto aquí (display:none en su sección) → las cards
-     recuperan el ancho completo del grid de 1 columna. */
   .sidePanel { grid-column: 1 / -1; }
-  /* .quickNav { display: none } vive en la sección QUICK NAV, después de su
-     base, para respetar override-después-de-base en la cascada. */
 }
 
 .mainColumn { min-width: 0; }
@@ -657,7 +654,210 @@
   .mobileTabBar { display: flex; }
 }
 
+/* ─────── BARRA HORIZONTAL DE SECCIONES (escritorio ≥1025px) ─────── */
+/* Sustituye al quick-nav vertical: el menú pasa a una franja bajo la cabecera
+   y el contenido recupera los 220px de la columna izquierda (Fotos clínicas,
+   Radiografías, Odontograma y Modelos 3D los aprovechan de inmediato).
+
+   El wrapper sticky NO vive dentro del grid `.layout` a propósito: Chrome
+   limita un grid item sticky a su CONTENEDOR, no a su celda, así que dentro del
+   grid la barra se despegaba al llegar al final de la columna (es la misma
+   trampa que ya obligó a mover el .sidePanel de columna en laptop). Como
+   hermano directo del contenedor de la ficha, su bloque contenedor es la página
+   entera y el sticky vive hasta el final del scroll.
+
+   top: 52px = alto EXACTO del topbar del dashboard (.topbar-new, sticky top:0
+   dentro del MISMO div scrolleable). z-index 4 < 5 del topbar: al scrollear la
+   barra se mete DEBAJO del topbar en vez de taparlo. */
+.patientNavSticky {
+  position: sticky;
+  top: 52px;
+  z-index: 4;
+  /* El fondo opaco cubre el hueco entre la barra y el contenido: sin él las
+     tarjetas se veían pasar por la franja del margen al scrollear. */
+  background: var(--bg);
+  padding: 6px 0 10px;
+  margin-top: -6px;
+}
+.patientNavBar {
+  /* Bloque contenedor de la capa espejo (.patientNavMeasure). */
+  position: relative;
+  background: var(--bg-elev);
+  border: 1px solid var(--border-soft);
+  border-radius: 12px;
+  padding: 6px;
+  box-shadow: var(--shadow-1);
+  font-family: var(--font-sans, system-ui, sans-serif);
+}
+/* Fila visible. `overflow: hidden` es solo la red de seguridad del frame en el
+   que aún no se ha medido: lo que no cabe se va al menú "Más" (lo decide el
+   ResizeObserver de patient-nav-bar.tsx), nunca a un scroll horizontal con
+   items escondidos sin señal. */
+.patientNavRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  overflow: hidden;
+}
+/* Capa espejo de medición — fuera de flujo, invisible y sin capturar clics.
+   `width: max-content` para que cada botón conserve su ancho NATURAL (la fila
+   real recorta, así que ahí no se puede medir). El componente lee el gap de
+   .patientNavRow con getComputedStyle: si cambias uno, cambia el otro. */
+.patientNavMeasure {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: max-content;
+  visibility: hidden;
+  pointer-events: none;
+}
+.patientNavItem {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  flex-shrink: 0;
+  min-height: 34px;
+  padding: 0 11px;
+  font-size: 12.5px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  color: var(--text-2);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  cursor: pointer;
+  font-family: inherit;
+  white-space: nowrap;
+  transition: background var(--dur-1) var(--ease), color var(--dur-1) var(--ease),
+    border-color var(--dur-1) var(--ease);
+}
+.patientNavItem:hover:not(:disabled) {
+  background: var(--bg-hover);
+  color: var(--text-1);
+}
+.patientNavItem:focus-visible { outline: none; box-shadow: var(--ring); }
+.patientNavItem svg {
+  color: var(--text-3);
+  flex-shrink: 0;
+  transition: color var(--dur-1) var(--ease);
+}
+.patientNavItem:hover:not(:disabled) svg { color: var(--brand); }
+/* Activo: pill de marca + subrayado con el degradado. La barra indicadora
+   vertical del menú lateral no se traduce a una barra horizontal. */
+.patientNavItemActive {
+  position: relative;
+  background: var(--brand-soft);
+  color: var(--brand);
+  border-color: var(--border-brand);
+  font-weight: 600;
+}
+.patientNavItemActive svg { color: var(--brand); }
+.patientNavItemActive::after {
+  content: "";
+  position: absolute;
+  left: 11px;
+  right: 11px;
+  bottom: 3px;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--brand-grad, var(--brand));
+}
+.patientNavItemDisabled,
+.patientNavItemDisabled:hover {
+  opacity: 0.45;
+  cursor: not-allowed;
+  color: var(--text-3);
+  background: transparent;
+  border-color: transparent;
+}
+/* Módulo activo en la clínica pero sin registros del paciente: atenuado pero
+   clickable (igual que en el quick-nav). */
+.patientNavItemDimmed { opacity: 0.7; transition: opacity 0.15s ease-in-out; }
+.patientNavItemDimmed:hover { opacity: 1; }
+.patientNavItemLabel { white-space: nowrap; }
+/* Triggers "Más ▾" / "Administrativo ▾". El estado abierto NO debe pisar al
+   activo → :not(.patientNavItemActive) para no ganarle por especificidad. */
+.patientNavTrigger[data-state="open"]:not(.patientNavItemActive) {
+  background: var(--bg-hover);
+  color: var(--text-1);
+}
+.patientNavTrigger[data-state="open"]:not(.patientNavItemActive) svg { color: var(--brand); }
+.patientNavChevron { opacity: 0.75; }
+/* Punto de señal: el menú "Más" esconde items con contador o badge NUEVO. */
+.patientNavDot {
+  width: 6px;
+  height: 6px;
+  flex-shrink: 0;
+  border-radius: 999px;
+  background: var(--brand-grad, var(--brand));
+}
+.patientNavNewBadge {
+  flex-shrink: 0;
+  font-size: 8.5px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  color: #fff;
+  background: var(--brand-grad);
+  border-radius: 999px;
+  padding: 2.5px 6px;
+  line-height: 1;
+}
+.patientNavCount {
+  display: inline-grid;
+  place-items: center;
+  flex-shrink: 0;
+  min-width: 19px;
+  height: 17px;
+  padding: 0 5px;
+  font-size: 10px;
+  font-weight: 700;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  border-radius: 999px;
+  background: var(--bg-elev-2);
+  color: var(--text-3);
+  letter-spacing: 0.02em;
+}
+/* Menú desplegable (Radix portal). Los selectores van anidados a propósito:
+   las clases base del DropdownMenuItem son utilities de Tailwind (0,1,0) y el
+   orden de inyección del CSS module frente a ellas no está garantizado —
+   (0,2,0) gana siempre. */
+.patientNavMenu {
+  min-width: 236px;
+  padding: 5px;
+}
+.patientNavMenu .patientNavMenuItem {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-height: 34px;
+  padding: 0 9px;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--text-2);
+  border-radius: 7px;
+  cursor: pointer;
+}
+.patientNavMenu .patientNavMenuItem svg { color: var(--text-3); flex-shrink: 0; }
+.patientNavMenu .patientNavMenuItem.patientNavMenuItemActive {
+  background: var(--brand-soft);
+  color: var(--brand);
+  font-weight: 600;
+}
+.patientNavMenu .patientNavMenuItem.patientNavMenuItemActive svg { color: var(--brand); }
+.patientNavMenuLabel { flex: 1; white-space: nowrap; }
+/* Tablet/móvil ≤1024px: manda la .mobileTabBar (chips con scroll), igual que
+   antes con el quick-nav. Override DESPUÉS de la base para ganar la cascada. */
+@media (max-width: 1024px) {
+  .patientNavSticky { display: none; }
+}
+
 /* ─────── QUICK NAV ─────── */
+/* ⚠️ Menú vertical HISTÓRICO: lo sustituyó .patientNavBar (barra horizontal) y
+   ya no se monta en la ficha. Los estilos siguen aquí junto a quick-nav.tsx
+   mientras el componente no se borre. */
 .quickNav {
   position: sticky;
   /* El topbar del dashboard (.topbar-new) es sticky top:0 con 52px de alto y
