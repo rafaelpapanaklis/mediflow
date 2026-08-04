@@ -6,6 +6,8 @@ import { Analytics } from "@vercel/analytics/next";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 import { ConfirmProvider } from "@/components/ui/confirm-dialog";
 import { AnalyticsTracker } from "@/components/analytics/analytics-tracker";
+import { GaPageview } from "@/components/analytics/ga-pageview";
+import { GA4_MEASUREMENT_ID, PRIVATE_PATH_PATTERN } from "@/lib/analytics/ga4";
 import "./globals.css";
 
 const sans = IBM_Plex_Sans({ subsets: ["latin"], weight: ["300", "400", "500", "600", "700"], variable: "--font-sans", display: "swap" });
@@ -82,12 +84,19 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           src="https://www.googletagmanager.com/gtag/js?id=AW-18276007996"
           strategy="afterInteractive"
         />
+        {/* El mismo gtag.js sirve a varios destinos: GA4 se suma como un config
+            extra DESPUÉS del de Ads, que no cambia. GA4 solo se configura en
+            rutas públicas (PRIVATE_PATH_PATTERN) y con send_page_view:false,
+            porque el page_view lo manda <GaPageview /> en cada navegación. */}
         <Script id="ga-gtag" strategy="afterInteractive">
           {`
             window.dataLayer = window.dataLayer || [];
             function gtag(){dataLayer.push(arguments);}
             gtag('js', new Date());
             gtag('config', 'AW-18276007996');
+            if (!new RegExp(${JSON.stringify(PRIVATE_PATH_PATTERN)}).test(location.pathname)) {
+              gtag('config', ${JSON.stringify(GA4_MEASUREMENT_ID)}, { send_page_view: false });
+            }
           `}
         </Script>
         {/* Toaster centralizado: única posición (top-right), duraciones
@@ -128,6 +137,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         {/* Analítica propia (DaleControl) — tracker de primera parte para /admin/analytics.
             No rastrea /admin ni /live; identidad resuelta server-side desde cookies. */}
         <AnalyticsTracker />
+        {/* GA4 (G-Q3HM012SPZ) — page_view por navegación, solo rutas públicas. */}
+        <GaPageview />
       </body>
     </html>
   );
