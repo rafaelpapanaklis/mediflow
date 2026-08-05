@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { FOOTER, navHref } from "./v2/landing-data";
 import { BrandGlyph } from "../primitives/logo";
+import { SecureBadge } from "../primitives/secure-badge";
 import "./v2/landing-v2.css";
 
 /**
@@ -78,8 +79,9 @@ export function SalesFooter() {
         </nav>
       </div>
       <div style={{ borderTop: "1px solid rgba(255,255,255,0.1)" }}>
-        <div style={{ maxWidth: 1200, margin: "0 auto", padding: "18px 20px", display: "flex", flexWrap: "wrap", gap: "8px 24px", justifyContent: "space-between" }}>
+        <div style={{ maxWidth: 1200, margin: "0 auto", padding: "18px 20px", display: "flex", flexWrap: "wrap", gap: "8px 24px", justifyContent: "space-between", alignItems: "center" }}>
           <span style={{ fontSize: 13, color: "#94a3b8" }}>{FOOTER.copyright}</span>
+          <SecureBadge tone="dark" />
           <span style={{ fontSize: 13, color: "#94a3b8" }}>{FOOTER.madeIn}</span>
         </div>
       </div>

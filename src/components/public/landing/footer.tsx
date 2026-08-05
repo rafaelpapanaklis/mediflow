@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Logo } from "./primitives/logo";
+import { SecureBadge } from "./primitives/secure-badge";
 
 interface FooterColumn {
   title: string;
@@ -173,6 +174,8 @@ export function Footer() {
               © 2026 DaleControl · Hecho en México 🇲🇽
             </span>
           </div>
+
+          <SecureBadge tone="token" />
 
           <div
             style={{

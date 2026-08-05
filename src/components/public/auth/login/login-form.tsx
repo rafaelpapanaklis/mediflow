@@ -5,6 +5,7 @@ import { useState, type FormEvent } from "react";
 import toast from "react-hot-toast";
 import { createClient } from "@/lib/supabase/client";
 import { Logo } from "../../landing/primitives/logo";
+import { SecureBadge } from "../../landing/primitives/secure-badge";
 import { SocialButtons, GOOGLE_OAUTH_ENABLED } from "../social-buttons";
 import { Divider } from "../divider";
 import { FormField } from "../form-field";
@@ -194,6 +195,10 @@ export function LoginForm() {
           {loading ? "Iniciando sesión…" : "Iniciar sesión →"}
         </button>
       </form>
+
+      <div style={{ display: "flex", justifyContent: "center" }}>
+        <SecureBadge tone="light" />
+      </div>
 
       {/* Footer */}
       <div style={{ textAlign: "center", fontSize: 13, color: "var(--ld-fg-muted)" }}>
