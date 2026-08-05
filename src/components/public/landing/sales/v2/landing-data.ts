@@ -305,7 +305,7 @@ export const FINAL_CTA = {
 };
 
 export const FOOTER = {
-  blurb: 'El software de gestión para clínicas dentales en México. Todo en un solo lugar, en español y en pesos.',
+  blurb: 'El software dental más completo de México. Agenda, expediente, WhatsApp y facturación CFDI 4.0 en una sola plataforma.',
   // El footer es un superconjunto del nav, no un espejo: arranca de NAV.links
   // (anclas + Blog) y añade las rutas de SEO que a propósito NO están en el
   // menú para no alargarlo. Ambos consumidores normalizan con navHref().

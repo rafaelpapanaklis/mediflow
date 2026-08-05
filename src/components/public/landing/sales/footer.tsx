@@ -27,7 +27,7 @@ export function SalesFooter() {
               <span style={{ color: "#a78bfa" }}>Dale</span><span style={{ color: "#ffffff" }}>Control</span>
             </span>
           </span>
-          <p style={{ marginTop: 14, fontSize: 14, lineHeight: 1.6, color: "#94a3b8", maxWidth: "30ch" }}>{FOOTER.blurb}</p>
+          <p style={{ marginTop: 14, fontSize: 14, lineHeight: 1.6, color: "#94a3b8", maxWidth: "34ch" }}>{FOOTER.blurb}</p>
         </div>
 
         <nav aria-label="Producto" style={{ flex: "1 1 150px", minWidth: 0 }}>
