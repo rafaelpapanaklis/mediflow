@@ -11,6 +11,7 @@ import { ButtonNew } from "@/components/ui/design-system/button-new";
 import { BadgeNew }  from "@/components/ui/design-system/badge-new";
 import { KpiCard }   from "@/components/ui/design-system/kpi-card";
 import { fmtMXN } from "@/lib/format";
+import { paymentDate, importedLaterAt, type PaymentDateFields } from "@/lib/admin/payment-date";
 
 /* ── Constants ────────────────────────────────────────────────────────────── */
 
@@ -38,6 +39,27 @@ function statusBadge(status: string) {
 
 function fmtDate(d: string | Date) {
   return new Date(d).toLocaleDateString("es-MX", { day: "numeric", month: "short", year: "numeric" });
+}
+
+/**
+ * Fecha del COBRO (paidAt), no la de alta de la fila. Los pagos importados de
+ * Stripe con backfill-stripe entraron todos el mismo día, así que `createdAt`
+ * hacía que 4 cobros de meses distintos se vieran con la misma fecha. Cuando el
+ * registro entró mucho después del cobro se explica en el tooltip, sin gastar
+ * otra columna.
+ */
+function PaymentDateCell({ inv }: { inv: PaymentDateFields }) {
+  const imported = importedLaterAt(inv);
+  return (
+    <span
+      className="mono"
+      style={{ fontSize: 11, color: "var(--text-3)", cursor: imported ? "help" : undefined }}
+      title={imported ? `Cobro del ${fmtDate(paymentDate(inv))} · importado el ${fmtDate(imported)}` : undefined}
+    >
+      {fmtDate(paymentDate(inv))}
+      {imported && <span style={{ opacity: 0.6, marginLeft: 4 }}>·imp</span>}
+    </span>
+  );
 }
 
 /* ── Props ────────────────────────────────────────────────────────────────── */
@@ -691,8 +713,8 @@ export function PaymentsClient({
                     <td className="mono" style={{ fontSize: 11, color: "var(--text-3)" }}>
                       {inv.reference || "—"}
                     </td>
-                    <td className="mono" style={{ fontSize: 11, color: "var(--text-3)" }}>
-                      {fmtDate(inv.createdAt)}
+                    <td>
+                      <PaymentDateCell inv={inv} />
                     </td>
                     <td style={{ textAlign: "right" }}>
                       <div style={{ display: "inline-flex", gap: 6 }}>
@@ -841,9 +863,7 @@ export function PaymentsClient({
                       </td>
                       <td>
                         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                          <span className="mono" style={{ fontSize: 11, color: "var(--text-3)" }}>
-                            {fmtDate(inv.createdAt)}
-                          </span>
+                          <PaymentDateCell inv={inv} />
                           <Link
                             href={`/admin/payments/${inv.id}/cfdi`}
                             style={{ fontSize: 11, fontWeight: 600, color: "var(--brand)", textDecoration: "none" }}

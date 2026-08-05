@@ -8,6 +8,7 @@ import {
 import { prisma } from "@/lib/prisma";
 import { getPlanLimits } from "@/lib/plans";
 import { PLAN_IDS } from "@/lib/billing/plans";
+import { comparePaymentDateDesc, paymentDate, importedLaterAt } from "@/lib/admin/payment-date";
 import { formatCurrency } from "@/lib/utils";
 import { formatRelativeDate } from "@/lib/format";
 import { CardNew }   from "@/components/ui/design-system/card-new";
@@ -31,6 +32,27 @@ async function loadPlanPrices(): Promise<Record<string, number>> {
   const out: Record<string, number> = {};
   for (const r of rows) out[r.id] = r.price;
   return out;
+}
+
+/**
+ * Celda de fecha de un pago: la del COBRO (paidAt), no la de alta de la fila.
+ * Con el backfill de Stripe todos los cobros históricos entraron el mismo día,
+ * así que `createdAt` mostraba la fecha de la importación. Cuando las dos
+ * difieren mucho, el tooltip lo aclara.
+ */
+function PagoFechaCell({ inv }: { inv: { paidAt: Date | null; createdAt: Date } }) {
+  const imported = importedLaterAt(inv);
+  return (
+    <td
+      className="mono"
+      style={{ color: "var(--text-3)", cursor: imported ? "help" : undefined }}
+      title={imported
+        ? `Importado el ${imported.toLocaleDateString("es-MX", { day: "numeric", month: "long", year: "numeric" })}`
+        : undefined}
+    >
+      {formatRelativeDate(paymentDate(inv))}
+    </td>
+  );
 }
 
 export default async function AdminPage() {
@@ -128,6 +150,11 @@ async function renderAdminDashboard() {
     ? `${formatCurrency(pendingPay)} por cobrar · ${failedInv.length} fallido${failedInv.length===1?"":"s"}`
     : `${formatCurrency(pendingPay)} por cobrar`;
   const growthRate   = newClinicsPrev > 0 ? Math.round(((newClinicsMonth-newClinicsPrev)/newClinicsPrev)*100) : 0;
+
+  // "Últimos pagos" se ordena por la fecha REAL del cobro (paidAt ?? createdAt),
+  // que es la que se pinta. Ordenar por createdAt dejaba arriba lo último
+  // IMPORTADO, no lo último cobrado.
+  const ultimosPagos = subInvoices.slice().sort(comparePaymentDateDesc).slice(0, 10);
 
   const fechaStr = now.toLocaleDateString("es-MX", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
 
@@ -306,7 +333,7 @@ async function renderAdminDashboard() {
                 </tr>
               </thead>
               <tbody>
-                {subInvoices.slice(0, 10).map(inv => (
+                {ultimosPagos.map(inv => (
                   <tr key={inv.id}>
                     <td>
                       <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
@@ -323,9 +350,7 @@ async function renderAdminDashboard() {
                         {inv.status === "paid" ? "Pagado" : inv.status === "failed" ? "Fallido" : "Pendiente"}
                       </BadgeNew>
                     </td>
-                    <td className="mono" style={{ color: "var(--text-3)" }}>
-                      {formatRelativeDate(inv.createdAt)}
-                    </td>
+                    <PagoFechaCell inv={inv} />
                   </tr>
                 ))}
               </tbody>

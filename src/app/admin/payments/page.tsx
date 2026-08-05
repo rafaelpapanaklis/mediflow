@@ -1,7 +1,11 @@
 export const dynamic = "force-dynamic";
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
+import { comparePaymentDateDesc } from "@/lib/admin/payment-date";
 import { PaymentsClient } from "./payments-client";
+
+/** Tope de la pestaña "Todos los pagos". */
+const RECENT_PAYMENTS_LIMIT = 100;
 
 // Helpers que no fallan: si la query truena por (p. ej.) una tabla que no
 // existe todavía o un campo null raro, devolvemos valores seguros para que
@@ -79,7 +83,15 @@ async function renderPaymentsPage() {
 
   // Ejecutamos todas las queries en paralelo pero cada una con fallback
   // seguro para que un fallo individual no tire toda la página.
-  const [totalClinics, activeClinics, trialClinics, recentPayments, pendingTransfers] =
+  //
+  // Los pagos se piden en DOS tandas porque la lista se ordena por la misma
+  // fecha que se pinta (paidAt ?? createdAt) y Prisma no sabe ordenar por un
+  // COALESCE. Cada tanda trae su tope ya ordenada por SU fecha, así que la
+  // unión contiene con certeza los `RECENT_PAYMENTS_LIMIT` más recientes de
+  // verdad: si una fila entra en el top real, ningún otro registro de su propia
+  // tanda la desplaza. Ordenar sólo en JS sobre "los 100 últimos por createdAt"
+  // dejaría fuera un cobro viejo verificado hoy.
+  const [totalClinics, activeClinics, trialClinics, paidPayments, unpaidPayments, pendingTransfers] =
     await Promise.all([
       safe(prisma.clinic.count(), 0),
       safe(prisma.clinic.count({ where: { subscriptionStatus: "active" } }), 0),
@@ -94,8 +106,16 @@ async function renderPaymentsPage() {
         },
       }), 0),
       safe(prisma.subscriptionInvoice.findMany({
+        where: { paidAt: { not: null } },
+        orderBy: { paidAt: "desc" },
+        take: RECENT_PAYMENTS_LIMIT,
+        include: { clinic: { select: { id: true, name: true, plan: true } } },
+      }), [] as any[]),
+      // Sin paidAt (pendientes/fallidos): ahí createdAt SÍ es su fecha real.
+      safe(prisma.subscriptionInvoice.findMany({
+        where: { paidAt: null },
         orderBy: { createdAt: "desc" },
-        take: 100,
+        take: RECENT_PAYMENTS_LIMIT,
         include: { clinic: { select: { id: true, name: true, plan: true } } },
       }), [] as any[]),
       safe(prisma.subscriptionInvoice.findMany({
@@ -104,6 +124,11 @@ async function renderPaymentsPage() {
         orderBy: { createdAt: "desc" },
       }), [] as any[]),
     ]);
+
+  const recentPayments = paidPayments
+    .concat(unpaidPayments)
+    .sort(comparePaymentDateDesc)
+    .slice(0, RECENT_PAYMENTS_LIMIT);
 
   const [expiredClinics, overdueClinics, thisMonthRev, prevMonthRev] =
     await Promise.all([
