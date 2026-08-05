@@ -1482,6 +1482,18 @@
       "recetas": "Prescriptions",
       "sectionsAria": "Patient sections"
     },
+    "tabsShort": {
+      "cuestionario": "Questionnaire",
+      "historialConsultas": "History",
+      "subidos": "Uploads",
+      "tratamiento": "Plan"
+    },
+    "navBar": {
+      "more": "More",
+      "moreAria": "More sections",
+      "adminAria": "Administrative sections",
+      "pendingAria": "{count} pending in administrative sections"
+    },
     "fotosTab": {
       "title": "Clinical photos",
       "subtitle": "Extraoral and intraoral photos by treatment stage",

@@ -11,7 +11,7 @@ import { OdontogramV2 } from "@/components/dashboard/odontogram-v2/App";
 import { HeroCard } from "@/components/dashboard/patient-detail/hero-card";
 import { DeletePatientModal } from "@/components/dashboard/patient-detail/delete-patient-modal";
 import { TreatmentsModal, type SuggestedTreatment } from "@/components/dashboard/patient-detail/treatments-modal";
-import { QuickNav } from "@/components/dashboard/patient-detail/quick-nav";
+import { PatientNavBar } from "@/components/dashboard/patient-detail/patient-nav-bar";
 import { buildPatientNavItems } from "@/components/dashboard/patient-detail/patient-nav-items";
 import { SideCards } from "@/components/dashboard/patient-detail/side-cards";
 import { useNewAppointmentDialog } from "@/components/dashboard/new-appointment/new-appointment-provider";
@@ -1183,8 +1183,21 @@ export function PatientDetailClient({
   const RAIL_TABS = ["resumen", "agenda", "presupuestos", "facturacion"];
   const showRail = RAIL_TABS.includes(tab);
 
+  // El contenedor de abajo fija el margen lateral de la ficha ENTERA (hero,
+  // barra de secciones y contenido), así que es el único sitio donde hay que
+  // contemplar el recorte de pantalla: en iPhone horizontal el notch/isla se
+  // come ~44px de un lado y con 28px pelados el primer chip de la tab bar y el
+  // borde del hero quedaban debajo. Sin recorte, env(...) vale 0 y manda el 28.
   return (
-    <div style={{ padding: "20px 28px 28px", maxWidth: outerMaxWidth, margin: "0 auto" }}>
+    <div
+      style={{
+        padding: "20px 28px 28px",
+        paddingLeft: "max(28px, env(safe-area-inset-left))",
+        paddingRight: "max(28px, env(safe-area-inset-right))",
+        maxWidth: outerMaxWidth,
+        margin: "0 auto",
+      }}
+    >
       <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, color: "var(--text-3)", marginBottom: 12 }}>
         <Link href="/dashboard/patients" className="inline-flex items-center gap-1 rounded-md text-[var(--text-3)] no-underline transition-colors duration-150 hover:text-[var(--text-1)] focus-visible:outline-none focus-visible:[box-shadow:var(--ring)]">
           <ArrowLeft size={12} strokeWidth={1.75} aria-hidden /> {t("patients.breadcrumb.patients")}
@@ -1291,44 +1304,49 @@ export function PatientDetailClient({
         </div>
       )}
 
-      {/* Layout 3 columnas — audit Opción C ajuste 3.
-          El grid colapsa a 2 columnas (layoutWide) en todo tab SIN rail
+      {/* Barra HORIZONTAL de secciones — sustituye al quick-nav vertical.
+          Va FUERA del grid a propósito: como hermano del contenedor de la
+          ficha su sticky vive hasta el final del scroll (dentro del grid,
+          Chrome lo clampea al contenedor y se despegaba). Se oculta ≤1024px,
+          donde manda la tab bar móvil de más abajo. */}
+      <PatientNavBar
+        activeTab={tab}
+        onSelect={setTab}
+        counts={{
+          historia: records.length,
+          historialConsultas: records.length,
+          evolucion: records.length,
+          radiografias: filesLoaded ? files.length : undefined,
+          fotos: fotosCount,
+          tratamiento: treatments.length,
+          agenda: appointments.length,
+          facturacion: invoices.length,
+          pediatria: pediatricsData?.pendingConsents.length ?? 0,
+          periodoncia: perioData?.recordsCount ?? 0,
+          endodoncia: endoSummaries?.filter((s) => s.hasActiveTreatment).length ?? 0,
+          implantes: implants?.length ?? 0,
+          ortodoncia: orthoData?.controls.filter((c) => c.performedAt === null).length ?? 0,
+        }}
+        hasBalance={totalBalance > 0}
+        pediatrics={{ state: pediatricsState, reason: PEDIATRICS_DISABLED_REASON }}
+        showPeriodontics={showPeriodontics}
+        showEndodontics={showEndodontics}
+        showImplants={showImplants}
+        showOrthodontics={showOrthodontics}
+        showBilling={canViewBilling}
+        activityCounts={activityCounts}
+      />
+
+      {/* Layout 2 columnas — contenido + rail derecho.
+          El grid colapsa a 1 columna (layoutWide) en todo tab SIN rail
           (ver showRail): así el contenido ocupa el ancho completo y no queda
-          el hueco del tercer track. Incluye ortodoncia (su orchestrator ya
+          el hueco del segundo track. Incluye ortodoncia (su orchestrator ya
           trae su propia RightRail) y odontograma (32 dientes a lo ancho). */}
       <div
         className={`${patientDetailStyles.layout} ${
           showRail ? "" : patientDetailStyles.layoutWide
         }`}
       >
-        <QuickNav
-          activeTab={tab}
-          onSelect={setTab}
-          counts={{
-            historia: records.length,
-            historialConsultas: records.length,
-            evolucion: records.length,
-            radiografias: filesLoaded ? files.length : undefined,
-            fotos: fotosCount,
-            tratamiento: treatments.length,
-            agenda: appointments.length,
-            facturacion: invoices.length,
-            pediatria: pediatricsData?.pendingConsents.length ?? 0,
-            periodoncia: perioData?.recordsCount ?? 0,
-            endodoncia: endoSummaries?.filter((s) => s.hasActiveTreatment).length ?? 0,
-            implantes: implants?.length ?? 0,
-            ortodoncia: orthoData?.controls.filter((c) => c.performedAt === null).length ?? 0,
-          }}
-          hasBalance={totalBalance > 0}
-          pediatrics={{ state: pediatricsState, reason: PEDIATRICS_DISABLED_REASON }}
-          showPeriodontics={showPeriodontics}
-          showEndodontics={showEndodontics}
-          showImplants={showImplants}
-          showOrthodontics={showOrthodontics}
-          showBilling={canViewBilling}
-          activityCounts={activityCounts}
-        />
-
         <div className={patientDetailStyles.mainColumn}>
           {/* Sticky context bar + SOAP editor (audit Opción C ajustes 2 y 5) */}
           {isConsultActive && activeAppointment && (
