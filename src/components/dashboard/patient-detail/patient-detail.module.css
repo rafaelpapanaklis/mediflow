@@ -439,16 +439,36 @@
 .mobileTabBar {
   display: none;
   position: sticky;
-  top: 0;
-  z-index: 10;
+  /* El topbar del dashboard (.topbar-new) mide 52px y es sticky top:0 con
+     z-index 5 TAMBIÉN en móvil (ahí el scrollport es el viewport, porque
+     lg:overflow-y-auto no aplica). Con top:0 + z-index:10 esta barra se
+     plantaba ENCIMA del topbar al scrollear y lo tapaba entero: el usuario
+     perdía el botón de menú. Ahora se ancla justo debajo (+ la barra de
+     consulta activa si existe) y con z-index 4 < 5 pasa por debajo del topbar,
+     nunca por encima. */
+  top: calc(52px + var(--mf-context-bar-h, 0px));
+  z-index: 4;
   gap: 6px;
   margin: 0 -16px 14px;
   padding: 10px 16px;
-  background: var(--bg);
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
   scrollbar-width: none;
   border-bottom: 1px solid var(--border-soft);
+  /* Sombras de scroll auto-revelantes: las 2 primeras capas (attachment local)
+     viajan CON el contenido y tapan a las 2 siguientes (attachment scroll,
+     fijas a los bordes). Resultado: la sombra aparece solo del lado donde
+     queda contenido por descubrir y desaparece al llegar al extremo.
+     Antes el scrollbar iba oculto y no había ninguna señal: las secciones que
+     no cabían quedaban tras un scroll invisible. */
+  background:
+    linear-gradient(to right, var(--bg) 45%, transparent) 0 0 / 26px 100% no-repeat local,
+    linear-gradient(to left,  var(--bg) 45%, transparent) 100% 0 / 26px 100% no-repeat local,
+    linear-gradient(to right, color-mix(in srgb, var(--text-1) 16%, transparent), transparent)
+      0 0 / 14px 100% no-repeat scroll,
+    linear-gradient(to left,  color-mix(in srgb, var(--text-1) 16%, transparent), transparent)
+      100% 0 / 14px 100% no-repeat scroll,
+    var(--bg);
 }
 .mobileTabBar::-webkit-scrollbar { display: none; }
 .mobileTabBtn {
@@ -870,8 +890,28 @@
 }
 .patientNavMenu .patientNavMenuItem.patientNavMenuItemActive svg { color: var(--brand); }
 .patientNavMenuLabel { flex: 1; white-space: nowrap; }
+/* Pantallas táctiles que SÍ ven esta barra (>1024px): iPad Pro 12.9" en
+   horizontal mide 1366px, y ahí 34px de alto se queda corto para el dedo.
+   `pointer: coarse` mira el dispositivo apuntador PRIMARIO, no el ancho, así
+   que un portátil con ratón se queda con la versión compacta de 34px y solo
+   sube el táctil puro. El gap sube a la par para que los items no queden
+   pegados; el componente LEE el columnGap de .patientNavRow con
+   getComputedStyle, y la capa espejo tiene que medir con el mismo gap → las
+   tres reglas van juntas y se cambian juntas. */
+@media (pointer: coarse) {
+  .patientNavItem {
+    min-height: 40px;
+    padding: 0 13px;
+  }
+  .patientNavRow,
+  .patientNavMeasure { gap: 8px; }
+  .patientNavMenu .patientNavMenuItem { min-height: 40px; }
+}
 /* Tablet/móvil ≤1024px: manda la .mobileTabBar (chips con scroll), igual que
-   antes con el quick-nav. Override DESPUÉS de la base para ganar la cascada. */
+   antes con el quick-nav. Override DESPUÉS de la base para ganar la cascada.
+   Las dos navegaciones son mutuamente excluyentes por construcción: este
+   display:none y el display:flex de .mobileTabBar comparten el MISMO
+   breakpoint, así que en ningún ancho conviven ni desaparecen las dos. */
 @media (max-width: 1024px) {
   .patientNavSticky { display: none; }
 }
