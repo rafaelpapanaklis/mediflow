@@ -4,6 +4,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import toast from "react-hot-toast";
 import { Logo } from "../../landing/primitives/logo";
+import { SecureBadge } from "../../landing/primitives/secure-badge";
 import { SocialButtons, GOOGLE_OAUTH_ENABLED } from "../social-buttons";
 import { Divider } from "../divider";
 import { Stepper } from "./stepper";
@@ -355,6 +356,11 @@ export function SignupForm() {
           loading={loading}
         />
       )}
+
+      {/* Sello de confianza: visible en los 3 pasos, incluido el de plan y pago. */}
+      <div style={{ display: "flex", justifyContent: "center" }}>
+        <SecureBadge tone="light" />
+      </div>
     </div>
   );
 }
