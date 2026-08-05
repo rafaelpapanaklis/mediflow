@@ -7,7 +7,7 @@ export const metadata: Metadata = {
     "Aviso de privacidad integral conforme a la Ley Federal de Protección de Datos Personales en Posesión de los Particulares (LFPDPPP).",
 };
 
-const LAST_UPDATED = "30 de abril de 2026";
+const LAST_UPDATED = "5 de agosto de 2026";
 const RESPONSIBLE_NAME = "DaleControl (operado por Rafael Papanaklis)";
 const RESPONSIBLE_ADDRESS = "México · contacto: privacidad@dalecontrol.com";
 const PRIVACY_EMAIL = "privacidad@dalecontrol.com";
@@ -70,7 +70,54 @@ export default function PrivacidadPage() {
         </ul>
       </Section>
 
-      <Section title="3. Finalidades del tratamiento">
+      <Section title="3. Cookies">
+        <p>
+          Una cookie es un archivo pequeño que el sitio guarda en su navegador para
+          recordar algo entre una visita y otra. En DaleControl usamos:
+        </p>
+        <ul>
+          <li>
+            <b>Cookies estrictamente necesarias.</b> Mantienen su sesión iniciada y
+            protegen el acceso a su cuenta. Las gestiona nuestro proveedor de
+            autenticación (Supabase) y sin ellas no es posible usar el sistema.
+          </li>
+          <li>
+            <b>Cookie de atribución del Programa de Afiliados (&quot;dc_aff&quot;).</b> Se
+            guarda únicamente cuando usted llega al sitio a través del link de
+            recomendación de un afiliado (una dirección del tipo
+            dalecontrol.com/r/codigo). Tiene una sola finalidad: saber a qué afiliado
+            corresponde la recomendación si más adelante se contrata una suscripción,
+            para poder pagarle su comisión.
+          </li>
+        </ul>
+        <p>
+          <b>Qué guarda la cookie de atribución:</b> el código del afiliado, el nombre de
+          la campaña del link (cuando el link trae una) y la fecha de ese primer ingreso.{" "}
+          <b>No contiene datos personales:</b> no guarda su nombre, ni su correo, ni su
+          dirección IP, ni ningún dato que permita identificarlo.
+        </p>
+        <p>
+          <b>Cuánto dura:</b> <b>90 días</b> contados desde ese primer ingreso. La escribe
+          nuestro servidor y no puede leerse desde el código que corre en su navegador
+          (httpOnly), viaja solo por conexión segura (Secure) y no se envía a otros sitios
+          (SameSite=Lax). Cumplidos los 90 días caduca sola y deja de atribuir la
+          recomendación a nadie; tampoco se renueva con visitas posteriores.
+        </p>
+        <p>
+          <b>No se comparte con terceros:</b> el contenido de esta cookie no se vende ni se
+          cede, no se usa con fines publicitarios ni para elaborar perfiles sobre usted, y
+          no alimenta ninguna herramienta de análisis.
+        </p>
+        <p>
+          <b>Cómo borrarla:</b> desde la configuración de su navegador puede consultar y
+          eliminar en cualquier momento las cookies de este sitio (normalmente en la
+          sección de privacidad o de datos de navegación). Si borra la cookie de
+          atribución, el sitio sigue funcionando igual y simplemente deja de atribuirse la
+          recomendación; si borra las cookies de sesión, tendrá que iniciar sesión de nuevo.
+        </p>
+      </Section>
+
+      <Section title="4. Finalidades del tratamiento">
         <p><b>Finalidades primarias</b> (necesarias para la relación jurídica):</p>
         <ul>
           <li>Operación del expediente clínico electrónico bajo NOM-004-SSA3-2012 y NOM-024-SSA3-2012.</li>
@@ -84,7 +131,7 @@ export default function PrivacidadPage() {
         </ul>
       </Section>
 
-      <Section title="4. Transferencias">
+      <Section title="5. Transferencias">
         <p>
           Para la operación del servicio, sus datos pueden ser transferidos a los siguientes
           encargados, sujetos a contrato de confidencialidad y nivel de protección equivalente:
@@ -103,7 +150,7 @@ export default function PrivacidadPage() {
         </p>
       </Section>
 
-      <Section title="5. Derechos ARCO">
+      <Section title="6. Derechos ARCO">
         <p>
           Usted tiene derecho a <b>Acceder, Rectificar, Cancelar u Oponerse</b> al tratamiento
           de sus datos personales, y a revocar el consentimiento otorgado. Puede ejercerlos:
@@ -127,7 +174,7 @@ export default function PrivacidadPage() {
         </p>
       </Section>
 
-      <Section title="6. Revocación del consentimiento">
+      <Section title="7. Revocación del consentimiento">
         <p>
           Puede revocar en cualquier momento el consentimiento otorgado al tratamiento de
           sus datos personales. La revocación no tendrá efectos retroactivos y, en su caso,
@@ -135,7 +182,7 @@ export default function PrivacidadPage() {
         </p>
       </Section>
 
-      <Section title="7. Conservación de la información">
+      <Section title="8. Conservación de la información">
         <p>
           Los datos del expediente clínico se conservan al menos <b>5 años</b> contados a
           partir del último acto médico (NOM-004-SSA3-2012, numeral 5.5). Datos fiscales
@@ -143,14 +190,14 @@ export default function PrivacidadPage() {
         </p>
       </Section>
 
-      <Section title="8. Cambios al aviso de privacidad">
+      <Section title="9. Cambios al aviso de privacidad">
         <p>
           Cualquier modificación al presente aviso se publicará en esta misma URL con la
           nueva fecha de actualización. Le recomendamos revisarlo periódicamente.
         </p>
       </Section>
 
-      <Section title="9. Contacto">
+      <Section title="10. Contacto">
         <p>
           Para cualquier duda relacionada con la protección de sus datos personales, contacte
           a: <a href={`mailto:${PRIVACY_EMAIL}`}>{PRIVACY_EMAIL}</a>.

@@ -104,7 +104,7 @@ export async function getPayoutSettings(): Promise<{
  * de PRORRATEO: `notes = "Stripe <billing_reason> <número>"`. Es el único dato
  * que sobrevive en subscription_invoices para distinguirlas.
  */
-const PRORATION_NOTE_PREFIX = "Stripe subscription_update";
+export const PRORATION_NOTE_PREFIX = "Stripe subscription_update";
 
 /**
  * Número de cobro de la clínica para esta factura: 1 = primer cobro.

@@ -4321,3 +4321,252 @@ engañosa). Se dejó **tal cual lo pidió Rafael** —el encargo fijaba el texto
 y prohibía añadir o quitar nada—, pero queda anotado aquí por si algún día conviene cambiarlo
 por una afirmación demostrable. El resto del blurb sí es verificable: agenda, expediente,
 WhatsApp y timbrado CFDI 4.0 existen los cuatro.
+
+---
+
+## Afiliados — atribución por cookie, links cortos, bono en el panel y soporte con manager (5 ago 2026)
+
+Cuatro frentes en una sola ola. El que importa de verdad es el primero: hasta hoy un afiliado
+podía hacer todo el trabajo y no cobrar.
+
+### El agujero que se cierra
+
+La atribución dependía de que `?ref=` **sobreviviera en la URL hasta el registro**
+(`src/app/api/auth/register/route.ts`). Si el visitante entraba por el link del afiliado, se
+iba, y volvía tres días después escribiendo `dalecontrol.com` a mano, el afiliado **no
+cobraba**. No existía ninguna cookie de atribución — verificado antes de empezar: cero
+ocurrencias de `dc_ref`/`aff_ref` en el repo.
+
+### La regla de atribución, escrita una vez
+
+Cookie **`dc_aff`**, `httpOnly` · `Secure` · `SameSite=Lax` · `path=/` · **90 días**.
+Contenido: `v1.<referralCode>.<campaña>.<epochMs>` — sin un solo dato personal (ni nombre, ni
+correo, ni IP).
+
+**Server-side obligatorio.** La escribe el route handler con `Set-Cookie`, nunca
+`document.cookie`: Safari (ITP) borra a los 7 días las cookies escritas por JavaScript, así que
+por JS los 90 días habrían sido **7 en iPhone**.
+
+**PRIMER TOQUE.** Si ya hay cookie vigente **no se sobrescribe ni se renueva** — ni por otro
+afiliado, ni por otra campaña, ni por el mismo. En `/r/[code]` eso es literalmente
+`if (!parseAttribution(...)) setAttributionCookie(...)`. A los 90 días expira y **deja de
+atribuir a nadie**: quien vuelva el día 91, por donde sea, no es de ningún afiliado. Sin
+renovación por visitas posteriores.
+
+La consecuencia contraintuitiva se respeta a propósito y está escrita en los términos: **cookie
+de A + clic en el link de B + registro inmediato ⇒ la comisión es de A.** Eso significa primer
+toque.
+
+`parseAttribution()` revalida los 90 días **en el servidor** además del `maxAge`: una cookie de
+91 días que sobreviva (reloj adelantado, proxy que la reinyecte) no atribuye.
+
+### `/r/[code]` — la ruta corta
+
+`src/app/r/[code]/route.ts`, route handler de redirección (no página). `/r` **no cae en el
+matcher del middleware**, así que corre en Node sin `updateSession`.
+
+Resuelve en orden: (a) `AffiliateLink.publicCode` → afiliado + campaña, y suma 1 a `clicks` de
+ese link; (b) `Affiliate.referralCode` → link base sin campaña; (c) nada → home limpia.
+
+**Nunca un 404.** Un link roto compartido en WhatsApp o impreso en un QR lleva al sitio, no a un
+muro. Afiliado no `APPROVED` → mismo trato: redirige, sin cookie. Añadí también `/r` a secas
+(sin código), que redirige igual: pasa cuando un link se trunca al compartirse.
+
+Registra el clic reusando lo de `/api/afiliados/track` (`hashIp` con salt — **jamás IP cruda**).
+El rate limit gatea **solo las escrituras**: el visitante siempre redirige y siempre recibe su
+cookie, nunca un 429 en la cara. Redirección **302 explícita** (`NextResponse.redirect` es 307
+por defecto). Aterriza en `dalecontrol.com` limpio, sin querystring.
+
+### El registro lee la cookie
+
+En `register/route.ts`, `refCode` y la campaña salen **siempre de la misma fuente ganadora**:
+cookie vigente si la hay, si no el `?ref`/`?c` de siempre (comportamiento histórico intacto).
+Mezclarlas habría descuadrado las conversiones por campaña del panel y la atribución a vendedor
+por `affiliateId_campaign`.
+
+Si gana la cookie pero su afiliado ya no resuelve (suspendido, borrado), **no se cae de vuelta
+al `?ref`**: se queda sin atribución. Volver al `?ref` le regalaría al último toque una comisión
+que era del primero. Todo en try/catch: una cookie corrupta no rompe un alta. El anti
+self-referral se aplica igual, venga el ref de donde venga.
+
+Precedencia real, que no estaba escrita en ningún lado y ahora sí está en los términos:
+**cookie vigente > `?ref` de la URL > cupón** (el bloque del cupón solo corre si no hay ya
+atribución).
+
+### Links del afiliado
+
+`MAX_LINKS` 20 → **15** (solo el del afiliado; el de vendedores se queda en 20). Quien ya tenga
+más **no pierde ninguno**: solo no puede crear más.
+
+Los links nuevos llevan `publicCode`: 8 caracteres `[a-z0-9]` con `randomBytes` (no
+`Math.random`, que es lo que usa `referralCode`), único global, con reintento ante colisión. Un
+`?c=facebook` adivinable dejaba manipular las campañas de otro afiliado; el código opaco lo
+evita. La URL que se muestra y se copia es `dalecontrol.com/r/<publicCode>`.
+
+`campaign` **no se tocó**: sigue siendo la llave de las estadísticas y de la atribución a
+vendedor, y las URLs `/socio/<slug>?c=<campaign>` ya compartidas siguen funcionando. Los links
+creados antes de la migración tienen `publicCode` null y conservan su URL histórica. El **título
+que escribe el afiliado** ("Facebook", "Expo dental") sigue siendo lo que ve en su panel junto a
+clics y registros: opaco hacia afuera, legible hacia adentro.
+
+Dos cosas que salieron de paso:
+
+- **La URL estaba duplicada en tres sitios** y la page SSR de `/afiliados/herramientas` armaba la
+  plantilla a mano en vez de usar la función de la route — un link recién creado y uno viejo
+  podían mostrarse con **formatos distintos en la misma pantalla**. Ahora las tres pasan por
+  `src/lib/affiliates/link-url.ts`.
+- **Regresión evitada:** con `publicCode` ya en el schema, cualquier `findMany` sin `select`
+  pide esa columna, así que sin el SQL aplicado habría reventado la pantalla entera de
+  herramientas. Se añadió un reintento sin la columna.
+
+El **link base** ahora tiene su propia fila con botón de copiar y QR (antes no se podía copiar
+desde esa pantalla), claramente marcado como "sin campaña".
+
+### Aviso de privacidad y términos
+
+`/privacidad` **no mencionaba cookies ni una sola vez** (verificado: 0 ocurrencias). Sección
+nueva **"3. Cookies"** con qué cookie, para qué, cuánto dura, que no lleva datos personales, que
+no se comparte y cómo borrarla — más las estrictamente necesarias de sesión, que sí existen. Las
+seis secciones posteriores se renumeraron a mano (la numeración está hardcodeada en el string
+del título).
+
+En `/terminos-afiliados`, la ventana de primer toque y 90 días entró **dentro** de la sección 3
+existente, sin tocar el objeto `S` de numeración dinámica (crear sección nueva habría obligado a
+correr los ternarios `hitosOn ? N : N-1` de todas las posteriores y sus referencias cruzadas).
+Cubre los cinco casos, incluido el del día 91 y el de borrar cookies o cambiar de dispositivo.
+
+### Bono por Clínicas Activas, en el panel
+
+Los hitos ya se configuraban en `/admin` pero **nadie los calculaba** — el propio schema lo
+decía: *"Sólo se ANUNCIAN y se configuran: el sistema NO los calcula ni los paga"*. Ahora el
+afiliado ve su progreso en `/afiliados/inicio`: los tres escalones con su monto (leídos de
+`affiliate_payout_config`, ni un número a mano), los ya alcanzados marcados, y una barra hacia
+el siguiente. Si `milestonesEnabled` está apagado, el bloque no aparece.
+
+**El número es el que CALIFICA, no el bruto.** Los términos dicen "al menos 3 mensualidades
+pagadas y su suscripción sigue vigente", y eso es lo que se cuenta. Si la barra mostrara altas o
+activas a secas, el afiliado vería "50/50" y no cobraría: reclamo garantizado. Cuando el
+conteo que califica difiere del total de activas, se muestran **los dos** con su explicación
+("42 activas · 38 ya califican · 4 aún no llegan a las 3 mensualidades").
+
+Cómo se calcula, en `src/lib/affiliates/milestones-progress.ts` (fuente única, la usan el panel
+y el admin):
+
+1. Clínicas del afiliado que pasan `activeClinicWhere()` → solo los ids (privacidad: ni nombres
+   ni planes salen al navegador).
+2. **Una** `subscriptionInvoice.groupBy` por `clinicId` con `status:"paid"` — sin N+1.
+3. Califica la que llega a `MIN_PAID_INVOICES` (3), vía el predicado compartido
+   `clinicQualifies()`.
+
+**Los prorrateos no cuentan.** Un cambio de plan a mitad de ciclo genera una factura pagada que
+no es una mensualidad; contarla habría pintado "ya califica" a una clínica que al verificar el
+bono no calificaría — justo el reclamo que el bloque existe para evitar. Se excluyen con el
+**mismo criterio que ya usaba `getInvoiceNo()`** del motor de comisiones, para que "mensualidad"
+signifique lo mismo en las dos partes del sistema. La rama `{ notes: null }` del filtro es
+obligatoria: en Postgres un `NOT LIKE` descarta los NULL, y sin ella las facturas sin nota —la
+mayoría— se habrían caído del conteo y nadie habría llegado nunca a un hito.
+
+Sin caché: son dos lecturas pequeñas y un progreso personal congelado se lee como bug ("ya di de
+alta la clínica y sigo en 4"). La condición de sostenerse 3 meses se menciona en el bloque, con
+enlace a los términos. **Nada de esto paga nada**: los bonos se siguen entregando a mano.
+
+### Soporte del afiliado, con manager de cuenta
+
+**Tablas propias, no `support_tickets`.** El soporte de clínicas está acoplado a `clinicId` de
+punta a punta (incluidos los adjuntos, con prefijo `support/{clinicId}/`); tocarlo para meter
+afiliados arriesgaba soporte en producción. `AffiliateSupportTicket` y `AffiliateSupportMessage`
+son un espejo 1:1 con `affiliateId`, al final del schema. Folio propio **`#AF-0001`**,
+independiente de los `#DC-` de las clínicas. Categorías propias también: un afiliado no reporta
+bugs del expediente, pregunta por su dinero (COMISIONES · PAGOS · MATERIAL · CUENTA · DUDA).
+
+`/afiliados/soporte` (entrada nueva en el sidebar): arriba la **tarjeta del manager** con foto,
+nombre, si está en línea según su horario y botón de WhatsApp con mensaje prellenado que lo
+identifica. **Sin manager asignado, cae al canal general** — nunca una tarjeta vacía. Debajo,
+sus tickets con folio, estado y aviso de respuesta sin leer, más crear ticket y la conversación
+en `/afiliados/soporte/[id]`.
+
+**Aislamiento:** `affiliateId` siempre de `getAffiliateContext()`, jamás del request. Lecturas y
+escrituras por id van con `where` compuesto `{ id, affiliateId }`, y un ticket ajeno da **404,
+no 403** (un 403 confirmaría que existe). El route de mensajes verifica propiedad **antes** de
+escribir.
+
+**Notas internas:** se filtran en el `where` de Prisma (`messages: { where: { internalNote:
+false } }`), no en el render, y el cliente vuelve a descartarlas por si acaso. Un afiliado no
+puede crear una nota interna ni mandándola forjada en el body: `internalNote` solo es válido con
+`authorType === "support"`.
+
+En el admin: asignar/cambiar manager desde la ficha del afiliado (**auditado con
+`logAdminGlobalEvent`** — la asignación de clínicas no lo está), y bandeja
+`/admin/soporte-afiliados` con filtros, métricas, responder, notas internas y cambio de estado.
+El selector de managers se **extrajo a un componente compartido** con el de clínicas en vez de
+duplicar 300 líneas; las dos pantallas de tickets sí se duplicaron, porque compartirlas exigía
+generizar componentes del soporte de clínicas en producción.
+
+En `/admin/affiliates`, un bloque nuevo con **cuántos afiliados van por cada hito** (5+, 25+,
+50+) y el monto comprometido: un afiliado acercándose a 50 es una salida de $100,000 que
+conviene ver venir con meses de anticipación. Usa exactamente el mismo criterio que el panel —
+si contara distinto, no sabrías cuál de los dos números creer.
+
+### Recorrido de verificación
+
+| # | Escenario | Resultado |
+|---|---|---|
+| 1 | Clic en `/r/<code>` | Cookie puesta por `Set-Cookie`, clic registrado, `clicks` +1, aterriza en la home limpia |
+| 2 | **Vuelve 3 días después escribiendo la URL y se registra** | **Comisión del afiliado. Este es el caso que hoy está roto** |
+| 3 | Cookie de A + clic en link de B + alta inmediata | Sigue siendo de **A** (primer toque) |
+| 4 | Cookie de 91 días | `parseAttribution` la descarta → no atribuye a nadie |
+| 5 | Sin cookie, con `?ref=` | Funciona como siempre, sin cambios |
+| 6 | Afiliado suspendido / pendiente | Redirige a la home sin cookie ni clic |
+| 7 | Auto-referido | Sigue bloqueado, venga el ref de la cookie o de la URL |
+| 8 | Origen de la cookie | `Set-Cookie` del handler, `httpOnly` — JS no puede leerla ni escribirla |
+| 9 | Barra del bono | Cuenta activas con ≥3 mensualidades pagadas, **sin prorrateos**; muestra el bruto aparte |
+| 10 | Ticket de otro afiliado por id en la URL | 404 en leer, responder y marcar leído |
+| 11 | Nota interna | Filtrada en el `where`; nunca llega al panel del afiliado |
+| 12 | Afiliado sin manager | La pantalla funciona igual, con el canal general |
+
+### Build
+
+`npm run build` completo y **verde**, sin pipe: `prisma generate` OK, **0 errores de tipos**,
+**365/365** páginas prerenderizadas. Rutas nuevas en el manifest: `ƒ /r`, `ƒ /r/[code]`,
+`ƒ /afiliados/soporte` + `/[id]`, `ƒ /admin/soporte-afiliados` + `/[id]`,
+`ƒ /api/afiliados/soporte/*`, `ƒ /api/admin/affiliate-support/tickets/*` y
+`ƒ /api/admin/affiliates/[id]/account-manager`. Los `prisma:error` de `DATABASE_URL` del
+prerender son los de siempre (no hay `.env` local) y los warnings (clases ambiguas de Tailwind,
+`Critical dependency` de `file-type`) son preexistentes.
+
+### Qué probar en producción
+
+1. **El caso 2 de la tabla**, que es el que justifica la ola: entra por `/r/<código>`, cierra el
+   navegador, vuelve al día siguiente escribiendo `dalecontrol.com` y regístrate. La clínica
+   tiene que quedar atribuida.
+2. Que la cookie `dc_aff` aparezca en DevTools → Application → Cookies **con `HttpOnly` marcado**
+   y expiración a 90 días.
+3. Crear un link nuevo en `/afiliados/herramientas`: debe mostrar `dalecontrol.com/r/<8 chars>`,
+   copiarse bien y **redirigir a la home**, no a la página de socio.
+4. Que un link viejo (`/socio/<slug>?c=...`) siga funcionando y sumando clics.
+5. El bloque del bono en `/afiliados/inicio` con una cuenta real: comprobar que el número que
+   califica cuadra con las mensualidades pagadas de sus clínicas.
+6. Asignar un manager a un afiliado desde `/admin/affiliates/<id>` y ver la tarjeta con el botón
+   de WhatsApp en `/afiliados/soporte`.
+7. Abrir un ticket como afiliado, responderlo desde `/admin/soporte-afiliados`, y **guardar una
+   nota interna**: confirmar que no aparece del lado del afiliado.
+
+### Límites conocidos
+
+- **Adjuntos fuera de esta ola.** El bucket `affiliate-support` no existe en Supabase y crearlo
+  es manual. El campo `attachments` queda en la BD y en los DTO (siempre `[]`); cuando exista el
+  bucket, se activa en `service.ts` más el input de archivos.
+- **GA4 y Google Ads siguen sin documentarse** en el aviso de privacidad. Existen
+  (`src/lib/analytics/ga4.ts` y el tag inline del layout) y son un hueco **preexistente**. El
+  texto nuevo se escribió **sin ninguna frase de exhaustividad** para que no mienta hoy, pero
+  documentarlos obligaría además a listar a Google en la sección de Transferencias.
+- El afiliado no puede cerrar ni calificar su ticket (el admin sí cambia estado); la UI ya
+  muestra el rating en solo lectura si algún día se agrega.
+- Se corrigió de paso un bug del menú del admin: `isActive` usaba `startsWith(href)` suelto, así
+  que `/admin/soporte-afiliados` encendía también "Soporte".
+
+**SQL:** `sql/afiliados-atribucion-soporte.sql` — ya aplicado en Supabase; se guarda para el
+histórico y como red de auto-reparación (cada columna con `ADD COLUMN IF NOT EXISTS`, así que
+re-correrlo completa cualquier diferencia sin tocar datos). Incluye RLS deny-all en las dos
+tablas nuevas. No se tocaron el motor de comisiones, `globals.css`, `src/lib/support/**` ni las
+tablas de soporte de clínicas.

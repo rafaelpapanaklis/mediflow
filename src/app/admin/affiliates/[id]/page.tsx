@@ -3,6 +3,7 @@ export const dynamic = "force-dynamic";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
+import { formatWhatsappDisplay, type AccountManagerDTO } from "@/lib/account-manager/types";
 import { AffiliateDetailClient } from "./affiliate-detail-client";
 
 /**
@@ -53,5 +54,36 @@ export default async function AdminAffiliateDetailPage({ params }: { params: { i
 
   if (!affiliate) notFound();
 
-  return <AffiliateDetailClient initial={affiliate} />;
+  // Manager de cuenta asignado. Query APARTE y con su propio catch (NO metida en
+  // el select de arriba): si la columna affiliates."accountManagerId" todavía no
+  // existiera, ampliar aquel select tumbaría el findUnique entero y el
+  // `.catch(() => null)` mandaría la ficha a notFound(). Así el peor caso es
+  // "sin manager asignado", que es un estado VÁLIDO.
+  let accountManager: AccountManagerDTO | null = null;
+  try {
+    const withManager = await prisma.affiliate.findUnique({
+      where: { id: params.id },
+      select: {
+        accountManager: {
+          select: {
+            id: true, name: true, photoUrl: true, whatsappE164: true, whatsappDisplay: true,
+            days: true, startMinutes: true, endMinutes: true, timezone: true, status: true,
+          },
+        },
+      },
+    });
+    const m = withManager?.accountManager;
+    if (m) {
+      accountManager = {
+        ...m,
+        photoUrl: m.photoUrl ?? null,
+        // Si el admin no capturó el formateado, se deriva del E.164.
+        whatsappDisplay: m.whatsappDisplay || formatWhatsappDisplay(m.whatsappE164),
+      };
+    }
+  } catch (e) {
+    console.warn("[admin/affiliates/:id] manager de cuenta no disponible:", e);
+  }
+
+  return <AffiliateDetailClient initial={affiliate} accountManager={accountManager} />;
 }

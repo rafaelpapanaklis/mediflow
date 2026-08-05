@@ -6,7 +6,7 @@ import toast from "react-hot-toast";
 import {
   Clock, CheckCircle2, XCircle, Ban,
   MousePointerClick, Wallet, DollarSign, TrendingUp,
-  Coins, Percent, Repeat,
+  Coins, Percent, Repeat, Trophy,
 } from "lucide-react";
 import { CardNew } from "@/components/ui/design-system/card-new";
 import { ButtonNew } from "@/components/ui/design-system/button-new";
@@ -176,6 +176,13 @@ type PayoutConfigResponse = {
   exists: boolean;
   plans: PayoutPlanRow[];
 };
+
+/**
+ * Bloque `milestones` de /metrics: cuántos afiliados alcanzan hoy cada escalón
+ * del Bono por Clínicas Activas. Se toma DEL CONTRATO del endpoint (no se
+ * redeclara) para que un cambio de shape rompa aquí en compilación.
+ */
+type MilestoneMetrics = AdminAffiliateMetricsResponse["milestones"];
 
 /** Bloque `payout` que /metrics agrega con el estado del motor de comisiones. */
 type PayoutMetrics = {
@@ -564,6 +571,11 @@ export function AffiliatesClient({ initial }: { initial: AffiliateRow[] }) {
   // El bloque `payout` de /metrics puede no existir todavía (lo agrega el
   // motor de comisiones): se lee tolerante y solo se pinta si viene.
   const payoutMetrics: PayoutMetrics | null = (metrics as any)?.payout ?? null;
+
+  // Igual de tolerante: un deploy viejo del endpoint no manda `milestones`.
+  const milestoneMetrics: MilestoneMetrics | null = (metrics as any)?.milestones ?? null;
+  const showMilestoneMetrics =
+    !!milestoneMetrics?.enabled && (milestoneMetrics.tiers?.length ?? 0) > 0;
 
   function setPayNum(key: PayoutNumberKey, value: string) {
     setPayForm((prev) => {
@@ -1147,6 +1159,102 @@ export function AffiliatesClient({ initial }: { initial: AffiliateRow[] }) {
                 icon={TrendingUp}
               />
             </div>
+
+            {/* Bono por Clínicas Activas: cuántos afiliados van por cada hito.
+                Es la alerta anticipada — un afiliado acercándose al escalón
+                mayor es una salida grande que conviene ver venir. El criterio
+                es EXACTAMENTE el que ve el afiliado en su panel: clínicas
+                activas con las mensualidades pagadas que exigen los términos.
+                Apagado el bono (o sin escalones), el bloque no aparece. */}
+            {showMilestoneMetrics && (
+              <div style={{ marginBottom: 14 }}>
+                <CardNew
+                  title="Bono por Clínicas Activas"
+                  sub={`Afiliados que hoy alcanzan cada hito · cuenta cada clínica activa con al menos ${milestoneMetrics.minPaidInvoices} mensualidades pagadas`}
+                >
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 190px), 1fr))",
+                      gap: 12,
+                    }}
+                  >
+                    {milestoneMetrics.tiers.map((t, i) => {
+                      // El escalón mayor es el último (mismo criterio que la
+                      // landing y que el panel): es el único con acento morado.
+                      const isTop = i === milestoneMetrics.tiers.length - 1;
+                      return (
+                        <div
+                          key={t.n}
+                          style={{
+                            padding: "12px 14px",
+                            borderRadius: 12,
+                            border: isTop ? "1px solid var(--border-brand)" : "1px solid var(--border-soft)",
+                            background: isTop ? "var(--brand-soft)" : "var(--bg-elev-2)",
+                          }}
+                        >
+                          <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
+                            <span style={{ color: isTop ? "var(--violet-400)" : "var(--text-3)", display: "inline-flex" }}>
+                              <Trophy size={14} aria-hidden />
+                            </span>
+                            <span style={{ fontSize: 12, color: "var(--text-3)" }}>
+                              {t.clinics} clínicas · {formatCurrency(t.mxn)}
+                            </span>
+                          </div>
+                          <div
+                            className="mono"
+                            style={{
+                              fontSize: 22,
+                              fontWeight: 700,
+                              letterSpacing: "-0.02em",
+                              color: t.affiliates > 0 ? "var(--text-1)" : "var(--text-3)",
+                              marginTop: 6,
+                            }}
+                          >
+                            {t.affiliates}
+                          </div>
+                          <div style={{ fontSize: 11.5, color: "var(--text-3)", marginTop: 2 }}>
+                            {t.affiliates === 1 ? "afiliado lo alcanza" : "afiliados lo alcanzan"}
+                          </div>
+                          <div
+                            style={{
+                              fontSize: 11.5,
+                              color: t.committedMxn > 0 ? "var(--warning)" : "var(--text-3)",
+                              marginTop: 8,
+                              paddingTop: 8,
+                              borderTop: "1px solid var(--border-soft)",
+                            }}
+                          >
+                            Comprometido: <strong>{formatCurrency(t.committedMxn)}</strong>
+                          </div>
+                          <div style={{ fontSize: 11, color: "var(--text-3)", marginTop: 4 }}>
+                            {t.approaching === 0
+                              ? "Nadie va cerca todavía"
+                              : t.approaching === 1
+                                ? "1 afiliado va cerca"
+                                : `${t.approaching} afiliados van cerca`}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  <p style={{ fontSize: 12, color: "var(--text-3)", lineHeight: 1.5, margin: "12px 0 0" }}>
+                    Salida total si todos cobraran hoy:{" "}
+                    <strong style={{ color: "var(--text-1)" }}>{formatCurrency(milestoneMetrics.committedMxn)}</strong>{" "}
+                    · {milestoneMetrics.affiliatesWithQualifying}{" "}
+                    {milestoneMetrics.affiliatesWithQualifying === 1
+                      ? "afiliado tiene al menos una clínica que califica"
+                      : "afiliados tienen al menos una clínica que califica"}
+                    {milestoneMetrics.topQualifying > 0 && (
+                      <> · el que va adelante lleva {milestoneMetrics.topQualifying}</>
+                    )}
+                    . El sistema <strong>no paga</strong> estos bonos: solo cuenta el avance, la entrega sigue
+                    siendo manual.
+                  </p>
+                </CardNew>
+              </div>
+            )}
 
             {/* Top afiliados + inactivos */}
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 430px), 1fr))", gap: 14 }}>

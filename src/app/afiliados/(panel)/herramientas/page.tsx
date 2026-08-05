@@ -26,26 +26,62 @@ import {
   normalizePlanKey,
   type ProgramMode,
 } from "@/lib/affiliates/payout";
+import { siteBase, affiliateLinkUrl, baseReferralUrl } from "@/lib/affiliates/link-url";
 
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://www.dalecontrol.com";
+// Lectura defensiva de la columna nueva: si `publicCode` todavía no existe en
+// la BD (SQL sin correr) el SELECT revienta. Antes de dar la pantalla por
+// muerta (ready=false) reintentamos sin esa columna: los links se siguen
+// listando y copiando con su URL histórica. Si falta la TABLA entera el
+// segundo intento también falla y sube al catch de siempre.
+type LinkRow = {
+  id: string;
+  name: string;
+  campaign: string;
+  clicks: number;
+  publicCode: string | null;
+};
+
+async function findLinkRows(affiliateId: string): Promise<LinkRow[]> {
+  try {
+    return await prisma.affiliateLink.findMany({
+      where: { affiliateId },
+      orderBy: { createdAt: "asc" },
+      select: { id: true, name: true, campaign: true, clicks: true, publicCode: true },
+    });
+  } catch {
+    const rows = await prisma.affiliateLink.findMany({
+      where: { affiliateId },
+      orderBy: { createdAt: "asc" },
+      select: { id: true, name: true, campaign: true, clicks: true },
+    });
+    return rows.map((r) => ({ ...r, publicCode: null }));
+  }
+}
 
 export default async function HerramientasPage() {
   const ctx = await getAffiliateContext();
   if (!ctx) redirect("/afiliados/login");
 
   const affiliateId = ctx.affiliateId;
-  const base = SITE_URL.replace(/\/$/, "");
   const slug = ctx.affiliate.slug;
-  const partnerUrl = `${base}/socio/${slug}`;
+  // La landing de socio sigue siendo el destino que reparten el kit de
+  // marketing y las plantillas ({tu_link}); por eso partnerUrl no desaparece.
+  const partnerUrl = `${siteBase()}/socio/${slug}`;
+  // El link BASE (sin campaña) se arma en el servidor: link-url.ts importa
+  // prisma y crypto, así que no puede viajar al componente cliente.
+  const baseUrl = baseReferralUrl(ctx.affiliate.referralCode);
 
   let ready = true;
   let links: ToolLink[] = [];
   let coupon: AffiliateCouponInfo | null = null;
 
-  // Links + conversiones por campaña (tablas nuevas → defensivo)
+  // Links + conversiones por campaña (tablas nuevas → defensivo).
+  // La URL se arma con affiliateLinkUrl(), la MISMA función que usa
+  // /api/afiliados/links: antes esta page la escribía a mano y un link recién
+  // creado (que venía del POST) podía verse distinto al de al lado.
   try {
     const [rows, convGroups] = await Promise.all([
-      prisma.affiliateLink.findMany({ where: { affiliateId }, orderBy: { createdAt: "asc" } }),
+      findLinkRows(affiliateId),
       prisma.affiliateConversion.groupBy({
         by: ["campaign"],
         where: { affiliateId },
@@ -57,9 +93,10 @@ export default async function HerramientasPage() {
       id: r.id,
       name: r.name,
       campaign: r.campaign,
+      publicCode: r.publicCode,
       clicks: r.clicks,
       conversions: convByCampaign.get(r.campaign) ?? 0,
-      url: `${partnerUrl}?c=${r.campaign}`,
+      url: affiliateLinkUrl(r, slug),
     }));
   } catch {
     ready = false;
@@ -164,7 +201,12 @@ export default async function HerramientasPage() {
         title="Tus links por campaña"
         sub="Crea un link por canal (Facebook, WhatsApp, expos...) y descubre cuál te trae más clínicas."
       >
-        <LinksManager initialLinks={links} ready={ready} />
+        <LinksManager
+          initialLinks={links}
+          ready={ready}
+          baseUrl={baseUrl}
+          referralCode={ctx.affiliate.referralCode}
+        />
       </CardNew>
 
       {/* Cupón propio */}

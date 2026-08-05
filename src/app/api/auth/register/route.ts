@@ -8,6 +8,7 @@ import { sendWelcomeEmail } from "@/lib/email";
 import { SITE_URL } from "@/lib/seo";
 import { logError } from "@/lib/safe-log";
 import { resolveApprovedAffiliateByCode } from "@/lib/affiliates";
+import { AFFILIATE_COOKIE, parseAttribution } from "@/lib/affiliates/attribution-cookie";
 import { ensureClinicTerms, effectiveAffiliateMode, getPayoutConfig } from "@/lib/affiliates/payout";
 import { sendAffiliateNewReferralEmail } from "@/lib/affiliate-emails";
 
@@ -108,13 +109,53 @@ export async function POST(req: NextRequest) {
         : paymentMethodType === "paypal" || paymentMethodType === "transfer";
     // "none" cae al else implícito → false (correcto, no hay método capturado)
 
-    // Atribución de afiliado (best-effort): ?ref=<referralCode> del body o del
-    // query string. Solo se aplica si es un Affiliate APPROVED. Nunca rompe el
-    // registro si el ref es inválido (resolveApprovedAffiliateByCode → null).
-    const refCode = data.ref ?? req.nextUrl.searchParams.get("ref") ?? undefined;
+    // ── Atribución de afiliado (best-effort) ─────────────────────────────
+    // REGLA DE PRIMER TOQUE: manda la cookie dc_aff sobre el ?ref= de esta
+    // URL. La cookie la sembró /r/<code> la PRIMERA vez que el visitante tocó
+    // un link de afiliado; el ?ref de ahora es un toque POSTERIOR. Quien hizo
+    // el trabajo de traer al cliente fue el primero, aunque el alta se complete
+    // días después y entrando por otra parte. Caso contraintuitivo que se
+    // respeta a propósito: cookie de A + clic en el link de B + registro
+    // inmediato ⇒ la comisión es de A.
+    //
+    // Se lee en el SERVIDOR (la cookie es httpOnly) y dentro de try/catch: una
+    // cookie corrupta NO puede romper un alta — se cae a "sin atribución" pero
+    // el registro se completa.
+    let cookieRef: string | undefined;
+    let cookieCampaign: string | null = null;
+    let cookieWins = false;
+    try {
+      const attribution = parseAttribution(req.cookies.get(AFFILIATE_COOKIE)?.value);
+      if (attribution) {
+        cookieRef = attribution.ref;
+        cookieCampaign = attribution.campaign;
+        cookieWins = true;
+      }
+    } catch {
+      cookieWins = false;
+    }
+
+    // Fuente GANADORA: la cookie vigente si la hay; si no, el ?ref/?c de
+    // siempre (comportamiento histórico intacto). El ref y la campaña salen
+    // SIEMPRE de la MISMA fuente: mezclarlas descuadraría las conversiones por
+    // campaña del panel (AffiliateConversion.campaign) y la atribución a
+    // vendedor por affiliateId_campaign de más abajo.
+    const refCode = cookieWins
+      ? cookieRef
+      : (data.ref ?? req.nextUrl.searchParams.get("ref") ?? undefined);
+    const rawCampaign = cookieWins
+      ? (cookieCampaign ?? "")
+      : (data.campaign ?? req.nextUrl.searchParams.get("c") ?? "");
+
+    // Solo se aplica si es un Affiliate APPROVED. Nunca rompe el registro si el
+    // ref es inválido (resolveApprovedAffiliateByCode → null). Ojo: si ganó la
+    // cookie y su afiliado ya no resuelve (suspendido, borrado), el alta se
+    // queda SIN atribución — NO se cae de vuelta al ?ref, porque eso le
+    // regalaría al último toque una comisión que era del primero.
     let referringAffiliate = await resolveApprovedAffiliateByCode(refCode);
     // Anti self-referral: si el email del registro es el del propio afiliado,
     // se anula SOLO la atribución (el alta procede normal, sin comisión).
+    // Aplica igual venga el ref de la cookie o de la URL.
     if (
       referringAffiliate &&
       referringAffiliate.email.trim().toLowerCase() === data.email.trim().toLowerCase()
@@ -122,9 +163,8 @@ export async function POST(req: NextRequest) {
       referringAffiliate = null;
     }
 
-    // Campaña del link de afiliado (body o query ?c=), solo para atribución
-    // de la conversión. Formato estricto; inválida → se ignora en silencio.
-    const rawCampaign = data.campaign ?? req.nextUrl.searchParams.get("c") ?? "";
+    // Campaña de la fuente ganadora, solo para atribución de la conversión.
+    // Formato estricto; inválida → se ignora en silencio.
     const campaign = /^[a-z0-9-]{1,40}$/.test(rawCampaign) ? rawCampaign : undefined;
 
     // Cupón (best-effort, NUNCA rompe el alta): valida contra el sistema

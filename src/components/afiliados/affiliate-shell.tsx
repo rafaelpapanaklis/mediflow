@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
-import { LayoutDashboard, Settings, LogOut, Menu, X, Handshake, BarChart3, FileText, Megaphone, Users } from "lucide-react";
+import { LayoutDashboard, Settings, LogOut, Menu, X, Handshake, BarChart3, FileText, Megaphone, Users, LifeBuoy } from "lucide-react";
 import "@/app/panel-chrome-va.css";
 
 type NavItem = {
@@ -19,6 +19,7 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/afiliados/estadisticas", label: "Estadísticas", icon: BarChart3 },
   { href: "/afiliados/reportes", label: "Reportes", icon: FileText },
   { href: "/afiliados/configuracion", label: "Datos de pago", icon: Settings },
+  { href: "/afiliados/soporte", label: "Soporte", icon: LifeBuoy },
 ];
 
 export function AffiliateShell({

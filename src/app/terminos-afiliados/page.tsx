@@ -16,7 +16,7 @@ export const metadata: Metadata = {
 // el PUT del admin la revalida (ver @/lib/cache/public-pricing).
 export const revalidate = 600;
 
-const LAST_UPDATED = "4 de agosto de 2026";
+const LAST_UPDATED = "5 de agosto de 2026";
 const PROVIDER = "DaleControl, marca operada por Efthymios Rafail Papanaklis (persona física)";
 const CONTACT_EMAIL = "hola@dalecontrol.com";
 
@@ -102,6 +102,47 @@ export default async function TerminosAfiliadosPage() {
         <p>
           Cada clínica queda ligada al afiliado cuyo <b>link de referido o cupón</b> haya utilizado
           al momento de registrarse.
+        </p>
+        <p>
+          <b>Ventana de atribución: primer toque y 90 días.</b> Cuando la atribución viene de un
+          link de referido, la decide el <b>primer</b> link de afiliado con el que la persona llegó
+          al sitio. Ese primer ingreso se guarda en el navegador de esa persona y la ventana de
+          atribución dura <b>90 días naturales</b>. Sobre esa regla se resuelven todos los casos:
+        </p>
+        <ul>
+          <li>
+            Si dentro de esos 90 días la persona vuelve por su cuenta —escribiendo la dirección,
+            desde un buscador, desde redes sociales o por donde sea— y se registra, la clínica es
+            del afiliado del <b>primer toque</b>.
+          </li>
+          <li>
+            Si dentro de esos 90 días la persona hace clic en el link de <b>otro</b> afiliado, la
+            atribución <b>sigue siendo del primero</b>. La ventana no se reasigna al último link
+            utilizado ni se abre una segunda ventana en paralelo.
+          </li>
+          <li>
+            Mientras la ventana esté abierta, <b>tiene prioridad</b> sobre el link o el cupón que
+            se utilice al momento del alta. El <b>cupón</b> de afiliado atribuye la clínica cuando
+            no hay una ventana de atribución abierta.
+          </li>
+          <li>
+            Pasados los <b>90 días sin que la clínica se registre</b>, la ventana se cierra y ese
+            contacto <b>ya no se atribuye a nadie</b>: quien se registre después, llegando por su
+            cuenta, no genera comisión para ningún afiliado. La ventana <b>no se renueva ni se
+            extiende</b> con visitas posteriores; solo un nuevo ingreso por un link de afiliado,
+            una vez cerrada la anterior, abre una ventana nueva.
+          </li>
+          <li>
+            La ventana vive en el navegador de la persona: si <b>borra las cookies</b>, navega en
+            modo privado o entra desde <b>otro dispositivo o navegador</b>, la ventana se pierde.
+            En ese caso la atribución solo puede darse si vuelve a entrar por un link de afiliado o
+            si captura un cupón de afiliado al registrarse.
+          </li>
+        </ul>
+        <p>
+          Para sostener esa ventana, el sitio guarda en el navegador de la persona el código del
+          afiliado, la campaña del link y la fecha del primer ingreso, <b>sin ningún dato
+          personal</b>. El detalle está en el <Link href="/privacidad">Aviso de Privacidad</Link>.
         </p>
         <p>
           <b>Una clínica pertenece a un solo afiliado.</b> La atribución se fija en el alta y no se

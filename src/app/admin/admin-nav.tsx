@@ -29,6 +29,7 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/admin/payments",     label: "Pagos",        icon: CreditCard,      section: "main"   },
   { href: "/admin/ai-billing",   label: "Tesorería IA", icon: Coins,           section: "main"   },
   { href: "/admin/soporte",      label: "Soporte",      icon: LifeBuoy,        section: "main"   },
+  { href: "/admin/soporte-afiliados", label: "Soporte afiliados", icon: LifeBuoy, section: "main" },
   { href: "/admin/account-managers", label: "Managers",  icon: UserRound,      section: "main"   },
   { href: "/admin/churn",        label: "Retención",    icon: TrendingDown,    section: "main"   },
   { href: "/admin/onboarding",   label: "Onboarding",   icon: CheckSquare,     section: "main"   },
@@ -47,7 +48,12 @@ const NAV_ITEMS: NavItem[] = [
 export function AdminSidebar({
   counts,
 }: {
-  counts?: { clinics?: number; atRisk?: number; supportPending?: number };
+  counts?: {
+    clinics?: number;
+    atRisk?: number;
+    supportPending?: number;
+    affiliateSupportPending?: number;
+  };
 }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -69,18 +75,23 @@ export function AdminSidebar({
 
   function isActive(href: string) {
     if (href === "/admin") return pathname === "/admin";
-    return pathname.startsWith(href);
+    // Coincidencia por SEGMENTO, no por prefijo de texto: con startsWith a secas
+    // "/admin/soporte-afiliados" también encendía "/admin/soporte" y quedaban
+    // dos items activos a la vez.
+    return pathname === href || pathname.startsWith(`${href}/`);
   }
 
   function renderItem(item: NavItem) {
     const active = isActive(item.href);
     const Icon   = item.icon;
     let count: number | undefined;
-    // Soporte es el único badge de ALERTA: tickets esperando MI respuesta.
-    const alert = item.href === "/admin/soporte";
+    // Los dos soportes son los únicos badges de ALERTA: tickets esperando MI
+    // respuesta (clínicas y afiliados llevan contadores independientes).
+    const alert = item.href === "/admin/soporte" || item.href === "/admin/soporte-afiliados";
     if (item.href === "/admin/clinics") count = counts?.clinics;
     if (item.href === "/admin/churn")   count = counts?.atRisk;
-    if (alert)                          count = counts?.supportPending;
+    if (item.href === "/admin/soporte") count = counts?.supportPending;
+    if (item.href === "/admin/soporte-afiliados") count = counts?.affiliateSupportPending;
     return (
       <Link
         key={item.href}

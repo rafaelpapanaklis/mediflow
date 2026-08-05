@@ -372,7 +372,8 @@ model AccountManager {
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
-  clinics Clinic[]
+  clinics    Clinic[]
+  affiliates Affiliate[]
 
   @@index([status])
   @@map("account_managers")
@@ -3389,6 +3390,10 @@ model Affiliate {
   payoutMode    String          @default("recurring")
   payoutMethod  String?
   payoutDetails String?
+  /// Manager de cuenta asignado (sql/afiliados-atribucion-soporte.sql). null =
+  /// sin manager: la pantalla de soporte cae al canal general, nunca a una
+  /// tarjeta vacía. Mismo catálogo global que usan las clínicas.
+  accountManagerId String?
   createdAt     DateTime        @default(now())
   updatedAt     DateTime        @updatedAt
 
@@ -3398,8 +3403,11 @@ model Affiliate {
   links           AffiliateLink[]
   conversions     AffiliateConversion[]
   affiliateCoupons AffiliateCoupon[]
+  supportTickets   AffiliateSupportTicket[]
+  accountManager   AccountManager? @relation(fields: [accountManagerId], references: [id])
 
   @@index([status])
+  @@index([accountManagerId])
   @@map("affiliates")
 }
 
@@ -7366,15 +7374,22 @@ model SupportMessage {
 // con ramas paralelas.
 // ═══════════════════════════════════════════════════════════════════════════
 
-/// Link nombrado del afiliado ("Facebook", "Expo dental"). URL pública:
-/// /socio/<slug>?c=<campaign>. El click suma al contador en la página de
-/// socio y la campaña viaja al registro (AffiliateConversion.campaign).
+/// Link nombrado del afiliado ("Facebook", "Expo dental"). URL pública corta:
+/// /r/<publicCode>. El click suma al contador en /r y la campaña viaja al
+/// registro (AffiliateConversion.campaign) vía la cookie de atribución.
+/// La URL histórica /socio/<slug>?c=<campaign> sigue funcionando igual.
 model AffiliateLink {
   id          String   @id @default(cuid())
   affiliateId String
   sellerId    String? // vendedor dueño del link (equipo). null = link del propio afiliado. FK en SQL.
   name        String
   campaign    String // slug corto [a-z0-9-], inmutable (estabilidad de URL/QR)
+  /// Código opaco de 8 chars [a-z0-9] para la URL corta /r/<publicCode>.
+  /// Opcional: los links creados ANTES de sql/afiliados-atribucion-soporte.sql
+  /// lo tienen null y siguen usando /socio/<slug>?c=<campaign>.
+  /// Es opaco a propósito: un ?c=facebook adivinable dejaría manipular las
+  /// campañas de otro afiliado.
+  publicCode  String?  @unique
   clicks      Int      @default(0)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -7975,4 +7990,66 @@ model AffiliateClinicTerms {
 
   @@index([affiliateId])
   @@map("affiliate_clinic_terms")
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// SOPORTE DE AFILIADOS (ago 2026) — sql/afiliados-atribucion-soporte.sql
+//
+// TABLAS PROPIAS, NO se reusa support_tickets: el soporte de clínicas está
+// acoplado a clinicId de punta a punta (incluidos los adjuntos, con prefijo
+// support/{clinicId}/). Meterle afiliados arriesgaría soporte en producción.
+// Por eso esto es un ESPEJO 1:1 de SupportTicket/SupportMessage con
+// affiliateId donde el otro lleva clinicId.
+//
+// Estados/categorías/prioridades son String, igual que en el de clínicas; los
+// valores válidos los define src/lib/affiliate-support/types.ts (evita enums
+// de Postgres en el SQL manual). Al final del schema para no chocar con ramas
+// paralelas.
+// ═══════════════════════════════════════════════════════════════════════════
+
+model AffiliateSupportTicket {
+  id            String  @id @default(cuid())
+  folio         Int     @unique @default(autoincrement()) // se muestra como #AF-0001
+  affiliateId   String
+  createdById   String? // AffiliateUser.id (sin FK: el ticket sobrevive al usuario)
+  createdByName String?
+  subject       String
+  category      String  @default("DUDA") // COMISIONES | PAGOS | MATERIAL | CUENTA | DUDA
+  priority      String  @default("NORMAL") // BAJA | NORMAL | ALTA | URGENTE
+  status        String  @default("ABIERTO") // ABIERTO | EN_PROGRESO | ESPERANDO_RESPUESTA | RESUELTO | CERRADO
+  rating        Int? // 1-5, opcional al cerrar
+
+  // Campos de métricas/badges, mantenidos por el service en cada transición.
+  firstResponseAt        DateTime? // primera respuesta pública de soporte
+  lastAffiliateMessageAt DateTime?
+  lastSupportMessageAt   DateTime?
+  affiliateUnread        Boolean   @default(false) // novedades que el afiliado no ha visto
+
+  closedAt  DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  messages  AffiliateSupportMessage[]
+  affiliate Affiliate                @relation(fields: [affiliateId], references: [id], onDelete: Cascade)
+
+  @@index([affiliateId, status])
+  @@index([status, updatedAt])
+  @@map("affiliate_support_tickets")
+}
+
+model AffiliateSupportMessage {
+  id           String   @id @default(cuid())
+  ticketId     String
+  authorType   String // affiliate | support | system
+  authorId     String?
+  authorName   String?
+  body         String
+  attachments  Json? // AffiliateSupportAttachment[]: [{ path, name, size, type }]
+  internalNote Boolean  @default(false) // nota interna de soporte; el afiliado NUNCA la ve
+  createdAt    DateTime @default(now())
+
+  ticket AffiliateSupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+
+  @@index([ticketId, createdAt])
+  @@map("affiliate_support_messages")
 }

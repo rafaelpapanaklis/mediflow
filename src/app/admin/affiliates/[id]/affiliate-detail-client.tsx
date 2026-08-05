@@ -10,6 +10,8 @@ import { CardNew } from "@/components/ui/design-system/card-new";
 import { ButtonNew } from "@/components/ui/design-system/button-new";
 import { BadgeNew } from "@/components/ui/design-system/badge-new";
 import { KpiCard } from "@/components/ui/design-system/kpi-card";
+import { AffiliateAccountManagerBlock } from "@/components/admin/affiliate-account-manager-block";
+import type { AccountManagerDTO } from "@/lib/account-manager/types";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { formatRelativeDate } from "@/lib/format";
 // payout-core es la mitad PURA del motor (sin Prisma): importable desde el
@@ -98,7 +100,14 @@ const labelStyle: CSSProperties = {
   marginBottom: 3,
 };
 
-export function AffiliateDetailClient({ initial }: { initial: AffiliateDetailInitial }) {
+export function AffiliateDetailClient({
+  initial,
+  accountManager = null,
+}: {
+  initial: AffiliateDetailInitial;
+  /** Manager de cuenta ya resuelto en el server (null = sin asignar). */
+  accountManager?: AccountManagerDTO | null;
+}) {
   // DECISIÓN: la página server solo resuelve el encabezado (nombre/slug/estado)
   // y TODO lo pesado se pide aquí a GET /api/admin/affiliates/[id]/detail. Así
   // el cálculo de la ficha vive en UN solo lugar (el endpoint), el botón
@@ -301,6 +310,14 @@ export function AffiliateDetailClient({ initial }: { initial: AffiliateDetailIni
             {loading ? "Cargando…" : "Actualizar"}
           </ButtonNew>
         </div>
+      </div>
+
+      {/* 1b · Manager de cuenta.
+          Va FUERA del bloque que depende de `data`: la asignación se resuelve en
+          el server y no necesita el endpoint /detail, así que sigue funcionando
+          aunque la ficha pesada falle o esté cargando. */}
+      <div style={{ marginBottom: 18 }}>
+        <AffiliateAccountManagerBlock affiliateId={initial.id} initialManager={accountManager} />
       </div>
 
       {error && !data ? (

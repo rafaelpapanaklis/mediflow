@@ -1,8 +1,18 @@
 "use client";
 
+// Tres enlaces, del más corto al más específico. El corto (/r/<código>) es el
+// principal a compartir; los dos históricos SIGUEN aquí porque no son
+// duplicados suyos: /socio/<slug> es una landing de venta con contenido propio
+// (la que reparten el kit de marketing y las plantillas) y /signup?ref= entra
+// directo al alta. Además muchos afiliados ya los tienen impresos o pegados en
+// su bio: quitarlos de la pantalla no los desactivaría, solo dejaría al
+// afiliado sin saber qué está circulando.
+//
+// El corto llega YA ARMADO por prop: link-url.ts —la fuente única de estas
+// URLs— importa prisma y crypto, así que no puede cruzar al cliente.
 import { useState } from "react";
 import toast from "react-hot-toast";
-import { Copy, Check, Link2, UserPlus } from "lucide-react";
+import { Copy, Check, Link2, Globe, UserPlus } from "lucide-react";
 
 type LinkRow = {
   key: string;
@@ -10,27 +20,38 @@ type LinkRow = {
   hint: string;
   url: string;
   icon: React.ComponentType<{ size?: number | string }>;
+  badge?: string; // etiqueta corta junto al nombre ("Recomendado")
 };
 
 export function ReferralLinks({
   siteUrl,
   slug,
   referralCode,
+  shortUrl,
 }: {
   siteUrl: string;
   slug: string;
   referralCode: string;
+  shortUrl: string; // /r/<referralCode>, resuelto en el servidor
 }) {
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
 
   const base = siteUrl.replace(/\/$/, "");
   const rows: LinkRow[] = [
     {
+      key: "short",
+      label: "Tu link corto",
+      hint: "El más fácil de compartir y de dictar. Lleva a DaleControl y deja tu referido guardado 90 días, aunque la clínica se registre días después.",
+      url: shortUrl,
+      icon: Link2,
+      badge: "Recomendado",
+    },
+    {
       key: "page",
       label: "Tu página de socio",
       hint: "Una landing de venta de DaleControl lista para compartir. Cada botón ya incluye tu código.",
       url: `${base}/socio/${slug}`,
-      icon: Link2,
+      icon: Globe,
     },
     {
       key: "direct",
@@ -59,9 +80,25 @@ export function ReferralLinks({
         const copied = copiedKey === row.key;
         return (
           <div key={row.key} style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
               <Icon size={14} />
               <span style={{ fontSize: 13, fontWeight: 600, color: "var(--text-1)" }}>{row.label}</span>
+              {row.badge && (
+                <span
+                  style={{
+                    padding: "2px 8px",
+                    borderRadius: 999,
+                    background: "var(--brand-soft)",
+                    border: "1px solid var(--border-brand)",
+                    color: "var(--violet-400)",
+                    fontSize: 11,
+                    fontWeight: 600,
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  {row.badge}
+                </span>
+              )}
             </div>
             <div style={{ display: "flex", gap: 8, alignItems: "stretch" }}>
               <input

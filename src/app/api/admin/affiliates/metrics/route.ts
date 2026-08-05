@@ -9,13 +9,27 @@ import {
   roundMxn,
 } from "@/lib/affiliates/stats";
 import {
-  getPayoutConfig,
+  getPayoutSettings,
   fixedAmountFor,
+  milestoneTiers,
   normalizePlanKey,
   normalizePayoutMode,
 } from "@/lib/affiliates/payout";
+import {
+  MIN_PAID_INVOICES,
+  clinicQualifies,
+  paidInvoiceCountByClinic,
+} from "@/lib/affiliates/milestones-progress";
 
 export const dynamic = "force-dynamic";
+
+/**
+ * "Va cerca": a partir de qué fracción del umbral un afiliado entra en la
+ * alerta anticipada. NO es una regla del programa (los umbrales y los montos
+ * salen todos de la config) — es solo el corte visual para ver venir una salida
+ * grande con meses de anticipación.
+ */
+const NEAR_RATIO = 0.8;
 
 
 export interface AdminAffiliateTopRow {
@@ -57,6 +71,36 @@ export interface AdminAffiliatePayoutMetrics {
   byKindMxn: { pct: number; recurring: number; onetime: number };
 }
 
+/** Un escalón del Bono por Clínicas Activas, con cuántos afiliados lo alcanzan HOY. */
+export interface AdminAffiliateMilestoneTier {
+  /** 1 | 2 | 3 — el orden EN LA CONFIG. */
+  n: number;
+  /** Umbral de clínicas que califican (de la config, jamás escrito a mano). */
+  clinics: number;
+  /** Bono de ese escalón, pago único (de la config). */
+  mxn: number;
+  /** Afiliados que hoy llegan al umbral. */
+  affiliates: number;
+  /** Afiliados que aún no llegan pero van por ≥ NEAR_RATIO del umbral: la alerta anticipada. */
+  approaching: number;
+  /** affiliates × mxn — lo que costaría si todos cruzaran hoy. */
+  committedMxn: number;
+}
+
+export interface AdminAffiliateMilestoneMetrics {
+  /** false = bono apagado, sin escalones o SQL sin aplicar → el bloque no se pinta. */
+  enabled: boolean;
+  /** Mensualidades pagadas que exige la cláusula (mismo número que ve el afiliado). */
+  minPaidInvoices: number;
+  tiers: AdminAffiliateMilestoneTier[];
+  /** Suma de los committedMxn de todos los escalones ya alcanzados. */
+  committedMxn: number;
+  /** Afiliados con al menos 1 clínica que califica. */
+  affiliatesWithQualifying: number;
+  /** El mayor conteo que califica entre todos los afiliados (quién va adelante). */
+  topQualifying: number;
+}
+
 export interface AdminAffiliateMetricsResponse {
   program: {
     affiliatesTotal: number;
@@ -75,6 +119,8 @@ export interface AdminAffiliateMetricsResponse {
   inactive: AdminAffiliateInactiveRow[]; // APPROVED sin clicks en 30 días
   /** Motor de comisiones fijas (enabled=false si el SQL aún no se corrió). */
   payout: AdminAffiliatePayoutMetrics;
+  /** Bono por Clínicas Activas: cuántos afiliados van por cada hito (enabled=false si está apagado). */
+  milestones: AdminAffiliateMilestoneMetrics;
 }
 
 /**
@@ -94,7 +140,7 @@ export async function GET() {
     const since30 = new Date(now.getTime() - 30 * 86400000);
 
     // ── Batch 1: afiliados, clínicas referidas y comisiones ──────────────
-    const [statusGroups, affiliateList, signupGroups, payingClinics, activeReferred, commissionGroups] =
+    const [statusGroups, affiliateList, signupGroups, payingClinics, activeReferredClinics, commissionGroups] =
       await Promise.all([
         prisma.affiliate.groupBy({ by: ["status"], _count: { _all: true } }),
         prisma.affiliate.findMany({
@@ -114,8 +160,11 @@ export async function GET() {
         }),
         // activeClinicWhere() devuelve { OR: [...] }: va dentro de AND para
         // no pisar el filtro de affiliateId al combinarlos.
-        prisma.clinic.count({
+        // Se traen las FILAS (no un count) porque el bono por clínicas activas
+        // necesita cruzarlas con sus cobros pagados; el funnel usa .length.
+        prisma.clinic.findMany({
           where: { AND: [{ affiliateId: { not: null } }, activeClinicWhere(now)] },
+          select: { id: true, affiliateId: true },
         }),
         prisma.affiliateCommission.groupBy({
           by: ["affiliateId", "status"],
@@ -124,7 +173,7 @@ export async function GET() {
       ]);
 
     // ── Batch 2: clicks + config del motor (tablas nuevas — degradan) ────
-    const [clicksAllTime, clicks30d, clickGroups, lastClickRows, payoutCfg] = await Promise.all([
+    const [clicksAllTime, clicks30d, clickGroups, lastClickRows, payoutSettings] = await Promise.all([
       prisma.affiliateClick.count().catch(() => 0),
       prisma.affiliateClick.count({ where: { createdAt: { gte: since30 } } }).catch(() => 0),
       prisma.affiliateClick
@@ -136,10 +185,15 @@ export async function GET() {
         FROM "affiliate_clicks"
         GROUP BY 1
       `.catch(() => [] as Array<{ id: string; last: Date }>),
-      // Config del motor de comisiones fijas. null = sql/afiliados-comisiones.sql
-      // sin correr → el bloque `payout` sale apagado. Nunca lanza.
-      getPayoutConfig(),
+      // Config del motor + bonos por hitos en UNA lectura de la fila id=1
+      // (misma query que getPayoutConfig, sin SELECT extra). cfg = null si
+      // sql/afiliados-comisiones.sql no se corrió → el bloque `payout` sale
+      // apagado; milestones = null apaga el bloque de hitos. Nunca lanza.
+      getPayoutSettings(),
     ]);
+
+    const payoutCfg = payoutSettings.cfg;
+    const milestonesCfg = payoutSettings.milestones;
 
     // ── Merge en código ──────────────────────────────────────────────────
     const clicksByAff = new Map<string, number>();
@@ -189,7 +243,7 @@ export async function GET() {
     const funnel: AffiliateFunnel = {
       clicks: Number(clicksAllTime),
       signups: signupsTotal,
-      active: Number(activeReferred),
+      active: activeReferredClinics.length,
       paying: payingClinics.length,
     };
 
@@ -280,6 +334,86 @@ export async function GET() {
       }
     }
 
+    // ── Batch 4: Bono por Clínicas Activas ───────────────────────────────
+    // Cuántos afiliados alcanzan HOY cada escalón, con el MISMO criterio que ve
+    // el afiliado en su panel: clínicas ACTIVAS con al menos MIN_PAID_INVOICES
+    // cobros pagados. Contar aquí "activas" a secas daría un número distinto al
+    // suyo y ninguno de los dos sería creíble.
+    //
+    // Agregación GLOBAL, sin N+1 (nada de llamar a getMilestoneProgress por
+    // afiliado): las clínicas activas referidas ya vienen del batch 1, se pide
+    // UNA groupBy de cobros pagados y el cruce se hace en memoria.
+    let milestones: AdminAffiliateMilestoneMetrics = {
+      enabled: false,
+      minPaidInvoices: MIN_PAID_INVOICES,
+      tiers: [],
+      committedMxn: 0,
+      affiliatesWithQualifying: 0,
+      topQualifying: 0,
+    };
+
+    const tierList = milestonesCfg ? milestoneTiers(milestonesCfg) : [];
+    if (milestonesCfg?.milestonesEnabled === true && tierList.length > 0) {
+      try {
+        const paidByClinic = await paidInvoiceCountByClinic(
+          activeReferredClinics.map((c) => c.id),
+        );
+
+        // Clínicas que califican, contadas por afiliado.
+        const qualifyingByAff = new Map<string, number>();
+        for (const c of activeReferredClinics) {
+          if (!c.affiliateId) continue;
+          if (!clinicQualifies(paidByClinic.get(c.id))) continue;
+          qualifyingByAff.set(c.affiliateId, (qualifyingByAff.get(c.affiliateId) ?? 0) + 1);
+        }
+
+        // Map.forEach y no spread del iterador: el target de TS del repo no
+        // permite [...map.values()].
+        const counts: number[] = [];
+        let topQualifying = 0;
+        qualifyingByAff.forEach((n) => {
+          counts.push(n);
+          if (n > topQualifying) topQualifying = n;
+        });
+
+        let committedMxn = 0;
+        const tiers: AdminAffiliateMilestoneTier[] = tierList.map((t) => {
+          // Umbral de "va cerca": nunca el propio umbral (si no, un afiliado
+          // que ya lo alcanzó contaría dos veces).
+          const nearAt = Math.ceil(t.clinics * NEAR_RATIO);
+          let reached = 0;
+          let approaching = 0;
+          for (const n of counts) {
+            if (n >= t.clinics) reached += 1;
+            else if (n >= nearAt) approaching += 1;
+          }
+          const tierCommitted = roundMxn(reached * t.mxn);
+          committedMxn += tierCommitted;
+          return {
+            n: t.n,
+            clinics: t.clinics,
+            mxn: t.mxn,
+            affiliates: reached,
+            approaching,
+            committedMxn: tierCommitted,
+          };
+        });
+
+        milestones = {
+          enabled: true,
+          minPaidInvoices: MIN_PAID_INVOICES,
+          tiers,
+          committedMxn: roundMxn(committedMxn),
+          affiliatesWithQualifying: counts.length,
+          topQualifying,
+        };
+      } catch (err) {
+        // Mismo criterio que `payout`: el bloque se apaga y el endpoint sigue
+        // respondiendo 200 con el resto de las métricas.
+        console.error("[admin/affiliates/metrics] milestones", err);
+      }
+    }
+
     // Top 10: clínicas pagando desc → conversión desc (null al final).
     const top: AdminAffiliateTopRow[] = affiliateList
       .map((a) => {
@@ -344,6 +478,7 @@ export async function GET() {
       top,
       inactive,
       payout,
+      milestones,
     };
     return NextResponse.json(body);
   } catch (err) {

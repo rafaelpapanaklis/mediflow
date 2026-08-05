@@ -14,14 +14,18 @@ import { getAffiliateLevelInfo } from "@/lib/affiliate-levels";
 import { LevelProgress, type LevelAmountRow } from "@/components/afiliados/level-progress";
 import { getResolvedPlans } from "@/lib/plans";
 import {
-  getPayoutConfig,
+  getPayoutSettings,
   effectiveAffiliateMode,
   fixedAmountFor,
+  milestoneTiers,
   normalizePlanKey,
   commissionKindLabel,
   PAYOUT_MODE_LABELS,
   type ProgramMode,
 } from "@/lib/affiliates/payout";
+import { baseReferralUrl } from "@/lib/affiliates/link-url";
+import { getMilestoneProgress } from "@/lib/affiliates/milestones-progress";
+import { MilestonesCard } from "@/components/afiliados/milestones-card";
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://www.dalecontrol.com";
 
@@ -31,10 +35,13 @@ export default async function AffiliateHomePage() {
 
   const affiliateId = ctx.affiliateId;
 
-  // affiliateId SIEMPRE de la sesión, nunca del request. Promise.all ≤ 6.
-  // payoutCfg = null si sql/afiliados-comisiones.sql no está aplicado (motor
-  // inactivo → todo se queda en el % del nivel). getPayoutConfig nunca lanza.
-  const [referredClinics, byStatus, recent, payoutCfg, plans] = await Promise.all([
+  // affiliateId SIEMPRE de la sesión, nunca del request. Promise.all ≤ 6
+  // (PgBouncer). `getPayoutSettings` reemplaza a `getPayoutConfig`: es la MISMA
+  // lectura de la fila id=1 pero trae también los bonos por clínicas activas,
+  // así que el bloque nuevo no cuesta un SELECT extra.
+  // cfg = null si sql/afiliados-comisiones.sql no está aplicado (motor inactivo
+  // → todo se queda en el % del nivel). Nunca lanza.
+  const [referredClinics, byStatus, recent, payoutSettings, plans, milestoneProgress] = await Promise.all([
     prisma.clinic.count({ where: { affiliateId } }),
     prisma.affiliateCommission.groupBy({
       by: ["status"],
@@ -47,9 +54,19 @@ export default async function AffiliateHomePage() {
       orderBy: { createdAt: "desc" },
       take: 8,
     }),
-    getPayoutConfig(),
+    getPayoutSettings(),
     getResolvedPlans(),
+    // Progreso del bono por clínicas activas. Nunca lanza: degrada a ceros.
+    getMilestoneProgress(affiliateId),
   ]);
+
+  const payoutCfg = payoutSettings.cfg;
+
+  // Bono por Clínicas Activas: el bloque NO aparece si el admin lo apagó o si
+  // no queda ni un escalón utilizable (mismo criterio que la landing pública).
+  const milestoneTiersList = payoutSettings.milestones ? milestoneTiers(payoutSettings.milestones) : [];
+  const showMilestones =
+    payoutSettings.milestones?.milestonesEnabled === true && milestoneTiersList.length > 0;
 
   const pendingTotal = byStatus.find((g) => g.status === "pending")?._sum.commissionMxn ?? 0;
   const paidTotal = byStatus.find((g) => g.status === "paid")?._sum.commissionMxn ?? 0;
@@ -175,7 +192,14 @@ export default async function AffiliateHomePage() {
             </div>
           </div>
         </div>
-        <ReferralLinks siteUrl={SITE_URL} slug={ctx.affiliate.slug} referralCode={ctx.affiliate.referralCode} />
+        {/* El link corto se arma en el servidor: link-url.ts (fuente única de
+            estas URLs) importa prisma y no puede cruzar al cliente. */}
+        <ReferralLinks
+          siteUrl={SITE_URL}
+          slug={ctx.affiliate.slug}
+          referralCode={ctx.affiliate.referralCode}
+          shortUrl={baseReferralUrl(ctx.affiliate.referralCode)}
+        />
       </CardNew>
 
       {/* KPIs */}
@@ -195,6 +219,10 @@ export default async function AffiliateHomePage() {
           <KpiCard label="Tu comisión" value={`${levelInfo.pct}%`} icon={Percent} />
         )}
       </div>
+
+      {/* Bono por Clínicas Activas: su progreso personal (solo conteos, jamás
+          datos de las clínicas referidas). */}
+      {showMilestones && <MilestonesCard tiers={milestoneTiersList} progress={milestoneProgress} />}
 
       {/* Comisiones recientes */}
       <CardNew noPad title="Comisiones recientes">
