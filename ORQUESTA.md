@@ -4971,3 +4971,140 @@ se vea el trade-off en el código.
   calcula desde `clinics.affiliateId`.
 - **El filtro de bots**: intacto, mismo detector único.
 - **La redirección de `/r`**: nunca se frena, nunca devuelve error.
+
+══════════════════════════════════════════════════════════════════════════
+## Admin pagos fecha real y MRR unico ✅ (2026-08-05) · rama fix/pagos-fecha-mrr → main
+══════════════════════════════════════════════════════════════════════════
+2 commits sobre `origin/main` (rebasado encima de `aaa1ea0f`): `4fb18b04` (fecha) y el de MRR +
+aviso de precio heredado. **Sin SQL. Sin escrituras a Stripe.** `npx tsc --noEmit` 0 errores ·
+`npm run build` **exit 0** (365/365 páginas) · `npm run test:mrr` **10/10** (nuevo).
+
+### El diagnóstico, confirmado
+
+Las dos cosas eran ciertas, y apareció una tercera:
+
+- **(A) Fecha.** `payments-client.tsx` y `/admin` pintaban `inv.createdAt`, que es cuándo se
+  insertó LA FILA. Como los cobros históricos entraron de golpe por
+  `POST /api/admin/billing/backfill-stripe`, todos comparten el día de la importación. La fecha
+  buena ya estaba en `paidAt` (`recordStripeInvoice` la toma de `status_transitions.paid_at`).
+- **(B) MRR $0.** `/admin/payments` sumaba `Clinic.monthlyPrice`, columna que sólo escriben
+  `verify_payment` y `activate_clinic` de `/api/admin/billing`. Quien paga por Stripe Checkout
+  nunca la recibe → suma 0. `/admin` calculaba por plan contra `plan_configs` → otro número.
+- **(C) Extra: había un TERCER cálculo.** `GET /api/admin/billing` (línea 69) repetía el mismo
+  `_sum: { monthlyPrice }` con el mismo bug. Hoy no lo consume ninguna pantalla, pero era una
+  cuarta versión de la verdad esperando a que alguien la usara. Migrado también.
+
+De paso, `/admin/clientes/[supabaseId]` ya hacía `inv.paidAt ?? inv.createdAt` desde antes: las
+otras dos superficies eran las que estaban desalineadas, no al revés.
+
+### CAMBIO 1 — la fecha que se ve es la del cobro
+
+`src/lib/admin/payment-date.ts` (nuevo, puro, sin prisma: lo importan las pages server y el
+client component, que recibe las fechas ya serializadas). Las dos superficies muestran
+`paidAt ?? createdAt`; sin pagar, `paidAt` es null y `createdAt` sí es lo correcto (alta del
+cobro pendiente).
+
+**El orden fue lo delicado.** El aviso del prompt era exacto: en Postgres `ORDER BY x DESC` pone
+los **NULL PRIMERO**, así que `orderBy: [{paidAt:"desc"},{createdAt:"desc"}]` habría puesto los
+pendientes encabezando la lista. Y forzarlos al final tampoco sirve: los hunde a todos y la
+columna Fecha se ve desordenada. Prisma no sabe ordenar por un `COALESCE`, así que:
+
+- **/admin/payments**: dos consultas — las que tienen `paidAt` (ordenadas por `paidAt`) y las
+  que no (ordenadas por `createdAt`), cada una con su tope de 100 — y el orden final se decide
+  en JS con el comparador compartido. No es cosmética: como los conjuntos son disjuntos y cada
+  tanda viene ordenada por SU fecha, la unión contiene con certeza los 100 más recientes de
+  verdad. Traer "los 100 últimos por createdAt" y ordenarlos después dejaría fuera un cobro
+  viejo verificado hoy.
+- **/admin**: esa consulta no tiene `take`, así que basta ordenar en JS antes del `slice(0,10)`.
+
+**Matiz sin columna nueva:** cuando el cobro es más de 48 h anterior al alta de la fila, la
+fecha lleva `cursor: help`, una marca `·imp` y un `title` con "importado el <fecha>". El umbral
+de 48 h está en la constante `IMPORT_GAP_MS`: un cobro por Stripe lo registra el webhook el
+mismo día, así que esa distancia sólo pasa en un backfill.
+
+### CAMBIO 2 — un solo MRR
+
+`src/lib/admin/mrr.ts` es ahora el único punto de entrada; la aritmética vive en `mrr-core.ts`
+(puro, sin prisma — convención `-core` del repo, como `payout-core` o `audit-core`, para poder
+probarla sin base de datos). Lo usan **/admin**, **/admin/payments** y el GET de
+`/api/admin/billing`. Precedencia, documentada en el código:
+
+1. `clinic.monthlyPrice` si es **> 0** — precio negociado / activación manual;
+2. si no, el precio del plan desde `plan_configs` vía `getPlanLimits`.
+
+Cero números literales. `/admin` reusa las filas que ya cargó (`computeMrr`) en vez de
+consultar otra vez; `/admin/payments`, que no las tiene, llama a `getAdminMrr()`.
+
+Dos decisiones que quedaron por escrito para que nadie las "arregle" mal después:
+
+- **Sólo cuenta `subscriptionStatus === "active"`.** NO se usa `ACTIVE_SUBSCRIPTION_STATUSES`
+  (`@/lib/plan-status`), que incluye `trialing` y `paid` porque responde a otra pregunta —quién
+  tiene ACCESO al panel—. Una clínica en trial paga $0: contarla inflaría el MRR. Hay un test.
+- **Un plan que no exista en `plan_configs` vale 0**, no un precio inventado.
+
+El desglose por plan se devuelve y además se enseña bajo el KPI en las dos pantallas
+("2 BASIC · 1 PRO · 2 CLINIC"), para poder auditar el total sin abrir la base.
+
+### CAMBIO 3 — aviso de precio heredado en Stripe
+
+`getLivePaymentMethod` pasó a ser `getLiveSubscriptionSnapshot`: la **misma** llamada a
+`subscriptions.retrieve` que ya se hacía para el método de pago devuelve ahora también el
+importe recurrente (`items.data[0].price.unit_amount × quantity`, su `interval` y su
+`interval_count`). **Cero llamadas extra**, misma disciplina: sólo lectura, timeout 4 s, y si
+Stripe no responde la ficha se renderiza igual.
+
+La ficha de clínica compara ese importe contra el precio del plan en `plan_configs` y, si no
+coinciden, saca el aviso ámbar: *"Stripe cobra $X/mes pero el plan Profesional son $Y/mes —
+precio heredado"*. **No corrige nada**: cambiar precios en Stripe es decisión tuya.
+
+Tres cosas que evitan avisos falsos:
+
+- **La promo de primer mes no interfiere.** Lo verifiqué en `first-month-promo.ts`: se aplica
+  con un **cupón `duration: "once"`**, no con un Price distinto, así que el price conserva el
+  importe de lista. Un cliente recién dado de alta no dispara el aviso.
+- **Ciclos raros** (`interval_count` ≠ 1, tipo "cada 3 meses") no tienen precio de plan
+  comparable: se informa el importe y no se acusa a nadie.
+- **Suscripciones `canceled`/`incomplete_expired`** no reportan importe: ya no van a cobrar.
+
+### Verificación — y qué NO pude verificar
+
+- `npx tsc --noEmit` → **0 errores**.
+- `npm run build` → **exit 0**, salida completa leída (4,350 líneas): sin `Failed to compile`,
+  sin `Type error`, sin `Module not found`; 365/365 páginas. Los únicos `error:` del log son los
+  `DATABASE_URL not found` del prerender, que ya salían antes de tocar nada.
+- `npm run test:mrr` → **10/10** (script nuevo en package.json).
+
+**No pude comparar las dos pantallas contra datos reales: no hay `.env` local, así que no hay
+DATABASE_URL y las páginas de /admin no rinden con datos.** En vez de afirmar que las vi
+iguales, lo aseguré por construcción y con tests: hay un caso que corre las mismas filas por
+los dos caminos (`/admin` con filas ya cargadas, `/admin/payments` consultando) y exige el mismo
+total, y otro que reproduce el bug (5 clínicas activas sin `monthlyPrice` ya no dan $0). Al ser
+literalmente la misma función, divergir exigiría pasarle universos distintos.
+
+### El número: qué MRR da y de dónde sale cada peso
+
+Con los precios vigentes de `plan_configs` (BASIC $419 · PRO $689 · CLINIC $1,719) y **ninguna
+clínica con precio negociado**, el resultado es **$4,965/mes**, que es exactamente lo que ya
+mostraba `/admin` — el que estaba mal era `/admin/payments` con su $0. El desglose:
+
+| Plan   | Clínicas | Precio lista | Subtotal |
+|--------|----------|--------------|----------|
+| BASIC  | 2        | $419         | $838     |
+| PRO    | 1        | $689         | $689     |
+| CLINIC | 2        | $1,719       | $3,438   |
+| **Total** | **5** |              | **$4,965** |
+
+Con 5 clínicas activas y esos tres precios, **ésa es la única combinación que suma $4,965** (lo
+comprobé caso por caso), así que el reparto es ese salvo que alguna clínica tenga
+`monthlyPrice > 0`. Si la tiene, su precio negociado manda y el total cambia: **el desglose real
+lo tienes en vivo bajo el KPI**, y las clínicas con precio negociado se cuentan aparte en
+`byPlan[].negotiated` precisamente para poder auditarlo.
+
+### Riesgo conocido que NO toqué (decisión tuya)
+
+`verify_payment` escribe `monthlyPrice: invoice.amount` **tal cual**. Si registras a mano un
+pago que cubre 3 meses (el formulario deja poner el monto y el periodo libres), la clínica se
+queda con `monthlyPrice` = el total de los 3 meses, y por la regla de precedencia ese número
+manda sobre el del plan → MRR inflado para esa clínica. `activate_clinic` no tiene el problema
+(usa `getPlanLimits`). No lo cambié porque la regla de precedencia es la pedida y arreglarlo es
+decidir qué significa "monto" en ese formulario; queda anotado.

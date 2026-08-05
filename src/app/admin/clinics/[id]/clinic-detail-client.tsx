@@ -20,7 +20,7 @@ import type { TemplateChannel } from "@/lib/admin-templates";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import { FALLBACK_PLAN_PRICES_MXN } from "@/lib/plan-shared";
 import { ClinicAccountManagerBlock } from "@/components/admin/clinic-account-manager-block";
-import { ClinicPaymentMethodCard } from "@/components/admin/clinic-payment-method-card";
+import { ClinicPaymentMethodCard, type ClinicRecurringCharge } from "@/components/admin/clinic-payment-method-card";
 import type { AccountManagerDTO } from "@/lib/account-manager/types";
 import type { StripeLivePaymentMethod } from "@/lib/admin/stripe-payment-method";
 
@@ -65,6 +65,8 @@ interface Props {
   accountManager:       AccountManagerDTO | null;
   /** Método de pago vivo en Stripe. null = la clínica no tiene cliente en Stripe. */
   livePaymentMethod:    StripeLivePaymentMethod | null;
+  /** Importe recurrente de Stripe ya contrastado con el precio del plan. */
+  recurringCharge:      ClinicRecurringCharge | null;
   platformPayments:     PlatformPayments;
 }
 
@@ -85,6 +87,7 @@ export function AdminClinicDetailClient({
   clinicModuleRows,
   accountManager,
   livePaymentMethod,
+  recurringCharge,
   platformPayments,
 }: Props) {
   const askConfirm = useConfirm();
@@ -660,6 +663,7 @@ export function AdminClinicDetailClient({
           <ClinicPaymentMethodCard
             stripeCustomerId={clinic.stripeCustomerId ?? null}
             live={livePaymentMethod}
+            recurring={recurringCharge}
             signup={{
               collected: Boolean((clinic as any).paymentMethodCollected),
               type:      (clinic as any).paymentMethodType ?? null,

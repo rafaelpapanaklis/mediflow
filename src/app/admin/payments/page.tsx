@@ -1,6 +1,7 @@
 export const dynamic = "force-dynamic";
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
+import { getAdminMrr, mrrBreakdownHint, EMPTY_MRR } from "@/lib/admin/mrr";
 import { comparePaymentDateDesc } from "@/lib/admin/payment-date";
 import { PaymentsClient } from "./payments-client";
 
@@ -157,13 +158,10 @@ async function renderPaymentsPage() {
       }), { _sum: { amount: 0 } } as any),
     ]);
 
-  const mrrResult = await safe(
-    prisma.clinic.aggregate({
-      where: { subscriptionStatus: "active" },
-      _sum: { monthlyPrice: true },
-    }),
-    { _sum: { monthlyPrice: 0 } } as any,
-  );
+  // MRR compartido con /admin. Antes esta página sumaba Clinic.monthlyPrice,
+  // columna que sólo escribe /api/admin/billing: las clínicas que pagan por
+  // Stripe Checkout la tienen en 0 y el KPI marcaba $0 con 5 clínicas activas.
+  const mrr = await safe(getAdminMrr(), EMPTY_MRR);
 
   const clinics = await safe(
     prisma.clinic.findMany({
@@ -179,7 +177,6 @@ async function renderPaymentsPage() {
   // llegara como Decimal del driver.
   const thisMonth = Number(thisMonthRev?._sum?.amount ?? 0);
   const prevMonth = Number(prevMonthRev?._sum?.amount ?? 0);
-  const currentMRR = Number(mrrResult?._sum?.monthlyPrice ?? 0);
   const thisMonthPayments = Number(thisMonthRev?._count ?? 0);
 
   // Sanitizamos los arrays a plain objects antes de pasarlos al client
@@ -197,7 +194,8 @@ async function renderPaymentsPage() {
         activeClinics,
         trialClinics,
         expiredClinics,
-        currentMRR,
+        currentMRR: mrr.total,
+        mrrBreakdown: mrrBreakdownHint(mrr),
         thisMonthRevenue: thisMonth,
         thisMonthPayments,
         prevMonthRevenue: prevMonth,

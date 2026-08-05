@@ -71,6 +71,8 @@ interface Props {
     trialClinics: number;
     expiredClinics: number;
     currentMRR: number;
+    /** Desglose por plan del MRR ("2 BASIC · 1 PRO · 2 CLINIC"). */
+    mrrBreakdown: string;
     thisMonthRevenue: number;
     thisMonthPayments: number;
     prevMonthRevenue: number;
@@ -427,6 +429,7 @@ export function PaymentsClient({
           label="MRR actual"
           value={fmtMXN(metrics.currentMRR)}
           icon={DollarSign}
+          hint={metrics.mrrBreakdown}
           delta={{ value: `${metrics.activeClinics} clínicas activas`, direction: "up" }}
         />
         <KpiCard

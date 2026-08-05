@@ -5,7 +5,9 @@ import { prisma } from "@/lib/prisma";
 import { isStripeConfigured, STRIPE_SETUP_INSTRUCTIONS } from "@/lib/stripe";
 import { stripClinicSecrets } from "@/lib/clinic-secrets";
 import { formatWhatsappDisplay, type AccountManagerDTO } from "@/lib/account-manager/types";
-import { getLivePaymentMethod, type StripeLivePaymentMethod } from "@/lib/admin/stripe-payment-method";
+import { getLiveSubscriptionSnapshot, type StripeLivePaymentMethod } from "@/lib/admin/stripe-payment-method";
+import { getResolvedPlan } from "@/lib/plans";
+import type { ClinicRecurringCharge } from "@/components/admin/clinic-payment-method-card";
 import { AdminClinicDetailClient, type PlatformPayments } from "./clinic-detail-client";
 
 export const metadata: Metadata = { title: "Detalle Clínica — Admin DaleControl" };
@@ -111,15 +113,36 @@ export default async function AdminClinicDetailPage({ params }: { params: { id: 
     console.warn("[admin/clinics/:id] pagos de suscripción no disponibles:", e);
   }
 
-  // Método de pago VIGENTE en Stripe (solo lectura). El campo del alta
-  // (paymentMethodCollected) no se actualiza nunca, así que no sirve para saber
-  // qué tarjeta se va a cobrar. getLivePaymentMethod nunca lanza.
-  const livePaymentMethod: StripeLivePaymentMethod | null = clinic.stripeCustomerId
-    ? await getLivePaymentMethod({
+  // Método de pago e importe VIGENTES en Stripe (solo lectura, una sola
+  // consulta). El campo del alta (paymentMethodCollected) no se actualiza nunca,
+  // así que no sirve para saber qué tarjeta se va a cobrar.
+  // getLiveSubscriptionSnapshot nunca lanza.
+  const stripeSnapshot = clinic.stripeCustomerId
+    ? await getLiveSubscriptionSnapshot({
         stripeCustomerId:     clinic.stripeCustomerId,
         stripeSubscriptionId: clinic.stripeSubscriptionId ?? null,
       })
     : null;
+  const livePaymentMethod: StripeLivePaymentMethod | null = stripeSnapshot?.paymentMethod ?? null;
+
+  // Contraste contra el precio de lista del plan (plan_configs, fuente única).
+  // Sólo se compara cuando el ciclo es de 1 mes o 1 año: para "cada 3 meses" no
+  // hay precio de plan equivalente y se informa el importe sin juzgarlo.
+  let recurringCharge: ClinicRecurringCharge | null = null;
+  if (stripeSnapshot?.recurring) {
+    const r = stripeSnapshot.recurring;
+    const plan = await getResolvedPlan(clinic.plan);
+    recurringCharge = {
+      amountMxn:     r.amountMxn,
+      currency:      r.currency,
+      interval:      r.interval,
+      intervalCount: r.intervalCount,
+      planAmountMxn: r.intervalCount === 1
+        ? (r.interval === "year" ? plan.priceMxnAnnual : plan.priceMxnMonthly)
+        : null,
+      planLabel:     plan.label,
+    };
+  }
 
   // Catálogo de módulos del marketplace para el tab "Módulos". Filtramos
   // por isActive=true y category="Dental" (los 6 dentales del seed).
@@ -160,6 +183,7 @@ export default async function AdminClinicDetailPage({ params }: { params: { id: 
       clinicModuleRows={clinicModuleRows}
       accountManager={accountManager}
       livePaymentMethod={livePaymentMethod}
+      recurringCharge={recurringCharge}
       platformPayments={platformPayments}
     />
   );

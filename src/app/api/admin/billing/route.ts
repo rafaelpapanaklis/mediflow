@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { refundPayment } from "@/lib/stripe-subscriptions";
 import { isStripeConfigured, stripeUnavailableResponse } from "@/lib/stripe";
 import { getPlanLimits } from "@/lib/plans";
+import { getAdminMrr } from "@/lib/admin/mrr";
 import { isAdminAuthed, getAdminSession } from "@/lib/admin-auth";
 import { logAdminClinicMutation } from "@/lib/admin-audit";
 
@@ -66,9 +67,10 @@ export async function GET(req: NextRequest) {
     take: 30,
   });
 
-  const currentMRR = activeClinics > 0
-    ? (await prisma.clinic.aggregate({ where: { subscriptionStatus: "active" }, _sum: { monthlyPrice: true } }))._sum.monthlyPrice ?? 0
-    : 0;
+  // MISMA función que /admin y /admin/payments. Sumar Clinic.monthlyPrice daba
+  // $0: esa columna sólo la escriben verify_payment y activate_clinic (más
+  // abajo en este archivo), nunca Stripe Checkout.
+  const currentMRR = activeClinics > 0 ? (await getAdminMrr()).total : 0;
 
   return NextResponse.json({
     metrics: {

@@ -1,7 +1,11 @@
 import type Stripe from "stripe";
 import { getStripeSafe } from "@/lib/stripe";
+import { subscriptionItemInterval } from "@/lib/billing/proration";
 
 /**
+ * Lo que Stripe dice HOY de la suscripción de una clínica: con qué método se va
+ * a cobrar y CUÁNTO. Las dos cosas salen de la misma llamada.
+ *
  * Método de pago VIGENTE en Stripe — el que se va a cobrar en la próxima
  * renovación.
  *
@@ -31,6 +35,38 @@ export type StripeLivePaymentMethod =
   | { state: "none" }
   /** No se pudo consultar (Stripe sin configurar, caído, timeout, customer borrado). */
   | { state: "unavailable"; reason: string };
+
+/**
+ * Importe RECURRENTE que Stripe va a cobrar en la próxima renovación, leído del
+ * price del item de la suscripción.
+ *
+ * Existe porque hay suscripciones vivas con Price viejos (p. ej. $499 o $1,796)
+ * que ya no existen en plan_configs: van a renovar a ESE importe aunque el panel
+ * muestre el precio actual del plan. Compararlo es la única forma de enterarse.
+ *
+ * La promo de primer mes NO ensucia este dato: se aplica con un cupón
+ * `duration: "once"` (ver @/lib/billing/first-month-promo), así que el price
+ * conserva el importe de lista.
+ */
+export interface StripeRecurringCharge {
+  /** Importe por ciclo en PESOS (Stripe lo entrega en centavos) × cantidad. */
+  amountMxn: number;
+  /** "MXN", "USD"… en mayúsculas. */
+  currency: string;
+  interval: "month" | "year";
+  /** 1 salvo ciclos raros (cada 3 meses…), donde no hay precio de plan comparable. */
+  intervalCount: number;
+}
+
+/** Lo que se leyó de Stripe en UNA sola consulta. */
+export interface StripeSubscriptionSnapshot {
+  paymentMethod: StripeLivePaymentMethod;
+  /** null = no hay suscripción, no se pudo leer, o ya no va a renovar. */
+  recurring: StripeRecurringCharge | null;
+}
+
+/** Estados en los que la suscripción ya no va a cobrar nada más. */
+const DEAD_SUBSCRIPTION_STATUSES = new Set(["canceled", "incomplete_expired"]);
 
 /**
  * Presupuesto TOTAL de la consulta. El cliente de @/lib/stripe trae
@@ -78,20 +114,45 @@ function describe(
   };
 }
 
+/**
+ * Importe recurrente a partir de la suscripción que YA tenemos en memoria: cero
+ * llamadas extra a Stripe. null si no hay item, si el price es por tramos
+ * (`unit_amount` null) o si la suscripción ya no va a cobrar.
+ */
+function readRecurring(sub: Stripe.Subscription): StripeRecurringCharge | null {
+  if (DEAD_SUBSCRIPTION_STATUSES.has(sub.status)) return null;
+
+  // DaleControl crea la suscripción con UN item (ver buildSubscriptionUpdateParams).
+  const item = sub.items?.data?.[0];
+  const price = item?.price;
+  if (!price || price.unit_amount == null) return null;
+
+  return {
+    amountMxn: (price.unit_amount * (item.quantity ?? 1)) / 100,
+    currency: (price.currency ?? "mxn").toUpperCase(),
+    interval: subscriptionItemInterval(item),
+    intervalCount: price.recurring?.interval_count ?? 1,
+  };
+}
+
 async function lookup(
   stripe: Stripe,
   stripeCustomerId: string,
   stripeSubscriptionId: string | null,
-): Promise<StripeLivePaymentMethod> {
-  // 1) default_payment_method de la suscripción: es el que se cobra.
+): Promise<StripeSubscriptionSnapshot> {
+  let recurring: StripeRecurringCharge | null = null;
+
+  // 1) default_payment_method de la suscripción: es el que se cobra. De paso,
+  //    la MISMA respuesta trae el importe recurrente.
   if (stripeSubscriptionId) {
     const sub = await stripe.subscriptions.retrieve(
       stripeSubscriptionId,
       { expand: ["default_payment_method"] },
       REQUEST_OPTIONS,
     );
+    recurring = readRecurring(sub);
     const pm = await resolvePaymentMethod(stripe, sub.default_payment_method);
-    if (pm) return describe(pm, "subscription");
+    if (pm) return { paymentMethod: describe(pm, "subscription"), recurring };
   }
 
   // 2) Si la suscripción no lo fija, Stripe cae al del customer.
@@ -103,30 +164,44 @@ async function lookup(
   // `Response<Customer | DeletedCustomer>` es una intersección, no una unión
   // discriminada: TypeScript no estrecha solo con `if (customer.deleted)`.
   if ((customer as Stripe.DeletedCustomer).deleted) {
-    return { state: "unavailable", reason: "El cliente fue eliminado en Stripe" };
+    return {
+      paymentMethod: { state: "unavailable", reason: "El cliente fue eliminado en Stripe" },
+      recurring,
+    };
   }
 
   const invoiceSettings = (customer as Stripe.Customer).invoice_settings;
   const pm = await resolvePaymentMethod(stripe, invoiceSettings?.default_payment_method);
-  return pm ? describe(pm, "customer") : { state: "none" };
+  return {
+    paymentMethod: pm ? describe(pm, "customer") : { state: "none" },
+    recurring,
+  };
 }
 
 /**
- * Consulta el método de pago vigente. NUNCA lanza: si Stripe no está
- * configurado, no responde o devuelve error, la página se sigue renderizando
- * con estado "unavailable".
+ * Consulta método de pago e importe recurrente vigentes. NUNCA lanza: si Stripe
+ * no está configurado, no responde o devuelve error, la página se sigue
+ * renderizando con estado "unavailable" y sin importe.
  */
-export async function getLivePaymentMethod(params: {
+export async function getLiveSubscriptionSnapshot(params: {
   stripeCustomerId: string | null;
   stripeSubscriptionId: string | null;
-}): Promise<StripeLivePaymentMethod> {
+}): Promise<StripeSubscriptionSnapshot> {
   if (!params.stripeCustomerId) {
-    return { state: "unavailable", reason: "La clínica no tiene cliente en Stripe" };
+    return {
+      paymentMethod: { state: "unavailable", reason: "La clínica no tiene cliente en Stripe" },
+      recurring: null,
+    };
   }
 
   const stripe = getStripeSafe();
   // Stripe sin configurar ≠ clínica sin método: es "no disponible".
-  if (!stripe) return { state: "unavailable", reason: "Stripe no está configurado" };
+  if (!stripe) {
+    return {
+      paymentMethod: { state: "unavailable", reason: "Stripe no está configurado" },
+      recurring: null,
+    };
+  }
 
   try {
     return await withDeadline(
@@ -134,7 +209,10 @@ export async function getLivePaymentMethod(params: {
       LOOKUP_TIMEOUT_MS,
     );
   } catch (e: any) {
-    console.warn("[admin] no se pudo leer el método de pago en Stripe:", e?.message ?? e);
-    return { state: "unavailable", reason: "No respondió Stripe" };
+    console.warn("[admin] no se pudo leer la suscripción en Stripe:", e?.message ?? e);
+    return {
+      paymentMethod: { state: "unavailable", reason: "No respondió Stripe" },
+      recurring: null,
+    };
   }
 }

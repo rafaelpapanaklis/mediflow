@@ -3,6 +3,7 @@
 import { AlertTriangle } from "lucide-react";
 import { CardNew } from "@/components/ui/design-system/card-new";
 import { BadgeNew } from "@/components/ui/design-system/badge-new";
+import { fmtMXN, fmtMXNdec } from "@/lib/format";
 import type { StripeLivePaymentMethod } from "@/lib/admin/stripe-payment-method";
 
 /**
@@ -17,11 +18,33 @@ import type { StripeLivePaymentMethod } from "@/lib/admin/stripe-payment-method"
  *      luego pagó por Stripe Checkout se queda en `false` para siempre, así que
  *      ese campo no puede usarse para afirmar que no hay método de pago.
  */
+/**
+ * Importe que Stripe va a cobrar, ya contrastado contra el precio del plan.
+ * Lo arma la page (server) porque el precio de lista vive en plan_configs.
+ */
+export interface ClinicRecurringCharge {
+  amountMxn: number;
+  /** "MXN" salvo que el price esté en otra divisa: entonces se muestra. */
+  currency: string;
+  interval: "month" | "year";
+  intervalCount: number;
+  /**
+   * Precio de lista de ese plan HOY para el MISMO ciclo. null cuando no hay con
+   * qué comparar (ciclos raros tipo "cada 3 meses"): entonces se informa el
+   * importe sin acusar a nadie de estar desalineado.
+   */
+  planAmountMxn: number | null;
+  /** "Profesional", "Básico"… tal cual lo nombra plan_configs. */
+  planLabel: string;
+}
+
 export interface ClinicPaymentMethodCardProps {
   /** Sin cliente en Stripe no hay cobro automático que consultar. */
   stripeCustomerId: string | null;
   /** null cuando no hay stripeCustomerId (no se consultó a Stripe). */
   live: StripeLivePaymentMethod | null;
+  /** null = sin suscripción en Stripe, o no se pudo leer. */
+  recurring: ClinicRecurringCharge | null;
   signup: {
     collected: boolean;
     type: string | null;
@@ -82,9 +105,22 @@ function cardExpiry(pm: FoundPaymentMethod): { label: string; expired: boolean }
   };
 }
 
+/** Sin centavos cuando el importe es redondo (lo normal en los planes). */
+function money(n: number): string {
+  return Number.isInteger(n) ? fmtMXN(n) : fmtMXNdec(n);
+}
+
+/** "/mes", "/año" o "cada 3 meses" para ciclos que no son de 1. */
+function intervalLabel(interval: "month" | "year", count: number): string {
+  const unit = interval === "year" ? "año" : "mes";
+  if (count === 1) return `/${unit}`;
+  return ` cada ${count} ${unit === "año" ? "años" : "meses"}`;
+}
+
 export function ClinicPaymentMethodCard({
   stripeCustomerId,
   live,
+  recurring,
   signup,
   cancelRequested,
   cancelRequestedAt,
@@ -94,6 +130,13 @@ export function ClinicPaymentMethodCard({
   const unavailableReason = live?.state === "unavailable" ? live.reason : null;
   const found = live?.state === "found" ? live : null;
   const expiry = found ? cardExpiry(found) : null;
+
+  // Precio heredado: el price de la suscripción sigue vivo en Stripe con un
+  // importe que ya no existe en plan_configs, y va a renovar a ESE importe. Se
+  // compara en centavos para que un Float no invente una diferencia.
+  const legacyPrice =
+    recurring?.planAmountMxn != null &&
+    Math.round(recurring.amountMxn * 100) !== Math.round(recurring.planAmountMxn * 100);
 
   return (
     <CardNew>
@@ -150,6 +193,55 @@ export function ClinicPaymentMethodCard({
         <div style={NEUTRAL_BOX_STYLE}>
           No se pudo consultar Stripe{unavailableReason ? ` — ${unavailableReason}.` : "."}{" "}
           Esto no significa que la clínica no tenga método de pago.
+        </div>
+      )}
+
+      {/* Importe que Stripe va a cobrar. Sale de la MISMA consulta de arriba. */}
+      {recurring && (
+        <div style={{ marginTop: 10 }}>
+          <div style={{ ...ROW_STYLE, padding: "10px 14px" }}>
+            <div style={{ flex: 1, fontSize: 13, color: "var(--text-1)" }}>
+              Stripe cobra{" "}
+              <strong className="mono">
+                {money(recurring.amountMxn)}
+                {intervalLabel(recurring.interval, recurring.intervalCount)}
+              </strong>
+              {recurring.currency !== "MXN" && (
+                <span style={{ color: "var(--text-3)" }}> {recurring.currency}</span>
+              )}
+            </div>
+            {recurring.planAmountMxn != null && !legacyPrice && (
+              <BadgeNew tone="success" dot>Coincide con el plan</BadgeNew>
+            )}
+          </div>
+
+          {legacyPrice && (
+            <div style={{
+              marginTop: 8,
+              display: "flex",
+              alignItems: "center",
+              gap: 10,
+              padding: 14,
+              background: "var(--warning-soft)",
+              border: "1px solid color-mix(in oklab, var(--warning) 25%, transparent)",
+              borderRadius: 10,
+            }}>
+              <AlertTriangle size={16} strokeWidth={1.75} style={{ color: "var(--warning)", flexShrink: 0 }} />
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 13, fontWeight: 600, color: "var(--warning)" }}>
+                  Stripe cobra {money(recurring.amountMxn)}
+                  {intervalLabel(recurring.interval, recurring.intervalCount)} pero el plan{" "}
+                  {recurring.planLabel} son {money(recurring.planAmountMxn as number)}
+                  {intervalLabel(recurring.interval, recurring.intervalCount)} — precio heredado
+                </div>
+                <div style={{ fontSize: 11, color: "var(--text-3)", marginTop: 2 }}>
+                  La suscripción sigue con un price viejo y va a renovar a ese importe. Cambiarlo
+                  en Stripe altera lo que se le cobra al cliente: es una decisión tuya, aquí sólo
+                  se avisa.
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
 

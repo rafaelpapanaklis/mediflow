@@ -21,6 +21,7 @@
     "test:wa-booking": "tsx --test src/lib/whatsapp/bot/__tests__/booking.test.ts",
     "test:inbox": "tsx --test src/lib/inbox/__tests__/inbox-send.test.ts",
     "test:audit": "tsx --test src/lib/admin/audit-core.test.ts",
+    "test:mrr": "tsx --test src/lib/admin/mrr-core.test.ts",
     "test:patient-number": "tsx --test src/lib/patients/__tests__/next-patient-number-core.test.ts",
     "test:proration": "tsx --test src/lib/billing/proration.test.ts",
     "test:click-guard": "tsx --test src/lib/affiliates/__tests__/click-guard-core.test.ts",

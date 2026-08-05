@@ -6,8 +6,7 @@ import {
   AlertTriangle, Clock, XCircle, Plus, FileText,
 } from "lucide-react";
 import { prisma } from "@/lib/prisma";
-import { getPlanLimits } from "@/lib/plans";
-import { PLAN_IDS } from "@/lib/billing/plans";
+import { computeMrr, loadPlanPrices, mrrBreakdownHint } from "@/lib/admin/mrr";
 import { comparePaymentDateDesc, paymentDate, importedLaterAt } from "@/lib/admin/payment-date";
 import { formatCurrency } from "@/lib/utils";
 import { formatRelativeDate } from "@/lib/format";
@@ -18,21 +17,6 @@ import { AvatarNew } from "@/components/ui/design-system/avatar-new";
 import { KpiCard }   from "@/components/ui/design-system/kpi-card";
 
 export const metadata: Metadata = { title: "Super Admin — DaleControl" };
-
-/**
- * Precios mensuales desde plan_configs — MISMA fuente que el checkout y que
- * /api/admin/billing (getPlanLimits). Nada de números literales en este
- * archivo: getPlanLimits ya cae solo al fallback compartido de plan-shared si
- * la tabla no responde.
- */
-async function loadPlanPrices(): Promise<Record<string, number>> {
-  const rows = await Promise.all(
-    PLAN_IDS.map(async (id) => ({ id, price: (await getPlanLimits(id)).monthlyPrice })),
-  );
-  const out: Record<string, number> = {};
-  for (const r of rows) out[r.id] = r.price;
-  return out;
-}
 
 /**
  * Celda de fecha de un pago: la del COBRO (paidAt), no la de alta de la fila.
@@ -134,8 +118,13 @@ async function renderAdminDashboard() {
     return !last || new Date(last) < prev7;
   });
 
-  const mrr          = activeClinics.reduce((s,c) => s + (planPrices[c.plan] ?? 0), 0);
-  const mrrPotential = mrr + trialClinics.reduce((s,c) => s + (planPrices[c.plan] ?? 0), 0);
+  // MRR por la MISMA función que /admin/payments (@/lib/admin/mrr): precio
+  // negociado de la clínica si lo tiene, si no el del plan en plan_configs.
+  // Reusa las filas ya cargadas arriba en vez de volver a consultar.
+  const mrrActive    = computeMrr(activeClinics, planPrices);
+  const mrrTrial     = computeMrr(trialClinics, planPrices);
+  const mrr          = mrrActive.total;
+  const mrrPotential = mrr + mrrTrial.total;
   // Se mide por FECHA DE PAGO (paidAt), no por alta de la fila: los cobros de
   // Stripe se registran con el paid_at real de la factura.
   const paidMonth    = subInvoices.filter(i => i.status==="paid" && (i.paidAt ?? i.createdAt)>=month1).reduce((s,i)=>s+i.amount,0);
@@ -183,6 +172,7 @@ async function renderAdminDashboard() {
       {/* KPI principales */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0,1fr))", gap: 14, marginBottom: 20 }}>
         <KpiCard label="MRR Activo" value={formatCurrency(mrr)} icon={DollarSign}
+          hint={mrrBreakdownHint(mrrActive)}
           delta={{ value: `${activeClinics.length} clínicas`, direction: "up" }} />
         <KpiCard label="MRR Potencial" value={formatCurrency(mrrPotential)} icon={TrendingUp}
           delta={{ value: `+${trialClinics.length} en trial`, direction: "up" }} />
