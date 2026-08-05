@@ -4262,3 +4262,62 @@ ambiguas de Tailwind, `Critical dependency` de `file-type`) son preexistentes.
 
 **Sin SQL ni cambios de schema** — se reusan `affiliates` y `affiliate_users` tal cual. No se
 tocaron el motor de comisiones, la landing ni `globals.css`.
+
+---
+
+## [Blurb del footer alineado al title SEO] — 2026-08-05
+
+Commit **`950853b7`** en `main` (directo, sin PR). Cambio de copy: sin SQL, sin envs, sin
+dependencias. **2 archivos, 2 inserciones y 2 borrados.**
+
+### Archivos tocados
+
+- **`src/components/public/landing/sales/v2/landing-data.ts`** (línea 308) — el valor de
+  `FOOTER.blurb`. Ninguna otra clave de `FOOTER` (`product`, `funciones`, `legal`, `contact`,
+  `copyright`, `madeIn`) ni ninguna otra constante del archivo se tocó.
+- **`src/components/public/landing/sales/footer.tsx`** (línea 30) — solo `maxWidth: "30ch"` →
+  `"34ch"` en el `<p>` del blurb. `fontSize`, `lineHeight`, `color` y `marginTop` quedaron
+  igual, y el `SecureBadge` de la barra inferior no se rozó.
+
+Antes: «El software de gestión para clínicas dentales en México. Todo en un solo lugar, en
+español y en pesos.»
+Después: «El software dental más completo de México. Agenda, expediente, WhatsApp y facturación
+CFDI 4.0 en una sola plataforma.»
+
+### Por qué sube el ancho de la columna
+
+El texto pasa de **102 a 118 caracteres** (+16, medidos sobre el archivo, no a ojo). El
+`maxWidth` sube un 13% (30→34ch) para absorber ese 16%: la columna de marca es la primera de un
+`flex` con `flex: 1 1 260px`, así que cada renglón de más la estira hacia abajo y la descuadra
+contra las cuatro columnas de enlaces. **El conteo de renglones no se verificó en navegador**
+(no hay `.env` local para levantar el sitio); el `34ch` es el que venía indicado en el encargo.
+
+### Alcance: se propaga a todo el sitio público
+
+`FOOTER.blurb` tiene **un solo consumidor**, `sales/footer.tsx`, pero ese `SalesFooter` se monta
+en **19+ rutas públicas**: home, blog, `/casos-de-uso`, `/herramientas`, `/descubre`, las **8
+páginas de módulo** y `/afiliados`. El copy nuevo aparece en todas a la vez — es lo esperado, no
+un efecto colateral. Las especialidades `/[slug]` y `/roadmap` usan el **otro** footer
+(`landing/footer.tsx`), que no lee esta constante y por tanto no cambia.
+
+### Verificación
+
+- `grep` de la frase vieja («software de gestión para clínicas dentales») sobre `src/`: **0
+  resultados**. Antes del cambio había exactamente 1, en `landing-data.ts:308`.
+- «CFDI 4.0» es **exacto**: `src/lib/facturapi.ts` integra CFDI 4.0 y el resto de la landing ya
+  lo nombra así (`lib/landing-data.ts:79`, `lib/specialty-data.ts:80`).
+- `npm run build` completo y **verde**, sin pipe: `prisma generate` OK, tipos OK, **362/362**
+  páginas prerenderizadas (el conteo subió de 360 a 362 con los commits que entraron entre
+  olas). `/` sigue **estático** (`○`), 11.1 kB / 213 kB de First Load JS. Los `prisma:error` de
+  `DATABASE_URL` del prerender son los de siempre (no hay `.env` local) y los warnings —3 clases
+  ambiguas de Tailwind y el `Critical dependency` de `file-type`— son preexistentes.
+
+### Nota sobre el claim
+
+«El software dental **más completo** de México» es un superlativo comparativo: a diferencia de
+«TLS + AES-256» del sello, no hay nada en el repo con lo que sostenerlo, y es el tipo de frase
+que un competidor o PROFECO pueden pedir que se acredite (LFPC art. 32, información veraz y no
+engañosa). Se dejó **tal cual lo pidió Rafael** —el encargo fijaba el texto palabra por palabra
+y prohibía añadir o quitar nada—, pero queda anotado aquí por si algún día conviene cambiarlo
+por una afirmación demostrable. El resto del blurb sí es verificable: agenda, expediente,
+WhatsApp y timbrado CFDI 4.0 existen los cuatro.
