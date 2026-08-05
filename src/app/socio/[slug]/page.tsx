@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { headers } from "next/headers";
+import { cookies, headers } from "next/headers";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Inter } from "next/font/google";
@@ -18,6 +18,7 @@ import { SalesLogo } from "@/components/public/landing/sales/logo";
 import { RefClickTracker } from "@/components/afiliados/ref-click-tracker";
 import { shouldCountAffiliateClick } from "@/lib/affiliates/click-guard";
 import { clientIp, hashIp } from "@/lib/affiliates/stats";
+import { VISITOR_COOKIE, parseVisitorId } from "@/lib/affiliates/visitor-cookie";
 import { SavingsCalculator } from "@/components/socio/savings-calculator";
 import "@/components/public/landing/sales/sales.css";
 
@@ -96,6 +97,13 @@ export default async function PartnerLandingPage({ params, searchParams }: Props
   // El dedupe se apoya en las filas de affiliate_clicks que siembra
   // <RefClickTracker /> desde el navegador: la primera visita cuenta y crea la
   // fila, y las recargas de los siguientes 30 min ya se topan con ella.
+  //
+  // Esta página LEE dc_vid pero no la puede sembrar: un server component no
+  // manda Set-Cookie (solo un route handler o una server action). Quien la
+  // siembra es el POST de <RefClickTracker /> a /api/afiliados/track, unos
+  // milisegundos después — así que la primera visita se decide sin cookie (y
+  // cuenta, como debe: es un visitante nuevo) y de la segunda en adelante ya
+  // hay identificador de navegador con el que deduplicar.
   if (c) {
     try {
       const h = headers();
@@ -103,6 +111,7 @@ export default async function PartnerLandingPage({ params, searchParams }: Props
         userAgent: h.get("user-agent"),
         ref: affiliate.referralCode,
         ipHash: hashIp(clientIp(h)),
+        vid: parseVisitorId(cookies().get(VISITOR_COOKIE)?.value),
       });
       if (counts) {
         await prisma.affiliateLink.updateMany({

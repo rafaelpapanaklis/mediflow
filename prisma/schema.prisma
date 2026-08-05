@@ -7289,6 +7289,11 @@ model AffiliateClick {
   landingPage String? // path de aterrizaje, sin querystring
   ipHash      String? // sha256 truncado con salt — jamás IP cruda
   userAgent   String? // resumido (máx 160 chars)
+  // Cookie dc_vid: id aleatorio opaco del NAVEGADOR (visitor-cookie.ts). Es
+  // con lo que se deduplica; la IP ya no sirve (CGNAT móvil = miles de
+  // teléfonos por IP). Nullable: filas viejas y clics guardados antes de
+  // aplicar sql/affiliate-click-vid.sql.
+  vid         String?
   createdAt   DateTime @default(now())
 
   @@index([affiliateId, createdAt])

@@ -23,6 +23,7 @@
     "test:audit": "tsx --test src/lib/admin/audit-core.test.ts",
     "test:patient-number": "tsx --test src/lib/patients/__tests__/next-patient-number-core.test.ts",
     "test:proration": "tsx --test src/lib/billing/proration.test.ts",
+    "test:click-guard": "tsx --test src/lib/affiliates/__tests__/click-guard-core.test.ts",
     "test:afiliados": "tsx --test src/lib/affiliates/payout-core.test.ts",
     "test:ua": "tsx --test src/lib/analytics/ua.test.ts",
     "test:account-manager": "tsx --test src/lib/account-manager/__tests__/availability.test.ts",

@@ -2,12 +2,18 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { rateLimit } from "@/lib/rate-limit";
 import { clientIp, hashIp, summarizeUserAgent } from "@/lib/affiliates/stats";
-import { shouldCountAffiliateClick } from "@/lib/affiliates/click-guard";
+import { createAffiliateClick, shouldCountAffiliateClick } from "@/lib/affiliates/click-guard";
 import {
   AFFILIATE_COOKIE,
   parseAttribution,
   setAttributionCookie,
 } from "@/lib/affiliates/attribution-cookie";
+import {
+  VISITOR_COOKIE,
+  newVisitorId,
+  parseVisitorId,
+  setVisitorCookie,
+} from "@/lib/affiliates/visitor-cookie";
 
 // force-dynamic: cada visita tiene que leer y escribir cookies. Si Next
 // cacheara esta ruta, dos visitantes distintos compartirían el mismo
@@ -52,7 +58,12 @@ export async function GET(req: NextRequest, { params }: { params: { code: string
     // Rate limit por IP+path: solo frena las ESCRITURAS (clic + contador). El
     // visitante siempre se redirige y siempre recibe su cookie — jamás un 429
     // en la cara de alguien que acaba de tocar un link.
-    const limited = rateLimit(req, 30, 60_000) !== null;
+    //
+    // 120/min y no 30: en México la IP es compartida (CGNAT móvil, WiFi de la
+    // clínica). Cuando un afiliado tira su link a un grupo grande de WhatsApp,
+    // decenas de personas entran desde la misma IP en el mismo minuto y con 30
+    // se tiraban clics legítimos.
+    const limited = rateLimit(req, 120, 60_000) !== null;
 
     // Afiliado resuelto + campaña del link que lo trajo (null = link base).
     let affiliateId: string | null = null;
@@ -126,6 +137,14 @@ export async function GET(req: NextRequest, { params }: { params: { code: string
       setAttributionCookie(res, { ref, campaign, firstTouchAt: Date.now() });
     }
 
+    // Identificador de NAVEGADOR para el conteo (dc_vid). Independiente de la
+    // cookie de atribución de arriba: esta no atribuye nada, solo evita contar
+    // cinco veces al mismo navegador. Se siembra a todos —bots incluidos, que
+    // la ignoran— para que la respuesta sea siempre idéntica.
+    const incomingVid = parseVisitorId(req.cookies.get(VISITOR_COOKIE)?.value);
+    const vid = incomingVid ?? newVisitorId();
+    if (!incomingVid) setVisitorCookie(res, vid);
+
     // Clic para el embudo del panel. En su propio try/catch: el tracking jamás
     // puede impedir que el visitante llegue al sitio. Privacidad: la IP solo
     // se guarda hasheada con salt, nunca cruda.
@@ -136,10 +155,13 @@ export async function GET(req: NextRequest, { params }: { params: { code: string
     const ipHash = hashIp(clientIp(req.headers));
     const counts =
       !limited &&
+      // `incomingVid`, NO `vid`: lo que decide es la cookie que el visitante
+      // TRAÍA. El id recién sembrado no tiene historial y saltaría el respaldo.
       (await shouldCountAffiliateClick({
         userAgent: req.headers.get("user-agent"),
         ref,
         ipHash,
+        vid: incomingVid,
       }));
 
     if (counts) {
@@ -150,19 +172,17 @@ export async function GET(req: NextRequest, { params }: { params: { code: string
               .update({ where: { id: linkIdToCount }, data: { clicks: { increment: 1 } } })
               .catch(() => null)
           : null,
-        prisma.affiliateClick
-          .create({
-            data: {
-              affiliateId,
-              ref,
-              campaign,
-              landingPage: `/r/${code}`.slice(0, 120),
-              ipHash,
-              userAgent: summarizeUserAgent(req.headers.get("user-agent")),
-            },
-          })
-          // Silencio: sin clic registrado, pero con redirección y cookie intactas.
-          .catch(() => null),
+        // La fila lleva el vid EFECTIVO (el recién sembrado en la primera
+        // visita): es contra ella que deduplican las recargas siguientes.
+        createAffiliateClick({
+          affiliateId,
+          ref,
+          campaign,
+          landingPage: `/r/${code}`.slice(0, 120),
+          ipHash,
+          userAgent: summarizeUserAgent(req.headers.get("user-agent")),
+          vid,
+        }),
       ]);
     }
 

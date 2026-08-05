@@ -4820,3 +4820,154 @@ ni siquiera gasta esa consulta.
 - El dedupe **no distingue campaña**: dos links distintos del mismo afiliado abiertos por la
   misma persona dentro de la ventana cuentan una vez. Es lo correcto para el embudo (una
   persona = un clic), pero conviene saberlo al leer el desglose por campaña.
+
+---
+
+## Afiliados — el dedupe de clics ya no va por IP, va por navegador (5 ago 2026)
+
+La ola anterior dejó el dedupe en **`ipHash` + `ref` a 30 minutos**, y eso en México **pierde
+clics reales**:
+
+- **CGNAT.** Telcel, AT&T y los ISP móviles mexicanos meten a **miles de usuarios detrás de una
+  misma IP pública**. Dos dentistas con dos teléfonos distintos contaban como **uno**.
+- **WiFi compartido.** Tres personas del mismo consultorio abriendo el link contaban como
+  **una**.
+
+Y como el link se comparte por WhatsApp, **casi todo el tráfico es móvil**: el subconteo no era
+hipotético, era el caso normal.
+
+### La cookie `dc_vid` — identificar al navegador, no a la red
+
+`src/lib/affiliates/visitor-cookie.ts` (nuevo). Identificador **aleatorio opaco**
+(`randomUUID`), `httpOnly`, `secure` en producción, `sameSite: "lax"`, `path: "/"`, **1 año**,
+sembrado **server-side con `Set-Cookie`** (nunca `document.cookie`: Safari/ITP borra a los 7
+días lo que escribe el JS).
+
+**No se deriva de la IP ni del user-agent** a propósito — sería el mismo bug con otro nombre.
+Es un identificador **técnico de conteo**: no lleva nada personal dentro y su único uso es
+responder "¿este navegador ya contó en los últimos 30 minutos?". No se confunde con `dc_aff`
+(atribución/comisión, primer toque, 90 días): son cookies independientes.
+
+### La regla, en este orden
+
+`src/lib/affiliates/click-guard-core.ts` (nuevo, puro y probado; `click-guard.ts` quedó como el
+cableado a Prisma):
+
+0. **Bot** → no cuenta. Sin cambios: mismo detector único (`src/lib/analytics/ua.ts`).
+1. **Trae `dc_vid`** → dedupe por **`ref` + `vid`, 30 min**. La IP **ni se mira**: dos
+   navegadores de la misma red son **dos clics**.
+2. **No trae `dc_vid`** → es un visitante **nuevo por definición** (la cookie se siembra en la
+   primera visita, así que si no la trae es que nunca había estado aquí): **cuenta**, y se le
+   siembra. Aquí **NO** hay dedupe por IP a 30 minutos — ese era exactamente el bug.
+3. **Único respaldo por IP, y muy corto: 2 minutos.** Para quien tiene las cookies bloqueadas y
+   recarga varias veces seguidas. Empata además el **user-agent completo** (lo que ya se
+   guardaba en la fila), que es lo más cerca de "el mismo navegador" que se puede estar sin
+   cookie: así tres personas del mismo WiFi, con navegadores distintos, **siguen contando por
+   separado aunque entren en el mismo segundo**.
+
+La fila del clic guarda el **`vid` efectivo** —el recién sembrado en la primera visita, no el
+que traía la petición—; si no, la recarga siguiente no tendría contra qué deduplicar. Y la
+decisión se toma **siempre con la cookie entrante**: un id recién creado no tiene historial y
+se saltaría el respaldo corto.
+
+### Qué pasa sin cookies
+
+| Situación | Resultado |
+|---|---|
+| Cookies bloqueadas, 3 recargas en 1 min | **1 clic** (respaldo corto por IP + user-agent) |
+| Cookies bloqueadas, recargas cada 3 min | 1 clic por recarga — **se sobrecuenta a propósito**: no hay forma de distinguirlo de tres personas distintas de la misma red, y la ola existe para dejar de perder gente real |
+| Sin IP disponible (proxy raro) | cuenta |
+| Consulta de dedupe caída | cuenta |
+
+El criterio de siempre, intacto: **mejor un falso positivo que perder un clic real**, y esto
+**nunca** bloquea ni rompe una visita.
+
+### Las tres superficies
+
+| Superficie | Lee `dc_vid` | Siembra `dc_vid` |
+|---|---|---|
+| `src/app/r/[code]/route.ts` | sí | **sí** (en el mismo 302, junto a `dc_aff`) |
+| `src/app/api/afiliados/track/route.ts` | sí | **sí** (en el 204) |
+| `src/app/socio/[slug]/page.tsx` | sí | **no puede** |
+
+**El hueco de `/socio/<slug>`:** es un server component y un server component **no puede mandar
+`Set-Cookie`** (solo un route handler o una server action). Quien siembra ahí es el POST de
+`<RefClickTracker />` a `/api/afiliados/track`, milisegundos después. Consecuencia real: la
+**primera** carga se decide sin cookie —y cuenta, que es lo correcto: es un visitante nuevo— y
+de la segunda en adelante ya hay identificador. Por eso el 204 de `track` se arma **al
+principio** de la función y **todas** las salidas devuelven ese mismo response: si alguna se
+fuera por su cuenta, ese visitante se quedaría sin identificador y volvería a contar en cada
+recarga.
+
+### Rate limit: 30 → 120 por minuto
+
+`/r/[code]` frenaba las **escrituras** a 30/min por IP. Con la IP compartida (CGNAT, WiFi de la
+clínica), un afiliado que tira su link a un grupo grande de WhatsApp llenaba la cuota con gente
+legítima y esos clics se tiraban. Ahora **120/min**. La **redirección nunca se frena** — eso ya
+estaba bien y no se tocó.
+
+**También se subió en `/api/afiliados/track`** (30 → 120), que no venía en el encargo: es la
+misma IP compartida y el mismo grupo de WhatsApp, y además es la ruta que **siembra la cookie**
+en `/socio` — un 429 ahí deja al visitante sin identificador y lo devuelve al conteo por IP.
+
+### ⚠️ PENDIENTE — el `ALTER TABLE` (Rafael lo corre a mano)
+
+Para deduplicar por `vid` hay que **guardarlo en la fila del clic**, y `affiliate_clicks` no
+tenía dónde. Está en el schema de Prisma y en **`sql/affiliate-click-vid.sql`**:
+
+```sql
+ALTER TABLE "affiliate_clicks"
+  ADD COLUMN IF NOT EXISTS "vid" TEXT;
+```
+
+Sin índice nuevo a propósito: las consultas filtran por `ref` + `createdAt` (índice
+`affiliate_clicks_ref_createdAt_idx`, ya existente) con ventanas de 2 y 30 minutos, así que
+`vid` solo afina un puñado de filas.
+
+**Si el SQL no se corre, NO se rompe nada ni se pierde un solo clic**, que es la trampa clásica
+de una columna nueva (un insert que la menciona truena y el `catch` se lo traga en silencio):
+
+- `createAffiliateClick()` **reintenta el insert sin `vid`** si el primero falla.
+- La consulta por `vid` devuelve "no pude" (≠ "no encontré") y el guard **cae al respaldo corto
+  por IP** en vez de contar a ciegas.
+- Ninguna lectura existente de `affiliate_clicks` se rompe: todas usan `select`, `count`,
+  `groupBy` o `$queryRaw` — ninguna pide la fila completa.
+
+Degrada al comportamiento de antes **menos** el dedupe largo por IP; en cuanto corra el SQL,
+empieza a deduplicar por navegador solo. Los clics guardados mientras tanto quedan con `vid`
+nulo y no estorban.
+
+### Verificación
+
+`npm run test:click-guard` (nuevo, **8/8 verde**) — cada caso de la ola es un test, con el
+mundo de filas y el reloj inyectados:
+
+1. **Dos teléfonos distintos en la misma red móvil, sin cookie, con minutos de diferencia →
+   2 clics.** Peor caso a propósito: **mismo modelo de teléfono** (mismo user-agent) y misma IP
+   de Telcel. Antes: 1.
+2. Tres navegadores desde el WiFi de la clínica, **en el mismo instante** → 3 clics.
+3. El mismo navegador recargando 5 veces en un minuto → 1 clic.
+4. El mismo navegador 40 minutos después → 2 clics (la ventana expiró).
+5. Cookies bloqueadas, 3 recargas en un minuto → 1 clic.
+6. Bot de vista previa → no cuenta y sigue recibiendo su redirección.
+7. Sin el SQL aplicado → degrada, no pierde clics.
+
+`npm run build` completo: **verde**, 365/365 páginas. `/r/[code]`, `/socio/[slug]` y
+`/api/afiliados/track` siguen dinámicas (`ƒ`).
+
+### Residual conocido
+
+**Dos teléfonos idénticos** (mismo user-agent), en la misma IP, entrando **con menos de 2
+minutos de diferencia** → 1 clic. Es el precio de que el caso 5 siga funcionando: sin cookie no
+hay forma de distinguir "otra persona con el mismo teléfono en la misma red" de "el mismo
+navegador recargando". Con 2 minutos la ventana es lo bastante estrecha para que sea raro, y
+con **un user-agent distinto no se pierde ni dentro de la ventana**. Queda como test para que
+se vea el trade-off en el código.
+
+### Lo que NO se tocó
+
+- **La cookie de atribución `dc_aff`** y su regla de primer toque: intactas.
+- **El motor de comisiones**: intacto. Esto solo cambia el número del embudo; el dinero se
+  calcula desde `clinics.affiliateId`.
+- **El filtro de bots**: intacto, mismo detector único.
+- **La redirección de `/r`**: nunca se frena, nunca devuelve error.
