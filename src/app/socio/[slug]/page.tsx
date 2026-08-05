@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import { headers } from "next/headers";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Inter } from "next/font/google";
@@ -15,6 +16,8 @@ import {
 import { ProductWindow } from "@/components/public/landing/sales/product-window";
 import { SalesLogo } from "@/components/public/landing/sales/logo";
 import { RefClickTracker } from "@/components/afiliados/ref-click-tracker";
+import { shouldCountAffiliateClick } from "@/lib/affiliates/click-guard";
+import { clientIp, hashIp } from "@/lib/affiliates/stats";
 import { SavingsCalculator } from "@/components/socio/savings-calculator";
 import "@/components/public/landing/sales/sales.css";
 
@@ -86,12 +89,27 @@ export default async function PartnerLandingPage({ params, searchParams }: Props
   // Click tracking de la campaña. updateMany (no update) ⇒ una campaña no
   // registrada simplemente actualiza 0 filas sin tronar; y si la tabla aún no
   // existe en la BD, el catch lo silencia: el tracking nunca tumba la landing.
+  //
+  // La página es force-dynamic, así que ESTE es el punto que más inflaba el
+  // número: cada carga sumaba, y un bot de vista previa o una recarga valían
+  // tanto como una visita real. El guard filtra ambos (click-guard.ts).
+  // El dedupe se apoya en las filas de affiliate_clicks que siembra
+  // <RefClickTracker /> desde el navegador: la primera visita cuenta y crea la
+  // fila, y las recargas de los siguientes 30 min ya se topan con ella.
   if (c) {
     try {
-      await prisma.affiliateLink.updateMany({
-        where: { affiliateId: affiliate.id, campaign: c },
-        data: { clicks: { increment: 1 } },
+      const h = headers();
+      const counts = await shouldCountAffiliateClick({
+        userAgent: h.get("user-agent"),
+        ref: affiliate.referralCode,
+        ipHash: hashIp(clientIp(h)),
       });
+      if (counts) {
+        await prisma.affiliateLink.updateMany({
+          where: { affiliateId: affiliate.id, campaign: c },
+          data: { clicks: { increment: 1 } },
+        });
+      }
     } catch {}
   }
 

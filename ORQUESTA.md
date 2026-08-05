@@ -4713,3 +4713,110 @@ reclamos.
 - No se tocaron `globals.css`, `panel-chrome-va.css` (compartido con `/admin`,
   `/laboratorios` y `/proveedores`), `afiliados.css` (landing pública), el motor de comisiones
   ni ninguna query, endpoint o validación. **Sin SQL, sin cambios de schema.**
+
+## Afiliados — el contador de clics contaba bots (5 ago 2026)
+
+Bug de producción. Medido en la base de datos: de **149 clics registrados, 133 eran bots y
+solo 16 humanos** — **89 % de basura**. El afiliado veía un embudo con casi diez veces más
+clics de los reales, y la discrepancia contra Google Analytics no tenía explicación visible.
+
+### Por qué no se veía venir
+
+Los bots que inflaban el número **no ejecutan JavaScript**: los generadores de vista previa de
+enlaces (WhatsApp, Facebook, Telegram, Slack, Twitter, LinkedIn, Discord) golpean cada URL en
+cuanto alguien la comparte en un chat, y los crawlers la revisitan solos cada tanto. Por eso
+**no aparecían ni en GA4 ni en el chat en vivo** —que se cargan desde el navegador— pero sí
+sumaban en el servidor, que es donde vivía el conteo de afiliados.
+
+El repo **ya tenía** detector de bots (`src/lib/analytics/ua.ts`) y la analítica general **ya
+lo usaba** (`src/app/api/track/route.ts`: `if (ua.device === "bot") return;`). El tracking de
+afiliados simplemente nunca lo llamó.
+
+### Qué se filtra
+
+Un solo detector, un solo lugar: se **amplió** `src/lib/analytics/ua.ts` en vez de escribir uno
+nuevo, así que la analítica general se beneficia del mismo cambio. El genérico `bot` ya cubría
+a TelegramBot, Slackbot, Twitterbot, LinkedInBot, Discordbot, Applebot, GPTBot, AhrefsBot…, y
+`preview` a BingPreview y SkypeUriPreview. Lo que se añadió son los que **no llevan "bot" en el
+nombre**: `Slack-ImgProxy`, `GoogleOther`, `Google-InspectionTool`, `Mediapartners`,
+`FeedFetcher`, `Discourse`, monitores de uptime (`pingdom`, `datadog`, `betterstack`,
+`checkly`, `statuscake`) y clientes HTTP de servidor (`okhttp`, `node-fetch`, `undici`,
+`apache-httpclient`, `java/`, `postman`, `insomnia`, `libwww`).
+
+**WhatsApp va aparte y ANCLADO** (`/^whatsapp\//`), y esto es lo delicado del cambio: el
+generador de vista previa se identifica como `WhatsApp/2.23.20.0 A` —el UA **entero** empieza
+por `WhatsApp/`—, mientras que el **navegador integrado** de WhatsApp lleva `WhatsApp/2.x` al
+**final** de un UA normal con prefijo `Mozilla/5.0 (…)`. Ese segundo es **una persona**, y en
+México es de los caminos más comunes para abrir un link compartido. Buscar `whatsapp` suelto
+habría tirado a la basura clics reales — justo el error opuesto y peor.
+
+`src/lib/analytics/ua.test.ts` (nuevo, `npm run test:ua`, **5/5 verde**) fija ese contrato por
+los dos lados: los 11 bots de vista previa se detectan, y los 5 navegadores reales **más el
+navegador integrado de WhatsApp** no. Sin user-agent tampoco se asume bot: se cuenta.
+
+### La ventana de dedupe: 30 minutos
+
+Segunda fuente de inflado: una recarga valía otro clic. Ahora, antes de contar, se comprueba si
+ya hay un clic del **mismo `ipHash` + mismo `ref`** en los **últimos 30 minutos**; si lo hay,
+no cuenta. La consulta usa el índice `[ref, createdAt]` que ya existía — **sin SQL nuevo, sin
+cambios de schema**.
+
+Dos reglas de seguridad, ambas hacia contar de más antes que de menos:
+
+- **Sin `ipHash` disponible se cuenta.** Mejor un falso positivo que perder un clic real.
+- **La consulta va en `try/catch` y devuelve "cuenta" si falla.** Base caída, tabla ausente,
+  lo que sea: jamás romper la redirección.
+
+### El criterio vive en un solo archivo
+
+`src/lib/affiliates/click-guard.ts` (nuevo) es el **único** lugar que decide si una visita
+suma. Lo consultan las tres superficies que contaban, que antes no compartían criterio:
+
+| Superficie | Qué contaba de más |
+|---|---|
+| `src/app/r/[code]/route.ts` | incrementaba `clicks` e insertaba la fila sin mirar el UA |
+| `src/app/api/afiliados/track/route.ts` | guardaba el UA pero no lo filtraba |
+| `src/app/socio/[slug]/page.tsx` | es `force-dynamic`: **incrementaba en CADA carga** |
+
+En `/r/[code]` las dos escrituras (contador del link + fila de clic) se movieron abajo del
+todo para que **compartan UNA sola decisión** y no se puedan desfasar: antes el contador subía
+arriba, en la rama (a), y la fila se insertaba 40 líneas después.
+
+**El bot NO se bloquea.** Recibe su redirección 302 y su cookie de atribución exactamente igual
+que siempre — solo que no se le cuenta. Si `/r` le devolviera un error, WhatsApp dejaría de
+generar la vista previa del enlace y el afiliado perdería el empujón visual del link que
+comparte: peor negocio que el contador sucio.
+
+En `/socio/[slug]` el dedupe se apoya en las filas de `affiliate_clicks` que siembra
+`<RefClickTracker />` desde el navegador: la primera visita cuenta y crea la fila, y las
+recargas de los 30 minutos siguientes ya se topan con ella.
+
+De regalo, `/api/afiliados/track` resuelve el guard **antes** de buscar al afiliado: un bot ya
+ni siquiera gasta esa consulta.
+
+### Verificación
+
+- **`npm run build` completo, sin pipe, verde**: exit 0, `prisma generate` OK, **0 errores de
+  tipos**, **365/365** páginas prerenderizadas, `/r/[code]` y `/socio/[slug]` siguen dinámicas
+  (`ƒ`). Los `prisma:error` del prerender son los de siempre (no hay `.env` local) y los
+  warnings (clases ambiguas de Tailwind, `Critical dependency` de `file-type`) son
+  preexistentes.
+- **`npm run test:ua`: 5/5**.
+
+### Lo que NO se tocó
+
+- **La cookie de atribución**, intacta: se sigue sembrando igual, **también para bots**.
+- **El motor de comisiones**, intacto. Esto solo cambia un número de vanidad del embudo; el
+  dinero se calcula desde `clinics.affiliateId`, no desde `affiliate_clicks`.
+
+### Pendiente
+
+- **Los 133 clics basura históricos los limpia Rafael con un SQL aparte** — esta ola es solo el
+  código que deja de generarlos. Hasta que corra esa limpieza, el embudo del panel seguirá
+  arrastrando los números viejos.
+- `clientIp()` en `src/lib/affiliates/stats.ts` pasó de recibir `Headers` a un tipo estructural
+  (`{ get }`) para aceptar también el `ReadonlyHeaders` de `next/headers`. Cambio de tipo, no
+  de comportamiento.
+- El dedupe **no distingue campaña**: dos links distintos del mismo afiliado abiertos por la
+  misma persona dentro de la ventana cuentan una vez. Es lo correcto para el embudo (una
+  persona = un clic), pero conviene saberlo al leer el desglose por campaña.

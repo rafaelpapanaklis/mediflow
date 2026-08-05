@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { rateLimit } from "@/lib/rate-limit";
 import { clientIp, hashIp, summarizeUserAgent } from "@/lib/affiliates/stats";
+import { shouldCountAffiliateClick } from "@/lib/affiliates/click-guard";
 import {
   AFFILIATE_COOKIE,
   parseAttribution,
@@ -29,6 +30,9 @@ export const runtime = "nodejs";
  * NUNCA devuelve 404 ni error: un link roto, caducado o de un afiliado
  * suspendido —compartido en WhatsApp o impreso en un QR— tiene que llevar al
  * sitio, no a un muro. Sin atribución, pero al sitio.
+ *
+ * Los BOTS tampoco se bloquean: reciben su redirección y su cookie igual que
+ * cualquiera, solo que no suman clic (ver click-guard.ts).
  */
 
 // Defensivo: el code viaja en la URL, así que se valida ANTES de tocar la BD.
@@ -54,6 +58,10 @@ export async function GET(req: NextRequest, { params }: { params: { code: string
     let affiliateId: string | null = null;
     let ref: string | null = null;
     let campaign: string | null = null;
+    // Link cuyo contador propio habría que subir. Se resuelve aquí pero se
+    // incrementa hasta ABAJO, junto con la fila de clic: las dos escrituras
+    // comparten UNA sola decisión de "¿esto cuenta?" y no se pueden desfasar.
+    let linkIdToCount: string | null = null;
 
     // a) publicCode de un AffiliateLink (alfabeto [a-z0-9] → normalizamos a
     //    minúsculas por si alguien lo dictó o lo escribió en mayúsculas).
@@ -82,12 +90,8 @@ export async function GET(req: NextRequest, { params }: { params: { code: string
       campaign = link.campaign ?? null;
 
       // Contador propio del link (el panel del afiliado lo muestra por
-      // campaña). Best-effort: si falla, la redirección sigue su curso.
-      if (!limited) {
-        await prisma.affiliateLink
-          .update({ where: { id: link.id }, data: { clicks: { increment: 1 } } })
-          .catch(() => null);
-      }
+      // campaña). Se sube abajo, si la visita resulta contable.
+      linkIdToCount = link.id;
     }
 
     // b) referralCode del propio afiliado (link base, sin campaña). El
@@ -125,21 +129,41 @@ export async function GET(req: NextRequest, { params }: { params: { code: string
     // Clic para el embudo del panel. En su propio try/catch: el tracking jamás
     // puede impedir que el visitante llegue al sitio. Privacidad: la IP solo
     // se guarda hasheada con salt, nunca cruda.
-    if (!limited) {
-      try {
-        await prisma.affiliateClick.create({
-          data: {
-            affiliateId,
-            ref,
-            campaign,
-            landingPage: `/r/${code}`.slice(0, 120),
-            ipHash: hashIp(clientIp(req.headers)),
-            userAgent: summarizeUserAgent(req.headers.get("user-agent")),
-          },
-        });
-      } catch {
-        // Silencio: sin clic registrado, pero con redirección y cookie intactas.
-      }
+    //
+    // OJO: `res` ya está armado con su cookie. A partir de aquí NADA puede
+    // cambiar la respuesta — un bot de vista previa (WhatsApp, facebookexternalhit)
+    // recibe exactamente la misma redirección de siempre, solo que sin sumar.
+    const ipHash = hashIp(clientIp(req.headers));
+    const counts =
+      !limited &&
+      (await shouldCountAffiliateClick({
+        userAgent: req.headers.get("user-agent"),
+        ref,
+        ipHash,
+      }));
+
+    if (counts) {
+      await Promise.all([
+        // Contador por campaña del panel del afiliado.
+        linkIdToCount
+          ? prisma.affiliateLink
+              .update({ where: { id: linkIdToCount }, data: { clicks: { increment: 1 } } })
+              .catch(() => null)
+          : null,
+        prisma.affiliateClick
+          .create({
+            data: {
+              affiliateId,
+              ref,
+              campaign,
+              landingPage: `/r/${code}`.slice(0, 120),
+              ipHash,
+              userAgent: summarizeUserAgent(req.headers.get("user-agent")),
+            },
+          })
+          // Silencio: sin clic registrado, pero con redirección y cookie intactas.
+          .catch(() => null),
+      ]);
     }
 
     return res;

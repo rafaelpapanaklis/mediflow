@@ -195,8 +195,14 @@ export function hashIp(ip: string | null | undefined): string | null {
   return createHash("sha256").update(`${IP_SALT}:${v}`).digest("hex").slice(0, 32);
 }
 
-/** Primer IP del x-forwarded-for o x-real-ip. */
-export function clientIp(headers: Headers): string | null {
+/**
+ * Primer IP del x-forwarded-for o x-real-ip.
+ *
+ * El tipo es estructural (solo `get`) a propósito: así acepta tanto el
+ * `req.headers` de una route handler como el `ReadonlyHeaders` que devuelve
+ * `headers()` de next/headers en un server component.
+ */
+export function clientIp(headers: { get(name: string): string | null }): string | null {
   const xff = headers.get("x-forwarded-for");
   if (xff) {
     const first = xff.split(",")[0]?.trim();
