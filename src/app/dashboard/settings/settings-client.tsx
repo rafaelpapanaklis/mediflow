@@ -714,10 +714,18 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
               </div>
             </div>
           </div>
-          <div className="card__body">
+          <div className="card__body" style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             <a href="/afiliados" target="_blank" rel="noopener noreferrer"
               className="btn-new btn-new--secondary">
               Conocer el programa →
+            </a>
+            {/* Atajo directo: /afiliados/registro detecta la sesión abierta y
+                ofrece activar el rol de afiliado en un clic, sin pedir de nuevo
+                correo ni contraseña (clínicas y afiliados comparten Supabase
+                Auth, así que el alta normal rechazaría este correo). */}
+            <a href="/afiliados/registro" target="_blank" rel="noopener noreferrer"
+              className="btn-new btn-new--secondary">
+              Activar mi cuenta de afiliado →
             </a>
           </div>
         </div>

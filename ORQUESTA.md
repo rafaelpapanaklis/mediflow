@@ -4082,3 +4082,183 @@ Las dos superficies de autenticación cubiertas — **`/login`** y **`/signup`**
 `light` — más los dos footers públicos de `9a1ed79e` (`SalesFooter` en home, blog,
 `/casos-de-uso`, `/herramientas`, `/descubre`, las 8 páginas de módulo y `/afiliados`; `Footer`
 en las especialidades `/[slug]` y `/roadmap`).
+
+---
+
+## Afiliados · Un dueño de clínica ya puede registrarse como afiliado (vinculación)
+
+### El bug
+
+`POST /api/afiliados/auth/register` paso (d) llamaba a `auth.admin.createUser({ email, password })`.
+Afiliados y usuarios de clínica viven en el **mismo** proyecto de Supabase Auth, así que si el
+correo ya existía —porque esa persona es dueña o staff de una clínica— Supabase devolvía
+`email_exists` y el endpoint cortaba con un **400 "Este email ya tiene una cuenta"**: un error
+muerto, sin salida. La persona con más razones para ser afiliado (un cliente que ya usa y confía
+en el producto) era justamente la que no podía registrarse — y el enlace desde Configuración del
+panel llevaba directo a ese muro.
+
+Ser cliente y ser afiliado son **roles independientes**. Una misma persona puede tener ambos.
+
+### La trampa de seguridad, y cómo se evitó
+
+El arreglo ingenuo —"si el correo existe, reutiliza ese usuario"— es un **secuestro de cuentas**:
+el formulario pide contraseña, así que cualquiera que conociera el correo de un dentista podría
+mandar el registro de afiliado con una contraseña nueva y quedarse con su cuenta de clínica.
+
+Regla aplicada, sin excepciones: **si el correo ya existe en Supabase Auth, el registro no crea
+usuario, no cambia la contraseña y no toca esa cuenta de ninguna forma.** La única vía es que la
+persona demuestre que es dueña del correo **iniciando sesión**.
+
+Cómo se sostiene en el código:
+
+- `/api/afiliados/auth/link` (la ruta que da de alta al que ya existe) **no importa el admin
+  client de Supabase**. No hay `createUser`, ni `updateUserById`, ni `deleteUser` en todo el
+  archivo: sólo `INSERT` en `affiliates` y `affiliate_users`. La contraseña es inalcanzable desde
+  ahí.
+- El `supabaseId` y el correo salen de `supabase.auth.getUser()` — sesión **verificada contra el
+  servidor de Auth**—, nunca del body. El body sólo aporta nombre y datos de pago.
+- El rollback best-effort de `deleteUser` sigue existiendo **sólo** en el registro normal, y sólo
+  sobre `created.user`, el usuario que ese request acaba de crear. La rama del correo preexistente
+  sale antes de llegar ahí, así que nunca puede borrar a un usuario que ya estaba.
+
+### Los tres casos del registro
+
+`POST /api/afiliados/auth/register` ahora distingue:
+
+| Caso | Detección | Respuesta |
+|---|---|---|
+| (a) Correo nuevo | `createUser` OK | 201 — flujo de siempre, intacto |
+| (b) Ya es afiliado | `Affiliate.email` (@unique) existe | 400 `{ error, loginUrl: "/afiliados/login" }` |
+| (c) Existe en Auth, **no** es afiliado | `createUser` → `email_exists` | **409 `{ needsLogin: true, linkUrl }`** |
+
+**Por qué se detecta por el error de `createUser` y no con una búsqueda.** El SDK instalado
+(`@supabase/supabase-js ^2.45`) expone `admin.listUsers({ page, perPage })` **sin filtro por
+correo** — lo verifiqué en `node_modules/@supabase/auth-js/.../GoTrueAdminApi.js`: sólo manda
+`page` y `per_page`. Recorrer todas las páginas de usuarios en cada registro no es viable. Usar
+`createUser` como sonda es seguro porque es un `INSERT` puro: ante un correo repetido devuelve
+422 `email_exists` y **no modifica** al usuario existente. La detección (`isEmailTakenError`) mira
+el `code` (`email_exists` / `user_already_exists`) y, como red, el mensaje.
+
+El caso (b) se resuelve por `Affiliate.email` porque **todo `Affiliate` nace junto a su
+`AffiliateUser` en la misma transacción** (`createAffiliateAccount`) — no existen afiliados
+huérfanos. El chequeo por `supabaseId` vive donde sí hay identidad verificada: en `/link`.
+
+### El flujo nuevo
+
+`/afiliados/vincular` — pantalla propia, no un segundo paso del registro. Se eligió así porque
+tiene que servir a **dos** perfiles y ser enlazable por sí sola:
+
+1. **Sin sesión** (rebotado del registro con 409): escribe su contraseña **de siempre** →
+   `signInWithPassword` → sólo si eso funciona se llama a `/link`. Contraseña mala = se corta
+   antes del fetch, no se crea nada.
+2. **Con sesión abierta**: no pide correo ni contraseña, sólo confirma.
+
+Los datos ya escritos (nombre, método y datos de pago) viajan en **`sessionStorage`**, no en query
+params: `payoutDetails` puede traer una CLABE y la query string acaba en el historial del
+navegador y en los logs de acceso. Se lee una sola vez y se borra (`consumeSignupDraft`). El
+correo sí va en `?email=` porque sólo prellena el input — la identidad real la decide la sesión.
+
+`POST /api/afiliados/auth/link` valida en este orden:
+
+1. Sesión verificada en servidor → si no hay, **401**.
+2. ¿Ya tiene `AffiliateUser`? → no duplica: `{ alreadyLinked: true, home }` → a su panel.
+3. ¿Es **vendedor** de un equipo? → **409**. Convertirlo también en afiliado lo dejaría sin su
+   panel: `/api/afiliados/whoami` prioriza afiliado sobre vendedor y lo mandaría al equivocado.
+4. ¿Existe un `Affiliate` con ese correo no vinculado a esta sesión? → **409**, no se adopta.
+   Adoptarlo sería un camino de apropiación de cuenta ajena (p. ej. si el correo de aquel afiliado
+   cambió en Auth y otra persona lo reusó).
+5. Nombre obligatorio; método/datos de pago opcionales.
+6. Alta con el **mismo helper** que el registro normal.
+
+Además: check de **origen** (mismo criterio que el guard CSRF de `/api/admin` en `middleware.ts`) y
+rate-limit por IP (10/min). La ruta muta estado y autentica por cookie; la cookie de Supabase es
+`SameSite=lax`, pero el check explícito no depende de esa configuración.
+
+### Núcleo compartido
+
+`src/lib/affiliates/signup.ts` — `createAffiliateAccount()` + `sendAffiliateSignupEmails()` +
+`normalizePayoutMethod()`. Lo usan las **dos** puertas de entrada, así que slug, `referralCode`,
+`status PENDING` y los **dos correos** (aviso a la casa + acuse al solicitante) salen idénticos por
+ambas. El registro normal quedó más corto: delega en el helper en vez de repetir la transacción.
+
+### El camino corto (punto 4 — sí entró)
+
+`/afiliados/registro` es server component `force-dynamic`, así que resuelve la sesión antes de
+pintar (`getAffiliateLinkState()`, que nunca lanza). Con sesión abierta y sin cuenta de afiliado,
+el formulario **esconde correo y contraseña** y manda a `/link`: un clic, sin reescribir nada. Si
+esa sesión ya es afiliada, muestra "Ya tienes cuenta de afiliado" con enlace a su panel en vez de
+un formulario inútil.
+
+En Configuración del panel se agregó un segundo botón, **"Activar mi cuenta de afiliado →"**, que
+apunta directo a `/afiliados/registro` (el existente "Conocer el programa" se quedó igual).
+
+Límite conocido: `/afiliados/*` **no** está en el matcher de `src/middleware.ts`, así que ahí no se
+refresca la cookie de Supabase. Con un access token vencido, `getAffiliateLinkState()` devuelve
+`sessionEmail: null` y la persona simplemente escribe su contraseña en `/afiliados/vincular` — el
+flujo sigue completo, sólo pierde el atajo. No se tocó el middleware a propósito.
+
+### Convivencia de los dos roles — lo que revisé
+
+Es lo más delicado del cambio: tras vincular, un mismo `supabaseId` tiene rol de clínica **y** de
+afiliado.
+
+**No se confunden porque leen tablas distintas y no comparten campos.**
+
+- `getAuthContext()` → `prisma.user.findFirst({ supabaseId, isActive })` sobre `users`. Nunca lee
+  `affiliate_users`.
+- `getAffiliateContext()` → `prisma.affiliateUser.findFirst({ supabaseId, isActive })` sobre
+  `affiliate_users`. Nunca lee `users`.
+- `getAffiliateSellerContext()` → `affiliate_sellers`.
+
+**No heredan permisos** porque no tienen dónde: `AffiliateContext` expone
+`{ affiliateUserId, affiliateId, affiliate, status }` — **sin `clinicId`, sin `role`, sin
+`permissionsOverride`**. `AuthContext` no expone `affiliateId`. No hay un campo por el que un rol
+pueda leer al otro.
+
+Verificación mecánica: recorrí los 21 archivos que usan `getAffiliateContext` /
+`getAffiliateSellerContext` buscando cuáles usan además `getAuthContext` o `getCurrentUser`.
+**Resultado: cero solapamientos.** Ningún archivo del repo mezcla contexto de clínica y de
+afiliado, así que no hay superficie donde uno pueda filtrarse al otro.
+
+**Aislamiento intacto.** `/api/afiliados/stats` sigue filtrando por `Clinic.affiliateId ===
+ctx.affiliateId` (las clínicas que **ese afiliado refirió**) y devolviendo agregados; el `id` que
+selecciona es sólo para cruzar términos congelados y no sale en la respuesta. Que la persona sea
+además dueña de una clínica no cambia el scope: su propia clínica sólo aparecería si estuviera
+atribuida a su `affiliateId`, y eso lo bloquea el anti self-referral.
+
+**Anti self-referral: verificado, y ahora más sólido.** `git diff` sobre
+`src/app/api/auth/register/route.ts` y `src/lib/affiliates.ts` sale **vacío** — el motor de
+atribución no se tocó. El guard compara `Affiliate.email` con el correo del alta y anula sólo la
+atribución. Con la vinculación, `Affiliate.email` sale de la **sesión verificada**, no de un campo
+tecleado, así que coincide con el correo real de la persona: el chequeo es más fiable que antes.
+Ser dueño de una clínica y afiliado a la vez es legítimo; usar tu propio enlace para tu propia
+clínica sigue sin comisionar. (Límite preexistente, fuera de alcance: si la segunda clínica se da
+de alta con **otro** correo, el guard por correo no lo detecta.)
+
+**Consecuencia de UX que conviene saber:** la sesión de Supabase es **una sola** para ambos roles.
+`POST /api/afiliados/auth/logout` hace `signOut()` global, así que cerrar sesión desde el panel de
+afiliado **también cierra la del panel de la clínica** (y al revés). No es una fuga —es el mismo
+usuario— pero es lo que se va a sentir. Es comportamiento preexistente de la sesión compartida
+(igual que labs/proveedores), no algo que introduzca esta ola.
+
+### Recorrido de verificación
+
+| # | Escenario | Resultado |
+|---|---|---|
+| 1 | Correo nuevo | Alta normal, sin cambios: `createUser` → Affiliate PENDING + AffiliateUser → 201 → `/afiliados/login` |
+| 2 | Correo de dueño de clínica | 409 `needsLogin` → tarjeta "Ya tienes una cuenta en DaleControl… inicia sesión y activamos tu cuenta" + botón a `/afiliados/vincular`. **No** es un error rojo |
+| 3 | Mismo correo, contraseña **equivocada** | `signInWithPassword` falla → mensaje y `return` **antes** del fetch a `/link`. Nada creado. Aunque se saltara el cliente, `/link` sin sesión da 401 |
+| 4 | Mismo correo, contraseña **correcta** | Affiliate PENDING + AffiliateUser sobre su `supabaseId` existente → `/afiliados/pendiente`. La contraseña **no cambia**: `/link` no importa el admin client |
+| 5 | Correo que ya es afiliado | 400 "Este correo ya tiene una cuenta de afiliado." con enlace a `/afiliados/login` pintado **dentro** del aviso |
+| 6 | Tras vincular, ambos paneles | `/dashboard` resuelve por `users`, `/afiliados/*` por `affiliate_users`. Sin solapamiento (verificado arriba). PENDING cae en `/afiliados/pendiente` hasta la aprobación |
+
+### Build
+
+`npm run build` completo y **verde**, sin pipe: `prisma generate` OK, **0 errores de tipos**,
+**362/362** páginas prerenderizadas. Rutas nuevas en el manifest: `ƒ /afiliados/vincular` (4.18 kB)
+y `ƒ /api/afiliados/auth/link`. `/afiliados/registro` pasó de 3.33 → 3.39 kB. Los `prisma:error` de
+`DATABASE_URL` del prerender son los de siempre (no hay `.env` local) y los warnings (clases
+ambiguas de Tailwind, `Critical dependency` de `file-type`) son preexistentes.
+
+**Sin SQL ni cambios de schema** — se reusan `affiliates` y `affiliate_users` tal cual. No se
+tocaron el motor de comisiones, la landing ni `globals.css`.

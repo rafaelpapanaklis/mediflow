@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { generateReferralCode } from "@/lib/affiliates";
 import {
-  sendAffiliateApplicationAdminEmail,
-  sendAffiliateApplicationReceivedEmail,
-} from "@/lib/affiliate-emails";
+  createAffiliateAccount,
+  normalizePayoutMethod,
+  sendAffiliateSignupEmails,
+} from "@/lib/affiliates/signup";
 import { createClient as createAdminClient } from "@supabase/supabase-js";
 
 // Admin client (mismo patrón que src/app/api/laboratorios/auth/register/route.ts
@@ -35,21 +35,27 @@ function isRateLimited(ip: string): boolean {
   return entry.count > RATE_LIMIT_MAX;
 }
 
-// Slug legible derivado del nombre del afiliado.
-function slugifyAffiliate(name: string): string {
-  return (
-    name
-      .toLowerCase()
-      .normalize("NFD")
-      .replace(/[̀-ͯ]/g, "")
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/(^-|-$)/g, "")
-      .slice(0, 40) || "afiliado"
-  );
+/**
+ * ¿El error de `createUser` significa "ese correo ya existe en Supabase Auth"?
+ *
+ * Afiliados y usuarios de clínica comparten el MISMO proyecto de Supabase Auth,
+ * así que el correo de un dueño de clínica ya existe cuando intenta registrarse
+ * como afiliado. Detectarlo por el error es intencional: el SDK instalado
+ * (@supabase/supabase-js ^2.45) expone `admin.listUsers({ page, perPage })` SIN
+ * filtro por correo, así que no hay búsqueda directa; recorrer todas las páginas
+ * de usuarios en cada registro no es viable.
+ *
+ * `admin.createUser` es un INSERT puro: cuando el correo ya existe devuelve
+ * 422 email_exists y NO modifica al usuario existente (no cambia su contraseña
+ * ni sus metadatos). Por eso usarlo como sonda es seguro.
+ */
+function isEmailTakenError(err: { message?: string; code?: string; status?: number } | null): boolean {
+  if (!err) return false;
+  const code = (err as any).code ?? "";
+  if (code === "email_exists" || code === "user_already_exists") return true;
+  const msg = err.message ?? "";
+  return /already\s+(been\s+)?registered|already\s+exists|email\s+address\s+is\s+already/i.test(msg);
 }
-
-// Métodos de pago aceptados (free-form pero validado contra catálogo fijo).
-const VALID_PAYOUT_METHODS = new Set(["SPEI", "PAYPAL", "OTHER"]);
 
 export async function POST(req: Request) {
   // a) Rate-limit por IP.
@@ -72,8 +78,7 @@ export async function POST(req: Request) {
   const name = typeof body?.name === "string" ? body.name.trim() : "";
   const rawEmail = typeof body?.email === "string" ? body.email.trim() : "";
   const password = typeof body?.password === "string" ? body.password : "";
-  const payoutMethodRaw = typeof body?.payoutMethod === "string" ? body.payoutMethod.trim().toUpperCase() : "";
-  const payoutMethod = VALID_PAYOUT_METHODS.has(payoutMethodRaw) ? payoutMethodRaw : "";
+  const payoutMethod = normalizePayoutMethod(body?.payoutMethod);
   const payoutDetails = typeof body?.payoutDetails === "string" ? body.payoutDetails.trim().slice(0, 300) : "";
 
   if (!name) {
@@ -92,9 +97,18 @@ export async function POST(req: Request) {
   const email = rawEmail.toLowerCase();
 
   // c) Email ya registrado como afiliado → cortar temprano con mensaje claro.
+  //    `Affiliate.email` es @unique y TODO Affiliate nace junto a su
+  //    AffiliateUser en la misma transacción (createAffiliateAccount), así que
+  //    este check cubre el caso "ya tiene cuenta de afiliado".
   const existingAffiliate = await prisma.affiliate.findUnique({ where: { email } });
   if (existingAffiliate) {
-    return NextResponse.json({ error: "Este email ya tiene una cuenta de afiliado." }, { status: 400 });
+    return NextResponse.json(
+      {
+        error: "Este correo ya tiene una cuenta de afiliado.",
+        loginUrl: "/afiliados/login",
+      },
+      { status: 400 }
+    );
   }
 
   // d) Crear el usuario en Supabase Auth.
@@ -106,53 +120,54 @@ export async function POST(req: Request) {
   });
 
   if (createError || !created?.user) {
-    const msg = createError?.message ?? "";
-    if (msg.includes("already been registered") || msg.includes("already exists")) {
-      return NextResponse.json({ error: "Este email ya tiene una cuenta." }, { status: 400 });
+    // d.1) El correo YA existe en Supabase Auth pero NO es de un afiliado (c ya
+    //      descartó eso): es un dueño/staff de clínica, o un vendedor de equipo.
+    //      Ser cliente y ser afiliado son roles independientes, así que esto no
+    //      es un error: es el camino de VINCULACIÓN.
+    //
+    //      SEGURIDAD — regla innegociable: aquí NO se crea usuario, NO se cambia
+    //      la contraseña y NO se toca esa cuenta de ninguna forma. Si lo
+    //      hiciéramos, cualquiera que conozca el correo de un dentista podría
+    //      secuestrar su cuenta mandando este formulario con una contraseña
+    //      nueva. La única vía es que la persona demuestre que es dueña del
+    //      correo iniciando sesión: /afiliados/vincular →
+    //      POST /api/afiliados/auth/link, que saca el supabaseId de una sesión
+    //      verificada en el servidor.
+    //
+    //      409 + `needsLogin` para que el formulario lo distinga de un error
+    //      muerto y ofrezca el siguiente paso.
+    if (isEmailTakenError(createError)) {
+      return NextResponse.json(
+        {
+          needsLogin: true,
+          error: "Ya tienes una cuenta en DaleControl con este correo.",
+          linkUrl: "/afiliados/vincular",
+        },
+        { status: 409 }
+      );
     }
-    return NextResponse.json({ error: msg || "No se pudo crear la cuenta." }, { status: 400 });
+    return NextResponse.json(
+      { error: createError?.message || "No se pudo crear la cuenta." },
+      { status: 400 }
+    );
   }
 
-  // e) Slug único.
-  let slug = slugifyAffiliate(name);
-  for (let attempt = 0; attempt < 5; attempt++) {
-    const existing = await prisma.affiliate.findUnique({ where: { slug } });
-    if (!existing) break;
-    const suffix = Math.random().toString(36).slice(2, 6);
-    slug = `${slugifyAffiliate(name)}-${suffix}`;
-  }
-
-  // f) referralCode único (helper de la fundación).
-  const referralCode = await generateReferralCode();
-
-  // g) Crear Affiliate + AffiliateUser en una transacción.
+  // e) Affiliate + AffiliateUser (slug, referralCode y status PENDING salen del
+  //    helper compartido con la vinculación).
   let newAffiliateId = "";
   try {
-    newAffiliateId = await prisma.$transaction(async (tx) => {
-      const affiliate = await tx.affiliate.create({
-        data: {
-          name,
-          slug,
-          email,
-          referralCode,
-          payoutMethod: payoutMethod || null,
-          payoutDetails: payoutDetails || null,
-          // status usa el default PENDING; commissionPct usa el default (20).
-        },
-      });
-
-      await tx.affiliateUser.create({
-        data: {
-          affiliateId: affiliate.id,
-          supabaseId: created.user.id,
-          isActive: true,
-        },
-      });
-
-      return affiliate.id;
+    newAffiliateId = await createAffiliateAccount({
+      name,
+      email,
+      supabaseId: created.user.id,
+      payoutMethod,
+      payoutDetails,
     });
   } catch (err) {
-    // h) Rollback del usuario de Supabase (best-effort) si Prisma falló.
+    // f) Rollback del usuario de Supabase (best-effort) si Prisma falló. Sólo
+    //    aplica a `created.user`, el usuario que ESTE request acaba de crear —
+    //    jamás se borra un usuario preexistente (esa rama sale en d.1 sin llegar
+    //    aquí).
     try {
       await getAdminClient().auth.admin.deleteUser(created.user.id);
     } catch {
@@ -164,20 +179,9 @@ export async function POST(req: Request) {
     );
   }
 
-  // i) Avisos por correo. Fire-and-forget (mismo patrón que el resto del
-  // programa): las funciones ya llevan su try/catch interno y jamás tiran, y
-  // el `.catch()` cubre además el rechazo de la promesa. Un fallo de Resend no
-  // puede tumbar un registro que ya quedó guardado.
-  if (newAffiliateId) {
-    void sendAffiliateApplicationAdminEmail({
-      affiliateId: newAffiliateId,
-      name,
-      email,
-      payoutMethod: payoutMethod || null,
-    }).catch(() => {});
-  }
-  void sendAffiliateApplicationReceivedEmail({ name, email }).catch(() => {});
+  // g) Avisos por correo (fire-and-forget, ver helper).
+  sendAffiliateSignupEmails({ affiliateId: newAffiliateId, name, email, payoutMethod });
 
-  // j) Éxito.
+  // h) Éxito.
   return NextResponse.json({ ok: true }, { status: 201 });
 }
