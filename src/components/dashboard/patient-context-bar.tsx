@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import {
@@ -26,6 +26,23 @@ export function PatientContextBar() {
   const { consult, loading } = useActiveConsult();
   const elapsedSeconds = useConsultElapsedSeconds();
   const [endModalOpen, setEndModalOpen] = useState(false);
+
+  // Esta barra es sticky a top:52 (justo bajo el topbar) y mide otros 52px, pero
+  // solo existe cuando hay una consulta activa. Las barras sticky que van MÁS
+  // ABAJO en la página —la de secciones de la ficha y su rail derecho— no tienen
+  // forma de saberlo desde su propio CSS: si se anclan a 52px fijos acaban
+  // EXACTAMENTE encima de esta (mismo z-index, y ganan por orden de DOM).
+  // Publicamos el alto en una custom property del root y allá lo suman con
+  // var(--mf-context-bar-h, 0px), que sin consulta activa vale 0.
+  useEffect(() => {
+    if (loading || !consult) return;
+    const root = document.documentElement;
+    root.style.setProperty("--mf-context-bar-h", "52px");
+    // Con llaves: removeProperty devuelve string y el cleanup debe devolver void.
+    return () => {
+      root.style.removeProperty("--mf-context-bar-h");
+    };
+  }, [loading, consult]);
 
   // Early returns DESPUÉS de todos los hooks
   if (loading) return null;

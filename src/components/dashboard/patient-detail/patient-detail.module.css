@@ -402,8 +402,10 @@
   position: sticky;
   /* 52px del topbar + 47px de la barra de secciones (34px del botón + 2×6px de
      padding + borde) + 12px de respiro. Antes eran 16px y el rail se metía
-     debajo del topbar; ahora además tenía encima la barra horizontal. */
-  top: 111px;
+     debajo del topbar; ahora además tenía encima la barra horizontal.
+     + el alto de la barra de consulta activa cuando existe (misma custom
+     property que usa .patientNavSticky). */
+  top: calc(111px + var(--mf-context-bar-h, 0px));
   display: flex; flex-direction: column;
   gap: 12px;
 }
@@ -668,10 +670,15 @@
 
    top: 52px = alto EXACTO del topbar del dashboard (.topbar-new, sticky top:0
    dentro del MISMO div scrolleable). z-index 4 < 5 del topbar: al scrollear la
-   barra se mete DEBAJO del topbar en vez de taparlo. */
+   barra se mete DEBAJO del topbar en vez de taparlo.
+
+   --mf-context-bar-h la publica <PatientContextBar/> (52px) mientras hay una
+   consulta activa; sin ella vale 0. Sin ese sumando las dos barras se anclaban
+   al MISMO top:52 con el mismo z-index y esta, que va después en el DOM, tapaba
+   la de la consulta activa. */
 .patientNavSticky {
   position: sticky;
-  top: 52px;
+  top: calc(52px + var(--mf-context-bar-h, 0px));
   z-index: 4;
   /* El fondo opaco cubre el hueco entre la barra y el contenido: sin él las
      tarjetas se veían pasar por la franja del margen al scrollear. */
