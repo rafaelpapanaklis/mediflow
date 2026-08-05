@@ -4033,3 +4033,52 @@ clases ambiguas de Tailwind y el `Critical dependency` de `file-type`.
   módulo y `/afiliados`.
 - **`Footer`** → páginas de especialidad `/[slug]` y `/roadmap`.
 - **Login** (`/login`) → dentro de la tarjeta blanca, bajo el botón de «Iniciar sesión».
+
+---
+
+## [Sello «Datos cifrados» · /signup] — 2026-08-04
+
+Commit **`4b033861`** en `main` (directo, sin PR). Continuación de `9a1ed79e` (footers + login).
+Sin SQL, sin envs, sin dependencias.
+
+### Archivo tocado (uno solo)
+
+**`src/components/public/auth/signup/signup-form.tsx`** — el import de `SecureBadge` y un bloque
+de 5 líneas. **6 inserciones, 0 borrados**: no se tocó `handleSubmit`, ni el `submitLockRef`, ni
+el tracking de conversión (`trackSignupConversionAndRedirect`), ni el `Stepper`, ni ninguno de
+los tres `step-N-*.tsx`, ni un solo copy existente.
+
+### Por qué se ve en los 3 pasos
+
+El sello va como **último hijo del contenedor raíz** del `return` (el `<div>` con
+`flexDirection: "column", gap: 24`), **fuera** de los tres `{step === N && (…)}`. Ese div se
+renderiza siempre, así que el sello no depende del paso: queda debajo del bloque activo, sea el
+de cuenta, el de clínica o el de plan y pago — que es justo donde más pesa, porque es el paso
+donde el usuario mete la tarjeta. Como cuelga del contenedor con `gap: 24`, hereda la
+separación del formulario sin margen propio.
+
+`tone="light"` porque `AuthShell` pinta la tarjeta en blanco (#ffffff), igual que el login. El
+sello **no es un enlace** (sin `href`), y `globals.css` / `landing-v2.css` quedaron intactos.
+
+### Verificación previa
+
+`git checkout main && git pull origin main` trajo la rama local **39 commits atrás** hasta
+`9a68043c`, y ahí se confirmó que `src/components/public/landing/primitives/secure-badge.tsx`
+**sí existe** — el requisito para no duplicar el componente. El paso 0 pedía detenerse si
+faltaba; no fue el caso.
+
+### Build
+
+`npm run build` completo y **verde**, sin pipe: `prisma generate` OK, tipos OK, **360/360**
+páginas prerenderizadas. `/signup` pasó de **17.2 kB → 17.3 kB**, con el **First Load JS igual
+en 224 kB**: el icono va inline como SVG y el componente no arrastra dependencias. Los
+`prisma:error` de `DATABASE_URL` del prerender son los de siempre (no hay `.env` local), y los
+warnings (3 clases ambiguas de Tailwind, `Critical dependency` de `file-type`) son
+preexistentes.
+
+### Estado del sello tras esta ola
+
+Las dos superficies de autenticación cubiertas — **`/login`** y **`/signup`**, ambas en versión
+`light` — más los dos footers públicos de `9a1ed79e` (`SalesFooter` en home, blog,
+`/casos-de-uso`, `/herramientas`, `/descubre`, las 8 páginas de módulo y `/afiliados`; `Footer`
+en las especialidades `/[slug]` y `/roadmap`).
