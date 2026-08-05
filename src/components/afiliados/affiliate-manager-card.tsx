@@ -5,16 +5,20 @@
 // Se monta arriba de la lista de tickets en /afiliados/soporte.
 //
 // Mismo contenido que la tarjeta de la clínica (components/dashboard/
-// account-manager-card.tsx) pero escrita al idioma visual de este panel:
-// inline styles + variables CSS, sin CSS module y sin i18n (el panel del
+// account-manager-card.tsx) pero escrita al lenguaje visual de ESTE panel:
+// las primitivas de components/afiliados/ui/panel-ui + las clases `dcafp-*`
+// de src/app/afiliados/panel.css. Sin CSS module y sin i18n (el panel del
 // afiliado es solo español).
+//
+// Va con `accent`: es el canal PRINCIPAL de la pantalla —un WhatsApp directo
+// contesta antes que un ticket—, así que se lee como la pieza destacada.
 //
 // Los datos llegan YA resueltos desde el servidor: aquí no se calcula
 // disponibilidad ni se conoce el catálogo de managers.
 //
 // Tres estados:
 //   · manager EN LÍNEA         → chip verde
-//   · manager FUERA DE HORARIO → chip gris + cuándo vuelve a atender; el botón
+//   · manager FUERA DE HORARIO → chip ámbar + cuándo vuelve a atender; el botón
 //     de WhatsApp SIGUE habilitado (puede escribir ahora y le contestan luego)
 //   · SIN manager              → canal general de soporte con CTA a ticket.
 //     Nunca una tarjeta vacía: "sin manager" es un estado válido y frecuente
@@ -24,12 +28,12 @@
 import { LifeBuoy } from "lucide-react";
 import type { AccountManagerDTO } from "@/lib/account-manager/types";
 import { firstNameOf, initialsFromName } from "@/lib/account-manager/types";
+import { Chip, EmptyState, Eyebrow, Footnote, PanelCard } from "@/components/afiliados/ui/panel-ui";
 
-// ── EXCEPCIÓN AL DESIGN SYSTEM ─────────────────────────────────────────────
-// #16a34a es el verde de marca de WhatsApp (un tercero): es justo lo que hace
-// el botón reconocible de un vistazo, así que NO se mapea a --brand ni a
-// --success. Mismo criterio que la tarjeta de la clínica.
-const WA_GREEN = "#16a34a";
+// El botón de WhatsApp usa el primario del panel (`dcafp-btn--primary`), no el
+// verde de la marca de WhatsApp: dentro del panel la acción principal es
+// morada en todas las pantallas y romper eso aquí desalinearía la jerarquía.
+// El glifo oficial de abajo es el que lo hace reconocible de un vistazo.
 
 /** Glifo oficial de WhatsApp (mismo path que usa la tarjeta de la clínica). */
 function WhatsAppGlyph({ size = 16 }: { size?: number }) {
@@ -40,37 +44,8 @@ function WhatsAppGlyph({ size = 16 }: { size?: number }) {
   );
 }
 
-const cardStyle: React.CSSProperties = {
-  display: "flex",
-  alignItems: "center",
-  gap: 16,
-  flexWrap: "wrap", // en móvil el bloque de acción baja a su propia línea
-  padding: "16px 20px",
-  background: "var(--bg-elev)",
-  border: "1px solid var(--border-soft)",
-  borderRadius: "var(--radius-lg)",
-  boxShadow: "var(--shadow-1)",
-};
-
-const eyebrowStyle: React.CSSProperties = {
-  fontSize: 10,
-  fontWeight: 700,
-  letterSpacing: "0.12em",
-  color: "var(--text-3)",
-  textTransform: "uppercase",
-};
-
-const chipBase: React.CSSProperties = {
-  display: "inline-flex",
-  alignItems: "center",
-  gap: 5,
-  padding: "2px 8px",
-  borderRadius: 999,
-  fontSize: 9,
-  fontWeight: 700,
-  letterSpacing: "0.06em",
-  whiteSpace: "nowrap",
-};
+/** El avatar del diseño mide 36px; aquí es la pieza destacada y va a 54px. */
+const AVATAR_PX = 54;
 
 interface Props {
   /** null = el afiliado no tiene manager asignado (o el SQL aún no se aplicó). */
@@ -100,42 +75,29 @@ export function AffiliateManagerCard({
   // ── Sin manager: canal general de soporte ────────────────────────────────
   if (!manager) {
     return (
-      <section style={{ ...cardStyle, justifyContent: "center", textAlign: "center", flexDirection: "column", gap: 10, padding: 22 }} aria-label="Soporte a afiliados">
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, width: "100%" }}>
-          <span style={eyebrowStyle}>Soporte a afiliados</span>
-          <span style={{ ...chipBase, background: "var(--brand-soft)", color: "var(--brand)" }}>PRONTO</span>
-        </div>
-        <div
-          aria-hidden
-          style={{
-            width: 54,
-            height: 54,
-            borderRadius: "50%",
-            background: "var(--brand-soft)",
-            color: "var(--brand)",
-            display: "grid",
-            placeItems: "center",
-            marginTop: 6,
-          }}
+      <PanelCard
+        accent
+        title="Soporte a afiliados"
+        action={<Chip tone="brand" sm>Pronto</Chip>}
+      >
+        <EmptyState
+          icon={<LifeBuoy size={22} strokeWidth={1.8} />}
+          title="Aún no tienes un manager asignado"
+          action={
+            <button type="button" className="dcafp-btn dcafp-btn--primary" onClick={onOpenTicket}>
+              <LifeBuoy size={15} strokeWidth={1.9} aria-hidden />
+              Abrir un ticket
+            </button>
+          }
         >
-          <LifeBuoy size={24} strokeWidth={1.7} />
+          Mientras tanto, el equipo de DaleControl te atiende por aquí: abre un ticket con
+          tu duda —comisiones, pagos, material de venta— y te respondemos en este mismo
+          panel.
+        </EmptyState>
+        <div style={{ marginTop: 12 }}>
+          <Footnote>En cuanto te asignemos un manager, lo verás aquí con su WhatsApp directo.</Footnote>
         </div>
-        <div style={{ fontSize: 15, fontWeight: 700, color: "var(--text-1)" }}>
-          Aún no tienes un manager asignado
-        </div>
-        <p style={{ fontSize: 12.5, color: "var(--text-3)", lineHeight: 1.55, margin: 0, maxWidth: "44ch" }}>
-          Mientras tanto, el equipo de DaleControl te atiende por aquí: abre un ticket
-          con tu duda —comisiones, pagos, material de venta— y te respondemos en este
-          mismo panel.
-        </p>
-        <button type="button" className="btn-new btn-new--primary" style={{ marginTop: 6 }} onClick={onOpenTicket}>
-          <LifeBuoy size={15} strokeWidth={1.8} />
-          Abrir un ticket
-        </button>
-        <div style={{ fontSize: 11.5, color: "var(--text-4)" }}>
-          En cuanto te asignemos un manager, lo verás aquí con su WhatsApp directo.
-        </div>
-      </section>
+      </PanelCard>
     );
   }
 
@@ -150,138 +112,115 @@ export function AffiliateManagerCard({
   const waHref = `https://wa.me/${manager.whatsappE164}?text=${prefilled}`;
 
   return (
-    <section style={cardStyle} aria-label="Tu manager de cuenta">
-      {/* Avatar + textos: juntos ocupan el centro y en móvil quedan arriba. */}
-      <div style={{ display: "flex", alignItems: "center", gap: 16, flex: "1 1 260px", minWidth: 0 }}>
-        <div style={{ position: "relative", width: 54, height: 54, flexShrink: 0 }}>
-          {manager.photoUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element -- URL externa (Supabase Storage): next/image exigiría allowlist de dominios.
-            <img
-              src={manager.photoUrl}
-              alt={manager.name}
-              width={54}
-              height={54}
-              style={{ width: 54, height: 54, borderRadius: "50%", objectFit: "cover", display: "block" }}
-            />
-          ) : (
-            <div
-              aria-hidden
-              style={{
-                width: 54,
-                height: 54,
-                borderRadius: "50%",
-                display: "grid",
-                placeItems: "center",
-                background: "linear-gradient(135deg, var(--violet-400, #a855f7), var(--brand))",
-                color: "#fff",
-                fontSize: 16,
-                fontWeight: 700,
-                letterSpacing: "0.02em",
-                userSelect: "none",
-              }}
-            >
-              {initialsFromName(manager.name)}
-            </div>
-          )}
-          {online && (
-            <span
-              aria-hidden
-              style={{
-                position: "absolute",
-                right: 0,
-                bottom: 0,
-                width: 12,
-                height: 12,
-                borderRadius: "50%",
-                background: "var(--success)",
-                border: "2px solid var(--bg-elev)",
-              }}
-            />
-          )}
-        </div>
-
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-            <span style={eyebrowStyle}>Tu manager de cuenta</span>
-            {online ? (
-              <span style={{ ...chipBase, background: "var(--success-soft)", color: "var(--success-strong, var(--success))" }}>
-                <span aria-hidden style={{ width: 5, height: 5, borderRadius: "50%", background: "var(--success)", flexShrink: 0 }} />
-                EN LÍNEA
-              </span>
+    <PanelCard accent>
+      <div style={{ display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
+        {/* Avatar + textos: juntos ocupan el centro y en móvil quedan arriba. */}
+        <div style={{ display: "flex", alignItems: "center", gap: 14, flex: "1 1 260px", minWidth: 0 }}>
+          <div style={{ position: "relative", width: AVATAR_PX, height: AVATAR_PX, flexShrink: 0 }}>
+            {manager.photoUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element -- URL externa (Supabase Storage): next/image exigiría allowlist de dominios.
+              <img
+                src={manager.photoUrl}
+                alt={manager.name}
+                width={AVATAR_PX}
+                height={AVATAR_PX}
+                style={{ width: AVATAR_PX, height: AVATAR_PX, borderRadius: "50%", objectFit: "cover", display: "block" }}
+              />
             ) : (
-              <span style={{ ...chipBase, background: "var(--bg-elev-2)", color: "var(--text-3)" }}>
-                <span aria-hidden style={{ width: 5, height: 5, borderRadius: "50%", background: "var(--text-4)", flexShrink: 0 }} />
-                FUERA DE HORARIO
-              </span>
+              <div className="dcafp-avatar" aria-hidden style={{ width: AVATAR_PX, height: AVATAR_PX, fontSize: 17 }}>
+                {initialsFromName(manager.name)}
+              </div>
+            )}
+            {online && (
+              <span
+                aria-hidden
+                style={{
+                  position: "absolute",
+                  right: 1,
+                  bottom: 1,
+                  width: 13,
+                  height: 13,
+                  borderRadius: "50%",
+                  background: "var(--dcafp-ok)",
+                  border: "2px solid var(--dcafp-surface)",
+                }}
+              />
             )}
           </div>
 
-          <div style={{ fontSize: 16.5, fontWeight: 700, color: "var(--text-1)", marginTop: 3, letterSpacing: "-0.01em" }}>
-            {manager.name}
-          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+              <Eyebrow>Tu manager de cuenta</Eyebrow>
+              {online ? (
+                <Chip tone="ok" dot sm>En línea</Chip>
+              ) : (
+                <Chip tone="amber" dot sm>Fuera de horario</Chip>
+              )}
+            </div>
 
-          <div style={{ fontSize: 12, color: "var(--text-3)", marginTop: 3 }}>
-            {scheduleText ? <>Atiende {scheduleText}{" · "}</> : null}
-            <span className="mono" style={{ fontWeight: 600, color: "var(--text-2)" }}>
-              {manager.whatsappDisplay}
-            </span>
-            {/* Fuera de horario decimos cuándo vuelve: evita la ansiedad de
-                escribir y no saber si alguien contesta. */}
-            {!online && nextAvailable ? <>{" · "}{nextAvailable}</> : null}
+            <div
+              style={{
+                fontSize: 17,
+                fontWeight: 800,
+                letterSpacing: "-0.2px",
+                color: "var(--dcafp-ink)",
+                marginTop: 4,
+                overflowWrap: "anywhere",
+              }}
+            >
+              {manager.name}
+            </div>
+
+            <div style={{ fontSize: 12.5, color: "var(--dcafp-ink-3)", marginTop: 4, lineHeight: 1.5, overflowWrap: "anywhere" }}>
+              {scheduleText ? <>Atiende {scheduleText}{" · "}</> : null}
+              <span className="dcafp-mono" style={{ fontWeight: 700, color: "var(--dcafp-ink-2)" }}>
+                {manager.whatsappDisplay}
+              </span>
+              {/* Fuera de horario decimos cuándo vuelve: evita la ansiedad de
+                  escribir y no saber si alguien contesta. */}
+              {!online && nextAvailable ? <>{" · "}{nextAvailable}</> : null}
+            </div>
           </div>
         </div>
-      </div>
 
-      {/* Acción. Fuera de horario el botón NO se deshabilita: puede escribir
-          ahora y le contestan dentro del horario del manager. */}
-      <div style={{ flex: "0 1 224px", minWidth: 200 }}>
-        <a
-          href={waHref}
-          target="_blank"
-          rel="noopener noreferrer"
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            gap: 8,
-            height: 42,
-            borderRadius: "var(--radius)",
-            background: WA_GREEN,
-            color: "#fff",
-            fontSize: 13.5,
-            fontWeight: 700,
-            textDecoration: "none",
-            boxShadow: "var(--shadow-1)",
-          }}
-        >
-          <WhatsAppGlyph size={16} />
-          Escribir por WhatsApp
-        </a>
-        <div style={{ textAlign: "center", fontSize: 11, color: "var(--text-3)", marginTop: 6 }}>
-          {online ? null : <>Escríbele ahora, te responde en su horario.{" "}</>}
-          O{" "}
-          <button
-            type="button"
-            onClick={onOpenTicket}
-            style={{
-              // Nada de `font: inherit` (shorthand): pisaría el fontWeight de
-              // abajo según el orden en que React serializa el objeto.
-              fontFamily: "inherit",
-              fontSize: "inherit",
-              fontWeight: 600,
-              color: "var(--brand)",
-              background: "none",
-              border: "none",
-              padding: 0,
-              cursor: "pointer",
-              textDecoration: "underline",
-            }}
+        {/* Acción. Fuera de horario el botón NO se deshabilita: puede escribir
+            ahora y le contestan dentro del horario del manager. */}
+        <div style={{ flex: "0 1 240px", minWidth: 200 }}>
+          <a
+            href={waHref}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="dcafp-btn dcafp-btn--primary dcafp-btn--block"
           >
-            abre un ticket
-          </button>
-          {" "}si prefieres dejarlo por escrito.
+            <WhatsAppGlyph size={16} />
+            Escribir por WhatsApp
+          </a>
+          <div style={{ textAlign: "center", fontSize: 11.5, color: "var(--dcafp-ink-3)", marginTop: 8, lineHeight: 1.5 }}>
+            {online ? null : <>Escríbele ahora, te responde en su horario.{" "}</>}
+            O{" "}
+            <button
+              type="button"
+              onClick={onOpenTicket}
+              style={{
+                // Nada de `font: inherit` (shorthand): pisaría el fontWeight de
+                // abajo según el orden en que React serializa el objeto.
+                fontFamily: "inherit",
+                fontSize: "inherit",
+                fontWeight: 700,
+                color: "var(--dcafp-brand-deep)",
+                background: "none",
+                border: "none",
+                padding: 0,
+                cursor: "pointer",
+                textDecoration: "underline",
+              }}
+            >
+              abre un ticket
+            </button>
+            {" "}si prefieres dejarlo por escrito.
+          </div>
         </div>
       </div>
-    </section>
+    </PanelCard>
   );
 }

@@ -5,19 +5,24 @@
 // herramientas del afiliado (links-manager.tsx + coupon-card.tsx) pero contra
 // /api/afiliados/vendedor/*. Carga sus datos en el cliente al montar; si el SQL
 // no está aplicado (503 tools_not_ready) muestra un aviso suave en cada sección.
-// Estilo: inline styles con CSS vars del panel + react-hot-toast. 100% responsive.
+//
+// Estilo: clases `dcafp-*` de src/app/afiliados/panel.css + primitivas de
+// components/afiliados/ui (PanelCard, Chip, Note, EmptyState, Stat). Copiar el
+// enlace/cupón usa CopyButton/CopyCodeButton, que traen el toast del panel (la
+// píldora de abajo); el resto de avisos —crear, eliminar, errores— sigue en
+// react-hot-toast. 100% responsive: nada desborda a 375px.
 import { useEffect, useState } from "react";
 import toast from "react-hot-toast";
+import { Link2, MousePointerClick, Plus, TicketPercent, Trash2 } from "lucide-react";
 import {
-  Copy,
-  Check,
-  Plus,
-  Trash2,
-  MousePointerClick,
-  TicketPercent,
-} from "lucide-react";
-import { CardNew } from "@/components/ui/design-system/card-new";
-import { BadgeNew } from "@/components/ui/design-system/badge-new";
+  Chip,
+  EmptyState,
+  Note,
+  PanelCard,
+  Stat,
+  StatRow,
+} from "@/components/afiliados/ui/panel-ui";
+import { CopyButton, CopyCodeButton } from "@/components/afiliados/ui/copy-button";
 import { QrDownloadButton } from "@/components/afiliados/tools/qr-download-button";
 
 type SellerLink = {
@@ -39,72 +44,12 @@ type SellerCouponInfo = {
 
 const CODE_RE = /^[A-Z0-9]{4,12}$/;
 
-const urlInputStyle: React.CSSProperties = {
-  flex: "1 1 220px",
-  minWidth: 0,
-  height: 40,
-  padding: "0 12px",
-  borderRadius: 10,
-  background: "var(--bg-elev-2)",
-  border: "1px solid var(--border-soft)",
-  color: "var(--text-2)",
-  fontSize: 12.5,
-  outline: "none",
-};
-
-const chipStyle: React.CSSProperties = {
-  display: "inline-flex",
-  alignItems: "center",
-  gap: 5,
-  padding: "3px 9px",
-  borderRadius: 999,
-  background: "var(--bg-elev-2)",
-  border: "1px solid var(--border-soft)",
-  color: "var(--text-3)",
-  fontSize: 11.5,
-  fontWeight: 600,
-  whiteSpace: "nowrap",
-};
-
-function brandButtonStyle(disabled: boolean): React.CSSProperties {
-  return {
-    display: "inline-flex",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 6,
-    padding: "0 14px",
-    height: 40,
-    flexShrink: 0,
-    borderRadius: 10,
-    border: "1px solid var(--border-brand)",
-    background: "var(--brand-soft)",
-    color: "var(--violet-400)",
-    fontSize: 13,
-    fontWeight: 600,
-    cursor: disabled ? "not-allowed" : "pointer",
-    opacity: disabled ? 0.55 : 1,
-    fontFamily: "inherit",
-    transition: "all .15s",
-    whiteSpace: "nowrap",
-  };
-}
-
-function notReadyBanner() {
+function NotReadyNote() {
   return (
-    <div
-      style={{
-        padding: "10px 14px",
-        borderRadius: 10,
-        border: "1px solid var(--warning-border-strong)",
-        background: "var(--warning-soft)",
-        color: "var(--text-2)",
-        fontSize: 12.5,
-        lineHeight: 1.5,
-      }}
-    >
+    <Note tone="warn">
       Disponible en cuanto se active la base de datos (
-      <span className="mono">sql/afiliados-ventas.sql</span>).
-    </div>
+      <span className="dcafp-mono">sql/afiliados-ventas.sql</span>).
+    </Note>
   );
 }
 
@@ -122,7 +67,6 @@ function SellerLinks() {
   const [ready, setReady] = useState(true);
   const [name, setName] = useState("");
   const [creating, setCreating] = useState(false);
-  const [copiedId, setCopiedId] = useState<string | null>(null);
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
@@ -175,17 +119,6 @@ function SellerLinks() {
     }
   }
 
-  async function copy(link: SellerLink) {
-    try {
-      await navigator.clipboard.writeText(link.url);
-      setCopiedId(link.id);
-      toast.success("Enlace copiado");
-      setTimeout(() => setCopiedId((id) => (id === link.id ? null : id)), 2000);
-    } catch {
-      toast.error("No se pudo copiar");
-    }
-  }
-
   async function removeLink(link: SellerLink) {
     // Paso 1: armar confirmación (se desarma sola a los 4 s).
     if (confirmingId !== link.id) {
@@ -214,12 +147,12 @@ function SellerLinks() {
   }
 
   return (
-    <CardNew
+    <PanelCard
       title="Tus links por campaña"
       sub="Crea un link por canal (Facebook, WhatsApp, expos...) y descubre cuál te trae más clínicas."
     >
-      <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-        {!ready && notReadyBanner()}
+      <div style={{ display: "flex", flexDirection: "column", gap: 16, minWidth: 0 }}>
+        {!ready && <NotReadyNote />}
 
         {/* Crear link */}
         <form
@@ -227,109 +160,92 @@ function SellerLinks() {
             e.preventDefault();
             void createLink();
           }}
-          style={{ display: "flex", gap: 8, alignItems: "stretch", flexWrap: "wrap" }}
+          style={{ display: "flex", gap: 8, alignItems: "flex-end", flexWrap: "wrap" }}
         >
-          <input
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="Facebook, WhatsApp, Expo dental..."
-            aria-label="Nombre de la campaña"
-            maxLength={40}
-            disabled={!ready || creating}
-            style={{
-              ...urlInputStyle,
-              color: "var(--text-1)",
-              fontSize: 13,
-              opacity: ready ? 1 : 0.55,
-            }}
-          />
-          <button type="submit" disabled={!canCreate} style={brandButtonStyle(!canCreate)}>
-            <Plus size={15} />
+          <div style={{ flex: "1 1 240px", minWidth: 0 }}>
+            <label className="dcafp-label" htmlFor="seller-link-name">
+              Nombre de la campaña
+            </label>
+            <input
+              id="seller-link-name"
+              className="dcafp-input"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Facebook, WhatsApp, Expo dental..."
+              maxLength={40}
+              disabled={!ready || creating}
+              style={{ opacity: ready ? 1 : 0.55 }}
+            />
+          </div>
+          <button type="submit" className="dcafp-btn dcafp-btn--primary" disabled={!canCreate}>
+            <Plus size={16} aria-hidden />
             {creating ? "Creando..." : "Crear link"}
           </button>
         </form>
 
         {loading ? (
-          <p style={{ fontSize: 13, color: "var(--text-3)", margin: 0 }}>Cargando…</p>
+          <p className="dcafp-hint">Cargando…</p>
         ) : links.length === 0 ? (
-          <p style={{ fontSize: 13, color: "var(--text-3)", margin: 0, lineHeight: 1.5 }}>
-            Crea tu primer link nombrado para saber qué canal te trae más clínicas.
-          </p>
+          <EmptyState icon={<Link2 size={22} />} title="Aún no tienes links">
+            Crea tu primer link con nombre —Facebook, WhatsApp, una expo— y aquí verás cuántos clics trae
+            cada uno y cuál te está dejando clínicas.
+          </EmptyState>
         ) : (
-          <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-            {links.map((l) => {
-              const copied = copiedId === l.id;
+          <div style={{ display: "flex", flexDirection: "column", gap: 14, minWidth: 0 }}>
+            {links.map((l, i) => {
               const confirming = confirmingId === l.id;
               const deleting = deletingId === l.id;
               return (
-                <div key={l.id} style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                    <span style={{ fontSize: 13, fontWeight: 600, color: "var(--text-1)" }}>{l.name}</span>
-                    <span style={chipStyle}>
-                      <MousePointerClick size={12} />
-                      {l.clicks} clics
+                <div
+                  key={l.id}
+                  style={{
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: 8,
+                    minWidth: 0,
+                    borderTop: i > 0 ? "1px solid var(--dcafp-line-soft)" : undefined,
+                    paddingTop: i > 0 ? 14 : undefined,
+                  }}
+                >
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", minWidth: 0 }}>
+                    <span className="dcafp-linkrow__k" style={{ overflowWrap: "anywhere" }}>
+                      {l.name}
                     </span>
+                    <Chip sm>
+                      <MousePointerClick size={12} aria-hidden />
+                      {l.clicks} clics
+                    </Chip>
                   </div>
-                  <div style={{ display: "flex", gap: 8, alignItems: "stretch", flexWrap: "wrap" }}>
+                  <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", minWidth: 0 }}>
                     <input
                       readOnly
                       value={l.url}
                       onFocus={(e) => e.currentTarget.select()}
-                      className="mono"
-                      style={urlInputStyle}
+                      aria-label={`Enlace de ${l.name}`}
+                      className="dcafp-urlbox"
+                      style={{ flex: "1 1 220px" }}
                     />
-                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                      <button
-                        type="button"
-                        onClick={() => void copy(l)}
-                        style={{
-                          ...brandButtonStyle(false),
-                          background: copied
-                            ? "var(--success-soft, rgba(52,211,153,0.12))"
-                            : "var(--brand-soft)",
-                          color: copied ? "var(--success)" : "var(--violet-400)",
-                        }}
-                      >
-                        {copied ? <Check size={15} /> : <Copy size={15} />}
-                        {copied ? "Copiado" : "Copiar"}
-                      </button>
-                      <QrDownloadButton url={l.url} fileName={`qr-${l.campaign}`} />
-                      <button
-                        type="button"
-                        onClick={() => void removeLink(l)}
-                        disabled={deleting}
-                        aria-label={confirming ? "Confirmar eliminación" : `Eliminar link ${l.name}`}
-                        title={confirming ? "Se perderán los clics de este link" : "Eliminar link"}
-                        style={{
-                          display: "inline-flex",
-                          alignItems: "center",
-                          justifyContent: "center",
-                          gap: 6,
-                          padding: "0 12px",
-                          height: 40,
-                          flexShrink: 0,
-                          borderRadius: 10,
-                          border: confirming
-                            ? "1px solid var(--danger-border-strong)"
-                            : "1px solid var(--border-soft)",
-                          background: confirming ? "var(--danger-soft)" : "var(--bg-elev-2)",
-                          color: confirming ? "var(--danger)" : "var(--text-3)",
-                          fontSize: 12.5,
-                          fontWeight: 600,
-                          cursor: deleting ? "not-allowed" : "pointer",
-                          opacity: deleting ? 0.55 : 1,
-                          fontFamily: "inherit",
-                          transition: "all .15s",
-                          whiteSpace: "nowrap",
-                        }}
-                      >
-                        <Trash2 size={15} />
-                        {confirming ? (deleting ? "Eliminando..." : "¿Eliminar?") : ""}
-                      </button>
-                    </div>
+                    <CopyButton
+                      text={l.url}
+                      toast="Enlace copiado"
+                      ariaLabel={`Copiar el enlace de ${l.name}`}
+                      variant="outline"
+                    />
+                    <QrDownloadButton url={l.url} fileName={`qr-${l.campaign}`} />
+                    <button
+                      type="button"
+                      onClick={() => void removeLink(l)}
+                      disabled={deleting}
+                      aria-label={confirming ? `Confirmar eliminación del link ${l.name}` : `Eliminar link ${l.name}`}
+                      title={confirming ? "Se perderán los clics de este link" : "Eliminar link"}
+                      className={confirming ? "dcafp-btn dcafp-btn--danger" : "dcafp-iconbtn"}
+                    >
+                      <Trash2 size={16} aria-hidden />
+                      {confirming ? (deleting ? "Eliminando..." : "¿Eliminar?") : null}
+                    </button>
                   </div>
                   {confirming && (
-                    <p style={{ fontSize: 11.5, color: "var(--warning-strong)", margin: 0, lineHeight: 1.4 }}>
+                    <p className="dcafp-hint" style={{ color: "var(--dcafp-warn-ink)" }}>
                       Se perderán los clics de este link. Pulsa &quot;¿Eliminar?&quot; otra vez para confirmar.
                     </p>
                   )}
@@ -339,7 +255,7 @@ function SellerLinks() {
           </div>
         )}
       </div>
-    </CardNew>
+    </PanelCard>
   );
 }
 
@@ -350,7 +266,6 @@ function SellerCoupon() {
   const [ready, setReady] = useState(true);
   const [code, setCode] = useState("");
   const [busy, setBusy] = useState(false);
-  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     let alive = true;
@@ -403,23 +318,11 @@ function SellerCoupon() {
     }
   }
 
-  async function copyCode() {
-    if (!coupon) return;
-    try {
-      await navigator.clipboard.writeText(coupon.code);
-      setCopied(true);
-      toast.success("Código copiado");
-      setTimeout(() => setCopied(false), 2000);
-    } catch {
-      toast.error("No se pudo copiar");
-    }
-  }
-
   let inner: React.ReactNode;
   if (!ready) {
-    inner = notReadyBanner();
+    inner = <NotReadyNote />;
   } else if (loading) {
-    inner = <p style={{ fontSize: 13, color: "var(--text-3)", margin: 0 }}>Cargando…</p>;
+    inner = <p className="dcafp-hint">Cargando…</p>;
   } else if (coupon) {
     const benefit = coupon.active
       ? coupon.type === "percentage"
@@ -427,145 +330,72 @@ function SellerCoupon() {
         : `$${coupon.value} MXN de descuento`
       : null;
     inner = (
-      <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-          <div
-            className="mono"
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: 10,
-              height: 46,
-              padding: "0 16px",
-              borderRadius: 10,
-              background: "var(--bg-elev-2)",
-              border: "1px solid var(--border-soft)",
-              color: "var(--text-1)",
-              fontSize: 19,
-              fontWeight: 700,
-              letterSpacing: "0.1em",
-            }}
-          >
-            <TicketPercent size={18} />
-            {coupon.code}
+      <div style={{ display: "flex", flexDirection: "column", gap: 14, minWidth: 0 }}>
+        <div className="dcafp-linkhero">
+          <div style={{ display: "flex", alignItems: "center", gap: 9, flexWrap: "wrap", minWidth: 0 }}>
+            <CopyCodeButton code={coupon.code} kicker="CUPÓN" toast="Cupón copiado" />
+            <Chip tone={coupon.active ? "ok" : "amber"} dot sm>
+              {coupon.active ? "Activo" : "En revisión"}
+            </Chip>
           </div>
-          <button
-            type="button"
-            onClick={copyCode}
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: 6,
-              padding: "0 14px",
-              height: 40,
-              flexShrink: 0,
-              borderRadius: 10,
-              border: "1px solid var(--border-brand)",
-              background: copied ? "var(--success-soft, rgba(52,211,153,0.12))" : "var(--brand-soft)",
-              color: copied ? "var(--success)" : "var(--violet-400)",
-              fontSize: 13,
-              fontWeight: 600,
-              cursor: "pointer",
-              fontFamily: "inherit",
-              transition: "all .15s",
-            }}
-          >
-            {copied ? <Check size={15} /> : <Copy size={15} />}
-            {copied ? "Copiado" : "Copiar"}
-          </button>
-          <BadgeNew tone={coupon.active ? "success" : "warning"} dot>
-            {coupon.active ? "Activo" : "En revisión"}
-          </BadgeNew>
+          {benefit ? (
+            <p style={{ fontSize: 13, color: "var(--dcafp-ink-2)", lineHeight: 1.5 }}>
+              Beneficio para la clínica que lo canjea: <strong>{benefit}</strong>.
+            </p>
+          ) : (
+            <p style={{ fontSize: 13, color: "var(--dcafp-ink-2)", lineHeight: 1.5 }}>
+              El equipo DaleControl está revisando tu cupón: definirá el beneficio y lo activará.
+            </p>
+          )}
         </div>
 
-        {benefit ? (
-          <p style={{ margin: 0, fontSize: 13, color: "var(--text-2)", lineHeight: 1.5 }}>
-            Beneficio para la clínica que lo canjea: <strong>{benefit}</strong>.
-          </p>
-        ) : (
-          <p style={{ margin: 0, fontSize: 13, color: "var(--text-2)", lineHeight: 1.5 }}>
-            El equipo DaleControl está revisando tu cupón: definirá el beneficio y lo activará.
-          </p>
-        )}
-
-        <p style={{ margin: 0, fontSize: 12, color: "var(--text-3)", lineHeight: 1.45 }}>
-          {coupon.usedCount} canjes
-        </p>
+        <StatRow>
+          <Stat label="Canjes" value={coupon.usedCount} tone={coupon.usedCount > 0 ? "default" : "idle"} />
+        </StatRow>
       </div>
     );
   } else {
     inner = (
-      <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-        <p style={{ margin: 0, fontSize: 13, color: "var(--text-2)", lineHeight: 1.5 }}>
+      <div style={{ display: "flex", flexDirection: "column", gap: 14, minWidth: 0 }}>
+        <p style={{ fontSize: 13, color: "var(--dcafp-ink-2)", lineHeight: 1.5 }}>
           Tu cupón personalizado: las clínicas que lo canjeen al registrarse cuentan como referidas tuyas,
           aunque no usen tu link.
         </p>
-        <div style={{ display: "flex", gap: 8, alignItems: "stretch", flexWrap: "wrap" }}>
-          <input
-            value={code}
-            onChange={(e) => setCode(e.target.value.toUpperCase())}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !busy) requestCoupon();
-            }}
-            placeholder="JUAN10"
-            maxLength={12}
-            className="mono"
-            style={{
-              width: 200,
-              maxWidth: "100%",
-              height: 40,
-              padding: "0 12px",
-              borderRadius: 10,
-              background: "var(--bg-elev-2)",
-              border: "1px solid var(--border-soft)",
-              color: "var(--text-1)",
-              fontSize: 14,
-              letterSpacing: "0.08em",
-              textTransform: "uppercase",
-              outline: "none",
-            }}
-          />
-          <button
-            type="button"
-            onClick={requestCoupon}
-            disabled={busy}
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: 6,
-              padding: "0 14px",
-              height: 40,
-              flexShrink: 0,
-              borderRadius: 10,
-              border: "1px solid var(--border-brand)",
-              background: "var(--brand-soft)",
-              color: "var(--violet-400)",
-              fontSize: 13,
-              fontWeight: 600,
-              cursor: busy ? "default" : "pointer",
-              opacity: busy ? 0.6 : 1,
-              fontFamily: "inherit",
-              transition: "all .15s",
-            }}
-          >
-            <TicketPercent size={15} />
+        <div style={{ display: "flex", gap: 8, alignItems: "flex-end", flexWrap: "wrap" }}>
+          <div style={{ flex: "0 1 200px", minWidth: 0 }}>
+            <label className="dcafp-label" htmlFor="seller-coupon-code">
+              Código que quieres
+            </label>
+            <input
+              id="seller-coupon-code"
+              className="dcafp-input dcafp-mono"
+              value={code}
+              onChange={(e) => setCode(e.target.value.toUpperCase())}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !busy) requestCoupon();
+              }}
+              placeholder="JUAN10"
+              maxLength={12}
+              style={{ letterSpacing: "0.08em", textTransform: "uppercase" }}
+            />
+          </div>
+          <button type="button" onClick={requestCoupon} disabled={busy} className="dcafp-btn dcafp-btn--primary">
+            <TicketPercent size={16} aria-hidden />
             {busy ? "Solicitando…" : "Solicitar cupón"}
           </button>
         </div>
-        <p style={{ margin: 0, fontSize: 12, color: "var(--text-3)", lineHeight: 1.45 }}>
-          El equipo DaleControl define el beneficio y lo activa.
-        </p>
+        <p className="dcafp-hint">El equipo DaleControl define el beneficio y lo activa.</p>
       </div>
     );
   }
 
   return (
-    <CardNew
+    <PanelCard
       title="Tu cupón"
       sub="Un código con tu nombre: quien lo canjea al registrarse cuenta como referido tuyo, aunque no use tu link."
     >
       {inner}
-    </CardNew>
+    </PanelCard>
   );
 }
 
@@ -574,7 +404,7 @@ export function SellerTools(_props: { siteUrl: string; parentSlug: string }) {
   // afiliado PADRE, no al vendedor. El vendedor SIEMPRE debe compartir un link
   // con campaña (lleva su sellerId) para ganar su comisión.
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: 18, minWidth: 0 }}>
       <SellerLinks />
       <SellerCoupon />
     </div>

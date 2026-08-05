@@ -1,16 +1,31 @@
 export const dynamic = "force-dynamic";
 
+// Portada del VENDEDOR con el lenguaje visual del panel de afiliados
+// (src/app/afiliados/panel.css, namespace `dcafp` + primitivas de
+// components/afiliados/ui/panel-ui). Mismo mundo que la portada del afiliado,
+// con menos superficie: saludo, sus cifras y el atajo a Herramientas —que es
+// donde viven sus enlaces, porque un /socio/<slug> sin campaña se atribuiría
+// al afiliado PADRE y no a él.
 import { redirect } from "next/navigation";
-import { Users, DollarSign, Clock, Wallet, Handshake, Percent, MousePointerClick, Megaphone } from "lucide-react";
 import Link from "next/link";
+import { DollarSign, Megaphone } from "lucide-react";
 import { getAffiliateSellerContext } from "@/lib/affiliate-seller-auth";
 import { getSellerOwnStats } from "@/lib/affiliates/seller-stats";
 import { prisma } from "@/lib/prisma";
 import { formatCurrency } from "@/lib/utils";
 import { formatRelativeDate } from "@/lib/format";
-import { CardNew } from "@/components/ui/design-system/card-new";
-import { KpiCard } from "@/components/ui/design-system/kpi-card";
-import { BadgeNew } from "@/components/ui/design-system/badge-new";
+import {
+  Chip,
+  EmptyState,
+  Eyebrow,
+  Footnote,
+  GridRow,
+  GridTable,
+  PageHead,
+  PanelCard,
+  Stat,
+  StatRow,
+} from "@/components/afiliados/ui/panel-ui";
 
 export default async function VendedorInicioPage() {
   const ctx = await getAffiliateSellerContext();
@@ -44,188 +59,118 @@ export default async function VendedorInicioPage() {
   const clinicNameById = new Map(clinics.map((c) => [c.id, c.name]));
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
-      {/* Hero */}
-      <div style={{ position: "relative", display: "flex", alignItems: "center", gap: 14 }}>
-        <div
-          aria-hidden
-          style={{
-            position: "absolute",
-            top: -40,
-            left: -30,
-            width: 280,
-            height: 180,
-            pointerEvents: "none",
-            background: "radial-gradient(60% 70% at 20% 30%, rgba(124,58,237,0.18), transparent 70%)",
-          }}
-        />
-        <div
-          style={{
-            position: "relative",
-            width: 44,
-            height: 44,
-            borderRadius: 14,
-            flexShrink: 0,
-            display: "grid",
-            placeItems: "center",
-            color: "#fff",
-            background: "var(--brand-grad)",
-            boxShadow: "0 8px 20px -8px rgba(124,58,237,0.6)",
-          }}
-        >
-          <Handshake size={22} />
-        </div>
-        <div style={{ position: "relative" }}>
-          <h1 style={{ fontSize: 22, letterSpacing: "-0.02em", color: "var(--text-1)", fontWeight: 600, margin: 0 }}>
-            Hola, {seller.name}
-          </h1>
-          <p style={{ color: "var(--text-3)", fontSize: 13, marginTop: 4, marginBottom: 0 }}>
-            Ganas {seller.commissionPct}% por cada clínica que traes y que se suscribe.
-          </p>
-        </div>
-      </div>
+    <>
+      <PageHead
+        title={`Hola, ${seller.name}`}
+        sub={`Ganas ${seller.commissionPct}% por cada clínica que traes y que se suscribe.`}
+      />
 
-      {/* Invita a Herramientas */}
-      <CardNew>
-        <div
-          style={{
-            position: "absolute",
-            top: 0,
-            left: 0,
-            right: 0,
-            height: 3,
-            background: "var(--brand-grad)",
-          }}
-        />
-        <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+      <div className="dcafp-hero">
+        {/* Sus cifras. Un vendedor recién dado de alta lo ve todo en cero: las
+            cifras van en gris (`idle`) para que se lea "todavía no" y no como
+            una pérdida. */}
+        <PanelCard>
+          <div className="dcafp-cardhead">
+            <Eyebrow>Pendiente de pago</Eyebrow>
+            <Chip tone="brand" dot sm>
+              {seller.commissionPct}% por clínica
+            </Chip>
+          </div>
           <div
-            style={{
-              width: 34,
-              height: 34,
-              borderRadius: 10,
-              flexShrink: 0,
-              display: "grid",
-              placeItems: "center",
-              background: "var(--brand-soft)",
-              border: "1px solid var(--border-brand)",
-              color: "var(--violet-400)",
-            }}
+            className={stats.pendingMxn > 0 ? "dcafp-bignum" : "dcafp-bignum dcafp-bignum--idle"}
+            style={{ marginTop: 10, overflowWrap: "anywhere" }}
           >
-            <Megaphone size={18} />
+            {formatCurrency(stats.pendingMxn)}
           </div>
-          <div style={{ flex: "1 1 240px" }}>
-            <div style={{ fontSize: 15, fontWeight: 600, color: "var(--text-1)", letterSpacing: "-0.01em" }}>
-              Crea tus links y tu cupón
-            </div>
-            <div style={{ fontSize: 13, color: "var(--text-3)", marginTop: 2, lineHeight: 1.5 }}>
-              Genera un link por canal y pide tu cupón en Herramientas para empezar a traer clínicas.
-            </div>
+          <div style={{ marginTop: 14 }}>
+            <StatRow>
+              <Stat
+                label="Pagado"
+                value={formatCurrency(stats.paidMxn)}
+                tone={stats.paidMxn > 0 ? "ok" : "idle"}
+              />
+              <Stat label="Clínicas" value={stats.clinics} tone={stats.clinics > 0 ? "default" : "idle"} />
+              <Stat label="Clics" value={stats.clicks} tone={stats.clicks > 0 ? "default" : "idle"} />
+            </StatRow>
           </div>
-          <Link
-            href="/afiliados/vendedor/herramientas"
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: 6,
-              padding: "0 16px",
-              height: 40,
-              flexShrink: 0,
-              borderRadius: 10,
-              border: "1px solid var(--border-brand)",
-              background: "var(--brand-soft)",
-              color: "var(--violet-400)",
-              fontSize: 13,
-              fontWeight: 600,
-              textDecoration: "none",
-              transition: "all .15s",
-            }}
-          >
-            <Megaphone size={15} />
+          <div style={{ marginTop: 12 }}>
+            <Footnote>
+              Tu comisión se genera cuando la clínica paga su factura y se repite cada mes mientras siga
+              activa.
+            </Footnote>
+          </div>
+        </PanelCard>
+
+        {/* El bloque "empieza aquí": los enlaces del vendedor viven en
+            Herramientas, así que la portada lleva ahí. */}
+        <PanelCard
+          accent
+          tag="EMPIEZA AQUÍ"
+          title="Crea tus links y tu cupón"
+          sub="Genera un link por canal y pide tu cupón en Herramientas para empezar a traer clínicas."
+        >
+          <Link href="/afiliados/vendedor/herramientas" className="dcafp-btn dcafp-btn--primary">
+            <Megaphone size={16} aria-hidden />
             Ir a Herramientas
           </Link>
-        </div>
-      </CardNew>
-
-      {/* KPIs */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: 14 }}>
-        <KpiCard label="Clics" value={String(stats.clicks)} icon={MousePointerClick} />
-        <KpiCard label="Clínicas" value={String(stats.clinics)} icon={Users} />
-        <KpiCard label="Pendiente de pago" value={formatCurrency(stats.pendingMxn)} icon={Clock} />
-        <KpiCard label="Pagado" value={formatCurrency(stats.paidMxn)} icon={Wallet} />
-        <KpiCard label="Tu comisión" value={`${seller.commissionPct}%`} icon={Percent} />
+          <div style={{ marginTop: 12 }}>
+            <Footnote>
+              Comparte siempre un link con campaña o tu cupón: es lo que hace que la clínica cuente como
+              tuya.
+            </Footnote>
+          </div>
+        </PanelCard>
       </div>
 
-      {/* Comisiones recientes */}
-      <CardNew noPad title="Comisiones recientes">
+      <PanelCard flush title="Comisiones recientes">
         {recent.length === 0 ? (
-          <div
-            style={{
-              padding: "48px 24px",
-              textAlign: "center",
-              display: "flex",
-              flexDirection: "column",
-              alignItems: "center",
-              gap: 10,
-            }}
-          >
-            <div
-              style={{
-                width: 56,
-                height: 56,
-                borderRadius: 16,
-                display: "grid",
-                placeItems: "center",
-                background: "var(--brand-soft)",
-                border: "1px solid var(--border-brand)",
-                color: "var(--violet-400)",
-              }}
-            >
-              <DollarSign size={26} />
-            </div>
-            <div style={{ color: "var(--text-1)", fontWeight: 600, fontSize: 14 }}>Aún no tienes comisiones</div>
-            <p style={{ color: "var(--text-3)", fontSize: 13, margin: 0, maxWidth: 360, lineHeight: 1.5 }}>
-              Cuando una clínica que traes se suscriba y pague su primera factura, tu comisión aparecerá aquí —
-              y se repetirá cada mes mientras siga activa.
-            </p>
+          <div style={{ padding: "8px 22px 22px" }}>
+            <EmptyState icon={<DollarSign size={22} />} title="Aún no tienes comisiones">
+              Cuando una clínica que traes se suscriba y pague su primera factura, tu comisión aparecerá
+              aquí — y se repetirá cada mes mientras siga activa.
+            </EmptyState>
           </div>
         ) : (
-          <div style={{ overflowX: "auto" }}>
-            <table className="table-new">
-              <thead>
-                <tr>
-                  <th>Clínica</th>
-                  <th>Factura</th>
-                  <th>Tu comisión</th>
-                  <th>Estado</th>
-                  <th>Fecha</th>
-                </tr>
-              </thead>
-              <tbody>
-                {recent.map((c) => (
-                  <tr key={c.id}>
-                    <td style={{ color: "var(--text-1)" }}>{clinicNameById.get(c.clinicId) ?? "Clínica"}</td>
-                    <td className="mono" style={{ color: "var(--text-2)" }}>{formatCurrency(c.amountMxn)}</td>
-                    <td className="mono" style={{ color: "var(--text-1)", fontWeight: 600 }}>
-                      {formatCurrency(c.commissionMxn)}
-                    </td>
-                    <td>
-                      <BadgeNew tone={c.status === "paid" ? "success" : "warning"}>
-                        {c.status === "paid" ? "Pagada" : "Pendiente"}
-                      </BadgeNew>
-                    </td>
-                    <td className="mono" style={{ color: "var(--text-3)" }}>{formatRelativeDate(c.createdAt)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <GridTable
+            cols="minmax(0,1.5fr) minmax(0,1fr) minmax(0,1fr) 104px 104px"
+            colsSm="minmax(0,1fr) 92px 96px"
+            head={
+              <>
+                <div>Clínica</div>
+                <div className="dcafp-col-opt" style={{ textAlign: "right" }}>
+                  Factura
+                </div>
+                <div style={{ textAlign: "right" }}>Tu comisión</div>
+                <div>Estado</div>
+                <div className="dcafp-col-opt">Fecha</div>
+              </>
+            }
+            foot={
+              stats.commissionsCount > recent.length
+                ? `Mostrando las ${recent.length} más recientes de ${stats.commissionsCount} comisiones.`
+                : undefined
+            }
+          >
+            {recent.map((c) => (
+              <GridRow key={c.id}>
+                <div className="dcafp-td--name">{clinicNameById.get(c.clinicId) ?? "Clínica"}</div>
+                <div className="dcafp-col-opt dcafp-td--num dcafp-td--muted">
+                  {formatCurrency(c.amountMxn)}
+                </div>
+                <div className="dcafp-td--num">{formatCurrency(c.commissionMxn)}</div>
+                <div>
+                  <Chip tone={c.status === "paid" ? "ok" : "amber"} sm>
+                    {c.status === "paid" ? "Pagada" : "Pendiente"}
+                  </Chip>
+                </div>
+                <div className="dcafp-col-opt dcafp-td--muted" style={{ whiteSpace: "nowrap" }}>
+                  {formatRelativeDate(c.createdAt)}
+                </div>
+              </GridRow>
+            ))}
+          </GridTable>
         )}
-        {stats.commissionsCount > recent.length && (
-          <div style={{ padding: "10px 16px", fontSize: 12, color: "var(--text-3)", borderTop: "1px solid var(--border-soft)" }}>
-            Mostrando las {recent.length} más recientes de {stats.commissionsCount} comisiones.
-          </div>
-        )}
-      </CardNew>
-    </div>
+      </PanelCard>
+    </>
   );
 }

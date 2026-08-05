@@ -3,10 +3,17 @@
 // Kit de marketing: logo descargable + copys listos para WhatsApp/redes con
 // botón copiar + pitch de objeciones comunes. Contenido estático de
 // src/lib/affiliates-marketing-content.ts ({tu_link} se reemplaza con el
-// link real del afiliado al copiar/mostrar). Estilo del panel (CSS vars).
+// link real del afiliado al copiar/mostrar).
+//
+// Estilo: lenguaje del panel (src/app/afiliados/panel.css). Cada bloque abre
+// con un `Eyebrow` (el "COMISIÓN MENSUAL" del diseño), los copys viven en
+// superficies anidadas y todo lo que se pulsa es `dcafp-btn`. Confirmaciones
+// con el toast del panel; los errores siguen en react-hot-toast.
 import { useState } from "react";
 import toast from "react-hot-toast";
 import { Copy, Check, ChevronDown, Download, MessageCircleQuestion, Palette, Share2 } from "lucide-react";
+import { EmptyState, Eyebrow } from "@/components/afiliados/ui/panel-ui";
+import { showPanelToast } from "@/components/afiliados/ui/panel-toast";
 import {
   MARKETING_COPYS,
   OBJECTION_PITCHES,
@@ -19,6 +26,18 @@ const LOGOS = [
   { file: "/brand/dalecontrol-logo-dark.svg", label: "Logo para fondos oscuros" },
   { file: "/brand/dalecontrol-logo-light.svg", label: "Logo para fondos claros" },
 ];
+
+// Superficie anidada de cada copy: el mismo gris de .dcafp-planbox.
+const copyCardStyle: React.CSSProperties = {
+  display: "flex",
+  flexDirection: "column",
+  gap: 8,
+  minWidth: 0,
+  padding: 14,
+  borderRadius: "var(--dcafp-r-box)",
+  background: "var(--dcafp-surface-2)",
+  border: "1px solid var(--dcafp-line-nested)",
+};
 
 export function MarketingKit({
   partnerUrl, // link de la página de socio (el que conviene compartir)
@@ -44,7 +63,7 @@ export function MarketingKit({
     try {
       await navigator.clipboard.writeText(text);
       setCopiedId(id);
-      toast.success(okMsg);
+      showPanelToast(okMsg);
       setTimeout(() => setCopiedId((k) => (k === id ? null : k)), 2000);
     } catch {
       toast.error("No se pudo copiar");
@@ -52,27 +71,30 @@ export function MarketingKit({
   }
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 22 }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: 22, minWidth: 0 }}>
       {/* Logo DaleControl */}
-      <section style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+      <section style={{ display: "flex", flexDirection: "column", gap: 10, minWidth: 0 }}>
         <SectionTitle icon={<Palette size={14} />} text="Logo DaleControl" />
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 240px), 1fr))",
+            gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 240px), 1fr))",
             gap: 12,
           }}
         >
           {LOGOS.map((logo) => {
+            // El SVG "-dark" es el logo BLANCO (para fondos oscuros): sobre el
+            // gris claro del panel sería invisible, así que su mosaico va en
+            // tinta. El "-light" es el de color y va sobre blanco.
             const darkTile = logo.file.includes("-dark");
             return (
-              <div key={logo.file} style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              <div key={logo.file} style={{ display: "flex", flexDirection: "column", gap: 8, minWidth: 0 }}>
                 <div
                   style={{
-                    height: 72,
-                    borderRadius: 10,
-                    border: "1px solid var(--border-soft)",
-                    background: darkTile ? "var(--bg-elev-2)" : "#fff",
+                    height: 76,
+                    borderRadius: "var(--dcafp-r-box)",
+                    border: "1px solid var(--dcafp-line)",
+                    background: darkTile ? "var(--dcafp-ink)" : "var(--dcafp-surface)",
                     display: "grid",
                     placeItems: "center",
                     padding: 12,
@@ -91,29 +113,17 @@ export function MarketingKit({
                     justifyContent: "space-between",
                     gap: 8,
                     flexWrap: "wrap",
+                    minWidth: 0,
                   }}
                 >
-                  <span style={{ fontSize: 12, color: "var(--text-3)" }}>{logo.label}</span>
+                  <span className="dcafp-hint">{logo.label}</span>
                   <a
                     href={logo.file}
                     download
-                    style={{
-                      display: "inline-flex",
-                      alignItems: "center",
-                      gap: 6,
-                      height: 30,
-                      padding: "0 10px",
-                      flexShrink: 0,
-                      borderRadius: 8,
-                      border: "1px solid var(--border-soft)",
-                      color: "var(--text-2)",
-                      fontSize: 12,
-                      fontWeight: 600,
-                      textDecoration: "none",
-                      transition: "all .15s",
-                    }}
+                    className="dcafp-btn dcafp-btn--sm"
+                    aria-label={`Descargar el ${logo.label.toLowerCase()} en SVG`}
                   >
-                    <Download size={13} />
+                    <Download size={14} aria-hidden />
                     Descargar SVG
                   </a>
                 </div>
@@ -124,10 +134,12 @@ export function MarketingKit({
       </section>
 
       {/* Copys listos para compartir */}
-      <section style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+      <section style={{ display: "flex", flexDirection: "column", gap: 10, minWidth: 0 }}>
         <SectionTitle icon={<Share2 size={14} />} text="Copys listos para compartir" />
         {MARKETING_COPYS.length === 0 ? (
-          <EmptyHint text="Aún no hay copys disponibles. Muy pronto encontrarás aquí mensajes listos para compartir." />
+          <EmptyState icon={<Share2 size={22} />} title="Aún no hay copys disponibles">
+            Muy pronto encontrarás aquí mensajes listos para compartir.
+          </EmptyState>
         ) : (
           <>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
@@ -138,19 +150,8 @@ export function MarketingKit({
                     key={chip.key}
                     type="button"
                     onClick={() => setVertical(chip.key)}
-                    style={{
-                      height: 30,
-                      padding: "0 12px",
-                      borderRadius: 999,
-                      border: active ? "1px solid var(--border-brand)" : "1px solid var(--border-soft)",
-                      background: active ? "var(--brand-soft)" : "transparent",
-                      color: active ? "var(--violet-400)" : "var(--text-3)",
-                      fontSize: 12,
-                      fontWeight: 600,
-                      cursor: "pointer",
-                      fontFamily: "inherit",
-                      transition: "all .15s",
-                    }}
+                    aria-pressed={active}
+                    className={`dcafp-btn dcafp-btn--sm${active ? " dcafp-btn--outline" : ""}`}
                   >
                     {chip.label}
                   </button>
@@ -158,12 +159,12 @@ export function MarketingKit({
               })}
             </div>
             {copys.length === 0 ? (
-              <EmptyHint text="No hay copys para esta categoría todavía." />
+              <EmptyState icon={<Share2 size={22} />} title="No hay copys para esta categoría todavía" />
             ) : (
               <div
                 style={{
                   display: "grid",
-                  gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 300px), 1fr))",
+                  gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 300px), 1fr))",
                   gap: 12,
                 }}
               >
@@ -171,25 +172,16 @@ export function MarketingKit({
                   const finalText = fillTemplate(c.text, { tu_link: partnerUrl });
                   const id = `copy-${c.id}`;
                   return (
-                    <div
-                      key={c.id}
-                      style={{
-                        display: "flex",
-                        flexDirection: "column",
-                        gap: 8,
-                        padding: 14,
-                        borderRadius: 12,
-                        border: "1px solid var(--border-soft)",
-                        background: "var(--bg-elev-2)",
-                      }}
-                    >
-                      <span style={{ fontSize: 13, fontWeight: 600, color: "var(--text-1)" }}>{c.title}</span>
+                    <div key={c.id} style={copyCardStyle}>
+                      <span style={{ fontSize: 13.5, fontWeight: 750, color: "var(--dcafp-ink)" }}>
+                        {c.title}
+                      </span>
                       <p
                         style={{
                           margin: 0,
                           fontSize: 12.5,
-                          color: "var(--text-2)",
-                          lineHeight: 1.5,
+                          color: "var(--dcafp-ink-2)",
+                          lineHeight: 1.55,
                           whiteSpace: "pre-wrap",
                           overflowWrap: "anywhere",
                         }}
@@ -200,6 +192,7 @@ export function MarketingKit({
                         <CopyMiniButton
                           copied={copiedId === id}
                           onClick={() => copyText(id, finalText, "Texto copiado")}
+                          ariaLabel={`Copiar el copy "${c.title}"`}
                         />
                       </div>
                     </div>
@@ -212,10 +205,12 @@ export function MarketingKit({
       </section>
 
       {/* Respuestas a objeciones comunes */}
-      <section style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+      <section style={{ display: "flex", flexDirection: "column", gap: 6, minWidth: 0 }}>
         <SectionTitle icon={<MessageCircleQuestion size={14} />} text="Respuestas a objeciones comunes" />
         {OBJECTION_PITCHES.length === 0 ? (
-          <EmptyHint text="Aún no hay respuestas a objeciones. Muy pronto tendrás argumentos listos para usar." />
+          <EmptyState icon={<MessageCircleQuestion size={22} />} title="Aún no hay respuestas a objeciones">
+            Muy pronto tendrás argumentos listos para usar.
+          </EmptyState>
         ) : (
           <div style={{ display: "flex", flexDirection: "column" }}>
             {OBJECTION_PITCHES.map((p, i) => {
@@ -227,35 +222,39 @@ export function MarketingKit({
                   key={p.id}
                   style={{
                     borderBottom:
-                      i === OBJECTION_PITCHES.length - 1 ? "none" : "1px solid var(--border-soft)",
+                      i === OBJECTION_PITCHES.length - 1
+                        ? "none"
+                        : "1px solid var(--dcafp-line-soft)",
                   }}
                 >
                   <button
                     type="button"
                     onClick={() => setOpenPitch(open ? null : p.id)}
+                    aria-expanded={open}
+                    aria-controls={`${id}-panel`}
                     style={{
                       width: "100%",
+                      minHeight: "var(--dcafp-tap)",
                       display: "flex",
                       alignItems: "center",
                       justifyContent: "space-between",
                       gap: 10,
-                      padding: "11px 2px",
+                      padding: "10px 2px",
                       background: "none",
                       border: "none",
-                      cursor: "pointer",
                       textAlign: "left",
-                      color: "var(--text-1)",
-                      fontSize: 13,
-                      fontWeight: 600,
-                      fontFamily: "inherit",
+                      color: "var(--dcafp-ink)",
+                      fontSize: 13.5,
+                      fontWeight: 700,
                     }}
                   >
-                    <span>{p.objection}</span>
+                    <span style={{ minWidth: 0 }}>{p.objection}</span>
                     <ChevronDown
-                      size={15}
+                      size={16}
+                      aria-hidden
                       style={{
                         flexShrink: 0,
-                        color: "var(--text-3)",
+                        color: "var(--dcafp-ink-3)",
                         transform: open ? "rotate(180deg)" : "none",
                         transition: "transform .15s",
                       }}
@@ -263,19 +262,21 @@ export function MarketingKit({
                   </button>
                   {open && (
                     <div
+                      id={`${id}-panel`}
                       style={{
                         padding: "0 2px 12px",
                         display: "flex",
                         flexDirection: "column",
                         gap: 8,
+                        minWidth: 0,
                       }}
                     >
                       <p
                         style={{
                           margin: 0,
                           fontSize: 12.5,
-                          color: "var(--text-2)",
-                          lineHeight: 1.5,
+                          color: "var(--dcafp-ink-2)",
+                          lineHeight: 1.55,
                           overflowWrap: "anywhere",
                         }}
                       >
@@ -286,6 +287,7 @@ export function MarketingKit({
                           copied={copiedId === id}
                           onClick={() => copyText(id, answer, "Respuesta copiada")}
                           label="Copiar respuesta"
+                          ariaLabel={`Copiar la respuesta a "${p.objection}"`}
                         />
                       </div>
                     </div>
@@ -300,65 +302,43 @@ export function MarketingKit({
   );
 }
 
+/** Encabezado de bloque: icono de marca + eyebrow del panel. */
 function SectionTitle({ icon, text }: { icon: React.ReactNode; text: string }) {
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: 7, color: "var(--violet-400)" }}>
+    <div style={{ display: "flex", alignItems: "center", gap: 7, color: "var(--dcafp-brand)" }}>
       {icon}
-      <span style={{ fontSize: 13, fontWeight: 600, color: "var(--text-1)" }}>{text}</span>
+      <Eyebrow>{text}</Eyebrow>
     </div>
   );
 }
 
-function EmptyHint({ text }: { text: string }) {
-  return (
-    <div
-      style={{
-        padding: "14px 12px",
-        borderRadius: 10,
-        border: "1px dashed var(--border-soft)",
-        color: "var(--text-3)",
-        fontSize: 12.5,
-        lineHeight: 1.5,
-        textAlign: "center",
-      }}
-    >
-      {text}
-    </div>
-  );
-}
+// Tinte verde de los 2 s de "Copiado": estado efímero, no patrón.
+const copiedBtnStyle: React.CSSProperties = {
+  background: "var(--dcafp-ok-bg)",
+  borderColor: "var(--dcafp-ok-line)",
+  color: "var(--dcafp-ok-ink)",
+};
 
 function CopyMiniButton({
   copied,
   onClick,
   label = "Copiar",
+  ariaLabel,
 }: {
   copied: boolean;
   onClick: () => void;
   label?: string;
+  ariaLabel: string;
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
-      style={{
-        display: "inline-flex",
-        alignItems: "center",
-        gap: 6,
-        height: 30,
-        padding: "0 10px",
-        flexShrink: 0,
-        borderRadius: 8,
-        border: "1px solid var(--border-brand)",
-        background: copied ? "var(--success-soft, rgba(52,211,153,0.12))" : "var(--brand-soft)",
-        color: copied ? "var(--success)" : "var(--violet-400)",
-        fontSize: 12,
-        fontWeight: 600,
-        cursor: "pointer",
-        fontFamily: "inherit",
-        transition: "all .15s",
-      }}
+      className="dcafp-btn dcafp-btn--sm dcafp-btn--outline"
+      style={copied ? copiedBtnStyle : undefined}
+      aria-label={ariaLabel}
     >
-      {copied ? <Check size={13} /> : <Copy size={13} />}
+      {copied ? <Check size={14} aria-hidden /> : <Copy size={14} aria-hidden />}
       {copied ? "Copiado" : label}
     </button>
   );

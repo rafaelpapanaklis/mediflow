@@ -5,9 +5,14 @@
 // API: GET/POST /api/afiliados/soporte
 // Contrato: src/lib/affiliate-support/types.ts.
 //
-// Estilo del panel de afiliados: inline styles con variables CSS y las clases
-// globales (card/list-row/modal/field-new/input-new/btn-new). Sin Tailwind
-// arbitrario: la raíz de este panel mide 13px y los rem no cuadran.
+// Lenguaje visual del panel de afiliados: primitivas de
+// components/afiliados/ui/panel-ui + clases `dcafp-*` de
+// src/app/afiliados/panel.css. Los detalles de una sola vez van inline con
+// tokens var(--dcafp-*). Sin Tailwind arbitrario: la raíz de este panel mide
+// 13px y los rem no cuadran.
+//
+// El modal sigue con las clases .modal* de globals.css (chrome compartido, no
+// hay equivalente en panel.css); su INTERIOR sí está en el idioma nuevo.
 //
 // ⚠️ Sin adjuntos en esta ola: el bucket `affiliate-support` todavía no existe
 // en Supabase, así que el formulario no ofrece subir archivos (ver la nota en
@@ -15,11 +20,11 @@
 // ═══════════════════════════════════════════════════════════════════════════
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { LifeBuoy, Plus, X } from "lucide-react";
 import toast from "react-hot-toast";
-import { ButtonNew } from "@/components/ui/design-system/button-new";
-import { BadgeNew } from "@/components/ui/design-system/badge-new";
+import { Chip, EmptyState, PanelCard, type ChipTone } from "@/components/afiliados/ui/panel-ui";
 import {
   AFFILIATE_SUPPORT_CATEGORIES,
   AFFILIATE_SUPPORT_CATEGORY_LABELS,
@@ -33,20 +38,21 @@ import type { AffiliateTicketSummary } from "@/lib/affiliate-support/types";
 import type { AccountManagerDTO } from "@/lib/account-manager/types";
 import { AffiliateManagerCard } from "@/components/afiliados/affiliate-manager-card";
 
-// Tono del badge de estado. MISMO mapa en soporte/[id]/ticket-client.tsx —
-// mantener en sincronía.
-type BadgeTone = "success" | "warning" | "danger" | "info" | "brand" | "neutral";
-const STATUS_TONES: Record<string, BadgeTone> = {
-  ABIERTO: "info",
+// Tono del chip de estado. MISMO mapa en soporte/[id]/ticket-client.tsx —
+// mantener en sincronía. Son los CINCO estados del contrato, ni uno más.
+// `Chip` no tiene tono "info": ABIERTO y EN_PROGRESO caen los dos en `brand`
+// (los distingue el texto, que es lo que el afiliado lee).
+const STATUS_TONES: Record<string, ChipTone> = {
+  ABIERTO: "brand",
   EN_PROGRESO: "brand",
-  ESPERANDO_RESPUESTA: "warning",
-  RESUELTO: "success",
+  ESPERANDO_RESPUESTA: "amber",
+  RESUELTO: "ok",
   CERRADO: "neutral",
 };
 
-const PRIORITY_TONES: Record<string, BadgeTone> = {
+const PRIORITY_TONES: Record<string, ChipTone> = {
   URGENTE: "danger",
-  ALTA: "warning",
+  ALTA: "amber",
   NORMAL: "neutral",
   BAJA: "neutral",
 };
@@ -55,6 +61,16 @@ function formatShortDate(iso: string): string {
   const d = new Date(iso);
   if (isNaN(d.getTime())) return "—";
   return d.toLocaleString("es-MX", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
+}
+
+/** Barra gris del esqueleto de carga (no hay clase para esto en panel.css). */
+function SkelBar({ w, h = 12 }: { w: number | string; h?: number }) {
+  return (
+    <span
+      aria-hidden
+      style={{ display: "block", width: w, height: h, borderRadius: 6, background: "var(--dcafp-line-soft)" }}
+    />
+  );
 }
 
 interface Props {
@@ -164,161 +180,164 @@ export function SoporteAfiliadoClient({
       />
 
       {/* Lista de tickets */}
-      <div className="card">
-        <div className="card__header">
-          <div>
-            <div className="card__title">Tus tickets</div>
-            <div className="card__sub">Te respondemos en este mismo panel.</div>
-          </div>
-          <ButtonNew
-            variant="primary"
-            size="sm"
+      <PanelCard
+        flush
+        title="Tus tickets"
+        sub="Te respondemos en este mismo panel."
+        action={
+          <button
             type="button"
-            icon={<Plus size={14} strokeWidth={1.75} />}
+            className="dcafp-btn dcafp-btn--primary dcafp-btn--sm"
             onClick={() => setShowNew(true)}
           >
+            <Plus size={15} strokeWidth={2} aria-hidden />
             Nuevo ticket
-          </ButtonNew>
-        </div>
-
+          </button>
+        }
+      >
         {loading ? (
-          <div aria-busy="true">
+          <div aria-busy="true" style={{ padding: "14px 24px 20px", display: "flex", flexDirection: "column", gap: 16 }}>
             {[0, 1, 2].map((i) => (
-              <div
-                key={i}
-                className="list-row"
-                style={{ flexDirection: "column", alignItems: "flex-start", gap: 10, padding: "14px 18px" }}
-              >
-                <span className="skel-new" style={{ height: 10, width: 96 }} />
-                <span className="skel-new" style={{ height: 14, width: "60%", maxWidth: 320 }} />
+              <div key={i} style={{ display: "flex", flexDirection: "column", gap: 9 }}>
+                <SkelBar w={96} h={10} />
+                <SkelBar w="min(320px, 60%)" h={14} />
                 <div style={{ display: "flex", gap: 8 }}>
-                  <span className="skel-new" style={{ height: 20, width: 80, borderRadius: 20 }} />
-                  <span className="skel-new" style={{ height: 20, width: 112, borderRadius: 20 }} />
+                  <SkelBar w={80} h={20} />
+                  <SkelBar w={112} h={20} />
                 </div>
               </div>
             ))}
           </div>
         ) : tickets.length === 0 ? (
-          <div
-            style={{
-              display: "flex",
-              flexDirection: "column",
-              alignItems: "center",
-              justifyContent: "center",
-              textAlign: "center",
-              padding: "56px 24px",
-            }}
-          >
-            <LifeBuoy size={32} strokeWidth={1.75} style={{ color: "var(--text-4)", marginBottom: 14 }} aria-hidden />
-            <div style={{ fontSize: 15, fontWeight: 600, color: "var(--text-1)" }}>Aún no tienes tickets</div>
-            <p style={{ fontSize: 13, color: "var(--text-3)", marginTop: 6, marginBottom: 0, maxWidth: "46ch", lineHeight: 1.55 }}>
+          <div style={{ padding: "6px 16px 20px" }}>
+            <EmptyState
+              icon={<LifeBuoy size={22} strokeWidth={1.8} />}
+              title="Aún no tienes tickets"
+              action={
+                <button
+                  type="button"
+                  className="dcafp-btn dcafp-btn--primary"
+                  onClick={() => setShowNew(true)}
+                >
+                  <Plus size={16} strokeWidth={2} aria-hidden />
+                  Crear mi primer ticket
+                </button>
+              }
+            >
               ¿Una comisión que no cuadra, un pago que no llegó o material que necesitas?
               Abre un ticket y el equipo de DaleControl te responde lo antes posible.
-            </p>
-            <div style={{ marginTop: 18 }}>
-              <ButtonNew
-                variant="primary"
-                type="button"
-                icon={<Plus size={16} strokeWidth={1.75} />}
-                onClick={() => setShowNew(true)}
-              >
-                Crear mi primer ticket
-              </ButtonNew>
-            </div>
+            </EmptyState>
           </div>
         ) : (
-          <div>
-            {tickets.map((tk) => {
-              const statusLabel = AFFILIATE_SUPPORT_STATUS_LABELS_AFFILIATE[tk.status] || tk.status;
-              const tone = STATUS_TONES[tk.status] || "neutral";
-              const catLabel = AFFILIATE_SUPPORT_CATEGORY_LABELS[tk.category] || tk.category;
-              const prioLabel = AFFILIATE_SUPPORT_PRIORITY_LABELS[tk.priority] || tk.priority;
-              return (
-                <button
-                  key={tk.id}
-                  type="button"
-                  onClick={() => router.push(`/afiliados/soporte/${tk.id}`)}
-                  className="list-row"
-                  style={{
-                    display: "block",
-                    width: "100%",
-                    textAlign: "left",
-                    padding: "14px 18px",
-                    background: "none",
-                    // Solo se quitan 3 bordes: el inferior lo pone .list-row y
-                    // su :last-child lo retira en la última fila. Un
-                    // `border: none` inline mataría también esa separación.
-                    borderTop: "none",
-                    borderLeft: "none",
-                    borderRight: "none",
-                    cursor: "pointer",
-                    font: "inherit",
-                  }}
-                >
-                  <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 12 }}>
-                    <div style={{ flex: "1 1 240px", minWidth: 0 }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                        <span className="mono" style={{ fontSize: 11, color: "var(--text-3)" }}>{tk.folioLabel}</span>
-                        {tk.affiliateUnread === true && <BadgeNew tone="brand" dot>Respuesta nueva</BadgeNew>}
-                      </div>
-                      <div
-                        style={{
-                          fontSize: 14,
-                          fontWeight: 600,
-                          color: "var(--text-1)",
-                          marginTop: 4,
-                          overflow: "hidden",
-                          textOverflow: "ellipsis",
-                          whiteSpace: "nowrap",
-                        }}
-                      >
-                        {tk.subject}
-                      </div>
-                      <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginTop: 8 }}>
-                        <BadgeNew tone="neutral">{catLabel}</BadgeNew>
-                        <BadgeNew tone={tone} dot>{statusLabel}</BadgeNew>
-                        <BadgeNew tone={PRIORITY_TONES[tk.priority] || "neutral"} dot>{prioLabel}</BadgeNew>
-                      </div>
-                    </div>
-                    <div style={{ flexShrink: 0, display: "flex", alignItems: "center", gap: 10 }}>
-                      <span style={{ fontSize: 12, color: "var(--text-3)", whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" }}>
-                        {formatShortDate(tk.lastActivityAt)}
-                      </span>
-                      {tk.rating != null && (
-                        <span style={{ fontSize: 12, color: "var(--warning-strong)", whiteSpace: "nowrap" }}>
-                          ★ {tk.rating}/5
+          <div className="dcafp-scrollx" style={{ padding: "0 10px 4px" }}>
+            {/* Esos 10px alinean la primera columna (th/td traen 14px propios)
+                con el título de la tarjeta, que va a 24px. */}
+            <table className="dcafp-table">
+              <thead>
+                <tr>
+                  <th scope="col">Ticket</th>
+                  <th scope="col">Estado</th>
+                  <th scope="col">Prioridad</th>
+                  <th scope="col">Última actividad</th>
+                </tr>
+              </thead>
+              <tbody>
+                {tickets.map((tk) => {
+                  const statusLabel = AFFILIATE_SUPPORT_STATUS_LABELS_AFFILIATE[tk.status] || tk.status;
+                  const tone = STATUS_TONES[tk.status] || "neutral";
+                  const catLabel = AFFILIATE_SUPPORT_CATEGORY_LABELS[tk.category] || tk.category;
+                  const prioLabel = AFFILIATE_SUPPORT_PRIORITY_LABELS[tk.priority] || tk.priority;
+                  const href = `/afiliados/soporte/${tk.id}`;
+                  return (
+                    <tr
+                      key={tk.id}
+                      style={{ cursor: "pointer" }}
+                      // La fila entera navega (comodidad con el ratón), pero el
+                      // enlace real del asunto es lo que hace el teclado y el
+                      // lector de pantalla: si el clic salió de él, no se
+                      // duplica el push.
+                      onClick={(e) => {
+                        if ((e.target as HTMLElement).closest("a")) return;
+                        router.push(href);
+                      }}
+                    >
+                      <td style={{ minWidth: 230 }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                          <span className="dcafp-mono" style={{ fontSize: 11, color: "var(--dcafp-ink-3)" }}>
+                            {tk.folioLabel}
+                          </span>
+                          <span style={{ fontSize: 11.5, color: "var(--dcafp-ink-3)" }}>{catLabel}</span>
+                          {tk.affiliateUnread === true && <Chip tone="brand" dot sm>Respuesta nueva</Chip>}
+                        </div>
+                        <Link
+                          href={href}
+                          style={{
+                            display: "inline-block",
+                            marginTop: 3,
+                            fontSize: 14,
+                            fontWeight: 700,
+                            color: "var(--dcafp-ink)",
+                            overflowWrap: "anywhere",
+                          }}
+                        >
+                          {tk.subject}
+                        </Link>
+                      </td>
+                      <td>
+                        <Chip tone={tone} dot sm>{statusLabel}</Chip>
+                      </td>
+                      <td>
+                        <Chip tone={PRIORITY_TONES[tk.priority] || "neutral"} dot sm>{prioLabel}</Chip>
+                      </td>
+                      <td style={{ whiteSpace: "nowrap" }}>
+                        <span className="dcafp-nums" style={{ fontSize: 12.5, color: "var(--dcafp-ink-3)" }}>
+                          {formatShortDate(tk.lastActivityAt)}
                         </span>
-                      )}
-                    </div>
-                  </div>
-                </button>
-              );
-            })}
+                        {tk.rating != null && (
+                          <div className="dcafp-nums" style={{ fontSize: 12, fontWeight: 700, color: "var(--dcafp-amber)", marginTop: 2 }}>
+                            ★ {tk.rating}/5
+                          </div>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
         )}
-      </div>
+      </PanelCard>
 
       {/* Modal: nuevo ticket */}
       {showNew && (
         <div className="modal-overlay" onClick={() => { if (!submitting) setShowNew(false); }}>
-          <div className="modal" onClick={(e) => e.stopPropagation()}>
+          <div
+            className="modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="af-ticket-modal-title"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="modal__header">
-              <div className="modal__title">Nuevo ticket</div>
+              <div className="dcafp-h2" id="af-ticket-modal-title">Nuevo ticket</div>
               <button
                 type="button"
-                className="btn-new btn-new--ghost btn-new--sm"
+                className="dcafp-iconbtn dcafp-iconbtn--bare"
                 aria-label="Cerrar"
                 onClick={() => { if (!submitting) setShowNew(false); }}
               >
-                <X size={16} strokeWidth={1.75} />
+                <X size={18} strokeWidth={1.9} aria-hidden />
               </button>
             </div>
 
             <div className="modal__body">
-              <div className="field-new" style={{ marginBottom: 14 }}>
-                <label className="field-new__label">Asunto <span className="req">*</span></label>
+              <div style={{ marginBottom: 14 }}>
+                <label className="dcafp-label" htmlFor="af-ticket-subject">
+                  Asunto <span style={{ color: "var(--dcafp-danger)" }}>*</span>
+                </label>
                 <input
-                  className="input-new"
+                  id="af-ticket-subject"
+                  className="dcafp-input"
                   maxLength={AFFILIATE_SUPPORT_MAX_SUBJECT_CHARS}
                   placeholder="Resumen breve de tu duda o problema"
                   value={subject}
@@ -327,17 +346,27 @@ export function SoporteAfiliadoClient({
               </div>
 
               <div style={{ display: "flex", flexWrap: "wrap", gap: 12, marginBottom: 14 }}>
-                <div className="field-new" style={{ flex: "1 1 180px", minWidth: 0 }}>
-                  <label className="field-new__label">Categoría</label>
-                  <select className="input-new" value={category} onChange={(e) => setCategory(e.target.value)}>
+                <div style={{ flex: "1 1 180px", minWidth: 0 }}>
+                  <label className="dcafp-label" htmlFor="af-ticket-category">Categoría</label>
+                  <select
+                    id="af-ticket-category"
+                    className="dcafp-select"
+                    value={category}
+                    onChange={(e) => setCategory(e.target.value)}
+                  >
                     {AFFILIATE_SUPPORT_CATEGORIES.map((c) => (
                       <option key={c} value={c}>{AFFILIATE_SUPPORT_CATEGORY_LABELS[c] || c}</option>
                     ))}
                   </select>
                 </div>
-                <div className="field-new" style={{ flex: "1 1 180px", minWidth: 0 }}>
-                  <label className="field-new__label">Prioridad</label>
-                  <select className="input-new" value={priority} onChange={(e) => setPriority(e.target.value)}>
+                <div style={{ flex: "1 1 180px", minWidth: 0 }}>
+                  <label className="dcafp-label" htmlFor="af-ticket-priority">Prioridad</label>
+                  <select
+                    id="af-ticket-priority"
+                    className="dcafp-select"
+                    value={priority}
+                    onChange={(e) => setPriority(e.target.value)}
+                  >
                     {AFFILIATE_SUPPORT_PRIORITIES.map((p) => (
                       <option key={p} value={p}>{AFFILIATE_SUPPORT_PRIORITY_LABELS[p] || p}</option>
                     ))}
@@ -345,19 +374,22 @@ export function SoporteAfiliadoClient({
                 </div>
               </div>
 
-              <div className="field-new">
-                <label className="field-new__label">Descripción <span className="req">*</span></label>
+              <div>
+                <label className="dcafp-label" htmlFor="af-ticket-body">
+                  Descripción <span style={{ color: "var(--dcafp-danger)" }}>*</span>
+                </label>
                 <textarea
-                  className="input-new"
-                  style={{ height: 130, paddingTop: 10, resize: "vertical" }}
+                  id="af-ticket-body"
+                  className="dcafp-textarea"
+                  style={{ minHeight: 130 }}
                   maxLength={AFFILIATE_SUPPORT_MAX_BODY_CHARS}
                   placeholder="Cuéntanos con el mayor detalle posible: qué pasó, desde cuándo y qué esperabas. Si es de una clínica referida, incluye su nombre."
                   value={body}
                   onChange={(e) => setBody(e.target.value)}
                 />
                 <div
-                  className="mono"
-                  style={{ textAlign: "right", fontSize: 11, color: "var(--text-3)", fontVariantNumeric: "tabular-nums" }}
+                  className="dcafp-nums"
+                  style={{ textAlign: "right", fontSize: 11.5, color: "var(--dcafp-ink-3)", marginTop: 6 }}
                 >
                   {body.length}/{AFFILIATE_SUPPORT_MAX_BODY_CHARS}
                 </div>
@@ -365,12 +397,22 @@ export function SoporteAfiliadoClient({
             </div>
 
             <div className="modal__footer">
-              <ButtonNew variant="ghost" type="button" onClick={() => setShowNew(false)} disabled={submitting}>
+              <button
+                type="button"
+                className="dcafp-btn dcafp-btn--ghost"
+                onClick={() => setShowNew(false)}
+                disabled={submitting}
+              >
                 Cancelar
-              </ButtonNew>
-              <ButtonNew variant="primary" type="button" onClick={submitTicket} disabled={submitting}>
+              </button>
+              <button
+                type="button"
+                className="dcafp-btn dcafp-btn--primary"
+                onClick={submitTicket}
+                disabled={submitting}
+              >
                 {submitting ? "Creando…" : "Crear ticket"}
-              </ButtonNew>
+              </button>
             </div>
           </div>
         </div>

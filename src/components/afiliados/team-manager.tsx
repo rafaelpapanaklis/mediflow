@@ -1,11 +1,9 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useState, type CSSProperties, type FormEvent } from "react";
 import toast from "react-hot-toast";
 import { UserPlus, Users, X, Check, Ban, Trash2, Pencil } from "lucide-react";
-import { CardNew } from "@/components/ui/design-system/card-new";
-import { ButtonNew } from "@/components/ui/design-system/button-new";
-import { BadgeNew } from "@/components/ui/design-system/badge-new";
+import { PanelCard, Chip, EmptyState } from "@/components/afiliados/ui/panel-ui";
 import { formatCurrency } from "@/lib/utils";
 
 export interface SellerRowWithStats {
@@ -23,27 +21,10 @@ export interface SellerRowWithStats {
   paidMxn: number;
 }
 
-const fieldStyle: React.CSSProperties = {
-  height: 42,
-  padding: "0 14px",
-  borderRadius: 10,
-  background: "var(--bg-elev-2)",
-  border: "1px solid var(--border-soft)",
-  color: "var(--text-1)",
-  fontSize: 14,
-  fontFamily: "inherit",
-  outline: "none",
-  width: "100%",
-  boxSizing: "border-box",
-};
-
-const labelStyle: React.CSSProperties = {
-  fontSize: 12,
-  fontWeight: 600,
-  color: "var(--text-2)",
-  marginBottom: 6,
-  display: "block",
-};
+// Los encabezados de `.dcafp-table` van a la izquierda por defecto; las cuatro
+// columnas de cifras se alinean a la derecha para que los dígitos formen
+// columna con las celdas (.dcafp-td--num / --money ya lo hacen).
+const numTh: CSSProperties = { textAlign: "right" };
 
 export function TeamManager({
   initial,
@@ -161,19 +142,20 @@ export function TeamManager({
   }
 
   return (
-    <CardNew
-      noPad
+    <PanelCard
+      flush
       title="Vendedores"
       sub={`${sellers.length} ${sellers.length === 1 ? "vendedor" : "vendedores"} en tu equipo`}
       action={
-        <ButtonNew
-          variant="primary"
-          size="sm"
-          icon={<UserPlus size={14} />}
+        <button
+          type="button"
+          className="dcafp-btn dcafp-btn--primary dcafp-btn--sm"
+          aria-expanded={showForm}
           onClick={() => setShowForm((v) => !v)}
         >
+          <UserPlus size={14} />
           Agregar vendedor
-        </ButtonNew>
+        </button>
       }
     >
       {/* Formulario de alta (inline, plegable) */}
@@ -181,37 +163,73 @@ export function TeamManager({
         <form
           onSubmit={handleCreate}
           style={{
-            padding: 16,
-            borderBottom: "1px solid var(--border-soft)",
-            background: "var(--bg-elev-2)",
+            padding: "16px 22px 18px",
+            marginTop: 14,
+            borderTop: "1px solid var(--dcafp-line-soft)",
+            borderBottom: "1px solid var(--dcafp-line)",
+            background: "var(--dcafp-surface-2)",
           }}
         >
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
-              gap: 12,
-            }}
-          >
-            <div>
-              <label style={labelStyle}>Nombre</label>
-              <input name="name" type="text" required style={fieldStyle} placeholder="Nombre del vendedor" />
-            </div>
-            <div>
-              <label style={labelStyle}>Correo</label>
-              <input name="email" type="email" required style={fieldStyle} placeholder="correo@ejemplo.com" />
-            </div>
-            <div>
-              <label style={labelStyle}>Contraseña</label>
-              <input name="password" type="password" required minLength={8} style={fieldStyle} placeholder="Mínimo 8 caracteres" />
-            </div>
-            <div>
-              <label style={labelStyle}>Teléfono (opcional)</label>
-              <input name="phone" type="tel" style={fieldStyle} placeholder="55 1234 5678" />
-            </div>
-            <div>
-              <label style={labelStyle}>% de comisión</label>
+          <div className="dcafp-autogrid dcafp-autogrid--sm">
+            <div style={{ minWidth: 0 }}>
+              <label className="dcafp-label" htmlFor="tm-name">
+                Nombre
+              </label>
               <input
+                id="tm-name"
+                className="dcafp-input"
+                name="name"
+                type="text"
+                required
+                placeholder="Nombre del vendedor"
+              />
+            </div>
+            <div style={{ minWidth: 0 }}>
+              <label className="dcafp-label" htmlFor="tm-email">
+                Correo
+              </label>
+              <input
+                id="tm-email"
+                className="dcafp-input"
+                name="email"
+                type="email"
+                required
+                placeholder="correo@ejemplo.com"
+              />
+            </div>
+            <div style={{ minWidth: 0 }}>
+              <label className="dcafp-label" htmlFor="tm-password">
+                Contraseña
+              </label>
+              <input
+                id="tm-password"
+                className="dcafp-input"
+                name="password"
+                type="password"
+                required
+                minLength={8}
+                placeholder="Mínimo 8 caracteres"
+              />
+            </div>
+            <div style={{ minWidth: 0 }}>
+              <label className="dcafp-label" htmlFor="tm-phone">
+                Teléfono (opcional)
+              </label>
+              <input
+                id="tm-phone"
+                className="dcafp-input"
+                name="phone"
+                type="tel"
+                placeholder="55 1234 5678"
+              />
+            </div>
+            <div style={{ minWidth: 0 }}>
+              <label className="dcafp-label" htmlFor="tm-pct">
+                % de comisión
+              </label>
+              <input
+                id="tm-pct"
+                className="dcafp-input dcafp-nums"
                 name="commissionPct"
                 type="number"
                 required
@@ -219,68 +237,62 @@ export function TeamManager({
                 max={levelPct}
                 step="0.1"
                 defaultValue={0}
-                style={fieldStyle}
+                aria-describedby="tm-pct-hint"
               />
-              <div style={{ fontSize: 11.5, color: "var(--text-3)", marginTop: 4 }}>
+              <p className="dcafp-hint" id="tm-pct-hint" style={{ marginTop: 5 }}>
                 máx {levelPct}% — tu nivel
-              </div>
+              </p>
             </div>
           </div>
-          <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
-            <ButtonNew type="submit" variant="primary" disabled={busyId === "__new__"}>
+          <div style={{ display: "flex", gap: 8, marginTop: 14, flexWrap: "wrap" }}>
+            <button type="submit" className="dcafp-btn dcafp-btn--primary" disabled={busyId === "__new__"}>
               {busyId === "__new__" ? "Creando…" : "Crear vendedor"}
-            </ButtonNew>
-            <ButtonNew type="button" variant="ghost" icon={<X size={14} />} onClick={() => setShowForm(false)}>
+            </button>
+            <button type="button" className="dcafp-btn dcafp-btn--ghost" onClick={() => setShowForm(false)}>
+              <X size={14} />
               Cancelar
-            </ButtonNew>
+            </button>
           </div>
         </form>
       )}
 
       {/* Estado vacío */}
       {sellers.length === 0 ? (
-        <div
-          style={{
-            padding: "48px 24px",
-            textAlign: "center",
-            display: "flex",
-            flexDirection: "column",
-            alignItems: "center",
-            gap: 10,
-          }}
-        >
-          <div
-            style={{
-              width: 56,
-              height: 56,
-              borderRadius: 16,
-              display: "grid",
-              placeItems: "center",
-              background: "var(--brand-soft)",
-              border: "1px solid var(--border-brand)",
-              color: "var(--violet-400)",
-            }}
+        <div style={{ padding: showForm ? "18px 22px 22px" : "6px 22px 22px" }}>
+          <EmptyState
+            icon={<Users size={22} />}
+            title="Aún no tienes vendedores"
+            action={
+              showForm ? null : (
+                <button
+                  type="button"
+                  className="dcafp-btn dcafp-btn--outline"
+                  onClick={() => setShowForm(true)}
+                >
+                  <UserPlus size={15} />
+                  Agregar vendedor
+                </button>
+              )
+            }
           >
-            <Users size={26} />
-          </div>
-          <div style={{ color: "var(--text-1)", fontWeight: 600, fontSize: 14 }}>Aún no tienes vendedores</div>
-          <p style={{ color: "var(--text-3)", fontSize: 13, margin: 0, maxWidth: 360, lineHeight: 1.5 }}>
-            Agrega a tu primer vendedor para que empiece a referir clínicas con su propio enlace y % de comisión.
-          </p>
+            Agrega a tu primer vendedor para que empiece a referir clínicas con su propio enlace y % de
+            comisión. Tú ves sus clics, sus clínicas y lo que ha generado, y te quedas con el resto de tu
+            nivel como override.
+          </EmptyState>
         </div>
       ) : (
-        <div style={{ overflowX: "auto" }}>
-          <table className="table-new">
+        <div className="dcafp-scrollx" style={{ marginTop: showForm ? 0 : 12 }}>
+          <table className="dcafp-table">
             <thead>
               <tr>
                 <th>Vendedor</th>
                 <th>% comisión</th>
-                <th>Clics</th>
-                <th>Clínicas</th>
-                <th>Pendiente</th>
-                <th>Pagado</th>
+                <th style={numTh}>Clics</th>
+                <th style={numTh}>Clínicas</th>
+                <th style={numTh}>Pendiente</th>
+                <th style={numTh}>Pagado</th>
                 <th>Estado</th>
-                <th style={{ textAlign: "right" }}>Acciones</th>
+                <th style={numTh}>Acciones</th>
               </tr>
             </thead>
             <tbody>
@@ -289,10 +301,10 @@ export function TeamManager({
                 return (
                   <tr key={s.id}>
                     <td>
-                      <div style={{ color: "var(--text-1)", fontWeight: 600 }}>{s.name}</div>
-                      <div style={{ color: "var(--text-3)", fontSize: 12 }}>{s.email}</div>
+                      <div style={{ fontWeight: 650, color: "var(--dcafp-ink)" }}>{s.name}</div>
+                      <div style={{ fontSize: 12, color: "var(--dcafp-ink-3)" }}>{s.email}</div>
                     </td>
-                    <td className="mono">
+                    <td>
                       {editing === s.id ? (
                         <PctEditor
                           initial={s.commissionPct}
@@ -302,52 +314,51 @@ export function TeamManager({
                           onCancel={() => setEditing(null)}
                         />
                       ) : (
-                        <span style={{ color: "var(--text-1)", fontWeight: 600 }}>{s.commissionPct}%</span>
+                        <span className="dcafp-nums" style={{ fontWeight: 700, color: "var(--dcafp-ink)" }}>
+                          {s.commissionPct}%
+                        </span>
                       )}
                     </td>
-                    <td className="mono" style={{ color: "var(--text-2)" }}>{s.clicks}</td>
-                    <td className="mono" style={{ color: "var(--text-2)" }}>{s.clinics}</td>
-                    <td className="mono" style={{ color: "var(--text-2)" }}>{formatCurrency(s.pendingMxn)}</td>
-                    <td className="mono" style={{ color: "var(--text-1)", fontWeight: 600 }}>{formatCurrency(s.paidMxn)}</td>
+                    <td className="dcafp-td--num dcafp-td--muted">{s.clicks}</td>
+                    <td className="dcafp-td--num dcafp-td--muted">{s.clinics}</td>
+                    <td className="dcafp-td--num dcafp-td--muted">{formatCurrency(s.pendingMxn)}</td>
+                    <td className="dcafp-td--money">{formatCurrency(s.paidMxn)}</td>
                     <td>
-                      <BadgeNew tone={s.isActive ? "success" : "neutral"} dot>
+                      <Chip tone={s.isActive ? "ok" : "neutral"} dot sm>
                         {s.isActive ? "Activo" : "Inactivo"}
-                      </BadgeNew>
+                      </Chip>
                     </td>
                     <td>
                       <div style={{ display: "flex", gap: 6, justifyContent: "flex-end", flexWrap: "wrap" }}>
                         {editing !== s.id && (
-                          <ButtonNew
+                          <button
                             type="button"
-                            variant="ghost"
-                            size="sm"
-                            icon={<Pencil size={13} />}
+                            className="dcafp-btn dcafp-btn--sm dcafp-btn--ghost"
                             disabled={busy}
                             onClick={() => setEditing(s.id)}
                           >
+                            <Pencil size={13} />
                             Editar %
-                          </ButtonNew>
+                          </button>
                         )}
-                        <ButtonNew
+                        <button
                           type="button"
-                          variant="ghost"
-                          size="sm"
-                          icon={s.isActive ? <Ban size={13} /> : <Check size={13} />}
+                          className="dcafp-btn dcafp-btn--sm dcafp-btn--ghost"
                           disabled={busy}
                           onClick={() => handleToggle(s.id, !s.isActive)}
                         >
+                          {s.isActive ? <Ban size={13} /> : <Check size={13} />}
                           {s.isActive ? "Desactivar" : "Activar"}
-                        </ButtonNew>
-                        <ButtonNew
+                        </button>
+                        <button
                           type="button"
-                          variant="danger"
-                          size="sm"
-                          icon={<Trash2 size={13} />}
+                          className="dcafp-btn dcafp-btn--sm dcafp-btn--danger"
                           disabled={busy}
                           onClick={() => handleDelete(s.id, s.name)}
                         >
+                          <Trash2 size={13} />
                           Eliminar
-                        </ButtonNew>
+                        </button>
                       </div>
                     </td>
                   </tr>
@@ -357,7 +368,7 @@ export function TeamManager({
           </table>
         </div>
       )}
-    </CardNew>
+    </PanelCard>
   );
 }
 
@@ -378,7 +389,10 @@ function PctEditor({
   const [value, setValue] = useState(String(initial));
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+      {/* Sin <label> visible: la columna ya dice "% comisión", así que la
+          etiqueta accesible viaja en aria-label. */}
       <input
+        className="dcafp-input dcafp-nums"
         type="number"
         min={0}
         max={max}
@@ -386,20 +400,31 @@ function PctEditor({
         value={value}
         autoFocus
         disabled={disabled}
+        aria-label="Porcentaje de comisión del vendedor"
         onChange={(e) => setValue(e.target.value)}
-        style={{ ...fieldStyle, height: 32, width: 80, padding: "0 8px" }}
+        style={{ width: 88, flex: "0 0 auto" }}
       />
+      {/* `.dcafp-iconbtn` no trae estado :disabled en panel.css — el apagado va
+          inline para no inventar una clase nueva. */}
       <button
         type="button"
-        className="icon-btn-new"
-        aria-label="Guardar"
+        className="dcafp-iconbtn"
+        aria-label="Guardar porcentaje"
         disabled={disabled}
+        style={{ opacity: disabled ? 0.55 : 1 }}
         onClick={() => onSave(Number(value))}
       >
-        <Check size={13} />
+        <Check size={16} />
       </button>
-      <button type="button" className="icon-btn-new" aria-label="Cancelar" disabled={disabled} onClick={onCancel}>
-        <X size={13} />
+      <button
+        type="button"
+        className="dcafp-iconbtn"
+        aria-label="Cancelar edición"
+        disabled={disabled}
+        style={{ opacity: disabled ? 0.55 : 1 }}
+        onClick={onCancel}
+      >
+        <X size={16} />
       </button>
     </div>
   );

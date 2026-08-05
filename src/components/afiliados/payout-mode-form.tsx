@@ -2,9 +2,7 @@
 
 import { useState, type CSSProperties, type FormEvent } from "react";
 import toast from "react-hot-toast";
-import { CardNew } from "@/components/ui/design-system/card-new";
-import { ButtonNew } from "@/components/ui/design-system/button-new";
-import { BadgeNew } from "@/components/ui/design-system/badge-new";
+import { Chip, Note, PanelCard } from "@/components/afiliados/ui/panel-ui";
 import { PAYOUT_MODE_LABELS, type PayoutMode, type PlanKey } from "@/lib/affiliates/payout-core";
 
 /**
@@ -48,12 +46,6 @@ const OPTIONS: { value: PayoutMode; blurb: string; annual: string }[] = [
   },
 ];
 
-const gridStyle: CSSProperties = {
-  display: "grid",
-  gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 260px), 1fr))",
-  gap: 12,
-};
-
 // Todo el contenido de las tarjetas va en <span> con display de bloque: viven
 // dentro de un <label>, cuyo modelo de contenido es phrasing content.
 const rowStyle: CSSProperties = {
@@ -61,38 +53,42 @@ const rowStyle: CSSProperties = {
   alignItems: "baseline",
   justifyContent: "space-between",
   gap: 10,
+  minWidth: 0,
 };
 
 const rowLabelStyle: CSSProperties = {
   fontSize: 12.5,
-  color: "var(--text-3)",
+  color: "var(--dcafp-ink-3)",
+  minWidth: 0,
 };
 
 const rowValueStyle: CSSProperties = {
   fontSize: 13,
-  fontWeight: 600,
-  color: "var(--text-1)",
+  fontWeight: 700,
+  color: "var(--dcafp-ink)",
   whiteSpace: "nowrap",
 };
 
 const blurbStyle: CSSProperties = {
   display: "block",
   fontSize: 12.5,
-  color: "var(--text-3)",
+  color: "var(--dcafp-ink-3)",
   margin: 0,
   lineHeight: 1.5,
 };
 
-// La venta anual paga por adelantado: se destaca en vez de esconderse.
+// La venta anual paga por adelantado: se destaca en vez de esconderse. El
+// morado 75 la separa tanto de la tarjeta blanca (solo lectura) como de la
+// seleccionada (brand-50) y de la que no lo está (surface-2).
 const annualStyle: CSSProperties = {
   display: "block",
   fontSize: 12,
   lineHeight: 1.45,
-  color: "var(--text-2)",
-  background: "var(--brand-soft)",
-  border: "1px solid var(--border-brand)",
-  borderRadius: 8,
-  padding: "7px 10px",
+  color: "var(--dcafp-ink-2)",
+  background: "var(--dcafp-brand-75)",
+  border: "1px solid var(--dcafp-brand-100)",
+  borderRadius: "var(--dcafp-r-el)",
+  padding: "8px 11px",
 };
 
 /** Formato MXN sin decimales cuando el monto es entero ($40, $1,400, $37.50). */
@@ -142,7 +138,7 @@ export function PayoutModeForm({
     const rows = rowsFor(target);
     if (rows.length === 0) return null;
     return (
-      <span style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+      <span style={{ display: "flex", flexDirection: "column", gap: 6, minWidth: 0 }}>
         {rows.map((a) => {
           // Trueque explícito: cuántos meses del fijo equivale el pago único.
           const months =
@@ -152,12 +148,12 @@ export function PayoutModeForm({
           return (
             <span key={a.plan} style={rowStyle}>
               <span style={rowLabelStyle}>{a.label}</span>
-              <span style={{ textAlign: "right" }}>
-                <span className="mono" style={rowValueStyle}>
+              <span style={{ textAlign: "right", flex: "0 0 auto" }}>
+                <span className="dcafp-nums" style={rowValueStyle}>
                   {target === "onetime" ? mxn(a.oneTimeMxn) : `${mxn(a.recurringMxn)}/mes`}
                 </span>
                 {months !== null && months > 0 && (
-                  <span style={{ display: "block", fontSize: 11, color: "var(--text-4)" }}>
+                  <span style={{ display: "block", fontSize: 11, color: "var(--dcafp-ink-4)" }}>
                     ≈ {months} {months === 1 ? "mes" : "meses"} del fijo
                   </span>
                 )}
@@ -196,34 +192,34 @@ export function PayoutModeForm({
   if (readOnly) {
     const active = OPTIONS.find((o) => o.value === saved) ?? OPTIONS[0];
     return (
-      <CardNew title="Cómo quieres cobrar tus comisiones">
-        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+      <PanelCard title="Cómo quieres cobrar tus comisiones">
+        <div style={{ display: "flex", flexDirection: "column", gap: 12, minWidth: 0 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
             <span style={rowLabelStyle}>Modalidad vigente</span>
-            <BadgeNew tone="brand">{PAYOUT_MODE_LABELS[saved]}</BadgeNew>
+            <Chip tone="brand" dot>
+              {PAYOUT_MODE_LABELS[saved]}
+            </Chip>
           </div>
           <p style={blurbStyle}>{active.blurb}</p>
           {renderAmounts(saved)}
           {renderAnnual(saved)}
-          <p style={{ ...blurbStyle, color: "var(--text-4)" }}>
+          <p className="dcafp-hint">
             Tu modalidad la define el programa; escríbenos si necesitas cambiarla.
           </p>
         </div>
-      </CardNew>
+      </PanelCard>
     );
   }
 
   // ── Editable ───────────────────────────────────────────────────────────
   return (
     <form onSubmit={handleSubmit}>
-      <CardNew title="Cómo quieres cobrar tus comisiones">
-        <p style={{ ...blurbStyle, fontSize: 13, marginBottom: 16 }}>
-          Elige el esquema que más te convenga. Aplica a las clínicas que refieras a partir de
-          ahora.
-        </p>
-
-        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-          <div role="radiogroup" aria-label="Modalidad de comisión" style={gridStyle}>
+      <PanelCard
+        title="Cómo quieres cobrar tus comisiones"
+        sub="Elige el esquema que más te convenga. Aplica a las clínicas que refieras a partir de ahora."
+      >
+        <div style={{ display: "flex", flexDirection: "column", gap: 16, minWidth: 0 }}>
+          <div role="radiogroup" aria-label="Modalidad de comisión" className="dcafp-autogrid">
             {OPTIONS.map((opt) => {
               const selected = mode === opt.value;
               const isFocused = focused === opt.value;
@@ -235,9 +231,12 @@ export function PayoutModeForm({
                     flexDirection: "column",
                     gap: 10,
                     padding: 14,
-                    borderRadius: 12,
-                    border: `1px solid ${selected ? "var(--border-brand)" : "var(--border-soft)"}`,
-                    background: selected ? "var(--brand-soft)" : "var(--bg-elev-2)",
+                    minWidth: 0,
+                    borderRadius: "var(--dcafp-r-box)",
+                    // 1.5px en los dos estados: si la seleccionada engordara el
+                    // borde, la tarjeta saltaría 1px al elegirla.
+                    border: `1.5px solid ${selected ? "var(--dcafp-brand-300)" : "var(--dcafp-line)"}`,
+                    background: selected ? "var(--dcafp-brand-50)" : "var(--dcafp-surface-2)",
                     // El foco del radio nativo se refleja en toda la tarjeta.
                     boxShadow: isFocused ? "var(--ring)" : "none",
                     cursor: "pointer",
@@ -245,7 +244,7 @@ export function PayoutModeForm({
                     boxSizing: "border-box",
                   }}
                 >
-                  <span style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <span style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
                     <input
                       type="radio"
                       name="afiliado-payout-mode"
@@ -256,18 +255,22 @@ export function PayoutModeForm({
                       onBlur={() => setFocused(null)}
                       disabled={saving}
                       style={{
-                        width: 16,
-                        height: 16,
-                        accentColor: "var(--brand)",
+                        width: 17,
+                        height: 17,
+                        accentColor: "var(--dcafp-brand)",
                         cursor: "pointer",
                         flexShrink: 0,
                         margin: 0,
                       }}
                     />
-                    <span style={{ fontSize: 13.5, fontWeight: 600, color: "var(--text-1)" }}>
+                    <span style={{ fontSize: 13.5, fontWeight: 700, color: "var(--dcafp-ink)" }}>
                       {PAYOUT_MODE_LABELS[opt.value]}
                     </span>
-                    {saved === opt.value && <BadgeNew tone="neutral">Actual</BadgeNew>}
+                    {saved === opt.value && (
+                      <Chip tone="neutral" sm>
+                        Actual
+                      </Chip>
+                    )}
                   </span>
                   <span style={blurbStyle}>{opt.blurb}</span>
                   {renderAmounts(opt.value)}
@@ -277,29 +280,19 @@ export function PayoutModeForm({
             })}
           </div>
 
-          <div
-            style={{
-              padding: "10px 14px",
-              borderRadius: 10,
-              border: "1px solid var(--warning-border-strong)",
-              background: "var(--warning-soft)",
-              color: "var(--text-2)",
-              fontSize: 12.5,
-              lineHeight: 1.5,
-            }}
-          >
-            <strong style={{ color: "var(--warning-strong)" }}>Ojo: </strong>
+          <Note tone="warn">
+            <strong>Ojo: </strong>
             Cambiar tu modalidad aplica solo a las clínicas NUEVAS que refieras. Las que ya
             referiste conservan la modalidad con la que se dieron de alta.
-          </div>
+          </Note>
 
           <div>
-            <ButtonNew type="submit" variant="primary" disabled={saving || !dirty}>
+            <button type="submit" className="dcafp-btn dcafp-btn--primary" disabled={saving || !dirty}>
               {saving ? "Guardando…" : "Guardar modalidad"}
-            </ButtonNew>
+            </button>
           </div>
         </div>
-      </CardNew>
+      </PanelCard>
     </form>
   );
 }

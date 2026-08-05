@@ -5,6 +5,7 @@ import { getAffiliateContext } from "@/lib/affiliate-auth";
 import { prisma } from "@/lib/prisma";
 import { getResolvedPlans } from "@/lib/plans";
 import { fixedAmountFor, getPayoutConfig, normalizePayoutMode } from "@/lib/affiliates/payout";
+import { PageHead } from "@/components/afiliados/ui/panel-ui";
 import { PayoutForm } from "@/components/afiliados/payout-form";
 import {
   PayoutModeForm,
@@ -44,15 +45,12 @@ export default async function AffiliateSettingsPage() {
   }));
 
   return (
+    // maxWidth 720: un formulario a lo ancho del panel (~900px) se lee mal.
     <div style={{ display: "flex", flexDirection: "column", gap: 18, maxWidth: 720 }}>
-      <div>
-        <h1 style={{ fontSize: 22, letterSpacing: "-0.02em", color: "var(--text-1)", fontWeight: 600, margin: 0 }}>
-          Pagos y comisiones
-        </h1>
-        <p style={{ color: "var(--text-3)", fontSize: 13, marginTop: 4, margin: 0 }}>
-          Elige cómo se calculan tus comisiones y dinos a dónde te las depositamos.
-        </p>
-      </div>
+      <PageHead
+        title="Pagos y comisiones"
+        sub="Elige cómo se calculan tus comisiones y dinos a dónde te las depositamos."
+      />
 
       <PayoutModeForm
         initialMode={normalizePayoutMode(ctx.affiliate.payoutMode)}

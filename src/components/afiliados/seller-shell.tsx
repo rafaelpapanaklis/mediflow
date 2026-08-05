@@ -1,13 +1,21 @@
 "use client";
 
-// Shell/sidebar del VENDEDOR (equipo). Espejo de affiliate-shell.tsx: mismo CSS
-// (sidebar-new), hamburguesa móvil y logout. Subtítulo "Vendedor" + nombre del
-// afiliado padre en el footer. NAV reducido: Inicio, Herramientas, Datos de pago.
+/**
+ * Shell del panel del VENDEDOR (equipo) — espejo de affiliate-shell.tsx.
+ *
+ * Mismo lenguaje visual (panel.css, namespace `dcafp`), mismo cajón móvil y
+ * mismo logout. Cambian el subtítulo de marca ("Vendedor"), el pie —que
+ * nombra al afiliado padre— y el NAV, reducido a Inicio, Herramientas y
+ * Datos de pago.
+ */
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState } from "react";
-import { LayoutDashboard, Settings, LogOut, Menu, X, Handshake, Megaphone } from "lucide-react";
+import { useEffect, useState } from "react";
+import { CreditCard, Home, LogOut, Menu, SlidersHorizontal, X } from "lucide-react";
 import "@/app/panel-chrome-va.css";
+import "@/app/afiliados/panel.css";
+import { PanelToast } from "./ui/panel-toast";
+import { initialsOf } from "./affiliate-shell";
 
 type NavItem = {
   href: string;
@@ -16,9 +24,9 @@ type NavItem = {
 };
 
 const NAV_ITEMS: NavItem[] = [
-  { href: "/afiliados/vendedor/inicio", label: "Inicio", icon: LayoutDashboard },
-  { href: "/afiliados/vendedor/herramientas", label: "Herramientas", icon: Megaphone },
-  { href: "/afiliados/vendedor/configuracion", label: "Datos de pago", icon: Settings },
+  { href: "/afiliados/vendedor/inicio", label: "Inicio", icon: Home },
+  { href: "/afiliados/vendedor/herramientas", label: "Herramientas", icon: SlidersHorizontal },
+  { href: "/afiliados/vendedor/configuracion", label: "Datos de pago", icon: CreditCard },
 ];
 
 export function SellerShell({
@@ -33,6 +41,10 @@ export function SellerShell({
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
 
+  useEffect(() => {
+    setMobileOpen(false);
+  }, [pathname]);
+
   async function handleLogout() {
     try {
       await fetch("/api/afiliados/auth/logout", { method: "POST" });
@@ -46,65 +58,42 @@ export function SellerShell({
   }
 
   return (
-    <div className="mf-extpanel dashboard-shell flex min-h-screen font-sans">
-      {/* Mobile hamburger */}
-      <button
-        type="button"
-        onClick={() => setMobileOpen(true)}
-        className="icon-btn-new lg:hidden"
-        style={{ position: "fixed", top: 12, left: 12, zIndex: 40 }}
-        aria-label="Abrir menú"
-      >
-        <Menu size={14} />
-      </button>
+    <div className="dcafp mf-extpanel dashboard-shell font-sans">
+      <div className="dcafp-shell">
+        <button
+          type="button"
+          onClick={() => setMobileOpen(true)}
+          className="dcafp-burger"
+          aria-label="Abrir menú"
+          aria-expanded={mobileOpen}
+        >
+          <Menu size={18} />
+        </button>
 
-      {mobileOpen && (
-        <div
-          onClick={() => setMobileOpen(false)}
-          style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", backdropFilter: "blur(2px)", zIndex: 40 }}
-          className="lg:hidden"
-        />
-      )}
+        {mobileOpen && <div className="dcafp-veil" onClick={() => setMobileOpen(false)} aria-hidden />}
 
-      <aside
-        className="sidebar-new"
-        style={{
-          zIndex: 41,
-          position: mobileOpen ? "fixed" : undefined,
-          left: mobileOpen ? 0 : undefined,
-          top: mobileOpen ? 0 : undefined,
-        }}
-      >
-        {/* Brand */}
-        <div className="sidebar-new__brand">
-          <div
-            className="sidebar-new__logo"
-            style={{
-              background: "linear-gradient(135deg, #8b5cf6, #7c3aed)",
-              boxShadow: "0 0 20px rgba(124,58,237,0.4), inset 0 1px 0 rgba(255,255,255,0.2)",
-            }}
-          >
-            <Handshake size={14} color="#fff" />
+        <aside className={`dcafp-side ${mobileOpen ? "dcafp-side--open" : ""}`}>
+          <div className="dcafp-brand">
+            <div className="dcafp-brand__logo" aria-hidden>
+              <span style={{ fontSize: 17, fontWeight: 800, lineHeight: 1 }}>D</span>
+            </div>
+            <div style={{ minWidth: 0, flex: 1 }}>
+              <div className="dcafp-brand__name">DaleControl</div>
+              <div className="dcafp-brand__sub">Vendedor</div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setMobileOpen(false)}
+              className="dcafp-iconbtn dcafp-iconbtn--bare dcafp-side__close"
+              aria-label="Cerrar menú"
+            >
+              <X size={18} />
+            </button>
           </div>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div className="sidebar-new__brandname">DaleControl</div>
-            <div className="sidebar-new__brandsub">Vendedor</div>
-          </div>
-          <button
-            type="button"
-            onClick={() => setMobileOpen(false)}
-            className="icon-btn-new lg:hidden"
-            style={{ marginLeft: 4 }}
-            aria-label="Cerrar menú"
-          >
-            <X size={14} />
-          </button>
-        </div>
 
-        {/* Nav */}
-        <nav className="scrollbar-thin" style={{ flex: 1, overflowY: "auto", marginRight: -4, paddingRight: 4 }}>
-          <div className="nav-section-new">Panel</div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+          <div className="dcafp-navkicker">PANEL</div>
+
+          <nav className="dcafp-nav" aria-label="Navegación principal">
             {NAV_ITEMS.map((item) => {
               const Icon = item.icon;
               const active = isActive(item.href);
@@ -112,68 +101,44 @@ export function SellerShell({
                 <Link
                   key={item.href}
                   href={item.href}
-                  onClick={() => setMobileOpen(false)}
-                  className={`nav-item-new ${active ? "nav-item-new--active" : ""}`}
+                  className={`dcafp-navitem ${active ? "dcafp-navitem--active" : ""}`}
+                  aria-current={active ? "page" : undefined}
                 >
-                  <Icon size={14} />
+                  <Icon size={19} />
                   <span>{item.label}</span>
                 </Link>
               );
             })}
-          </div>
-        </nav>
+          </nav>
 
-        {/* Footer */}
-        <div style={{ marginTop: "auto", paddingTop: 12, borderTop: "1px solid var(--border-soft)" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 10, padding: 8 }}>
+          <div className="dcafp-spacer" style={{ flex: 1 }} />
+
+          <div className="dcafp-user">
+            <div className="dcafp-avatar" aria-hidden>
+              {initialsOf(sellerName)}
+            </div>
             <div style={{ flex: 1, minWidth: 0 }}>
-              <div
-                style={{
-                  fontSize: 12,
-                  fontWeight: 600,
-                  color: "var(--text-1)",
-                  overflow: "hidden",
-                  textOverflow: "ellipsis",
-                  whiteSpace: "nowrap",
-                }}
-              >
-                {sellerName}
-              </div>
-              <div
-                style={{
-                  fontSize: 11,
-                  color: "var(--text-3)",
-                  overflow: "hidden",
-                  textOverflow: "ellipsis",
-                  whiteSpace: "nowrap",
-                }}
-              >
-                Vendedor de {parentName}
-              </div>
+              <div className="dcafp-user__name">{sellerName}</div>
+              <div className="dcafp-user__role">Vendedor de {parentName}</div>
             </div>
             <button
               type="button"
               onClick={handleLogout}
-              className="icon-btn-new"
+              className="dcafp-iconbtn dcafp-iconbtn--bare"
               aria-label="Cerrar sesión"
               title="Cerrar sesión"
             >
-              <LogOut size={14} />
+              <LogOut size={18} />
             </button>
           </div>
-        </div>
-      </aside>
+        </aside>
 
-      <div className="flex min-h-screen flex-1 flex-col lg:max-h-screen lg:overflow-y-auto">
-        <main
-          id="main-content"
-          tabIndex={-1}
-          className="flex-1 pt-20 lg:pt-6"
-          style={{ padding: "clamp(12px, 1.5vw, 28px)", paddingTop: "clamp(16px, 2vw, 24px)" }}
-        >
+        <main id="main-content" tabIndex={-1} className="dcafp-main">
           {children}
         </main>
       </div>
+
+      <PanelToast />
     </div>
   );
 }

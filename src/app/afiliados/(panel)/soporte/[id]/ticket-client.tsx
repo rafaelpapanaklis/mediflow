@@ -8,6 +8,11 @@
 //      POST /api/afiliados/soporte/[id]/messages
 // Contrato: src/lib/affiliate-support/types.ts.
 //
+// Lenguaje visual del panel de afiliados: primitivas de
+// components/afiliados/ui/panel-ui + clases `dcafp-*` de
+// src/app/afiliados/panel.css. Las burbujas son el único bloque con estilo
+// inline "de una sola vez": no hay patrón de chat en panel.css.
+//
 // Las notas internas NUNCA llegan a este endpoint (el service las descarta en
 // el where de Prisma), pero igual NO se renderiza nada con internalNote=true:
 // defensa en profundidad, misma regla que en el hilo de la clínica.
@@ -19,9 +24,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import toast from "react-hot-toast";
 import { ArrowLeft, LifeBuoy, Loader2, Send } from "lucide-react";
-import { BadgeNew } from "@/components/ui/design-system/badge-new";
-import { ButtonNew } from "@/components/ui/design-system/button-new";
-import { AvatarNew } from "@/components/ui/design-system/avatar-new";
+import { Chip, EmptyState, PageHead, PanelCard, Note, type ChipTone } from "@/components/afiliados/ui/panel-ui";
 import {
   AFFILIATE_SUPPORT_CATEGORY_LABELS,
   AFFILIATE_SUPPORT_MAX_BODY_CHARS,
@@ -33,20 +36,19 @@ import type {
   AffiliateTicketSummary,
 } from "@/lib/affiliate-support/types";
 
-type BadgeTone = "success" | "warning" | "danger" | "info" | "brand" | "neutral";
-
-// MISMO mapa que en soporte-client.tsx — mantener en sincronía.
-const STATUS_TONES: Record<string, BadgeTone> = {
-  ABIERTO: "info",
+// MISMO mapa que en soporte-client.tsx — mantener en sincronía. `Chip` no
+// tiene tono "info": ABIERTO y EN_PROGRESO caen los dos en `brand`.
+const STATUS_TONES: Record<string, ChipTone> = {
+  ABIERTO: "brand",
   EN_PROGRESO: "brand",
-  ESPERANDO_RESPUESTA: "warning",
-  RESUELTO: "success",
+  ESPERANDO_RESPUESTA: "amber",
+  RESUELTO: "ok",
   CERRADO: "neutral",
 };
 
-const PRIORITY_TONES: Record<string, BadgeTone> = {
+const PRIORITY_TONES: Record<string, ChipTone> = {
   URGENTE: "danger",
-  ALTA: "warning",
+  ALTA: "amber",
   NORMAL: "neutral",
   BAJA: "neutral",
 };
@@ -67,6 +69,28 @@ function formatMsgTime(iso: string): string {
   return d.toLocaleString("es-MX", opts);
 }
 
+/** Iniciales del avatar de la burbuja. Dos como máximo: con tres son ilegibles. */
+function initialsOf(name: string): string {
+  const parts = String(name || "").trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return "?";
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+}
+
+/** Enlace de regreso — el mismo en las cuatro salidas de la pantalla. */
+function BackToSupport({ label = "Soporte" }: { label?: string }) {
+  return (
+    <Link
+      href="/afiliados/soporte"
+      className="dcafp-btn dcafp-btn--ghost dcafp-btn--sm"
+      style={{ alignSelf: "flex-start" }}
+    >
+      <ArrowLeft size={16} strokeWidth={1.9} aria-hidden />
+      {label}
+    </Link>
+  );
+}
+
 // ── Burbuja de mensaje ──────────────────────────────────────────────────────
 
 function MessageBubble({ msg }: { msg: AffiliateSupportMessageDTO }) {
@@ -77,11 +101,15 @@ function MessageBubble({ msg }: { msg: AffiliateSupportMessageDTO }) {
   if (msg.authorType === "system") {
     return (
       <div style={{ display: "flex", justifyContent: "center", padding: "0 8px" }}>
-        <div style={{ maxWidth: "80%", textAlign: "center" }}>
-          <p style={{ whiteSpace: "pre-wrap", overflowWrap: "break-word", fontSize: 12, fontStyle: "italic", color: "var(--text-3)", margin: 0 }}>
+        <div style={{ maxWidth: "80%", textAlign: "center", minWidth: 0 }}>
+          <p style={{ margin: 0, whiteSpace: "pre-wrap", overflowWrap: "anywhere", fontSize: 12, fontStyle: "italic", color: "var(--dcafp-ink-3)" }}>
             {msg.body}
           </p>
-          {time && <p style={{ marginTop: 2, marginBottom: 0, fontSize: 11, color: "var(--text-3)" }}>{time}</p>}
+          {time && (
+            <p className="dcafp-nums" style={{ margin: 0, marginTop: 2, fontSize: 11, color: "var(--dcafp-ink-4)" }}>
+              {time}
+            </p>
+          )}
         </div>
       </div>
     );
@@ -92,52 +120,66 @@ function MessageBubble({ msg }: { msg: AffiliateSupportMessageDTO }) {
     ? (msg.authorName || "Tú")
     : (msg.authorName || "Soporte DaleControl");
 
+  const avatar = (
+    <span
+      className="dcafp-avatar"
+      aria-hidden
+      style={{
+        width: 32,
+        height: 32,
+        fontSize: 11.5,
+        marginTop: 4,
+        // El staff se distingue del afiliado también en el avatar: gris contra
+        // el lila de marca.
+        background: isAffiliate ? "var(--dcafp-brand-75)" : "var(--dcafp-surface-2)",
+        color: isAffiliate ? "var(--dcafp-brand-deep)" : "var(--dcafp-ink-2)",
+        border: isAffiliate ? "1px solid var(--dcafp-brand-100)" : "1px solid var(--dcafp-line)",
+      }}
+    >
+      {initialsOf(authorLabel)}
+    </span>
+  );
+
   return (
-    <div style={{ display: "flex", alignItems: "flex-start", gap: 8, justifyContent: isAffiliate ? "flex-end" : "flex-start" }}>
-      {!isAffiliate && (
-        <div style={{ marginTop: 4, flexShrink: 0 }}>
-          <AvatarNew name={authorLabel} size="sm" />
-        </div>
-      )}
+    <div style={{ display: "flex", alignItems: "flex-start", gap: 9, justifyContent: isAffiliate ? "flex-end" : "flex-start" }}>
+      {!isAffiliate && avatar}
       <div
-        style={
-          isAffiliate
-            ? {
-                maxWidth: "78%",
-                padding: "10px 14px",
-                background: "var(--brand-soft)",
-                border: "1px solid var(--border-brand, rgba(124,58,237,0.25))",
-                borderRadius: "var(--radius-lg)",
-                borderBottomRightRadius: "var(--radius-sm)",
-              }
-            : {
-                maxWidth: "78%",
-                padding: "10px 14px",
-                background: "var(--bg-elev-2)",
-                border: "1px solid var(--border-soft)",
-                borderRadius: "var(--radius-lg)",
-                borderBottomLeftRadius: "var(--radius-sm)",
-              }
-        }
+        style={{
+          maxWidth: "78%",
+          minWidth: 0,
+          padding: "11px 14px",
+          borderRadius: "var(--dcafp-r-box)",
+          background: isAffiliate ? "var(--dcafp-brand-50)" : "var(--dcafp-surface-2)",
+          border: isAffiliate ? "1px solid var(--dcafp-brand-100)" : "1px solid var(--dcafp-line)",
+        }}
       >
-        <p style={{ margin: 0, marginBottom: 4, fontSize: 11, fontWeight: 600, color: isAffiliate ? "var(--brand)" : "var(--text-2)" }}>
+        <p
+          style={{
+            margin: 0,
+            marginBottom: 4,
+            fontSize: 11.5,
+            fontWeight: 800,
+            letterSpacing: "0.2px",
+            color: isAffiliate ? "var(--dcafp-brand-deep)" : "var(--dcafp-ink-2)",
+            overflowWrap: "anywhere",
+          }}
+        >
           {authorLabel}
         </p>
         {/* Texto plano siempre — nunca HTML. */}
-        <p style={{ margin: 0, whiteSpace: "pre-wrap", overflowWrap: "break-word", fontSize: 13.5, lineHeight: 1.6, color: "var(--text-1)" }}>
+        <p style={{ margin: 0, whiteSpace: "pre-wrap", overflowWrap: "anywhere", fontSize: 13.5, lineHeight: 1.6, color: "var(--dcafp-ink)" }}>
           {msg.body}
         </p>
         {time && (
-          <p style={{ margin: 0, marginTop: 4, fontSize: 11, color: "var(--text-3)", textAlign: isAffiliate ? "right" : "left" }}>
+          <p
+            className="dcafp-nums"
+            style={{ margin: 0, marginTop: 5, fontSize: 11, color: "var(--dcafp-ink-3)", textAlign: isAffiliate ? "right" : "left" }}
+          >
             {time}
           </p>
         )}
       </div>
-      {isAffiliate && (
-        <div style={{ marginTop: 4, flexShrink: 0 }}>
-          <AvatarNew name={authorLabel} size="sm" />
-        </div>
-      )}
+      {isAffiliate && avatar}
     </div>
   );
 }
@@ -254,42 +296,60 @@ export function TicketAfiliadoClient({ ticketId }: { ticketId: string }) {
   // ── Estados de página ─────────────────────────────────────────────────────
   if (loading) {
     return (
-      <div style={{ minHeight: "50vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 12 }}>
-        <Loader2 size={20} strokeWidth={1.75} className="animate-spin" style={{ color: "var(--text-3)" }} aria-hidden />
-        <p style={{ fontSize: 13, color: "var(--text-3)", margin: 0 }}>Cargando ticket…</p>
-      </div>
+      <PanelCard>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 10, padding: "44px 0" }}>
+          <Loader2 size={18} strokeWidth={1.9} className="animate-spin" style={{ color: "var(--dcafp-ink-3)" }} aria-hidden />
+          <p style={{ fontSize: 13, color: "var(--dcafp-ink-3)" }}>Cargando ticket…</p>
+        </div>
+      </PanelCard>
     );
   }
 
   if (notFound) {
     return (
-      <div style={{ minHeight: "55vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 8, textAlign: "center" }}>
-        <LifeBuoy size={20} strokeWidth={1.75} style={{ color: "var(--text-4)" }} aria-hidden />
-        <h2 style={{ fontSize: 17, fontWeight: 600, color: "var(--text-1)", margin: 0 }}>Ticket no encontrado</h2>
-        <p style={{ maxWidth: "42ch", fontSize: 13, color: "var(--text-3)", margin: 0 }}>
-          Puede que el enlace sea incorrecto o que ese ticket no sea tuyo.
-        </p>
-        <Link href="/afiliados/soporte" className="btn-new btn-new--secondary" style={{ marginTop: 8 }}>
-          <ArrowLeft size={16} strokeWidth={1.75} aria-hidden /> Volver a Soporte
-        </Link>
+      <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+        <BackToSupport />
+        <PanelCard>
+          <EmptyState
+            icon={<LifeBuoy size={22} strokeWidth={1.8} />}
+            title="Ticket no encontrado"
+            action={
+              <Link href="/afiliados/soporte" className="dcafp-btn dcafp-btn--outline">
+                <ArrowLeft size={16} strokeWidth={1.9} aria-hidden />
+                Volver a Soporte
+              </Link>
+            }
+          >
+            Puede que el enlace sea incorrecto o que ese ticket no sea tuyo.
+          </EmptyState>
+        </PanelCard>
       </div>
     );
   }
 
   if (loadError || !ticket) {
     return (
-      <div style={{ minHeight: "55vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 8, textAlign: "center" }}>
-        <LifeBuoy size={20} strokeWidth={1.75} style={{ color: "var(--text-4)" }} aria-hidden />
-        <h2 style={{ fontSize: 17, fontWeight: 600, color: "var(--text-1)", margin: 0 }}>No se pudo cargar el ticket</h2>
-        <p style={{ maxWidth: "42ch", fontSize: 13, color: "var(--text-3)", margin: 0 }}>
-          Revisa tu conexión e inténtalo de nuevo.
-        </p>
-        <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 8 }}>
-          <ButtonNew variant="primary" onClick={() => loadTicket()}>Reintentar</ButtonNew>
-          <Link href="/afiliados/soporte" className="btn-new btn-new--ghost">
-            <ArrowLeft size={16} strokeWidth={1.75} aria-hidden /> Soporte
-          </Link>
-        </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+        <BackToSupport />
+        <PanelCard>
+          <EmptyState
+            icon={<LifeBuoy size={22} strokeWidth={1.8} />}
+            title="No se pudo cargar el ticket"
+            action={
+              <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", justifyContent: "center" }}>
+                <button type="button" className="dcafp-btn dcafp-btn--primary" onClick={() => loadTicket()}>
+                  Reintentar
+                </button>
+                <Link href="/afiliados/soporte" className="dcafp-btn">
+                  <ArrowLeft size={16} strokeWidth={1.9} aria-hidden />
+                  Soporte
+                </Link>
+              </div>
+            }
+          >
+            Revisa tu conexión e inténtalo de nuevo.
+          </EmptyState>
+        </PanelCard>
       </div>
     );
   }
@@ -300,68 +360,71 @@ export function TicketAfiliadoClient({ ticketId }: { ticketId: string }) {
   const categoryLabel = AFFILIATE_SUPPORT_CATEGORY_LABELS[ticket.category] || ticket.category;
   const priorityLabel = AFFILIATE_SUPPORT_PRIORITY_LABELS[ticket.priority] || ticket.priority;
   const priorityTone = PRIORITY_TONES[ticket.priority] || "neutral";
+  const nearLimit = body.length > AFFILIATE_SUPPORT_MAX_BODY_CHARS - 500;
 
   return (
-    <div style={{ maxWidth: 780, margin: "0 auto", display: "flex", flexDirection: "column" }}>
-      <Link
-        href="/afiliados/soporte"
-        style={{ display: "inline-flex", alignItems: "center", gap: 6, width: "fit-content", marginBottom: 12, fontSize: 13, color: "var(--text-3)", textDecoration: "none" }}
-      >
-        <ArrowLeft size={16} strokeWidth={1.75} aria-hidden /> Soporte
-      </Link>
+    // `overflowWrap` se hereda: un asunto de una sola palabra larguísima corta
+    // dentro del <h1> de PageHead sin desbordar a 375px.
+    <div style={{ maxWidth: 820, width: "100%", margin: "0 auto", display: "flex", flexDirection: "column", gap: 14, minWidth: 0, overflowWrap: "anywhere" }}>
+      <BackToSupport />
 
-      {/* Encabezado */}
-      <div style={{ display: "flex", flexWrap: "wrap", alignItems: "flex-start", justifyContent: "space-between", gap: 12, paddingBottom: 16, borderBottom: "1px solid var(--border-soft)" }}>
-        <div style={{ flex: "1 1 260px", minWidth: 0 }}>
-          <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8 }}>
-            <span className="mono" style={{ fontSize: 11, color: "var(--text-3)" }}>{ticket.folioLabel}</span>
-            <BadgeNew tone={statusTone} dot>{statusLabel}</BadgeNew>
-          </div>
-          <h1 style={{ margin: 0, marginTop: 6, fontSize: 19, fontWeight: 600, color: "var(--text-1)", letterSpacing: "-0.02em", overflowWrap: "break-word" }}>
-            {ticket.subject}
-          </h1>
-          <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8, marginTop: 8 }}>
-            <BadgeNew tone="neutral">{categoryLabel}</BadgeNew>
-            <BadgeNew tone={priorityTone} dot>Prioridad: {priorityLabel}</BadgeNew>
-            <span style={{ fontSize: 12, color: "var(--text-3)" }}>
-              Creado el {formatDateLong(ticket.createdAt)}
-            </span>
-          </div>
-        </div>
+      <PageHead
+        title={ticket.subject}
+        sub={
+          <>
+            <span className="dcafp-mono">{ticket.folioLabel}</span>
+            {" · "}Creado el {formatDateLong(ticket.createdAt)}
+          </>
+        }
+        action={<Chip tone={statusTone} dot>{statusLabel}</Chip>}
+      />
+
+      <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+        <Chip sm>{categoryLabel}</Chip>
+        <Chip tone={priorityTone} dot sm>Prioridad: {priorityLabel}</Chip>
       </div>
 
       {/* Hilo */}
-      <div style={{ display: "flex", flexDirection: "column", gap: 12, padding: "16px 0" }}>
-        {visibleMessages.length === 0 ? (
-          <p style={{ padding: "24px 0", textAlign: "center", fontSize: 13, color: "var(--text-3)" }}>
-            Aún no hay mensajes en este ticket.
-          </p>
-        ) : (
-          visibleMessages.map((m) => <MessageBubble key={m.id} msg={m} />)
-        )}
-        <div ref={bottomRef} aria-hidden />
-      </div>
+      <PanelCard>
+        <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+          {visibleMessages.length === 0 ? (
+            <p style={{ padding: "20px 0", textAlign: "center", fontSize: 13, color: "var(--dcafp-ink-3)" }}>
+              Aún no hay mensajes en este ticket.
+            </p>
+          ) : (
+            visibleMessages.map((m) => <MessageBubble key={m.id} msg={m} />)
+          )}
+          <div ref={bottomRef} aria-hidden />
+        </div>
+      </PanelCard>
 
       {/* Composer / aviso de cerrado */}
       {isClosed ? (
-        <div style={{ padding: "20px 16px", textAlign: "center", background: "var(--bg-elev)", border: "1px solid var(--border-soft)", borderRadius: "var(--radius-lg)", boxShadow: "var(--shadow-1)" }}>
-          <p style={{ margin: 0, fontSize: 13, fontWeight: 500, color: "var(--text-1)" }}>Este ticket está cerrado.</p>
-          {typeof ticket.rating === "number" && ticket.rating >= 1 && (
-            <p style={{ margin: 0, marginTop: 4, fontSize: 12, color: "var(--text-3)" }}>
-              Calificación: <span style={{ color: "var(--warning-strong)" }}>{"★".repeat(Math.min(5, ticket.rating))}</span> ({ticket.rating}/5)
-            </p>
-          )}
-          <p style={{ margin: 0, marginTop: 4, fontSize: 12, color: "var(--text-3)" }}>
-            Si necesitas algo más, crea un ticket nuevo y te atendemos.
-          </p>
-          <Link href="/afiliados/soporte" className="btn-new btn-new--primary" style={{ marginTop: 12 }}>
-            Crear ticket nuevo
-          </Link>
-        </div>
+        <Note>
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6, textAlign: "center" }}>
+            <span style={{ fontSize: 13.5, fontWeight: 750, color: "var(--dcafp-ink)" }}>Este ticket está cerrado.</span>
+            {typeof ticket.rating === "number" && ticket.rating >= 1 && (
+              <span style={{ fontSize: 12.5, color: "var(--dcafp-ink-3)" }}>
+                Calificación:{" "}
+                <span style={{ color: "var(--dcafp-amber)" }}>{"★".repeat(Math.min(5, ticket.rating))}</span>{" "}
+                <span className="dcafp-nums">({ticket.rating}/5)</span>
+              </span>
+            )}
+            <span style={{ fontSize: 12.5, color: "var(--dcafp-ink-3)" }}>
+              Si necesitas algo más, crea un ticket nuevo y te atendemos.
+            </span>
+            <Link href="/afiliados/soporte" className="dcafp-btn dcafp-btn--primary" style={{ marginTop: 6 }}>
+              Crear ticket nuevo
+            </Link>
+          </div>
+        </Note>
       ) : (
-        <div style={{ position: "sticky", bottom: 0, zIndex: 10, paddingTop: 4, paddingBottom: 4, background: "var(--bg)" }}>
-          <div style={{ padding: 10, background: "var(--bg-elev)", border: "1px solid var(--border-soft)", borderRadius: "var(--radius-lg)", boxShadow: "var(--shadow-1)" }}>
+        <div style={{ position: "sticky", bottom: 0, zIndex: 10, paddingTop: 4, paddingBottom: 6, background: "var(--dcafp-bg)" }}>
+          <PanelCard tight>
+            <label className="dcafp-label" htmlFor="af-ticket-reply">Tu respuesta</label>
             <textarea
+              id="af-ticket-reply"
+              className="dcafp-textarea"
               value={body}
               onChange={(e) => setBody(e.target.value.slice(0, AFFILIATE_SUPPORT_MAX_BODY_CHARS))}
               onKeyDown={onComposerKeyDown}
@@ -369,40 +432,30 @@ export function TicketAfiliadoClient({ ticketId }: { ticketId: string }) {
               rows={2}
               maxLength={AFFILIATE_SUPPORT_MAX_BODY_CHARS}
               disabled={sending}
-              style={{
-                width: "100%",
-                resize: "none",
-                background: "transparent",
-                border: "none",
-                outline: "none",
-                padding: "4px 6px",
-                fontSize: 13.5,
-                fontFamily: "inherit",
-                color: "var(--text-1)",
-                boxSizing: "border-box",
-              }}
+              style={{ minHeight: 84 }}
             />
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 8, marginTop: 4 }}>
-              {body.length > AFFILIATE_SUPPORT_MAX_BODY_CHARS - 500 && (
-                <span style={{ fontSize: 11, color: "var(--text-3)", fontVariantNumeric: "tabular-nums" }}>
-                  {body.length}/{AFFILIATE_SUPPORT_MAX_BODY_CHARS}
-                </span>
-              )}
-              <ButtonNew
-                variant="primary"
-                onClick={handleSend}
-                disabled={sending || !body.trim()}
-                icon={sending
-                  ? <Loader2 size={16} strokeWidth={1.75} className="animate-spin" aria-hidden />
-                  : <Send size={16} strokeWidth={1.75} aria-hidden />}
-              >
-                {sending ? "Enviando…" : "Enviar"}
-              </ButtonNew>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap", marginTop: 10 }}>
+              <span className="dcafp-hint">Enter para enviar · Shift+Enter para salto de línea</span>
+              <div style={{ display: "flex", alignItems: "center", gap: 10, marginLeft: "auto" }}>
+                {nearLimit && (
+                  <span className="dcafp-nums" style={{ fontSize: 11.5, color: "var(--dcafp-ink-3)" }}>
+                    {body.length}/{AFFILIATE_SUPPORT_MAX_BODY_CHARS}
+                  </span>
+                )}
+                <button
+                  type="button"
+                  className="dcafp-btn dcafp-btn--primary"
+                  onClick={handleSend}
+                  disabled={sending || !body.trim()}
+                >
+                  {sending
+                    ? <Loader2 size={16} strokeWidth={1.9} className="animate-spin" aria-hidden />
+                    : <Send size={16} strokeWidth={1.9} aria-hidden />}
+                  {sending ? "Enviando…" : "Enviar"}
+                </button>
+              </div>
             </div>
-          </div>
-          <p style={{ margin: 0, marginTop: 6, textAlign: "center", fontSize: 11, color: "var(--text-3)" }}>
-            Enter para enviar · Shift+Enter para salto de línea
-          </p>
+          </PanelCard>
         </div>
       )}
     </div>

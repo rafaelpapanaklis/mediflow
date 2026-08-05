@@ -11,67 +11,59 @@
 // El TÍTULO que escribió el afiliado ("Facebook") es lo que se muestra en el
 // panel junto a clics y registros: opaco hacia afuera, legible hacia adentro.
 //
-// Estilo del panel: inline styles con CSS vars (--text-1/2/3, --bg-elev-2,
-// --border-soft, --brand-soft, --border-brand, --violet-400, --success) —
-// mismo look que referral-links.tsx. 100% responsive (la fila se apila en
-// móvil con flexWrap). Toasts con react-hot-toast.
+// Estilo: lenguaje del panel (src/app/afiliados/panel.css, namespace `dcafp`).
+// El link base usa la caja morada `dcafp-linkhero` del diseño y cada link con
+// campaña una superficie anidada; las URLs van en `dcafp-urlbox` y los botones
+// en `dcafp-btn` (44px táctiles). Lo que solo pasa una vez —el ancho base de
+// la caja de URL, el tinte de "Copiado"— va inline con tokens `--dcafp-*`.
+//
+// Confirmaciones con el toast del panel (la píldora oscura del diseño, que es
+// donde el usuario mira cuando acaba de copiar); los ERRORES siguen en
+// react-hot-toast, que sí tiene tono de error.
 import { useState } from "react";
 import toast from "react-hot-toast";
 import { Copy, Check, Plus, Trash2, MousePointerClick, UserPlus, Link2 } from "lucide-react";
 import { QrDownloadButton } from "@/components/afiliados/tools/qr-download-button";
+import { Chip, EmptyState, Note } from "@/components/afiliados/ui/panel-ui";
+import { showPanelToast } from "@/components/afiliados/ui/panel-toast";
 import type { ToolLink } from "@/app/api/afiliados/links/route";
 
 export type { ToolLink };
 
-const urlInputStyle: React.CSSProperties = {
-  flex: "1 1 220px",
-  minWidth: 0,
-  height: 40,
-  padding: "0 12px",
-  borderRadius: 10,
-  background: "var(--bg-elev-2)",
-  border: "1px solid var(--border-soft)",
-  color: "var(--text-2)",
-  fontSize: 12.5,
-  outline: "none",
-};
+// La caja de URL crece, pero con un ancho base propio: sin él `flex:1` la
+// dejaría en 0 y a 375px el botón "Copiar" se comería el renglón entero.
+const urlBoxStyle: React.CSSProperties = { flexBasis: 220 };
 
-const chipStyle: React.CSSProperties = {
-  display: "inline-flex",
+// Fila de URL + acciones. Envuelve a propósito: a 375px los botones caen bajo
+// la caja en vez de desbordar el ancho de la tarjeta.
+const actionsRowStyle: React.CSSProperties = {
+  display: "flex",
+  gap: 8,
   alignItems: "center",
-  gap: 5,
-  padding: "3px 9px",
-  borderRadius: 999,
-  background: "var(--bg-elev-2)",
-  border: "1px solid var(--border-soft)",
-  color: "var(--text-3)",
-  fontSize: 11.5,
-  fontWeight: 600,
-  whiteSpace: "nowrap",
+  flexWrap: "wrap",
+  minWidth: 0,
 };
 
-function brandButtonStyle(disabled: boolean): React.CSSProperties {
-  return {
-    display: "inline-flex",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 6,
-    padding: "0 14px",
-    height: 40,
-    flexShrink: 0,
-    borderRadius: 10,
-    border: "1px solid var(--border-brand)",
-    background: "var(--brand-soft)",
-    color: "var(--violet-400)",
-    fontSize: 13,
-    fontWeight: 600,
-    cursor: disabled ? "not-allowed" : "pointer",
-    opacity: disabled ? 0.55 : 1,
-    fontFamily: "inherit",
-    transition: "all .15s",
-    whiteSpace: "nowrap",
-  };
-}
+// Superficie anidada de cada link con campaña (misma receta que .dcafp-planbox,
+// con el aire que piden dos renglones).
+const linkBoxStyle: React.CSSProperties = {
+  display: "flex",
+  flexDirection: "column",
+  gap: 9,
+  minWidth: 0,
+  padding: "13px 15px",
+  borderRadius: "var(--dcafp-r-box)",
+  background: "var(--dcafp-surface-2)",
+  border: "1px solid var(--dcafp-line-nested)",
+};
+
+// Tinte verde del botón mientras dura el "Copiado". Es un estado de 2 s, no un
+// patrón: por eso va inline y no como clase.
+const copiedBtnStyle: React.CSSProperties = {
+  background: "var(--dcafp-ok-bg)",
+  borderColor: "var(--dcafp-ok-line)",
+  color: "var(--dcafp-ok-ink)",
+};
 
 function errorMessage(body: any, fallback: string): string {
   if (body?.error === "tools_not_ready") {
@@ -120,7 +112,7 @@ export function LinksManager({
       }
       setLinks((prev) => [...prev, body.link as ToolLink]);
       setName("");
-      toast.success("Link creado");
+      showPanelToast("Link creado");
     } catch {
       toast.error("No se pudo crear el link");
     } finally {
@@ -134,7 +126,7 @@ export function LinksManager({
     try {
       await navigator.clipboard.writeText(url);
       setCopiedId(rowId);
-      toast.success("Enlace copiado");
+      showPanelToast("Enlace copiado");
       setTimeout(() => setCopiedId((id) => (id === rowId ? null : id)), 2000);
     } catch {
       toast.error("No se pudo copiar");
@@ -159,7 +151,7 @@ export function LinksManager({
         return;
       }
       setLinks((prev) => prev.filter((x) => x.id !== link.id));
-      toast.success("Link eliminado");
+      showPanelToast("Link eliminado");
     } catch {
       toast.error("No se pudo eliminar el link");
     } finally {
@@ -169,76 +161,48 @@ export function LinksManager({
   }
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: 16, minWidth: 0 }}>
       {!ready && (
-        <div
-          style={{
-            padding: "10px 14px",
-            borderRadius: 10,
-            border: "1px solid var(--warning-border-strong)",
-            background: "var(--warning-soft)",
-            color: "var(--text-2)",
-            fontSize: 12.5,
-            lineHeight: 1.5,
-          }}
-        >
+        <Note tone="warn">
           Disponible en cuanto se active la base de datos (
-          <span className="mono">sql/afiliados-ventas.sql</span>).
-        </div>
+          <span className="dcafp-mono">sql/afiliados-ventas.sql</span>).
+        </Note>
       )}
 
       {/* Link BASE (sin campaña). Va arriba y sobre fondo violeta para que se
           distinga a simple vista de los links con campaña: es el que se
           reparte cuando no estás midiendo un canal concreto, y el único que
           no se puede eliminar. */}
-      <div
-        style={{
-          display: "flex",
-          flexDirection: "column",
-          gap: 6,
-          padding: 12,
-          borderRadius: 12,
-          border: "1px solid var(--border-brand)",
-          background: "var(--brand-soft)",
-        }}
-      >
-        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-          <Link2 size={14} color="var(--violet-400)" />
-          <span style={{ fontSize: 13, fontWeight: 600, color: "var(--text-1)" }}>Tu link base</span>
-          <span style={chipStyle}>sin campaña</span>
-          <span className="mono" style={{ ...chipStyle, letterSpacing: "0.06em" }}>
+      <div className="dcafp-linkhero">
+        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", minWidth: 0 }}>
+          <Link2 size={15} style={{ color: "var(--dcafp-brand)", flex: "0 0 auto" }} aria-hidden />
+          <span style={{ fontSize: 13.5, fontWeight: 750, color: "var(--dcafp-ink)" }}>Tu link base</span>
+          <Chip sm>sin campaña</Chip>
+          <span className="dcafp-chip dcafp-chip--sm dcafp-mono" style={{ letterSpacing: "0.06em" }}>
             {referralCode}
           </span>
         </div>
-        <div style={{ display: "flex", gap: 8, alignItems: "stretch", flexWrap: "wrap" }}>
+        <div className="dcafp-linkhero__row" style={actionsRowStyle}>
           <input
             readOnly
             value={baseUrl}
             onFocus={(e) => e.currentTarget.select()}
             aria-label="Tu link base sin campaña"
-            className="mono"
-            style={urlInputStyle}
+            className="dcafp-urlbox dcafp-mono"
+            style={urlBoxStyle}
           />
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            <button
-              type="button"
-              onClick={() => void copy(BASE_ROW_ID, baseUrl)}
-              style={{
-                ...brandButtonStyle(false),
-                background:
-                  copiedId === BASE_ROW_ID
-                    ? "var(--success-soft, rgba(52,211,153,0.12))"
-                    : "var(--bg-elev-2)",
-                color: copiedId === BASE_ROW_ID ? "var(--success)" : "var(--violet-400)",
-              }}
-            >
-              {copiedId === BASE_ROW_ID ? <Check size={15} /> : <Copy size={15} />}
-              {copiedId === BASE_ROW_ID ? "Copiado" : "Copiar"}
-            </button>
-            <QrDownloadButton url={baseUrl} fileName={`qr-${referralCode.toLowerCase()}`} />
-          </div>
+          <button
+            type="button"
+            onClick={() => void copy(BASE_ROW_ID, baseUrl)}
+            className="dcafp-btn dcafp-btn--primary"
+            aria-label="Copiar tu link base"
+          >
+            {copiedId === BASE_ROW_ID ? <Check size={16} aria-hidden /> : <Copy size={16} aria-hidden />}
+            {copiedId === BASE_ROW_ID ? "Copiado" : "Copiar"}
+          </button>
+          <QrDownloadButton url={baseUrl} fileName={`qr-${referralCode.toLowerCase()}`} />
         </div>
-        <p style={{ fontSize: 11.5, color: "var(--text-3)", margin: 0, lineHeight: 1.45 }}>
+        <p className="dcafp-hint" style={{ margin: 0 }}>
           Compártelo cuando no necesites medir un canal en concreto: deja tu referido guardado 90
           días. Los de abajo hacen lo mismo, pero cada uno cuenta sus clics y registros por separado.
         </p>
@@ -250,7 +214,7 @@ export function LinksManager({
           e.preventDefault();
           void createLink();
         }}
-        style={{ display: "flex", gap: 8, alignItems: "stretch", flexWrap: "wrap" }}
+        style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", minWidth: 0 }}
       >
         <input
           value={name}
@@ -259,105 +223,90 @@ export function LinksManager({
           aria-label="Nombre de la campaña"
           maxLength={40}
           disabled={!ready || creating}
-          style={{
-            ...urlInputStyle,
-            color: "var(--text-1)",
-            fontSize: 13,
-            opacity: ready ? 1 : 0.55,
-          }}
+          className="dcafp-input"
+          style={{ flex: "1 1 220px", minWidth: 0, width: "auto", opacity: ready ? 1 : 0.55 }}
         />
-        <button type="submit" disabled={!canCreate} style={brandButtonStyle(!canCreate)}>
-          <Plus size={15} />
+        <button type="submit" disabled={!canCreate} className="dcafp-btn dcafp-btn--primary">
+          <Plus size={16} aria-hidden />
           {creating ? "Creando..." : "Crear link"}
         </button>
       </form>
 
       {links.length === 0 ? (
-        <p style={{ fontSize: 13, color: "var(--text-3)", margin: 0, lineHeight: 1.5 }}>
+        <EmptyState icon={<Link2 size={22} />} title="Todavía no tienes links por campaña">
           Crea tu primer link nombrado para saber qué canal te trae más clínicas.
-        </p>
+        </EmptyState>
       ) : (
-        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 12, minWidth: 0 }}>
           {links.map((l) => {
             const copied = copiedId === l.id;
             const confirming = confirmingId === l.id;
             const deleting = deletingId === l.id;
             return (
-              <div key={l.id} style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                  <span style={{ fontSize: 13, fontWeight: 600, color: "var(--text-1)" }}>{l.name}</span>
-                  <span style={chipStyle}>
-                    <MousePointerClick size={12} />
+              <div key={l.id} style={linkBoxStyle}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", minWidth: 0 }}>
+                  <span style={{ fontSize: 13.5, fontWeight: 750, color: "var(--dcafp-ink)", minWidth: 0 }}>
+                    {l.name}
+                  </span>
+                  <Chip sm>
+                    <MousePointerClick size={12} aria-hidden />
                     {l.clicks} clics
-                  </span>
-                  <span style={chipStyle}>
-                    <UserPlus size={12} />
+                  </Chip>
+                  <Chip sm>
+                    <UserPlus size={12} aria-hidden />
                     {l.conversions} registros
-                  </span>
+                  </Chip>
                 </div>
-                <div style={{ display: "flex", gap: 8, alignItems: "stretch", flexWrap: "wrap" }}>
+                <div style={actionsRowStyle}>
                   <input
                     readOnly
                     value={l.url}
                     onFocus={(e) => e.currentTarget.select()}
-                    className="mono"
-                    style={urlInputStyle}
+                    aria-label={`Link de la campaña ${l.name}`}
+                    className="dcafp-urlbox dcafp-mono"
+                    style={urlBoxStyle}
                   />
-                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                    <button
-                      type="button"
-                      onClick={() => void copy(l.id, l.url)}
-                      style={{
-                        ...brandButtonStyle(false),
-                        background: copied
-                          ? "var(--success-soft, rgba(52,211,153,0.12))"
-                          : "var(--brand-soft)",
-                        color: copied ? "var(--success)" : "var(--violet-400)",
-                      }}
-                    >
-                      {copied ? <Check size={15} /> : <Copy size={15} />}
-                      {copied ? "Copiado" : "Copiar"}
-                    </button>
-                    <QrDownloadButton url={l.url} fileName={`qr-${l.campaign}`} />
+                  <button
+                    type="button"
+                    onClick={() => void copy(l.id, l.url)}
+                    className="dcafp-btn dcafp-btn--outline"
+                    style={copied ? copiedBtnStyle : undefined}
+                    aria-label={`Copiar el link de ${l.name}`}
+                  >
+                    {copied ? <Check size={16} aria-hidden /> : <Copy size={16} aria-hidden />}
+                    {copied ? "Copiado" : "Copiar"}
+                  </button>
+                  <QrDownloadButton url={l.url} fileName={`qr-${l.campaign}`} />
+                  {/* Sin confirmar es un botón cuadrado de icono; al confirmar
+                      crece a botón con texto para que el paso destructivo
+                      diga lo que hace. Ambos miden 44px de alto. */}
+                  {confirming ? (
                     <button
                       type="button"
                       onClick={() => void removeLink(l)}
                       disabled={deleting}
-                      aria-label={confirming ? "Confirmar eliminación" : `Eliminar link ${l.name}`}
-                      title={confirming ? "Se perderán los clics y registros de este link" : "Eliminar link"}
-                      style={{
-                        display: "inline-flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        gap: 6,
-                        padding: "0 12px",
-                        height: 40,
-                        flexShrink: 0,
-                        borderRadius: 10,
-                        border: confirming
-                          ? "1px solid var(--danger-border-strong)"
-                          : "1px solid var(--border-soft)",
-                        background: confirming ? "var(--danger-soft)" : "var(--bg-elev-2)",
-                        color: confirming ? "var(--danger)" : "var(--text-3)",
-                        fontSize: 12.5,
-                        fontWeight: 600,
-                        cursor: deleting ? "not-allowed" : "pointer",
-                        opacity: deleting ? 0.55 : 1,
-                        fontFamily: "inherit",
-                        transition: "all .15s",
-                        whiteSpace: "nowrap",
-                      }}
+                      className="dcafp-btn dcafp-btn--danger"
+                      aria-label={`Confirmar la eliminación del link ${l.name}`}
                     >
-                      <Trash2 size={15} />
-                      {confirming ? (deleting ? "Eliminando..." : "¿Eliminar?") : ""}
+                      <Trash2 size={16} aria-hidden />
+                      {deleting ? "Eliminando..." : "¿Eliminar?"}
                     </button>
-                  </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => void removeLink(l)}
+                      className="dcafp-iconbtn"
+                      aria-label={`Eliminar link ${l.name}`}
+                    >
+                      <Trash2 size={16} aria-hidden />
+                    </button>
+                  )}
                 </div>
                 {confirming && (
-                  <p style={{ fontSize: 11.5, color: "var(--warning-strong)", margin: 0, lineHeight: 1.4 }}>
-                    Se perderán los clics y registros de este link. Pulsa &quot;¿Eliminar?&quot; otra vez
-                    para confirmar.
-                  </p>
+                  <Note tone="warn">
+                    Se perderán los clics y registros de este link. Pulsa &quot;¿Eliminar?&quot; otra
+                    vez para confirmar.
+                  </Note>
                 )}
               </div>
             );

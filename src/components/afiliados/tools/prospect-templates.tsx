@@ -2,10 +2,16 @@
 
 // Plantillas de prospección (email y WhatsApp) con variables
 // {nombre_clinica} y {tu_link}. El afiliado escribe el nombre de la clínica
-// una vez y copia cada plantilla ya personalizada. Estilo del panel.
+// una vez y copia cada plantilla ya personalizada.
+//
+// Estilo: lenguaje del panel (src/app/afiliados/panel.css) — `dcafp-label` +
+// `dcafp-input` para el campo, `dcafp-btn` para el conmutador de canal y para
+// copiar, y superficies anidadas para cada plantilla. Confirmaciones con el
+// toast del panel; los errores siguen en react-hot-toast.
 import { useState } from "react";
 import toast from "react-hot-toast";
 import { Copy, Check, Mail, MessageCircle } from "lucide-react";
+import { showPanelToast } from "@/components/afiliados/ui/panel-toast";
 import {
   PROSPECT_TEMPLATES,
   fillTemplate,
@@ -17,6 +23,13 @@ const CHANNEL_TABS = [
   { key: "whatsapp" as const, label: "WhatsApp", icon: MessageCircle },
 ];
 
+// Tinte verde de los 2 s de "Copiado": estado efímero, no patrón.
+const copiedBtnStyle: React.CSSProperties = {
+  background: "var(--dcafp-ok-bg)",
+  borderColor: "var(--dcafp-ok-line)",
+  color: "var(--dcafp-ok-ink)",
+};
+
 // Resalta {nombre_clinica} pendiente (sin reemplazar) dentro del texto ya
 // procesado por fillTemplate.
 function renderWithPendingVar(text: string) {
@@ -26,11 +39,11 @@ function renderWithPendingVar(text: string) {
       <span
         key={i}
         style={{
-          background: "var(--brand-soft)",
-          color: "var(--violet-400)",
+          background: "var(--dcafp-brand-75)",
+          color: "var(--dcafp-brand-deep)",
           borderRadius: 4,
           padding: "0 4px",
-          fontWeight: 600,
+          fontWeight: 700,
         }}
       >
         {part}
@@ -63,7 +76,7 @@ export function ProspectTemplates({
     try {
       await navigator.clipboard.writeText(text);
       setCopiedId(t.id);
-      toast.success("Plantilla copiada");
+      showPanelToast("Plantilla copiada");
       setTimeout(() => setCopiedId((id) => (id === t.id ? null : id)), 2000);
     } catch {
       toast.error("No se pudo copiar");
@@ -71,13 +84,10 @@ export function ProspectTemplates({
   }
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: 14, minWidth: 0 }}>
       {/* Nombre de la clínica */}
-      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-        <label
-          htmlFor="prospect-clinic-name"
-          style={{ fontSize: 13, fontWeight: 600, color: "var(--text-1)" }}
-        >
+      <div style={{ minWidth: 0 }}>
+        <label htmlFor="prospect-clinic-name" className="dcafp-label">
           Nombre de la clínica a la que escribes
         </label>
         <input
@@ -85,22 +95,13 @@ export function ProspectTemplates({
           value={clinicName}
           onChange={(e) => setClinicName(e.target.value)}
           placeholder="Clínica Sonríe"
-          style={{
-            maxWidth: 380,
-            height: 40,
-            padding: "0 12px",
-            borderRadius: 10,
-            background: "var(--bg-elev-2)",
-            border: "1px solid var(--border-soft)",
-            color: "var(--text-1)",
-            fontSize: 13,
-            fontFamily: "inherit",
-            outline: "none",
-          }}
+          className="dcafp-input"
+          style={{ maxWidth: 380 }}
         />
-        <p style={{ fontSize: 12, color: "var(--text-3)", margin: 0, lineHeight: 1.45 }}>
+        <p className="dcafp-hint" style={{ marginTop: 6 }}>
           Las plantillas se personalizan al instante. Si lo dejas vacío,{" "}
-          <span className="mono">{"{nombre_clinica}"}</span> se copia tal cual para editarlo después.
+          <span className="dcafp-mono">{"{nombre_clinica}"}</span> se copia tal cual para editarlo
+          después.
         </p>
       </div>
 
@@ -114,23 +115,10 @@ export function ProspectTemplates({
               key={tab.key}
               type="button"
               onClick={() => setChannel(tab.key)}
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: 6,
-                padding: "7px 14px",
-                borderRadius: 999,
-                border: `1px solid ${active ? "var(--border-brand)" : "var(--border-soft)"}`,
-                background: active ? "var(--brand-soft)" : "var(--bg-elev-2)",
-                color: active ? "var(--violet-400)" : "var(--text-2)",
-                fontSize: 13,
-                fontWeight: 600,
-                cursor: "pointer",
-                fontFamily: "inherit",
-                transition: "all .15s",
-              }}
+              aria-pressed={active}
+              className={`dcafp-btn dcafp-btn--sm${active ? " dcafp-btn--outline" : ""}`}
             >
-              <Icon size={14} />
+              <Icon size={15} aria-hidden />
               {tab.label}
             </button>
           );
@@ -141,7 +129,7 @@ export function ProspectTemplates({
       <div
         style={{
           display: "grid",
-          gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 340px), 1fr))",
+          gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 340px), 1fr))",
           gap: 14,
         }}
       >
@@ -156,9 +144,10 @@ export function ProspectTemplates({
                 display: "flex",
                 flexDirection: "column",
                 gap: 8,
+                minWidth: 0,
                 padding: 14,
-                borderRadius: 12,
-                border: "1px solid var(--border-soft)",
+                borderRadius: "var(--dcafp-r-box)",
+                border: "1px solid var(--dcafp-line)",
               }}
             >
               <div
@@ -167,39 +156,27 @@ export function ProspectTemplates({
                   alignItems: "center",
                   justifyContent: "space-between",
                   gap: 8,
+                  flexWrap: "wrap",
+                  minWidth: 0,
                 }}
               >
-                <span style={{ fontSize: 13, fontWeight: 600, color: "var(--text-1)" }}>
+                <span style={{ fontSize: 13.5, fontWeight: 750, color: "var(--dcafp-ink)", minWidth: 0 }}>
                   {t.title}
                 </span>
                 <button
                   type="button"
                   onClick={() => copy(t)}
-                  style={{
-                    display: "inline-flex",
-                    alignItems: "center",
-                    gap: 6,
-                    padding: "0 12px",
-                    height: 32,
-                    flexShrink: 0,
-                    borderRadius: 10,
-                    border: "1px solid var(--border-brand)",
-                    background: copied ? "var(--success-soft, rgba(52,211,153,0.12))" : "var(--brand-soft)",
-                    color: copied ? "var(--success)" : "var(--violet-400)",
-                    fontSize: 12.5,
-                    fontWeight: 600,
-                    cursor: "pointer",
-                    fontFamily: "inherit",
-                    transition: "all .15s",
-                  }}
+                  className="dcafp-btn dcafp-btn--sm dcafp-btn--outline"
+                  style={copied ? copiedBtnStyle : undefined}
+                  aria-label={`Copiar la plantilla "${t.title}"`}
                 >
-                  {copied ? <Check size={14} /> : <Copy size={14} />}
+                  {copied ? <Check size={14} aria-hidden /> : <Copy size={14} aria-hidden />}
                   {copied ? "Copiado" : "Copiar"}
                 </button>
               </div>
               {filledSubject != null && (
-                <div style={{ fontSize: 12.5, color: "var(--text-2)", lineHeight: 1.5 }}>
-                  <span style={{ fontWeight: 600, color: "var(--text-3)" }}>Asunto: </span>
+                <div style={{ fontSize: 12.5, color: "var(--dcafp-ink-2)", lineHeight: 1.5, overflowWrap: "anywhere" }}>
+                  <span style={{ fontWeight: 700, color: "var(--dcafp-ink-3)" }}>Asunto: </span>
                   {renderWithPendingVar(filledSubject)}
                 </div>
               )}
@@ -211,10 +188,10 @@ export function ProspectTemplates({
                   fontFamily: "inherit",
                   fontSize: 12.5,
                   lineHeight: 1.55,
-                  color: "var(--text-2)",
-                  background: "var(--bg-elev-2)",
-                  border: "1px solid var(--border-soft)",
-                  borderRadius: 10,
+                  color: "var(--dcafp-ink-2)",
+                  background: "var(--dcafp-surface-2)",
+                  border: "1px solid var(--dcafp-line-nested)",
+                  borderRadius: "var(--dcafp-r-el)",
                   padding: 12,
                   maxHeight: 260,
                   overflow: "auto",

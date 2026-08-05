@@ -3,6 +3,10 @@
 // Botón "QR" que genera el código en el cliente con la lib `qrcode` (ya en
 // package.json, misma que usa el carnet de implantes) y dispara la descarga
 // como PNG. Sin estado global; cada click genera fresco.
+//
+// Estilo: `dcafp-btn` de src/app/afiliados/panel.css — acción secundaria al
+// lado de "Copiar". Lo usan los dos paneles (afiliado y vendedor) y ambos
+// shells cargan esa hoja, así que la clase existe en las dos pantallas.
 import { useState } from "react";
 import toast from "react-hot-toast";
 import { QrCode } from "lucide-react";
@@ -43,28 +47,12 @@ export function QrDownloadButton({
       type="button"
       onClick={download}
       disabled={busy}
+      // "QR" a secas no dice qué hace el botón: el nombre accesible lo explica.
+      aria-label="Descargar código QR en PNG"
       title="Descargar código QR (PNG)"
-      style={{
-        display: "inline-flex",
-        alignItems: "center",
-        justifyContent: "center",
-        gap: 6,
-        padding: "0 14px",
-        height: 40,
-        flexShrink: 0,
-        borderRadius: 10,
-        border: "1px solid var(--border-brand)",
-        background: "var(--brand-soft)",
-        color: "var(--violet-400)",
-        fontSize: 13,
-        fontWeight: 600,
-        cursor: busy ? "default" : "pointer",
-        opacity: busy ? 0.6 : 1,
-        fontFamily: "inherit",
-        transition: "all .15s",
-      }}
+      className="dcafp-btn"
     >
-      <QrCode size={15} />
+      <QrCode size={16} aria-hidden />
       {label}
     </button>
   );

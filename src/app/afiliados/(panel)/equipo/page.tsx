@@ -1,12 +1,11 @@
 export const dynamic = "force-dynamic";
 
 import { redirect } from "next/navigation";
-import { Users } from "lucide-react";
 import { getAffiliateContext } from "@/lib/affiliate-auth";
 import { prisma } from "@/lib/prisma";
 import { currentParentLevelPct } from "@/lib/affiliates/team";
 import { getSellerStatsForAffiliate, emptySellerStat } from "@/lib/affiliates/seller-stats";
-import { CardNew } from "@/components/ui/design-system/card-new";
+import { PageHead, Note } from "@/components/afiliados/ui/panel-ui";
 import { TeamManager, type SellerRowWithStats } from "@/components/afiliados/team-manager";
 
 export default async function MiEquipoPage() {
@@ -58,72 +57,24 @@ export default async function MiEquipoPage() {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
-      {/* Hero */}
-      <div style={{ position: "relative", display: "flex", alignItems: "center", gap: 14 }}>
-        <div
-          aria-hidden
-          style={{
-            position: "absolute",
-            top: -40,
-            left: -30,
-            width: 280,
-            height: 180,
-            pointerEvents: "none",
-            background: "radial-gradient(60% 70% at 20% 30%, rgba(124,58,237,0.18), transparent 70%)",
-          }}
-        />
-        <div
-          style={{
-            position: "relative",
-            width: 44,
-            height: 44,
-            borderRadius: 14,
-            flexShrink: 0,
-            display: "grid",
-            placeItems: "center",
-            color: "#fff",
-            background: "var(--brand-grad)",
-            boxShadow: "0 8px 20px -8px rgba(124,58,237,0.6)",
-          }}
-        >
-          <Users size={22} />
-        </div>
-        <div style={{ position: "relative" }}>
-          <h1 style={{ fontSize: 22, letterSpacing: "-0.02em", color: "var(--text-1)", fontWeight: 600, margin: 0 }}>
-            Mi equipo
-          </h1>
-          <p style={{ color: "var(--text-3)", fontSize: 13, marginTop: 4, marginBottom: 0 }}>
-            Registra a tus vendedores y asigna a cada uno su porcentaje de comisión.
-          </p>
-        </div>
-      </div>
+      <PageHead
+        title="Mi equipo"
+        sub="Registra a tus vendedores y asigna a cada uno su porcentaje de comisión."
+      />
 
-      {/* Explicación del split */}
-      <CardNew>
-        <div
-          style={{
-            position: "absolute",
-            top: 0,
-            left: 0,
-            right: 0,
-            height: 3,
-            background: "var(--brand-grad)",
-          }}
-        />
-        <p style={{ fontSize: 13.5, color: "var(--text-2)", margin: 0, lineHeight: 1.6 }}>
-          Tu comisión de nivel ({cap}%) se reparte con tu equipo: asignas a cada vendedor su %, y tú te quedas
-          el resto como override. La plataforma no cobra de más.
-        </p>
-      </CardNew>
+      {/* Cómo se reparte la comisión del nivel. Es un aviso, no un bloque de
+          contenido: va como Note y no como tarjeta. */}
+      <Note tone="brand">
+        Tu comisión de nivel ({cap}%) se reparte con tu equipo: asignas a cada vendedor su %, y tú te quedas
+        el resto como override. La plataforma no cobra de más.
+      </Note>
 
       {/* Aviso si el módulo aún no está activado en la BD */}
       {tableMissing && (
-        <CardNew>
-          <p style={{ fontSize: 13, color: "var(--text-3)", margin: 0, lineHeight: 1.5 }}>
-            El módulo de equipo aún no está activado. En cuanto se aplique la configuración pendiente podrás
-            registrar a tus vendedores aquí.
-          </p>
-        </CardNew>
+        <Note tone="warn">
+          El módulo de equipo aún no está activado. En cuanto se aplique la configuración pendiente podrás
+          registrar a tus vendedores aquí.
+        </Note>
       )}
 
       <TeamManager initial={sellers} levelPct={cap} />

@@ -8,11 +8,10 @@ export const dynamic = "force-dynamic";
 // Privacidad: el afiliado solo ve CONTEOS, nunca datos de las clínicas.
 
 import { redirect } from "next/navigation";
-import { Megaphone } from "lucide-react";
 import { getAffiliateContext } from "@/lib/affiliate-auth";
 import { prisma } from "@/lib/prisma";
 import { getAffiliateLevelInfo } from "@/lib/affiliate-levels";
-import { CardNew } from "@/components/ui/design-system/card-new";
+import { PageHead, PanelCard, Note } from "@/components/afiliados/ui/panel-ui";
 import { LinksManager, type ToolLink } from "@/components/afiliados/tools/links-manager";
 import { CouponCard, type AffiliateCouponInfo } from "@/components/afiliados/tools/coupon-card";
 import { MarketingKit } from "@/components/afiliados/tools/marketing-kit";
@@ -149,55 +148,24 @@ export default async function HerramientasPage() {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
-      {/* Header */}
-      <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
-        <div
-          style={{
-            width: 44,
-            height: 44,
-            borderRadius: 14,
-            flexShrink: 0,
-            display: "grid",
-            placeItems: "center",
-            color: "#fff",
-            background: "var(--brand-grad)",
-            boxShadow: "0 8px 20px -8px rgba(124,58,237,0.6)",
-          }}
-        >
-          <Megaphone size={22} />
-        </div>
-        <div>
-          <h1 style={{ fontSize: 22, letterSpacing: "-0.02em", color: "var(--text-1)", fontWeight: 600, margin: 0 }}>
-            Herramientas de venta
-          </h1>
-          <p style={{ color: "var(--text-3)", fontSize: 13, marginTop: 4, marginBottom: 0 }}>
-            Links por campaña, tu cupón, materiales y plantillas para traer más clínicas.
-          </p>
-        </div>
-      </div>
+      <PageHead
+        title="Herramientas de venta"
+        sub="Links por campaña, tu cupón, materiales y plantillas para traer más clínicas."
+      />
 
       {!ready && (
-        <div
-          style={{
-            padding: "12px 16px",
-            borderRadius: 12,
-            border: "1px solid var(--warning-border-strong)",
-            background: "var(--warning-soft)",
-            color: "var(--text-2)",
-            fontSize: 13,
-            lineHeight: 1.5,
-          }}
-        >
-          Estas herramientas se activan en cuanto se aplique <span className="mono">sql/afiliados-ventas.sql</span> en
-          la base de datos. Mientras tanto puedes ver el kit de marketing y las plantillas.
-        </div>
+        <Note tone="warn">
+          Estas herramientas se activan en cuanto se aplique{" "}
+          <span className="dcafp-mono">sql/afiliados-ventas.sql</span> en la base de datos. Mientras
+          tanto puedes ver el kit de marketing y las plantillas.
+        </Note>
       )}
 
       {/* Nivel y comisión */}
       <LevelProgress info={levelInfo} mode={programMode} payoutMode={payoutMode} amounts={amounts} />
 
       {/* Multi-links con campaña */}
-      <CardNew
+      <PanelCard
         title="Tus links por campaña"
         sub="Crea un link por canal (Facebook, WhatsApp, expos...) y descubre cuál te trae más clínicas."
       >
@@ -207,31 +175,31 @@ export default async function HerramientasPage() {
           baseUrl={baseUrl}
           referralCode={ctx.affiliate.referralCode}
         />
-      </CardNew>
+      </PanelCard>
 
       {/* Cupón propio */}
-      <CardNew
+      <PanelCard
         title="Tu cupón"
         sub="Un código con tu nombre: quien lo canjea al registrarse cuenta como referido tuyo, aunque no use tu link."
       >
         <CouponCard initial={coupon} ready={ready} />
-      </CardNew>
+      </PanelCard>
 
       {/* Kit de marketing */}
-      <CardNew
+      <PanelCard
         title="Kit de marketing"
         sub="Logo oficial, copys listos para compartir y respuestas a objeciones comunes."
       >
         <MarketingKit partnerUrl={partnerUrl} />
-      </CardNew>
+      </PanelCard>
 
       {/* Plantillas de prospección */}
-      <CardNew
+      <PanelCard
         title="Plantillas de prospección"
         sub="Mensajes de email y WhatsApp listos para personalizar y enviar a clínicas."
       >
         <ProspectTemplates partnerUrl={partnerUrl} />
-      </CardNew>
+      </PanelCard>
     </div>
   );
 }

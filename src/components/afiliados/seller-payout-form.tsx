@@ -2,10 +2,12 @@
 
 // Datos de pago del VENDEDOR. Espejo de payout-form.tsx SIN las preferencias de
 // notificación: solo método + datos. PATCH a /api/afiliados/vendedor/me.
+// Estilo: clases `dcafp-*` de src/app/afiliados/panel.css (label/input/select/
+// botón) + <PanelCard>. Sin título en la tarjeta: la página ya encabeza con
+// "Datos de pago" y repetirlo dejaba dos veces el mismo titular.
 import { useState, type FormEvent } from "react";
 import toast from "react-hot-toast";
-import { CardNew } from "@/components/ui/design-system/card-new";
-import { ButtonNew } from "@/components/ui/design-system/button-new";
+import { PanelCard } from "@/components/afiliados/ui/panel-ui";
 
 const PAYOUT_METHODS: { value: string; label: string; placeholder: string }[] = [
   { value: "", label: "Sin definir", placeholder: "" },
@@ -13,28 +15,6 @@ const PAYOUT_METHODS: { value: string; label: string; placeholder: string }[] = 
   { value: "PAYPAL", label: "PayPal", placeholder: "Correo de tu cuenta PayPal" },
   { value: "OTHER", label: "Otro", placeholder: "Describe cómo quieres recibir tus pagos" },
 ];
-
-const fieldStyle: React.CSSProperties = {
-  height: 42,
-  padding: "0 14px",
-  borderRadius: 10,
-  background: "var(--bg-elev-2)",
-  border: "1px solid var(--border-soft)",
-  color: "var(--text-1)",
-  fontSize: 14,
-  fontFamily: "inherit",
-  outline: "none",
-  width: "100%",
-  boxSizing: "border-box",
-};
-
-const labelStyle: React.CSSProperties = {
-  fontSize: 12,
-  fontWeight: 600,
-  color: "var(--text-2)",
-  marginBottom: 6,
-  display: "block",
-};
 
 export function SellerPayoutForm({
   initialMethod,
@@ -76,18 +56,25 @@ export function SellerPayoutForm({
 
   return (
     <form onSubmit={handleSubmit}>
-      <CardNew title="Datos de pago">
-        <p style={{ fontSize: 13, color: "var(--text-3)", margin: "0 0 18px", lineHeight: 1.5 }}>
+      <PanelCard>
+        <p className="dcafp-hint" style={{ marginBottom: 18 }}>
           Indícanos cómo prefieres recibir tus comisiones. El equipo de DaleControl usará estos datos para
           procesar tus pagos.
         </p>
 
-        <div style={{ display: "flex", flexDirection: "column", gap: 16, maxWidth: 460 }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 16, maxWidth: 460, minWidth: 0 }}>
           <div>
-            <label style={labelStyle}>Método de pago</label>
-            <select value={method} onChange={(e) => setMethod(e.target.value)} style={fieldStyle}>
+            <label className="dcafp-label" htmlFor="seller-payout-method">
+              Método de pago
+            </label>
+            <select
+              id="seller-payout-method"
+              className="dcafp-select"
+              value={method}
+              onChange={(e) => setMethod(e.target.value)}
+            >
               {PAYOUT_METHODS.map((m) => (
-                <option key={m.value || "none"} value={m.value} style={{ backgroundColor: "#18181b", color: "#f4f4f5" }}>
+                <option key={m.value || "none"} value={m.value}>
                   {m.label}
                 </option>
               ))}
@@ -96,24 +83,27 @@ export function SellerPayoutForm({
 
           {method && (
             <div>
-              <label style={labelStyle}>Datos</label>
+              <label className="dcafp-label" htmlFor="seller-payout-details">
+                Datos
+              </label>
               <input
+                id="seller-payout-details"
+                className="dcafp-input"
                 type="text"
                 value={details}
                 onChange={(e) => setDetails(e.target.value)}
                 placeholder={current.placeholder}
-                style={fieldStyle}
               />
             </div>
           )}
 
           <div>
-            <ButtonNew type="submit" variant="primary" disabled={saving}>
+            <button type="submit" className="dcafp-btn dcafp-btn--primary" disabled={saving}>
               {saving ? "Guardando…" : "Guardar cambios"}
-            </ButtonNew>
+            </button>
           </div>
         </div>
-      </CardNew>
+      </PanelCard>
     </form>
   );
 }

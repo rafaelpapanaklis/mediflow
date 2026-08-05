@@ -4570,3 +4570,146 @@ histórico y como red de auto-reparación (cada columna con `ADD COLUMN IF NOT E
 re-correrlo completa cualquier diferencia sin tocar datos). Incluye RLS deny-all en las dos
 tablas nuevas. No se tocaron el motor de comisiones, `globals.css`, `src/lib/support/**` ni las
 tablas de soporte de clínicas.
+
+---
+
+## Rediseño del PANEL DE AFILIADO + el mismo lenguaje en todo el panel
+
+Diseño de origen: `C:\Users\Rafael\ClauCode\MediFlow\disenos\Panel-Afiliado-DaleControl.dc.html`
+(Claude Design, ~64 KB). El archivo traía **dos estados apilados** —"Afiliado nuevo" y
+"Afiliado activo"— que **no son dos pantallas**: son la misma con datos distintos. Se
+implementó **una sola ruta y una sola composición**; lo que cambia sale de los datos.
+
+### Dónde viven los patrones compartidos
+
+| Archivo | Qué contiene |
+|---|---|
+| `src/app/afiliados/panel.css` | **La única hoja de estilo del panel.** Namespace `dcafp` (para no chocar con `dcaf-` de `afiliados.css`, la landing pública, que ya define `dcafSpin`/`dcafSway`). Tokens de la paleta, chrome del sidebar, y los patrones: tarjeta, encabezado, eyebrow, chip, botón, icon-button, botón-código, formulario, aviso, barra de progreso, estado vacío, tabla (rejilla y `<table>`), rejillas, KPI, fila de enlace, escalón del bono, piezas 3D y toast. |
+| `src/components/afiliados/ui/panel-ui.tsx` | Primitivas **server-safe**: `PageHead`, `PanelCard`, `SectionHead`, `Eyebrow`, `Chip`, `EmptyState`, `ProgressBar`, `StatRow`/`Stat`, `Kpi`, `Note`, `Footnote`, `GridTable`/`GridRow`. |
+| `src/components/afiliados/ui/copy-button.tsx` | `CopyButton`, `CopyIconButton`, `CopyCodeButton`. Conservan el respaldo `<textarea>`+`execCommand` del diseño: `navigator.clipboard` no existe en el navegador in-app de Facebook, que es justo donde muchos afiliados abren el panel. |
+| `src/components/afiliados/ui/panel-toast.tsx` | El `toastIn` del diseño (píldora oscura abajo al centro). Una sola instancia montada en el shell, alimentada por un bus de módulo: dos copiados seguidos no apilan dos píldoras. |
+| `src/components/afiliados/ui/tier-pieces.tsx` | Las tres piezas 3D (regalo `sway`, monedas `spinZ`, trofeo `spinY`). CSS puro, sin librerías, sólo `transform`/`opacity`, `aria-hidden` en la raíz. |
+
+**Dos redes para que ninguna pantalla quedara a medias:** dentro de `.dcafp`, `panel.css`
+(1) **remapea los tokens semánticos** de la app (`--text-1`, `--bg-elev-2`, `--border-soft`,
+`--violet-400`, `--brand-soft`, `--brand-grad`…) a la paleta clara del diseño, y
+(2) **sobrescribe las clases heredadas** (`.card`, `.table-new`, `.btn-new`, `.input-new`,
+`.badge-new`, `.icon-btn-new`) con `.dcafp X` (0,2,0), que le gana a la base (0,1,0). Así, un
+componente que todavía no lleve clases `dcafp` igual aterriza en la paleta nueva.
+
+### Páginas migradas (todas)
+
+| Ruta / componente | Estado |
+|---|---|
+| `/afiliados/inicio` | ✅ Composición completa del diseño |
+| `/afiliados/herramientas` + los 5 de `tools/` | ✅ |
+| `/afiliados/estadisticas` + `estadisticas-client` | ✅ (colores del gráfico repintados para fondo claro) |
+| `/afiliados/reportes` + `reportes-client` | ✅ |
+| `/afiliados/equipo` + `team-manager` | ✅ |
+| `/afiliados/configuracion` + `payout-form`, `payout-mode-form` | ✅ |
+| `/afiliados/soporte` + lista, detalle, `affiliate-manager-card` | ✅ |
+| `affiliate-shell` (sidebar, navegación, pie) | ✅ Reescrito |
+| `seller-shell` + `/vendedor/{inicio,herramientas,configuracion}` + `seller-tools`, `seller-payout-form` | ✅ |
+| `level-progress`, `milestones-card`, `referral-links` | ✅ |
+
+**No quedó ninguna página con el estilo viejo.** `grep` de `CardNew|KpiCard|BadgeNew|table-new|
+btn-new|sidebar-new|nav-item-new` en todo el panel: 0 usos (sólo aparece en un comentario).
+
+### Ni un monto escrito a mano
+
+- **Comisión mensual** (`$2,940` en el diseño) → `projectFixedMonthlyMxn()` de
+  `src/lib/affiliates/stats.ts` sobre las clínicas que hoy pagan cruzadas con su **modalidad
+  congelada** (`affiliateClinicTerms`). Es la **misma función** que alimenta
+  `/api/afiliados/stats`: si aquí y allá se contara distinto, el afiliado vería dos números
+  suyos que no cuadran.
+- **Montos por plan** (`$80/$140/$300`) → `fixedAmountFor()` con las etiquetas de
+  `plan_configs`. Un plan en `$0` es un plan apagado: no se lista.
+- **Bonos** (`2,500/10,000/100,000`) → `milestoneTiers()` de la config editable en `/admin`.
+- **Código de referido** (`W64W6PKH`) y los tres enlaces → sesión + `baseReferralUrl()`.
+- **"90 días"** → `AFFILIATE_COOKIE_DAYS`, no un literal.
+- **"3 mensualidades"** → `progress.minPaidInvoices` (`MIN_PAID_INVOICES`).
+- `grep` de `W64W6PKH|2500|10000|100000|\$80|\$140|\$300|2,940|8,300|1,240|7,060` en el código
+  nuevo: **0 coincidencias**.
+
+El conteo del bono usa `getMilestoneProgress()` → **el que CALIFICA** (activas con ≥3
+mensualidades pagadas, prorrateos excluidos), nunca el bruto de altas. La diferencia entre
+referidas / activas / que califican se **explica en pantalla**, que es justo donde nacen los
+reclamos.
+
+### Decisiones que vale la pena conocer
+
+- **El panel es claro y punto.** El script de `<head>` en `layout.tsx` sólo aplica `.dark` en
+  `/dashboard` y `/admin`, así que `/afiliados` nunca fue oscuro por elección del usuario. No
+  hay bloque `.dark` en `panel.css`: sería código muerto.
+- **`@container`, no `@media`, para el contenido.** `.dcafp-main` es el contenedor con nombre
+  (`container-name: dcafp`) y todos los bloques miden **el ancho real disponible**, no la
+  ventana. Las únicas `@media` que quedan son las del **chrome** (el sidebar decide su propio
+  colapso: 1080px → barra superior, 900px → cajón con hamburguesa) y
+  `prefers-reduced-motion`.
+- **La tarjeta de enlaces se destaca sólo mientras haga falta**: con `accent` + etiqueta
+  "EMPIEZA AQUÍ" cuando aún no hay ganancias; en cuanto entra la primera comisión, deja de
+  gritar. Igual que el diseño.
+- **El estado vacío no es una pared de ceros**: las cifras en cero van en gris (`tone="idle"`,
+  se leen como "todavía no" y no como una pérdida), los montos por plan suben a rejilla grande
+  porque son *la promesa*, y la tabla de comisiones trae un `EmptyState` con la acción que la
+  desbloquea.
+- **La barra del bono marca los escalones ya cobrados** (una muesca por umbral superado) en
+  vez de un reparto mudo; persiguiendo el primero, cae al reparto en quintos del diseño.
+- **El regalo 3D cambia a dorado y se detiene** cuando ese escalón ya se ganó: un premio
+  conseguido no sigue girando pidiendo atención.
+- **Modalidades que el diseño no cubría.** El mockup asume montos fijos recurrentes. Con
+  **pago único** un "$X al mes" siempre daría $0, así que la cifra grande pasa a lo acumulado
+  y el copy cambia; con el motor en **%** o inactivo se conserva `<LevelProgress>` debajo,
+  porque la escalera de niveles es información real que el hero no muestra (en modo fijo se
+  omite: sería duplicar).
+- **La tabla de comisiones conserva todo.** El diseño mostraba 4 columnas; se mantuvieron
+  también *estado* y *factura que la originó* (sin ella no se puede cuadrar una comisión con
+  su cobro). Estrechada, la rejilla baja a 3 columnas y el **estado reaparece como chip bajo
+  el nombre** — un "pendiente" escondido a 375px es justo el dato por el que se abre un ticket.
+- **`referral-links.tsx` dejó de ser client component**: sólo copiar es interactivo y eso vive
+  en `ui/copy-button`. `/afiliados/inicio` bajó a **1.23 kB** de JS de cliente.
+- **Bug real arreglado de paso**: el mosaico del "logo para fondos oscuros" del kit de
+  marketing usaba `--bg-elev-2` (que aquí es `#f8fafc`) y el SVG es **blanco** → era invisible
+  en el panel claro. Ahora va sobre `--dcafp-ink`.
+- **El botón de WhatsApp del manager** pasó de verde `#16a34a` al primario morado; el glifo es
+  lo que carga el reconocimiento. Volver al verde es una línea.
+- Los toasts de **error** siguen en `react-hot-toast`: el toast del panel es la confirmación de
+  copiado y no tiene tono de error. Sólo el copiado usa la píldora del diseño.
+
+### Verificación
+
+- **`npm run build` completo, sin pipe, verde**: exit 0, `prisma generate` OK, **0 errores de
+  tipos**, **365/365** páginas prerenderizadas. Los `prisma:error` de `DATABASE_URL` del
+  prerender son los de siempre (no hay `.env` local) y los warnings (clases ambiguas de
+  Tailwind, `Critical dependency` de `file-type`) son preexistentes.
+- **Verificado en Chrome** con una página temporal fuera del gate de sesión (ya borrada),
+  en los dos estados:
+  - Estado vacío: `$0` en gris, rejilla de montos, "EMPIEZA AQUÍ", barra sin relleno con 4
+    muescas, las 3 piezas girando.
+  - Estado activo: `$2,940`, barra al 72 % con la muesca sobre el escalón de 5 clínicas ya
+    cobrado, regalo dorado "Conseguido" y estático, "TU SIGUIENTE META" en el de 25.
+  - **A 375px: `scrollWidth == clientWidth == 375`, cero desbordes horizontales** en el
+    contenido y **cero objetivos táctiles por debajo de 24px**. El `@container` conmuta: hero a
+    una columna, tabla a 3 columnas, botón "Copiar" a ancho completo.
+  - `prefers-reduced-motion`: la regla existe y apaga toda animación bajo `.dcafp`; las piezas
+    quedan **congeladas en una pose legible**, no desaparecen. Los 4 contenedores 3D están
+    `aria-hidden`.
+
+### Pendientes / huecos conocidos (ninguno bloquea)
+
+- **`panel.css` no tiene** patrón de *caja anidada genérica* (`surface-2` + `line-nested` +
+  `r-box`), que se repite inline en 3 archivos de `tools/`; ni *segmented control* (los
+  selectores de rango y de tipo de reporte usan `dcafp-btn--outline` como "activo"); ni
+  *esqueleto de carga*, *modal*, *burbuja de chat* ni *tarjeta de opción seleccionable*. Todos
+  resueltos inline con `var(--dcafp-*)`; son los candidatos naturales del próximo pase.
+- `Chip` no tiene tono `info` ni `gold`: `ABIERTO`/`EN_PROGRESO` de soporte caen los dos en
+  `brand`, y el nivel Oro pide prestado el violeta de marca.
+- `Kpi` no acepta `tone`, así que una rejilla de KPIs no puede apagarse a gris en vacío (por
+  eso la portada usa `StatRow`/`Stat`).
+- **Recharts** no acepta `var(--dcafp-*)` en `stroke`/`stopColor` (son atributos SVG, no
+  `style`): los colores del gráfico de estadísticas van en hex dentro de una constante `CHART`
+  con el token equivalente anotado en cada línea. Es el único punto del diff con colores
+  literales.
+- No se tocaron `globals.css`, `panel-chrome-va.css` (compartido con `/admin`,
+  `/laboratorios` y `/proveedores`), `afiliados.css` (landing pública), el motor de comisiones
+  ni ninguna query, endpoint o validación. **Sin SQL, sin cambios de schema.**

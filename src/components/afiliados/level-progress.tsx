@@ -1,38 +1,37 @@
-// Badge de nivel (bronce/plata/oro) + barra de progreso al siguiente nivel.
+// Nivel del afiliado (bronce/plata/oro) + lo que gana por cada clínica.
 // Con el programa en modo "fixed" los % ya no aplican: en su lugar se pinta la
-// tabla de montos por plan de la modalidad vigente del afiliado (los montos
+// rejilla de montos por plan de la modalidad vigente del afiliado (los montos
 // llegan ya calculados desde el server vía props).
-// Server-safe: SIN "use client" (solo render de props, sin hooks).
-// Colores: bronce #d97706-ish, plata #94a3b8, oro #eab308 (suaves sobre dark,
-// patrón BadgeNew-like pero custom para los 3 metales).
-import { Medal } from "lucide-react";
-import type { LevelInfo } from "@/lib/affiliate-levels";
-import { LEVEL_LABELS } from "@/lib/affiliate-levels";
+// Server-safe: SIN "use client" (solo render de props, sin hooks ni handlers).
+//
+// ESTILO: lenguaje del panel de afiliados — primitivas de ui/panel-ui.tsx y
+// clases `dcafp-*` de src/app/afiliados/panel.css. Aquí NO se declaran colores
+// propios: el nivel se distingue por el tono del chip, no por una paleta de
+// metales (la tenía cuando el panel era oscuro; ahora es claro).
+//
+// NI UN MONTO NI UN PORCENTAJE ESCRITO A MANO: todo sale de `info`/`amounts`.
+import { LEVEL_LABELS, type AffiliateLevel, type LevelInfo } from "@/lib/affiliate-levels";
 // payout-core es PURO (sin Prisma): el componente sigue siendo server-safe.
 import { PAYOUT_MODE_LABELS, type PayoutMode, type ProgramMode } from "@/lib/affiliates/payout-core";
 import { formatCurrency } from "@/lib/utils";
+import {
+  Chip,
+  Eyebrow,
+  Footnote,
+  Note,
+  PanelCard,
+  ProgressBar,
+  Stat,
+  StatRow,
+  type ChipTone,
+} from "@/components/afiliados/ui/panel-ui";
 
-// Paleta por nivel: color del metal + fondos/bordes suaves + gradiente de la
-// barra de progreso.
-const LEVEL_STYLES = {
-  bronze: {
-    color: "#d97706",
-    soft: "rgba(217,119,6,0.12)",
-    border: "rgba(217,119,6,0.35)",
-    gradient: "linear-gradient(90deg, #b45309, #d97706)",
-  },
-  silver: {
-    color: "#94a3b8",
-    soft: "rgba(148,163,184,0.12)",
-    border: "rgba(148,163,184,0.35)",
-    gradient: "linear-gradient(90deg, #64748b, #94a3b8)",
-  },
-  gold: {
-    color: "#eab308",
-    soft: "rgba(234,179,8,0.12)",
-    border: "rgba(234,179,8,0.35)",
-    gradient: "linear-gradient(90deg, #ca8a04, #eab308)",
-  },
+// Tono del chip por nivel: oro = marca (violeta), bronce = ámbar, plata =
+// neutro. Es la única señal de color que queda del metal.
+const LEVEL_TONES: Record<AffiliateLevel, ChipTone> = {
+  bronze: "amber",
+  silver: "neutral",
+  gold: "brand",
 };
 
 /** Monto que paga el programa por un plan, ya resuelto en el server. */
@@ -61,10 +60,9 @@ export interface LevelProgressProps {
 }
 
 export function LevelProgress({ info, mode, payoutMode, amounts }: LevelProgressProps) {
-  const styles = LEVEL_STYLES[info.level];
   const isGold = !info.legacy && info.level === "gold";
 
-  // Modo "fixed": los % del nivel dejan de aplicar, así que NO se pintan ni el
+  // Modo "fixed": los % del nivel dejan de aplicar, así que NO se pinta ni el
   // chip de % ni la barra de progreso (sería mentirle al afiliado).
   const isFixed = mode === "fixed";
   const effectiveMode: PayoutMode = payoutMode === "onetime" ? "onetime" : "recurring";
@@ -74,17 +72,29 @@ export function LevelProgress({ info, mode, payoutMode, amounts }: LevelProgress
         (a) => (effectiveMode === "onetime" ? a.oneTimeMxn : a.recurringMxn) > 0,
       )
     : [];
+  // El sufijo depende de la modalidad, nunca del plan.
+  const unitSuffix = effectiveMode === "onetime" ? " única vez" : " /mes";
+
+  const levelTone: ChipTone = LEVEL_TONES[info.level] ?? "neutral";
+  // El punto del chip solo se pinta en los tonos que tienen color: panel.css no
+  // le da fondo al de `neutral`, y sin esto plata dejaría un hueco de 8px.
+  const showDot = levelTone !== "neutral";
 
   // Singular/plural correcto en español.
-  const activeLabel =
-    info.activeCount === 1 ? "1 clínica activa" : `${info.activeCount} clínicas activas`;
+  const activeLabel = info.activeCount === 1 ? "Clínica activa" : "Clínicas activas";
 
-  // Ancho de la barra: oro = llena; resto = avance hacia el siguiente umbral.
-  const progressPct = isGold
-    ? 100
-    : info.nextThreshold && info.nextThreshold > 0
-      ? Math.min(100, (info.activeCount / info.nextThreshold) * 100)
-      : 0;
+  // La barra habla en clínicas, no en porcentaje: ProgressBar calcula el ancho
+  // y de paso publica los valores accesibles. Oro = llena; sin umbral siguiente
+  // no hay avance que mostrar (0), igual que antes.
+  const nextThreshold = info.nextThreshold != null && info.nextThreshold > 0 ? info.nextThreshold : 0;
+  const hasNext = !isGold && nextThreshold > 0;
+  const barMax = isGold ? 1 : hasNext ? nextThreshold : 1;
+  const barValue = isGold ? 1 : hasNext ? info.activeCount : 0;
+  const barLabel = isGold
+    ? "Nivel máximo alcanzado"
+    : info.nextLevel != null
+      ? `Avance hacia nivel ${LEVEL_LABELS[info.nextLevel]}`
+      : "Avance hacia el siguiente nivel";
 
   const missingLabel =
     info.nextLevel != null && info.missing != null
@@ -92,134 +102,81 @@ export function LevelProgress({ info, mode, payoutMode, amounts }: LevelProgress
         ? `Te falta 1 clínica activa para ${LEVEL_LABELS[info.nextLevel]} (${info.nextPct}%)`
         : `Te faltan ${info.missing} clínicas activas para ${LEVEL_LABELS[info.nextLevel]} (${info.nextPct}%)`
       : null;
+  const progressNote = isGold ? "Estás en el nivel máximo" : missingLabel;
 
   return (
-    <div
-      style={{
-        background: "var(--bg-elev-1, transparent)",
-        border: "1px solid var(--border-soft)",
-        borderRadius: 14,
-        padding: "16px 18px",
-        display: "flex",
-        flexDirection: "column",
-        gap: 12,
-      }}
-    >
-      {/* Fila superior: tile + nivel + chip (% o modalidad) + clínicas activas */}
-      <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 10 }}>
-        <div
-          style={{
-            width: 34,
-            height: 34,
-            borderRadius: 10,
-            flexShrink: 0,
-            display: "grid",
-            placeItems: "center",
-            background: styles.soft,
-            border: `1px solid ${styles.border}`,
-            color: styles.color,
-          }}
-        >
-          <Medal size={18} />
-        </div>
-        <div style={{ fontSize: 15, fontWeight: 600, color: "var(--text-1)", letterSpacing: "-0.01em" }}>
+    <PanelCard>
+      {/* Nivel + modalidad (o el % vigente cuando el programa va por niveles). */}
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          flexWrap: "wrap",
+          gap: 8,
+          minWidth: 0,
+          marginBottom: 16,
+        }}
+      >
+        <Chip tone={levelTone} dot={showDot}>
           Nivel {LEVEL_LABELS[info.level]}
-        </div>
-        <span
-          style={{
-            display: "inline-flex",
-            alignItems: "center",
-            padding: "3px 10px",
-            borderRadius: 999,
-            fontSize: 12,
-            fontWeight: 600,
-            color: styles.color,
-            background: styles.soft,
-            border: `1px solid ${styles.border}`,
-          }}
-        >
+        </Chip>
+        <Chip tone="brand">
           {/* El fragmento conserva el markup exacto del modo % (mismos nodos). */}
           {isFixed ? PAYOUT_MODE_LABELS[effectiveMode] : <>{info.pct}% de comisión</>}
-        </span>
-        <div style={{ marginLeft: "auto", fontSize: 13, color: "var(--text-3)" }}>{activeLabel}</div>
+        </Chip>
       </div>
 
-      {isFixed ? (
-        // Programa con montos fijos: la tabla real de lo que gana por clínica,
-        // en su modalidad vigente. Sin % ni barra de progreso a otro %.
-        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          <div style={{ display: "flex", alignItems: "baseline", flexWrap: "wrap", gap: 8 }}>
-            <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text-1)" }}>
-              Ganas por cada clínica
+      <div style={{ display: "flex", flexDirection: "column", gap: 10, minWidth: 0, marginBottom: 16 }}>
+        {isFixed ? (
+          // Programa con montos fijos: la rejilla real de lo que gana por
+          // clínica, en su modalidad vigente. Sin % ni barra hacia otro %.
+          <>
+            <div style={{ display: "flex", alignItems: "baseline", flexWrap: "wrap", gap: 8, minWidth: 0 }}>
+              <Eyebrow>Ganas por cada clínica</Eyebrow>
+              <span style={{ fontSize: 12.5, lineHeight: 1.45, color: "var(--dcafp-ink-3)", minWidth: 0 }}>
+                {effectiveMode === "onetime"
+                  ? "Un solo pago por clínica"
+                  : "Cada mes que la clínica siga pagando"}
+              </span>
             </div>
-            <div style={{ fontSize: 12, color: "var(--text-3)" }}>
-              {effectiveMode === "onetime"
-                ? "Un solo pago por clínica"
-                : "Cada mes que la clínica siga pagando"}
-            </div>
-          </div>
-          {amountRows.length === 0 ? (
-            <p style={{ margin: 0, fontSize: 13, color: "var(--text-3)", lineHeight: 1.5 }}>
-              Tus montos por plan se están configurando. En cuanto estén listos los verás aquí.
-            </p>
-          ) : (
-            <div style={{ display: "flex", flexDirection: "column" }}>
-              {amountRows.map((a) => (
-                <div
-                  key={a.plan}
-                  style={{
-                    display: "flex",
-                    alignItems: "baseline",
-                    justifyContent: "space-between",
-                    flexWrap: "wrap",
-                    gap: 12,
-                    padding: "7px 0",
-                    borderTop: "1px solid var(--border-soft)",
-                  }}
-                >
-                  <span style={{ fontSize: 13, color: "var(--text-2)" }}>{a.label}</span>
-                  <span style={{ display: "inline-flex", alignItems: "baseline", gap: 4 }}>
-                    <span className="mono" style={{ fontSize: 14, fontWeight: 600, color: "var(--text-1)" }}>
+            {amountRows.length === 0 ? (
+              <Note>
+                Tus montos por plan se están configurando. En cuanto estén listos los verás aquí.
+              </Note>
+            ) : (
+              <div className="dcafp-plangrid">
+                {amountRows.map((a) => (
+                  <div key={a.plan} className="dcafp-planbox">
+                    <div className="dcafp-planbox__k">{a.label}</div>
+                    <div className="dcafp-planbox__v">
                       {formatCurrency(effectiveMode === "onetime" ? a.oneTimeMxn : a.recurringMxn)}
-                    </span>
-                    <span style={{ fontSize: 12, color: "var(--text-3)" }}>
-                      {effectiveMode === "onetime" ? "una vez" : "al mes"}
-                    </span>
-                  </span>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      ) : info.legacy ? (
-        // Modo legacy (tabla de config sin aplicar): % fijo, sin barra.
-        <p style={{ margin: 0, fontSize: 13, color: "var(--text-3)", lineHeight: 1.5 }}>
-          Comisión fija de {info.pct}%. Los niveles se activan próximamente.
-        </p>
-      ) : (
-        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          <div
-            style={{
-              height: 8,
-              borderRadius: 999,
-              background: "var(--bg-elev-2)",
-              overflow: "hidden",
-            }}
-          >
-            <div
-              style={{
-                height: "100%",
-                width: `${progressPct}%`,
-                borderRadius: 999,
-                background: "var(--brand-grad)",
-              }}
-            />
-          </div>
-          <div style={{ fontSize: 12, color: "var(--text-3)" }}>
-            {isGold ? "Estás en el nivel máximo" : missingLabel}
-          </div>
-        </div>
-      )}
-    </div>
+                      <span className="dcafp-planbox__u">{unitSuffix}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </>
+        ) : info.legacy ? (
+          // Modo legacy (tabla de config sin aplicar): % fijo, sin barra.
+          <Note>Comisión fija de {info.pct}%. Los niveles se activan próximamente.</Note>
+        ) : (
+          <>
+            <ProgressBar value={barValue} max={barMax} label={barLabel} />
+            {progressNote ? <Footnote>{progressNote}</Footnote> : null}
+          </>
+        )}
+      </div>
+
+      {/* La cifra que mueve el nivel. En cero se apaga a gris: es "todavía no",
+          no una pérdida. */}
+      <StatRow>
+        <Stat
+          label={activeLabel}
+          value={info.activeCount}
+          tone={info.activeCount === 0 ? "idle" : "default"}
+        />
+      </StatRow>
+    </PanelCard>
   );
 }

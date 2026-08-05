@@ -2,10 +2,10 @@ export const dynamic = "force-dynamic";
 
 import { redirect } from "next/navigation";
 import type { Metadata } from "next";
-import { LifeBuoy } from "lucide-react";
 import { getAffiliateContext } from "@/lib/affiliate-auth";
 import { getAccountManagerForAffiliate } from "@/lib/account-manager/get-for-affiliate";
 import { isOnline, formatSchedule, nextAvailableText } from "@/lib/account-manager/availability";
+import { PageHead } from "@/components/afiliados/ui/panel-ui";
 import { SoporteAfiliadoClient } from "./soporte-client";
 
 export const metadata: Metadata = { title: "Soporte — Afiliados DaleControl" };
@@ -19,6 +19,8 @@ export const metadata: Metadata = { title: "Soporte — Afiliados DaleControl" }
  *
  * getAccountManagerForAffiliate nunca lanza: si la columna aún no existe
  * devuelve null y la tarjeta cae al canal general de soporte.
+ *
+ * Sin envoltorio propio: `.dcafp-main` ya separa encabezado y contenido.
  */
 export default async function AffiliateSupportPage() {
   const ctx = await getAffiliateContext();
@@ -29,47 +31,11 @@ export default async function AffiliateSupportPage() {
   const online = manager ? isOnline(manager, now) : false;
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
-      {/* Hero compacto (mismo idioma visual que inicio/reportes). */}
-      <div style={{ position: "relative", display: "flex", alignItems: "center", gap: 14 }}>
-        <div
-          aria-hidden
-          style={{
-            position: "absolute",
-            top: -40,
-            left: -30,
-            width: 280,
-            height: 180,
-            pointerEvents: "none",
-            background: "radial-gradient(60% 70% at 20% 30%, rgba(124,58,237,0.18), transparent 70%)",
-          }}
-        />
-        <div
-          style={{
-            position: "relative",
-            width: 44,
-            height: 44,
-            borderRadius: 14,
-            flexShrink: 0,
-            display: "grid",
-            placeItems: "center",
-            color: "#fff",
-            background: "var(--brand-grad)",
-            boxShadow: "0 8px 20px -8px rgba(124,58,237,0.6)",
-          }}
-        >
-          <LifeBuoy size={22} />
-        </div>
-        <div style={{ position: "relative" }}>
-          <h1 style={{ fontSize: 22, letterSpacing: "-0.02em", color: "var(--text-1)", fontWeight: 600, margin: 0 }}>
-            Soporte
-          </h1>
-          <p style={{ color: "var(--text-3)", fontSize: 13, marginTop: 4, marginBottom: 0 }}>
-            Escríbele a tu manager por WhatsApp o abre un ticket: comisiones, pagos,
-            material de venta o cualquier duda de tu cuenta.
-          </p>
-        </div>
-      </div>
+    <>
+      <PageHead
+        title="Soporte"
+        sub="Escríbele a tu manager por WhatsApp o abre un ticket: comisiones, pagos, material de venta o cualquier duda de tu cuenta."
+      />
 
       <SoporteAfiliadoClient
         manager={manager}
@@ -79,6 +45,6 @@ export default async function AffiliateSupportPage() {
         affiliateName={ctx.affiliate.name}
         referralCode={ctx.affiliate.referralCode}
       />
-    </div>
+    </>
   );
 }

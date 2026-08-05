@@ -1,9 +1,8 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useState, type CSSProperties, type FormEvent } from "react";
 import toast from "react-hot-toast";
-import { CardNew } from "@/components/ui/design-system/card-new";
-import { ButtonNew } from "@/components/ui/design-system/button-new";
+import { Eyebrow, PanelCard } from "@/components/afiliados/ui/panel-ui";
 
 const PAYOUT_METHODS: { value: string; label: string; placeholder: string }[] = [
   { value: "", label: "Sin definir", placeholder: "" },
@@ -12,34 +11,23 @@ const PAYOUT_METHODS: { value: string; label: string; placeholder: string }[] = 
   { value: "OTHER", label: "Otro", placeholder: "Describe cómo quieres recibir tus pagos" },
 ];
 
-const fieldStyle: React.CSSProperties = {
-  height: 42,
-  padding: "0 14px",
-  borderRadius: 10,
-  background: "var(--bg-elev-2)",
-  border: "1px solid var(--border-soft)",
-  color: "var(--text-1)",
-  fontSize: 14,
-  fontFamily: "inherit",
-  outline: "none",
-  width: "100%",
-  boxSizing: "border-box",
-};
-
-const labelStyle: React.CSSProperties = {
-  fontSize: 12,
-  fontWeight: 600,
-  color: "var(--text-2)",
-  marginBottom: 6,
-  display: "block",
-};
-
-const checkRowStyle: React.CSSProperties = {
+// Fila de casilla: el <label> envuelve al input, así que todo el renglón es
+// zona táctil. `minHeight` la lleva a los 44px del diseño.
+const checkRowStyle: CSSProperties = {
   display: "flex",
   alignItems: "center",
   gap: 10,
+  minHeight: "var(--dcafp-tap)",
   fontSize: 13.5,
-  color: "var(--text-2)",
+  color: "var(--dcafp-ink-2)",
+  cursor: "pointer",
+};
+
+const checkboxStyle: CSSProperties = {
+  width: 17,
+  height: 17,
+  flex: "0 0 auto",
+  accentColor: "var(--dcafp-brand)",
   cursor: "pointer",
 };
 
@@ -111,18 +99,23 @@ export function PayoutForm({
 
   return (
     <form onSubmit={handleSubmit}>
-      <CardNew title="Datos de pago">
-        <p style={{ fontSize: 13, color: "var(--text-3)", margin: "0 0 18px", lineHeight: 1.5 }}>
-          Indícanos cómo prefieres recibir tus comisiones. El equipo de DaleControl usará estos datos para
-          procesar tus pagos.
-        </p>
-
-        <div style={{ display: "flex", flexDirection: "column", gap: 16, maxWidth: 460 }}>
-          <div>
-            <label style={labelStyle}>Método de pago</label>
-            <select value={method} onChange={(e) => setMethod(e.target.value)} style={fieldStyle}>
+      <PanelCard
+        title="Datos de pago"
+        sub="Indícanos cómo prefieres recibir tus comisiones. El equipo de DaleControl usará estos datos para procesar tus pagos."
+      >
+        <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+          <div style={{ minWidth: 0 }}>
+            <label className="dcafp-label" htmlFor="payout-method">
+              Método de pago
+            </label>
+            <select
+              id="payout-method"
+              className="dcafp-select"
+              value={method}
+              onChange={(e) => setMethod(e.target.value)}
+            >
               {PAYOUT_METHODS.map((m) => (
-                <option key={m.value || "none"} value={m.value} style={{ backgroundColor: "#18181b", color: "#f4f4f5" }}>
+                <option key={m.value || "none"} value={m.value}>
                   {m.label}
                 </option>
               ))}
@@ -130,33 +123,40 @@ export function PayoutForm({
           </div>
 
           {method && (
-            <div>
-              <label style={labelStyle}>Datos</label>
+            <div style={{ minWidth: 0 }}>
+              <label className="dcafp-label" htmlFor="payout-details">
+                Datos
+              </label>
               <input
+                id="payout-details"
+                className="dcafp-input"
                 type="text"
                 value={details}
                 onChange={(e) => setDetails(e.target.value)}
                 placeholder={current.placeholder}
-                style={fieldStyle}
               />
             </div>
           )}
 
-          <div style={{ borderTop: "1px solid var(--border-soft)", paddingTop: 16 }}>
-            <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text-1)", marginBottom: 4 }}>
-              Notificaciones por email
-            </div>
-            <p style={{ fontSize: 12.5, color: "var(--text-3)", margin: "0 0 12px", lineHeight: 1.5 }}>
+          <div
+            style={{
+              borderTop: "1px solid var(--dcafp-line-soft)",
+              paddingTop: 16,
+              minWidth: 0,
+            }}
+          >
+            <Eyebrow>Notificaciones por email</Eyebrow>
+            <p className="dcafp-hint" style={{ margin: "6px 0 8px" }}>
               Elige qué avisos quieres recibir en tu correo.
             </p>
-            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
               {NOTIFY_OPTIONS.map((opt) => (
                 <label key={opt.key} style={checkRowStyle}>
                   <input
                     type="checkbox"
                     checked={prefs[opt.key]}
                     onChange={(e) => setPrefs({ ...prefs, [opt.key]: e.target.checked })}
-                    style={{ width: 16, height: 16, accentColor: "var(--brand)", cursor: "pointer" }}
+                    style={checkboxStyle}
                   />
                   <span>{opt.label}</span>
                 </label>
@@ -165,12 +165,12 @@ export function PayoutForm({
           </div>
 
           <div>
-            <ButtonNew type="submit" variant="primary" disabled={saving}>
+            <button type="submit" className="dcafp-btn dcafp-btn--primary" disabled={saving}>
               {saving ? "Guardando…" : "Guardar cambios"}
-            </ButtonNew>
+            </button>
           </div>
         </div>
-      </CardNew>
+      </PanelCard>
     </form>
   );
 }

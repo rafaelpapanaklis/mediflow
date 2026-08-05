@@ -1,0 +1,1077 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   DaleControl · PANEL DE AFILIADO — lenguaje visual
+   (diseño Panel-Afiliado-DaleControl.dc.html, aprobado por Rafael)
+   ───────────────────────────────────────────────────────────────────────────
+   ESTE ARCHIVO ES EL ÚNICO LUGAR DONDE VIVE EL ESTILO DEL PANEL.
+
+   El diseño llegó con TODO inline en el HTML. Copiar esos `style=` en cada
+   página habría dejado siete copias del mismo borde: aquí se extraen los
+   patrones —tarjeta, encabezado, tabla, chip, botón, estado vacío, barra de
+   progreso— y las páginas solo ponen clases. Un cambio de estilo futuro se
+   hace aquí, no en siete archivos.
+
+   NAMESPACE `dcafp-` (panel) para no chocar con `dcaf-` (afiliados.css, la
+   landing pública): las dos hojas pueden acabar en la misma respuesta y
+   dcafSpin/dcafSway ya existen allá con otra geometría.
+
+   ALCANCE: todo cuelga de `.dcafp`, la clase del shell. No toca globals.css,
+   ni panel-chrome-va.css (compartido con /admin, /laboratorios y
+   /proveedores), ni afiliados.css.
+
+   TEMA: el panel es SIEMPRE claro. El script de <head> en layout.tsx solo
+   aplica `.dark` en /dashboard y /admin, así que la paleta del diseño (fondo
+   #e9edf4, tarjetas blancas) es la única que se renderiza. No hay bloque
+   `.dark` aquí a propósito: sería código muerto.
+
+   ANCHOS: dentro del panel se mide con `@container`, no con `@media`. El
+   sidebar ocupa 250px reales, así que a 1200px de viewport un bloque tiene
+   ~900px: preguntarle a la ventana da la respuesta equivocada. Las únicas
+   `@media` que quedan son las del CHROME (el sidebar decide su propio
+   colapso, que sí es cosa del viewport) y la de `prefers-reduced-motion`.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── Paleta y medidas ─────────────────────────────────────────────────────
+   Los tokens `--dcafp-*` son la fuente del diseño. Debajo se remapean los
+   tokens SEMÁNTICOS de la app (--text-1, --bg-elev, …): así, cualquier
+   componente que todavía no se haya migrado a las clases de aquí igual cae
+   en esta paleta en vez de quedarse con los grises del panel viejo. Es lo
+   que evita el "media página nueva, media vieja". */
+.dcafp {
+  --dcafp-bg:          #e9edf4;
+  --dcafp-surface:     #ffffff;
+  --dcafp-surface-2:   #f8fafc;
+  --dcafp-line:        #e2e8f0;
+  --dcafp-line-soft:   #f1f5f9;
+  --dcafp-line-faint:  #f8fafc;
+  --dcafp-line-nested: #eef2f6;
+
+  --dcafp-ink:   #0f172a;
+  --dcafp-ink-2: #475569;
+  --dcafp-ink-3: #64748b;
+  --dcafp-ink-4: #94a3b8;
+
+  --dcafp-brand:        #7c3aed;
+  --dcafp-brand-deep:   #6d28d9;
+  --dcafp-brand-deeper: #5b21b6;
+  --dcafp-brand-400:    #8b5cf6;
+  --dcafp-brand-300:    #a78bfa;
+  --dcafp-brand-200:    #c4b5fd;
+  --dcafp-brand-100:    #ddd6fe;
+  --dcafp-brand-75:     #ede9fe;
+  --dcafp-brand-50:     #f5f3ff;
+  --dcafp-grad:         linear-gradient(135deg, #8b5cf6, #6d28d9);
+  --dcafp-grad-bar:     linear-gradient(90deg, #8b5cf6, #6d28d9);
+
+  --dcafp-ok:        #15803d;
+  --dcafp-ok-ink:    #166534;
+  --dcafp-ok-bg:     #dcfce7;
+  --dcafp-ok-line:   #bbf7d0;
+  --dcafp-warn-ink:  #92400e;
+  --dcafp-warn-bg:   #fef3c7;
+  --dcafp-warn-line: #fde68a;
+  --dcafp-warn-tint: #fffbeb;
+  --dcafp-amber:     #d97706;
+  --dcafp-danger:      #b91c1c;
+  --dcafp-danger-bg:   #fef2f2;
+  --dcafp-danger-line: #fecaca;
+
+  --dcafp-r-card: 16px;
+  --dcafp-r-box:  13px;
+  --dcafp-r-el:   10px;
+  --dcafp-r-pill: 999px;
+  --dcafp-tap:    44px;                 /* objetivo táctil del diseño */
+  --dcafp-mono:   ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --dcafp-shadow-card:  0 1px 2px rgba(15, 23, 42, .04);
+  --dcafp-shadow-brand: 0 14px 34px -22px rgba(124, 58, 237, .5);
+  --dcafp-shadow-tier:  0 10px 28px -16px rgba(124, 58, 237, .45);
+
+  /* ── Remapeo de los tokens semánticos de la app ───────────────────────
+     Solo dentro del panel de afiliados. Sirve de red: los componentes
+     cliente grandes (kit de marketing, plantillas, formularios) siguen
+     escribiendo var(--text-1) y aterrizan en esta paleta sin tocarlos. */
+  --text-1: var(--dcafp-ink);
+  --text-2: var(--dcafp-ink-2);
+  --text-3: var(--dcafp-ink-3);
+  --text-4: var(--dcafp-ink-4);
+  --bg: var(--dcafp-bg);
+  --bg-elev: var(--dcafp-surface);
+  --bg-elev-1: var(--dcafp-surface);
+  --bg-elev-2: var(--dcafp-surface-2);
+  --bg-hover: var(--dcafp-surface-2);
+  --border-soft: var(--dcafp-line);
+  --border-strong: #cbd5e1;
+  --border-brand: var(--dcafp-brand-100);
+  --brand: var(--dcafp-brand);
+  --brand-soft: var(--dcafp-brand-50);
+  --brand-softer: var(--dcafp-brand-50);
+  --brand-grad: var(--dcafp-grad);
+  --brand-grad-v: var(--dcafp-grad);
+  --violet-400: var(--dcafp-brand-deep);
+  --success: var(--dcafp-ok);
+  --success-strong: var(--dcafp-ok-ink);
+  --success-soft: var(--dcafp-ok-bg);
+  --warning: var(--dcafp-amber);
+  --warning-strong: var(--dcafp-warn-ink);
+  --warning-soft: var(--dcafp-warn-bg);
+  --warning-border-strong: var(--dcafp-warn-line);
+  --danger: #dc2626;
+  --danger-soft: var(--dcafp-danger-bg);
+  --danger-border-strong: var(--dcafp-danger-line);
+  --shadow-1: var(--dcafp-shadow-card);
+  --ring: 0 0 0 2px var(--dcafp-brand);
+
+  background: var(--dcafp-bg);
+  color: var(--dcafp-ink);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* Reset acotado, todo en `:where()` → especificidad 0. Sin eso `.dcafp a`
+   (0,2,0) le ganaría a `.dcafp-btn` (0,2,0 pero antes en el archivo) y a
+   cualquier clase de un componente hijo. */
+:where(.dcafp) :where(h1, h2, h3, h4, p, figure) { margin: 0; }
+:where(.dcafp) :where(a) { color: var(--dcafp-brand-deep); text-decoration: none; }
+:where(.dcafp) :where(button, input, select, textarea) { font-family: inherit; }
+:where(.dcafp) :where(button) { cursor: pointer; }
+
+/* Foco visible único de todo el panel. `outline` y no `box-shadow`: los
+   chips y las filas de tabla tienen `overflow:hidden` y una sombra se
+   recortaría. */
+.dcafp a:focus-visible,
+.dcafp button:focus-visible,
+.dcafp [tabindex]:focus-visible,
+.dcafp input:focus-visible,
+.dcafp select:focus-visible,
+.dcafp textarea:focus-visible,
+.dcafp summary:focus-visible {
+  outline: 2px solid var(--dcafp-brand);
+  outline-offset: 2px;
+}
+
+.dcafp-mono { font-family: var(--dcafp-mono); }
+.dcafp-nums { font-variant-numeric: tabular-nums; }
+
+/* ── El contenedor de medida ──────────────────────────────────────────────
+   `.dcafp-main` es el ancho REAL disponible: lo que queda después del
+   sidebar. Todo `@container dcafp (...)` de este archivo pregunta por él.
+   El nombre es explícito para que un container anidado (una tarjeta que se
+   declare a sí misma contenedor) no se lo robe. */
+.dcafp-main {
+  container-type: inline-size;
+  container-name: dcafp;
+  min-width: 0;
+}
+
+/* ═════════════════════════════════════════════════════════════════════════
+   CHROME · sidebar, navegación y pie
+   Las @media de esta sección son legítimas: el sidebar decide si colapsa
+   mirando la VENTANA, no un contenedor — es él quien define el ancho que
+   los demás miden.
+   ═════════════════════════════════════════════════════════════════════════ */
+.dcafp-shell {
+  display: flex;
+  align-items: stretch;
+  min-height: 100vh;
+  background: var(--dcafp-bg);
+}
+
+.dcafp-side {
+  width: 250px;
+  flex: 0 0 250px;
+  background: var(--dcafp-surface);
+  border-right: 1px solid var(--dcafp-line);
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  position: sticky;
+  top: 0;
+  padding: 18px 14px;
+  z-index: 41;
+}
+
+.dcafp-brand {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 4px 8px 16px;
+}
+.dcafp-brand__logo {
+  width: 36px;
+  height: 36px;
+  border-radius: 11px;
+  background: var(--dcafp-grad);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  flex: 0 0 auto;
+}
+.dcafp-brand__name { font-size: 15px; font-weight: 800; letter-spacing: -0.2px; color: var(--dcafp-ink); }
+.dcafp-brand__sub {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--dcafp-brand);
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+}
+
+.dcafp-navkicker {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 1.4px;
+  color: var(--dcafp-ink-4);
+  padding: 0 12px 8px;
+}
+
+.dcafp-nav { display: flex; flex-direction: column; gap: 2px; }
+
+.dcafp-navitem {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  min-height: var(--dcafp-tap);
+  padding: 0 12px;
+  border-radius: var(--dcafp-r-el);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--dcafp-ink-2);
+  text-decoration: none;
+  transition: background .15s ease, color .15s ease;
+}
+.dcafp-navitem > svg { flex: 0 0 auto; }
+.dcafp-navitem:hover { background: var(--dcafp-surface-2); color: var(--dcafp-ink); }
+.dcafp-navitem--active {
+  font-weight: 700;
+  color: var(--dcafp-brand-deep);
+  background: var(--dcafp-brand-50);
+  box-shadow: inset 3px 0 0 var(--dcafp-brand);
+}
+.dcafp-navitem--active:hover { background: var(--dcafp-brand-50); color: var(--dcafp-brand-deep); }
+
+.dcafp-user {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border-top: 1px solid var(--dcafp-line-soft);
+  padding-top: 14px;
+  margin-top: 14px;
+}
+.dcafp-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: var(--dcafp-brand-75);
+  color: var(--dcafp-brand-deep);
+  font-weight: 800;
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+}
+.dcafp-user__name {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--dcafp-ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.dcafp-user__role {
+  font-size: 11.5px;
+  color: var(--dcafp-ink-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dcafp-main {
+  flex: 1;
+  padding: 26px 30px 40px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+/* Hamburguesa y velo: solo existen en la barra colapsada. */
+.dcafp-burger {
+  display: none;
+  position: fixed;
+  top: 12px;
+  left: 12px;
+  z-index: 42;
+  width: var(--dcafp-tap);
+  height: var(--dcafp-tap);
+  align-items: center;
+  justify-content: center;
+  background: var(--dcafp-surface);
+  border: 1px solid var(--dcafp-line);
+  border-radius: var(--dcafp-r-el);
+  color: var(--dcafp-ink-2);
+  box-shadow: 0 6px 18px -10px rgba(15, 23, 42, .4);
+}
+.dcafp-veil { display: none; }
+/* Sube a (0,2,0) a propósito: `.dcafp-iconbtn` —que este botón también
+   lleva— declara `display:inline-flex` más abajo en el archivo, y con la
+   misma especificidad ganaría por orden dejando la ✕ visible en escritorio. */
+.dcafp-side .dcafp-side__close { display: none; }
+
+/* Colapso del sidebar. Debajo de 1080px se vuelve una barra superior, y
+   debajo de 900px un cajón que se abre con la hamburguesa. Ambos umbrales
+   miran la ventana a propósito (ver cabecera de la sección). */
+@media (max-width: 1079px) {
+  .dcafp-shell { flex-direction: column; }
+  .dcafp-side {
+    width: auto;
+    flex: 1 1 auto;
+    height: auto;
+    position: static;
+    border-right: none;
+    border-bottom: 1px solid var(--dcafp-line);
+    flex-direction: row;
+    align-items: center;
+    flex-wrap: wrap;
+    padding: 10px 16px;
+    gap: 8px;
+  }
+  .dcafp-brand { padding: 0 8px 0 0; }
+  .dcafp-navkicker, .dcafp-spacer { display: none; }
+  .dcafp-nav { flex-direction: row; flex-wrap: wrap; gap: 4px; }
+  .dcafp-user { border-top: none; padding-top: 0; margin-top: 0; margin-left: auto; }
+  .dcafp-main { padding: 22px 20px 34px; }
+}
+
+@media (max-width: 899px) {
+  .dcafp-burger { display: flex; }
+  .dcafp-side {
+    position: fixed;
+    inset: 0 auto 0 0;
+    width: min(280px, 86vw);
+    flex: 0 0 auto;
+    height: 100vh;
+    flex-direction: column;
+    align-items: stretch;
+    flex-wrap: nowrap;
+    padding: 18px 14px;
+    border-bottom: none;
+    border-right: 1px solid var(--dcafp-line);
+    transform: translateX(-102%);
+    transition: transform .22s ease;
+    overflow-y: auto;
+  }
+  .dcafp-side--open { transform: translateX(0); box-shadow: 0 20px 60px -20px rgba(15, 23, 42, .45); }
+  .dcafp-side .dcafp-side__close { display: inline-flex; }
+  .dcafp-brand { padding: 4px 8px 16px; }
+  .dcafp-navkicker { display: block; }
+  .dcafp-spacer { display: block; flex: 1; }
+  .dcafp-nav { flex-direction: column; flex-wrap: nowrap; gap: 2px; }
+  .dcafp-user { border-top: 1px solid var(--dcafp-line-soft); padding-top: 14px; margin-top: 14px; margin-left: 0; }
+  .dcafp-veil { display: block; position: fixed; inset: 0; background: rgba(15, 23, 42, .45); z-index: 40; }
+  .dcafp-main { padding: 68px 14px 30px; }
+}
+
+/* ═════════════════════════════════════════════════════════════════════════
+   PATRONES · lo que se repite en las siete páginas
+   ═════════════════════════════════════════════════════════════════════════ */
+
+/* ── Encabezado de página ─────────────────────────────────────────────── */
+.dcafp-pagehead__title {
+  font-size: 23px;
+  font-weight: 800;
+  letter-spacing: -0.4px;
+  color: var(--dcafp-ink);
+  line-height: 1.2;
+}
+.dcafp-pagehead__sub {
+  margin-top: 5px;
+  font-size: 14px;
+  color: var(--dcafp-ink-3);
+  line-height: 1.5;
+}
+@container dcafp (max-width: 520px) {
+  .dcafp-pagehead__title { font-size: 20px; }
+  .dcafp-pagehead__sub { font-size: 13px; }
+}
+
+/* ── Tarjeta ──────────────────────────────────────────────────────────── */
+.dcafp-card {
+  background: var(--dcafp-surface);
+  border: 1px solid var(--dcafp-line);
+  border-radius: var(--dcafp-r-card);
+  padding: 22px 24px 20px;
+  min-width: 0;
+}
+.dcafp-card--flush { padding: 0; overflow: hidden; }
+.dcafp-card--tight { padding: 20px 22px 18px; }
+/* Variante destacada: la del bloque "EMPIEZA AQUÍ" del diseño. */
+.dcafp-card--accent {
+  position: relative;
+  border: 1.5px solid var(--dcafp-brand-200);
+  box-shadow: var(--dcafp-shadow-brand);
+}
+.dcafp-card__tag {
+  position: absolute;
+  top: -11px;
+  left: 18px;
+  background: var(--dcafp-brand);
+  color: #fff;
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 1.2px;
+  padding: 5px 11px;
+  border-radius: var(--dcafp-r-pill);
+}
+@container dcafp (max-width: 520px) {
+  .dcafp-card { padding: 18px 16px 16px; }
+  .dcafp-card--tight { padding: 16px 14px 14px; }
+  .dcafp-card--flush { padding: 0; }
+}
+
+/* Encabezado de sección dentro de una tarjeta. */
+.dcafp-h2 {
+  font-size: 16.5px;
+  font-weight: 800;
+  letter-spacing: -0.2px;
+  color: var(--dcafp-ink);
+}
+.dcafp-sub {
+  margin-top: 3px;
+  font-size: 13px;
+  color: var(--dcafp-ink-3);
+  line-height: 1.5;
+}
+/* Eyebrow: el "COMISIÓN MENSUAL" / "TUS ENLACES" del diseño. */
+.dcafp-eyebrow {
+  font-size: 11.5px;
+  font-weight: 800;
+  letter-spacing: 1.1px;
+  color: var(--dcafp-ink-3);
+  text-transform: uppercase;
+}
+.dcafp-cardhead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+/* ── Cifras ───────────────────────────────────────────────────────────── */
+.dcafp-bignum {
+  font-size: 48px;
+  font-weight: 800;
+  letter-spacing: -1.8px;
+  line-height: 1;
+  color: var(--dcafp-ink);
+  font-variant-numeric: tabular-nums;
+}
+/* Estado vacío: la cifra es gris, no negra. Un "$0" a tamaño titular y en
+   negro se lee como una pérdida; en gris se lee como "todavía no". */
+.dcafp-bignum--idle { font-size: 44px; letter-spacing: -1.5px; color: var(--dcafp-ink-4); }
+@container dcafp (max-width: 560px) {
+  .dcafp-bignum, .dcafp-bignum--idle { font-size: 36px; letter-spacing: -1px; }
+}
+
+.dcafp-statrow {
+  display: flex;
+  gap: 26px;
+  flex-wrap: wrap;
+  border-top: 1px solid var(--dcafp-line-soft);
+  padding-top: 13px;
+}
+.dcafp-stat__k { font-size: 11.5px; font-weight: 600; color: var(--dcafp-ink-3); }
+.dcafp-stat__v {
+  font-size: 18px;
+  font-weight: 750;
+  color: var(--dcafp-ink);
+  font-variant-numeric: tabular-nums;
+}
+.dcafp-stat__v--idle { font-size: 17px; color: var(--dcafp-ink-3); }
+.dcafp-stat__v--ok { color: var(--dcafp-ok); }
+@container dcafp (max-width: 520px) { .dcafp-statrow { gap: 18px; } }
+
+/* Rejilla de montos por plan. `auto-fit` + minmax se adapta sin consultas. */
+.dcafp-plangrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(106px, 1fr));
+  gap: 10px;
+}
+.dcafp-planbox {
+  background: var(--dcafp-surface-2);
+  border: 1px solid var(--dcafp-line-nested);
+  border-radius: 12px;
+  padding: 11px 13px;
+  min-width: 0;
+}
+.dcafp-planbox__k { font-size: 11.5px; font-weight: 700; color: var(--dcafp-ink-2); }
+.dcafp-planbox__v {
+  font-size: 20px;
+  font-weight: 800;
+  letter-spacing: -0.4px;
+  color: var(--dcafp-ink);
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+.dcafp-planbox__u { font-size: 11.5px; color: var(--dcafp-ink-3); font-weight: 650; letter-spacing: 0; }
+
+/* ── Chips de estado ──────────────────────────────────────────────────── */
+.dcafp-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 4px 11px;
+  border-radius: var(--dcafp-r-pill);
+  white-space: nowrap;
+  background: var(--dcafp-surface-2);
+  color: var(--dcafp-ink-2);
+  border: 1px solid transparent;
+}
+/* El punto lleva color BASE: sin él, un chip neutral con `dot` deja un hueco
+   de 8px invisible que descuadra la fila. Los tonos de abajo lo pisan por
+   especificidad (0,2,0 contra 0,1,0). */
+.dcafp-chip__dot { width: 8px; height: 8px; border-radius: 50%; flex: 0 0 auto; background: var(--dcafp-ink-4); }
+.dcafp-chip--brand   { background: var(--dcafp-brand-50); color: var(--dcafp-brand-deep); }
+.dcafp-chip--brand .dcafp-chip__dot { background: var(--dcafp-brand); }
+.dcafp-chip--amber   { background: var(--dcafp-warn-bg); color: var(--dcafp-warn-ink); }
+.dcafp-chip--amber .dcafp-chip__dot { background: var(--dcafp-amber); }
+.dcafp-chip--ok      { background: var(--dcafp-ok-bg); color: var(--dcafp-ok-ink); }
+.dcafp-chip--ok .dcafp-chip__dot { background: var(--dcafp-ok); }
+.dcafp-chip--danger  { background: var(--dcafp-danger-bg); color: var(--dcafp-danger); }
+.dcafp-chip--danger .dcafp-chip__dot { background: var(--dcafp-danger); }
+.dcafp-chip--solid   { background: var(--dcafp-brand); color: #fff; font-size: 10px; font-weight: 800; letter-spacing: .8px; padding: 3px 8px; }
+/* Chip pequeño de plan, el de la tabla de comisiones. */
+.dcafp-chip--sm { font-size: 11.5px; padding: 3px 9px; }
+
+/* ── Botones ──────────────────────────────────────────────────────────── */
+.dcafp-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: var(--dcafp-tap);
+  padding: 0 16px;
+  border-radius: var(--dcafp-r-el);
+  font-size: 13.5px;
+  font-weight: 750;
+  border: 1px solid var(--dcafp-line);
+  background: var(--dcafp-surface);
+  color: var(--dcafp-ink-2);
+  transition: background .15s ease, color .15s ease, border-color .15s ease;
+  text-decoration: none;
+}
+.dcafp-btn:hover { background: var(--dcafp-brand-50); border-color: var(--dcafp-brand-100); color: var(--dcafp-brand-deep); }
+.dcafp-btn:disabled, .dcafp-btn[aria-disabled="true"] { opacity: .55; cursor: not-allowed; }
+.dcafp-btn:disabled:hover { background: var(--dcafp-surface); border-color: var(--dcafp-line); color: var(--dcafp-ink-2); }
+
+.dcafp-btn--primary { background: var(--dcafp-brand); border-color: var(--dcafp-brand); color: #fff; }
+.dcafp-btn--primary:hover { background: var(--dcafp-brand-deep); border-color: var(--dcafp-brand-deep); color: #fff; }
+.dcafp-btn--primary:focus-visible { outline-color: var(--dcafp-ink); }
+.dcafp-btn--primary:disabled:hover { background: var(--dcafp-brand); border-color: var(--dcafp-brand); color: #fff; }
+
+.dcafp-btn--outline { background: var(--dcafp-surface); border: 1.5px solid var(--dcafp-brand-100); color: var(--dcafp-brand-deep); font-weight: 700; }
+.dcafp-btn--outline:hover { background: var(--dcafp-brand-50); border-color: var(--dcafp-brand-300); color: var(--dcafp-brand-deep); }
+
+.dcafp-btn--ghost { background: transparent; border-color: transparent; color: var(--dcafp-ink-3); }
+.dcafp-btn--ghost:hover { background: var(--dcafp-line-soft); border-color: transparent; color: var(--dcafp-ink); }
+
+.dcafp-btn--danger { background: var(--dcafp-surface); border-color: var(--dcafp-danger-line); color: var(--dcafp-danger); }
+.dcafp-btn--danger:hover { background: var(--dcafp-danger-bg); border-color: var(--dcafp-danger); color: var(--dcafp-danger); }
+
+.dcafp-btn--sm { min-height: 36px; padding: 0 12px; font-size: 13px; }
+.dcafp-btn--block { width: 100%; }
+
+/* Botón cuadrado de icono — mantiene los 44px táctiles del diseño. */
+.dcafp-iconbtn {
+  width: var(--dcafp-tap);
+  height: var(--dcafp-tap);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  background: var(--dcafp-surface);
+  border: 1px solid var(--dcafp-line);
+  border-radius: var(--dcafp-r-el);
+  color: var(--dcafp-ink-2);
+  transition: background .15s ease, color .15s ease, border-color .15s ease;
+}
+.dcafp-iconbtn:hover { background: var(--dcafp-brand-50); color: var(--dcafp-brand-deep); border-color: var(--dcafp-brand-100); }
+.dcafp-iconbtn--bare { background: none; border: none; }
+.dcafp-iconbtn--bare:hover { background: var(--dcafp-line-soft); color: var(--dcafp-ink); }
+.dcafp-iconbtn:disabled, .dcafp-iconbtn[aria-disabled="true"] { opacity: .45; cursor: not-allowed; }
+.dcafp-iconbtn:disabled:hover { background: var(--dcafp-surface); color: var(--dcafp-ink-2); border-color: var(--dcafp-line); }
+.dcafp-iconbtn--bare:disabled:hover { background: none; }
+
+/* Botón-código: el "CÓDIGO W64W6PKH ⧉" de la cabecera de enlaces. */
+.dcafp-codebtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: var(--dcafp-tap);
+  padding: 0 13px;
+  background: var(--dcafp-surface-2);
+  border: 1px solid var(--dcafp-line);
+  border-radius: var(--dcafp-r-el);
+  transition: background .15s ease, border-color .15s ease;
+}
+.dcafp-codebtn:hover { background: var(--dcafp-brand-50); border-color: var(--dcafp-brand-100); }
+.dcafp-codebtn__k { font-size: 10.5px; font-weight: 700; letter-spacing: .6px; color: var(--dcafp-ink-3); }
+.dcafp-codebtn__v {
+  font-family: var(--dcafp-mono);
+  font-size: 13px;
+  font-weight: 750;
+  letter-spacing: .6px;
+  color: var(--dcafp-ink);
+}
+
+/* ── Formularios ──────────────────────────────────────────────────────── */
+.dcafp-label { display: block; font-size: 12.5px; font-weight: 700; color: var(--dcafp-ink-2); margin-bottom: 6px; }
+.dcafp-input,
+.dcafp-select,
+.dcafp-textarea {
+  width: 100%;
+  min-height: var(--dcafp-tap);
+  padding: 10px 13px;
+  border-radius: var(--dcafp-r-el);
+  border: 1px solid var(--dcafp-line);
+  background: var(--dcafp-surface);
+  color: var(--dcafp-ink);
+  font-size: 14px;
+  outline: none;
+}
+.dcafp-textarea { min-height: 96px; resize: vertical; line-height: 1.5; }
+.dcafp-input::placeholder, .dcafp-textarea::placeholder { color: var(--dcafp-ink-4); }
+.dcafp-input:focus, .dcafp-select:focus, .dcafp-textarea:focus { border-color: var(--dcafp-brand-300); }
+.dcafp-input:disabled, .dcafp-select:disabled, .dcafp-textarea:disabled {
+  opacity: .6;
+  cursor: not-allowed;
+  background: var(--dcafp-surface-2);
+}
+.dcafp-hint { font-size: 12px; color: var(--dcafp-ink-3); line-height: 1.45; }
+
+/* Caja de solo lectura para URLs. */
+.dcafp-urlbox {
+  flex: 1;
+  min-width: 0;
+  height: var(--dcafp-tap);
+  padding: 0 12px;
+  border-radius: var(--dcafp-r-el);
+  background: var(--dcafp-surface-2);
+  border: 1px solid var(--dcafp-line);
+  color: var(--dcafp-ink-2);
+  font-family: var(--dcafp-mono);
+  font-size: 12.5px;
+  outline: none;
+}
+
+/* ── Avisos ───────────────────────────────────────────────────────────── */
+.dcafp-note {
+  padding: 12px 16px;
+  border-radius: 12px;
+  font-size: 13px;
+  line-height: 1.55;
+  border: 1px solid var(--dcafp-line);
+  background: var(--dcafp-surface-2);
+  color: var(--dcafp-ink-2);
+}
+.dcafp-note--warn   { background: var(--dcafp-warn-tint); border-color: var(--dcafp-warn-line); color: var(--dcafp-warn-ink); }
+.dcafp-note--brand  { background: var(--dcafp-brand-50); border-color: var(--dcafp-brand-100); color: var(--dcafp-ink-2); }
+.dcafp-note--danger { background: var(--dcafp-danger-bg); border-color: var(--dcafp-danger-line); color: var(--dcafp-danger); }
+.dcafp-note--ok     { background: var(--dcafp-ok-bg); border-color: var(--dcafp-ok-line); color: var(--dcafp-ok-ink); }
+
+/* Pie de nota con icono — el "El conteo debe sostenerse 3 meses…". */
+.dcafp-footnote {
+  display: flex;
+  gap: 7px;
+  align-items: flex-start;
+  font-size: 12.5px;
+  color: var(--dcafp-ink-3);
+  line-height: 1.55;
+}
+.dcafp-footnote > svg { flex: 0 0 auto; margin-top: 1px; }
+
+/* ── Barra de progreso ────────────────────────────────────────────────── */
+.dcafp-bar {
+  position: relative;
+  height: 12px;
+  background: var(--dcafp-brand-75);
+  border-radius: var(--dcafp-r-pill);
+  overflow: hidden;
+}
+.dcafp-bar__fill {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  background: var(--dcafp-grad-bar);
+  border-radius: var(--dcafp-r-pill);
+}
+/* Muescas: parten la pista en tramos para que el avance se lea sin cifras.
+   Van encima del relleno, con blanco translúcido para no borrarlo. */
+.dcafp-bar__tick {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: rgba(255, 255, 255, .85);
+}
+
+/* ── Estado vacío ─────────────────────────────────────────────────────── */
+.dcafp-empty {
+  padding: 30px 20px 26px;
+  border: 1.5px dashed var(--dcafp-line);
+  border-radius: 14px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 10px;
+}
+.dcafp-empty__ico {
+  width: 46px;
+  height: 46px;
+  border-radius: 14px;
+  background: var(--dcafp-brand-50);
+  color: var(--dcafp-brand);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+}
+.dcafp-empty__title { font-size: 14.5px; font-weight: 750; color: var(--dcafp-ink); }
+.dcafp-empty__text {
+  max-width: 430px;
+  font-size: 13px;
+  color: var(--dcafp-ink-3);
+  line-height: 1.55;
+}
+
+/* ── Tabla ────────────────────────────────────────────────────────────────
+   Rejilla, no <table>: el diseño alinea columnas de ancho fijo y en móvil
+   necesita esconder una entera sin dejar un hueco. Las columnas las declara
+   cada página con `--dcafp-cols`. */
+.dcafp-thead,
+.dcafp-trow {
+  display: grid;
+  grid-template-columns: var(--dcafp-cols, 1fr);
+  gap: 0 14px;
+  align-items: center;
+  padding: 0 24px;
+}
+.dcafp-thead {
+  padding: 12px 24px 10px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .8px;
+  color: var(--dcafp-ink-4);
+  border-bottom: 1px solid var(--dcafp-line-soft);
+  text-transform: uppercase;
+}
+.dcafp-trow {
+  min-height: 50px;
+  border-bottom: 1px solid var(--dcafp-line-faint);
+  font-size: 13.5px;
+  color: var(--dcafp-ink);
+}
+.dcafp-trow:last-child { border-bottom: none; padding-bottom: 6px; }
+.dcafp-trow:hover { background: var(--dcafp-surface-2); }
+.dcafp-td--muted { color: var(--dcafp-ink-3); }
+.dcafp-td--name { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dcafp-td--num { text-align: right; font-weight: 750; font-variant-numeric: tabular-nums; }
+.dcafp-td--money { text-align: right; font-weight: 750; color: var(--dcafp-ok); font-variant-numeric: tabular-nums; }
+.dcafp-tfoot {
+  padding: 10px 24px;
+  font-size: 12px;
+  color: var(--dcafp-ink-3);
+  border-top: 1px solid var(--dcafp-line-soft);
+}
+/* Columna prescindible: se va cuando el bloque se estrecha. Su pareja
+   `--only-sm` hace lo contrario, y así un dato que pierde su columna puede
+   reaparecer DENTRO de otra celda en vez de desaparecer de la pantalla. */
+.dcafp-col-only-sm { display: none; }
+@container dcafp (max-width: 640px) {
+  .dcafp-thead, .dcafp-trow {
+    padding-left: 16px;
+    padding-right: 16px;
+    gap: 0 10px;
+    grid-template-columns: var(--dcafp-cols-sm, var(--dcafp-cols, 1fr));
+  }
+  /* La celda del medio crece a dos o tres renglones cuando recoge los datos
+     que perdieron su columna. Centrado, la fecha y el monto quedaban
+     flotando a media altura, lejos del nombre al que acompañan. */
+  .dcafp-trow { align-items: start; padding-top: 11px; padding-bottom: 11px; }
+  .dcafp-col-opt { display: none; }
+  .dcafp-col-only-sm { display: inline-flex; }
+  .dcafp-tfoot { padding-left: 16px; padding-right: 16px; }
+}
+
+/* Tabla clásica (<table>) para las pantallas que ya la usan y no vale la
+   pena reescribir a rejilla: mismo lenguaje, sin tocar su marcado. */
+.dcafp-table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+.dcafp-table th {
+  text-align: left;
+  padding: 12px 14px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .8px;
+  text-transform: uppercase;
+  color: var(--dcafp-ink-4);
+  border-bottom: 1px solid var(--dcafp-line-soft);
+  white-space: nowrap;
+}
+.dcafp-table td {
+  padding: 13px 14px;
+  border-bottom: 1px solid var(--dcafp-line-faint);
+  color: var(--dcafp-ink);
+  vertical-align: middle;
+}
+.dcafp-table tbody tr:last-child td { border-bottom: none; }
+.dcafp-table tbody tr:hover { background: var(--dcafp-surface-2); }
+/* Envoltorio que se lleva el scroll horizontal: a 375px la tabla desborda
+   dentro de SU caja, nunca el <body>. */
+.dcafp-scrollx { overflow-x: auto; max-width: 100%; }
+
+/* ── Rejillas de contenido ────────────────────────────────────────────────
+   Todas por @container: el ancho que importa es el del main, no el de la
+   ventana. */
+.dcafp-hero { display: grid; grid-template-columns: 1fr; gap: 20px; align-items: stretch; }
+@container dcafp (min-width: 820px) { .dcafp-hero { grid-template-columns: 1.2fr 1fr; } }
+
+.dcafp-grid2 { display: grid; grid-template-columns: 1fr; gap: 16px; align-items: start; }
+@container dcafp (min-width: 720px) { .dcafp-grid2 { grid-template-columns: 1fr 1fr; } }
+
+.dcafp-grid3 { display: grid; grid-template-columns: 1fr; gap: 16px; align-items: start; }
+@container dcafp (min-width: 640px) { .dcafp-grid3 { grid-template-columns: 1fr 1fr; } }
+@container dcafp (min-width: 940px) { .dcafp-grid3 { grid-template-columns: repeat(3, 1fr); } }
+
+/* Rejilla auto: se adapta sola, sin consultas. Para KPIs y escalones. */
+.dcafp-autogrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 250px), 1fr)); gap: 16px; }
+.dcafp-autogrid--sm { grid-template-columns: repeat(auto-fit, minmax(min(100%, 170px), 1fr)); gap: 14px; }
+
+/* ── KPI ──────────────────────────────────────────────────────────────── */
+.dcafp-kpi {
+  background: var(--dcafp-surface);
+  border: 1px solid var(--dcafp-line);
+  border-radius: var(--dcafp-r-card);
+  padding: 16px 18px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.dcafp-kpi__k { font-size: 11.5px; font-weight: 700; letter-spacing: .4px; color: var(--dcafp-ink-3); text-transform: uppercase; }
+.dcafp-kpi__v {
+  font-size: 24px;
+  font-weight: 800;
+  letter-spacing: -0.6px;
+  color: var(--dcafp-ink);
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+  line-height: 1.1;
+}
+.dcafp-kpi__sub { font-size: 12px; color: var(--dcafp-ink-3); line-height: 1.45; }
+
+/* ── Fila de enlace ───────────────────────────────────────────────────── */
+.dcafp-linkrow { display: flex; align-items: center; gap: 10px; min-height: var(--dcafp-tap); }
+.dcafp-linkrow__body { flex: 1; min-width: 0; }
+.dcafp-linkrow__k { font-size: 12px; font-weight: 700; color: var(--dcafp-ink-2); }
+.dcafp-code {
+  display: block;
+  font-family: var(--dcafp-mono);
+  font-size: 12.5px;
+  color: var(--dcafp-ink-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.dcafp-code--lead { font-size: 14.5px; font-weight: 600; color: var(--dcafp-ink); }
+/* Caja morada del link recomendado. */
+.dcafp-linkhero {
+  background: var(--dcafp-brand-50);
+  border: 1px solid var(--dcafp-brand-100);
+  border-radius: var(--dcafp-r-box);
+  padding: 13px 15px;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+.dcafp-linkhero__row { display: flex; align-items: center; gap: 10px; min-width: 0; }
+/* Por debajo de ~430px el botón "Copiar" y la URL no caben en un renglón:
+   la URL pasa arriba y el botón ocupa el ancho. */
+@container dcafp (max-width: 430px) {
+  .dcafp-linkhero__row { flex-wrap: wrap; }
+  .dcafp-linkhero__row .dcafp-btn { width: 100%; }
+}
+
+/* ═════════════════════════════════════════════════════════════════════════
+   PIEZAS 3D · portadas del diseño tal cual
+   Solo `transform` y `opacity`: ni un reflow. Todas van con aria-hidden en
+   el marcado — son adorno, no información.
+   ═════════════════════════════════════════════════════════════════════════ */
+@keyframes dcafpSway { 0%, 100% { transform: rotateX(-14deg) rotateY(-28deg); } 50% { transform: rotateX(-10deg) rotateY(28deg); } }
+@keyframes dcafpSpinY { from { transform: rotateY(18deg); } to { transform: rotateY(378deg); } }
+@keyframes dcafpSpinZ { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+@keyframes dcafpToastIn { from { opacity: 0; transform: translate(-50%, 8px); } to { opacity: 1; transform: translate(-50%, 0); } }
+
+.dcafp-sway  { animation: dcafpSway 16s linear infinite; }
+.dcafp-spinY { animation: dcafpSpinY 13s linear infinite; }
+.dcafp-spinZ { animation: dcafpSpinZ 18s linear infinite; }
+
+.dcafp-3d { position: relative; transform-style: preserve-3d; }
+.dcafp-3d__stage { display: flex; align-items: center; justify-content: center; }
+.dcafp-3d__shadow {
+  height: 8px;
+  border-radius: 50%;
+  background: radial-gradient(ellipse at center, rgba(15, 23, 42, .16), rgba(15, 23, 42, 0) 70%);
+  margin-top: -3px;
+}
+/* El canto de cada moneda. Es un ::before y no un <div> porque el disco ya
+   lleva `inset:3px` y un hijo heredaría ese recorte: aquí se pinta detrás,
+   desplazado en Z, para que la pila se vea con grosor. */
+.dcafp-coin::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: #b45309;
+  transform: translateZ(-3px);
+}
+
+/* ── Escalón del bono ─────────────────────────────────────────────────────
+   Pieza 3D a la izquierda, cifras a la derecha. Tres estados: pendiente
+   (gris), siguiente meta (morado con etiqueta) y cobrado (ámbar). */
+.dcafp-tier {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--dcafp-surface-2);
+  border: 1px solid var(--dcafp-line);
+  border-radius: var(--dcafp-r-card);
+  padding: 16px;
+  min-width: 0;
+}
+.dcafp-tier--next {
+  background: var(--dcafp-surface);
+  border: 1.5px solid var(--dcafp-brand-300);
+  box-shadow: var(--dcafp-shadow-tier);
+}
+.dcafp-tier--done { background: var(--dcafp-warn-tint); border-color: var(--dcafp-warn-line); }
+.dcafp-tier__tag {
+  position: absolute;
+  top: -11px;
+  left: 16px;
+  background: var(--dcafp-brand);
+  color: #fff;
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 1px;
+  padding: 4px 10px;
+  border-radius: var(--dcafp-r-pill);
+  white-space: nowrap;
+}
+.dcafp-tier__body { min-width: 0; }
+.dcafp-tier__k { font-size: 12.5px; font-weight: 700; color: var(--dcafp-ink-3); }
+.dcafp-tier--done .dcafp-tier__k { color: var(--dcafp-warn-ink); }
+.dcafp-tier__v {
+  font-size: 24px;
+  font-weight: 800;
+  letter-spacing: -0.6px;
+  color: var(--dcafp-ink);
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+  line-height: 1.15;
+}
+.dcafp-tier__note { margin-top: 4px; font-size: 12px; font-weight: 600; color: var(--dcafp-ink-3); }
+.dcafp-tier__note--next { font-weight: 700; color: var(--dcafp-brand-deep); }
+
+/* ── Toast de copiado ─────────────────────────────────────────────────── */
+.dcafp-toast {
+  position: fixed;
+  left: 50%;
+  bottom: 26px;
+  transform: translateX(-50%);
+  background: var(--dcafp-ink);
+  color: #fff;
+  padding: 13px 22px;
+  border-radius: var(--dcafp-r-pill);
+  font-size: 14px;
+  font-weight: 600;
+  box-shadow: 0 12px 30px rgba(15, 23, 42, .35);
+  z-index: 60;
+  animation: dcafpToastIn .18s ease-out;
+  max-width: calc(100vw - 32px);
+  text-align: center;
+}
+
+/* ═════════════════════════════════════════════════════════════════════════
+   COMPATIBILIDAD · componentes que aún no llevan clases dcafp
+   `.dcafp .card` (0,2,0) le gana a `.card` (0,1,0) de globals.css. Es la
+   segunda red —además del remapeo de tokens— para que ninguna pantalla se
+   quede con el chrome oscuro al lado de una tarjeta nueva.
+   ═════════════════════════════════════════════════════════════════════════ */
+.dcafp .card {
+  background: var(--dcafp-surface);
+  border: 1px solid var(--dcafp-line);
+  border-radius: var(--dcafp-r-card);
+  box-shadow: none;
+}
+.dcafp .card__header { border-bottom: 1px solid var(--dcafp-line-soft); }
+.dcafp .card__title { font-size: 16.5px; font-weight: 800; letter-spacing: -0.2px; color: var(--dcafp-ink); }
+.dcafp .card__sub { font-size: 13px; color: var(--dcafp-ink-3); }
+
+.dcafp .table-new th {
+  color: var(--dcafp-ink-4);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .8px;
+  text-transform: uppercase;
+  border-bottom: 1px solid var(--dcafp-line-soft);
+  background: transparent;
+}
+.dcafp .table-new td { border-bottom: 1px solid var(--dcafp-line-faint); color: var(--dcafp-ink); }
+.dcafp .table-new tbody tr:hover { background: var(--dcafp-surface-2); }
+
+.dcafp .btn-new { border-radius: var(--dcafp-r-el); font-weight: 700; }
+.dcafp .btn-new--primary { background: var(--dcafp-brand); color: #fff; box-shadow: none; }
+.dcafp .btn-new--primary:hover { background: var(--dcafp-brand-deep); box-shadow: none; }
+.dcafp .btn-new--secondary { background: var(--dcafp-surface); border: 1px solid var(--dcafp-line); color: var(--dcafp-ink-2); }
+.dcafp .btn-new--secondary:hover { background: var(--dcafp-brand-50); color: var(--dcafp-brand-deep); }
+
+.dcafp .input-new {
+  background: var(--dcafp-surface);
+  border: 1px solid var(--dcafp-line);
+  color: var(--dcafp-ink);
+  border-radius: var(--dcafp-r-el);
+}
+.dcafp .input-new::placeholder { color: var(--dcafp-ink-4); }
+
+.dcafp .badge-new { border-radius: var(--dcafp-r-pill); font-weight: 700; }
+.dcafp .badge-new--success { background: var(--dcafp-ok-bg); color: var(--dcafp-ok-ink); border-color: var(--dcafp-ok-line); }
+.dcafp .badge-new--warning { background: var(--dcafp-warn-bg); color: var(--dcafp-warn-ink); border-color: var(--dcafp-warn-line); }
+.dcafp .badge-new--danger  { background: var(--dcafp-danger-bg); color: var(--dcafp-danger); border-color: var(--dcafp-danger-line); }
+.dcafp .badge-new--brand   { background: var(--dcafp-brand-50); color: var(--dcafp-brand-deep); border-color: var(--dcafp-brand-100); }
+.dcafp .badge-new--neutral { background: var(--dcafp-surface-2); color: var(--dcafp-ink-2); border-color: var(--dcafp-line); }
+
+.dcafp .icon-btn-new {
+  background: var(--dcafp-surface);
+  border: 1px solid var(--dcafp-line);
+  color: var(--dcafp-ink-2);
+  border-radius: var(--dcafp-r-el);
+}
+.dcafp .icon-btn-new:hover { background: var(--dcafp-brand-50); color: var(--dcafp-brand-deep); }
+
+/* ── Movimiento reducido ──────────────────────────────────────────────────
+   Las piezas 3D se CONGELAN (no desaparecen): quedan en su primer
+   fotograma, que ya es una pose legible. */
+@media (prefers-reduced-motion: reduce) {
+  .dcafp *,
+  .dcafp *::before,
+  .dcafp *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+  .dcafp-side { transition: none; }
+}

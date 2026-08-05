@@ -1,20 +1,31 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Download, FileSpreadsheet, FileText } from "lucide-react";
-import { CardNew } from "@/components/ui/design-system/card-new";
+import { Download } from "lucide-react";
+import { Note, PanelCard } from "@/components/afiliados/ui/panel-ui";
 
 /**
- * Cliente de /afiliados/reportes — dos tarjetas (idioma visual de inicio):
+ * Cliente de /afiliados/reportes — dos tarjetas:
  *  1. "Exportar a Excel": tipo (referidos | comisiones) + rango de fechas →
  *     /api/afiliados/reportes/export
  *  2. "Estado de cuenta (PDF)": mes → /api/afiliados/reportes/estado-cuenta
  * Validación suave en cliente (from ≤ to, rango ≤ 366 días) que deshabilita
- * el botón y muestra un hint. La validación dura vive en el endpoint.
+ * el botón y muestra un aviso. La validación dura vive en el endpoint.
+ *
+ * Estilo: clases `dcafp-*` de src/app/afiliados/panel.css. Los campos usan
+ * `dcafp-input` (44px táctiles) en vez de estilos inline propios, así que un
+ * cambio de radio o de borde en el panel llega solo hasta aquí.
  */
 
 const DAY_MS = 86_400_000;
 const MAX_RANGE_DAYS = 366;
+
+const REPORT_TYPES = [
+  { value: "referidos", label: "Referidos" },
+  { value: "comisiones", label: "Comisiones" },
+] as const;
+
+type ReportType = (typeof REPORT_TYPES)[number]["value"];
 
 function toInputDate(d: Date): string {
   const mm = String(d.getMonth() + 1).padStart(2, "0");
@@ -27,93 +38,8 @@ function currentMonthInput(): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
 }
 
-// ── Estilos compartidos (inputs dark estilo referral-links.tsx) ──────────
-
-const fieldStyle: React.CSSProperties = {
-  width: "100%",
-  height: 40,
-  padding: "0 12px",
-  borderRadius: 10,
-  background: "var(--bg-elev-2)",
-  border: "1px solid var(--border-soft)",
-  color: "var(--text-2)",
-  fontSize: 13,
-  outline: "none",
-  fontFamily: "inherit",
-  // color-scheme se hereda del tema (root claro / .dark) para que el picker
-  // nativo siga la Variante A en claro y el modo oscuro cuando aplique.
-};
-
-const labelStyle: React.CSSProperties = {
-  fontSize: 12,
-  fontWeight: 600,
-  color: "var(--text-3)",
-};
-
-const hintStyle: React.CSSProperties = {
-  fontSize: 12,
-  color: "var(--text-3)",
-  margin: 0,
-  lineHeight: 1.45,
-};
-
-const primaryBtn: React.CSSProperties = {
-  display: "inline-flex",
-  alignItems: "center",
-  justifyContent: "center",
-  gap: 8,
-  height: 40,
-  padding: "0 16px",
-  borderRadius: 10,
-  border: "1px solid var(--border-brand)",
-  background: "var(--brand-soft)",
-  color: "var(--violet-400)",
-  fontSize: 13,
-  fontWeight: 600,
-  cursor: "pointer",
-  fontFamily: "inherit",
-  transition: "all .15s",
-  alignSelf: "flex-start",
-};
-
-function CardHeader({
-  icon: Icon,
-  title,
-  sub,
-}: {
-  icon: React.ComponentType<{ size?: number | string }>;
-  title: string;
-  sub: string;
-}) {
-  return (
-    <div style={{ display: "flex", alignItems: "flex-start", gap: 12, marginBottom: 14 }}>
-      <div
-        style={{
-          width: 34,
-          height: 34,
-          borderRadius: 10,
-          flexShrink: 0,
-          display: "grid",
-          placeItems: "center",
-          background: "var(--brand-soft)",
-          border: "1px solid var(--border-brand)",
-          color: "var(--violet-400)",
-        }}
-      >
-        <Icon size={18} />
-      </div>
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: 15, fontWeight: 600, color: "var(--text-1)", letterSpacing: "-0.01em" }}>
-          {title}
-        </div>
-        <div style={{ fontSize: 13, color: "var(--text-3)", marginTop: 2, lineHeight: 1.45 }}>{sub}</div>
-      </div>
-    </div>
-  );
-}
-
 export function ReportesClient() {
-  const [type, setType] = useState<"referidos" | "comisiones">("referidos");
+  const [type, setType] = useState<ReportType>("referidos");
   const [from, setFrom] = useState<string>(() => toInputDate(new Date(Date.now() - 30 * DAY_MS)));
   const [to, setTo] = useState<string>(() => toInputDate(new Date()));
   const [month, setMonth] = useState<string>(currentMonthInput);
@@ -144,87 +70,72 @@ export function ReportesClient() {
   }
 
   return (
-    <div
-      style={{
-        display: "grid",
-        gridTemplateColumns: "repeat(auto-fit, minmax(min(300px, 100%), 1fr))",
-        gap: 14,
-      }}
-    >
+    <div className="dcafp-grid2">
       {/* ── Exportar a Excel ── */}
-      <CardNew>
-        <CardHeader
-          icon={FileSpreadsheet}
-          title="Exportar a Excel"
-          sub="Elige qué quieres exportar y el rango de fechas; descargas un .xlsx al instante."
-        />
-        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-            <span style={labelStyle}>Tipo de reporte</span>
-            <div role="radiogroup" aria-label="Tipo de reporte" style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-              {(["referidos", "comisiones"] as const).map((t) => {
-                const active = type === t;
+      <PanelCard
+        title="Exportar a Excel"
+        sub="Elige qué quieres exportar y el rango de fechas; descargas un .xlsx al instante."
+      >
+        <div style={{ display: "flex", flexDirection: "column", gap: 14, minWidth: 0 }}>
+          <div>
+            <span className="dcafp-label" id="reporte-tipo-label">
+              Tipo de reporte
+            </span>
+            <div
+              role="radiogroup"
+              aria-labelledby="reporte-tipo-label"
+              style={{ display: "flex", gap: 8, flexWrap: "wrap" }}
+            >
+              {REPORT_TYPES.map((t) => {
+                const active = type === t.value;
                 return (
                   <button
-                    key={t}
+                    key={t.value}
                     type="button"
                     role="radio"
                     aria-checked={active}
-                    onClick={() => setType(t)}
-                    style={{
-                      height: 34,
-                      padding: "0 14px",
-                      borderRadius: 999,
-                      border: `1px solid ${active ? "var(--border-brand)" : "var(--border-soft)"}`,
-                      background: active ? "var(--brand-soft)" : "var(--bg-elev-2)",
-                      color: active ? "var(--violet-400)" : "var(--text-2)",
-                      fontSize: 13,
-                      fontWeight: 600,
-                      cursor: "pointer",
-                      fontFamily: "inherit",
-                      transition: "all .15s",
-                    }}
+                    onClick={() => setType(t.value)}
+                    className={`dcafp-btn${active ? " dcafp-btn--outline" : ""}`}
                   >
-                    {t === "referidos" ? "Referidos" : "Comisiones"}
+                    {t.label}
                   </button>
                 );
               })}
             </div>
           </div>
 
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: 10 }}>
-            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-              <label htmlFor="reporte-desde" style={labelStyle}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 140px), 1fr))", gap: 12 }}>
+            <div style={{ minWidth: 0 }}>
+              <label htmlFor="reporte-desde" className="dcafp-label">
                 Desde
               </label>
               <input
                 id="reporte-desde"
                 type="date"
+                className="dcafp-input"
                 value={from}
                 max={to || undefined}
                 onChange={(e) => setFrom(e.target.value)}
-                style={fieldStyle}
               />
             </div>
-            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-              <label htmlFor="reporte-hasta" style={labelStyle}>
+            <div style={{ minWidth: 0 }}>
+              <label htmlFor="reporte-hasta" className="dcafp-label">
                 Hasta
               </label>
               <input
                 id="reporte-hasta"
                 type="date"
+                className="dcafp-input"
                 value={to}
                 min={from || undefined}
                 onChange={(e) => setTo(e.target.value)}
-                style={fieldStyle}
               />
             </div>
           </div>
 
-          {rangeHint && (
-            <p style={{ ...hintStyle, color: "var(--warning, #fbbf24)" }}>{rangeHint}</p>
-          )}
-          <p style={hintStyle}>
+          {rangeHint && <Note tone="warn">{rangeHint}</Note>}
+
+          <p className="dcafp-hint">
             Incluye solo tus referidos; los datos de cada clínica se limitan a nombre y estado.
           </p>
 
@@ -232,57 +143,53 @@ export function ReportesClient() {
             type="button"
             onClick={downloadExcel}
             disabled={excelDisabled}
-            style={{
-              ...primaryBtn,
-              opacity: excelDisabled ? 0.5 : 1,
-              cursor: excelDisabled ? "not-allowed" : "pointer",
-            }}
+            className="dcafp-btn dcafp-btn--primary"
+            style={{ alignSelf: "flex-start" }}
           >
             <Download size={15} />
             Descargar Excel
           </button>
         </div>
-      </CardNew>
+      </PanelCard>
 
       {/* ── Estado de cuenta (PDF) ── */}
-      <CardNew>
-        <CardHeader
-          icon={FileText}
-          title="Estado de cuenta (PDF)"
-          sub="Desglose mensual de tus comisiones: monto, estado y total del mes."
-        />
-        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-          <div style={{ display: "flex", flexDirection: "column", gap: 6, maxWidth: 240 }}>
-            <label htmlFor="reporte-mes" style={labelStyle}>
+      <PanelCard
+        title="Estado de cuenta (PDF)"
+        sub="Desglose mensual de tus comisiones: monto, estado y total del mes."
+      >
+        <div style={{ display: "flex", flexDirection: "column", gap: 14, minWidth: 0 }}>
+          <div style={{ maxWidth: 240, minWidth: 0 }}>
+            <label htmlFor="reporte-mes" className="dcafp-label">
               Mes
             </label>
             <input
               id="reporte-mes"
               type="month"
+              className="dcafp-input"
               value={month}
               max={currentMonthInput()}
               onChange={(e) => setMonth(e.target.value)}
-              style={fieldStyle}
             />
           </div>
-          <p style={hintStyle}>
+
+          {pdfDisabled && <Note tone="warn">Elige un mes válido para poder descargar.</Note>}
+
+          <p className="dcafp-hint">
             Elige el mes y descarga tu estado de cuenta listo para guardar o compartir con tu contador.
           </p>
+
           <button
             type="button"
             onClick={downloadPdf}
             disabled={pdfDisabled}
-            style={{
-              ...primaryBtn,
-              opacity: pdfDisabled ? 0.5 : 1,
-              cursor: pdfDisabled ? "not-allowed" : "pointer",
-            }}
+            className="dcafp-btn dcafp-btn--primary"
+            style={{ alignSelf: "flex-start" }}
           >
             <Download size={15} />
             Descargar PDF
           </button>
         </div>
-      </CardNew>
+      </PanelCard>
     </div>
   );
 }
