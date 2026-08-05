@@ -425,11 +425,16 @@ export function PatientNavBar({
 
         {/* Capa espejo: fuera de flujo e invisible, conserva el ancho NATURAL de
             cada botón (la fila real recorta). De aquí salen las medidas del
-            corte; nunca es navegable ni la ve un lector de pantalla. */}
-        <div className={styles.patientNavMeasure} ref={measureRef} aria-hidden>
-          {mainItems.map((item) => renderItem(item, { measuring: true }))}
-          {renderMoreButton({ measuring: true })}
-          {renderAdminButton({ measuring: true })}
+            corte; nunca es navegable ni la ve un lector de pantalla.
+            El envoltorio .patientNavMeasureClip la RECORTA: invisible no es lo
+            mismo que inexistente, y sus ~2000px de ancho le daban scroll
+            horizontal al panel entero (ver el CSS). */}
+        <div className={styles.patientNavMeasureClip} aria-hidden>
+          <div className={styles.patientNavMeasure} ref={measureRef}>
+            {mainItems.map((item) => renderItem(item, { measuring: true }))}
+            {renderMoreButton({ measuring: true })}
+            {renderAdminButton({ measuring: true })}
+          </div>
         </div>
       </nav>
     </div>

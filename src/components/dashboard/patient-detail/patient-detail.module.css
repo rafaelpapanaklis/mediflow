@@ -699,10 +699,27 @@
   gap: 6px;
   overflow: hidden;
 }
+/* Recorte de la capa espejo. IMPRESCINDIBLE, no cosmético: `visibility: hidden`
+   esconde la capa pero NO la saca de la región de overflow desplazable, así que
+   sus ~2000px de ancho natural le metían scroll horizontal AL PANEL ENTERO
+   (medido: scrollWidth 2006 vs clientWidth 1673 a 1920px, y hasta +900px en
+   laptop). Este envoltorio la recorta contra la barra —`overflow: hidden` sí
+   corta la propagación del overflow— sin tocar la barra en sí, que debe seguir
+   con overflow visible para que el anillo de foco de los items se pinte entero. */
+.patientNavMeasureClip {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  visibility: hidden;
+  pointer-events: none;
+}
 /* Capa espejo de medición — fuera de flujo, invisible y sin capturar clics.
    `width: max-content` para que cada botón conserve su ancho NATURAL (la fila
-   real recorta, así que ahí no se puede medir). El componente lee el gap de
-   .patientNavRow con getComputedStyle: si cambias uno, cambia el otro. */
+   real recorta, así que ahí no se puede medir). Que el recorte de arriba la
+   corte visualmente no afecta a la medición: getBoundingClientRect() sigue
+   devolviendo el ancho de layout. El componente lee el gap de .patientNavRow
+   con getComputedStyle: si cambias uno, cambia el otro (incluido el bloque
+   `pointer: coarse` del final). */
 .patientNavMeasure {
   position: absolute;
   top: 0;
@@ -711,8 +728,6 @@
   align-items: center;
   gap: 6px;
   width: max-content;
-  visibility: hidden;
-  pointer-events: none;
 }
 .patientNavItem {
   display: inline-flex;
