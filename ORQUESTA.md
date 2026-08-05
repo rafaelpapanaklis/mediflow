@@ -3976,3 +3976,60 @@ solo a datos verdaderos, con sus reglas de privacidad intactas (nada de ids, est
 5+ afiliados, máximo 2 por afiliado). Los **ajustes de ritmo** (6-8 s la primera, 5-6 s de
 vida, 9-18 s de hueco) y el **tope de retención por hover** quedaron sin tocar, igual que
 `globals.css`, el motor de comisiones, la calculadora y los hitos.
+
+---
+
+## [Sello «Datos cifrados» · footers públicos + login] — 2026-08-04
+
+Commit **`9a1ed79e`** en `main` (directo, sin PR). Sin SQL, sin envs, sin dependencias.
+
+### Archivos
+
+- **`src/components/public/landing/primitives/secure-badge.tsx`** — NUEVO. Componente de
+  presentación puro: sin `"use client"`, sin estado y sin efectos, para que sirva igual en los
+  dos footers (server) y dentro del login (client) sin arrastrar a nadie al bundle de cliente.
+- **`src/components/public/landing/sales/footer.tsx`** — `<SecureBadge tone="dark" />` entre el
+  `©` y «Hecho en México», más `alignItems: "center"` en esa barra (sin él la pastilla se
+  estiraba a la altura de la fila en vez de quedar centrada).
+- **`src/components/public/landing/footer.tsx`** — `<SecureBadge tone="token" />` como hijo del
+  medio de `.ld-footer-bottom`: queda `[logo + ©] · [sello] · [redes]`. No se tocó su CSS; el
+  media query de 768px que pasa esa fila a columna ya funcionaba con tres hijos.
+- **`src/components/public/auth/login/login-form.tsx`** — el sello en versión `light` justo
+  debajo del `</form>` y antes de «¿No tienes cuenta?». La lógica de fail-ban quedó intacta.
+
+### El copy es el que se puede sostener con el código
+
+«Datos cifrados» + «TLS + AES-256». Es lo verificable: TLS en tránsito, AES-256 en reposo y el
+sobre AES-256-GCM de `src/lib/crypto/envelope.ts`. **Nada de «100% seguro», «extremo a extremo»
+ni «certificado»**: no son ciertos y son reclamables. El `title`/`aria-label` dicen la frase
+larga («Cifrado TLS en tránsito y AES-256 en reposo») para que el lector de pantalla no reciba
+sólo la sigla.
+
+### Tres tonos porque son tres fondos
+
+`dark` con hex fijos para el `SalesFooter` (#080d1a); `token` con los `--ld-*` para el footer
+viejo, que vive bajo el tema de la landing y seguiría el tema si esas páginas dejaran de ser
+oscuras; `light` para la tarjeta blanca del login. Bajo **380px** el `@media` local del
+componente esconde el separador y «TLS + AES-256» y deja sólo «Datos cifrados» — ahí `@media` sí
+es correcto: no hay sidebar que cambie el ancho real del contenedor (footer a todo lo ancho,
+tarjeta de login ocupando casi el viewport).
+
+### Presupuesto: cero peso extra
+
+El icono va **inline como SVG**, no como archivo: ni una request más, ni PSI móvil ni CLS
+tocados. No se editaron `globals.css` ni `landing-v2.css`, no hay `href` (el sello **no** es un
+enlace) y ningún otro copy de la landing cambió.
+
+### Build
+
+`npm run build` completo y **verde**, sin pipe: `prisma generate` OK, tipos OK, **360/360**
+páginas prerenderizadas y tabla de rutas impresa. Los `prisma:error` de `DATABASE_URL` del
+prerender son los de siempre (no hay `.env` local). Warnings preexistentes sin relación: las 3
+clases ambiguas de Tailwind y el `Critical dependency` de `file-type`.
+
+### Dónde se ve ahora el sello
+
+- **`SalesFooter`** → home, blog, `/casos-de-uso`, `/herramientas`, `/descubre`, las 8 páginas de
+  módulo y `/afiliados`.
+- **`Footer`** → páginas de especialidad `/[slug]` y `/roadmap`.
+- **Login** (`/login`) → dentro de la tarjeta blanca, bajo el botón de «Iniciar sesión».
