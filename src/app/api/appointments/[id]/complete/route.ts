@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { loadClinicSession } from "@/lib/agenda/api-helpers";
+import { loadClinicSession, requireRole } from "@/lib/agenda/api-helpers";
 import { appointmentToDTO } from "@/lib/agenda/server";
 import { revalidateAfter, revalidatePatientProfile } from "@/lib/cache/revalidate";
 import {
@@ -38,6 +38,14 @@ interface Params { params: { id: string } }
 export async function PATCH(req: NextRequest, { params }: Params) {
   const session = await loadClinicSession();
   if (session instanceof NextResponse) return session;
+
+  // Gate de rol (P1-1): cerrar la cita FIRMA la nota clínica (specialtyData
+  // status:"SIGNED") — el evento legalmente decisivo de NOM-004. Es un acto
+  // clínico: DOCTOR/ADMIN/SUPER_ADMIN, igual que COMPLETED en la matriz de
+  // transitions. Antes esta ruta no tenía ningún gate y cualquier sesión de la
+  // clínica (READONLY o recepción) quedaba registrada como firmante.
+  const forbidden = requireRole(session, ["DOCTOR", "ADMIN", "SUPER_ADMIN"]);
+  if (forbidden) return forbidden;
 
   const body = await req.json().catch(() => ({}));
   const parsed = Schema.safeParse(body);

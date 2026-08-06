@@ -26,6 +26,12 @@ const TRANSITIONS: Transition[] = [
   // ── SCHEDULED ────────────────────────────────────────────────────
   { from: "SCHEDULED",   to: "CONFIRMED",   allowedRoles: FRONT_DESK },
   { from: "SCHEDULED",   to: "CHECKED_IN",  allowedRoles: FRONT_DESK },
+  // Mismos atajos clínicos que CONFIRMED: en la práctica muchas citas nunca
+  // pasan por "Confirmada" y el doctor arranca directo desde "Agendada".
+  // Sin estas dos entradas, al volver canTransition una validación real ese
+  // flujo cotidiano quedaría bloqueado con un 409.
+  { from: "SCHEDULED",   to: "IN_CHAIR",    allowedRoles: CLINICAL },
+  { from: "SCHEDULED",   to: "IN_PROGRESS", allowedRoles: CLINICAL },
   { from: "SCHEDULED",   to: "CANCELLED",   allowedRoles: FRONT_DESK },
   { from: "SCHEDULED",   to: "NO_SHOW",     allowedRoles: FRONT_DESK, predicate: noShowOk },
 
@@ -67,6 +73,10 @@ const TRANSITIONS: Transition[] = [
 
   // ── COMPLETED ────────────────────────────────────────────────────
   { from: "COMPLETED",   to: "CHECKED_OUT", allowedRoles: FRONT_DESK },
+  // Escape para el clic equivocado (se completó la cita que no era), simétrico
+  // a los de CANCELLED/NO_SHOW y también solo de admin: revierte el estado,
+  // no la firma de la nota (esa queda en el expediente y en el AuditLog).
+  { from: "COMPLETED",   to: "SCHEDULED",   allowedRoles: ADMINS },
 
   // ── CANCELLED / NO_SHOW (terminales con escape) ──────────────────
   { from: "CANCELLED",   to: "SCHEDULED",   allowedRoles: ADMINS },
@@ -76,22 +86,50 @@ const TRANSITIONS: Transition[] = [
 export interface TransitionCheckResult {
   ok: boolean;
   error?: string;
+  /**
+   * Por qué falló, para que el endpoint elija el status HTTP: `forbidden_role`
+   * es un problema de PERMISO (403); el resto son de ESTADO (409).
+   */
+  code?: "same_status" | "not_allowed" | "forbidden_role";
 }
 
+/**
+ * Validación REAL de la máquina de estados: la transición debe existir en
+ * TRANSITIONS, el rol debe estar en su allowlist y su predicate (si tiene)
+ * debe pasar. Antes esto era un no-op que devolvía {ok:true} siempre
+ * (P1-1 auditoría 2026-08-06): cualquier sesión de la clínica —READONLY
+ * incluido— cancelaba o completaba cualquier cita por PATCH /status, y el
+ * requireRole del DELETE era teatro porque /status lo puenteaba. READONLY no
+ * aparece en ninguna allowlist: para él toda transición es forbidden_role.
+ */
 export function canTransition(
   from: AppointmentStatus,
   to: AppointmentStatus,
-  _role: UserRole,
-  _now: Date,
-  _appointmentStart: Date,
+  role: UserRole,
+  now: Date,
+  appointmentStart: Date,
 ): TransitionCheckResult {
-  // Transiciones LIBRES: el staff puede corregir el estado de una cita a
-  // cualquier otro (p. ej. volver de Confirmada a Pendiente). El permiso de
-  // gestión ya lo valida el endpoint (sesión de clínica + doctor-dueño); aquí
-  // solo bloqueamos el no-op. La matriz TRANSITIONS se conserva para
-  // availableTransitions/analytics, pero ya no restringe el cambio manual.
   if (from === to) {
-    return { ok: false, error: "La cita ya está en ese estado." };
+    return { ok: false, code: "same_status", error: "La cita ya está en ese estado." };
+  }
+  const entry = TRANSITIONS.find((t) => t.from === from && t.to === to);
+  if (!entry) {
+    return {
+      ok: false,
+      code: "not_allowed",
+      error: `No se puede pasar una cita de ${from} a ${to}.`,
+    };
+  }
+  if (!entry.allowedRoles.includes(role)) {
+    return {
+      ok: false,
+      code: "forbidden_role",
+      error: "Tu rol no permite este cambio de estado.",
+    };
+  }
+  const predicateError = entry.predicate ? entry.predicate(now, appointmentStart) : null;
+  if (predicateError) {
+    return { ok: false, code: "not_allowed", error: predicateError };
   }
   return { ok: true };
 }
@@ -113,9 +151,9 @@ export function availableTransitions(
 /**
  * Lista de targets válidos desde un status, ignorando rol y predicates.
  * Usado por la UI del panel detail para filtrar visualmente botones.
- * El server (PATCH /api/appointments/[id]/status) sigue validando rol +
- * predicates con canTransition; si el usuario no tiene permiso, recibe 409
- * y la UI muestra el toast de error.
+ * El server (PATCH /api/appointments/[id]/status) valida con canTransition:
+ * transición fuera de la matriz o predicate fallido → 409; rol sin permiso
+ * → 403. La UI muestra el `reason` en el toast de error.
  */
 export function possibleTransitions(from: AppointmentStatus): AppointmentStatus[] {
   // Todos los estados (menos el actual): la UI ofrece pasar a cualquiera.

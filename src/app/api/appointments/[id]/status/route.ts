@@ -64,6 +64,9 @@ export async function PATCH(
       { status: 409 },
     );
   }
+  // Máquina de estados REAL (P1-1): matriz + rol + predicate. Antes canTransition
+  // era un no-op y cualquier sesión de la clínica (READONLY incluido) cancelaba
+  // o completaba citas por aquí, puenteando el requireRole del DELETE.
   const check = canTransition(
     existing.status as Exclude<typeof existing.status, "PENDING">,
     body.status,
@@ -72,6 +75,13 @@ export async function PATCH(
     existing.startsAt,
   );
   if (!check.ok) {
+    // Rol sin permiso = 403 (problema de QUIÉN); estado inválido = 409 (de QUÉ).
+    if (check.code === "forbidden_role") {
+      return NextResponse.json(
+        { error: "forbidden", reason: check.error },
+        { status: 403 },
+      );
+    }
     return NextResponse.json(
       { error: "invalid_transition", reason: check.error },
       { status: 409 },
