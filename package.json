@@ -15,6 +15,7 @@
     "test:marketplace-pricing": "tsx --test src/lib/marketplace/pricing.test.ts",
     "test:agenda": "tsx --test src/lib/agenda/date-ranges.test.ts",
     "test:permissions": "tsx --test src/lib/auth/__tests__/permissions-matrix.test.ts",
+    "test:patient-visibility": "tsx --test src/lib/__tests__/patient-visibility.test.ts",
     "test:public-slots": "tsx --test src/lib/public-booking/__tests__/slots.test.ts",
     "test:clinic-hours": "tsx --test src/lib/agenda/__tests__/clinic-hours.test.ts",
     "test:agenda-transitions": "tsx --test src/lib/agenda/__tests__/transitions.test.ts",
