@@ -16,10 +16,10 @@ import {
 } from "@/lib/agenda/server";
 import {
   dayRangeUtc,
-  getTzParts,
   isValidDateISO,
   todayInTz,
 } from "@/lib/agenda/time-utils";
+import { scheduleViolation } from "@/lib/agenda/clinic-hours";
 import { canOverrideOverlap } from "@/lib/agenda/transitions";
 import {
   ensureUserCanSeePatient,
@@ -44,22 +44,6 @@ const APPT_INCLUDE = {
   patient: { select: { id: true, firstName: true, lastName: true } },
   doctor:  { select: { id: true, firstName: true, lastName: true } },
 } as const;
-
-function isWithinClinicHours(
-  startsAt: Date,
-  endsAt: Date,
-  timezone: string,
-  dayStart: number,
-  dayEnd: number,
-): { ok: true } | { ok: false; reason: "before_open" | "after_close" } {
-  const s = getTzParts(startsAt, timezone);
-  const e = getTzParts(endsAt, timezone);
-  const startMin = s.hour * 60 + s.minute;
-  const endMin = e.hour * 60 + e.minute;
-  if (startMin < dayStart * 60) return { ok: false, reason: "before_open" };
-  if (endMin > dayEnd * 60) return { ok: false, reason: "after_close" };
-  return { ok: true };
-}
 
 // ═════════════════════════════════════════════════════════════════
 // GET /api/appointments?date=&doctorId=&resourceId=&status=
@@ -146,8 +130,10 @@ export async function GET(req: NextRequest) {
     },
     timezone: session.clinic.timezone,
     slotMinutes: session.clinic.defaultSlotMinutes,
-    dayStart: session.clinic.agendaDayStart,
-    dayEnd: session.clinic.agendaDayEnd,
+    // Ventana EFECTIVA (∪ ClinicSchedule) — P1-13: el eje pinta las horas
+    // que la clínica configuró en Ajustes, no el 8–20 clavado.
+    dayStart: session.timeConfig.dayStart,
+    dayEnd: session.timeConfig.dayEnd,
     appointments,
     doctors,
     resources,
@@ -199,26 +185,17 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "invalid_duration" }, { status: 400 });
   }
 
-  if (!body.overrideReason) {
-    const hoursCheck = isWithinClinicHours(
-      startsAt,
-      endsAt,
-      session.clinic.timezone,
-      session.clinic.agendaDayStart,
-      session.clinic.agendaDayEnd,
-    );
-    if (hoursCheck.ok === false) {
-      return NextResponse.json(
-        {
-          error: "outside_clinic_hours",
-          reason: hoursCheck.reason,
-          clinicDayStart: session.clinic.agendaDayStart,
-          clinicDayEnd: session.clinic.agendaDayEnd,
-        },
-        { status: 422 },
-      );
-    }
-  }
+  // P1-13: fuera-de-horario/día cerrado ya NO bloquea con un 422 mudo — se
+  // guarda la cita y se AVISA (scheduleWarning en la respuesta → toast). El
+  // horario que manda es el configurado en Ajustes (ClinicSchedule), con
+  // fallback a agendaDayStart/End si la clínica nunca guardó horario.
+  const hoursWarning = scheduleViolation(
+    startsAt,
+    endsAt,
+    session.clinic.timezone,
+    session.clinic,
+    session.clinic.schedules,
+  );
 
   if (body.overrideReason && !canOverrideOverlap(session.user.role)) {
     return NextResponse.json(
@@ -365,7 +342,11 @@ export async function POST(req: NextRequest) {
     revalidateAfter("appointments");
     revalidatePatientProfile(created.patientId);
     return NextResponse.json(
-      { appointment: appointmentToDTO(created, session.clinic.category) },
+      {
+        appointment: appointmentToDTO(created, session.clinic.category),
+        // P1-13: aviso de fuera-de-horario/día cerrado (null si todo bien).
+        scheduleWarning: hoursWarning,
+      },
       { status: 201 },
     );
   } catch (err) {

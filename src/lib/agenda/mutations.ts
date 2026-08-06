@@ -96,17 +96,33 @@ export interface RescheduleAppointmentInput {
   overrideReason?: string | null;
 }
 
+/** Aviso de fuera-de-horario/día cerrado (P1-13): la API ya no bloquea, avisa. */
+export interface ScheduleWarningDTO {
+  reason: "closed_day" | "before_open" | "after_close";
+  message: string;
+  openTime: string | null;
+  closeTime: string | null;
+}
+
+export interface RescheduleAppointmentResult {
+  appointment: AgendaAppointmentDTO;
+  scheduleWarning: ScheduleWarningDTO | null;
+}
+
 export async function rescheduleAppointment(
   id: string,
   input: RescheduleAppointmentInput,
-): Promise<AgendaAppointmentDTO> {
+): Promise<RescheduleAppointmentResult> {
   const res = await fetch(`/api/appointments/${id}`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input),
   });
-  const body = await jsonOrThrow<{ appointment: AgendaAppointmentDTO }>(res);
-  return body.appointment;
+  const body = await jsonOrThrow<{
+    appointment: AgendaAppointmentDTO;
+    scheduleWarning?: ScheduleWarningDTO | null;
+  }>(res);
+  return { appointment: body.appointment, scheduleWarning: body.scheduleWarning ?? null };
 }
 
 /* ─────── Resources CRUD ─────── */

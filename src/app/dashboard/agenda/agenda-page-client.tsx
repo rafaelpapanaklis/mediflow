@@ -576,8 +576,10 @@ function AgendaShell({ highlightId, clinicTaxMode }: { highlightId: string | nul
     if (newResourceId !== currentResourceId) apiPayload.resourceId = newResourceId;
 
     try {
-      const updated = await rescheduleAppointment(original.id, apiPayload);
+      const { appointment: updated, scheduleWarning } = await rescheduleAppointment(original.id, apiPayload);
       dispatch({ type: "REPLACE_APPOINTMENT", appointment: updated });
+      // P1-13: fuera-de-horario/día cerrado ya no bloquea — se avisa.
+      if (scheduleWarning?.message) toast(scheduleWarning.message, { duration: 6000 });
       // Invalida el cache SWR del provider para que volver a este dia o
       // cambiar de vista no restaure la version pre-mutacion del cacheRef.
       // NO llamamos router.refresh() porque vuelve a hidratar initialPayload

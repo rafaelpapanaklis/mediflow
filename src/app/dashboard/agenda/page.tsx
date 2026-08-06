@@ -14,6 +14,8 @@ import {
   todayInTz,
   type ClinicTimeConfig,
 } from "@/lib/agenda/time-utils";
+import { effectiveAgendaWindow } from "@/lib/agenda/clinic-hours";
+import { prisma } from "@/lib/prisma";
 import { viewRangeUtc } from "@/lib/agenda/date-ranges";
 import type { AgendaDayResponse } from "@/lib/agenda/types";
 import { AgendaPageClient } from "./agenda-page-client";
@@ -44,11 +46,21 @@ export default async function AgendaPage({ searchParams }: PageProps) {
   const clinic = user.clinic;
   if (!clinic) redirect("/login");
 
+  // P1-13: el eje respeta el horario configurado en Ajustes (ClinicSchedule),
+  // con la MISMA ventana efectiva que /api/appointments y /api/agenda/range
+  // (unión — nunca más angosto que el 8–20 histórico).
+  const schedules = await prisma.clinicSchedule.findMany({
+    where: { clinicId: clinic.id },
+    select: { dayOfWeek: true, enabled: true, openTime: true, closeTime: true },
+    orderBy: { dayOfWeek: "asc" },
+  });
+  const window = effectiveAgendaWindow(clinic, schedules);
+
   const timeConfig: ClinicTimeConfig = {
     timezone: clinic.timezone,
     slotMinutes: clinic.defaultSlotMinutes,
-    dayStart: clinic.agendaDayStart,
-    dayEnd: clinic.agendaDayEnd,
+    dayStart: window.dayStart,
+    dayEnd: window.dayEnd,
   };
 
   const dateParam = searchParams?.date;
@@ -92,8 +104,8 @@ export default async function AgendaPage({ searchParams }: PageProps) {
     },
     timezone: clinic.timezone,
     slotMinutes: clinic.defaultSlotMinutes,
-    dayStart: clinic.agendaDayStart,
-    dayEnd: clinic.agendaDayEnd,
+    dayStart: window.dayStart,
+    dayEnd: window.dayEnd,
     appointments,
     doctors,
     resources,

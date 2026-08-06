@@ -16,10 +16,11 @@ import {
 } from "@/lib/patient-visibility";
 import { canOverrideOverlap } from "@/lib/agenda/transitions";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
+import { clearAutoRemindersForAppointment } from "@/lib/appointment-change/slots";
 import { validateResourceSchedule } from "@/lib/agenda/resource-schedule";
 import { loadResourceSchedule } from "@/lib/agenda/resource-schedule.server";
 import { revalidateAfter, revalidatePatientProfile } from "@/lib/cache/revalidate";
-import { getTzParts } from "@/lib/agenda/time-utils";
+import { scheduleViolation } from "@/lib/agenda/clinic-hours";
 import {
   syncUpdateToGoogleCalendar,
   syncDeleteFromGoogleCalendar,
@@ -36,22 +37,6 @@ const APPT_INCLUDE = {
   patient: { select: { id: true, firstName: true, lastName: true, visibleUserIds: true } },
   doctor:  { select: { id: true, firstName: true, lastName: true } },
 } as const;
-
-function isWithinClinicHours(
-  startsAt: Date,
-  endsAt: Date,
-  timezone: string,
-  dayStart: number,
-  dayEnd: number,
-): { ok: true } | { ok: false; reason: "before_open" | "after_close" } {
-  const s = getTzParts(startsAt, timezone);
-  const e = getTzParts(endsAt, timezone);
-  const startMin = s.hour * 60 + s.minute;
-  const endMin = e.hour * 60 + e.minute;
-  if (startMin < dayStart * 60) return { ok: false, reason: "before_open" };
-  if (endMin > dayEnd * 60) return { ok: false, reason: "after_close" };
-  return { ok: true };
-}
 
 // ═════════════════════════════════════════════════════════════════
 // PATCH /api/appointments/:id
@@ -166,26 +151,16 @@ export async function PATCH(
     return NextResponse.json({ error: "invalid_duration" }, { status: 400 });
   }
 
-  if (!body.overrideReason) {
-    const hoursCheck = isWithinClinicHours(
-      newStarts,
-      newEnds,
-      session.clinic.timezone,
-      session.clinic.agendaDayStart,
-      session.clinic.agendaDayEnd,
-    );
-    if (hoursCheck.ok === false) {
-      return NextResponse.json(
-        {
-          error: "outside_clinic_hours",
-          reason: hoursCheck.reason,
-          clinicDayStart: session.clinic.agendaDayStart,
-          clinicDayEnd: session.clinic.agendaDayEnd,
-        },
-        { status: 422 },
-      );
-    }
-  }
+  // P1-13: fuera-de-horario/día cerrado AVISA en vez de bloquear con 422.
+  // Manda el horario configurado en Ajustes (ClinicSchedule), con fallback a
+  // agendaDayStart/End. El aviso viaja como scheduleWarning en la respuesta.
+  const hoursWarning = scheduleViolation(
+    newStarts,
+    newEnds,
+    session.clinic.timezone,
+    session.clinic,
+    session.clinic.schedules,
+  );
 
   // Resource working-hours validation. Applies if the appointment ends up with
   // a resourceId (either explicitly set in this PATCH or inherited from the
@@ -242,6 +217,15 @@ export async function PATCH(
       return row;
     });
 
+    // Reagendado (P1-12): borra los recordatorios APPT_AUTO (pendientes Y
+    // enviados) para que el sweep re-encole con la hora nueva — sin esto el
+    // mensaje congelado con la fecha vieja sale igual y el dedupe
+    // (cita+offset+canal) bloquea el correcto. Mismo patrón best-effort,
+    // fuera de la tx, que las dos rutas del portal (resolve/change-request).
+    if (body.startsAt && existing.startsAt.getTime() !== updated.startsAt.getTime()) {
+      await clearAutoRemindersForAppointment(params.id); // nunca lanza
+    }
+
     // TODO(M3.b): if body.notifyPatient → trigger WA notification (waConnected).
 
     await logMutation({
@@ -283,9 +267,13 @@ export async function PATCH(
     revalidateAfter("appointments");
     revalidatePatientProfile(updated.patientId);
     return NextResponse.json(
-      { appointment: appointmentToDTO(updated, session.clinic.category, {
-        userId: session.user.id, role: session.user.role, clinicId: session.clinic.id,
-      }) },
+      {
+        appointment: appointmentToDTO(updated, session.clinic.category, {
+          userId: session.user.id, role: session.user.role, clinicId: session.clinic.id,
+        }),
+        // P1-13: aviso de fuera-de-horario/día cerrado (null si todo bien).
+        scheduleWarning: hoursWarning,
+      },
     );
   } catch (err) {
     if (isOverlapError(err)) {

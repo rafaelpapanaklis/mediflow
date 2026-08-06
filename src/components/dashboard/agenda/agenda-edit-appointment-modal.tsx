@@ -125,7 +125,7 @@ export function AgendaEditAppointmentModal({ appt, isOpen, onClose }: Props) {
 
     setSubmitting(true);
     try {
-      const updated = await rescheduleAppointment(appt.id, {
+      const { appointment: updated, scheduleWarning } = await rescheduleAppointment(appt.id, {
         startsAt: startsAtIso,
         endsAt: endsAtIso,
         doctorId: form.doctorId,
@@ -135,6 +135,8 @@ export function AgendaEditAppointmentModal({ appt, isOpen, onClose }: Props) {
       });
       dispatch({ type: "REPLACE_APPOINTMENT", appointment: updated });
       toast.success(t("agenda.editApptModal.apptUpdated"));
+      // P1-13: fuera-de-horario/día cerrado ya no bloquea — se avisa.
+      if (scheduleWarning?.message) toast(scheduleWarning.message, { duration: 6000 });
       onClose();
     } catch (err) {
       const e = err as ApiError & { message?: string };

@@ -103,8 +103,9 @@ export async function GET(req: Request) {
     range: { from: fromUtc.toISOString(), to: toUtc.toISOString() },
     timezone: session.clinic.timezone,
     slotMinutes: session.clinic.defaultSlotMinutes,
-    dayStart: session.clinic.agendaDayStart,
-    dayEnd: session.clinic.agendaDayEnd,
+    // Ventana EFECTIVA (∪ ClinicSchedule) — P1-13, misma que el SSR y el GET.
+    dayStart: session.timeConfig.dayStart,
+    dayEnd: session.timeConfig.dayEnd,
     appointments,
     doctors,
     resources,

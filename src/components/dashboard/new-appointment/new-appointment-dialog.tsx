@@ -309,8 +309,15 @@ export function NewAppointmentDialog({ isOpen, onClose, params }: Props) {
         return;
       }
 
-      const body = (await res.json()) as { appointment: { id: string; startsAt: string } };
+      const body = (await res.json()) as {
+        appointment: { id: string; startsAt: string };
+        // P1-13: la API ya no bloquea fuera-de-horario/día cerrado; avisa.
+        scheduleWarning?: { message: string } | null;
+      };
       toast.success(t("appointments.newApptDialog.toastCreated"));
+      if (body.scheduleWarning?.message) {
+        toast(body.scheduleWarning.message, { duration: 6000 });
+      }
       params?.onCreated?.({ id: body.appointment.id, startsAt: body.appointment.startsAt });
 
       if (params?.redirectAfter) {

@@ -4,6 +4,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import type { Role, ClinicCategory } from "@prisma/client";
 import type { ClinicTimeConfig } from "./time-utils";
+import { effectiveAgendaWindow, type ScheduleDay } from "./clinic-hours";
 
 export interface ClinicSession {
   user: {
@@ -26,7 +27,12 @@ export interface ClinicSession {
     agendaDayEnd: number;
     waConnected: boolean;
     trialEndsAt: Date | null;
+    // Horario configurado en Ajustes (P1-13): lo usan scheduleViolation (aviso
+    // de fuera-de-horario/día cerrado) y effectiveAgendaWindow (eje del panel).
+    schedules: ScheduleDay[];
   };
+  // OJO: dayStart/dayEnd de timeConfig ya son la ventana EFECTIVA
+  // (unión agendaDayStart/End ∪ ClinicSchedule) — ver clinic-hours.ts.
   timeConfig: ClinicTimeConfig;
 }
 
@@ -54,6 +60,10 @@ export async function loadClinicSession(): Promise<ClinicSession | NextResponse>
       agendaDayEnd: true,
       waConnected: true,
       trialEndsAt: true,
+      schedules: {
+        select: { dayOfWeek: true, enabled: true, openTime: true, closeTime: true },
+        orderBy: { dayOfWeek: "asc" },
+      },
     },
   });
 
@@ -65,6 +75,10 @@ export async function loadClinicSession(): Promise<ClinicSession | NextResponse>
     `${user.firstName ?? ""} ${user.lastName ?? ""}`.trim() ||
     user.email ||
     "";
+
+  // P1-13: el eje/validación de la agenda respeta el horario de Ajustes.
+  // Unión (nunca más angosto que el 8–20 histórico) — ver clinic-hours.ts.
+  const window = effectiveAgendaWindow(clinic, clinic.schedules);
 
   return {
     user: {
@@ -78,8 +92,8 @@ export async function loadClinicSession(): Promise<ClinicSession | NextResponse>
     timeConfig: {
       timezone: clinic.timezone,
       slotMinutes: clinic.defaultSlotMinutes,
-      dayStart: clinic.agendaDayStart,
-      dayEnd: clinic.agendaDayEnd,
+      dayStart: window.dayStart,
+      dayEnd: window.dayEnd,
     },
   };
 }
