@@ -71,12 +71,9 @@ function iso(x: unknown): string {
   return isNaN(d.getTime()) ? "" : d.toISOString();
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function serializeInvoice(inv: any): BillingInvoiceLite {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const items: BillingInvoiceItem[] = Array.isArray(inv.items)
-    ? // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      inv.items.map((it: any) => ({
+    ? inv.items.map((it: any) => ({
         description: String(it?.description ?? ""),
         quantity: num(it?.quantity) || 1,
         unitPrice: num(it?.unitPrice),
@@ -84,8 +81,7 @@ function serializeInvoice(inv: any): BillingInvoiceLite {
       }))
     : [];
   const payments: BillingPaymentLite[] = Array.isArray(inv.payments)
-    ? // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      inv.payments.map((p: any) => ({
+    ? inv.payments.map((p: any) => ({
         id: p.id,
         amount: num(p.amount),
         method: p.method,
@@ -173,7 +169,6 @@ export async function createInvoiceFromQuote(
   // anterior hacía count+1+attempt: con 8 o más huecos por debajo del máximo
   // (justo esta ruta los fabrica, porque sus DRAFT se borran en duro) los 8
   // intentos caían todos en folios ya emitidos y la clínica quedaba bloqueada.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let created: any;
   try {
     created = await withInvoiceNumberRetry(async () =>
