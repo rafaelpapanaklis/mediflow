@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   ChevronLeft, ChevronRight, Plus, X,
   Phone, MessageCircle, Ban,
@@ -267,9 +267,17 @@ function ApptForm({ form, setForm, doctors, patients, loading, onSubmit, onCance
 
 export function AppointmentsClient({ appointments: initialAppts, patients, doctors, currentUserId, clinicId, waConnected }: Props) {
   const t = useT();
+  const router = useRouter();
   const askConfirm = useConfirm();
   const today = new Date();
   const [appts,       setAppts]       = useState<Appt[]>(initialAppts);
+
+  // P1-16: el estado se re-siembra cuando el SSR entrega props frescas
+  // (router.refresh del efecto de focus). El shape es SIEMPRE el legacy que
+  // mapea page.tsx (date/startTime/endTime) — nunca el AgendaAppointmentDTO.
+  useEffect(() => {
+    setAppts(initialAppts.map(serializeAppt));
+  }, [initialAppts]);
   const [view,        setView]        = useState<ViewMode>("month");
   const [currentDate, setCurrentDate] = useState(new Date(today.getFullYear(), today.getMonth(), 1));
   const [selectedDay, setSelectedDay] = useState<string>(toDateStr(today));
@@ -302,28 +310,22 @@ export function AppointmentsClient({ appointments: initialAppts, patients, docto
     }
   }, [searchParams]);
 
-  // Refresh appointments when page gains focus (back from another page/tab)
+  // Refresh appointments when page gains focus (back from another page/tab).
+  // P1-16: antes pegaba a GET /api/appointments, que devuelve el shape M3
+  // (AgendaAppointmentDTO, sin `date` y SOLO el día de hoy) → `a.date.split`
+  // tronaba con TypeError y mes/semana se quedaban vacíos. router.refresh()
+  // re-corre el SSR (shape legacy completo) y el efecto de arriba re-siembra.
   useEffect(() => {
-    let mounted = true;
-    async function refresh() {
-      try {
-        const res = await fetch("/api/appointments");
-        if (res.ok && mounted) {
-          const data = await res.json();
-          if (mounted) setAppts(data.appointments ?? []);
-        }
-      } catch { /* silent */ }
-    }
+    function refresh() { router.refresh(); }
     window.addEventListener("focus", refresh);
     // Also refresh on navigation (visibilitychange)
     function onVisible() { if (document.visibilityState === "visible") refresh(); }
     document.addEventListener("visibilitychange", onVisible);
     return () => {
-      mounted = false;
       window.removeEventListener("focus", refresh);
       document.removeEventListener("visibilitychange", onVisible);
     };
-  }, []);
+  }, [router]);
 
   const emptyForm = { patientId:"", doctorId:currentUserId, type:"Consulta general", date:toDateStr(today), startTime:"09:00", durationMins:30, notes:"", mode:"IN_PERSON", resourceId:"" };
   // resourceId opcional en el tipo: el form de EDITAR cita (setForm) no lo pasa;
