@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import type { Role } from "@prisma/client";
 import { getAuthContext } from "@/lib/auth-context";
 import { prisma } from "@/lib/prisma";
+import { assertPatientVisible } from "@/lib/patient-visibility";
 import { logMutation } from "@/lib/audit";
 import { hasPermission } from "@/lib/auth/permissions";
 import { revalidatePath } from "next/cache";
@@ -27,6 +28,17 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
   });
   if (!existing) {
     return NextResponse.json({ error: "Receta no encontrada" }, { status: 404 });
+  }
+
+  // Visibilidad por paciente (barrido Ola 3): anular la receta de un paciente
+  // restringido exige poder verlo — 404 antes del owner-check.
+  if (existing.patientId) {
+    const visDenied = await assertPatientVisible(existing.patientId, {
+      userId: ctx.userId,
+      role: ctx.role,
+      clinicId: ctx.clinicId,
+    });
+    if (visDenied) return visDenied;
   }
 
   const isOwner = existing.doctorId === ctx.userId;

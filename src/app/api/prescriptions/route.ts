@@ -122,12 +122,14 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "diagnosis_invalid" }, { status: 400 });
   }
 
-  // Multi-tenant: el paciente debe pertenecer a la clínica del usuario.
-  const patient = await prisma.patient.findFirst({
-    where: { id: patientId, clinicId: ctx.clinicId },
-    select: { id: true },
+  // Tenant + visibilidad por paciente en un solo query (barrido Ola 3): el GET
+  // de esta ruta ya asserta — recetar a un paciente restringido exige verlo.
+  const visDenied = await assertPatientVisible(patientId, {
+    userId: ctx.userId,
+    role: ctx.role,
+    clinicId: ctx.clinicId,
   });
-  if (!patient) return NextResponse.json({ error: "Paciente no encontrado" }, { status: 404 });
+  if (visDenied) return visDenied;
 
   // Items con FK a CUMS — preferido (NOM-024).
   const itemsArray: PrescriptionItemBody[] = Array.isArray(items) ? items : [];
