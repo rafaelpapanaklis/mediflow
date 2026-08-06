@@ -1,5 +1,7 @@
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
+import { requirePermissionOrRedirect } from "@/lib/auth/require-permission";
+import { hasPermission } from "@/lib/auth/permissions";
 import {
   fetchActiveDoctors,
   fetchAppointmentsForRange,
@@ -25,6 +27,17 @@ interface PageProps {
 export default async function AgendaPage({ searchParams }: PageProps) {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
+
+  // Gate de página (P1-3/P2): igual que el resto de pantallas sensibles.
+  requirePermissionOrRedirect(user, "agenda.view");
+
+  // Booleans de permiso para que la UI esconda/deshabilite lo que la API
+  // rechaza (crear / editar-mover / cancelar citas).
+  const agendaPermissions = {
+    canCreate: hasPermission(user, "agenda.create"),
+    canEdit: hasPermission(user, "agenda.edit"),
+    canCancel: hasPermission(user, "agenda.delete"),
+  };
 
   // getCurrentUser ya hace include: { clinic: true } — leemos la config
   // directo del session sin un segundo query a prisma.clinic.
@@ -99,6 +112,7 @@ export default async function AgendaPage({ searchParams }: PageProps) {
       // navegador): el cobro inline del panel de detalle timbra con él ya
       // resuelto, sin que un fetch en vuelo pueda decidir el régimen fiscal.
       clinicTaxMode={clinic.cfdiTaxMode ?? "exempt"}
+      permissions={agendaPermissions}
     />
   );
 }

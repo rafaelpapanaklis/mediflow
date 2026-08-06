@@ -347,6 +347,12 @@ export default async function PatientDetailPage({ params }: { params: { id: stri
             { role: user.role, permissionsOverride: user.permissionsOverride ?? [] },
             "patients.delete",
           )}
+          // Permiso granular "Editar pacientes" (P1-3): controla el botón
+          // Editar del hero; PUT/PATCH de /api/patients lo revalidan con 403.
+          canEditPatient={hasPermission(
+            { role: user.role, permissionsOverride: user.permissionsOverride ?? [] },
+            "patients.edit",
+          )}
           canViewBilling={canViewBilling}
           facturApiEnabled={Boolean((user.clinic as any).facturApiEnabled)}
           // Solo el modo fiscal (no la fila de Clinic): con qué impuestos nace

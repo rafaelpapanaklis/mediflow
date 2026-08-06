@@ -163,7 +163,7 @@ interface WeekDayColumnProps {
 }
 
 function WeekDayColumn({ day, isToday, slotsTotal }: WeekDayColumnProps) {
-  const { state, setDay } = useAgenda();
+  const { state, permissions, setDay } = useAgenda();
   const t = useT();
   const { open: openNewAppointment } = useNewAppointmentDialog();
   const colRef = useRef<HTMLDivElement | null>(null);
@@ -212,6 +212,8 @@ function WeekDayColumn({ day, isToday, slotsTotal }: WeekDayColumnProps) {
     (e: React.MouseEvent) => {
       if ((e.target as HTMLElement).closest(`.${styles.appt}`)) return;
       setDay(day.iso);
+      // Navegar al día sí; abrir "Nueva cita" solo con agenda.create (P1-3).
+      if (!permissions.canCreate) return;
       const el = colRef.current;
       if (!el) return;
       const rect = el.getBoundingClientRect();
@@ -229,7 +231,7 @@ function WeekDayColumn({ day, isToday, slotsTotal }: WeekDayColumnProps) {
         openAgendaAfter: true,
       });
     },
-    [openNewAppointment, setDay, day.iso, slotsTotal, state.timezone, state.slotMinutes, state.dayStart, state.dayEnd],
+    [openNewAppointment, permissions.canCreate, setDay, day.iso, slotsTotal, state.timezone, state.slotMinutes, state.dayStart, state.dayEnd],
   );
 
   const overlapMode = useDragOverlap(droppableId);

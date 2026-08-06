@@ -64,15 +64,17 @@ export function AgendaAppointmentCard({
   columnMode,
   resourceColor,
 }: Props) {
-  const { state, selectAppointment, dispatch } = useAgenda();
+  const { state, permissions, selectAppointment, dispatch } = useAgenda();
   const t = useT();
   const [pendingNext, setPendingNext] = useState(false);
 
   const config = { timezone, slotMinutes, dayStart, dayEnd: 24 };
   const rawSlot = timeToSlotIndex(appointment.startsAt, dayISO, config);
 
+  // Sin "agenda.edit" el drag-to-reschedule queda deshabilitado (P1-3).
   const dragDisabled =
     !draggable ||
+    !permissions.canEdit ||
     appointment.status === "CANCELLED" ||
     appointment.status === "COMPLETED" ||
     appointment.status === "NO_SHOW";

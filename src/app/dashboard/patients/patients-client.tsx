@@ -168,6 +168,13 @@ type ColumnId =
 interface Props {
   currentUser: { id: string; role: string };
   doctors: Doctor[];
+  /** Permisos granulares (P1-3), calculados server-side en page.tsx. La API
+   *  los vuelve a validar; estos solo alinean la UI con lo que va a aceptar. */
+  canCreatePatients: boolean;
+  canDeletePatients: boolean;
+  /** patients.create + rol ADMIN/RECEPTIONIST (el POST /api/patients/import
+   *  exige ambos, igual que su espejo de citas). */
+  canImportPatients: boolean;
 }
 
 /* ─── Constantes ─── */
@@ -286,7 +293,7 @@ function computePages(current: number, total: number): Array<number | "..."> {
 
 /* ─── Componente principal ─── */
 
-export function PatientsClient({ doctors }: Props) {
+export function PatientsClient({ doctors, canCreatePatients, canDeletePatients, canImportPatients }: Props) {
   const t = useT();
   const router = useRouter();
   const askConfirm = useConfirm();
@@ -540,8 +547,9 @@ export function PatientsClient({ doctors }: Props) {
         }
       } else if (e.key === "n" || e.key === "N") {
         e.preventDefault();
-        // Mismo gate que el botón: sin cupo no se abre el formulario para nada
+        // Mismo gate que el botón: sin permiso ni cupo no se abre el formulario
         // (el bloqueo de verdad sigue viviendo en el modal y en la API).
+        if (!canCreatePatients) return;
         const q = data?.quota;
         if (q && !q.unlimited && !q.canCreate) {
           toast.error(t("patients.toolbar.quotaFull"));
@@ -563,7 +571,7 @@ export function PatientsClient({ doctors }: Props) {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [drawerOpen, colsDropdownOpen, selected.size, search, data, focusedIdx, router, toggleView, toggleOne, advAgeMin, advAgeMax, advGenders, advDoctorId, advTags, advHasDebt, advVisitFrom, advVisitTo, advSource, t]);
+  }, [drawerOpen, colsDropdownOpen, selected.size, search, data, focusedIdx, router, toggleView, toggleOne, advAgeMin, advAgeMax, advGenders, advDoctorId, advTags, advHasDebt, advVisitFrom, advVisitTo, advSource, t, canCreatePatients]);
 
   const stats = data?.stats;
   /**
@@ -812,14 +820,16 @@ export function PatientsClient({ doctors }: Props) {
 
         <span className={styles.toolbarSpacer} />
 
-        <button
-          type="button"
-          className={styles.btn}
-          onClick={() => { setImportAssisted(false); setImportOpen(true); }}
-          title={t("shell.importClinic.launch")}
-        >
-          <Upload size={13} strokeWidth={1.75} aria-hidden /> {t("shell.importClinic.launch")}
-        </button>
+        {canImportPatients && (
+          <button
+            type="button"
+            className={styles.btn}
+            onClick={() => { setImportAssisted(false); setImportOpen(true); }}
+            title={t("shell.importClinic.launch")}
+          >
+            <Upload size={13} strokeWidth={1.75} aria-hidden /> {t("shell.importClinic.launch")}
+          </button>
+        )}
 
         {/* Consumo del cupo de pacientes del plan. Sólo existe si el plan tiene
             tope (los ilimitados no ven nada). Va pegado al botón que limita.
@@ -843,17 +853,19 @@ export function PatientsClient({ doctors }: Props) {
           </span>
         )}
 
-        <button
-          type="button"
-          className={`${styles.btn} ${styles.btnPrimary}`}
-          onClick={() => setNewPatientOpen(true)}
-          // Prevención de error (Nielsen #5): al tope no se ofrece una acción que
-          // la API va a rechazar. El bloqueo real vive en el modal y en el POST.
-          disabled={quotaBlocked}
-          title={quotaBlocked ? t("patients.toolbar.quotaFull") : t("patients.toolbar.newPatientTitle")}
-        >
-          <Plus size={13} strokeWidth={1.75} aria-hidden /> {t("patients.toolbar.newPatient")}
-        </button>
+        {canCreatePatients && (
+          <button
+            type="button"
+            className={`${styles.btn} ${styles.btnPrimary}`}
+            onClick={() => setNewPatientOpen(true)}
+            // Prevención de error (Nielsen #5): al tope no se ofrece una acción que
+            // la API va a rechazar. El bloqueo real vive en el modal y en el POST.
+            disabled={quotaBlocked}
+            title={quotaBlocked ? t("patients.toolbar.quotaFull") : t("patients.toolbar.newPatientTitle")}
+          >
+            <Plus size={13} strokeWidth={1.75} aria-hidden /> {t("patients.toolbar.newPatient")}
+          </button>
+        )}
       </div>
 
       {selected.size > 0 && (
@@ -872,10 +884,14 @@ export function PatientsClient({ doctors }: Props) {
           <button type="button" className={styles.btn} onClick={bulkExportCsv}>
             <Download size={13} strokeWidth={1.75} aria-hidden /> {t("patients.bulk.exportCsv")}
           </button>
-          <span className={styles.bulkDivider} aria-hidden />
-          <button type="button" className={`${styles.btn} ${styles.btnDanger}`} onClick={bulkArchive}>
-            <Trash2 size={13} strokeWidth={1.75} aria-hidden /> {t("patients.bulk.archive")}
-          </button>
+          {canDeletePatients && (
+            <>
+              <span className={styles.bulkDivider} aria-hidden />
+              <button type="button" className={`${styles.btn} ${styles.btnDanger}`} onClick={bulkArchive}>
+                <Trash2 size={13} strokeWidth={1.75} aria-hidden /> {t("patients.bulk.archive")}
+              </button>
+            </>
+          )}
           <span className={styles.toolbarSpacer} />
           <button type="button" className={`${styles.btn} ${styles.btnGhost}`} onClick={() => setSelected(new Set())}>
             {t("common.cancel")}
@@ -888,7 +904,7 @@ export function PatientsClient({ doctors }: Props) {
           <AlertCircle size={28} strokeWidth={1.75} style={{ marginBottom: 8, color: "var(--danger)" }} aria-hidden />
           <div>{t("patients.list.errorPrefix", { message: error })}</div>
         </div>
-      ) : showEmptyClinic ? (
+      ) : showEmptyClinic && canImportPatients ? (
         <ImportClinicEmpty
           onImport={() => { setImportAssisted(false); setImportOpen(true); }}
           onAssisted={() => { setImportAssisted(true); setImportOpen(true); }}
@@ -970,27 +986,31 @@ export function PatientsClient({ doctors }: Props) {
         />
       )}
 
-      <NewPatientModal
-        open={newPatientOpen}
-        onClose={() => setNewPatientOpen(false)}
-        onCreated={() => {
-          setNewPatientOpen(false);
-          setPage(1);
-          // Lista client-fetched: router.refresh() no recarga las filas; forzamos refetch.
-          reload();
-        }}
-      />
+      {canCreatePatients && (
+        <NewPatientModal
+          open={newPatientOpen}
+          onClose={() => setNewPatientOpen(false)}
+          onCreated={() => {
+            setNewPatientOpen(false);
+            setPage(1);
+            // Lista client-fetched: router.refresh() no recarga las filas; forzamos refetch.
+            reload();
+          }}
+        />
+      )}
 
-      <ImportWizard
-        open={importOpen}
-        startInAssisted={importAssisted}
-        onClose={() => setImportOpen(false)}
-        onImported={() => {
-          setImportOpen(false);
-          setPage(1);
-          reload();
-        }}
-      />
+      {canImportPatients && (
+        <ImportWizard
+          open={importOpen}
+          startInAssisted={importAssisted}
+          onClose={() => setImportOpen(false)}
+          onImported={() => {
+            setImportOpen(false);
+            setPage(1);
+            reload();
+          }}
+        />
+      )}
     </div>
   );
 }

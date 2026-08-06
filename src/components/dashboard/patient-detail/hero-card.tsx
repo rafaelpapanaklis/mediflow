@@ -69,6 +69,9 @@ export interface HeroCardProps {
   /** Genera/copia el link LEGACY de solo lectura (portalToken, POST /api/portal). */
   onGeneratePortal?: () => void;
   onEdit: () => void;
+  /** Permiso granular "patients.edit" (P1-3): sin él se oculta "Editar
+   *  paciente" del menú; la API lo revalida con 403. */
+  canEdit?: boolean;
   onStartConsult: () => void;
   onReschedule: () => void;
   onCharge: () => void;
@@ -109,6 +112,7 @@ export function HeroCard({
   onInvitePortal,
   onGeneratePortal,
   onEdit,
+  canEdit = true,
   onStartConsult,
   onReschedule,
   onCharge,
@@ -282,16 +286,18 @@ export function HeroCard({
             </Popover.Trigger>
             <Popover.Portal>
               <Popover.Content align="end" sideOffset={6} className={styles.heroMenuPopover}>
-                <button
-                  type="button"
-                  className={styles.heroMenuItem}
-                  onClick={() => {
-                    setMoreOpen(false);
-                    onEdit();
-                  }}
-                >
-                  <Edit size={12} strokeWidth={1.75} aria-hidden /> {t("patients.heroCard.editPatient")}
-                </button>
+                {canEdit && (
+                  <button
+                    type="button"
+                    className={styles.heroMenuItem}
+                    onClick={() => {
+                      setMoreOpen(false);
+                      onEdit();
+                    }}
+                  >
+                    <Edit size={12} strokeWidth={1.75} aria-hidden /> {t("patients.heroCard.editPatient")}
+                  </button>
+                )}
                 {/* Acceso al portal con CUENTA REAL: el paciente define su
                     propia contraseña desde un correo (la clínica nunca la ve). */}
                 {portalAccountStatus === "active" ? (

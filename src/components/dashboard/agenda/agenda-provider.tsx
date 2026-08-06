@@ -34,9 +34,24 @@ import type {
   AgendaViewMode,
 } from "@/lib/agenda/types";
 
+/**
+ * Permisos granulares del usuario sobre la agenda (P1-3), calculados en el
+ * server component con hasPermission y bajados como booleans — el cliente
+ * NUNCA los deduce del rol. La API los vuelve a validar; esto solo alinea
+ * la UI con lo que la API va a aceptar.
+ */
+export interface AgendaPermissions {
+  canCreate: boolean;
+  canEdit: boolean;
+  canCancel: boolean;
+}
+
+const ALL_ALLOWED: AgendaPermissions = { canCreate: true, canEdit: true, canCancel: true };
+
 interface AgendaContextValue {
   state: AgendaStoreState;
   dispatch: Dispatch<AgendaAction>;
+  permissions: AgendaPermissions;
   setDay: (dayISO: string) => void;
   setViewMode: (mode: AgendaViewMode) => void;
   setColumnMode: (mode: AgendaColumnMode) => void;
@@ -72,6 +87,9 @@ interface ProviderProps {
   initialPayload: AgendaDayResponse;
   initialDayISO: string;
   clinicCategory: string;
+  // Opcional para no romper montajes fuera de /dashboard/agenda; sin prop se
+  // asume todo permitido (la API sigue siendo el enforcement real).
+  permissions?: AgendaPermissions;
   children: ReactNode;
 }
 
@@ -79,6 +97,7 @@ export function AgendaProvider({
   initialPayload,
   initialDayISO,
   clinicCategory,
+  permissions = ALL_ALLOWED,
   children,
 }: ProviderProps) {
   const router = useRouter();
@@ -302,14 +321,14 @@ export function AgendaProvider({
 
   const ctx = useMemo<AgendaContextValue>(
     () => ({
-      state, dispatch,
+      state, dispatch, permissions,
       setDay, setViewMode, setColumnMode,
       setSearchQuery, selectAppointment,
       openModal, closeModal, toggleWaitlist, togglePendingPanel,
       setFilters, clearFilters, prefetchView,
       invalidateRangeCache,
     }),
-    [state, setDay, setViewMode, setColumnMode, setSearchQuery, selectAppointment, openModal, closeModal, toggleWaitlist, togglePendingPanel, setFilters, clearFilters, prefetchView, invalidateRangeCache],
+    [state, permissions, setDay, setViewMode, setColumnMode, setSearchQuery, selectAppointment, openModal, closeModal, toggleWaitlist, togglePendingPanel, setFilters, clearFilters, prefetchView, invalidateRangeCache],
   );
 
   return <AgendaContext.Provider value={ctx}>{children}</AgendaContext.Provider>;

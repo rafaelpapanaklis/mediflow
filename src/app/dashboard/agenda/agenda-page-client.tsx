@@ -14,7 +14,7 @@ import {
   type DragStartEvent,
 } from "@dnd-kit/core";
 import toast from "react-hot-toast";
-import { AgendaProvider } from "@/components/dashboard/agenda/agenda-provider";
+import { AgendaProvider, type AgendaPermissions } from "@/components/dashboard/agenda/agenda-provider";
 import { AgendaTopbar } from "@/components/dashboard/agenda/agenda-topbar";
 import { AgendaSubToolbar } from "@/components/dashboard/agenda/agenda-sub-toolbar";
 import { AgendaTimeAxis } from "@/components/dashboard/agenda/agenda-time-axis";
@@ -63,6 +63,8 @@ interface Props {
    *  Clinic. Baja hasta el cobro inline del panel de detalle para que el CFDI se
    *  timbre con el régimen de la clínica sin depender de ningún fetch. */
   clinicTaxMode: string | null;
+  /** Permisos granulares de agenda (P1-3), calculados server-side. */
+  permissions: AgendaPermissions;
 }
 
 export function AgendaPageClient(props: Props) {
@@ -71,6 +73,7 @@ export function AgendaPageClient(props: Props) {
       initialPayload={props.initialPayload}
       initialDayISO={props.initialDayISO}
       clinicCategory={props.clinicCategory}
+      permissions={props.permissions}
     >
       <AgendaShell highlightId={props.highlightId} clinicTaxMode={props.clinicTaxMode} />
     </AgendaProvider>
@@ -310,7 +313,7 @@ const AGX_CSS = `
 `;
 
 function AgendaShell({ highlightId, clinicTaxMode }: { highlightId: string | null; clinicTaxMode: string | null }) {
-  const { state, dispatch, setDay, invalidateRangeCache } = useAgenda();
+  const { state, dispatch, permissions, setDay, invalidateRangeCache } = useAgenda();
   const router = useRouter();
   const t = useT();
   const { open: openNewAppointment } = useNewAppointmentDialog();
@@ -408,6 +411,8 @@ function AgendaShell({ highlightId, clinicTaxMode }: { highlightId: string | nul
 
       // ─── Waitlist → cell: abrir NewAppointmentDialog pre-llenado ───
       if (dragData.kind === "waitlist") {
+        // Agendar desde la waitlist CREA una cita: exige agenda.create (P1-3).
+        if (!permissions.canCreate) return;
         const activatorEvent = event.activatorEvent as PointerEvent | undefined;
         const startY = activatorEvent?.clientY ?? 0;
         const overRect = over.rect;
@@ -462,6 +467,9 @@ function AgendaShell({ highlightId, clinicTaxMode }: { highlightId: string | nul
       }
 
       if (dragData.kind !== "appt") return;
+      // El drag ya nace deshabilitado sin agenda.edit (card); esto es el
+      // cinturón por si un drag llega igual (P1-3).
+      if (!permissions.canEdit) return;
 
       const original = state.appointments.find((a) => a.id === dragData.appointmentId);
       if (!original) return;
@@ -534,6 +542,8 @@ function AgendaShell({ highlightId, clinicTaxMode }: { highlightId: string | nul
       state.slotMinutes,
       state.timezone,
       state.doctors,
+      permissions.canCreate,
+      permissions.canEdit,
       openNewAppointment,
       router,
       t,

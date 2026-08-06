@@ -93,7 +93,7 @@ interface AgendaDetailPanelProps {
 
 export function AgendaDetailPanel({ clinicTaxMode }: AgendaDetailPanelProps) {
   const t = useT();
-  const { state, selectAppointment, dispatch, invalidateRangeCache } = useAgenda();
+  const { state, permissions, selectAppointment, dispatch, invalidateRangeCache } = useAgenda();
   const router = useRouter();
   const { open: openNewAppointment } = useNewAppointmentDialog();
   const [pendingStatus, setPendingStatus] = useState<AppointmentStatus | null>(null);
@@ -159,6 +159,13 @@ export function AgendaDetailPanel({ clinicTaxMode }: AgendaDetailPanelProps) {
    */
   async function changeStatus(target: AppointmentStatus): Promise<boolean> {
     if (!appt) return false;
+    // Guard local (el pipeline de chips también llega aquí): mismo criterio y
+    // mismo mensaje que el 403 de la API, sin gastar el round-trip (P1-3).
+    const allowed = target === "CANCELLED" ? permissions.canCancel : permissions.canEdit;
+    if (!allowed) {
+      toast.error(`Permiso requerido: ${target === "CANCELLED" ? "agenda.delete" : "agenda.edit"}`);
+      return false;
+    }
     if (pendingStatus) return false;
     if (appt.status === target) {
       // Antes esto era un early return silente que el usuario veía como
@@ -229,16 +236,22 @@ export function AgendaDetailPanel({ clinicTaxMode }: AgendaDetailPanelProps) {
   // CHECKED_IN ("En Sala de Espera") e IN_CHAIR se excluyen de los botones
   // de acción: el primero es alcanzable por el chip del pipeline y el
   // segundo se de-prioriza del flujo. La transición backend sigue válida.
-  const primaryActions = validTargets.filter(
-    (s) =>
-      s !== "CANCELLED" &&
-      s !== "NO_SHOW" &&
-      s !== "CHECKED_IN" &&
-      s !== "IN_CHAIR" &&
-      !(isTerminal && s === "SCHEDULED"),
-  );
+  // Sin agenda.edit no se ofrecen transiciones; cancelar además exige
+  // agenda.delete (mismo criterio que la API de /status — P1-3).
+  const primaryActions = permissions.canEdit
+    ? validTargets.filter(
+        (s) =>
+          s !== "CANCELLED" &&
+          s !== "NO_SHOW" &&
+          s !== "CHECKED_IN" &&
+          s !== "IN_CHAIR" &&
+          !(isTerminal && s === "SCHEDULED"),
+      )
+    : [];
   const dangerActions = validTargets.filter(
-    (s) => s === "CANCELLED" || s === "NO_SHOW",
+    (s) =>
+      (s === "CANCELLED" && permissions.canCancel) ||
+      (s === "NO_SHOW" && permissions.canEdit),
   );
 
   // "Cobrar" desde la agenda: resuelve la factura vinculada a la cita y abre
@@ -433,7 +446,7 @@ export function AgendaDetailPanel({ clinicTaxMode }: AgendaDetailPanelProps) {
         >
           <FileText size={12} aria-hidden /> {t("agenda.detailPanel.record")}
         </button>
-        {!isTerminal && (
+        {!isTerminal && permissions.canEdit && (
           <button
             type="button"
             className={styles.detailAction}
@@ -463,7 +476,7 @@ export function AgendaDetailPanel({ clinicTaxMode }: AgendaDetailPanelProps) {
             <DollarSign size={12} aria-hidden /> {resolvingCharge ? "…" : t("agenda.detailPanel.charge")}
           </button>
         )}
-        {isTerminal && (
+        {isTerminal && permissions.canCreate && (
           <button
             type="button"
             className={`${styles.detailAction} ${styles.primary}`}

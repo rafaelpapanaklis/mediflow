@@ -50,7 +50,7 @@ function formatHumanDate(
 
 export function AgendaTopbar() {
   const t = useT();
-  const { state, setDay, setViewMode, setSearchQuery, prefetchView } = useAgenda();
+  const { state, permissions, setDay, setViewMode, setSearchQuery, prefetchView } = useAgenda();
   const { open: openNew } = useNewAppointmentDialog();
 
   const today = todayInTz(state.timezone);
@@ -131,13 +131,15 @@ export function AgendaTopbar() {
         />
       </div>
 
-      <button
-        type="button"
-        onClick={() => openNew({})}
-        className={styles.newApptBtn}
-      >
-        <CalendarPlus size={13} /> {t("agenda.topbar.newAppointment")}
-      </button>
+      {permissions.canCreate && (
+        <button
+          type="button"
+          onClick={() => openNew({})}
+          className={styles.newApptBtn}
+        >
+          <CalendarPlus size={13} /> {t("agenda.topbar.newAppointment")}
+        </button>
+      )}
     </header>
   );
 }

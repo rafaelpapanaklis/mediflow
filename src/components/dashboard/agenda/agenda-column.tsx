@@ -19,7 +19,7 @@ import styles from "./agenda.module.css";
 
 export function AgendaColumn({ column }: { column: AgendaColumnDescriptor }) {
   const t = useT();
-  const { state } = useAgenda();
+  const { state, permissions } = useAgenda();
   const { open: openNewAppointment } = useNewAppointmentDialog();
   const ref = useRef<HTMLDivElement | null>(null);
 
@@ -110,6 +110,8 @@ export function AgendaColumn({ column }: { column: AgendaColumnDescriptor }) {
   const handleClick = useCallback(
     (e: React.MouseEvent) => {
       if ((e.target as HTMLElement).closest(`.${styles.appt}`)) return;
+      // Sin "agenda.create" el click en hueco vacío no abre el modal (P1-3).
+      if (!permissions.canCreate) return;
 
       const el = ref.current;
       if (!el) return;
@@ -134,7 +136,7 @@ export function AgendaColumn({ column }: { column: AgendaColumnDescriptor }) {
         openAgendaAfter: true,
       });
     },
-    [openNewAppointment, slotsTotal, state.dayISO, state.dayEnd, state.dayStart, state.slotMinutes, state.timezone, column.doctorId, column.resourceId],
+    [openNewAppointment, permissions.canCreate, slotsTotal, state.dayISO, state.dayEnd, state.dayStart, state.slotMinutes, state.timezone, column.doctorId, column.resourceId],
   );
 
   const hourBands = [];

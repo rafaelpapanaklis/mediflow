@@ -348,6 +348,12 @@ interface Props {
    */
   canDeletePatient?: boolean;
   /**
+   * ¿La sesión tiene "patients.edit"? Mismo mecanismo que canDeletePatient:
+   * lo resuelve page.tsx en el server. Controla "Editar paciente" del hero;
+   * PUT/PATCH de la API lo revalidan con 403.
+   */
+  canEditPatient?: boolean;
+  /**
    * ¿La sesión tiene el permiso "billing.view" (el mismo que gatea Caja)? Lo
    * resuelve page.tsx en el server con hasPermission — el cliente NO lo deduce
    * del rol, porque el permiso se enciende/apaga por persona desde el modal de
@@ -384,6 +390,7 @@ export function PatientDetailClient({
   fotosCount: initialFotosCount = 0,
   originClinicName = null,
   canDeletePatient = false,
+  canEditPatient = false,
   canViewBilling = false,
   facturApiEnabled = false,
 }: Props) {
@@ -1268,6 +1275,7 @@ export function PatientDetailClient({
           }}
           onReschedule={openNewAppointmentForPatient}
           onCharge={openChargeShortcut}
+          canEdit={canEditPatient}
           canDelete={canDeletePatient}
           onDelete={() => setShowDelete(true)}
         />
