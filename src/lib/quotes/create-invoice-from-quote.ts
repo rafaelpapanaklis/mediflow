@@ -9,6 +9,11 @@ import { logAudit } from "@/lib/audit";
 // round2 sale de invoice-totals (que la re-exporta desde ./compute): una sola
 // ruta de módulo para toda la aritmética de la factura.
 import { sumInvoiceItems, computeInvoiceTotal, itemLineTotal, round2 } from "@/lib/invoice-totals";
+import {
+  InvoiceNumberExhaustedError,
+  nextInvoiceNumber,
+  withInvoiceNumberRetry,
+} from "@/lib/invoices/next-invoice-number";
 import type {
   BillingInvoiceItem,
   BillingInvoiceLite,
@@ -164,18 +169,19 @@ export async function createInvoiceFromQuote(
   const discount = round2(Math.min(Math.max(0, num(quote.discountAmount)), subtotal));
   const { total } = computeInvoiceTotal(subtotal, discount, 0, true);
 
-  // Folio MF-XXXX por clínica, con reintento ante carrera (unique compuesto).
+  // Folio por MÁXIMO emitido con reintento ante carrera (P0-2). El loop
+  // anterior hacía count+1+attempt: con 8 o más huecos por debajo del máximo
+  // (justo esta ruta los fabrica, porque sus DRAFT se borran en duro) los 8
+  // intentos caían todos en folios ya emitidos y la clínica quedaba bloqueada.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  let created: any = null;
-  for (let attempt = 0; attempt < 8; attempt++) {
-    const count = await prisma.invoice.count({ where: { clinicId: ctx.clinicId } });
-    const invoiceNumber = `MF-${String(count + 1 + attempt).padStart(4, "0")}`;
-    try {
-      created = await prisma.invoice.create({
+  let created: any;
+  try {
+    created = await withInvoiceNumberRetry(async () =>
+      prisma.invoice.create({
         data: {
           clinicId: ctx.clinicId,
           patientId: quote.patientId,
-          invoiceNumber,
+          invoiceNumber: await nextInvoiceNumber(ctx.clinicId),
           items: items as unknown as Prisma.InputJsonValue,
           subtotal,
           discount,
@@ -185,14 +191,14 @@ export async function createInvoiceFromQuote(
           status: "DRAFT",
           notes: `Generada desde presupuesto ${quote.folio}`,
         },
-      });
-      break;
-    } catch (e) {
-      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") continue;
-      throw e;
-    }
+      }),
+    );
+  } catch (e) {
+    // Se conserva el contrato público de este módulo: los callers ya manejan
+    // InvoiceFolioError; el error nuevo del helper se traduce aquí.
+    if (e instanceof InvoiceNumberExhaustedError) throw new InvoiceFolioError();
+    throw e;
   }
-  if (!created) throw new InvoiceFolioError();
 
   // Vincula la factura al presupuesto (cierra la idempotencia aguas abajo).
   await prisma.quote.update({ where: { id: quote.id }, data: { invoiceId: created.id } });

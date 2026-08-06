@@ -20,6 +20,10 @@ import {
   isClinicalNoteEmpty,
   normalizeNoteStatus,
 } from "@/lib/clinical/note-validation";
+import {
+  nextInvoiceNumber,
+  withInvoiceNumberRetry,
+} from "@/lib/invoices/next-invoice-number";
 
 export const dynamic = "force-dynamic";
 
@@ -195,32 +199,29 @@ export async function POST(req: NextRequest) {
         const { taxRate, taxIncluded } = clinicInvoiceTaxDefaults((dbUser as any).clinic?.cfdiTaxMode);
         const { total } = computeInvoiceTotal(subtotal, 0, taxRate, taxIncluded);
 
-        // Generate invoice number (clinic-scoped)
-        const lastInvoice = await prisma.invoice.findFirst({
-          where: { clinicId: dbUser.clinicId },
-          orderBy: { createdAt: "desc" },
-          select: { invoiceNumber: true },
-        });
-        const lastNum = lastInvoice?.invoiceNumber ? parseInt(lastInvoice.invoiceNumber.replace(/\D/g, "")) || 0 : 0;
-        const invoiceNumber = `MF-${String(lastNum + 1).padStart(4, "0")}`;
-
-        draftInvoice = await prisma.invoice.create({
-          data: {
-            clinicId: dbUser.clinicId,
-            patientId: data.patientId,
-            invoiceNumber,
-            items: items as any,
-            subtotal,
-            discount: 0,
-            total,
-            paid: 0,
-            balance: total,
-            status: "DRAFT",
-            taxRate,
-            taxIncluded,
-            notes: `Auto-generada desde expediente clínico del ${new Date().toLocaleDateString("es-MX")}`,
-          },
-        });
+        // Folio por MÁXIMO emitido con reintento ante carrera (P0-2). El
+        // generador anterior parseaba TODOS los dígitos del último folio por
+        // createdAt: de un "INV-2026-0007" fabricaba "MF-20260008" y arruinaba
+        // la numeración de la clínica para siempre.
+        draftInvoice = await withInvoiceNumberRetry(async () =>
+          prisma.invoice.create({
+            data: {
+              clinicId: dbUser.clinicId,
+              patientId: data.patientId,
+              invoiceNumber: await nextInvoiceNumber(dbUser.clinicId),
+              items: items as any,
+              subtotal,
+              discount: 0,
+              total,
+              paid: 0,
+              balance: total,
+              status: "DRAFT",
+              taxRate,
+              taxIncluded,
+              notes: `Auto-generada desde expediente clínico del ${new Date().toLocaleDateString("es-MX")}`,
+            },
+          }),
+        );
       }
     } catch (err) {
       console.error("Error creating draft invoice:", err);

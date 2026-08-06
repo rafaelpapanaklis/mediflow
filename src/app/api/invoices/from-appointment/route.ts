@@ -12,6 +12,11 @@ import {
   clinicInvoiceTaxDefaults,
   round2,
 } from "@/lib/invoice-totals";
+import {
+  InvoiceNumberExhaustedError,
+  nextInvoiceNumber,
+  withInvoiceNumberRetry,
+} from "@/lib/invoices/next-invoice-number";
 
 export const dynamic = "force-dynamic";
 
@@ -118,49 +123,55 @@ export async function POST(req: NextRequest) {
   const { taxRate, taxIncluded } = clinicInvoiceTaxDefaults(clinicTax?.cfdiTaxMode);
   const { total } = computeInvoiceTotal(subtotal, discount, taxRate, taxIncluded);
 
-  // Generación simple de invoiceNumber: INV-YYYY-#### (count + 1 en clínica).
-  const year = new Date().getFullYear();
-  const count = await prisma.invoice.count({
-    where: { clinicId: session.clinic.id, createdAt: { gte: new Date(year, 0, 1) } },
-  });
-  const invoiceNumber = `INV-${year}-${String(count + 1).padStart(4, "0")}`;
-
   try {
-    const invoice = await prisma.invoice.create({
-      data: {
-        clinicId: session.clinic.id,
-        patientId: appt.patientId,
-        appointmentId: appt.id,
-        invoiceNumber,
-        items: items as unknown as Prisma.InputJsonValue,
-        subtotal,
-        discount,
-        total,
-        balance: total,
-        status: "PENDING",
-        notes: parsed.data.notes ?? null,
-        taxRate,
-        taxIncluded,
-      },
-      select: {
-        id: true,
-        invoiceNumber: true,
-        subtotal: true,
-        discount: true,
-        total: true,
-        balance: true,
-        status: true,
-        appointmentId: true,
-        items: true,
-        createdAt: true,
-      },
-    });
+    // Folio por MÁXIMO emitido con reintento ante carrera (P0-2). La serie
+    // INV-YYYY-#### que emitía esta ruta se retira: era la 2ª serie paralela
+    // sobre la misma columna única y su count+1 anual chocaba con la serie
+    // MF-#### del resto de generadores. El folio se recalcula DENTRO de cada
+    // intento; el P2002 de appointmentId NO se reintenta (cae al catch).
+    const invoice = await withInvoiceNumberRetry(async () =>
+      prisma.invoice.create({
+        data: {
+          clinicId: session.clinic.id,
+          patientId: appt.patientId,
+          appointmentId: appt.id,
+          invoiceNumber: await nextInvoiceNumber(session.clinic.id),
+          items: items as unknown as Prisma.InputJsonValue,
+          subtotal,
+          discount,
+          total,
+          balance: total,
+          status: "PENDING",
+          notes: parsed.data.notes ?? null,
+          taxRate,
+          taxIncluded,
+        },
+        select: {
+          id: true,
+          invoiceNumber: true,
+          subtotal: true,
+          discount: true,
+          total: true,
+          balance: true,
+          status: true,
+          appointmentId: true,
+          items: true,
+          createdAt: true,
+        },
+      }),
+    );
     revalidateAfter("invoices");
     revalidatePath(`/dashboard/patients/${appt.patientId}`);
     return NextResponse.json({ invoice }, { status: 201 });
   } catch (err) {
-    // Race condition: otra request creó la invoice primero (P2002 sobre
-    // appointmentId @unique o invoiceNumber).
+    // Carrera de folio agotada (ya reintentó recalculando el máximo).
+    if (err instanceof InvoiceNumberExhaustedError) {
+      return NextResponse.json({ error: "invoice_number_conflict" }, { status: 409 });
+    }
+    // Race condition: otra request creó la invoice primero. Aquí solo llega el
+    // P2002 de appointmentId @unique (el de invoiceNumber lo distingue y
+    // reintenta withInvoiceNumberRetry por meta.target), así que el mensaje
+    // "invoice_already_exists" por fin es verdad siempre.
     const code = (err as { code?: string }).code;
     if (code === "P2002") {
       return NextResponse.json(

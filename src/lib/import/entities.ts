@@ -9,6 +9,8 @@ import { prisma } from "@/lib/prisma";
 import { getPatientQuota } from "@/lib/patient-quota";
 import { lastPatientFolio } from "@/lib/patients/next-patient-number";
 import { formatPatientNumber } from "@/lib/patients/next-patient-number-core";
+import { lastInvoiceFolio } from "@/lib/invoices/next-invoice-number";
+import { formatInvoiceNumber } from "@/lib/invoices/next-invoice-number-core";
 import { sumInvoiceItems, computeInvoiceTotal, round2 } from "@/lib/invoice-totals";
 import type { PreviewRow } from "./types";
 import {
@@ -549,9 +551,12 @@ export const balancesHandler: EntityHandler = {
     if (debtRows.length > 0) {
       created += await insertNumbered({
         rows: debtRows,
-        lastSeq: () => prisma.invoice.count({ where: { clinicId } }),
+        // Máximo folio emitido, NO el conteo (P0-2): con huecos (DRAFT borrados)
+        // el count+1 reasignaba un folio ya usado — mismo arreglo que el
+        // patientNumber de arriba, que ya cumple el contrato de lastSeq.
+        lastSeq: async () => (await lastInvoiceFolio(clinicId)) ?? 0,
         numberField: "invoiceNumber",
-        format: (seq) => `MF-${String(seq).padStart(4, "0")}`,
+        format: formatInvoiceNumber,
         build: (slice) => slice.map((r) => {
           // La factura de apertura pasa por la MISMA aritmética que el resto
           // (invoice-totals): ningún creador de facturas debe tener matemática

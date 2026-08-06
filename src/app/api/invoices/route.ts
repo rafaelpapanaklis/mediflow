@@ -10,6 +10,11 @@ import { revalidateAfter } from "@/lib/cache/revalidate";
 import { sumInvoiceItems, computeInvoiceTotal, round2, IVA_RATE_PCT } from "@/lib/invoice-totals";
 import { relatedPatientVisibilityAnd, assertPatientVisible } from "@/lib/patient-visibility";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
+import {
+  InvoiceNumberExhaustedError,
+  nextInvoiceNumber,
+  withInvoiceNumberRetry,
+} from "@/lib/invoices/next-invoice-number";
 
 async function getCtx() {
   const supabase = createClient();
@@ -22,11 +27,6 @@ async function getCtx() {
   }
   const dbUser = await prisma.user.findFirst({ where: { supabaseId: user.id, isActive: true }, orderBy: { createdAt: "asc" } });
   return dbUser ? { clinicId: dbUser.clinicId, userId: dbUser.id, role: dbUser.role, permissionsOverride: dbUser.permissionsOverride ?? [] } : null;
-}
-
-async function nextInvoiceNumber(clinicId: string) {
-  const count = await prisma.invoice.count({ where: { clinicId } });
-  return `MF-${String(count + 1).padStart(4, "0")}`;
 }
 
 export async function GET(req: NextRequest) {
@@ -121,14 +121,20 @@ export async function POST(req: NextRequest) {
     });
     if (denied) return denied;
 
-    const invoice = await prisma.invoice.create({
-      data: { clinicId, patientId: data.patientId, appointmentId: data.appointmentId ?? undefined,
-        invoiceNumber: await nextInvoiceNumber(clinicId), items: data.items, subtotal, discount,
-        total, paid: 0, balance: total, status: "PENDING", paymentMethod: data.paymentMethod, notes: data.notes,
-        dueDate: data.dueDate ? new Date(data.dueDate) : undefined,
-        doctorId, taxRate, taxIncluded },
-      include: { patient: true },
-    });
+    // Folio por MÁXIMO emitido con reintento ante carrera (P0-2): el folio se
+    // recalcula DENTRO de cada intento para que el perdedor de la carrera vea
+    // el máximo nuevo. El count+1 anterior, con cualquier hueco (DRAFT borrado),
+    // apuntaba a un folio ya emitido → P2002 permanente: facturación bloqueada.
+    const invoice = await withInvoiceNumberRetry(async () =>
+      prisma.invoice.create({
+        data: { clinicId, patientId: data.patientId, appointmentId: data.appointmentId ?? undefined,
+          invoiceNumber: await nextInvoiceNumber(clinicId), items: data.items, subtotal, discount,
+          total, paid: 0, balance: total, status: "PENDING", paymentMethod: data.paymentMethod, notes: data.notes,
+          dueDate: data.dueDate ? new Date(data.dueDate) : undefined,
+          doctorId, taxRate, taxIncluded },
+        include: { patient: true },
+      }),
+    );
 
     await logMutation({
       req,
@@ -151,6 +157,11 @@ export async function POST(req: NextRequest) {
       const issue = err.issues[0];
       const where = issue && issue.path.length ? ` (${issue.path.join(".")})` : "";
       return NextResponse.json({ error: `${issue ? issue.message : "Datos inválidos"}${where}` }, { status: 400 });
+    }
+    // Carrera de folio agotada (ya reintentó recalculando el máximo): es un
+    // conflicto transitorio, no un error del usuario → 409 con mensaje humano.
+    if (err instanceof InvoiceNumberExhaustedError) {
+      return NextResponse.json({ error: err.message }, { status: 409 });
     }
     return NextResponse.json({ error: err.message }, { status: 400 });
   }
