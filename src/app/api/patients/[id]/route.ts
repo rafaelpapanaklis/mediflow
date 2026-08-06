@@ -23,6 +23,12 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
   // Con el flag apagado, clinicIds = [ctx.clinicId] y esto es la query de hoy.
   const visibility = await getPatientVisibility(ctx.clinicId);
 
+  // El doctor de cada cita/nota va con `select` MÍNIMO, nunca `doctor: true`:
+  // la fila completa de User carga totpSecret, recoveryCodes, cajaPinHash,
+  // googleRefreshToken y stripeAccountId, y aquí se serializaba al navegador
+  // repetida por CADA cita y CADA nota del paciente (P1-9).
+  const doctorPublic = { select: { id: true, firstName: true, lastName: true } } as const;
+
   // Use buildPatientWhere so doctors can only see their own patients
   const patient = await prisma.patient.findFirst({
     where: { ...buildPatientWhere(ctx, {}, visibility.clinicIds), id: params.id },
@@ -30,14 +36,14 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
       // Citas y facturas SIEMPRE de la sede activa, aunque el paciente venga
       // prestado: cada sucursal agenda y cobra por separado. Para un paciente
       // propio el filtro no cambia nada.
-      appointments: { where: { clinicId: ctx.clinicId }, orderBy: { startsAt: "desc" }, include: { doctor: true } },
+      appointments: { where: { clinicId: ctx.clinicId }, orderBy: { startsAt: "desc" }, include: { doctor: doctorPublic } },
       // El expediente SÍ viaja: es el contenido clínico que se comparte. El
       // scope explícito es defensa en profundidad — hoy medicalRecord.clinicId
       // SIEMPRE coincide con el del paciente (todos los writers lo validan),
       // así que para un paciente propio es no-op; queda puesto para que el día
       // que exista una escritura sobre paciente prestado esto no se vuelva una
       // fuga transitiva. Además excluye notas privadas de sedes ajenas.
-      records:      { where: sharedRecordScope(ctx.clinicId, visibility.clinicIds), orderBy: { visitDate: "desc" }, include: { doctor: true } },
+      records:      { where: sharedRecordScope(ctx.clinicId, visibility.clinicIds), orderBy: { visitDate: "desc" }, include: { doctor: doctorPublic } },
       invoices:     { where: { clinicId: ctx.clinicId }, include: { payments: true } },
     },
   });
