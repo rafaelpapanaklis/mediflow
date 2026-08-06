@@ -14,6 +14,8 @@ import { logMutation } from "@/lib/audit";
 import { revalidateAfter } from "@/lib/cache/revalidate";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { getPatientDeleteBlockers } from "@/lib/patient-deletion";
+import { APPT_AUTO_TYPE } from "@/lib/reminders/config";
+import { WA_REMINDER_PENDING_STATUSES } from "@/lib/whatsapp/reminder-status";
 
 export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
   const ctx = await getAuthContext();
@@ -281,6 +283,17 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     return autoIncluded ? { ...row, visibleUserIds: autoIncluded } : row;
   });
 
+  // P2/Ola 4: archivar por PATCH (el camino del archivado masivo de la lista)
+  // también cancela citas futuras y limpia recordatorios, igual que el DELETE.
+  // Idempotente: re-archivar no encuentra citas activas y no toca nada.
+  let cancelledFutureAppointments = 0;
+  if (data.status === "ARCHIVED") {
+    cancelledFutureAppointments = await cancelFutureAppointmentsForPatient(
+      params.id,
+      ctx.clinicId,
+    );
+  }
+
   await logMutation({
     req,
     clinicId: ctx.clinicId,
@@ -289,11 +302,62 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     entityId: params.id,
     action: "update",
     before: exists as any,
-    after: updated as any,
+    after: (cancelledFutureAppointments > 0
+      ? { ...(updated as any), cancelledFutureAppointments }
+      : updated) as any,
   });
 
   revalidateAfter("patients");
+  if (cancelledFutureAppointments > 0) revalidateAfter("appointments");
   return NextResponse.json(updated);
+}
+
+/**
+ * Archivar un paciente NO debe dejar sus citas futuras vivas (P2/Ola 4): antes
+ * seguían ocupando el hueco del doctor, contaban en KPIs y les seguían saliendo
+ * recordatorios de WhatsApp. Cancela las citas futuras no-terminales con motivo
+ * y borra sus recordatorios (APPT_AUTO completos —también SENT, por el dedupe—
+ * y cualquier otro tipo aún pendiente). Best-effort en los recordatorios: un
+ * fallo ahí no revierte el archivado (la cola además re-checa status terminal
+ * antes de enviar, así que una fila huérfana no dispara mensajes).
+ */
+async function cancelFutureAppointmentsForPatient(
+  patientId: string,
+  clinicId: string,
+): Promise<number> {
+  const now = new Date();
+  const future = await prisma.appointment.findMany({
+    where: {
+      patientId,
+      clinicId,
+      startsAt: { gt: now },
+      status: { notIn: ["CANCELLED", "NO_SHOW", "COMPLETED", "CHECKED_OUT"] },
+    },
+    select: { id: true },
+  });
+  if (future.length === 0) return 0;
+  const ids = future.map((a) => a.id);
+
+  await prisma.appointment.updateMany({
+    where: { id: { in: ids }, clinicId },
+    data: { status: "CANCELLED", cancelledAt: now, cancelReason: "Paciente archivado" },
+  });
+
+  try {
+    await prisma.whatsAppReminder.deleteMany({
+      where: {
+        appointmentId: { in: ids },
+        OR: [
+          { type: APPT_AUTO_TYPE },
+          { status: { in: WA_REMINDER_PENDING_STATUSES } },
+        ],
+      },
+    });
+  } catch (err) {
+    console.error("[patients DELETE/PATCH] limpieza de recordatorios falló (ignorado):", err);
+  }
+
+  return ids.length;
 }
 
 /**
@@ -337,6 +401,13 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
       data:  { status: "ARCHIVED" },
     });
 
+    // P2/Ola 4: sus citas futuras se cancelan (con motivo) y sus
+    // recordatorios pendientes se limpian — ver helper arriba.
+    const cancelledFutureAppointments = await cancelFutureAppointmentsForPatient(
+      params.id,
+      ctx.clinicId,
+    );
+
     await logMutation({
       req,
       clinicId: ctx.clinicId,
@@ -345,10 +416,12 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
       entityId: params.id,
       action: "delete",
       before: before as any,
+      after: { archived: true, cancelledFutureAppointments } as any,
     });
 
     revalidateAfter("patients");
-    return NextResponse.json({ success: true, archived: true });
+    if (cancelledFutureAppointments > 0) revalidateAfter("appointments");
+    return NextResponse.json({ success: true, archived: true, cancelledFutureAppointments });
   }
 
   // ── Modo BORRADO DEFINITIVO ────────────────────────────────────────────
