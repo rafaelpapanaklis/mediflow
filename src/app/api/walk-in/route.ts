@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthContext } from "@/lib/auth-context";
+import { assertPatientVisible } from "@/lib/patient-visibility";
 import { prisma } from "@/lib/prisma";
 
 export async function GET(req: NextRequest) {
@@ -31,6 +32,18 @@ export async function POST(req: NextRequest) {
 
   if (!patientName?.trim() || !service?.trim()) {
     return NextResponse.json({ error: "patientName and service are required" }, { status: 400 });
+  }
+
+  // Tenant + visibilidad por paciente (barrido Ola 3): el patientId venía
+  // CRUDO del body — sin ni siquiera validar la clínica se podía colgar una
+  // FK a un paciente ajeno. El assert cubre las dos cosas en un query.
+  if (typeof patientId === "string" && patientId) {
+    const visDenied = await assertPatientVisible(patientId, {
+      userId: ctx.userId,
+      role: ctx.role,
+      clinicId: ctx.clinicId,
+    });
+    if (visDenied) return visDenied;
   }
 
   const entry = await prisma.walkInQueue.create({

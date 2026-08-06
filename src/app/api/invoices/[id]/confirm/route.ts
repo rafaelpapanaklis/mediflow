@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { logMutation } from "@/lib/audit";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
+import { assertPatientVisible } from "@/lib/patient-visibility";
 import { revalidateAfter } from "@/lib/cache/revalidate";
 
 // Contexto vía el helper CENTRAL: misma resolución cookie→clínica que la
@@ -30,6 +31,17 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
 
   const invoice = await prisma.invoice.findFirst({ where: { id: params.id, clinicId } });
   if (!invoice) return NextResponse.json({ error: "Factura no encontrada" }, { status: 404 });
+
+  // Visibilidad por paciente (barrido Ola 3): confirmar la factura de un
+  // paciente restringido exige poder verlo.
+  if (invoice.patientId) {
+    const visDenied = await assertPatientVisible(invoice.patientId, {
+      userId: ctx.userId,
+      role: ctx.role,
+      clinicId,
+    });
+    if (visDenied) return visDenied;
+  }
   if (invoice.status !== "DRAFT") {
     return NextResponse.json({ error: "Solo se pueden confirmar borradores" }, { status: 400 });
   }

@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { logMutation } from "@/lib/audit";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
+import { assertPatientVisible } from "@/lib/patient-visibility";
 import { revalidateAfter } from "@/lib/cache/revalidate";
 
 // Contexto vía el helper CENTRAL: misma resolución cookie→clínica que la
@@ -29,6 +30,23 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
 
   const { method } = await req.json().catch(() => ({ method: undefined }));
   const payMethod = (method ?? "cash") as string;
+
+  // Visibilidad por paciente (barrido Ola 3): cobrar la factura de un paciente
+  // restringido exige poder verlo (el GET de facturas ya filtra la lista).
+  // Pre-check FUERA de la tx: dentro solo va el flujo con lock FOR UPDATE.
+  const invoicePeek = await prisma.invoice.findFirst({
+    where: { id: params.id, clinicId },
+    select: { patientId: true },
+  });
+  if (!invoicePeek) return NextResponse.json({ error: "Factura no encontrada" }, { status: 404 });
+  if (invoicePeek.patientId) {
+    const visDenied = await assertPatientVisible(invoicePeek.patientId, {
+      userId: ctx.userId,
+      role: ctx.role,
+      clinicId,
+    });
+    if (visDenied) return visDenied;
+  }
 
   const now = new Date();
 

@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { getAuthContext } from "@/lib/auth-context";
 import { prisma } from "@/lib/prisma";
+import { assertPatientVisible } from "@/lib/patient-visibility";
 import { logAudit } from "@/lib/audit";
 import { distinctPhaseCount } from "@/lib/quotes/compute";
 
@@ -22,6 +23,19 @@ export async function POST(_req: NextRequest, { params }: Params) {
     include: { items: { select: { phase: true } } },
   });
   if (!quote) return NextResponse.json({ error: "Presupuesto no encontrado" }, { status: 404 });
+
+  // Visibilidad por paciente (barrido Ola 3): el resto de /quotes/** asserta;
+  // crear el plan de tratamiento del paciente restringido exige poder verlo.
+  // 404 ANTES del chequeo de status para no filtrar el estado del presupuesto.
+  if (quote.patientId) {
+    const visDenied = await assertPatientVisible(quote.patientId, {
+      userId: ctx.userId,
+      role: ctx.role,
+      clinicId: ctx.clinicId,
+    });
+    if (visDenied) return visDenied;
+  }
+
   if (quote.status !== "ACCEPTED") {
     return NextResponse.json(
       { error: "Solo se crea un plan desde un presupuesto aceptado" },

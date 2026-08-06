@@ -4,7 +4,7 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getAuthContext } from "@/lib/auth-context";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
-import { relatedPatientVisibilityAnd } from "@/lib/patient-visibility";
+import { relatedPatientVisibilityAnd, assertPatientVisible } from "@/lib/patient-visibility";
 import { DEFAULT_TZ, calendarDayISO } from "@/lib/agenda/date-ranges";
 import { tzLocalToUtc } from "@/lib/agenda/time-utils";
 
@@ -271,11 +271,15 @@ export async function POST(req: NextRequest) {
       );
     }
     if (parsed.data.patientId) {
-      const patient = await prisma.patient.findFirst({
-        where: { id: parsed.data.patientId, clinicId: dbUser.clinicId },
-        select: { id: true },
+      // Tenant + visibilidad por paciente (barrido Ola 3): abrir un hilo a
+      // nombre de un paciente restringido exige poder verlo — el resto de los
+      // handlers del inbox ya assertan; este POST era el único pelado.
+      const visDenied = await assertPatientVisible(parsed.data.patientId, {
+        userId: dbUser.id,
+        role: dbUser.role,
+        clinicId: dbUser.clinicId,
       });
-      if (!patient) return jsonError("patient_not_found", 404);
+      if (visDenied) return visDenied;
     }
 
     const now = new Date();
