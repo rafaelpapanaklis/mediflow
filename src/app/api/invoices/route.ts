@@ -121,6 +121,28 @@ export async function POST(req: NextRequest) {
     });
     if (denied) return denied;
 
+    // La cita del body debe ser de ESTA clínica y de ESTE paciente (P1-6).
+    // Invoice.appointmentId es @unique GLOBAL: sin esta validación se escribía
+    // la FK sobre la cita de OTRA clínica y se le quemaba el slot único (409
+    // permanente para su dueña) — o, intra-clínica, se colgaba la factura del
+    // paciente X sobre la cita del paciente Y. 404 para la cita ajena (no
+    // confirmar existencia cross-tenant), 400 para el cruce de paciente.
+    if (data.appointmentId) {
+      const appt = await prisma.appointment.findFirst({
+        where: { id: data.appointmentId, clinicId },
+        select: { id: true, patientId: true },
+      });
+      if (!appt) {
+        return NextResponse.json({ error: "Cita no encontrada" }, { status: 404 });
+      }
+      if (appt.patientId !== data.patientId) {
+        return NextResponse.json(
+          { error: "La cita seleccionada es de otro paciente" },
+          { status: 400 },
+        );
+      }
+    }
+
     // Folio por MÁXIMO emitido con reintento ante carrera (P0-2): el folio se
     // recalcula DENTRO de cada intento para que el perdedor de la carrera vea
     // el máximo nuevo. El count+1 anterior, con cualquier hueco (DRAFT borrado),
@@ -162,6 +184,12 @@ export async function POST(req: NextRequest) {
     // conflicto transitorio, no un error del usuario → 409 con mensaje humano.
     if (err instanceof InvoiceNumberExhaustedError) {
       return NextResponse.json({ error: err.message }, { status: 409 });
+    }
+    // El único P2002 que llega hasta aquí es el de appointmentId @unique (el de
+    // invoiceNumber lo reintenta withInvoiceNumberRetry distinguiendo por
+    // meta.target): la cita ya tiene factura → 409 humano, no el texto de Prisma.
+    if (err?.code === "P2002") {
+      return NextResponse.json({ error: "Esa cita ya tiene una factura" }, { status: 409 });
     }
     return NextResponse.json({ error: err.message }, { status: 400 });
   }
