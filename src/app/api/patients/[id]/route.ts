@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { Prisma, PatientStatus, Gender } from "@prisma/client";
+import { Prisma, PatientStatus, Gender, type Role } from "@prisma/client";
 import { getAuthContext, buildPatientWhere } from "@/lib/auth-context";
 import { prisma } from "@/lib/prisma";
-import { getPatientVisibility, sharedRecordScope } from "@/lib/branches";
+import { getPatientVisibility, sharedRecordScope, ownPrivateRecordsOnly } from "@/lib/branches";
 import { patientSchema } from "@/lib/validations";
 import { validateCurpRecord } from "@/lib/validators/curp";
 import {
@@ -13,6 +13,8 @@ import {
 import { logMutation } from "@/lib/audit";
 import { revalidateAfter } from "@/lib/cache/revalidate";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
+import { hasPermission } from "@/lib/auth/permissions";
+import { stripPatientSecrets } from "@/lib/patient-secrets";
 import { getPatientDeleteBlockers } from "@/lib/patient-deletion";
 import { APPT_AUTO_TYPE } from "@/lib/reminders/config";
 import { WA_REMINDER_PENDING_STATUSES } from "@/lib/whatsapp/reminder-status";
@@ -31,6 +33,13 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
   // repetida por CADA cita y CADA nota del paciente (P1-9).
   const doctorPublic = { select: { id: true, firstName: true, lastName: true } } as const;
 
+  // Notas privadas (P1-N2): `sharedRecordScope` sólo excluye las privadas de
+  // OTRA sede; para una clínica sola devuelve `{ clinicId }` pelado y esta ruta
+  // entregaba el SOAP privado de cualquier doctor a cualquiera que abriera la
+  // ficha — recepción incluida. `ownPrivateRecordsOnly` es la otra mitad del
+  // filtro, la de la sede propia: la privada la ve sólo su autor.
+  const ownPrivateOnly = ownPrivateRecordsOnly(ctx.userId);
+
   // Use buildPatientWhere so doctors can only see their own patients
   const patient = await prisma.patient.findFirst({
     where: { ...buildPatientWhere(ctx, {}, visibility.clinicIds), id: params.id },
@@ -45,14 +54,31 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
       // así que para un paciente propio es no-op; queda puesto para que el día
       // que exista una escritura sobre paciente prestado esto no se vuelva una
       // fuga transitiva. Además excluye notas privadas de sedes ajenas.
-      records:      { where: sharedRecordScope(ctx.clinicId, visibility.clinicIds), orderBy: { visitDate: "desc" }, include: { doctor: doctorPublic } },
+      records:      { where: { AND: [sharedRecordScope(ctx.clinicId, visibility.clinicIds), ownPrivateOnly] }, orderBy: { visitDate: "desc" }, include: { doctor: doctorPublic } },
       invoices:     { where: { clinicId: ctx.clinicId }, include: { payments: true } },
     },
   });
   if (!patient) return NextResponse.json({ error: "Paciente no encontrado" }, { status: 404 });
 
+  // Permiso de expediente (P1-N2), mismo criterio que la ficha SSR con
+  // "billing.view": sin "Ver expediente clínico" la ficha del paciente se sigue
+  // abriendo (datos de contacto, citas, facturación) pero el SOAP no viaja. Se
+  // vacía en vez de responder 403 porque esta ruta sirve la ficha ENTERA:
+  // negarla completa dejaría sin trabajar a quien sí puede ver al paciente.
+  // OJO con la sobrecarga: `hasPermission(role, key)` mira SÓLO el default del
+  // rol y se salta `permissionsOverride` (es el bug P1-7 que ya se cerró en
+  // /api/records). La forma correcta es la de objeto, la misma que usa la ficha
+  // SSR. `ctx.role` viene tipado como string del contexto de auth.
+  const records = hasPermission(
+    { role: ctx.role as Role, permissionsOverride: ctx.permissionsOverride ?? [] },
+    "medicalRecord.view",
+  )
+    ? patient.records
+    : [];
+
   return NextResponse.json({
-    ...patient,
+    ...stripPatientSecrets(patient),
+    records,
     originClinicName:
       patient.clinicId === ctx.clinicId
         ? null
@@ -131,7 +157,7 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
     });
 
     revalidateAfter("patients");
-    return NextResponse.json(updated);
+    return NextResponse.json(stripPatientSecrets(updated));
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 400 });
   }
@@ -309,7 +335,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 
   revalidateAfter("patients");
   if (cancelledFutureAppointments > 0) revalidateAfter("appointments");
-  return NextResponse.json(updated);
+  return NextResponse.json(stripPatientSecrets(updated));
 }
 
 /**
@@ -367,12 +393,14 @@ async function cancelFutureAppointmentsForPatient(
  *                                           Comportamiento histórico, intacto.
  *   DELETE /api/patients/:id?mode=hard    → BORRADO DEFINITIVO de la fila.
  *
- * El borrado definitivo solo procede si el paciente no tiene nada que obligue a
- * conservarlo (facturas/pagos/CFDI + historia clínica —notas, recetas,
- * consentimientos, archivos, radiografías, odontograma— + las 5 tablas con
- * `onDelete: Restrict`, ver @/lib/patient-deletion). Si lo tiene responde 409 con
- * `{ blocked: true, reasons: [{ type, count }] }` para que la UI lo explique en
- * español y ofrezca archivar.
+ * El borrado definitivo solo procede si el paciente no tiene NADA que obligue a
+ * conservarlo. El criterio está invertido (P0-1): sólo puede desaparecer lo que
+ * está en la allowlist explícita de @/lib/patient-deletion-policy —citas,
+ * presupuestos, planes de pago, lo operativo—; todo lo demás que cuelgue del
+ * paciente bloquea, incluidas las especialidades completas (Ortodoncia,
+ * Pediatría, Periodoncia, Endodoncia, Implantes) y su saldo a favor. Si lo tiene
+ * responde 409 con `{ blocked: true, reasons: [{ type, count }] }` para que la
+ * UI lo explique en español y ofrezca archivar.
  */
 export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {
   const ctx = await getAuthContext();

@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { signMaybeUrls } from "@/lib/storage";
 import { logMutation } from "@/lib/audit";
 import { assertPatientVisible } from "@/lib/patient-visibility";
+import { stripPatientSecrets } from "@/lib/patient-secrets";
 
 export const dynamic = "force-dynamic";
 
@@ -118,7 +119,12 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
   return NextResponse.json({
     schemaVersion: "1.0",
     exportedAt: new Date().toISOString(),
-    patient,
+    // P1-N1: el `findFirst` de arriba no lleva `select`, así que `portalToken`
+    // —el bearer permanente de /portal/[token]— acababa dentro del archivo de
+    // portabilidad ARCO que se le entrega al titular. Un dump que se guarda en
+    // disco, se manda por correo y se archiva no es sitio para una credencial
+    // viva: el paciente pide sus datos, no una llave.
+    patient: stripPatientSecrets(patient),
     appointments,
     medicalRecords: records,
     diagnoses,

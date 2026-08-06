@@ -3,9 +3,10 @@ export const dynamic = "force-dynamic";
 import { getCurrentUser } from "@/lib/auth";
 import { getServerT } from "@/i18n/server";
 import { prisma } from "@/lib/prisma";
-import { getPatientVisibility, clinicScopeFilter, sharedRecordScope } from "@/lib/branches";
+import { getPatientVisibility, clinicScopeFilter, sharedRecordScope, ownPrivateRecordsOnly } from "@/lib/branches";
 import { getPatientCreditBalance } from "@/lib/patient-credit";
 import { patientVisibilityAnd } from "@/lib/patient-visibility";
+import { stripPatientSecrets } from "@/lib/patient-secrets";
 import { notFound } from "next/navigation";
 import { headers } from "next/headers";
 import { logAudit } from "@/lib/audit";
@@ -72,8 +73,19 @@ export default async function PatientDetailPage({ params }: { params: { id: stri
         // El expediente SÍ se comparte: es el contenido clínico de la Fase 2.
         // Scope explícito = defensa en profundidad (no-op para paciente propio)
         // + excluye notas privadas de otro doctor cuando la sede es ajena.
+        // Notas privadas (P1-N2): `sharedRecordScope` sólo excluye las privadas
+        // de OTRA sede; con una clínica sola es `{ clinicId }` pelado y esta
+        // página entregaba el SOAP privado de cualquier doctor a quien abriera
+        // la ficha, recepción incluida. Mismo criterio que /api/records: la
+        // privada la ve sólo su autor. En AND porque `sharedRecordScope` puede
+        // ocupar `OR` cuando hay sedes vinculadas.
         records: {
-          where: sharedRecordScope(user.clinicId, visibility.clinicIds),
+          where: {
+            AND: [
+              sharedRecordScope(user.clinicId, visibility.clinicIds),
+              ownPrivateRecordsOnly(user.id),
+            ],
+          },
           orderBy: { visitDate: "desc" },
           take: 20,
           include: { doctor: { select: { id: true, firstName: true, lastName: true } } },
@@ -178,6 +190,16 @@ export default async function PatientDetailPage({ params }: { params: { id: stri
   const canViewBilling = hasPermission(
     { role: user.role, permissionsOverride: user.permissionsOverride ?? [] },
     "billing.view",
+  );
+
+  // Mismo criterio para el EXPEDIENTE (P1-N2): sin "Ver expediente clínico" la
+  // ficha se sigue abriendo (contacto, citas, facturación) pero el SOAP no sale
+  // del server. Se manda [] en vez de negar la página entera: quien no tiene el
+  // permiso sí tiene trabajo que hacer en la ficha. /api/records y /api/clinical
+  // ya exigían esta key; la ficha SSR era la puerta que se quedó abierta.
+  const canViewRecords = hasPermission(
+    { role: user.role, permissionsOverride: user.permissionsOverride ?? [] },
+    "medicalRecord.view",
   );
 
   const questionnaireRiskFlags = latestQuestionnaire?.riskFlags ?? [];
@@ -291,7 +313,27 @@ export default async function PatientDetailPage({ params }: { params: { id: stri
     updatedAt:    a.updatedAt instanceof Date ? a.updatedAt.toISOString() : String(a.updatedAt),
   }));
 
-  const serializedRecords = patient.records.map(r => ({
+  // P1-N1: `patient` es la fila completa y cruza al cliente dentro del payload
+  // RSC. `portalUrl` ya se armó arriba con el token, así que aquí el token
+  // sobra: se va. (El link legacy del portal SÍ sigue llegando al navegador,
+  // como prop `portalUrl` — es una función deliberada de la ficha, el botón
+  // "copiar liga de solo lectura". Lo que se corta aquí es que el token viaje
+  // además dentro del objeto paciente, donde nadie lo pide y de donde se cuela
+  // a cada respuesta de la API.)
+  //
+  // Y el strip es SHALLOW: copia `{...patient}`, así que se lleva también las
+  // relaciones del include. Sin vaciarlas aquí, `records` e `invoices` cruzaban
+  // ENTEROS en el flight data aunque los props de abajo mandaran `[]`: una
+  // recepcionista sin "Ver expediente clínico" recibía igual los 20 SOAP, y sin
+  // "Ver facturación" los folios y montos. Los props gatean lo que se PINTA;
+  // esto gatea lo que se MANDA, que es lo que importa.
+  const patientForClient = {
+    ...stripPatientSecrets(patient),
+    records:  canViewRecords ? patient.records  : [],
+    invoices: canViewBilling ? patient.invoices : [],
+  };
+
+  const serializedRecords = (canViewRecords ? patient.records : []).map(r => ({
     ...r,
     visitDate: r.visitDate instanceof Date ? r.visitDate.toISOString() : String(r.visitDate),
     createdAt: r.createdAt instanceof Date ? r.createdAt.toISOString() : String(r.createdAt),
@@ -325,7 +367,7 @@ export default async function PatientDetailPage({ params }: { params: { id: stri
               ? null
               : visibility.otherClinicNames[patient.clinicId] ?? null
           }
-          patient={patient as any}
+          patient={patientForClient as any}
           records={serializedRecords as any}
           appointments={serializedAppts as any}
           invoices={canViewBilling ? (patient.invoices as any) : []}

@@ -14,6 +14,7 @@ import { normalizeVisibleUserIds } from "@/lib/patient-visibility";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { logMutation } from "@/lib/audit";
 import { revalidateAfter } from "@/lib/cache/revalidate";
+import { stripPatientSecrets } from "@/lib/patient-secrets";
 
 export const dynamic = "force-dynamic";
 
@@ -456,7 +457,12 @@ async function v2Handler(
   const hasMore = page < totalPages;
 
   return NextResponse.json({
-    patients: pageSlice,
+    // P1-N1, defensa en profundidad. HOY es no-op: `enriched` se arma campo por
+    // campo, sin `...p`, así que nunca llevó `portalToken`. Se deja porque esa
+    // proyección es exactamente el tipo de código que alguien "simplifica" a un
+    // `...p` un martes, y ahí el token se iría al navegador multiplicado por las
+    // 50 filas de la página. El que SÍ filtraba es el handler legacy de abajo.
+    patients: stripPatientSecrets(pageSlice),
     total,
     page,
     pageSize: limit,
@@ -514,7 +520,7 @@ async function legacyHandler(
     skip,
   });
 
-  return NextResponse.json(patients);
+  return NextResponse.json(stripPatientSecrets(patients));
 }
 
 /* ─── helpers ─── */
@@ -676,5 +682,5 @@ export async function POST(req: NextRequest) {
   });
 
   revalidateAfter("patients");
-  return NextResponse.json(patient, { status: 201 });
+  return NextResponse.json(stripPatientSecrets(patient), { status: 201 });
 }

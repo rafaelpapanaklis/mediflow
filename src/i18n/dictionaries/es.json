@@ -2251,6 +2251,14 @@
           "one": "Tiene 1 registro de implantes",
           "other": "Tiene {count} registros de implantes"
         },
+        "specialty": {
+          "one": "Tiene 1 registro de especialidad (ortodoncia, pediatría o periodoncia)",
+          "other": "Tiene {count} registros de especialidad (ortodoncia, pediatría o periodoncia)"
+        },
+        "credit": {
+          "one": "Tiene 1 saldo a favor o paquete prepagado sin usar",
+          "other": "Tiene {count} saldos a favor o paquetes prepagados sin usar"
+        },
         "related": "Tiene información ligada que debe conservarse"
       }
     },

@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { Prisma } from "@prisma/client";
 import { TREATMENT_KINDS } from "@/lib/agenda/types";
 import { sumInvoiceItems, computeInvoiceTotal, round2 } from "@/lib/invoice-totals";
+import { getPatientDeleteBlockers, type PatientDeleteBlocker } from "@/lib/patient-deletion";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -1078,18 +1079,64 @@ export async function DELETE(req: NextRequest) {
     return NextResponse.json({ error: "rafael_clinic_not_found" }, { status: 404 });
   }
 
-  const before = await prisma.patient.count({
+  const demoPatients = await prisma.patient.findMany({
     where: { clinicId: clinic.id, tags: { has: DEMO_TAG } },
+    select: { id: true, patientNumber: true, firstName: true, lastName: true },
   });
+  const before = demoPatients.length;
 
-  const result = await prisma.patient.deleteMany({
-    where: { clinicId: clinic.id, tags: { has: DEMO_TAG } },
-  });
+  // P0-1: este DELETE era el segundo hard-delete de paciente del repo y NO
+  // pasaba por el precheck — `deleteMany` arrastraba en cascada expediente,
+  // ortodoncia, saldos a favor y todo lo demás sin preguntar. Está acotado a la
+  // clínica demo y al tag, pero nada impide que un paciente REAL termine
+  // etiquetado como demo (el tag se teclea en la UI).
+  //
+  // Ahora cada ficha pasa por el MISMO criterio que el borrado de la app. Pero
+  // OJO con el matiz que hace útil este endpoint: el propio seed le crea notas
+  // SOAP y recetas a sus pacientes demo, así que TODOS salen bloqueados por
+  // `clinical` — aplicar el precheck a secas convertía el wipe en un no-op
+  // permanente y dejaba la clínica demo sin forma de limpiarse.
+  //
+  // El precheck se usa entonces como RED DE SEGURIDAD, no como veto: se reporta
+  // siempre qué bloquea a cada ficha, y borrar lo bloqueado exige un segundo
+  // header explícito. Sin él la respuesta dice exactamente qué se saltó y por
+  // qué; con él, quien lo manda ya vio esa lista. Un paciente real mal
+  // etiquetado no se borra nunca en silencio, que es lo que importaba.
+  const force = req.headers.get("x-force-delete-blocked") === "yes";
+  const deleted: string[] = [];
+  const skipped: Array<{ patientNumber: string; name: string; reasons: PatientDeleteBlocker[] }> = [];
+  const forced: Array<{ patientNumber: string; name: string; reasons: PatientDeleteBlocker[] }> = [];
+
+  for (const p of demoPatients) {
+    const reasons = await getPatientDeleteBlockers(p.id, clinic.id);
+    const entry = {
+      patientNumber: p.patientNumber,
+      name: `${p.firstName} ${p.lastName}`.trim(),
+      reasons,
+    };
+    if (reasons.length > 0) {
+      if (!force) {
+        skipped.push(entry);
+        continue;
+      }
+      forced.push(entry);
+    }
+    await prisma.patient.deleteMany({ where: { id: p.id, clinicId: clinic.id } });
+    deleted.push(p.id);
+  }
 
   return NextResponse.json({
     success: true,
     clinic: clinic.name,
-    patientsDeleted: result.count,
+    patientsDeleted: deleted.length,
     patientsBefore: before,
+    // Lo que NO se borró por tener algo que conservar. Para borrarlos hay que
+    // repetir la llamada con el header X-Force-Delete-Blocked: yes.
+    patientsSkipped: skipped,
+    // Lo que se borró PESE a estar bloqueado (solo con el header de forzado).
+    patientsForceDeleted: forced,
+    hint: skipped.length
+      ? "Hay fichas con datos que normalmente se conservan. Revisa patientsSkipped; para borrarlas de todos modos repite con el header X-Force-Delete-Blocked: yes."
+      : undefined,
   });
 }

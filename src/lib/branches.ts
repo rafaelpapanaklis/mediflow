@@ -262,31 +262,12 @@ export async function listPatientLinks(ownedClinicIds: string[]) {
 }
 
 /**
- * Scope de MedicalRecord para las superficies compartidas.
- *
- * Las notas marcadas `isPrivate` son del doctor que las escribió: /api/records
- * ya las oculta a los demás dentro de la misma clínica. Al compartir entre
- * sedes hay que ser MÁS estricto, no menos: de una sede AJENA nunca se leen
- * notas privadas, porque el doctor que las escribió no tiene siquiera fila
- * User en la sede que las está leyendo (los ids de doctor son por clínica, así
- * que "es mía" es indecidible cruzando la frontera).
- *
- * Devuelve el filtro de clínica pelado cuando no hay nada compartido, así la
- * query queda idéntica a la de hoy.
+ * Scope de notas de expediente. La implementación vive en
+ * `@/lib/clinical/record-scope` (módulo PURO, sin `server-only`, para poder
+ * probar la composición de los dos filtros con `tsx --test`). Se re-exportan
+ * aquí para no tocar a los callers históricos.
  */
-export function sharedRecordScope(
-  activeClinicId: string,
-  visibleClinicIds: string[],
-): Record<string, unknown> {
-  const others = visibleClinicIds.filter((id) => id !== activeClinicId);
-  if (others.length === 0) return { clinicId: activeClinicId };
-  return {
-    OR: [
-      { clinicId: activeClinicId },
-      { clinicId: { in: others }, isPrivate: false },
-    ],
-  };
-}
+export { sharedRecordScope, ownPrivateRecordsOnly } from "@/lib/clinical/record-scope";
 
 /**
  * Crea el vínculo (idempotente). El par se normaliza ANTES de escribir, así el

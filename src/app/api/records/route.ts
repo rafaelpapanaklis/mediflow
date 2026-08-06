@@ -5,7 +5,7 @@ import { getAuthContext } from "@/lib/auth-context";
 import { logAudit, logMutation, extractAuditMeta } from "@/lib/audit";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { relatedPatientVisibilityAnd, assertPatientVisible } from "@/lib/patient-visibility";
-import { getVisiblePatientClinicIds, sharedRecordScope } from "@/lib/branches";
+import { getVisiblePatientClinicIds, sharedRecordScope, ownPrivateRecordsOnly } from "@/lib/branches";
 
 const recordSchema = z.object({
   patientId:     z.string().min(1),
@@ -68,7 +68,7 @@ export async function GET(req: NextRequest) {
   const records = await prisma.medicalRecord.findMany({
     where: {
       ...where,
-      OR: [{ isPrivate: false }, { isPrivate: true, doctorId: dbUser.id }],
+      ...ownPrivateRecordsOnly(dbUser.id),
       ...(recordAnd.length ? { AND: recordAnd } : {}),
     },
     include: { doctor: { select: { id: true, firstName: true, lastName: true } } },

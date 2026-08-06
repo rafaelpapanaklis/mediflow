@@ -7,6 +7,7 @@ import { revalidateAfter } from "@/lib/cache/revalidate";
 import { sumInvoiceItems, computeInvoiceTotal, round2 } from "@/lib/invoice-totals";
 import { findInvalidLineDiscount, LINE_DISCOUNT_ERROR } from "@/lib/validations";
 import { assertPatientVisible } from "@/lib/patient-visibility";
+import { stripNestedPatientSecrets } from "@/lib/patient-secrets";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 
 // Contexto vía el helper CENTRAL: misma resolución cookie→clínica que la
@@ -34,7 +35,9 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     const denied = await assertPatientVisible(invoice.patientId, { userId: ctx.userId, role: ctx.role, clinicId });
     if (denied) return denied;
   }
-  return NextResponse.json(invoice);
+  // P1-N1: `include: { patient: true }` trae la fila completa, `portalToken`
+  // incluido — el bearer permanente del portal del paciente.
+  return NextResponse.json(stripNestedPatientSecrets(invoice));
 }
 
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
