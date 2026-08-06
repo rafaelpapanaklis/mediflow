@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { getPlanLimits } from "@/lib/plans";
 import { NextResponse } from "next/server";
+import { formatBytes } from "@/lib/uploads/patient-study-upload";
 
 /**
  * Cuota de almacenamiento por plan. Suma el tamaño de:
@@ -39,8 +40,23 @@ export async function storageQuotaError(clinicId: string, addBytes: number): Pro
     Number(uploadAgg._sum.sizeBytes ?? 0);
   if (used + addBytes > storageBytes) {
     const gb = Math.round(storageBytes / (1024 ** 3));
+    const free = Math.max(0, storageBytes - used);
+    // El mensaje dice las TRES cosas que el usuario necesita para decidir:
+    // cuánto pesa lo que intenta subir, cuánto espacio le queda y qué hacer.
+    // Con estudios de cientos de MB un "llegaste al límite" a secas no basta.
+    const detail =
+      addBytes > 0
+        ? `Este archivo ocupa ${formatBytes(addBytes)} y solo te quedan ${formatBytes(free)} libres de ${gb} GB.`
+        : `Ya usaste los ${gb} GB de tu plan.`;
     return NextResponse.json(
-      { error: `Llegaste al límite de almacenamiento de tu plan (${gb} GB). Libera espacio o sube de plan.`, code: "PLAN_LIMIT_STORAGE", limit: storageBytes, used },
+      {
+        error: `${detail} Libera espacio o mejora tu plan.`,
+        code: "PLAN_LIMIT_STORAGE",
+        limit: storageBytes,
+        used,
+        free,
+        needed: addBytes,
+      },
       { status: 402 },
     );
   }
