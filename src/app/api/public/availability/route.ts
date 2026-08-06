@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { persistentRateLimit } from "@/lib/failban";
 import { tzLocalToUtc, getTzParts } from "@/lib/agenda/time-utils";
-import { timeHHMMInTz } from "@/lib/agenda/legacy-helpers";
+import { partitionSlotsByOverlap } from "@/lib/public-booking/slots";
 
 // GET /api/public/availability?slug=my-clinic&date=2026-04-10&doctorId=xxx
 // No authentication required — public endpoint
@@ -61,9 +61,12 @@ export async function GET(req: NextRequest) {
   const [y, m, d] = dateStr.split("-").map(Number);
   const localDate = new Date(y, m - 1, d);
 
-  // Validate date is not in the past
-  const today = new Date(); today.setHours(0, 0, 0, 0);
-  if (localDate < today) {
+  // "Hoy" en la TZ DE LA CLÍNICA, no la del servidor (P1-10): con el reloj
+  // del server en UTC, después de las 18:00 CDMX el día de hoy salía como
+  // "Fecha en el pasado" y el público no podía reservar para el mismo día.
+  const nowTz = getTzParts(new Date(), clinic.timezone);
+  const todayInTz = `${nowTz.year}-${String(nowTz.month).padStart(2, "0")}-${String(nowTz.day).padStart(2, "0")}`;
+  if (dateStr < todayInTz) {
     return NextResponse.json({ slots: [], reason: "Fecha en el pasado" });
   }
 
@@ -90,28 +93,32 @@ export async function GET(req: NextRequest) {
     currentMins += 30;
   }
 
-  // Get booked slots for this date — range en clinic.timezone
+  // Citas ocupadas del día — por RANGO (startsAt/endsAt), no solo inicio,
+  // para poder marcar ocupado por SOLAPE (P1-10): una cita de 10:00–11:00
+  // tapa "10:00" Y "10:30". Mismo criterio que la constraint EXCLUDE y el
+  // bot: CANCELLED/NO_SHOW no bloquean, y overrideReason tampoco.
   const dayStartUtc = tzLocalToUtc(dateStr, 0, 0, clinic.timezone);
   const dayEndUtc = new Date(dayStartUtc.getTime() + 86_400_000);
 
-  const booked = await prisma.appointment.findMany({
+  const busy = await prisma.appointment.findMany({
     where: {
       clinicId: clinic.id,
-      startsAt: { gte: dayStartUtc, lt: dayEndUtc },
+      startsAt: { lt: dayEndUtc },
+      endsAt:   { gt: dayStartUtc },
       status:   { notIn: ["CANCELLED","NO_SHOW"] },
+      overrideReason: null,
       ...(doctorId ? { doctorId } : {}),
     },
-    select: { startsAt: true },
+    select: { startsAt: true, endsAt: true },
   });
 
-  const bookedTimes = new Set(booked.map(b => timeHHMMInTz(b.startsAt, clinic.timezone)));
-  let available     = slots.filter(s => !bookedTimes.has(s));
+  const partition = partitionSlotsByOverlap(slots, dateStr, clinic.timezone, 30, busy);
+  const bookedTimes = new Set(partition.taken);
+  let available = partition.available;
 
   // Si la fecha pedida es HOY en la zona horaria de la clínica, oculta los
   // horarios cuya hora de inicio ya pasó (antes solo se filtraban días pasados,
   // no las horas vencidas del día en curso).
-  const nowTz = getTzParts(new Date(), clinic.timezone);
-  const todayInTz = `${nowTz.year}-${String(nowTz.month).padStart(2, "0")}-${String(nowTz.day).padStart(2, "0")}`;
   if (dateStr === todayInTz) {
     const nowMins = nowTz.hour * 60 + nowTz.minute;
     available = available.filter(s => {

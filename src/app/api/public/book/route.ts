@@ -3,7 +3,8 @@ import { prisma } from "@/lib/prisma";
 import { sendWhatsAppLogged } from "@/lib/whatsapp/send-and-log";
 import { createCalendarEvent, refreshAccessToken, getOrCreateClinicCalendar } from "@/lib/google-calendar";
 import { rateLimit } from "@/lib/rate-limit";
-import { tzLocalToUtc } from "@/lib/agenda/time-utils";
+import { tzLocalToUtc, getTzParts } from "@/lib/agenda/time-utils";
+import { isOverlapError } from "@/lib/agenda/api-helpers";
 import { getPatientPortalContext } from "@/lib/patient-portal/guard";
 import { resolveBookingPatient } from "@/lib/patient-portal/link";
 
@@ -34,12 +35,6 @@ export async function POST(req: NextRequest) {
   const [y, m, d] = date.split("-").map(Number);
   const apptDate = new Date(y, m - 1, d);
 
-  // Validate date is not in the past (compare date-only, not time)
-  const today = new Date(); today.setHours(0, 0, 0, 0);
-  if (apptDate < today) {
-    return NextResponse.json({ error: "La fecha debe ser hoy o futura" }, { status: 400 });
-  }
-
   // Validate startTime format HH:MM
   if (!/^\d{2}:\d{2}$/.test(startTime)) {
     return NextResponse.json({ error: "Formato de hora inválido" }, { status: 400 });
@@ -64,6 +59,15 @@ export async function POST(req: NextRequest) {
     },
   });
   if (!clinic) return NextResponse.json({ error: "Clínica no encontrada" }, { status: 404 });
+
+  // ── Validate date is not in the past — en la TZ DE LA CLÍNICA (P1-10) ─────
+  // Con el reloj del server en UTC, después de las 18:00 CDMX "hoy" se
+  // rechazaba como fecha pasada. Misma técnica que la ruta hermana del portal.
+  const nowTz = getTzParts(new Date(), clinic.timezone);
+  const todayInClinicTz = `${nowTz.year}-${String(nowTz.month).padStart(2, "0")}-${String(nowTz.day).padStart(2, "0")}`;
+  if (date < todayInClinicTz) {
+    return NextResponse.json({ error: "La fecha debe ser hoy o futura" }, { status: 400 });
+  }
 
   // ── Verify doctor belongs to this clinic ──────────────────────────────────
   const doctor = await prisma.user.findFirst({
@@ -110,13 +114,19 @@ export async function POST(req: NextRequest) {
   const endsAtBook = new Date(startsAtBook.getTime() + 30 * 60_000);
 
   const appt = await prisma.$transaction(async (tx) => {
+    // Pre-check por SOLAPE (P1-10), no por igualdad de startsAt: una cita de
+    // 10:00–11:00 también bloquea "10:30". Mismo criterio que la constraint
+    // EXCLUDE (ignora CANCELLED/NO_SHOW y filas con overrideReason).
     const conflict = await tx.appointment.findFirst({
       where: {
         clinicId:  clinic.id,
         doctorId,
-        startsAt:  startsAtBook,
         status:    { notIn: ["CANCELLED","NO_SHOW"] },
+        overrideReason: null,
+        startsAt:  { lt: endsAtBook },
+        endsAt:    { gt: startsAtBook },
       },
+      select: { id: true },
     });
     if (conflict) {
       throw new Error("SLOT_TAKEN");
@@ -132,10 +142,17 @@ export async function POST(req: NextRequest) {
         endsAt:      endsAtBook,
         status:      "SCHEDULED",
         notes:       notes?.trim() || null,
+        // P1-11: origen real + bandeja de validación, como el bot de WhatsApp.
+        // Antes caía en los defaults (STAFF, false) y la clínica jamás
+        // revisaba las reservas web en fetchPendingValidation.
+        source:             "WEBSITE",
+        requiresValidation: true,
       },
     });
   }).catch((err) => {
-    if (err.message === "SLOT_TAKEN") return null;
+    // Carrera perdida contra la constraint EXCLUDE (23P01) = mismo 409
+    // amable que el pre-check, nunca el error crudo de Postgres.
+    if (err.message === "SLOT_TAKEN" || isOverlapError(err)) return null;
     throw err;
   });
 
@@ -152,11 +169,14 @@ export async function POST(req: NextRequest) {
         weekday:"long", day:"numeric", month:"long", year:"numeric",
       });
       const contactNum = clinic.phone ?? clinic.waPhoneNumberId;
-      const msg = `✅ *Cita confirmada en ${clinic.name}*\n\n`
+      // Copy honesto (P1-11): la cita nace requiresValidation=true — la
+      // clínica la confirma en la bandeja de validación, igual que el bot.
+      const msg = `✅ *Cita registrada en ${clinic.name}*\n\n`
         + `📅 *Fecha:* ${dateFormatted}\n`
         + `🕐 *Hora:* ${startTime}\n`
         + `👨‍⚕️ *Doctor/a:* Dr/a. ${doctor.firstName} ${doctor.lastName}\n`
         + `📋 *Motivo:* ${type?.trim() || "Consulta general"}\n\n`
+        + `La clínica confirmará tu cita en breve.\n`
         + `Para cambios o cancelaciones contáctanos: ${contactNum}`;
 
       await sendWhatsAppLogged({
@@ -225,10 +245,19 @@ export async function POST(req: NextRequest) {
     success:       true,
     appointmentId: appt.id,
     patientId:     resolved.patientId,
-    message:       "¡Cita agendada con éxito! Te enviaremos un recordatorio por WhatsApp.",
+    message:       "¡Cita registrada! La clínica la confirmará en breve.",
   });
   } catch (err: any) {
     console.error("Booking error:", err);
-    return NextResponse.json({ error: err.message ?? "Error interno al agendar" }, { status: 500 });
+    // 23P01 fuera de la tx (carrera rarísima) también merece un 409 claro.
+    if (isOverlapError(err)) {
+      return NextResponse.json(
+        { error: "Este horario ya fue reservado. Por favor elige otro horario." },
+        { status: 409 },
+      );
+    }
+    // Nunca el error crudo (venía de Postgres/stack interno) a un cliente
+    // anónimo: mensaje genérico y el detalle queda en el log.
+    return NextResponse.json({ error: "Error interno al agendar. Intenta de nuevo." }, { status: 500 });
   }
 }
