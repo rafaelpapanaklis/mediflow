@@ -16,6 +16,7 @@ import { persistentRateLimit, acquireLock, releaseLock } from "@/lib/failban";
 import { prisma } from "@/lib/prisma";
 import { BUCKETS, extractStoragePath, SIGNED_URL_TTL_SECONDS } from "@/lib/storage";
 import { CBCT_LITE_SUFFIX, CBCT_LITE_HI_SUFFIX, CBCT_LITE_CONTENT_TYPE } from "@/components/patient-3d/cbct-lite-shared";
+import { MAX_CBCT_LITE_BYTES, formatBytes } from "@/lib/uploads/patient-study-upload";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -84,13 +85,29 @@ export async function POST(
   // Multi-tenant: el archivo debe ser de esta clínica y este paciente.
   const file = await prisma.patientFile.findFirst({
     where: { id: params.fileId, patientId: params.id, clinicId: ctx.clinicId, deletedAt: null },
-    select: { id: true, name: true, url: true },
+    select: { id: true, name: true, url: true, size: true },
   });
   if (!file) return NextResponse.json({ error: "Estudio no encontrado" }, { status: 404 });
 
   // Solo sets CBCT (.zip). Las mallas/DICOM sueltos no aplican.
   if (!/\.zip$/i.test(file.name)) {
     return NextResponse.json({ error: "El archivo no es un set CBCT (.zip)" }, { status: 400 });
+  }
+
+  // Techo de tamaño. Generar el lite descomprime el .zip ENTERO en memoria; con
+  // la subida directa ya entran estudios de hasta 2 GB y esta función tiene
+  // 3009 MB. Sin este guard, un CBCT gigante mata la función por OOM y el visor
+  // móvil se queda con un error mudo. Con él, el usuario lee QUÉ pasó y qué
+  // puede hacer. `detail` es justo lo que DicomSetViewer pinta en pantalla.
+  if (file.size != null && file.size > MAX_CBCT_LITE_BYTES) {
+    return NextResponse.json(
+      {
+        error: "Estudio demasiado grande para la vista móvil",
+        detail: `Este CBCT pesa ${formatBytes(file.size)} y la versión para móvil solo se puede generar hasta ${formatBytes(MAX_CBCT_LITE_BYTES)}. Ábrelo desde una computadora o descárgalo para verlo en tu visor DICOM.`,
+        tooLarge: true,
+      },
+      { status: 413 },
+    );
   }
 
   const zipPath = extractStoragePath(file.url);

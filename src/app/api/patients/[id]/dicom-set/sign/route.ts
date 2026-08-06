@@ -5,6 +5,7 @@ import { createClient as createAdmin } from "@supabase/supabase-js";
 import { randomUUID } from "crypto";
 import { assertPatientVisible } from "@/lib/patient-visibility";
 import { storageQuotaError } from "@/lib/storage-quota";
+import { MAX_STUDY_UPLOAD_BYTES, MAX_STUDY_UPLOAD_LABEL } from "@/lib/uploads/patient-study-upload";
 
 // Subida DIRECTA a Storage de un set CBCT (.zip de cortes DICOM). Como los CBCT
 // pesan cientos de MB, no pasan por el route handler (límite de body): el cliente
@@ -49,6 +50,17 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   const name = String(body?.name ?? "estudio.zip");
   if (!/\.zip$/i.test(name)) {
     return NextResponse.json({ error: "El set debe subirse como un .zip" }, { status: 400 });
+  }
+
+  // Mismo techo por archivo que el camino nuevo (/uploads/sign). El cliente ya
+  // no usa esta ruta —quedó por compatibilidad con pestañas abiertas durante el
+  // deploy—, pero sin este guard seguía siendo una puerta sin tope declarado.
+  const declaredSize = Number(body?.size);
+  if (Number.isFinite(declaredSize) && declaredSize > MAX_STUDY_UPLOAD_BYTES) {
+    return NextResponse.json(
+      { error: `Archivo demasiado grande (máx ${MAX_STUDY_UPLOAD_LABEL}).`, code: "FILE_TOO_LARGE" },
+      { status: 413 },
+    );
   }
 
   // Guard de cuota ANTES de entregar la signed upload URL: si la clínica YA
