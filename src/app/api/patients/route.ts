@@ -14,6 +14,7 @@ import { normalizeVisibleUserIds } from "@/lib/patient-visibility";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { logMutation } from "@/lib/audit";
 import { revalidateAfter } from "@/lib/cache/revalidate";
+import { stripPatientSecrets } from "@/lib/patient-secrets";
 
 export const dynamic = "force-dynamic";
 
@@ -456,7 +457,10 @@ async function v2Handler(
   const hasMore = page < totalPages;
 
   return NextResponse.json({
-    patients: pageSlice,
+    // P1-N1: `pageSlice` son filas COMPLETAS de Patient (el include no lleva
+    // select), así que `portalToken` viajaba al navegador multiplicado por 50
+    // filas por página — un link permanente al portal de medio padrón.
+    patients: stripPatientSecrets(pageSlice),
     total,
     page,
     pageSize: limit,
@@ -514,7 +518,7 @@ async function legacyHandler(
     skip,
   });
 
-  return NextResponse.json(patients);
+  return NextResponse.json(stripPatientSecrets(patients));
 }
 
 /* ─── helpers ─── */
@@ -676,5 +680,5 @@ export async function POST(req: NextRequest) {
   });
 
   revalidateAfter("patients");
-  return NextResponse.json(patient, { status: 201 });
+  return NextResponse.json(stripPatientSecrets(patient), { status: 201 });
 }

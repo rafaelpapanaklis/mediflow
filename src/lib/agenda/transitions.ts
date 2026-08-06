@@ -134,6 +134,36 @@ export function canTransition(
   return { ok: true };
 }
 
+/**
+ * Cerrar una TELECONSULTA (POST /api/teleconsulta/end).
+ *
+ * Colgar la videollamada es a la vez iniciar y cerrar la consulta: nada en el
+ * flujo de teleconsulta mueve la cita a IN_PROGRESS (ni `/room` ni `/join`
+ * tocan el status), así que al colgar suele seguir en SCHEDULED o CONFIRMED.
+ * Validar `X → COMPLETED` a secas daría 409 en el 100% de las teleconsultas
+ * reales; ampliar la matriz con SCHEDULED → COMPLETED aflojaría también
+ * /status y /complete.
+ *
+ * La salida: se valida el camino de DOS saltos que de hecho ocurrió,
+ * `estado → IN_PROGRESS → COMPLETED`. Desde CANCELLED / NO_SHOW / COMPLETED /
+ * CHECKED_OUT no hay salto a IN_PROGRESS, así que esos siguen rechazados — que
+ * era el agujero (P1-1: la ruta escribía COMPLETED sin ninguna validación de
+ * estado).
+ */
+export function canCloseTeleconsulta(
+  from: AppointmentStatus,
+  role: UserRole,
+  now: Date,
+  appointmentStart: Date,
+): TransitionCheckResult {
+  if (from === "IN_PROGRESS") {
+    return canTransition("IN_PROGRESS", "COMPLETED", role, now, appointmentStart);
+  }
+  const start = canTransition(from, "IN_PROGRESS", role, now, appointmentStart);
+  if (!start.ok) return start;
+  return canTransition("IN_PROGRESS", "COMPLETED", role, now, appointmentStart);
+}
+
 export function availableTransitions(
   from: AppointmentStatus,
   role: UserRole,

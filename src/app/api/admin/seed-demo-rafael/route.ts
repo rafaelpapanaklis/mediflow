@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { Prisma } from "@prisma/client";
 import { TREATMENT_KINDS } from "@/lib/agenda/types";
 import { sumInvoiceItems, computeInvoiceTotal, round2 } from "@/lib/invoice-totals";
+import { getPatientDeleteBlockers, type PatientDeleteBlocker } from "@/lib/patient-deletion";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -1078,18 +1079,41 @@ export async function DELETE(req: NextRequest) {
     return NextResponse.json({ error: "rafael_clinic_not_found" }, { status: 404 });
   }
 
-  const before = await prisma.patient.count({
+  const demoPatients = await prisma.patient.findMany({
     where: { clinicId: clinic.id, tags: { has: DEMO_TAG } },
+    select: { id: true, patientNumber: true, firstName: true, lastName: true },
   });
+  const before = demoPatients.length;
 
-  const result = await prisma.patient.deleteMany({
-    where: { clinicId: clinic.id, tags: { has: DEMO_TAG } },
-  });
+  // P0-1: este DELETE era el segundo hard-delete de paciente del repo y NO
+  // pasaba por el precheck — `deleteMany` arrastraba en cascada expediente,
+  // ortodoncia, saldos a favor y todo lo demás sin preguntar. Está acotado a la
+  // clínica demo y al tag, pero nada impide que un paciente REAL termine
+  // etiquetado como demo (el tag se teclea en la UI). Ahora cada ficha pasa por
+  // el mismo criterio que el borrado de la app: la que tenga algo que conservar
+  // se salta y se reporta, no se borra.
+  const deleted: string[] = [];
+  const skipped: Array<{ patientNumber: string; name: string; reasons: PatientDeleteBlocker[] }> = [];
+
+  for (const p of demoPatients) {
+    const reasons = await getPatientDeleteBlockers(p.id, clinic.id);
+    if (reasons.length > 0) {
+      skipped.push({
+        patientNumber: p.patientNumber,
+        name: `${p.firstName} ${p.lastName}`.trim(),
+        reasons,
+      });
+      continue;
+    }
+    await prisma.patient.deleteMany({ where: { id: p.id, clinicId: clinic.id } });
+    deleted.push(p.id);
+  }
 
   return NextResponse.json({
     success: true,
     clinic: clinic.name,
-    patientsDeleted: result.count,
+    patientsDeleted: deleted.length,
     patientsBefore: before,
+    patientsSkipped: skipped,
   });
 }

@@ -1,36 +1,130 @@
 // Precheck del borrado DEFINITIVO de un paciente (DELETE ?mode=hard).
 //
-// Archivar (status ARCHIVED) siempre se puede. Borrar de verdad NO: `patientId`
-// cuelga de ~200 relaciones y un DELETE arrastraría en cascada expediente,
-// radiografías, facturas y consentimientos. Este módulo decide si el paciente
-// es borrable y, si no, POR QUÉ — en tipos que la UI traduce a lenguaje humano
-// (nunca nombres de tabla).
+// Archivar (status ARCHIVED) siempre se puede. Borrar de verdad casi nunca: el
+// criterio está INVERTIDO desde 2026-08-06 (P0-1). La decisión de qué puede
+// morir con el paciente —y el porqué de cada entrada— vive en
+// `@/lib/patient-deletion-policy`; aquí sólo se cuenta contra la BD.
+//
+// Lo que este módulo hace, en orden:
+//   1. Enumera las relaciones a `Patient` leyendo el DMMF de Prisma, NO una
+//      lista escrita a mano. Una tabla nueva del schema aparece sola.
+//   2. Las reparte con la política: allowlist explícita → puede cascadear;
+//      TODO lo demás → bloquea.
+//   3. Cuenta filas de lo que bloquea y lo agrupa en razones que la UI traduce.
+//   4. Suma aparte lo fiscal (facturas/pagos/CFDI), que tiene reglas propias.
+//
+// Multi-tenant: `clinicId` lo pone SIEMPRE el caller desde la sesión.
 
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import {
+  classifyPatientRelations,
+  summarizeBlockers,
+  type BlockingModel,
+  type PatientDeleteBlocker,
+  type PatientDeleteBlockerType,
+  type PatientRelationModel,
+} from "@/lib/patient-deletion-policy";
 
-export type PatientDeleteBlockerType =
-  | "invoices"
-  | "payments"
-  | "cfdi"
-  | "clinical"
-  | "endodontics"
-  | "implants"
-  // Comodín para un fallo de FK que este precheck no anticipó (carrera, o una
-  // relación Restrict nueva). Lo emite el handler desde el catch, no esta función.
-  | "related";
+export type { PatientDeleteBlocker, PatientDeleteBlockerType };
 
-export interface PatientDeleteBlocker {
-  type: PatientDeleteBlockerType;
-  count: number;
+/**
+ * Lee del DMMF todos los modelos con una FK a `Patient`. Esto es lo que hace
+ * que el precheck no se pueda quedar obsoleto: no hay lista que mantener, la
+ * fuente es el schema compilado.
+ */
+export function patientRelationsFromDmmf(): PatientRelationModel[] {
+  const models = Prisma.dmmf?.datamodel?.models;
+  if (!Array.isArray(models) || models.length === 0) {
+    // Sin DMMF no hay forma de saber qué cuelga del paciente. Se lanza en vez de
+    // devolver [] porque un array vacío significaría "no hay nada que bloquear"
+    // y el borrado pasaría arrasando: exactamente el fallo que este módulo
+    // existe para impedir. El caller responde 500, no un 200 que borra.
+    throw new Error(
+      "[patient-deletion] Prisma.dmmf no disponible: no se puede verificar qué cuelga del paciente",
+    );
+  }
+  const out: PatientRelationModel[] = [];
+  for (const model of models) {
+    const hasClinicId = model.fields.some((f) => f.name === "clinicId");
+    for (const field of model.fields) {
+      if (field.type !== "Patient") continue;
+      if (!field.relationFromFields?.length) continue; // el lado inverso, no la FK
+      out.push({
+        model: model.name,
+        onDelete: (field as { relationOnDelete?: string }).relationOnDelete as
+          | PatientRelationModel["onDelete"]
+          | undefined ?? null,
+        required: field.isRequired,
+        hasClinicId,
+      });
+    }
+  }
+  return out;
+}
+
+/**
+ * Delegate de Prisma para un modelo del DMMF. Prisma expone cada modelo en
+ * camelCase de su nombre (sólo baja la primera letra: `SRPSession` → `sRPSession`).
+ * Devuelve null si no se puede resolver — el caller lo trata como bloqueo, no
+ * como "no hay nada" (fallo cerrado).
+ */
+function countDelegate(model: string): { count: (args: unknown) => Promise<number> } | null {
+  const key = model.charAt(0).toLowerCase() + model.slice(1);
+  const delegate = (prisma as unknown as Record<string, unknown>)[key] as
+    | { count?: unknown }
+    | undefined;
+  if (!delegate || typeof delegate.count !== "function") return null;
+  return delegate as { count: (args: unknown) => Promise<number> };
+}
+
+/** Tope de concurrencia del proyecto para consultas en paralelo. */
+const QUERY_CHUNK = 7;
+
+async function countBlockingModels(
+  blocking: BlockingModel[],
+  patientId: string,
+  clinicId: string,
+): Promise<Array<{ type: PatientDeleteBlockerType; count: number }>> {
+  const results: Array<{ type: PatientDeleteBlockerType; count: number }> = [];
+
+  for (let i = 0; i < blocking.length; i += QUERY_CHUNK) {
+    const chunk = blocking.slice(i, i + QUERY_CHUNK);
+    const counts = await Promise.all(
+      chunk.map(async (entry) => {
+        const delegate = countDelegate(entry.model);
+        if (!delegate) {
+          // El modelo existe en el schema pero el cliente no lo expone con el
+          // nombre esperado (cliente Prisma desfasado tras un deploy, o un
+          // nombre que no sigue la convención). No se puede saber si hay filas
+          // → se asume que SÍ. Preferimos un borrado bloqueado de más a una
+          // pérdida de expediente.
+          console.error(
+            `[patient-deletion] sin delegate de Prisma para "${entry.model}": se bloquea por precaución`,
+          );
+          return 1;
+        }
+        // El scope de clínica sólo se aplica donde la tabla lo tiene. Las que no
+        // (odontograma, consentimiento de implante…) cuelgan del paciente, que el
+        // caller ya validó que pertenece a esta clínica.
+        return delegate.count({
+          where: { patientId, ...(entry.hasClinicId ? { clinicId } : {}) },
+        });
+      }),
+    );
+    chunk.forEach((entry, idx) => results.push({ type: entry.type, count: counts[idx] }));
+  }
+
+  return results;
 }
 
 /**
  * Devuelve los motivos que BLOQUEAN el borrado definitivo. Array vacío = se
  * puede borrar.
  *
- * Tres familias de bloqueo, por razones distintas:
+ * Dos caminos que se suman:
  *
- * 1) FISCAL / CONTABLE — facturas, pagos y CFDI. A nivel schema Invoice→Patient
+ * A) FISCAL / CONTABLE — facturas, pagos y CFDI. A nivel schema Invoice→Patient
  *    es `Cascade`, así que la BD los borraría EN SILENCIO: el bloqueo es de
  *    negocio, no técnico. Un CFDI timbrado ante el SAT no se puede desaparecer
  *    (conservación NOM-024 + cuadre contable), y `CfdiRecord` ni siquiera cuelga
@@ -40,30 +134,18 @@ export interface PatientDeleteBlocker {
  *    factura anulada no es dinero ni obligación. Sus pagos y su timbre SÍ se
  *    siguen revisando (ver el comentario de `activeInvoices`).
  *
- * 2) HISTORIA CLÍNICA con `Cascade` — notas SOAP, recetas, consentimientos,
- *    archivos/radiografías, análisis IA y odontograma. La BD los borraría en
- *    silencio (son `Cascade`), pero la NOM-024 obliga a conservar el expediente
- *    5 años: si existe CUALQUIER dato clínico el borrado definitivo se bloquea
- *    y el camino es ARCHIVAR. Antes este precheck solo miraba facturación y un
- *    paciente que pagó en efectivo pasaba como `deletable:true` con 20 notas
- *    firmadas — pérdida irreversible (P0-1 auditoría 2026-08-06). El borrado
- *    duro queda SOLO para fichas vacías (altas por error, duplicados sin uso).
- *
- * 3) CLÍNICO CON `Restrict` — las 5 tablas de endodoncia/implantes declaran
- *    `onDelete: Restrict`, o sea que la BD ya rechaza el DELETE por su cuenta.
- *    Se cuentan ANTES para poder explicarlo en español en vez de reventar con
- *    un error de foreign key.
- *
- * NO cuentan como bloqueo (decisión asumida, no olvido): citas, tratamientos,
- * presupuestos y planes de pago sin factura. Son datos operativos, no expediente
- * clínico; una ficha de prueba con una cita cancelada debe poder borrarse.
- *
- * Multi-tenant: `clinicId` lo pone SIEMPRE el caller desde la sesión.
+ * B) TODO LO DEMÁS que cuelgue del paciente con `Cascade` o `Restrict` y no esté
+ *    en la allowlist de la política. Aquí entran el expediente (NOM-024 obliga a
+ *    conservarlo 5 años), las especialidades completas —Ortodoncia, Pediatría,
+ *    Periodoncia, Endodoncia, Implantes— y el dinero del paciente
+ *    (`PatientCredit`, paquetes prepagados). El borrado duro queda SOLO para
+ *    fichas vacías: altas por error y duplicados sin uso.
  */
 export async function getPatientDeleteBlockers(
   patientId: string,
   clinicId: string,
 ): Promise<PatientDeleteBlocker[]> {
+  // ── A) Facturación ──────────────────────────────────────────────────────
   // Se traen TODAS (canceladas incluidas), no se cuentan: sus ids son la llave
   // para llegar a pagos y timbres, que no tienen patientId propio. El filtro por
   // status va DESPUÉS y solo sobre el blocker de facturas — ver abajo.
@@ -84,66 +166,31 @@ export async function getPatientDeleteBlockers(
   // sobre una factura que sigue activa, y esa sí cuenta.
   const activeInvoices = invoices.filter((i) => i.status !== "CANCELLED");
 
-  const [payments, cfdiRows, endoDiagnoses, vitalityTests, endoTreatments, implants, implantConsents] =
-    await Promise.all([
-      // Payment cuelga de Invoice (sin clinicId propio): el scope de clínica
-      // llega heredado por invoiceIds, que ya salió filtrado.
-      invoiceIds.length
-        ? prisma.payment.count({ where: { invoiceId: { in: invoiceIds } } })
-        : Promise.resolve(0),
-      invoiceIds.length
-        ? prisma.cfdiRecord.count({ where: { clinicId, invoiceId: { in: invoiceIds } } })
-        : Promise.resolve(0),
-      // Endodoncia/implantes: aquí NO se aplica el criterio de "ignorar
-      // anulados" que sí vale para las facturas. Estas 5 tablas son `Restrict`:
-      // la fila soft-borrada (deletedAt) o el implante REMOVED siguen existiendo
-      // en la BD y Postgres rechaza el DELETE igual. Descontarlas daría un "sí
-      // se puede borrar" falso que revienta después como FK y cae al bloqueo
-      // genérico `related`, sin explicación útil. Se cuentan todas, a propósito.
-      prisma.endodonticDiagnosis.count({ where: { patientId, clinicId } }),
-      prisma.vitalityTest.count({ where: { patientId, clinicId } }),
-      prisma.endodonticTreatment.count({ where: { patientId, clinicId } }),
-      prisma.implant.count({ where: { patientId, clinicId } }),
-      // ImplantConsent no tiene clinicId propio — cuelga del paciente, que el
-      // caller ya validó que pertenece a esta clínica.
-      prisma.implantConsent.count({ where: { patientId } }),
-    ]);
-
-  // HISTORIA CLÍNICA (familia 2). Promise.all aparte del anterior para respetar
-  // el tope de 7 del proyecto. Aquí NO hay criterio de "ignorar anulados": una
-  // nota, receta o radiografía existe o no existe, y con que exista una sola el
-  // expediente debe conservarse (NOM-024).
-  const [records, prescriptions, consents, files, xrayAnalyses, odontoEntries, odontoSnapshots] =
-    await Promise.all([
-      prisma.medicalRecord.count({ where: { patientId, clinicId } }),
-      prisma.prescription.count({ where: { patientId, clinicId } }),
-      prisma.consentForm.count({ where: { patientId, clinicId } }),
-      prisma.patientFile.count({ where: { patientId, clinicId } }),
-      prisma.xrayAnalysis.count({ where: { patientId, clinicId } }),
-      // Odontograma: sin clinicId propio — cuelga del paciente, que el caller
-      // ya validó que pertenece a esta clínica (igual que ImplantConsent).
-      prisma.odontogramEntry.count({ where: { patientId } }),
-      prisma.odontogramSnapshot.count({ where: { patientId } }),
-    ]);
-  const clinical =
-    records + prescriptions + consents + files + xrayAnalyses + odontoEntries + odontoSnapshots;
+  const [payments, cfdiRows] = await Promise.all([
+    // Payment cuelga de Invoice (sin clinicId propio): el scope de clínica
+    // llega heredado por invoiceIds, que ya salió filtrado.
+    invoiceIds.length
+      ? prisma.payment.count({ where: { invoiceId: { in: invoiceIds } } })
+      : Promise.resolve(0),
+    invoiceIds.length
+      ? prisma.cfdiRecord.count({ where: { clinicId, invoiceId: { in: invoiceIds } } })
+      : Promise.resolve(0),
+  ]);
 
   // Timbres: las filas reales de cfdi_records y, como respaldo, las facturas
   // que quedaron marcadas con cfdiUuid (timbrados viejos sin fila propia).
   // Sobre `invoices` (todas), NO sobre `activeInvoices`: el timbre de una
   // factura cancelada es justamente el caso que hay que seguir conservando.
   const stampedInvoices = invoices.filter((i) => i.cfdiUuid).length;
-  const cfdi = Math.max(cfdiRows, stampedInvoices);
 
-  const endodontics = endoDiagnoses + vitalityTests + endoTreatments;
-  const implantRecords = implants + implantConsents;
+  // ── B) Todo lo que la política no deja cascadear ────────────────────────
+  const { blocking } = classifyPatientRelations(patientRelationsFromDmmf());
+  const counted = await countBlockingModels(blocking, patientId, clinicId);
 
-  const blockers: PatientDeleteBlocker[] = [];
-  if (activeInvoices.length) blockers.push({ type: "invoices", count: activeInvoices.length });
-  if (payments)        blockers.push({ type: "payments",   count: payments });
-  if (cfdi)            blockers.push({ type: "cfdi",       count: cfdi });
-  if (clinical)        blockers.push({ type: "clinical",   count: clinical });
-  if (endodontics)     blockers.push({ type: "endodontics", count: endodontics });
-  if (implantRecords)  blockers.push({ type: "implants",   count: implantRecords });
-  return blockers;
+  return summarizeBlockers([
+    { type: "invoices", count: activeInvoices.length },
+    { type: "payments", count: payments },
+    { type: "cfdi", count: Math.max(cfdiRows, stampedInvoices) },
+    ...counted,
+  ]);
 }

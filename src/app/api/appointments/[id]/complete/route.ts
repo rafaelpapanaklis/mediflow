@@ -18,6 +18,7 @@ import { logMutation } from "@/lib/audit";
 import { EMPTY_NOTE_ERROR, isClinicalNoteEmpty } from "@/lib/clinical/note-validation";
 import { assertPatientVisible } from "@/lib/patient-visibility";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
+import { canTransition } from "@/lib/agenda/transitions";
 
 export const dynamic = "force-dynamic";
 
@@ -59,7 +60,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
 
   const existing = await prisma.appointment.findFirst({
     where: { id: params.id, clinicId: session.clinic.id },
-    select: { id: true, status: true, doctorId: true, patientId: true },
+    select: { id: true, status: true, doctorId: true, patientId: true, startsAt: true },
   });
   if (!existing) {
     return NextResponse.json({ error: "not_found" }, { status: 404 });
@@ -82,6 +83,42 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   // para conservar el 404 sobre el 403.
   const deniedPerm = denyIfMissingPermission(session.user, "agenda.edit");
   if (deniedPerm) return deniedPerm;
+
+  // Máquina de estados REAL (P1-1). El gate de rol de arriba dice QUIÉN puede
+  // cerrar; esto dice DESDE QUÉ ESTADO. Sin ello un DOCTOR "completaba" —y
+  // FIRMABA la nota, el acto legalmente decisivo de la NOM-004— una cita ya
+  // CANCELLED, NO_SHOW o COMPLETED, transición que su hermana PATCH /status
+  // rechaza con 409. Dos puertas al mismo cambio de estado con reglas distintas
+  // es una puerta sin regla.
+  //
+  // No rompe el flujo vivo: el único caller (`patient-detail-client.tsx`) sólo
+  // arma el botón de cerrar cuando la cita está IN_PROGRESS, y IN_PROGRESS →
+  // COMPLETED está en la matriz para DOCTOR/ADMIN/SUPER_ADMIN — exactamente los
+  // roles que el requireRole de arriba deja pasar. Lo que ahora falla es el
+  // caso que debía fallar: cerrar dos veces, o cerrar lo ya cancelado.
+  if (existing.status === "PENDING") {
+    return NextResponse.json(
+      { error: "legacy_status", reason: "Status PENDING ya no soportado. Migrá a SCHEDULED." },
+      { status: 409 },
+    );
+  }
+  const check = canTransition(
+    existing.status as Exclude<typeof existing.status, "PENDING">,
+    "COMPLETED",
+    session.user.role,
+    new Date(),
+    existing.startsAt,
+  );
+  if (!check.ok) {
+    // Mismo contrato de códigos que PATCH /status: rol = 403, estado = 409.
+    if (check.code === "forbidden_role") {
+      return NextResponse.json({ error: "forbidden", reason: check.error }, { status: 403 });
+    }
+    return NextResponse.json(
+      { error: "invalid_transition", reason: check.error },
+      { status: 409 },
+    );
+  }
 
   // Find linked clinical note: explícito por id o por specialtyData.appointmentId.
   // En AMBAS ramas la nota se ata al PACIENTE de esta cita, no solo a la clínica

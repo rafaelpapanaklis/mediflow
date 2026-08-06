@@ -2251,6 +2251,14 @@
           "one": "Has 1 implants record",
           "other": "Has {count} implants records"
         },
+        "specialty": {
+          "one": "Has 1 specialty record (orthodontics, pediatrics or periodontics)",
+          "other": "Has {count} specialty records (orthodontics, pediatrics or periodontics)"
+        },
+        "credit": {
+          "one": "Has 1 account credit or unused prepaid package",
+          "other": "Has {count} account credits or unused prepaid packages"
+        },
         "related": "Has linked information that must be kept"
       }
     },

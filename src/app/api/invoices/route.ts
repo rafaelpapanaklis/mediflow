@@ -8,6 +8,7 @@ import { logMutation } from "@/lib/audit";
 import { revalidateAfter } from "@/lib/cache/revalidate";
 import { sumInvoiceItems, computeInvoiceTotal, round2, IVA_RATE_PCT } from "@/lib/invoice-totals";
 import { relatedPatientVisibilityAnd, assertPatientVisible } from "@/lib/patient-visibility";
+import { stripNestedPatientSecrets } from "@/lib/patient-secrets";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import {
   InvoiceNumberExhaustedError,
@@ -165,7 +166,8 @@ export async function POST(req: NextRequest) {
 
     revalidateAfter("invoices");
     revalidatePath(`/dashboard/patients/${invoice.patientId}`);
-    return NextResponse.json(invoice, { status: 201 });
+    // P1-N1: el `include: { patient: true }` de arriba arrastra `portalToken`.
+    return NextResponse.json(stripNestedPatientSecrets(invoice), { status: 201 });
   } catch (err: any) {
     // Un fallo de zod llega con `message` = el JSON crudo de TODOS los issues, y
     // el editor lo pinta tal cual en el toast. Se surfacea el primero con su ruta
