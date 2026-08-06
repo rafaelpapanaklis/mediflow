@@ -71,6 +71,11 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
   });
   if (!exists) return NextResponse.json({ error: "Paciente no encontrado" }, { status: 404 });
 
+  // Permiso granular (P1-3): "Editar pacientes". Tras el 404 de visibilidad
+  // para no revelar existencia con un 403.
+  const deniedPerm = denyIfMissingPermission(ctx, "patients.edit");
+  if (deniedPerm) return deniedPerm;
+
   try {
     const body = await req.json();
     const data = patientSchema.parse(body);
@@ -148,6 +153,11 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     where: { id: params.id, clinicId: ctx.clinicId, AND: patientVisibilityAnd(ctx) },
   });
   if (!exists) return NextResponse.json({ error: "Paciente no encontrado" }, { status: 404 });
+
+  // Permiso granular (P1-3): "Editar pacientes" cubre todo el PATCH parcial.
+  // Archivar (status: ARCHIVED) exige ADEMÁS patients.delete más abajo.
+  const deniedEdit = denyIfMissingPermission(ctx, "patients.edit");
+  if (deniedEdit) return deniedEdit;
 
   let body: Record<string, unknown>;
   try {

@@ -11,6 +11,7 @@ import {
 } from "@/lib/patients/next-patient-number";
 import { validateCurpRecord, type CurpStatusValue } from "@/lib/validators/curp";
 import { normalizeVisibleUserIds } from "@/lib/patient-visibility";
+import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { logMutation } from "@/lib/audit";
 import { revalidateAfter } from "@/lib/cache/revalidate";
 
@@ -543,6 +544,11 @@ function isBirthdayThisWeek(dobIso: string | null): boolean {
 export async function POST(req: NextRequest) {
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  // Permiso granular (P1-3): "Crear pacientes" en /dashboard/team. El default
+  // de ADMIN/DOCTOR/RECEPTIONIST lo incluye — solo corta a quien se lo quitaron.
+  const deniedPerm = denyIfMissingPermission(ctx, "patients.create");
+  if (deniedPerm) return deniedPerm;
 
   // Tope de pacientes del plan (enforcement real: la UI es sólo un espejo).
   // Cuenta y tope salen de getPatientQuota — el MISMO helper que alimenta el
