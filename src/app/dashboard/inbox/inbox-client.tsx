@@ -45,6 +45,15 @@ import {
 import toast from "react-hot-toast";
 import { useT } from "@/i18n/i18n-provider";
 import { parseSystemKind } from "@/lib/whatsapp/system-message";
+import {
+  applyDraft,
+  dropDraft as dropDraftFrom,
+  forgetEmptyDraft,
+  getDraft,
+  type ComposerMode,
+  type DraftMap,
+  type DraftPatch,
+} from "@/lib/inbox/composer-drafts";
 import styles from "./inbox.module.css";
 
 type Channel = "WHATSAPP" | "EMAIL" | "PORTAL_FORM" | "VALIDATION" | "REMINDER" | "PORTAL";
@@ -197,15 +206,6 @@ function formatBubbleTime(iso: string): string {
   return formatClock(new Date(iso));
 }
 
-/* Borrador del composer. Vive POR HILO: el composer es uno solo, así que sin
-   esto el texto escrito para un paciente seguía en pantalla al saltar a otra
-   conversación —y el modo volvía a "Responder"—, de modo que una nota interna
-   sobre Ana podía salir por WhatsApp al teléfono de Beto. */
-type ComposerDraft = { text: string; mode: "reply" | "internal" };
-const EMPTY_DRAFT: ComposerDraft = { text: "", mode: "reply" };
-/* Tope de borradores vivos en memoria (se descartan los menos recientes). */
-const MAX_DRAFTS = 40;
-
 /* Clave de día en hora LOCAL (agrupar por fecha UTC partía la noche en dos). */
 function dayKey(iso: string): string {
   const d = new Date(iso);
@@ -233,9 +233,9 @@ export function InboxClient({ viewer }: { viewer: Viewer }) {
   const [activeThread, setActiveThread] = useState<ThreadDetail | null>(null);
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
-  // Borradores por hilo (ver ComposerDraft). El composer lee SIEMPRE el del
-  // hilo activo: cambiar de conversación restaura su propio texto y su modo.
-  const [drafts, setDrafts] = useState<Record<string, ComposerDraft>>({});
+  // Borradores por hilo (lib/inbox/composer-drafts). El composer lee SIEMPRE el
+  // del hilo activo: cambiar de conversación restaura su propio texto y su modo.
+  const [drafts, setDrafts] = useState<DraftMap>({});
   const [sending, setSending] = useState(false);
   const [loadingList, setLoadingList] = useState(true);
   const [loadingDetail, setLoadingDetail] = useState(false);
@@ -275,7 +275,7 @@ export function InboxClient({ viewer }: { viewer: Viewer }) {
      id, lo que se lee, lo que se escribe y a dónde se envía son siempre el
      mismo hilo. */
   const draftThreadId = activeThread?.id ?? null;
-  const activeDraft = (draftThreadId ? drafts[draftThreadId] : null) ?? EMPTY_DRAFT;
+  const activeDraft = getDraft(drafts, draftThreadId);
   const composerText = activeDraft.text;
   const composerMode = activeDraft.mode;
 
@@ -283,44 +283,27 @@ export function InboxClient({ viewer }: { viewer: Viewer }) {
    * Escribe el borrador de UN hilo concreto (nunca "el activo"): el envío es
    * asíncrono y el usuario puede haber saltado a otra conversación mientras
    * tanto — limpiar "el activo" borraría el borrador del hilo equivocado.
+   * La transición vive en lib/inbox/composer-drafts (pura y testeada).
    */
-  const setDraftFor = useCallback(
-    (
-      threadId: string,
-      patch: Partial<ComposerDraft> | ((prev: ComposerDraft) => Partial<ComposerDraft>),
-    ) => {
-      setDrafts((prev) => {
-        const current = prev[threadId] ?? EMPTY_DRAFT;
-        const next: ComposerDraft = {
-          ...current,
-          ...(typeof patch === "function" ? patch(current) : patch),
-        };
-        if (next.text === current.text && next.mode === current.mode) return prev;
-
-        const rest: Record<string, ComposerDraft> = {};
-        for (const k of Object.keys(prev)) if (k !== threadId) rest[k] = prev[k];
-        // Sin texto y en modo respuesta = el default: no hay nada que recordar.
-        if (!next.text && next.mode === "reply") return rest;
-        // Reinsertar al final ordena por uso reciente; sobre el tope se sueltan
-        // los más viejos para que el mapa no crezca sin límite.
-        rest[threadId] = next;
-        const keys = Object.keys(rest);
-        for (const k of keys.slice(0, Math.max(0, keys.length - MAX_DRAFTS))) delete rest[k];
-        return rest;
-      });
-    },
-    [],
-  );
+  const setDraftFor = useCallback((threadId: string, patch: DraftPatch) => {
+    setDrafts((prev) => applyDraft(prev, threadId, patch));
+  }, []);
 
   /** Olvida por completo el borrador de un hilo (al resolverlo/archivarlo). */
   const dropDraft = useCallback((threadId: string) => {
-    setDrafts((prev) => {
-      if (!(threadId in prev)) return prev;
-      const rest: Record<string, ComposerDraft> = {};
-      for (const k of Object.keys(prev)) if (k !== threadId) rest[k] = prev[k];
-      return rest;
-    });
+    setDrafts((prev) => dropDraftFrom(prev, threadId));
   }, []);
+
+  /* Al salir de una conversación, su borrador se olvida si quedó SIN texto.
+     Recordar el modo "Nota interna" vacío no guarda ningún trabajo y sí cambia
+     el destino del siguiente mensaje: al volver, una respuesta escrita para el
+     paciente se guardaría como nota y él nunca la recibiría. Mientras el hilo
+     está en pantalla no se toca — mover el selector bajo los dedos de quien
+     escribe es justo el camino por el que una nota acaba saliendo al paciente. */
+  useEffect(() => {
+    if (!draftThreadId) return;
+    return () => setDrafts((prev) => forgetEmptyDraft(prev, draftThreadId));
+  }, [draftThreadId]);
 
   // Wrappers con la firma de siempre para el composer (acepta valor o updater).
   const setComposerText = useCallback(
@@ -334,7 +317,7 @@ export function InboxClient({ viewer }: { viewer: Viewer }) {
   );
 
   const setComposerMode = useCallback(
-    (mode: "reply" | "internal") => {
+    (mode: ComposerMode) => {
       if (!draftThreadId) return;
       setDraftFor(draftThreadId, { mode });
     },

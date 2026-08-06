@@ -7,8 +7,10 @@
 // Cuando se propague el código real, este helper puede recibirlo directo sin
 // cambiar a sus consumidores.
 //
-// PURO: sin Prisma ni React. La clave que devuelve se traduce en la UI con
-// `inbox.whatsapp.reminderReason.<key>` (es/en).
+// PURO: sin Prisma ni React. La clave que devuelve la traduce la UI con el mapa
+// REMINDER_REASON_KEY de `dashboard/whatsapp/whatsapp-client.tsx`, que la lleva
+// a `inbox.whatsapp.reason<Key>` (es/en). Ese mapa es un Record sobre la unión
+// de abajo: agregar aquí una clave sin traducirla allí NO compila.
 
 export type ReminderErrorKey =
   /** 131047 — fuera de la ventana de 24 h: hace falta plantilla aprobada. */

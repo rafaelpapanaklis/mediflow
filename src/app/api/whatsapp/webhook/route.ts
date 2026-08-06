@@ -4,17 +4,13 @@ import { createHmac, timingSafeEqual } from "crypto";
 import { sendWhatsAppMessage } from "@/lib/whatsapp";
 import { timeHHMMInTz } from "@/lib/agenda/legacy-helpers";
 import { runBotTurn } from "@/lib/whatsapp/bot/engine";
-import { classifyReminderReply } from "@/lib/whatsapp/reminder-reply";
+import { resolveReminderReply } from "@/lib/whatsapp/reminder-pick";
 import { findPatientByWhatsAppPhone, upsertWhatsAppThread } from "@/lib/whatsapp/inbox-log";
 import { SYSTEM_EXTERNAL_ID_PREFIX, buildSystemExternalId } from "@/lib/whatsapp/system-message";
 import { rateLimitKey } from "@/lib/rate-limit";
 import type { BotHistoryItem } from "@/lib/whatsapp/bot/types";
 import { Prisma } from "@prisma/client";
-import {
-  WA_REMINDER_STATUS,
-  WA_REMINDER_CONFIRMABLE_TYPES,
-  WA_REMINDER_REPLYABLE_APPT_STATUSES,
-} from "@/lib/whatsapp/reminder-status";
+import { WA_REMINDER_STATUS } from "@/lib/whatsapp/reminder-status";
 
 // Tope diario de respuestas del bot por clínica (proxy de gasto: cada
 // respuesta OUT del bot ≈ 1 llamada a Claude + 1 envío de WhatsApp).
@@ -173,34 +169,28 @@ export async function POST(req: NextRequest) {
           orderBy: { sentAt: "desc" },
           // Tope de seguridad: con más de 10 recordatorios sin contestar el
           // accionable podría quedar fuera (peor caso: la confirmación no se
-          // registra y el mensaje espera al staff en el Inbox — nunca se
-          // reescribe una cita ajena, que era el daño real).
+          // registra y el mensaje espera al staff en el Inbox).
           take: 10,
         })
       : [];
 
-    // Accionable = el recordatorio que PIDE confirmar/cancelar (APPT_AUTO,
-    // APPOINTMENT legacy o MANUAL) Y cuya cita sigue viva. Sin este filtro,
-    // contestar la encuesta de seguimiento (FOLLOWUP) reabría o cancelaba una
-    // cita ya atendida —probablemente facturada— y el paciente recibía
-    // "❌ Tu cita ha sido cancelada" justo después de opinar.
-    const actionable =
-      pendingReminders.find(
-        (r) =>
-          WA_REMINDER_CONFIRMABLE_TYPES.includes(r.type) &&
-          !!r.appointment &&
-          WA_REMINDER_REPLYABLE_APPT_STATUSES.includes(r.appointment.status),
-      ) ?? null;
-    const reminder = actionable ?? pendingReminders[0] ?? null;
+    // Selección + clasificación, ambas puras y testeadas sin BD
+    // (lib/whatsapp/reminder-pick.ts, npm run test:wa-reminder-pick):
+    // - Accionable = el que PIDE confirmar/cancelar (APPT_AUTO, APPOINTMENT
+    //   legacy o MANUAL) Y cuya cita sigue viva. Sin ese filtro, contestar la
+    //   encuesta de seguimiento (FOLLOWUP) reabría o cancelaba una cita ya
+    //   atendida —probablemente facturada— y el paciente recibía "❌ Tu cita ha
+    //   sido cancelada" justo después de opinar.
+    // - Si no hay accionable, la respuesta se registra sobre el más reciente
+    //   pero con acción "none": no se toca ninguna cita.
+    // - CANCELAR además exige que el accionable sea el mensaje MÁS RECIENTE:
+    //   "no tuve dolor" contestado a una encuesta clasifica como cancelar por
+    //   el "no", y no puede llevarse por delante la cita de la semana que viene.
+    // - Cancelar se evalúa PRIMERO para frases ambiguas ("mejor no, sí
+    //   cancélala"); "1"/"2" solo por igualdad exacta (text ya viene trimmed).
+    const { reminder, action: reply } = resolveReminderReply(pendingReminders, text);
 
     if (reminder) {
-      // Clasificación pura compartida con los tests (classifyReminderReply):
-      // cancelar se evalúa PRIMERO para frases ambiguas ("mejor no, sí
-      // cancélala"); "1"/"2" solo por igualdad exacta (rawText ya viene trimmed).
-      // Si el recordatorio no es accionable, la respuesta se guarda pero NO
-      // toca la cita (misma rama "none" de siempre).
-      const reply = reminder === actionable ? classifyReminderReply(text) : "none";
-
       if (reply === "cancel") {
         await prisma.appointment.update({
           where: { id: reminder.appointmentId },

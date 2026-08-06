@@ -150,6 +150,11 @@ export function WhatsAppClient({
       // Mismo criterio que /api/whatsapp/connect: con WABA es coexistence.
       setConnMethod(form.wabaId ? "coexistence" : "manual");
       setStep("done");
+      // El panel de recordatorios lo arma el servidor y solo consulta la cola
+      // si la clínica está conectada: sin este refresh, tras reconectar (el
+      // caso típico, token caducado) diría "no se ha encolado ningún
+      // recordatorio" justo sobre la cola que se viene a diagnosticar.
+      router.refresh();
       toast.success(`${t("inbox.whatsapp.connectedToast")}${data.displayName ? ` — ${data.displayName}` : ""}`);
     } catch (err: any) { toast.error(err.message); } finally { setLoading(false); }
   }

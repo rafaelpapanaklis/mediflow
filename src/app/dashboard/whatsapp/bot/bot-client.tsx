@@ -456,13 +456,14 @@ export function BotClient({ canEdit = true }: { canEdit?: boolean }) {
               onToggle={() => setForm((f) => ({ ...f, enabled: !f.enabled }))}
               title="Bot activado"
               desc="Cuando está activo, el bot responde automáticamente los mensajes entrantes."
-              disabled={saving}
+              disabled={saving || !canEdit}
             />
 
             <div className="field-new">
               <label className="field-new__label">Nombre del bot</label>
               <input
                 className="input-new"
+                readOnly={!canEdit}
                 placeholder="Asistente de la clínica"
                 value={form.botName}
                 onChange={(e) => setForm((f) => ({ ...f, botName: e.target.value }))}
@@ -486,6 +487,7 @@ export function BotClient({ canEdit = true }: { canEdit?: boolean }) {
                         key={tpl.id}
                         type="button"
                         aria-pressed={selected}
+                        disabled={!canEdit}
                         onClick={() => setForm((f) => ({ ...f, persona: tpl.text }))}
                         style={{
                           flex: "1 1 180px",
@@ -513,6 +515,7 @@ export function BotClient({ canEdit = true }: { canEdit?: boolean }) {
 
               <textarea
                 className="input-new"
+                readOnly={!canEdit}
                 style={{ height: 90, resize: "vertical" }}
                 placeholder="Tono, estilo y reglas que debe seguir el bot al responder."
                 value={form.persona}
@@ -524,6 +527,7 @@ export function BotClient({ canEdit = true }: { canEdit?: boolean }) {
               <label className="field-new__label">Saludo</label>
               <textarea
                 className="input-new"
+                readOnly={!canEdit}
                 style={{ height: 90, resize: "vertical" }}
                 placeholder="Hola 👋, soy el asistente de la clínica. ¿En qué puedo ayudarte?"
                 value={form.greeting}
@@ -535,6 +539,7 @@ export function BotClient({ canEdit = true }: { canEdit?: boolean }) {
               <label className="field-new__label">Mensaje fuera de horario</label>
               <textarea
                 className="input-new"
+                readOnly={!canEdit}
                 style={{ height: 90, resize: "vertical" }}
                 placeholder="Gracias por tu mensaje. Te responderemos en nuestro horario de atención."
                 value={form.afterHoursMsg}
@@ -548,21 +553,21 @@ export function BotClient({ canEdit = true }: { canEdit?: boolean }) {
                 onToggle={() => setForm((f) => ({ ...f, canAnswerFaq: !f.canAnswerFaq }))}
                 title="Responder preguntas frecuentes"
                 desc="El bot usa tu lista de FAQ para contestar dudas comunes."
-                disabled={saving}
+                disabled={saving || !canEdit}
               />
               <ToggleRow
                 on={form.canBookAppointments}
                 onToggle={() => setForm((f) => ({ ...f, canBookAppointments: !f.canBookAppointments }))}
                 title="Agendar citas"
                 desc="Permite que el bot proponga horarios y agende citas."
-                disabled={saving}
+                disabled={saving || !canEdit}
               />
               <ToggleRow
                 on={form.fallbackToHuman}
                 onToggle={() => setForm((f) => ({ ...f, fallbackToHuman: !f.fallbackToHuman }))}
                 title="Derivar a un humano"
                 desc="Si el bot no puede resolver, pasa la conversación a tu equipo."
-                disabled={saving}
+                disabled={saving || !canEdit}
               />
             </div>
 
@@ -602,6 +607,8 @@ export function BotClient({ canEdit = true }: { canEdit?: boolean }) {
                   <input
                     type="checkbox"
                     checked={s.enabled}
+                    // readOnly no aplica a checkbox: aquí hace falta disabled.
+                    disabled={!canEdit}
                     onChange={(e) =>
                       setSchedule((sc) => ({ ...sc, [key]: { ...s, enabled: e.target.checked } }))
                     }
@@ -622,6 +629,7 @@ export function BotClient({ canEdit = true }: { canEdit?: boolean }) {
                       <input
                         type="time"
                         className="input-new mono"
+                        readOnly={!canEdit}
                         style={{ width: 120 }}
                         value={s.open}
                         onChange={(e) =>
@@ -632,6 +640,7 @@ export function BotClient({ canEdit = true }: { canEdit?: boolean }) {
                       <input
                         type="time"
                         className="input-new mono"
+                        readOnly={!canEdit}
                         style={{ width: 120 }}
                         value={s.close}
                         onChange={(e) =>
@@ -676,6 +685,7 @@ export function BotClient({ canEdit = true }: { canEdit?: boolean }) {
                 <label className="field-new__label">Pregunta</label>
                 <input
                   className="input-new"
+                  readOnly={!canEdit}
                   placeholder="¿Cuál es el costo de una consulta?"
                   value={newQuestion}
                   onChange={(e) => setNewQuestion(e.target.value)}
@@ -685,6 +695,7 @@ export function BotClient({ canEdit = true }: { canEdit?: boolean }) {
                 <label className="field-new__label">Respuesta</label>
                 <textarea
                   className="input-new"
+                  readOnly={!canEdit}
                   style={{ height: 90, resize: "vertical" }}
                   placeholder="La primera consulta tiene un costo de…"
                   value={newAnswer}
@@ -730,6 +741,7 @@ export function BotClient({ canEdit = true }: { canEdit?: boolean }) {
                           on={faq.enabled}
                           onClick={() => patchFaq(faq.id, { enabled: !faq.enabled })}
                           label="Activa"
+                          disabled={!canEdit}
                         />
                         <span style={{ fontSize: 11, color: "var(--text-3)" }}>
                           {faq.enabled ? "Activa" : "Inactiva"}
@@ -742,6 +754,7 @@ export function BotClient({ canEdit = true }: { canEdit?: boolean }) {
                           className="input-new mono"
                           style={{ width: 72 }}
                           value={faq.order}
+                          readOnly={!canEdit}
                           onChange={(e) => {
                             const order = Number(e.target.value);
                             setFaqs((prev) =>
@@ -749,6 +762,10 @@ export function BotClient({ canEdit = true }: { canEdit?: boolean }) {
                             );
                           }}
                           onBlur={(e) => {
+                            // Sin permiso ni se intenta: readOnly no impide el
+                            // foco, y tabular por la lista soltaría un toast
+                            // rojo por campo sin que nadie haya editado nada.
+                            if (!canEdit) return;
                             const order = Number(e.target.value);
                             patchFaq(faq.id, { order: Number.isNaN(order) ? 0 : order });
                           }}
@@ -758,6 +775,7 @@ export function BotClient({ canEdit = true }: { canEdit?: boolean }) {
                           size="sm"
                           icon={<Trash2 size={14} />}
                           onClick={() => deleteFaq(faq.id)}
+                          disabled={!canEdit}
                         >
                           Borrar
                         </ButtonNew>
@@ -768,6 +786,7 @@ export function BotClient({ canEdit = true }: { canEdit?: boolean }) {
                       <label className="field-new__label">Pregunta</label>
                       <input
                         className="input-new"
+                        readOnly={!canEdit}
                         value={faq.question}
                         onChange={(e) =>
                           setFaqs((prev) =>
@@ -775,6 +794,7 @@ export function BotClient({ canEdit = true }: { canEdit?: boolean }) {
                           )
                         }
                         onBlur={(e) => {
+                          if (!canEdit) return;
                           const v = e.target.value;
                           if (v !== "") patchFaq(faq.id, { question: v });
                         }}
@@ -785,6 +805,7 @@ export function BotClient({ canEdit = true }: { canEdit?: boolean }) {
                       <label className="field-new__label">Respuesta</label>
                       <textarea
                         className="input-new"
+                        readOnly={!canEdit}
                         style={{ height: 90, resize: "vertical" }}
                         value={faq.answer}
                         onChange={(e) =>
@@ -793,6 +814,7 @@ export function BotClient({ canEdit = true }: { canEdit?: boolean }) {
                           )
                         }
                         onBlur={(e) => {
+                          if (!canEdit) return;
                           const v = e.target.value;
                           if (v !== "") patchFaq(faq.id, { answer: v });
                         }}

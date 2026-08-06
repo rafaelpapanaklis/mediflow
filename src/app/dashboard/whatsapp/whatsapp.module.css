@@ -322,7 +322,9 @@
 }
 .refreshBtn:hover {
   color: var(--text-1);
-  border-color: var(--border);
+  /* --border son canales HSL crudos de Tailwind (`255 30% 9% / .08`): puesto
+     directo en border-color la declaración es inválida y no pinta nada. */
+  border-color: hsl(var(--border));
 }
 
 .remEmpty {

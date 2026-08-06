@@ -2,6 +2,7 @@ export const dynamic = "force-dynamic";
 
 import type { Metadata } from "next";
 import { getCurrentUser } from "@/lib/auth";
+import { requirePermissionOrRedirect } from "@/lib/auth/require-permission";
 import { getEffectiveReminderSettings } from "@/lib/reminders/config";
 import { getRecentReminders } from "@/lib/whatsapp/recent-reminders";
 import { WhatsAppClient } from "./whatsapp-client";
@@ -10,6 +11,11 @@ export const metadata: Metadata = { title: "WhatsApp — DaleControl" };
 
 export default async function WhatsAppPage() {
   const user = await getCurrentUser();
+  // Mismo gate que las hijas (bot/ y bot/saldo/). Hasta ahora esta pantalla
+  // solo mostraba la conexión y el sidebar bastaba para esconderla; el panel de
+  // recordatorios trae NOMBRES DE PACIENTES, y por URL directa entraba
+  // cualquier rol —incluido DOCTOR, que no tiene "whatsapp.view"—.
+  requirePermissionOrRedirect(user, "whatsapp.view");
   const connected = user.clinic.waConnected ?? false;
 
   // Config EFECTIVA (reminderSettings Json si existe; si no, los toggles
