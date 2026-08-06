@@ -203,6 +203,13 @@ export function buildPatientWhere(
   const AND = [...scope, ...extraAndList];
   return {
     clinicId: clinicFilterFor(ctx, visibleClinicIds), // ALWAYS — cross-clinic guard + multi-clínica opt-in
+    // ARCO (P2): un paciente cancelado (deletedAt ≠ null, PII anonimizado) no
+    // debe aparecer en listas, ficha ni pickers — ninguna lectura núcleo lo
+    // filtraba. Va ANTES de restExtra para que un caller pueda sobreescribirlo
+    // a propósito (hoy ninguno lo hace). OJO: el folio de paciente
+    // (next-patient-number.ts) NO usa este where y debe seguir contando TODAS
+    // las filas — no "arreglar" aquello con este filtro.
+    deletedAt: null,
     ...(AND.length ? { AND } : {}),
     ...restExtra,
   };

@@ -17,6 +17,9 @@ export async function GET(req: NextRequest) {
   const tokens = q.split(/\s+/).filter(Boolean);
   const where = {
     clinicId: session.clinic.id,
+    // ARCO (P2): un paciente cancelado (deletedAt ≠ null) no aparece en el
+    // buscador — mismo filtro que buildPatientWhere aplica a las listas.
+    deletedAt: null,
     AND: [
       // Visibilidad por paciente: la búsqueda rápida filtraba SOLO por clinicId,
       // así que un paciente restringido se encontraba igual por nombre/teléfono.
