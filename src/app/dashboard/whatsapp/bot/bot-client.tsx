@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Bot, Plus, Trash2, MessageSquare, Clock, Wallet } from "lucide-react";
+import { Bot, Plus, Trash2, MessageSquare, Clock, Wallet, Lock } from "lucide-react";
 import toast from "react-hot-toast";
 import { CardNew } from "@/components/ui/design-system/card-new";
 import { ButtonNew } from "@/components/ui/design-system/button-new";
@@ -160,8 +160,11 @@ function ToggleRow({
   );
 }
 
-export function BotClient() {
+export function BotClient({ canEdit = true }: { canEdit?: boolean }) {
   const askConfirm = useConfirm();
+  // Sin permiso de escritura la pantalla es de solo lectura: las mutaciones se
+  // frenan aquí además del 403 del servidor (que es el gate de verdad).
+  const noPermissionToast = () => toast.error("No tienes permiso para configurar el bot de WhatsApp");
 
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
@@ -225,6 +228,7 @@ export function BotClient() {
   }
 
   async function saveConfig() {
+    if (!canEdit) return noPermissionToast();
     setSaving(true);
     try {
       const body = {
@@ -258,6 +262,7 @@ export function BotClient() {
 
   // ── FAQs ──────────────────────────────────────────────────────────────────
   async function addFaq() {
+    if (!canEdit) return noPermissionToast();
     const question = newQuestion.trim();
     const answer = newAnswer.trim();
     if (!question || !answer) {
@@ -295,6 +300,7 @@ export function BotClient() {
   }
 
   async function patchFaq(id: string, patch: Partial<Pick<BotFaqDTO, "question" | "answer" | "enabled" | "order">>) {
+    if (!canEdit) return noPermissionToast();
     const before = faqs;
     // Optimistic.
     setFaqs((prev) => prev.map((f) => (f.id === id ? { ...f, ...patch } : f)));
@@ -314,6 +320,7 @@ export function BotClient() {
   }
 
   async function deleteFaq(id: string) {
+    if (!canEdit) return noPermissionToast();
     const ok = await askConfirm({
       title: "Eliminar FAQ",
       description: "¿Seguro que quieres eliminar esta pregunta frecuente?",
@@ -413,6 +420,33 @@ export function BotClient() {
         </div>
       </div>
 
+      {!canEdit && (
+        <div
+          style={{
+            display: "flex",
+            alignItems: "flex-start",
+            gap: 12,
+            background: "var(--bg-elev-2)",
+            border: "1px solid var(--border-soft)",
+            borderRadius: 12,
+            padding: "14px 16px",
+            marginBottom: 14,
+          }}
+        >
+          <Lock size={16} style={{ flexShrink: 0, marginTop: 1, color: "var(--text-3)" }} />
+          <div>
+            <div style={{ fontSize: 12.5, fontWeight: 600, color: "var(--text-1)" }}>
+              Solo lectura
+            </div>
+            <p style={{ marginTop: 3, fontSize: 12, lineHeight: 1.55, color: "var(--text-2)" }}>
+              Puedes ver cómo está configurado el bot, pero no cambiarlo. Lo que se guarda aquí es
+              el texto que el asistente le manda a los pacientes desde el número de la clínica: pide
+              a un administrador el permiso <strong>Enviar WhatsApp</strong> si necesitas editarlo.
+            </p>
+          </div>
+        </div>
+      )}
+
       <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
         {/* ── GENERAL ── */}
         <CardNew title="General" sub="Identidad y comportamiento del asistente.">
@@ -422,13 +456,14 @@ export function BotClient() {
               onToggle={() => setForm((f) => ({ ...f, enabled: !f.enabled }))}
               title="Bot activado"
               desc="Cuando está activo, el bot responde automáticamente los mensajes entrantes."
-              disabled={saving}
+              disabled={saving || !canEdit}
             />
 
             <div className="field-new">
               <label className="field-new__label">Nombre del bot</label>
               <input
                 className="input-new"
+                readOnly={!canEdit}
                 placeholder="Asistente de la clínica"
                 value={form.botName}
                 onChange={(e) => setForm((f) => ({ ...f, botName: e.target.value }))}
@@ -452,6 +487,7 @@ export function BotClient() {
                         key={tpl.id}
                         type="button"
                         aria-pressed={selected}
+                        disabled={!canEdit}
                         onClick={() => setForm((f) => ({ ...f, persona: tpl.text }))}
                         style={{
                           flex: "1 1 180px",
@@ -479,6 +515,7 @@ export function BotClient() {
 
               <textarea
                 className="input-new"
+                readOnly={!canEdit}
                 style={{ height: 90, resize: "vertical" }}
                 placeholder="Tono, estilo y reglas que debe seguir el bot al responder."
                 value={form.persona}
@@ -490,6 +527,7 @@ export function BotClient() {
               <label className="field-new__label">Saludo</label>
               <textarea
                 className="input-new"
+                readOnly={!canEdit}
                 style={{ height: 90, resize: "vertical" }}
                 placeholder="Hola 👋, soy el asistente de la clínica. ¿En qué puedo ayudarte?"
                 value={form.greeting}
@@ -501,6 +539,7 @@ export function BotClient() {
               <label className="field-new__label">Mensaje fuera de horario</label>
               <textarea
                 className="input-new"
+                readOnly={!canEdit}
                 style={{ height: 90, resize: "vertical" }}
                 placeholder="Gracias por tu mensaje. Te responderemos en nuestro horario de atención."
                 value={form.afterHoursMsg}
@@ -514,26 +553,26 @@ export function BotClient() {
                 onToggle={() => setForm((f) => ({ ...f, canAnswerFaq: !f.canAnswerFaq }))}
                 title="Responder preguntas frecuentes"
                 desc="El bot usa tu lista de FAQ para contestar dudas comunes."
-                disabled={saving}
+                disabled={saving || !canEdit}
               />
               <ToggleRow
                 on={form.canBookAppointments}
                 onToggle={() => setForm((f) => ({ ...f, canBookAppointments: !f.canBookAppointments }))}
                 title="Agendar citas"
                 desc="Permite que el bot proponga horarios y agende citas."
-                disabled={saving}
+                disabled={saving || !canEdit}
               />
               <ToggleRow
                 on={form.fallbackToHuman}
                 onToggle={() => setForm((f) => ({ ...f, fallbackToHuman: !f.fallbackToHuman }))}
                 title="Derivar a un humano"
                 desc="Si el bot no puede resolver, pasa la conversación a tu equipo."
-                disabled={saving}
+                disabled={saving || !canEdit}
               />
             </div>
 
             <div style={{ display: "flex", gap: 8 }}>
-              <ButtonNew variant="primary" onClick={saveConfig} disabled={saving}>
+              <ButtonNew variant="primary" onClick={saveConfig} disabled={saving || !canEdit}>
                 {saving ? "Guardando…" : "Guardar"}
               </ButtonNew>
             </div>
@@ -568,6 +607,8 @@ export function BotClient() {
                   <input
                     type="checkbox"
                     checked={s.enabled}
+                    // readOnly no aplica a checkbox: aquí hace falta disabled.
+                    disabled={!canEdit}
                     onChange={(e) =>
                       setSchedule((sc) => ({ ...sc, [key]: { ...s, enabled: e.target.checked } }))
                     }
@@ -588,6 +629,7 @@ export function BotClient() {
                       <input
                         type="time"
                         className="input-new mono"
+                        readOnly={!canEdit}
                         style={{ width: 120 }}
                         value={s.open}
                         onChange={(e) =>
@@ -598,6 +640,7 @@ export function BotClient() {
                       <input
                         type="time"
                         className="input-new mono"
+                        readOnly={!canEdit}
                         style={{ width: 120 }}
                         value={s.close}
                         onChange={(e) =>
@@ -613,7 +656,7 @@ export function BotClient() {
             })}
           </div>
           <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
-            <ButtonNew variant="primary" onClick={saveConfig} disabled={saving}>
+            <ButtonNew variant="primary" onClick={saveConfig} disabled={saving || !canEdit}>
               {saving ? "Guardando…" : "Guardar horario"}
             </ButtonNew>
           </div>
@@ -642,6 +685,7 @@ export function BotClient() {
                 <label className="field-new__label">Pregunta</label>
                 <input
                   className="input-new"
+                  readOnly={!canEdit}
                   placeholder="¿Cuál es el costo de una consulta?"
                   value={newQuestion}
                   onChange={(e) => setNewQuestion(e.target.value)}
@@ -651,6 +695,7 @@ export function BotClient() {
                 <label className="field-new__label">Respuesta</label>
                 <textarea
                   className="input-new"
+                  readOnly={!canEdit}
                   style={{ height: 90, resize: "vertical" }}
                   placeholder="La primera consulta tiene un costo de…"
                   value={newAnswer}
@@ -662,7 +707,7 @@ export function BotClient() {
                   variant="primary"
                   icon={<Plus size={14} />}
                   onClick={addFaq}
-                  disabled={addingFaq}
+                  disabled={addingFaq || !canEdit}
                 >
                   {addingFaq ? "Agregando…" : "Agregar"}
                 </ButtonNew>
@@ -696,6 +741,7 @@ export function BotClient() {
                           on={faq.enabled}
                           onClick={() => patchFaq(faq.id, { enabled: !faq.enabled })}
                           label="Activa"
+                          disabled={!canEdit}
                         />
                         <span style={{ fontSize: 11, color: "var(--text-3)" }}>
                           {faq.enabled ? "Activa" : "Inactiva"}
@@ -708,6 +754,7 @@ export function BotClient() {
                           className="input-new mono"
                           style={{ width: 72 }}
                           value={faq.order}
+                          readOnly={!canEdit}
                           onChange={(e) => {
                             const order = Number(e.target.value);
                             setFaqs((prev) =>
@@ -715,6 +762,10 @@ export function BotClient() {
                             );
                           }}
                           onBlur={(e) => {
+                            // Sin permiso ni se intenta: readOnly no impide el
+                            // foco, y tabular por la lista soltaría un toast
+                            // rojo por campo sin que nadie haya editado nada.
+                            if (!canEdit) return;
                             const order = Number(e.target.value);
                             patchFaq(faq.id, { order: Number.isNaN(order) ? 0 : order });
                           }}
@@ -724,6 +775,7 @@ export function BotClient() {
                           size="sm"
                           icon={<Trash2 size={14} />}
                           onClick={() => deleteFaq(faq.id)}
+                          disabled={!canEdit}
                         >
                           Borrar
                         </ButtonNew>
@@ -734,6 +786,7 @@ export function BotClient() {
                       <label className="field-new__label">Pregunta</label>
                       <input
                         className="input-new"
+                        readOnly={!canEdit}
                         value={faq.question}
                         onChange={(e) =>
                           setFaqs((prev) =>
@@ -741,6 +794,7 @@ export function BotClient() {
                           )
                         }
                         onBlur={(e) => {
+                          if (!canEdit) return;
                           const v = e.target.value;
                           if (v !== "") patchFaq(faq.id, { question: v });
                         }}
@@ -751,6 +805,7 @@ export function BotClient() {
                       <label className="field-new__label">Respuesta</label>
                       <textarea
                         className="input-new"
+                        readOnly={!canEdit}
                         style={{ height: 90, resize: "vertical" }}
                         value={faq.answer}
                         onChange={(e) =>
@@ -759,6 +814,7 @@ export function BotClient() {
                           )
                         }
                         onBlur={(e) => {
+                          if (!canEdit) return;
                           const v = e.target.value;
                           if (v !== "") patchFaq(faq.id, { answer: v });
                         }}

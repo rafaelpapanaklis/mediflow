@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
 import { getAuthContext } from "@/lib/auth-context";
+import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { prisma } from "@/lib/prisma";
 import { toFaqDTO } from "../../service";
 
@@ -10,10 +11,13 @@ export const dynamic = "force-dynamic";
  * PATCH /api/whatsapp/bot/faqs/[id]
  * Edita una FAQ { question?, answer?, enabled?, order? }. Guard de pertenencia:
  * findFirst { id, clinicId } antes de mutar — clinicId de la sesión.
+ * Exige "whatsapp.send" (mismo criterio que crear una FAQ).
  */
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const denied = denyIfMissingPermission(ctx, "whatsapp.send");
+  if (denied) return denied;
 
   const existing = await prisma.whatsAppBotFaq.findFirst({
     where: { id: params.id, clinicId: ctx.clinicId },
@@ -47,11 +51,13 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 /**
  * DELETE /api/whatsapp/bot/faqs/[id]
  * Borra una FAQ. Guard de pertenencia por clinicId (doble cinturón con
- * deleteMany { id, clinicId }).
+ * deleteMany { id, clinicId }). Exige "whatsapp.send".
  */
 export async function DELETE(_req: NextRequest, { params }: { params: { id: string } }) {
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const denied = denyIfMissingPermission(ctx, "whatsapp.send");
+  if (denied) return denied;
 
   const existing = await prisma.whatsAppBotFaq.findFirst({
     where: { id: params.id, clinicId: ctx.clinicId },

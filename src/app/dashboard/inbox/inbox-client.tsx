@@ -45,6 +45,15 @@ import {
 import toast from "react-hot-toast";
 import { useT } from "@/i18n/i18n-provider";
 import { parseSystemKind } from "@/lib/whatsapp/system-message";
+import {
+  applyDraft,
+  dropDraft as dropDraftFrom,
+  forgetEmptyDraft,
+  getDraft,
+  type ComposerMode,
+  type DraftMap,
+  type DraftPatch,
+} from "@/lib/inbox/composer-drafts";
 import styles from "./inbox.module.css";
 
 type Channel = "WHATSAPP" | "EMAIL" | "PORTAL_FORM" | "VALIDATION" | "REMINDER" | "PORTAL";
@@ -224,8 +233,9 @@ export function InboxClient({ viewer }: { viewer: Viewer }) {
   const [activeThread, setActiveThread] = useState<ThreadDetail | null>(null);
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
-  const [composerMode, setComposerMode] = useState<"reply" | "internal">("reply");
-  const [composerText, setComposerText] = useState("");
+  // Borradores por hilo (lib/inbox/composer-drafts). El composer lee SIEMPRE el
+  // del hilo activo: cambiar de conversación restaura su propio texto y su modo.
+  const [drafts, setDrafts] = useState<DraftMap>({});
   const [sending, setSending] = useState(false);
   const [loadingList, setLoadingList] = useState(true);
   const [loadingDetail, setLoadingDetail] = useState(false);
@@ -257,6 +267,62 @@ export function InboxClient({ viewer }: { viewer: Viewer }) {
   const teamLoadingRef = useRef(false);
 
   const now = Date.now() + nowTick * 0; // nowTick fuerza el re-render periódico
+
+  /* ── Composer: siempre el borrador del hilo activo ──
+     La llave es el id del hilo CARGADO (activeThread), no el seleccionado
+     (activeThreadId): mientras el detalle viaja, en pantalla sigue el hilo
+     anterior, y es a ese al que `sendReply` postea. Atando el borrador al mismo
+     id, lo que se lee, lo que se escribe y a dónde se envía son siempre el
+     mismo hilo. */
+  const draftThreadId = activeThread?.id ?? null;
+  const activeDraft = getDraft(drafts, draftThreadId);
+  const composerText = activeDraft.text;
+  const composerMode = activeDraft.mode;
+
+  /**
+   * Escribe el borrador de UN hilo concreto (nunca "el activo"): el envío es
+   * asíncrono y el usuario puede haber saltado a otra conversación mientras
+   * tanto — limpiar "el activo" borraría el borrador del hilo equivocado.
+   * La transición vive en lib/inbox/composer-drafts (pura y testeada).
+   */
+  const setDraftFor = useCallback((threadId: string, patch: DraftPatch) => {
+    setDrafts((prev) => applyDraft(prev, threadId, patch));
+  }, []);
+
+  /** Olvida por completo el borrador de un hilo (al resolverlo/archivarlo). */
+  const dropDraft = useCallback((threadId: string) => {
+    setDrafts((prev) => dropDraftFrom(prev, threadId));
+  }, []);
+
+  /* Al salir de una conversación, su borrador se olvida si quedó SIN texto.
+     Recordar el modo "Nota interna" vacío no guarda ningún trabajo y sí cambia
+     el destino del siguiente mensaje: al volver, una respuesta escrita para el
+     paciente se guardaría como nota y él nunca la recibiría. Mientras el hilo
+     está en pantalla no se toca — mover el selector bajo los dedos de quien
+     escribe es justo el camino por el que una nota acaba saliendo al paciente. */
+  useEffect(() => {
+    if (!draftThreadId) return;
+    return () => setDrafts((prev) => forgetEmptyDraft(prev, draftThreadId));
+  }, [draftThreadId]);
+
+  // Wrappers con la firma de siempre para el composer (acepta valor o updater).
+  const setComposerText = useCallback(
+    (value: string | ((prev: string) => string)) => {
+      if (!draftThreadId) return;
+      setDraftFor(draftThreadId, (d) => ({
+        text: typeof value === "function" ? value(d.text) : value,
+      }));
+    },
+    [draftThreadId, setDraftFor],
+  );
+
+  const setComposerMode = useCallback(
+    (mode: ComposerMode) => {
+      if (!draftThreadId) return;
+      setDraftFor(draftThreadId, { mode });
+    },
+    [draftThreadId, setDraftFor],
+  );
 
   useEffect(() => {
     const id = window.setInterval(() => setNowTick((n) => n + 1), 30_000);
@@ -468,7 +534,10 @@ export function InboxClient({ viewer }: { viewer: Viewer }) {
     }
     let cancelled = false;
     setLoadingDetail(true);
-    setComposerMode("reply");
+    // OJO: aquí NO se toca el composer. Antes se hacía setComposerMode("reply")
+    // sin limpiar el texto, y esa mezcla —modo nuevo, texto viejo— era justo la
+    // que mandaba una nota interna al paciente equivocado. El borrador (texto Y
+    // modo) es propio de cada hilo y se restaura solo.
     setOpenMenu(null);
     (async () => {
       try {
@@ -590,7 +659,10 @@ export function InboxClient({ viewer }: { viewer: Viewer }) {
           t("inbox.client.eventTookOver", { name: `${viewer.firstName} ${viewer.lastName}`.trim() }),
         );
       }
-      setComposerText("");
+      // Limpia el borrador DEL HILO AL QUE SE ENVIÓ (no el activo: pudo cambiar
+      // durante el POST). El modo se conserva: si estabas tomando notas en esa
+      // conversación, sigues en notas.
+      setDraftFor(activeThread.id, { text: "" });
       if (data.sendError) {
         toast(t("inbox.client.toastSavedButError", { error: data.sendError }), { icon: "⚠️" });
       } else {
@@ -601,7 +673,7 @@ export function InboxClient({ viewer }: { viewer: Viewer }) {
     } finally {
       setSending(false);
     }
-  }, [activeThread, composerText, composerMode, sending, t, viewer.firstName, viewer.lastName, pushLiveEvent]);
+  }, [activeThread, composerText, composerMode, sending, t, viewer.firstName, viewer.lastName, pushLiveEvent, setDraftFor]);
 
   // Pausa/reactiva el bot de WhatsApp en el hilo activo (PATCH botActive).
   const toggleBot = useCallback(async () => {
@@ -645,6 +717,9 @@ export function InboxClient({ viewer }: { viewer: Viewer }) {
       setThreads((prev) => prev.filter((th) => th.id !== threadId));
       setActiveThreadId(null);
       setActiveThread(null);
+      // La conversación se cierra: su borrador se olvida en vez de quedar
+      // esperando a que alguien la reabra semanas después.
+      dropDraft(threadId);
       setStats((prev) => (prev ? { ...prev, resolvedToday: prev.resolvedToday + 1 } : prev));
       toast(
         (tk) => (
@@ -695,7 +770,7 @@ export function InboxClient({ viewer }: { viewer: Viewer }) {
     } catch {
       toast.error(t("inbox.client.toastArchiveError"));
     }
-  }, [activeThread, threads, t, fetchThreads]);
+  }, [activeThread, threads, t, fetchThreads, dropDraft]);
 
   // Posponer → SNOOZED + snoozedUntil.
   const snoozeUntil = useCallback(async (when: Date) => {
@@ -858,7 +933,7 @@ export function InboxClient({ viewer }: { viewer: Viewer }) {
   const insertTemplate = useCallback((text: string) => {
     setComposerText((prev) => (prev.trim() ? `${prev.trimEnd()}\n${text}` : text));
     composerRef.current?.focus();
-  }, []);
+  }, [setComposerText]);
 
   /* ── Grupos de mensajes por día ── */
   const messagesByDay = useMemo(() => {
