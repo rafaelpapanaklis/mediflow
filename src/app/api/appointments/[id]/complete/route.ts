@@ -78,17 +78,23 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   }
 
   // Find linked clinical note: explícito por id o por specialtyData.appointmentId.
+  // En AMBAS ramas la nota se ata al PACIENTE de esta cita, no solo a la clínica
+  // (P1-2): scopear solo por clinicId permitía cerrar una cita propia mandando
+  // {"clinicalNoteId":"<id ajeno>"} y firmar el expediente de OTRO paciente —
+  // alteración de un expediente firmado, irreversible desde la UI.
   let note = parsed.data.clinicalNoteId
     ? await prisma.medicalRecord.findFirst({
         where: {
           id: parsed.data.clinicalNoteId,
           clinicId: session.clinic.id,
+          patientId: existing.patientId,
         },
         select: { id: true, specialtyData: true, subjective: true, objective: true, assessment: true, plan: true },
       })
     : await prisma.medicalRecord.findFirst({
         where: {
           clinicId: session.clinic.id,
+          patientId: existing.patientId,
           specialtyData: {
             path: ["appointmentId"],
             equals: params.id,
