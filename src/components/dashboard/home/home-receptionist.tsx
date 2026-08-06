@@ -31,10 +31,14 @@ export function HomeReceptionist({ user, data }: Props) {
 
   const handleCheckIn = async (id: string) => {
     try {
-      await fetch(`/api/dashboard/appointments/${id}/check-in`, {
+      // La ruta real es /api/appointments/... (P1-14): el segmento /dashboard
+      // sobrante daba 404 y, sin mirar res.ok, el toast cantaba éxito mientras
+      // la cita jamás pasaba a CHECKED_IN.
+      const res = await fetch(`/api/appointments/${id}/check-in`, {
         method: "POST",
         credentials: "include",
       });
+      if (!res.ok) throw new Error(String(res.status));
       toast.success(t("home.recep.checkInOk"));
       router.refresh();
     } catch {
