@@ -1,27 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { getAuthContext } from "@/lib/auth-context";
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
-import { readActiveClinicCookie } from "@/lib/active-clinic";
 import { logMutation } from "@/lib/audit";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { revalidateAfter } from "@/lib/cache/revalidate";
 
 // Multi-tenant: clinicId siempre desde la sesión, nunca del body. Mismo
 // patrón que /api/invoices/[id]/route.ts.
+// Contexto vía el helper CENTRAL: misma resolución cookie→clínica que la
+// copia local que había aquí, pero aplicando el gate de plan vencido
+// (isPlanExpired) que las copias locales se saltaban.
 async function getCtx() {
-  const supabase = createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return null;
-  const activeClinicId = readActiveClinicCookie();
-  // Incluimos role + permissionsOverride para denyIfMissingPermission.
-  const select = { id: true, clinicId: true, role: true, permissionsOverride: true } as const;
-  if (activeClinicId) {
-    const u = await prisma.user.findFirst({ where: { supabaseId: user.id, clinicId: activeClinicId, isActive: true }, select });
-    if (u) return { clinicId: u.clinicId, userId: u.id, role: u.role, permissionsOverride: u.permissionsOverride };
-  }
-  const dbUser = await prisma.user.findFirst({ where: { supabaseId: user.id, isActive: true }, orderBy: { createdAt: "asc" }, select });
-  return dbUser ? { clinicId: dbUser.clinicId, userId: dbUser.id, role: dbUser.role, permissionsOverride: dbUser.permissionsOverride } : null;
+  const ctx = await getAuthContext();
+  if (!ctx) return null;
+  return { clinicId: ctx.clinicId, userId: ctx.userId, role: ctx.role, permissionsOverride: ctx.permissionsOverride };
 }
 
 // POST /api/invoices/[id]/cancel — body { reason?: string }

@@ -1,31 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
-import { createClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
-import { readActiveClinicCookie } from "@/lib/active-clinic";
+import { getAuthContext } from "@/lib/auth-context";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { relatedPatientVisibilityAnd } from "@/lib/patient-visibility";
 
 export const dynamic = "force-dynamic";
 
-// Mismo helper self-contained que el resto de rutas del inbox (threads, [id],
-// messages). El clinicId SIEMPRE sale de la cookie firmada, nunca del request:
-// ese es el punto de aislamiento multi-tenant y aquí no se relaja.
+// Contexto vía el helper CENTRAL (getAuthContext): misma resolución
+// cookie→clínica que la copia local que había aquí (clinicId SIEMPRE de la
+// cookie firmada, nunca del request), pero aplicando el gate de plan vencido
+// que las copias locales se saltaban. ctx.user es la fila User (include
+// clinic) con permissionsOverride normalizado.
 async function getDbUser() {
-  const supabase = createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return null;
-  const activeClinicId = readActiveClinicCookie();
-  if (activeClinicId) {
-    const u = await prisma.user.findFirst({
-      where: { supabaseId: user.id, clinicId: activeClinicId, isActive: true },
-    });
-    if (u) return u;
-  }
-  return prisma.user.findFirst({
-    where: { supabaseId: user.id, isActive: true },
-    orderBy: { createdAt: "asc" },
-  });
+  const ctx = await getAuthContext();
+  return ctx?.user ?? null;
 }
 
 function jsonError(message: string, status: number, extra?: Record<string, unknown>) {
