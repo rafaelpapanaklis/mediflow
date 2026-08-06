@@ -14,6 +14,11 @@ function getAdminClient() {
   );
 }
 
+// P1-8: roles asignables por API — los mismos que ofrece la UI de equipo
+// (team-client.tsx ROLES). Nunca SUPER_ADMIN: asignarlo por API era una
+// escalada de privilegios (requireRole le da bypass en todo el producto).
+const ASSIGNABLE_ROLES: string[] = ["DOCTOR", "ADMIN", "RECEPTIONIST"];
+
 // GET /api/team/[id] — get doctor details
 export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
   const ctx = await getAuthContext();
@@ -65,6 +70,29 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     where: { id: params.id, clinicId: ctx!.clinicId },
   });
   if (!member) return NextResponse.json({ error: "No encontrado" }, { status: 404 });
+
+  // P1-8: (a) el rol nuevo debe estar en la allowlist de la UI — se acepta
+  // re-enviar el rol actual sin cambio (el modal manda el form completo);
+  // (b) un no-SUPER_ADMIN no puede tocar rol/estado de un SUPER_ADMIN (ni
+  // degradar ni desactivar al dueño de la plataforma).
+  if (
+    body.role !== undefined &&
+    body.role !== member.role &&
+    !ASSIGNABLE_ROLES.includes(body.role)
+  ) {
+    return NextResponse.json(
+      { error: "Rol inválido. Permitidos: DOCTOR, ADMIN, RECEPTIONIST." },
+      { status: 400 },
+    );
+  }
+  const touchesSuperAdminRoleOrState =
+    (body.role !== undefined && body.role !== member.role) || body.isActive === false;
+  if (member.role === "SUPER_ADMIN" && !ctx!.isSuperAdmin && touchesSuperAdminRoleOrState) {
+    return NextResponse.json(
+      { error: "Solo un SUPER_ADMIN puede modificar el rol o estado de un SUPER_ADMIN" },
+      { status: 403 },
+    );
+  }
 
   // Tope de usuarios por plan al REACTIVAR. El POST de /api/team ya lo valida,
   // pero este PATCH aplicaba isActive a ciegas: crear 2 → desactivar 1 → crear
@@ -142,6 +170,15 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
   });
 
   if (!member) return NextResponse.json({ error: "No encontrado" }, { status: 404 });
+
+  // P1-8: un ADMIN no puede eliminar (ni desactivar vía este DELETE) al dueño
+  // de la plataforma.
+  if (member.role === "SUPER_ADMIN" && !ctx!.isSuperAdmin) {
+    return NextResponse.json(
+      { error: "Solo un SUPER_ADMIN puede eliminar a un SUPER_ADMIN" },
+      { status: 403 },
+    );
+  }
 
   // If doctor has appointments/records, deactivate instead of delete
   if (member._count.appointments > 0 || member._count.records > 0) {

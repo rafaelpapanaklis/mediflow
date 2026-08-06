@@ -12,6 +12,13 @@ const DOCTOR_COLORS = [
   "#9333ea","#0284c7","#f97316","#84cc16",
 ];
 
+// P1-8: roles que un admin puede asignar por API — exactamente los que ofrece
+// la UI de equipo (team-client.tsx ROLES). SUPER_ADMIN queda fuera a propósito:
+// es el dueño de la plataforma y requireRole le da bypass en todo el producto,
+// así que fabricar uno por API era una escalada de privilegios. (Const local:
+// un route.ts no puede exportar nada que no sea handler/config de Next.)
+const ASSIGNABLE_ROLES: string[] = ["DOCTOR", "ADMIN", "RECEPTIONIST"];
+
 function getAdminClient() {
   return createAdminClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -58,6 +65,14 @@ export async function POST(req: NextRequest) {
 
   if (!firstName?.trim() || !lastName?.trim() || !email?.trim()) {
     return NextResponse.json({ error: "Nombre, apellido y email son requeridos" }, { status: 400 });
+  }
+
+  // P1-8: allowlist de rol. Sin rol en el body se mantiene el default DOCTOR.
+  if (role !== undefined && !ASSIGNABLE_ROLES.includes(role)) {
+    return NextResponse.json(
+      { error: "Rol inválido. Permitidos: DOCTOR, ADMIN, RECEPTIONIST." },
+      { status: 400 },
+    );
   }
 
   // Auto-assign color
