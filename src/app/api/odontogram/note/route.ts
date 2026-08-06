@@ -64,7 +64,8 @@ export async function PUT(req: NextRequest) {
       );
     }
     const { patientId, toothNumber } = parsed.data;
-    if (!(await ensurePatientInClinic(patientId, dbUser.clinicId))) {
+    // Visibilidad incluida (Ola 3) — misma regla que el resto del odontograma.
+    if (!(await ensurePatientInClinic(patientId, { userId: dbUser.id, role: dbUser.role, clinicId: dbUser.clinicId }))) {
       return jsonError("patient_not_found", 404);
     }
 
@@ -114,7 +115,7 @@ export async function DELETE(req: NextRequest) {
         { status: 400 },
       );
     }
-    if (!(await ensurePatientInClinic(parsed.data.patientId, dbUser.clinicId))) {
+    if (!(await ensurePatientInClinic(parsed.data.patientId, { userId: dbUser.id, role: dbUser.role, clinicId: dbUser.clinicId }))) {
       return jsonError("patient_not_found", 404);
     }
     await clearNote(parsed.data.patientId, parsed.data.toothNumber);

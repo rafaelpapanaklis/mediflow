@@ -79,8 +79,9 @@ export async function POST(req: NextRequest) {
     }
 
     const { patientId, records } = parsed.data;
-    // Aislamiento multi-tenant: el paciente debe pertenecer a la clínica activa.
-    if (!(await ensurePatientInClinic(patientId, dbUser.clinicId))) {
+    // Aislamiento multi-tenant + visibilidad (Ola 3): sync borra y reinserta el
+    // odontograma COMPLETO — un doctor excluido no debe poder reemplazarlo.
+    if (!(await ensurePatientInClinic(patientId, { userId: dbUser.id, role: dbUser.role, clinicId: dbUser.clinicId }))) {
       return NextResponse.json({ error: "patient_not_found" }, { status: 404 });
     }
 

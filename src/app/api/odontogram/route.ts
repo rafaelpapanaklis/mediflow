@@ -83,7 +83,7 @@ export async function GET(req: NextRequest) {
     // también si el paciente vive en una sede vinculada. PUT/DELETE/sync/reset
     // llaman a ensurePatientInClinic SIN esta opción → siguen exigiendo que el
     // paciente sea de la sede activa (compartir es solo-lectura).
-    if (!(await ensurePatientInClinic(patientId, dbUser.clinicId, { sharedRead: true }))) {
+    if (!(await ensurePatientInClinic(patientId, { userId: dbUser.id, role: dbUser.role, clinicId: dbUser.clinicId }, { sharedRead: true }))) {
       return jsonError("patient_not_found", 404);
     }
     // Visibilidad por paciente: lee un solo paciente por id → 404 si no lo puede ver.
@@ -124,7 +124,9 @@ export async function PUT(req: NextRequest) {
         { status: 400 },
       );
     }
-    if (!(await ensurePatientInClinic(parsed.data.patientId, dbUser.clinicId))) {
+    // Visibilidad incluida (Ola 3): un doctor excluido ya no escribe el
+    // odontograma de un paciente restringido aunque tenga el id.
+    if (!(await ensurePatientInClinic(parsed.data.patientId, { userId: dbUser.id, role: dbUser.role, clinicId: dbUser.clinicId }))) {
       return jsonError("patient_not_found", 404);
     }
 
@@ -191,7 +193,7 @@ export async function DELETE(req: NextRequest) {
         { status: 400 },
       );
     }
-    if (!(await ensurePatientInClinic(parsed.data.patientId, dbUser.clinicId))) {
+    if (!(await ensurePatientInClinic(parsed.data.patientId, { userId: dbUser.id, role: dbUser.role, clinicId: dbUser.clinicId }))) {
       return jsonError("patient_not_found", 404);
     }
 
