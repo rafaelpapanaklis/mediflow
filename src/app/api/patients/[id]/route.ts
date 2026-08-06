@@ -288,8 +288,9 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
  *   DELETE /api/patients/:id?mode=hard    → BORRADO DEFINITIVO de la fila.
  *
  * El borrado definitivo solo procede si el paciente no tiene nada que obligue a
- * conservarlo (facturas/pagos/CFDI + las 5 tablas con `onDelete: Restrict`, ver
- * @/lib/patient-deletion). Si lo tiene responde 409 con
+ * conservarlo (facturas/pagos/CFDI + historia clínica —notas, recetas,
+ * consentimientos, archivos, radiografías, odontograma— + las 5 tablas con
+ * `onDelete: Restrict`, ver @/lib/patient-deletion). Si lo tiene responde 409 con
  * `{ blocked: true, reasons: [{ type, count }] }` para que la UI lo explique en
  * español y ofrezca archivar.
  */

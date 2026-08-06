@@ -2239,6 +2239,10 @@
           "one": "Tiene 1 factura timbrada ante el SAT",
           "other": "Tiene {count} facturas timbradas ante el SAT"
         },
+        "clinical": {
+          "one": "Tiene 1 registro de historia clínica (notas, recetas, consentimientos, archivos, radiografías u odontograma), que la NOM-024 obliga a conservar",
+          "other": "Tiene {count} registros de historia clínica (notas, recetas, consentimientos, archivos, radiografías u odontograma), que la NOM-024 obliga a conservar"
+        },
         "endodontics": {
           "one": "Tiene 1 registro de endodoncia",
           "other": "Tiene {count} registros de endodoncia"

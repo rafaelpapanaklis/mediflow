@@ -2239,6 +2239,10 @@
           "one": "Has 1 invoice stamped with the tax authority",
           "other": "Has {count} invoices stamped with the tax authority"
         },
+        "clinical": {
+          "one": "Has 1 clinical history record (notes, prescriptions, consent forms, files, X-rays or dental chart) that must be kept by law",
+          "other": "Has {count} clinical history records (notes, prescriptions, consent forms, files, X-rays or dental chart) that must be kept by law"
+        },
         "endodontics": {
           "one": "Has 1 endodontics record",
           "other": "Has {count} endodontics records"
