@@ -17,6 +17,7 @@ import { sendReviewInvitation } from "@/lib/reviews/invite";
 import { logMutation } from "@/lib/audit";
 import { EMPTY_NOTE_ERROR, isClinicalNoteEmpty } from "@/lib/clinical/note-validation";
 import { assertPatientVisible } from "@/lib/patient-visibility";
+import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 
 export const dynamic = "force-dynamic";
 
@@ -76,6 +77,11 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   ) {
     return NextResponse.json({ error: "not_your_appointment" }, { status: 403 });
   }
+
+  // Permiso granular ADEMÁS del rol (P1-3). Tras el assert de visibilidad
+  // para conservar el 404 sobre el 403.
+  const deniedPerm = denyIfMissingPermission(session.user, "agenda.edit");
+  if (deniedPerm) return deniedPerm;
 
   // Find linked clinical note: explícito por id o por specialtyData.appointmentId.
   // En AMBAS ramas la nota se ata al PACIENTE de esta cita, no solo a la clínica

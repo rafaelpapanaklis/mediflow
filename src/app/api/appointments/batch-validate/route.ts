@@ -9,6 +9,7 @@ import type {
   BatchValidateResult,
 } from "@/lib/agenda/types";
 import { revalidateAfter, revalidatePatientProfile } from "@/lib/cache/revalidate";
+import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 
 export async function POST(req: NextRequest) {
   const session = await loadClinicSession();
@@ -20,6 +21,10 @@ export async function POST(req: NextRequest) {
     "SUPER_ADMIN",
   ]);
   if (forbidden) return forbidden;
+
+  // Permiso granular ADEMÁS del rol (P1-3): confirmar/rechazar muta citas.
+  const deniedPerm = denyIfMissingPermission(session.user, "agenda.edit");
+  if (deniedPerm) return deniedPerm;
 
   let body: BatchValidateInput;
   try {

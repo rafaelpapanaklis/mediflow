@@ -9,6 +9,7 @@ import {
 } from "@/lib/agenda/transitions";
 import { revalidateAfter, revalidatePatientProfile } from "@/lib/cache/revalidate";
 import { assertPatientVisible } from "@/lib/patient-visibility";
+import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import type { StatusChangeInput } from "@/lib/agenda/types";
 
 const APPT_INCLUDE = {
@@ -56,6 +57,16 @@ export async function PATCH(
   ) {
     return NextResponse.json({ error: "not_your_appointment" }, { status: 403 });
   }
+
+  // Permiso granular ADEMÁS de la matriz de canTransition (P1-3): cancelar
+  // pide "agenda.delete" (mismo permiso que el DELETE soft-cancel, para que
+  // /status no lo puentee); cualquier otra transición pide "agenda.edit".
+  // Va DESPUÉS del assert de visibilidad para conservar el 404 sobre el 403.
+  const deniedPerm = denyIfMissingPermission(
+    session.user,
+    body.status === "CANCELLED" ? "agenda.delete" : "agenda.edit",
+  );
+  if (deniedPerm) return deniedPerm;
 
   const now = new Date();
   if (existing.status === "PENDING") {

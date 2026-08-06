@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { loadClinicSession, requireRole } from "@/lib/agenda/api-helpers";
 import { revalidateAfter, revalidatePatientProfile } from "@/lib/cache/revalidate";
+import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 
 export async function POST(
   _req: NextRequest,
@@ -16,6 +17,10 @@ export async function POST(
     "SUPER_ADMIN",
   ]);
   if (forbidden) return forbidden;
+
+  // Permiso granular ADEMÁS del rol (P1-3): el check-in mueve la cita de estado.
+  const deniedPerm = denyIfMissingPermission(session.user, "agenda.edit");
+  if (deniedPerm) return deniedPerm;
 
   const existing = await prisma.appointment.findFirst({
     where: { id: params.id, clinicId: session.clinic.id },

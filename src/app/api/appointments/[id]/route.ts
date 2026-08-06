@@ -15,6 +15,7 @@ import {
   type VisibilityViewer,
 } from "@/lib/patient-visibility";
 import { canOverrideOverlap } from "@/lib/agenda/transitions";
+import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { validateResourceSchedule } from "@/lib/agenda/resource-schedule";
 import { loadResourceSchedule } from "@/lib/agenda/resource-schedule.server";
 import { revalidateAfter, revalidatePatientProfile } from "@/lib/cache/revalidate";
@@ -70,6 +71,10 @@ export async function PATCH(
     "SUPER_ADMIN",
   ]);
   if (forbidden) return forbidden;
+
+  // Permiso granular ADEMÁS del rol (P1-3): editable en /dashboard/team.
+  const deniedPerm = denyIfMissingPermission(session.user, "agenda.edit");
+  if (deniedPerm) return deniedPerm;
 
   const existing = await prisma.appointment.findFirst({
     where: { id: params.id, clinicId: session.clinic.id },
@@ -333,6 +338,10 @@ export async function DELETE(
     "SUPER_ADMIN",
   ]);
   if (forbidden) return forbidden;
+
+  // Permiso granular ADEMÁS del rol (P1-3): "Cancelar citas" en /dashboard/team.
+  const deniedPerm = denyIfMissingPermission(session.user, "agenda.delete");
+  if (deniedPerm) return deniedPerm;
 
   const existing = await prisma.appointment.findFirst({
     where: { id: params.id, clinicId: session.clinic.id },

@@ -29,6 +29,7 @@ import {
 } from "@/lib/patient-visibility";
 import { validateResourceSchedule } from "@/lib/agenda/resource-schedule";
 import { loadResourceSchedule } from "@/lib/agenda/resource-schedule.server";
+import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { logMutation } from "@/lib/audit";
 import { revalidateAfter, revalidatePatientProfile } from "@/lib/cache/revalidate";
 import { syncCreateToGoogleCalendar } from "@/lib/agenda/google-sync";
@@ -174,6 +175,11 @@ export async function POST(req: NextRequest) {
     "SUPER_ADMIN",
   ]);
   if (forbidden) return forbidden;
+
+  // Permiso granular ADEMÁS del rol: el default de cada rol lo incluye, así
+  // que solo bloquea a quien el SUPER_ADMIN se lo destildó en /dashboard/team.
+  const deniedPerm = denyIfMissingPermission(session.user, "agenda.create");
+  if (deniedPerm) return deniedPerm;
 
   let body: CreateAppointmentInput;
   try {
