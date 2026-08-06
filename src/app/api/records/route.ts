@@ -1,10 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
 import { z } from "zod";
-import { readActiveClinicCookie } from "@/lib/active-clinic";
+import { getAuthContext } from "@/lib/auth-context";
 import { logAudit, logMutation, extractAuditMeta } from "@/lib/audit";
-import { hasPermission } from "@/lib/auth/permissions";
+import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { relatedPatientVisibilityAnd } from "@/lib/patient-visibility";
 import { getVisiblePatientClinicIds, sharedRecordScope } from "@/lib/branches";
 
@@ -20,25 +19,22 @@ const recordSchema = z.object({
   isPrivate:     z.boolean().optional(),
 });
 
+// Contexto de sesión vía el helper CENTRAL (getAuthContext): misma resolución
+// cookie→clínica que la copia local que había aquí, pero además aplica el gate
+// de plan vencido. Devuelve la fila User (con permissionsOverride normalizado)
+// para no tocar el resto del handler.
 async function getDbUser() {
-  const supabase = createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return null;
-  const activeClinicId = readActiveClinicCookie();
-  if (activeClinicId) {
-    const u = await prisma.user.findFirst({ where: { supabaseId: user.id, clinicId: activeClinicId, isActive: true } });
-    if (u) return u;
-  }
-  return prisma.user.findFirst({ where: { supabaseId: user.id, isActive: true }, orderBy: { createdAt: "asc" } });
+  const ctx = await getAuthContext();
+  return ctx ? (ctx.user as { id: string; role: any; clinicId: string; permissionsOverride: string[] }) : null;
 }
 
 export async function GET(req: NextRequest) {
   const dbUser = await getDbUser();
   if (!dbUser) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  // NOM-024: solo DOCTOR/ADMIN/SUPER_ADMIN ven el expediente clínico.
-  if (!hasPermission(dbUser.role, "medicalRecord.read")) {
-    return NextResponse.json({ error: "forbidden" }, { status: 403 });
-  }
+  // NOM-024 + P1-7: mismo permiso granular que su gemela /api/clinical
+  // ("Ver expediente clínico" — respeta permissionsOverride, no solo el rol).
+  const denied = denyIfMissingPermission(dbUser, "medicalRecord.view");
+  if (denied) return denied;
   const { searchParams } = new URL(req.url);
   const patientId = searchParams.get("patientId");
   const limit = Math.min(Math.max(parseInt(searchParams.get("limit") ?? "200"), 1), 500);
@@ -104,9 +100,9 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const dbUser = await getDbUser();
   if (!dbUser) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  if (!hasPermission(dbUser.role, "medicalRecord.create")) {
-    return NextResponse.json({ error: "forbidden" }, { status: 403 });
-  }
+  // P1-7: misma key que el POST de /api/clinical ("Editar notas SOAP / firmar").
+  const denied = denyIfMissingPermission(dbUser, "medicalRecord.edit");
+  if (denied) return denied;
 
   const body = await req.json();
   const parsed = recordSchema.safeParse(body);
