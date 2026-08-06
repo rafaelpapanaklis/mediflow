@@ -33,7 +33,7 @@ import {
   signMaybeUrl,
 } from "@/lib/storage";
 import { storageQuotaError } from "@/lib/storage-quota";
-import { validateMagicNumber, validateModel3D } from "@/lib/validate-upload";
+import { validateCbctZip, validateModel3D } from "@/lib/validate-upload";
 import {
   MAX_SERVER_INSPECT_BYTES,
   extOfName,
@@ -189,9 +189,12 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
 
   if (bytes) {
     // Firma real del contenido: frena un ejecutable/imagen renombrado a .stl o
-    // .dcm. Es la MISMA validación que hacía el POST multipart viejo.
+    // .dcm. Es la MISMA validación que hacía el POST multipart viejo. Para el
+    // .zip se usa el validador tolerante (firma PK + veto de ejecutables): el
+    // camino viejo de CBCT no validaba nada, y aquí un rechazo BORRA el archivo
+    // — inventar rechazos nuevos sobre sets legítimos sería peor que el hueco.
     const magicError = isCbctZipExt(ext)
-      ? await validateMagicNumber(bytes, ["application/zip"])
+      ? validateCbctZip(bytes)
       : await validateModel3D(bytes, ext);
     if (magicError) {
       await removeFileFromStorage(path).catch((e) =>

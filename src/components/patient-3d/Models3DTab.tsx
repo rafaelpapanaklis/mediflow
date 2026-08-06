@@ -211,6 +211,29 @@ export function Models3DTab({ patientId }: { patientId: string }) {
     abortRef.current?.abort();
   }, []);
 
+  // Descarga del estudio. Re-firma ANTES de abrir: la URL de la lista dura 5
+  // minutos y un expediente abierto un rato deja links caducados que revientan
+  // con un XML de error de Storage — un fallo mudo en la práctica.
+  // `?download=` hace que Storage mande Content-Disposition: attachment con el
+  // nombre real, en vez de que el navegador intente pintar el binario.
+  const downloadFile = useCallback(
+    async (file: Model3DFile) => {
+      try {
+        const res = await fetch(`/api/patients/${patientId}/models-3d`);
+        if (!res.ok) throw new Error();
+        const data = await res.json();
+        const fresh = Array.isArray(data) ? data.find((d: Model3DFile) => d.id === file.id) : null;
+        if (!fresh?.url) throw new Error();
+        setFiles(data);
+        const sep = fresh.url.includes("?") ? "&" : "?";
+        window.open(`${fresh.url}${sep}download=${encodeURIComponent(file.name)}`, "_blank");
+      } catch {
+        toast.error(t("patients.models3d.loadError"));
+      }
+    },
+    [patientId, t],
+  );
+
   // Re-firma la signed URL (TTL 5 min) antes de abrir, por si expiró desde la
   // carga inicial; de paso refresca la lista.
   const openViewer = useCallback(
@@ -412,18 +435,18 @@ export function Models3DTab({ patientId }: { patientId: string }) {
             >
               <Box className="w-3.5 h-3.5" /> {t("patients.models3d.view")}
             </button>
-            {/* Descarga directa: es la salida SIEMPRE disponible, y la única
-                realista para un estudio que el visor del navegador no aguanta.
-                `f.url` ya viene firmada por el GET (TTL 5 min). */}
-            <a
-              href={f.url}
-              download={f.name}
-              className="flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-lg border border-border hover:bg-muted transition-colors no-underline text-foreground"
+            {/* Descarga: la salida SIEMPRE disponible, y la única realista para
+                un estudio que el visor del navegador no aguanta. Re-firma al
+                pulsar (la URL de la lista caduca a los 5 min). */}
+            <button
+              type="button"
+              onClick={() => downloadFile(f)}
+              className="flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-lg border border-border hover:bg-muted transition-colors"
               aria-label={t("patients.models3d.downloadAria", { name: f.name })}
             >
               <Download className="w-3.5 h-3.5" aria-hidden />
               {t("patients.models3d.downloadStudy")}
-            </a>
+            </button>
             <button
               type="button"
               onClick={() => onDelete(f)}

@@ -117,6 +117,29 @@ export async function validateModel3D(bytes: ArrayBuffer, ext: string): Promise<
   return null;
 }
 
+/**
+ * Valida un set CBCT (.zip de cortes DICOM) por CONTENIDO.
+ *
+ * A propósito NO usa el allow-list de MIME de validateMagicNumber: `file-type`
+ * clasifica los contenedores ZIP por lo que llevan dentro (ooxml, epub…) y para
+ * algunos devuelve null, así que exigir exactamente "application/zip" rechazaría
+ * sets legítimos — y en este flujo un rechazo BORRA el archivo que la clínica
+ * acaba de tardar media hora en subir.
+ *
+ * Se comprueba lo que de verdad importa: que no sea un ejecutable disfrazado y
+ * que empiece con la firma "PK" de ZIP. Devuelve null si OK, o un mensaje.
+ */
+export function validateCbctZip(bytes: ArrayBuffer): string | null {
+  const head = headOf(bytes);
+
+  const danger = dangerousExecutable(head);
+  if (danger) return `el contenido es un ${danger}, no un set CBCT`;
+
+  const PK = [0x50, 0x4b]; // "PK" — todo zip empieza así
+  if (!startsWith(head, PK)) return "el contenido no es un archivo .zip válido";
+  return null;
+}
+
 // ---------------------------------------------------------------------------
 // Hojas de cálculo (XLSX / XLS / CSV)
 // ---------------------------------------------------------------------------
