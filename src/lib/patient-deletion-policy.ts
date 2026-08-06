@@ -65,7 +65,7 @@ export const CASCADE_ALLOWED: Record<string, string> = {
   TreatmentPlan:
     "Plan de tratamiento y sus sesiones. Criterio heredado del precheck original: es planeación, no el registro clínico del acto. Lo ejecutado vive en MedicalRecord.",
   PaymentPlan:
-    "Plan de pagos (mensualidades). Si tiene factura detrás, Invoice bloquea por su cuenta; suelto es solo un acuerdo de calendario.",
+    "Plan de pagos (mensualidades) SIN mensualidades pagadas. Un calendario vacío no es dinero. Ojo: sus `PlanPayment` cobrados SÍ bloquean — cuelgan del plan, no del paciente, así que se cuentan aparte (ver TRANSITIVE_MONEY).",
 
   // ── Portal del paciente y avisos ───────────────────────────────────────
   PatientAccountLink:
@@ -173,6 +173,39 @@ export const BLOCKER_TYPE_BY_MODEL: Record<string, PatientDeleteBlockerType> = {
  * bloquear por la puerta de atrás.
  */
 export const HANDLED_SEPARATELY = new Set<string>(["Invoice"]);
+
+/**
+ * El punto ciego de enumerar SÓLO las relaciones directas a `Patient`: hay
+ * tablas que no tienen `patientId` y aun así mueren con el paciente, porque
+ * cuelgan de algo que SÍ está en la allowlist. Son invisibles para el recorrido
+ * genérico y hay que contarlas a mano.
+ *
+ * Hoy la lista tiene una entrada y es dinero: `PlanPayment` (la mensualidad
+ * cobrada) cuelga de `PaymentPlan` con `onDelete: Cascade`. Permitir el plan
+ * —que es sólo un calendario— arrastraba los pagos ya recibidos, que es
+ * exactamente lo que la política dice no permitir. Se cuentan como `credit`.
+ *
+ * `Payment` y `CfdiRecord` son el mismo caso (cuelgan de `Invoice`) pero ya
+ * están cubiertos por el bloque fiscal, que los busca por `invoiceId`.
+ *
+ * Aceptado a propósito y NO listado: `TreatmentSession` / `TreatmentLink`, que
+ * cuelgan de `TreatmentPlan`. Es comportamiento heredado —el precheck original
+ * ya dejaba morir los planes de tratamiento y sus sesiones— y son planeación,
+ * no dinero ni el registro del acto clínico (eso vive en MedicalRecord, que
+ * bloquea). Si algún día cambia el criterio para TreatmentPlan, cambia con él.
+ */
+export const TRANSITIVE_MONEY: Array<{
+  model: string;
+  type: PatientDeleteBlockerType;
+  /** Por qué es invisible al recorrido genérico. */
+  reason: string;
+}> = [
+  {
+    model: "PlanPayment",
+    type: "credit",
+    reason: "cuelga de PaymentPlan (allowlist) por planId, sin patientId propio",
+  },
+];
 
 /** Una relación de otro modelo hacia `Patient`, como la ve el DMMF. */
 export interface PatientRelationModel {

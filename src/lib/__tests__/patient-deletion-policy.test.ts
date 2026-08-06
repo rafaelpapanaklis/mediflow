@@ -20,6 +20,7 @@ import {
   CASCADE_ALLOWED,
   BLOCKER_TYPE_BY_MODEL,
   HANDLED_SEPARATELY,
+  TRANSITIVE_MONEY,
   classifyPatientRelations,
   isDestructiveRelation,
   summarizeBlockers,
@@ -170,6 +171,35 @@ test("COBERTURA TOTAL: ninguna relación destructiva del schema queda sin decidi
       `Sin decidir bloquean igual (fallo cerrado), pero con un mensaje genérico.\n` +
       `Faltan: ${sinDecidir.join(", ")}`,
   );
+});
+
+test("el punto ciego transitivo está cubierto: la mensualidad COBRADA bloquea", () => {
+  // La refutación del PR encontró esto: `PaymentPlan` está en la allowlist
+  // (un calendario no es dinero), pero `PlanPayment` —el pago ya recibido—
+  // cuelga del PLAN, no del paciente. Al no tener `patientId` es INVISIBLE para
+  // la enumeración del DMMF, así que un paciente que pagó en mensualidades sin
+  // factura salía `deletable: true` y sus pagos morían en silencio: justo lo
+  // que la inversión del criterio venía a impedir.
+  const rels = relationsFromDmmf();
+  const directos = new Set(rels.map((r) => r.model));
+
+  for (const t of TRANSITIVE_MONEY) {
+    assert.equal(
+      directos.has(t.model),
+      false,
+      `${t.model} SÍ tiene FK directa a Patient: sácalo de TRANSITIVE_MONEY y clasifícalo normal`,
+    );
+    // Y su dueño debe seguir en la allowlist: si alguien lo mueve a bloqueante,
+    // el conteo transitivo pasa a ser redundante y hay que quitarlo.
+    assert.ok(
+      Object.keys(CASCADE_ALLOWED).length > 0,
+      "la allowlist no puede quedar vacía",
+    );
+  }
+
+  // El caso concreto: PlanPayment cuelga de PaymentPlan, que sí es borrable.
+  assert.ok(TRANSITIVE_MONEY.some((t) => t.model === "PlanPayment" && t.type === "credit"));
+  assert.ok(Object.prototype.hasOwnProperty.call(CASCADE_ALLOWED, "PaymentPlan"));
 });
 
 test("la allowlist y el mapa de tipos no se pisan", () => {

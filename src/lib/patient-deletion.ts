@@ -187,10 +187,19 @@ export async function getPatientDeleteBlockers(
   const { blocking } = classifyPatientRelations(patientRelationsFromDmmf());
   const counted = await countBlockingModels(blocking, patientId, clinicId);
 
+  // ── C) Dinero que cuelga de algo permitido ──────────────────────────────
+  // El punto ciego de enumerar sólo relaciones DIRECTAS a Patient: la
+  // mensualidad cobrada (`PlanPayment`) cuelga del plan de pagos, que sí puede
+  // cascadear. Ver TRANSITIVE_MONEY para el porqué de contarla a mano.
+  const planPayments = await prisma.planPayment.count({
+    where: { plan: { patientId, clinicId }, paidAt: { not: null } },
+  });
+
   return summarizeBlockers([
     { type: "invoices", count: activeInvoices.length },
     { type: "payments", count: payments },
     { type: "cfdi", count: Math.max(cfdiRows, stampedInvoices) },
+    { type: "credit", count: planPayments },
     ...counted,
   ]);
 }

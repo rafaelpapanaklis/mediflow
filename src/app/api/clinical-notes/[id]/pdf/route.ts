@@ -5,6 +5,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { assertPatientVisible } from "@/lib/patient-visibility";
+import { ownPrivateRecordsOnly } from "@/lib/branches";
 import {
   ClinicalNoteDocument,
   type ClinicalNoteDxRow,
@@ -29,7 +30,11 @@ export async function GET(_req: NextRequest, { params }: Params) {
   if (denied) return denied;
 
   const record = await prisma.medicalRecord.findFirst({
-    where: { id: params.id, clinicId: user.clinicId },
+    // Notas privadas (P1-N2): con el id a mano, esta ruta imprimía en PDF la
+    // nota privada de otro doctor a cualquiera con "Ver expediente clínico".
+    // Misma regla que la ficha y /api/records: la privada la ve sólo su autor.
+    // 404 y no 403: no confirmamos que la nota exista.
+    where: { id: params.id, clinicId: user.clinicId, AND: [ownPrivateRecordsOnly(user.id)] },
     select: {
       id: true,
       patientId: true,

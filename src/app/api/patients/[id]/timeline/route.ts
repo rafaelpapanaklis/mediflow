@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
 import { assertPatientVisible } from "@/lib/patient-visibility";
 import { prisma } from "@/lib/prisma";
-import { getVisiblePatientClinicIds, clinicScopeFilter, sharedRecordScope } from "@/lib/branches";
+import { getVisiblePatientClinicIds, clinicScopeFilter, sharedRecordScope, ownPrivateRecordsOnly } from "@/lib/branches";
 
 export const dynamic = "force-dynamic";
 
@@ -122,8 +122,16 @@ export async function GET(req: NextRequest, { params }: Params) {
     wantSoap ? prisma.medicalRecord.findMany({
       // sharedRecordScope (no clinicalScope pelado): de una sede AJENA nunca se
       // leen notas privadas de otro doctor. El timeline lo ven además los
-      // RECEPTIONIST, así que aquí importa doblemente.
-      where: { ...sharedRecordScope(user.clinicId, visibleClinicIds), patientId: params.id, ...dateRange<"visitDate">("visitDate") },
+      // RECEPTIONIST, así que aquí importa doblemente — y por eso hacía falta
+      // `ownPrivateRecordsOnly`: sharedRecordScope no filtra `isPrivate` dentro
+      // de la sede PROPIA, así que con una clínica sola este timeline entregaba
+      // subjective/assessment/plan de las privadas ajenas a recepción (P1-N2).
+      // Los dos van en el mismo AND: cada uno puede ocupar `OR` y se pisarían.
+      where: {
+        AND: [sharedRecordScope(user.clinicId, visibleClinicIds), ownPrivateRecordsOnly(user.id)],
+        patientId: params.id,
+        ...dateRange<"visitDate">("visitDate"),
+      },
       select: {
         id: true, visitDate: true, subjective: true, assessment: true, plan: true,
         specialtyData: true,

@@ -3,7 +3,7 @@ export const dynamic = "force-dynamic";
 import { getCurrentUser } from "@/lib/auth";
 import { getServerT } from "@/i18n/server";
 import { prisma } from "@/lib/prisma";
-import { getPatientVisibility, clinicScopeFilter, sharedRecordScope } from "@/lib/branches";
+import { getPatientVisibility, clinicScopeFilter, sharedRecordScope, ownPrivateRecordsOnly } from "@/lib/branches";
 import { getPatientCreditBalance } from "@/lib/patient-credit";
 import { patientVisibilityAnd } from "@/lib/patient-visibility";
 import { stripPatientSecrets } from "@/lib/patient-secrets";
@@ -83,7 +83,7 @@ export default async function PatientDetailPage({ params }: { params: { id: stri
           where: {
             AND: [
               sharedRecordScope(user.clinicId, visibility.clinicIds),
-              { OR: [{ isPrivate: false }, { isPrivate: true, doctorId: user.id }] },
+              ownPrivateRecordsOnly(user.id),
             ],
           },
           orderBy: { visitDate: "desc" },
@@ -315,9 +315,23 @@ export default async function PatientDetailPage({ params }: { params: { id: stri
 
   // P1-N1: `patient` es la fila completa y cruza al cliente dentro del payload
   // RSC. `portalUrl` ya se armó arriba con el token, así que aquí el token
-  // sobra: se va. Sin esto, el bearer permanente del portal del paciente
-  // quedaba escrito en el HTML de cualquiera que abriera la ficha.
-  const patientForClient = stripPatientSecrets(patient);
+  // sobra: se va. (El link legacy del portal SÍ sigue llegando al navegador,
+  // como prop `portalUrl` — es una función deliberada de la ficha, el botón
+  // "copiar liga de solo lectura". Lo que se corta aquí es que el token viaje
+  // además dentro del objeto paciente, donde nadie lo pide y de donde se cuela
+  // a cada respuesta de la API.)
+  //
+  // Y el strip es SHALLOW: copia `{...patient}`, así que se lleva también las
+  // relaciones del include. Sin vaciarlas aquí, `records` e `invoices` cruzaban
+  // ENTEROS en el flight data aunque los props de abajo mandaran `[]`: una
+  // recepcionista sin "Ver expediente clínico" recibía igual los 20 SOAP, y sin
+  // "Ver facturación" los folios y montos. Los props gatean lo que se PINTA;
+  // esto gatea lo que se MANDA, que es lo que importa.
+  const patientForClient = {
+    ...stripPatientSecrets(patient),
+    records:  canViewRecords ? patient.records  : [],
+    invoices: canViewBilling ? patient.invoices : [],
+  };
 
   const serializedRecords = (canViewRecords ? patient.records : []).map(r => ({
     ...r,

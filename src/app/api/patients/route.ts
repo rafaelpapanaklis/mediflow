@@ -457,9 +457,11 @@ async function v2Handler(
   const hasMore = page < totalPages;
 
   return NextResponse.json({
-    // P1-N1: `pageSlice` son filas COMPLETAS de Patient (el include no lleva
-    // select), así que `portalToken` viajaba al navegador multiplicado por 50
-    // filas por página — un link permanente al portal de medio padrón.
+    // P1-N1, defensa en profundidad. HOY es no-op: `enriched` se arma campo por
+    // campo, sin `...p`, así que nunca llevó `portalToken`. Se deja porque esa
+    // proyección es exactamente el tipo de código que alguien "simplifica" a un
+    // `...p` un martes, y ahí el token se iría al navegador multiplicado por las
+    // 50 filas de la página. El que SÍ filtraba es el handler legacy de abajo.
     patients: stripPatientSecrets(pageSlice),
     total,
     page,

@@ -6,7 +6,7 @@ import { getAuthContext } from "@/lib/auth-context";
 import { logMutation } from "@/lib/audit";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { assertPatientVisible } from "@/lib/patient-visibility";
-import { getVisiblePatientClinicIds, sharedRecordScope } from "@/lib/branches";
+import { getVisiblePatientClinicIds, sharedRecordScope, ownPrivateRecordsOnly } from "@/lib/branches";
 import {
   sumInvoiceItems,
   computeInvoiceTotal,
@@ -75,8 +75,14 @@ export async function GET(req: NextRequest) {
   const records = await prisma.medicalRecord.findMany({
     // sharedRecordScope excluye las notas privadas de las sedes AJENAS: cruzando
     // la frontera "esta nota es mía" no se puede decidir (los ids de doctor son
-    // por clínica), así que se cierra.
-    where: { ...sharedRecordScope(dbUser.clinicId, visibleClinicIds), patientId },
+    // por clínica), así que se cierra. Y `ownPrivateRecordsOnly` hace lo propio
+    // DENTRO de la sede: con una clínica sola sharedRecordScope es `{clinicId}`
+    // pelado y esta ruta devolvía las privadas de cualquier doctor (P1-N2).
+    // Los dos en el mismo AND: cada uno puede ocupar `OR` y se pisarían.
+    where: {
+      AND: [sharedRecordScope(dbUser.clinicId, visibleClinicIds), ownPrivateRecordsOnly(dbUser.id)],
+      patientId,
+    },
     include: { doctor: { select: { id: true, firstName: true, lastName: true } } },
     orderBy: { visitDate: "desc" },
   });

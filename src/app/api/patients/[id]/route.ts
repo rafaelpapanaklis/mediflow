@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { Prisma, PatientStatus, Gender, type Role } from "@prisma/client";
 import { getAuthContext, buildPatientWhere } from "@/lib/auth-context";
 import { prisma } from "@/lib/prisma";
-import { getPatientVisibility, sharedRecordScope } from "@/lib/branches";
+import { getPatientVisibility, sharedRecordScope, ownPrivateRecordsOnly } from "@/lib/branches";
 import { patientSchema } from "@/lib/validations";
 import { validateCurpRecord } from "@/lib/validators/curp";
 import {
@@ -36,13 +36,9 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
   // Notas privadas (P1-N2): `sharedRecordScope` sólo excluye las privadas de
   // OTRA sede; para una clínica sola devuelve `{ clinicId }` pelado y esta ruta
   // entregaba el SOAP privado de cualquier doctor a cualquiera que abriera la
-  // ficha — recepción incluida. Mismo criterio que /api/records y /api/clinical:
-  // la privada la ve sólo su autor. Va en AND porque `sharedRecordScope` ya
-  // puede ocupar `OR` cuando hay sedes vinculadas (dos `OR` en el mismo objeto
-  // se pisan).
-  const ownPrivateOnly = {
-    OR: [{ isPrivate: false }, { isPrivate: true, doctorId: ctx.userId }],
-  };
+  // ficha — recepción incluida. `ownPrivateRecordsOnly` es la otra mitad del
+  // filtro, la de la sede propia: la privada la ve sólo su autor.
+  const ownPrivateOnly = ownPrivateRecordsOnly(ctx.userId);
 
   // Use buildPatientWhere so doctors can only see their own patients
   const patient = await prisma.patient.findFirst({
