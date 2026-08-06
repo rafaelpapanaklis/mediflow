@@ -112,6 +112,22 @@ export async function DELETE(_req: NextRequest, { params }: Params) {
   try {
     const dbUser = await getDbUser();
     if (!dbUser) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+    // Visibilidad por paciente (barrido Ola 3): el PATCH de arriba ya asserta;
+    // borrar el recordatorio de un paciente restringido exige poder verlo.
+    // Un id inexistente conserva el ok idempotente que ya daba el deleteMany.
+    const existing = await prisma.reminder.findFirst({
+      where: { id: params.id, clinicId: dbUser.clinicId },
+      select: { id: true, patientId: true },
+    });
+    if (!existing) return NextResponse.json({ ok: true });
+    if (existing.patientId) {
+      const visDenied = await assertPatientVisible(existing.patientId, {
+        userId: dbUser.id,
+        role: dbUser.role,
+        clinicId: dbUser.clinicId,
+      });
+      if (visDenied) return visDenied;
+    }
     await prisma.reminder.deleteMany({
       where: { id: params.id, clinicId: dbUser.clinicId },
     });

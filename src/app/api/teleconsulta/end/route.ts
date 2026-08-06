@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthContext } from "@/lib/auth-context";
+import { assertPatientVisible } from "@/lib/patient-visibility";
 import { prisma } from "@/lib/prisma";
 import { deleteRoom } from "@/lib/daily";
 
@@ -16,6 +17,17 @@ export async function POST(req: NextRequest) {
 
     if (!appointment) {
       return NextResponse.json({ error: "Cita no encontrada" }, { status: 404 });
+    }
+
+    // Visibilidad por paciente (barrido Ola 3): room y join ya assertan; end
+    // era la única sin gate. 404 antes del 403 de doctor-dueño.
+    if (appointment.patientId) {
+      const visDenied = await assertPatientVisible(appointment.patientId, {
+        userId: ctx.userId,
+        role: ctx.role,
+        clinicId: ctx.clinicId,
+      });
+      if (visDenied) return visDenied;
     }
 
     if (appointment.doctorId !== ctx.userId) {

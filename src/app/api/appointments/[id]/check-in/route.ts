@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { loadClinicSession, requireRole } from "@/lib/agenda/api-helpers";
 import { revalidateAfter, revalidatePatientProfile } from "@/lib/cache/revalidate";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
+import { assertPatientVisible } from "@/lib/patient-visibility";
 
 export async function POST(
   _req: NextRequest,
@@ -28,6 +29,18 @@ export async function POST(
   });
   if (!existing) {
     return NextResponse.json({ error: "not_found" }, { status: 404 });
+  }
+
+  // Visibilidad por paciente (Ola 3): el check-in muta la cita — mismo assert
+  // (y mismo 404) que el PATCH y el /status de la cita. Antes del chequeo de
+  // estado para no revelar en qué estado está una cita que no puede ver.
+  if (existing.patientId) {
+    const visDenied = await assertPatientVisible(existing.patientId, {
+      userId: session.user.id,
+      role: session.user.role,
+      clinicId: session.clinic.id,
+    });
+    if (visDenied) return visDenied;
   }
 
   if (

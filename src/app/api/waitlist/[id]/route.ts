@@ -5,6 +5,7 @@ import {
   loadClinicSession,
   requireRole,
 } from "@/lib/agenda/api-helpers";
+import { assertPatientVisible } from "@/lib/patient-visibility";
 
 export const dynamic = "force-dynamic";
 
@@ -39,10 +40,21 @@ export async function PATCH(
 
   const existing = await prisma.waitlistEntry.findFirst({
     where: { id: params.id, clinicId: session.clinic.id },
-    select: { id: true, resolvedAt: true },
+    select: { id: true, resolvedAt: true, patientId: true },
   });
   if (!existing) {
     return NextResponse.json({ error: "not_found" }, { status: 404 });
+  }
+
+  // Visibilidad por paciente (barrido Ola 3): el POST raíz de /waitlist ya
+  // asserta; mutar la entrada de un paciente restringido exige poder verlo.
+  if (existing.patientId) {
+    const visDenied = await assertPatientVisible(existing.patientId, {
+      userId: session.user.id,
+      role: session.user.role,
+      clinicId: session.clinic.id,
+    });
+    if (visDenied) return visDenied;
   }
 
   const body = await req.json().catch(() => null);
@@ -125,10 +137,20 @@ export async function DELETE(
 
   const existing = await prisma.waitlistEntry.findFirst({
     where: { id: params.id, clinicId: session.clinic.id },
-    select: { id: true, resolvedAt: true },
+    select: { id: true, resolvedAt: true, patientId: true },
   });
   if (!existing) {
     return NextResponse.json({ error: "not_found" }, { status: 404 });
+  }
+  // Visibilidad por paciente (barrido Ola 3) — antes del early-return
+  // idempotente, mismo criterio que el PATCH.
+  if (existing.patientId) {
+    const visDenied = await assertPatientVisible(existing.patientId, {
+      userId: session.user.id,
+      role: session.user.role,
+      clinicId: session.clinic.id,
+    });
+    if (visDenied) return visDenied;
   }
   if (existing.resolvedAt) {
     return NextResponse.json({ ok: true });

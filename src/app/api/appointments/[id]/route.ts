@@ -338,6 +338,18 @@ export async function DELETE(
   if (!existing) {
     return NextResponse.json({ error: "not_found" }, { status: 404 });
   }
+  // Visibilidad por paciente (Ola 3): cancelar muta la cita de un paciente —
+  // quien no puede verlo no puede cancelarla. 404 ANTES del early-return de
+  // idempotencia para no revelar ni la existencia ni el estado (el PATCH
+  // hermano ya hacía este assert; este DELETE era la única mutación sin él).
+  if (existing.patientId) {
+    const visDenied = await assertPatientVisible(existing.patientId, {
+      userId: session.user.id,
+      role: session.user.role,
+      clinicId: session.clinic.id,
+    });
+    if (visDenied) return visDenied;
+  }
   if (existing.status === "CANCELLED") {
     return NextResponse.json({ ok: true });
   }

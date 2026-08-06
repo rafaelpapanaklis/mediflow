@@ -4,6 +4,7 @@ import { z } from "zod";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { loadClinicSession } from "@/lib/agenda/api-helpers";
+import { assertPatientVisible } from "@/lib/patient-visibility";
 import { revalidateAfter } from "@/lib/cache/revalidate";
 import {
   sumInvoiceItems,
@@ -70,6 +71,19 @@ export async function POST(req: NextRequest) {
   });
   if (!appt) {
     return NextResponse.json({ error: "appointment_not_found" }, { status: 404 });
+  }
+
+  // Visibilidad por paciente (Ola 3 / P1-5): sus hermanas by-appointment (GET)
+  // y quotes/from-appointment ya validan — sin esto, un rol con scope=clinic
+  // facturaba al paciente restringido (y el 409 de abajo le filtraba
+  // folio/total/saldo). 404 ANTES del 409 para no revelar nada.
+  if (appt.patientId) {
+    const visDenied = await assertPatientVisible(appt.patientId, {
+      userId: session.user.id,
+      role: session.user.role,
+      clinicId: session.clinic.id,
+    });
+    if (visDenied) return visDenied;
   }
 
   // Si ya hay invoice vinculada, devolverla en lugar de duplicar.
