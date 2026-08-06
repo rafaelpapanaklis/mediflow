@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Search, X, Star, Plus } from "lucide-react";
+import { isAbortError } from "@/lib/fetch-safe";
 
 interface Cie10Code {
   code: string;
@@ -57,20 +58,30 @@ export function Cie10Selector({ diagnoses, onAdd, onRemove, disabled }: Props) {
       return;
     }
     if (debounceRef.current) clearTimeout(debounceRef.current);
+    // Patrón abortable (ver src/lib/fetch-safe.ts): al teclear otra letra o al
+    // cerrar el modal se cancela la búsqueda en vuelo. Sin esto, cerrar el
+    // modal con una búsqueda a medias dejaba un rechazo sin atrapar y un
+    // setState sobre un componente ya desmontado.
+    const ctrl = new AbortController();
     debounceRef.current = setTimeout(async () => {
       setLoading(true);
       try {
-        const res = await fetch(`/api/catalogs/cie10?q=${encodeURIComponent(query)}&limit=20`);
+        const res = await fetch(`/api/catalogs/cie10?q=${encodeURIComponent(query)}&limit=20`, {
+          signal: ctrl.signal,
+        });
         if (res.ok) {
           const data = await res.json();
-          setResults(data.codes ?? []);
+          if (!ctrl.signal.aborted) setResults(data.codes ?? []);
         }
+      } catch (err) {
+        if (!isAbortError(err)) setResults([]);
       } finally {
-        setLoading(false);
+        if (!ctrl.signal.aborted) setLoading(false);
       }
     }, 200);
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
+      ctrl.abort();
     };
   }, [query]);
 

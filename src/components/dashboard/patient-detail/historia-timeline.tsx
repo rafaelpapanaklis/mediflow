@@ -12,6 +12,7 @@ import {
   FileSearch,
   Loader2,
 } from "lucide-react";
+import { isAbortError } from "@/lib/fetch-safe";
 import { useT } from "@/i18n/i18n-provider";
 
 type TimelineEventType =
@@ -151,7 +152,7 @@ export function HistoriaTimeline({
         setLoading(false);
       })
       .catch((e) => {
-        if (e.name === "AbortError") return;
+        if (isAbortError(e)) return;
         setError(String(e.message ?? e));
         setLoading(false);
       });

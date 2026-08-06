@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Search, X, Plus, Pill } from "lucide-react";
+import { isAbortError } from "@/lib/fetch-safe";
 
 interface CumsItem {
   clave: string;
@@ -46,17 +47,29 @@ export function CumsSelector({ items, onChange, disabled }: Props) {
       return;
     }
     if (debounceRef.current) clearTimeout(debounceRef.current);
+    // Patrón abortable (ver src/lib/fetch-safe.ts) — mismo caso que Cie10Selector:
+    // la receta se escribe dentro de un modal que puede cerrarse a media búsqueda.
+    const ctrl = new AbortController();
     debounceRef.current = setTimeout(async () => {
       setLoading(true);
       try {
-        const res = await fetch(`/api/catalogs/cums?q=${encodeURIComponent(query)}&limit=20`);
+        const res = await fetch(`/api/catalogs/cums?q=${encodeURIComponent(query)}&limit=20`, {
+          signal: ctrl.signal,
+        });
         if (res.ok) {
           const data = await res.json();
-          setResults(data.items ?? []);
+          if (!ctrl.signal.aborted) setResults(data.items ?? []);
         }
-      } finally { setLoading(false); }
+      } catch (err) {
+        if (!isAbortError(err)) setResults([]);
+      } finally {
+        if (!ctrl.signal.aborted) setLoading(false);
+      }
     }, 200);
-    return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+      ctrl.abort();
+    };
   }, [query]);
 
   useEffect(() => {

@@ -11,6 +11,7 @@ import {
 } from "react";
 import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
+import { isAbortError } from "@/lib/fetch-safe";
 import type { ActiveConsult } from "@/hooks/use-active-consult";
 
 export interface ActiveConsultContextValue {
@@ -135,7 +136,7 @@ export function ActiveConsultProvider({ children }: { children: ReactNode }) {
         setLoading(false);
       })
       .catch((err) => {
-        if (cancelled || err?.name === "AbortError") return;
+        if (cancelled || isAbortError(err)) return;
         setConsult(null);
         setLoading(false);
       });

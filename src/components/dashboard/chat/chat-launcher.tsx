@@ -24,6 +24,7 @@ import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { MessageCircle, X } from "lucide-react";
 import { ChatPanel } from "./chat-panel";
+import { isAbortError } from "@/lib/fetch-safe";
 import { useT } from "@/i18n/i18n-provider";
 
 type Tab = "supplier" | "lab";
@@ -161,7 +162,7 @@ export function ChatLauncher() {
           });
         })
         .catch((err) => {
-          if (cancelled || err?.name === "AbortError") return;
+          if (cancelled || isAbortError(err)) return;
         });
     };
 

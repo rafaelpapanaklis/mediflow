@@ -18,6 +18,7 @@ import { useActiveConsult } from "@/hooks/use-active-consult";
 import { useNewAppointmentDialog } from "@/components/dashboard/new-appointment/new-appointment-provider";
 import { useNewPatientDialog } from "@/components/dashboard/new-patient/new-patient-provider";
 import { useDebouncedValue } from "@/hooks/use-command-palette";
+import { isAbortError } from "@/lib/fetch-safe";
 
 interface CommandPaletteProps {
   open: boolean;
@@ -119,7 +120,7 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
         setLoading(false);
       })
       .catch((err) => {
-        if (err?.name !== "AbortError") {
+        if (!isAbortError(err)) {
           setRemoteResults(null);
           setLoading(false);
         }

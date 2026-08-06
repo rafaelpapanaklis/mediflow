@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Plus, X, Send, Save, ArrowDownLeft, ArrowUpRight, Loader2 } from "lucide-react";
 import toast from "react-hot-toast";
 import { Cie10Selector } from "@/components/dashboard/clinical/cie10-selector";
+import { useAbortableFetch } from "@/lib/fetch-safe";
 import { useT } from "@/i18n/i18n-provider";
 
 interface ReferralRow {
@@ -53,27 +54,16 @@ const STATUS_COLOR: Record<ReferralRow["status"], string> = {
 
 export function ReferralsTab({ patientId }: Props) {
   const t = useT();
-  const [list, setList] = useState<ReferralRow[]>([]);
-  const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
 
-  async function load() {
-    setLoading(true);
-    try {
-      const res = await fetch(`/api/referrals?patientId=${patientId}`);
-      if (res.ok) {
-        const data = await res.json();
-        setList(data.referrals ?? []);
-      }
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  useEffect(() => {
-    load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [patientId]);
+  // La lista se pide con el patrón abortable compartido: al cambiar de
+  // sección o cerrar la ficha la petición en vuelo se cancela sin ensuciar
+  // la consola ni escribir estado sobre un componente desmontado.
+  // `reload` es lo que llaman las tarjetas y el alta para refrescar.
+  const { data, loading, reload } = useAbortableFetch<{ referrals: ReferralRow[] }>(
+    `/api/referrals?patientId=${encodeURIComponent(patientId)}`,
+  );
+  const list = data?.referrals ?? [];
 
   return (
     <div className="space-y-3">
@@ -101,7 +91,7 @@ export function ReferralsTab({ patientId }: Props) {
         </div>
       ) : (
         <div className="space-y-2">
-          {list.map((r) => <ReferralCard key={r.id} ref={r} onChanged={load} />)}
+          {list.map((r) => <ReferralCard key={r.id} referral={r} onChanged={reload} />)}
         </div>
       )}
 
@@ -109,14 +99,17 @@ export function ReferralsTab({ patientId }: Props) {
         <NewReferralModal
           patientId={patientId}
           onClose={() => setShowForm(false)}
-          onCreated={() => { setShowForm(false); load(); }}
+          onCreated={() => { setShowForm(false); reload(); }}
         />
       )}
     </div>
   );
 }
 
-function ReferralCard({ ref: r, onChanged }: { ref: ReferralRow; onChanged: () => void }) {
+// OJO: la prop NO puede llamarse `ref` — es una prop reservada de React. En
+// React 18 se elimina de props para los componentes función, así que el
+// componente recibiría `undefined` y reventaría al leer cualquier campo.
+function ReferralCard({ referral: r, onChanged }: { referral: ReferralRow; onChanged: () => void }) {
   const t = useT();
   const [responding, setResponding] = useState(false);
   const [response, setResponse] = useState("");

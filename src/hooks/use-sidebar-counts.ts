@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
+import { isAbortError } from "@/lib/fetch-safe";
 
 export interface SidebarCounts {
   messagesUnread: number;
@@ -50,7 +51,7 @@ export function useSidebarCounts(): SidebarCounts {
           });
         })
         .catch((err) => {
-          if (cancelled || err?.name === "AbortError") return;
+          if (cancelled || isAbortError(err)) return;
           setCounts(ZERO);
         });
     };

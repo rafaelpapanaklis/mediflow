@@ -2,6 +2,7 @@
 
 import React from "react";
 import { AlertTriangle, RefreshCw } from "lucide-react";
+import { isAbortError } from "@/lib/fetch-safe";
 
 interface Props {
   children: React.ReactNode;
@@ -25,11 +26,32 @@ export class ErrorBoundary extends React.Component<Props, State> {
     this.state = { hasError: false, error: null };
   }
 
+  /** Recuperaciones ya gastadas por cancelación (ver componentDidCatch). */
+  private abortRecoveries = 0;
+
   static getDerivedStateFromError(error: Error): State {
     return { hasError: true, error };
   }
 
   componentDidCatch(error: Error, info: React.ErrorInfo) {
+    // Cancelar NO es fallar. Una petición abortada (cambio de sección, cierre
+    // de modal, desmontaje por router.refresh()) no debe pintar la pantalla de
+    // "no se pudo cargar": el subárbol sigue siendo válido y el efecto que
+    // sustituye al cancelado ya está pidiendo los datos otra vez. Se reintenta
+    // el render UNA sola vez — acotado a propósito: si volviera a lanzar, el
+    // fallback aparece en vez de entrar en bucle de re-render.
+    //
+    // En React 18 un rechazo de promesa NO llega a un error boundary (solo los
+    // errores lanzados en render/lifecycle), así que esto es una red de
+    // seguridad para subárboles que en el futuro usen `use()`/Suspense. La
+    // defensa de verdad está en el origen: ver src/lib/fetch-safe.ts.
+    if (isAbortError(error)) {
+      if (this.abortRecoveries < 1) {
+        this.abortRecoveries += 1;
+        this.reset();
+      }
+      return;
+    }
     console.error("[ErrorBoundary]", error, info.componentStack);
   }
 

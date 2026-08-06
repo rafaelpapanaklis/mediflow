@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Bell, Banknote, UserPlus, CheckCircle2 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { es } from "date-fns/locale";
+import { isAbortError } from "@/lib/fetch-safe";
 import { useT } from "@/i18n/i18n-provider";
 
 interface ActivityEvent {
@@ -39,7 +40,7 @@ export function NotificationsPopover() {
       setEvents(data.events ?? []);
       setUnreadCount(data.unreadCount ?? 0);
     } catch (err: any) {
-      if (err.name !== "AbortError") { /* silent */ }
+      if (!isAbortError(err)) { /* silent */ }
     } finally {
       if (!signal?.aborted) setLoading(false);
     }

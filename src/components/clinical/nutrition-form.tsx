@@ -7,6 +7,7 @@ import { ButtonNew } from "@/components/ui/design-system/button-new";
 import { BadgeNew }  from "@/components/ui/design-system/badge-new";
 import { EvolutionChart } from "@/components/clinical/shared";
 import { DateField } from "@/components/ui/date-field";
+import { isAbortError } from "@/lib/fetch-safe";
 import { useT } from "@/i18n/i18n-provider";
 
 const ACTIVITY_LEVELS = [
@@ -58,7 +59,7 @@ export function NutritionForm({ patientId, patient, onSaved }: Props) {
     fetch(`/api/clinical?patientId=${patientId}`, { signal: ctrl.signal })
       .then(r => r.ok ? r.json() : [])
       .then(d => setHistory(Array.isArray(d) ? d : []))
-      .catch(err => { if (err.name !== "AbortError") toast.error(t("clinical.nutritionForm.errorLoadHistory")); });
+      .catch(err => { if (!isAbortError(err)) toast.error(t("clinical.nutritionForm.errorLoadHistory")); });
     return () => ctrl.abort();
   }, [patientId]);
 
