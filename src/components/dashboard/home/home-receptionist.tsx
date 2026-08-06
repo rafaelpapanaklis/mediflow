@@ -51,7 +51,9 @@ export function HomeReceptionist({ user, data }: Props) {
   };
 
   const handleCall = (id: string) => {
-    router.push(`/dashboard/appointments/${id}?action=call`);
+    // P1-15: /dashboard/appointments/[id] no existe (404). El panel de la
+    // agenda muestra el teléfono y las acciones de contacto de la cita.
+    router.push(`/dashboard/agenda?highlight=${id}`);
   };
 
   return (

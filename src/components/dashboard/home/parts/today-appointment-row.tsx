@@ -210,10 +210,14 @@ export function TodayAppointmentRow({
                 sideOffset={4}
                 style={dropdownStyle}
               >
+                {/* P1-15: /dashboard/appointments/[id] NO existe (404). Igual
+                    que el command-palette, la cita se abre en la agenda del
+                    día resaltada con ?highlight= (sin ?date=: estas filas son
+                    de HOY y la agenda ya abre en hoy en la tz de la clínica). */}
                 <DropdownMenu.Item
                   style={dropdownItemStyle}
                   onSelect={() =>
-                    router.push(`/dashboard/appointments/${appt.id}`)
+                    router.push(`/dashboard/agenda?highlight=${appt.id}`)
                   }
                 >
                   {t("home.apptRow.viewAppointment")}
@@ -221,7 +225,7 @@ export function TodayAppointmentRow({
                 <DropdownMenu.Item
                   style={dropdownItemStyle}
                   onSelect={() =>
-                    router.push(`/dashboard/appointments/${appt.id}?edit=1`)
+                    router.push(`/dashboard/agenda?highlight=${appt.id}`)
                   }
                 >
                   {t("home.apptRow.reschedule")}
@@ -229,7 +233,7 @@ export function TodayAppointmentRow({
                 <DropdownMenu.Item
                   style={{ ...dropdownItemStyle, color: "var(--danger)" }}
                   onSelect={() =>
-                    router.push(`/dashboard/appointments/${appt.id}?cancel=1`)
+                    router.push(`/dashboard/agenda?highlight=${appt.id}`)
                   }
                 >
                   {t("home.apptRow.cancelAppointment")}

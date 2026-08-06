@@ -99,7 +99,15 @@ export function UpcomingAppointmentsCard({ limit = 5 }: { limit?: number }) {
               item={it}
               last={i === items.length - 1}
               t={t}
-              onOpen={() => router.push(`/dashboard/appointments/${it.id}`)}
+              // P1-15: /dashboard/appointments/[id] no existe (404). Igual que
+              // el command-palette: agenda del día + ?highlight=. La fecha se
+              // deriva en la tz del navegador — la misma aproximación que ya
+              // usa formatShortTime para pintar la hora de estas filas.
+              onOpen={() => {
+                const d = new Date(it.startsAt);
+                const dateISO = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+                router.push(`/dashboard/agenda?date=${dateISO}&highlight=${it.id}`);
+              }}
               onPatient={() => router.push(`/dashboard/patients/${it.patientId}`)}
             />
           ))}
