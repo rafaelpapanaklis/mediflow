@@ -56,12 +56,29 @@ const rel = (over: Partial<PatientRelationModel> = {}): PatientRelationModel => 
 
 // ── Qué cuenta como destructivo ──────────────────────────────────────────
 
-test("Cascade y Restrict son destructivos; SetNull y las opcionales no", () => {
+test("Cascade y Restrict son destructivos; SetNull y los defaults opcionales no", () => {
   assert.equal(isDestructiveRelation(rel({ onDelete: "Cascade" })), true);
   assert.equal(isDestructiveRelation(rel({ onDelete: "Restrict" })), true);
   assert.equal(isDestructiveRelation(rel({ onDelete: "SetNull", required: false })), false);
-  // Una relación OPCIONAL sobrevive con patientId = null: no borra ni bloquea.
+  // Una OPCIONAL sin onDelete resuelve a SetNull: la fila sobrevive con
+  // patientId = null, no borra ni bloquea.
   assert.equal(isDestructiveRelation(rel({ onDelete: null, required: false })), false);
+});
+
+test("el onDelete explícito manda aunque la FK sea opcional (el schema de mañana)", () => {
+  // Una FK opcional con Cascade explícito BORRA la fila hija igual — Postgres
+  // no mira la nullability. Si mañana alguien la declara, esa tabla debe nacer
+  // bloqueando, no escapar de la política (y del candado de cobertura de abajo)
+  // por ser opcional. Restrict/NoAction opcionales también rechazan el DELETE
+  // y hay que poder explicarlos en español en vez de un P2003.
+  assert.equal(isDestructiveRelation(rel({ onDelete: "Cascade", required: false })), true);
+  assert.equal(isDestructiveRelation(rel({ onDelete: "Restrict", required: false })), true);
+  assert.equal(isDestructiveRelation(rel({ onDelete: "NoAction", required: false })), true);
+  // Una REQUERIDA sin onDelete: el default de Prisma es Restrict → bloquea.
+  assert.equal(isDestructiveRelation(rel({ onDelete: null, required: true })), true);
+  // SetNull/SetDefault explícitos siguen siendo inocuos: la fila sobrevive.
+  assert.equal(isDestructiveRelation(rel({ onDelete: "SetNull", required: true })), false);
+  assert.equal(isDestructiveRelation(rel({ onDelete: "SetDefault", required: false })), false);
 });
 
 // ── El criterio invertido ────────────────────────────────────────────────

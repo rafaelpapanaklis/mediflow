@@ -213,7 +213,11 @@ export interface PatientRelationModel {
   model: string;
   /** Acción referencial declarada en el schema. */
   onDelete: "Cascade" | "Restrict" | "SetNull" | "NoAction" | "SetDefault" | null;
-  /** ¿La relación es obligatoria? Una opcional no puede arrastrar nada. */
+  /**
+   * ¿La relación es obligatoria? Decide el DEFAULT cuando no hay `onDelete`
+   * declarado (requerida → Restrict, opcional → SetNull). Con `onDelete`
+   * explícito no participa: Postgres lo ejecuta igual sobre una FK opcional.
+   */
   required: boolean;
   /** ¿El modelo tiene columna `clinicId` propia para scopear el conteo? */
   hasClinicId: boolean;
@@ -229,17 +233,28 @@ export interface BlockingModel {
 /**
  * ¿Esta relación puede destruir o impedir el borrado del paciente?
  *
- * `SetNull` (y las opcionales sin acción declarada, que Prisma resuelve a
- * SetNull) son inocuas: la fila sobrevive con `patientId = null`. Sólo `Cascade`
- * (borra la fila) y `Restrict` (Postgres rechaza el DELETE) importan.
+ * El `onDelete` EXPLÍCITO manda, sea la FK opcional u obligatoria: Postgres no
+ * mira la nullability para ejecutarlo. `Cascade` borra la fila hija;
+ * `Restrict`/`NoAction` rechazan el DELETE del paciente mientras existan filas
+ * — hay que contarlas para explicarlo en español y no reventar con un P2003.
+ * (La versión anterior descartaba toda relación opcional ANTES de mirar
+ * `onDelete`: una FK opcional con `Cascade` explícito escapaba de la política
+ * y del candado de cobertura del test, o sea que nacería borrando en silencio
+ * — justo lo que el criterio invertido promete impedir. Hoy el schema no
+ * declara ninguna, así que este cambio no altera el conjunto destructivo
+ * actual; cierra el schema de mañana.)
  *
- * Se exige ADEMÁS `required`: una relación opcional nunca puede ser Cascade en
- * la práctica de este schema, y pedirlo evita clasificar de más si alguien
- * declara un `onDelete` raro sobre un campo opcional.
+ * Sin `onDelete` declarado, Prisma resuelve el default por opcionalidad:
+ * requerida → Restrict (bloquea), opcional → SetNull (la fila sobrevive con
+ * `patientId = null`: inocua). `SetNull`/`SetDefault` explícitos tampoco
+ * destruyen nada.
  */
 export function isDestructiveRelation(rel: PatientRelationModel): boolean {
-  if (!rel.required) return false;
-  return rel.onDelete === "Cascade" || rel.onDelete === "Restrict";
+  if (rel.onDelete === "Cascade" || rel.onDelete === "Restrict" || rel.onDelete === "NoAction") {
+    return true;
+  }
+  if (rel.onDelete === null) return rel.required;
+  return false;
 }
 
 /**
