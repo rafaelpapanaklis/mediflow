@@ -4,7 +4,7 @@ import { z } from "zod";
 import { getAuthContext } from "@/lib/auth-context";
 import { logAudit, logMutation, extractAuditMeta } from "@/lib/audit";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
-import { relatedPatientVisibilityAnd } from "@/lib/patient-visibility";
+import { relatedPatientVisibilityAnd, assertPatientVisible } from "@/lib/patient-visibility";
 import { getVisiblePatientClinicIds, sharedRecordScope } from "@/lib/branches";
 
 const recordSchema = z.object({
@@ -110,11 +110,16 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Datos inválidos", details: parsed.error.flatten() }, { status: 400 });
   }
 
-  // Verify patient belongs to this clinic
-  const patient = await prisma.patient.findFirst({
-    where: { id: parsed.data.patientId, clinicId: dbUser.clinicId },
+  // Tenant + visibilidad por paciente en un solo query (Ola 3): el GET de esta
+  // ruta ya filtra por visibleUserIds — sin este assert, un doctor excluido
+  // podía ESCRIBIR en el expediente del paciente restringido con el id.
+  // 404 uniforme (patient_not_found): no confirmar existencia a quien no lo ve.
+  const visDenied = await assertPatientVisible(parsed.data.patientId, {
+    userId: dbUser.id,
+    role: dbUser.role,
+    clinicId: dbUser.clinicId,
   });
-  if (!patient) return NextResponse.json({ error: "Paciente no encontrado" }, { status: 404 });
+  if (visDenied) return visDenied;
 
   const record = await prisma.medicalRecord.create({
     data: {

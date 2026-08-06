@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { getAuthContext } from "@/lib/auth-context";
 import { logMutation } from "@/lib/audit";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
+import { assertPatientVisible } from "@/lib/patient-visibility";
 import { revalidateAfter, revalidatePatientProfile } from "@/lib/cache/revalidate";
 
 export const dynamic = "force-dynamic";
@@ -49,13 +50,14 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const patient = await prisma.patient.findFirst({
-    where: { id: parsed.data.patientId, clinicId: dbUser.clinicId },
-    select: { id: true },
+  // Tenant + visibilidad por paciente en un solo query (Ola 3): sin esto, un
+  // doctor excluido creaba notas clínicas del paciente restringido con el id.
+  const visDenied = await assertPatientVisible(parsed.data.patientId, {
+    userId: dbUser.id,
+    role: dbUser.role,
+    clinicId: dbUser.clinicId,
   });
-  if (!patient) {
-    return NextResponse.json({ error: "patient_not_found" }, { status: 404 });
-  }
+  if (visDenied) return visDenied;
 
   const doctorId = parsed.data.doctorId ?? dbUser.id;
   if (parsed.data.doctorId) {

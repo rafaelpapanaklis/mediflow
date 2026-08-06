@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { assertPatientVisible } from "@/lib/patient-visibility";
 import { logMutation } from "@/lib/audit";
 
 export const dynamic = "force-dynamic";
@@ -22,9 +23,20 @@ export async function POST(req: NextRequest, { params }: Params) {
 
   const record = await prisma.medicalRecord.findFirst({
     where: { id: params.id, clinicId: user.clinicId },
-    select: { id: true },
+    select: { id: true, patientId: true },
   });
   if (!record) return NextResponse.json({ error: "record_not_found" }, { status: 404 });
+
+  // Visibilidad por paciente (barrido Ola 3): diagnosticar el expediente de un
+  // paciente restringido exige poder verlo — 404 uniforme.
+  if (record.patientId) {
+    const visDenied = await assertPatientVisible(record.patientId, {
+      userId: user.id,
+      role: user.role,
+      clinicId: user.clinicId,
+    });
+    if (visDenied) return visDenied;
+  }
 
   let body: { cie10Code?: string; isPrimary?: boolean; note?: string };
   try { body = await req.json(); } catch {
@@ -75,9 +87,19 @@ export async function GET(_req: NextRequest, { params }: Params) {
   const user = await getCurrentUser();
   const record = await prisma.medicalRecord.findFirst({
     where: { id: params.id, clinicId: user.clinicId },
-    select: { id: true },
+    select: { id: true, patientId: true },
   });
   if (!record) return NextResponse.json({ error: "record_not_found" }, { status: 404 });
+
+  // Visibilidad por paciente (barrido Ola 3): también la LECTURA de los dx.
+  if (record.patientId) {
+    const visDenied = await assertPatientVisible(record.patientId, {
+      userId: user.id,
+      role: user.role,
+      clinicId: user.clinicId,
+    });
+    if (visDenied) return visDenied;
+  }
 
   const dxs = await prisma.medicalRecordDiagnosis.findMany({
     where: { medicalRecordId: params.id },

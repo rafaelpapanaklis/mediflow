@@ -5,6 +5,7 @@ import { getAuthContext } from "@/lib/auth-context";
 import { logMutation } from "@/lib/audit";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { hasPermission } from "@/lib/auth/permissions";
+import { assertPatientVisible } from "@/lib/patient-visibility";
 import { revalidateAfter, revalidatePatientProfile } from "@/lib/cache/revalidate";
 import { EMPTY_NOTE_ERROR, isClinicalNoteEmpty } from "@/lib/clinical/note-validation";
 
@@ -66,12 +67,25 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     select: {
       id: true,
       doctorId: true,
+      patientId: true,
       specialtyData: true,
       isPrivate: true,
     },
   });
   if (!existing) {
     return NextResponse.json({ error: "not_found" }, { status: 404 });
+  }
+
+  // Visibilidad por paciente (barrido Ola 3): editar la nota de un paciente
+  // restringido exige poder verlo — 404 ANTES del chequeo de SIGNED para no
+  // filtrar ni la existencia ni el estado de la nota.
+  if (existing.patientId) {
+    const visDenied = await assertPatientVisible(existing.patientId, {
+      userId: dbUser.id,
+      role: dbUser.role,
+      clinicId: dbUser.clinicId,
+    });
+    if (visDenied) return visDenied;
   }
 
   // NOM-024: notas SIGNED son inalterables. Bloquear ANTES de owner check
@@ -200,6 +214,16 @@ export async function DELETE(req: NextRequest, { params }: Params) {
   });
   if (!existing) {
     return NextResponse.json({ error: "not_found" }, { status: 404 });
+  }
+
+  // Visibilidad por paciente (barrido Ola 3) — mismo criterio que el PATCH.
+  if (existing.patientId) {
+    const visDenied = await assertPatientVisible(existing.patientId, {
+      userId: dbUser.id,
+      role: dbUser.role,
+      clinicId: dbUser.clinicId,
+    });
+    if (visDenied) return visDenied;
   }
 
   const status = ((existing.specialtyData ?? {}) as Record<string, unknown>).status;

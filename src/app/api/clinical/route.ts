@@ -101,11 +101,15 @@ export async function POST(req: NextRequest) {
   }
   const data = parsed.data;
 
-  // Verify patient belongs to this clinic
-  const patient = await prisma.patient.findFirst({
-    where: { id: data.patientId, clinicId: dbUser.clinicId },
+  // Tenant + visibilidad por paciente en un solo query (barrido Ola 3): el GET
+  // de esta ruta ya asserta — el POST hacía el findFirst pelado que prohíbe la
+  // regla dura de patient-visibility.ts. 404 uniforme (patient_not_found).
+  const visDenied = await assertPatientVisible(data.patientId, {
+    userId: dbUser.id,
+    role: dbUser.role,
+    clinicId: dbUser.clinicId,
   });
-  if (!patient) return NextResponse.json({ error: "Paciente no encontrado" }, { status: 404 });
+  if (visDenied) return visDenied;
 
   // NOM-004 INALTERABILIDAD: la nota nace SIEMPRE con status y el cliente no
   // puede forjar la firma. Strippeamos status/signedAt del payload — el servidor

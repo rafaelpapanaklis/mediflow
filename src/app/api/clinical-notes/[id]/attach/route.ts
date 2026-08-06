@@ -4,6 +4,7 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getAuthContext } from "@/lib/auth-context";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
+import { assertPatientVisible } from "@/lib/patient-visibility";
 
 export const dynamic = "force-dynamic";
 
@@ -47,17 +48,32 @@ export async function POST(req: NextRequest, { params }: Params) {
 
   const note = await prisma.medicalRecord.findFirst({
     where: { id: params.id, clinicId: dbUser.clinicId },
-    select: { id: true, doctorId: true, specialtyData: true },
+    select: { id: true, doctorId: true, patientId: true, specialtyData: true },
   });
   if (!note) return NextResponse.json({ error: "not_found" }, { status: 404 });
+
+  // Visibilidad por paciente (barrido Ola 3): adjuntar a la nota de un
+  // paciente restringido exige poder verlo. 404 antes del owner-check.
+  if (note.patientId) {
+    const visDenied = await assertPatientVisible(note.patientId, {
+      userId: dbUser.id,
+      role: dbUser.role,
+      clinicId: dbUser.clinicId,
+    });
+    if (visDenied) return visDenied;
+  }
+
   const isOwner = note.doctorId === dbUser.id;
   const isAdmin = dbUser.role === "ADMIN" || dbUser.role === "SUPER_ADMIN";
   if (!isOwner && !isAdmin) {
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
   }
 
+  // El archivo debe ser DEL MISMO paciente que la nota: antes bastaba que
+  // fuera de la clínica y se podía colgar la radiografía de OTRO paciente
+  // en este expediente (fuga cruzada al abrir el adjunto).
   const file = await prisma.patientFile.findFirst({
-    where: { id: parsed.data.fileId, clinicId: dbUser.clinicId },
+    where: { id: parsed.data.fileId, clinicId: dbUser.clinicId, patientId: note.patientId },
     select: { id: true, name: true, mimeType: true },
   });
   if (!file) return NextResponse.json({ error: "file_not_found" }, { status: 404 });
