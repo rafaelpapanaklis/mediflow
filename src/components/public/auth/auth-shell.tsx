@@ -11,6 +11,12 @@ interface AuthShellProps {
   form: ReactNode;
   /** Proporción del split — "50/50" (login), "60/40" o "45/55" (signup) */
   split?: "50/50" | "60/40" | "45/55";
+  /**
+   * Fondo del panel visual. "brand" = violeta profundo (default, sin cambios
+   * para signup). "dark" = casi negro, para el login con escena 3D. Solo
+   * cambia el valor de background: el esqueleto 50/50 es el mismo.
+   */
+  visualVariant?: "brand" | "dark";
 }
 
 /**
@@ -18,13 +24,23 @@ interface AuthShellProps {
  * Aplica .landing-theme al wrapper para usar los tokens --ld-*.
  * Siempre en claro: el modo oscuro solo existe dentro del panel.
  */
-export function AuthShell({ visual, form, split = "50/50" }: AuthShellProps) {
+export function AuthShell({ visual, form, split = "50/50", visualVariant = "brand" }: AuthShellProps) {
   // Proporción de columnas por split. "45/55" da más ancho al form (signup con
   // 3 planes para elegir) sin tocar "50/50" (login) ni "60/40".
   const [leftRatio, rightRatio] =
     split === "60/40" ? ["1.5fr", "1fr"] :
     split === "45/55" ? ["45fr", "55fr"] :
     ["1fr", "1fr"];
+
+  const isDark = visualVariant === "dark";
+
+  const visualBackground = isDark
+    ? "radial-gradient(80% 60% at 80% -10%, rgba(124,58,237,0.16), transparent 60%), " +
+      "radial-gradient(70% 60% at -10% 110%, rgba(76,29,149,0.28), transparent 60%), " +
+      "linear-gradient(160deg, #0b0a14 0%, #0e0d20 46%, #121035 100%)"
+    : "radial-gradient(90% 70% at 85% -10%, rgba(167,139,250,0.35), transparent 55%), " +
+      "radial-gradient(70% 60% at -10% 110%, rgba(76,29,149,0.5), transparent 60%), " +
+      "linear-gradient(168deg, #221052 0%, #371a7e 55%, #5b21b6 100%)";
 
   return (
     <div
@@ -37,8 +53,8 @@ export function AuthShell({ visual, form, split = "50/50" }: AuthShellProps) {
         background: "var(--ld-bg)",
       }}
     >
-      {/* LEFT — panel de marca violeta profundo. Aquí el texto blanco SÍ es
-          correcto: los tokens se re-declaran abajo scoped a .auth-shell__visual. */}
+      {/* LEFT — panel de marca. Aquí el texto blanco SÍ es correcto: los
+          tokens se re-declaran abajo scoped a .auth-shell__visual. */}
       <div
         className="auth-shell__visual"
         style={{
@@ -48,23 +64,35 @@ export function AuthShell({ visual, form, split = "50/50" }: AuthShellProps) {
           display: "flex",
           flexDirection: "column",
           justifyContent: "space-between",
-          background:
-            "radial-gradient(90% 70% at 85% -10%, rgba(167,139,250,0.35), transparent 55%), " +
-            "radial-gradient(70% 60% at -10% 110%, rgba(76,29,149,0.5), transparent 60%), " +
-            "linear-gradient(168deg, #221052 0%, #371a7e 55%, #5b21b6 100%)",
+          background: visualBackground,
         }}
       >
-        <Glow x="50%" y="8%" size={1000} opacity={0.4} color="139,92,246" />
-        <div
-          aria-hidden="true"
-          style={{
-            position: "absolute",
-            inset: 0,
-            background: "radial-gradient(ellipse at 85% 40%, rgba(52,211,153,0.08), transparent 50%)",
-          }}
-        />
+        <Glow x="50%" y="8%" size={1000} opacity={isDark ? 0.22 : 0.4} color="139,92,246" />
+        {!isDark && (
+          <div
+            aria-hidden="true"
+            style={{
+              position: "absolute",
+              inset: 0,
+              background: "radial-gradient(ellipse at 85% 40%, rgba(52,211,153,0.08), transparent 50%)",
+            }}
+          />
+        )}
         <GridBg opacity={0.04} />
-        <div style={{ position: "relative", zIndex: 1, width: "100%" }}>{visual}</div>
+        {/* flex:1 + display:flex SOLO en "dark": es lo que deja a la escena 3D
+            llenar el panel de verdad. En "brand" se mantiene el bloque de
+            siempre — SignupVisual tiene height:100% y un spacer flex:1, así
+            que estirar este wrapper le movería el testimonial. */}
+        <div
+          style={{
+            position: "relative",
+            zIndex: 1,
+            width: "100%",
+            ...(isDark ? { flex: 1, display: "flex" } : null),
+          }}
+        >
+          {visual}
+        </div>
       </div>
 
       {/* RIGHT — form sobre fondo claro suave, en tarjeta blanca */}
@@ -97,8 +125,12 @@ export function AuthShell({ visual, form, split = "50/50" }: AuthShellProps) {
       </div>
 
       <style>{`
-        /* Dentro del panel violeta los tokens vuelven a "texto claro":
-           login-visual/signup-visual heredan blanco sin tocar sus archivos. */
+        /* Dentro del panel visual los tokens vuelven al modo de texto claro:
+           login-visual/signup-visual heredan blanco sin tocar sus archivos.
+           Sin comillas rectas ni signos de menor, mayor o ampersand aquí
+           dentro: React solo los escapa al serializar en el servidor, así que
+           el cliente ve otro texto y se invalida la hidratación de la raíz
+           entera (mismo caso que secure-badge). */
         .auth-shell__visual {
           --ld-fg: #ffffff;
           --ld-fg-muted: rgba(255,255,255,0.75);

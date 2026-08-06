@@ -5108,3 +5108,129 @@ queda con `monthlyPrice` = el total de los 3 meses, y por la regla de precedenci
 manda sobre el del plan → MRR inflado para esa clínica. `activate_clinic` no tiene el problema
 (usa `getPlanLimits`). No lo cambié porque la regla de precedencia es la pedida y arreglarlo es
 decidir qué significa "monto" en ese formulario; queda anotado.
+
+---
+
+## [Login-Redesign] Robot 3D de Spline + spotlight + animación de éxito
+
+Integración del handoff `Login rediseño en revisión.zip` sobre `origin/main` (c781bd43), en
+worktree `feat/login-redesign`.
+
+### Archivos tocados
+
+**Nuevos**
+- `src/components/ui/splite.tsx` — wrapper `lazy()` de `@splinetool/react-spline`.
+- `src/components/ui/spotlight.tsx` — foco que sigue al cursor (framer-motion).
+- `src/components/public/auth/login/login-success-animation.ts` — secuencia de éxito ≈1.15 s.
+
+**Modificados**
+- `src/components/public/auth/login/login-visual.tsx` — escena 3D + spotlight + copy nuevo.
+- `src/components/public/auth/login/login-form.tsx` — refs + animación entre toast y navegación.
+- `src/components/public/auth/auth-shell.tsx` — prop `visualVariant`.
+- `src/app/login/page.tsx` — pasa `visualVariant="dark"`.
+- `next.config.mjs` — CSP.
+- `src/components/public/landing/primitives/secure-badge.tsx` — bug de hidratación preexistente.
+- `package.json` / `package-lock.json` — `@splinetool/react-spline` + `@splinetool/runtime`.
+
+### CSP
+
+Añadido al array de la Content-Security-Policy:
+
+```
+"worker-src 'self' blob:",
+```
+
+No lo di por bueno de palabra: el runtime instalado crea **3** workers desde blob
+(`new Worker(URL.createObjectURL(new Blob(...)))` en `@splinetool/runtime/build/runtime.js` —
+decodificador Draco/meshopt, navmesh y ordenador de splats). Sin la directiva caen en
+`default-src 'self'` y el navegador los mata sin decir nada. `script-src`, `connect-src` e
+`img-src` no hicieron falta.
+
+### Copy: el dato falso fuera
+
+`+2,400 clínicas confían en DaleControl` **eliminado**. En su lugar, mismo hueco y mismo peso
+visual (17px bold + 12px atenuado, sobre el mismo borde superior):
+
+**CFDI 4.0** · Facturación timbrada ante el SAT
+
+Es un sello de cumplimiento, no una métrica inventada. De paso, el rediseño ya se llevaba por
+delante el testimonial *"Dr. Fernando Ruiz · Clínica Dental Roma Norte — me ahorra 10 horas de
+papeleo cada semana"*, que también era inventado.
+
+**Sigue vivo el mismo dato falso en otra pantalla:** `signup-visual.tsx:88` dice *"Únete a
+2,400+ clínicas"*. No lo toqué porque el encargo pedía que el signup quedara idéntico.
+
+### Revisión crítica (los 5 puntos, uno por uno)
+
+1. **Lógica del form intacta.** fail-ban (`check`/`fail`/`success`), `signOut()` previo,
+   `post-login`, manejo de errores y botones sociales, todos verbatim. El handoff **borraba el
+   enlace "Soporte"** del pie legal; lo repuse.
+2. **La animación nunca bloquea.** Va en `try/catch` en el form, y además le puse un
+   **watchdog de 2.5 s** dentro del módulo: framer-motion avanza con rAF, así que si la pestaña
+   se va a segundo plano a mitad de la secuencia la promesa no resolvería nunca y el usuario se
+   quedaba atrapado en el login. Ahora gana la carrera el watchdog y se navega igual.
+3. **El gate de 3D sí impide la descarga.** Probado en el build, no de palabra: el runtime vive
+   en un chunk propio de **1970 kB** que **no aparece** en la carga inicial de `/login`
+   (`app-build-manifest.json` → 14 archivos, 762 kB). Y a 375px la pestaña Network no registra
+   **ni una** petición con `splinetool` / `.splinecode`.
+4. **Signup idéntico.** El handoff ponía `flex:1; display:flex` en el wrapper del visual para
+   los dos variants. `SignupVisual` tiene `height:100%` y un spacer `flex:1`, así que eso le
+   habría estirado el panel y bajado el testimonial. Lo dejé **condicionado a `dark`**.
+5. **i18n y textos.** Ningún texto sale de `dictionaries` en estas pantallas; el único texto
+   existente que el handoff eliminaba era "Soporte", ya repuesto.
+
+### Dos arreglos que no venían en el encargo
+
+- **Hidratación rota en `/login` y `/signup` (preexistente).** Los hijos de texto de un
+  `<style>` con comillas rectas (o `< > &`) los escapa React **solo** en el servidor: el
+  cliente veía otro texto, la hidratación se invalidaba y **la raíz entera caía a
+  client-render**. Dos focos: el comentario de `secure-badge.tsx` y el de `auth-shell.tsx`.
+  Reescribí ambos comentarios sin esos caracteres — cero cambio visual. Verificado sobre el
+  HTML del servidor: **0 entidades escapadas** en los 3 bloques `<style>` de cada página.
+- **Fuga de listeners en `spotlight.tsx`.** El snippet pasaba arrows nuevas a
+  `addEventListener` y a `removeEventListener`, así que `mouseenter`/`mouseleave` nunca se
+  desregistraban. Handlers con identidad estable.
+
+### Un ajuste estructural que hacía falta
+
+`Spotlight` le escribe `position:relative` + `overflow:hidden` **a su elemento padre**. Tal
+como venía, ese padre era la capa `position:absolute; inset:0` de la escena → el `relative` la
+habría devuelto al flujo y **colapsado a 0 px de alto, con el canvas dentro**. Le puse un host
+propio de 100%×100% que ya nace relative. Medido en vivo: el host queda en 864×903, no en 0.
+
+### Verificación en navegador
+
+Con `next dev` en :3100. El panel de `/login` se ocultó `<1024px` por CSS, así que para tener
+anchos exactos monté cada viewport en un **iframe same-origin** (viewport real: dentro de él
+las media queries y `matchMedia` se evalúan contra su propio tamaño, no simulado).
+
+| # | Comprobación | Resultado |
+|---|---|---|
+| a | 1920 y 1440 | Robot carga. Spotlight sigue al cursor (medido: pasa de `left:-300px` a seguir el puntero). **Sin scroll horizontal** (`scrollWidth == clientWidth` en ambos). |
+| b | Consola | **0 violaciones de CSP** y **0 errores de hidratación** tras los arreglos. |
+| c | 1280 y 1366 | Columnas 640/640 y 683/683, tarjeta de 464px **entera dentro del viewport**, sello CFDI visible, sin scroll horizontal. |
+| d | 375 | Panel `display:none`, `hasCanvas:false`, y en **Network ni una** petición de Spline. |
+| e | Login correcto | toast+capa 215 ms → convergen 595 → verde+palomita 776 → velo 1195 → opaco 1395 → `pagehide` 1623. **≈1.18 s de animación** y luego navega. |
+| f | Login fallido | *"Email o contraseña incorrectos."* inline con icono, **sin animación** (inputs nunca ocultos, form nunca atenuado, sin velo), se queda en `/login`. |
+| g | `prefers-reduced-motion` | Solo velo: aparece 214 ms, opaco 415 ms (**~200 ms**), navega 682 ms. La secuencia larga **no corre**. |
+
+Cómo se probaron (e), (f) y (g) sin base de datos: (f) es real de punta a punta (Supabase
+apuntando a un host que no autentica → `authError`). Para (e) y (g) stubeé **solo la respuesta
+HTTP de Supabase**; todo lo demás —fail-ban, post-login, toast, animación, navegación— es el
+código real del form. En (g) además se emula `matchMedia('(prefers-reduced-motion: reduce)')`,
+que es exactamente la entrada en la que se ramifica el módulo.
+
+### Build
+
+`npx next build` → **BUILD_EXIT=0** real (leído del código de salida, no de un `echo`), 365/365
+páginas, sin `Failed to compile`, sin `Type error`, sin `Module not found`.
+`npx tsc --noEmit` → 0 errores. `/login`: 9 kB de ruta, 231 kB First Load (vs 225 kB de
+`/laboratorios/login`) — los ~6 kB de diferencia confirman que el runtime 3D no viaja ahí.
+
+### Detalle cosmético que dejo anotado, no cambiado
+
+En desktop **"Datos cifrados · TLS + AES-256" sale dos veces**: la pastilla nueva abajo a la
+derecha del panel (la trae el handoff, tapa la esquina de la marca de Spline) y el `SecureBadge`
+que ya existía dentro de la tarjeta. Se ve redundante. No borré ninguno por mi cuenta: quitar el
+del form cambia algo que hoy está en producción y quitar el del panel destapa la marca de
+Spline. Dime cuál prefieres y lo quito en un commit de una línea.

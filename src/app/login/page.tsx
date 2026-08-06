@@ -32,5 +32,6 @@ export default async function LoginPage() {
     if (clinicUser) redirect("/dashboard");
     // sesión de lab/proveedor (o huérfana): mostrar el form (no redirigir)
   }
-  return <AuthShell split="50/50" visual={<LoginVisual />} form={<LoginForm />} />;
+  // visualVariant="dark": panel izquierdo casi negro para la escena 3D.
+  return <AuthShell split="50/50" visualVariant="dark" visual={<LoginVisual />} form={<LoginForm />} />;
 }

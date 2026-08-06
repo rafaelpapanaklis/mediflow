@@ -73,8 +73,14 @@ export function SecureBadge({
         TLS + AES-256
       </span>
       <style>{`
-        /* Bajo ~380px la pastilla completa ya no cabe en el ancho de pantalla:
-           se cae el detalle técnico y queda solo "Datos cifrados". Aquí @media
+        /* OJO: este bloque no puede contener comillas rectas ni los signos de
+           menor, mayor o ampersand. React los escapa SOLO al serializar en el
+           servidor; el cliente escribe el texto crudo, no coinciden y se
+           invalida la hidratación de la raíz entera (la página caía a
+           client-render completo).
+           Bajo unos 380px la pastilla completa ya no cabe en el ancho de
+           pantalla: se cae el detalle técnico y queda solo el rótulo Datos
+           cifrados. Aquí @media
            es correcto (no hay sidebar que cambie el ancho real del contenedor:
            footer a todo lo ancho y tarjeta de login que a ese tamaño ocupa
            prácticamente el viewport). */

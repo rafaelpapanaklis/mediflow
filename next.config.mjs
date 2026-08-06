@@ -79,6 +79,12 @@ const nextConfig = {
               "font-src 'self' https://fonts.gstatic.com data: https://*.tawk.to",
               "img-src 'self' data: blob: https: http:",
               "media-src 'self' blob: https:",
+              // blob: = el runtime de Spline (robot 3D del /login) arranca sus
+              // Web Workers con new Worker(URL.createObjectURL(new Blob(...))):
+              // decodificador Draco/meshopt, navmesh y ordenador de splats.
+              // Sin worker-src caen en default-src 'self' y el navegador los
+              // bloquea EN SILENCIO -> escena negra sin error de JS.
+              "worker-src 'self' blob:",
               "connect-src 'self' https: wss:",
               // td.doubleclick / googleads.g.doubleclick = iframes del tag de conversiones de Google Ads.
               // www.facebook.com / staticxx.facebook.com = iframe de comunicación del SDK de Meta (xd_arbiter); sin esto el popup del Embedded Signup no puede devolver el resultado.
