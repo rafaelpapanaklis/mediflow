@@ -11,6 +11,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient as createAdmin } from "@supabase/supabase-js";
 import { getAuthContext } from "@/lib/auth-context";
+import { assertPatientVisible } from "@/lib/patient-visibility";
 import { persistentRateLimit, acquireLock, releaseLock } from "@/lib/failban";
 import { prisma } from "@/lib/prisma";
 import { BUCKETS, extractStoragePath, SIGNED_URL_TTL_SECONDS } from "@/lib/storage";
@@ -70,6 +71,15 @@ export async function POST(
   if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
     return NextResponse.json({ error: "Storage no configurado" }, { status: 500 });
   }
+
+  // Visibilidad por paciente (Ola 3): esta ruta entrega una URL FIRMADA del
+  // CBCT — sus hermanas register/sign ya validan; esta era la única abierta.
+  const visDenied = await assertPatientVisible(params.id, {
+    userId: ctx.userId,
+    role: ctx.role,
+    clinicId: ctx.clinicId,
+  });
+  if (visDenied) return visDenied;
 
   // Multi-tenant: el archivo debe ser de esta clínica y este paciente.
   const file = await prisma.patientFile.findFirst({

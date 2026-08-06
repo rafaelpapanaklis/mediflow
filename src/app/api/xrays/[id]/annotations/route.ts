@@ -4,6 +4,7 @@ import { Prisma } from "@prisma/client";
 import { createClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
 import { readActiveClinicCookie } from "@/lib/active-clinic";
+import { assertPatientVisible } from "@/lib/patient-visibility";
 
 export const dynamic = "force-dynamic";
 
@@ -58,9 +59,21 @@ export async function GET(_req: NextRequest, { params }: Params) {
 
     const file = await prisma.patientFile.findFirst({
       where: { id: params.id, clinicId: dbUser.clinicId },
-      select: { id: true, annotations: true },
+      select: { id: true, annotations: true, patientId: true },
     });
     if (!file) return NextResponse.json({ error: "not_found" }, { status: 404 });
+
+    // Visibilidad por paciente (Ola 3): la ruta llega por fileId, así que se
+    // resuelve el paciente dueño del archivo y se valida — su hermano
+    // GET /api/xrays ya filtra por visibleUserIds; este alias no debía menos.
+    if (file.patientId) {
+      const visDenied = await assertPatientVisible(file.patientId, {
+        userId: dbUser.id,
+        role: dbUser.role,
+        clinicId: dbUser.clinicId,
+      });
+      if (visDenied) return visDenied;
+    }
 
     const annotations = Array.isArray(file.annotations) ? file.annotations : [];
     return NextResponse.json({ annotations });
@@ -97,9 +110,20 @@ export async function PUT(req: NextRequest, { params }: Params) {
 
     const file = await prisma.patientFile.findFirst({
       where: { id: params.id, clinicId: dbUser.clinicId },
-      select: { id: true },
+      select: { id: true, patientId: true },
     });
     if (!file) return NextResponse.json({ error: "not_found" }, { status: 404 });
+
+    // Visibilidad por paciente (Ola 3): un doctor excluido no anota la
+    // radiografía de un paciente restringido aunque tenga el fileId.
+    if (file.patientId) {
+      const visDenied = await assertPatientVisible(file.patientId, {
+        userId: dbUser.id,
+        role: dbUser.role,
+        clinicId: dbUser.clinicId,
+      });
+      if (visDenied) return visDenied;
+    }
 
     await prisma.patientFile.update({
       where: { id: params.id },

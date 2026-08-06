@@ -6,6 +6,7 @@ import sharp from "sharp";
 import { createClient } from "@supabase/supabase-js";
 import { prisma } from "@/lib/prisma";
 import { getAuthContext } from "@/lib/auth-context";
+import { assertPatientVisible } from "@/lib/patient-visibility";
 import { validateMagicNumber } from "@/lib/validate-upload";
 import { canAccessModule } from "@/lib/marketplace/access-control";
 import { ORTHODONTICS_MODULE_KEY } from "@/lib/specialties/keys";
@@ -98,6 +99,17 @@ export async function POST(req: NextRequest) {
   });
   if (!set) {
     return NextResponse.json({ error: "Set no encontrado" }, { status: 404 });
+  }
+
+  // Visibilidad por paciente (barrido Ola 3): subir fotos al set de un
+  // paciente restringido exige poder verlo — se resuelve vía set.patientId.
+  if (set.patientId) {
+    const visDenied = await assertPatientVisible(set.patientId, {
+      userId: ctx.userId,
+      role: ctx.role,
+      clinicId: ctx.clinicId,
+    });
+    if (visDenied) return visDenied;
   }
 
   // Lee buffer + procesa con sharp.

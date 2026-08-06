@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { getAuthContext } from "@/lib/auth-context";
 import { prisma } from "@/lib/prisma";
+import { assertPatientVisible } from "@/lib/patient-visibility";
 import { logAudit } from "@/lib/audit";
 import { hasPermission } from "@/lib/auth/permissions";
 
@@ -31,10 +32,21 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   // Multi-tenant guard
   const existing = await prisma.patientFile.findFirst({
     where:  { id: params.id, clinicId: ctx.clinicId },
-    select: { id: true, doctorNotes: true },
+    select: { id: true, doctorNotes: true, patientId: true },
   });
   if (!existing) {
     return NextResponse.json({ error: "Archivo no encontrado" }, { status: 404 });
+  }
+
+  // Visibilidad por paciente (barrido Ola 3): las notas del doctor sobre la
+  // radiografía de un paciente restringido exigen poder verlo.
+  if (existing.patientId) {
+    const visDenied = await assertPatientVisible(existing.patientId, {
+      userId: ctx.userId,
+      role: ctx.role,
+      clinicId: ctx.clinicId,
+    });
+    if (visDenied) return visDenied;
   }
 
   const updated = await prisma.patientFile.update({
@@ -81,6 +93,17 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
     where: { id: params.id, clinicId: ctx.clinicId },
   });
   if (!file) return NextResponse.json({ error: "Archivo no encontrado" }, { status: 404 });
+
+  // Visibilidad por paciente (barrido Ola 3) — antes del early-return
+  // idempotente para no revelar el estado del archivo.
+  if (file.patientId) {
+    const visDenied = await assertPatientVisible(file.patientId, {
+      userId: ctx.userId,
+      role: ctx.role,
+      clinicId: ctx.clinicId,
+    });
+    if (visDenied) return visDenied;
+  }
 
   // Ya borrado lógicamente — idempotente.
   if (file.deletedAt) return NextResponse.json({ success: true, softDeleted: true });

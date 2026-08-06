@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { getAuthContext } from "@/lib/auth-context";
 import { prisma } from "@/lib/prisma";
 import { hasPermission } from "@/lib/auth/permissions";
+import { denyIfMissingPermission } from "@/lib/auth/require-permission";
+import { assertPatientVisible } from "@/lib/patient-visibility";
 import { logAudit } from "@/lib/audit";
 
 export const runtime = "nodejs";
@@ -19,6 +21,14 @@ export async function DELETE(
   if (!hasPermission(ctx.role as any, "medicalRecord.delete")) {
     return NextResponse.json({ error: "Sin permisos" }, { status: 403 });
   }
+
+  // Visibilidad por paciente (barrido Ola 3) — mismo assert que el PATCH.
+  const visDenied = await assertPatientVisible(params.id, {
+    userId: ctx.userId,
+    role: ctx.role,
+    clinicId: ctx.clinicId,
+  });
+  if (visDenied) return visDenied;
 
   const file = await prisma.patientFile.findFirst({
     where: { id: params.fileId, patientId: params.id, clinicId: ctx.clinicId },
@@ -73,6 +83,19 @@ export async function PATCH(
 ) {
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
+
+  // Visibilidad por paciente (Ola 3): primero el 404 de visibilidad (no
+  // revelar existencia), luego el permiso — doctorNotes/annotations son
+  // contenido clínico, así que exige "medicalRecord.edit" como sus hermanas
+  // POST /api/records y /api/clinical-notes (antes no pedía NI permiso).
+  const visDenied = await assertPatientVisible(params.id, {
+    userId: ctx.userId,
+    role: ctx.role,
+    clinicId: ctx.clinicId,
+  });
+  if (visDenied) return visDenied;
+  const deniedPerm = denyIfMissingPermission(ctx, "medicalRecord.edit");
+  if (deniedPerm) return deniedPerm;
 
   // Valida que el PatientFile sea del paciente y de la clínica de la sesión.
   const file = await prisma.patientFile.findFirst({
