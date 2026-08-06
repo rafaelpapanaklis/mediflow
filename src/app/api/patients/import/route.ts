@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getAuthContext } from "@/lib/auth-context";
+import { getAuthContext, requireRole } from "@/lib/auth-context";
+import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { rateLimit } from "@/lib/rate-limit";
 import { parseImportForm, runImport, importErrorResponse } from "@/lib/import/engine";
 import { patientsHandler } from "@/lib/import/entities";
@@ -26,6 +27,13 @@ export async function POST(req: NextRequest) {
 
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  // Mismo gate que su espejo /api/import/appointments: solo ADMIN/RECEPTIONIST
+  // (SUPER_ADMIN pasa por bypass). Antes cualquier sesión importaba en masa.
+  const roleGate = requireRole(ctx, "ADMIN", "RECEPTIONIST");
+  if (roleGate) return roleGate;
+  // Y el permiso granular de crear pacientes (P1-3): importar ES crear.
+  const deniedPerm = denyIfMissingPermission(ctx, "patients.create");
+  if (deniedPerm) return deniedPerm;
 
   try {
     const form = await parseImportForm(req);
