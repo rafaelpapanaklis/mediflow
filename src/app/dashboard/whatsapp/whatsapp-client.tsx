@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import {
   MessageCircle, CheckCircle, CheckCircle2, ExternalLink, Eye, EyeOff, Bot,
-  Facebook, QrCode, Check, CreditCard, LifeBuoy,
+  Facebook, QrCode, Check, CreditCard, LifeBuoy, Info, RefreshCw, Mail,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
@@ -15,6 +15,7 @@ import { useConfirm } from "@/components/ui/confirm-dialog";
 import { useT } from "@/i18n/i18n-provider";
 import type { TFunction } from "@/i18n/t";
 import { EmbeddedSignupButton } from "./embedded-signup-button";
+import type { RecentReminderDTO } from "@/lib/whatsapp/recent-reminders";
 import s from "./whatsapp.module.css";
 
 // Dónde agrega la clínica su método de pago para las plantillas de Meta.
@@ -34,8 +35,53 @@ interface Props {
   reminderMsg:   string;
   reminder24h:   boolean;
   reminder1h:    boolean;
+  /** Config efectiva del cron (reminderSettings o los toggles legacy). */
+  remindersEnabled:      boolean;
+  recentReminders:       RecentReminderDTO[];
+  recentRemindersFailed: boolean;
   clinicName:    string;
 }
+
+/** Tono del chip por estado. "Enviado" = aceptado por WhatsApp, no entregado. */
+const REMINDER_TONE: Record<RecentReminderDTO["status"], "success" | "danger" | "neutral" | "warning"> = {
+  SENT:      "success",
+  FAILED:    "danger",
+  PENDING:   "warning",
+  CANCELLED: "neutral",
+};
+
+// Mapas explícitos (no llaves armadas por concatenación): si mañana se agrega
+// un estado/tipo/motivo, TypeScript obliga a traducirlo en vez de pintar la
+// llave cruda en pantalla.
+const REMINDER_STATUS_KEY: Record<RecentReminderDTO["status"], string> = {
+  SENT:      "inbox.whatsapp.recentStatusSent",
+  FAILED:    "inbox.whatsapp.recentStatusFailed",
+  PENDING:   "inbox.whatsapp.recentStatusPending",
+  CANCELLED: "inbox.whatsapp.recentStatusCancelled",
+};
+
+const REMINDER_KIND_KEY: Record<RecentReminderDTO["kind"], string> = {
+  Appointment:       "inbox.whatsapp.recentKindAppointment",
+  Recall:            "inbox.whatsapp.recentKindRecall",
+  Birthday:          "inbox.whatsapp.recentKindBirthday",
+  Followup:          "inbox.whatsapp.recentKindFollowup",
+  TreatmentFollowup: "inbox.whatsapp.recentKindTreatmentFollowup",
+  Clinical:          "inbox.whatsapp.recentKindClinical",
+  Other:             "inbox.whatsapp.recentKindOther",
+};
+
+const REMINDER_REASON_KEY: Record<NonNullable<RecentReminderDTO["reasonKey"]>, string> = {
+  outside24h:    "inbox.whatsapp.reasonOutside24h",
+  undeliverable: "inbox.whatsapp.reasonUndeliverable",
+  tokenExpired:  "inbox.whatsapp.reasonTokenExpired",
+  notConnected:  "inbox.whatsapp.reasonNotConnected",
+  noPhone:       "inbox.whatsapp.reasonNoPhone",
+  emailIssue:    "inbox.whatsapp.reasonEmailIssue",
+  expired:       "inbox.whatsapp.reasonExpired",
+  apptClosed:    "inbox.whatsapp.reasonApptClosed",
+  renderFailed:  "inbox.whatsapp.reasonRenderFailed",
+  rateLimited:   "inbox.whatsapp.reasonRateLimited",
+};
 
 /** Las plantillas de recordatorio se cobran por unidad: la clínica necesita un
  *  método de pago en Meta. Aparece antes y después de conectar. */
@@ -62,7 +108,8 @@ function BillingNote({ t, compact }: { t: TFunction; compact?: boolean }) {
 export function WhatsAppClient({
   connected: initConnected, phoneNumberId: initPhone, wabaId: initWabaId,
   connMethod: initConnMethod,
-  reminderMsg: initMsg, reminder24h: init24h, reminder1h: init1h, clinicName,
+  reminderMsg: initMsg, reminder24h: init24h, reminder1h: init1h,
+  remindersEnabled, recentReminders, recentRemindersFailed, clinicName,
 }: Props) {
   const t = useT();
   const router = useRouter();
@@ -145,6 +192,11 @@ export function WhatsAppClient({
       : connMethod === "manual"
         ? { tone: "neutral" as const, label: t("inbox.whatsapp.connMethodManual") }
         : null;
+
+  // El aviso de la ventana de 24 h se muestra si el cron los tiene activos O si
+  // la clínica acaba de encender un toggle (aún sin guardar): en la duda, se
+  // avisa. Es la promesa que hace esta tarjeta, y hoy solo se cumple a medias.
+  const remindersOn = remindersEnabled || r24h || r1h;
 
   const steps = [
     { Icon: Facebook,     titleKey: "inbox.whatsapp.stepLoginTitle", descKey: "inbox.whatsapp.stepLoginDesc" },
@@ -355,6 +407,62 @@ export function WhatsAppClient({
                   </div>
                 ))}
               </div>
+
+              {/* Ventana de 24 h — hoy el recordatorio NO llega a quien no ha
+                  escrito. Se dice aquí mismo, junto a los toggles que lo
+                  prometen, en vez de dejar que el envío muera en silencio. */}
+              {remindersOn && (
+                <div className={`${s.billing} ${s.windowNote}`}>
+                  <Info size={16} className={s.billingIcon} />
+                  <div>
+                    <div className={s.billingLabel}>{t("inbox.whatsapp.window24Label")}</div>
+                    <p className={s.billingBody}>{t("inbox.whatsapp.window24Body")}</p>
+                  </div>
+                </div>
+              )}
+            </CardNew>
+
+            <CardNew
+              title={t("inbox.whatsapp.recentTitle")}
+              sub={t("inbox.whatsapp.recentSub")}
+              action={
+                <button type="button" className={s.refreshBtn} onClick={() => router.refresh()}>
+                  <RefreshCw size={12} /> {t("inbox.whatsapp.recentRefresh")}
+                </button>
+              }
+            >
+              {recentRemindersFailed ? (
+                <p className={s.remEmpty}>{t("inbox.whatsapp.recentFailed")}</p>
+              ) : recentReminders.length === 0 ? (
+                <p className={s.remEmpty}>{t("inbox.whatsapp.recentEmpty")}</p>
+              ) : (
+                <ul className={s.remList}>
+                  {recentReminders.map(r => (
+                    <li key={r.id} className={s.remRow}>
+                      <BadgeNew tone={REMINDER_TONE[r.status]} className={s.remBadge}>
+                        {t(REMINDER_STATUS_KEY[r.status])}
+                      </BadgeNew>
+                      <div className={s.remBody}>
+                        <div className={s.remHead}>
+                          <span className={s.remKind}>{t(REMINDER_KIND_KEY[r.kind])}</span>
+                          {r.channel === "email" && (
+                            <span className={s.remChannel}>
+                              <Mail size={11} /> {t("inbox.whatsapp.recentChannelEmail")}
+                            </span>
+                          )}
+                          {r.who && <span className={s.remWho}>· {r.who}</span>}
+                        </div>
+                        {(r.reasonKey || r.rawError) && (
+                          <div className={s.remReason}>
+                            {r.reasonKey ? t(REMINDER_REASON_KEY[r.reasonKey]) : r.rawError}
+                          </div>
+                        )}
+                      </div>
+                      <span className={s.remWhen}>{r.whenLabel}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
             </CardNew>
 
             <CardNew

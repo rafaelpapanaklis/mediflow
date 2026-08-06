@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthContext } from "@/lib/auth-context";
+import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { prisma } from "@/lib/prisma";
 import { getOrCreateBotConfig, toConfigDTO, toFaqDTO, buildConfigUpdate } from "./service";
 
@@ -31,10 +32,18 @@ export async function GET() {
  * Actualiza enabled, botName, persona, greeting, businessHours, afterHoursMsg,
  * canAnswerFaq, canBookAppointments, fallbackToHuman (whitelist). clinicId de
  * la sesión; nunca del body.
+ *
+ * Exige "whatsapp.send": lo que se guarda aquí (persona, saludo, FAQs) es
+ * literalmente el texto que el bot le dice a pacientes reales desde el número
+ * oficial de la clínica, y `canBookAppointments` lo autoriza a crear citas. Es
+ * el mismo permiso de escritura de WhatsApp que ya tienen ADMIN, SUPER_ADMIN y
+ * RECEPTIONIST por default; DOCTOR y READONLY no.
  */
 export async function PATCH(req: NextRequest) {
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const denied = denyIfMissingPermission(ctx, "whatsapp.send");
+  if (denied) return denied;
 
   let body: Record<string, unknown>;
   try {

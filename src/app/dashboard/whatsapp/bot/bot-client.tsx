@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Bot, Plus, Trash2, MessageSquare, Clock, Wallet } from "lucide-react";
+import { Bot, Plus, Trash2, MessageSquare, Clock, Wallet, Lock } from "lucide-react";
 import toast from "react-hot-toast";
 import { CardNew } from "@/components/ui/design-system/card-new";
 import { ButtonNew } from "@/components/ui/design-system/button-new";
@@ -160,8 +160,11 @@ function ToggleRow({
   );
 }
 
-export function BotClient() {
+export function BotClient({ canEdit = true }: { canEdit?: boolean }) {
   const askConfirm = useConfirm();
+  // Sin permiso de escritura la pantalla es de solo lectura: las mutaciones se
+  // frenan aquí además del 403 del servidor (que es el gate de verdad).
+  const noPermissionToast = () => toast.error("No tienes permiso para configurar el bot de WhatsApp");
 
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
@@ -225,6 +228,7 @@ export function BotClient() {
   }
 
   async function saveConfig() {
+    if (!canEdit) return noPermissionToast();
     setSaving(true);
     try {
       const body = {
@@ -258,6 +262,7 @@ export function BotClient() {
 
   // ── FAQs ──────────────────────────────────────────────────────────────────
   async function addFaq() {
+    if (!canEdit) return noPermissionToast();
     const question = newQuestion.trim();
     const answer = newAnswer.trim();
     if (!question || !answer) {
@@ -295,6 +300,7 @@ export function BotClient() {
   }
 
   async function patchFaq(id: string, patch: Partial<Pick<BotFaqDTO, "question" | "answer" | "enabled" | "order">>) {
+    if (!canEdit) return noPermissionToast();
     const before = faqs;
     // Optimistic.
     setFaqs((prev) => prev.map((f) => (f.id === id ? { ...f, ...patch } : f)));
@@ -314,6 +320,7 @@ export function BotClient() {
   }
 
   async function deleteFaq(id: string) {
+    if (!canEdit) return noPermissionToast();
     const ok = await askConfirm({
       title: "Eliminar FAQ",
       description: "¿Seguro que quieres eliminar esta pregunta frecuente?",
@@ -412,6 +419,33 @@ export function BotClient() {
           </BadgeNew>
         </div>
       </div>
+
+      {!canEdit && (
+        <div
+          style={{
+            display: "flex",
+            alignItems: "flex-start",
+            gap: 12,
+            background: "var(--bg-elev-2)",
+            border: "1px solid var(--border-soft)",
+            borderRadius: 12,
+            padding: "14px 16px",
+            marginBottom: 14,
+          }}
+        >
+          <Lock size={16} style={{ flexShrink: 0, marginTop: 1, color: "var(--text-3)" }} />
+          <div>
+            <div style={{ fontSize: 12.5, fontWeight: 600, color: "var(--text-1)" }}>
+              Solo lectura
+            </div>
+            <p style={{ marginTop: 3, fontSize: 12, lineHeight: 1.55, color: "var(--text-2)" }}>
+              Puedes ver cómo está configurado el bot, pero no cambiarlo. Lo que se guarda aquí es
+              el texto que el asistente le manda a los pacientes desde el número de la clínica: pide
+              a un administrador el permiso <strong>Enviar WhatsApp</strong> si necesitas editarlo.
+            </p>
+          </div>
+        </div>
+      )}
 
       <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
         {/* ── GENERAL ── */}
@@ -533,7 +567,7 @@ export function BotClient() {
             </div>
 
             <div style={{ display: "flex", gap: 8 }}>
-              <ButtonNew variant="primary" onClick={saveConfig} disabled={saving}>
+              <ButtonNew variant="primary" onClick={saveConfig} disabled={saving || !canEdit}>
                 {saving ? "Guardando…" : "Guardar"}
               </ButtonNew>
             </div>
@@ -613,7 +647,7 @@ export function BotClient() {
             })}
           </div>
           <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
-            <ButtonNew variant="primary" onClick={saveConfig} disabled={saving}>
+            <ButtonNew variant="primary" onClick={saveConfig} disabled={saving || !canEdit}>
               {saving ? "Guardando…" : "Guardar horario"}
             </ButtonNew>
           </div>
@@ -662,7 +696,7 @@ export function BotClient() {
                   variant="primary"
                   icon={<Plus size={14} />}
                   onClick={addFaq}
-                  disabled={addingFaq}
+                  disabled={addingFaq || !canEdit}
                 >
                   {addingFaq ? "Agregando…" : "Agregar"}
                 </ButtonNew>

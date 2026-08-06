@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthContext } from "@/lib/auth-context";
+import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { prisma } from "@/lib/prisma";
 import { getOrCreateBotConfig, toFaqDTO } from "../service";
 
@@ -10,10 +11,15 @@ export const dynamic = "force-dynamic";
  * Crea una FAQ { question, answer, enabled?, order? } para la clínica de
  * sesión. Setea clinicId (de la sesión) y configId (config de la clínica,
  * creada si no existe) — la FAQ guarda ambos por el índice del motor.
+ *
+ * Exige "whatsapp.send" (igual que PATCH /api/whatsapp/bot): la respuesta de
+ * una FAQ se le manda tal cual al paciente desde el número de la clínica.
  */
 export async function POST(req: NextRequest) {
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const denied = denyIfMissingPermission(ctx, "whatsapp.send");
+  if (denied) return denied;
 
   let body: Record<string, unknown>;
   try {

@@ -299,6 +299,121 @@
   text-underline-offset: 3px;
 }
 
+/* Aviso de la ventana de 24 h: misma caja neutra que .billing (no alarma,
+   informa) pero separada de los toggles que comenta. */
+.windowNote {
+  margin-top: 14px;
+}
+
+/* ── Últimos recordatorios (estado real de la cola) ───────────── */
+.refreshBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: transparent;
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  padding: 5px 10px;
+  font: inherit;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--text-3);
+  cursor: pointer;
+}
+.refreshBtn:hover {
+  color: var(--text-1);
+  border-color: var(--border);
+}
+
+.remEmpty {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--text-3);
+}
+
+.remList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+.remRow {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border-soft);
+}
+.remRow:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+.remRow:first-child {
+  padding-top: 0;
+}
+/* El chip lleva una etiqueta de ancho variable: se deja crecer y no se aplasta.
+   Doble clase para ganarle a .badge-new sin depender del orden de las hojas. */
+.remBadge.remBadge {
+  flex-shrink: 0;
+  min-width: 74px;
+  justify-content: center;
+  text-transform: none;
+  letter-spacing: 0.01em;
+  font-size: 10.5px;
+}
+.remBody {
+  flex: 1;
+  min-width: 0;
+}
+.remHead {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  font-size: 12.5px;
+  line-height: 1.4;
+}
+.remKind {
+  font-weight: 600;
+  color: var(--text-1);
+}
+.remChannel {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 10.5px;
+  color: var(--text-3);
+}
+.remWho {
+  color: var(--text-2);
+  overflow-wrap: anywhere;
+}
+.remReason {
+  margin-top: 3px;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--text-3);
+  overflow-wrap: anywhere;
+}
+.remWhen {
+  flex-shrink: 0;
+  font-size: 11px;
+  color: var(--text-4);
+  white-space: nowrap;
+  padding-top: 2px;
+}
+@media (max-width: 560px) {
+  .remRow {
+    flex-wrap: wrap;
+  }
+  .remWhen {
+    width: 100%;
+    padding-left: 84px;
+  }
+}
+
 /* ── Conexión manual (avanzada) ───────────────────────────────── */
 .manualPane {
   max-width: 720px;
