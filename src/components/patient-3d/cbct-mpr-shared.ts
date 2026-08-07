@@ -155,6 +155,62 @@ export function planeGeom(
 }
 
 /* -------------------------------------------------------------------------- */
+/* Encuadre en pantalla (el lienzo se re-mide cuando cambia el layout)         */
+/* -------------------------------------------------------------------------- */
+
+// Techos del BÚFER del lienzo de un corte. El bucle bilineal es O(W·H) y se
+// repite en CADA repintado (girar la rueda repinta), así que el lienzo no puede
+// seguir al contenedor sin freno: un panel maximizado en HiDPI pediría ~4 Mpx
+// por corte. Acotamos lado y área; el 3D tiene su propio techo equivalente.
+export const MAX_VIEW_SIDE = 2048;
+export const MAX_VIEW_PIXELS = 2_600_000;
+// Por encima de 2 no se distingue y cuadruplica el trabajo. Mismo tope que ya
+// usaba el volumen 3D (Dicom3DVolume), para no tener dos criterios de nitidez.
+export const MAX_DPR = 2;
+
+// Caja CSS del corte dentro de su contenedor conservando la proporción FÍSICA
+// del estudio (mm reales, no píxeles): "contain", nunca estirar. Lo que sobre
+// queda como margen y lo centra el flex del panel.
+export function fitContain(
+  extA: number,
+  extB: number,
+  boxW: number,
+  boxH: number,
+): { w: number; h: number } {
+  if (extA <= 0 || extB <= 0 || boxW <= 0 || boxH <= 0) return { w: 0, h: 0 };
+  const ratio = extA / extB;
+  let w = boxW;
+  let h = w / ratio;
+  if (h > boxH) {
+    h = boxH;
+    w = h * ratio;
+  }
+  return { w: Math.max(1, Math.floor(w)), h: Math.max(1, Math.floor(h)) };
+}
+
+// Tamaño del búfer para una caja CSS que YA tiene la proporción del estudio.
+// Sube a píxeles de dispositivo (nitidez en HiDPI) pero nunca por encima de la
+// resolución NATIVA del estudio —interpolar de más solo gasta CPU sin añadir
+// detalle— y siempre bajo los techos de arriba. Devuelve el búfer, no la caja:
+// la caja CSS manda en el layout y el búfer solo en cuántas muestras se pintan.
+export function viewRasterDims(
+  g: PlaneGeom,
+  cssW: number,
+  cssH: number,
+  dpr: number,
+): { W: number; H: number } {
+  const d = Math.max(1, Math.min(MAX_DPR, dpr || 1));
+  const w0 = Math.max(1, cssW) * d;
+  const h0 = Math.max(1, cssH) * d;
+  const pmm = Math.min(g.sA, g.sB) || 1;
+  // Nativo = 1 muestra por el espaciado más fino (sin el tope de `rasterDims`).
+  let k = Math.min(1, (g.nA * g.sA) / pmm / w0, (g.nB * g.sB) / pmm / h0);
+  k = Math.min(k, MAX_VIEW_SIDE / Math.max(w0, h0));
+  k = Math.min(k, Math.sqrt(MAX_VIEW_PIXELS / (w0 * h0)));
+  return { W: Math.max(1, Math.round(w0 * k)), H: Math.max(1, Math.round(h0 * k)) };
+}
+
+/* -------------------------------------------------------------------------- */
 /* Estadística por percentiles del estudio (auto-ventana + presets)            */
 /* -------------------------------------------------------------------------- */
 

@@ -30,6 +30,22 @@ export interface VolSlice {
 // hacía que iOS/WebKit recargara la pestaña.
 const MAX_DIM = 256;
 
+// Alto por defecto del lienzo 3D (rejilla 2×2). Maximizado el visor pasa un alto
+// mayor por prop y el ResizeObserver re-dimensiona el render.
+const DEFAULT_HEIGHT = 460;
+
+// Techo de MEGAPÍXELES del búfer de dibujo. `min(2, dpr)` no conoce el área: al
+// maximizar, el área ya se multiplica ×2.5 y cada fragmento cuesta un rayo
+// completo con sus pasos, así que el DPR efectivo tiene que ceder cuando el
+// panel crece. Mantiene el ratio 2 en la rejilla y lo baja solo en pantalla
+// completa, que es donde el coste se dispara.
+const MAX_DRAW_PIXELS = 2_600_000;
+function pixelRatioFor(w: number, h: number): number {
+  const dpr = Math.min(2, window.devicePixelRatio || 1);
+  const area = Math.max(1, w * h);
+  return Math.max(0.75, Math.min(dpr, Math.sqrt(MAX_DRAW_PIXELS / area)));
+}
+
 // Colormap ÓSEO/MARFIL: interpola de marrón oscuro → marfil/crema (R y G altos,
 // B medio) para que el hueso se vea natural y con relieve. El alfa sube rápido
 // con la densidad: aire/tejido blando transparente, hueso opaco. Sirve igual
@@ -186,7 +202,17 @@ const FALLBACK_WINDOW: AutoWindow = {
   },
 };
 
-export default function Dicom3DVolume({ slices, maxDim = MAX_DIM }: { slices: VolSlice[]; maxDim?: number }) {
+export default function Dicom3DVolume({
+  slices,
+  maxDim = MAX_DIM,
+  height = DEFAULT_HEIGHT,
+}: {
+  slices: VolSlice[];
+  maxDim?: number;
+  /** Alto CSS del lienzo. Acepta vh para el panel maximizado; el ResizeObserver
+   *  mide el valor REAL resultante, así que un tope en CSS no descuadra nada. */
+  height?: number | string;
+}) {
   const mountRef = useRef<HTMLDivElement | null>(null);
   const [renderstyle, setRenderstyle] = useState<0 | 1>(1); // 1 = Sólido/ISO (defecto), 0 = MIP
   const [iso, setIso] = useState(0.36); // umbral que aísla hueso/diente
@@ -387,18 +413,20 @@ export default function Dicom3DVolume({ slices, maxDim = MAX_DIM }: { slices: Vo
     (texture as any).unpackAlignment = 1;
     texture.needsUpdate = true;
 
-    const width = mount.clientWidth || 600;
-    const height = 460;
+    // Tamaño REAL del contenedor (el alto ya viene de la prop vía CSS, y puede
+    // estar acotado por un vh: por eso se mide, no se asume).
+    const w0 = Math.max(1, mount.clientWidth || 600);
+    const h0 = Math.max(1, mount.clientHeight || DEFAULT_HEIGHT);
 
     // antialias:false → el MSAA solo suaviza los bordes del cubo contenedor; el
     // ray casting de volumen no se beneficia, así que es coste inútil de GPU.
     const renderer = new THREE.WebGLRenderer({ antialias: false, alpha: true });
-    renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
-    renderer.setSize(width, height);
+    renderer.setPixelRatio(pixelRatioFor(w0, h0));
+    renderer.setSize(w0, h0);
     mount.appendChild(renderer.domElement);
 
     const scene = new THREE.Scene();
-    const aspect = width / height;
+    const aspect = w0 / h0;
     const frustum = Math.max(Wp, Hp, Dp) * 1.4;
     const camera = new THREE.OrthographicCamera(
       (-frustum * aspect) / 2,
@@ -551,19 +579,35 @@ export default function Dicom3DVolume({ slices, maxDim = MAX_DIM }: { slices: Vo
     renderer.domElement.addEventListener("webglcontextlost", onContextLost, false);
     renderer.domElement.addEventListener("webglcontextrestored", onContextRestored, false);
 
+    // Re-dimensionado. Maximizar/restaurar es un cambio de ESTADO de React: no
+    // emite `window.resize`, así que antes el render se quedaba con el tamaño de
+    // la rejilla. Observamos el contenedor y seguimos sus DOS ejes: la cámara es
+    // ortográfica, el alto del mundo es fijo (`top/bottom = ±frustum/2`), así que
+    // al crecer la caja el cráneo se dibuja más grande sin deformarse — pero
+    // `left/right` DEBEN rehacerse con el nuevo aspecto o se estira en horizontal.
+    let lastW = w0;
+    let lastH = h0;
     const onResize = () => {
-      const nw = mount.clientWidth || 600;
-      renderer.setSize(nw, height);
-      const a = nw / height;
+      const nw = Math.max(1, mount.clientWidth || 600);
+      const nh = Math.max(1, mount.clientHeight || DEFAULT_HEIGHT);
+      if (nw === lastW && nh === lastH) return;
+      lastW = nw;
+      lastH = nh;
+      renderer.setPixelRatio(pixelRatioFor(nw, nh));
+      renderer.setSize(nw, nh);
+      const a = nw / nh;
       camera.left = (-frustum * a) / 2;
       camera.right = (frustum * a) / 2;
       camera.updateProjectionMatrix();
       requestRender(); // el cambio de tamaño necesita un cuadro nuevo
     };
+    const ro = typeof ResizeObserver !== "undefined" ? new ResizeObserver(onResize) : null;
+    ro?.observe(mount);
     window.addEventListener("resize", onResize);
 
     return () => {
       cancelAnimationFrame(raf);
+      ro?.disconnect();
       window.removeEventListener("resize", onResize);
       controls.removeEventListener("change", requestRender);
       renderer.domElement.removeEventListener("webglcontextlost", onContextLost);
@@ -594,7 +638,7 @@ export default function Dicom3DVolume({ slices, maxDim = MAX_DIM }: { slices: Vo
     <div>
       <div
         ref={mountRef}
-        style={{ width: "100%", height: 460, background: "#000", borderRadius: 8, overflow: "hidden" }}
+        style={{ width: "100%", height, background: "#000", borderRadius: 8, overflow: "hidden" }}
       />
       <div className="mt-3 flex items-center gap-3 flex-wrap bg-muted/40 rounded-lg p-3 border border-border">
         <div className="flex gap-1">

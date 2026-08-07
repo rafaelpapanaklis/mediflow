@@ -735,8 +735,16 @@ export default function DicomSetViewer({ url, name, fileId, patientId, liteUrl, 
     />
   );
 
+  // `self-start` es correcto en la rejilla (evita estirar tarjetas de distinta
+  // altura), pero maximizado el padre es un flex COLUMN: ahí `self-start` deja la
+  // tarjeta en fit-content y el panel colapsaba a una franja. Maximizado manda w-full.
+  const volumeMax = maximized === "volume";
   const volumeCell = (
-    <div className="flex flex-col self-start rounded-lg border border-border bg-card overflow-hidden">
+    <div
+      className={`flex flex-col ${
+        volumeMax ? "w-full" : "self-start"
+      } rounded-lg border border-border bg-card overflow-hidden`}
+    >
       <div className="flex items-center justify-between px-2 py-1 bg-muted/40 border-b border-border">
         <span className="inline-flex items-center gap-1.5 text-[11px] font-mono text-foreground">
           <Box className="w-3.5 h-3.5" aria-hidden /> Volumen 3D
@@ -754,7 +762,11 @@ export default function DicomSetViewer({ url, name, fileId, patientId, liteUrl, 
       <div className="p-2">
         {/* En móvil submuestrea más fino (128 vs 256): el pico de `avg` Float32
             cae de ~67 MB a ~8 MB y la textura 3D a 1/8, clave para no recargar. */}
-        <Dicom3DVolume slices={slices as unknown as VolSlice[]} maxDim={hd ? 384 : 256} />
+        <Dicom3DVolume
+          slices={slices as unknown as VolSlice[]}
+          maxDim={hd ? 384 : 256}
+          height={volumeMax ? "72vh" : 460}
+        />
       </div>
     </div>
   );

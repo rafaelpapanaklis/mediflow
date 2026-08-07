@@ -14,7 +14,14 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Maximize2, Minimize2 } from "lucide-react";
 import type { Slice, PlaneKey, Tool, ScaleInfo, Cross, CalibStatus } from "./cbct-mpr-shared";
-import { planeGeom, worstStatus } from "./cbct-mpr-shared";
+import {
+  planeGeom,
+  worstStatus,
+  fitContain,
+  viewRasterDims,
+  MAX_DPR,
+  MAX_VIEW_SIDE,
+} from "./cbct-mpr-shared";
 
 // Color por plano (convención tipo Romexis): cada vista tiene su color y las guías
 // que dibuja toman el color del PLANO QUE CONTROLAN (no el suyo), para leer de un
@@ -24,6 +31,11 @@ const PLANE_COLOR: Record<PlaneKey, string> = {
   coronal: "#34d399", // emerald-400
   sagittal: "#38bdf8", // sky-400
 };
+// Techo del alto del corte maximizado. Solo acota el ALTO: el ancho lo da
+// siempre el contenedor. Deja aire para la barra de herramientas dentro del
+// modal del visor, que ya trae su propio scroll (max-h-[80vh]).
+const MAX_PANE_HEIGHT = "78vh";
+
 // En cada plano, qué plano representa la línea vertical (v) y la horizontal (h).
 const LINE_PLANES: Record<PlaneKey, { v: PlaneKey; h: PlaneKey }> = {
   axial: { v: "sagittal", h: "coronal" }, // X→sagital, Y→coronal
@@ -31,15 +43,20 @@ const LINE_PLANES: Record<PlaneKey, { v: PlaneKey; h: PlaneKey }> = {
   sagittal: { v: "coronal", h: "axial" }, // Y→coronal, Z→axial
 };
 
+// Anotaciones en coordenadas NORMALIZADAS [0,1] del plano, NUNCA en píxeles del
+// lienzo: el lienzo ahora se re-mide con el layout (maximizar/restaurar) y una
+// medida guardada en píxeles cambiaría de valor en silencio al cambiar de tamaño.
+// En normalizado, los mm salen de la extensión física del estudio (nA·sA) y son
+// idénticos en la rejilla 2×2 y maximizado.
 interface MeasureSeg {
-  a0: number;
-  b0: number;
-  a1: number;
-  b1: number;
+  u0: number;
+  v0: number;
+  u1: number;
+  v1: number;
 }
 interface ProbePoint {
-  a: number;
-  b: number;
+  u: number;
+  v: number;
   value: number;
 }
 
@@ -111,17 +128,22 @@ export default function MprPane(props: Props) {
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const overlayRef = useRef<HTMLCanvasElement | null>(null);
+  const viewportRef = useRef<HTMLDivElement | null>(null);
 
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [measure, setMeasure] = useState<MeasureSeg | null>(null);
   const [probe, setProbe] = useState<ProbePoint | null>(null);
+  // Caja REAL del área negra + densidad de pantalla. La mide un ResizeObserver:
+  // el cambio de tamaño lo dispara maximizar/restaurar (estado de React), que no
+  // emite `window.resize`, así que escuchar la ventana no serviría de nada.
+  const [box, setBox] = useState({ w: 0, h: 0, dpr: 1 });
 
   const dragRef = useRef<{ x: number; y: number } | null>(null); // origen del paneo
   const modeRef = useRef<Tool | null>(null); // gesto activo durante un arrastre
   const measuringRef = useRef(false);
   const rafRef = useRef<number | null>(null);
-  const pendingRef = useRef<{ a: number; b: number } | null>(null);
+  const pendingRef = useRef<{ u: number; v: number } | null>(null);
 
   const cols = slices.length ? slices[0].cols : 0;
   const rows = slices.length ? slices[0].rows : 0;
@@ -131,6 +153,65 @@ export default function MprPane(props: Props) {
     () => planeGeom(cols, rows, depth, plane, scale),
     [cols, rows, depth, plane, scale],
   );
+
+  // Extensión FÍSICA del plano en mm: de aquí sale la proporción real del estudio
+  // (vóxeles anisótropos incluidos) y también los mm de la medición.
+  const extA = geom ? geom.nA * geom.sA : 1;
+  const extB = geom ? geom.nB * geom.sB : 1;
+  const aspect = extB > 0 ? extA / extB : 1;
+
+  /* ---------------------------------------------------------------------- */
+  /* Medida del contenedor -> caja del corte -> tamaño del búfer             */
+  /* ---------------------------------------------------------------------- */
+  useEffect(() => {
+    const el = viewportRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    let raf = 0;
+    const read = () => {
+      raf = 0;
+      const node = viewportRef.current;
+      if (!node) return;
+      const w = node.clientWidth;
+      const h = node.clientHeight;
+      const dpr = Math.max(1, Math.min(MAX_DPR, window.devicePixelRatio || 1));
+      setBox((prev) => (prev.w === w && prev.h === h && prev.dpr === dpr ? prev : { w, h, dpr }));
+    };
+    // Maximizar dispara varias entradas seguidas (ancho y alto llegan por
+    // separado): coalescemos en un frame para re-rasterizar UNA vez.
+    const ro = new ResizeObserver(() => {
+      if (!raf) raf = requestAnimationFrame(read);
+    });
+    ro.observe(el);
+    read();
+    return () => {
+      if (raf) cancelAnimationFrame(raf);
+      ro.disconnect();
+    };
+  }, []);
+
+  // Caja CSS del corte: "contain" con la proporción física. Lo que sobre son
+  // márgenes que centra el flex; jamás se estira la imagen para rellenar.
+  const fit = useMemo(
+    () => (geom ? fitContain(extA, extB, box.w, box.h) : { w: 0, h: 0 }),
+    [geom, extA, extB, box.w, box.h],
+  );
+
+  // Búfer del corte (píxeles de dispositivo, acotado) y del overlay (siempre a
+  // densidad de pantalla: son vectores, salen baratos y así la cruz nunca pixela).
+  const view = useMemo(
+    () => (geom && fit.w > 0 ? viewRasterDims(geom, fit.w, fit.h, box.dpr) : null),
+    [geom, fit.w, fit.h, box.dpr],
+  );
+  const ov = useMemo(
+    () => ({
+      W: Math.max(1, Math.min(MAX_VIEW_SIDE, Math.round(fit.w * box.dpr))),
+      H: Math.max(1, Math.min(MAX_VIEW_SIDE, Math.round(fit.h * box.dpr))),
+    }),
+    [fit.w, fit.h, box.dpr],
+  );
+  // Si el búfer se quedó por debajo de la densidad de pantalla (tope de área o
+  // estudio de baja resolución), interpolar suave se ve mejor que los bloques.
+  const exactPixels = view != null && view.W >= Math.round(fit.w * box.dpr);
 
   // Índice del corte que MUESTRA este plano (coordenada fija a lo largo de su normal)
   // y su máximo. Sale de la cruz compartida.
@@ -142,12 +223,14 @@ export default function MprPane(props: Props) {
   /* ventana), para que mover la cruz no re-rasterice el plano sin cambios.  */
   /* ---------------------------------------------------------------------- */
   useEffect(() => {
-    if (!geom || slices.length === 0) return;
+    if (!geom || !view || slices.length === 0) return;
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
-    const { W, H } = geom;
+    // El búfer lo manda la caja MEDIDA (no la geometría del volumen): así el
+    // corte se re-rasteriza a la resolución real que ocupa en pantalla.
+    const { W, H } = view;
     const c = cols;
     const r = rows;
     const d = depth;
@@ -243,36 +326,42 @@ export default function MprPane(props: Props) {
         return left + (right - left) * tz;
       });
     }
-  }, [geom, slices, plane, nIndex, center, width, cols, rows, depth]);
+  }, [geom, view, slices, plane, nIndex, center, width, cols, rows, depth]);
 
   /* ---------------------------------------------------------------------- */
   /* Overlay: cruz sincronizada + medición + sonda. Coordenadas en px raster. */
   /* ---------------------------------------------------------------------- */
   useEffect(() => {
     const cv = overlayRef.current;
-    if (!cv || !geom) return;
-    if (cv.width !== geom.W) cv.width = geom.W;
-    if (cv.height !== geom.H) cv.height = geom.H;
+    if (!cv || !geom || fit.w <= 0) return;
+    if (cv.width !== ov.W) cv.width = ov.W;
+    if (cv.height !== ov.H) cv.height = ov.H;
     const ctx = cv.getContext("2d");
     if (!ctx) return;
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.clearRect(0, 0, cv.width, cv.height);
-    const { W, H } = geom;
+    // Escalamos el contexto UNA vez: a partir de aquí todo se dibuja en píxeles
+    // CSS, así que los grosores no cambian con la densidad de pantalla ni con el
+    // tamaño del búfer (mismo patrón que Clinic3DHud).
+    ctx.setTransform(ov.W / fit.w, 0, 0, ov.H / fit.h, 0, 0);
+    const W = fit.w;
+    const H = fit.h;
     const lw = Math.max(1, Math.round(Math.min(W, H) / 300));
 
-    // Cruz: índice de vóxel -> coordenada raster (inverso del muestreo).
+    // Cruz: índice de vóxel -> normalizado -> píxeles CSS de la caja del corte.
     if (showGuides) {
-      const rasterOf = (vox: number, n: number, dim: number) => ((vox + 0.5) * dim) / n - 0.5;
+      const normOf = (vox: number, n: number) => (n > 0 ? (vox + 0.5) / n : 0);
       let vx: number;
       let hy: number;
       if (plane === "axial") {
-        vx = rasterOf(cross.x, cols, W);
-        hy = rasterOf(cross.y, rows, H);
+        vx = normOf(cross.x, cols) * W;
+        hy = normOf(cross.y, rows) * H;
       } else if (plane === "coronal") {
-        vx = rasterOf(cross.x, cols, W);
-        hy = rasterOf(cross.z, depth, H);
+        vx = normOf(cross.x, cols) * W;
+        hy = normOf(cross.z, depth) * H;
       } else {
-        vx = rasterOf(cross.y, rows, W);
-        hy = rasterOf(cross.z, depth, H);
+        vx = normOf(cross.y, rows) * W;
+        hy = normOf(cross.z, depth) * H;
       }
       const gap = Math.max(6, Math.round(Math.min(W, H) / 36));
       const lp = LINE_PLANES[plane];
@@ -286,34 +375,40 @@ export default function MprPane(props: Props) {
     }
 
     if (measure) {
+      const x0 = measure.u0 * W;
+      const y0 = measure.v0 * H;
+      const x1 = measure.u1 * W;
+      const y1 = measure.v1 * H;
       ctx.strokeStyle = "rgba(244,114,182,0.97)"; // pink-400 (distinto de las guías)
       ctx.lineWidth = lw + 1;
       ctx.beginPath();
-      ctx.moveTo(measure.a0, measure.b0);
-      ctx.lineTo(measure.a1, measure.b1);
+      ctx.moveTo(x0, y0);
+      ctx.lineTo(x1, y1);
       ctx.stroke();
       ctx.fillStyle = "rgba(244,114,182,0.97)";
       const rr = lw + 2;
       ctx.beginPath();
-      ctx.arc(measure.a0, measure.b0, rr, 0, Math.PI * 2);
+      ctx.arc(x0, y0, rr, 0, Math.PI * 2);
       ctx.fill();
       ctx.beginPath();
-      ctx.arc(measure.a1, measure.b1, rr, 0, Math.PI * 2);
+      ctx.arc(x1, y1, rr, 0, Math.PI * 2);
       ctx.fill();
     }
 
     if (probe && tool === "probe") {
+      const px = probe.u * W;
+      const py = probe.v * H;
       ctx.strokeStyle = "rgba(255,255,255,0.97)";
       ctx.lineWidth = lw;
       const len = (lw + 2) * 4;
       ctx.beginPath();
-      ctx.moveTo(probe.a - len, probe.b);
-      ctx.lineTo(probe.a + len, probe.b);
-      ctx.moveTo(probe.a, probe.b - len);
-      ctx.lineTo(probe.a, probe.b + len);
+      ctx.moveTo(px - len, py);
+      ctx.lineTo(px + len, py);
+      ctx.moveTo(px, py - len);
+      ctx.lineTo(px, py + len);
       ctx.stroke();
     }
-  }, [geom, cross, measure, probe, tool, showGuides, plane, cols, rows, depth]);
+  }, [geom, fit.w, fit.h, ov, cross, measure, probe, tool, showGuides, plane, cols, rows, depth]);
 
   // Cambiar el corte de ESTE plano (o el plano) invalida medición/sonda hechas sobre
   // otro corte.
@@ -343,25 +438,31 @@ export default function MprPane(props: Props) {
   }, []);
 
   /* ---------------------------------------------------------------------- */
-  /* Mapeos puntero <-> raster <-> vóxel                                     */
+  /* Mapeos puntero <-> normalizado <-> vóxel                                */
   /* ---------------------------------------------------------------------- */
 
-  // clientX/Y -> coordenadas del raster del lienzo (incluye zoom/pan vía el rect).
-  const toRaster = (clientX: number, clientY: number): { a: number; b: number } | null => {
+  // clientX/Y -> coordenadas NORMALIZADAS [0,1] del corte. Normaliza contra el
+  // rect real del lienzo, así que absorbe zoom y paneo (el transform está en un
+  // ancestro y `getBoundingClientRect` ya devuelve la caja transformada) y —lo
+  // importante— NO depende del tamaño del búfer: el mismo punto anatómico da el
+  // mismo valor en la rejilla 2×2 y maximizado.
+  const toNorm = (clientX: number, clientY: number): { u: number; v: number } | null => {
     const cv = canvasRef.current;
-    if (!cv || cv.width === 0 || cv.height === 0) return null;
+    if (!cv) return null;
     const rect = cv.getBoundingClientRect();
     if (rect.width === 0 || rect.height === 0) return null;
-    let a = ((clientX - rect.left) / rect.width) * cv.width;
-    let b = ((clientY - rect.top) / rect.height) * cv.height;
-    a = a < 0 ? 0 : a > cv.width ? cv.width : a;
-    b = b < 0 ? 0 : b > cv.height ? cv.height : b;
-    return { a, b };
+    let u = (clientX - rect.left) / rect.width;
+    let v = (clientY - rect.top) / rect.height;
+    u = u < 0 ? 0 : u > 1 ? 1 : u;
+    v = v < 0 ? 0 : v > 1 ? 1 : v;
+    return { u, v };
   };
 
-  // raster -> índice de vóxel (vecino más cercano), acotado.
-  const rasterToVox = (coord: number, dim: number, n: number): number => {
-    let v = Math.round(((coord + 0.5) * n) / dim - 0.5);
+  // normalizado -> índice de vóxel (vecino más cercano), acotado. El centro del
+  // vóxel v cae en (v+0.5)/n, así que el inverso exacto es u·n − 0.5.
+  const normToVox = (t: number, n: number): number => {
+    if (n <= 0) return 0;
+    let v = Math.round(t * n - 0.5);
     if (v < 0) v = 0;
     else if (v > n - 1) v = n - 1;
     return v;
@@ -369,40 +470,36 @@ export default function MprPane(props: Props) {
 
   // Clic en este plano -> qué coordenadas del mundo (vóxel) fija. Las dos en plano;
   // la normal NO se toca (la mantiene este mismo plano).
-  const crossFromRaster = (a: number, b: number): Partial<Cross> => {
-    if (!geom) return {};
-    const { W, H } = geom;
-    if (plane === "axial") return { x: rasterToVox(a, W, cols), y: rasterToVox(b, H, rows) };
-    if (plane === "coronal") return { x: rasterToVox(a, W, cols), z: rasterToVox(b, H, depth) };
-    return { y: rasterToVox(a, W, rows), z: rasterToVox(b, H, depth) };
+  const crossFromNorm = (u: number, v: number): Partial<Cross> => {
+    if (plane === "axial") return { x: normToVox(u, cols), y: normToVox(v, rows) };
+    if (plane === "coronal") return { x: normToVox(u, cols), z: normToVox(v, depth) };
+    return { y: normToVox(u, rows), z: normToVox(v, depth) };
   };
 
-  // Valor de gris (Int16, rescale aplicado) bajo el raster por vecino más cercano.
+  // Valor de gris (Int16, rescale aplicado) bajo el puntero por vecino más cercano.
   // RELATIVO (no HU): el CBCT no entrega Hounsfield reales.
-  const sampleValueAt = (a: number, b: number): number | null => {
-    if (!geom || slices.length === 0) return null;
-    const { W, H } = geom;
-    const cl = (v: number, n: number) => (v < 0 ? 0 : v > n - 1 ? n - 1 : v);
+  const sampleValueAt = (u: number, v: number): number | null => {
+    if (slices.length === 0) return null;
     if (plane === "coronal") {
-      const x = Math.round(cl(((a + 0.5) * cols) / W - 0.5, cols));
-      const z = Math.round(cl(((b + 0.5) * depth) / H - 0.5, depth));
+      const x = normToVox(u, cols);
+      const z = normToVox(v, depth);
       const yb = Math.min(Math.max(nIndex, 0), rows - 1) * cols;
-      const v = slices[z]?.pixels[yb + x];
-      return v == null ? null : v;
+      const val = slices[z]?.pixels[yb + x];
+      return val == null ? null : val;
     }
     if (plane === "sagittal") {
-      const y = Math.round(cl(((a + 0.5) * rows) / W - 0.5, rows));
-      const z = Math.round(cl(((b + 0.5) * depth) / H - 0.5, depth));
+      const y = normToVox(u, rows);
+      const z = normToVox(v, depth);
       const xf = Math.min(Math.max(nIndex, 0), cols - 1);
-      const v = slices[z]?.pixels[y * cols + xf];
-      return v == null ? null : v;
+      const val = slices[z]?.pixels[y * cols + xf];
+      return val == null ? null : val;
     }
     const s = slices[Math.min(Math.max(nIndex, 0), depth - 1)];
     if (!s) return null;
-    const x = Math.round(cl(((a + 0.5) * cols) / W - 0.5, cols));
-    const y = Math.round(cl(((b + 0.5) * rows) / H - 0.5, rows));
-    const v = s.pixels[y * cols + x];
-    return v == null ? null : v;
+    const x = normToVox(u, cols);
+    const y = normToVox(v, rows);
+    const val = s.pixels[y * cols + x];
+    return val == null ? null : val;
   };
 
   // Mueve la cruz con coalescencia por frame (limita los re-render a ~60/s mientras
@@ -412,10 +509,10 @@ export default function MprPane(props: Props) {
     const p = pendingRef.current;
     pendingRef.current = null;
     if (!p) return;
-    onCrossChange(crossFromRaster(p.a, p.b));
+    onCrossChange(crossFromNorm(p.u, p.v));
   };
-  const queueCross = (a: number, b: number) => {
-    pendingRef.current = { a, b };
+  const queueCross = (u: number, v: number) => {
+    pendingRef.current = { u, v };
     if (rafRef.current == null) rafRef.current = requestAnimationFrame(flushCross);
   };
 
@@ -430,26 +527,26 @@ export default function MprPane(props: Props) {
       dragRef.current = { x: e.clientX - pan.x, y: e.clientY - pan.y };
       return;
     }
-    const p = toRaster(e.clientX, e.clientY);
+    const p = toNorm(e.clientX, e.clientY);
     if (!p) return;
     if (active === "crosshair") {
-      queueCross(p.a, p.b);
+      queueCross(p.u, p.v);
     } else if (active === "measure") {
       measuringRef.current = true;
-      setMeasure({ a0: p.a, b0: p.b, a1: p.a, b1: p.b });
+      setMeasure({ u0: p.u, v0: p.v, u1: p.u, v1: p.v });
     } else {
-      const v = sampleValueAt(p.a, p.b);
-      setProbe(v == null ? null : { a: p.a, b: p.b, value: v });
+      const val = sampleValueAt(p.u, p.v);
+      setProbe(val == null ? null : { u: p.u, v: p.v, value: val });
     }
   };
 
   const onMove = (e: React.MouseEvent) => {
     // Sonda: lectura en vivo al pasar el cursor (sin arrastrar).
     if (tool === "probe" && modeRef.current == null) {
-      const p = toRaster(e.clientX, e.clientY);
+      const p = toNorm(e.clientX, e.clientY);
       if (p) {
-        const v = sampleValueAt(p.a, p.b);
-        setProbe(v == null ? null : { a: p.a, b: p.b, value: v });
+        const val = sampleValueAt(p.u, p.v);
+        setProbe(val == null ? null : { u: p.u, v: p.v, value: val });
       }
       return;
     }
@@ -460,15 +557,15 @@ export default function MprPane(props: Props) {
       return;
     }
     if (!m) return;
-    const p = toRaster(e.clientX, e.clientY);
+    const p = toNorm(e.clientX, e.clientY);
     if (!p) return;
     if (m === "crosshair") {
-      queueCross(p.a, p.b);
+      queueCross(p.u, p.v);
     } else if (m === "measure") {
-      if (measuringRef.current) setMeasure((mm) => (mm ? { ...mm, a1: p.a, b1: p.b } : mm));
+      if (measuringRef.current) setMeasure((mm) => (mm ? { ...mm, u1: p.u, v1: p.v } : mm));
     } else if (m === "probe") {
-      const v = sampleValueAt(p.a, p.b);
-      setProbe(v == null ? null : { a: p.a, b: p.b, value: v });
+      const val = sampleValueAt(p.u, p.v);
+      setProbe(val == null ? null : { u: p.u, v: p.v, value: val });
     }
   };
 
@@ -484,21 +581,31 @@ export default function MprPane(props: Props) {
     if (tool === "probe") setProbe(null);
   };
 
-  const onWheel = (e: React.WheelEvent) => {
-    e.preventDefault();
-    // Ctrl/⌘ + rueda = zoom; rueda sola = navegar cortes a lo largo de la normal.
-    if (e.ctrlKey || e.metaKey) {
-      setZoom((z) => Math.min(8, Math.max(0.25, z * (e.deltaY < 0 ? 1.1 : 0.9))));
-      return;
-    }
-    if (nMax <= 0) return;
-    const step = e.deltaY < 0 ? 1 : -1;
-    const next = Math.min(Math.max(nIndex + step, 0), nMax);
-    if (next === nIndex) return;
-    if (plane === "axial") onCrossChange({ z: next });
-    else if (plane === "coronal") onCrossChange({ y: next });
-    else onCrossChange({ x: next });
-  };
+  // La rueda navega cortes. Va como listener NATIVO con `{ passive: false }`:
+  // React registra `wheel` de forma pasiva en la raíz, así que su `preventDefault`
+  // es un no-op y la rueda acababa desplazando el modal (que tiene su propio
+  // overflow) en vez de cambiar de corte — se nota más con el panel maximizado.
+  useEffect(() => {
+    const el = viewportRef.current;
+    if (!el) return;
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      // Ctrl/⌘ + rueda = zoom; rueda sola = navegar cortes a lo largo de la normal.
+      if (e.ctrlKey || e.metaKey) {
+        setZoom((z) => Math.min(8, Math.max(0.25, z * (e.deltaY < 0 ? 1.1 : 0.9))));
+        return;
+      }
+      if (nMax <= 0) return;
+      const step = e.deltaY < 0 ? 1 : -1;
+      const next = Math.min(Math.max(nIndex + step, 0), nMax);
+      if (next === nIndex) return;
+      if (plane === "axial") onCrossChange({ z: next });
+      else if (plane === "coronal") onCrossChange({ y: next });
+      else onCrossChange({ x: next });
+    };
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => el.removeEventListener("wheel", onWheel);
+  }, [nIndex, nMax, plane, onCrossChange]);
 
   const onDoubleClick = () => {
     setZoom(1);
@@ -511,13 +618,15 @@ export default function MprPane(props: Props) {
     else onCrossChange({ x: val });
   };
 
-  // Lectura de la medición activa (mm honesto + estado de calibración).
+  // Lectura de la medición activa (mm honesto + estado de calibración). Sale de
+  // la extensión física del plano por la fracción medida: ni el tamaño del búfer
+  // ni el de la caja entran en la cuenta, así que maximizar no altera el número.
   const readout = (() => {
     if (!geom || !measure) return null;
-    const da = measure.a1 - measure.a0;
-    const db = measure.b1 - measure.b0;
-    const mm = Math.hypot((da * geom.nA * geom.sA) / geom.W, (db * geom.nB * geom.sB) / geom.H);
-    const pxNative = Math.hypot((da * geom.nA) / geom.W, (db * geom.nB) / geom.H);
+    const du = measure.u1 - measure.u0;
+    const dv = measure.v1 - measure.v0;
+    const mm = Math.hypot(du * geom.nA * geom.sA, dv * geom.nB * geom.sB);
+    const pxNative = Math.hypot(du * geom.nA, dv * geom.nB);
     const axisStat = (axis: "X" | "Y" | "Z"): CalibStatus =>
       axis === "Z"
         ? geom.sc.zCalibrated
@@ -535,33 +644,52 @@ export default function MprPane(props: Props) {
   const cursor = tool === "pan" ? (dragRef.current ? "grabbing" : "grab") : "crosshair";
   const accent = PLANE_COLOR[plane];
 
+  // Alto del área de imagen. En la rejilla lo fija el orquestador; maximizado lo
+  // manda el ANCHO real ya medido, para que el corte aproveche el ancho sin
+  // deformarse. El techo en vh es sobre el ALTO (el ancho siempre sale del
+  // contenedor, nunca del viewport) y evita que la imagen se salga de pantalla.
+  const viewportH = maximized
+    ? Math.max(320, Math.round(box.w / aspect) || heightPx)
+    : heightPx;
+
   return (
-    <div className="flex flex-col self-start rounded-lg border border-border bg-card overflow-hidden">
+    <div
+      className={`flex flex-col ${
+        maximized ? "w-full" : "self-start"
+      } rounded-lg border border-border bg-card overflow-hidden`}
+    >
       <div
-        className="relative w-full select-none"
-        style={{ height: heightPx, background: "#000", cursor }}
-        onWheel={onWheel}
+        ref={viewportRef}
+        className="relative w-full select-none overflow-hidden"
+        style={{
+          height: viewportH,
+          maxHeight: maximized ? MAX_PANE_HEIGHT : undefined,
+          background: "#000",
+          cursor,
+        }}
         onMouseDown={onDown}
         onMouseMove={onMove}
         onMouseUp={onUp}
         onMouseLeave={onLeave}
         onDoubleClick={onDoubleClick}
       >
+        {/* Caja del corte: YA tiene la proporción física (fitContain), así que
+            ambos lienzos la rellenan al 100% y coinciden EXACTO — la cruz y las
+            medidas no pueden desalinearse de la imagen. */}
         <div
           className="absolute inset-0 flex items-center justify-center"
           style={{ transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})` }}
         >
-          <div className="relative" style={{ maxWidth: "100%", maxHeight: "100%" }}>
+          <div className="relative" style={{ width: fit.w, height: fit.h }}>
             <canvas
               ref={canvasRef}
-              className="block"
-              style={{ maxWidth: "100%", maxHeight: heightPx, imageRendering: "pixelated" }}
+              className="absolute inset-0 w-full h-full"
+              style={{ imageRendering: exactPixels ? "pixelated" : "auto" }}
             />
             <canvas
               ref={overlayRef}
               aria-hidden
               className="absolute inset-0 w-full h-full pointer-events-none"
-              style={{ imageRendering: "pixelated" }}
             />
           </div>
         </div>
