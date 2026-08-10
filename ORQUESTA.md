@@ -5234,3 +5234,128 @@ derecha del panel (la trae el handoff, tapa la esquina de la marca de Spline) y 
 que ya existía dentro de la tarjeta. Se ve redundante. No borré ninguno por mi cuenta: quitar el
 del form cambia algo que hoy está en producción y quitar el del panel destapa la marca de
 Spline. Dime cuál prefieres y lo quito en un commit de una línea.
+
+---
+
+## Afiliados — el % del vendedor ahora es su parte de TU comisión (2026-08-10) · `3fc8e9ba` en main
+
+Retomé un cambio que una terminal anterior dejó **sin commitear** en el working tree (la PC se
+trabó dos veces a mitad de la edición). No descarté nada: revisé lo que había, lo cerré, lo
+verifiqué y lo subí.
+
+### El significado nuevo
+
+El número que un afiliado escribe en "Mi equipo" no significaba lo que aparentaba.
+`computeSellerSplitFromTotal` repartía `total × (sellerPct / nivelDelPadre)` y el formulario
+limitaba el campo a `[0, nivel del padre]`. Con un padre en **Bronce (10 %)** y una clínica
+**Básico ($80 de comisión)**, asignarle **"10 %"** a un vendedor le entregaba los **$80
+completos** y dejaba al padre en **$0**. El "10" se leía como "diez por ciento" y valía "todo".
+
+Ahora `commissionPct` es el **porcentaje de la comisión del padre**, rango **0-100**:
+
+```
+sellerMxn   = round(totalMxn × sellerPct / 100)
+overrideMxn = totalMxn − sellerMxn        ← por RESTA, siempre cuadra
+```
+
+| Comisión del padre | 10 % | 30 % | 50 % | 100 % |
+|---|---|---|---|---|
+| Básico $80 | $8 / $72 | $24 / $56 | $40 / $40 | $80 / $0 |
+| Profesional $140 | $14 / $126 | **$42 / $98** | $70 / $70 | $140 / $0 |
+
+El **nivel del padre deja de ser tope y denominador** del reparto: se fue de `clampSellerPct`
+(que queda vivo **solo** para el modo histórico "pct"), de la validación de los dos endpoints
+de equipo, del formulario y de los textos. `computeSellerSplit` (la del modo % sobre la
+factura) **no se tocó** y conserva sus propios tests. **DaleControl paga exactamente lo mismo**:
+esto solo redistribuye entre padre y vendedor.
+
+### Qué encontré a medias al retomar
+
+El grueso estaba hecho y era coherente — la terminal anterior alcanzó a dejar el corte
+`team-split.ts` (matemática pura, client-safe), el webhook llamando a la firma nueva de dos
+argumentos, los dos endpoints con tope 100, el formulario con la equivalencia viva y la
+migración escrita. Lo que faltaba y cerré yo:
+
+- **`prisma/schema.prisma` seguía documentando el significado viejo** en cinco comentarios:
+  `commissionPct … (0..nivel del padre)`, `commissionMxn … (amount × min(%congelado, nivel%))`,
+  `sellerPct … CONGELADO al alta` sin decir de qué, y dos cabeceras que decían que las dos
+  porciones "suman el % del nivel del padre". Es el documento donde alguien va a buscar qué
+  significa la columna; quedaba contradiciendo al código.
+- **Dos textos sueltos**: el comentario `GET: … + cap del nivel` del endpoint de equipo y el
+  subtítulo de la página ("asigna a cada uno su porcentaje de comisión" → "qué parte de tu
+  comisión se lleva").
+- **Dos huecos en el script de migración** (detalle abajo).
+
+Verifiqué además que **nada quedó colgando**: cero referencias a `currentParentLevelPct` (la
+función borrada), cero llamadas a `computeSellerSplitFromTotal` con la firma vieja de tres
+argumentos, y el congelado del alta (`api/auth/register`) ya copiaba `seller.commissionPct`
+tal cual, sin clampear al nivel — o sea que bajo el significado nuevo ya era correcto.
+
+### La migración de datos — NO LA CORRÍ
+
+`scripts/migrate-seller-share-pct.mts` convierte `nuevoPct = round(viejoPct / nivel × 100)`
+(clamp a 100) en los **dos** lugares donde vive el número:
+
+- `affiliate_sellers.commissionPct` — la asignación vigente.
+- `affiliate_seller_attributions.sellerPct` — el **congelado por clínica**, que es el que
+  decide lo que se paga de verdad en cada factura.
+
+Sin esta conversión, un vendedor al 5 % con un padre en Bronce —que cobraba **la mitad** de la
+comisión— pasaría a cobrar el 5 %. Dinero prometido que se evapora.
+
+**Comando (PowerShell), en dos pasos:**
+
+```powershell
+$env:DATABASE_URL = "postgresql://..."   # el de producción
+
+# 1) INFORME — no escribe una sola fila. Imprime tabla vieja→nueva y un token.
+npx tsx scripts/migrate-seller-share-pct.mts
+
+# 2) APLICAR — solo con el token que imprimió el informe de arriba.
+npx tsx scripts/migrate-seller-share-pct.mts --apply --token=<token>
+```
+
+**Cuántas filas toca:** exactamente las que el informe lista como `[convertibles]` — toda fila
+de esas dos tablas con `pct > 0` cuyo padre tenga un % de nivel utilizable. Las de `pct = 0` y
+las de un padre sin nivel se saltan y salen en `[sin conversión]`. **No pude contarlas yo: no
+me conecté a la base** (el informe del paso 1 es justo el que da el número antes de escribir
+nada). Si el módulo de equipos todavía no tiene vendedores dados de alta, el script sale con
+`NO HAY NADA QUE CONVERTIR` y no toca nada.
+
+**Los dos huecos que le cerré al script:**
+
+1. **Se podía convertir dos veces.** El token caduca al cambiar los datos, sí — pero si
+   alguien re-corría el informe **después** de aplicar y copiaba el token nuevo, el segundo
+   `--apply` volvía a dividir entre el nivel y disparaba los porcentajes. Ahora hay un segundo
+   candado: si alguna fila ya trae un % por encima del nivel más alto del programa (imposible
+   con el significado viejo, que clampaba al nivel), `--apply` **se niega** y hay que pasar
+   `--force` a propósito. El informe también avisa por adelantado de que el comando se negará.
+2. **En modo legacy marcaba TODO como dudoso.** Sin tabla de niveles el denominador es el
+   `Affiliate.commissionPct` fijo, que no se mueve; el "⚠ casos dudosos" solo tiene sentido
+   cuando el padre pudo cambiar de nivel desde que asignó el %.
+
+### Verificación
+
+- **`npm run test:afiliados` → 66/66 verde.** Los cuatro casos de la especificación más una
+  **malla de 20 totales × 16 porcentajes** (320 combinaciones, con $0.01, $0.07, $19.99,
+  100/3, 33.33 %, 66.67 %, 99.9 %) comprobando `sellerMxn + overrideMxn === totalMxn`
+  **en centavos enteros y con `===`**. En pesos esa comprobación no valdría nada: `0.01 + 0.06`
+  da `0.06999999999999999` en binario, así que un reparto perfecto "fallaría" y uno malo podría
+  pasar. Por eso el reparto entero se hace en centavos y el override sale por resta.
+- **`npm run test:billing` → 94/94 verde. `npm run test:click-guard` → 8/8 verde.** Sin regresión.
+- **`npm run build` completo → verde.** `Checking validity of types` sin un solo error,
+  365/365 páginas, sin `Failed to compile` ni `Module not found`. Los `Environment variable not
+  found: DATABASE_URL` del log son los de siempre al compilar sin `.env` local.
+- **`npx tsc --noEmit` sobre el `.mts`** de la migración → 0 errores (el `include` del
+  `tsconfig` es `**/*.ts` y no alcanza a los `.mts`, así que `next build` no lo tipa).
+
+### Nota sobre la equivalencia en pesos del formulario
+
+El hint bajo el campo —"Con 30 %, por cada clínica que él traiga (cada mes que siga activa):
+Profesional: él **$42** y tú **$98**"— sale de `getPublicOffer()` y se reparte con
+`computeSellerSplitFromTotal`, **la misma función que escribe el dinero en el webhook**. Ni un
+monto escrito a mano. Elige recurrente o pago único según la modalidad congelada del afiliado,
+y si el programa estuviera en modo "% del nivel" (sin montos fijos) explica el reparto sobre
+"cada $100 de comisión", donde el significado del % es idéntico. Por eso `team-split.ts` nace
+como archivo aparte: `team.ts` arrastra imports de servidor y el formulario es un client
+component.
