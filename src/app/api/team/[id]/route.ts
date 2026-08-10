@@ -19,6 +19,11 @@ function getAdminClient() {
 // escalada de privilegios (requireRole le da bypass en todo el producto).
 const ASSIGNABLE_ROLES: string[] = ["DOCTOR", "ADMIN", "RECEPTIONIST"];
 
+// Mismo patrón que EMAIL_RE de @/lib/import/engine.ts. Se declara local en vez
+// de importarlo porque ese módulo arrastra exceljs entero (y un route.ts no
+// puede exportar nada que no sea handler/config de Next).
+const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
+
 // GET /api/team/[id] — get doctor details
 export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
   const ctx = await getAuthContext();
@@ -56,6 +61,13 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   const body = await req.json();
 
   // Prevent changing own role or deactivating self
+  //
+  // El correo propio SÍ se permite, a diferencia de rol/estado. Los dos casos de
+  // arriba se bloquean porque son escalada (subirse el rol) o lock-out (dejarse
+  // fuera); cambiarse el correo no es ninguno de los dos: getAuthContext resuelve
+  // la sesión por supabaseId — el `sub` del JWT, que no cambia — y la contraseña
+  // sigue siendo la misma, así que ni se cae la sesión abierta ni se pierde el
+  // acceso. Es además el caso legítimo más común (el dueño cambia su correo).
   if (params.id === ctx!.userId) {
     if (body.role && body.role !== ctx!.role) {
       return NextResponse.json({ error: "No puedes cambiar tu propio rol" }, { status: 400 });
@@ -118,24 +130,147 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     }
   }
 
-  const updated = await prisma.user.update({
-    where: { id: params.id },
-    data: {
-      ...(body.firstName  !== undefined && { firstName:  body.firstName  }),
-      ...(body.lastName   !== undefined && { lastName:   body.lastName   }),
-      ...(body.specialty  !== undefined && { specialty:  body.specialty  }),
-      ...(body.color      !== undefined && { color:      body.color      }),
-      ...(body.phone      !== undefined && { phone:      body.phone      }),
-      ...(body.avatarUrl  !== undefined && { avatarUrl:  body.avatarUrl  }),
-      ...(body.role       !== undefined && { role:       body.role       }),
-      ...(body.isActive   !== undefined && { isActive:   body.isActive   }),
-      ...(body.services   !== undefined && { services:   body.services   }),
-      // NOM-024 — datos del médico
-      ...(body.cedulaProfesional  !== undefined && { cedulaProfesional:  body.cedulaProfesional  || null }),
-      ...(body.especialidad       !== undefined && { especialidad:       body.especialidad       || null }),
-      ...(body.cedulaEspecialidad !== undefined && { cedulaEspecialidad: body.cedulaEspecialidad || null }),
-    },
-  });
+  // ── Cambio de email ───────────────────────────────────────────────────────
+  // El email NO es una columna más: es la IDENTIDAD DE LOGIN en Supabase Auth.
+  // Este PATCH lo ignoraba (no estaba en el `data` de abajo), así que editarlo
+  // desde /dashboard/team guardaba "bien" sin cambiar nada — un no-op silencioso.
+  //
+  // Se aplica en LOS DOS lados, en este orden: Supabase primero (es la fuente de
+  // verdad del login) y Prisma sólo si Supabase respondió OK. Si Prisma truena
+  // después, se revierte Supabase — dejar Auth con el correo nuevo y el panel
+  // con el viejo es justo el estado imposible de depurar que esto viene a cerrar.
+  //
+  // La comparación es case-insensitive contra lo que ya hay en BD: el modal
+  // reenvía el form completo, y filas viejas guardadas con mayúsculas no deben
+  // contar como "cambio" (Supabase trata el login como case-insensitive).
+  const emailRaw = typeof body.email === "string" ? body.email.trim().toLowerCase() : null;
+  const emailChanged = emailRaw !== null && emailRaw !== member.email.trim().toLowerCase();
+
+  // Filas hermanas del MISMO supabaseId. El schema es @@unique([supabaseId,
+  // clinicId]): una persona tiene UNA fila User POR clínica y /api/clinics crea
+  // cada sucursal con el supabaseId del dueño. Como Auth es global, cambiar el
+  // login lo cambia para TODAS sus sedes — si sólo tocáramos la fila de esta
+  // clínica, las demás seguirían mostrando el correo viejo.
+  let siblingIds: string[] = [];
+  let supabaseAdmin: ReturnType<typeof getAdminClient> | null = null;
+
+  if (emailChanged) {
+    if (!EMAIL_RE.test(emailRaw!)) {
+      return NextResponse.json({ error: "El email no tiene un formato válido" }, { status: 400 });
+    }
+
+    // Escalada de privilegios: cambiarle el correo a un SUPER_ADMIN es
+    // apoderarse de su login (con el correo nuevo se pide "olvidé mi
+    // contraseña" y se toma la cuenta del dueño de la plataforma). Mismo
+    // criterio que el guard de rol/estado de arriba y que reset-password.
+    if (member.role === "SUPER_ADMIN" && !ctx!.isSuperAdmin) {
+      return NextResponse.json(
+        { error: "Solo un SUPER_ADMIN puede cambiar el correo de un SUPER_ADMIN" },
+        { status: 403 },
+      );
+    }
+
+    const siblings = await prisma.user.findMany({
+      where: { supabaseId: member.supabaseId },
+      select: { id: true, clinicId: true },
+    });
+    siblingIds = siblings.filter(s => s.id !== member.id).map(s => s.id);
+
+    // Duplicado: mismo chequeo que el alta (POST /api/team) — no puede haber dos
+    // usuarios con el mismo correo en una clínica. Se evalúa sobre TODAS las
+    // clínicas donde vamos a escribir, no sólo la activa, e insensitive para
+    // atrapar también las filas viejas guardadas con mayúsculas.
+    const clash = await prisma.user.findFirst({
+      where: {
+        email:      { equals: emailRaw!, mode: "insensitive" },
+        clinicId:   { in: Array.from(new Set(siblings.map(s => s.clinicId))) },
+        supabaseId: { not: member.supabaseId },
+      },
+      select: { id: true },
+    });
+    if (clash) {
+      return NextResponse.json(
+        { error: "Ya existe un usuario con ese email en esta clínica" },
+        { status: 400 },
+      );
+    }
+
+    supabaseAdmin = getAdminClient();
+    const { error: authError } = await supabaseAdmin.auth.admin.updateUserById(
+      member.supabaseId,
+      // email_confirm: sin esto el correo queda pendiente de confirmar y el
+      // doctor no puede entrar hasta hacer clic en un mail que nunca pidió.
+      { email: emailRaw!, email_confirm: true },
+    );
+    if (authError) {
+      const msg = (authError.message ?? "") + " " + ((authError as any).code ?? "");
+      if (/already been registered|already exists|email_exists/i.test(msg)) {
+        // Mismo caso que cubre el alta (POST /api/team): el correo ya es de otra
+        // cuenta de la plataforma, sea de esta clínica o de cualquier otra.
+        return NextResponse.json({
+          error: "Este email ya tiene cuenta en DaleControl. Usa otro correo distinto para este miembro.",
+        }, { status: 400 });
+      }
+      console.error("[api/team/[id] PATCH] supabase updateUserById falló:", authError);
+      return NextResponse.json(
+        { error: "No se pudo actualizar el correo de acceso. No se guardó ningún cambio." },
+        { status: 400 },
+      );
+    }
+  }
+
+  const data = {
+    ...(body.firstName  !== undefined && { firstName:  body.firstName  }),
+    ...(body.lastName   !== undefined && { lastName:   body.lastName   }),
+    ...(body.specialty  !== undefined && { specialty:  body.specialty  }),
+    ...(body.color      !== undefined && { color:      body.color      }),
+    ...(body.phone      !== undefined && { phone:      body.phone      }),
+    ...(body.avatarUrl  !== undefined && { avatarUrl:  body.avatarUrl  }),
+    ...(body.role       !== undefined && { role:       body.role       }),
+    ...(body.isActive   !== undefined && { isActive:   body.isActive   }),
+    ...(body.services   !== undefined && { services:   body.services   }),
+    // NOM-024 — datos del médico
+    ...(body.cedulaProfesional  !== undefined && { cedulaProfesional:  body.cedulaProfesional  || null }),
+    ...(body.especialidad       !== undefined && { especialidad:       body.especialidad       || null }),
+    ...(body.cedulaEspecialidad !== undefined && { cedulaEspecialidad: body.cedulaEspecialidad || null }),
+    // Sólo cuando cambió de verdad: así un guardado que no toca el correo no
+    // reescribe la columna ni dispara el aviso de "entra con el correo nuevo".
+    ...(emailChanged && { email: emailRaw! }),
+  };
+
+  let updated: Awaited<ReturnType<typeof prisma.user.update>>;
+  try {
+    updated = emailChanged
+      ? await prisma.$transaction(async (tx) => {
+          const row = await tx.user.update({ where: { id: params.id }, data });
+          // Las otras sedes de la misma persona: mismo correo o nada.
+          if (siblingIds.length > 0) {
+            await tx.user.updateMany({ where: { id: { in: siblingIds } }, data: { email: emailRaw! } });
+          }
+          return row;
+        })
+      : await prisma.user.update({ where: { id: params.id }, data });
+  } catch (e) {
+    // Supabase ya cambió y Prisma no. Se revierte Auth para que el doctor siga
+    // entrando con el correo que el panel muestra.
+    if (emailChanged && supabaseAdmin) {
+      const { error: revertError } = await supabaseAdmin.auth.admin.updateUserById(
+        member.supabaseId,
+        { email: member.email, email_confirm: true },
+      );
+      if (revertError) {
+        console.error(
+          "[api/team/[id] PATCH] CUENTAS DESINCRONIZADAS: Supabase quedó con el correo nuevo, Prisma con el viejo, y la reversión también falló.",
+          { userId: params.id, supabaseId: member.supabaseId, emailAnterior: member.email, emailNuevo: emailRaw, causa: e, revertError },
+        );
+        return NextResponse.json({
+          error: `No se guardó el cambio y tampoco se pudo deshacer: la cuenta quedó iniciando sesión con ${emailRaw} aunque el panel siga mostrando ${member.email}. Avisa a soporte con este dato antes de volver a intentar.`,
+        }, { status: 500 });
+      }
+    }
+    console.error("[api/team/[id] PATCH] update falló:", e);
+    return NextResponse.json({ error: "No se pudieron guardar los cambios" }, { status: 500 });
+  }
 
   await logMutation({
     req,
@@ -144,13 +279,19 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     entityType: "user",
     entityId: params.id,
     action: "update",
+    // Ambos son la fila COMPLETA (ni el findFirst de arriba ni el update llevan
+    // select), así que diffObjects registra `email: {before, after}` solo. No
+    // meterle un select a ninguno de los dos: un cambio de identidad de login
+    // tiene que quedar rastreable.
     before: member as any,
     after: updated as any,
   });
 
   revalidateAfter("team");
 
-  return NextResponse.json(updated);
+  // emailChanged: la UI lo usa para avisarle al admin que el miembro ahora
+  // inicia sesión con el correo nuevo — sin esa señal el cambio es invisible.
+  return NextResponse.json({ ...updated, emailChanged });
 }
 
 // DELETE /api/team/[id] — permanently remove doctor
