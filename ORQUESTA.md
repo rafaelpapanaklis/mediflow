@@ -5822,3 +5822,61 @@ quitar el `updateMany` de las hermanas reintroduce el mismo bug para cualquier c
 sucursales, que es justo donde más caro sale depurarlo.
 
 **Sin SQL y sin tocar `prisma/schema.prisma`** — no hacía falta ninguno de los dos.
+
+---
+
+## [Sidebar-Recursos] · Los sillones se fueron de CATÁLOGO a ADMINISTRACIÓN
+
+**Commit:** `c85914a1` (mergeado a `main` en `151ebdae`) · `src/components/dashboard/sidebar.tsx`, 9 líneas
+arriba y 5 abajo. Sin SQL, sin schema, sin dependencias.
+
+**El problema era de vecindario, no de código.** "Recursos" —los sillones y consultorios— vivía en
+CATÁLOGO, entre Paquetes e Inventario y pegado a Proveedores, Mis compras y Laboratorios. Todo lo que
+lo rodeaba era cosas que la clínica *compra*. Un sillón no se compra desde ahí: se da de alta para
+que la Agenda pueda asignarle citas, exactamente igual que se da de alta a un miembro del Equipo.
+Ahora está en ADMINISTRACIÓN, justo arriba de Equipo, que es donde el dueño ya va a configurar quién
+y con qué atiende.
+
+**El cambio es de una línea y de un lugar.** `section: "catalogo"` → `section: "admin"`, y el objeto
+completo se movió dentro de `NAV_ITEMS` para quedar inmediatamente antes de `team` — en este sidebar
+el orden del array *es* el orden de render, no hay campo `order` que ajustar. Se conservaron intactos
+`id`, `label`, `href`, `icon: DoorOpen`, `adminOnly: true`, el array `categories` de siete categorías
+y `permission: "resources.view"`. El gating no se movió ni un milímetro: el filtro se aplica en
+`shouldShowItem`, que no mira la sección para nada.
+
+**Lo que se revisó antes de darlo por bueno**, con el componente REAL montado en el navegador (una
+page temporal fuera del matcher del middleware, ya borrada — el panel no levanta sin `.env`):
+
+- **20 combinaciones de rol × categoría** (SUPER_ADMIN / ADMIN / DOCTOR / RECEPTIONIST × DENTAL / SPA
+  / NUTRITION / PSYCHOLOGY / PODIATRY). Recursos sale exactamente cuando el rol es dueño/admin **y**
+  la categoría está en su lista, y en las 20 quedó dentro de ADMINISTRACIÓN e inmediatamente arriba
+  de Equipo. Cero desviaciones. Una clínica de NUTRICIÓN sigue sin verlo, y recepción y doctores
+  tampoco, esté en la sección que esté.
+- **Encabezados huérfanos: no hay riesgo, y no es mérito nuevo.** Las dos ramas de render ya venían
+  guardadas con `itemsBySection[sec].length > 0 ? … : null` (la expandida y la icon-only), así que
+  una sección sin ítems visibles no pinta ni el título. Se forzó el caso real: usuario con
+  `permissionsOverride` sin ningún permiso de catálogo y clínica de NUTRICIÓN → CATÁLOGO **entera**
+  desaparece, no queda el título solo. Prueba adicional gratis: ESPECIALIDADES lleva oculta desde
+  `HIDE_SPECIALTIES` y su encabezado nunca aparece en ningún dump.
+- **Secciones colapsadas por usuario:** los ids de sección no cambiaron (`clinico | catalogo |
+  specialties | admin`, y `COLLAPSIBLE_SECTIONS` está duplicado a propósito en el componente y en
+  `src/app/actions/sidebar.ts`), así que lo que cada usuario tenga guardado en `User.sidebarCollapsed`
+  sigue siendo válido tal cual — nadie queda con un valor apuntando a una sección que ya no existe.
+  Verificado que con ADMINISTRACIÓN colapsada el cuerpo mide 0px, lleva `inert` y el chevron reporta
+  `aria-expanded="false"`; al expandir vuelven los 586px. El único efecto real del cambio es que un
+  usuario que ya tenía ADMINISTRACIÓN colapsada tiene que abrirla para ver Recursos, igual que para
+  ver Equipo o Caja.
+- **Móvil y modo icono:** el drawer se probó en un viewport de 397px (el `<aside>` de escritorio ni
+  se monta, el drawer abre con el evento `mf:open-mobile-sidebar` y trae el mismo orden), y el modo
+  icon-only de 68px —que es otra rama de render, sin encabezados— también deja Recursos entre
+  Reportes y Equipo. Los dos consumen el mismo `sidebarInner`, así que no había forma de que
+  divergieran, pero se miró igual.
+
+**Gate:** `npx next build` completo, **exit 0**, 358/358 páginas estáticas, sin errores de tipos ni de
+compilación. Los `prisma:error` del log son el ruido conocido de correr el build en un worktree sin
+`.env` (`DATABASE_URL` ausente), no del cambio.
+
+**Nada más se tocó.** El diff son 14 líneas en un solo archivo y no hay ninguna otra superficie que
+dependa de en qué sección estaba el ítem: la paleta de comandos no agrupa por sección, el título de
+la ruta en el topbar sale de un mapa por `href` y las traducciones se resuelven por `id`
+(`sidebar.nav.resources`), no por sección.
