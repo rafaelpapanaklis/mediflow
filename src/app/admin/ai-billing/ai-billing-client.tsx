@@ -21,19 +21,35 @@ type Pricing = {
   feePct: number;
 };
 type Margin = { incomeMxn: number; realCostMxn: number; marginMxn: number; marginPct: number | null };
+/** prepaid = monedero WhatsApp · included = IA clínica que absorbe el plan. */
+type UsageKind = "prepaid" | "included" | "mixed" | "none";
 type ClinicRow = {
   clinicId: string;
   name: string;
   slug: string | null;
-  balanceCents: number;
+  /** null = la clínica no tiene monedero prepago (no es saldo 0, es "no aplica"). */
+  balanceCents: number | null;
   hasWallet: boolean;
   status: string | null;
   autoRecharge: boolean;
   consumoMxn: number;
+  prepaidCostUsd: number;
+  absorbedCostUsd: number;
   realCostUsd: number;
   eventCount: number;
-  sharePct: number;
+  prepaidEventCount: number;
+  absorbedEventCount: number;
+  usageKind: UsageKind;
+  costSharePct: number;
   lowBalance: boolean;
+};
+type CostBlock = {
+  prepaidUsd: number;
+  absorbedUsd: number;
+  totalUsd: number;
+  prepaidMxn: number;
+  absorbedMxn: number;
+  totalMxn: number;
 };
 type Dashboard = {
   pricing: Pricing;
@@ -45,13 +61,21 @@ type Dashboard = {
     avgDailyBurnUsd: number;
     burnWindowDays: number;
   };
+  /** SOLO prepago (WhatsApp). El consumo incluido en los planes no entra aquí. */
   margin: { allTime: Margin; month: Margin };
+  absorbed: {
+    allTime: { costUsd: number; costMxn: number };
+    month: { costUsd: number; costMxn: number; clinicCount: number; eventCount: number };
+  };
+  cost: { month: CostBlock; allTime: CostBlock };
   totals: {
     clinicCount: number;
     walletCount: number;
+    includedClinicCount: number;
     lowBalanceCount: number;
     negativeCount: number;
     pausedCount: number;
+    shownCount: number;
     capped: boolean;
   };
   clinics: ClinicRow[];
@@ -87,6 +111,9 @@ const PRICE_FIELDS: { key: keyof Pricing; label: string; hint?: string; step: nu
 ];
 
 const labelStyle = { fontSize: 11, color: "var(--text-3)", fontWeight: 600 } as const;
+
+// Espeja MAX_ROWS del endpoint; solo se usa para el texto de "tope alcanzado".
+const MAX_ROWS_UI = 500;
 
 export function AiBillingClient() {
   const [data, setData] = useState<Dashboard | null>(null);
@@ -266,6 +293,11 @@ export function AiBillingClient() {
   const a = d.anthropic;
   const mAll = d.margin.allTime;
   const mMonth = d.margin.month;
+  // Defaults defensivos: si el panel queda servido contra un deploy viejo del
+  // endpoint (sin los bloques nuevos) muestra ceros en vez de reventar.
+  const abs = d.absorbed ?? { allTime: { costUsd: 0, costMxn: 0 }, month: { costUsd: 0, costMxn: 0, clinicCount: 0, eventCount: 0 } };
+  const cMonth =
+    d.cost?.month ?? { prepaidUsd: 0, absorbedUsd: 0, totalUsd: 0, prepaidMxn: 0, absorbedMxn: 0, totalMxn: 0 };
 
   return (
     <div style={{ maxWidth: 1280, margin: "0 auto" }}>
@@ -297,10 +329,13 @@ export function AiBillingClient() {
           delta={{ value: `${fmtUSD(a.avgDailyBurnUsd)} por día`, direction: "down" }}
         />
         <KpiCard
-          label="Margen del mes"
+          label="Margen prepago del mes"
           value={formatCurrency(mMonth.marginMxn, "MXN")}
           icon={TrendingUp}
-          delta={{ value: mMonth.marginPct == null ? "sin consumo" : `${mMonth.marginPct.toFixed(1)}% margen`, direction: "up" }}
+          delta={{
+            value: mMonth.marginPct == null ? "sin consumo prepago" : `${mMonth.marginPct.toFixed(1)}% sobre lo facturado`,
+            direction: "up",
+          }}
         />
         <KpiCard
           label="Clínicas saldo bajo"
@@ -310,12 +345,55 @@ export function AiBillingClient() {
         />
       </div>
 
-      {/* Stats secundarios */}
+      {/* Costo del mes: las dos bolsas por separado + el cheque real */}
+      <SectionLabel
+        title="Este mes"
+        hint="El prepago del bot factura y deja margen. La IA clínica cuesta pero no factura aquí: la paga la mensualidad de la clínica."
+      />
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0,1fr))", gap: 14, marginBottom: 20 }}>
+        <StatTile
+          label="Costo total del mes"
+          value={fmtUSD(cMonth.totalUsd)}
+          sub={`${formatCurrency(cMonth.totalMxn, "MXN")} · prepago + absorbido = el cheque a Anthropic`}
+        />
+        <StatTile
+          label="Prepago · bot de WhatsApp"
+          value={fmtUSD(cMonth.prepaidUsd)}
+          sub={`${formatCurrency(mMonth.incomeMxn, "MXN")} facturado · margen ${
+            mMonth.marginPct == null ? "—" : `${mMonth.marginPct.toFixed(1)}%`
+          }`}
+        />
+        <StatTile
+          label="Costo absorbido (incluido en planes)"
+          value={fmtUSD(abs.month.costUsd)}
+          sub={`${formatCurrency(abs.month.costMxn, "MXN")} · La clínica no paga extra; sale de su mensualidad.`}
+          warn={abs.month.costUsd > 0}
+        />
+      </div>
+      {abs.month.eventCount > 0 && (
+        <div style={{ fontSize: 11, color: "var(--text-3)", marginTop: -12, marginBottom: 20 }}>
+          {abs.month.eventCount.toLocaleString("es-MX")} análisis de IA clínica en{" "}
+          {abs.month.clinicCount} {abs.month.clinicCount === 1 ? "clínica" : "clínicas"} este mes, sin cobro
+          extra. No entra en el margen porque su ingreso es la mensualidad, no el monedero.
+        </div>
+      )}
+
+      {/* Stats secundarios — histórico */}
+      <SectionLabel title="Histórico" />
       <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0,1fr))", gap: 14, marginBottom: 20 }}>
-        <StatTile label="Consumo total (Anthropic)" value={fmtUSD(a.consumedUsd)} sub={`${fmtUSD(a.rechargedUsd)} cargado`} />
-        <StatTile label="Ingreso de clínicas" value={formatCurrency(mAll.incomeMxn, "MXN")} sub="facturado, fee incluido" />
-        <StatTile label="Costo real" value={formatCurrency(mAll.realCostMxn, "MXN")} sub="Anthropic a MXN (fx histórico)" />
-        <StatTile label="Margen total" value={formatCurrency(mAll.marginMxn, "MXN")} sub={mAll.marginPct == null ? "—" : `${mAll.marginPct.toFixed(1)}% margen`} accent />
+        <StatTile
+          label="Consumo total (Anthropic)"
+          value={fmtUSD(a.consumedUsd)}
+          sub={`${fmtUSD(a.rechargedUsd)} cargado · ${fmtUSD(abs.allTime.costUsd)} absorbido`}
+        />
+        <StatTile label="Ingreso prepago" value={formatCurrency(mAll.incomeMxn, "MXN")} sub="facturado, fee incluido" />
+        <StatTile label="Costo real prepago" value={formatCurrency(mAll.realCostMxn, "MXN")} sub="Anthropic a MXN (fx histórico)" />
+        <StatTile
+          label="Margen prepago"
+          value={formatCurrency(mAll.marginMxn, "MXN")}
+          sub={mAll.marginPct == null ? "—" : `${mAll.marginPct.toFixed(1)}% margen`}
+          accent
+        />
       </div>
 
       {/* Editor de precios + recarga Anthropic */}
@@ -383,7 +461,11 @@ export function AiBillingClient() {
       <CardNew
         noPad
         title="Saldo y consumo por clínica"
-        sub={d.totals.capped ? `Mostrando ${d.totals.walletCount} monederos (tope ${d.totals.walletCount})` : undefined}
+        sub={
+          d.totals.capped
+            ? `Mostrando ${d.totals.shownCount} de ${d.totals.clinicCount} clínicas (tope ${MAX_ROWS_UI})`
+            : `${d.totals.walletCount} con monedero prepago · ${d.totals.includedClinicCount} con IA incluida en su plan`
+        }
         action={
           <ButtonNew size="sm" variant="ghost" icon={<RefreshCw size={13} />} onClick={() => fetchData()}>
             Actualizar
@@ -394,8 +476,9 @@ export function AiBillingClient() {
           <thead>
             <tr>
               <th>Clínica</th>
+              <th>Tipo de consumo</th>
               <th>Saldo (MXN)</th>
-              <th>Consumo (MXN)</th>
+              <th>Consumo prepago (MXN)</th>
               <th>Costo real (USD)</th>
               <th>Participación</th>
               <th>Estado</th>
@@ -404,7 +487,8 @@ export function AiBillingClient() {
           </thead>
           <tbody>
             {d.clinics.map((c) => {
-              const balColor = c.balanceCents < 0 ? "var(--danger)" : c.lowBalance ? "var(--warning)" : "var(--text-1)";
+              const bal = c.balanceCents;
+              const balColor = bal == null ? "var(--text-3)" : bal < 0 ? "var(--danger)" : c.lowBalance ? "var(--warning)" : "var(--text-1)";
               return (
                 <tr key={c.clinicId}>
                   <td>
@@ -420,17 +504,24 @@ export function AiBillingClient() {
                       </div>
                     </div>
                   </td>
-                  <td className="mono" style={{ fontWeight: 500, color: balColor }}>
-                    {fmtMXNdec(c.balanceCents / 100)}
+                  <td>
+                    <UsageKindChip kind={c.usageKind} />
+                  </td>
+                  {/* Sin monedero va "—", no $0.00: un cero se lee como deuda. */}
+                  <td className="mono" style={{ fontWeight: 500, color: balColor }} title={bal == null ? "La clínica no tiene monedero prepago" : undefined}>
+                    {bal == null ? "—" : fmtMXNdec(bal / 100)}
                   </td>
                   <td className="mono" style={{ color: "var(--text-2)" }}>
-                    {formatCurrency(c.consumoMxn, "MXN")}
+                    {c.prepaidEventCount > 0 ? formatCurrency(c.consumoMxn, "MXN") : "—"}
                   </td>
                   <td className="mono" style={{ color: "var(--text-3)" }}>
                     {fmtUSD(c.realCostUsd)}
+                    {c.absorbedCostUsd > 0 && c.prepaidCostUsd > 0 && (
+                      <div style={{ fontSize: 10 }}>{fmtUSD(c.absorbedCostUsd)} absorbido</div>
+                    )}
                   </td>
-                  <td className="mono" style={{ color: "var(--text-3)" }}>
-                    {c.sharePct.toFixed(1)}%
+                  <td className="mono" style={{ color: "var(--text-3)" }} title="Sobre el costo total en Anthropic">
+                    {c.costSharePct.toFixed(1)}%
                   </td>
                   <td>
                     {!c.hasWallet ? (
@@ -439,7 +530,7 @@ export function AiBillingClient() {
                       <BadgeNew tone="danger" dot>
                         Pausado
                       </BadgeNew>
-                    ) : c.balanceCents < 0 ? (
+                    ) : (bal ?? 0) < 0 ? (
                       <BadgeNew tone="danger" dot>
                         Negativo
                       </BadgeNew>
@@ -474,7 +565,7 @@ export function AiBillingClient() {
             })}
             {d.clinics.length === 0 && (
               <tr>
-                <td colSpan={7} style={{ padding: 40, textAlign: "center", color: "var(--text-3)", fontSize: 13 }}>
+                <td colSpan={8} style={{ padding: 40, textAlign: "center", color: "var(--text-3)", fontSize: 13 }}>
                   Sin consumo ni monederos todavía
                 </td>
               </tr>
@@ -557,7 +648,11 @@ export function AiBillingClient() {
           <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 420 }}>
             <CardNew
               title={`Ajustar saldo · ${adjustClinic.name}`}
-              sub={`Saldo actual: ${fmtMXNdec(adjustClinic.balanceCents / 100)}`}
+              sub={
+                adjustClinic.balanceCents == null
+                  ? "Sin monedero: el ajuste le crea uno con este saldo"
+                  : `Saldo actual: ${fmtMXNdec(adjustClinic.balanceCents / 100)}`
+              }
               action={
                 <button onClick={() => setAdjustClinic(null)} className="icon-btn-new" aria-label="Cerrar">
                   <X size={14} />
@@ -591,7 +686,7 @@ export function AiBillingClient() {
                 <div style={{ marginTop: 10, fontSize: 12, color: "var(--text-3)" }}>
                   Nuevo saldo:{" "}
                   <span className="mono" style={{ color: "var(--text-1)" }}>
-                    {fmtMXNdec((adjustClinic.balanceCents + Math.round(Number(adjustPesos) * 100)) / 100)}
+                    {fmtMXNdec(((adjustClinic.balanceCents ?? 0) + Math.round(Number(adjustPesos) * 100)) / 100)}
                   </span>
                 </div>
               )}
@@ -611,14 +706,47 @@ export function AiBillingClient() {
   );
 }
 
-function StatTile({ label, value, sub, accent }: { label: string; value: string; sub?: string; accent?: boolean }) {
+function StatTile({
+  label,
+  value,
+  sub,
+  accent,
+  warn,
+}: {
+  label: string;
+  value: string;
+  sub?: string;
+  accent?: boolean;
+  /** Costo que sale sin ingreso enfrente: se pinta ámbar, no rojo (no es una pérdida). */
+  warn?: boolean;
+}) {
+  const color = accent ? "var(--success)" : warn ? "var(--warning)" : "var(--text-1)";
   return (
     <CardNew>
       <div style={{ fontSize: 11, color: "var(--text-3)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: 8 }}>
         {label}
       </div>
-      <div style={{ fontSize: 24, fontWeight: 600, color: accent ? "var(--success)" : "var(--text-1)" }}>{value}</div>
+      <div style={{ fontSize: 24, fontWeight: 600, color }}>{value}</div>
       {sub && <div style={{ fontSize: 11, color: "var(--text-3)", marginTop: 4 }}>{sub}</div>}
     </CardNew>
   );
+}
+
+function SectionLabel({ title, hint }: { title: string; hint?: string }) {
+  return (
+    <div style={{ marginBottom: 10 }}>
+      <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text-2)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+        {title}
+      </div>
+      {hint && <div style={{ fontSize: 11, color: "var(--text-3)", marginTop: 2 }}>{hint}</div>}
+    </div>
+  );
+}
+
+/** De dónde salió el consumo de esa clínica: del monedero o de su mensualidad. */
+function UsageKindChip({ kind }: { kind: UsageKind }) {
+  if (kind === "prepaid") return <BadgeNew tone="brand">Prepago</BadgeNew>;
+  if (kind === "included") return <BadgeNew tone="info">Incluido en plan</BadgeNew>;
+  if (kind === "mixed") return <BadgeNew tone="warning">Prepago + plan</BadgeNew>;
+  return <BadgeNew tone="neutral">Sin consumo</BadgeNew>;
 }

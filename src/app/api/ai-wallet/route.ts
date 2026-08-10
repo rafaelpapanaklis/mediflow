@@ -22,8 +22,13 @@ export async function GET() {
     const wallet = await getOrCreateWallet(ctx.clinicId);
 
     const [usageEvents, txns] = await Promise.all([
+      // SOLO consumo que salió del monedero (billedCents > 0). Desde que la IA
+      // clínica también registra AiUsageEvent — con billedCents 0, porque el
+      // plan la incluye — un findMany sin filtro llenaría este historial de
+      // renglones de $0.00 que la clínica nunca pagó y empujaría fuera de los
+      // 20 los consumos reales del bot.
       prisma.aiUsageEvent.findMany({
-        where: { clinicId: ctx.clinicId },
+        where: { clinicId: ctx.clinicId, billedCents: { gt: 0 } },
         orderBy: { createdAt: "desc" },
         take: 20,
       }),

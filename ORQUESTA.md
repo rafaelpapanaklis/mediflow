@@ -6006,3 +6006,131 @@ fuerza ≥ "Regular"), más el tope de 72 caracteres de bcrypt. La pantalla reus
 layout y el helper llegaron a quedar pisados por una versión distinta. Se detectó comparando
 `git status` contra lo escrito, se reaplicó y se verificó archivo por archivo antes de compilar y
 commitear. Vale la pena mirar el diff de `src/app/dashboard/layout.tsx` con eso en mente.
+## Tesorería de IA: el consumo clínico deja de ser invisible (`feat/ai-treasury-clinical-cost`)
+
+**El agujero.** Convivían dos contabilidades que no se hablaban. El contador de tokens del plan
+(`Clinic.aiTokensUsed`) lo movían las cuatro rutas clínicas, pero no generaba ni un registro de
+dinero. El monedero (`AiWallet`/`AiUsageEvent`) solo lo tocaba el bot de WhatsApp. Resultado: cada
+"Analizar con IA" le costaba dólares reales a DaleControl y la Tesorería mostraba $0 — y como esa
+pantalla lista la unión de clínicas *con evento* o *con monedero*, una clínica que solo usara IA
+clínica (el caso de Clínica Dental Mariel, 4,311 tokens) ni siquiera aparecía en la tabla.
+
+### Qué se registra ahora
+
+Nace `recordUsageNoCharge()` en `src/lib/ai-billing/record-usage.ts`: **mide, no cobra**. Calcula el
+costo real con lo que ya existía (`getPricingConfig()` + `computeCostUsdMicros()`), escribe UN
+`AiUsageEvent` con ese `costUsdMicros`, el `fxRate` y `feePct` vigentes, y **`billedCents: 0`**. No
+toca `AiWallet`: no crea monedero, no descuenta saldo, no dispara recargas. Todo dentro de un
+try/catch con `console.error` — cuando se llega ahí la IA ya le respondió al doctor, así que un
+fallo de medición se traga y no rompe nada.
+
+Se llama en las cuatro rutas, justo después del `addAiTokens` que ya estaba, sin tocar ningún
+`MODEL`, ni el gate de cupo, ni los 429/403/503:
+
+| Ruta | feature | modelo |
+|---|---|---|
+| `POST /api/ai` | `chat_assistant` | `AI_CHAT_MODEL` (Haiku) |
+| `POST /api/consult/ai-assist` | `consult_analysis` | Sonnet |
+| `POST /api/xrays/[id]/analyze` | `xray_analysis` | Sonnet |
+| `POST /api/prescriptions/check-contraindications` | `prescription_check` | Sonnet |
+
+**Cache hits: cero eventos.** Las tres rutas con atajo (radiografía por `fileId`, dos rutas de ella,
+y receta por hash) devuelven *antes* del `fetch` a Anthropic; el punto de registro está después de
+un `response.ok`, así que un hit no puede generar costo fantasma. Tampoco registra si los tokens
+vienen en cero (respuesta mock o vacía).
+
+**Un ajuste de precisión que no pedía el encargo, y conviene revisar.** `computeCostUsdMicros`
+cobraba *todo* el cache al precio de LECTURA (0.30 USD/Mtok) y `cacheWriteUsdPerMtok` (3.75) estaba
+en la config, editable en el panel, sin usarse en ningún cálculo. Al bot le daba igual porque no
+manda `cache_control`, pero las tres rutas clínicas sí lo mandan: con cache frío eso subestimaba el
+costo real ~25%. Se añadió un sexto parámetro **opcional** `cacheWriteTokens` (default 0), así que
+`chargeUsage` y el prepago se comportan exactamente igual que antes, y las rutas clínicas pasan
+`cache_creation` y `cache_read` por separado. La columna `cacheTokens` sigue guardando el total.
+
+### Cómo quedó separado el margen
+
+El separador es `billedCents`, y los dos bloques cubren todos los eventos sin solaparse:
+
+- **Prepago (WhatsApp), `billedCents > 0`** — tiene ingreso, así que tiene margen. `margin.allTime`
+  y `margin.month` ahora se calculan **solo** con estos eventos. El margen del prepago no se movió
+  ni un peso por culpa del consumo clínico, que era justo el riesgo: meter costo sin ingreso
+  enfrente lo habría pintado negativo y mentiroso.
+- **Incluido en el plan, `billedCents = 0`** — bloque nuevo `absorbed` en el payload, con costo en
+  USD **y** en MXN (convertido con el `fxRate` histórico de cada evento, igual que el prepago). En
+  la UI es una tarjeta ámbar, "Costo absorbido (incluido en planes)", con el subtítulo *"La clínica
+  no paga extra; sale de su mensualidad."*
+
+Encima de los dos, un bloque `cost` con el **costo total del mes (prepago + absorbido)** — ese es el
+cheque real a Anthropic — y una sección "Este mes" que lo desglosa en tres tarjetas. El saldo de
+Anthropic, la quema y el runway **sí** suman los dos bloques: es dinero que sale, venga de donde
+venga. Al desplegarse, el saldo va a bajar y el runway a acortarse; eso no es una regresión, es que
+por fin se está contando la IA clínica.
+
+En la tabla por clínica: `balanceCents` viaja como `null` cuando no hay monedero y se pinta **"—"**,
+no `$0.00` — un cero se leía como deuda. Se añadió la columna **Tipo de consumo** (Prepago /
+Incluido en plan / Prepago + plan), el consumo prepago va "—" si nunca hubo cobro, y
+**Participación** pasó a repartirse sobre el **costo total** en vez de sobre lo facturado: con
+clínicas que solo tienen consumo absorbido, repartir sobre lo facturado le daba 0.0% a todas y la
+columna no decía nada. El orden pone primero los monederos (saldo más bajo primero, que es lo
+urgente) y después las clínicas sin monedero por costo descendente.
+
+`MAX_ROWS` (500) se respeta y ahora recorta **antes** de pedir los nombres: el `IN` de
+`clinic.findMany` crecía con cada clínica que hubiera tocado la IA alguna vez. `capped` se levanta
+tanto si se llenaron los monederos como si la lista completa pasó el tope, y el subtítulo de la
+tabla dice cuántas de cuántas se están viendo (antes imprimía el mismo número dos veces).
+
+### Dos efectos secundarios que había que atajar
+
+1. **El historial del monedero de la clínica** (`GET /api/ai-wallet`, pantalla WhatsApp → bot →
+   saldo) listaba los últimos 20 `AiUsageEvent` **sin filtro**. Con el cambio se habría llenado de
+   renglones de $0.00 que la clínica nunca pagó, empujando fuera de los 20 los consumos reales del
+   bot. Ahora filtra `billedCents > 0`: un monedero solo enseña lo que salió del monedero. La
+   pantalla sigue sin ver USD, fx ni fee.
+2. **La Tesorería es solo de DaleControl.** Costo en USD, fee y margen viven exclusivamente en
+   `/api/admin/ai-billing`, detrás de `isAdminAuthed()`. Ninguna superficie de clínica los recibe.
+
+### El desglose "¿En qué se fue tu IA este mes?" — confirmado, pero la causa no era la que parecía
+
+Se verificó y **el diagnóstico previo no se sostiene**: las cuatro rutas ya le pasaban su `feature`
+a `addAiTokens` (`chat`, `consult_assist`, `xray_analysis`, `contraindications`), así que sí se
+estaba etiquetando. Lo que pasa es que `/api/ai/usage` lee `AiQuotaUsage`, y esa tabla depende de
+`sql/ai-quota-usage.sql`, que sigue **sin aplicar**. Sin tabla, el `groupBy` cae en su `catch`,
+`byFeatureTotal` queda en 0 y toda la barra se va a la fila "sin detalle" → el 100% que se veía.
+Registrar `AiUsageEvent` no arreglaba eso por sí solo: son tablas distintas.
+
+Como el encargo prohíbe SQL, se resolvió por el otro lado: `/api/ai/usage` ahora tiene un **plan B**
+que arma el desglose desde `AiUsageEvent` —que sí existe en producción— cuando el desglose del cupo
+viene vacío. Solo entra si vino vacío (sumar las dos fuentes duplicaría: la misma llamada escribe en
+ambas) y filtra `billedCents <= 0`, porque el prepago del bot sale del monedero, no del cupo del
+plan, y no pinta en esa pantalla. Los tokens se suman con el mismo criterio que usó el contador
+(entrada + salida + cache), así que el desglose cuadra con `used` y la fila "sin detalle" se
+encoge sola.
+
+Para que las dos contabilidades den la misma etiqueta, `normalizeAiFeature` aprendió los slugs de
+la Tesorería como alias (`chat_assistant`→`chat`, `consult_analysis`→`consult_assist`,
+`prescription_check`→`contraindications`, `xray_analysis` ya coincidía), con guarda de
+`hasOwnProperty` para que un slug heredado de `Object` no devuelva una función. Las etiquetas
+quedaron en es/en: **Chat del asistente · Análisis de consulta · Análisis de radiografías · Revisión
+de recetas**. Y las etiquetas de `AiUsageEvent.feature` viven ahora en un mapa compartido en
+`src/lib/ai-billing/types.ts`, que la pantalla del saldo del bot ya consume en vez de su `if`
+suelto.
+
+### Sin SQL, confirmado
+
+**No se creó ninguna migración ni ningún `.sql`.** `AiUsageEvent.feature` ya era `String` (no un
+enum de Postgres) con default `whatsapp_bot`, y el modelo ya traía `model`, `inputTokens`,
+`outputTokens`, `cacheTokens`, `costUsdMicros`, `fxRate`, `feePct` y `billedCents`. `schema.prisma`
+no se tocó. Todo lo nuevo son valores dentro de columnas que ya existían.
+
+**Gate:** `npx next build` completo, 358/358 páginas, tipos válidos, sin errores de compilación;
+`npx tsc --noEmit` limpio. Los `prisma:error` del log son el ruido conocido de correr el build en un
+worktree sin `.env` (`DATABASE_URL` ausente), no del cambio.
+
+### Lo que falta y es de Rafael
+
+Las cuatro verificaciones de punta a punta —evento con `feature: consult_analysis`, costo > 0 y
+`billedCents = 0`; Mariel apareciendo con Saldo "—"; el margen del prepago intacto; y el desglose
+sin el 100% de "otro consumo"— **no se pudieron correr aquí**: el worktree no tiene `.env`, así que
+no hay base contra la que pegarle. Quedan como QA manual. Y sigue pendiente aplicar
+`sql/ai-quota-usage.sql`: con él, el desglose vuelve a salir de la fuente primaria y el plan B se
+apaga solo.

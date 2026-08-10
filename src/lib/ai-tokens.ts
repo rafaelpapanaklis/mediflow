@@ -1,12 +1,20 @@
 import { prisma } from "@/lib/prisma";
+import {
+  AI_FEATURE_CHAT_ASSISTANT,
+  AI_FEATURE_CONSULT_ANALYSIS,
+  AI_FEATURE_PRESCRIPTION_CHECK,
+  AI_FEATURE_XRAY_ANALYSIS,
+} from "@/lib/ai-billing/types";
 
 /**
  * Slugs estables (en inglés) de cada función de IA que cobra contra el cupo
  * mensual del plan. Lista CERRADA: si un caller manda algo fuera de aquí se
  * normaliza a "other" para que el desglose no se contamine.
  *
- * ⚠️ No confundir con AiUsageEvent.feature ("whatsapp_bot"), que pertenece al
- * monedero prepago en MXN del bot de WhatsApp — otra bolsa distinta.
+ * ⚠️ No confundir con AiUsageEvent.feature, que es la contabilidad en DINERO
+ * (costo real en USD). Ahí conviven el prepago del bot de WhatsApp y el costo
+ * que DaleControl absorbe por la IA clínica; los slugs son otros y se traducen
+ * a estos con AI_FEATURE_ALIASES, más abajo.
  */
 export const AI_FEATURES = [
   "chat",               // POST /api/ai — asistente de chat del panel
@@ -37,9 +45,30 @@ export const AI_FEATURE_LABEL_KEY: Record<AiFeature, string> = {
   other:              "common.aiFeature.other",
 };
 
-/** Normaliza a la lista cerrada; cualquier cosa desconocida cae en "other". */
+/**
+ * Alias: slug de `AiUsageEvent.feature` (contabilidad de la Tesorería) → slug
+ * del cupo del plan. Las dos contabilidades le pusieron nombres distintos a la
+ * MISMA función; aquí convergen para que el desglose que ve la clínica salga
+ * igual venga de la tabla del cupo o de los eventos de costo.
+ */
+const AI_FEATURE_ALIASES: Record<string, AiFeature> = {
+  [AI_FEATURE_CHAT_ASSISTANT]: "chat",
+  [AI_FEATURE_CONSULT_ANALYSIS]: "consult_assist",
+  [AI_FEATURE_XRAY_ANALYSIS]: "xray_analysis", // mismo slug en las dos; explícito a propósito
+  [AI_FEATURE_PRESCRIPTION_CHECK]: "contraindications",
+};
+
+/**
+ * Normaliza a la lista cerrada; cualquier cosa desconocida cae en "other".
+ * hasOwnProperty y no `AI_FEATURE_ALIASES[feature]` a secas: un slug heredado
+ * de Object ("constructor") devolvería una función en vez de un AiFeature.
+ */
 export function normalizeAiFeature(feature: string | null | undefined): AiFeature {
-  return AI_FEATURES.includes(feature as AiFeature) ? (feature as AiFeature) : "other";
+  if (AI_FEATURES.includes(feature as AiFeature)) return feature as AiFeature;
+  if (feature && Object.prototype.hasOwnProperty.call(AI_FEATURE_ALIASES, feature)) {
+    return AI_FEATURE_ALIASES[feature];
+  }
+  return "other";
 }
 
 /**

@@ -51,15 +51,33 @@ export async function GET() {
 
   const { t } = serverTForLocale(localeFromClinic(clinic));
 
-  // Desglose del mes en curso. Fail-open: si la tabla todavía no existe
-  // (sql/ai-quota-usage.sql sin aplicar) devolvemos el medidor sin detalle en
-  // vez de romper la pantalla.
+  // Desglose del mes en curso. Fail-open en las dos fuentes: si ninguna
+  // responde devolvemos el medidor sin detalle en vez de romper la pantalla.
   let byFeature: { feature: AiFeature; label: string; tokens: number; percent: number }[] = [];
   let byFeatureTotal = 0;
+
+  const monthStart = aiMonthStart(now);
+
+  // Da forma al desglose a partir de {slug normalizado: tokens}.
+  const shapeBreakdown = (totals: Record<string, number>) => {
+    const keys = Object.keys(totals);
+    const total = keys.reduce((acc, k) => acc + totals[k], 0);
+    const rows = keys
+      .map((slug) => ({
+        feature: slug as AiFeature,
+        label: t(AI_FEATURE_LABEL_KEY[slug as AiFeature] ?? AI_FEATURE_LABEL_KEY.other),
+        tokens: totals[slug],
+        percent: total > 0 ? Math.round((totals[slug] / total) * 100) : 0,
+      }))
+      .filter((r) => r.tokens > 0)
+      .sort((a, b) => b.tokens - a.tokens);
+    return { rows, total };
+  };
+
   try {
     const rows = await prisma.aiQuotaUsage.groupBy({
       by: ["feature"],
-      where: { clinicId: ctx.clinicId, createdAt: { gte: aiMonthStart(now) } },
+      where: { clinicId: ctx.clinicId, createdAt: { gte: monthStart } },
       _sum: { tokens: true },
     });
 
@@ -70,23 +88,55 @@ export async function GET() {
       totals[slug] = (totals[slug] ?? 0) + (rows[i]._sum.tokens ?? 0);
     }
 
-    byFeatureTotal = Object.keys(totals).reduce((acc, k) => acc + totals[k], 0);
-
-    byFeature = Object.keys(totals)
-      .map((slug) => ({
-        feature: slug as AiFeature,
-        label: t(AI_FEATURE_LABEL_KEY[slug as AiFeature] ?? AI_FEATURE_LABEL_KEY.other),
-        tokens: totals[slug],
-        percent:
-          byFeatureTotal > 0 ? Math.round((totals[slug] / byFeatureTotal) * 100) : 0,
-      }))
-      .filter((r) => r.tokens > 0)
-      .sort((a, b) => b.tokens - a.tokens);
+    const shaped = shapeBreakdown(totals);
+    byFeature = shaped.rows;
+    byFeatureTotal = shaped.total;
   } catch (err) {
     console.error("[ai/usage] desglose no disponible (fail-open)", {
       clinicId: ctx.clinicId,
       err,
     });
+  }
+
+  // Plan B: los eventos de COSTO (AiUsageEvent). Desde ago-2026 cada llamada de
+  // IA clínica escribe uno con su feature y billedCents = 0, y esa tabla sí
+  // existe en producción — ai_quota_usage puede no estar aplicada todavía, y
+  // sin ella la pantalla decía "otro consumo sin detalle 100%".
+  //
+  // Solo entra si el desglose del cupo vino VACÍO: sumar las dos fuentes
+  // duplicaría, porque la misma llamada escribe en ambas.
+  //
+  // billedCents <= 0 filtra a propósito el consumo PREPAGO del bot de WhatsApp:
+  // ese sale del monedero, no del cupo del plan, y no pinta en esta pantalla.
+  if (byFeatureTotal === 0) {
+    try {
+      const rows = await prisma.aiUsageEvent.groupBy({
+        by: ["feature"],
+        where: { clinicId: ctx.clinicId, createdAt: { gte: monthStart }, billedCents: { lte: 0 } },
+        _sum: { inputTokens: true, outputTokens: true, cacheTokens: true },
+      });
+
+      const totals: Record<string, number> = {};
+      for (let i = 0; i < rows.length; i++) {
+        const slug = normalizeAiFeature(rows[i].feature);
+        // Mismo criterio de "tokens" que usó el contador del cupo: entrada +
+        // salida + cache, así el desglose cuadra con `used`.
+        const tokens =
+          (rows[i]._sum.inputTokens ?? 0) +
+          (rows[i]._sum.outputTokens ?? 0) +
+          (rows[i]._sum.cacheTokens ?? 0);
+        totals[slug] = (totals[slug] ?? 0) + tokens;
+      }
+
+      const shaped = shapeBreakdown(totals);
+      byFeature = shaped.rows;
+      byFeatureTotal = shaped.total;
+    } catch (err) {
+      console.error("[ai/usage] desglose por eventos de costo no disponible (fail-open)", {
+        clinicId: ctx.clinicId,
+        err,
+      });
+    }
   }
 
   // Reconciliación. Si el contador quedó en un mes anterior reportamos 0 (el
