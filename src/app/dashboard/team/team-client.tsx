@@ -143,13 +143,14 @@ function MemberForm({
           placeholder="doctor@clinica.com"
           value={form.email}
           onChange={e => set("email", e.target.value)}
-          disabled={isEdit}
         />
-        {!isEdit && (
-          <p className="text-xs text-muted-foreground">
-            {t("settings.team.emailHint")}
-          </p>
-        )}
+        {/* En edición el campo estaba `disabled` — y aun así el PATCH aceptaba
+         *  el email del body y lo tiraba a la basura. Ahora se puede cambiar y
+         *  el endpoint lo aplica en Supabase Auth + Prisma, así que el hint
+         *  tiene que decir que se está tocando el login, no un dato de ficha. */}
+        <p className="text-xs text-muted-foreground">
+          {isEdit ? t("settings.team.emailHintEdit") : t("settings.team.emailHint")}
+        </p>
       </div>
 
       {/* Role */}
@@ -518,6 +519,10 @@ export function TeamClient({ team: initialTeam, currentUserId, currentUserRole, 
   const [tempPassMode, setTempPassMode] = useState<"create" | "reset" | null>(null);
   const [tempPassFor, setTempPassFor] = useState<string>("");
   const [copied,     setCopied]     = useState(false);
+  // Aviso persistente tras cambiar el correo de un miembro. Va en banner y no
+  // en toast a propósito: el admin tiene que entregarle el dato al doctor (a
+  // partir de ahora entra con ese correo) y un toast de 4s se lo come.
+  const [emailNotice, setEmailNotice] = useState<{ name: string; email: string } | null>(null);
 
   const isSuperAdmin = currentUserRole === "SUPER_ADMIN";
 
@@ -580,9 +585,20 @@ export function TeamClient({ team: initialTeam, currentUserId, currentUserRole, 
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
-      setTeam(prev => prev.map(m => m.id === editMember.id ? { ...m, ...form } : m));
+      // El email se pinta con el que devolvió el server, no con el del form:
+      // el endpoint lo normaliza (trim + minúsculas) antes de guardarlo.
+      const savedEmail: string = data.email ?? form.email;
+      setTeam(prev => prev.map(m => m.id === editMember.id ? { ...m, ...form, email: savedEmail } : m));
       setEditMember(null);
       toast.success(t("settings.team.dataUpdated"));
+      // El cambio de correo es un cambio de LOGIN: el server manda emailChanged
+      // y levantamos el banner. El fallback comparando contra el correo previo
+      // cubre un deploy en el que el server aún no devuelva el flag.
+      const emailChanged: boolean =
+        data.emailChanged ?? (savedEmail.trim().toLowerCase() !== editMember.email.trim().toLowerCase());
+      if (emailChanged) {
+        setEmailNotice({ name: `${form.firstName} ${form.lastName}`.trim(), email: savedEmail });
+      }
       router.refresh();
     } catch (err: any) {
       toast.error(err.message);
@@ -737,6 +753,39 @@ export function TeamClient({ team: initialTeam, currentUserId, currentUserRole, 
             </div>
             <button
               onClick={() => { setTempPass(null); setTempPassMode(null); setTempPassFor(""); }}
+              type="button"
+              className="btn-new btn-new--ghost btn-new--sm"
+              aria-label={t("common.close")}
+            >
+              <X size={16} strokeWidth={1.75} />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Aviso de correo de acceso cambiado. Persistente (se cierra a mano)
+       *  porque el admin tiene que pasarle el dato al miembro: su contraseña
+       *  sigue siendo la misma, pero el correo con el que entra ya no. */}
+      {emailNotice && (
+        <div style={{
+          background: "var(--info-soft)",
+          // No hay --info-border-strong (sólo danger/warning lo tienen); este es
+          // el par que ya usa reminders-section.tsx para un bloque informativo.
+          border: "1px solid var(--info)",
+          borderRadius: "var(--radius-lg)",
+          padding: 16, marginBottom: 18,
+        }}>
+          <div style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 13, fontWeight: 600, color: "var(--info-strong)", marginBottom: 4 }}>
+                {t("settings.team.emailChangedTitle", { name: emailNotice.name })}
+              </div>
+              <div style={{ fontSize: 12, color: "var(--info-strong)", opacity: 0.85 }}>
+                {t("settings.team.emailChangedDesc", { email: emailNotice.email })}
+              </div>
+            </div>
+            <button
+              onClick={() => setEmailNotice(null)}
               type="button"
               className="btn-new btn-new--ghost btn-new--sm"
               aria-label={t("common.close")}

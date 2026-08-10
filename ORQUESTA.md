@@ -5741,3 +5741,84 @@ El SQL ya está corrido. Lo que falta es de operación:
 Y lo que **nadie debe "arreglar" sin pensarlo dos veces**: el conteo mira `invitedByAffiliateId` a
 un salto. Si alguien alguna vez lo convierte en recursivo "para que sea más justo", el programa
 deja de ser de un solo nivel y el costo deja de ser predecible.
+
+---
+
+## [Fix-Email-Equipo] · El correo de un miembro no se guardaba (no-op silencioso)
+
+**El síntoma.** En `/dashboard/team`, editar el Email de un doctor terminaba en "Datos
+actualizados" y el correo seguía siendo el de antes. El `PATCH /api/team/[id]` armaba su objeto
+`data` campo por campo — `firstName`, `lastName`, `specialty`, `color`, `phone`, `avatarUrl`,
+`role`, `isActive`, `services` y los NOM-024 — y **`email` no estaba en la lista**. Llegaba en el
+body y se tiraba a la basura sin un solo error. El administrador creía haber guardado.
+
+Un detalle del reporte que no era exacto: el input **sí estaba bloqueado** (`disabled={isEdit}` en
+`team-client.tsx`). O sea que había dos capas del mismo agujero — la UI no dejaba escribir y el
+endpoint no dejaba guardar. Se quitaron las dos.
+
+**Por qué no era una línea.** El email de un miembro no es una columna de Prisma: es su
+**identidad de login en Supabase Auth**. Añadirlo al `update` de Prisma y nada más habría sido peor
+que el bug: el panel mostraría el correo nuevo y el doctor seguiría entrando con el viejo, sin nada
+en la pantalla que explicara por qué. Se aplica en los dos lados.
+
+**El orden, que es lo delicado.** Supabase primero — es la fuente de verdad del login — con
+`supabaseAdmin.auth.admin.updateUserById(supabaseId, { email, email_confirm: true })`, el mismo
+patrón de `reset-password/route.ts`. El `email_confirm` no es decorativo: sin él el correo queda
+pendiente de confirmar y el doctor se queda fuera esperando un mail que nunca pidió. Si Supabase
+falla, **Prisma no se toca** y no se guarda ningún campo del formulario. Sólo si Auth respondió OK
+se escribe en Prisma. Y si Prisma truena después, se revierte el correo en Supabase; si la
+reversión también falla, queda un `console.error` con las dos direcciones y el mensaje al usuario
+dice literalmente con cuál correo quedó entrando la cuenta, para que soporte no tenga que
+adivinarlo.
+
+**La consistencia real es a N filas, no a dos lados.** El schema es
+`@@unique([supabaseId, clinicId])`: una persona tiene **una fila `User` por clínica**, y
+`/api/clinics` crea cada sucursal nueva con el `supabaseId` del dueño. Supabase Auth, en cambio, es
+global: cambiar el login lo cambia para todas sus sedes de golpe. Tocar sólo la fila de la clínica
+activa habría dejado a las demás mostrando el correo viejo — la misma desincronización que este fix
+viene a cerrar, sólo que escondida un nivel más abajo. Por eso el `$transaction` actualiza la fila
+del path y, en la misma transacción, las filas hermanas del mismo `supabaseId`. Todas o ninguna.
+Esto además importa porque `User.email` **no es `@unique`** y varios flujos lo usan como llave de
+identidad a mano (`auth/check-email`, `auth/register-oauth`): una fila con el correo viejo no es
+cosmética, contamina esas búsquedas.
+
+**Validaciones, todas antes de escribir nada.** Formato (mismo patrón que `EMAIL_RE` de
+`lib/import/engine.ts`, declarado local para no arrastrar exceljs a la ruta); duplicado dentro de la
+clínica — el mismo chequeo que ya hacía el alta en `team/route.ts`, extendido a todas las clínicas
+donde vamos a escribir y hecho `insensitive` para atrapar filas viejas guardadas con mayúsculas; y
+si el correo es idéntico al actual **no pasa nada**: cero llamadas a Supabase, cero escrituras, cero
+aviso. Esa comparación también es case-insensitive, porque el modal reenvía el formulario completo y
+un `Doctor@X.com` guardado hace años no debe contar como cambio. El caso "ese correo ya tiene cuenta
+en DaleControl" devuelve el mismo texto entendible que ya devolvía el alta, no el error crudo de
+Supabase.
+
+**Sobre el self-edit — se permite, a propósito.** El guard que ya existía bloquea dos cosas al
+editarse uno mismo: cambiarse el rol (escalada) y desactivarse (lock-out). Cambiarse el correo no es
+ninguna de las dos. `getAuthContext` resuelve la sesión por `supabaseId` — el `sub` del JWT, que no
+cambia al cambiar el email — y la contraseña sigue siendo la misma, así que ni se cae la sesión
+abierta ni se pierde el acceso. Es además el caso legítimo más común: el dueño de la clínica cambia
+su propio correo. Queda documentado en el código para que no parezca un olvido.
+
+**Lo que sí se cerró es el vector inverso.** Un ADMIN podía quedar habilitado para cambiarle el
+correo a un SUPER_ADMIN, y eso es apoderarse de su cuenta: con el correo nuevo se pide "olvidé mi
+contraseña" y se toma el login del dueño de la plataforma. El guard existente sólo cubría rol y
+estado. Ahora un no-SUPER_ADMIN tampoco puede tocarle el correo — mismo criterio que ya aplicaban
+`reset-password` y el `DELETE`.
+
+**Auditoría.** `logMutation` ya corría aquí, y como el `before` es la fila completa leída antes y el
+`after` es la que devuelve el `update` (ninguno lleva `select`), `diffObjects` registra
+`email: {before, after}` solo. Quedó anotado en el código que a ninguno de los dos se le puede meter
+un `select`: un cambio de identidad de login tiene que seguir siendo rastreable.
+
+**La UI ya lo dice.** El input se desbloqueó, el hint en edición avisa que se está tocando el correo
+de inicio de sesión y que la contraseña no cambia, y al guardar un correo distinto sale un banner
+persistente — no un toast, que se lo lleva el tiempo — con el nombre del miembro y el correo nuevo,
+recordando que el anterior ya no sirve para entrar. El endpoint devuelve `emailChanged` para que ese
+aviso salga cuando cambió de verdad y no cuando el admin simplemente volvió a guardar el formulario.
+
+**Lo que nadie debe "simplificar" después:** el orden Supabase → Prisma y la actualización de las
+filas hermanas. Invertir el orden deja cuentas que el panel jura que existen y que Auth no reconoce;
+quitar el `updateMany` de las hermanas reintroduce el mismo bug para cualquier clínica con
+sucursales, que es justo donde más caro sale depurarlo.
+
+**Sin SQL y sin tocar `prisma/schema.prisma`** — no hacía falta ninguno de los dos.
