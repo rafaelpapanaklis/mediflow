@@ -4,6 +4,8 @@ import { prisma } from "@/lib/prisma";
 import { addAiTokens } from "@/lib/ai-tokens";
 import { persistentRateLimit } from "@/lib/failban";
 import { AI_CHAT_MODEL } from "@/lib/ai/models";
+import { recordUsageNoCharge } from "@/lib/ai-billing/record-usage";
+import { AI_FEATURE_CHAT_ASSISTANT } from "@/lib/ai-billing/types";
 
 const AI_SYSTEM_PROMPT = `Eres un asistente clínico de apoyo para médicos en México. 
 Tu función es ayudar al doctor a:
@@ -111,6 +113,16 @@ export async function POST(req: NextRequest) {
     const totalTokens  = inputTokens + outputTokens;
 
     await addAiTokens(ctx.clinicId, totalTokens, "chat", ctx.userId);
+
+    // Costo real para DaleControl (Tesorería de IA). No se le cobra a la
+    // clínica — su plan ya lo incluye — pero sí se mide. Best-effort.
+    await recordUsageNoCharge({
+      clinicId: ctx.clinicId,
+      feature: AI_FEATURE_CHAT_ASSISTANT,
+      model: AI_CHAT_MODEL,
+      inputTokens,
+      outputTokens,
+    });
 
     const reply           = data.content?.[0]?.text ?? "";
     const tokensRemaining = Math.max(0, clinic.aiTokensLimit - currentTokensUsed - totalTokens);

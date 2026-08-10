@@ -6,6 +6,8 @@ import { addAiTokens } from "@/lib/ai-tokens";
 import { persistentRateLimit } from "@/lib/failban";
 import { hasPermission } from "@/lib/auth/permissions";
 import { assertPatientVisible } from "@/lib/patient-visibility";
+import { recordUsageNoCharge } from "@/lib/ai-billing/record-usage";
+import { AI_FEATURE_PRESCRIPTION_CHECK } from "@/lib/ai-billing/types";
 
 export const dynamic = "force-dynamic";
 
@@ -336,6 +338,20 @@ export async function POST(req: NextRequest) {
     const totalTokens = inputTokens + outputTokens + cacheCreation + cacheRead;
 
     await addAiTokens(ctx.clinicId, totalTokens, "contraindications", ctx.userId);
+
+    // Costo real para DaleControl (Tesorería de IA). No se le cobra a la
+    // clínica — su plan ya lo incluye — pero sí se mide. Best-effort. Un hit
+    // del cache por hash devolvió antes de llegar aquí: sin llamada a Anthropic
+    // no hay costo y no se registra evento.
+    await recordUsageNoCharge({
+      clinicId: ctx.clinicId,
+      feature: AI_FEATURE_PRESCRIPTION_CHECK,
+      model: MODEL,
+      inputTokens,
+      outputTokens,
+      cacheTokens: cacheRead,
+      cacheWriteTokens: cacheCreation,
+    });
 
     /* Extrae el tool_use forzado; fallback defensivo si el modelo no lo usó. */
     const contentBlocks: any[] = Array.isArray(data.content) ? data.content : [];

@@ -23,11 +23,11 @@
   },
   "common": {
     "aiFeature": {
-      "chat": "Chat",
+      "chat": "Chat del asistente",
       "xrayAnalysis": "Análisis de radiografías",
       "dictation": "Dictado por voz",
-      "consultAssist": "Asistente de consulta",
-      "contraindications": "Contraindicaciones",
+      "consultAssist": "Análisis de consulta",
+      "contraindications": "Revisión de recetas",
       "homeopathy": "Homeopatía",
       "aiInsight": "Análisis de datos",
       "noShowPrediction": "Predicción de inasistencias",

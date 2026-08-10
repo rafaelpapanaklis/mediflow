@@ -7,6 +7,8 @@ import { createClient as createAdmin } from "@supabase/supabase-js";
 import { persistentRateLimit } from "@/lib/failban";
 import { BUCKETS, extractStoragePath } from "@/lib/storage";
 import { getModeConfig, isValidMode } from "@/lib/xray/analysis-modes";
+import { recordUsageNoCharge } from "@/lib/ai-billing/record-usage";
+import { AI_FEATURE_XRAY_ANALYSIS } from "@/lib/ai-billing/types";
 import type { XrayAnalysisMode } from "@prisma/client";
 
 // Prompt legacy preservado para tests/imports residuales. El flujo activo
@@ -457,6 +459,20 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
 
     // Update token usage (incluye tokens de cache creation/read que también se cobran)
     await addAiTokens(ctx.clinicId, totalTokens, "xray_analysis", ctx.userId);
+
+    // Costo real para DaleControl (Tesorería de IA). No se le cobra a la
+    // clínica — su plan ya lo incluye — pero sí se mide. Best-effort. Los
+    // cache hits por fileId ya devolvieron antes de llegar aquí: sin llamada a
+    // Anthropic no hay costo y no se registra evento.
+    await recordUsageNoCharge({
+      clinicId: ctx.clinicId,
+      feature: AI_FEATURE_XRAY_ANALYSIS,
+      model: MODEL,
+      inputTokens,
+      outputTokens,
+      cacheTokens: cacheRead,
+      cacheWriteTokens: cacheCreation,
+    });
 
     /* ─── Extract tool_use (happy path) o fallback a texto ─── */
     const contentBlocks: any[] = Array.isArray(data.content) ? data.content : [];

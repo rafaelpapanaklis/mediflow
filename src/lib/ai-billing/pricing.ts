@@ -58,9 +58,17 @@ export function clearPricingCache(): void {
  * Costo real de Anthropic en MICRO-USD (entero) para una llamada.
  * usdPerMtok = USD por millón de tokens ⇒ tokens * usdPerMtok = micro-USD
  * (porque tokens/1e6 * usdPerMtok = USD, y USD * 1e6 = micro-USD).
- * El cache se cobra al precio de lectura (cache_read); el bot no usa cache hoy,
- * así que en la práctica suele ser 0. `model` queda reservado para precios
- * por-modelo en el futuro (hoy hay un precio único).
+ *
+ * `cacheTokens` se cobra al precio de LECTURA (cache_read); el bot no usa cache
+ * hoy, así que en la práctica suele ser 0. `cacheWriteTokens` es opcional y
+ * pertenece a las rutas clínicas, que sí mandan `cache_control: ephemeral`:
+ * escribir cache cuesta ~12x leerlo (3.75 vs 0.30 USD/Mtok), así que meterlo en
+ * el mismo saco subestimaría el costo real ~25% en un análisis con cache frío.
+ * Los llamadores viejos (chargeUsage) no lo pasan y se comportan igual que antes.
+ *
+ * `model` queda reservado para precios por-modelo en el futuro (hoy hay un
+ * precio único, así que Haiku se cobra al precio de Sonnet: sobreestima, nunca
+ * subestima el cheque a Anthropic).
  */
 export function computeCostUsdMicros(
   model: string,
@@ -68,11 +76,13 @@ export function computeCostUsdMicros(
   outputTokens: number,
   cacheTokens: number,
   cfg: PricingConfig,
+  cacheWriteTokens = 0,
 ): number {
   const micros =
     inputTokens * cfg.inputUsdPerMtok +
     outputTokens * cfg.outputUsdPerMtok +
-    cacheTokens * cfg.cacheReadUsdPerMtok;
+    cacheTokens * cfg.cacheReadUsdPerMtok +
+    cacheWriteTokens * cfg.cacheWriteUsdPerMtok;
   return Math.max(0, Math.round(micros));
 }
 

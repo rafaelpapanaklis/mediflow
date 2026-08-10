@@ -13,6 +13,7 @@ import toast from "react-hot-toast";
 import { CardNew } from "@/components/ui/design-system/card-new";
 import { ButtonNew } from "@/components/ui/design-system/button-new";
 import { BadgeNew } from "@/components/ui/design-system/badge-new";
+import { aiBillingFeatureLabel } from "@/lib/ai-billing/types";
 import { fmtMXNdec, formatRelativeDate } from "@/lib/format";
 
 // ── Tipos de la API (GET /api/ai-wallet) ──────────────────────────────────────
@@ -52,10 +53,10 @@ type WalletData = {
 const PRESET_AMOUNTS_CENTS = [20000, 50000, 100000, 200000];
 
 // ── Etiquetas en español neutro ───────────────────────────────────────────────
-function featureLabel(feature: string): string {
-  if (feature === "whatsapp_bot") return "Bot de WhatsApp";
-  return feature;
-}
+// El historial de esta pantalla ya viene filtrado a consumo prepago, así que en
+// la práctica solo aparece "Bot de WhatsApp"; el mapa compartido cubre el resto
+// sin que haya que tocar dos archivos si algún día se cobra otra función.
+const featureLabel = aiBillingFeatureLabel;
 
 function txTypeLabel(type: TransactionRow["type"]): string {
   switch (type) {

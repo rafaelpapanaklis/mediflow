@@ -8,6 +8,8 @@ import { hasPermission } from "@/lib/auth/permissions";
 import { assertPatientVisible } from "@/lib/patient-visibility";
 import { logAudit } from "@/lib/audit";
 import { buildConsultContext } from "@/lib/ai/consult-context";
+import { recordUsageNoCharge } from "@/lib/ai-billing/record-usage";
+import { AI_FEATURE_CONSULT_ANALYSIS } from "@/lib/ai-billing/types";
 
 export const dynamic = "force-dynamic";
 
@@ -193,6 +195,18 @@ export async function POST(req: NextRequest) {
       (usage.cache_read_input_tokens ?? 0);
 
     await addAiTokens(ctx.clinicId, totalTokens, "consult_assist", ctx.userId);
+
+    // Costo real para DaleControl (Tesorería de IA). No se le cobra a la
+    // clínica — su plan ya lo incluye — pero sí se mide. Best-effort.
+    await recordUsageNoCharge({
+      clinicId: ctx.clinicId,
+      feature: AI_FEATURE_CONSULT_ANALYSIS,
+      model: MODEL,
+      inputTokens: usage.input_tokens ?? 0,
+      outputTokens: usage.output_tokens ?? 0,
+      cacheTokens: usage.cache_read_input_tokens ?? 0,
+      cacheWriteTokens: usage.cache_creation_input_tokens ?? 0,
+    });
 
     const contentBlocks: any[] = Array.isArray(data.content) ? data.content : [];
     const toolUseBlock = contentBlocks.find((b) => b?.type === "tool_use" && b?.name === REPORT_TOOL.name);
