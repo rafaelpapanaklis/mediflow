@@ -219,11 +219,6 @@ const NAV_ITEMS: NavItemDef[] = [
     icon: Gift, adminOnly: true,
     categories: ["AESTHETIC_MEDICINE", "BEAUTY_CENTER", "DERMATOLOGY", "HAIR_RESTORATION",
                  "LASER_HAIR_REMOVAL", "SPA", "MASSAGE", "BROW_LASH", "HAIR_SALON"] },
-  { id: "resources",    section: "catalogo", label: "Recursos",     href: "/dashboard/resources",
-    icon: DoorOpen, adminOnly: true,
-    categories: ["SPA", "MASSAGE", "BEAUTY_CENTER", "DENTAL", "MEDICINE",
-                 "AESTHETIC_MEDICINE", "PHYSIOTHERAPY"],
-    permission: "resources.view" },
   { id: "inventory",    section: "catalogo", label: "Inventario",   href: "/dashboard/inventory",
     icon: Package, adminOnly: true,
     categories: ["DENTAL", "MEDICINE", "PODIATRY", "DERMATOLOGY", "AESTHETIC_MEDICINE"],
@@ -242,6 +237,15 @@ const NAV_ITEMS: NavItemDef[] = [
   { id: "analytics",      section: "admin", label: "Analytics",         href: "/dashboard/analytics",     icon: BarChart3, adminOnly: true, permission: "analytics.view", moduleKey: "analytics" },
   { id: "tv-modes",       section: "admin", label: "Pantallas TV",      href: "/dashboard/tv-modes",      icon: Monitor, adminOnly: true, permission: "tvModes.view", moduleKey: "tv-modes" },
   { id: "reports",        section: "admin", label: "Reportes",          href: "/dashboard/reports",       icon: BarChart3,     permission: "reports.view", moduleKey: "reports" },
+  // Recursos (sillones / consultorios): vive en ADMINISTRACIÓN, justo arriba de
+  // Equipo — es configuración de la clínica, no catálogo comercial. El filtro
+  // por `categories` y `adminOnly` siguen aplicando igual que en su sección
+  // anterior; sólo cambió dónde se pinta.
+  { id: "resources",      section: "admin", label: "Recursos",          href: "/dashboard/resources",
+    icon: DoorOpen, adminOnly: true,
+    categories: ["SPA", "MASSAGE", "BEAUTY_CENTER", "DENTAL", "MEDICINE",
+                 "AESTHETIC_MEDICINE", "PHYSIOTHERAPY"],
+    permission: "resources.view" },
   { id: "team",           section: "admin", label: "Equipo",            href: "/dashboard/team",          icon: UserCog,        permission: "team.view" },
   { id: "landing",        section: "admin", label: "Página web",        href: "/dashboard/landing",       icon: Globe,          permission: "landing.view", moduleKey: "landing" },
   { id: "procedures",     section: "admin", label: "Procedimientos",    href: "/dashboard/procedures",    icon: ClipboardList,  permission: "procedures.view" },
