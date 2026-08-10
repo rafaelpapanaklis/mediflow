@@ -172,6 +172,13 @@ export async function POST(req: NextRequest) {
             lastName: ctx.user.lastName,
             role: "SUPER_ADMIN",
             specialty: data.category.toLowerCase(),
+            // La sede nueva HEREDA la exigencia de cambiar contraseña. La marca
+            // es por fila pero la contraseña es una sola (Supabase Auth, global
+            // por supabaseId): una fila nueva en false sería una sede donde la
+            // misma contraseña temporal sí pasa. El gate vive en el layout y no
+            // cubre este endpoint, así que una sesión marcada podría llamar aquí
+            // directo, estrenar sede sin marca y entrar por el switcher.
+            mustChangePassword: ctx.user.mustChangePassword === true,
           },
         },
         schedules: {
