@@ -511,6 +511,16 @@ function dateLabel(value: string | null | undefined): string {
 }
 
 /**
+ * Número saneado del resumen de la bandeja. Un campo que el endpoint no mande
+ * pinta 0, no "$NaN": el resumen es informativo y ninguna decisión de dinero
+ * cuelga de él (eso lo deciden el cron y sus candados).
+ */
+function safeNum(value: unknown): number {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : 0;
+}
+
+/**
  * Meses de racha ya cumplidos de un award que está contando. Se calculan aquí
  * con `monthsElapsed` —la MISMA función del cron— en vez de pedirle el número
  * al endpoint: así la bandeja y el barrido nunca discrepan sobre cuántos meses
@@ -661,6 +671,19 @@ export function AffiliatesClient({ initial }: { initial: AffiliateRow[] }) {
       cancelled = true;
     };
   }, []);
+
+  // El resumen saneado una sola vez: un campo que el endpoint no mande cuenta
+  // como 0 en vez de pintar "undefined" o "$NaN" en un tile.
+  const netSummary = useMemo(
+    () => ({
+      tracking: safeNum(netBonus?.summary?.tracking),
+      awarded: safeNum(netBonus?.summary?.awarded),
+      awardedMxn: safeNum(netBonus?.summary?.awardedMxn),
+      commissionsPendingMxn: safeNum(netBonus?.summary?.commissionsPendingMxn),
+      commissionsPaidMxn: safeNum(netBonus?.summary?.commissionsPaidMxn),
+    }),
+    [netBonus],
+  );
 
   // Precio vigente de cada plan (plan_configs). Sin entrada = sin precio.
   const planPrices = useMemo(() => {
@@ -1536,13 +1559,14 @@ export function AffiliatesClient({ initial }: { initial: AffiliateRow[] }) {
                           fontSize: 18,
                           fontWeight: 700,
                           marginTop: 4,
-                          color: netBonus.summary.tracking > 0 ? "var(--warning)" : "var(--text-3)",
+                          color: netSummary.tracking > 0 ? "var(--warning)" : "var(--text-3)",
                         }}
                       >
-                        {netBonus.summary.tracking}
+                        {netSummary.tracking}
                       </div>
                       <div style={{ fontSize: 11, color: "var(--text-3)", marginTop: 2 }}>
-                        de {netBonus.sustainMonths} meses seguidos
+                        {netSummary.tracking === 1 ? "escalón contando sus" : "escalones contando sus"}{" "}
+                        {netBonus.sustainMonths} meses
                       </div>
                     </div>
                     <div style={SIM_PANEL}>
@@ -1551,11 +1575,11 @@ export function AffiliatesClient({ initial }: { initial: AffiliateRow[] }) {
                         Bonos otorgados
                       </div>
                       <div className="mono" style={{ fontSize: 18, fontWeight: 700, marginTop: 4, color: "var(--text-1)" }}>
-                        {formatCurrency(netBonus.summary.awardedMxn)}
+                        {formatCurrency(netSummary.awardedMxn)}
                       </div>
                       <div style={{ fontSize: 11, color: "var(--text-3)", marginTop: 2 }}>
-                        en pago único · {netBonus.summary.awarded}{" "}
-                        {netBonus.summary.awarded === 1 ? "escalón" : "escalones"}
+                        en pago único · {netSummary.awarded}{" "}
+                        {netSummary.awarded === 1 ? "escalón" : "escalones"}
                       </div>
                     </div>
                     <div style={SIM_PANEL}>
@@ -1564,12 +1588,10 @@ export function AffiliatesClient({ initial }: { initial: AffiliateRow[] }) {
                         Comisiones generadas
                       </div>
                       <div className="mono" style={{ fontSize: 18, fontWeight: 700, marginTop: 4, color: "var(--text-1)" }}>
-                        {formatCurrency(
-                          netBonus.summary.commissionsPendingMxn + netBonus.summary.commissionsPaidMxn,
-                        )}
+                        {formatCurrency(netSummary.commissionsPendingMxn + netSummary.commissionsPaidMxn)}
                       </div>
                       <div style={{ fontSize: 11, color: "var(--text-3)", marginTop: 2 }}>
-                        {formatCurrency(netBonus.summary.commissionsPendingMxn)} sin liquidar
+                        {formatCurrency(netSummary.commissionsPendingMxn)} sin liquidar
                       </div>
                     </div>
                   </div>

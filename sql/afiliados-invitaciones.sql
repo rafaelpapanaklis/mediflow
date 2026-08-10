@@ -75,3 +75,14 @@ SET "networkTier1MonthlyMxn" = 0,
     "networkTier4MonthlyMxn" = 0,
     "networkTier5MonthlyMxn" = 0
 WHERE "id" = 1;
+
+-- Y sus DEFAULT también a 0. Hoy solo existe la fila id=1, así que esto no
+-- cambia nada en la práctica; pero si alguien llegara a crear la config desde
+-- cero, los defaults viejos ($375…$50,000) aterrizarían en columnas muertas y
+-- el siguiente que lea el schema pensaría que la modalidad mensual sigue viva.
+ALTER TABLE "affiliate_payout_config"
+  ALTER COLUMN "networkTier1MonthlyMxn" SET DEFAULT 0,
+  ALTER COLUMN "networkTier2MonthlyMxn" SET DEFAULT 0,
+  ALTER COLUMN "networkTier3MonthlyMxn" SET DEFAULT 0,
+  ALTER COLUMN "networkTier4MonthlyMxn" SET DEFAULT 0,
+  ALTER COLUMN "networkTier5MonthlyMxn" SET DEFAULT 0;

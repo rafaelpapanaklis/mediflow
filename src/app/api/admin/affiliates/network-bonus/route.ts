@@ -70,6 +70,8 @@ export interface AdminNetworkAwardRow {
   id: string;
   affiliateId: string;
   affiliateName: string;
+  /** Su /socio/…, para pintarlo bajo el nombre. "" = afiliado no encontrado. */
+  affiliateSlug: string;
   tier: number;
   status: NetworkAwardStatus;
   /** Umbral del escalón; en `awarded` es el que quedó congelado. */
@@ -87,8 +89,14 @@ export interface AdminNetworkAwardRow {
 export interface AdminNetworkBonusSummary {
   /** Escalones otorgados (su comisión de pago único ya nació). */
   awarded: number;
-  /** Suma de esos pagos únicos con el monto CONGELADO de cada award. */
-  awardedOnceMxn: number;
+  /**
+   * Suma de esos pagos únicos con el monto CONGELADO de cada award.
+   *
+   * Se llama igual que `NetworkBonusView.awardedMxn` (network-bonus-core), que
+   * es la misma cifra vista desde el panel del afiliado: un nombre distinto
+   * aquí invitaría a creer que son dos números distintos.
+   */
+  awardedMxn: number;
   /** Escalones contando su racha: todavía no pagan nada. */
   tracking: number;
   /** Comisiones `network_bonus` ya generadas y todavía sin liquidar. */
@@ -122,7 +130,7 @@ const STATUS_ORDER: Record<NetworkAwardStatus, number> = {
 
 const EMPTY_SUMMARY: AdminNetworkBonusSummary = {
   awarded: 0,
-  awardedOnceMxn: 0,
+  awardedMxn: 0,
   tracking: 0,
   commissionsPendingMxn: 0,
   commissionsPaidMxn: 0,
@@ -191,11 +199,11 @@ export async function GET() {
   for (const a of awardRows) if (affiliateIds.indexOf(a.affiliateId) === -1) affiliateIds.push(a.affiliateId);
   const affiliates = affiliateIds.length
     ? await prisma.affiliate
-        .findMany({ where: { id: { in: affiliateIds } }, select: { id: true, name: true } })
-        .catch(() => [] as { id: string; name: string }[])
+        .findMany({ where: { id: { in: affiliateIds } }, select: { id: true, name: true, slug: true } })
+        .catch(() => [] as { id: string; name: string; slug: string }[])
     : [];
-  const nameById = new Map<string, string>();
-  for (const a of affiliates) nameById.set(a.id, a.name);
+  const byId = new Map<string, { name: string; slug: string }>();
+  for (const a of affiliates) byId.set(a.id, { name: a.name, slug: a.slug });
 
   // ── Los escalones, con la alerta anticipada ────────────────────────────
   // `reached` y `approaching` se cuentan sobre TODOS los afiliados con red que
@@ -235,23 +243,27 @@ export async function GET() {
   });
 
   // ── La bandeja ────────────────────────────────────────────────────────
-  const awards: AdminNetworkAwardRow[] = awardRows.map((row) => ({
-    id: row.id,
-    affiliateId: row.affiliateId,
-    // Un afiliado borrado deja su award huérfano (la FK es ON DELETE CASCADE,
-    // así que no debería pasar): el guion evita una fila sin nombre.
-    affiliateName: nameById.get(row.affiliateId) ?? "—",
-    tier: row.tier,
-    // Los estados de la etapa con modalidad mensual se normalizan a `awarded`:
-    // cualquiera de ellos significa "ya se otorgó".
-    status: normalizeAwardStatus(row.status),
-    clinics: Number(row.clinics) || 0,
-    onceMxn: Number(row.onceMxn) || 0,
-    qualifiedSince: iso(row.qualifiedSince),
-    awardedAt: iso(row.awardedAt),
-    paidAt: iso(row.paidAt),
-    lastCount: Number(row.lastCount) || 0,
-  }));
+  const awards: AdminNetworkAwardRow[] = awardRows.map((row) => {
+    const who = byId.get(row.affiliateId);
+    return {
+      id: row.id,
+      affiliateId: row.affiliateId,
+      // Un afiliado borrado deja su award huérfano (la FK es ON DELETE CASCADE,
+      // así que no debería pasar): el guion evita una fila sin nombre.
+      affiliateName: who?.name ?? "—",
+      affiliateSlug: who?.slug ?? "",
+      tier: row.tier,
+      // Los estados de la etapa con modalidad mensual se normalizan a
+      // `awarded`: cualquiera de ellos significa "ya se otorgó".
+      status: normalizeAwardStatus(row.status),
+      clinics: Number(row.clinics) || 0,
+      onceMxn: Number(row.onceMxn) || 0,
+      qualifiedSince: iso(row.qualifiedSince),
+      awardedAt: iso(row.awardedAt),
+      paidAt: iso(row.paidAt),
+      lastCount: Number(row.lastCount) || 0,
+    };
+  });
 
   awards.sort((a, b) => {
     const byStatus = (STATUS_ORDER[a.status] ?? 9) - (STATUS_ORDER[b.status] ?? 9);
@@ -267,15 +279,15 @@ export async function GET() {
   for (const a of awards) {
     if (a.status === "awarded") {
       summary.awarded += 1;
-      summary.awardedOnceMxn += a.onceMxn;
+      summary.awardedMxn += a.onceMxn;
     } else {
       summary.tracking += 1;
     }
   }
-  summary.awardedOnceMxn = roundMxn(summary.awardedOnceMxn);
+  summary.awardedMxn = roundMxn(summary.awardedMxn);
 
   // Lo REALMENTE generado en comisiones de bono: cuadra la bandeja contra el
-  // dinero que ya entró al flujo de pago. `awardedOnceMxn` y la suma de las
+  // dinero que ya entró al flujo de pago. `awardedMxn` y la suma de las
   // comisiones tienen que ir a la par: si se separan, hay un award otorgado sin
   // su comisión (o una comisión sin su award).
   try {
