@@ -52,6 +52,11 @@
 import { prisma } from "@/lib/prisma";
 import { fmtMxn, type PublicOffer } from "./public-offer";
 import type { PlanKey } from "./payout-core";
+// Desde `network-bonus-core` (puro) y no desde `network-bonus`: aquí solo hace
+// falta la cadena del `kind`, no el motor de bonos. Se importa en vez de
+// teclear "network_bonus" porque una copia desincronizada volvería a colar los
+// bonos en los avisos públicos sin que nadie lo note.
+import { NETWORK_BONUS_KIND } from "./network-bonus-core";
 import type { AvisoAfiliado } from "@/components/afiliados/landing/avisos";
 
 /** Ventana de actividad que se considera "reciente". */
@@ -98,7 +103,22 @@ async function avisosReales(offer: PublicOffer): Promise<AvisoAfiliado[]> {
   const desde = new Date(Date.now() - DIAS_VENTANA * 24 * 60 * 60 * 1000);
 
   const filas = await prisma.affiliateCommission.findMany({
-    where: { createdAt: { gte: desde }, commissionMxn: { gt: 0 } },
+    // Los BONOS POR RED quedan FUERA. Toda tarjeta de este modo dice "por una
+    // clínica" y resuelve el plan a partir de `clinicId`; un bono no nace de
+    // ninguna clínica (su `clinicId` va vacío a propósito), así que publicaría
+    // en una página PÚBLICA una frase falsa —"Un afiliado cobró $400,000 por
+    // una clínica"— sobre el pago más grande del programa. Los bonos tienen su
+    // sitio en el panel del afiliado y en los términos, no aquí.
+    //
+    // El `NOT` es seguro sobre esta columna: `kind` es `text NOT NULL DEFAULT
+    // 'pct'` (sql/afiliados-comisiones.sql), así que no hay filas con NULL que
+    // un `kind <> 'network_bonus'` descartaría en silencio. Sobre una columna
+    // nullable haría falta además la rama `OR { kind: null }`.
+    where: {
+      createdAt: { gte: desde },
+      commissionMxn: { gt: 0 },
+      NOT: { kind: NETWORK_BONUS_KIND },
+    },
     // Sólo lo que hace falta para redactar. `Clinic` entera jamás: esta página
     // es pública y toda columna nueva se filtraría sola.
     select: {

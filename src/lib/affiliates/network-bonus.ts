@@ -323,6 +323,24 @@ export type ChooseResult =
   | { ok: true; status: "once_paid" | "monthly_active"; commissionMxn: number }
   | { ok: false; error: string; code: 400 | 404 | 409 | 503 };
 
+/** El fallo de `chooseNetworkBonus`, ya estrechado. */
+export type ChooseFailure = Extract<ChooseResult, { ok: false }>;
+
+/**
+ * ¿La elección falló? Guarda de tipo EXPLÍCITA, y no es ceremonia.
+ *
+ * El tsconfig del repo corre con `strict: false`, y sin `strictNullChecks`
+ * TypeScript NO estrecha una unión por un discriminante booleano: dentro de un
+ * `if (!result.ok)` el tipo sigue siendo la unión entera y leer `result.error`
+ * ni siquiera compila. Un predicado de tipo funciona igual con `strict` en true
+ * o en false, así que la unión conserva lo que promete —nunca leer el error de
+ * un resultado exitoso, ni el monto de uno fallido— sin quedar colgada de una
+ * bandera del compilador que algún día podría moverse.
+ */
+export function isChooseFailure(result: ChooseResult): result is ChooseFailure {
+  return result.ok === false;
+}
+
 /**
  * El afiliado elige cómo cobra UN escalón. DEFINITIVA: solo se acepta sobre un
  * award en `pending_choice`, así que un segundo intento choca con el 409.

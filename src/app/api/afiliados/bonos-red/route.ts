@@ -27,7 +27,7 @@ export const dynamic = "force-dynamic";
 
 import { NextResponse } from "next/server";
 import { getAffiliateContext } from "@/lib/affiliate-auth";
-import { chooseNetworkBonus, normalizeChoice } from "@/lib/affiliates/network-bonus";
+import { chooseNetworkBonus, isChooseFailure, normalizeChoice } from "@/lib/affiliates/network-bonus";
 
 export async function POST(req: Request) {
   const ctx = await getAffiliateContext();
@@ -58,8 +58,11 @@ export async function POST(req: Request) {
     );
   }
 
+  // `isChooseFailure` y no `!result.ok`: con el `strict: false` del tsconfig,
+  // TypeScript no estrecha una unión por un discriminante booleano y
+  // `result.error` no compilaría. Ver la guarda en @/lib/affiliates/network-bonus.
   const result = await chooseNetworkBonus(ctx.affiliateId, awardId, choice);
-  if (!result.ok) {
+  if (isChooseFailure(result)) {
     return NextResponse.json({ error: result.error }, { status: result.code });
   }
 
