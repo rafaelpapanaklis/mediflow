@@ -1,5 +1,5 @@
 // Contenido ESTÁTICO del kit de marketing del afiliado (copys, pitch de
-// objeciones y plantillas de prospección). Español neutro con tú, vendedor
+// objeciones y plantillas de prospección). Español neutro con tú, comercial
 // pero sobrio. PROHIBIDO: promesas falsas, "prueba gratis", precios
 // concretos, "garantizado", spam de emojis (máx 1-2 por copy de WhatsApp).
 // Variables soportadas en los textos: {tu_link} y {nombre_clinica}.

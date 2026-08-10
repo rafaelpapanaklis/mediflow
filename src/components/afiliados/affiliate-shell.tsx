@@ -41,7 +41,9 @@ type NavItem = {
 const NAV_ITEMS: NavItem[] = [
   { href: "/afiliados/inicio", label: "Inicio", icon: Home },
   { href: "/afiliados/herramientas", label: "Herramientas", icon: SlidersHorizontal },
-  { href: "/afiliados/equipo", label: "Mi equipo", icon: Users },
+  // La ruta se queda en /afiliados/equipo (links viejos, marcadores), pero la
+  // pantalla ya no registra vendedores: invita afiliados y mide la red.
+  { href: "/afiliados/equipo", label: "Mi red", icon: Users },
   { href: "/afiliados/estadisticas", label: "Estadísticas", icon: BarChart3 },
   { href: "/afiliados/reportes", label: "Reportes", icon: FileText },
   { href: "/afiliados/configuracion", label: "Datos de pago", icon: CreditCard },

@@ -17,11 +17,15 @@ export const maxDuration = 300;
  *
  * QUÉ BARRE
  * Los BONOS POR RED de los afiliados: los que premian las clínicas activas que
- * trajeron SUS VENDEDORES (no las que trajo él mismo — para esas está el Bono
- * por Clínicas Activas). En una pasada recuenta la red de cada afiliado, mueve
- * sus awards por el ciclo de vida (arrancar la racha, reiniciarla, otorgar,
- * pausar, reactivar) y genera las mensualidades del mes de quienes eligieron
- * cobrar mensual.
+ * trajeron LOS AFILIADOS QUE ÉL INVITÓ (no las que trajo él mismo — para esas
+ * está el Bono por Clínicas Activas). En una pasada recuenta la red de cada
+ * afiliado y mueve sus awards por el ciclo de vida, que hoy es corto: arrancar
+ * la racha, reiniciarla si se pierde el umbral, y otorgar cuando se sostuvo.
+ *
+ * NO GENERA MENSUALIDADES. La modalidad mensual se retiró: todo bono por red es
+ * un PAGO ÚNICO, y su comisión (`netbonus:<awardId>:once`) la escribe el propio
+ * barrido en la misma transacción que otorga el escalón. No queda nada
+ * pendiente de elegir ni de renovar cada mes.
  *
  * ESTE ARCHIVO NO DECIDE NADA. Autentica, invoca y notifica. Toda la lógica de
  * dinero vive en `runNetworkBonusSweep` (src/lib/affiliates/network-bonus.ts) y
@@ -38,20 +42,15 @@ export const maxDuration = 300;
  * distintos.
  *
  * DÓNDE ESTÁ EL CANDADO DE IDEMPOTENCIA
- * En el índice ÚNICO de `affiliate_commissions."stripeInvoiceId"`. Cada
- * mensualidad se escribe con la referencia `netbonus:<awardId>:<YYYY-MM>`
- * (commissionRefMonthly) y esa referencia va en la MISMA `$transaction` que la
- * actualización del award. Correr el cron dos veces el mismo mes NO paga doble:
- * el segundo intento choca contra el índice y el rollback deja también el award
- * como estaba, así que no queda un `lastMonthlyKey` avanzado sin su comisión.
- * El filtro por `lastMonthlyKey` es solo el atajo barato que evita intentarlo;
- * la garantía es la base de datos, no una lectura previa (esa carrera se
- * pierde). Los choques se cuentan en `duplicatesBlocked` y en una corrida sana
- * deberían ser 0.
- * El pago único lleva la misma protección con `netbonus:<awardId>:once`, y el
- * paso de "otorgar" es un `updateMany` condicionado a `status = 'tracking'`,
- * así que dos instancias simultáneas tampoco otorgan el mismo escalón dos
- * veces.
+ * En el índice ÚNICO de `affiliate_commissions."stripeInvoiceId"`. El bono se
+ * escribe con la referencia `netbonus:<awardId>:once` (commissionRefOnce) en la
+ * MISMA `$transaction` que otorga el award. Correr el cron dos veces NO paga
+ * doble: el segundo intento choca contra el índice y el rollback deja también
+ * el award como estaba, así que nunca queda un escalón marcado como otorgado
+ * sin su comisión. El `updateMany` condicionado a `status = 'tracking'` es solo
+ * el filtro barato que evita intentarlo; la garantía es la base de datos, no
+ * una lectura previa (esa carrera se pierde). Los choques se cuentan en
+ * `duplicatesBlocked` y en una corrida sana deberían ser 0.
  *
  * DEGRADACIÓN
  * Si el programa está apagado o `sql/afiliados-bonos-red.sql` todavía no está
@@ -93,9 +92,10 @@ export async function GET(req: NextRequest) {
     // Uno por uno y con su propio try/catch: un correo caído no puede tumbar el
     // cron ni deshacer lo ya escrito, y NO se reintenta porque el barrido del
     // mes siguiente ya no volverá a otorgar ese escalón (el award queda en
-    // `pending_choice`) — el aviso vive también en el panel, que es la fuente
-    // de verdad. `sendAffiliateNetworkBonusAwardedEmail` tiene su propio
-    // try/catch interno; este es el cinturón sobre los tirantes.
+    // `awarded`) — el aviso vive también en el panel, que es la fuente de
+    // verdad, y el bono se cobra igual aunque el correo nunca llegue.
+    // `sendAffiliateNetworkBonusAwardedEmail` tiene su propio try/catch
+    // interno; este es el cinturón sobre los tirantes.
     //
     // Secuencial a propósito: son un puñado de awards al mes y así no se
     // dispara el rate limit del proveedor de correo con una ráfaga.
@@ -113,10 +113,10 @@ export async function GET(req: NextRequest) {
 
     console.info(
       `[cron/affiliate-network-bonus] ${summary.periodKey}: ${summary.affiliates} afiliados, ` +
-        `${summary.awarded} bonos otorgados, ${summary.monthlyPaid} mensualidades ` +
-        `($${summary.monthlyPaidMxn}), ${summary.paused} pausados, ${summary.resumed} reactivados, ` +
-        `${summary.duplicatesBlocked} duplicados bloqueados, ${summary.errors} errores, ` +
-        `${emailsSent} correos`,
+        `${summary.started} rachas iniciadas, ${summary.refreshed} refrescadas, ` +
+        `${summary.resets} reiniciadas, ${summary.awarded} bonos otorgados ` +
+        `($${summary.awardedMxn}), ${summary.duplicatesBlocked} duplicados bloqueados, ` +
+        `${summary.errors} errores, ${emailsSent} correos`,
     );
 
     // El summary completo en la respuesta: es lo que se lee en los logs de

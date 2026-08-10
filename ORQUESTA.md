@@ -5537,3 +5537,207 @@ El SQL ya está corrido, así que la tabla y las 16 columnas existen. Lo que fal
 **Ojo con el mensual:** es un costo **recurrente** mientras el afiliado sostenga el número, no
 una salida única. El formulario avisa en ámbar si un mensual pasa del 15 % del ingreso estimado
 de esa red, pero el aviso **no bloquea**.
+
+---
+
+## AFILIADOS — EL SEGUNDO NIVEL, REHECHO (ago 2026)
+
+### Por qué se tiró el modelo anterior
+
+El segundo nivel estaba **muerto por diseño**. Un "vendedor" cobraba una fracción de la comisión
+de quien lo había reclutado, sin elegir modalidad, sin bonos propios y sin poder armar su propio
+equipo. Comparado con registrarse directo en DaleControl, siempre perdía — así que a nadie le
+convenía entrar por el link de otro afiliado, y el número lo confirmaba: **0 vendedores y 0
+atribuciones en la base**. Eso permitió rehacerlo limpio: no hubo nada que migrar y nadie dejó
+de cobrar.
+
+### El modelo nuevo, en cuatro reglas
+
+1. **El invitado es un afiliado NORMAL, idéntico al que lo invitó.** Misma comisión por plan
+   ($80/$140/$300, de la config), elige su propia modalidad (fijo recurrente o pago único), gana
+   sus propios bonos por clínicas activas (5/25/50), puede invitar gente a su vez y usa el panel
+   normal. Cero diferencias. No hay un tipo de cuenta "de segundo nivel": hay afiliados.
+2. **Quien invita NO cobra por las clínicas de su invitado.** Ni reparto, ni override, ni nada
+   mensual. Su premio son los **BONOS POR RED**, y únicamente como **PAGO ÚNICO**:
+   $3,000 / $15,000 / $40,000 / $120,000 / $400,000 al llegar a 5, 20, 50, 150 o 500 clínicas
+   activas de sus invitados. La modalidad mensual de esos bonos se apagó entera.
+3. **UN SOLO NIVEL.** Si A invita a B y B invita a C, las clínicas de C cuentan para el bono de
+   red de B y **nada** para A. Nunca se acumula hacia arriba. No es una preferencia de producto:
+   es lo que mantiene el programa lejos de un esquema piramidal y lo que hace el costo
+   predecible. Se cumple **por construcción**, no por una validación: el conteo mira
+   `Affiliate.invitedByAffiliateId` a un salto y no existe una sola consulta que recorra el árbol.
+4. **Vínculo permanente y visible.** El invitado ve en su panel quién lo invitó, presentado como
+   un dato normal. El vínculo se escribe UNA vez, en `createAffiliateAccount`, y **ninguna ruta,
+   pantalla o acción lo cambia o lo borra** — ni el panel ni el admin. Si se pudiera romper,
+   cualquiera se desvincularía el día antes de que su invitador cobrara un bono que ya se ganó.
+
+### El link de invitación: por qué NO es `/r/<code>`
+
+`/r/<code>` es el link de **clientes**: siembra la cookie de atribución `dc_aff` y manda a la
+home para que la clínica que se dé de alta después cuente como referida. Meter ahí también las
+invitaciones entre afiliados habría mezclado dos atribuciones distintas en la misma cookie —el
+invitado habría quedado además marcado como "clínica referida" de su invitador— y vuelto ambiguo
+qué significa un clic.
+
+La invitación es un acto explícito de una sola pantalla, así que viaja como parámetro visible del
+registro: **`/afiliados/registro?inv=<referralCode>`**, sin cookie y sin tocar la atribución de
+clínicas. El nombre del parámetro vive en `INVITE_PARAM` (`@/lib/affiliates/invites`), fuente
+única. El `inv` se propaga también a `/afiliados/vincular` para que el vínculo no se pierda
+cuando alguien que ya tiene cuenta de clínica cambia de pantalla a mitad del alta.
+
+**Nada de esto puede romper un alta.** Código inválido, invitador que no está APPROVED, o
+auto-invitación → `resolveInviterId` devuelve null y la cuenta se crea igual, sin vínculo.
+Perder una invitación es recuperable; perder el alta de alguien que ya llenó el formulario, no.
+
+**Anti auto-invitación, doble candado**: la app la bloquea por correo y por id, y la BD tiene un
+`CHECK (invitedByAffiliateId IS NULL OR invitedByAffiliateId <> id)`. Es la regla que impide
+fabricarse una red de una sola persona y cobrarse un bono por el propio trabajo.
+
+### Qué se eliminó
+
+Barrido completo, sin dejar imports muertos ni endpoints que no responden a nada:
+
+- **El reparto de comisión.** `computeSellerSplitFromTotal` y toda su rama en el webhook de
+  Stripe; `computeSellerSplit` (modo pct) se fue con ella por no tener llamadores. El webhook
+  quedó con **un solo `create`** bajo un comentario que fija la regla: la comisión es íntegra del
+  afiliado atribuido, y si algún día reaparece ahí un segundo `create` con otro `affiliateId`, es
+  que el modelo cambió.
+- **La atribución de vendedor en el alta de clínicas** (`/api/auth/register`): el bloque que
+  resolvía `sellerId` desde el campaign o el cupón y congelaba un `sellerPct`.
+- **El panel de vendedor entero**: `/afiliados/vendedor/*`, `/api/afiliados/vendedor/*`,
+  `seller-shell.tsx`, `seller-tools.tsx`, `seller-payout-form.tsx`.
+- **El formulario de equipo** (`team-manager.tsx`, `/api/afiliados/equipo/*`) y su campo
+  "% de tu comisión".
+- **El login diferenciado**: `/api/afiliados/whoami` ruteaba afiliado vs vendedor. Ahora todos
+  son afiliados y la ruta se simplificó.
+- **La elección de modalidad del bono por red**: `network-bonus-choice.tsx`,
+  `POST /api/afiliados/bonos-red`, `chooseNetworkBonus`, `compareChoices`, `normalizeChoice`,
+  `commissionRefMonthly`, y los estados `pending_choice` / `monthly_active` / `monthly_paused`.
+- `src/lib/affiliate-seller-auth.ts`, `team.ts`, `team-split.ts`, `seller-stats.ts`, los dos
+  correos de vendedor, las rutas de admin de vendedores y `scripts/migrate-seller-share-pct.mts`.
+
+### Los bonos por red, después del ajuste
+
+- **Solo pago único.** Al cumplirse la racha, el escalón se otorga **y su comisión se genera en
+  la misma transacción**. No hay estado intermedio en el que un bono ganado se quede esperando un
+  clic, ni pantalla que preguntar. Ciclo de vida entero: `tracking → awarded`.
+- **El conteo** pasó de `AffiliateSellerAttribution` a `Affiliate.invitedByAffiliateId`.
+- **Se conservan** las condiciones: activas al mismo tiempo · 3+ mensualidades pagadas cada una ·
+  sostenido 3 meses · una vez por escalón · un solo nivel.
+- **El predicado de "clínica que califica" sigue siendo UNO SOLO** (`qualifying-clinic.ts`),
+  compartido con los bonos propios. Nunca se reescribió.
+- **El candado** sigue siendo el índice único de `affiliate_commissions.stripeInvoiceId`, ahora
+  con una sola forma: `netbonus:<awardId>:once`. Las dos escrituras van en la misma `$transaction`,
+  así que un choque revierte también el cambio de estado del award.
+- `normalizeAwardStatus` mapea los cuatro estados de la etapa con mensualidad
+  (`pending_choice`, `once_paid`, `monthly_active`, `monthly_paused`) a **`awarded`, nunca a
+  `tracking`**. No había ni una fila cuando se retiró la modalidad, pero degradar un bono ya
+  otorgado al estado que cuenta la racha lo volvería a otorgar y a pagar: el sentido del error
+  importa más que la probabilidad.
+
+### Privacidad del invitador
+
+El invitador ve de cada invitado **nombre, desde cuándo, y conteos de clínicas** (activas y
+cuántas califican para su bono). Jamás sus comisiones, su modalidad, sus datos de pago, su correo
+ni un solo dato de las clínicas que trajo. Cobra por un número, así que ve ese número.
+`getInvitedAffiliates` no selecciona nada más, y la página de "Mi red" no tiene una sola columna
+de dinero.
+
+### El encuadre, que no es cosmético
+
+En el panel, en los términos y en la landing se dice lo mismo: **se cobra por CLÍNICAS ACTIVAS
+que contratan y pagan un producto, nunca por incorporar personas**. Y **es un solo nivel**, dicho
+con el ejemplo A→B→C. Ese lenguaje tiene que seguir siendo consistente en las tres superficies:
+ninguna reescritura de esos bloques puede aflojarlo.
+
+### DEUDA — tablas y columnas muertas
+
+**No se dropeó nada** (destructivo). Queda sin uso y sin un solo lector en el código:
+
+- Tablas `affiliate_sellers`, `affiliate_seller_attributions`, `affiliate_seller_commissions`
+  (0 filas). Sus modelos siguen en `prisma/schema.prisma` con una nota de deuda encima, para no
+  provocar drift.
+- Columnas `affiliate_links.sellerId` y `affiliate_coupons.sellerId`.
+- Columnas `affiliate_payout_config.networkTier<N>MonthlyMxn` (1..5), puestas en 0. No entran al
+  `select` de `getNetworkBonusConfig`, no viajan a la UI del admin y ninguna escritura las
+  menciona.
+- Columnas de `affiliate_network_bonus_awards` que eran de la elección/mensualidad: `chosenAt`,
+  `choice`, `monthlyMxn`, `lastMonthlyAt`, `lastMonthlyKey`, `monthlyPaidCount`, `pausedAt`.
+- `sql/afiliados-equipo.sql` quedó marcado como **ARCHIVO MUERTO — NO CORRER** y
+  `sql/afiliados-bonos-red.sql` con un aviso de qué dos cosas de las que describe ya no son
+  ciertas.
+
+### SQL
+
+`sql/afiliados-invitaciones.sql` (aditivo e idempotente) — **ya corrido**. Deja la columna, su FK
+`ON DELETE SET NULL` (borrar a un invitador jamás puede borrar las cuentas ni las comisiones de
+la gente que invitó), el índice y el CHECK anti auto-invitación; y pone los montos mensuales de
+los bonos por red en 0.
+
+### Las superficies, una por una
+
+- **Panel del afiliado.** "Mi equipo" → **"Mi red"** (`/afiliados/equipo`, misma ruta). Su link de
+  invitación con botón de copiar —reusando el `CopyButton` que ya existía, no uno nuevo—, la lista
+  de invitados, el progreso al siguiente escalón y la explicación honesta. El copy aclara que
+  **este link no trae clínicas**: el de referidos sigue en Herramientas. Tener dos links en el
+  mismo panel era la confusión más probable.
+- **Panel del invitado.** En `/afiliados/inicio` ve "Te invitó {nombre}" como un dato normal al pie
+  de la tarjeta de comisión, con la línea que importa: *ganas exactamente lo mismo que cualquier
+  afiliado; tu invitador no recibe ninguna parte de tus comisiones*. Sin recuadro de advertencia y
+  sin letra chica.
+- **Tarjeta de bonos por red.** Sin `PendingAward` ni botones de elección: un escalón otorgado
+  muestra su monto congelado, cuándo se otorgó y que ya entró al corte. Si no ha invitado a nadie,
+  explica cómo empezar y enlaza a su sección de invitaciones.
+- **Admin.** En la ficha del afiliado: quién lo invitó y a quiénes invitó él (con conteos), y una
+  línea que deja explícito que el invitador no cobra de las comisiones de sus invitados — es la
+  aclaración que evita que alguien del equipo lo lea al revés. **El vínculo no es editable desde
+  ahí**: no hay botón, select ni acción que lo toque. En "Esquema de pago" los campos mensuales
+  desaparecieron de la interfaz. **La alerta anticipada se conserva** (`approaching`, 80 % del
+  umbral): es lo que permite ver venir una salida de $400,000 con meses de antelación.
+- **Login.** `/api/afiliados/whoami` ya solo devuelve `affiliate` o `none`. El redirect a
+  `/afiliados/pendiente` nunca fue suyo: lo hace `(panel)/layout.tsx`.
+
+### Tests
+
+92 en verde: `test:bonos-red` **27**, `test:afiliados` **57**, `test:click-guard` **8**.
+
+Los que fijan el modelo nuevo y conviene no borrar nunca:
+- *la comisión de una clínica es ÍNTEGRA del afiliado que la trajo* — la regla 2, en el motor.
+- *normalizeAwardStatus: los estados legados degradan a `awarded`, NO a `tracking`* y *un status
+  legado tampoco vuelve a otorgar al pasar por el barrido* — el espejo del anterior: no basta con
+  probar el mapeo, hay que probar que el barrido tampoco lo re-otorga.
+- *un award `awarded` NO se revoca si su red se cae: ya se ganó*.
+- *la vista suma los montos CONGELADOS del award, no los vigentes*.
+
+### QUÉ DEBE PROBAR RAFAEL EN PROD
+
+El SQL ya está corrido. Lo que falta es de operación:
+
+1. **El link de invitación.** Entrar a `/afiliados/equipo` con una cuenta aprobada, copiar el link
+   y abrirlo **en otro navegador**: debe salir `/afiliados/registro?inv=<CODE>` con el aviso
+   "Te invitó {nombre}". Registrar una cuenta de prueba y verificar en la ficha del admin que el
+   vínculo quedó en los DOS lados (el invitado ve a su invitador, el invitador ve al invitado).
+2. **Auto-invitación.** Abrir el propio link estando con el propio correo: el alta debe seguir
+   funcionando **sin** crear vínculo. No debe salir un error.
+3. **Un código basura** (`?inv=XXXXXXXX`): el registro debe funcionar igual, sin aviso y sin
+   vínculo. Esto es lo que nunca puede romperse.
+4. **Que el invitado cobre igual.** Con la cuenta de prueba invitada, revisar en `/admin` que su
+   esquema de comisión y su modalidad son idénticos a los de un afiliado directo. Si algún día una
+   clínica de ese invitado genera comisión, confirmar que se creó **una sola** fila en
+   `affiliate_commissions` y que su `affiliateId` es el del invitado, no el del invitador.
+5. **`/admin` → Afiliados → Esquema de pago.** Que el bloque de bonos por red cargue los umbrales y
+   **un solo monto** por escalón, sin rastro de campos mensuales. Guardar sin cambiar nada y
+   verificar que responde OK y que la landing se revalidó. Probar que poner el umbral del escalón 3
+   por debajo del 2 **se rechaza**.
+6. **El cron, en seco.** Dispararlo a mano con el `Bearer $CRON_SECRET`. Sin nadie cerca de un
+   umbral debe responder `ok: true` con los contadores en 0. **Dispararlo dos veces seguidas** y
+   comprobar que la segunda no genera comisiones y que `duplicatesBlocked` sigue en 0.
+7. **`/afiliados` y `/terminos-afiliados`.** Que la mención y la sección salgan con los montos
+   vivos, con un solo monto por escalón, y que la numeración de secciones de los términos no salte.
+8. **Un award real, de punta a punta.** Es lo único que no se puede probar sin datos: cuando un
+   afiliado llegue a un escalón, revisar que le llegó el correo, que el panel lo muestra como
+   otorgado, y que se generó **una** comisión con `stripeInvoiceId` = `netbonus:<awardId>:once`.
+
+Y lo que **nadie debe "arreglar" sin pensarlo dos veces**: el conteo mira `invitedByAffiliateId` a
+un salto. Si alguien alguna vez lo convierte en recursivo "para que sea más justo", el programa
+deja de ser de un solo nivel y el costo deja de ser predecible.

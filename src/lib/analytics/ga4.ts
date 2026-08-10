@@ -25,10 +25,14 @@ export const GA4_MEASUREMENT_ID = "G-Q3HM012SPZ";
  *   /live, /tv     pantallas dentro de la clínica, se recargan solas
  *
  * /afiliados es MIXTA: la raíz es landing pública (está en el sitemap) y
- * login/registro/pendiente son el embudo de alta al que apuntan sus CTAs; el
- * resto —el grupo (panel) y /afiliados/vendedor— es panel. La regla es
- * fail-closed: toda ruta NUEVA bajo /afiliados/ nace excluida hasta que se
- * añada aquí explícitamente.
+ * login/registro/pendiente son el embudo de alta al que apuntan sus CTAs; todo
+ * lo demás bajo /afiliados/ —el grupo (panel)— es área privada. La regla es
+ * fail-closed y vive ENTERA en el lookahead de abajo: toda ruta NUEVA bajo
+ * /afiliados/ nace excluida hasta que se añada ahí explícitamente. Por eso
+ * /afiliados/vincular no se mide, aunque sea parte del alta.
+ *
+ * Nota: el criterio mira sólo el pathname, así que el `?inv=` de una invitación
+ * entre afiliados no cambia nada: /afiliados/registro se sigue midiendo.
  *
  * Se exporta el patrón (string) además de la función porque el mismo criterio
  * corre en dos sitios: aquí, para el page_view del cliente, y dentro del

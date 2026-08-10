@@ -9,7 +9,7 @@ import { fmtMxn } from "@/lib/affiliates/public-offer";
 export const metadata: Metadata = {
   title: "Términos del Programa de Afiliados — DaleControl",
   description:
-    "Términos del Programa de Afiliados de DaleControl: cómo se aprueba una cuenta, atribución de clínicas, modalidades de comisión, bono por clínicas activas, bono por equipo de ventas, calendario de pagos, uso de marca y causales de cancelación.",
+    "Términos del Programa de Afiliados de DaleControl: cómo se aprueba una cuenta, atribución de clínicas, modalidades de comisión, bono por clínicas activas, bono por red de afiliados, calendario de pagos, uso de marca y causales de cancelación.",
 };
 
 // Los umbrales y montos de los bonos SE LEEN de affiliate_payout_config, igual
@@ -55,7 +55,7 @@ export default async function TerminosAfiliadosPage() {
     comisiones: 4,
     hitos: 5,
     // La de red va DESPUÉS de la de hitos cuando las dos están: se lee de lo
-    // propio a lo del equipo, igual que en el panel y en la landing.
+    // propio a lo de la red, igual que en el panel y en la landing.
     red: hitosOn ? 6 : 5,
     pagos: 5 + extras,
     invalida: 6 + extras,
@@ -282,55 +282,94 @@ export default async function TerminosAfiliadosPage() {
           /afiliados y que lee el cron que los paga.
 
           ⚠️ EL ENCUADRE NO ES NEGOCIABLE: lo que se paga son CLÍNICAS ACTIVAS
-          que contratan un producto, nunca personas incorporadas al equipo. Un
-          afiliado con veinte vendedores y ninguna clínica activa no cobra un
-          peso, y eso es exactamente lo que separa un programa de ventas de un
-          esquema piramidal. Cualquier reescritura de esta sección tiene que
-          seguir diciéndolo así de claro. */}
+          que contratan un producto, nunca personas invitadas. Un afiliado con
+          veinte invitados y ninguna clínica activa en su red no cobra un peso,
+          y eso —junto con el UN SOLO NIVEL— es exactamente lo que separa un
+          programa de ventas de un esquema piramidal. Cualquier reescritura de
+          esta sección tiene que seguir diciéndolo así de claro. */}
       {redOn && redMayor && (
-        <Section title={`${S.red}. Bono por equipo de ventas`}>
+        <Section title={`${S.red}. Bono por Red de Afiliados`}>
           <p>
-            Un afiliado puede registrar <b>vendedores</b> a su cargo desde su panel. Además de las
-            comisiones que ya le corresponden, el Programa paga un bono por las{" "}
-            <b>clínicas activas que esos vendedores dan de alta</b>, al alcanzar cada uno de estos
-            escalones:
+            Todo afiliado aprobado tiene en su panel un <b>link de invitación</b> con el que puede
+            invitar a otras personas a solicitar su propia cuenta de afiliado. Quien llega por ese
+            link presenta su solicitud como cualquier otro y, si se aprueba, queda ligado a quien lo
+            invitó.
+          </p>
+          <p>
+            <b>El invitado es un afiliado exactamente igual al que lo invitó.</b> No entra en una
+            categoría distinta ni bajo condiciones distintas:
+          </p>
+          <ul>
+            <li>
+              Cobra <b>las mismas comisiones</b> de la sección {S.comisiones}, con los mismos montos
+              publicados.
+            </li>
+            <li>
+              Elige <b>su propia modalidad</b> —fijo recurrente o pago único—, con las reglas de esa
+              misma sección.
+            </li>
+            <li>
+              Gana <b>sus propios bonos</b> por clínicas activas, en los mismos términos de la
+              sección {S.hitos}.
+            </li>
+            <li>
+              Puede <b>invitar a su vez</b> y formar su propia red, con los bonos de esta sección.
+            </li>
+            <li>
+              Usa <b>el mismo panel</b> y cobra por los mismos medios y en el mismo calendario de la
+              sección {S.pagos}.
+            </li>
+          </ul>
+          <p>
+            <b>Quien invita no percibe ninguna parte de las comisiones de su invitado.</b> Las
+            comisiones del invitado son íntegramente suyas: no se reparten, no se le descuenta nada
+            y no generan ningún pago recurrente a favor de quien lo invitó. El <b>único</b> ingreso
+            que el Programa paga por una red son los bonos de esta sección, y siempre como{" "}
+            <b>pago único</b>.
+          </p>
+          <p>
+            Esos bonos se otorgan por las <b>clínicas activas que dan de alta los afiliados que uno
+            invitó</b>, al alcanzar cada uno de estos escalones:
           </p>
           <ul>
             {redes.map((red) => (
               <li key={red.n}>
-                <b>{red.clinics} clínicas activas</b> traídas por sus vendedores, al mismo tiempo:{" "}
-                {red.onceMxn > 0 && red.monthlyMxn > 0 ? (
-                  <>
-                    {fmtMxn(red.onceMxn)} en un solo pago <b>o</b> {fmtMxn(red.monthlyMxn)} al mes, a
-                    elección del afiliado.
-                  </>
-                ) : red.onceMxn > 0 ? (
-                  <>{fmtMxn(red.onceMxn)} en un solo pago.</>
-                ) : (
-                  <>{fmtMxn(red.monthlyMxn)} al mes.</>
-                )}
+                <b>{red.clinics} clínicas activas</b> traídas por los afiliados que invitó, al mismo
+                tiempo: {fmtMxn(red.onceMxn)} en un solo pago.
               </li>
             ))}
           </ul>
           <p>
-            <b>Este bono se paga por clínicas que contratan y pagan una suscripción, no por
-            incorporar personas al equipo.</b> Registrar vendedores no genera por sí mismo ningún
-            pago, ni existe cuota, compra ni inscripción alguna para participar: si los vendedores
-            de un afiliado no dan de alta clínicas que cumplan las condiciones de esta sección, el
-            afiliado no percibe ningún bono por este concepto.
+            <b>El Programa es de un solo nivel.</b> Para el bono de un afiliado cuentan únicamente
+            las clínicas de los afiliados que <b>él mismo</b> invitó, y ahí se detiene el conteo. Con
+            un ejemplo: si A invita a B y B invita a C, las clínicas que dé de alta C cuentan para el
+            bono de red de B y <b>no cuentan para A</b> por ningún concepto. Nada se acumula hacia
+            arriba ni existe un segundo nivel de pagos.
           </p>
           <p>
-            El conteo de esta sección es <b>independiente</b> del de la sección {S.hitos}: aquí
-            cuentan <b>únicamente</b> las clínicas dadas de alta por los vendedores del afiliado, y
-            no las que el afiliado haya dado de alta por su cuenta. Ninguna clínica cuenta en los
-            dos bonos.
+            <b>Este bono se paga por clínicas que contratan y pagan una suscripción, no por invitar
+            personas.</b> Invitar afiliados no genera por sí mismo ningún pago, ni existe cuota,
+            compra ni inscripción alguna para participar: si los afiliados que uno invitó no dan de
+            alta clínicas que cumplan las condiciones de esta sección, no se percibe ningún bono por
+            este concepto.
+          </p>
+          <p>
+            <b>El vínculo con quien invitó es permanente.</b> Queda registrado al aprobarse la cuenta
+            del invitado, es visible para ambos desde su panel y <b>no puede modificarse,
+            transferirse ni cancelarse</b>, ni a petición del invitado ni de quien lo invitó.
+          </p>
+          <p>
+            El conteo de esta sección es <b>independiente</b> del de la sección {S.hitos}: para un
+            mismo afiliado cuentan aquí <b>únicamente</b> las clínicas dadas de alta por los
+            afiliados que invitó, y no las que él haya dado de alta por su cuenta. Ninguna clínica
+            cuenta dos veces para la misma persona.
           </p>
 
           <p>Para que un bono de esta sección se otorgue deben cumplirse todas estas condiciones:</p>
           <ul>
             <li>
               Cuentan las clínicas <b>activas al mismo tiempo</b>, no el total histórico que los
-              vendedores hayan dado de alta.
+              afiliados invitados hayan dado de alta.
             </li>
             <li>
               Una clínica cuenta como activa cuando lleva{" "}
@@ -352,30 +391,8 @@ export default async function TerminosAfiliadosPage() {
           </ul>
 
           <p>
-            <b>Elección de la forma de cobro.</b> Al otorgarse un escalón, el afiliado elige desde su
-            panel entre las dos modalidades publicadas para ese escalón:
-          </p>
-          <ul>
-            <li>
-              <b>Pago único:</b> el monto se paga una sola vez y el escalón queda cerrado.
-            </li>
-            <li>
-              <b>Mensual:</b> el monto se paga cada mes <b>mientras el número de clínicas se
-              sostenga</b>. Si el número baja del umbral, el pago mensual{" "}
-              <b>se suspende automáticamente</b> y se reanuda, también de forma automática, en cuanto
-              el número vuelve a alcanzarse. La suspensión no cancela el escalón ni obliga a cumplir
-              de nuevo los {SUSTAIN_MONTHS} meses.
-            </li>
-          </ul>
-          <p>
-            La elección es <b>definitiva por escalón</b> y no puede modificarse una vez registrada.{" "}
-            <b>Mientras el afiliado no elija, el bono no se paga</b>; el escalón otorgado no vence ni
-            se pierde por no elegir. Cada escalón se elige por separado.
-          </p>
-          <p>
-            Los montos de un escalón <b>quedan fijados en el momento en que se otorga</b>: una
-            modificación posterior de los montos publicados no altera los bonos ya otorgados, ni los
-            pagos mensuales que estuvieran corriendo.
+            El monto de un escalón <b>queda fijado en el momento en que se otorga</b>: una
+            modificación posterior de los montos publicados no altera los bonos ya otorgados.
           </p>
           <p>
             Los bonos de esta sección son <b>adicionales</b> a las comisiones de la sección{" "}
@@ -384,7 +401,8 @@ export default async function TerminosAfiliadosPage() {
           </p>
           <p>
             Las <b>altas fraudulentas, duplicadas, con datos falsos o de negocios relacionados entre
-            sí</b> —o con el propio afiliado o sus vendedores— no cuentan para estos escalones e{" "}
+            sí</b> —o con el propio afiliado o con los afiliados que invitó— no cuentan para estos
+            escalones e{" "}
             <b>invalidan el bono</b>, aunque ya se haya otorgado. Aplican además las causales de la
             sección {S.invalida}.
           </p>

@@ -763,13 +763,50 @@ export function AffiliateDetailClient({
             )}
           </CardNew>
 
-          {/* 8 · Vendedores */}
+          {/* 8 · Red de invitados (el segundo nivel del programa).
+              SOLO LECTURA: el vínculo `invitedByAffiliateId` se fija al
+              registrarse y es permanente por diseño, así que aquí no hay ni un
+              botón para cambiarlo o romperlo. */}
           <CardNew
             noPad
-            title={`Equipo de vendedores (${data.sellers.length})`}
-            sub="Vendedores que refieren clínicas bajo este afiliado. El % es la parte de la comisión del afiliado que se lleva cada uno (el resto le queda a él como override); no cambia lo que paga DaleControl."
+            title={`Red de invitados (${data.invited.length})`}
+            sub="Afiliados que este afiliado invitó al programa. Cada invitado es un afiliado normal: cobra su propia comisión completa por las clínicas que trae y elige su propia modalidad."
           >
-            {data.sellers.length === 0 ? (
+            {/* Quién lo invitó a él */}
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+                flexWrap: "wrap",
+                padding: "12px 16px",
+                borderBottom: "1px solid var(--border-soft)",
+                fontSize: 12.5,
+              }}
+            >
+              <span style={{ color: "var(--text-3)" }}>Lo invitó</span>
+              {data.invitedBy ? (
+                <Link
+                  href={`/admin/affiliates/${data.invitedBy.id}`}
+                  style={{
+                    fontWeight: 600,
+                    color: "var(--violet-400)",
+                    textDecoration: "none",
+                  }}
+                >
+                  {data.invitedBy.name}
+                </Link>
+              ) : (
+                <span style={{ color: "var(--text-1)", fontWeight: 600 }}>
+                  Nadie · se registró directo
+                </span>
+              )}
+              <span style={{ color: "var(--text-3)" }}>
+                · El vínculo se fija al registrarse y es permanente: no se edita desde aquí.
+              </span>
+            </div>
+
+            {data.invited.length === 0 ? (
               <div
                 style={{
                   padding: "32px 18px",
@@ -778,43 +815,48 @@ export function AffiliateDetailClient({
                   fontSize: 13,
                 }}
               >
-                Este afiliado aún no tiene vendedores en su equipo.
+                Este afiliado todavía no ha invitado a nadie.
               </div>
             ) : (
               <div style={{ overflowX: "auto" }}>
                 <table className="table-new">
                   <thead>
                     <tr>
-                      <th>Vendedor</th>
-                      <th>Email</th>
-                      <th>% de la comisión</th>
-                      <th>Clínicas</th>
-                      <th>Pendiente</th>
-                      <th>Pagado</th>
+                      <th>Afiliado invitado</th>
                       <th>Estado</th>
+                      <th>Invitado desde</th>
+                      <th>Clínicas activas</th>
+                      <th>De esas, califican</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {data.sellers.map((s) => (
-                      <tr key={s.id}>
-                        <td style={{ fontWeight: 600, color: "var(--text-1)" }}>{s.name}</td>
-                        <td style={{ fontSize: 12.5, color: "var(--text-2)" }}>{s.email}</td>
-                        <td className="mono" style={{ fontSize: 12, color: "var(--text-2)" }}>
-                          {s.commissionPct}%
-                        </td>
-                        <td className="mono" style={{ fontSize: 12, color: "var(--text-2)" }}>
-                          {s.clinics}
-                        </td>
-                        <td className="mono" style={{ fontSize: 12, color: "var(--warning)" }}>
-                          {formatCurrency(s.pendingMxn)}
-                        </td>
-                        <td className="mono" style={{ fontSize: 12, color: "var(--text-2)" }}>
-                          {formatCurrency(s.paidMxn)}
+                    {data.invited.map((inv) => (
+                      <tr key={inv.id}>
+                        <td style={{ fontWeight: 600 }}>
+                          <Link
+                            href={`/admin/affiliates/${inv.id}`}
+                            style={{ color: "var(--text-1)", textDecoration: "none" }}
+                          >
+                            {inv.name}
+                          </Link>
                         </td>
                         <td>
-                          <BadgeNew tone={s.isActive ? "success" : "neutral"} dot>
-                            {s.isActive ? "Activo" : "Inactivo"}
+                          <BadgeNew tone={STATUS_TONE[inv.status] ?? "neutral"} dot>
+                            {STATUS_LABELS[inv.status] ?? inv.status}
                           </BadgeNew>
+                        </td>
+                        <td className="mono" style={{ fontSize: 12, color: "var(--text-3)" }}>
+                          {formatRelativeDate(inv.since)}
+                        </td>
+                        <td className="mono" style={{ fontSize: 12, color: "var(--text-2)" }}>
+                          {inv.activeClinics}
+                        </td>
+                        <td
+                          className="mono"
+                          style={{ fontSize: 12, color: "var(--text-1)", fontWeight: 600 }}
+                          title="Clínicas activas con las mensualidades pagadas que exige la cláusula: son las que suman al bono por red del invitador."
+                        >
+                          {inv.qualifyingClinics}
                         </td>
                       </tr>
                     ))}
@@ -822,6 +864,13 @@ export function AffiliateDetailClient({
                 </table>
               </div>
             )}
+
+            <p style={{ ...noteStyle, padding: "12px 16px", margin: 0 }}>
+              Este afiliado NO cobra nada de las comisiones de sus invitados: cada invitado cobra la
+              suya completa. Lo único que gana por su red son los bonos por red, que se calculan
+              sobre las clínicas activas que califican de esta lista y se pagan una sola vez por
+              escalón. La red es de un solo nivel: a quienes inviten sus invitados no le cuentan.
+            </p>
           </CardNew>
         </div>
       )}

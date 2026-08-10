@@ -30,9 +30,14 @@ export function AffiliateLoginForm() {
         return;
       }
       toast.success("¡Bienvenido!");
-      // Enruta según quién inicia sesión: afiliado → /afiliados/inicio,
-      // vendedor (equipo) → /afiliados/vendedor/inicio. Si whoami falla por lo
-      // que sea, cae al panel del afiliado. Hard navigation: garantiza un único
+      // Todos los que entran aquí son afiliados —el segundo nivel del programa
+      // son afiliados invitados, no un rol aparte—, así que el destino es
+      // siempre el mismo panel. whoami lo confirma contra la sesión del
+      // servidor y, si falla por lo que sea, se cae a /afiliados/inicio igual.
+      //
+      // El status NO se enruta desde aquí: el layout de (panel) manda a
+      // /afiliados/pendiente a quien todavía no está APPROVED, y esa es la
+      // única fuente de esa decisión. Hard navigation: garantiza un único
       // mount del layout del panel.
       const r = await fetch("/api/afiliados/whoami").then((x) => x.json()).catch(() => null);
       window.location.href = r?.home ?? "/afiliados/inicio";

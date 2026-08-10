@@ -11,19 +11,26 @@
  * del cron (`decideNetworkSweep`) es una función pura: se puede martillear sin
  * base de datos.
  *
+ * QUÉ PREMIA (modelo de ago 2026). Un afiliado INVITA a otros afiliados. El
+ * invitado es un afiliado NORMAL: la comisión de sus clínicas es suya y
+ * completa. Quien invita no cobra un peso por ellas; su único premio son estos
+ * bonos, que cuentan las clínicas activas de sus invitados DIRECTOS —un solo
+ * nivel— y se pagan SIEMPRE en PAGO ÚNICO. No hay modalidad mensual, no hay
+ * pantalla de elección y no hay estado intermedio: al cumplirse la racha el
+ * escalón se otorga y su comisión se genera en la misma transacción.
+ *
  * Foco crítico:
- *  - Alcanzar un escalón NO paga: nace `pending_choice` y ahí se queda hasta
- *    que el afiliado elige. Un plan de acciones que emita un pago sobre un
- *    award sin elección le entrega dinero que todavía no decidió cómo cobrar.
- *  - El cron corriendo DOS VECES el mismo mes no puede pagar dos veces. El
- *    candado duro es el índice único de affiliate_commissions."stripeInvoiceId",
- *    así que aquí se prueban las dos mitades: que la referencia del mes sea
- *    determinista (misma entrada → misma cadena, o el índice no choca) y que el
- *    filtro por `lastMonthlyKey` no vuelva a emitir el pago.
- *  - `once_paid` está cerrado PARA SIEMPRE: una segunda comisión sobre un pago
- *    único es dinero duplicado sin contraparte.
- *  - Pausa y reactivación son simétricas y NO cuestan un nuevo periodo de 3
- *    meses: el trato publicado es "mientras sostengas".
+ *  - Alcanzar un escalón NO paga: arranca una racha de SUSTAIN_MONTHS. Un plan
+ *    de acciones que otorgue antes de tiempo entrega dinero que no se ganó.
+ *  - Un escalón `awarded` está cerrado PARA SIEMPRE: ni una segunda comisión
+ *    (dinero duplicado sin contraparte) ni una revocación si su red baja (ya se
+ *    ganó con 3 meses sostenidos). El candado duro es el índice único de
+ *    affiliate_commissions."stripeInvoiceId", así que aquí se prueban las dos
+ *    mitades: que `commissionRefOnce` sea determinista (misma entrada → misma
+ *    cadena, o el índice no choca) y que el barrido nunca reemita el `award`.
+ *  - Los estados de la etapa con modalidad mensual degradan a `awarded`, JAMÁS
+ *    a `tracking`: el sentido del error decide si un bono ya entregado se vuelve
+ *    a pagar.
  *  - Los montos se CONGELAN al otorgar: editar la config después no puede mover
  *    lo que ya se prometió.
  *
@@ -40,16 +47,13 @@ import {
   NETWORK_TIER_KEYS,
   SUSTAIN_MONTHS,
   buildNetworkBonusView,
-  commissionRefMonthly,
   commissionRefOnce,
-  compareChoices,
   decideNetworkSweep,
   isSustained,
   monthsElapsed,
   monthsLeftToAward,
   networkBonusTiers,
   normalizeAwardStatus,
-  normalizeChoice,
   normalizeNetworkBonus,
   periodKey,
   type AwardSnapshot,
@@ -67,19 +71,14 @@ const CFG: NetworkBonusConfig = {
   networkBonusEnabled: true,
   networkTier1Clinics: 4,
   networkTier1OnceMxn: 2000,
-  networkTier1MonthlyMxn: 250,
   networkTier2Clinics: 10,
   networkTier2OnceMxn: 8000,
-  networkTier2MonthlyMxn: 1000,
   networkTier3Clinics: 30,
   networkTier3OnceMxn: 24000,
-  networkTier3MonthlyMxn: 3000,
   networkTier4Clinics: 100,
   networkTier4OnceMxn: 90000,
-  networkTier4MonthlyMxn: 10000,
   networkTier5Clinics: 300,
   networkTier5OnceMxn: 300000,
-  networkTier5MonthlyMxn: 40000,
 };
 
 const TIERS: NetworkBonusTier[] = networkBonusTiers(CFG);
@@ -98,9 +97,7 @@ function award(over: Partial<AwardSnapshot> & { tier: number }): AwardSnapshot {
     status: "tracking",
     clinics: t.clinics,
     onceMxn: t.onceMxn,
-    monthlyMxn: t.monthlyMxn,
     qualifiedSince: null,
-    lastMonthlyKey: null,
     lastCount: 0,
     ...over,
   };
@@ -150,16 +147,26 @@ test("networkBonusTiers ordena por umbral y descarta lo inutilizable", () => {
     [4, 10, 30, 100, 300],
     "los escalones salen de la CONFIG, no de los defaults",
   );
-  // Un escalón con los DOS montos en 0 se apaga sin apagar los otros cuatro.
-  const apagado = networkBonusTiers({ ...CFG, networkTier2OnceMxn: 0, networkTier2MonthlyMxn: 0 });
-  assert.equal(apagado.length, 4);
-  assert.equal(apagado.find((t) => t.clinics === 10), undefined);
-  // Con un solo monto en 0 SÍ sale: es "solo pago único" / "solo mensual".
-  const soloUnico = networkBonusTiers({ ...CFG, networkTier2MonthlyMxn: 0 });
-  assert.equal(soloUnico.length, 5);
-  assert.equal(soloUnico.find((t) => t.clinics === 10)!.monthlyMxn, 0);
+  assert.deepEqual(
+    tiers.map((t) => t.onceMxn),
+    [2000, 8000, 24000, 90000, 300000],
+    "y los montos también",
+  );
   // Umbral en 0 = escalón sin sentido.
   assert.equal(networkBonusTiers({ ...CFG, networkTier1Clinics: 0 }).length, 4);
+});
+
+test("networkBonusTiers descarta el escalón con el MONTO en 0", () => {
+  // Con la modalidad mensual retirada, el pago único es el ÚNICO monto del
+  // escalón: un 0 ahí ya no significa "solo mensual", significa un escalón sin
+  // premio. Publicarlo sería prometer un bono de $0 y, peor, otorgarlo: una
+  // comisión de cero pesos que el afiliado ve en su panel como pendiente.
+  const apagado = networkBonusTiers({ ...CFG, networkTier2OnceMxn: 0 });
+  assert.equal(apagado.length, 4, "se apaga UNO sin apagar los otros cuatro");
+  assert.equal(apagado.find((t) => t.clinics === 10), undefined);
+  assert.deepEqual(apagado.map((t) => t.clinics), [4, 30, 100, 300]);
+  // Un monto negativo (un UPDATE a mano en Supabase) tampoco pasa.
+  assert.equal(networkBonusTiers({ ...CFG, networkTier3OnceMxn: -1 }).length, 4);
 });
 
 test("normalizeNetworkBonus rellena huecos con los defaults del DDL y nunca lanza", () => {
@@ -172,35 +179,14 @@ test("normalizeNetworkBonus rellena huecos con los defaults del DDL y nunca lanz
   // El interruptor solo se apaga con un `false` explícito.
   assert.equal(normalizeNetworkBonus({}).networkBonusEnabled, true);
   assert.equal(normalizeNetworkBonus({ networkBonusEnabled: false }).networkBonusEnabled, false);
-  // Las 16 columnas están cubiertas por NETWORK_TIER_KEYS + el switch.
-  assert.equal(NETWORK_TIER_KEYS.length * 3 + 1, 16);
+  // Las 11 columnas VIVAS están cubiertas por NETWORK_TIER_KEYS + el switch
+  // (las 5 `networkTier<N>MonthlyMxn` del DDL quedaron sin uso al retirarse la
+  // modalidad mensual: no se leen, no se escriben y no viajan a ninguna UI).
+  assert.equal(NETWORK_TIER_KEYS.length * 2 + 1, 11);
+  assert.equal(Object.keys(DEFAULT_NETWORK_BONUS).length, 11);
 });
 
-// ── 3. La comparación entre las dos formas de cobro ───────────────────────
-
-test("compareChoices calcula los meses de cruce, nunca los teclea", () => {
-  // Cociente ENTERO: iguala en el 8, supera en el 9. Decirlo mal le vende mejor
-  // una de las dos modalidades sobre una elección irreversible.
-  const exacto = compareChoices(8000, 1000);
-  assert.equal(exacto.monthsToMatch, 8);
-  assert.equal(exacto.monthsToBeat, 9);
-  assert.equal(exacto.monthlyYearlyMxn, 12000);
-  assert.equal(exacto.bothAvailable, true);
-
-  // Cociente NO entero: iguala y supera en el mismo mes.
-  const roto = compareChoices(7300, 1000);
-  assert.equal(roto.monthsToMatch, 8);
-  assert.equal(roto.monthsToBeat, 8);
-
-  // Con una sola modalidad no hay comparación posible: nulls, no ceros que la
-  // UI pintaría como "0 meses".
-  const solo = compareChoices(5000, 0);
-  assert.equal(solo.bothAvailable, false);
-  assert.equal(solo.monthsToMatch, null);
-  assert.equal(solo.monthsToBeat, null);
-});
-
-// ── 4. El reloj de los meses sostenidos ───────────────────────────────────
+// ── 3. El reloj de los meses sostenidos ───────────────────────────────────
 
 test("monthsElapsed cuenta meses de CALENDARIO y redondea hacia abajo", () => {
   // Del 15 de enero al 14 de febrero van 0 meses; al 15, 1.
@@ -226,243 +212,40 @@ test("isSustained exige los SUSTAIN_MONTHS completos", () => {
 test("periodKey es UTC y estable a los lados de la medianoche", () => {
   assert.equal(periodKey(new Date(Date.UTC(2026, 8, 1, 0, 0, 0))), "2026-09");
   assert.equal(periodKey(new Date(Date.UTC(2026, 8, 30, 23, 59, 59))), "2026-09");
-  // El mes se rellena a dos dígitos: "2026-9" y "2026-09" serían DOS candados
-  // distintos sobre el mismo mes.
+  // El mes se rellena a dos dígitos: "2026-9" y "2026-09" serían DOS etiquetas
+  // distintas sobre el mismo mes en los resúmenes del cron y del admin.
   assert.equal(periodKey(utc(2026, 1, 1)), "2026-01");
 });
 
-// ── 5. El ciclo de vida: alcanzar NO es cobrar ────────────────────────────
+// ── 4. El ciclo de vida: alcanzar NO es cobrar ────────────────────────────
 
-test("llegar al umbral por primera vez arranca la racha y NO paga nada", () => {
+test("llegar al umbral por primera vez arranca la racha y NO otorga nada", () => {
   const actions = decideNetworkSweep({ count: 10, tiers: TIERS, awards: [], now: utc(2026, 1) });
   // Alcanza el escalón de 4 y el de 10: los dos arrancan (son acumulables).
   const started = only(actions, "start-tracking");
   assert.equal(started.length, 2);
   assert.deepEqual(started.map((a) => a.clinics).sort((x, y) => x - y), [4, 10]);
-  // Y NADA de dinero en la primera pasada.
+  // Y NADA de dinero en la primera pasada: otorgar es lo que genera la comisión.
   assert.equal(only(actions, "award").length, 0);
-  assert.equal(only(actions, "pay-monthly").length, 0);
 });
 
-test("cumplidos los 3 meses se OTORGA, pero seguir otorgado NO paga", () => {
+test("cumplidos los 3 meses se OTORGA con los montos de su escalón", () => {
   const enRacha = award({ tier: 2, status: "tracking", qualifiedSince: utc(2026, 1), lastCount: 10 });
 
   // A los 2 meses todavía no.
   const antes = decideNetworkSweep({ count: 10, tiers: TIERS, awards: [enRacha], now: utc(2026, 3) });
-  assert.equal(only(antes, "award").length, 0);
+  assert.equal(only(antes, "award").length, 0, "2 meses de racha no otorgan");
   assert.equal(only(antes, "refresh-tracking").length, 1);
 
-  // A los 3, sí.
+  // A los 3, sí. La acción `award` lleva el monto con el que el aplicador
+  // escribe la comisión de PAGO ÚNICO en la misma transacción.
   const justo = decideNetworkSweep({ count: 10, tiers: TIERS, awards: [enRacha], now: utc(2026, 4) });
   const otorgado = only(justo, "award");
   assert.equal(otorgado.length, 1);
   assert.equal(otorgado[0].tier, 2);
-  assert.equal(otorgado[0].onceMxn, 8000);
-  assert.equal(otorgado[0].monthlyMxn, 1000);
-
-  // ⚠️ EL PUNTO DEL PROGRAMA: otorgar NO es pagar.
-  assert.equal(only(justo, "pay-monthly").length, 0, "otorgar no puede generar un pago");
-});
-
-test("un award en pending_choice NO paga por más corridas que pasen", () => {
-  const esperando = award({ tier: 2, status: "pending_choice", lastCount: 10 });
-  for (const mes of [5, 6, 7, 8, 9]) {
-    const actions = decideNetworkSweep({
-      count: 10,
-      tiers: TIERS,
-      awards: [esperando],
-      now: utc(2026, mes),
-    });
-    assert.equal(
-      only(actions, "pay-monthly").length,
-      0,
-      `mes ${mes}: mientras no elija no se paga NADA`,
-    );
-    assert.equal(only(actions, "award").length, 0, "y no se vuelve a otorgar");
-  }
-});
-
-test("pending_choice NO se revoca si su red se cae: ya se ganó", () => {
-  const esperando = award({ tier: 2, status: "pending_choice", lastCount: 10 });
-  const actions = decideNetworkSweep({
-    count: 0,
-    tiers: TIERS,
-    awards: [esperando],
-    now: utc(2026, 6),
-  });
-  // Solo se anota el nuevo conteo observado; el bono sigue en pie.
-  assert.deepEqual(actions.map((a) => a.type), ["touch"]);
-});
-
-// ── 6. EL CANDADO: el cron dos veces el mismo mes ─────────────────────────
-
-test("la referencia de la mensualidad es determinista (el candado del índice único)", () => {
-  // Misma entrada → misma cadena. Si variara (un timestamp, un random), el
-  // índice único de affiliate_commissions NUNCA chocaría y el cron pagaría dos
-  // veces sin que nada lo detuviera.
-  assert.equal(commissionRefMonthly("abc", "2026-09"), "netbonus:abc:2026-09");
-  assert.equal(commissionRefMonthly("abc", "2026-09"), commissionRefMonthly("abc", "2026-09"));
-  // Meses distintos → candados distintos (si no, el segundo mes no se pagaría).
-  assert.notEqual(commissionRefMonthly("abc", "2026-09"), commissionRefMonthly("abc", "2026-10"));
-  // Awards distintos → candados distintos.
-  assert.notEqual(commissionRefMonthly("abc", "2026-09"), commissionRefMonthly("xyz", "2026-09"));
-  // El pago único tiene su propio candado, para siempre.
-  assert.equal(commissionRefOnce("abc"), "netbonus:abc:once");
-  assert.notEqual(commissionRefOnce("abc"), commissionRefMonthly("abc", "2026-09"));
-  assert.equal(NETWORK_BONUS_KIND, "network_bonus");
-});
-
-test("EL CANDADO: correr el cron dos veces el mismo mes no emite un segundo pago", () => {
-  const now = utc(2026, 9);
-  const key = periodKey(now);
-  const activo = award({ tier: 2, status: "monthly_active", lastMonthlyKey: null, lastCount: 10 });
-  // Con 10 clínicas también está por encima del escalón de 4, que en un
-  // afiliado real ya estaría cobrado hace tiempo. Va en la foto para que las
-  // aserciones de "no se escribe nada" midan el barrido completo del afiliado y
-  // no un escalón suelto.
-  const previo = award({ tier: 1, status: "once_paid", lastCount: 10 });
-
-  // Primera corrida del mes: paga.
-  const primera = decideNetworkSweep({ count: 10, tiers: TIERS, awards: [previo, activo], now });
-  const pagos = only(primera, "pay-monthly");
-  assert.equal(pagos.length, 1, "solo el escalón mensual cobra; el único ya está cerrado");
-  assert.equal(pagos[0].periodKey, key);
-  assert.equal(pagos[0].monthlyMxn, 1000);
-
-  // El aplicador escribe `lastMonthlyKey`. SEGUNDA corrida el MISMO mes:
-  const yaPagado = { ...activo, lastMonthlyKey: key, lastCount: 10 };
-  const segunda = decideNetworkSweep({ count: 10, tiers: TIERS, awards: [previo, yaPagado], now });
-  assert.equal(only(segunda, "pay-monthly").length, 0, "⚠️ NO puede pagar dos veces el mismo mes");
-  // Y sin nada que anotar, tampoco escribe por escribir.
-  assert.equal(segunda.length, 0);
-
-  // Tercera, cuarta, décima corrida del mismo mes: igual.
-  for (let i = 0; i < 10; i++) {
-    assert.equal(
-      only(
-        decideNetworkSweep({ count: 10, tiers: TIERS, awards: [previo, yaPagado], now }),
-        "pay-monthly",
-      ).length,
-      0,
-    );
-  }
-
-  // El MES SIGUIENTE sí vuelve a pagar (si no, el mensual dejaría de serlo).
-  const octubre = utc(2026, 10);
-  const siguiente = decideNetworkSweep({
-    count: 10,
-    tiers: TIERS,
-    awards: [previo, yaPagado],
-    now: octubre,
-  });
-  const pagoOct = only(siguiente, "pay-monthly");
-  assert.equal(pagoOct.length, 1);
-  assert.equal(pagoOct[0].periodKey, "2026-10");
-  assert.notEqual(
-    commissionRefMonthly(pagoOct[0].awardId, pagoOct[0].periodKey),
-    commissionRefMonthly(pagos[0].awardId, pagos[0].periodKey),
-  );
-});
-
-test("el modo ÚNICO paga una sola vez: once_paid nunca vuelve a emitir nada", () => {
-  const cerrado = award({ tier: 2, status: "once_paid", lastCount: 10 });
-  for (const mes of [5, 6, 7, 12]) {
-    const actions = decideNetworkSweep({
-      count: 10,
-      tiers: TIERS,
-      awards: [cerrado],
-      now: utc(2026, mes),
-    });
-    assert.equal(only(actions, "pay-monthly").length, 0, "un pago único no se repite");
-    assert.equal(only(actions, "award").length, 0);
-  }
-  // Ni siquiera si su red sube muchísimo dentro del mismo escalón.
-  const subiendo = decideNetworkSweep({
-    count: 29,
-    tiers: TIERS,
-    awards: [cerrado],
-    now: utc(2026, 7),
-  });
-  assert.equal(only(subiendo, "pay-monthly").length, 0);
-});
-
-// ── 7. Pausa y reactivación ───────────────────────────────────────────────
-
-test("la red cae → PAUSADO y deja de pagar", () => {
-  const activo = award({ tier: 2, status: "monthly_active", lastMonthlyKey: "2026-08", lastCount: 10 });
-  const actions = decideNetworkSweep({ count: 9, tiers: TIERS, awards: [activo], now: utc(2026, 9) });
-  const pausas = only(actions, "pause");
-  assert.equal(pausas.length, 1);
-  assert.equal(pausas[0].tier, 2);
-  assert.equal(only(actions, "pay-monthly").length, 0, "un mensual pausado NO cobra");
-});
-
-test("un pausado que sigue abajo no cobra y no cuesta escrituras de más", () => {
-  const pausado = award({
-    tier: 2,
-    status: "monthly_paused",
-    lastMonthlyKey: "2026-08",
-    lastCount: 9,
-  });
-  // El escalón de 4, que sigue alcanzado y ya está cobrado: la foto completa
-  // del afiliado, para que "no se escribe nada" mida el barrido entero.
-  const previo = award({ tier: 1, status: "once_paid", lastCount: 9 });
-
-  // Mismo conteo que la última vez: no hay nada que anotar.
-  const igual = decideNetworkSweep({
-    count: 9,
-    tiers: TIERS,
-    awards: [previo, pausado],
-    now: utc(2026, 10),
-  });
-  assert.equal(only(igual, "pay-monthly").length, 0);
-  assert.equal(igual.length, 0, "sin cambios no se escribe");
-
-  // Conteo distinto: se anota en los dos awards, pero nadie cobra.
-  const cambio = decideNetworkSweep({
-    count: 7,
-    tiers: TIERS,
-    awards: [previo, pausado],
-    now: utc(2026, 10),
-  });
-  assert.deepEqual(cambio.map((a) => a.type), ["touch", "touch"], "solo se anota el conteo");
-});
-
-test("la red vuelve a subir → REACTIVADO, y sin repetir los 3 meses", () => {
-  const pausado = award({
-    tier: 2,
-    status: "monthly_paused",
-    lastMonthlyKey: "2026-08",
-    lastCount: 9,
-    // Ojo: sin racha en curso. El trato es "mientras sostengas", así que volver
-    // al umbral reactiva de inmediato en vez de exigir otros 3 meses.
-    qualifiedSince: null,
-  });
-  const actions = decideNetworkSweep({ count: 10, tiers: TIERS, awards: [pausado], now: utc(2026, 9) });
-  assert.equal(only(actions, "resume").length, 1);
-  const pagos = only(actions, "pay-monthly");
-  assert.equal(pagos.length, 1, "al reactivarse cobra el mes en curso");
-  assert.equal(pagos[0].periodKey, "2026-09");
-  // Y el ORDEN importa: primero reactivar, luego pagar. Al revés, un fallo
-  // entre las dos escrituras dejaría una comisión emitida sobre un award que
-  // sigue marcado como pausado. Se busca por posición relativa, no por índice
-  // absoluto: en el mismo barrido caben acciones de otros escalones.
-  const iResume = actions.findIndex((a) => a.type === "resume");
-  const iPago = actions.findIndex((a) => a.type === "pay-monthly");
-  assert.ok(iResume >= 0 && iPago > iResume, "reactivar va ANTES de pagar");
-});
-
-test("reactivar el MISMO mes en que ya cobró no duplica el pago", () => {
-  // Caso real: cae y vuelve dentro del mismo mes, o el cron corre dos veces.
-  const pausado = award({
-    tier: 2,
-    status: "monthly_paused",
-    lastMonthlyKey: "2026-09",
-    lastCount: 9,
-  });
-  const actions = decideNetworkSweep({ count: 10, tiers: TIERS, awards: [pausado], now: utc(2026, 9) });
-  assert.equal(only(actions, "resume").length, 1, "sí se reactiva");
-  assert.equal(only(actions, "pay-monthly").length, 0, "⚠️ pero NO cobra dos veces septiembre");
+  assert.equal(otorgado[0].awardId, enRacha.id);
+  assert.equal(otorgado[0].onceMxn, 8000, "el monto de CFG, no un default");
+  assert.equal(otorgado[0].clinics, 10);
 });
 
 test("caer del umbral mientras se cuenta REINICIA la racha", () => {
@@ -493,41 +276,112 @@ test("un afiliado lejos del umbral no genera escrituras cada mes", () => {
   assert.equal(actions.length, 0);
 });
 
-// ── 8. Los montos CONGELADOS ──────────────────────────────────────────────
+test("un tracking que sigue abajo del umbral no cuesta escrituras de más", () => {
+  // Racha ya reiniciada (qualifiedSince null) y el mismo conteo de la última
+  // corrida: no hay nada que anotar. El escalón de 4 va en la foto ya otorgado,
+  // para que "no se escribe nada" mida el barrido ENTERO del afiliado.
+  const previo = award({ tier: 1, status: "awarded", lastCount: 3 });
+  const parado = award({ tier: 2, status: "tracking", qualifiedSince: null, lastCount: 3 });
+  const igual = decideNetworkSweep({
+    count: 3,
+    tiers: TIERS,
+    awards: [previo, parado],
+    now: utc(2026, 10),
+  });
+  assert.equal(igual.length, 0, "sin cambios no se escribe");
 
-test("editar la config NO mueve un bono ya otorgado", () => {
-  // El award se otorgó con los montos viejos…
-  const otorgado = award({
-    tier: 2,
-    status: "monthly_active",
-    onceMxn: 8000,
-    monthlyMxn: 1000,
-    lastMonthlyKey: "2026-08",
-    lastCount: 10,
+  // Conteo distinto: solo se anota, y en los dos awards.
+  const cambio = decideNetworkSweep({
+    count: 2,
+    tiers: TIERS,
+    awards: [previo, parado],
+    now: utc(2026, 10),
   });
-  // …y mientras tanto Rafael duplicó los montos en /admin.
-  const nuevaCfg: NetworkBonusConfig = {
-    ...CFG,
-    networkTier2OnceMxn: 16000,
-    networkTier2MonthlyMxn: 2000,
-  };
-  const actions = decideNetworkSweep({
-    count: 10,
-    tiers: networkBonusTiers(nuevaCfg),
-    awards: [otorgado],
-    now: utc(2026, 9),
-  });
-  const pagos = only(actions, "pay-monthly");
-  assert.equal(pagos.length, 1);
-  assert.equal(pagos[0].monthlyMxn, 1000, "⚠️ se paga lo CONGELADO, no lo vigente");
+  assert.deepEqual(cambio.map((a) => a.type), ["touch", "touch"], "solo se anota el conteo");
 });
+
+// ── 5. EL CANDADO: otorgado es otorgado, para siempre ─────────────────────
+
+test("commissionRefOnce es determinista (el candado del índice único)", () => {
+  // Misma entrada → misma cadena. Si variara (un timestamp, un random), el
+  // índice único de affiliate_commissions."stripeInvoiceId" NUNCA chocaría y
+  // dos corridas simultáneas del cron pagarían el mismo escalón dos veces sin
+  // que nada lo detuviera.
+  assert.equal(commissionRefOnce("abc"), "netbonus:abc:once");
+  assert.equal(commissionRefOnce("abc"), commissionRefOnce("abc"));
+  // Un award por (afiliado, escalón) y una comisión por award: awards distintos
+  // → candados distintos, o el segundo escalón no se podría pagar nunca.
+  assert.notEqual(commissionRefOnce("abc"), commissionRefOnce("xyz"));
+  assert.equal(NETWORK_BONUS_KIND, "network_bonus");
+});
+
+test("EL CANDADO: un escalón `awarded` JAMÁS vuelve a producir un `award`", () => {
+  // Con 10 clínicas también está por encima del escalón de 4, que en un
+  // afiliado real ya estaría otorgado hace tiempo. Va en la foto para que las
+  // aserciones de "no se escribe nada" midan el barrido completo del afiliado y
+  // no un escalón suelto.
+  const previo = award({ tier: 1, status: "awarded", lastCount: 10 });
+  const cerrado = award({ tier: 2, status: "awarded", lastCount: 10 });
+
+  // Mes tras mes, corrida tras corrida: ni un `award` más.
+  for (const mes of [5, 6, 7, 9, 12]) {
+    const actions = decideNetworkSweep({
+      count: 10,
+      tiers: TIERS,
+      awards: [previo, cerrado],
+      now: utc(2026, mes),
+    });
+    assert.equal(only(actions, "award").length, 0, `mes ${mes}: un bono otorgado no se repite`);
+    assert.equal(actions.length, 0, `mes ${mes}: y sin cambios tampoco escribe por escribir`);
+  }
+
+  // El cron corriendo DIEZ veces el mismo día: idéntico.
+  const now = utc(2026, 9);
+  for (let i = 0; i < 10; i++) {
+    const actions = decideNetworkSweep({ count: 10, tiers: TIERS, awards: [previo, cerrado], now });
+    assert.equal(only(actions, "award").length, 0, `corrida ${i + 1}`);
+  }
+
+  // Ni siquiera si su red sube muchísimo dentro del mismo escalón: se anota el
+  // conteo nuevo y nada más.
+  const subiendo = decideNetworkSweep({
+    count: 29,
+    tiers: TIERS,
+    awards: [previo, cerrado],
+    now: utc(2026, 7),
+  });
+  assert.equal(only(subiendo, "award").length, 0);
+  assert.deepEqual(subiendo.map((a) => a.type), ["touch", "touch"]);
+});
+
+test("un award `awarded` NO se revoca si su red se cae: ya se ganó", () => {
+  // El trato publicado es "sostenlo 3 meses y el bono es tuyo". Bajar después
+  // del umbral no lo deshace —el dinero ya salió y no hay nada que retirar—,
+  // así que el barrido solo anota el conteo nuevo.
+  const cerrado = award({ tier: 2, status: "awarded", onceMxn: 8000, lastCount: 10 });
+  const actions = decideNetworkSweep({
+    count: 0,
+    tiers: TIERS,
+    awards: [cerrado],
+    now: utc(2026, 6),
+  });
+  assert.deepEqual(actions.map((a) => a.type), ["touch"], "ni reset, ni revocación, ni nada");
+  assert.equal(only(actions, "award").length, 0);
+
+  // Y la vista lo sigue enseñando otorgado, con su monto.
+  const view = buildNetworkBonusView(0, TIERS, [cerrado], utc(2026, 6));
+  assert.equal(view.awarded.length, 1);
+  assert.equal(view.awarded[0].n, 2);
+  assert.equal(view.awardedMxn, 8000);
+});
+
+// ── 6. Los montos CONGELADOS ──────────────────────────────────────────────
 
 test("un award en tracking SÍ sigue los montos vivos (aún no se prometió nada)", () => {
   const enRacha = award({
     tier: 2,
     status: "tracking",
     onceMxn: 8000,
-    monthlyMxn: 1000,
     qualifiedSince: utc(2026, 1),
     lastCount: 10,
   });
@@ -543,19 +397,32 @@ test("un award en tracking SÍ sigue los montos vivos (aún no se prometió nada
   assert.equal(otorgado[0].onceMxn, 16000, "al otorgar se congela lo VIGENTE en ese instante");
 });
 
-// ── 9. Escalones acumulables, cada uno con su vida ────────────────────────
+test("editar la config NO mueve un bono ya otorgado", () => {
+  // El award se otorgó con el monto viejo…
+  const previo = award({ tier: 1, status: "awarded", lastCount: 10 });
+  const otorgado = award({ tier: 2, status: "awarded", onceMxn: 8000, lastCount: 10 });
+  // …y mientras tanto Rafael duplicó los montos en /admin.
+  const nuevaCfg: NetworkBonusConfig = { ...CFG, networkTier2OnceMxn: 16000 };
+  const actions = decideNetworkSweep({
+    count: 10,
+    tiers: networkBonusTiers(nuevaCfg),
+    awards: [previo, otorgado],
+    now: utc(2026, 9),
+  });
+  assert.equal(actions.length, 0, "un award cerrado no se reabre para 'actualizar' su monto");
+});
 
-test("los escalones son independientes: uno cobrado no bloquea al siguiente", () => {
-  const now = utc(2026, 9);
-  const awards: AwardSnapshot[] = [
-    award({ tier: 1, status: "once_paid", lastCount: 10 }),
-    award({ tier: 2, status: "monthly_active", lastMonthlyKey: null, lastCount: 10 }),
-  ];
-  const actions = decideNetworkSweep({ count: 10, tiers: TIERS, awards, now });
-  // El de 4 está cerrado; el de 10 cobra su mes.
-  const pagos = only(actions, "pay-monthly");
-  assert.equal(pagos.length, 1);
-  assert.equal(pagos[0].tier, 2);
+// ── 7. Escalones acumulables, cada uno con su vida ────────────────────────
+
+test("los escalones son independientes: uno otorgado no bloquea al siguiente", () => {
+  const enRacha = award({ tier: 2, status: "tracking", qualifiedSince: utc(2026, 6), lastCount: 10 });
+  const awards: AwardSnapshot[] = [award({ tier: 1, status: "awarded", lastCount: 10 }), enRacha];
+  const actions = decideNetworkSweep({ count: 10, tiers: TIERS, awards, now: utc(2026, 9) });
+  // El de 4 está cerrado; el de 10 cumple sus 3 meses y se otorga.
+  const otorgado = only(actions, "award");
+  assert.equal(otorgado.length, 1);
+  assert.equal(otorgado[0].tier, 2);
+  assert.equal(otorgado[0].onceMxn, 8000);
 });
 
 test("subir de golpe arranca TODOS los escalones alcanzados a la vez", () => {
@@ -566,59 +433,61 @@ test("subir de golpe arranca TODOS los escalones alcanzados a la vez", () => {
     [4, 10, 30, 100],
     "los cuatro alcanzados; el de 300 no",
   );
-  assert.equal(only(actions, "pay-monthly").length, 0);
+  // Pero ninguno cobra el primer día: los 3 meses se cuentan igual para todos.
+  assert.equal(only(actions, "award").length, 0);
 });
 
-// ── 10. La vista del panel ────────────────────────────────────────────────
+// ── 8. La vista del panel ─────────────────────────────────────────────────
 
-test("buildNetworkBonusView separa lo pendiente de lo elegido y suma bien", () => {
+test("buildNetworkBonusView separa lo otorgado y suma bien", () => {
   const now = utc(2026, 9);
   const awards: AwardSnapshot[] = [
-    award({ tier: 1, status: "once_paid", lastCount: 12 }),
-    award({ tier: 2, status: "pending_choice", lastCount: 12 }),
+    award({ tier: 1, status: "awarded", lastCount: 12 }),
+    award({ tier: 2, status: "tracking", qualifiedSince: utc(2026, 8), lastCount: 12 }),
   ];
   const view = buildNetworkBonusView(12, TIERS, awards, now);
 
   assert.equal(view.count, 12);
-  assert.equal(view.pending.length, 1);
-  assert.equal(view.pending[0].n, 2);
-  assert.equal(view.chosen.length, 1);
-  assert.equal(view.chosen[0].n, 1);
-  assert.equal(view.oncePaidMxn, 2000, "el pago único del escalón 1 de CFG");
-  assert.equal(view.monthlyActiveMxn, 0, "un pending_choice NO suma a lo que cobra al mes");
+  assert.equal(view.awarded.length, 1, "solo el escalón 1 está otorgado");
+  assert.equal(view.awarded[0].n, 1);
+  assert.equal(view.awardedMxn, 2000, "el pago único del escalón 1 de CFG");
+
+  // El escalón 2 va en racha: la vista dice cuánto lleva y cuánto le falta.
+  assert.equal(view.tiers[1].monthsSustained, 1);
+  assert.equal(view.tiers[1].monthsLeft, 2);
 
   // El siguiente escalón y cuántas faltan — la frase de la barra.
   assert.equal(view.next!.clinics, 30);
   assert.equal(view.missing, 18);
 });
 
-test("la vista de un award otorgado compara SUS montos, no los vigentes", () => {
-  const congelado = award({
-    tier: 2,
-    status: "pending_choice",
-    onceMxn: 8000,
-    monthlyMxn: 1000,
-    lastCount: 10,
-  });
+test("la vista suma los montos CONGELADOS del award, no los vigentes", () => {
+  // El afiliado cobró $8,000 y $2,000; después Rafael subió los montos en
+  // /admin. Su panel tiene que seguir diciendo $10,000: enseñarle lo vigente
+  // sería prometerle una diferencia que nadie le va a pagar.
+  const awards: AwardSnapshot[] = [
+    award({ tier: 1, status: "awarded", onceMxn: 2000, lastCount: 12 }),
+    award({ tier: 2, status: "awarded", onceMxn: 8000, lastCount: 12 }),
+  ];
   const nuevaCfg: NetworkBonusConfig = {
     ...CFG,
+    networkTier1OnceMxn: 50000,
     networkTier2OnceMxn: 40000,
-    networkTier2MonthlyMxn: 1000,
   };
-  const view = buildNetworkBonusView(10, networkBonusTiers(nuevaCfg), [congelado], utc(2026, 9));
-  // 8000/1000 = 8 meses, no 40000/1000 = 40: al afiliado se le enseña el cruce
-  // de LO SUYO antes de una elección irreversible.
-  assert.equal(view.pending[0].comparison.monthsToMatch, 8);
+  const view = buildNetworkBonusView(12, networkBonusTiers(nuevaCfg), awards, utc(2026, 9));
+  assert.equal(view.awarded.length, 2);
+  assert.equal(view.awardedMxn, 10000, "2000 + 8000 congelados, no 50000 + 40000");
 });
 
 test("la vista no adelanta estados que el cron todavía no vio", () => {
   // Llega al umbral hoy, pero el barrido aún no ha corrido: no hay award.
   const view = buildNetworkBonusView(10, TIERS, [], utc(2026, 9));
-  assert.equal(view.pending.length, 0);
-  assert.equal(view.chosen.length, 0);
+  assert.equal(view.awarded.length, 0);
+  assert.equal(view.awardedMxn, 0);
   assert.equal(view.tiers[1].reachedNow, true, "sí dice que hoy alcanza el umbral");
   assert.equal(view.tiers[1].award, null, "pero no finge una racha que nadie registró");
   assert.equal(view.tiers[1].monthsSustained, null);
+  assert.equal(view.tiers[1].monthsLeft, null);
 });
 
 test("con todos los escalones alcanzados no hay 'siguiente'", () => {
@@ -627,24 +496,37 @@ test("con todos los escalones alcanzados no hay 'siguiente'", () => {
   assert.equal(view.missing, 0);
 });
 
-// ── 11. Normalizadores defensivos ─────────────────────────────────────────
+// ── 9. Normalizadores defensivos ──────────────────────────────────────────
 
-test("normalizeAwardStatus y normalizeChoice degradan a lo SEGURO", () => {
-  // Un estado desconocido cae a "tracking": el estado que NO paga. Caer a
-  // "monthly_active" por un typo en la BD sería pagar sin haber otorgado.
-  assert.equal(normalizeAwardStatus("monthly_active"), "monthly_active");
-  assert.equal(normalizeAwardStatus("pending_choice"), "pending_choice");
+test("normalizeAwardStatus: los estados legados degradan a `awarded`, NO a `tracking`", () => {
+  // ⚠️ EL SENTIDO DEL ERROR. Los cuatro estados de la etapa con modalidad
+  // mensual significan todos "este escalón YA se otorgó". Degradarlos a
+  // `tracking` —el estado que cuenta la racha— haría que el barrido los
+  // otorgara otra vez y emitiera una SEGUNDA comisión sobre un bono ya
+  // entregado: dinero duplicado sin contraparte. Al revés, quedarse en
+  // `awarded` solo cuesta que un escalón no se vuelva a contar, que es
+  // exactamente lo que se quiere.
+  for (const legado of ["pending_choice", "once_paid", "monthly_active", "monthly_paused"]) {
+    assert.equal(normalizeAwardStatus(legado), "awarded", `${legado} ya estaba otorgado`);
+    assert.notEqual(normalizeAwardStatus(legado), "tracking", `${legado} no puede volver a otorgar`);
+  }
+  assert.equal(normalizeAwardStatus("awarded"), "awarded");
+  assert.equal(normalizeAwardStatus("tracking"), "tracking");
+  // Lo DESCONOCIDO sí cae a "tracking": ahí no hay nada que suponer otorgado, y
+  // ese es el estado que no paga.
   assert.equal(normalizeAwardStatus("basura"), "tracking");
   assert.equal(normalizeAwardStatus(null), "tracking");
   assert.equal(normalizeAwardStatus(undefined), "tracking");
+  assert.equal(normalizeAwardStatus(7), "tracking");
+});
 
-  // La elección NO tiene default: null obliga al caller a rechazar el request
-  // en vez de elegir por el afiliado sobre algo irreversible.
-  assert.equal(normalizeChoice("once"), "once");
-  assert.equal(normalizeChoice("monthly"), "monthly");
-  assert.equal(normalizeChoice("mensual"), null);
-  assert.equal(normalizeChoice(""), null);
-  assert.equal(normalizeChoice(null), null);
+test("un status legado tampoco vuelve a otorgar al pasar por el barrido", () => {
+  // La otra mitad de la regla anterior, comprobada de punta a punta: una fila
+  // vieja normalizada entra al cron como `awarded` y sale sin un solo `award`.
+  const legado = award({ tier: 2, status: normalizeAwardStatus("once_paid"), lastCount: 10 });
+  assert.equal(legado.status, "awarded");
+  const actions = decideNetworkSweep({ count: 10, tiers: TIERS, awards: [legado], now: utc(2026, 9) });
+  assert.equal(only(actions, "award").length, 0);
 });
 
 test("un conteo basura no otorga nada", () => {

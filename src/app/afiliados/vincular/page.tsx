@@ -3,7 +3,8 @@ import { redirect } from "next/navigation";
 import { AuthShell } from "@/components/public/auth/auth-shell";
 import { LoginVisual } from "@/components/public/auth/login/login-visual";
 import { AffiliateVincularForm } from "@/components/afiliados/affiliate-vincular-form";
-import { getAffiliateLinkState } from "@/lib/affiliates/link-state";
+import { getAffiliateLinkState, getInvitePreview } from "@/lib/affiliates/link-state";
+import { INVITE_PARAM } from "@/lib/affiliates/invites";
 
 // Dynamic: depende de la sesión de Supabase, no se puede prerenderizar.
 export const dynamic = "force-dynamic";
@@ -29,7 +30,7 @@ export const metadata: Metadata = {
 export default async function AffiliateVincularPage({
   searchParams,
 }: {
-  searchParams?: { email?: string };
+  searchParams?: { [key: string]: string | string[] | undefined };
 }) {
   const { sessionEmail, alreadyAffiliate } = await getAffiliateLinkState();
 
@@ -41,11 +42,23 @@ export default async function AffiliateVincularPage({
   const initialEmail =
     typeof searchParams?.email === "string" ? searchParams.email.trim().slice(0, 160) : "";
 
+  // El `inv` llega propagado desde /afiliados/registro cuando el correo ya
+  // existía en DaleControl. Se muestra igual que allá y se manda en el POST:
+  // cambiar de pantalla no puede costar la invitación.
+  const invite = await getInvitePreview(searchParams?.[INVITE_PARAM], sessionEmail);
+
   return (
     <AuthShell
       split="50/50"
       visual={<LoginVisual />}
-      form={<AffiliateVincularForm sessionEmail={sessionEmail} initialEmail={initialEmail} />}
+      form={
+        <AffiliateVincularForm
+          sessionEmail={sessionEmail}
+          initialEmail={initialEmail}
+          inviteCode={invite?.code ?? ""}
+          inviterName={invite?.name ?? ""}
+        />
+      }
     />
   );
 }

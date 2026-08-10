@@ -3394,6 +3394,20 @@ model Affiliate {
   /// sin manager: la pantalla de soporte cae al canal general, nunca a una
   /// tarjeta vacía. Mismo catálogo global que usan las clínicas.
   accountManagerId String?
+  /// Quién lo invitó al programa, vía su link de invitación
+  /// (/afiliados/registro?inv=<referralCode>). null = se registró directo.
+  ///
+  /// PERMANENTE Y DE UN SOLO NIVEL. Se escribe UNA vez, al crear la cuenta, y
+  /// no hay ninguna superficie —panel, admin o API— que lo cambie o lo borre:
+  /// si se pudiera romper, cualquiera se desvincularía justo antes de que su
+  /// invitador cobrara un bono por red.
+  ///
+  /// El invitado es un afiliado NORMAL: misma comisión por plan, elige su
+  /// propia modalidad y gana sus propios bonos. Su invitador NO cobra un peso
+  /// por las clínicas del invitado; su premio son los bonos por red
+  /// (AffiliateNetworkBonusAward), que cuentan las clínicas activas de sus
+  /// invitados DIRECTOS y nunca acumulan hacia arriba más de un nivel.
+  invitedByAffiliateId String?
   createdAt     DateTime        @default(now())
   updatedAt     DateTime        @updatedAt
 
@@ -3405,9 +3419,12 @@ model Affiliate {
   affiliateCoupons AffiliateCoupon[]
   supportTickets   AffiliateSupportTicket[]
   accountManager   AccountManager? @relation(fields: [accountManagerId], references: [id])
+  invitedBy        Affiliate?      @relation("AffiliateInvites", fields: [invitedByAffiliateId], references: [id])
+  invited          Affiliate[]     @relation("AffiliateInvites")
 
   @@index([status])
   @@index([accountManagerId])
+  @@index([invitedByAffiliateId])
   @@map("affiliates")
 }
 
@@ -7462,6 +7479,17 @@ model AffiliateProgramConfig {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
+// ⚠️ DEUDA — TABLAS MUERTAS (ago 2026). El segundo nivel del programa se
+// rehízo: ya no hay "vendedores", hay AFILIADOS INVITADOS
+// (Affiliate.invitedByAffiliateId), que son afiliados normales e idénticos a
+// quien los invitó. Los tres modelos de abajo —AffiliateSeller,
+// AffiliateSellerAttribution, AffiliateSellerCommission— y las columnas
+// affiliate_links.sellerId / affiliate_coupons.sellerId ya NO los lee ni los
+// escribe ninguna línea de código. Se conservan porque dropear tablas es
+// destructivo; estaban en 0 filas al retirarse (0 vendedores, 0 atribuciones),
+// así que no hay nada que migrar. Limpieza pendiente: ver ORQUESTA.md.
+//
+// Modelo histórico (ya NO vigente):
 // AFILIADOS — EQUIPOS DE VENDEDORES (jun 2026, WS3 · feat/afiliados-equipo)
 // Un AFILIADO (padre) registra manualmente a sus VENDEDORES. El vendedor gana
 // comisión por las clínicas que trae y el padre un OVERRIDE; juntos suman la
@@ -7978,11 +8006,15 @@ model AffiliatePayoutConfig {
   milestone3Clinics    Int      @default(50)
   milestone3Mxn        Float    @default(100000)
   // ── Bonos por RED (sql/afiliados-bonos-red.sql) ──────────────────────────
-  // Premian las clínicas activas que trajeron los VENDEDORES del afiliado.
-  // Cinco escalones, cada uno con DOS montos: el afiliado elige pago único o
-  // mensual al alcanzarlo. A diferencia de los hitos propios, estos SÍ se
-  // calculan y se pagan solos (@/lib/affiliates/network-bonus + el cron
-  // /api/cron/affiliate-network-bonus).
+  // Premian las clínicas activas que trajeron los AFILIADOS INVITADOS por este
+  // afiliado (Affiliate.invitedByAffiliateId). Cinco escalones, PAGO ÚNICO.
+  // A diferencia de los hitos propios, estos SÍ se calculan y se pagan solos
+  // (@/lib/affiliates/network-bonus + el cron /api/cron/affiliate-network-bonus).
+  //
+  // ⚠️ networkTier<N>MonthlyMxn quedan en la BD en 0 y SIN USO: la modalidad
+  // mensual del bono por red se retiró (ago 2026). Ninguna lectura las pide
+  // (getNetworkBonusConfig lleva `select` explícito) ni la UI del admin las
+  // edita. Deuda: dropearlas cuando toque una limpieza de columnas.
   //
   // ⚠️ Se leen con `select` explícito (getNetworkBonusConfig) para que un
   // deploy sin el SQL aplicado NO tumbe la lectura del motor de comisiones:
@@ -8010,15 +8042,15 @@ model AffiliatePayoutConfig {
 
 /// Un escalón del BONO POR RED otorgado (o en curso) a un afiliado.
 /// sql/afiliados-bonos-red.sql. SIN relación Prisma a Affiliate (la FK vive en
-/// el SQL, mismo patrón que AffiliateCommission / AffiliateSellerAttribution).
+/// el SQL, mismo patrón que AffiliateCommission).
 ///
 /// Ciclo de vida — ver @/lib/affiliates/network-bonus-core:
-///   tracking → pending_choice → once_paid
-///                             ↘ monthly_active ⇄ monthly_paused
+///   tracking → awarded
 ///
-/// `clinics`/`onceMxn`/`monthlyMxn` se refrescan mientras la fila está en
-/// `tracking` y quedan CONGELADOS al otorgarse: editar la config después no
-/// puede cambiar lo que ya se prometió.
+/// `clinics`/`onceMxn` se refrescan mientras la fila está en `tracking` y
+/// quedan CONGELADOS al otorgarse: editar la config después no puede cambiar
+/// lo que ya se prometió. Al otorgar se genera la comisión de PAGO ÚNICO en la
+/// misma transacción; no hay elección de modalidad ni mensualidades.
 model AffiliateNetworkBonusAward {
   id          String @id @default(cuid())
   affiliateId String
@@ -8026,20 +8058,21 @@ model AffiliateNetworkBonusAward {
   tier        Int
   /// Umbral congelado al otorgarse.
   clinics     Int
-  /// Los dos montos entre los que elige, congelados al otorgarse.
+  /// Monto de pago único, congelado al otorgarse.
   onceMxn     Float
+  /// ⚠️ SIN USO desde ago 2026 (se retiró la modalidad mensual). Queda en 0.
   monthlyMxn  Float
-  /// tracking | pending_choice | once_paid | monthly_active | monthly_paused
+  /// tracking | awarded
   status      String @default("tracking")
   /// Inicio de la racha de 3 meses. null = hoy no está en el umbral.
   qualifiedSince DateTime?
   awardedAt      DateTime?
+  /// ⚠️ SIN USO desde ago 2026 (columnas de la elección de modalidad retirada).
   chosenAt       DateTime?
-  /// "once" | "monthly". null = todavía no elige. DEFINITIVA al escribirse.
   choice         String?
-  /// Modo único: cuándo se generó la comisión.
+  /// Cuándo se generó la comisión del pago único.
   paidAt         DateTime?
-  /// Modo mensual: última mensualidad generada y su mes ("YYYY-MM").
+  /// ⚠️ SIN USO desde ago 2026 (rastro de la modalidad mensual retirada).
   lastMonthlyAt  DateTime?
   lastMonthlyKey String?
   monthlyPaidCount Int     @default(0)

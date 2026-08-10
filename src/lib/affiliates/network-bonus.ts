@@ -5,12 +5,18 @@
  * sin BD) y este archivo la RE-EXPORTA, así que el server importa todo desde
  * "@/lib/affiliates/network-bonus". Mismo corte que payout-core.ts/payout.ts.
  *
+ * RED = los afiliados que ÉL invitó (`Affiliate.invitedByAffiliateId`), a UN
+ * salto. Las clínicas de los invitados de sus invitados NO cuentan para él: el
+ * programa es de un solo nivel y aquí se cumple por construcción, porque
+ * ninguna consulta de este archivo recorre el árbol hacia abajo.
+ *
  * DEGRADACIÓN: si sql/afiliados-bonos-red.sql no está aplicado, todo aquí
  * devuelve "apagado" (config null, conteos en 0, cero awards) y nada lanza. Un
  * panel sin el bloque de bonos es preferible a un 500.
  *
  * PRIVACIDAD: de la red del afiliado solo salen CONTEOS. Ni un nombre, ni un
- * plan, ni un correo de las clínicas que trajeron sus vendedores.
+ * plan, ni un correo de las clínicas que trajeron sus invitados — y jamás las
+ * comisiones ni los datos de pago de los invitados mismos.
  */
 import { prisma } from "@/lib/prisma";
 import { activeClinicWhere } from "./stats";
@@ -21,7 +27,6 @@ import {
   NETWORK_BONUS_CLINIC_ID,
   NETWORK_BONUS_KIND,
   buildNetworkBonusView,
-  commissionRefMonthly,
   commissionRefOnce,
   decideNetworkSweep,
   networkBonusTiers,
@@ -29,7 +34,6 @@ import {
   normalizeNetworkBonus,
   periodKey,
   type AwardSnapshot,
-  type NetworkBonusChoice,
   type NetworkBonusConfig,
   type NetworkBonusTier,
   type NetworkBonusView,
@@ -39,33 +43,31 @@ import {
 export * from "./network-bonus-core";
 
 /**
- * Las 16 columnas de los bonos por red, como `select` de Prisma.
+ * Las columnas VIVAS de los bonos por red, como `select` de Prisma.
  *
  * ⚠️ NO es un capricho: `getPayoutConfig()` lee la fila id=1 con `findUnique`
- * sin `select`, así que Prisma pide TODAS las columnas del modelo. Si estas 16
- * no existieran en la BD (SQL sin correr), esa lectura fallaría y el MOTOR DE
+ * sin `select`, así que Prisma pide TODAS las columnas del modelo. Si estas no
+ * existieran en la BD (SQL sin correr), esa lectura fallaría y el MOTOR DE
  * COMISIONES entero caería al modo "% del nivel" — un cambio silencioso de
  * cuánto se le paga a cada afiliado. Por eso payout.ts acota sus SELECT a sus
  * propias columnas y los bonos de red leen aparte, con este `select`: un
  * deploy adelantado al SQL apaga los bonos y no toca nada más.
+ *
+ * Las cinco `networkTier<N>MonthlyMxn` NO se piden: la modalidad mensual se
+ * retiró (ago 2026) y sus columnas quedaron en 0 y sin uso.
  */
 const NETWORK_SELECT = {
   networkBonusEnabled: true,
   networkTier1Clinics: true,
   networkTier1OnceMxn: true,
-  networkTier1MonthlyMxn: true,
   networkTier2Clinics: true,
   networkTier2OnceMxn: true,
-  networkTier2MonthlyMxn: true,
   networkTier3Clinics: true,
   networkTier3OnceMxn: true,
-  networkTier3MonthlyMxn: true,
   networkTier4Clinics: true,
   networkTier4OnceMxn: true,
-  networkTier4MonthlyMxn: true,
   networkTier5Clinics: true,
   networkTier5OnceMxn: true,
-  networkTier5MonthlyMxn: true,
 } as const;
 
 /**
@@ -104,24 +106,42 @@ export async function getNetworkBonusTiers(): Promise<{
 /** `in` por tandas: evita un IN con decenas de miles de ids. */
 const ID_CHUNK = 4000;
 
-function chunk<T>(items: T[], size: number): T[][] {
+export function chunkIds<T>(items: T[], size: number = ID_CHUNK): T[][] {
   const out: T[][] = [];
   for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size));
   return out;
 }
 
 /**
- * Clínicas de esa lista que están ACTIVAS hoy. Devuelve solo ids (privacidad:
- * de la red del afiliado no sale nada más que el conteo).
+ * Ids de los afiliados que ESTE afiliado invitó. UN salto: no se recorre el
+ * árbol, porque las clínicas de los invitados de sus invitados no le cuentan.
  */
-async function activeIdsAmong(clinicIds: string[], now: Date): Promise<string[]> {
-  if (clinicIds.length === 0) return [];
-  const out: string[] = [];
-  for (const part of chunk(clinicIds, ID_CHUNK)) {
-    const rows = await prisma.clinic.findMany({
-      where: { AND: [{ id: { in: part } }, activeClinicWhere(now)] },
+export async function getInvitedAffiliateIds(affiliateId: string): Promise<string[]> {
+  if (!affiliateId) return [];
+  try {
+    const rows = await prisma.affiliate.findMany({
+      where: { invitedByAffiliateId: affiliateId },
       select: { id: true },
     });
+    return rows.map((r) => r.id);
+  } catch {
+    // Columna sin crear (SQL sin correr) → nadie tiene red. Nunca lanza.
+    return [];
+  }
+}
+
+/** Clínicas de esos afiliados, con o sin filtro de actividad. Solo ids. */
+async function clinicIdsOfAffiliates(
+  affiliateIds: string[],
+  now: Date | null,
+): Promise<string[]> {
+  if (affiliateIds.length === 0) return [];
+  const out: string[] = [];
+  for (const part of chunkIds(affiliateIds)) {
+    const where = now
+      ? { AND: [{ affiliateId: { in: part } }, activeClinicWhere(now)] }
+      : { affiliateId: { in: part } };
+    const rows = await prisma.clinic.findMany({ where, select: { id: true } });
     for (const r of rows) out.push(r.id);
   }
   return out;
@@ -130,14 +150,8 @@ async function activeIdsAmong(clinicIds: string[], now: Date): Promise<string[]>
 /**
  * Clínicas de RED que califican HOY para UN afiliado.
  *
- * Red = las que trajeron SUS VENDEDORES (AffiliateSellerAttribution, cuyo
- * `affiliateId` es el padre). Las que trajo él mismo NO entran: para esas está
- * el Bono por Clínicas Activas.
- *
- * Tres queries fijas, sin importar cuántos vendedores tenga:
- *  1. las clínicas atribuidas a sus vendedores (solo ids),
- *  2. cuáles de esas siguen activas,
- *  3. los cobros pagados de esas, agregados por clínica.
+ * Red = las que trajeron LOS AFILIADOS QUE ÉL INVITÓ. Las que trajo él mismo
+ * NO entran: para esas está el Bono por Clínicas Activas.
  *
  * Se evalúa con `clinicQualifies` — el MISMO predicado de los bonos propios,
  * nunca una segunda definición. Cualquier error degrada a 0: sin bonos, jamás
@@ -146,25 +160,31 @@ async function activeIdsAmong(clinicIds: string[], now: Date): Promise<string[]>
 export async function getNetworkQualifyingCount(
   affiliateId: string,
   now: Date = new Date(),
-): Promise<{ qualifying: number; active: number; attributed: number }> {
-  const empty = { qualifying: 0, active: 0, attributed: 0 };
+): Promise<{ qualifying: number; active: number; attributed: number; invited: number }> {
+  const empty = { qualifying: 0, active: 0, attributed: 0, invited: 0 };
   if (!affiliateId) return empty;
   try {
-    const attrs = await prisma.affiliateSellerAttribution.findMany({
-      where: { affiliateId },
-      select: { clinicId: true },
-    });
-    if (attrs.length === 0) return empty;
+    const invitedIds = await getInvitedAffiliateIds(affiliateId);
+    if (invitedIds.length === 0) return empty;
 
-    const ids = attrs.map((a) => a.clinicId);
-    const activeIds = await activeIdsAmong(ids, now);
-    if (activeIds.length === 0) return { ...empty, attributed: ids.length };
+    const allIds = await clinicIdsOfAffiliates(invitedIds, null);
+    if (allIds.length === 0) return { ...empty, invited: invitedIds.length };
+
+    const activeIds = await clinicIdsOfAffiliates(invitedIds, now);
+    if (activeIds.length === 0) {
+      return { ...empty, invited: invitedIds.length, attributed: allIds.length };
+    }
 
     const paidByClinic = await paidInvoiceCountByClinic(activeIds);
     let qualifying = 0;
     for (const id of activeIds) if (clinicQualifies(paidByClinic.get(id))) qualifying += 1;
 
-    return { qualifying, active: activeIds.length, attributed: ids.length };
+    return {
+      qualifying,
+      active: activeIds.length,
+      attributed: allIds.length,
+      invited: invitedIds.length,
+    };
   } catch {
     return empty;
   }
@@ -174,31 +194,50 @@ export async function getNetworkQualifyingCount(
  * Lo mismo para TODOS los afiliados de una pasada — lo que necesitan el cron y
  * la alerta anticipada del admin. Agregado, sin N+1: tres queries en total y
  * el cruce en memoria. Un mapa vacío si algo falla.
+ *
+ * El cruce es de UN salto por construcción: cada clínica se le suma al
+ * INVITADOR DIRECTO del afiliado que la trajo, y ahí se detiene. Nada sube al
+ * invitador del invitador.
  */
 export async function getNetworkQualifyingCounts(
   now: Date = new Date(),
 ): Promise<Map<string, number>> {
   const counts = new Map<string, number>();
   try {
-    const attrs = await prisma.affiliateSellerAttribution.findMany({
-      select: { clinicId: true, affiliateId: true },
+    // Todos los afiliados que tienen invitador. `{ not: null }` es la forma
+    // correcta de un IS NOT NULL en Prisma (no un NOT sobre un filtro, que sí
+    // descartaría los nulls por su cuenta).
+    const invited = await prisma.affiliate.findMany({
+      where: { invitedByAffiliateId: { not: null } },
+      select: { id: true, invitedByAffiliateId: true },
     });
-    if (attrs.length === 0) return counts;
+    if (invited.length === 0) return counts;
 
-    const activeIds = await activeIdsAmong(attrs.map((a) => a.clinicId), now);
-    if (activeIds.length === 0) return counts;
+    const inviterOf = new Map<string, string>();
+    for (const a of invited) if (a.invitedByAffiliateId) inviterOf.set(a.id, a.invitedByAffiliateId);
 
-    const activeSet = new Set(activeIds);
-    const paidByClinic = await paidInvoiceCountByClinic(activeIds);
+    const invitedIds = Array.from(inviterOf.keys());
+    const activeRows: { id: string; affiliateId: string | null }[] = [];
+    for (const part of chunkIds(invitedIds)) {
+      const rows = await prisma.clinic.findMany({
+        where: { AND: [{ affiliateId: { in: part } }, activeClinicWhere(now)] },
+        select: { id: true, affiliateId: true },
+      });
+      for (const r of rows) activeRows.push(r);
+    }
+    if (activeRows.length === 0) return counts;
 
-    for (const a of attrs) {
-      if (!a.affiliateId) continue;
-      if (!activeSet.has(a.clinicId)) continue;
-      if (!clinicQualifies(paidByClinic.get(a.clinicId))) continue;
-      counts.set(a.affiliateId, (counts.get(a.affiliateId) ?? 0) + 1);
+    const paidByClinic = await paidInvoiceCountByClinic(activeRows.map((r) => r.id));
+
+    for (const row of activeRows) {
+      if (!row.affiliateId) continue;
+      const inviterId = inviterOf.get(row.affiliateId);
+      if (!inviterId) continue;
+      if (!clinicQualifies(paidByClinic.get(row.id))) continue;
+      counts.set(inviterId, (counts.get(inviterId) ?? 0) + 1);
     }
   } catch {
-    // Tabla ausente o error de BD → nadie califica. Nunca lanza.
+    // Columna/tabla ausente o error de BD → nadie califica. Nunca lanza.
   }
   return counts;
 }
@@ -213,36 +252,22 @@ const AWARD_SELECT = {
   status: true,
   clinics: true,
   onceMxn: true,
-  monthlyMxn: true,
   qualifiedSince: true,
   awardedAt: true,
-  chosenAt: true,
-  choice: true,
   paidAt: true,
-  lastMonthlyAt: true,
-  lastMonthlyKey: true,
-  monthlyPaidCount: true,
-  pausedAt: true,
   lastCount: true,
 } as const;
 
-type AwardRow = {
+export type AwardRow = {
   id: string;
   affiliateId: string;
   tier: number;
   status: string;
   clinics: number;
   onceMxn: number;
-  monthlyMxn: number;
   qualifiedSince: Date | null;
   awardedAt: Date | null;
-  chosenAt: Date | null;
-  choice: string | null;
   paidAt: Date | null;
-  lastMonthlyAt: Date | null;
-  lastMonthlyKey: string | null;
-  monthlyPaidCount: number;
-  pausedAt: Date | null;
   lastCount: number;
 };
 
@@ -253,9 +278,7 @@ function toSnapshot(row: AwardRow): AwardSnapshot {
     status: normalizeAwardStatus(row.status),
     clinics: Number(row.clinics) || 0,
     onceMxn: Number(row.onceMxn) || 0,
-    monthlyMxn: Number(row.monthlyMxn) || 0,
     qualifiedSince: row.qualifiedSince,
-    lastMonthlyKey: row.lastMonthlyKey,
     lastCount: Number(row.lastCount) || 0,
   };
 }
@@ -278,7 +301,9 @@ export interface NetworkBonusPanel {
   /** false = programa apagado, sin escalones o SQL sin correr → no se pinta. */
   enabled: boolean;
   view: NetworkBonusView;
-  /** Clínicas atribuidas a sus vendedores, activas o no (para explicar). */
+  /** Cuántos afiliados invitó. */
+  invited: number;
+  /** Clínicas traídas por sus invitados, activas o no (para explicar). */
   attributed: number;
   /** De esas, cuántas están activas hoy. */
   active: number;
@@ -292,8 +317,8 @@ export interface NetworkBonusPanel {
  * Todo lo que el panel del afiliado necesita, en una llamada.
  * `affiliateId` SIEMPRE de la sesión (getAffiliateContext), jamás del request.
  *
- * NO se cachea: son cuatro lecturas pequeñas y un número congelado en un
- * progreso personal se siente roto ("ya vendió mi vendedor y sigo en 11"). Si
+ * NO se cachea: son unas pocas lecturas pequeñas y un número congelado en un
+ * progreso personal se siente roto ("ya vendió mi invitado y sigo en 11"). Si
  * algún día pesa, `unstable_cache` con tag por afiliado — el conteo global del
  * admin es el que primero lo pediría, no este.
  */
@@ -310,132 +335,11 @@ export async function getNetworkBonusPanel(
   return {
     enabled,
     view: buildNetworkBonusView(counts.qualifying, tiers, snapshots, now),
+    invited: counts.invited,
     attributed: counts.attributed,
     active: counts.active,
     minPaidInvoices: MIN_PAID_INVOICES,
     awards,
-  };
-}
-
-// ── La elección ───────────────────────────────────────────────────────────
-
-export type ChooseResult =
-  | { ok: true; status: "once_paid" | "monthly_active"; commissionMxn: number }
-  | { ok: false; error: string; code: 400 | 404 | 409 | 503 };
-
-/** El fallo de `chooseNetworkBonus`, ya estrechado. */
-export type ChooseFailure = Extract<ChooseResult, { ok: false }>;
-
-/**
- * ¿La elección falló? Guarda de tipo EXPLÍCITA, y no es ceremonia.
- *
- * El tsconfig del repo corre con `strict: false`, y sin `strictNullChecks`
- * TypeScript NO estrecha una unión por un discriminante booleano: dentro de un
- * `if (!result.ok)` el tipo sigue siendo la unión entera y leer `result.error`
- * ni siquiera compila. Un predicado de tipo funciona igual con `strict` en true
- * o en false, así que la unión conserva lo que promete —nunca leer el error de
- * un resultado exitoso, ni el monto de uno fallido— sin quedar colgada de una
- * bandera del compilador que algún día podría moverse.
- */
-export function isChooseFailure(result: ChooseResult): result is ChooseFailure {
-  return result.ok === false;
-}
-
-/**
- * El afiliado elige cómo cobra UN escalón. DEFINITIVA: solo se acepta sobre un
- * award en `pending_choice`, así que un segundo intento choca con el 409.
- *
- * `affiliateId` va en el WHERE, no solo comprobado después: el award de otro
- * afiliado simplemente no existe para esta consulta.
- *
- * Único   → una comisión `netbonus:<id>:once` y el escalón queda cerrado.
- * Mensual → el award pasa a activo y se genera YA la mensualidad del mes en
- *           curso, para que no espere hasta el próximo corte. El cron usará la
- *           MISMA referencia ese mes, así que el índice único la rechaza y no
- *           puede pagarse dos veces.
- */
-export async function chooseNetworkBonus(
-  affiliateId: string,
-  awardId: string,
-  choice: NetworkBonusChoice,
-  now: Date = new Date(),
-): Promise<ChooseResult> {
-  if (!affiliateId || !awardId) return { ok: false, error: "Falta el bono", code: 400 };
-
-  let award: AwardRow | null = null;
-  try {
-    award = (await prisma.affiliateNetworkBonusAward.findFirst({
-      where: { id: awardId, affiliateId },
-      select: AWARD_SELECT,
-    })) as AwardRow | null;
-  } catch {
-    return { ok: false, error: "Corre sql/afiliados-bonos-red.sql en Supabase", code: 503 };
-  }
-
-  if (!award) return { ok: false, error: "Ese bono no existe", code: 404 };
-  if (normalizeAwardStatus(award.status) !== "pending_choice") {
-    return {
-      ok: false,
-      error: "Ese bono ya tiene una forma de cobro elegida y no se puede cambiar",
-      code: 409,
-    };
-  }
-
-  const amount = choice === "once" ? Number(award.onceMxn) : Number(award.monthlyMxn);
-  if (!Number.isFinite(amount) || amount <= 0) {
-    return { ok: false, error: "Esa forma de cobro no está disponible para este bono", code: 400 };
-  }
-
-  const key = periodKey(now);
-  const reference = choice === "once" ? commissionRefOnce(award.id) : commissionRefMonthly(award.id, key);
-
-  try {
-    await prisma.$transaction(async (tx) => {
-      await tx.affiliateCommission.create({
-        data: {
-          affiliateId,
-          clinicId: NETWORK_BONUS_CLINIC_ID,
-          stripeInvoiceId: reference,
-          amountMxn: 0,
-          commissionMxn: amount,
-          kind: NETWORK_BONUS_KIND,
-          monthsCovered: 1,
-          status: "pending",
-        },
-      });
-      // El WHERE repite `status` para que dos clics simultáneos no puedan
-      // escribir dos elecciones: el segundo actualiza 0 filas y su comisión
-      // ya habría chocado con el índice único de todos modos.
-      const updated = await tx.affiliateNetworkBonusAward.updateMany({
-        where: { id: award!.id, affiliateId, status: "pending_choice" },
-        data:
-          choice === "once"
-            ? { status: "once_paid", choice: "once", chosenAt: now, paidAt: now }
-            : {
-                status: "monthly_active",
-                choice: "monthly",
-                chosenAt: now,
-                lastMonthlyAt: now,
-                lastMonthlyKey: key,
-                monthlyPaidCount: { increment: 1 },
-              },
-      });
-      if (updated.count === 0) throw new Error("race");
-    });
-  } catch (err: any) {
-    // P2002 = la comisión ya existía: alguien eligió primero (doble clic o dos
-    // pestañas). No es un error del afiliado, pero tampoco se paga dos veces.
-    if (err?.code === "P2002" || err?.message === "race") {
-      return { ok: false, error: "Ese bono ya tiene una forma de cobro elegida", code: 409 };
-    }
-    console.error("[network-bonus] choose", err);
-    return { ok: false, error: "No se pudo registrar tu elección", code: 503 };
-  }
-
-  return {
-    ok: true,
-    status: choice === "once" ? "once_paid" : "monthly_active",
-    commissionMxn: amount,
   };
 }
 
@@ -449,11 +353,9 @@ export interface SweepSummary {
   refreshed: number;
   resets: number;
   awarded: number;
-  monthlyPaid: number;
-  monthlyPaidMxn: number;
-  paused: number;
-  resumed: number;
-  /** Mensualidades que el candado rechazó por duplicadas (debería ser 0). */
+  /** Lo que sumaron los bonos otorgados en esta corrida. */
+  awardedMxn: number;
+  /** Bonos que el candado rechazó por duplicados (debería ser 0). */
   duplicatesBlocked: number;
   errors: number;
   periodKey: string;
@@ -468,10 +370,7 @@ const EMPTY_SUMMARY = (key: string): SweepSummary => ({
   refreshed: 0,
   resets: 0,
   awarded: 0,
-  monthlyPaid: 0,
-  monthlyPaidMxn: 0,
-  paused: 0,
-  resumed: 0,
+  awardedMxn: 0,
   duplicatesBlocked: 0,
   errors: 0,
   periodKey: key,
@@ -480,14 +379,14 @@ const EMPTY_SUMMARY = (key: string): SweepSummary => ({
 
 /**
  * Una pasada completa: recalcula la red de cada afiliado, mueve los awards y
- * genera las mensualidades del mes.
+ * genera la comisión de los escalones que se otorgan.
  *
- * IDEMPOTENTE POR CONSTRUCCIÓN. Correrlo dos veces el mismo mes no paga doble
- * y el segundo intento no es "casi inofensivo": cada mensualidad se escribe
- * junto a una comisión cuya referencia `netbonus:<award>:<YYYY-MM>` choca con
- * el índice único de affiliate_commissions. Como las dos escrituras van en la
- * MISMA $transaction, el choque revierte también la actualización del award.
- * `lastMonthlyKey` es solo el filtro barato que evita intentarlo.
+ * IDEMPOTENTE POR CONSTRUCCIÓN. Correrlo dos veces no paga doble y el segundo
+ * intento no es "casi inofensivo": cada bono se escribe junto a una comisión
+ * cuya referencia `netbonus:<award>:once` choca con el índice único de
+ * affiliate_commissions. Como las dos escrituras van en la MISMA $transaction,
+ * el choque revierte también el cambio de estado del award. El WHERE con
+ * `status: "tracking"` es solo el filtro barato que evita intentarlo.
  *
  * Se procesa afiliado por afiliado (no en paralelo) a propósito: son pocas
  * filas al mes y PgBouncer agradece no abrir seis transacciones a la vez.
@@ -512,7 +411,7 @@ export async function runNetworkBonusSweep(now: Date = new Date()): Promise<Swee
   const counts = await getNetworkQualifyingCounts(now);
 
   // Universo = quien hoy tiene red que califica + quien ya tiene algún award
-  // (aunque su red haya caído a 0: justo esos son los que hay que pausar).
+  // (aunque su red haya caído a 0: hay que refrescarles el conteo observado).
   const awardsByAffiliate = new Map<string, AwardRow[]>();
   for (const a of allAwards) {
     const list = awardsByAffiliate.get(a.affiliateId);
@@ -542,7 +441,7 @@ export async function runNetworkBonusSweep(now: Date = new Date()): Promise<Swee
         await applySweepAction(affiliateId, action, count, now, summary);
       } catch (err: any) {
         if (err?.code === "P2002") {
-          // El candado hizo su trabajo: esa mensualidad ya existía.
+          // El candado hizo su trabajo: ese bono ya existía.
           summary.duplicatesBlocked += 1;
         } else {
           summary.errors += 1;
@@ -571,7 +470,7 @@ async function applySweepAction(
           tier: action.tier,
           clinics: action.clinics,
           onceMxn: action.onceMxn,
-          monthlyMxn: action.monthlyMxn,
+          monthlyMxn: 0,
           status: "tracking",
           qualifiedSince: now,
           lastCount: count,
@@ -587,7 +486,6 @@ async function applySweepAction(
         data: {
           clinics: action.clinics,
           onceMxn: action.onceMxn,
-          monthlyMxn: action.monthlyMxn,
           qualifiedSince: action.qualifiedSince,
           lastCount: count,
         },
@@ -606,72 +504,43 @@ async function applySweepAction(
     }
 
     case "award": {
-      // Aquí se CONGELAN los montos. El WHERE repite el estado para que dos
-      // corridas simultáneas no otorguen el mismo escalón dos veces.
-      const updated = await prisma.affiliateNetworkBonusAward.updateMany({
-        where: { id: action.awardId, status: "tracking" },
-        data: {
-          status: "pending_choice",
-          clinics: action.clinics,
-          onceMxn: action.onceMxn,
-          monthlyMxn: action.monthlyMxn,
-          awardedAt: now,
-          lastCount: count,
-        },
-      });
-      if (updated.count > 0) {
-        summary.awarded += 1;
-        summary.awardedIds.push(action.awardId);
-      }
-      return;
-    }
-
-    case "pay-monthly": {
-      // Las DOS escrituras en una sola transacción: si la comisión choca con
-      // el índice único, el award tampoco avanza y el mes queda intacto.
-      await prisma.$transaction(async (tx) => {
+      // Aquí se CONGELAN los montos y se genera el PAGO ÚNICO. Las DOS
+      // escrituras en una sola transacción: si la comisión choca con el índice
+      // único, el award tampoco avanza y el escalón queda intacto para el mes
+      // siguiente. El WHERE repite el estado para que dos corridas simultáneas
+      // no otorguen el mismo escalón dos veces.
+      const awarded = await prisma.$transaction(async (tx) => {
+        const updated = await tx.affiliateNetworkBonusAward.updateMany({
+          where: { id: action.awardId, status: "tracking" },
+          data: {
+            status: "awarded",
+            clinics: action.clinics,
+            onceMxn: action.onceMxn,
+            awardedAt: now,
+            paidAt: now,
+            lastCount: count,
+          },
+        });
+        if (updated.count === 0) return false;
         await tx.affiliateCommission.create({
           data: {
             affiliateId,
             clinicId: NETWORK_BONUS_CLINIC_ID,
-            stripeInvoiceId: commissionRefMonthly(action.awardId, action.periodKey),
+            stripeInvoiceId: commissionRefOnce(action.awardId),
             amountMxn: 0,
-            commissionMxn: action.monthlyMxn,
+            commissionMxn: action.onceMxn,
             kind: NETWORK_BONUS_KIND,
             monthsCovered: 1,
             status: "pending",
           },
         });
-        await tx.affiliateNetworkBonusAward.update({
-          where: { id: action.awardId },
-          data: {
-            lastMonthlyAt: now,
-            lastMonthlyKey: action.periodKey,
-            monthlyPaidCount: { increment: 1 },
-            lastCount: count,
-          },
-        });
+        return true;
       });
-      summary.monthlyPaid += 1;
-      summary.monthlyPaidMxn += action.monthlyMxn;
-      return;
-    }
-
-    case "pause": {
-      await prisma.affiliateNetworkBonusAward.updateMany({
-        where: { id: action.awardId, status: "monthly_active" },
-        data: { status: "monthly_paused", pausedAt: now, lastCount: count },
-      });
-      summary.paused += 1;
-      return;
-    }
-
-    case "resume": {
-      await prisma.affiliateNetworkBonusAward.updateMany({
-        where: { id: action.awardId, status: "monthly_paused" },
-        data: { status: "monthly_active", pausedAt: null, lastCount: count },
-      });
-      summary.resumed += 1;
+      if (awarded) {
+        summary.awarded += 1;
+        summary.awardedMxn += action.onceMxn;
+        summary.awardedIds.push(action.awardId);
+      }
       return;
     }
 

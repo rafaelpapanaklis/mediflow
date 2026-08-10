@@ -5,6 +5,7 @@ import {
   normalizePayoutMethod,
   sendAffiliateSignupEmails,
 } from "@/lib/affiliates/signup";
+import { resolveInviterId } from "@/lib/affiliates/invites";
 import { createClient as createAdminClient } from "@supabase/supabase-js";
 
 // Admin client (mismo patrón que src/app/api/laboratorios/auth/register/route.ts
@@ -96,6 +97,16 @@ export async function POST(req: Request) {
 
   const email = rawEmail.toLowerCase();
 
+  // b.1) ¿Viene de la invitación de otro afiliado (`?inv=<referralCode>`)?
+  //
+  //      REGLA DURA: esto NUNCA rompe un alta. Un código mal escrito, un
+  //      invitador que no está APPROVED o alguien invitándose a sí mismo
+  //      devuelven null y el registro sigue exactamente igual, solo que sin
+  //      vínculo. Por eso aquí no hay ningún 4xx: perder una invitación es
+  //      recuperable (se vuelve a invitar); perder el alta de un afiliado que
+  //      ya llenó el formulario, no.
+  const invitedByAffiliateId = await resolveInviterId({ code: body?.inv, email });
+
   // c) Email ya registrado como afiliado → cortar temprano con mensaje claro.
   //    `Affiliate.email` es @unique y TODO Affiliate nace junto a su
   //    AffiliateUser en la misma transacción (createAffiliateAccount), así que
@@ -121,7 +132,7 @@ export async function POST(req: Request) {
 
   if (createError || !created?.user) {
     // d.1) El correo YA existe en Supabase Auth pero NO es de un afiliado (c ya
-    //      descartó eso): es un dueño/staff de clínica, o un vendedor de equipo.
+    //      descartó eso): es un dueño o staff de clínica.
     //      Ser cliente y ser afiliado son roles independientes, así que esto no
     //      es un error: es el camino de VINCULACIÓN.
     //
@@ -162,6 +173,7 @@ export async function POST(req: Request) {
       supabaseId: created.user.id,
       payoutMethod,
       payoutDetails,
+      invitedByAffiliateId,
     });
   } catch (err) {
     // f) Rollback del usuario de Supabase (best-effort) si Prisma falló. Sólo

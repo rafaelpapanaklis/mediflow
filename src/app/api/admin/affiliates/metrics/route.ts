@@ -20,21 +20,17 @@ import {
   clinicQualifies,
   paidInvoiceCountByClinic,
 } from "@/lib/affiliates/milestones-progress";
-// El `kind` con el que los BONOS POR RED entran a affiliate_commissions. Se
-// importa en vez de teclear "network_bonus": la cadena la define el módulo que
-// las escribe, y una copia desincronizada aquí solo se notaría como una cifra
-// mal repartida meses después.
-import { NETWORK_BONUS_KIND } from "@/lib/affiliates/network-bonus";
+// Del módulo de bonos por red se importan DOS cosas, y ninguna se teclea aquí:
+//  · NETWORK_BONUS_KIND — el `kind` con el que los bonos entran a
+//    affiliate_commissions. Una copia desincronizada solo se notaría como una
+//    cifra mal repartida meses después.
+//  · NEAR_RATIO — el corte de "va cerca" de la alerta anticipada. NO es una
+//    regla del programa (nadie cobra ni deja de cobrar por él), pero la bandeja
+//    de bonos por red usa este mismo número: dos umbrales distintos sobre el
+//    mismo afiliado se leen como un bug del sistema, no como dos vistas.
+import { NEAR_RATIO, NETWORK_BONUS_KIND } from "@/lib/affiliates/network-bonus";
 
 export const dynamic = "force-dynamic";
-
-/**
- * "Va cerca": a partir de qué fracción del umbral un afiliado entra en la
- * alerta anticipada. NO es una regla del programa (los umbrales y los montos
- * salen todos de la config) — es solo el corte visual para ver venir una salida
- * grande con meses de anticipación.
- */
-const NEAR_RATIO = 0.8;
 
 
 export interface AdminAffiliateTopRow {

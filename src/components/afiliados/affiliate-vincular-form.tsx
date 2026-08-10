@@ -27,9 +27,15 @@ import {
 export function AffiliateVincularForm({
   sessionEmail,
   initialEmail = "",
+  inviteCode = "",
+  inviterName = "",
 }: {
   sessionEmail: string | null;
   initialEmail?: string;
+  /** Código de invitación (`?inv=`) ya normalizado en el servidor. */
+  inviteCode?: string;
+  /** Nombre de quien invita, sólo si el código resolvió a un afiliado activo. */
+  inviterName?: string;
 }) {
   const hasSession = !!sessionEmail;
 
@@ -42,7 +48,7 @@ export function AffiliateVincularForm({
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  // Rechazos que traen a dónde ir (cuenta de vendedor, correo ya afiliado).
+  // Rechazos que traen a dónde ir (p. ej. el correo ya tiene cuenta de afiliado).
   const [errorLink, setErrorLink] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
 
@@ -96,6 +102,7 @@ export function AffiliateVincularForm({
           name: name.trim(),
           payoutMethod: payoutMethod || undefined,
           payoutDetails: payoutDetails.trim() || undefined,
+          inv: inviteCode || undefined,
         }),
       });
 
@@ -190,6 +197,27 @@ export function AffiliateVincularForm({
             : "Ya tienes cuenta en DaleControl con este correo. Inicia sesión con tu contraseña de siempre y activamos tu cuenta de afiliado — no necesitas crear otra."}
         </p>
       </div>
+
+      {/* Misma invitación que traía /afiliados/registro, con el mismo texto:
+          el alta es idéntica a la de cualquier afiliado. */}
+      {inviterName && (
+        <div
+          style={{
+            padding: "12px 14px",
+            borderRadius: 12,
+            border: "1px solid rgba(139,92,246,0.25)",
+            background: "rgba(139,92,246,0.08)",
+            fontSize: 13,
+            color: "var(--ld-fg-muted)",
+            lineHeight: 1.5,
+          }}
+        >
+          Te invitó{" "}
+          <strong style={{ color: "var(--ld-fg)", fontWeight: 600 }}>{inviterName}</strong>. Entras
+          como cualquier otro afiliado: ganas la misma comisión por cada clínica que traigas, eliges
+          tu modalidad de pago y quien te invitó no recibe ninguna parte de tus comisiones.
+        </div>
+      )}
 
       {hasSession && (
         <div

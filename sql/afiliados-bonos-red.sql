@@ -1,8 +1,22 @@
 -- Afiliados — BONOS POR RED (ago 2026). Aditivo e idempotente.
 --
--- Premia al afiliado por las clínicas ACTIVAS que trajeron SUS VENDEDORES
--- (AffiliateSellerAttribution), no las que trajo él mismo — para esas ya
--- existen los bonos propios de sql/afiliados-hitos.sql.
+-- ⚠️ ESTE ARCHIVO QUEDÓ PARCIALMENTE SUPERADO por sql/afiliados-invitaciones.sql
+-- (ago 2026, mismo mes). El DDL de abajo sigue siendo el vigente y correr este
+-- archivo sigue siendo seguro, pero DOS COSAS QUE DESCRIBE YA NO SON CIERTAS:
+--
+--   1. La "red" ya NO son los vendedores del afiliado (AffiliateSellerAttribution,
+--      tabla muerta) sino los AFILIADOS QUE ÉL INVITÓ
+--      (affiliates."invitedByAffiliateId"), a UN SOLO NIVEL.
+--   2. Ya NO hay elección entre pago único y mensualidad: el bono es SOLO pago
+--      único. Las columnas "networkTier<N>MonthlyMxn" quedan en 0 y sin uso, y
+--      los estados 'pending_choice' / 'monthly_active' / 'monthly_paused' no
+--      los produce nadie. El ciclo de vida vivo es: tracking → awarded.
+--
+-- La verdad vigente vive en @/lib/affiliates/network-bonus-core.
+--
+-- Premia al afiliado por las clínicas ACTIVAS que trajeron los afiliados que
+-- él invitó, no las que trajo él mismo — para esas ya existen los bonos
+-- propios de sql/afiliados-hitos.sql.
 --
 -- Se puede correr las veces que haga falta: todo va con IF NOT EXISTS.
 --

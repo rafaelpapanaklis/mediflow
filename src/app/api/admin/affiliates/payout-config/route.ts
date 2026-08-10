@@ -6,7 +6,7 @@ import { isAdminAuthed, getAdminSession } from "@/lib/admin-auth";
 //   (exists=false ⇒ tabla sin crear: el front muestra "corre
 //   sql/afiliados-comisiones.sql" y el motor está inactivo;
 //   networkBonusExists=false ⇒ falta sql/afiliados-bonos-red.sql).
-// PUT { 11 campos del motor + 7 de los bonos por hitos + 16 de los bonos por
+// PUT { 11 campos del motor + 7 de los bonos por hitos + 11 de los bonos por
 //   red } → upsert fila id=1.
 // Auth: sesión admin (mismo patrón que /api/admin/affiliates/config).
 import { NextRequest, NextResponse } from "next/server";
@@ -39,15 +39,20 @@ export interface AdminPayoutConfigResponse {
    */
   milestones: MilestonesConfig;
   /**
-   * BONOS POR RED (las 16 columnas de sql/afiliados-bonos-red.sql). También
-   * viven en la fila id=1 y también van FUERA de `config`: el motor de
-   * comisiones no los conoce — los otorga y los paga el cron mensual.
+   * BONOS POR RED (las 11 columnas VIVAS de sql/afiliados-bonos-red.sql: el
+   * interruptor y los 5 pares umbral/pago único). También viven en la fila id=1
+   * y también van FUERA de `config`: el motor de comisiones no los conoce — los
+   * otorga y los paga el cron mensual.
+   *
+   * Las cinco `networkTier<N>MonthlyMxn` NO salen ni entran por aquí: la
+   * modalidad mensual se retiró (ago 2026) y sus columnas quedaron en 0 y sin
+   * uso. Ninguna escritura de este endpoint las menciona.
    */
   networkBonus: NetworkBonusConfig;
   /** false = sql/afiliados-comisiones.sql sin correr → motor inactivo. */
   exists: boolean;
   /**
-   * false = las 16 columnas de los bonos por red NO existen todavía → la UI
+   * false = las columnas de los bonos por red NO existen todavía → la UI
    * avisa "corre sql/afiliados-bonos-red.sql" y lo que se muestra son los
    * defaults del DDL, no lo guardado.
    */
@@ -116,12 +121,13 @@ export async function GET() {
 
   // Los bonos por red se leen APARTE y no dentro del try de abajo. El motivo es
   // concreto: el `findUnique` de la fila id=1 va SIN `select`, así que Prisma
-  // pide TODAS las columnas del modelo — incluidas las 16 de los bonos por red.
+  // pide TODAS las columnas del modelo — incluidas las de los bonos por red.
   // Si sql/afiliados-bonos-red.sql no se ha corrido, esa lectura falla entera y
   // el GET caería al catch, dejando a Rafael sin ver tampoco su esquema de pago
   // ni sus hitos (que sí están guardados). `getNetworkBonusConfig()` usa un
-  // `select` acotado a esas 16 columnas y su propio try/catch: devuelve null en
-  // vez de lanzar, así que un deploy adelantado al SQL apaga SOLO este bloque.
+  // `select` acotado a las 11 columnas vivas y su propio try/catch: devuelve
+  // null en vez de lanzar, así que un deploy adelantado al SQL apaga SOLO este
+  // bloque.
   const [plans, networkRow] = await Promise.all([loadPlans(), getNetworkBonusConfig()]);
   const networkBonus: NetworkBonusConfig = networkRow ?? { ...DEFAULT_NETWORK_BONUS };
   const networkBonusExists = networkRow !== null;
@@ -285,6 +291,12 @@ export async function PUT(req: NextRequest) {
   // una promesa comercial rota: es dinero que sale. Se valida campo por campo
   // iterando NETWORK_TIER_KEYS — nunca cinco bloques copiados, que es como se
   // cuela un "networkTier3OnceMxn" validado contra el umbral del escalón 4.
+  //
+  // Son 11 campos, no 16: el bono por red se cobra en PAGO ÚNICO y punto. Las
+  // cinco `networkTier<N>MonthlyMxn` quedaron en la BD en 0 al retirarse la
+  // modalidad mensual (ago 2026) y este PUT ni las valida ni las escribe —
+  // tampoco para ponerlas a 0. Una columna que ninguna escritura menciona es
+  // una columna que ya no puede resucitar por accidente.
   const networkBonusEnabled = body?.networkBonusEnabled;
   if (typeof networkBonusEnabled !== "boolean") {
     return NextResponse.json(
@@ -313,18 +325,8 @@ export async function PUT(req: NextRequest) {
         { status: 400 }
       );
     }
-    const monthly = Number(body?.[key.monthly]);
-    if (!Number.isFinite(monthly) || monthly < 0 || monthly > MAX_NETWORK_BONUS_MXN) {
-      return NextResponse.json(
-        {
-          error: `Escalón ${key.n} de red: el pago mensual debe ser un monto entre 0 y ${MAX_NETWORK_BONUS_MXN} MXN`,
-        },
-        { status: 400 }
-      );
-    }
     network[key.clinics] = clinics;
     network[key.once] = once;
-    network[key.monthly] = monthly;
   }
 
   // Los 5 umbrales, en orden ESTRICTAMENTE creciente. No es cosmética: el cron
@@ -368,26 +370,22 @@ export async function PUT(req: NextRequest) {
     milestone2Mxn: milestones.milestone2Mxn,
     milestone3Clinics: milestones.milestone3Clinics,
     milestone3Mxn: milestones.milestone3Mxn,
-    // Las 16 de los bonos por red, escritas una por una a propósito (mismo
-    // criterio que los hitos de arriba): un `...network` metería un
+    // Las 11 VIVAS de los bonos por red, escritas una por una a propósito
+    // (mismo criterio que los hitos de arriba): un `...network` metería un
     // Record<string, number> en el input de Prisma y perdería la comprobación
-    // de que están las 16 y solo las 16.
+    // de que están las 11 y solo las 11. Las cinco columnas de la modalidad
+    // mensual NO aparecen aquí ni con un 0: se quedan como están.
     networkBonusEnabled,
     networkTier1Clinics: network.networkTier1Clinics,
     networkTier1OnceMxn: network.networkTier1OnceMxn,
-    networkTier1MonthlyMxn: network.networkTier1MonthlyMxn,
     networkTier2Clinics: network.networkTier2Clinics,
     networkTier2OnceMxn: network.networkTier2OnceMxn,
-    networkTier2MonthlyMxn: network.networkTier2MonthlyMxn,
     networkTier3Clinics: network.networkTier3Clinics,
     networkTier3OnceMxn: network.networkTier3OnceMxn,
-    networkTier3MonthlyMxn: network.networkTier3MonthlyMxn,
     networkTier4Clinics: network.networkTier4Clinics,
     networkTier4OnceMxn: network.networkTier4OnceMxn,
-    networkTier4MonthlyMxn: network.networkTier4MonthlyMxn,
     networkTier5Clinics: network.networkTier5Clinics,
     networkTier5OnceMxn: network.networkTier5OnceMxn,
-    networkTier5MonthlyMxn: network.networkTier5MonthlyMxn,
   };
 
   try {
@@ -426,10 +424,10 @@ export async function PUT(req: NextRequest) {
     });
   } catch {
     // Tabla (o columnas) inexistentes: el admin ve el aviso y sabe qué correr.
-    // El upsert escribe las 16 columnas de los bonos por red, así que un deploy
-    // adelantado a sql/afiliados-bonos-red.sql aterriza EXACTAMENTE aquí — por
-    // eso ese archivo también se nombra, o el admin correría los otros dos y
-    // seguiría sin poder guardar.
+    // El upsert escribe las 11 columnas vivas de los bonos por red, así que un
+    // deploy adelantado a sql/afiliados-bonos-red.sql aterriza EXACTAMENTE aquí
+    // — por eso ese archivo también se nombra, o el admin correría los otros dos
+    // y seguiría sin poder guardar.
     return NextResponse.json(
       {
         error:

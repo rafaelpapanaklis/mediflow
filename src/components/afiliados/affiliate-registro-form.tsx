@@ -43,11 +43,24 @@ const primaryButtonStyle: React.CSSProperties = {
   boxShadow: "0 8px 20px -6px rgba(124,58,237,0.5), inset 0 1px 0 rgba(255,255,255,0.15)",
 };
 
+/** Aviso de invitación. Mismo bloque en registro y en vinculación. */
+const inviteNoticeStyle: React.CSSProperties = {
+  padding: "12px 14px",
+  borderRadius: 12,
+  border: "1px solid rgba(139,92,246,0.25)",
+  background: "rgba(139,92,246,0.08)",
+  fontSize: 13,
+  color: "var(--ld-fg-muted)",
+  lineHeight: 1.5,
+};
+
 export function AffiliateRegistroForm({
   topRecurringMxn = 0,
   topOneTimeMxn = 0,
   sessionEmail = null,
   alreadyAffiliate = false,
+  inviteCode = "",
+  inviterName = "",
 }: {
   topRecurringMxn?: number;
   topOneTimeMxn?: number;
@@ -59,6 +72,13 @@ export function AffiliateRegistroForm({
   sessionEmail?: string | null;
   /** Esa sesión ya tiene cuenta de afiliado. */
   alreadyAffiliate?: boolean;
+  /**
+   * Código de invitación de la URL (`?inv=`), ya normalizado en el servidor.
+   * Viaja tal cual en el POST del alta: quien decide si vale es el servidor.
+   */
+  inviteCode?: string;
+  /** Nombre de quien invita, sólo si el código resolvió a un afiliado activo. */
+  inviterName?: string;
 }) {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -116,6 +136,7 @@ export function AffiliateRegistroForm({
               name: name.trim(),
               payoutMethod: payoutMethod || undefined,
               payoutDetails: payoutDetails.trim() || undefined,
+              inv: inviteCode || undefined,
             }),
           })
         : await fetch("/api/afiliados/auth/register", {
@@ -127,6 +148,7 @@ export function AffiliateRegistroForm({
               password,
               payoutMethod: payoutMethod || undefined,
               payoutDetails: payoutDetails.trim() || undefined,
+              inv: inviteCode || undefined,
             }),
           });
 
@@ -207,9 +229,13 @@ export function AffiliateRegistroForm({
 
   // ── El correo ya existe en DaleControl: hay que iniciar sesión ───────────
   if (needsLogin !== null) {
-    const href = needsLogin
-      ? `/afiliados/vincular?email=${encodeURIComponent(needsLogin)}`
-      : "/afiliados/vincular";
+    // El `inv` viaja a la otra pantalla: si se quedara aquí, cambiar de
+    // formulario borraría la invitación y el vínculo nunca se escribiría.
+    const params = new URLSearchParams();
+    if (needsLogin) params.set("email", needsLogin);
+    if (inviteCode) params.set("inv", inviteCode);
+    const qs = params.toString();
+    const href = qs ? `/afiliados/vincular?${qs}` : "/afiliados/vincular";
     return (
       <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
         <div>
@@ -352,6 +378,17 @@ export function AffiliateRegistroForm({
           ← Conoce el programa
         </Link>
       </div>
+
+      {/* Invitación de otro afiliado. Se dice completo lo que significa: es un
+          alta idéntica a cualquier otra, sin comisiones compartidas. */}
+      {inviterName && (
+        <div style={inviteNoticeStyle}>
+          Te invitó{" "}
+          <strong style={{ color: "var(--ld-fg)", fontWeight: 600 }}>{inviterName}</strong>. Entras
+          como cualquier otro afiliado: ganas la misma comisión por cada clínica que traigas, eliges
+          tu modalidad de pago y quien te invitó no recibe ninguna parte de tus comisiones.
+        </div>
+      )}
 
       {/* Camino corto: ya está dentro del sistema, no vuelve a escribir credenciales. */}
       {linkMode && (
@@ -551,7 +588,7 @@ export function AffiliateRegistroForm({
           <>
             ¿No eres tú?{" "}
             <Link
-              href="/afiliados/vincular"
+              href={inviteCode ? `/afiliados/vincular?inv=${encodeURIComponent(inviteCode)}` : "/afiliados/vincular"}
               style={{ color: "var(--ld-brand-light)", fontWeight: 500, textDecoration: "none" }}
             >
               Usar otra cuenta →

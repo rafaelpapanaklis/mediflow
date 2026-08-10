@@ -272,8 +272,8 @@ function avisosReglas(offer: PublicOffer): AvisoAfiliado[] {
     tipo: "regla",
   });
   avisos.push({
-    k: "s-equipo",
-    texto: "Registra a tus propios vendedores y asígnales su porcentaje",
+    k: "s-red",
+    texto: "Invita afiliados y gana bonos por las clínicas de tu red",
     icono: "personas",
     tipo: "regla",
   });

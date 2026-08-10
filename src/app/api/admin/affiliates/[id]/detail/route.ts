@@ -3,7 +3,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getResolvedPlans } from "@/lib/plans";
 import { getAffiliateLevelInfo, type LevelInfo } from "@/lib/affiliate-levels";
-import { getSellerStatsForAffiliate } from "@/lib/affiliates/seller-stats";
+// El SEGUNDO NIVEL del programa: quién lo invitó y a quién invitó él. Los dos
+// helpers degradan a null/[] por su cuenta, así que la ficha nunca se rompe por
+// una columna sin crear.
+import { getInvitedAffiliates, getInviter } from "@/lib/affiliates/invites";
 import { clinicMonthlyMxn } from "@/lib/affiliates/stats";
 import {
   commissionKindLabel,
@@ -27,9 +30,10 @@ export const dynamic = "force-dynamic";
  * DEGRADACIÓN TOTAL: el subsistema de afiliados se despliega por olas y sus
  * tablas/columnas nuevas (affiliate_payout_config, affiliate_clinic_terms,
  * affiliates.payoutMode, affiliate_commissions.kind/monthsCovered,
- * affiliate_seller_*) pueden no existir todavía en la BD. Cada query que las
- * toca lleva su propio .catch, así que este endpoint NUNCA responde 500 por un
- * SQL sin correr: devuelve el subconjunto que sí se pudo leer.
+ * affiliates.invitedByAffiliateId) pueden no existir todavía en la BD. Cada
+ * query que las toca lleva su propio .catch, así que este endpoint NUNCA
+ * responde 500 por un SQL sin correr: devuelve el subconjunto que sí se pudo
+ * leer.
  *
  * Rendimiento: cero N+1. Los conteos de cobros, los términos congelados y las
  * comisiones acumuladas por clínica salen de groupBy/findMany agregados, y los
@@ -107,15 +111,23 @@ export interface AdminAffiliateDetailMoney {
   projectedMonthlyMxn: number;
 }
 
-export interface AdminAffiliateDetailSeller {
+/**
+ * Un afiliado que ESTE afiliado invitó. Es un afiliado NORMAL: cobra su propia
+ * comisión por plan y elige su propia modalidad. Quien lo invitó no toca un peso
+ * de eso — su único premio son los bonos por red, que se calculan sobre
+ * `qualifyingClinics`.
+ */
+export interface AdminAffiliateDetailInvite {
   id: string;
   name: string;
-  email: string;
-  commissionPct: number;
-  isActive: boolean;
-  clinics: number;
-  pendingMxn: number;
-  paidMxn: number;
+  /** Estado del invitado: explica un conteo en 0 sin más contexto. */
+  status: string;
+  /** Cuándo se registró el invitado = desde cuándo existe el vínculo (ISO). */
+  since: string;
+  /** Sus clínicas activas que CUENTAN para el bono por red del invitador. */
+  qualifyingClinics: number;
+  /** Sus clínicas activas, califiquen o no (contexto del número de arriba). */
+  activeClinics: number;
 }
 
 export interface AdminAffiliateDetailResponse {
@@ -126,7 +138,13 @@ export interface AdminAffiliateDetailResponse {
   /** Historial completo, más recientes primero (tope 500 filas). */
   commissions: AdminAffiliateDetailCommission[];
   money: AdminAffiliateDetailMoney;
-  sellers: AdminAffiliateDetailSeller[];
+  /**
+   * Quién lo invitó al programa. null = se registró directo. El vínculo es
+   * PERMANENTE y de un solo nivel: no se edita desde ninguna pantalla.
+   */
+  invitedBy: { id: string; name: string } | null;
+  /** A quiénes invitó él, con las clínicas que alimentan su bono por red. */
+  invited: AdminAffiliateDetailInvite[];
   /**
    * true = la proyección NO sale de montos fijos sino del modo viejo (MRR
    * referido × % del nivel), porque el motor está inactivo o el programa corre
@@ -239,34 +257,23 @@ async function loadCommissions(affiliateId: string): Promise<CommissionRow[]> {
   return base as CommissionRow[];
 }
 
-// ── Equipo de vendedores (misma lógica que GET .../[id]/sellers) ──────────
+// ── Red de invitados (el segundo nivel) ──────────────────────────────────
 
-async function loadSellers(affiliateId: string): Promise<AdminAffiliateDetailSeller[]> {
-  try {
-    const [sellers, stats] = await Promise.all([
-      prisma.affiliateSeller.findMany({
-        where: { affiliateId },
-        orderBy: { createdAt: "asc" },
-      }),
-      getSellerStatsForAffiliate(affiliateId),
-    ]);
-    return sellers.map((s) => {
-      const st = stats.get(s.id);
-      return {
-        id: s.id,
-        name: s.name,
-        email: s.email,
-        commissionPct: s.commissionPct,
-        isActive: s.isActive,
-        clinics: st?.clinics ?? 0,
-        pendingMxn: roundMxn(st?.pendingMxn ?? 0),
-        paidMxn: roundMxn(st?.paidMxn ?? 0),
-      };
-    });
-  } catch {
-    // affiliate_seller_* sin crear → sin equipo (degrada sin romper).
-    return [];
-  }
+/**
+ * Los invitados directos de este afiliado, listos para el DTO. Un solo salto:
+ * `getInvitedAffiliates` no recorre el árbol, porque las clínicas de los
+ * invitados de sus invitados NO le cuentan a nadie más arriba.
+ */
+async function loadInvited(affiliateId: string): Promise<AdminAffiliateDetailInvite[]> {
+  const rows = await getInvitedAffiliates(affiliateId);
+  return rows.map((r) => ({
+    id: r.id,
+    name: r.name,
+    status: r.status,
+    since: r.since.toISOString(),
+    qualifyingClinics: r.qualifyingClinics,
+    activeClinics: r.activeClinics,
+  }));
 }
 
 // ── Handler ──────────────────────────────────────────────────────────────
@@ -350,10 +357,11 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
         .catch(() => [] as Array<{ status: string; _sum: { commissionMxn: number | null } }>),
     ]);
 
-    // ── Lote 3: historial de comisiones y equipo ─────────────────────────
-    const [commissionRows, sellers] = await Promise.all([
+    // ── Lote 3: historial de comisiones y red de invitados ───────────────
+    const [commissionRows, inviter, invited] = await Promise.all([
       loadCommissions(affiliateId),
-      loadSellers(affiliateId),
+      getInviter(affiliateId),
+      loadInvited(affiliateId),
     ]);
 
     // ── Merge en código (sin N+1) ────────────────────────────────────────
@@ -511,7 +519,10 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
         paidMxn: roundMxn(paidMxn),
         projectedMonthlyMxn: roundMxn(projectedMonthlyMxn),
       },
-      sellers,
+      // `since` del invitador se omite a propósito: es el createdAt de ESTE
+      // afiliado, que ya viaja en `affiliate.createdAt`.
+      invitedBy: inviter ? { id: inviter.id, name: inviter.name } : null,
+      invited,
       projectionIsLegacy,
       payoutModeAvailable,
     };

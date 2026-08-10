@@ -1,7 +1,7 @@
 // URL pública de los links de afiliado — fuente ÚNICA.
 //
-// Antes esta plantilla estaba escrita a mano en tres sitios (la route del
-// afiliado, la del vendedor y la page SSR de /afiliados/herramientas), así que
+// Antes esta plantilla estaba escrita a mano en tres sitios (dos routes de API
+// del panel y la page SSR de /afiliados/herramientas), así que
 // un link recién creado y uno ya existente podían mostrarse con formatos
 // distintos en la misma pantalla.
 //

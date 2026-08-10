@@ -5,8 +5,8 @@
 // como PNG. Sin estado global; cada click genera fresco.
 //
 // Estilo: `dcafp-btn` de src/app/afiliados/panel.css — acción secundaria al
-// lado de "Copiar". Lo usan los dos paneles (afiliado y vendedor) y ambos
-// shells cargan esa hoja, así que la clase existe en las dos pantallas.
+// lado de "Copiar". Sólo se usa dentro del panel de afiliado, cuyo shell carga
+// esa hoja, así que la clase siempre existe donde se pinta.
 import { useState } from "react";
 import toast from "react-hot-toast";
 import { QrCode } from "lucide-react";

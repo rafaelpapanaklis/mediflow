@@ -28,9 +28,10 @@ import "@/components/public/landing/sales/sales.css";
 // Dynamic: depende del slug + estado del afiliado (no SSG).
 //
 // NO se pasa a ISR a propósito (evaluado en la ola de cache de públicas). El
-// `?c=<campaña>` no solo cuenta clicks: se propaga a los 6 CTA como
-// /signup?ref=…&c=…, y en el alta ese `c` resuelve el AffiliateLink → sellerId
-// que crea AffiliateSellerAttribution (comisión del vendedor, dinero real).
+// `?c=<campaña>` no solo suma el click al AffiliateLink de esa campaña: se
+// propaga a los 6 CTA como /signup?ref=…&c=…, y el alta lo guarda en
+// AffiliateConversion.campaign — que es como el afiliado sabe qué canal suyo le
+// trae clínicas de verdad y no solo visitas.
 // Prerenderizar la página congelaría los href SIN campaña, y el href de <Link>
 // es una prop de React: parchear el atributo del DOM desde el cliente no
 // cambiaría a dónde navega. Moverlo al cliente exigiría convertir los 6 CTA a

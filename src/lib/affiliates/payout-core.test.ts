@@ -13,9 +13,9 @@
  *    13 se los regala.
  *  - Los MONTOS no se congelan: si la clínica sube de plan, la comisión del
  *    cobro siguiente es la del plan NUEVO. Congelarla paga de menos.
- *  - Con equipos de vendedores la suma DEBE cuadrar al centavo: si
- *    sellerMxn + overrideMxn > totalMxn, la plataforma paga de más en cada
- *    venta y para siempre.
+ *  - La comisión que genera una clínica es ÍNTEGRA del afiliado que la trajo.
+ *    El segundo nivel del programa (un afiliado INVITA a otros afiliados) NO
+ *    reparte este total con nadie: quien invita cobra aparte, en bonos por red.
  *
  * Todos los montos se pasan por CONFIG explícita (la que el admin edita en
  * /admin) para comprobar que dentro del motor no hay ni un número escrito a
@@ -40,12 +40,6 @@ import {
   type PayoutConfig,
   type ResolveCommissionInput,
 } from "./payout-core";
-import { computeSellerSplit } from "./team";
-import {
-  SELLER_SHARE_MAX,
-  clampSellerSharePct,
-  computeSellerSplitFromTotal,
-} from "./team-split";
 
 // ── Fixtures ────────────────────────────────────────────────────────────────
 
@@ -791,178 +785,38 @@ test("simulateProgram: bajar el fijo baja el % efectivo", () => {
   assert.equal(sim.recurring.effectivePct, 6.5);
 });
 
-// ── 12. Split con vendedor: la suma DEBE cuadrar al centavo ─────────────────
+// ── 12. La comisión es ÍNTEGRA del afiliado que trajo la clínica ────────────
 //
-// El % del vendedor es el PORCENTAJE DE LA COMISIÓN DEL PADRE que se lleva
-// (0-100), no un % de la factura ni un trozo del nivel: con $80 de comisión,
-// 10 % son $8 y 100 % son los $80 completos. El nivel del padre NO participa.
+// Desde ago 2026 un afiliado puede INVITAR a otros afiliados
+// (Affiliate.invitedByAffiliateId). El invitado es un afiliado NORMAL e
+// idéntico: la comisión de SUS clínicas es suya y completa. Quien invita no
+// cobra un peso por ellas — su único premio son los BONOS POR RED
+// (./network-bonus-core), que se calculan aparte y NO salen de este total.
+// El modelo viejo de "vendedores" sí partía esta cifra en dos; ya no existe.
 
-/** Centavos exactos de un monto en pesos. */
-function cents(mxn: number): number {
-  return Math.round(mxn * 100);
-}
-
-/**
- * REGLA DE ORO, comprobada donde vive el dinero: EN CENTAVOS, con `===` y sin
- * una pizca de tolerancia. Sumar los pesos en coma flotante NO sirve de
- * comprobación: 0.01 + 0.06 da 0.06999999999999999, así que un reparto
- * perfecto de $0.07 "fallaría" y uno malo de $19.99 podría pasar.
- */
-function assertCuadra(r: ReturnType<typeof computeSellerSplitFromTotal>, ctx: string) {
-  assert.equal(
-    cents(r.sellerMxn) + cents(r.overrideMxn),
-    cents(r.totalMxn),
-    `${ctx} → ${r.sellerMxn} + ${r.overrideMxn} ≠ ${r.totalMxn}`,
+test("la comisión de una clínica es ÍNTEGRA del afiliado que la trajo", () => {
+  // El vínculo de invitación no entra en la fórmula: la entrada del motor no
+  // tiene ni un campo del invitador, así que el mismo cobro resuelve el mismo
+  // número exista o no alguien arriba.
+  assert.deepEqual(
+    Object.keys(input()).filter((k) => /invit|seller|vendedor|parent|share|split/i.test(k)),
+    [],
+    "resolveCommission no sabe —ni puede saber— quién invitó al afiliado",
   );
-  assert.ok(r.sellerMxn >= 0 && r.overrideMxn >= 0, `${ctx}: ninguna porción puede ser negativa`);
-}
 
-test("computeSellerSplitFromTotal: el % es sobre la comisión, no sobre el nivel", () => {
-  // Los cuatro casos de la especificación, con el Básico ($80 de comisión).
-  const diez = computeSellerSplitFromTotal(80, 10);
-  assert.equal(diez.sellerMxn, 8);
-  assert.equal(diez.overrideMxn, 72);
-
-  const treinta = computeSellerSplitFromTotal(80, 30);
-  assert.equal(treinta.sellerMxn, 24);
-  assert.equal(treinta.overrideMxn, 56);
-
-  const mitad = computeSellerSplitFromTotal(80, 50);
-  assert.equal(mitad.sellerMxn, 40);
-  assert.equal(mitad.overrideMxn, 40);
-
-  const todo = computeSellerSplitFromTotal(80, 100);
-  assert.equal(todo.sellerMxn, 80);
-  assert.equal(todo.overrideMxn, 0, "el padre no cobra override, pero tampoco sale negativo");
-  assert.equal(todo.overridePct, 0);
-
-  // Profesional ($140): 30 % → $42 / $98.
-  const pro = computeSellerSplitFromTotal(140, 30);
-  assert.equal(pro.sellerMxn, 42);
-  assert.equal(pro.overrideMxn, 98);
-
-  for (const r of [diez, treinta, mitad, todo, pro]) assertCuadra(r, "casos de la especificación");
-});
-
-test("computeSellerSplitFromTotal: el nivel del padre ya no interviene", () => {
-  // La firma vieja llevaba el nivel en medio y repartía total × pct/nivel: un
-  // vendedor al 10 % con un padre en Bronce se llevaba la comisión ENTERA.
-  // Ahora el mismo 10 % son $8 de $80, dé lo que dé el nivel del padre.
-  const r = computeSellerSplitFromTotal(80, 10);
-  assert.equal(r.sellerMxn, 8);
-  assert.notEqual(r.sellerMxn, 80, "el 10 % ya no es 'todo' aunque el padre sea Bronce (10 %)");
-  // Y el reparto se expresa sobre la comisión completa: 100 puntos.
-  assert.equal(r.totalPct, 100);
-  assert.equal(r.sellerPct + r.overridePct, 100);
-});
-
-test("computeSellerSplitFromTotal: vendedor + override === total, al centavo", () => {
-  // Si esto se rompe, la plataforma paga de más (o de menos) en CADA venta de
-  // equipo: el override se calcula por RESTA justamente por esto. Se barre una
-  // malla amplia a propósito, con los totales y porcentajes más feos posibles.
-  const TOTALES = [0, 0.01, 0.03, 0.07, 19.99, 33.33, 40, 80, 90, 140, 300, 350, 650, 1080, 1234.56,
-    1400, 7777.77, 100 / 3, 0.05, 999.99];
-  const PCTS = [0, 0.1, 1, 3, 7, 10, 12.5, 25, 30, 33.33, 50, 66.67, 70, 90, 99.9, 100];
-  let casos = 0;
-  for (const total of TOTALES) {
-    for (const pct of PCTS) {
-      const r = computeSellerSplitFromTotal(total, pct);
-      assertCuadra(r, `total=${total} vendedor=${pct}%`);
-      assert.ok(r.sellerMxn <= r.totalMxn, `total=${total} pct=${pct}: el vendedor no rebasa el total`);
-      casos++;
-    }
-  }
-  assert.equal(casos, TOTALES.length * PCTS.length);
-});
-
-test("computeSellerSplitFromTotal: los redondeos feos los absorbe el override", () => {
-  // 1/3 de $0.07 no existe en centavos: el vendedor cobra el centavo redondeado
-  // y el padre EXACTAMENTE lo que sobra — nunca dos centavos inventados.
-  const chico = computeSellerSplitFromTotal(0.07, 50);
-  assert.equal(chico.sellerMxn, 0.04); // 3.5 centavos → 4 (medio hacia arriba)
-  assert.equal(chico.overrideMxn, 0.03);
-  assertCuadra(chico, "0.07 al 50%");
-
-  const feo = computeSellerSplitFromTotal(19.99, 33.33);
-  assert.equal(feo.sellerMxn, 6.66); // 1999 × 33.33 / 100 = 666.267 centavos
-  assert.equal(feo.overrideMxn, 13.33);
-  assertCuadra(feo, "19.99 al 33.33%");
-
-  const anual = computeSellerSplitFromTotal(1080, 50);
-  assert.equal(anual.sellerMxn, 540);
-  assert.equal(anual.overrideMxn, 540);
-});
-
-test("computeSellerSplitFromTotal: un % mayor a 100 se clampa (no se paga de más)", () => {
-  const r = computeSellerSplitFromTotal(1000, 250);
-  assert.equal(r.sellerPct, 100);
-  assert.equal(r.sellerMxn, 1000);
-  assert.equal(r.overrideMxn, 0);
-  assertCuadra(r, "clamp a 100");
-});
-
-test("computeSellerSplitFromTotal: un % inválido o cero no gana nada", () => {
-  // Un % basura (NaN, ±Infinity) NO se interpreta como "más que 100": se
-  // descarta y la comisión entera queda con el padre, que es con quien
-  // DaleControl tiene el trato. Nunca se le entrega de más al vendedor por un
-  // dato corrupto.
-  for (const pct of [0, -5, NaN, Infinity, -Infinity]) {
-    const r = computeSellerSplitFromTotal(650, pct);
-    assert.equal(r.sellerPct, 0, `pct=${pct}`);
-    assert.equal(r.sellerMxn, 0, `pct=${pct}`);
-    assert.equal(r.overrideMxn, 650, `pct=${pct}`);
-    assertCuadra(r, `pct=${pct}`);
+  // Y lo que devuelve es el fijo COMPLETO de la config, no una fracción de él.
+  const c = cfg();
+  for (const plan of PLAN_KEYS) {
+    assert.equal(
+      resolveCommission(input({ plan, cfg: c }))!.totalMxn,
+      fixedAmountFor(plan, "recurring", c),
+      `${plan} recurrente: el total es el fijo entero`,
+    );
+    assert.equal(
+      resolveCommission(input({ plan, mode: "onetime", cfg: c }))!.totalMxn,
+      fixedAmountFor(plan, "onetime", c),
+      `${plan} pago único: el total es el fijo entero`,
+    );
   }
 });
 
-test("computeSellerSplitFromTotal: totales no finitos o negativos → todo en cero", () => {
-  for (const total of [NaN, Infinity, -Infinity, -500]) {
-    const r = computeSellerSplitFromTotal(total, 50);
-    assert.equal(r.totalMxn, 0, `total=${total}`);
-    assert.equal(r.sellerMxn, 0, `total=${total}`);
-    assert.equal(r.overrideMxn, 0, `total=${total}`);
-    assertCuadra(r, `total=${total}`);
-  }
-});
-
-test("computeSellerSplitFromTotal: el total se redondea a centavos", () => {
-  const r = computeSellerSplitFromTotal(100 / 3, 15);
-  assert.equal(r.totalMxn, 33.33);
-  assertCuadra(r, "100/3 al 15%");
-});
-
-// ── 12b. El modo histórico "pct" sigue intacto ──────────────────────────────
-
-test("computeSellerSplit (modo pct): intacto — reparte puntos de la FACTURA", () => {
-  // Esta función NO cambió con el nuevo significado: sigue aplicando el % a la
-  // factura y clampando al % del nivel del padre. El webhook ya no la llama
-  // (reparte el total resuelto), pero el contrato histórico se conserva.
-  const r = computeSellerSplit(1000, 10, 4);
-  assert.equal(r.totalMxn, 100); // 10 % de la factura
-  assert.equal(r.sellerMxn, 40); // 4 % de la factura
-  assert.equal(r.overrideMxn, 60);
-  assert.equal(r.totalPct, 10);
-  assert.equal(r.overridePct, 6);
-
-  // El clamp al nivel del padre sigue vivo aquí (y SOLO aquí).
-  const clamp = computeSellerSplit(1000, 10, 25);
-  assert.equal(clamp.sellerPct, 10);
-  assert.equal(clamp.sellerMxn, 100);
-  assert.equal(clamp.overrideMxn, 0);
-
-  // Sin nivel utilizable no hay comisión que repartir.
-  for (const nivel of [0, -3, NaN]) {
-    const sinNivel = computeSellerSplit(500, nivel, 5);
-    assert.equal(sinNivel.sellerMxn, 0, `nivel=${nivel}`);
-  }
-});
-
-test("clampSellerSharePct: el tope es 100, no el nivel", () => {
-  assert.equal(clampSellerSharePct(30), 30);
-  assert.equal(clampSellerSharePct(100), 100);
-  assert.equal(clampSellerSharePct(140), 100);
-  assert.equal(clampSellerSharePct(0), 0);
-  assert.equal(clampSellerSharePct(-1), 0);
-  assert.equal(clampSellerSharePct(NaN), 0);
-  assert.equal(SELLER_SHARE_MAX, 100);
-});

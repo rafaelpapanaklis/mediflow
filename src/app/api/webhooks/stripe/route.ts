@@ -4,9 +4,8 @@ import { getStripeSafe, stripeUnavailableResponse } from "@/lib/stripe";
 import { logAudit } from "@/lib/audit";
 import type Stripe from "stripe";
 import { calcCommissionMxn } from "@/lib/affiliates";
-import { sendAffiliateConversionEmail, sendAffiliateSellerConversionEmail } from "@/lib/affiliate-emails";
+import { sendAffiliateConversionEmail } from "@/lib/affiliate-emails";
 import { getProgramConfig, countActiveReferred, computeLevel, levelPct } from "@/lib/affiliate-levels";
-import { computeSellerSplitFromTotal } from "@/lib/affiliates/team";
 import {
   claimOneTimePayout,
   effectiveAffiliateMode,
@@ -540,37 +539,28 @@ export async function POST(req: NextRequest) {
           : { kind: "pct", totalMxn: calcCommissionMxn(amountMxn, pct), months: 1 };
 
         // null = esta factura NO genera comisión (cobro promocional, pago único
-        // ya entregado o monto fijo apagado): ni fila del padre, ni del
-        // vendedor, ni correo.
+        // ya entregado o monto fijo apagado): ni fila ni correo.
         if (!resolved) break;
 
-        // ── EQUIPOS DE VENDEDORES: si la clínica tiene atribución de
-        //    vendedor, la comisión total (la que resolvió el motor, sin pagar
-        //    de más) se REPARTE: el vendedor su % congelado al alta —que es el
-        //    % DE ESA COMISIÓN que le toca, 0-100— y el padre el override
-        //    (= total − vendedor). Vale igual en los dos modos del programa:
-        //    `resolved.totalMxn` ya es la comisión completa del padre, sea el
-        //    monto fijo del plan o el % del nivel sobre la factura. El nivel NO
-        //    interviene en el reparto. Sin atribución, todo sigue al padre.
-        const attr = await prisma.affiliateSellerAttribution
-          .findUnique({ where: { clinicId: clinic.id } })
-          .catch(() => null);
-
+        // ── UN SOLO DUEÑO POR COMISIÓN ─────────────────────────────────────
+        // La comisión que resolvió el motor es ÍNTEGRAMENTE del afiliado al que
+        // está atribuida la clínica. No se reparte con nadie: quien lo invitó
+        // al programa NO cobra un peso por las clínicas de su invitado. Ese es
+        // el corazón del segundo nivel — el invitado es un afiliado normal y su
+        // dinero es suyo; a quien invita se le premia aparte, con los BONOS POR
+        // RED (@/lib/affiliates/network-bonus), que se otorgan por escalones de
+        // clínicas sostenidas y jamás factura por factura.
+        // Si algún día vuelve a aparecer aquí un segundo `create` con otro
+        // affiliateId, es que el modelo cambió: no es un detalle de implementación.
         try {
-          if (attr) {
-            const split = computeSellerSplitFromTotal(resolved.totalMxn, attr.sellerPct);
-            // Las dos comisiones se crean en una transacción. El primer create
-            // (affiliateCommission, stripeInvoiceId @unique) lanza P2002 en
-            // reintentos → la transacción aborta y el catch de abajo lo trata
-            // como ya-procesado (no-op). Suma garantizada por el contrato:
-            // split.overrideMxn + split.sellerMxn === split.totalMxn.
+          // La transacción SOLO hace falta para el candado del pago único; en
+          // los demás casos se conserva el create suelto de siempre.
+          if (resolved.kind === "onetime") {
             await prisma.$transaction(async (tx) => {
               // CANDADO del pago único: si otro proceso ya lo reclamó, aborta
               // ANTES de escribir nada (no se paga dos veces la misma clínica).
-              if (resolved.kind === "onetime") {
-                const claimed = await claimOneTimePayout(tx, clinic.id);
-                if (!claimed) throw oneTimeClaimedError();
-              }
+              const claimed = await claimOneTimePayout(tx, clinic.id);
+              if (!claimed) throw oneTimeClaimedError();
               await tx.affiliateCommission.create({
                 data: {
                   affiliateId: clinic.affiliateId,
@@ -579,81 +569,35 @@ export async function POST(req: NextRequest) {
                   // amountMxn = lo que pagó la clínica (auditoría); el monto de
                   // la comisión puede ser fijo y no guardar relación con él.
                   amountMxn,
-                  commissionMxn: split.overrideMxn,
-                  kind: resolved.kind,
-                  monthsCovered: resolved.months,
-                  status: "pending",
-                },
-              });
-              await tx.affiliateSellerCommission.create({
-                data: {
-                  sellerId: attr.sellerId,
-                  affiliateId: clinic.affiliateId,
-                  clinicId: clinic.id,
-                  stripeInvoiceId: invoiceId,
-                  amountMxn,
-                  commissionMxn: split.sellerMxn,
-                  kind: resolved.kind,
-                  status: "pending",
-                },
-              });
-            });
-            // Emails fire-and-forget (cada helper avisa solo en la 1a comisión
-            // de la clínica): override al padre, porción al vendedor.
-            sendAffiliateConversionEmail({
-              affiliateId: clinic.affiliateId,
-              clinicId: clinic.id,
-              commissionMxn: split.overrideMxn,
-            }).catch(() => {});
-            sendAffiliateSellerConversionEmail({
-              sellerId: attr.sellerId,
-              clinicId: clinic.id,
-              commissionMxn: split.sellerMxn,
-            }).catch(() => {});
-          } else {
-            // Sin vendedor el padre se lleva el total completo. La transacción
-            // SOLO hace falta para el candado del pago único; en los demás
-            // casos se conserva el create suelto de siempre.
-            if (resolved.kind === "onetime") {
-              await prisma.$transaction(async (tx) => {
-                const claimed = await claimOneTimePayout(tx, clinic.id);
-                if (!claimed) throw oneTimeClaimedError();
-                await tx.affiliateCommission.create({
-                  data: {
-                    affiliateId: clinic.affiliateId,
-                    clinicId: clinic.id,
-                    stripeInvoiceId: invoiceId,
-                    amountMxn,
-                    commissionMxn: resolved.totalMxn,
-                    kind: resolved.kind,
-                    monthsCovered: resolved.months,
-                    status: "pending",
-                  },
-                });
-              });
-            } else {
-              await prisma.affiliateCommission.create({
-                data: {
-                  affiliateId: clinic.affiliateId,
-                  clinicId: clinic.id,
-                  stripeInvoiceId: invoiceId,
-                  amountMxn,
                   commissionMxn: resolved.totalMxn,
                   kind: resolved.kind,
                   monthsCovered: resolved.months,
                   status: "pending",
                 },
               });
-            }
-            // Email de conversión al afiliado (solo la 1a comisión de la
-            // clínica; el helper lo verifica). Fire-and-forget: el webhook
-            // NO espera el envío.
-            sendAffiliateConversionEmail({
-              affiliateId: clinic.affiliateId,
-              clinicId: clinic.id,
-              commissionMxn: resolved.totalMxn,
-            }).catch(() => {});
+            });
+          } else {
+            await prisma.affiliateCommission.create({
+              data: {
+                affiliateId: clinic.affiliateId,
+                clinicId: clinic.id,
+                stripeInvoiceId: invoiceId,
+                amountMxn,
+                commissionMxn: resolved.totalMxn,
+                kind: resolved.kind,
+                monthsCovered: resolved.months,
+                status: "pending",
+              },
+            });
           }
+          // Email de conversión al afiliado (solo la 1a comisión de la
+          // clínica; el helper lo verifica). Fire-and-forget: el webhook
+          // NO espera el envío.
+          sendAffiliateConversionEmail({
+            affiliateId: clinic.affiliateId,
+            clinicId: clinic.id,
+            commissionMxn: resolved.totalMxn,
+          }).catch(() => {});
         } catch (err: any) {
           // P2002 = unique violation → la comisión ya existía, no-op.
           // ONE_TIME_ALREADY_CLAIMED = el pago único de esta clínica ya se

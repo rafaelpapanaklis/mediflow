@@ -150,7 +150,7 @@ const HERRAMIENTAS = [
   { icono: P.cupon, t: "Cupón propio", d: "Al activarlo, tu código acredita la venta aunque no usen tu link." },
   { icono: P.barras, t: "Panel con tus números", d: "Clics, altas, clínicas activas y comisiones." },
   { icono: P.carpeta, t: "Kit de materiales listos", d: "Copys para WhatsApp y redes, plantillas de correo y respuestas a objeciones." },
-  { icono: P.personas, t: "Equipo de vendedores", d: "Registra a tu propia gente y asígnale su porcentaje." },
+  { icono: P.personas, t: "Link de invitación", d: "Invita a otros afiliados: entran con tus mismas condiciones y sus clínicas activas te suman bonos." },
 ];
 
 const AUDIENCIA = [
@@ -210,12 +210,12 @@ const PILA_NOMBRES = ["Dental Río Lerma", "Clínica Sonrisa Norte", "Odonto Int
 export default async function AfiliadosPage() {
   const offer = await getPublicOffer();
 
-  // Bono por equipo de ventas. Lectura APARTE de `getPublicOffer` a propósito:
+  // Bono por red de afiliados. Lectura APARTE de `getPublicOffer` a propósito:
   // tiene su propio SQL, así que un deploy adelantado apaga solo esta mención y
   // no la oferta entera. Nunca lanza: sin las columnas, `enabled` viene false.
   const redBonus = await getNetworkBonusTiers().catch(() => ({
     cfg: null,
-    tiers: [] as { n: number; clinics: number; onceMxn: number; monthlyMxn: number }[],
+    tiers: [] as { n: number; clinics: number; onceMxn: number }[],
     enabled: false,
   }));
 
@@ -277,7 +277,7 @@ export default async function AfiliadosPage() {
   const hitos = offer.milestones;
   const hitoMayor = hitos.tiers.length > 0 ? hitos.tiers[hitos.tiers.length - 1] : null;
 
-  // ── Bono por equipo de ventas: aquí solo la MENCIÓN ─────────────────────
+  // ── Bono por red de afiliados: aquí solo la MENCIÓN ─────────────────────
   // El detalle completo vive en /terminos-afiliados. En la landing basta el
   // escalón de entrada (el que un afiliado nuevo puede imaginarse alcanzando) y
   // el mayor, para que se vea hasta dónde llega.
@@ -391,8 +391,8 @@ export default async function AfiliadosPage() {
       a: "No. Cualquier persona o empresa que ya trate con clínicas —distribuidores, consultores, contadores, laboratorios o agencias— puede participar.",
     },
     {
-      q: "¿Puedo tener un equipo de vendedores?",
-      a: "Sí. Desde tu panel das de alta a tu propia gente y le asignas a cada quien su porcentaje de la comisión.",
+      q: "¿Puedo invitar a otros afiliados?",
+      a: "Sí. Desde tu panel tienes un link de invitación. Quien entra por ahí es un afiliado igual que tú —misma comisión, su propia modalidad y sus propios bonos— y tú no recibes nada de lo que él gana: lo que ganas es un bono de pago único cuando las clínicas activas de tu red alcanzan cada escalón. Es de un solo nivel y solo cuentan las clínicas de los afiliados que tú invitaste.",
     },
     {
       q: "¿Cómo sé que se me cuenta bien?",
@@ -739,18 +739,18 @@ export default async function AfiliadosPage() {
               </div>
             )}
 
-            {/* ── Bono por equipo de ventas: MENCIÓN corta ──────────────────
+            {/* ── Bono por red de afiliados: MENCIÓN corta ──────────────────
                 Se apaga desde /admin (`networkBonusEnabled`) igual que el de
                 arriba. Deliberadamente breve: aquí solo se anuncia que existe y
                 se manda a los términos, que son la fuente completa.
 
                 ⚠️ EL ENCUADRE NO ES NEGOCIABLE. Se cobra por CLÍNICAS ACTIVAS
-                que contratan y pagan un producto, JAMÁS por incorporar personas
-                al equipo. Por eso la frase que abre el bloque habla de clínicas
-                y la que lo cierra lo dice explícitamente: un equipo grande sin
-                clínicas activas no paga nada. Es lo que separa un programa de
-                ventas de un esquema piramidal, y ninguna reescritura de este
-                bloque puede aflojarlo. */}
+                que contratan y pagan un producto, JAMÁS por invitar personas.
+                Por eso la frase que abre el bloque habla de clínicas y la que lo
+                cierra lo dice explícitamente: una red grande sin clínicas
+                activas no paga nada, y el conteo es de UN SOLO NIVEL. Es lo que
+                separa un programa de ventas de un esquema piramidal, y ninguna
+                reescritura de este bloque puede aflojarlo. */}
             {redOn && redPrimero && redMayor && (
               <div style={{ marginTop: 40 }}>
                 <div
@@ -763,42 +763,33 @@ export default async function AfiliadosPage() {
                   }}
                 >
                   <span style={{ ...KICKER, color: "#0f766e", fontSize: 12 }}>
-                    ¿Vendes con equipo?
+                    ¿Invitas a otros afiliados?
                   </span>
                   <h4
                     className="dcaf-balance"
                     style={{ marginTop: 8, fontSize: "clamp(19px,2.4vw,24px)", fontWeight: 800, letterSpacing: "-0.01em", lineHeight: 1.25 }}
                   >
-                    También hay bono por las clínicas que traen tus vendedores
+                    También hay bono cuando las clínicas de tu red crecen
                   </h4>
                   <p style={{ marginTop: 10, fontSize: 14.5, color: "#475569", lineHeight: 1.6 }}>
-                    Si registras vendedores a tu cargo, las clínicas{" "}
-                    <strong style={{ color: "#0f172a" }}>activas</strong> que ellos den de alta suman
-                    para un bono aparte del tuyo. Desde{" "}
-                    <strong style={{ color: "#0f766e" }}>{redPrimero.clinics} clínicas</strong>
-                    {redPrimero.onceMxn > 0 ? (
-                      <>
-                        {" "}
-                        ({fmtMxn(redPrimero.onceMxn)})
-                      </>
-                    ) : (
-                      <>
-                        {" "}
-                        ({fmtMxn(redPrimero.monthlyMxn)} al mes)
-                      </>
-                    )}{" "}
-                    y hasta{" "}
-                    <strong style={{ color: "#0f766e" }}>{redMayor.clinics} clínicas</strong>
-                    {redMayor.onceMxn > 0 ? <> ({fmtMxn(redMayor.onceMxn)})</> : null}. En cada
-                    escalón eliges, una sola vez, entre cobrarlo de golpe o cada mes mientras el
-                    número se sostenga.
+                    Con tu link de invitación traes a otros afiliados. Quien entra por ahí es{" "}
+                    <strong style={{ color: "#0f172a" }}>un afiliado igual que tú</strong> —misma
+                    comisión, su propia modalidad, sus propios bonos— y lo que él gana es suyo: tú no
+                    te llevas ninguna parte. Lo tuyo es un bono de{" "}
+                    <strong style={{ color: "#0f172a" }}>pago único</strong> cuando las clínicas
+                    activas de tu red llegan a cada escalón, desde{" "}
+                    <strong style={{ color: "#0f766e" }}>{redPrimero.clinics} clínicas</strong> (
+                    {fmtMxn(redPrimero.onceMxn)}) y hasta{" "}
+                    <strong style={{ color: "#0f766e" }}>{redMayor.clinics} clínicas</strong> (
+                    {fmtMxn(redMayor.onceMxn)}).
                   </p>
                   <p style={{ marginTop: 10, fontSize: 13, color: "#64748b", lineHeight: 1.6 }}>
                     Se paga por <strong>clínicas activas que pagan su suscripción</strong> —cada una
                     con al menos {MIN_PAID_INVOICES} mensualidades pagadas y el conteo sostenido{" "}
-                    {SUSTAIN_MONTHS} meses—, <strong>no por registrar personas</strong>: un equipo
-                    grande sin clínicas activas no genera ningún bono. Las condiciones completas
-                    están en{" "}
+                    {SUSTAIN_MONTHS} meses—, <strong>no por invitar personas</strong>: una red grande
+                    sin clínicas activas no genera ningún bono. Es de{" "}
+                    <strong>un solo nivel</strong>: solo cuentan las clínicas de los afiliados que tú
+                    invitaste. Las condiciones completas están en{" "}
                     <Link href="/terminos-afiliados" style={{ color: "#1d4ed8", textDecoration: "underline" }}>
                       los términos del programa
                     </Link>

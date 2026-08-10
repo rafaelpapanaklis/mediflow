@@ -1,13 +1,13 @@
 "use client";
 
-import { Fragment, useCallback, useEffect, useMemo, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useMemo, useState, type CSSProperties } from "react";
 import Link from "next/link";
 import toast from "react-hot-toast";
 import {
   Clock, CheckCircle2, XCircle, Ban,
   MousePointerClick, Wallet, DollarSign, TrendingUp,
   Coins, Percent, Repeat, Trophy,
-  Network, Hourglass, CirclePause, HandCoins,
+  Network, Hourglass, HandCoins,
 } from "lucide-react";
 import { CardNew } from "@/components/ui/design-system/card-new";
 import { ButtonNew } from "@/components/ui/design-system/button-new";
@@ -31,18 +31,18 @@ import {
   type PlanKey,
   type ProgramMode,
 } from "@/lib/affiliates/payout-core";
-// Bonos por red: la MISMA matemática pura que usa el cron. Los meses de
-// equivalencia entre las dos formas de cobro y los valores por defecto salen de
+// Bonos por red: la MISMA matemática pura que usa el cron. Los escalones, los
+// valores por defecto, los meses sostenidos y las etiquetas de estado salen de
 // aquí, nunca tecleados en la pantalla. OJO: se importa network-bonus-CORE, no
 // network-bonus (ese toca Prisma y este archivo es "use client").
 import {
   DEFAULT_NETWORK_BONUS,
   MIN_PAID_INVOICES,
   NETWORK_AWARD_STATUS_LABELS,
-  NETWORK_CHOICE_LABELS,
   NETWORK_TIER_KEYS,
   SUSTAIN_MONTHS,
-  compareChoices,
+  monthsElapsed,
+  type NetworkAwardStatus,
   type NetworkBonusConfig,
 } from "@/lib/affiliates/network-bonus-core";
 // Type-only: se borra al compilar (mismo patrón que SearchablePatient).
@@ -69,21 +69,6 @@ type AffiliateRow = {
   createdAt: string | Date;
   approvedAt: string | Date | null;
   _count?: { clinics: number };
-};
-
-// Vendedor del equipo de un afiliado (GET /api/admin/affiliates/[id]/sellers).
-type SellerRow = {
-  id: string;
-  name: string;
-  email: string;
-  phone: string | null;
-  commissionPct: number;
-  isActive: boolean;
-  payoutMethod: string | null;
-  payoutDetails: string | null;
-  pendingMxn: number;
-  paidMxn: number;
-  clinics: number;
 };
 
 const STATUS_LABELS: Record<AffiliateStatus, string> = {
@@ -178,8 +163,8 @@ const DEFAULT_CONFIG_FORM: Record<ConfigFieldKey, string> = {
 };
 
 // ── Esquema de pago (GET/PUT /api/admin/affiliates/payout-config) ─────────
-// Los tipos van declarados aquí a propósito (mismo criterio que SellerRow):
-// así este archivo compila sin depender de la ruta del API.
+// Los tipos van declarados aquí a propósito: así este archivo compila sin
+// depender de la ruta del API.
 
 /** Precio REAL del plan (plan_configs). Jamás se escribe un precio a mano. */
 type PayoutPlanRow = { id: PlanKey; label: string; priceMxn: number };
@@ -188,7 +173,7 @@ type PayoutConfigResponse = {
   config: PayoutConfig;
   /** Bono por Clínicas Activas: se guarda en la misma fila, fuera de `config`. */
   milestones?: MilestonesConfig;
-  /** Bonos por red: los 16 campos, también en la misma fila y el mismo PUT. */
+  /** Bonos por red: los 11 campos, también en la misma fila y el mismo PUT. */
   networkBonus?: NetworkBonusConfig;
   /** false = falta correr sql/afiliados-bonos-red.sql. Opcional: un deploy
    *  viejo del endpoint todavía no manda el bloque y no debe romper nada. */
@@ -333,14 +318,15 @@ function toMilestoneForm(cfg: Partial<MilestonesConfig> | null | undefined): Mil
   };
 }
 
-// ── Bonos por red (equipo de vendedores del afiliado) ─────────────────────
+// ── Bonos por red (los afiliados que ESE afiliado invitó) ─────────────────
 // Se guardan en la MISMA fila que el esquema de pago y viajan en el mismo PUT,
 // igual que los hitos. La diferencia grande con el Bono por Clínicas Activas es
-// que ESTE sí lo calcula y lo paga el sistema: un cron mensual cuenta la red,
-// otorga los escalones y genera la comisión. Por eso lo que se teclea aquí es
-// dinero que va a salir solo.
+// que ESTE sí lo calcula y lo paga el sistema: un cron mensual cuenta las
+// clínicas activas de los afiliados invitados, otorga los escalones y genera la
+// comisión de pago único. Por eso lo que se teclea aquí es dinero que va a salir
+// solo. Un solo nivel: lo que traen los invitados de sus invitados no cuenta.
 
-/** Las 15 columnas numéricas (todo menos el interruptor). */
+/** Las 10 columnas numéricas (todo menos el interruptor). */
 type NetworkNumberKey = Exclude<keyof NetworkBonusConfig, "networkBonusEnabled">;
 
 /** El formulario: los montos viven como string (inputs controlados). */
@@ -348,20 +334,21 @@ type NetworkForm = Record<NetworkNumberKey, string> & { networkBonusEnabled: boo
 
 /**
  * Umbral de AVISO de esta pantalla, no del programa: nadie cobra ni deja de
- * cobrar por él y no se guarda en ninguna parte. Marca en ámbar el mensual de
- * un escalón que se lleve más de este % del ingreso estimado de esa red —
- * porque el mensual es recurrente mientras el afiliado sostenga el número.
+ * cobrar por él y no se guarda en ninguna parte. Marca en ámbar el pago único
+ * de un escalón que se lleve más de este % del ingreso de UN AÑO de esa red —
+ * es la defensa contra el cero de más, porque este bono lo paga el cron sin que
+ * nadie vuelva a aprobarlo.
  */
-const NETWORK_MONTHLY_ALERT_PCT = 15;
+const NETWORK_ONCE_ALERT_PCT = 15;
 
 /** Config del API → formulario (strings). Tolerante a campos faltantes. */
 function toNetworkForm(cfg: Partial<NetworkBonusConfig> | null | undefined): NetworkForm {
   const c = cfg ?? {};
-  // Las 15 claves se recorren desde NETWORK_TIER_KEYS: escribirlas a mano aquí
+  // Las 10 claves se recorren desde NETWORK_TIER_KEYS: escribirlas a mano aquí
   // sería la forma más fácil de que un escalón nuevo se quede sin guardar.
   const out = { networkBonusEnabled: c.networkBonusEnabled !== false } as NetworkForm;
   for (const key of NETWORK_TIER_KEYS) {
-    for (const field of [key.clinics, key.once, key.monthly]) {
+    for (const field of [key.clinics, key.once]) {
       const k = field as NetworkNumberKey;
       out[k] = String(c[k] ?? DEFAULT_NETWORK_BONUS[k]);
     }
@@ -373,15 +360,14 @@ function toNetworkForm(cfg: Partial<NetworkBonusConfig> | null | undefined): Net
 const DEFAULT_NETWORK_FORM: NetworkForm = toNetworkForm(DEFAULT_NETWORK_BONUS);
 
 // ── La bandeja (GET /api/admin/affiliates/network-bonus) ──────────────────
-// Los tipos van declarados aquí a propósito (mismo criterio que SellerRow):
-// así este archivo compila sin depender de la ruta del API.
+// Los tipos van declarados aquí a propósito: así este archivo compila sin
+// depender de la ruta del API.
 
 /** Un escalón visto desde arriba: quién llega, quién se acerca y qué costaría. */
 type NetworkTierStat = {
   n: number;
   clinics: number;
   onceMxn: number;
-  monthlyMxn: number;
   /** Afiliados cuya red llega HOY al umbral. */
   reached: number;
   /** Los que van por encima del nearRatio sin alcanzarlo: la alerta anticipada. */
@@ -389,43 +375,35 @@ type NetworkTierStat = {
   awarded: number;
   tracking: number;
   exposureOnceMxn: number;
-  exposureMonthlyMxn: number;
 };
 
-/** Un award con su afiliado y su conteo de red vivo. */
+/** Un award con su afiliado y el conteo del último corte. */
 type NetworkAwardRow = {
   id: string;
   affiliateId: string;
   affiliateName: string;
-  affiliateSlug: string;
+  /** Opcional: si el endpoint lo manda se pinta el /socio/… bajo el nombre. */
+  affiliateSlug?: string | null;
   tier: number;
+  /** Umbral CONGELADO del award, no el vigente en la config. */
   clinics: number;
   onceMxn: number;
-  monthlyMxn: number;
-  /** tracking | pending_choice | once_paid | monthly_active | monthly_paused */
-  status: string;
-  /** once | monthly | null (todavía no elige). */
-  choice: string | null;
+  status: NetworkAwardStatus;
+  /** Inicio de la racha (ISO). De aquí sale "lleva X de N meses". */
+  qualifiedSince: string | null;
   awardedAt: string | null;
-  chosenAt: string | null;
   paidAt: string | null;
-  lastMonthlyAt: string | null;
-  lastMonthlyKey: string | null;
-  monthlyPaidCount: number;
-  pausedAt: string | null;
-  /** Conteo de red AHORA: contra `clinics` explica una pausa de un vistazo. */
-  currentCount: number;
-  monthsSustained: number | null;
+  /** Clínicas de su red en el último barrido: contra `clinics` explica todo. */
+  lastCount: number;
 };
 
 type NetworkBonusSummary = {
-  pendingChoice: number;
-  monthlyActive: number;
-  monthlyCommittedMxn: number;
-  monthlyPaused: number;
-  oncePaid: number;
-  oncePaidMxn: number;
+  /** Awards contando su racha: todavía no pagan nada. */
   tracking: number;
+  /** Escalones ya otorgados, con su comisión de pago único generada. */
+  awarded: number;
+  /** Lo que suman esos pagos únicos (los montos congelados de cada award). */
+  awardedMxn: number;
   commissionsPendingMxn: number;
   commissionsPaidMxn: number;
 };
@@ -444,23 +422,15 @@ type NetworkBonusResponse = {
 };
 
 /**
- * Etiquetas de estado EN ADMIN. Salen de NETWORK_AWARD_STATUS_LABELS (fuente
- * única) salvo `pending_choice`: allá está escrito para el afiliado ("Te falta
- * elegir") y aquí se leería como si Rafael tuviera que elegir algo. No: la
- * elección es del afiliado y esta bandeja es de solo lectura.
+ * Tono del badge por estado. Solo hay dos y ninguno pide una acción humana:
+ * contando la racha (neutro) o ya otorgado con su comisión generada (verde).
+ * Las etiquetas salen tal cual de NETWORK_AWARD_STATUS_LABELS — fuente única
+ * con el panel del afiliado, para que un estado no se llame distinto según
+ * quién lo mire.
  */
-const NETWORK_STATUS_ADMIN_LABELS: Record<string, string> = {
-  ...NETWORK_AWARD_STATUS_LABELS,
-  pending_choice: "Espera su elección",
-};
-
-/** Tono del badge por estado. Lo accionable/roto salta; lo cerrado, no. */
-const NETWORK_STATUS_TONE: Record<string, "success" | "warning" | "danger" | "neutral"> = {
+const NETWORK_STATUS_TONE: Record<NetworkAwardStatus, "success" | "neutral"> = {
   tracking: "neutral",
-  pending_choice: "warning",
-  once_paid: "neutral",
-  monthly_active: "success",
-  monthly_paused: "danger",
+  awarded: "success",
 };
 
 const DEFAULT_SIM_COUNTS: Record<PlanKey, string> = { BASIC: "10", PRO: "20", CLINIC: "5" };
@@ -540,17 +510,23 @@ function dateLabel(value: string | null | undefined): string {
   return Number.isFinite(d.getTime()) ? formatDate(d) : "—";
 }
 
+/**
+ * Meses de racha ya cumplidos de un award que está contando. Se calculan aquí
+ * con `monthsElapsed` —la MISMA función del cron— en vez de pedirle el número
+ * al endpoint: así la bandeja y el barrido nunca discrepan sobre cuántos meses
+ * lleva alguien. Sin racha (o con una fecha basura) devuelve null.
+ */
+function sustainedMonths(qualifiedSince: string | null | undefined): number | null {
+  if (!qualifiedSince) return null;
+  const d = new Date(qualifiedSince);
+  return Number.isFinite(d.getTime()) ? monthsElapsed(d, new Date()) : null;
+}
+
 export function AffiliatesClient({ initial }: { initial: AffiliateRow[] }) {
   const askConfirm = useConfirm();
   const [list, setList] = useState<AffiliateRow[]>(initial);
   const [filter, setFilter] = useState<FilterKey>("ALL");
   const [busyId, setBusyId] = useState<string | null>(null);
-
-  // Equipo de vendedores por afiliado (expandible bajo cada fila).
-  const [expandedTeam, setExpandedTeam] = useState<string | null>(null);
-  const [teamByAffiliate, setTeamByAffiliate] = useState<Record<string, SellerRow[]>>({});
-  const [teamLoading, setTeamLoading] = useState<string | null>(null);
-  const [busySellerId, setBusySellerId] = useState<string | null>(null);
 
   // Métricas del programa (A7)
   const [metrics, setMetrics] = useState<AdminAffiliateMetricsResponse | null>(null);
@@ -741,25 +717,37 @@ export function AffiliatesClient({ initial }: { initial: AffiliateRow[] }) {
     return out;
   }, [payForm, payFormConfig, planPrices, planLabels]);
 
-  // Aviso NO bloqueante del bono por red: un mensual que se lleve más del
-  // NETWORK_MONTHLY_ALERT_PCT del ingreso estimado de esa red es dinero
-  // recurrente mientras el afiliado sostenga el número — conviene verlo ANTES
-  // de guardarlo. Sin el precio del plan de referencia no se avisa nada: no hay
-  // con qué comparar y no se inventa una cifra.
+  // Avisos NO bloqueantes del bono por red. Dos cosas, y las dos se ven ANTES
+  // de guardar porque este bono lo paga el cron sin que nadie vuelva a
+  // aprobarlo:
+  //   · un pago único que se lleve más del NETWORK_ONCE_ALERT_PCT del ingreso de
+  //     un año de esa red (el cero de más se ve aquí, no en el estado de
+  //     cuenta). Sin el precio del plan de referencia no se avisa nada: no hay
+  //     con qué comparar y no se inventa una cifra.
+  //   · un umbral que no sea mayor que el del escalón anterior. Guardar ya lo
+  //     bloquea, pero el aviso aparece mientras se teclea y explica el 400 antes
+  //     de que llegue.
   const networkWarnings = useMemo(() => {
     const out: string[] = [];
     const proPrice = planPrices.PRO;
-    if (!proPrice) return out;
+    let prevClinics: number | null = null;
     for (const key of NETWORK_TIER_KEYS) {
       const clinics = Number(netForm[key.clinics as NetworkNumberKey]);
-      const monthly = Number(netForm[key.monthly as NetworkNumberKey]);
+      const once = Number(netForm[key.once as NetworkNumberKey]);
       if (!Number.isFinite(clinics) || clinics <= 0) continue;
-      if (!Number.isFinite(monthly) || monthly <= 0) continue;
-      const revenueMonthly = clinics * proPrice;
-      const pct = equivalentPct(monthly, revenueMonthly);
-      if (pct !== null && pct > NETWORK_MONTHLY_ALERT_PCT) {
+      if (prevClinics !== null && clinics <= prevClinics) {
         out.push(
-          `Ojo: el mensual del escalón de ${clinics} clínicas (${formatCurrency(monthly)}/mes) es el ${pct}% del ingreso estimado de esa red (${formatCurrency(revenueMonthly)}/mes con ${planLabels.PRO}), y se paga cada mes mientras sostenga el número.`,
+          `Ojo: el umbral del escalón ${key.n} (${clinics} clínicas) no es mayor que el del escalón anterior (${prevClinics}). Los escalones tienen que ir en aumento.`,
+        );
+      }
+      prevClinics = clinics;
+      if (!proPrice) continue;
+      if (!Number.isFinite(once) || once <= 0) continue;
+      const revenueYearly = clinics * proPrice * 12;
+      const pct = equivalentPct(once, revenueYearly);
+      if (pct !== null && pct > NETWORK_ONCE_ALERT_PCT) {
+        out.push(
+          `Ojo: el bono del escalón de ${clinics} clínicas (${formatCurrency(once)}) es el ${pct}% del ingreso de un año de esa red (${formatCurrency(revenueYearly)} con ${planLabels.PRO}), y el cron lo paga solo al cumplirse la racha.`,
         );
       }
     }
@@ -869,7 +857,6 @@ export function AffiliatesClient({ initial }: { initial: AffiliateRow[] }) {
       n: key.n,
       clinics: Number(netForm[key.clinics as NetworkNumberKey]),
       once: Number(netForm[key.once as NetworkNumberKey]),
-      monthly: Number(netForm[key.monthly as NetworkNumberKey]),
     }));
     for (const red of redes) {
       if (!Number.isInteger(red.clinics) || red.clinics < 1) {
@@ -877,11 +864,7 @@ export function AffiliatesClient({ initial }: { initial: AffiliateRow[] }) {
         return;
       }
       if (!Number.isFinite(red.once) || red.once < 0) {
-        toast.error(`Escalón ${red.n} de red: el pago único debe ser un número mayor o igual a 0.`);
-        return;
-      }
-      if (!Number.isFinite(red.monthly) || red.monthly < 0) {
-        toast.error(`Escalón ${red.n} de red: el mensual debe ser un número mayor o igual a 0.`);
+        toast.error(`Escalón ${red.n} de red: el bono debe ser un número mayor o igual a 0.`);
         return;
       }
     }
@@ -928,14 +911,13 @@ export function AffiliatesClient({ initial }: { initial: AffiliateRow[] }) {
           milestone2Mxn: hitos[1].mxn,
           milestone3Clinics: hitos[2].clinics,
           milestone3Mxn: hitos[2].mxn,
-          // Los 16 de los bonos por red. Se arman desde NETWORK_TIER_KEYS (no a
+          // Los 11 de los bonos por red. Se arman desde NETWORK_TIER_KEYS (no a
           // mano): así un escalón nuevo no se queda fuera del PUT en silencio.
           networkBonusEnabled: netForm.networkBonusEnabled,
           ...redes.reduce<Record<string, number>>((acc, red, i) => {
             const key = NETWORK_TIER_KEYS[i];
             acc[key.clinics] = red.clinics;
             acc[key.once] = red.once;
-            acc[key.monthly] = red.monthly;
             return acc;
           }, {}),
         }),
@@ -1047,68 +1029,6 @@ export function AffiliatesClient({ initial }: { initial: AffiliateRow[] }) {
     }
   }
 
-  // Carga (o recarga) el equipo de vendedores de un afiliado.
-  const loadTeam = useCallback(async (affiliateId: string) => {
-    setTeamLoading(affiliateId);
-    try {
-      const res = await fetch(`/api/admin/affiliates/${affiliateId}/sellers`);
-      const data = await res.json().catch(() => ({} as any));
-      if (!res.ok) throw new Error(data?.error ?? "No se pudo cargar el equipo");
-      setTeamByAffiliate((prev) => ({ ...prev, [affiliateId]: data?.sellers ?? [] }));
-    } catch (e: any) {
-      toast.error(e?.message ?? "No se pudo cargar el equipo");
-      setTeamByAffiliate((prev) => ({ ...prev, [affiliateId]: [] }));
-    } finally {
-      setTeamLoading(null);
-    }
-  }, []);
-
-  // Abre/cierra el equipo de un afiliado; carga la primera vez que se expande.
-  function toggleTeam(affiliateId: string) {
-    if (expandedTeam === affiliateId) {
-      setExpandedTeam(null);
-      return;
-    }
-    setExpandedTeam(affiliateId);
-    if (!teamByAffiliate[affiliateId]) void loadTeam(affiliateId);
-  }
-
-  // Marca pagadas las comisiones pendientes de UN vendedor (espejo de markPaid).
-  async function markSellerPaid(affiliateId: string, seller: SellerRow) {
-    const ok = await askConfirm({
-      title: "¿Marcar comisiones del vendedor como pagadas?",
-      description: `Todas las comisiones pendientes de ${seller.name} se marcarán como pagadas y se notificará al vendedor por email.`,
-      variant: "warning",
-      confirmText: "Marcar pagadas",
-    });
-    if (!ok) return;
-
-    setBusySellerId(seller.id);
-    try {
-      const res = await fetch(`/api/admin/affiliates/sellers/${seller.id}/payouts`, { method: "POST" });
-      const data = await res.json().catch(() => ({} as any));
-      if (!res.ok) throw new Error(data?.error ?? "No se pudo registrar el pago");
-      const paid: number = data?.paid ?? 0;
-      if (paid === 0) {
-        toast.success("Sin comisiones pendientes");
-      } else {
-        const monto = formatCurrency(data?.totalMxn ?? 0);
-        toast.success(
-          paid === 1
-            ? `Se liquidó 1 comisión por ${monto}`
-            : `Se liquidaron ${paid} comisiones por ${monto}`
-        );
-      }
-      // Refresca el equipo (montos) y las métricas del programa.
-      void loadTeam(affiliateId);
-      void loadMetrics();
-    } catch (e: any) {
-      toast.error(e?.message ?? "No se pudo registrar el pago");
-    } finally {
-      setBusySellerId(null);
-    }
-  }
-
   // Input de monto + su equivalencia viva contra el precio real del plan.
   function renderAmountField(plan: PlanKey, mode: PayoutMode) {
     const key = mode === "onetime" ? ONETIME_FIELD[plan] : RECURRING_FIELD[plan];
@@ -1200,53 +1120,39 @@ export function AffiliatesClient({ initial }: { initial: AffiliateRow[] }) {
     );
   }
 
-  // Un escalón del BONO POR RED: umbral + los dos montos + sus equivalencias
-  // vivas. Las dos equivalencias que importan al decidir un monto son:
-  //   · en cuántos meses el mensual alcanza al pago único (compareChoices — la
-  //     MISMA función que ve el afiliado antes de elegir, para que nadie tenga
-  //     dos versiones de ese número), y
-  //   · qué porcentaje del ingreso de esa red se lleva cada modalidad, con los
-  //     precios REALES de plan_configs. Sin el precio del plan de referencia no
-  //     se inventa ninguna cifra: se muestra solo lo que sí se puede calcular.
+  // Un escalón del BONO POR RED: umbral + su pago único + las equivalencias
+  // vivas. Se cobra de una sola forma, así que lo que hay que poder juzgar de un
+  // vistazo es qué tan caro sale ese escalón:
+  //   · cuánto es por cada clínica de la red que lo desbloquea, y
+  //   · qué porcentaje del ingreso de UN AÑO de esa red se lleva, con los
+  //     precios REALES de plan_configs (comparar una salida única contra un
+  //     ingreso mensual daría un porcentaje sin sentido).
+  // Sin el precio del plan de referencia no se inventa ninguna cifra: se muestra
+  // solo lo que sí se puede calcular.
   function renderNetworkRow(key: (typeof NETWORK_TIER_KEYS)[number]) {
     const clinics = Number(netForm[key.clinics as NetworkNumberKey]);
     const once = Number(netForm[key.once as NetworkNumberKey]);
-    const monthly = Number(netForm[key.monthly as NetworkNumberKey]);
     const okClinics = Number.isInteger(clinics) && clinics > 0;
-    const cmp = compareChoices(once, monthly);
+    const okOnce = Number.isFinite(once) && once > 0;
 
     const proPrice = planPrices.PRO ?? 0;
     // Ingreso que esa red le genera a DaleControl, estimado con el plan más
     // común: es contra esto que se mide si un bono sale caro.
-    const revenueMonthly = okClinics && proPrice > 0 ? clinics * proPrice : 0;
-    const monthlyPct = revenueMonthly > 0 ? equivalentPct(monthly, revenueMonthly) : null;
-    // El pago único se mide contra el ingreso de UN AÑO de esa red: comparar una
-    // salida única contra un ingreso mensual daría un porcentaje sin sentido.
-    const oncePct = revenueMonthly > 0 ? equivalentPct(once, revenueMonthly * 12) : null;
+    const revenueYearly = okClinics && proPrice > 0 ? clinics * proPrice * 12 : 0;
+    const oncePct = revenueYearly > 0 && okOnce ? equivalentPct(once, revenueYearly) : null;
 
     const hints: string[] = [];
-    if (cmp.bothAvailable && cmp.monthsToMatch !== null) {
+    if (!okOnce) {
+      hints.push("escalón apagado: con el pago único en 0 no se anuncia ni se otorga");
+    } else if (okClinics) {
       hints.push(
-        `el mensual iguala al único en ${cmp.monthsToMatch} ${cmp.monthsToMatch === 1 ? "mes" : "meses"}` +
-          (cmp.monthsToBeat !== null && cmp.monthsToBeat !== cmp.monthsToMatch
-            ? ` y lo supera desde el ${cmp.monthsToBeat}`
-            : "") +
-          ` · ${formatCurrency(cmp.monthlyYearlyMxn)} al año`,
-      );
-    } else if (once > 0) {
-      hints.push("solo pago único (el mensual está en 0)");
-    } else if (monthly > 0) {
-      hints.push("solo mensual (el pago único está en 0)");
-    } else {
-      hints.push("escalón apagado: con los dos montos en 0 no se anuncia ni se otorga");
-    }
-    if (monthlyPct !== null) {
-      hints.push(
-        `mensual = ${monthlyPct}% del ingreso de esa red (${formatCurrency(revenueMonthly)}/mes con ${planLabels.PRO})`,
+        `${formatCurrency(once)} ÷ ${clinics} = ${formatCurrency(once / clinics)} por clínica de su red`,
       );
     }
     if (oncePct !== null) {
-      hints.push(`único = ${oncePct}% del ingreso de un año de esa red`);
+      hints.push(
+        `${oncePct}% del ingreso de un año de esa red (${formatCurrency(revenueYearly)} con ${planLabels.PRO})`,
+      );
     }
 
     return (
@@ -1254,13 +1160,13 @@ export function AffiliatesClient({ initial }: { initial: AffiliateRow[] }) {
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 140px), 1fr))",
+            gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 160px), 1fr))",
             gap: 12,
           }}
         >
           <div className="field-new">
             <label className="field-new__label" htmlFor={`network-${key.n}-clinics`}>
-              Escalón {key.n} · clínicas de su equipo
+              Escalón {key.n} · clínicas de su red
             </label>
             <input
               id={`network-${key.n}-clinics`}
@@ -1275,7 +1181,7 @@ export function AffiliatesClient({ initial }: { initial: AffiliateRow[] }) {
           </div>
           <div className="field-new">
             <label className="field-new__label" htmlFor={`network-${key.n}-once`}>
-              Pago único (MXN)
+              Bono (MXN, pago único)
             </label>
             <input
               id={`network-${key.n}-once`}
@@ -1286,21 +1192,6 @@ export function AffiliatesClient({ initial }: { initial: AffiliateRow[] }) {
               value={netForm[key.once as NetworkNumberKey]}
               disabled={payLoading}
               onChange={(e) => setNetNum(key.once as NetworkNumberKey, e.target.value)}
-            />
-          </div>
-          <div className="field-new">
-            <label className="field-new__label" htmlFor={`network-${key.n}-monthly`}>
-              Mensual (MXN/mes)
-            </label>
-            <input
-              id={`network-${key.n}-monthly`}
-              type="number"
-              className="input-new"
-              min={0}
-              step={50}
-              value={netForm[key.monthly as NetworkNumberKey]}
-              disabled={payLoading}
-              onChange={(e) => setNetNum(key.monthly as NetworkNumberKey, e.target.value)}
             />
           </div>
         </div>
@@ -1319,109 +1210,6 @@ export function AffiliatesClient({ initial }: { initial: AffiliateRow[] }) {
         <span className="mono" style={{ fontSize: 13, fontWeight: 600, color: "var(--text-1)", whiteSpace: "nowrap" }}>
           {value}
         </span>
-      </div>
-    );
-  }
-
-  // Panel expandible con el equipo de vendedores de un afiliado.
-  function renderTeam(a: AffiliateRow) {
-    const loading = teamLoading === a.id;
-    const sellers = teamByAffiliate[a.id];
-
-    return (
-      <div style={{ padding: "14px 16px" }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap", marginBottom: 10 }}>
-          <div style={{ minWidth: 0 }}>
-            <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text-1)" }}>
-              Equipo de {a.name}
-            </div>
-            <div style={{ fontSize: 11.5, color: "var(--text-3)", marginTop: 2 }}>
-              El % es la parte de la comisión del afiliado que se lleva cada vendedor; el resto le queda a
-              él como override. No cambia lo que paga DaleControl.
-            </div>
-          </div>
-          <ButtonNew size="sm" variant="ghost" disabled={loading} onClick={() => void loadTeam(a.id)}>
-            {loading ? "Cargando…" : "Actualizar"}
-          </ButtonNew>
-        </div>
-
-        {loading && !sellers ? (
-          <div style={{ fontSize: 13, color: "var(--text-3)", padding: "10px 0" }}>Cargando equipo…</div>
-        ) : !sellers || sellers.length === 0 ? (
-          <div style={{ fontSize: 13, color: "var(--text-3)", padding: "10px 0" }}>
-            Este afiliado aún no tiene vendedores en su equipo.
-          </div>
-        ) : (
-          <div style={{ overflowX: "auto" }}>
-            <table className="table-new">
-              <thead>
-                <tr>
-                  <th>Vendedor</th>
-                  <th>Datos de pago</th>
-                  <th>% de la comisión</th>
-                  <th>Clínicas</th>
-                  <th>Pendiente</th>
-                  <th>Pagado</th>
-                  <th>Estado</th>
-                  <th style={{ textAlign: "right" }}>Acciones</th>
-                </tr>
-              </thead>
-              <tbody>
-                {sellers.map((s) => {
-                  const busy = busySellerId === s.id;
-                  return (
-                    <tr key={s.id}>
-                      <td>
-                        <div style={{ fontWeight: 600, color: "var(--text-1)" }}>{s.name}</div>
-                        <div style={{ fontSize: 12, color: "var(--text-3)" }}>{s.email}</div>
-                        {s.phone && (
-                          <div className="mono" style={{ fontSize: 11, color: "var(--text-3)" }}>{s.phone}</div>
-                        )}
-                      </td>
-                      <td>
-                        {s.payoutMethod || s.payoutDetails ? (
-                          <>
-                            {s.payoutMethod && (
-                              <div style={{ fontSize: 12, color: "var(--text-2)" }}>{s.payoutMethod}</div>
-                            )}
-                            {s.payoutDetails && (
-                              <div className="mono" style={{ fontSize: 12, color: "var(--text-1)", wordBreak: "break-all" }}>
-                                {s.payoutDetails}
-                              </div>
-                            )}
-                          </>
-                        ) : (
-                          <span style={{ fontSize: 12, color: "var(--text-3)" }}>Sin datos</span>
-                        )}
-                      </td>
-                      <td className="mono" style={{ color: "var(--text-2)", fontSize: 12 }}>{s.commissionPct}%</td>
-                      <td className="mono" style={{ color: "var(--text-2)", fontSize: 12 }}>{s.clinics}</td>
-                      <td className="mono" style={{ color: "var(--warning)", fontSize: 12 }}>{formatCurrency(s.pendingMxn)}</td>
-                      <td className="mono" style={{ color: "var(--text-2)", fontSize: 12 }}>{formatCurrency(s.paidMxn)}</td>
-                      <td>
-                        <BadgeNew tone={s.isActive ? "success" : "neutral"} dot>
-                          {s.isActive ? "Activo" : "Inactivo"}
-                        </BadgeNew>
-                      </td>
-                      <td>
-                        <div style={{ display: "flex", justifyContent: "flex-end" }}>
-                          <ButtonNew
-                            size="sm"
-                            variant="ghost"
-                            disabled={busy || s.pendingMxn <= 0}
-                            onClick={() => markSellerPaid(a.id, s)}
-                          >
-                            {busy ? "Pagando…" : "Marcar pagado"}
-                          </ButtonNew>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
       </div>
     );
   }
@@ -1633,17 +1421,19 @@ export function AffiliatesClient({ initial }: { initial: AffiliateRow[] }) {
             )}
 
             {/* ── BONOS POR RED ────────────────────────────────────────────
-                Los otorga y los paga el cron mensual, así que esta bandeja es
-                de SOLO LECTURA: no hay un botón que mueva dinero fuera del
-                barrido idempotente. Lo primero de cada escalón es la ALERTA
-                ANTICIPADA — cuántos van al 80% sin haber llegado —, porque un
-                afiliado acercándose al escalón mayor es una salida que conviene
-                ver venir con meses de antelación, no el día que se otorga. */}
+                Cuentan las clínicas activas que trajeron los AFILIADOS QUE ESE
+                AFILIADO INVITÓ, a un solo nivel. Los otorga y los paga el cron
+                mensual, así que esta bandeja es de SOLO LECTURA: no hay un botón
+                que mueva dinero fuera del barrido idempotente. Lo primero de
+                cada escalón es la ALERTA ANTICIPADA — cuántos van por encima del
+                nearRatio sin haber llegado —, porque un afiliado acercándose al
+                escalón mayor es una salida que conviene ver venir con meses de
+                antelación, no el día que se otorga. */}
             {netBonus && netBonus.tableExists && (netBonus.tiers.length > 0 || netBonus.awards.length > 0) && (
               <div style={{ marginBottom: 14 }}>
                 <CardNew
-                  title="Bono por su equipo (red de vendedores)"
-                  sub={`Clínicas activas que trajeron los vendedores de cada afiliado · ${netBonus.minPaidInvoices} mensualidades pagadas y ${netBonus.sustainMonths} meses sostenidos${netBonus.enabled ? "" : " · PROGRAMA APAGADO"}`}
+                  title="Bono por su red (afiliados que invitó)"
+                  sub={`Clínicas activas que trajeron los afiliados que cada quien invitó · ${netBonus.minPaidInvoices} mensualidades pagadas y ${netBonus.sustainMonths} meses sostenidos${netBonus.enabled ? "" : " · PROGRAMA APAGADO"}`}
                 >
                   {netBonus.tiers.length > 0 && (
                     <div
@@ -1681,8 +1471,7 @@ export function AffiliatesClient({ initial }: { initial: AffiliateRow[] }) {
                                 <Network size={14} aria-hidden />
                               </span>
                               <span style={{ fontSize: 12, color: "var(--text-3)" }}>
-                                {t.clinics} clínicas · {formatCurrency(t.onceMxn)} o{" "}
-                                {formatCurrency(t.monthlyMxn)}/mes
+                                {t.clinics} clínicas · {formatCurrency(t.onceMxn)} de pago único
                               </span>
                             </div>
                             <div
@@ -1718,8 +1507,7 @@ export function AffiliatesClient({ initial }: { initial: AffiliateRow[] }) {
                               {t.awarded} otorgado{t.awarded === 1 ? "" : "s"} · {t.tracking} contando
                             </div>
                             <div style={{ fontSize: 11, color: "var(--text-3)", marginTop: 4 }}>
-                              Si todos cobraran: {formatCurrency(t.exposureOnceMxn)} único o{" "}
-                              {formatCurrency(t.exposureMonthlyMxn)}/mes
+                              Si todos lo sostuvieran: {formatCurrency(t.exposureOnceMxn)}
                             </div>
                           </div>
                         );
@@ -1727,8 +1515,8 @@ export function AffiliatesClient({ initial }: { initial: AffiliateRow[] }) {
                     </div>
                   )}
 
-                  {/* El resumen del dinero comprometido. `pendingChoice` va
-                      primero: es lo único que espera una acción humana. */}
+                  {/* El resumen. Lo que está CONTANDO va primero: es la salida
+                      que todavía no ocurre pero ya tiene fecha. */}
                   <div
                     style={{
                       display: "grid",
@@ -1740,7 +1528,7 @@ export function AffiliatesClient({ initial }: { initial: AffiliateRow[] }) {
                     <div style={SIM_PANEL}>
                       <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "var(--text-3)" }}>
                         <Hourglass size={13} aria-hidden />
-                        Esperan elección
+                        {NETWORK_AWARD_STATUS_LABELS.tracking}
                       </div>
                       <div
                         className="mono"
@@ -1748,43 +1536,26 @@ export function AffiliatesClient({ initial }: { initial: AffiliateRow[] }) {
                           fontSize: 18,
                           fontWeight: 700,
                           marginTop: 4,
-                          color: netBonus.summary.pendingChoice > 0 ? "var(--warning)" : "var(--text-3)",
+                          color: netBonus.summary.tracking > 0 ? "var(--warning)" : "var(--text-3)",
                         }}
                       >
-                        {netBonus.summary.pendingChoice}
+                        {netBonus.summary.tracking}
+                      </div>
+                      <div style={{ fontSize: 11, color: "var(--text-3)", marginTop: 2 }}>
+                        de {netBonus.sustainMonths} meses seguidos
                       </div>
                     </div>
                     <div style={SIM_PANEL}>
                       <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "var(--text-3)" }}>
-                        <Repeat size={13} aria-hidden />
-                        Mensuales activos
+                        <Trophy size={13} aria-hidden />
+                        Bonos otorgados
                       </div>
                       <div className="mono" style={{ fontSize: 18, fontWeight: 700, marginTop: 4, color: "var(--text-1)" }}>
-                        {formatCurrency(netBonus.summary.monthlyCommittedMxn)}
+                        {formatCurrency(netBonus.summary.awardedMxn)}
                       </div>
                       <div style={{ fontSize: 11, color: "var(--text-3)", marginTop: 2 }}>
-                        al mes · {netBonus.summary.monthlyActive}{" "}
-                        {netBonus.summary.monthlyActive === 1 ? "bono" : "bonos"}
-                      </div>
-                    </div>
-                    <div style={SIM_PANEL}>
-                      <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "var(--text-3)" }}>
-                        <CirclePause size={13} aria-hidden />
-                        Mensuales en pausa
-                      </div>
-                      <div
-                        className="mono"
-                        style={{
-                          fontSize: 18,
-                          fontWeight: 700,
-                          marginTop: 4,
-                          color: netBonus.summary.monthlyPaused > 0 ? "var(--warning)" : "var(--text-3)",
-                        }}
-                      >
-                        {netBonus.summary.monthlyPaused}
-                      </div>
-                      <div style={{ fontSize: 11, color: "var(--text-3)", marginTop: 2 }}>
-                        su red cayó del umbral
+                        en pago único · {netBonus.summary.awarded}{" "}
+                        {netBonus.summary.awarded === 1 ? "escalón" : "escalones"}
                       </div>
                     </div>
                     <div style={SIM_PANEL}>
@@ -1812,20 +1583,20 @@ export function AffiliatesClient({ initial }: { initial: AffiliateRow[] }) {
                             <th>Afiliado</th>
                             <th>Escalón</th>
                             <th>Estado</th>
-                            <th>Eligió</th>
-                            <th>Monto</th>
-                            <th>Su red hoy</th>
-                            <th>Última mensualidad</th>
+                            <th>Bono</th>
+                            <th>Su red (último corte)</th>
+                            <th>Otorgado · pagado</th>
                           </tr>
                         </thead>
                         <tbody>
                           {netBonus.awards.map((a) => {
                             const status = a.status;
                             const tone = NETWORK_STATUS_TONE[status] ?? "neutral";
-                            const chosen = a.choice ? NETWORK_CHOICE_LABELS[a.choice as "once" | "monthly"] : null;
-                            // El conteo vivo contra el umbral congelado: es lo
-                            // que EXPLICA una pausa sin abrir la base de datos.
-                            const belowThreshold = a.currentCount < a.clinics;
+                            // El conteo del último barrido contra el umbral
+                            // congelado: EXPLICA de un vistazo por qué una racha
+                            // se reinició, sin abrir la base de datos.
+                            const belowThreshold = a.lastCount < a.clinics;
+                            const sustained = status === "tracking" ? sustainedMonths(a.qualifiedSince) : null;
                             return (
                               <tr key={a.id}>
                                 <td>
@@ -1840,35 +1611,22 @@ export function AffiliatesClient({ initial }: { initial: AffiliateRow[] }) {
                                 </td>
                                 <td style={{ whiteSpace: "nowrap" }}>
                                   <span className="mono">{a.clinics}</span> clínicas
-                                  <div style={{ fontSize: 11, color: "var(--text-3)" }}>
-                                    escalón {a.tier}
-                                    {a.awardedAt ? ` · ${dateLabel(a.awardedAt)}` : ""}
-                                  </div>
+                                  <div style={{ fontSize: 11, color: "var(--text-3)" }}>escalón {a.tier}</div>
                                 </td>
                                 <td>
                                   <BadgeNew tone={tone}>
-                                    {NETWORK_STATUS_ADMIN_LABELS[status] ?? status}
+                                    {NETWORK_AWARD_STATUS_LABELS[status] ?? status}
                                   </BadgeNew>
-                                  {status === "tracking" && a.monthsSustained !== null && (
+                                  {sustained !== null && (
                                     <div style={{ fontSize: 11, color: "var(--text-3)", marginTop: 2 }}>
-                                      {a.monthsSustained} de {netBonus.sustainMonths} meses
+                                      {sustained} de {netBonus.sustainMonths} meses
                                     </div>
                                   )}
                                 </td>
-                                <td style={{ whiteSpace: "nowrap" }}>
-                                  {chosen ?? <span style={{ color: "var(--text-3)" }}>—</span>}
-                                  {a.chosenAt && (
-                                    <div style={{ fontSize: 11, color: "var(--text-3)" }}>{dateLabel(a.chosenAt)}</div>
-                                  )}
-                                </td>
                                 <td className="mono" style={{ whiteSpace: "nowrap" }}>
-                                  {/* Los montos CONGELADOS del award, no los
-                                      vigentes: es lo que se le prometió. */}
-                                  {a.choice === "monthly"
-                                    ? `${formatCurrency(a.monthlyMxn)}/mes`
-                                    : a.choice === "once"
-                                      ? formatCurrency(a.onceMxn)
-                                      : `${formatCurrency(a.onceMxn)} o ${formatCurrency(a.monthlyMxn)}/mes`}
+                                  {/* El monto CONGELADO del award, no el
+                                      vigente: es lo que se le prometió. */}
+                                  {formatCurrency(a.onceMxn)}
                                 </td>
                                 <td
                                   className="mono"
@@ -1877,14 +1635,13 @@ export function AffiliatesClient({ initial }: { initial: AffiliateRow[] }) {
                                     color: belowThreshold ? "var(--warning)" : "var(--text-1)",
                                   }}
                                 >
-                                  {a.currentCount} / {a.clinics}
+                                  {a.lastCount} / {a.clinics}
                                 </td>
                                 <td style={{ whiteSpace: "nowrap", fontSize: 12, color: "var(--text-3)" }}>
-                                  {a.lastMonthlyKey
-                                    ? `${a.lastMonthlyKey} · ${a.monthlyPaidCount} ${a.monthlyPaidCount === 1 ? "mes" : "meses"}`
-                                    : a.paidAt
-                                      ? `pagado ${dateLabel(a.paidAt)}`
-                                      : "—"}
+                                  {a.awardedAt ? dateLabel(a.awardedAt) : "—"}
+                                  <div style={{ fontSize: 11, color: "var(--text-3)" }}>
+                                    {a.paidAt ? `pagado ${dateLabel(a.paidAt)}` : "sin liquidar"}
+                                  </div>
                                 </td>
                               </tr>
                             );
@@ -1895,12 +1652,12 @@ export function AffiliatesClient({ initial }: { initial: AffiliateRow[] }) {
                   )}
 
                   <p style={{ fontSize: 12, color: "var(--text-3)", lineHeight: 1.5, margin: "12px 0 0" }}>
-                    Esta bandeja es de <strong>solo lectura</strong>: otorgar, pagar, pausar y
-                    reactivar lo hace el cron del día 1 de cada mes, y elegir la forma de cobro es
-                    del afiliado desde su panel. Un bono en{" "}
-                    <strong>{NETWORK_STATUS_ADMIN_LABELS.pending_choice.toLowerCase()}</strong> no
-                    genera ni un peso hasta que él entra y decide. Un mensual en pausa se reactiva
-                    solo en cuanto su red vuelve al umbral.
+                    Esta bandeja es de <strong>solo lectura</strong>: otorgar y generar la comisión lo
+                    hace el cron del día 1 de cada mes, en una sola pasada y sin que nadie elija nada.
+                    Un escalón <strong>{NETWORK_AWARD_STATUS_LABELS.awarded.toLowerCase()}</strong> queda
+                    cerrado para siempre: no se vuelve a pagar aunque su red siga creciendo, y tampoco se
+                    revoca si baja. La columna de su red es la del último corte; los escalones de arriba
+                    sí cuentan en vivo, y son los que avisan con meses de antelación.
                   </p>
                 </CardNew>
               </div>
@@ -2020,8 +1777,7 @@ export function AffiliatesClient({ initial }: { initial: AffiliateRow[] }) {
                 const busy = busyId === a.id;
                 const referred = a._count?.clinics ?? 0;
                 return (
-                  <Fragment key={a.id}>
-                  <tr>
+                  <tr key={a.id}>
                     <td>
                       <div style={{ fontWeight: 600, color: "var(--text-1)" }}>{a.name}</div>
                       <div className="mono" style={{ fontSize: 11, color: "var(--text-3)" }}>/socio/{a.slug}</div>
@@ -2078,13 +1834,6 @@ export function AffiliatesClient({ initial }: { initial: AffiliateRow[] }) {
                         <ButtonNew size="sm" variant="ghost" disabled={busy} onClick={() => markPaid(a)}>
                           Marcar pagadas
                         </ButtonNew>
-                        <ButtonNew
-                          size="sm"
-                          variant={expandedTeam === a.id ? "secondary" : "ghost"}
-                          onClick={() => toggleTeam(a.id)}
-                        >
-                          {expandedTeam === a.id ? "Ocultar equipo" : "Ver equipo"}
-                        </ButtonNew>
                         {/* Ficha completa del afiliado (clínicas, comisiones, modalidad). */}
                         <Link
                           href={`/admin/affiliates/${a.id}`}
@@ -2096,14 +1845,6 @@ export function AffiliatesClient({ initial }: { initial: AffiliateRow[] }) {
                       </div>
                     </td>
                   </tr>
-                  {expandedTeam === a.id && (
-                    <tr>
-                      <td colSpan={9} style={{ padding: 0, background: "var(--surface-2, rgba(255,255,255,0.02))" }}>
-                        {renderTeam(a)}
-                      </td>
-                    </tr>
-                  )}
-                  </Fragment>
                 );
               })}
             </tbody>
@@ -2470,12 +2211,12 @@ export function AffiliatesClient({ initial }: { initial: AffiliateRow[] }) {
               </p>
             </div>
 
-            {/* Bono por RED (el equipo de vendedores del afiliado). A
+            {/* Bono por RED (los afiliados que ESE afiliado invitó). A
                 diferencia del de arriba, ESTE lo calcula y lo paga el sistema:
                 lo que se teclea aquí es dinero que sale solo. */}
             <div style={{ marginTop: 22 }}>
               <div className="form-section__title">
-                Bono por su equipo (red de vendedores)
+                Bono por su red (afiliados que invitó)
                 <span className="form-section__rule" />
               </div>
 
@@ -2507,7 +2248,7 @@ export function AffiliatesClient({ initial }: { initial: AffiliateRow[] }) {
                   }
                   style={{ width: 15, height: 15, accentColor: "var(--brand)" }}
                 />
-                Programa de bonos por red activo (el cron mensual otorga y paga)
+                Programa de bonos por red activo (el cron mensual otorga y genera la comisión)
               </label>
 
               <div
@@ -2522,8 +2263,9 @@ export function AffiliatesClient({ initial }: { initial: AffiliateRow[] }) {
                 {NETWORK_TIER_KEYS.map((key) => renderNetworkRow(key))}
               </div>
 
-              {/* Aviso NO bloqueante: un mensual caro es un costo recurrente,
-                  no una salida única. Se ve ANTES de guardar. */}
+              {/* Aviso NO bloqueante: un bono desproporcionado o un escalón que
+                  no crece. Se ve ANTES de guardar, que es cuando todavía se
+                  puede corregir sin que el cron ya lo haya pagado. */}
               {networkWarnings.length > 0 && (
                 <div style={{ ...AMBER_NOTE, marginTop: 14 }}>
                   {networkWarnings.map((w, i) => (
@@ -2535,15 +2277,16 @@ export function AffiliatesClient({ initial }: { initial: AffiliateRow[] }) {
               )}
 
               <p style={{ color: "var(--text-3)", fontSize: 12, lineHeight: 1.5, margin: "12px 0 0" }}>
-                Cuenta las clínicas <strong>activas que trajeron sus vendedores</strong> (no las que
-                trajo él: para esas está el bono de arriba), con el mismo criterio de{" "}
-                {MIN_PAID_INVOICES} mensualidades pagadas, sostenido {SUSTAIN_MONTHS} meses
-                seguidos.
-                Al alcanzar un escalón el afiliado elige <strong>una sola vez</strong> entre el pago
-                único y el mensual, y esa elección ya no se cambia — por eso los dos montos deben
-                tener sentido por separado. Los umbrales tienen que ir en aumento (1 &lt; 2 &lt; 3
-                &lt; 4 &lt; 5). Editar estos montos <strong>no toca los bonos ya otorgados</strong>:
-                cada award congela lo suyo al otorgarse.
+                Cuenta las clínicas <strong>activas que trajeron los afiliados que él invitó</strong>{" "}
+                (no las que trajo él: para esas está el bono de arriba), con el mismo criterio de{" "}
+                {MIN_PAID_INVOICES} mensualidades pagadas. Es <strong>un solo nivel</strong>: lo que
+                traigan los invitados de sus invitados no le suma nada. Al alcanzar un escalón y
+                sostenerlo {SUSTAIN_MONTHS} meses seguidos el bono se otorga solo y su comisión de{" "}
+                <strong>pago único</strong> se genera en la misma pasada — no hay nada que elegir ni
+                que aprobar, y cada escalón se paga una sola vez. Los umbrales tienen que ir en
+                aumento (1 &lt; 2 &lt; 3 &lt; 4 &lt; 5) y un escalón con el bono en 0 queda apagado.
+                Editar estos montos <strong>no toca los bonos ya otorgados</strong>: cada award
+                congela lo suyo al otorgarse.
               </p>
             </div>
           </div>

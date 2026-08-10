@@ -1,5 +1,19 @@
 -- ═══════════════════════════════════════════════════════════════════
--- Afiliados — EQUIPOS DE VENDEDORES (vendedores de un afiliado)
+-- ⚠️⚠️ ARCHIVO MUERTO — NO CORRER (ago 2026) ⚠️⚠️
+--
+-- El segundo nivel del programa se rehízo: ya no hay "vendedores", hay
+-- AFILIADOS INVITADOS (ver sql/afiliados-invitaciones.sql). Las tres tablas
+-- que este archivo crea —affiliate_sellers, affiliate_seller_attributions,
+-- affiliate_seller_commissions— y las columnas sellerId de affiliate_links /
+-- affiliate_coupons siguen existiendo en la BD porque dropearlas es
+-- destructivo, pero NINGUNA línea de código las lee ni las escribe. Estaban en
+-- 0 filas al retirarse, así que no hubo nada que migrar.
+--
+-- Se conserva como registro histórico de lo que se aplicó en su día. La
+-- limpieza (drop de tablas y columnas) queda anotada como deuda en ORQUESTA.md.
+-- ═══════════════════════════════════════════════════════════════════
+--
+-- Afiliados — EQUIPOS DE VENDEDORES (vendedores de un afiliado) — HISTÓRICO
 --
 -- ⚠️  CORRER EN SUPABASE (SQL Editor) tras el deploy de feat/afiliados-equipo.
 --     3 tablas NUEVAS + 2 columnas nullable (affiliate_links.sellerId,

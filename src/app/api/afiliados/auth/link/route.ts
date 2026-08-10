@@ -7,6 +7,7 @@ import {
   normalizePayoutMethod,
   sendAffiliateSignupEmails,
 } from "@/lib/affiliates/signup";
+import { resolveInviterId } from "@/lib/affiliates/invites";
 
 /**
  * POST /api/afiliados/auth/link — VINCULACIÓN.
@@ -97,24 +98,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: true, alreadyLinked: true, home: "/afiliados/inicio" });
   }
 
-  // 3) ¿Es vendedor del equipo de otro afiliado? Convertirlo también en afiliado
-  //    lo dejaría sin su panel: /api/afiliados/whoami prioriza afiliado sobre
-  //    vendedor y lo mandaría al panel equivocado. Se corta con mensaje claro.
-  const seller = await prisma.affiliateSeller
-    .findUnique({ where: { supabaseId } })
-    .catch(() => null);
-  if (seller) {
-    return NextResponse.json(
-      {
-        error:
-          "Esta cuenta pertenece al equipo de un afiliado. Entra con ella desde el portal de afiliados.",
-        loginUrl: "/afiliados/login",
-      },
-      { status: 409 }
-    );
-  }
-
-  // 4) Ya hay un Affiliate con ese correo pero NO vinculado a ESTA sesión.
+  // 3) Ya hay un Affiliate con ese correo pero NO vinculado a ESTA sesión.
   //    No se adopta: sería un camino de apropiación de una cuenta ajena (p. ej.
   //    si el correo de aquel afiliado cambió en Auth y otra persona lo reusó).
   const existingAffiliate = await prisma.affiliate.findUnique({ where: { email } });
@@ -129,7 +113,7 @@ export async function POST(req: Request) {
     );
   }
 
-  // 5) Datos del alta. Vienen del formulario de registro cuando la persona ya
+  // 4) Datos del alta. Vienen del formulario de registro cuando la persona ya
   //    los había escrito; si no llegaron, la pantalla de vinculación los pide.
   //    El correo NO se lee del body: es el de la sesión verificada.
   let body: any;
@@ -151,6 +135,13 @@ export async function POST(req: Request) {
     );
   }
 
+  // 5) ¿Llegó invitado por otro afiliado (`?inv=<referralCode>` propagado desde
+  //    /afiliados/registro)? Igual que en el registro normal, esto NUNCA rompe
+  //    el alta: código inválido, invitador no APPROVED o auto-invitación
+  //    devuelven null y la cuenta se crea igual, sin vínculo. Se resuelve aquí
+  //    y no antes porque el `inv` viaja en el body, que se parsea en el paso 4.
+  const invitedByAffiliateId = await resolveInviterId({ code: body?.inv, email });
+
   // 6) Alta con el MISMO helper que el registro normal: mismo slug, mismo
   //    referralCode y mismo status PENDING.
   let affiliateId = "";
@@ -161,6 +152,7 @@ export async function POST(req: Request) {
       supabaseId,
       payoutMethod,
       payoutDetails,
+      invitedByAffiliateId,
     });
   } catch {
     // Sin rollback de Supabase Auth a propósito: el usuario ya existía y esta

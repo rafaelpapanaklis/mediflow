@@ -9,8 +9,8 @@ import {
   SUSTAIN_MONTHS,
   getNetworkBonusTiers,
   getNetworkQualifyingCounts,
-  monthsElapsed,
   normalizeAwardStatus,
+  type AwardRow,
   type NetworkAwardStatus,
 } from "@/lib/affiliates/network-bonus";
 
@@ -27,17 +27,21 @@ export const dynamic = "force-dynamic";
  *     miles de pesos que conviene ver venir con meses de antelación, no el día
  *     que el cron los otorga. Por eso el conteo de red se recalcula EN VIVO
  *     aquí (no se lee `lastCount`, que es la foto del último corte mensual).
- *  2. QUIÉN ESTÁ EN QUÉ (`awards`). Quién alcanzó qué escalón, qué eligió, qué
- *     sigue esperando su decisión y qué se pausó. Un `pending_choice` viejo es
- *     dinero que el afiliado todavía no cobra porque no ha entrado a elegir.
- *  3. QUÉ HAY COMPROMETIDO (`summary`). Lo que ya se prometió en mensuales
- *     activos y lo que ya se generó en comisiones.
+ *  2. QUIÉN ESTÁ EN QUÉ (`awards`). Quién está sosteniendo su número y a quién
+ *     ya se le otorgó el escalón, con el monto que quedó CONGELADO al otorgarlo
+ *     y el conteo con el que se cerró el último corte.
+ *  3. QUÉ SALIÓ (`summary`). Lo otorgado en pago único frente a las comisiones
+ *     `network_bonus` realmente generadas, liquidadas o no.
  *
- * SOLO LECTURA, a propósito. Otorgar, pagar, pausar y reactivar los decide el
- * cron mensual (/api/cron/affiliate-network-bonus) sobre la lógica pura de
- * `decideNetworkSweep`, y ELEGIR es del afiliado. Un botón aquí sería una
- * segunda forma de mover dinero, con sus propias carreras y sin el candado de
- * idempotencia del barrido.
+ * DOS ESTADOS Y NADA MÁS: `tracking` (contando los meses, no paga nada) y
+ * `awarded` (otorgado, su pago único ya se generó y está cerrado para siempre).
+ * La modalidad mensual y su pantalla de elección se retiraron en ago 2026: aquí
+ * ya no hay `choice`, ni mensualidades, ni un bono ganado esperando un clic.
+ *
+ * SOLO LECTURA, a propósito. Otorgar y pagar lo decide el cron mensual
+ * (/api/cron/affiliate-network-bonus) sobre la lógica pura de
+ * `decideNetworkSweep`. Un botón aquí sería una segunda forma de mover dinero,
+ * con sus propias carreras y sin el candado de idempotencia del barrido.
  *
  * DEGRADACIÓN: sin sql/afiliados-bonos-red.sql aplicado devuelve
  * `tableExists: false` con todo en cero y 200 — el bloque del admin se explica
@@ -49,54 +53,43 @@ export interface AdminNetworkTierStat {
   n: number;
   clinics: number;
   onceMxn: number;
-  monthlyMxn: number;
   /** Afiliados cuya red llega HOY al umbral (conteo en vivo, no el del corte). */
   reached: number;
   /** Los que van por encima del NEAR_RATIO sin alcanzarlo: LA alerta. */
   approaching: number;
-  /** Awards ya otorgados de este escalón (elegidos o esperando elección). */
+  /** Awards ya otorgados de este escalón (su pago único ya se generó). */
   awarded: number;
   /** Awards contando sus meses sostenidos (todavía no otorgan nada). */
   tracking: number;
-  /** Si TODOS los que hoy lo alcanzan acabaran cobrándolo en pago único. */
+  /** Si TODOS los que hoy lo alcanzan acabaran otorgándose: una sola salida. */
   exposureOnceMxn: number;
-  /** Lo mismo en modalidad mensual: costo recurrente, no una sola salida. */
-  exposureMonthlyMxn: number;
 }
 
-/** Un award con su afiliado y su conteo de red vivo. */
+/** Un award con su afiliado. Espejo de AwardRow + el nombre para pintarlo. */
 export interface AdminNetworkAwardRow {
   id: string;
   affiliateId: string;
   affiliateName: string;
-  affiliateSlug: string;
   tier: number;
+  status: NetworkAwardStatus;
+  /** Umbral del escalón; en `awarded` es el que quedó congelado. */
   clinics: number;
+  /** Pago único; en `awarded` es el monto congelado, no el vigente. */
   onceMxn: number;
-  monthlyMxn: number;
-  status: string;
-  choice: string | null;
+  /** Arranque de la racha viva. null en `tracking` = cayó del umbral. */
+  qualifiedSince: string | null;
   awardedAt: string | null;
-  chosenAt: string | null;
   paidAt: string | null;
-  lastMonthlyAt: string | null;
-  lastMonthlyKey: string | null;
-  monthlyPaidCount: number;
-  pausedAt: string | null;
-  /** Conteo de red AHORA: contra `clinics` explica una pausa de un vistazo. */
-  currentCount: number;
-  /** Meses de racha cumplidos; solo en `tracking`. */
-  monthsSustained: number | null;
+  /** Conteo de red del ÚLTIMO corte del cron (la foto, no el vivo). */
+  lastCount: number;
 }
 
 export interface AdminNetworkBonusSummary {
-  pendingChoice: number;
-  monthlyActive: number;
-  /** Lo que se paga CADA MES mientras esas redes sostengan su número. */
-  monthlyCommittedMxn: number;
-  monthlyPaused: number;
-  oncePaid: number;
-  oncePaidMxn: number;
+  /** Escalones otorgados (su comisión de pago único ya nació). */
+  awarded: number;
+  /** Suma de esos pagos únicos con el monto CONGELADO de cada award. */
+  awardedOnceMxn: number;
+  /** Escalones contando su racha: todavía no pagan nada. */
   tracking: number;
   /** Comisiones `network_bonus` ya generadas y todavía sin liquidar. */
   commissionsPendingMxn: number;
@@ -118,25 +111,18 @@ export interface AdminNetworkBonusResponse {
 }
 
 /**
- * Orden de la bandeja: primero lo ACCIONABLE. Un bono esperando elección es
- * dinero parado, y uno pausado es una promesa que el afiliado ve rota — los dos
- * tienen que salir antes que los que ya están cerrados.
+ * Orden de la bandeja: primero lo que TODAVÍA PUEDE MOVERSE. Una racha en curso
+ * es dinero que está por salir y que aún depende de que su red aguante; un
+ * escalón otorgado está cerrado para siempre y no hay nada que vigilar en él.
  */
 const STATUS_ORDER: Record<NetworkAwardStatus, number> = {
-  pending_choice: 0,
-  monthly_paused: 1,
-  monthly_active: 2,
-  tracking: 3,
-  once_paid: 4,
+  tracking: 0,
+  awarded: 1,
 };
 
 const EMPTY_SUMMARY: AdminNetworkBonusSummary = {
-  pendingChoice: 0,
-  monthlyActive: 0,
-  monthlyCommittedMxn: 0,
-  monthlyPaused: 0,
-  oncePaid: 0,
-  oncePaidMxn: 0,
+  awarded: 0,
+  awardedOnceMxn: 0,
   tracking: 0,
   commissionsPendingMxn: 0,
   commissionsPaidMxn: 0,
@@ -155,47 +141,27 @@ export async function GET() {
   // en columnas de una tabla que ya existía. Se lee aparte para poder decir
   // `tableExists: false` sin apagar también los escalones (que sí se pueden
   // configurar y anunciar antes de que exista una sola fila).
-  let awardRows: {
-    id: string;
-    affiliateId: string;
-    tier: number;
-    clinics: number;
-    onceMxn: number;
-    monthlyMxn: number;
-    status: string;
-    choice: string | null;
-    awardedAt: Date | null;
-    chosenAt: Date | null;
-    paidAt: Date | null;
-    lastMonthlyAt: Date | null;
-    lastMonthlyKey: string | null;
-    monthlyPaidCount: number;
-    pausedAt: Date | null;
-    qualifiedSince: Date | null;
-  }[] = [];
+  // El shape es `AwardRow` (@/lib/affiliates/network-bonus): mismas columnas
+  // vivas que lee el cron, para que la bandeja no invente una segunda idea de
+  // qué es un award.
+  let awardRows: AwardRow[] = [];
   let tableExists = true;
   try {
-    awardRows = await prisma.affiliateNetworkBonusAward.findMany({
+    awardRows = (await prisma.affiliateNetworkBonusAward.findMany({
       select: {
         id: true,
         affiliateId: true,
         tier: true,
+        status: true,
         clinics: true,
         onceMxn: true,
-        monthlyMxn: true,
-        status: true,
-        choice: true,
-        awardedAt: true,
-        chosenAt: true,
-        paidAt: true,
-        lastMonthlyAt: true,
-        lastMonthlyKey: true,
-        monthlyPaidCount: true,
-        pausedAt: true,
         qualifiedSince: true,
+        awardedAt: true,
+        paidAt: true,
+        lastCount: true,
       },
       orderBy: { tier: "desc" },
-    });
+    })) as AwardRow[];
   } catch {
     tableExists = false;
   }
@@ -225,11 +191,11 @@ export async function GET() {
   for (const a of awardRows) if (affiliateIds.indexOf(a.affiliateId) === -1) affiliateIds.push(a.affiliateId);
   const affiliates = affiliateIds.length
     ? await prisma.affiliate
-        .findMany({ where: { id: { in: affiliateIds } }, select: { id: true, name: true, slug: true } })
-        .catch(() => [] as { id: string; name: string; slug: string }[])
+        .findMany({ where: { id: { in: affiliateIds } }, select: { id: true, name: true } })
+        .catch(() => [] as { id: string; name: string }[])
     : [];
-  const byId = new Map<string, { name: string; slug: string }>();
-  for (const a of affiliates) byId.set(a.id, { name: a.name, slug: a.slug });
+  const nameById = new Map<string, string>();
+  for (const a of affiliates) nameById.set(a.id, a.name);
 
   // ── Los escalones, con la alerta anticipada ────────────────────────────
   // `reached` y `approaching` se cuentan sobre TODOS los afiliados con red que
@@ -260,49 +226,35 @@ export async function GET() {
       n: t.n,
       clinics: t.clinics,
       onceMxn: t.onceMxn,
-      monthlyMxn: t.monthlyMxn,
       reached,
       approaching,
       awarded: awardedByTier.get(t.n) ?? 0,
       tracking: trackingByTier.get(t.n) ?? 0,
       exposureOnceMxn: roundMxn(reached * t.onceMxn),
-      exposureMonthlyMxn: roundMxn(reached * t.monthlyMxn),
     };
   });
 
   // ── La bandeja ────────────────────────────────────────────────────────
-  const awards: AdminNetworkAwardRow[] = awardRows.map((row) => {
-    const status = normalizeAwardStatus(row.status);
-    const who = byId.get(row.affiliateId);
-    return {
-      id: row.id,
-      affiliateId: row.affiliateId,
-      // Un afiliado borrado deja su award huérfano (la FK es ON DELETE CASCADE,
-      // así que no debería pasar): el guion evita una fila sin nombre.
-      affiliateName: who?.name ?? "—",
-      affiliateSlug: who?.slug ?? "",
-      tier: row.tier,
-      clinics: Number(row.clinics) || 0,
-      onceMxn: Number(row.onceMxn) || 0,
-      monthlyMxn: Number(row.monthlyMxn) || 0,
-      status,
-      choice: row.choice,
-      awardedAt: iso(row.awardedAt),
-      chosenAt: iso(row.chosenAt),
-      paidAt: iso(row.paidAt),
-      lastMonthlyAt: iso(row.lastMonthlyAt),
-      lastMonthlyKey: row.lastMonthlyKey,
-      monthlyPaidCount: Number(row.monthlyPaidCount) || 0,
-      pausedAt: iso(row.pausedAt),
-      currentCount: counts.get(row.affiliateId) ?? 0,
-      monthsSustained: status === "tracking" ? monthsElapsed(row.qualifiedSince, now) : null,
-    };
-  });
+  const awards: AdminNetworkAwardRow[] = awardRows.map((row) => ({
+    id: row.id,
+    affiliateId: row.affiliateId,
+    // Un afiliado borrado deja su award huérfano (la FK es ON DELETE CASCADE,
+    // así que no debería pasar): el guion evita una fila sin nombre.
+    affiliateName: nameById.get(row.affiliateId) ?? "—",
+    tier: row.tier,
+    // Los estados de la etapa con modalidad mensual se normalizan a `awarded`:
+    // cualquiera de ellos significa "ya se otorgó".
+    status: normalizeAwardStatus(row.status),
+    clinics: Number(row.clinics) || 0,
+    onceMxn: Number(row.onceMxn) || 0,
+    qualifiedSince: iso(row.qualifiedSince),
+    awardedAt: iso(row.awardedAt),
+    paidAt: iso(row.paidAt),
+    lastCount: Number(row.lastCount) || 0,
+  }));
 
   awards.sort((a, b) => {
-    const byStatus =
-      (STATUS_ORDER[normalizeAwardStatus(a.status)] ?? 9) -
-      (STATUS_ORDER[normalizeAwardStatus(b.status)] ?? 9);
+    const byStatus = (STATUS_ORDER[a.status] ?? 9) - (STATUS_ORDER[b.status] ?? 9);
     if (byStatus !== 0) return byStatus;
     // Dentro del mismo estado, el escalón MÁS CARO primero: es el que más
     // urge revisar.
@@ -313,32 +265,19 @@ export async function GET() {
   // ── El resumen ────────────────────────────────────────────────────────
   const summary: AdminNetworkBonusSummary = { ...EMPTY_SUMMARY };
   for (const a of awards) {
-    switch (normalizeAwardStatus(a.status)) {
-      case "pending_choice":
-        summary.pendingChoice += 1;
-        break;
-      case "monthly_active":
-        summary.monthlyActive += 1;
-        summary.monthlyCommittedMxn += a.monthlyMxn;
-        break;
-      case "monthly_paused":
-        summary.monthlyPaused += 1;
-        break;
-      case "once_paid":
-        summary.oncePaid += 1;
-        summary.oncePaidMxn += a.onceMxn;
-        break;
-      case "tracking":
-        summary.tracking += 1;
-        break;
+    if (a.status === "awarded") {
+      summary.awarded += 1;
+      summary.awardedOnceMxn += a.onceMxn;
+    } else {
+      summary.tracking += 1;
     }
   }
-  summary.monthlyCommittedMxn = roundMxn(summary.monthlyCommittedMxn);
-  summary.oncePaidMxn = roundMxn(summary.oncePaidMxn);
+  summary.awardedOnceMxn = roundMxn(summary.awardedOnceMxn);
 
   // Lo REALMENTE generado en comisiones de bono: cuadra la bandeja contra el
-  // dinero que ya entró al flujo de pago. Si esto y `oncePaidMxn` se separaran,
-  // habría un award marcado como pagado sin su comisión (o al revés).
+  // dinero que ya entró al flujo de pago. `awardedOnceMxn` y la suma de las
+  // comisiones tienen que ir a la par: si se separan, hay un award otorgado sin
+  // su comisión (o una comisión sin su award).
   try {
     const groups = await prisma.affiliateCommission.groupBy({
       by: ["status"],

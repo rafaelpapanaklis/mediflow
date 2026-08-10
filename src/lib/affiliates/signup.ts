@@ -59,6 +59,16 @@ async function uniqueSlug(name: string): Promise<string> {
  * NO toca Supabase Auth: el usuario ya existe cuando se llama a esto. Quien
  * llama decide qué hacer si esto lanza (el register hace rollback del usuario
  * que ÉL acaba de crear; el link no tiene nada que revertir).
+ *
+ * EL VÍNCULO DE INVITACIÓN SE ESCRIBE AQUÍ Y SOLO AQUÍ. `invitedByAffiliateId`
+ * se graba UNA sola vez, en el instante de crear la cuenta, y NINGUNA ruta,
+ * pantalla o acción posterior lo cambia ni lo borra: es permanente por diseño.
+ * Si se pudiera romper después, cualquiera se desvincularía de su invitador el
+ * día antes de que a este le tocara cobrar su bono por red, y el bono —que se
+ * gana por clínicas que ya existen y ya se sostuvieron— se evaporaría. Quien
+ * llama es responsable de resolverlo con `resolveInviterId`
+ * (@/lib/affiliates/invites), que devuelve null ante cualquier problema: un
+ * vínculo que no se puede resolver NUNCA rompe un alta, simplemente no existe.
  */
 export async function createAffiliateAccount(opts: {
   name: string;
@@ -66,6 +76,8 @@ export async function createAffiliateAccount(opts: {
   supabaseId: string;
   payoutMethod: string; // "" → null
   payoutDetails: string; // "" → null
+  /** Quién lo invitó. null/undefined = se registró directo, sin invitación. */
+  invitedByAffiliateId?: string | null;
 }): Promise<string> {
   const slug = await uniqueSlug(opts.name);
   const referralCode = await generateReferralCode();
@@ -79,6 +91,7 @@ export async function createAffiliateAccount(opts: {
         referralCode,
         payoutMethod: opts.payoutMethod || null,
         payoutDetails: opts.payoutDetails || null,
+        invitedByAffiliateId: opts.invitedByAffiliateId || null,
         // status usa el default PENDING; commissionPct usa el default (20).
       },
     });
