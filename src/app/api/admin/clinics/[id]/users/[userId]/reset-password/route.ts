@@ -3,6 +3,7 @@ import { getAdminSession } from "@/lib/admin-auth";
 import { prisma } from "@/lib/prisma";
 import { createClient as createAdminClient } from "@supabase/supabase-js";
 import { logAudit, extractAuditMeta } from "@/lib/audit";
+import { markMustChangePassword } from "@/lib/auth/must-change-password";
 
 // Service-role client. Mismo patrón que /api/team/[id]/reset-password/route.ts —
 // usa SUPABASE_SERVICE_ROLE_KEY (NUNCA exponer al cliente). Se deshabilita
@@ -108,6 +109,14 @@ export async function POST(
       { status: 500 },
     );
   }
+
+  // La contraseña la escribió el admin de plataforma, así que la conoce alguien
+  // que no es el titular de la cuenta: el usuario debe cambiarla al entrar. Sólo
+  // después del OK de Supabase, y sobre las filas HERMANAS del mismo supabaseId
+  // (una por clínica; ver markMustChangePassword). A diferencia de los otros dos
+  // puntos, aquí el target PUEDE ser un SUPER_ADMIN dado de alta con Google —
+  // ese caso lo detecta y exenta markMustChangePassword.
+  await markMustChangePassword(target.supabaseId);
 
   // Audit log — registramos la ACCIÓN y el target, JAMÁS la contraseña.
   // AuditLog.userId es FK NOT NULL a User y el AdminUser de plataforma no tiene

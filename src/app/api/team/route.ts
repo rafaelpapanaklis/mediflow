@@ -138,6 +138,14 @@ export async function POST(req: NextRequest) {
       especialidad:       especialidad?.trim() || null,
       cedulaEspecialidad: cedulaEspecialidad?.trim() || null,
       canAccessCaja:      canAccessCaja === true,
+      // La contraseña de arriba la generó el sistema y la conoce quien dio de
+      // alta al miembro: no puede quedarse con ella. Hasta que defina la suya en
+      // /dashboard/cambiar-contrasena, el layout del dashboard no le deja usar
+      // el panel. Va en el create y no por markMustChangePassword porque
+      // supabaseAdmin.auth.admin.createUser acaba de crear la cuenta: es de
+      // correo + contraseña por construcción (no hay caso Google que exentar) y
+      // este supabaseId tiene exactamente esta fila, sin hermanas que marcar.
+      mustChangePassword: true,
     },
   });
 

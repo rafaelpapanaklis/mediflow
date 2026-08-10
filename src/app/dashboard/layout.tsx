@@ -24,6 +24,7 @@ import {
   TWO_FA_CHALLENGE_PATH,
   TWO_FA_SETUP_PATH,
 } from "@/lib/auth/two-factor-constants";
+import { MUST_CHANGE_PASSWORD_PATH } from "@/lib/auth/must-change-password";
 import { ACTIVE_SUBSCRIPTION_STATUSES, isPlanExpired, isAllowedWhileSuspended } from "@/lib/plan-status";
 import { getBranchQuota } from "@/lib/branches";
 
@@ -66,17 +67,47 @@ export default async function DashboardLayout({ children }: { children: React.Re
       redirect(TWO_FA_SETUP_PATH);
     }
   }
-  if (isTwoFaRoute) {
-    // Layout mínimo: sin sidebar/topbar ni providers de dashboard; dentro de
-    // I18nProvider para que el reto/enrolamiento tengan useT.
-    return (
-      <I18nProvider locale={locale} dict={dict}>
-        <main className="flex min-h-screen w-full items-center justify-center bg-background px-4 py-10 font-sans">
-          {children}
-        </main>
-      </I18nProvider>
-    );
+  // Layout mínimo: sin sidebar/topbar ni providers de dashboard; dentro de
+  // I18nProvider para que el reto/enrolamiento tengan useT. Lo comparten el
+  // flujo 2FA y el cambio forzado de contraseña — ambos son barreras PREVIAS al
+  // panel, y pintar el panel detrás de ellas sería exponerlo.
+  const minimalShell = (
+    <I18nProvider locale={locale} dict={dict}>
+      <main className="flex min-h-screen w-full items-center justify-center bg-background px-4 py-10 font-sans">
+        {children}
+      </main>
+    </I18nProvider>
+  );
+
+  if (isTwoFaRoute) return minimalShell;
+
+  // ── Gate de contraseña temporal (AUTORITATIVO, no evitable) ───────
+  // Cuando el sistema GENERA la contraseña (alta de miembro o reset), quien la
+  // generó la conoció. Para un expediente clínico no basta con pedir de palabra
+  // que la cambien: hasta que el usuario define la suya, el panel no se usa.
+  // Corre en CADA render de /dashboard (force-dynamic) con la BD en mano, así
+  // que no se puede saltar navegando directo.
+  //
+  // ORDEN — DESPUÉS del 2FA y ANTES del gate de plan:
+  //   • Después del 2FA porque el 2FA es AUTENTICACIÓN: decide si quien tiene la
+  //     sesión es de verdad esa persona. Cambiar la contraseña es una operación
+  //     sobre la cuenta YA autenticada; permitirla antes del segundo factor
+  //     dejaría que quien se hizo con la contraseña temporal se apropiara de la
+  //     cuenta saltándose justo el factor que existe para impedirlo. Los dos
+  //     redirects no se pelean: /dashboard/2fa* sale antes por el return de
+  //     arriba, así que este bloque sólo corre con el 2FA ya resuelto.
+  //   • Antes del gate de plan, y con return propio, para que no haya loop: si
+  //     el gate de plan corriera sobre esta ruta la mandaría a
+  //     /dashboard/suspended, y allí este gate la devolvería aquí, y así
+  //     indefinidamente. Con el return, una clínica suspendida cambia primero la
+  //     contraseña y cae en /dashboard/suspended en el render siguiente — que es
+  //     además el orden correcto: pagar con una credencial que generó el sistema
+  //     y que un tercero conoce es justo lo que esto viene a cerrar.
+  const isPasswordChangeRoute = pathname.startsWith(MUST_CHANGE_PASSWORD_PATH);
+  if ((user as { mustChangePassword?: boolean }).mustChangePassword && !isPasswordChangeRoute) {
+    redirect(MUST_CHANGE_PASSWORD_PATH);
   }
+  if (isPasswordChangeRoute) return minimalShell;
 
   // ── Gating sin plan activo (sin modal bloqueante) ────────────────
   // Una clínica está sin acceso cuando trialEndsAt < now Y la suscripción

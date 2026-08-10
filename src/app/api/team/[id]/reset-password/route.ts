@@ -3,6 +3,7 @@ import { getAuthContext } from "@/lib/auth-context";
 import { prisma } from "@/lib/prisma";
 import { createClient as createAdminClient } from "@supabase/supabase-js";
 import { logAudit, extractAuditMeta } from "@/lib/audit";
+import { markMustChangePassword } from "@/lib/auth/must-change-password";
 
 // Service-role client. Mismo patrón que /api/team/[id]/route.ts:8-13 —
 // usa SUPABASE_SERVICE_ROLE_KEY (NUNCA exponer al cliente). Disable de
@@ -76,6 +77,13 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     console.error("[/api/team/[id]/reset-password] supabase update failed:", updateError);
     return NextResponse.json({ error: "No se pudo actualizar la contraseña en Supabase" }, { status: 500 });
   }
+
+  // La temporal recién aplicada la conoce el SUPER_ADMIN que la generó: el
+  // usuario NO puede quedarse con ella. Se marca sólo después de que Supabase
+  // aceptó el cambio (si Auth falla, arriba se corta y no hay nada que exigir).
+  // Marca las filas HERMANAS del mismo supabaseId — una por clínica, ver
+  // markMustChangePassword — y exenta a las cuentas de Google.
+  await markMustChangePassword(target.supabaseId);
 
   // Audit log — guardamos quién reseteó a quién y cuándo. NO guardamos el
   // password (ni hash) en el log: solo la acción y el target. Usamos

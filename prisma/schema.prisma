@@ -1068,6 +1068,14 @@ model User {
   phone      String?
   isActive   Boolean @default(true)
 
+  /// true = la contraseña actual la GENERÓ el sistema (alta de miembro o reset
+  /// desde Equipo/admin) y el usuario aún no ha puesto la suya. El layout del
+  /// dashboard lo obliga a definirla antes de dejarlo entrar al panel.
+  /// Como Supabase Auth es GLOBAL por supabaseId y una persona tiene UNA fila
+  /// User POR clínica (@@unique([supabaseId, clinicId])), esta marca se pone y
+  /// se quita en TODAS sus filas hermanas — ver lib/auth/must-change-password.
+  mustChangePassword Boolean @default(false)
+
   // Identificación NOM-024 (Compliance Fase A) — médicos
   cedulaProfesional  String? @db.VarChar(15)
   especialidad       String? @db.VarChar(100)
