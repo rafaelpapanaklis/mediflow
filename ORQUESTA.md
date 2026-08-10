@@ -5880,3 +5880,129 @@ compilación. Los `prisma:error` del log son el ruido conocido de correr el buil
 dependa de en qué sección estaba el ítem: la paleta de comandos no agrupa por sección, el título de
 la ruta en el topbar sale de un mapa por `href` y las traducciones se resuelven por `id`
 (`sidebar.nav.resources`), no por sección.
+
+---
+
+## [Forzar-Cambio-Password]
+
+**Qué se cerró.** La contraseña temporal de 12 caracteres no caducaba ni obligaba a nada: el doctor
+podía quedarse con ella para siempre, y esa contraseña la conoció quien lo dio de alta. En un
+expediente clínico eso significa que las notas firmadas por un médico las pudo escribir su
+administrador, y el `AuditLog` no tendría cómo distinguirlo. Ahora quien entra con una contraseña
+que **generó el sistema** define la suya antes de poder usar el panel.
+
+Columna `users.mustChangePassword` (`sql/must-change-password.sql`, ya aplicado por Rafael) + campo
+en `prisma/schema.prisma`. Se marca en los tres puntos donde el sistema genera la contraseña —
+`POST /api/team`, `POST /api/team/[id]/reset-password` y el reset del admin de plataforma — y sólo
+**después** del OK de Supabase: si Auth falla no hay contraseña nueva, así que no hay nada que
+exigir. La generación de la temporal y el banner amarillo de `/dashboard/team` no se tocaron.
+
+### El orden frente al gate de 2FA: 2FA primero, contraseña después
+
+El gate nuevo va **después** del de 2FA y **antes** del de plan. Los tres viven en
+`src/app/dashboard/layout.tsx`, que corre en cada render con la BD en mano.
+
+- **Después del 2FA porque el 2FA es autenticación.** El segundo factor decide si quien tiene la
+  sesión es de verdad esa persona; cambiar la contraseña es una operación *sobre la cuenta ya
+  autenticada*. Al revés sería un agujero real y no un detalle de orden: quien se hiciera con la
+  contraseña temporal —que viaja por WhatsApp o se dicta en un pasillo— entraría a la pantalla de
+  cambio, se pondría una contraseña propia y se quedaría con la cuenta **saltándose justo el factor
+  que existe para impedirlo**. Los dos redirects no se pelean porque `/dashboard/2fa*` sale antes
+  por su propio `return`: cuando corre el bloque de contraseña, el 2FA ya está resuelto.
+- **Antes del gate de plan, y con `return` propio, porque si no hay loop.** Si el gate de plan
+  llegara a correr sobre `/dashboard/cambiar-contrasena`, la mandaría a `/dashboard/suspended`, y
+  allí el gate de contraseña la devolvería a `/dashboard/cambiar-contrasena`, indefinidamente. Con
+  el `return` la ruta nunca llega al gate de plan. El efecto es que una clínica suspendida cambia
+  primero la contraseña y cae en la pantalla de pago en el render siguiente — que además es el orden
+  correcto: pagar con una credencial que generó el sistema y que un tercero conoce es exactamente lo
+  que esto viene a cerrar. `isAllowedWhileSuspended` no se tocó.
+
+El layout mínimo (sin sidebar ni topbar) que ya usaba el 2FA se extrajo a una constante y ahora lo
+comparten las dos barreras: las dos son previas al panel y pintar el panel detrás de ellas sería
+exponerlo.
+
+### El caso Google, que era el riesgo serio
+
+Un usuario de OAuth no tiene contraseña propia; exigirle una es pedirle que invente una credencial
+que su login no usa. Se resolvió **en el punto de la marca y no en el gate**, y con una segunda red
+por si acaso:
+
+1. `markMustChangePassword` consulta las `identities` de Supabase Auth y **no marca** a una cuenta
+   sin identidad de correo. El punto que más importa es el reset del admin de plataforma: es el
+   único que puede tocar a un `SUPER_ADMIN`, que es justo el rol que suele haberse dado de alta con
+   Google. (`POST /api/team` no necesita la consulta: `auth.admin.createUser` acaba de crear esa
+   cuenta con contraseña, es de correo por construcción.)
+2. La pantalla tiene un **escape**: si aun así llega una fila marcada de una cuenta sin identidad de
+   correo, limpia la marca y la deja pasar al panel. Cubre lo que la comprobación de arriba no puede
+   —una fila marcada antes de que este chequeo existiera, una cuenta que dejó de tener identidad de
+   correo— y cuesta una llamada al Admin API sólo en esa página, que sólo se renderiza si la marca
+   está puesta; no se paga en cada render del dashboard.
+
+Ante la duda (Admin API caído, sin service role, `identities` vacío) se asume "usuario de
+contraseña". Eso nunca atrapa a nadie: en el peor caso muestra una pantalla que funciona igual para
+cualquier cuenta —el cambio va por Admin API, no por la sesión— y desde la que **siempre** se puede
+cerrar sesión, que es el botón que la pantalla lleva a propósito.
+
+### Filas hermanas
+
+Una persona tiene una fila `User` **por clínica** (`@@unique([supabaseId, clinicId])`) y la
+contraseña vive en Supabase Auth, que es **global**. La marca se pone y se quita en **todas** las
+filas del mismo `supabaseId` — mismo criterio que el correo del staff en `10fc1b52`. Si sólo se
+tocara la fila de la clínica activa, bastaría el switcher de sedes para saltarse el gate en un
+sentido, o pediría cambiar de nuevo una contraseña ya cambiada en el otro.
+
+**Un agujero que salió de tirar de ese hilo:** el gate lee la fila de la clínica **activa**, y
+`POST /api/clinics` crea la sede nueva con una fila del mismo `supabaseId` cayendo al default
+`false`. Una sesión marcada podía llamar a ese endpoint directo —el gate está en el layout, no cubre
+`/api`—, estrenar una sede sin marca y entrar por el switcher con la temporal todavía viva. La sede
+nueva ahora hereda la marca (commit aparte, `18e77a58`).
+
+### Verificación
+
+`npx next build` completo: **exit 0**, sin errores de tipos ni de compilación, con
+`/dashboard/cambiar-contrasena` y `/api/auth/change-password` registradas como dinámicas. Los
+`prisma:error` del log son el ruido conocido de correr el build en un worktree sin `.env`. Lo que
+sigue es **trazado sobre el código**, no ejecutado contra Supabase: en este entorno no hay `.env`, así
+que el flujo con credenciales reales queda para prod (ver abajo).
+
+1. **Alta → temporal → pantalla → panel.** `POST /api/team` crea la fila con la marca puesta. Al
+   entrar, el layout redirige a `/dashboard/cambiar-contrasena` y la sirve con layout mínimo. El
+   `POST /api/auth/change-password` valida, cambia en Auth, limpia la marca en todas las hermanas y
+   el cliente hace navegación dura a `/dashboard`, que ya monta el panel completo. La navegación es
+   dura a propósito: el gate es del layout de servidor y un `router.push` reusaría el árbol y
+   rebotaría de vuelta.
+2. **Entrar con la nueva.** La marca quedó en `false` en todas las filas; ningún gate dispara.
+3. **La temporal vieja ya no sirve** por `updateUserById`, que reemplaza el hash en Auth.
+4. **Resetear desde Equipo vuelve a exigir**: `markMustChangePassword` sobre el `supabaseId` del
+   target, después del OK de Supabase.
+5. **Usuario existente no ve nada.** La columna entra con `DEFAULT false` y nada marca hacia atrás.
+   Confirmado además que el `SUPER_ADMIN` dueño no se marca por accidente: se da de alta por
+   `POST /api/auth/register` (nested `users: { create: … }`), que no toca el campo. Sólo existen dos
+   sitios que crean filas `User` — `POST /api/team` y `seed-clinics` — más los nested writes de
+   `register` y `clinics`; los cuatro revisados uno por uno.
+6. **Usuario de Google**: los dos mecanismos de arriba.
+
+**Clínica suspendida**: sin loop, por el `return` propio; el orden es cambiar contraseña → pantalla
+de pago. El endpoint vive bajo `/api/auth/*`, que ya está en el allowlist del gate de plan, así que
+una clínica suspendida puede completar el cambio. **Portal del paciente**: intacto, cuelga de
+`/portal/[token]`, fuera de `/dashboard`, y los paneles de proveedores, laboratorios y afiliados
+usan tablas de usuario propias.
+
+**Rechazar quedarse con la temporal.** La temporal no se guarda en ningún lado —a propósito—, así
+que no hay con qué compararla: la única prueba fiable de "es la misma" es que **autentique**. Se
+intenta un login con la candidata en un cliente desechable (`persistSession:false`, no toca las
+cookies de la sesión abierta) y si entra, se rechaza. Si esa comprobación no se puede hacer (sin
+anon key, fallo de red) queda como red la del propio GoTrue. La contraseña no se escribe **en
+ningún** log: ni en el `AuditLog` ni en consola; el `logMutation` registra el hecho, y su
+`before/after` refleja si el cambio fue forzado o voluntario en vez de inventar una transición.
+
+**Fuerza mínima**: se importa `scorePassword` del sitio público en vez de reescribir la regla, así
+que la pantalla exige exactamente lo mismo que el registro y la recuperación por correo (mínimo 8 +
+fuerza ≥ "Regular"), más el tope de 72 caracteres de bcrypt. La pantalla reusa `password-input` y
+`password-strength`; no tiene botón de omitir, y es responsive por `@container` sobre un
+`container-type` propio (los toasts viven en el layout raíz, fuera de ese contenedor).
+
+**Nota de entorno:** durante la tarea hubo otra sesión escribiendo en el mismo worktree; el gate del
+layout y el helper llegaron a quedar pisados por una versión distinta. Se detectó comparando
+`git status` contra lo escrito, se reaplicó y se verificó archivo por archivo antes de compilar y
+commitear. Vale la pena mirar el diff de `src/app/dashboard/layout.tsx` con eso en mente.

@@ -67,6 +67,12 @@ export async function POST(req: NextRequest) {
 
   const supabaseId = ctx.user.supabaseId as string;
   const email      = (ctx.user.email as string | null | undefined) ?? "";
+  // Estado ANTES de tocar nada, para que el AuditLog diga lo que de verdad pasó.
+  // Este endpoint también sirve al usuario que cambia su contraseña sin estar
+  // obligado: ahí la marca ya estaba en false y el log no debe inventar una
+  // transición true→false que nunca ocurrió (el AuditLog se lee como fuente de
+  // datos, no sólo como bitácora).
+  const wasForced = ctx.user.mustChangePassword === true;
 
   // ── Rechazar quedarse con la temporal ────────────────────────────────────
   // La temporal no se guarda en ningún lado (a propósito), así que no hay nada
@@ -131,6 +137,11 @@ export async function POST(req: NextRequest) {
 
   // Auditoría: un cambio de credenciales debe quedar rastreado. Se registra el
   // HECHO, nunca la contraseña — ni la vieja ni la nueva.
+  //
+  // passwordChangedByOwner va en los dos lados con valores distintos para que
+  // diffObjects SIEMPRE produzca al menos un campo: logMutation descarta el
+  // update cuyo diff sale vacío, y un cambio de credenciales no puede perderse
+  // por no haber movido ninguna columna.
   await logMutation({
     req,
     clinicId:   ctx.clinicId,
@@ -138,8 +149,8 @@ export async function POST(req: NextRequest) {
     entityType: "user",
     entityId:   ctx.userId,
     action:     "update",
-    before:     { mustChangePassword: true,  passwordSetBy: "system" },
-    after:      { mustChangePassword: false, passwordSetBy: "user"   },
+    before:     { passwordChangedByOwner: false, mustChangePassword: wasForced },
+    after:      { passwordChangedByOwner: true,  mustChangePassword: false     },
   });
 
   return NextResponse.json({ success: true });
