@@ -5359,3 +5359,181 @@ y si el programa estuviera en modo "% del nivel" (sin montos fijos) explica el r
 "cada $100 de comisión", donde el significado del % es idéntico. Por eso `team-split.ts` nace
 como archivo aparte: `team.ts` arrastra imports de servidor y el formulario es un client
 component.
+
+## Afiliados — BONOS POR RED del equipo de vendedores (2026-08-10) · `8e31d93a` + `5fa7d9dd` en main
+
+Premia al afiliado por las clínicas **activas que trajeron sus vendedores**. Es el primer bono
+del programa que **una máquina calcula y paga sola**: los bonos por clínicas activas siguen
+siendo una promesa comercial con seguimiento manual, estos no. Por eso casi todo lo que sigue
+habla de dinero saliendo sin que nadie apriete un botón.
+
+Se retomó un working tree a medias: la sesión anterior murió antes de commitear (tercera vez).
+Nada se descartó; abajo está lo que faltaba.
+
+### El criterio de conteo — una sola definición para los dos programas
+
+**Qué se cuenta:** clínicas cuyo alta registró un `AffiliateSellerAttribution` con
+`affiliateId` = el afiliado padre. Esa tabla **solo tiene fila cuando un VENDEDOR trajo la
+clínica** (`/api/auth/register` la escribe únicamente si el link o el cupón resolvieron un
+`sellerId` válido e hijo del padre), así que las clínicas que el afiliado trajo por su cuenta
+**no aparecen ahí y no entran en este bono** — para esas está el Bono por Clínicas Activas.
+Ninguna clínica cuenta en los dos.
+
+**Qué califica:** el predicado se extrajo a `src/lib/affiliates/qualifying-clinic.ts`
+(`MIN_PAID_INVOICES = 3` + `clinicQualifies`), un módulo **puro, sin una línea de BD**.
+`milestones-progress.ts` ya no lo declara: lo importa y lo re-exporta, así que los callers
+históricos siguen funcionando y **hay una sola definición de "clínica que califica" en todo el
+repo**. Los dos programas de bonos, el admin y el cron cuentan exactamente igual.
+
+Sobre eso, tres condiciones más, iguales a las de los bonos propios: activas **al mismo
+tiempo**, el conteo **sostenido 3 meses seguidos** (`SUSTAIN_MONTHS`), y **cada escalón una sola
+vez** por afiliado (índice único `(affiliateId, tier)`).
+
+**Privacidad:** de la red del afiliado solo salen **conteos**. Ni un nombre, ni un plan, ni un
+correo de las clínicas que trajeron sus vendedores.
+
+### La elección — nada se paga antes
+
+Al cumplirse los 3 meses el award pasa a `pending_choice` con los dos montos **congelados** y
+**no paga nada**. El afiliado elige en su panel entre pago único o mensual; la elección es
+**definitiva por escalón** y se le enseñan los dos números y en cuántos meses el mensual supera
+al único (`compareChoices`, la misma función que usa el correo y el admin) **antes** de decidir.
+Mientras no elija, el bono no vence ni se pierde, pero tampoco avanza. Escalones acumulables,
+cada uno con su propia elección.
+
+### Cómo funciona el cron
+
+`/api/cron/affiliate-network-bonus`, Vercel Cron **`0 8 1 * *`** (08:00 UTC el día 1). El
+archivo de la ruta **no decide nada**: autentica con `CRON_SECRET`, invoca y manda los correos.
+
+Toda la lógica de dinero vive en `runNetworkBonusSweep` (con BD) sobre su cerebro **puro**
+`decideNetworkSweep` (`network-bonus-core.ts`), que se prueba sin base de datos. Una pasada:
+recuenta la red de todos los afiliados en **tres queries agregadas** (sin N+1), y por cada uno
+produce un plan de acciones — `start-tracking`, `refresh-tracking`, `reset-streak`, `award`,
+`pay-monthly`, `pause`, `resume`, `touch` — que el aplicador solo ejecuta.
+
+**Por qué una vez al mes:** la cláusula cuenta MESES sostenidos, no días. Correrlo más seguido
+no adelantaría ningún bono (`monthsElapsed` redondea hacia abajo) y solo multiplicaría
+escrituras. El día 1 hace además que el mes del reloj y el mes que se paga sean el mismo.
+
+**Pausa y reactivación** son simétricas y **no cuestan un nuevo periodo de 3 meses**: el trato
+publicado es "mientras sostengas". Si la red cae, el mensual pasa a `monthly_paused` y deja de
+pagar; si vuelve, se reactiva solo y cobra el mes en curso. Un `pending_choice` **no se revoca**
+aunque la red baje: ya se ganó con los 3 meses.
+
+**Degradación:** sin el SQL aplicado o con el programa apagado el barrido devuelve `ran: false`
+y la ruta responde 200 con `skipped` — un deploy adelantado al SQL no pinta de rojo el panel de
+crons.
+
+### DÓNDE ESTÁ EL CANDADO DE IDEMPOTENCIA
+
+En el **índice único de `affiliate_commissions."stripeInvoiceId"`** (que ya existía). Cada
+mensualidad se escribe con la referencia **`netbonus:<awardId>:<YYYY-MM>`**
+(`commissionRefMonthly`), y esa comisión va en la **MISMA `$transaction`** que la actualización
+del award. Correr el cron dos veces el mismo mes **no paga doble**: el segundo intento choca
+contra el índice y el rollback deja también el award como estaba, así que no queda un
+`lastMonthlyKey` avanzado sin su comisión. El filtro por `lastMonthlyKey` es solo el atajo
+barato que evita intentarlo; **la garantía es la base de datos, no una lectura previa** — esa
+carrera se pierde. Los choques se cuentan en `duplicatesBlocked` y en una corrida sana son 0.
+
+El pago único lleva la misma protección con **`netbonus:<awardId>:once`**, y **otorgar** es un
+`updateMany` condicionado a `status = 'tracking'`, así que dos instancias simultáneas tampoco
+otorgan el mismo escalón dos veces. La elección del afiliado repite el `status` en el WHERE por
+la misma razón (doble clic o dos pestañas).
+
+Los bonos entran a `affiliate_commissions` con `kind = "network_bonus"`, `clinicId = ""` y
+`amountMxn = 0`, para cobrarse **por el mismo flujo de pago y reportes que ya existe**.
+
+### Verificación
+
+- **`npm run test:bonos-red` → 31/31 verde** (`network-bonus-core.test.ts`, nuevo). Cubre los
+  puntos donde un bug cuesta dinero real: 2 mensualidades **no** cuentan y 3 sí · alcanzar un
+  escalón **no paga** (y sigue sin pagar por muchas corridas que pasen) · el modo único paga
+  **una sola vez** · **el cron dos veces el mismo mes no emite un segundo pago** (y a la décima
+  corrida tampoco), pero el mes siguiente **sí** · la referencia del candado es determinista ·
+  la red cae → pausado, sube → reactivado **sin repetir los 3 meses** · reactivar el mismo mes
+  en que ya cobró **no duplica** · los montos **congelados** no se mueven si se edita la config
+  (pero un `tracking` sí sigue los vivos, porque todavía no se prometió nada).
+  La config de los tests trae números **distintos** a los defaults: si el motor tuviera un
+  umbral tecleado dentro, los tests lo verían.
+- **`npm run test:afiliados` → 66/66 · `npm run test:click-guard` → 8/8.** Sin regresión en el
+  motor de comisiones.
+- **`npm run build` completo → verde**, exit 0, `Checking validity of types` sin un error,
+  365/365 páginas. Las tres rutas nuevas y las tres páginas tocadas salen en el manifest.
+- **Aislamiento entre afiliados:** el `affiliateId` sale **siempre** de la sesión
+  (`getAffiliateContext`) y viaja **dentro del WHERE**, no como comprobación posterior — el
+  award de otro afiliado sencillamente no existe para esa consulta, así que un `awardId`
+  adivinado devuelve 404 y no hay ventana entre "leer el dueño" y "escribir la elección".
+
+### Qué encontré a medias al retomar
+
+El núcleo estaba completo y coherente (lógica pura, helpers con BD, las tres rutas, el admin
+entero, los correos y los cuatro reportes). Faltaba, y se hizo ahora:
+
+1. **`network-bonus-card.tsx` no existía.** `network-bonus-choice.tsx` ya lo citaba como "el
+   server component" y la importación habría roto el build. Es el bloque del panel: conteo,
+   barra al siguiente escalón, los cinco escalones, el pendiente de elección bien visible con
+   sus dos botones y los ya elegidos con su estado.
+2. **El bloque no estaba enganchado** en `/afiliados/inicio`.
+3. **No existía la sección de bonos de red en `/terminos-afiliados`** ni la mención en la
+   landing `/afiliados`.
+4. **No había tests** — y `npm run test:bonos-red`, citado en tres comentarios del código, no
+   existía en `package.json`.
+5. **`SUSTAIN_MONTHS` usado donde iba `MIN_PAID_INVOICES`** en el texto del admin. Los dos valen
+   3, así que se leía bien por accidente: exactamente la "segunda verdad" que el resto del
+   módulo se esfuerza en evitar.
+6. **La tabla de comisiones recientes del panel** pintaba una "Clínica" fantasma en la fila de
+   un bono. Las otras cuatro superficies ya estaban corregidas; esta se había quedado fuera.
+7. **La unión `ChooseResult` no compilaba.** El `tsconfig` corre con `strict: false` y sin
+   `strictNullChecks` TypeScript **no estrecha una unión por un discriminante booleano**: dentro
+   de `if (!result.ok)` el tipo sigue siendo la unión entera. Se agregó la guarda
+   `isChooseFailure`, que funciona igual con `strict` en true o en false. **Esto tumbaba el
+   build.**
+8. **Los bonos se colaban en los avisos flotantes públicos de `/afiliados`.** Ese widget lee
+   `affiliate_commissions` y redacta *"Un afiliado cobró $X **por una clínica**"*, resolviendo
+   el plan desde `clinicId`. Un bono no nace de ninguna clínica, así que la landing pública
+   habría publicado *"Un afiliado cobró $400,000 por una clínica"* — falso, y justo sobre el
+   pago más grande del programa. Se excluyen por `kind`.
+
+### El encuadre, que no es cosmético
+
+En el panel, en los términos y en la landing se dice lo mismo: **se cobra por CLÍNICAS ACTIVAS
+que contratan y pagan un producto, nunca por incorporar personas al equipo**. Los términos lo
+dicen explícitamente ("registrar vendedores no genera por sí mismo ningún pago… ni existe cuota,
+compra ni inscripción alguna para participar") y la landing cierra con "un equipo grande sin
+clínicas activas no genera ningún bono". Es lo que separa un programa de ventas de un esquema
+piramidal y **ninguna reescritura de esos bloques puede aflojarlo** — hay un comentario en cada
+uno de los tres archivos diciéndolo.
+
+### QUÉ DEBE PROBAR RAFAEL EN PROD
+
+El SQL ya está corrido, así que la tabla y las 16 columnas existen. Lo que falta es de operación:
+
+1. **`/admin` → Afiliados → Esquema de pago.** Confirmar que el bloque "Bono por su equipo"
+   carga los valores **vivos** (5→$3,000/$400 · 20→$15,000/$1,800 · 50→$40,000/$5,000 ·
+   150→$120,000/$16,000 · 500→$400,000/$55,000) y **no** los defaults del DDL. Si aparece el
+   aviso ámbar de "falta correr sql/afiliados-bonos-red.sql", algo no cuadra: avisar.
+   Guardar sin cambiar nada y verificar que responde OK y que dice que la landing se revalidó.
+2. **Las equivalencias del formulario.** Cada escalón imprime en cuántos meses el mensual
+   alcanza al único y qué % del ingreso de esa red se lleva. Con $3,000/$400 deben salir
+   **8 meses** para igualar. Es la cifra que verá el afiliado al decidir.
+3. **La validación.** Poner el umbral del escalón 3 por debajo del 2 y comprobar que el guardado
+   **se rechaza** con un mensaje que nombra los dos escalones.
+4. **`/afiliados` y `/terminos-afiliados`.** Que la mención y la sección salgan con los montos
+   vivos, y que la sección de los términos **no salte** la numeración.
+5. **El cron, en seco.** Dispararlo a mano con el `Bearer $CRON_SECRET`. Con nadie cerca de un
+   umbral debe responder `ok: true` con todos los contadores en 0 (o `started` > 0 si algún
+   vendedor ya trajo suficientes). **Dispararlo DOS VECES seguidas** y comprobar que la segunda
+   no genera comisiones y que `duplicatesBlocked` sigue en 0 (el filtro barato ya lo evita).
+6. **Un award real, de punta a punta.** Es lo único que no se puede probar sin datos: cuando
+   algún afiliado llegue a `pending_choice`, revisar que le llegó el correo con las dos
+   opciones, que el panel enseña los dos botones, que al elegir se genera **una** comisión con
+   `stripeInvoiceId` = `netbonus:<id>:once` o `netbonus:<id>:<YYYY-MM>`, y que el segundo clic
+   responde 409.
+7. **La bandeja del admin.** La alerta anticipada (`approaching`, 80 % del umbral) es lo que
+   permite ver venir una salida de $400,000 con meses de antelación. Vale la pena mirarla de vez
+   en cuando aunque hoy esté toda en cero.
+
+**Ojo con el mensual:** es un costo **recurrente** mientras el afiliado sostenga el número, no
+una salida única. El formulario avisa en ámbar si un mensual pasa del 15 % del ingreso estimado
+de esa red, pero el aviso **no bloquea**.
