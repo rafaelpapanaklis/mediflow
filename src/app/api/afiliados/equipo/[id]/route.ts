@@ -3,7 +3,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getAffiliateContext } from "@/lib/affiliate-auth";
-import { currentParentLevelPct } from "@/lib/affiliates/team";
+import { SELLER_SHARE_MAX } from "@/lib/affiliates/team";
 import { createClient as createAdminClient } from "@supabase/supabase-js";
 
 function getAdminClient() {
@@ -35,10 +35,11 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
 
   if (body?.commissionPct !== undefined) {
     const pct = typeof body.commissionPct === "number" ? body.commissionPct : NaN;
-    const cap = await currentParentLevelPct(ctx.affiliateId, ctx.affiliate.commissionPct);
-    if (!Number.isFinite(pct) || pct < 0 || pct > cap) {
+    // % de la comisión del padre que se lleva el vendedor: [0, 100]. El nivel
+    // ya no lo topa (ver @/lib/affiliates/team).
+    if (!Number.isFinite(pct) || pct < 0 || pct > SELLER_SHARE_MAX) {
       return NextResponse.json(
-        { error: `El porcentaje debe estar entre 0 y ${cap}% (tu nivel vigente).` },
+        { error: `El porcentaje debe estar entre 0 y ${SELLER_SHARE_MAX}% de tu comisión.` },
         { status: 400 }
       );
     }

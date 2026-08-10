@@ -3,10 +3,15 @@ export const dynamic = "force-dynamic";
 import { redirect } from "next/navigation";
 import { getAffiliateContext } from "@/lib/affiliate-auth";
 import { prisma } from "@/lib/prisma";
-import { currentParentLevelPct } from "@/lib/affiliates/team";
+import { getPublicOffer } from "@/lib/affiliates/public-offer";
+import { effectiveAffiliateMode } from "@/lib/affiliates/payout";
 import { getSellerStatsForAffiliate, emptySellerStat } from "@/lib/affiliates/seller-stats";
 import { PageHead, Note } from "@/components/afiliados/ui/panel-ui";
-import { TeamManager, type SellerRowWithStats } from "@/components/afiliados/team-manager";
+import {
+  TeamManager,
+  type SellerRowWithStats,
+  type SplitPlan,
+} from "@/components/afiliados/team-manager";
 
 export default async function MiEquipoPage() {
   const ctx = await getAffiliateContext();
@@ -14,9 +19,23 @@ export default async function MiEquipoPage() {
 
   const affiliateId = ctx.affiliateId;
 
-  // cap = % del nivel vigente del padre (nunca lanza; cae a legacy). Va fuera
-  // del Promise.all porque tiene sus propios try/catch internos.
-  const cap = await currentParentLevelPct(affiliateId, ctx.affiliate.commissionPct);
+  // Montos REALES del programa para la equivalencia en pesos del formulario:
+  // ni una cifra escrita a mano (misma fuente que la landing). Va fuera del
+  // Promise.all porque nunca lanza (degrada a los defaults del motor).
+  const offer = await getPublicOffer();
+  // La comisión del padre por clínica depende de SU modalidad congelada: fijo
+  // recurrente (cada mes) o pago único. En modo "pct" del programa no hay monto
+  // fijo que enseñar → la equivalencia se explica sobre "cada $100 de comisión".
+  const payoutMode = effectiveAffiliateMode(ctx.affiliate.payoutMode, offer.cfg);
+  const fixedMode = offer.cfg.defaultMode === "fixed";
+  const plans: SplitPlan[] = fixedMode
+    ? offer.plans
+        .map((p) => ({
+          label: p.label,
+          commissionMxn: payoutMode === "onetime" ? p.oneTimeMxn : p.recurringMxn,
+        }))
+        .filter((p) => p.commissionMxn > 0)
+    : [];
 
   // Carga vendedores + stats. Si la tabla affiliate_sellers no existe aún
   // (SQL sin correr), degrada a lista vacía con aviso. Promise.all ≤ 6.
@@ -59,14 +78,15 @@ export default async function MiEquipoPage() {
     <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
       <PageHead
         title="Mi equipo"
-        sub="Registra a tus vendedores y asigna a cada uno su porcentaje de comisión."
+        sub="Registra a tus vendedores y asigna a cada uno qué parte de tu comisión se lleva."
       />
 
-      {/* Cómo se reparte la comisión del nivel. Es un aviso, no un bloque de
-          contenido: va como Note y no como tarjeta. */}
+      {/* Qué significa el %. Es un aviso, no un bloque de contenido: va como
+          Note y no como tarjeta. */}
       <Note tone="brand">
-        Tu comisión de nivel ({cap}%) se reparte con tu equipo: asignas a cada vendedor su %, y tú te quedas
-        el resto como override. La plataforma no cobra de más.
+        El % que le asignas a un vendedor es la parte de TU comisión que se lleva él: con 30 %, de cada
+        $100 que te toca por esa clínica él cobra $30 y tú $70. Tu nivel no cambia con esto y la
+        plataforma paga lo mismo se reparta como se reparta.
       </Note>
 
       {/* Aviso si el módulo aún no está activado en la BD */}
@@ -77,7 +97,11 @@ export default async function MiEquipoPage() {
         </Note>
       )}
 
-      <TeamManager initial={sellers} levelPct={cap} />
+      <TeamManager
+        initial={sellers}
+        plans={plans}
+        recurring={payoutMode !== "onetime"}
+      />
     </div>
   );
 }

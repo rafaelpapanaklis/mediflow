@@ -5,6 +5,7 @@ import toast from "react-hot-toast";
 import { UserPlus, Users, X, Check, Ban, Trash2, Pencil } from "lucide-react";
 import { PanelCard, Chip, EmptyState } from "@/components/afiliados/ui/panel-ui";
 import { formatCurrency } from "@/lib/utils";
+import { SELLER_SHARE_MAX, computeSellerSplitFromTotal } from "@/lib/affiliates/team-split";
 
 export interface SellerRowWithStats {
   id: string;
@@ -21,22 +22,59 @@ export interface SellerRowWithStats {
   paidMxn: number;
 }
 
+/**
+ * Un plan con la comisión REAL que el afiliado cobra por una clínica de ese
+ * plan (fijo recurrente o pago único, según su modalidad). Los montos llegan
+ * por props desde `getPublicOffer()`: ni uno escrito a mano aquí.
+ */
+export interface SplitPlan {
+  label: string;
+  commissionMxn: number;
+}
+
 // Los encabezados de `.dcafp-table` van a la izquierda por defecto; las cuatro
 // columnas de cifras se alinean a la derecha para que los dígitos formen
 // columna con las celdas (.dcafp-td--num / --money ya lo hacen).
 const numTh: CSSProperties = { textAlign: "right" };
 
+const PCT_ERROR = `El porcentaje debe estar entre 0 y ${SELLER_SHARE_MAX}% de tu comisión.`;
+
+function pctIsValid(pct: number): boolean {
+  return Number.isFinite(pct) && pct >= 0 && pct <= SELLER_SHARE_MAX;
+}
+
+/**
+ * Moneda para la equivalencia del reparto. `formatCurrency` redondea a pesos
+ * enteros y con un % fraccionario (12.5 %) las dos mitades se verían sumando
+ * un peso de más; aquí los centavos aparecen SOLO cuando existen.
+ */
+function fmtSplitMxn(n: number): string {
+  const decimals = Number.isInteger(n) ? 0 : 2;
+  return new Intl.NumberFormat("es-MX", {
+    style: "currency",
+    currency: "MXN",
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals,
+  }).format(n);
+}
+
 export function TeamManager({
   initial,
-  levelPct,
+  plans,
+  recurring,
 }: {
   initial: SellerRowWithStats[];
-  levelPct: number;
+  /** Comisión real por plan. Vacío = el programa paga % del nivel, no fijos. */
+  plans: SplitPlan[];
+  /** true = comisión mensual mientras la clínica pague; false = pago único. */
+  recurring: boolean;
 }) {
   const [sellers, setSellers] = useState<SellerRowWithStats[]>(initial);
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
+  // Valor del campo de alta, para la equivalencia viva en pesos.
+  const [newPct, setNewPct] = useState("0");
 
   // ── Alta de vendedor ────────────────────────────────────────────────
   async function handleCreate(e: FormEvent<HTMLFormElement>) {
@@ -52,9 +90,7 @@ export function TeamManager({
     if (!name) return toast.error("El nombre es requerido.");
     if (!email) return toast.error("El correo es requerido.");
     if (password.length < 8) return toast.error("La contraseña debe tener al menos 8 caracteres.");
-    if (!Number.isFinite(commissionPct) || commissionPct < 0 || commissionPct > levelPct) {
-      return toast.error(`El porcentaje debe estar entre 0 y ${levelPct}%.`);
-    }
+    if (!pctIsValid(commissionPct)) return toast.error(PCT_ERROR);
 
     setBusyId("__new__");
     try {
@@ -69,6 +105,7 @@ export function TeamManager({
       toast.success("Vendedor agregado");
       setShowForm(false);
       form.reset();
+      setNewPct("0");
     } catch (err: any) {
       toast.error(err?.message ?? "No se pudo crear el vendedor.");
     } finally {
@@ -78,9 +115,7 @@ export function TeamManager({
 
   // ── Guardar % editado ───────────────────────────────────────────────
   async function handleSavePct(id: string, value: number) {
-    if (!Number.isFinite(value) || value < 0 || value > levelPct) {
-      return toast.error(`El porcentaje debe estar entre 0 y ${levelPct}%.`);
-    }
+    if (!pctIsValid(value)) return toast.error(PCT_ERROR);
     setBusyId(id);
     try {
       const res = await fetch(`/api/afiliados/equipo/${id}`, {
@@ -225,7 +260,7 @@ export function TeamManager({
             </div>
             <div style={{ minWidth: 0 }}>
               <label className="dcafp-label" htmlFor="tm-pct">
-                % de comisión
+                % de tu comisión
               </label>
               <input
                 id="tm-pct"
@@ -234,14 +269,15 @@ export function TeamManager({
                 type="number"
                 required
                 min={0}
-                max={levelPct}
+                max={SELLER_SHARE_MAX}
                 step="0.1"
-                defaultValue={0}
+                value={newPct}
+                onChange={(e) => setNewPct(e.target.value)}
                 aria-describedby="tm-pct-hint"
               />
-              <p className="dcafp-hint" id="tm-pct-hint" style={{ marginTop: 5 }}>
-                máx {levelPct}% — tu nivel
-              </p>
+              <div id="tm-pct-hint" style={{ marginTop: 5 }}>
+                <SplitPreview pct={Number(newPct)} plans={plans} recurring={recurring} />
+              </div>
             </div>
           </div>
           <div style={{ display: "flex", gap: 8, marginTop: 14, flexWrap: "wrap" }}>
@@ -275,9 +311,9 @@ export function TeamManager({
               )
             }
           >
-            Agrega a tu primer vendedor para que empiece a referir clínicas con su propio enlace y % de
-            comisión. Tú ves sus clics, sus clínicas y lo que ha generado, y te quedas con el resto de tu
-            nivel como override.
+            Agrega a tu primer vendedor para que empiece a referir clínicas con su propio enlace. Tú ves sus
+            clics, sus clínicas y lo que ha generado, y le asignas qué parte de tu comisión se lleva: el
+            resto te queda a ti como override.
           </EmptyState>
         </div>
       ) : (
@@ -286,7 +322,7 @@ export function TeamManager({
             <thead>
               <tr>
                 <th>Vendedor</th>
-                <th>% comisión</th>
+                <th>% de tu comisión</th>
                 <th style={numTh}>Clics</th>
                 <th style={numTh}>Clínicas</th>
                 <th style={numTh}>Pendiente</th>
@@ -308,7 +344,8 @@ export function TeamManager({
                       {editing === s.id ? (
                         <PctEditor
                           initial={s.commissionPct}
-                          max={levelPct}
+                          plans={plans}
+                          recurring={recurring}
                           disabled={busy}
                           onSave={(v) => handleSavePct(s.id, v)}
                           onCancel={() => setEditing(null)}
@@ -372,60 +409,124 @@ export function TeamManager({
   );
 }
 
+/**
+ * La equivalencia VIVA del % en pesos: "Con 30%: de cada clínica Profesional él
+ * cobra $42 y tú $98". Reparte con la MISMA función que el webhook
+ * (`computeSellerSplitFromTotal`) sobre los montos reales del programa, así que
+ * lo que se lee aquí es lo que se va a pagar.
+ */
+function SplitPreview({
+  pct,
+  plans,
+  recurring,
+}: {
+  pct: number;
+  plans: SplitPlan[];
+  recurring: boolean;
+}) {
+  if (!pctIsValid(pct)) {
+    return (
+      <p className="dcafp-hint" style={{ margin: 0 }}>
+        Escribe un porcentaje entre 0 y {SELLER_SHARE_MAX}.
+      </p>
+    );
+  }
+
+  // Sin montos fijos publicados (programa en modo "% del nivel") el reparto se
+  // explica sobre una comisión de $100: el significado del % no cambia.
+  if (plans.length === 0) {
+    const s = computeSellerSplitFromTotal(100, pct);
+    return (
+      <p className="dcafp-hint" style={{ margin: 0 }}>
+        Con {pct}%: de cada {fmtSplitMxn(100)} de comisión él cobra{" "}
+        <strong>{fmtSplitMxn(s.sellerMxn)}</strong> y tú{" "}
+        <strong>{fmtSplitMxn(s.overrideMxn)}</strong>.
+      </p>
+    );
+  }
+
+  return (
+    <div className="dcafp-hint" style={{ margin: 0 }}>
+      <div>
+        Con {pct}%, por cada clínica que él traiga
+        {recurring ? " (cada mes que siga activa):" : " (pago único):"}
+      </div>
+      <ul style={{ margin: "4px 0 0", paddingLeft: 16 }}>
+        {plans.map((p) => {
+          const s = computeSellerSplitFromTotal(p.commissionMxn, pct);
+          return (
+            <li key={p.label} style={{ marginTop: 1 }}>
+              {p.label}: él <strong>{fmtSplitMxn(s.sellerMxn)}</strong> y tú{" "}
+              <strong>{fmtSplitMxn(s.overrideMxn)}</strong>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
+}
+
 // Editor inline del % de comisión (input + guardar/cancelar).
 function PctEditor({
   initial,
-  max,
+  plans,
+  recurring,
   disabled,
   onSave,
   onCancel,
 }: {
   initial: number;
-  max: number;
+  plans: SplitPlan[];
+  recurring: boolean;
   disabled: boolean;
   onSave: (v: number) => void;
   onCancel: () => void;
 }) {
   const [value, setValue] = useState(String(initial));
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-      {/* Sin <label> visible: la columna ya dice "% comisión", así que la
-          etiqueta accesible viaja en aria-label. */}
-      <input
-        className="dcafp-input dcafp-nums"
-        type="number"
-        min={0}
-        max={max}
-        step="0.1"
-        value={value}
-        autoFocus
-        disabled={disabled}
-        aria-label="Porcentaje de comisión del vendedor"
-        onChange={(e) => setValue(e.target.value)}
-        style={{ width: 88, flex: "0 0 auto" }}
-      />
-      {/* `.dcafp-iconbtn` no trae estado :disabled en panel.css — el apagado va
-          inline para no inventar una clase nueva. */}
-      <button
-        type="button"
-        className="dcafp-iconbtn"
-        aria-label="Guardar porcentaje"
-        disabled={disabled}
-        style={{ opacity: disabled ? 0.55 : 1 }}
-        onClick={() => onSave(Number(value))}
-      >
-        <Check size={16} />
-      </button>
-      <button
-        type="button"
-        className="dcafp-iconbtn"
-        aria-label="Cancelar edición"
-        disabled={disabled}
-        style={{ opacity: disabled ? 0.55 : 1 }}
-        onClick={onCancel}
-      >
-        <X size={16} />
-      </button>
+    <div style={{ minWidth: 190 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+        {/* Sin <label> visible: la columna ya dice "% de tu comisión", así que
+            la etiqueta accesible viaja en aria-label. */}
+        <input
+          className="dcafp-input dcafp-nums"
+          type="number"
+          min={0}
+          max={SELLER_SHARE_MAX}
+          step="0.1"
+          value={value}
+          autoFocus
+          disabled={disabled}
+          aria-label="Porcentaje de tu comisión que se lleva el vendedor"
+          onChange={(e) => setValue(e.target.value)}
+          style={{ width: 88, flex: "0 0 auto" }}
+        />
+        {/* `.dcafp-iconbtn` no trae estado :disabled en panel.css — el apagado va
+            inline para no inventar una clase nueva. */}
+        <button
+          type="button"
+          className="dcafp-iconbtn"
+          aria-label="Guardar porcentaje"
+          disabled={disabled}
+          style={{ opacity: disabled ? 0.55 : 1 }}
+          onClick={() => onSave(Number(value))}
+        >
+          <Check size={16} />
+        </button>
+        <button
+          type="button"
+          className="dcafp-iconbtn"
+          aria-label="Cancelar edición"
+          disabled={disabled}
+          style={{ opacity: disabled ? 0.55 : 1 }}
+          onClick={onCancel}
+        >
+          <X size={16} />
+        </button>
+      </div>
+      <div style={{ marginTop: 5 }}>
+        <SplitPreview pct={Number(value)} plans={plans} recurring={recurring} />
+      </div>
     </div>
   );
 }

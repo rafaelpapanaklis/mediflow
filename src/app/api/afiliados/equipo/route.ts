@@ -4,7 +4,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getAffiliateContext } from "@/lib/affiliate-auth";
-import { currentParentLevelPct } from "@/lib/affiliates/team";
+import { SELLER_SHARE_MAX } from "@/lib/affiliates/team";
 import { getSellerStatsForAffiliate, emptySellerStat } from "@/lib/affiliates/seller-stats";
 import { createClient as createAdminClient } from "@supabase/supabase-js";
 
@@ -23,16 +23,13 @@ const MAX_SELLERS_PER_AFFILIATE = 50;
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-// ── GET: lista de vendedores + stats por vendedor + cap del nivel ─────────
+// ── GET: lista de vendedores + stats por vendedor + tope del % ────────────
 export async function GET() {
   const ctx = await getAffiliateContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (ctx.status !== "APPROVED") {
     return NextResponse.json({ error: "Tu cuenta aún no está aprobada." }, { status: 401 });
   }
-
-  // cap = % del nivel vigente del padre (nunca lanza; cae a legacy).
-  const cap = await currentParentLevelPct(ctx.affiliateId, ctx.affiliate.commissionPct);
 
   try {
     const [sellers, stats] = await Promise.all([
@@ -45,7 +42,9 @@ export async function GET() {
 
     return NextResponse.json({
       ready: true,
-      levelPct: cap,
+      // Tope del % del vendedor: 100 % de la comisión del padre. Ya no es el %
+      // del nivel (ver @/lib/affiliates/team).
+      sellerPctMax: SELLER_SHARE_MAX,
       sellers: sellers.map((s) => {
         const st = stats.get(s.id) ?? emptySellerStat(s.id);
         return {
@@ -68,7 +67,7 @@ export async function GET() {
     // Tabla affiliate_sellers aún no existe en la BD (SQL sin correr) →
     // degrada sin romper; la UI muestra "pendiente de activar".
     if (err?.code === "P2021") {
-      return NextResponse.json({ ready: false, levelPct: cap, sellers: [] });
+      return NextResponse.json({ ready: false, sellerPctMax: SELLER_SHARE_MAX, sellers: [] });
     }
     throw err;
   }
@@ -105,11 +104,11 @@ export async function POST(req: Request) {
     );
   }
 
-  // cap = % del nivel vigente del padre. El % del vendedor va en [0, cap].
-  const cap = await currentParentLevelPct(ctx.affiliateId, ctx.affiliate.commissionPct);
-  if (!Number.isFinite(commissionPct) || commissionPct < 0 || commissionPct > cap) {
+  // El % del vendedor es el trozo de TU comisión que se lleva: [0, 100]. El
+  // nivel del padre no lo topa (ver @/lib/affiliates/team).
+  if (!Number.isFinite(commissionPct) || commissionPct < 0 || commissionPct > SELLER_SHARE_MAX) {
     return NextResponse.json(
-      { error: `El porcentaje debe estar entre 0 y ${cap}% (tu nivel vigente).` },
+      { error: `El porcentaje debe estar entre 0 y ${SELLER_SHARE_MAX}% de tu comisión.` },
       { status: 400 }
     );
   }

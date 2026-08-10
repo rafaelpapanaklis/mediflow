@@ -961,8 +961,14 @@ export function AffiliatesClient({ initial }: { initial: AffiliateRow[] }) {
     return (
       <div style={{ padding: "14px 16px" }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap", marginBottom: 10 }}>
-          <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text-1)" }}>
-            Equipo de {a.name}
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text-1)" }}>
+              Equipo de {a.name}
+            </div>
+            <div style={{ fontSize: 11.5, color: "var(--text-3)", marginTop: 2 }}>
+              El % es la parte de la comisión del afiliado que se lleva cada vendedor; el resto le queda a
+              él como override. No cambia lo que paga DaleControl.
+            </div>
           </div>
           <ButtonNew size="sm" variant="ghost" disabled={loading} onClick={() => void loadTeam(a.id)}>
             {loading ? "Cargando…" : "Actualizar"}
@@ -982,7 +988,7 @@ export function AffiliatesClient({ initial }: { initial: AffiliateRow[] }) {
                 <tr>
                   <th>Vendedor</th>
                   <th>Datos de pago</th>
-                  <th>Comisión</th>
+                  <th>% de la comisión</th>
                   <th>Clínicas</th>
                   <th>Pendiente</th>
                   <th>Pagado</th>

@@ -1,46 +1,48 @@
 /**
- * Afiliados — EQUIPOS DE VENDEDORES: contrato + matemática del split.
+ * Afiliados — EQUIPOS DE VENDEDORES: contrato del reparto vendedor ↔ padre.
  *
- * Este archivo es el CONTRATO de la comisión repartida entre un vendedor y su
- * afiliado padre. Lo consumen el webhook de Stripe (genera el split), "Mi
- * equipo" (valida el % del vendedor) y el panel del vendedor.
+ * La matemática vive en `./team-split.ts` (PURA, client-safe) y se re-exporta
+ * aquí para no romper a ningún consumidor: el webhook de Stripe, "Mi equipo" y
+ * el panel del vendedor importan de este módulo. El corte es el mismo que
+ * payout-core.ts / payout.ts, y existe para que el formulario del afiliado
+ * (client component) pueda calcular la equivalencia en pesos con LA MISMA
+ * función que escribe el dinero.
  *
- * REGLA DE ORO: la comisión total de una venta del equipo = % del nivel del
- * padre (vigente). El vendedor gana su % CONGELADO al alta (clamp al nivel) y
- * el padre el OVERRIDE (= total − vendedor). La plataforma NUNCA paga de más:
- *   sellerMxn + overrideMxn === totalMxn   (siempre).
+ * El % del vendedor es el PORCENTAJE DE LA COMISIÓN DEL PADRE que le toca
+ * (0-100), no un % de la factura ni un trozo del nivel — ver team-split.ts.
  */
-import { prisma } from "@/lib/prisma";
 import { calcCommissionMxn } from "@/lib/affiliates";
-import { getProgramConfig, countActiveReferred, computeLevel, levelPct } from "@/lib/affiliate-levels";
+import { roundMxn, type CommissionSplit } from "./team-split";
 
-export function roundMxn(n: number): number {
-  if (!Number.isFinite(n)) return 0;
-  return Math.round(n * 100) / 100;
-}
+export {
+  SELLER_SHARE_MAX,
+  clampSellerSharePct,
+  computeSellerSplitFromTotal,
+  roundMxn,
+  type CommissionSplit,
+} from "./team-split";
 
-/** Clampa el % de un vendedor al rango [0, cap]. cap = % del nivel del padre. */
+/**
+ * Clampa el % de un vendedor al rango [0, cap]. SOLO para el modo histórico
+ * "pct" del programa (`computeSellerSplit`, abajo), donde el % del vendedor se
+ * aplica a la factura y el tope natural es el % del nivel del padre. El reparto
+ * vigente usa `clampSellerSharePct` (tope 100, sin nivel).
+ */
 export function clampSellerPct(pct: number, cap: number): number {
   if (!Number.isFinite(pct) || pct <= 0) return 0;
   if (!Number.isFinite(cap) || cap <= 0) return 0;
   return Math.min(pct, cap);
 }
 
-export interface CommissionSplit {
-  totalPct: number; // % del nivel del padre (vigente)
-  sellerPct: number; // % efectivo del vendedor = clamp(congelado, totalPct)
-  overridePct: number; // % del padre = totalPct − sellerPct
-  totalMxn: number; // comisión total (amount × totalPct)
-  sellerMxn: number; // porción del vendedor
-  overrideMxn: number; // porción (override) del padre = total − vendedor
-}
-
 /**
- * Reparte una factura entre vendedor y padre. `totalPct` es el % del nivel
- * VIGENTE del padre (lo calcula el webhook). `frozenSellerPct` viene de la
- * atribución (congelado al alta de la clínica → no retroactivo). El override
- * se calcula por resta (no por %) para que la suma cuadre al centavo aunque
- * haya redondeos: overrideMxn = round(totalMxn − sellerMxn).
+ * HISTÓRICO — modo "pct" del programa: reparte una FACTURA entre vendedor y
+ * padre en puntos porcentuales de esa factura. `totalPct` es el % del nivel
+ * VIGENTE del padre y el % del vendedor se clampa a él.
+ *
+ * Ya NO lo llama el webhook: `computeSellerSplitFromTotal` sirve a los dos
+ * modos del programa porque el motor entrega la comisión ya resuelta (en modo
+ * "pct" ese total es exactamente `amountMxn × nivel%`). Se conserva intacto
+ * como referencia del reparto por puntos de factura y con tests propios.
  */
 export function computeSellerSplit(
   amountMxn: number,
@@ -59,58 +61,6 @@ export function computeSellerSplit(
     sellerMxn,
     overrideMxn,
   };
-}
-
-/**
- * Reparte una comisión YA CALCULADA (monto fijo del motor de comisiones) entre
- * vendedor y padre. Con montos fijos el % del vendedor ya no aplica al monto
- * de la factura, así que se reparte por PROPORCIÓN del nivel del padre:
- *
- *     sellerMxn   = total × min(frozenSellerPct, parentLevelPct) / parentLevelPct
- *     overrideMxn = total − sellerMxn        (por resta: siempre cuadra)
- *
- * Se conserva la REGLA DE ORO intacta: sellerMxn + overrideMxn === totalMxn.
- * Si el padre no tiene % de nivel utilizable (≤ 0) el vendedor no puede ganar
- * una proporción de nada → todo queda como override del padre.
- * `computeSellerSplit` (arriba) sigue intacta para el modo pct.
- */
-export function computeSellerSplitFromTotal(
-  totalMxn: number,
-  parentLevelPct: number,
-  frozenSellerPct: number,
-): CommissionSplit {
-  const total = roundMxn(totalMxn);
-  const totalPct = Number.isFinite(parentLevelPct) && parentLevelPct > 0 ? parentLevelPct : 0;
-  const sellerPct = clampSellerPct(frozenSellerPct, totalPct);
-  const sellerMxn = totalPct > 0 ? roundMxn((total * sellerPct) / totalPct) : 0;
-  const overrideMxn = Math.max(0, roundMxn(total - sellerMxn));
-  return {
-    totalPct,
-    sellerPct,
-    overridePct: roundMxn(totalPct - sellerPct),
-    totalMxn: total,
-    sellerMxn,
-    overrideMxn,
-  };
-}
-
-/**
- * % del nivel VIGENTE del afiliado padre (para el cap del vendedor y el split).
- * Cae a `legacyPct` (Affiliate.commissionPct) si la tabla de config no existe.
- * Nunca lanza.
- */
-export async function currentParentLevelPct(
-  affiliateId: string,
-  legacyPct: number,
-): Promise<number> {
-  try {
-    const cfg = await getProgramConfig();
-    if (!cfg) return legacyPct;
-    const active = await countActiveReferred(affiliateId);
-    return levelPct(computeLevel(active, cfg), cfg);
-  } catch {
-    return legacyPct;
-  }
 }
 
 // ── Shapes compartidos del equipo (UI afiliado/admin) ────────────────────

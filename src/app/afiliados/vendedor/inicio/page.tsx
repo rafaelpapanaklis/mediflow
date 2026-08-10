@@ -62,7 +62,7 @@ export default async function VendedorInicioPage() {
     <>
       <PageHead
         title={`Hola, ${seller.name}`}
-        sub={`Ganas ${seller.commissionPct}% por cada clínica que traes y que se suscribe.`}
+        sub={`Ganas el ${seller.commissionPct}% de la comisión de tu afiliado por cada clínica que traes y que se suscribe.`}
       />
 
       <div className="dcafp-hero">
@@ -73,7 +73,7 @@ export default async function VendedorInicioPage() {
           <div className="dcafp-cardhead">
             <Eyebrow>Pendiente de pago</Eyebrow>
             <Chip tone="brand" dot sm>
-              {seller.commissionPct}% por clínica
+              {seller.commissionPct}% de la comisión
             </Chip>
           </div>
           <div

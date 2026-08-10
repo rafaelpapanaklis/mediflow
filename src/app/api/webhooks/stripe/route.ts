@@ -6,7 +6,7 @@ import type Stripe from "stripe";
 import { calcCommissionMxn } from "@/lib/affiliates";
 import { sendAffiliateConversionEmail, sendAffiliateSellerConversionEmail } from "@/lib/affiliate-emails";
 import { getProgramConfig, countActiveReferred, computeLevel, levelPct } from "@/lib/affiliate-levels";
-import { computeSellerSplit, computeSellerSplitFromTotal } from "@/lib/affiliates/team";
+import { computeSellerSplitFromTotal } from "@/lib/affiliates/team";
 import {
   claimOneTimePayout,
   effectiveAffiliateMode,
@@ -546,21 +546,19 @@ export async function POST(req: NextRequest) {
 
         // ── EQUIPOS DE VENDEDORES: si la clínica tiene atribución de
         //    vendedor, la comisión total (la que resolvió el motor, sin pagar
-        //    de más) se REPARTE: el vendedor su % congelado al alta (clamp al
-        //    nivel del padre) y el padre el override (= total − vendedor). En
-        //    modo "pct" el reparto se calcula sobre la factura (histórico,
-        //    intacto); con montos fijos se reparte POR PROPORCIÓN el total ya
-        //    resuelto. Las clínicas sin atribución siguen 100% al padre.
+        //    de más) se REPARTE: el vendedor su % congelado al alta —que es el
+        //    % DE ESA COMISIÓN que le toca, 0-100— y el padre el override
+        //    (= total − vendedor). Vale igual en los dos modos del programa:
+        //    `resolved.totalMxn` ya es la comisión completa del padre, sea el
+        //    monto fijo del plan o el % del nivel sobre la factura. El nivel NO
+        //    interviene en el reparto. Sin atribución, todo sigue al padre.
         const attr = await prisma.affiliateSellerAttribution
           .findUnique({ where: { clinicId: clinic.id } })
           .catch(() => null);
 
         try {
           if (attr) {
-            const split =
-              resolved.kind === "pct"
-                ? computeSellerSplit(amountMxn, pct, attr.sellerPct)
-                : computeSellerSplitFromTotal(resolved.totalMxn, pct, attr.sellerPct);
+            const split = computeSellerSplitFromTotal(resolved.totalMxn, attr.sellerPct);
             // Las dos comisiones se crean en una transacción. El primer create
             // (affiliateCommission, stripeInvoiceId @unique) lanza P2002 en
             // reintentos → la transacción aborta y el catch de abajo lo trata

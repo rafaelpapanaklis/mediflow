@@ -767,7 +767,7 @@ export function AffiliateDetailClient({
           <CardNew
             noPad
             title={`Equipo de vendedores (${data.sellers.length})`}
-            sub="Vendedores que refieren clínicas bajo este afiliado."
+            sub="Vendedores que refieren clínicas bajo este afiliado. El % es la parte de la comisión del afiliado que se lleva cada uno (el resto le queda a él como override); no cambia lo que paga DaleControl."
           >
             {data.sellers.length === 0 ? (
               <div
@@ -787,7 +787,7 @@ export function AffiliateDetailClient({
                     <tr>
                       <th>Vendedor</th>
                       <th>Email</th>
-                      <th>Comisión</th>
+                      <th>% de la comisión</th>
                       <th>Clínicas</th>
                       <th>Pendiente</th>
                       <th>Pagado</th>

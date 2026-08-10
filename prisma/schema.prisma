@@ -7464,9 +7464,9 @@ model AffiliateProgramConfig {
 // ═══════════════════════════════════════════════════════════════════════════
 // AFILIADOS — EQUIPOS DE VENDEDORES (jun 2026, WS3 · feat/afiliados-equipo)
 // Un AFILIADO (padre) registra manualmente a sus VENDEDORES. El vendedor gana
-// comisión por las clínicas que trae y el padre un OVERRIDE; juntos suman el
-// % del nivel del padre — la plataforma NO paga de más. Máximo 2 niveles: el
-// vendedor jamás registra gente ni tiene equipo propio.
+// comisión por las clínicas que trae y el padre un OVERRIDE; juntos suman la
+// comisión COMPLETA del padre — la plataforma NO paga de más. Máximo 2 niveles:
+// el vendedor jamás registra gente ni tiene equipo propio.
 //
 // SIN relación Prisma a Affiliate/Clinic (mismo patrón que AffiliateCommission
 // / AffiliateClick): las FKs viven en sql/afiliados-equipo.sql. Así no se toca
@@ -7478,8 +7478,9 @@ model AffiliateProgramConfig {
 
 /// Vendedor de un afiliado. Login propio vía Supabase (supabaseId), igual que
 /// AffiliateUser pero sin tabla puente: el mapeo supabaseId→vendedor vive aquí.
-/// commissionPct = % que el padre le asigna (0..% del nivel del padre); se
-/// CONGELA en cada conversión nueva (no retroactivo). Datos de pago propios:
+/// commissionPct = qué PORCENTAJE DE LA COMISIÓN DEL PADRE le asigna éste
+/// (0..100, ver @/lib/affiliates/team-split); se CONGELA en cada conversión
+/// nueva (no retroactivo). El nivel del padre NO lo topa. Datos de pago propios:
 /// DaleControl le paga directo con el mismo flujo (mismo mínimo) del afiliado.
 model AffiliateSeller {
   id            String   @id @default(cuid())
@@ -7488,7 +7489,7 @@ model AffiliateSeller {
   name          String
   email         String // lowercase; único por afiliado (Supabase lo hace único global)
   phone         String?
-  commissionPct Float    @default(0) // % asignado por el padre (0..nivel del padre)
+  commissionPct Float    @default(0) // % de la comisión del padre (0..100)
   isActive      Boolean  @default(true)
   payoutMethod  String? // SPEI | PAYPAL | OTHER
   payoutDetails String?
@@ -7508,7 +7509,7 @@ model AffiliateSellerAttribution {
   clinicId    String   @unique
   sellerId    String
   affiliateId String // padre (denormalizado para reportes/limpieza)
-  sellerPct   Float // % del vendedor CONGELADO al alta (no retroactivo)
+  sellerPct   Float // % de la comisión del padre (0..100) CONGELADO al alta
   createdAt   DateTime @default(now())
 
   @@index([sellerId])
@@ -7519,7 +7520,7 @@ model AffiliateSellerAttribution {
 /// Porción del VENDEDOR por factura pagada (sidecar de affiliate_commissions).
 /// El override del padre queda en affiliate_commissions.commissionMxn (reducido
 /// al override cuando hay vendedor); aquí va SOLO la parte del vendedor. La
-/// suma de ambos = comisión total del nivel (la plataforma no paga de más).
+/// suma de ambos = comisión total del padre (la plataforma no paga de más).
 /// Idempotente por stripeInvoiceId (igual que affiliate_commissions).
 model AffiliateSellerCommission {
   id              String    @id @default(cuid())
@@ -7528,7 +7529,7 @@ model AffiliateSellerCommission {
   clinicId        String
   stripeInvoiceId String    @unique
   amountMxn       Float // factura pagada (igual que la del padre)
-  commissionMxn   Float // porción del VENDEDOR (amount × min(%congelado, nivel%))
+  commissionMxn   Float // porción del VENDEDOR (comisión del padre × %congelado)
   kind            String    @default("pct") // pct | recurring | onetime (espejo del padre)
   status          String    @default("pending") // pending | paid
   createdAt       DateTime  @default(now())
