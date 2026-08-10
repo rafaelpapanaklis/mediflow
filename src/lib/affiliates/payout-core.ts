@@ -32,8 +32,15 @@ export type PayoutMode = "recurring" | "onetime";
 /** Modo del programa completo. "fixed" = montos por plan; "pct" = niveles. */
 export type ProgramMode = "fixed" | "pct";
 
-/** Cómo se calculó una comisión ya generada (AffiliateCommission.kind). */
-export type CommissionKind = "pct" | "recurring" | "onetime";
+/**
+ * Cómo se calculó una comisión ya generada (AffiliateCommission.kind).
+ *
+ * "network_bonus" NO sale de `resolveCommission`: lo escriben los BONOS POR
+ * RED (@/lib/affiliates/network-bonus) para entrar por el mismo flujo de pago,
+ * reportes y estado de cuenta que el resto. Vive en este tipo para que toda
+ * pantalla que etiquete un `kind` tenga que contemplarlo.
+ */
+export type CommissionKind = "pct" | "recurring" | "onetime" | "network_bonus";
 
 /** Planes con monto configurable (espejo del enum Plan de Prisma). */
 export type PlanKey = "BASIC" | "PRO" | "CLINIC";
@@ -180,6 +187,7 @@ export const COMMISSION_KIND_LABELS: Record<CommissionKind, string> = {
   pct: "% del nivel",
   recurring: "Fijo recurrente",
   onetime: "Pago único",
+  network_bonus: "Bono por tu equipo",
 };
 
 /** Redondeo a centavos. Defensivo ante no-finitos (→ 0). */
@@ -205,8 +213,18 @@ export function normalizePlanKey(value: unknown): PlanKey {
 
 /** Etiqueta de kind tolerante a valores viejos/desconocidos de la BD. */
 export function commissionKindLabel(kind: string | null | undefined): string {
-  const k = kind === "recurring" || kind === "onetime" ? kind : "pct";
+  const k =
+    kind === "recurring" || kind === "onetime" || kind === "network_bonus" ? kind : "pct";
   return COMMISSION_KIND_LABELS[k];
+}
+
+/**
+ * ¿Esta comisión es un BONO POR RED? Se pregunta en toda pantalla que resuelve
+ * el nombre de la clínica: un bono no nace de una clínica y su `clinicId` va
+ * vacío, así que sin este corte saldría un "Clínica" fantasma en la tabla.
+ */
+export function isNetworkBonusKind(kind: string | null | undefined): boolean {
+  return kind === "network_bonus";
 }
 
 /** Días promedio de un mes (365.25 / 12). Un mes "de calendario" real. */

@@ -2,12 +2,14 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { getPayoutSettings } from "@/lib/affiliates/payout";
 import { DEFAULT_MILESTONES, milestonesTotalMxn, milestoneTiers } from "@/lib/affiliates/payout-core";
+import { getNetworkBonusTiers } from "@/lib/affiliates/network-bonus";
+import { MIN_PAID_INVOICES, SUSTAIN_MONTHS } from "@/lib/affiliates/network-bonus-core";
 import { fmtMxn } from "@/lib/affiliates/public-offer";
 
 export const metadata: Metadata = {
   title: "Términos del Programa de Afiliados — DaleControl",
   description:
-    "Términos del Programa de Afiliados de DaleControl: cómo se aprueba una cuenta, atribución de clínicas, modalidades de comisión, bono por clínicas activas, calendario de pagos, uso de marca y causales de cancelación.",
+    "Términos del Programa de Afiliados de DaleControl: cómo se aprueba una cuenta, atribución de clínicas, modalidades de comisión, bono por clínicas activas, bono por equipo de ventas, calendario de pagos, uso de marca y causales de cancelación.",
 };
 
 // Los umbrales y montos de los bonos SE LEEN de affiliate_payout_config, igual
@@ -22,27 +24,44 @@ const CONTACT_EMAIL = "hola@dalecontrol.com";
 
 export default async function TerminosAfiliadosPage() {
   // Nunca lanza: sin BD (o con el SQL sin correr) caen los defaults del DDL.
-  const settings = await getPayoutSettings().catch(() => ({ cfg: null, milestones: null }));
+  // Los bonos por red se leen APARTE (su propio SQL, su propio try/catch): si
+  // esas columnas no existen, `enabled` viene en false y la sección desaparece
+  // sin arrastrar al resto del documento.
+  const [settings, red] = await Promise.all([
+    getPayoutSettings().catch(() => ({ cfg: null, milestones: null })),
+    getNetworkBonusTiers().catch(() => ({ cfg: null, tiers: [], enabled: false })),
+  ]);
   const milestonesCfg = settings.milestones ?? { ...DEFAULT_MILESTONES };
   const hitos = milestoneTiers(milestonesCfg);
   const hitosOn = milestonesCfg.milestonesEnabled && hitos.length > 0;
   const hitoMayor = hitos.length > 0 ? hitos[hitos.length - 1] : null;
 
-  // Numeración de las secciones. Va calculada porque la de bonos aparece y
-  // desaparece con la promoción: un documento legal no puede saltar del 4 al 6,
-  // y las referencias cruzadas ("conforme al calendario de la sección N") deben
-  // seguir apuntando a donde apuntan.
+  // Bonos por red: mismo criterio que los hitos — es una promoción y si se
+  // apaga en /admin, la sección se va del documento.
+  const redes = red.tiers;
+  const redOn = red.enabled && redes.length > 0;
+  const redMayor = redes.length > 0 ? redes[redes.length - 1] : null;
+
+  // Numeración de las secciones. Va calculada porque las dos de bonos aparecen
+  // y desaparecen con su promoción: un documento legal no puede saltar del 4 al
+  // 6, y las referencias cruzadas ("conforme al calendario de la sección N")
+  // deben seguir apuntando a donde apuntan. Cada bloque opcional corre en 1 lo
+  // que va debajo, así que se cuentan los que están encendidos.
+  const extras = (hitosOn ? 1 : 0) + (redOn ? 1 : 0);
   const S = {
     quien: 1,
     alta: 2,
     atribucion: 3,
     comisiones: 4,
     hitos: 5,
-    pagos: hitosOn ? 6 : 5,
-    invalida: hitosOn ? 7 : 6,
-    marca: hitosOn ? 8 : 7,
-    fin: hitosOn ? 9 : 8,
-    contacto: hitosOn ? 10 : 9,
+    // La de red va DESPUÉS de la de hitos cuando las dos están: se lee de lo
+    // propio a lo del equipo, igual que en el panel y en la landing.
+    red: hitosOn ? 6 : 5,
+    pagos: 5 + extras,
+    invalida: 6 + extras,
+    marca: 7 + extras,
+    fin: 8 + extras,
+    contacto: 9 + extras,
   };
 
   return (
@@ -253,6 +272,126 @@ export default async function TerminosAfiliadosPage() {
             <Link href="/afiliados">/afiliados</Link>. Son una <b>promoción</b>: DaleControl puede
             modificarla o darla por terminada en cualquier momento, sin afectar los bonos ya
             pagados ni los hitos ya cumplidos y verificados.
+          </p>
+        </Section>
+      )}
+
+      {/* Bonos por RED. Igual que los de arriba: es una PROMOCIÓN y si se apaga
+          en /admin la sección desaparece. Ni un umbral ni un monto se escriben
+          aquí — salen de affiliate_payout_config, la misma fila que publica
+          /afiliados y que lee el cron que los paga.
+
+          ⚠️ EL ENCUADRE NO ES NEGOCIABLE: lo que se paga son CLÍNICAS ACTIVAS
+          que contratan un producto, nunca personas incorporadas al equipo. Un
+          afiliado con veinte vendedores y ninguna clínica activa no cobra un
+          peso, y eso es exactamente lo que separa un programa de ventas de un
+          esquema piramidal. Cualquier reescritura de esta sección tiene que
+          seguir diciéndolo así de claro. */}
+      {redOn && redMayor && (
+        <Section title={`${S.red}. Bono por equipo de ventas`}>
+          <p>
+            Un afiliado puede registrar <b>vendedores</b> a su cargo desde su panel. Además de las
+            comisiones que ya le corresponden, el Programa paga un bono por las{" "}
+            <b>clínicas activas que esos vendedores dan de alta</b>, al alcanzar cada uno de estos
+            escalones:
+          </p>
+          <ul>
+            {redes.map((red) => (
+              <li key={red.n}>
+                <b>{red.clinics} clínicas activas</b> traídas por sus vendedores, al mismo tiempo:{" "}
+                {red.onceMxn > 0 && red.monthlyMxn > 0 ? (
+                  <>
+                    {fmtMxn(red.onceMxn)} en un solo pago <b>o</b> {fmtMxn(red.monthlyMxn)} al mes, a
+                    elección del afiliado.
+                  </>
+                ) : red.onceMxn > 0 ? (
+                  <>{fmtMxn(red.onceMxn)} en un solo pago.</>
+                ) : (
+                  <>{fmtMxn(red.monthlyMxn)} al mes.</>
+                )}
+              </li>
+            ))}
+          </ul>
+          <p>
+            <b>Este bono se paga por clínicas que contratan y pagan una suscripción, no por
+            incorporar personas al equipo.</b> Registrar vendedores no genera por sí mismo ningún
+            pago, ni existe cuota, compra ni inscripción alguna para participar: si los vendedores
+            de un afiliado no dan de alta clínicas que cumplan las condiciones de esta sección, el
+            afiliado no percibe ningún bono por este concepto.
+          </p>
+          <p>
+            El conteo de esta sección es <b>independiente</b> del de la sección {S.hitos}: aquí
+            cuentan <b>únicamente</b> las clínicas dadas de alta por los vendedores del afiliado, y
+            no las que el afiliado haya dado de alta por su cuenta. Ninguna clínica cuenta en los
+            dos bonos.
+          </p>
+
+          <p>Para que un bono de esta sección se otorgue deben cumplirse todas estas condiciones:</p>
+          <ul>
+            <li>
+              Cuentan las clínicas <b>activas al mismo tiempo</b>, no el total histórico que los
+              vendedores hayan dado de alta.
+            </li>
+            <li>
+              Una clínica cuenta como activa cuando lleva{" "}
+              <b>al menos {MIN_PAID_INVOICES} mensualidades pagadas</b> y su suscripción sigue
+              vigente. Es el mismo criterio de la sección {S.hitos}.
+            </li>
+            <li>
+              El número de clínicas debe <b>sostenerse durante {SUSTAIN_MONTHS} meses consecutivos</b>{" "}
+              antes de que el bono se otorgue.
+            </li>
+            <li>
+              Cada clínica debe ser un <b>negocio distinto, con su propio titular</b>. Varias
+              sucursales o razones sociales de un mismo grupo cuentan como una sola.
+            </li>
+            <li>
+              Cada escalón se otorga <b>una sola vez</b> por afiliado, aunque el número de clínicas
+              baje y vuelva a subir. Los escalones son <b>acumulables</b>.
+            </li>
+          </ul>
+
+          <p>
+            <b>Elección de la forma de cobro.</b> Al otorgarse un escalón, el afiliado elige desde su
+            panel entre las dos modalidades publicadas para ese escalón:
+          </p>
+          <ul>
+            <li>
+              <b>Pago único:</b> el monto se paga una sola vez y el escalón queda cerrado.
+            </li>
+            <li>
+              <b>Mensual:</b> el monto se paga cada mes <b>mientras el número de clínicas se
+              sostenga</b>. Si el número baja del umbral, el pago mensual{" "}
+              <b>se suspende automáticamente</b> y se reanuda, también de forma automática, en cuanto
+              el número vuelve a alcanzarse. La suspensión no cancela el escalón ni obliga a cumplir
+              de nuevo los {SUSTAIN_MONTHS} meses.
+            </li>
+          </ul>
+          <p>
+            La elección es <b>definitiva por escalón</b> y no puede modificarse una vez registrada.{" "}
+            <b>Mientras el afiliado no elija, el bono no se paga</b>; el escalón otorgado no vence ni
+            se pierde por no elegir. Cada escalón se elige por separado.
+          </p>
+          <p>
+            Los montos de un escalón <b>quedan fijados en el momento en que se otorga</b>: una
+            modificación posterior de los montos publicados no altera los bonos ya otorgados, ni los
+            pagos mensuales que estuvieran corriendo.
+          </p>
+          <p>
+            Los bonos de esta sección son <b>adicionales</b> a las comisiones de la sección{" "}
+            {S.comisiones} y a los bonos de la sección {S.hitos}, y no las sustituyen ni las
+            interrumpen. Se pagan conforme al calendario de la sección {S.pagos}.
+          </p>
+          <p>
+            Las <b>altas fraudulentas, duplicadas, con datos falsos o de negocios relacionados entre
+            sí</b> —o con el propio afiliado o sus vendedores— no cuentan para estos escalones e{" "}
+            <b>invalidan el bono</b>, aunque ya se haya otorgado. Aplican además las causales de la
+            sección {S.invalida}.
+          </p>
+          <p>
+            Los <b>montos y umbrales vigentes son los publicados</b> en esta página. Son una{" "}
+            <b>promoción</b>: DaleControl puede modificarla o darla por terminada en cualquier
+            momento, sin afectar los bonos ya otorgados ni los pagos ya realizados.
           </p>
         </Section>
       )}

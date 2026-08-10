@@ -7977,9 +7977,82 @@ model AffiliatePayoutConfig {
   milestone2Mxn        Float    @default(10000)
   milestone3Clinics    Int      @default(50)
   milestone3Mxn        Float    @default(100000)
+  // ── Bonos por RED (sql/afiliados-bonos-red.sql) ──────────────────────────
+  // Premian las clínicas activas que trajeron los VENDEDORES del afiliado.
+  // Cinco escalones, cada uno con DOS montos: el afiliado elige pago único o
+  // mensual al alcanzarlo. A diferencia de los hitos propios, estos SÍ se
+  // calculan y se pagan solos (@/lib/affiliates/network-bonus + el cron
+  // /api/cron/affiliate-network-bonus).
+  //
+  // ⚠️ Se leen con `select` explícito (getNetworkBonusConfig) para que un
+  // deploy sin el SQL aplicado NO tumbe la lectura del motor de comisiones:
+  // ver el comentario de getPayoutConfig() en @/lib/affiliates/payout.
+  networkBonusEnabled    Boolean @default(true)
+  networkTier1Clinics    Int     @default(5)
+  networkTier1OnceMxn    Float   @default(3000)
+  networkTier1MonthlyMxn Float   @default(375)
+  networkTier2Clinics    Int     @default(20)
+  networkTier2OnceMxn    Float   @default(15000)
+  networkTier2MonthlyMxn Float   @default(1875)
+  networkTier3Clinics    Int     @default(50)
+  networkTier3OnceMxn    Float   @default(40000)
+  networkTier3MonthlyMxn Float   @default(5000)
+  networkTier4Clinics    Int     @default(150)
+  networkTier4OnceMxn    Float   @default(120000)
+  networkTier4MonthlyMxn Float   @default(15000)
+  networkTier5Clinics    Int     @default(500)
+  networkTier5OnceMxn    Float   @default(400000)
+  networkTier5MonthlyMxn Float   @default(50000)
   updatedAt            DateTime @updatedAt
 
   @@map("affiliate_payout_config")
+}
+
+/// Un escalón del BONO POR RED otorgado (o en curso) a un afiliado.
+/// sql/afiliados-bonos-red.sql. SIN relación Prisma a Affiliate (la FK vive en
+/// el SQL, mismo patrón que AffiliateCommission / AffiliateSellerAttribution).
+///
+/// Ciclo de vida — ver @/lib/affiliates/network-bonus-core:
+///   tracking → pending_choice → once_paid
+///                             ↘ monthly_active ⇄ monthly_paused
+///
+/// `clinics`/`onceMxn`/`monthlyMxn` se refrescan mientras la fila está en
+/// `tracking` y quedan CONGELADOS al otorgarse: editar la config después no
+/// puede cambiar lo que ya se prometió.
+model AffiliateNetworkBonusAward {
+  id          String @id @default(cuid())
+  affiliateId String
+  /// 1..5 — el escalón EN LA CONFIG, no en pantalla.
+  tier        Int
+  /// Umbral congelado al otorgarse.
+  clinics     Int
+  /// Los dos montos entre los que elige, congelados al otorgarse.
+  onceMxn     Float
+  monthlyMxn  Float
+  /// tracking | pending_choice | once_paid | monthly_active | monthly_paused
+  status      String @default("tracking")
+  /// Inicio de la racha de 3 meses. null = hoy no está en el umbral.
+  qualifiedSince DateTime?
+  awardedAt      DateTime?
+  chosenAt       DateTime?
+  /// "once" | "monthly". null = todavía no elige. DEFINITIVA al escribirse.
+  choice         String?
+  /// Modo único: cuándo se generó la comisión.
+  paidAt         DateTime?
+  /// Modo mensual: última mensualidad generada y su mes ("YYYY-MM").
+  lastMonthlyAt  DateTime?
+  lastMonthlyKey String?
+  monthlyPaidCount Int     @default(0)
+  pausedAt       DateTime?
+  /// Último conteo de red que vio el cron: es lo que explica una pausa.
+  lastCount      Int       @default(0)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@unique([affiliateId, tier])
+  @@index([status])
+  @@index([affiliateId])
+  @@map("affiliate_network_bonus_awards")
 }
 
 /// Términos CONGELADOS de una clínica referida: con qué modalidad se le paga

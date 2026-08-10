@@ -12,6 +12,16 @@ import { prisma } from "@/lib/prisma";
 import { sendEmail } from "@/lib/email";
 import { getPayoutConfig } from "@/lib/affiliates/payout";
 import { getPublicOffer } from "@/lib/affiliates/public-offer";
+// Desde `network-bonus-core` y NO desde `network-bonus`: el core es puro (no
+// toca Prisma) y así este archivo no arrastra el motor de bonos entero para
+// escribir un correo. Los tres símbolos son los que evitan teclear números:
+// el "3 meses" de la cláusula, la comparación entre las dos formas de cobro y
+// la normalización del estado guardado.
+import {
+  SUSTAIN_MONTHS,
+  compareChoices,
+  normalizeAwardStatus,
+} from "@/lib/affiliates/network-bonus-core";
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://www.dalecontrol.com";
 
@@ -740,5 +750,167 @@ export async function sendAffiliateRejectedEmail(opts: { affiliateId: string }):
     });
   } catch (err) {
     console.error("[affiliate-emails] sendAffiliateRejectedEmail:", err);
+  }
+}
+
+// ── BONOS POR RED ─────────────────────────────────────────────────────────
+
+/**
+ * "Alcanzaste un bono por tu equipo: elige cómo cobrarlo" — lo dispara el cron
+ * mensual (/api/cron/affiliate-network-bonus) por cada award que ACABA de
+ * pasar a `pending_choice`.
+ *
+ * RECIBE SOLO EL ID, no los montos ya resueltos, y es deliberado:
+ *  · El barrido otorga con un `updateMany` condicionado al estado, así que los
+ *    montos de su plan de acciones son una INTENCIÓN. Los que valen son los
+ *    que quedaron ESCRITOS en la fila — los mismos que el afiliado verá en su
+ *    panel y los mismos con los que se generará su comisión. Releer la fila es
+ *    la única forma de que el correo no prometa un número distinto.
+ *  · Con la fila a la vista se puede confirmar que el bono sigue esperando
+ *    decisión, cosa que el cron por sí solo no sabría.
+ *  · Y deja la función reutilizable desde el admin o desde un reenvío manual
+ *    sin recalcular nada: basta el id del award.
+ * El costo son dos SELECT por correo, en un cron que corre una vez al mes.
+ *
+ * NO CONSULTA AffiliatePrefs, a diferencia de los tres primeros correos de
+ * este archivo. Las preferencias que existen —notifySignup, notifyConversion,
+ * notifyPayout— son avisos de ACTIVIDAD de referidos: "se registró una
+ * clínica", "tu referido pagó", "ya te liquidamos". Las tres cuentan algo que
+ * YA ocurrió y que el afiliado puede consultar en su panel cuando le dé la
+ * gana; apagarlas solo le quita ruido. Este correo es de otra especie: hay un
+ * bono OTORGADO que NO SE PAGA hasta que él elija, y la elección únicamente se
+ * hace entrando al panel. Bloquearlo por una casilla de "avísame cuando te
+ * pague" sería quedarnos su dinero por una preferencia que nunca se pidió para
+ * esto. Mismo criterio que los correos de alta de más arriba. Si algún día
+ * nace una preferencia de verdad transaccional (`notifyBonus`), este es el
+ * punto exacto donde engancharla.
+ *
+ * Jamás tira.
+ */
+export async function sendAffiliateNetworkBonusAwardedEmail(opts: {
+  awardId: string;
+}): Promise<void> {
+  try {
+    const award = await prisma.affiliateNetworkBonusAward.findUnique({
+      where: { id: opts.awardId },
+      select: {
+        affiliateId: true,
+        status: true,
+        clinics: true,
+        onceMxn: true,
+        monthlyMxn: true,
+      },
+    });
+    if (!award) return;
+
+    // Solo se avisa de un bono que DE VERDAD espera decisión. Un reenvío
+    // tardío, o una corrida sobre un id viejo, no debe pedirle que elija algo
+    // que ya eligió.
+    if (normalizeAwardStatus(award.status) !== "pending_choice") return;
+
+    const affiliate = await prisma.affiliate.findUnique({
+      where: { id: award.affiliateId },
+      select: { name: true, email: true },
+    });
+    if (!affiliate) return;
+
+    // Los montos CONGELADOS del award, no los vigentes en la config: si Rafael
+    // edita los escalones mañana, este bono sigue valiendo lo que se otorgó.
+    const onceMxn = Number(award.onceMxn) || 0;
+    const monthlyMxn = Number(award.monthlyMxn) || 0;
+    // Sin ninguna de las dos modalidades no hay nada que elegir ni que ofrecer.
+    // No debería pasar (networkBonusTiers descarta esos escalones), pero un
+    // correo que dice "elige entre $0.00 y $0.00" es peor que no mandar nada.
+    if (onceMxn <= 0 && monthlyMxn <= 0) return;
+
+    const clinics = Number(award.clinics) || 0;
+    const clinicasTxt = `${clinics} ${clinics === 1 ? "clínica activa" : "clínicas activas"}`;
+
+    // La comparación NUNCA se calcula aquí: es la misma función que usa el
+    // panel, así que el correo y la pantalla dicen el mismo número de meses.
+    const cmp = compareChoices(onceMxn, monthlyMxn);
+
+    // Los meses en que el mensual alcanza al único. Cuando el cociente es
+    // entero, igualar y superar caen en meses distintos (iguala en el 8,
+    // supera en el 9) y decirlo mal sería venderle mejor una de las dos.
+    const cruceHtml =
+      cmp.monthsToMatch === cmp.monthsToBeat
+        ? `el mensual pasa al pago único a partir del mes <strong style="color: #f5f5f7;">${cmp.monthsToBeat}</strong>`
+        : `el mensual iguala al pago único en el mes <strong style="color: #f5f5f7;">${cmp.monthsToMatch}</strong> y lo supera desde el mes <strong style="color: #f5f5f7;">${cmp.monthsToBeat}</strong>`;
+    const cruceText =
+      cmp.monthsToMatch === cmp.monthsToBeat
+        ? `el mensual pasa al pago único a partir del mes ${cmp.monthsToBeat}`
+        : `el mensual iguala al pago único en el mes ${cmp.monthsToMatch} y lo supera desde el mes ${cmp.monthsToBeat}`;
+
+    // Cada modalidad se pinta solo si de verdad se ofrece: un escalón puede
+    // tener un monto en 0 y entonces no hay dos opciones, hay una.
+    const opcionesHtml: string[] = [];
+    const opcionesText: string[] = [];
+    if (onceMxn > 0) {
+      opcionesHtml.push(
+        `<strong style="color: #f5f5f7;">Un solo pago:</strong> ${fmtMxn(onceMxn)} una sola vez, y el escalón queda cerrado.`,
+      );
+      opcionesText.push(`  - Un solo pago: ${fmtMxn(onceMxn)} una sola vez, y el escalón queda cerrado.`);
+    }
+    if (monthlyMxn > 0) {
+      opcionesHtml.push(
+        `<strong style="color: #f5f5f7;">Mensual:</strong> ${fmtMxn(monthlyMxn)} cada mes mientras tu equipo sostenga las ${clinics} clínicas.`,
+      );
+      opcionesText.push(
+        `  - Mensual: ${fmtMxn(monthlyMxn)} cada mes mientras tu equipo sostenga las ${clinics} clínicas.`,
+      );
+    }
+
+    const comparaHtml = cmp.bothAvailable
+      ? `<br /><br />Para que lo compares sin sacar cuentas: ${cruceHtml}, que en 12 meses suma ` +
+        `<strong style="color: #f5f5f7;">${fmtMxn(cmp.monthlyYearlyMxn)}</strong>. Si tu equipo baja de las ` +
+        `${clinics} clínicas, el mensual se pausa y vuelve solo en cuanto lo recuperen.`
+      : `<br /><br />En este escalón solo se ofrece esa modalidad.`;
+    const comparaText = cmp.bothAvailable
+      ? `Para que lo compares sin sacar cuentas: ${cruceText}, que en 12 meses suma ` +
+        `${fmtMxn(cmp.monthlyYearlyMxn)}. Si tu equipo baja de las ${clinics} clínicas, el mensual ` +
+        `se pausa y vuelve solo en cuanto lo recuperen.`
+      : `En este escalón solo se ofrece esa modalidad.`;
+
+    const html = affiliateEmailHtml({
+      heading: "Alcanzaste un bono por tu equipo 🏆",
+      introHtml:
+        `Hola, ${esc(affiliate.name)}: las <strong style="color: #f5f5f7;">${clinicasTxt}</strong> ` +
+        `que trajeron tus vendedores se sostuvieron ${SUSTAIN_MONTHS} meses seguidos. ` +
+        `El bono ya es tuyo; lo único que falta es que elijas cómo lo cobras.`,
+      box: {
+        label: "Tus dos formas de cobrarlo",
+        contentHtml: opcionesHtml.join("<br /><br />") + comparaHtml,
+      },
+      extraBox: {
+        label: "Ojo con esto",
+        contentHtml:
+          `La elección es <strong style="color: #f5f5f7;">definitiva</strong>: se hace una sola vez por ` +
+          `escalón y después no se puede cambiar. Y mientras no elijas, el bono ` +
+          `<strong style="color: #f5f5f7;">no se paga</strong> — no vence ni lo pierdes, pero tampoco ` +
+          `avanza. Son dos clics en tu panel.`,
+      },
+      cta: { href: `${SITE_URL}/afiliados/inicio`, label: "Elegir cómo cobrarlo →" },
+    });
+
+    const text =
+      `Hola, ${affiliate.name}:\n\n` +
+      `Las ${clinicasTxt} que trajeron tus vendedores se sostuvieron ${SUSTAIN_MONTHS} meses seguidos. ` +
+      `El bono ya es tuyo; lo único que falta es que elijas cómo lo cobras.\n\n` +
+      `Tus dos formas de cobrarlo:\n${opcionesText.join("\n")}\n\n` +
+      `${comparaText}\n\n` +
+      `La elección es definitiva: se hace una sola vez por escalón y después no se puede cambiar. ` +
+      `Y mientras no elijas, el bono no se paga — no vence ni lo pierdes, pero tampoco avanza.\n\n` +
+      `Elige cómo cobrarlo: ${SITE_URL}/afiliados/inicio\n\n` +
+      `DaleControl — Programa de afiliados`;
+
+    await sendEmail({
+      to: affiliate.email,
+      subject: "Alcanzaste un bono por tu equipo: elige cómo cobrarlo",
+      html,
+      text,
+    });
+  } catch (err) {
+    console.error("[affiliate-emails] sendAffiliateNetworkBonusAwardedEmail:", err);
   }
 }

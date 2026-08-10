@@ -56,6 +56,41 @@ export function toPayoutConfig(row: {
 }
 
 /**
+ * Las columnas que el MOTOR necesita, como `select` explícito.
+ *
+ * ⚠️ Sin `select`, Prisma pide TODAS las columnas del modelo — incluidas las
+ * que se agregan después (los bonos por hitos, los bonos por red…). Un deploy
+ * que se adelanta a su SQL haría fallar esta lectura y el motor entero caería
+ * al modo "% del nivel": un cambio silencioso de cuánto se le paga a cada
+ * afiliado, por una columna que al motor ni le importa. Acotar el SELECT lo
+ * vuelve inmune a lo que se añada más adelante en la misma fila.
+ */
+const ENGINE_SELECT = {
+  defaultMode: true,
+  defaultPayoutMode: true,
+  allowAffiliateChoice: true,
+  recurringBasicMxn: true,
+  recurringProMxn: true,
+  recurringClinicMxn: true,
+  oneTimeBasicMxn: true,
+  oneTimeProMxn: true,
+  oneTimeClinicMxn: true,
+  startAtInvoiceNo: true,
+  oneTimeAtInvoiceNo: true,
+} as const;
+
+/** Igual, para las columnas de los bonos por hitos (sql/afiliados-hitos.sql). */
+const MILESTONES_SELECT = {
+  milestonesEnabled: true,
+  milestone1Clinics: true,
+  milestone1Mxn: true,
+  milestone2Clinics: true,
+  milestone2Mxn: true,
+  milestone3Clinics: true,
+  milestone3Mxn: true,
+} as const;
+
+/**
  * Config vigente del motor (fila id=1). Devuelve null SOLO si la tabla no
  * existe todavía (SQL sin correr) → el caller cae al modo % por nivel. Si la
  * tabla existe pero la fila no, devuelve los defaults. Mismo contrato que
@@ -63,7 +98,10 @@ export function toPayoutConfig(row: {
  */
 export async function getPayoutConfig(): Promise<PayoutConfig | null> {
   try {
-    const row = await prisma.affiliatePayoutConfig.findUnique({ where: { id: 1 } });
+    const row = await prisma.affiliatePayoutConfig.findUnique({
+      where: { id: 1 },
+      select: ENGINE_SELECT,
+    });
     if (!row) return { ...DEFAULT_PAYOUT_CONFIG };
     return toPayoutConfig(row);
   } catch {
@@ -88,14 +126,19 @@ export async function getPayoutSettings(): Promise<{
   milestones: MilestonesConfig | null;
 }> {
   try {
-    const row = await prisma.affiliatePayoutConfig.findUnique({ where: { id: 1 } });
+    const row = await prisma.affiliatePayoutConfig.findUnique({
+      where: { id: 1 },
+      select: { ...ENGINE_SELECT, ...MILESTONES_SELECT },
+    });
     if (!row) return { cfg: { ...DEFAULT_PAYOUT_CONFIG }, milestones: { ...DEFAULT_MILESTONES } };
     return { cfg: toPayoutConfig(row), milestones: normalizeMilestones(row) };
   } catch {
-    // Tabla inexistente (sql/afiliados-comisiones.sql sin correr) u otro error.
-    // Ojo: las COLUMNAS de hitos sin crear (sql/afiliados-hitos.sql sin correr)
-    // caen aquí también, porque Prisma las pide en el SELECT.
-    return { cfg: null, milestones: null };
+    // Las COLUMNAS de hitos sin crear (sql/afiliados-hitos.sql sin correr) caen
+    // aquí, pero eso NO es razón para apagar también el motor: se reintenta con
+    // el SELECT acotado del motor y solo los hitos quedan en null. Antes las dos
+    // mitades se hundían juntas y el programa entero se iba al % del nivel.
+    const cfg = await getPayoutConfig();
+    return { cfg, milestones: null };
   }
 }
 

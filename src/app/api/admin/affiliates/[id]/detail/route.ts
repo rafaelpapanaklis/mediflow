@@ -6,9 +6,11 @@ import { getAffiliateLevelInfo, type LevelInfo } from "@/lib/affiliate-levels";
 import { getSellerStatsForAffiliate } from "@/lib/affiliates/seller-stats";
 import { clinicMonthlyMxn } from "@/lib/affiliates/stats";
 import {
+  commissionKindLabel,
   effectiveAffiliateMode,
   fixedAmountFor,
   getPayoutConfig,
+  isNetworkBonusKind,
   normalizePayoutMode,
   normalizePlanKey,
   roundMxn,
@@ -450,7 +452,12 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
     const commissions: AdminAffiliateDetailCommission[] = commissionRows.map((c) => ({
       id: c.id,
       clinicId: c.clinicId,
-      clinicName: clinicNameById.get(c.clinicId) ?? "Clínica",
+      // Un BONO POR RED no nace de una clínica (su `clinicId` va vacío a
+      // propósito): sin este corte la ficha del afiliado mostraría una
+      // "Clínica" inexistente en la fila de un bono.
+      clinicName: isNetworkBonusKind(c.kind)
+        ? commissionKindLabel(c.kind)
+        : (clinicNameById.get(c.clinicId) ?? "Clínica"),
       stripeInvoiceId: c.stripeInvoiceId,
       kind: c.kind ?? "pct",
       monthsCovered: c.monthsCovered ?? 1,

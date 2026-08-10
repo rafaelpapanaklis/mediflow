@@ -18,6 +18,8 @@ import {
 import { IconoHito } from "@/components/afiliados/landing/hitos";
 import { SerpentinaHito } from "@/components/afiliados/landing/serpentina";
 import { getAvisosAfiliados } from "@/lib/affiliates/public-activity";
+import { getNetworkBonusTiers } from "@/lib/affiliates/network-bonus";
+import { MIN_PAID_INVOICES, SUSTAIN_MONTHS } from "@/lib/affiliates/network-bonus-core";
 import { fmtMxn, getPublicOffer } from "@/lib/affiliates/public-offer";
 import type { PlanKey } from "@/lib/affiliates/payout-core";
 import "./afiliados.css";
@@ -208,6 +210,15 @@ const PILA_NOMBRES = ["Dental Río Lerma", "Clínica Sonrisa Norte", "Odonto Int
 export default async function AfiliadosPage() {
   const offer = await getPublicOffer();
 
+  // Bono por equipo de ventas. Lectura APARTE de `getPublicOffer` a propósito:
+  // tiene su propio SQL, así que un deploy adelantado apaga solo esta mención y
+  // no la oferta entera. Nunca lanza: sin las columnas, `enabled` viene false.
+  const redBonus = await getNetworkBonusTiers().catch(() => ({
+    cfg: null,
+    tiers: [] as { n: number; clinics: number; onceMxn: number; monthlyMxn: number }[],
+    enabled: false,
+  }));
+
   // Avisos flotantes de la esquina. Reciben la oferta ya resuelta (una lectura,
   // no dos) y eligen solos entre las comisiones reales y los mensajes del
   // programa. Nunca lanza: sin BD devuelve los informativos.
@@ -265,6 +276,15 @@ export default async function AfiliadosPage() {
   // ── Bono por Clínicas Activas: acumulable, así que el total es la suma ──
   const hitos = offer.milestones;
   const hitoMayor = hitos.tiers.length > 0 ? hitos.tiers[hitos.tiers.length - 1] : null;
+
+  // ── Bono por equipo de ventas: aquí solo la MENCIÓN ─────────────────────
+  // El detalle completo vive en /terminos-afiliados. En la landing basta el
+  // escalón de entrada (el que un afiliado nuevo puede imaginarse alcanzando) y
+  // el mayor, para que se vea hasta dónde llega.
+  const redes = redBonus.tiers;
+  const redOn = redBonus.enabled && redes.length > 0;
+  const redPrimero = redes.length > 0 ? redes[0] : null;
+  const redMayor = redes.length > 0 ? redes[redes.length - 1] : null;
 
   // ── Escena 2: la pila de clínicas y su fijo mensual ─────────────────────
   const tarjetasPila: TarjetaPila[] = [];
@@ -710,6 +730,75 @@ export default async function AfiliadosPage() {
                   </ul>
                   <p style={{ fontSize: 13, color: "#64748b", marginTop: 12 }}>
                     Las reglas completas están en{" "}
+                    <Link href="/terminos-afiliados" style={{ color: "#1d4ed8", textDecoration: "underline" }}>
+                      los términos del programa
+                    </Link>
+                    .
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* ── Bono por equipo de ventas: MENCIÓN corta ──────────────────
+                Se apaga desde /admin (`networkBonusEnabled`) igual que el de
+                arriba. Deliberadamente breve: aquí solo se anuncia que existe y
+                se manda a los términos, que son la fuente completa.
+
+                ⚠️ EL ENCUADRE NO ES NEGOCIABLE. Se cobra por CLÍNICAS ACTIVAS
+                que contratan y pagan un producto, JAMÁS por incorporar personas
+                al equipo. Por eso la frase que abre el bloque habla de clínicas
+                y la que lo cierra lo dice explícitamente: un equipo grande sin
+                clínicas activas no paga nada. Es lo que separa un programa de
+                ventas de un esquema piramidal, y ninguna reescritura de este
+                bloque puede aflojarlo. */}
+            {redOn && redPrimero && redMayor && (
+              <div style={{ marginTop: 40 }}>
+                <div
+                  style={{
+                    ...TARJETA,
+                    maxWidth: 820,
+                    margin: "0 auto",
+                    padding: "26px 26px",
+                    background: "linear-gradient(180deg,#f8fafc,#ffffff 60%)",
+                  }}
+                >
+                  <span style={{ ...KICKER, color: "#0f766e", fontSize: 12 }}>
+                    ¿Vendes con equipo?
+                  </span>
+                  <h4
+                    className="dcaf-balance"
+                    style={{ marginTop: 8, fontSize: "clamp(19px,2.4vw,24px)", fontWeight: 800, letterSpacing: "-0.01em", lineHeight: 1.25 }}
+                  >
+                    También hay bono por las clínicas que traen tus vendedores
+                  </h4>
+                  <p style={{ marginTop: 10, fontSize: 14.5, color: "#475569", lineHeight: 1.6 }}>
+                    Si registras vendedores a tu cargo, las clínicas{" "}
+                    <strong style={{ color: "#0f172a" }}>activas</strong> que ellos den de alta suman
+                    para un bono aparte del tuyo. Desde{" "}
+                    <strong style={{ color: "#0f766e" }}>{redPrimero.clinics} clínicas</strong>
+                    {redPrimero.onceMxn > 0 ? (
+                      <>
+                        {" "}
+                        ({fmtMxn(redPrimero.onceMxn)})
+                      </>
+                    ) : (
+                      <>
+                        {" "}
+                        ({fmtMxn(redPrimero.monthlyMxn)} al mes)
+                      </>
+                    )}{" "}
+                    y hasta{" "}
+                    <strong style={{ color: "#0f766e" }}>{redMayor.clinics} clínicas</strong>
+                    {redMayor.onceMxn > 0 ? <> ({fmtMxn(redMayor.onceMxn)})</> : null}. En cada
+                    escalón eliges, una sola vez, entre cobrarlo de golpe o cada mes mientras el
+                    número se sostenga.
+                  </p>
+                  <p style={{ marginTop: 10, fontSize: 13, color: "#64748b", lineHeight: 1.6 }}>
+                    Se paga por <strong>clínicas activas que pagan su suscripción</strong> —cada una
+                    con al menos {MIN_PAID_INVOICES} mensualidades pagadas y el conteo sostenido{" "}
+                    {SUSTAIN_MONTHS} meses—, <strong>no por registrar personas</strong>: un equipo
+                    grande sin clínicas activas no genera ningún bono. Las condiciones completas
+                    están en{" "}
                     <Link href="/terminos-afiliados" style={{ color: "#1d4ed8", textDecoration: "underline" }}>
                       los términos del programa
                     </Link>

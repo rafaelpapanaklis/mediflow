@@ -47,6 +47,8 @@ export interface AffiliateStatementProps {
       pct: number;
       recurring: number;
       onetime: number;
+      /** Bonos por red. Opcional: los estados de cuenta viejos no lo traen. */
+      networkBonus?: number;
     };
   };
 }
@@ -287,6 +289,10 @@ export function AffiliateStatementDocument({
         { kind: "recurring", amountMxn: byKind.recurring },
         { kind: "onetime", amountMxn: byKind.onetime },
         { kind: "pct", amountMxn: byKind.pct },
+        // Los bonos por red van al final y con su propia etiqueta: no son un
+        // % ni un fijo por clínica, y sumarlos a otro cubo desdibujaría de
+        // dónde salió el dinero justo en el documento que sirve para cuadrarlo.
+        { kind: "network_bonus", amountMxn: byKind.networkBonus ?? 0 },
       ].filter((k) => k.amountMxn > 0)
     : [];
   const showKindBreakdown = kindBreakdown.length > 1;

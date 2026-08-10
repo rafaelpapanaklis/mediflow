@@ -2,10 +2,12 @@ import { isAdminAuthed, getAdminSession } from "@/lib/admin-auth";
 // Config del MOTOR DE COMISIONES de afiliados (montos fijos por plan +
 // modalidad recurrente/pago único). Espejo de /api/admin/affiliates/config,
 // que gobierna la otra mitad del programa (los % por nivel).
-// GET → { config, milestones, exists, plans } (exists=false ⇒ tabla sin crear:
-//   el front muestra "corre sql/afiliados-comisiones.sql" y el motor está
-//   inactivo).
-// PUT { 11 campos del motor + 7 de los bonos por hitos } → upsert fila id=1.
+// GET → { config, milestones, networkBonus, exists, networkBonusExists, plans }
+//   (exists=false ⇒ tabla sin crear: el front muestra "corre
+//   sql/afiliados-comisiones.sql" y el motor está inactivo;
+//   networkBonusExists=false ⇒ falta sql/afiliados-bonos-red.sql).
+// PUT { 11 campos del motor + 7 de los bonos por hitos + 16 de los bonos por
+//   red } → upsert fila id=1.
 // Auth: sesión admin (mismo patrón que /api/admin/affiliates/config).
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
@@ -20,6 +22,13 @@ import {
   type MilestonesConfig,
   type PayoutConfig,
 } from "@/lib/affiliates/payout";
+import {
+  DEFAULT_NETWORK_BONUS,
+  NETWORK_TIER_KEYS,
+  getNetworkBonusConfig,
+  normalizeNetworkBonus,
+  type NetworkBonusConfig,
+} from "@/lib/affiliates/network-bonus";
 
 export interface AdminPayoutConfigResponse {
   config: PayoutConfig;
@@ -29,8 +38,20 @@ export interface AdminPayoutConfigResponse {
    * configuran, el seguimiento es manual).
    */
   milestones: MilestonesConfig;
+  /**
+   * BONOS POR RED (las 16 columnas de sql/afiliados-bonos-red.sql). También
+   * viven en la fila id=1 y también van FUERA de `config`: el motor de
+   * comisiones no los conoce — los otorga y los paga el cron mensual.
+   */
+  networkBonus: NetworkBonusConfig;
   /** false = sql/afiliados-comisiones.sql sin correr → motor inactivo. */
   exists: boolean;
+  /**
+   * false = las 16 columnas de los bonos por red NO existen todavía → la UI
+   * avisa "corre sql/afiliados-bonos-red.sql" y lo que se muestra son los
+   * defaults del DDL, no lo guardado.
+   */
+  networkBonusExists: boolean;
   /** Precios REALES de plan_configs (getResolvedPlans), para las equivalencias. */
   plans: { id: "BASIC" | "PRO" | "CLINIC"; label: string; priceMxn: number }[];
 }
@@ -72,10 +93,38 @@ const MILESTONE_FIELDS = [
 const MAX_MILESTONE_MXN = 1000000;
 const MAX_MILESTONE_CLINICS = 100000;
 
+/**
+ * Techo de un bono POR RED. Es 5× el de los hitos a propósito: el escalón 5 del
+ * DDL ya vale $400,000 de pago único, así que el techo de los hitos
+ * ($1,000,000) deja apenas 2.5× de margen y cualquier renegociación al alza
+ * chocaría contra la validación en vez de contra una decisión de negocio. Sigue
+ * siendo un techo —un cero de más al teclear se rechaza— pero holgado de
+ * verdad.
+ */
+const MAX_NETWORK_BONUS_MXN = 5000000;
+
+/**
+ * Umbral máximo de clínicas de un escalón de red. Es EL MISMO límite que el de
+ * los hitos y por eso es un alias y no un número tecleado otra vez: los dos
+ * cuentan clínicas con el mismo criterio (@/lib/affiliates/qualifying-clinic) y
+ * si algún día se sube, se sube en un solo sitio.
+ */
+const MAX_NETWORK_CLINICS = MAX_MILESTONE_CLINICS;
+
 export async function GET() {
   if (!(await isAdminAuthed())) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const plans = await loadPlans();
+  // Los bonos por red se leen APARTE y no dentro del try de abajo. El motivo es
+  // concreto: el `findUnique` de la fila id=1 va SIN `select`, así que Prisma
+  // pide TODAS las columnas del modelo — incluidas las 16 de los bonos por red.
+  // Si sql/afiliados-bonos-red.sql no se ha corrido, esa lectura falla entera y
+  // el GET caería al catch, dejando a Rafael sin ver tampoco su esquema de pago
+  // ni sus hitos (que sí están guardados). `getNetworkBonusConfig()` usa un
+  // `select` acotado a esas 16 columnas y su propio try/catch: devuelve null en
+  // vez de lanzar, así que un deploy adelantado al SQL apaga SOLO este bloque.
+  const [plans, networkRow] = await Promise.all([loadPlans(), getNetworkBonusConfig()]);
+  const networkBonus: NetworkBonusConfig = networkRow ?? { ...DEFAULT_NETWORK_BONUS };
+  const networkBonusExists = networkRow !== null;
 
   try {
     const row = await prisma.affiliatePayoutConfig.findUnique({ where: { id: 1 } });
@@ -83,7 +132,9 @@ export async function GET() {
     const body: AdminPayoutConfigResponse = {
       config: row ? toPayoutConfig(row) : { ...DEFAULT_PAYOUT_CONFIG },
       milestones: row ? normalizeMilestones(row) : { ...DEFAULT_MILESTONES },
+      networkBonus,
       exists: true,
+      networkBonusExists,
       plans,
     };
     return NextResponse.json(body);
@@ -95,7 +146,9 @@ export async function GET() {
     const body: AdminPayoutConfigResponse = {
       config: { ...DEFAULT_PAYOUT_CONFIG },
       milestones: { ...DEFAULT_MILESTONES },
+      networkBonus,
       exists: false,
+      networkBonusExists,
       plans,
     };
     return NextResponse.json(body);
@@ -226,6 +279,76 @@ export async function PUT(req: NextRequest) {
     );
   }
 
+  // ── Bonos por red ──────────────────────────────────────────────────────
+  // Estos SÍ los calcula y los paga una máquina (el cron mensual de
+  // @/lib/affiliates/network-bonus), así que un número mal guardado aquí no es
+  // una promesa comercial rota: es dinero que sale. Se valida campo por campo
+  // iterando NETWORK_TIER_KEYS — nunca cinco bloques copiados, que es como se
+  // cuela un "networkTier3OnceMxn" validado contra el umbral del escalón 4.
+  const networkBonusEnabled = body?.networkBonusEnabled;
+  if (typeof networkBonusEnabled !== "boolean") {
+    return NextResponse.json(
+      { error: "El interruptor de los bonos por red debe ser verdadero o falso" },
+      { status: 400 }
+    );
+  }
+
+  const network: Record<string, number> = {};
+  for (const key of NETWORK_TIER_KEYS) {
+    const clinics = Number(body?.[key.clinics]);
+    if (!Number.isInteger(clinics) || clinics < 1 || clinics > MAX_NETWORK_CLINICS) {
+      return NextResponse.json(
+        {
+          error: `Escalón ${key.n} de red: las clínicas deben ser un entero entre 1 y ${MAX_NETWORK_CLINICS}`,
+        },
+        { status: 400 }
+      );
+    }
+    const once = Number(body?.[key.once]);
+    if (!Number.isFinite(once) || once < 0 || once > MAX_NETWORK_BONUS_MXN) {
+      return NextResponse.json(
+        {
+          error: `Escalón ${key.n} de red: el pago único debe ser un monto entre 0 y ${MAX_NETWORK_BONUS_MXN} MXN`,
+        },
+        { status: 400 }
+      );
+    }
+    const monthly = Number(body?.[key.monthly]);
+    if (!Number.isFinite(monthly) || monthly < 0 || monthly > MAX_NETWORK_BONUS_MXN) {
+      return NextResponse.json(
+        {
+          error: `Escalón ${key.n} de red: el pago mensual debe ser un monto entre 0 y ${MAX_NETWORK_BONUS_MXN} MXN`,
+        },
+        { status: 400 }
+      );
+    }
+    network[key.clinics] = clinics;
+    network[key.once] = once;
+    network[key.monthly] = monthly;
+  }
+
+  // Los 5 umbrales, en orden ESTRICTAMENTE creciente. No es cosmética: el cron
+  // recorre los escalones y otorga TODOS los que el conteo alcanza, así que dos
+  // umbrales iguales (o al revés) entregarían dos bonos por el mismo logro. Se
+  // compara por pares consecutivos sobre NETWORK_TIER_KEYS y el mensaje dice
+  // exactamente cuál escalón está mal, con los dos números a la vista.
+  for (let i = 1; i < NETWORK_TIER_KEYS.length; i++) {
+    const prevKey = NETWORK_TIER_KEYS[i - 1];
+    const curKey = NETWORK_TIER_KEYS[i];
+    const prevClinics = network[prevKey.clinics];
+    const curClinics = network[curKey.clinics];
+    if (!(prevClinics < curClinics)) {
+      return NextResponse.json(
+        {
+          error:
+            `Escalón ${curKey.n} de red: su umbral (${curClinics} clínicas) debe ser MAYOR que el del ` +
+            `escalón ${prevKey.n} (${prevClinics} clínicas). Los cinco escalones van de menor a mayor.`,
+        },
+        { status: 400 }
+      );
+    }
+  }
+
   const data = {
     defaultMode,
     defaultPayoutMode,
@@ -245,6 +368,26 @@ export async function PUT(req: NextRequest) {
     milestone2Mxn: milestones.milestone2Mxn,
     milestone3Clinics: milestones.milestone3Clinics,
     milestone3Mxn: milestones.milestone3Mxn,
+    // Las 16 de los bonos por red, escritas una por una a propósito (mismo
+    // criterio que los hitos de arriba): un `...network` metería un
+    // Record<string, number> en el input de Prisma y perdería la comprobación
+    // de que están las 16 y solo las 16.
+    networkBonusEnabled,
+    networkTier1Clinics: network.networkTier1Clinics,
+    networkTier1OnceMxn: network.networkTier1OnceMxn,
+    networkTier1MonthlyMxn: network.networkTier1MonthlyMxn,
+    networkTier2Clinics: network.networkTier2Clinics,
+    networkTier2OnceMxn: network.networkTier2OnceMxn,
+    networkTier2MonthlyMxn: network.networkTier2MonthlyMxn,
+    networkTier3Clinics: network.networkTier3Clinics,
+    networkTier3OnceMxn: network.networkTier3OnceMxn,
+    networkTier3MonthlyMxn: network.networkTier3MonthlyMxn,
+    networkTier4Clinics: network.networkTier4Clinics,
+    networkTier4OnceMxn: network.networkTier4OnceMxn,
+    networkTier4MonthlyMxn: network.networkTier4MonthlyMxn,
+    networkTier5Clinics: network.networkTier5Clinics,
+    networkTier5OnceMxn: network.networkTier5OnceMxn,
+    networkTier5MonthlyMxn: network.networkTier5MonthlyMxn,
   };
 
   try {
@@ -257,9 +400,13 @@ export async function PUT(req: NextRequest) {
     logAdminGlobalEvent({
       req, admin: admin.user, entity: "affiliate-payout-config", entityId: "1",
       action: "update",
-      // El `before` incluye los hitos: si no, el log diría que aparecieron de
-      // la nada en cada guardado.
-      before: prev ? { ...toPayoutConfig(prev), ...normalizeMilestones(prev) } : null,
+      // El `before` incluye los hitos Y los bonos por red: si no, el log diría
+      // que aparecieron de la nada en cada guardado. `normalizeNetworkBonus`
+      // rellena con los defaults del DDL lo que la fila no traiga, así que el
+      // diff nunca queda con huecos.
+      before: prev
+        ? { ...toPayoutConfig(prev), ...normalizeMilestones(prev), ...normalizeNetworkBonus(prev) }
+        : null,
       after: data,
     });
     // La landing /afiliados es ISR: sin esto seguía publicando los montos viejos
@@ -272,12 +419,22 @@ export async function PUT(req: NextRequest) {
       ok: true,
       config: toPayoutConfig(row),
       milestones: normalizeMilestones(row),
+      // Se devuelve lo GUARDADO (la fila releída), no lo enviado: si algún día
+      // la BD normalizara un valor, la pantalla se queda con la verdad.
+      networkBonus: normalizeNetworkBonus(row),
       revalidated,
     });
   } catch {
     // Tabla (o columnas) inexistentes: el admin ve el aviso y sabe qué correr.
+    // El upsert escribe las 16 columnas de los bonos por red, así que un deploy
+    // adelantado a sql/afiliados-bonos-red.sql aterriza EXACTAMENTE aquí — por
+    // eso ese archivo también se nombra, o el admin correría los otros dos y
+    // seguiría sin poder guardar.
     return NextResponse.json(
-      { error: "Corre sql/afiliados-comisiones.sql y sql/afiliados-hitos.sql en Supabase" },
+      {
+        error:
+          "Corre sql/afiliados-comisiones.sql, sql/afiliados-hitos.sql y sql/afiliados-bonos-red.sql en Supabase",
+      },
       { status: 503 }
     );
   }

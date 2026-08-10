@@ -25,16 +25,12 @@ import { activeClinicWhere } from "./stats";
 // Fuente única de qué factura es un prorrateo. Se importa del motor de
 // comisiones en vez de repetir la cadena: si allá cambia, aquí cambia solo.
 import { PRORATION_NOTE_PREFIX } from "./payout";
+// El predicado "esta clínica califica" vive en un módulo PURO desde que los
+// bonos por red lo necesitaron en sitios client-safe. Se re-exporta aquí para
+// que los callers históricos sigan importándolo de este archivo.
+import { MIN_PAID_INVOICES, clinicQualifies } from "./qualifying-clinic";
 
-/**
- * Mensualidades PAGADAS que exige la cláusula del bono. Vive aquí, exportada,
- * para que la UI escriba el copy con este valor en vez de teclear un "3" que
- * quedaría desincronizado si algún día se renegocia el requisito.
- *
- * Atado a: /terminos-afiliados → "Una clínica cuenta como activa cuando lleva
- * al menos 3 mensualidades pagadas y su suscripción sigue vigente".
- */
-export const MIN_PAID_INVOICES = 3;
+export { MIN_PAID_INVOICES, clinicQualifies };
 
 export interface MilestoneProgress {
   /** Clínicas activas CON al menos MIN_PAID_INVOICES cobros pagados. Este es el número del bono. */
@@ -54,20 +50,6 @@ export const EMPTY_MILESTONE_PROGRESS: MilestoneProgress = {
   shortOfPayments: 0,
   minPaidInvoices: MIN_PAID_INVOICES,
 };
-
-/**
- * ¿Una clínica ACTIVA califica para el bono? Predicado ÚNICO, compartido por el
- * panel del afiliado y por /api/admin/affiliates/metrics.
- *
- * Se aísla del acceso a BD a propósito: el admin necesita el mismo criterio
- * pero resuelto para TODOS los afiliados de una sola pasada (sin N+1), así que
- * arma su propio mapa clinicId → cobros pagados y evalúa con esta función. Si
- * cada lado escribiera su propio `>= 3`, el día que cambie el requisito se
- * actualizaría uno solo.
- */
-export function clinicQualifies(paidInvoices: number | null | undefined): boolean {
-  return (Number(paidInvoices) || 0) >= MIN_PAID_INVOICES;
-}
 
 /**
  * MENSUALIDADES pagadas por clínica, en UNA sola query agregada (nada de un

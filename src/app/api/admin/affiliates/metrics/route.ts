@@ -20,6 +20,11 @@ import {
   clinicQualifies,
   paidInvoiceCountByClinic,
 } from "@/lib/affiliates/milestones-progress";
+// El `kind` con el que los BONOS POR RED entran a affiliate_commissions. Se
+// importa en vez de teclear "network_bonus": la cadena la define el módulo que
+// las escribe, y una copia desincronizada aquí solo se notaría como una cifra
+// mal repartida meses después.
+import { NETWORK_BONUS_KIND } from "@/lib/affiliates/network-bonus";
 
 export const dynamic = "force-dynamic";
 
@@ -67,8 +72,13 @@ export interface AdminAffiliatePayoutMetrics {
   onetimeClinics: number;
   /** Clínicas cuyo pago único ya se entregó (oneTimePaidAt != null). */
   onetimePaidClinics: number;
-  /** Comisiones ya generadas por tipo (histórico, todos los estados). */
-  byKindMxn: { pct: number; recurring: number; onetime: number };
+  /**
+   * Comisiones ya generadas por tipo (histórico, todos los estados).
+   * `networkBonus` es su propio cubo: los bonos por red NO son comisiones del
+   * motor (no nacen de una factura) y si cayeran en `pct` inflarían justo la
+   * cifra con la que se decide si el % del nivel sale caro.
+   */
+  byKindMxn: { pct: number; recurring: number; onetime: number; networkBonus: number };
 }
 
 /** Un escalón del Bono por Clínicas Activas, con cuántos afiliados lo alcanzan HOY. */
@@ -259,7 +269,7 @@ export async function GET() {
       recurringClinics: 0,
       onetimeClinics: 0,
       onetimePaidClinics: 0,
-      byKindMxn: { pct: 0, recurring: 0, onetime: 0 },
+      byKindMxn: { pct: 0, recurring: 0, onetime: 0, networkBonus: 0 },
     };
 
     if (payoutCfg) {
@@ -305,10 +315,16 @@ export async function GET() {
         let kindPct = 0;
         let kindRecurring = 0;
         let kindOnetime = 0;
+        let kindNetworkBonus = 0;
         for (const g of kindGroups) {
           const sum = g._sum.commissionMxn ?? 0;
           if (g.kind === "recurring") kindRecurring += sum;
           else if (g.kind === "onetime") kindOnetime += sum;
+          // Los BONOS POR RED entran a affiliate_commissions para cobrarse por
+          // el mismo flujo, pero no los calculó el motor: sin esta rama caerían
+          // en el `else` y se sumarían al cubo del "% del nivel", que es
+          // exactamente la cifra que se mira para decidir si ese % sale caro.
+          else if (g.kind === NETWORK_BONUS_KIND) kindNetworkBonus += sum;
           else kindPct += sum; // "pct" y cualquier valor viejo/desconocido
         }
 
@@ -325,6 +341,7 @@ export async function GET() {
             pct: roundMxn(kindPct),
             recurring: roundMxn(kindRecurring),
             onetime: roundMxn(kindOnetime),
+            networkBonus: roundMxn(kindNetworkBonus),
           },
         };
       } catch (err) {

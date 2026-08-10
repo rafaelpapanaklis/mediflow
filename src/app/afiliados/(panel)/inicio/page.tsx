@@ -34,6 +34,7 @@ import {
   normalizePlanKey,
   normalizePayoutMode,
   commissionKindLabel,
+  isNetworkBonusKind,
   PAYOUT_MODE_LABELS,
   type PayoutMode,
   type ProgramMode,
@@ -41,8 +42,10 @@ import {
 import { payingClinicWhere, projectFixedMonthlyMxn } from "@/lib/affiliates/stats";
 import { baseReferralUrl } from "@/lib/affiliates/link-url";
 import { getMilestoneProgress } from "@/lib/affiliates/milestones-progress";
+import { getNetworkBonusPanel } from "@/lib/affiliates/network-bonus";
 import { fmtMxn } from "@/lib/affiliates/public-offer";
 import { MilestonesCard } from "@/components/afiliados/milestones-card";
+import { NetworkBonusCard } from "@/components/afiliados/network-bonus-card";
 import { ReferralLinks } from "@/components/afiliados/referral-links";
 import {
   PageHead,
@@ -120,9 +123,14 @@ export default async function AffiliateHomePage() {
 
   // Segunda tanda: lo que depende de la primera (los términos congelados) más
   // lo que no cabía en la de arriba.
-  const [milestoneProgress, termsRows, clinics] = await Promise.all([
+  const [milestoneProgress, networkBonus, termsRows, clinics] = await Promise.all([
     // Progreso del bono por clínicas activas. Nunca lanza: degrada a ceros.
     getMilestoneProgress(affiliateId),
+    // BONO POR TU EQUIPO: las clínicas que trajeron sus VENDEDORES. Es otro
+    // programa y otro conteo (los bonos propios cuentan las que trajo él), por
+    // eso va su propia lectura. Nunca lanza: sin sql/afiliados-bonos-red.sql
+    // devuelve `enabled: false` y la tarjeta no se pinta.
+    getNetworkBonusPanel(affiliateId),
     // Modalidad CONGELADA de cada clínica que paga. Sin motor no hay nada que
     // cruzar y nos ahorramos la query.
     payoutCfg && payingIds.length
@@ -342,6 +350,12 @@ export default async function AffiliateHomePage() {
         />
       )}
 
+      {/* Bono por tu equipo: BLOQUE APARTE del de arriba. Aquel cuenta las
+          clínicas que trajo él; este las que trajeron sus vendedores. Fundirlos
+          en una sola cifra sería prometer un bono que no le toca. La tarjeta se
+          apaga sola si el programa está apagado o falta el SQL. */}
+      <NetworkBonusCard panel={networkBonus} />
+
       {/* ── Comisiones recientes ───────────────────────────────────────── */}
       <PanelCard
         flush
@@ -409,15 +423,24 @@ export default async function AffiliateHomePage() {
                 <span className="dcafp-td--muted dcafp-nums">{formatDate(c.createdAt)}</span>
                 <span style={{ minWidth: 0 }}>
                   <span className="dcafp-td--name" style={{ display: "block" }}>
-                    {clinicNameById.get(c.clinicId) ?? "Clínica"}
+                    {/* Un BONO POR TU EQUIPO no nace de una clínica (su
+                        `clinicId` va vacío a propósito): sin este corte esta
+                        tabla pintaría una "Clínica" fantasma justo en la fila
+                        donde el afiliado espera ver su bono. Mismo criterio que
+                        el estado de cuenta, la exportación y el admin. */}
+                    {isNetworkBonusKind(c.kind)
+                      ? commissionKindLabel(c.kind)
+                      : (clinicNameById.get(c.clinicId) ?? "Clínica")}
                   </span>
                   {/* La factura que la originó: sin ella no se puede cuadrar
-                      una comisión con el cobro que la generó. */}
+                      una comisión con el cobro que la generó. Un bono no tiene
+                      factura detrás (`amountMxn` = 0), así que en su lugar se
+                      dice de dónde salió. */}
                   <span
                     style={{ display: "flex", alignItems: "center", gap: 7, flexWrap: "wrap", minWidth: 0 }}
                   >
                     <span className="dcafp-nums" style={{ fontSize: 11.5, color: "var(--dcafp-ink-4)" }}>
-                      factura {fmtMxn(c.amountMxn)}
+                      {isNetworkBonusKind(c.kind) ? "bono de tu equipo" : `factura ${fmtMxn(c.amountMxn)}`}
                     </span>
                     {/* El estado, cuando su columna ya no cabe. */}
                     <span className="dcafp-col-only-sm">

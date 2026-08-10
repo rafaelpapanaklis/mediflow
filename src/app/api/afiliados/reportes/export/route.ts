@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getAffiliateContext } from "@/lib/affiliate-auth";
 import { roundMxn } from "@/lib/affiliates/stats";
-import { commissionKindLabel } from "@/lib/affiliates/payout-core";
+import { commissionKindLabel, isNetworkBonusKind } from "@/lib/affiliates/payout-core";
 import * as XLSX from "xlsx";
 
 export const runtime = "nodejs";
@@ -147,7 +147,12 @@ export async function GET(req: NextRequest) {
     const nameById = new Map(clinics.map((c) => [c.id, c.name]));
     rows = commissions.map((c) => ({
       "Fecha": fmtDayMx(c.createdAt),
-      "Clínica": nameById.get(c.clinicId) ?? "Clínica",
+      // Un BONO POR RED no nace de una clínica (su `clinicId` va vacío a
+      // propósito): sin este corte la exportación diría "Clínica" en la fila
+      // de un bono y nadie podría cuadrarla contra ningún cobro.
+      "Clínica": isNetworkBonusKind(c.kind)
+        ? commissionKindLabel(c.kind)
+        : (nameById.get(c.clinicId) ?? "Clínica"),
       // Filas viejas pueden no traer kind/monthsCovered: siempre con fallback.
       "Tipo": commissionKindLabel(c.kind),
       "Meses cubiertos": c.monthsCovered ?? 1,

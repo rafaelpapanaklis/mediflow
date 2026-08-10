@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getAffiliateContext } from "@/lib/affiliate-auth";
 import { monthBoundsUtc, roundMxn } from "@/lib/affiliates/stats";
+import { commissionKindLabel, isNetworkBonusKind } from "@/lib/affiliates/payout-core";
 import { renderToBuffer } from "@react-pdf/renderer";
 import { createElement } from "react";
 import {
@@ -56,7 +57,12 @@ export async function GET(req: NextRequest) {
       year: "numeric",
       timeZone: "UTC",
     }),
-    clinicName: clinicNameById.get(c.clinicId) ?? "Clínica",
+    // Un BONO POR RED no nace de una clínica (su `clinicId` va vacío a
+    // propósito): sin este corte el estado de cuenta pintaría una "Clínica"
+    // fantasma en la fila donde el afiliado espera ver su bono.
+    clinicName: isNetworkBonusKind(c.kind)
+      ? commissionKindLabel(c.kind)
+      : (clinicNameById.get(c.clinicId) ?? "Clínica"),
     // Las filas viejas pueden no traer kind/monthsCovered: siempre con fallback
     // (el documento etiqueta con commissionKindLabel, que tolera null).
     kind: c.kind,
@@ -68,9 +74,16 @@ export async function GET(req: NextRequest) {
 
   // Desglose del generado por tipo. Mismo criterio que commissionKindLabel:
   // cualquier kind desconocido o ausente cuenta como "% del nivel".
-  const byKind = { pct: 0, recurring: 0, onetime: 0 };
+  // Los BONOS POR RED llevan su propio cubo: meterlos en el de "% del nivel"
+  // le diría al afiliado que cobró por un porcentaje que nunca se le aplicó.
+  const byKind = { pct: 0, recurring: 0, onetime: 0, networkBonus: 0 };
   commissions.forEach((c) => {
-    const kind = c.kind === "recurring" || c.kind === "onetime" ? c.kind : "pct";
+    const kind =
+      c.kind === "recurring" || c.kind === "onetime"
+        ? c.kind
+        : isNetworkBonusKind(c.kind)
+          ? "networkBonus"
+          : "pct";
     byKind[kind] += c.commissionMxn;
   });
 
@@ -87,6 +100,7 @@ export async function GET(req: NextRequest) {
       pct: roundMxn(byKind.pct),
       recurring: roundMxn(byKind.recurring),
       onetime: roundMxn(byKind.onetime),
+      networkBonus: roundMxn(byKind.networkBonus),
     },
   };
 
