@@ -1,15 +1,17 @@
 "use client";
 /* ============================================================
    Puerta de identificación de la reserva pública — LÓGICA y COPY.
-   La comparten las TRES superficies que postean a /api/public/book
-   (que sin sesión responde 401 { error, requiresAuth: true }):
-     · las mini-webs de /[slug]      → _shared/booking-session.tsx
-     · /reservar/[slug]              → booking-client.tsx
-     · el popup del directorio       → components/directory/BookingSchedule.tsx
-   Aquí NO hay presentación: cada superficie tiene su propio estilo y
-   pinta estos datos como le corresponde. Lo que se comparte es el
-   comportamiento — un solo GET de sesión, los dos caminos para
-   identificarse, el hueco guardado mientras va y vuelve del login.
+   La consume EL flujo único de reserva
+   (src/app/[slug]/_shared/booking-flow.tsx), que montan las tres
+   superficies que postean a /api/public/book (sin sesión responde
+   401 { error, requiresAuth: true }):
+     · las mini-webs de /[slug]
+     · /reservar/[slug]
+     · el popup del directorio (/descubre)
+   Aquí NO hay presentación: el flujo pinta estos datos con la piel
+   de cada superficie. Lo que se comparte es el comportamiento — un
+   solo GET de sesión, los dos caminos para identificarse, el hueco
+   guardado mientras va y vuelve del login.
    ============================================================ */
 import { useCallback, useEffect, useRef, useState } from "react";
 

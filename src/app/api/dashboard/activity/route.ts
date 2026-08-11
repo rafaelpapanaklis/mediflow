@@ -9,7 +9,7 @@ export const dynamic = "force-dynamic";
 
 interface ActivityEvent {
   id: string;
-  type: "payment" | "patient_new" | "appointment_completed";
+  type: "payment" | "patient_new" | "appointment_completed" | "booking_request";
   title: string;
   subtitle?: string;
   amount?: number;
@@ -31,6 +31,27 @@ export async function GET(req: NextRequest) {
   const viewer = { userId: ctx.userId, role: ctx.role, clinicId: ctx.clinicId };
   const patientVis = patientVisibilityAnd(viewer);
   const relatedVis = relatedPatientVisibilityAnd(viewer, { patientNullable: true });
+
+  // Solicitudes de cita SIN cuenta: nadie tiene expediente todavía, así que
+  // no hay visibilidad por paciente que aplicar — pero sí hay una persona
+  // esperando respuesta. Si el SQL de landing-v2 aún no se aplicó, la tabla no
+  // existe (P2021/42P01) y la campana sigue funcionando sin ellas.
+  const solicitudes = await prisma.bookingRequest
+    .findMany({
+      where: { clinicId: ctx.clinicId, status: "PENDIENTE" },
+      select: {
+        id: true, patientName: true, requestedAt: true, serviceName: true, createdAt: true,
+        // La hora pedida se muestra en la zona de la CLÍNICA: el servidor corre
+        // en UTC y sin esto una solicitud de las 9:00 salía como las 15:00.
+        clinic: { select: { timezone: true } },
+      },
+      orderBy: { createdAt: "desc" },
+      take: 10,
+    })
+    .catch((err: { code?: string }) => {
+      if (err?.code === "P2021" || err?.code === "42P01") return [];
+      throw err;
+    });
 
   const [paidInvoices, newPatients, doneAppointments] = await Promise.all([
     prisma.invoice.findMany({
@@ -88,6 +109,17 @@ export async function GET(req: NextRequest) {
       title: `Cita completada — ${a.patient.firstName} ${a.patient.lastName}`,
       href: `/dashboard/appointments?focus=${a.id}`,
       at: a.updatedAt,
+    })),
+    ...solicitudes.map(s => ({
+      id: `req-${s.id}`,
+      type: "booking_request" as const,
+      title: `Solicitud de cita — ${s.patientName}`,
+      subtitle: `${s.requestedAt.toLocaleString("es-MX", {
+        day: "numeric", month: "short", hour: "2-digit", minute: "2-digit",
+        timeZone: s.clinic?.timezone || "America/Mexico_City",
+      })}${s.serviceName ? ` · ${s.serviceName}` : ""}`,
+      href: `/dashboard/appointments?solicitudes=1`,
+      at: s.createdAt,
     })),
   ]
     .filter(e => e.at.getTime() <= horizon)

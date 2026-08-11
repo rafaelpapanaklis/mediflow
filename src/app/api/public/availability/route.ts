@@ -2,10 +2,22 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { persistentRateLimit } from "@/lib/failban";
 import { tzLocalToUtc, getTzParts } from "@/lib/agenda/time-utils";
-import { partitionSlotsByOverlap } from "@/lib/public-booking/slots";
+import { partitionSlotsByOverlap, slotOverlapsBusy } from "@/lib/public-booking/slots";
 
 // GET /api/public/availability?slug=my-clinic&date=2026-04-10&doctorId=xxx
 // No authentication required — public endpoint
+//
+// doctorId AUSENTE (o "any") = "cualquier disponible". El criterio es
+// distinto al de un doctor concreto: un horario está DISPONIBLE si al menos
+// UN doctor lo tiene libre, no si lo tienen libre todos. Antes se sumaban
+// las citas de TODA la clínica en una sola bolsa, así que con tres doctores
+// una sola cita de las 10:00 borraba las 10:00 para los otros dos y la
+// agenda pública salía casi vacía.
+//
+// En ese modo se devuelve además `slotDoctors`: qué doctores quedan libres
+// en cada horario. La UI lo usa para saber si sigue habiendo alguien y el
+// POST /api/public/book vuelve a resolverlo en el servidor (el cliente no
+// elige: entre que se pinta la pantalla y se confirma pueden pasar minutos).
 export async function GET(req: NextRequest) {
   // Sin auth y con 2 queries a Prisma por llamada: es una puerta directa al
   // pooler de Supabase. 60/min por IP es holgadísimo para el flujo real
@@ -16,7 +28,9 @@ export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const slug     = searchParams.get("slug");
   const dateStr  = searchParams.get("date");
-  const doctorId = searchParams.get("doctorId") ?? undefined;
+  // "any" (y el parámetro ausente) = cualquier doctor disponible.
+  const rawDoctorId = searchParams.get("doctorId") ?? undefined;
+  const doctorId = rawDoctorId && rawDoctorId !== "any" ? rawDoctorId : undefined;
 
   if (!slug) return NextResponse.json({ error: "slug requerido" }, { status: 400 });
 
@@ -109,12 +123,48 @@ export async function GET(req: NextRequest) {
       overrideReason: null,
       ...(doctorId ? { doctorId } : {}),
     },
-    select: { startsAt: true, endsAt: true },
+    // doctorId hace falta para el modo "cualquiera": hay que saber de QUIÉN es
+    // cada cita ocupada, no solo que la clínica está ocupada a esa hora.
+    select: { startsAt: true, endsAt: true, doctorId: true },
   });
 
-  const partition = partitionSlotsByOverlap(slots, dateStr, clinic.timezone, 30, busy);
-  const bookedTimes = new Set(partition.taken);
-  let available = partition.available;
+  let available: string[];
+  let bookedTimes: string[];
+  /** Sólo en modo "cualquiera": qué doctores quedan libres en cada horario. */
+  let slotDoctors: Record<string, string[]> | undefined;
+
+  if (doctorId) {
+    // Un doctor concreto: comportamiento de siempre, intacto.
+    const partition = partitionSlotsByOverlap(slots, dateStr, clinic.timezone, 30, busy);
+    available = partition.available;
+    bookedTimes = partition.taken;
+  } else {
+    // "Cualquier disponible": el horario se cae SOLO si TODOS los doctores lo
+    // tienen ocupado. Se parte la agenda por doctor y se pregunta por cada uno.
+    const busyByDoctor = new Map<string, { startsAt: Date; endsAt: Date }[]>();
+    for (const b of busy) {
+      const list = busyByDoctor.get(b.doctorId);
+      if (list) list.push(b);
+      else busyByDoctor.set(b.doctorId, [b]);
+    }
+
+    available = [];
+    bookedTimes = [];
+    slotDoctors = {};
+    for (const hhmm of slots) {
+      const [h, mn] = hhmm.split(":").map(Number);
+      const slotStart = tzLocalToUtc(dateStr, h, mn, clinic.timezone);
+      const free = clinic.users
+        .filter(u => !slotOverlapsBusy(slotStart, 30, busyByDoctor.get(u.id) ?? []))
+        .map(u => u.id);
+      if (free.length > 0) {
+        available.push(hhmm);
+        slotDoctors[hhmm] = free;
+      } else {
+        bookedTimes.push(hhmm);
+      }
+    }
+  }
 
   // Si la fecha pedida es HOY en la zona horaria de la clínica, oculta los
   // horarios cuya hora de inicio ya pasó (antes solo se filtraban días pasados,
@@ -125,6 +175,10 @@ export async function GET(req: NextRequest) {
       const [h, mn] = s.split(":").map(Number);
       return h * 60 + mn > nowMins;
     });
+    if (slotDoctors) {
+      const vivos = new Set(available);
+      slotDoctors = Object.fromEntries(Object.entries(slotDoctors).filter(([s]) => vivos.has(s)));
+    }
     if (available.length === 0) {
       return NextResponse.json({ slots: [], reason: "No quedan horarios disponibles para hoy" });
     }
@@ -138,6 +192,7 @@ export async function GET(req: NextRequest) {
     doctors:     clinic.users,
     slots:       available,
     allSlots:    slots,
-    bookedSlots: Array.from(bookedTimes),
+    bookedSlots: bookedTimes,
+    ...(slotDoctors ? { slotDoctors } : {}),
   });
 }

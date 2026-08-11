@@ -70,11 +70,20 @@ export async function POST(req: NextRequest) {
   }
 
   // ── Verify doctor belongs to this clinic ──────────────────────────────────
-  const doctor = await prisma.user.findFirst({
-    where: { id: doctorId, clinicId: clinic.id, isActive: true, role: { in: ["DOCTOR","ADMIN","SUPER_ADMIN"] } },
+  // doctorId === "any" = el paciente eligió "cualquier disponible". El doctor
+  // NO se elige aquí: se elige DENTRO de la transacción que crea la cita, con
+  // una lectura fresca de quién está ocupado. Si se eligiera ahora, dos
+  // reservas simultáneas leerían la misma foto y caerían en el mismo doctor.
+  const anyDoctor = doctorId === "any";
+  const candidates = await prisma.user.findMany({
+    where: {
+      clinicId: clinic.id, isActive: true, role: { in: ["DOCTOR","ADMIN","SUPER_ADMIN"] },
+      ...(anyDoctor ? {} : { id: doctorId }),
+    },
     select: { id: true, firstName: true, lastName: true },
+    orderBy: { firstName: "asc" },
   });
-  if (!doctor) return NextResponse.json({ error: "Doctor no disponible" }, { status: 404 });
+  if (candidates.length === 0) return NextResponse.json({ error: "Doctor no disponible" }, { status: 404 });
 
   // ── Validate day is open ───────────────────────────────────────────────────
   const jsDayOfWeek = apptDate.getDay();
@@ -106,61 +115,84 @@ export async function POST(req: NextRequest) {
     lastName:        lastName.trim(),
     phone:           cleanPhone,
     email:           email?.trim() || null,
-    primaryDoctorId: doctorId,
+    // Con "cualquiera" todavía no hay doctor: el expediente nace SIN doctor de
+    // cabecera antes que con uno inventado.
+    primaryDoctorId: anyDoctor ? null : doctorId,
   });
 
   // ── Check conflict + create appointment in a transaction (prevent double-booking) ──
   const startsAtBook = tzLocalToUtc(date, slotH, slotM, clinic.timezone);
   const endsAtBook = new Date(startsAtBook.getTime() + 30 * 60_000);
 
-  const appt = await prisma.$transaction(async (tx) => {
-    // Pre-check por SOLAPE (P1-10), no por igualdad de startsAt: una cita de
-    // 10:00–11:00 también bloquea "10:30". Mismo criterio que la constraint
-    // EXCLUDE (ignora CANCELLED/NO_SHOW y filas con overrideReason).
-    const conflict = await tx.appointment.findFirst({
-      where: {
-        clinicId:  clinic.id,
-        doctorId,
-        status:    { notIn: ["CANCELLED","NO_SHOW"] },
-        overrideReason: null,
-        startsAt:  { lt: endsAtBook },
-        endsAt:    { gt: startsAtBook },
-      },
-      select: { id: true },
+  /**
+   * Elige un doctor libre y crea la cita en la MISMA transacción: la lectura
+   * de ocupados y el INSERT no se pueden separar o dos reservas simultáneas
+   * con "cualquiera" caerían en el mismo doctor.
+   */
+  const bookOnce = async () => {
+    return prisma.$transaction(async (tx) => {
+      // Pre-check por SOLAPE (P1-10), no por igualdad de startsAt: una cita de
+      // 10:00–11:00 también bloquea "10:30". Mismo criterio que la constraint
+      // EXCLUDE (ignora CANCELLED/NO_SHOW y filas con overrideReason).
+      const conflicts = await tx.appointment.findMany({
+        where: {
+          clinicId:  clinic!.id,
+          doctorId:  { in: candidates.map(c => c.id) },
+          status:    { notIn: ["CANCELLED","NO_SHOW"] },
+          overrideReason: null,
+          startsAt:  { lt: endsAtBook },
+          endsAt:    { gt: startsAtBook },
+        },
+        select: { doctorId: true },
+      });
+      const ocupados = new Set(conflicts.map(c => c.doctorId));
+      const elegido = candidates.find(c => !ocupados.has(c.id));
+      if (!elegido) throw new Error("SLOT_TAKEN");
+
+      const created = await tx.appointment.create({
+        data: {
+          clinicId:    clinic!.id,
+          patientId:   resolved.patientId,
+          doctorId:    elegido.id,
+          type:        type?.trim() || "Consulta general",
+          startsAt:    startsAtBook,
+          endsAt:      endsAtBook,
+          status:      "SCHEDULED",
+          notes:       notes?.trim() || null,
+          // P1-11: origen real + bandeja de validación, como el bot de WhatsApp.
+          // Antes caía en los defaults (STAFF, false) y la clínica jamás
+          // revisaba las reservas web en fetchPendingValidation.
+          source:             "WEBSITE",
+          requiresValidation: true,
+        },
+      });
+      return { appt: created, doctor: elegido };
     });
-    if (conflict) {
-      throw new Error("SLOT_TAKEN");
+  };
+
+  // Carrera perdida contra la constraint EXCLUDE (23P01): con "cualquiera"
+  // puede quedar OTRO doctor libre, así que se relee y se reintenta. Con un
+  // doctor concreto el reintento vuelve a encontrarlo ocupado y sale por 409.
+  let booked: { appt: { id: string; startsAt: Date; endsAt: Date }; doctor: { id: string; firstName: string; lastName: string } } | null = null;
+  for (let intento = 0; intento < 3; intento++) {
+    try {
+      booked = await bookOnce();
+      break;
+    } catch (err: any) {
+      if (err?.message === "SLOT_TAKEN") break;   // no queda NINGÚN doctor libre
+      if (isOverlapError(err)) continue;          // se lo ganaron: relee y reintenta
+      throw err;
     }
+  }
 
-    return tx.appointment.create({
-      data: {
-        clinicId:    clinic.id,
-        patientId:   resolved.patientId,
-        doctorId,
-        type:        type?.trim() || "Consulta general",
-        startsAt:    startsAtBook,
-        endsAt:      endsAtBook,
-        status:      "SCHEDULED",
-        notes:       notes?.trim() || null,
-        // P1-11: origen real + bandeja de validación, como el bot de WhatsApp.
-        // Antes caía en los defaults (STAFF, false) y la clínica jamás
-        // revisaba las reservas web en fetchPendingValidation.
-        source:             "WEBSITE",
-        requiresValidation: true,
-      },
-    });
-  }).catch((err) => {
-    // Carrera perdida contra la constraint EXCLUDE (23P01) = mismo 409
-    // amable que el pre-check, nunca el error crudo de Postgres.
-    if (err.message === "SLOT_TAKEN" || isOverlapError(err)) return null;
-    throw err;
-  });
-
-  if (!appt) {
+  if (!booked) {
     return NextResponse.json({
-      error: "Este horario ya fue reservado. Por favor elige otro horario.",
+      error: anyDoctor
+        ? "Ese horario acaba de ocuparse con todos los doctores. Elige otro horario, por favor."
+        : "Este horario ya fue reservado. Por favor elige otro horario.",
     }, { status: 409 });
   }
+  const { appt, doctor } = booked;
 
   // ── Send WhatsApp confirmation ─────────────────────────────────────────────
   if (clinic.waConnected && clinic.waPhoneNumberId && clinic.waAccessToken) {

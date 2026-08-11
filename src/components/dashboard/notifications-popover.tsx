@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { Bell, Banknote, UserPlus, CheckCircle2 } from "lucide-react";
+import { Bell, Banknote, UserPlus, CheckCircle2, CalendarClock } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { es } from "date-fns/locale";
 import { isAbortError } from "@/lib/fetch-safe";
@@ -10,7 +10,7 @@ import { useT } from "@/i18n/i18n-provider";
 
 interface ActivityEvent {
   id: string;
-  type: "payment" | "patient_new" | "appointment_completed";
+  type: "payment" | "patient_new" | "appointment_completed" | "booking_request";
   title: string;
   subtitle?: string;
   amount?: number;
@@ -22,7 +22,10 @@ const TYPE_ICON = {
   payment: { Icon: Banknote, color: "#34d399" },
   patient_new: { Icon: UserPlus, color: "#a78bfa" },
   appointment_completed: { Icon: CheckCircle2, color: "#38bdf8" },
+  booking_request: { Icon: CalendarClock, color: "#fbbf24" },
 };
+/** Un tipo desconocido (feed más nuevo que este bundle) no debe tumbar la campana. */
+const FALLBACK_ICON = { Icon: Bell, color: "#94a3b8" };
 
 export function NotificationsPopover() {
   const t = useT();
@@ -122,7 +125,7 @@ export function NotificationsPopover() {
               <div style={{ padding: 24, textAlign: "center", fontSize: 12, color: "var(--text-3)" }}>{t("shell.notif.empty")}</div>
             ) : (
               events.map(ev => {
-                const conf = TYPE_ICON[ev.type];
+                const conf = TYPE_ICON[ev.type] ?? FALLBACK_ICON;
                 // El feed sólo trae actividad OCURRIDA (el API descarta fechas
                 // futuras), pero addSuffix rendería "en X" si el reloj DEL
                 // NAVEGADOR va adelantado del servidor. Clampamos a ahora para

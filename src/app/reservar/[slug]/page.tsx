@@ -55,13 +55,15 @@ export default async function ReservarPage({ params, searchParams }: Props) {
       city:      true,
       logoUrl:   true,
       description: true,
-      landingServices: true,
+      landingServices:   true,
+      landingWhatsapp:   true,
+      landingThemeColor: true,
       schedules: {
         select: { dayOfWeek: true, enabled: true, openTime: true, closeTime: true },
       },
       users: {
         where:   { isActive: true, role: { in: ["DOCTOR","ADMIN","SUPER_ADMIN"] } },
-        select:  { id: true, firstName: true, lastName: true, specialty: true, color: true, services: true },
+        select:  { id: true, firstName: true, lastName: true, specialty: true, color: true, avatarUrl: true, services: true },
         orderBy: { firstName: "asc" },
       },
     },
