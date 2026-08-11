@@ -4,6 +4,10 @@ import { ClinicLandingClient } from "./landing-client";
 import { TemplateFuturista } from "./templates/template-futurista";
 import { TemplateHealthtech } from "./templates/template-healthtech";
 import { TemplateCalido } from "./templates/template-calido";
+import { TemplateEquipo } from "./templates/template-equipo";
+import { TemplateSonrisa } from "./templates/template-sonrisa";
+import { TemplateConsultorio } from "./templates/template-consultorio";
+import { TemplateEspecialistas } from "./templates/template-especialistas";
 
 const CATEGORY_HIGHLIGHTS: Record<string, string[]> = {
   DENTAL: ["Odontograma digital", "Radiografías", "Plan de tratamiento por pieza", "Evaluación periodontal"],
@@ -70,8 +74,12 @@ export async function ClinicLandingServer({
   const highlights = CATEGORY_HIGHLIGHTS[category] ?? CATEGORY_HIGHLIGHTS.OTHER;
 
   const tpl = (previewTpl ?? c.landingTemplate ?? "classic");
-  if (tpl === "futurista")  return <TemplateFuturista clinic={c} highlights={highlights} />;
-  if (tpl === "healthtech") return <TemplateHealthtech clinic={c} highlights={highlights} />;
-  if (tpl === "calido")     return <TemplateCalido clinic={c} highlights={highlights} />;
+  if (tpl === "futurista")     return <TemplateFuturista clinic={c} highlights={highlights} />;
+  if (tpl === "healthtech")    return <TemplateHealthtech clinic={c} highlights={highlights} />;
+  if (tpl === "calido")        return <TemplateCalido clinic={c} highlights={highlights} />;
+  if (tpl === "equipo")        return <TemplateEquipo clinic={c} highlights={highlights} />;
+  if (tpl === "sonrisa")       return <TemplateSonrisa clinic={c} highlights={highlights} />;
+  if (tpl === "consultorio")   return <TemplateConsultorio clinic={c} highlights={highlights} />;
+  if (tpl === "especialistas") return <TemplateEspecialistas clinic={c} highlights={highlights} />;
   return <ClinicLandingClient clinic={c} highlights={highlights} />;
 }

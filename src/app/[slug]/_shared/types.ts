@@ -10,6 +10,11 @@ export interface LandingClinic {
   landingTiktok:string|null; landingMapEmbed:string|null; landingTagline:string|null;
   landingTemplate:string|null; landingYearsExperience:number|null; landingPatients:string|null;
   googlePlaceId:string|null;
+  /* Landing v2 (sql/landing-v2.sql). Opcionales: una clínica que nunca abrió
+     el editor nuevo los tiene en null y las plantillas caen a sus respaldos.
+     Leerlos SIEMPRE por los helpers de landing-data.ts, nunca crudos. */
+  landingSections?:unknown; landingPhotos?:unknown;
+  landingUrgentText?:string|null; landingMsiPlazos?:number[];
   users:LandingDoctor[]; schedules:LandingSchedule[];
 }
 export interface TemplateProps { clinic:LandingClinic; highlights?:string[]; }

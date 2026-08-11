@@ -32,6 +32,10 @@ const TEMPLATES = [
   { id:"futurista",  nameKey:"pages.landing.templateFuturistName",   descKey:"pages.landing.templateFuturistDesc" },
   { id:"healthtech", nameKey:"pages.landing.templateHealthtechName", descKey:"pages.landing.templateHealthtechDesc" },
   { id:"calido",     nameKey:"pages.landing.templateWarmName",       descKey:"pages.landing.templateWarmDesc" },
+  { id:"equipo",       nameKey:"pages.landing.templateTeamName",        descKey:"pages.landing.templateTeamDesc" },
+  { id:"sonrisa",      nameKey:"pages.landing.templateSmileName",       descKey:"pages.landing.templateSmileDesc" },
+  { id:"consultorio",  nameKey:"pages.landing.templateOfficeName",      descKey:"pages.landing.templateOfficeDesc" },
+  { id:"especialistas",nameKey:"pages.landing.templateSpecialistsName", descKey:"pages.landing.templateSpecialistsDesc" },
 ];
 
 // ── Clases visuales compartidas (rediseño Variante A — solo presentación) ──
@@ -55,6 +59,12 @@ function TemplateThumb({ variant }: { variant: string }) {
     futurista:  { bg:"bg-gradient-to-br from-fuchsia-600 via-violet-700 to-slate-900", bar:"bg-cyan-300",  chip:"bg-fuchsia-300/80", text:"bg-white/30" },
     healthtech: { bg:"bg-gradient-to-br from-emerald-400 to-teal-700",               bar:"bg-white/90",  chip:"bg-emerald-100/80", text:"bg-white/40" },
     calido:     { bg:"bg-gradient-to-br from-amber-300 via-rose-300 to-orange-400",  bar:"bg-white/95",  chip:"bg-rose-100/90",    text:"bg-amber-900/25" },
+    // Las cuatro nuevas. El thumb es una miniatura abstracta: lo que
+    // distingue a cada una es la estructura, no el color de esa clínica.
+    equipo:       { bg:"bg-gradient-to-br from-teal-600 to-emerald-800",             bar:"bg-white/90",  chip:"bg-emerald-200/80", text:"bg-white/35" },
+    sonrisa:      { bg:"bg-gradient-to-br from-rose-300 via-stone-100 to-rose-400",  bar:"bg-stone-800/80", chip:"bg-rose-500/70", text:"bg-stone-800/20" },
+    consultorio:  { bg:"bg-gradient-to-br from-blue-700 to-blue-900",                bar:"bg-amber-300", chip:"bg-white/70",       text:"bg-white/30" },
+    especialistas:{ bg:"bg-gradient-to-br from-slate-900 to-slate-800",              bar:"bg-amber-200/90", chip:"bg-amber-200/60", text:"bg-white/15" },
   };
   const s = v[variant] ?? v.classic;
   return (
