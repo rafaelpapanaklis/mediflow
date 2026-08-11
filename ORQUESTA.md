@@ -6134,3 +6134,112 @@ sin el 100% de "otro consumo"— **no se pudieron correr aquí**: el worktree no
 no hay base contra la que pegarle. Quedan como QA manual. Y sigue pendiente aplicar
 `sql/ai-quota-usage.sql`: con él, el desglose vuelve a salir de la fuente primaria y el plan B se
 apaga solo.
+
+---
+
+## La reserva pública de las mini-webs ya no muere en un 401
+
+`POST /api/public/book` exige sesión del portal del paciente desde hace tiempo y responde
+`401 { error: "Inicia sesión para reservar tu cita", requiresAuth: true }`. **Nadie en todo `src/`
+manejaba esa bandera** — el único match de `requiresAuth` era la línea que la emite. Las cuatro
+plantillas hacían `throw new Error(data.error)` y pintaban ese texto en una caja roja sin botón ni
+link: el visitante había elegido doctor, día y hora, y ahí se acababa. Classic era el espejo del
+mismo callejón por el otro extremo: su `openBooking()` consultaba la sesión ANTES de abrir el modal
+y, si no había, mandaba a `/paciente/registro` sin dejarle ver un solo horario.
+
+### Lo que se hizo
+
+Nace **`src/app/[slug]/_shared/booking-session.tsx`**, la pieza compartida entre el modal de
+futurista/healthtech/calido (`_shared/booking-modal.tsx`) y el modal inline de classic
+(`landing-client.tsx`). Nada de duplicar el gate en cinco archivos:
+
+- **`usePatientSession(open)`** — un solo `GET /api/paciente/me`, y solo **al abrir el modal**:
+  la mini-web es pública y estática, no se le cuelga un fetch de sesión a cada visita. Con sesión
+  precarga nombre / teléfono / correo; sin sesión deja el estado en `anonymous`.
+- **`BookingSessionBadge`** — "Reservas como {name}" arriba del paso de datos, con **Usar otros
+  datos** (limpia los campos para agendar a un tercero) y el camino de vuelta, **Usar mis datos**.
+- **`BookingAuthChoices`** — los dos caminos, en el paso de datos y **antes de que llene nada**:
+  *Ya soy paciente · Iniciar sesión* → `/paciente/login?next=%2F{slug}` y *Es mi primera vez ·
+  Crear cuenta* → `/paciente/registro?next=%2F{slug}`. La letra chica dice "Tu cuenta te sirve en
+  cualquier clínica con DaleControl"; **los botones no dicen DaleControl**, porque el paciente
+  conoce a su dentista, no a la plataforma.
+- **`savePendingBooking` / `takePendingBooking` / `useBookingReopen`** — el hueco elegido
+  (`{ doctorId, date, slot, service }`) viaja en `sessionStorage` bajo clave **por clínica**
+  (`dc:pending-booking:<slug>`), se guarda en el `onClick` del enlace (antes de que el navegador se
+  vaya) y al volver reabre el modal en esa selección y **borra la clave**. El `?reservar=1` del gate
+  viejo de classic se sigue reconociendo para no romper enlaces en vuelo.
+
+**El hueco ya tomado no falla seco.** Al reponer la selección se revalida contra
+`/api/public/availability`: si el horario ya no está, aviso ámbar ("El horario de las 10:00 ya fue
+reservado. Elige otro, por favor.") y de vuelta al calendario con ese día seleccionado, en vez de
+un 409 en la cara. El mismo criterio se aplicó al 409 del `POST`: quita el horario de la lista y
+regresa al paso 2. **Red de seguridad:** si el `POST` responde 401 a media reserva (sesión vencida),
+se guarda el hueco y salen esos mismos dos botones — nunca más el texto rojo.
+
+**Con sesión el flujo quedó igual de corto que antes**: doctor → fecha/hora → datos precargados →
+confirmar. Cero pasos extra.
+
+### Lo que NO se tocó
+
+`/api/public/book` y la vinculación de expedientes quedaron intactos: `resolveBookingPatient` sigue
+creando/reutilizando el `Patient` de ESA clínica y la clave de `sessionStorage` es por slug, así que
+nada de otra clínica se asoma. **Sin SQL, sin envs, sin dependencias nuevas.**
+`registro-form.tsx` **ya** propagaba `?next=` (a `/paciente/verificar` y a `/paciente/login`) con el
+mismo `safeNext` anti open-redirect que `login-form.tsx`: verificado, no hizo falta cambiarlo.
+
+Único retoque visual fuera del alcance estricto, y era necesario: los campos del modal compartido
+llevan `text-gray-900` explícito. En **futurista** heredaban el `color: inkText` (#e7eef5) de la
+raíz de la plantilla y el nombre precargado quedaba casi invisible sobre la tarjeta blanca — el
+defecto ya existía, pero solo se veía ahora que los campos llegan llenos.
+
+### Archivos
+
+| Archivo | Qué |
+|---|---|
+| `src/app/[slug]/_shared/booking-session.tsx` | **nuevo** — hook de sesión, los dos caminos, el hueco guardado |
+| `src/app/[slug]/_shared/booking-modal.tsx` | gate + reposición + 401/409 (futurista, healthtech, calido) |
+| `src/app/[slug]/landing-client.tsx` | classic: mismo gate; muere el redirect a `/paciente/registro` |
+| `src/app/[slug]/templates/template-futurista.tsx` | `useBookingReopen` + `restore` |
+| `src/app/[slug]/templates/template-healthtech.tsx` | `useBookingReopen` + `restore` |
+| `src/app/[slug]/templates/template-calido.tsx` | `useBookingReopen` + `restore` |
+
+**Commit:** `c8995508` (rebasado sobre `origin/main` `57a9a3cc`, que iba 9 commits adelante — sin
+solape de archivos).
+
+### Verificación
+
+**Build:** `npm run build` completo, sin pipes, **exit 0**, 360/360 páginas estáticas, tipos
+válidos, `/[slug]` en 3.87 kB / 240 kB. Los `prisma:error` del log son el ruido conocido de correr
+el build sin `.env` (`DATABASE_URL` ausente), no del cambio. `npx tsc --noEmit` limpio.
+
+**A mano, en Chrome**, con una página temporal fuera del middleware que montaba las 4 plantillas con
+clínica falsa y `fetch` mockeado (`/api/paciente/me`, `/api/public/availability`, `/api/public/book`)
+— borrada antes de commitear:
+
+| Estado | futurista | healthtech | cálido | classic |
+|---|---|---|---|---|
+| **Con sesión** (hueco repuesto) | ✅ | ✅ | ✅ | ✅ |
+| **Sin sesión** (los dos botones) | ✅ | ✅ | ✅ | ✅ |
+
+- **Con sesión:** el modal se reabre solo en el paso "Tus datos", con el resumen `mar, 11 de agosto ·
+  10:00 · Dr/a. Ana`, el aviso "RESERVAS COMO María Fernanda Pérez López" y los cuatro campos
+  precargados; el motivo repuesto (`Limpieza dental`) aparece seleccionado en el `<select>`.
+- **Sin sesión:** mismo resumen, "Solo falta identificarte" y los dos botones con
+  `href="/paciente/login?next=%2Fclinica-demo"` y `.../registro?next=%2Fclinica-demo` — verificados
+  en el DOM. Al hacer clic, `sessionStorage` queda con
+  `{"doctorId":"doc-1","date":"2026-08-11","slot":"10:00","service":"Limpieza dental"}`; antes del
+  clic estaba en `null`, o sea que la clave sembrada se consumió y se borró al reabrir.
+- **Hueco tomado:** el modal se queda en "Fecha y hora" con el aviso ámbar y el 10:00 ya no aparece
+  entre los horarios.
+- **401 a media reserva:** con sesión en la UI, al pulsar "Confirmar cita" el formulario se cambia
+  por los dos botones (nada de caja roja) y el hueco vuelve a `sessionStorage`.
+- **Flujo limpio sin sesión (classic):** "Agendar cita" ya **no** expulsa al registro — abre el modal,
+  deja elegir doctor, día y horario, y solo en "Tus datos" pide identificarse.
+- Consola del navegador: sin errores de React ni avisos de hidratación (solo los scripts de Vercel
+  Analytics que no cargan en localhost).
+
+### Lo que falta
+
+Nada del encargo. Queda como QA de Rafael probarlo contra una clínica real con cuenta de paciente
+real: aquí no hay `.env` con `DATABASE_URL`, así que el login y el `POST` de verdad no se ejercieron
+end-to-end — se ejercieron sus contratos (401 / 409 / 200), que es lo que consume la UI.
