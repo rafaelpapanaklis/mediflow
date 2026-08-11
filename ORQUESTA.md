@@ -6243,3 +6243,104 @@ clínica falsa y `fetch` mockeado (`/api/paciente/me`, `/api/public/availability
 Nada del encargo. Queda como QA de Rafael probarlo contra una clínica real con cuenta de paciente
 real: aquí no hay `.env` con `DATABASE_URL`, así que el login y el `POST` de verdad no se ejercieron
 end-to-end — se ejercieron sus contratos (401 / 409 / 200), que es lo que consume la UI.
+
+---
+
+## Reserva pública — las otras dos puertas (`/reservar` y el directorio)
+
+**Commit:** `96579ea9` · rama `main` (sobre `4dd0bbf5`, que ya traía la puerta 1)
+**Build:** `npm run build` completo, exit code 0, sin `Failed to compile` ni `Type error`.
+`npx tsc --noEmit` limpio. Sin SQL, sin envs, sin dependencias nuevas.
+
+### Qué reutilicé del helper (y qué tuve que hacer crecer)
+
+La lógica de la puerta 1 vivía dentro de `src/app/[slug]/_shared/booking-session.tsx`, mezclada con
+UI que pinta con el `theme` de cada mini-web. Las otras dos superficies tienen estilo propio
+(oscuro en `/reservar`, violeta del directorio en el popup), así que **moví la lógica a un módulo
+sin piel** y dejé la piel donde estaba:
+
+- **Nuevo:** `src/lib/patient-portal/booking-auth.ts` — sesión (`usePatientSession`,
+  `fetchBookingAccount`), hueco guardado (`savePendingBooking` / `takePendingBooking` /
+  `useBookingReopen`), `patientAuthHref` + `safeNextPath` + `currentBookingNext`, el copy
+  (`BOOKING_AUTH_COPY`), los dos caminos como datos (`bookingAuthLinks`), la salida por teléfono
+  (`bookingPhoneExit`), `requiresPatientAuth`, `splitFullName` y la decisión del hueco al llegar la
+  disponibilidad (`pendingSlotOutcome` + `slotTakenNotice`).
+- `_shared/booking-session.tsx` **re-exporta** todo eso y conserva sus tres componentes con estilo
+  de mini-web. Las 4 plantillas y los dos modales siguen importando exactamente lo mismo.
+- `patientAuthHref` creció de `(kind, slug)` a `(kind, next)` para que el `?next=` sea la ruta real
+  de cada superficie; `BookingAuthChoices` mantiene su prop `slug` y arma `/${slug}` como antes.
+- `src/lib/directory/booking-state.ts`: `fetchPatientMe` y `buildRegistroUrl` ahora delegan en el
+  módulo compartido — el `fetch` de `/api/paciente/me` existe UNA sola vez en el repo.
+- `BookingAuthChoices` acepta ahora `next` y `phone` opcionales. **Las mini-webs no los pasan**: la
+  puerta 1 se renderiza idéntica.
+
+### Qué agregué en cada superficie
+
+**A. `/reservar/[slug]` (`booking-client.tsx`)** — la trampa era real: ya llamaba a
+`/api/paciente/me`, pero para **expulsar**. Sin sesión, al abrir la página redirigía a
+`/paciente/registro` antes de que el visitante viera a la clínica; y el 401 del POST hacía lo mismo.
+- Fuera el redirect de entrada: ahora se elige servicio → doctor → día y hora sin cuenta.
+- Paso 4: `loading` → línea discreta; `anonymous` → los dos caminos con estilo oscuro + "Tu cuenta
+  te sirve en cualquier clínica con DaleControl" + "o llámanos al …"; `authenticated` → chip
+  "Reservas como {name}" con "Usar otros datos" y los campos precargados.
+- `useBookingReopen` repone el hueco al volver (doctor, día, motivo y horario) y salta al paso 4.
+- 401 del POST → guarda el hueco y muestra los dos botones con copy de "Tu sesión se cerró".
+- 409 → aviso ámbar nuevo (`AmberNotice`), quita el horario de la lista y regresa al calendario.
+
+**B. Directorio (`components/directory/BookingSchedule.tsx`)** — no tenía nada: un solo botón
+"Continuar con mi cuenta" que mandaba al registro.
+- Mismo contrato con la piel del directorio (ShieldCheck, violeta, blanco): los dos caminos,
+  el pie de cuenta portátil y "o llámanos al …".
+- Chip "Reservas como {name}" con salida a datos de otra persona.
+- 401 del POST → persiste la selección y vuelve a los dos botones (antes caía en el `else` rojo).
+- El hueco NO usa el `sessionStorage` de las mini-webs: el directorio ya tenía algo mejor
+  (`persistSelection` + URL `?reservar=&servicio=&doctor=&fecha=&hora=` que reabre el popup en el
+  paso 4 vía `BookingPopupController`). Se conserva y el `?next=` sale de esa misma URL.
+
+### `next` en el registro
+
+`registro-form.tsx` **ya** lo propagaba con `safeNext` (a `/paciente/verificar?...&next=` y al link
+de login), y `verificar-form.tsx` cierra la cadena con `window.location.assign(next || "/paciente")`.
+No hizo falta tocarlos.
+
+### Archivos
+
+- `src/lib/patient-portal/booking-auth.ts` (nuevo)
+- `src/app/[slug]/_shared/booking-session.tsx`
+- `src/app/reservar/[slug]/booking-client.tsx`
+- `src/components/directory/BookingSchedule.tsx`
+- `src/lib/directory/booking-state.ts`
+
+### Cómo lo probé (sin `DATABASE_URL` local)
+
+Página `probe-tmp` temporal fuera del middleware, con `window.fetch` stubeado para
+`/api/paciente/me`, `/api/public/availability` y `/api/public/book` (200 / 401 / 409). **Borrada
+antes del commit** — `git status` limpio salvo los 5 archivos de arriba.
+
+- **`/reservar` sin sesión:** ya no expulsa; el paso 4 muestra "Solo falta identificarte", los dos
+  botones (`/paciente/login?next=…` y `/paciente/registro?next=…` con la ruta actual **y su
+  querystring**) y "o llámanos al 999 123 4567". Al hacer clic queda
+  `dc:pending-booking:clinica-sonrisa` con doctor/día/hora/motivo.
+- **`/reservar` con sesión:** al volver reabre en el paso 4 con el mismo hueco, chip "Reservas como
+  María Pérez García" y los 4 campos precargados; "Usar otros datos" los vacía y ofrece volver.
+- **`/reservar` hueco tomado:** al volver con un horario que ya no está → "El horario de las 11:00
+  ya fue reservado. Elige otro, por favor." en el calendario, con el día y el motivo conservados.
+- **`/reservar` 401 a media reserva:** el formulario se cambia por los dos botones con "Tu sesión se
+  cerró" y el hueco vuelve a `sessionStorage`. Cero caja roja.
+- **`/reservar` 409:** aviso ámbar "Ese horario ya fue reservado", el 09:30 desaparece de la lista y
+  vuelve al paso 3.
+- **Directorio sin sesión:** los dos botones con `?next=` de la URL actual y la selección completa
+  en `dc-directory-booking` (`{clinicSlug, service, doctorId, date, slot, savedPath}`).
+- **Directorio con sesión:** chip + campos precargados, sin pasos extra.
+- **Directorio 401 / 409:** 401 → dos botones y selección persistida; 409 → sigue igual que antes
+  ("Ese horario se acaba de ocupar" + "Elegir otro horario").
+- **Puerta 1 intacta:** el modal compartido de las plantillas se ve idéntico, sus enlaces siguen
+  siendo `?next=%2Fclinica-sonrisa` (la mini-web, no la ruta actual) y **no** aparece la línea de
+  teléfono. Con sesión, el chip y el prefill siguen funcionando.
+
+### Detalle que conviene saber
+
+El encargo pedía la salida por teléfono "igual que en las mini-webs": **las mini-webs no la tenían**.
+El helper ya la soporta (`phone` opcional); pasarla en `booking-modal.tsx` y `landing-client.tsx` es
+una línea en cada uno, pero no la puse para no cambiar el render de las 4 plantillas. Se enciende
+cuando digas.
