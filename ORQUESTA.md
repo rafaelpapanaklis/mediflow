@@ -6344,3 +6344,98 @@ El encargo pedía la salida por teléfono "igual que en las mini-webs": **las mi
 El helper ya la soporta (`phone` opcional); pasarla en `booking-modal.tsx` y `landing-client.tsx` es
 una línea en cada uno, pero no la puse para no cambiar el render de las 4 plantillas. Se enciende
 cuando digas.
+
+---
+
+## [Píxel de Meta en el sitio público] — 2026-08-11 (`189f43db`)
+
+El sitio no tenía **ningún** píxel. La campaña de Meta Ads optimiza a "vistas de la página de
+destino", que es un evento que **solo el píxel puede medir**: sin él, Meta no tiene señal a la que
+optimizar y no reparte. De ahí las 19 h con 1 sola impresión.
+
+Se instaló el conjunto de datos **1692815882024068** — "DaleControl Web". El viejo de tipo app
+(`1485010419522177`) se dejó como estaba: sigue inactivo, con 0 eventos, y no se toca.
+
+### Archivos tocados (3)
+
+| Archivo | Qué |
+| --- | --- |
+| `src/lib/analytics/meta-pixel.ts` | **nuevo** — `META_PIXEL_ID`. Constante en el código, mismo criterio que `GA4_MEASUREMENT_ID` y el tag de Ads: es un identificador público, no cambia entre entornos, y como variable de entorno un deploy sin la var dejaría la campaña midiendo cero en silencio. |
+| `src/components/analytics/meta-pixel-pageview.tsx` | **nuevo** — `<MetaPixelPageview />`, espejo de `<GaPageview />`. |
+| `src/app/layout.tsx` | 2 imports, el `<Script id="meta-pixel">` con el arranque de `fbq` justo después del de `ga-gtag`, y el componente montado junto a `<GaPageview />`. |
+
+Sin SQL y sin tocar `schema.prisma`, como venía en el encargo.
+
+### El reparto init / PageView
+
+Igual que GA4 con `send_page_view:false`: el layout hace **únicamente** `fbq('init', …)` y el
+PageView —uno por navegación real, ni cero ni dos— sale del componente. El App Router no dispara
+PageView solo: el snippet oficial tal cual mediría la primera página de la visita y ninguna más
+(una visita de 5 páginas contaría 1).
+
+El componente copia las tres decisiones de `ga-pageview.tsx`:
+
+- **`<Suspense fallback={null}>`** alrededor del interno. `useSearchParams` lo exige o `next build`
+  revienta con `missing-suspense-with-csr-bailout` y las páginas públicas pierden el prerender.
+- **deps `pathname` + `searchParams.toString()`** (el string, no el objeto: el objeto cambia de
+  referencia en cada render y dispararía un hit por render). `query` no se lee en el cuerpo —el
+  PageView de Meta no acepta la ruta como parámetro, el píxel lee `location` por su cuenta—, está
+  en las deps a propósito para que un cambio de solo query string cuente como navegación; lleva su
+  `eslint-disable-next-line` con la razón escrita.
+- **reintento 100 ms × 40** mientras `window.fbq` no sea función. El `<Script>` es
+  `afterInteractive`, así que en la primera carga el efecto corre **antes** de que `fbq` exista y
+  sin el reintento se perdería el PageView de entrada de cada visita, que es justo el que le
+  importa a la campaña. Si se agota (adblock) se rinde en silencio; `clearTimeout` en el cleanup.
+
+### Privacidad — la regla no se duplicó
+
+El guard es **el mismo `PRIVATE_PATH_PATTERN` de `src/lib/analytics/ga4.ts`**, importado en los dos
+únicos sitios que lo aplican: el `<Script>` inline (decide si llega a hacer `init`) y el componente
+(vía `isPrivatePath`, decide si manda el PageView). La regex no se copió a ningún lado, así que
+`/afiliados/loquesea` nuevo sigue naciendo excluido igual que en GA4.
+
+Consecuencia concreta: en `/dashboard`, `/admin`, `/portal`, `/paciente`, `/proveedores`,
+`/laboratorios`, `/onboarding`, `/live` y `/tv` **ni siquiera se descarga `fbevents.js`** y `fbq`
+nunca se define. No es solo higiene de medición: `/paciente` y `/portal` son datos de pacientes y
+no pueden mandar señales a Meta.
+
+Por lo mismo **no** se añadió el `<noscript><img>` del snippet oficial: este es el layout **raíz**,
+y ese pixel de respaldo se renderizaría también en las rutas privadas — justo lo que el guard
+existe para impedir.
+
+Efecto lateral que conviene conocer: si una visita **empieza** en una ruta privada, `fbq` no se
+define en toda esa sesión de SPA; si después navega en cliente a una pública, no se manda PageView
+(el reintento se agota y calla). Es fail-closed a propósito y es exactamente lo que ya hace GA4.
+
+### CSP: confirmada, no tocada
+
+Se revisó `next.config.mjs` y no hizo falta ni una línea:
+
+- `script-src` ya trae `https://connect.facebook.net` (entró con el SDK de WhatsApp) → `fbevents.js`.
+- `img-src 'self' data: blob: https: http:` → el beacon `facebook.com/tr?…`.
+- `connect-src 'self' https: wss:` → los envíos por fetch/`sendBeacon`.
+- `frame-src` ya lista `www.facebook.com` y `staticxx.facebook.com`, por si `fbevents` monta iframe.
+
+El `<meta name="facebook-domain-verification">` ya estaba en el `<head>` y no se duplicó.
+
+### Build
+
+`npm run build` completo, **exit 0** (marcador `BUILD_DONE_EXIT=0` en el log; sin `| tail`, que
+enmascara el código de salida). `✓ Generating static pages (360/360)`.
+
+Cero `missing-suspense-with-csr-bailout` y **ninguna pública perdió el prerender**: `○ /`,
+`○ /afiliados`, `○ /casos-de-uso`, `○ /herramientas`, `○ /reservar`, `● /[slug]`,
+`● /casos-de-uso/[slug]` siguen estáticas. Los avisos del log son los de siempre y ajenos a esto:
+las 3 clases ambiguas de Tailwind, el `Critical dependency` de `file-type`, y el ruido de
+`DATABASE_URL not found` por buildear sin `.env`.
+
+### Falta por verificar (no lo pude hacer yo)
+
+El build no prueba que Meta reciba nada. Cuando Vercel termine el deploy de `main`:
+
+1. **Events Manager → DaleControl Web → Probar eventos**: abrir `www.dalecontrol.com` y esperar el
+   `PageView`; navegar a `/precios` y confirmar que llega un **segundo** PageView (eso valida que
+   el componente hace su trabajo y que no hay duplicados).
+2. Abrir `/dashboard` y confirmar que **no** llega nada — ni una petición a `connect.facebook.net`
+   en la pestaña Red.
+3. Con eso el conjunto deja de estar en 0 eventos y la campaña ya tiene a qué optimizar.
