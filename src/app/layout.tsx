@@ -7,7 +7,9 @@ import { SpeedInsights } from "@vercel/speed-insights/next";
 import { ConfirmProvider } from "@/components/ui/confirm-dialog";
 import { AnalyticsTracker } from "@/components/analytics/analytics-tracker";
 import { GaPageview } from "@/components/analytics/ga-pageview";
+import { MetaPixelPageview } from "@/components/analytics/meta-pixel-pageview";
 import { GA4_MEASUREMENT_ID, PRIVATE_PATH_PATTERN } from "@/lib/analytics/ga4";
+import { META_PIXEL_ID } from "@/lib/analytics/meta-pixel";
 import "./globals.css";
 
 const sans = IBM_Plex_Sans({ subsets: ["latin"], weight: ["300", "400", "500", "600", "700"], variable: "--font-sans", display: "swap" });
@@ -99,6 +101,29 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             }
           `}
         </Script>
+        {/* Píxel de Meta (1692815882024068 — "DaleControl Web"): snippet oficial
+            de arranque de fbq, envuelto en el MISMO guard de rutas privadas que
+            GA4. En el panel no se carga fbevents.js ni se define fbq: /paciente
+            y /portal no mandan señales a Meta.
+            Aquí solo va el init. El PageView lo manda <MetaPixelPageview /> en
+            cada navegación, mismo criterio que el send_page_view:false de GA4.
+            Sin <noscript><img>: este layout es el raíz y ese pixel de respaldo
+            se renderizaría también en las rutas privadas. */}
+        <Script id="meta-pixel" strategy="afterInteractive">
+          {`
+            if (!new RegExp(${JSON.stringify(PRIVATE_PATH_PATTERN)}).test(location.pathname)) {
+              !function(f,b,e,v,n,t,s)
+              {if(f.fbq)return;n=f.fbq=function(){n.callMethod?
+              n.callMethod.apply(n,arguments):n.queue.push(arguments)};
+              if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';
+              n.queue=[];t=b.createElement(e);t.async=!0;
+              t.src=v;s=b.getElementsByTagName(e)[0];
+              s.parentNode.insertBefore(t,s)}(window, document,'script',
+              'https://connect.facebook.net/en_US/fbevents.js');
+              fbq('init', ${JSON.stringify(META_PIXEL_ID)});
+            }
+          `}
+        </Script>
         {/* Toaster centralizado: única posición (top-right), duraciones
             consistentes (3s success/info, 5s error). Estilos globales
             via className para que dark mode funcione automáticamente
@@ -139,6 +164,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <AnalyticsTracker />
         {/* GA4 (G-Q3HM012SPZ) — page_view por navegación, solo rutas públicas. */}
         <GaPageview />
+        {/* Píxel de Meta — PageView por navegación, solo rutas públicas. */}
+        <MetaPixelPageview />
       </body>
     </html>
   );
