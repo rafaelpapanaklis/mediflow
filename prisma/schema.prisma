@@ -153,6 +153,24 @@ model Clinic {
   landingYearsExperience Int?
   landingPatients        String?
 
+  // Landing v2 — el editor de Configuración se dibuja desde el manifiesto de
+  // cada plantilla (src/app/[slug]/_shared/template-manifest.ts), no a mano.
+  // Requiere sql/landing-v2.sql aplicado en Supabase.
+  //   landingSections: [{ id, visible, orden, titulo, subtitulo }] — qué
+  //     secciones se ven y en qué orden. contacto/reservar son obligatorias.
+  //   landingPhotos:   { <idDeRanura>: url } — la foto de cada ranura con
+  //     nombre que declara la plantilla ("portada", "equipo", "caso1_antes").
+  //     NO reemplaza landingCoverUrl ni landingGallery: convive con ellas.
+  //   landingMsiPlazos: meses sin intereses, p.ej. [3,6,12]. Vacío = ocultar.
+  // La duración por servicio NO es columna: va como `durationMin` dentro de
+  // cada elemento de landingServices.
+  landingSections   Json?
+  landingPhotos     Json?
+  landingUrgentText String?
+  landingMsiPlazos  Int[]  @default([])
+
+  bookingRequests BookingRequest[]
+
   // AI Assistant usage tracking
   aiTokensUsed  Int      @default(0)
   aiTokensLimit Int      @default(50000)
@@ -1741,6 +1759,55 @@ model AppointmentChangeRequest {
   @@index([clinicId, status, createdAt])
   @@index([appointmentId, status])
   @@map("appointment_change_requests")
+}
+
+/// Solicitud de cita hecha desde la landing pública SIN cuenta.
+///
+/// NO es una cita: `appointments.patientId` es OBLIGATORIO, así que sin
+/// expediente no puede existir una cita. La solicitud tampoco bloquea el hueco
+/// en la agenda — es un "por confirmar". La clínica la acepta desde la bandeja
+/// del panel y AHÍ se crea el Patient (con nextPatientNumber) y el Appointment.
+///
+/// doctorId null = el paciente eligió "cualquier disponible"; la clínica
+/// resuelve el doctor al aceptar.
+///
+/// createdPatientId / createdAppointmentId son referencias SUELTAS a propósito
+/// (sin FK ni relación): el borrado de paciente se calcula desde el DMMF y una
+/// relación nueva lo bloquearía, y la solicitud debe seguir siendo auditable
+/// aunque la cita se borre después.
+///
+/// Requiere sql/landing-v2.sql aplicado en Supabase.
+model BookingRequest {
+  id       String  @id @default(cuid())
+  clinicId String
+  doctorId String? // null = "cualquier disponible"
+
+  requestedAt        DateTime @db.Timestamptz(6) // día y hora pedidos
+  serviceName        String?
+  serviceDurationMin Int?
+
+  patientName     String
+  patientDob      DateTime? @db.Date
+  patientWhatsapp String
+  notes           String?
+
+  /// "PENDIENTE" | "ACEPTADA" | "RECHAZADA" | "EXPIRADA" — String a propósito,
+  /// sin enum PG. En SQL hay un CHECK que valida el set.
+  status         String  @default("PENDIENTE")
+  rejectedReason String?
+
+  createdPatientId     String?
+  createdAppointmentId String?
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  clinic Clinic @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+
+  @@index([clinicId, status, requestedAt])
+  @@index([status, requestedAt])
+  @@index([doctorId])
+  @@map("booking_requests")
 }
 
 model MedicalRecord {
