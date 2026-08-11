@@ -6439,3 +6439,142 @@ El build no prueba que Meta reciba nada. Cuando Vercel termine el deploy de `mai
 2. Abrir `/dashboard` y confirmar que **no** llega nada — ni una petición a `connect.facebook.net`
    en la pestaña Red.
 3. Con eso el conjunto deja de estar en 0 eventos y la campaña ya tiene a qué optimizar.
+
+---
+
+## Mini-webs v2: cuatro plantillas, un solo flujo de reserva y editor por manifiesto — 2026-08-11
+
+Cinco fases, en orden, cada una con su build completo verde antes de empujar. Todo está en `main`.
+
+| Fase | Qué | Commit | Build |
+|---|---|---|---|
+| 1 | SQL + esquema | `c8155c3f` | exit 0 · 360 páginas |
+| 2 | Un solo flujo de reserva + vía sin cuenta | `914a4571` | exit 0 · 361 páginas |
+| 3 | Bandeja de solicitudes en la agenda | `db907085` | exit 0 · 361 páginas |
+| 4 | Las cuatro plantillas nuevas | `512b2998` | exit 0 · 361 páginas |
+| 5 | Editor que se dibuja solo + fin del retraso de 5 min | `2a98c3d1` | exit 0 · 361 páginas |
+
+Ninguna fase se empujó sin `npm run build` completo (sin `| tail`, leyendo el exit code de un
+marcador `EXIT=$?`, no de la notificación de fondo).
+
+### Fase 1 — datos
+
+`sql/landing-v2.sql` (**ya aplicado y verificado por Rafael en Supabase**) + `prisma/schema.prisma`.
+
+- `clinics` gana `landingSections`, `landingPhotos` (jsonb), `landingUrgentText` (text) y
+  `landingMsiPlazos` (integer[]). La duración por servicio **no** es columna: va como `durationMin`
+  dentro del JSON de `landingServices`, que ya existía.
+- Nace `booking_requests` (16 columnas + RLS deny-all). El paciente que reserva sin cuenta genera
+  una **solicitud**, no una cita: `appointments.patientId` es obligatorio y sin expediente no puede
+  existir la cita.
+- Tres decisiones que conviene recordar:
+  - Se añadió `rejectedReason` (no estaba en la lista) porque la fase 3 pide rechazar con motivo y
+    si no, habría hecho falta un segundo SQL.
+  - `createdPatientId` / `createdAppointmentId` van **sin FK y sin relación Prisma**: el borrado de
+    paciente se calcula desde el DMMF y una relación nueva entraría en ese cálculo.
+  - RLS deny-all porque la tabla guarda nombre, fecha de nacimiento y WhatsApp de gente que ni
+    siquiera tiene cuenta, y entra por un endpoint público.
+
+### Fase 2 — un solo flujo de reserva
+
+El flujo bueno estaba copiado en cuatro archivos. Ahora vive **una vez** en
+`src/app/[slug]/_shared/booking-flow.tsx` y lo montan las ocho plantillas, `/reservar` y el popup
+del directorio. Saldo: **−2 472 líneas, +1 802**.
+
+- `_shared/booking-modal.tsx` quedó como el traductor de `LandingClinic` al contrato del flujo.
+- `_shared/booking-session.tsx` quedó como re-export (su UI se fue al flujo).
+- `components/directory/BookingSchedule.tsx` **se borró**.
+- Pasos: doctor → fecha → hora → procedimiento → identificarse. Los que no aplican se saltan solos.
+  La piel sale de `surface` (clara/oscura) y todo el acento de `landingThemeColor`.
+
+**"Cualquier disponible" fue cambio de API, no de UI:**
+
+- `GET /api/public/availability` sin `doctorId` ya no suma las citas de toda la clínica en una
+  bolsa (con tres doctores, una sola cita de las 10:00 borraba las 10:00 para los otros dos). Ahora
+  el horario está libre si **al menos un** doctor lo tiene libre, y devuelve `slotDoctors`. Con
+  `doctorId`, comportamiento idéntico al de antes.
+- `POST /api/public/book` acepta `doctorId: "any"` y elige al doctor **dentro de la misma
+  transacción** que crea la cita. Si pierde la carrera contra la constraint EXCLUDE reintenta
+  (puede quedar otro libre) y sólo entonces responde 409. `resolveBookingPatient` y las
+  restricciones de la agenda quedaron intactas.
+
+**`POST /api/public/booking-request`** (nuevo, sin sesión): crea la solicitud, valida que el horario
+exista en la agenda de ese día, **no** bloquea el hueco, rate limit persistente por IP, campo trampa
+anti-bots, dedupe del doble envío y `clinicId` siempre resuelto desde el slug en el servidor. El
+copy dice "solicitud enviada, te confirmamos por WhatsApp", nunca "cita agendada". Avisa a la
+clínica por WhatsApp (a su propio número) y con una tarjeta en la campana del panel.
+
+### Fase 3 — bandeja en la agenda
+
+Panel lateral "Solicitudes por confirmar" arriba de las citas del día; se pinta sola cuando hay
+pendientes. Cada tarjeta trae nombre, día y hora pedidos, duración, doctor solicitado (o "cualquier
+doctor"), procedimiento, WhatsApp con enlace directo, fecha de nacimiento y edad.
+
+"Crear paciente y confirmar" hace todo en **una** transacción: `Patient` con folio de
+`nextPatientNumber` (jamás `count + 1`), `Appointment` resolviendo el doctor si pidió "cualquiera",
+procedimiento y notas arrastrados a las notas de la cita, y la solicitud `ACEPTADA` apuntando a lo
+que creó.
+
+El hueco nunca estuvo apartado, así que puede habérselo ganado alguien: cuando pasa, el 409 vuelve
+**con los horarios que sí quedan libres ese día** y la recepción reagenda desde la misma tarjeta.
+
+Rechazar guarda el motivo. Las solicitudes vencidas se marcan `EXPIRADA` al abrir la bandeja —
+nunca se borran. Aceptar exige `agenda.create` **y** `patients.create`. Todo se busca por
+`(id, clinicId)`, nunca por id solo.
+
+### Fase 4 — las cuatro plantillas
+
+`equipo`, `sonrisa`, `consultorio`, `especialistas`, registradas en el switch de
+`clinic-landing-server`, en `TEMPLATES` y en `TemplateThumb`, con sus llaves de traducción.
+
+- **consultorio** no usa **ninguna** foto y esa es su razón de existir: el patrón del hero es un SVG
+  en data-uri y los doctores salen con iniciales.
+- Tipografía: la del panel (IBM Plex Sans/Mono), que **ya** carga el layout raíz como `--font-sans`
+  y `--font-mono`. Ninguna plantilla importa fuentes de Google.
+- Todo el color deriva del acento, incluido el fondo oscuro de "especialistas". La única excepción
+  es el ámbar de urgencias en "consultorio", que es semántico.
+- **Cero copy comercial inventado**: valores, credenciales y cifras se arman sólo con lo que la
+  clínica capturó. Si el dato no está, la tarjeta no existe.
+- Cada sección se oculta sin datos: sin galería, sin testimonios, sin fotos de casos o con un solo
+  doctor, la página se ve terminada.
+- Piezas nuevas compartidas: `_shared/landing-data.ts` (lectura normalizada de los campos v2, con
+  la cadena de respaldo ranura → `landingCoverUrl` → galería) y `_shared/landing-pieces.tsx`
+  (comparador antes/después —arrastrable también con el teclado— y simulador de MSI).
+
+### Fase 5 — el editor se dibuja solo
+
+`_shared/template-manifest.ts` con el manifiesto de las **ocho** plantillas: secciones, ranuras de
+foto y textos. `manifest-editor.tsx` se pinta leyendo eso y no conoce ninguna plantilla por su
+nombre: **añadir una novena es escribir su manifiesto**.
+
+- Secciones: reordenables con interruptor; contacto y reservar ni se apagan ni se mueven.
+- Fotos: tarjeta por ranura con nombre, proporción, foto actual y un **diagrama** de la plantilla
+  que resalta dónde va a salir antes de subirla.
+- Textos: un campo por texto, con el valor por defecto de placeholder.
+- Duración por servicio (viaja como número), urgencias y MSI con su interruptor.
+- `/api/landing-upload` acepta el id de ranura y lo valida contra el manifiesto: `field` entra en la
+  ruta del objeto y no puede ser texto libre del cliente.
+- Vista previa en vivo al lado (iframe de `/landing-preview`), escritorio y móvil, recargada en cada
+  guardado.
+- **El retraso de 5 minutos se acabó**: el PATCH de `/api/clinic-landing` revalida `/[slug]`, la
+  vista previa y la ficha del directorio.
+
+### Qué queda pendiente (no lo pude hacer yo)
+
+1. **Nadie ha mandado todavía una solicitud real.** Falta la prueba de punta a punta en producción:
+   abrir la mini-web de una clínica, reservar **sin cuenta**, y confirmar que (a) llega el WhatsApp
+   al número de la clínica, (b) aparece la tarjeta en la campana y en la bandeja de la agenda, y
+   (c) "Crear paciente y confirmar" deja el expediente con folio correcto y la cita en su hueco.
+2. **El aviso por WhatsApp a la clínica sale con texto libre.** Si el número de la clínica está
+   fuera de la ventana de 24 h de Meta, ese mensaje **no llega y falla mudo** (el mismo agujero de
+   `whatsapp_sin_plantillas`). La solicitud igual queda guardada y visible en el panel, pero
+   conviene registrar una plantilla para este aviso.
+3. **La expiración de solicitudes corre al abrir la bandeja**, no por cron. Si nadie abre la agenda
+   en varios días, quedan `PENDIENTE` en la tabla (la campana ya no las anuncia porque filtra por
+   `requestedAt >= ahora`). Si molesta, es un cron de dos líneas sobre `expirePastRequests`.
+4. **Las plantillas nuevas no se han visto con datos reales de una clínica**, sólo compiladas.
+   Vale la pena abrir `/landing-preview/<slug>?preview=equipo|sonrisa|consultorio|especialistas`
+   con una clínica que tenga servicios, doctores y fotos cargados.
+5. **`landingGallery` y `landingCoverUrl` siguen vivas** junto a `landingPhotos`: las plantillas
+   viejas las usan y las nuevas caen a ellas como respaldo. No hay migración de datos y no hace
+   falta, pero conviene saberlo antes de tocar el uploader viejo.
