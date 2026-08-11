@@ -17,6 +17,7 @@ import {
   useScrolled, useActiveSection, Reveal, scrollToId, useLightbox, Lightbox,
 } from "../_shared/landing-utils";
 import { BookingModal } from "../_shared/booking-modal";
+import { useBookingReopen, type PendingBooking } from "../_shared/booking-session";
 
 const DAYS_FULL = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"];
 const CERRADO = "#b91c1c";
@@ -70,9 +71,12 @@ export function TemplateFuturista({ clinic, highlights }: TemplateProps) {
   const orderedSchedules = clinic.schedules.slice().sort((a, b) => a.dayOfWeek - b.dayOfWeek);
 
   /* ---------- estado ---------- */
-  const [booking, setBooking] = useState<{ open: boolean; service?: string; doctorId?: string }>({ open: false });
+  const [booking, setBooking] = useState<{ open: boolean; service?: string; doctorId?: string; restore?: PendingBooking | null }>({ open: false });
   const openBooking = (opts: { service?: string; doctorId?: string } = {}) => setBooking({ open: true, service: opts.service, doctorId: opts.doctorId });
   const closeBooking = () => setBooking((b) => ({ ...b, open: false }));
+  // De vuelta del login/registro: reabre el modal en el hueco ya elegido.
+  useBookingReopen(clinic.slug, (pending) =>
+    setBooking({ open: true, doctorId: pending?.doctorId, service: pending?.service, restore: pending }));
   const [menu, setMenu] = useState(false);
   const [showFab, setShowFab] = useState(false);
   const [openFaq, setOpenFaq] = useState<number>(0);
@@ -675,7 +679,7 @@ export function TemplateFuturista({ clinic, highlights }: TemplateProps) {
       </button>
 
       {/* ---------- modal de reserva REAL (uno solo, controlado) ---------- */}
-      <BookingModal clinic={clinic} theme={theme} open={booking.open} onClose={closeBooking} preselectedDoctorId={booking.doctorId} preselectedService={booking.service} />
+      <BookingModal clinic={clinic} theme={theme} open={booking.open} onClose={closeBooking} preselectedDoctorId={booking.doctorId} preselectedService={booking.service} restore={booking.restore} />
     </div>
   );
 }

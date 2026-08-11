@@ -14,6 +14,7 @@ import {
   useScrolled, useActiveSection, useLightbox, scrollToId,
 } from "../_shared/landing-utils";
 import { BookingModal } from "../_shared/booking-modal";
+import { useBookingReopen, type PendingBooking } from "../_shared/booking-session";
 
 const DAYS_SHORT = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
 
@@ -30,9 +31,12 @@ export function TemplateCalido({ clinic }: TemplateProps) {
   const waLink = clinic.landingWhatsapp ? `https://wa.me/${clinic.landingWhatsapp.replace(/\D/g, "")}` : null;
 
   // ---- estado ----
-  const [booking, setBooking] = useState<{ open: boolean; service?: string; doctorId?: string }>({ open: false });
+  const [booking, setBooking] = useState<{ open: boolean; service?: string; doctorId?: string; restore?: PendingBooking | null }>({ open: false });
   const openBooking = (opts?: { service?: string; doctorId?: string }) => setBooking({ open: true, ...opts });
   const closeBooking = () => setBooking((b) => ({ ...b, open: false }));
+  // De vuelta del login/registro: reabre el modal en el hueco ya elegido.
+  useBookingReopen(clinic.slug, (pending) =>
+    setBooking({ open: true, doctorId: pending?.doctorId, service: pending?.service, restore: pending }));
   const scrolled = useScrolled(40);
   const [menu, setMenu] = useState(false);
   const active = useActiveSection(["inicio", "servicios", "equipo", "galeria", "contacto"]);
@@ -528,6 +532,7 @@ export function TemplateCalido({ clinic }: TemplateProps) {
         onClose={closeBooking}
         preselectedDoctorId={booking.doctorId}
         preselectedService={booking.service}
+        restore={booking.restore}
       />
     </div>
   );

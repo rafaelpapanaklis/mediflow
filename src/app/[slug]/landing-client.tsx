@@ -1,7 +1,11 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Phone, MapPin, Clock, Instagram, Facebook, Star, ChevronDown, ChevronUp, X, Check, Loader2, ChevronLeft, ChevronRight, Calendar, ArrowRight, Menu } from "lucide-react";
-import type { PacienteMe } from "@/lib/patient-portal/types";
+import {
+  BookingAuthChoices, BookingSessionBadge, BookingSessionLoading,
+  savePendingBooking, splitFullName, useBookingReopen, usePatientSession,
+  type PendingBooking,
+} from "./_shared/booking-session";
 
 const MONTHS_ES = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
 const DAYS_SHORT = ["Lun","Mar","Mié","Jue","Vie","Sáb","Dom"];
@@ -16,23 +20,6 @@ function hexAdjust(hex: string, amount: number) {
   const b = Math.min(255,Math.max(0,(n&0xff)+amount));
   return `#${((r<<16)|(g<<8)|b).toString(16).padStart(6,"0")}`;
 }
-
-/** Sesión del portal del paciente: GET /api/paciente/me → PacienteMe | null. */
-async function fetchPacienteMe(): Promise<PacienteMe | null> {
-  try {
-    const res = await fetch("/api/paciente/me", { credentials: "same-origin", cache: "no-store" });
-    if (!res.ok) return null;
-    return await res.json();
-  } catch {
-    return null;
-  }
-}
-/** Primer token → firstName; el resto → lastName (un solo token → lastName ""). */
-function splitFullName(name: string): { firstName: string; lastName: string } {
-  const tokens = (name || "").trim().split(/\s+/).filter(Boolean);
-  return { firstName: tokens[0] ?? "", lastName: tokens.slice(1).join(" ") };
-}
-interface BookingPrefill { firstName: string; lastName: string; phone: string; email: string }
 
 interface Clinic {
   id:string; name:string; slug:string; specialty:string;
@@ -52,7 +39,7 @@ export function ClinicLandingClient({ clinic, highlights }:{ clinic:Clinic; high
   const theme     = clinic.landingThemeColor ?? "#0f766e";
   const themeDark = hexAdjust(theme, -35);
   const [showBook, setShowBook] = useState(false);
-  const [bookPrefill, setBookPrefill] = useState<BookingPrefill|null>(null);
+  const [bookRestore, setBookRestore] = useState<PendingBooking|null>(null);
   const [lightbox, setLightbox] = useState<number|null>(null);
   const [openFaq, setOpenFaq]   = useState<number|null>(null);
   const [scrolled, setScrolled] = useState(false);
@@ -79,30 +66,16 @@ export function ClinicLandingClient({ clinic, highlights }:{ clinic:Clinic; high
     return () => window.removeEventListener("scroll", fn);
   }, []);
 
-  // GATE: reservar requiere sesión del portal del paciente. Sin sesión →
-  // registro con ?next= de vuelta a esta landing (reabre el modal solo).
-  async function openBooking() {
-    const me = await fetchPacienteMe();
-    if (!me) {
-      window.location.assign(`/paciente/registro?next=${encodeURIComponent(`/${clinic.slug}?reservar=1`)}`);
-      return;
-    }
-    const { firstName, lastName } = splitFullName(me.name);
-    setBookPrefill({ firstName, lastName, phone: me.phone ?? "", email: me.email });
+  // Reservar ya NO expulsa al visitante al registro: el modal resuelve la
+  // sesión solo y, si no hay, ofrece los dos caminos sin perder el hueco.
+  function openBooking() {
+    setBookRestore(null);
     setShowBook(true);
   }
 
-  // AUTO-REOPEN: al volver de registro/login con ?reservar=1, corre el mismo
-  // gate y limpia el query de la URL.
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    if (params.get("reservar") !== "1") return;
-    params.delete("reservar");
-    const qs = params.toString();
-    window.history.replaceState(null, "", window.location.pathname + (qs ? `?${qs}` : "") + window.location.hash);
-    openBooking();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  // AUTO-REOPEN: de vuelta del login/registro, reabre el modal en el hueco
+  // que ya había elegido (y limpia el ?reservar=1 del gate viejo).
+  useBookingReopen(clinic.slug, (pending) => { setBookRestore(pending); setShowBook(true); });
 
   const navLinks = [
     ...(services.length > 0   ? [{href:"#servicios", label:"Servicios"}] : []),
@@ -602,23 +575,54 @@ export function ClinicLandingClient({ clinic, highlights }:{ clinic:Clinic; high
       </footer>
 
       {/* BOOKING MODAL */}
-      {showBook && <BookingModal clinic={clinic} onClose={() => setShowBook(false)} theme={theme} themeDark={themeDark} prefill={bookPrefill}/>}
+      {showBook && <BookingModal clinic={clinic} onClose={() => setShowBook(false)} theme={theme} themeDark={themeDark} restore={bookRestore}/>}
     </div>
     </>
   );
 }
 
-function BookingModal({ clinic, onClose, theme, themeDark, prefill }:{ clinic:Clinic; onClose:()=>void; theme:string; themeDark:string; prefill?:BookingPrefill|null }) {
-  const [step, setStep]           = useState(1);
-  const [doctor, setDoctor]       = useState<Clinic["users"][0]|null>(null);
-  const [calDate, setCalDate]     = useState(new Date());
-  const [selDate, setSelDate]     = useState("");
+function BookingModal({ clinic, onClose, theme, themeDark, restore }:{ clinic:Clinic; onClose:()=>void; theme:string; themeDark:string; restore?:PendingBooking|null }) {
+  // El hueco guardado solo se repone si ese doctor sigue en la clínica.
+  const backDoctor = restore ? clinic.users.find(u=>u.id===restore.doctorId) ?? null : null;
+  const pending    = backDoctor ? restore : null;
+  const [step, setStep]           = useState(backDoctor ? 2 : 1);
+  const [doctor, setDoctor]       = useState<Clinic["users"][0]|null>(backDoctor);
+  const [calDate, setCalDate]     = useState(() => pending ? new Date(`${pending.date}T00:00:00`) : new Date());
+  const [selDate, setSelDate]     = useState(pending ? pending.date : "");
   const [slots, setSlots]         = useState<string[]>([]);
   const [selSlot, setSelSlot]     = useState("");
   const [loadSlots, setLoadSlots] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError]         = useState("");
-  const [form, setForm]           = useState({ firstName:prefill?.firstName??"", lastName:prefill?.lastName??"", phone:prefill?.phone??"", email:prefill?.email??"", type:"Consulta general", notes:"" });
+  /** Aviso ámbar del paso 2 (el hueco se lo ganaron), distinto del error rojo. */
+  const [notice, setNotice]       = useState(restore && !backDoctor ? "Ese doctor ya no está disponible. Elige otro, por favor." : "");
+  const [form, setForm]           = useState({ firstName:"", lastName:"", phone:"", email:"", type:(pending && pending.service) || "Consulta general", notes:"" });
+  /** Selección por reponer en cuanto llegue la disponibilidad del día. */
+  const restoreRef                = useRef<PendingBooking|null>(pending);
+
+  // Sesión del portal: un solo GET /api/paciente/me, al abrir el modal.
+  const { status:sessionStatus, me, markSignedOut } = usePatientSession(true);
+  const [usingAccount, setUsingAccount] = useState(true);
+
+  /** El hueco elegido, tal cual se guarda antes de mandarlo a identificarse. */
+  function selection():PendingBooking {
+    return { doctorId: doctor?.id ?? "", date: selDate, slot: selSlot, service: form.type };
+  }
+  function fillFromAccount() {
+    if (!me) return;
+    const { firstName, lastName } = splitFullName(me.name);
+    setUsingAccount(true);
+    setForm(f=>({ ...f, firstName, lastName, phone: me.phone ?? "", email: me.email ?? "" }));
+  }
+  function clearIdentity() {
+    setUsingAccount(false);
+    setForm(f=>({ ...f, firstName:"", lastName:"", phone:"", email:"" }));
+  }
+  // Con sesión: nombre / teléfono / correo precargados — cero pasos extra.
+  useEffect(() => {
+    if (me) fillFromAccount();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [me]);
 
   const schedMap = Object.fromEntries(clinic.schedules.map(s=>[s.dayOfWeek,s]));
   function isDayEnabled(date:Date) {
@@ -634,11 +638,23 @@ function BookingModal({ clinic, onClose, theme, themeDark, prefill }:{ clinic:Cl
     for(let d=1;d<=last;d++) cells.push(new Date(y,m,d));
     return cells;
   }
+  // Disponibilidad real + reposición del hueco guardado
   useEffect(() => {
     if (!selDate||!doctor) return;
     setSlots([]); setSelSlot(""); setLoadSlots(true);
     fetch(`/api/public/availability?slug=${clinic.slug}&date=${selDate}&doctorId=${doctor.id}`)
-      .then(r=>r.json()).then(d=>setSlots(d.slots??[])).catch(()=>{}).finally(()=>setLoadSlots(false));
+      .then(r=>r.json())
+      .then(d=>{
+        const list:string[] = d.slots??[];
+        setSlots(list);
+        const pend = restoreRef.current;
+        if (!pend || pend.date!==selDate || pend.doctorId!==doctor.id) return;
+        restoreRef.current = null;
+        if (list.includes(pend.slot)) { setSelSlot(pend.slot); setStep(3); return; }
+        // Se lo ganaron mientras se identificaba: aviso y de vuelta al calendario.
+        setNotice(`El horario de las ${pend.slot} ya fue reservado. Elige otro, por favor.`);
+      })
+      .catch(()=>{}).finally(()=>setLoadSlots(false));
   },[selDate,doctor,clinic.slug]);
 
   async function submit() {
@@ -646,14 +662,29 @@ function BookingModal({ clinic, onClose, theme, themeDark, prefill }:{ clinic:Cl
     setError(""); setSubmitting(true);
     try {
       const res=await fetch("/api/public/book",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({slug:clinic.slug,doctorId:doctor!.id,date:selDate,startTime:selSlot,type:form.type,firstName:form.firstName.trim(),lastName:form.lastName.trim(),phone:form.phone.trim(),email:form.email.trim()||undefined,notes:form.notes.trim()||undefined})});
-      const data=await res.json();
-      if (res.status===401) { window.location.assign(`/paciente/registro?next=${encodeURIComponent(`/${clinic.slug}?reservar=1`)}`); return; }
+      const data=await res.json().catch(()=>({} as any));
+      // Red de seguridad: la sesión venció a media reserva. Guardamos el hueco
+      // y el paso de datos vuelve a ofrecer los dos caminos (nunca el rojo).
+      if (res.status===401) { savePendingBooking(clinic.slug, selection()); markSignedOut(); return; }
+      // El hueco se lo ganaron: aviso y de vuelta al calendario, no un muro rojo.
+      if (res.status===409) {
+        const taken=selSlot;
+        setSlots(s=>s.filter(x=>x!==taken));
+        setSelSlot("");
+        setNotice(data.error??"Ese horario ya fue reservado. Elige otro, por favor.");
+        setStep(2);
+        return;
+      }
       if (!res.ok) throw new Error(data.error??"Error al agendar");
       setStep(4);
     } catch(e:any){setError(e.message);} finally{setSubmitting(false);}
   }
 
   const today=toYMD(new Date());
+  const baseTypes  = doctor?.services.length ? doctor.services : ["Consulta general","Primera vez","Revisión","Urgencia"];
+  // El motivo elegido (o repuesto del hueco guardado) siempre debe existir como
+  // opción, o el <select> mostraría uno distinto al que se manda.
+  const typeOptions = form.type && !baseTypes.includes(form.type) ? [form.type, ...baseTypes] : baseTypes;
   return (
     <div className="fixed inset-0 z-50 bg-black/65 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4" onClick={onClose}>
       <div className="bg-white w-full sm:max-w-[440px] rounded-t-[2.5rem] sm:rounded-[2.5rem] shadow-2xl max-h-[94vh] overflow-y-auto" onClick={e=>e.stopPropagation()}>
@@ -703,6 +734,7 @@ function BookingModal({ clinic, onClose, theme, themeDark, prefill }:{ clinic:Cl
                 <div className="w-9 h-9 rounded-xl flex items-center justify-center text-white text-sm font-bold shrink-0" style={{background:doctor.color}}>{doctor.firstName[0]}{doctor.lastName[0]}</div>
                 <span className="text-sm font-semibold text-gray-700">Dr/a. {doctor.firstName} {doctor.lastName}</span>
               </div>
+              {notice && <div className="mb-4 rounded-2xl p-3.5 text-sm bg-amber-50 text-amber-800 border border-amber-100">{notice}</div>}
               <div className="bg-gray-50 rounded-2xl p-4 mb-4">
                 <div className="flex items-center justify-between mb-4">
                   <button onClick={()=>setCalDate(d=>new Date(d.getFullYear(),d.getMonth()-1,1))} className="w-9 h-9 rounded-xl hover:bg-gray-200 flex items-center justify-center text-gray-400 font-bold text-lg transition-colors">‹</button>
@@ -717,7 +749,7 @@ function BookingModal({ clinic, onClose, theme, themeDark, prefill }:{ clinic:Cl
                     if(!day) return <div key={i}/>;
                     const ymd=toYMD(day),en=isDayEnabled(day),sel=ymd===selDate,isT=ymd===today;
                     return (
-                      <button key={i} disabled={!en} onClick={()=>setSelDate(ymd)}
+                      <button key={i} disabled={!en} onClick={()=>{setSelDate(ymd);setNotice("");}}
                         className="h-9 rounded-xl text-sm font-medium transition-all"
                         style={{background:sel?theme:"transparent",color:sel?"#fff":en?"#1f2937":"#d1d5db",fontWeight:isT||sel?700:400,border:isT&&!sel?`2px solid ${theme}`:"2px solid transparent",cursor:en?"pointer":"default"}}>
                         {day.getDate()}
@@ -733,7 +765,7 @@ function BookingModal({ clinic, onClose, theme, themeDark, prefill }:{ clinic:Cl
                   : slots.length===0 ? <p className="text-sm text-gray-400 py-2">Sin horarios — elige otra fecha</p>
                   : <div className="grid grid-cols-4 gap-2">
                       {slots.map(slot=>(
-                        <button key={slot} onClick={()=>setSelSlot(slot)}
+                        <button key={slot} onClick={()=>{setSelSlot(slot);setNotice("");}}
                           className="py-2.5 rounded-xl text-sm font-bold border-2 transition-all"
                           style={{background:selSlot===slot?theme:"transparent",color:selSlot===slot?"#fff":"#374151",borderColor:selSlot===slot?theme:"#e5e7eb"}}>
                           {slot}
@@ -757,6 +789,17 @@ function BookingModal({ clinic, onClose, theme, themeDark, prefill }:{ clinic:Cl
               <div className="rounded-2xl p-4 text-sm font-semibold flex items-center gap-2.5" style={{background:`${theme}10`,color:themeDark}}>
                 <Calendar size={15}/> {selDate?new Date(selDate+"T00:00:00").toLocaleDateString("es-MX",{weekday:"short",day:"numeric",month:"long"}):""} · {selSlot} · Dr/a. {doctor?.firstName}
               </div>
+              {/* Sin sesión el POST responde 401: los dos caminos ANTES de que
+                  llene nada, con el hueco guardado por si se va al login. */}
+              {sessionStatus==="loading" ? <BookingSessionLoading theme={theme}/>
+              : sessionStatus==="anonymous" ? (
+                <BookingAuthChoices slug={clinic.slug} theme={theme} onBeforeLeave={()=>savePendingBooking(clinic.slug, selection())}/>
+              ) : (
+              <>
+              {me && (
+                <BookingSessionBadge name={me.name} theme={theme} usingAccount={usingAccount}
+                  onUseOther={clearIdentity} onUseAccount={fillFromAccount}/>
+              )}
               <div className="grid grid-cols-2 gap-3">
                 {[{l:"Nombre *",k:"firstName",p:"Nombre"},{l:"Apellido *",k:"lastName",p:"Apellido"}].map(f=>(
                   <div key={f.k}>
@@ -780,7 +823,7 @@ function BookingModal({ clinic, onClose, theme, themeDark, prefill }:{ clinic:Cl
                 <select value={form.type} onChange={e=>setForm(f=>({...f,type:e.target.value}))}
                   className="w-full border-2 border-gray-100 rounded-xl px-3.5 py-2.5 text-sm outline-none bg-white transition-colors"
                   onFocus={e=>e.target.style.borderColor=theme} onBlur={e=>e.target.style.borderColor="#f3f4f6"}>
-                  {(doctor?.services.length?doctor.services:["Consulta general","Primera vez","Revisión","Urgencia"]).map(t=>(
+                  {typeOptions.map(t=>(
                     <option key={t} value={t}>{t}</option>
                   ))}
                 </select>
@@ -798,6 +841,8 @@ function BookingModal({ clinic, onClose, theme, themeDark, prefill }:{ clinic:Cl
                 {submitting?<><Loader2 size={18} className="animate-spin"/>Confirmando…</>:<><Check size={18}/>Confirmar cita</>}
               </button>
               <p className="text-xs text-gray-400 text-center">Recibirás confirmación por WhatsApp 📱</p>
+              </>
+              )}
             </div>
           )}
           {/* Step 4 */}

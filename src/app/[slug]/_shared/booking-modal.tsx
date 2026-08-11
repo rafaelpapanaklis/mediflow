@@ -10,6 +10,15 @@ import { useState, useEffect, useRef } from "react";
 import { X, Check, Loader2, ArrowRight, Calendar } from "lucide-react";
 import type { LandingClinic, LandingDoctor } from "./types";
 import { hexAdjust } from "./landing-utils";
+import {
+  BookingAuthChoices,
+  BookingSessionBadge,
+  BookingSessionLoading,
+  savePendingBooking,
+  splitFullName,
+  usePatientSession,
+  type PendingBooking,
+} from "./booking-session";
 
 const MONTHS_ES = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
 const DAYS_SHORT = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
@@ -25,9 +34,11 @@ export interface BookingModalProps {
   onClose: () => void;
   preselectedDoctorId?: string;
   preselectedService?: string;
+  /** Hueco que el visitante eligió antes de irse a identificarse. */
+  restore?: PendingBooking | null;
 }
 
-export function BookingModal({ clinic, theme, open, onClose, preselectedDoctorId, preselectedService }: BookingModalProps) {
+export function BookingModal({ clinic, theme, open, onClose, preselectedDoctorId, preselectedService, restore }: BookingModalProps) {
   const themeDark = hexAdjust(theme, -35);
   const [step, setStep] = useState(1);
   const [doctor, setDoctor] = useState<LandingDoctor | null>(null);
@@ -38,8 +49,31 @@ export function BookingModal({ clinic, theme, open, onClose, preselectedDoctorId
   const [loadSlots, setLoadSlots] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
+  /** Aviso ámbar del paso 2 (el hueco se lo ganaron), distinto del error rojo. */
+  const [notice, setNotice] = useState("");
   const [form, setForm] = useState({ firstName: "", lastName: "", phone: "", email: "", type: "Consulta general", notes: "" });
   const cardRef = useRef<HTMLDivElement>(null);
+  /** Selección por reponer en cuanto llegue la disponibilidad del día. */
+  const restoreRef = useRef<PendingBooking | null>(null);
+
+  // Sesión del portal: un solo GET /api/paciente/me, al abrir el modal.
+  const { status: sessionStatus, me, markSignedOut } = usePatientSession(open);
+  const [usingAccount, setUsingAccount] = useState(true);
+
+  /** El hueco elegido, tal cual se guarda antes de mandarlo a identificarse. */
+  function selection(): PendingBooking {
+    return { doctorId: doctor?.id ?? "", date: selDate, slot: selSlot, service: form.type };
+  }
+  function fillFromAccount() {
+    if (!me) return;
+    const { firstName, lastName } = splitFullName(me.name);
+    setUsingAccount(true);
+    setForm((f) => ({ ...f, firstName, lastName, phone: me.phone ?? "", email: me.email ?? "" }));
+  }
+  function clearIdentity() {
+    setUsingAccount(false);
+    setForm((f) => ({ ...f, firstName: "", lastName: "", phone: "", email: "" }));
+  }
 
   const schedMap = Object.fromEntries(clinic.schedules.map((s) => [s.dayOfWeek, s]));
   function isDayEnabled(date: Date) {
@@ -56,25 +90,54 @@ export function BookingModal({ clinic, theme, open, onClose, preselectedDoctorId
     return cells;
   }
 
-  // Disponibilidad real (idéntico a classic)
+  // Disponibilidad real (idéntico a classic) + reposición del hueco guardado
   useEffect(() => {
     if (!selDate || !doctor) return;
     setSlots([]); setSelSlot(""); setLoadSlots(true);
     fetch(`/api/public/availability?slug=${clinic.slug}&date=${selDate}&doctorId=${doctor.id}`)
-      .then((r) => r.json()).then((d) => setSlots(d.slots ?? [])).catch(() => {}).finally(() => setLoadSlots(false));
+      .then((r) => r.json())
+      .then((d) => {
+        const list: string[] = d.slots ?? [];
+        setSlots(list);
+        const pend = restoreRef.current;
+        if (!pend || pend.date !== selDate || pend.doctorId !== doctor.id) return;
+        restoreRef.current = null;
+        if (list.includes(pend.slot)) { setSelSlot(pend.slot); setStep(3); return; }
+        // Se lo ganaron mientras se identificaba: aviso y de vuelta al calendario.
+        setNotice(`El horario de las ${pend.slot} ya fue reservado. Elige otro, por favor.`);
+      })
+      .catch(() => {}).finally(() => setLoadSlots(false));
   }, [selDate, doctor, clinic.slug]);
 
-  // Reset + preselección al abrir
+  // Reset + preselección al abrir (o reposición del hueco tras identificarse)
   useEffect(() => {
     if (!open) return;
+    const back = restore ? clinic.users.find((u) => u.id === restore.doctorId) ?? null : null;
+    const pending = back ? restore : null;
     const pre = preselectedDoctorId ? clinic.users.find((u) => u.id === preselectedDoctorId) ?? null : null;
-    setDoctor(pre);
-    setStep(pre ? 2 : 1);
-    setCalDate(new Date());
-    setSelDate(""); setSlots([]); setSelSlot(""); setLoadSlots(false);
+    const doc = back ?? pre;
+    restoreRef.current = pending;
+    setDoctor(doc);
+    setStep(doc ? 2 : 1);
+    setCalDate(pending ? new Date(`${pending.date}T00:00:00`) : new Date());
+    setSelDate(pending ? pending.date : "");
+    setSlots([]); setSelSlot(""); setLoadSlots(false);
     setSubmitting(false); setError("");
-    setForm({ firstName: "", lastName: "", phone: "", email: "", type: preselectedService || "Consulta general", notes: "" });
-  }, [open, preselectedDoctorId, preselectedService, clinic.users]);
+    setNotice(restore && !back ? "Ese doctor ya no está disponible. Elige otro, por favor." : "");
+    setUsingAccount(true);
+    setForm({
+      firstName: "", lastName: "", phone: "", email: "",
+      type: (pending && pending.service) || preselectedService || "Consulta general",
+      notes: "",
+    });
+  }, [open, preselectedDoctorId, preselectedService, restore, clinic.users]);
+
+  // Con sesión: nombre / teléfono / correo precargados — cero pasos extra.
+  useEffect(() => {
+    if (!open || !me) return;
+    fillFromAccount();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, me]);
 
   // Esc + bloqueo de scroll del body + focus-trap
   useEffect(() => {
@@ -104,7 +167,19 @@ export function BookingModal({ clinic, theme, open, onClose, preselectedDoctorId
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ slug: clinic.slug, doctorId: doctor!.id, date: selDate, startTime: selSlot, type: form.type, firstName: form.firstName.trim(), lastName: form.lastName.trim(), phone: form.phone.trim(), email: form.email.trim() || undefined, notes: form.notes.trim() || undefined }),
       });
-      const data = await res.json();
+      const data = await res.json().catch(() => ({} as any));
+      // Red de seguridad: la sesión venció a media reserva. Guardamos el hueco
+      // y el paso de datos vuelve a ofrecer los dos caminos (nunca el rojo).
+      if (res.status === 401) { savePendingBooking(clinic.slug, selection()); markSignedOut(); return; }
+      // El hueco se lo ganaron: aviso y de vuelta al calendario, no un muro rojo.
+      if (res.status === 409) {
+        const taken = selSlot;
+        setSlots((s) => s.filter((x) => x !== taken));
+        setSelSlot("");
+        setNotice(data.error ?? "Ese horario ya fue reservado. Elige otro, por favor.");
+        setStep(2);
+        return;
+      }
       if (!res.ok) throw new Error(data.error ?? "Error al agendar");
       setStep(4);
     } catch (e: any) { setError(e.message); } finally { setSubmitting(false); }
@@ -114,7 +189,9 @@ export function BookingModal({ clinic, theme, open, onClose, preselectedDoctorId
 
   const today = toYMD(new Date());
   const baseTypes = doctor?.services.length ? doctor.services : ["Consulta general", "Primera vez", "Revisión", "Urgencia"];
-  const typeOptions = preselectedService && !baseTypes.includes(preselectedService) ? [preselectedService, ...baseTypes] : baseTypes;
+  // El motivo elegido (preseleccionado o repuesto del hueco guardado) siempre
+  // debe existir como opción, o el <select> mostraría uno distinto al que manda.
+  const typeOptions = form.type && !baseTypes.includes(form.type) ? [form.type, ...baseTypes] : baseTypes;
 
   return (
     <div className="fixed inset-0 z-50 bg-black/65 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4" onClick={onClose}>
@@ -165,6 +242,9 @@ export function BookingModal({ clinic, theme, open, onClose, preselectedDoctorId
                 <div className="w-9 h-9 rounded-xl flex items-center justify-center text-white text-sm font-bold shrink-0" style={{ background: doctor.color }}>{doctor.firstName[0]}{doctor.lastName[0]}</div>
                 <span className="text-sm font-semibold text-gray-700">Dr/a. {doctor.firstName} {doctor.lastName}</span>
               </div>
+              {notice && (
+                <div className="mb-4 rounded-2xl p-3.5 text-sm bg-amber-50 text-amber-800 border border-amber-100">{notice}</div>
+              )}
               <div className="bg-gray-50 rounded-2xl p-4 mb-4">
                 <div className="flex items-center justify-between mb-4">
                   <button onClick={() => setCalDate((d) => new Date(d.getFullYear(), d.getMonth() - 1, 1))} aria-label="Mes anterior" className="w-9 h-9 rounded-xl hover:bg-gray-200 flex items-center justify-center text-gray-400 font-bold text-lg transition-colors">‹</button>
@@ -179,7 +259,7 @@ export function BookingModal({ clinic, theme, open, onClose, preselectedDoctorId
                     if (!day) return <div key={i} />;
                     const ymd = toYMD(day), en = isDayEnabled(day), sel = ymd === selDate, isT = ymd === today;
                     return (
-                      <button key={i} disabled={!en} onClick={() => setSelDate(ymd)}
+                      <button key={i} disabled={!en} onClick={() => { setSelDate(ymd); setNotice(""); }}
                         className="h-9 rounded-xl text-sm font-medium transition-all"
                         style={{ background: sel ? theme : "transparent", color: sel ? "#fff" : en ? "#1f2937" : "#d1d5db", fontWeight: isT || sel ? 700 : 400, border: isT && !sel ? `2px solid ${theme}` : "2px solid transparent", cursor: en ? "pointer" : "default" }}>
                         {day.getDate()}
@@ -195,7 +275,7 @@ export function BookingModal({ clinic, theme, open, onClose, preselectedDoctorId
                     : slots.length === 0 ? <p className="text-sm text-gray-400 py-2">Sin horarios — elige otra fecha</p>
                       : <div className="grid grid-cols-4 gap-2">
                           {slots.map((slot) => (
-                            <button key={slot} onClick={() => setSelSlot(slot)}
+                            <button key={slot} onClick={() => { setSelSlot(slot); setNotice(""); }}
                               className="py-2.5 rounded-xl text-sm font-bold border-2 transition-all"
                               style={{ background: selSlot === slot ? theme : "transparent", color: selSlot === slot ? "#fff" : "#374151", borderColor: selSlot === slot ? theme : "#e5e7eb" }}>
                               {slot}
@@ -219,47 +299,70 @@ export function BookingModal({ clinic, theme, open, onClose, preselectedDoctorId
               <div className="rounded-2xl p-4 text-sm font-semibold flex items-center gap-2.5" style={{ background: `${theme}10`, color: themeDark }}>
                 <Calendar size={15} /> {selDate ? new Date(selDate + "T00:00:00").toLocaleDateString("es-MX", { weekday: "short", day: "numeric", month: "long" }) : ""} · {selSlot} · Dr/a. {doctor?.firstName}
               </div>
-              <div className="grid grid-cols-2 gap-3">
-                {[{ l: "Nombre *", k: "firstName", p: "Nombre" }, { l: "Apellido *", k: "lastName", p: "Apellido" }].map((f) => (
-                  <div key={f.k}>
-                    <label className="text-xs font-semibold text-gray-400 block mb-1.5">{f.l}</label>
-                    <input value={(form as any)[f.k]} onChange={(e) => setForm((p) => ({ ...p, [f.k]: e.target.value }))} placeholder={f.p}
-                      className="w-full border-2 border-gray-100 rounded-xl px-3.5 py-2.5 text-sm outline-none focus:border-blue-200 transition-colors"
+              {/* Sin sesión el POST responde 401: los dos caminos ANTES de que
+                  llene nada, con el hueco guardado por si se va al login. */}
+              {sessionStatus === "loading" ? (
+                <BookingSessionLoading theme={theme} />
+              ) : sessionStatus === "anonymous" ? (
+                <BookingAuthChoices
+                  slug={clinic.slug}
+                  theme={theme}
+                  onBeforeLeave={() => savePendingBooking(clinic.slug, selection())}
+                />
+              ) : (
+                <>
+                  {me && (
+                    <BookingSessionBadge
+                      name={me.name}
+                      theme={theme}
+                      usingAccount={usingAccount}
+                      onUseOther={clearIdentity}
+                      onUseAccount={fillFromAccount}
+                    />
+                  )}
+                  <div className="grid grid-cols-2 gap-3">
+                    {[{ l: "Nombre *", k: "firstName", p: "Nombre" }, { l: "Apellido *", k: "lastName", p: "Apellido" }].map((f) => (
+                      <div key={f.k}>
+                        <label className="text-xs font-semibold text-gray-400 block mb-1.5">{f.l}</label>
+                        <input value={(form as any)[f.k]} onChange={(e) => setForm((p) => ({ ...p, [f.k]: e.target.value }))} placeholder={f.p}
+                          className="w-full border-2 border-gray-100 rounded-xl px-3.5 py-2.5 text-sm text-gray-900 outline-none focus:border-blue-200 transition-colors"
+                          onFocus={(e) => (e.target.style.borderColor = theme)} onBlur={(e) => (e.target.style.borderColor = "#f3f4f6")} />
+                      </div>
+                    ))}
+                  </div>
+                  {[{ l: "WhatsApp / Teléfono *", k: "phone", p: "+52 999 123 4567", t: "tel" }, { l: "Email (opcional)", k: "email", p: "correo@ejemplo.com", t: "email" }].map((f) => (
+                    <div key={f.k}>
+                      <label className="text-xs font-semibold text-gray-400 block mb-1.5">{f.l}</label>
+                      <input value={(form as any)[f.k]} onChange={(e) => setForm((p) => ({ ...p, [f.k]: e.target.value }))} placeholder={f.p} type={f.t}
+                        className="w-full border-2 border-gray-100 rounded-xl px-3.5 py-2.5 text-sm text-gray-900 outline-none transition-colors"
+                        onFocus={(e) => (e.target.style.borderColor = theme)} onBlur={(e) => (e.target.style.borderColor = "#f3f4f6")} />
+                    </div>
+                  ))}
+                  <div>
+                    <label className="text-xs font-semibold text-gray-400 block mb-1.5">Motivo de consulta</label>
+                    <select value={form.type} onChange={(e) => setForm((f) => ({ ...f, type: e.target.value }))}
+                      className="w-full border-2 border-gray-100 rounded-xl px-3.5 py-2.5 text-sm text-gray-900 outline-none bg-white transition-colors"
+                      onFocus={(e) => (e.target.style.borderColor = theme)} onBlur={(e) => (e.target.style.borderColor = "#f3f4f6")}>
+                      {typeOptions.map((t) => (
+                        <option key={t} value={t}>{t}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-xs font-semibold text-gray-400 block mb-1.5">Notas (opcional)</label>
+                    <textarea value={form.notes} onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))} placeholder="Describe tu motivo…" rows={2}
+                      className="w-full border-2 border-gray-100 rounded-xl px-3.5 py-2.5 text-sm text-gray-900 outline-none resize-none transition-colors"
                       onFocus={(e) => (e.target.style.borderColor = theme)} onBlur={(e) => (e.target.style.borderColor = "#f3f4f6")} />
                   </div>
-                ))}
-              </div>
-              {[{ l: "WhatsApp / Teléfono *", k: "phone", p: "+52 999 123 4567", t: "tel" }, { l: "Email (opcional)", k: "email", p: "correo@ejemplo.com", t: "email" }].map((f) => (
-                <div key={f.k}>
-                  <label className="text-xs font-semibold text-gray-400 block mb-1.5">{f.l}</label>
-                  <input value={(form as any)[f.k]} onChange={(e) => setForm((p) => ({ ...p, [f.k]: e.target.value }))} placeholder={f.p} type={f.t}
-                    className="w-full border-2 border-gray-100 rounded-xl px-3.5 py-2.5 text-sm outline-none transition-colors"
-                    onFocus={(e) => (e.target.style.borderColor = theme)} onBlur={(e) => (e.target.style.borderColor = "#f3f4f6")} />
-                </div>
-              ))}
-              <div>
-                <label className="text-xs font-semibold text-gray-400 block mb-1.5">Motivo de consulta</label>
-                <select value={form.type} onChange={(e) => setForm((f) => ({ ...f, type: e.target.value }))}
-                  className="w-full border-2 border-gray-100 rounded-xl px-3.5 py-2.5 text-sm outline-none bg-white transition-colors"
-                  onFocus={(e) => (e.target.style.borderColor = theme)} onBlur={(e) => (e.target.style.borderColor = "#f3f4f6")}>
-                  {typeOptions.map((t) => (
-                    <option key={t} value={t}>{t}</option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="text-xs font-semibold text-gray-400 block mb-1.5">Notas (opcional)</label>
-                <textarea value={form.notes} onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))} placeholder="Describe tu motivo…" rows={2}
-                  className="w-full border-2 border-gray-100 rounded-xl px-3.5 py-2.5 text-sm outline-none resize-none transition-colors"
-                  onFocus={(e) => (e.target.style.borderColor = theme)} onBlur={(e) => (e.target.style.borderColor = "#f3f4f6")} />
-              </div>
-              {error && <div className="bg-red-50 text-red-600 text-sm rounded-xl p-3 border border-red-100">{error}</div>}
-              <button onClick={submit} disabled={submitting}
-                className="w-full py-4 rounded-2xl font-bold text-white text-base disabled:opacity-50 flex items-center justify-center gap-2.5 transition-all"
-                style={{ background: theme, boxShadow: `0 8px 24px ${theme}40` }}>
-                {submitting ? <><Loader2 size={18} className="animate-spin" />Confirmando…</> : <><Check size={18} />Confirmar cita</>}
-              </button>
-              <p className="text-xs text-gray-400 text-center">Recibirás confirmación por WhatsApp 📱</p>
+                  {error && <div className="bg-red-50 text-red-600 text-sm rounded-xl p-3 border border-red-100">{error}</div>}
+                  <button onClick={submit} disabled={submitting}
+                    className="w-full py-4 rounded-2xl font-bold text-white text-base disabled:opacity-50 flex items-center justify-center gap-2.5 transition-all"
+                    style={{ background: theme, boxShadow: `0 8px 24px ${theme}40` }}>
+                    {submitting ? <><Loader2 size={18} className="animate-spin" />Confirmando…</> : <><Check size={18} />Confirmar cita</>}
+                  </button>
+                  <p className="text-xs text-gray-400 text-center">Recibirás confirmación por WhatsApp 📱</p>
+                </>
+              )}
             </div>
           )}
           {/* Step 4 */}
