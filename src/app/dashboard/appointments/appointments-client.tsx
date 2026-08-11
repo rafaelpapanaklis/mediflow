@@ -19,6 +19,7 @@ import toast from "react-hot-toast";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import { DateField } from "@/components/ui/date-field";
 import { useT } from "@/i18n/i18n-provider";
+import { BookingRequestsPanel } from "./booking-requests-panel";
 
 interface Patient { id: string; firstName: string; lastName: string; patientNumber: string; phone?: string | null }
 interface Doctor  { id: string; firstName: string; lastName: string; role: string }
@@ -910,6 +911,10 @@ export function AppointmentsClient({ appointments: initialAppts, patients, docto
 
       {/* Side panel */}
       <div className="w-72 flex-shrink-0">
+        {/* Solicitudes de la mini-web SIN cuenta: ni expediente ni cita
+            existen todavía, y el hueco no está apartado. Se pinta sola
+            cuando hay alguna pendiente. */}
+        <BookingRequestsPanel initialOpen={searchParams.get("solicitudes") === "1"} />
         <div className="card" style={{ overflow: "hidden" }}>
           <div className="card__header">
             <div>

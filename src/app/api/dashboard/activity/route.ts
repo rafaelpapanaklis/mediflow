@@ -38,7 +38,10 @@ export async function GET(req: NextRequest) {
   // existe (P2021/42P01) y la campana sigue funcionando sin ellas.
   const solicitudes = await prisma.bookingRequest
     .findMany({
-      where: { clinicId: ctx.clinicId, status: "PENDIENTE" },
+      // requestedAt futuro: una solicitud cuyo horario ya pasó está vencida
+      // (la bandeja de la agenda la marca EXPIRADA al abrirse) y no debe seguir
+      // sonando en la campana como si alguien pudiera contestarla.
+      where: { clinicId: ctx.clinicId, status: "PENDIENTE", requestedAt: { gte: new Date() } },
       select: {
         id: true, patientName: true, requestedAt: true, serviceName: true, createdAt: true,
         // La hora pedida se muestra en la zona de la CLÍNICA: el servidor corre
