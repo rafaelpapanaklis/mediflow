@@ -1,8 +1,10 @@
 "use client";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import toast from "react-hot-toast";
-import { ExternalLink, Copy, Eye, Plus, Trash2, Check, Sparkles, RefreshCw, Users, ImagePlus, ChevronLeft, ChevronRight, Star, HelpCircle, Stethoscope, Share2 } from "lucide-react";
+import { ExternalLink, Copy, Eye, Plus, Trash2, Check, Sparkles, RefreshCw, Users, ImagePlus, ChevronLeft, ChevronRight, Star, HelpCircle, Stethoscope, Share2, Monitor, Smartphone, Zap } from "lucide-react";
 import { useT } from "@/i18n/i18n-provider";
+import { ManifestEditor } from "./manifest-editor";
+import type { SectionState } from "@/app/[slug]/_shared/landing-data";
 
 interface Clinic {
   id: string; name: string; slug: string; phone: string|null; email: string|null;
@@ -13,12 +15,19 @@ interface Clinic {
   landingFacebook: string|null; landingTiktok: string|null; landingMapEmbed: string|null;
   landingTagline: string|null;
   landingTemplate: string|null; landingYearsExperience: number|null; landingPatients: string|null;
+  /* Landing v2 — opcionales: una clínica que nunca abrió el editor nuevo los
+     tiene en null y el manifiesto rellena los valores por defecto. */
+  landingSections?: unknown; landingPhotos?: unknown;
+  landingUrgentText?: string|null; landingMsiPlazos?: number[];
 }
 
 interface Props { clinic: Clinic; appUrl: string }
 
 const TABS = [
   { id:"plantilla",    labelKey:"pages.landing.tabTemplate"   },
+  // Se dibuja SOLA desde el manifiesto de la plantilla activa: secciones,
+  // textos y ranuras de foto. Ver _shared/template-manifest.ts.
+  { id:"diseno",       labelKey:"pages.landing.tabDesign"     },
   { id:"general",      labelKey:"pages.landing.tabGeneral"    },
   { id:"servicios",    labelKey:"pages.landing.tabServices"   },
   { id:"testimonios",  labelKey:"pages.landing.tabTestimonials" },
@@ -96,6 +105,10 @@ export function LandingConfigClient({ clinic: initial, appUrl }: Props) {
   const [tab, setTab]       = useState("plantilla");
   const [saving, setSaving] = useState(false);
   const [templateSel, setTemplateSel] = useState(initial.landingTemplate ?? "classic");
+  /* Vista previa en vivo: el nonce cambia en cada guardado y fuerza la
+     recarga del iframe (su key depende de él). */
+  const [previewNonce, setPreviewNonce] = useState(0);
+  const [previewAncho, setPreviewAncho] = useState<"escritorio" | "movil">("escritorio");
 
   const landingUrl = `${appUrl}/${clinic.slug}`;
 
@@ -114,6 +127,9 @@ export function LandingConfigClient({ clinic: initial, appUrl }: Props) {
       if (!res.ok) throw new Error((await res.json()).error);
       const updated = await res.json();
       setClinic(c => ({ ...c, ...updated }));
+      // El sitio público ya se revalidó en el servidor; aquí se refresca la
+      // vista previa para que la clínica vea el cambio sin recargar nada.
+      setPreviewNonce(n => n + 1);
       toast.success(successMsg);
     } catch(e: any) { toast.error(e.message); }
     finally { setSaving(false); }
@@ -144,9 +160,33 @@ export function LandingConfigClient({ clinic: initial, appUrl }: Props) {
     await save({ landingTemplate: templateSel, landingActive: true }, t("pages.landing.templateApplied", { name }));
   }
 
+  // ── Secciones y fotos guardadas (landing v2) — el editor por manifiesto
+  //    las recibe ya normalizadas y devuelve el objeto completo al guardar.
+  const savedSections = useMemo(() => {
+    const raw = (clinic as any).landingSections;
+    if (!Array.isArray(raw)) return [] as SectionState[];
+    return raw
+      .filter((s: any) => s && typeof s.id === "string")
+      .map((s: any, i: number) => ({
+        id: s.id,
+        visible: s.visible !== false,
+        orden: Number.isFinite(Number(s.orden)) ? Number(s.orden) : i,
+        titulo: typeof s.titulo === "string" && s.titulo.trim() ? s.titulo : null,
+        subtitulo: typeof s.subtitulo === "string" && s.subtitulo.trim() ? s.subtitulo : null,
+      })) as SectionState[];
+  }, [clinic]);
+
+  const savedPhotos = useMemo(() => {
+    const raw = (clinic as any).landingPhotos;
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {} as Record<string, string>;
+    const out: Record<string, string> = {};
+    for (const [k, v] of Object.entries(raw)) if (typeof v === "string" && v.trim()) out[k] = v;
+    return out;
+  }, [clinic]);
+
   // ── Servicios state
   const [services, setServices] = useState<any[]>(Array.isArray(clinic.landingServices) ? clinic.landingServices : []);
-  function addService() { setServices(s => [...s, { name:"", desc:"", price:"", icon:"🦷" }]); }
+  function addService() { setServices(s => [...s, { name:"", desc:"", price:"", durationMin:30, icon:"🦷" }]); }
   function removeService(i: number) { setServices(s => s.filter((_,j) => j !== i)); }
   function updateService(i: number, k: string, v: string) { setServices(s => s.map((x,j) => j===i ? {...x,[k]:v} : x)); }
 
@@ -177,7 +217,8 @@ export function LandingConfigClient({ clinic: initial, appUrl }: Props) {
   }
 
   return (
-    <div className="flex-1 min-w-0 p-4 sm:p-6 space-y-5 max-w-4xl">
+    <div className="flex-1 min-w-0 p-4 sm:p-6 flex gap-6 items-start">
+      <div className="flex-1 min-w-0 space-y-5 max-w-4xl">
 
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -291,6 +332,25 @@ export function LandingConfigClient({ clinic: initial, appUrl }: Props) {
         </div>
       )}
 
+      {/* ── DISEÑO: se dibuja solo desde el manifiesto de la plantilla ── */}
+      {tab === "diseno" && (
+        <ManifestEditor
+          templateId={clinic.landingTemplate ?? "classic"}
+          sections={savedSections}
+          photos={savedPhotos}
+          saving={saving}
+          onSaveSections={async (secs) => {
+            updateLocal("landingSections", secs);
+            await save({ landingSections: secs });
+          }}
+          onSavePhotos={async (fotos) => {
+            updateLocal("landingPhotos", fotos);
+            await save({ landingPhotos: fotos });
+          }}
+          onUpload={uploadImage}
+        />
+      )}
+
       {/* ── GENERAL ── */}
       {tab === "general" && (
         <div className={`${CARD_CLS} p-5 divide-y divide-[color:var(--border-soft)]`}>
@@ -352,6 +412,71 @@ export function LandingConfigClient({ clinic: initial, appUrl }: Props) {
               landingPatients: clinic.landingPatients,
             })} disabled={saving} className={`${BTN_PRIMARY_SM} mt-3`}>
               <Check size={16} strokeWidth={1.75}/> {t("pages.landing.saveInfo")}
+            </button>
+          </div>
+
+          {/* Urgencias — el bloque no se pinta si el texto está vacío */}
+          <div className="py-6 first:pt-0 last:pb-0">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <label className={`${LABEL_CLS} flex items-center gap-1.5`}>
+                  <Zap size={14} strokeWidth={1.75} className="text-[color:var(--warning-strong)]" /> Aviso de urgencias
+                </label>
+                <p className={`${HELP_CLS} -mt-0.5`}>
+                  Qué haces con quien llega con dolor. Vacío = el bloque no aparece.
+                </p>
+              </div>
+              <button role="switch" aria-checked={!!clinic.landingUrgentText}
+                aria-label="Mostrar el aviso de urgencias"
+                onClick={() => {
+                  const nuevo = clinic.landingUrgentText ? null : "Guardamos espacios al día para urgencias. Llámanos y te acomodamos hoy.";
+                  updateLocal("landingUrgentText", nuevo);
+                  save({ landingUrgentText: nuevo });
+                }}
+                className={`w-10 h-5 rounded-full relative transition-colors duration-150 shrink-0 ${clinic.landingUrgentText ? "bg-brand-600" : "bg-[color:var(--border-strong)]"}`}>
+                <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow-[var(--shadow-1)] transition-all duration-150 ${clinic.landingUrgentText ? "left-[22px]" : "left-0.5"}`} />
+              </button>
+            </div>
+            {clinic.landingUrgentText != null && (
+              <>
+                <textarea value={clinic.landingUrgentText ?? ""}
+                  onChange={e => updateLocal("landingUrgentText", e.target.value)}
+                  placeholder="Guardamos dos espacios al día para dolor agudo."
+                  rows={2} className={`${INPUT_CLS} resize-none mt-2`} />
+                <button onClick={() => save({ landingUrgentText: clinic.landingUrgentText })}
+                  disabled={saving} className={`${BTN_PRIMARY_SM} mt-3`}>
+                  <Check size={16} strokeWidth={1.75}/> Guardar urgencias
+                </button>
+              </>
+            )}
+          </div>
+
+          {/* Meses sin intereses — vacío = no se muestra nada de MSI */}
+          <div className="py-6 first:pt-0 last:pb-0">
+            <label className={LABEL_CLS}>Meses sin intereses</label>
+            <p className={`${HELP_CLS} -mt-0.5 mb-2`}>
+              Marca los plazos que aceptas. Sin ninguno marcado, la plantilla no
+              menciona mensualidades.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {[3, 6, 9, 12, 18, 24].map(m => {
+                const actuales: number[] = Array.isArray(clinic.landingMsiPlazos) ? clinic.landingMsiPlazos : [];
+                const on = actuales.includes(m);
+                return (
+                  <button key={m} type="button" aria-pressed={on}
+                    onClick={() => {
+                      const nuevos = on ? actuales.filter(x => x !== m) : [...actuales, m].sort((a, b) => a - b);
+                      updateLocal("landingMsiPlazos", nuevos);
+                    }}
+                    className={`h-9 px-3.5 rounded-[var(--radius-sm)] text-[12.5px] font-semibold mono transition ${on ? "bg-brand-600 text-white" : "bg-card border border-[color:var(--border-soft)] text-[color:var(--text-2)] hover:bg-[color:var(--bg-hover)]"}`}>
+                    {m} meses
+                  </button>
+                );
+              })}
+            </div>
+            <button onClick={() => save({ landingMsiPlazos: Array.isArray(clinic.landingMsiPlazos) ? clinic.landingMsiPlazos : [] })}
+              disabled={saving} className={`${BTN_PRIMARY_SM} mt-3`}>
+              <Check size={16} strokeWidth={1.75}/> Guardar plazos
             </button>
           </div>
 
@@ -421,7 +546,7 @@ export function LandingConfigClient({ clinic: initial, appUrl }: Props) {
                 <span className="text-[12.5px] font-semibold text-[color:var(--text-3)]">{t("pages.landing.serviceN", { n: i+1 })}</span>
                 <button aria-label={t("common.delete")} onClick={() => removeService(i)} className={BTN_ICON_DANGER}><Trash2 size={16} strokeWidth={1.75}/></button>
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-3 gap-3">
                 <div>
                   <label className={LABEL_CLS}>{t("pages.landing.emojiIcon")}</label>
                   <input value={svc.icon} onChange={e => updateService(i,"icon",e.target.value)}
@@ -431,6 +556,15 @@ export function LandingConfigClient({ clinic: initial, appUrl }: Props) {
                   <label className={LABEL_CLS}>{t("pages.landing.priceOptional")}</label>
                   <input value={svc.price} onChange={e => updateService(i,"price",e.target.value)}
                     placeholder={t("pages.landing.priceFromPlaceholder")} className={INPUT_CLS} />
+                </div>
+                <div>
+                  {/* La duración manda en la reserva: es el hueco que se aparta
+                      en la agenda cuando el paciente elige este procedimiento. */}
+                  <label className={LABEL_CLS}>Duración (min)</label>
+                  <input type="number" min={5} max={600} step={5}
+                    value={svc.durationMin ?? ""}
+                    onChange={e => updateService(i,"durationMin", e.target.value === "" ? "" : String(Math.max(5, Math.min(600, Number(e.target.value)))))}
+                    placeholder="30" className={INPUT_CLS} />
                 </div>
               </div>
               <div>
@@ -447,7 +581,14 @@ export function LandingConfigClient({ clinic: initial, appUrl }: Props) {
             </div>
           ))}
           {services.length > 0 && (
-            <button onClick={() => save({ landingServices: services })} disabled={saving} className={BTN_SAVE_FULL}>
+            <button onClick={() => save({
+              // durationMin viaja como NÚMERO: el input lo entrega en texto y
+              // un "30" string haría fallar las cuentas de la reserva.
+              landingServices: services.map(s => ({
+                ...s,
+                durationMin: s.durationMin === "" || s.durationMin == null ? null : Number(s.durationMin),
+              })),
+            })} disabled={saving} className={BTN_SAVE_FULL}>
               {saving ? t("common.saving") : t("pages.landing.saveServices")}
             </button>
           )}
@@ -712,6 +853,54 @@ export function LandingConfigClient({ clinic: initial, appUrl }: Props) {
           </button>
         </div>
       )}
+      </div>
+
+      {/* ── VISTA PREVIA EN VIVO ──────────────────────────────────────
+          El iframe se recarga al guardar (previewNonce en la key). Apunta a
+          /landing-preview, que es la ruta DINÁMICA: /[slug] es ISR y no puede
+          leer ?preview=. Se oculta por debajo de xl: en pantalla chica el
+          editor ya ocupa todo. */}
+      <aside className="hidden xl:block w-[420px] shrink-0">
+        <div className="sticky top-4 space-y-2">
+          <div className="flex items-center gap-2">
+            <span className="text-[13px] font-semibold text-[color:var(--text-1)]">Vista previa</span>
+            <div className="ml-auto flex items-center gap-1">
+              <button type="button" onClick={() => setPreviewAncho("escritorio")}
+                aria-pressed={previewAncho === "escritorio"} aria-label="Ver en escritorio"
+                className={`w-8 h-8 grid place-items-center rounded-[var(--radius-sm)] transition ${previewAncho === "escritorio" ? "bg-brand-600 text-white" : "text-[color:var(--text-3)] hover:bg-[color:var(--bg-hover)]"}`}>
+                <Monitor size={14} />
+              </button>
+              <button type="button" onClick={() => setPreviewAncho("movil")}
+                aria-pressed={previewAncho === "movil"} aria-label="Ver en móvil"
+                className={`w-8 h-8 grid place-items-center rounded-[var(--radius-sm)] transition ${previewAncho === "movil" ? "bg-brand-600 text-white" : "text-[color:var(--text-3)] hover:bg-[color:var(--bg-hover)]"}`}>
+                <Smartphone size={14} />
+              </button>
+              <button type="button" onClick={() => setPreviewNonce(n => n + 1)}
+                aria-label="Recargar la vista previa"
+                className="w-8 h-8 grid place-items-center rounded-[var(--radius-sm)] text-[color:var(--text-3)] hover:bg-[color:var(--bg-hover)] transition">
+                <RefreshCw size={14} />
+              </button>
+            </div>
+          </div>
+
+          <div className={`${CARD_CLS} overflow-hidden`} style={{ height: "calc(100vh - 120px)" }}>
+            <iframe
+              key={`${templateSel}-${previewNonce}`}
+              src={`/landing-preview/${clinic.slug}?preview=${templateSel}`}
+              title="Vista previa de tu sitio"
+              className="border-0 bg-white origin-top-left"
+              style={previewAncho === "movil"
+                ? { width: 390, height: "calc((100vh - 120px) / 0.94)", transform: "scale(0.94)", margin: "0 auto", display: "block" }
+                : { width: "285.7%", height: "calc((100vh - 120px) / 0.35)", transform: "scale(0.35)" }}
+            />
+          </div>
+
+          <p className="text-[11px] text-[color:var(--text-3)] leading-snug">
+            Se actualiza cada vez que guardas. Tu sitio público también:
+            ya no hay que esperar cinco minutos.
+          </p>
+        </div>
+      </aside>
     </div>
   );
 }

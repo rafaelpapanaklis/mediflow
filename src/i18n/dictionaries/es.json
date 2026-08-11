@@ -7604,6 +7604,7 @@
     },
     "landing": {
       "tabTemplate": "Plantilla",
+      "tabDesign": "Diseño",
       "tabGeneral": "General",
       "tabServices": "Servicios",
       "tabTestimonials": "Testimonios",

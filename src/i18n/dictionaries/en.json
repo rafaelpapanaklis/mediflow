@@ -7604,6 +7604,7 @@
     },
     "landing": {
       "tabTemplate": "Template",
+      "tabDesign": "Design",
       "tabGeneral": "General",
       "tabServices": "Services",
       "tabTestimonials": "Testimonials",

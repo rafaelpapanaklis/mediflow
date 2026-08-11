@@ -3,6 +3,7 @@ import { getAuthContext } from "@/lib/auth-context";
 import { createClient as createAdmin } from "@supabase/supabase-js";
 import { validateMagicNumber } from "@/lib/validate-upload";
 import { BUCKETS } from "@/lib/storage";
+import { allPhotoSlotIds } from "@/app/[slug]/_shared/template-manifest";
 
 function getAdminSupabase() {
   return createAdmin(
@@ -21,9 +22,18 @@ export async function POST(req: NextRequest) {
 
   const formData = await req.formData();
   const file     = formData.get("file") as File | null;
-  const field    = formData.get("field") as string | null; // "cover" | "gallery"
+  // "cover" | "gallery" (uploader viejo) o el id de una RANURA del manifiesto
+  // ("portada", "caso1_antes", "tecnologia1"…). Cualquier otra cosa se rechaza:
+  // `field` entra en la ruta del objeto y no puede ser texto libre del cliente.
+  const field    = formData.get("field") as string | null;
 
   if (!file) return NextResponse.json({ error: "No file" }, { status: 400 });
+
+  const CAMPOS_LEGADO = ["cover", "gallery"];
+  const destino = (field ?? "").trim();
+  if (!destino || (!CAMPOS_LEGADO.includes(destino) && !allPhotoSlotIds().includes(destino))) {
+    return NextResponse.json({ error: "Destino de imagen no válido" }, { status: 400 });
+  }
 
   const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/gif", "image/webp", "application/pdf", "image/bmp", "image/tiff"];
   const MAX_SIZE = 50 * 1024 * 1024; // 50MB
@@ -35,7 +45,7 @@ export async function POST(req: NextRequest) {
   }
 
   const ext  = (file.name.split(".").pop() ?? "jpg").replace(/[^a-z0-9]/gi, "").slice(0, 8).toLowerCase() || "jpg";
-  const path = `landing/${ctx.clinicId}/${field}/${Date.now()}.${ext}`;
+  const path = `landing/${ctx.clinicId}/${destino}/${Date.now()}.${ext}`;
 
   const supabase = getAdminSupabase();
   const bytes    = await file.arrayBuffer();
