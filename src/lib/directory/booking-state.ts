@@ -9,13 +9,16 @@ import {
   BOOKING_OPEN_EVENT,
   BOOKING_PARAM_KEYS,
   BOOKING_STORAGE_KEY,
-  PATIENT_ME_API,
-  PATIENT_REGISTER_PATH,
   type BookingSelection,
   type DirectoryClinic,
   type DirectorySchedule,
   type PatientMe,
 } from "./types";
+import {
+  currentBookingNext,
+  fetchBookingAccount,
+  patientAuthHref,
+} from "@/lib/patient-portal/booking-auth";
 
 // ── Bus de eventos: las cards piden abrir el popup sin prop-drilling ─────────
 
@@ -102,25 +105,21 @@ export function clearPersistedSelection(): void {
   try { sessionStorage.removeItem(BOOKING_STORAGE_KEY); } catch { /* noop */ }
 }
 
-// ── Contrato de auth de pacientes (solo consumo — otra terminal lo provee) ───
+// ── Contrato de auth de pacientes ───────────────────────────────────────────
+// La sesión, los dos caminos para identificarse y el ?next= viven en
+// @/lib/patient-portal/booking-auth: una sola implementación para el
+// directorio, las mini-webs de /[slug] y /reservar/[slug]. Aquí solo quedan
+// los envoltorios con la firma que ya consumía el popup.
 
 /** 200 → PatientMe · 401/404/red caída → null (tratar como "sin sesión"). */
 export async function fetchPatientMe(): Promise<PatientMe | null> {
-  try {
-    const res = await fetch(PATIENT_ME_API, { credentials: "include", cache: "no-store" });
-    if (!res.ok) return null;
-    const data = await res.json();
-    return data?.id ? (data as PatientMe) : null;
-  } catch {
-    return null;
-  }
+  return fetchBookingAccount();
 }
 
 /** URL de registro con ?next= apuntando a la URL ACTUAL (que ya lleva la selección). */
 export function buildRegistroUrl(): string {
-  if (typeof window === "undefined") return PATIENT_REGISTER_PATH;
-  const next = window.location.pathname + window.location.search;
-  return `${PATIENT_REGISTER_PATH}?next=${encodeURIComponent(next)}`;
+  // Sin window (SSR) no hay ruta de regreso: el ?next= se omite, no se inventa.
+  return patientAuthHref("registro", currentBookingNext(""));
 }
 
 // ── Paso derivado de la selección (el popup no persiste el paso) ─────────────

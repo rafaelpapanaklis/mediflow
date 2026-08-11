@@ -1,7 +1,7 @@
 "use client";
 
 import { type CSSProperties, type FocusEvent, useEffect, useRef, useState } from "react";
-import { Calendar, Check, Loader2, ShieldCheck } from "lucide-react";
+import { Calendar, Check, Loader2, LogIn, Phone, ShieldCheck, UserPlus } from "lucide-react";
 import {
   DEFAULT_SERVICE,
   PUBLIC_AVAILABILITY_API,
@@ -11,7 +11,6 @@ import {
   type BookResponse,
   type DirectoryClinic,
   type DirectoryDoctor,
-  type PatientMe,
 } from "@/lib/directory/types";
 import {
   MONTHS_ES,
@@ -19,12 +18,18 @@ import {
   toYMD,
   isDayEnabled,
   formatDateEs,
-  fetchPatientMe,
-  buildRegistroUrl,
   persistSelection,
   cleanPhoneDigits,
   splitName,
 } from "@/lib/directory/booking-state";
+import {
+  BOOKING_AUTH_COPY,
+  bookingAuthLinks,
+  bookingPhoneExit,
+  currentBookingNext,
+  requiresPatientAuth,
+  usePatientSession,
+} from "@/lib/patient-portal/booking-auth";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Pasos 3 (fecha/hora) y 4 (confirmar) del popup de reserva del directorio.
@@ -36,9 +41,12 @@ import {
 //   · POST /api/public/book (BookRequestBody) → 409 horario ocupado,
 //     429 rate limit, resto { error }.
 //
-// El paso "confirm" exige sesión de paciente (contrato de otra terminal,
-// solo consumo vía fetchPatientMe): sin sesión se persiste la selección
-// (persistSelection) y se redirige al registro con ?next= de regreso.
+// El paso "confirm" exige sesión de paciente: sin ella el POST responde 401
+// { requiresAuth: true }. La puerta (un solo GET /api/paciente/me, los dos
+// caminos para identificarse y el copy) sale de @/lib/patient-portal/booking-auth,
+// compartida con las mini-webs y /reservar/[slug]; aquí solo se le pone la piel
+// del directorio. La selección se persiste (persistSelection + la URL que
+// mantiene el controller) para volver justo a este paso tras identificarse.
 // ─────────────────────────────────────────────────────────────────────────────
 
 export interface BookingScheduleProps {
@@ -70,6 +78,8 @@ export function BookingSchedule(props: BookingScheduleProps) {
   const labelStyle: CSSProperties = { fontSize: 11, fontWeight: 600, color: MUTED };
   const inputCls = "w-full rounded-xl border-2 px-3.5 py-2.5 outline-none transition-colors";
   const inputStyle: CSSProperties = { borderColor: "#f1f5f9", fontSize: 14, color: INK, background: "#fff" };
+  /** La salida de siempre para quien no quiere cuenta: llamar a la clínica. */
+  const phoneExit = bookingPhoneExit(clinic.phone);
 
   // ── Paso 3: calendario + slots ─────────────────────────────────────────────
   const [calDate, setCalDate] = useState<Date>(() => (date ? new Date(`${date}T00:00:00`) : new Date()));
@@ -80,7 +90,14 @@ export function BookingSchedule(props: BookingScheduleProps) {
   const [loadingSlots, setLoadingSlots] = useState(false);
 
   // ── Paso 4: gate de sesión + formulario ────────────────────────────────────
-  const [authState, setAuthState] = useState<"checking" | "anon" | PatientMe>("checking");
+  // Un solo GET /api/paciente/me, compartido con las otras superficies que
+  // reservan: arranca al entrar al paso 3 para que el 4 no espere nada.
+  const { status: authStatus, me, markSignedOut } = usePatientSession(true);
+  const [usingAccount, setUsingAccount] = useState(true);
+  /** La sesión se venció a media reserva (401 del POST), no es un visitante nuevo. */
+  const [authExpired, setAuthExpired] = useState(false);
+  /** ?next= de vuelta a ESTA reserva: la URL ya lleva la selección completa. */
+  const [authNext, setAuthNext] = useState("");
   const prefilledRef = useRef(false);
   const [form, setForm] = useState({ firstName: "", lastName: "", phone: "", email: "", notes: "" });
   const [phoneTouched, setPhoneTouched] = useState(false);
@@ -116,28 +133,30 @@ export function BookingSchedule(props: BookingScheduleProps) {
     return () => ctrl.abort();
   }, [mode, selDate, clinic.slug, doctor.id]);
 
-  // Gate de auth al entrar a confirmar (contrato de otra terminal — solo consumo).
+  // Con sesión: nombre / teléfono / correo precargados — cero pasos extra.
   useEffect(() => {
-    if (mode !== "confirm") return;
-    let alive = true;
-    setAuthState("checking");
-    fetchPatientMe().then((me) => {
-      if (!alive) return;
-      if (!me) {
-        setAuthState("anon");
-        return;
-      }
-      setAuthState(me);
-      if (!prefilledRef.current) {
-        prefilledRef.current = true;
-        const { firstName, lastName } = splitName(me.name);
-        setForm((f) => ({ ...f, firstName, lastName, phone: me.phone ?? "", email: me.email ?? "" }));
-      }
-    });
-    return () => {
-      alive = false;
-    };
-  }, [mode]);
+    if (!me || prefilledRef.current) return;
+    prefilledRef.current = true;
+    fillFromAccount(me);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [me]);
+
+  // El ?next= sale de la URL actual, que el controller mantiene sincronizada con
+  // la selección (?reservar=&servicio=&doctor=&fecha=&hora=). Se recalcula en un
+  // efecto: en el HTML del server todavía no hay window.
+  useEffect(() => {
+    setAuthNext(currentBookingNext());
+  }, [mode, service, doctor.id, date, slot]);
+
+  function fillFromAccount(account: { name: string; phone: string | null; email: string | null }) {
+    const { firstName, lastName } = splitName(account.name);
+    setUsingAccount(true);
+    setForm((f) => ({ ...f, firstName, lastName, phone: account.phone ?? "", email: account.email ?? "" }));
+  }
+  function clearIdentity() {
+    setUsingAccount(false);
+    setForm((f) => ({ ...f, firstName: "", lastName: "", phone: "", email: "" }));
+  }
 
   const now = new Date();
   const todayYMD = toYMD(now);
@@ -155,9 +174,9 @@ export function BookingSchedule(props: BookingScheduleProps) {
     return cells;
   }
 
-  function goToRegister() {
+  /** Respaldo del hueco elegido antes de que el navegador se vaya a identificarse. */
+  function keepSelection() {
     persistSelection({ clinicSlug: clinic.slug, service, doctorId: doctor.id, date, slot });
-    window.location.href = buildRegistroUrl();
   }
 
   const focusTheme = (e: FocusEvent<HTMLInputElement | HTMLTextAreaElement>) => {
@@ -171,7 +190,7 @@ export function BookingSchedule(props: BookingScheduleProps) {
   const showPhoneError = phoneInvalid && (phoneTouched || attempted);
 
   async function submit() {
-    if (typeof authState !== "object" || submitting) return;
+    if (!me || submitting) return;
     setAttempted(true);
     if (!date || !slot) {
       onBack();
@@ -211,6 +230,15 @@ export function BookingSchedule(props: BookingScheduleProps) {
         return;
       }
       const data: BookResponse = await res.json().catch(() => ({} as BookResponse));
+      // Red de seguridad: la sesión venció a media reserva. Guardamos la
+      // selección y el paso vuelve a ofrecer los dos caminos (nunca el rojo).
+      if (requiresPatientAuth(res.status, data as { requiresAuth?: boolean })) {
+        keepSelection();
+        setAuthExpired(true);
+        markSignedOut();
+        setSubmitting(false);
+        return;
+      }
       if (res.status === 409) {
         setSlotTaken(true);
         setError("Ese horario se acaba de ocupar. Elige otro.");
@@ -400,14 +428,16 @@ export function BookingSchedule(props: BookingScheduleProps) {
         </div>
       </div>
 
-      {authState === "checking" && (
+      {authStatus === "loading" && (
         <div className="flex items-center justify-center gap-2 py-8" style={{ fontSize: 13, color: MUTED }}>
           <Loader2 size={16} className="animate-spin" /> Verificando tu sesión…
         </div>
       )}
 
-      {authState === "anon" && (
-        <div className="px-1 py-4 text-center">
+      {/* Sin sesión el POST responde 401: los DOS caminos antes de que llene
+          nada, con la selección guardada por si se va a identificarse. */}
+      {authStatus === "anonymous" && (
+        <div className="px-1 py-2 text-center">
           <div
             className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl"
             style={{ background: V50, color: B2 }}
@@ -415,27 +445,75 @@ export function BookingSchedule(props: BookingScheduleProps) {
             <ShieldCheck size={26} />
           </div>
           <h4 className="mb-1.5 text-base" style={{ fontWeight: 700, color: INK }}>
-            Crea tu cuenta para confirmar
+            {authExpired ? BOOKING_AUTH_COPY.expiredTitle : BOOKING_AUTH_COPY.title}
           </h4>
           <p className="mx-auto mb-5 max-w-[300px]" style={{ fontSize: 13, color: MUTED }}>
-            Tu selección queda guardada: al volver continúas justo donde quedaste.
+            {authExpired ? BOOKING_AUTH_COPY.expiredHint : BOOKING_AUTH_COPY.hint}
           </p>
-          <button
-            type="button"
-            onClick={goToRegister}
-            className="w-full rounded-2xl py-3.5 text-sm font-bold text-white transition-all"
-            style={{
-              background: "linear-gradient(135deg, var(--b, #7c3aed), var(--b2, #6d28d9))",
-              boxShadow: "0 8px 24px rgba(124, 58, 237, 0.28)",
-            }}
-          >
-            Continuar con mi cuenta
-          </button>
+
+          <div className="space-y-2.5">
+            {bookingAuthLinks(authNext).map((link) =>
+              link.kind === "login" ? (
+                <a
+                  key={link.kind}
+                  href={link.href}
+                  onClick={keepSelection}
+                  className="flex w-full items-center justify-center gap-2 rounded-2xl py-3.5 text-sm font-bold text-white transition-all"
+                  style={{ background: theme, boxShadow: `0 8px 24px ${theme}40` }}
+                >
+                  <LogIn size={16} /> {link.label}
+                </a>
+              ) : (
+                <a
+                  key={link.kind}
+                  href={link.href}
+                  onClick={keepSelection}
+                  className="flex w-full items-center justify-center gap-2 rounded-2xl border-2 bg-white py-3.5 text-sm font-bold transition-all"
+                  style={{ borderColor: theme, color: theme }}
+                >
+                  <UserPlus size={16} /> {link.label}
+                </a>
+              ),
+            )}
+          </div>
+
+          <p className="mt-3.5" style={{ fontSize: 11, color: MUTED, lineHeight: 1.6 }}>
+            {BOOKING_AUTH_COPY.portable}
+          </p>
+          {phoneExit && (
+            <a
+              href={phoneExit.href}
+              className="mt-2 inline-flex items-center gap-1.5 font-semibold"
+              style={{ fontSize: 12, color: B2 }}
+            >
+              <Phone size={12} /> {phoneExit.label}
+            </a>
+          )}
         </div>
       )}
 
-      {typeof authState === "object" && (
+      {authStatus === "authenticated" && me && (
         <>
+          {/* Reservas como {name} — con salida a datos de otra persona. */}
+          <div className="flex items-center justify-between gap-3 rounded-2xl p-3.5" style={{ background: `${theme}10` }}>
+            <div className="min-w-0">
+              <div className="text-[10px] font-bold uppercase tracking-wider" style={{ color: MUTED }}>
+                {usingAccount ? "Reservas como" : "Reservas para otra persona"}
+              </div>
+              <div className="truncate text-sm font-bold" style={{ color: INK }}>
+                {usingAccount ? me.name : "Con datos distintos a los de tu cuenta"}
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={usingAccount ? clearIdentity : () => fillFromAccount(me)}
+              className="shrink-0 whitespace-nowrap text-[11px] font-bold underline"
+              style={{ color: theme }}
+            >
+              {usingAccount ? "Usar otros datos" : "Usar mis datos"}
+            </button>
+          </div>
+
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="mb-1.5 block" style={labelStyle}>

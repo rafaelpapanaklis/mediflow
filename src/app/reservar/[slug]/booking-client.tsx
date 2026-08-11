@@ -1,7 +1,21 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
-import { ChevronLeft, ChevronRight, Check, Phone, FileText, Loader2, MapPin, Clock, Calendar } from "lucide-react";
+import { useState, useEffect, useMemo, useRef } from "react";
+import { ChevronLeft, ChevronRight, Check, Phone, FileText, Loader2, MapPin, Clock, LogIn, UserPlus } from "lucide-react";
+import {
+  BOOKING_AUTH_COPY,
+  bookingAuthLinks,
+  bookingPhoneExit,
+  currentBookingNext,
+  pendingSlotOutcome,
+  requiresPatientAuth,
+  savePendingBooking,
+  slotTakenNotice,
+  splitFullName,
+  useBookingReopen,
+  usePatientSession,
+  type PendingBooking,
+} from "@/lib/patient-portal/booking-auth";
 
 interface Doctor {
   id: string; firstName: string; lastName: string;
@@ -48,9 +62,62 @@ export function BookingClient({ clinic, preselectedService, categoryServices }: 
   const [loadSlots,  setLoadSlots]  = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error,      setError]      = useState("");
+  /** Aviso ámbar del paso 3 (el hueco se lo ganaron), distinto del error rojo. */
+  const [notice,     setNotice]     = useState("");
   const [form, setForm] = useState({
     firstName:"", lastName:"", phone:"", email:"",
     type: preselectedService ?? "", notes:"",
+  });
+
+  // Sesión del portal: un solo GET /api/paciente/me al abrir el flujo.
+  // Sin sesión NO se echa a nadie: elige servicio, doctor y hora, y recién en
+  // el paso 4 se le ofrecen los dos caminos para identificarse.
+  const { status: sessionStatus, me, markSignedOut } = usePatientSession(true);
+  const [usingAccount, setUsingAccount] = useState(true);
+  /** Hueco por reponer en cuanto llegue la disponibilidad del día. */
+  const restoreRef = useRef<PendingBooking | null>(null);
+  /** La sesión se venció a media reserva (401 del POST), no es un visitante nuevo. */
+  const [authExpired, setAuthExpired] = useState(false);
+  /** ?next= de regreso. En el cliente conserva el querystring (?service=…). */
+  const [authNext, setAuthNext] = useState(`/reservar/${clinic.slug}`);
+  useEffect(() => { setAuthNext(currentBookingNext(`/reservar/${clinic.slug}`)); }, [clinic.slug]);
+
+  const phoneExit = bookingPhoneExit(clinic.phone);
+
+  /** El hueco elegido, tal cual se guarda antes de mandarlo a identificarse. */
+  function selection(): PendingBooking {
+    return { doctorId: doctor?.id ?? "", date: selDate, slot: selSlot, service: form.type };
+  }
+  /** Guarda el hueco antes de que el navegador se vaya al login/registro. */
+  function keepSlot() {
+    savePendingBooking(clinic.slug, selection());
+  }
+  function fillFromAccount() {
+    if (!me) return;
+    const { firstName, lastName } = splitFullName(me.name);
+    setUsingAccount(true);
+    setForm(f => ({ ...f, firstName, lastName, phone: me.phone ?? "", email: me.email ?? "" }));
+  }
+  function clearIdentity() {
+    setUsingAccount(false);
+    setForm(f => ({ ...f, firstName:"", lastName:"", phone:"", email:"" }));
+  }
+
+  // Al volver del login/registro: se reabre la reserva con el hueco guardado.
+  useBookingReopen(clinic.slug, (pending) => {
+    if (!pending) return;
+    const doc = clinic.users.find(u => u.id === pending.doctorId) ?? null;
+    if (!doc) {
+      setNotice("Ese doctor ya no está disponible. Elige otro, por favor.");
+      setStep(2);
+      return;
+    }
+    restoreRef.current = pending;
+    setDoctor(doc);
+    if (pending.service) setForm(f => ({ ...f, type: pending.service }));
+    setCalDate(parseYMD(pending.date));
+    setSelDate(pending.date);
+    setStep(3);
   });
 
   // All available services: landing services > category services > fallback
@@ -88,45 +155,35 @@ export function BookingClient({ clinic, preselectedService, categoryServices }: 
     return cells;
   }
 
+  // Disponibilidad real + reposición del hueco guardado tras identificarse.
   useEffect(() => {
     if (!selDate || !doctor) return;
     setSlots([]); setSelSlot(""); setLoadSlots(true);
     fetch(`/api/public/availability?slug=${clinic.slug}&date=${selDate}&doctorId=${doctor.id}`)
       .then(r => r.json())
-      .then(d => setSlots(d.slots ?? []))
+      .then(d => {
+        const list: string[] = d.slots ?? [];
+        setSlots(list);
+        const pend = restoreRef.current;
+        const outcome = pendingSlotOutcome(pend, doctor.id, selDate, list);
+        if (outcome === "ignore") return;
+        restoreRef.current = null;
+        if (outcome === "apply") { setSelSlot(pend!.slot); setStep(4); return; }
+        // Se lo ganaron mientras se identificaba: aviso y de vuelta al calendario.
+        setNotice(slotTakenNotice(pend!.slot));
+      })
       .catch(() => {})
       .finally(() => setLoadSlots(false));
   }, [selDate, doctor, clinic.slug]);
 
-  // Reservar requiere cuenta de paciente (cookie patient_session): sin sesión
-  // → registro con ?next= de regreso; con sesión → prefill de contacto.
+  // Con sesión: nombre / teléfono / correo precargados — cero pasos extra.
   useEffect(() => {
-    let cancelled = false;
-    fetch("/api/paciente/me", { credentials: "same-origin", cache: "no-store" })
-      .then(r => (r.ok ? r.json() : null))
-      .catch(() => null)
-      .then(me => {
-        if (cancelled) return;
-        if (!me) {
-          window.location.assign(`/paciente/registro?next=${encodeURIComponent(`/reservar/${clinic.slug}`)}`);
-          return;
-        }
-        setForm(f => {
-          const parts = typeof me.name === "string" ? me.name.trim().split(/\s+/) : [];
-          return {
-            ...f,
-            firstName: f.firstName || (parts[0] ?? ""),
-            lastName:  f.lastName  || parts.slice(1).join(" "),
-            email:     f.email     || (me.email ?? ""),
-            phone:     f.phone     || (me.phone ?? ""),
-          };
-        });
-      });
-    return () => { cancelled = true; };
-  }, [clinic.slug]);
+    if (me) fillFromAccount();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [me]);
 
   async function submit() {
-    setError(""); setSubmitting(true);
+    setError(""); setNotice(""); setSubmitting(true);
     try {
       const res = await fetch("/api/public/book", {
         method:"POST", headers:{"Content-Type":"application/json"},
@@ -142,8 +199,21 @@ export function BookingClient({ clinic, preselectedService, categoryServices }: 
       const text = await res.text();
       let data: any;
       try { data = JSON.parse(text); } catch { data = { error: text || `Error del servidor (${res.status})` }; }
-      if (res.status === 401) {
-        window.location.assign(`/paciente/registro?next=${encodeURIComponent(`/reservar/${clinic.slug}`)}`);
+      // Red de seguridad: la sesión venció a media reserva. Guardamos el hueco
+      // y el paso de datos vuelve a ofrecer los dos caminos (nunca el rojo).
+      if (requiresPatientAuth(res.status, data)) {
+        keepSlot();
+        setAuthExpired(true);
+        markSignedOut();
+        return;
+      }
+      // El hueco se lo ganaron: aviso y de vuelta al calendario, no un muro rojo.
+      if (res.status === 409) {
+        const taken = selSlot;
+        setSlots(s => s.filter(x => x !== taken));
+        setSelSlot("");
+        setNotice(data.error ?? "Ese horario ya fue reservado. Elige otro, por favor.");
+        setStep(3);
         return;
       }
       if (!res.ok) throw new Error(data.error ?? "Error al agendar");
@@ -240,6 +310,7 @@ export function BookingClient({ clinic, preselectedService, categoryServices }: 
             <h1 style={{ fontSize:22, fontWeight:800, color:"#f1f5f9", marginBottom:4 }}>
               Elige tu doctor
             </h1>
+            {notice && <AmberNotice text={notice}/>}
             {form.type && (
               <div style={{ background:"#1e3a5f", border:"1px solid #2563eb", borderRadius:12, padding:"10px 14px", marginBottom:16, fontSize:13, color:"#93c5fd", fontWeight:600 }}>
                 📋 {form.type}
@@ -298,6 +369,7 @@ export function BookingClient({ clinic, preselectedService, categoryServices }: 
             </button>
             <h1 style={{ fontSize:22, fontWeight:800, color:"#f1f5f9", marginBottom:4 }}>Fecha y hora</h1>
             <p style={{ fontSize:13, color:"#64748b", marginBottom:18 }}>Dr/a. {doctor.firstName} {doctor.lastName} · {form.type}</p>
+            {notice && <AmberNotice text={notice}/>}
 
             {/* Calendar */}
             <div style={{ ...S.card, padding:"16px", marginBottom:14 }}>
@@ -327,7 +399,7 @@ export function BookingClient({ clinic, preselectedService, categoryServices }: 
                   const sel     = ymd === selDate;
                   const isToday = ymd === today;
                   return (
-                    <button key={i} disabled={!enabled} onClick={() => setSelDate(ymd)}
+                    <button key={i} disabled={!enabled} onClick={() => { setSelDate(ymd); setNotice(""); }}
                       style={{
                         height:38, borderRadius:10, border: isToday && !sel ? "1.5px solid #2563eb" : "none",
                         cursor: enabled ? "pointer" : "default",
@@ -361,7 +433,7 @@ export function BookingClient({ clinic, preselectedService, categoryServices }: 
                         <div style={{ fontSize:11, fontWeight:600, color:"#475569", textTransform:"uppercase", letterSpacing:"0.05em", marginBottom:8 }}>☀️ Mañana</div>
                         <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:6 }}>
                           {slots.filter(s => parseInt(s) < 13).map(slot => (
-                            <DarkSlot key={slot} slot={slot} selected={selSlot===slot} onSelect={setSelSlot}/>
+                            <DarkSlot key={slot} slot={slot} selected={selSlot===slot} onSelect={s => { setSelSlot(s); setNotice(""); }}/>
                           ))}
                         </div>
                       </div>
@@ -371,7 +443,7 @@ export function BookingClient({ clinic, preselectedService, categoryServices }: 
                         <div style={{ fontSize:11, fontWeight:600, color:"#475569", textTransform:"uppercase", letterSpacing:"0.05em", marginBottom:8 }}>🌤 Tarde</div>
                         <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:6 }}>
                           {slots.filter(s => parseInt(s) >= 13).map(slot => (
-                            <DarkSlot key={slot} slot={slot} selected={selSlot===slot} onSelect={setSelSlot}/>
+                            <DarkSlot key={slot} slot={slot} selected={selSlot===slot} onSelect={s => { setSelSlot(s); setNotice(""); }}/>
                           ))}
                         </div>
                       </div>
@@ -407,47 +479,108 @@ export function BookingClient({ clinic, preselectedService, categoryServices }: 
               </div>
             </div>
 
-            <h1 style={{ fontSize:20, fontWeight:800, color:"#f1f5f9", marginBottom:16 }}>Tus datos</h1>
-
-            <div style={{ display:"flex", flexDirection:"column", gap:14 }}>
-              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>
-                <DarkField label="Nombre *" value={form.firstName} onChange={v => setForm(f=>({...f,firstName:v}))} placeholder="Nombre"/>
-                <DarkField label="Apellido *" value={form.lastName} onChange={v => setForm(f=>({...f,lastName:v}))} placeholder="Apellido"/>
+            {/* Sin sesión el POST responde 401: los dos caminos ANTES de que
+                llene nada, con el hueco guardado por si se va a identificarse. */}
+            {sessionStatus === "loading" ? (
+              <div style={{ display:"flex", alignItems:"center", gap:8, padding:"18px 0", fontSize:13, color:"#64748b" }}>
+                <Loader2 size={15} style={{ animation:"spin 1s linear infinite" }}/> Un momento…
               </div>
-              <DarkField label="WhatsApp / Teléfono *" value={form.phone} onChange={v => setForm(f=>({...f,phone:v}))} placeholder="+52 999 123 4567" type="tel"/>
-              <DarkField label="Email (opcional)" value={form.email} onChange={v => setForm(f=>({...f,email:v}))} placeholder="correo@ejemplo.com" type="email"/>
-
-              <div>
-                <label style={S.label}>Servicio seleccionado</label>
-                <div style={{ ...S.input, background:"#1e293b", color:"#93c5fd", fontWeight:600 }}>{form.type || "Consulta general"}</div>
+            ) : sessionStatus === "anonymous" ? (
+              <div style={{ ...S.card, padding:"20px 18px" }}>
+                <div style={{ fontSize:16, fontWeight:800, color:"#f1f5f9", marginBottom:6 }}>
+                  {authExpired ? BOOKING_AUTH_COPY.expiredTitle : BOOKING_AUTH_COPY.title}
+                </div>
+                <p style={{ fontSize:13, color:"#94a3b8", lineHeight:1.6, margin:"0 0 18px" }}>
+                  {authExpired ? BOOKING_AUTH_COPY.expiredHint : BOOKING_AUTH_COPY.hint}
+                </p>
+                <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
+                  {bookingAuthLinks(authNext).map(link => (
+                    <a key={link.kind} href={link.href} onClick={keepSlot}
+                      style={{
+                        display:"flex", alignItems:"center", justifyContent:"center", gap:8,
+                        padding:"14px", borderRadius:14, fontSize:15, fontWeight:700, textDecoration:"none",
+                        ...(link.kind === "login"
+                          ? { background:"#2563eb", color:"#fff", border:"1.5px solid #2563eb" }
+                          : { background:"transparent", color:"#93c5fd", border:"1.5px solid #334155" }),
+                      }}>
+                      {link.kind === "login" ? <LogIn size={16}/> : <UserPlus size={16}/>} {link.label}
+                    </a>
+                  ))}
+                </div>
+                <p style={{ fontSize:12, color:"#475569", textAlign:"center", lineHeight:1.6, margin:"14px 0 0" }}>
+                  {BOOKING_AUTH_COPY.portable}
+                </p>
+                {phoneExit && (
+                  <p style={{ textAlign:"center", margin:"10px 0 0" }}>
+                    <a href={phoneExit.href}
+                      style={{ display:"inline-flex", alignItems:"center", gap:6, fontSize:13, fontWeight:600, color:"#60a5fa", textDecoration:"none" }}>
+                      <Phone size={13}/> {phoneExit.label}
+                    </a>
+                  </p>
+                )}
               </div>
+            ) : (
+              <>
+                {me && (
+                  <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:12, background:"#1e3a5f", border:"1px solid #2563eb", borderRadius:14, padding:"12px 16px", marginBottom:18 }}>
+                    <div style={{ minWidth:0 }}>
+                      <div style={{ fontSize:10, fontWeight:700, letterSpacing:"0.06em", textTransform:"uppercase", color:"#60a5fa" }}>
+                        {usingAccount ? "Reservas como" : "Reservas para otra persona"}
+                      </div>
+                      <div style={{ fontSize:14, fontWeight:700, color:"#f1f5f9", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+                        {usingAccount ? me.name : "Con datos distintos a los de tu cuenta"}
+                      </div>
+                    </div>
+                    <button onClick={usingAccount ? clearIdentity : fillFromAccount}
+                      style={{ background:"none", border:"none", padding:0, flexShrink:0, cursor:"pointer", fontSize:12, fontWeight:700, color:"#60a5fa", textDecoration:"underline", whiteSpace:"nowrap" }}>
+                      {usingAccount ? "Usar otros datos" : "Usar mis datos"}
+                    </button>
+                  </div>
+                )}
 
-              <div>
-                <label style={S.label}>
-                  <FileText size={12} style={{ display:"inline", marginRight:4, verticalAlign:"middle" }}/>
-                  Notas para el doctor (opcional)
-                </label>
-                <textarea value={form.notes} onChange={e => setForm(f=>({...f,notes:e.target.value}))}
-                  placeholder="Describe brevemente tu motivo de consulta…" rows={3}
-                  style={{ ...S.input, resize:"none", fontFamily:"inherit", lineHeight:1.6 }}/>
-              </div>
-            </div>
+                <h1 style={{ fontSize:20, fontWeight:800, color:"#f1f5f9", marginBottom:16 }}>Tus datos</h1>
 
-            {error && (
-              <div style={{ marginTop:12, padding:"10px 14px", background:"#450a0a", border:"1px solid #7f1d1d", borderRadius:10, fontSize:13, color:"#f87171" }}>
-                ⚠️ {error}
-              </div>
+                <div style={{ display:"flex", flexDirection:"column", gap:14 }}>
+                  <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>
+                    <DarkField label="Nombre *" value={form.firstName} onChange={v => setForm(f=>({...f,firstName:v}))} placeholder="Nombre"/>
+                    <DarkField label="Apellido *" value={form.lastName} onChange={v => setForm(f=>({...f,lastName:v}))} placeholder="Apellido"/>
+                  </div>
+                  <DarkField label="WhatsApp / Teléfono *" value={form.phone} onChange={v => setForm(f=>({...f,phone:v}))} placeholder="+52 999 123 4567" type="tel"/>
+                  <DarkField label="Email (opcional)" value={form.email} onChange={v => setForm(f=>({...f,email:v}))} placeholder="correo@ejemplo.com" type="email"/>
+
+                  <div>
+                    <label style={S.label}>Servicio seleccionado</label>
+                    <div style={{ ...S.input, background:"#1e293b", color:"#93c5fd", fontWeight:600 }}>{form.type || "Consulta general"}</div>
+                  </div>
+
+                  <div>
+                    <label style={S.label}>
+                      <FileText size={12} style={{ display:"inline", marginRight:4, verticalAlign:"middle" }}/>
+                      Notas para el doctor (opcional)
+                    </label>
+                    <textarea value={form.notes} onChange={e => setForm(f=>({...f,notes:e.target.value}))}
+                      placeholder="Describe brevemente tu motivo de consulta…" rows={3}
+                      style={{ ...S.input, resize:"none", fontFamily:"inherit", lineHeight:1.6 }}/>
+                  </div>
+                </div>
+
+                {error && (
+                  <div style={{ marginTop:12, padding:"10px 14px", background:"#450a0a", border:"1px solid #7f1d1d", borderRadius:10, fontSize:13, color:"#f87171" }}>
+                    ⚠️ {error}
+                  </div>
+                )}
+
+                <button disabled={!canSubmit || submitting} onClick={submit}
+                  style={{ marginTop:20, width:"100%", padding:"16px", borderRadius:14, fontSize:16, fontWeight:700,
+                    display:"flex", alignItems:"center", justifyContent:"center", gap:8,
+                    ...( canSubmit && !submitting ? S.primary : { background:"#1e293b", color:"#475569", border:"none", cursor:"default" }) }}>
+                  {submitting ? <><Loader2 size={18} style={{ animation:"spin 1s linear infinite" }}/> Confirmando…</> : "✅ Confirmar cita"}
+                </button>
+                <p style={{ fontSize:12, color:"#475569", textAlign:"center", marginTop:8 }}>
+                  Recibirás confirmación por WhatsApp
+                </p>
+              </>
             )}
-
-            <button disabled={!canSubmit || submitting} onClick={submit}
-              style={{ marginTop:20, width:"100%", padding:"16px", borderRadius:14, fontSize:16, fontWeight:700,
-                display:"flex", alignItems:"center", justifyContent:"center", gap:8,
-                ...( canSubmit && !submitting ? S.primary : { background:"#1e293b", color:"#475569", border:"none", cursor:"default" }) }}>
-              {submitting ? <><Loader2 size={18} style={{ animation:"spin 1s linear infinite" }}/> Confirmando…</> : "✅ Confirmar cita"}
-            </button>
-            <p style={{ fontSize:12, color:"#475569", textAlign:"center", marginTop:8 }}>
-              Recibirás confirmación por WhatsApp
-            </p>
           </div>
         )}
 
@@ -489,6 +622,15 @@ export function BookingClient({ clinic, preselectedService, categoryServices }: 
       </main>
 
       <style>{`@keyframes spin { to { transform:rotate(360deg) } } input::placeholder, textarea::placeholder { color:#475569 } select option { background:#1e293b; color:#f1f5f9 }`}</style>
+    </div>
+  );
+}
+
+/** Aviso ámbar: el hueco ya no está / el doctor ya no está. No es un error rojo. */
+function AmberNotice({ text }: { text:string }) {
+  return (
+    <div style={{ marginBottom:16, padding:"11px 14px", background:"#422006", border:"1px solid #a16207", borderRadius:12, fontSize:13, color:"#fcd34d", lineHeight:1.5 }}>
+      ⚠️ {text}
     </div>
   );
 }
