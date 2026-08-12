@@ -19,6 +19,7 @@ import { prisma } from "@/lib/prisma";
 import { decryptField } from "@/lib/crypto/envelope";
 import { parseWaTemplates, type WaTemplateConfig, type WaTemplateMap } from "./template-config";
 import {
+  DEFAULT_CATALOG_KINDS,
   WA_TEMPLATE_CATALOG,
   WA_TEMPLATES_GRAPH_VERSION,
   buildTemplateCreatePayload,
@@ -435,6 +436,31 @@ export async function clinicsWithStalePendingTemplates(hours: number): Promise<s
       return Number.isNaN(t) || t < cutoff;
     });
     if (stale) out.push(c.id);
+  }
+  return out;
+}
+
+/**
+ * Clínicas conectadas (con WABA) a las que les FALTA alguna plantilla default
+ * del catálogo. Existe para el rollout: cuando el catálogo crece (p. ej.
+ * dc_aviso_saldo y dc_presupuesto_listo), las clínicas que conectaron antes no
+ * vuelven a pasar por el alta automática de la conexión; el cron usa esta lista
+ * para crearles lo que falte con provisionClinicTemplates (idempotente).
+ */
+export async function clinicsMissingDefaultTemplates(limit: number): Promise<string[]> {
+  const clinics = await prisma.clinic.findMany({
+    where: { waConnected: true, NOT: { waBusinessAccountId: null } },
+    select: { id: true, waTemplates: true },
+    take: 500,
+    orderBy: { id: "asc" },
+  });
+  const out: string[] = [];
+  for (const c of clinics) {
+    const map = parseWaTemplates(c.waTemplates);
+    if (DEFAULT_CATALOG_KINDS.some((k) => !map[k])) {
+      out.push(c.id);
+      if (out.length >= limit) break;
+    }
   }
   return out;
 }

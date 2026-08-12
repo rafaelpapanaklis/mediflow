@@ -50,7 +50,7 @@ test("solo la de reseñas es de marketing, y es la única opcional", () => {
   const optional = WA_TEMPLATE_CATALOG.filter((e) => e.optional);
   assert.deepEqual(optional.map((e) => e.kind), ["review"]);
   assert.ok(!DEFAULT_CATALOG_KINDS.includes("review"));
-  assert.equal(DEFAULT_CATALOG_KINDS.length, 5);
+  assert.equal(DEFAULT_CATALOG_KINDS.length, 7);
 });
 
 test("checkTemplateBody rechaza lo que Meta rechaza", () => {

@@ -12,7 +12,12 @@
 // mensaje YA salió y ni el request ni la corrida del cron se rompen.
 
 import { prisma } from "@/lib/prisma";
-import { sendWhatsAppMessage, sendWhatsAppTemplate } from "@/lib/whatsapp";
+import {
+  sendWhatsAppDocument,
+  sendWhatsAppMessage,
+  sendWhatsAppTemplate,
+  uploadWhatsAppMedia,
+} from "@/lib/whatsapp";
 import {
   findPatientByWhatsAppPhone,
   lastInboundAtForPhone,
@@ -40,6 +45,14 @@ export interface WhatsAppLogClinic {
   waTemplates?: unknown;
 }
 
+/** Documento (PDF) que acompaña a un envío. Solo sale con la ventana abierta. */
+export interface WhatsAppOutboundAttachment {
+  buffer: Buffer;
+  filename: string;
+  /** Texto que WhatsApp muestra bajo el documento. */
+  caption?: string;
+}
+
 export interface SendWhatsAppLoggedArgs {
   /** Clínica ya cargada. Si no la tienes, pasa `clinicId` y el helper la carga. */
   clinic?: WhatsAppLogClinic | null;
@@ -64,6 +77,14 @@ export interface SendWhatsAppLoggedArgs {
    * legible en vez de mandar texto libre que Meta tira a la basura.
    */
   templateParams?: string[] | null;
+  /**
+   * Adjunto que se manda DESPUÉS del texto, como segundo mensaje del hilo.
+   * Solo aplica con la ventana de 24 h abierta (modo texto): las plantillas de
+   * DaleControl son de solo texto y Meta no permite colgarles un documento, así
+   * que en modo plantilla el adjunto se IGNORA sin error (limitación de Meta,
+   * documentada en el caller).
+   */
+  attachment?: WhatsAppOutboundAttachment | null;
 }
 
 /**
@@ -135,6 +156,27 @@ export async function sendWhatsAppLogged(args: SendWhatsAppLoggedArgs): Promise<
     await setBillingOk(clinic.id, true);
   }
 
+  // 2b) Documento adjunto — solo con la ventana abierta. Best-effort DESPUÉS del
+  //     texto: si el documento falla, el texto YA salió y el envío no se da por
+  //     fallido (relanzar duplicaría el texto); se deja rastro en el log.
+  let docMeta: any = null;
+  if (decision.mode === "text" && args.attachment && clinic?.id) {
+    try {
+      const mediaId = await uploadWhatsAppMedia(
+        clinic.waPhoneNumberId ?? "",
+        clinic.waAccessToken ?? "",
+        { buffer: args.attachment.buffer, filename: args.attachment.filename, mimeType: "application/pdf" },
+      );
+      docMeta = await sendWhatsAppDocument(clinic.waPhoneNumberId ?? "", clinic.waAccessToken ?? "", args.to, {
+        mediaId,
+        filename: args.attachment.filename,
+        caption: args.attachment.caption,
+      });
+    } catch (e) {
+      console.error(`[whatsapp/send-and-log] el texto salió pero el documento no (${args.kind}):`, e);
+    }
+  }
+
   // 3) Registro best-effort. NUNCA debe tumbar el envío ya realizado.
   if (clinic?.id) {
     try {
@@ -153,6 +195,19 @@ export async function sendWhatsAppLogged(args: SendWhatsAppLoggedArgs): Promise<
         linkPatient: args.linkPatient ?? args.kind !== "system",
         wamid: meta?.messages?.[0]?.id ?? null,
       });
+      if (docMeta && args.attachment) {
+        await logOutboundToInbox({
+          clinicId: clinic.id,
+          to: args.to,
+          // El Inbox no renderiza adjuntos hoy: el cuerpo dice qué archivo fue y el
+          // Json `attachments` queda para cuando la UI los pinte.
+          body: `[Documento] ${args.attachment.filename}`,
+          kind: args.kind,
+          linkPatient: args.linkPatient ?? args.kind !== "system",
+          wamid: docMeta?.messages?.[0]?.id ?? null,
+          attachments: [{ name: args.attachment.filename, mime: "application/pdf", size: args.attachment.buffer.length }],
+        });
+      }
     } catch (e) {
       console.error(`[whatsapp/send-and-log] no se pudo registrar el envío (${args.kind}):`, e);
     }
@@ -198,6 +253,7 @@ interface LogArgs {
   kind: WhatsAppSendKind;
   linkPatient: boolean;
   wamid: string | null;
+  attachments?: Array<{ name: string; mime: string; size: number }> | null;
 }
 
 async function logOutboundToInbox(args: LogArgs): Promise<void> {
@@ -233,6 +289,7 @@ async function logOutboundToInbox(args: LogArgs): Promise<void> {
       // `sys:<kind>:<wamid>` — marca el origen SIN columna nueva y permite
       // excluir estos envíos del tope diario del bot (ver webhook).
       externalId: buildSystemExternalId(args.kind, args.wamid),
+      ...(args.attachments ? { attachments: args.attachments as any } : {}),
     },
   });
 }

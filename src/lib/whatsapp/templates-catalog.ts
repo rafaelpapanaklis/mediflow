@@ -54,7 +54,7 @@ export interface WaCatalogEntry {
 }
 
 /**
- * Las CINCO de utilidad + la de marketing.
+ * Las SIETE de utilidad + la de marketing.
  *
  * Reglas de Meta que respeta cada cuerpo (las verifica `checkTemplateBody`, y
  * el test las comprueba sobre todo el catálogo para que nadie las rompa al
@@ -162,6 +162,42 @@ export const WA_TEMPLATE_CATALOG: readonly WaCatalogEntry[] = [
     optional: false,
   },
   {
+    kind: "payment_notice",
+    name: "dc_aviso_saldo",
+    category: "UTILITY",
+    lang: WA_TEMPLATE_LANG,
+    body:
+      "Hola {{1}}, te saludamos de {{2}}. Tienes un saldo pendiente de {{3}}. " +
+      "Llámanos al {{4}} o responde este mensaje para coordinar tu pago. ¡Gracias!",
+    labelKey: "inbox.whatsapp.tplKindPaymentNotice",
+    variableKeys: [
+      "inbox.whatsapp.tplVarPatient",
+      "inbox.whatsapp.tplVarClinic",
+      "inbox.whatsapp.tplVarAmount",
+      "inbox.whatsapp.tplVarClinicPhone",
+    ],
+    sample: ["María", "Clínica Dental Sonrisa", "$1,200.00 MXN", "555 123 4567"],
+    optional: false,
+  },
+  {
+    kind: "quote_ready",
+    name: "dc_presupuesto_listo",
+    category: "UTILITY",
+    lang: WA_TEMPLATE_LANG,
+    body:
+      "Hola {{1}}, en {{2}} ya está listo tu presupuesto. " +
+      "Puedes verlo y aceptarlo aquí: {{3}}. " +
+      "Cualquier duda respóndenos por este medio. ¡Gracias!",
+    labelKey: "inbox.whatsapp.tplKindQuoteReady",
+    variableKeys: [
+      "inbox.whatsapp.tplVarPatient",
+      "inbox.whatsapp.tplVarClinic",
+      "inbox.whatsapp.tplVarQuoteLink",
+    ],
+    sample: ["María", "Clínica Dental Sonrisa", "https://dalecontrol.com/presupuesto/abc123"],
+    optional: false,
+  },
+  {
     kind: "review",
     name: "dc_invitacion_resena",
     category: "MARKETING",
@@ -214,7 +250,7 @@ export function isValidTemplateLang(lang: string): boolean {
  * Reglas de Meta sobre el cuerpo. Devuelve el motivo del rechazo, o null si
  * pasa. Se comprueban ANTES de llamar a Meta porque un cuerpo mal formado
  * gasta una llamada y vuelve con un error genérico que no dice cuál de las
- * seis plantillas falló.
+ * ocho plantillas falló.
  */
 export function checkTemplateBody(body: string): string | null {
   const text = (body ?? "").trim();

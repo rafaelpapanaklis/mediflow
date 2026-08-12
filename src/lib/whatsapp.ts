@@ -120,3 +120,80 @@ export async function sendWhatsAppTemplate(
     },
   });
 }
+
+/**
+ * Sube un archivo (el comprobante o presupuesto en PDF) a la WABA de la clínica
+ * y devuelve el media id que luego referencia sendWhatsAppDocument. Existe para
+ * adjuntar el documento cuando la ventana de 24 h está abierta: el media id
+ * vive ~30 días en los servidores de Meta y aquí se usa de inmediato tras la
+ * subida. El coste de ese almacenamiento corre por cuenta de Meta, no nuestra.
+ */
+export async function uploadWhatsAppMedia(
+  phoneNumberId: string,
+  accessToken: string,
+  file: { buffer: Buffer; filename: string; mimeType?: string },
+): Promise<string> {
+  // Mismo descifrado perezoso que postToGraph: cifrado ("v1:...") o en claro.
+  const token = decryptField(accessToken) ?? accessToken;
+
+  const doFetch = () => {
+    // FormData/Blob nativos de Node 18 (undici); cuerpo y señal frescos por
+    // intento. Uint8Array de por medio como en facturapi/whisper: es el patrón
+    // del repo que ya compila con un Buffer.
+    const form = new FormData();
+    form.append("messaging_product", "whatsapp");
+    form.append(
+      "file",
+      new Blob([new Uint8Array(file.buffer)], { type: file.mimeType ?? "application/pdf" }),
+      file.filename,
+    );
+    return fetch(`https://graph.facebook.com/v19.0/${phoneNumberId}/media`, {
+      method: "POST",
+      // SOLO Authorization: el Content-Type del multipart (con su boundary)
+      // lo arma fetch a partir del FormData; ponerlo a mano lo rompe.
+      headers: { Authorization: `Bearer ${token}` },
+      body: form,
+      // Más holgado que los 15 s de mensajes: aquí se sube un PDF entero.
+      signal: AbortSignal.timeout(30000),
+    });
+  };
+
+  let res = await doFetch();
+  // Reintento único solo con 5xx/429, igual que postToGraph. En timeout o
+  // error de red NO se reintenta.
+  if (res.status >= 500 || res.status === 429) {
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+    res = await doFetch();
+  }
+
+  // Meta puede responder HTML (p. ej. 502 del gateway): no asumir JSON.
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) throw parseWaError(json, res.status);
+  // La respuesta buena es `{ id }`: un 200 sin id también es fallo para el caller.
+  if (!json.id) throw parseWaError(json, res.status);
+  return String(json.id);
+}
+
+/**
+ * Documento ya subido (por media id). Como cualquier mensaje libre, SOLO llega
+ * dentro de la ventana de 24 h; fuera de ella Meta lo rechaza con 131047 (por
+ * eso send-and-log solo lo usa en modo texto).
+ */
+export async function sendWhatsAppDocument(
+  phoneNumberId: string,
+  accessToken: string,
+  to: string,
+  doc: { mediaId: string; filename: string; caption?: string },
+) {
+  return postToGraph(phoneNumberId, accessToken, {
+    messaging_product: "whatsapp",
+    to: normalizeMxWhatsAppPhone(to),
+    type: "document",
+    document: {
+      id: doc.mediaId,
+      filename: doc.filename,
+      // Sin caption, el campo ni se manda.
+      ...(doc.caption ? { caption: doc.caption } : {}),
+    },
+  });
+}

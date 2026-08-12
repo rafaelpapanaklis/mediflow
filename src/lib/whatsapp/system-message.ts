@@ -19,7 +19,9 @@ export type WhatsAppSendKind =
   | "booking"             // confirmación/solicitud de cita
   | "appointment_change"  // resolución de un cambio de cita
   | "system"              // avisos de la plataforma (saldo IA, pagos…)
-  | "manual_api";         // recordatorio disparado a mano desde el panel
+  | "manual_api"          // recordatorio disparado a mano desde el panel
+  | "payment_notice"      // aviso de saldo pendiente de una factura
+  | "quote_ready";        // presupuesto listo con su liga pública
 
 export const WHATSAPP_SEND_KINDS: readonly WhatsAppSendKind[] = [
   "reminder",
@@ -29,6 +31,8 @@ export const WHATSAPP_SEND_KINDS: readonly WhatsAppSendKind[] = [
   "appointment_change",
   "system",
   "manual_api",
+  "payment_notice",
+  "quote_ready",
 ];
 
 /** Prefijo de `externalId` que marca un envío automático de la plataforma. */
