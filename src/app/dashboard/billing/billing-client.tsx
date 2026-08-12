@@ -14,20 +14,15 @@ import { fmtMXN, fmtMXNdec, formatRelativeDate } from "@/lib/format";
 import { PaymentModal, type PaymentInvoice } from "@/components/dashboard/billing/payment-modal";
 import { InvoiceDetailModal } from "@/components/dashboard/billing/invoice-detail-modal";
 import { InvoiceCfdiBadge } from "@/components/dashboard/billing/invoice-cfdi-badge";
+import { invoiceStatusBadge } from "@/components/dashboard/billing/invoice-status";
 import { InvoiceEditorModal } from "@/components/billing/invoice-editor-modal";
 import { useT } from "@/i18n/i18n-provider";
 import { REGIMENES_FISCALES, USOS_CFDI, FORMAS_PAGO_SAT } from "@/lib/cfdi-catalogs";
 import { derivePaymentForm, resolveTaxMode, type CfdiTaxMode } from "@/lib/invoice-totals";
 
-type Tone = "success" | "warning" | "danger" | "info" | "brand" | "neutral";
-const STATUS_BADGE: Record<string, { tone: Tone; labelKey: string }> = {
-  PENDING:   { tone: "warning", labelKey: "billing.billingClient.statusPending"   },
-  PARTIAL:   { tone: "info",    labelKey: "billing.billingClient.statusPartial"   },
-  PAID:      { tone: "success", labelKey: "billing.billingClient.statusPaid"      },
-  OVERDUE:   { tone: "danger",  labelKey: "billing.billingClient.statusOverdue"   },
-  DRAFT:     { tone: "brand",   labelKey: "billing.billingClient.statusDraft"     },
-  CANCELLED: { tone: "neutral", labelKey: "billing.billingClient.statusCancelled" },
-};
+// Mapa de estados de factura → fuente única invoice-status.ts, compartida con
+// la ficha del paciente y el modal de detalle (la divergencia entre copias
+// locales fue el origen del bug MF-0151).
 
 const STATUS_FILTERS = [
   { value: "all",      labelKey: "billing.billingClient.filterAll" },
@@ -267,7 +262,7 @@ export function BillingClient({ invoices: initial, patients, totalPaid, totalPen
             </thead>
             <tbody>
               {filtered.map(inv => {
-                const badge = STATUS_BADGE[inv.status] ?? STATUS_BADGE.PENDING;
+                const badge = invoiceStatusBadge(inv.status);
                 const fullName = patientNameOf(inv);
                 const isDraft = inv.status === "DRAFT";
                 const canPay  = !["PAID", "CANCELLED"].includes(inv.status) && !isDraft;

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState, useEffect, useMemo } from "react";
+import { useCallback, useState, useEffect, useMemo, useRef } from "react";
 import { useT } from "@/i18n/i18n-provider";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -19,7 +19,9 @@ import { ConsultBar } from "@/components/dashboard/patient-detail/consult-bar";
 import { SoapEditorInline, type SoapDraft } from "@/components/dashboard/patient-detail/soap-editor-inline";
 import { NoteDetailModal, type ClinicalNote } from "@/components/dashboard/patient-detail/note-detail-modal";
 import { InvoiceDetailModal } from "@/components/dashboard/billing/invoice-detail-modal";
-import { InvoiceCfdiBadge } from "@/components/dashboard/billing/invoice-cfdi-badge";
+import { PaymentModal } from "@/components/dashboard/billing/payment-modal";
+import { isVoidedInvoice } from "@/components/dashboard/billing/invoice-status";
+import { BillingTab } from "@/components/dashboard/patient-detail/billing-tab";
 import { HistoriaTimeline } from "@/components/dashboard/patient-detail/historia-timeline";
 import { PatientAuditHistory } from "@/components/dashboard/patient-detail/patient-audit-history";
 import patientDetailStyles from "@/components/dashboard/patient-detail/patient-detail.module.css";
@@ -223,26 +225,10 @@ const APPT_STATUS: Record<string, { labelKey: string; cls: string }> = {
   NO_SHOW:   { labelKey: "patients.apptStatus.noShow",    cls: "bg-[var(--bg-elev-2)] text-[var(--text-2)]" },
 };
 
-/* Cubre los 6 valores del enum InvoiceStatus. Si falta alguno, el render cae a
-   `?? INV_STATUS.PENDING` y una factura CANCELLED se pintaba de amarillo
-   "Pendiente" — el bug de MF-0151. Los estilos espejan los de las otras dos
-   superficies que ya mostraban estos badges bien (billing-client STATUS_BADGE e
-   invoice-detail-modal INV_STATUS): cancelada = neutro (cancelar es un estado
-   normal, NO un error → nada de rojo de peligro) y borrador = brand. */
-const INV_STATUS: Record<string, { labelKey: string; cls: string }> = {
-  PENDING:   { labelKey: "patients.invStatus.pending",   cls: "bg-[var(--warning-soft)] text-[var(--warning-strong)]" },
-  PARTIAL:   { labelKey: "patients.invStatus.partial",   cls: "bg-[var(--info-soft)] text-[var(--info-strong)]" },
-  PAID:      { labelKey: "patients.invStatus.paid",      cls: "bg-[var(--success-soft)] text-[var(--success-strong)]" },
-  OVERDUE:   { labelKey: "patients.invStatus.overdue",   cls: "bg-[var(--danger-soft)] text-[var(--danger-strong)]" },
-  CANCELLED: { labelKey: "patients.invStatus.cancelled", cls: "bg-[var(--bg-elev-2)] text-[var(--text-2)]" },
-  DRAFT:     { labelKey: "patients.invStatus.draft",     cls: "bg-[var(--brand-soft)] text-[var(--brand)]" },
-};
-
-/* Una factura CANCELLED está anulada: no es plan de tratamiento, no es dinero
-   cobrado y no es saldo por cobrar. El endpoint de cancelar NO pone balance a 0
-   (solo cambia status), así que cualquier suma que no la excluya la cuenta como
-   deuda. Ojo: reembolsada ≠ cancelada — un reembolso NO pasa por aquí. */
-const isVoidedInvoice = (inv: { status?: string | null }) => inv.status === "CANCELLED";
+/* El mapa de estados de factura (badge + label) y el helper isVoidedInvoice
+   viven en la fuente única src/components/dashboard/billing/invoice-status.ts,
+   compartida con Caja y el modal de detalle: la divergencia entre las copias
+   locales fue el origen del bug MF-0151 (CANCELLED pintada "Pendiente"). */
 
 /* `bg` incluye border-color porque los consumidores aplican la clase `border`.
    alta/media llevan borde semántico (tokens *-border-strong existentes);
@@ -481,6 +467,12 @@ export function PatientDetailClient({
   const [invoiceDetailAction, setInvoiceDetailAction] = useState<"cfdi" | null>(null);
   const [invoices, setInvoices] = useState(initialInvoices);
   const [showNewInvoice, setShowNewInvoice] = useState(false);
+  // Cobro directo en 2 clicks: snapshot de la factura objetivo del
+  // PaymentModal montado abajo ("Cobrar ahora" del rail/hero y "Cobrar" por
+  // fila del tab Facturación).
+  const [directPayInvoice, setDirectPayInvoice] = useState<any | null>(null);
+  // Evita confirmar dos veces un DRAFT con doble click mientras el POST vuela.
+  const confirmingDraftRef = useRef(false);
   useEffect(() => {
     setInvoices(initialInvoices);
   }, [initialInvoices]);
@@ -509,10 +501,37 @@ export function PatientDetailClient({
     if (!canViewBilling) return;
     setTab("facturacion");
   };
-  // Shortcut: cuando el usuario hace click en "Cobrar" desde HeroCard /
-  // SideCards, abrir directo el InvoiceDetailModal con la factura más
-  // relevante (DRAFT > PENDING/PARTIAL/OVERDUE). Si no hay ninguna
-  // procesable, fallback al tab Facturación para que pueda crear una.
+  // Cobro en 2 clicks: "Cobrar" (fila del tab Facturación) y "Cobrar ahora"
+  // (HeroCard/SideCards) abren el PaymentModal DIRECTO, sin pasar por el
+  // detalle. Un DRAFT primero se confirma (DRAFT → PENDING, mismo endpoint
+  // que handleConfirmAndPay del detalle) y el snapshot local se actualiza
+  // para que la fila no siga ofreciendo confirmar un borrador que ya avanzó.
+  const openDirectPayment = async (inv: any) => {
+    if (!canViewBilling || !inv) return;
+    let target = inv;
+    if (inv.status === "DRAFT") {
+      if (confirmingDraftRef.current) return;
+      confirmingDraftRef.current = true;
+      try {
+        const res = await fetch(`/api/invoices/${inv.id}/confirm`, { method: "POST" });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err.error ?? t("clinical.invoiceDetail.confirmError"));
+        }
+        target = { ...inv, status: "PENDING" };
+        setInvoices((prev: any[]) => prev.map((i: any) => (i.id === inv.id ? { ...i, status: "PENDING" } : i)));
+      } catch (err: any) {
+        toast.error(err.message ?? t("common.genericError"));
+        return;
+      } finally {
+        confirmingDraftRef.current = false;
+      }
+    }
+    setDirectPayInvoice(target);
+  };
+  // Shortcut de HeroCard / SideCards: cobrar la factura más relevante
+  // (DRAFT > PENDING/PARTIAL/OVERDUE). Si no hay ninguna procesable,
+  // fallback al tab Facturación para que pueda crear una.
   const openChargeShortcut = () => {
     if (!canViewBilling) return;
     const draft = invoices.find((inv: any) => inv.status === "DRAFT");
@@ -520,7 +539,7 @@ export function PatientDetailClient({
       inv.status === "PENDING" || inv.status === "PARTIAL" || inv.status === "OVERDUE",
     );
     const target = draft ?? pendingLike;
-    if (target) setInvoiceDetailOpen(target);
+    if (target) void openDirectPayment(target);
     else openBillingTab();
   };
 
@@ -3110,71 +3129,19 @@ export function PatientDetailClient({
 
           {/* Pestaña gateada por "billing.view" (mismo permiso que Caja). El
               ítem del menú tampoco existe sin el permiso — ver buildPatientNavItems
-              — y el server ni siquiera manda las facturas. */}
+              — y el server ni siquiera manda las facturas. El tab vive en
+              billing-tab.tsx (design system, mismo molde que Caja); el resumen
+              reusa los totales que ya alimentan el rail. */}
           {tab === "facturacion" && canViewBilling && (
-            <div className="bg-card border border-border rounded-xl overflow-hidden">
-              <div className="px-5 py-4 border-b border-border flex items-center justify-between">
-                <h2 className="text-sm font-bold">{t("patients.billing.title")}</h2>
-                <button type="button" onClick={() => setShowNewInvoice(true)} className="text-xs font-bold px-3 py-1.5 rounded-lg bg-brand-600 text-white hover:bg-brand-700 transition-colors">+ Nueva factura</button>
-              </div>
-              <div className="overflow-x-auto">
-              <table className="w-full text-xs">
-                <thead>
-                  <tr className="bg-muted/30 border-b border-border">
-                    {[
-                      { id: "invoice", label: t("patients.billing.colInvoice") },
-                      { id: "date", label: t("common.date") },
-                      { id: "amount", label: t("patients.billing.colAmount") },
-                      { id: "paid", label: t("patients.billing.colPaid") },
-                      { id: "balance", label: t("patients.billing.colBalance") },
-                      { id: "status", label: t("common.status") },
-                      { id: "cfdi", label: t("billing.billingClient.thCfdi") },
-                    ].map(h => (
-                      <th key={h.id} className="text-left px-4 py-2.5 text-[10px] font-bold text-muted-foreground uppercase tracking-wide whitespace-nowrap">{h.label}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {invoices.length === 0 ? (
-                    <tr><td colSpan={7} className="px-4 py-10 text-center text-muted-foreground">{t("patients.billing.empty")}</td></tr>
-                  ) : invoices.map(inv => {
-                    const s = INV_STATUS[inv.status] ?? INV_STATUS.PENDING;
-                    // Cancelar NO pone balance a 0 en BD, así que la columna
-                    // Saldo mostraría el monto en rojo en una fila que dice
-                    // "Cancelada". Se muestra "—": no hay nada que cobrar.
-                    const voided = isVoidedInvoice(inv);
-                    return (
-                      <tr
-                        key={inv.id}
-                        className="border-b border-border/50 hover:bg-muted/20 cursor-pointer"
-                        onClick={() => setInvoiceDetailOpen(inv)}
-                      >
-                        <td className="px-4 py-2 font-mono font-bold">{inv.invoiceNumber}</td>
-                        <td className="px-4 py-2 text-muted-foreground">{formatDate(inv.createdAt)}</td>
-                        <td className="px-4 py-2 font-bold">{formatCurrency(inv.total)}</td>
-                        <td className="px-4 py-2 text-emerald-600 font-bold">{formatCurrency(inv.paid)}</td>
-                        <td className={voided ? "px-4 py-2 text-muted-foreground" : "px-4 py-2 text-rose-600 font-bold"}>
-                          {voided ? "—" : formatCurrency(inv.balance)}
-                        </td>
-                        <td className="px-4 py-2"><span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${s.cls}`}>{t(s.labelKey)}</span></td>
-                        {/* CFDI — mismo indicador que la lista de Caja: badge ✓
-                            "Facturado (CFDI)" si ya se timbró, "Timbrar" si el SAT
-                            está configurado, o el estado neutro. Timbrar/descargar
-                            viven en el detalle (InvoiceDetailModal). */}
-                        <td className="px-4 py-2 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
-                          <InvoiceCfdiBadge
-                            cfdiUuid={inv.cfdiUuid}
-                            facturApiEnabled={facturApiEnabled}
-                            onStamp={voided ? undefined : () => { setInvoiceDetailAction("cfdi"); setInvoiceDetailOpen(inv); }}
-                          />
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-              </div>
-            </div>
+            <BillingTab
+              invoices={invoices}
+              summary={{ total: totalPlan, paid: totalPaid, balance: totalBalance }}
+              facturApiEnabled={facturApiEnabled}
+              onNewInvoice={() => setShowNewInvoice(true)}
+              onOpenInvoice={(inv) => setInvoiceDetailOpen(inv)}
+              onChargeInvoice={(inv) => { void openDirectPayment(inv); }}
+              onStampInvoice={(inv) => { setInvoiceDetailAction("cfdi"); setInvoiceDetailOpen(inv); }}
+            />
           )}
 
           </div>
@@ -3403,6 +3370,26 @@ export function PatientDetailClient({
         onMutated={() => router.refresh()}
         initialAction={invoiceDetailAction}
         clinicTaxMode={clinicTaxMode ?? null}
+      />
+
+      {/* Cobro directo en 2 clicks — "Cobrar ahora" (rail/hero) y "Cobrar"
+       *  por fila abren este PaymentModal SIN pasar por el detalle. El click
+       *  en la fila sigue abriendo el detalle completo de arriba. Al cobrar,
+       *  router.refresh() re-fetchea las facturas del server y el useEffect
+       *  de sync propaga el estado fresco (mismo circuito que el detalle). */}
+      <PaymentModal
+        open={directPayInvoice !== null}
+        invoice={directPayInvoice ? {
+          id: directPayInvoice.id,
+          invoiceNumber: directPayInvoice.invoiceNumber,
+          total: directPayInvoice.total,
+          paid: directPayInvoice.paid,
+          balance: directPayInvoice.balance,
+          status: directPayInvoice.status,
+          patientName: fullName,
+        } : null}
+        onClose={() => setDirectPayInvoice(null)}
+        onSuccess={() => { setDirectPayInvoice(null); router.refresh(); }}
       />
     </div>
   );

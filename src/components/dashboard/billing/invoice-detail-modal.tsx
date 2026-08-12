@@ -5,26 +5,18 @@ import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
 import { Printer, FileText, CreditCard, CheckCircle2, Pencil, Tag, XCircle, Undo2, Trash2, Receipt, Download } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
+import { ButtonNew } from "@/components/ui/design-system/button-new";
+import { BadgeNew } from "@/components/ui/design-system/badge-new";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { useT } from "@/i18n/i18n-provider";
 import { PaymentModal, type PaymentInvoice } from "./payment-modal";
 import { InvoiceCfdiBadge } from "./invoice-cfdi-badge";
+import { invoiceStatusBadge } from "./invoice-status";
 import { REGIMENES_FISCALES, USOS_CFDI, FORMAS_PAGO_SAT } from "@/lib/cfdi-catalogs";
 import { derivePaymentForm, resolveTaxMode, type CfdiTaxMode } from "@/lib/invoice-totals";
-
-// labelKey -> translation key resolved via t() at render time.
-// cls = badge-new semántico del sistema (mismo mapa de tonos que BillingClient).
-const INV_STATUS: Record<string, { labelKey: string; cls: string }> = {
-  PENDING: { labelKey: "clinical.invoiceDetail.statusPending", cls: "badge-new badge-new--warning" },
-  PARTIAL: { labelKey: "clinical.invoiceDetail.statusPartial", cls: "badge-new badge-new--info" },
-  PAID:    { labelKey: "clinical.invoiceDetail.statusPaid",    cls: "badge-new badge-new--success" },
-  OVERDUE: { labelKey: "clinical.invoiceDetail.statusOverdue", cls: "badge-new badge-new--danger" },
-  CANCELLED: { labelKey: "clinical.invoiceDetail.statusCancelled", cls: "badge-new badge-new--neutral" },
-  DRAFT:   { labelKey: "clinical.invoiceDetail.statusDraft",   cls: "badge-new badge-new--brand" },
-};
 
 const METHOD_LABEL_KEYS: Record<string, string> = {
   cash: "clinical.invoiceDetail.methodCash", debit: "clinical.invoiceDetail.methodDebit", credit: "clinical.invoiceDetail.methodCredit",
@@ -101,6 +93,7 @@ type SubAction = null | "refund" | "edit-price" | "discount" | "cancel" | "cfdi"
 export function InvoiceDetailModal({ open, invoice, patientName, onClose, onMutated, initialAction = null, clinicTaxMode }: InvoiceDetailModalProps) {
   const t = useT();
   const router = useRouter();
+  const confirmDialog = useConfirm();
   const [paymentOpen, setPaymentOpen] = useState(false);
   const [sub, setSub] = useState<SubAction>(null);
   const [busy, setBusy] = useState(false);
@@ -159,7 +152,7 @@ export function InvoiceDetailModal({ open, invoice, patientName, onClose, onMuta
   // editar precio/descuento o eliminar el borrador completo desde aquí.
   const isDraft    = status === "DRAFT";
   const canEditPrice = (isPending || isDraft) && invoice.paid === 0;
-  const s = INV_STATUS[status] ?? INV_STATUS.PENDING;
+  const s = invoiceStatusBadge(status);
 
   // CFDI: uuid efectivo (prop o timbrado optimista) y si aplica facturar.
   const effectiveUuid  = stampedUuid ?? invoice.cfdiUuid ?? null;
@@ -345,7 +338,12 @@ export function InvoiceDetailModal({ open, invoice, patientName, onClose, onMuta
   }
 
   async function handleMarkPaid() {
-    if (!confirm(t("clinical.invoiceDetail.markPaidConfirm", { balance: formatCurrency(invoice!.balance) }))) return;
+    if (!(await confirmDialog({
+      title: t("clinical.invoiceDetail.markPaid"),
+      description: t("clinical.invoiceDetail.markPaidConfirm", { balance: formatCurrency(invoice!.balance) }),
+      confirmText: t("clinical.invoiceDetail.markPaid"),
+      cancelText: t("common.cancel"),
+    }))) return;
     await callApi("/mark-paid", "POST", {}, t("clinical.invoiceDetail.markPaidSuccess"));
   }
 
@@ -397,7 +395,13 @@ export function InvoiceDetailModal({ open, invoice, patientName, onClose, onMuta
 
   async function handleDeleteDraft() {
     if (!invoice) return;
-    if (!confirm(t("clinical.invoiceDetail.deleteDraftConfirm", { number: invoice.invoiceNumber }))) return;
+    if (!(await confirmDialog({
+      title: t("clinical.invoiceDetail.deleteDraft"),
+      description: t("clinical.invoiceDetail.deleteDraftConfirm", { number: invoice.invoiceNumber }),
+      confirmText: t("clinical.invoiceDetail.deleteDraft"),
+      cancelText: t("common.cancel"),
+      variant: "danger",
+    }))) return;
     await callApi("", "DELETE", undefined, t("clinical.invoiceDetail.draftDeleted"));
   }
 
@@ -415,7 +419,7 @@ export function InvoiceDetailModal({ open, invoice, patientName, onClose, onMuta
           <DialogHeader>
             <DialogTitle className="text-foreground font-bold flex items-center gap-3 flex-wrap">
               <span className="font-mono">{invoice.invoiceNumber}</span>
-              <span className={s.cls}>{t(s.labelKey)}</span>
+              <BadgeNew tone={s.tone} dot>{t(s.labelKey)}</BadgeNew>
               {/* Timbrada: el mismo badge de la lista (Caja y ficha) para que el
                   estado fiscal se lea de inmediato al abrir la factura. */}
               {effectiveUuid && <InvoiceCfdiBadge cfdiUuid={effectiveUuid} />}
@@ -463,7 +467,8 @@ export function InvoiceDetailModal({ open, invoice, patientName, onClose, onMuta
                       type="button"
                       onClick={() => downloadCfdi("pdf")}
                       disabled={busy}
-                      className="flex-shrink-0 inline-flex items-center gap-1 text-[10px] font-bold underline underline-offset-2 text-blue-700 dark:text-blue-300 hover:opacity-80 disabled:opacity-50"
+                      className="flex-shrink-0 inline-flex items-center gap-1 text-[10px] font-bold underline underline-offset-2 hover:opacity-80 disabled:opacity-50"
+                      style={{ color: "var(--info, var(--brand))" }}
                     >
                       <Download size={11} aria-hidden /> {t("clinical.invoiceDetail.viewCfdi")}
                     </button>
@@ -508,7 +513,7 @@ export function InvoiceDetailModal({ open, invoice, patientName, onClose, onMuta
                     return (
                       <div key={p.id} className="px-3 py-2 flex items-center justify-between text-xs">
                         <div className="min-w-0">
-                          <div className={`font-medium ${isRefund ? "text-rose-600 dark:text-rose-400" : "text-foreground"}`}>
+                          <div className={`font-medium ${isRefund ? "" : "text-foreground"}`} style={isRefund ? { color: "var(--danger)" } : undefined}>
                             {METHOD_LABEL_KEYS[p.method] ? t(METHOD_LABEL_KEYS[p.method]) : (p.method ?? "—")}
                           </div>
                           <div className="text-[10px] text-muted-foreground">
@@ -517,7 +522,7 @@ export function InvoiceDetailModal({ open, invoice, patientName, onClose, onMuta
                             {p.notes ? ` · ${p.notes}` : ""}
                           </div>
                         </div>
-                        <div className={`font-mono font-bold ${isRefund ? "text-rose-600 dark:text-rose-400" : "text-emerald-600 dark:text-emerald-400"}`}>
+                        <div className="font-mono font-bold" style={{ color: isRefund ? "var(--danger)" : "var(--success)" }}>
                           {isRefund ? "−" : ""}{formatCurrency(p.amount)}
                         </div>
                       </div>
@@ -533,46 +538,44 @@ export function InvoiceDetailModal({ open, invoice, patientName, onClose, onMuta
                 hace ambos pasos (confirm + payment) en un click. */}
             {isDraft && (
               <>
-                <Button onClick={handleConfirmAndPay} disabled={busy}>
-                  <CreditCard size={14} aria-hidden /> {t("clinical.invoiceDetail.chargeNow", { amount: formatCurrency(invoice.total) })}
-                </Button>
-                <Button variant="outline" onClick={() => openSub("edit-price")} disabled={busy}>
-                  <Pencil size={14} aria-hidden /> {t("clinical.invoiceDetail.editPrice")}
-                </Button>
-                <Button variant="outline" onClick={() => openSub("discount")} disabled={busy}>
-                  <Tag size={14} aria-hidden /> {t("clinical.invoiceDetail.applyDiscount")}
-                </Button>
-                <Button variant="outline" onClick={handleDeleteDraft} disabled={busy}
-                  className="border-rose-300 text-rose-700 hover:bg-rose-50 dark:border-rose-800 dark:text-rose-300 dark:hover:bg-rose-950/40">
-                  <Trash2 size={14} aria-hidden /> {t("clinical.invoiceDetail.deleteDraft")}
-                </Button>
+                <ButtonNew variant="primary" icon={<CreditCard size={14} aria-hidden />} onClick={handleConfirmAndPay} disabled={busy}>
+                  {t("clinical.invoiceDetail.chargeNow", { amount: formatCurrency(invoice.total) })}
+                </ButtonNew>
+                <ButtonNew variant="secondary" icon={<Pencil size={14} aria-hidden />} onClick={() => openSub("edit-price")} disabled={busy}>
+                  {t("clinical.invoiceDetail.editPrice")}
+                </ButtonNew>
+                <ButtonNew variant="secondary" icon={<Tag size={14} aria-hidden />} onClick={() => openSub("discount")} disabled={busy}>
+                  {t("clinical.invoiceDetail.applyDiscount")}
+                </ButtonNew>
+                <ButtonNew variant="danger" icon={<Trash2 size={14} aria-hidden />} onClick={handleDeleteDraft} disabled={busy}>
+                  {t("clinical.invoiceDetail.deleteDraft")}
+                </ButtonNew>
               </>
             )}
 
             {/* PENDIENTE / PARCIAL */}
             {isPending && (
               <>
-                <Button onClick={() => setPaymentOpen(true)} disabled={busy}>
-                  <CreditCard size={14} aria-hidden /> {t("clinical.invoiceDetail.collectPayment", { amount: formatCurrency(invoice.balance) })}
-                </Button>
-                <Button variant="outline" onClick={handleMarkPaid} disabled={busy} className="border-emerald-300 text-emerald-700 hover:bg-emerald-50 dark:border-emerald-800 dark:text-emerald-300 dark:hover:bg-emerald-950/40">
-                  <CheckCircle2 size={14} aria-hidden /> {t("clinical.invoiceDetail.markPaid")}
-                </Button>
+                <ButtonNew variant="primary" icon={<CreditCard size={14} aria-hidden />} onClick={() => setPaymentOpen(true)} disabled={busy}>
+                  {t("clinical.invoiceDetail.collectPayment", { amount: formatCurrency(invoice.balance) })}
+                </ButtonNew>
+                <ButtonNew variant="secondary" icon={<CheckCircle2 size={14} aria-hidden />} onClick={handleMarkPaid} disabled={busy}>
+                  {t("clinical.invoiceDetail.markPaid")}
+                </ButtonNew>
                 {canEditPrice && (
                   <>
-                    <Button variant="outline" onClick={() => openSub("edit-price")} disabled={busy}>
-                      <Pencil size={14} aria-hidden /> {t("clinical.invoiceDetail.editPrice")}
-                    </Button>
-                    <Button variant="outline" onClick={() => openSub("discount")} disabled={busy}>
-                      <Tag size={14} aria-hidden /> {t("clinical.invoiceDetail.applyDiscount")}
-                    </Button>
+                    <ButtonNew variant="secondary" icon={<Pencil size={14} aria-hidden />} onClick={() => openSub("edit-price")} disabled={busy}>
+                      {t("clinical.invoiceDetail.editPrice")}
+                    </ButtonNew>
+                    <ButtonNew variant="secondary" icon={<Tag size={14} aria-hidden />} onClick={() => openSub("discount")} disabled={busy}>
+                      {t("clinical.invoiceDetail.applyDiscount")}
+                    </ButtonNew>
                   </>
                 )}
                 {invoice.paid === 0 && (
-                  <Button variant="outline" onClick={() => openSub("cancel")} disabled={busy}
-                    className="border-rose-300 text-rose-700 hover:bg-rose-50 dark:border-rose-800 dark:text-rose-300 dark:hover:bg-rose-950/40">
-                    <XCircle size={14} aria-hidden /> {t("clinical.invoiceDetail.cancelInvoice")}
-                  </Button>
+                  <ButtonNew variant="danger" icon={<XCircle size={14} aria-hidden />} onClick={() => openSub("cancel")} disabled={busy}>
+                    {t("clinical.invoiceDetail.cancelInvoice")}
+                  </ButtonNew>
                 )}
               </>
             )}
@@ -580,17 +583,16 @@ export function InvoiceDetailModal({ open, invoice, patientName, onClose, onMuta
             {/* PAGADA */}
             {isPaid && (
               <>
-                <Button variant="outline" onClick={() => openSub("refund")} disabled={busy}
-                  className="border-rose-300 text-rose-700 hover:bg-rose-50 dark:border-rose-800 dark:text-rose-300 dark:hover:bg-rose-950/40">
-                  <Undo2 size={14} aria-hidden /> {t("clinical.invoiceDetail.refund")}
-                </Button>
+                <ButtonNew variant="danger" icon={<Undo2 size={14} aria-hidden />} onClick={() => openSub("refund")} disabled={busy}>
+                  {t("clinical.invoiceDetail.refund")}
+                </ButtonNew>
                 {effectiveUuid && (
-                  <Button variant="outline" onClick={() => {
+                  <ButtonNew variant="secondary" icon={<FileText size={14} aria-hidden />} onClick={() => {
                     navigator.clipboard.writeText(effectiveUuid).catch(() => {});
                     toast.success(t("clinical.invoiceDetail.cfdiUuidCopied"));
                   }}>
-                    <FileText size={14} aria-hidden /> {t("clinical.invoiceDetail.copyCfdiUuid")}
-                  </Button>
+                    {t("clinical.invoiceDetail.copyCfdiUuid")}
+                  </ButtonNew>
                 )}
               </>
             )}
@@ -599,29 +601,26 @@ export function InvoiceDetailModal({ open, invoice, patientName, onClose, onMuta
             {canInvoiceCfdi && (
               effectiveUuid ? (
                 <>
-                  <Button variant="outline" onClick={() => downloadCfdi("pdf")} disabled={busy}
-                    className="border-blue-300 text-blue-700 hover:bg-blue-50 dark:border-blue-800 dark:text-blue-300 dark:hover:bg-blue-950/40">
-                    <Download size={14} aria-hidden /> {t("clinical.invoiceDetail.downloadPdf")}
-                  </Button>
-                  <Button variant="outline" onClick={() => downloadCfdi("xml")} disabled={busy}
-                    className="border-blue-300 text-blue-700 hover:bg-blue-50 dark:border-blue-800 dark:text-blue-300 dark:hover:bg-blue-950/40">
-                    <Download size={14} aria-hidden /> {t("clinical.invoiceDetail.downloadXml")}
-                  </Button>
+                  <ButtonNew variant="secondary" icon={<Download size={14} aria-hidden />} onClick={() => downloadCfdi("pdf")} disabled={busy}>
+                    {t("clinical.invoiceDetail.downloadPdf")}
+                  </ButtonNew>
+                  <ButtonNew variant="secondary" icon={<Download size={14} aria-hidden />} onClick={() => downloadCfdi("xml")} disabled={busy}>
+                    {t("clinical.invoiceDetail.downloadXml")}
+                  </ButtonNew>
                 </>
               ) : (
-                <Button variant="outline" onClick={openCfdiForm} disabled={busy}
-                  className="border-blue-300 text-blue-700 hover:bg-blue-50 dark:border-blue-800 dark:text-blue-300 dark:hover:bg-blue-950/40">
-                  <Receipt size={14} aria-hidden /> {t("clinical.invoiceDetail.cfdiInvoiceBtn")}
-                </Button>
+                <ButtonNew variant="secondary" icon={<Receipt size={14} aria-hidden />} onClick={openCfdiForm} disabled={busy}>
+                  {t("clinical.invoiceDetail.cfdiInvoiceBtn")}
+                </ButtonNew>
               )
             )}
 
             {/* Imprimir comprobante A4 en pestaña nueva (ya no window.print()) */}
-            <Button variant="outline" onClick={() => window.open(`/api/invoices/${invoice.id}/print`, "_blank")}>
-              <Printer size={14} aria-hidden /> {t("common.print")}
-            </Button>
+            <ButtonNew variant="secondary" icon={<Printer size={14} aria-hidden />} onClick={() => window.open(`/api/invoices/${invoice.id}/print`, "_blank")}>
+              {t("common.print")}
+            </ButtonNew>
 
-            <Button variant="ghost" onClick={onClose}>{t("common.close")}</Button>
+            <ButtonNew variant="ghost" onClick={onClose}>{t("common.close")}</ButtonNew>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -641,17 +640,18 @@ export function InvoiceDetailModal({ open, invoice, patientName, onClose, onMuta
             <div className="space-y-1.5">
               <Label>{t("clinical.invoiceDetail.reason")}</Label>
               <textarea
-                className="flex min-h-[60px] w-full rounded-lg border border-border bg-card text-foreground px-3 py-2 text-sm placeholder:text-muted-foreground resize-none"
+                className="input-new"
+                style={{ resize: "none", minHeight: 60 }}
                 placeholder={t("clinical.invoiceDetail.refundReasonPlaceholder")}
                 value={refundReason} onChange={(e) => setRefundReason(e.target.value)}
               />
             </div>
           </div>
           <DialogFooter>
-            <Button variant="ghost" onClick={() => setSub(null)} disabled={busy}>{t("common.cancel")}</Button>
-            <Button onClick={handleRefund} disabled={busy} className="bg-rose-600 hover:bg-rose-700 text-white">
+            <ButtonNew variant="ghost" onClick={() => setSub(null)} disabled={busy}>{t("common.cancel")}</ButtonNew>
+            <ButtonNew variant="danger" onClick={handleRefund} disabled={busy}>
               {busy ? t("clinical.invoiceDetail.processing") : t("clinical.invoiceDetail.refundAmountBtn", { amount: formatCurrency(Number(refundAmount) || 0) })}
-            </Button>
+            </ButtonNew>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -671,8 +671,8 @@ export function InvoiceDetailModal({ open, invoice, patientName, onClose, onMuta
             <p className="text-[11px] text-muted-foreground">{t("clinical.invoiceDetail.editPriceHelper")}</p>
           </div>
           <DialogFooter>
-            <Button variant="ghost" onClick={() => setSub(null)} disabled={busy}>{t("common.cancel")}</Button>
-            <Button onClick={handleEditPrice} disabled={busy}>{busy ? t("common.saving") : t("clinical.invoiceDetail.savePrice")}</Button>
+            <ButtonNew variant="ghost" onClick={() => setSub(null)} disabled={busy}>{t("common.cancel")}</ButtonNew>
+            <ButtonNew variant="primary" onClick={handleEditPrice} disabled={busy}>{busy ? t("common.saving") : t("clinical.invoiceDetail.savePrice")}</ButtonNew>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -692,8 +692,8 @@ export function InvoiceDetailModal({ open, invoice, patientName, onClose, onMuta
             <p className="text-[11px] text-muted-foreground">{t("clinical.invoiceDetail.discountHelper")}</p>
           </div>
           <DialogFooter>
-            <Button variant="ghost" onClick={() => setSub(null)} disabled={busy}>{t("common.cancel")}</Button>
-            <Button onClick={handleDiscount} disabled={busy}>{busy ? t("clinical.invoiceDetail.applying") : t("clinical.invoiceDetail.applyDiscount")}</Button>
+            <ButtonNew variant="ghost" onClick={() => setSub(null)} disabled={busy}>{t("common.cancel")}</ButtonNew>
+            <ButtonNew variant="primary" onClick={handleDiscount} disabled={busy}>{busy ? t("clinical.invoiceDetail.applying") : t("clinical.invoiceDetail.applyDiscount")}</ButtonNew>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -709,17 +709,18 @@ export function InvoiceDetailModal({ open, invoice, patientName, onClose, onMuta
             <div className="space-y-1.5">
               <Label>{t("clinical.invoiceDetail.reasonOptional")}</Label>
               <textarea
-                className="flex min-h-[60px] w-full rounded-lg border border-border bg-card text-foreground px-3 py-2 text-sm placeholder:text-muted-foreground resize-none"
+                className="input-new"
+                style={{ resize: "none", minHeight: 60 }}
                 placeholder={t("clinical.invoiceDetail.cancelReasonPlaceholder")}
                 value={cancelReason} onChange={(e) => setCancelReason(e.target.value)}
               />
             </div>
           </div>
           <DialogFooter>
-            <Button variant="ghost" onClick={() => setSub(null)} disabled={busy}>{t("common.back")}</Button>
-            <Button onClick={handleCancel} disabled={busy} className="bg-rose-600 hover:bg-rose-700 text-white">
+            <ButtonNew variant="ghost" onClick={() => setSub(null)} disabled={busy}>{t("common.back")}</ButtonNew>
+            <ButtonNew variant="danger" onClick={handleCancel} disabled={busy}>
               {busy ? t("clinical.invoiceDetail.cancelling") : t("clinical.invoiceDetail.confirmCancellation")}
-            </Button>
+            </ButtonNew>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -755,11 +756,11 @@ export function InvoiceDetailModal({ open, invoice, patientName, onClose, onMuta
                 }}
               >
                 <p>{cfdiMismatch}</p>
-                <Button variant="outline" size="sm" onClick={() => { setCfdiMismatch(null); setCfdiBlockCode(null); setSub(null); }}>
+                <ButtonNew variant="secondary" size="sm" onClick={() => { setCfdiMismatch(null); setCfdiBlockCode(null); setSub(null); }}>
                   {cfdiBlockCode === "CFDI_LIVE_NOT_READY"
                     ? t("clinical.invoiceDetail.cfdiNotReadyDismiss")
                     : t("clinical.invoiceDetail.cfdiMismatchReview")}
-                </Button>
+                </ButtonNew>
               </div>
             )}
             {invoice.balance > 0 && (
@@ -792,7 +793,7 @@ export function InvoiceDetailModal({ open, invoice, patientName, onClose, onMuta
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <Label>{t("clinical.invoiceDetail.fiscalRegimen")}</Label>
-                <select className="flex h-10 w-full rounded-lg border border-border bg-card px-3 text-sm focus:outline-none"
+                <select className="input-new"
                   value={fiscal.regimen} onChange={(e) => setFiscal(f => ({ ...f, regimen: e.target.value }))}>
                   {REGIMENES_FISCALES.map(r => <option key={r.clave} value={r.clave}>{r.clave} — {r.descripcion}</option>)}
                 </select>
@@ -805,7 +806,7 @@ export function InvoiceDetailModal({ open, invoice, patientName, onClose, onMuta
             </div>
             <div className="space-y-1.5">
               <Label>{t("clinical.invoiceDetail.fiscalUso")}</Label>
-              <select className="flex h-10 w-full rounded-lg border border-border bg-card px-3 text-sm focus:outline-none"
+              <select className="input-new"
                 value={fiscal.uso} onChange={(e) => setFiscal(f => ({ ...f, uso: e.target.value }))}>
                 {USOS_CFDI.map(u => <option key={u.clave} value={u.clave}>{u.clave} — {u.descripcion}</option>)}
               </select>
@@ -813,14 +814,14 @@ export function InvoiceDetailModal({ open, invoice, patientName, onClose, onMuta
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <Label>{t("clinical.invoiceDetail.cfdiPaymentFormLabel")}</Label>
-                <select className="flex h-10 w-full rounded-lg border border-border bg-card px-3 text-sm focus:outline-none"
+                <select className="input-new"
                   value={fiscal.formaPago} onChange={(e) => setFiscal(f => ({ ...f, formaPago: e.target.value }))}>
                   {FORMAS_PAGO_SAT.map(fp => <option key={fp.clave} value={fp.clave}>{fp.clave} — {fp.descripcion}</option>)}
                 </select>
               </div>
               <div className="space-y-1.5">
                 <Label>{t("clinical.invoiceDetail.cfdiTaxesLabel")}</Label>
-                <select className="flex h-10 w-full rounded-lg border border-border bg-card px-3 text-sm focus:outline-none"
+                <select className="input-new"
                   value={fiscal.impuestos}
                   onChange={(e) => setFiscal(f => ({ ...f, impuestos: e.target.value as CfdiTaxMode }))}>
                   <option value="exento">{t("clinical.invoiceDetail.cfdiTaxExempt")}</option>
@@ -834,10 +835,10 @@ export function InvoiceDetailModal({ open, invoice, patientName, onClose, onMuta
             </div>
           </div>
           <DialogFooter>
-            <Button variant="ghost" onClick={() => setSub(null)} disabled={busy}>{t("common.cancel")}</Button>
-            <Button onClick={handleStampCfdi} disabled={busy || (invoice.balance > 0 && !pueOk)}>
+            <ButtonNew variant="ghost" onClick={() => setSub(null)} disabled={busy}>{t("common.cancel")}</ButtonNew>
+            <ButtonNew variant="primary" onClick={handleStampCfdi} disabled={busy || (invoice.balance > 0 && !pueOk)}>
               {busy ? t("clinical.invoiceDetail.stamping") : t("clinical.invoiceDetail.stampCfdiBtn")}
-            </Button>
+            </ButtonNew>
           </DialogFooter>
         </DialogContent>
       </Dialog>

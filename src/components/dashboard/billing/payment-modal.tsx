@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import toast from "react-hot-toast";
 import { CreditCard, Banknote, ArrowLeftRight, Wallet, FileCheck2, MoreHorizontal } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
+import { ButtonNew } from "@/components/ui/design-system/button-new";
 import { Input } from "@/components/ui/input";
 import { DateField } from "@/components/ui/date-field";
 import { Label } from "@/components/ui/label";
@@ -157,9 +157,10 @@ export function PaymentModal({ open, invoice, onClose, onSuccess }: PaymentModal
                     onClick={() => setMethod(m.value)}
                     className={`flex flex-col items-center gap-1 px-2 py-2 rounded-lg border text-[11px] font-semibold transition-colors ${
                       active
-                        ? "bg-brand-600 text-white border-brand-600"
-                        : "bg-card text-foreground border-border hover:bg-muted/50"
+                        ? ""
+                        : "bg-[var(--bg-elev)] text-[var(--text-1)] border-[var(--border-soft)] hover:bg-muted/50"
                     }`}
+                    style={active ? { background: "var(--brand)", color: "#fff", borderColor: "var(--brand)" } : undefined}
                   >
                     <Icon size={14} aria-hidden />
                     {t(m.labelKey)}
@@ -191,7 +192,8 @@ export function PaymentModal({ open, invoice, onClose, onSuccess }: PaymentModal
           <div className="space-y-1.5">
             <Label>{t("common.notes")}</Label>
             <textarea
-              className="flex min-h-[60px] w-full rounded-lg border border-border bg-card px-3 py-2 text-sm placeholder:text-muted-foreground resize-none"
+              className="input-new"
+              style={{ resize: "none", minHeight: 60 }}
               placeholder={t("common.optional")}
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
@@ -200,10 +202,10 @@ export function PaymentModal({ open, invoice, onClose, onSuccess }: PaymentModal
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={onClose} disabled={saving}>{t("common.cancel")}</Button>
-          <Button onClick={submit} disabled={isInvalid || saving}>
+          <ButtonNew variant="ghost" onClick={onClose} disabled={saving}>{t("common.cancel")}</ButtonNew>
+          <ButtonNew variant="primary" onClick={submit} disabled={isInvalid || saving}>
             {saving ? t("clinical.paymentModal.registering") : t("clinical.paymentModal.registerPaymentBtn", { amount: amountNum ? " · " + formatCurrency(amountNum) : "" })}
-          </Button>
+          </ButtonNew>
         </DialogFooter>
       </DialogContent>
     </Dialog>

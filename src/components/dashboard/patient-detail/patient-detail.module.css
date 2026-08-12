@@ -1973,20 +1973,6 @@
   text-align: center;
   color: var(--text-3);
 }
-/* Facturación: columnas 3-5 (importe / pagado / saldo) numéricas a la derecha */
-.tableInv thead th:nth-child(3),
-.tableInv thead th:nth-child(4),
-.tableInv thead th:nth-child(5),
-.tableInv tbody td:nth-child(3),
-.tableInv tbody td:nth-child(4),
-.tableInv tbody td:nth-child(5) {
-  text-align: right;
-  font-variant-numeric: tabular-nums;
-}
-/* Cifras de dinero sobre fila clara — par strong para AA */
-.moneyPaidB { color: var(--success-strong); font-weight: 600; }
-.moneyDebtB { color: var(--danger); font-weight: 700; }
-.moneyZeroB { color: var(--text-4); font-weight: 500; }
 @media (prefers-reduced-motion: reduce) {
   .tableB tbody tr { transition: none; }
 }
