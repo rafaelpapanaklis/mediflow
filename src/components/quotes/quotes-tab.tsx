@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import {
   FileText, Plus, Loader2, Trash2, Copy, Check, Download, Send,
   CheckCircle2, XCircle, Pencil, Files, ReceiptText, ClipboardList, Search,
+  MessageCircle,
 } from "lucide-react";
 import { computeTotals } from "@/lib/quotes/compute";
 import type { QuoteDTO, QuoteStatus, QuoteItemInput, BillingInvoiceLite } from "@/lib/quotes/types";
@@ -151,7 +152,7 @@ export function QuotesTab({ patientId, prefill, onViewInvoice, onViewPlan, onInv
       ) : (
         <div className="space-y-3">
           {quotes.map((q) => (
-            <QuoteCard key={q.id} quote={q} onChanged={load} onEdit={() => openEdit(q)} onViewInvoice={onViewInvoice} onViewPlan={onViewPlan} />
+            <QuoteCard key={q.id} quote={q} patientId={patientId} onChanged={load} onEdit={() => openEdit(q)} onViewInvoice={onViewInvoice} onViewPlan={onViewPlan} />
           ))}
         </div>
       )}
@@ -163,12 +164,13 @@ export function QuotesTab({ patientId, prefill, onViewInvoice, onViewPlan, onInv
 // Tarjeta de un presupuesto + acciones
 // ---------------------------------------------------------------------------
 
-function QuoteCard({ quote, onChanged, onEdit, onViewInvoice, onViewPlan }: { quote: QuoteDTO; onChanged: () => Promise<void> | void; onEdit: () => void; onViewInvoice?: (invoiceId: string) => void; onViewPlan?: (planId: string) => void }) {
+function QuoteCard({ quote, patientId, onChanged, onEdit, onViewInvoice, onViewPlan }: { quote: QuoteDTO; patientId: string; onChanged: () => Promise<void> | void; onEdit: () => void; onViewInvoice?: (invoiceId: string) => void; onViewPlan?: (planId: string) => void }) {
   const t = useT();
   const confirmDialog = useConfirm();
   const [busy, setBusy] = useState(false);
   const [copied, setCopied] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
+  const [waSent, setWaSent] = useState(false);
   const cfg = STATUS_CFG[quote.status] ?? STATUS_CFG.DRAFT;
 
   const post = useCallback(async (url: string, body?: unknown) => {
@@ -223,6 +225,12 @@ function QuoteCard({ quote, onChanged, onEdit, onViewInvoice, onViewPlan }: { qu
     } catch {
       setMsg(t("quotes.card.copyFailed", { url }));
     }
+  }
+
+  async function sendWhatsApp() {
+    setWaSent(false);
+    const out = await post(`/api/quotes/${quote.id}/send-whatsapp`);
+    if (out) setWaSent(true);
   }
 
   const Btn = ({ onClick, children, tone = "default" as "default" | "primary" | "danger" | "success" }) => {
@@ -307,6 +315,12 @@ function QuoteCard({ quote, onChanged, onEdit, onViewInvoice, onViewPlan }: { qu
           </>
         )}
 
+        {(quote.status === "DRAFT" || quote.status === "PRESENTED" || quote.status === "EXPIRED") && (
+          <Btn onClick={sendWhatsApp} tone="primary">
+            <MessageCircle size={12} /> {t("quotes.card.sendWhatsApp")}
+          </Btn>
+        )}
+
         {quote.status === "EXPIRED" && (
           <Btn onClick={() => post(`/api/quotes/${quote.id}/status`, { action: "present" })} tone="primary">
             <Send size={12} /> {t("quotes.card.presentAgain")}
@@ -349,6 +363,14 @@ function QuoteCard({ quote, onChanged, onEdit, onViewInvoice, onViewPlan }: { qu
       </div>
 
       {msg && <p className="text-[11px] text-rose-600 mt-2">{msg}</p>}
+      {waSent && (
+        <p className="text-[11px] text-emerald-600 mt-2">
+          {t("quotes.card.waSentToast")}{" "}
+          <a href={`/dashboard/inbox${patientId ? `?patientId=${patientId}` : ""}`} className="underline font-semibold">
+            {t("quotes.card.waViewInbox")}
+          </a>
+        </p>
+      )}
     </div>
   );
 }

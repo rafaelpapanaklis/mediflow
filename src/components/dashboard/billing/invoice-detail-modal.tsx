@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
-import { Printer, FileText, CreditCard, CheckCircle2, Pencil, Tag, XCircle, Undo2, Trash2, Receipt, Download } from "lucide-react";
+import { Printer, FileText, CreditCard, CheckCircle2, Pencil, Tag, XCircle, Undo2, Trash2, Receipt, Download, MessageCircle } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { ButtonNew } from "@/components/ui/design-system/button-new";
 import { BadgeNew } from "@/components/ui/design-system/badge-new";
@@ -347,6 +347,32 @@ export function InvoiceDetailModal({ open, invoice, patientName, onClose, onMuta
     await callApi("/mark-paid", "POST", {}, t("clinical.invoiceDetail.markPaidSuccess"));
   }
 
+  // Aviso de saldo por WhatsApp. No muta la factura: no se llama onMutated ni
+  // se cierra el modal — el éxito enlaza al hilo del Inbox.
+  async function handleSendWhatsApp() {
+    if (!invoice) return;
+    setBusy(true);
+    try {
+      const res = await fetch(`/api/invoices/${invoice.id}/send-whatsapp`, { method: "POST" });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error ?? t("clinical.invoiceDetail.operationError"));
+      const inboxHref = `/dashboard/inbox${(data.patientId ?? invoice.patientId) ? `?patientId=${data.patientId ?? invoice.patientId}` : ""}`;
+      toast.success(
+        <span>
+          {t("clinical.invoiceDetail.waSentToast")}{" "}
+          <a href={inboxHref} className="underline font-bold">{t("clinical.invoiceDetail.waViewInbox")}</a>
+        </span>,
+        { duration: 6000 },
+      );
+    } catch (err: any) {
+      // El motivo puede ser largo (plantilla en revisión, sin método de pago…):
+      // más duración para alcanzar a leerlo.
+      toast.error(err.message ?? t("common.genericError"), { duration: 8000 });
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function handleCancel() {
     await callApi("/cancel", "POST", { reason: cancelReason.trim() || undefined }, t("clinical.invoiceDetail.cancelSuccess"));
   }
@@ -561,6 +587,9 @@ export function InvoiceDetailModal({ open, invoice, patientName, onClose, onMuta
                 </ButtonNew>
                 <ButtonNew variant="secondary" icon={<CheckCircle2 size={14} aria-hidden />} onClick={handleMarkPaid} disabled={busy}>
                   {t("clinical.invoiceDetail.markPaid")}
+                </ButtonNew>
+                <ButtonNew variant="secondary" icon={<MessageCircle size={14} aria-hidden />} onClick={handleSendWhatsApp} disabled={busy}>
+                  {t("clinical.invoiceDetail.sendWhatsApp")}
                 </ButtonNew>
                 {canEditPrice && (
                   <>

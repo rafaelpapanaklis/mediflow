@@ -1,9 +1,9 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { randomBytes } from "crypto";
 import { getAuthContext } from "@/lib/auth-context";
 import { prisma } from "@/lib/prisma";
 import { logAudit } from "@/lib/audit";
 import { serializeQuote } from "@/lib/quotes/serialize";
+import { presentQuote } from "@/lib/quotes/present";
 import { assertPatientVisible } from "@/lib/patient-visibility";
 
 export const dynamic = "force-dynamic";
@@ -48,25 +48,28 @@ export async function POST(req: NextRequest, { params }: Params) {
     if (denied) return denied;
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  if (action === "present") {
+    // Token + vigencia + auditoría viven en lib/quotes/present, COMPARTIDOS
+    // con POST /api/quotes/[id]/send-whatsapp (que presenta un DRAFT antes de
+    // mandar la liga pública por WhatsApp).
+    const presented = await presentQuote({
+      current: quote,
+      clinicId: ctx.clinicId,
+      userId: ctx.userId,
+    });
+    if (!presented.ok) {
+      return NextResponse.json(
+        { error: presented.error ?? "No se pudo presentar el presupuesto." },
+        { status: presented.httpStatus ?? 409 },
+      );
+    }
+    return NextResponse.json(serializeQuote(presented.quote));
+  }
+
   const data: any = {};
   const now = new Date();
 
-  if (action === "present") {
-    if (quote.status === "ACCEPTED" || quote.status === "REJECTED") {
-      return NextResponse.json(
-        { error: "El presupuesto ya está cerrado" },
-        { status: 409 },
-      );
-    }
-    data.status = "PRESENTED";
-    data.presentedAt = now;
-    if (!quote.acceptToken) data.acceptToken = randomBytes(20).toString("hex");
-    const vu = quote.validUntil ? new Date(quote.validUntil) : null;
-    if (!vu || vu.getTime() <= now.getTime()) {
-      data.validUntil = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
-    }
-  } else if (action === "accept") {
+  if (action === "accept") {
     if (quote.status === "ACCEPTED") {
       return NextResponse.json({ error: "El presupuesto ya fue aceptado" }, { status: 409 });
     }
