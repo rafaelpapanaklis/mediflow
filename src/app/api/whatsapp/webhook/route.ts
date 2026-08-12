@@ -18,6 +18,7 @@ import {
 } from "@/lib/whatsapp/delivery-status";
 import { WA_ERROR_CODE, formatWaErrorMessage } from "@/lib/whatsapp/errors";
 import { markWhatsAppDisconnected } from "@/lib/whatsapp/connection";
+import { cancelPendingRemindersForAppointment } from "@/lib/reminders/reschedule.server";
 import { rateLimitKey } from "@/lib/rate-limit";
 import type { BotHistoryItem } from "@/lib/whatsapp/bot/types";
 import { Prisma } from "@prisma/client";
@@ -216,9 +217,19 @@ export async function POST(req: NextRequest) {
 
     if (reminder) {
       if (reply === "cancel") {
-        await prisma.appointment.update({
-          where: { id: reminder.appointmentId },
-          data:  { status: "CANCELLED", cancelledAt: new Date(), cancelReason: "Cancelado por paciente vía WhatsApp" },
+        await prisma.$transaction(async (tx) => {
+          await tx.appointment.update({
+            where: { id: reminder.appointmentId! },
+            data:  { status: "CANCELLED", cancelledAt: new Date(), cancelReason: "Cancelado por paciente vía WhatsApp" },
+          });
+          // El paciente canceló: los avisos que quedaran en cola para esa cita
+          // ya no tienen sentido. El SENT al que está contestando no se toca
+          // (queda con patientReply/repliedAt, abajo).
+          await cancelPendingRemindersForAppointment(tx, {
+            appointmentId: reminder.appointmentId!,
+            clinicId: clinic.id,
+            reason: "Cancelado: el paciente canceló la cita por WhatsApp",
+          });
         });
         await prisma.$executeRaw`UPDATE whatsapp_reminders SET "patientReply"=${text}, "repliedAt"=NOW() WHERE id=${reminder.id}`;
 

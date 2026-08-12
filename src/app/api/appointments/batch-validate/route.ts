@@ -10,6 +10,7 @@ import type {
 } from "@/lib/agenda/types";
 import { revalidateAfter, revalidatePatientProfile } from "@/lib/cache/revalidate";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
+import { cancelPendingRemindersForAppointment } from "@/lib/reminders/reschedule.server";
 
 export async function POST(req: NextRequest) {
   const session = await loadClinicSession();
@@ -77,16 +78,25 @@ export async function POST(req: NextRequest) {
           },
         });
       } else {
-        await prisma.appointment.update({
-          where: { id },
-          data: {
-            status: "CANCELLED",
-            requiresValidation: false,
-            cancelReason: body.rejectReason
-              ? `[Rechazada] ${body.rejectReason}`
-              : "[Rechazada por staff]",
-            cancelledAt: new Date(),
-          },
+        // Rechazar deja la cita CANCELLED: sus recordatorios pendientes se
+        // cancelan con ella, en la misma transacción.
+        await prisma.$transaction(async (tx) => {
+          await tx.appointment.update({
+            where: { id },
+            data: {
+              status: "CANCELLED",
+              requiresValidation: false,
+              cancelReason: body.rejectReason
+                ? `[Rechazada] ${body.rejectReason}`
+                : "[Rechazada por staff]",
+              cancelledAt: new Date(),
+            },
+          });
+          await cancelPendingRemindersForAppointment(tx, {
+            appointmentId: id,
+            clinicId: session.clinic.id,
+            reason: "Cancelado: la cita se rechazó en la validación",
+          });
         });
       }
       result.processed += 1;

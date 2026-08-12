@@ -46,8 +46,11 @@ import {
   CHANGEABLE_STATUSES,
   canPatientChange,
   isSlotFree,
-  clearAutoRemindersForAppointment,
 } from "@/lib/appointment-change/slots";
+import {
+  applyReminderReschedule,
+  cancelPendingRemindersForAppointment,
+} from "@/lib/reminders/reschedule.server";
 import { notifyPatientChangeResolution } from "@/lib/appointment-change/notify";
 import { tzLocalToUtc } from "@/lib/agenda/time-utils";
 
@@ -251,6 +254,14 @@ export async function POST(
             confirmedAt: null,
           },
         });
+
+        // M-22, dentro de la MISMA tx: se cancelan los avisos que llevan la
+        // hora vieja y se encolan los de la nueva.
+        await applyReminderReschedule(tx, {
+          appointmentId: appt.id,
+          clinicId: appt.clinicId,
+          newStartsAt: proposedStartsAt!,
+        });
       } else {
         await tx.appointment.update({
           where: { id: appt.id },
@@ -259,6 +270,11 @@ export async function POST(
             cancelledAt: now,
             cancelReason: reason || "Cancelada por el paciente desde el portal",
           },
+        });
+        await cancelPendingRemindersForAppointment(tx, {
+          appointmentId: appt.id,
+          clinicId: appt.clinicId,
+          reason: "Cancelado: el paciente canceló la cita desde el portal",
         });
       }
 
@@ -292,10 +308,7 @@ export async function POST(
   }
 
   // Best-effort FUERA de la tx: nunca rompen la respuesta.
-  if (type === "RESCHEDULE") {
-    // Borra recordatorios automáticos (hora vieja) → el sweep re-encola.
-    await clearAutoRemindersForAppointment(appt.id); // nunca lanza
-  }
+  // Los recordatorios ya se reprogramaron DENTRO de la transacción.
   try {
     await notifyPatientChangeResolution(crId);
   } catch (err) {

@@ -14,14 +14,16 @@
 //   isSlotFree(opts: { clinicId: string; doctorId: string; startsAt: Date; endsAt: Date;
 //     excludeAppointmentId?: string }): Promise<boolean>
 //     true si NO hay cita del doctor que se traslape (status notIn CANCELLED/NO_SHOW).
-//   clearAutoRemindersForAppointment(appointmentId: string): Promise<void>
-//     Best-effort (nunca lanza): borra los recordatorios automáticos
-//     (WhatsAppReminder type APPT_AUTO) de la cita — pendientes Y enviados,
-//     porque referencian la hora vieja y bloquean el dedup del sweep — para
-//     que /api/cron/appointment-reminders re-encole con la nueva hora.
+//
+// Aquí vivía `clearAutoRemindersForAppointment`, que BORRABA los recordatorios
+// de la cita —pendientes y enviados— y dejaba que el barrido re-encolara. Se
+// retiró en M-22: borrar los enviados destruía el historial y, sobre todo,
+// dejaba sin efecto la respuesta del paciente, porque el webhook empareja el
+// "CONFIRMAR"/"CANCELAR" contra la fila SENT del recordatorio que recibió.
+// Su reemplazo es lib/reminders/reschedule.server.ts, que cancela solo los
+// pendientes y encola los nuevos en la misma transacción que mueve la cita.
 
 import { prisma } from "@/lib/prisma";
-import { APPT_AUTO_TYPE } from "@/lib/reminders/config";
 
 /** Estados de cita que el paciente puede pedir cambiar desde el portal. */
 export const CHANGEABLE_STATUSES: string[] = ["PENDING", "SCHEDULED", "CONFIRMED"];
@@ -81,19 +83,3 @@ export async function isSlotFree(opts: IsSlotFreeOpts): Promise<boolean> {
   return conflict === null;
 }
 
-/**
- * Borra los recordatorios automáticos (type APPT_AUTO) de la cita para que el
- * sweep re-encole con la nueva hora. Borra pendientes Y enviados: las filas
- * SENT también referencian la hora vieja y su sola existencia bloquea el
- * dedup cita+momento+canal de src/lib/reminders/enqueue.ts.
- * Best-effort: try/catch interno, NUNCA lanza.
- */
-export async function clearAutoRemindersForAppointment(appointmentId: string): Promise<void> {
-  try {
-    await prisma.whatsAppReminder.deleteMany({
-      where: { appointmentId, type: APPT_AUTO_TYPE },
-    });
-  } catch (err) {
-    console.error("[appointment-change] clearAutoRemindersForAppointment error:", err);
-  }
-}

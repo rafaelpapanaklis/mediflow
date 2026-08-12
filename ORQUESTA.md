@@ -6715,3 +6715,97 @@ motivo nuevo se traducía en una y salía crudo en la otra.
 5. **`recentStatusFailed` cambió de "No salió" a "No llegó"** (y en inglés a "Did not arrive"): ahora
    la fila cubre los dos casos —nunca salió, o salió y Meta rechazó la entrega—, y "no salió" era
    falso para el segundo.
+
+---
+
+## M-22: reagendar cancela y reprograma los recordatorios
+
+**Fecha:** 2026-08-11 · **Rama:** `main`
+
+### Punto de partida (lo que ya existía y lo que no)
+
+La mitad del problema estaba resuelta desde P1-12: `PATCH /api/appointments/[id]`, la resolución
+de solicitudes y el cambio de cita del portal llamaban a `clearAutoRemindersForAppointment`. Un
+grep de `whatsAppReminder` dentro de `src/app/api/appointments/*` **no encuentra nada** porque la
+llamada va a través de ese helper, que vive en `lib/appointment-change/slots.ts`.
+
+Pero el arreglo viejo tenía tres defectos de fondo:
+
+1. **Borraba también los enviados.** Y las filas SENT son contra las que el webhook empareja el
+   "CONFIRMAR"/"CANCELAR" del paciente (`status: SENT, repliedAt: null`). Al reagendar se borraban,
+   así que si el paciente contestaba al recordatorio que ya había recibido, su respuesta no casaba
+   con nada y se perdía. Además destruía el historial de entrega que acabamos de hacer útil
+   (deliveryStatus, `payload.wamid`).
+2. **No reprogramaba: delegaba en el barrido.** Funciona, pero el hueco entre el reagendado y el
+   siguiente tick quedaba sin ningún recordatorio encolado.
+3. **Iba fuera de la transacción**, best-effort. Si fallaba, la cita quedaba movida con el
+   recordatorio viejo vivo — exactamente el bug que decía arreglar.
+
+Y faltaba un cuarto punto de reagendado entero: el del bot.
+
+### Los cuatro puntos que mueven `startsAt`
+
+| Dónde | Qué es | Estado antes |
+|---|---|---|
+| `PATCH /api/appointments/[id]` | agenda: arrastrar-y-soltar + editar | borraba, fuera de tx |
+| `POST /api/appointment-change-requests/[id]/resolve` | la clínica aprueba el cambio | borraba, fuera de tx |
+| `POST /api/paciente/appointments/[id]/change-request` | portal, auto-aprobado | borraba, fuera de tx |
+| `lib/agenda/bot-booking-service.ts` | el bot de WhatsApp reagenda | **no hacía nada** |
+
+No hay server actions que toquen `startsAt` (verificado sobre `src/app/actions/`).
+
+**Solo dispara `startsAt`, no `endsAt`**, y es deliberado: el recordatorio se programa N minutos
+antes del *inicio* y su texto anuncia la fecha y la hora de inicio. Alargar o acortar una cita sin
+moverla no cambia ni cuándo sale el aviso ni lo que dice, así que reprogramar ahí sería trabajo
+—y filas canceladas— para nada.
+
+### Lo que hace ahora
+
+`src/lib/reminders/reschedule.ts` (**puro, 18 tests**) decide el plan: qué cancelar, qué conservar
+y qué encolar. `reschedule.server.ts` lo aplica **dentro de la transacción que mueve la cita**.
+
+- Se cancelan (no se borran) los que aún no han salido, incluido el legacy **`ACTIVE`** — la columna
+  es TEXT y las filas de mayo usan ese valor; filtrar solo por `PENDING` habría dejado vivas justo
+  las más viejas.
+- **Los SENT no se tocan**: son historial y son el ancla de la respuesta del paciente.
+- Se encolan los momentos que la clínica tenga activos, con el cuerpo **rendeado con la fecha y la
+  hora nuevas** (que es el punto: el mensaje viaja congelado dentro de la fila).
+- Un momento que **ya pasó no se recrea**: mover una cita a dentro de 3 h no debe disparar un
+  "te recordamos tu cita de mañana".
+- Se respetan las **preferencias del paciente** (anticipación y canal) con las mismas reglas que el
+  barrido, incluida la salvaguarda de no dejarlo sin ningún canal. Sin esto habríamos regresado:
+  el borrar-y-que-el-barrido-reencole sí las aplicaba.
+
+### Cancelar la cita cancela sus recordatorios
+
+Antes solo lo cubría el re-check del worker al enviar (no mandaba el aviso, pero la fila seguía en
+"En cola" en el panel). Ahora se cancelan en la misma transacción en los seis puntos: `DELETE
+/api/appointments/[id]`, `PATCH .../status` (CANCELLED y NO_SHOW), `batch-validate` al rechazar,
+la resolución de solicitudes, el portal del paciente y el webhook cuando el paciente responde
+CANCELAR.
+
+### Una carrera que cerré sobre la marcha
+
+El `updateMany` de cancelación filtraba solo por `id`. El worker hace claim-then-send —marca SENT
+**antes** de enviar—, así que podía reclamar una fila entre mi lectura y mi escritura y yo la habría
+marcado "cancelada" con el mensaje ya en camino: la misma clase de mentira que este arreglo
+persigue, solo que del otro lado. Las dos escrituras llevan ahora `status: { in: PENDING | ACTIVE }`.
+
+### Código retirado
+
+`clearAutoRemindersForAppointment` se eliminó de `lib/appointment-change/slots.ts` al quedarse sin
+usos. Dejar viva una función que borra filas SENT era una trampa para el siguiente que pasara por
+ahí; el comentario de cabecera del módulo explica dónde está su reemplazo.
+
+### Pendientes
+
+1. **Sin probar contra la base real.** Los 18 tests cubren la decisión, no la escritura: falta mover
+   una cita en producción y confirmar en el panel que el viejo queda "Cancelado" con su motivo y el
+   nuevo "En cola" con la hora correcta.
+2. **Las filas canceladas siguen ocupando la llave del dedup** (cita+momento+canal). Es
+   intencionado —evita que el barrido encole un duplicado junto al que acabamos de crear— pero
+   significa que el historial de una cita muy reagendada acumula filas CANCELLED. No molesta al
+   panel (muestra las 20 últimas), pero conviene saberlo.
+3. **Los recordatorios clínicos por especialidad** (ENDO_/PERIO_/ORTHO_/IMPLANT_) no entran aquí:
+   solo se reprograma el tipo `APPT_AUTO`. Los de especialidad cuelgan de tratamientos, no del
+   horario de la cita.

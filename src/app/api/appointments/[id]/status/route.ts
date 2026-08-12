@@ -10,6 +10,7 @@ import {
 import { revalidateAfter, revalidatePatientProfile } from "@/lib/cache/revalidate";
 import { assertPatientVisible } from "@/lib/patient-visibility";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
+import { cancelPendingRemindersForAppointment } from "@/lib/reminders/reschedule.server";
 import type { StatusChangeInput } from "@/lib/agenda/types";
 
 const APPT_INCLUDE = {
@@ -101,13 +102,32 @@ export async function PATCH(
 
   const sideEffects = sideEffectsOf(body.status, now);
 
-  const updated = await prisma.appointment.update({
-    where: { id: params.id },
-    data: {
-      status: body.status,
-      ...sideEffects,
-    },
-    include: APPT_INCLUDE,
+  // Estados que CIERRAN la cita: sus recordatorios pendientes ya no tienen a
+  // quién avisar. El worker se negaba a enviarlos (re-check al salir), pero la
+  // fila seguía en "En cola" en el panel hasta que le tocaba turno. Va en la
+  // misma transacción que el cambio de estado.
+  const closesAppointment = body.status === "CANCELLED" || body.status === "NO_SHOW";
+
+  const updated = await prisma.$transaction(async (tx) => {
+    const row = await tx.appointment.update({
+      where: { id: params.id },
+      data: {
+        status: body.status,
+        ...sideEffects,
+      },
+      include: APPT_INCLUDE,
+    });
+    if (closesAppointment) {
+      await cancelPendingRemindersForAppointment(tx, {
+        appointmentId: params.id,
+        clinicId: session.clinic.id,
+        reason:
+          body.status === "NO_SHOW"
+            ? "Cancelado: la cita se marcó como no asistida"
+            : "Cancelado: la cita se canceló",
+      });
+    }
+    return row;
   });
 
   // Instrumentación de tiempos para analytics. Cada transición de status

@@ -15,10 +15,11 @@ import {
   syncUpdateToGoogleCalendar,
   syncDeleteFromGoogleCalendar,
 } from "@/lib/agenda/google-sync";
+import { isSlotFree } from "@/lib/appointment-change/slots";
 import {
-  isSlotFree,
-  clearAutoRemindersForAppointment,
-} from "@/lib/appointment-change/slots";
+  applyReminderReschedule,
+  cancelPendingRemindersForAppointment,
+} from "@/lib/reminders/reschedule.server";
 import { notifyPatientChangeResolution } from "@/lib/appointment-change/notify";
 import { revalidateAfter } from "@/lib/cache/revalidate";
 import { assertPatientVisible } from "@/lib/patient-visibility";
@@ -123,24 +124,30 @@ export async function POST(
   // ── APPROVE + CANCEL ────────────────────────────────────────────
   if (cr.type === "CANCEL") {
     try {
-      await prisma.$transaction([
-        prisma.appointment.update({
+      await prisma.$transaction(async (tx) => {
+        await tx.appointment.update({
           where: { id: appointment.id },
           data: {
             status: "CANCELLED",
             cancelledAt: now,
             cancelReason: cr.reason || "Cancelada a petición del paciente",
           },
-        }),
-        prisma.appointmentChangeRequest.update({
+        });
+        await tx.appointmentChangeRequest.update({
           where: { id: cr.id },
           data: {
             status: "APPROVED",
             resolvedById: session.user.id,
             resolvedAt: now,
           },
-        }),
-      ]);
+        });
+        // La cita se cancela: sus recordatorios pendientes también.
+        await cancelPendingRemindersForAppointment(tx, {
+          appointmentId: appointment.id,
+          clinicId: session.clinic.id,
+          reason: "Cancelado: el paciente canceló la cita desde el portal",
+        });
+      });
     } catch (err) {
       console.error("[resolve CR] APPROVE CANCEL error", err);
       return NextResponse.json({ error: "internal_error" }, { status: 500 });
@@ -274,6 +281,15 @@ export async function POST(
           resolvedAt: now,
         },
       });
+
+      // M-22: dentro de la MISMA tx que mueve la cita. Antes se borraban fuera,
+      // best-effort: si eso fallaba, la cita quedaba movida y el recordatorio
+      // viejo salía igual con la hora anterior.
+      await applyReminderReschedule(tx, {
+        appointmentId: appointment.id,
+        clinicId: session.clinic.id,
+        newStartsAt: proposedStartsAt,
+      });
     });
   } catch (err) {
     // Chocó dentro de la tx (re-check o constraint EXCLUDE) → auto-rechazo.
@@ -288,16 +304,9 @@ export async function POST(
   }
 
   // Post-aprobación (fuera de tx, best-effort cada uno):
+  // Los recordatorios YA se reprogramaron dentro de la transacción de arriba.
 
-  // 1) Limpiar recordatorios automáticos para que el sweep re-encole con la
-  //    nueva hora (solo RESCHEDULE).
-  try {
-    await clearAutoRemindersForAppointment(appointment.id);
-  } catch (err) {
-    console.error("[resolve CR] clearAutoReminders error (ignorado):", err);
-  }
-
-  // 2) Google Calendar sync (best-effort) — mismo helper que el PATCH
+  // Google Calendar sync (best-effort) — mismo helper que el PATCH
   //    /api/appointments/[id].
   try {
     const updatedFull = await prisma.appointment.findUnique({

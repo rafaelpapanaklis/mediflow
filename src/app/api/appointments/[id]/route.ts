@@ -16,7 +16,10 @@ import {
 } from "@/lib/patient-visibility";
 import { canOverrideOverlap } from "@/lib/agenda/transitions";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
-import { clearAutoRemindersForAppointment } from "@/lib/appointment-change/slots";
+import {
+  applyReminderReschedule,
+  cancelPendingRemindersForAppointment,
+} from "@/lib/reminders/reschedule.server";
 import { validateResourceSchedule } from "@/lib/agenda/resource-schedule";
 import { loadResourceSchedule } from "@/lib/agenda/resource-schedule.server";
 import { revalidateAfter, revalidatePatientProfile } from "@/lib/cache/revalidate";
@@ -214,17 +217,24 @@ export async function PATCH(
       if (body.doctorId) {
         await ensureUserCanSeePatient(tx, row.patientId, body.doctorId, session.clinic.id);
       }
+
+      // Reagendado (M-22): el recordatorio en cola lleva la fecha y la hora
+      // congeladas DENTRO del texto, así que saldría con la hora vieja; y como
+      // el dedup del encolador va por cita+momento+canal, mientras esa fila
+      // exista bloquea además el correcto. Se cancelan los que no han salido y
+      // se encolan de nuevo con la hora nueva.
+      //
+      // Va DENTRO de la transacción: una cita movida con recordatorios viejos
+      // es exactamente el estado que este arreglo no puede permitir.
+      if (row.startsAt.getTime() !== existing.startsAt.getTime()) {
+        await applyReminderReschedule(tx, {
+          appointmentId: params.id,
+          clinicId: session.clinic.id,
+          newStartsAt: row.startsAt,
+        });
+      }
       return row;
     });
-
-    // Reagendado (P1-12): borra los recordatorios APPT_AUTO (pendientes Y
-    // enviados) para que el sweep re-encole con la hora nueva — sin esto el
-    // mensaje congelado con la fecha vieja sale igual y el dedupe
-    // (cita+offset+canal) bloquea el correcto. Mismo patrón best-effort,
-    // fuera de la tx, que las dos rutas del portal (resolve/change-request).
-    if (body.startsAt && existing.startsAt.getTime() !== updated.startsAt.getTime()) {
-      await clearAutoRemindersForAppointment(params.id); // nunca lanza
-    }
 
     // TODO(M3.b): if body.notifyPatient → trigger WA notification (waConnected).
 
@@ -354,9 +364,19 @@ export async function DELETE(
     return NextResponse.json({ ok: true });
   }
 
-  await prisma.appointment.update({
-    where: { id: params.id },
-    data: { status: "CANCELLED" },
+  // Cancelar la cita cancela sus recordatorios pendientes, en la MISMA
+  // transacción. El worker ya se negaba a enviarlos (re-check al salir), pero la
+  // fila seguía en "En cola" en el panel hasta que le tocaba turno: un
+  // recordatorio pendiente de una cita que ya no existe.
+  await prisma.$transaction(async (tx) => {
+    await tx.appointment.update({
+      where: { id: params.id },
+      data: { status: "CANCELLED" },
+    });
+    await cancelPendingRemindersForAppointment(tx, {
+      appointmentId: params.id,
+      clinicId: session.clinic.id,
+    });
   });
 
   await logMutation({

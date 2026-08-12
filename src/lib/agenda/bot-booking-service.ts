@@ -1,7 +1,7 @@
 import "server-only";
 import { prisma } from "@/lib/prisma";
 import { getTzParts, tzLocalToUtc } from "@/lib/agenda/time-utils";
-import { clearAutoRemindersForAppointment } from "@/lib/appointment-change/slots";
+import { applyReminderReschedule } from "@/lib/reminders/reschedule.server";
 
 /**
  * Servicio server-side reutilizable para que el bot de WhatsApp agende y
@@ -274,21 +274,23 @@ export async function rescheduleBotAppointment(params: {
   }
 
   try {
-    await prisma.appointment.update({
-      where: { id: existing.id },
-      data: { startsAt, endsAt, status: "SCHEDULED", requiresValidation: true },
+    // M-22: mover la cita y reprogramar sus recordatorios es UNA operación. El
+    // mensaje se rendea al ENCOLAR, con la fecha y la hora congeladas dentro
+    // del texto: si el update entra y la reprogramación no, al paciente le
+    // llega la hora anterior. Antes esto no estaba en transacción.
+    await prisma.$transaction(async (tx) => {
+      await tx.appointment.update({
+        where: { id: existing.id },
+        data: { startsAt, endsAt, status: "SCHEDULED", requiresValidation: true },
+      });
+      if (existing.startsAt.getTime() !== startsAt.getTime()) {
+        await applyReminderReschedule(tx, {
+          appointmentId: existing.id,
+          clinicId,
+          newStartsAt: startsAt,
+        });
+      }
     });
-
-    // M-22: al mover la cita hay que tirar sus recordatorios automáticos. El
-    // mensaje se rendea al ENCOLAR, así que el que estaba en cola lleva
-    // congelada la hora vieja y saldría con ella; y como el dedup del sweep va
-    // por cita+momento+canal, mientras esa fila exista bloquea el recordatorio
-    // correcto. Las tres rutas de reagendado (agenda, portal y resolución de
-    // solicitudes) ya lo hacían: faltaba esta, la del bot de WhatsApp.
-    // Best-effort y fuera de cualquier transacción: nunca lanza.
-    if (existing.startsAt.getTime() !== startsAt.getTime()) {
-      await clearAutoRemindersForAppointment(existing.id);
-    }
 
     return { ok: true, appointmentId: existing.id };
   } catch (err) {
