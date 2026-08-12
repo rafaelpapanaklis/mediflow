@@ -7,6 +7,8 @@ import {
 } from "lucide-react";
 import { computeTotals } from "@/lib/quotes/compute";
 import type { QuoteDTO, QuoteStatus, QuoteItemInput, BillingInvoiceLite } from "@/lib/quotes/types";
+import { useT } from "@/i18n/i18n-provider";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 
 function money(n: number): string {
   const v = isFinite(Number(n)) ? Number(n) : 0;
@@ -18,12 +20,13 @@ function fmtDate(iso: string | null): string {
   return isNaN(d.getTime()) ? "—" : d.toLocaleDateString("es-MX", { day: "2-digit", month: "short", year: "numeric" });
 }
 
-const STATUS_CFG: Record<QuoteStatus, { label: string; cls: string }> = {
-  DRAFT:     { label: "Borrador",  cls: "bg-muted text-muted-foreground border-border" },
-  PRESENTED: { label: "Presentado", cls: "bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/30 dark:text-blue-300 dark:border-blue-800" },
-  ACCEPTED:  { label: "Aceptado",  cls: "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/30 dark:text-emerald-300 dark:border-emerald-800" },
-  REJECTED:  { label: "Rechazado", cls: "bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/30 dark:text-rose-300 dark:border-rose-800" },
-  EXPIRED:   { label: "Vencido",   cls: "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/30 dark:text-amber-300 dark:border-amber-800" },
+// labelKey se resuelve vía t() al renderizar (constante de módulo: sin hooks aquí).
+const STATUS_CFG: Record<QuoteStatus, { labelKey: string; cls: string }> = {
+  DRAFT:     { labelKey: "quotes.status.draft",     cls: "bg-muted text-muted-foreground border-border" },
+  PRESENTED: { labelKey: "quotes.status.presented", cls: "bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/30 dark:text-blue-300 dark:border-blue-800" },
+  ACCEPTED:  { labelKey: "quotes.status.accepted",  cls: "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/30 dark:text-emerald-300 dark:border-emerald-800" },
+  REJECTED:  { labelKey: "quotes.status.rejected",  cls: "bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/30 dark:text-rose-300 dark:border-rose-800" },
+  EXPIRED:   { labelKey: "quotes.status.expired",   cls: "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/30 dark:text-amber-300 dark:border-amber-800" },
 };
 
 interface CatalogProcedure { id: string; name: string; basePrice: number; category?: string }
@@ -62,6 +65,7 @@ interface QuotesTabProps {
 }
 
 export function QuotesTab({ patientId, prefill, onViewInvoice, onViewPlan, onInvoiceCreated }: QuotesTabProps) {
+  const t = useT();
   const [quotes, setQuotes] = useState<QuoteDTO[]>([]);
   const [loading, setLoading] = useState(true);
   const [editorOpen, setEditorOpen] = useState(false);
@@ -123,14 +127,14 @@ export function QuotesTab({ patientId, prefill, onViewInvoice, onViewPlan, onInv
     <div className="space-y-4">
       <div className="flex items-center justify-between gap-2">
         <h2 className="text-sm font-bold flex items-center gap-2">
-          <FileText size={15} className="text-brand-600" /> Presupuestos
+          <FileText size={15} className="text-brand-600" /> {t("quotes.title")}
         </h2>
         <button
           type="button"
           onClick={openNew}
           className="text-xs font-semibold bg-brand-600 text-white px-3 py-1.5 rounded-lg hover:bg-brand-700 flex items-center gap-1.5"
         >
-          <Plus size={14} /> Nuevo presupuesto
+          <Plus size={14} /> {t("quotes.newQuote")}
         </button>
       </div>
 
@@ -141,8 +145,8 @@ export function QuotesTab({ patientId, prefill, onViewInvoice, onViewPlan, onInv
       ) : quotes.length === 0 ? (
         <div className="bg-card border border-border rounded-xl p-10 text-center text-muted-foreground">
           <FileText size={28} className="mx-auto mb-2 opacity-40" />
-          <p className="text-sm font-semibold">Aún no hay presupuestos</p>
-          <p className="text-xs mt-1">Crea uno con los conceptos del tarifario y compártelo con el paciente.</p>
+          <p className="text-sm font-semibold">{t("quotes.emptyTitle")}</p>
+          <p className="text-xs mt-1">{t("quotes.emptyHint")}</p>
         </div>
       ) : (
         <div className="space-y-3">
@@ -160,6 +164,8 @@ export function QuotesTab({ patientId, prefill, onViewInvoice, onViewPlan, onInv
 // ---------------------------------------------------------------------------
 
 function QuoteCard({ quote, onChanged, onEdit, onViewInvoice, onViewPlan }: { quote: QuoteDTO; onChanged: () => Promise<void> | void; onEdit: () => void; onViewInvoice?: (invoiceId: string) => void; onViewPlan?: (planId: string) => void }) {
+  const t = useT();
+  const confirmDialog = useConfirm();
   const [busy, setBusy] = useState(false);
   const [copied, setCopied] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
@@ -174,7 +180,7 @@ function QuoteCard({ quote, onChanged, onEdit, onViewInvoice, onViewPlan }: { qu
         body: body ? JSON.stringify(body) : undefined,
       });
       const out = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(out.error ?? "Error");
+      if (!res.ok) throw new Error(out.error ?? t("quotes.card.errorFallback"));
       await onChanged();
       return out;
     } catch (e) {
@@ -183,15 +189,22 @@ function QuoteCard({ quote, onChanged, onEdit, onViewInvoice, onViewPlan }: { qu
     } finally {
       setBusy(false);
     }
-  }, [onChanged]);
+  }, [onChanged, t]);
 
   async function del() {
-    if (!confirm(`¿Eliminar el presupuesto ${quote.folio}?`)) return;
+    const ok = await confirmDialog({
+      title: t("quotes.deleteConfirmTitle"),
+      description: t("quotes.deleteConfirm", { folio: quote.folio }),
+      variant: "danger",
+      confirmText: t("quotes.deleteConfirmBtn"),
+      cancelText: t("quotes.deleteCancelBtn"),
+    });
+    if (!ok) return;
     setBusy(true); setMsg(null);
     try {
       const res = await fetch(`/api/quotes/${quote.id}`, { method: "DELETE" });
       const out = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(out.error ?? "Error");
+      if (!res.ok) throw new Error(out.error ?? t("quotes.card.errorFallback"));
       await onChanged();
     } catch (e) {
       setMsg((e as Error).message);
@@ -208,7 +221,7 @@ function QuoteCard({ quote, onChanged, onEdit, onViewInvoice, onViewPlan }: { qu
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch {
-      setMsg("No se pudo copiar; copia manual: " + url);
+      setMsg(t("quotes.card.copyFailed", { url }));
     }
   }
 
@@ -237,24 +250,24 @@ function QuoteCard({ quote, onChanged, onEdit, onViewInvoice, onViewPlan }: { qu
         <div className="min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
             <span className="font-mono text-xs font-bold text-muted-foreground">{quote.folio}</span>
-            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${cfg.cls}`}>{cfg.label}</span>
+            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${cfg.cls}`}>{t(cfg.labelKey)}</span>
             {quote.invoiceId && (
-              <span className="text-[10px] font-semibold text-emerald-600 inline-flex items-center gap-1"><ReceiptText size={11} /> Facturado</span>
+              <span className="text-[10px] font-semibold text-emerald-600 inline-flex items-center gap-1"><ReceiptText size={11} /> {t("quotes.card.invoiced")}</span>
             )}
             {quote.treatmentPlanId && (
-              <span className="text-[10px] font-semibold text-brand-600 inline-flex items-center gap-1"><ClipboardList size={11} /> Plan creado</span>
+              <span className="text-[10px] font-semibold text-brand-600 inline-flex items-center gap-1"><ClipboardList size={11} /> {t("quotes.card.planCreated")}</span>
             )}
           </div>
           <div className="font-bold text-sm mt-1 truncate">{quote.title}</div>
           <div className="text-xs text-muted-foreground mt-0.5">
-            {quote.items.length} concepto{quote.items.length === 1 ? "" : "s"}
-            {quote.validUntil ? ` · vence ${fmtDate(quote.validUntil)}` : ""}
+            {t("quotes.card.itemCount", { count: quote.items.length })}
+            {quote.validUntil ? ` · ${t("quotes.card.validUntil", { date: fmtDate(quote.validUntil) })}` : ""}
           </div>
         </div>
         <div className="text-right flex-shrink-0">
           <div className="text-lg font-bold text-foreground">{money(quote.total)}</div>
           {quote.discountAmount > 0 && (
-            <div className="text-[11px] text-muted-foreground">desc. {money(quote.discountAmount)}</div>
+            <div className="text-[11px] text-muted-foreground">{t("quotes.card.discountShort", { amount: money(quote.discountAmount) })}</div>
           )}
         </div>
       </div>
@@ -267,36 +280,36 @@ function QuoteCard({ quote, onChanged, onEdit, onViewInvoice, onViewPlan }: { qu
           rel="noreferrer"
           className="text-[11px] font-semibold px-2.5 py-1 rounded-lg border border-border text-muted-foreground hover:text-foreground hover:bg-muted/50 inline-flex items-center gap-1.5"
         >
-          <Download size={12} /> PDF
+          <Download size={12} /> {t("quotes.card.pdf")}
         </a>
 
         {(quote.status === "DRAFT" || quote.status === "PRESENTED") && (
-          <Btn onClick={onEdit} tone="default"><Pencil size={12} /> Editar</Btn>
+          <Btn onClick={onEdit} tone="default"><Pencil size={12} /> {t("quotes.card.edit")}</Btn>
         )}
 
         {quote.status === "DRAFT" && (
           <Btn onClick={() => post(`/api/quotes/${quote.id}/status`, { action: "present" })} tone="primary">
-            <Send size={12} /> Presentar
+            <Send size={12} /> {t("quotes.card.present")}
           </Btn>
         )}
 
         {quote.status === "PRESENTED" && (
           <>
             <Btn onClick={copyLink} tone="primary">
-              {copied ? <Check size={12} /> : <Copy size={12} />} {copied ? "¡Copiada!" : "Copiar liga"}
+              {copied ? <Check size={12} /> : <Copy size={12} />} {copied ? t("quotes.card.copied") : t("quotes.card.copyLink")}
             </Btn>
             <Btn onClick={() => post(`/api/quotes/${quote.id}/status`, { action: "accept" })} tone="success">
-              <CheckCircle2 size={12} /> Aceptado
+              <CheckCircle2 size={12} /> {t("quotes.card.markAccepted")}
             </Btn>
             <Btn onClick={() => post(`/api/quotes/${quote.id}/status`, { action: "reject" })} tone="danger">
-              <XCircle size={12} /> Rechazado
+              <XCircle size={12} /> {t("quotes.card.markRejected")}
             </Btn>
           </>
         )}
 
         {quote.status === "EXPIRED" && (
           <Btn onClick={() => post(`/api/quotes/${quote.id}/status`, { action: "present" })} tone="primary">
-            <Send size={12} /> Re-presentar
+            <Send size={12} /> {t("quotes.card.presentAgain")}
           </Btn>
         )}
 
@@ -312,7 +325,7 @@ function QuoteCard({ quote, onChanged, onEdit, onViewInvoice, onViewPlan }: { qu
               }}
               tone="success"
             >
-              <ReceiptText size={12} /> {quote.invoiceId ? "Ver factura" : "Generar factura"}
+              <ReceiptText size={12} /> {quote.invoiceId ? t("quotes.card.viewInvoice") : t("quotes.card.generateInvoice")}
             </Btn>
             <Btn
               onClick={async () => {
@@ -323,15 +336,15 @@ function QuoteCard({ quote, onChanged, onEdit, onViewInvoice, onViewPlan }: { qu
               }}
               tone="primary"
             >
-              <ClipboardList size={12} /> {quote.treatmentPlanId ? "Ver plan" : "Crear plan"}
+              <ClipboardList size={12} /> {quote.treatmentPlanId ? t("quotes.card.viewPlan") : t("quotes.card.createPlan")}
             </Btn>
           </>
         )}
 
-        <Btn onClick={() => post(`/api/quotes/${quote.id}/duplicate`)} tone="default"><Files size={12} /> Duplicar</Btn>
+        <Btn onClick={() => post(`/api/quotes/${quote.id}/duplicate`)} tone="default"><Files size={12} /> {t("quotes.card.duplicate")}</Btn>
 
         {quote.status === "DRAFT" && (
-          <Btn onClick={del} tone="danger"><Trash2 size={12} /> Eliminar</Btn>
+          <Btn onClick={del} tone="danger"><Trash2 size={12} /> {t("quotes.card.delete")}</Btn>
         )}
       </div>
 
@@ -383,7 +396,8 @@ function QuoteEditor({
   onCancel: () => void;
   onSaved: (created?: { invoice?: BillingInvoiceLite | null }) => void;
 }) {
-  const [title, setTitle] = useState(editing?.title ?? prefill?.title ?? "Presupuesto");
+  const t = useT();
+  const [title, setTitle] = useState(editing?.title ?? prefill?.title ?? t("quotes.editor.defaultTitle"));
   const [items, setItems] = useState<EditorItem[]>(() => toEditorItems(prefill, editing));
   const [discountMode, setDiscountMode] = useState<"none" | "pct" | "amount">(
     editing?.discountPct != null ? "pct" : (editing && editing.discountAmount > 0 ? "amount" : "none"),
@@ -457,11 +471,11 @@ function QuoteEditor({
 
   async function save() {
     const clean = items.filter((it) => it.name.trim().length > 0);
-    if (clean.length === 0) { setError("Agrega al menos un concepto con nombre."); return; }
+    if (clean.length === 0) { setError(t("quotes.editor.errorNoItems")); return; }
     setSaving(true); setError(null);
     const payload = {
       patientId,
-      title: title.trim() || "Presupuesto",
+      title: title.trim() || t("quotes.editor.defaultTitle"),
       items: clean.map((it) => ({
         procedureId: it.procedureId,
         name: it.name.trim(),
@@ -484,7 +498,7 @@ function QuoteEditor({
         body: JSON.stringify(payload),
       });
       const out = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(out.error ?? "No se pudo guardar");
+      if (!res.ok) throw new Error(out.error ?? t("quotes.editor.errorSave"));
       // En creación, propaga la factura automática (si vino) para insertarla en
       // Facturación sin recargar. En edición no se factura.
       onSaved(editing ? undefined : { invoice: out.invoice ?? null });
@@ -504,35 +518,35 @@ function QuoteEditor({
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between gap-2">
-        <h2 className="text-sm font-bold">{editing ? `Editar ${editing.folio}` : "Nuevo presupuesto"}</h2>
+        <h2 className="text-sm font-bold">{editing ? t("quotes.editor.editTitle", { folio: editing.folio }) : t("quotes.editor.newTitle")}</h2>
         <button type="button" onClick={onCancel} className="text-xs font-semibold text-muted-foreground hover:text-foreground">
-          Cancelar
+          {t("quotes.editor.cancel")}
         </button>
       </div>
 
       {/* Título */}
       <div className="bg-card border border-border rounded-xl p-4">
-        <label className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground">Título</label>
+        <label className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground">{t("quotes.editor.titleLabel")}</label>
         <input
           value={title}
           onChange={(e) => setTitle(e.target.value)}
           className="mt-1 w-full bg-background border border-border rounded-lg px-3 py-2 text-sm"
-          placeholder="Ej. Rehabilitación integral"
+          placeholder={t("quotes.editor.titlePlaceholder")}
         />
       </div>
 
       {/* Conceptos */}
       <div className="bg-card border border-border rounded-xl p-4 space-y-3">
         <div className="flex items-center justify-between">
-          <h3 className="text-xs font-bold">Conceptos</h3>
+          <h3 className="text-xs font-bold">{t("quotes.editor.items")}</h3>
           <div className="flex items-center gap-2">
             <button type="button" onClick={() => setShowSearch((s) => !s)}
               className="text-[11px] font-semibold text-brand-700 dark:text-brand-300 inline-flex items-center gap-1">
-              <Search size={13} /> Del tarifario
+              <Search size={13} /> {t("quotes.editor.fromCatalog")}
             </button>
             <button type="button" onClick={addBlank}
               className="text-[11px] font-semibold text-muted-foreground hover:text-foreground inline-flex items-center gap-1">
-              <Plus size={13} /> Línea libre
+              <Plus size={13} /> {t("quotes.editor.freeLine")}
             </button>
           </div>
         </div>
@@ -543,12 +557,12 @@ function QuoteEditor({
               autoFocus
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Buscar procedimiento…"
+              placeholder={t("quotes.editor.searchPlaceholder")}
               className="w-full bg-background border border-border rounded-lg px-3 py-1.5 text-sm"
             />
             <div className="mt-2 max-h-56 overflow-y-auto divide-y divide-border">
               {filtered.length === 0 ? (
-                <p className="text-xs text-muted-foreground py-3 text-center">Sin coincidencias en el tarifario.</p>
+                <p className="text-xs text-muted-foreground py-3 text-center">{t("quotes.editor.noMatches")}</p>
               ) : filtered.map((p) => (
                 <button
                   key={p.id}
@@ -566,7 +580,7 @@ function QuoteEditor({
 
         {items.length === 0 ? (
           <p className="text-xs text-muted-foreground py-4 text-center">
-            Agrega conceptos desde el tarifario o como línea libre.
+            {t("quotes.editor.emptyItems")}
           </p>
         ) : (
           <div className="space-y-2">
@@ -580,43 +594,43 @@ function QuoteEditor({
                     <input
                       value={it.name}
                       onChange={(e) => patchItem(it.key, { name: e.target.value })}
-                      placeholder="Concepto"
+                      placeholder={t("quotes.editor.itemNamePlaceholder")}
                       className="flex-1 min-w-0 bg-transparent border-b border-border px-1 py-1 text-sm font-medium focus:border-brand-500 outline-none"
                     />
-                    <button type="button" onClick={() => removeItem(it.key)}
+                    <button type="button" onClick={() => removeItem(it.key)} aria-label={t("quotes.editor.removeItem")}
                       className="p-1 rounded text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/30 flex-shrink-0">
                       <Trash2 size={14} />
                     </button>
                   </div>
                   <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 mt-2">
-                    <Field label="Dientes FDI">
+                    <Field label={t("quotes.editor.fieldTeeth")}>
                       <input value={it.toothFdi} onChange={(e) => patchItem(it.key, { toothFdi: e.target.value })}
-                        placeholder="11,12" className={inputCls} />
+                        placeholder={t("quotes.editor.teethPlaceholder")} className={inputCls} />
                     </Field>
-                    <Field label="Cant.">
+                    <Field label={t("quotes.editor.fieldQty")}>
                       <input type="number" min={1} value={it.quantity}
                         onChange={(e) => patchItem(it.key, { quantity: Math.max(1, Math.floor(num(e.target.value))) })}
                         className={inputCls} />
                     </Field>
-                    <Field label="P. unitario">
+                    <Field label={t("quotes.editor.fieldUnitPrice")}>
                       <input type="number" min={0} step="0.01" value={it.unitPrice}
                         onChange={(e) => patchItem(it.key, { unitPrice: num(e.target.value) })}
                         className={inputCls} />
                     </Field>
-                    <Field label="Descuento">
+                    <Field label={t("quotes.editor.fieldDiscount")}>
                       <input type="number" min={0} step="0.01" value={it.discount}
                         onChange={(e) => patchItem(it.key, { discount: num(e.target.value) })}
                         className={inputCls} />
                     </Field>
-                    <Field label="Fase">
+                    <Field label={t("quotes.editor.fieldPhase")}>
                       <input type="number" min={1} value={it.phase}
                         onChange={(e) => patchItem(it.key, { phase: e.target.value })}
-                        placeholder="—" className={inputCls} />
+                        placeholder={t("quotes.editor.phasePlaceholder")} className={inputCls} />
                     </Field>
                   </div>
                   <div className="flex items-center justify-between mt-2 gap-2">
                     <input value={it.notes} onChange={(e) => patchItem(it.key, { notes: e.target.value })}
-                      placeholder="Nota (opcional)"
+                      placeholder={t("quotes.editor.notePlaceholder")}
                       className="flex-1 min-w-0 bg-transparent text-xs text-muted-foreground border-b border-transparent focus:border-border px-1 py-0.5 outline-none" />
                     <span className="text-sm font-bold whitespace-nowrap">{money(line ? line.lineTotal : 0)}</span>
                   </div>
@@ -630,13 +644,13 @@ function QuoteEditor({
       {/* Descuento global + vigencia + notas */}
       <div className="bg-card border border-border rounded-xl p-4 grid sm:grid-cols-2 gap-4">
         <div>
-          <label className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground">Descuento global</label>
+          <label className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground">{t("quotes.editor.globalDiscount")}</label>
           <div className="flex items-center gap-1.5 mt-1">
             <select value={discountMode} onChange={(e) => setDiscountMode(e.target.value as "none" | "pct" | "amount")}
               className="bg-background border border-border rounded-lg px-2 py-2 text-sm">
-              <option value="none">Sin descuento</option>
-              <option value="pct">Porcentaje %</option>
-              <option value="amount">Monto $</option>
+              <option value="none">{t("quotes.editor.discountNone")}</option>
+              <option value="pct">{t("quotes.editor.discountPct")}</option>
+              <option value="amount">{t("quotes.editor.discountAmount")}</option>
             </select>
             {discountMode !== "none" && (
               <input type="number" min={0} step="0.01" value={discountValue}
@@ -646,14 +660,14 @@ function QuoteEditor({
           </div>
         </div>
         <div>
-          <label className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground">Vigencia</label>
+          <label className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground">{t("quotes.editor.validUntil")}</label>
           <input type="date" value={validUntil} onChange={(e) => setValidUntil(e.target.value)}
             className="mt-1 w-full bg-background border border-border rounded-lg px-3 py-2 text-sm" />
         </div>
         <div className="sm:col-span-2">
-          <label className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground">Notas</label>
+          <label className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground">{t("quotes.editor.notes")}</label>
           <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2}
-            placeholder="Condiciones, formas de pago, etc."
+            placeholder={t("quotes.editor.notesPlaceholder")}
             className="mt-1 w-full bg-background border border-border rounded-lg px-3 py-2 text-sm resize-y" />
         </div>
       </div>
@@ -662,15 +676,15 @@ function QuoteEditor({
       <div className="bg-card border border-border rounded-xl p-4">
         <div className="flex flex-col items-end gap-0.5 mb-3">
           <div className="flex justify-between w-full max-w-xs text-xs text-muted-foreground">
-            <span>Subtotal</span><span>{money(totals.subtotal)}</span>
+            <span>{t("quotes.editor.subtotal")}</span><span>{money(totals.subtotal)}</span>
           </div>
           {totals.discountAmount > 0 && (
             <div className="flex justify-between w-full max-w-xs text-xs text-muted-foreground">
-              <span>Descuento</span><span>-{money(totals.discountAmount)}</span>
+              <span>{t("quotes.editor.discount")}</span><span>-{money(totals.discountAmount)}</span>
             </div>
           )}
           <div className="flex justify-between w-full max-w-xs text-base font-bold text-brand-700 dark:text-brand-300 pt-1">
-            <span>Total</span><span>{money(totals.total)}</span>
+            <span>{t("quotes.editor.total")}</span><span>{money(totals.total)}</span>
           </div>
         </div>
 
@@ -678,12 +692,12 @@ function QuoteEditor({
 
         <div className="flex items-center justify-end gap-2">
           <button type="button" onClick={onCancel} className="text-xs font-semibold px-4 py-2 rounded-lg border border-border text-muted-foreground hover:bg-muted/50">
-            Cancelar
+            {t("quotes.editor.cancel")}
           </button>
           <button type="button" onClick={save} disabled={saving}
             className="text-xs font-semibold px-4 py-2 rounded-lg bg-brand-600 text-white hover:bg-brand-700 disabled:opacity-50 inline-flex items-center gap-1.5">
             {saving ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
-            {editing ? "Guardar cambios" : "Crear presupuesto"}
+            {editing ? t("quotes.editor.saveChanges") : t("quotes.editor.create")}
           </button>
         </div>
       </div>

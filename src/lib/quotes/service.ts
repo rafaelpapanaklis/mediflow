@@ -3,6 +3,7 @@
 
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { MAX_INVOICE_FOLIO_DIGITS } from "@/lib/invoices/next-invoice-number-core";
 import { computeTotals, formatFolio } from "./compute";
 import type { QuoteItemInput } from "./types";
 
@@ -56,7 +57,6 @@ export async function sanitizeItems(
     }));
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function buildItemsData(items: ReturnType<typeof computeTotals>["items"]): any[] {
   return items.map((it, i) => ({
     procedureId: it.procedureId ?? null,
@@ -72,7 +72,51 @@ function buildItemsData(items: ReturnType<typeof computeTotals>["items"]): any[]
   }));
 }
 
-/** Crea un presupuesto asignando folio P-000N por clínica, con reintento ante carrera. */
+/**
+ * Mayor folio de presupuesto emitido en la clínica (o null si no hay ninguno
+ * numérico). Espejo de lastInvoiceFolio (@/lib/invoices/next-invoice-number):
+ * el folio sale del MÁXIMO REALMENTE EMITIDO, nunca de un COUNT de filas — con
+ * huecos por borrado (los DRAFT se borran en duro), count+1 apunta a un folio
+ * ya emitido → P2002 permanente. Se toma el ÚLTIMO bloque de dígitos y se
+ * compara como NÚMERO; el filtro por longitud evita que un folio absurdo
+ * reviente el CAST (22003). Tabla física: "quotes" (@@map del modelo Quote).
+ */
+async function lastQuoteFolio(clinicId: string): Promise<number | null> {
+  const rows = await prisma.$queryRaw<{ max: bigint | number | null }[]>`
+    SELECT MAX(CAST(digits AS BIGINT)) AS max
+    FROM (
+      SELECT substring("folio" from '([0-9]+)[^0-9]*$') AS digits
+      FROM "quotes"
+      WHERE "clinicId" = ${clinicId}
+    ) s
+    WHERE digits IS NOT NULL AND length(digits) <= ${MAX_INVOICE_FOLIO_DIGITS}
+  `;
+  const raw = rows[0]?.max ?? null;
+  if (raw === null) return null;
+  const n = Number(raw);
+  return Number.isSafeInteger(n) ? n : null;
+}
+
+/**
+ * ¿El error es un P2002 del índice de folio (@@unique([clinicId, folio]))?
+ * isInvoiceNumberConflict del core NO sirve aquí: su detector exige
+ * "invoiceNumber" en meta.target. Mismo criterio documentado allá: sin target
+ * no podemos distinguirlo y asumimos que es el folio — reintentar es inocuo
+ * (el folio se recalcula) y si era otro índice el P2002 reaparece en cada
+ * intento hasta agotar los reintentos.
+ */
+function isQuoteFolioConflict(err: unknown): boolean {
+  if (!(err instanceof Prisma.PrismaClientKnownRequestError) || err.code !== "P2002") return false;
+  const target = (err.meta as { target?: unknown } | undefined)?.target;
+  const text = Array.isArray(target) ? target.join(",") : typeof target === "string" ? target : "";
+  return text === "" || text.includes("folio");
+}
+
+/**
+ * Crea un presupuesto asignando folio P-000N por clínica, con reintento ante
+ * carrera. El folio sale de MAX(último bloque de dígitos) + 1 — nunca de
+ * count+1 (ver lastQuoteFolio) — y se recalcula en CADA intento.
+ */
 export async function createQuoteWithFolio(args: {
   clinicId: string;
   patientId: string;
@@ -92,8 +136,7 @@ export async function createQuoteWithFolio(args: {
   const itemsData = buildItemsData(totals.items);
 
   for (let attempt = 0; attempt < 8; attempt++) {
-    const count = await prisma.quote.count({ where: { clinicId: args.clinicId } });
-    const folio = formatFolio(count + 1 + attempt);
+    const folio = formatFolio(((await lastQuoteFolio(args.clinicId)) ?? 0) + 1);
     try {
       return await prisma.quote.create({
         data: {
@@ -113,7 +156,9 @@ export async function createQuoteWithFolio(args: {
         include: QUOTE_INCLUDE,
       });
     } catch (e) {
-      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") continue;
+      // Solo la carrera de folio se reintenta (recalculando el MAX); cualquier
+      // otro error —incluido un P2002 de otro índice con target— se propaga.
+      if (isQuoteFolioConflict(e)) continue;
       throw e;
     }
   }
