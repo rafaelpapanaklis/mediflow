@@ -43,6 +43,10 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
   const ctx = await getCtx();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  // Registrar pagos exige "billing.charge" — el mismo permiso que ya pide
+  // mark-paid: cobrar es acción financiera, no basta con poder ver la factura.
+  const deniedPerm = denyIfMissingPermission(ctx, "billing.charge");
+  if (deniedPerm) return deniedPerm;
   const { clinicId } = ctx;
   // Visibilidad por paciente: no registrar pagos sobre la factura de un paciente
   // que este usuario no puede ver. Pre-check antes de la transacción para no
@@ -107,6 +111,10 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
   const ctx = await getCtx();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  // Editar la factura (status/notas/conceptos) exige "billing.edit" — el mismo
+  // permiso que ya pide edit-price.
+  const deniedPerm = denyIfMissingPermission(ctx, "billing.edit");
+  if (deniedPerm) return deniedPerm;
   const { clinicId } = ctx;
   const body = await req.json();
   const invoice = await prisma.invoice.findFirst({ where: { id: params.id, clinicId } });
@@ -186,6 +194,10 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {
   const ctx = await getCtx();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  // Borrar borradores / cancelar sin pagos es edición del documento: mismo
+  // "billing.edit" que el PATCH y que edit-price.
+  const deniedPerm = denyIfMissingPermission(ctx, "billing.edit");
+  if (deniedPerm) return deniedPerm;
   const { clinicId } = ctx;
   const invoice = await prisma.invoice.findFirst({ where: { id: params.id, clinicId } });
   if (!invoice) return NextResponse.json({ error: "Not found" }, { status: 404 });

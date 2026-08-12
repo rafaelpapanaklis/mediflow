@@ -54,6 +54,10 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const ctx = await getCtx();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  // Crear facturas es acción granular ("billing.create"): el editor de Caja/ficha
+  // ya exige billing.view para verse; esto cierra el POST directo a la API.
+  const deniedPerm = denyIfMissingPermission(ctx, "billing.create");
+  if (deniedPerm) return deniedPerm;
   const { clinicId } = ctx;
   try {
     const body = await req.json();

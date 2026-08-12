@@ -203,7 +203,9 @@ export const ROLE_DEFAULT_PERMISSIONS: Record<Role, PermissionKey[]> = {
     "today.view",
     "agenda.view", "agenda.create", "agenda.edit", "agenda.delete",
     "patients.view", "patients.create", "patients.edit",
-    "billing.view", "billing.create", "billing.charge",
+    // billing.edit: la recepción con Caja borra borradores y edita facturas desde
+    // el detalle — DELETE y PATCH de /api/invoices/[id] ahora lo exigen (edit-price ya).
+    "billing.view", "billing.create", "billing.charge", "billing.edit",
     "inbox.view", "inbox.send",
     "whatsapp.view", "whatsapp.send",
     "treatments.view", "resources.view", "inventory.view", "suppliers.view",
