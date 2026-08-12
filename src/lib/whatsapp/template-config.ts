@@ -7,16 +7,27 @@
 // nunca le había escrito a la clínica NO le llegaba nada, Meta respondía 131047
 // y el panel lo pintaba como "Enviado".
 //
-// EL MODELO DE NEGOCIO manda en el diseño: la cuenta de WhatsApp (WABA) es de
-// cada clínica y Meta le cobra a ELLA cada plantilla. DaleControl no puede dar
-// de alta plantillas por ella ni pagarlas, así que lo único que se puede hacer
-// es: (a) decirle EXACTAMENTE qué texto registrar, (b) guardar el nombre con el
-// que la aprobaron y (c) no enviar —y decir por qué— cuando falte.
+// QUIÉN DA DE ALTA LAS PLANTILLAS: la cuenta de WhatsApp (WABA) es de cada
+// clínica y Meta le cobra a ELLA cada plantilla, pero DaleControl sí puede
+// crearlas DENTRO de su cuenta usando el token que la clínica nos dio al
+// conectar. Eso es lo que hace `provision-templates.ts` con la redacción de
+// `templates-catalog.ts`. Este archivo se queda con lo que sabe la clínica de
+// esas plantillas: nombre, idioma y en qué estado las tiene Meta.
 //
 // PURO: sin Prisma ni React. Lo importan el helper de envío (servidor) y la
 // pantalla de configuración (cliente).
 
 import type { WhatsAppSendKind } from "./system-message";
+import {
+  WA_TEMPLATE_CATALOG,
+  isValidTemplateLang,
+  isValidTemplateName,
+  type WaCatalogEntry,
+  type WaTemplateStatus,
+} from "./templates-catalog";
+
+export { isValidTemplateLang, isValidTemplateName };
+export type { WaTemplateStatus };
 
 /** Plantilla registrada por la clínica para un tipo de mensaje. */
 export interface WaTemplateConfig {
@@ -24,82 +35,37 @@ export interface WaTemplateConfig {
   name: string;
   /** Código de idioma de Meta: "es_MX", "es", "en_US"… */
   lang: string;
+  /**
+   * En qué estado la tiene Meta. AUSENTE = aprobada: las entradas sin estado
+   * son las que la clínica escribió a mano en la pantalla vieja, y si las
+   * escribió ahí era porque ya se las habían aprobado.
+   */
+  status?: WaTemplateStatus;
+  /** Motivo de Meta cuando la rechaza (o por qué no se pudo crear). */
+  reason?: string;
+  /** Id de la plantilla en Meta: identifica la fila en el webhook y el cron. */
+  metaId?: string;
+  /** Cuándo se actualizó este registro (ISO). Lo usa el cron de respaldo. */
+  updatedAt?: string;
 }
 
 /** Mapa que se guarda en `Clinic.waTemplates`. */
 export type WaTemplateMap = Partial<Record<WhatsAppSendKind, WaTemplateConfig>>;
 
 /**
- * Especificación de la plantilla que la clínica debe dar de alta en Meta.
+ * Especificación de la plantilla de cada tipo de mensaje.
+ *
+ * Es EL CATÁLOGO: una sola redacción para todas las clínicas. Se mantiene el
+ * nombre `WA_TEMPLATE_SPECS` porque lo usan la pantalla, el guardado manual y
+ * los comentarios de los envíos; la fuente está en `templates-catalog.ts`.
  *
  * El texto lo fija DaleControl, no la clínica: al enviar mandamos los valores
- * de {{1}}…{{n}} POSICIONALMENTE, así que si la clínica registra un texto con
- * otro número de variables o en otro orden, Meta rechaza con 132000 o entrega
- * el mensaje con los datos cambiados de sitio.
+ * de {{1}}…{{n}} POSICIONALMENTE, así que una plantilla con otro número de
+ * variables o en otro orden hace que Meta rechace con 132000 o que el mensaje
+ * llegue con los datos cambiados de sitio.
  */
-export interface WaTemplateSpec {
-  kind: WhatsAppSendKind;
-  /** Clave i18n del nombre humano del tipo de mensaje. */
-  labelKey: string;
-  /** Nombre sugerido para darla de alta (Meta exige [a-z0-9_]). */
-  suggestedName: string;
-  /** Texto EXACTO a registrar en Meta, con las variables numeradas. */
-  body: string;
-  /** Qué es cada {{n}}, en orden. Claves i18n. */
-  variableKeys: string[];
-}
-
-/**
- * Tipos que HOY salen fuera de la ventana de 24 h y por tanto necesitan
- * plantilla sí o sí. Los tres comparten las mismas cuatro variables a
- * propósito: una clínica que da de alta tres plantillas casi iguales se
- * equivoca menos que con tres formatos distintos.
- *
- * El resto de `WHATSAPP_SEND_KINDS` (review, prescription, system, manual_api)
- * queda fuera por ahora: o responden a algo que el paciente acaba de hacer
- * (dentro de ventana) o van dirigidos a la propia clínica. La pantalla los
- * muestra como "no configurables todavía" en vez de fingir que existen.
- */
-export const WA_TEMPLATE_SPECS: readonly WaTemplateSpec[] = [
-  {
-    kind: "reminder",
-    labelKey: "inbox.whatsapp.tplKindReminder",
-    suggestedName: "recordatorio_cita",
-    body:
-      "Hola {{1}}, te recordamos tu cita en {{2}} el {{3}} a las {{4}}. " +
-      "Responde CONFIRMAR para confirmarla o CANCELAR si no puedes asistir.",
-    variableKeys: [
-      "inbox.whatsapp.tplVarPatient",
-      "inbox.whatsapp.tplVarClinic",
-      "inbox.whatsapp.tplVarDate",
-      "inbox.whatsapp.tplVarTime",
-    ],
-  },
-  {
-    kind: "booking",
-    labelKey: "inbox.whatsapp.tplKindBooking",
-    suggestedName: "confirmacion_cita",
-    body: "Hola {{1}}, tu cita en {{2}} quedó agendada para el {{3}} a las {{4}}. ¡Te esperamos!",
-    variableKeys: [
-      "inbox.whatsapp.tplVarPatient",
-      "inbox.whatsapp.tplVarClinic",
-      "inbox.whatsapp.tplVarDate",
-      "inbox.whatsapp.tplVarTime",
-    ],
-  },
-  {
-    kind: "appointment_change",
-    labelKey: "inbox.whatsapp.tplKindAppointmentChange",
-    suggestedName: "reagendado_cita",
-    body: "Hola {{1}}, tu cita en {{2}} cambió de horario: ahora es el {{3}} a las {{4}}.",
-    variableKeys: [
-      "inbox.whatsapp.tplVarPatient",
-      "inbox.whatsapp.tplVarClinic",
-      "inbox.whatsapp.tplVarDate",
-      "inbox.whatsapp.tplVarTime",
-    ],
-  },
-];
+export type WaTemplateSpec = WaCatalogEntry;
+export const WA_TEMPLATE_SPECS: readonly WaTemplateSpec[] = WA_TEMPLATE_CATALOG;
 
 /** Tipos que hoy admiten plantilla. */
 export const TEMPLATED_KINDS: readonly WhatsAppSendKind[] = WA_TEMPLATE_SPECS.map((s) => s.kind);
@@ -129,21 +95,14 @@ export function renderTemplateBody(
   });
 }
 
-/** Nombre válido de plantilla en Meta: minúsculas, dígitos y guion bajo. */
-export function isValidTemplateName(name: string): boolean {
-  return /^[a-z0-9_]{1,512}$/.test(name);
-}
-
-/** Código de idioma de Meta: "es", "es_MX", "pt_BR"… */
-export function isValidTemplateLang(lang: string): boolean {
-  return /^[a-z]{2}(_[A-Z]{2})?$/.test(lang);
-}
-
 /**
  * Lee `Clinic.waTemplates` (Json libre, puede traer cualquier cosa) y devuelve
  * solo las entradas bien formadas. Una entrada corrupta se DESCARTA en vez de
  * intentar enviarse: mandar a Meta un nombre inválido gasta un intento y falla
  * con un código que no explica nada.
+ *
+ * El estado se conserva tal cual salvo que sea basura, en cuyo caso se deja sin
+ * estado (= aprobada, el comportamiento de las entradas manuales de siempre).
  */
 export function parseWaTemplates(raw: unknown): WaTemplateMap {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
@@ -151,13 +110,28 @@ export function parseWaTemplates(raw: unknown): WaTemplateMap {
   for (const spec of WA_TEMPLATE_SPECS) {
     const entry = (raw as Record<string, unknown>)[spec.kind];
     if (!entry || typeof entry !== "object") continue;
-    const name = (entry as Record<string, unknown>).name;
-    const lang = (entry as Record<string, unknown>).lang;
+    const row = entry as Record<string, unknown>;
+    const name = row.name;
+    const lang = row.lang;
     if (typeof name !== "string" || typeof lang !== "string") continue;
     const trimmedName = name.trim();
     const trimmedLang = lang.trim();
     if (!isValidTemplateName(trimmedName) || !isValidTemplateLang(trimmedLang)) continue;
-    out[spec.kind] = { name: trimmedName, lang: trimmedLang };
+
+    const cfg: WaTemplateConfig = { name: trimmedName, lang: trimmedLang };
+    if (row.status === "PENDING" || row.status === "APPROVED" || row.status === "REJECTED") {
+      cfg.status = row.status;
+    }
+    if (typeof row.reason === "string" && row.reason.trim() !== "") {
+      cfg.reason = row.reason.trim().slice(0, 500);
+    }
+    if (typeof row.metaId === "string" && row.metaId.trim() !== "") {
+      cfg.metaId = row.metaId.trim();
+    }
+    if (typeof row.updatedAt === "string" && row.updatedAt.trim() !== "") {
+      cfg.updatedAt = row.updatedAt.trim();
+    }
+    out[spec.kind] = cfg;
   }
   return out;
 }

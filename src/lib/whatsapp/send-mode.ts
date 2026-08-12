@@ -70,6 +70,30 @@ export function decideSendMode(input: SendModeInput): SendModeDecision {
     };
   }
 
+  // 2b. Registrada pero todavía no enviable. Desde que DaleControl crea las
+  //     plantillas dentro de la WABA de la clínica, `waTemplates` guarda también
+  //     en qué estado las tiene Meta: recién creadas quedan en revisión (horas)
+  //     y pueden acabar rechazadas. Mandarlas igual gastaría el intento para
+  //     recibir un 132001 que nadie sabe leer; mejor decir la verdad.
+  //
+  //     Una entrada SIN estado es de las que la clínica registró a mano cuando
+  //     la pantalla solo pedía el nombre: esa cuenta como aprobada.
+  if (template.status === "PENDING") {
+    return {
+      mode: "blocked",
+      reason:
+        "Fuera de la ventana de 24 h: Meta todavía no aprueba la plantilla de este tipo de " +
+        "mensaje. En cuanto la apruebe, los envíos salen solos.",
+    };
+  }
+  if (template.status === "REJECTED") {
+    const motivo = template.reason ? ` Motivo: ${template.reason}` : "";
+    return {
+      mode: "blocked",
+      reason: `Fuera de la ventana de 24 h: Meta rechazó la plantilla de este tipo de mensaje.${motivo}`,
+    };
+  }
+
   // 3. Los parámetros son posicionales: Meta rechaza con 132000 si el número no
   //    coincide con el de la plantilla aprobada. Mejor no gastar el intento.
   const params = input.params ?? [];

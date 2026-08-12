@@ -63,7 +63,14 @@ export async function sendReviewInvitation(appointmentId: string): Promise<void>
       select: {
         id: true, clinicId: true, patientId: true, status: true,
         patient: { select: { firstName: true, lastName: true, phone: true, email: true } },
-        clinic: { select: { name: true, waConnected: true, waPhoneNumberId: true, waAccessToken: true } },
+        // waTemplates: sin él, una invitación fuera de la ventana de 24 h se
+        // bloquearía siempre aunque la clínica tenga la plantilla de reseñas.
+        clinic: {
+          select: {
+            name: true, waConnected: true, waPhoneNumberId: true, waAccessToken: true,
+            waTemplates: true,
+          },
+        },
       },
     });
     if (!appt || !appt.patient) return;
@@ -115,10 +122,16 @@ export async function sendReviewInvitation(appointmentId: string): Promise<void>
             waPhoneNumberId: appt.clinic.waPhoneNumberId,
             waAccessToken: appt.clinic.waAccessToken,
             waConnected: appt.clinic.waConnected,
+            waTemplates: appt.clinic.waTemplates,
           },
           to: appt.patient.phone,
           body: message,
           kind: "review",
+          // {{1}} paciente, {{2}} clínica. La plantilla de reseñas es de
+          // MARKETING y es OPCIONAL: si la clínica no la activó, `waTemplates`
+          // no la trae y fuera de ventana el envío se bloquea con motivo —
+          // que es lo correcto, no se le cobra un mensaje que no pidió.
+          templateParams: [firstName || "paciente", clinicName],
         });
         channels.push("whatsapp");
       } catch (e) {

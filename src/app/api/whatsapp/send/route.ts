@@ -29,6 +29,8 @@ export async function POST(req: NextRequest) {
     timeZone: clinic.timezone, weekday: "long", day: "numeric", month: "long",
   }).format(appt.startsAt);
 
+  const hora = timeHHMMInTz(appt.startsAt, clinic.timezone);
+
   // Bidirectional reminder — patient can reply CONFIRMAR or CANCELAR
   const defaultMsg = clinic.waReminderMsg ||
     `Hola ${appt.patient.firstName} 👋, te recordamos que tienes una cita en *${clinic.name}* el *${date}* a las *${timeHHMMInTz(appt.startsAt, clinic.timezone)}h*.\n\nDr/a. ${appt.doctor.firstName} ${appt.doctor.lastName}\n\n✅ Responde *CONFIRMAR* para confirmar tu cita\n❌ Responde *CANCELAR* si no podrás asistir`;
@@ -39,6 +41,15 @@ export async function POST(req: NextRequest) {
       to: appt.patient.phone,
       body: defaultMsg,
       kind: "manual_api",
+      // {{1}} paciente, {{2}} clínica, {{3}} fecha, {{4}} hora. El cuerpo libre
+      // de arriba lo puede haber cambiado la clínica (waReminderMsg); la
+      // plantilla NO, porque Meta la aprueba palabra por palabra.
+      templateParams: [
+        appt.patient.firstName || "paciente",
+        clinic.name,
+        date,
+        hora,
+      ],
     });
     await prisma.appointment.update({ where: { id: appointmentId }, data: { reminderSent: true } });
     await prisma.whatsAppReminder.create({

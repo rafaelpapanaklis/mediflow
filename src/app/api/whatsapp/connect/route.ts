@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getAuthContext, requireAdmin } from "@/lib/auth-context";
 import { encryptField } from "@/lib/crypto/envelope";
+import { provisionClinicTemplates } from "@/lib/whatsapp/provision-templates";
 
 export async function POST(req: NextRequest) {
   const ctx = await getAuthContext();
@@ -56,6 +57,17 @@ export async function POST(req: NextRequest) {
         waConnMethod: wabaId ? "coexistence" : "manual",
       },
     });
+
+    // Plantillas: se dan de alta en la WABA de la clínica con SU token, en
+    // segundo plano. Sin await a propósito — son cinco llamadas a Meta y la
+    // conexión no puede quedarse esperando ni fallar por esto. Si esta corrida
+    // se pierde, quedan dos redes: el botón "Crear mis plantillas" del panel y
+    // el cron de respaldo. Sin wabaId ni se intenta: no hay dónde crearlas.
+    if (wabaId) {
+      void provisionClinicTemplates(clinicId).catch((e) => {
+        console.error(`[whatsapp/connect] alta de plantillas (${clinicId}):`, e);
+      });
+    }
 
     return NextResponse.json({
       success: true,

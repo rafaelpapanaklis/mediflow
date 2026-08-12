@@ -42,7 +42,11 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       issuedAt: true,
       verifyUrl: true,
       patient: { select: { firstName: true, lastName: true, phone: true, email: true } },
-      clinic: { select: { name: true, waPhoneNumberId: true, waAccessToken: true } },
+      // waTemplates: fuera de la ventana de 24 h la receta solo sale con la
+      // plantilla aprobada de la clínica; sin este campo se bloquearía siempre.
+      clinic: {
+        select: { name: true, waPhoneNumberId: true, waAccessToken: true, waTemplates: true },
+      },
     },
   });
   if (!rx) return NextResponse.json({ error: "Receta no encontrada" }, { status: 404 });
@@ -83,10 +87,20 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
           id: ctx.clinicId,
           waPhoneNumberId: rx.clinic.waPhoneNumberId,
           waAccessToken: rx.clinic.waAccessToken,
+          waTemplates: rx.clinic.waTemplates,
         },
         to: rx.patient.phone,
         body: message,
         kind: "prescription",
+        // {{1}} paciente, {{2}} clínica, {{3}} fecha de la consulta. La
+        // plantilla no lleva el enlace: Meta no admite URLs variables en el
+        // cuerpo sin darlas de alta como botón, así que fuera de ventana el
+        // paciente recibe el aviso y el enlace viaja en la respuesta del hilo.
+        templateParams: [
+          rx.patient.firstName || "paciente",
+          rx.clinic.name,
+          issuedDate,
+        ],
       });
     } catch (err) {
       return NextResponse.json(

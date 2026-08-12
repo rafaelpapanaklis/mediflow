@@ -23,6 +23,9 @@ export default async function WhatsAppTemplatesPage() {
       key={user.clinicId}
       canEdit={canEdit}
       connected={user.clinic.waConnected ?? false}
+      // Solo el booleano: el id de la cuenta de Meta no tiene por qué viajar al
+      // navegador, y lo único que decide la pantalla es si se pueden crear.
+      hasWaba={Boolean(user.clinic.waBusinessAccountId)}
       // Se pasa ya parseado: una entrada corrupta en el Json no debe llegar a
       // los inputs como texto raro.
       templates={parseWaTemplates(user.clinic.waTemplates)}

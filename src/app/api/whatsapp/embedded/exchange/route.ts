@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { getAuthContext, requireAdmin } from "@/lib/auth-context";
 import { encryptField } from "@/lib/crypto/envelope";
 import { WA_GRAPH_VERSION } from "@/lib/whatsapp/embedded/types";
+import { provisionClinicTemplates } from "@/lib/whatsapp/provision-templates";
 
 const GRAPH = `https://graph.facebook.com/${WA_GRAPH_VERSION}`;
 
@@ -103,6 +104,13 @@ export async function POST(req: NextRequest) {
         waConnected: true,
         waConnMethod: "embedded",
       },
+    });
+
+    // 6) Plantillas del catálogo dentro de la WABA recién conectada, en segundo
+    //    plano: son cinco llamadas a Meta y el onboarding no puede demorarse ni
+    //    fallar por esto. El botón del panel y el cron son la red de respaldo.
+    void provisionClinicTemplates(clinicId).catch((e) => {
+      console.error(`[whatsapp/embedded] alta de plantillas (${clinicId}):`, e);
     });
 
     return NextResponse.json({ success: true, displayName, subscribed });

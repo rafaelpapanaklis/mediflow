@@ -6809,3 +6809,106 @@ ahí; el comentario de cabecera del módulo explica dónde está su reemplazo.
 3. **Los recordatorios clínicos por especialidad** (ENDO_/PERIO_/ORTHO_/IMPLANT_) no entran aquí:
    solo se reprograma el tipo `APPT_AUTO`. Los de especialidad cuelgan de tratamientos, no del
    horario de la cita.
+
+---
+
+## Cada clínica recibe sus plantillas sin tocar Meta
+
+**Qué estaba roto.** `ff06dad6` enseñó al envío a usar plantillas fuera de la ventana de 24 h, y
+`64471ad9` a decir la verdad sobre la entrega. Faltaba lo de en medio: **nadie creaba las
+plantillas**. `message_templates` no aparecía en todo el repo, la pantalla se limitaba a dictarle a
+la clínica un texto para que lo diera de alta a mano en el administrador de Meta, y ninguna lo hizo.
+Resultado: `waTemplates` vacío en todas, y todo mensaje a un paciente que llevara más de 24 h sin
+escribir se bloqueaba con "falta configurar la plantilla". El P0 estaba resuelto a medias.
+
+Las plantillas son **por WABA**: no se comparten entre cuentas. Pero DaleControl ya tiene el token
+de cada clínica (lo guarda `connect` y `embedded/exchange`), y con ese token se pueden crear
+plantillas **dentro de su cuenta**. Eso es lo que hace esta entrega.
+
+### Un catálogo, seis plantillas
+
+`src/lib/whatsapp/templates-catalog.ts` es la fuente única de la redacción. Cinco de **utilidad**
+(recordatorio, confirmación, reagendado, receta y mensaje de la clínica) y una de **marketing**
+(invitación a reseña), todas en `es_MX`. `WA_TEMPLATE_SPECS` pasó a derivarse de ahí, así que la
+pantalla, el guardado manual y el envío leen exactamente el mismo texto.
+
+El catálogo se valida a sí mismo contra las reglas de Meta —nombre en `[a-z0-9_]`, el cuerpo ni
+empieza ni termina en variable, sin dos variables seguidas, numeración sin saltos— **antes** de
+gastar una llamada, y un test recorre las seis para que nadie las rompa al cambiar una redacción.
+
+### Las tres plantillas viejas ganaron una variable
+
+El texto nuevo de recordatorio, confirmación y reagendado dice "**con {{5}}**" (el doctor). Como
+Meta sustituye por **posición**, eso obliga a que los cinco callers manden cinco datos: cola de
+recordatorios, `appointment-change/notify`, `/api/public/book` y `/api/paciente/appointments`. Sin
+ese ajuste, cada envío fuera de ventana se habría bloqueado con "la plantilla espera 5 datos y se
+prepararon 4". Es el único punto donde hubo que tocar el envío de `ff06dad6`.
+
+Además, tres tipos que antes no tenían plantilla ahora la tienen y **ya mandan sus datos**: receta
+(`prescriptions/[id]/send`), mensaje manual (`/api/whatsapp/send`) y reseña (`lib/reviews/invite`).
+A los dos últimos les faltaba `waTemplates` en el `select` de la clínica: sin ese campo la plantilla
+existía pero el envío la daba por no configurada.
+
+### `waTemplates` ahora guarda el estado
+
+Cada entrada lleva `status` (PENDING | APPROVED | REJECTED), el `reason` de Meta, su `metaId` y
+`updatedAt`. **Una entrada sin `status` cuenta como aprobada**: son las que una clínica pudo escribir
+a mano en la pantalla anterior, y tratarlas como "en revisión" apagaría envíos que hoy funcionan.
+
+`decideSendMode` bloquea PENDING y REJECTED con motivo legible en vez de gastar el intento en un
+132001 que nadie sabe leer. El motivo nuevo viaja hasta el panel traducido (`templatePending`).
+
+### Cómo se disparan
+
+1. **Al conectar**, en las dos rutas (`connect` y `embedded/exchange`), sin `await`: son cinco
+   llamadas a Meta y la conexión no puede demorarse ni fallar por esto. En `connect` solo se intenta
+   si la clínica aportó el WABA id.
+2. **Botón "Crear mis plantillas"** en `/dashboard/whatsapp/plantillas` → `POST
+   /api/whatsapp/templates/provision`. Es el camino para las clínicas ya conectadas —incluida la de
+   Rafael— y el reintento cuando Meta rechaza una.
+3. **Idempotente**: no vuelve a pedir lo que ya está aprobado, en revisión o registrado a mano, y si
+   Meta responde que el nombre ya existe eso **no es un error** — recupera esa plantilla y registra
+   su estado real.
+
+Si el token no tiene permiso de gestión de plantillas o falta el WABA id, no revienta: corta,
+devuelve el motivo en español y la pantalla lo enseña fijo (no en un toast que se va).
+
+### Saber cuándo las aprueban
+
+- **Webhook**: `message_template_status_update` en el webhook que ya existe. Ese aviso **no trae**
+  `phone_number_id`; el `entry[].id` es el WABA id, así que la clínica se resuelve por
+  `waBusinessAccountId`.
+- **Cron de respaldo**: `/api/cron/whatsapp-templates` (diario, 11:00 UTC, `Bearer CRON_SECRET`)
+  pregunta el estado real de las que lleven más de 24 h en revisión. Sin él, un webhook perdido
+  dejaría los recordatorios apagados para siempre sin que nadie se enterara.
+
+### Lo que ve la clínica
+
+Una fila por tipo con su estado en español —**Lista**, **En revisión por Meta**, **Rechazada** con
+el motivo, o **No creada**— y el texto que recibe el paciente. Arriba, si `waBillingOk` es false, el
+aviso de que **sin método de pago en su cuenta de WhatsApp no saldrá ningún recordatorio**, con el
+enlace al billing hub. La de marketing va en su propia tarjeta, apagada, explicando que cuesta más y
+que el paciente puede bloquear ese tipo sin perder los importantes. Escribir nombres a mano quedó
+plegado en "Opciones avanzadas".
+
+De paso, dos trampas del guardado manual: ahora conserva el `status` de las filas que no se tocaron
+(antes un guardado habría dejado en "aprobada" una plantilla en revisión) y una fila sin nombre ya
+no es un error de validación, sino "sin plantilla".
+
+### Pendientes
+
+1. **Nadie ha creado una plantilla real todavía.** Todo el camino de red está sin ejercitar contra
+   Meta: hace falta pulsar el botón en una clínica conectada y ver si Meta acepta los seis cuerpos
+   tal cual o rechaza alguno por categoría.
+2. **El campo del webhook hay que suscribirlo en el panel de la app de Meta.**
+   `POST /{waba}/subscribed_apps` suscribe la app al WABA pero no elige campos: hay que marcar
+   `message_template_status_update` en Webhooks → WhatsApp Business Account. Mientras no esté, el
+   cron es el único que entera del APPROVED (hasta 24 h de retraso).
+3. **La clínica conectada a mano sin WABA id no puede recibirlas.** La pantalla se lo dice y le pide
+   reconectar con el botón de Meta; no hay forma de adivinar el WABA desde el `phone_number_id`.
+4. **El alta en segundo plano al conectar puede perderse** si la función serverless se congela al
+   responder. Es aceptable porque el botón y el cron son la red, pero significa que la conexión no
+   garantiza las plantillas.
+5. **`prescription` no lleva el enlace de la receta.** Meta no admite URLs variables en el cuerpo sin
+   darlas de alta como botón: fuera de ventana el paciente recibe el aviso y el enlace viaja en la
+   conversación.

@@ -317,10 +317,10 @@ export async function processWhatsAppQueue(opts?: {
       // El registro es best-effort dentro del helper: si falla, el envío ya
       // salió y la corrida del cron sigue igual que antes.
       // Datos de la plantilla de recordatorio, EN EL ORDEN de WA_TEMPLATE_SPECS
-      // ({{1}} paciente, {{2}} clínica, {{3}} fecha, {{4}} hora). Solo se pueden
-      // armar si el recordatorio cuelga de una cita: los de tipo RECALL o
-      // BIRTHDAY no tienen fecha que anunciar, así que fuera de la ventana de
-      // 24 h se bloquean con motivo en vez de salir y morir en Meta.
+      // ({{1}} paciente, {{2}} clínica, {{3}} fecha, {{4}} hora, {{5}} doctor).
+      // Solo se pueden armar si el recordatorio cuelga de una cita: los de tipo
+      // RECALL o BIRTHDAY no tienen fecha que anunciar, así que fuera de la
+      // ventana de 24 h se bloquean con motivo en vez de salir y morir en Meta.
       const templateParams = r.appointment?.startsAt
         ? [
             patientCtx.firstName || "paciente",
@@ -337,6 +337,11 @@ export async function processWhatsAppQueue(opts?: {
               minute: "2-digit",
               hour12: false,
             }).format(r.appointment.startsAt),
+            // Meta rechaza las variables vacías: sin doctor en la cita se manda
+            // una fórmula genérica en vez de dejar el hueco (y perder el envío).
+            r.appointment.doctor
+              ? `Dr/a. ${r.appointment.doctor.firstName} ${r.appointment.doctor.lastName}`.trim()
+              : "tu doctor(a)",
           ]
         : null;
 

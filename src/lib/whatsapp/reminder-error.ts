@@ -38,6 +38,8 @@ export type ReminderErrorKey =
   | "rateLimited"
   /** La clínica no ha registrado plantilla para ese tipo de mensaje (nuestro). */
   | "templateNotConfigured"
+  /** La plantilla existe pero Meta sigue revisándola (nuestro, pre-envío). */
+  | "templatePending"
   /** 132000 / 132001 — Meta rechazó la plantilla (nombre, idioma o variables). */
   | "templateRejected"
   /** 131042 — la WABA de la clínica no tiene método de pago. */
@@ -97,6 +99,11 @@ const PATTERNS: Array<{ key: ReminderErrorKey; re: RegExp }> = [
   // Fase 3: fuera de ventana y sin plantilla registrada para ese tipo → NO se
   // envía. Va antes que el 131047 de Meta porque ni siquiera se llegó a llamar.
   { key: "templateNotConfigured", re: /falta configurar la plantilla/i },
+  // Creada dentro de la WABA pero aún en revisión / rechazada por Meta: el
+  // bloqueo lo escribe send-mode antes de llamar, así que no hay código que
+  // mirar. Van antes que los patrones en inglés de Meta.
+  { key: "templatePending",  re: /todav[ií]a no aprueba la plantilla/i },
+  { key: "templateRejected", re: /meta rechaz[oó] la plantilla/i },
 
   // ── Errores de Meta (Cloud API) ────────────────────────────────────────────
   // Respaldo por texto: solo entra cuando la fila no trae el código aparte.

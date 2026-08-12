@@ -220,9 +220,16 @@ export async function POST(req: NextRequest) {
         to: cleanPhone,
         body: msg,
         kind: "booking",
-        // {{1}} paciente, {{2}} clínica, {{3}} fecha, {{4}} hora — el orden de
-        // WA_TEMPLATE_SPECS. Meta sustituye por posición, no por nombre.
-        templateParams: [firstName.trim(), clinic.name, dateFormatted, startTime],
+        // {{1}} paciente, {{2}} clínica, {{3}} fecha, {{4}} hora, {{5}} doctor —
+        // el orden de WA_TEMPLATE_SPECS. Meta sustituye por posición, no por
+        // nombre.
+        templateParams: [
+          firstName.trim(),
+          clinic.name,
+          dateFormatted,
+          startTime,
+          `Dr/a. ${doctor.firstName} ${doctor.lastName}`.trim(),
+        ],
       });
     } catch (e) {
       console.error("WhatsApp confirmation failed:", e);

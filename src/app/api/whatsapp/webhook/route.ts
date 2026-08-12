@@ -18,6 +18,7 @@ import {
 } from "@/lib/whatsapp/delivery-status";
 import { WA_ERROR_CODE, formatWaErrorMessage } from "@/lib/whatsapp/errors";
 import { markWhatsAppDisconnected } from "@/lib/whatsapp/connection";
+import { ingestTemplateStatusUpdate } from "@/lib/whatsapp/provision-templates";
 import { cancelPendingRemindersForAppointment } from "@/lib/reminders/reschedule.server";
 import { rateLimitKey } from "@/lib/rate-limit";
 import type { BotHistoryItem } from "@/lib/whatsapp/bot/types";
@@ -87,6 +88,19 @@ export async function POST(req: NextRequest) {
     //    la conversación) para no responder doble. No corre runBotTurn.
     if (changes?.field === "smb_message_echoes") {
       await ingestBusinessAppEchoes(value);
+      return NextResponse.json({ ok: true });
+    }
+
+    // ── Meta revisó una plantilla ────────────────────────────────────────────
+    //    Aquí llega el APPROVED / REJECTED de las plantillas que DaleControl da
+    //    de alta en la WABA de cada clínica. Sin esto quedarían "en revisión"
+    //    para siempre y con ellas los recordatorios apagados.
+    //    OJO: este aviso NO trae `metadata.phone_number_id`; el `entry[].id` ES
+    //    el WABA id, así que la clínica se resuelve por `waBusinessAccountId`.
+    //    (Requiere tener suscrito el campo `message_template_status_update` en
+    //    la app de Meta; el cron de respaldo cubre lo que se pierda.)
+    if (changes?.field === "message_template_status_update") {
+      await ingestTemplateStatusUpdate(entry?.id, value);
       return NextResponse.json({ ok: true });
     }
 

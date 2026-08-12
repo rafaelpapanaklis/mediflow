@@ -40,6 +40,19 @@ export async function PUT(req: NextRequest) {
     return NextResponse.json({ error: "invalid_payload" }, { status: 400 });
   }
 
+  // Estado actual: hace falta para NO perder lo que Meta ya dijo sobre las
+  // plantillas que creamos nosotros. Este PUT es la opción avanzada (la clínica
+  // apunta el nombre de SUS plantillas) y llega con el formulario entero, así
+  // que sin este rescate un guardado dejaría en "aprobada" una plantilla que
+  // Meta tiene en revisión — y el siguiente recordatorio se gastaría en un
+  // 132001.
+  const existing = parseWaTemplates(
+    (await prisma.clinic.findUnique({
+      where: { id: user.clinicId },
+      select: { waTemplates: true },
+    }))?.waTemplates ?? null,
+  );
+
   // Se valida campo a campo para poder decir QUÉ está mal. `parseWaTemplates`
   // descarta en silencio (es lo correcto al leer de la BD), pero al guardar la
   // clínica necesita enterarse de que su nombre no es válido en vez de creer
@@ -59,8 +72,11 @@ export async function PUT(req: NextRequest) {
     const name = typeof rawName === "string" ? rawName.trim() : "";
     const lang = typeof rawLang === "string" ? rawLang.trim() : "";
 
-    // Vaciar los dos campos = borrar la plantilla de ese tipo (válido).
-    if (name === "" && lang === "") continue;
+    // Sin nombre no hay plantilla: se borra la de ese tipo (o se deja sin
+    // crear) en vez de responder "nombre inválido". El formulario avanzado
+    // llega con las seis filas y el idioma pre-rellenado a es_MX, así que
+    // exigir los dos campos vacíos convertía cada fila no usada en un error.
+    if (name === "") continue;
 
     if (!isValidTemplateName(name)) {
       errors.push({
@@ -79,7 +95,12 @@ export async function PUT(req: NextRequest) {
       });
       continue;
     }
-    clean[spec.kind] = { name, lang };
+    // Mismo nombre e idioma que lo guardado = no lo tocó: se conserva el estado
+    // que reportó Meta. Si los cambió, está declarando una plantilla SUYA ya
+    // aprobada, así que se guarda sin estado (= aprobada, como siempre).
+    const prev = existing[spec.kind];
+    clean[spec.kind] =
+      prev && prev.name === name && prev.lang === lang ? { ...prev } : { name, lang };
   }
 
   if (errors.length > 0) {

@@ -119,16 +119,17 @@ export async function notifyPatientChangeResolution(changeRequestId: string): Pr
           to: patient.phone,
           body: message,
           kind: "appointment_change",
-          // {{1}} paciente, {{2}} clínica, {{3}} fecha, {{4}} hora. `fecha` y
-          // `hora` son ya las de la cita resultante (el resolve la actualizó).
+          // {{1}} paciente, {{2}} clínica, {{3}} fecha, {{4}} hora, {{5}} doctor.
+          // `fecha` y `hora` son ya las de la cita resultante (el resolve la
+          // actualizó).
           //
-          // OJO: la plantilla de este tipo dice "cambió de horario", así que
+          // OJO: la plantilla de este tipo dice que la cita "cambió", así que
           // solo se ofrece cuando de verdad hubo reagendado. En cancelación o
           // rechazo NO se manda plantilla: fuera de ventana ese aviso se
           // bloquea con motivo en vez de entregar un texto que miente.
           templateParams:
             cr.status === "APPROVED" && cr.type === "RESCHEDULE"
-              ? [patient.firstName || "paciente", clinic.name, fecha, hora]
+              ? [patient.firstName || "paciente", clinic.name, fecha, hora, doctorName]
               : null,
         });
       } catch (e) {

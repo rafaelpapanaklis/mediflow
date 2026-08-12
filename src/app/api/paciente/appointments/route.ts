@@ -396,12 +396,13 @@ export async function POST(req: NextRequest) {
           to: cleanPhone,
           body: msg,
           kind: "booking",
-          // {{1}} paciente, {{2}} clínica, {{3}} fecha, {{4}} hora.
+          // {{1}} paciente, {{2}} clínica, {{3}} fecha, {{4}} hora, {{5}} doctor.
           templateParams: [
             patient?.firstName || patientName || "paciente",
             clinic.name,
             dateFormatted,
             startTime,
+            `Dr/a. ${doctor.firstName} ${doctor.lastName}`.trim(),
           ],
         });
       } catch (e) {
