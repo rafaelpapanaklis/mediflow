@@ -41,10 +41,15 @@ import {
   MoreHorizontal,
   Filter,
   ExternalLink,
+  AlertCircle,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { useT } from "@/i18n/i18n-provider";
+import type { TFunction } from "@/i18n/t";
 import { parseSystemKind } from "@/lib/whatsapp/system-message";
+import type { WaDeliveryStatus } from "@/lib/whatsapp/delivery-status";
+import { describeReminderFailure } from "@/lib/whatsapp/reminder-error";
+import { REMINDER_REASON_KEY } from "@/lib/whatsapp/reason-i18n";
 import {
   applyDraft,
   dropDraft as dropDraftFrom,
@@ -111,6 +116,12 @@ interface ThreadMessage {
   sentAt: string;
   isInternal: boolean;
   externalId: string | null;
+  /** Entrega REAL que reporta Meta. Null = todavía sin dato (≠ "no llegó"). */
+  deliveryStatus: WaDeliveryStatus | null;
+  deliveredAt: string | null;
+  readAt: string | null;
+  errorCode: number | null;
+  errorTitle: string | null;
   sentBy: { id: string; firstName: string; lastName: string } | null;
 }
 
@@ -142,6 +153,85 @@ const CHANNEL_META: Record<Channel, { labelKey: string; color: string; icon: typ
   REMINDER:    { labelKey: "inbox.client.channelReminder",   color: "#8b5cf6", icon: Bell },
   PORTAL:      { labelKey: "inbox.client.channelPortal",     color: "#06b6d4", icon: MessageSquare },
 };
+
+/**
+ * Palomita de entrega REAL (M-06).
+ *
+ * Antes se pintaba SIEMPRE la doble palomita, que en WhatsApp significa
+ * "entregado": era mentira en cuanto Meta rechazaba el mensaje, que es
+ * justamente lo que pasa fuera de la ventana de 24 h.
+ *
+ *   null (Meta aún no reporta) / SENT → UNA palomita: lo único que sabemos es
+ *     que salió. NO es "no llegó": es "todavía sin confirmar".
+ *   DELIVERED → doble palomita.  READ → doble palomita en acento.
+ *   FAILED → aspa, y el motivo en español debajo de la burbuja.
+ *
+ * Solo para WhatsApp: en los demás canales Meta no reporta nada y el estado
+ * sería null para todos, así que se conserva la palomita de siempre.
+ */
+function DeliveryTick({
+  message,
+  fromStaff,
+  channel,
+  t,
+}: {
+  message: ThreadMessage;
+  fromStaff: boolean;
+  channel: Channel;
+  t: TFunction;
+}) {
+  const base = fromStaff ? styles.checkSolid : styles.checkSoft;
+
+  if (channel !== "WHATSAPP") {
+    return (
+      <span className={base}>
+        <CheckCheck size={13} strokeWidth={2.2} aria-hidden />
+      </span>
+    );
+  }
+
+  const st = message.deliveryStatus;
+
+  if (st === "FAILED") {
+    const label = t("inbox.client.deliveryFailed");
+    return (
+      <span className={styles.checkFailed} title={label} aria-label={label}>
+        <AlertCircle size={13} strokeWidth={2.2} aria-hidden />
+      </span>
+    );
+  }
+
+  const delivered = st === "DELIVERED" || st === "READ";
+  const Icon = delivered ? CheckCheck : Check;
+  const label = t(
+    st === "READ"
+      ? "inbox.client.deliveryRead"
+      : st === "DELIVERED"
+        ? "inbox.client.deliveryDelivered"
+        : "inbox.client.deliverySent",
+  );
+
+  return (
+    <span
+      className={[base, st === "READ" ? styles.checkRead : ""].filter(Boolean).join(" ")}
+      title={label}
+      aria-label={label}
+    >
+      <Icon size={13} strokeWidth={2.2} aria-hidden />
+    </span>
+  );
+}
+
+/**
+ * Motivo del fallo en español. Prefiere el código de Meta (dato estable) y solo
+ * cae al título crudo cuando no hay traducción: mejor un texto feo en inglés
+ * que inventarle a la clínica una causa que no es.
+ */
+function describeDelivery(m: ThreadMessage, t: TFunction): string {
+  const key = describeReminderFailure({ code: m.errorCode, errorMsg: m.errorTitle });
+  if (key) return t(REMINDER_REASON_KEY[key]);
+  return m.errorTitle?.trim() || t("inbox.client.deliveryFailedGeneric");
+}
 
 const SYSTEM_FOLDERS: Array<{ id: string; labelKey: string; icon: typeof InboxIcon }> = [
   { id: "inbox",    labelKey: "inbox.client.folderInbox",    icon: InboxIcon },
@@ -461,16 +551,38 @@ export function InboxClient({ viewer }: { viewer: Viewer }) {
         setCounts((prev) => ({ ...prev, byChannel: data.counts.byChannel }));
       }
 
-      // Mensajes nuevos del hilo abierto: se anexan deduplicando por id.
+      // Mensajes del hilo abierto. Los nuevos se anexan; los que YA estaban se
+      // PARCHEAN con la versión del servidor — /since reenvía a propósito los
+      // recientes cuando Meta confirma la entrega, y anexar solo por id nuevo
+      // dejaba la palomita congelada en el estado con el que nació el mensaje.
       const newMsgs: ThreadMessage[] = data.messages ?? [];
       if (newMsgs.length > 0) {
         setActiveThread((prev) => {
           if (!prev) return prev;
+          const incomingById: Record<string, ThreadMessage> = {};
+          for (const m of newMsgs) incomingById[m.id] = m;
           const haveIds: Record<string, true> = {};
           for (const m of prev.messages) haveIds[m.id] = true;
           const extra = newMsgs.filter((m) => !haveIds[m.id]);
-          if (extra.length === 0) return prev;
-          const merged = prev.messages
+          // Se compara por CONTENIDO, no por identidad: el objeto que llega del
+          // JSON siempre es nuevo, así que quedarse con él sin más marcaría
+          // "cambió" en cada poll y re-renderizaría el hilo cada 5 s. Solo
+          // cambian los campos de entrega; body y sentAt son inmutables.
+          const patched = prev.messages.map((m) => {
+            const inc = incomingById[m.id];
+            if (!inc) return m;
+            const same =
+              inc.deliveryStatus === m.deliveryStatus &&
+              inc.deliveredAt === m.deliveredAt &&
+              inc.readAt === m.readAt &&
+              inc.errorCode === m.errorCode;
+            return same ? m : inc;
+          });
+          // Sin altas y sin cambios reales: devolver `prev` evita el re-render
+          // (y el salto de scroll) en un hilo que no se movió.
+          const changed = patched.some((m, i) => m !== prev.messages[i]);
+          if (extra.length === 0 && !changed) return prev;
+          const merged = patched
             .concat(extra)
             .sort((a, b) => new Date(a.sentAt).getTime() - new Date(b.sentAt).getTime());
           return { ...prev, messages: merged };
@@ -1771,11 +1883,23 @@ export function InboxClient({ viewer }: { viewer: Viewer }) {
                             {m.body}
                             <span className={styles.bubbleTime}>
                               {formatBubbleTime(m.sentAt)}
-                              <span className={fromStaff ? styles.checkSolid : styles.checkSoft}>
-                                <CheckCheck size={13} strokeWidth={2.2} aria-hidden />
-                              </span>
+                              <DeliveryTick
+                                message={m}
+                                fromStaff={fromStaff}
+                                channel={activeThread.channel}
+                                t={t}
+                              />
                             </span>
                           </div>
+                          {/* El motivo del fallo va FUERA de la burbuja: dentro
+                              competiría con el texto del mensaje y en un hilo
+                              largo se perdería. */}
+                          {activeThread.channel === "WHATSAPP" && m.deliveryStatus === "FAILED" && (
+                            <span className={styles.deliveryError}>
+                              <AlertCircle size={12} strokeWidth={2.2} aria-hidden />
+                              {describeDelivery(m, t)}
+                            </span>
+                          )}
                         </div>
                       );
                     })}

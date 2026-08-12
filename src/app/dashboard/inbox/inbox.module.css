@@ -69,6 +69,7 @@
   --ib-green-border: #dcfce7;
   --ib-green-dot: #22c55e;
   --ib-check: #60a5fa;         /* palomitas en burbujas suaves */
+  --ib-read: #1d4ed8;          /* leído: azul saturado, distinto de entregado */
   --ib-composer-border: #e6e4ec;
   --ib-shadow-card: 0 8px 24px rgba(24, 24, 27, 0.08);
   --ib-shadow-btn: 0 2px 8px rgba(124, 58, 237, 0.3);
@@ -150,6 +151,7 @@
   --ib-green-2: #86efac;
   --ib-green-bg: rgba(34, 197, 94, 0.12);
   --ib-green-border: rgba(34, 197, 94, 0.35);
+  --ib-read: #93c5fd;          /* en oscuro el azul saturado se apaga */
   --ib-composer-border: var(--border-soft);
   --ib-shadow-card: 0 8px 24px rgba(0, 0, 0, 0.35);
   --ib-shadow-seg: 0 1px 2px rgba(0, 0, 0, 0.4);
@@ -951,6 +953,28 @@
 .bubbleStaff .bubbleTime { color: rgba(255, 255, 255, 0.75); }
 .checkSoft { color: var(--ib-check); display: inline-flex; }
 .checkSolid { color: #fff; display: inline-flex; }
+
+/* Entrega REAL (M-06). `checkRead` se AÑADE a checkSoft/checkSolid, no las
+   sustituye: así el estado normal de la burbuja queda intacto y solo se tiñe
+   el caso "leído". Sobre la burbuja de marca (fondo morado, texto blanco) el
+   azul saturado no se distinguiría, así que ahí se aclara. */
+.checkRead { color: var(--ib-read); }
+.bubbleStaff .checkRead { color: #bfdbfe; }
+.checkFailed { color: var(--ib-red); display: inline-flex; }
+.bubbleStaff .checkFailed { color: #fecaca; }
+
+/* Motivo del fallo, bajo la burbuja: no compite con el texto del mensaje. */
+.deliveryError {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 3px;
+  max-width: min(78%, 520px);
+  font-size: 11px;
+  line-height: 1.35;
+  color: var(--ib-red);
+  text-align: right;
+}
 
 .sysEvent { display: flex; justify-content: center; }
 .sysEventPill {

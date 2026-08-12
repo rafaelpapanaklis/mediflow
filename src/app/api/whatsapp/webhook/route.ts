@@ -6,7 +6,18 @@ import { timeHHMMInTz } from "@/lib/agenda/legacy-helpers";
 import { runBotTurn } from "@/lib/whatsapp/bot/engine";
 import { resolveReminderReply } from "@/lib/whatsapp/reminder-pick";
 import { findPatientByWhatsAppPhone, upsertWhatsAppThread } from "@/lib/whatsapp/inbox-log";
-import { SYSTEM_EXTERNAL_ID_PREFIX, buildSystemExternalId } from "@/lib/whatsapp/system-message";
+import {
+  SYSTEM_EXTERNAL_ID_PREFIX,
+  buildSystemExternalId,
+  WHATSAPP_SEND_KINDS,
+} from "@/lib/whatsapp/system-message";
+import {
+  applyDeliveryStatus,
+  metaTimestampToDate,
+  parseDeliveryStatus,
+} from "@/lib/whatsapp/delivery-status";
+import { WA_ERROR_CODE, formatWaErrorMessage } from "@/lib/whatsapp/errors";
+import { markWhatsAppDisconnected } from "@/lib/whatsapp/connection";
 import { rateLimitKey } from "@/lib/rate-limit";
 import type { BotHistoryItem } from "@/lib/whatsapp/bot/types";
 import { Prisma } from "@prisma/client";
@@ -76,6 +87,19 @@ export async function POST(req: NextRequest) {
     if (changes?.field === "smb_message_echoes") {
       await ingestBusinessAppEchoes(value);
       return NextResponse.json({ ok: true });
+    }
+
+    // ── Estado de entrega REAL (M-06, M-10) ──────────────────────────────────
+    //    Meta reporta aquí qué pasó con CADA mensaje que mandamos nosotros:
+    //    sent → delivered → read, o failed con el código del motivo. El webhook
+    //    no lo miraba, así que la doble palomita del Inbox mentía siempre y el
+    //    panel daba por "Enviado" lo que Meta había rechazado.
+    //    Va ANTES del early-return de `messages`: un payload de status no trae
+    //    `messages` y hasta hoy salía por ahí sin que nadie lo leyera.
+    if (Array.isArray(value?.statuses) && value.statuses.length > 0) {
+      await ingestDeliveryStatuses(value);
+      // Sin `return`: Meta manda statuses y messages en llamadas distintas,
+      // pero si algún día vinieran juntos el mensaje entrante no se perdería.
     }
 
     const messages = value?.messages;
@@ -358,6 +382,131 @@ async function logAutoReply(threadId: string, body: string): Promise<void> {
     });
   } catch (e) {
     console.error("[whatsapp/webhook] no se pudo registrar la respuesta automática:", e);
+  }
+}
+
+/**
+ * Estado de entrega REAL de lo que enviamos (M-06, M-10).
+ *
+ * Meta entrega estos avisos en `value.statuses[]`, repetidos y fuera de orden
+ * (reintenta ante timeouts y 5xx). La decisión de si un status se aplica y qué
+ * escribe vive en lib/whatsapp/delivery-status.ts —puro y testeado sin BD—, que
+ * garantiza que un status repetido no cambie nada y que el estado NUNCA
+ * retroceda (READ no vuelve a DELIVERED).
+ *
+ * Multi-tenant: todo se resuelve contra la clínica dueña del phone_number_id;
+ * la búsqueda del mensaje va SIEMPRE acotada por `thread.clinicId`.
+ */
+async function ingestDeliveryStatuses(value: any): Promise<void> {
+  const phoneNumberId = value?.metadata?.phone_number_id;
+  const statuses = Array.isArray(value?.statuses) ? value.statuses : [];
+  if (!phoneNumberId || statuses.length === 0) return;
+
+  const clinic = await prisma.clinic.findFirst({
+    where: { waPhoneNumberId: phoneNumberId },
+    select: { id: true },
+  });
+  if (!clinic) return;
+
+  const now = new Date();
+  let revokedReason: string | null = null;
+
+  for (const st of statuses) {
+    const wamid = typeof st?.id === "string" ? st.id : null;
+    const raw   = typeof st?.status === "string" ? st.status : null;
+    if (!wamid || !raw) continue;
+
+    const err        = Array.isArray(st?.errors) ? st.errors[0] : null;
+    const errorCode  = typeof err?.code === "number" ? err.code : null;
+    const errorTitle = typeof err?.title === "string" ? err.title : null;
+
+    const incoming = {
+      raw,
+      at: metaTimestampToDate(st?.timestamp, now),
+      errorCode,
+      errorTitle,
+    };
+
+    // El mismo wamid está guardado de dos formas según quién mandó el mensaje:
+    // crudo (respuesta del staff desde el Inbox, ecos de coexistence) o dentro
+    // de `sys:<kind>:<wamid>` (envíos automáticos — los recordatorios, que son
+    // justo los que importan aquí). Se prueban las dos por igualdad EXACTA para
+    // que la consulta use el índice de externalId: un `endsWith` recorrería la
+    // tabla de mensajes entera en cada status que manda Meta.
+    const candidates = [
+      wamid,
+      ...WHATSAPP_SEND_KINDS.map((k) => buildSystemExternalId(k, wamid)),
+    ];
+
+    try {
+      const msg = await prisma.inboxMessage.findFirst({
+        where: { externalId: { in: candidates }, thread: { clinicId: clinic.id } },
+        select: { id: true, deliveryStatus: true },
+      });
+
+      if (msg) {
+        const patch = applyDeliveryStatus(msg.deliveryStatus, incoming);
+        // null = status desconocido, repetido, o que haría retroceder el
+        // estado → no se escribe nada (idempotencia).
+        if (patch) {
+          await prisma.inboxMessage.update({ where: { id: msg.id }, data: patch });
+        }
+      }
+
+      if (parseDeliveryStatus(raw) === "FAILED") {
+        await markReminderFailedByWamid(clinic.id, wamid, errorCode, errorTitle);
+        if (errorCode === WA_ERROR_CODE.TOKEN_EXPIRED) {
+          revokedReason = formatWaErrorMessage(errorCode, errorTitle ?? "sesión caducada");
+        }
+      }
+    } catch (e) {
+      // Un status ilegible no puede tumbar los demás ni hacer que Meta
+      // reintente el lote entero (el POST responde 200 igual).
+      console.error("[whatsapp/webhook] status no aplicado:", e);
+    }
+  }
+
+  // Token revocado: se apaga la conexión UNA vez por lote, no por status.
+  // Seguir intentando con un token muerto es exactamente el "fallo mudo" que
+  // esta auditoría persigue.
+  if (revokedReason) {
+    await markWhatsAppDisconnected(clinic.id, revokedReason);
+  }
+}
+
+/**
+ * Refleja en `WhatsAppReminder` un fallo que Meta reporta DESPUÉS de aceptar el
+ * mensaje (131042 sin método de pago, 131026 número sin WhatsApp…). Sin esto la
+ * fila se quedaba en SENT para siempre y el panel seguía diciendo que salió.
+ *
+ * El enlace es `payload.wamid`, que graba la cola al enviar: `WhatsAppReminder`
+ * no tiene columna para el wamid y `payload` ya es Json libre.
+ *
+ * Acotado a `status: SENT` a propósito: un CANCELLED o un FAILED previo no se
+ * reescriben. Best-effort — nunca tumba la ingesta del status.
+ */
+async function markReminderFailedByWamid(
+  clinicId: string,
+  wamid: string,
+  code: number | null,
+  title: string | null,
+): Promise<void> {
+  try {
+    await prisma.whatsAppReminder.updateMany({
+      where: {
+        clinicId,
+        status: WA_REMINDER_STATUS.SENT,
+        payload: { path: ["wamid"], equals: wamid },
+      },
+      data: {
+        status: WA_REMINDER_STATUS.FAILED,
+        // El código va DENTRO del texto: la tabla no tiene columna para él y es
+        // lo que lee el panel de recordatorios para traducir el motivo.
+        errorMsg: formatWaErrorMessage(code, title ?? "Meta no pudo entregar el mensaje"),
+      },
+    });
+  } catch (e) {
+    console.error("[whatsapp/webhook] no se pudo marcar el recordatorio como fallido:", e);
   }
 }
 

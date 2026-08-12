@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import {
   MessageCircle, CheckCircle, CheckCircle2, ExternalLink, Eye, EyeOff, Bot,
-  Facebook, QrCode, Check, CreditCard, LifeBuoy, Info, RefreshCw, Mail,
+  Facebook, QrCode, Check, CreditCard, LifeBuoy, Info, RefreshCw, Mail, FileText,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
@@ -16,6 +16,7 @@ import { useT } from "@/i18n/i18n-provider";
 import type { TFunction } from "@/i18n/t";
 import { EmbeddedSignupButton } from "./embedded-signup-button";
 import type { RecentReminderDTO } from "@/lib/whatsapp/recent-reminders";
+import { REMINDER_REASON_KEY } from "@/lib/whatsapp/reason-i18n";
 import s from "./whatsapp.module.css";
 
 // Dónde agrega la clínica su método de pago para las plantillas de Meta.
@@ -70,18 +71,8 @@ const REMINDER_KIND_KEY: Record<RecentReminderDTO["kind"], string> = {
   Other:             "inbox.whatsapp.recentKindOther",
 };
 
-const REMINDER_REASON_KEY: Record<NonNullable<RecentReminderDTO["reasonKey"]>, string> = {
-  outside24h:    "inbox.whatsapp.reasonOutside24h",
-  undeliverable: "inbox.whatsapp.reasonUndeliverable",
-  tokenExpired:  "inbox.whatsapp.reasonTokenExpired",
-  notConnected:  "inbox.whatsapp.reasonNotConnected",
-  noPhone:       "inbox.whatsapp.reasonNoPhone",
-  emailIssue:    "inbox.whatsapp.reasonEmailIssue",
-  expired:       "inbox.whatsapp.reasonExpired",
-  apptClosed:    "inbox.whatsapp.reasonApptClosed",
-  renderFailed:  "inbox.whatsapp.reasonRenderFailed",
-  rateLimited:   "inbox.whatsapp.reasonRateLimited",
-};
+// El mapa de motivos vive en lib/whatsapp/reason-i18n: lo comparte con las
+// burbujas del Inbox, que traducen exactamente los mismos códigos de Meta.
 
 /** Las plantillas de recordatorio se cobran por unidad: la clínica necesita un
  *  método de pago en Meta. Aparece antes y después de conectar. */
@@ -231,6 +222,13 @@ export function WhatsAppClient({
           <BadgeNew tone={connected ? "success" : "danger"} dot>
             {connected ? t("inbox.whatsapp.connected") : t("inbox.whatsapp.disconnected")}
           </BadgeNew>
+          <ButtonNew
+            variant="secondary"
+            icon={<FileText size={15} />}
+            onClick={() => router.push("/dashboard/whatsapp/plantillas")}
+          >
+            {t("inbox.whatsapp.tplNav")}
+          </ButtonNew>
           <ButtonNew variant="secondary" icon={<Bot size={15} />} onClick={() => router.push("/dashboard/whatsapp/bot")}>
             Configurar bot
           </ButtonNew>

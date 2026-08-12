@@ -43,6 +43,13 @@ function isMissingTable(err: unknown): boolean {
  * respete la vista activa. Aislamiento por clínica garantizado en el servidor
  * (clinicId de getDbUser); nada del request puede ampliar el alcance.
  */
+/**
+ * Ventana en la que un mensaje del hilo abierto se reenvía en cada poll SOLO
+ * para refrescar su estado de entrega. Meta confirma (o falla) en segundos o
+ * pocos minutos; 30 min da margen de sobra sin arrastrar el historial entero.
+ */
+const RECENT_DELIVERY_MS = 30 * 60 * 1000;
+
 export async function GET(req: NextRequest) {
   // Capturado ANTES de cualquier await: es el cursor que devolvemos. Un mensaje
   // insertado durante esta petición tendrá sentAt >= serverTime y lo recogerá el
@@ -179,7 +186,22 @@ export async function GET(req: NextRequest) {
       });
       if (owned) {
         messages = await prisma.inboxMessage.findMany({
-          where: { threadId, sentAt: { gt: since } },
+          where: {
+            threadId,
+            OR: [
+              { sentAt: { gt: since } },
+              // Cuando Meta confirma la entrega (o el fallo) de un mensaje NO
+              // se mueve `sentAt` —la tabla no tiene updatedAt—, así que el
+              // incremental por sentAt jamás lo volvería a mandar y la palomita
+              // se quedaría congelada en el hilo que está abierto. Se reenvían
+              // los recientes que YA tienen estado; el merge del cliente
+              // parchea por id, así que reenviar de más no duplica nada.
+              {
+                sentAt: { gt: new Date(Date.now() - RECENT_DELIVERY_MS) },
+                deliveryStatus: { not: null },
+              },
+            ],
+          },
           orderBy: { sentAt: "asc" },
           select: {
             id: true,
@@ -189,6 +211,11 @@ export async function GET(req: NextRequest) {
             sentAt: true,
             isInternal: true,
             externalId: true,
+            deliveryStatus: true,
+            deliveredAt: true,
+            readAt: true,
+            errorCode: true,
+            errorTitle: true,
             sentBy: { select: { id: true, firstName: true, lastName: true } },
           },
         });

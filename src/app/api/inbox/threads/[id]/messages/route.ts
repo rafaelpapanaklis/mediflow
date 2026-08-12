@@ -78,6 +78,14 @@ export async function GET(_req: NextRequest, { params }: Params) {
         sentAt: true,
         isInternal: true,
         externalId: true,
+        // Entrega REAL reportada por Meta (M-06): la palomita del Inbox se
+        // pintaba a partir de "el envío no lanzó", que solo significa que Meta
+        // ACEPTÓ el mensaje. Null = todavía sin dato, no "no llegó".
+        deliveryStatus: true,
+        deliveredAt: true,
+        readAt: true,
+        errorCode: true,
+        errorTitle: true,
         sentBy: { select: { id: true, firstName: true, lastName: true } },
       },
     });
