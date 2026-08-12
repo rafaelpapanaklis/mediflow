@@ -52,6 +52,15 @@ model Clinic {
   waReminder24h    Boolean @default(true)
   waReminder1h     Boolean @default(false)
   waReminderMsg    String?
+  /// Plantillas aprobadas de ESTA clínica en Meta, por tipo de mensaje:
+  /// { "reminder": { "name": "recordatorio_cita", "lang": "es_MX" }, … }.
+  /// La clave es un WhatsAppSendKind (src/lib/whatsapp/system-message.ts).
+  /// Sin plantilla para un tipo, ese aviso NO sale fuera de la ventana de 24 h.
+  waTemplates      Json?
+  /// La WABA de la clínica tiene método de pago válido. Meta le cobra a ELLA
+  /// cada plantilla; sin tarjeta el envío falla con 131042. Se pone true al
+  /// primer envío de plantilla aceptado y vuelve a false ante ese error.
+  waBillingOk      Boolean @default(false)
 
   // Inbox unificado — Twilio Conversations + Postmark Inbound
   twilioAccountSid     String? // SID de la cuenta Twilio (admin la conecta en /settings/integrations)
@@ -3071,11 +3080,26 @@ model InboxMessage {
   /// true = nota interna del staff (no se envía al canal externo).
   isInternal  Boolean          @default(false)
 
+  /// Entrega REAL reportada por Meta en el webhook (`value.statuses[]`):
+  /// SENT | DELIVERED | READ | FAILED. Null = Meta todavía no reporta nada
+  /// (que NO es lo mismo que "no llegó"): la UI lo pinta como "enviado".
+  deliveryStatus String?
+  deliveredAt    DateTime? @db.Timestamptz(3)
+  readAt         DateTime? @db.Timestamptz(3)
+  /// Código y título CRUDOS del error de Meta (131047, 190, 131042…). El
+  /// código se guarda aparte del texto porque Meta cambia la redacción y el
+  /// idioma del mensaje, pero nunca el número.
+  errorCode      Int?
+  errorTitle     String?
+
   thread InboxThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
   sentBy User?       @relation(fields: [sentById], references: [id])
 
   @@unique([threadId, externalId])
   @@index([threadId, sentAt])
+  /// Un status de Meta solo trae el wamid: el mensaje se busca por externalId
+  /// a secas, y el @@unique de arriba no sirve (su columna guía es threadId).
+  @@index([externalId])
   @@map("inbox_messages")
 }
 
