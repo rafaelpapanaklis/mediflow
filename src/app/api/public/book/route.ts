@@ -55,6 +55,10 @@ export async function POST(req: NextRequest) {
     select: {
       id: true, name: true, phone: true, timezone: true,
       waConnected: true, waPhoneNumberId: true, waAccessToken: true,
+      // Quien reserva desde la web pública casi nunca ha escrito antes por
+      // WhatsApp: la ventana de 24 h está cerrada y la confirmación solo sale
+      // por plantilla (M-09).
+      waTemplates: true,
       schedules: { select: { dayOfWeek: true, enabled: true, openTime: true, closeTime: true } },
     },
   });
@@ -216,6 +220,9 @@ export async function POST(req: NextRequest) {
         to: cleanPhone,
         body: msg,
         kind: "booking",
+        // {{1}} paciente, {{2}} clínica, {{3}} fecha, {{4}} hora — el orden de
+        // WA_TEMPLATE_SPECS. Meta sustituye por posición, no por nombre.
+        templateParams: [firstName.trim(), clinic.name, dateFormatted, startTime],
       });
     } catch (e) {
       console.error("WhatsApp confirmation failed:", e);

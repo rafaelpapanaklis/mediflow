@@ -252,6 +252,8 @@ export async function POST(req: NextRequest) {
         waConnected: true,
         waPhoneNumberId: true,
         waAccessToken: true,
+        // Fuera de la ventana de 24 h el aviso solo sale por plantilla (M-09).
+        waTemplates: true,
         googleCalendarEnabled: true,
         googleCalendarToken: true,
         googleRefreshToken: true,
@@ -389,7 +391,19 @@ export async function POST(req: NextRequest) {
           `👨‍⚕️ *Doctor/a:* Dr/a. ${doctor.firstName} ${doctor.lastName}\n` +
           `📋 *Motivo:* ${cleanType}\n\n` +
           `La clínica confirmará tu cita pronto. Para cambios: ${contactNum}`;
-        await sendWhatsAppLogged({ clinic, to: cleanPhone, body: msg, kind: "booking" });
+        await sendWhatsAppLogged({
+          clinic,
+          to: cleanPhone,
+          body: msg,
+          kind: "booking",
+          // {{1}} paciente, {{2}} clínica, {{3}} fecha, {{4}} hora.
+          templateParams: [
+            patient?.firstName || patientName || "paciente",
+            clinic.name,
+            dateFormatted,
+            startTime,
+          ],
+        });
       } catch (e) {
         console.error("[paciente/appointments POST] WhatsApp confirm failed:", e);
       }

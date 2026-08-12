@@ -12,9 +12,21 @@
 // mensaje YA salió y ni el request ni la corrida del cron se rompen.
 
 import { prisma } from "@/lib/prisma";
-import { sendWhatsAppMessage } from "@/lib/whatsapp";
-import { findPatientByWhatsAppPhone, upsertWhatsAppThread } from "@/lib/whatsapp/inbox-log";
+import { sendWhatsAppMessage, sendWhatsAppTemplate } from "@/lib/whatsapp";
+import {
+  findPatientByWhatsAppPhone,
+  lastInboundAtForPhone,
+  upsertWhatsAppThread,
+} from "@/lib/whatsapp/inbox-log";
 import { buildSystemExternalId, type WhatsAppSendKind } from "@/lib/whatsapp/system-message";
+import { isWithin24hWindow } from "@/lib/inbox/send-core";
+import { decideSendMode } from "@/lib/whatsapp/send-mode";
+import {
+  parseWaTemplates,
+  renderTemplateBody,
+  specForKind,
+} from "@/lib/whatsapp/template-config";
+import { WhatsAppBlockedError, isBillingError } from "@/lib/whatsapp/errors";
 
 export type { WhatsAppSendKind } from "@/lib/whatsapp/system-message";
 
@@ -24,6 +36,8 @@ export interface WhatsAppLogClinic {
   waPhoneNumberId?: string | null;
   waAccessToken?: string | null;
   waConnected?: boolean | null;
+  /** Plantillas aprobadas de ESTA clínica (Json de Clinic.waTemplates). */
+  waTemplates?: unknown;
 }
 
 export interface SendWhatsAppLoggedArgs {
@@ -41,6 +55,15 @@ export interface SendWhatsAppLoggedArgs {
    * mal. Los callers de "system" que sí escriben a un paciente lo activan a mano.
    */
   linkPatient?: boolean;
+  /**
+   * Valores de {{1}}…{{n}} de la plantilla de ese tipo, EN ORDEN (ver
+   * WA_TEMPLATE_SPECS). Solo se usan si la ventana de 24 h está cerrada; dentro
+   * de ventana sale `body` como texto libre y esto se ignora.
+   *
+   * Sin ellos, un envío fuera de ventana NO sale: se bloquea con un motivo
+   * legible en vez de mandar texto libre que Meta tira a la basura.
+   */
+  templateParams?: string[] | null;
 }
 
 /**
@@ -52,24 +75,80 @@ export interface SendWhatsAppLoggedArgs {
 export async function sendWhatsAppLogged(args: SendWhatsAppLoggedArgs): Promise<any> {
   const clinic = await resolveClinic(args);
 
-  // 1) El envío manda: mismas credenciales, mismo helper y MISMA semántica de
-  //    fallo que antes de esta capa (lanza y el caller decide). A propósito NO
-  //    se filtra por waConnected aquí: los callers ya lo hacen y añadir el gate
-  //    cambiaría su comportamiento de error.
-  const meta = await sendWhatsAppMessage(
-    clinic?.waPhoneNumberId ?? "",
-    clinic?.waAccessToken ?? "",
-    args.to,
-    args.body,
-  );
+  // 1) ¿Texto libre o plantilla? (M-09, el P0.)
+  //    WhatsApp solo acepta texto libre dentro de las 24 h siguientes al último
+  //    mensaje DEL PACIENTE. Fuera de esa ventana exige plantilla aprobada, y
+  //    hasta ahora aquí salía SIEMPRE texto libre: al paciente que nunca había
+  //    escrito no le llegaba nada y el panel lo daba por enviado.
+  //
+  //    La ventana se mide contra el Inbox (mismo criterio que la respuesta
+  //    manual del staff). Sin clínica resuelta no hay hilo que mirar: se trata
+  //    como cerrada, que es el lado seguro.
+  const lastInbound = clinic?.id ? await lastInboundAtForPhone(clinic.id, args.to) : null;
+  const windowOpen = isWithin24hWindow(lastInbound, new Date());
 
-  // 2) Registro best-effort. NUNCA debe tumbar el envío ya realizado.
+  const decision = decideSendMode({
+    kind: args.kind,
+    windowOpen,
+    templates: parseWaTemplates(clinic?.waTemplates ?? null),
+    params: args.templateParams,
+  });
+
+  if (decision.mode === "blocked") {
+    // No se llama a Meta: el mensaje no llegaría y encima parecería enviado.
+    // El motivo va en el `message` y de ahí a WhatsAppReminder.errorMsg.
+    throw new WhatsAppBlockedError(decision.reason);
+  }
+
+  // 2) El envío manda: mismas credenciales y MISMA semántica de fallo que antes
+  //    de esta capa (lanza y el caller decide). A propósito NO se filtra por
+  //    waConnected aquí: los callers ya lo hacen y añadir el gate cambiaría su
+  //    comportamiento de error.
+  let meta: any;
+  try {
+    meta =
+      decision.mode === "template"
+        ? await sendWhatsAppTemplate(
+            clinic?.waPhoneNumberId ?? "",
+            clinic?.waAccessToken ?? "",
+            args.to,
+            decision.template,
+            decision.params,
+          )
+        : await sendWhatsAppMessage(
+            clinic?.waPhoneNumberId ?? "",
+            clinic?.waAccessToken ?? "",
+            args.to,
+            args.body,
+          );
+  } catch (e) {
+    // 131042: la WABA de la clínica se quedó sin método de pago. Se anota para
+    // que la pantalla de Plantillas lo diga en vez de repetir el mismo fallo.
+    if (isBillingError(e) && clinic?.id) {
+      await setBillingOk(clinic.id, false);
+    }
+    throw e;
+  }
+
+  if (decision.mode === "template" && clinic?.id) {
+    // Una plantilla aceptada demuestra que la cuenta puede pagarlas.
+    await setBillingOk(clinic.id, true);
+  }
+
+  // 3) Registro best-effort. NUNCA debe tumbar el envío ya realizado.
   if (clinic?.id) {
     try {
       await logOutboundToInbox({
         clinicId: clinic.id,
         to: args.to,
-        body: args.body,
+        // Con plantilla, en el Inbox se guarda lo que REALMENTE recibió el
+        // paciente (el texto de la plantilla con sus datos), no el texto libre
+        // que se habría mandado dentro de ventana: son distintos y el equipo
+        // necesita ver la conversación de verdad.
+        body:
+          decision.mode === "template"
+            ? renderTemplateBody(specForKind(args.kind), decision.params, args.body)
+            : args.body,
         kind: args.kind,
         linkPatient: args.linkPatient ?? args.kind !== "system",
         wamid: meta?.messages?.[0]?.id ?? null,
@@ -82,6 +161,19 @@ export async function sendWhatsAppLogged(args: SendWhatsAppLoggedArgs): Promise<
   return meta;
 }
 
+/** Marca si la cuenta de WhatsApp de la clínica puede pagar plantillas. Best-effort. */
+async function setBillingOk(clinicId: string, ok: boolean): Promise<void> {
+  try {
+    // updateMany con el valor contrario: no escribe si ya estaba así.
+    await prisma.clinic.updateMany({
+      where: { id: clinicId, waBillingOk: !ok },
+      data: { waBillingOk: ok },
+    });
+  } catch (e) {
+    console.error("[whatsapp/send-and-log] no se pudo actualizar waBillingOk:", e);
+  }
+}
+
 async function resolveClinic(args: SendWhatsAppLoggedArgs): Promise<WhatsAppLogClinic | null> {
   if (args.clinic) return args.clinic;
   if (!args.clinicId) {
@@ -89,7 +181,13 @@ async function resolveClinic(args: SendWhatsAppLoggedArgs): Promise<WhatsAppLogC
   }
   return prisma.clinic.findUnique({
     where: { id: args.clinicId },
-    select: { id: true, waPhoneNumberId: true, waAccessToken: true, waConnected: true },
+    select: {
+      id: true,
+      waPhoneNumberId: true,
+      waAccessToken: true,
+      waConnected: true,
+      waTemplates: true,
+    },
   });
 }
 

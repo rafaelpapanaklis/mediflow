@@ -1,6 +1,7 @@
 import "server-only";
 import { prisma } from "@/lib/prisma";
 import { getTzParts, tzLocalToUtc } from "@/lib/agenda/time-utils";
+import { clearAutoRemindersForAppointment } from "@/lib/appointment-change/slots";
 
 /**
  * Servicio server-side reutilizable para que el bot de WhatsApp agende y
@@ -277,6 +278,18 @@ export async function rescheduleBotAppointment(params: {
       where: { id: existing.id },
       data: { startsAt, endsAt, status: "SCHEDULED", requiresValidation: true },
     });
+
+    // M-22: al mover la cita hay que tirar sus recordatorios automáticos. El
+    // mensaje se rendea al ENCOLAR, así que el que estaba en cola lleva
+    // congelada la hora vieja y saldría con ella; y como el dedup del sweep va
+    // por cita+momento+canal, mientras esa fila exista bloquea el recordatorio
+    // correcto. Las tres rutas de reagendado (agenda, portal y resolución de
+    // solicitudes) ya lo hacían: faltaba esta, la del bot de WhatsApp.
+    // Best-effort y fuera de cualquier transacción: nunca lanza.
+    if (existing.startsAt.getTime() !== startsAt.getTime()) {
+      await clearAutoRemindersForAppointment(existing.id);
+    }
+
     return { ok: true, appointmentId: existing.id };
   } catch (err) {
     if (isOverlapError(err)) return { ok: false, error: "overlap" };

@@ -6578,3 +6578,140 @@ nombre: **añadir una novena es escribir su manifiesto**.
 5. **`landingGallery` y `landingCoverUrl` siguen vivas** junto a `landingPhotos`: las plantillas
    viejas las usan y las nuevas caen a ellas como respaldo. No hay migración de datos y no hace
    falta, pero conviene saberlo antes de tocar el uploader viejo.
+
+---
+
+## WhatsApp: entrega real y plantillas aprobadas (P0 M-09 + Ola 1 de la auditoría)
+
+**Fecha:** 2026-08-11 · **Rama:** `main`
+
+El problema de fondo: WhatsApp solo deja escribir libremente durante las 24 h siguientes al último
+mensaje **del paciente**. `sendWhatsAppMessage` mandaba SIEMPRE `type:"text"`, así que a todo el que
+no le hubiera escrito antes a la clínica **no le llegaba nada** — Meta respondía 131047 y el panel lo
+pintaba como "Enviado". Encima el webhook no leía el array `statuses` de Meta, de modo que ni la
+doble palomita del Inbox ni el estado del recordatorio se enteraban jamás de si el mensaje llegó.
+
+### Fase 1 — Columnas de entrega y de plantillas · `c433cb85`
+
+`sql/whatsapp-entrega-y-plantillas.sql` (**aplicado por Rafael en Supabase**) y su reflejo en
+`prisma/schema.prisma`:
+
+- `inbox_messages`: `deliveryStatus` (SENT|DELIVERED|READ|FAILED), `deliveredAt`, `readAt`,
+  `errorCode`, `errorTitle`. El código va aparte del texto porque Meta cambia la redacción y el
+  idioma del mensaje, pero nunca el número.
+- Índice `inbox_messages_externalId_idx`: un status de Meta trae el wamid y nada más, y el
+  `@@unique([threadId, externalId])` que ya existía no sirve para buscar por `externalId` a secas
+  porque su columna guía es `threadId`.
+- `clinics`: `waTemplates` (jsonb) y `waBillingOk` (bool).
+
+Se usó `TIMESTAMPTZ(3)` con `@db.Timestamptz(3)` en Prisma: sin la precisión explícita el DDL queda
+en microsegundos y el schema en milisegundos, y el schema acabaría mintiendo sobre la base.
+
+### Fase 2 — Estado de entrega real (M-06, M-10)
+
+**Webhook** (`src/app/api/whatsapp/webhook/route.ts`): procesa `value.statuses[]` **antes** del
+early-return de `messages` — un payload de status no trae `messages` y hasta hoy salía por ahí sin
+que nadie lo leyera. Por cada status localiza el mensaje y actualiza su entrega.
+
+El wamid está guardado de dos formas según quién mandó el mensaje: crudo (respuesta del staff, ecos
+de coexistence) o dentro de `sys:<kind>:<wamid>` (envíos automáticos — **los recordatorios, que son
+justo los que importan**). Se prueban las dos por igualdad exacta para que la consulta use el índice;
+un `endsWith` recorrería la tabla de mensajes entera en cada status que manda Meta.
+
+**`src/lib/whatsapp/delivery-status.ts`** (puro, 18 tests) decide si un status se aplica. Un status
+solo entra si su rango supera al actual, y de ahí salen las tres garantías: idempotencia, sin
+retroceso (READ nunca vuelve a DELIVERED) y ningún evento tardío pisa una confirmación buena.
+
+> **Decisión que conviene conocer:** `FAILED` va **entre** SENT y DELIVERED, no arriba del todo.
+> Meta manda `failed` *en lugar de* `delivered`, nunca después, así que su posición solo decide qué
+> pasa ante un duplicado fuera de orden. Se eligió que no pise a DELIVERED/READ porque esos los
+> confirma el teléfono del paciente: marcar "no llegó" un mensaje que consta como leído sería otra
+> mentira, sólo que en el sentido contrario a la que arregla esta auditoría. El caso que de verdad
+> importa —Meta acepta y rechaza segundos después con 131047— es SENT → FAILED, y ese sí se aplica.
+
+**`src/lib/whatsapp/errors.ts`** (nuevo): `WhatsAppApiError` con `code`, `subcode`, `title` y
+`httpStatus`. Extiende `Error` y su `message` sigue siendo el texto de Meta con `(#código)` al
+frente, así que los ~15 llamadores que solo leen `e.message` no cambiaron.
+
+- **Token revocado (190 / HTTP 401)** → `markWhatsAppDisconnected` apaga `waConnected` en vez de
+  reintentar en silencio cada tick del cron. Solo esos dos códigos: apagar la conexión deja a la
+  clínica sin envíos, y un falso positivo cuesta más caro que seguir intentando.
+- **`WhatsAppReminder` dice la verdad**: la cola guarda el wamid en `payload.wamid` al enviar, y
+  cuando Meta reporta el fallo minutos después el webhook pasa la fila a FAILED con el código. Sin
+  eso la fila se quedaba en SENT para siempre por más que el mensaje nunca llegara.
+
+**Inbox**: la palomita ahora es real — una palomita "enviado" (null/SENT), doble "entregado", doble
+en azul "leído", aspa + motivo en español al fallar. Solo en WhatsApp; en los demás canales Meta no
+reporta nada y se conserva lo de siempre.
+
+Dos cosas que había que arreglar para que la palomita se moviera de verdad:
+- `/api/inbox/since` filtraba por `sentAt > since`, y confirmar una entrega **no mueve `sentAt`**
+  (la tabla no tiene `updatedAt`): el mensaje no se reenviaba nunca. Ahora reenvía los de los
+  últimos 30 min que ya tienen estado.
+- El merge del polling solo **anexaba ids nuevos**, así que descartaba la versión actualizada. Ahora
+  parchea por id, comparando por **contenido** — quedarse con el objeto del JSON sin más marcaría
+  "cambió" en cada poll y re-renderizaría el hilo cada 5 s.
+
+**Traducción de códigos** (es/en): 131047, 190, 131026, 132000/132001, 131042. El mapa de motivos
+salió a `src/lib/whatsapp/reason-i18n.ts` porque ahora lo usan dos pantallas; estaba duplicado y un
+motivo nuevo se traducía en una y salía crudo en la otra.
+
+> 132000 y 132001 comparten motivo a propósito: 132001 es "no existe o no está aprobada" y 132000 es
+> "el número de variables no coincide". Para quien lo lee la acción es la misma —revisar nombre,
+> idioma y variables contra lo aprobado— y separarlos obligaría a distinguir dos mensajes casi
+> idénticos. Por eso el texto es más amplio que "plantilla inexistente o no aprobada".
+
+### Fase 3 — Plantillas aprobadas (M-09, el P0)
+
+- `sendWhatsAppTemplate` nuevo; `sendWhatsAppMessage` conserva su firma. Lo común (descifrado del
+  token, timeout, reintento único, conversión del error) se concentró en `postToGraph`.
+- **`src/lib/whatsapp/send-mode.ts`** (puro, 16 tests) es el punto único de decisión: ventana abierta
+  → texto libre (gratis, como hoy); cerrada → plantilla del tipo; sin plantilla utilizable → **no se
+  envía** y se registra el motivo. Hay un test que recorre todas las combinaciones para comprobar que
+  **jamás** se devuelve texto libre con la ventana cerrada.
+- Dentro de ventana no se gasta plantilla aunque esté configurada: Meta se la cobra a la clínica y el
+  texto libre entrega igual.
+- La ventana se mide contra el Inbox con el **mismo emparejamiento laxo** que usan los envíos
+  (exacto y, si no, por los últimos 10 dígitos). Con un criterio más estricto un hilo que sí existe
+  pasaría por inexistente y exigiríamos plantilla donde hoy basta el texto libre.
+- Con plantilla, en el Inbox se guarda **lo que de verdad recibió el paciente** (el texto de la
+  plantilla con sus datos), no el texto libre que se habría mandado dentro de ventana.
+- **Pantalla nueva** `/dashboard/whatsapp/plantillas`: por cada tipo, el texto EXACTO a dar de alta
+  en Meta (copiable), qué es cada `{{n}}`, los campos de nombre e idioma, el enlace al billing hub y
+  el aviso de que **Meta le cobra a la clínica**, no a DaleControl. `waBillingOk` se enciende cuando
+  una plantilla sale bien y se apaga ante un 131042.
+- Tipos cubiertos: recordatorio de cita, confirmación de cita y reagendado — los tres con las mismas
+  cuatro variables (paciente, clínica, fecha, hora), que es más difícil de equivocar que tres
+  formatos distintos. Parámetros conectados en la cola, `/api/public/book`,
+  `/api/paciente/appointments` y `appointment-change/notify`.
+
+### Fase 4 — M-25 y M-22
+
+- **M-25**: `PATCH /api/clinic` devolvía la fila entera de `Clinic` — token de WhatsApp, llave viva
+  de Facturapi, tokens de Google, API key de Daily, hash del password del modo En Vivo. Ahora lleva
+  `select` explícito (no un strip a posteriori, para que una columna secreta futura no salga por
+  defecto). Verificado que ningún consumidor lee el cuerpo: los seis sitios solo miran `res.ok`.
+- **M-22**: ya estaba resuelto en las tres rutas principales (agenda vía
+  `PATCH /api/appointments/[id]`, portal y resolución de solicitudes) desde P1-12. **Faltaba la del
+  bot**: `lib/agenda/bot-booking-service.ts` movía `startsAt` sin limpiar recordatorios, así que
+  reagendar por WhatsApp sí mandaba la hora vieja. Cerrado.
+
+### Pendientes
+
+1. **Nadie ha enviado todavía una plantilla real.** Falta el ciclo completo en producción: dar de
+   alta las tres plantillas en Meta con una clínica de verdad, esperar su aprobación, registrarlas en
+   la pantalla nueva y comprobar que un recordatorio le llega a un paciente que **nunca** ha escrito.
+   Hasta que eso ocurra, el P0 está arreglado en código pero no demostrado en campo.
+2. **Los avisos `system` a la propia clínica siguen sin plantilla.** Los que van al número de la
+   clínica (nueva solicitud de cita, saldo de IA, pagos) no tienen tipo de plantilla definido: fuera
+   de ventana ahora se bloquean con motivo en vez de morir en Meta, pero **siguen sin llegar**. Es el
+   mismo agujero que ya estaba anotado en la sección de la mini-web; ahora al menos se ve el porqué.
+3. **Un mensaje que falla con el hilo abierto tarda hasta 30 min en teñirse de rojo si nadie lo
+   recarga.** `InboxMessage` no tiene `updatedAt`, así que el polling reenvía por ventana de tiempo.
+   Al abrir el hilo el estado siempre es el correcto.
+4. **Dos motivos de bloqueo salen en español aunque el panel esté en inglés**: el de "faltan datos" y
+   el de "este tipo no admite plantilla" no tienen clave i18n y caen al texto crudo. Son legibles,
+   pero si alguna clínica usa el panel en inglés conviene darles clave.
+5. **`recentStatusFailed` cambió de "No salió" a "No llegó"** (y en inglés a "Did not arrive"): ahora
+   la fila cubre los dos casos —nunca salió, o salió y Meta rechazó la entrega—, y "no salió" era
+   falso para el segundo.

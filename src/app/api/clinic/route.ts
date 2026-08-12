@@ -99,9 +99,49 @@ export async function PATCH(req: NextRequest) {
     }
   }
 
+  // M-25: esta ruta devolvía la fila ENTERA de Clinic al navegador — token de
+  // WhatsApp, llave viva de Facturapi, tokens de Google, API key de Daily,
+  // hash del password del modo En Vivo. Cualquiera con acceso al panel (y
+  // cualquier extensión del navegador) los leía en la respuesta del guardado.
+  //
+  // El `select` es explícito, no un strip a posteriori: así una columna
+  // secreta que se añada mañana NO sale por aquí por defecto. Son exactamente
+  // los campos que esta ruta puede escribir, más los que la UI repinta.
   const updated = await prisma.clinic.update({
     where: { id: dbUser.clinicId },
     data,
+    select: {
+      id: true,
+      name: true,
+      city: true,
+      address: true,
+      mapsUrl: true,
+      phone: true,
+      email: true,
+      description: true,
+      isPublic: true,
+      landingActive: true,
+      category: true,
+      clues: true,
+      timezone: true,
+      locale: true,
+      slug: true,
+      logoUrl: true,
+      latitude: true,
+      longitude: true,
+      birthdayMsgActive: true,
+      postApptFollowupActive: true,
+      noShowTaskActive: true,
+      patientChangesAutoApprove: true,
+      patientChangesMinHours: true,
+      // Ajustes de recordatorios: los guarda esta misma ruta desde la pantalla
+      // de WhatsApp. Son configuración, no credenciales.
+      waReminderMsg: true,
+      waReminder24h: true,
+      waReminder1h: true,
+      waReminderActive: true,
+      waConnected: true,
+    },
   });
 
   revalidateAfter("clinic");

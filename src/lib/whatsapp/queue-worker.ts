@@ -24,6 +24,8 @@ import {
   WA_REMINDER_STATUS,
   WA_REMINDER_PENDING_STATUSES,
 } from "@/lib/whatsapp/reminder-status";
+import { isTokenRevoked } from "@/lib/whatsapp/errors";
+import { markWhatsAppDisconnected } from "@/lib/whatsapp/connection";
 import { ENDO_WHATSAPP_TEMPLATES } from "@/lib/endodontics/whatsapp-templates";
 import { ORTHO_WHATSAPP_TEMPLATES } from "@/lib/orthodontics/whatsapp-templates";
 import { PERIO_WHATSAPP_TEMPLATES } from "@/lib/periodontics/whatsapp-templates";
@@ -108,6 +110,9 @@ export async function processWhatsAppQueue(opts?: {
           waConnected: true,
           waPhoneNumberId: true,
           waAccessToken: true,
+          // Plantillas aprobadas de ESTA clínica: sin ellas, un recordatorio
+          // fuera de la ventana de 24 h no puede salir (M-09).
+          waTemplates: true,
         },
       },
       appointment: {
@@ -311,18 +316,62 @@ export async function processWhatsAppQueue(opts?: {
       // Envía Y deja rastro en el Inbox (la clínica ve "recordatorio enviado").
       // El registro es best-effort dentro del helper: si falla, el envío ya
       // salió y la corrida del cron sigue igual que antes.
-      await sendWhatsAppLogged({
+      // Datos de la plantilla de recordatorio, EN EL ORDEN de WA_TEMPLATE_SPECS
+      // ({{1}} paciente, {{2}} clínica, {{3}} fecha, {{4}} hora). Solo se pueden
+      // armar si el recordatorio cuelga de una cita: los de tipo RECALL o
+      // BIRTHDAY no tienen fecha que anunciar, así que fuera de la ventana de
+      // 24 h se bloquean con motivo en vez de salir y morir en Meta.
+      const templateParams = r.appointment?.startsAt
+        ? [
+            patientCtx.firstName || "paciente",
+            clinicCtx.name,
+            new Intl.DateTimeFormat("es-MX", {
+              timeZone: clinicCtx.timezone,
+              weekday: "long",
+              day: "numeric",
+              month: "long",
+            }).format(r.appointment.startsAt),
+            new Intl.DateTimeFormat("es-MX", {
+              timeZone: clinicCtx.timezone,
+              hour: "2-digit",
+              minute: "2-digit",
+              hour12: false,
+            }).format(r.appointment.startsAt),
+          ]
+        : null;
+
+      const sent = await sendWhatsAppLogged({
         clinic: {
           id: clinicCtx.id,
           waPhoneNumberId: clinicCtx.waPhoneNumberId,
           waAccessToken: clinicCtx.waAccessToken,
           waConnected: true,
+          waTemplates: r.clinic.waTemplates,
         },
         to: patientCtx.phone,
         body,
         kind: "reminder",
+        templateParams,
       });
       // El row ya quedó SENT por el claim; no hay update post-send.
+      //
+      // Lo único que se persiste es el wamid: que Meta lo acepte NO significa
+      // que llegue, y el fallo real (131042 sin método de pago, 131026 número
+      // sin WhatsApp) aparece minutos después por el webhook. Ese aviso solo
+      // trae el wamid, así que sin guardarlo aquí la fila se quedaría en SENT
+      // para siempre por más que el mensaje nunca llegara. Va en `payload`
+      // porque la tabla no tiene columna propia y ese Json ya es libre.
+      const wamid: string | null = sent?.messages?.[0]?.id ?? null;
+      if (wamid) {
+        await prisma.whatsAppReminder
+          .update({
+            where: { id: r.id },
+            // Spread del payload existente: `channel` y `offsetMin` son la
+            // llave del dedup del encolador y perderlos duplicaría envíos.
+            data: { payload: { ...((r.payload ?? {}) as object), wamid } },
+          })
+          .catch(() => {});
+      }
       summary.sent++;
       // Pausa breve para respetar rate limits.
       await new Promise((resolve) => setTimeout(resolve, 200));
@@ -331,6 +380,11 @@ export async function processWhatsAppQueue(opts?: {
       summary.errors.push({ id: r.id, reason });
       await markFailed(r.id, reason);
       summary.failed++;
+      // Token revocado: apagar la conexión en vez de reintentar en silencio en
+      // cada tick del cron. `reason` ya lleva el `(#190)` incrustado.
+      if (isTokenRevoked(e)) {
+        await markWhatsAppDisconnected(r.clinicId, reason);
+      }
     }
   }
 

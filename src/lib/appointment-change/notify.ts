@@ -59,6 +59,10 @@ export async function notifyPatientChangeResolution(changeRequestId: string): Pr
             waConnected: true,
             waPhoneNumberId: true,
             waAccessToken: true,
+            // Un cambio de cita se resuelve días después de que el paciente lo
+            // pidió: la ventana de 24 h suele estar cerrada y hace falta
+            // plantilla (M-09).
+            waTemplates: true,
           },
         },
       },
@@ -110,10 +114,22 @@ export async function notifyPatientChangeResolution(changeRequestId: string): Pr
             waPhoneNumberId: clinic.waPhoneNumberId,
             waAccessToken: clinic.waAccessToken,
             waConnected: clinic.waConnected,
+            waTemplates: clinic.waTemplates,
           },
           to: patient.phone,
           body: message,
           kind: "appointment_change",
+          // {{1}} paciente, {{2}} clínica, {{3}} fecha, {{4}} hora. `fecha` y
+          // `hora` son ya las de la cita resultante (el resolve la actualizó).
+          //
+          // OJO: la plantilla de este tipo dice "cambió de horario", así que
+          // solo se ofrece cuando de verdad hubo reagendado. En cancelación o
+          // rechazo NO se manda plantilla: fuera de ventana ese aviso se
+          // bloquea con motivo en vez de entregar un texto que miente.
+          templateParams:
+            cr.status === "APPROVED" && cr.type === "RESCHEDULE"
+              ? [patient.firstName || "paciente", clinic.name, fecha, hora]
+              : null,
         });
       } catch (e) {
         console.error("[appointment-change notify]", e);

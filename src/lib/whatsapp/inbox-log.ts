@@ -40,6 +40,61 @@ export interface WhatsAppThreadRef {
   patientId: string | null;
 }
 
+/**
+ * Localiza el hilo de un teléfono: primero por externalId exacto y, si no hay,
+ * por los últimos 10 dígitos normalizados. Es el MISMO criterio que usa
+ * `upsertWhatsAppThread` en los envíos, extraído para poder reutilizarlo.
+ */
+async function findThreadByPhone(
+  clinicId: string,
+  externalId: string,
+): Promise<{ id: string } | null> {
+  const exact = await prisma.inboxThread.findFirst({
+    where: { clinicId, channel: "WHATSAPP", externalId },
+    select: { id: true },
+  });
+  if (exact) return exact;
+
+  const last10 = normalizeLast10(externalId);
+  if (last10.length !== 10) return null;
+
+  const candidates = await prisma.inboxThread.findMany({
+    where: { clinicId, channel: "WHATSAPP", externalId: { contains: last10 } },
+    orderBy: { lastMessageAt: "desc" },
+    take: 10,
+    select: { id: true, externalId: true },
+  });
+  // El `contains` solo pre-filtra: el match real es exacto por los 10 dígitos
+  // normalizados (nunca un hilo de otro número que los contenga).
+  const match = candidates.find((t) => normalizeLast10(t.externalId ?? "") === last10);
+  return match ? { id: match.id } : null;
+}
+
+/**
+ * Momento del último mensaje ENTRANTE de ese contacto, o null si nunca escribió.
+ *
+ * Es lo que decide si la ventana de servicio de 24 h de WhatsApp sigue abierta
+ * y, por tanto, si un aviso automático puede salir como texto libre o necesita
+ * plantilla (lib/whatsapp/send-mode.ts).
+ *
+ * Usa el mismo emparejamiento laxo que los envíos a propósito: con un criterio
+ * más estricto un hilo que SÍ existe pasaría por inexistente, daríamos la
+ * ventana por cerrada y exigiríamos plantilla donde hoy basta el texto libre.
+ */
+export async function lastInboundAtForPhone(
+  clinicId: string,
+  phone: string,
+): Promise<Date | null> {
+  const thread = await findThreadByPhone(clinicId, phone);
+  if (!thread) return null;
+  const lastIn = await prisma.inboxMessage.findFirst({
+    where: { threadId: thread.id, direction: "IN" },
+    orderBy: { sentAt: "desc" },
+    select: { sentAt: true },
+  });
+  return lastIn?.sentAt ?? null;
+}
+
 export interface UpsertWhatsAppThreadArgs {
   clinicId: string;
   /** externalId del hilo = teléfono del contacto (mismo criterio que el webhook). */

@@ -1,0 +1,189 @@
+/* Configuración → WhatsApp → Plantillas.
+   Solo lo que NO existe ya en ../whatsapp.module.css, que aporta page/header/
+   billing*/
+
+.backLink {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-2);
+  text-decoration: none;
+  padding: 7px 12px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-md);
+}
+.backLink:hover { background: var(--bg-hover); color: var(--text-1); }
+
+/* ── Por qué existe la pantalla ─────────────────────────────────── */
+.explain {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  background: var(--bg-elev-2);
+  border: 1px solid var(--border-soft);
+  border-left: 3px solid #d97706;
+  border-radius: var(--radius-lg);
+  padding: 14px 16px;
+  margin-bottom: 16px;
+}
+.explainIcon { color: #d97706; flex-shrink: 0; margin-top: 1px; }
+.explainTitle { font-size: 13px; font-weight: 600; color: var(--text-1); }
+.explainBody {
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--text-2);
+  margin: 4px 0 0;
+}
+
+.warnRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+.warnText { font-size: 12.5px; color: var(--text-2); }
+
+/* ── Layout ─────────────────────────────────────────────────────── */
+.grid {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+@media (max-width: 1024px) {
+  .grid { grid-template-columns: minmax(0, 1fr); }
+}
+.col {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+}
+
+/* ── Texto exacto de la plantilla ───────────────────────────────── */
+.blockLabel {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-3);
+  margin-bottom: 6px;
+}
+.bodyBox {
+  position: relative;
+  background: var(--bg-elev-2);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-md);
+  padding: 12px 14px;
+}
+/* El texto debe poder copiarse EXACTO, así que se respetan los saltos de
+   línea; el scroll horizontal se queda dentro de la caja para que la página
+   nunca se desplace de lado. */
+.bodyPre {
+  margin: 0;
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--text-1);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.copyBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 10px;
+  padding: 5px 10px;
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--text-2);
+  background: var(--bg-elev-1);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+.copyBtn:hover { background: var(--bg-hover); color: var(--text-1); }
+
+/* ── Variables ──────────────────────────────────────────────────── */
+.varList {
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.varItem {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+  color: var(--text-2);
+}
+.varNum {
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--wa-brand-ink, #6d28d9);
+  background: var(--bg-elev-2);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm);
+  padding: 1px 6px;
+  flex-shrink: 0;
+}
+
+/* ── Campos ─────────────────────────────────────────────────────── */
+.fields {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+  gap: 12px;
+  margin-top: 16px;
+}
+@media (max-width: 620px) {
+  .fields { grid-template-columns: minmax(0, 1fr); }
+}
+.fieldError {
+  margin: 10px 0 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--danger, #dc2626);
+}
+
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+/* ── Facturación ────────────────────────────────────────────────── */
+.billingRow {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+.billingState {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 14px 0 12px;
+}
+.billingStateHint {
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--text-3);
+}
+
+.steps {
+  margin: 0 0 12px;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--text-2);
+}
