@@ -54,7 +54,7 @@ export interface WaCatalogEntry {
 }
 
 /**
- * Las SIETE de utilidad + la de marketing.
+ * Las OCHO de utilidad + la de marketing.
  *
  * Reglas de Meta que respeta cada cuerpo (las verifica `checkTemplateBody`, y
  * el test las comprueba sobre todo el catálogo para que nadie las rompa al
@@ -195,6 +195,34 @@ export const WA_TEMPLATE_CATALOG: readonly WaCatalogEntry[] = [
       "inbox.whatsapp.tplVarQuoteLink",
     ],
     sample: ["María", "Clínica Dental Sonrisa", "https://dalecontrol.com/presupuesto/abc123"],
+    optional: false,
+  },
+  {
+    kind: "consent",
+    name: "dc_consentimiento_listo",
+    category: "UTILITY",
+    lang: WA_TEMPLATE_LANG,
+    // La LIGA va dentro de la plantilla, como en `quote_ready`. Fuera de la
+    // ventana de 24 h este es el ÚNICO mensaje que se puede entregar: una
+    // plantilla que dijera "te mandamos la liga aparte" reproduciría el fallo
+    // que arregló M-09, porque ese segundo mensaje no saldría nunca.
+    body:
+      "Hola {{1}}, {{2}} te comparte tu carta de consentimiento informado de {{3}} " +
+      "para que la revises y la firmes aquí: {{4}}. " +
+      "Si tienes dudas, responde por aquí.",
+    labelKey: "inbox.whatsapp.tplKindConsent",
+    variableKeys: [
+      "inbox.whatsapp.tplVarPatient",
+      "inbox.whatsapp.tplVarClinic",
+      "inbox.whatsapp.tplVarProcedure",
+      "inbox.whatsapp.tplVarConsentLink",
+    ],
+    sample: [
+      "María",
+      "Clínica Dental Sonrisa",
+      "Extracción dental simple",
+      "https://dalecontrol.com/consentimiento/abc123",
+    ],
     optional: false,
   },
   {

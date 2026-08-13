@@ -2344,6 +2344,16 @@ model PlanPayment {
 }
 
 // ── Consent Forms ─────────────────────────────────────────────────────
+/// Carta de consentimiento informado con firma electrónica.
+///
+/// El `content` es un SNAPSHOT INMUTABLE: es exactamente el texto que el
+/// paciente leyó y firmó. Nunca se reescribe después de la firma (NOM-004
+/// numeral 5.11 — conservación mínima 5 años), y `contentHash` (sha256) permite
+/// demostrar en el PDF que nadie lo alteró.
+///
+/// Un consentimiento FIRMADO no se borra ni se edita: sólo se REVOCA
+/// (revokedAt/revokedById/revokedReason). El soft delete (`deletedAt`) queda
+/// reservado a los pendientes que nunca se firmaron.
 model ConsentForm {
   id           String    @id @default(cuid())
   clinicId     String
@@ -2355,10 +2365,56 @@ model ConsentForm {
   token        String    @unique
   expiresAt    DateTime
   createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  /// Soft delete — SÓLO para pendientes sin firma (ver DELETE /api/consent/[id]).
+  deletedAt DateTime?
+
+  /// Quién lo generó y qué estomatólogo se responsabiliza del acto. Strings
+  /// simples SIN @relation a propósito: la carta debe seguir leyéndose aunque
+  /// el usuario se dé de baja, y una FK con onDelete restringiría esa baja.
+  createdById String?
+  doctorId    String?
+
+  /// Clave del catálogo (CONSENT_PROCEDURES). null = texto libre del doctor.
+  procedureKey String?
+
+  /// Representante legal que firma en nombre del paciente (menor de edad o
+  /// paciente sin capacidad de decidir) — NOM-004 10.1.1.3.
+  signerName     String?
+  signerRelation String?
+
+  /// Evidencia de la firma electrónica (Código de Comercio arts. 89 y 89 bis;
+  /// CFPC 210-A): cuándo se abrió la carta, desde dónde se firmó y el hash del
+  /// texto firmado.
+  viewedAt        DateTime?
+  signedIp        String?
+  signedUserAgent String?
+  contentHash     String?
+
+  /// Testigos del acto (opcionales, hasta dos) — NOM-004 10.1.1.7.
+  witness1Name         String?
+  witness1SignatureUrl String?
+  witness1SignedAt     DateTime?
+  witness2Name         String?
+  witness2SignatureUrl String?
+  witness2SignedAt     DateTime?
+
+  /// Contrafirma del estomatólogo desde el panel — NOM-013 9.6.9.
+  doctorSignedAt     DateTime?
+  doctorSignatureUrl String?
+
+  /// Revocación del consentimiento por el paciente (siempre posible mientras el
+  /// procedimiento no haya iniciado). No borra nada: deja constancia.
+  revokedAt     DateTime?
+  revokedById   String?
+  revokedReason String?
 
   clinic  Clinic  @relation(fields: [clinicId], references: [id], onDelete: Cascade)
   patient Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
 
+  @@index([clinicId, patientId])
+  @@index([clinicId, createdAt])
   @@map("consent_forms")
 }
 

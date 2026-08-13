@@ -6,7 +6,7 @@ import { useEffect, useId, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 import toast from "react-hot-toast";
-import { SignaturePad } from "@/components/patient-detail/pediatrics/modals/SignaturePad";
+import { SignaturePad } from "@/components/ui/signature-pad";
 import {
   getEndoConsentText,
   getApicalSurgeryConsentText,

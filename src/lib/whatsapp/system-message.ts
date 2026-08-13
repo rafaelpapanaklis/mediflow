@@ -21,7 +21,8 @@ export type WhatsAppSendKind =
   | "system"              // avisos de la plataforma (saldo IA, pagos…)
   | "manual_api"          // recordatorio disparado a mano desde el panel
   | "payment_notice"      // aviso de saldo pendiente de una factura
-  | "quote_ready";        // presupuesto listo con su liga pública
+  | "quote_ready"         // presupuesto listo con su liga pública
+  | "consent";            // carta de consentimiento informado para firmar
 
 export const WHATSAPP_SEND_KINDS: readonly WhatsAppSendKind[] = [
   "reminder",
@@ -33,6 +34,7 @@ export const WHATSAPP_SEND_KINDS: readonly WhatsAppSendKind[] = [
   "manual_api",
   "payment_notice",
   "quote_ready",
+  "consent",
 ];
 
 /** Prefijo de `externalId` que marca un envío automático de la plataforma. */

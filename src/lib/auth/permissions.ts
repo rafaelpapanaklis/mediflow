@@ -96,6 +96,10 @@ export const ALL_PERMISSIONS = {
   // Recetas
   "prescription.view":    "Ver recetas",
   "prescription.create":  "Crear/firmar recetas",
+  // Consentimientos informados
+  "consents.view":        "Ver consentimientos",
+  "consents.create":      "Crear, enviar y contrafirmar consentimientos",
+  "consents.revoke":      "Revocar y eliminar consentimientos",
   // Radiografías
   "xrays.view":           "Ver radiografías",
   "xrays.upload":         "Subir radiografías",
@@ -165,6 +169,7 @@ export const PERMISSION_GROUPS: { title: string; keys: PermissionKey[] }[] = [
   { title: "Pacientes",      keys: ["patients.view", "patients.create", "patients.edit", "patients.delete"] },
   { title: "Expediente",     keys: ["medicalRecord.view", "medicalRecord.edit"] },
   { title: "Recetas",        keys: ["prescription.view", "prescription.create"] },
+  { title: "Consentimientos", keys: ["consents.view", "consents.create", "consents.revoke"] },
   { title: "Radiografías",   keys: ["xrays.view", "xrays.upload", "xrays.analyze"] },
   { title: "Comunicación",   keys: ["inbox.view", "inbox.send", "inbox.delete", "whatsapp.view", "whatsapp.send"] },
   { title: "Catálogo",       keys: ["treatments.view", "treatments.edit", "resources.view", "resources.edit", "inventory.view", "inventory.edit", "suppliers.view", "suppliers.order"] },
@@ -189,6 +194,9 @@ export const ROLE_DEFAULT_PERMISSIONS: Record<Role, PermissionKey[]> = {
     "patients.view", "patients.create", "patients.edit",
     "medicalRecord.view", "medicalRecord.edit",
     "prescription.view", "prescription.create",
+    // El consentimiento lo explica y lo firma el profesional que va a tratar:
+    // revocarlo también es suyo (mismo criterio que prescription.*).
+    "consents.view", "consents.create", "consents.revoke",
     "xrays.view", "xrays.upload", "xrays.analyze",
     "treatments.view", "resources.view", "suppliers.view",
     "inbox.view", "inbox.send",
@@ -206,6 +214,10 @@ export const ROLE_DEFAULT_PERMISSIONS: Record<Role, PermissionKey[]> = {
     // billing.edit: la recepción con Caja borra borradores y edita facturas desde
     // el detalle — DELETE y PATCH de /api/invoices/[id] ahora lo exigen (edit-price ya).
     "billing.view", "billing.create", "billing.charge", "billing.edit",
+    // Recepción prepara la carta y se la manda al paciente por WhatsApp (el
+    // envío exige consents.create además de whatsapp.send). Revocar NO: eso es
+    // del profesional responsable.
+    "consents.view", "consents.create",
     "inbox.view", "inbox.send",
     "whatsapp.view", "whatsapp.send",
     "treatments.view", "resources.view", "inventory.view", "suppliers.view",
@@ -216,11 +228,14 @@ export const ROLE_DEFAULT_PERMISSIONS: Record<Role, PermissionKey[]> = {
     "specialties.orthodontics",
     "specialties.implants",
   ],
-  // READONLY: solo *.view excepto medical/prescription/xrays
+  // READONLY: solo *.view excepto medical/prescription/xrays/consentimientos.
+  // El consentimiento es un documento clínico con el mismo contenido sensible
+  // que la receta y el expediente — se excluye por el mismo motivo.
   READONLY: ALL_PERMISSION_KEYS.filter((k) =>
     k.endsWith(".view") &&
     !k.startsWith("medicalRecord.") &&
     !k.startsWith("prescription.") &&
+    !k.startsWith("consents.") &&
     !k.startsWith("xrays."),
   ),
 };

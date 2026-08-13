@@ -6,7 +6,7 @@ import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 import toast from "react-hot-toast";
 import { signConsentByGuardian, signConsentByMinor, isFailure } from "@/app/actions/pediatrics";
-import { SignaturePad } from "./SignaturePad";
+import { SignaturePad } from "@/components/ui/signature-pad";
 
 export interface ConsentModalProps {
   open: boolean;

@@ -3,7 +3,7 @@
 // Reusa SignaturePad de pediatría. SPEC §1.5, §10.3.
 
 import { useState } from "react";
-import { SignaturePad } from "@/components/patient-detail/pediatrics/modals/SignaturePad";
+import { SignaturePad } from "@/components/ui/signature-pad";
 import { SRP_CONSENT_TEXT } from "@/lib/periodontics/consent-texts";
 
 export interface SRPConsentModalProps {

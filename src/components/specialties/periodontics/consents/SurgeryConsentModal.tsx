@@ -3,7 +3,7 @@
 // periodontal. Reusa SignaturePad de pediatría. SPEC §1.5, §10.4.
 
 import { useState } from "react";
-import { SignaturePad } from "@/components/patient-detail/pediatrics/modals/SignaturePad";
+import { SignaturePad } from "@/components/ui/signature-pad";
 import { SURGERY_CONSENT_TEXT, labelSurgeryType } from "@/lib/periodontics/consent-texts";
 import type { PeriodontalSurgeryType } from "@prisma/client";
 

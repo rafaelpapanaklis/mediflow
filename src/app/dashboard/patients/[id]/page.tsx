@@ -36,18 +36,25 @@ import {
   type PatientActivityCounts,
 } from "@/lib/clinical-shared/get-patient-activity-counts";
 import { questionnaireFreshness } from "@/lib/health-questionnaire";
+import { CONSENT_DTO_SELECT, toConsentDTO } from "@/lib/consent/types";
 
 export default async function PatientDetailPage({ params }: { params: { id: string } }) {
   const user = await getCurrentUser();
   const { t } = await getServerT();
   const tz = user.clinic.timezone;
 
+  // CONSENTIMIENTOS — permiso granular "consents.view". Sin él la ficha no
+  // muestra la pestaña (ni en QuickNav ni en la tab bar móvil) y las cartas ni
+  // siquiera salen del server: se manda [] y los endpoints revalidan con 403.
+  const permsUser = { role: user.role, permissionsOverride: user.permissionsOverride ?? [] };
+  const canViewConsents = hasPermission(permsUser, "consents.view");
+
   // MULTI-CLÍNICA · FASE 2 — sedes cuyo expediente puede LEER esta sesión.
   // Con el flag apagado devuelve [user.clinicId] sin tocar la BD, así que la
   // query de abajo queda exactamente como estaba.
   const visibility = await getPatientVisibility(user.clinicId);
 
-  const [patient, doctors] = await Promise.all([
+  const [patient, doctors, consentRows] = await Promise.all([
     prisma.patient.findFirst({
       // MULTI-CLÍNICA: clinicScopeFilter permite el expediente de una sede vinculada
       // (con el flag apagado = user.clinicId pelado). Visibilidad por paciente: esta
@@ -108,6 +115,17 @@ export default async function PatientDetailPage({ params }: { params: { id: stri
       where:  { clinicId: user.clinicId, isActive: true },
       select: { id: true, firstName: true, lastName: true },
     }),
+    // Consentimientos del paciente en ESTA sede. Los borrados lógicos quedan
+    // fuera; los firmados nunca se borran, así que siempre están. Sin permiso
+    // ni se consulta. .catch(()=>[]): si sql/consent-informado-v2.sql todavía
+    // no corrió en esta base, la ficha entera NO se cae — solo falta el tab.
+    canViewConsents
+      ? prisma.consentForm.findMany({
+          where:   { patientId: params.id, clinicId: user.clinicId, deletedAt: null },
+          orderBy: { createdAt: "desc" },
+          select:  CONSENT_DTO_SELECT,
+        }).catch(() => [])
+      : Promise.resolve([]),
   ]);
 
   if (!patient) notFound();
@@ -191,6 +209,14 @@ export default async function PatientDetailPage({ params }: { params: { id: stri
     { role: user.role, permissionsOverride: user.permissionsOverride ?? [] },
     "billing.view",
   );
+
+  // Consentimientos: los tres permisos del módulo + el del canal de envío. Se
+  // resuelven aquí (no en el cliente) porque el SUPER_ADMIN los enciende y
+  // apaga persona a persona desde el modal de equipo; cada endpoint los
+  // revalida con 403.
+  const canCreateConsents  = hasPermission(permsUser, "consents.create");
+  const canRevokeConsents  = hasPermission(permsUser, "consents.revoke");
+  const canSendWhatsApp    = hasPermission(permsUser, "whatsapp.send");
 
   // Mismo criterio para el EXPEDIENTE (P1-N2): sin "Ver expediente clínico" la
   // ficha se sigue abriendo (contacto, citas, facturación) pero el SOAP no sale
@@ -396,6 +422,11 @@ export default async function PatientDetailPage({ params }: { params: { id: stri
             "patients.edit",
           )}
           canViewBilling={canViewBilling}
+          consents={consentRows.map((c) => toConsentDTO(c))}
+          canViewConsents={canViewConsents}
+          canCreateConsents={canCreateConsents}
+          canRevokeConsents={canRevokeConsents}
+          canSendWhatsApp={canSendWhatsApp}
           facturApiEnabled={Boolean((user.clinic as any).facturApiEnabled)}
           // Solo el modo fiscal (no la fila de Clinic): con qué impuestos nace
           // una factura nueva desde la ficha — igual que en Caja.

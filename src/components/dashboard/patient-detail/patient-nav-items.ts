@@ -18,6 +18,7 @@ import {
   ArrowUpRight,
   Box,
   FileText,
+  FileSignature,
   Receipt,
   type LucideIcon,
 } from "lucide-react";
@@ -75,6 +76,14 @@ export interface BuildPatientNavOpts {
    * persona desde el modal de equipo.
    */
   showBilling?: boolean;
+  /**
+   * Consentimientos informados — requiere el permiso UI "consents.view".
+   * Mismo mecanismo que `showBilling`: `false` la saca del menú por completo;
+   * `undefined` la deja visible para no cambiar el comportamiento de callers
+   * que no la gatean. Lo resuelve el server (page.tsx con hasPermission) y baja
+   * como prop — el cliente NO lo deduce del rol.
+   */
+  showConsents?: boolean;
 }
 
 /**
@@ -141,6 +150,7 @@ export function buildPatientNavItems(opts: BuildPatientNavOpts): PatientNavItem[
     { id: "modelos-3d",   labelKey: "patients.tabs.modelos3d",    icon: Box,          section: "imagen-docs" },
     { id: "tratamiento",  labelKey: "patients.tabs.tratamiento",  shortLabelKey: "patients.tabsShort.tratamiento", icon: Pill,         section: "imagen-docs" },
     { id: "recetas",      labelKey: "patients.tabs.recetas",      icon: FileText,     section: "imagen-docs" },
+    { id: "consentimientos", labelKey: "patients.tabs.consentimientos", shortLabelKey: "patients.tabsShort.consentimientos", icon: FileSignature, section: "imagen-docs", isNew: true },
     { id: "referencias",  labelKey: "patients.tabs.referencias",  icon: ArrowUpRight, section: "imagen-docs" },
     // Administrativo.
     { id: "agenda",       labelKey: "patients.tabs.agenda",       icon: Calendar,     section: "admin" },
@@ -152,7 +162,11 @@ export function buildPatientNavItems(opts: BuildPatientNavOpts): PatientNavItem[
   // Facturación sin permiso "billing.view". Al hacerlo aquí, escritorio y móvil
   // quedan sincronizados y no se cuela ningún count ni subhead colgando.
   const hideBilling = opts.showBilling === false;
+  const hideConsents = opts.showConsents === false;
   return items.filter(
-    (i) => !HIDDEN_SPECIALTY_IDS.has(i.id) && !(hideBilling && i.id === "facturacion"),
+    (i) =>
+      !HIDDEN_SPECIALTY_IDS.has(i.id) &&
+      !(hideBilling && i.id === "facturacion") &&
+      !(hideConsents && i.id === "consentimientos"),
   );
 }

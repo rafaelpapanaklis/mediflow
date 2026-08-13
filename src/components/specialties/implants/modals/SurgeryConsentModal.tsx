@@ -6,7 +6,7 @@
 import { useEffect, useState, useTransition } from "react";
 import toast from "react-hot-toast";
 import { X, FileSignature } from "lucide-react";
-import { SignaturePad } from "@/components/patient-detail/pediatrics/modals/SignaturePad";
+import { SignaturePad } from "@/components/ui/signature-pad";
 import { SURGERY_CONSENT_TEXT } from "@/lib/implants/consent-texts";
 import { createImplantConsent } from "@/app/actions/implants/createImplantConsent";
 import { isFailure } from "@/app/actions/implants/result";

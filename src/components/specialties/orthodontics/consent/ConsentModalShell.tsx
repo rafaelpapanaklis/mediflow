@@ -3,7 +3,7 @@
 
 import { useState } from "react";
 import { X } from "lucide-react";
-import { SignaturePad } from "@/components/patient-detail/pediatrics/modals/SignaturePad";
+import { SignaturePad } from "@/components/ui/signature-pad";
 
 export interface ConsentModalShellProps {
   title: string;

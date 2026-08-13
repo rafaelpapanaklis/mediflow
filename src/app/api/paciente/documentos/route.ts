@@ -89,6 +89,11 @@ export async function GET() {
           patientId: { in: patientIds },
           signedAt: { not: null },
           patient: { deletedAt: null },
+          // Borrado lógico del consentimiento. Hoy es redundante (solo se
+          // pueden borrar los que nadie firmó, y aquí solo salen firmados),
+          // pero deja el filtro explícito para que ninguna otra superficie
+          // reviva un documento retirado del expediente.
+          deletedAt: null,
         },
         orderBy: { signedAt: "desc" },
         take: 100,

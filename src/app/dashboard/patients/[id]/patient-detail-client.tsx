@@ -22,6 +22,8 @@ import { InvoiceDetailModal } from "@/components/dashboard/billing/invoice-detai
 import { PaymentModal } from "@/components/dashboard/billing/payment-modal";
 import { isVoidedInvoice } from "@/components/dashboard/billing/invoice-status";
 import { BillingTab } from "@/components/dashboard/patient-detail/billing-tab";
+import { ConsentsTab } from "@/components/dashboard/patient-detail/consents-tab";
+import type { ConsentDTO } from "@/lib/consent/types";
 import { HistoriaTimeline } from "@/components/dashboard/patient-detail/historia-timeline";
 import { PatientAuditHistory } from "@/components/dashboard/patient-detail/patient-audit-history";
 import patientDetailStyles from "@/components/dashboard/patient-detail/patient-detail.module.css";
@@ -348,6 +350,17 @@ interface Props {
    * siquiera manda `invoices`, y los endpoints revalidan con 403.
    */
   canViewBilling?: boolean;
+  /**
+   * Consentimientos informados del paciente (snapshot del server). El tab los
+   * pinta al instante y luego se refresca solo contra GET /api/consent.
+   * Vacío sin el permiso "consents.view": las cartas ni salen del server.
+   */
+  consents?: ConsentDTO[];
+  canViewConsents?: boolean;
+  canCreateConsents?: boolean;
+  canRevokeConsents?: boolean;
+  /** "whatsapp.send" — decide si el tab ofrece el envío por WhatsApp. */
+  canSendWhatsApp?: boolean;
   /** ¿La clínica tiene el SAT (Facturapi) configurado? Decide si la columna
    *  CFDI ofrece "Timbrar" o el estado neutro "SAT no configurado". */
   facturApiEnabled?: boolean;
@@ -378,6 +391,11 @@ export function PatientDetailClient({
   canDeletePatient = false,
   canEditPatient = false,
   canViewBilling = false,
+  consents = [],
+  canViewConsents = false,
+  canCreateConsents = false,
+  canRevokeConsents = false,
+  canSendWhatsApp = false,
   facturApiEnabled = false,
 }: Props) {
   const t = useT();
@@ -407,9 +425,10 @@ export function PatientDetailClient({
       showImplants,
       showOrthodontics,
       showBilling: canViewBilling,
+      showConsents: canViewConsents,
     });
     return [...items.filter((i) => !i.disabled), ...items.filter((i) => i.disabled)];
-  }, [pediatricsState, showPeriodontics, showEndodontics, showImplants, showOrthodontics, canViewBilling]);
+  }, [pediatricsState, showPeriodontics, showEndodontics, showImplants, showOrthodontics, canViewBilling, canViewConsents]);
   const tabFromUrl = searchParams.get("tab");
   const initialTab =
     tabFromUrl === "pediatria" && showPediatrics
@@ -424,7 +443,9 @@ export function PatientDetailClient({
               ? "ortodoncia"
               : tabFromUrl === "facturacion" && canViewBilling
                 ? "facturacion"
-                : "resumen";
+                : tabFromUrl === "consentimientos" && canViewConsents
+                  ? "consentimientos"
+                  : "resumen";
   const [tab, setTab]         = useState(initialTab);
   const [consultPaused, setConsultPaused] = useState(false);
   const [consultClosed, setConsultClosed] = useState(false);
@@ -3108,6 +3129,26 @@ export function PatientDetailClient({
 
           {tab === "modelos-3d" && (
             <Models3DTab patientId={patient.id} />
+          )}
+
+          {/* Pestaña gateada por "consents.view": sin el permiso el ítem no
+              existe en el menú (ver buildPatientNavItems) y el server manda []
+              en vez de las cartas. El panel vive en consents-tab.tsx para no
+              engordar más este archivo. */}
+          {tab === "consentimientos" && canViewConsents && (
+            <ConsentsTab
+              patientId={patient.id}
+              initialConsents={consents}
+              doctors={doctors}
+              currentUserId={currentUser.id}
+              canCreate={canCreateConsents}
+              canRevoke={canRevokeConsents}
+              canSendWhatsApp={canSendWhatsApp}
+              // La contrafirma es la firma del profesional responsable: la API
+              // la limita a DOCTOR/ADMIN/SUPER_ADMIN y aquí se refleja para no
+              // ofrecer un botón que va a devolver 403.
+              canCountersign={["DOCTOR", "ADMIN", "SUPER_ADMIN"].includes(currentUser.role ?? "")}
+            />
           )}
 
           {tab === "presupuestos" && (
