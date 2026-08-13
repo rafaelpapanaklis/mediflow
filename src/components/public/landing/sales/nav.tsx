@@ -59,7 +59,14 @@ export function SalesNav({
               <Link href="/afiliados/registro" className="dcv2-btn-primary" style={cta}>Registrarme gratis</Link>
             </>
           ) : isLoggedIn ? (
-            <Link href="/dashboard" className="dcv2-btn-primary" style={cta}>Ir al panel</Link>
+            // <a> y NO <Link>: navegación DURA a propósito. El layout de
+            // /dashboard hace redirect() a /dashboard/suspended cuando la
+            // clínica no tiene plan activo, y un redirect() lanzado desde un
+            // LAYOUT durante una navegación suave deja el árbol del router
+            // vacío (Next 14) — la pantalla de pago sale EN BLANCO hasta
+            // recargar. Con <a> el navegador pide el documento completo y el
+            // 307 se resuelve server-side. NO lo cambies a <Link>.
+            <a href="/dashboard" className="dcv2-btn-primary" style={cta}>Ir al panel</a>
           ) : (
             <>
               <Link href="/paciente/login" className="dcv2-nav-ghost dcv2-nav-patient" style={{ color: "#64748b" }} title="Portal del paciente">

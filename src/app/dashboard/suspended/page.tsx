@@ -4,9 +4,8 @@ import { isPlanId, type PlanId } from "@/lib/billing/plans";
 import { getResolvedPlans } from "@/lib/plans";
 import { isFirstContract } from "@/lib/billing/first-month-promo";
 import { SuspendedPlanCards, type PlanCardData } from "./suspended-client";
-import { getServerT } from "@/i18n/server";
+import { localeFromClinic, serverTForLocale } from "@/i18n/server";
 import { getCurrentUser } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
 
@@ -15,11 +14,21 @@ export default async function SuspendedPage({
 }: {
   searchParams: { pending?: string };
 }) {
-  const { t } = await getServerT();
   // Vuelta de un Checkout SPEI/OXXO (asíncrono): el pago aún no se acredita.
   const pending = searchParams?.pending;
   const showPending = pending === "spei" || pending === "oxxo";
-  const planCards: PlanCardData[] = (await getResolvedPlans()).map((p) => ({
+
+  // Sesión y catálogo de planes son INDEPENDIENTES: una sola ronda en paralelo
+  // en vez de dos awaits en serie. getCurrentUser() puede hacer redirect()
+  // (onboarding / proveedores / laboratorios) y eso SIGUE funcionando dentro del
+  // Promise.all: redirect() lanza NEXT_REDIRECT, Promise.all propaga el primer
+  // rechazo y el await de aquí lo re-lanza, que es justo lo que Next intercepta.
+  const [user, resolvedPlans] = await Promise.all([
+    getCurrentUser(),
+    getResolvedPlans(),
+  ]);
+
+  const planCards: PlanCardData[] = resolvedPlans.map((p) => ({
     id: p.id,
     name: p.name,
     priceMxn: p.priceMxn,
@@ -30,28 +39,23 @@ export default async function SuspendedPage({
   }));
 
   // Plan elegido en el registro (Clinic.plan): preselección + base del upsell.
-  const user = await getCurrentUser();
-  const clinic = await prisma.clinic.findUnique({
-    where: { id: user.clinicId },
-    select: {
-      plan: true,
-      subscriptionStatus: true,
-      // Para la promo de 1er mes (misma regla que /api/billing/checkout).
-      stripeSubscriptionId: true,
-      subscriptionId: true,
-      nextBillingDate: true,
-    },
-  });
-  const currentPlan: PlanId | null = clinic && isPlanId(clinic.plan) ? clinic.plan : null;
+  // La clínica YA viene con la sesión (getCurrentUser usa include:{clinic:true}),
+  // así que plan / subscriptionStatus / los tres campos de la promo salen de ahí
+  // SIN una segunda consulta.
+  const clinic = user.clinic;
+  // t con la clínica en mano: getServerT() volvería a resolver la sesión para
+  // sacar el locale. Este atajo es síncrono y no añade await al camino crítico.
+  const { t } = serverTForLocale(localeFromClinic(clinic));
+  const currentPlan: PlanId | null = isPlanId(clinic.plan) ? clinic.plan : null;
   // Promo 1er mes: solo PRIMERA contratación (el checkout re-valida server-side).
-  const firstMonthEligible = !!clinic && isFirstContract(clinic);
+  const firstMonthEligible = isFirstContract(clinic);
 
   // Copy adaptativo según el estado de la cuenta:
   //  - Reactivación = cuenta que YA tuvo acceso y se pausó por un pago
   //    pendiente (past_due / cancelled / unpaid) → tono "reactiva tu plan".
   //  - Cualquier otro caso (pending_payment o sin estado) = compra nueva
   //    recién creada en el wizard → tono "último paso", SIN "bloqueado".
-  const status = clinic?.subscriptionStatus ?? null;
+  const status = clinic.subscriptionStatus ?? null;
   const isReactivation = !!status && ["past_due", "cancelled", "unpaid"].includes(status);
   const pillText = isReactivation ? "Tu panel está en pausa" : "Último paso";
   const heading = isReactivation ? "Reactiva tu plan" : "Último paso: activa tu cuenta";

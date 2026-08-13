@@ -65,7 +65,14 @@ export function SpecNav({ currentSlug, isLoggedIn = false }: SpecNavProps) {
 
         <div style={{ display: "flex", gap: 10, alignItems: "center", justifyContent: "flex-end", flexWrap: "wrap", rowGap: 8, fontSize: 13 }}>
           {isLoggedIn ? (
-            <Link
+            // <a> y NO <Link>: navegación DURA a propósito. El layout de
+            // /dashboard hace redirect() a /dashboard/suspended cuando la
+            // clínica no tiene plan activo, y un redirect() lanzado desde un
+            // LAYOUT durante una navegación suave deja el árbol del router
+            // vacío (Next 14) — la pantalla de pago sale EN BLANCO hasta
+            // recargar. Con <a> el navegador pide el documento completo y el
+            // 307 se resuelve server-side. NO lo cambies a <Link>.
+            <a
               href="/dashboard"
               style={{
                 padding: "8px 14px",
@@ -79,7 +86,7 @@ export function SpecNav({ currentSlug, isLoggedIn = false }: SpecNavProps) {
               }}
             >
               Ir al dashboard →
-            </Link>
+            </a>
           ) : (
             <>
               <Link

@@ -155,10 +155,20 @@ export default async function DashboardLayout({ children }: { children: React.Re
   // onboardingCompleted alimenta el checklist "Primeros pasos" (ids alineados
   // con STEPS). El cálculo vive en getOnboardingCompleted (React.cache), así el
   // home del panel lo reusa en el MISMO request sin re-correr los COUNT(*).
+  //
+  // CLÍNICA SUSPENDIDA — nos saltamos las dos consultas que su sidebar no mira.
+  // Con isExpired el sidebar pinta el MENÚ REDUCIDO (Facturación + Soporte), que
+  // sale de SUSPENDED_NAV_IDS: no filtra por clinicModuleKeys ni lee
+  // onboardingCompleted. Calcularlos era pagar el módulo activo + seis COUNT(*)
+  // de onboarding en la ÚNICA pantalla que esta clínica llega a ver, la de pago.
+  // Se saltan con Promise.resolve([]) DENTRO del Promise.all para no tocar el
+  // camino de la clínica activa: ahí siguen siendo las mismas 3 en paralelo.
+  // getUserClinics NO se salta: el switcher es la vía de escape del dueño con
+  // varias sedes hacia una activa (y el propio menú reducido lo renderiza).
   const [allClinics, clinicModuleKeys, onboardingCompleted] = await Promise.all([
     getUserClinics(),
-    getActiveClinicModuleKeys(clinic.id),
-    getOnboardingCompleted(clinic.id, clinic.waConnected),
+    isExpired ? Promise.resolve<string[]>([]) : getActiveClinicModuleKeys(clinic.id),
+    isExpired ? Promise.resolve<string[]>([]) : getOnboardingCompleted(clinic.id, clinic.waConnected),
   ]);
 
   // Multi-Clínica Fase 1 — cupo de sucursales para el switcher del sidebar.

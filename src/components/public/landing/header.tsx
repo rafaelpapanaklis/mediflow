@@ -83,7 +83,14 @@ export function Header({ isLoggedIn = false }: HeaderProps) {
             {mode === "dark" ? "🌙" : "☀"}
           </button>
           {isLoggedIn ? (
-            <Link
+            // <a> y NO <Link>: navegación DURA a propósito. El layout de
+            // /dashboard hace redirect() a /dashboard/suspended cuando la
+            // clínica no tiene plan activo, y un redirect() lanzado desde un
+            // LAYOUT durante una navegación suave deja el árbol del router
+            // vacío (Next 14) — la pantalla de pago sale EN BLANCO hasta
+            // recargar. Con <a> el navegador pide el documento completo y el
+            // 307 se resuelve server-side. NO lo cambies a <Link>.
+            <a
               href="/dashboard"
               style={{
                 padding: "8px 14px",
@@ -96,7 +103,7 @@ export function Header({ isLoggedIn = false }: HeaderProps) {
               }}
             >
               Ir al dashboard →
-            </Link>
+            </a>
           ) : (
             <>
               <Link
