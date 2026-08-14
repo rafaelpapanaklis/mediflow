@@ -119,7 +119,10 @@ export async function POST(req: NextRequest) {
   const [clinic, doctor] = await Promise.all([
     prisma.clinic.findUnique({
       where: { id: ctx.clinicId },
-      select: { name: true, address: true, city: true },
+      // timezone: el "Lugar y fecha" de la carta se fecha en la zona de la
+      // clínica. Sin él, una carta creada de noche en México salía fechada al
+      // día siguiente (el servidor corre en UTC).
+      select: { name: true, address: true, city: true, timezone: true },
     }),
     // Estomatólogo responsable: el elegido en el modal o, si no se eligió, quien
     // crea la carta. Se busca dentro de la clínica de la sesión — un id de otra
@@ -144,6 +147,7 @@ export async function POST(req: NextRequest) {
       clinicName: clinic?.name ?? "",
       clinicAddress: clinic?.address ?? null,
       clinicCity: clinic?.city ?? null,
+      timezone: clinic?.timezone ?? null,
       patientName,
       patientAge: patient.dob ? calculateAge(patient.dob).years : null,
       patientNumber: patient.patientNumber ?? null,

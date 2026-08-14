@@ -10,6 +10,11 @@
 // sin la del profesional está incompleta según la NOM-004 numeral 10.1.1, y
 // hasta ahora no había forma de notarlo.
 //
+// EN VIVO: la firma del paciente sucede fuera de esta pantalla, así que la
+// lista se recarga sola al recuperar el foco y, mientras quede alguna carta
+// pendiente, cada 30 s con la pestaña visible. Sin eso había que apretar F5
+// para enterarse de que ya se podía firmar como doctor.
+//
 // JERARQUÍA (ola de pulido tras el QA visual): el acto que de verdad importa es
 // FIRMAR, y estaba escondido entre seis botones del mismo tamaño con la URL
 // cruda de protagonista. Ahora cada fila lleva al frente las dos acciones que se
@@ -58,7 +63,7 @@ export interface ConsentsTabProps {
   canRevoke: boolean;
   /** "whatsapp.send" — sin él no se ofrece el envío (la API lo revalida). */
   canSendWhatsApp: boolean;
-  /** Solo el profesional responsable contrafirma (la API revalida el rol). */
+  /** Solo el doctor responsable estampa su firma (la API revalida el rol). */
   canCountersign: boolean;
 }
 
@@ -106,6 +111,48 @@ export function ConsentsTab(props: ConsentsTabProps) {
       /* la lista anterior sigue siendo válida: no se vacía por un fallo de red */
     }
   }, [patientId]);
+
+  // ── Refresco en vivo ──────────────────────────────────────────────────────
+  //
+  // La firma ocurre FUERA de este panel: en otra pestaña (el botón "Firma del
+  // paciente" abre la liga) o directamente en el teléfono del paciente. La
+  // lista solo se recargaba con acciones propias o con F5, así que la recepción
+  // veía "PENDIENTE" para siempre y el botón de firma del doctor —que solo
+  // aparece cuando el paciente ya firmó— no salía nunca.
+  //
+  // Volver el foco a la ventana es la señal más fiable de que algo pudo pasar
+  // fuera: cubre el caso de la tableta (firmar en la otra pestaña y volver) sin
+  // pedirle nada al usuario.
+  useEffect(() => {
+    const refetch = () => {
+      // `focus` también llega en pestañas de segundo plano de algunos
+      // navegadores; sin el guard se pediría la lista sin nadie mirándola.
+      if (document.visibilityState !== "visible") return;
+      void load();
+    };
+    window.addEventListener("focus", refetch);
+    document.addEventListener("visibilitychange", refetch);
+    return () => {
+      window.removeEventListener("focus", refetch);
+      document.removeEventListener("visibilitychange", refetch);
+    };
+  }, [load]);
+
+  // Cuando el paciente firma desde su casa no hay ningún foco que recuperar: el
+  // panel está abierto en el mostrador y nadie lo toca. Ahí hace falta
+  // preguntar, pero SOLO mientras haya algo que esperar (una carta pendiente de
+  // firma) y con la pestaña delante — un consultorio deja el expediente abierto
+  // horas y esto no puede convertirse en tráfico de fondo perpetuo.
+  const hasPending = useMemo(() => list.some((c) => c.status === "PENDING"), [list]);
+
+  useEffect(() => {
+    if (!hasPending) return;
+    const timer = setInterval(() => {
+      if (document.visibilityState !== "visible") return;
+      void load();
+    }, 30_000);
+    return () => clearInterval(timer);
+  }, [hasPending, load]);
 
   function publicUrl(token: string): string {
     return `${window.location.origin}/consentimiento/${token}`;
@@ -1019,7 +1066,7 @@ function CreatedPanel({
 }
 
 // ---------------------------------------------------------------------------
-// Modal: contrafirma del profesional
+// Modal: firma del doctor (countersign en la API y en el modelo de datos)
 // ---------------------------------------------------------------------------
 
 function CountersignModal({

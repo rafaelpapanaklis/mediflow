@@ -1,4 +1,5 @@
 import { Document, Page, Text, View, StyleSheet, Image as PdfImage } from "@react-pdf/renderer";
+import { formatConsentDate, formatConsentDateTime } from "@/lib/consent/dates";
 
 /**
  * ConsentDocument — PDF de la carta de consentimiento informado.
@@ -13,6 +14,11 @@ import { Document, Page, Text, View, StyleSheet, Image as PdfImage } from "@reac
  * El pie de evidencia (hash del texto, IP y navegador desde donde se firmó) es
  * lo que sostiene la firma electrónica: sin él, el PDF es una imagen bonita sin
  * nada que demuestre qué se firmó ni desde dónde.
+ *
+ * TODAS las fechas se imprimen en la zona horaria de la CLÍNICA (`timeZone`),
+ * que llega como prop obligatoria. Este componente se renderiza en el servidor,
+ * donde la zona local es UTC: sin ella el PDF fechaba las firmas seis horas
+ * adelante y contradecía a la pantalla que el paciente acababa de ver.
  *
  * Mismo lenguaje visual que QuoteDocument y PrescriptionDocument.
  */
@@ -41,6 +47,12 @@ export interface ConsentDocumentProps {
   place: string | null;
   /** Fecha de emisión (ISO). */
   issuedAt: string;
+  /**
+   * Zona horaria de la clínica (`Clinic.timezone`). Obligatoria a propósito:
+   * si fuera opcional, un caller nuevo que la olvide vuelve a imprimir en UTC
+   * y nadie se entera hasta que un paciente reclama la hora de su firma.
+   */
+  timeZone: string;
 
   patientName: string;
   patientNumber: string | null;
@@ -137,20 +149,6 @@ const styles = StyleSheet.create({
   pageNum: { fontSize: 7.5, color: "#9b9aa8", textAlign: "center", marginTop: 2 },
 });
 
-function fmtDate(iso: string | null): string {
-  if (!iso) return "—";
-  const d = new Date(iso);
-  if (isNaN(d.getTime())) return "—";
-  return d.toLocaleDateString("es-MX", { day: "2-digit", month: "long", year: "numeric" });
-}
-
-function fmtDateTime(iso: string | null): string {
-  if (!iso) return "—";
-  const d = new Date(iso);
-  if (isNaN(d.getTime())) return "—";
-  return `${d.toLocaleDateString("es-MX", { day: "2-digit", month: "2-digit", year: "numeric" })} ${d.toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" })}`;
-}
-
 /** Pares de firmas por renglón (dos columnas). */
 function inPairs(blocks: ConsentSignatureBlock[]): ConsentSignatureBlock[][] {
   const rows: ConsentSignatureBlock[][] = [];
@@ -158,7 +156,7 @@ function inPairs(blocks: ConsentSignatureBlock[]): ConsentSignatureBlock[][] {
   return rows;
 }
 
-function SignatureCell({ block }: { block: ConsentSignatureBlock }) {
+function SignatureCell({ block, timeZone }: { block: ConsentSignatureBlock; timeZone: string }) {
   return (
     <View style={styles.sigBox}>
       {block.dataUrl ? (
@@ -170,7 +168,9 @@ function SignatureCell({ block }: { block: ConsentSignatureBlock }) {
         <Text style={styles.sigRole}>{block.role}</Text>
         <Text style={styles.sigName}>{block.name || "—"}</Text>
         <Text style={styles.sigDate}>
-          {block.signedAt ? `Firmado el ${fmtDateTime(block.signedAt)}` : "Fecha: ____ / ____ / ________"}
+          {block.signedAt
+            ? `Firmado el ${formatConsentDateTime(block.signedAt, timeZone)}`
+            : "Fecha: ____ / ____ / ________"}
         </Text>
       </View>
     </View>
@@ -205,14 +205,14 @@ export function ConsentDocument(props: ConsentDocumentProps) {
           <View>
             <Text style={styles.docTitle}>CARTA DE CONSENTIMIENTO INFORMADO</Text>
             <Text style={styles.metaRight}>Fecha</Text>
-            <Text style={styles.metaValue}>{fmtDate(props.issuedAt)}</Text>
+            <Text style={styles.metaValue}>{formatConsentDate(props.issuedAt, props.timeZone)}</Text>
           </View>
         </View>
 
         {props.revokedAt ? (
           <View style={styles.revoked}>
             <Text style={styles.revokedTitle}>
-              CONSENTIMIENTO REVOCADO EL {fmtDateTime(props.revokedAt)}
+              CONSENTIMIENTO REVOCADO EL {formatConsentDateTime(props.revokedAt, props.timeZone)}
             </Text>
             <Text style={styles.revokedText}>
               Motivo: {props.revokedReason || "No se registró motivo."}
@@ -247,7 +247,7 @@ export function ConsentDocument(props: ConsentDocumentProps) {
               ) : null}
               <Text style={[styles.label, { marginTop: 6 }]}>Lugar y fecha</Text>
               <Text style={styles.sub}>
-                {(props.place || "—") + ", a " + fmtDate(props.issuedAt)}
+                {(props.place || "—") + ", a " + formatConsentDate(props.issuedAt, props.timeZone)}
               </Text>
               <Text style={[styles.label, { marginTop: 6 }]}>Acto autorizado</Text>
               <Text style={styles.sub}>{props.procedure}</Text>
@@ -268,7 +268,7 @@ export function ConsentDocument(props: ConsentDocumentProps) {
         <Text style={styles.sectionTitle}>Firmas</Text>
         {inPairs(props.signatures).map((row, i) => (
           <View key={i} style={styles.sigRow} wrap={false}>
-            {row.map((b, j) => <SignatureCell key={j} block={b} />)}
+            {row.map((b, j) => <SignatureCell key={j} block={b} timeZone={props.timeZone} />)}
             {/* Relleno para que una firma suelta no ocupe el ancho completo. */}
             {row.length === 1 ? <View style={styles.sigBox} /> : null}
           </View>
@@ -286,7 +286,8 @@ export function ConsentDocument(props: ConsentDocumentProps) {
             </Text>
           ) : null}
           <Text style={styles.evidenceMono}>
-            Firma del paciente: {props.signedAt ? fmtDateTime(props.signedAt) : "pendiente"}
+            Firma del paciente:{" "}
+            {props.signedAt ? formatConsentDateTime(props.signedAt, props.timeZone) : "pendiente"}
             {props.signedIp ? ` · IP ${props.signedIp}` : ""}
           </Text>
           {props.signedUserAgent ? (

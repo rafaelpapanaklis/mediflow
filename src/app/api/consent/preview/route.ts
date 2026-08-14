@@ -57,7 +57,10 @@ export async function GET(req: NextRequest) {
   const [clinic, doctor] = await Promise.all([
     prisma.clinic.findUnique({
       where: { id: ctx.clinicId },
-      select: { name: true, address: true, city: true },
+      // timezone: la vista previa tiene que fechar EXACTAMENTE igual que el POST
+      // que guarda la carta. Si aquí faltara, el doctor revisaría un día y el
+      // paciente firmaría otro.
+      select: { name: true, address: true, city: true, timezone: true },
     }),
     prisma.user.findFirst({
       where: { id: doctorId || ctx.userId, clinicId: ctx.clinicId, isActive: true },
@@ -69,6 +72,7 @@ export async function GET(req: NextRequest) {
     clinicName: clinic?.name ?? "",
     clinicAddress: clinic?.address ?? null,
     clinicCity: clinic?.city ?? null,
+    timezone: clinic?.timezone ?? null,
     patientName: `${patient.firstName} ${patient.lastName}`.trim(),
     patientAge: patient.dob ? calculateAge(patient.dob).years : null,
     patientNumber: patient.patientNumber ?? null,

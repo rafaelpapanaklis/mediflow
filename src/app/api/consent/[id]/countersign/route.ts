@@ -34,7 +34,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   // del acto". Recepción puede generar y enviar la carta, no firmarla.
   if (!COUNTERSIGN_ROLES.includes(ctx.role)) {
     return NextResponse.json(
-      { error: "Solo el profesional responsable puede contrafirmar el consentimiento." },
+      { error: "Solo el doctor responsable puede estampar la firma del doctor en el consentimiento." },
       { status: 403 },
     );
   }
@@ -55,7 +55,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
 
   if (!form.signedAt) {
     return NextResponse.json(
-      { error: "El paciente todavía no ha firmado. La contrafirma se estampa después de su firma." },
+      { error: "El paciente todavía no ha firmado. La firma del doctor se estampa después de la suya." },
       { status: 409 },
     );
   }
@@ -66,7 +66,10 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     );
   }
   if (form.doctorSignedAt) {
-    return NextResponse.json({ error: "Este consentimiento ya está contrafirmado." }, { status: 409 });
+    return NextResponse.json(
+      { error: "Este consentimiento ya tiene la firma del doctor." },
+      { status: 409 },
+    );
   }
 
   const body = await req.json().catch(() => ({} as Record<string, unknown>));

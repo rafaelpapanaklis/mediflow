@@ -98,7 +98,7 @@ export const ALL_PERMISSIONS = {
   "prescription.create":  "Crear/firmar recetas",
   // Consentimientos informados
   "consents.view":        "Ver consentimientos",
-  "consents.create":      "Crear, enviar y contrafirmar consentimientos",
+  "consents.create":      "Crear, enviar y firmar como doctor los consentimientos",
   "consents.revoke":      "Revocar y eliminar consentimientos",
   // Radiografías
   "xrays.view":           "Ver radiografías",

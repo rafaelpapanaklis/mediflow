@@ -6,6 +6,7 @@ import {
   ConsentDocument,
   type ConsentSignatureBlock,
 } from "@/lib/pdf/consent-document";
+import { consentTimeZone } from "@/lib/consent/dates";
 
 /**
  * buildConsentPdf — query + logo + firmas + render del PDF de un consentimiento.
@@ -53,6 +54,10 @@ export async function buildConsentPdf(
       clinic: {
         select: {
           name: true, address: true, city: true, phone: true, email: true, logoUrl: true,
+          // Zona horaria de la clínica: TODAS las fechas del PDF se imprimen en
+          // ella. Sin esto el render (servidor = UTC) fechaba las firmas seis
+          // horas adelante y no coincidían con la pantalla del paciente.
+          timezone: true,
         },
       },
     },
@@ -132,6 +137,7 @@ export async function buildConsentPdf(
     procedure: form.procedure,
     place: form.clinic.city ?? null,
     issuedAt: form.createdAt.toISOString(),
+    timeZone: consentTimeZone(form.clinic.timezone),
 
     patientName,
     patientNumber: form.patient.patientNumber ?? null,

@@ -28,6 +28,10 @@ import {
   CONSENT_PROCEDURES,
   type ConsentProcedure,
 } from "@/lib/herramientas/consent-procedures";
+// La fecha de la carta se formatea en la zona de la CLÍNICA, no en la del
+// runtime: esta función corre en el servidor (Vercel = UTC) y una carta creada
+// por la noche se fechaba al día siguiente.
+import { formatConsentDate } from "./dates";
 
 /** Clave de la carta genérica de atención odontológica. */
 export const GENERAL_CONSENT_KEY = "atencion-general";
@@ -167,6 +171,13 @@ export interface ConsentTemplateVars {
   place?: string | null;
   /** Fecha ya formateada. Por defecto, la de hoy en es-MX. */
   date?: string | null;
+  /**
+   * Zona horaria de la clínica (`Clinic.timezone`). Decide QUÉ DÍA es "hoy" al
+   * fechar la carta: sin ella el servidor (UTC en Vercel) fechaba en el futuro
+   * todo lo generado después de las 18:00 hora de México. Vacía → default
+   * nacional.
+   */
+  timezone?: string | null;
 }
 
 /**
@@ -196,7 +207,7 @@ function tokenMap(vars: ConsentTemplateVars): Record<string, string> {
     NOMBRE_REPRESENTANTE: (vars.signerName ?? "").trim() || "—",
     PARENTESCO_REPRESENTANTE: (vars.signerRelation ?? "").trim() || "—",
     LUGAR: (vars.place ?? vars.clinicCity ?? "").trim() || "—",
-    FECHA: (vars.date ?? "").trim() || todayEsMx(),
+    FECHA: (vars.date ?? "").trim() || todayInClinicTz(vars.timezone),
   };
 }
 
@@ -214,12 +225,16 @@ export function interpolateConsent(text: string, vars: ConsentTemplateVars): str
   );
 }
 
-function todayEsMx(): string {
-  return new Date().toLocaleDateString("es-MX", {
-    day: "2-digit",
-    month: "long",
-    year: "numeric",
-  });
+/**
+ * "Hoy" en la zona de la clínica.
+ *
+ * Antes era `new Date().toLocaleDateString("es-MX", …)` sin `timeZone`: en el
+ * servidor eso es UTC, y una carta creada el 13 de agosto a las 23:43 de México
+ * decía "a 14 de agosto de 2026". Un documento legal no puede fechar un día que
+ * todavía no llega.
+ */
+function todayInClinicTz(timezone?: string | null): string {
+  return formatConsentDate(new Date(), timezone);
 }
 
 function bullets(items: string[]): string {
