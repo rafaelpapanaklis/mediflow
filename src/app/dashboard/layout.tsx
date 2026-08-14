@@ -27,6 +27,7 @@ import {
 import { MUST_CHANGE_PASSWORD_PATH } from "@/lib/auth/must-change-password";
 import { ACTIVE_SUBSCRIPTION_STATUSES, isPlanExpired, isAllowedWhileSuspended } from "@/lib/plan-status";
 import { getBranchQuota } from "@/lib/branches";
+import { HIDE_SUPPLY_MODULES } from "@/lib/hidden-modules";
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const user = await getCurrentUser();
@@ -248,8 +249,10 @@ export default async function DashboardLayout({ children }: { children: React.Re
     </div>
     <ExpiredPlanModal isExpired={isExpired} currentPathname={pathname} />
     {/* Ícono de chat flotante (FAB) permanente en todo el dashboard. Una sola
-        instancia aquí ⇒ visible exactamente una vez en cada ruta /dashboard/*. */}
-    <ChatLauncher />
+        instancia aquí ⇒ visible exactamente una vez en cada ruta /dashboard/*.
+        Sus 2 pestañas son Proveedores + Laboratorios, así que se apaga junto con
+        esos módulos (HIDE_SUPPLY_MODULES); si no, seguiría siendo su puerta visible. */}
+    {!HIDE_SUPPLY_MODULES && <ChatLauncher />}
     </NewAppointmentProvider>
     </NewPatientProvider>
     </ActiveConsultProvider>
