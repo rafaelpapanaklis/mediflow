@@ -160,6 +160,27 @@ export const PRICING_COPY = {
   ],
 };
 
+/**
+ * Banda de contacto entre precios y el trío oscuro (whatsapp-cta.tsx).
+ *
+ * `numberE164` va SIN "+" porque es lo que espera wa.me (misma convención que
+ * account-manager-card.tsx y los templates de mini-web); `numberDisplay` es el
+ * mismo número ya formateado para leerlo. Los dos salen de aquí, así que el
+ * footer y el CTA no pueden desincronizarse.
+ *
+ * El copy no promete tiempos de respuesta: del otro lado contesta una persona
+ * en horario de oficina, no un bot.
+ */
+export const WHATSAPP_CTA = {
+  eyebrow: 'Habla con nosotros',
+  title: '¿Tienes dudas? Escríbenos por WhatsApp',
+  subtitle: 'Cuéntanos de tu clínica y te ayudamos a decidir si DaleControl es para ti. Sin compromiso.',
+  button: 'Chatear por WhatsApp',
+  numberDisplay: '+52 999 260 2093',
+  numberE164: '529992602093',
+  prefilledText: 'Hola, me interesa DaleControl para mi clínica dental. ¿Me pueden dar más información?',
+};
+
 export const MODULES_TRIO = {
   title: 'Y también dominas los números, tu equipo y tu presencia en línea',
   subtitle: 'Tres módulos más, directo del panel.',
@@ -327,11 +348,14 @@ export const FOOTER = {
     { label: 'Términos y condiciones', href: '/terminos' },
     { label: 'Términos del programa de afiliados', href: '/terminos-afiliados' },
   ],
-  // Sin href="#": los dos placeholders (WhatsApp / Facebook) no tenían destino
-  // real y un ancla vacía deja al usuario dando un salto al inicio de la
-  // página. Sólo se listan canales que existen de verdad; el handle de
-  // Instagram es el mismo que ya declara landing/footer.tsx.
+  // Sólo canales que existen de verdad, nunca href="#": un ancla vacía deja al
+  // usuario dando un salto al inicio de la página. Por eso Facebook sigue
+  // fuera. WhatsApp SÍ entra desde que hay número real: el mismo de
+  // WHATSAPP_CTA, para que el footer y la banda de contacto no se
+  // desincronicen. El handle de Instagram es el mismo que ya declara
+  // landing/footer.tsx.
   contact: [
+    { label: `WhatsApp ${WHATSAPP_CTA.numberDisplay}`, href: `https://wa.me/${WHATSAPP_CTA.numberE164}` },
     { label: 'hola@dalecontrol.com', href: 'mailto:hola@dalecontrol.com' },
     { label: 'soporte@dalecontrol.com', href: 'mailto:soporte@dalecontrol.com' },
     { label: 'Instagram', href: 'https://instagram.com/dalecontrol' },

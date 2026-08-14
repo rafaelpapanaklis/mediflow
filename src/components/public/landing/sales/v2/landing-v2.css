@@ -158,6 +158,46 @@ html:has(.dcv4-root) { scroll-behavior: smooth; }
   .dcv2-btn-white:hover, .dcv4-btn-glass:hover { transform: none; }
 }
 
+/* ── CTA de WhatsApp (whatsapp-cta.tsx) ──────────────────────────────────
+   Verde oscuro a propósito: el #25D366 de marca con texto blanco no llega ni a
+   2:1 de contraste. */
+.dcv2-btn-wa {
+  text-decoration: none;
+  background: #128C7E;
+  color: #fff;
+  font-weight: 700;
+  transition: background .16s, transform .18s;
+}
+.dcv2-btn-wa:hover { background: #0e7566; color: #fff; transform: translateY(-2px); }
+.dcv2-btn-wa:focus-visible { outline: 2px solid #0f172a; outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) { .dcv2-btn-wa:hover { transform: none; } }
+
+/* El quiebre lo decide la TARJETA, no el viewport: es la única medida que
+   importa (texto y botón dejan de convivir en una fila cuando el contenido de
+   la tarjeta baja de ~640px, alrededor de 735px de viewport). Con container
+   query el corte cae siempre donde debe, aunque la banda cambie de ancho.
+   Sólo se declaran aquí las propiedades que cambian entre los dos modos; el
+   resto del layout va inline como en toda la landing.
+
+   El `flex` del bloque de texto NO puede ir inline: en columna la base sería
+   un ALTO, no un ancho, y una base inline no se puede sobreescribir desde la
+   query. Y la base tiene que ser concreta (320px), no `auto`: con `auto` el
+   ancho hipotético es el max-content del título + subtítulo, así que la fila
+   se envolvía SIEMPRE y el botón caía debajo hasta en desktop. El
+   `flex-wrap` sobrevive como red de seguridad para navegadores sin container
+   queries: ahí el bloque se envuelve por la base de 320px. */
+.dcv4-wa-card { container-type: inline-size; }
+.dcv4-wa-lead { flex: 1 1 320px; }
+.dcv4-wa-btn { padding: 0 28px; }
+@container (max-width: 640px) {
+  .dcv4-wa-row { flex-direction: column; text-align: center; }
+  .dcv4-wa-lead { flex: 0 0 auto; flex-direction: column; }
+  .dcv4-wa-action { width: 100%; max-width: 360px; }
+  /* A lo ancho de la tarjeta los 28px de los CTA ya no separan de nada y a
+     360px dejaban la etiqueta a 6px de caber: partía en dos líneas. */
+  .dcv4-wa-btn { width: 100%; padding: 0 16px; }
+}
+
 /* ── Tarjetas ────────────────────────────────────────────────────────────── */
 .dcv4-figure { transition: transform .3s ease; }
 .dcv4-figure:hover { transform: translateY(-4px); }

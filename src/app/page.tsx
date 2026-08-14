@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import {
-  Hero, SocialProofBar, Funciones, PricingSection, ModulesTrio, FeaturesGrid,
+  Hero, SocialProofBar, Funciones, PricingSection, WhatsappCta, ModulesTrio, FeaturesGrid,
   ModulePages, Comparison, Testimonials, TrustFaq, FinalCta, ScrollReveal, TawkChat,
 } from "@/components/public/landing/sales/v2";
 import { buildPlanCards, cheapestFirstMonthLabel, headlineYearlyDiscount } from "@/components/public/landing/sales/v2/plan-cards";
@@ -148,6 +148,7 @@ export default async function HomePage() {
         <SocialProofBar />
         <Funciones />
         <PricingSection cards={cards} firstMonthFrom={firstMonthFrom} yearlyDiscountPct={yearlyDiscountPct} />
+        <WhatsappCta />
         <ModulesTrio />
         <FeaturesGrid />
         <ModulePages />
