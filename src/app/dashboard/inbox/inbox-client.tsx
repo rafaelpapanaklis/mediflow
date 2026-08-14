@@ -3,6 +3,7 @@
 import {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -28,6 +29,7 @@ import {
   CheckCheck,
   Menu,
   ArrowLeft,
+  ArrowDown,
   User,
   UserX,
   UserPlus,
@@ -332,6 +334,14 @@ function dayKey(iso: string): string {
   return `${d.getFullYear()}-${mm}-${dd}`;
 }
 
+/** `useLayoutEffect` avisa en SSR; en el servidor no hay scroll que colocar. */
+const useIsoLayoutEffect = typeof window === "undefined" ? useEffect : useLayoutEffect;
+
+/** Holgura en px para dar por bueno "está mirando el final del hilo". */
+const AT_BOTTOM_SLACK = 48;
+/** Margen que se le da a la animación suave antes de rematar el salto a mano. */
+const SMOOTH_SETTLE_MS = 400;
+
 export function InboxClient({ viewer }: { viewer: Viewer }) {
   const t = useT();
   const router = useRouter();
@@ -388,8 +398,28 @@ export function InboxClient({ viewer }: { viewer: Viewer }) {
   // hilo. Antes era un toast de "próximamente" y la clínica solo podía RESPONDER.
   const [composeOpen, setComposeOpen] = useState(false);
 
+  // Aviso "nuevos mensajes" cuando llega algo y el usuario está leyendo
+  // historial más arriba. Arrastrarlo al fondo en ese momento es de lo más
+  // molesto que puede hacer un chat: se le pierde el renglón que estaba leyendo.
+  const [hasNewBelow, setHasNewBelow] = useState(false);
+
   const composerRef = useRef<HTMLTextAreaElement>(null);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
+  // Contenedor con scroll de los mensajes. Se mueve el contenedor, no un ancla
+  // con scrollIntoView: eso también desplazaba a los ancestros.
+  const messagesRef = useRef<HTMLDivElement>(null);
+  /** ¿El usuario está pegado al fondo? Ref: cambia en cada evento de scroll. */
+  const atBottomRef = useRef(true);
+  /** Id del hilo que YA se posicionó abajo (para no volver a saltar en cada mensaje). */
+  const positionedForRef = useRef<string | null>(null);
+  /** El propio usuario acaba de enviar: su mensaje sí lo seguimos al fondo. */
+  const followOwnSendRef = useRef(false);
+  /** Cuántas burbujas se habían visto ya, y de qué hilo. Distingue "llegó algo
+      nuevo" de "el mismo mensaje cambió de palomita" (el polling reenvía los
+      recientes cuando Meta confirma la entrega). */
+  const seenCountRef = useRef<{ threadId: string | null; total: number }>({
+    threadId: null,
+    total: 0,
+  });
   // Cursor del polling en tiempo real (lo siembra el listado con serverTime y lo
   // avanza cada poll de /api/inbox/since). Ref para no re-disparar efectos.
   const lastSyncRef = useRef<string | null>(null);
@@ -734,10 +764,83 @@ export function InboxClient({ viewer }: { viewer: Viewer }) {
     return () => { cancelled = true; };
   }, [activeThreadId, t]);
 
-  // Auto-scroll al fondo cuando cambian mensajes.
+  /* ── Posición del hilo: abajo al abrir, sin arrastrar a quien lee arriba ──
+
+     El efecto anterior dependía de `[activeThread?.messages.length,
+     liveEvents.length]` y hacía `scrollIntoView({ behavior: "smooth" })`:
+       · al cambiar a una conversación con el MISMO número de mensajes el valor
+         no cambiaba, el efecto no corría y el chat se quedaba arriba; y
+       · cuando sí corría, la animación al abrir se percibe como "empieza arriba".
+     Ahora abrir y recibir son dos cosas distintas (ver los dos efectos abajo). */
+
+  /**
+   * Baja del todo el contenedor de mensajes.
+   *
+   * El salto directo NUNCA usa `behavior: "smooth"`, y el suave lleva red de
+   * seguridad, porque el desplazamiento suave se puede APAGAR: Chrome tiene el
+   * ajuste "Smooth Scrolling" (y está apagado en máquinas reales), y con él
+   * `scrollTo({behavior:"smooth"})`, `scroll-behavior: smooth` y
+   * `scrollIntoView({behavior:"smooth"})` no hacen absolutamente nada — ni un
+   * píxel. Ese era el fondo del fallo reportado: el efecto viejo hacía justo
+   * ese scrollIntoView suave, así que aunque llegara a correr, la conversación
+   * se quedaba arriba igual.
+   */
+  const scrollToBottom = useCallback((behavior: ScrollBehavior) => {
+    const el = messagesRef.current;
+    if (!el) return;
+    atBottomRef.current = true;
+    setHasNewBelow(false);
+
+    const reduced =
+      typeof window !== "undefined" &&
+      !!window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    if (behavior !== "smooth" || reduced) {
+      el.scrollTop = el.scrollHeight;   // asignación directa: siempre funciona
+      return;
+    }
+
+    el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+    window.setTimeout(() => {
+      const cur = messagesRef.current;
+      // Si el usuario subió a propósito mientras tanto, mandan sus manos: el
+      // onScroll ya habrá puesto atBottomRef en false.
+      if (!cur || !atBottomRef.current) return;
+      // Remate incondicional (no "si falta más de AT_BOTTOM_SLACK"): esa holgura
+      // sirve para leer la INTENCIÓN del usuario, no para dar por terminado un
+      // desplazamiento nuestro. Con el suave apagado, una burbuja nueva deja el
+      // hilo ~44 px corto —dentro de la holgura— y el último mensaje se queda a
+      // medias. Si la animación ya llegó, esto no hace nada.
+      cur.scrollTop = cur.scrollHeight;
+    }, SMOOTH_SETTLE_MS);
+  }, []);
+
+  /** ¿Sigue pegado al fondo? Lo decide cada evento de scroll, no un estado. */
+  const onMessagesScroll = useCallback(() => {
+    const el = messagesRef.current;
+    if (!el) return;
+    const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight <= AT_BOTTOM_SLACK;
+    atBottomRef.current = atBottom;
+    if (atBottom) setHasNewBelow(false);
+  }, []);
+
+  /* Cambiar de conversación (o cerrarla) rearma el posicionamiento: la nueva se
+     abre otra vez por el final, aunque sea la misma de antes. */
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [activeThread?.messages.length, liveEvents.length]);
+    positionedForRef.current = null;
+    atBottomRef.current = true;
+    setHasNewBelow(false);
+  }, [activeThreadId]);
+
+  /* Al ABRIR: al último mensaje de golpe, sin animación. useLayoutEffect para
+     que el salto ocurra antes de pintar — con useEffect se ve un fotograma
+     arriba, que es justo lo que se reportó. */
+  useIsoLayoutEffect(() => {
+    const id = activeThread?.id ?? null;
+    if (!id || loadingDetail) return;
+    if (positionedForRef.current === id) return;
+    positionedForRef.current = id;
+    scrollToBottom("auto");
+  }, [activeThread?.id, loadingDetail, scrollToBottom]);
 
   /* ── Derivados ── */
 
@@ -848,6 +951,9 @@ export function InboxClient({ viewer }: { viewer: Viewer }) {
       // reflejarlo en el detalle y en la lista + evento de sistema en vivo.
       const pausedBot =
         composerMode !== "internal" && activeThread.channel === "WHATSAPP" && activeThread.botActive;
+      // Lo que escribe uno mismo sí se sigue al fondo, aunque estuviera leyendo
+      // más arriba: acaba de pulsar enviar y quiere ver salir su mensaje.
+      followOwnSendRef.current = true;
       setActiveThread((prev) =>
         prev
           ? { ...prev, messages: [...prev.messages, data.message], ...(pausedBot ? { botActive: false } : {}) }
@@ -1176,6 +1282,34 @@ export function InboxClient({ viewer }: { viewer: Viewer }) {
     [liveEvents, activeThreadId],
   );
 
+  /* ── Llegó algo NUEVO con la conversación ya abierta ──
+     · mirando el final  → se sigue solo, con desplazamiento suave;
+     · leyendo historial → NO se le mueve nada. Aparece el aviso "nuevos
+       mensajes" y baja cuando él lo pulse. Arrastrar a alguien al fondo
+       mientras lee es de lo más molesto que puede hacer un chat.
+     El contador distingue un mensaje nuevo de un simple cambio de palomita: el
+     polling reenvía a propósito los recientes cuando Meta confirma la entrega. */
+  const messageCount = activeThread?.messages.length ?? 0;
+  const liveCount = activeLiveEvents.length;
+  useEffect(() => {
+    const id = activeThread?.id ?? null;
+    if (!id || loadingDetail) return;
+    // Todavía sin posicionar: del salto inicial se encarga el efecto de abrir.
+    if (positionedForRef.current !== id) return;
+
+    const prev = seenCountRef.current;
+    const total = messageCount + liveCount;
+    seenCountRef.current = { threadId: id, total };
+    if (prev.threadId !== id || total <= prev.total) return;
+
+    if (followOwnSendRef.current || atBottomRef.current) {
+      followOwnSendRef.current = false;
+      scrollToBottom("smooth");
+    } else {
+      setHasNewBelow(true);
+    }
+  }, [activeThread?.id, messageCount, liveCount, loadingDetail, scrollToBottom]);
+
   /* ── Ventana 24h del hilo activo (client-side; el server la respeta igual) ── */
   const windowInfo = useMemo(() => {
     if (!activeThread || activeThread.channel !== "WHATSAPP") return null;
@@ -1286,6 +1420,7 @@ export function InboxClient({ viewer }: { viewer: Viewer }) {
       if (!res.ok) throw new Error(data.error || t("inbox.client.tplSendFailed"));
       setPendingTemplate(null);
       toast.success(t("inbox.client.tplSent", { name }));
+      followOwnSendRef.current = true;   // la plantilla la mandó el propio staff
       await refreshThreadDetail(threadId);
       void fetchThreads({ silent: true });
     } catch (err) {
@@ -2098,113 +2233,128 @@ export function InboxClient({ viewer }: { viewer: Viewer }) {
             </div>
 
             {/* Mensajes */}
-            <div className={styles.messages}>
-              {loadingDetail ? (
-                <div className={styles.msgLoading}>{t("inbox.client.loadingMessages")}</div>
-              ) : activeThread.messages.length === 0 && activeLiveEvents.length === 0 ? (
-                <div className={styles.msgLoading}>{t("inbox.client.noMessagesYet")}</div>
-              ) : (
-                messagesByDay.map((g) => (
-                  <div key={g.day} style={{ display: "contents" }}>
-                    <div className={styles.dayWrap}>
-                      <span className={styles.dayChip}>{formatDayDivider(g.day)}</span>
-                    </div>
-                    {g.items.map((m) => {
-                      if (m.isInternal) {
+            <div className={styles.messagesWrap}>
+              <div className={styles.messages} ref={messagesRef} onScroll={onMessagesScroll}>
+                {loadingDetail ? (
+                  <div className={styles.msgLoading}>{t("inbox.client.loadingMessages")}</div>
+                ) : activeThread.messages.length === 0 && activeLiveEvents.length === 0 ? (
+                  <div className={styles.msgLoading}>{t("inbox.client.noMessagesYet")}</div>
+                ) : (
+                  messagesByDay.map((g) => (
+                    <div key={g.day} style={{ display: "contents" }}>
+                      <div className={styles.dayWrap}>
+                        <span className={styles.dayChip}>{formatDayDivider(g.day)}</span>
+                      </div>
+                      {g.items.map((m) => {
+                        if (m.isInternal) {
+                          return (
+                            <div key={m.id} className={styles.noteCard}>
+                              <div className={styles.noteHead}>
+                                <Lock size={12} strokeWidth={2.2} aria-hidden />
+                                <span className={styles.noteTitle}>{t("inbox.client.internalNote")}</span>
+                                <span className={styles.noteMeta}>
+                                  {m.sentBy ? `${m.sentBy.firstName} ${m.sentBy.lastName}` : t("inbox.client.staff")}
+                                  {" · "}
+                                  {formatBubbleTime(m.sentAt)}
+                                </span>
+                              </div>
+                              <div className={styles.noteBody}>{m.body}</div>
+                              <div className={styles.noteFoot}>{t("inbox.client.internalNoteFoot")}</div>
+                            </div>
+                          );
+                        }
+                        if (m.direction === "IN") {
+                          return (
+                            <div key={m.id} className={`${styles.msgGroup} ${styles.msgGroupIn}`}>
+                              <div className={`${styles.bubble} ${styles.bubbleIn}`}>
+                                {m.body}
+                                <span className={styles.bubbleTime}>{formatBubbleTime(m.sentAt)}</span>
+                              </div>
+                            </div>
+                          );
+                        }
+                        // OUT: staff desde el panel (sentBy) vs automático (sin sentBy).
+                        // Dentro de los automáticos, los envíos de la plataforma
+                        // (recordatorios, reseñas, recetas…) traen su origen en el
+                        // externalId `sys:<kind>:…` y llevan etiqueta precisa; el
+                        // resto (respuestas del bot, echo del celular) queda con el
+                        // label genérico "DaleControl".
+                        const fromStaff = m.sentBy !== null;
+                        const autoKind = fromStaff ? null : parseSystemKind(m.externalId);
+                        const autoLabel = autoKind
+                          ? t(`inbox.client.autoLabel.${autoKind}`)
+                          : t("inbox.client.genericOutLabel");
                         return (
-                          <div key={m.id} className={styles.noteCard}>
-                            <div className={styles.noteHead}>
-                              <Lock size={12} strokeWidth={2.2} aria-hidden />
-                              <span className={styles.noteTitle}>{t("inbox.client.internalNote")}</span>
-                              <span className={styles.noteMeta}>
-                                {m.sentBy ? `${m.sentBy.firstName} ${m.sentBy.lastName}` : t("inbox.client.staff")}
-                                {" · "}
+                          <div key={m.id} className={`${styles.msgGroup} ${styles.msgGroupOut}`}>
+                            <span className={styles.msgLabel}>
+                              {fromStaff ? (
+                                <>
+                                  <span className={styles.msgLabelIconStaff}>
+                                    <User size={11} strokeWidth={2.2} aria-hidden />
+                                  </span>
+                                  {t("inbox.client.staffFromPanel", { name: `${m.sentBy!.firstName} ${m.sentBy!.lastName}`.trim() })}
+                                </>
+                              ) : activeThread.channel === "WHATSAPP" ? (
+                                <>
+                                  <span className={styles.msgLabelIconBot}>
+                                    <Bot size={12} strokeWidth={2.2} aria-hidden />
+                                  </span>
+                                  {autoLabel}
+                                </>
+                              ) : (
+                                autoLabel
+                              )}
+                            </span>
+                            <div className={`${styles.bubble} ${fromStaff ? styles.bubbleStaff : styles.bubbleBot}`}>
+                              {m.body}
+                              <span className={styles.bubbleTime}>
                                 {formatBubbleTime(m.sentAt)}
+                                <DeliveryTick
+                                  message={m}
+                                  fromStaff={fromStaff}
+                                  channel={activeThread.channel}
+                                  t={t}
+                                />
                               </span>
                             </div>
-                            <div className={styles.noteBody}>{m.body}</div>
-                            <div className={styles.noteFoot}>{t("inbox.client.internalNoteFoot")}</div>
-                          </div>
-                        );
-                      }
-                      if (m.direction === "IN") {
-                        return (
-                          <div key={m.id} className={`${styles.msgGroup} ${styles.msgGroupIn}`}>
-                            <div className={`${styles.bubble} ${styles.bubbleIn}`}>
-                              {m.body}
-                              <span className={styles.bubbleTime}>{formatBubbleTime(m.sentAt)}</span>
-                            </div>
-                          </div>
-                        );
-                      }
-                      // OUT: staff desde el panel (sentBy) vs automático (sin sentBy).
-                      // Dentro de los automáticos, los envíos de la plataforma
-                      // (recordatorios, reseñas, recetas…) traen su origen en el
-                      // externalId `sys:<kind>:…` y llevan etiqueta precisa; el
-                      // resto (respuestas del bot, echo del celular) queda con el
-                      // label genérico "DaleControl".
-                      const fromStaff = m.sentBy !== null;
-                      const autoKind = fromStaff ? null : parseSystemKind(m.externalId);
-                      const autoLabel = autoKind
-                        ? t(`inbox.client.autoLabel.${autoKind}`)
-                        : t("inbox.client.genericOutLabel");
-                      return (
-                        <div key={m.id} className={`${styles.msgGroup} ${styles.msgGroupOut}`}>
-                          <span className={styles.msgLabel}>
-                            {fromStaff ? (
-                              <>
-                                <span className={styles.msgLabelIconStaff}>
-                                  <User size={11} strokeWidth={2.2} aria-hidden />
-                                </span>
-                                {t("inbox.client.staffFromPanel", { name: `${m.sentBy!.firstName} ${m.sentBy!.lastName}`.trim() })}
-                              </>
-                            ) : activeThread.channel === "WHATSAPP" ? (
-                              <>
-                                <span className={styles.msgLabelIconBot}>
-                                  <Bot size={12} strokeWidth={2.2} aria-hidden />
-                                </span>
-                                {autoLabel}
-                              </>
-                            ) : (
-                              autoLabel
+                            {/* El motivo del fallo va FUERA de la burbuja: dentro
+                                competiría con el texto del mensaje y en un hilo
+                                largo se perdería. */}
+                            {activeThread.channel === "WHATSAPP" && m.deliveryStatus === "FAILED" && (
+                              <span className={styles.deliveryError}>
+                                <AlertCircle size={12} strokeWidth={2.2} aria-hidden />
+                                {describeDelivery(m, t)}
+                              </span>
                             )}
-                          </span>
-                          <div className={`${styles.bubble} ${fromStaff ? styles.bubbleStaff : styles.bubbleBot}`}>
-                            {m.body}
-                            <span className={styles.bubbleTime}>
-                              {formatBubbleTime(m.sentAt)}
-                              <DeliveryTick
-                                message={m}
-                                fromStaff={fromStaff}
-                                channel={activeThread.channel}
-                                t={t}
-                              />
-                            </span>
                           </div>
-                          {/* El motivo del fallo va FUERA de la burbuja: dentro
-                              competiría con el texto del mensaje y en un hilo
-                              largo se perdería. */}
-                          {activeThread.channel === "WHATSAPP" && m.deliveryStatus === "FAILED" && (
-                            <span className={styles.deliveryError}>
-                              <AlertCircle size={12} strokeWidth={2.2} aria-hidden />
-                              {describeDelivery(m, t)}
-                            </span>
-                          )}
-                        </div>
-                      );
-                    })}
+                        );
+                      })}
+                    </div>
+                  ))
+                )}
+                {activeLiveEvents.map((ev) => (
+                  <div key={ev.id} className={styles.sysEvent}>
+                    <span className={styles.sysEventPill}>
+                      <Pause size={11} strokeWidth={2.2} aria-hidden />
+                      {ev.text} · {formatBubbleTime(ev.at)}
+                    </span>
                   </div>
-                ))
+                ))}
+                {/* Respiro al final del hilo (el `gap` del contenedor). Era el
+                    ancla del scrollIntoView de antes; ahora se mueve el
+                    contenedor, pero el hueco se conserva. */}
+                <div aria-hidden />
+              </div>
+              {hasNewBelow && (
+                <button
+                  type="button"
+                  className={styles.newBelow}
+                  onClick={() => scrollToBottom("smooth")}
+                >
+                  <ArrowDown size={13} strokeWidth={2.4} aria-hidden />
+                  {t("inbox.client.newMessagesBelow")}
+                </button>
               )}
-              {activeLiveEvents.map((ev) => (
-                <div key={ev.id} className={styles.sysEvent}>
-                  <span className={styles.sysEventPill}>
-                    <Pause size={11} strokeWidth={2.2} aria-hidden />
-                    {ev.text} · {formatBubbleTime(ev.at)}
-                  </span>
-                </div>
-              ))}
-              <div ref={messagesEndRef} />
             </div>
 
             {/* Composer */}

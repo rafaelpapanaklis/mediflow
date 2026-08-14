@@ -23,7 +23,12 @@ import {
  */
 export type PickableReminder = {
   type: string;
-  appointment: { status: string } | null;
+  /**
+   * `patientId` es opcional a propósito: solo lo necesita
+   * `actionablePatientIds` (desambiguar teléfonos compartidos) y así las filas
+   * de Prisma y los objetos literales de los tests siguen cumpliendo el tipo.
+   */
+  appointment: { status: string; patientId?: string | null } | null;
 };
 
 /**
@@ -62,11 +67,38 @@ export function pickActionableReminder<T extends PickableReminder>(
   return reminders.find((r) => isActionableReminder(r)) ?? null;
 }
 
+/**
+ * Ids de paciente DISTINTOS entre los recordatorios accionables.
+ *
+ * Un mismo teléfono puede pertenecer a varios pacientes de la clínica (caso
+ * real: hermanos con el celular de la mamá). Si dos de ellos tienen cita por
+ * confirmar al mismo tiempo, un "CONFIRMAR" a secas no dice de quién es: hay
+ * que preguntarle a una persona, no adivinar y confirmarle la cita al hermano.
+ */
+export function actionablePatientIds<T extends PickableReminder>(
+  reminders: readonly T[],
+): string[] {
+  const ids: string[] = [];
+  for (const r of reminders) {
+    if (!isActionableReminder(r)) continue;
+    const pid = r.appointment?.patientId ?? null;
+    if (pid && !ids.includes(pid)) ids.push(pid);
+  }
+  return ids;
+}
+
 export type ReminderReplyTarget<T> = {
   /** Fila donde se guarda `patientReply`/`repliedAt` (null = no hacer nada). */
   reminder: T | null;
   /** Qué hacer con la cita. "none" = guardar la respuesta y no tocarla. */
   action: ReminderReply;
+  /**
+   * true = lo ÚLTIMO que recibió el paciente SÍ le pedía confirmar o cancelar,
+   * y no se entendió qué contestó. Es la única situación en la que tiene
+   * sentido pedirle que aclare: hacerlo tras una encuesta ("¿cómo te sentiste?"
+   * → "todo bien") sería responderle un sinsentido.
+   */
+  unclear: boolean;
 };
 
 /**
@@ -75,8 +107,15 @@ export type ReminderReplyTarget<T> = {
  *
  * - Sin accionable → la respuesta se registra sobre el más reciente (para que
  *   el hilo no quede pendiente para siempre) y NINGUNA cita se toca.
- * - Con accionable → se registra ahí y el texto se interpreta.
- * - Lista vacía → `{ reminder: null, action: "none" }`.
+ * - Con accionable Y texto entendido (confirmar/cancelar) → se registra ahí y
+ *   se actúa.
+ * - Con accionable pero texto NO entendido → se registra sobre el más reciente
+ *   (es a lo que contesta) y el accionable NO se toca: el webhook lo deja
+ *   abierto para que el siguiente intento del paciente —el que escriba bien—
+ *   todavía pueda confirmar. Marcar el accionable aquí es justo lo que quemaba
+ *   el recordatorio con un dedazo ("Confirmarr") y dejaba la cita sin confirmar
+ *   para siempre.
+ * - Lista vacía → `{ reminder: null, action: "none", unclear: false }`.
  *
  * CANCELAR pide una condición más: que el ÚLTIMO mensaje que recibió el
  * paciente le haya pedido confirmar o cancelar algo.
@@ -105,13 +144,16 @@ export function resolveReminderReply<T extends PickableReminder>(
   reminders: readonly T[],
   text: string,
 ): ReminderReplyTarget<T> {
+  const latest = reminders[0] ?? null;
   const actionable = pickActionableReminder(reminders);
-  if (!actionable) return { reminder: reminders[0] ?? null, action: "none" };
+  if (!actionable || !latest) return { reminder: latest, action: "none", unclear: false };
 
   const action = classifyReminderReply(text);
-  const latest = reminders[0];
-  if (action === "cancel" && latest !== actionable && !asksToConfirmOrCancel(latest)) {
-    return { reminder: latest, action: "none" };
+  if (action === "none") {
+    return { reminder: latest, action: "none", unclear: asksToConfirmOrCancel(latest) };
   }
-  return { reminder: actionable, action };
+  if (action === "cancel" && latest !== actionable && !asksToConfirmOrCancel(latest)) {
+    return { reminder: latest, action: "none", unclear: false };
+  }
+  return { reminder: actionable, action, unclear: false };
 }

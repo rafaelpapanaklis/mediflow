@@ -4546,6 +4546,7 @@
       "outOfWindowNotice": "Fuera de ventana: el texto libre está deshabilitado — se reactiva cuando el paciente vuelva a escribir.",
       "loadingMessages": "Cargando mensajes…",
       "noMessagesYet": "Sin mensajes en esta conversación todavía.",
+      "newMessagesBelow": "Nuevos mensajes",
       "staff": "Equipo",
       "staffFromPanel": "{name} · desde el panel",
       "genericOutLabel": "DaleControl",

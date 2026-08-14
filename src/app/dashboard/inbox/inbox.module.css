@@ -881,6 +881,15 @@
 .redDot { width: 7px; height: 7px; border-radius: 999px; background: var(--ib-red); flex-shrink: 0; }
 
 /* Mensajes */
+/* Envoltura del área de mensajes: solo existe para anclar el aviso flotante
+   "nuevos mensajes" sobre el scroll, sin meterlo dentro del propio scroll. */
+.messagesWrap {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
 .messages {
   flex: 1;
   overflow-y: auto;
@@ -890,6 +899,30 @@
   flex-direction: column;
   gap: 10px;
 }
+/* Aviso "nuevos mensajes": aparece cuando llega algo y el usuario está leyendo
+   historial más arriba. Al pulsarlo baja al final. */
+.newBelow {
+  position: absolute;
+  left: 50%;
+  bottom: 14px;
+  transform: translateX(-50%);
+  z-index: 3;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--ib-brand-border-soft);
+  background: var(--ib-surface);
+  color: var(--ib-brand-ink);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 650;
+  cursor: pointer;
+  box-shadow: var(--ib-shadow-card);
+}
+.newBelow:hover { background: var(--ib-brand-hover-bg); }
+.newBelow:focus-visible { outline: none; box-shadow: var(--ring); }
 .msgLoading { padding: 30px; color: var(--ib-text-3); text-align: center; font-size: 12.5px; }
 .dayWrap { display: flex; justify-content: center; }
 .dayChip {

@@ -4546,6 +4546,7 @@
       "outOfWindowNotice": "Out of the window: free text is disabled — it re-opens when the patient writes again.",
       "loadingMessages": "Loading messages…",
       "noMessagesYet": "No messages in this conversation yet.",
+      "newMessagesBelow": "New messages",
       "staff": "Team",
       "staffFromPanel": "{name} · from the panel",
       "genericOutLabel": "DaleControl",

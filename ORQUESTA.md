@@ -7257,3 +7257,131 @@ red contra Meta sigue sin ejercitarse.
    clínica (`WA_TEMPLATE_CATALOG` + provisión), que es otra tarea.
 3. Un paciente sin cita ni saldo sólo tendría `review` (marketing, casi nunca
    dada de alta): el modal lo explica, pero es el límite real de hoy.
+
+---
+
+## [Fix-Confirmacion-Cita] · Un dedazo dejaba la cita sin confirmar, y el chat abría por arriba — 2026-08-14
+
+Dos fallos reproducidos en producción, sin relación entre sí más que el módulo.
+
+### BUG 1 — "Confirmarr" quemaba el recordatorio para siempre
+
+El paciente recibía "Responde CONFIRMAR…", escribía **"Confirmarr"** (dos erres),
+y después "Confirmar", "CONFIRMAR" y "SI". La cita nunca se confirmaba y él nunca
+recibía el "te esperamos".
+
+**Causa confirmada** (`src/app/api/whatsapp/webhook/route.ts`): las tres ramas del
+bloque de recordatorios escribían `repliedAt=NOW()`, también la del `else` —la de
+"no entendí nada"—. Como `pendingReminders` filtra por `repliedAt: null`, el
+primer mensaje CONSUMÍA el recordatorio y los tres intentos correctos que venían
+detrás ya no encontraban nada que confirmar. Y encima el `else` no respondía:
+el paciente se quedaba creyendo que había confirmado.
+
+**Qué se cambió**
+
+1. **`repliedAt` pasa a significar "esta respuesta CERRÓ el recordatorio"**, no
+   "llegó algo". Solo lo cierra una respuesta accionable (confirmar/cancelar) o
+   una respuesta a un mensaje que no pedía nada sobre la agenda (una encuesta).
+   Un texto que no se entiende guarda `patientReply` —el staff lo ve en el
+   panel— pero deja `repliedAt` en null: el recordatorio sigue vivo y el
+   siguiente intento, ya bien escrito, confirma la cita.
+   Se eligió esto y no un campo nuevo porque **no hay SQL en esta tarea** y
+   porque el significado que hacía falta ya cabía en la columna: lo que estaba
+   mal era escribirla siempre, no la columna.
+2. **Deja de estar callado.** Cuando no se entiende, sale
+   `🤔 No te entendí. Responde *CONFIRMAR* … o *CANCELAR* …` — las mismas dos
+   palabras que le pide el propio recordatorio (`lib/reminders/config.ts`).
+   **Una sola vez por recordatorio**: el dedupe mira si ese texto exacto ya salió
+   en el hilo desde `reminder.sentAt` (mismo patrón que el aviso del tope diario
+   del bot). Si ya se le pidió y sigue sin decir confirmar ni cancelar, no es un
+   dedazo sino otra conversación: el mensaje **pasa al bot / al staff** en vez de
+   repetirle la frase. El recordatorio sigue abierto, así que un CONFIRMAR
+   posterior confirma igual.
+3. **Tolerancia a erratas, solo en confirmar** (`lib/whatsapp/bot/booking-parse.ts`).
+   Damerau-Levenshtein contra la RAÍZ `confirm`, midiendo contra el mejor prefijo
+   del token: la raíz reconoce sola todas las flexiones (`confirmar`, `confirmo`,
+   `confirmado`, `confirmación`) a distancia 0 y los dedazos a 1 (`cofirmar`,
+   `confimar`, `comfirmar`, `cnofirmar`, `confrimar`, `confirmarr`). Sin librería
+   nueva, ~25 líneas.
+   Umbral 1 y tokens de 6+ letras **a propósito**: a distancia 2 empiezan a
+   colarse palabras reales (`confiar` está a 2) y por debajo de 6 letras hay
+   medio diccionario a un paso de "sí"/"ok".
+   **Cancelar NO se tocó.** Confirmar de más cuesta un ✅ sobrante; cancelar de
+   más libera el sillón y le dice al paciente que su cita ya no existe. Un
+   "canselar" mal escrito cae en el "no te entendí" y el paciente lo reescribe:
+   eso se recupera, una cita borrada no. Y el orden CANCELAR-primero se mantiene,
+   que es lo que hace que **"no puedo confirmar" NO confirme**.
+4. **El paciente equivocado.** `pendingReminders` buscaba por
+   `patientId: patient.id`, y `findPatientByWhatsAppPhone` devuelve UNO solo.
+   Con teléfonos compartidos (hermanos con el celular de la mamá; se han visto 6
+   pacientes con el mismo número) elegía al que no tenía la cita y no pasaba
+   nada. Ahora se leen **todos** los pacientes de la clínica con ese teléfono
+   (`findPatientsByWhatsAppPhone`, que ya existía) y el recordatorio se busca
+   sobre el conjunto. `patient` sigue siendo el primero para atribuir el hilo y
+   el turno del bot: eso no cambia.
+   Y si la ambigüedad es REAL —dos citas por confirmar de personas distintas con
+   el mismo número— **no se adivina**: se le dice al paciente que el equipo le
+   escribe, el mensaje se queda en el Inbox (el hilo ya queda UNREAD) y **ningún
+   recordatorio se toca**. Ese aviso también sale una sola vez; después la
+   conversación sigue su curso normal para no dejar a la familia sin bot durante
+   días.
+
+**Efecto colateral que también se arregla**: contestar la encuesta post-cita
+("todo excelente") registraba la respuesta sobre el recordatorio de la cita VIVA
+y lo cerraba. Ahora una respuesta no accionable se registra sobre lo ÚLTIMO que
+recibió el paciente, que es a lo que contesta.
+
+### BUG 2 — el chat abría por arriba
+
+Causa reportada (`inbox-client.tsx:738`): el efecto dependía de
+`[activeThread?.messages.length, liveEvents.length]`, así que cambiar a una
+conversación con el MISMO número de mensajes no lo disparaba.
+
+**Y hay una segunda causa, más de fondo, encontrada verificando en Chrome**: el
+efecto usaba `scrollIntoView({ behavior: "smooth" })`, y el desplazamiento suave
+**se puede apagar** (ajuste "Smooth Scrolling" de Chrome). Con él apagado
+—medido en esta máquina— `scrollTo({behavior:"smooth"})`, `scroll-behavior: smooth`
+y `scrollIntoView({behavior:"smooth"})` no mueven **ni un píxel**. Por eso el chat
+no bajaba nunca, ni cuando el efecto sí corría.
+
+**Qué se cambió**
+
+- **Abrir y recibir son dos cosas distintas.** Abrir va por `useLayoutEffect`
+  con llave el ID del hilo (no el número de mensajes) y baja con **asignación
+  directa de `scrollTop`**: salto instantáneo, antes de pintar, siempre efectivo.
+- **Mensaje nuevo estando dentro**: desplazamiento suave, con **red de seguridad**
+  a 400 ms que remata el salto a mano si la animación no existe. El remate es
+  incondicional, no "si falta más de la holgura": una burbuja nueva deja el hilo
+  ~44 px corto —dentro de la holgura— y el último mensaje se quedaba a medias.
+- **Si el usuario subió a leer historial, no se le mueve nada**: aparece un aviso
+  flotante "Nuevos mensajes" que baja al pulsarlo. Se apaga solo al volver al
+  fondo. Lo que escribe uno mismo sí se sigue (`followOwnSendRef`), y un cambio
+  de palomita no cuenta como mensaje nuevo (el polling reenvía los recientes a
+  propósito cuando Meta confirma la entrega).
+- `.messages` queda envuelto en `.messagesWrap` (`position: relative`) solo para
+  anclar el aviso; el contenedor con scroll y su CSS no cambian.
+
+### LO QUE SE PROBÓ
+
+- `npx next build` completo, **EXIT 0**.
+- `npm run test:wa-reminder-pick` — 62 casos (24 nuevos), incluidos los exactos
+  del reporte: `Confirmarr`, `Confirmar`, `CONFIRMAR`, `SI`, `sí`, `1`, `2`,
+  `CANCELAR`, `no puedo confirmar`, `mejor no`. Con las suites vecinas
+  (`inbox-send`, `booking`, `reschedule`): **113 en verde**.
+- Bug 2 verificado **en Chrome** contra una réplica exacta del layout y de la
+  lógica: abrir → último mensaje visible; mensaje nuevo estando abajo → sigue;
+  leyendo arriba → no arrastra y sale el aviso; pulsar el aviso → baja; cambiar a
+  un hilo con el mismo nº de mensajes → salta igual.
+
+**NADIE ha mandado todavía un WhatsApp real desde el producto**, así que el
+camino contra Meta de los dos avisos nuevos sigue sin ejercitarse.
+
+### PENDIENTES
+
+1. **QA en prod del ciclo completo**: mandar un recordatorio real, contestar una
+   burrada (llega la aclaración, la cita NO se confirma), contestar CONFIRMAR
+   (pasa a CONFIRMED en la agenda y llega el ✅).
+2. **El caso del teléfono compartido no tiene forma de resolverse desde el
+   Inbox**: hoy el staff tiene que ir a la agenda y confirmar la cita a mano. Si
+   se repite, merece un botón "confirmar la cita de …" en el propio hilo.
+3. Sin SQL y sin dependencias nuevas, como pedía el encargo.

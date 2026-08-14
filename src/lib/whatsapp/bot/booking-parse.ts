@@ -109,12 +109,79 @@ export function parseChoiceIndex(text: string, max: number): number | null {
   return null;
 }
 
+/**
+ * Minúsculas sin acentos. El \b de JS no cierra palabra tras una vocal
+ * acentuada, así que sin esto "sí" —la confirmación más común— nunca casaba
+ * con \b(si)\b. Tras NFD+strip, "sí" → "si" y el resto del set no cambia.
+ */
+export function foldAccents(text: string): string {
+  return text.trim().toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+}
+
+/**
+ * Distancia de edición Damerau-Levenshtein (sustitución, inserción, borrado y
+ * transposición de adyacentes) entre `stem` y el MEJOR PREFIJO de `token`: lo
+ * que sobra al final del token NO cuenta.
+ *
+ * Con eso una raíz corta reconoce de golpe todas las flexiones ("confirmar",
+ * "confirmo", "confirmado", "confirmación") a distancia 0 y los dedazos
+ * ("cofirmar", "confimar", "cnofirmar", "comfirmar", "confrimar") a 1, sin
+ * tener que listarlos uno por uno ni meter una librería.
+ */
+function stemDistance(stem: string, token: string): number {
+  const n = stem.length;
+  const m = token.length;
+  const d: number[][] = [];
+  for (let i = 0; i <= n; i++) {
+    d[i] = new Array<number>(m + 1).fill(0);
+    d[i][0] = i;
+  }
+  for (let j = 0; j <= m; j++) d[0][j] = j;
+  for (let i = 1; i <= n; i++) {
+    for (let j = 1; j <= m; j++) {
+      const cost = stem[i - 1] === token[j - 1] ? 0 : 1;
+      d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + cost);
+      if (i > 1 && j > 1 && stem[i - 1] === token[j - 2] && stem[i - 2] === token[j - 1]) {
+        d[i][j] = Math.min(d[i][j], d[i - 2][j - 2] + 1);
+      }
+    }
+  }
+  // El sobrante del token es gratis: nos quedamos con el mejor prefijo.
+  let best = d[n][0];
+  for (let j = 1; j <= m; j++) best = Math.min(best, d[n][j]);
+  return best;
+}
+
+const CONFIRM_STEM = "confirm";
+/** Un solo dedazo. Con 2 empiezan a colarse palabras reales ("confiar" está a 2). */
+const CONFIRM_STEM_MAX_DIST = 1;
+/** Palabras cortas fuera: a 1-2 letras de "sí"/"ok" hay medio diccionario. */
+const CONFIRM_MIN_TOKEN_LEN = 6;
+
+/**
+ * ¿Alguna palabra del texto es "confirmar" (o una flexión suya) con hasta un
+ * dedazo? Es la tolerancia a erratas del flujo de recordatorios: "Confirmarr"
+ * con dos erres es literalmente el caso que dejaba citas sin confirmar.
+ *
+ * SOLO se aplica a confirmar, nunca a cancelar: confirmar de más cuesta un ✅
+ * sobrante, cancelar de más libera el sillón y le dice al paciente que su cita
+ * ya no existe. Un "canselar" mal escrito cae en el "no te entendí" del webhook
+ * y el paciente lo vuelve a escribir; eso es recuperable, una cita borrada no.
+ */
+export function hasConfirmStem(text: string): boolean {
+  for (const token of foldAccents(text).split(/[^a-z0-9]+/)) {
+    if (token.length < CONFIRM_MIN_TOKEN_LEN) continue;
+    if (stemDistance(CONFIRM_STEM, token) <= CONFIRM_STEM_MAX_DIST) return true;
+  }
+  return false;
+}
+
 export function isAffirmative(text: string): boolean {
-  // Normaliza acentos antes de comparar: el \b de JS no cierra palabra tras la
-  // "í", así que "sí" (la confirmación más común) nunca casaba. Tras NFD+strip,
-  // "sí" → "si" y el resto del set sigue igual (superset del comportamiento previo).
-  const t = text.trim().toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
-  return /\b(si|claro|correcto|confirmo|confirmar|de acuerdo|va|ok|okay|dale|perfecto|sale)\b/.test(t);
+  const t = foldAccents(text);
+  if (/\b(si|claro|correcto|confirmo|confirmar|de acuerdo|va|ok|okay|dale|perfecto|sale)\b/.test(t)) {
+    return true;
+  }
+  return hasConfirmStem(t);
 }
 
 export function isNegative(text: string): boolean {

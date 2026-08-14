@@ -13,6 +13,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import {
+  actionablePatientIds,
   isActionableReminder,
   pickActionableReminder,
   resolveReminderReply,
@@ -349,8 +350,8 @@ describe("la cita del recordatorio ya está cerrada", () => {
 describe("bordes", () => {
   it("lista vacía → null, sin excepción", () => {
     assert.equal(pickActionableReminder([]), null);
-    assert.deepEqual(resolveReminderReply([], "1"), { reminder: null, action: "none" });
-    assert.deepEqual(resolveReminderReply([], ""), { reminder: null, action: "none" });
+    assert.deepEqual(resolveReminderReply([], "1"), { reminder: null, action: "none", unclear: false });
+    assert.deepEqual(resolveReminderReply([], ""), { reminder: null, action: "none", unclear: false });
   });
 
   it("isActionableReminder es tolerante con filas incompletas", () => {
@@ -374,5 +375,168 @@ describe("bordes", () => {
     resolveReminderReply(lista, "1");
     pickActionableReminder(lista);
     assert.deepEqual(lista, copia);
+  });
+});
+
+/* ── 7. EL BUG DE PRODUCCIÓN: un dedazo inutilizaba la confirmación ─────────
+   Reproducido con un paciente real: escribió "Confirmarr" (dos erres) y luego
+   "Confirmar", "CONFIRMAR" y "SI". La cita nunca se confirmó porque el primer
+   mensaje, al no ser ni confirmar ni cancelar, escribía `repliedAt` igual que
+   una confirmación y quemaba el recordatorio para siempre.
+
+   `text` llega al webhook ya en minúsculas y trimmed (route.ts), así que los
+   tests lo pasan por el mismo filtro. */
+const asWebhook = (raw: string): string => raw.trim().toLowerCase();
+
+describe("erratas del paciente: los casos exactos del reporte", () => {
+  const cita = [r("cita", APPT_AUTO_TYPE, "SCHEDULED")];
+  const decide = (raw: string) => resolveReminderReply(cita, asWebhook(raw));
+
+  it('"Confirmarr" (dedazo, dos erres) CONFIRMA', () => {
+    // Era el caso 1 del reporte: \bconfirmar\b no casaba por la erre de más.
+    assert.equal(decide("Confirmarr").action, "confirm");
+  });
+
+  it('"Confirmar", "CONFIRMAR", "SI", "sí", "1" confirman', () => {
+    for (const raw of ["Confirmar", "CONFIRMAR", "SI", "sí", "1", "Sí, confirmo"]) {
+      assert.equal(decide(raw).action, "confirm", `texto: "${raw}"`);
+    }
+  });
+
+  it('"confirmado", "confirmo", "cofirmar" y demás dedazos también', () => {
+    for (const raw of [
+      "confirmado", "Confirmada", "confirmo", "cofirmar", "confimar",
+      "comfirmar", "cnofirmar", "confrimar", "confirmé", "ya confirme",
+      "confirmar mi cita del jueves", "CONFIRMARRR",
+    ]) {
+      assert.equal(decide(raw).action, "confirm", `texto: "${raw}"`);
+    }
+  });
+
+  it('"CANCELAR", "2" y "mejor no" cancelan', () => {
+    for (const raw of ["CANCELAR", "2", "mejor no", "Cancelar por favor"]) {
+      assert.equal(decide(raw).action, "cancel", `texto: "${raw}"`);
+    }
+  });
+
+  it('"no puedo confirmar" NO confirma — cancelar se evalúa primero', () => {
+    // La tolerancia a erratas NO puede invertir este orden: la frase lleva
+    // "confirmar" dentro y aun así es una negativa.
+    const { action } = decide("no puedo confirmar");
+    assert.notEqual(action, "confirm");
+    assert.equal(action, "cancel");
+  });
+
+  it("un texto de verdad ajeno sigue sin mover la cita", () => {
+    for (const raw of [
+      "hola buenas", "gracias doctora", "quiero una cita", "cuánto cuesta la limpieza",
+      "confío en usted", "ahí estaré",
+    ]) {
+      assert.equal(decide(raw).action, "none", `texto: "${raw}"`);
+    }
+  });
+
+  it("la tolerancia NO se extiende a cancelar (cancelar de más no se deshace)", () => {
+    // "canselar" cae en el "no te entendí" del webhook y el paciente lo
+    // reescribe. Confirmar de más cuesta un ✅ sobrante; cancelar de más libera
+    // el sillón y le dice al paciente que su cita ya no existe.
+    assert.equal(decide("canselar").action, "none");
+    assert.equal(decide("cancelarr").action, "none");
+  });
+});
+
+/* ── 8. Una respuesta que no se entiende NO quema el recordatorio ──────────── */
+describe("respuesta no entendida: la puerta queda abierta", () => {
+  const cita = [r("cita", APPT_AUTO_TYPE, "SCHEDULED")];
+
+  it("marca `unclear` para que el webhook pida aclarar y NO cierre la fila", () => {
+    const { reminder, action, unclear } = resolveReminderReply(cita, "el jueves mejor");
+    assert.equal(action, "none");
+    assert.equal(unclear, true);
+    assert.equal(reminder?.id, "cita");
+  });
+
+  it("y el intento siguiente, ya bien escrito, SÍ confirma", () => {
+    // Es la secuencia del reporte. En la vida real el webhook no cierra la fila
+    // en el primer mensaje, así que la lista de pendientes es la MISMA.
+    assert.equal(resolveReminderReply(cita, "confirmarr").action, "confirm");
+    assert.equal(resolveReminderReply(cita, "confirmar").action, "confirm");
+    assert.equal(resolveReminderReply(cita, "si").action, "confirm");
+  });
+
+  it("no pide aclarar cuando lo último que recibió fue una encuesta", () => {
+    // Pedirle "responde CONFIRMAR o CANCELAR" a quien acaba de contestar
+    // "¿cómo te sentiste?" sería un sinsentido.
+    const lista = [r("followup", "FOLLOWUP", "COMPLETED"), r("cita", APPT_AUTO_TYPE, "SCHEDULED")];
+    const { reminder, action, unclear } = resolveReminderReply(lista, "todo excelente, gracias");
+    assert.equal(action, "none");
+    assert.equal(unclear, false);
+    // Y se registra sobre la ENCUESTA, no sobre el recordatorio de la cita:
+    // cerrar ahí el recordatorio vivo es exactamente el bug que se arregla.
+    assert.equal(reminder?.id, "followup");
+  });
+
+  it("tampoco cuando el 'no' de una encuesta se coló como cancelar", () => {
+    const lista = [r("followup", "FOLLOWUP", "COMPLETED"), r("cita", APPT_AUTO_TYPE, "SCHEDULED")];
+    const { reminder, action, unclear } = resolveReminderReply(lista, "no tuve dolor");
+    assert.equal(action, "none");
+    assert.equal(unclear, false);
+    assert.equal(reminder?.id, "followup");
+  });
+
+  it("una encuesta sola se cierra como siempre (no es 'no entendido')", () => {
+    const { action, unclear } = resolveReminderReply([r("f", "FOLLOWUP", "COMPLETED")], "excelente");
+    assert.equal(action, "none");
+    assert.equal(unclear, false);
+  });
+
+  it("confirmar y cancelar nunca marcan `unclear`", () => {
+    assert.equal(resolveReminderReply(cita, "1").unclear, false);
+    assert.equal(resolveReminderReply(cita, "2").unclear, false);
+    assert.equal(resolveReminderReply(cita, "confirmar").unclear, false);
+    assert.equal(resolveReminderReply(cita, "cancelar").unclear, false);
+  });
+});
+
+/* ── 9. Teléfonos compartidos: hermanos con el celular de la mamá ──────────── */
+describe("varios pacientes con el mismo teléfono", () => {
+  const withPatient = (id: string, type: string, status: string | null, patientId: string) => {
+    const base = r(id, type, status);
+    return { ...base, appointment: base.appointment ? { ...base.appointment, patientId } : null };
+  };
+
+  it("un solo dueño → sin ambigüedad, se confirma normal", () => {
+    const lista = [
+      withPatient("a", APPT_AUTO_TYPE, "SCHEDULED", "p1"),
+      withPatient("b", APPT_AUTO_TYPE, "SCHEDULED", "p1"), // dos citas del MISMO
+    ];
+    assert.deepEqual(actionablePatientIds(lista), ["p1"]);
+    assert.equal(resolveReminderReply(lista, "confirmar").action, "confirm");
+  });
+
+  it("dos hermanos con cita por confirmar → ambigüedad real", () => {
+    const lista = [
+      withPatient("hermana", APPT_AUTO_TYPE, "SCHEDULED", "p1"),
+      withPatient("hermano", APPT_AUTO_TYPE, "SCHEDULED", "p2"),
+    ];
+    assert.equal(actionablePatientIds(lista).length, 2);
+  });
+
+  it("solo cuentan los ACCIONABLES: la cita cerrada del hermano no ambigua nada", () => {
+    const lista = [
+      withPatient("hermano", APPT_AUTO_TYPE, "COMPLETED", "p2"),  // ya atendida
+      withPatient("hermana", APPT_AUTO_TYPE, "SCHEDULED", "p1"),
+      withPatient("encuesta", "FOLLOWUP", "SCHEDULED", "p2"),     // no pide confirmar
+    ];
+    assert.deepEqual(actionablePatientIds(lista), ["p1"]);
+  });
+
+  it("sin patientId (filas viejas leídas sin la relación) no inventa dueños", () => {
+    const lista = [r("a", APPT_AUTO_TYPE, "SCHEDULED"), r("b", APPT_AUTO_TYPE, "SCHEDULED")];
+    assert.deepEqual(actionablePatientIds(lista), []);
+  });
+
+  it("lista vacía → sin dueños", () => {
+    assert.deepEqual(actionablePatientIds([]), []);
   });
 });

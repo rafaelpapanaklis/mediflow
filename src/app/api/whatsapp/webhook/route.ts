@@ -4,8 +4,12 @@ import { createHmac, timingSafeEqual } from "crypto";
 import { sendWhatsAppMessage } from "@/lib/whatsapp";
 import { timeHHMMInTz } from "@/lib/agenda/legacy-helpers";
 import { runBotTurn } from "@/lib/whatsapp/bot/engine";
-import { resolveReminderReply } from "@/lib/whatsapp/reminder-pick";
-import { findPatientByWhatsAppPhone, upsertWhatsAppThread } from "@/lib/whatsapp/inbox-log";
+import { actionablePatientIds, resolveReminderReply } from "@/lib/whatsapp/reminder-pick";
+import {
+  findPatientByWhatsAppPhone,
+  findPatientsByWhatsAppPhone,
+  upsertWhatsAppThread,
+} from "@/lib/whatsapp/inbox-log";
 import {
   SYSTEM_EXTERNAL_ID_PREFIX,
   buildSystemExternalId,
@@ -30,6 +34,20 @@ import { WA_REMINDER_STATUS } from "@/lib/whatsapp/reminder-status";
 const BOT_DAILY_REPLY_CAP = parseInt(process.env.WA_BOT_DAILY_REPLY_CAP ?? "", 10) || 200;
 const BOT_CAP_REACHED_MSG =
   "Por el momento te atiende un humano 🙋: tu mensaje quedó registrado y el equipo de la clínica te responderá en breve.";
+
+// El recordatorio le pidió al paciente responder CONFIRMAR o CANCELAR
+// (lib/reminders/config.ts) y contestó otra cosa. Antes esto se guardaba en
+// silencio —el paciente creía que había confirmado— y encima quemaba el
+// recordatorio. Ahora se le dice, con las mismas dos palabras que le pedimos.
+const REMINDER_UNCLEAR_MSG =
+  "🤔 No te entendí. Responde *CONFIRMAR* para confirmar tu cita o *CANCELAR* si no podrás asistir.";
+
+// Varios pacientes de la clínica comparten este teléfono y más de uno tiene
+// cita por confirmar. Confirmar "la que sea" le movería la agenda a otra
+// persona, así que esto lo resuelve el staff desde el Inbox.
+const REMINDER_AMBIGUOUS_MSG =
+  "📋 Con este número tenemos más de una cita por confirmar y no sabemos cuál es la tuya. " +
+  "Para no mover la de otra persona, el equipo de la clínica te escribe en un momento. 🙏";
 
 // GET — webhook verification by Meta
 export async function GET(req: NextRequest) {
@@ -148,7 +166,16 @@ export async function POST(req: NextRequest) {
 
     // Empareja al paciente por teléfono (últimos 10 dígitos normalizados en
     // ambos lados; el `contains` de la query solo pre-filtra en la BD).
-    const patient = await findPatientByWhatsAppPhone(clinic.id, from);
+    //
+    // Se leen TODOS los pacientes de la clínica con ese número, no solo el
+    // primero: en producción hay teléfonos compartidos (hermanos con el celular
+    // de la mamá — se han visto 6 pacientes con el mismo número). `patient`
+    // sigue siendo el primero, que es a quien se atribuye el hilo y el turno del
+    // bot; lo que cambia es que la búsqueda del recordatorio ya no se queda con
+    // él: si la cita era de otro hermano, antes no se encontraba nada y el
+    // "CONFIRMAR" moría en silencio.
+    const phoneOwners = await findPatientsByWhatsAppPhone(clinic.id, from);
+    const patient = phoneOwners[0] ?? null;
 
     // ── Ingest al Inbox unificado (generalizado para Meta, igual que Twilio) ──
     const profileName = value?.contacts?.[0]?.profile?.name as string | undefined;
@@ -196,20 +223,22 @@ export async function POST(req: NextRequest) {
     // que de verdad pide confirmar/cancelar por encima de uno más nuevo que no
     // lo pide — p. ej. una encuesta post-cita encolada después del recordatorio
     // de una cita futura.
-    const pendingReminders = patient
+    const pendingReminders = phoneOwners.length > 0
       ? await prisma.whatsAppReminder.findMany({
           where: {
             clinicId:    clinic.id,
-            appointment: { patientId: patient.id },
+            // TODOS los pacientes con este teléfono, no solo el primero.
+            appointment: { patientId: { in: phoneOwners.map((p) => p.id) } },
             status:      WA_REMINDER_STATUS.SENT,
             repliedAt:   null,
           },
           include: { appointment: true },
           orderBy: { sentAt: "desc" },
-          // Tope de seguridad: con más de 10 recordatorios sin contestar el
+          // Tope de seguridad: con más de 20 recordatorios sin contestar el
           // accionable podría quedar fuera (peor caso: la confirmación no se
-          // registra y el mensaje espera al staff en el Inbox).
-          take: 10,
+          // registra y el mensaje espera al staff en el Inbox). Sube de 10 a 20
+          // porque ahora la lista puede venir de varios pacientes a la vez.
+          take: 20,
         })
       : [];
 
@@ -227,9 +256,30 @@ export async function POST(req: NextRequest) {
     //   el "no", y no puede llevarse por delante la cita de la semana que viene.
     // - Cancelar se evalúa PRIMERO para frases ambiguas ("mejor no, sí
     //   cancélala"); "1"/"2" solo por igualdad exacta (text ya viene trimmed).
-    const { reminder, action: reply } = resolveReminderReply(pendingReminders, text);
+    // - `unclear` = el mensaje SÍ le pedía confirmar/cancelar y no se entendió
+    //   la respuesta. Ese caso ya no quema el recordatorio (ver abajo).
+    const { reminder, action: reply, unclear } = resolveReminderReply(pendingReminders, text);
 
-    if (reminder) {
+    const dayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+
+    // ── Teléfono compartido con citas de VARIAS personas por confirmar ──
+    // No se adivina de quién es el "CONFIRMAR": se le dice al paciente que el
+    // equipo lo va a resolver y el mensaje se queda en el Inbox (ya está ahí,
+    // y el hilo quedó UNREAD). NINGÚN recordatorio se toca: el que de verdad
+    // corresponda lo cierra el staff a mano desde la agenda.
+    if (actionablePatientIds(pendingReminders).length > 1) {
+      const notified = await sendOnceToThread({
+        clinic,
+        threadId: thread.id,
+        to: from,
+        body: REMINDER_AMBIGUOUS_MSG,
+        since: dayAgo,
+      });
+      // Ya avisado (o sin credenciales para avisar): no se repite la misma
+      // frase en cada mensaje — el resto de la conversación sigue su curso
+      // normal hacia el bot / el staff en vez de quedarse muda aquí.
+      if (notified) return NextResponse.json({ ok: true });
+    } else if (reminder) {
       if (reply === "cancel") {
         await prisma.$transaction(async (tx) => {
           await tx.appointment.update({
@@ -245,19 +295,20 @@ export async function POST(req: NextRequest) {
             reason: "Cancelado: el paciente canceló la cita por WhatsApp",
           });
         });
-        await prisma.$executeRaw`UPDATE whatsapp_reminders SET "patientReply"=${text}, "repliedAt"=NOW() WHERE id=${reminder.id}`;
+        await recordReminderReply(reminder.id, text, { close: true });
 
         if (clinic.waAccessToken && clinic.waPhoneNumberId) {
           const body = `❌ Tu cita ha sido *cancelada*. Si deseas reagendar, comunícate con nosotros. ¡Hasta pronto!`;
           await sendWhatsAppMessage(clinic.waPhoneNumberId, clinic.waAccessToken, from, body);
           await logAutoReply(thread.id, body);
         }
+        return NextResponse.json({ ok: true });
       } else if (reply === "confirm") {
         await prisma.appointment.update({
           where: { id: reminder.appointmentId },
           data:  { status: "CONFIRMED", confirmedAt: new Date() },
         });
-        await prisma.$executeRaw`UPDATE whatsapp_reminders SET "patientReply"=${text}, "repliedAt"=NOW() WHERE id=${reminder.id}`;
+        await recordReminderReply(reminder.id, text, { close: true });
 
         if (clinic.waAccessToken && clinic.waPhoneNumberId) {
           const appt = reminder.appointment;
@@ -268,12 +319,40 @@ export async function POST(req: NextRequest) {
           await sendWhatsAppMessage(clinic.waPhoneNumberId, clinic.waAccessToken, from, body);
           await logAutoReply(thread.id, body);
         }
+        return NextResponse.json({ ok: true });
+      } else if (unclear) {
+        // ── Un dedazo NO puede inutilizar la confirmación ──
+        // El mensaje SÍ le pedía CONFIRMAR/CANCELAR y contestó algo que no
+        // entendemos ("Confirmarr", "el jueves mejor", "ok gracias"). Antes esto
+        // escribía `repliedAt` igual que una confirmación: el recordatorio se
+        // quemaba, `pendingReminders` volvía vacío y los tres intentos correctos
+        // que venían detrás ya no encontraban nada que confirmar.
+        //
+        // Criterio nuevo: `repliedAt` significa "esta respuesta CERRÓ el
+        // recordatorio", y solo la cierra algo accionable. El texto sí se guarda
+        // en `patientReply` —el staff lo ve— pero la puerta queda abierta: el
+        // siguiente "Confirmar" bien escrito confirma la cita.
+        await recordReminderReply(reminder.id, text, { close: false });
+        const asked = await sendOnceToThread({
+          clinic,
+          threadId: thread.id,
+          to: from,
+          body: REMINDER_UNCLEAR_MSG,
+          // Una sola aclaración por recordatorio, no por mensaje.
+          since: reminder.sentAt ?? dayAgo,
+        });
+        if (asked) return NextResponse.json({ ok: true });
+        // Ya se le pidió aclarar y sigue sin decir confirmar ni cancelar: no es
+        // un dedazo, es otra conversación. Se deja pasar al bot / al staff en
+        // vez de repetirle la misma frase — o de callar, que era lo de antes.
+        // El recordatorio sigue abierto: si más tarde escribe CONFIRMAR, entra
+        // por la rama de arriba y la cita se confirma.
       } else {
-        // Guarda la respuesta sin cambiar el estado de la cita.
-        await prisma.$executeRaw`UPDATE whatsapp_reminders SET "patientReply"=${text}, "repliedAt"=NOW() WHERE id=${reminder.id}`;
+        // Respuesta a una encuesta o a un aviso que no pedía nada sobre la
+        // agenda: se registra y se cierra, como siempre.
+        await recordReminderReply(reminder.id, text, { close: true });
+        return NextResponse.json({ ok: true });
       }
-
-      return NextResponse.json({ ok: true });
     }
 
     // ── El staff tomó el control del hilo → el bot calla ──
@@ -299,7 +378,7 @@ export async function POST(req: NextRequest) {
     // Cuenta las respuestas OUT del bot (sentById null = automáticas) de las
     // últimas 24h. Al excederlo no se llama a Claude: se avisa máximo una vez
     // por hilo al día que atiende un humano, y el resto queda en el Inbox.
-    const dayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    // (`dayAgo` se calculó arriba, junto al flujo de recordatorios.)
     const botRepliesToday = await prisma.inboxMessage.count({
       where: {
         thread: { clinicId: clinic.id },
@@ -383,6 +462,72 @@ export async function POST(req: NextRequest) {
     console.error("WhatsApp webhook error:", err);
     return NextResponse.json({ ok: true }); // siempre 200 para evitar reintentos de Meta
   }
+}
+
+/**
+ * Guarda lo que contestó el paciente en la fila del recordatorio.
+ *
+ * `close` es la decisión de fondo del arreglo: `repliedAt` significa "esta
+ * respuesta CERRÓ el recordatorio", no "llegó algo". Solo lo cierra una
+ * respuesta accionable (confirmar / cancelar) o una respuesta a un mensaje que
+ * no pedía nada sobre la agenda (una encuesta). Un texto que no se entiende
+ * guarda `patientReply` —para que el staff lo vea en el panel— pero deja
+ * `repliedAt` en null: el recordatorio sigue vivo y el siguiente intento del
+ * paciente, ya bien escrito, todavía puede confirmar la cita.
+ *
+ * Va en $executeRaw como el resto del flujo: whatsapp_reminders se creó y se
+ * alteró a mano desde sql/, no con prisma migrate.
+ */
+async function recordReminderReply(
+  id: string,
+  text: string,
+  opts: { close: boolean },
+): Promise<void> {
+  if (opts.close) {
+    await prisma.$executeRaw`UPDATE whatsapp_reminders SET "patientReply"=${text}, "repliedAt"=NOW() WHERE id=${id}`;
+    return;
+  }
+  await prisma.$executeRaw`UPDATE whatsapp_reminders SET "patientReply"=${text} WHERE id=${id}`;
+}
+
+/**
+ * Manda UN aviso automático al paciente y lo registra en el Inbox, pero solo si
+ * ese mismo texto no salió ya en este hilo desde `since`. Mismo patrón (dedupe
+ * por cuerpo exacto) que el aviso del tope diario del bot.
+ *
+ * Devuelve true si lo mandó. false = ya estaba avisado o la clínica no tiene
+ * credenciales de WhatsApp; en ambos casos el caller deja seguir el mensaje en
+ * vez de quedarse atascado repitiendo —o callando— la misma frase.
+ */
+async function sendOnceToThread(args: {
+  clinic: { waAccessToken: string | null; waPhoneNumberId: string | null };
+  threadId: string;
+  to: string;
+  body: string;
+  since: Date;
+}): Promise<boolean> {
+  const { waAccessToken, waPhoneNumberId } = args.clinic;
+  if (!waAccessToken || !waPhoneNumberId) return false;
+  try {
+    const already = await prisma.inboxMessage.findFirst({
+      where: {
+        threadId:  args.threadId,
+        direction: "OUT",
+        body:      args.body,
+        sentAt:    { gte: args.since },
+      },
+      select: { id: true },
+    });
+    if (already) return false;
+  } catch (e) {
+    // Si no se puede comprobar, mejor no mandar: repetirle la misma frase al
+    // paciente en cada mensaje es peor que no decírsela dos veces.
+    console.error("[whatsapp/webhook] no se pudo comprobar el aviso previo:", e);
+    return false;
+  }
+  await sendWhatsAppMessage(waPhoneNumberId, waAccessToken, args.to, args.body);
+  await logAutoReply(args.threadId, args.body);
+  return true;
 }
 
 /**
