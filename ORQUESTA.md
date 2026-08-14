@@ -6912,3 +6912,90 @@ no es un error de validación, sino "sin plantilla".
 5. **`prescription` no lleva el enlace de la receta.** Meta no admite URLs variables en el cuerpo sin
    darlas de alta como botón: fuera de ventana el paciente recibe el aviso y el enlace viaja en la
    conversación.
+
+## [Hotfix-Fuga-Secretos] · Las mini-webs publicaban las credenciales de la clínica — 2026-08-14
+
+Verificado en producción antes de tocar nada: descargando el HTML de
+`https://www.dalecontrol.com/rafael-clinica` aparecían, sin contraseña y con "ver código fuente",
+`waAccessToken` (6 860 caracteres), `googleCalendarToken`, `googleRefreshToken` y `liveModePassword`
+**con valor real**; `facturApiLiveKey`, `twilioAuthToken` y `dailyApiKey` salían también, en null,
+porque esa clínica todavía no los tiene configurados — en cuanto los configure, se publican solos.
+
+### El archivo que filtraba
+
+**`src/app/[slug]/clinic-landing-server.tsx`** — uno solo, pero es el que sirve TODAS las mini-webs.
+`prisma.clinic.findUnique()` iba con `include` y sin `select`, así que traía las ~130 columnas de
+`Clinic`. Esa fila se pasa como prop `clinic={c}` a componentes **cliente** (las siete plantillas más
+`ClinicLandingClient`), y Next serializa los props de un componente cliente **dentro del HTML**. El
+`stripClinicSecrets` de `src/lib/clinic-secrets.ts` ya existía y ya lo usaban `/api/clinic-landing`,
+`/api/settings`, `/dashboard/landing`, `/dashboard/settings` y `/admin/clinics/[id]`: aquí se olvidó.
+
+Dos rutas comparten ese componente y las dos filtraban:
+
+- `/[slug]` — la mini-web pública, además **cacheada por ISR** (`revalidate = 300`), así que el
+  token viajaba en HTML servido desde el edge.
+- `/landing-preview/[slug]?preview=<plantilla>` — **no está en el matcher del middleware**
+  (`/dashboard`, `/admin`, `/api`, `/proveedores`), o sea que es pública para cualquiera y permite
+  pedir la misma clínica en cualquiera de las ocho plantillas. Confirmado: filtraba en las tres que
+  probé (classic, futurista, healthtech).
+
+### Cómo se cerró
+
+`select` **explícito** en vez de `stripClinicSecrets`, que era la opción preferida del encargo y es
+la que aguanta el futuro: `stripClinicSecrets` quita una lista de siete nombres, así que una columna
+secreta nueva en `Clinic` se filtraría sola hasta que alguien se acordara de añadirla a la lista. Con
+`select`, una columna nueva simplemente no se pide.
+
+La lista enumerada es exactamente el type `LandingClinic` (`_shared/types.ts`) más los tres campos
+que solo usa el propio server component: `category` (elige los highlights), `landingActive` y
+`landingTemplate`. Se derivó leyendo qué toca cada plantilla, no a ojo: `clinic.*`, `c.*` y
+`(clinic as any).*` en todo `src/app/[slug]`. De paso `schedules` también lleva su `select`
+(`dayOfWeek`/`enabled`/`openTime`/`closeTime`) — no tenía secretos, pero ya no viajan `id` ni
+`clinicId`. `users` ya venía con `select` propio y estaba limpio.
+
+Antes de commitear se comprobó que las columnas de landing v2 (`landingSections`, `landingPhotos`,
+`landingUrgentText`, `landingMsiPlazos`) **existen en la base de producción** — aparecían en el
+payload filtrado —, así que pedirlas por nombre no revienta con un P2022 donde el `include` no lo
+hacía.
+
+### El resto del repo: auditado, y no había más
+
+Se revisaron las **252 llamadas a `prisma.clinic.*`** de `src/` con un script que balancea llaves y
+marca las que no llevan `select` de primer nivel (71). Ninguna otra filtra:
+
+- **Superficies públicas, todas con `select` limpio ya**: el directorio `/descubre` y
+  `/descubre/clinica/[slug]`, `src/lib/directory/query.ts` (5 consultas), `/reservar/[slug]`,
+  `/api/public/availability`, `/api/public/clinicas`, `/live/[slug]` y `/live/[slug]/3d`.
+- **`/api/public/booking-request`** sí pide `waAccessToken`, pero para **mandar** el WhatsApp
+  server-side; sus respuestas son `{success, status, message, id}`. Igual `/live/[slug]`, que pide
+  `liveModePassword` y solo lo usa para `Boolean(...)` — al cliente le pasa `hasPassword`.
+- **Rutas autenticadas que devuelven la fila entera** (`/api/settings` GET y PATCH,
+  `/api/clinic-landing` GET y PUT): ya envuelven en `stripClinicSecrets`. `/api/clinic` PUT ya usaba
+  `select` explícito. `/api/clinic/me` devuelve el `select` acotado de `loadClinicSession`.
+- **Props a componentes cliente**: `/dashboard/landing`, `/dashboard/settings` y
+  `/admin/clinics/[id]` pasan por `stripClinicSecrets`; `/dashboard` manda `{ name }`;
+  `/admin/payments/[id]/cfdi` y `/dashboard/laboratorios/[labId]` mandan objetos acotados.
+  `/admin` y `/admin/churn` cargan la fila completa pero **solo la leen en el server** — el `Section`
+  de churn es una función local, no un `"use client"`, así que nada de eso se serializa.
+- Las 9 llamadas de `src/app/actions/**` y las 2 consultas de `User` de `/api/public` llevan `select`.
+
+### Verificación
+
+`npx next build` completo, **EXIT 0**, sin `Type error` ni `Failed to compile` (los `prisma:error` de
+`DATABASE_URL` son el ruido normal de construir sin `.env`, y son los mismos de antes del cambio).
+
+La comprobación de "ver código fuente" **no se pudo hacer en local**: no hay `.env` en la máquina, así
+que el dev server no tiene base y la mini-web no llega a pintar una clínica. Se hizo contra
+**producción**, que además es donde está la clínica con WhatsApp conectado: se guardó el HTML crudo de
+`/rafael-clinica`, `?preview=futurista` y `?preview=healthtech` **antes** del push (los tres con las
+seis cadenas presentes) para volver a descargarlos tras el deploy y comparar, tanto las cadenas como
+el texto visible — servicios, precios, doctores, horario de los siete días, teléfono, WhatsApp y
+correo.
+
+### Pendiente
+
+`/landing-preview/[slug]` sigue siendo **público**. Ya no filtra credenciales y va con
+`robots: noindex`, y lo que enseña es el sitio público de la clínica, así que no es una fuga; pero
+deja que cualquiera vea la mini-web de cualquier slug en las ocho plantillas, incluso con
+`landingActive` apagado (donde cae a la pantalla de "disponible pronto"). Si se quiere cerrar, es
+meterlo al matcher del middleware o pedir sesión de esa clínica.

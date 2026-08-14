@@ -43,12 +43,40 @@ export async function ClinicLandingServer({
   slug: string;
   previewTpl?: string;
 }) {
+  /**
+   * SEGURIDAD — `select` EXPLÍCITO, jamás `include` a secas.
+   *
+   * Esta fila viaja como prop a componentes CLIENTE (las 8 plantillas), así que
+   * Next la serializa DENTRO del HTML público, cacheado por ISR y legible con
+   * "ver código fuente" sin contraseña. Con `include` traía TODAS las columnas
+   * de Clinic — incluidos waAccessToken, facturApiLiveKey, twilioAuthToken y
+   * googleRefreshToken. Enumerar los campos (en vez de quitar los secretos con
+   * stripClinicSecrets) es a prueba de futuro: una columna secreta nueva en
+   * Clinic no se filtra sola, simplemente no se pide.
+   *
+   * La lista es exactamente `LandingClinic` (_shared/types.ts) más los tres
+   * campos que solo usa este archivo: category, landingActive y landingTemplate.
+   * Si una plantilla necesita un campo nuevo, hay que agregarlo AQUÍ y al type.
+   */
   const clinic = await prisma.clinic.findUnique({
-    where:   { slug },
-    include: {
+    where:  { slug },
+    select: {
+      id: true, name: true, slug: true, specialty: true, category: true,
+      phone: true, email: true, address: true, city: true,
+      logoUrl: true, description: true, googlePlaceId: true,
+      landingActive: true, landingTemplate: true,
+      landingThemeColor: true, landingCoverUrl: true, landingGallery: true,
+      landingTestimonials: true, landingFaqs: true, landingServices: true,
+      landingWhatsapp: true, landingInstagram: true, landingFacebook: true,
+      landingTiktok: true, landingMapEmbed: true, landingTagline: true,
+      landingYearsExperience: true, landingPatients: true,
+      // Landing v2 (sql/landing-v2.sql)
+      landingSections: true, landingPhotos: true,
+      landingUrgentText: true, landingMsiPlazos: true,
       users:     { where: { isActive: true, role: { in: ["DOCTOR","ADMIN","SUPER_ADMIN"] } },
                    select: { id:true, firstName:true, lastName:true, specialty:true, color:true, avatarUrl:true, services:true } },
-      schedules: { orderBy: { dayOfWeek: "asc" } },
+      schedules: { orderBy: { dayOfWeek: "asc" },
+                   select: { dayOfWeek:true, enabled:true, openTime:true, closeTime:true } },
     },
   });
 
