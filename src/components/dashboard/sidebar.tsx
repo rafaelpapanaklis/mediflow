@@ -26,6 +26,7 @@ import {
   ORTHODONTICS_MODULE_KEY,
 } from "@/lib/specialties/keys";
 import { setSidebarSectionCollapsed } from "@/app/actions/sidebar";
+import { HIDE_SUPPLY_MODULES, SUPPLY_NAV_IDS } from "@/lib/hidden-modules";
 import { useT } from "@/i18n/i18n-provider";
 import { NewBranchDialog } from "@/components/dashboard/new-branch-dialog";
 import type { SidebarBranchInfo } from "@/lib/branches-shared";
@@ -171,6 +172,14 @@ const NAV_ITEMS: NavItemDef[] = [
   { id: "marketplace",  section: "workspace", label: "Marketplace", href: "/dashboard/marketplace",   icon: ShoppingBag,   permission: "marketplace.view", moduleKey: "marketplace", comingSoon: true },
 
   { id: "ai",           section: "clinico", label: "IA asistente", href: "/dashboard/ai-assistant", icon: Sparkles, moduleKey: "ai-assistant" },
+  // Inventario vive en CLÍNICO, justo debajo de "IA asistente": al ocultar
+  // Proveedores/Laboratorios (ver HIDE_SUPPLY_MODULES) era el único superviviente
+  // de "Catálogo" y no ameritaba sección propia. Los filtros por `categories`,
+  // `adminOnly` y `permission` siguen aplicando igual que en su sección anterior.
+  { id: "inventory",    section: "clinico", label: "Inventario",   href: "/dashboard/inventory",
+    icon: Package, adminOnly: true,
+    categories: ["DENTAL", "MEDICINE", "PODIATRY", "DERMATOLOGY", "AESTHETIC_MEDICINE"],
+    permission: "inventory.view" },
   { id: "before-after", section: "clinico", label: "Antes/Después", href: "/dashboard/before-after",
     icon: Camera,
     categories: ["DERMATOLOGY", "AESTHETIC_MEDICINE", "BEAUTY_CENTER", "HAIR_RESTORATION", "LASER_HAIR_REMOVAL"] },
@@ -219,10 +228,9 @@ const NAV_ITEMS: NavItemDef[] = [
     icon: Gift, adminOnly: true,
     categories: ["AESTHETIC_MEDICINE", "BEAUTY_CENTER", "DERMATOLOGY", "HAIR_RESTORATION",
                  "LASER_HAIR_REMOVAL", "SPA", "MASSAGE", "BROW_LASH", "HAIR_SALON"] },
-  { id: "inventory",    section: "catalogo", label: "Inventario",   href: "/dashboard/inventory",
-    icon: Package, adminOnly: true,
-    categories: ["DENTAL", "MEDICINE", "PODIATRY", "DERMATOLOGY", "AESTHETIC_MEDICINE"],
-    permission: "inventory.view" },
+  // Proveedores / Mis compras / Laboratorios / Mis órdenes de laboratorio:
+  // OCULTOS mientras HIDE_SUPPLY_MODULES sea true (src/lib/hidden-modules.ts).
+  // Se dejan aquí, no se borran — volverlos a mostrar es apagar esa bandera.
   { id: "suppliers",    section: "catalogo", label: "Proveedores", href: "/dashboard/suppliers",
     icon: Truck, permission: "suppliers.view" },
   { id: "compras",      section: "catalogo", label: "Mis compras", href: "/dashboard/compras",
@@ -322,6 +330,9 @@ function shouldShowItem(
   if (item.suspendedOnly) return false;
   // Oculta toda la sección de especialidades (aún en desarrollo). Ver HIDE_SPECIALTIES.
   if (HIDE_SPECIALTIES && item.section === "specialties") return false;
+  // Oculta Proveedores / Mis compras / Laboratorios / Mis órdenes de laboratorio
+  // mientras el área no sea pública. Ver HIDE_SUPPLY_MODULES.
+  if (HIDE_SUPPLY_MODULES && SUPPLY_NAV_IDS.includes(item.id)) return false;
   if (item.adminOnly && user.role !== "SUPER_ADMIN" && user.role !== "ADMIN") return false;
   if (item.categories && item.categories.length > 0) {
     if (!item.categories.includes(category)) return false;
