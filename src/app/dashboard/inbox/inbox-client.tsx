@@ -7,7 +7,8 @@ import {
   useRef,
   useState,
 } from "react";
-import { useSearchParams } from "next/navigation";
+import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   Inbox as InboxIcon,
   Clock,
@@ -59,6 +60,7 @@ import {
   type DraftMap,
   type DraftPatch,
 } from "@/lib/inbox/composer-drafts";
+import type { InboxTemplateOption } from "@/lib/inbox/composer-templates";
 import styles from "./inbox.module.css";
 
 type Channel = "WHATSAPP" | "EMAIL" | "PORTAL_FORM" | "VALIDATION" | "REMINDER" | "PORTAL";
@@ -143,6 +145,29 @@ interface LiveEvent {
   threadId: string;
   text: string;
   at: string;
+}
+
+/**
+ * Paciente al que está acotado el Inbox cuando se llega desde su ficha con
+ * ?patientId=. Lo devuelve GET /api/inbox/threads: el nombre NO se puede sacar
+ * de la lista porque el caso interesante es justo cuando viene vacía.
+ */
+interface PatientFilterInfo {
+  id: string;
+  name: string;
+  hasPhone: boolean;
+}
+
+/** Respuesta de GET /api/inbox/threads/[id]/templates. */
+interface TemplatesPayload {
+  windowOpen: boolean;
+  waConnected: boolean;
+  billingOk: boolean;
+  patientName: string | null;
+  options: InboxTemplateOption[];
+  /** Por qué HOY no se puede mandar ninguna, o null si alguna sirve. */
+  unavailableReason: string | null;
+  manageHref: string;
 }
 
 const CHANNEL_META: Record<Channel, { labelKey: string; color: string; icon: typeof InboxIcon }> = {
@@ -306,6 +331,7 @@ function dayKey(iso: string): string {
 
 export function InboxClient({ viewer }: { viewer: Viewer }) {
   const t = useT();
+  const router = useRouter();
   const sp = useSearchParams();
   const patientIdFilter = sp.get("patientId");
 
@@ -342,6 +368,19 @@ export function InboxClient({ viewer }: { viewer: Viewer }) {
   const [snoozedToday, setSnoozedToday] = useState(0);
   // Tick de 30s para refrescar tiempos relativos / SLA / ventana 24h sin re-fetch.
   const [nowTick, setNowTick] = useState(0);
+  // Paciente del ?patientId= (lo resuelve el servidor). Sin esto, cuando el
+  // paciente no tiene ni un hilo no habría de dónde sacar su nombre y el vacío
+  // volvería a ser el genérico "sin conversaciones" que no explica nada.
+  const [patientFilter, setPatientFilter] = useState<PatientFilterInfo | null>(null);
+  // Plantillas aprobadas del hilo activo (solo se piden fuera de la ventana).
+  const [tplData, setTplData] = useState<TemplatesPayload | null>(null);
+  const [tplLoading, setTplLoading] = useState(false);
+  const [tplError, setTplError] = useState<string | null>(null);
+  // Plantilla elegida y todavía NO enviada: pulsar el chip solo la pone aquí
+  // para enseñar su texto. Cada plantilla se la cobra Meta a la clínica, así
+  // que nadie manda a ciegas: primero se ve exactamente qué va a recibir.
+  const [pendingTemplate, setPendingTemplate] = useState<InboxTemplateOption | null>(null);
+  const [tplSending, setTplSending] = useState(false);
 
   const composerRef = useRef<HTMLTextAreaElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -355,6 +394,10 @@ export function InboxClient({ viewer }: { viewer: Viewer }) {
   // threads de /since no traen lastMessage; el fetch completo los repone).
   const reconcilePendingRef = useRef(false);
   const teamLoadingRef = useRef(false);
+  // Candado del auto-abrir al llegar desde una ficha: guarda el patientId con el
+  // que ya se abrió conversación. Sin él, cada reconciliación de la lista
+  // reabriría el primer hilo debajo de los dedos de quien ya se movió a otro.
+  const autoOpenedForRef = useRef<string | null>(null);
 
   const now = Date.now() + nowTick * 0; // nowTick fuerza el re-render periódico
 
@@ -475,6 +518,9 @@ export function InboxClient({ viewer }: { viewer: Viewer }) {
       const data = await res.json();
       setThreads(data.threads ?? []);
       setCounts(data.counts ?? { total: 0, byChannel: {} });
+      // Se asigna SIEMPRE (también en null): al quitar el ?patientId= el banner
+      // tiene que desaparecer, no quedarse con el paciente de la vez anterior.
+      setPatientFilter(data.patientFilter ?? null);
       if (data.stats) setStats(data.stats);
       // Sólo la carga NO silenciosa siembra/avanza el cursor. La reconciliación
       // deja el cursor intacto a propósito: así el siguiente poll incremental
@@ -726,6 +772,40 @@ export function InboxClient({ viewer }: { viewer: Viewer }) {
   );
 
   const hasFilters = activeChannel !== null || segment !== "all" || quickFilter !== null || searchInput.trim() !== "";
+
+  /* ── Llegada desde la ficha del paciente (?patientId=) ──
+     Filtrar la lista no basta: quien pulsa "Ver conversación" en la ficha viene
+     a LEERLA, y dejarle una lista de un solo elemento sin abrir era un clic de
+     más que parecía un fallo ("tampoco me abre la conversación"). Se abre el
+     primer hilo —el más reciente, la lista ya viene ordenada— UNA sola vez por
+     valor de patientId: si después cierra o cambia de conversación, mandan sus
+     manos, no este efecto. */
+  useEffect(() => {
+    if (!patientIdFilter) {
+      // Al volver a "todas" se rearma: una segunda llegada desde otra ficha
+      // tiene que volver a abrir.
+      autoOpenedForRef.current = null;
+      return;
+    }
+    if (loadingList) return; // sin lista todavía no hay nada que abrir
+    if (autoOpenedForRef.current === patientIdFilter) return;
+    // El candado se echa aunque no haya nada que abrir (lista vacía, o el
+    // usuario ya tenía una conversación abierta): el intento se gasta aquí.
+    autoOpenedForRef.current = patientIdFilter;
+    if (activeThreadId) return;
+    const first = visibleThreads[0];
+    if (first) setActiveThreadId(first.id);
+  }, [patientIdFilter, loadingList, activeThreadId, visibleThreads]);
+
+  /* Nombre del paciente filtrado. Preferimos el del servidor (existe aunque no
+     haya ni un hilo); si esa respuesta aún no llegó, el del primer hilo, que es
+     del mismo paciente. Vacío = todavía no sabemos cómo se llama. */
+  const patientFilterName = useMemo(() => {
+    const fromApi = patientFilter?.name?.trim();
+    if (fromApi) return fromApi;
+    const first = threads[0];
+    return first ? threadName(first).trim() : "";
+  }, [patientFilter, threads]);
 
   /* ── Acciones ── */
 
@@ -1030,6 +1110,13 @@ export function InboxClient({ viewer }: { viewer: Viewer }) {
     setSearchInput("");
   }, []);
 
+  /* Quita el ?patientId= de la URL. `replace` y no `push` a propósito: con push,
+     el botón "atrás" del navegador devolvería al mismo Inbox filtrado del que el
+     usuario acaba de pedir salir. */
+  const clearPatientFilter = useCallback(() => {
+    router.replace("/dashboard/inbox");
+  }, [router]);
+
   const composeSoon = useCallback(() => {
     toast(t("inbox.client.composeSoon"), { icon: "🛠️" });
   }, [t]);
@@ -1083,6 +1170,119 @@ export function InboxClient({ viewer }: { viewer: Viewer }) {
 
   const windowClosed = windowInfo !== null && !windowInfo.open;
   const replyDisabled = sending || (composerMode === "reply" && windowClosed);
+
+  /* ── Plantillas aprobadas de Meta (solo con la ventana CERRADA) ──
+     Es justo al revés de como estaba: pasadas las 24 h el texto libre no se
+     entrega y una plantilla aprobada es lo ÚNICO que WhatsApp acepta, así que es
+     ahora cuando hacen falta. Se piden por hilo y NO entran en el polling de 5 s:
+     el catálogo de la clínica no cambia mientras se lee una conversación, y cada
+     consulta pega contra Meta. */
+  const templatesThreadId =
+    activeThread && activeThread.channel === "WHATSAPP" && windowClosed ? activeThread.id : null;
+
+  useEffect(() => {
+    if (!templatesThreadId) {
+      // Dentro de ventana (o en otro canal) no hay nada que ofrecer. Se limpia
+      // para que al saltar de conversación no queden a la vista —ni enviables—
+      // las plantillas rellenadas con los datos del paciente anterior.
+      setTplData(null);
+      setTplError(null);
+      setTplLoading(false);
+      setPendingTemplate(null);
+      return;
+    }
+    let cancelled = false;
+    setTplLoading(true);
+    setTplError(null);
+    setTplData(null);
+    setPendingTemplate(null);
+    (async () => {
+      try {
+        const res = await fetch(`/api/inbox/threads/${templatesThreadId}/templates`);
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || t("inbox.client.tplSendFailed"));
+        if (cancelled) return;
+        // Se normaliza en la puerta: un 200 con el cuerpo a medias (o un HTML de
+        // error colado como 200) reventaría el render al hacer options.map, y
+        // tumbar el Inbox entero por una plantilla es un precio absurdo.
+        setTplData({
+          windowOpen: !!data.windowOpen,
+          waConnected: !!data.waConnected,
+          billingOk: !!data.billingOk,
+          patientName: data.patientName ?? null,
+          options: Array.isArray(data.options) ? data.options : [],
+          unavailableReason: data.unavailableReason ?? null,
+          manageHref: data.manageHref ?? "",
+        });
+      } catch (err) {
+        if (!cancelled) {
+          setTplError(err instanceof Error ? err.message : t("inbox.client.tplSendFailed"));
+        }
+      } finally {
+        if (!cancelled) setTplLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [templatesThreadId, t]);
+
+  /**
+   * Vuelve a pedir el detalle de UN hilo concreto (no "el activo": el usuario
+   * pudo saltar de conversación mientras la plantilla viajaba) y lo pinta solo
+   * si sigue en pantalla. Tras enviar, el mensaje tiene que VERSE ya: esperar al
+   * poll de 5 s es lo que hace que se pulse "enviar" dos veces, y la segunda
+   * también se cobra.
+   */
+  const refreshThreadDetail = useCallback(async (threadId: string) => {
+    try {
+      const res = await fetch(`/api/inbox/threads/${threadId}`);
+      if (!res.ok) return;
+      const data = await res.json();
+      setActiveThread((prev) => (prev && prev.id === threadId ? data.thread : prev));
+    } catch {
+      // silencioso: si falla, el polling repone el mensaje en el siguiente tick
+    }
+  }, []);
+
+  const sendTemplate = useCallback(async () => {
+    if (!activeThread || !pendingTemplate || tplSending) return;
+    const threadId = activeThread.id;
+    // Nombre para el toast: el del servidor manda (es el del paciente ligado al
+    // hilo); si el hilo es huérfano, el del propio hilo (su teléfono/asunto).
+    const name = tplData?.patientName?.trim() || threadName(activeThread);
+    setTplSending(true);
+    try {
+      const res = await fetch(`/api/inbox/threads/${threadId}/templates`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ kind: pendingTemplate.kind }),
+      });
+      const data = await res.json().catch(() => ({}));
+      // El servidor ya devuelve el motivo en español: mostrarlo tal cual, nunca
+      // el error crudo de Meta ni un genérico que no dice qué arreglar.
+      if (!res.ok) throw new Error(data.error || t("inbox.client.tplSendFailed"));
+      setPendingTemplate(null);
+      toast.success(t("inbox.client.tplSent", { name }));
+      await refreshThreadDetail(threadId);
+      void fetchThreads({ silent: true });
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : t("inbox.client.tplSendFailed"));
+    } finally {
+      setTplSending(false);
+    }
+  }, [activeThread, pendingTemplate, tplSending, tplData, t, refreshThreadDetail, fetchThreads]);
+
+  const cancelTemplate = useCallback(() => setPendingTemplate(null), []);
+
+  /** Sufijo corto del chip apagado: un chip muerto sin motivo no se entiende. */
+  const templateStateSuffix = useCallback(
+    (state: InboxTemplateOption["state"]): string | null => {
+      if (state === "pending") return t("inbox.client.tplStatePending");
+      if (state === "rejected") return t("inbox.client.tplStateRejected");
+      if (state === "missing") return t("inbox.client.tplStateMissing");
+      return null;
+    },
+    [t],
+  );
 
   /* ── Formatos de texto ── */
 
@@ -1297,6 +1497,28 @@ export function InboxClient({ viewer }: { viewer: Viewer }) {
             </button>
           </div>
 
+          {/* Banner del filtro por paciente: sin él, llegar desde una ficha deja
+              un Inbox que parece vacío o incompleto sin decir por qué, y sin
+              forma evidente de volver a ver todas las conversaciones.
+              Si todavía no sabemos el nombre (ni servidor ni hilos) se usa el
+              título sin nombre en vez de dejar la preposición colgando —"…las
+              conversaciones de ."—, que es lo que pasaría al interpolar vacío. */}
+          {patientIdFilter && (
+            <div className={styles.patientFilterBar}>
+              <span className={styles.patientFilterIcon}>
+                <User size={14} strokeWidth={2.2} aria-hidden />
+              </span>
+              <span className={styles.patientFilterText}>
+                {patientFilterName
+                  ? t("inbox.client.patientFilterTitle", { name: patientFilterName })
+                  : t("inbox.client.emptyPatientThreads")}
+              </span>
+              <button type="button" className={styles.patientFilterClear} onClick={clearPatientFilter}>
+                {t("inbox.client.patientFilterClear")}
+              </button>
+            </div>
+          )}
+
           {(waitingThreads.length > 0 || quickFilter === "sla") && folder === "inbox" && (
             <button
               type="button"
@@ -1390,11 +1612,35 @@ export function InboxClient({ viewer }: { viewer: Viewer }) {
           </div>
         </div>
 
+        {/* Vacío CON explicación cuando se llega filtrado por paciente: el
+            genérico "sin conversaciones en bandeja de entrada" aquí es una
+            mentira a medias —la bandeja puede estar llena y lo que falta es este
+            paciente—. Y si ni teléfono tiene, el motivo es otro y se dice:
+            esperar un WhatsApp que nunca podrá existir es tiempo perdido. */}
         <div className={styles.threadList}>
           {loadingList ? (
             <div className={styles.emptyList}>{t("common.loading")}</div>
           ) : error ? (
             <div className={styles.emptyList} style={{ color: "var(--ib-red)" }}>{error}</div>
+          ) : visibleThreads.length === 0 && patientIdFilter ? (
+            <div className={styles.emptyList}>
+              <InboxIcon size={36} strokeWidth={1.75} aria-hidden style={{ opacity: 0.3, marginBottom: 8 }} />
+              <div className={styles.emptyPatientTitle}>{t("inbox.client.emptyPatientThreads")}</div>
+              {patientFilterName && (
+                <div className={styles.emptyPatientHint}>
+                  {patientFilter && patientFilter.hasPhone === false
+                    ? t("inbox.client.emptyPatientThreadsNoPhone", { name: patientFilterName })
+                    : t("inbox.client.emptyPatientThreadsHint", { name: patientFilterName })}
+                </div>
+              )}
+              <button
+                type="button"
+                className={`${styles.patientFilterClear} ${styles.emptyPatientAction}`}
+                onClick={clearPatientFilter}
+              >
+                {t("inbox.client.patientFilterClear")}
+              </button>
+            </div>
           ) : visibleThreads.length === 0 ? (
             <div className={styles.emptyList}>
               <InboxIcon size={36} strokeWidth={1.75} aria-hidden style={{ opacity: 0.3, marginBottom: 8 }} />
@@ -1958,18 +2204,21 @@ export function InboxClient({ viewer }: { viewer: Viewer }) {
                 )}
               </div>
 
-              {composerMode === "reply" && (
+              {/* DENTRO de la ventana: los atajos de siempre. Son texto libre
+                  que se pega en el recuadro —ni pasan por Meta ni cuestan— y por
+                  eso ahora se llaman "atajos" y no "plantillas": confundirlos es
+                  lo que hacía creer que el Inbox ya mandaba plantillas. */}
+              {composerMode === "reply" && !windowClosed && (
                 <div className={styles.tplRow}>
                   <span className={styles.tplLabel}>
                     <Zap size={12} strokeWidth={2.2} aria-hidden />
-                    <span>{t("inbox.client.templates")}</span>
+                    <span>{t("inbox.client.tplShortcuts")}</span>
                   </span>
                   {(["tplConfirm", "tplLocation", "tplPostCare"] as const).map((k) => (
                     <button
                       key={k}
                       type="button"
                       className={styles.tplChip}
-                      disabled={windowClosed}
                       onClick={() => insertTemplate(t(`inbox.client.${k}Text`))}
                     >
                       {t(`inbox.client.${k}Label`)}
@@ -1978,6 +2227,87 @@ export function InboxClient({ viewer }: { viewer: Viewer }) {
                 </div>
               )}
 
+              {/* FUERA de la ventana: las plantillas aprobadas de Meta, que es lo
+                  único que WhatsApp entrega a estas alturas. Aquí SÍ están
+                  habilitadas. */}
+              {composerMode === "reply" && windowClosed && activeThread.channel === "WHATSAPP" && (
+                <div className={styles.tplMetaBlock}>
+                  <div className={styles.tplRow}>
+                    <span className={styles.tplLabel}>
+                      <ShieldCheck size={12} strokeWidth={2.2} aria-hidden />
+                      <span>{t("inbox.client.tplMeta")}</span>
+                    </span>
+                    {tplLoading ? (
+                      <span className={styles.tplMetaNote}>{t("inbox.client.tplLoading")}</span>
+                    ) : tplError ? (
+                      <span className={styles.tplMetaAlert}>{tplError}</span>
+                    ) : tplData && tplData.unavailableReason ? (
+                      <span className={styles.tplMetaAlert}>
+                        {tplData.unavailableReason}{" "}
+                        {tplData.manageHref && (
+                          <Link href={tplData.manageHref} className={styles.tplManageLink}>
+                            {t("inbox.client.tplManage")}
+                          </Link>
+                        )}
+                      </span>
+                    ) : tplData ? (
+                      tplData.options.map((opt) => {
+                        const blocked = opt.blockedReason !== null;
+                        const suffix = blocked ? templateStateSuffix(opt.state) : null;
+                        const chosen = pendingTemplate !== null && pendingTemplate.kind === opt.kind;
+                        return (
+                          <button
+                            key={opt.kind}
+                            type="button"
+                            className={`${styles.tplChip} ${chosen ? styles.tplChipChosen : ""}`}
+                            disabled={blocked || tplSending}
+                            title={opt.blockedReason ?? undefined}
+                            onClick={() => setPendingTemplate(opt)}
+                          >
+                            {t(opt.labelKey)}
+                            {suffix && <span className={styles.tplChipState}> · {suffix}</span>}
+                          </button>
+                        );
+                      })
+                    ) : null}
+                  </div>
+
+                  {/* El coste va a la vista, no en un tooltip: cada plantilla se
+                      la cobra Meta a la clínica y eso cambia la decisión. */}
+                  {tplData && tplData.unavailableReason === null && (
+                    <div className={styles.tplMetaHint}>{t("inbox.client.tplMetaHint")}</div>
+                  )}
+
+                  {pendingTemplate && pendingTemplate.preview && (
+                    <div className={styles.tplPreview}>
+                      <div className={styles.tplPreviewTitle}>{t("inbox.client.tplPreviewTitle")}</div>
+                      <div className={styles.tplPreviewBody}>{pendingTemplate.preview}</div>
+                      <div className={styles.tplPreviewActions}>
+                        <button
+                          type="button"
+                          className={styles.tplSendBtn}
+                          onClick={sendTemplate}
+                          disabled={tplSending}
+                        >
+                          <Send size={13} strokeWidth={2.2} aria-hidden />
+                          {tplSending ? t("inbox.client.tplSending") : t("inbox.client.tplSend")}
+                        </button>
+                        <button
+                          type="button"
+                          className={styles.tplCancelBtn}
+                          onClick={cancelTemplate}
+                          disabled={tplSending}
+                        >
+                          {t("inbox.client.tplCancel")}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Sigue siendo cierto y no contradice a los chips: el aviso habla
+                  del TEXTO LIBRE, que ahí abajo continúa deshabilitado. */}
               {composerMode === "reply" && windowClosed && (
                 <div className={styles.oowNotice}>{t("inbox.client.outOfWindowNotice")}</div>
               )}

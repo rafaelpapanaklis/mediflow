@@ -6912,3 +6912,146 @@ no es un error de validación, sino "sin plantilla".
 5. **`prescription` no lleva el enlace de la receta.** Meta no admite URLs variables en el cuerpo sin
    darlas de alta como botón: fuera de ventana el paciente recibe el aviso y el enlace viaja en la
    conversación.
+
+
+---
+
+## [Fix-Inbox-Paciente-Plantillas]
+
+Dos bugs reportados desde producción. Los dos venían del mismo sitio: código que
+se escribió suponiendo un estado del mundo que en producción casi nunca se da.
+
+### Bug 1 — "Abrir chat" llevaba a un Inbox vacío
+
+El enlace hilo↔paciente (`inbox_threads."patientId"`) se intentaba **una sola
+vez**, al crear el hilo desde el webhook de Meta. Si el paciente se dio de alta
+DESPUÉS de que empezara la conversación —el caso normal: el paciente escribe
+para pedir cita y recepción lo registra luego—, o si su teléfono se capturó o se
+corrigió más tarde, el hilo se quedaba con `patientId` nulo **para siempre**:
+nada volvía a mirarlo. Todo lo que filtraba por `patientId` salía vacío aunque la
+conversación estuviera ahí, y el hilo se mostraba con el nombre de perfil de
+WhatsApp ("ra rara") en vez del nombre del paciente.
+
+La lógica de emparejamiento por teléfono (`findPatientByWhatsAppPhone`) estaba
+bien; lo que faltaba era volver a usarla.
+
+Se arregló en las tres capas, no en una:
+
+1. **Buscar sin depender del enlace.** `src/lib/inbox/patient-threads.ts` es la
+   pieza nueva: dado un `patientId` resuelve su teléfono y localiza también los
+   hilos que le corresponden por número. `GET /api/inbox/threads` y
+   `/api/inbox/since` ya no filtran por `patientId` a secas.
+2. **Auto-reparación.** `linkOrphanThreadsToPatient` escribe el enlace que
+   faltaba, y así el sistema se cura con el uso. Sólo cuando el match es
+   **inequívoco** (un único paciente de la clínica con ese número); con dos o más
+   no toca nada y lo registra. El `updateMany` filtra por `patientId: null`, así
+   que es idempotente y no se pisa consigo mismo.
+3. **Enlazar al crear/editar paciente.** `POST /api/patients` y el `PUT`/`PATCH`
+   de `[id]` llaman al mismo helper (best-effort, en su propio try/catch). Es el
+   origen del problema. El `PATCH` sólo lo hace si el body traía `phone`, para no
+   pagar dos consultas por cada click en la estrellita de VIP.
+
+Y la experiencia:
+
+- Al llegar con `?patientId=`, el Inbox **abre** la conversación, no sólo la
+  filtra. Una vez por `patientId`: si el usuario se mueve a otro hilo, mandan sus
+  manos.
+- Banner "Solo las conversaciones de X" con salida a "Ver todas".
+- Sin conversación, un vacío que **explica**: "Sin conversaciones con este
+  paciente", y si además no tiene teléfono lo dice, porque entonces esperar un
+  WhatsApp es tiempo perdido.
+- La tarjeta **"WhatsApp recientes" de la ficha era 100% estática**: no hacía
+  ningún fetch, siempre pintaba "Sin mensajes recientes". Eso no lo decía el
+  reporte y era la mitad del síntoma. Ahora tira de
+  `GET /api/inbox/patient-recent`, con el mismo criterio por teléfono.
+
+### Bug 2 — Las plantillas del Inbox ni se podían usar ni eran plantillas
+
+Dos capas, las dos verificadas:
+
+- `disabled={windowClosed}` en los chips. **Al revés**: fuera de la ventana de
+  24 h una plantilla aprobada es lo único que Meta entrega, y era justo cuando el
+  código las apagaba.
+- Aunque se habilitaran, `insertTemplate` sólo pegaba **texto** en el recuadro.
+  Nunca se había enviado una plantilla aprobada desde el Inbox — concuerda con el
+  hallazgo de la auditoría de WhatsApp ("nada usa plantillas aprobadas").
+
+Ahora hay dos cosas distintas y se llaman distinto:
+
+- **Atajos de texto** (los tres de siempre): dentro de la ventana, gratis, se
+  pegan en el recuadro. Sin cambios.
+- **Plantillas aprobadas**: fuera de la ventana, habilitadas, y envían de verdad
+  por `sendWhatsAppTemplate` a través de `sendWhatsAppLogged` — que ya decide
+  texto/plantilla, marca `waBillingOk` ante el 131042 y deja el mensaje en el
+  hilo. Cero infraestructura nueva.
+
+`GET/POST /api/inbox/threads/[id]/templates` ofrece los cinco tipos del catálogo
+que el Inbox sabe **rellenar** con lo que sabe del paciente (`manual_api`,
+`reminder`, `booking`, `payment_notice`, `review`); los demás cuelgan de un
+documento y se mandan desde su pantalla. Cada opción viene con su estado real en
+Meta y, si no se puede usar, el motivo en español: chip apagado **con
+explicación**, nunca un chip muerto. Sin ninguna aprobada, un texto que dice qué
+falta y un enlace a Plantillas. Los params se **recalculan en el servidor**: si
+llegaran del body, cualquiera dictaría el texto que Meta entrega firmado por la
+clínica. Pulsar un chip no envía: enseña el texto EXACTO que va a recibir el
+paciente y el envío es un segundo clic — cada plantilla se la cobra Meta a la
+clínica.
+
+### Lo que encontró la revisión adversarial (y se corrigió antes de subir)
+
+Diez agentes: seis implementando en paralelo, cuatro revisando por dimensiones
+distintas. Lo que sacaron y ya está arreglado:
+
+- **Import roto** (`templateUiState` vive en `templates-catalog`, no en
+  `template-config`). Habría tumbado el build.
+- **`phone: { contains: last10 }` no casaba con los teléfonos guardados con
+  espacios o guiones** ("55 1234 5678"), que es como los teclea recepción. La
+  auto-reparación quedaba muerta justo para el formato más común y, peor, la
+  guarda de ambigüedad se invertía: de dos hermanos con el mismo celular, si uno
+  lo tenía con espacios y el otro sin ellos, el LIKE sólo veía a uno → "match
+  inequívoco" → enlace al que no tocaba, y ya irreversible. Ahora la
+  normalización va DENTRO de la consulta (`$queryRaw` con `regexp_replace`),
+  idéntica al script SQL, con vuelta al criterio viejo si el raw falla.
+- **Fuga de PHI por el número de la propia clínica.** Los avisos internos
+  (solicitud de cita, saldo de IA, cobros) salen al teléfono de la clínica y
+  hablan de OTROS pacientes. Si ese número está en la ficha de alguien, el match
+  era "inequívoco" y le habríamos metido datos de terceros en su expediente.
+  Excluido en el código y en el SQL.
+- **El saldo pendiente viajaba a cualquiera con `inbox.view`**, saltándose el
+  `billing.view` que lo protege en el resto del producto (el aviso de saldo lleva
+  el importe dentro del cuerpo de la plantilla). Sin ese permiso la opción ya no
+  se ofrece — ni se consulta el saldo.
+- **GET que escribían a nombre de un READONLY.** La auto-reparación sólo se
+  persiste si la sesión tiene `inbox.send`; la tarjeta de la ficha va en modo
+  lectura. Encontrar la conversación no necesitaba escribirla.
+- **Diagnóstico invertido**: `waBillingOk` es `@default(false)` y sólo pasa a
+  true cuando un envío de plantilla sale bien — o sea, hoy, en todas. Se
+  evaluaba antes que "no hay plantillas", así que la clínica sin plantillas leía
+  "revisa tu tarjeta en Meta" y se iba a la pantalla equivocada… de la que no
+  podía salir. Reordenado, con test del camino inverso.
+- **La tarjeta pintaba mensajes del portal y de correo** como si fueran WhatsApp
+  (esos hilos nacen con `patientId`). Filtrada por canal.
+- **El envío iba al teléfono de la FICHA y no al del HILO**: si la ficha se
+  corrigió después, la plantilla salía a otro número y el registro caía en otro
+  hilo — el toast decía "enviado" y el mensaje no aparecía nunca en la
+  conversación. Manda el número del hilo.
+- **El SQL refrescaba `updatedAt`**, que en esta tabla no es sólo rastro: el
+  header del Inbox lo usa como `resolvedAt` para "resueltos hoy". Reparar hilos
+  viejos ARCHIVED habría reportado como resueltas hoy conversaciones cerradas
+  hace meses, sin vuelta atrás. Ya no se toca.
+- Número compartido por dos pacientes: los hilos huérfanos entran en la lista del
+  Inbox (ahí el hilo lleva su propio nombre) pero **no** en la tarjeta de la
+  ficha, donde cada entrante se atribuye por nombre a ESE paciente.
+
+### Pendientes
+
+1. **Correr `sql/inbox-link-orphan-threads.sql`** (una clínica por corrida).
+   Repara de golpe el histórico; sin él, los hilos viejos se van curando de uno
+   en uno conforme se abren las fichas. Los bloques (1) y (2) enseñan qué va a
+   pasar y qué se queda fuera antes de escribir nada.
+2. **Sigue sin mandarse una plantilla real desde el Inbox.** Todo el camino de
+   red está sin ejercitar contra Meta. Hace falta una clínica con plantillas
+   APROBADAS y método de pago en su cuenta de Meta: sin tarjeta, Meta responde
+   131042 y el mensaje —ahora sí— lo explica en español.
+3. La importación masiva de pacientes (`/api/patients/import`) NO enlaza hilos a
+   propósito (N × 2 consultas). Lo cubren la auto-reparación y el script.

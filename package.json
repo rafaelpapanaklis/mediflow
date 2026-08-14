@@ -39,6 +39,7 @@
     "test:reminders-reschedule": "tsx --test src/lib/reminders/__tests__/reschedule.test.ts",
     "test:inbox": "tsx --test src/lib/inbox/__tests__/inbox-send.test.ts",
     "test:inbox-drafts": "tsx --test src/lib/inbox/__tests__/composer-drafts.test.ts",
+    "test:inbox-templates": "tsx --test src/lib/inbox/__tests__/composer-templates.test.ts",
     "test:audit": "tsx --test src/lib/admin/audit-core.test.ts",
     "test:mrr": "tsx --test src/lib/admin/mrr-core.test.ts",
     "test:patient-number": "tsx --test src/lib/patients/__tests__/next-patient-number-core.test.ts",

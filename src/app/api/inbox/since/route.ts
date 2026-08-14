@@ -3,7 +3,8 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getAuthContext } from "@/lib/auth-context";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
-import { relatedPatientVisibilityAnd } from "@/lib/patient-visibility";
+import { relatedPatientVisibilityAnd, canViewPatient } from "@/lib/patient-visibility";
+import { resolvePatientThreadScope, patientThreadWhere } from "@/lib/inbox/patient-threads";
 
 export const dynamic = "force-dynamic";
 
@@ -111,10 +112,35 @@ export async function GET(req: NextRequest) {
     if (assignedTo === "me") where.assignedToId = dbUser.id;
     else if (assignedTo === "unassigned") where.assignedToId = null;
     else if (assignedTo) where.assignedToId = assignedTo;
-    const patientId = sp.get("patientId");
-    if (patientId) where.patientId = patientId;
 
     const andClauses: Prisma.InboxThreadWhereInput[] = [];
+
+    // Filtro por paciente: MISMO criterio que GET /api/inbox/threads (el hilo
+    // puede estar huérfano y corresponderle solo por teléfono), pero SIN
+    // reparar — este endpoint corre cada 5 s y no tiene por qué escribir: para
+    // entonces el GET de la lista ya enlazó lo que fuera inequívoco. Se aplica
+    // igual para que un hilo que siga huérfano (caso ambiguo: el número lo
+    // comparten dos pacientes) no desaparezca de la vista entre polls.
+    const patientId = sp.get("patientId");
+    if (patientId) {
+      const canView = await canViewPatient(patientId, {
+        userId: dbUser.id,
+        role: dbUser.role,
+        clinicId: dbUser.clinicId,
+      });
+      if (!canView) {
+        // Sin visibilidad, filtro ESTRICTO por el enlace: nada que resolver por
+        // teléfono para quien no puede ver al paciente. No devolvemos error —
+        // el poll no debe romperse; el resultado vacío ya es la respuesta.
+        andClauses.push({ patientId });
+      } else {
+        const scope = await resolvePatientThreadScope(dbUser.clinicId, patientId, {
+          repair: false,
+        });
+        andClauses.push(patientThreadWhere(patientId, scope.extraThreadIds));
+      }
+    }
+
     const search = sp.get("search");
     if (search && search.trim().length > 0) {
       andClauses.push({
