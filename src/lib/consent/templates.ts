@@ -146,6 +146,16 @@ export interface ConsentTemplateVars {
   clinicAddress?: string | null;
   clinicCity?: string | null;
   patientName: string;
+  /**
+   * Edad en AÑOS CUMPLIDOS al momento de generar la carta. La pide la práctica
+   * mexicana (y el expediente de la NOM-004) porque cambia lo que se autoriza:
+   * un menor no consiente por sí mismo y la dosis y el riesgo se leen distinto.
+   * Si no hay fecha de nacimiento capturada, la línea sale en blanco para
+   * llenarla a mano — nunca desaparece.
+   */
+  patientAge?: number | null;
+  /** Número de expediente del paciente (`Patient.patientNumber`). */
+  patientNumber?: string | null;
   /** Estomatólogo responsable del acto. */
   doctorName?: string | null;
   /** Cédula profesional del estomatólogo (NOM-004 10.1.1.4). */
@@ -159,10 +169,27 @@ export interface ConsentTemplateVars {
   date?: string | null;
 }
 
+/**
+ * Hueco para llenar a mano. Se usa en los datos que puede que la clínica no
+ * tenga capturados (edad, expediente): una carta impresa con "Edad: undefined"
+ * —o sin la línea— es una carta que no sirve; una con la raya se completa con
+ * un bolígrafo delante del paciente.
+ */
+const BLANK = "______";
+
+/** Edad en años cumplidos → "34 años". Sin dato, hueco para llenar. */
+function ageLabel(age: number | null | undefined): string {
+  if (age == null || !Number.isFinite(age) || age < 0) return BLANK;
+  const years = Math.floor(age);
+  return `${years} ${years === 1 ? "año" : "años"}`;
+}
+
 /** Marcadores admitidos dentro de un texto de consentimiento. */
 function tokenMap(vars: ConsentTemplateVars): Record<string, string> {
   return {
     NOMBRE_PACIENTE: vars.patientName || "—",
+    EDAD_PACIENTE: ageLabel(vars.patientAge),
+    EXPEDIENTE_PACIENTE: (vars.patientNumber ?? "").trim() || BLANK,
     NOMBRE_DOCTOR: (vars.doctorName ?? "").trim() || "—",
     NOMBRE_CLINICA: vars.clinicName || "—",
     CEDULA_DOCTOR: (vars.doctorLicense ?? "").trim() || "—",
@@ -223,11 +250,19 @@ export function buildConsentContent(
     ? "Nombre: [NOMBRE_DOCTOR]\nCédula profesional: [CEDULA_DOCTOR]"
     : "Nombre: [NOMBRE_DOCTOR]";
 
+  // Edad y expediente van SIEMPRE, tengan dato o no: son la identificación
+  // mínima del paciente en el expediente clínico (NOM-004 numeral 5.11) y lo
+  // primero que se busca cuando la carta se archiva en papel.
+  const patientIdBlock =
+    "Nombre del paciente: [NOMBRE_PACIENTE]\n" +
+    "Edad: [EDAD_PACIENTE]\n" +
+    "Número de expediente: [EXPEDIENTE_PACIENTE]";
+
   const patientBlock = isMinorRepresented
-    ? "Nombre del paciente: [NOMBRE_PACIENTE]\n" +
-      "Representante legal que firma en su nombre: [NOMBRE_REPRESENTANTE]\n" +
+    ? patientIdBlock +
+      "\nRepresentante legal que firma en su nombre: [NOMBRE_REPRESENTANTE]\n" +
       "Parentesco o relación con el paciente: [PARENTESCO_REPRESENTANTE]"
-    : "Nombre del paciente: [NOMBRE_PACIENTE]";
+    : patientIdBlock;
 
   const objective = OBJECTIVES[proc.key] ?? OBJECTIVES[GENERAL_CONSENT_KEY];
   const benefit = BENEFITS[proc.key] ?? BENEFITS[GENERAL_CONSENT_KEY];

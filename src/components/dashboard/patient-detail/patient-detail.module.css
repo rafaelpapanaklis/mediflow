@@ -916,6 +916,37 @@
   .patientNavSticky { display: none; }
 }
 
+/* ─────── MENÚ "⋯" DE ACCIONES DE FILA ─────── */
+/* Lo usa la lista de consentimientos para guardar lo secundario (copiar liga,
+   regenerar, revocar, eliminar) y dejar al frente firmar y enviar. Mismas
+   medidas que el menú de desbordamiento de la barra de navegación, pero con
+   nombre propio: son dos menús distintos y encadenarlos por la clase del otro
+   convertiría cualquier retoque de la barra en un cambio sorpresa aquí.
+   El fondo y el borde los pone .bg-popover del DropdownMenuContent. */
+.rowMenu {
+  min-width: 214px;
+  padding: 5px;
+}
+.rowMenu .rowMenuItem {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-height: 34px;
+  padding: 0 9px;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--text-2);
+  border-radius: 7px;
+  cursor: pointer;
+}
+.rowMenu .rowMenuItem svg { color: currentColor; flex-shrink: 0; opacity: 0.75; }
+.rowMenuLabel { flex: 1; white-space: nowrap; }
+/* Táctil: 34px de alto se queda corto para el dedo en la tableta del sillón,
+   que es justo donde se usa este módulo. */
+@media (pointer: coarse) {
+  .rowMenu .rowMenuItem { min-height: 40px; }
+}
+
 /* ─────── QUICK NAV ─────── */
 /* ⚠️ Menú vertical HISTÓRICO: lo sustituyó .patientNavBar (barra horizontal) y
    ya no se monta en la ficha. Los estilos siguen aquí junto a quick-nav.tsx

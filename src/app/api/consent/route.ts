@@ -22,6 +22,9 @@ import { rateLimit } from "@/lib/rate-limit";
 import { logMutation } from "@/lib/audit";
 import { assertPatientVisible } from "@/lib/patient-visibility";
 import { buildConsentContent, findConsentTemplate } from "@/lib/consent/templates";
+// Mismo helper de edad que el preview: la carta creada no puede decir una edad
+// distinta de la que el doctor acaba de revisar en el modal.
+import { calculateAge } from "@/lib/pediatrics/age";
 import { CONSENT_DTO_SELECT, toConsentDTO } from "@/lib/consent/types";
 import { consentLinkExpiry, consentPublicUrl, newConsentToken } from "@/lib/consent/link";
 
@@ -98,7 +101,10 @@ export async function POST(req: NextRequest) {
 
   const patient = await prisma.patient.findFirst({
     where: { id: patientId, clinicId: ctx.clinicId },
-    select: { id: true, firstName: true, lastName: true },
+    // dob y patientNumber alimentan la identificación de la carta (edad y
+    // número de expediente). Mismos campos que lee /api/consent/preview: el
+    // texto que el doctor revisó tiene que ser el que se guarda.
+    select: { id: true, firstName: true, lastName: true, dob: true, patientNumber: true },
   });
   if (!patient) return NextResponse.json({ error: "Paciente no encontrado" }, { status: 404 });
 
@@ -139,6 +145,8 @@ export async function POST(req: NextRequest) {
       clinicAddress: clinic?.address ?? null,
       clinicCity: clinic?.city ?? null,
       patientName,
+      patientAge: patient.dob ? calculateAge(patient.dob).years : null,
+      patientNumber: patient.patientNumber ?? null,
       doctorName,
       doctorLicense: doctor?.cedulaProfesional ?? null,
       signerName: signerName || null,

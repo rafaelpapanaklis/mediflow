@@ -16,6 +16,9 @@ import { getAuthContext } from "@/lib/auth-context";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { assertPatientVisible } from "@/lib/patient-visibility";
 import { buildConsentContent, findConsentTemplate } from "@/lib/consent/templates";
+// Único cálculo de edad del repo (lógica de cumpleaños, no resta de años): un
+// off-by-one aquí saldría impreso en un documento legal.
+import { calculateAge } from "@/lib/pediatrics/age";
 
 export async function GET(req: NextRequest) {
   const limited = rateLimit(req, 60);
@@ -40,7 +43,9 @@ export async function GET(req: NextRequest) {
 
   const patient = await prisma.patient.findFirst({
     where: { id: patientId, clinicId: ctx.clinicId },
-    select: { firstName: true, lastName: true },
+    // dob y patientNumber: la carta identifica al paciente con su edad y su
+    // número de expediente, como se firma en la práctica mexicana.
+    select: { firstName: true, lastName: true, dob: true, patientNumber: true },
   });
   if (!patient) return NextResponse.json({ error: "Paciente no encontrado" }, { status: 404 });
 
@@ -65,6 +70,8 @@ export async function GET(req: NextRequest) {
     clinicAddress: clinic?.address ?? null,
     clinicCity: clinic?.city ?? null,
     patientName: `${patient.firstName} ${patient.lastName}`.trim(),
+    patientAge: patient.dob ? calculateAge(patient.dob).years : null,
+    patientNumber: patient.patientNumber ?? null,
     doctorName: doctor ? `${doctor.firstName ?? ""} ${doctor.lastName ?? ""}`.trim() : "",
     doctorLicense: doctor?.cedulaProfesional ?? null,
     signerName: signerName || null,
