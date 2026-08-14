@@ -1,8 +1,10 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Receipt, Sparkles, MessageCircle, CheckCircle2 } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
+import { isAbortError } from "@/lib/fetch-safe";
 import { useT } from "@/i18n/i18n-provider";
 import styles from "./patient-detail.module.css";
 
@@ -33,6 +35,37 @@ interface SideCardsProps {
 /** Máximo de cobros timbrados listados; el resto se resume en un enlace. */
 const MAX_STAMPED_ROWS = 3;
 
+/** Un mensaje del hilo de WhatsApp, tal cual lo devuelve la API. */
+interface RecentWaMessage {
+  id: string;
+  direction: "IN" | "OUT";
+  body: string;
+  sentAt: string;
+  /** Envío automático de la plataforma (recordatorio, reseña, aviso…). */
+  isSystem: boolean;
+}
+
+/** Cuántos mensajes caben en el rail sin estirar la tarjeta. */
+const WA_RECENT_LIMIT = 4;
+
+/**
+ * "cargando" hasta que responde; "noAccess" solo con 403 (sin permiso de Inbox
+ * o paciente restringido); "ready" para todo lo demás — un fallo de red se
+ * degrada a "sin mensajes" en silencio, sin toast: es una tarjeta secundaria.
+ */
+type WaCardState = "idle" | "loading" | "ready" | "noAccess";
+
+/**
+ * Hora corta en formato de México (3:05 p.m.). Un solo formatter para toda la
+ * lista. Se construye a nivel de módulo sin riesgo de desajuste de hidratación
+ * porque estas filas SOLO se pintan tras el fetch del cliente.
+ */
+const WA_TIME_FMT = new Intl.DateTimeFormat("es-MX", {
+  hour: "numeric",
+  minute: "2-digit",
+  hour12: true,
+});
+
 export function SideCards({
   finance,
   patientId,
@@ -46,6 +79,62 @@ export function SideCards({
   const t = useT();
   const stampedShown = stampedInvoices.slice(0, MAX_STAMPED_ROWS);
   const stampedRest  = stampedInvoices.length - stampedShown.length;
+  const firstName = patientName.split(" ")[0] ?? "";
+
+  // ── WhatsApp recientes ──────────────────────────────────────────────────
+  // La tarjeta era ESTÁTICA: pintaba siempre "Sin mensajes recientes" porque
+  // nunca pedía nada. Ahora los mensajes salen de /api/inbox/patient-recent,
+  // que además encuentra los hilos que le tocan al paciente por teléfono
+  // aunque el enlace hilo↔paciente falte.
+  const [waState, setWaState] = useState<WaCardState>(patientPhone ? "loading" : "idle");
+  const [waMessages, setWaMessages] = useState<RecentWaMessage[]>([]);
+
+  useEffect(() => {
+    // Sin teléfono no puede haber conversación: ni se pide.
+    if (!patientPhone) {
+      setWaMessages([]);
+      setWaState("idle");
+      return;
+    }
+
+    const ctrl = new AbortController();
+    let cancelled = false;
+    setWaState("loading");
+
+    fetch(
+      `/api/inbox/patient-recent?patientId=${encodeURIComponent(patientId)}&limit=${WA_RECENT_LIMIT}`,
+      { signal: ctrl.signal },
+    )
+      .then(async (res) => {
+        if (cancelled) return;
+        if (res.status === 403) {
+          setWaMessages([]);
+          setWaState("noAccess");
+          return;
+        }
+        if (!res.ok) {
+          setWaMessages([]);
+          setWaState("ready");
+          return;
+        }
+        const json = await res.json().catch(() => null);
+        if (cancelled) return;
+        setWaMessages(Array.isArray(json?.messages) ? (json.messages as RecentWaMessage[]) : []);
+        setWaState("ready");
+      })
+      .catch((err: unknown) => {
+        // Cancelar no es fallar (no se toca estado). Un error de red tampoco
+        // se grita: la tarjeta se queda con su texto de "sin mensajes".
+        if (cancelled || isAbortError(err)) return;
+        setWaMessages([]);
+        setWaState("ready");
+      });
+
+    return () => {
+      cancelled = true;
+      ctrl.abort();
+    };
+  }, [patientId, patientPhone]);
 
   return (
     <aside className={styles.sidePanel} aria-label={t("patients.sideCards.panelAria")}>
@@ -143,7 +232,7 @@ export function SideCards({
           </h3>
         </header>
         <p className={styles.aiText}>
-          {t("patients.sideCards.reminderText", { name: patientName.split(" ")[0] ?? "" })}
+          {t("patients.sideCards.reminderText", { name: firstName })}
         </p>
       </section>
 
@@ -154,14 +243,41 @@ export function SideCards({
             <MessageCircle size={13} strokeWidth={1.75} aria-hidden /> {t("patients.sideCards.recentWhatsApp")}
           </h3>
         </header>
-        <div className={styles.waEmpty}>
-          {patientPhone ? (
-            <>{t("patients.sideCards.noRecentMessages", { name: patientName.split(" ")[0] ?? "" })}</>
-          ) : (
-            <>{t("patients.sideCards.noPhone")}</>
-          )}
-        </div>
-        {patientPhone && (
+        {!patientPhone ? (
+          <div className={styles.waEmpty}>{t("patients.sideCards.noPhone")}</div>
+        ) : waState === "loading" ? (
+          <div className={styles.waEmpty}>{t("patients.sideCards.waLoading")}</div>
+        ) : waState === "noAccess" ? (
+          <div className={styles.waEmpty}>{t("patients.sideCards.waNoAccess")}</div>
+        ) : waMessages.length === 0 ? (
+          <div className={styles.waEmpty}>
+            {t("patients.sideCards.noRecentMessages", { name: firstName })}
+          </div>
+        ) : (
+          <ul className={styles.waList}>
+            {waMessages.map((m) => (
+              <li
+                key={m.id}
+                className={`${styles.waMsg} ${m.direction === "IN" ? styles.waMsgIn : ""} ${
+                  m.isSystem ? styles.waMsgSystem : ""
+                }`}
+              >
+                <span className={styles.waWho}>
+                  {m.direction === "IN"
+                    ? t("patients.sideCards.waFromPatient", { name: firstName })
+                    : t("patients.sideCards.waFromClinic")}
+                </span>
+                {/* El rail recorta a una línea: el texto completo, en el title. */}
+                <span className={styles.waBody} title={m.body}>
+                  {m.body}
+                </span>
+                <span className={styles.waTime}>{WA_TIME_FMT.format(new Date(m.sentAt))}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+        {/* Sin acceso al Inbox el enlace no lleva a ningún lado: se esconde. */}
+        {patientPhone && waState !== "noAccess" && (
           <Link
             href={`/dashboard/inbox?patientId=${encodeURIComponent(patientId)}`}
             className={`${styles.sideBtn} ${styles.fullWidth}`}

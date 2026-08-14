@@ -1495,3 +1495,191 @@
   .pulseDot,
   .needDot { animation: none; }
 }
+
+/* ═══════════════════════════════════════════════════════════════════
+   Filtro por paciente (?patientId=) + plantillas aprobadas de Meta
+   Clases NUEVAS: no toca ninguna de las de arriba.
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* Banner "solo las conversaciones de X". En violeta (marca) y no en rojo/ámbar:
+   no es una alerta, es un filtro puesto a propósito al llegar desde la ficha. */
+.patientFilterBar {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  background: var(--ib-brand-soft);
+  border: 1px solid var(--ib-brand-border-soft);
+  border-radius: 12px;
+  padding: 8px 10px 8px 12px;
+}
+.patientFilterIcon {
+  display: grid;
+  place-items: center;
+  color: var(--ib-brand-ink);
+  flex-shrink: 0;
+}
+.patientFilterText {
+  flex: 1;
+  min-width: 0;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--ib-brand-ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.patientFilterClear {
+  flex-shrink: 0;
+  background: var(--ib-surface);
+  border: 1px solid var(--ib-brand-border-soft);
+  color: var(--ib-brand-ink);
+  border-radius: 8px;
+  padding: 5px 10px;
+  font-size: 11.5px;
+  font-weight: 700;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background var(--dur-1) var(--ease);
+}
+.patientFilterClear:hover { background: var(--ib-brand-hover-bg); }
+.patientFilterClear:focus-visible { outline: none; box-shadow: var(--ring); }
+
+/* Vacío explicado dentro de .emptyList (que ya es columna centrada). */
+.emptyPatientTitle {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--ib-text-2);
+}
+.emptyPatientHint {
+  margin-top: 6px;
+  max-width: 30ch;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--ib-text-3);
+}
+.emptyPatientAction { margin-top: 14px; }
+
+/* ── Plantillas de Meta en el composer (solo fuera de la ventana de 24 h) ── */
+.tplMetaBlock {
+  display: flex;
+  flex-direction: column;
+  border-top: 1px solid var(--ib-hairline);
+  margin-top: 8px;
+  padding-bottom: 4px;
+}
+.tplMetaNote {
+  font-size: 11.5px;
+  color: var(--ib-text-3);
+}
+/* Motivo por el que hoy no hay ninguna enviable: ocupa toda la fila porque es
+   una explicación, no un chip, y truncarla dejaría a la clínica sin saber qué
+   arreglar. */
+.tplMetaAlert {
+  flex: 1 0 100%;
+  min-width: 0;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--ib-amber-deep);
+  background: var(--ib-amber-bg);
+  border: 1px solid var(--ib-amber-border);
+  border-radius: 8px;
+  padding: 7px 10px;
+}
+.tplManageLink {
+  color: var(--ib-brand-ink);
+  font-weight: 700;
+  text-decoration: underline;
+  white-space: nowrap;
+}
+.tplManageLink:focus-visible { outline: none; box-shadow: var(--ring); border-radius: 4px; }
+.tplMetaHint {
+  padding: 0 14px 6px;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--ib-amber-meta);
+}
+/* Chip elegido: el par de reglas es a propósito — `.tplChip:hover:not(:disabled)`
+   pesa más que una sola clase y, sin la segunda, al pasar el ratón por encima el
+   chip elegido perdía el resalte justo mientras se decide si enviar. */
+.tplChip.tplChipChosen,
+.tplChip.tplChipChosen:hover:not(:disabled) {
+  background: var(--ib-brand-soft);
+  border-color: var(--ib-brand-border);
+  color: var(--ib-brand-ink);
+}
+.tplChipState {
+  font-weight: 600;
+  opacity: 0.75;
+}
+
+/* Vista previa: el texto EXACTO que va a recibir el paciente. */
+.tplPreview {
+  margin: 4px 14px 6px;
+  background: var(--ib-chat);
+  border: 1px solid var(--ib-border-2);
+  border-radius: 12px;
+  padding: 10px 12px;
+}
+.tplPreviewTitle {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--ib-text-3);
+  margin-bottom: 6px;
+}
+.tplPreviewBody {
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--ib-text-1);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.tplPreviewActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  flex-wrap: wrap;
+}
+.tplSendBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--ib-brand);
+  color: #fff;
+  border: none;
+  border-radius: 9px;
+  padding: 7px 14px;
+  font-size: 12.5px;
+  font-weight: 700;
+  font-family: inherit;
+  cursor: pointer;
+  box-shadow: var(--ib-shadow-btn);
+  transition: background var(--dur-1) var(--ease);
+}
+.tplSendBtn:hover:not(:disabled) { background: var(--ib-brand-hover); }
+.tplSendBtn:disabled { opacity: 0.5; cursor: not-allowed; box-shadow: none; }
+.tplSendBtn:focus-visible { outline: none; box-shadow: var(--ring); }
+.tplCancelBtn {
+  border: 1px solid var(--ib-border-2);
+  background: transparent;
+  color: var(--ib-text-2b);
+  border-radius: 9px;
+  padding: 7px 12px;
+  font-size: 12.5px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background var(--dur-1) var(--ease);
+}
+.tplCancelBtn:hover:not(:disabled) { background: var(--ib-hover-3); }
+.tplCancelBtn:disabled { opacity: 0.5; cursor: not-allowed; }
+.tplCancelBtn:focus-visible { outline: none; box-shadow: var(--ring); }
+
+@media (max-width: 767px) {
+  /* En móvil .tplRow no envuelve (scroll horizontal): el motivo largo se
+     saldría de la pantalla, así que aquí sí se deja envolver. */
+  .tplMetaAlert { white-space: normal; flex: 1 1 auto; }
+  .tplMetaHint { padding: 0 12px 6px; }
+  .tplPreview { margin: 4px 12px 6px; }
+  .patientFilterText { font-size: 12px; }
+}

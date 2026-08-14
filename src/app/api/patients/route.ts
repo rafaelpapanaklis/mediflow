@@ -15,6 +15,7 @@ import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { logMutation } from "@/lib/audit";
 import { revalidateAfter } from "@/lib/cache/revalidate";
 import { stripPatientSecrets } from "@/lib/patient-secrets";
+import { linkOrphanThreadsToPatient } from "@/lib/whatsapp/inbox-log";
 
 export const dynamic = "force-dynamic";
 
@@ -680,6 +681,32 @@ export async function POST(req: NextRequest) {
       ...(visibleUserIds.length > 0 && { visibleUserIdsCount: visibleUserIds.length }),
     },
   });
+
+  // ORIGEN del hilo huérfano: casi siempre el paciente ESCRIBE por WhatsApp antes
+  // de existir en el sistema (pide cita, pregunta precios) y recepción lo da de
+  // alta después. Ese hilo nació con patientId = null y nada volvía a mirarlo:
+  // la ficha recién creada abría el Inbox vacío aunque la conversación existiera.
+  // Aquí se cierra ese origen. La función solo enlaza si el número identifica a UN
+  // paciente de la clínica, y es idempotente.
+  //
+  // Best-effort en su PROPIO try/catch, fuera del que decide el 500 del alta: el
+  // paciente YA se guardó y devolver un error por no haber podido reordenar unos
+  // hilos de WhatsApp sería mentirle al usuario sobre lo que pasó.
+  //
+  // El alta MASIVA (/api/patients/import) queda fuera a propósito: N pacientes ×
+  // 2 consultas encarece la importación, y para ese caso ya está la auto-reparación
+  // que hace el propio Inbox al abrir la ficha (+ el script SQL de respaldo).
+  if (patient.phone) {
+    try {
+      await linkOrphanThreadsToPatient({
+        clinicId: ctx.clinicId,
+        patientId: patient.id,
+        phone: patient.phone,
+      });
+    } catch (err) {
+      console.error("[api/patients][POST] enlace de hilos de WhatsApp falló (ignorado):", err);
+    }
+  }
 
   revalidateAfter("patients");
   return NextResponse.json(stripPatientSecrets(patient), { status: 201 });

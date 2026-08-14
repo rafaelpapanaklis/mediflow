@@ -18,6 +18,7 @@ import { stripPatientSecrets } from "@/lib/patient-secrets";
 import { getPatientDeleteBlockers } from "@/lib/patient-deletion";
 import { APPT_AUTO_TYPE } from "@/lib/reminders/config";
 import { WA_REMINDER_PENDING_STATUSES } from "@/lib/whatsapp/reminder-status";
+import { linkOrphanThreadsToPatient } from "@/lib/whatsapp/inbox-log";
 
 export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
   const ctx = await getAuthContext();
@@ -155,6 +156,30 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
       before: exists as any,
       after: updated as any,
     });
+
+    // Segundo ORIGEN del hilo huérfano: el teléfono se captura o se CORRIGE
+    // después del alta (venía mal escrito, o el paciente dio otro número). El
+    // hilo de WhatsApp que ya existía con ese número sigue con patientId = null
+    // y nadie lo vuelve a mirar → la ficha abre el Inbox vacío. Al guardar la
+    // edición es justo cuando se puede reparar.
+    //
+    // Se usa el teléfono YA GUARDADO (`updated`), no el del body: el body puede
+    // traer el campo ausente/undefined y el update dejarlo intacto, y buscar por
+    // lo que el cliente mandó enlazaría hilos del número equivocado.
+    //
+    // Best-effort con su propio try/catch: el paciente ya se guardó y este
+    // enlace jamás puede convertir una edición correcta en un 400.
+    if (updated?.phone) {
+      try {
+        await linkOrphanThreadsToPatient({
+          clinicId: ctx.clinicId,
+          patientId: params.id,
+          phone: updated.phone,
+        });
+      } catch (e) {
+        console.error("[api/patients][PUT] enlace de hilos de WhatsApp falló (ignorado):", e);
+      }
+    }
 
     revalidateAfter("patients");
     return NextResponse.json(stripPatientSecrets(updated));
@@ -332,6 +357,26 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
       ? { ...(updated as any), cancelledFutureAppointments }
       : updated) as any,
   });
+
+  // Mismo cierre de origen que en el PUT: si acaban de darle (o corregirle) el
+  // teléfono, sus hilos de WhatsApp huérfanos se enlazan a la ficha.
+  //
+  // Sólo cuando el body TRAÍA la clave "phone": este handler lo usa la lista de
+  // pacientes para el toggle de VIP, cambiar status o reasignar doctor, y en
+  // ninguno de esos casos el número cambió — dos consultas extra por cada click
+  // en una estrellita no arreglarían nada. El teléfono se lee de la fila
+  // resultante, no del body, por lo mismo que en el PUT.
+  if (has("phone") && (updated as any)?.phone) {
+    try {
+      await linkOrphanThreadsToPatient({
+        clinicId: ctx.clinicId,
+        patientId: params.id,
+        phone: (updated as any).phone,
+      });
+    } catch (e) {
+      console.error("[api/patients][PATCH] enlace de hilos de WhatsApp falló (ignorado):", e);
+    }
+  }
 
   revalidateAfter("patients");
   if (cancelledFutureAppointments > 0) revalidateAfter("appointments");

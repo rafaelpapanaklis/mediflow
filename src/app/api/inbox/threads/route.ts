@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { getAuthContext } from "@/lib/auth-context";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { relatedPatientVisibilityAnd, assertPatientVisible } from "@/lib/patient-visibility";
+import { resolvePatientThreadScope, patientThreadWhere } from "@/lib/inbox/patient-threads";
 import { DEFAULT_TZ, calendarDayISO } from "@/lib/agenda/date-ranges";
 import { tzLocalToUtc } from "@/lib/agenda/time-utils";
 
@@ -68,11 +69,14 @@ export async function GET(req: NextRequest) {
       { userId: dbUser.id, role: dbUser.role, clinicId: dbUser.clinicId },
       { patientNullable: true },
     );
+    // Todo lo restrictivo se acumula aquí (visibilidad + filtro por paciente) y
+    // se vuelca en `where.AND` justo antes del findMany. Va en AND porque
+    // `where.OR` lo ocupa la búsqueda por texto de más abajo — meter cualquiera
+    // de estas cláusulas ahí las volvería PERMISIVAS (traerían la clínica
+    // entera) en vez de restrictivas.
+    const andClauses: Prisma.InboxThreadWhereInput[] = [...visibilityAnd];
     const where: Prisma.InboxThreadWhereInput = {
       clinicId: dbUser.clinicId,
-      // Va en AND porque `where.OR` lo ocupa la búsqueda por texto de más
-      // abajo — meterlo ahí lo volvería permisivo en vez de restrictivo.
-      ...(visibilityAnd.length ? { AND: visibilityAnd } : {}),
     };
     const status = sp.get("status");
     if (status && ["UNREAD", "READ", "ARCHIVED", "SNOOZED"].includes(status)) {
@@ -96,8 +100,58 @@ export async function GET(req: NextRequest) {
       ];
     }
 
+    // Filtro "conversaciones de ESTE paciente" (se llega así desde la ficha).
+    // NO basta con `patientId`: el enlace hilo↔paciente solo se intentaba al
+    // CREAR el hilo en el webhook, así que la conversación de un paciente dado
+    // de alta después queda huérfana (patientId null) y la lista salía VACÍA
+    // aunque el hilo estuviera ahí, bajo el nombre de perfil de WhatsApp.
+    // resolvePatientThreadScope lo busca también por teléfono y repara el
+    // enlace cuando el match es inequívoco.
     const patientId = sp.get("patientId");
-    if (patientId) where.patientId = patientId;
+    let patientFilter: { id: string; name: string; hasPhone: boolean } | null = null;
+    if (patientId) {
+      const visDenied = await assertPatientVisible(patientId, {
+        userId: dbUser.id,
+        role: dbUser.role,
+        clinicId: dbUser.clinicId,
+      });
+      if (visDenied) {
+        // No puede ver a este paciente: filtro ESTRICTO por el enlace (la lista
+        // sale vacía sin filtrar de menos) y ni se resuelve el alcance por
+        // teléfono — no reparamos datos para quien no puede ver al paciente.
+        // Tampoco devolvemos el 404/403: aquí la lista vacía ya es la respuesta
+        // correcta y un error solo llenaría la pantalla de avisos.
+        andClauses.push({ patientId });
+      } else {
+        // La AUTO-REPARACIÓN escribe (enlaza el hilo al paciente), así que se
+        // reserva a quien puede escribir en el Inbox. "inbox.view" lo tiene
+        // hasta el rol de solo lectura, y un GET que muta datos a nombre de un
+        // READONLY no deja rastro de quién lo provocó. Sin el permiso la
+        // conversación se ENCUENTRA igual —la búsqueda por teléfono no depende
+        // del enlace—, simplemente no se persiste el arreglo.
+        const canRepair = !denyIfMissingPermission(dbUser, "inbox.send");
+        const scope = await resolvePatientThreadScope(dbUser.clinicId, patientId, {
+          repair: canRepair,
+        });
+        andClauses.push(patientThreadWhere(patientId, scope.extraThreadIds));
+        if (scope.repaired > 0) {
+          // Sin PHI: id del paciente y conteo, nunca el teléfono.
+          console.info(
+            `[GET /api/inbox/threads] auto-enlace: ${scope.repaired} hilo(s) huérfano(s) ligados al paciente ${patientId}`,
+          );
+        }
+        if (scope.patient) {
+          patientFilter = {
+            id: scope.patient.id,
+            name: `${scope.patient.firstName ?? ""} ${scope.patient.lastName ?? ""}`.trim(),
+            // Sin teléfono la UI explica por qué no hay conversación posible.
+            hasPhone: Boolean(scope.patient.phone && scope.patient.phone.trim()),
+          };
+        }
+      }
+    }
+
+    if (andClauses.length) where.AND = andClauses;
 
     const limit = Math.min(parseInt(sp.get("limit") ?? "100", 10) || 100, 200);
 
@@ -240,6 +294,10 @@ export async function GET(req: NextRequest) {
       threads: threadsPayload,
       counts,
       serverTime: serverTime.toISOString(),
+      // Solo cuando se pidió el filtro por paciente: la cabecera de la lista
+      // necesita el nombre (el hilo puede seguir mostrando el alias de
+      // WhatsApp) y saber si el paciente tiene teléfono para explicar el vacío.
+      ...(patientId ? { patientFilter } : {}),
       ...(stats ? { stats } : {}),
     });
   } catch (err) {

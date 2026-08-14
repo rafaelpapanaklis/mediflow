@@ -1267,6 +1267,48 @@
   padding: 6px 0;
 }
 
+/* WhatsApp recientes — una LÍNEA por mensaje. El rail es estrecho y no puede
+   crecer: cada parte tiene su min-width:0 y su ellipsis, y ni el emisor ni la
+   hora se encogen. Nada envuelve, nada desborda. */
+.waList {
+  list-style: none;
+  margin: 0; padding: 0;
+  display: flex; flex-direction: column;
+}
+.waMsg {
+  display: flex; align-items: baseline; gap: 6px;
+  min-width: 0;
+  padding: 5px 0 5px 8px;
+  border-left: 2px solid var(--border-soft);
+  font-size: 12px;
+}
+/* IN = lo escribió el paciente, OUT = la clínica. La distinción es SOBRIA a
+   propósito (solo el filete izquierdo y el color del emisor): el rail de la
+   ficha es una columna de datos, no un chat con globos. */
+.waMsgIn { border-left-color: var(--brand); }
+/* Envío automático de la plataforma (recordatorio, reseña…): filete punteado
+   para no confundirlo con una respuesta escrita por una persona. */
+.waMsgSystem { border-left-style: dashed; }
+.waWho {
+  flex-shrink: 0;
+  max-width: 40%;
+  font-size: 11px; font-weight: 600;
+  color: var(--text-3);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.waMsgIn .waWho { color: var(--brand); }
+.waBody {
+  flex: 1; min-width: 0;
+  color: var(--text-1);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.waTime {
+  flex-shrink: 0;
+  font-size: 10px; color: var(--text-3);
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-variant-numeric: tabular-nums;
+}
+
 /* ─────── CONSULT BAR (sticky) ─────── */
 .consultBar {
   position: sticky;
