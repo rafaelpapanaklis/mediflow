@@ -61,6 +61,7 @@ import {
   type DraftPatch,
 } from "@/lib/inbox/composer-drafts";
 import type { InboxTemplateOption } from "@/lib/inbox/composer-templates";
+import { StartConversationModal } from "@/components/dashboard/inbox/start-conversation-modal";
 import styles from "./inbox.module.css";
 
 type Channel = "WHATSAPP" | "EMAIL" | "PORTAL_FORM" | "VALIDATION" | "REMINDER" | "PORTAL";
@@ -72,6 +73,8 @@ interface Viewer {
   firstName: string;
   lastName: string;
   clinicName: string;
+  /** "inbox.send". Sin él no se responde ni se inicia una conversación. */
+  canSend?: boolean;
 }
 
 interface Thread {
@@ -381,6 +384,9 @@ export function InboxClient({ viewer }: { viewer: Viewer }) {
   // que nadie manda a ciegas: primero se ve exactamente qué va a recibir.
   const [pendingTemplate, setPendingTemplate] = useState<InboxTemplateOption | null>(null);
   const [tplSending, setTplSending] = useState(false);
+  // "+ Componer": iniciar una conversación con un paciente que todavía no tiene
+  // hilo. Antes era un toast de "próximamente" y la clínica solo podía RESPONDER.
+  const [composeOpen, setComposeOpen] = useState(false);
 
   const composerRef = useRef<HTMLTextAreaElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -400,6 +406,11 @@ export function InboxClient({ viewer }: { viewer: Viewer }) {
   const autoOpenedForRef = useRef<string | null>(null);
 
   const now = Date.now() + nowTick * 0; // nowTick fuerza el re-render periódico
+
+  /* Permiso de envío. Por defecto NO: si algún día alguien monta este cliente
+     sin resolverlo, que se quede sin los botones de escribir en vez de ofrecer
+     algo que el servidor va a rechazar con 403. */
+  const canSend = viewer.canSend ?? false;
 
   /* ── Composer: siempre el borrador del hilo activo ──
      La llave es el id del hilo CARGADO (activeThread), no el seleccionado
@@ -1117,9 +1128,22 @@ export function InboxClient({ viewer }: { viewer: Viewer }) {
     router.replace("/dashboard/inbox");
   }, [router]);
 
-  const composeSoon = useCallback(() => {
-    toast(t("inbox.client.composeSoon"), { icon: "🛠️" });
-  }, [t]);
+  /* "+ Componer" — iniciar una conversación con quien todavía no ha escrito.
+     Era un toast de "próximamente": el Inbox solo sabía RESPONDER. El modal es
+     el MISMO que usa la ficha del paciente, para que "escribirle primero a
+     alguien" signifique exactamente lo mismo desde los dos sitios. */
+  const openCompose = useCallback(() => setComposeOpen(true), []);
+
+  /* Tras enviar (o al abrir una conversación que ya existía): se salta a ella.
+     `threadId` puede venir null si el mensaje salió pero el registro en el
+     Inbox falló — entonces solo se recarga la lista, nunca se da el envío por
+     fallido. */
+  const openThreadFromCompose = useCallback((threadId: string | null) => {
+    if (threadId) setActiveThreadId(threadId);
+    // El hilo puede acabar de nacer: sin recargar no aparecería en la lista de
+    // la izquierda aunque la conversación ya esté abierta a la derecha.
+    void fetchThreads({ silent: true });
+  }, [fetchThreads]);
 
   const openOldestWaiting = useCallback(() => {
     if (waitingThreads.length > 0) {
@@ -1381,10 +1405,14 @@ export function InboxClient({ viewer }: { viewer: Viewer }) {
             <span className={styles.brandIcon}><InboxIcon size={16} strokeWidth={2} aria-hidden /></span>
             Inbox
           </div>
-          <button type="button" className={styles.composeBtn} onClick={composeSoon}>
-            <Plus size={15} strokeWidth={2.2} aria-hidden /> {t("inbox.client.compose")}
-            <kbd>C</kbd>
-          </button>
+          {/* Sin "inbox.send" no se puede escribir a nadie: el botón no se
+              pinta en vez de abrir un modal que acabaría en 403. */}
+          {canSend && (
+            <button type="button" className={styles.composeBtn} onClick={openCompose}>
+              <Plus size={15} strokeWidth={2.2} aria-hidden /> {t("inbox.client.compose")}
+              <kbd>C</kbd>
+            </button>
+          )}
         </div>
 
         <div className={styles.sidebarScroll}>
@@ -1633,6 +1661,20 @@ export function InboxClient({ viewer }: { viewer: Viewer }) {
                     : t("inbox.client.emptyPatientThreadsHint", { name: patientFilterName })}
                 </div>
               )}
+              {/* Aquí acababa el camino: se llegaba desde la ficha, no había
+                  conversación y lo único que se ofrecía era "ver todas". Ahora
+                  se puede EMPEZARLA — que es a lo que venía quien pulsó "Abrir
+                  chat" en la ficha. Sin teléfono no se ofrece: no hay WhatsApp
+                  posible y el texto de arriba ya lo explica. */}
+              {canSend && patientFilter && patientFilter.hasPhone !== false && (
+                <button
+                  type="button"
+                  className={`${styles.patientFilterClear} ${styles.emptyPatientAction}`}
+                  onClick={openCompose}
+                >
+                  {t("inbox.compose.startCta")}
+                </button>
+              )}
               <button
                 type="button"
                 className={`${styles.patientFilterClear} ${styles.emptyPatientAction}`}
@@ -1748,9 +1790,11 @@ export function InboxClient({ viewer }: { viewer: Viewer }) {
           </div>
         )}
 
-        <button type="button" className={styles.fab} onClick={composeSoon} aria-label={t("inbox.client.compose")}>
-          <Plus size={22} strokeWidth={2.2} aria-hidden />
-        </button>
+        {canSend && (
+          <button type="button" className={styles.fab} onClick={openCompose} aria-label={t("inbox.client.compose")}>
+            <Plus size={22} strokeWidth={2.2} aria-hidden />
+          </button>
+        )}
       </section>
 
       {/* ─── Col 3: Conversación / panel vacío ─── */}
@@ -2380,6 +2424,25 @@ export function InboxClient({ viewer }: { viewer: Viewer }) {
           </>
         )}
       </section>
+
+      {/* Iniciar conversación. Se monta solo al pedirlo: su GET consulta citas y
+          saldo del paciente, y no tiene por qué correr al abrir el Inbox.
+          Si se llegó filtrado por un paciente (?patientId= desde su ficha) ese
+          va de partida, pero SÍ se puede cambiar: aquí el filtro es una vista,
+          no el expediente de nadie. */}
+      {composeOpen && (
+        <StartConversationModal
+          open={composeOpen}
+          onOpenChange={setComposeOpen}
+          patient={
+            patientFilter && patientFilter.hasPhone !== false
+              ? { id: patientFilter.id, name: patientFilterName || patientFilter.name }
+              : null
+          }
+          onSent={openThreadFromCompose}
+          onOpenThread={openThreadFromCompose}
+        />
+      )}
     </div>
   );
 }

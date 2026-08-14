@@ -2,10 +2,12 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Receipt, Sparkles, MessageCircle, CheckCircle2 } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Receipt, Sparkles, MessageCircle, CheckCircle2, Send } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
 import { isAbortError } from "@/lib/fetch-safe";
 import { useT } from "@/i18n/i18n-provider";
+import { StartConversationModal } from "@/components/dashboard/inbox/start-conversation-modal";
 import styles from "./patient-detail.module.css";
 
 /** Cobro ya timbrado ante el SAT — se lista con ✓ "Facturado" en el card. */
@@ -30,6 +32,12 @@ interface SideCardsProps {
   canViewBilling?: boolean;
   /** Facturas del paciente con CFDI timbrado (canceladas excluidas). */
   stampedInvoices?: StampedInvoiceSummary[];
+  /**
+   * ¿La sesión tiene "inbox.send"? Es el MISMO permiso con el que el Inbox deja
+   * responder, y aquí decide si se ofrece INICIAR la conversación. Lo resuelve
+   * page.tsx en el server; el POST lo revalida con 403.
+   */
+  canStartConversation?: boolean;
 }
 
 /** Máximo de cobros timbrados listados; el resto se resume en un enlace. */
@@ -75,11 +83,14 @@ export function SideCards({
   onOpenBilling,
   canViewBilling = false,
   stampedInvoices = [],
+  canStartConversation = false,
 }: SideCardsProps) {
   const t = useT();
+  const router = useRouter();
   const stampedShown = stampedInvoices.slice(0, MAX_STAMPED_ROWS);
   const stampedRest  = stampedInvoices.length - stampedShown.length;
   const firstName = patientName.split(" ")[0] ?? "";
+  const [composeOpen, setComposeOpen] = useState(false);
 
   // ── WhatsApp recientes ──────────────────────────────────────────────────
   // La tarjeta era ESTÁTICA: pintaba siempre "Sin mensajes recientes" porque
@@ -276,6 +287,30 @@ export function SideCards({
             ))}
           </ul>
         )}
+        {/* INICIAR la conversación — el hueco que faltaba. Hasta ahora, sin
+            conversación previa esta tarjeta era un callejón sin salida: decía
+            "sin mensajes" y "Abrir chat" llevaba a un Inbox vacío. La clínica no
+            tenía NINGUNA forma de escribirle primero a un paciente.
+
+            Solo aparece cuando de verdad se puede y hace falta:
+              · con teléfono (sin él no hay WhatsApp posible);
+              · sin acceso denegado al Inbox;
+              · sin mensajes todavía — si ya hay conversación, "Abrir chat" es
+                el camino y ofrecer las dos cosas sería ruido;
+              · con permiso de envío ("inbox.send"), el mismo que deja responder.
+            Qué se le puede mandar (y si la clínica tiene plantillas aprobadas)
+            lo resuelve el modal contra el servidor: aquí no se adivina nada. */}
+        {patientPhone && waState === "ready" && waMessages.length === 0 && canStartConversation && (
+          <button
+            type="button"
+            className={`${styles.sideBtn} ${styles.primary} ${styles.fullWidth}`}
+            onClick={() => setComposeOpen(true)}
+          >
+            <Send size={12} strokeWidth={2.25} aria-hidden />
+            {t("patients.sideCards.startConversation")}
+          </button>
+        )}
+
         {/* Sin acceso al Inbox el enlace no lleva a ningún lado: se esconde. */}
         {patientPhone && waState !== "noAccess" && (
           <Link
@@ -287,6 +322,24 @@ export function SideCards({
           </Link>
         )}
       </section>
+
+      {/* El modal se monta solo cuando se pide: su GET consulta citas y saldo, y
+          no tiene por qué correr en cada apertura de la ficha. */}
+      {composeOpen && (
+        <StartConversationModal
+          open={composeOpen}
+          onOpenChange={setComposeOpen}
+          patient={{ id: patientId, name: patientName, phone: patientPhone }}
+          lockPatient
+          /* Tras enviar, a la conversación. Se llega por ?patientId= y no por el
+             id del hilo a propósito: el Inbox ya sabe abrir el hilo más reciente
+             de un paciente al llegar así —y el que se acaba de enviar lo es—,
+             así que no hace falta una segunda forma de llegar al mismo sitio.
+             También cubre el caso en que el hilo no se pudo resolver. */
+          onSent={() => router.push(`/dashboard/inbox?patientId=${encodeURIComponent(patientId)}`)}
+          onOpenThread={() => router.push(`/dashboard/inbox?patientId=${encodeURIComponent(patientId)}`)}
+        />
+      )}
     </aside>
   );
 }

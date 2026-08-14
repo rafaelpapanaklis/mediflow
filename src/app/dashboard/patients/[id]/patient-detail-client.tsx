@@ -361,6 +361,12 @@ interface Props {
   canRevokeConsents?: boolean;
   /** "whatsapp.send" — decide si el tab ofrece el envío por WhatsApp. */
   canSendWhatsApp?: boolean;
+  /**
+   * "inbox.send" — el MISMO permiso con el que el Inbox deja responder. Decide
+   * si la tarjeta de WhatsApp ofrece INICIAR la conversación cuando todavía no
+   * hay ninguna. Se resuelve en el server; el POST lo revalida con 403.
+   */
+  canStartConversation?: boolean;
   /** ¿La clínica tiene el SAT (Facturapi) configurado? Decide si la columna
    *  CFDI ofrece "Timbrar" o el estado neutro "SAT no configurado". */
   facturApiEnabled?: boolean;
@@ -396,6 +402,7 @@ export function PatientDetailClient({
   canCreateConsents = false,
   canRevokeConsents = false,
   canSendWhatsApp = false,
+  canStartConversation = false,
   facturApiEnabled = false,
 }: Props) {
   const t = useT();
@@ -3208,6 +3215,7 @@ export function PatientDetailClient({
             onOpenBilling={openBillingTab}
             canViewBilling={canViewBilling}
             stampedInvoices={stampedInvoices}
+            canStartConversation={canStartConversation}
           />
         )}
       </div>

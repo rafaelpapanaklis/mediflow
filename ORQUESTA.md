@@ -7141,3 +7141,119 @@ distintas. Lo que sacaron y ya está arreglado:
    131042 y el mensaje —ahora sí— lo explica en español.
 3. La importación masiva de pacientes (`/api/patients/import`) NO enlaza hilos a
    propósito (N × 2 consultas). Lo cubren la auto-reparación y el script.
+
+## [Iniciar-Conversacion] · La clínica ya puede escribir PRIMERO — 2026-08-14
+
+BUILD EXIT 0 (`npx next build`, 362 páginas). Tests existentes en verde:
+`test:inbox-templates` (25), `test:wa-send-mode` (21), `test:inbox` (19),
+`test:wa-catalog` (15). Sin SQL. Sin dependencias nuevas. Sin envs nuevas.
+
+### EL HUECO
+
+El Inbox sólo sabía RESPONDER. No había NINGUNA forma de empezar una
+conversación con un paciente:
+
+- `+ Componer` (sidebar y FAB) llamaba a `composeSoon()`: un toast de
+  "próximamente".
+- "Abrir chat" de la ficha llevaba al Inbox filtrado, y sin conversación
+  enseñaba "Sin conversaciones con este paciente" — un callejón sin salida.
+
+Caso real: paciente registrada, con teléfono, a la que hay que mandarle
+indicaciones post-tratamiento. No se podía.
+
+### LA REGLA QUE MANDA (no es nuestra, es de Meta)
+
+A quien nunca ha escrito —o cuya ventana de 24 h ya cerró— WhatsApp SOLO le
+entrega una **plantilla aprobada**; el texto libre lo rechaza con 131047. Por
+eso el flujo es paciente → plantilla aprobada → ver el texto exacto → enviar, y
+en el modal no hay recuadro de texto libre. Cada plantilla se la cobra Meta a la
+clínica.
+
+### QUÉ SE CONSTRUYÓ
+
+**`src/lib/inbox/template-offer.ts` (nuevo)** — la pieza compartida. Salió tal
+cual de `api/inbox/threads/[id]/templates/route.ts`, que la tenía atada a un
+hilo existente: qué plantillas del catálogo se pueden mandar HOY, con qué
+valores de `{{1}}…{{n}}` (próxima cita, saldo, teléfono de la clínica) y el
+motivo en español de las que no. Copiarla habría dejado dos fuentes que se
+separan en el primer cambio de redacción — lo que se previsualiza y lo que sale
+dejarían de ser lo mismo. La ruta del hilo pasó de 687 a ~300 líneas y ahora la
+consume; el punto de partida es un PACIENTE, que es el denominador común.
+
+**`GET/POST /api/inbox/compose` (nuevo)**
+- `GET ?patientId=` → si se le puede escribir, con qué plantillas, si la ventana
+  de 24 h está abierta y si YA existe conversación (para abrirla en vez de
+  crearla).
+- `POST {patientId, kind}` → envía. Los params se RECALCULAN en el servidor,
+  nunca llegan del body: son el texto que Meta entrega firmado por la clínica.
+
+**`StartConversationModal`** (`src/components/dashboard/inbox/`) — el MISMO
+componente en los dos puntos de entrada, para que "escribirle primero a alguien"
+signifique lo mismo desde la ficha y desde el Inbox. Con paciente fijo
+(`lockPatient`) desde la ficha; con buscador (`/api/patients/search`, ya con
+visibilidad por paciente) desde `+ Componer`.
+
+**Puntos de entrada**
+- Ficha → tarjeta "WhatsApp recientes": botón sólo con teléfono, con acceso al
+  Inbox, SIN mensajes todavía y con `inbox.send`. Tras enviar, lleva a
+  `/dashboard/inbox?patientId=` (que ya sabe abrir el hilo más reciente).
+- Inbox → `+ Componer`, el FAB, y el vacío de "Sin conversaciones con este
+  paciente", que era justo donde se acababa el camino.
+
+### DECISIONES QUE IMPORTAN
+
+- **El hilo nace ligado al paciente.** `sendWhatsAppLogged` acepta ahora
+  `patientId` explícito, que GANA sobre el emparejamiento por teléfono. Ese
+  emparejamiento devuelve "el primero" cuando dos hermanos comparten el celular
+  de la mamá: a ciegas podía ligar el hilo al que no era. Con el id no hay nada
+  que adivinar — y por eso el hilo aparece en el Inbox con su nombre y no con el
+  de perfil de WhatsApp.
+- **El mensaje queda atribuido a quien lo mandó.** `sendWhatsAppLogged` acepta
+  `sentById`; lo pasan las DOS rutas de plantillas. Una plantilla que manda una
+  persona no es un automatismo, y pintarla como tal escondía quién habló con el
+  paciente. El `externalId` sigue siendo `sys:<kind>:<wamid>` porque ahí viaja el
+  wamid con el que el webhook casa la entrega. Consecuencia arreglada de paso:
+  `patient-recent` calculaba `isSystem` sólo por ese prefijo, así que habría
+  pintado como automático un mensaje con autor — ahora exige además `sentById`
+  null.
+- **Reutiliza el hilo que exista.** No hay lógica nueva: `upsertWhatsAppThread`
+  con `matchByLast10` es la misma que agrupa todos los envíos del producto.
+- **El hilo se resuelve DESPUÉS de enviar.** Crearlo antes dejaría una
+  conversación vacía en el Inbox cada vez que Meta rechazara el mensaje.
+- **Doble clic.** Tres capas, porque cada plantilla es dinero: `sendingRef` en el
+  cliente (evita hasta la petición), `rateLimit` y un `acquireLock` de 20 s por
+  clínica+paciente+plantilla que sólo se suelta si el envío FALLA, para poder
+  reintentar en el acto.
+- **Ventana abierta.** Si el paciente escribió hace menos de 24 h el mensaje sale
+  como texto y no cuesta: se dice, y se dice TAMBIÉN cuando no hay plantillas
+  aprobadas — ese aviso habla de Meta y mandaría a la clínica a arreglar algo que
+  ahora mismo no le hace falta.
+- **Multi-tenant y permisos.** `clinicId` siempre de `getAuthContext`; el
+  paciente pasa por `assertPatientVisible` y por `deletedAt: null` (a un paciente
+  cancelado por ARCO no se le escribe). El gate es `inbox.send`, el mismo con el
+  que el Inbox deja responder — también en el GET, que no es una lectura sino la
+  antesala de un envío que se cobra. `payment_notice` sigue fuera sin
+  `billing.view`: su cuerpo lleva el importe.
+- **"No existe" y "no lo puedes ver" comparten respuesta**, y en español: el
+  motivo estándar del helper (`patient_not_found`) se leería crudo en pantalla.
+
+### LO QUE SE PROBÓ Y LO QUE NO
+
+Build completo y suites existentes en verde. **NADIE ha mandado todavía una
+plantilla real por este camino**: como en el resto del módulo de WhatsApp, la
+red contra Meta sigue sin ejercitarse.
+
+### PENDIENTES
+
+1. **QA en prod** con una clínica con plantillas APROBADAS y método de pago en
+   Meta. Sin tarjeta, Meta responde 131042 y el panel lo explica en español,
+   pero eso también está sin ver en real.
+2. **El catálogo no tiene plantilla de "indicaciones"**: las cinco que ofrece el
+   composer son cita (genérica, recordatorio, confirmación), saldo y reseña. Para
+   el caso post-tratamiento sirve la genérica `dc_mensaje_clinica` —que necesita
+   una cita registrada, y un paciente post-tratamiento la tiene— y en cuanto el
+   paciente responde se abre la ventana y ya se le escribe a mano. Si se quiere
+   una plantilla propia de indicaciones hay que darla de alta en la WABA de cada
+   clínica (`WA_TEMPLATE_CATALOG` + provisión), que es otra tarea.
+3. Un paciente sin cita ni saldo sólo tendría `review` (marketing, casi nunca
+   dada de alta): el modal lo explica, pero es el límite real de hoy.

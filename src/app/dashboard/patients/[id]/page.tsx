@@ -218,6 +218,14 @@ export default async function PatientDetailPage({ params }: { params: { id: stri
   const canRevokeConsents  = hasPermission(permsUser, "consents.revoke");
   const canSendWhatsApp    = hasPermission(permsUser, "whatsapp.send");
 
+  // INICIAR una conversación de WhatsApp desde la tarjeta del rail. El permiso
+  // es "inbox.send" —el mismo con el que el Inbox deja responder— y no
+  // "whatsapp.send": el mensaje se manda desde el Inbox, cae en su hilo y queda
+  // atribuido a quien lo envió, así que quien puede escribirle a un paciente ahí
+  // es exactamente quien puede escribirle desde aquí. /api/inbox/compose lo
+  // revalida con 403.
+  const canStartConversation = hasPermission(permsUser, "inbox.send");
+
   // Mismo criterio para el EXPEDIENTE (P1-N2): sin "Ver expediente clínico" la
   // ficha se sigue abriendo (contacto, citas, facturación) pero el SOAP no sale
   // del server. Se manda [] en vez de negar la página entera: quien no tiene el
@@ -427,6 +435,7 @@ export default async function PatientDetailPage({ params }: { params: { id: stri
           canCreateConsents={canCreateConsents}
           canRevokeConsents={canRevokeConsents}
           canSendWhatsApp={canSendWhatsApp}
+          canStartConversation={canStartConversation}
           facturApiEnabled={Boolean((user.clinic as any).facturApiEnabled)}
           // Solo el modo fiscal (no la fila de Clinic): con qué impuestos nace
           // una factura nueva desde la ficha — igual que en Caja.

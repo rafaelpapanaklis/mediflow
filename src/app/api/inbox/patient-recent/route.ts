@@ -111,7 +111,12 @@ export async function GET(req: NextRequest) {
         where: messageWhere,
         orderBy: { sentAt: "desc" },
         take: limit,
-        select: { id: true, direction: true, body: true, sentAt: true, externalId: true },
+        // sentById distingue "lo mandó la plataforma sola" de "lo mandó alguien
+        // del equipo": desde que una persona puede enviar una plantilla a mano
+        // (el composer del hilo y "iniciar conversación"), el prefijo `sys:` del
+        // externalId ya no basta —esos envíos lo llevan igual, porque es donde
+        // viaja el wamid con el que Meta reporta la entrega—.
+        select: { id: true, direction: true, body: true, sentAt: true, externalId: true, sentById: true },
       }),
       prisma.inboxMessage.count({ where: messageWhere }),
     ]);
@@ -127,8 +132,11 @@ export async function GET(req: NextRequest) {
         body: m.body.length > BODY_MAX_CHARS ? m.body.slice(0, BODY_MAX_CHARS) : m.body,
         sentAt: m.sentAt.toISOString(),
         // Envío automático de la plataforma (recordatorio, reseña, aviso…):
-        // viaja marcado en el externalId como `sys:<kind>:<wamid>`.
-        isSystem: parseSystemKind(m.externalId) !== null,
+        // viaja marcado en el externalId como `sys:<kind>:<wamid>` Y sin autor.
+        // Con autor lo mandó una persona —una plantilla enviada a mano desde el
+        // Inbox o al iniciar la conversación— y pintarlo como automático diría
+        // que a este paciente no le ha escrito nadie, que es justo lo contrario.
+        isSystem: m.sentById === null && parseSystemKind(m.externalId) !== null,
       }));
 
     return NextResponse.json({ threadId, messages, total });

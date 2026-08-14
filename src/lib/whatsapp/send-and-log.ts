@@ -69,6 +69,27 @@ export interface SendWhatsAppLoggedArgs {
    */
   linkPatient?: boolean;
   /**
+   * Paciente YA identificado por el caller. Cuando viene, GANA sobre la búsqueda
+   * por teléfono: es el caso de "iniciar conversación desde la ficha", donde una
+   * persona eligió a ESTE paciente y el hilo debe nacer ligado a él.
+   *
+   * Importa además porque el emparejamiento por teléfono devuelve "el primero"
+   * cuando dos pacientes comparten número (dos hermanos con el celular de la
+   * mamá): a ciegas podría ligar el hilo al hermano equivocado. Con el id
+   * explícito no hay nada que adivinar.
+   *
+   * Solo se USA si `linkPatient` no está en false.
+   */
+  patientId?: string | null;
+  /**
+   * Quién pulsó el botón. Null (lo normal) = envío automático de la plataforma,
+   * y el Inbox lo pinta con la etiqueta del bot. Con id, el mensaje aparece en
+   * la conversación atribuido a esa persona, igual que una respuesta escrita a
+   * mano: una plantilla que manda alguien del equipo no es un automatismo, y
+   * enseñarla como tal esconde quién habló con el paciente.
+   */
+  sentById?: string | null;
+  /**
    * Valores de {{1}}…{{n}} de la plantilla de ese tipo, EN ORDEN (ver
    * WA_TEMPLATE_SPECS). Solo se usan si la ventana de 24 h está cerrada; dentro
    * de ventana sale `body` como texto libre y esto se ignora.
@@ -193,6 +214,8 @@ export async function sendWhatsAppLogged(args: SendWhatsAppLoggedArgs): Promise<
             : args.body,
         kind: args.kind,
         linkPatient: args.linkPatient ?? args.kind !== "system",
+        patientId: args.patientId ?? null,
+        sentById: args.sentById ?? null,
         wamid: meta?.messages?.[0]?.id ?? null,
       });
       if (docMeta && args.attachment) {
@@ -204,6 +227,8 @@ export async function sendWhatsAppLogged(args: SendWhatsAppLoggedArgs): Promise<
           body: `[Documento] ${args.attachment.filename}`,
           kind: args.kind,
           linkPatient: args.linkPatient ?? args.kind !== "system",
+          patientId: args.patientId ?? null,
+          sentById: args.sentById ?? null,
           wamid: docMeta?.messages?.[0]?.id ?? null,
           attachments: [{ name: args.attachment.filename, mime: "application/pdf", size: args.attachment.buffer.length }],
         });
@@ -252,14 +277,20 @@ interface LogArgs {
   body: string;
   kind: WhatsAppSendKind;
   linkPatient: boolean;
+  /** Paciente ya identificado por el caller; gana sobre la búsqueda por teléfono. */
+  patientId?: string | null;
+  /** Persona del equipo que lo mandó, o null si fue un envío automático. */
+  sentById?: string | null;
   wamid: string | null;
   attachments?: Array<{ name: string; mime: string; size: number }> | null;
 }
 
 async function logOutboundToInbox(args: LogArgs): Promise<void> {
   const now = new Date();
-  const patient = args.linkPatient
-    ? await findPatientByWhatsAppPhone(args.clinicId, args.to)
+  // El id explícito primero: si el caller ya sabe a quién le escribe, no hay
+  // que adivinarlo por teléfono (ni arriesgarse a acertar el hermano que no es).
+  const patientId = args.linkPatient
+    ? args.patientId ?? (await findPatientByWhatsAppPhone(args.clinicId, args.to))?.id ?? null
     : null;
 
   const thread = await upsertWhatsAppThread({
@@ -272,7 +303,7 @@ async function logOutboundToInbox(args: LogArgs): Promise<void> {
     // el status: si el paciente había escrito y el hilo está UNREAD, un
     // recordatorio automático no puede darlo por leído a nombre del equipo.
     createStatus: "READ",
-    patientId: patient?.id ?? null,
+    patientId,
     matchByLast10: true,
     // Sin pauseBot: estos avisos NO son un humano tomando la conversación; el
     // bot debe seguir contestando (p.ej. el "CONFIRMAR" a un recordatorio).
@@ -283,7 +314,9 @@ async function logOutboundToInbox(args: LogArgs): Promise<void> {
       threadId: thread.id,
       direction: "OUT",
       body: args.body,
-      sentById: null,          // automático: no lo escribió una persona
+      // null = automático (nadie lo escribió). Con id, el Inbox lo pinta como
+      // mensaje del equipo y con el nombre de quien lo mandó.
+      sentById: args.sentById ?? null,
       sentAt: now,
       isInternal: false,       // es parte de la conversación, no una nota
       // `sys:<kind>:<wamid>` — marca el origen SIN columna nueva y permite

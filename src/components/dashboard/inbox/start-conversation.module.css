@@ -1,0 +1,261 @@
+/* Modal "Iniciar conversación" — se monta desde DOS sitios (la ficha del
+   paciente y el "+ Componer" del Inbox), así que NO puede depender de las
+   variables --ib-* del módulo del Inbox: usa los tokens globales del panel, que
+   además ya traen su versión en oscuro.
+
+   El ancho lo decide el modal, no el viewport: por eso las reglas responsive son
+   @container sobre .body y no @media. Dentro del panel el ancho útil depende del
+   sidebar (232px expandido vs 68px colapsado) y del escalado de Windows, y
+   ningún @media acierta en todos los casos a la vez.
+
+   OJO: container-type crea un contenedor de contención — cualquier
+   position:fixed que naciera aquí dentro quedaría anclado a .body en vez de al
+   viewport. Este modal no tiene ninguno (el overlay y el diálogo los pinta
+   Radix en un portal, POR ENCIMA de este árbol), y no debe tenerlo. */
+
+.body {
+  container-type: inline-size;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 0 24px 14px;
+}
+
+/* ── Destinatario ── */
+
+.target {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--bg-elev-2);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+}
+.targetIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: var(--brand-soft);
+  color: var(--brand);
+}
+/* `display: block` en los tres: son <span> (van dentro de otro <span>) y sin
+   esto el nombre y el teléfono quedarían en la misma línea — y el ellipsis del
+   nombre no recortaría nada, porque un inline no tiene ancho que recortar. */
+.targetText { display: block; min-width: 0; flex: 1; }
+.targetName {
+  display: block;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-1);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.targetPhone { display: block; font-size: 11.5px; color: var(--text-3); }
+.targetChange {
+  border: none;
+  background: transparent;
+  color: var(--brand);
+  font-family: inherit;
+  font-size: 11.5px;
+  font-weight: 700;
+  cursor: pointer;
+  padding: 4px 6px;
+  border-radius: var(--radius-sm);
+  flex-shrink: 0;
+}
+.targetChange:hover { background: var(--brand-softer); }
+.targetChange:focus-visible { outline: none; box-shadow: var(--ring); }
+
+/* ── Buscador de paciente ── */
+
+.fieldLabel {
+  display: block;
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--text-2);
+  margin-bottom: 6px;
+}
+.hits {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  max-height: 220px;
+  overflow-y: auto;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius);
+}
+.hit {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  border: none;
+  background: transparent;
+  font-family: inherit;
+  text-align: left;
+  padding: 8px 10px;
+  cursor: pointer;
+  border-bottom: 1px solid var(--border-soft);
+}
+.hits li:last-child .hit { border-bottom: none; }
+.hit:hover:not(:disabled) { background: var(--bg-hover); }
+.hit:focus-visible { outline: none; box-shadow: var(--ring); }
+/* Sin teléfono no se puede escribir: el renglón se queda, apagado y con el
+   motivo, en vez de desaparecer. Un paciente que "no sale en la búsqueda"
+   manda a la clínica a buscar un fallo que no existe. */
+.hit:disabled { cursor: not-allowed; opacity: 0.55; }
+.hitName {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-1);
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.hitPhone { font-size: 11.5px; color: var(--text-3); white-space: nowrap; }
+.hitNoPhone {
+  font-size: 10.5px;
+  font-weight: 700;
+  color: var(--warning-strong);
+  background: var(--warning-soft);
+  border-radius: 999px;
+  padding: 2px 7px;
+  white-space: nowrap;
+}
+.searchNote { margin-top: 8px; font-size: 11.5px; color: var(--text-3); }
+
+/* ── Avisos ── */
+
+.note {
+  font-size: 11.5px;
+  line-height: 1.55;
+  border-radius: var(--radius);
+  padding: 9px 11px;
+}
+.noteInfo {
+  color: var(--text-2);
+  background: var(--bg-elev-2);
+  border: 1px solid var(--border-soft);
+}
+.noteWarn {
+  color: var(--warning-strong);
+  background: var(--warning-soft);
+  border: 1px solid var(--warning-border-strong);
+}
+.noteOk {
+  color: var(--success-strong);
+  background: var(--success-soft);
+  border: 1px solid var(--success);
+}
+.noteLink {
+  color: var(--brand);
+  font-weight: 700;
+  text-decoration: underline;
+}
+.noteLink:focus-visible { outline: none; box-shadow: var(--ring); border-radius: 4px; }
+
+.existingRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.existingBtn {
+  border: 1px solid var(--border-strong);
+  background: var(--bg-elev);
+  color: var(--text-1);
+  border-radius: var(--radius-sm);
+  padding: 4px 10px;
+  font-family: inherit;
+  font-size: 11.5px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.existingBtn:hover { background: var(--bg-hover); }
+.existingBtn:focus-visible { outline: none; box-shadow: var(--ring); }
+
+/* ── Plantillas ── */
+
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip {
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  padding: 5px 12px;
+  font-size: 11.5px;
+  font-weight: 600;
+  font-family: inherit;
+  background: transparent;
+  color: var(--text-2);
+  cursor: pointer;
+  transition: border-color var(--dur-1, .15s) ease, background var(--dur-1, .15s) ease, color var(--dur-1, .15s) ease;
+}
+.chip:hover:not(:disabled) {
+  border-color: var(--border-brand);
+  background: var(--brand-softer);
+  color: var(--brand);
+}
+.chip:disabled { opacity: 0.5; cursor: not-allowed; }
+.chip:focus-visible { outline: none; box-shadow: var(--ring); }
+/* El par de reglas es a propósito: `.chip:hover:not(:disabled)` pesa más que
+   una sola clase y, sin la segunda, al pasar el ratón por encima el chip
+   elegido perdía el resalte justo mientras se decide si enviar. */
+.chip.chipChosen,
+.chip.chipChosen:hover:not(:disabled) {
+  background: var(--brand-soft);
+  border-color: var(--border-brand);
+  color: var(--brand);
+}
+.chipState { font-weight: 600; opacity: 0.75; }
+
+/* Vista previa: el texto EXACTO que va a recibir el paciente. */
+.preview {
+  background: var(--bg-elev-2);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-lg);
+  padding: 11px 13px;
+}
+.previewTitle {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-3);
+  margin-bottom: 6px;
+}
+.previewBody {
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--text-1);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* El pie mide su PROPIO ancho: un elemento no puede consultarse a sí mismo con
+   @container, así que el contenedor es el host y la fila de botones el que
+   responde. (Igual que .body: aquí dentro no puede nacer ningún position:fixed,
+   o quedaría anclado al pie en vez de al viewport.) */
+.footerHost {
+  container-type: inline-size;
+  display: block;
+}
+.footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+/* Diálogo estrecho (móvil, o el panel a media pantalla): los botones dejan de
+   competir por el ancho y pasan a ocupar cada uno su renglón, con la acción
+   principal arriba. */
+@container (max-width: 360px) {
+  .footer { flex-direction: column-reverse; align-items: stretch; }
+  .footer > * { width: 100%; }
+}
