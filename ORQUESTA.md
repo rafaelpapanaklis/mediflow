@@ -7385,3 +7385,40 @@ camino contra Meta de los dos avisos nuevos sigue sin ejercitarse.
    Inbox**: hoy el staff tiene que ir a la agenda y confirmar la cita a mano. Si
    se repite, merece un botón "confirmar la cita de …" en el propio hilo.
 3. Sin SQL y sin dependencias nuevas, como pedía el encargo.
+
+## Las pantallas de auth de afiliados se veían de otra app — 2026-08-15
+
+`/afiliados/login`, `/afiliados/registro` y `/afiliados/vincular` salían con el degradado morado y
+el robot 3D chico, mientras que `/login` de clínicas se ve casi negro y con la escena a pantalla
+completa. No era CSS suelto: `AuthShell` tiene dos variantes y las tres páginas caían en la de por
+defecto (`brand`) por no pasar `visualVariant`.
+
+Lo que no era obvio es que la variante no solo cambia el fondo. **`dark` es la única que le pone
+`flex:1 + display:flex` al wrapper del panel visual**, y sin eso `LoginVisual` se queda en su
+`minHeight: 520px` en vez de llenar el panel: de ahí el robot pequeño. Una sola prop arregla las dos
+cosas a la vez.
+
+El arreglo es `visualVariant="dark"` en las tres páginas — el mismo valor que ya pasaba `/login`.
+No se tocó `auth-shell.tsx`, ni `/login` o `/signup` de clínicas (ese usa `SignupVisual`, al que sí
+le corresponde `brand`), ni la lógica de los formularios.
+
+**El split de `/afiliados/registro` se queda en 60/40.** Medido en el navegador contra `/login`: el
+tamaño del robot lo manda la **altura** del canvas, idéntica en ambas (1031 px), no el ancho del
+panel (1280 px vs 1555 px). El panel más ancho solo le da más aire alrededor, y bajarlo a 50/50
+habría apretado la tarjeta del alta, que es la más larga de las tres.
+
+### Verificado
+
+Los tres fondos y la escena 3D comparados lado a lado contra `/login`; a 375 px ninguna desborda
+(`scrollWidth == clientWidth`) y el panel visual se oculta como estaba previsto; los enlaces entre
+alta e inicio de sesión siguen en su sitio. `npm run build` verde.
+
+**Sin ejercitar:** el envío real de los formularios no se probó — en local no hay `DATABASE_URL` ni
+credenciales de Supabase. El cambio no toca esa lógica, pero queda dicho.
+
+### De paso
+
+`/afiliados/pendiente` no usa `AuthShell` (es una tarjeta suelta), así que no entró. Sí quedan con
+la variante `brand` y `LoginVisual` — o sea, con el mismo síntoma — `/proveedores/login`,
+`/proveedores/registro`, `/laboratorios/login`, `/laboratorios/registro`, `/forgot-password` y
+`/reset-password`. Se dejaron fuera por estar fuera del encargo, no por estar bien.

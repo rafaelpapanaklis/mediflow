@@ -39,6 +39,7 @@ export default async function AffiliateRegistroPage({
   return (
     <AuthShell
       split="60/40"
+      visualVariant="dark"
       visual={<LoginVisual />}
       form={
         <AffiliateRegistroForm

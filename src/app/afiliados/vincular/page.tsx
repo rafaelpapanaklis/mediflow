@@ -50,6 +50,7 @@ export default async function AffiliateVincularPage({
   return (
     <AuthShell
       split="50/50"
+      visualVariant="dark"
       visual={<LoginVisual />}
       form={
         <AffiliateVincularForm

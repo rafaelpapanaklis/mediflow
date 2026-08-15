@@ -13,5 +13,7 @@ export const metadata: Metadata = {
 };
 
 export default function AffiliateLoginPage() {
-  return <AuthShell split="50/50" visual={<LoginVisual />} form={<AffiliateLoginForm />} />;
+  // visualVariant="dark": misma piel que /login de clínicas — fondo casi negro y
+  // el wrapper con flex:1 que deja a la escena 3D llenar el panel.
+  return <AuthShell split="50/50" visualVariant="dark" visual={<LoginVisual />} form={<AffiliateLoginForm />} />;
 }
