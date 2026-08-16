@@ -5,10 +5,12 @@ import { useState } from "react";
 import { FormField } from "../form-field";
 import { PasswordInput } from "../password-input";
 import { PasswordStrength, scorePassword } from "../password-strength";
+import { MX_PHONE_ERROR, mxTenDigits } from "@/lib/phone-mx";
 
 interface Step1Values {
   nombre: string;
   email: string;
+  phone: string;
   password: string;
 }
 
@@ -27,6 +29,7 @@ export function Step1Account({ values, onChange, onContinue }: Step1AccountProps
 
   const nameValid = values.nombre.trim().length >= 2;
   const emailValid = EMAIL_RE.test(values.email);
+  const phoneValid = mxTenDigits(values.phone) !== null;
   const pwScore = scorePassword(values.password);
   const pwValid = pwScore >= 2;
 
@@ -36,13 +39,14 @@ export function Step1Account({ values, onChange, onContinue }: Step1AccountProps
     email:
       (touched.email && !emailValid ? "Email inválido" : undefined) ??
       emailServerError,
+    phone: touched.phone && !phoneValid ? MX_PHONE_ERROR : undefined,
     password:
       touched.password && !pwValid
         ? "La contraseña es muy débil"
         : undefined,
   };
 
-  const canContinue = nameValid && emailValid && pwValid;
+  const canContinue = nameValid && emailValid && phoneValid && pwValid;
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -99,6 +103,20 @@ export function Step1Account({ values, onChange, onContinue }: Step1AccountProps
         }}
         onBlur={() => setTouched(t => ({ ...t, email: true }))}
         error={errors.email}
+        required
+      />
+
+      <FormField
+        label="WhatsApp de la clínica"
+        type="tel"
+        inputMode="numeric"
+        placeholder="55 1234 5678"
+        autoComplete="tel"
+        hint="Te escribimos por aquí para ayudarte a configurar tu clínica."
+        value={values.phone}
+        onChange={e => onChange({ phone: e.target.value })}
+        onBlur={() => setTouched(t => ({ ...t, phone: true }))}
+        error={errors.phone}
         required
       />
 

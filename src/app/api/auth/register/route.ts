@@ -11,6 +11,8 @@ import { resolveApprovedAffiliateByCode } from "@/lib/affiliates";
 import { AFFILIATE_COOKIE, parseAttribution } from "@/lib/affiliates/attribution-cookie";
 import { ensureClinicTerms, effectiveAffiliateMode, getPayoutConfig } from "@/lib/affiliates/payout";
 import { sendAffiliateNewReferralEmail } from "@/lib/affiliate-emails";
+import { MX_PHONE_ERROR, mxTenDigits } from "@/lib/phone-mx";
+import { normalizeMxWhatsAppPhone } from "@/lib/whatsapp";
 
 const CATEGORY_MAP: Record<string, string> = {
   dental: "DENTAL", odontologia: "DENTAL",
@@ -29,7 +31,15 @@ const schema = z.object({
   country: z.string().min(1), city: z.string().optional(),
   state: z.string().optional(),           // MX state (signup step 2)
   clinicSize: z.string().optional(),      // 1 | 2-5 | 6-15 | 16+
-  phone: z.string().optional(), plan: z.enum(["BASIC","PRO","CLINIC"]).default("PRO"),
+  // WhatsApp de la clínica: OBLIGATORIO. Es el único canal de contacto que nos
+  // queda con una clínica que se registra y no paga. El formulario ya lo valida,
+  // pero el cliente miente: la regla que manda es ésta. Sale del parse ya
+  // limpio, a 10 dígitos (mxTenDigits absorbe espacios, guiones y lada +52).
+  phone: z
+    .string({ required_error: MX_PHONE_ERROR, invalid_type_error: MX_PHONE_ERROR })
+    .transform(v => mxTenDigits(v))
+    .refine((v): v is string => v !== null, { message: MX_PHONE_ERROR }),
+  plan: z.enum(["BASIC","PRO","CLINIC"]).default("PRO"),
   slug: z.string().optional(),
   paymentMethod: z
     .enum(["stripe", "transfer", "card", "paypal", "none"])
@@ -234,7 +244,9 @@ export async function POST(req: NextRequest) {
         state: data.state,
         city: data.city,
         clinicSize: data.clinicSize,
-        phone: data.phone,
+        // Guardado como 52 + 10 dígitos, la MISMA forma que sendWhatsAppMessage
+        // usa al mandar: así el número del alta sirve tal cual para escribirle.
+        phone: normalizeMxWhatsAppPhone(data.phone),
         email: data.email, plan: data.plan as any, trialEndsAt,
         aiTokensLimit: planLimits.aiTokensDefault,
         subscriptionStatus: "pending_payment",
@@ -319,6 +331,15 @@ export async function POST(req: NextRequest) {
       coupon: data.coupon ? (couponValid ? "applied" : "invalid") : null,
     });
   } catch (err: any) {
+    // Campo inválido (p. ej. el WhatsApp) → 400 con el mensaje del campo. Antes
+    // caía al 500 de abajo y el formulario mostraba el volcado JSON de issues,
+    // que no le dice al usuario qué corregir.
+    if (err instanceof z.ZodError) {
+      return NextResponse.json(
+        { error: err.issues[0]?.message ?? "Revisa los datos del registro" },
+        { status: 400 },
+      );
+    }
     logError("[register]", err);
     return NextResponse.json({ error: err.message ?? "Error interno" }, { status: 500 });
   }

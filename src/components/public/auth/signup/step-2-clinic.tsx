@@ -5,6 +5,7 @@ import * as Select from "@radix-ui/react-select";
 import { Check, ChevronDown, ChevronUp } from "lucide-react";
 import { FormField } from "../form-field";
 import { SPECIALTIES, SPECIALTY_SLUGS } from "@/lib/specialty-data";
+import { MX_PHONE_ERROR, mxTenDigits } from "@/lib/phone-mx";
 
 interface Step2Values {
   clinicName: string;
@@ -12,6 +13,7 @@ interface Step2Values {
   clinicSize: string;
   city: string;
   state: string;
+  phone: string;
 }
 
 interface Step2ClinicProps {
@@ -19,6 +21,12 @@ interface Step2ClinicProps {
   onChange: (values: Partial<Step2Values>) => void;
   onContinue: () => void;
   onBack: () => void;
+  /**
+   * Pide aquí el WhatsApp cuando el usuario NUNCA vio el paso 1 (entró con
+   * Google, o por un enlace con ?step=2). Sin esto, esos registros se completan
+   * sin teléfono y la clínica que no paga queda sin forma de contacto.
+   */
+  showPhone?: boolean;
 }
 
 const ESTADOS_MX = [
@@ -225,12 +233,14 @@ export function Step2Clinic({
   onChange,
   onContinue,
   onBack,
+  showPhone = false,
 }: Step2ClinicProps) {
   const [touched, setTouched] = useState<Record<string, boolean>>({});
 
   const clinicValid = values.clinicName.trim().length >= 2;
+  const phoneValid = !showPhone || mxTenDigits(values.phone) !== null;
   const canContinue =
-    clinicValid && !!values.specialty && !!values.state;
+    clinicValid && !!values.specialty && !!values.state && phoneValid;
 
   const specialtyOptions = SPECIALTY_SLUGS.map(slug => ({
     value: slug,
@@ -260,6 +270,22 @@ export function Step2Clinic({
         }
         required
       />
+
+      {showPhone && (
+        <FormField
+          label="WhatsApp de la clínica"
+          type="tel"
+          inputMode="numeric"
+          placeholder="55 1234 5678"
+          autoComplete="tel"
+          hint="Te escribimos por aquí para ayudarte a configurar tu clínica."
+          value={values.phone}
+          onChange={e => onChange({ phone: e.target.value })}
+          onBlur={() => setTouched(t => ({ ...t, phone: true }))}
+          error={touched.phone && !phoneValid ? MX_PHONE_ERROR : undefined}
+          required
+        />
+      )}
 
       <FormField
         label="Especialidad principal"

@@ -20,6 +20,9 @@ interface SignupState {
   // Step 1
   nombre: string;
   email: string;
+  // WhatsApp de la clínica. Se pide en el paso 1, o en el paso 2 cuando ese
+  // paso 1 no existe (OAuth). Es obligatorio venga por donde venga el registro.
+  phone: string;
   password: string;
   // Step 2
   clinicName: string;
@@ -40,6 +43,7 @@ interface SignupState {
 const INITIAL: SignupState = {
   nombre: "",
   email: "",
+  phone: "",
   password: "",
   clinicName: "",
   specialty: "",
@@ -104,6 +108,10 @@ export function SignupForm() {
     initialStepParam === "3" ? 3 :
     isOAuthFlow ? 2 :
     1;
+  // Quien no arranca en el paso 1 nunca ve el campo de WhatsApp de ese paso
+  // (OAuth, o un enlace directo con ?step=2). A esos hay que pedírselo en el
+  // paso 2: el teléfono es obligatorio se entre por donde se entre.
+  const skippedAccountStep = initialStep !== 1;
 
   const [step, setStep] = useState<1 | 2 | 3>(initialStep);
   const [form, setForm] = useState<SignupState>(() => ({
@@ -154,6 +162,9 @@ export function SignupForm() {
         city: form.city || undefined,
         state: form.state || undefined,
         clinicSize: form.clinicSize || undefined,
+        // Sin normalizar a propósito: el endpoint limpia y valida (es el gate
+        // que manda), y así los dos caminos mandan exactamente lo que se tecleó.
+        phone: form.phone,
         plan: form.plan,
         billing: form.billing,
         // El cobro real es vía Stripe Checkout (método elegido en el paso 3);
@@ -310,6 +321,7 @@ export function SignupForm() {
           values={{
             nombre: form.nombre,
             email: form.email,
+            phone: form.phone,
             password: form.password,
           }}
           onChange={update}
@@ -325,7 +337,9 @@ export function SignupForm() {
             clinicSize: form.clinicSize,
             city: form.city,
             state: form.state,
+            phone: form.phone,
           }}
+          showPhone={skippedAccountStep}
           onChange={update}
           onContinue={() => setStep(3)}
           onBack={() => {

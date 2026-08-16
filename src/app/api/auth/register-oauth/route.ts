@@ -5,6 +5,8 @@ import { z } from "zod";
 import { rateLimit } from "@/lib/rate-limit";
 import { sendWelcomeEmail } from "@/lib/email";
 import { SITE_URL } from "@/lib/seo";
+import { MX_PHONE_ERROR, mxTenDigits } from "@/lib/phone-mx";
+import { normalizeMxWhatsAppPhone } from "@/lib/whatsapp";
 
 /**
  * Completar registro para usuarios que entraron via OAuth (Google/Microsoft).
@@ -19,7 +21,12 @@ const schema = z.object({
   state: z.string().optional(),
   city: z.string().optional(),
   clinicSize: z.string().optional(),
-  phone: z.string().optional(),
+  // OBLIGATORIO igual que en /api/auth/register: quien entra con Google se
+  // salta el paso 1, y sin este gate esos registros quedaban sin teléfono.
+  phone: z
+    .string({ required_error: MX_PHONE_ERROR, invalid_type_error: MX_PHONE_ERROR })
+    .transform(v => mxTenDigits(v))
+    .refine((v): v is string => v !== null, { message: MX_PHONE_ERROR }),
   plan: z.enum(["BASIC", "PRO", "CLINIC"]).default("PRO"),
   slug: z.string().optional(),
   paymentMethod: z.enum(["stripe", "transfer", "card", "paypal", "none"]).default("transfer"),
@@ -125,7 +132,8 @@ export async function POST(req: NextRequest) {
         state: data.state,
         city: data.city,
         clinicSize: data.clinicSize,
-        phone: data.phone,
+        // 52 + 10 dígitos: la misma forma que usa sendWhatsAppMessage al mandar.
+        phone: normalizeMxWhatsAppPhone(data.phone),
         email,
         plan: data.plan as any,
         trialEndsAt,
@@ -167,6 +175,13 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ success: true });
   } catch (err: any) {
+    // Campo inválido (p. ej. el WhatsApp) → 400 legible, no el volcado de issues.
+    if (err instanceof z.ZodError) {
+      return NextResponse.json(
+        { error: err.issues[0]?.message ?? "Revisa los datos del registro" },
+        { status: 400 },
+      );
+    }
     console.error("register-oauth error:", err);
     return NextResponse.json({ error: err.message ?? "Error interno" }, { status: 500 });
   }
