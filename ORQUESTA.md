@@ -7578,3 +7578,153 @@ desde una sesión de afiliado**: en local no hay `DATABASE_URL`, así que la rut
 completa (`getAffiliateContext` → QR de una campaña propia) no se ha ejercitado. La reja se
 leyó en el código y la parte que se puede probar sin BD —el arte, las medidas, los PDF y el
 QR— sí se probó. Queda pendiente bajar una imagen y un PDF desde el panel en producción.
+
+═══════════════════════════════════════════════════════════════════════════
+## KIT-VISUAL-TEMAS-ESTILOS — 10 temas × 3 estilos × 4 formatos ✅ (2026-08-16)
+═══════════════════════════════════════════════════════════════════════════
+COMMIT: 9f184a24 (main) · BUILD EXIT 0 (✓ Compiled successfully, 362 páginas) · 20 tests verdes
+en `npm run test:kit-marketing`. Sin SQL, sin schema, sin dependencias nuevas.
+
+El kit repartía **4 mensajes en un solo tratamiento oscuro**. Ahora son **10 temas en 3
+estilos** → 30 mensajes distintos, × 4 formatos = **120 imágenes**, más 3 piezas de papel
+en los 3 estilos (y el volante y el díptico llevan además el tema elegido).
+
+### La matriz de temas × estilos
+
+Los 10 temas existen en los 3 estilos y en los 4 formatos (post 1080×1080, historia
+1080×1920, portada 1640×624, banner 1200×630). Ninguna combinación rota.
+
+| # | Tema (`id`) | Titular | Nota de plan |
+|---|---|---|---|
+| 1 | `agenda` | Toda tu clínica en una sola pantalla | — |
+| 2 | `recordatorios` | El recordatorio de la cita llega por WhatsApp | — |
+| 3 | `bot` | Un bot contesta el WhatsApp de tu clínica | — |
+| 4 | `web` | Tu página web viene incluida | — |
+| 5 | `tomografias` | Abre tus tomografías desde el navegador | — |
+| 6 | `cfdi` | Timbra tus facturas desde el sistema | — |
+| 7 | `odontograma` | El odontograma de cada paciente, al día | — |
+| 8 | `portal` | Tus pacientes consultan lo suyo sin llamar | — |
+| 9 | `sucursales` | Tus sedes, administradas desde una cuenta | **Plan Clínica · hasta 3 sedes** |
+| 10 | `ia` | Un asistente con IA dentro de tu sistema | **Disponible desde el plan Profesional** |
+
+Se retiró `mexico` ("en español y en pesos"): el encargo enumeraba la lista de temas y ese
+ángulo sobrevive en el TAGLINE y el pie de las piezas de papel.
+
+### Las notas de plan salen de `plan-shared`, no de la mano
+
+`PLAN_NOTES` en `marketing-assets.ts` se **construye** desde `FALLBACK_PLAN_CONFIG`:
+
+- **Sucursales** — `CLINIC.maxClinics` es **3**, así que la nota dice "hasta 3 sedes". Si
+  mañana el plan incluyera 5, la nota lo diría sola; si pasara a `null` (sin tope), cae a
+  "Solo en el plan Clínica" en vez de prometer un número equivocado. **Nunca** "sucursales
+  ilimitadas".
+- **IA** — `BASIC.aiTokensDefault` es **0** y `BASIC.features["ai-assistant"]` es `false`.
+  La nota manda al plan Profesional (200k/mes). Un test lo cruza contra el config: si el
+  Básico llegara a traer tokens, truena.
+- **Usuarios ilimitados** — no se menciona en ningún tema ni en ninguna lista del papel, y
+  un test barre TODO el texto del catálogo buscando "IA / sucursal / sede / ilimitad /
+  usuarios": si aparece sin nota de plan, falla.
+
+La nota se pinta **junto al titular**, no en el pie: quien recorta la imagen para una
+historia se lleva la promesa y su condición en el mismo golpe de vista.
+
+### Los tres estilos son tres paletas, no una inversión
+
+`SOCIAL_PALETTES` (redes) y `PRINT_PALETTES` (papel) — 20+ tokens cada una.
+
+- **Oscuro** — `#0b0a14 → #121035`, eyebrow `#a78bfa`, isotipo en baldosa morada con trazo
+  blanco, QR `#0f172a` sobre baldosa blanca.
+- **Claro** — `#ffffff → #f1f5f9`. El morado de marca `#7c3aed` da **5.0:1** sobre blanco:
+  pasa para texto grande pero no para cuerpo, así que el eyebrow y el link bajan a
+  `#6d28d9` y los apoyos van en pizarra `#475569` (7.5:1), no en morado claro. El QR se
+  pinta en **negro puro** y su baldosa lleva borde `#e2e8f0` para no perderse contra el
+  fondo. El wordmark reproduce `dalecontrol-logo-light.svg` — "Dale" morado + "Control"
+  tinta.
+- **Color** — `#371a7e → #5b21b6`, acentos lavanda, isotipo sobre **baldosa blanca con
+  trazo morado**, que es como está dibujado en `public/brand/icon-color.svg`.
+
+El QR nunca se invierte (blanco sobre oscuro): media cámara rechaza un QR invertido. Lo que
+cambia es el tono de los módulos y la baldosa que va detrás. La ruta lee el color de la
+**misma** paleta que dibuja la pieza, así no pueden quedar desalineados.
+
+### La interfaz: dos pasos, sin 120 tarjetas
+
+En "Imágenes para redes": **(1)** tema en un `select` de 10 opciones —con diez ángulos,
+una fila de chips es un muro de tres renglones en el celular y el selector nativo se maneja
+con el pulgar— con un eco en texto del eyebrow, el titular, los dos apoyos y la nota de
+plan; **(2)** estilo en 3 chips `dcafp-btn` de 44 px; **(3)** los cuatro formatos de ESA
+combinación con vista previa y descarga.
+
+Todo `useState`: cambiar tema o estilo no navega, no recarga y no mueve el scroll. Se quitó
+el `key` del `img` de vista previa — con `key` el elemento se remonta y la caja parpadea en
+vacío en cada clic; sin él solo cambia el `src` y el navegador deja la imagen anterior hasta
+que llega la nueva. Las cajas siguen con altura fija (168 px), así que no hay salto de
+layout. Cero componentes nuevos: `SectionEyebrow` de `panel-ui` + clases `dcafp`.
+
+### Los imprimibles
+
+Las 3 piezas en los 3 estilos. El **volante** y el **díptico** llevan además el tema
+elegido (eyebrow + titular + entrada + nota de plan en la portada); la **tarjeta** no —en
+90 × 50 mm no cabe un titular de campaña con su nota, y sin la nota sería justo la pieza
+que miente—, así que solo cambia de estilo. El papel tiene su **propio** selector de estilo,
+con **claro marcado como recomendado** y elegido por defecto: lo que luce en un feed oscuro
+se come el tóner de una láser. El QR va siempre sobre baldosa blanca (`QrChip`), porque en
+oscuro y en color el fondo de la hoja no sirve de blanco.
+
+Las listas genéricas del papel (`FEATURES`, `INCLUDES`) solo mencionan funciones que vienen
+en **todos** los planes. Lo que tiene tope entra únicamente como tema elegido, y entonces
+viaja con su nota pegada.
+
+### Claims: qué se dice y qué no
+
+- **Tomografías** — "abre y revisa", nunca "diagnostica" ni "detecta patologías". El visor
+  lleva su `DiagnosticDisclaimer` justamente porque no es de grado diagnóstico. Un test
+  específico lo verifica sobre ese tema.
+- **CFDI** — "timbra tus facturas desde el sistema". Sin SAT, sin "validez", sin
+  "autorizado": el timbrado real depende de `FACTURAPI_ENV` y en "test" no llega al SAT.
+- **IA** — "un apoyo para redactar y resumir; la decisión clínica sigue siendo tuya".
+- **Bot** — redactado para ser cierto también con 0 tokens de IA: la FAQ por reglas y la
+  agenda funcionan en cualquier plan; el `canSpend` solo gobierna la respuesta libre, y
+  cuando no hay cupo el motor deriva a una persona ("lo que se sale del guion se lo pasa a
+  una persona"), que es lo que dice la pieza.
+- Sin NOM-024, sin prueba gratis/trial, sin garantías de resultado, sin precios, sin
+  especialidades que no existen.
+
+### Verificación
+
+1. **Los 63 PDF** (pieza × estilo × tema) renderizados con `renderToBuffer` y contadas las
+   páginas: tarjetas 1, volante **1**, díptico 2. El volante sigue cabiendo en UNA plana
+   con el titular más largo Y la nota de plan puesta — se bajaron `sectionTitle` (26→22) y
+   `feature` (14→12) para comprarle el aire que ocupan el eyebrow y la pastilla.
+2. **Las imágenes** revisadas en los tres estilos y en los cuatro formatos por una ruta
+   **edge temporal** montada para eso y borrada después: `@vercel/og` no arranca con
+   runtime `nodejs` en Windows ("Invalid URL"), así que el script suelto no sirve. QR
+   legible en los tres, nota de plan legible en los tres, el estilo claro terminado (no
+   invertido).
+3. **La interfaz** vista a 391 px: select y chips a 44 px, la rejilla de formatos colapsa a
+   una columna (`minmax(min(100%, 250px), 1fr)`).
+4. **20 tests** — la matriz completa, las notas cruzadas contra `FALLBACK_PLAN_CONFIG`, la
+   reja de claims prohibidos y los buscadores rechazando basura de la URL. Se comprobó que
+   la reja **falla** si se quita la nota de sucursales (2 tests en rojo), no que solo pase.
+5. `npm run build` completo, sin pipe, **exit 0**, con las dos rutas dinámicas.
+
+### Compatibilidad de las URLs
+
+`/imagen` ahora **exige** `estilo` (400 si falta): es la ruta que pinta el panel y el panel
+siempre lo manda. `/imprimible` **cae a un valor bueno** si `estilo` o `tema` faltan o
+vienen inventados (claro + primer tema) en vez de devolver 400: son parámetros de
+presentación, no de identidad, y un enlace guardado de la versión anterior tiene que seguir
+bajando su PDF. El nombre del archivo ya incluye estilo (y tema donde aplica), para que
+bajar el volante en tres estilos no deje tres copias con el mismo nombre.
+
+### Lo que NO se hizo
+
+Sin SQL, sin schema, sin librerías nuevas, sin tocar el motor de comisiones, la landing
+pública ni `globals.css`. El código del afiliado sigue saliendo **solo de la sesión**
+(`resolveAffiliateQrTarget` con el `affiliateId` del contexto en el WHERE); de la URL solo
+viajan formato, tema, estilo y cuál de SUS links va en el QR.
+
+**Sigue sin descargarse una pieza real desde una sesión de afiliado**: en local no hay
+`DATABASE_URL`, así que la ruta autenticada completa no se ejercitó — el arte se verificó
+por la ruta temporal sin sesión. Queda pendiente bajar una imagen y un PDF desde el panel
+en producción.
