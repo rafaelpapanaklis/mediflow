@@ -188,9 +188,15 @@ export default async function HerramientasPage() {
       {/* Kit de marketing */}
       <PanelCard
         title="Kit de marketing"
-        sub="Logo oficial, copys listos para compartir y respuestas a objeciones comunes."
+        sub="Logo oficial, imágenes para redes y material para imprimir con tu nombre y tu QR, copys listos para compartir y respuestas a objeciones comunes."
       >
-        <MarketingKit partnerUrl={partnerUrl} />
+        {/* Solo las campañas con link corto: el QR de una pieza impresa no
+            puede llevar la URL histórica con querystring. Sin ninguna, el
+            material sale con el link base y el selector ni se pinta. */}
+        <MarketingKit
+          partnerUrl={partnerUrl}
+          qrLinks={links.filter((l) => l.publicCode).map((l) => ({ id: l.id, label: l.name }))}
+        />
       </PanelCard>
 
       {/* Plantillas de prospección */}

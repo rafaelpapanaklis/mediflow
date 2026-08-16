@@ -117,6 +117,19 @@ export function Eyebrow({ children }: { children: ReactNode }) {
   return <span className="dcafp-eyebrow">{children}</span>;
 }
 
+/**
+ * Encabezado de un bloque DENTRO de una tarjeta: icono de marca + eyebrow.
+ * Separa las secciones del kit de marketing sin abrir otra `PanelCard`.
+ */
+export function SectionEyebrow({ icon, text }: { icon: ReactNode; text: string }) {
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 7, color: "var(--dcafp-brand)" }}>
+      {icon}
+      <Eyebrow>{text}</Eyebrow>
+    </div>
+  );
+}
+
 /* ── Chip de estado ───────────────────────────────────────────────────── */
 
 export type ChipTone = "neutral" | "brand" | "amber" | "ok" | "danger" | "solid";

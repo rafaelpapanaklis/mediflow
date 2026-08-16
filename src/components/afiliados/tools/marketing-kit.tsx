@@ -1,9 +1,12 @@
 "use client";
 
-// Kit de marketing: logo descargable + copys listos para WhatsApp/redes con
-// botón copiar + pitch de objeciones comunes. Contenido estático de
+// Kit de marketing: logo descargable + material visual con la marca del
+// afiliado (imágenes para redes y PDF para imprimir, en marketing-visuals.tsx)
+// + copys listos para WhatsApp/redes con botón copiar + pitch de objeciones
+// comunes. El contenido de texto es estático y sale de
 // src/lib/affiliates-marketing-content.ts ({tu_link} se reemplaza con el
-// link real del afiliado al copiar/mostrar).
+// link real del afiliado al copiar/mostrar); lo visual se genera en el
+// servidor, que es donde vive la sesión.
 //
 // Estilo: lenguaje del panel (src/app/afiliados/panel.css). Cada bloque abre
 // con un `Eyebrow` (el "COMISIÓN MENSUAL" del diseño), los copys viven en
@@ -12,8 +15,9 @@
 import { useState } from "react";
 import toast from "react-hot-toast";
 import { Copy, Check, ChevronDown, Download, MessageCircleQuestion, Palette, Share2 } from "lucide-react";
-import { EmptyState, Eyebrow } from "@/components/afiliados/ui/panel-ui";
+import { EmptyState, SectionEyebrow } from "@/components/afiliados/ui/panel-ui";
 import { showPanelToast } from "@/components/afiliados/ui/panel-toast";
+import { MarketingVisuals, type QrLinkOption } from "@/components/afiliados/tools/marketing-visuals";
 import {
   MARKETING_COPYS,
   OBJECTION_PITCHES,
@@ -41,8 +45,10 @@ const copyCardStyle: React.CSSProperties = {
 
 export function MarketingKit({
   partnerUrl, // link de la página de socio (el que conviene compartir)
+  qrLinks = [], // campañas del afiliado que pueden ir en el QR del material
 }: {
   partnerUrl: string;
+  qrLinks?: QrLinkOption[];
 }) {
   const [vertical, setVertical] = useState<MarketingVertical | "all">("all");
   const [copiedId, setCopiedId] = useState<string | null>(null);
@@ -74,7 +80,7 @@ export function MarketingKit({
     <div style={{ display: "flex", flexDirection: "column", gap: 22, minWidth: 0 }}>
       {/* Logo DaleControl */}
       <section style={{ display: "flex", flexDirection: "column", gap: 10, minWidth: 0 }}>
-        <SectionTitle icon={<Palette size={14} />} text="Logo DaleControl" />
+        <SectionEyebrow icon={<Palette size={14} />} text="Logo DaleControl" />
         <div
           style={{
             display: "grid",
@@ -133,9 +139,12 @@ export function MarketingKit({
         </div>
       </section>
 
+      {/* Material visual con su marca (imágenes para redes + PDF imprimibles) */}
+      <MarketingVisuals qrLinks={qrLinks} />
+
       {/* Copys listos para compartir */}
       <section style={{ display: "flex", flexDirection: "column", gap: 10, minWidth: 0 }}>
-        <SectionTitle icon={<Share2 size={14} />} text="Copys listos para compartir" />
+        <SectionEyebrow icon={<Share2 size={14} />} text="Copys listos para compartir" />
         {MARKETING_COPYS.length === 0 ? (
           <EmptyState icon={<Share2 size={22} />} title="Aún no hay copys disponibles">
             Muy pronto encontrarás aquí mensajes listos para compartir.
@@ -206,7 +215,7 @@ export function MarketingKit({
 
       {/* Respuestas a objeciones comunes */}
       <section style={{ display: "flex", flexDirection: "column", gap: 6, minWidth: 0 }}>
-        <SectionTitle icon={<MessageCircleQuestion size={14} />} text="Respuestas a objeciones comunes" />
+        <SectionEyebrow icon={<MessageCircleQuestion size={14} />} text="Respuestas a objeciones comunes" />
         {OBJECTION_PITCHES.length === 0 ? (
           <EmptyState icon={<MessageCircleQuestion size={22} />} title="Aún no hay respuestas a objeciones">
             Muy pronto tendrás argumentos listos para usar.
@@ -298,16 +307,6 @@ export function MarketingKit({
           </div>
         )}
       </section>
-    </div>
-  );
-}
-
-/** Encabezado de bloque: icono de marca + eyebrow del panel. */
-function SectionTitle({ icon, text }: { icon: React.ReactNode; text: string }) {
-  return (
-    <div style={{ display: "flex", alignItems: "center", gap: 7, color: "var(--dcafp-brand)" }}>
-      {icon}
-      <Eyebrow>{text}</Eyebrow>
     </div>
   );
 }

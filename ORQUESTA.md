@@ -7494,3 +7494,87 @@ El árbol tenía trabajo sin commitear de **otra sesión en paralelo** (kit de m
 `marketing-kit.tsx`, `panel-ui.tsx`, `herramientas/page.tsx`, `src/lib/og/`, `src/lib/pdf/`, más
 `scripts/tmp-*` y `public/tmp-check/`). Se commitearon **solo los seis archivos de este encargo**,
 no `git add -A`, que se habría llevado por delante trabajo ajeno a medio hacer.
+
+## El kit del afiliado ya tiene material que se ve — 2026-08-16
+
+`/afiliados/herramientas` repartía dos SVG y texto. Ahora reparte **cuatro imágenes para
+redes y tres PDF de imprenta**, cada pieza con el logo, el nombre del afiliado y **su** QR.
+
+### Las piezas y de dónde sale cada dato
+
+| Pieza | Medida | Se genera en |
+|---|---|---|
+| Post cuadrado | 1080 × 1080 | `ImageResponse` (satori) |
+| Historia | 1080 × 1920 | `ImageResponse` |
+| Portada de Facebook | 1640 × 624 | `ImageResponse` |
+| Banner horizontal | 1200 × 630 | `ImageResponse` |
+| Tarjetas de presentación | Carta · 10 de 90 × 50 mm | `@react-pdf` |
+| Volante | Carta, 1 plana | `@react-pdf` |
+| Díptico de expo | Carta horizontal, 2 caras | `@react-pdf` |
+
+Sin librerías nuevas: `next/og`, `@react-pdf/renderer` y `qrcode` ya estaban.
+
+**Los datos.** El nombre sale de `Affiliate.name` (de la SESIÓN) pasado por
+`affiliateShortName()` → "Martín R.". El QR sale de `resolveAffiliateQrTarget()`:
+`baseReferralUrl(referralCode)` = `/r/<code>`, o el `publicCode` de un link de campaña
+**suyo**. Los textos de venta viven en `marketing-assets.ts` (imágenes) y en
+`affiliate-marketing-print.tsx` (impresos): estáticos, revisados uno por uno contra el
+producto de hoy. **Ni un precio en el papel** — cambian y el papel no.
+
+### La reja, que es lo único que importa aquí
+
+`affiliateId` NUNCA viaja por la URL. De la URL solo llegan el formato, el mensaje y —
+opcional — el **id de un link**, y ese id entra en la consulta junto al afiliado de la
+sesión:
+
+```ts
+where: { id: linkId, affiliateId: ctx.affiliateId }
+```
+
+Con el id de un link ajeno la consulta no devuelve nada y el QR **cae al link base de
+quien pide**, nunca al del dueño. Las dos rutas comparten esa función a propósito: puesta
+en una y olvidada en la otra es exactamente el fallo que se quería evitar.
+
+### Runtime: nodejs, no edge
+
+`/og/blog` corre en el Edge porque su título viaja por query. Aquí hay que leer la sesión
+con Prisma, que no corre en el Edge → `runtime = "nodejs"`.
+
+**Ojo con el dev en Windows.** El build *node* de `@vercel/og` arma mal la ruta de su
+fuente por defecto (`path.join` sobre un `file://` URL) y truena con `ERR_INVALID_URL` al
+importarse. Es un fallo del paquete **en win32**: en Linux `path.posix.join` normaliza la
+misma expresión a una URL válida, así que en Vercel funciona. Verificado en local pasando
+el MISMO arte por una ruta temporal en edge.
+
+### Verificado
+
+1. **Medidas exactas** — leídas de la cabecera IHDR de los cuatro PNG: 1080×1080,
+   1080×1920, 1640×624, 1200×630.
+2. **El QR se lee** — decodificado de la imagen COMPUESTA (no del PNG original): se
+   localiza la baldosa blanca por componentes conexos, se muestrea el centro de cada
+   módulo y se compara contra la matriz de `qrcode`. **841/841 módulos en los cuatro
+   formatos**, a 5.0–8.1 px por módulo.
+3. **Los tres PDF** abiertos en Chrome: 1, 1 y 2 páginas, nada fuera de márgenes, el
+   isotipo se dibuja con `Svg`/`Path` y las marcas de corte caen en el papel.
+4. **Sin nombre** (`name` vacío o en blancos) las siete piezas se generan igual, sin la
+   línea "Recomendado por". 10 pruebas en `npm run test:kit-marketing`.
+5. `npm run build` completo, exit 0, con las dos rutas como dinámicas.
+
+### Dos cosas que se arreglaron por el camino
+
+**Satori no tolera una clave de estilo puesta a `undefined`.** `width: undefined` no es lo
+mismo que no pasar `width`: intenta leerla como cadena y truena con *"Cannot read
+properties of undefined (reading 'trim')"*. El post y la historia devolvían 500 mientras
+los dos horizontales salían bien.
+
+**La historia entra hacia el centro** (`padTop` 200 / `padBottom` 250): Instagram le encima
+su cabecera y la barra de "enviar mensaje", y con el sangrado normal el QR — lo único que
+importa de la pieza — quedaba debajo del teclado.
+
+### Lo que NO se hizo
+
+Sin SQL y sin schema, como pedía el encargo. **Nadie ha descargado todavía una pieza real
+desde una sesión de afiliado**: en local no hay `DATABASE_URL`, así que la ruta autenticada
+completa (`getAffiliateContext` → QR de una campaña propia) no se ha ejercitado. La reja se
+leyó en el código y la parte que se puede probar sin BD —el arte, las medidas, los PDF y el
+QR— sí se probó. Queda pendiente bajar una imagen y un PDF desde el panel en producción.
