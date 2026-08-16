@@ -2,20 +2,21 @@ import { ImageResponse } from "next/og";
 import { NextResponse, type NextRequest } from "next/server";
 import { getAffiliateContext } from "@/lib/affiliate-auth";
 import { resolveAffiliateQrTarget, qrDataUrl } from "@/lib/affiliates/marketing-target";
-import { AffiliateMarketingArtwork } from "@/lib/og/affiliate-marketing-artwork";
+import { AffiliateMarketingArtwork, SOCIAL_PALETTES } from "@/lib/og/affiliate-marketing-artwork";
 import {
   findSocialFormat,
   findSocialVariant,
+  findSocialStyle,
   affiliateShortName,
   displayShortUrl,
 } from "@/lib/affiliates/marketing-assets";
 
 /**
- * GET /api/afiliados/marketing/imagen?formato=post&variante=agenda[&link=<id>]
+ * GET /api/afiliados/marketing/imagen?formato=post&variante=agenda&estilo=oscuro[&link=<id>]
  *
- * Imagen para redes con la marca DaleControl, el mensaje elegido, el nombre
- * del afiliado y su QR. Se genera al vuelo con ImageResponse (satori), el
- * mismo motor que /og/blog. El dibujo vive en
+ * Imagen para redes con la marca DaleControl, el mensaje elegido, el estilo
+ * elegido, el nombre del afiliado y su QR. Se genera al vuelo con
+ * ImageResponse (satori), el mismo motor que /og/blog. El dibujo vive en
  * src/lib/og/affiliate-marketing-artwork.tsx.
  *
  * RUNTIME NODEJS, no edge: /og/blog corre en el Edge porque su título viaja
@@ -39,8 +40,9 @@ export async function GET(req: NextRequest) {
   const params = new URL(req.url).searchParams;
   const format = findSocialFormat(params.get("formato"));
   const variant = findSocialVariant(params.get("variante"));
-  if (!format || !variant) {
-    return NextResponse.json({ error: "Formato o mensaje desconocido." }, { status: 400 });
+  const style = findSocialStyle(params.get("estilo"));
+  if (!format || !variant || !style) {
+    return NextResponse.json({ error: "Formato, mensaje o estilo desconocido." }, { status: 400 });
   }
 
   const target = await resolveAffiliateQrTarget(ctx, params.get("link"));
@@ -51,7 +53,8 @@ export async function GET(req: NextRequest) {
     "Cache-Control": "private, max-age=600",
   };
   if (params.get("descarga") === "1") {
-    headers["Content-Disposition"] = `attachment; filename="dalecontrol-${variant.id}-${format.id}.png"`;
+    headers["Content-Disposition"] =
+      `attachment; filename="dalecontrol-${variant.id}-${style.id}-${format.id}.png"`;
   }
 
   return new ImageResponse(
@@ -59,7 +62,12 @@ export async function GET(req: NextRequest) {
       <AffiliateMarketingArtwork
         format={format}
         variant={variant}
-        qrDataUrl={await qrDataUrl(target, { size: 620 })}
+        style={style.id}
+        // El QR se tiñe con el estilo: negro puro sobre el claro, casi negro
+        // sobre los otros dos (que llevan baldosa blanca detrás). El color
+        // sale de la MISMA paleta que dibuja la pieza, para que no puedan
+        // quedar desalineados.
+        qrDataUrl={await qrDataUrl(target, { size: 620, dark: SOCIAL_PALETTES[style.id].qrDark })}
         urlText={displayShortUrl(target)}
         affiliateName={affiliateShortName(ctx.affiliate.name)}
       />
