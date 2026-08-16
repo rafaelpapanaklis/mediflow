@@ -7422,3 +7422,75 @@ credenciales de Supabase. El cambio no toca esa lógica, pero queda dicho.
 la variante `brand` y `LoginVisual` — o sea, con el mismo síntoma — `/proveedores/login`,
 `/proveedores/registro`, `/laboratorios/login`, `/laboratorios/registro`, `/forgot-password` y
 `/reset-password`. Se dejaron fuera por estar fuera del encargo, no por estar bien.
+
+---
+
+## El WhatsApp de la clínica es obligatorio en el registro — `06e45879`
+
+Hasta ahora el alta no pedía teléfono en ningún paso: una clínica que se registraba y no pagaba
+quedaba sin **ninguna** forma de contacto. `clinics.phone` ya existía y los dos endpoints ya lo
+escribían — nadie lo llenaba. **No hubo SQL ni cambio de schema.**
+
+### Archivos tocados
+
+| Archivo | Qué cambió |
+| --- | --- |
+| `src/lib/phone-mx.ts` *(nuevo)* | `mxTenDigits()` + `MX_PHONE_ERROR`. Regla ÚNICA de 10 dígitos que comparten navegador y servidor |
+| `src/components/public/auth/signup/step-1-account.tsx` | Campo "WhatsApp de la clínica" debajo del correo, con su texto de ayuda |
+| `src/components/public/auth/signup/step-2-clinic.tsx` | El MISMO campo, condicionado a `showPhone`, debajo del nombre de la clínica |
+| `src/components/public/auth/signup/signup-form.tsx` | `phone` en el estado, en `basePayload` (lo mandan las DOS ramas) y `showPhone={skippedAccountStep}` |
+| `src/app/api/auth/register/route.ts` | `phone` de opcional a **requerido**; se guarda `52` + 10 dígitos |
+| `src/app/api/auth/register-oauth/route.ts` | Lo mismo |
+
+### La trampa: quien entra con Google no ve el paso 1
+
+`signup-form.tsx` arranca en el paso 2 cuando `isOAuthFlow`. Un campo puesto solo en el paso 1
+habría dejado exactamente igual de incomunicados a los registros por Google. Por eso el campo
+aparece también en el paso 2, gobernado por `skippedAccountStep = initialStep !== 1` — que es un
+poco más ancho que `isOAuthFlow` a propósito: cubre además los enlaces directos con `?step=2`.
+
+El gate que de verdad manda es el del endpoint: el cliente miente y `?step=3` se salta los dos
+pasos. Por eso `phone` pasa a requerido en los DOS endpoints y un alta sin teléfono responde 400
+con un mensaje legible (antes un campo inválido caía al 500 con el volcado JSON de `ZodError`).
+
+Normalización: `+52`, `+521`, espacios, guiones y paréntesis se **limpian**, no se rechazan. Se
+guarda `52` + 10 dígitos, la misma forma que produce `normalizeMxWhatsAppPhone` en `@/lib/whatsapp`,
+o sea que el número del alta sirve tal cual para escribirle por WhatsApp.
+
+### Verificado
+
+`npm run build` completo y verde (leído entero, sin pipes). Terminó a las 12:25:51 con los seis
+archivos ya en su versión final (12:20–12:22), así que el build cubre exactamente lo que se commiteó.
+
+**Camino 1 — registro con correo** (componentes reales en el navegador): el campo sale con
+`type=tel`, `inputMode=numeric`, `autoComplete=tel` y su ayuda. Con nombre, correo y contraseña
+llenos y el teléfono vacío, "Continuar" sigue **bloqueado**; con 9 dígitos también, y al salir del
+campo aparece *"Escribe tu WhatsApp a 10 dígitos"*. Pasan y se limpian `55 1234 5678`,
+`+52 55 1234 5678`, `52 55 1234 5678`, `5215512345678` y `(55) 1234-5678`; una ristra de 15 dígitos
+queda bloqueada. En el paso 2 el campo **no** se duplica.
+
+**Camino 2 — entrando con Google** (`?source=oauth`): arranca en el paso 2 y ahí está el mismo campo
+con la misma ayuda, debajo del nombre de la clínica, y "Continuar" bloqueado mientras esté vacío.
+
+**Los dos endpoints, contra el servidor de verdad:** `/api/auth/register` sin `phone` → 400
+*"Escribe tu WhatsApp a 10 dígitos"*; con 9 dígitos → 400. `/api/auth/register-oauth` sin `phone` →
+400 igual; con `+52 (55) 1234-5678` **pasa** el gate del teléfono (muere después, en el env que falta).
+
+### Sin ejercitar
+
+- **No se completó un alta de punta a punta**: en local no hay `DATABASE_URL` ni credenciales de
+  Supabase, así que ninguna clínica llegó a escribirse. Lo que sí se comprobó es que el teléfono
+  llega al POST: en el chunk compilado que ejecuta el navegador, `basePayload` lleva
+  `phone: form.phone`, la rama OAuth manda `JSON.stringify(basePayload)` y la de correo lo esparce.
+- **Los `Select` de Radix del paso 2** (especialidad, estado) no se dejaron manejar por automatización
+  — ni clics sintéticos, ni `PointerEvent`, ni teclado por CDP abren la lista. Por eso el submit final
+  se verificó por el lado del endpoint y del bundle, no clicando "Crear cuenta". El widget no se tocó
+  en este cambio.
+- Los registros ya existentes **no** se tocaron: sin migración y sin backfill, tal como se pidió.
+
+### Ojo al commitear
+
+El árbol tenía trabajo sin commitear de **otra sesión en paralelo** (kit de marketing de afiliados:
+`marketing-kit.tsx`, `panel-ui.tsx`, `herramientas/page.tsx`, `src/lib/og/`, `src/lib/pdf/`, más
+`scripts/tmp-*` y `public/tmp-check/`). Se commitearon **solo los seis archivos de este encargo**,
+no `git add -A`, que se habría llevado por delante trabajo ajeno a medio hacer.
