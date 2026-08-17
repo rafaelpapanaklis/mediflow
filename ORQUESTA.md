@@ -7728,3 +7728,114 @@ viajan formato, tema, estilo y cuál de SUS links va en el QR.
 `DATABASE_URL`, así que la ruta autenticada completa no se ejercitó — el arte se verificó
 por la ruta temporal sin sesión. Queda pendiente bajar una imagen y un PDF desde el panel
 en producción.
+
+---
+
+## KIT-VISUAL-TODO-EN-UNO — una pieza que enseña el sistema entero ✅ (2026-08-16)
+
+**Rama:** `main` · **Alcance:** ola CHICA, sin SQL · **Build:** `npm run build` completo, sin
+pipe, **exit 0** · **Tests:** `npm run test:kit-marketing` → **25 pasan**
+
+### El problema
+
+Los diez temas del kit hablan de UNA función cada uno. Con eso no se promociona en frío: un
+post que solo dice "agenda y expediente" vende una función, no el producto. El afiliado que
+quiere presentar DaleControl a alguien que no lo conoce no tenía ninguna pieza que lo contara
+completo.
+
+### Lo que ahora existe
+
+Un tema **"Todo en uno"** (`id: "todo"`) que es el **primero** de `SOCIAL_VARIANTS` y el único
+con `recommended: true` — el panel lo abre por defecto, lo marca en el selector
+("(recomendado)") y le pone la pastilla "Recomendado para empezar" en la vista previa. **Los
+diez temas sueltos siguen intactos**: sirven para publicar variado sin repetir la misma pieza,
+y un test cuenta que sigan siendo diez.
+
+Es la excepción de FORMA, no de fondo: donde un tema suelto pone titular + dos apoyos, este
+pone una **rejilla de funciones con ícono**. Por eso `lines` pasó a opcional y nació
+`features: VariantFeature[]`; un test exige que cada tema traiga **una cosa o la otra, nunca
+las dos ni ninguna** (con las dos, media pieza se quedaría sin pintar en silencio).
+
+### Cuántas funciones lleva cada formato, y por qué
+
+La regla es la del encargo: **antes que achicar la tipografía, se quitan funciones**. El orden
+del catálogo es orden de fuerza y cada formato se queda con las primeras N — lo que se recorta
+es siempre la cola (`featuresForFormat`, `COMBO_LAYOUT`).
+
+| Formato | Funciones | Rejilla | Cuerpo | Por qué |
+|---|---|---|---|---|
+| Post cuadrado 1080×1080 | **6** | 2 col × 3 filas | 29 px | Con diez, el cuerpo bajaba a ~18 px = 6 px reales en un celular. Seis se leen. |
+| Historia 1080×1920 | **10** | 1 col × 10 | 33 px | El único formato con aire de verdad; las diez caben en un renglón cada una. |
+| Portada de Facebook 1640×624 | **4** | 4 col × 1 fila | 18 px | Banda muy baja y el celular recorta los lados: se compone dentro de la caja segura de 1080 y solo entra una fila. |
+| Banner 1200×630 | **6** | 3 col × 2 filas | 19 px | El QR se come un tercio del ancho; en las dos filas que quedan entran seis. |
+
+`count % cols === 0` está probado: una `count` que no sea múltiplo de `cols` deja la última
+fila coja, y la rejilla se arma A MANO (ni satori ni @react-pdf tienen CSS grid). Las
+horizontales apilan el ícono ARRIBA del texto (`stack`) porque con 167 px de celda, un ícono a
+la izquierda deja el texto en 120.
+
+### Las notas de plan, sin saturar
+
+Diez pastillas no caben. Las dos funciones con tope (`capped: true`) llevan **asterisco**
+—puesto por `featureLabel`, no a mano, para que las tres superficies no discrepen— y la pieza
+cierra con una nota al pie **solo si en ESA pieza salió alguna función con tope**
+(`needsPlanFootnote` sobre la lista ya recortada). Como IA y sucursales son las dos últimas,
+hoy la nota aparece en la historia y en las dos piezas de papel; la portada y el banner no
+arrastran una nota que no les toca.
+
+Dos notas, según el sitio:
+
+- `PLAN_FOOTNOTE` (imágenes): *"\* Algunas funciones según el plan contratado."*
+- `PLAN_FOOTNOTE_PRINT` (papel, que se lee de cerca y se guarda): *"\* Asistente con IA: desde
+  el plan Profesional. Varias sucursales: plan Clínica, hasta 3 sedes."* — el número de sedes
+  sale de `maxClinics` de `FALLBACK_PLAN_CONFIG`, igual que la pastilla del tema suelto. Si
+  mañana el plan Clínica trae 5 sedes, la nota lo dice sola.
+
+En el panel se enseña la nota LARGA aunque en la imagen quepa la corta: el afiliado tiene
+derecho a saber qué está prometiendo antes de publicarlo. Y cada tarjeta de formato dice
+"Muestra 6 de las 10 funciones", para que nadie crea que el post se le comió cuatro.
+
+### Papel
+
+El volante y el díptico cambian su lista genérica de venta por la del tema (las diez, con
+ícono y nota al pie): es donde más sentido tiene —un volante SÍ debe contar el producto
+entero— y evita que la pieza diga dos veces lo mismo con distintas palabras. El titular del
+volante baja a 22 pt **solo en este tema**: a 26 pt @react-pdf lo silabeaba ("en un sis-tema"),
+que en papel se lee como una errata. El QR del panel interior del díptico cede 14 pt (110 →
+96) para que tres renglones más no empujen una tercera cara.
+
+### Íconos
+
+`FEATURE_ICONS` vive en el catálogo, no en cada superficie: los mismos trazos los pintan
+**satori** (`<svg><path>`), **@react-pdf** (`<Svg><Path>`) y el **navegador** en la vista
+previa del panel. Copiados en tres sitios, el ícono de la imagen y el del volante se irían
+separando solos. Sin arcos (`A`) ni relleno —solo M/L/H/V/C/Z—, que es lo que los tres
+renderizan igual sin normalizar nada; hay un test que lo vigila.
+
+### Verificación
+
+1. **Las 12 imágenes** del tema nuevo (4 formatos × 3 estilos) generadas y **miradas una por
+   una** por una ruta **edge temporal** montada para eso y borrada después (`@vercel/og` no
+   arranca con runtime `nodejs` en Windows). El post cuadrado se lee a tamaño de celular; la
+   historia entra con sus diez y su nota al pie; la portada y el banner no desbordan la caja
+   segura. Regresión: los temas sueltos siguen saliendo con sus dos apoyos y su pastilla.
+2. **Los 99 PDF** (3 piezas × 3 estilos × 11 temas) renderizados con `renderToBuffer` y
+   contadas las páginas: tarjetas 1, volante **1**, díptico **2**. Ninguno se desbordó.
+   Volante y díptico del tema nuevo revisados a ojo en el visor.
+3. **El panel** montado en una página temporal sin sesión: selector, pastilla de recomendado,
+   la rejilla de diez con íconos, la nota larga y el "Muestra N de las 10" en cada formato.
+4. **25 tests**. La reja se probó **al revés**: quitándole `capped` a la función de IA,
+   *"nadie promete IA, sedes o usuarios sin decir en qué plan vienen"* e *"IA y sucursales
+   NUNCA salen sin asterisco"* se ponen **en rojo**. Restaurado, verde.
+
+### Lo que NO se hizo
+
+Sin SQL, sin schema, sin librerías nuevas. No se tocó `globals.css`, ni el motor de
+comisiones, ni la landing. Los claims no cambian: las tomografías se **abren y revisan**
+(nunca "diagnostica" ni "detecta"), sin NOM-024 certificado, sin "prueba gratis", sin
+garantías y sin precios escritos a mano.
+
+**Sigue sin descargarse una pieza real desde una sesión de afiliado**: en local no hay
+`DATABASE_URL`, así que la ruta autenticada completa no se ejercitó — el arte se verificó por
+rutas temporales sin sesión. Queda pendiente bajar una imagen y un PDF desde el panel en
+producción y comprobar que el QR lleve al link del afiliado correcto.

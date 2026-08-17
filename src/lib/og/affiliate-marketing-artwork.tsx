@@ -21,7 +21,19 @@
  * puro—, y el de color usa el isotipo sobre baldosa blanca, que es como está
  * dibujado en public/brand/icon-color.svg.
  */
-import type { SocialFormat, SocialStyleId, SocialVariant } from "@/lib/affiliates/marketing-assets";
+import {
+  COMBO_LAYOUT,
+  FEATURE_ICONS,
+  PLAN_FOOTNOTE,
+  featureLabel,
+  featuresForFormat,
+  needsPlanFootnote,
+  type FeatureIconId,
+  type SocialFormat,
+  type SocialStyleId,
+  type SocialVariant,
+  type VariantFeature,
+} from "@/lib/affiliates/marketing-assets";
 
 /* Un solo juego de proporciones no sirve para 1080×1080 y para 1640×624: el
    titular que respira en el cuadrado se sale de la portada. Cada formato trae
@@ -50,6 +62,32 @@ const SCALES: Record<string, Scale> = {
   historia: { pad: 92, padTop: 200, padBottom: 250, mark: 76, brand: 48, eyebrow: 28, headline: 84, line: 36, qr: 250, gap: 32 },
   portada: { pad: 56, mark: 48, brand: 30, eyebrow: 18, headline: 48, line: 23, qr: 156, gap: 18 },
   banner: { pad: 60, mark: 52, brand: 34, eyebrow: 20, headline: 52, line: 25, qr: 172, gap: 20 },
+};
+
+/* El tema "todo en uno" no se pinta con la escala de los demás: donde un tema
+   suelto pone un titular grande y dos apoyos, este pone una rejilla de
+   funciones. El titular baja (el peso lo lleva la lista) y aparecen tres
+   medidas nuevas —el ícono, el cuerpo de la función y la nota al pie—, medidas
+   contra la celda más angosta de cada formato. CUÁNTAS funciones entran lo
+   decide el catálogo (COMBO_LAYOUT); aquí solo está de qué tamaño se pintan. */
+interface ComboScale {
+  /** Ícono ARRIBA del texto, no al lado: en las bandas horizontales la celda
+   *  mide ~170 px y un ícono a la izquierda deja el texto en 120. */
+  stack: boolean;
+  /** Lado de la baldosa del ícono. */
+  icon: number;
+  text: number;
+  headline: number;
+  rowGap: number;
+  colGap: number;
+  foot: number;
+}
+
+const COMBOS: Record<string, ComboScale> = {
+  post: { stack: false, icon: 54, text: 29, headline: 58, rowGap: 20, colGap: 26, foot: 21 },
+  historia: { stack: false, icon: 58, text: 33, headline: 64, rowGap: 14, colGap: 0, foot: 25 },
+  portada: { stack: true, icon: 40, text: 18, headline: 42, rowGap: 14, colGap: 12, foot: 15 },
+  banner: { stack: true, icon: 42, text: 19, headline: 46, rowGap: 14, colGap: 14, foot: 16 },
 };
 
 // Ancho útil de los formatos horizontales. La portada de Facebook mide 1640 px
@@ -244,7 +282,10 @@ function Message({ s, p, v, width }: { s: Scale; p: SocialPalette; v: SocialVari
         {v.headline}
       </span>
       <div style={{ display: "flex", flexDirection: "column", gap: Math.round(s.line * 0.42) }}>
-        {v.lines.map((l) => (
+        {/* `?? []` y no `v.lines` a secas: el tema "todo en uno" no trae apoyos
+            —lleva funciones— y aunque hoy no pasa por aquí, un tema sin apoyos
+            no puede tumbar el render de una pieza. */}
+        {(v.lines ?? []).map((l) => (
           <div key={l} style={{ display: "flex", alignItems: "flex-start", gap: Math.round(s.line * 0.5) }}>
             <div
               style={{
@@ -279,6 +320,130 @@ function Message({ s, p, v, width }: { s: Scale; p: SocialPalette; v: SocialVari
             {v.planNote}
           </span>
         </div>
+      ) : null}
+    </div>
+  );
+}
+
+/**
+ * Ícono de una función, sobre la misma baldosa que usa la nota de plan. El
+ * trazo sale de FEATURE_ICONS (el catálogo), no de un SVG local: el mismo
+ * dibujo lo pintan también el PDF y la vista previa del panel.
+ */
+function FeatureIcon({ id, box, p }: { id: FeatureIconId; box: number; p: SocialPalette }) {
+  const inner = Math.round(box * 0.6);
+  return (
+    <div
+      style={{
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        flexShrink: 0,
+        width: box,
+        height: box,
+        borderRadius: Math.round(box * 0.28),
+        background: p.noteBg,
+        border: `1px solid ${p.noteLine}`,
+      }}
+    >
+      <svg width={inner} height={inner} viewBox="0 0 24 24" fill="none">
+        {FEATURE_ICONS[id].map((d) => (
+          <path
+            key={d}
+            d={d}
+            fill="none"
+            stroke={p.eyebrow}
+            strokeWidth={1.9}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        ))}
+      </svg>
+    </div>
+  );
+}
+
+/**
+ * El tema "todo en uno": titular corto + rejilla de funciones + nota al pie.
+ *
+ * La rejilla se arma A MANO por filas. Satori no tiene CSS grid, así que las
+ * columnas son flex con ancho CALCULADO: sin un `width` explícito por celda,
+ * la función de texto más largo se quedaría con media fila y las demás
+ * quedarían apretadas contra el borde.
+ *
+ * La nota al pie aparece solo si en ESTA pieza salió alguna función con tope
+ * (`needsPlanFootnote` sobre la lista ya recortada): la portada muestra cuatro
+ * funciones sin tope y no arrastra una nota que no le toca.
+ */
+function ComboBlock({
+  s,
+  c,
+  p,
+  v,
+  features,
+  cols,
+  width,
+}: {
+  s: Scale;
+  c: ComboScale;
+  p: SocialPalette;
+  v: SocialVariant;
+  features: VariantFeature[];
+  cols: number;
+  width: number;
+}) {
+  const rows: VariantFeature[][] = [];
+  for (let i = 0; i < features.length; i += cols) rows.push(features.slice(i, i + cols));
+
+  const cellW = Math.floor((width - c.colGap * (cols - 1)) / cols);
+  const iconGap = Math.round(c.icon * 0.3);
+  const textW = c.stack ? cellW : cellW - c.icon - iconGap;
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", width, gap: Math.round(s.gap * 0.62) }}>
+      <span style={{ color: p.eyebrow, fontSize: s.eyebrow, fontWeight: 700, letterSpacing: "0.14em" }}>
+        {v.eyebrow}
+      </span>
+      <span
+        style={{
+          color: p.headline,
+          fontSize: c.headline,
+          fontWeight: 800,
+          lineHeight: 1.12,
+          letterSpacing: "-0.02em",
+        }}
+      >
+        {v.headline}
+      </span>
+
+      <div style={{ display: "flex", flexDirection: "column", gap: c.rowGap, marginTop: Math.round(c.rowGap * 0.3) }}>
+        {rows.map((row) => (
+          <div key={row[0].text} style={{ display: "flex", gap: c.colGap }}>
+            {row.map((f) => (
+              <div
+                key={f.text}
+                style={{
+                  display: "flex",
+                  width: cellW,
+                  flexDirection: c.stack ? "column" : "row",
+                  alignItems: c.stack ? "flex-start" : "center",
+                  gap: iconGap,
+                }}
+              >
+                <FeatureIcon id={f.icon} box={c.icon} p={p} />
+                <span style={{ width: textW, color: p.line, fontSize: c.text, lineHeight: 1.3, fontWeight: 600 }}>
+                  {featureLabel(f)}
+                </span>
+              </div>
+            ))}
+          </div>
+        ))}
+      </div>
+
+      {needsPlanFootnote(features) ? (
+        <span style={{ color: p.line, fontSize: c.foot, fontWeight: 600, marginTop: Math.round(c.foot * 0.3) }}>
+          {PLAN_FOOTNOTE}
+        </span>
       ) : null}
     </div>
   );
@@ -374,6 +539,29 @@ export function AffiliateMarketingArtwork({
   const rightW = s.qr + 170;
   const leftW = SAFE_WIDE - rightW - 48;
 
+  // Un tema que lista funciones se pinta como rejilla; los demás, con titular
+  // y apoyos. Es la MISMA pieza (mismo logo, mismo QR, mismos tres estilos):
+  // lo único que cambia es el bloque de en medio.
+  const features = featuresForFormat(variant, format.id);
+  const body =
+    features.length > 0 ? (
+      <ComboBlock
+        s={s}
+        c={COMBOS[format.id]}
+        p={p}
+        v={variant}
+        features={features}
+        cols={COMBO_LAYOUT[format.id].cols}
+        // Apilado, el bloque ocupa el ancho de la página menos los márgenes;
+        // en los horizontales, la columna que le deja el QR.
+        width={wide ? leftW : format.width - 2 * s.pad}
+      />
+    ) : wide ? (
+      <Message s={s} p={p} v={variant} width={leftW} />
+    ) : (
+      <Message s={s} p={p} v={variant} />
+    );
+
   return (
     <div
       style={{
@@ -398,7 +586,7 @@ export function AffiliateMarketingArtwork({
           >
             <div style={{ display: "flex", flexDirection: "column", gap: s.gap, width: leftW }}>
               <Lockup s={s} p={p} />
-              <Message s={s} p={p} v={variant} width={leftW} />
+              {body}
             </div>
             <div
               style={{
@@ -421,7 +609,7 @@ export function AffiliateMarketingArtwork({
               `space-between`: en la historia (1920 px de alto) el reparto
               dejaba un vacío enorme entre el logo y el titular. */}
           <div style={{ display: "flex", flexDirection: "column", flexGrow: 1, justifyContent: "center" }}>
-            <Message s={s} p={p} v={variant} />
+            {body}
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: s.gap }}>
             <QrTile s={s} p={p} src={qrDataUrl} />

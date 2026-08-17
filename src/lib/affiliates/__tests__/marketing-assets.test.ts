@@ -13,6 +13,13 @@ import {
   PRINT_PIECES,
   PRINT_DEFAULT_STYLE,
   PLAN_NOTES,
+  PLAN_FOOTNOTE,
+  PLAN_FOOTNOTE_PRINT,
+  COMBO_LAYOUT,
+  FEATURE_ICONS,
+  featureLabel,
+  featuresForFormat,
+  needsPlanFootnote,
 } from "../marketing-assets";
 import { FALLBACK_PLAN_CONFIG } from "../../plan-shared";
 
@@ -127,9 +134,20 @@ test("la matriz completa está entera: ninguna combinación sin contenido", () =
     assert.ok(v.headline.trim().length > 0, `${v.id} sin titular`);
     assert.ok(v.label.trim().length > 0, `${v.id} sin nombre en el selector`);
     assert.ok(v.printIntro.trim().length > 20, `${v.id} sin entrada para el papel`);
-    // Dos apoyos: con tres, en 1080 px de ancho ya no respiran.
-    assert.ok(v.lines.length === 2, `${v.id} tiene ${v.lines.length} apoyos, no 2`);
-    for (const l of v.lines) assert.ok(l.trim().length > 0, `${v.id} con un apoyo vacío`);
+    // Un tema trae apoyos O funciones, nunca las dos ni ninguna: son dos
+    // formas distintas de pieza y cada superficie elige el bloque por ahí.
+    // Un tema con las dos cosas dejaría una mitad sin pintar en silencio.
+    const apoyos = Array.isArray(v.lines);
+    const funciones = Array.isArray(v.features);
+    assert.ok(apoyos !== funciones, `${v.id}: tiene que traer apoyos O funciones, no ${apoyos ? "las dos" : "ninguna"}`);
+    if (apoyos) {
+      // Dos apoyos: con tres, en 1080 px de ancho ya no respiran.
+      assert.ok(v.lines!.length === 2, `${v.id} tiene ${v.lines!.length} apoyos, no 2`);
+      for (const l of v.lines!) assert.ok(l.trim().length > 0, `${v.id} con un apoyo vacío`);
+    } else {
+      assert.ok(v.features!.length >= 8, `${v.id} lista solo ${v.features!.length} funciones`);
+      for (const f of v.features!) assert.ok(f.text.trim().length > 0, `${v.id} con una función vacía`);
+    }
     // El titular tiene que caber en la portada de Facebook (48 px sobre 1080
     // de caja segura): pasando de ~52 caracteres se parte en tres renglones y
     // se come el mensaje.
@@ -201,17 +219,153 @@ test("todo tema con tope de plan LLEVA su nota, y la nota nombra un plan", () =>
 test("nadie promete IA, sedes o usuarios sin decir en qué plan vienen", () => {
   // Barrido sobre TODO el texto del catálogo, no solo sobre los dos temas que
   // sabemos: si mañana un apoyo suelto dice "usuarios ilimitados", aquí truena.
+  //
+  // Dos salidas válidas: la pastilla de plan (tema de una sola función) o el
+  // asterisco de la función + la nota al pie (tema "todo en uno"). Lo que no
+  // vale es prometerlo a secas.
   const gatillos = [/\bIA\b/, /inteligencia artificial/i, /sucursal/i, /sede/i, /ilimitad/i, /usuarios/i];
   for (const v of SOCIAL_VARIANTS) {
-    const cuerpo = [v.eyebrow, v.headline, ...v.lines, v.printIntro].join(" · ");
-    const promete = gatillos.some((re) => re.test(cuerpo));
-    if (promete) {
+    const cuerpo = [v.eyebrow, v.headline, ...(v.lines ?? []), v.printIntro].join(" · ");
+    if (gatillos.some((re) => re.test(cuerpo))) {
       assert.ok(
         v.planNote,
         `el tema "${v.id}" habla de IA/sucursales/usuarios y no trae nota de plan: "${cuerpo}"`,
       );
     }
+    for (const f of v.features ?? []) {
+      if (gatillos.some((re) => re.test(f.text))) {
+        assert.ok(f.capped, `la función "${f.text}" de "${v.id}" promete de más y NO va marcada con tope`);
+        assert.match(featureLabel(f), /\*$/, `la función "${f.text}" no sale con asterisco`);
+      }
+    }
   }
+});
+
+/* ── El tema "todo en uno" ────────────────────────────────────────────────
+   El que sirve para promocionar en frío: una sola pieza con el sistema
+   entero. Lo que se prueba aquí es que salga primero, que ningún formato
+   liste más funciones de las que se leen, y que las dos funciones con tope
+   nunca aparezcan sin su asterisco y su nota. */
+
+test("el tema que enseña TODO va primero y es el único recomendado", () => {
+  // Es el que un afiliado abre por defecto para presentar DaleControl a quien
+  // no lo conoce: si quedara en el puesto siete, el panel arrancaría en un
+  // tema de una sola función y volveríamos al problema de origen.
+  const primero = SOCIAL_VARIANTS[0];
+  assert.ok(primero.features && primero.features.length >= 8, "el primer tema no lista las funciones");
+  assert.equal(primero.recommended, true, "el primer tema no está marcado como recomendado");
+
+  const recomendados = SOCIAL_VARIANTS.filter((v) => v.recommended);
+  assert.equal(recomendados.length, 1, "hay más de un tema recomendado: el selector marcaría dos");
+
+  // …y los diez temas de una función siguen ahí. Sirven para publicar variado
+  // sin repetir la misma pieza.
+  const sueltos = SOCIAL_VARIANTS.filter((v) => !v.features);
+  assert.equal(sueltos.length, 10, `quedan ${sueltos.length} temas sueltos, no 10`);
+  for (const id of ["agenda", "recordatorios", "bot", "web", "tomografias", "cfdi", "odontograma", "portal", "sucursales", "ia"]) {
+    assert.ok(findSocialVariant(id), `desapareció el tema suelto "${id}"`);
+  }
+});
+
+test("cada formato lista las funciones que CABEN, y la fila nunca queda coja", () => {
+  const combo = SOCIAL_VARIANTS[0];
+  const total = combo.features!.length;
+  assert.equal(total, 10, `el tema completo lista ${total} funciones`);
+
+  for (const f of SOCIAL_FORMATS) {
+    const { count, cols } = COMBO_LAYOUT[f.id];
+    assert.ok(count > 0 && count <= total, `${f.id} pide ${count} de ${total}`);
+    // Si `count` no es múltiplo de `cols`, la última fila sale coja y la
+    // rejilla se ve rota — es a mano, no con CSS grid: ni satori ni @react-pdf
+    // lo tienen.
+    assert.equal(count % cols, 0, `${f.id}: ${count} funciones en ${cols} columnas dejan una fila coja`);
+    assert.equal(featuresForFormat(combo, f.id).length, count);
+    // Lo que se recorta es siempre la COLA: el orden del catálogo es el orden
+    // de fuerza, así que la portada se queda con las cuatro primeras.
+    assert.deepEqual(featuresForFormat(combo, f.id), combo.features!.slice(0, count));
+  }
+
+  // La historia (1080 × 1920) es el único formato con aire para las diez; la
+  // portada de Facebook es una banda de 624 px y no aguanta ni la mitad.
+  assert.equal(COMBO_LAYOUT.historia.count, total, "la historia debería llevarlas todas");
+  assert.ok(
+    COMBO_LAYOUT.portada.count < COMBO_LAYOUT.post.count,
+    "la portada no puede listar tantas como el post cuadrado",
+  );
+  // Antes que achicar la tipografía se quitan funciones: en 1080 px de ancho,
+  // diez renglones obligan a bajar el cuerpo a ~18 px (6 px en un celular).
+  assert.ok(COMBO_LAYOUT.post.count <= 8, "el post cuadrado se pasa de renglones");
+
+  // Un tema de una sola función no lista nada: el bloque de rejilla no se usa.
+  const suelto = SOCIAL_VARIANTS.find((v) => !v.features)!;
+  for (const f of SOCIAL_FORMATS) assert.deepEqual(featuresForFormat(suelto, f.id), []);
+});
+
+test("cada función cabe en la celda más angosta y trae un ícono dibujable", () => {
+  for (const v of SOCIAL_VARIANTS) {
+    for (const f of v.features ?? []) {
+      // La portada reparte ~167 px por columna: pasando de ~32 caracteres, la
+      // celda crece un renglón y desalinea la fila entera.
+      assert.ok(f.text.length <= 32, `función larga (${f.text.length}): "${f.text}"`);
+      const trazos = FEATURE_ICONS[f.icon];
+      assert.ok(trazos && trazos.length > 0, `el ícono "${f.icon}" no existe`);
+      for (const d of trazos) {
+        assert.match(d, /^M/, `trazo sin punto de partida en "${f.icon}": ${d}`);
+        // Sin arcos: satori, @react-pdf y el navegador los normalizan cada uno
+        // a su manera y el mismo ícono saldría distinto en la imagen y en el
+        // volante.
+        assert.doesNotMatch(d, /[Aa]\s*[\d.]/, `el ícono "${f.icon}" usa un arco`);
+      }
+    }
+  }
+});
+
+test("IA y sucursales NUNCA salen sin asterisco, y donde salen va la nota", () => {
+  const combo = SOCIAL_VARIANTS[0];
+  const conTope = combo.features!.filter((f) => f.capped).map((f) => f.text);
+  assert.deepEqual(conTope, ["Asistente con IA", "Varias sucursales"]);
+
+  for (const f of combo.features!) {
+    assert.equal(featureLabel(f), f.capped ? `${f.text} *` : f.text);
+  }
+
+  // Formato por formato: si en la pieza salió una función con tope, la pieza
+  // pide nota al pie; si no salió ninguna, NO arrastra una nota que no le toca
+  // (una nota de plan sobre cuatro funciones sin tope confunde en vez de
+  // avisar).
+  for (const f of SOCIAL_FORMATS) {
+    const lista = featuresForFormat(combo, f.id);
+    const hayTope = lista.some((x) => x.capped);
+    assert.equal(needsPlanFootnote(lista), hayTope, `${f.id} no decide bien la nota al pie`);
+    for (const x of lista) {
+      if (x.capped) assert.match(featureLabel(x), /\*$/, `${f.id}: "${x.text}" sin asterisco`);
+    }
+  }
+
+  // El camino inverso, que es el que importa: una función con tope a la que se
+  // le olvide el `capped` deja de pedir nota. Si esta comprobación no fallara,
+  // el resto del test no probaría nada.
+  const sinMarca = combo.features!.map((f) => ({ ...f, capped: false }));
+  assert.equal(needsPlanFootnote(sinMarca), false);
+  assert.doesNotMatch(featureLabel(sinMarca[8]), /\*/);
+});
+
+test("las notas al pie dicen el plan real, y la de papel sale de maxClinics", () => {
+  // La corta, la de las imágenes: no promete un plan concreto (no cabe), pero
+  // avisa de que hay planes de por medio.
+  assert.match(PLAN_FOOTNOTE, /^\*/, "la nota corta no arranca con el asterisco que la ancla");
+  assert.match(PLAN_FOOTNOTE, /plan/i);
+  assert.doesNotMatch(PLAN_FOOTNOTE, /ilimitad/i);
+
+  // La larga, la del papel: un volante se lee de cerca y se guarda, así que
+  // dice el plan exacto de cada función con tope. Y el número de sedes sale de
+  // FALLBACK_PLAN_CONFIG, no de la mano.
+  assert.equal(FALLBACK_PLAN_CONFIG.CLINIC.maxClinics, 3);
+  assert.match(PLAN_FOOTNOTE_PRINT, /^\*/);
+  assert.match(PLAN_FOOTNOTE_PRINT, /Profesional/);
+  assert.match(PLAN_FOOTNOTE_PRINT, /Clínica/);
+  assert.match(PLAN_FOOTNOTE_PRINT, /hasta 3 sedes/);
+  assert.doesNotMatch(PLAN_FOOTNOTE_PRINT, /ilimitad/i);
 });
 
 /* ── Claims prohibidos ────────────────────────────────────────────────── */
@@ -238,7 +392,10 @@ test("ningún mensaje promete lo que el producto no hace", () => {
       v.label,
       v.eyebrow,
       v.headline,
-      ...v.lines,
+      ...(v.lines ?? []),
+      // Las funciones del tema "todo en uno" pasan por la MISMA reja: son
+      // texto que se publica igual que un apoyo.
+      ...(v.features ?? []).map((f) => f.text),
       v.printIntro,
       v.planNote ?? "",
     ]),
@@ -247,6 +404,8 @@ test("ningún mensaje promete lo que el producto no hace", () => {
     ...SOCIAL_FORMATS.flatMap((f) => [f.label, f.where, f.hint]),
     PLAN_NOTES.ia,
     PLAN_NOTES.sucursales,
+    PLAN_FOOTNOTE,
+    PLAN_FOOTNOTE_PRINT,
   ];
 
   for (const t of textos) {

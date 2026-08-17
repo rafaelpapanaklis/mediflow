@@ -9,8 +9,8 @@
 // referido: si el navegador pudiera elegirlo, cualquiera generaría material
 // con el de otro. Lo único que manda es QUÉ pieza quiere.
 //
-// EL CATÁLOGO NO SE PINTA ENTERO. 10 temas × 3 estilos × 4 formatos son 120
-// imágenes: una rejilla con todas sería una pared imposible de mirar (y 120
+// EL CATÁLOGO NO SE PINTA ENTERO. 11 temas × 3 estilos × 4 formatos son 132
+// imágenes: una rejilla con todas sería una pared imposible de mirar (y 132
 // renders de satori al cargar la página). Por eso la elección va en dos
 // pasos —primero el tema y el estilo, después aparecen los cuatro formatos de
 // ESA combinación—, todo con useState: cambiar de tema o de estilo no navega,
@@ -28,8 +28,14 @@ import {
   SOCIAL_STYLES,
   PRINT_PIECES,
   PRINT_DEFAULT_STYLE,
+  COMBO_LAYOUT,
+  FEATURE_ICONS,
+  PLAN_FOOTNOTE_PRINT,
+  featureLabel,
+  type FeatureIconId,
   type SocialStyleId,
   type SocialVariantId,
+  type VariantFeature,
 } from "@/lib/affiliates/marketing-assets";
 
 /** Un destino posible para el QR: el link base o una campaña del afiliado. */
@@ -136,6 +142,36 @@ function StyleChips({
   );
 }
 
+/**
+ * El mismo ícono que va impreso en la pieza, dibujado con los trazos del
+ * catálogo. Así lo que el afiliado ve en la lista de arriba es lo que le va a
+ * salir en la imagen, no una aproximación con otro juego de íconos.
+ */
+function FeatureGlyph({ id, size = 16 }: { id: FeatureIconId; size?: number }) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      aria-hidden
+      style={{ flexShrink: 0, color: "var(--dcafp-brand)" }}
+    >
+      {FEATURE_ICONS[id].map((d) => (
+        <path
+          key={d}
+          d={d}
+          fill="none"
+          stroke="currentColor"
+          strokeWidth={1.9}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      ))}
+    </svg>
+  );
+}
+
 function imageUrl(opts: {
   formato: string;
   variante: string;
@@ -170,6 +206,8 @@ export function MarketingVisuals({ qrLinks }: { qrLinks: QrLinkOption[] }) {
 
   const activeVariant = SOCIAL_VARIANTS.find((v) => v.id === variant) ?? SOCIAL_VARIANTS[0];
   const activeStyle = SOCIAL_STYLES.find((s) => s.id === style) ?? SOCIAL_STYLES[0];
+  /** 0 en los temas de una sola función: entonces no se habla de cuántas caben. */
+  const totalFeatures = activeVariant.features?.length ?? 0;
 
   return (
     <>
@@ -226,7 +264,7 @@ export function MarketingVisuals({ qrLinks }: { qrLinks: QrLinkOption[] }) {
           >
             {SOCIAL_VARIANTS.map((v) => (
               <option key={v.id} value={v.id}>
-                {v.label}
+                {v.recommended ? `${v.label} (recomendado)` : v.label}
               </option>
             ))}
           </select>
@@ -244,38 +282,96 @@ export function MarketingVisuals({ qrLinks }: { qrLinks: QrLinkOption[] }) {
               border: "1px solid var(--dcafp-line-nested)",
             }}
           >
-            <span
-              style={{
-                fontSize: 10.5,
-                fontWeight: 800,
-                letterSpacing: 1,
-                color: "var(--dcafp-brand)",
-              }}
-            >
-              {activeVariant.eyebrow}
-            </span>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", minWidth: 0 }}>
+              <span
+                style={{
+                  fontSize: 10.5,
+                  fontWeight: 800,
+                  letterSpacing: 1,
+                  color: "var(--dcafp-brand)",
+                }}
+              >
+                {activeVariant.eyebrow}
+              </span>
+              {activeVariant.recommended ? (
+                <span
+                  style={{
+                    fontSize: 10.5,
+                    fontWeight: 800,
+                    letterSpacing: 0.3,
+                    color: "var(--dcafp-ok-ink)",
+                    background: "var(--dcafp-ok-bg)",
+                    borderRadius: 999,
+                    padding: "2px 7px",
+                  }}
+                >
+                  Recomendado para empezar
+                </span>
+              ) : null}
+            </div>
             <span style={{ fontSize: 14.5, fontWeight: 750, color: "var(--dcafp-ink)", lineHeight: 1.35 }}>
               “{activeVariant.headline}”
             </span>
-            {/* `listStyle` explícito: el reset de panel.css apaga los
-                marcadores con :where(), y sin ellos los dos apoyos se leen
-                como un párrafo partido en vez de como la lista que son. */}
-            <ul
-              style={{
-                margin: 0,
-                paddingLeft: 18,
-                listStyle: "disc outside",
-                display: "flex",
-                flexDirection: "column",
-                gap: 3,
-              }}
-            >
-              {activeVariant.lines.map((l) => (
-                <li key={l} style={{ fontSize: 12.5, color: "var(--dcafp-ink-2)", lineHeight: 1.5 }}>
-                  {l}
-                </li>
-              ))}
-            </ul>
+            {/* Un tema que lista funciones enseña SU lista, con los mismos
+                íconos que va a llevar impresa; los demás, sus dos apoyos.
+                `listStyle` explícito en la lista de apoyos: el reset de
+                panel.css apaga los marcadores con :where(), y sin ellos los
+                dos apoyos se leen como un párrafo partido. */}
+            {activeVariant.features ? (
+              <>
+                <ul
+                  style={{
+                    margin: 0,
+                    padding: 0,
+                    listStyle: "none",
+                    display: "grid",
+                    gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 210px), 1fr))",
+                    gap: "5px 14px",
+                  }}
+                >
+                  {activeVariant.features.map((f: VariantFeature) => (
+                    <li
+                      key={f.text}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 8,
+                        minWidth: 0,
+                        fontSize: 12.5,
+                        color: "var(--dcafp-ink-2)",
+                        lineHeight: 1.5,
+                      }}
+                    >
+                      <FeatureGlyph id={f.icon} />
+                      {featureLabel(f)}
+                    </li>
+                  ))}
+                </ul>
+                {/* La nota LARGA, la del papel: el afiliado tiene derecho a
+                    saber el plan exacto de lo que va a publicar, aunque en la
+                    imagen quepa solo la corta. */}
+                <span style={{ fontSize: 11.5, color: "var(--dcafp-ink-3)", lineHeight: 1.45 }}>
+                  {PLAN_FOOTNOTE_PRINT}
+                </span>
+              </>
+            ) : (
+              <ul
+                style={{
+                  margin: 0,
+                  paddingLeft: 18,
+                  listStyle: "disc outside",
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 3,
+                }}
+              >
+                {(activeVariant.lines ?? []).map((l) => (
+                  <li key={l} style={{ fontSize: 12.5, color: "var(--dcafp-ink-2)", lineHeight: 1.5 }}>
+                    {l}
+                  </li>
+                ))}
+              </ul>
+            )}
             {/* La nota de plan también se ve AQUÍ, no solo impresa: el afiliado
                 tiene que saber qué está prometiendo antes de publicarlo. */}
             {activeVariant.planNote ? (
@@ -366,6 +462,15 @@ export function MarketingVisuals({ qrLinks }: { qrLinks: QrLinkOption[] }) {
                     <span style={{ fontSize: 12, color: "var(--dcafp-ink-3)", lineHeight: 1.45 }}>
                       {f.hint}
                     </span>
+                    {/* Cuántas funciones entra en ESTE formato. Dicho aquí, el
+                        afiliado no cree que el post cuadrado se le comió
+                        cuatro: en 1080 px no se leen diez renglones, y vale
+                        más un post de seis que se lee. */}
+                    {totalFeatures > 0 ? (
+                      <span style={{ fontSize: 12, color: "var(--dcafp-ink-3)", lineHeight: 1.45 }}>
+                        {`Muestra ${Math.min(COMBO_LAYOUT[f.id].count, totalFeatures)} de las ${totalFeatures} funciones.`}
+                      </span>
+                    ) : null}
                   </div>
 
                   <div style={{ marginTop: "auto", display: "flex", justifyContent: "flex-end" }}>

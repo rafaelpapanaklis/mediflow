@@ -1,5 +1,14 @@
 import { Document, Page, Text, View, Image, Svg, Path, StyleSheet } from "@react-pdf/renderer";
-import type { SocialStyleId, SocialVariant } from "@/lib/affiliates/marketing-assets";
+import {
+  FEATURE_ICONS,
+  PLAN_FOOTNOTE_PRINT,
+  featureLabel,
+  needsPlanFootnote,
+  type FeatureIconId,
+  type SocialStyleId,
+  type SocialVariant,
+  type VariantFeature,
+} from "@/lib/affiliates/marketing-assets";
 
 /**
  * Material IMPRIMIBLE del kit de marketing del afiliado: tarjetas de
@@ -30,6 +39,13 @@ import type { SocialStyleId, SocialVariant } from "@/lib/affiliates/marketing-as
  * su entrada y —si el tema tiene tope de plan— su nota. La TARJETA no: en
  * 90 × 50 mm no cabe un titular de campaña con su nota, y una tarjeta se
  * entrega para presentarse.
+ *
+ * CON EL TEMA "TODO EN UNO" las dos piezas cambian su lista de venta por la
+ * del tema (las diez funciones con su ícono): es justo donde más sentido tiene
+ * —un volante SÍ debe contar el producto entero— y evita que la pieza diga dos
+ * veces lo mismo con distintas palabras. Ahí la nota de plan no va en pastilla
+ * sino al pie, con PLAN_FOOTNOTE_PRINT, que en papel dice el plan exacto de
+ * cada función con tope porque un volante se lee de cerca y se guarda.
  *
  * El contenido describe lo que el sistema hace HOY. Sin precios (cambian y el
  * papel no), sin "prueba gratis" (el registro cobra desde el primer mes), sin
@@ -240,6 +256,36 @@ function QrChip({ src, size }: { src: string; size: number }) {
       <Image src={src} style={{ width: size, height: size }} />
     </View>
   );
+}
+
+/**
+ * Ícono de una función del tema "todo en uno". El trazo sale de FEATURE_ICONS
+ * —el catálogo—, igual que en las imágenes para redes: un volante y un post
+ * que enseñan la misma lista tienen que enseñar los mismos dibujos.
+ */
+function FeatureIcon({ id, size, color }: { id: FeatureIconId; size: number; color: string }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24">
+      {FEATURE_ICONS[id].map((d) => (
+        <Path
+          key={d}
+          d={d}
+          fill="none"
+          stroke={color}
+          strokeWidth={2}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      ))}
+    </Svg>
+  );
+}
+
+/** Reparte la lista en filas de `cols`. @react-pdf tampoco tiene CSS grid. */
+function chunk<T>(list: T[], cols: number): T[][] {
+  const out: T[][] = [];
+  for (let i = 0; i < list.length; i += cols) out.push(list.slice(i, i + cols));
+  return out;
 }
 
 /** Pastilla con el plan que incluye el tema. Solo si el tema tiene tope. */
@@ -522,6 +568,18 @@ const flyerStyles = (p: PrintPalette) =>
     bulletNum: { fontSize: 9, fontFamily: "Helvetica-Bold", color: p.bulletInk },
     featureTitle: { fontSize: 12, fontFamily: "Helvetica-Bold", color: p.ink },
     featureDesc: { fontSize: 9.8, color: p.ink2, lineHeight: 1.5, marginTop: 3 },
+    // Rejilla del tema "todo en uno": DOS columnas de cinco. En una sola
+    // columna, diez renglones de una línea dejan la plana a medio llenar y el
+    // volante parece un folio abandonado; en dos, la lista se lee de un golpe
+    // de vista y queda sitio para el bloque del QR.
+    // El interlineado es generoso a propósito: con el titular en una sola
+    // línea y la lista en dos columnas, la plana se acababa a tres cuartos de
+    // la hoja. El aire se reparte entre las cinco filas en vez de dejarlo
+    // todo junto al pie.
+    fnRow: { flexDirection: "row", marginBottom: 25 },
+    fnCell: { width: 258, flexDirection: "row", alignItems: "center", paddingRight: 12 },
+    fnText: { flex: 1, fontSize: 13, color: p.ink, lineHeight: 1.3, marginLeft: 10 },
+    fnFoot: { fontSize: 9.5, color: p.ink3, lineHeight: 1.45, marginTop: 4 },
     cta: {
       marginTop: 20,
       backgroundColor: p.tint,
@@ -569,7 +627,11 @@ export function AffiliateFlyerDocument({
 
         <View style={st.body}>
           <Text style={st.eyebrow}>{variant.eyebrow}</Text>
-          <Text style={st.headline}>{variant.headline}</Text>
+          {/* El titular del tema "todo en uno" es el más largo del catálogo y a
+              26 pt se partía A MEDIA PALABRA ("en un sis-tema"): @react-pdf
+              silabea cuando la última palabra no cabe, y en un volante impreso
+              eso se lee como una errata. A 22 pt entra de una tirada. */}
+          <Text style={[st.headline, variant.features ? { fontSize: 22 } : {}]}>{variant.headline}</Text>
           <Text style={st.intro}>{variant.printIntro}</Text>
           {/* La nota de plan va JUNTO al titular del tema, no en el pie: quien
               lee "administra tus sedes" tiene que leer en el mismo golpe de
@@ -580,18 +642,44 @@ export function AffiliateFlyerDocument({
             </View>
           ) : null}
 
-          <Text style={st.sectionTitle}>Lo que vas a tener</Text>
-          {FEATURES.map((f, i) => (
-            <View key={f.title} style={st.feature} wrap={false}>
-              <View style={st.bullet}>
-                <Text style={st.bulletNum}>{i + 1}</Text>
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={st.featureTitle}>{f.title}</Text>
-                <Text style={st.featureDesc}>{f.desc}</Text>
-              </View>
-            </View>
-          ))}
+          {/* El tema "todo en uno" YA es la lista del producto entero: si
+              debajo fuera la lista genérica de cinco, el volante diría dos
+              veces lo mismo con distintas palabras. Se cambia por la suya,
+              con sus diez funciones y su nota al pie — que en papel dice el
+              plan exacto, porque aquí sí hay sitio para el detalle. */}
+          {variant.features && variant.features.length > 0 ? (
+            <>
+              <Text style={st.sectionTitle}>Todo lo que vas a tener</Text>
+              {chunk(variant.features, 2).map((row) => (
+                <View key={row[0].text} style={st.fnRow} wrap={false}>
+                  {row.map((f: VariantFeature) => (
+                    <View key={f.text} style={st.fnCell}>
+                      <FeatureIcon id={f.icon} size={18} color={p.accent} />
+                      <Text style={st.fnText}>{featureLabel(f)}</Text>
+                    </View>
+                  ))}
+                </View>
+              ))}
+              {needsPlanFootnote(variant.features) ? (
+                <Text style={st.fnFoot}>{PLAN_FOOTNOTE_PRINT}</Text>
+              ) : null}
+            </>
+          ) : (
+            <>
+              <Text style={st.sectionTitle}>Lo que vas a tener</Text>
+              {FEATURES.map((f, i) => (
+                <View key={f.title} style={st.feature} wrap={false}>
+                  <View style={st.bullet}>
+                    <Text style={st.bulletNum}>{i + 1}</Text>
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={st.featureTitle}>{f.title}</Text>
+                    <Text style={st.featureDesc}>{f.desc}</Text>
+                  </View>
+                </View>
+              ))}
+            </>
+          )}
 
           <View style={st.cta} wrap={false}>
             <View style={st.ctaText}>
@@ -662,6 +750,12 @@ const dipStyles = (p: PrintPalette) =>
     item: { flexDirection: "row", marginTop: 12, alignItems: "flex-start" },
     dot: { width: 6, height: 6, borderRadius: 3, backgroundColor: p.accent, marginTop: 5, marginRight: 9 },
     itemText: { flex: 1, fontSize: 10.5, color: p.ink, lineHeight: 1.45 },
+    // Misma lista que la viñeta, pero con el ícono de cada función y tres
+    // renglones más: el interior del díptico es la cara que se lee de pie, y
+    // el panel derecho da justo para las diez con su nota al pie.
+    fnItem: { flexDirection: "row", marginTop: 10, alignItems: "center" },
+    fnItemText: { flex: 1, fontSize: 10.5, color: p.ink, lineHeight: 1.35, marginLeft: 8 },
+    fnFoot: { fontSize: 8.5, color: p.ink3, lineHeight: 1.4, marginTop: 11 },
     step: { flexDirection: "row", marginTop: 15, alignItems: "flex-start" },
     stepNum: {
       width: 17,
@@ -797,14 +891,37 @@ export function AffiliateExpoBrochureDocument({
         <View style={st.panel}>
           <Text style={st.eyebrow}>Lo que incluye</Text>
           <Text style={st.h2}>Todo en la misma pantalla</Text>
-          {INCLUDES.map((i) => (
-            <View key={i} style={st.item}>
-              <View style={st.dot} />
-              <Text style={st.itemText}>{i}</Text>
-            </View>
-          ))}
+          {/* Con el tema "todo en uno", este panel lista SUS diez funciones
+              —con ícono y con la nota al pie— en vez de la lista genérica de
+              siete: es la cara del stand y es donde el afiliado enseña el
+              producto completo. */}
+          {variant.features && variant.features.length > 0 ? (
+            <>
+              {variant.features.map((f) => (
+                <View key={f.text} style={st.fnItem}>
+                  <FeatureIcon id={f.icon} size={13} color={p.accent} />
+                  <Text style={st.fnItemText}>{featureLabel(f)}</Text>
+                </View>
+              ))}
+              {needsPlanFootnote(variant.features) ? (
+                <Text style={st.fnFoot}>{PLAN_FOOTNOTE_PRINT}</Text>
+              ) : null}
+            </>
+          ) : (
+            INCLUDES.map((i) => (
+              <View key={i} style={st.item}>
+                <View style={st.dot} />
+                <Text style={st.itemText}>{i}</Text>
+              </View>
+            ))
+          )}
           <View style={st.qrBox}>
-            <QrChip src={qrDataUrl} size={110} />
+            {/* Diez funciones + nota al pie ocupan tres renglones más que la
+                lista de siete: el QR de ESTE panel cede 14 pt para que el
+                interior siga cabiendo en su cara y no se desborde a una
+                tercera página. Sigue midiendo 96 pt (3.4 cm), de sobra para
+                escanearse a un palmo. */}
+            <QrChip src={qrDataUrl} size={variant.features ? 96 : 110} />
             <Text style={st.qrUrl}>{shortUrl}</Text>
           </View>
         </View>
