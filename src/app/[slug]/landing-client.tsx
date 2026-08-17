@@ -4,6 +4,7 @@ import { Phone, MapPin, Clock, Instagram, Facebook, Star, ChevronDown, ChevronUp
 import { useBookingReopen, type PendingBooking } from "./_shared/booking-session";
 import { BookingModal } from "./_shared/booking-modal";
 import type { LandingClinic } from "./_shared/types";
+import { useLiveClinic } from "./_shared/live-preview";
 
 const DAYS_SHORT = ["Lun","Mar","Mié","Jue","Vie","Sáb","Dom"];
 
@@ -19,7 +20,10 @@ function hexAdjust(hex: string, amount: number) {
    clínica para las ocho mini-webs (antes classic tenía su copia local). */
 type Clinic = LandingClinic;
 
-export function ClinicLandingClient({ clinic, highlights }:{ clinic:Clinic; highlights?:string[] }) {
+export function ClinicLandingClient({ clinic: publicada, highlights }:{ clinic:Clinic; highlights?:string[] }) {
+  // En /dashboard/landing esto trae lo que la clínica lleva escrito sin
+  // guardar; en la página pública devuelve `publicada` tal cual.
+  const clinic = useLiveClinic(publicada);
   const theme     = clinic.landingThemeColor ?? "#0f766e";
   const themeDark = hexAdjust(theme, -35);
   const [showBook, setShowBook] = useState(false);

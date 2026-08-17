@@ -11,6 +11,7 @@
 import { useState, useEffect } from "react";
 import { ChevronRight, Instagram, MessageCircle } from "lucide-react";
 import type { TemplateProps } from "../_shared/types";
+import { useLiveClinic } from "../_shared/live-preview";
 import { shade, alpha, mix } from "../_shared/landing-utils";
 import {
   faqList, msiPlazos, photoOf, sectionMap, sectionSubtitle, sectionTitle,
@@ -20,7 +21,10 @@ import { BeforeAfter, MsiSimulator, StarRow, priceToNumber } from "../_shared/la
 import { BookingModal } from "../_shared/booking-modal";
 import { useBookingReopen, type PendingBooking } from "../_shared/booking-session";
 
-export function TemplateEspecialistas({ clinic }: TemplateProps) {
+export function TemplateEspecialistas({ clinic: publicada }: TemplateProps) {
+  // En /dashboard/landing esto trae lo que la clínica lleva escrito sin
+  // guardar; en la página pública devuelve `publicada` tal cual.
+  const clinic = useLiveClinic(publicada);
   const acento = clinic.landingThemeColor ?? "#c9a961";
   /* La base oscura sale del acento mezclado con azul noche: conserva su
      temperatura (un acento dorado da un fondo cálido, uno azul uno frío)

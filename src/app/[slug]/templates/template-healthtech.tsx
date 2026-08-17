@@ -12,6 +12,7 @@ import {
   Phone, Clock, Instagram, Facebook, ChevronDown, Plus, Calendar, Star, Check,
 } from "lucide-react";
 import type { TemplateProps } from "../_shared/types";
+import { useLiveClinic } from "../_shared/live-preview";
 import {
   SmartImg, Stars, GoogleG, useScrolled, useActiveSection, Reveal,
   scrollToId, useLightbox, Lightbox, tint, shade, alpha, mix, hexAdjust,
@@ -83,7 +84,10 @@ function TrustBadge({ tk, icon, big, small }: { tk: Tokens; icon: ReactNode; big
   );
 }
 
-export function TemplateHealthtech({ clinic, highlights }: TemplateProps) {
+export function TemplateHealthtech({ clinic: publicada, highlights }: TemplateProps) {
+  // En /dashboard/landing esto trae lo que la clínica lleva escrito sin
+  // guardar; en la página pública devuelve `publicada` tal cual.
+  const clinic = useLiveClinic(publicada);
   /* ---- tokens de marca (todo deriva del acento) ---- */
   const theme = clinic.landingThemeColor ?? "#0f766e";
   const ink = "#0f172a";

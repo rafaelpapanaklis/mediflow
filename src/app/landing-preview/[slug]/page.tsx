@@ -18,6 +18,8 @@ interface Props {
 
 export default function LandingPreviewPage({ params, searchParams }: Props) {
   return (
-    <ClinicLandingServer slug={params.slug} previewTpl={searchParams?.preview} />
+    // live: aquí (y solo aquí) se escucha al editor por postMessage para
+    // repintar sin recargar mientras la clínica escribe.
+    <ClinicLandingServer slug={params.slug} previewTpl={searchParams?.preview} live />
   );
 }

@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
+import { LivePreviewBridge } from "./_shared/live-preview";
 import { ClinicLandingClient } from "./landing-client";
 import { TemplateFuturista } from "./templates/template-futurista";
 import { TemplateHealthtech } from "./templates/template-healthtech";
@@ -35,13 +36,19 @@ const CATEGORY_HIGHLIGHTS: Record<string, string[]> = {
  * (estática/ISR — por eso aquí NO se leen searchParams ni cookies) y la
  * ruta /landing-preview/[slug] (dinámica, pasa previewTpl). Leer
  * searchParams en la ruta ISR lanzaba DYNAMIC_SERVER_USAGE al regenerar.
+ *
+ * `live` solo lo enciende /landing-preview: monta el puente que recibe por
+ * postMessage lo que la clínica lleva escrito en el editor. La página
+ * pública NUNCA escucha mensajes de nadie.
  */
 export async function ClinicLandingServer({
   slug,
   previewTpl,
+  live = false,
 }: {
   slug: string;
   previewTpl?: string;
+  live?: boolean;
 }) {
   /**
    * SEGURIDAD — `select` EXPLÍCITO, jamás `include` a secas.
@@ -102,12 +109,17 @@ export async function ClinicLandingServer({
   const highlights = CATEGORY_HIGHLIGHTS[category] ?? CATEGORY_HIGHLIGHTS.OTHER;
 
   const tpl = (previewTpl ?? c.landingTemplate ?? "classic");
-  if (tpl === "futurista")     return <TemplateFuturista clinic={c} highlights={highlights} />;
-  if (tpl === "healthtech")    return <TemplateHealthtech clinic={c} highlights={highlights} />;
-  if (tpl === "calido")        return <TemplateCalido clinic={c} highlights={highlights} />;
-  if (tpl === "equipo")        return <TemplateEquipo clinic={c} highlights={highlights} />;
-  if (tpl === "sonrisa")       return <TemplateSonrisa clinic={c} highlights={highlights} />;
-  if (tpl === "consultorio")   return <TemplateConsultorio clinic={c} highlights={highlights} />;
-  if (tpl === "especialistas") return <TemplateEspecialistas clinic={c} highlights={highlights} />;
-  return <ClinicLandingClient clinic={c} highlights={highlights} />;
+  const pagina =
+    tpl === "futurista"     ? <TemplateFuturista clinic={c} highlights={highlights} /> :
+    tpl === "healthtech"    ? <TemplateHealthtech clinic={c} highlights={highlights} /> :
+    tpl === "calido"        ? <TemplateCalido clinic={c} highlights={highlights} /> :
+    tpl === "equipo"        ? <TemplateEquipo clinic={c} highlights={highlights} /> :
+    tpl === "sonrisa"       ? <TemplateSonrisa clinic={c} highlights={highlights} /> :
+    tpl === "consultorio"   ? <TemplateConsultorio clinic={c} highlights={highlights} /> :
+    tpl === "especialistas" ? <TemplateEspecialistas clinic={c} highlights={highlights} /> :
+    <ClinicLandingClient clinic={c} highlights={highlights} />;
+
+  // El puente NO cambia nada de lo que se pinta: sin mensajes, la plantilla
+  // recibe exactamente la misma clínica que sin él.
+  return live ? <LivePreviewBridge slug={c.slug}>{pagina}</LivePreviewBridge> : pagina;
 }

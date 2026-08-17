@@ -15,6 +15,7 @@
 import { useState, useEffect } from "react";
 import { ChevronRight, Facebook, Instagram, MapPin, MessageCircle, Shield, Sparkles, Users, Zap } from "lucide-react";
 import type { TemplateProps } from "../_shared/types";
+import { useLiveClinic } from "../_shared/live-preview";
 import { tint, shade, alpha } from "../_shared/landing-utils";
 import {
   faqList, msiPlazos, photoOf, sectionMap, sectionSubtitle, sectionTitle,
@@ -24,7 +25,10 @@ import { BeforeAfter, StarRow } from "../_shared/landing-pieces";
 import { BookingModal } from "../_shared/booking-modal";
 import { useBookingReopen, type PendingBooking } from "../_shared/booking-session";
 
-export function TemplateEquipo({ clinic }: TemplateProps) {
+export function TemplateEquipo({ clinic: publicada }: TemplateProps) {
+  // En /dashboard/landing esto trae lo que la clínica lleva escrito sin
+  // guardar; en la página pública devuelve `publicada` tal cual.
+  const clinic = useLiveClinic(publicada);
   const acento = clinic.landingThemeColor ?? "#0e7c66";
   const acentoOsc = shade(acento, 0.28);
   const acentoCl = tint(acento, 0.9);

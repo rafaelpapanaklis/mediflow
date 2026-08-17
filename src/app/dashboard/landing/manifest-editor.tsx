@@ -34,6 +34,13 @@ export interface ManifestEditorProps {
   saving: boolean;
   onSaveSections: (secciones: SectionState[]) => Promise<void> | void;
   onSavePhotos: (fotos: Record<string, string>) => Promise<void> | void;
+  /**
+   * Cambio SIN guardar, para la vista previa en vivo. Se dispara solo
+   * cuando la clínica toca algo — nunca al montar: el estado inicial se
+   * completa contra el manifiesto y no coincide con lo guardado, así que
+   * avisarlo de entrada encendería el aviso de "sin guardar" sin motivo.
+   */
+  onDraftSections?: (secciones: SectionState[]) => void;
   /** Sube el archivo y devuelve la URL pública. */
   onUpload: (file: File, slotId: string) => Promise<string>;
 }
@@ -100,7 +107,7 @@ function TemplateDiagram({
    ============================================================ */
 export function ManifestEditor({
   templateId, sections, photos, saving,
-  onSaveSections, onSavePhotos, onUpload,
+  onSaveSections, onSavePhotos, onDraftSections, onUpload,
 }: ManifestEditorProps) {
   const manifest = useMemo(() => manifestOf(templateId), [templateId]);
 
@@ -119,7 +126,13 @@ export function ManifestEditor({
         };
       })
       .sort((a, b) => a.orden - b.orden);
-    return ordenadas.map((s, i) => ({ ...s, orden: i }));
+    const base = ordenadas.map((s, i) => ({ ...s, orden: i }));
+    /* Secciones guardadas que este manifiesto no declara: las que solo
+       existen para colgar un texto y las de una plantilla anterior. No se
+       pintan, pero se conservan — si se cayeran aquí, el siguiente
+       "Guardar secciones" borraría esos textos sin avisar. */
+    const ajenas = sections.filter(s => !manifest.secciones.some(m => m.id === s.id));
+    return [...base, ...ajenas.map((s, i) => ({ ...s, orden: base.length + i }))];
   });
 
   const [fotos, setFotos] = useState<Record<string, string>>(photos);
@@ -129,6 +142,13 @@ export function ManifestEditor({
   const metaSeccion = (id: string) => manifest.secciones.find(s => s.id === id);
   const ordenIds = secs.filter(s => s.visible).map(s => s.id);
 
+  /* Un solo punto de escritura: así la vista previa en vivo se entera de
+     TODO cambio y de ninguno que no sea del usuario. */
+  function aplicar(next: SectionState[]) {
+    setSecs(next);
+    onDraftSections?.(next);
+  }
+
   /* ---- mover: las obligatorias no se mueven ni se dejan pisar ---- */
   function mover(i: number, dir: -1 | 1) {
     const j = i + dir;
@@ -136,22 +156,21 @@ export function ManifestEditor({
     if (metaSeccion(secs[i].id)?.obligatoria || metaSeccion(secs[j].id)?.obligatoria) return;
     const copia = [...secs];
     [copia[i], copia[j]] = [copia[j], copia[i]];
-    setSecs(copia.map((s, k) => ({ ...s, orden: k })));
+    aplicar(copia.map((s, k) => ({ ...s, orden: k })));
   }
 
   function alternar(id: string) {
     if (metaSeccion(id)?.obligatoria) return;
-    setSecs(prev => prev.map(s => (s.id === id ? { ...s, visible: !s.visible } : s)));
+    aplicar(secs.map(s => (s.id === id ? { ...s, visible: !s.visible } : s)));
   }
 
   function setTexto(seccion: string, campo: "titulo" | "subtitulo", valor: string) {
-    setSecs(prev => {
-      const existe = prev.some(s => s.id === seccion);
-      const limpio = valor.trim() ? valor : null;
-      if (existe) return prev.map(s => (s.id === seccion ? { ...s, [campo]: limpio } : s));
+    const limpio = valor.trim() ? valor : null;
+    const existe = secs.some(s => s.id === seccion);
+    aplicar(existe
+      ? secs.map(s => (s.id === seccion ? { ...s, [campo]: limpio } : s))
       // Sección que solo existe para colgar textos (p.ej. "tecnologia").
-      return [...prev, { id: seccion, visible: true, orden: prev.length, titulo: null, subtitulo: null, [campo]: limpio } as SectionState];
-    });
+      : [...secs, { id: seccion, visible: true, orden: secs.length, titulo: null, subtitulo: null, [campo]: limpio } as SectionState]);
   }
 
   const valorTexto = (seccion: string, campo: "titulo" | "subtitulo") =>

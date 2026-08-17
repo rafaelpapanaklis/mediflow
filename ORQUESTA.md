@@ -7971,3 +7971,133 @@ al admin dándole otra vez a "Aprobar" sobre algo ya aprobado.
   que alguien revise. Solo funciona mientras siga en `pending`.
 - No se tocó el hero, ni la atribución (los CTA siguen apuntando a
   `/signup?ref=<referralCode>` con su campaña), ni el tracking de clics, ni `globals.css`.
+
+═══════════════════════════════════════════════════════════════════════════
+## [Preview-Vivo-Miniweb] — la vista previa se mueve MIENTRAS se escribe ✅ (2026-08-16)
+═══════════════════════════════════════════════════════════════════════════
+
+En `/dashboard/landing` la clínica escribía a ciegas: cambiaba un texto, un color o apagaba una
+sección y el panel derecho seguía enseñando lo publicado hasta pulsar Guardar. Ahora el iframe
+refleja lo que hay escrito, **sin recargarse**, ~350 ms después de la última tecla.
+
+### El camino: postMessage + contexto, NO recargar el iframe
+
+Recargar la página entera por tecla era inaceptable (parpadeo, scroll perdido, una petición por
+pulsación), así que el editor **manda** los cambios y el iframe se repinta solo.
+
+La pieza nueva es `src/app/[slug]/_shared/live-preview.tsx`:
+
+- `LivePreviewBridge` — vive DENTRO del iframe. Escucha `message`, guarda el parche en estado y
+  lo publica por contexto de React. Al montar avisa `{kind:"ready"}` al padre: el editor no
+  tiene forma de saber cuándo terminó de cargar el iframe, así que el saludo lo pone al día
+  con lo que ya haya escrito (esto es lo que hace que cambiar de plantilla no pierda el borrador).
+- `useLiveClinic(clinic)` — una línea al principio de cada una de las **8 plantillas**. Sin
+  proveedor —o sea, en la página pública— devuelve **la misma referencia** que llegó del
+  servidor: cero coste y cero cambio de comportamiento.
+
+Se descartó la alternativa obvia —un componente cliente que reciba el id de plantilla y elija
+él mismo cuál pintar— porque metería las ocho plantillas en el mismo grafo de cliente y la
+página PÚBLICA se descargaría el JS de las ocho. Con el contexto, `clinic-landing-server` sigue
+eligiendo en el servidor y cada plantilla conserva su chunk. `/[slug]` quedó en **261 kB**
+First Load JS, igual que antes.
+
+El puente **solo se monta en `/landing-preview/[slug]`** (`ClinicLandingServer` recibe `live`).
+La página pública no escucha mensajes de nadie: comprobado en el navegador mandándole un parche
+a una réplica de `/[slug]` — no se inmuta.
+
+### Lo que viaja: una allowlist cerrada, no el objeto `clinic`
+
+Después del commit `0424d5ab` esto no admitía atajos. Viajan **exactamente los 19 campos que el
+formulario edita**, y la lista es la misma en las dos puntas porque sale del mismo módulo
+(`LIVE_PREVIEW_FIELDS`). No es solo una lista de nombres: cada campo lleva su **validador de
+forma** (`esTexto`, `esNumero`, `esLista`, `esUrls`, `esMapa`), y un valor con la forma
+equivocada se descarta **campo a campo**, sin tirar el mensaje entero. El iframe además exige
+que el `slug` del mensaje sea el suyo (multi-tenant) y que el origen coincida.
+
+Verificado a mano contra el iframe: un parche con `waAccessToken` no deja rastro en el DOM, uno
+con `landingGallery: "no-soy-un-array"` se ignora sin romper nada, y uno firmado con el slug de
+otra clínica no se aplica.
+
+### Que nunca se quede en blanco
+
+Tres redes, de fuera hacia dentro:
+
+1. El validador de arriba: la mayoría de la basura no llega a React.
+2. Un **error boundary** dentro del puente. Si la plantilla revienta con un parche, se vuelve a
+   **lo publicado** —que es justo lo que pinta la página pública y por tanto no puede fallar, así
+   que el bucle termina siempre— y el siguiente parche se intenta igual: borrar el carácter que
+   rompió la cosa recupera la vista previa sola. Probado con un componente que revienta a
+   propósito: parche bueno → se ve; parche que revienta → vuelve a lo publicado (**no** a blanco);
+   parche bueno otra vez → se recupera.
+3. Recargar el iframe sigue existiendo al guardar y al cambiar de plantilla. Lo que se ve tras
+   guardar sale del servidor, no de un parche.
+
+### El aviso de borrador, campo por campo
+
+Mientras haya algo sin guardar sale un chip ámbar **"Sin guardar"** junto a "Vista previa", el
+marco del iframe se pone ámbar y el pie cambia a *"Esto es un borrador: se ve aquí, pero tu sitio
+público sigue como estaba."*
+
+Se comparaba con una foto entera del formulario y **estaba mal**: esta pantalla tiene un botón
+"Guardar" por bloque, así que guardar el eslogan apagaba el aviso aunque las secciones siguieran
+tocadas — la clínica se iba creyendo publicado algo que seguía en el navegador. Ahora se guarda
+la firma de **cada campo** y `save()` solo marca como publicados los que iban en ESE guardado.
+Comprobado en el navegador: tocar secciones → aviso; guardar solo el eslogan → **el aviso sigue**;
+guardar secciones → se apaga.
+
+Esto es solo visual: no toca la base, no hay autoguardado y recargar sin guardar descarta todo
+(comprobado). No se puso `beforeunload`: el requisito era justamente que recargar descarte, y un
+diálogo nativo del navegador no estaba pedido.
+
+### De paso, dos arreglos en el editor por manifiesto
+
+- **El borrador de secciones sobrevive al cambio de pestaña.** `sections` ahora entra como
+  `draftSections ?? savedSections`. Antes, ir a "General" y volver a "Diseño" perdía lo tocado en
+  silencio; ahora además el formulario y la vista previa no pueden descuadrarse.
+- **`ManifestEditor` ya no borra las secciones que su manifiesto no declara** (las que solo
+  existen para colgar un texto, o las de una plantilla anterior). Se caían al montar y el
+  siguiente "Guardar secciones" las borraba de la base sin avisar.
+
+### Verificación
+
+`npx next build` **EXIT 0** completo, leído entero (los tres warnings de Tailwind y el de
+`file-type` son preexistentes). `npx tsc --noEmit` limpio.
+
+En Chrome, sobre `next dev` y dos pages temporales sin BD (el editor REAL con una clínica mock +
+una réplica de `/landing-preview/<slug>`), **borradas antes de commitear**:
+
+- Escribir en un campo → **612 ms** del clic al repintado, con la pestaña en primer plano. El
+  reparto: **3 ms** es el repintado de la plantilla; lo demás es el retardo de 350 ms.
+- **Sin recargar y sin perder el scroll**: se marcó `contentWindow` y la marca sobrevive; el
+  `scrollY` sigue donde estaba.
+- **El retardo agrupa**: 7 teclas a 90 ms → **1** mensaje; 3 teclas a 500 ms → **3**. Escribir un
+  párrafo no dispara cincuenta mensajes.
+- Apagar/encender una sección, el color (toda la plantilla cambia), y los servicios (que viven en
+  estado propio del editor, no en `clinic`) — todo en vivo.
+- Cambiar de plantilla **sí recarga** el iframe (`?preview=sonrisa`) y el borrador se vuelve a
+  aplicar solo, por el saludo `ready`.
+- Guardar: el chip desaparece, el iframe se recarga, el pie vuelve a *"Lo que ves aquí es tu sitio
+  público, tal cual"*.
+- Recargar sin guardar: todo descartado, la vista previa vuelve a lo publicado.
+- **Consola limpia**: ni un error de CSP ni de postMessage ni de hidratación. Se confirmó que
+  `next dev` sí sirve la CSP real (`frame-src 'self'`, `frame-ancestors 'self'`) — el iframe es
+  del mismo origen y no le afecta.
+
+Medir esto con la pestaña **oculta** engaña: Chrome estrangula `setTimeout` a 1 s (se midió
+`setTimeout(50)` tardando 590 ms), y el retardo de 350 ms parecía 2 s. Los números de arriba son
+con la pestaña en primer plano.
+
+### Lo que NO se hizo
+
+- **Reordenar secciones sigue sin verse, ni aquí ni en el sitio publicado.** El nuevo orden llega
+  al iframe (se comprobó: el parche viaja con `equipo#0 servicios#1 …`), pero **ninguna de las 8
+  plantillas lee `orden`** — `grep -rn "orden" src/app/[slug]/` fuera de `landing-data.ts` no
+  devuelve nada. El orden de las secciones está fijo en el JSX de cada plantilla. La vista previa
+  es fiel: enseña exactamente lo que enseñaría guardar. Hacer que el orden mande de verdad es
+  reestructurar el JSX de las 4 plantillas que usan `sectionMap`, y es otra tarea.
+- Solo 4 de las 8 plantillas (consultorio, equipo, especialistas, sonrisa) leen `sectionMap`; en
+  las otras 4 encender o apagar una sección no cambia nada. Preexistente.
+- No se verificó de punta a punta con base de datos: en local no hay `DATABASE_URL`. Falta ver en
+  prod que tras guardar la vista previa y el sitio público coincidan (el `revalidatePath` de
+  `/landing-preview/[slug]` ya estaba).
+- Sin dependencias nuevas, sin SQL, sin tocar `globals.css` ni la CSP.

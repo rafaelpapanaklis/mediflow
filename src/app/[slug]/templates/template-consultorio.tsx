@@ -15,6 +15,7 @@
 import { useState, useEffect } from "react";
 import { Facebook, Instagram, MapPin, MessageCircle, Phone, Zap } from "lucide-react";
 import type { TemplateProps } from "../_shared/types";
+import { useLiveClinic } from "../_shared/live-preview";
 import { tint, shade, alpha } from "../_shared/landing-utils";
 import {
   faqList, msiPlazos, sectionMap, sectionSubtitle, sectionTitle,
@@ -35,7 +36,10 @@ function patronHero(): string {
   return `url("data:image/svg+xml;utf8,${encodeURIComponent(svg)}")`;
 }
 
-export function TemplateConsultorio({ clinic }: TemplateProps) {
+export function TemplateConsultorio({ clinic: publicada }: TemplateProps) {
+  // En /dashboard/landing esto trae lo que la clínica lleva escrito sin
+  // guardar; en la página pública devuelve `publicada` tal cual.
+  const clinic = useLiveClinic(publicada);
   const acento = clinic.landingThemeColor ?? "#1d4ed8";
   const acentoOsc = shade(acento, 0.3);
   const acentoCl = tint(acento, 0.9);

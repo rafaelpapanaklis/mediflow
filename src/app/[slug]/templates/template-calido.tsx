@@ -8,6 +8,7 @@
 import { useState, useEffect } from "react";
 import { Menu, X, ArrowRight, Plus, Calendar, MapPin, Phone, MessageCircle, Clock, Instagram, Facebook } from "lucide-react";
 import type { TemplateProps, LandingDoctor } from "../_shared/types";
+import { useLiveClinic } from "../_shared/live-preview";
 import {
   tint, shade, alpha,
   SmartImg, Stars, GoogleG, Reveal, Lightbox,
@@ -18,7 +19,10 @@ import { useBookingReopen, type PendingBooking } from "../_shared/booking-sessio
 
 const DAYS_SHORT = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
 
-export function TemplateCalido({ clinic }: TemplateProps) {
+export function TemplateCalido({ clinic: publicada }: TemplateProps) {
+  // En /dashboard/landing esto trae lo que la clínica lleva escrito sin
+  // guardar; en la página pública devuelve `publicada` tal cual.
+  const clinic = useLiveClinic(publicada);
   const accent = clinic.landingThemeColor ?? "#0f766e";
 
   // ---- datos reales (mismos campos que la landing classic) ----

@@ -11,6 +11,7 @@
 import { useState, useEffect } from "react";
 import { Facebook, Instagram, MessageCircle } from "lucide-react";
 import type { TemplateProps } from "../_shared/types";
+import { useLiveClinic } from "../_shared/live-preview";
 import { tint, shade } from "../_shared/landing-utils";
 import {
   faqList, msiPlazos, photoOf, sectionMap, sectionSubtitle, sectionTitle,
@@ -20,7 +21,10 @@ import { BeforeAfter, MsiSimulator, StarRow, priceToNumber } from "../_shared/la
 import { BookingModal } from "../_shared/booking-modal";
 import { useBookingReopen, type PendingBooking } from "../_shared/booking-session";
 
-export function TemplateSonrisa({ clinic }: TemplateProps) {
+export function TemplateSonrisa({ clinic: publicada }: TemplateProps) {
+  // En /dashboard/landing esto trae lo que la clínica lleva escrito sin
+  // guardar; en la página pública devuelve `publicada` tal cual.
+  const clinic = useLiveClinic(publicada);
   const acento = clinic.landingThemeColor ?? "#b4574d";
   const acentoOsc = shade(acento, 0.25);
   const acentoCl = tint(acento, 0.92);

@@ -1,10 +1,18 @@
 "use client";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import toast from "react-hot-toast";
 import { ExternalLink, Copy, Eye, Plus, Trash2, Check, Sparkles, RefreshCw, Users, ImagePlus, ChevronLeft, ChevronRight, Star, HelpCircle, Stethoscope, Share2, Monitor, Smartphone, Zap } from "lucide-react";
 import { useT } from "@/i18n/i18n-provider";
 import { ManifestEditor } from "./manifest-editor";
 import type { SectionState } from "@/app/[slug]/_shared/landing-data";
+import { LIVE_PREVIEW_FIELDS, parseLiveMessage, postLivePreview, type LivePreviewPatch } from "@/app/[slug]/_shared/live-preview";
+
+/** Cuánto se espera antes de mandar al iframe. Escribir un párrafo manda un
+    puñado de mensajes, no uno por tecla. */
+const RETARDO_VISTA_PREVIA = 350;
+
+/** Firma comparable de un valor. `undefined` y `null` cuentan como lo mismo. */
+const firma = (v: unknown) => JSON.stringify(v === undefined ? null : v);
 
 interface Clinic {
   id: string; name: string; slug: string; phone: string|null; email: string|null;
@@ -105,10 +113,21 @@ export function LandingConfigClient({ clinic: initial, appUrl }: Props) {
   const [tab, setTab]       = useState("plantilla");
   const [saving, setSaving] = useState(false);
   const [templateSel, setTemplateSel] = useState(initial.landingTemplate ?? "classic");
-  /* Vista previa en vivo: el nonce cambia en cada guardado y fuerza la
-     recarga del iframe (su key depende de él). */
+  /* El nonce cambia en cada guardado y RECARGA el iframe (su key depende de
+     él). Es la red de seguridad: lo que se ve tras guardar sale del servidor,
+     no de un parche. Los cambios sin guardar viajan por postMessage. */
   const [previewNonce, setPreviewNonce] = useState(0);
   const [previewAncho, setPreviewAncho] = useState<"escritorio" | "movil">("escritorio");
+  /**
+   * Lo PUBLICADO, campo por campo (nombre → JSON del valor).
+   *
+   * Campo por campo y no una foto entera del formulario: esta pantalla tiene
+   * un botón "Guardar" por bloque, así que guardar el eslogan no publica las
+   * secciones que quedaron tocadas. Con una sola foto, ese guardado apagaba
+   * el aviso de "sin guardar" y la clínica se iba creyendo que su sitio ya
+   * tenía cambios que seguían en el navegador.
+   */
+  const [publicado, setPublicado] = useState<Record<string, string> | null>(null);
 
   const landingUrl = `${appUrl}/${clinic.slug}`;
 
@@ -130,6 +149,14 @@ export function LandingConfigClient({ clinic: initial, appUrl }: Props) {
       // El sitio público ya se revalidó en el servidor; aquí se refresca la
       // vista previa para que la clínica vea el cambio sin recargar nada.
       setPreviewNonce(n => n + 1);
+      // Solo los campos que IBAN en este guardado pasan a "publicado": los
+      // demás siguen contando como sin guardar. Se firma lo que se mandó (no
+      // lo que devuelve el servidor) porque es lo mismo que arma el parche.
+      setPublicado(prev => {
+        const next = { ...(prev ?? {}) };
+        for (const campo of LIVE_PREVIEW_FIELDS) if (campo in data) next[campo] = firma(data[campo]);
+        return next;
+      });
       toast.success(successMsg);
     } catch(e: any) { toast.error(e.message); }
     finally { setSaving(false); }
@@ -201,6 +228,90 @@ export function LandingConfigClient({ clinic: initial, appUrl }: Props) {
   function addFaq() { setFaqs(f => [...f, { question:"", answer:"" }]); }
   function removeFaq(i: number) { setFaqs(f => f.filter((_,j) => j !== i)); }
   function updateFaq(i: number, k: string, v: string) { setFaqs(f => f.map((x,j) => j===i ? {...x,[k]:v} : x)); }
+
+  /* ══════════════════════════════════════════════════════════════════
+     VISTA PREVIA EN VIVO
+
+     El iframe ya no espera al guardado: se le manda por postMessage lo
+     que hay escrito y él se repinta sin recargarse (nada de parpadeo ni
+     de perder el scroll). Recargar sigue existiendo como red de
+     seguridad — al guardar y al cambiar de plantilla.
+
+     ⚠️ Viajan SOLO los campos que este formulario edita. Nunca el objeto
+     `clinic`: la fila trae credenciales (tokens de WhatsApp, llave de
+     Facturapi) y ya nos costó una fuga (commit 0424d5ab). Del otro lado
+     hay además una allowlist que tira cualquier clave que no sea de esta
+     lista, así que las dos puntas tienen que estar de acuerdo.
+     ══════════════════════════════════════════════════════════════════ */
+  const iframeRef = useRef<HTMLIFrameElement | null>(null);
+  /** Secciones y textos que el editor por manifiesto lleva SIN guardar. */
+  const [draftSections, setDraftSections] = useState<SectionState[] | null>(null);
+
+  const livePatch = useMemo<LivePreviewPatch>(() => ({
+    description:            clinic.description,
+    landingThemeColor:      clinic.landingThemeColor,
+    landingTagline:         clinic.landingTagline,
+    landingYearsExperience: clinic.landingYearsExperience,
+    landingPatients:        clinic.landingPatients,
+    landingUrgentText:      clinic.landingUrgentText ?? null,
+    landingMsiPlazos:       Array.isArray(clinic.landingMsiPlazos) ? clinic.landingMsiPlazos : [],
+    landingCoverUrl:        clinic.landingCoverUrl,
+    landingGallery:         clinic.landingGallery ?? [],
+    landingMapEmbed:        clinic.landingMapEmbed,
+    // durationMin como NÚMERO, igual que al guardar: el input lo entrega
+    // en texto y la plantilla hace cuentas con él.
+    landingServices:        services.map(s => ({
+      ...s,
+      durationMin: s.durationMin === "" || s.durationMin == null ? null : Number(s.durationMin),
+    })),
+    landingTestimonials:    testimonials,
+    landingFaqs:            faqs,
+    landingWhatsapp:        clinic.landingWhatsapp,
+    landingInstagram:       clinic.landingInstagram,
+    landingFacebook:        clinic.landingFacebook,
+    landingTiktok:          clinic.landingTiktok,
+    landingSections:        draftSections ?? savedSections,
+    landingPhotos:          savedPhotos,
+  }), [clinic, services, testimonials, faqs, draftSections, savedSections, savedPhotos]);
+
+  /* ── ¿Hay algo sin guardar? Campo contra campo, contra lo publicado. ── */
+  useEffect(() => {
+    // Al montar, lo que hay en el formulario ES lo publicado. Después solo
+    // lo toca save(), y solo en los campos que viajaron.
+    if (publicado !== null) return;
+    const inicial: Record<string, string> = {};
+    for (const campo of LIVE_PREVIEW_FIELDS) inicial[campo] = firma((livePatch as any)[campo]);
+    setPublicado(inicial);
+  }, [publicado, livePatch]);
+
+  const sinGuardar = useMemo(() => {
+    if (!publicado) return false;
+    return LIVE_PREVIEW_FIELDS.some(campo => firma((livePatch as any)[campo]) !== publicado[campo]);
+  }, [livePatch, publicado]);
+
+  /* ── Enviar con retardo. Si el iframe todavía no cargó, postMessage no
+        hace nada y el saludo de abajo lo pone al día. ───────────────── */
+  const patchRef = useRef(livePatch);
+  useEffect(() => { patchRef.current = livePatch; }, [livePatch]);
+  useEffect(() => {
+    const id = setTimeout(
+      () => postLivePreview(iframeRef.current?.contentWindow, clinic.slug, livePatch),
+      RETARDO_VISTA_PREVIA,
+    );
+    return () => clearTimeout(id);
+  }, [livePatch, clinic.slug]);
+
+  /* ── Saludo del iframe: avisa cuando ya puede recibir (al cargar y en
+        cada recarga) y se le manda de una lo que haya escrito. ─────── */
+  useEffect(() => {
+    function onMessage(ev: MessageEvent) {
+      const msg = parseLiveMessage(ev, clinic.slug);
+      if (!msg || msg.kind !== "ready") return;
+      postLivePreview(iframeRef.current?.contentWindow, clinic.slug, patchRef.current);
+    }
+    window.addEventListener("message", onMessage);
+    return () => window.removeEventListener("message", onMessage);
+  }, [clinic.slug]);
 
   // ── Galería: reordenar (intercambia i con su vecino) y elegir portada
   async function moveGalleryPhoto(i: number, dir: -1 | 1) {
@@ -336,11 +447,15 @@ export function LandingConfigClient({ clinic: initial, appUrl }: Props) {
       {tab === "diseno" && (
         <ManifestEditor
           templateId={clinic.landingTemplate ?? "classic"}
-          sections={savedSections}
+          /* El borrador manda: así cambiar de pestaña y volver no pierde lo
+             que la clínica llevaba escrito (ni descuadra la vista previa). */
+          sections={draftSections ?? savedSections}
           photos={savedPhotos}
           saving={saving}
+          onDraftSections={setDraftSections}
           onSaveSections={async (secs) => {
             updateLocal("landingSections", secs);
+            setDraftSections(secs);
             await save({ landingSections: secs });
           }}
           onSavePhotos={async (fotos) => {
@@ -856,7 +971,10 @@ export function LandingConfigClient({ clinic: initial, appUrl }: Props) {
       </div>
 
       {/* ── VISTA PREVIA EN VIVO ──────────────────────────────────────
-          El iframe se recarga al guardar (previewNonce en la key). Apunta a
+          Los cambios sin guardar llegan por postMessage y la plantilla se
+          repinta SOLA (ver _shared/live-preview.tsx). El iframe se recarga
+          únicamente al guardar y al cambiar de plantilla (previewNonce y
+          templateSel están en la key), que es la red de seguridad. Apunta a
           /landing-preview, que es la ruta DINÁMICA: /[slug] es ISR y no puede
           leer ?preview=. Se oculta por debajo de xl: en pantalla chica el
           editor ya ocupa todo. */}
@@ -864,6 +982,12 @@ export function LandingConfigClient({ clinic: initial, appUrl }: Props) {
         <div className="sticky top-4 space-y-2">
           <div className="flex items-center gap-2">
             <span className="text-[13px] font-semibold text-[color:var(--text-1)]">Vista previa</span>
+            {sinGuardar && (
+              <span className="inline-flex items-center gap-1 text-[10.5px] font-bold uppercase tracking-wide rounded-full px-2 py-0.5 bg-[color:var(--warning-soft)] text-[color:var(--warning-strong)] border border-[color:var(--warning-border-strong)]">
+                <span className="w-1.5 h-1.5 rounded-full bg-[color:var(--warning)]" />
+                Sin guardar
+              </span>
+            )}
             <div className="ml-auto flex items-center gap-1">
               <button type="button" onClick={() => setPreviewAncho("escritorio")}
                 aria-pressed={previewAncho === "escritorio"} aria-label="Ver en escritorio"
@@ -883,8 +1007,10 @@ export function LandingConfigClient({ clinic: initial, appUrl }: Props) {
             </div>
           </div>
 
-          <div className={`${CARD_CLS} overflow-hidden`} style={{ height: "calc(100vh - 120px)" }}>
+          <div className={`${CARD_CLS} overflow-hidden transition-shadow ${sinGuardar ? "!border-[color:var(--warning)] ring-2 ring-[color:var(--warning-soft-strong)]" : ""}`}
+            style={{ height: "calc(100vh - 120px)" }}>
             <iframe
+              ref={iframeRef}
               key={`${templateSel}-${previewNonce}`}
               src={`/landing-preview/${clinic.slug}?preview=${templateSel}`}
               title="Vista previa de tu sitio"
@@ -896,8 +1022,9 @@ export function LandingConfigClient({ clinic: initial, appUrl }: Props) {
           </div>
 
           <p className="text-[11px] text-[color:var(--text-3)] leading-snug">
-            Se actualiza cada vez que guardas. Tu sitio público también:
-            ya no hay que esperar cinco minutos.
+            {sinGuardar
+              ? "Esto es un borrador: se ve aquí, pero tu sitio público sigue como estaba. Guarda para publicarlo."
+              : "Lo que ves aquí es tu sitio público, tal cual. Al escribir se actualiza al momento."}
           </p>
         </div>
       </aside>

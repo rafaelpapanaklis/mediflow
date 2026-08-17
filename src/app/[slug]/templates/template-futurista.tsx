@@ -11,6 +11,7 @@ import {
   MessageCircle, Instagram, Facebook, ShieldCheck, Quote, Plus, ChevronDown,
 } from "lucide-react";
 import type { TemplateProps } from "../_shared/types";
+import { useLiveClinic } from "../_shared/live-preview";
 import {
   tint, shade, alpha,
   SmartImg, Stars, GoogleG,
@@ -42,7 +43,10 @@ function SectionHead({ kicker, title, sub, glow, muted }: { kicker: string; titl
   );
 }
 
-export function TemplateFuturista({ clinic, highlights }: TemplateProps) {
+export function TemplateFuturista({ clinic: publicada, highlights }: TemplateProps) {
+  // En /dashboard/landing esto trae lo que la clínica lleva escrito sin
+  // guardar; en la página pública devuelve `publicada` tal cual.
+  const clinic = useLiveClinic(publicada);
   /* ---------- color de marca (todo deriva de aquí) ---------- */
   const theme = clinic.landingThemeColor ?? "#0f766e";
   const glow = tint(theme, 0.42);
