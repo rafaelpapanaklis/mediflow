@@ -8101,3 +8101,140 @@ con la pestaña en primer plano.
   prod que tras guardar la vista previa y el sitio público coincidan (el `revalidatePath` de
   `/landing-preview/[slug]` ya estaba).
 - Sin dependencias nuevas, sin SQL, sin tocar `globals.css` ni la CSP.
+
+---
+
+## [Miniweb-Ola1] — el sitio público deja de estar abierto ✅ (2026-08-17)
+
+Rama `fix/miniweb-ola1`, commit `29608790`. Cierra lo que la ola de la vista previa dejó apuntado
+como "otra tarea": las 4 plantillas que no leen el manifiesto y el `orden` que nadie respeta.
+
+### Lo que se cerró
+
+**1. El PATCH de `/api/clinic-landing` no preguntaba NADA de permisos.** Entre el `if (!ctx) → 401`
+y el `prisma.clinic.update` no había ni una línea: cualquier usuario con sesión —incluido uno de
+SOLO LECTURA— podía reescribir la página pública y **despublicarla** (`landingActive` estaba en la
+lista de campos guardables). `landing.edit` existía en `lib/auth/permissions.ts` y no lo leía nadie:
+un permiso muerto. Ahora lo exigen el PATCH y `POST /api/landing-upload`; el GET pide `landing.view`.
+
+**2. `/dashboard/landing` se pinta en solo lectura** para quien no tiene `landing.edit`: aviso
+arriba explicando qué falta y quién lo da, y todo lo editable dentro de un `<fieldset disabled>`
+—inputs, botones, interruptores y los `input[type=file]` escondidos, 24 controles, comprobado con
+`:disabled` en el navegador—. Fuera quedan las pestañas y "Ver página / Copiar link": mirar no es
+editar. El 403 del servidor sigue siendo la barrera de verdad; esto es para que no lo descubra
+después de redactar media página.
+
+**3. La pestaña "Diseño" ya no miente.** El manifiesto declara `leeManifiesto` y el editor lo lee de
+ahí (`plantillaLeeManifiesto` / `plantillasQueLeenManifiesto`): no hay ninguna lista de nombres
+escrita en la pantalla. En `classic` —la de por defecto— , `futurista`, `healthtech` y `calido` se
+explica por qué no hay interruptores y se ofrecen por su nombre las cuatro que sí. En `equipo` los
+interruptores siguen ahí y funcionan.
+
+**4. Reordenar secciones: fuera.** Las flechas guardaban `orden` y ninguna plantilla lo lee. Se
+quitan hasta que el orden mande al pintar. `orden` se sigue guardando (ya está en la base).
+
+**5. Subir la foto de un doctor.** `team-client` manda `field="avatar"` y el endpoint dejó de
+reconocerlo en `2a98c3d1`, cuando el manifiesto trajo su lista de destinos: **400 desde entonces**.
+El desajuste era del SERVIDOR (el cliente manda lo mismo de siempre, ver `git show 2a98c3d1`), así
+que se arregló ahí; mandar el cliente a la ranura `doctor` del manifiesto habría metido los avatares
+del equipo en una ranura que significa otra cosa.
+
+**6. Las fotos de celular.** Nace `lib/image-client.ts`: 2000 px de lado máximo, webp q0.82, antes de
+que salga la request, en los dos sitios que suben imagen de la mini-web. El tope del servidor baja
+de 50 MB (imposible: el runtime corta en ~4.5 MB) a 4 MB, con mensaje que se entiende.
+
+**7. Fugas y validación.** El PATCH ya no devuelve la fila de la clínica (la lista NEGRA de 7 campos
+dejaba pasar `rfcEmisor`, `stripeCustomerId`, `twilioAccountSid`): contesta `{ok, updatedAt,
+fields}` y el `update` pide `select: {slug, updatedAt}`. Nace `lib/landing-fields.ts`: lista LITERAL
+con validador por campo y tope de 64 KB en los JSON. `beforeunload` en el editor (no había ni uno en
+todo el repo). Los datos de contacto viajan a la vista previa en vivo.
+
+### Lo que salió distinto de como venía descrito
+
+- **La pestaña "General" NO tenía teléfono, correo, dirección ni nombre.** El encargo daba por hecho
+  que existían y que solo faltaba meterlos en `CAMPOS_VIVOS`. No existían en ningún lado del editor:
+  se editaban únicamente en Configuración (`/api/settings`), lejos de la vista previa. Se **crearon**
+  los cuatro campos en General, se metieron en la lista del PATCH con su validador y en
+  `CAMPOS_VIVOS`. Así la allowlist sigue siendo cerrada y honesta: ahora el formulario sí los edita.
+  Se guardan por `/api/clinic-landing` (gateado por `landing.edit`), NO por `/api/settings`.
+- **El fallo de la subida era del servidor, no del cliente** (el encargo apostaba por el cliente).
+  Lo confirma `git show 2a98c3d1`: antes de ese commit el endpoint aceptaba cualquier `field`.
+- **`orden` no se lee en NINGUNA de las 8 plantillas**, ni siquiera en las 4 que sí leen el
+  manifiesto. Por eso se quitó la reordenación entera en vez de solo esconderla en 4.
+- **Las 4 plantillas viejas ignoran el manifiesto ENTERO**, no solo las secciones: tampoco leen
+  `landingPhotos` (usan `landingCoverUrl`), ni `landingUrgentText`, ni `landingMsiPlazos`. O sea que
+  subir una "Portada" desde Diseño en `classic` tampoco hacía nada. Se cierra con la misma bandera, y
+  en General se avisa en línea para urgencias y meses sin intereses.
+- **`landingHours` era columna muerta**: estaba en la lista de campos guardables del PATCH y no la
+  escribe ni la lee nadie en todo el repo (los horarios salen de la relación `schedules`). Se sacó
+  de la lista. La columna sigue en el schema.
+- **El GET de `/api/clinic-landing` no lo llama nadie** del repo y devolvía la clínica casi entera a
+  cualquiera con sesión. Se dejó (para no romper a un cliente que no veamos) pero con `landing.view`
+  y `select` explícito.
+
+### El gate de permisos, ¿deja fuera a alguien?
+
+Defaults de `landing.edit` (`ROLE_DEFAULT_PERMISSIONS`): SUPER_ADMIN ✅ · ADMIN ✅ · DOCTOR ❌ ·
+RECEPTIONIST ❌ · READONLY ❌.
+
+- **Nadie que hoy use la pantalla pierde nada que deba conservar.** DOCTOR y RECEPTIONIST **tampoco
+  tienen `landing.view`**, así que hoy ni siquiera pueden abrir `/dashboard/landing`
+  (`requirePermissionOrRedirect` los echa). Lo que perdían por la puerta de atrás era llamar al API
+  a mano — que es justo el agujero.
+- **READONLY sí cambia**: conserva `landing.view` (todas las keys `*.view` entran en su default), así
+  que sigue viendo su sitio, pero ya no puede tocarlo. Ese era el caso más grave del encargo.
+- **⚠️ El único caso no obvio:** `permissionsOverride` **REEMPLAZA** los defaults, no se mezcla con
+  ellos. Un ADMIN con permisos personalizados armados antes de que `landing.edit` sirviera para algo
+  —nadie lo marcaba, porque no hacía nada— se queda **sin poder editar la web**. Rafael ya revisó
+  quién tiene overrides; si aparece alguien así, se arregla marcándole la casilla en Equipo →
+  Permisos (Configuración → "Editar landing"). No se tocó `ROLE_DEFAULT_PERMISSIONS`: subir
+  `landing.edit` a RECEPTIONIST o DOCTOR sería ampliar quién publica el sitio, y eso es decisión de
+  producto, no de esta ola.
+- **La subida se gatea por destino**, no en bloque: `avatar` pide admin (igual que el `PATCH
+  /api/team/[id]` que persiste la foto) y el resto pide `landing.edit`. Si se hubiera gateado todo
+  con `landing.edit`, un admin sin ese permiso habría dejado de poder subir avatares aunque el
+  endpoint que los guarda sí se lo permitiera.
+
+### Verificación
+
+- **`npx next build` completo, EXIT 0**, 364 páginas. Sin errores de tipos.
+- **43 comprobaciones** de `validarCamposLanding` y del manifiesto con `tsx`, todas verdes. **Una
+  encontró un fallo real antes de salir**: `v.every(esUrlWeb)` le pasa el ÍNDICE como segundo
+  argumento, que en `esUrlWeb(v, max)` es el tope de longitud → la primera URL se comparaba contra 0
+  y **ninguna galería se habría podido guardar**. Corregido a `v.every(x => item(x))`.
+- **En el navegador** (`next dev` + página temporal fuera del middleware, ya borrada — en local no
+  hay `DATABASE_URL`):
+  - `classic` → explicación en Diseño, sin interruptores. `equipo` → interruptores presentes, sin
+    flechas.
+  - Solo lectura: aviso visible, `fieldset.disabled=true`, **0 de 24** controles activos, escribir en
+    un input no cambia su valor, los `input[type=file]` bloqueados. Pestañas y "Copiar link" siguen
+    vivos.
+  - Escribir un teléfono en General → el parche que sale al iframe lleva `phone` con el valor nuevo
+    (+ `name`, `email`, `address`), **23 claves y ni un secreto**, y se enciende el chip "Sin
+    guardar".
+  - `beforeunload` armado: el evento sale cancelado con cambios pendientes.
+  - Foto de 4032×3024 → sube como **webp de 250 KB** (−85 %), por debajo del corte del runtime. Un
+    png de 800×600 y 17 KB → **se manda byte por byte igual**, sin recomprimir.
+
+### Lo que NO se pudo verificar en local (falta prod o una BD)
+
+- Que el dueño publique de verdad y que el sitio público se regenere (necesita `DATABASE_URL`).
+- Que un usuario sin `landing.edit` reciba el 403 real del endpoint (necesita sesión).
+- Que la foto del doctor se vea en el equipo y en las plantillas que muestran doctores.
+- Que el código fuente del sitio público no traiga datos sensibles: **revisado por código**, no
+  ejecutado. `clinic-landing-server.tsx` usa `select` explícito (sin `include`) y el parche de la
+  vista previa se comprobó en el navegador: 23 claves, ninguna sensible.
+
+### Lo que queda abierto (no era de esta ola)
+
+- **`/api/settings` sigue sin gate de permisos** y su lista incluye credenciales de Twilio y datos
+  fiscales. Intacto a propósito: es otra ola, y es más grave que lo que se cerró aquí.
+- **`/dashboard/landing/page.tsx` sigue pasando la fila casi completa de la clínica** al componente
+  cliente (`stripClinicSecrets` es la misma lista NEGRA de 7 campos), así que `rfcEmisor`,
+  `stripeCustomerId` y `twilioAccountSid` siguen viajando en el payload RSC de esa pantalla. Se
+  cerró la puerta del PATCH, no esta. Arreglarlo pide enumerar todos los campos que lee el cliente
+  (unas 1000 líneas) y merece su propio cambio.
+- Que el `orden` de las secciones mande de verdad: hay que reestructurar el JSX de las 4 plantillas
+  que leen `sectionMap`.
+- Que `classic`, `futurista`, `healthtech` y `calido` aprendan a leer el manifiesto. El día que lo
+  hagan, basta con poner `leeManifiesto: true` y el editor aparece solo.
