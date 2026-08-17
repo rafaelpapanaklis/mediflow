@@ -1,11 +1,13 @@
 "use client";
 import { useEffect, useMemo, useRef, useState } from "react";
 import toast from "react-hot-toast";
-import { ExternalLink, Copy, Eye, Plus, Trash2, Check, Sparkles, RefreshCw, Users, ImagePlus, ChevronLeft, ChevronRight, Star, HelpCircle, Stethoscope, Share2, Monitor, Smartphone, Zap } from "lucide-react";
+import { ExternalLink, Copy, Eye, Plus, Trash2, Check, Sparkles, RefreshCw, Users, ImagePlus, ChevronLeft, ChevronRight, Star, HelpCircle, Stethoscope, Share2, Monitor, Smartphone, Zap, Lock, Layers } from "lucide-react";
 import { useT } from "@/i18n/i18n-provider";
 import { ManifestEditor } from "./manifest-editor";
 import type { SectionState } from "@/app/[slug]/_shared/landing-data";
 import { LIVE_PREVIEW_FIELDS, parseLiveMessage, postLivePreview, type LivePreviewPatch } from "@/app/[slug]/_shared/live-preview";
+import { manifestOf, plantillaLeeManifiesto, plantillasQueLeenManifiesto } from "@/app/[slug]/_shared/template-manifest";
+import { prepararImagen } from "@/lib/image-client";
 
 /** Cuánto se espera antes de mandar al iframe. Escribir un párrafo manda un
     puñado de mensajes, no uno por tecla. */
@@ -29,7 +31,12 @@ interface Clinic {
   landingUrgentText?: string|null; landingMsiPlazos?: number[];
 }
 
-interface Props { clinic: Clinic; appUrl: string }
+/**
+ * `puedeEditar` es el permiso "landing.edit" resuelto en el servidor. Sin él la
+ * pantalla se ve completa pero en solo lectura: el endpoint responde 403 y de
+ * nada sirve dejar los botones puestos para que fallen al pulsarlos.
+ */
+interface Props { clinic: Clinic; appUrl: string; puedeEditar: boolean }
 
 const TABS = [
   { id:"plantilla",    labelKey:"pages.landing.tabTemplate"   },
@@ -107,7 +114,7 @@ function TemplateThumb({ variant }: { variant: string }) {
   );
 }
 
-export function LandingConfigClient({ clinic: initial, appUrl }: Props) {
+export function LandingConfigClient({ clinic: initial, appUrl, puedeEditar }: Props) {
   const t = useT();
   const [clinic, setClinic] = useState(initial);
   const [tab, setTab]       = useState("plantilla");
@@ -135,6 +142,17 @@ export function LandingConfigClient({ clinic: initial, appUrl }: Props) {
     setClinic(c => ({ ...c, [key]: value }));
   }
 
+  /** El error legible de una respuesta que puede no ser ni JSON (413 del CDN). */
+  async function motivoDelFallo(res: Response): Promise<string> {
+    if (res.status === 403) return "No tienes permiso para editar la página web. Pídeselo al dueño de la clínica.";
+    if (res.status === 413) return "El archivo pesa demasiado para enviarlo.";
+    try {
+      const j = await res.json();
+      if (j?.error) return String(j.error);
+    } catch { /* respuesta HTML del runtime: no hay JSON que leer */ }
+    return "No pudimos guardar. Vuelve a intentarlo.";
+  }
+
   async function save(data: Record<string, any>, successMsg = t("pages.landing.saved")) {
     setSaving(true);
     try {
@@ -143,9 +161,12 @@ export function LandingConfigClient({ clinic: initial, appUrl }: Props) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(data),
       });
-      if (!res.ok) throw new Error((await res.json()).error);
-      const updated = await res.json();
-      setClinic(c => ({ ...c, ...updated }));
+      if (!res.ok) throw new Error(await motivoDelFallo(res));
+      await res.json();
+      // El servidor ya no devuelve la fila de la clínica (traía RFC, ids de
+      // Stripe y el SID de Twilio): lo que se acaba de guardar es exactamente
+      // lo que se mandó, y de ahí sale el estado local.
+      setClinic(c => ({ ...c, ...data }));
       // El sitio público ya se revalidó en el servidor; aquí se refresca la
       // vista previa para que la clínica vea el cambio sin recargar nada.
       setPreviewNonce(n => n + 1);
@@ -162,12 +183,20 @@ export function LandingConfigClient({ clinic: initial, appUrl }: Props) {
     finally { setSaving(false); }
   }
 
+  /**
+   * Sube una imagen de la mini-web.
+   *
+   * Se comprime ANTES de salir del navegador (@/lib/image-client): el runtime
+   * corta el cuerpo de la petición en ~4.5 MB y una foto de celular pesa el
+   * triple. Los errores de prepararImagen ya vienen escritos para la clínica.
+   */
   async function uploadImage(file: File, field: string) {
+    const listo = await prepararImagen(file);
     const formData = new FormData();
-    formData.append("file", file);
+    formData.append("file", listo);
     formData.append("field", field);
     const res = await fetch("/api/landing-upload", { method:"POST", body:formData });
-    if (!res.ok) throw new Error(t("pages.landing.uploadImageError"));
+    if (!res.ok) throw new Error(await motivoDelFallo(res));
     const { url } = await res.json();
     return url;
   }
@@ -248,6 +277,12 @@ export function LandingConfigClient({ clinic: initial, appUrl }: Props) {
   const [draftSections, setDraftSections] = useState<SectionState[] | null>(null);
 
   const livePatch = useMemo<LivePreviewPatch>(() => ({
+    // Identidad y contacto: las ocho plantillas los pintan (encabezado, pie y
+    // bloque de contacto), así que se ven cambiar mientras se escriben.
+    name:                   clinic.name,
+    phone:                  clinic.phone,
+    email:                  clinic.email,
+    address:                clinic.address,
     description:            clinic.description,
     landingThemeColor:      clinic.landingThemeColor,
     landingTagline:         clinic.landingTagline,
@@ -288,6 +323,21 @@ export function LandingConfigClient({ clinic: initial, appUrl }: Props) {
     if (!publicado) return false;
     return LIVE_PREVIEW_FIELDS.some(campo => firma((livePatch as any)[campo]) !== publicado[campo]);
   }, [livePatch, publicado]);
+
+  /* ── Cerrar con cambios sin guardar avisa ──────────────────────────
+     Esta pantalla tiene un botón "Guardar" por bloque: es fácil escribir el
+     eslogan, cambiar de pestaña y cerrar creyendo que ya estaba publicado.
+     El navegador enseña SU diálogo (el texto no se puede personalizar desde
+     2011); lo que importa es que no se pierda el trabajo. */
+  useEffect(() => {
+    if (!sinGuardar) return;
+    function alSalir(e: BeforeUnloadEvent) {
+      e.preventDefault();
+      e.returnValue = "";
+    }
+    window.addEventListener("beforeunload", alSalir);
+    return () => window.removeEventListener("beforeunload", alSalir);
+  }, [sinGuardar]);
 
   /* ── Enviar con retardo. Si el iframe todavía no cargó, postMessage no
         hace nada y el saludo de abajo lo pone al día. ───────────────── */
@@ -343,13 +393,13 @@ export function LandingConfigClient({ clinic: initial, appUrl }: Props) {
             <span className={`text-[11px] font-bold uppercase tracking-wide rounded-full px-2 py-0.5 ${clinic.landingActive ? "bg-[color:var(--success-soft)] text-[color:var(--success-strong)]" : "bg-[color:var(--bg-elev-2)] text-[color:var(--text-2)]"}`}>
               {clinic.landingActive ? t("pages.landing.statusPublished") : t("pages.landing.statusHidden")}
             </span>
-            <button role="switch" aria-checked={clinic.landingActive}
+            <button role="switch" aria-checked={clinic.landingActive} disabled={!puedeEditar || saving}
               aria-label={clinic.landingActive ? t("pages.landing.statusPublished") : t("pages.landing.statusHidden")}
               onClick={async () => {
               const newVal = !clinic.landingActive;
               updateLocal("landingActive", newVal);
               await save({ landingActive: newVal });
-            }} className={`w-10 h-5 rounded-full relative transition-colors duration-150 ${clinic.landingActive ? "bg-brand-600" : "bg-[color:var(--border-strong)]"}`}>
+            }} className={`w-10 h-5 rounded-full relative transition-colors duration-150 disabled:opacity-50 disabled:cursor-not-allowed ${clinic.landingActive ? "bg-brand-600" : "bg-[color:var(--border-strong)]"}`}>
               <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow-[var(--shadow-1)] transition-all duration-150 ${clinic.landingActive ? "left-[22px]" : "left-0.5"}`} />
             </button>
           </div>
@@ -377,7 +427,9 @@ export function LandingConfigClient({ clinic: initial, appUrl }: Props) {
         </button>
       </div>
 
-      {/* Tabs → control segmentado del sistema */}
+      {/* Tabs → control segmentado del sistema. Fuera del <fieldset>: mirar las
+          pestañas no es editar, y un usuario de solo lectura tiene que poder
+          recorrer su sitio aunque no pueda tocarlo. */}
       <div className="overflow-x-auto -mx-1 px-1 pb-0.5">
         <div className="segment-new min-w-max" role="tablist" aria-label={t("pages.landing.title")}>
           {TABS.map(tb => (
@@ -388,6 +440,26 @@ export function LandingConfigClient({ clinic: initial, appUrl }: Props) {
           ))}
         </div>
       </div>
+
+      {/* Solo lectura: se dice ANTES de que intente escribir, no con un 403
+          después de haber redactado media página. */}
+      {!puedeEditar && (
+        <div className="flex items-start gap-2.5 bg-[color:var(--warning-soft)] border border-[color:var(--warning-border-strong)] rounded-[var(--radius)] px-4 py-3">
+          <Lock size={16} strokeWidth={1.75} className="text-[color:var(--warning-strong)] shrink-0 mt-0.5" />
+          <div className="text-sm text-[color:var(--text-2)]">
+            <span className="font-semibold text-[color:var(--text-1)]">Estás viendo tu sitio en solo lectura.</span>{" "}
+            Puedes recorrerlo y copiar el enlace, pero para cambiarlo o publicarlo hace falta el
+            permiso <span className="font-mono text-[12.5px]">landing.edit</span>, que da el dueño de la clínica desde Equipo.
+          </div>
+        </div>
+      )}
+
+      {/* Todo lo editable vive dentro del <fieldset>: deshabilitarlo apaga de
+          una vez inputs, botones y selectores de archivo, sin depender de que
+          cada control nuevo se acuerde de preguntar por el permiso. `min-w-0`
+          es obligatorio: un fieldset trae min-width:min-content y sin eso
+          rompe el flex de la columna. */}
+      <fieldset disabled={!puedeEditar} className="min-w-0 border-0 p-0 m-0 space-y-5 disabled:opacity-70">
 
       {/* ── PLANTILLA ── */}
       {tab === "plantilla" && (
@@ -443,8 +515,36 @@ export function LandingConfigClient({ clinic: initial, appUrl }: Props) {
         </div>
       )}
 
-      {/* ── DISEÑO: se dibuja solo desde el manifiesto de la plantilla ── */}
-      {tab === "diseno" && (
+      {/* ── DISEÑO: se dibuja solo desde el manifiesto de la plantilla ──
+          Solo si la plantilla activa LEE el manifiesto. Las cuatro primeras
+          (classic —la de por defecto—, futurista, healthtech y cálido) traen su
+          lista de secciones escrita en el JSX: enseñarles estos interruptores
+          era prometer algo que no pasaba. Quién sí y quién no sale del propio
+          manifiesto, no de una lista escrita aquí. */}
+      {tab === "diseno" && !plantillaLeeManifiesto(clinic.landingTemplate) && (
+        <div className={`${CARD_CLS} p-5 space-y-3`}>
+          <h3 className={`${H_SECTION} flex items-center gap-1.5`}>
+            <Layers size={16} strokeWidth={1.75} className="text-[color:var(--brand)]"/> Esta plantilla no se arma por secciones
+          </h3>
+          <p className="text-sm text-[color:var(--text-2)] leading-relaxed">
+            “{manifestOf(clinic.landingTemplate).nombre}”
+            {" "}trae su estructura fija: el orden de los bloques y sus títulos vienen de fábrica y
+            se llenan solos con lo que escribes en las demás pestañas. Aquí no hay interruptores
+            porque no habría nada que encender.
+          </p>
+          <p className={HELP_CLS}>
+            Si quieres decidir qué secciones aparecen, cambia a{" "}
+            <span className="font-semibold text-[color:var(--text-2)]">
+              {plantillasQueLeenManifiesto().map(m => m.nombre).join(", ")}
+            </span>.
+          </p>
+          <button type="button" onClick={() => setTab("plantilla")} className={BTN_SECONDARY}>
+            <Sparkles size={16} strokeWidth={1.75}/> Ver las plantillas
+          </button>
+        </div>
+      )}
+
+      {tab === "diseno" && plantillaLeeManifiesto(clinic.landingTemplate) && (
         <ManifestEditor
           templateId={clinic.landingTemplate ?? "classic"}
           /* El borrador manda: así cambiar de pestaña y volver no pierde lo
@@ -469,6 +569,52 @@ export function LandingConfigClient({ clinic: initial, appUrl }: Props) {
       {/* ── GENERAL ── */}
       {tab === "general" && (
         <div className={`${CARD_CLS} p-5 divide-y divide-[color:var(--border-soft)]`}>
+          {/* Datos de contacto — los pintan las ocho plantillas (encabezado,
+              pie y bloque de contacto) y hasta ahora solo se podían cambiar en
+              Configuración, lejos de la vista previa. Son los mismos campos de
+              la clínica: cambiarlos aquí los cambia en todo el producto. */}
+          <div className="py-6 first:pt-0 last:pb-0">
+            <label className={LABEL_CLS}>Nombre de la clínica</label>
+            <p className={`${HELP_CLS} -mt-0.5 mb-2`}>
+              Como aparece arriba del todo en tu sitio y en los mensajes a tus pacientes.
+            </p>
+            <input value={clinic.name ?? ""}
+              onChange={e => updateLocal("name", e.target.value)}
+              placeholder="Clínica Dental Sonrisa"
+              className={INPUT_CLS} />
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3">
+              <div>
+                <label className={LABEL_CLS}>Teléfono</label>
+                <input value={clinic.phone ?? ""} inputMode="tel"
+                  onChange={e => updateLocal("phone", e.target.value)}
+                  placeholder="999 123 4567"
+                  className={INPUT_CLS} />
+              </div>
+              <div>
+                <label className={LABEL_CLS}>Correo</label>
+                <input value={clinic.email ?? ""} inputMode="email"
+                  onChange={e => updateLocal("email", e.target.value)}
+                  placeholder="hola@tuclinica.com"
+                  className={INPUT_CLS} />
+              </div>
+            </div>
+            <div className="mt-3">
+              <label className={LABEL_CLS}>Dirección</label>
+              <input value={clinic.address ?? ""}
+                onChange={e => updateLocal("address", e.target.value)}
+                placeholder="Calle 20 #123, Col. Centro"
+                className={INPUT_CLS} />
+            </div>
+            <button onClick={() => save({
+              name: clinic.name,
+              phone: clinic.phone,
+              email: clinic.email,
+              address: clinic.address,
+            })} disabled={saving} className={`${BTN_PRIMARY_SM} mt-3`}>
+              <Check size={16} strokeWidth={1.75}/> Guardar contacto
+            </button>
+          </div>
+
           {/* Theme color */}
           <div className="py-6 first:pt-0 last:pb-0">
             <label className={LABEL_CLS}>{t("pages.landing.primaryColor")}</label>
@@ -540,6 +686,12 @@ export function LandingConfigClient({ clinic: initial, appUrl }: Props) {
                 <p className={`${HELP_CLS} -mt-0.5`}>
                   Qué haces con quien llega con dolor. Vacío = el bloque no aparece.
                 </p>
+                {!plantillaLeeManifiesto(clinic.landingTemplate) && (
+                  <p className="text-xs text-[color:var(--warning-strong)] mt-1">
+                    “{manifestOf(clinic.landingTemplate).nombre}” no pinta este aviso. Se guarda y
+                    aparece en cuanto cambies a una plantilla que sí lo tenga.
+                  </p>
+                )}
               </div>
               <button role="switch" aria-checked={!!clinic.landingUrgentText}
                 aria-label="Mostrar el aviso de urgencias"
@@ -573,6 +725,12 @@ export function LandingConfigClient({ clinic: initial, appUrl }: Props) {
               Marca los plazos que aceptas. Sin ninguno marcado, la plantilla no
               menciona mensualidades.
             </p>
+            {!plantillaLeeManifiesto(clinic.landingTemplate) && (
+              <p className="text-xs text-[color:var(--warning-strong)] -mt-1 mb-2">
+                “{manifestOf(clinic.landingTemplate).nombre}” no tiene bloque de mensualidades. Se
+                guarda y aparece en cuanto cambies a una plantilla que sí lo tenga.
+              </p>
+            )}
             <div className="flex flex-wrap gap-2">
               {[3, 6, 9, 12, 18, 24].map(m => {
                 const actuales: number[] = Array.isArray(clinic.landingMsiPlazos) ? clinic.landingMsiPlazos : [];
@@ -615,7 +773,7 @@ export function LandingConfigClient({ clinic: initial, appUrl }: Props) {
                   const url = await uploadImage(file, "cover");
                   updateLocal("landingCoverUrl", url);
                   await save({ landingCoverUrl: url });
-                } catch { toast.error(t("pages.landing.uploadError")); }
+                } catch (err: any) { toast.error(err?.message ?? t("pages.landing.uploadError")); }
               }} />
             </label>
           </div>
@@ -835,7 +993,7 @@ export function LandingConfigClient({ clinic: initial, appUrl }: Props) {
                     const newGallery = [...clinic.landingGallery, url];
                     updateLocal("landingGallery", newGallery);
                     await save({ landingGallery: newGallery });
-                  } catch { toast.error(t("pages.landing.uploadError")); }
+                  } catch (err: any) { toast.error(err?.message ?? t("pages.landing.uploadError")); }
                 }} />
             </label>
           </div>
@@ -913,7 +1071,7 @@ export function LandingConfigClient({ clinic: initial, appUrl }: Props) {
                             const newGallery = clinic.landingGallery.map((u,j) => j===i ? newUrl : u);
                             updateLocal("landingGallery", newGallery);
                             await save({ landingGallery: newGallery });
-                          } catch { toast.error(t("pages.landing.uploadError")); }
+                          } catch (err: any) { toast.error(err?.message ?? t("pages.landing.uploadError")); }
                         }} />
                       </label>
                       <button type="button" aria-label={t("pages.landing.deletePhotoAria")} title={t("common.delete")}
@@ -968,6 +1126,7 @@ export function LandingConfigClient({ clinic: initial, appUrl }: Props) {
           </button>
         </div>
       )}
+      </fieldset>
       </div>
 
       {/* ── VISTA PREVIA EN VIVO ──────────────────────────────────────

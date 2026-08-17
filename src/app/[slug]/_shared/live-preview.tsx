@@ -35,6 +35,8 @@ import type { LandingClinic } from "./types";
 /* ── Validadores por forma. Se rechaza el campo, no el mensaje entero:
       un valor roto deja la vista previa en lo último bueno. ───────── */
 const esTexto  = (v: unknown) => v === null || typeof v === "string";
+/** Para los campos que la plantilla da por hechos (el nombre de la clínica). */
+const esTextoFijo = (v: unknown) => typeof v === "string";
 const esNumero = (v: unknown) => v === null || (typeof v === "number" && Number.isFinite(v));
 const esLista  = (v: unknown) => Array.isArray(v);
 const esUrls   = (v: unknown) => Array.isArray(v) && v.every(x => typeof x === "string");
@@ -48,6 +50,14 @@ const esMapa   = (v: unknown) => !!v && typeof v === "object" && !Array.isArray(
  * al iframe ni se aplica dentro de él.
  */
 const CAMPOS_VIVOS = {
+  /* Identidad y contacto. No llevan prefijo "landing" pero son campos que el
+     formulario edita (pestaña General) y que las ocho plantillas pintan en el
+     encabezado, el pie y el bloque de contacto. `slug` NO está y no debe
+     estar: cambia la URL pública y no se edita desde aquí. */
+  name:                   esTextoFijo,
+  phone:                  esTexto,
+  email:                  esTexto,
+  address:                esTexto,
   description:            esTexto,
   landingThemeColor:      esTexto,
   landingTagline:         esTexto,

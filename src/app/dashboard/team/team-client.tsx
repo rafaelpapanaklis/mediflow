@@ -13,6 +13,7 @@ import toast from "react-hot-toast";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import { PermissionsModal } from "@/components/dashboard/team/permissions-modal";
 import { useT } from "@/i18n/i18n-provider";
+import { prepararImagen } from "@/lib/image-client";
 
 type RoleTone = "success" | "info" | "warning" | "brand" | "neutral";
 // labelKey -> resolved via t() at render time (never call t() at module scope).
@@ -325,12 +326,17 @@ function MemberForm({
 // ── MemberPhoto — avatar con foto subible por miembro ───────────────────────
 // Si el miembro tiene avatarUrl muestra la imagen; si no, las iniciales sobre
 // su color de agenda. El botón de cámara abre un file picker oculto, sube el
-// archivo a POST /api/landing-upload (field="avatar") y persiste la URL con
+// archivo (comprimido antes en el navegador) a POST /api/landing-upload
+// (field="avatar" — el endpoint dejó de reconocerlo en 2a98c3d1 y desde
+// entonces ninguna clínica pudo subir la foto de un doctor) y persiste la URL con
 // PATCH /api/team/[id] {avatarUrl}. "Quitar foto" hace PATCH {avatarUrl:null}.
 // El clinic se resuelve por sesión en el server — aquí solo va el id en la URL.
 // onChange actualiza el estado del padre para que la foto se vea al instante;
 // esas fotos también alimentan la sección "Equipo" de la landing (users[].avatarUrl).
-const MAX_AVATAR_BYTES = 8 * 1024 * 1024; // ~8MB en cliente (el server admite hasta 50MB)
+// Tope de lo que se acepta del disco. La foto se comprime en el navegador antes
+// de subirla (prepararImagen: 2000 px, webp), así que 25 MB de entrada acaban
+// siendo unos cientos de KB de salida — y el endpoint corta en 4 MB.
+const MAX_AVATAR_BYTES = 25 * 1024 * 1024;
 
 function memberInitials(first: string, last: string) {
   return `${first?.[0] ?? ""}${last?.[0] ?? ""}`.toUpperCase() || "?";
@@ -374,11 +380,15 @@ function MemberPhoto({
     }
     setUploading(true);
     try {
+      // Comprimir en el navegador: el runtime corta el cuerpo de la petición en
+      // ~4.5 MB y una foto de celular pesa el triple. Además convierte el HEIC
+      // del iPhone, que el endpoint no acepta por tipo.
+      const listo = await prepararImagen(file);
       const fd = new FormData();
-      fd.append("file", file);
+      fd.append("file", listo);
       fd.append("field", "avatar");
       const up = await fetch("/api/landing-upload", { method: "POST", body: fd });
-      const upData = await up.json();
+      const upData = await up.json().catch(() => ({}));
       if (!up.ok) throw new Error(upData.error ?? t("settings.team.uploadImageError"));
 
       const res = await fetch(`/api/team/${member.id}`, {

@@ -7,7 +7,7 @@
    una novena solo requiere escribir su manifiesto.
    ============================================================ */
 import { useMemo, useRef, useState } from "react";
-import { ArrowDown, ArrowUp, ImageIcon, Loader2, Lock, Trash2, Upload } from "lucide-react";
+import { ImageIcon, Loader2, Lock, Trash2, Upload } from "lucide-react";
 import toast from "react-hot-toast";
 import {
   manifestOf,
@@ -149,15 +149,13 @@ export function ManifestEditor({
     onDraftSections?.(next);
   }
 
-  /* ---- mover: las obligatorias no se mueven ni se dejan pisar ---- */
-  function mover(i: number, dir: -1 | 1) {
-    const j = i + dir;
-    if (j < 0 || j >= secs.length) return;
-    if (metaSeccion(secs[i].id)?.obligatoria || metaSeccion(secs[j].id)?.obligatoria) return;
-    const copia = [...secs];
-    [copia[i], copia[j]] = [copia[j], copia[i]];
-    aplicar(copia.map((s, k) => ({ ...s, orden: k })));
-  }
+  /* ---- REORDENAR NO SE OFRECE ----
+     Había flechas de subir/bajar que guardaban `orden` en landingSections…
+     y ninguna plantilla lo lee: todas pintan sus bloques en el orden escrito
+     en su JSX. La clínica movía la sección, guardaba, iba a ver su sitio y
+     estaba igual. `orden` se sigue guardando (es parte de SectionState y de
+     lo que ya está en la base), pero no se promete moverlo hasta que las
+     plantillas lo respeten al pintar. */
 
   function alternar(id: string) {
     if (metaSeccion(id)?.obligatoria) return;
@@ -206,30 +204,17 @@ export function ManifestEditor({
         <div>
           <h3 className={H_SEC}>Secciones de tu sitio</h3>
           <p className={`${HELP} mt-0.5`}>
-            Enciende, apaga y reordena. Contacto y reserva no se pueden quitar: sin ellas el
-            paciente no tiene cómo llegar ni cómo agendar.
+            Enciende y apaga lo que quieres que se vea. El orden lo fija la plantilla. Contacto y
+            reserva no se pueden quitar: sin ellas el paciente no tiene cómo llegar ni cómo agendar.
           </p>
         </div>
 
         <div className="space-y-2">
-          {secs.map((s, i) => {
+          {secs.map(s => {
             const meta = metaSeccion(s.id);
             if (!meta) return null; // sección de una plantilla anterior: no se pinta
             return (
               <div key={s.id} className="flex items-center gap-3 border border-[color:var(--border-soft)] rounded-[var(--radius)] px-3 py-2.5">
-                <div className="flex flex-col gap-0.5">
-                  <button type="button" onClick={() => mover(i, -1)} disabled={i === 0 || !!meta.obligatoria}
-                    aria-label={`Subir ${meta.nombre}`}
-                    className="w-6 h-5 grid place-items-center rounded text-[color:var(--text-3)] hover:text-[color:var(--text-1)] disabled:opacity-30">
-                    <ArrowUp size={13} />
-                  </button>
-                  <button type="button" onClick={() => mover(i, 1)} disabled={i === secs.length - 1 || !!meta.obligatoria}
-                    aria-label={`Bajar ${meta.nombre}`}
-                    className="w-6 h-5 grid place-items-center rounded text-[color:var(--text-3)] hover:text-[color:var(--text-1)] disabled:opacity-30">
-                    <ArrowDown size={13} />
-                  </button>
-                </div>
-
                 <div className="min-w-0 flex-1">
                   <div className="text-sm font-semibold text-[color:var(--text-1)] flex items-center gap-1.5">
                     {meta.nombre}

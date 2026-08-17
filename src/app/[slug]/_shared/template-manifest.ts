@@ -57,6 +57,23 @@ export interface TemplateManifest {
   para: string;
   /** true = la plantilla NO usa fotos (consultorio). */
   sinFotos?: boolean;
+  /**
+   * ¿La plantilla LEE de verdad este manifiesto al pintar?
+   *
+   * Las cuatro primeras (classic, futurista, healthtech, calido) son
+   * anteriores al manifiesto: su lista de secciones y sus títulos están
+   * escritos a mano en el JSX y no consultan `landingSections` ni
+   * `landingPhotos` (ver _shared/landing-data.ts: sectionMap, photoOf).
+   * Enseñarles el editor de secciones era prometer interruptores que no
+   * hacen nada — y `classic` es la plantilla por defecto del schema, o sea
+   * lo que ve la mayoría.
+   *
+   * La bandera vive AQUÍ y no en la pantalla: el editor la lee y no conoce
+   * ninguna plantilla por su nombre. Cuando classic/futurista/healthtech/
+   * calido aprendan a leer el manifiesto, se pone en true y el editor
+   * aparece solo.
+   */
+  leeManifiesto?: boolean;
   secciones: ManifestSection[];
   fotos: ManifestPhotoSlot[];
   textos: ManifestText[];
@@ -136,6 +153,7 @@ export const TEMPLATE_MANIFESTS: Record<string, TemplateManifest> = {
     id: "equipo",
     nombre: "Equipo",
     para: "Varias personas atendiendo: el argumento es quién te atiende.",
+    leeManifiesto: true,
     secciones: [
       SEC_SERVICIOS,
       SEC_EQUIPO,
@@ -170,6 +188,7 @@ export const TEMPLATE_MANIFESTS: Record<string, TemplateManifest> = {
     id: "sonrisa",
     nombre: "Sonrisa",
     para: "Estética dental: la transformación manda y las fotos son enormes.",
+    leeManifiesto: true,
     secciones: [
       { id: "casos", nombre: "Antes y después (protagonista)", consume: ["fotos"] },
       SEC_SERVICIOS,
@@ -211,6 +230,7 @@ export const TEMPLATE_MANIFESTS: Record<string, TemplateManifest> = {
     para: "Para la clínica que no tiene fotos: color, precios y horarios.",
     // NO tiene ranuras de foto y es a propósito: es su razón de existir.
     sinFotos: true,
+    leeManifiesto: true,
     secciones: [
       { id: "urgencias", nombre: "Aviso de urgencias", consume: ["urgencias"] },
       SEC_SERVICIOS,
@@ -237,6 +257,7 @@ export const TEMPLATE_MANIFESTS: Record<string, TemplateManifest> = {
     id: "especialistas",
     nombre: "Especialistas",
     para: "Alta especialidad y ticket alto: tecnología, credenciales y financiamiento.",
+    leeManifiesto: true,
     secciones: [
       SEC_SERVICIOS,
       { id: "tecnologia", nombre: "Tecnología (3 tarjetas)", consume: ["fotos"] },
@@ -290,4 +311,20 @@ export function allPhotoSlotIds(): string[] {
     for (const f of m.fotos) ids.add(f.id);
   }
   return Array.from(ids);
+}
+
+/**
+ * ¿Esta plantilla obedece al editor de secciones, textos y ranuras de foto?
+ *
+ * Fuente ÚNICA: la bandera del manifiesto. La pantalla de Configuración
+ * pregunta aquí en vez de llevar su propia lista de nombres, que se
+ * desincronizaría en cuanto una plantilla aprendiera a leerlo.
+ */
+export function plantillaLeeManifiesto(templateId: string | null | undefined): boolean {
+  return manifestOf(templateId).leeManifiesto === true;
+}
+
+/** Las plantillas que SÍ obedecen al editor — para poder ofrecerlas por su nombre. */
+export function plantillasQueLeenManifiesto(): TemplateManifest[] {
+  return Object.values(TEMPLATE_MANIFESTS).filter(m => m.leeManifiesto);
 }
