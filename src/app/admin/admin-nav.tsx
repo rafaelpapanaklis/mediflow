@@ -6,7 +6,7 @@ import { useState } from "react";
 import {
   LayoutDashboard, Building2, CreditCard, TrendingDown, CheckSquare,
   BarChart3, Megaphone, Ticket, Settings, LogOut, Menu, X, Bug, Truck, Handshake, Coins, Star,
-  LifeBuoy, FlaskConical, Users, KeyRound, ScrollText, LineChart, Newspaper, UserRound,
+  LifeBuoy, FlaskConical, Users, KeyRound, ScrollText, LineChart, Newspaper, UserRound, Globe,
 } from "lucide-react";
 import { BadgeNew } from "@/components/ui/design-system/badge-new";
 import { AvatarNew } from "@/components/ui/design-system/avatar-new";
@@ -26,6 +26,11 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/admin/suppliers",    label: "Proveedores",  icon: Truck,           section: "main"   },
   { href: "/admin/labs",         label: "Laboratorios", icon: FlaskConical,    section: "main"   },
   { href: "/admin/affiliates",   label: "Afiliados",    icon: Handshake,       section: "main"   },
+  // Ruta HERMANA de /admin/affiliates, no hija, a propósito: isActive() empareja
+  // por segmento, así que "/admin/affiliates/paginas" encendería también
+  // "Afiliados" y quedarían dos items marcados a la vez — el mismo problema que
+  // ya se arregló entre "/admin/soporte" y "/admin/soporte-afiliados".
+  { href: "/admin/paginas-socio", label: "Páginas de socio", icon: Globe,       section: "main"   },
   { href: "/admin/payments",     label: "Pagos",        icon: CreditCard,      section: "main"   },
   { href: "/admin/ai-billing",   label: "Tesorería IA", icon: Coins,           section: "main"   },
   { href: "/admin/soporte",      label: "Soporte",      icon: LifeBuoy,        section: "main"   },
@@ -53,6 +58,7 @@ export function AdminSidebar({
     atRisk?: number;
     supportPending?: number;
     affiliateSupportPending?: number;
+    affiliatePagesPending?: number;
   };
 }) {
   const pathname = usePathname();
@@ -85,13 +91,19 @@ export function AdminSidebar({
     const active = isActive(item.href);
     const Icon   = item.icon;
     let count: number | undefined;
-    // Los dos soportes son los únicos badges de ALERTA: tickets esperando MI
-    // respuesta (clínicas y afiliados llevan contadores independientes).
-    const alert = item.href === "/admin/soporte" || item.href === "/admin/soporte-afiliados";
+    // Badges de ALERTA: lo que espera MI respuesta. Los dos soportes (tickets
+    // de clínicas y de afiliados, con contadores independientes) y las páginas
+    // de socio, que no se publican hasta que alguien las revise: sin el badge,
+    // un socio puede quedarse días esperando sin que nadie se entere.
+    const alert =
+      item.href === "/admin/soporte" ||
+      item.href === "/admin/soporte-afiliados" ||
+      item.href === "/admin/paginas-socio";
     if (item.href === "/admin/clinics") count = counts?.clinics;
     if (item.href === "/admin/churn")   count = counts?.atRisk;
     if (item.href === "/admin/soporte") count = counts?.supportPending;
     if (item.href === "/admin/soporte-afiliados") count = counts?.affiliateSupportPending;
+    if (item.href === "/admin/paginas-socio") count = counts?.affiliatePagesPending;
     return (
       <Link
         key={item.href}

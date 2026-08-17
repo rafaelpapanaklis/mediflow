@@ -20,6 +20,8 @@ import { shouldCountAffiliateClick } from "@/lib/affiliates/click-guard";
 import { clientIp, hashIp } from "@/lib/affiliates/stats";
 import { VISITOR_COOKIE, parseVisitorId } from "@/lib/affiliates/visitor-cookie";
 import { SavingsCalculator } from "@/components/socio/savings-calculator";
+import { PartnerIntro } from "@/components/socio/partner-intro";
+import { publishedPage, visibleSectionIds } from "@/lib/affiliates/page-config";
 import "@/components/public/landing/sales/sales.css";
 
 // Página hosteada del socio/afiliado: una landing de venta de DaleControl donde
@@ -48,12 +50,39 @@ const inter = Inter({
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://www.dalecontrol.com";
 
+// Select EXPLÍCITO. La fila de `affiliates` lleva correo, datos de pago y
+// porcentaje de comisión: en una página pública se pide solo lo que se pinta.
+//
+// Las columnas de personalización que se leen aquí son las PUBLICADAS. Las
+// `*Pending` —el borrador que el socio está escribiendo— no se piden siquiera:
+// lo que espera revisión no puede llegar a un visitante ni por descuido.
 async function getApprovedAffiliate(slug: string) {
   return prisma.affiliate.findFirst({
     where: { slug, status: "APPROVED" },
-    select: { id: true, name: true, slug: true, referralCode: true },
+    select: {
+      id: true,
+      name: true,
+      slug: true,
+      referralCode: true,
+      photoUrl: true,
+      bio: true,
+      sectionsConfig: true,
+    },
   });
 }
+
+// Las secciones que el socio puede encender, apagar y reordenar. El id es el
+// del catálogo (@/lib/affiliates/page-config); el orden por defecto de ese
+// catálogo es EXACTAMENTE este, así que un socio sin configuración guardada ve
+// la página de siempre.
+const SECTION_COMPONENTS: Record<string, () => JSX.Element> = {
+  "prueba-social": SocialProof,
+  funciones: FeaturesGrid,
+  destacados: Spotlights,
+  comparativa: Comparison,
+  testimonios: Testimonials,
+  preguntas: TrustFaq,
+};
 
 interface Props {
   params: { slug: string };
@@ -127,6 +156,16 @@ export default async function PartnerLandingPage({ params, searchParams }: Props
   // calculadora, CTA final y footer) lo reusan y propagan la campaña al signup.
   const signupHref = `/signup?ref=${affiliate.referralCode}${c ? `&c=${c}` : ""}`;
 
+  // Personalización APROBADA del socio. Sin nada aprobado, publishedPage
+  // devuelve foto y texto en null y las secciones en el orden del catálogo:
+  // la página queda idéntica a como era antes de que esto existiera.
+  const page = publishedPage(affiliate);
+  const seccionesVisibles = visibleSectionIds(page.sections);
+  // El botón "Ver funciones" del hero salta al ancla id="funciones", que la
+  // pone <FeaturesGrid />. Si el socio apagó esa sección el ancla no existe y
+  // el botón no llevaría a ningún lado, así que se retira con ella.
+  const mostrarVerFunciones = seccionesVisibles.includes("funciones");
+
   return (
     <div className={`mfh ${inter.variable}`} style={{ minHeight: "100dvh" }}>
       <a href="#mfh-main" className="mf-skip-link">Saltar al contenido</a>
@@ -172,9 +211,11 @@ export default async function PartnerLandingPage({ params, searchParams }: Props
                 <Link href={signupHref} className="mfh-btn mfh-btn--primary mfh-btn--lg">
                   Crear cuenta <ArrowRight />
                 </Link>
-                <a href="#funciones" className="mfh-btn mfh-btn--ghost mfh-btn--lg">
-                  Ver funciones
-                </a>
+                {mostrarVerFunciones ? (
+                  <a href="#funciones" className="mfh-btn mfh-btn--ghost mfh-btn--lg">
+                    Ver funciones
+                  </a>
+                ) : null}
               </div>
 
               <div className="mfh-hero__trust">
@@ -190,13 +231,17 @@ export default async function PartnerLandingPage({ params, searchParams }: Props
           </div>
         </section>
 
-        {/* Secciones presentacionales reutilizadas del home (sin CTA propios) */}
-        <SocialProof />
-        <FeaturesGrid />
-        <Spotlights />
-        <Comparison />
-        <Testimonials />
-        <TrustFaq />
+        {/* Presentación del socio: su foto y lo que escribió sobre sí mismo,
+            ya APROBADO. Se pinta como texto plano (ver partner-intro.tsx) y
+            devuelve null si no tiene ninguna de las dos cosas. */}
+        <PartnerIntro name={affiliate.name} photoUrl={page.photoUrl} bio={page.bio} />
+
+        {/* Secciones presentacionales reutilizadas del home (sin CTA propios),
+            en el orden que el socio dejó aprobado. Las que apagó no se pintan. */}
+        {seccionesVisibles.map((id) => {
+          const Section = SECTION_COMPONENTS[id];
+          return Section ? <Section key={id} /> : null;
+        })}
 
         {/* Calculadora de ahorro — última parada antes del CTA final */}
         <section className="mfh-section mfh-band--violet" aria-label="Calculadora de ahorro">
@@ -247,22 +292,31 @@ export default async function PartnerLandingPage({ params, searchParams }: Props
       </main>
 
       {/* Footer mínimo del socio */}
+      {/* Colores del tema CLARO de sales.css (`.mfh` es blanco, --ink/--muted).
+          Estaban en rgba(255,255,255,…), heredados de una versión oscura de
+          esta plantilla: sobre el fondo blanco actual, el crédito
+          "Recomendado por <socio>" salía en blanco sobre blanco, es decir
+          invisible. Es justo la línea que da crédito al socio. */}
       <footer
         style={{
-          borderTop: "1px solid rgba(255,255,255,0.08)",
+          borderTop: "1px solid #e9e7f3",
           padding: "28px 0",
           textAlign: "center",
-          color: "rgba(255,255,255,0.6)",
+          color: "#64748b",
           fontSize: 13,
         }}
       >
         <div className="mfh-container" style={{ display: "flex", flexDirection: "column", gap: 8, alignItems: "center" }}>
           <SalesLogo />
           <p style={{ margin: 0 }}>
-            Recomendado por <strong style={{ color: "rgba(255,255,255,0.85)" }}>{affiliate.name}</strong> ·
+            Recomendado por <strong style={{ color: "#0f172a" }}>{affiliate.name}</strong> ·
             DaleControl © {new Date().getFullYear()}
           </p>
-          <Link href={signupHref} style={{ color: "var(--mfh-brand, #a78bfa)", fontWeight: 600, textDecoration: "none" }}>
+          {/* --mfh-brand no existe en sales.css (el token es --b), así que esto
+              caía siempre al respaldo #a78bfa: violeta claro sobre blanco, muy
+              por debajo de AA. --b2 es el que la propia hoja marca como
+              "texto legible". */}
+          <Link href={signupHref} style={{ color: "var(--b2, #6d28d9)", fontWeight: 600, textDecoration: "none" }}>
             Crear cuenta gratis →
           </Link>
         </div>

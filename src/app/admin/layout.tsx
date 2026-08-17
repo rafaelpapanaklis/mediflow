@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { getAdminSessionResult } from "@/lib/admin-auth";
 import { countAdminPendingReply } from "@/lib/support/service";
 import { countAffiliateSupportPendingReply } from "@/lib/affiliate-support/service";
+import { countPagesPendingReview } from "@/lib/affiliates/page-moderation";
 import AdminLoginPage from "./login/page";
 import { AdminSessionError } from "./session-error";
 import { AdminSessionKeepalive } from "./session-keepalive";
@@ -10,7 +11,7 @@ import "@/app/panel-chrome-va.css";
 
 async function getNavCounts() {
   try {
-    const [clinics, atRisk, supportPending, affiliateSupportPending] = await Promise.all([
+    const [clinics, atRisk, supportPending, affiliateSupportPending, affiliatePagesPending] = await Promise.all([
       prisma.clinic.count().catch(() => 0),
       prisma.clinic.count({
         where: {
@@ -22,10 +23,19 @@ async function getNavCounts() {
       // SQL de affiliate_support_* no esté aplicado la consulta lanza y el
       // sidebar entero no puede caerse por un badge.
       countAffiliateSupportPendingReply().catch(() => 0),
+      // Páginas de socio esperando revisión. countPagesPendingReview ya trae su
+      // propio try/catch → 0 si la consulta falla.
+      countPagesPendingReview(),
     ]);
-    return { clinics, atRisk, supportPending, affiliateSupportPending };
+    return { clinics, atRisk, supportPending, affiliateSupportPending, affiliatePagesPending };
   } catch {
-    return { clinics: 0, atRisk: 0, supportPending: 0, affiliateSupportPending: 0 };
+    return {
+      clinics: 0,
+      atRisk: 0,
+      supportPending: 0,
+      affiliateSupportPending: 0,
+      affiliatePagesPending: 0,
+    };
   }
 }
 

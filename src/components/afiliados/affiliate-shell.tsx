@@ -20,6 +20,7 @@ import {
   BarChart3,
   CreditCard,
   FileText,
+  Globe,
   HelpCircle,
   Home,
   LogOut,
@@ -41,6 +42,7 @@ type NavItem = {
 const NAV_ITEMS: NavItem[] = [
   { href: "/afiliados/inicio", label: "Inicio", icon: Home },
   { href: "/afiliados/herramientas", label: "Herramientas", icon: SlidersHorizontal },
+  { href: "/afiliados/mi-pagina", label: "Mi página", icon: Globe },
   // La ruta se queda en /afiliados/equipo (links viejos, marcadores), pero la
   // pantalla ya no registra vendedores: invita afiliados y mide la red.
   { href: "/afiliados/equipo", label: "Mi red", icon: Users },

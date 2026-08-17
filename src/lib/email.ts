@@ -146,6 +146,150 @@ export async function sendWelcomeEmail(opts: {
   });
 }
 
+/* ── Página personal del socio afiliado ─────────────────────────────────────
+   Los dos avisos de la moderación de /socio/<slug>. Mismo envoltorio oscuro y
+   con marca que el resto de las plantillas del repo; lo único que cambia es el
+   cuerpo. Ninguno lanza: sendEmail ya traga sus propios errores, así que un
+   fallo del correo nunca revierte una aprobación que ya está en la base. */
+
+/** Envoltorio compartido de los dos correos de la página de socio. */
+function affiliatePageEmailShell(opts: {
+  heading: string;
+  intro: string;
+  block?: { label: string; body: string; danger?: boolean };
+  ctaHref: string;
+  ctaText: string;
+  outro?: string;
+}): string {
+  const { heading, intro, block, ctaHref, ctaText, outro } = opts;
+  const accent = block?.danger ? "220,38,38" : "124,58,237";
+  const accentInk = block?.danger ? "#fca5a5" : "#a78bfa";
+
+  return `
+<!doctype html>
+<html lang="es">
+<body style="font-family: system-ui, -apple-system, sans-serif; background: #0b0815; color: #f5f5f7; margin: 0; padding: 40px 20px;">
+  <div style="max-width: 560px; margin: 0 auto; background: #121020; border: 1px solid rgba(255,255,255,0.08); border-radius: 14px; padding: 40px 32px;">
+    <div style="font-size: 22px; font-weight: 600; letter-spacing: -0.02em; color: #a78bfa; margin-bottom: 20px;">
+      DaleControl
+    </div>
+    <h1 style="font-size: 24px; font-weight: 600; letter-spacing: -0.02em; margin: 0 0 12px 0; color: #f5f5f7;">
+      ${heading}
+    </h1>
+    <p style="font-size: 15px; color: rgba(245,245,247,0.7); line-height: 1.55; margin: 0 0 24px 0;">
+      ${intro}
+    </p>
+
+    ${
+      block
+        ? `<div style="padding: 18px 20px; background: rgba(${accent},0.1); border: 1px solid rgba(${accent},0.3); border-radius: 10px; margin: 24px 0;">
+      <div style="font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: ${accentInk}; font-weight: 600; margin-bottom: 6px;">
+        ${block.label}
+      </div>
+      <div style="font-size: 14px; color: rgba(245,245,247,0.85); line-height: 1.5; white-space: pre-line;">${block.body}</div>
+    </div>`
+        : ""
+    }
+
+    <a href="${ctaHref}" style="display: inline-block; padding: 14px 28px; background: linear-gradient(180deg, #8b5cf6, #7c3aed); color: #fff; font-weight: 600; text-decoration: none; border-radius: 10px; font-size: 15px; margin: 8px 0 32px 0;">
+      ${ctaText} →
+    </a>
+
+    ${
+      outro
+        ? `<div style="font-size: 13px; color: rgba(245,245,247,0.6); line-height: 1.6;">${outro}</div>
+    <hr style="border: none; border-top: 1px solid rgba(255,255,255,0.08); margin: 28px 0;" />`
+        : `<hr style="border: none; border-top: 1px solid rgba(255,255,255,0.08); margin: 28px 0;" />`
+    }
+
+    <div style="font-size: 11px; color: rgba(245,245,247,0.4); line-height: 1.5;">
+      ¿Dudas? Escríbenos desde Soporte en tu panel de afiliado.
+      <br /><br />
+      DaleControl — Software médico 🇲🇽
+    </div>
+  </div>
+</body>
+</html>`;
+}
+
+/** Su página quedó publicada. */
+export async function sendAffiliatePageApprovedEmail(opts: {
+  email: string;
+  name: string;
+  pageUrl: string;
+}): Promise<void> {
+  const { email, name, pageUrl } = opts;
+  const firstName = String(name || "").trim().split(/\s+/)[0] ?? "";
+  const hi = firstName ? `, ${firstName}` : "";
+
+  const html = affiliatePageEmailShell({
+    heading: "Tu página ya está publicada ✅",
+    intro: `Listo${hi}: revisamos los cambios de tu página de socio y ya están en línea. Cualquiera que entre a tu enlace verá tu foto y tu presentación.`,
+    ctaHref: pageUrl,
+    ctaText: "Ver mi página",
+    outro:
+      "Si más adelante quieres cambiar algo, edítalo desde <strong style=\"color: rgba(245,245,247,0.85);\">Mi página</strong> en tu panel. Cada cambio vuelve a pasar por revisión antes de publicarse.",
+  });
+
+  const text =
+    `Tu página ya está publicada.\n\n` +
+    `Listo${hi}: revisamos los cambios de tu página de socio y ya están en línea.\n\n` +
+    `Ver mi página: ${pageUrl}\n\n` +
+    `Para cambiar algo, entra a "Mi página" en tu panel de afiliado. Cada cambio vuelve a pasar por revisión.\n\n` +
+    `DaleControl — Software médico MX`;
+
+  await sendEmail({ to: email, subject: "Tu página de socio ya está publicada · DaleControl", html, text });
+}
+
+/**
+ * No se publicó (o se retiró), con el motivo que escribió el admin.
+ *
+ * `reason` viaja tal cual dentro de un bloque con white-space: pre-line — es
+ * texto que escribió una persona, no marcado.
+ */
+export async function sendAffiliatePageRejectedEmail(opts: {
+  email: string;
+  name: string;
+  reason: string;
+  panelUrl: string;
+  /** true si se retiró una página que YA estaba publicada. */
+  wasPublished?: boolean;
+}): Promise<void> {
+  const { email, name, reason, panelUrl, wasPublished } = opts;
+  const firstName = String(name || "").trim().split(/\s+/)[0] ?? "";
+  const hi = firstName ? `, ${firstName}` : "";
+
+  const intro = wasPublished
+    ? `Hola${hi}: retiramos tu página de socio y volvió a su versión estándar. Tu texto y tu foto siguen guardados en tu borrador, así que puedes corregir y volver a enviarla.`
+    : `Hola${hi}: revisamos los cambios de tu página de socio y todavía no podemos publicarlos. Tu borrador sigue guardado tal como lo dejaste.`;
+
+  const html = affiliatePageEmailShell({
+    heading: wasPublished ? "Retiramos tu página" : "Tus cambios no se publicaron",
+    intro,
+    block: { label: "Motivo", body: reason, danger: true },
+    ctaHref: panelUrl,
+    ctaText: "Corregir y reenviar",
+    outro:
+      "Corrige lo que dice el motivo y vuelve a enviarla a revisión desde <strong style=\"color: rgba(245,245,247,0.85);\">Mi página</strong>. Si algo no te queda claro, escríbenos desde Soporte.",
+  });
+
+  const text =
+    (wasPublished ? `Retiramos tu página.\n\n` : `Tus cambios no se publicaron.\n\n`) +
+    `${intro.replace(/<[^>]*>/g, "")}\n\n` +
+    `Motivo:\n${reason}\n\n` +
+    `Corregir y reenviar: ${panelUrl}\n\n` +
+    `DaleControl — Software médico MX`;
+
+  await sendEmail({
+    to: email,
+    subject: wasPublished
+      ? "Retiramos tu página de socio · DaleControl"
+      : "Tus cambios no se publicaron · DaleControl",
+    html,
+    text,
+  });
+}
+
 /** Formatea un monto a moneda local. Cae a "$X.XX CUR" si Intl no soporta la
  *  divisa (jamás lanza). */
 function formatBillingMoney(amount: number, currency: string): string {

@@ -1,0 +1,99 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   Presentación del socio — el bloque de foto + texto de /socio/<slug>.
+
+   NAMESPACE `dcsi-` y COLORES LITERALES a propósito. Esta pieza se pinta en
+   dos sitios con paletas distintas: dentro de `.mfh` (la landing pública) y
+   dentro de `.dcafp` (la vista previa del panel del afiliado, que es donde el
+   socio decide si le gusta). Si tomara sus colores de variables heredadas se
+   vería de un color en cada sitio, y la vista previa dejaría de servir para lo
+   único que sirve: enseñar cómo va a quedar de verdad.
+
+   Los valores son los de sales.css (--ink, --body, --line, --b, --v50), no
+   una paleta nueva: es la misma estética, escrita donde no se puede perder.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.dcsi {
+  padding: clamp(40px, 6vw, 72px) 0;
+  background: #ffffff;
+}
+
+.dcsi__container {
+  width: 100%;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 24px;
+}
+
+.dcsi__card {
+  display: flex;
+  align-items: center;
+  gap: clamp(20px, 3vw, 34px);
+  max-width: 820px;
+  margin: 0 auto;
+  padding: clamp(22px, 3vw, 32px);
+  background: #ffffff;
+  border: 1px solid #e9e7f3;
+  border-radius: 22px;
+  box-shadow: 0 6px 24px -10px rgba(15, 23, 42, 0.14);
+}
+
+/* La foto llega del servidor ya recortada en cuadrado (sharp, fit cover), así
+   que aquí no hace falta reencuadrar nada. El object-fit es la red por si
+   alguna vez entra una imagen que no pasó por ese recorte. */
+.dcsi__photo {
+  flex: 0 0 auto;
+  width: 124px;
+  height: 124px;
+  border-radius: 50%;
+  object-fit: cover;
+  display: block;
+  background: #f5f3ff;
+  border: 3px solid #ffffff;
+  box-shadow: 0 0 0 1px #ddd6fe, 0 16px 38px -14px rgba(124, 58, 237, 0.4);
+}
+
+.dcsi__body {
+  min-width: 0;
+}
+
+.dcsi__eyebrow {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: #6d28d9;
+  margin-bottom: 8px;
+}
+
+.dcsi__name {
+  margin: 0 0 10px;
+  font-size: clamp(20px, 2.4vw, 26px);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+  color: #0f172a;
+}
+
+/* pre-line: el afiliado puede separar en dos párrafos y se respeta, pero sin
+   permitir una cascada de líneas en blanco (sanitizeBio ya corta en dos). */
+.dcsi__bio {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.65;
+  color: #475569;
+  white-space: pre-line;
+  overflow-wrap: break-word;
+}
+
+@media (max-width: 640px) {
+  .dcsi__card {
+    flex-direction: column;
+    align-items: flex-start;
+    text-align: left;
+  }
+  .dcsi__photo {
+    width: 96px;
+    height: 96px;
+  }
+}

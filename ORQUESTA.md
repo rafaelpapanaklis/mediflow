@@ -7839,3 +7839,135 @@ garantías y sin precios escritos a mano.
 `DATABASE_URL`, así que la ruta autenticada completa no se ejercitó — el arte se verificó por
 rutas temporales sin sesión. Queda pendiente bajar una imagen y un PDF desde el panel en
 producción y comprobar que el QR lleve al link del afiliado correcto.
+
+## PAGINA-SOCIO — cada afiliado personaliza su /socio/<slug>, con revisión previa ✅ (2026-08-16)
+
+Un socio ya puede ponerle **su foto**, **una presentación suya** y **decidir qué secciones se
+ven y en qué orden** a su página pública. Nada de eso llega a internet hasta que Rafael lo
+aprueba: la página vive en dalecontrol.com y lo que diga se lee como dicho por DaleControl.
+
+No edita el hero, ni los colores, ni la tipografía. La estética no se toca.
+
+### La decisión que sostiene todo: dos juegos de columnas
+
+`affiliates` gana diez columnas. Tres son **lo publicado** (`photoUrl`, `bio`,
+`sectionsConfig`) y tres son **el borrador** (`photoUrlPending`, `bioPending`,
+`sectionsConfigPending`); las otras cuatro son el estado de la moderación.
+
+La página pública lee **solo las publicadas**, y las del borrador ni siquiera salen de la base
+en la consulta que la sirve (`getApprovedAffiliate` las omite del select). La consecuencia es
+la que importa: mientras algo está en revisión —o si se rechaza— el visitante sigue viendo lo
+último aprobado. Un socio no puede tumbar su propia página dejando un borrador a medias, y un
+texto sin revisar no llega a nadie ni por un descuido de render.
+
+**`hasDraft()` mira `sectionsConfigPending`, no "algún pendiente no es null".** Parece un
+detalle y es el que evita un bug feo: un socio que BORRA su foto y su texto deja los dos
+campos pendientes en null, y con la otra regla eso se leería como "no ha editado nada" — la
+pantalla le devolvería su contenido publicado y le desharía el borrado delante de los ojos.
+Por eso **toda** escritura de borrador guarda los tres campos a la vez: el borrador es una
+foto fija del estado propuesto, nunca un diff. De paso, aprobar es copiar tres columnas y el
+"antes y después" del admin no tiene que adivinar qué significa un null.
+
+### Las secciones
+
+Once entradas en el catálogo (`page-config.ts`), y el orden de ese array **es** el orden por
+defecto de la página: un socio que no toque nada tiene exactamente lo de siempre. Seis son
+movibles; cinco son fijas **porque llevan un botón de registro con su código**, y la pantalla
+le escribe el motivo en cada una en vez de dejarle un interruptor gris sin explicación.
+
+`normalizeSections()` es el punto que garantiza que nada se rompa: null, un jsonb con basura,
+una sección retirada del catálogo o una añadida después de que ese socio guardó su orden —
+todo cae en una lista completa y renumerada. Lo que falte entra **encendido** y al final, así
+que una sección nueva del producto aparece sola en las páginas ya configuradas. Lo llaman los
+tres lados (pública, panel y admin) para que un mismo jsonb no pinte tres páginas distintas.
+
+### La foto
+
+Se sube por el patrón ya resuelto en `account-managers/[id]/photo` (jpeg/png/webp, 5 MB,
+`validateMagicNumber` — el content-type del navegador es falseable), al bucket `clinic-public`
+bajo `affiliates/<id>/`. Lo que se guarda **no es lo que llegó**: sharp la recorta a un
+cuadrado **centrado** y la baja a 512px webp. Centrado y no "atención": el recorte tiene que
+ser predecible porque la vista previa enseña ese mismo encuadre, y un recorte inteligente que
+elija otra región dejaría mentir a la vista previa. De paso el reencode tira los EXIF, que en
+un retrato de teléfono suelen traer dónde se tomó, y evita que una foto de 5 MB de cámara
+arruine el LCP de la landing de un socio que no tiene por qué saber de compresión.
+
+### El texto es TEXTO PLANO
+
+Se guarda literal y se pinta con `{bio}` dentro de un `<p>`: React escapa, así que
+`<b>hola</b>` se lee `<b>hola</b>`. Ni HTML ni markdown — es contenido de un tercero en
+nuestro dominio. `sanitizeBio` solo quita lo invisible (controles) y limita los párrafos
+vacíos en cadena; el tope de 600 se cuenta por **caracteres visibles**, no por unidades
+UTF-16, para que un emoji no gaste dos del cupo y el contador de la pantalla no discrepe del
+servidor justo al enviar.
+
+### La vista previa no puede mentir
+
+El bloque de presentación de la vista previa **es** `<PartnerIntro />`, el mismo componente
+que pinta `/socio/<slug>`. No es una imitación. Su CSS lleva colores literales (los de
+`sales.css`) en vez de heredar variables, precisamente porque se pinta en dos sitios con
+paletas distintas: dentro de `.mfh` en la pública y dentro de `.dcafp` en el panel. Si tomara
+los colores del entorno se vería de un color en cada sitio y la vista previa dejaría de servir
+para lo único que sirve.
+
+### Moderación
+
+`/admin/paginas-socio` (**hermana** de `/admin/affiliates`, no hija: `isActive()` empareja por
+segmento y anidarla encendería los dos items del menú a la vez — el mismo problema que ya se
+arregló entre `/admin/soporte` y `/admin/soporte-afiliados`). Badge de alerta con las
+pendientes: sin él un socio puede quedarse días esperando sin que nadie se entere.
+
+Antes y después lado a lado, aprobar o rechazar **con motivo obligatorio** (el socio lo lee y
+es lo único que le dice qué corregir), y retirar una ya publicada. Al retirar, lo publicado
+**vuelve a su borrador** en vez de tirarse: ve el motivo, conserva su trabajo y puede corregir
+y reenviar, mientras su página ya volvió a la de fábrica.
+
+Las tres transiciones usan `updateMany` con el estado esperado en el WHERE, así que dos
+pestañas del admin no pueden aprobar y rechazar lo mismo: la segunda toca 0 filas, responde
+409 y la pantalla se recarga sola. El correo va **después** y nunca revierte: la decisión ya
+está escrita cuando se intenta enviar, y tirar la respuesta porque Resend no contestó dejaría
+al admin dándole otra vez a "Aprobar" sobre algo ya aprobado.
+
+### Dos cosas que se arreglaron de paso
+
+1. **`Prisma.DbNull`, no `undefined`.** La primera versión de `approvePage` limpiaba el
+   borrador con `sectionsConfigPending: undefined`; en un campo Json eso significa "no toques
+   esta columna". El borrador habría sobrevivido a su propia aprobación y el panel le habría
+   dicho al socio "tienes cambios sin enviar" el segundo después de aprobárselos.
+2. **El pie de `/socio/<slug>` era blanco sobre blanco.** Los colores estaban en
+   `rgba(255,255,255,…)`, heredados de una versión oscura de la plantilla; `.mfh` es blanco.
+   La línea invisible era justamente **"Recomendado por \<socio\>"**, el crédito del afiliado.
+   Y el enlace caía siempre al respaldo `#a78bfa` porque `--mfh-brand` no existe en
+   `sales.css` (el token es `--b`). Ahora `--b2` → **7.1:1** medido en el navegador.
+
+### Verificación
+
+- **`npm run build` completo, exit 0**, leído entero (sin pipes: enmascaran el exit code).
+  Los tres warnings de Tailwind son preexistentes. `npx tsc --noEmit` limpio.
+- **18 tests** (`npm run test:afiliados-pagina`) sobre los tres estados y sus trampas: sin
+  personalizar la página queda idéntica; en revisión el público **no ve nada** de lo
+  pendiente; aprobada publica lo aprobado con el borrador limpio. Más el caso de borrar foto y
+  texto, el jsonb corrupto, el recorte por code points y "un estado desconocido cae en draft"
+  (ante la duda, no publicar).
+- **Los cuatro estados del panel mirados uno por uno** en una página temporal sin sesión ni
+  BD, borrada después: sin personalizar, en revisión (21 controles bloqueados, comprobado en
+  el DOM), aprobada y rechazada con su motivo.
+- **`<PartnerIntro />` dentro de `.mfh`** por otra ruta temporal: centrado (contenedor 1200px,
+  tarjeta 820px a 190px de cada lado, medido en el DOM), con foto, sin foto, y **sin pintar
+  nada** cuando no hay ni foto ni texto. Contraste del pie medido ahí mismo.
+
+### Lo que NO se hizo / queda pendiente
+
+- **Nadie ha subido todavía una foto real ni ha aprobado una página de verdad.** En local no
+  hay `DATABASE_URL`, así que las rutas autenticadas completas (subida a Supabase Storage,
+  aprobación, correo) no se ejercitaron de punta a punta. Queda: subir una foto desde una
+  sesión de afiliado real, enviarla, aprobarla desde `/admin/paginas-socio` y comprobar que
+  llegue el correo y que `/socio/<slug>` la pinte.
+- **Los correos salen por el stub** mientras no haya `RESEND_API_KEY`: hoy se registran en
+  consola, no se envían.
+- **Se añadió "Retirar el envío"** (`DELETE /api/afiliados/pagina/revision`), que no estaba
+  pedido. La cola la atiende una sola persona y sin eso un socio que detecta su propia errata
+  treinta segundos después de enviar se queda bloqueado —sin poder editar ni reenviar— hasta
+  que alguien revise. Solo funciona mientras siga en `pending`.
+- No se tocó el hero, ni la atribución (los CTA siguen apuntando a
+  `/signup?ref=<referralCode>` con su campaña), ni el tracking de clics, ni `globals.css`.

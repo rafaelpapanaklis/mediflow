@@ -3563,6 +3563,46 @@ model Affiliate {
   /// (AffiliateNetworkBonusAward), que cuentan las clínicas activas de sus
   /// invitados DIRECTOS y nunca acumulan hacia arriba más de un nivel.
   invitedByAffiliateId String?
+
+  /// ── Página pública personalizada (/socio/<slug>) ─────────────────────
+  /// sql/afiliados-pagina-personal.sql.
+  ///
+  /// DOS JUEGOS DE CAMPOS A PROPÓSITO. Estos tres son lo PUBLICADO: lo único
+  /// que lee /socio/<slug>, y solo los escribe la aprobación del admin. Los
+  /// `*Pending` de abajo son el borrador del socio.
+  ///
+  /// Los tres en null = este socio no personalizó nada, y su página se ve
+  /// EXACTAMENTE como antes de que esto existiera. Ese es el caso por defecto
+  /// y el que no se puede romper.
+  photoUrl      String?
+  /// Presentación del socio con su voz. Se guarda y se pinta como TEXTO
+  /// PLANO: es contenido de un tercero en nuestro dominio, nada de HTML ni
+  /// markdown. El tope de longitud lo pone el código (page-config.ts).
+  bio           String?
+  /// [{ id, visible, orden }] — QUÉ secciones se ven y en qué orden. El
+  /// contenido de cada sección sigue siendo el del home; esto no lo edita.
+  /// Las secciones con el CTA de registro no son apagables (lo impone el
+  /// código): son las que sostienen la atribución del socio.
+  sectionsConfig Json?
+
+  /// 'draft' | 'pending' | 'approved' | 'rejected'. Los valores válidos los
+  /// define src/lib/affiliates/page-config.ts, no un enum de Postgres —
+  /// mismo criterio que AffiliateSupportTicket.status.
+  pageStatus       String    @default("draft")
+  /// Motivo del rechazo tal cual lo escribe el admin. El afiliado LO VE: es
+  /// lo que le dice qué corregir antes de reenviar.
+  pageRejectReason String?
+  pageSubmittedAt  DateTime? @db.Timestamptz(6)
+  pageReviewedAt   DateTime? @db.Timestamptz(6)
+
+  /// El BORRADOR que espera revisión. Lo escribe el afiliado desde su panel y
+  /// NUNCA lo ve el público. Se limpia al aprobar (su contenido ya pasó a las
+  /// columnas publicadas) y se CONSERVA al rechazar, para que pueda corregir
+  /// lo que escribió en vez de volver a escribirlo.
+  photoUrlPending       String?
+  bioPending            String?
+  sectionsConfigPending Json?
+
   createdAt     DateTime        @default(now())
   updatedAt     DateTime        @updatedAt
 
@@ -3580,6 +3620,8 @@ model Affiliate {
   @@index([status])
   @@index([accountManagerId])
   @@index([invitedByAffiliateId])
+  /// Cola de moderación del admin: WHERE pageStatus='pending' ORDER BY pageSubmittedAt.
+  @@index([pageStatus, pageSubmittedAt])
   @@map("affiliates")
 }
 
