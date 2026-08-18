@@ -46,6 +46,7 @@
     "test:patient-number": "tsx --test src/lib/patients/__tests__/next-patient-number-core.test.ts",
     "test:invoice-number": "tsx --test src/lib/invoices/__tests__/next-invoice-number-core.test.ts",
     "test:proration": "tsx --test src/lib/billing/proration.test.ts",
+    "test:subscription-lapse": "tsx --test src/lib/billing/__tests__/manual-subscription-lapse.test.ts",
     "test:click-guard": "tsx --test src/lib/affiliates/__tests__/click-guard-core.test.ts",
     "test:afiliados": "tsx --test src/lib/affiliates/payout-core.test.ts",
     "test:bonos-red": "tsx --test src/lib/affiliates/network-bonus-core.test.ts",
