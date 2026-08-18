@@ -137,5 +137,5 @@ export async function ClinicLandingServer({
 
   // El puente NO cambia nada de lo que se pinta: sin mensajes, la plantilla
   // recibe exactamente la misma clínica que sin él.
-  return live ? <LivePreviewBridge slug={c.slug} edit={edit}>{pagina}</LivePreviewBridge> : pagina;
+  return live ? <LivePreviewBridge slug={c.slug} tpl={tpl} edit={edit}>{pagina}</LivePreviewBridge> : pagina;
 }

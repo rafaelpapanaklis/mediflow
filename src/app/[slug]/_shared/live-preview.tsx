@@ -188,10 +188,10 @@ class LiveBoundary extends Component<
  * paciente. Mientras carga, <Txt>/<Foto> siguen siendo el passthrough de
  * siempre, así que no hay estado intermedio roto.
  */
-export function LivePreviewBridge({ slug, edit = false, children }: { slug: string; edit?: boolean; children: ReactNode }) {
+export function LivePreviewBridge({ slug, tpl, edit = false, children }: { slug: string; tpl?: string | null; edit?: boolean; children: ReactNode }) {
   const [patch, setPatch] = useState<LivePreviewPatch | null>(null);
   const [resetKey, setResetKey] = useState(0);
-  const [Editor, setEditor] = useState<ComponentType<{ slug: string; children: ReactNode }> | null>(null);
+  const [Editor, setEditor] = useState<ComponentType<{ slug: string; tpl?: string | null; children: ReactNode }> | null>(null);
 
   useEffect(() => {
     if (!edit) return;
@@ -236,7 +236,10 @@ export function LivePreviewBridge({ slug, edit = false, children }: { slug: stri
     setResetKey(k => k + 1);
   }
 
-  const cuerpo = Editor ? <Editor slug={slug}>{children}</Editor> : children;
+  /* `tpl` va SOLO para que el editor sepa cómo se llama cada campo EN ESTA
+     plantilla ("Título de servicios" en classic, "Título de tratamientos" en
+     especialistas). No cambia nada de lo que se pinta. */
+  const cuerpo = Editor ? <Editor slug={slug} tpl={tpl}>{children}</Editor> : children;
 
   return (
     <LiveClinicCtx.Provider value={patch}>

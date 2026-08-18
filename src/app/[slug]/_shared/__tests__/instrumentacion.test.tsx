@@ -45,7 +45,7 @@ const golden = (tpl: string) =>
 
 /** El mismo árbol, pero con el runtime de edición puesto. */
 const htmlEnEdicion = (tpl: string) =>
-  renderToString(<EditProvider slug="aurora">{elementoDePlantilla(tpl)}</EditProvider>);
+  renderToString(<EditProvider slug="aurora" tpl={tpl}>{elementoDePlantilla(tpl)}</EditProvider>);
 
 /**
  * Los TRES estados de la plantilla, pegados.
@@ -62,7 +62,7 @@ const htmlEnEdicion = (tpl: string) =>
  */
 const htmlDeTodosLosEstados = (tpl: string) =>
   [CLINICA_FIXTURE, CLINICA_VACIA, CLINICA_UN_DOCTOR]
-    .map(c => renderToString(<EditProvider slug="aurora">{elementoDePlantilla(tpl, c)}</EditProvider>))
+    .map(c => renderToString(<EditProvider slug="aurora" tpl={tpl}>{elementoDePlantilla(tpl, c)}</EditProvider>))
     .join("");
 
 /* ══════════════════════════════════════════════════════════════
@@ -97,6 +97,24 @@ for (const tpl of plantillasInstrumentadas()) {
       `O se instrumentan, o se quitan del manifiesto — declarados y sin nodo, la clínica no puede ` +
       `editarlos y aun así ocuparían sitio en landingCopy. Si el texto solo sale en otro estado ` +
       `(reseñas de Google, p. ej.), márcalo con "variante" y el motivo.`,
+    );
+  });
+
+  test(`${tpl}: toda dirección tiene nombre humano en el manifiesto`, () => {
+    // Las etiquetas ya no viajan en las props de cada <Txt> —eran 7 KB de
+    // texto que nunca se pinta en público—: las resuelve el runtime desde el
+    // manifiesto. Si una dirección no se resuelve, el editor enseña la
+    // dirección cruda ("copia:hero.cta") como nombre del campo. Aquí se exige
+    // que no quede ninguna.
+    const html = htmlDeTodosLosEstados(tpl);
+    const titulos = html.match(/title="([^"]*?) — clic para editar"/g) ?? [];
+    const crudas = titulos.filter(t => /title="(copia:|sec:|servicio:|faq:|testimonio:|clinica:)/.test(t));
+    assert.ok(titulos.length > 0, "no se encontró ni un campo editable");
+    assert.deepEqual(
+      crudas, [],
+      `En "${tpl}" hay campos cuyo nombre no está en el manifiesto: el editor ` +
+      `enseñaría la dirección cruda. Declara la clave en \`copia\` o el texto ` +
+      `en \`textos\`, o pasa \`etiqueta\` desde la plantilla.`,
     );
   });
 

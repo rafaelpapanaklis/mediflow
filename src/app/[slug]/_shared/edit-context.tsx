@@ -56,14 +56,19 @@ function conSaltos(s: string): ReactNode {
 export interface TextoParaEditar {
   /** Dirección del campo (@/lib/landing-address). */
   campo: string;
-  /** Nombre humano, para el aviso del editor. */
-  etiqueta: string;
+  /**
+   * Nombre humano del campo. Casi siempre `undefined`: lo resuelve el runtime
+   * desde el manifiesto (_shared/edit-labels.ts). Solo se pasa desde la
+   * plantilla cuando ahí no hay nada que resolver.
+   *
+   * Escribirlo en cada <Txt> costaba 4,6 KB de texto que NUNCA se pinta en la
+   * página pública viajando igual al navegador de los pacientes.
+   */
+  etiqueta?: string;
   /** Lo que se pinta ahora mismo. null = no hay nada escrito. */
   texto: string | null;
   /** El literal de la plantilla. Es lo que se ve si la clínica no escribió nada. */
   porDefecto: string | null;
-  /** Lo que se ve atenuado cuando no hay ni valor ni texto por defecto. */
-  placeholder: string;
   /** El valor real guardado (sin el texto por defecto de la plantilla). */
   valor: string | null;
   Tag: any;
@@ -86,7 +91,8 @@ export interface TextoParaEditar {
 
 export interface FotoParaEditar {
   slot: string;
-  etiqueta: string;
+  /** Como en <Txt>: normalmente lo resuelve el runtime desde el manifiesto. */
+  etiqueta?: string;
   ayuda?: string;
   /** Estilos del envoltorio que SOLO existe en modo edición. */
   caja?: CSSProperties;
@@ -133,7 +139,13 @@ export interface TxtProps {
   valor?: string | null;
   /** El texto que pinta la plantilla si no hay valor. null = no pintar nada. */
   porDefecto?: string | null;
-  /** Nombre humano del campo, para el editor. */
+  /**
+   * Nombre humano del campo.
+   *
+   * NO hace falta escribirlo: el runtime lo saca del manifiesto por la
+   * dirección, y el manifiesto solo se carga en modo edición. Se pasa aquí
+   * únicamente cuando la dirección no basta para saber de qué campo se habla.
+   */
   etiqueta?: string;
   /** Qué elemento se pinta. Por defecto <span>. */
   as?: any;
@@ -207,10 +219,9 @@ export function Txt(props: TxtProps) {
     <>
       {api.texto({
         campo,
-        etiqueta: etiqueta ?? campo,
+        etiqueta,
         texto,
         porDefecto: porDefecto || null,
-        placeholder: etiqueta || "Escribe aquí",
         valor: guardado,
         Tag,
         atributos,
@@ -270,7 +281,7 @@ export function Foto({ slot, url, etiqueta, ayuda, caja, zona, vacio, children }
     <>
       {api.foto({
         slot,
-        etiqueta: etiqueta ?? slot,
+        etiqueta,
         ayuda,
         caja,
         zona: zona ?? "completa",

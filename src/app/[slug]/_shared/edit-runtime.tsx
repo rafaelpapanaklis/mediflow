@@ -39,6 +39,10 @@ import {
   type EditApi, type FotoParaEditar, type TextoParaEditar,
 } from "./edit-context";
 import { avisarAlEditor, leerRespuestaDeFoto } from "./edit-bus";
+/* El manifiesto entra AQUÍ y no en las plantillas: este archivo solo se carga
+   con import() dinámico bajo ?edit=1, así que ni él ni las ~230 etiquetas de
+   los campos tocan nunca el bundle de /[slug]. */
+import { etiquetaDeCampo, ranuraDeFoto } from "./edit-labels";
 
 /* ------------------------------------------------------------------
    Estado compartido de la sesión de edición
@@ -46,6 +50,8 @@ import { avisarAlEditor, leerRespuestaDeFoto } from "./edit-bus";
 
 interface Interno {
   slug: string;
+  /** Qué plantilla se está pintando: decide cómo se llama cada campo. */
+  tpl?: string | null;
   /** Hay un archivo sobrevolando el lienzo: las zonas de soltar se encienden. */
   arrastrando: boolean;
   /** Vista previa local por ranura, mientras el padre comprime y sube. */
@@ -97,7 +103,10 @@ function conSaltos(s: string, multilinea?: boolean): ReactNode {
 }
 
 function TextoEditable({ t }: { t: TextoParaEditar }) {
-  const { mandarTexto, slug } = useContext(InternoCtx);
+  const { mandarTexto, slug, tpl } = useContext(InternoCtx);
+  /* La etiqueta la resuelve el manifiesto por la dirección del campo. La
+     plantilla solo la escribe cuando la dirección no basta. */
+  const etq = t.etiqueta ?? etiquetaDeCampo(t.campo, tpl);
   const nodo = useRef<HTMLElement | null>(null);
   const campo = useRef<HTMLTextAreaElement | null>(null);
   const [editando, setEditando] = useState(false);
@@ -124,7 +133,7 @@ function TextoEditable({ t }: { t: TextoParaEditar }) {
      ni uno ni otro sale el marcador atenuado, que en la página pública no
      existe (ahí ese elemento sencillamente no se pinta). */
   const vacio = !(valorVivo && valorVivo.trim());
-  const aPintar = !vacio ? (valorVivo as string) : (t.porDefecto ?? t.placeholder);
+  const aPintar = !vacio ? (valorVivo as string) : (t.porDefecto ?? etq);
   const atenuado = vacio && t.porDefecto === null;
 
   function abrir() {
@@ -153,13 +162,13 @@ function TextoEditable({ t }: { t: TextoParaEditar }) {
     const limpio = crudo.replace(/\r\n/g, "\n").trim();
     const nuevo = limpio === "" ? null : limpio;
     if (nuevo === null && t.requerido) {
-      avisarAlEditor(slug, { kind: "aviso", texto: `«${t.etiqueta}» no puede quedarse vacío.` });
+      avisarAlEditor(slug, { kind: "aviso", texto: `«${etq}» no puede quedarse vacío.` });
       return;
     }
     if (nuevo === t.valor) return;
     setRecien(nuevo);
     mandarTexto(t.campo, nuevo);
-  }, [mandarTexto, slug, t.campo, t.etiqueta, t.requerido, t.valor]);
+  }, [mandarTexto, slug, t.campo, etq, t.requerido, t.valor]);
 
   if (editando && estilos) {
     const casiLleno = largo >= Math.floor(t.maxLen * 0.8);
@@ -168,7 +177,7 @@ function TextoEditable({ t }: { t: TextoParaEditar }) {
         <textarea
           ref={campo}
           defaultValue={valorVivo ?? ""}
-          placeholder={t.placeholder}
+          placeholder={etq}
           maxLength={t.maxLen}
           rows={1}
           spellCheck
@@ -232,7 +241,7 @@ function TextoEditable({ t }: { t: TextoParaEditar }) {
       {...atributos}
       ref={nodo}
       data-dc-txt={t.campo}
-      title={`${t.etiqueta} — clic para editar`}
+      title={`${etq} — clic para editar`}
       onClick={(e: any) => { e.preventDefault(); e.stopPropagation(); abrir(); }}
       onMouseEnter={() => setSobre(true)}
       onMouseLeave={() => setSobre(false)}
@@ -274,7 +283,11 @@ function Boton({ children, onClick, tono = "claro" }: { children: ReactNode; onC
 }
 
 function FotoEditable({ f }: { f: FotoParaEditar }) {
-  const { arrastrando, previas, mandarFoto, quitarFoto, slug } = useContext(InternoCtx);
+  const { arrastrando, previas, mandarFoto, quitarFoto, slug, tpl } = useContext(InternoCtx);
+  /* Igual que en el texto: el nombre de la ranura sale del manifiesto. */
+  const meta = ranuraDeFoto(f.slot, tpl);
+  const etq = f.etiqueta ?? meta.nombre;
+  const ayuda = f.ayuda ?? meta.ayuda;
   const entrada = useRef<HTMLInputElement | null>(null);
   const [encima, setEncima] = useState(false);
 
@@ -299,6 +312,10 @@ function FotoEditable({ f }: { f: FotoParaEditar }) {
     <span
       data-dc-foto={f.slot}
       data-dc-zona={f.zona}
+      /* El nombre de la ranura y su nota ("mismo encuadre que la de antes")
+         estaban declarados en el manifiesto y no se enseñaban en ninguna
+         parte. Ahora salen al pasar por encima del hueco. */
+      title={ayuda ? `${etq} — ${ayuda}` : etq}
       onDragOver={e => { e.preventDefault(); setEncima(true); }}
       onDragLeave={() => setEncima(false)}
       onDrop={e => {
@@ -357,7 +374,7 @@ function FotoEditable({ f }: { f: FotoParaEditar }) {
    EL PROVEEDOR
    ------------------------------------------------------------------ */
 
-export function EditProvider({ slug, children }: { slug: string; children: ReactNode }) {
+export function EditProvider({ slug, tpl, children }: { slug: string; tpl?: string | null; children: ReactNode }) {
   const [arrastrando, setArrastrando] = useState(false);
   const [previas, setPrevias] = useState<Record<string, string>>({});
   const previasRef = useRef(previas);
@@ -451,8 +468,8 @@ export function EditProvider({ slug, children }: { slug: string; children: React
   }, []);
 
   const interno = useMemo<Interno>(
-    () => ({ slug, arrastrando, previas, mandarFoto, quitarFoto, mandarTexto }),
-    [slug, arrastrando, previas, mandarFoto, quitarFoto, mandarTexto],
+    () => ({ slug, tpl, arrastrando, previas, mandarFoto, quitarFoto, mandarTexto }),
+    [slug, tpl, arrastrando, previas, mandarFoto, quitarFoto, mandarTexto],
   );
 
   // Estable a propósito: todo el estado viaja por InternoCtx, así que cambiar

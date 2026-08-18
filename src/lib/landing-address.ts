@@ -71,6 +71,19 @@ const MAX_INDICE = 59;
 /** ¿La clave es PROPIA del objeto? Nada de heredarla del prototipo. */
 const propia = (o: object, k: string) => Object.prototype.hasOwnProperty.call(o, k);
 
+/**
+ * El nombre humano de una columna suelta, para el lienzo.
+ *
+ * Lo lee _shared/edit-labels.ts, que corre DENTRO del iframe y solo en modo
+ * edición. Se exporta desde aquí en vez de repetir las siete cadenas: tenerlas
+ * en dos sitios es la manera de que se separen.
+ */
+export function etiquetaDeColumna(columna: string): string | undefined {
+  return propia(COLUMNAS_SUELTAS, columna)
+    ? COLUMNAS_SUELTAS[columna as ColumnaSuelta].etiqueta
+    : undefined;
+}
+
 export type Direccion =
   | { tipo: "clinica";    columna: ColumnaSuelta }
   | { tipo: "seccion";    seccion: string; campo: CampoDeSeccion }
