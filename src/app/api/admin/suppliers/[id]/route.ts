@@ -2,6 +2,7 @@ import { getAdminSession } from "@/lib/admin-auth";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { logAdminGlobalEvent } from "@/lib/admin-audit";
+import { PROVEEDOR_SELECT } from "@/lib/b2b/vendor-fields";
 
 
 // Estados que el admin asigna a mano desde el panel. PENDING no se asigna
@@ -41,7 +42,9 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   // SUSPENDED: solo cambia el status; conserva approvedAt y rejectedReason.
 
   try {
-    const updated = await prisma.supplier.update({ where: { id: params.id }, data });
+    // B2B-12: igual que su gemela de laboratorios — `updated` se responde tal
+    // cual, y aprobar un proveedor devolvía su mpAccessToken.
+    const updated = await prisma.supplier.update({ where: { id: params.id }, data, select: PROVEEDOR_SELECT });
     logAdminGlobalEvent({
       req, admin: admin.user, entity: "supplier", entityId: params.id,
       action: status === "APPROVED" ? "approve" : status === "REJECTED" ? "reject" : "suspend",

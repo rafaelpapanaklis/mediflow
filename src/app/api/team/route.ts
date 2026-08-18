@@ -5,6 +5,7 @@ import { getPlanLimits } from "@/lib/plans";
 import { createClient as createAdminClient } from "@supabase/supabase-js";
 import { logMutation } from "@/lib/audit";
 import { revalidateAfter } from "@/lib/cache/revalidate";
+import { camposPublicosDeMiembro } from "@/lib/team/member-fields";
 
 const DOCTOR_COLORS = [
   "#3b82f6","#7c3aed","#059669","#e11d48","#d97706",
@@ -161,8 +162,14 @@ export async function POST(req: NextRequest) {
 
   revalidateAfter("team");
 
+  // Mismo patrón que EQ-05 y por eso la misma lista blanca: `create` sin
+  // `select` + spread al responder. Aquí los secretos nacen vacíos, así que
+  // hoy no hay nada que robar — pero el día que el alta enrole el 2FA o
+  // siembre un PIN, el agujero ya estaría abierto y nadie habría tocado este
+  // archivo. `tempPassword` sí sale, y a propósito: es lo único que se le
+  // enseña UNA vez a quien da de alta al miembro.
   return NextResponse.json({
-    ...newUser,
+    ...camposPublicosDeMiembro(newUser),
     tempPassword,
     createdAt: newUser.createdAt.toISOString(),
     updatedAt: newUser.updatedAt.toISOString(),

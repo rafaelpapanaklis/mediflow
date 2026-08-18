@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import type { SupplierStatus } from "@/lib/suppliers/types";
 import { parsePageParams } from "@/lib/pagination";
+import { PROVEEDOR_SELECT } from "@/lib/b2b/vendor-fields";
 
 
 const SUPPLIER_STATUSES = ["PENDING", "APPROVED", "REJECTED", "SUSPENDED"] as const;
@@ -19,8 +20,11 @@ export async function GET(req: NextRequest) {
     : undefined;
 
   const { take, skip } = parsePageParams(req.nextUrl.searchParams);
+  // B2B-12: ver el comentario gemelo en /api/admin/labs. Sin `select` salía el
+  // mpAccessToken de cada proveedor.
   const suppliers = await prisma.supplier.findMany({
     where: status ? { status } : undefined,
+    select: PROVEEDOR_SELECT,
     orderBy: { createdAt: "desc" },
     take,
     skip,

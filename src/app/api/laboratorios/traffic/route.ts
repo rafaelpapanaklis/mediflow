@@ -2,6 +2,7 @@ import { type NextRequest, NextResponse } from "next/server";
 import { getDentalLabContext } from "@/lib/lab-auth";
 import { prisma } from "@/lib/prisma";
 import { DENTAL_LAB_TRAFFIC, type DentalLabTrafficLevel } from "@/lib/laboratorios/types";
+import { LAB_SELECT } from "@/lib/b2b/vendor-fields";
 
 export const dynamic = "force-dynamic";
 
@@ -102,6 +103,11 @@ export async function PATCH(req: NextRequest) {
         ...(note !== undefined ? { trafficNote: note || null } : {}),
         trafficUpdatedAt: new Date(),
       },
+      // B2B-12: la respuesta era la fila entera del propio laboratorio, con su
+      // mpAccessToken dentro. Aquí no es cross-tenant —es su token— pero quien
+      // llama a esta ruta es un MANAGER que gestiona semáforo y plazos, y no
+      // tiene por qué recibir la credencial de cobro del laboratorio.
+      select: LAB_SELECT,
     });
   });
 

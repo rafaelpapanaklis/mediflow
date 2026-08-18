@@ -5,6 +5,7 @@ import { getPlanLimits } from "@/lib/plans";
 import { createClient as createAdminClient } from "@supabase/supabase-js";
 import { logMutation } from "@/lib/audit";
 import { revalidateAfter } from "@/lib/cache/revalidate";
+import { MIEMBRO_SELECT, camposPublicosDeMiembro } from "@/lib/team/member-fields";
 
 function getAdminClient() {
   return createAdminClient(
@@ -30,9 +31,14 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
   const err = requireAdmin(ctx);
   if (err) return err;
 
+  // EQ-05: `include` sin `select` traía la fila ENTERA y se serializaba tal
+  // cual — totpSecret en claro, los hashes de los códigos de recuperación, el
+  // hash del PIN de Caja y el refresh token de Google. Con la lista blanca el
+  // secreto ni siquiera sale de Postgres.
   const member = await prisma.user.findFirst({
     where: { id: params.id, clinicId: ctx!.clinicId }, // cross-clinic protection
-    include: {
+    select: {
+      ...MIEMBRO_SELECT,
       _count: {
         select: {
           appointments: true,
@@ -291,7 +297,12 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 
   // emailChanged: la UI lo usa para avisarle al admin que el miembro ahora
   // inicia sesión con el correo nuevo — sin esa señal el cambio es invisible.
-  return NextResponse.json({ ...updated, emailChanged });
+  //
+  // EQ-05: la fila entera se queda en el servidor. Aquí hacía falta completa
+  // (la bitácora de arriba saca el diff de ella), pero lo que se responde pasa
+  // por la lista blanca: el spread `{...updated}` mandaba el secret TOTP de esa
+  // persona al navegador de quien pulsó "Guardar cambios".
+  return NextResponse.json({ ...camposPublicosDeMiembro(updated), emailChanged });
 }
 
 // DELETE /api/team/[id] — permanently remove doctor
