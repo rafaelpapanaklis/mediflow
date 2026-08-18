@@ -276,9 +276,83 @@ export const TEMPLATE_MANIFESTS: Record<string, TemplateManifest> = {
     id: "futurista",
     nombre: "Futurista",
     para: "Moderna, oscura, con acentos de neón. Para clínicas que venden tecnología.",
+    leeManifiesto: true,
+    instrumentada: true,
     secciones: [SEC_SERVICIOS, SEC_EQUIPO, SEC_GALERIA, SEC_OPINIONES, SEC_FAQ, SEC_CONTACTO, SEC_RESERVAR],
     fotos: [FOTO_PORTADA],
-    textos: TEXTOS_BASE,
+    /* NO usa TEXTOS_BASE, y es el motivo de leerlos uno por uno: los SEIS
+       mentían. TEXTOS_BASE son los literales de las plantillas nuevas, y
+       futurista pinta otros desde antes de que el manifiesto existiera:
+       "Lo que cuesta, antes de sentarte" → "Tratamientos de nueva generación";
+       "Quién te va a atender" → "Especialistas detrás de la pantalla";
+       "Lo que todos preguntan antes de venir" → "Resolvemos tus dudas";
+       "Dónde estamos" → "Estamos cerca de ti". Y faltaban cuatro que la
+       plantilla sí pinta (galería, bajada del equipo y el cierre entero).
+
+       El título de opiniones es el kicker mono: en esta plantilla el bloque de
+       testimonios no tiene <h2>, solo esa línea. El "// " que lo precede es
+       decoración de la plantilla y va pegado FUERA de lo editable. */
+    textos: [
+      { seccion: "servicios", campo: "titulo",    etiqueta: "Título de servicios",  porDefecto: "Tratamientos de nueva generación" },
+      { seccion: "servicios", campo: "subtitulo", etiqueta: "Bajada de servicios",  porDefecto: "Precios transparentes y resultados predecibles." },
+      { seccion: "equipo",    campo: "titulo",    etiqueta: "Título del equipo",    porDefecto: "Especialistas detrás de la pantalla" },
+      { seccion: "equipo",    campo: "subtitulo", etiqueta: "Bajada del equipo",    porDefecto: "Ciencia, tecnología y calidez en un mismo lugar." },
+      { seccion: "galeria",   campo: "titulo",    etiqueta: "Título de la galería", porDefecto: "Un entorno clínico de otro nivel" },
+      { seccion: "opiniones", campo: "titulo",    etiqueta: "Título de opiniones",  porDefecto: "Lo que dicen nuestros pacientes" },
+      { seccion: "faq",       campo: "titulo",    etiqueta: "Título de preguntas",  porDefecto: "Resolvemos tus dudas" },
+      { seccion: "contacto",  campo: "titulo",    etiqueta: "Título de contacto",   porDefecto: "Estamos cerca de ti" },
+      { seccion: "reservar",  campo: "titulo",    etiqueta: "Título del cierre",    porDefecto: "¿List@ para tu cita?" },
+      { seccion: "reservar",  campo: "subtitulo", etiqueta: "Bajada del cierre",    porDefecto: "Agenda tu valoración. Te confirmamos por WhatsApp en minutos." },
+    ],
+    copia: [
+      { clave: "nav.cta",  etiqueta: "Barra · botón de reservar", porDefecto: "Agendar Cita", maxLen: 40, linea: true },
+
+      { clave: "hero.cta",      etiqueta: "Portada · botón principal",   porDefecto: "Agendar Cita", maxLen: 60, linea: true },
+      { clave: "hero.whatsapp", etiqueta: "Portada · botón de WhatsApp", porDefecto: "WhatsApp",     maxLen: 60, linea: true },
+      { clave: "hero.cta2",     etiqueta: "Portada · botón alterno (sin WhatsApp)", porDefecto: "Conoce más", maxLen: 60, linea: true },
+
+      /* Las tres cifras del hero son literales; lo interpolado es el valor. */
+      { clave: "stats.google",    etiqueta: "Portada · leyenda de la nota de Google", porDefecto: "rating google", maxLen: 60, linea: true,
+        variante: "Solo sale con ficha de Google, y las reseñas llegan por fetch: en el render de servidor los efectos no corren." },
+      { clave: "stats.anios",     etiqueta: "Portada · leyenda de años",     porDefecto: "años exp.",  maxLen: 60, linea: true },
+      { clave: "stats.pacientes", etiqueta: "Portada · leyenda de pacientes", porDefecto: "pacientes", maxLen: 60, linea: true },
+
+      { clave: "servicios.kicker", etiqueta: "Servicios · etiqueta",              porDefecto: "Servicios", maxLen: 60, linea: true },
+      { clave: "servicios.cta",    etiqueta: "Servicios · botón de cada tarjeta", porDefecto: "Agendar",   maxLen: 40, linea: true },
+      { clave: "equipo.kicker",    etiqueta: "Equipo · etiqueta",                 porDefecto: "Equipo",    maxLen: 60, linea: true },
+      { clave: "equipo.cta",       etiqueta: "Equipo · botón de cada doctor",     porDefecto: "Agendar consulta", maxLen: 60, linea: true },
+      { clave: "galeria.kicker",   etiqueta: "Galería · etiqueta",                porDefecto: "Galería",   maxLen: 60, linea: true },
+      { clave: "galeria.cta",      etiqueta: "Galería · botón",                   porDefecto: "Conoce el espacio · Agendar Cita", maxLen: 80, linea: true },
+      { clave: "opiniones.tituloGoogle", etiqueta: "Reseñas de Google · título", porDefecto: "Reseñas de Google", maxLen: 60, linea: true,
+        variante: "El bloque solo existe con reseñas de Google, que llegan por fetch." },
+      { clave: "opiniones.cta", etiqueta: "Reseñas de Google · botón", porDefecto: "Agendar Cita", maxLen: 60, linea: true,
+        variante: "Mismo bloque de Google." },
+
+      { clave: "faq.kicker", etiqueta: "Preguntas · etiqueta", porDefecto: "Preguntas frecuentes", maxLen: 60, linea: true },
+      { clave: "faq.nota",   etiqueta: "Preguntas · texto de cierre", porDefecto: "¿Te quedó otra duda? Con gusto te ayudamos.", maxLen: 160, linea: true },
+      { clave: "faq.cta",    etiqueta: "Preguntas · botón", porDefecto: "Agendar Cita", maxLen: 60, linea: true },
+
+      { clave: "reservar.kicker", etiqueta: "Cierre · etiqueta", porDefecto: "Tu próxima cita", maxLen: 60, linea: true },
+      { clave: "reservar.cta",    etiqueta: "Cierre · botón",    porDefecto: "Agendar Cita",    maxLen: 60, linea: true },
+
+      { clave: "contacto.kicker",            etiqueta: "Contacto · etiqueta",               porDefecto: "Visítanos",   maxLen: 60, linea: true },
+      { clave: "contacto.etiquetaDireccion", etiqueta: "Contacto · rótulo de la dirección", porDefecto: "Dirección",   maxLen: 60, linea: true },
+      { clave: "contacto.etiquetaTelefono",  etiqueta: "Contacto · rótulo del teléfono",    porDefecto: "Teléfono",    maxLen: 60, linea: true },
+      { clave: "contacto.etiquetaWhatsapp",  etiqueta: "Contacto · rótulo de WhatsApp",     porDefecto: "WhatsApp",    maxLen: 60, linea: true },
+      { clave: "contacto.etiquetaHorarios",  etiqueta: "Contacto · rótulo de los horarios", porDefecto: "Horarios",    maxLen: 60, linea: true },
+      { clave: "contacto.cerrado",           etiqueta: "Contacto · cómo se dice «cerrado»", porDefecto: "Cerrado",     maxLen: 40, linea: true },
+      { clave: "contacto.cta",               etiqueta: "Contacto · botón de reservar",      porDefecto: "Agendar Cita", maxLen: 60, linea: true },
+    ],
+    noEditables: [
+      { donde: "Menú de navegación (y su versión móvil, con el rótulo «Menú»)", porque: "Los enlaces siguen a las secciones que estén encendidas." },
+      { donde: "Pie de página, incluido «Hecho con DaleControl»", porque: "El pie es nuestro, no de la clínica." },
+      { donde: "Portada · pastilla «// {especialidad} · {ciudad}» y el chip de especialidad", porque: "Son datos de la clínica; se cambian en Configuración." },
+      { donde: "Portada · «{n} reseñas verificadas»", porque: "Se construye con lo que devuelve Google." },
+      { donde: "«Dr/a. {nombre} {apellido}» y las especialidades del equipo", porque: "Se arman con datos del equipo." },
+      { donde: "La numeración de las tarjetas de servicio («01/04»)", porque: "Es la posición en la lista, no copy." },
+      { donde: "El texto del mapa cuando no hay mapa configurado", porque: "Es una expresión con respaldo: o la dirección, o un aviso." },
+      { donde: "Las reseñas de Google", porque: "Son de Google. No hay dónde guardarlas si alguien las reescribe." },
+    ],
   },
 
   healthtech: {

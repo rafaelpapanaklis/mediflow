@@ -176,6 +176,9 @@ export const CLINICA_VACIA: LandingClinic = {
   landingCoverUrl: null,
   landingPatients: null,
   landingYearsExperience: null,
+  // Sin WhatsApp: hay plantillas que cambian el segundo botón de la portada
+  // por otro distinto cuando la clínica no lo tiene (futurista).
+  landingWhatsapp: null,
   landingMsiPlazos: [],
   landingUrgentText: null,
   schedules: CLINICA_FIXTURE.schedules.map(s => ({ ...s, enabled: false })),

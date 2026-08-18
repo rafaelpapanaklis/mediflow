@@ -12,6 +12,12 @@ import {
 } from "lucide-react";
 import type { TemplateProps } from "../_shared/types";
 import { useLiveClinic } from "../_shared/live-preview";
+import { Foto, Txt, useEnEdicion } from "../_shared/edit-context";
+// landing-address-parts y NO landing-address: este archivo viaja al navegador
+// de los pacientes, y el módulo grande arrastra el manifiesto de las ocho
+// plantillas (17 KB) sin que la página pública lo necesite para nada.
+import { dirClinica, dirCopia, dirFaq, dirSeccion, dirServicio, dirTestimonio } from "@/lib/landing-address-parts";
+import { copyMap, copyValue, photoOf, sectionMap, sectionSubtitle, sectionTitle, showSection } from "../_shared/landing-data";
 import {
   tint, shade, alpha,
   SmartImg, Stars, GoogleG,
@@ -32,13 +38,31 @@ function TiktokIcon({ size = 20 }: { size?: number }) {
   );
 }
 
-/* ---- encabezado de sección (kicker mono + título Grotesk) ---- */
-function SectionHead({ kicker, title, sub, glow, muted }: { kicker: string; title: string; sub?: string; glow: string; muted: string }) {
+/* ---- encabezado de sección (kicker mono + título Grotesk) ----
+   Los tres textos son EDITABLES y siguen siendo los mismos tres elementos:
+   el <Txt> ES el <p>/<h2> que ya existía, no uno de más. El "// " del kicker
+   va pegado al texto (`unido`) porque en el JSX era UN nodo de texto y porque
+   es decoración de la plantilla, no copy de la clínica. */
+function SectionHead({ seccion, claveKicker, kicker, kickerValor, title, titleValor, sub, subValor, glow, muted, editando }: {
+  seccion: string; claveKicker: string;
+  kicker: string; kickerValor: string | null;
+  title: string; titleValor?: string | null;
+  sub?: string; subValor?: string | null;
+  glow: string; muted: string; editando: boolean;
+}) {
   return (
     <Reveal className="max-w-2xl">
-      <p className="tf-mono text-[12px] tracking-[0.22em] uppercase mb-4" style={{ color: glow }}>{kicker}</p>
-      <h2 className="text-4xl sm:text-5xl font-bold leading-[1.05] tracking-tight">{title}</h2>
-      {sub && <p className="mt-4 text-lg" style={{ color: muted }}>{sub}</p>}
+      <Txt as="p" className="tf-mono text-[12px] tracking-[0.22em] uppercase mb-4" style={{ color: glow }}
+        campo={dirCopia(claveKicker)} linea maxLen={80}
+        valor={kickerValor} porDefecto={kicker} prefijo="// " unido />
+      <Txt as="h2" className="text-4xl sm:text-5xl font-bold leading-[1.05] tracking-tight"
+        campo={dirSeccion(seccion, "titulo")} linea maxLen={160}
+        valor={titleValor} porDefecto={title} />
+      {((sub && (subValor || sub)) || (sub && editando)) && (
+        <Txt as="p" className="mt-4 text-lg" style={{ color: muted }}
+          campo={dirSeccion(seccion, "subtitulo")} maxLen={500}
+          valor={subValor} porDefecto={sub} />
+      )}
     </Reveal>
   );
 }
@@ -47,6 +71,9 @@ export function TemplateFuturista({ clinic: publicada, highlights }: TemplatePro
   // En /dashboard/landing esto trae lo que la clínica lleva escrito sin
   // guardar; en la página pública devuelve `publicada` tal cual.
   const clinic = useLiveClinic(publicada);
+  /* Solo dentro del lienzo del editor. En la página pública es SIEMPRE false,
+     así que ninguna sección se pinta distinta para un paciente. */
+  const editando = useEnEdicion();
   /* ---------- color de marca (todo deriva de aquí) ---------- */
   const theme = clinic.landingThemeColor ?? "#0f766e";
   const glow = tint(theme, 0.42);
@@ -73,6 +100,25 @@ export function TemplateFuturista({ clinic: publicada, highlights }: TemplatePro
   const gallery: string[] = clinic.landingGallery ?? [];
   const waLink = clinic.landingWhatsapp ? `https://wa.me/${clinic.landingWhatsapp.replace(/\D/g, "")}` : null;
   const orderedSchedules = clinic.schedules.slice().sort((a, b) => a.dayOfWeek - b.dayOfWeek);
+
+  /* ---------- lo que guardó el editor ----------
+     futurista nació antes del manifiesto: su lista de bloques y sus títulos
+     estaban escritos a mano y los interruptores de la pestaña Diseño se
+     guardaban sin que pasara nada. Ahora se leen. Las listas siguen siendo
+     las CRUDAS (sin serviceList ni faqList): esas normalizadoras tiran los
+     elementos incompletos, y una tarjeta que hoy se pinta a medias
+     desaparecería del sitio publicado de alguien sin que nadie lo pidiera. */
+  const S = sectionMap(clinic);
+  const copias = copyMap(clinic);
+  const C = (clave: string) => copyValue(copias, clave);
+  /* La portada, con la misma cadena de respaldo que las otras siete:
+     ranura "portada" → landingCoverUrl (lo que futurista leía hasta hoy). */
+  const portada = photoOf(clinic, "portada", { cover: true });
+  const verServicios = showSection(S, "servicios", services.length > 0);
+  const verEquipo    = showSection(S, "equipo",    clinic.users.length > 0);
+  const verGaleria   = showSection(S, "galeria",   gallery.length > 0);
+  const verOpiniones = showSection(S, "opiniones", testimonials.length > 0);
+  const verFaq       = showSection(S, "faq",       faqs.length > 0);
 
   /* ---------- estado ---------- */
   const [booking, setBooking] = useState<{ open: boolean; service?: string; doctorId?: string; restore?: PendingBooking | null }>({ open: false });
@@ -106,19 +152,23 @@ export function TemplateFuturista({ clinic: publicada, highlights }: TemplatePro
   }, []);
 
   /* ---------- navegación (solo secciones presentes) ---------- */
+  /* Los enlaces siguen a las secciones ENCENDIDAS: apagar una y dejar su
+     ancla en el menú era mandar al paciente a un sitio que ya no existe. */
   const navLinks: [string, string][] = [
-    ...(services.length ? [["Servicios", "servicios"] as [string, string]] : []),
-    ...(clinic.users.length ? [["Equipo", "equipo"] as [string, string]] : []),
-    ...(gallery.length ? [["Galería", "galeria"] as [string, string]] : []),
+    ...(verServicios ? [["Servicios", "servicios"] as [string, string]] : []),
+    ...(verEquipo ? [["Equipo", "equipo"] as [string, string]] : []),
+    ...(verGaleria ? [["Galería", "galeria"] as [string, string]] : []),
     ["Contacto", "contacto"],
   ];
   const active = useActiveSection(["inicio", ...navLinks.map((n) => n[1])]);
 
   /* ---------- señales de confianza del hero ---------- */
-  const stats: { value: string; label: string }[] = [];
-  if (googleReviews?.rating) stats.push({ value: googleReviews.rating.toFixed(1), label: "rating google" });
-  if (clinic.landingYearsExperience != null) stats.push({ value: `${clinic.landingYearsExperience}+`, label: "años exp." });
-  if (clinic.landingPatients) stats.push({ value: clinic.landingPatients, label: "pacientes" });
+  /* Las tres leyendas son literales (lo interpolado es el valor), así que las
+     tres se editan. Cada una lleva su clave. */
+  const stats: { value: string; label: string; clave: string }[] = [];
+  if (googleReviews?.rating) stats.push({ value: googleReviews.rating.toFixed(1), label: "rating google", clave: "stats.google" });
+  if (clinic.landingYearsExperience != null) stats.push({ value: `${clinic.landingYearsExperience}+`, label: "años exp.", clave: "stats.anios" });
+  if (clinic.landingPatients) stats.push({ value: clinic.landingPatients, label: "pacientes", clave: "stats.pacientes" });
 
   /* ---------- redes ---------- */
   const socials = [
@@ -198,10 +248,11 @@ export function TemplateFuturista({ clinic: publicada, highlights }: TemplatePro
               ))}
             </nav>
             <div className="flex items-center gap-3">
-              <button onClick={() => openBooking()} className="tf-cta hidden sm:inline-flex items-center gap-2 px-5 py-2.5 rounded-lg text-[13px] font-semibold"
-                style={{ background: theme, color: "#fff", border: `1px solid ${alpha(glow, 0.6)}`, boxShadow: `0 0 22px ${alpha(theme, 0.55)}` }}>
-                <Calendar size={16} /> Agendar Cita
-              </button>
+              <Txt as="button" onClick={() => openBooking()} className="tf-cta hidden sm:inline-flex items-center gap-2 px-5 py-2.5 rounded-lg text-[13px] font-semibold"
+                style={{ background: theme, color: "#fff", border: `1px solid ${alpha(glow, 0.6)}`, boxShadow: `0 0 22px ${alpha(theme, 0.55)}` }}
+                campo={dirCopia("nav.cta")} linea maxLen={40}
+                valor={C("nav.cta")} porDefecto="Agendar Cita" prefijo=" " unido
+                antes={<Calendar size={16} />} />
               <button className="md:hidden w-10 h-10 grid place-items-center rounded-lg" style={glass} aria-label="Abrir menú" onClick={() => setMenu(true)}><Menu size={20} /></button>
             </div>
           </div>
@@ -221,9 +272,10 @@ export function TemplateFuturista({ clinic: publicada, highlights }: TemplatePro
                   <span className="tf-mono text-xs mr-3" style={{ color: glow }}>{String(i + 1).padStart(2, "0")}</span>{label}
                 </a>
               ))}
-              <button onClick={() => { setMenu(false); openBooking(); }} className="tf-cta mt-4 inline-flex items-center justify-center gap-2" style={ctaSolid}>
-                <Calendar size={18} /> Agendar Cita
-              </button>
+              <Txt as="button" onClick={() => { setMenu(false); openBooking(); }} className="tf-cta mt-4 inline-flex items-center justify-center gap-2" style={ctaSolid}
+                campo={dirCopia("nav.cta")} linea maxLen={40}
+                valor={C("nav.cta")} porDefecto="Agendar Cita" prefijo=" " unido
+                antes={<Calendar size={18} />} />
             </nav>
           </div>
         )}
@@ -238,12 +290,15 @@ export function TemplateFuturista({ clinic: publicada, highlights }: TemplatePro
                 <span className="w-1.5 h-1.5 rounded-full" style={{ background: glow, boxShadow: `0 0 8px ${glow}` }} />
                 <span className="tf-mono text-[11px] tracking-[0.2em] uppercase" style={{ color: muted }}>// {clinic.specialty}{clinic.city ? ` · ${clinic.city}` : ""}</span>
               </div>
-              <h1 className="text-[40px] sm:text-6xl lg:text-7xl font-bold leading-[0.98] tracking-tight">{clinic.name}</h1>
-              {clinic.landingTagline && (
-                <p className="mt-5 text-2xl sm:text-3xl font-semibold leading-tight" style={neonText}>{clinic.landingTagline}</p>
+              <Txt as="h1" className="text-[40px] sm:text-6xl lg:text-7xl font-bold leading-[0.98] tracking-tight"
+                campo={dirClinica("name")} linea requerido maxLen={120} valor={clinic.name} />
+              {(clinic.landingTagline || editando) && (
+                <Txt as="p" className="mt-5 text-2xl sm:text-3xl font-semibold leading-tight" style={neonText}
+                  campo={dirClinica("landingTagline")} maxLen={300} valor={clinic.landingTagline} />
               )}
-              {clinic.description && (
-                <p className="mt-6 text-[17px] leading-relaxed max-w-md" style={{ color: muted }}>{clinic.description}</p>
+              {(clinic.description || editando) && (
+                <Txt as="p" className="mt-6 text-[17px] leading-relaxed max-w-md" style={{ color: muted }}
+                  campo={dirClinica("description")} maxLen={5000} valor={clinic.description} />
               )}
               {highlights && highlights.length > 0 && (
                 <div className="mt-6 flex flex-wrap gap-2">
@@ -255,17 +310,20 @@ export function TemplateFuturista({ clinic: publicada, highlights }: TemplatePro
                 </div>
               )}
               <div className="mt-9 flex flex-wrap items-center gap-4">
-                <button onClick={() => openBooking()} className="tf-cta inline-flex items-center justify-center gap-2" style={ctaSolid}>
-                  <Calendar size={18} /> Agendar Cita
-                </button>
+                <Txt as="button" onClick={() => openBooking()} className="tf-cta inline-flex items-center justify-center gap-2" style={ctaSolid}
+                  campo={dirCopia("hero.cta")} linea maxLen={60}
+                  valor={C("hero.cta")} porDefecto="Agendar Cita" prefijo=" " unido
+                  antes={<Calendar size={18} />} />
                 {waLink ? (
-                  <a href={waLink} target="_blank" rel="noreferrer" className="tf-cta inline-flex items-center justify-center gap-2" style={ctaGhost}>
-                    <MessageCircle size={18} /> WhatsApp
-                  </a>
+                  <Txt as="a" href={waLink} target="_blank" rel="noreferrer" className="tf-cta inline-flex items-center justify-center gap-2" style={ctaGhost}
+                    campo={dirCopia("hero.whatsapp")} linea maxLen={60}
+                    valor={C("hero.whatsapp")} porDefecto="WhatsApp" prefijo=" " unido
+                    antes={<MessageCircle size={18} />} />
                 ) : (
-                  <button onClick={() => scrollToId(services.length ? "servicios" : "contacto")} className="tf-cta inline-flex items-center justify-center gap-2" style={ctaGhost}>
-                    Conoce más <ArrowRight size={18} />
-                  </button>
+                  <Txt as="button" onClick={() => scrollToId(verServicios ? "servicios" : "contacto")} className="tf-cta inline-flex items-center justify-center gap-2" style={ctaGhost}
+                    campo={dirCopia("hero.cta2")} linea maxLen={60}
+                    valor={C("hero.cta2")} porDefecto="Conoce más" sufijo=" " unido
+                    despues={<ArrowRight size={18} />} />
                 )}
               </div>
               {/* señales de confianza */}
@@ -276,7 +334,9 @@ export function TemplateFuturista({ clinic: publicada, highlights }: TemplatePro
                       {i > 0 && <span className="w-px self-stretch" style={{ background: borderC }} />}
                       <div>
                         <span className="text-3xl font-bold" style={{ color: glow, textShadow: `0 0 14px ${alpha(glow, 0.27)}` }}>{s.value}</span>
-                        <p className="tf-mono text-[11px] tracking-[0.12em] uppercase mt-0.5" style={{ color: muted }}>{s.label}</p>
+                        <Txt as="p" className="tf-mono text-[11px] tracking-[0.12em] uppercase mt-0.5" style={{ color: muted }}
+                          campo={dirCopia(s.clave)} linea maxLen={60}
+                          valor={C(s.clave)} porDefecto={s.label} />
                       </div>
                     </div>
                   ))}
@@ -288,7 +348,11 @@ export function TemplateFuturista({ clinic: publicada, highlights }: TemplatePro
             <div className="tf-float relative">
               <div className="relative rounded-2xl p-2.5" style={{ ...glass, boxShadow: `0 0 40px ${alpha(theme, 0.25)}` }}>
                 <div className="relative overflow-hidden rounded-xl">
-                  <SmartImg src={clinic.landingCoverUrl} alt={`Instalaciones de ${clinic.name}`} accent={theme} className="w-full aspect-[4/5] object-cover" />
+                  {/* Sin `caja`: la botonera se ancla al div de arriba, que ya
+                      es `relative`. Envolver aquí movería la foto. */}
+                  <Foto slot="portada" url={portada} zona="derecha">
+                    {(url) => <SmartImg src={url} alt={`Instalaciones de ${clinic.name}`} accent={theme} className="w-full aspect-[4/5] object-cover" />}
+                  </Foto>
                   <div className="absolute inset-0" style={{ background: `linear-gradient(180deg, transparent 40%, ${alpha(theme, 0.35)})`, mixBlendMode: "multiply" }} />
                   <div className="tf-scan absolute inset-x-0 h-16 pointer-events-none" style={{ background: `linear-gradient(${alpha(glow, 0.25)}, transparent)` }} />
                 </div>
@@ -323,10 +387,14 @@ export function TemplateFuturista({ clinic: publicada, highlights }: TemplatePro
         {/* ============================================================
             3 · SERVICIOS
            ============================================================ */}
-        {services.length > 0 && (
+        {verServicios && (
           <section id="servicios" className="py-20 sm:py-28">
             <div className="max-w-6xl mx-auto px-5 sm:px-8">
-              <SectionHead kicker="// Servicios" title="Tratamientos de nueva generación" sub="Precios transparentes y resultados predecibles." glow={glow} muted={muted} />
+              <SectionHead seccion="servicios" claveKicker="servicios.kicker"
+                kicker="Servicios" kickerValor={C("servicios.kicker")}
+                title="Tratamientos de nueva generación" titleValor={S.servicios?.titulo}
+                sub="Precios transparentes y resultados predecibles." subValor={S.servicios?.subtitulo}
+                glow={glow} muted={muted} editando={editando} />
               <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4 mt-14">
                 {services.map((s, i) => (
                   <Reveal key={i} delay={(i % 3) * 55}>
@@ -337,13 +405,20 @@ export function TemplateFuturista({ clinic: publicada, highlights }: TemplatePro
                         <span className="grid place-items-center w-14 h-14 rounded-xl text-2xl" style={{ background: alpha(theme, 0.14), border: `1px solid ${alpha(glow, 0.3)}` }}>{s.icon || "🏥"}</span>
                         <span className="tf-mono text-[12px]" style={{ color: alpha(glow, 0.7) }}>{String(i + 1).padStart(2, "0")}/{String(services.length).padStart(2, "0")}</span>
                       </div>
-                      <h3 className="mt-5 text-xl font-bold tracking-tight">{s.name}</h3>
-                      {(s.description || s.desc) && <p className="mt-1.5 text-[14px] leading-relaxed min-h-[40px]" style={{ color: muted }}>{s.description || s.desc}</p>}
+                      <Txt as="h3" className="mt-5 text-xl font-bold tracking-tight"
+                        campo={dirServicio(i, "name")} linea requerido maxLen={120} valor={s.name} />
+                      {((s.description || s.desc) || editando) && (
+                        <Txt as="p" className="mt-1.5 text-[14px] leading-relaxed min-h-[40px]" style={{ color: muted }}
+                          campo={dirServicio(i, "desc")} maxLen={400} valor={s.description || s.desc} />
+                      )}
                       <div className="mt-5 pt-4 flex items-center justify-between" style={{ borderTop: `1px solid ${borderC}` }}>
-                        {s.price ? <span className="text-lg font-bold">{s.price}</span> : <span />}
-                        <button onClick={() => openBooking({ service: s.name })} className="tf-mono text-[12px] tracking-wider uppercase inline-flex items-center gap-1.5 transition" style={{ color: glow }}>
-                          Agendar <ArrowRight size={14} className="transition-transform group-hover:translate-x-1" />
-                        </button>
+                        {s.price || editando
+                          ? <Txt as="span" className="text-lg font-bold" campo={dirServicio(i, "price")} linea maxLen={40} valor={s.price} />
+                          : <span />}
+                        <Txt as="button" onClick={() => openBooking({ service: s.name })} className="tf-mono text-[12px] tracking-wider uppercase inline-flex items-center gap-1.5 transition" style={{ color: glow }}
+                          campo={dirCopia("servicios.cta")} linea maxLen={40}
+                          valor={C("servicios.cta")} porDefecto="Agendar" sufijo=" " unido
+                          despues={<ArrowRight size={14} className="transition-transform group-hover:translate-x-1" />} />
                       </div>
                     </div>
                   </Reveal>
@@ -356,10 +431,14 @@ export function TemplateFuturista({ clinic: publicada, highlights }: TemplatePro
         {/* ============================================================
             4 · EQUIPO
            ============================================================ */}
-        {clinic.users.length > 0 && (
+        {verEquipo && (
           <section id="equipo" className="py-20 sm:py-28">
             <div className="max-w-6xl mx-auto px-5 sm:px-8">
-              <SectionHead kicker="// Equipo" title="Especialistas detrás de la pantalla" sub="Ciencia, tecnología y calidez en un mismo lugar." glow={glow} muted={muted} />
+              <SectionHead seccion="equipo" claveKicker="equipo.kicker"
+                kicker="Equipo" kickerValor={C("equipo.kicker")}
+                title="Especialistas detrás de la pantalla" titleValor={S.equipo?.titulo}
+                sub="Ciencia, tecnología y calidez en un mismo lugar." subValor={S.equipo?.subtitulo}
+                glow={glow} muted={muted} editando={editando} />
               <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4 mt-14">
                 {clinic.users.map((u, i) => (
                   <Reveal key={u.id} delay={(i % 4) * 60}>
@@ -379,10 +458,11 @@ export function TemplateFuturista({ clinic: publicada, highlights }: TemplatePro
                       </div>
                       <div className="p-5">
                         <h3 className="text-lg font-bold tracking-tight">Dr/a. {u.firstName} {u.lastName}</h3>
-                        <button onClick={() => openBooking({ doctorId: u.id })} className="tf-cta mt-3 w-full py-2.5 rounded-lg text-[13px] font-semibold inline-flex items-center justify-center gap-2"
-                          style={{ background: alpha(theme, 0.16), color: glow, border: `1px solid ${alpha(glow, 0.35)}` }}>
-                          Agendar consulta <ArrowRight size={14} />
-                        </button>
+                        <Txt as="button" onClick={() => openBooking({ doctorId: u.id })} className="tf-cta mt-3 w-full py-2.5 rounded-lg text-[13px] font-semibold inline-flex items-center justify-center gap-2"
+                          style={{ background: alpha(theme, 0.16), color: glow, border: `1px solid ${alpha(glow, 0.35)}` }}
+                          campo={dirCopia("equipo.cta")} linea maxLen={60}
+                          valor={C("equipo.cta")} porDefecto="Agendar consulta" sufijo=" " unido
+                          despues={<ArrowRight size={14} />} />
                       </div>
                     </div>
                   </Reveal>
@@ -395,10 +475,13 @@ export function TemplateFuturista({ clinic: publicada, highlights }: TemplatePro
         {/* ============================================================
             5 · GALERÍA
            ============================================================ */}
-        {gallery.length > 0 && (
+        {verGaleria && (
           <section id="galeria" className="py-20 sm:py-28">
             <div className="max-w-6xl mx-auto px-5 sm:px-8">
-              <SectionHead kicker="// Galería" title="Un entorno clínico de otro nivel" glow={glow} muted={muted} />
+              <SectionHead seccion="galeria" claveKicker="galeria.kicker"
+                kicker="Galería" kickerValor={C("galeria.kicker")}
+                title="Un entorno clínico de otro nivel" titleValor={S.galeria?.titulo}
+                glow={glow} muted={muted} editando={editando} />
               <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 mt-14">
                 {gallery.map((g, i) => (
                   <Reveal key={i} delay={(i % 3) * 55} className={i % 5 === 0 ? "col-span-2 lg:col-span-1" : ""}>
@@ -412,9 +495,10 @@ export function TemplateFuturista({ clinic: publicada, highlights }: TemplatePro
                 ))}
               </div>
               <Reveal className="mt-10 text-center">
-                <button onClick={() => openBooking()} className="tf-cta inline-flex items-center justify-center gap-2" style={ctaSolid}>
-                  <Calendar size={18} /> Conoce el espacio · Agendar Cita
-                </button>
+                <Txt as="button" onClick={() => openBooking()} className="tf-cta inline-flex items-center justify-center gap-2" style={ctaSolid}
+                  campo={dirCopia("galeria.cta")} linea maxLen={80}
+                  valor={C("galeria.cta")} porDefecto="Conoce el espacio · Agendar Cita" prefijo=" " unido
+                  antes={<Calendar size={18} />} />
               </Reveal>
             </div>
           </section>
@@ -423,17 +507,29 @@ export function TemplateFuturista({ clinic: publicada, highlights }: TemplatePro
         {/* ============================================================
             6 · TESTIMONIOS
            ============================================================ */}
-        {testimonials.length > 0 && (
+        {verOpiniones && (
           <section className="py-20 sm:py-28">
             <div className="max-w-6xl mx-auto px-5 sm:px-8">
-              <p className="tf-mono text-[12px] tracking-[0.2em] uppercase mb-10" style={{ color: glow }}>// Lo que dicen nuestros pacientes</p>
+              {/* En esta plantilla el bloque de opiniones no tiene <h2>: esta
+                  línea ES su título, así que se edita como tal. El "// " es
+                  decoración y va pegado fuera de lo editable. */}
+              <Txt as="p" className="tf-mono text-[12px] tracking-[0.2em] uppercase mb-10" style={{ color: glow }}
+                campo={dirSeccion("opiniones", "titulo")} linea maxLen={160}
+                valor={S.opiniones?.titulo} porDefecto="Lo que dicen nuestros pacientes" prefijo="// " unido />
               <div className="grid md:grid-cols-3 gap-4">
                 {testimonials.map((tm, i) => (
                   <Reveal key={i} delay={(i % 3) * 70} className="rounded-2xl p-7" style={glass}>
                     <Quote size={28} style={{ color: alpha(glow, 0.7) }} fill={alpha(glow, 0.7)} strokeWidth={0} />
-                    <p className="mt-4 text-[16px] leading-relaxed" style={{ color: inkText }}>&ldquo;{tm.text}&rdquo;</p>
+                    {/* Las comillas van como prefijo/sufijo y no dentro del
+                        texto: si se guardaran, la siguiente edición las
+                        duplicaría. Igual el guion largo del nombre. */}
+                    <Txt as="p" className="mt-4 text-[16px] leading-relaxed" style={{ color: inkText }}
+                      campo={dirTestimonio(i, "text")} requerido maxLen={800}
+                      valor={tm.text} prefijo={"\u201C"} sufijo={"\u201D"} />
                     <div className="mt-5 flex items-center justify-between">
-                      <span className="tf-mono text-sm" style={{ color: muted }}>— {tm.name}</span>
+                      <Txt as="span" className="tf-mono text-sm" style={{ color: muted }}
+                        campo={dirTestimonio(i, "name")} linea maxLen={80}
+                        valor={tm.name} prefijo={"\u2014 "} />
                       <Stars value={tm.rating ?? 5} size={14} color={glow} />
                     </div>
                   </Reveal>
@@ -450,7 +546,9 @@ export function TemplateFuturista({ clinic: publicada, highlights }: TemplatePro
           <section className="py-20 sm:py-28">
             <div className="max-w-6xl mx-auto px-5 sm:px-8 grid lg:grid-cols-[0.8fr_1.2fr] gap-10 items-center">
               <Reveal className="rounded-2xl p-8" style={glass}>
-                <div className="flex items-center gap-3 mb-5"><GoogleG size={26} /><span className="text-lg font-bold">Reseñas de Google</span></div>
+                <div className="flex items-center gap-3 mb-5"><GoogleG size={26} /><Txt as="span" className="text-lg font-bold"
+                  campo={dirCopia("opiniones.tituloGoogle")} linea maxLen={60}
+                  valor={C("opiniones.tituloGoogle")} porDefecto="Reseñas de Google" /></div>
                 <div className="flex items-end gap-4">
                   <span className="text-7xl font-bold leading-none" style={neonText}>{(googleReviews.rating ?? 5).toFixed(1)}</span>
                   <div className="pb-2">
@@ -458,9 +556,10 @@ export function TemplateFuturista({ clinic: publicada, highlights }: TemplatePro
                     <p className="text-sm mt-1" style={{ color: muted }}>{googleReviews.total} reseñas verificadas</p>
                   </div>
                 </div>
-                <button onClick={() => openBooking()} className="tf-cta mt-7 w-full inline-flex items-center justify-center gap-2" style={ctaSolid}>
-                  <Calendar size={18} /> Agendar Cita
-                </button>
+                <Txt as="button" onClick={() => openBooking()} className="tf-cta mt-7 w-full inline-flex items-center justify-center gap-2" style={ctaSolid}
+                  campo={dirCopia("opiniones.cta")} linea maxLen={60}
+                  valor={C("opiniones.cta")} porDefecto="Agendar Cita" prefijo=" " unido
+                  antes={<Calendar size={18} />} />
               </Reveal>
               <div className="grid sm:grid-cols-2 gap-4">
                 {googleReviews.reviews.slice(0, 3).map((r, i) => (
@@ -486,12 +585,16 @@ export function TemplateFuturista({ clinic: publicada, highlights }: TemplatePro
         {/* ============================================================
             8 · FAQ
            ============================================================ */}
-        {faqs.length > 0 && (
+        {verFaq && (
           <section className="py-20 sm:py-28" style={{ background: surfaceAlt }}>
             <div className="max-w-3xl mx-auto px-5 sm:px-8">
               <Reveal className="text-center mb-12">
-                <p className="tf-mono text-[12px] tracking-[0.2em] uppercase mb-3" style={{ color: glow }}>// Preguntas frecuentes</p>
-                <h2 className="text-4xl sm:text-5xl font-bold leading-tight tracking-tight">Resolvemos tus dudas</h2>
+                <Txt as="p" className="tf-mono text-[12px] tracking-[0.2em] uppercase mb-3" style={{ color: glow }}
+                  campo={dirCopia("faq.kicker")} linea maxLen={60}
+                  valor={C("faq.kicker")} porDefecto="Preguntas frecuentes" prefijo="// " unido />
+                <Txt as="h2" className="text-4xl sm:text-5xl font-bold leading-tight tracking-tight"
+                  campo={dirSeccion("faq", "titulo")} linea maxLen={160}
+                  valor={S.faq?.titulo} porDefecto="Resolvemos tus dudas" />
               </Reveal>
               <div className="space-y-3">
                 {faqs.map((f, i) => {
@@ -500,14 +603,23 @@ export function TemplateFuturista({ clinic: publicada, highlights }: TemplatePro
                     <Reveal key={i} delay={(i % 5) * 40}>
                       <div style={{ ...glass, borderRadius: 14, boxShadow: isOpen ? `0 20px 50px -20px ${alpha(theme, 0.55)}` : "none", transition: "box-shadow .3s" }}>
                         <button onClick={() => setOpenFaq(isOpen ? -1 : i)} aria-expanded={isOpen} className="w-full flex items-center justify-between gap-4 text-left px-6 py-5">
-                          <span className="font-semibold text-[17px]">{f.question}</span>
+                          {/* Se leen las DOS formas: el formulario de siempre
+                              guarda {question, answer} y el lienzo normaliza a
+                              {q, a}. Antes solo se leía la vieja, así que la
+                              primera pregunta que alguien editara desde el
+                              lienzo habría desaparecido de la página. */}
+                          <Txt as="span" className="font-semibold text-[17px]"
+                            campo={dirFaq(i, "q")} linea requerido maxLen={200}
+                            valor={f.q ?? f.question} />
                           <span className="shrink-0 grid place-items-center w-8 h-8 rounded-full transition-transform duration-300"
                             style={{ background: isOpen ? theme : surface, color: isOpen ? "#fff" : inkText, border: `1px solid ${borderC}`, transform: isOpen ? "rotate(180deg)" : "none" }}>
                             <ChevronDown size={18} />
                           </span>
                         </button>
                         <div style={{ maxHeight: isOpen ? 320 : 0, overflow: "hidden", transition: "max-height .4s ease" }}>
-                          <p className="px-6 pb-5 text-[15px] leading-relaxed" style={{ color: muted }}>{f.answer}</p>
+                          <Txt as="p" className="px-6 pb-5 text-[15px] leading-relaxed" style={{ color: muted }}
+                            campo={dirFaq(i, "a")} requerido maxLen={1200}
+                            valor={f.a ?? f.answer} />
                         </div>
                       </div>
                     </Reveal>
@@ -515,10 +627,13 @@ export function TemplateFuturista({ clinic: publicada, highlights }: TemplatePro
                 })}
               </div>
               <Reveal className="mt-10 flex flex-col sm:flex-row items-center justify-center gap-4 text-center">
-                <span className="text-[15px]" style={{ color: muted }}>¿Te quedó otra duda? Con gusto te ayudamos.</span>
-                <button onClick={() => openBooking()} className="tf-cta inline-flex items-center gap-2" style={ctaSolid}>
-                  Agendar Cita <ArrowRight size={17} />
-                </button>
+                <Txt as="span" className="text-[15px]" style={{ color: muted }}
+                  campo={dirCopia("faq.nota")} linea maxLen={160}
+                  valor={C("faq.nota")} porDefecto="¿Te quedó otra duda? Con gusto te ayudamos." />
+                <Txt as="button" onClick={() => openBooking()} className="tf-cta inline-flex items-center gap-2" style={ctaSolid}
+                  campo={dirCopia("faq.cta")} linea maxLen={60}
+                  valor={C("faq.cta")} porDefecto="Agendar Cita" sufijo=" " unido
+                  despues={<ArrowRight size={17} />} />
               </Reveal>
             </div>
           </section>
@@ -533,13 +648,20 @@ export function TemplateFuturista({ clinic: publicada, highlights }: TemplatePro
               style={{ background: `linear-gradient(135deg, ${shade(theme, 0.35)}, ${shade(theme, 0.6)})`, border: `1px solid ${alpha(glow, 0.4)}`, boxShadow: `0 0 60px ${alpha(theme, 0.4)}` }}>
               <div className="absolute inset-0 opacity-40" style={{ backgroundImage: `linear-gradient(${alpha(glow, 0.12)} 1px, transparent 1px), linear-gradient(90deg, ${alpha(glow, 0.12)} 1px, transparent 1px)`, backgroundSize: "40px 40px" }} />
               <div className="relative">
-                <p className="tf-mono text-[12px] tracking-[0.25em] uppercase mb-4" style={{ color: tint(theme, 0.55) }}>// Tu próxima cita</p>
-                <h2 className="text-4xl sm:text-5xl font-bold leading-tight tracking-tight text-white">¿List@ para tu cita?</h2>
-                <p className="mt-4 text-lg max-w-xl mx-auto" style={{ color: alpha("#ffffff", 0.8) }}>Agenda tu valoración. Te confirmamos por WhatsApp en minutos.</p>
-                <button onClick={() => openBooking()} className="tf-cta mt-8 inline-flex items-center gap-2 px-8 py-4 rounded-xl font-bold"
-                  style={{ background: "#fff", color: shade(theme, 0.2), boxShadow: `0 0 30px ${alpha(glow, 0.5)}` }}>
-                  <Calendar size={18} /> Agendar Cita
-                </button>
+                <Txt as="p" className="tf-mono text-[12px] tracking-[0.25em] uppercase mb-4" style={{ color: tint(theme, 0.55) }}
+                  campo={dirCopia("reservar.kicker")} linea maxLen={60}
+                  valor={C("reservar.kicker")} porDefecto="Tu próxima cita" prefijo="// " unido />
+                <Txt as="h2" className="text-4xl sm:text-5xl font-bold leading-tight tracking-tight text-white"
+                  campo={dirSeccion("reservar", "titulo")} linea maxLen={160}
+                  valor={S.reservar?.titulo} porDefecto="¿List@ para tu cita?" />
+                <Txt as="p" className="mt-4 text-lg max-w-xl mx-auto" style={{ color: alpha("#ffffff", 0.8) }}
+                  campo={dirSeccion("reservar", "subtitulo")} maxLen={500}
+                  valor={S.reservar?.subtitulo} porDefecto="Agenda tu valoración. Te confirmamos por WhatsApp en minutos." />
+                <Txt as="button" onClick={() => openBooking()} className="tf-cta mt-8 inline-flex items-center gap-2 px-8 py-4 rounded-xl font-bold"
+                  style={{ background: "#fff", color: shade(theme, 0.2), boxShadow: `0 0 30px ${alpha(glow, 0.5)}` }}
+                  campo={dirCopia("reservar.cta")} linea maxLen={60}
+                  valor={C("reservar.cta")} porDefecto="Agendar Cita" prefijo=" " unido
+                  antes={<Calendar size={18} />} />
               </div>
             </Reveal>
           </div>
@@ -551,37 +673,47 @@ export function TemplateFuturista({ clinic: publicada, highlights }: TemplatePro
         <section id="contacto" className="py-20 sm:py-28" style={{ background: surfaceAlt }}>
           <div className="max-w-6xl mx-auto px-5 sm:px-8">
             <Reveal className="text-center mb-12">
-              <p className="tf-mono text-[12px] tracking-[0.2em] uppercase mb-3" style={{ color: glow }}>// Visítanos</p>
-              <h2 className="text-4xl sm:text-5xl font-bold leading-tight tracking-tight">Estamos cerca de ti</h2>
+              <Txt as="p" className="tf-mono text-[12px] tracking-[0.2em] uppercase mb-3" style={{ color: glow }}
+                campo={dirCopia("contacto.kicker")} linea maxLen={60}
+                valor={C("contacto.kicker")} porDefecto="Visítanos" prefijo="// " unido />
+              <Txt as="h2" className="text-4xl sm:text-5xl font-bold leading-tight tracking-tight"
+                campo={dirSeccion("contacto", "titulo")} linea maxLen={160}
+                valor={S.contacto?.titulo} porDefecto="Estamos cerca de ti" />
             </Reveal>
             <div className="grid lg:grid-cols-2 gap-8 items-stretch">
               <Reveal className="flex flex-col gap-4">
                 {clinic.address && (
                   <div className="flex items-center gap-4 p-5 rounded-2xl" style={glass}>
                     <span className="shrink-0 grid place-items-center w-12 h-12 rounded-xl" style={{ background: alpha(theme, 0.14), color: glow }}><MapPin size={22} /></span>
-                    <div><p className="tf-mono text-xs uppercase tracking-wider" style={{ color: muted }}>Dirección</p><p className="font-semibold text-[16px]">{clinic.address}{clinic.city ? `, ${clinic.city}` : ""}</p></div>
+                    <div><Txt as="p" className="tf-mono text-xs uppercase tracking-wider" style={{ color: muted }} campo={dirCopia("contacto.etiquetaDireccion")} linea maxLen={60} valor={C("contacto.etiquetaDireccion")} porDefecto="Dirección" /><p className="font-semibold text-[16px]">{clinic.address}{clinic.city ? `, ${clinic.city}` : ""}</p></div>
                   </div>
                 )}
                 {clinic.phone && (
                   <a href={`tel:${clinic.phone}`} className="flex items-center gap-4 p-5 rounded-2xl transition hover:brightness-110" style={glass}>
                     <span className="shrink-0 grid place-items-center w-12 h-12 rounded-xl" style={{ background: alpha(theme, 0.14), color: glow }}><Phone size={22} /></span>
-                    <div><p className="tf-mono text-xs uppercase tracking-wider" style={{ color: muted }}>Teléfono</p><p className="font-semibold text-[16px]">{clinic.phone}</p></div>
+                    <div><Txt as="p" className="tf-mono text-xs uppercase tracking-wider" style={{ color: muted }} campo={dirCopia("contacto.etiquetaTelefono")} linea maxLen={60} valor={C("contacto.etiquetaTelefono")} porDefecto="Teléfono" /><p className="font-semibold text-[16px]">{clinic.phone}</p></div>
                   </a>
                 )}
                 {clinic.landingWhatsapp && waLink && (
                   <a href={waLink} target="_blank" rel="noreferrer" className="flex items-center gap-4 p-5 rounded-2xl transition hover:brightness-110" style={glass}>
                     <span className="shrink-0 grid place-items-center w-12 h-12 rounded-xl" style={{ background: alpha(theme, 0.14), color: glow }}><MessageCircle size={22} /></span>
-                    <div><p className="tf-mono text-xs uppercase tracking-wider" style={{ color: muted }}>WhatsApp</p><p className="font-semibold text-[16px]">{clinic.landingWhatsapp}</p></div>
+                    <div><Txt as="p" className="tf-mono text-xs uppercase tracking-wider" style={{ color: muted }} campo={dirCopia("contacto.etiquetaWhatsapp")} linea maxLen={60} valor={C("contacto.etiquetaWhatsapp")} porDefecto="WhatsApp" /><p className="font-semibold text-[16px]">{clinic.landingWhatsapp}</p></div>
                   </a>
                 )}
                 {/* horarios */}
                 {orderedSchedules.length > 0 && (
                   <div className="p-5 rounded-2xl" style={glass}>
-                    <div className="flex items-center gap-3 mb-3"><Clock size={20} style={{ color: glow }} /><span className="font-semibold">Horarios</span></div>
+                    <div className="flex items-center gap-3 mb-3"><Clock size={20} style={{ color: glow }} /><Txt as="span" className="font-semibold" campo={dirCopia("contacto.etiquetaHorarios")} linea maxLen={60} valor={C("contacto.etiquetaHorarios")} porDefecto="Horarios" /></div>
                     {orderedSchedules.map((s) => (
                       <div key={s.dayOfWeek} className="flex justify-between py-1.5 text-[15px]" style={{ color: muted }}>
                         <span>{DAYS_FULL[s.dayOfWeek] ?? `Día ${s.dayOfWeek}`}</span>
-                        <span className="font-medium" style={{ color: s.enabled ? inkText : CERRADO }}>{s.enabled ? `${s.openTime} – ${s.closeTime}` : "Cerrado"}</span>
+                        {/* Solo el día CERRADO es texto editable: el horario
+                            abierto es el dato de la agenda. */}
+                        {s.enabled
+                          ? <span className="font-medium" style={{ color: inkText }}>{`${s.openTime} – ${s.closeTime}`}</span>
+                          : <Txt as="span" className="font-medium" style={{ color: CERRADO }}
+                              campo={dirCopia("contacto.cerrado")} linea maxLen={40}
+                              valor={C("contacto.cerrado")} porDefecto="Cerrado" />}
                       </div>
                     ))}
                   </div>
@@ -595,9 +727,9 @@ export function TemplateFuturista({ clinic: publicada, highlights }: TemplatePro
                         {sc.node}
                       </a>
                     ))}
-                    <button onClick={() => openBooking()} className="tf-cta ml-auto inline-flex items-center gap-2 px-6 py-3 rounded-xl font-semibold text-white" style={{ background: theme, border: `1px solid ${alpha(glow, 0.6)}`, boxShadow: `0 0 22px ${alpha(theme, 0.5)}` }}>
-                      Agendar Cita
-                    </button>
+                    <Txt as="button" onClick={() => openBooking()} className="tf-cta ml-auto inline-flex items-center gap-2 px-6 py-3 rounded-xl font-semibold text-white" style={{ background: theme, border: `1px solid ${alpha(glow, 0.6)}`, boxShadow: `0 0 22px ${alpha(theme, 0.5)}` }}
+                      campo={dirCopia("contacto.cta")} linea maxLen={60}
+                      valor={C("contacto.cta")} porDefecto="Agendar Cita" />
                   </div>
                 )}
               </Reveal>
