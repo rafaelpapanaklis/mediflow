@@ -358,7 +358,7 @@ export const FOOTER = {
     { label: `WhatsApp ${WHATSAPP_CTA.numberDisplay}`, href: `https://wa.me/${WHATSAPP_CTA.numberE164}` },
     { label: 'hola@dalecontrol.com', href: 'mailto:hola@dalecontrol.com' },
     { label: 'soporte@dalecontrol.com', href: 'mailto:soporte@dalecontrol.com' },
-    { label: 'Instagram', href: 'https://instagram.com/dalecontrol' },
+    { label: 'Instagram', href: 'https://instagram.com/dalecontrol.mx' },
   ],
   copyright: '© 2026 DaleControl. Todos los derechos reservados.',
   madeIn: 'Hecho en México 🇲🇽',
