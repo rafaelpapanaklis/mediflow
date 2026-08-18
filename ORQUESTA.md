@@ -8769,3 +8769,186 @@ que confirma que no arrastró nada de Node.
   el precio de que el middleware no pueda consultar la BD.
 - No se tocaron los otros 171 hallazgos del reporte, incluidos `PORT-01` (el cuarto P0, la
   fuga de secretos de la mini-web) y los 8 P1 de seguridad.
+
+---
+
+## [P1-Seguridad] — 2026-08-18
+
+Rama `fix/p1-seguridad`, worktree `mediflow-worktrees/p1-seguridad`, desde `origin/main`
+(`6f9d9acb`). Dos bloques: el campo del editor visual, y los 9 P1 de seguridad y permisos
+del reporte `docs/audits/PANEL_AUDIT_2026-08-12.md`.
+
+### Bloque 1 — el campo de edición abría vacío
+
+`a6d72273`. Hacer clic en "Agendar" abría un `<textarea>` SIN texto, con el nombre del campo
+("Botón de reservar de la barra") como marcador. Para escribir "Agendar cita" había que
+teclear "Agendar" otra vez, y no era un caso raro: como los defaults de plantilla no se
+materializan nunca, el valor propio es `null` en la inmensa mayoría de los campos, así que
+abrir en blanco ERA el caso normal.
+
+Ahora abre con lo que ve un paciente y, al confirmar, un texto idéntico al literal se manda
+como `null` — igual que si se hubiera vaciado. La regla del plan (§4, "los defaults nunca se
+materializan") se mantiene intacta, y cubre además el camino de vuelta: teclear otra vez el
+texto original sobre un valor propio es deshacer el cambio, no inventarse copy.
+
+Los tres casos que no son el normal:
+
+- `porDefecto === null` (declarado sin literal): abre VACÍO. Lo que se pinta atenuado en el
+  lienzo es la ETIQUETA del campo, que no es texto de la clínica; precargarla la guardaría
+  como copy.
+- `porDefecto === ""` (la plantilla CONSTRUYE la frase: plazos de MSI, la ciudad, cuántos
+  dentistas): abre VACÍO. **Dato que no estaba en el encargo:** ese caso NO llega nunca al
+  runtime — `<Txt>` hace `porDefecto: porDefecto || null` (edit-context.tsx), así que se
+  convierte en `null` antes. La regla lo contempla igual para no depender de esa conversión.
+- multilínea: el `\n` sobrevive el viaje; solo se normaliza el CRLF que mete Windows al
+  pegar.
+
+`setLargo` arranca contando lo precargado. El marcador pasó de ser la etiqueta a ser el
+literal al que el campo va a volver (la etiqueta solo cuando no hay literal, que es la única
+pista que queda).
+
+- `src/app/[slug]/_shared/edit-runtime.tsx` — `textoPrecargado` y `resolverConfirmacion`,
+  puras y exportadas para poder fijarlas sin DOM
+- `src/app/[slug]/_shared/__tests__/campo-edicion.test.ts` — 27 tests
+- `src/app/[slug]/_shared/__tests__/instrumentacion.test.tsx` — guarda nueva: todo
+  `porDefecto` del manifiesto tiene que caber en su propio `maxLen`. Antes daba igual porque
+  el campo abría vacío; ahora un literal más largo abriría ya en rojo.
+
+Las 8 capturas de `html-publicado/` salen **byte-idénticas**: esto es solo modo edición.
+
+### Bloque 2 — 7 de los 9 P1 cerrados
+
+Orden de trabajo: primero los que exponen credenciales, luego los que ignoran permisos,
+EQ-02 al final.
+
+**`4093230a` — EQ-05 y B2B-12: ningún endpoint serializa la fila entera**
+
+Misma causa en los dos: consulta sin `select` y fila respondida tal cual. Se cierran con
+listas BLANCAS (`src/lib/team/member-fields.ts`, `src/lib/b2b/vendor-fields.ts`), no con
+listas negras — el criterio que ya se fijó al cerrar la fuga de la mini-web (`0424d5ab`).
+
+- EQ-05: GET y PATCH `/api/team/[id]` devolvían `totpSecret` EN CLARO, los hashes de los
+  códigos de recuperación, `cajaPinHash`, el refresh token de Google y `stripeAccountId`. El
+  GET ahora lee con `select`; el PATCH conserva la fila completa en el servidor (logMutation
+  la necesita entera para el diff) y proyecta la RESPUESTA.
+- B2B-12: `mpAccessToken` —la credencial con la que se cobra a nombre del vendedor— salía
+  por 7 sitios. Los peores no eran los endpoints: `/admin/labs` y `/admin/suppliers` son
+  Server Components que pasan hasta 100 filas enteras a un componente `"use client"`, así
+  que el token viajaba en el payload RSC con solo ABRIR la lista.
+- **Hallazgo que el reporte NO trae:** `POST /api/team` tiene el mismo patrón (`create` sin
+  select + spread al responder). Hoy no filtra nada porque los secretos nacen vacíos; se
+  arregló igual porque el día que el alta enrole el 2FA el agujero ya estaría abierto.
+
+17 tests. Los dos que de verdad sujetan esto no son los que nombran los secretos de hoy:
+ningún campo cuyo NOMBRE huela a credencial puede entrar en una lista (con excepciones
+concedidas a mano y con el motivo escrito), y todo campo de la lista tiene que existir de
+verdad en el modelo — el `select` es un objeto de literales, así que un typo no lo caza el
+compilador y revienta en producción con "Unknown field" de Prisma.
+
+**`8d9dcb17` — ISO-01: PATCH `/api/settings` exige administrador**
+
+El handler entero se guardaba con `if (!ctx) return 401` y nada más: cualquier usuario con
+sesión reescribía el nombre de la clínica, el `rfcEmisor` que sale timbrado en los CFDI,
+`isPublic` (apagar la mini-web) y las credenciales de Twilio. Su gemela `/api/clinic` escribe
+LOS MISMOS campos y sí corta por rol.
+
+Se le pone el gate de `/api/clinic` letra por letra. **NO se exige `settings.edit`**, aunque
+el reporte lo proponga: ese permiso hoy no lo lee nadie (EQ-07), así que empezar a pedirlo
+dejaría fuera a cualquier administrador cuyo `permissionsOverride` no lo incluya — y ese
+override REEMPLAZA los defaults. Esa decisión necesita los números del SQL.
+
+De paso, `/dashboard/settings/integrations` no tenía NINGUNA puerta. Se le pone el mismo
+`settings.view` que ya exige su hermana `/dashboard/settings`.
+
+**`572bea66` — DEAD-03: el rol de la teleconsulta deja de salir de la URL**
+
+`role === "doctor" ? teleDoctorToken : (searchParams.token ?? telePatientToken)`, sin sesión
+y sin comprobar nada. El paciente borraba `role=patient&token=…`, escribía `role=doctor` y
+entraba como DUEÑO de la sala (`is_owner:true`: puede grabar y expulsar al doctor). Y el
+respaldo `?? telePatientToken` era lo mismo que no pedir nada.
+
+Se aplica la regla que este producto YA tenía escrita en su ruta hermana
+`/api/teleconsulta/join`. Una diferencia deliberada: allí se acepta solo al doctor de la cita
+y aquí a cualquier miembro de esa clínica, porque el enlace "Unirse" se pinta en la agenda y
+en `/dashboard/teleconsulta`, que listan TODAS las teleconsultas de la clínica — cerrarlo al
+`doctorId` dejaría fuera al administrador que hoy sí puede entrar.
+
+**`99e01bfa` — PAC-05 y FIN-07: piden lo que ya pedían sus hermanos**
+
+- PAC-05: PUT y DELETE de `/api/odontogram` y de `/api/odontogram/note` no comprobaban rol.
+  Sus hermanos `/reset` y `/sync` sí, con el comentario "Recepción/readonly NO". La lista de
+  roles estaba declarada DOS veces y faltaba en CUATRO sitios; ahora vive una sola vez en
+  `lib/odontogram/api-auth.ts`. Además, esas dos eran las únicas escrituras del odontograma
+  sin bitácora.
+- FIN-07: `POST /api/caja/withdrawal` pedía `billing.view` y nada más, mientras `/open` y
+  `/close` exigen acceso a Caja + PIN. Un READONLY —que trae `billing.view` por default—
+  registraba un retiro de $5,000 y el descuadre le salía al cajero que sí opera la caja. Se
+  le pone el bloque de `/close` **y el PIN en el modal**: sin lo segundo el arreglo rompe el
+  retiro, porque el cliente mandaba solo `{amount, reason}`. El retiro opcional de la
+  apertura reusa el PIN que se acaba de teclear.
+
+**EQ-02 — el segundo factor pasa a ser de la persona**
+
+El reporte decía que `/api/switch-clinic` quedó exento del gate "porque la clínica de destino
+vuelve a pedir su propio reto". **Se verificó y es falso.** La cookie `df_2fa` sí está atada
+al par persona+clínica, pero eso solo importa si el destino pide algo: `totpEnabled`,
+`totpSecret` y `recoveryCodes` son columnas de la FILA `User`, y los cinco endpoints de 2FA
+escribían con `where: { id: actor.user.id }` — una sola. La sede de destino tenía
+`totpEnabled=false` y no pedía NADA.
+
+Y no hace falta ni el switcher: quien enroló en su SEGUNDA sede, con un login nuevo aterriza
+en la primera (`candidates[0]`, ordenado por `createdAt`) y entra directo.
+
+Se cierra por los dos lados, con el mismo criterio que este repo ya aplicó a la contraseña
+temporal (`must-change-password.ts`: `updateMany({ where: { supabaseId } })`):
+
+- **Escritura** — setup, enable, disable, verify y recovery-codes escriben en TODAS las filas
+  de la persona.
+- **Lectura** — el gate resuelve el 2FA por persona, no por fila. Esto es lo que lo hace
+  fail-closed sin depender de que el backfill se aplique.
+- **El secreto también** — si el reto se exigiera en una sede cuya fila no tiene `totpSecret`,
+  el dueño se quedaría encerrado fuera de su propia clínica sin poder contestar un código que
+  nadie puede validar. `getTwoFactorActor` presta el secret de la sede donde enroló.
+- `/disable` mira ahora si CUALQUIERA de sus clínicas exige 2FA: mirar solo la activa dejaba
+  una salida (cambiarse a la sede sin política y apagarlo para las dos).
+- `/api/switch-clinic` re-siembra las cookies del reto para la sede de destino. Sigue exenta
+  del gate a propósito: es una salida, y bloquearla dejaría al dueño sin poder moverse.
+
+11 tests sobre la regla pura (`two-factor-identity-core.ts`).
+
+### Verificación
+
+- `npx next build` COMPLETO y leído entero, sin pipes, en cada bloque. **exit 0**, 365/365
+  páginas. Un build intermedio salió en **exit 1** por un error de tipos en la bitácora del
+  odontograma (`Record<string, unknown>` no encaja en el `Json` de Prisma); se arregló y se
+  repitió. Los `prisma:error` por `DATABASE_URL` y los warnings de Tailwind son preexistentes.
+- Tests: 27 (campo de edición) + 67 (instrumentación de landing, con las 8 capturas
+  byte-idénticas) + 17 (listas blancas) + 11 (identidad 2FA) + 61 (gate 2FA, que se corrió
+  por tocar `auth-context` y `auth.ts`). 0 fallos.
+
+### Lo que NO se hizo, y por qué
+
+- **`ISO-03` y `EQ-07` quedan SIN TOCAR**, a la espera de los números. Los dos significan
+  EMPEZAR A EXIGIR permisos que hoy no se exigen, y `permissionsOverride` REEMPLAZA los
+  defaults del rol: quien personalizó sus permisos tiene esas llaves y ninguna más, así que
+  un permiso que se empiece a pedir puede dejarlo fuera de su trabajo sin que nadie haya
+  tocado su configuración. Es lo que rompió el tab de consentimientos. El SQL para medirlo
+  es `sql/p1-seguridad-quien-se-queda-fuera.sql`.
+- **`PORT-02` ya estaba cerrado** en la Ola 1 de la mini-web: `/api/clinic-landing` PATCH
+  tiene `denyIfMissingPermission(ctx, "landing.edit")`. Comprobado, no se rehízo.
+- **Ningún SQL se aplicó.** Los dos archivos nuevos los corre Rafael:
+  `sql/p1-seguridad-quien-se-queda-fuera.sql` (solo lectura) y `sql/eq02-2fa-por-persona.sql`
+  (el backfill, opcional — el código ya cierra el agujero sin él).
+- **Nada se probó con una sesión real.** Todo está fijado por tests de función pura y por el
+  build. Falta el QA manual de las cinco cosas de abajo.
+- **El GET de `/api/settings` sigue abierto** a cualquier usuario de la clínica. Devuelve
+  `stripClinicSecrets(clinic)`, así que el `twilioAuthToken` no sale, pero sí el RFC, el
+  `taxId` y el `twilioAccountSid`. Nadie lo llama hoy (grep en todo `src`: cero). Cerrarlo
+  pide decidir con qué permiso, y es la misma decisión de EQ-07.
+- **La página de teleconsulta no exige el 2FA** aunque el usuario lo tenga pendiente:
+  `/teleconsulta` no está bajo `/dashboard` (layout) ni bajo `/api` (gate de
+  `getAuthContext`). Es más pequeño que lo que DEAD-03 cierra —hace falta ser del equipo—
+  pero es real.
+- **La bitácora no registra `xray`, `inventory`, `procedure` ni pedidos a proveedores.** Son
+  justo cuatro de los permisos más peligrosos de EQ-07, así que no se puede medir su uso
+  desde la base: un cero ahí significa "no lo estamos midiendo", no "nadie lo usa".
