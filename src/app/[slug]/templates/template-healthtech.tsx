@@ -13,6 +13,12 @@ import {
 } from "lucide-react";
 import type { TemplateProps } from "../_shared/types";
 import { useLiveClinic } from "../_shared/live-preview";
+import { Foto, Txt, useEnEdicion } from "../_shared/edit-context";
+// landing-address-parts y NO landing-address: este archivo viaja al navegador
+// de los pacientes, y el módulo grande arrastra el manifiesto de las ocho
+// plantillas (17 KB) sin que la página pública lo necesite para nada.
+import { dirClinica, dirCopia, dirFaq, dirSeccion, dirServicio, dirTestimonio } from "@/lib/landing-address-parts";
+import { copyMap, copyText, copyValue, photoOf, sectionMap, sectionTitle, showSection } from "../_shared/landing-data";
 import {
   SmartImg, Stars, GoogleG, useScrolled, useActiveSection, Reveal,
   scrollToId, useLightbox, Lightbox, tint, shade, alpha, mix, hexAdjust,
@@ -31,25 +37,51 @@ type Tokens = {
 /* ---------- Botón pastilla (sólido / fantasma) ---------- */
 function Pill({
   tk, children, onClick, variant = "solid", size = "md", className = "",
+  campo, valor, porDefecto, despues,
 }: {
-  tk: Tokens; children: ReactNode; onClick?: () => void;
+  tk: Tokens; children?: ReactNode; onClick?: () => void;
   variant?: "solid" | "ghost"; size?: "md" | "sm"; className?: string;
+  /* Con `campo`, el <button> ES el <Txt> y la etiqueta se edita haciendo clic.
+     El icono viaja como hermano (`despues`) y el espacio como sufijo pegado:
+     en el JSX eran UN nodo de texto seguido del svg, y partirlo metería una
+     marca de hidratación donde no había ninguna. */
+  campo?: string; valor?: string | null; porDefecto?: string; despues?: ReactNode;
 }) {
+  const clase =
+    "inline-flex items-center justify-center gap-2 font-semibold rounded-full transition-all duration-300 " +
+    (size === "md" ? "px-6 py-3.5 " : "px-5 py-2.5 text-sm ") + className;
+  const estilo =
+    variant === "solid"
+      ? { background: tk.grad, color: "#fff", boxShadow: `0 12px 26px -10px ${alpha(tk.theme, 0.7)}` }
+      : { background: "#fff", color: tk.ink, border: `1.5px solid ${tk.border}` };
+  const sobre = (e: any) => (e.currentTarget.style.transform = "translateY(-2px)");
+  const fuera = (e: any) => (e.currentTarget.style.transform = "none");
+
+  if (campo) {
+    return (
+      <Txt
+        as="button"
+        type="button"
+        onClick={onClick}
+        className={clase}
+        style={estilo}
+        onMouseEnter={sobre}
+        onMouseLeave={fuera}
+        campo={campo} linea maxLen={80}
+        valor={valor} porDefecto={porDefecto}
+        sufijo={despues !== undefined ? " " : undefined} unido={despues !== undefined}
+        despues={despues}
+      />
+    );
+  }
   return (
     <button
       type="button"
       onClick={onClick}
-      className={
-        "inline-flex items-center justify-center gap-2 font-semibold rounded-full transition-all duration-300 " +
-        (size === "md" ? "px-6 py-3.5 " : "px-5 py-2.5 text-sm ") + className
-      }
-      style={
-        variant === "solid"
-          ? { background: tk.grad, color: "#fff", boxShadow: `0 12px 26px -10px ${alpha(tk.theme, 0.7)}` }
-          : { background: "#fff", color: tk.ink, border: `1.5px solid ${tk.border}` }
-      }
-      onMouseEnter={(e) => (e.currentTarget.style.transform = "translateY(-2px)")}
-      onMouseLeave={(e) => (e.currentTarget.style.transform = "none")}
+      className={clase}
+      style={estilo}
+      onMouseEnter={sobre}
+      onMouseLeave={fuera}
     >
       {children}
     </button>
@@ -58,28 +90,45 @@ function Pill({
 
 /* ---------- Encabezado de sección ---------- */
 function SectionHead({
-  tk, kicker, title, sub, center = false,
+  tk, seccion, claveKicker, kicker, kickerValor, title, titleValor, sub, subValor, center = false, editando = false,
 }: {
-  tk: Tokens; kicker: string; title: string; sub?: string; center?: boolean;
+  tk: Tokens; seccion: string; claveKicker: string;
+  kicker: string; kickerValor: string | null;
+  title: string; titleValor?: string | null;
+  sub?: string; subValor?: string | null;
+  center?: boolean; editando?: boolean;
 }) {
   return (
     <Reveal className={center ? "max-w-2xl mx-auto text-center" : "max-w-2xl"}>
-      <span className="inline-block px-3 py-1 rounded-full text-[13px] font-bold mb-4" style={{ background: alpha(tk.theme, 0.1), color: tk.theme }}>
-        {kicker}
-      </span>
-      <h2 className="text-4xl sm:text-5xl font-extrabold tracking-tight leading-[1.08]" style={{ color: tk.ink }}>{title}</h2>
-      {sub && <p className="mt-4 text-lg" style={{ color: tk.muted }}>{sub}</p>}
+      <Txt as="span" className="inline-block px-3 py-1 rounded-full text-[13px] font-bold mb-4" style={{ background: alpha(tk.theme, 0.1), color: tk.theme }}
+        campo={dirCopia(claveKicker)} linea maxLen={60}
+        valor={kickerValor} porDefecto={kicker} />
+      <Txt as="h2" className="text-4xl sm:text-5xl font-extrabold tracking-tight leading-[1.08]" style={{ color: tk.ink }}
+        campo={dirSeccion(seccion, "titulo")} linea maxLen={160}
+        valor={titleValor} porDefecto={title} />
+      {sub && (subValor || sub || editando) && (
+        <Txt as="p" className="mt-4 text-lg" style={{ color: tk.muted }}
+          campo={dirSeccion(seccion, "subtitulo")} maxLen={500}
+          valor={subValor} porDefecto={sub} />
+      )}
     </Reveal>
   );
 }
 
 /* ---------- Badge de confianza del hero ---------- */
-function TrustBadge({ tk, icon, big, small }: { tk: Tokens; icon: ReactNode; big: string; small: string }) {
+function TrustBadge({ tk, icon, big, small, clave, smallValor }: {
+  tk: Tokens; icon: ReactNode; big: string; small: string;
+  /* Sin `clave`, la leyenda no se edita: es el caso de la calificación con
+     ficha de Google, donde el texto cambia solo según haya ficha o no. */
+  clave?: string; smallValor?: string | null;
+}) {
   return (
     <div className="rounded-2xl px-3 py-3 text-center" style={{ background: "#fff", border: `1px solid ${tk.border}` }}>
       <span className="flex justify-center mb-1" style={{ color: tk.theme }}>{icon}</span>
       <p className="text-xl font-extrabold leading-none" style={{ color: tk.ink }}>{big}</p>
-      <p className="text-[11px] mt-0.5" style={{ color: "#94a3b8" }}>{small}</p>
+      <Txt as="p" className="text-[11px] mt-0.5" style={{ color: "#94a3b8" }}
+        campo={clave ? dirCopia(clave) : null} linea maxLen={40}
+        valor={clave ? smallValor : null} porDefecto={small} />
     </div>
   );
 }
@@ -88,6 +137,9 @@ export function TemplateHealthtech({ clinic: publicada, highlights }: TemplatePr
   // En /dashboard/landing esto trae lo que la clínica lleva escrito sin
   // guardar; en la página pública devuelve `publicada` tal cual.
   const clinic = useLiveClinic(publicada);
+  /* Solo dentro del lienzo del editor. En la página pública es SIEMPRE false,
+     así que ninguna sección se pinta distinta para un paciente. */
+  const editando = useEnEdicion();
   /* ---- tokens de marca (todo deriva del acento) ---- */
   const theme = clinic.landingThemeColor ?? "#0f766e";
   const ink = "#0f172a";
@@ -154,6 +206,25 @@ export function TemplateHealthtech({ clinic: publicada, highlights }: TemplatePr
   const showGoogle = !!googleReviews && googleReviews.reviews.length > 0;
   const hasBadges = ratingValue != null || clinic.landingYearsExperience != null || !!clinic.landingPatients;
 
+  /* ---- lo que guardó el editor ----
+     healthtech nació antes del manifiesto: su lista de bloques y sus títulos
+     estaban escritos a mano y los interruptores de la pestaña Diseño se
+     guardaban sin que pasara nada. Ahora se leen. Las listas siguen siendo
+     las CRUDAS (sin serviceList ni faqList): esas normalizadoras tiran los
+     elementos incompletos, y una tarjeta que hoy se pinta a medias
+     desaparecería del sitio publicado de alguien sin que nadie lo pidiera. */
+  const S = sectionMap(clinic);
+  const copias = copyMap(clinic);
+  const C = (clave: string) => copyValue(copias, clave);
+  /* La portada, con la misma cadena de respaldo que las otras siete:
+     ranura "portada" → landingCoverUrl (lo que healthtech leía hasta hoy). */
+  const portada = photoOf(clinic, "portada", { cover: true });
+  const verServicios = showSection(S, "servicios", services.length > 0);
+  const verEquipo    = showSection(S, "equipo",    doctors.length > 0);
+  const verGaleria   = showSection(S, "galeria",   gallery.length > 0);
+  const verOpiniones = showSection(S, "opiniones", testimonials.length > 0);
+  const verFaq       = showSection(S, "faq",       faqs.length > 0);
+
   const navItems: [string, string][] = [
     ...(services.length > 0 ? [["Servicios", "servicios"] as [string, string]] : []),
     ...(doctors.length > 0 ? [["Equipo", "equipo"] as [string, string]] : []),
@@ -213,7 +284,8 @@ export function TemplateHealthtech({ clinic: publicada, highlights }: TemplatePr
           </nav>
 
           <div className="flex items-center gap-2">
-            <Pill tk={tk} size="sm" onClick={() => openBooking()} className="hidden sm:inline-flex">Agendar Cita</Pill>
+            <Pill tk={tk} size="sm" onClick={() => openBooking()} className="hidden sm:inline-flex"
+              campo={dirCopia("nav.cta")} valor={C("nav.cta")} porDefecto="Agendar Cita" />
             <button className="md:hidden w-10 h-10 grid place-items-center rounded-xl" style={{ background: paper, color: ink }} aria-label="Abrir menú" onClick={() => setMenu(true)}>
               <Menu size={20} />
             </button>
@@ -242,7 +314,8 @@ export function TemplateHealthtech({ clinic: publicada, highlights }: TemplatePr
                 {label}
               </a>
             ))}
-            <Pill tk={tk} className="mt-3 w-full" onClick={() => { setMenu(false); openBooking(); }}>Agendar Cita</Pill>
+            <Pill tk={tk} className="mt-3 w-full" onClick={() => { setMenu(false); openBooking(); }}
+              campo={dirCopia("nav.cta")} valor={C("nav.cta")} porDefecto="Agendar Cita" />
           </nav>
         </div>
       )}
@@ -260,15 +333,16 @@ export function TemplateHealthtech({ clinic: publicada, highlights }: TemplatePr
               {clinic.specialty}{clinic.city ? ` · ${clinic.city}` : ""}
             </div>
 
-            <h1 className="text-[40px] sm:text-6xl font-extrabold leading-[1.04] tracking-tight" style={{ color: ink }}>
-              {clinic.name}
-            </h1>
-            {clinic.landingTagline && (
-              <p className="mt-3 text-2xl sm:text-3xl font-extrabold leading-tight" style={{ background: grad, WebkitBackgroundClip: "text", backgroundClip: "text", color: "transparent" }}>
-                {clinic.landingTagline}
-              </p>
+            <Txt as="h1" className="text-[40px] sm:text-6xl font-extrabold leading-[1.04] tracking-tight" style={{ color: ink }}
+              campo={dirClinica("name")} linea requerido maxLen={120} valor={clinic.name} />
+            {(clinic.landingTagline || editando) && (
+              <Txt as="p" className="mt-3 text-2xl sm:text-3xl font-extrabold leading-tight" style={{ background: grad, WebkitBackgroundClip: "text", backgroundClip: "text", color: "transparent" }}
+                campo={dirClinica("landingTagline")} maxLen={300} valor={clinic.landingTagline} />
             )}
-            {clinic.description && <p className="mt-6 text-lg leading-relaxed" style={{ color: muted }}>{clinic.description}</p>}
+            {(clinic.description || editando) && (
+              <Txt as="p" className="mt-6 text-lg leading-relaxed" style={{ color: muted }}
+                campo={dirClinica("description")} maxLen={5000} valor={clinic.description} />
+            )}
 
             {highlights && highlights.length > 0 && (
               <div className="mt-6 flex flex-wrap gap-2">
@@ -281,39 +355,52 @@ export function TemplateHealthtech({ clinic: publicada, highlights }: TemplatePr
             )}
 
             <div className="mt-8 flex flex-wrap gap-3">
-              <Pill tk={tk} onClick={() => openBooking()}>Agendar Cita <ArrowRight size={18} /></Pill>
+              <Pill tk={tk} onClick={() => openBooking()}
+                campo={dirCopia("hero.cta")} valor={C("hero.cta")} porDefecto="Agendar Cita"
+                despues={<ArrowRight size={18} />} />
               {waLink ? (
-                <a
+                <Txt
+                  as="a"
                   href={waLink}
                   target="_blank"
                   rel="noreferrer"
                   className="inline-flex items-center justify-center gap-2 font-semibold rounded-full px-6 py-3.5 transition-all duration-300 hover:-translate-y-0.5"
                   style={{ background: "#fff", color: ink, border: `1.5px solid ${border}` }}
-                >
-                  <MessageCircle size={18} style={{ color: theme }} /> WhatsApp
-                </a>
+                  campo={dirCopia("hero.whatsapp")} linea maxLen={60}
+                  valor={C("hero.whatsapp")} porDefecto="WhatsApp" prefijo=" " unido
+                  antes={<MessageCircle size={18} style={{ color: theme }} />}
+                />
               ) : (
-                <button
+                <Txt
+                  as="button"
                   type="button"
-                  onClick={() => scrollToId(services.length ? "servicios" : "contacto")}
+                  onClick={() => scrollToId(verServicios ? "servicios" : "contacto")}
                   className="inline-flex items-center justify-center gap-2 font-semibold rounded-full px-6 py-3.5 transition-all duration-300 hover:-translate-y-0.5"
                   style={{ background: "#fff", color: ink, border: `1.5px solid ${border}` }}
-                >
-                  Conoce más
-                </button>
+                  campo={dirCopia("hero.cta2")} linea maxLen={60}
+                  valor={C("hero.cta2")} porDefecto="Conoce más"
+                />
               )}
             </div>
 
             {hasBadges && (
               <div className="mt-10 grid grid-cols-3 gap-3 max-w-lg">
+                {/* Con ficha de Google la leyenda cambia sola a "Google": es
+                    una condición, no un literal, así que solo se edita la
+                    versión sin Google. */}
                 {ratingValue != null && (
-                  <TrustBadge tk={tk} icon={<Star size={18} />} big={ratingValue.toFixed(1)} small={googleReviews?.rating != null ? "Google" : "calificación"} />
+                  <TrustBadge tk={tk} icon={<Star size={18} />} big={ratingValue.toFixed(1)}
+                    small={googleReviews?.rating != null ? "Google" : "calificación"}
+                    clave={googleReviews?.rating != null ? undefined : "sellos.calificacion"}
+                    smallValor={C("sellos.calificacion")} />
                 )}
                 {clinic.landingYearsExperience != null && (
-                  <TrustBadge tk={tk} icon={<Award size={18} />} big={`${clinic.landingYearsExperience}+`} small="años" />
+                  <TrustBadge tk={tk} icon={<Award size={18} />} big={`${clinic.landingYearsExperience}+`} small="años"
+                    clave="sellos.anios" smallValor={C("sellos.anios")} />
                 )}
                 {clinic.landingPatients && (
-                  <TrustBadge tk={tk} icon={<Users size={18} />} big={clinic.landingPatients} small="pacientes" />
+                  <TrustBadge tk={tk} icon={<Users size={18} />} big={clinic.landingPatients} small="pacientes"
+                    clave="sellos.pacientes" smallValor={C("sellos.pacientes")} />
                 )}
               </div>
             )}
@@ -322,14 +409,20 @@ export function TemplateHealthtech({ clinic: publicada, highlights }: TemplatePr
           {/* columna foto + tarjetas flotantes */}
           <div className="relative ht-fade">
             <div className="rounded-[32px] overflow-hidden" style={{ boxShadow: "0 40px 80px -30px rgba(15,23,42,.35)" }}>
-              <SmartImg src={clinic.landingCoverUrl} alt={`Consultorio de ${clinic.name}`} accent={theme} className="w-full aspect-[4/3] object-cover" />
+              {/* Sin `caja`: el div de la tarjeta flotante de al lado ya crea
+                  el contexto posicionado; envolver aquí movería la foto. */}
+              <Foto slot="portada" url={portada} zona="derecha">
+                {(url) => <SmartImg src={url} alt={`Consultorio de ${clinic.name}`} accent={theme} className="w-full aspect-[4/3] object-cover" />}
+              </Foto>
             </div>
 
             {ratingValue != null && (
               <div className="absolute -left-4 sm:-left-8 bottom-8 bg-white rounded-2xl p-4 flex items-center gap-3 ht-pop" style={{ boxShadow: "0 20px 40px -16px rgba(15,23,42,.3)" }}>
                 <div className="grid place-items-center w-11 h-11 rounded-xl text-white" style={{ background: grad }}><Shield size={22} /></div>
                 <div>
-                  <p className="text-xs" style={{ color: "#94a3b8" }}>Calificación</p>
+                  <Txt as="p" className="text-xs" style={{ color: "#94a3b8" }}
+                    campo={dirCopia("sellos.tarjeta")} linea maxLen={40}
+                    valor={C("sellos.tarjeta")} porDefecto="Calificación" />
                   <p className="font-bold text-sm" style={{ color: ink }}>{ratingValue.toFixed(1)} de 5</p>
                 </div>
               </div>
@@ -355,10 +448,13 @@ export function TemplateHealthtech({ clinic: publicada, highlights }: TemplatePr
       </section>
 
       {/* ---------------- SERVICIOS ---------------- */}
-      {services.length > 0 && (
+      {verServicios && (
         <section id="servicios" className="py-20 sm:py-28">
           <div className="max-w-7xl mx-auto px-5 sm:px-8">
-            <SectionHead tk={tk} kicker="Servicios" title="Todo lo que tu salud necesita" sub="Tratamientos con tecnología de punta y precios claros." />
+            <SectionHead tk={tk} seccion="servicios" claveKicker="servicios.kicker" editando={editando}
+              kicker="Servicios" kickerValor={C("servicios.kicker")}
+              title="Todo lo que tu salud necesita" titleValor={S.servicios?.titulo}
+              sub="Tratamientos con tecnología de punta y precios claros." subValor={S.servicios?.subtitulo} />
             <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5 mt-14">
               {services.map((s: any, i: number) => (
                 <Reveal key={i} delay={i * 60}>
@@ -370,20 +466,29 @@ export function TemplateHealthtech({ clinic: publicada, highlights }: TemplatePr
                   >
                     <div className="flex items-center justify-between">
                       <span className="grid place-items-center w-14 h-14 rounded-2xl text-2xl" style={{ background: alpha(theme, 0.1) }}>{s.icon || "🏥"}</span>
-                      {s.price && <span className="px-3 py-1 rounded-full text-sm font-bold" style={{ background: paper, color: theme }}>{s.price}</span>}
+                      {(s.price || editando) && (
+                        <Txt as="span" className="px-3 py-1 rounded-full text-sm font-bold" style={{ background: paper, color: theme }}
+                          campo={dirServicio(i, "price")} linea maxLen={40} valor={s.price} />
+                      )}
                     </div>
-                    <h3 className="mt-5 text-xl font-bold" style={{ color: ink }}>{s.name}</h3>
-                    {s.desc && <p className="mt-1.5 text-[15px] leading-relaxed" style={{ color: muted }}>{s.desc}</p>}
-                    <button
+                    <Txt as="h3" className="mt-5 text-xl font-bold" style={{ color: ink }}
+                      campo={dirServicio(i, "name")} linea requerido maxLen={120} valor={s.name} />
+                    {(s.desc || editando) && (
+                      <Txt as="p" className="mt-1.5 text-[15px] leading-relaxed" style={{ color: muted }}
+                        campo={dirServicio(i, "desc")} maxLen={400} valor={s.desc} />
+                    )}
+                    <Txt
+                      as="button"
                       type="button"
                       onClick={() => openBooking({ service: s.name })}
                       className="mt-5 w-full py-3 rounded-2xl font-semibold text-sm transition-all flex items-center justify-center gap-2"
                       style={{ background: paper, color: ink }}
-                      onMouseEnter={(e) => { e.currentTarget.style.background = grad; e.currentTarget.style.color = "#fff"; }}
-                      onMouseLeave={(e) => { e.currentTarget.style.background = paper; e.currentTarget.style.color = ink; }}
-                    >
-                      Agendar <ArrowRight size={16} />
-                    </button>
+                      onMouseEnter={(e: any) => { e.currentTarget.style.background = grad; e.currentTarget.style.color = "#fff"; }}
+                      onMouseLeave={(e: any) => { e.currentTarget.style.background = paper; e.currentTarget.style.color = ink; }}
+                      campo={dirCopia("servicios.cta")} linea maxLen={40}
+                      valor={C("servicios.cta")} porDefecto="Agendar" sufijo=" " unido
+                      despues={<ArrowRight size={16} />}
+                    />
                   </div>
                 </Reveal>
               ))}
@@ -393,10 +498,13 @@ export function TemplateHealthtech({ clinic: publicada, highlights }: TemplatePr
       )}
 
       {/* ---------------- EQUIPO ---------------- */}
-      {doctors.length > 0 && (
+      {verEquipo && (
         <section id="equipo" className="py-20 sm:py-28" style={{ background: tintedSurface }}>
           <div className="max-w-7xl mx-auto px-5 sm:px-8">
-            <SectionHead tk={tk} kicker="Equipo médico" title="Especialistas en quienes confiar" sub="Profesionales certificados, comprometidos con tu bienestar." />
+            <SectionHead tk={tk} seccion="equipo" claveKicker="equipo.kicker" editando={editando}
+              kicker="Equipo médico" kickerValor={C("equipo.kicker")}
+              title="Especialistas en quienes confiar" titleValor={S.equipo?.titulo}
+              sub="Profesionales certificados, comprometidos con tu bienestar." subValor={S.equipo?.subtitulo} />
             <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-5 mt-14">
               {doctors.map((u, i) => (
                 <Reveal key={u.id} delay={i * 70}>
@@ -422,14 +530,16 @@ export function TemplateHealthtech({ clinic: publicada, highlights }: TemplatePr
                     </div>
                     <div className="p-4">
                       <h3 className="font-bold text-lg" style={{ color: ink }}>Dr(a). {u.firstName} {u.lastName}</h3>
-                      <button
+                      <Txt
+                        as="button"
                         type="button"
                         onClick={() => openBooking({ doctorId: u.id })}
                         className="mt-3 w-full py-2.5 rounded-xl font-semibold text-sm flex items-center justify-center gap-2 transition"
                         style={{ background: alpha(theme, 0.1), color: theme }}
-                      >
-                        Agendar consulta <ArrowRight size={15} />
-                      </button>
+                        campo={dirCopia("equipo.cta")} linea maxLen={60}
+                        valor={C("equipo.cta")} porDefecto="Agendar consulta" sufijo=" " unido
+                        despues={<ArrowRight size={15} />}
+                      />
                     </div>
                   </div>
                 </Reveal>
@@ -440,10 +550,12 @@ export function TemplateHealthtech({ clinic: publicada, highlights }: TemplatePr
       )}
 
       {/* ---------------- GALERÍA ---------------- */}
-      {gallery.length > 0 && (
+      {verGaleria && (
         <section id="galeria" className="py-20 sm:py-28">
           <div className="max-w-7xl mx-auto px-5 sm:px-8">
-            <SectionHead tk={tk} kicker="Galería" title="Conoce nuestras instalaciones" />
+            <SectionHead tk={tk} seccion="galeria" claveKicker="galeria.kicker" editando={editando}
+              kicker="Galería" kickerValor={C("galeria.kicker")}
+              title="Conoce nuestras instalaciones" titleValor={S.galeria?.titulo} />
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mt-14">
               {gallery.map((g, i) => (
                 <Reveal key={i} delay={(i % 4) * 50} className={i === 0 ? "col-span-2 row-span-2" : ""}>
@@ -462,27 +574,37 @@ export function TemplateHealthtech({ clinic: publicada, highlights }: TemplatePr
               ))}
             </div>
             <Reveal className="mt-10 text-center">
-              <Pill tk={tk} onClick={() => openBooking()}>Visítanos · Agendar Cita <ArrowRight size={18} /></Pill>
+              <Pill tk={tk} onClick={() => openBooking()}
+                campo={dirCopia("galeria.cta")} valor={C("galeria.cta")} porDefecto="Visítanos · Agendar Cita"
+                despues={<ArrowRight size={18} />} />
             </Reveal>
           </div>
         </section>
       )}
 
       {/* ---------------- TESTIMONIOS ---------------- */}
-      {testimonials.length > 0 && (
+      {verOpiniones && (
         <section className="py-20 sm:py-28" style={{ background: tintedSurface }}>
           <div className="max-w-7xl mx-auto px-5 sm:px-8">
-            <SectionHead tk={tk} center kicker="Testimonios" title="Lo que dicen nuestros pacientes" />
+            <SectionHead tk={tk} center seccion="opiniones" claveKicker="opiniones.kicker" editando={editando}
+              kicker="Testimonios" kickerValor={C("opiniones.kicker")}
+              title="Lo que dicen nuestros pacientes" titleValor={S.opiniones?.titulo} />
             <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5 mt-14">
               {testimonials.map((t: any, i: number) => (
                 <Reveal key={i} delay={i * 60}>
                   <div className="bg-white rounded-3xl p-6 h-full" style={{ border: `1px solid ${border}` }}>
                     <Stars value={t.rating ?? 5} size={15} />
-                    <p className="mt-3 text-[15px] leading-relaxed" style={{ color: "#475569" }}>&ldquo;{t.text}&rdquo;</p>
+                    {/* Las comillas van como prefijo/sufijo y no dentro del
+                        texto: si se guardaran, la siguiente edición las
+                        duplicaría. */}
+                    <Txt as="p" className="mt-3 text-[15px] leading-relaxed" style={{ color: "#475569" }}
+                      campo={dirTestimonio(i, "text")} requerido maxLen={800}
+                      valor={t.text} prefijo={"\u201C"} sufijo={"\u201D"} />
                     <div className="mt-4 flex items-center gap-2.5">
                       <span className="grid place-items-center w-9 h-9 rounded-full text-white font-bold text-sm" style={{ background: grad }}>{t.name?.[0] ?? "P"}</span>
                       <div>
-                        <p className="font-semibold text-sm" style={{ color: ink }}>{t.name}</p>
+                        <Txt as="p" className="font-semibold text-sm" style={{ color: ink }}
+                          campo={dirTestimonio(i, "name")} linea maxLen={80} valor={t.name} />
                         {t.date && <p className="text-xs" style={{ color: "#94a3b8" }}>{t.date}</p>}
                       </div>
                     </div>
@@ -503,7 +625,9 @@ export function TemplateHealthtech({ clinic: publicada, highlights }: TemplatePr
               <Reveal className="rounded-3xl p-8 text-white flex flex-col justify-between" style={{ background: grad, boxShadow: `0 30px 60px -24px ${alpha(theme, 0.6)}` }}>
                 <div>
                   <div className="flex items-center gap-2 bg-white/15 w-fit px-3 py-1.5 rounded-full">
-                    <GoogleG size={18} /><span className="text-sm font-semibold">Google</span>
+                    <GoogleG size={18} /><Txt as="span" className="text-sm font-semibold"
+                      campo={dirCopia("opiniones.tituloGoogle")} linea maxLen={40}
+                      valor={C("opiniones.tituloGoogle")} porDefecto="Google" />
                   </div>
                   {googleReviews!.rating != null && (
                     <>
@@ -513,9 +637,9 @@ export function TemplateHealthtech({ clinic: publicada, highlights }: TemplatePr
                   )}
                   <p className="mt-2 text-white/85">{googleReviews!.total} reseñas verificadas</p>
                 </div>
-                <button type="button" onClick={() => openBooking()} className="mt-8 bg-white rounded-2xl py-3.5 font-bold transition hover:brightness-95" style={{ color: shade(theme, 0.1) }}>
-                  Agendar mi cita
-                </button>
+                <Txt as="button" type="button" onClick={() => openBooking()} className="mt-8 bg-white rounded-2xl py-3.5 font-bold transition hover:brightness-95" style={{ color: shade(theme, 0.1) }}
+                  campo={dirCopia("opiniones.cta")} linea maxLen={60}
+                  valor={C("opiniones.cta")} porDefecto="Agendar mi cita" />
               </Reveal>
 
               {/* reseñas */}
@@ -544,10 +668,12 @@ export function TemplateHealthtech({ clinic: publicada, highlights }: TemplatePr
       )}
 
       {/* ---------------- FAQ ---------------- */}
-      {faqs.length > 0 && (
+      {verFaq && (
         <section className="py-20 sm:py-28">
           <div className="max-w-3xl mx-auto px-5 sm:px-8">
-            <SectionHead tk={tk} center kicker="Preguntas frecuentes" title="Resolvemos tus dudas" />
+            <SectionHead tk={tk} center seccion="faq" claveKicker="faq.kicker" editando={editando}
+              kicker="Preguntas frecuentes" kickerValor={C("faq.kicker")}
+              title="Resolvemos tus dudas" titleValor={S.faq?.titulo} />
             <div className="space-y-3 mt-12">
               {faqs.map((f: any, i: number) => {
                 const isOpen = openFaq === i;
@@ -560,7 +686,14 @@ export function TemplateHealthtech({ clinic: publicada, highlights }: TemplatePr
                         aria-expanded={isOpen}
                         className="w-full flex items-center justify-between gap-4 text-left px-6 py-5"
                       >
-                        <span className="font-semibold text-[17px]" style={{ color: ink }}>{f.question}</span>
+                        {/* Se leen las DOS formas: el formulario de siempre
+                            guarda {question, answer} y el lienzo normaliza a
+                            {q, a}. Antes solo se leía la vieja, así que la
+                            primera pregunta que alguien editara desde el
+                            lienzo habría desaparecido de la página. */}
+                        <Txt as="span" className="font-semibold text-[17px]" style={{ color: ink }}
+                          campo={dirFaq(i, "q")} linea requerido maxLen={200}
+                          valor={f.q ?? f.question} />
                         <span
                           className="shrink-0 grid place-items-center w-8 h-8 rounded-full transition-transform duration-300"
                           style={{ background: isOpen ? theme : paper, color: isOpen ? "#fff" : ink, transform: isOpen ? "rotate(180deg)" : "none" }}
@@ -569,7 +702,9 @@ export function TemplateHealthtech({ clinic: publicada, highlights }: TemplatePr
                         </span>
                       </button>
                       <div style={{ maxHeight: isOpen ? 320 : 0, overflow: "hidden", transition: "max-height .4s ease" }}>
-                        <p className="px-6 pb-5 text-[15px] leading-relaxed" style={{ color: muted }}>{f.answer}</p>
+                        <Txt as="p" className="px-6 pb-5 text-[15px] leading-relaxed" style={{ color: muted }}
+                          campo={dirFaq(i, "a")} requerido maxLen={1200}
+                          valor={f.a ?? f.answer} />
                       </div>
                     </div>
                   </Reveal>
@@ -577,8 +712,12 @@ export function TemplateHealthtech({ clinic: publicada, highlights }: TemplatePr
               })}
             </div>
             <Reveal className="mt-10 flex flex-col sm:flex-row items-center justify-center gap-4 text-center">
-              <span className="text-[15px]" style={{ color: muted }}>¿Te quedó otra duda? Con gusto te ayudamos.</span>
-              <Pill tk={tk} size="sm" onClick={() => openBooking()}>Agendar Cita <ArrowRight size={16} /></Pill>
+              <Txt as="span" className="text-[15px]" style={{ color: muted }}
+                campo={dirCopia("faq.nota")} linea maxLen={160}
+                valor={C("faq.nota")} porDefecto="¿Te quedó otra duda? Con gusto te ayudamos." />
+              <Pill tk={tk} size="sm" onClick={() => openBooking()}
+                campo={dirCopia("faq.cta")} valor={C("faq.cta")} porDefecto="Agendar Cita"
+                despues={<ArrowRight size={16} />} />
             </Reveal>
           </div>
         </section>
@@ -591,16 +730,22 @@ export function TemplateHealthtech({ clinic: publicada, highlights }: TemplatePr
             <div aria-hidden className="absolute -top-20 -right-10 w-72 h-72 rounded-full bg-white/10" />
             <div aria-hidden className="absolute -bottom-24 -left-10 w-80 h-80 rounded-full bg-white/10" />
             <div className="relative">
-              <h2 className="text-4xl sm:text-5xl font-extrabold text-white leading-tight">¿Listo para tu cita?</h2>
-              <p className="mt-4 text-lg text-white/85 max-w-xl mx-auto">Agenda en menos de un minuto. Te confirmamos por WhatsApp.</p>
-              <button
+              <Txt as="h2" className="text-4xl sm:text-5xl font-extrabold text-white leading-tight"
+                campo={dirSeccion("reservar", "titulo")} linea maxLen={160}
+                valor={S.reservar?.titulo} porDefecto="¿Listo para tu cita?" />
+              <Txt as="p" className="mt-4 text-lg text-white/85 max-w-xl mx-auto"
+                campo={dirSeccion("reservar", "subtitulo")} maxLen={500}
+                valor={S.reservar?.subtitulo} porDefecto="Agenda en menos de un minuto. Te confirmamos por WhatsApp." />
+              <Txt
+                as="button"
                 type="button"
                 onClick={() => openBooking()}
                 className="mt-8 inline-flex items-center gap-2 bg-white px-8 py-4 rounded-full font-bold transition hover:scale-105"
                 style={{ color: shade(theme, 0.1) }}
-              >
-                Agendar Cita <ArrowRight size={18} />
-              </button>
+                campo={dirCopia("reservar.cta")} linea maxLen={60}
+                valor={C("reservar.cta")} porDefecto="Agendar Cita" sufijo=" " unido
+                despues={<ArrowRight size={18} />}
+              />
             </div>
           </Reveal>
         </div>
@@ -609,7 +754,9 @@ export function TemplateHealthtech({ clinic: publicada, highlights }: TemplatePr
       {/* ---------------- CONTACTO ---------------- */}
       <section id="contacto" className="py-20 sm:py-28" style={{ background: paper }}>
         <div className="max-w-6xl mx-auto px-5 sm:px-8">
-          <SectionHead tk={tk} center kicker="Visítanos" title="Estamos cerca de ti" />
+          <SectionHead tk={tk} center seccion="contacto" claveKicker="contacto.kicker" editando={editando}
+            kicker="Visítanos" kickerValor={C("contacto.kicker")}
+            title="Estamos cerca de ti" titleValor={S.contacto?.titulo} />
           <div className="grid lg:grid-cols-2 gap-8 items-stretch mt-12">
             {/* info */}
             <Reveal className="flex flex-col gap-4">
@@ -617,7 +764,9 @@ export function TemplateHealthtech({ clinic: publicada, highlights }: TemplatePr
                 <div className="flex items-center gap-4 p-5" style={{ background: "#fff", border: `1px solid ${border}`, borderRadius: 20 }}>
                   <span className="shrink-0 grid place-items-center w-12 h-12 rounded-2xl" style={{ background: alpha(theme, 0.1), color: theme }}><MapPin size={22} /></span>
                   <div>
-                    <p className="text-xs uppercase tracking-wider" style={{ color: muted }}>Dirección</p>
+                    <Txt as="p" className="text-xs uppercase tracking-wider" style={{ color: muted }}
+                      campo={dirCopia("contacto.etiquetaDireccion")} linea maxLen={60}
+                      valor={C("contacto.etiquetaDireccion")} porDefecto="Dirección" />
                     <p className="font-semibold text-[16px]" style={{ color: ink }}>{clinic.address}{clinic.city ? `, ${clinic.city}` : ""}</p>
                   </div>
                 </div>
@@ -626,7 +775,9 @@ export function TemplateHealthtech({ clinic: publicada, highlights }: TemplatePr
                 <a href={`tel:${clinic.phone}`} className="flex items-center gap-4 p-5 transition hover:-translate-y-0.5" style={{ background: "#fff", border: `1px solid ${border}`, borderRadius: 20 }}>
                   <span className="shrink-0 grid place-items-center w-12 h-12 rounded-2xl" style={{ background: alpha(theme, 0.1), color: theme }}><Phone size={22} /></span>
                   <div>
-                    <p className="text-xs uppercase tracking-wider" style={{ color: muted }}>Teléfono</p>
+                    <Txt as="p" className="text-xs uppercase tracking-wider" style={{ color: muted }}
+                      campo={dirCopia("contacto.etiquetaTelefono")} linea maxLen={60}
+                      valor={C("contacto.etiquetaTelefono")} porDefecto="Teléfono" />
                     <p className="font-semibold text-[16px]" style={{ color: ink }}>{clinic.phone}</p>
                   </div>
                 </a>
@@ -635,7 +786,9 @@ export function TemplateHealthtech({ clinic: publicada, highlights }: TemplatePr
                 <a href={waLink} target="_blank" rel="noreferrer" className="flex items-center gap-4 p-5 transition hover:-translate-y-0.5" style={{ background: "#fff", border: `1px solid ${border}`, borderRadius: 20 }}>
                   <span className="shrink-0 grid place-items-center w-12 h-12 rounded-2xl" style={{ background: alpha(theme, 0.1), color: theme }}><MessageCircle size={22} /></span>
                   <div>
-                    <p className="text-xs uppercase tracking-wider" style={{ color: muted }}>WhatsApp</p>
+                    <Txt as="p" className="text-xs uppercase tracking-wider" style={{ color: muted }}
+                      campo={dirCopia("contacto.etiquetaWhatsapp")} linea maxLen={60}
+                      valor={C("contacto.etiquetaWhatsapp")} porDefecto="WhatsApp" />
                     <p className="font-semibold text-[16px]" style={{ color: ink }}>{clinic.landingWhatsapp}</p>
                   </div>
                 </a>
@@ -645,7 +798,9 @@ export function TemplateHealthtech({ clinic: publicada, highlights }: TemplatePr
               {(clinic.schedules ?? []).some((s) => s.enabled) && (
                 <div className="p-5" style={{ background: "#fff", border: `1px solid ${border}`, borderRadius: 20 }}>
                   <div className="flex items-center gap-3 mb-3">
-                    <Clock size={20} style={{ color: theme }} /><span className="font-semibold" style={{ color: ink }}>Horarios</span>
+                    <Clock size={20} style={{ color: theme }} /><Txt as="span" className="font-semibold" style={{ color: ink }}
+                      campo={dirCopia("contacto.etiquetaHorarios")} linea maxLen={60}
+                      valor={C("contacto.etiquetaHorarios")} porDefecto="Horarios" />
                   </div>
                   {[0, 1, 2, 3, 4, 5, 6].map((dow) => {
                     const s = schedMap[String(dow)];
@@ -653,9 +808,15 @@ export function TemplateHealthtech({ clinic: publicada, highlights }: TemplatePr
                     return (
                       <div key={dow} className="flex justify-between py-1.5 text-[15px]" style={{ color: muted }}>
                         <span>{DAYS_FULL[dow]}</span>
-                        <span className="font-medium" style={{ color: closed ? CLOSED_RED : ink }}>
-                          {closed ? "Cerrado" : `${s.openTime} – ${s.closeTime}`}
-                        </span>
+                        {/* Solo el día CERRADO es texto editable: el horario
+                            abierto es el dato de la agenda. */}
+                        {closed
+                          ? <Txt as="span" className="font-medium" style={{ color: CLOSED_RED }}
+                              campo={dirCopia("contacto.cerrado")} linea maxLen={40}
+                              valor={C("contacto.cerrado")} porDefecto="Cerrado" />
+                          : <span className="font-medium" style={{ color: ink }}>
+                              {`${s.openTime} – ${s.closeTime}`}
+                            </span>}
                       </div>
                     );
                   })}
@@ -680,9 +841,9 @@ export function TemplateHealthtech({ clinic: publicada, highlights }: TemplatePr
                       <MessageCircle size={20} />
                     </a>
                   )}
-                  <button type="button" onClick={() => openBooking()} className="ml-auto px-6 py-3 rounded-full font-semibold text-white transition hover:brightness-110" style={{ background: theme }}>
-                    Agendar Cita
-                  </button>
+                  <Txt as="button" type="button" onClick={() => openBooking()} className="ml-auto px-6 py-3 rounded-full font-semibold text-white transition hover:brightness-110" style={{ background: theme }}
+                    campo={dirCopia("contacto.cta")} linea maxLen={60}
+                    valor={C("contacto.cta")} porDefecto="Agendar Cita" />
                 </div>
               )}
             </Reveal>
@@ -772,7 +933,9 @@ export function TemplateHealthtech({ clinic: publicada, highlights }: TemplatePr
       <button
         type="button"
         onClick={() => openBooking()}
-        aria-label="Agendar Cita"
+        /* El aria-label sigue al texto visible: si la clínica renombra el
+           botón, quien usa lector de pantalla oye lo mismo que se ve. */
+        aria-label={copyText(copias, "flotante.cta", "Agendar Cita")}
         className="fixed right-4 sm:right-6 z-[90] inline-flex items-center gap-2 font-semibold text-white transition-all duration-500 hover:brightness-110 active:scale-95"
         style={{
           bottom: 24,
@@ -786,7 +949,9 @@ export function TemplateHealthtech({ clinic: publicada, highlights }: TemplatePr
         }}
       >
         <Calendar size={18} />
-        <span className="hidden sm:inline">Agendar Cita</span>
+        <Txt as="span" className="hidden sm:inline"
+          campo={dirCopia("flotante.cta")} linea maxLen={40}
+          valor={C("flotante.cta")} porDefecto="Agendar Cita" />
       </button>
 
       {/* ---------------- LIGHTBOX + MODAL REAL ---------------- */}
