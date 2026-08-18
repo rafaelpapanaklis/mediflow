@@ -197,3 +197,65 @@ export async function sendWhatsAppDocument(
     },
   });
 }
+
+/**
+ * Metadatos de un archivo que el PACIENTE mandó por WhatsApp (foto, nota de
+ * voz, PDF, video…). Meta no entrega el binario en el webhook: manda un media
+ * id y hay que venir aquí a pedir la URL de descarga, que además solo abre con
+ * el token en la cabecera — por eso el panel lo sirve a través de un proxy
+ * (api/whatsapp/media) y no con un enlace directo en un `<img src>`.
+ *
+ * Devuelve null cuando el archivo YA NO EXISTE en Meta: lo borran a los ~30
+ * días, así que un adjunto viejo no es un error, es que caducó — y la UI tiene
+ * que decirlo, no pintar un ícono roto. Meta lo reporta de dos formas: un 404
+ * a secas, o el clásico HTTP 400 con código 100 / subcódigo 33 ("Object with
+ * ID … does not exist") de la Graph API; las dos se tratan como "caducó".
+ * Cualquier otro fallo (token revocado, 5xx) sí lanza WhatsAppApiError.
+ */
+export async function getWhatsAppMediaMeta(
+  accessToken: string,
+  mediaId: string,
+): Promise<{ url: string; mimeType: string; fileSize: number } | null> {
+  // Mismo descifrado perezoso que postToGraph: cifrado ("v1:...") o en claro.
+  const token = decryptField(accessToken) ?? accessToken;
+  const res = await fetch(`https://graph.facebook.com/v19.0/${encodeURIComponent(mediaId)}`, {
+    headers: { Authorization: `Bearer ${token}` },
+    signal: AbortSignal.timeout(15000),
+  });
+  if (res.status === 404) return null;
+  // Meta puede responder HTML (p. ej. 502 del gateway): no asumir JSON.
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const err = parseWaError(json, res.status);
+    if (err.code === 100 && err.subcode === 33) return null;
+    throw err;
+  }
+  if (typeof json?.url !== "string" || json.url.length === 0) return null;
+  return {
+    url: json.url,
+    mimeType: typeof json.mime_type === "string" ? json.mime_type : "application/octet-stream",
+    fileSize: Number(json.file_size) || 0,
+  };
+}
+
+/**
+ * Marca como LEÍDO un mensaje del paciente: es lo que le pinta las palomitas
+ * azules en su WhatsApp. Sin esto, la clínica abre la conversación en el
+ * panel y el paciente sigue viendo su mensaje "sin leer" durante horas, y
+ * vuelve a escribir para preguntar si lo recibieron.
+ *
+ * Va por el mismo endpoint de mensajes que un envío (por eso reusa
+ * postToGraph): Meta lo modela como un "status" que se publica sobre el wamid.
+ * Best-effort desde el caller: una palomita nunca puede romper el abrir el hilo.
+ */
+export async function markWhatsAppMessageRead(
+  phoneNumberId: string,
+  accessToken: string,
+  wamid: string,
+) {
+  return postToGraph(phoneNumberId, accessToken, {
+    messaging_product: "whatsapp",
+    status: "read",
+    message_id: wamid,
+  });
+}

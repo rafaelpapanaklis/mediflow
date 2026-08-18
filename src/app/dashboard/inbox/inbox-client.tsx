@@ -45,6 +45,7 @@ import {
   Filter,
   ExternalLink,
   AlertCircle,
+  X,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { useT } from "@/i18n/i18n-provider";
@@ -64,6 +65,7 @@ import {
 } from "@/lib/inbox/composer-drafts";
 import type { InboxTemplateOption } from "@/lib/inbox/composer-templates";
 import { StartConversationModal } from "@/components/dashboard/inbox/start-conversation-modal";
+import { MediaBubble } from "@/components/dashboard/inbox/media-bubble";
 import styles from "./inbox.module.css";
 
 type Channel = "WHATSAPP" | "EMAIL" | "PORTAL_FORM" | "VALIDATION" | "REMINDER" | "PORTAL";
@@ -1081,6 +1083,80 @@ export function InboxClient({ viewer }: { viewer: Viewer }) {
     }
   }, [activeThread, threads, t, fetchThreads, dropDraft]);
 
+  // La X de la fila. SOLO ARCHIVA — no borra nada, nunca (el DELETE y su
+  // permiso inbox.delete no se tocan). Misma limpieza local y mismo toast con
+  // "Deshacer" que resolveThread; la diferencia es que actúa sobre cualquier
+  // fila de la lista, esté abierta o no.
+  const archiveFromList = useCallback(async (threadId: string) => {
+    const snapshot = threads.find((th) => th.id === threadId) ?? null;
+    try {
+      const res = await fetch(`/api/inbox/threads/${threadId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "ARCHIVED" }),
+      });
+      if (!res.ok) throw new Error();
+      setThreads((prev) => prev.filter((th) => th.id !== threadId));
+      if (activeThreadId === threadId) {
+        setActiveThreadId(null);
+        setActiveThread(null);
+      }
+      dropDraft(threadId);
+      setStats((prev) => (prev ? { ...prev, resolvedToday: prev.resolvedToday + 1 } : prev));
+      toast(
+        (tk) => (
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 10 }}>
+            {t("inbox.client.toastArchivedFromList")}
+            <button
+              type="button"
+              onClick={async () => {
+                toast.dismiss(tk.id);
+                try {
+                  const undo = await fetch(`/api/inbox/threads/${threadId}`, {
+                    method: "PATCH",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ status: "READ" }),
+                  });
+                  if (!undo.ok) throw new Error();
+                  if (snapshot) {
+                    setThreads((prev) =>
+                      [...prev.filter((th) => th.id !== threadId), { ...snapshot, status: "READ" as Status }].sort(
+                        (a, b) => new Date(b.lastMessageAt).getTime() - new Date(a.lastMessageAt).getTime(),
+                      ),
+                    );
+                  } else {
+                    void fetchThreads({ silent: true });
+                  }
+                  setStats((prev) => (prev ? { ...prev, resolvedToday: Math.max(0, prev.resolvedToday - 1) } : prev));
+                } catch {
+                  toast.error(t("inbox.client.toastArchiveError"));
+                }
+              }}
+              style={{
+                border: "none",
+                background: "transparent",
+                color: "#7c3aed",
+                fontWeight: 700,
+                cursor: "pointer",
+                fontFamily: "inherit",
+                fontSize: 13,
+                padding: 0,
+              }}
+            >
+              {t("inbox.client.undo")}
+            </button>
+          </span>
+        ),
+        { duration: 5000 },
+      );
+    } catch {
+      toast.error(t("inbox.client.toastArchiveError"));
+      // La fila sigue en pantalla: se repone desde el servidor para que la
+      // lista no se quede mintiendo sobre el estado real del hilo.
+      void fetchThreads({ silent: true });
+    }
+  }, [threads, activeThreadId, t, fetchThreads, dropDraft]);
+
   // Posponer → SNOOZED + snoozedUntil.
   const snoozeUntil = useCallback(async (when: Date) => {
     if (!activeThread) return;
@@ -1840,9 +1916,13 @@ export function InboxClient({ viewer }: { viewer: Viewer }) {
               const showBotChip = !showHumanChip && th.channel === "WHATSAPP" && th.botActive;
               const showUnattended = !showHumanChip && !showBotChip && isUnread;
               return (
-                <button
+                // div[role=button] y NO <button>: la X de archivar vive DENTRO de la
+                // fila y un <button> anidado es HTML inválido (React revienta en la
+                // hidratación). Enter/Espacio abren el hilo igual que un botón.
+                <div
                   key={th.id}
-                  type="button"
+                  role="button"
+                  tabIndex={0}
                   className={[
                     styles.row,
                     isActive ? styles.rowSelected : "",
@@ -1850,6 +1930,15 @@ export function InboxClient({ viewer }: { viewer: Viewer }) {
                     isSnoozed ? styles.rowSnoozed : "",
                   ].filter(Boolean).join(" ")}
                   onClick={() => setActiveThreadId(th.id)}
+                  onKeyDown={(e) => {
+                    // Solo la fila en sí: la X interior maneja sus propias teclas
+                    // y su keydown burbujea hasta aquí.
+                    if (e.target !== e.currentTarget) return;
+                    if (e.key === "Enter" || e.key === " ") {
+                      if (e.key === " ") e.preventDefault();
+                      setActiveThreadId(th.id);
+                    }
+                  }}
                 >
                   <span className={styles.avatarWrap}>
                     <span className={styles.avatar} style={{ background: gradientFor(name) }}>
@@ -1907,7 +1996,24 @@ export function InboxClient({ viewer }: { viewer: Viewer }) {
                       {isUnread && <span className={styles.unreadPill} aria-label={t("inbox.client.unreadAria")} />}
                     </span>
                   </span>
-                </button>
+                  {/* Quitar de la lista = archivar (nunca borrar). En "archivados"
+                      no se pinta: archivar lo archivado no hace nada. */}
+                  {folder !== "archived" && (
+                    <button
+                      type="button"
+                      className={styles.rowRemove}
+                      aria-label={t("inbox.client.removeAria", { name })}
+                      title={t("inbox.client.removeTitle")}
+                      onClick={(e) => {
+                        // Sin esto la X archiva Y abre la conversación.
+                        e.stopPropagation();
+                        void archiveFromList(th.id);
+                      }}
+                    >
+                      <X size={14} strokeWidth={2.4} aria-hidden />
+                    </button>
+                  )}
+                </div>
               );
             })
           )}
@@ -2267,6 +2373,10 @@ export function InboxClient({ viewer }: { viewer: Viewer }) {
                           return (
                             <div key={m.id} className={`${styles.msgGroup} ${styles.msgGroupIn}`}>
                               <div className={`${styles.bubble} ${styles.bubbleIn}`}>
+                                {/* La foto / nota de voz / PDF va ENCIMA del texto, que
+                                    queda debajo como pie de foto. Sin adjuntos devuelve
+                                    null y la burbuja se ve igual que siempre. */}
+                                <MediaBubble messageId={m.id} attachments={m.attachments} />
                                 {m.body}
                                 <span className={styles.bubbleTime}>{formatBubbleTime(m.sentAt)}</span>
                               </div>
@@ -2306,6 +2416,7 @@ export function InboxClient({ viewer }: { viewer: Viewer }) {
                               )}
                             </span>
                             <div className={`${styles.bubble} ${fromStaff ? styles.bubbleStaff : styles.bubbleBot}`}>
+                              <MediaBubble messageId={m.id} attachments={m.attachments} />
                               {m.body}
                               <span className={styles.bubbleTime}>
                                 {formatBubbleTime(m.sentAt)}

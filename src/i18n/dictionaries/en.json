@@ -4616,7 +4616,13 @@
       "toastSavedButError": "Message saved but {error}",
       "toastInternalNoteSaved": "Internal note saved",
       "toastMessageSent": "Message sent",
-      "toastArchiveError": "Error resolving"
+      "toastArchiveError": "Error resolving",
+      "removeAria": "Remove the conversation with {name} from the list (it is archived, not deleted)",
+      "removeTitle": "Archive conversation",
+      "toastArchivedFromList": "Conversation archived",
+      "mediaOpen": "View full size",
+      "mediaExpired": "This file is no longer available. WhatsApp deletes them after 30 days.",
+      "mediaDocOpen": "Open"
     },
     "compose": {
       "title": "Start a conversation",

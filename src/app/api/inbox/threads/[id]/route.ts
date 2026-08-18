@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { getAuthContext } from "@/lib/auth-context";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { assertPatientVisible } from "@/lib/patient-visibility";
+import { markWhatsAppMessageRead } from "@/lib/whatsapp";
 
 export const dynamic = "force-dynamic";
 
@@ -42,9 +43,30 @@ export async function GET(_req: NextRequest, { params }: Params) {
         assignedTo: { select: { id: true, firstName: true, lastName: true } },
         messages: {
           orderBy: { sentAt: "asc" },
+          // Este select ES el contrato que espera `ThreadMessage` en
+          // inbox-client.tsx, copiado tal cual del GET de
+          // /api/inbox/threads/[id]/messages para que los dos endpoints no
+          // vuelvan a divergir. Antes faltaban externalId y los campos de
+          // entrega: un recordatorio que Meta RECHAZÓ se pintaba como entregado
+          // y sin motivo, y todo envío automático salía etiquetado "DaleControl"
+          // en vez de "Recordatorio"/"Receta"/"Consentimiento" (solo se
+          // arreglaba solo en lo que reenviaba /since).
           select: {
-            id: true, direction: true, body: true, attachments: true,
-            sentAt: true, isInternal: true,
+            id: true,
+            direction: true,
+            body: true,
+            attachments: true,
+            sentAt: true,
+            isInternal: true,
+            externalId: true,
+            // Entrega REAL reportada por Meta (M-06): la palomita del Inbox se
+            // pintaba a partir de "el envío no lanzó", que solo significa que Meta
+            // ACEPTÓ el mensaje. Null = todavía sin dato, no "no llegó".
+            deliveryStatus: true,
+            deliveredAt: true,
+            readAt: true,
+            errorCode: true,
+            errorTitle: true,
             sentBy: { select: { id: true, firstName: true, lastName: true } },
           },
         },
@@ -91,7 +113,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     }
     const existing = await prisma.inboxThread.findFirst({
       where: { id: params.id, clinicId: dbUser.clinicId },
-      select: { id: true, patientId: true },
+      select: { id: true, patientId: true, channel: true },
     });
     if (!existing) return NextResponse.json({ error: "not_found" }, { status: 404 });
 
@@ -143,6 +165,37 @@ export async function PATCH(req: NextRequest, { params }: Params) {
         subject: true, tags: true, botActive: true,
       },
     });
+
+    // ── Palomitas azules ──
+    // Alguien de la clínica abrió la conversación (READ): se le dice a Meta que
+    // el último mensaje del paciente está leído, que es lo que le pinta las dos
+    // palomitas azules en SU WhatsApp. Sin esto el paciente ve su mensaje "sin
+    // leer" durante horas y vuelve a escribir para preguntar si llegó.
+    // BEST-EFFORT ABSOLUTO: si Meta falla, el usuario ya abrió su conversación
+    // y la respuesta de este PATCH no puede romperse por una palomita.
+    if (parsed.data.status === "READ" && existing.channel === "WHATSAPP") {
+      try {
+        const lastIn = await prisma.inboxMessage.findFirst({
+          where: { threadId: params.id, direction: "IN" },
+          orderBy: { sentAt: "desc" },
+          select: { externalId: true },
+        });
+        // Solo un wamid real de Meta: los `sys:` son nuestros y no existen allá.
+        if (lastIn?.externalId?.startsWith("wamid.")) {
+          // Credenciales solo en esta rama, no en cada PATCH.
+          const clinic = await prisma.clinic.findUnique({
+            where: { id: dbUser.clinicId },
+            select: { waPhoneNumberId: true, waAccessToken: true },
+          });
+          if (clinic?.waPhoneNumberId && clinic.waAccessToken) {
+            await markWhatsAppMessageRead(clinic.waPhoneNumberId, clinic.waAccessToken, lastIn.externalId);
+          }
+        }
+      } catch (err) {
+        console.error("[PATCH inbox/threads/:id] no se pudo marcar como leído en WhatsApp:", err);
+      }
+    }
+
     return NextResponse.json({ thread: updated });
   } catch (err) {
     console.error("[PATCH inbox/threads/:id]", err);

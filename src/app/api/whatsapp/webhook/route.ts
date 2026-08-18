@@ -49,6 +49,109 @@ const REMINDER_AMBIGUOUS_MSG =
   "📋 Con este número tenemos más de una cita por confirmar y no sabemos cuál es la tuya. " +
   "Para no mover la de otra persona, el equipo de la clínica te escribe en un momento. 🙏";
 
+// El paciente mandó algo que no es texto (foto, nota de voz, PDF…). El bot no
+// lo va a contestar (no sabe qué hay dentro) y el staff puede tardar: se le
+// confirma que llegó, para que no se quede mirando una sola palomita.
+const MEDIA_RECEIVED_MSG = "Recibí tu archivo, en un momento te atiende una persona.";
+
+/** Adjunto entrante tal y como se guarda en `InboxMessage.attachments` (Json). */
+type IncomingAttachment = {
+  kind: "image" | "video" | "audio" | "document" | "sticker";
+  /** Media id de Meta; el binario se pide con él (api/whatsapp/media). */
+  mediaId: string;
+  mime?: string;
+  filename?: string;
+};
+
+/**
+ * Describe en una frase, para el Inbox, un mensaje entrante que NO es texto,
+ * y extrae sus adjuntos (por media id: aquí no se descarga nada).
+ *
+ * Existe porque el webhook tiraba en silencio todo lo que no fuera `text`. El
+ * objetivo es que nada vuelva a desaparecer: por eso un tipo desconocido NO
+ * devuelve null sino una frase honesta ("el panel todavía no sabe mostrarlo").
+ * Solo devuelve null para `text` (ese ya lo cubre rawText; si venía vacío no
+ * hay nada que contar).
+ *
+ * Ubicación, contacto y reacción NO llevan adjunto: dos números o un nombre
+ * pesan cero y el texto sirve tal cual.
+ */
+function describeIncoming(msg: any): { body: string; attachments: IncomingAttachment[] | null } | null {
+  if (!msg || msg.type === "text") return null;
+
+  const media = (kind: IncomingAttachment["kind"], obj: any): IncomingAttachment[] | null => {
+    if (typeof obj?.id !== "string" || obj.id.length === 0) return null;
+    const att: IncomingAttachment = { kind, mediaId: obj.id };
+    if (typeof obj.mime_type === "string" && obj.mime_type) att.mime = obj.mime_type;
+    if (typeof obj.filename === "string" && obj.filename.trim()) att.filename = obj.filename.trim();
+    return [att];
+  };
+  // El pie de foto que escribió el paciente va detrás de la descripción.
+  const withCaption = (body: string, obj: any): string => {
+    const caption = typeof obj?.caption === "string" ? obj.caption.trim() : "";
+    return caption ? `${body} — ${caption}` : body;
+  };
+
+  switch (msg.type) {
+    case "image":
+      return { body: withCaption("📷 Te mandaron una foto", msg.image), attachments: media("image", msg.image) };
+    case "video":
+      return { body: withCaption("🎥 Te mandaron un video", msg.video), attachments: media("video", msg.video) };
+    case "audio":
+      return {
+        body: msg.audio?.voice === true ? "🎤 Te mandaron una nota de voz" : "🎵 Te mandaron un audio",
+        attachments: media("audio", msg.audio),
+      };
+    case "document": {
+      const filename = typeof msg.document?.filename === "string" ? msg.document.filename.trim() : "";
+      return {
+        body: withCaption(`📄 Te mandaron el archivo ${filename || "sin nombre"}`, msg.document),
+        attachments: media("document", msg.document),
+      };
+    }
+    case "sticker":
+      return { body: "Te mandaron una calcomanía", attachments: media("sticker", msg.sticker) };
+    case "location": {
+      const lat = Number(msg.location?.latitude);
+      const lng = Number(msg.location?.longitude);
+      let body = "📍 Te mandaron su ubicación";
+      if (Number.isFinite(lat) && Number.isFinite(lng)) body += `: https://maps.google.com/?q=${lat},${lng}`;
+      const place = [msg.location?.name, msg.location?.address]
+        .filter((v): v is string => typeof v === "string" && v.trim().length > 0)
+        .map((v) => v.trim())
+        .join(", ");
+      if (place) body += ` — ${place}`;
+      return { body, attachments: null };
+    }
+    case "contacts": {
+      const contacts: any[] = Array.isArray(msg.contacts) ? msg.contacts : [];
+      const names = contacts
+        .map((c) => {
+          const name = typeof c?.name?.formatted_name === "string" ? c.name.formatted_name.trim() : "";
+          // El teléfono es lo que la clínica necesita del contacto: sin él la
+          // tarjeta no sirve de nada desde el panel.
+          const phone = typeof c?.phones?.[0]?.phone === "string" ? c.phones[0].phone.trim() : "";
+          return phone ? `${name || "sin nombre"} (${phone})` : name;
+        })
+        .filter((s) => s.length > 0);
+      return {
+        body: `👤 Te compartieron el contacto de ${names.length > 0 ? names.join(", ") : "alguien"}`,
+        attachments: null,
+      };
+    }
+    case "reaction": {
+      const emoji = typeof msg.reaction?.emoji === "string" ? msg.reaction.emoji.trim() : "";
+      // Emoji vacío = quitó la reacción que había puesto.
+      return { body: emoji ? `Reaccionó ${emoji} a un mensaje` : "Quitó su reacción a un mensaje", attachments: null };
+    }
+    default:
+      return {
+        body: "Te mandaron un mensaje que el panel todavía no sabe mostrar. Ábrelo en el WhatsApp del consultorio.",
+        attachments: null,
+      };
+  }
+}
+
 // GET — webhook verification by Meta
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
@@ -141,10 +244,25 @@ export async function POST(req: NextRequest) {
 
     const msg     = messages[0];
     const from    = msg.from;                       // teléfono del paciente (formato internacional)
-    const rawText = msg.text?.body?.trim() ?? "";   // texto original (Inbox + bot)
+    // Texto original (Inbox + bot). Las respuestas por BOTÓN cuentan como texto:
+    // un "CONFIRMAR" pulsado —y no escrito— sigue confirmando la cita.
+    const rawText = String(
+      msg.text?.body ??
+      msg.interactive?.button_reply?.title ??
+      msg.interactive?.list_reply?.title ??
+      msg.button?.text ??
+      "",
+    ).trim();
     const text    = rawText.toLowerCase();          // para detectar confirmar/cancelar
 
-    if (!from || !rawText) return NextResponse.json({ ok: true });
+    if (!from) return NextResponse.json({ ok: true });
+
+    // Lo que NO es texto (foto, nota de voz, PDF, ubicación…) antes se tiraba
+    // aquí en silencio: la paciente mandaba la foto de su muela y el Inbox no se
+    // enteraba de que existió. Ahora se describe en una frase y sus adjuntos
+    // viajan en `attachments`; solo se sale si no hay ni texto ni nada que contar.
+    const incoming = rawText ? null : describeIncoming(msg);
+    if (!rawText && !incoming) return NextResponse.json({ ok: true });
 
     // Resuelve la clínica por el phone_number_id de WhatsApp.
     const phoneNumberId = value?.metadata?.phone_number_id;
@@ -201,7 +319,10 @@ export async function POST(req: NextRequest) {
         data: {
           threadId: thread.id,
           direction: "IN",
-          body: rawText,
+          // Texto del paciente o, si no mandó texto, la frase que describe lo
+          // que mandó (el guard de arriba garantiza que hay una de las dos).
+          body: rawText || incoming!.body,
+          attachments: incoming?.attachments ?? undefined,
           externalId: msg.id,
           sentAt: now,
         },
@@ -215,6 +336,31 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ ok: true });
       }
       throw err;
+    }
+
+    // ── Multimedia: se avisa que llegó y AQUÍ TERMINA ──
+    // Una foto no es un "CONFIRMAR" (no puede tocar recordatorios ni citas) y el
+    // bot no debe contestarle a un texto que se inventó el propio sistema. Por
+    // eso este return va ANTES del bloque de recordatorios y ANTES de runBotTurn.
+    // El hilo ya quedó sin leer (markUnread arriba), que es lo que lo pone en
+    // "Necesitan atención ahora".
+    if (incoming) {
+      // Si el bot sigue activo nadie más va a contestar de inmediato: se le
+      // dice a la paciente que su archivo llegó (máximo uno por hora por hilo;
+      // el dedupe lo hace sendOnceToThread). Sin esto manda su radiografía y
+      // no recibe absolutamente nada. Con el bot en pausa un humano ya está
+      // atendiendo, y a una reacción (👍 a un mensaje) no se le contesta:
+      // no espera respuesta y "recibí tu archivo" sonaría a error.
+      if (thread.botActive !== false && msg.type !== "reaction") {
+        await sendOnceToThread({
+          clinic,
+          threadId: thread.id,
+          to: from,
+          body: MEDIA_RECEIVED_MSG,
+          since: new Date(Date.now() - 60 * 60 * 1000),
+        });
+      }
+      return NextResponse.json({ ok: true });
     }
 
     // ── CONSERVA el flujo de confirmar/cancelar recordatorios ──

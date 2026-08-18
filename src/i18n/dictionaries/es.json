@@ -4616,7 +4616,13 @@
       "toastSavedButError": "Mensaje guardado pero {error}",
       "toastInternalNoteSaved": "Nota interna guardada",
       "toastMessageSent": "Mensaje enviado",
-      "toastArchiveError": "Error al resolver"
+      "toastArchiveError": "Error al resolver",
+      "removeAria": "Quitar la conversación con {name} de la lista (se archiva, no se borra)",
+      "removeTitle": "Archivar conversación",
+      "toastArchivedFromList": "Conversación archivada",
+      "mediaOpen": "Ver en grande",
+      "mediaExpired": "Este archivo ya no está disponible. WhatsApp los borra a los 30 días.",
+      "mediaDocOpen": "Abrir"
     },
     "compose": {
       "title": "Iniciar conversación",
