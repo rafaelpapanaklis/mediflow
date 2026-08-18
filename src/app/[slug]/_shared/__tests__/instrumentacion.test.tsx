@@ -31,7 +31,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { renderToString } from "react-dom/server";
 
-import { manifestOf, plantillasInstrumentadas } from "../template-manifest";
+import { manifestOf, plantillaPinta, plantillasInstrumentadas } from "../template-manifest";
 import { EditProvider } from "../edit-runtime";
 import {
   CARPETA_GOLDEN, CLINICA_FIXTURE, CLINICA_UN_DOCTOR, CLINICA_VACIA, PLANTILLAS_CON_GOLDEN,
@@ -39,6 +39,18 @@ import {
 } from "./fixture";
 
 congelarReloj();
+
+/** Dónde vive el JSX de cada plantilla, para leerlo como texto. */
+const FUENTES_DE_PLANTILLA: Record<string, string> = {
+  classic:       "src/app/[slug]/landing-client.tsx",
+  futurista:     "src/app/[slug]/templates/template-futurista.tsx",
+  healthtech:    "src/app/[slug]/templates/template-healthtech.tsx",
+  calido:        "src/app/[slug]/templates/template-calido.tsx",
+  equipo:        "src/app/[slug]/templates/template-equipo.tsx",
+  sonrisa:       "src/app/[slug]/templates/template-sonrisa.tsx",
+  consultorio:   "src/app/[slug]/templates/template-consultorio.tsx",
+  especialistas: "src/app/[slug]/templates/template-especialistas.tsx",
+};
 
 const golden = (tpl: string) =>
   readFileSync(join(process.cwd(), CARPETA_GOLDEN, `${tpl}.html`), "utf8");
@@ -136,6 +148,26 @@ for (const tpl of plantillasInstrumentadas()) {
       faltan, [],
       `El manifiesto de "${tpl}" declara ranuras de foto que la plantilla no envuelve en <Foto>.`,
     );
+  });
+}
+
+/**
+ * El manifiesto dice qué datos sueltos pinta cada plantilla, y el formulario
+ * avisa con eso ("«X» no pinta este aviso; se guarda y aparece al cambiar de
+ * plantilla"). Si la declaración se separa del JSX, ese aviso miente — que es
+ * exactamente lo que la Ola 1 vino a quitar.
+ */
+for (const [tpl, fuente] of Object.entries(FUENTES_DE_PLANTILLA)) {
+  test(`${tpl}: lo que el manifiesto dice que pinta es lo que pinta`, () => {
+    const src = readFileSync(join(process.cwd(), fuente), "utf8");
+    for (const [que, marca] of [["urgencias", /landingUrgentText|urgentText\(/], ["msi", /landingMsiPlazos|msiPlazos\(/]] as const) {
+      assert.equal(
+        plantillaPinta(tpl, que as "urgencias" | "msi"),
+        marca.test(src),
+        `El manifiesto de "${tpl}" y su JSX no dicen lo mismo sobre "${que}". ` +
+        `El formulario avisa con el manifiesto: si se separan, le miente a la clínica.`,
+      );
+    }
   });
 }
 

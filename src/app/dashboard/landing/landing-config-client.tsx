@@ -6,7 +6,7 @@ import { useT } from "@/i18n/i18n-provider";
 import { ManifestEditor } from "./manifest-editor";
 import type { SectionState } from "@/app/[slug]/_shared/landing-data";
 import { LIVE_PREVIEW_FIELDS, parseLiveMessage, postLivePreview, type LivePreviewPatch } from "@/app/[slug]/_shared/live-preview";
-import { manifestOf, plantillaInstrumentada, plantillaLeeManifiesto, plantillasQueLeenManifiesto } from "@/app/[slug]/_shared/template-manifest";
+import { manifestOf, plantillaInstrumentada, plantillaLeeManifiesto, plantillaPinta, plantillasQueLeenManifiesto } from "@/app/[slug]/_shared/template-manifest";
 import { prepararImagen } from "@/lib/image-client";
 
 /** Cuánto se espera antes de mandar al iframe. Escribir un párrafo manda un
@@ -709,7 +709,10 @@ export function LandingConfigClient({ clinic: initial, appUrl, puedeEditar }: Pr
                 <p className={`${HELP_CLS} -mt-0.5`}>
                   Qué haces con quien llega con dolor. Vacío = el bloque no aparece.
                 </p>
-                {!plantillaLeeManifiesto(clinic.landingTemplate) && (
+                {/* El aviso se decide por lo que la plantilla PINTA de verdad
+                    (manifiesto → `pinta`), no por si lee el manifiesto: desde
+                    que lo leen las ocho, ese proxy diría que todas lo pintan. */}
+                {!plantillaPinta(clinic.landingTemplate, "urgencias") && (
                   <p className="text-xs text-[color:var(--warning-strong)] mt-1">
                     “{manifestOf(clinic.landingTemplate).nombre}” no pinta este aviso. Se guarda y
                     aparece en cuanto cambies a una plantilla que sí lo tenga.
@@ -748,7 +751,7 @@ export function LandingConfigClient({ clinic: initial, appUrl, puedeEditar }: Pr
               Marca los plazos que aceptas. Sin ninguno marcado, la plantilla no
               menciona mensualidades.
             </p>
-            {!plantillaLeeManifiesto(clinic.landingTemplate) && (
+            {!plantillaPinta(clinic.landingTemplate, "msi") && (
               <p className="text-xs text-[color:var(--warning-strong)] -mt-1 mb-2">
                 “{manifestOf(clinic.landingTemplate).nombre}” no tiene bloque de mensualidades. Se
                 guarda y aparece en cuanto cambies a una plantilla que sí lo tenga.

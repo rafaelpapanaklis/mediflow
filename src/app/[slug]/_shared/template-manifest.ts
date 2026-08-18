@@ -153,6 +153,16 @@ export interface TemplateManifest {
   copia?: ManifestCopy[];
   /** Lo que se deja fuera a propósito, con el motivo. Documentación viva. */
   noEditables?: ManifestNoEditable[];
+  /**
+   * Qué datos SUELTOS pinta de verdad esta plantilla.
+   *
+   * El formulario avisa "«X» no pinta este aviso; se guarda y aparece en cuanto
+   * cambies de plantilla" para el aviso de urgencias y los meses sin intereses.
+   * Ese aviso se decidía por `leeManifiesto`, que servía de proxy mientras solo
+   * cuatro plantillas lo leían; ahora lo leen las ocho y el proxy diría que
+   * todas los pintan. Esto es la lista real, leída del JSX de cada una.
+   */
+  pinta?: Array<"urgencias" | "msi">;
 }
 
 /* ---------- piezas que se repiten entre plantillas ---------- */
@@ -437,13 +447,73 @@ export const TEMPLATE_MANIFESTS: Record<string, TemplateManifest> = {
     id: "calido",
     nombre: "Cálido",
     para: "Tonos suaves y formas redondeadas. Familiar y cercana.",
+    leeManifiesto: true,
+    instrumentada: true,
     secciones: [SEC_SERVICIOS, SEC_EQUIPO, SEC_GALERIA, SEC_OPINIONES, SEC_FAQ, SEC_CONTACTO, SEC_RESERVAR],
     fotos: [FOTO_PORTADA],
-    textos: TEXTOS_BASE,
+    /* Tampoco usa TEXTOS_BASE. Y aquí NO hay bajadas de sección: el
+       encabezado de esta plantilla es emoji + kicker + título, sin más, así
+       que declarar `subtitulo` habría sido ofrecer un campo que no se pinta
+       en ninguna parte. */
+    textos: [
+      { seccion: "servicios", campo: "titulo",    etiqueta: "Título de servicios",  porDefecto: "Cuidamos cada sonrisa con cariño" },
+      { seccion: "equipo",    campo: "titulo",    etiqueta: "Título del equipo",    porDefecto: "Doctores que te hacen sentir en casa" },
+      { seccion: "galeria",   campo: "titulo",    etiqueta: "Título de la galería", porDefecto: "Un lugar pensado para tu sonrisa" },
+      { seccion: "opiniones", campo: "titulo",    etiqueta: "Título de opiniones",  porDefecto: "Familias que ya confían en nosotros" },
+      { seccion: "faq",       campo: "titulo",    etiqueta: "Título de preguntas",  porDefecto: "Resolvemos tus dudas" },
+      { seccion: "contacto",  campo: "titulo",    etiqueta: "Título de contacto",   porDefecto: "Estamos cerca de ti" },
+      { seccion: "reservar",  campo: "titulo",    etiqueta: "Título del cierre",    porDefecto: "¿Listos para sonreír juntos?" },
+      { seccion: "reservar",  campo: "subtitulo", etiqueta: "Bajada del cierre",    porDefecto: "Agenda tu cita en línea. Te escribimos por WhatsApp para confirmar." },
+    ],
+    copia: [
+      { clave: "nav.cta",   etiqueta: "Barra · botón de reservar", porDefecto: "Agendar Cita",  maxLen: 40, linea: true },
+      { clave: "hero.cta",  etiqueta: "Portada · botón principal", porDefecto: "Agendar Cita",  maxLen: 60, linea: true },
+      { clave: "hero.cta2", etiqueta: "Portada · botón de servicios", porDefecto: "Ver servicios", maxLen: 60, linea: true },
+
+      { clave: "chips.pacientes", etiqueta: "Portada · leyenda de pacientes", porDefecto: "pacientes felices",   maxLen: 60, linea: true },
+      { clave: "chips.anios",     etiqueta: "Portada · leyenda de años",      porDefecto: "años de experiencia", maxLen: 60, linea: true },
+      { clave: "chips.tarjeta.titulo", etiqueta: "Portada · tarjeta flotante · título", porDefecto: "Sin miedo al dentista",              maxLen: 60,  linea: true },
+      { clave: "chips.tarjeta.texto",  etiqueta: "Portada · tarjeta flotante · texto",  porDefecto: "Trato amable para toda la familia", maxLen: 120, linea: true },
+
+      { clave: "servicios.kicker", etiqueta: "Servicios · etiqueta",              porDefecto: "Nuestros servicios", maxLen: 60, linea: true },
+      { clave: "servicios.cta",    etiqueta: "Servicios · botón de cada tarjeta", porDefecto: "Agendar",            maxLen: 40, linea: true },
+      { clave: "equipo.kicker",    etiqueta: "Equipo · etiqueta",                 porDefecto: "Nuestro equipo",     maxLen: 60, linea: true },
+      { clave: "equipo.cta",       etiqueta: "Equipo · botón de cada doctor",     porDefecto: "Agendar consulta",   maxLen: 60, linea: true },
+      { clave: "galeria.kicker",   etiqueta: "Galería · etiqueta",                porDefecto: "Galería",            maxLen: 60, linea: true },
+      { clave: "galeria.cta",      etiqueta: "Galería · botón",                   porDefecto: "Ven a conocernos · Agendar Cita", maxLen: 80, linea: true },
+      { clave: "opiniones.kicker", etiqueta: "Opiniones · etiqueta",              porDefecto: "Testimonios",        maxLen: 60, linea: true },
+
+      { clave: "faq.kicker", etiqueta: "Preguntas · etiqueta",       porDefecto: "Preguntas frecuentes", maxLen: 60, linea: true },
+      { clave: "faq.nota",   etiqueta: "Preguntas · texto de cierre", porDefecto: "¿Te quedó otra duda? Con gusto te ayudamos.", maxLen: 160, linea: true },
+      { clave: "faq.cta",    etiqueta: "Preguntas · botón",          porDefecto: "Agendar Cita",         maxLen: 60, linea: true },
+
+      { clave: "reservar.cta", etiqueta: "Cierre · botón", porDefecto: "Agendar Cita", maxLen: 60, linea: true },
+      { clave: "flotante.cta", etiqueta: "Botón flotante de reservar", porDefecto: "Agendar Cita", maxLen: 40, linea: true },
+
+      { clave: "contacto.kicker",            etiqueta: "Contacto · etiqueta",               porDefecto: "Visítanos",    maxLen: 60, linea: true },
+      { clave: "contacto.etiquetaDireccion", etiqueta: "Contacto · rótulo de la dirección", porDefecto: "Dirección",    maxLen: 60, linea: true },
+      { clave: "contacto.etiquetaTelefono",  etiqueta: "Contacto · rótulo del teléfono",    porDefecto: "Teléfono",     maxLen: 60, linea: true },
+      { clave: "contacto.etiquetaWhatsapp",  etiqueta: "Contacto · rótulo de WhatsApp",     porDefecto: "WhatsApp",     maxLen: 60, linea: true },
+      { clave: "contacto.etiquetaHorarios",  etiqueta: "Contacto · rótulo de los horarios", porDefecto: "Horarios",     maxLen: 60, linea: true },
+      { clave: "contacto.cerrado",           etiqueta: "Contacto · cómo se dice «cerrado»", porDefecto: "Cerrado",      maxLen: 40, linea: true },
+      { clave: "contacto.cta",               etiqueta: "Contacto · botón de reservar",      porDefecto: "Agendar Cita", maxLen: 60, linea: true },
+    ],
+    noEditables: [
+      { donde: "Menú de navegación (y su versión móvil, con el rótulo «Menú»)", porque: "Los enlaces siguen a las secciones que estén encendidas." },
+      { donde: "Pie de página, incluido «Hecho con DaleControl»", porque: "El pie es nuestro, no de la clínica." },
+      { donde: "EL TITULAR DE LA PORTADA", porque: "Es el caso que el plan marcó como no instrumentable: se parte el eslogan por la PRIMERA COMA, se pinta la segunda mitad en color y se le pega « 🦷✨». No es una cadena, así que como texto plano se guardaría la mezcla ya montada. El eslogan se sigue editando desde el formulario y desde las otras siete plantillas." },
+      { donde: "Portada · pastilla «👋 {especialidad}»", porque: "Es el dato de especialidad de la clínica." },
+      { donde: "Portada · «{nota} · {n} reseñas»", porque: "Se construye con lo que devuelve Google." },
+      { donde: "Los emojis de los encabezados de sección y del cierre", porque: "Son decoración de la plantilla, no copy: van pegados fuera de lo editable para que la clínica no los pierda al reescribir el texto." },
+      { donde: "«Dr(a). {nombre} {apellido}» y las especialidades del equipo", porque: "Se arman con datos del equipo." },
+      { donde: "El texto del mapa cuando no hay mapa configurado", porque: "Es una expresión con respaldo: o la dirección, o un aviso." },
+      { donde: "Las reseñas de Google", porque: "Son de Google. No hay dónde guardarlas si alguien las reescribe." },
+    ],
   },
 
   equipo: {
     id: "equipo",
+    pinta: ["urgencias", "msi"],
     nombre: "Equipo",
     para: "Varias personas atendiendo: el argumento es quién te atiende.",
     leeManifiesto: true,
@@ -544,6 +614,7 @@ export const TEMPLATE_MANIFESTS: Record<string, TemplateManifest> = {
 
   sonrisa: {
     id: "sonrisa",
+    pinta: ["msi"],
     nombre: "Sonrisa",
     para: "Estética dental: la transformación manda y las fotos son enormes.",
     leeManifiesto: true,
@@ -630,6 +701,7 @@ export const TEMPLATE_MANIFESTS: Record<string, TemplateManifest> = {
 
   consultorio: {
     id: "consultorio",
+    pinta: ["urgencias", "msi"],
     nombre: "Consultorio",
     para: "Para la clínica que no tiene fotos: color, precios y horarios.",
     // NO tiene ranuras de foto y es a propósito: es su razón de existir.
@@ -710,6 +782,7 @@ export const TEMPLATE_MANIFESTS: Record<string, TemplateManifest> = {
 
   especialistas: {
     id: "especialistas",
+    pinta: ["msi"],
     nombre: "Especialistas",
     para: "Alta especialidad y ticket alto: tecnología, credenciales y financiamiento.",
     leeManifiesto: true,
@@ -870,6 +943,16 @@ export function plantillasQueLeenManifiesto(): TemplateManifest[] {
  */
 export function plantillaInstrumentada(templateId: string | null | undefined): boolean {
   return manifestOf(templateId).instrumentada === true;
+}
+
+/**
+ * ¿Esta plantilla pinta de verdad ese dato suelto?
+ *
+ * Lo pregunta el formulario para avisar de que el aviso de urgencias o los
+ * meses sin intereses se guardan pero no se ven con la plantilla activa.
+ */
+export function plantillaPinta(templateId: string | null | undefined, que: "urgencias" | "msi"): boolean {
+  return (manifestOf(templateId).pinta ?? []).includes(que);
 }
 
 /** Los ids de las plantillas instrumentadas, en el orden del manifiesto. */
