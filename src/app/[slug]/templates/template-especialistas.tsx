@@ -12,9 +12,14 @@ import { useState, useEffect } from "react";
 import { ChevronRight, Instagram, MessageCircle } from "lucide-react";
 import type { TemplateProps } from "../_shared/types";
 import { useLiveClinic } from "../_shared/live-preview";
+import { Foto, Txt, useEnEdicion } from "../_shared/edit-context";
+// landing-address-parts y NO landing-address: este archivo viaja al navegador
+// de los pacientes, y el módulo grande arrastra el manifiesto de las ocho
+// plantillas (17 KB) sin que la página pública lo necesite para nada.
+import { dirClinica, dirCopia, dirFaq, dirSeccion, dirServicio, dirTestimonio } from "@/lib/landing-address-parts";
 import { shade, alpha, mix } from "../_shared/landing-utils";
 import {
-  faqList, msiPlazos, photoOf, sectionMap, sectionSubtitle, sectionTitle,
+  copyMap, copyValue, faqList, msiPlazos, photoOf, sectionMap, sectionSubtitle, sectionTitle,
   serviceList, showSection, testimonialList, weekSchedule,
 } from "../_shared/landing-data";
 import { BeforeAfter, MsiSimulator, StarRow, priceToNumber } from "../_shared/landing-pieces";
@@ -37,7 +42,13 @@ export function TemplateEspecialistas({ clinic: publicada }: TemplateProps) {
   const linea = "rgba(255,255,255,.11)";
   const inkSobreAcento = shade(acento, 0.78);
 
+  /* Solo dentro del lienzo del editor. En la página pública es SIEMPRE false. */
+  const editando = useEnEdicion();
   const S = sectionMap(clinic);
+  /* El texto suelto que reescribió la clínica. `C(clave)` devuelve null si no
+     lo tocó, y entonces <Txt> pinta el literal de siempre. */
+  const copias = copyMap(clinic);
+  const C = (clave: string) => copyValue(copias, clave);
   const servicios = serviceList(clinic);
   const doctores = clinic.users ?? [];
   const testimonios = testimonialList(clinic);
@@ -79,8 +90,11 @@ export function TemplateEspecialistas({ clinic: publicada }: TemplateProps) {
   }, []);
 
   const verTratamientos = showSection(S, "servicios", servicios.length > 0);
-  const verTec = showSection(S, "tecnologia", tecFotos.some(Boolean));
-  const verCaso = showSection(S, "casos", !!(casoAntes && casoDespues));
+  /* En el lienzo, tecnología y el caso se ven aunque no haya fotos: se suben
+     desde ahí mismo, y si se ocultaran por estar vacías no habría dónde
+     soltarlas. Siguen respetando el interruptor: apagadas siguen apagadas. */
+  const verTec = showSection(S, "tecnologia", editando || tecFotos.some(Boolean));
+  const verCaso = showSection(S, "casos", editando || !!(casoAntes && casoDespues));
   const verDoctor = showSection(S, "equipo", doctores.length > 0);
   const opcionesMsi = servicios
     .map(s => ({ label: s.name, monto: priceToNumber(s.price) }))
@@ -90,11 +104,13 @@ export function TemplateEspecialistas({ clinic: publicada }: TemplateProps) {
   const verFaq = showSection(S, "faq", faqs.length > 0);
 
   /* Franja de credenciales: solo cifras que la clínica capturó. */
-  const franja: { valor: string; etiqueta: string }[] = [];
-  if (clinic.landingPatients) franja.push({ valor: clinic.landingPatients, etiqueta: "pacientes atendidos" });
-  if (clinic.landingYearsExperience) franja.push({ valor: String(clinic.landingYearsExperience), etiqueta: "años de especialidad" });
+  /* `clave` solo en las tres leyendas que son LITERALES. La de Google se
+     construye con el número de reseñas y no se instrumenta. */
+  const franja: { valor: string; etiqueta: string; clave?: string }[] = [];
+  if (clinic.landingPatients) franja.push({ valor: clinic.landingPatients, etiqueta: "pacientes atendidos", clave: "franja.pacientes" });
+  if (clinic.landingYearsExperience) franja.push({ valor: String(clinic.landingYearsExperience), etiqueta: "años de especialidad", clave: "franja.anios" });
   if (google?.rating) franja.push({ valor: String(google.rating), etiqueta: `${google.total} reseñas en Google` });
-  if (msi.length > 0) franja.push({ valor: String(Math.max(...msi)), etiqueta: "meses sin intereses" });
+  if (msi.length > 0) franja.push({ valor: String(Math.max(...msi)), etiqueta: "meses sin intereses", clave: "franja.msi" });
 
   const nav: { href: string; label: string }[] = [
     ...(verTratamientos ? [{ href: "#tratamientos", label: "Tratamientos" }] : []),
@@ -175,7 +191,9 @@ export function TemplateEspecialistas({ clinic: publicada }: TemplateProps) {
           <div className="es-links" style={{ display: "flex", gap: 28 }}>
             {nav.map(l => <a key={l.href} href={l.href} style={{ textDecoration: "none", fontSize: 14.5, color: gris }}>{l.label}</a>)}
           </div>
-          <button type="button" onClick={() => abrir()} style={{ ...btnP, ...btnSm }}>Valoración</button>
+          <Txt as="button" type="button" onClick={() => abrir()} style={{ ...btnP, ...btnSm }}
+            campo={dirCopia("nav.cta")} etiqueta="Botón de reservar de la barra" linea maxLen={40}
+            valor={C("nav.cta")} porDefecto="Valoración" />
         </div>
       </nav>
 
@@ -183,23 +201,36 @@ export function TemplateEspecialistas({ clinic: publicada }: TemplateProps) {
       <header className="es-wrap es-hero">
         <div>
           <span style={kicker}>{clinic.specialty}</span>
-          <h1 style={{ fontSize: "clamp(38px,5.2vw,64px)", fontWeight: 300, maxWidth: "15ch", letterSpacing: "-.03em", lineHeight: 1.1, margin: 0 }}>
-            {clinic.landingTagline || clinic.name}
-          </h1>
-          {clinic.description && (
-            <p style={{ color: gris, fontSize: 18, maxWidth: "46ch", margin: "24px 0 34px", fontWeight: 300 }}>{clinic.description}</p>
+          <Txt as="h1" style={{ fontSize: "clamp(38px,5.2vw,64px)", fontWeight: 300, maxWidth: "15ch", letterSpacing: "-.03em", lineHeight: 1.1, margin: 0 }}
+            campo={dirClinica("landingTagline")} etiqueta="Eslogan" maxLen={300}
+            valor={clinic.landingTagline} porDefecto={clinic.name} />
+          {(clinic.description || editando) && (
+            <Txt as="p" style={{ color: gris, fontSize: 18, maxWidth: "46ch", margin: "24px 0 34px", fontWeight: 300 }}
+              campo={dirClinica("description")} etiqueta="Descripción de la clínica" maxLen={5000}
+              valor={clinic.description} />
           )}
           <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
-            <button type="button" onClick={() => abrir()} style={btnP}>Agenda tu valoración</button>
-            {verCaso && <a href="#casos" style={btnO}>Ver casos <ChevronRight size={15} /></a>}
+            <Txt as="button" type="button" onClick={() => abrir()} style={btnP}
+              campo={dirCopia("hero.cta")} etiqueta="Botón principal de la portada" linea maxLen={60}
+              valor={C("hero.cta")} porDefecto="Agenda tu valoración" />
+            {verCaso && (
+              <Txt as="a" href="#casos" style={btnO}
+                campo={dirCopia("hero.cta2")} etiqueta="Botón de casos de la portada" linea maxLen={60}
+                valor={C("hero.cta2")} porDefecto="Ver casos" sufijo=" " unido
+                despues={<ChevronRight size={15} />} />
+            )}
           </div>
         </div>
         <div style={{ position: "relative", borderRadius: 8, overflow: "hidden", aspectRatio: "4/3.4", background: fondo2, border: `1px solid ${linea}` }}>
-          {portada
-            ? <img src={portada} alt={clinic.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-            : <div style={{ width: "100%", height: "100%", display: "grid", placeItems: "center", background: `linear-gradient(200deg, ${alpha(acento, 0.16)}, ${fondo2})`, color: acento, ...mono, fontSize: 64, fontWeight: 300 }}>
-                {clinic.name.charAt(0).toUpperCase()}
-              </div>}
+          {/* Sin `caja`: la botonera se ancla al div de arriba, que ya es
+              `position:relative`. Envolver aquí movería la foto. */}
+          <Foto slot="portada" url={portada} etiqueta="Portada" zona="derecha">
+            {(url) => url
+              ? <img src={url} alt={clinic.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+              : <div style={{ width: "100%", height: "100%", display: "grid", placeItems: "center", background: `linear-gradient(200deg, ${alpha(acento, 0.16)}, ${fondo2})`, color: acento, ...mono, fontSize: 64, fontWeight: 300 }}>
+                  {clinic.name.charAt(0).toUpperCase()}
+                </div>}
+          </Foto>
         </div>
       </header>
 
@@ -213,7 +244,9 @@ export function TemplateEspecialistas({ clinic: publicada }: TemplateProps) {
                 borderRight: i === franja.length - 1 ? "none" : `1px solid ${linea}`,
               }}>
                 <b style={{ display: "block", ...mono, fontSize: 30, fontWeight: 500, letterSpacing: "-.03em", color: "#fff" }}>{f.valor}</b>
-                <span style={{ fontSize: 13.5, color: gris }}>{f.etiqueta}</span>
+                <Txt as="span" style={{ fontSize: 13.5, color: gris }}
+                  campo={f.clave ? dirCopia(f.clave) : null} etiqueta="Leyenda de la cifra" linea maxLen={60}
+                  valor={f.clave ? C(f.clave) : null} porDefecto={f.etiqueta} />
               </div>
             ))}
           </div>
@@ -224,25 +257,52 @@ export function TemplateEspecialistas({ clinic: publicada }: TemplateProps) {
       {verTratamientos && (
         <section className="es-sec" id="tratamientos">
           <div className="es-wrap">
-            <span style={kicker}>Tratamientos</span>
-            <h2 style={h2}>{sectionTitle(S, "servicios", "Alta especialidad, precio cerrado")}</h2>
-            {sectionSubtitle(S, "servicios") && <p style={{ ...lead, marginTop: 16 }}>{sectionSubtitle(S, "servicios")}</p>}
+            <Txt as="span" style={kicker} campo={dirCopia("servicios.kicker")} etiqueta="Etiqueta de tratamientos" linea maxLen={60}
+              valor={C("servicios.kicker")} porDefecto="Tratamientos" />
+            <Txt as="h2" style={h2} campo={dirSeccion("servicios", "titulo")} etiqueta="Título de tratamientos" linea maxLen={160}
+              valor={S.servicios?.titulo} porDefecto="Alta especialidad, precio cerrado" />
+            {(sectionSubtitle(S, "servicios") || editando) && (
+              <Txt as="p" style={{ ...lead, marginTop: 16 }}
+                campo={dirSeccion("servicios", "subtitulo")} etiqueta="Bajada de tratamientos" maxLen={500}
+                valor={S.servicios?.subtitulo} />
+            )}
 
             <div style={{ marginTop: 52, borderTop: `1px solid ${linea}` }}>
               {servicios.map((s, i) => (
                 <div key={s.name + i} className="es-fila es-t" style={{ padding: "26px 0", borderBottom: `1px solid ${linea}`, transition: ".2s" }}>
                   <span className="es-num" style={{ ...mono, fontSize: 12.5, color: acento, width: 36 }}>{String(i + 1).padStart(2, "0")}</span>
                   <div>
-                    <b style={{ fontSize: 21, fontWeight: 500, display: "block", letterSpacing: "-.02em" }}>{s.name}</b>
-                    {s.desc && <span style={{ color: gris, fontSize: 14.5 }}>{s.desc}</span>}
-                  </div>
-                  <span style={{ ...mono, fontSize: 20, fontWeight: 500, textAlign: "right" }}>
-                    {s.price}
-                    {s.durationMin && (
-                      <i style={{ display: "block", fontStyle: "normal", fontFamily: "var(--font-sans)", fontSize: 12.5, color: gris }}>{s.durationMin} min</i>
+                    <Txt as="b" style={{ fontSize: 21, fontWeight: 500, display: "block", letterSpacing: "-.02em" }}
+                      campo={dirServicio(s.i, "name")} etiqueta="Nombre del tratamiento" linea requerido maxLen={120}
+                      valor={s.name} />
+                    {(s.desc || editando) && (
+                      <Txt as="span" style={{ color: gris, fontSize: 14.5 }}
+                        campo={dirServicio(s.i, "desc")} etiqueta="Descripción del tratamiento" maxLen={400}
+                        valor={s.desc} />
                     )}
-                  </span>
-                  <button type="button" onClick={() => abrir({ service: s.name })} style={{ ...btnO, ...btnSm }}>Valoración</button>
+                  </div>
+                  {/* El precio va SUELTO dentro del <span>, con la duración
+                      debajo. Envolverlo en un elemento propio añadiría un nodo
+                      al HTML público, así que el <Txt> ES ese mismo <span> y la
+                      duración viaja como hermano (`despues`). Sin precio y sin
+                      lienzo se deja el <span> de siempre: <Txt> no pinta nada
+                      cuando no hay texto, y se llevaría la duración por delante. */}
+                  {s.price || editando
+                    ? <Txt as="span" style={{ ...mono, fontSize: 20, fontWeight: 500, textAlign: "right" }}
+                        campo={dirServicio(s.i, "price")} etiqueta="Precio" linea maxLen={40}
+                        valor={s.price}
+                        despues={s.durationMin
+                          ? <i style={{ display: "block", fontStyle: "normal", fontFamily: "var(--font-sans)", fontSize: 12.5, color: gris }}>{s.durationMin} min</i>
+                          : undefined} />
+                    : <span style={{ ...mono, fontSize: 20, fontWeight: 500, textAlign: "right" }}>
+                        {s.price}
+                        {s.durationMin && (
+                          <i style={{ display: "block", fontStyle: "normal", fontFamily: "var(--font-sans)", fontSize: 12.5, color: gris }}>{s.durationMin} min</i>
+                        )}
+                      </span>}
+                  <Txt as="button" type="button" onClick={() => abrir({ service: s.name })} style={{ ...btnO, ...btnSm }}
+                    campo={dirCopia("servicios.cta")} etiqueta="Botón de cada tratamiento" linea maxLen={40}
+                    valor={C("servicios.cta")} porDefecto="Valoración" />
                 </div>
               ))}
             </div>
@@ -254,23 +314,33 @@ export function TemplateEspecialistas({ clinic: publicada }: TemplateProps) {
       {verTec && (
         <section className="es-sec" id="tecnologia" style={{ paddingTop: verTratamientos ? 0 : undefined }}>
           <div className="es-wrap">
-            <span style={kicker}>Tecnología</span>
-            <h2 style={h2}>{sectionTitle(S, "tecnologia", "Nada se improvisa en el sillón")}</h2>
+            <Txt as="span" style={kicker} campo={dirCopia("tecnologia.kicker")} etiqueta="Etiqueta de tecnología" linea maxLen={60}
+              valor={C("tecnologia.kicker")} porDefecto="Tecnología" />
+            <Txt as="h2" style={h2} campo={dirSeccion("tecnologia", "titulo")} etiqueta="Título de tecnología" linea maxLen={160}
+              valor={S.tecnologia?.titulo} porDefecto="Nada se improvisa en el sillón" />
             <div className="es-3" style={{ marginTop: 52 }}>
               {tecFotos.map((foto, i) => {
-                if (!foto) return null;
+                // En el lienzo la tarjeta se ve aunque no haya foto: si no, no
+                // habría dónde soltarla y la ranura sería inalcanzable.
+                if (!foto && !editando) return null;
                 const id = `tecnologia${i + 1}`;
                 return (
                   <article key={id} className="es-tc" style={{ background: fondo2, border: `1px solid ${linea}`, borderRadius: 8, overflow: "hidden", display: "flex", flexDirection: "column" }}>
                     <div style={{ aspectRatio: "16/11", overflow: "hidden" }}>
-                      <img src={foto} alt={sectionTitle(S, id, "Equipo del consultorio")} loading="lazy" style={{ width: "100%", height: "100%", objectFit: "cover", opacity: .92 }} />
+                      <Foto slot={id} url={foto} etiqueta={`Tecnología ${i + 1}`} zona="completa">
+                        {(url) => url
+                          ? <img src={url} alt={sectionTitle(S, id, "Equipo del consultorio")} loading="lazy" style={{ width: "100%", height: "100%", objectFit: "cover", opacity: .92 }} />
+                          : null}
+                      </Foto>
                     </div>
                     <div style={{ padding: 24 }}>
-                      <div style={{ ...mono, fontSize: 10.5, letterSpacing: ".18em", textTransform: "uppercase", color: acento, marginBottom: 10 }}>
-                        {sectionTitle(S, id, "Equipo")}
-                      </div>
-                      {sectionSubtitle(S, id) && (
-                        <p style={{ margin: 0, color: gris, fontSize: 14.5, fontWeight: 300 }}>{sectionSubtitle(S, id)}</p>
+                      <Txt as="div" style={{ ...mono, fontSize: 10.5, letterSpacing: ".18em", textTransform: "uppercase", color: acento, marginBottom: 10 }}
+                        campo={dirSeccion(id, "titulo")} etiqueta={`Tecnología ${i + 1} · nombre`} linea maxLen={120}
+                        valor={S[id]?.titulo} porDefecto="Equipo" />
+                      {(sectionSubtitle(S, id) || editando) && (
+                        <Txt as="p" style={{ margin: 0, color: gris, fontSize: 14.5, fontWeight: 300 }}
+                          campo={dirSeccion(id, "subtitulo")} etiqueta={`Tecnología ${i + 1} · texto`} maxLen={500}
+                          valor={S[id]?.subtitulo} />
                       )}
                     </div>
                   </article>
@@ -285,13 +355,30 @@ export function TemplateEspecialistas({ clinic: publicada }: TemplateProps) {
       {verCaso && (
         <section className="es-sec" id="casos" style={{ background: fondo2, borderTop: `1px solid ${linea}`, borderBottom: `1px solid ${linea}` }}>
           <div className="es-wrap">
-            <span style={kicker}>Caso documentado</span>
-            <h2 style={h2}>{sectionTitle(S, "casos", "Antes y después")}</h2>
+            <Txt as="span" style={kicker} campo={dirCopia("casos.kicker")} etiqueta="Etiqueta del caso" linea maxLen={60}
+              valor={C("casos.kicker")} porDefecto="Caso documentado" />
+            <Txt as="h2" style={h2} campo={dirSeccion("casos", "titulo")} etiqueta="Título del caso" linea maxLen={160}
+              valor={S.casos?.titulo} porDefecto="Antes y después" />
             <div className="es-2" style={{ marginTop: 44 }}>
-              <BeforeAfter antes={casoAntes} despues={casoDespues} accent={acento} radius={8} surface="dark" />
+              {/* Dos ranuras en un mismo hueco: la caja la pone la de "antes" y
+                  la de "después" cuelga su botonera de esa misma caja. */}
+              <Foto slot="caso1_antes" url={casoAntes} etiqueta="Caso 1 · antes" zona="izquierda"
+                caja={{ position: "relative" }} vacio={{ aspectRatio: "4/3" }}>
+                {(antes) => (
+                  <Foto slot="caso1_despues" url={casoDespues} etiqueta="Caso 1 · después" zona="derecha">
+                    {(despues) => <BeforeAfter antes={antes} despues={despues} accent={acento} radius={8} surface="dark" />}
+                  </Foto>
+                )}
+              </Foto>
               <div>
-                {sectionSubtitle(S, "casos") && <p style={lead}>{sectionSubtitle(S, "casos")}</p>}
-                <button type="button" onClick={() => abrir()} style={{ ...btnP, marginTop: 26 }}>Agenda tu valoración</button>
+                {(sectionSubtitle(S, "casos") || editando) && (
+                  <Txt as="p" style={lead}
+                    campo={dirSeccion("casos", "subtitulo")} etiqueta="Descripción del caso" maxLen={600}
+                    valor={S.casos?.subtitulo} />
+                )}
+                <Txt as="button" type="button" onClick={() => abrir()} style={{ ...btnP, marginTop: 26 }}
+                  campo={dirCopia("casos.cta")} etiqueta="Botón del caso" linea maxLen={60}
+                  valor={C("casos.cta")} porDefecto="Agenda tu valoración" />
               </div>
             </div>
           </div>
@@ -305,19 +392,24 @@ export function TemplateEspecialistas({ clinic: publicada }: TemplateProps) {
             {doctores.length === 1 ? (
               <div className="es-doc">
                 <div style={{ borderRadius: 8, overflow: "hidden", aspectRatio: "4/5", border: `1px solid ${linea}`, background: fondo2, display: "grid", placeItems: "center" }}>
-                  {fotoDoctor
-                    ? <img src={fotoDoctor} alt={`${doctores[0].firstName} ${doctores[0].lastName}`} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                    : <span style={{ ...mono, fontSize: 72, fontWeight: 300, color: acento }}>{doctores[0].firstName[0]}{doctores[0].lastName[0]}</span>}
+                  <Foto slot="doctor" url={fotoDoctor} etiqueta="Foto del especialista" zona="completa">
+                    {(url) => url
+                      ? <img src={url} alt={`${doctores[0].firstName} ${doctores[0].lastName}`} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                      : <span style={{ ...mono, fontSize: 72, fontWeight: 300, color: acento }}>{doctores[0].firstName[0]}{doctores[0].lastName[0]}</span>}
+                  </Foto>
                 </div>
                 <div>
-                  <span style={kicker}>El especialista</span>
+                  <Txt as="span" style={kicker} campo={dirCopia("equipo.kickerUno")} etiqueta="Etiqueta del especialista" linea maxLen={60}
+                    valor={C("equipo.kickerUno")} porDefecto="El especialista" />
                   <h2 style={{ ...h2, fontSize: "clamp(28px,3.4vw,40px)" }}>Dr/a. {doctores[0].firstName} {doctores[0].lastName}</h2>
                   {doctores[0].specialty && <p style={{ ...lead, marginTop: 16 }}>{doctores[0].specialty}</p>}
                   {doctores[0].services.length > 0 && (
                     <ul style={{ listStyle: "none", padding: 0, margin: "28px 0 32px" }}>
                       {doctores[0].services.slice(0, 6).map(s => (
                         <li key={s} style={{ display: "flex", gap: 18, padding: "14px 0", borderBottom: `1px solid ${linea}`, fontSize: 15 }}>
-                          <b style={{ ...mono, fontSize: 11, letterSpacing: ".14em", textTransform: "uppercase", color: acento, minWidth: 120 }}>Atiende</b>
+                          <Txt as="b" style={{ ...mono, fontSize: 11, letterSpacing: ".14em", textTransform: "uppercase", color: acento, minWidth: 120 }}
+                            campo={dirCopia("equipo.etiquetaAtiende")} etiqueta="Rótulo de cada tratamiento que atiende" linea maxLen={40}
+                            valor={C("equipo.etiquetaAtiende")} porDefecto="Atiende" />
                           <span style={{ color: gris, fontWeight: 300 }}>{s}</span>
                         </li>
                       ))}
@@ -328,8 +420,10 @@ export function TemplateEspecialistas({ clinic: publicada }: TemplateProps) {
               </div>
             ) : (
               <>
-                <span style={kicker}>Los especialistas</span>
-                <h2 style={h2}>{sectionTitle(S, "equipo", "Quién te va a operar")}</h2>
+                <Txt as="span" style={kicker} campo={dirCopia("equipo.kickerVarios")} etiqueta="Etiqueta de los especialistas" linea maxLen={60}
+                  valor={C("equipo.kickerVarios")} porDefecto="Los especialistas" />
+                <Txt as="h2" style={h2} campo={dirSeccion("equipo", "titulo")} etiqueta="Título del especialista" linea maxLen={160}
+                  valor={S.equipo?.titulo} porDefecto="Quién te va a operar" />
                 <div className="es-3" style={{ marginTop: 48 }}>
                   {doctores.map(d => (
                     <article key={d.id} style={{ background: fondo2, border: `1px solid ${linea}`, borderRadius: 8, overflow: "hidden" }}>
@@ -341,7 +435,9 @@ export function TemplateEspecialistas({ clinic: publicada }: TemplateProps) {
                       <div style={{ padding: 24 }}>
                         <b style={{ fontSize: 19, fontWeight: 500, display: "block" }}>Dr/a. {d.firstName} {d.lastName}</b>
                         {d.specialty && <div style={{ ...mono, fontSize: 11, letterSpacing: ".14em", textTransform: "uppercase", color: acento, margin: "8px 0 14px" }}>{d.specialty}</div>}
-                        <button type="button" onClick={() => abrir({ doctorId: d.id })} style={{ ...btnO, ...btnSm }}>Valoración</button>
+                        <Txt as="button" type="button" onClick={() => abrir({ doctorId: d.id })} style={{ ...btnO, ...btnSm }}
+                          campo={dirCopia("equipo.cta")} etiqueta="Botón de cada especialista" linea maxLen={40}
+                          valor={C("equipo.cta")} porDefecto="Valoración" />
                       </div>
                     </article>
                   ))}
@@ -357,11 +453,17 @@ export function TemplateEspecialistas({ clinic: publicada }: TemplateProps) {
         <section className="es-sec" id="pagos" style={{ background: fondo2, borderTop: `1px solid ${linea}`, borderBottom: `1px solid ${linea}` }}>
           <div className="es-wrap es-fin">
             <div>
-              <span style={kicker}>Financiamiento</span>
-              <h2 style={h2}>{sectionTitle(S, "pagos", "Tu tratamiento cabe en tu mes")}</h2>
-              <p style={{ ...lead, marginTop: 16 }}>
-                {sectionSubtitle(S, "pagos", `Meses sin intereses con tarjetas participantes, hasta ${Math.max(...msi)} plazos. La cifra que ves es la que se carga.`)}
-              </p>
+              <Txt as="span" style={kicker} campo={dirCopia("pagos.kicker")} etiqueta="Etiqueta de financiamiento" linea maxLen={60}
+                valor={C("pagos.kicker")} porDefecto="Financiamiento" />
+              <Txt as="h2" style={h2} campo={dirSeccion("pagos", "titulo")} etiqueta="Título de financiamiento" linea maxLen={160}
+                valor={S.pagos?.titulo} porDefecto="Tu tratamiento cabe en tu mes" />
+              {/* El texto por defecto se CONSTRUYE con los plazos de la clínica,
+                  así que en el manifiesto va vacío y el literal real se pasa
+                  aquí. <Txt> nunca guarda el default, solo lo enseña. */}
+              <Txt as="p" style={{ ...lead, marginTop: 16 }}
+                campo={dirSeccion("pagos", "subtitulo")} etiqueta="Bajada de financiamiento" maxLen={500}
+                valor={S.pagos?.subtitulo}
+                porDefecto={`Meses sin intereses con tarjetas participantes, hasta ${Math.max(...msi)} plazos. La cifra que ves es la que se carga.`} />
             </div>
             <MsiSimulator
               plazos={msi}
@@ -381,22 +483,38 @@ export function TemplateEspecialistas({ clinic: publicada }: TemplateProps) {
       {verOpiniones && (
         <section className="es-sec">
           <div className="es-wrap">
-            <span style={kicker}>Opiniones</span>
-            <h2 style={h2}>
-              {google?.rating
-                ? <>{google.rating} <b style={{ fontWeight: 600 }}>de {google.total} reseñas</b></>
-                : sectionTitle(S, "opiniones", "Lo que dicen nuestros pacientes")}
-            </h2>
+            <Txt as="span" style={kicker} campo={dirCopia("opiniones.kicker")} etiqueta="Etiqueta de opiniones" linea maxLen={60}
+              valor={C("opiniones.kicker")} porDefecto="Opiniones" />
+            {/* Con ficha de Google el titular es una cadena CONSTRUIDA y además
+                va partida en dos elementos: no se instrumenta. Sin Google sí es
+                un título de sección. */}
+            {google?.rating
+              ? <h2 style={h2}>{google.rating} <b style={{ fontWeight: 600 }}>de {google.total} reseñas</b></h2>
+              : <Txt as="h2" style={h2} campo={dirSeccion("opiniones", "titulo")} etiqueta="Título de opiniones" linea maxLen={160}
+                  valor={S.opiniones?.titulo} porDefecto="Lo que dicen nuestros pacientes" />}
             <div className="es-3" style={{ marginTop: 48 }}>
+              {/* `dir` es null en las reseñas de Google: son de Google, no de la
+                  clínica, y no hay dónde guardarlas si alguien las reescribe. */}
               {(testimonios.length > 0
-                ? testimonios
-                : (google?.reviews ?? []).slice(0, 3).map((r: any) => ({ text: r.text, name: r.author_name ?? "Paciente", rating: r.rating ?? 5, meta: r.relative_time_description ?? null }))
+                ? testimonios.map(t => ({ text: t.text, name: t.name, rating: t.rating, meta: t.meta, dir: t.i as number | null }))
+                : (google?.reviews ?? []).slice(0, 3).map((r: any) => ({ text: r.text, name: r.author_name ?? "Paciente", rating: r.rating ?? 5, meta: r.relative_time_description ?? null, dir: null as number | null }))
               ).slice(0, 6).map((t, i) => (
                 <article key={i} style={{ borderTop: `1px solid ${acento}`, paddingTop: 22 }}>
                   <StarRow value={t.rating} color={acento} size={14} />
-                  <p style={{ fontSize: 16, margin: "14px 0 18px", fontWeight: 300 }}>“{t.text}”</p>
-                  <b style={{ fontSize: 14.5, fontWeight: 500, display: "block" }}>{t.name}</b>
-                  {t.meta && <small style={{ color: gris, fontSize: 13 }}>{t.meta}</small>}
+                  {/* Las comillas van como prefijo/sufijo y no dentro del texto:
+                      si se guardaran, la siguiente edición las duplicaría. */}
+                  <Txt as="p" style={{ fontSize: 16, margin: "14px 0 18px", fontWeight: 300 }}
+                    campo={t.dir === null ? null : dirTestimonio(t.dir, "text")}
+                    etiqueta="Opinión" requerido maxLen={800}
+                    valor={t.text} prefijo="“" sufijo="”" />
+                  <Txt as="b" style={{ fontSize: 14.5, fontWeight: 500, display: "block" }}
+                    campo={t.dir === null ? null : dirTestimonio(t.dir, "name")}
+                    etiqueta="Quién lo dice" linea maxLen={80} valor={t.name} />
+                  {t.meta && (
+                    <Txt as="small" style={{ color: gris, fontSize: 13 }}
+                      campo={t.dir === null ? null : dirTestimonio(t.dir, "meta")}
+                      etiqueta="Cuándo / de dónde" linea maxLen={80} valor={t.meta} />
+                  )}
                 </article>
               ))}
             </div>
@@ -408,13 +526,19 @@ export function TemplateEspecialistas({ clinic: publicada }: TemplateProps) {
       {verFaq && (
         <section className="es-sec" style={{ paddingTop: 0 }}>
           <div className="es-wrap">
-            <span style={kicker}>Preguntas frecuentes</span>
-            <h2 style={h2}>{sectionTitle(S, "faq", "Antes de decidir")}</h2>
+            <Txt as="span" style={kicker} campo={dirCopia("faq.kicker")} etiqueta="Etiqueta de preguntas" linea maxLen={60}
+              valor={C("faq.kicker")} porDefecto="Preguntas frecuentes" />
+            <Txt as="h2" style={h2} campo={dirSeccion("faq", "titulo")} etiqueta="Título de preguntas" linea maxLen={160}
+              valor={S.faq?.titulo} porDefecto="Antes de decidir" />
             <div style={{ maxWidth: 840, marginTop: 40 }}>
               {faqs.map((f, i) => (
                 <details key={i} open={i === 0} style={{ borderBottom: `1px solid ${linea}` }}>
-                  <summary style={{ cursor: "pointer", padding: "20px 0", fontWeight: 500, fontSize: 17, listStyle: "none" }}>{f.q}</summary>
-                  <p style={{ margin: "0 0 20px", color: gris, fontWeight: 300 }}>{f.a}</p>
+                  <Txt as="summary" style={{ cursor: "pointer", padding: "20px 0", fontWeight: 500, fontSize: 17, listStyle: "none" }}
+                    campo={dirFaq(f.i, "q")} etiqueta="Pregunta" linea requerido maxLen={200}
+                    valor={f.q} />
+                  <Txt as="p" style={{ margin: "0 0 20px", color: gris, fontWeight: 300 }}
+                    campo={dirFaq(f.i, "a")} etiqueta="Respuesta" requerido maxLen={1200}
+                    valor={f.a} />
                 </details>
               ))}
             </div>
@@ -425,8 +549,12 @@ export function TemplateEspecialistas({ clinic: publicada }: TemplateProps) {
       {/* ============ UBICACIÓN ============ */}
       <section className="es-sec" style={{ paddingTop: 0 }} id="ubicacion">
         <div className="es-wrap">
-          <span style={kicker}>Dónde estamos</span>
-          <h2 style={h2}>{sectionTitle(S, "contacto", clinic.city ?? "Ubicación y horarios")}</h2>
+          <Txt as="span" style={kicker} campo={dirCopia("contacto.kicker")} etiqueta="Etiqueta de ubicación" linea maxLen={60}
+            valor={C("contacto.kicker")} porDefecto="Dónde estamos" />
+          {/* El texto por defecto es la CIUDAD de la clínica y, si no la tiene,
+              "Ubicación y horarios". <Txt> nunca guarda el default. */}
+          <Txt as="h2" style={h2} campo={dirSeccion("contacto", "titulo")} etiqueta="Título de contacto" linea maxLen={160}
+            valor={S.contacto?.titulo} porDefecto={clinic.city ?? "Ubicación y horarios"} />
           <div className="es-ubi" style={{ border: `1px solid ${linea}`, borderRadius: 8, overflow: "hidden", marginTop: 44 }}>
             <div style={{ padding: "38px 34px" }}>
               <ul style={{ listStyle: "none", padding: 0, margin: "0 0 24px" }}>
@@ -437,16 +565,26 @@ export function TemplateEspecialistas({ clinic: publicada }: TemplateProps) {
                     color: d.hoy ? acento : d.open ? tinta : gris,
                   }}>
                     <span>{d.label}{d.hoy ? " · hoy" : ""}</span>
-                    <time style={{ ...mono, fontSize: 14 }}>{d.open ?? "Cerrado"}</time>
+                    {/* Solo el día CERRADO es texto editable: el horario abierto
+                        es el dato de la agenda. */}
+                    {d.open
+                      ? <time style={{ ...mono, fontSize: 14 }}>{d.open}</time>
+                      : <Txt as="time" style={{ ...mono, fontSize: 14 }}
+                          campo={dirCopia("contacto.cerrado")} etiqueta="Cómo se dice «cerrado»" linea maxLen={40}
+                          valor={C("contacto.cerrado")} porDefecto="Cerrado" />}
                   </li>
                 ))}
               </ul>
               {clinic.address && <p style={{ fontSize: 15, color: gris, margin: "0 0 6px", fontWeight: 300 }}>{clinic.address}{clinic.city ? `, ${clinic.city}` : ""}</p>}
               {clinic.phone && <p style={{ margin: "0 0 22px" }}><a href={`tel:${clinic.phone}`} style={{ ...mono, color: acento, textDecoration: "none" }}>{clinic.phone}</a></p>}
               <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-                <button type="button" onClick={() => abrir()} style={{ ...btnP, ...btnSm }}>Agendar valoración</button>
+                <Txt as="button" type="button" onClick={() => abrir()} style={{ ...btnP, ...btnSm }}
+                  campo={dirCopia("contacto.cta")} etiqueta="Botón de reservar de ubicación" linea maxLen={60}
+                  valor={C("contacto.cta")} porDefecto="Agendar valoración" />
                 {clinic.address && (
-                  <a style={{ ...btnO, ...btnSm }} href={`https://maps.google.com/?q=${encodeURIComponent(`${clinic.address} ${clinic.city ?? ""}`)}`} target="_blank" rel="noopener noreferrer">Cómo llegar</a>
+                  <Txt as="a" style={{ ...btnO, ...btnSm }} href={`https://maps.google.com/?q=${encodeURIComponent(`${clinic.address} ${clinic.city ?? ""}`)}`} target="_blank" rel="noopener noreferrer"
+                    campo={dirCopia("contacto.comoLlegar")} etiqueta="Botón del mapa" linea maxLen={60}
+                    valor={C("contacto.comoLlegar")} porDefecto="Cómo llegar" />
                 )}
               </div>
             </div>

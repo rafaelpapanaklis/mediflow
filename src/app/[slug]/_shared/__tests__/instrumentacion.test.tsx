@@ -34,7 +34,7 @@ import { renderToString } from "react-dom/server";
 import { manifestOf, plantillasInstrumentadas } from "../template-manifest";
 import { EditProvider } from "../edit-runtime";
 import {
-  CARPETA_GOLDEN, CLINICA_VACIA, PLANTILLAS_CON_GOLDEN,
+  CARPETA_GOLDEN, CLINICA_FIXTURE, CLINICA_UN_DOCTOR, CLINICA_VACIA, PLANTILLAS_CON_GOLDEN,
   congelarReloj, elementoDePlantilla, htmlPublicado,
 } from "./fixture";
 
@@ -48,16 +48,22 @@ const htmlEnEdicion = (tpl: string) =>
   renderToString(<EditProvider slug="aurora">{elementoDePlantilla(tpl)}</EditProvider>);
 
 /**
- * Los dos estados de la plantilla, pegados.
+ * Los TRES estados de la plantilla, pegados.
  *
- * La clínica llena y la clínica vacía pintan textos distintos: el tercer
- * acceso de `equipo` dice "Conócenos" con equipo y "Cómo llegar" sin él, y la
- * tabla de horarios solo dice "Cerrado" si hay días cerrados. Con un solo
- * render, la mitad de esos textos podría declararse y no existir.
+ * Una plantilla no pinta lo mismo según lo que tenga la clínica, y hay textos
+ * y ranuras que solo existen en uno de esos estados:
+ *   · llena       — el caso normal.
+ *   · vacía       — el tercer acceso de `equipo` dice "Cómo llegar" en vez de
+ *                   "Conócenos", y la tabla de horarios dice "Cerrado".
+ *   · un doctor   — `sonrisa` cambia a retrato grande (ranura "doctor") y a la
+ *                   lista de tratamientos con su rótulo.
+ * Con un solo render, todo eso podría declararse en el manifiesto y no existir
+ * en ninguna parte de la plantilla.
  */
-const htmlDeLosDosEstados = (tpl: string) =>
-  htmlEnEdicion(tpl) +
-  renderToString(<EditProvider slug="aurora">{elementoDePlantilla(tpl, CLINICA_VACIA)}</EditProvider>);
+const htmlDeTodosLosEstados = (tpl: string) =>
+  [CLINICA_FIXTURE, CLINICA_VACIA, CLINICA_UN_DOCTOR]
+    .map(c => renderToString(<EditProvider slug="aurora">{elementoDePlantilla(tpl, c)}</EditProvider>))
+    .join("");
 
 /* ══════════════════════════════════════════════════════════════
    1 · Todo lo declarado tiene su nodo
@@ -79,7 +85,7 @@ for (const tpl of plantillasInstrumentadas()) {
   });
 
   test(`${tpl}: cada texto suelto del manifiesto tiene su nodo editable`, () => {
-    const html = htmlDeLosDosEstados(tpl);
+    const html = htmlDeTodosLosEstados(tpl);
     const m = manifestOf(tpl);
     const faltan = (m.copia ?? [])
       .filter(c => !c.variante)
@@ -101,7 +107,9 @@ for (const tpl of plantillasInstrumentadas()) {
   });
 
   test(`${tpl}: cada ranura de foto del manifiesto tiene su hueco`, () => {
-    const html = htmlEnEdicion(tpl);
+    // Los tres estados, por lo mismo que los textos: la ranura "doctor" de
+    // `sonrisa` solo existe cuando la clínica tiene UN doctor.
+    const html = htmlDeTodosLosEstados(tpl);
     const m = manifestOf(tpl);
     const faltan = m.fotos
       .map(f => f.id)

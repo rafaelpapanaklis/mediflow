@@ -404,6 +404,7 @@ export const TEMPLATE_MANIFESTS: Record<string, TemplateManifest> = {
     nombre: "Sonrisa",
     para: "Estética dental: la transformación manda y las fotos son enormes.",
     leeManifiesto: true,
+    instrumentada: true,
     secciones: [
       { id: "casos", nombre: "Antes y después (protagonista)", consume: ["fotos"] },
       SEC_SERVICIOS,
@@ -423,19 +424,64 @@ export const TEMPLATE_MANIFESTS: Record<string, TemplateManifest> = {
       { id: "servicio2", nombre: "Foto del servicio 2", proporcion: "4:5 vertical", seccion: "servicios", zona: "completa" },
       { id: "servicio3", nombre: "Foto del servicio 3", proporcion: "4:5 vertical", seccion: "servicios", zona: "derecha" },
     ],
+    /* Los `porDefecto` están verificados contra ESTE archivo
+       (templates/template-sonrisa.tsx), uno por uno. Tres estaban mal y se
+       corrigieron al instrumentar: "equipo.titulo" decía "Quién te atiende" y
+       la plantilla pinta "El equipo"; "casos.subtitulo" anunciaba un texto por
+       defecto que la plantilla NO pinta (sin nada escrito, ahí no sale nada); y
+       "pagos.subtitulo" no tiene default fijo — se construye con los plazos de
+       MSI de cada clínica, así que aquí va vacío y el literal real (interpolado)
+       se lo pasa la plantilla al <Txt>. Un `porDefecto` que no es el literal
+       real le miente a la clínica sobre lo que verá si deja el campo en blanco. */
     textos: [
       { seccion: "casos", campo: "titulo", etiqueta: "Título del antes y después", porDefecto: "Arrastra para ver el cambio" },
-      { seccion: "casos", campo: "subtitulo", etiqueta: "Descripción del caso", porDefecto: "Tratamiento, número de citas e inversión." },
+      { seccion: "casos", campo: "subtitulo", etiqueta: "Descripción del caso", porDefecto: "" },
       { seccion: "servicios", campo: "titulo", etiqueta: "Título de tratamientos", porDefecto: "Lo que hacemos y lo que cuesta" },
       { seccion: "servicios", campo: "subtitulo", etiqueta: "Bajada de tratamientos", porDefecto: "" },
       { seccion: "galeria", campo: "titulo", etiqueta: "Título de la galería", porDefecto: "Así quedan nuestros pacientes" },
-      { seccion: "equipo", campo: "titulo", etiqueta: "Título del equipo", porDefecto: "Quién te atiende" },
+      { seccion: "equipo", campo: "titulo", etiqueta: "Título del equipo", porDefecto: "El equipo" },
       { seccion: "opiniones", campo: "titulo", etiqueta: "Título de opiniones", porDefecto: "Lo que dicen nuestros pacientes" },
       { seccion: "pagos", campo: "titulo", etiqueta: "Título de pagos", porDefecto: "Tu tratamiento, en mensualidades" },
-      { seccion: "pagos", campo: "subtitulo", etiqueta: "Bajada de pagos", porDefecto: "Meses sin intereses con tarjetas participantes." },
+      { seccion: "pagos", campo: "subtitulo", etiqueta: "Bajada de pagos", porDefecto: "" },
       { seccion: "faq", campo: "titulo", etiqueta: "Título de preguntas", porDefecto: "Antes de agendar" },
       { seccion: "reservar", campo: "titulo", etiqueta: "Título del cierre", porDefecto: "Empieza por tu valoración" },
       { seccion: "reservar", campo: "subtitulo", etiqueta: "Bajada del cierre", porDefecto: "Agenda en línea, sin llamar. Te confirmamos por WhatsApp." },
+    ],
+    copia: [
+      { clave: "nav.cta",   etiqueta: "Barra · botón de reservar",  porDefecto: "Agenda tu valoración", maxLen: 60, linea: true },
+      { clave: "hero.cta",  etiqueta: "Portada · botón principal",  porDefecto: "Agenda tu valoración", maxLen: 60, linea: true },
+      { clave: "hero.cta2", etiqueta: "Portada · botón secundario", porDefecto: "Ver transformaciones", maxLen: 60, linea: true },
+
+      /* La tira de cifras. Aquí las CUATRO leyendas son literales (en `equipo`
+         tres de ellas se construyen), así que aquí sí se editan las cuatro. */
+      { clave: "cifras.anios",     etiqueta: "Cifras · leyenda de años",      porDefecto: "años de experiencia", maxLen: 60, linea: true },
+      { clave: "cifras.pacientes", etiqueta: "Cifras · leyenda de pacientes", porDefecto: "pacientes atendidos", maxLen: 60, linea: true },
+      { clave: "cifras.msi",       etiqueta: "Cifras · leyenda de meses",     porDefecto: "meses sin intereses", maxLen: 60, linea: true },
+      { clave: "cifras.google",    etiqueta: "Cifras · leyenda de reseñas",   porDefecto: "reseñas en Google",   maxLen: 60, linea: true,
+        variante: "Solo sale con ficha de Google conectada, y las reseñas llegan por fetch: en el render de servidor los efectos no corren." },
+
+      { clave: "casos.kicker",     etiqueta: "Antes y después · etiqueta",           porDefecto: "Casos reales",         maxLen: 60, linea: true },
+      { clave: "servicios.kicker", etiqueta: "Tratamientos · etiqueta",              porDefecto: "Tratamientos",         maxLen: 60, linea: true },
+      { clave: "servicios.cta",    etiqueta: "Tratamientos · botón de cada tarjeta", porDefecto: "Agendar",              maxLen: 40, linea: true },
+      { clave: "galeria.kicker",   etiqueta: "Galería · etiqueta",                   porDefecto: "Nuestras sonrisas",    maxLen: 60, linea: true },
+      { clave: "equipo.kicker",    etiqueta: "Equipo · etiqueta",                    porDefecto: "Quién te atiende",     maxLen: 60, linea: true },
+      { clave: "equipo.etiquetaAtiende", etiqueta: "Equipo · rótulo de cada tratamiento", porDefecto: "Atiende",         maxLen: 40, linea: true },
+      { clave: "equipo.cta",       etiqueta: "Equipo · botón de cada doctor",        porDefecto: "Agendar",              maxLen: 40, linea: true },
+      { clave: "opiniones.kicker", etiqueta: "Opiniones · etiqueta",                 porDefecto: "Opiniones",            maxLen: 60, linea: true },
+      { clave: "pagos.kicker",     etiqueta: "Pagos · etiqueta",                     porDefecto: "Formas de pago",       maxLen: 60, linea: true },
+      { clave: "faq.kicker",       etiqueta: "Preguntas · etiqueta",                 porDefecto: "Preguntas frecuentes", maxLen: 60, linea: true },
+      { clave: "reservar.cta",     etiqueta: "Cierre · botón",                       porDefecto: "Agenda tu valoración", maxLen: 60, linea: true },
+    ],
+    noEditables: [
+      { donde: "Menú de navegación", porque: "Los enlaces siguen a las secciones encendidas." },
+      { donde: "Pie de página, incluido «Hecho con DaleControl»", porque: "El pie es nuestro, no de la clínica." },
+      { donde: "Portada · kicker «{especialidad} · {ciudad}»", porque: "Se construye con dos datos de la clínica." },
+      { donde: "Portada · tarjeta de Google («{n} reseñas en Google»)", porque: "Se construye con lo que devuelve Google." },
+      { donde: "Opiniones · titular cuando hay ficha de Google («{nota} de {n} reseñas»)", porque: "Es una cadena construida. El titular SIN Google sí se edita." },
+      { donde: "Equipo · «Dr/a. {nombre} {apellido}» y «Agenda con {nombre}»", porque: "Se arman con datos del equipo." },
+      { donde: "«{duración} min» de cada tratamiento", porque: "Es el dato de duración del servicio." },
+      { donde: "Etiqueta de accesibilidad del botón flotante de WhatsApp", porque: "No es contenido: es texto para lectores de pantalla." },
+      { donde: "Las reseñas de Google", porque: "Son de Google. No hay dónde guardarlas si alguien las reescribe." },
     ],
   },
 
@@ -446,6 +492,7 @@ export const TEMPLATE_MANIFESTS: Record<string, TemplateManifest> = {
     // NO tiene ranuras de foto y es a propósito: es su razón de existir.
     sinFotos: true,
     leeManifiesto: true,
+    instrumentada: true,
     secciones: [
       { id: "urgencias", nombre: "Aviso de urgencias", consume: ["urgencias"] },
       SEC_SERVICIOS,
@@ -456,15 +503,65 @@ export const TEMPLATE_MANIFESTS: Record<string, TemplateManifest> = {
       SEC_RESERVAR,
     ],
     fotos: [],
+    /* `porDefecto` verificados contra templates/template-consultorio.tsx. Dos
+       estaban mal: "servicios.subtitulo" anunciaba una nota que la plantilla NO
+       pinta si la clínica no escribe nada, y "equipo.titulo" decía "Quién te
+       atiende" —que es el KICKER de esa sección, no su título—. El título real
+       es "Tu dentista" con un solo doctor, y con varios se CONSTRUYE
+       ("3 dentistas, siempre los mismos"), así que aquí va el literal y la
+       plantilla le pasa al <Txt> el que toque. */
     textos: [
       { seccion: "servicios", campo: "titulo", etiqueta: "Título de la lista de precios", porDefecto: "Lo que cuesta cada cosa" },
-      { seccion: "servicios", campo: "subtitulo", etiqueta: "Nota bajo los precios", porDefecto: "Precios vigentes. Si tu caso necesita algo distinto te lo decimos antes de empezar." },
+      { seccion: "servicios", campo: "subtitulo", etiqueta: "Nota bajo los precios", porDefecto: "" },
       { seccion: "contacto", campo: "titulo", etiqueta: "Título de horarios", porDefecto: "Cuándo y dónde" },
-      { seccion: "equipo", campo: "titulo", etiqueta: "Título de dentistas", porDefecto: "Quién te atiende" },
+      { seccion: "equipo", campo: "titulo", etiqueta: "Título de dentistas", porDefecto: "Tu dentista" },
       { seccion: "opiniones", campo: "titulo", etiqueta: "Título de opiniones", porDefecto: "Lo que dicen nuestros pacientes" },
       { seccion: "faq", campo: "titulo", etiqueta: "Título de preguntas", porDefecto: "Lo que más nos preguntan" },
       { seccion: "reservar", campo: "titulo", etiqueta: "Título del cierre", porDefecto: "Agenda en dos minutos, sin llamar" },
       { seccion: "reservar", campo: "subtitulo", etiqueta: "Bajada del cierre", porDefecto: "Eliges día y hora y te confirmamos por WhatsApp." },
+    ],
+    copia: [
+      { clave: "nav.cta",   etiqueta: "Barra · botón de reservar",  porDefecto: "Agendar",              maxLen: 40, linea: true },
+      { clave: "hero.cta",  etiqueta: "Portada · botón principal",  porDefecto: "Agendar cita →",       maxLen: 60, linea: true },
+      { clave: "hero.cta2", etiqueta: "Portada · botón de precios", porDefecto: "Ver lista de precios", maxLen: 60, linea: true },
+
+      /* De los cuatro datos del hero, solo DOS son literales; los otros dos se
+         construyen (el nombre del tratamiento más barato, los años con la
+         ciudad, las reseñas de Google). */
+      { clave: "datos.hoyCierra", etiqueta: "Portada · leyenda de la hora de cierre", porDefecto: "hoy cerramos a las", maxLen: 60, linea: true },
+      { clave: "datos.pacientes", etiqueta: "Portada · leyenda de pacientes",         porDefecto: "pacientes atendidos", maxLen: 60, linea: true },
+
+      { clave: "urgencias.titulo", etiqueta: "Urgencias · titular", porDefecto: "¿Traes dolor ahorita?", maxLen: 80, linea: true },
+      { clave: "urgencias.cta",    etiqueta: "Urgencias · botón",   porDefecto: "Llamar ahora",          maxLen: 40, linea: true },
+
+      { clave: "servicios.kicker",         etiqueta: "Precios · etiqueta",              porDefecto: "Lista de precios", maxLen: 60, linea: true },
+      { clave: "servicios.colTratamiento", etiqueta: "Precios · columna «tratamiento»", porDefecto: "Tratamiento",      maxLen: 40, linea: true },
+      { clave: "servicios.colDuracion",    etiqueta: "Precios · columna «duración»",    porDefecto: "Duración",         maxLen: 40, linea: true },
+      { clave: "servicios.colPrecio",      etiqueta: "Precios · columna «precio»",      porDefecto: "Precio",           maxLen: 40, linea: true },
+      { clave: "servicios.cta",            etiqueta: "Precios · botón de cada fila",    porDefecto: "Agendar",          maxLen: 40, linea: true },
+
+      { clave: "contacto.kicker",     etiqueta: "Horarios · etiqueta",                porDefecto: "Horarios y ubicación", maxLen: 60, linea: true },
+      { clave: "contacto.cerrado",    etiqueta: "Horarios · cómo se dice «cerrado»",  porDefecto: "Cerrado",              maxLen: 40, linea: true },
+      { clave: "contacto.comoLlegar", etiqueta: "Horarios · botón del mapa",          porDefecto: "Cómo llegar",          maxLen: 60, linea: true },
+      { clave: "contacto.llamar",     etiqueta: "Horarios · botón de llamar",         porDefecto: "Llamar",               maxLen: 40, linea: true },
+
+      { clave: "equipo.kicker",    etiqueta: "Dentistas · etiqueta",             porDefecto: "Quién te atiende",     maxLen: 60, linea: true },
+      { clave: "equipo.cta",       etiqueta: "Dentistas · botón de cada doctor", porDefecto: "Agendar",              maxLen: 40, linea: true },
+      { clave: "opiniones.kicker", etiqueta: "Opiniones · etiqueta",             porDefecto: "Opiniones",            maxLen: 60, linea: true },
+      { clave: "faq.kicker",       etiqueta: "Preguntas · etiqueta",             porDefecto: "Preguntas frecuentes", maxLen: 60, linea: true },
+      { clave: "reservar.cta",     etiqueta: "Cierre · botón",                   porDefecto: "Agendar mi cita →",    maxLen: 60, linea: true },
+    ],
+    noEditables: [
+      { donde: "Menú de navegación", porque: "Los enlaces siguen a las secciones encendidas." },
+      { donde: "Pie de página, incluido «Hecho con DaleControl»", porque: "El pie es nuestro, no de la clínica." },
+      { donde: "Barra superior (teléfono, dirección, «Hoy {hora}»)", porque: "Son datos de la clínica, con emoji o con la hora pegada." },
+      { donde: "Portada · «{especialidad} · desde hace {n} años» del logotipo", porque: "Se construye con dos datos." },
+      { donde: "Portada · leyenda del precio más barato y la de los años («años en {ciudad}»)", porque: "La primera es el nombre del tratamiento en minúsculas y la segunda lleva la ciudad dentro. Las otras dos leyendas SÍ se editan." },
+      { donde: "Opiniones · titular con ficha de Google («{nota} en Google, {n} reseñas»)", porque: "Es una cadena construida. El titular SIN Google sí se edita." },
+      { donde: "Dentistas · «Dr/a. {nombre} {apellido}» y sus especialidades", porque: "Se arman con datos del equipo." },
+      { donde: "«{duración} min» y el precio de cada fila", porque: "El precio SÍ se edita (es del servicio); la duración es el dato de agenda." },
+      { donde: "El texto del mapa cuando no hay mapa configurado", porque: "Es una expresión con respaldo: o la ciudad, o un aviso." },
+      { donde: "Las reseñas de Google", porque: "Son de Google. No hay dónde guardarlas si alguien las reescribe." },
     ],
   },
 
@@ -473,6 +570,7 @@ export const TEMPLATE_MANIFESTS: Record<string, TemplateManifest> = {
     nombre: "Especialistas",
     para: "Alta especialidad y ticket alto: tecnología, credenciales y financiamiento.",
     leeManifiesto: true,
+    instrumentada: true,
     secciones: [
       SEC_SERVICIOS,
       { id: "tecnologia", nombre: "Tecnología (3 tarjetas)", consume: ["fotos"] },
@@ -492,24 +590,81 @@ export const TEMPLATE_MANIFESTS: Record<string, TemplateManifest> = {
       { id: "tecnologia3", nombre: "Tecnología 3", proporcion: "16:11", seccion: "tecnologia", zona: "derecha" },
       { id: "doctor", nombre: "Foto del especialista", proporcion: "4:5 vertical", seccion: "equipo", zona: "izquierda", ayuda: "Retrato vertical. Si no la subes se usa la del perfil del doctor." },
     ],
+    /* `porDefecto` verificados contra templates/template-especialistas.tsx, uno
+       por uno. Siete estaban mal, y es el motivo de que esta lista se revise
+       plantilla por plantilla en vez de copiarla:
+         · Las tres tarjetas de tecnología anunciaban "Tomografía 3D",
+           "Escáner intraoral" y "Guía quirúrgica"; la plantilla pinta "Equipo"
+           en las tres.
+         · Cuatro bajadas (servicios, las tres de tecnología, casos) anunciaban
+           un texto que la plantilla NO pinta: sin nada escrito, ahí no sale nada.
+         · "contacto.titulo" decía "Dónde estamos", que es el KICKER de esa
+           sección. El título real es la ciudad de la clínica y, si no la tiene,
+           "Ubicación y horarios".
+         · "pagos.subtitulo" no tiene default fijo: se construye con los plazos.
+       Un `porDefecto` que no es el literal real le miente a la clínica sobre lo
+       que verá si deja el campo en blanco. */
     textos: [
       { seccion: "servicios", campo: "titulo", etiqueta: "Título de tratamientos", porDefecto: "Alta especialidad, precio cerrado" },
-      { seccion: "servicios", campo: "subtitulo", etiqueta: "Bajada de tratamientos", porDefecto: "Qué incluye cada precio." },
+      { seccion: "servicios", campo: "subtitulo", etiqueta: "Bajada de tratamientos", porDefecto: "" },
       { seccion: "tecnologia", campo: "titulo", etiqueta: "Título de tecnología", porDefecto: "Nada se improvisa en el sillón" },
-      { seccion: "tecnologia1", campo: "titulo", etiqueta: "Tecnología 1 · nombre", porDefecto: "Tomografía 3D" },
-      { seccion: "tecnologia1", campo: "subtitulo", etiqueta: "Tecnología 1 · texto", porDefecto: "Qué es y por qué le conviene al paciente." },
-      { seccion: "tecnologia2", campo: "titulo", etiqueta: "Tecnología 2 · nombre", porDefecto: "Escáner intraoral" },
-      { seccion: "tecnologia2", campo: "subtitulo", etiqueta: "Tecnología 2 · texto", porDefecto: "Qué es y por qué le conviene al paciente." },
-      { seccion: "tecnologia3", campo: "titulo", etiqueta: "Tecnología 3 · nombre", porDefecto: "Guía quirúrgica" },
-      { seccion: "tecnologia3", campo: "subtitulo", etiqueta: "Tecnología 3 · texto", porDefecto: "Qué es y por qué le conviene al paciente." },
+      { seccion: "tecnologia1", campo: "titulo", etiqueta: "Tecnología 1 · nombre", porDefecto: "Equipo" },
+      { seccion: "tecnologia1", campo: "subtitulo", etiqueta: "Tecnología 1 · texto", porDefecto: "" },
+      { seccion: "tecnologia2", campo: "titulo", etiqueta: "Tecnología 2 · nombre", porDefecto: "Equipo" },
+      { seccion: "tecnologia2", campo: "subtitulo", etiqueta: "Tecnología 2 · texto", porDefecto: "" },
+      { seccion: "tecnologia3", campo: "titulo", etiqueta: "Tecnología 3 · nombre", porDefecto: "Equipo" },
+      { seccion: "tecnologia3", campo: "subtitulo", etiqueta: "Tecnología 3 · texto", porDefecto: "" },
       { seccion: "casos", campo: "titulo", etiqueta: "Título del caso", porDefecto: "Antes y después" },
-      { seccion: "casos", campo: "subtitulo", etiqueta: "Descripción del caso", porDefecto: "Situación de partida, qué se hizo y en cuánto tiempo." },
+      { seccion: "casos", campo: "subtitulo", etiqueta: "Descripción del caso", porDefecto: "" },
       { seccion: "equipo", campo: "titulo", etiqueta: "Título del especialista", porDefecto: "Quién te va a operar" },
       { seccion: "pagos", campo: "titulo", etiqueta: "Título de financiamiento", porDefecto: "Tu tratamiento cabe en tu mes" },
-      { seccion: "pagos", campo: "subtitulo", etiqueta: "Bajada de financiamiento", porDefecto: "Meses sin intereses con tarjetas participantes." },
+      { seccion: "pagos", campo: "subtitulo", etiqueta: "Bajada de financiamiento", porDefecto: "" },
       { seccion: "opiniones", campo: "titulo", etiqueta: "Título de opiniones", porDefecto: "Lo que dicen nuestros pacientes" },
       { seccion: "faq", campo: "titulo", etiqueta: "Título de preguntas", porDefecto: "Antes de decidir" },
-      { seccion: "contacto", campo: "titulo", etiqueta: "Título de contacto", porDefecto: "Dónde estamos" },
+      { seccion: "contacto", campo: "titulo", etiqueta: "Título de contacto", porDefecto: "Ubicación y horarios" },
+    ],
+    copia: [
+      { clave: "nav.cta",   etiqueta: "Barra · botón de reservar",  porDefecto: "Valoración",           maxLen: 40, linea: true },
+      { clave: "hero.cta",  etiqueta: "Portada · botón principal",  porDefecto: "Agenda tu valoración", maxLen: 60, linea: true },
+      { clave: "hero.cta2", etiqueta: "Portada · botón de casos",   porDefecto: "Ver casos",            maxLen: 60, linea: true },
+
+      /* De las cuatro cifras de la franja, tres son literales; la de Google se
+         construye con el número de reseñas. */
+      { clave: "franja.pacientes", etiqueta: "Franja · leyenda de pacientes", porDefecto: "pacientes atendidos",  maxLen: 60, linea: true },
+      { clave: "franja.anios",     etiqueta: "Franja · leyenda de años",      porDefecto: "años de especialidad", maxLen: 60, linea: true },
+      { clave: "franja.msi",       etiqueta: "Franja · leyenda de meses",     porDefecto: "meses sin intereses",  maxLen: 60, linea: true },
+
+      { clave: "servicios.kicker", etiqueta: "Tratamientos · etiqueta",           porDefecto: "Tratamientos", maxLen: 60, linea: true },
+      { clave: "servicios.cta",    etiqueta: "Tratamientos · botón de cada fila", porDefecto: "Valoración",   maxLen: 40, linea: true },
+      { clave: "tecnologia.kicker", etiqueta: "Tecnología · etiqueta",            porDefecto: "Tecnología",   maxLen: 60, linea: true },
+
+      { clave: "casos.kicker", etiqueta: "Caso · etiqueta", porDefecto: "Caso documentado",     maxLen: 60, linea: true },
+      { clave: "casos.cta",    etiqueta: "Caso · botón",    porDefecto: "Agenda tu valoración", maxLen: 60, linea: true },
+
+      { clave: "equipo.kickerUno",       etiqueta: "Especialista · etiqueta (uno solo)", porDefecto: "El especialista",   maxLen: 60, linea: true },
+      { clave: "equipo.kickerVarios",    etiqueta: "Especialistas · etiqueta (varios)",  porDefecto: "Los especialistas", maxLen: 60, linea: true },
+      { clave: "equipo.etiquetaAtiende", etiqueta: "Especialista · rótulo de cada tratamiento", porDefecto: "Atiende",    maxLen: 40, linea: true },
+      { clave: "equipo.cta",             etiqueta: "Especialistas · botón de cada doctor", porDefecto: "Valoración",      maxLen: 40, linea: true },
+
+      { clave: "pagos.kicker",     etiqueta: "Financiamiento · etiqueta", porDefecto: "Financiamiento",      maxLen: 60, linea: true },
+      { clave: "opiniones.kicker", etiqueta: "Opiniones · etiqueta",      porDefecto: "Opiniones",           maxLen: 60, linea: true },
+      { clave: "faq.kicker",       etiqueta: "Preguntas · etiqueta",      porDefecto: "Preguntas frecuentes", maxLen: 60, linea: true },
+
+      { clave: "contacto.kicker",     etiqueta: "Ubicación · etiqueta",               porDefecto: "Dónde estamos",      maxLen: 60, linea: true },
+      { clave: "contacto.cerrado",    etiqueta: "Ubicación · cómo se dice «cerrado»", porDefecto: "Cerrado",            maxLen: 40, linea: true },
+      { clave: "contacto.cta",        etiqueta: "Ubicación · botón de reservar",      porDefecto: "Agendar valoración", maxLen: 60, linea: true },
+      { clave: "contacto.comoLlegar", etiqueta: "Ubicación · botón del mapa",         porDefecto: "Cómo llegar",        maxLen: 60, linea: true },
+    ],
+    noEditables: [
+      { donde: "Menú de navegación", porque: "Los enlaces siguen a las secciones encendidas." },
+      { donde: "Pie de página, incluido «Hecho con DaleControl»", porque: "El pie es nuestro, no de la clínica." },
+      { donde: "Portada · el kicker de especialidad", porque: "Es el dato de especialidad de la clínica; se cambia en Configuración." },
+      { donde: "Franja · leyenda de las reseñas («{n} reseñas en Google»)", porque: "Se construye con lo que devuelve Google. Las otras tres SÍ se editan." },
+      { donde: "Opiniones · titular con ficha de Google", porque: "Es una cadena construida y además va partida en dos elementos." },
+      { donde: "Especialista · «Dr/a. {nombre} {apellido}», su especialidad y «Agenda con {nombre}»", porque: "Se arman con datos del equipo." },
+      { donde: "«{duración} min» y la numeración de cada tratamiento", porque: "La duración es el dato de agenda y el número es la posición en la lista." },
+      { donde: "El texto del mapa cuando no hay mapa configurado", porque: "Es la ciudad de la clínica, o nada." },
+      { donde: "Las reseñas de Google", porque: "Son de Google. No hay dónde guardarlas si alguien las reescribe." },
     ],
   },
 };

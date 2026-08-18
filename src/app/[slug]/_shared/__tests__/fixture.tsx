@@ -181,6 +181,22 @@ export const CLINICA_VACIA: LandingClinic = {
   schedules: CLINICA_FIXTURE.schedules.map(s => ({ ...s, enabled: false })),
 };
 
+/**
+ * LA CLÍNICA DE UN SOLO DOCTOR.
+ *
+ * `sonrisa` y `especialistas` pintan la sección de equipo de DOS maneras
+ * distintas: con un solo doctor cambian a un retrato grande —que es la ranura
+ * de foto "doctor"— y a una lista de tratamientos con su rótulo. Con dos
+ * doctores esa mitad de la plantilla no existe, así que sin este estado la
+ * ranura y ese rótulo podrían declararse y no estar instrumentados.
+ *
+ * NO se compara contra ninguna captura: solo sirve para comprobar presencia.
+ */
+export const CLINICA_UN_DOCTOR: LandingClinic = {
+  ...CLINICA_FIXTURE,
+  users: [CLINICA_FIXTURE.users[0]],
+};
+
 /** El elemento de una plantilla con la clínica de prueba. */
 export function elementoDePlantilla(tpl: string, clinica: LandingClinic = CLINICA_FIXTURE): ReactElement {
   const Plantilla = PLANTILLAS[tpl];

@@ -16,9 +16,14 @@ import { useState, useEffect } from "react";
 import { Facebook, Instagram, MapPin, MessageCircle, Phone, Zap } from "lucide-react";
 import type { TemplateProps } from "../_shared/types";
 import { useLiveClinic } from "../_shared/live-preview";
+import { Txt, useEnEdicion } from "../_shared/edit-context";
+// landing-address-parts y NO landing-address: este archivo viaja al navegador
+// de los pacientes, y el módulo grande arrastra el manifiesto de las ocho
+// plantillas (17 KB) sin que la página pública lo necesite para nada.
+import { dirClinica, dirCopia, dirFaq, dirSeccion, dirServicio, dirTestimonio } from "@/lib/landing-address-parts";
 import { tint, shade, alpha } from "../_shared/landing-utils";
 import {
-  faqList, msiPlazos, sectionMap, sectionSubtitle, sectionTitle,
+  copyMap, copyValue, faqList, msiPlazos, sectionMap, sectionSubtitle, sectionTitle,
   serviceList, showSection, testimonialList, urgentText, weekSchedule,
 } from "../_shared/landing-data";
 import { StarRow } from "../_shared/landing-pieces";
@@ -78,6 +83,13 @@ export function TemplateConsultorio({ clinic: publicada }: TemplateProps) {
   useBookingReopen(clinic.slug, pending =>
     setBooking({ open: true, doctorId: pending?.doctorId, service: pending?.service, restore: pending }));
 
+  /* Solo dentro del lienzo del editor. En la página pública es SIEMPRE false. */
+  const editando = useEnEdicion();
+  /* El texto suelto que reescribió la clínica. `C(clave)` devuelve null si no
+     lo tocó, y entonces <Txt> pinta el literal de siempre. */
+  const copias = copyMap(clinic);
+  const C = (clave: string) => copyValue(copias, clave);
+
   const verPrecios = showSection(S, "servicios", servicios.length > 0);
   const verEquipo = showSection(S, "equipo", doctores.length > 0);
   const verOpiniones = showSection(S, "opiniones", testimonios.length > 0 || !!google);
@@ -87,12 +99,15 @@ export function TemplateConsultorio({ clinic: publicada }: TemplateProps) {
   const primerPrecio = servicios.find(s => s.price)?.price ?? null;
 
   /* Los cuatro datos del hero: solo hechos capturados por la clínica. */
-  const datos: { valor: string; etiqueta: string; destacado?: boolean }[] = [];
-  if (hoy?.open) datos.push({ valor: hoy.open.split("–")[1]?.trim() ?? hoy.open, etiqueta: "hoy cerramos a las", destacado: true });
+  /* `clave` solo en los dos que son LITERALES. Los otros dos se construyen —el
+     nombre del tratamiento más barato en minúsculas y los años con la ciudad
+     dentro—, y como texto plano se guardaría la mezcla ya montada. */
+  const datos: { valor: string; etiqueta: string; destacado?: boolean; clave?: string }[] = [];
+  if (hoy?.open) datos.push({ valor: hoy.open.split("–")[1]?.trim() ?? hoy.open, etiqueta: "hoy cerramos a las", destacado: true, clave: "datos.hoyCierra" });
   if (primerPrecio) datos.push({ valor: primerPrecio, etiqueta: servicios.find(s => s.price)!.name.toLowerCase() });
   if (clinic.landingYearsExperience) datos.push({ valor: String(clinic.landingYearsExperience), etiqueta: clinic.city ? `años en ${clinic.city}` : "años de experiencia" });
   if (google?.rating) datos.push({ valor: `${google.rating} ★`, etiqueta: `${google.total} reseñas en Google` });
-  else if (clinic.landingPatients) datos.push({ valor: clinic.landingPatients, etiqueta: "pacientes atendidos" });
+  else if (clinic.landingPatients) datos.push({ valor: clinic.landingPatients, etiqueta: "pacientes atendidos", clave: "datos.pacientes" });
 
   const nav: { href: string; label: string }[] = [
     ...(verPrecios ? [{ href: "#precios", label: "Precios" }] : []),
@@ -176,7 +191,9 @@ export function TemplateConsultorio({ clinic: publicada }: TemplateProps) {
           <div className="co-links" style={{ display: "flex", gap: 22 }}>
             {nav.map(l => <a key={l.href} href={l.href} style={{ textDecoration: "none", fontSize: 14.5, fontWeight: 500, color: shade(acento, 0.5) }}>{l.label}</a>)}
           </div>
-          <button type="button" onClick={() => abrir()} style={{ ...btnP, ...btnSm }}>Agendar</button>
+          <Txt as="button" type="button" onClick={() => abrir()} style={{ ...btnP, ...btnSm }}
+            campo={dirCopia("nav.cta")} etiqueta="Botón de reservar de la barra" linea maxLen={40}
+            valor={C("nav.cta")} porDefecto="Agendar" />
         </div>
       </nav>
 
@@ -187,15 +204,23 @@ export function TemplateConsultorio({ clinic: publicada }: TemplateProps) {
           backgroundImage: patronHero(), backgroundRepeat: "repeat", backgroundSize: "120px 120px",
         }} />
         <div className="co-wrap" style={{ position: "relative", padding: "64px 20px 0" }}>
-          <h1 style={{ fontSize: "clamp(34px,5vw,56px)", maxWidth: "17ch", marginBottom: 18, fontWeight: 600, letterSpacing: "-.025em", lineHeight: 1.12 }}>
-            {clinic.landingTagline || clinic.name}
-          </h1>
-          {clinic.description && (
-            <p style={{ fontSize: 18, color: tint(acento, 0.82), maxWidth: "50ch", margin: "0 0 28px" }}>{clinic.description}</p>
+          <Txt as="h1" style={{ fontSize: "clamp(34px,5vw,56px)", maxWidth: "17ch", marginBottom: 18, fontWeight: 600, letterSpacing: "-.025em", lineHeight: 1.12 }}
+            campo={dirClinica("landingTagline")} etiqueta="Eslogan" maxLen={300}
+            valor={clinic.landingTagline} porDefecto={clinic.name} />
+          {(clinic.description || editando) && (
+            <Txt as="p" style={{ fontSize: 18, color: tint(acento, 0.82), maxWidth: "50ch", margin: "0 0 28px" }}
+              campo={dirClinica("description")} etiqueta="Descripción de la clínica" maxLen={5000}
+              valor={clinic.description} />
           )}
           <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 44 }}>
-            <button type="button" onClick={() => abrir()} style={btnA}>Agendar cita →</button>
-            {verPrecios && <a href="#precios" style={{ ...btnO, background: "transparent", borderColor: "rgba(255,255,255,.4)", color: "#fff" }}>Ver lista de precios</a>}
+            <Txt as="button" type="button" onClick={() => abrir()} style={btnA}
+              campo={dirCopia("hero.cta")} etiqueta="Botón principal de la portada" linea maxLen={60}
+              valor={C("hero.cta")} porDefecto="Agendar cita →" />
+            {verPrecios && (
+              <Txt as="a" href="#precios" style={{ ...btnO, background: "transparent", borderColor: "rgba(255,255,255,.4)", color: "#fff" }}
+                campo={dirCopia("hero.cta2")} etiqueta="Botón de precios de la portada" linea maxLen={60}
+                valor={C("hero.cta2")} porDefecto="Ver lista de precios" />
+            )}
           </div>
           {datos.length > 0 && (
             <div className="co-datos" style={{ background: "rgba(255,255,255,.22)", borderRadius: "10px 10px 0 0", overflow: "hidden", transform: "translateY(1px)" }}>
@@ -206,7 +231,9 @@ export function TemplateConsultorio({ clinic: publicada }: TemplateProps) {
                   padding: "22px 20px",
                 }}>
                   <b style={{ display: "block", ...mono, fontSize: 26, fontWeight: 600, letterSpacing: "-.02em" }}>{d.valor}</b>
-                  <span style={{ fontSize: 13.5, color: d.destacado ? alpha(avisoInk, 0.75) : tint(acento, 0.75) }}>{d.etiqueta}</span>
+                  <Txt as="span" style={{ fontSize: 13.5, color: d.destacado ? alpha(avisoInk, 0.75) : tint(acento, 0.75) }}
+                    campo={d.clave ? dirCopia(d.clave) : null} etiqueta="Leyenda del dato" linea maxLen={60}
+                    valor={d.clave ? C(d.clave) : null} porDefecto={d.etiqueta} />
                 </div>
               ))}
             </div>
@@ -222,10 +249,18 @@ export function TemplateConsultorio({ clinic: publicada }: TemplateProps) {
               <Zap size={26} />
             </span>
             <div style={{ minWidth: 240, flex: 1 }}>
-              <b style={{ display: "block", fontSize: 19, fontWeight: 600 }}>¿Traes dolor ahorita?</b>
-              <span style={{ color: tint(acento, 0.66), fontSize: 14.5 }}>{urgencias}</span>
+              <Txt as="b" style={{ display: "block", fontSize: 19, fontWeight: 600 }}
+                campo={dirCopia("urgencias.titulo")} etiqueta="Titular de urgencias" linea maxLen={80}
+                valor={C("urgencias.titulo")} porDefecto="¿Traes dolor ahorita?" />
+              <Txt as="span" style={{ color: tint(acento, 0.66), fontSize: 14.5 }}
+                campo={dirClinica("landingUrgentText")} etiqueta="Aviso de urgencias" maxLen={1000}
+                valor={urgencias} />
             </div>
-            {clinic.phone && <a style={{ ...btnA, marginLeft: "auto" }} href={`tel:${clinic.phone}`}>Llamar ahora</a>}
+            {clinic.phone && (
+              <Txt as="a" style={{ ...btnA, marginLeft: "auto" }} href={`tel:${clinic.phone}`}
+                campo={dirCopia("urgencias.cta")} etiqueta="Botón de urgencias" linea maxLen={40}
+                valor={C("urgencias.cta")} porDefecto="Llamar ahora" />
+            )}
           </div>
         </div>
       )}
@@ -234,10 +269,14 @@ export function TemplateConsultorio({ clinic: publicada }: TemplateProps) {
       {verPrecios && (
         <section className="co-sec" id="precios">
           <div className="co-wrap">
-            <span style={kicker}>Lista de precios</span>
-            <h2 style={h2}>{sectionTitle(S, "servicios", "Lo que cuesta cada cosa")}</h2>
-            {sectionSubtitle(S, "servicios") && (
-              <p style={{ color: gris, margin: "8px 0 0", maxWidth: "60ch" }}>{sectionSubtitle(S, "servicios")}</p>
+            <Txt as="span" style={kicker} campo={dirCopia("servicios.kicker")} etiqueta="Etiqueta de precios" linea maxLen={60}
+              valor={C("servicios.kicker")} porDefecto="Lista de precios" />
+            <Txt as="h2" style={h2} campo={dirSeccion("servicios", "titulo")} etiqueta="Título de la lista de precios" linea maxLen={160}
+              valor={S.servicios?.titulo} porDefecto="Lo que cuesta cada cosa" />
+            {(sectionSubtitle(S, "servicios") || editando) && (
+              <Txt as="p" style={{ color: gris, margin: "8px 0 0", maxWidth: "60ch" }}
+                campo={dirSeccion("servicios", "subtitulo")} etiqueta="Nota bajo los precios" maxLen={500}
+                valor={S.servicios?.subtitulo} />
             )}
 
             <div style={{ border: `1px solid ${linea}`, borderRadius: 10, overflow: "hidden", marginTop: 26 }}>
@@ -245,19 +284,38 @@ export function TemplateConsultorio({ clinic: publicada }: TemplateProps) {
                 padding: "13px 22px", background: fondo2, borderBottom: `1px solid ${linea}`,
                 ...mono, fontSize: 11, letterSpacing: ".12em", textTransform: "uppercase", color: gris,
               }}>
-                <span>Tratamiento</span><span>Duración</span><span>Precio</span><span />
+                <Txt as="span" campo={dirCopia("servicios.colTratamiento")} etiqueta="Columna «tratamiento»" linea maxLen={40}
+                  valor={C("servicios.colTratamiento")} porDefecto="Tratamiento" /><Txt as="span" campo={dirCopia("servicios.colDuracion")} etiqueta="Columna «duración»" linea maxLen={40}
+                  valor={C("servicios.colDuracion")} porDefecto="Duración" /><Txt as="span" campo={dirCopia("servicios.colPrecio")} etiqueta="Columna «precio»" linea maxLen={40}
+                  valor={C("servicios.colPrecio")} porDefecto="Precio" /><span />
               </div>
               {servicios.map((s, i) => (
                 <div key={s.name + i} className="co-fila co-pr" style={{
                   padding: "16px 22px", borderBottom: i === servicios.length - 1 ? 0 : `1px solid ${linea}`, transition: ".12s",
                 }}>
                   <div>
-                    <b style={{ display: "block", fontSize: 16.5, fontWeight: 600 }}>{s.name}</b>
-                    {s.desc && <span style={{ fontSize: 13.5, color: gris }}>{s.desc}</span>}
+                    <Txt as="b" style={{ display: "block", fontSize: 16.5, fontWeight: 600 }}
+                      campo={dirServicio(s.i, "name")} etiqueta="Nombre del tratamiento" linea requerido maxLen={120}
+                      valor={s.name} />
+                    {(s.desc || editando) && (
+                      <Txt as="span" style={{ fontSize: 13.5, color: gris }}
+                        campo={dirServicio(s.i, "desc")} etiqueta="Descripción del tratamiento" maxLen={400}
+                        valor={s.desc} />
+                    )}
                   </div>
                   <span style={{ ...mono, fontSize: 13.5, color: gris }}>{s.durationMin ? `${s.durationMin} min` : ""}</span>
-                  <span style={{ ...mono, fontSize: 18, fontWeight: 600 }}>{s.price ?? ""}</span>
-                  <button type="button" onClick={() => abrir({ service: s.name })} style={{ ...btnO, ...btnSm }}>Agendar</button>
+                  {/* El precio se pinta vacío cuando no hay: <Txt> no pinta nada
+                      sin texto, así que la celda se queda igual de vacía que hoy
+                      y la rejilla no se mueve. En el lienzo sí aparece, para
+                      poder ponerle precio. */}
+                  {s.price || editando
+                    ? <Txt as="span" style={{ ...mono, fontSize: 18, fontWeight: 600 }}
+                        campo={dirServicio(s.i, "price")} etiqueta="Precio" linea maxLen={40}
+                        valor={s.price} />
+                    : <span style={{ ...mono, fontSize: 18, fontWeight: 600 }}>{""}</span>}
+                  <Txt as="button" type="button" onClick={() => abrir({ service: s.name })} style={{ ...btnO, ...btnSm }}
+                    campo={dirCopia("servicios.cta")} etiqueta="Botón de cada fila" linea maxLen={40}
+                    valor={C("servicios.cta")} porDefecto="Agendar" />
                 </div>
               ))}
             </div>
@@ -274,8 +332,10 @@ export function TemplateConsultorio({ clinic: publicada }: TemplateProps) {
       {/* ============ HORARIOS Y MAPA ============ */}
       <section className="co-sec" id="horarios" style={{ background: fondo2 }}>
         <div className="co-wrap">
-          <span style={kicker}>Horarios y ubicación</span>
-          <h2 style={h2}>{sectionTitle(S, "contacto", "Cuándo y dónde")}</h2>
+          <Txt as="span" style={kicker} campo={dirCopia("contacto.kicker")} etiqueta="Etiqueta de horarios" linea maxLen={60}
+              valor={C("contacto.kicker")} porDefecto="Horarios y ubicación" />
+          <Txt as="h2" style={h2} campo={dirSeccion("contacto", "titulo")} etiqueta="Título de horarios" linea maxLen={160}
+            valor={S.contacto?.titulo} porDefecto="Cuándo y dónde" />
           <div className="co-horarios" style={{ marginTop: 26 }}>
             <div style={{ border: `1px solid ${linea}`, borderRadius: 10, padding: 26, background: "#fff" }}>
               <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
@@ -287,16 +347,29 @@ export function TemplateConsultorio({ clinic: publicada }: TemplateProps) {
                     color: d.hoy ? acentoOsc : d.open ? tinta : gris, fontWeight: d.hoy ? 600 : 400,
                   }}>
                     <span>{d.label}{d.hoy ? " · hoy" : ""}</span>
-                    <time style={{ ...mono, fontSize: 14.5 }}>{d.open ?? "Cerrado"}</time>
+                    {/* Solo el día CERRADO es texto editable: el horario abierto
+                        es el dato de la agenda. */}
+                    {d.open
+                      ? <time style={{ ...mono, fontSize: 14.5 }}>{d.open}</time>
+                      : <Txt as="time" style={{ ...mono, fontSize: 14.5 }}
+                          campo={dirCopia("contacto.cerrado")} etiqueta="Cómo se dice «cerrado»" linea maxLen={40}
+                          valor={C("contacto.cerrado")} porDefecto="Cerrado" />}
                   </li>
                 ))}
               </ul>
               {clinic.address && <p style={{ fontSize: 15, color: gris, margin: "18px 0 6px" }}>{clinic.address}{clinic.city ? `, ${clinic.city}` : ""}</p>}
               <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 18 }}>
                 {clinic.address && (
-                  <a style={{ ...btnP, ...btnSm }} href={`https://maps.google.com/?q=${encodeURIComponent(`${clinic.address} ${clinic.city ?? ""}`)}`} target="_blank" rel="noopener noreferrer">Cómo llegar</a>
+                  <Txt as="a" style={{ ...btnP, ...btnSm }} href={`https://maps.google.com/?q=${encodeURIComponent(`${clinic.address} ${clinic.city ?? ""}`)}`} target="_blank" rel="noopener noreferrer"
+                    campo={dirCopia("contacto.comoLlegar")} etiqueta="Botón del mapa" linea maxLen={60}
+                    valor={C("contacto.comoLlegar")} porDefecto="Cómo llegar" />
                 )}
-                {clinic.phone && <a style={{ ...btnO, ...btnSm }} href={`tel:${clinic.phone}`}><Phone size={14} /> Llamar</a>}
+                {clinic.phone && (
+                  <Txt as="a" style={{ ...btnO, ...btnSm }} href={`tel:${clinic.phone}`}
+                    campo={dirCopia("contacto.llamar")} etiqueta="Botón de llamar" linea maxLen={40}
+                    valor={C("contacto.llamar")} porDefecto="Llamar" prefijo=" " unido
+                    antes={<Phone size={14} />} />
+                )}
               </div>
             </div>
             <div style={{ border: `1px solid ${linea}`, borderRadius: 10, overflow: "hidden", minHeight: 340, background: "#fff" }}>
@@ -315,8 +388,14 @@ export function TemplateConsultorio({ clinic: publicada }: TemplateProps) {
       {verEquipo && (
         <section className="co-sec" id="equipo">
           <div className="co-wrap">
-            <span style={kicker}>Quién te atiende</span>
-            <h2 style={h2}>{sectionTitle(S, "equipo", doctores.length === 1 ? "Tu dentista" : `${doctores.length} dentistas, siempre los mismos`)}</h2>
+            <Txt as="span" style={kicker} campo={dirCopia("equipo.kicker")} etiqueta="Etiqueta de dentistas" linea maxLen={60}
+              valor={C("equipo.kicker")} porDefecto="Quién te atiende" />
+            {/* Con varios doctores el texto por defecto se CONSTRUYE
+                ("3 dentistas, siempre los mismos"). <Txt> nunca guarda el
+                default, solo lo enseña, así que se le pasa el que toque. */}
+            <Txt as="h2" style={h2} campo={dirSeccion("equipo", "titulo")} etiqueta="Título de dentistas" linea maxLen={160}
+              valor={S.equipo?.titulo}
+              porDefecto={doctores.length === 1 ? "Tu dentista" : `${doctores.length} dentistas, siempre los mismos`} />
             <div className="co-equipo" style={{ marginTop: 26 }}>
               {doctores.map(d => (
                 <div key={d.id} style={{ display: "flex", gap: 16, alignItems: "center", border: `1px solid ${linea}`, borderRadius: 10, padding: "18px 20px", flexWrap: "wrap" }}>
@@ -328,7 +407,9 @@ export function TemplateConsultorio({ clinic: publicada }: TemplateProps) {
                     {d.specialty && <span style={{ display: "block", fontSize: 14, color: acento, fontWeight: 500 }}>{d.specialty}</span>}
                     {d.services.length > 0 && <small style={{ display: "block", ...mono, fontSize: 12, color: gris, marginTop: 2 }}>{d.services.slice(0, 3).join(" · ")}</small>}
                   </div>
-                  <button type="button" onClick={() => abrir({ doctorId: d.id })} style={{ ...btnO, ...btnSm, marginLeft: "auto" }}>Agendar</button>
+                  <Txt as="button" type="button" onClick={() => abrir({ doctorId: d.id })} style={{ ...btnO, ...btnSm, marginLeft: "auto" }}
+                    campo={dirCopia("equipo.cta")} etiqueta="Botón de cada doctor" linea maxLen={40}
+                    valor={C("equipo.cta")} porDefecto="Agendar" />
                 </div>
               ))}
             </div>
@@ -340,20 +421,38 @@ export function TemplateConsultorio({ clinic: publicada }: TemplateProps) {
       {verOpiniones && (
         <section className="co-sec" id="opiniones" style={{ background: fondo2 }}>
           <div className="co-wrap">
-            <span style={kicker}>Opiniones</span>
-            <h2 style={h2}>
-              {google?.rating ? `${google.rating} en Google, ${google.total} reseñas` : sectionTitle(S, "opiniones", "Lo que dicen nuestros pacientes")}
-            </h2>
+            <Txt as="span" style={kicker} campo={dirCopia("opiniones.kicker")} etiqueta="Etiqueta de opiniones" linea maxLen={60}
+              valor={C("opiniones.kicker")} porDefecto="Opiniones" />
+            {/* Con ficha de Google el titular es una cadena CONSTRUIDA y no se
+                instrumenta: guardarla congelaría los números de hoy. */}
+            {google?.rating
+              ? <h2 style={h2}>{`${google.rating} en Google, ${google.total} reseñas`}</h2>
+              : <Txt as="h2" style={h2} campo={dirSeccion("opiniones", "titulo")} etiqueta="Título de opiniones" linea maxLen={160}
+                  valor={S.opiniones?.titulo} porDefecto="Lo que dicen nuestros pacientes" />}
             <div className="co-res" style={{ marginTop: 26 }}>
+              {/* `dir` es null en las reseñas de Google: son de Google, no de la
+                  clínica, y no hay dónde guardarlas si alguien las reescribe. */}
               {(testimonios.length > 0
-                ? testimonios
-                : (google?.reviews ?? []).slice(0, 3).map((r: any) => ({ text: r.text, name: r.author_name ?? "Paciente", rating: r.rating ?? 5, meta: r.relative_time_description ?? null }))
+                ? testimonios.map(t => ({ text: t.text, name: t.name, rating: t.rating, meta: t.meta, dir: t.i as number | null }))
+                : (google?.reviews ?? []).slice(0, 3).map((r: any) => ({ text: r.text, name: r.author_name ?? "Paciente", rating: r.rating ?? 5, meta: r.relative_time_description ?? null, dir: null as number | null }))
               ).slice(0, 6).map((t, i) => (
                 <article key={i} style={{ border: `1px solid ${linea}`, borderRadius: 10, padding: 20, background: "#fff" }}>
                   <StarRow value={t.rating} color={aviso} />
-                  <p style={{ margin: "9px 0 14px", fontSize: 15 }}>“{t.text}”</p>
-                  <b style={{ fontSize: 14 }}>{t.name}</b>
-                  {t.meta && <small style={{ color: gris, fontSize: 13 }}> · {t.meta}</small>}
+                  {/* Las comillas van como prefijo/sufijo y no dentro del texto:
+                      si se guardaran, la siguiente edición las duplicaría. */}
+                  <Txt as="p" style={{ margin: "9px 0 14px", fontSize: 15 }}
+                    campo={t.dir === null ? null : dirTestimonio(t.dir, "text")}
+                    etiqueta="Opinión" requerido maxLen={800}
+                    valor={t.text} prefijo="“" sufijo="”" />
+                  <Txt as="b" style={{ fontSize: 14 }}
+                    campo={t.dir === null ? null : dirTestimonio(t.dir, "name")}
+                    etiqueta="Quién lo dice" linea maxLen={80} valor={t.name} />
+                  {t.meta && (
+                    <Txt as="small" style={{ color: gris, fontSize: 13 }}
+                      campo={t.dir === null ? null : dirTestimonio(t.dir, "meta")}
+                      etiqueta="Cuándo / de dónde" linea maxLen={80}
+                      valor={t.meta} prefijo=" · " />
+                  )}
                 </article>
               ))}
             </div>
@@ -365,13 +464,19 @@ export function TemplateConsultorio({ clinic: publicada }: TemplateProps) {
       {verFaq && (
         <section className="co-sec">
           <div className="co-wrap">
-            <span style={kicker}>Preguntas frecuentes</span>
-            <h2 style={h2}>{sectionTitle(S, "faq", "Lo que más nos preguntan")}</h2>
+            <Txt as="span" style={kicker} campo={dirCopia("faq.kicker")} etiqueta="Etiqueta de preguntas" linea maxLen={60}
+              valor={C("faq.kicker")} porDefecto="Preguntas frecuentes" />
+            <Txt as="h2" style={h2} campo={dirSeccion("faq", "titulo")} etiqueta="Título de preguntas" linea maxLen={160}
+              valor={S.faq?.titulo} porDefecto="Lo que más nos preguntan" />
             <div style={{ marginTop: 26, border: `1px solid ${linea}`, borderRadius: 10, overflow: "hidden" }}>
               {faqs.map((f, i) => (
                 <details key={i} open={i === 0} style={{ borderBottom: i === faqs.length - 1 ? 0 : `1px solid ${linea}` }}>
-                  <summary style={{ cursor: "pointer", padding: "16px 22px", fontWeight: 600, fontSize: 16, listStyle: "none", background: "#fff" }}>{f.q}</summary>
-                  <p style={{ margin: 0, padding: "0 22px 20px", color: gris }}>{f.a}</p>
+                  <Txt as="summary" style={{ cursor: "pointer", padding: "16px 22px", fontWeight: 600, fontSize: 16, listStyle: "none", background: "#fff" }}
+                    campo={dirFaq(f.i, "q")} etiqueta="Pregunta" linea requerido maxLen={200}
+                    valor={f.q} />
+                  <Txt as="p" style={{ margin: 0, padding: "0 22px 20px", color: gris }}
+                    campo={dirFaq(f.i, "a")} etiqueta="Respuesta" requerido maxLen={1200}
+                    valor={f.a} />
                 </details>
               ))}
             </div>
@@ -382,13 +487,15 @@ export function TemplateConsultorio({ clinic: publicada }: TemplateProps) {
       {/* ============ CTA ============ */}
       <section style={{ background: acento, color: "#fff", padding: "56px 0", textAlign: "center" }}>
         <div className="co-wrap">
-          <h2 style={{ ...h2, fontSize: "clamp(26px,3.4vw,38px)", marginBottom: 12 }}>
-            {sectionTitle(S, "reservar", "Agenda en dos minutos, sin llamar")}
-          </h2>
-          <p style={{ color: tint(acento, 0.82), margin: "0 0 26px" }}>
-            {sectionSubtitle(S, "reservar", "Eliges día y hora y te confirmamos por WhatsApp.")}
-          </p>
-          <button type="button" onClick={() => abrir()} style={btnA}>Agendar mi cita →</button>
+          <Txt as="h2" style={{ ...h2, fontSize: "clamp(26px,3.4vw,38px)", marginBottom: 12 }}
+            campo={dirSeccion("reservar", "titulo")} etiqueta="Título del cierre" linea maxLen={160}
+            valor={S.reservar?.titulo} porDefecto="Agenda en dos minutos, sin llamar" />
+          <Txt as="p" style={{ color: tint(acento, 0.82), margin: "0 0 26px" }}
+            campo={dirSeccion("reservar", "subtitulo")} etiqueta="Bajada del cierre" maxLen={500}
+            valor={S.reservar?.subtitulo} porDefecto="Eliges día y hora y te confirmamos por WhatsApp." />
+          <Txt as="button" type="button" onClick={() => abrir()} style={btnA}
+            campo={dirCopia("reservar.cta")} etiqueta="Botón del cierre" linea maxLen={60}
+            valor={C("reservar.cta")} porDefecto="Agendar mi cita →" />
         </div>
       </section>
 
