@@ -8599,3 +8599,173 @@ afiliados.
 - No se tocó ningún otro enlace ni texto del pie. Twitter y LinkedIn siguen apuntando a
   `/dalecontrol` tal cual estaban: si esos handles también cambiaron, siguen mal.
 - Sin SQL y sin variables de entorno.
+
+---
+
+## [P0-Panel] — los tres P0 de la auditoría del panel (12-ago)
+
+Reporte auditado: `docs/audits/PANEL_AUDIT_2026-08-12.md` (worktree `audit-panel`, rama
+`audit/panel-completo`). Se cerraron `PAC-01`, `SUB-01` y `EQ-01`, en ese orden y con un
+commit y un push cada uno: el tercero es el único que puede dejar a todo el mundo fuera,
+así que los dos primeros estaban ya en `main` antes de tocarlo.
+
+Worktree: `mediflow-worktrees/p0-panel`, rama `fix/p0-panel`, desde `origin/main` (`236f2980`).
+
+### PAC-01 — editar un paciente ya no le borra la diabetes
+
+El PUT de `/api/patients/[id]` hacía `patientSchema.parse(body)` y esparcía el resultado
+sobre el `prisma.patient.update`. Los cuatro arrays clínicos llevaban `.default([])`, así
+que zod los rellenaba con `[]` cuando el body no los traía. El modal de edición no manda
+`chronicConditions`, `currentMedications` ni `tags`: corregir un teléfono borraba los
+padecimientos crónicos y la medicación actual — justo lo que lee el chequeo de
+contraindicaciones al recetar.
+
+**Arreglo elegido: `.optional()` sin default.** El rastreo previo mostró que
+`patientSchema` tiene UN solo consumidor en todo el repo, ese PUT: el alta
+(`POST /api/patients:620-628`) no lo usa, lee `body.allergies ?? []` a mano. O sea que no
+había alta que romper, y un schema que solo sirve para editar no puede llevar defaults por
+definición. La columna ya trae `@default([])` en Postgres para el INSERT. Los demás fetch
+a esa ruta son PATCH, que tiene whitelist propia.
+
+Mismo fallo y misma clase en `gender`: entre el `.default("OTHER")` del schema y el
+`?? "OTHER"` del handler, un body sin género reescribía el género del paciente.
+
+- `src/lib/validations.ts` — los cuatro arrays y `gender` pasan a `.optional()`
+- `src/lib/patients/patient-update-core.ts` — el payload del update como función pura
+- `src/lib/patients/__tests__/patient-update-core.test.ts` — 17 tests
+- `sql/pac-01-arrays-borrados.sql` — SOLO LECTURA
+
+### SUB-01 — el que paga con SPEI/OXXO deja de ser activo para siempre
+
+`activatePlatformSubscription` atiende igual la tarjeta y el
+`checkout.session.async_payment_succeeded` de SPEI/OXXO, y en los dos escribe
+`subscriptionStatus:"active"`. Pero en SPEI/OXXO `subscriptionId` es null: no hay
+suscripción que renueve ni webhook que avise, e `isPlanExpired` da por viva cualquier
+clínica "active" mire la fecha que mire. Un pago y barra libre indefinida, invisible además
+para `/admin/payments`, que lista las morosas con `{ not: "active" }`.
+
+Cron diario nuevo a las 05:00 UTC — **el único endpoint nuevo de la tanda**.
+
+**`past_due` y no `unpaid`:** `past_due` ya existe y ya está cableado en las cuatro
+superficies que importan (lo escribe el propio webhook de Stripe al fallar una tarjeta,
+`/admin/payments` lo lista como morosa, el aviso de `/admin/layout` lo cuenta, el export de
+afiliados lo traduce). `unpaid` no lo mapea nadie.
+
+**El criterio exige que `nextBillingDate` Y `trialEndsAt` estén los dos en el pasado**, que
+es exactamente `manualPaidUntil() < now` (el helper del prorrateo, que es el máximo de las
+dos). Mirar solo `nextBillingDate` suspendería a quien tenga trial vivo; mirar solo
+`trialEndsAt` suspendería el mismo día a toda clínica activada a mano desde `/admin`, porque
+`activate_clinic` mueve `nextBillingDate` y deja `trialEndsAt` como estaba.
+
+**LAS SEDES NO SE TOCAN, y esto casi sale mal.** Una sucursal creada desde `/api/clinics`
+nace con la MISMA forma que un pagador manual vencido: "active", sin `stripeSubscriptionId`,
+`monthlyPrice` 0 y `trialEndsAt` = el instante de creación, o sea ya pasado (va incluida en
+la suscripción de la madre). Lo único que la distingue es que `nextBillingDate` se queda
+NULL. De ahí el `nextBillingDate: { not: null }`: sin él, el cron apagaría todas las
+sucursales del producto. El schema no tiene `parentClinicId`, no hay forma más directa de
+excluirlas.
+
+**Efecto colateral a la vista:** el MRR de `/admin` solo suma "active", así que estas
+clínicas salen del MRR y el número baja. Bajaba porque antes estaba inflado con gente que no
+paga. Igual el `activeCount` de afiliados.
+
+- `src/lib/billing/manual-subscription-lapse.ts` — criterio y estado destino
+- `src/app/api/cron/subscription-lapse/route.ts` — el cron (`maxDuration` 300 va como
+  `export const` en la ruta: el bloque `crons` de vercel.json no acepta ese campo)
+- `vercel.json` — registrado con los otros 18
+- `src/lib/billing/__tests__/manual-subscription-lapse.test.ts` — 12 tests
+- `sql/sub-01-manuales-vencidos.sql` — SOLO LECTURA
+
+### EQ-01 — el 2FA pasa a proteger los datos, no solo las pantallas
+
+El middleware devolvía `next()` para todo `/api` cuarenta líneas antes de su rama de 2FA, y
+ni `getAuthContext()` ni `getCurrentUser()` leían `df_2fa`. Con la contraseña robada, el
+ladrón se quedaba plantado en el reto de pantalla pero desde la consola hacía
+`fetch('/api/patients')` y se llevaba —y escribía— el expediente completo.
+
+Se copió el patrón del gate de plan vencido (`@/lib/plan-status`): allowlist por prefijo +
+el `x-pathname` que el middleware RE-ESCRIBE en toda ruta `/api`, y el corte dentro de
+`getAuthContext`, donde ya está la BD en mano. Va ANTES del gate de plan, igual que en el
+layout: el 2FA es autenticación, el plan es comercial.
+
+**El gate está en LOS DOS caminos de auth, no en uno.** `getAuthContext` (corta devolviendo
+null → las 225 rutas que ya hacen `if (!ctx) return 401` quedan cerradas sin tocarlas) y
+`getCurrentUser` (no puede devolver null por contrato, así que corta con `redirect` al reto,
+igual que `enforceApiPlanGate` con `/dashboard/suspended`). Por `getCurrentUser` entran las
+~30 rutas de agenda, citas, lista de espera y `/api/dashboard/home` vía
+`loadClinicSession()`. En `getCurrentUser` hay DOS puntos de retorno y los dos llevan el
+gate: dejarlo en uno solo mantenía el agujero abierto para cualquier sesión sin cookie de
+clínica válida.
+
+**Por qué la allowlist es corta.** El gate solo puede afectar a una ruta que llame a
+`getAuthContext` o `getCurrentUser`. De las 509 rutas bajo `src/app/api`, 225 los llaman —
+se midió con `grep -rlE "await (getAuthContext|getCurrentUser)\("`, no por lectura a ojo, y
+el primer conteo (230) estaba inflado porque el grep contaba menciones en comentarios: la
+propia `/api/consent/public/[token]` nombra `getAuthContext` en un comentario para decir que
+NO lo usa. Todo lo que el producto necesita que funcione sin 2FA no los llama, así que queda
+exento **por construcción**: webhooks (5), crons (19), `/api/paciente/*` (33, el portal del
+paciente), `/api/admin/*` (82, sesión de plataforma), proveedores (10), laboratorios (12),
+afiliados (20), rutas públicas, `/api/tv/[slug]/*` (la pantalla de la sala de espera),
+`/api/switch-clinic` y `/api/my-clinics`. La allowlist explícita tiene tres bases:
+
+| base | motivo |
+|---|---|
+| `/api/auth` | el flujo del propio 2FA. Las pantallas del reto y del enrolamiento piden exactamente `/api/auth/2fa/{clinic-policy,setup,enable,verify,recovery-codes,disable}` — comprobado abriendo `two-factor-challenge.tsx` y `two-factor-setup.tsx`. Sin esto el usuario no puede teclear su código y queda encerrado fuera de su panel. No abre nada: `2fa/disable` exige un TOTP o un código de recuperación válido. |
+| `/api/admin` | sesión de plataforma con su propio CSRF. Ninguna de sus 82 rutas llama a `getAuthContext`, así que el gate autoritativo no las toca; la entrada existe por el FAST-PATH del middleware, que sí las alcanzaría y dejaría sin `/admin` a un admin de plataforma que además sea usuario de una clínica con 2FA pendiente — caso real. |
+| `/api/switch-clinic` | es una salida, y no concede nada: solo alterna entre clínicas donde la sesión ya es miembro, y la de destino vuelve a pedir su propio reto (la cookie está atada al par persona+clínica). |
+
+**NO se exentó `/api/support` ni `/api/billing`**, aunque el gate de PLAN sí los exente: allí
+el motivo era que una clínica suspendida pudiera pagar y pedir ayuda, y esas pantallas viven
+bajo `/dashboard`, que el layout ya cierra ANTES del 2FA. Exentar su API daría acceso por
+fetch a datos cuya pantalla está cerrada.
+
+**El 403 con código.** `getAuthContext` corta con null y la ruta responde su 401 de siempre,
+que el cliente no distingue de "se te caducó la sesión". Para que el panel mande al reto y no
+al login, el fast-path del middleware devuelve `403 { code: "two_factor_required" }` cuando
+está la cookie `df_2fa_pending` (que el cierre de login siembra SOLO para quien necesita
+2FA). Ese fast-path NO es el gate de verdad —la cookie es borrable por el cliente—: quien la
+borre se salta el 403 y cae en el corte de `getAuthContext`, que consulta
+`totpEnabled`/`require2fa` en BD. Es la misma división de trabajo que ya existía para
+`/dashboard`.
+
+`src/lib/auth/two-factor-gate.ts` es **edge-safe a propósito** (solo strings y funciones
+puras) porque lo importa el middleware; el bundle del middleware pasó de 79,9 kB a 80 kB, lo
+que confirma que no arrastró nada de Node.
+
+- `src/lib/auth/two-factor-gate.ts` — allowlist, `needsTwoFactor` y el código del 403
+- `src/lib/auth-context.ts` / `src/lib/auth.ts` — el gate en los dos caminos
+- `src/middleware.ts` — fast-path que emite el 403
+- `src/lib/auth/two-factor-core.ts` — se extrajo `isTwoFactorTokenValidFor` (puro) desde
+  `hasValidTwoFactorCookie`, para poder probar la atadura persona+clínica sin un request
+- `src/components/dashboard/two-factor-fetch-guard.tsx` — traduce el 403 a "ve al reto"
+- `src/lib/auth/__tests__/two-factor-gate.test.ts` — 61 tests
+- `sql/eq-01-alcance-2fa.sql` — SOLO LECTURA
+
+### Verificación
+
+- `npx next build` COMPLETO y leído entero en cada uno de los tres, sin pipes. **exit 0**,
+  365/365 páginas. Los `prisma:error` por `DATABASE_URL` y los tres warnings de Tailwind son
+  preexistentes: en local no hay `DATABASE_URL`.
+- 224 tests en verde, 0 fallos: los 90 nuevos (17 + 12 + 61) más `test:permissions`,
+  `test:active-clinic`, `test:billing`, `test:proration` y `test:patient-secrets`, que se
+  corrieron por el refactor de `two-factor-core` y por el archivo nuevo en `src/lib/billing`.
+
+### Lo que NO se hizo
+
+- **Ningún SQL se aplicó.** Los tres archivos de `sql/` son de solo lectura y los corre
+  Rafael.
+- **`/api/settings` no se tocó**, por encargo explícito. Sigue sin gate de rol y su
+  whitelist sigue incluyendo credenciales de Twilio y datos fiscales (`ISO-01`, P1).
+- **El gate de 2FA no se probó con una sesión real.** Está fijado por tests de función pura
+  y por el build; falta la prueba manual de abrir sesión con un usuario con `totpEnabled`,
+  quedarse en el reto y comprobar que `fetch('/api/patients')` devuelve 403 y no 200.
+- **Residual conocido, preexistente:** `/api/auth/2fa/clinic-policy` permite a un admin
+  apagar `require2fa` con solo la sesión. Para quien ya tiene `totpEnabled` no sirve de nada
+  (sigue bloqueado), pero un admin de una clínica con `require2fa` que aún NO haya enrolado
+  podría apagar la política y entrar. Ya pasaba antes de este cambio —el layout hace el
+  mismo chequeo— y no estaba en el alcance de los tres P0.
+- **Ventana de 12 h:** cuando `df_2fa` caduca, el navegador borra también
+  `df_2fa_pending`, así que una pestaña vieja recibe 401 (login) en vez de 403 (reto). Es
+  el precio de que el middleware no pueda consultar la BD.
+- No se tocaron los otros 171 hallazgos del reporte, incluidos `PORT-01` (el cuarto P0, la
+  fuga de secretos de la mini-web) y los 8 P1 de seguridad.

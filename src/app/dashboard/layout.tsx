@@ -11,6 +11,7 @@ import { NewAppointmentProvider } from "@/components/dashboard/new-appointment/n
 import { NewPatientProvider } from "@/components/dashboard/new-patient/new-patient-provider";
 import { PatientContextBar } from "@/components/dashboard/patient-context-bar";
 import { ExpiredPlanModal } from "@/components/dashboard/expired-plan-modal";
+import { TwoFactorFetchGuard } from "@/components/dashboard/two-factor-fetch-guard";
 import { ChatLauncher } from "@/components/dashboard/chat/chat-launcher";
 import { getOnboardingCompleted } from "@/lib/onboarding-steps-server";
 import { getActiveClinicModuleKeys } from "@/lib/clinical-shared/get-active-clinic-modules";
@@ -248,6 +249,11 @@ export default async function DashboardLayout({ children }: { children: React.Re
       </div>
     </div>
     <ExpiredPlanModal isExpired={isExpired} currentPathname={pathname} />
+    {/* EQ-01 — al exigir 2FA en /api, una pantalla abierta con el segundo factor
+        pendiente recibe 403 en sus fetch. Esto los traduce a "ve al reto" en vez
+        de a un toast rojo genérico o a un rebote al login. Va aquí y no en el
+        minimalShell: sobre la propia pantalla del reto no tiene nada que hacer. */}
+    <TwoFactorFetchGuard />
     {/* Ícono de chat flotante (FAB) permanente en todo el dashboard. Una sola
         instancia aquí ⇒ visible exactamente una vez en cada ruta /dashboard/*.
         Sus 2 pestañas son Proveedores + Laboratorios, así que se apaga junto con

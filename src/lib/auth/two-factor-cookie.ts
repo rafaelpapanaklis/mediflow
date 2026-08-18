@@ -6,7 +6,7 @@ import {
   TWO_FA_OK_MAX_AGE_SECONDS,
   TWO_FA_PENDING_MAX_AGE_SECONDS,
 } from "./two-factor-constants";
-import { packTwoFactorToken, unpackTwoFactorToken } from "./two-factor-core";
+import { packTwoFactorToken, isTwoFactorTokenValidFor } from "./two-factor-core";
 
 // Helpers de cookies del 2FA, lado servidor (Node):
 //  - lectura para el LAYOUT / páginas del reto (hasValidTwoFactorCookie)
@@ -31,12 +31,9 @@ export function hasValidTwoFactorCookie(supabaseId: string, clinicId: string): b
   } catch {
     return false;
   }
-  const data = unpackTwoFactorToken(raw);
-  if (!data) return false;
-  if (data.supabaseId !== supabaseId || data.clinicId !== clinicId) return false;
-  const ageMs = Date.now() - data.iatMs;
-  if (ageMs < 0 || ageMs > TWO_FA_OK_MAX_AGE_SECONDS * 1000) return false;
-  return true;
+  // La decisión vive en two-factor-core (pura, con tests): firma + atadura al par
+  // persona/clínica + vigencia. Aquí sólo queda la lectura de la cookie.
+  return isTwoFactorTokenValidFor(raw, supabaseId, clinicId);
 }
 
 // ── Escritura sobre la respuesta (route handlers) ─────────────────

@@ -5,6 +5,9 @@ import { prisma } from "@/lib/prisma";
 import { redirect } from "next/navigation";
 import { readActiveClinicCookie, logClinicFallback } from "@/lib/active-clinic";
 import { isPlanExpired, isApiPathBlockedForExpiredPlan } from "@/lib/plan-status";
+import { hasValidTwoFactorCookie } from "@/lib/auth/two-factor-cookie";
+import { isApiPathBlockedForMissingTwoFactor, needsTwoFactor } from "@/lib/auth/two-factor-gate";
+import { TWO_FA_CHALLENGE_PATH } from "@/lib/auth/two-factor-constants";
 
 // getSession/getCurrentUser/getUserClinics van memoizadas por request con
 // React cache(): layout, page y route handlers invocados in-process dentro
@@ -39,6 +42,34 @@ function normalizeUser<T extends { permissionsOverride?: string[] | null } & obj
 // pero el redirect impide que el handler corra y el dato salga. Sólo dispara
 // en /api: las páginas server (pathname /dashboard/*) las cubre el layout, y
 // para callers sin x-pathname es no-op. Mismo criterio que getAuthContext.
+// Gate de 2FA para los route handlers que autentican vía getCurrentUser — el
+// SEGUNDO camino además de getAuthContext, y no es un camino menor: por aquí
+// entran las ~30 rutas de agenda, citas, lista de espera y /api/dashboard/home,
+// todas a través de loadClinicSession() (@/lib/agenda/api-helpers).
+//
+// getCurrentUser no puede devolver null (redirige por contrato), así que se corta
+// con redirect al reto — exactamente lo que ya hace enforceApiPlanGate con
+// /dashboard/suspended. El handler no llega a correr, que es lo único que
+// importa: el dato no sale.
+//
+// Sólo dispara en /api. Para páginas server (pathname /dashboard/*) es no-op: ahí
+// el gate autoritativo es el layout, que ya distingue reto de enrolamiento.
+// Criterio y allowlist compartidos con getAuthContext en @/lib/auth/two-factor-gate.
+function enforceApiTwoFactorGate(user: {
+  supabaseId: string;
+  clinicId: string;
+  totpEnabled?: boolean | null;
+  clinic?: { require2fa?: boolean | null } | null;
+}): void {
+  if (!needsTwoFactor({ totpEnabled: user.totpEnabled, require2fa: user.clinic?.require2fa })) return;
+  const pathname = (() => {
+    try { return headers().get("x-pathname"); } catch { return null; }
+  })();
+  if (!isApiPathBlockedForMissingTwoFactor(pathname)) return;
+  if (hasValidTwoFactorCookie(user.supabaseId, user.clinicId)) return;
+  redirect(TWO_FA_CHALLENGE_PATH);
+}
+
 function enforceApiPlanGate(clinic: unknown): void {
   if (!isPlanExpired(clinic as { trialEndsAt?: Date | string | null; subscriptionStatus?: string | null } | null)) return;
   const pathname = (() => {
@@ -57,6 +88,8 @@ export const getCurrentUser = cache(async () => {
       include: { clinic: true },
     });
     if (user) {
+      // ORDEN: 2FA antes que plan. El 2FA es autenticación; el plan, comercial.
+      enforceApiTwoFactorGate(user);
       enforceApiPlanGate(user.clinic);
       return normalizeUser(user);
     }
@@ -104,6 +137,11 @@ export const getCurrentUser = cache(async () => {
     }));
   }
 
+  // Mismo par de gates que en la rama de la cookie de clínica activa, y en el
+  // mismo orden. Este es el camino de fallback (primer User por createdAt asc):
+  // si se le olvida el gate a UNA de las dos ramas, el agujero sigue abierto por
+  // ahí para cualquier sesión sin cookie de clínica válida.
+  enforceApiTwoFactorGate(user);
   enforceApiPlanGate(user.clinic);
   return normalizeUser(user);
 });

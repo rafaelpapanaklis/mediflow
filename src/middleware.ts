@@ -2,6 +2,12 @@ import { type NextRequest, NextResponse } from "next/server";
 import { updateSession } from "@/lib/supabase/middleware";
 // Edge-safe: solo una constante string, sin node:crypto/otplib/prisma.
 import { TWO_FA_PENDING_COOKIE } from "@/lib/auth/two-factor-constants";
+// Edge-safe: allowlist de strings y funciones puras, sin prisma/node:crypto.
+import {
+  isTwoFactorGateAllowlistedPath,
+  TWO_FACTOR_REQUIRED_CODE,
+  TWO_FACTOR_REQUIRED_MESSAGE,
+} from "@/lib/auth/two-factor-gate";
 
 // These paths should NOT be treated as clinic slugs
 const RESERVED_PATHS = new Set([
@@ -62,6 +68,31 @@ export async function middleware(request: NextRequest) {
   // directo) y los webhooks/crons no deben pagar el refresh de sesión Supabase.
   // /api/live ya salió arriba (público, sin gate).
   if (pathname.startsWith("/api")) {
+    // Fast-path 2FA para /api (EQ-01). Edge, sin BD ni crypto: si el cierre de
+    // login marcó df_2fa_pending (o sea, esta persona SÍ necesita 2FA) y la ruta
+    // no está exenta, cortamos con 403 y un código propio.
+    //
+    // POR QUÉ AQUÍ Y NO SOLO EN getAuthContext: el gate autoritativo corta
+    // devolviendo null, y eso hace que la ruta responda su 401 de siempre — que
+    // el cliente no puede distinguir de "se te caducó la sesión", así que
+    // mandaría al usuario al login en vez de al reto. Este 403 es el que el panel
+    // sabe leer.
+    //
+    // POR QUÉ ESTO NO ES EL GATE DE VERDAD: la cookie es borrable por el cliente.
+    // Quien la borre se salta ESTE corte, pero cae en el de
+    // getAuthContext/getCurrentUser, que consulta totpEnabled/require2fa en BD.
+    // Misma división de trabajo que ya existe para /dashboard (fast-path aquí,
+    // gate autoritativo en el layout).
+    if (
+      request.cookies.get(TWO_FA_PENDING_COOKIE)?.value &&
+      !isTwoFactorGateAllowlistedPath(pathname)
+    ) {
+      return NextResponse.json(
+        { error: TWO_FACTOR_REQUIRED_MESSAGE, code: TWO_FACTOR_REQUIRED_CODE },
+        { status: 403 },
+      );
+    }
+
     const requestHeaders = new Headers(request.headers);
     requestHeaders.set("x-pathname", pathname);
     return NextResponse.next({ request: { headers: requestHeaders } });

@@ -4,6 +4,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { headers } from "next/headers";
 import { readActiveClinicCookie, logClinicFallback } from "@/lib/active-clinic";
 import { isPlanExpired, isApiPathBlockedForExpiredPlan } from "@/lib/plan-status";
+import { hasValidTwoFactorCookie } from "@/lib/auth/two-factor-cookie";
+import { isApiPathBlockedForMissingTwoFactor, needsTwoFactor } from "@/lib/auth/two-factor-gate";
 
 export interface AuthContext {
   userId:       string;
@@ -98,6 +100,34 @@ export async function getAuthContext(): Promise<AuthContext | null> {
     // /dashboard ya redirige esas navegaciones a /dashboard/suspended. El
     // gate aplica a TODOS los roles (un SUPER_ADMIN destraba desde /admin,
     // ruta con su propia auth, no cubierta por este check).
+    // Gate central de 2FA a nivel API (EQ-01). El segundo factor protegía las
+    // PANTALLAS y no los datos: el middleware devuelve next() para todo /api
+    // antes de llegar a su rama de 2FA, y ni esta función ni getCurrentUser
+    // leían df_2fa. Con la contraseña robada, el reto de pantalla se saltaba
+    // haciendo fetch('/api/patients') desde la consola.
+    //
+    // Va ANTES del gate de plan, igual que en el layout de /dashboard: el 2FA es
+    // AUTENTICACIÓN (decide si quien tiene la sesión es esa persona) y el plan es
+    // una cuestión comercial posterior. Se corta devolviendo null, así que las
+    // 225 rutas que ya hacen `if (!ctx) return 401` quedan cerradas sin tocarlas
+    // una por una — fail-closed. El 403 con código, que es lo que el panel usa
+    // para mandar al reto en vez de al login, lo emite el fast-path del
+    // middleware; ver @/lib/auth/two-factor-gate.
+    if (needsTwoFactor({
+      totpEnabled: (finalUser as { totpEnabled?: boolean | null }).totpEnabled,
+      require2fa:  (finalUser.clinic as { require2fa?: boolean | null } | null)?.require2fa,
+    })) {
+      const pathname = (() => {
+        try { return headers().get("x-pathname"); } catch { return null; }
+      })();
+      if (
+        isApiPathBlockedForMissingTwoFactor(pathname) &&
+        !hasValidTwoFactorCookie(finalUser.supabaseId, finalUser.clinicId)
+      ) {
+        return null;
+      }
+    }
+
     const planExpired = isPlanExpired(finalUser.clinic);
     if (planExpired) {
       const pathname = (() => {
