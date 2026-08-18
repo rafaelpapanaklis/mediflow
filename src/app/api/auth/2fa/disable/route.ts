@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { rateLimit } from "@/lib/rate-limit";
 import { getTwoFactorActor, verifyTotp, consumeRecoveryCode } from "@/lib/auth/two-factor";
 import { clearAllTwoFactorCookies } from "@/lib/auth/two-factor-cookie";
-import { prisma } from "@/lib/prisma";
+import { propagarDosFactores } from "@/lib/auth/two-factor-identity";
 
 // POST /api/auth/2fa/disable — desactiva el 2FA del usuario.
 // Exige un código actual (TOTP o recovery). Bloqueado si la clínica exige 2FA
@@ -18,9 +18,13 @@ export async function POST(req: NextRequest) {
   if (!actor.user.totpEnabled || !secret) {
     return NextResponse.json({ error: "El 2FA no está activo." }, { status: 400 });
   }
-  if (actor.user.clinic?.require2fa) {
+  // EQ-02: apagar el 2FA lo apaga en TODAS sus sedes, así que la política de
+  // CUALQUIERA de ellas lo bloquea. Mirar solo la clínica activa dejaba una
+  // salida: quien tiene una sede con require2fa y otra sin él se cambiaba a la
+  // segunda y desde ahí se quitaba el segundo factor de las dos.
+  if (actor.persona.algunaClinicaLoExige) {
     return NextResponse.json(
-      { error: "Tu clínica exige 2FA; pide a un administrador que desactive la política primero." },
+      { error: "Una de tus clínicas exige 2FA; pide a un administrador que desactive la política primero." },
       { status: 403 },
     );
   }
@@ -32,9 +36,8 @@ export async function POST(req: NextRequest) {
   if (!ok) ok = (await consumeRecoveryCode(code, actor.user.recoveryCodes ?? [])).ok;
   if (!ok) return NextResponse.json({ error: "Código incorrecto" }, { status: 400 });
 
-  await prisma.user.update({
-    where: { id: actor.user.id },
-    data: { totpEnabled: false, totpSecret: null, recoveryCodes: [] },
+  await propagarDosFactores(actor.supabaseId, {
+    totpEnabled: false, totpSecret: null, recoveryCodes: [],
   });
 
   const res = NextResponse.json({ ok: true });

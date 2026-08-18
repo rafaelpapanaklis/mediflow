@@ -6,7 +6,7 @@ import {
   consumeRecoveryCode,
   generateRecoveryCodes,
 } from "@/lib/auth/two-factor";
-import { prisma } from "@/lib/prisma";
+import { propagarDosFactores } from "@/lib/auth/two-factor-identity";
 
 // POST /api/auth/2fa/recovery-codes — regenera los códigos de recuperación.
 // Invalida los anteriores. Exige un código actual (TOTP o un recovery vigente).
@@ -31,6 +31,9 @@ export async function POST(req: NextRequest) {
   if (!ok) return NextResponse.json({ error: "Código incorrecto" }, { status: 400 });
 
   const { plain, hashes } = await generateRecoveryCodes();
-  await prisma.user.update({ where: { id: actor.user.id }, data: { recoveryCodes: hashes } });
+  // EQ-02: regenerar invalida los anteriores en TODAS sus sedes. Si no, los
+  // códigos viejos seguirían sirviendo en las otras filas de la misma persona,
+  // que es justo lo que "invalida los anteriores" promete que no pasa.
+  await propagarDosFactores(actor.supabaseId, { recoveryCodes: hashes });
   return NextResponse.json({ ok: true, recoveryCodes: plain });
 }

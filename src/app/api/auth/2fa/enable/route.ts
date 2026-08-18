@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { rateLimit } from "@/lib/rate-limit";
 import { getTwoFactorActor, verifyTotp, generateRecoveryCodes } from "@/lib/auth/two-factor";
 import { setTwoFactorOkCookie } from "@/lib/auth/two-factor-cookie";
-import { prisma } from "@/lib/prisma";
+import { propagarDosFactores } from "@/lib/auth/two-factor-identity";
 
 // POST /api/auth/2fa/enable — confirma el enrolamiento.
 // Valida un código contra el secret pendiente, marca totpEnabled=true, genera
@@ -25,10 +25,10 @@ export async function POST(req: NextRequest) {
   }
 
   const { plain, hashes } = await generateRecoveryCodes();
-  await prisma.user.update({
-    where: { id: actor.user.id },
-    data: { totpEnabled: true, recoveryCodes: hashes },
-  });
+  // EQ-02: enrolar enrola a la PERSONA, no a una de sus sedes. Antes, activar
+  // el 2FA en la clínica principal dejaba la segunda con totpEnabled=false, y
+  // entrar por el switcher a esa segunda sede no pedía el código.
+  await propagarDosFactores(actor.supabaseId, { totpEnabled: true, recoveryCodes: hashes });
 
   const res = NextResponse.json({ ok: true, recoveryCodes: plain });
   setTwoFactorOkCookie(res, actor.supabaseId, actor.user.clinicId);

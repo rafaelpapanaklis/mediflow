@@ -7,6 +7,7 @@ import { readActiveClinicCookie, logClinicFallback } from "@/lib/active-clinic";
 import { isPlanExpired, isApiPathBlockedForExpiredPlan } from "@/lib/plan-status";
 import { hasValidTwoFactorCookie } from "@/lib/auth/two-factor-cookie";
 import { isApiPathBlockedForMissingTwoFactor, needsTwoFactor } from "@/lib/auth/two-factor-gate";
+import { personaTieneDosFactores } from "@/lib/auth/two-factor-identity";
 import { TWO_FA_CHALLENGE_PATH } from "@/lib/auth/two-factor-constants";
 
 // getSession/getCurrentUser/getUserClinics van memoizadas por request con
@@ -33,6 +34,25 @@ export async function requireAuth() {
 // que el array siempre existe.
 function normalizeUser<T extends { permissionsOverride?: string[] | null } & object>(u: T): T & { permissionsOverride: string[] } {
   return { ...u, permissionsOverride: (u.permissionsOverride as string[] | null | undefined) ?? [] };
+}
+
+/**
+ * EQ-02 — corrige `totpEnabled` al nivel de la PERSONA.
+ *
+ * Una persona tiene una fila `User` por clínica y el 2FA vivía en esa fila, así
+ * que el dueño que lo enroló en su sede principal entraba a la segunda sin que
+ * nadie le pidiera el código. Se corrige aquí, en el resolver, y no en cada
+ * sitio que lo lee: el layout de /dashboard, las pantallas del reto y del
+ * enrolamiento y las ~30 rutas de agenda que entran por loadClinicSession leen
+ * `user.totpEnabled` y todas reciben ya el valor bueno.
+ *
+ * Si la fila activa ya lo tiene puesto no se consulta nada.
+ */
+async function conDosFactoresDeLaPersona<T extends { supabaseId: string; totpEnabled?: boolean | null }>(
+  u: T,
+): Promise<T> {
+  if (u.totpEnabled) return u;
+  return (await personaTieneDosFactores(u.supabaseId)) ? { ...u, totpEnabled: true } : u;
 }
 
 // Gate de plan vencido para los route handlers que autentican vía
@@ -89,9 +109,10 @@ export const getCurrentUser = cache(async () => {
     });
     if (user) {
       // ORDEN: 2FA antes que plan. El 2FA es autenticación; el plan, comercial.
-      enforceApiTwoFactorGate(user);
-      enforceApiPlanGate(user.clinic);
-      return normalizeUser(user);
+      const conDosFactores = await conDosFactoresDeLaPersona(user);
+      enforceApiTwoFactorGate(conDosFactores);
+      enforceApiPlanGate(conDosFactores.clinic);
+      return normalizeUser(conDosFactores);
     }
   }
 
@@ -141,9 +162,10 @@ export const getCurrentUser = cache(async () => {
   // mismo orden. Este es el camino de fallback (primer User por createdAt asc):
   // si se le olvida el gate a UNA de las dos ramas, el agujero sigue abierto por
   // ahí para cualquier sesión sin cookie de clínica válida.
-  enforceApiTwoFactorGate(user);
-  enforceApiPlanGate(user.clinic);
-  return normalizeUser(user);
+  const conDosFactores = await conDosFactoresDeLaPersona(user);
+  enforceApiTwoFactorGate(conDosFactores);
+  enforceApiPlanGate(conDosFactores.clinic);
+  return normalizeUser(conDosFactores);
 });
 
 export const getUserClinics = cache(async () => {

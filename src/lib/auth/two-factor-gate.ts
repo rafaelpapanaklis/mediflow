@@ -88,11 +88,21 @@ export const TWO_FACTOR_REQUIRED_MESSAGE =
 //
 //   • /api/switch-clinic → cambiar de clínica activa. Hoy usa getSession y no
 //                   pasa por el gate autoritativo, pero el fast-path del
-//                   middleware la alcanzaría. Se exenta por el mismo motivo que
-//                   en el gate de plan: es una salida, y no concede nada — solo
-//                   alterna entre clínicas donde la sesión YA es miembro, y la
-//                   clínica de destino vuelve a pedir su propio reto (la cookie
-//                   df_2fa está atada al par persona+clínica).
+//                   middleware la alcanzaría. Se exenta porque es una SALIDA:
+//                   bloquearla dejaría al dueño con varias sedes sin poder
+//                   moverse entre ellas, y no concede nada — solo alterna entre
+//                   clínicas donde la sesión YA es miembro.
+//
+//                   ⚠ EQ-02 — el argumento original era otro y NO era cierto:
+//                   "la clínica de destino vuelve a pedir su propio reto". La
+//                   cookie df_2fa sí está atada al par persona+clínica
+//                   (isTwoFactorTokenValidFor lo comprueba), pero eso solo
+//                   importa si el destino pide algo, y el 2FA vivía por FILA de
+//                   User: la sede a la que se llegaba podía tener
+//                   totpEnabled=false y no pedía NADA. Ahora el 2FA se resuelve
+//                   por persona (two-factor-identity-core.ts) y switch-clinic
+//                   re-siembra las cookies del reto para la sede de destino, así
+//                   que la exención vuelve a ser solo lo que dice ser.
 //
 // Todo lo demás bajo /api queda sujeto al gate. En particular NO se exenta
 // /api/support ni /api/billing, aunque el gate de PLAN sí los exente: allí el

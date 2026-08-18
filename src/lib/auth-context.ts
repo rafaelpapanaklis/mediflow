@@ -6,6 +6,7 @@ import { readActiveClinicCookie, logClinicFallback } from "@/lib/active-clinic";
 import { isPlanExpired, isApiPathBlockedForExpiredPlan } from "@/lib/plan-status";
 import { hasValidTwoFactorCookie } from "@/lib/auth/two-factor-cookie";
 import { isApiPathBlockedForMissingTwoFactor, needsTwoFactor } from "@/lib/auth/two-factor-gate";
+import { personaTieneDosFactores } from "@/lib/auth/two-factor-identity";
 
 export interface AuthContext {
   userId:       string;
@@ -113,8 +114,18 @@ export async function getAuthContext(): Promise<AuthContext | null> {
     // una por una — fail-closed. El 403 con código, que es lo que el panel usa
     // para mandar al reto en vez de al login, lo emite el fast-path del
     // middleware; ver @/lib/auth/two-factor-gate.
+    // EQ-02: `totpEnabled` es una columna de la FILA, y una persona tiene una
+    // fila por clínica. Preguntarle solo a la fila activa era el agujero: quien
+    // enroló el 2FA en su sede principal entraba a la segunda —por el switcher
+    // o con un login nuevo— y el panel no le pedía nada, porque esa otra fila
+    // tiene totpEnabled=false. El `||` corta antes: si la fila activa ya lo
+    // tiene puesto, no se pregunta por las hermanas.
+    const enrolado =
+      !!(finalUser as { totpEnabled?: boolean | null }).totpEnabled ||
+      await personaTieneDosFactores(finalUser.supabaseId);
+
     if (needsTwoFactor({
-      totpEnabled: (finalUser as { totpEnabled?: boolean | null }).totpEnabled,
+      totpEnabled: enrolado,
       require2fa:  (finalUser.clinic as { require2fa?: boolean | null } | null)?.require2fa,
     })) {
       const pathname = (() => {
@@ -142,7 +153,10 @@ export async function getAuthContext(): Promise<AuthContext | null> {
       role:           finalUser.role,
       color:          finalUser.color ?? "#3b82f6",
       clinic:         finalUser.clinic,
-      user:           { ...finalUser, permissionsOverride },
+      // EQ-02: `totpEnabled` sale corregido a nivel PERSONA, no de la fila de
+      // esta sede. Quien lo lea aguas abajo ve si el segundo factor está puesto
+      // en la cuenta, que es lo que significa de verdad.
+      user:           { ...finalUser, permissionsOverride, totpEnabled: enrolado },
       permissionsOverride,
       clinicCategory: (finalUser.clinic as any).category ?? "OTHER",
       isPlanExpired:  planExpired,

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { rateLimit } from "@/lib/rate-limit";
 import { getTwoFactorActor, verifyTotp, consumeRecoveryCode } from "@/lib/auth/two-factor";
 import { setTwoFactorOkCookie } from "@/lib/auth/two-factor-cookie";
-import { prisma } from "@/lib/prisma";
+import { propagarDosFactores } from "@/lib/auth/two-factor-identity";
 
 // POST /api/auth/2fa/verify — reto de login (segundo factor).
 // Valida TOTP o un recovery code (de un solo uso). En éxito emite df_2fa (2FA
@@ -30,10 +30,10 @@ export async function POST(req: NextRequest) {
     const r = await consumeRecoveryCode(code, actor.user.recoveryCodes ?? []);
     if (r.ok) {
       ok = true;
-      await prisma.user.update({
-        where: { id: actor.user.id },
-        data: { recoveryCodes: r.remaining },
-      });
+      // EQ-02: el código de recuperación es de UN SOLO USO, y eso tiene que
+      // valer para la persona entera. Consumirlo solo en la fila activa dejaba
+      // el mismo código intacto en sus otras sedes, listo para reutilizarse.
+      await propagarDosFactores(actor.supabaseId, { recoveryCodes: r.remaining });
     }
   }
   if (!ok) return NextResponse.json({ error: "Código incorrecto" }, { status: 400 });

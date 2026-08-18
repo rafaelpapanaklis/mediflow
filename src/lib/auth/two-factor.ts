@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
 import { readActiveClinicCookie } from "@/lib/active-clinic";
 import { RECOVERY_CODE_COUNT } from "./two-factor-constants";
+import { dosFactoresDeLaPersona, type DosFactoresDeLaPersona } from "./two-factor-identity";
 
 // Núcleo TOTP + recovery codes. Usa otplib/bcrypt/qrcode ⇒ SOLO route handlers
 // (Node), nunca middleware (Edge). El admin (api/admin/auth) implementa TOTP a
@@ -100,7 +101,19 @@ export async function consumeRecoveryCode(
 // Devuelve la fila User de la clínica activa (misma resolución que
 // getCurrentUser) pero SIN aplicar el gate — los endpoints de gestión/reto 2FA
 // deben funcionar mientras el 2FA está pendiente. null ⇒ el caller responde 401.
-export async function getTwoFactorActor(): Promise<{ supabaseId: string; user: any } | null> {
+//
+// EQ-02: el 2FA (totpEnabled/totpSecret/recoveryCodes) se resuelve por PERSONA,
+// no por la fila de la clínica activa. Sin esto, el dueño con dos sedes que
+// enroló en una y entra por la otra recibiría el reto —porque el gate ya
+// pregunta por la persona— y NO podría contestarlo: la fila de esa sede no
+// tiene secret contra el que validar, así que ningún código sería correcto y se
+// quedaría encerrado fuera de su propia clínica. `clinic` sigue siendo la de la
+// sede activa: la política require2fa es de cada clínica, no de la persona.
+export async function getTwoFactorActor(): Promise<{
+  supabaseId: string;
+  user: any;
+  persona: DosFactoresDeLaPersona;
+} | null> {
   const supabase = createClient();
   const {
     data: { user: sb },
@@ -122,5 +135,16 @@ export async function getTwoFactorActor(): Promise<{ supabaseId: string; user: a
     });
   }
   if (!user) return null;
-  return { supabaseId: sb.id, user };
+
+  const persona = await dosFactoresDeLaPersona(sb.id);
+  return {
+    supabaseId: sb.id,
+    user: {
+      ...user,
+      totpEnabled: persona.enrolado,
+      totpSecret: persona.totpSecret,
+      recoveryCodes: persona.recoveryCodes,
+    },
+    persona,
+  };
 }

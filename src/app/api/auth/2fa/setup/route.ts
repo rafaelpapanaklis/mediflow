@@ -6,7 +6,7 @@ import {
   buildOtpauthUrl,
   makeQrDataUrl,
 } from "@/lib/auth/two-factor";
-import { prisma } from "@/lib/prisma";
+import { propagarDosFactores } from "@/lib/auth/two-factor-identity";
 
 // POST /api/auth/2fa/setup — inicia el enrolamiento.
 // Genera un secret nuevo y lo guarda (totpEnabled SIGUE false → el gate no se
@@ -27,7 +27,10 @@ export async function POST(req: NextRequest) {
   }
 
   const secret = generateTotpSecret();
-  await prisma.user.update({ where: { id: actor.user.id }, data: { totpSecret: secret } });
+  // EQ-02: a TODAS sus sedes. El segundo factor protege la identidad, que es
+  // global (una contraseña de Supabase para todas sus filas User); guardarlo
+  // solo en la fila de la clínica activa dejaba a las hermanas sin él.
+  await propagarDosFactores(actor.supabaseId, { totpSecret: secret });
 
   const otpauth = buildOtpauthUrl(secret, actor.user.email);
   const qrDataUrl = await makeQrDataUrl(otpauth);

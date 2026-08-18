@@ -95,7 +95,13 @@ export async function applyTwoFactorLoginCookies(
       where: { supabaseId, clinicId, isActive: true },
       select: { totpEnabled: true, clinic: { select: { require2fa: true } } },
     });
-    const needs2fa = !!u && (u.totpEnabled || !!u.clinic?.require2fa);
+    // EQ-02: el 2FA es de la persona, no de esta fila. Si enroló en OTRA de sus
+    // sedes, aquí también hay que sembrar el pendiente: sin esto, aterrizar en
+    // una sede sin enrolar dejaba la sesión sin reto ninguno. `||` perezoso: si
+    // esta fila ya obliga, no se consulta nada más.
+    const { personaTieneDosFactores } = await import("./two-factor-identity");
+    const enrolado = !!u?.totpEnabled || (!!u && await personaTieneDosFactores(supabaseId));
+    const needs2fa = !!u && (enrolado || !!u.clinic?.require2fa);
     if (needs2fa) {
       setTwoFactorPendingCookie(res);
       clearTwoFactorOk(res);
