@@ -23,6 +23,7 @@ import {
   isApiPathBlockedForMissingTwoFactor,
   isTwoFactorGateAllowlistedPath,
   needsTwoFactor,
+  twoFactorPageGateDecision,
   TWO_FACTOR_REQUIRED_CODE,
 } from "../two-factor-gate";
 import { packTwoFactorToken, isTwoFactorTokenValidFor } from "../two-factor-core";
@@ -275,4 +276,81 @@ test("con la cookie de otra clinica, el expediente sigue cerrado", () => {
     }),
     true,
   );
+});
+
+// ── 6 · Páginas FUERA de /dashboard: /teleconsulta/[id] con sesión ────
+//
+// La sala de teleconsulta entrega el token de DUEÑO con solo la sesión. No
+// hereda el layout de /dashboard ni lleva x-pathname (el middleware no cubre
+// /teleconsulta), así que ninguno de los dos gates la alcanzaba. La página
+// aplica twoFactorPageGateDecision, que tiene que ser la regla del layout
+// letra por letra: estos tests la fijan por los DOS lados —a quién corta y,
+// sobre todo, a quién NO.
+
+test("teleconsulta: el doctor con 2FA enrolado y sin la prueba va al reto", () => {
+  assert.equal(
+    twoFactorPageGateDecision({ totpEnabled: true, require2fa: false, hasValidCookie: false }),
+    "challenge",
+  );
+  // ...aunque la clínica además lo exija: el que ya enroló nunca va a "setup".
+  assert.equal(
+    twoFactorPageGateDecision({ totpEnabled: true, require2fa: true, hasValidCookie: false }),
+    "challenge",
+  );
+});
+
+test("teleconsulta: con la prueba de 2FA en mano entra a la sala", () => {
+  assert.equal(
+    twoFactorPageGateDecision({ totpEnabled: true, require2fa: false, hasValidCookie: true }),
+    null,
+  );
+  assert.equal(
+    twoFactorPageGateDecision({ totpEnabled: true, require2fa: true, hasValidCookie: true }),
+    null,
+  );
+});
+
+test("teleconsulta: la clinica que EXIGE 2FA manda a enrolar a quien no lo tiene", () => {
+  assert.equal(
+    twoFactorPageGateDecision({ totpEnabled: false, require2fa: true, hasValidCookie: false }),
+    "setup",
+  );
+  // Una cookie df_2fa no puede existir sin enrolar; si apareciera, tampoco
+  // sustituye al enrolamiento que la clínica exige.
+  assert.equal(
+    twoFactorPageGateDecision({ totpEnabled: false, require2fa: true, hasValidCookie: true }),
+    "setup",
+  );
+});
+
+test("teleconsulta: quien NO tiene 2FA en una clinica que no lo exige entra igual que ayer", () => {
+  // El camino inverso, que es el que deja a la gente fuera de su trabajo si
+  // se equivoca: la doctora sin 2FA sigue uniéndose a su teleconsulta.
+  assert.equal(
+    twoFactorPageGateDecision({ totpEnabled: false, require2fa: false, hasValidCookie: false }),
+    null,
+  );
+  assert.equal(
+    twoFactorPageGateDecision({ totpEnabled: null, require2fa: null, hasValidCookie: false }),
+    null,
+  );
+  assert.equal(
+    twoFactorPageGateDecision({ hasValidCookie: false }),
+    null,
+  );
+});
+
+test("teleconsulta: la decision coincide con needsTwoFactor (misma regla que el layout)", () => {
+  // Si needsTwoFactor dice que no hay 2FA que exigir, la página no puede
+  // cortar; y si dice que sí, sin la prueba SIEMPRE corta (reto o enrolamiento).
+  for (const totpEnabled of [true, false]) {
+    for (const require2fa of [true, false]) {
+      const decision = twoFactorPageGateDecision({ totpEnabled, require2fa, hasValidCookie: false });
+      assert.equal(
+        decision !== null,
+        needsTwoFactor({ totpEnabled, require2fa }),
+        `totpEnabled=${totpEnabled} require2fa=${require2fa}: la página y needsTwoFactor no coinciden`,
+      );
+    }
+  }
 });

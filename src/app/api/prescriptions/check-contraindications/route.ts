@@ -4,7 +4,7 @@ import { getAuthContext } from "@/lib/auth-context";
 import { prisma } from "@/lib/prisma";
 import { addAiTokens } from "@/lib/ai-tokens";
 import { persistentRateLimit } from "@/lib/failban";
-import { hasPermission } from "@/lib/auth/permissions";
+import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { assertPatientVisible } from "@/lib/patient-visibility";
 import { recordUsageNoCharge } from "@/lib/ai-billing/record-usage";
 import { AI_FEATURE_PRESCRIPTION_CHECK } from "@/lib/ai-billing/types";
@@ -156,9 +156,10 @@ function normalizeSeverity(v: unknown): "leve" | "moderada" | "grave" {
 export async function POST(req: NextRequest) {
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  if (!hasPermission(ctx.role as "DOCTOR" | "ADMIN" | "SUPER_ADMIN" | "RECEPTIONIST" | "READONLY", "prescription.create")) {
-    return NextResponse.json({ error: "forbidden" }, { status: 403 });
-  }
+  // ISO-03: forma parte de emitir la receta → "Crear/firmar recetas" del
+  // modal, override incluido (antes capa por rol).
+  const denied = denyIfMissingPermission(ctx, "prescription.create");
+  if (denied) return denied;
 
   // Freno de gasto POR CLÍNICA (no por IP: todo el consultorio comparte IP) y
   // persistente en Upstash — el Map en memoria no limita en serverless.

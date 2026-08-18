@@ -4,7 +4,7 @@ import { getAuthContext } from "@/lib/auth-context";
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { logMutation } from "@/lib/audit";
-import { hasPermission } from "@/lib/auth/permissions";
+import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { assertPatientVisible } from "@/lib/patient-visibility";
 
 export const dynamic = "force-dynamic";
@@ -36,9 +36,11 @@ function expiresForCofeprisGroup(group?: string | null, base: Date = new Date())
 export async function GET(req: NextRequest) {
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  if (!hasPermission(ctx.role as "DOCTOR" | "ADMIN" | "SUPER_ADMIN" | "RECEPTIONIST" | "READONLY", "prescription.read")) {
-    return NextResponse.json({ error: "forbidden" }, { status: 403 });
-  }
+  // ISO-03: antes `hasPermission(ctx.role, "prescription.read")`, la capa por
+  // rol que ignoraba permissionsOverride. Ahora el interruptor "Ver recetas"
+  // del modal manda (mismos roles por default: SA/ADMIN/DOCTOR).
+  const deniedPerm = denyIfMissingPermission(ctx, "prescription.view");
+  if (deniedPerm) return deniedPerm;
   const patientId = req.nextUrl.searchParams.get("patientId");
   if (!patientId) return NextResponse.json({ error: "patientId required" }, { status: 400 });
 
@@ -93,9 +95,9 @@ interface PrescriptionItemBody {
 export async function POST(req: NextRequest) {
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  if (!hasPermission(ctx.role as "DOCTOR" | "ADMIN" | "SUPER_ADMIN" | "RECEPTIONIST" | "READONLY", "prescription.create")) {
-    return NextResponse.json({ error: "forbidden" }, { status: 403 });
-  }
+  // ISO-03: "Crear/firmar recetas" del modal, con override incluido.
+  const deniedPerm = denyIfMissingPermission(ctx, "prescription.create");
+  if (deniedPerm) return deniedPerm;
 
   const body = await req.json();
   const { medicalRecordId, patientId, items, indications, diagnosis, cofeprisGroup, cofeprisFolio, expiresAt: expiresAtOverride } = body;

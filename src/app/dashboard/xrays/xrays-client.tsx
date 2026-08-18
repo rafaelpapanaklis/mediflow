@@ -88,6 +88,17 @@ interface Props {
   initialFileId?: string;
   /** Si true, el viewer está bloqueado al paciente y no permite cambiar. */
   lockedToPatient?: boolean;
+  /**
+   * Permisos del modal, resueltos en el servidor (EQ-07). El endpoint los
+   * revalida con 403; aquí solo deciden qué se pinta:
+   *   canUpload      → "Subir radiografías y archivos" (xrays.upload)
+   *   canAnalyze     → "Analizar con IA" (xrays.analyze)
+   *   canEditRecords → borrar la placa, notas del doctor y trazos/medidas
+   *                    (medicalRecord.edit)
+   */
+  canUpload?: boolean;
+  canAnalyze?: boolean;
+  canEditRecords?: boolean;
 }
 
 const CATEGORIES = [
@@ -210,6 +221,9 @@ export function XraysClient({
   initialPatientId,
   initialFileId,
   lockedToPatient = false,
+  canUpload = true,
+  canAnalyze = true,
+  canEditRecords = true,
 }: Props) {
   const t = useT();
   const askConfirm = useConfirm();
@@ -794,14 +808,16 @@ export function XraysClient({
         >
           <FileDown size={13} aria-hidden /> {t("common.export")}
         </button>
-        <button
-          type="button"
-          className={`${styles.topbarBtn} ${styles.topbarBtnPrimary}`}
-          onClick={handleUploadClick}
-          disabled={uploading}
-        >
-          <Upload size={13} aria-hidden /> {uploading ? t("pages.xrays.uploading") : t("pages.xrays.uploadXray")}
-        </button>
+        {canUpload && (
+          <button
+            type="button"
+            className={`${styles.topbarBtn} ${styles.topbarBtnPrimary}`}
+            onClick={handleUploadClick}
+            disabled={uploading}
+          >
+            <Upload size={13} aria-hidden /> {uploading ? t("pages.xrays.uploading") : t("pages.xrays.uploadXray")}
+          </button>
+        )}
         <input
           ref={fileInputRef}
           type="file"
@@ -832,14 +848,16 @@ export function XraysClient({
             />
           </div>
         </div>
-        <button
-          type="button"
-          className={styles.timelineUploadCta}
-          onClick={handleUploadClick}
-          disabled={uploading}
-        >
-          <Upload size={12} aria-hidden /> {t("pages.xrays.uploadXray")}
-        </button>
+        {canUpload && (
+          <button
+            type="button"
+            className={styles.timelineUploadCta}
+            onClick={handleUploadClick}
+            disabled={uploading}
+          >
+            <Upload size={12} aria-hidden /> {t("pages.xrays.uploadXray")}
+          </button>
+        )}
         <div className={styles.timelineList}>
           {filteredFiles.length === 0 ? (
             <div className={styles.emptyState}>
@@ -932,8 +950,8 @@ export function XraysClient({
               </button>
             );
           })}
-          <span className={styles.toolDivider} />
-          {(
+          {canEditRecords && <span className={styles.toolDivider} />}
+          {canEditRecords && (
             [
               { id: "measure", label: t("pages.xrays.toolRuler") },
               { id: "angle", label: t("pages.xrays.toolAngle") },
@@ -978,16 +996,18 @@ export function XraysClient({
             <FlipHorizontal size={15} aria-hidden />
           </button>
           <span className={styles.toolDivider} />
-          <button
-            type="button"
-            className={styles.toolBtn}
-            onClick={handleClearAnnotations}
-            disabled={annotations.length === 0}
-            title={t("pages.xrays.clearAllAnnotations")}
-            aria-label={t("pages.xrays.clearAllAnnotations")}
-          >
-            <Eraser size={15} aria-hidden />
-          </button>
+          {canEditRecords && (
+            <button
+              type="button"
+              className={styles.toolBtn}
+              onClick={handleClearAnnotations}
+              disabled={annotations.length === 0}
+              title={t("pages.xrays.clearAllAnnotations")}
+              aria-label={t("pages.xrays.clearAllAnnotations")}
+            >
+              <Eraser size={15} aria-hidden />
+            </button>
+          )}
           <span className={styles.toolDivider} />
           <label className={styles.toolSlider}>
             {t("pages.xrays.brightness")}
@@ -1244,6 +1264,7 @@ export function XraysClient({
                       {t("pages.xrays.aiAnalysisPendingDesc")}
                     </div>
                   </div>
+                  {canAnalyze && (
                   <div className={styles.actionsRow} style={{ flexDirection: "column", gap: 6 }}>
                     <button
                       type="button"
@@ -1277,6 +1298,7 @@ export function XraysClient({
                       </button>
                     </div>
                   </div>
+                  )}
                   {aiLimit > 0 && (
                     <div style={{ fontSize: 10, color: "var(--text-3)", textAlign: "center" }}>
                       {t("pages.xrays.aiUsage")}: {aiUsed.toLocaleString()} / {aiLimit.toLocaleString()} ({aiPercent}%)
@@ -1442,25 +1464,28 @@ export function XraysClient({
                     value={notesDraft}
                     onChange={(e) => setNotesDraft(e.target.value)}
                     placeholder={t("pages.xrays.notesPlaceholder")}
+                    readOnly={!canEditRecords}
                   />
-                  <div className={styles.actionsRow}>
-                    <button
-                      type="button"
-                      className={`${styles.actionBtn} ${styles.actionBtnPrimary}`}
-                      onClick={handleSaveNotes}
-                      disabled={notesDraft === (activeFile.doctorNotes ?? "")}
-                    >
-                      {t("pages.xrays.saveNote")}
-                    </button>
-                    <button
-                      type="button"
-                      className={styles.actionBtn}
-                      onClick={handleDelete}
-                      style={{ color: "#dc2626" }}
-                    >
-                      <Trash2 size={13} aria-hidden /> {t("pages.xrays.deleteFile")}
-                    </button>
-                  </div>
+                  {canEditRecords && (
+                    <div className={styles.actionsRow}>
+                      <button
+                        type="button"
+                        className={`${styles.actionBtn} ${styles.actionBtnPrimary}`}
+                        onClick={handleSaveNotes}
+                        disabled={notesDraft === (activeFile.doctorNotes ?? "")}
+                      >
+                        {t("pages.xrays.saveNote")}
+                      </button>
+                      <button
+                        type="button"
+                        className={styles.actionBtn}
+                        onClick={handleDelete}
+                        style={{ color: "#dc2626" }}
+                      >
+                        <Trash2 size={13} aria-hidden /> {t("pages.xrays.deleteFile")}
+                      </button>
+                    </div>
+                  )}
                   {activeFile.doctorNotesUpdatedAt && (
                     <div style={{ fontSize: 10, color: "var(--text-3)", textAlign: "center" }}>
                       {t("pages.xrays.updatedAt")}: {formatDate(activeFile.doctorNotesUpdatedAt)}

@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
+import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { randomBytes } from "crypto";
 
 export const dynamic = "force-dynamic";
@@ -50,9 +51,12 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   const user = await getCurrentUser();
-  if (!["SUPER_ADMIN", "ADMIN"].includes(user.role)) {
-    return NextResponse.json({ error: "forbidden" }, { status: 403 });
-  }
+  // EQ-07: "Configurar Pantallas TV" del modal (por default SA/ADMIN, los
+  // mismos que dejaba pasar la lista de roles que había aquí), con override.
+  // El GET de arriba sigue por rol: es lectura y "Ver Pantallas TV" lo tiene
+  // también READONLY por default, así que abrirlo por key le daría la lista.
+  const denied = denyIfMissingPermission(user, "tvModes.edit");
+  if (denied) return denied;
   const clinicId = user.clinicId;
 
   let body: { name?: string; mode?: string; config?: unknown };

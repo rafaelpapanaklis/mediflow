@@ -69,6 +69,13 @@ export interface PatientNavBarProps {
   /** Facturación — requiere el permiso "billing.view". `false` esconde el ítem
    *  (también dentro del desplegable Administrativo). */
   showBilling?: boolean;
+  /** Consentimientos — "consents.view". La tab bar móvil ya lo aplicaba; la
+   *  barra de escritorio se lo saltaba y pintaba una pestaña vacía. */
+  showConsents?: boolean;
+  /** Radiografías — "xrays.view" (EQ-07). */
+  showXrays?: boolean;
+  /** Recetas — "prescription.view" (ISO-03). */
+  showPrescriptions?: boolean;
   activityCounts?: PatientActivityCounts;
 }
 
@@ -105,6 +112,9 @@ export function PatientNavBar({
   showImplants,
   showOrthodontics,
   showBilling,
+  showConsents,
+  showXrays,
+  showPrescriptions,
   activityCounts,
 }: PatientNavBarProps) {
   const t = useT();
@@ -118,8 +128,11 @@ export function PatientNavBar({
         showImplants:     Boolean(showImplants),
         showOrthodontics: Boolean(showOrthodontics),
         showBilling,
+        showConsents,
+        showXrays,
+        showPrescriptions,
       }),
-    [pediatrics, showPeriodontics, showEndodontics, showImplants, showOrthodontics, showBilling],
+    [pediatrics, showPeriodontics, showEndodontics, showImplants, showOrthodontics, showBilling, showConsents, showXrays, showPrescriptions],
   );
 
   const countFor: Record<string, number | undefined> = {

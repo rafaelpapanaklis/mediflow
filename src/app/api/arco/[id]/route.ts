@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { hasPermission } from "@/lib/auth/permissions";
+import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { logMutation } from "@/lib/audit";
 
 export const dynamic = "force-dynamic";
@@ -11,7 +11,14 @@ interface Params { params: { id: string } }
 const VALID_STATUSES = new Set(["PENDING", "IN_PROGRESS", "RESOLVED", "REJECTED"]);
 
 /**
- * GET /api/arco/[id] — admin de la clínica ve detalle de una solicitud ARCO.
+ * GET /api/arco/[id] — quien atiende ARCO en la clínica ve el detalle de una
+ * solicitud.
+ *
+ * ISO-03: antes `hasPermission(user.role, "arco.read")`, la capa por rol que
+ * ignoraba permissionsOverride (y `arco.read` ni siquiera existía en el
+ * catálogo del modal). Ahora manda "Ver y atender solicitudes ARCO"
+ * (arco.manage), que por default tienen SUPER_ADMIN y ADMIN — los mismos que
+ * pasaban antes.
  *
  * Multi-tenant:
  *  - Si la solicitud tiene clinicId, debe coincidir con ctx.clinicId.
@@ -19,9 +26,8 @@ const VALID_STATUSES = new Set(["PENDING", "IN_PROGRESS", "RESOLVED", "REJECTED"
  */
 export async function GET(_req: NextRequest, { params }: Params) {
   const user = await getCurrentUser();
-  if (!hasPermission(user.role, "arco.read")) {
-    return NextResponse.json({ error: "forbidden" }, { status: 403 });
-  }
+  const denied = denyIfMissingPermission(user, "arco.manage");
+  if (denied) return denied;
 
   const arco = await prisma.arcoRequest.findUnique({ where: { id: params.id } });
   if (!arco) return NextResponse.json({ error: "not_found" }, { status: 404 });
@@ -40,9 +46,9 @@ export async function GET(_req: NextRequest, { params }: Params) {
  */
 export async function PATCH(req: NextRequest, { params }: Params) {
   const user = await getCurrentUser();
-  if (!hasPermission(user.role, "arco.update")) {
-    return NextResponse.json({ error: "forbidden" }, { status: 403 });
-  }
+  // ISO-03: mismo interruptor que el GET (antes `arco.update`, capa por rol).
+  const denied = denyIfMissingPermission(user, "arco.manage");
+  if (denied) return denied;
 
   const arco = await prisma.arcoRequest.findUnique({ where: { id: params.id } });
   if (!arco) return NextResponse.json({ error: "not_found" }, { status: 404 });

@@ -4,7 +4,6 @@ import { prisma } from "@/lib/prisma";
 import { getAuthContext } from "@/lib/auth-context";
 import { logMutation } from "@/lib/audit";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
-import { hasPermission } from "@/lib/auth/permissions";
 import { assertPatientVisible } from "@/lib/patient-visibility";
 import { revalidateAfter, revalidatePatientProfile } from "@/lib/cache/revalidate";
 import { EMPTY_NOTE_ERROR, isClinicalNoteEmpty } from "@/lib/clinical/note-validation";
@@ -204,9 +203,12 @@ export async function DELETE(req: NextRequest, { params }: Params) {
   const dbUser = await getDbUser();
   if (!dbUser) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
 
-  if (!hasPermission(dbUser.role, "medicalRecord.delete")) {
-    return NextResponse.json({ error: "forbidden" }, { status: 403 });
-  }
+  // ISO-03: antes `hasPermission(dbUser.role, "medicalRecord.delete")`, la
+  // capa por rol que ignoraba permissionsOverride — el doctor al que le
+  // apagaban "Editar notas SOAP" seguía borrando notas. Mismo interruptor que
+  // el PATCH de arriba; el dueño-o-admin de abajo sigue acotando a quién.
+  const deniedPerm = denyIfMissingPermission(dbUser, "medicalRecord.edit");
+  if (deniedPerm) return deniedPerm;
 
   const existing = await prisma.medicalRecord.findFirst({
     where: { id: params.id, clinicId: dbUser.clinicId },

@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { hasPermission } from "@/lib/auth/permissions";
+import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { assertPatientVisible } from "@/lib/patient-visibility";
 import { buildCdaXml } from "@/lib/hl7/cda";
 import { logAudit, extractAuditMeta } from "@/lib/audit";
@@ -21,9 +21,10 @@ interface Params { params: { id: string } }
  */
 export async function GET(req: NextRequest, { params }: Params) {
   const user = await getCurrentUser();
-  if (!hasPermission(user.role as "DOCTOR" | "ADMIN" | "SUPER_ADMIN" | "RECEPTIONIST" | "READONLY", "medicalRecord.read")) {
-    return NextResponse.json({ error: "forbidden" }, { status: 403 });
-  }
+  // ISO-03: el CDA es el expediente entero (notas y recetas) → "Ver expediente
+  // clínico" del modal, override incluido (antes capa por rol).
+  const deniedPerm = denyIfMissingPermission(user, "medicalRecord.view");
+  if (deniedPerm) return deniedPerm;
 
   // Visibilidad por paciente: 404 si el viewer no puede ver este paciente.
   const denied = await assertPatientVisible(params.id, { userId: user.id, role: user.role, clinicId: user.clinicId });

@@ -1,7 +1,10 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { getAuthContext } from "@/lib/auth-context";
+import { hasValidTwoFactorCookie } from "@/lib/auth/two-factor-cookie";
+import { twoFactorPageGateDecision } from "@/lib/auth/two-factor-gate";
+import { TWO_FA_CHALLENGE_PATH, TWO_FA_SETUP_PATH } from "@/lib/auth/two-factor-constants";
 import { TeleconsultaClient } from "./teleconsulta-client";
 import { timeHHMMInTz } from "@/lib/agenda/legacy-helpers";
 
@@ -57,6 +60,25 @@ export default async function TeleconsultaPage({ params, searchParams }: { param
     // cookie firmada, nunca desde la petición.
     const ctx = await getAuthContext();
     if (!ctx || ctx.clinicId !== appointment.clinicId) return <EntraPorElPanel />;
+
+    // El segundo factor también se exige aquí. Esta página no está bajo
+    // /dashboard (no hereda el gate del layout) ni bajo /api (getAuthContext
+    // solo corta rutas con x-pathname, y el middleware no cubre /teleconsulta),
+    // así que con la contraseña robada y el reto de pantalla sin pasar se
+    // entraba igual como dueño de la sala. Misma regla que el layout, con
+    // `totpEnabled` ya resuelto a nivel PERSONA por getAuthContext (EQ-02).
+    // El reto devuelve a la lista de teleconsultas del panel —su `next` solo
+    // acepta rutas de /dashboard—, donde el botón "Unirse" vuelve a traer aquí.
+    const decision = twoFactorPageGateDecision({
+      totpEnabled: (ctx.user as { totpEnabled?: boolean | null }).totpEnabled,
+      require2fa: (ctx.clinic as { require2fa?: boolean | null } | null)?.require2fa,
+      hasValidCookie: hasValidTwoFactorCookie(ctx.user.supabaseId, ctx.clinicId),
+    });
+    if (decision === "challenge") {
+      redirect(`${TWO_FA_CHALLENGE_PATH}?next=${encodeURIComponent("/dashboard/teleconsulta")}`);
+    }
+    if (decision === "setup") redirect(TWO_FA_SETUP_PATH);
+
     role = "doctor";
     token = appointment.teleDoctorToken;
   } else {

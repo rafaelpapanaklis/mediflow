@@ -20,6 +20,7 @@ import { getDict } from "@/i18n/dictionaries";
 import { makeT } from "@/i18n/t";
 import { localeFromClinic } from "@/i18n/server";
 import { hasValidTwoFactorCookie } from "@/lib/auth/two-factor-cookie";
+import { twoFactorPageGateDecision } from "@/lib/auth/two-factor-gate";
 import {
   TWO_FA_ROUTE_PREFIX,
   TWO_FA_CHALLENGE_PATH,
@@ -54,20 +55,20 @@ export default async function DashboardLayout({ children }: { children: React.Re
   //   • Clínica con require2fa y usuario sin 2FA → enrolamiento forzado.
   // Las rutas /dashboard/2fa* quedan EXENTAS (si no, loop) y se renderizan con
   // layout mínimo (sin sidebar/topbar) para no exponer el panel antes del 2FA.
+  // La regla en sí vive en twoFactorPageGateDecision (pura, con tests) y la
+  // comparte /teleconsulta/[id], la única página con sesión de equipo que vive
+  // fuera de este layout.
   const isTwoFaRoute = pathname.startsWith(TWO_FA_ROUTE_PREFIX);
   if (!isTwoFaRoute) {
-    if (
-      (user as { totpEnabled?: boolean }).totpEnabled &&
-      !hasValidTwoFactorCookie(user.supabaseId, user.clinicId)
-    ) {
+    const decision = twoFactorPageGateDecision({
+      totpEnabled: (user as { totpEnabled?: boolean }).totpEnabled,
+      require2fa: (clinic as { require2fa?: boolean }).require2fa,
+      hasValidCookie: hasValidTwoFactorCookie(user.supabaseId, user.clinicId),
+    });
+    if (decision === "challenge") {
       redirect(`${TWO_FA_CHALLENGE_PATH}?next=${encodeURIComponent(pathname || "/dashboard")}`);
     }
-    if (
-      (clinic as { require2fa?: boolean }).require2fa &&
-      !(user as { totpEnabled?: boolean }).totpEnabled
-    ) {
-      redirect(TWO_FA_SETUP_PATH);
-    }
+    if (decision === "setup") redirect(TWO_FA_SETUP_PATH);
   }
   // Layout mínimo: sin sidebar/topbar ni providers de dashboard; dentro de
   // I18nProvider para que el reto/enrolamiento tengan useT. Lo comparten el

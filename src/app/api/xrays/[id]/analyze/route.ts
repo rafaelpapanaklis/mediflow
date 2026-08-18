@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthContext } from "@/lib/auth-context";
+import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { prisma } from "@/lib/prisma";
 import { addAiTokens } from "@/lib/ai-tokens";
 import { assertPatientVisible } from "@/lib/patient-visibility";
@@ -187,6 +188,10 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
+  // EQ-07: leer el análisis guardado es ver la placa.
+  const denied = denyIfMissingPermission(ctx, "xrays.view");
+  if (denied) return denied;
+
   // Verifica que el archivo pertenece a la clínica del ctx
   const file = await prisma.patientFile.findFirst({
     where: { id: params.id, clinicId: ctx.clinicId },
@@ -234,6 +239,12 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  // EQ-07: "Analizar radiografías con IA" existía en el modal, no lo leía
+  // nadie y esta ruta cobra tokens del cupo de la clínica: cualquier sesión
+  // —recepción, solo lectura— podía gastarlos. Por default SA/ADMIN/DOCTOR.
+  const denied = denyIfMissingPermission(ctx, "xrays.analyze");
+  if (denied) return denied;
 
   // Freno de gasto POR CLÍNICA (no por IP: todo el consultorio comparte IP) y
   // persistente en Upstash — el Map en memoria no limita en serverless. `scope`

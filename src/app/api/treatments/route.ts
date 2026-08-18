@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthContext } from "@/lib/auth-context";
+import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { relatedPatientVisibilityAnd, assertPatientVisible } from "@/lib/patient-visibility";
 import { prisma } from "@/lib/prisma";
 import { revalidateAfter } from "@/lib/cache/revalidate";
@@ -9,6 +10,12 @@ import { logMutation } from "@/lib/audit";
 export async function GET(req: NextRequest) {
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  // EQ-07: "Ver planes de tratamiento" existía en el modal y no lo leía nadie.
+  // Lo tienen los 5 roles por default, así que hoy no cambia a nadie; lo que
+  // cambia es que apagarlo empieza a hacer algo.
+  const deniedPerm = denyIfMissingPermission(ctx, "treatments.view");
+  if (deniedPerm) return deniedPerm;
 
   const { searchParams } = new URL(req.url);
   const patientId = searchParams.get("patientId");
@@ -55,6 +62,12 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  // EQ-07: "Crear y editar planes de tratamiento". Antes cualquier sesión
+  // creaba planes (solo-lectura incluido); el default lo tienen SA/ADMIN/
+  // DOCTOR/RECEPTIONIST, que son quienes de verdad los arman.
+  const deniedPerm = denyIfMissingPermission(ctx, "treatments.edit");
+  if (deniedPerm) return deniedPerm;
 
   const body = await req.json();
   const { patientId, doctorId, name, description, totalSessions, sessionIntervalDays, totalCost } = body;

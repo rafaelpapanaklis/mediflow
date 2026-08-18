@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthContext } from "@/lib/auth-context";
+import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { prisma } from "@/lib/prisma";
 import { cartInclude, toSupplierCartDTO } from "@/lib/suppliers/serializers";
 
@@ -26,6 +27,10 @@ export async function POST(
 ) {
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
+
+  // EQ-07: repetir un pedido crea uno nuevo → "Hacer y pagar pedidos".
+  const denied = denyIfMissingPermission(ctx, "suppliers.order");
+  if (denied) return denied;
 
   const order = await prisma.supplierOrder.findFirst({
     where: { id: params.orderId, clinicId: ctx.clinicId },

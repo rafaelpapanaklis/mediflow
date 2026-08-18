@@ -1,7 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
-import type { Role } from "@prisma/client";
 import { getAuthContext } from "@/lib/auth-context";
-import { hasPermission } from "@/lib/auth/permissions";
+import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { prisma } from "@/lib/prisma";
 import { assertPatientVisible } from "@/lib/patient-visibility";
 import { buildPrescriptionPdf } from "@/lib/pdf/prescription-pdf";
@@ -16,9 +15,9 @@ export const dynamic = "force-dynamic";
 export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  if (!hasPermission(ctx.role as Role, "prescription.read")) {
-    return NextResponse.json({ error: "forbidden" }, { status: 403 });
-  }
+  // ISO-03: "Ver recetas" del modal, override incluido (antes capa por rol).
+  const denied = denyIfMissingPermission(ctx, "prescription.view");
+  if (denied) return denied;
 
   // Visibilidad por paciente: el PDF renderiza el nombre del paciente. Resolvemos
   // la receta a su patientId y verificamos que este usuario pueda verlo (un staff

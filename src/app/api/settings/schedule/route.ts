@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthContext } from "@/lib/auth-context";
+import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { prisma } from "@/lib/prisma";
 import { revalidateAfter } from "@/lib/cache/revalidate";
 
@@ -11,14 +12,11 @@ export async function PATCH(req: NextRequest) {
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  // SECURITY: solo admins pueden modificar los horarios de atención (mismo
-  // gate que la configuración de la clínica en /api/clinic).
-  if (!ctx.isAdmin) {
-    return NextResponse.json(
-      { error: "Solo administradores pueden modificar los horarios" },
-      { status: 403 },
-    );
-  }
+  // EQ-07: los horarios son configuración de la clínica → "Editar
+  // configuración" del modal, mismo interruptor que /api/clinic y
+  // /api/settings (antes `isAdmin`; mismos roles por default).
+  const denied = denyIfMissingPermission(ctx, "settings.edit");
+  if (denied) return denied;
 
   const body = await req.json().catch(() => null);
   const schedules = body?.schedules;

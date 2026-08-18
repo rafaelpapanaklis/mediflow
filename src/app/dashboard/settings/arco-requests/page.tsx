@@ -1,15 +1,18 @@
 export const dynamic = "force-dynamic";
 
-import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
+import { requirePermissionOrRedirect } from "@/lib/auth/require-permission";
 import { prisma } from "@/lib/prisma";
 import { ArcoRequestsClient } from "./arco-requests-client";
 
 export default async function ArcoRequestsPage() {
   const user = await getCurrentUser();
-  if (!["SUPER_ADMIN", "ADMIN"].includes(user.role)) {
-    redirect("/dashboard");
-  }
+  // ISO-03: la misma puerta que GET/PATCH /api/arco/[id] — el interruptor "Ver
+  // y atender solicitudes ARCO" del modal (por default SUPER_ADMIN y ADMIN,
+  // que son exactamente los roles que esta página dejaba pasar a mano). Así
+  // el dueño que le apaga ARCO a un administrador le apaga también la pantalla,
+  // no solo el botón de guardar.
+  requirePermissionOrRedirect(user, "arco.manage");
 
   // Solicitudes scoped a la clínica
   const clinicRequests = await prisma.arcoRequest.findMany({

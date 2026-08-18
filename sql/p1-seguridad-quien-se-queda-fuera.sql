@@ -116,13 +116,18 @@ ORDER BY se_quedan_fuera DESC, k.permiso;
 --
 -- Lee así: "si empiezo a exigir xrays.upload, los N recepcionistas activos
 -- dejan de poder subir placas".
+--
+-- ⚠ ACTUALIZADO tras [ISO03-EQ07] (2026-08-18): los defaults ya se ajustaron
+-- al cablear los interruptores — RECEPTIONIST tiene xrays.view/upload y
+-- treatments.edit, DOCTOR tiene treatments.edit y ADMIN tiene team.edit. Lo
+-- que sigue faltando por default es a propósito (ver permissions.ts).
 SELECT
   u."role",
   COUNT(*) AS usuarios_activos,
   CASE u."role"
-    WHEN 'RECEPTIONIST' THEN 'sin xrays.*, sin treatments.edit, sin inventory.edit, sin suppliers.order'
-    WHEN 'READONLY'     THEN 'sin xrays.*, sin specialties.*, sin nada que no acabe en .view'
-    WHEN 'DOCTOR'       THEN 'sin inventory.view, sin treatments.edit, sin suppliers.order'
+    WHEN 'RECEPTIONIST' THEN 'sin xrays.analyze, sin inventory.edit, sin suppliers.order (a propósito)'
+    WHEN 'READONLY'     THEN 'sin xrays.*, sin specialties.*, sin arco.manage, sin nada que no acabe en .view'
+    WHEN 'DOCTOR'       THEN 'sin inventory.view/edit, sin suppliers.order, sin settings.*, sin team.*'
     ELSE                     'admin: los tiene todos por default'
   END AS que_le_falta_por_default
 FROM "users" u
@@ -179,7 +184,8 @@ ORDER BY filas DESC;
 -- `getEffectivePermissions` descarta en silencio las llaves que no estén en
 -- el catálogo. Un override lleno de llaves viejas es un usuario con MENOS
 -- permisos de los que su dueño cree haberle dado, y nadie se entera.
--- Ajustar la lista de abajo si el catálogo cambia (hoy son 57 llaves).
+-- Ajustar la lista de abajo si el catálogo cambia (hoy son 58 llaves: las 57
+-- originales + arco.manage, que nació en [ISO03-EQ07]).
 SELECT
   u."id",
   u."role",
@@ -204,7 +210,7 @@ WHERE u."isActive"
     'analytics.view','tvModes.view','tvModes.edit','reports.view',
     'team.view','team.edit','settings.view','settings.edit',
     'landing.view','landing.edit','procedures.view','procedures.edit',
-    'clinicLayout.view','clinicLayout.edit','marketplace.view',
+    'clinicLayout.view','clinicLayout.edit','arco.manage','marketplace.view',
     'specialties.pediatrics','specialties.endodontics','specialties.periodontics',
     'specialties.orthodontics','specialties.implants'
   )

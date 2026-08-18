@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthContext } from "@/lib/auth-context";
 import { prisma } from "@/lib/prisma";
-import { hasPermission } from "@/lib/auth/permissions";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { assertPatientVisible } from "@/lib/patient-visibility";
 import { logAudit } from "@/lib/audit";
@@ -18,9 +17,11 @@ export async function DELETE(
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
 
-  if (!hasPermission(ctx.role as any, "medicalRecord.delete")) {
-    return NextResponse.json({ error: "Sin permisos" }, { status: 403 });
-  }
+  // ISO-03: mismo interruptor que el PATCH de abajo ("Editar notas SOAP /
+  // firmar", que cubre borrar borradores, placas y modelos 3D), con override
+  // incluido — antes capa por rol (medicalRecord.delete).
+  const deniedPerm = denyIfMissingPermission(ctx, "medicalRecord.edit");
+  if (deniedPerm) return deniedPerm;
 
   // Visibilidad por paciente (barrido Ola 3) — mismo assert que el PATCH.
   const visDenied = await assertPatientVisible(params.id, {

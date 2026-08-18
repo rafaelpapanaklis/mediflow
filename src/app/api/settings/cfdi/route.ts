@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getAuthContext, requireAdmin } from "@/lib/auth-context";
+import { getAuthContext } from "@/lib/auth-context";
+import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { prisma } from "@/lib/prisma";
 import { logMutation } from "@/lib/audit";
 import { createOrganization, updateOrgLegal, getOrganizationStatus } from "@/lib/facturapi";
@@ -7,8 +8,11 @@ import { createOrganization, updateOrgLegal, getOrganizationStatus } from "@/lib
 // POST /api/settings/cfdi — configure clinic's RFC for invoicing
 export async function POST(req: NextRequest) {
   const ctx = await getAuthContext();
-  const err = requireAdmin(ctx);
-  if (err) return err;
+  if (!ctx) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
+  // EQ-07: los datos fiscales del emisor son configuración → "Editar
+  // configuración" (antes `requireAdmin`; mismos roles por default).
+  const denied = denyIfMissingPermission(ctx, "settings.edit");
+  if (denied) return denied;
 
   const { rfcEmisor, regimenFiscal, cpEmisor, razonSocial, cfdiTaxMode } = await req.json();
 

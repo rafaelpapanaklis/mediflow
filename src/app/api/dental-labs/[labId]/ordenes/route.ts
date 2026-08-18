@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthContext } from "@/lib/auth-context";
+import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { prisma } from "@/lib/prisma";
 import { makeDentalLabOrderNumber, isDentalLabMethodEnabled } from "@/lib/laboratorios/types";
 import { isB2BPaymentMethod } from "@/lib/payments-b2b";
@@ -21,6 +22,11 @@ export async function POST(
 ) {
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
+
+  // EQ-07: una orden a un laboratorio B2B es un pedido de la clínica → mismo
+  // interruptor que las compras a proveedores ("Hacer y pagar pedidos").
+  const denied = denyIfMissingPermission(ctx, "suppliers.order");
+  if (denied) return denied;
 
   const labId = params.labId;
 

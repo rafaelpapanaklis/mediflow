@@ -362,6 +362,22 @@ interface Props {
   /** "whatsapp.send" — decide si el tab ofrece el envío por WhatsApp. */
   canSendWhatsApp?: boolean;
   /**
+   * Radiografías y archivos (EQ-07) — resueltos en el server, del modal:
+   *   canViewXrays    "xrays.view"        → la pestaña Radiografías existe
+   *   canUploadXrays  "xrays.upload"      → botón "Subir archivo"
+   *   canAnalyzeXrays "xrays.analyze"     → botón "Analizar con IA"
+   *   canEditRecords  "medicalRecord.edit"→ borrar un archivo
+   * Cada endpoint los revalida con 403.
+   */
+  canViewXrays?: boolean;
+  canUploadXrays?: boolean;
+  canAnalyzeXrays?: boolean;
+  canEditRecords?: boolean;
+  /** "prescription.view" (ISO-03) — la pestaña Recetas existe. */
+  canViewPrescriptions?: boolean;
+  /** "treatments.edit" (EQ-07) — crear, editar y borrar planes de tratamiento. */
+  canEditTreatments?: boolean;
+  /**
    * "inbox.send" — el MISMO permiso con el que el Inbox deja responder. Decide
    * si la tarjeta de WhatsApp ofrece INICIAR la conversación cuando todavía no
    * hay ninguna. Se resuelve en el server; el POST lo revalida con 403.
@@ -403,6 +419,12 @@ export function PatientDetailClient({
   canRevokeConsents = false,
   canSendWhatsApp = false,
   canStartConversation = false,
+  canViewXrays = false,
+  canUploadXrays = false,
+  canAnalyzeXrays = false,
+  canEditRecords = false,
+  canViewPrescriptions = false,
+  canEditTreatments = false,
   facturApiEnabled = false,
 }: Props) {
   const t = useT();
@@ -433,9 +455,11 @@ export function PatientDetailClient({
       showOrthodontics,
       showBilling: canViewBilling,
       showConsents: canViewConsents,
+      showXrays: canViewXrays,
+      showPrescriptions: canViewPrescriptions,
     });
     return [...items.filter((i) => !i.disabled), ...items.filter((i) => i.disabled)];
-  }, [pediatricsState, showPeriodontics, showEndodontics, showImplants, showOrthodontics, canViewBilling, canViewConsents]);
+  }, [pediatricsState, showPeriodontics, showEndodontics, showImplants, showOrthodontics, canViewBilling, canViewConsents, canViewXrays, canViewPrescriptions]);
   const tabFromUrl = searchParams.get("tab");
   const initialTab =
     tabFromUrl === "pediatria" && showPediatrics
@@ -1389,6 +1413,9 @@ export function PatientDetailClient({
         showImplants={showImplants}
         showOrthodontics={showOrthodontics}
         showBilling={canViewBilling}
+        showConsents={canViewConsents}
+        showXrays={canViewXrays}
+        showPrescriptions={canViewPrescriptions}
         activityCounts={activityCounts}
       />
 
@@ -2506,13 +2533,15 @@ export function PatientDetailClient({
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
                   <h2 className="text-[15px] font-semibold tracking-[-0.01em]">{t("patients.treatment.title")}</h2>
-                  <button
-                    type="button"
-                    onClick={() => setShowNewTreatment(true)}
-                    className="inline-flex items-center text-xs font-semibold bg-[var(--brand)] text-white px-3 h-9 rounded-lg hover:bg-[var(--violet-700)] shadow-[var(--shadow-1)] transition-colors focus-visible:outline-none focus-visible:shadow-[var(--ring)] active:scale-[0.98]"
-                  >
-                    {t("patients.treatment.newTreatment")}
-                  </button>
+                  {canEditTreatments && (
+                    <button
+                      type="button"
+                      onClick={() => setShowNewTreatment(true)}
+                      className="inline-flex items-center text-xs font-semibold bg-[var(--brand)] text-white px-3 h-9 rounded-lg hover:bg-[var(--violet-700)] shadow-[var(--shadow-1)] transition-colors focus-visible:outline-none focus-visible:shadow-[var(--ring)] active:scale-[0.98]"
+                    >
+                      {t("patients.treatment.newTreatment")}
+                    </button>
+                  )}
                 </div>
 
                 {treatments.length > 0 && (
@@ -2536,13 +2565,15 @@ export function PatientDetailClient({
                   <div className="bg-card border border-border rounded-xl px-5 py-10 text-center text-muted-foreground">
                     <Pill className="w-5 h-5 mx-auto mb-2 text-[var(--text-3)]" strokeWidth={1.75} aria-hidden="true" />
                     <div className="text-sm font-semibold">{t("patients.treatment.empty")}</div>
-                    <button
-                      type="button"
-                      onClick={() => setShowNewTreatment(true)}
-                      className="text-xs text-[var(--brand)] hover:underline mt-2 inline-block rounded-[4px] focus-visible:outline-none focus-visible:shadow-[var(--ring)]"
-                    >
-                      {t("patients.treatment.createFirst")}
-                    </button>
+                    {canEditTreatments && (
+                      <button
+                        type="button"
+                        onClick={() => setShowNewTreatment(true)}
+                        className="text-xs text-[var(--brand)] hover:underline mt-2 inline-block rounded-[4px] focus-visible:outline-none focus-visible:shadow-[var(--ring)]"
+                      >
+                        {t("patients.treatment.createFirst")}
+                      </button>
+                    )}
                   </div>
                 ) : treatments.map((plan: any) => {
                   const completed = plan.sessions?.length ?? 0;
@@ -2578,18 +2609,22 @@ export function PatientDetailClient({
                           <span className={`text-[11px] font-semibold px-2.5 py-0.5 rounded-full border ${cfg.cls}`}>
                             {t(cfg.labelKey)}
                           </span>
-                          <button type="button" onClick={(e) => { e.stopPropagation(); setEditPlan(plan); }} className="p-1.5 rounded-lg text-muted-foreground hover:text-[var(--brand)] hover:bg-[var(--brand-soft)] transition-colors focus-visible:outline-none focus-visible:shadow-[var(--ring)]" aria-label={t("patients.treatment.editAria", { name: plan.name })} title={t("patients.treatment.editBtn")}>
-                            <Edit className="w-4 h-4" strokeWidth={1.75} />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={(e) => { e.stopPropagation(); handleDeleteTreatment(plan); }}
-                            className="p-1.5 rounded-lg text-[var(--danger)] hover:bg-[var(--danger-soft)] transition-colors focus-visible:outline-none focus-visible:shadow-[var(--ring)]"
-                            aria-label={t("patients.treatment.deletePlanAria", { name: plan.name })}
-                            title={t("patients.treatment.deletePlanTitle")}
-                          >
-                            <Trash2 className="w-4 h-4" strokeWidth={1.75} />
-                          </button>
+                          {canEditTreatments && (
+                            <>
+                              <button type="button" onClick={(e) => { e.stopPropagation(); setEditPlan(plan); }} className="p-1.5 rounded-lg text-muted-foreground hover:text-[var(--brand)] hover:bg-[var(--brand-soft)] transition-colors focus-visible:outline-none focus-visible:shadow-[var(--ring)]" aria-label={t("patients.treatment.editAria", { name: plan.name })} title={t("patients.treatment.editBtn")}>
+                                <Edit className="w-4 h-4" strokeWidth={1.75} />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={(e) => { e.stopPropagation(); handleDeleteTreatment(plan); }}
+                                className="p-1.5 rounded-lg text-[var(--danger)] hover:bg-[var(--danger-soft)] transition-colors focus-visible:outline-none focus-visible:shadow-[var(--ring)]"
+                                aria-label={t("patients.treatment.deletePlanAria", { name: plan.name })}
+                                title={t("patients.treatment.deletePlanTitle")}
+                              >
+                                <Trash2 className="w-4 h-4" strokeWidth={1.75} />
+                              </button>
+                            </>
+                          )}
                         </div>
                       </div>
                       <div className="flex items-center gap-3 mb-2">
@@ -2796,7 +2831,9 @@ export function PatientDetailClient({
                         </div>
                         <div className="flex items-center justify-end gap-2 px-5 py-4 border-t border-border">
                           <button type="button" onClick={() => setViewPlan(null)} className="px-3 h-9 rounded-lg border border-border text-sm font-semibold hover:bg-muted transition-colors focus-visible:outline-none focus-visible:shadow-[var(--ring)]">{t("common.close")}</button>
-                          <button type="button" onClick={() => { const p = viewPlan; setViewPlan(null); setEditPlan(p); }} className="px-3 h-9 rounded-lg bg-[var(--brand)] text-white text-sm font-semibold hover:bg-[var(--violet-700)] transition-colors focus-visible:outline-none focus-visible:shadow-[var(--ring)] active:scale-[0.98] inline-flex items-center gap-1.5"><Edit className="w-4 h-4" strokeWidth={1.75} />{t("patients.treatment.editBtn")}</button>
+                          {canEditTreatments && (
+                            <button type="button" onClick={() => { const p = viewPlan; setViewPlan(null); setEditPlan(p); }} className="px-3 h-9 rounded-lg bg-[var(--brand)] text-white text-sm font-semibold hover:bg-[var(--violet-700)] transition-colors focus-visible:outline-none focus-visible:shadow-[var(--ring)] active:scale-[0.98] inline-flex items-center gap-1.5"><Edit className="w-4 h-4" strokeWidth={1.75} />{t("patients.treatment.editBtn")}</button>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -2855,7 +2892,7 @@ export function PatientDetailClient({
           })()}
 
           {/* ===== TAB: RECETAS ===== */}
-          {tab === "recetas" && (
+          {tab === "recetas" && canViewPrescriptions && (
             <PrescriptionsTab patientId={patient.id} />
           )}
 
@@ -2929,7 +2966,7 @@ export function PatientDetailClient({
 
           {/* ===== TAB: FACTURACION ===== */}
           {/* ===== TAB: RADIOGRAFIAS ===== */}
-          {tab === "radiografias" && (() => {
+          {tab === "radiografias" && canViewXrays && (() => {
             if (!filesLoaded) loadFiles();
             return (
               <div className="space-y-4">
@@ -2939,11 +2976,13 @@ export function PatientDetailClient({
                     <h2 className="text-[15px] font-semibold tracking-[-0.01em]">{t("patients.xrays.title")}</h2>
                     <p className="text-xs text-muted-foreground tabular-nums">{t("patients.xrays.fileCount", { count: files.length })}</p>
                   </div>
-                  <label className="flex items-center gap-1.5 text-xs font-semibold bg-[var(--brand)] text-white px-3 h-9 rounded-lg cursor-pointer hover:bg-[var(--violet-700)] transition-colors shadow-[var(--shadow-1)]">
-                    <Plus className="w-4 h-4" strokeWidth={1.75} />
-                    {uploadingFile ? t("patients.xrays.uploading") : t("patients.xrays.uploadFile")}
-                    <input type="file" className="hidden" accept="image/*,application/pdf" onChange={uploadFile} disabled={uploadingFile} />
-                  </label>
+                  {canUploadXrays && (
+                    <label className="flex items-center gap-1.5 text-xs font-semibold bg-[var(--brand)] text-white px-3 h-9 rounded-lg cursor-pointer hover:bg-[var(--violet-700)] transition-colors shadow-[var(--shadow-1)]">
+                      <Plus className="w-4 h-4" strokeWidth={1.75} />
+                      {uploadingFile ? t("patients.xrays.uploading") : t("patients.xrays.uploadFile")}
+                      <input type="file" className="hidden" accept="image/*,application/pdf" onChange={uploadFile} disabled={uploadingFile} />
+                    </label>
+                  )}
                 </div>
 
                 {files.length === 0 && filesLoaded && (
@@ -3013,7 +3052,7 @@ export function PatientDetailClient({
                                 <span>🔍</span> {t("patients.xrays.openInViewer")}
                               </button>
                             )}
-                            {isImage && (
+                            {isImage && canAnalyzeXrays && (
                               <button
                                 type="button"
                                 onClick={() => analyzeFile(f.id)}
@@ -3042,16 +3081,18 @@ export function PatientDetailClient({
                                 {isExp ? t("patients.xrays.hideResults") : t("patients.xrays.showResults")}
                               </button>
                             )}
-                            <button
-                              type="button"
-                              onClick={() => handleDeleteFile(f)}
-                              className="flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-lg text-[var(--danger)] border border-[var(--danger-border-strong)] hover:bg-[var(--danger-soft)] transition-colors focus-visible:outline-none focus-visible:shadow-[var(--ring)]"
-                              aria-label={t("patients.xrays.deleteFileAria", { name: f.name })}
-                              title={t("patients.xrays.deleteFileTitle")}
-                            >
-                              <Trash2 className="w-4 h-4" strokeWidth={1.75} />
-                              {t("common.delete")}
-                            </button>
+                            {canEditRecords && (
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteFile(f)}
+                                className="flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-lg text-[var(--danger)] border border-[var(--danger-border-strong)] hover:bg-[var(--danger-soft)] transition-colors focus-visible:outline-none focus-visible:shadow-[var(--ring)]"
+                                aria-label={t("patients.xrays.deleteFileAria", { name: f.name })}
+                                title={t("patients.xrays.deleteFileTitle")}
+                              >
+                                <Trash2 className="w-4 h-4" strokeWidth={1.75} />
+                                {t("common.delete")}
+                              </button>
+                            )}
                           </div>
                         </div>
                       </div>

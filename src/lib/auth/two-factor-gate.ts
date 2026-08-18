@@ -158,3 +158,33 @@ export function needsTwoFactor(input: {
 }): boolean {
   return !!input.totpEnabled || !!input.require2fa;
 }
+
+/**
+ * La decisión del gate de 2FA para una PÁGINA server con sesión de equipo. Es
+ * la regla del layout de /dashboard, expresada como función pura para que la
+ * pueda aplicar —y fijar con tests— cualquier página que viva FUERA de
+ * /dashboard y por tanto no herede ese layout. Hoy: /teleconsulta/[id], que
+ * entrega el token de dueño de la sala de Daily con solo la sesión, sin pasar
+ * por el layout (no está bajo /dashboard) ni por el gate de /api (no lleva
+ * x-pathname: el middleware no cubre esa ruta).
+ *
+ *   • enroló 2FA y no trae la prueba (df_2fa) de ESTA persona+clínica → "challenge"
+ *   • la clínica exige 2FA y todavía no enroló                          → "setup"
+ *   • ninguna de las dos                                                → null
+ *
+ * El orden importa y es el del layout: quien ya enroló va al reto aunque la
+ * clínica además exija 2FA; el enrolamiento forzado es solo para quien no lo
+ * tiene. Y —lo mismo que needsTwoFactor— quien no tiene 2FA en una clínica que
+ * no lo exige recibe null y no se entera de que el gate existe.
+ */
+export type TwoFactorPageGateDecision = "challenge" | "setup" | null;
+
+export function twoFactorPageGateDecision(input: {
+  totpEnabled?: boolean | null;
+  require2fa?: boolean | null;
+  hasValidCookie: boolean;
+}): TwoFactorPageGateDecision {
+  if (input.totpEnabled) return input.hasValidCookie ? null : "challenge";
+  if (input.require2fa) return "setup";
+  return null;
+}

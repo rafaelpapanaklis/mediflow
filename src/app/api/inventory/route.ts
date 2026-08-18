@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthContext } from "@/lib/auth-context";
+import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { prisma } from "@/lib/prisma";
 
 export async function GET(req: NextRequest) {
@@ -19,7 +20,10 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  if (!ctx.isAdmin) return NextResponse.json({ error: "Solo administradores pueden agregar insumos" }, { status: 403 });
+  // EQ-07: "Editar inventario" del modal (por default SA/ADMIN, los mismos
+  // que dejaba pasar el `isAdmin` que había aquí), con override incluido.
+  const denied = denyIfMissingPermission(ctx, "inventory.edit");
+  if (denied) return denied;
 
   const body = await req.json();
   if (!body.name?.trim() || !body.category?.trim()) {

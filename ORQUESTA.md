@@ -9042,3 +9042,167 @@ verdad: el helper de servidor, el botón y el glifo, extraídos a un solo dueño
   verdad y comprobar que sale el manager que `/admin/account-managers` tiene asignado.
 - **No se ha mandado un solo WhatsApp real** desde este botón (igual que el resto del
   producto).
+
+## [ISO03-EQ07] — los interruptores de Permisos vuelven a mandar — 2026-08-18
+
+Rama `fix/iso03-eq07`, worktree `mediflow-worktrees/iso03-eq07`, desde `origin/main`
+(`3dda3fac`). Cierra los dos P1 que [P1-Seguridad] dejó parados a propósito, con la luz
+verde de `sql/p1-seguridad-quien-se-queda-fuera.sql`: **22 usuarios activos, 0 con
+override, 0 clínicas con override**. Nadie ha personalizado permisos, así que empezar a
+exigirlos no deja a nadie fuera por el lado del override — y los defaults por rol se
+revisaron uno por uno para que tampoco dejen fuera a nadie por el lado del rol.
+
+### Lo que decía el enunciado y lo que había de verdad
+
+- El catálogo tiene **57 interruptores, no 51**, y los muertos eran **14, no 13**:
+  `landing.edit` ya NO estaba muerto (lo cableó la Ola 1 de la mini-web) y había dos que
+  el reporte no listó: `xrays.analyze` (nadie lo leía y encima cobra tokens de IA) y
+  `prescription.create` (su único "lector" era la capa legacy con rol string, así que el
+  interruptor no hacía nada).
+- Los 14 de ISO-03 estaban confirmados y **no había ninguno más** (barrido de
+  `hasPermission(` con string en todo `src`). 12 mapean 1:1 a una key moderna con
+  **exactamente el mismo conjunto de roles** que la tabla legacy daba (SA/ADMIN/DOCTOR):
+  `medicalRecord.{read→view, create/update/delete→edit}` y
+  `prescription.{read→view, create/delete→create}`. Los 2 de ARCO no tenían key moderna.
+
+Tres subagentes de SOLO LECTURA hicieron el rastreo (uno por encargo: los 14 endpoints y
+su capa, los 57 permisos contra sus lectores reales, los defaults por rol contra el trabajo
+diario de cada rol); la lista con la propuesta por interruptor y su rol por default se
+enseñó ANTES de cablear y se aprobó con un cambio: ARCO con key nueva en vez de reusar
+`settings.edit`.
+
+### ISO-03 — las 14 llamadas legacy, migradas; la capa legacy, retirada
+
+`hasPermission(role: Role, "entidad.acción")` resolvía contra `ROLE_PERMISSIONS`, una
+tabla por ROL, y jamás miraba `permissionsOverride`. Las 14 llamadas pasan a
+`denyIfMissingPermission(ctx, key)`, la misma capa que ya usaban sus rutas hermanas
+(`/api/records`, `/api/clinical-notes` PATCH, `models-3d` PATCH):
+
+| Ruta | Antes (legacy) | Ahora (modal) |
+|---|---|---|
+| GET `/api/prescriptions`, GET `[id]/pdf`, POST `[id]/send` | `prescription.read` | `prescription.view` |
+| POST `/api/prescriptions`, POST `check-contraindications` | `prescription.create` | `prescription.create` |
+| DELETE `/api/prescriptions/[id]` (anular) | `prescription.delete` | `prescription.create` (+ dueño-o-admin, que se conserva) |
+| DELETE `/api/clinical-notes/[id]` | `medicalRecord.delete` | `medicalRecord.edit` (+ dueño-o-admin) |
+| POST/PATCH `/api/consult/ai-assist` | `medicalRecord.create/update` | `medicalRecord.edit` |
+| GET `/api/patients/[id]/export-cda` | `medicalRecord.read` | `medicalRecord.view` |
+| DELETE `models-3d/[fileId]` | `medicalRecord.delete` | `medicalRecord.edit` (igual que su PATCH) |
+| DELETE `/api/xrays/[id]` | `medicalRecord.delete` | `medicalRecord.edit` — **no** `xrays.upload`, que se lo habría regalado a recepción, que hoy no puede borrar |
+| GET/PATCH `/api/arco/[id]` + página `settings/arco-requests` | `arco.read/update` (rol) | **`arco.manage`, key nueva** "Ver y atender solicitudes ARCO (privacidad)"; default SA·ADMIN = los mismos que pasaban. A propósito no acaba en `.view` para que READONLY no la herede por el filtro |
+
+Con eso la capa legacy se quedó sin un solo consumidor y **se retiró entera** de
+`permissions.ts` (`Permission`, `ROLE_PERMISSIONS`, `roleHasEntityAction`, la sobrecarga
+por rol). `hasPermission` recibe SIEMPRE el usuario; pasar un string ya no compila y, si
+llega casteado, niega en vez de caer al default. Ya no queda forma de comprobar un permiso
+sin pasar por el override.
+
+### EQ-07 — los 14 muertos, uno por uno (todos fueron (a) cablear; ninguno era duplicado ni protegía algo inexistente)
+
+| Interruptor | Se cablea a | Default (SA·ADMIN siempre) |
+|---|---|---|
+| `prescription.view` / `prescription.create` | las rutas de recetas de ISO-03; la pestaña Recetas de la ficha se esconde sin `prescription.view` (antes salía para todos y recepción recibía 403) | +DOCTOR, sin cambio |
+| `xrays.view` | páginas `/dashboard/xrays` y `/[patientId]`, GET `/api/xrays`, GET del análisis, GET de anotaciones; la pestaña Radiografías de la ficha se esconde sin él | +DOCTOR **+RECEPTIONIST (nuevo)** |
+| `xrays.upload` | POST `/api/xrays` (también la subida genérica de archivos del paciente y adjuntos de la nota) | +DOCTOR **+RECEPTIONIST (nuevo)** |
+| `xrays.analyze` | POST `/api/xrays/[id]/analyze` (IA, cobra tokens) | +DOCTOR |
+| `treatments.view` | `/dashboard/treatments` + GET `/api/treatments` — son **planes** de tratamiento, no un catálogo (el catálogo de precios es `procedures`); reetiquetado y movido de "Catálogo" a un grupo "Planes de tratamiento" | los 5 roles, sin cambio |
+| `treatments.edit` | POST `/api/treatments`, PATCH/DELETE `[id]` (crear, registrar sesión, cambiar estado, editar) | **+DOCTOR +RECEPTIONIST (nuevos)** — la etiqueta "(admin)" mentía: el doctor es el autor del plan y recepción arma presupuestos |
+| `inventory.edit` | POST `/api/inventory`, PATCH `[id]` (**no tenía NINGUNA puerta**: cualquiera cambiaba existencias y precios), DELETE `[id]` | sin cambio |
+| `suppliers.order` | POST `/api/compras/orders`, `pay`, `reorder`, POST `/api/dental-labs/[labId]/ordenes` | sin cambio (módulos ocultos por `HIDE_SUPPLY_MODULES`) |
+| `tvModes.edit` | POST `/api/tv-displays`, PATCH/DELETE `[id]` | sin cambio |
+| `team.edit` | POST `/api/team`, PATCH/DELETE `/api/team/[id]` (alta, edición y baja) | **+ADMIN (nuevo)** — ya lo hacía por `requireAdmin`; la etiqueta "(solo SUPER_ADMIN)" no describía el gate. Permisos y reset de contraseña siguen SOLO SUPER_ADMIN por rol |
+| `settings.edit` | PATCH `/api/settings`, PATCH `/api/clinic`, PATCH `settings/schedule`, POST `settings/cfdi` y `cfdi/certificate` | sin cambio |
+| `procedures.edit` | POST `/api/procedures`, PATCH/DELETE `[id]`. GET **no** se toca: es el catálogo de precios que leen facturas, presupuestos y la consulta, y doctor/recepción no tienen `procedures.view` | sin cambio |
+| `clinicLayout.edit` | PUT `/api/clinic-layout`, PATCH `live-config`, POST `optimize`, POST/PUT `seed-demo` | sin cambio |
+
+Y en el mismo módulo, rutas que no tenían NINGUNA puerta y quedaban incoherentes al
+cerrar la lectura: PATCH notas del doctor sobre la placa y PUT/POST anotaciones →
+`medicalRecord.edit` (interpretación clínica). Las tres rutas de placas y las cuatro de
+Mi Clínica Visual (y `/api/clinic`) que traían una copia LOCAL de `getDbUser` (Supabase +
+prisma a mano) pasan por `getAuthContext`, así que ahora también respetan los gates de
+2FA y de plan vencido que se saltaban.
+
+**Defaults, resumidos:** RECEPTIONIST +`xrays.view` +`xrays.upload` +`treatments.edit` ·
+DOCTOR +`treatments.edit` · ADMIN +`team.edit` (queda con las 58) · READONLY y SUPER_ADMIN
+sin cambio. Lo único que se cierra a alguien que hoy podía: READONLY (ver/subir/analizar
+placas, crear planes, PATCH de inventario, pedidos, anotar placas), recepción (IA de
+placas, PATCH de inventario, pedidos, notas y anotaciones de placas), doctor (PATCH de
+inventario —cuya alta ya le daba 403—, pedidos). **ADMIN no pierde nada.**
+
+La UI acompaña a la puerta: la ficha esconde las pestañas Radiografías y Recetas sin su
+key, y los botones de subir/analizar/borrar placa y de crear/editar/borrar planes según su
+interruptor; el visor de placas esconde subir, analizar, borrar, la regla/ángulo/lápiz y
+el guardado de notas; la barra de escritorio de la ficha ahora también respeta
+`consents.view` (la tab bar móvil ya lo hacía; la barra pintaba una pestaña vacía).
+
+Etiquetas corregidas en el modal: `treatments.*` (planes), `team.edit` (alta/edición/baja),
+`suppliers.view` (sin el "y comprar"), `xrays.upload` (y archivos del paciente),
+`medicalRecord.edit` (incluye borrar borradores, placas y modelos 3D), `prescription.create`
+(y anular), `inventory.edit`, `settings.edit`.
+
+### Las dos propinas
+
+- **GET `/api/settings`** → `settings.view` (la misma key que la pantalla de Configuración).
+  Estaba abierto a los 5 roles; nadie del panel lo llama.
+- **`/teleconsulta/[id]` sin 2FA** — cerrado. La página no está bajo `/dashboard` (no hereda
+  el layout) ni lleva `x-pathname` (el middleware no cubre `/teleconsulta`), así que con la
+  contraseña robada y el reto sin pasar se entraba igual como dueño de la sala. La regla del
+  layout se extrajo a una función pura, `twoFactorPageGateDecision`
+  (`two-factor-gate.ts`), que ahora usan LOS DOS: el layout de `/dashboard` (reemplazo
+  mecánico de sus dos `if`) y la página de teleconsulta, con `totpEnabled` ya resuelto a
+  nivel persona por `getAuthContext` (EQ-02). El reto devuelve a `/dashboard/teleconsulta`
+  (su `next` solo acepta rutas de `/dashboard`).
+
+### Verificación
+
+- `npx next build` COMPLETO, leído entero, sin pipes: **exit 0**, 365/365 páginas (`.next` limpio, sandbox off). Lo único en el log son los `prisma:error` por `DATABASE_URL` de la generación estática (blog, casos de uso, planes) y los warnings de Tailwind/`file-type`, todos preexistentes.
+- `npx tsc --noEmit`: exit 0.
+- Tests: **19** en `permissions-matrix.test.ts` (matriz de 48 keys × 5 roles; override
+  vacío/lleno/inválido; ISO-03: la moderna da EXACTAMENTE los roles de la legacy, la
+  sobrecarga por rol ya no compila ni pasa; catálogo: cada key en un solo grupo, READONLY
+  solo `.view` y nada clínico, ADMIN = catálogo entero; y **el candado de EQ-07: el test
+  recorre `src/` y falla si una key del catálogo se queda sin lector, si una key exigida
+  solo la lee la UI, si alguna de las 46 rutas cableadas deja de exigir su key, o si vuelve
+  una llamada `hasPermission(<rol>, …)`**) + **5** nuevos en `two-factor-gate.test.ts`
+  (66 en total; la decisión coincide con `needsTwoFactor` en las 4 combinaciones) +
+  `whatsapp-write-permission` y `two-factor-identity` re-corridos. 0 fallos.
+- `sql/p1-seguridad-quien-se-queda-fuera.sql` actualizado al catálogo nuevo (58 llaves,
+  `arco.manage` en la lista de la consulta 7; comentario de la 5 al día).
+
+### Lo que NO se hizo, y por qué
+
+- **Ningún SQL hace falta ni se aplicó**: no hay cambio de esquema y no hay overrides que
+  rellenar. El día que una clínica personalice, el modal guarda la foto completa de las 58
+  keys, así que la key nueva `arco.manage` entra en su lista si el dueño la tilda.
+- **Los 10 interruptores SOLO-UI siguen como estaban** (`today.view`, `inventory.view`,
+  `suppliers.view`, `clinicLayout.view`, `marketplace.view`, `specialties.*`): esconden el
+  link del sidebar y el endpoint detrás no comprueba nada. No eran parte del encargo (los
+  13/14 muertos) y cablearlos toca superficies con más riesgo de dejar gente fuera
+  (`inventory.view` no lo tiene el doctor y GET `/api/inventory` lo usa al cerrar sesión de
+  plan; `specialties.*` no las tiene READONLY y las páginas gatean por módulo). Van en su
+  propia ola, con su tabla de roles.
+- **Incoherencias que salieron del rastreo y quedan anotadas:** GET `/api/tv-displays` sigue
+  por rol SA/ADMIN aunque `tvModes.view` lo tenga READONLY (abre la página y el API le da
+  403); READONLY abre `/dashboard/team` (lista SSR con correos y teléfonos) porque tiene
+  `team.view`; `analytics.view` lo tiene READONLY pero las páginas gatean por rol; POST
+  `/api/exercises` crea `inventoryItem` sin gate; `settings/signature` y `sucursales` gatean
+  por rol, no por key. Ninguna es de esta ola.
+- **Nada se probó con una sesión real**: todo está fijado por tests de función pura, por el
+  build y por el barrido del árbol. Falta el QA manual de abajo.
+
+### Qué probar en producción (a mano)
+
+1. Equipo → Permisos de una recepcionista: apagar "Subir radiografías y archivos" y guardar
+   → en la ficha de un paciente desaparece el botón "Subir archivo" y un POST a
+   `/api/xrays` da 403. Volver a "usar default del rol" → vuelve.
+2. Mismo modal, un doctor: apagar "Crear/firmar y anular recetas" → POST `/api/prescriptions`
+   403 (antes pasaba aunque estuviera apagado: es ISO-03).
+3. Un ADMIN: agrega, edita y da de baja un miembro del equipo (team.edit ahora es suyo por
+   default) — y sigue SIN ver el botón "Permisos" ni "Restablecer contraseña".
+4. Un doctor: crea un plan de tratamiento y registra una sesión desde la ficha; recepción
+   también. Un READONLY ya no ve el botón "Nuevo tratamiento".
+5. `/dashboard/settings/arco-requests` con ADMIN abre y resuelve una solicitud; con DOCTOR
+   redirige a `/dashboard?denied=arco.manage`.
+6. Un doctor con 2FA enrolado y sesión recién iniciada (sin pasar el reto): abrir el enlace
+   "Unirse" de una teleconsulta → cae en `/dashboard/2fa`, teclea el código, aterriza en
+   `/dashboard/teleconsulta` y desde ahí entra a la sala. El paciente con su liga entra igual
+   que antes.

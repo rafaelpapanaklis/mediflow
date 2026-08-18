@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import type { Role } from "@prisma/client";
 import { getAuthContext } from "@/lib/auth-context";
-import { hasPermission } from "@/lib/auth/permissions";
+import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { prisma } from "@/lib/prisma";
 import { sendWhatsAppLogged } from "@/lib/whatsapp/send-and-log";
 import { sendEmail } from "@/lib/email";
@@ -24,9 +23,11 @@ export const dynamic = "force-dynamic";
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  if (!hasPermission(ctx.role as Role, "prescription.read")) {
-    return NextResponse.json({ error: "forbidden" }, { status: 403 });
-  }
+  // ISO-03: "Ver recetas" del modal, override incluido (antes capa por rol).
+  // A propósito NO se exige además whatsapp.send: el doctor no lo tiene por
+  // default y se quedaría sin mandar sus propias recetas.
+  const denied = denyIfMissingPermission(ctx, "prescription.view");
+  if (denied) return denied;
 
   const body = await req.json().catch(() => ({}));
   const via = body?.via;

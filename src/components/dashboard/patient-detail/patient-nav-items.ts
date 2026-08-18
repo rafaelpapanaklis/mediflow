@@ -84,6 +84,16 @@ export interface BuildPatientNavOpts {
    * como prop — el cliente NO lo deduce del rol.
    */
   showConsents?: boolean;
+  /**
+   * Radiografías — requiere "xrays.view" (EQ-07). Mismo mecanismo que
+   * `showBilling`: `false` saca la pestaña; GET /api/xrays revalida con 403.
+   */
+  showXrays?: boolean;
+  /**
+   * Recetas — requiere "prescription.view" (ISO-03). Antes la pestaña salía
+   * para todos y recepción/solo-lectura la abrían para recibir un 403.
+   */
+  showPrescriptions?: boolean;
 }
 
 /**
@@ -163,10 +173,14 @@ export function buildPatientNavItems(opts: BuildPatientNavOpts): PatientNavItem[
   // quedan sincronizados y no se cuela ningún count ni subhead colgando.
   const hideBilling = opts.showBilling === false;
   const hideConsents = opts.showConsents === false;
+  const hideXrays = opts.showXrays === false;
+  const hidePrescriptions = opts.showPrescriptions === false;
   return items.filter(
     (i) =>
       !HIDDEN_SPECIALTY_IDS.has(i.id) &&
       !(hideBilling && i.id === "facturacion") &&
-      !(hideConsents && i.id === "consentimientos"),
+      !(hideConsents && i.id === "consentimientos") &&
+      !(hideXrays && i.id === "radiografias") &&
+      !(hidePrescriptions && i.id === "recetas"),
   );
 }

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
 import { getAuthContext } from "@/lib/auth-context";
+import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { prisma } from "@/lib/prisma";
 import { revalidateAfter } from "@/lib/cache/revalidate";
 import { encryptField, isEnvelope } from "@/lib/crypto/envelope";
@@ -24,19 +25,17 @@ import { sanitizeReminderSettings, sanitizeRecallSettings } from "@/lib/reminder
  * MISMOS campos (name/city/address/phone/email/description/isPublic) y sí
  * cortaba por rol; esta se quedó sin la puerta.
  *
- * El gate es el de `/api/clinic` letra por letra —rol de administrador— y no
- * un permiso del catálogo, a propósito: `settings.edit` hoy no lo lee NADIE
- * (EQ-07), así que empezar a exigirlo aquí dejaría fuera a cualquier
- * administrador cuyo `permissionsOverride` no lo incluya, y ese override
- * REEMPLAZA los defaults del rol. Eso se decide con los números en la mano,
- * no de paso en este arreglo.
+ * ISO-01 puso aquí el gate de `/api/clinic` letra por letra —rol de
+ * administrador— porque `settings.edit` no lo leía nadie y exigirlo podía
+ * dejar fuera a un administrador con `permissionsOverride`. EQ-07 midió
+ * (0 overrides) y cableó el interruptor: ahora manda "Editar configuración"
+ * del modal, que por default tienen SA y ADMIN — los mismos que pasaban.
  */
 export async function PATCH(req: NextRequest) {
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  if (!ctx.isAdmin) {
-    return NextResponse.json({ error: "Solo administradores" }, { status: 403 });
-  }
+  const denied = denyIfMissingPermission(ctx, "settings.edit");
+  if (denied) return denied;
 
   const body = await req.json();
 
@@ -136,6 +135,12 @@ export async function PATCH(req: NextRequest) {
 export async function GET(req: NextRequest) {
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  // Estaba abierto a cualquier sesión de la clínica: sin secretos, pero con
+  // RFC, taxId y twilioAccountSid. Misma key que la pantalla de Configuración
+  // ("Ver configuración"); hoy no lo llama nadie del panel.
+  const denied = denyIfMissingPermission(ctx, "settings.view");
+  if (denied) return denied;
 
   const clinic = await prisma.clinic.findUnique({
     where: { id: ctx.clinicId },

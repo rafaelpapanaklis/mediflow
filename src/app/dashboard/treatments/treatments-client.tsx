@@ -53,9 +53,12 @@ interface Props {
   patients: { id: string; firstName: string; lastName: string }[];
   doctors:  { id: string; firstName: string; lastName: string; color: string }[];
   currentUserId: string; isAdmin: boolean; clinicSlug: string;
+  /** "treatments.edit" (EQ-07), resuelto en el server: crear planes,
+   *  registrar sesiones y cambiar el estado. Los endpoints revalidan con 403. */
+  canEdit?: boolean;
 }
 
-export function TreatmentsClient({ treatments: initial, patients, doctors, currentUserId, isAdmin, clinicSlug }: Props) {
+export function TreatmentsClient({ treatments: initial, patients, doctors, currentUserId, isAdmin, clinicSlug, canEdit = false }: Props) {
   const t = useT();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -218,9 +221,11 @@ export function TreatmentsClient({ treatments: initial, patients, doctors, curre
             {t("pages.treatments.subtitle")}
           </p>
         </div>
-        <ButtonNew variant="primary" icon={<Plus size={14} />} onClick={() => setShowNew(true)}>
-          {t("pages.treatments.newPlan")}
-        </ButtonNew>
+        {canEdit && (
+          <ButtonNew variant="primary" icon={<Plus size={14} />} onClick={() => setShowNew(true)}>
+            {t("pages.treatments.newPlan")}
+          </ButtonNew>
+        )}
       </div>
 
       {/* KPIs */}
@@ -520,7 +525,7 @@ export function TreatmentsClient({ treatments: initial, patients, doctors, curre
               </div>
 
               {/* Add session */}
-              {selected.status === "ACTIVE" && (
+              {canEdit && selected.status === "ACTIVE" && (
                 <div style={{ marginBottom: 14 }}>
                   {addingSession === selected.id ? (
                     <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
@@ -592,7 +597,7 @@ export function TreatmentsClient({ treatments: initial, patients, doctors, curre
               )}
 
               {/* Status change */}
-              {selected.status === "ACTIVE" && addingSession !== selected.id && (
+              {canEdit && selected.status === "ACTIVE" && addingSession !== selected.id && (
                 <div style={{ display: "flex", gap: 8, paddingTop: 10, borderTop: "1px solid var(--border-soft)" }}>
                   <ButtonNew
                     variant="secondary"
@@ -610,7 +615,7 @@ export function TreatmentsClient({ treatments: initial, patients, doctors, curre
                   </ButtonNew>
                 </div>
               )}
-              {selected.status === "PAUSED" && (
+              {canEdit && selected.status === "PAUSED" && (
                 <ButtonNew
                   variant="primary"
                   onClick={() => changeStatus(selected.id, "ACTIVE")}

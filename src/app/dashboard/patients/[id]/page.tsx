@@ -226,6 +226,21 @@ export default async function PatientDetailPage({ params }: { params: { id: stri
   // revalida con 403.
   const canStartConversation = hasPermission(permsUser, "inbox.send");
 
+  // RADIOGRAFÍAS y ARCHIVOS (EQ-07): "Ver radiografías" decide si la pestaña
+  // existe; subir, analizar con IA y borrar tienen cada uno su interruptor. Se
+  // resuelven aquí, del modal (rol + override), y GET/POST /api/xrays,
+  // /analyze y DELETE los revalidan con 403. Recepción sube y organiza los
+  // archivos por default; interpretar la placa con IA y borrarla son clínicos.
+  const canViewXrays    = hasPermission(permsUser, "xrays.view");
+  const canUploadXrays  = hasPermission(permsUser, "xrays.upload");
+  const canAnalyzeXrays = hasPermission(permsUser, "xrays.analyze");
+  const canEditRecords  = hasPermission(permsUser, "medicalRecord.edit");
+  // RECETAS (ISO-03): la pestaña salía para todos aunque GET /api/prescriptions
+  // ya le diera 403 a recepción y solo-lectura. Misma key que el endpoint.
+  const canViewPrescriptions = hasPermission(permsUser, "prescription.view");
+  // PLANES DE TRATAMIENTO (EQ-07): crear/editar/borrar y registrar sesiones.
+  const canEditTreatments = hasPermission(permsUser, "treatments.edit");
+
   // Mismo criterio para el EXPEDIENTE (P1-N2): sin "Ver expediente clínico" la
   // ficha se sigue abriendo (contacto, citas, facturación) pero el SOAP no sale
   // del server. Se manda [] en vez de negar la página entera: quien no tiene el
@@ -436,6 +451,12 @@ export default async function PatientDetailPage({ params }: { params: { id: stri
           canRevokeConsents={canRevokeConsents}
           canSendWhatsApp={canSendWhatsApp}
           canStartConversation={canStartConversation}
+          canViewXrays={canViewXrays}
+          canUploadXrays={canUploadXrays}
+          canAnalyzeXrays={canAnalyzeXrays}
+          canEditRecords={canEditRecords}
+          canViewPrescriptions={canViewPrescriptions}
+          canEditTreatments={canEditTreatments}
           facturApiEnabled={Boolean((user.clinic as any).facturApiEnabled)}
           // Solo el modo fiscal (no la fila de Clinic): con qué impuestos nace
           // una factura nueva desde la ficha — igual que en Caja.

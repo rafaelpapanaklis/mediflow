@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthContext } from "@/lib/auth-context";
+import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { prisma } from "@/lib/prisma";
 import { makeSupplierOrderNumber } from "@/lib/suppliers/types";
 import { orderInclude, toSupplierOrderDTO } from "@/lib/suppliers/serializers";
@@ -29,6 +30,13 @@ export async function GET() {
 export async function POST(req: NextRequest) {
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
+
+  // EQ-07: "Hacer y pagar pedidos a proveedores y laboratorios" existía en el
+  // modal y no lo leía nadie: cualquier sesión de la clínica hacía el checkout.
+  // Por default SA/ADMIN; comprometer dinero de la clínica no es de recepción
+  // ni del doctor salvo que el dueño se lo encienda.
+  const denied = denyIfMissingPermission(ctx, "suppliers.order");
+  if (denied) return denied;
 
   const body = await req.json().catch(() => null);
   const supplierId = typeof body?.supplierId === "string" ? body.supplierId : "";

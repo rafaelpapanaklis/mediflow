@@ -1,10 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import type { Role } from "@prisma/client";
 import { getAuthContext } from "@/lib/auth-context";
 import { prisma } from "@/lib/prisma";
 import { assertPatientVisible } from "@/lib/patient-visibility";
 import { logMutation } from "@/lib/audit";
-import { hasPermission } from "@/lib/auth/permissions";
+import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { revalidatePath } from "next/cache";
 
 export const dynamic = "force-dynamic";
@@ -18,9 +17,11 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  if (!hasPermission(ctx.role as Role, "prescription.delete")) {
-    return NextResponse.json({ error: "forbidden" }, { status: 403 });
-  }
+  // ISO-03: anular es el inverso de firmar; no hay key aparte de "borrado" y
+  // "Crear/firmar y anular recetas" del modal (con su override) es la que
+  // manda. El dueño-o-admin de más abajo sigue acotando a quién.
+  const denied = denyIfMissingPermission(ctx, "prescription.create");
+  if (denied) return denied;
 
   const existing = await prisma.prescription.findFirst({
     where:  { id: params.id, clinicId: ctx.clinicId },

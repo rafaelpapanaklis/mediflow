@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthContext } from "@/lib/auth-context";
+import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { assertPatientVisible } from "@/lib/patient-visibility";
 import { prisma } from "@/lib/prisma";
 import { getVisiblePatientClinicIds, clinicScopeFilter } from "@/lib/branches";
@@ -19,6 +20,14 @@ function getAdminSupabase() {
 export async function GET(req: NextRequest) {
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  // EQ-07: "Ver radiografías" existía en el modal y no lo leía nadie — el
+  // dueño lo apagaba y la persona seguía viendo las placas. Ahora manda aquí y
+  // en las páginas de /dashboard/xrays. Lo tienen por default SA/ADMIN/DOCTOR
+  // y RECEPTIONIST (sube y organiza los archivos del paciente); READONLY no,
+  // igual que no ve el expediente.
+  const deniedPerm = denyIfMissingPermission(ctx, "xrays.view");
+  if (deniedPerm) return deniedPerm;
 
   const patientId = new URL(req.url).searchParams.get("patientId");
   if (!patientId) return NextResponse.json({ error: "patientId required" }, { status: 400 });
@@ -77,6 +86,12 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  // EQ-07: "Subir radiografías y archivos del paciente". Esta ruta es también
+  // la subida genérica de la ficha (fotos, PDFs, adjuntos de la nota), de ahí
+  // que recepción la tenga por default.
+  const deniedPerm = denyIfMissingPermission(ctx, "xrays.upload");
+  if (deniedPerm) return deniedPerm;
 
   const formData   = await req.formData();
   const file       = formData.get("file") as File | null;

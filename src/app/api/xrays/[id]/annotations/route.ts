@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { Prisma } from "@prisma/client";
-import { createClient } from "@/lib/supabase/server";
+import { getAuthContext } from "@/lib/auth-context";
+import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { prisma } from "@/lib/prisma";
-import { readActiveClinicCookie } from "@/lib/active-clinic";
 import { assertPatientVisible } from "@/lib/patient-visibility";
 
 export const dynamic = "force-dynamic";
@@ -21,21 +21,14 @@ const PutSchema = z.object({
   annotations: z.array(AnnotationSchema).max(200),
 });
 
+// Contexto vía el helper CENTRAL (getAuthContext): misma resolución
+// cookie→clínica que la copia local que había aquí (Supabase + prisma a
+// mano), pero pasando por los gates de 2FA y de plan vencido que la copia se
+// saltaba. ctx.user es la fila User con permissionsOverride normalizado, así
+// que sirve tal cual para denyIfMissingPermission.
 async function getDbUser() {
-  const supabase = createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return null;
-  const activeClinicId = readActiveClinicCookie();
-  if (activeClinicId) {
-    const u = await prisma.user.findFirst({
-      where: { supabaseId: user.id, clinicId: activeClinicId, isActive: true },
-    });
-    if (u) return u;
-  }
-  return prisma.user.findFirst({
-    where: { supabaseId: user.id, isActive: true },
-    orderBy: { createdAt: "asc" },
-  });
+  const ctx = await getAuthContext();
+  return ctx?.user ?? null;
 }
 
 interface Params { params: { id: string } }
@@ -56,6 +49,11 @@ export async function GET(_req: NextRequest, { params }: Params) {
   try {
     const dbUser = await getDbUser();
     if (!dbUser) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+
+    // EQ-07: leer las anotaciones es ver la placa (mismo interruptor que
+    // GET /api/xrays).
+    const denied = denyIfMissingPermission(dbUser, "xrays.view");
+    if (denied) return denied;
 
     const file = await prisma.patientFile.findFirst({
       where: { id: params.id, clinicId: dbUser.clinicId },
@@ -98,6 +96,11 @@ export async function PUT(req: NextRequest, { params }: Params) {
   try {
     const dbUser = await getDbUser();
     if (!dbUser) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+
+    // EQ-07: medir y trazar sobre la placa es interpretación clínica — mismo
+    // interruptor que las notas del doctor y las notas SOAP (SA/ADMIN/DOCTOR).
+    const denied = denyIfMissingPermission(dbUser, "medicalRecord.edit");
+    if (denied) return denied;
 
     const body = await req.json().catch(() => null);
     const parsed = PutSchema.safeParse(body);

@@ -2,6 +2,7 @@ export const dynamic = "force-dynamic";
 
 import type { Metadata } from "next";
 import { getCurrentUser } from "@/lib/auth";
+import { requirePermissionOrRedirect } from "@/lib/auth/require-permission";
 import { patientVisibilityAnd } from "@/lib/patient-visibility";
 import { prisma } from "@/lib/prisma";
 import { XraysPatientsList } from "./patients-list-client";
@@ -10,6 +11,9 @@ export const metadata: Metadata = { title: "Radiografías — DaleControl" };
 
 export default async function XraysPage() {
   const user = await getCurrentUser();
+  // EQ-07: la misma puerta que GET /api/xrays. Sin "Ver radiografías" la
+  // página no se abre (y el link de la paleta cae en /dashboard?denied=).
+  requirePermissionOrRedirect(user, "xrays.view");
   const clinicId = user.clinicId;
   const viewer = { userId: user.id, role: user.role, clinicId: user.clinicId };
 

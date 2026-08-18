@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getAuthContext, requireAdmin } from "@/lib/auth-context";
+import { getAuthContext } from "@/lib/auth-context";
+import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { prisma } from "@/lib/prisma";
 import { rateLimit } from "@/lib/rate-limit";
 import { uploadCertificate } from "@/lib/facturapi";
@@ -15,7 +16,10 @@ export async function POST(req: NextRequest) {
   if (rl) return rl;
 
   const ctx = await getAuthContext();
-  const denied = requireAdmin(ctx);
+  if (!ctx) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
+  // EQ-07: subir el CSD es configuración fiscal → "Editar configuración"
+  // (antes `requireAdmin`; mismos roles por default).
+  const denied = denyIfMissingPermission(ctx, "settings.edit");
   if (denied) return denied;
 
   if (!process.env.FACTURAPI_USER_KEY) {

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthContext } from "@/lib/auth-context";
+import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { prisma } from "@/lib/prisma";
 import { revalidateAfter } from "@/lib/cache/revalidate";
 
@@ -62,7 +63,12 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  if (!ctx.isAdmin) return NextResponse.json({ error: "Solo administradores" }, { status: 403 });
+  // EQ-07: "Editar procedimientos" del modal (por default SA/ADMIN = el
+  // `isAdmin` que había aquí), con override incluido. El GET sigue abierto a
+  // cualquier sesión a propósito: es el catálogo de precios que leen facturas,
+  // presupuestos y la consulta, y doctor/recepción no tienen procedures.view.
+  const denied = denyIfMissingPermission(ctx, "procedures.edit");
+  if (denied) return denied;
 
   try {
     const body = await req.json();

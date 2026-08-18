@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthContext } from "@/lib/auth-context";
+import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { prisma } from "@/lib/prisma";
 import { revalidateAfter } from "@/lib/cache/revalidate";
 import { logMutation } from "@/lib/audit";
@@ -8,6 +9,11 @@ import { assertPatientVisible } from "@/lib/patient-visibility";
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  // EQ-07: registrar sesiones, cambiar estado y editar el plan → "Crear y
+  // editar planes de tratamiento". El doctor sigue acotado a sus planes.
+  const deniedPerm = denyIfMissingPermission(ctx, "treatments.edit");
+  if (deniedPerm) return deniedPerm;
 
   const plan = await prisma.treatmentPlan.findFirst({
     where:   { id: params.id, clinicId: ctx.clinicId },
@@ -153,6 +159,9 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  // EQ-07: mismo interruptor que crear y editar.
+  const deniedPerm = denyIfMissingPermission(ctx, "treatments.edit");
+  if (deniedPerm) return deniedPerm;
   const plan = await prisma.treatmentPlan.findFirst({ where: { id: params.id, clinicId: ctx.clinicId } });
   if (!plan) return NextResponse.json({ error: "Plan no encontrado" }, { status: 404 });
   if (plan.patientId) {

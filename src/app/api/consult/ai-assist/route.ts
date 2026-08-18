@@ -4,7 +4,7 @@ import { getAuthContext } from "@/lib/auth-context";
 import { prisma } from "@/lib/prisma";
 import { addAiTokens } from "@/lib/ai-tokens";
 import { persistentRateLimit } from "@/lib/failban";
-import { hasPermission } from "@/lib/auth/permissions";
+import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { assertPatientVisible } from "@/lib/patient-visibility";
 import { logAudit } from "@/lib/audit";
 import { buildConsultContext } from "@/lib/ai/consult-context";
@@ -15,8 +15,6 @@ export const dynamic = "force-dynamic";
 
 const MODEL = "claude-sonnet-4-6";
 const DISCLAIMER = "Apoyo diagnóstico generado por IA. No sustituye el juicio clínico del profesional.";
-
-type Role = "DOCTOR" | "ADMIN" | "SUPER_ADMIN" | "RECEPTIONIST" | "READONLY";
 
 const SYSTEM_PROMPT = `Eres un asistente clínico de APOYO para dentistas en México. Recibes el expediente de un paciente (antecedentes, odontograma actual, consultas previas, recetas activas, tratamientos, radiografías, cuestionario de salud) y el motivo/borrador de la consulta de HOY. Produces un análisis breve, conservador y accionable para AYUDAR al doctor. NO eres el tratante y NO sustituyes su juicio.
 
@@ -74,9 +72,10 @@ function normalizeResult(parsed: any): ConsultResult {
 export async function POST(req: NextRequest) {
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  if (!hasPermission(ctx.role as Role, "medicalRecord.create")) {
-    return NextResponse.json({ error: "forbidden" }, { status: 403 });
-  }
+  // ISO-03: el análisis es contenido del expediente → "Editar notas SOAP /
+  // firmar" del modal, override incluido (antes capa por rol, medicalRecord.create).
+  const denied = denyIfMissingPermission(ctx, "medicalRecord.edit");
+  if (denied) return denied;
 
   // Freno de gasto POR CLÍNICA (no por IP: todo el consultorio comparte IP) y
   // persistente en Upstash — el Map en memoria no limita en serverless.
@@ -248,9 +247,9 @@ export async function POST(req: NextRequest) {
 export async function PATCH(req: NextRequest) {
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  if (!hasPermission(ctx.role as Role, "medicalRecord.update")) {
-    return NextResponse.json({ error: "forbidden" }, { status: 403 });
-  }
+  // ISO-03: escribe en un MedicalRecord → mismo interruptor que el POST.
+  const denied = denyIfMissingPermission(ctx, "medicalRecord.edit");
+  if (denied) return denied;
 
   const body = await req.json().catch(() => null);
   if (!body || typeof body !== "object") return NextResponse.json({ error: "Body inválido" }, { status: 400 });

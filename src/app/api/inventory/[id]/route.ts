@@ -1,10 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthContext } from "@/lib/auth-context";
+import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { prisma } from "@/lib/prisma";
 
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  // EQ-07: este PATCH no tenía NINGUNA puerta — cualquier sesión de la clínica
+  // (solo lectura incluida) cambiaba existencias, precios y nombres. Mismo
+  // interruptor que el alta y la baja: "Editar inventario" (SA/ADMIN).
+  const denied = denyIfMissingPermission(ctx, "inventory.edit");
+  if (denied) return denied;
 
   const body = await req.json();
   const item = await prisma.inventoryItem.findFirst({ where: { id: params.id, clinicId: ctx.clinicId } });
@@ -58,7 +65,9 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  if (!ctx.isAdmin) return NextResponse.json({ error: "Solo administradores pueden eliminar insumos" }, { status: 403 });
+  // EQ-07: "Editar inventario" (antes `isAdmin`, mismos roles por default).
+  const denied = denyIfMissingPermission(ctx, "inventory.edit");
+  if (denied) return denied;
 
   await prisma.inventoryItem.deleteMany({ where: { id: params.id, clinicId: ctx.clinicId } });
   return NextResponse.json({ success: true });

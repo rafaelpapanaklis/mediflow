@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthContext } from "@/lib/auth-context";
+import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { prisma } from "@/lib/prisma";
 import { createPreference } from "@/lib/mercadopago";
 
@@ -16,6 +17,10 @@ export async function POST(
 ) {
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
+
+  // EQ-07: pagar es parte de "Hacer y pagar pedidos" (SA/ADMIN por default).
+  const denied = denyIfMissingPermission(ctx, "suppliers.order");
+  if (denied) return denied;
 
   // clinicId de la sesión → una clínica jamás paga la orden de otra.
   const order = await prisma.supplierOrder.findFirst({

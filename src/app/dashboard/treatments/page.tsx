@@ -1,6 +1,8 @@
 export const dynamic = "force-dynamic";
 import type { Metadata } from "next";
 import { getCurrentUser } from "@/lib/auth";
+import { requirePermissionOrRedirect } from "@/lib/auth/require-permission";
+import { hasPermission } from "@/lib/auth/permissions";
 import { patientVisibilityAnd, relatedPatientVisibilityAnd } from "@/lib/patient-visibility";
 import { prisma } from "@/lib/prisma";
 import { TreatmentsClient } from "./treatments-client";
@@ -9,6 +11,8 @@ export const metadata: Metadata = { title: "Tratamientos — DaleControl" };
 
 export default async function TreatmentsPage() {
   const user = await getCurrentUser();
+  // EQ-07: misma puerta que GET /api/treatments.
+  requirePermissionOrRedirect(user, "treatments.view");
   const viewer = { userId: user.id, role: user.role, clinicId: user.clinicId };
 
   const treatments = await prisma.treatmentPlan.findMany({
@@ -68,6 +72,7 @@ export default async function TreatmentsPage() {
       currentUserId={user.id}
       isAdmin={user.role === "ADMIN" || user.role === "SUPER_ADMIN"}
       clinicSlug={user.clinic.slug}
+      canEdit={hasPermission({ role: user.role, permissionsOverride: user.permissionsOverride ?? [] }, "treatments.edit")}
     />
   );
 }

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthContext, requireAdmin } from "@/lib/auth-context";
+import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { prisma } from "@/lib/prisma";
 import { getPlanLimits } from "@/lib/plans";
 import { createClient as createAdminClient } from "@supabase/supabase-js";
@@ -57,8 +58,13 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   const ctx = await getAuthContext();
-  const err = requireAdmin(ctx);
-  if (err) return err;
+  if (!ctx) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
+  // EQ-07: dar de alta a un miembro es "Editar equipo" del modal (por default
+  // SA y ADMIN — los mismos que dejaba pasar el `requireAdmin` que había aquí),
+  // con override incluido. Lo que sigue siendo SOLO del SUPER_ADMIN por rol
+  // (permisos y reset de contraseña) vive en sus propias rutas.
+  const denied = denyIfMissingPermission(ctx, "team.edit");
+  if (denied) return denied;
 
   const body = await req.json();
   const { email, firstName, lastName, role, specialty, color, phone, services,

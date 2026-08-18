@@ -1,12 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthContext } from "@/lib/auth-context";
+import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { prisma } from "@/lib/prisma";
 import { revalidateAfter } from "@/lib/cache/revalidate";
 
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  if (!ctx.isAdmin) return NextResponse.json({ error: "Solo administradores" }, { status: 403 });
+  // EQ-07: "Editar procedimientos" (antes `isAdmin`, mismos roles por default).
+  const denied = denyIfMissingPermission(ctx, "procedures.edit");
+  if (denied) return denied;
 
   try {
     const existing = await prisma.procedureCatalog.findFirst({
@@ -38,7 +41,9 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  if (!ctx.isAdmin) return NextResponse.json({ error: "Solo administradores" }, { status: 403 });
+  // EQ-07: "Editar procedimientos" (antes `isAdmin`, mismos roles por default).
+  const denied = denyIfMissingPermission(ctx, "procedures.edit");
+  if (denied) return denied;
 
   try {
     await prisma.procedureCatalog.deleteMany({ where: { id: params.id, clinicId: ctx.clinicId } });

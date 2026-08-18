@@ -1,28 +1,21 @@
 import { NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
-import { createClient } from "@/lib/supabase/server";
+import { getAuthContext } from "@/lib/auth-context";
+import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { prisma } from "@/lib/prisma";
-import { readActiveClinicCookie } from "@/lib/active-clinic";
 import { DEMO_ELEMENTS } from "@/lib/floor-plan/demo-layout";
 import { TREATMENT_KINDS } from "@/lib/agenda/types";
 
 export const dynamic = "force-dynamic";
 
+// Contexto vía el helper CENTRAL (getAuthContext): misma resolución
+// cookie→clínica que la copia local que había aquí (Supabase + prisma a
+// mano), pero pasando por los gates de 2FA y de plan vencido que la copia se
+// saltaba. ctx.user es la fila User con permissionsOverride normalizado, así
+// que sirve tal cual para denyIfMissingPermission.
 async function getDbUser() {
-  const supabase = createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return null;
-  const activeClinicId = readActiveClinicCookie();
-  if (activeClinicId) {
-    const u = await prisma.user.findFirst({
-      where: { supabaseId: user.id, clinicId: activeClinicId, isActive: true },
-    });
-    if (u) return u;
-  }
-  return prisma.user.findFirst({
-    where: { supabaseId: user.id, isActive: true },
-    orderBy: { createdAt: "asc" },
-  });
+  const ctx = await getAuthContext();
+  return ctx?.user ?? null;
 }
 
 function isMissingTable(err: unknown): boolean {
@@ -48,9 +41,10 @@ export async function POST() {
   try {
     const dbUser = await getDbUser();
     if (!dbUser) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-    if (!["SUPER_ADMIN", "ADMIN"].includes(dbUser.role)) {
-      return NextResponse.json({ error: "forbidden" }, { status: 403 });
-    }
+    // EQ-07: "Editar Mi Clínica Visual" del modal (por default SA/ADMIN, los
+    // mismos que dejaba pasar la lista de roles que había aquí), con override.
+    const denied = denyIfMissingPermission(dbUser, "clinicLayout.edit");
+    if (denied) return denied;
 
     // 1. Crear/match Resources (lugares de tratamiento) para cada sillón demo.
     const existingChairs = await prisma.resource.findMany({
@@ -172,9 +166,10 @@ export async function PUT() {
   try {
     const dbUser = await getDbUser();
     if (!dbUser) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-    if (!["SUPER_ADMIN", "ADMIN"].includes(dbUser.role)) {
-      return NextResponse.json({ error: "forbidden" }, { status: 403 });
-    }
+    // EQ-07: "Editar Mi Clínica Visual" del modal (por default SA/ADMIN, los
+    // mismos que dejaba pasar la lista de roles que había aquí), con override.
+    const denied = denyIfMissingPermission(dbUser, "clinicLayout.edit");
+    if (denied) return denied;
     const layout = await prisma.clinicLayout.upsert({
       where: { clinicId: dbUser.clinicId },
       update: {},

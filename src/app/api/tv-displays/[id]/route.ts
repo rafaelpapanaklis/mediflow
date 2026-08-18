@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
+import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 
 export const dynamic = "force-dynamic";
 
@@ -19,9 +20,10 @@ const VALID_MODES = new Set(["OPERATIONAL", "MARKETING", "HYBRID"]);
 
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
   const user = await getCurrentUser();
-  if (!["SUPER_ADMIN", "ADMIN"].includes(user.role)) {
-    return NextResponse.json({ error: "forbidden" }, { status: 403 });
-  }
+  // EQ-07: "Configurar Pantallas TV" (antes lista de roles SA/ADMIN = mismo
+  // default), con override incluido.
+  const denied = denyIfMissingPermission(user, "tvModes.edit");
+  if (denied) return denied;
   const clinicId = user.clinicId;
 
   let body: { name?: string; mode?: string; config?: unknown; active?: boolean };
@@ -75,9 +77,10 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 
 export async function DELETE(_req: NextRequest, { params }: { params: { id: string } }) {
   const user = await getCurrentUser();
-  if (!["SUPER_ADMIN", "ADMIN"].includes(user.role)) {
-    return NextResponse.json({ error: "forbidden" }, { status: 403 });
-  }
+  // EQ-07: "Configurar Pantallas TV" (antes lista de roles SA/ADMIN = mismo
+  // default), con override incluido.
+  const denied = denyIfMissingPermission(user, "tvModes.edit");
+  if (denied) return denied;
   const clinicId = user.clinicId;
 
   // Validación tenant antes de delete.

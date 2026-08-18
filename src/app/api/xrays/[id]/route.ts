@@ -4,7 +4,7 @@ import { getAuthContext } from "@/lib/auth-context";
 import { prisma } from "@/lib/prisma";
 import { assertPatientVisible } from "@/lib/patient-visibility";
 import { logAudit } from "@/lib/audit";
-import { hasPermission } from "@/lib/auth/permissions";
+import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 
 /* ═══════════════════════════════════════════════════════════════════ */
 /*  PATCH — actualiza las notas clínicas del doctor sobre el archivo   */
@@ -17,6 +17,13 @@ const UpdateNotesSchema = z.object({
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  // EQ-07: las notas del doctor sobre la placa son interpretación clínica, no
+  // "subir un archivo": mismo interruptor que las notas SOAP y que el DELETE
+  // de abajo (SA/ADMIN/DOCTOR). Antes cualquier sesión de la clínica escribía
+  // aquí, recepción y solo-lectura incluidas.
+  const denied = denyIfMissingPermission(ctx, "medicalRecord.edit");
+  if (denied) return denied;
 
   let body: unknown;
   try {
@@ -85,9 +92,13 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  if (!hasPermission(ctx.role as any, "medicalRecord.delete")) {
-    return NextResponse.json({ error: "forbidden" }, { status: 403 });
-  }
+  // ISO-03: antes `hasPermission(ctx.role, "medicalRecord.delete")`, la capa
+  // por rol que ignoraba permissionsOverride. Borrar la placa es editar el
+  // expediente — mismo interruptor que el DELETE de modelos 3D (mismos roles
+  // por default: SA/ADMIN/DOCTOR). NO xrays.upload: se lo daría a recepción,
+  // que hoy no puede borrar.
+  const denied = denyIfMissingPermission(ctx, "medicalRecord.edit");
+  if (denied) return denied;
 
   const file = await prisma.patientFile.findFirst({
     where: { id: params.id, clinicId: ctx.clinicId },

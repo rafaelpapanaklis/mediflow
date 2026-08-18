@@ -3,6 +3,8 @@ export const dynamic = "force-dynamic";
 import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
+import { requirePermissionOrRedirect } from "@/lib/auth/require-permission";
+import { hasPermission } from "@/lib/auth/permissions";
 import { patientVisibilityAnd } from "@/lib/patient-visibility";
 import { prisma } from "@/lib/prisma";
 import { toPublicFileUrl } from "@/lib/storage";
@@ -17,6 +19,8 @@ interface Props {
 
 export default async function XraysPatientPage({ params, searchParams }: Props) {
   const user = await getCurrentUser();
+  // EQ-07: misma puerta que la lista y que GET /api/xrays.
+  requirePermissionOrRedirect(user, "xrays.view");
   const clinicId = user.clinicId;
   const viewer = { userId: user.id, role: user.role, clinicId: user.clinicId };
 
@@ -63,6 +67,10 @@ export default async function XraysPatientPage({ params, searchParams }: Props) 
   const aiLimit = clinic?.aiTokensLimit ?? 0;
   const normalized = files.map((f) => ({ ...f, url: toPublicFileUrl(f.url) }));
 
+  // EQ-07: qué acciones se pintan. Se resuelven aquí, del modal (rol +
+  // override), y cada endpoint las revalida con 403.
+  const permsUser = { role: user.role, permissionsOverride: user.permissionsOverride ?? [] };
+
   return (
     <XraysClient
       patients={[patient] as any}
@@ -73,6 +81,9 @@ export default async function XraysPatientPage({ params, searchParams }: Props) 
       initialPatientId={patient.id}
       initialFileId={searchParams.fileId}
       lockedToPatient
+      canUpload={hasPermission(permsUser, "xrays.upload")}
+      canAnalyze={hasPermission(permsUser, "xrays.analyze")}
+      canEditRecords={hasPermission(permsUser, "medicalRecord.edit")}
     />
   );
 }

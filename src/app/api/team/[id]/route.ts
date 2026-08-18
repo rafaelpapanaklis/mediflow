@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthContext, requireAdmin } from "@/lib/auth-context";
+import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { prisma } from "@/lib/prisma";
 import { getPlanLimits } from "@/lib/plans";
 import { createClient as createAdminClient } from "@supabase/supabase-js";
@@ -56,8 +57,12 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
 // PATCH /api/team/[id] — update doctor info
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
   const ctx = await getAuthContext();
-  const err = requireAdmin(ctx);
-  if (err) return err;
+  if (!ctx) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
+  // EQ-07: editar a un miembro es "Editar equipo" del modal (antes
+  // `requireAdmin`; mismos roles por default: SA y ADMIN), con override. Los
+  // guards de más abajo sobre SUPER_ADMIN siguen siendo por rol.
+  const denied = denyIfMissingPermission(ctx, "team.edit");
+  if (denied) return denied;
 
   // El body de la request solo se puede leer una vez. Antes lo leíamos dos
   // veces (una dentro del guard de self-edit y otra para el update), lo que
@@ -308,8 +313,10 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 // DELETE /api/team/[id] — permanently remove doctor
 export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {
   const ctx = await getAuthContext();
-  const err = requireAdmin(ctx);
-  if (err) return err;
+  if (!ctx) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
+  // EQ-07: dar de baja es "Editar equipo" (antes `requireAdmin`).
+  const denied = denyIfMissingPermission(ctx, "team.edit");
+  if (denied) return denied;
 
   // Cannot delete yourself
   if (params.id === ctx!.userId) {
