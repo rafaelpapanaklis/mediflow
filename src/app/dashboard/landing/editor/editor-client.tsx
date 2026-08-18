@@ -70,6 +70,42 @@ export interface ClinicaDelEditor extends BorradorLanding {
  */
 type Columna = ColumnaDeTexto | "landingThemeColor";
 
+/**
+ * Cómo se llama cada columna cuando hay que contarle a la clínica que se movió.
+ * El servidor manda nombres de columna; "landingTestimonials" no le dice nada
+ * a nadie.
+ */
+const NOMBRE_DE_COLUMNA: Record<string, string> = {
+  name:                "el nombre de la clínica",
+  phone:               "el teléfono",
+  address:             "la dirección",
+  description:         "la descripción",
+  landingTagline:      "el eslogan",
+  landingPatients:     "los pacientes atendidos",
+  landingUrgentText:   "el aviso de urgencias",
+  landingSections:     "los textos de las secciones",
+  landingServices:     "los servicios",
+  landingFaqs:         "las preguntas frecuentes",
+  landingTestimonials: "los testimonios",
+  landingPhotos:       "las fotos",
+  landingThemeColor:   "el color de acento",
+};
+
+/** "A", "A y B", "A, B y C". */
+function enumerar(cosas: string[]): string {
+  if (cosas.length === 0) return "algo de tu página";
+  if (cosas.length === 1) return cosas[0];
+  return `${cosas.slice(0, -1).join(", ")} y ${cosas[cosas.length - 1]}`;
+}
+
+/** Lo que devuelve el servidor cuando alguien SÍ tocó lo mismo que tú. */
+interface Conflicto {
+  campos: Columna[];
+  /** Lo que hay ahora publicado, solo de esas columnas. */
+  actual: Record<string, unknown>;
+  updatedAt: string;
+}
+
 /* ── contraste: aviso, no bloqueo ───────────────────────────────
    Las ocho plantillas pintan texto BLANCO sobre el acento. Por debajo de
    4.5:1 ese texto deja de leerse para mucha gente. Se avisa y ya: es la
@@ -101,7 +137,7 @@ export function EditorVisual({ inicial }: { inicial: ClinicaDelEditor }) {
   const [historial, setHistorial] = useState<{ b: ClinicaDelEditor; t: Columna[] }[]>([]);
   const [guardando, setGuardando] = useState(false);
   const [nonce, setNonce] = useState(0);
-  const [conflicto, setConflicto] = useState(false);
+  const [conflicto, setConflicto] = useState<Conflicto | null>(null);
   const [anchoDisponible, setAnchoDisponible] = useState(ANCHO_LIENZO);
   const [ventanaChica, setVentanaChica] = useState(false);
 
@@ -242,13 +278,36 @@ export function EditorVisual({ inicial }: { inicial: ClinicaDelEditor }) {
   }, [escribir, inicial.slug, subirFoto]);
 
   /* ── guardar / descartar ─────────────────────────────────── */
-  async function guardar() {
+  /**
+   * Publica lo que se tocó.
+   *
+   * Viaja LA MARCA con la que cargó esta pantalla y LA BASE: lo que esta
+   * pantalla tenía por publicado en esas mismas columnas. La base es lo que
+   * permite al servidor distinguir "otra pestaña me pisó" de "la fila se movió
+   * por el webhook de Stripe" — sin ella, el segundo caso salía como conflicto
+   * y el editor no guardaba nunca.
+   *
+   * `sobre` es la salida de "publicar de todos modos": se reintenta con la
+   * marca y los valores que acaba de devolver el servidor, así que el guardado
+   * entra y sustituye lo de la otra pestaña. Es una decisión de la clínica, y
+   * se le dice con esas palabras.
+   */
+  async function guardar(sobre?: { actual: Record<string, unknown>; updatedAt: string }) {
     if (!sinGuardar || guardando) return;
     setGuardando(true);
     try {
       // LISTA LITERAL. Nada de comparar el objeto clinic para deducir qué
       // cambió: ese patrón es el que causó 0424d5ab.
-      const cuerpo: Record<string, unknown> = { esperadoUpdatedAt: borrador.updatedAt };
+      const base: Record<string, unknown> = {};
+      for (const columna of tocados) {
+        base[columna] = sobre && columna in sobre.actual
+          ? sobre.actual[columna]
+          : (publicado as any)[columna];
+      }
+      const cuerpo: Record<string, unknown> = {
+        esperadoUpdatedAt: sobre?.updatedAt ?? borrador.updatedAt,
+        base,
+      };
       for (const columna of tocados) cuerpo[columna] = (borrador as any)[columna];
 
       const res = await fetch("/api/clinic-landing", {
@@ -256,7 +315,15 @@ export function EditorVisual({ inicial }: { inicial: ClinicaDelEditor }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(cuerpo),
       });
-      if (res.status === 409) { setConflicto(true); return; }
+      if (res.status === 409) {
+        const j = await res.json().catch(() => null);
+        setConflicto({
+          campos:    Array.isArray(j?.campos) ? j.campos : [],
+          actual:    (j?.actual && typeof j.actual === "object") ? j.actual : {},
+          updatedAt: typeof j?.updatedAt === "string" ? j.updatedAt : borrador.updatedAt,
+        });
+        return;
+      }
       if (!res.ok) throw new Error(await motivoDelFallo(res));
       const { updatedAt } = await res.json();
 
@@ -283,6 +350,36 @@ export function EditorVisual({ inicial }: { inicial: ClinicaDelEditor }) {
     setHistorial([]);
     setNonce(n => n + 1);
     toast("Se volvió a lo publicado.");
+  }
+
+  /* ── las dos salidas del conflicto ───────────────────────────
+     "Recarga y pierde lo que escribiste" no es una salida. Estas dos sí:
+     o gana lo tuyo, o gana lo de la otra pestaña, y en los dos casos lo
+     decides tú sabiendo QUÉ cambió. */
+
+  /** Lo mío encima. Se reintenta con la marca y los valores que hay ahora. */
+  function publicarDeTodosModos() {
+    if (!conflicto) return;
+    const c = conflicto;
+    setConflicto(null);
+    void guardar({ actual: c.actual, updatedAt: c.updatedAt });
+  }
+
+  /**
+   * Lo de la otra pestaña gana, PERO solo en las columnas que de verdad
+   * chocaron: lo que escribiste en las demás sigue aquí, sin publicar.
+   */
+  function traerLoDeLaOtraPestana() {
+    if (!conflicto) return;
+    const c = conflicto;
+    const traido = c.actual as Partial<ClinicaDelEditor>;
+    setBorrador(b => ({ ...b, ...traido, updatedAt: c.updatedAt }));
+    setPublicado(p => ({ ...p, ...traido, updatedAt: c.updatedAt }));
+    setTocados(t => t.filter(x => !c.campos.includes(x)));
+    setHistorial([]);
+    setConflicto(null);
+    setNonce(n => n + 1);
+    toast("Traído lo que se publicó en la otra pestaña.");
   }
 
   /* ── avisar al cerrar con cambios ────────────────────────── */
@@ -420,8 +517,11 @@ export function EditorVisual({ inicial }: { inicial: ClinicaDelEditor }) {
             <ExternalLink size={15} />
           </a>
 
+          {/* () => y no onClick={guardar}: guardar() acepta un argumento opcional
+              y onClick le pasaría el MouseEvent como si fuera "publica lo mío
+              de todos modos". */}
           <button
-            type="button" onClick={guardar} disabled={!sinGuardar || guardando}
+            type="button" onClick={() => void guardar()} disabled={!sinGuardar || guardando}
             className="inline-flex items-center justify-center h-9 px-4 rounded-[var(--radius-sm)] text-sm font-semibold text-white bg-brand-600 shadow-[var(--shadow-1)] hover:bg-brand-700 active:scale-[0.98] transition disabled:opacity-[.45] disabled:cursor-not-allowed"
           >
             {guardando ? "Publicando…" : "Publicar cambios"}
@@ -460,27 +560,39 @@ export function EditorVisual({ inicial }: { inicial: ClinicaDelEditor }) {
           pisa: se dice. */}
       {conflicto && (
         <div className="fixed inset-0 z-[80] grid place-items-center bg-black/45 p-4">
-          <div className="max-w-md w-full bg-card border border-[color:var(--border-soft)] rounded-[var(--radius-lg)] shadow-[var(--shadow-2)] p-5 space-y-3">
+          <div className="max-w-lg w-full bg-card border border-[color:var(--border-soft)] rounded-[var(--radius-lg)] shadow-[var(--shadow-2)] p-5 space-y-3">
             <h2 className="text-[15px] font-semibold text-[color:var(--text-1)]">
-              Tu página cambió en otra pestaña
+              Alguien más publicó {enumerar(conflicto.campos.map(c => NOMBRE_DE_COLUMNA[c] ?? c))}
             </h2>
             <p className="text-[13px] text-[color:var(--text-2)] leading-relaxed">
-              Alguien —o tú mismo en otra ventana— publicó cambios después de que abrieras este
-              editor. No los pisamos. Recarga para partir de la versión buena; lo que escribiste
-              aquí se pierde, así que cópialo antes si te hace falta.
+              Después de que abrieras este editor, se publicó otra versión de eso mismo —tú en otra
+              ventana, o alguien más de la clínica— y no la pisamos por tu cuenta. Lo que escribiste
+              aquí sigue en pantalla: decide tú cuál se queda.
             </p>
-            <div className="flex gap-2 justify-end pt-1">
+            <ul className="text-[12.5px] text-[color:var(--text-3)] leading-relaxed list-disc pl-5 space-y-0.5">
+              <li><b>Publicar lo mío</b>: se queda lo que ves en el lienzo y se sustituye lo otro.</li>
+              <li><b>Traer lo de la otra pestaña</b>: gana lo que ya está publicado. Lo que escribiste
+                  en {enumerar(conflicto.campos.map(c => NOMBRE_DE_COLUMNA[c] ?? c))} se pierde; lo demás
+                  se queda aquí sin publicar.</li>
+            </ul>
+            <div className="flex flex-wrap gap-2 justify-end pt-1">
               <button
-                type="button" onClick={() => setConflicto(false)}
+                type="button" onClick={() => setConflicto(null)}
                 className="h-9 px-3 rounded-[var(--radius-sm)] text-sm font-medium text-[color:var(--text-2)] hover:bg-[color:var(--bg-hover)] transition"
               >
-                Seguir aquí
+                Seguir aquí sin decidir
               </button>
               <button
-                type="button" onClick={() => window.location.reload()}
+                type="button" onClick={traerLoDeLaOtraPestana}
+                className="h-9 px-3 rounded-[var(--radius-sm)] text-sm font-medium text-[color:var(--text-1)] border border-[color:var(--border-soft)] hover:bg-[color:var(--bg-hover)] transition"
+              >
+                Traer lo de la otra pestaña
+              </button>
+              <button
+                type="button" onClick={publicarDeTodosModos}
                 className="h-9 px-4 rounded-[var(--radius-sm)] text-sm font-semibold text-white bg-brand-600 hover:bg-brand-700 transition"
               >
-                Recargar el editor
+                Publicar lo mío
               </button>
             </div>
           </div>
