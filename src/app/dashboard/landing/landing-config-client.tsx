@@ -8,6 +8,8 @@ import type { SectionState } from "@/app/[slug]/_shared/landing-data";
 import { LIVE_PREVIEW_FIELDS, parseLiveMessage, postLivePreview, type LivePreviewPatch } from "@/app/[slug]/_shared/live-preview";
 import { manifestOf, plantillaInstrumentada, plantillaLeeManifiesto, plantillaPinta, plantillasQueLeenManifiesto } from "@/app/[slug]/_shared/template-manifest";
 import { prepararImagen } from "@/lib/image-client";
+import { LandingUpgradeBanner } from "@/components/dashboard/landing-upgrade-banner";
+import type { AccountManagerCardData } from "@/lib/account-manager/get-for-clinic";
 
 /** Cuánto se espera antes de mandar al iframe. Escribir un párrafo manda un
     puñado de mensajes, no uno por tecla. */
@@ -35,8 +37,18 @@ interface Clinic {
  * `puedeEditar` es el permiso "landing.edit" resuelto en el servidor. Sin él la
  * pantalla se ve completa pero en solo lectura: el endpoint responde 403 y de
  * nada sirve dejar los botones puestos para que fallen al pulsarlos.
+ *
+ * `accountManager` llega YA resuelto del servidor (mismo helper que
+ * /dashboard/soporte) y `clinicName` es el nombre real de la clínica, que va en
+ * el mensaje pre-escrito de WhatsApp. Los dos son sólo para el banner del pie.
  */
-interface Props { clinic: Clinic; appUrl: string; puedeEditar: boolean }
+interface Props {
+  clinic: Clinic;
+  appUrl: string;
+  puedeEditar: boolean;
+  accountManager: AccountManagerCardData | null;
+  clinicName: string;
+}
 
 const TABS = [
   { id:"plantilla",    labelKey:"pages.landing.tabTemplate"   },
@@ -114,7 +126,7 @@ function TemplateThumb({ variant }: { variant: string }) {
   );
 }
 
-export function LandingConfigClient({ clinic: initial, appUrl, puedeEditar }: Props) {
+export function LandingConfigClient({ clinic: initial, appUrl, puedeEditar, accountManager, clinicName }: Props) {
   const t = useT();
   const [clinic, setClinic] = useState(initial);
   const [tab, setTab]       = useState("plantilla");
@@ -1153,6 +1165,13 @@ export function LandingConfigClient({ clinic: initial, appUrl, puedeEditar }: Pr
         </div>
       )}
       </fieldset>
+
+      {/* Cierre de la columna: si la mini-web se le queda corta, a quién le
+          escribe. Va FUERA del <fieldset>: preguntar por una cotización no es
+          editar el sitio, así que un usuario de solo lectura también lo ve y lo
+          puede pulsar (dentro del fieldset saldría atenuado). Al pie a
+          propósito — arriba estorbaría a lo que la clínica vino a hacer. */}
+      <LandingUpgradeBanner manager={accountManager} clinicName={clinicName} />
       </div>
 
       {/* ── VISTA PREVIA EN VIVO ──────────────────────────────────────

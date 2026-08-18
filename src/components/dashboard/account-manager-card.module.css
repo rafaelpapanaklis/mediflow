@@ -3,20 +3,12 @@
    Vive arriba de la lista de tickets en /dashboard/soporte.
 
    Los tokens del sistema (globals.css) fluyen directo, así que el tema
-   oscuro sale solo vía .dark global. Cero hex crudos… con UNA excepción
-   deliberada, documentada abajo: el verde de WhatsApp.
+   oscuro sale solo vía .dark global. Cero hex crudos: el verde de
+   WhatsApp (la única excepción del diseño) se mudó con el botón a
+   components/ui/whatsapp-link-button.module.css.
    ═══════════════════════════════════════════════════════════════════ */
 
 .card {
-  /* ── EXCEPCIÓN AL DESIGN SYSTEM ────────────────────────────────────
-     #16a34a es el verde de marca de WhatsApp (un tercero). Es justo lo
-     que hace el botón reconocible de un vistazo, así que NO se mapea a
-     --brand ni a --success: se declara como variable propia del
-     componente. Es el único color literal del archivo; todo lo demás
-     usa tokens. Decisión tomada por Rafael (prototipo, opción 1a).   */
-  --wa-green:       #16a34a;
-  --wa-green-hover: #148c40;
-
   display: flex;
   align-items: center;
   gap: 16px;
@@ -165,27 +157,8 @@
   width: 224px;
   flex-shrink: 0;
 }
-.waButton {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  height: 42px;
-  border-radius: var(--radius);
-  background: var(--wa-green);
-  color: #fff;
-  font-size: 13.5px;
-  font-weight: 700;
-  text-decoration: none;
-  box-shadow: var(--shadow-1), inset 0 -1.5px 0 rgba(0, 0, 0, 0.12);
-  transition: background 0.15s ease;
-}
-.waButton:hover { background: var(--wa-green-hover); color: #fff; }
-.waButton:focus-visible {
-  outline: none;
-  box-shadow: var(--ring);
-}
-.waIcon { flex-shrink: 0; }
+/* El botón verde lo pinta <WhatsAppLinkButton block />: ocupa el ancho de
+   esta columna y en móvil crece a 48px él solo. */
 
 .ticketHint {
   text-align: center;
@@ -273,7 +246,6 @@
   }
   .headRow { gap: 14px; }
   .actions { width: 100%; }
-  .waButton { height: 48px; font-size: 15px; }
   .name { font-size: 17px; }
   /* En columna la frase larga estorba: se guarda para ≥640px. */
   .quote { display: none; }

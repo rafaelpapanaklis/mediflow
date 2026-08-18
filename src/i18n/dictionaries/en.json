@@ -8026,7 +8026,13 @@
       "whatsappDesc": "Number with country code for the contact button",
       "handleDesc": "Just the @handle",
       "facebookDesc": "Full URL of your page",
-      "saveSocial": "💾 Save social media"
+      "saveSocial": "💾 Save social media",
+      "upgradeTitle": "Need a more advanced or custom website?",
+      "upgradeBodyNamed": "Your account manager, {name}, can quote it for you.",
+      "upgradeBody": "Your account manager can quote it for you.",
+      "upgradeBodyNoManager": "Tell us what you need and we'll quote it for you.",
+      "upgradeSupportCta": "Write to support",
+      "upgradeWhatsappMessage": "Hi {manager}, I'm from {clinic}. I'm on my clinic's website inside DaleControl and I'd like a more advanced or custom one. Could you send me a quote?"
     },
     "orthotics": {
       "title": "Orthotics Pipeline",

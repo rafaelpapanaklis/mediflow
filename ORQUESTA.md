@@ -8952,3 +8952,93 @@ temporal (`must-change-password.ts`: `updateMany({ where: { supabaseId } })`):
 - **La bitácora no registra `xray`, `inventory`, `procedure` ni pedidos a proveedores.** Son
   justo cuatro de los permisos más peligrosos de EQ-07, así que no se puede medir su uso
   desde la base: un cero ahí significa "no lo estamos midiendo", no "nadie lo usa".
+
+## [Landing-Banner-Manager] — la mini-web ya ofrece cotizar algo más grande — 2026-08-18
+
+En `/dashboard/landing`, al pie de la columna del editor, un banner: **"¿Necesitas una
+página más avanzada o personalizada?"** y el botón que abre WhatsApp con **el manager de
+cuenta asignado a esa clínica** en `/admin/account-managers`, con el mensaje ya escrito
+(de qué clínica viene y que es por la mini-web).
+
+### Qué se reutilizó y qué es nuevo
+
+Nada de esto se volvió a construir:
+
+- **`getAccountManagerForClinic(clinicId, {locale})`** — el mismo helper de servidor de
+  `/dashboard/soporte`. El banner NO consulta la base: recibe el manager ya resuelto.
+  `clinicId` sale de `getCurrentUser()`, es decir de la SESIÓN.
+- **El botón de WhatsApp** — se extrajo de la tarjeta de soporte a
+  `components/ui/whatsapp-link-button.tsx` (+ su CSS module). Mismas medidas, mismo verde
+  `#16a34a`, mismo salto a 48px en móvil. La tarjeta de soporte ahora lo importa: hay UNA
+  sola definición del botón y UN solo sitio que arma la URL de `wa.me`.
+- **El glifo de WhatsApp** — vivía duplicado (panel de clínica + panel de afiliados) y era
+  el tercer sitio a punto de copiar el mismo `<path d>`. Ahora es
+  `components/ui/whatsapp-glyph.tsx` y lo importan los tres. Sin CSS propio, porque el
+  botón del afiliado es morado y el de la clínica verde.
+- **Las llaves de i18n que ya existían**: `accountManager.writeWhatsapp` (la etiqueta del
+  botón) y `accountManager.writeNowReplyLater` (la nota de fuera de horario).
+
+Nuevo: `components/dashboard/landing-upgrade-banner.tsx` y seis llaves en `pages.landing`
+(es/en simétricas).
+
+### Componente nuevo, no una variante de la tarjeta
+
+Se descartó meterle `variant="banner"` a `<AccountManagerCard />`. Lo único que comparten
+es el botón y la foto: el banner no lleva horario, ni chip de estado, ni el "abre un
+ticket" —y sobre todo NO lleva el teléfono a la vista—, así que la variante habría sido un
+segundo componente disfrazado de `if`, y habría arrastrado un `onOpenTicket` obligatorio
+que en la pantalla de la mini-web no significa nada. Lo que sí se comparte se compartió de
+verdad: el helper de servidor, el botón y el glifo, extraídos a un solo dueño.
+
+### Los tres casos que no son el feliz
+
+- **Sin manager asignado** (`getAccountManagerForClinic` → `null`): **el banner se pinta
+  igual, pero manda a `/dashboard/soporte`** con un botón secundario del sistema. No se
+  oculta porque la necesidad —"quiero una página más grande"— es real aunque todavía no
+  sepamos quién la atiende, y esconderlo pierde la petición en silencio. No apunta a un
+  WhatsApp vacío, que era el fallo a evitar. El destino es coherente: la pantalla de
+  soporte, sin manager, ya ofrece justo el ticket con respuesta en menos de 24 h. También
+  cubre la lectura degradada (si un día la tabla falla, el helper devuelve `null` y el
+  banner sigue sirviendo).
+- **Manager fuera de horario**: el botón **sigue habilitado**, tal cual la tarjeta de
+  soporte. Sólo se añade la frase que ya existía: "puedes escribirle ahora; te contesta en
+  su horario".
+- **Manager sin WhatsApp usable**: mismo trato que sin manager. `whatsappE164` es NOT NULL
+  en la base, así que el caso real es una fila con el campo vacío o con basura; lo decide
+  `hasUsableWhatsapp()` (nuevo, en `lib/account-manager/types.ts`).
+
+### Decisiones tomadas sin preguntar
+
+- **Va al PIE de la columna, no arriba.** Arriba estorbaría a lo que la clínica vino a
+  hacer; al pie es el momento natural del "si esto se te queda corto...". Y **fuera del
+  `<fieldset disabled>`**: pedir una cotización no es editar el sitio, así que un usuario
+  de solo lectura (`landing.view` sin `landing.edit`) también lo ve y lo puede pulsar.
+- **NO se puso en `/dashboard/landing/editor`**, como pedía el encargo. Si Rafael lo
+  quiere ahí también, es un cambio de una línea.
+- **El teléfono no se pinta.** Va en el `href` y en ningún otro lado. La tarjeta de
+  soporte sí lo enseña; ahí es información de contacto, aquí sería ruido interno.
+- Se muestra la **foto y el nombre de pila** del manager: es lo que vuelve cierta la frase
+  "tu manager te la puede cotizar", y son los mismos datos que ya ve en soporte.
+
+### Qué se verificó
+
+- `npx next build` completo → **exit 0**, sin errores de tipos ni de compilación, con
+  `origin/main` ya fusionado (traía los cambios de 2FA de la otra terminal).
+- **Los cuatro estados, vistos en Chrome** con datos simulados, en dos anchos: 896px (el
+  ancho real de la columna, `max-w-4xl`) y 390px. En móvil el banner se apila, el avatar
+  se queda junto al título y el botón cruza a lo ancho con 48px de alto. Las páginas
+  temporales que se usaron para verlo se borraron.
+- El `href` sale bien formado: `wa.me/52XXXXXXXXXX?text=` con el mensaje encodeado una
+  sola vez (acentos y `¿` incluidos).
+- **Regresión de `/dashboard/soporte`**: la tarjeta del manager se renderizó en línea y
+  fuera de horario tras la extracción del botón. Se ve idéntica.
+
+### Qué falta / qué NO se hizo
+
+- **Cero SQL**: las tablas y la asignación ya existían. No hace falta correr nada.
+- Ningún endpoint nuevo: todo se resuelve en el server component.
+- **No se probó con una clínica real**: no hay `.env` con base en local, así que la
+  verificación fue con datos simulados. Falta abrir `/dashboard/landing` con una sesión de
+  verdad y comprobar que sale el manager que `/admin/account-managers` tiene asignado.
+- **No se ha mandado un solo WhatsApp real** desde este botón (igual que el resto del
+  producto).

@@ -1,0 +1,58 @@
+/* ═══════════════════════════════════════════════════════════════════
+   Botón "Escribir por WhatsApp" — la ÚNICA definición del panel.
+
+   Salió tal cual de account-manager-card.module.css (.waButton) al
+   necesitarlo una segunda pantalla. Mismas medidas, mismo verde, mismo
+   salto a 48px en móvil: la tarjeta de /dashboard/soporte se sigue
+   viendo exactamente igual que antes de la extracción.
+   ═══════════════════════════════════════════════════════════════════ */
+
+.waLink {
+  /* ── EXCEPCIÓN AL DESIGN SYSTEM ────────────────────────────────────
+     #16a34a es el verde de marca de WhatsApp (un tercero). Es justo lo
+     que hace el botón reconocible de un vistazo, así que NO se mapea a
+     --brand ni a --success: se declara como variable propia del
+     componente. Decisión tomada por Rafael (prototipo, opción 1a).
+     Antes vivía en `.card`; se muda con el botón para que éste no
+     dependa de quién lo monte.                                      */
+  --wa-green:       #16a34a;
+  --wa-green-hover: #148c40;
+
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 42px;
+  padding: 0 18px;
+  border-radius: var(--radius);
+  background: var(--wa-green);
+  color: #fff;
+  font-size: 13.5px;
+  font-weight: 700;
+  text-decoration: none;
+  box-shadow: var(--shadow-1), inset 0 -1.5px 0 rgba(0, 0, 0, 0.12);
+  transition: background 0.15s ease;
+}
+.waLink:hover { background: var(--wa-green-hover); color: #fff; }
+.waLink:focus-visible {
+  outline: none;
+  box-shadow: var(--ring);
+}
+
+/* Ocupa todo el ancho de su contenedor (la columna de acción de la
+   tarjeta de soporte, que mide 224px). */
+.block {
+  display: flex;
+  width: 100%;
+  padding: 0;
+}
+
+/* En móvil el botón manda: ancho completo y área táctil de 48px. */
+@media (max-width: 640px) {
+  .waLink {
+    display: flex;
+    width: 100%;
+    height: 48px;
+    font-size: 15px;
+  }
+}

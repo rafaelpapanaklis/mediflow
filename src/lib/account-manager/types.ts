@@ -76,6 +76,18 @@ export function formatWhatsappDisplay(e164: string): string {
   return `${national.slice(0, 3)} ${national.slice(3, 6)} ${national.slice(6)}`;
 }
 
+/**
+ * ¿El número del manager sirve para abrir un chat?
+ *
+ * `whatsappE164` es NOT NULL en BD, así que "manager sin WhatsApp" en la
+ * práctica es una fila con el campo vacío o con basura (alta a mano, importación).
+ * Un href a `wa.me/` con eso manda a la clínica a una pantalla de error de
+ * WhatsApp, así que quien pinte un botón tiene que preguntar antes.
+ */
+export function hasUsableWhatsapp(e164: string | null | undefined): boolean {
+  return digitsOnly(e164 ?? "").length >= WHATSAPP_NATIONAL_DIGITS;
+}
+
 /** Iniciales para el avatar de respaldo: "Rafael P." → "RP". */
 export function initialsFromName(name: string): string {
   const parts = String(name ?? "").trim().split(/\s+/).filter(Boolean);

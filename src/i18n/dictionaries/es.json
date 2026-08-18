@@ -8026,7 +8026,13 @@
       "whatsappDesc": "Número con código de país para botón de contacto",
       "handleDesc": "Solo el @usuario",
       "facebookDesc": "URL completa de tu página",
-      "saveSocial": "💾 Guardar redes sociales"
+      "saveSocial": "💾 Guardar redes sociales",
+      "upgradeTitle": "¿Necesitas una página más avanzada o personalizada?",
+      "upgradeBodyNamed": "Tu manager de cuenta, {name}, te la puede cotizar.",
+      "upgradeBody": "Tu manager de cuenta te la puede cotizar.",
+      "upgradeBodyNoManager": "Cuéntanos qué necesitas y te la cotizamos.",
+      "upgradeSupportCta": "Escríbenos por soporte",
+      "upgradeWhatsappMessage": "Hola {manager}, soy de {clinic}. Estoy en la página web de mi clínica en DaleControl y quiero una más avanzada o personalizada. ¿Me la puedes cotizar?"
     },
     "orthotics": {
       "title": "Pipeline Ortopédicos",
