@@ -6,7 +6,7 @@ import { useT } from "@/i18n/i18n-provider";
 import { ManifestEditor } from "./manifest-editor";
 import type { SectionState } from "@/app/[slug]/_shared/landing-data";
 import { LIVE_PREVIEW_FIELDS, parseLiveMessage, postLivePreview, type LivePreviewPatch } from "@/app/[slug]/_shared/live-preview";
-import { manifestOf, plantillaLeeManifiesto, plantillasQueLeenManifiesto } from "@/app/[slug]/_shared/template-manifest";
+import { manifestOf, plantillaInstrumentada, plantillaLeeManifiesto, plantillasQueLeenManifiesto } from "@/app/[slug]/_shared/template-manifest";
 import { prepararImagen } from "@/lib/image-client";
 
 /** Cuánto se espera antes de mandar al iframe. Escribir un párrafo manda un
@@ -414,6 +414,29 @@ export function LandingConfigClient({ clinic: initial, appUrl, puedeEditar }: Pr
           </button>
         </div>
       </div>
+
+      {/* Editor visual — solo si la plantilla activa está instrumentada (la
+          bandera vive en el manifiesto, esta pantalla no conoce ninguna
+          plantilla por su nombre) y solo con permiso de escritura. Ocultarlo
+          no es el gate: el gate está en /dashboard/landing/editor, en
+          /landing-preview y en el PATCH. */}
+      {puedeEditar && plantillaInstrumentada(clinic.landingTemplate) && (
+        <a href="/dashboard/landing/editor"
+          className="hidden lg:flex items-center gap-3 bg-card border border-[color:var(--border-brand)] rounded-[var(--radius)] shadow-[var(--shadow-1)] px-4 py-3 hover:shadow-[var(--shadow-2)] transition group">
+          <span className="w-9 h-9 shrink-0 grid place-items-center rounded-[var(--radius-sm)] bg-[color:var(--brand-soft)] text-[color:var(--brand)]">
+            <Zap size={17} strokeWidth={1.9} />
+          </span>
+          <span className="min-w-0">
+            <span className="block text-[13.5px] font-semibold text-[color:var(--text-1)]">
+              Editar haciendo clic encima
+            </span>
+            <span className="block text-[12px] text-[color:var(--text-3)]">
+              Abre tu sitio y cambia los textos y las fotos donde los ves. Desde el celular, usa el formulario de abajo.
+            </span>
+          </span>
+          <ChevronRight size={18} className="ml-auto shrink-0 text-[color:var(--text-3)] group-hover:translate-x-0.5 transition" />
+        </a>
+      )}
 
       {/* Link preview */}
       <div className="bg-[color:var(--brand-soft)] border border-[color:var(--border-brand)] rounded-[var(--radius)] px-4 py-3 flex items-center justify-between gap-3">

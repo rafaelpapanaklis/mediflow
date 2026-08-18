@@ -124,17 +124,27 @@ export interface LandingServiceItem {
   price?: string | null;
   durationMin?: number | null;
   icon?: string | null;
+  /**
+   * Posición en el array GUARDADO, no en el pintado.
+   *
+   * Estas listas filtran los elementos vacíos, así que el índice del map
+   * de la plantilla no sirve como dirección: el editor visual escribiría
+   * en el servicio equivocado. Ver @/lib/landing-address.
+   */
+  i: number;
 }
 
 /** landingServices tal cual lo pintan las plantillas (incluye desc). */
 export function serviceList(clinic: LandingClinic): LandingServiceItem[] {
   const raw = Array.isArray(clinic.landingServices) ? clinic.landingServices : [];
   const out: LandingServiceItem[] = [];
-  for (const s of raw) {
+  for (let i = 0; i < raw.length; i++) {
+    const s = raw[i];
     const name = typeof s?.name === "string" ? s.name.trim() : "";
     if (!name) continue;
     const dur = Number(s?.durationMin);
     out.push({
+      i,
       name,
       desc: typeof s?.desc === "string" && s.desc.trim() ? s.desc.trim() : null,
       price: typeof s?.price === "string" && s.price.trim() ? s.price.trim() : null,
@@ -145,15 +155,17 @@ export function serviceList(clinic: LandingClinic): LandingServiceItem[] {
   return out;
 }
 
-/** Testimonios normalizados: {name, text, rating}. */
-export function testimonialList(clinic: LandingClinic): { name: string; text: string; rating: number; meta?: string | null }[] {
+/** Testimonios normalizados: {name, text, rating}. `i` = posición guardada. */
+export function testimonialList(clinic: LandingClinic): { i: number; name: string; text: string; rating: number; meta?: string | null }[] {
   const raw = Array.isArray(clinic.landingTestimonials) ? clinic.landingTestimonials : [];
-  const out: { name: string; text: string; rating: number; meta?: string | null }[] = [];
-  for (const t of raw) {
+  const out: { i: number; name: string; text: string; rating: number; meta?: string | null }[] = [];
+  for (let i = 0; i < raw.length; i++) {
+    const t = raw[i];
     const text = typeof t?.text === "string" ? t.text.trim() : "";
     if (!text) continue;
     const r = Number(t?.rating);
     out.push({
+      i,
       name: typeof t?.name === "string" && t.name.trim() ? t.name.trim() : "Paciente",
       text,
       rating: Number.isFinite(r) && r >= 1 && r <= 5 ? r : 5,
@@ -163,14 +175,15 @@ export function testimonialList(clinic: LandingClinic): { name: string; text: st
   return out;
 }
 
-/** FAQs normalizadas: {q, a}. */
-export function faqList(clinic: LandingClinic): { q: string; a: string }[] {
+/** FAQs normalizadas: {q, a}. `i` = posición guardada. */
+export function faqList(clinic: LandingClinic): { i: number; q: string; a: string }[] {
   const raw = Array.isArray(clinic.landingFaqs) ? clinic.landingFaqs : [];
-  const out: { q: string; a: string }[] = [];
-  for (const f of raw) {
+  const out: { i: number; q: string; a: string }[] = [];
+  for (let i = 0; i < raw.length; i++) {
+    const f = raw[i];
     const q = typeof f?.q === "string" ? f.q.trim() : (typeof f?.question === "string" ? f.question.trim() : "");
     const a = typeof f?.a === "string" ? f.a.trim() : (typeof f?.answer === "string" ? f.answer.trim() : "");
-    if (q && a) out.push({ q, a });
+    if (q && a) out.push({ i, q, a });
   }
   return out;
 }

@@ -74,6 +74,21 @@ export interface TemplateManifest {
    * aparece solo.
    */
   leeManifiesto?: boolean;
+  /**
+   * ¿La plantilla está INSTRUMENTADA para el editor visual?
+   *
+   * `leeManifiesto` dice que obedece al formulario de secciones. Esto dice
+   * algo distinto y más fuerte: que sus textos van envueltos en <Txt> y sus
+   * fotos en <Foto> (_shared/edit-context.tsx), o sea que se puede editar
+   * haciendo clic encima de lo que se ve.
+   *
+   * Las dos banderas son independientes a propósito: una plantilla puede
+   * leer el manifiesto sin estar instrumentada todavía. Del set de las
+   * instrumentadas salen dos cosas: el botón "Editar mi sitio" y la prueba
+   * de __tests__/instrumentacion.test.tsx, que exige un nodo por cada texto
+   * y una ranura por cada foto declarados aquí abajo.
+   */
+  instrumentada?: boolean;
   secciones: ManifestSection[];
   fotos: ManifestPhotoSlot[];
   textos: ManifestText[];
@@ -154,6 +169,7 @@ export const TEMPLATE_MANIFESTS: Record<string, TemplateManifest> = {
     nombre: "Equipo",
     para: "Varias personas atendiendo: el argumento es quién te atiende.",
     leeManifiesto: true,
+    instrumentada: true,
     secciones: [
       SEC_SERVICIOS,
       SEC_EQUIPO,
@@ -174,6 +190,10 @@ export const TEMPLATE_MANIFESTS: Record<string, TemplateManifest> = {
     ],
     textos: [
       ...TEXTOS_BASE,
+      // Los pinta la plantilla desde siempre; faltaba declararlos, así que el
+      // formulario de Diseño no los ofrecía y el editor visual no los vería.
+      { seccion: "equipo", campo: "subtitulo", etiqueta: "Bajada del equipo", porDefecto: "" },
+      { seccion: "galeria", campo: "titulo", etiqueta: "Título de la galería", porDefecto: "Así se ve por dentro" },
       { seccion: "casos", campo: "titulo", etiqueta: "Título de casos", porDefecto: "Arrastra y mira la diferencia" },
       { seccion: "casos", campo: "subtitulo", etiqueta: "Descripción del caso", porDefecto: "Cuenta en dos líneas qué se hizo y en cuántas citas." },
       { seccion: "tecnologia", campo: "titulo", etiqueta: "Título de tecnología", porDefecto: "Lo que hay detrás del sillón" },
@@ -314,6 +334,25 @@ export function allPhotoSlotIds(): string[] {
 }
 
 /**
+ * Ids de sección que alguna plantilla declara.
+ *
+ * Los usa el editor visual para no dejar que el lienzo escriba en una
+ * sección inventada: `landingSections` es JSON libre, y una entrada que
+ * ninguna plantilla pinta se quedaría ahí para siempre sin que nadie la vea.
+ * Se incluyen también las secciones que solo aportan TEXTO (la cabecera de
+ * "tecnologia" en equipo, p. ej.), que no están en `secciones` pero sí en
+ * `textos`.
+ */
+export function allSectionIds(): string[] {
+  const ids = new Set<string>();
+  for (const m of Object.values(TEMPLATE_MANIFESTS)) {
+    for (const s of m.secciones) ids.add(s.id);
+    for (const t of m.textos) ids.add(t.seccion);
+  }
+  return Array.from(ids);
+}
+
+/**
  * ¿Esta plantilla obedece al editor de secciones, textos y ranuras de foto?
  *
  * Fuente ÚNICA: la bandera del manifiesto. La pantalla de Configuración
@@ -327,4 +366,20 @@ export function plantillaLeeManifiesto(templateId: string | null | undefined): b
 /** Las plantillas que SÍ obedecen al editor — para poder ofrecerlas por su nombre. */
 export function plantillasQueLeenManifiesto(): TemplateManifest[] {
   return Object.values(TEMPLATE_MANIFESTS).filter(m => m.leeManifiesto);
+}
+
+/**
+ * ¿Se puede abrir el editor visual con esta plantilla?
+ *
+ * Fuente ÚNICA, igual que `plantillaLeeManifiesto`: el botón "Editar mi
+ * sitio", el lienzo y la prueba de instrumentación preguntan aquí, y ninguno
+ * lleva su propia lista de nombres.
+ */
+export function plantillaInstrumentada(templateId: string | null | undefined): boolean {
+  return manifestOf(templateId).instrumentada === true;
+}
+
+/** Los ids de las plantillas instrumentadas, en el orden del manifiesto. */
+export function plantillasInstrumentadas(): string[] {
+  return Object.values(TEMPLATE_MANIFESTS).filter(m => m.instrumentada).map(m => m.id);
 }

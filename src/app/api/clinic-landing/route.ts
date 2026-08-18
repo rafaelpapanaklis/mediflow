@@ -47,14 +47,49 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ error: "No fields to update" }, { status: 400 });
   }
 
-  const clinic = await prisma.clinic.update({
-    where:  { id: ctx.clinicId },
-    data,
-    // Solo lo que hace falta para revalidar y contestar. Sin `select`, Prisma
-    // devuelve la fila COMPLETA (RFC, ids de Stripe, SID de Twilio…) y bastaba
-    // con olvidar un filtro para publicarla.
-    select: { slug: true, updatedAt: true },
-  });
+  /* CONCURRENCIA — el editor visual y el formulario de siempre son dos
+     superficies vivas a la vez, y a propósito. Quien manda `esperadoUpdatedAt`
+     dice "guardo sobre la versión que cargué"; si la fila se movió mientras
+     tanto, no se pisa: 409 y que la pantalla decida. Se hace con updateMany
+     porque `update` solo acepta claves únicas en el where, y comprobar antes
+     con un findUnique dejaría una rendija entre la lectura y la escritura. */
+  const esperado = typeof (body as Record<string, unknown>)?.esperadoUpdatedAt === "string"
+    ? new Date((body as Record<string, string>).esperadoUpdatedAt)
+    : null;
+  if (esperado && Number.isNaN(esperado.getTime())) {
+    return NextResponse.json({ error: "Cuerpo inválido" }, { status: 400 });
+  }
+
+  if (esperado) {
+    const tocadas = await prisma.clinic.updateMany({
+      where: { id: ctx.clinicId, updatedAt: esperado },
+      data,
+    });
+    if (tocadas.count === 0) {
+      // Se devuelven SOLO los campos que se intentaban guardar, y salen de la
+      // misma lista literal que ya se validó: nada de la fila entera.
+      const select: Record<string, boolean> = { updatedAt: true };
+      for (const campo of Object.keys(data)) select[campo] = true;
+      const actual = await prisma.clinic.findUnique({ where: { id: ctx.clinicId }, select });
+      return NextResponse.json(
+        { error: "Tu página cambió en otra pestaña desde que abriste esta.", conflicto: true, actual },
+        { status: 409 },
+      );
+    }
+  }
+
+  const clinic = esperado
+    ? await prisma.clinic.findUnique({ where: { id: ctx.clinicId }, select: { slug: true, updatedAt: true } })
+    : await prisma.clinic.update({
+        where:  { id: ctx.clinicId },
+        data,
+        // Solo lo que hace falta para revalidar y contestar. Sin `select`, Prisma
+        // devuelve la fila COMPLETA (RFC, ids de Stripe, SID de Twilio…) y bastaba
+        // con olvidar un filtro para publicarla.
+        select: { slug: true, updatedAt: true },
+      });
+
+  if (!clinic) return NextResponse.json({ error: "Clínica no encontrada" }, { status: 404 });
 
   // /[slug] es ISR con revalidate 300: sin esto la clínica guardaba, iba a ver
   // su sitio, no veía el cambio y creía que se había perdido. Ahora la página

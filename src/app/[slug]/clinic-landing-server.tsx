@@ -40,15 +40,21 @@ const CATEGORY_HIGHLIGHTS: Record<string, string[]> = {
  * `live` solo lo enciende /landing-preview: monta el puente que recibe por
  * postMessage lo que la clínica lleva escrito en el editor. La página
  * pública NUNCA escucha mensajes de nadie.
+ *
+ * `edit` es el lienzo del editor visual. Lo decide /landing-preview DESPUÉS
+ * de comprobar que quien mira tiene sesión de ESTA clínica y el permiso
+ * landing.edit; aquí llega ya resuelto y nunca sale de la URL.
  */
 export async function ClinicLandingServer({
   slug,
   previewTpl,
   live = false,
+  edit = false,
 }: {
   slug: string;
   previewTpl?: string;
   live?: boolean;
+  edit?: boolean;
 }) {
   /**
    * SEGURIDAD — `select` EXPLÍCITO, jamás `include` a secas.
@@ -90,7 +96,13 @@ export async function ClinicLandingServer({
   if (!clinic) notFound();
   const c = clinic as any;
 
-  if (!c.landingActive) {
+  /* Sin publicar, el visitante ve el cartel de "pronto".
+     En el EDITOR no: la clínica que todavía no publica es justamente la que
+     más necesita ver su sitio para decidir si lo publica. Hasta ahora este
+     return cortaba ANTES del switch de plantillas, así que el lienzo era un
+     rectángulo negro y el puente ni se montaba. `edit` ya viene comprobado
+     contra la sesión (ver /landing-preview/[slug]/page.tsx). */
+  if (!c.landingActive && !edit) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-slate-950 text-white text-center px-4">
         <div className="text-5xl mb-4">🏥</div>
@@ -121,5 +133,5 @@ export async function ClinicLandingServer({
 
   // El puente NO cambia nada de lo que se pinta: sin mensajes, la plantilla
   // recibe exactamente la misma clínica que sin él.
-  return live ? <LivePreviewBridge slug={c.slug}>{pagina}</LivePreviewBridge> : pagina;
+  return live ? <LivePreviewBridge slug={c.slug} edit={edit}>{pagina}</LivePreviewBridge> : pagina;
 }

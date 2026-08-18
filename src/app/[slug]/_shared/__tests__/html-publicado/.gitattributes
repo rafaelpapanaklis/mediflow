@@ -1,0 +1,11 @@
+# Estos archivos se comparan BYTE A BYTE contra lo que pinta react-dom/server
+# (../instrumentacion.test.tsx). Llevan saltos de línea dentro de los bloques
+# <style> de cada plantilla, y con core.autocrlf=true —el default en Windows—
+# Git los convertiría a CRLF al hacer checkout: el archivo dejaría de coincidir
+# con el render y la prueba fallaría en un clon limpio sin que nadie hubiera
+# tocado una plantilla. `-text` = Git no toca estos bytes.
+#
+# El .gitattributes vive AQUÍ dentro y no en la raíz porque los corchetes de
+# `[slug]` son una clase de caracteres en los patrones de gitattributes: la
+# ruta completa nunca casaría.
+*.html -text

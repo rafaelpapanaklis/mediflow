@@ -50,6 +50,10 @@
     "test:bonos-red": "tsx --test src/lib/affiliates/network-bonus-core.test.ts",
     "test:kit-marketing": "tsx --test src/lib/affiliates/__tests__/marketing-assets.test.ts",
     "test:afiliados-pagina": "tsx --test src/lib/affiliates/page-config.test.ts",
+    "//test:landing": "SIN --test: node interpreta los corchetes de [slug] como un patrón y no encuentra el archivo. node:test corre igual al importar el módulo.",
+    "test:landing": "tsx --tsconfig tsconfig.test.json \"src/app/[slug]/_shared/__tests__/instrumentacion.test.tsx\"",
+    "landing:golden": "tsx --tsconfig tsconfig.test.json scripts/landing-golden.ts",
+    "test:landing-address": "tsx --test src/lib/__tests__/landing-address.test.ts",
     "test:ua": "tsx --test src/lib/analytics/ua.test.ts",
     "test:account-manager": "tsx --test src/lib/account-manager/__tests__/availability.test.ts",
     "test:billing": "tsx --test src/lib/billing/proration.test.ts src/lib/billing/stripe-contract.test.ts src/lib/billing/webhook-decisions.test.ts src/lib/billing/manual-upgrade-diff.test.ts src/lib/billing/billing-guards.test.ts"

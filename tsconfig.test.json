@@ -1,0 +1,7 @@
+{
+  "//": "Las pruebas de landing pintan JSX en node (tsx --test). El tsconfig de la app deja jsx en 'preserve' porque de eso se encarga el compilador de Next; aquí hace falta que salga JS ejecutable.",
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "jsx": "react-jsx"
+  }
+}

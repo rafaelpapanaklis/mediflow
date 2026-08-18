@@ -28,7 +28,7 @@
    ============================================================ */
 import {
   Component, createContext, useContext, useEffect, useMemo, useState,
-  type ReactNode,
+  type ComponentType, type ReactNode,
 } from "react";
 import type { LandingClinic } from "./types";
 
@@ -179,10 +179,27 @@ class LiveBoundary extends Component<
 /**
  * Puente editor ⇄ iframe. Solo se monta en /landing-preview/[slug];
  * la página pública nunca escucha mensajes de nadie.
+ *
+ * `edit` enciende el EDITOR VISUAL dentro del lienzo (clic sobre un texto,
+ * soltar una foto en su hueco). Su runtime —_shared/edit-runtime.tsx— se
+ * trae con import() DINÁMICO y solo cuando hace falta: así su chunk no
+ * entra nunca en el First Load JS de /[slug], que es la página que abre un
+ * paciente. Mientras carga, <Txt>/<Foto> siguen siendo el passthrough de
+ * siempre, así que no hay estado intermedio roto.
  */
-export function LivePreviewBridge({ slug, children }: { slug: string; children: ReactNode }) {
+export function LivePreviewBridge({ slug, edit = false, children }: { slug: string; edit?: boolean; children: ReactNode }) {
   const [patch, setPatch] = useState<LivePreviewPatch | null>(null);
   const [resetKey, setResetKey] = useState(0);
+  const [Editor, setEditor] = useState<ComponentType<{ slug: string; children: ReactNode }> | null>(null);
+
+  useEffect(() => {
+    if (!edit) return;
+    let vivo = true;
+    import("./edit-runtime")
+      .then(m => { if (vivo) setEditor(() => m.EditProvider); })
+      .catch(() => { /* sin runtime el lienzo se queda en modo mirar, no roto */ });
+    return () => { vivo = false; };
+  }, [edit]);
 
   useEffect(() => {
     function onMessage(ev: MessageEvent) {
@@ -218,9 +235,11 @@ export function LivePreviewBridge({ slug, children }: { slug: string; children: 
     setResetKey(k => k + 1);
   }
 
+  const cuerpo = Editor ? <Editor slug={slug}>{children}</Editor> : children;
+
   return (
     <LiveClinicCtx.Provider value={patch}>
-      <LiveBoundary onFail={alFallar} resetKey={resetKey}>{children}</LiveBoundary>
+      <LiveBoundary onFail={alFallar} resetKey={resetKey}>{cuerpo}</LiveBoundary>
     </LiveClinicCtx.Provider>
   );
 }

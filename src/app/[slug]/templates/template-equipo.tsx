@@ -16,9 +16,14 @@ import { useState, useEffect } from "react";
 import { ChevronRight, Facebook, Instagram, MapPin, MessageCircle, Shield, Sparkles, Users, Zap } from "lucide-react";
 import type { TemplateProps } from "../_shared/types";
 import { useLiveClinic } from "../_shared/live-preview";
+import { Foto, Txt, useEnEdicion } from "../_shared/edit-context";
+// landing-address-parts y NO landing-address: este archivo viaja al navegador
+// de los pacientes, y el módulo grande arrastra el manifiesto de las ocho
+// plantillas (17 KB) sin que la página pública lo necesite para nada.
+import { dirClinica, dirFaq, dirSeccion, dirServicio, dirTestimonio } from "@/lib/landing-address-parts";
 import { tint, shade, alpha } from "../_shared/landing-utils";
 import {
-  faqList, msiPlazos, photoOf, sectionMap, sectionSubtitle, sectionTitle,
+  faqList, msiPlazos, photoOf, sectionMap, sectionTitle,
   serviceList, showSection, testimonialList, urgentText, weekSchedule,
 } from "../_shared/landing-data";
 import { BeforeAfter, StarRow } from "../_shared/landing-pieces";
@@ -29,6 +34,9 @@ export function TemplateEquipo({ clinic: publicada }: TemplateProps) {
   // En /dashboard/landing esto trae lo que la clínica lleva escrito sin
   // guardar; en la página pública devuelve `publicada` tal cual.
   const clinic = useLiveClinic(publicada);
+  /* Solo dentro del lienzo del editor. En la página pública es SIEMPRE false,
+     así que ninguna sección se pinta distinta para un paciente. */
+  const editando = useEnEdicion();
   const acento = clinic.landingThemeColor ?? "#0e7c66";
   const acentoOsc = shade(acento, 0.28);
   const acentoCl = tint(acento, 0.9);
@@ -84,9 +92,13 @@ export function TemplateEquipo({ clinic: publicada }: TemplateProps) {
   /* ---- qué secciones existen ---- */
   const verServicios = showSection(S, "servicios", servicios.length > 0);
   const verEquipo = showSection(S, "equipo", doctores.length > 0);
-  const verCasos = showSection(S, "casos", !!(casoAntes && casoDespues));
-  const verTec1 = showSection(S, "tecnologia1", !!tec1);
-  const verTec2 = showSection(S, "tecnologia2", !!tec2);
+  /* Estas tres solo dependen de que HAYA foto, y la foto se sube desde el
+     propio lienzo: si se ocultaran por estar vacías, no habría dónde soltarla
+     y la clínica no podría estrenarlas nunca. Siguen respetando el
+     interruptor de la sección — apagada sigue apagada. */
+  const verCasos = showSection(S, "casos", editando || !!(casoAntes && casoDespues));
+  const verTec1 = showSection(S, "tecnologia1", editando || !!tec1);
+  const verTec2 = showSection(S, "tecnologia2", editando || !!tec2);
   const verOpiniones = showSection(S, "opiniones", testimonios.length > 0 || !!google);
   const verGaleria = showSection(S, "galeria", galeria.length > 0);
   const verFaq = showSection(S, "faq", faqs.length > 0);
@@ -206,12 +218,15 @@ export function TemplateEquipo({ clinic: publicada }: TemplateProps) {
 
       {/* ============ HERO ============ */}
       <header style={{ position: "relative", minHeight: 640, display: "flex", alignItems: "flex-end", color: "#fff", overflow: "hidden", background: acentoOsc }}>
-        {portada && (
-          <div aria-hidden="true" style={{
-            position: "absolute", inset: 0,
-            background: `url("${portada}") center 28%/cover no-repeat`,
-          }} />
-        )}
+        <Foto slot="portada" url={portada} etiqueta="Portada" zona="derecha"
+          caja={{ position: "absolute", inset: 0 }}>
+          {(url) => url ? (
+            <div aria-hidden="true" style={{
+              position: "absolute", inset: 0,
+              background: `url("${url}") center 28%/cover no-repeat`,
+            }} />
+          ) : null}
+        </Foto>
         <div aria-hidden="true" style={{
           position: "absolute", inset: 0,
           background: `linear-gradient(100deg, ${alpha(shade(acento, 0.8), 0.94)} 0%, ${alpha(shade(acento, 0.8), 0.74)} 46%, ${alpha(shade(acento, 0.8), portada ? 0.3 : 0.7)} 100%)`,
@@ -220,12 +235,12 @@ export function TemplateEquipo({ clinic: publicada }: TemplateProps) {
           <span style={{ ...kicker, color: tint(acento, 0.55) }}>
             {clinic.specialty}{clinic.landingYearsExperience ? ` · desde hace ${clinic.landingYearsExperience} años` : ""}
           </span>
-          <h1 style={{ fontSize: "clamp(34px,5vw,58px)", fontWeight: 600, maxWidth: "16ch", margin: "14px 0 16px", lineHeight: 1.12, letterSpacing: "-.02em" }}>
-            {clinic.landingTagline || clinic.name}
-          </h1>
-          {clinic.description && (
-            <p style={{ maxWidth: "52ch", color: tint(acento, 0.78), fontSize: 17, margin: "0 0 28px" }}>{clinic.description}</p>
-          )}
+          <Txt as="h1" style={{ fontSize: "clamp(34px,5vw,58px)", fontWeight: 600, maxWidth: "16ch", margin: "14px 0 16px", lineHeight: 1.12, letterSpacing: "-.02em" }}
+            campo={dirClinica("landingTagline")} etiqueta="Eslogan" maxLen={300}
+            valor={clinic.landingTagline} porDefecto={clinic.name} />
+          <Txt as="p" style={{ maxWidth: "52ch", color: tint(acento, 0.78), fontSize: 17, margin: "0 0 28px" }}
+            campo={dirClinica("description")} etiqueta="Descripción de la clínica" maxLen={5000}
+            valor={clinic.description} />
           <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
             <button type="button" onClick={() => abrir()} style={btnP}>Agendar cita <ChevronRight size={16} /></button>
             {wa && (
@@ -299,8 +314,11 @@ export function TemplateEquipo({ clinic: publicada }: TemplateProps) {
         <section className="eq-sec" id="servicios" style={{ background: fondo2 }}>
           <div className="eq-wrap">
             <span style={kicker}>Servicios y precios</span>
-            <h2 style={secT}>{sectionTitle(S, "servicios", "Lo que cuesta, antes de sentarte")}</h2>
-            {sectionSubtitle(S, "servicios") && <p style={secS}>{sectionSubtitle(S, "servicios")}</p>}
+            <Txt as="h2" style={secT} campo={dirSeccion("servicios", "titulo")} linea maxLen={160}
+              etiqueta="Título de servicios" valor={S.servicios?.titulo}
+              porDefecto="Lo que cuesta, antes de sentarte" />
+            <Txt as="p" style={secS} campo={dirSeccion("servicios", "subtitulo")} maxLen={500}
+              etiqueta="Bajada de servicios" valor={S.servicios?.subtitulo} />
 
             <div className="eq-grid-4" style={{ marginTop: 40 }}>
               {servicios.map((s, i) => {
@@ -319,10 +337,16 @@ export function TemplateEquipo({ clinic: publicada }: TemplateProps) {
                       width: 40, height: 40, borderRadius: 11, display: "grid", placeItems: "center", marginBottom: 16, fontSize: 18,
                       background: relleno ? "rgba(255,255,255,.16)" : acentoCl, color: relleno ? "#fff" : acento,
                     }}>{s.icon || "🦷"}</span>
-                    <b style={{ fontSize: 16.5, fontWeight: 600, letterSpacing: "-.01em" }}>{s.name}</b>
-                    {s.desc && <p style={{ fontSize: 13.5, color: apagado, margin: "5px 0 18px", lineHeight: 1.5 }}>{s.desc}</p>}
+                    <Txt as="b" style={{ fontSize: 16.5, fontWeight: 600, letterSpacing: "-.01em" }}
+                      campo={dirServicio(s.i, "name")} etiqueta="Nombre del servicio" linea requerido maxLen={120}
+                      valor={s.name} />
+                    <Txt as="p" style={{ fontSize: 13.5, color: apagado, margin: "5px 0 18px", lineHeight: 1.5 }}
+                      campo={dirServicio(s.i, "desc")} etiqueta="Descripción del servicio" maxLen={400}
+                      valor={s.desc} />
                     <div style={{ marginTop: "auto", display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-                      {s.price && <span style={{ ...mono, fontSize: 19, fontWeight: 600 }}>{s.price}</span>}
+                      <Txt as="span" style={{ ...mono, fontSize: 19, fontWeight: 600 }}
+                        campo={dirServicio(s.i, "price")} etiqueta="Precio" linea maxLen={40}
+                        valor={s.price} />
                       {s.durationMin && <span style={{ ...mono, fontSize: 12.5, color: apagado }}>{s.durationMin} min</span>}
                       <button type="button" onClick={() => abrir({ service: s.name })} style={{
                         ...btnG, ...btnSm, marginLeft: "auto",
@@ -342,8 +366,11 @@ export function TemplateEquipo({ clinic: publicada }: TemplateProps) {
         <section className="eq-sec" id="equipo">
           <div className="eq-wrap">
             <span style={kicker}>Quién te atiende</span>
-            <h2 style={secT}>{sectionTitle(S, "equipo", doctores.length > 1 ? "Especialistas, no rotación de pasantes" : "Quién te va a atender")}</h2>
-            {sectionSubtitle(S, "equipo") && <p style={secS}>{sectionSubtitle(S, "equipo")}</p>}
+            <Txt as="h2" style={secT} campo={dirSeccion("equipo", "titulo")} linea maxLen={160}
+              etiqueta="Título del equipo" valor={S.equipo?.titulo}
+              porDefecto={doctores.length > 1 ? "Especialistas, no rotación de pasantes" : "Quién te va a atender"} />
+            <Txt as="p" style={secS} campo={dirSeccion("equipo", "subtitulo")} maxLen={500}
+              etiqueta="Bajada del equipo" valor={S.equipo?.subtitulo} />
 
             <div className="eq-grid-3" style={{ marginTop: 40 }}>
               {doctores.map(d => (
@@ -373,13 +400,24 @@ export function TemplateEquipo({ clinic: publicada }: TemplateProps) {
         <section className="eq-sec" id="casos" style={{ background: fondo2 }}>
           <div className="eq-wrap">
             <span style={kicker}>Casos reales</span>
-            <h2 style={secT}>{sectionTitle(S, "casos", "Arrastra y mira la diferencia")}</h2>
+            <Txt as="h2" style={secT} campo={dirSeccion("casos", "titulo")} linea maxLen={160}
+              etiqueta="Título de casos" valor={S.casos?.titulo}
+              porDefecto="Arrastra y mira la diferencia" />
             <div className="eq-grid-2" style={{ marginTop: 34 }}>
-              <BeforeAfter antes={casoAntes} despues={casoDespues} accent={acento} />
-              <div>
-                {sectionSubtitle(S, "casos") && (
-                  <p style={{ color: gris, margin: "10px 0 0", fontSize: 16 }}>{sectionSubtitle(S, "casos")}</p>
+              {/* Dos ranuras en un mismo hueco: la caja la pone la de "antes" y
+                  la de "después" cuelga su botonera de esa misma caja. */}
+              <Foto slot="caso1_antes" url={casoAntes} etiqueta="Caso 1 · antes" zona="izquierda"
+                caja={{ position: "relative" }} vacio={{ aspectRatio: "4/3" }}>
+                {(antes) => (
+                  <Foto slot="caso1_despues" url={casoDespues} etiqueta="Caso 1 · después" zona="derecha">
+                    {(despues) => <BeforeAfter antes={antes} despues={despues} accent={acento} />}
+                  </Foto>
                 )}
+              </Foto>
+              <div>
+                <Txt as="p" style={{ color: gris, margin: "10px 0 0", fontSize: 16 }}
+                  campo={dirSeccion("casos", "subtitulo")} etiqueta="Descripción del caso" maxLen={600}
+                  valor={S.casos?.subtitulo} />
                 <button type="button" onClick={() => abrir()} style={{ ...btnP, marginTop: 22 }}>Quiero mi valoración</button>
               </div>
             </div>
@@ -392,22 +430,32 @@ export function TemplateEquipo({ clinic: publicada }: TemplateProps) {
         <section className="eq-sec" id="tecnologia">
           <div className="eq-wrap">
             <span style={kicker}>Tecnología</span>
-            <h2 style={secT}>{sectionTitle(S, "tecnologia", "Lo que hay detrás del sillón")}</h2>
+            <Txt as="h2" style={secT} campo={dirSeccion("tecnologia", "titulo")} linea maxLen={160}
+              etiqueta="Título de tecnología" valor={S.tecnologia?.titulo}
+              porDefecto="Lo que hay detrás del sillón" />
 
-            {[{ ver: verTec1, foto: tec1, id: "tecnologia1" }, { ver: verTec2, foto: tec2, id: "tecnologia2" }]
+            {[{ ver: verTec1, foto: tec1, id: "tecnologia1", nombre: "Tecnología 1" }, { ver: verTec2, foto: tec2, id: "tecnologia2", nombre: "Tecnología 2" }]
               .filter(t => t.ver)
               .map((t, i) => (
                 <div key={t.id} className="eq-grid-2" style={{ marginTop: 38 }}>
                   <div style={{ order: i % 2 === 1 ? 2 : 0 }}>
-                    <div style={{ ...mono, fontSize: 12, letterSpacing: ".1em", textTransform: "uppercase", color: acento, marginBottom: 8 }}>
-                      {sectionTitle(S, t.id, "Equipo del consultorio")}
-                    </div>
-                    {sectionSubtitle(S, t.id) && <p style={{ color: gris, margin: "0 0 18px" }}>{sectionSubtitle(S, t.id)}</p>}
+                    <Txt as="div" style={{ ...mono, fontSize: 12, letterSpacing: ".1em", textTransform: "uppercase", color: acento, marginBottom: 8 }}
+                      campo={dirSeccion(t.id, "titulo")} linea maxLen={120}
+                      etiqueta={`${t.nombre} · nombre`} valor={S[t.id]?.titulo}
+                      porDefecto="Equipo del consultorio" />
+                    <Txt as="p" style={{ color: gris, margin: "0 0 18px" }}
+                      campo={dirSeccion(t.id, "subtitulo")} maxLen={500}
+                      etiqueta={`${t.nombre} · texto`} valor={S[t.id]?.subtitulo} />
                     <button type="button" onClick={() => abrir()} style={btnG}>Agendar cita</button>
                   </div>
-                  <div style={{ borderRadius: 14, overflow: "hidden", aspectRatio: "16/11", boxShadow: sombra }}>
-                    <img src={t.foto!} alt={sectionTitle(S, t.id, "Equipo del consultorio")} loading="lazy" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                  </div>
+                  <Foto slot={t.id} url={t.foto} etiqueta={t.nombre}
+                    caja={{ position: "relative" }} vacio={{ aspectRatio: "16/11" }}>
+                    {(url) => url ? (
+                      <div style={{ borderRadius: 14, overflow: "hidden", aspectRatio: "16/11", boxShadow: sombra }}>
+                        <img src={url} alt={sectionTitle(S, t.id, "Equipo del consultorio")} loading="lazy" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                      </div>
+                    ) : null}
+                  </Foto>
                 </div>
               ))}
           </div>
@@ -419,7 +467,9 @@ export function TemplateEquipo({ clinic: publicada }: TemplateProps) {
         <section className="eq-sec" id="opiniones" style={{ background: fondo2 }}>
           <div className="eq-wrap">
             <span style={kicker}>Opiniones</span>
-            <h2 style={secT}>{sectionTitle(S, "opiniones", google ? "Lo que dicen en Google" : "Lo que dicen nuestros pacientes")}</h2>
+            <Txt as="h2" style={secT} campo={dirSeccion("opiniones", "titulo")} linea maxLen={160}
+              etiqueta="Título de opiniones" valor={S.opiniones?.titulo}
+              porDefecto={google ? "Lo que dicen en Google" : "Lo que dicen nuestros pacientes"} />
 
             {google?.rating && (
               <div style={{ display: "flex", alignItems: "center", gap: 20, flexWrap: "wrap", margin: "26px 0 34px" }}>
@@ -432,20 +482,29 @@ export function TemplateEquipo({ clinic: publicada }: TemplateProps) {
             )}
 
             <div className="eq-grid-3" style={{ gap: 18, marginTop: google?.rating ? 0 : 34 }}>
+              {/* `dir` es null en las reseñas de Google: son de Google, no de la
+                  clínica, y no hay dónde guardarlas si alguien las reescribe. */}
               {(testimonios.length > 0
-                ? testimonios.map(t => ({ text: t.text, name: t.name, rating: t.rating, meta: t.meta }))
-                : (google?.reviews ?? []).slice(0, 3).map((r: any) => ({ text: r.text, name: r.author_name ?? "Paciente", rating: r.rating ?? 5, meta: r.relative_time_description ?? null }))
+                ? testimonios.map(t => ({ text: t.text, name: t.name, rating: t.rating, meta: t.meta, dir: t.i }))
+                : (google?.reviews ?? []).slice(0, 3).map((r: any) => ({ text: r.text, name: r.author_name ?? "Paciente", rating: r.rating ?? 5, meta: r.relative_time_description ?? null, dir: null }))
               ).slice(0, 6).map((t, i) => (
                 <article key={i} style={{ background: "#fff", border: `1px solid ${linea}`, borderRadius: 14, padding: 22 }}>
                   <StarRow value={t.rating} color="#fbbf24" />
-                  <p style={{ margin: "10px 0 16px", fontSize: 15, color: shade(acento, 0.55) }}>“{t.text}”</p>
+                  <Txt as="p" style={{ margin: "10px 0 16px", fontSize: 15, color: shade(acento, 0.55) }}
+                    campo={t.dir === null ? null : dirTestimonio(t.dir, "text")}
+                    etiqueta="Opinión" requerido maxLen={800}
+                    valor={t.text} prefijo="“" sufijo="”" />
                   <div style={{ display: "flex", alignItems: "center", gap: 11 }}>
                     <span style={{ width: 38, height: 38, borderRadius: "50%", background: acentoCl, color: acentoOsc, display: "grid", placeItems: "center", fontWeight: 600, fontSize: 14 }}>
                       {t.name.split(" ").map((w: string) => w[0]).slice(0, 2).join("").toUpperCase()}
                     </span>
                     <div>
-                      <b style={{ fontSize: 14.5, fontWeight: 600, display: "block" }}>{t.name}</b>
-                      {t.meta && <span style={{ fontSize: 12.5, color: gris }}>{t.meta}</span>}
+                      <Txt as="b" style={{ fontSize: 14.5, fontWeight: 600, display: "block" }}
+                        campo={t.dir === null ? null : dirTestimonio(t.dir, "name")}
+                        etiqueta="Quién lo dice" linea maxLen={80} valor={t.name} />
+                      <Txt as="span" style={{ fontSize: 12.5, color: gris }}
+                        campo={t.dir === null ? null : dirTestimonio(t.dir, "meta")}
+                        etiqueta="Cuándo / de dónde" linea maxLen={80} valor={t.meta} />
                     </div>
                   </div>
                 </article>
@@ -460,7 +519,9 @@ export function TemplateEquipo({ clinic: publicada }: TemplateProps) {
         <section className="eq-sec" id="galeria">
           <div className="eq-wrap">
             <span style={kicker}>La clínica</span>
-            <h2 style={secT}>{sectionTitle(S, "galeria", "Así se ve por dentro")}</h2>
+            <Txt as="h2" style={secT} campo={dirSeccion("galeria", "titulo")} linea maxLen={160}
+              etiqueta="Título de la galería" valor={S.galeria?.titulo}
+              porDefecto="Así se ve por dentro" />
             <div className="eq-gal" style={{ marginTop: 34 }}>
               {galeria.slice(0, 5).map((src, i) => (
                 <a key={i} href={src} target="_blank" rel="noopener noreferrer" style={{ borderRadius: 12, overflow: "hidden", aspectRatio: "1", display: "block" }}>
@@ -477,12 +538,18 @@ export function TemplateEquipo({ clinic: publicada }: TemplateProps) {
         <section className="eq-sec" style={{ background: fondo2 }}>
           <div className="eq-wrap">
             <span style={kicker}>Preguntas frecuentes</span>
-            <h2 style={secT}>{sectionTitle(S, "faq", "Lo que todos preguntan antes de venir")}</h2>
+            <Txt as="h2" style={secT} campo={dirSeccion("faq", "titulo")} linea maxLen={160}
+              etiqueta="Título de preguntas" valor={S.faq?.titulo}
+              porDefecto="Lo que todos preguntan antes de venir" />
             <div style={{ maxWidth: 820, margin: "34px auto 0" }}>
               {faqs.map((f, i) => (
                 <details key={i} open={i === 0} style={{ borderBottom: `1px solid ${linea}` }}>
-                  <summary style={{ cursor: "pointer", padding: "18px 0", fontWeight: 600, fontSize: 16.5, listStyle: "none" }}>{f.q}</summary>
-                  <p style={{ margin: "0 0 20px", color: gris }}>{f.a}</p>
+                  <Txt as="summary" style={{ cursor: "pointer", padding: "18px 0", fontWeight: 600, fontSize: 16.5, listStyle: "none" }}
+                    campo={dirFaq(f.i, "q")} etiqueta="Pregunta" linea requerido maxLen={200}
+                    valor={f.q} />
+                  <Txt as="p" style={{ margin: "0 0 20px", color: gris }}
+                    campo={dirFaq(f.i, "a")} etiqueta="Respuesta" requerido maxLen={1200}
+                    valor={f.a} />
                 </details>
               ))}
             </div>
@@ -494,7 +561,9 @@ export function TemplateEquipo({ clinic: publicada }: TemplateProps) {
       <section className="eq-sec" id="ubicacion">
         <div className="eq-wrap">
           <span style={kicker}>Ubicación y horarios</span>
-          <h2 style={secT}>{sectionTitle(S, "contacto", "Dónde estamos")}</h2>
+          <Txt as="h2" style={secT} campo={dirSeccion("contacto", "titulo")} linea maxLen={160}
+            etiqueta="Título de contacto" valor={S.contacto?.titulo}
+            porDefecto="Dónde estamos" />
           <div className="eq-ubi" style={{ borderRadius: 14, overflow: "hidden", border: `1px solid ${linea}`, marginTop: 34 }}>
             {clinic.landingMapEmbed
               ? <iframe src={clinic.landingMapEmbed} loading="lazy" title={`Mapa de ${clinic.name}`} style={{ width: "100%", height: "100%", minHeight: 420, border: 0, display: "block", filter: "grayscale(.15)" }} />

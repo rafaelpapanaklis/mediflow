@@ -8238,3 +8238,137 @@ RECEPTIONIST ❌ · READONLY ❌.
   que leen `sectionMap`.
 - Que `classic`, `futurista`, `healthtech` y `calido` aprendan a leer el manifiesto. El día que lo
   hagan, basta con poner `leeManifiesto: true` y el editor aparece solo.
+
+---
+
+## [Editor-Visual-Etapa1] — El motor, probado sobre "equipo"
+
+Rama `feat/editor-visual-miniweb`, worktree limpio desde `origin/main` (90848a21).
+Construido encima de la Ola 1: el gate `landing.edit`, `template-manifest.ts`,
+`image-client.ts` y `landing-fields.ts` ya estaban y no se tocaron.
+
+### Qué se puede hacer ahora que antes no
+
+Con la plantilla **equipo** activa aparece en `/dashboard/landing` una tarjeta
+"Editar haciendo clic encima" que lleva a `/dashboard/landing/editor`. Ahí está el
+sitio de la clínica a tamaño real: se hace clic sobre un texto y se edita en su
+sitio, se suelta una foto sobre su hueco y se ve al instante, se cambia el color de
+acento y todo se mueve en vivo. Nada se publica hasta pulsar "Publicar cambios".
+
+### La arquitectura, en corto
+
+- **El lienzo** es el iframe de siempre a `/landing-preview/<slug>?preview=<tpl>&edit=1`,
+  **con su propio scroll** y escalado solo por ancho (`escala = min(1, ancho/1280)`).
+  No se estira al alto del contenido ni se dibuja un solo overlay en el padre: la
+  geometría de `heatmap-stage.tsx` habría reventado los hero de 100vh, las barras
+  sticky y los botones fixed de las ocho plantillas.
+- **Las afordancias viven DENTRO del iframe** (`_shared/edit-runtime.tsx`). Mismo
+  origen, documento nuestro: cero rects, cero sincronía de scroll, y el archivo que
+  se suelta aterriza donde vive el `File`.
+- **Texto**: al hacer clic, el nodo **se sustituye en flujo por un `<textarea>`** con
+  los estilos calculados copiados inline. Nada de `contentEditable`. Campo **no
+  controlado**: mientras se escribe no sale ni un mensaje. `Esc` cancela; `Enter`
+  (una línea) o salir del campo confirma → **un** `postMessage`.
+- **`<Txt>` y `<Foto>`** (`_shared/edit-context.tsx`) son passthrough EXACTO sin
+  proveedor y no importan nada del runtime de edición. El runtime lo trae
+  `LivePreviewBridge` con `import()` dinámico y solo bajo `?edit=1`.
+- **Direccionamiento cerrado**: el iframe manda una cadena (`sec:servicios:titulo`,
+  `servicio:2:price`) y `@/lib/landing-address` la traduce contra un juego CERRADO
+  de formas a UNA columna ya permitida. El tipo `ColumnaDeTexto` es la intersección
+  de `CampoEditable` (el PATCH) con `LivePreviewField` (la vista previa): si una
+  columna faltara en cualquiera de las dos listas, no compila.
+- **Guardar manda una LISTA LITERAL** de las columnas tocadas. Jamás un diff del
+  objeto `clinic` — ese patrón causó `0424d5ab`.
+- **Sin autosave**: el PATCH publica y revalida tres rutas.
+- **409 real**: el editor manda el `updatedAt` con el que cargó y el PATCH usa
+  `updateMany` con ese `updatedAt` en el `where` (atómico; `update` solo acepta
+  claves únicas). Si la fila se movió, 409 con los valores actuales de los campos
+  que se intentaban guardar — nunca la fila.
+- **`?edit=1` exige sesión de ESA clínica y `landing.edit`**, comprobado en el
+  servidor de `/landing-preview` (esa ruta no pasa por el middleware). Solo
+  entonces se pinta una landing con `landingActive:false`, que hasta hoy cortaba
+  antes del switch de plantillas y dejaba un rectángulo negro.
+
+### El primer test de landing del repo
+
+`npm run test:landing` — 12 pruebas.
+
+1. **Manifiesto ↔ instrumentación**: por cada plantilla marcada `instrumentada`,
+   existe un nodo por cada texto y una ranura por cada foto que declara.
+2. **HTML byte-idéntico sin proveedor**: las **ocho** plantillas se pintan con una
+   clínica fixture y se comparan **byte a byte** contra `html-publicado/*.html`,
+   generados ANTES de tocar nada. Se usa `renderToString` (el de Next, marcas de
+   hidratación incluidas), no `renderToStaticMarkup`.
+   El golden de las ocho se guarda ya, así que las etapas 2-5 arrancan con su
+   línea base tomada del código pre-instrumentación.
+3. La prueba se **refutó**: metiendo un `data-refutacion="1"` en `<Txt>`, falla y
+   dice el byte exacto (26773 de 40425). Sin eso no valdría nada.
+
+`npm run test:landing-address` — 12 pruebas más sobre la frontera: qué formas se
+rechazan (`clinica:constructor`, `sec:inventada:titulo`, `foto:../../etc/passwd`,
+índices fuera de rango), dónde aterriza cada dirección, que vaciar guarda `null` y
+nunca el texto por defecto, y que una FAQ vieja `{question, answer}` se migra sin
+perder el campo que no se tocó.
+
+### Verificado
+
+- **`npx next build` COMPLETO, EXIT 0.** Leído entero, sin pipes.
+- **First Load JS de `/[slug]`: 261 kB → 263 kB (+2 kB).** La línea base la medí
+  compilando `origin/main` en un worktree aparte, no la di por buena.
+  La primera compilación dio **267 kB**: importar `@/lib/landing-address` desde la
+  plantilla arrastraba el manifiesto de las ocho (17 KB) al navegador de los
+  pacientes. De ahí sale `landing-address-parts.ts`, que no importa nada y solo
+  tiene seis funciones de una línea y tipos.
+- **En el navegador** (con dos rutas temporales, ya borradas, porque no hay
+  `DATABASE_URL` en local): clic en el titular → `<textarea>` con el MISMO tamaño,
+  fuente y saltos de línea, sin que el layout se mueva; escribir + salir → el
+  mensaje llega, se traduce a su columna y el parche vuelve pintado; `Esc` cancela;
+  vaciar un título → vuelve el texto por defecto de la plantilla; vaciar una
+  pregunta obligatoria → aviso y no se borra; soltar un PNG sobre `tecnologia1` →
+  vista previa inmediata; "Quitar" → el hueco punteado vuelve; el acento cambia en
+  vivo; y hacer clic en cualquiera de los 6 botones de "Agendar" **no** abre el
+  modal de reserva (el lienzo se edita, no se usa).
+- **Consola: cero errores de CSP, cero de postMessage, cero de hidratación.** Lo
+  único que sale son los scripts de Vercel Analytics que no cargan sin red.
+
+### Un fallo real que encontró la verificación
+
+El `<textarea>` llevaba `font: "inherit"` DESPUÉS de los estilos copiados: la
+taquigrafía pisa `fontSize`, `fontWeight` y `lineHeight`, así que un titular de
+58 px se escribía en 16. Se quitó y se añadió `maxWidth` a lo que se copia, para
+que un titular con `max-width:16ch` no se estire al empezar a escribir.
+
+### Decisiones que conviene saber
+
+- **`equipo` fue la barata, no la importante.** Se eligió porque ya leía el
+  manifiesto. En producción hay **10 clínicas con `classic` y 1 con `equipo`**: hasta
+  la Etapa 2 esto lo puede usar una sola clínica.
+- **Secciones que solo dependen de tener foto** (`casos`, `tecnologia1`,
+  `tecnologia2`) se pintan en el lienzo aunque estén vacías, con un hueco punteado.
+  Si no, no habría dónde soltar la primera foto. En la página pública siguen
+  ocultándose exactamente igual — lo garantiza el test byte-idéntico.
+- **Textos interpolados NO instrumentados**, marcados con `campo={null}`: la
+  duración de un servicio (`{s.durationMin} min`) y las reseñas de Google (son de
+  Google, no hay dónde guardarlas). Las comillas de un testimonio sí se editan, con
+  `prefijo`/`sufijo`, porque el valor guardado sigue siendo el texto pelado.
+- **Nada se borra de Storage** al cambiar o quitar una foto.
+- **Los fondos no se editan** y se dice con todas sus letras en la barra del editor.
+- Al manifiesto de `equipo` se le añadieron dos textos que la plantilla pintaba
+  desde siempre y nadie había declarado: `equipo.subtitulo` y `galeria.titulo`.
+
+### Lo que NO se pudo verificar en local
+
+- La pantalla `/dashboard/landing/editor` de verdad (barra, escalado real,
+  Guardar/Descartar/Deshacer, el 409 entre dos pestañas): todo eso exige sesión y
+  `DATABASE_URL`. Lo probado en el navegador fue el lienzo y el bus completos, con
+  el mismo runtime y el mismo módulo de direcciones, con una clínica de mentira.
+- Que el PATCH con `esperadoUpdatedAt` devuelva 409 contra Postgres.
+
+### Lo que queda abierto
+
+- Etapas 2-5: `classic` (10 de 11 clínicas), las otras 3 modernas, la columna
+  `landingCopy` para el copy escrito dentro de las plantillas, y las 3 viejas.
+- La primera foto de una ranura de una sección que NO es photo-gated (la galería,
+  el avatar de un doctor) sigue subiéndose desde el formulario.
+- `/dashboard/landing/page.tsx` sigue mandando la fila casi completa al cliente
+  (viene de antes; el editor nuevo sí usa `select` explícito).
