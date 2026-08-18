@@ -7,9 +7,36 @@ import { encryptField, isEnvelope } from "@/lib/crypto/envelope";
 import { stripClinicSecrets } from "@/lib/clinic-secrets";
 import { sanitizeReminderSettings, sanitizeRecallSettings } from "@/lib/reminders/config";
 
+/**
+ * ISO-01 — esta ruta reescribe la IDENTIDAD de la clínica.
+ *
+ * El handler entero se guardaba con `if (!ctx) return 401` y nada más, así que
+ * cualquier usuario con sesión —una recepcionista, un doctor, un usuario de
+ * solo lectura— podía mandar un fetch y:
+ *
+ *   · cambiarle el nombre a la clínica,
+ *   · meter un `rfcEmisor` falso, que es el que después sale en los CFDI,
+ *   · apagar `isPublic` y sacar la mini-web del directorio,
+ *   · poner SUS credenciales de Twilio y desviarse el WhatsApp entrante.
+ *
+ * Y todo eso sin pasar por la pantalla de Ajustes, que ya le daba 403 — porque
+ * el botón de Ajustes pega a `/api/clinic`, no aquí. Su gemela escribe LOS
+ * MISMOS campos (name/city/address/phone/email/description/isPublic) y sí
+ * cortaba por rol; esta se quedó sin la puerta.
+ *
+ * El gate es el de `/api/clinic` letra por letra —rol de administrador— y no
+ * un permiso del catálogo, a propósito: `settings.edit` hoy no lo lee NADIE
+ * (EQ-07), así que empezar a exigirlo aquí dejaría fuera a cualquier
+ * administrador cuyo `permissionsOverride` no lo incluya, y ese override
+ * REEMPLAZA los defaults del rol. Eso se decide con los números en la mano,
+ * no de paso en este arreglo.
+ */
 export async function PATCH(req: NextRequest) {
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!ctx.isAdmin) {
+    return NextResponse.json({ error: "Solo administradores" }, { status: 403 });
+  }
 
   const body = await req.json();
 

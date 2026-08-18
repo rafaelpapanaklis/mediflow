@@ -4,11 +4,18 @@ import type { Metadata } from "next";
 import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { IntegrationsClient } from "./integrations-client";
+import { requirePermissionOrRedirect } from "@/lib/auth/require-permission";
 
 export const metadata: Metadata = { title: "Integraciones — DaleControl" };
 
 export default async function IntegrationsPage() {
   const user = await getCurrentUser();
+  // Esta pantalla no tenía ninguna puerta: cualquier usuario con sesión la
+  // abría y guardaba las credenciales de Twilio de la clínica (ISO-01). El
+  // PATCH ya corta por rol; sin esto, una recepcionista se queda delante de
+  // un formulario de credenciales que revienta al guardar. Es el MISMO
+  // permiso que ya exige su hermana /dashboard/settings, no uno nuevo.
+  requirePermissionOrRedirect(user, "settings.view");
 
   const clinic = await prisma.clinic.findUnique({
     where: { id: user.clinicId },
