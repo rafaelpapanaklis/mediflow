@@ -22,8 +22,8 @@
 
    Sin "use client": lo carga el runtime, que ya lo es.
    ============================================================ */
-import { manifestOf, TEMPLATE_MANIFESTS } from "./template-manifest";
-import { etiquetaDeColumna } from "@/lib/landing-address";
+import { manifestOf, TEMPLATE_MANIFESTS, topeDeCopia } from "./template-manifest";
+import { etiquetaDeColumna, reglaDeColumna } from "@/lib/landing-address";
 
 /* Los campos de las listas no están en el manifiesto: no dependen de la
    plantilla, son la forma de un servicio, una FAQ o un testimonio. */
@@ -94,4 +94,82 @@ export function etiquetaDeCampo(campo: string, tpl?: string | null): string {
 export function ranuraDeFoto(slot: string, tpl?: string | null): { nombre: string; ayuda?: string } {
   const f = buscar(tpl, m => m.fotos.find((x: any) => x.id === slot));
   return f ? { nombre: f.nombre, ayuda: f.ayuda } : { nombre: slot };
+}
+
+/* ============================================================
+   CUÁNTO ADMITE CADA CAMPO, Y SI PUEDE QUEDARSE VACÍO
+
+   Estaba escrito en cada <Txt> de cada plantilla (`maxLen`, `linea`,
+   `requerido`): ~1000 props que no se pintan nunca en público y que, además,
+   se habían separado de la regla real. En diez botones el campo dejaba
+   escribir 80 caracteres donde el servidor solo acepta 60: la clínica
+   escribía, `aplicarDireccion` descartaba el cambio por pasarse del tope, y
+   el texto volvía atrás sin decir nada.
+
+   Ahora el tope sale de la MISMA fuente que aplica el servidor —
+   `topeDeCopia` del manifiesto y `reglaDeColumna` de landing-address — así
+   que no se pueden separar.
+
+   Los topes de las listas son los del lienzo (más ajustados que el tope duro
+   de `aplicarDireccion`, que son 2000): un nombre de servicio de 2000
+   caracteres cabe en la base pero rompe la tarjeta.
+   ============================================================ */
+
+interface Regla { maxLen: number; linea: boolean; requerido: boolean }
+
+const SERVICIO_R: Record<string, Regla> = {
+  name:  { maxLen: 120, linea: true,  requerido: true },
+  desc:  { maxLen: 400, linea: false, requerido: false },
+  price: { maxLen: 40,  linea: true,  requerido: false },
+};
+const FAQ_R: Record<string, Regla> = {
+  q: { maxLen: 200,  linea: true,  requerido: true },
+  a: { maxLen: 1200, linea: false, requerido: true },
+};
+const TESTIMONIO_R: Record<string, Regla> = {
+  text: { maxLen: 800, linea: false, requerido: true },
+  name: { maxLen: 80,  linea: true,  requerido: false },
+  meta: { maxLen: 80,  linea: true,  requerido: false },
+};
+/** Título y bajada de sección. El tope duro del servidor son 2000. */
+const SECCION_R: Record<string, Regla> = {
+  titulo:    { maxLen: 160, linea: true,  requerido: false },
+  subtitulo: { maxLen: 600, linea: false, requerido: false },
+};
+/** Las columnas que se escriben en una sola línea. */
+const COLUMNA_DE_UNA_LINEA = new Set(["name", "phone"]);
+
+const POR_DEFECTO: Regla = { maxLen: 300, linea: false, requerido: false };
+
+/** Cuánto admite ese campo, si va en una línea y si puede quedarse vacío. */
+export function reglaDeCampo(campo: string, tpl?: string | null): Regla {
+  const partes = campo.split(":");
+
+  if (partes.length === 2 && partes[0] === "clinica") {
+    const r = reglaDeColumna(partes[1]);
+    return r
+      ? { maxLen: r.maxLen, linea: COLUMNA_DE_UNA_LINEA.has(partes[1]), requerido: r.requerido }
+      : POR_DEFECTO;
+  }
+
+  if (partes.length === 2 && partes[0] === "copia") {
+    const decl = buscar(tpl, (m: any) => (m.copia ?? []).find((c: any) => c.clave === partes[1]));
+    return {
+      // El tope es el del MANIFIESTO, que es el que aplica el PATCH.
+      maxLen: topeDeCopia(partes[1]),
+      linea: decl?.linea ?? false,
+      requerido: false,
+    };
+  }
+
+  if (partes.length === 3) {
+    const tabla =
+      partes[0] === "sec"        ? SECCION_R :
+      partes[0] === "servicio"   ? SERVICIO_R :
+      partes[0] === "faq"        ? FAQ_R :
+      partes[0] === "testimonio" ? TESTIMONIO_R : null;
+    if (tabla && tabla[partes[2]]) return tabla[partes[2]];
+  }
+
+  return POR_DEFECTO;
 }

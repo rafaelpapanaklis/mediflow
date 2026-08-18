@@ -183,7 +183,7 @@ export function TemplateSonrisa({ clinic: publicada }: TemplateProps) {
             {nav.map(l => <a key={l.href} href={l.href} style={{ textDecoration: "none", fontSize: 14.5, color: gris }}>{l.label}</a>)}
           </div>
           <Txt as="button" type="button" onClick={() => abrir()} style={{ ...btnP, ...btnSm }}
-            campo={dirCopia("nav.cta")} linea maxLen={60}
+            campo={dirCopia("nav.cta")}
             valor={C("nav.cta")} porDefecto="Agenda tu valoración" />
         </div>
       </nav>
@@ -193,20 +193,20 @@ export function TemplateSonrisa({ clinic: publicada }: TemplateProps) {
         <div style={{ padding: "60px 60px 60px max(26px, calc((100vw - 1240px)/2 + 26px))" }}>
           <span style={eyebrow}>{clinic.specialty}{clinic.city ? ` · ${clinic.city}` : ""}</span>
           <Txt as="h1" style={{ fontSize: "clamp(42px,5.6vw,74px)", fontWeight: 600, letterSpacing: "-.035em", lineHeight: 1.06, margin: 0 }}
-            campo={dirClinica("landingTagline")} maxLen={300}
+            campo={dirClinica("landingTagline")}
             valor={clinic.landingTagline} porDefecto={clinic.name} />
           {(clinic.description || editando) && (
             <Txt as="p" style={{ fontSize: 19, color: gris, maxWidth: "44ch", margin: "26px 0 34px" }}
-              campo={dirClinica("description")} maxLen={5000}
+              campo={dirClinica("description")}
               valor={clinic.description} />
           )}
           <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
             <Txt as="button" type="button" onClick={() => abrir()} style={btnP}
-              campo={dirCopia("hero.cta")} linea maxLen={60}
+              campo={dirCopia("hero.cta")}
               valor={C("hero.cta")} porDefecto="Agenda tu valoración" />
             {verCasos && (
               <Txt as="a" href="#transformacion" style={btnO}
-                campo={dirCopia("hero.cta2")} linea maxLen={60}
+                campo={dirCopia("hero.cta2")}
                 valor={C("hero.cta2")} porDefecto="Ver transformaciones" />
             )}
           </div>
@@ -237,7 +237,7 @@ export function TemplateSonrisa({ clinic: publicada }: TemplateProps) {
             {cifras.map(c => (
               <div key={c.etiqueta} style={{ display: "flex", alignItems: "baseline", gap: 10, fontSize: 14 }}>
                 <b style={{ ...mono, fontSize: 22, fontWeight: 600, color: "#fff" }}>{c.valor}</b>
-                <Txt as="span" campo={dirCopia(c.clave)} linea maxLen={60}
+                <Txt as="span" campo={dirCopia(c.clave)}
                   valor={C(c.clave)} porDefecto={c.etiqueta} />
               </div>
             ))}
@@ -249,9 +249,9 @@ export function TemplateSonrisa({ clinic: publicada }: TemplateProps) {
       {verCasos && (
         <section id="transformacion" style={{ background: nude, padding: "100px 0" }}>
           <div className="so-wrap" style={{ textAlign: "center" }}>
-            <Txt as="span" style={eyebrow} campo={dirCopia("casos.kicker")} linea maxLen={60}
+            <Txt as="span" style={eyebrow} campo={dirCopia("casos.kicker")}
               valor={C("casos.kicker")} porDefecto="Casos reales" />
-            <Txt as="h2" style={h2} campo={dirSeccion("casos", "titulo")} linea maxLen={160}
+            <Txt as="h2" style={h2} campo={dirSeccion("casos", "titulo")}
               valor={S.casos?.titulo} porDefecto="Arrastra para ver el cambio" />
             {/* Dos ranuras en un mismo hueco: la caja la pone la de "antes" y
                 la de "después" cuelga su botonera de esa misma caja. */}
@@ -264,6 +264,8 @@ export function TemplateSonrisa({ clinic: publicada }: TemplateProps) {
                       antes={antes} despues={despues} accent={acento}
                       radius={0} aspect="16/10"
                       className="so-ba"
+                      claveAntes="casos.antes" valorAntes={C("casos.antes")}
+                    claveDespues="casos.despues" valorDespues={C("casos.despues")}
                     />
                   )}
                 </Foto>
@@ -271,7 +273,7 @@ export function TemplateSonrisa({ clinic: publicada }: TemplateProps) {
             </Foto>
             {(sectionSubtitle(S, "casos") || editando) && (
               <Txt as="p" style={{ ...lead, margin: "28px auto 0", textAlign: "center" }}
-                campo={dirSeccion("casos", "subtitulo")} maxLen={600}
+                campo={dirSeccion("casos", "subtitulo")}
                 valor={S.casos?.subtitulo} />
             )}
           </div>
@@ -282,13 +284,13 @@ export function TemplateSonrisa({ clinic: publicada }: TemplateProps) {
       {verTratamientos && (
         <section className="so-sec" id="tratamientos">
           <div className="so-wrap">
-            <Txt as="span" style={eyebrow} campo={dirCopia("servicios.kicker")} linea maxLen={60}
+            <Txt as="span" style={eyebrow} campo={dirCopia("servicios.kicker")}
               valor={C("servicios.kicker")} porDefecto="Tratamientos" />
-            <Txt as="h2" style={h2} campo={dirSeccion("servicios", "titulo")} linea maxLen={160}
+            <Txt as="h2" style={h2} campo={dirSeccion("servicios", "titulo")}
               valor={S.servicios?.titulo} porDefecto="Lo que hacemos y lo que cuesta" />
             {(sectionSubtitle(S, "servicios") || editando) && (
               <Txt as="p" style={{ ...lead, marginTop: 16 }}
-                campo={dirSeccion("servicios", "subtitulo")} maxLen={500}
+                campo={dirSeccion("servicios", "subtitulo")}
                 valor={S.servicios?.subtitulo} />
             )}
             <div className="so-3" style={{ marginTop: 52 }}>
@@ -315,22 +317,22 @@ export function TemplateSonrisa({ clinic: publicada }: TemplateProps) {
                       : tarjeta(foto)}
                     <div style={{ padding: "24px 24px 26px" }}>
                       <Txt as="h3" style={{ fontSize: 22, marginBottom: 6, fontWeight: 600, letterSpacing: "-.03em" }}
-                        campo={dirServicio(s.i, "name")} linea requerido maxLen={120}
+                        campo={dirServicio(s.i, "name")}
                         valor={s.name} />
                       {(s.desc || editando) && (
                         <Txt as="p" style={{ margin: "0 0 16px", color: gris, fontSize: 14.5 }}
-                          campo={dirServicio(s.i, "desc")} maxLen={400}
+                          campo={dirServicio(s.i, "desc")}
                           valor={s.desc} />
                       )}
                       <div style={{ display: "flex", alignItems: "baseline", gap: 12, borderTop: `1px solid ${linea}`, paddingTop: 15, flexWrap: "wrap" }}>
                         {(s.price || editando) && (
                           <Txt as="span" style={{ ...mono, fontSize: 21, fontWeight: 600 }}
-                            campo={dirServicio(s.i, "price")} linea maxLen={40}
+                            campo={dirServicio(s.i, "price")}
                             valor={s.price} />
                         )}
                         {s.durationMin && <span style={{ ...mono, fontSize: 12.5, color: gris }}>{s.durationMin} min</span>}
                         <Txt as="button" type="button" onClick={() => abrir({ service: s.name })} style={{ ...btnO, ...btnSm, marginLeft: "auto" }}
-                          campo={dirCopia("servicios.cta")} linea maxLen={40}
+                          campo={dirCopia("servicios.cta")}
                           valor={C("servicios.cta")} porDefecto="Agendar" />
                       </div>
                     </div>
@@ -346,9 +348,9 @@ export function TemplateSonrisa({ clinic: publicada }: TemplateProps) {
       {verSonrisas && (
         <section className="so-sec" id="sonrisas" style={{ paddingTop: verTratamientos ? 0 : undefined }}>
           <div className="so-wrap">
-            <Txt as="span" style={eyebrow} campo={dirCopia("galeria.kicker")} linea maxLen={60}
+            <Txt as="span" style={eyebrow} campo={dirCopia("galeria.kicker")}
               valor={C("galeria.kicker")} porDefecto="Nuestras sonrisas" />
-            <Txt as="h2" style={h2} campo={dirSeccion("galeria", "titulo")} linea maxLen={160}
+            <Txt as="h2" style={h2} campo={dirSeccion("galeria", "titulo")}
               valor={S.galeria?.titulo} porDefecto="Así quedan nuestros pacientes" />
             <div className="so-gal" style={{ marginTop: 48 }}>
               {galeria.slice(0, 5).map((src, i) => (
@@ -376,7 +378,7 @@ export function TemplateSonrisa({ clinic: publicada }: TemplateProps) {
                   </Foto>
                 </div>
                 <div>
-                  <Txt as="span" style={eyebrow} campo={dirCopia("equipo.kicker")} linea maxLen={60}
+                  <Txt as="span" style={eyebrow} campo={dirCopia("equipo.kicker")}
                     valor={C("equipo.kicker")} porDefecto="Quién te atiende" />
                   <h2 style={{ ...h2, fontSize: "clamp(28px,3.4vw,42px)" }}>Dr/a. {doctores[0].firstName} {doctores[0].lastName}</h2>
                   {doctores[0].specialty && <p style={{ ...lead, marginTop: 16 }}>{doctores[0].specialty}</p>}
@@ -385,7 +387,7 @@ export function TemplateSonrisa({ clinic: publicada }: TemplateProps) {
                       {doctores[0].services.slice(0, 5).map(s => (
                         <li key={s} style={{ padding: "12px 0", borderBottom: `1px solid ${linea}`, display: "flex", gap: 16, fontSize: 15 }}>
                           <Txt as="b" style={{ ...mono, fontSize: 12.5, letterSpacing: ".1em", textTransform: "uppercase", color: acento, minWidth: 120, flex: "0 0 auto" }}
-                            campo={dirCopia("equipo.etiquetaAtiende")} linea maxLen={40}
+                            campo={dirCopia("equipo.etiquetaAtiende")}
                             valor={C("equipo.etiquetaAtiende")} porDefecto="Atiende" />
                           <span>{s}</span>
                         </li>
@@ -397,9 +399,9 @@ export function TemplateSonrisa({ clinic: publicada }: TemplateProps) {
               </div>
             ) : (
               <>
-                <Txt as="span" style={eyebrow} campo={dirCopia("equipo.kicker")} linea maxLen={60}
+                <Txt as="span" style={eyebrow} campo={dirCopia("equipo.kicker")}
                   valor={C("equipo.kicker")} porDefecto="Quién te atiende" />
-                <Txt as="h2" style={h2} campo={dirSeccion("equipo", "titulo")} linea maxLen={160}
+                <Txt as="h2" style={h2} campo={dirSeccion("equipo", "titulo")}
                   valor={S.equipo?.titulo} porDefecto="El equipo" />
                 <div className="so-3" style={{ marginTop: 48 }}>
                   {doctores.map(d => (
@@ -412,7 +414,7 @@ export function TemplateSonrisa({ clinic: publicada }: TemplateProps) {
                       <h3 style={{ fontSize: 22, fontWeight: 600, letterSpacing: "-.03em", margin: "18px 0 4px" }}>Dr/a. {d.firstName} {d.lastName}</h3>
                       {d.specialty && <div style={{ color: acento, fontSize: 14.5 }}>{d.specialty}</div>}
                       <Txt as="button" type="button" onClick={() => abrir({ doctorId: d.id })} style={{ ...btnO, ...btnSm, marginTop: 16 }}
-                        campo={dirCopia("equipo.cta")} linea maxLen={40}
+                        campo={dirCopia("equipo.cta")}
                         valor={C("equipo.cta")} porDefecto="Agendar" />
                     </article>
                   ))}
@@ -427,14 +429,14 @@ export function TemplateSonrisa({ clinic: publicada }: TemplateProps) {
       {verOpiniones && (
         <section className="so-sec">
           <div className="so-wrap">
-            <Txt as="span" style={eyebrow} campo={dirCopia("opiniones.kicker")} linea maxLen={60}
+            <Txt as="span" style={eyebrow} campo={dirCopia("opiniones.kicker")}
               valor={C("opiniones.kicker")} porDefecto="Opiniones" />
             {/* Con ficha de Google el titular es una cadena CONSTRUIDA
                 ("4.8 de 132 reseñas") y no se instrumenta: guardarla congelaría
                 los números de hoy. Sin Google sí es un título de sección. */}
             {google?.rating
               ? <h2 style={h2}>{`${google.rating} de ${google.total} reseñas`}</h2>
-              : <Txt as="h2" style={h2} campo={dirSeccion("opiniones", "titulo")} linea maxLen={160}
+              : <Txt as="h2" style={h2} campo={dirSeccion("opiniones", "titulo")}
                   valor={S.opiniones?.titulo} porDefecto="Lo que dicen nuestros pacientes" />}
             <div className="so-3" style={{ marginTop: 48 }}>
               {/* `dir` es null en las reseñas de Google: son de Google, no de la
@@ -449,12 +451,12 @@ export function TemplateSonrisa({ clinic: publicada }: TemplateProps) {
                       si se guardaran, la siguiente edición las duplicaría. */}
                   <Txt as="p" style={{ fontSize: 16, margin: "14px 0 18px" }}
                     campo={t.dir === null ? null : dirTestimonio(t.dir, "text")}
-                    requerido maxLen={800}
+
                     valor={t.text} prefijo="“" sufijo="”" />
                   <div style={{ fontSize: 14, color: gris }}>
                     <Txt as="b" style={{ display: "block", color: tinta, fontWeight: 600 }}
                       campo={t.dir === null ? null : dirTestimonio(t.dir, "name")}
-                      linea maxLen={80} valor={t.name} />
+                      valor={t.name} />
                     {/* `meta` NO se instrumenta aquí y es una decisión: en esta
                         plantilla se pinta SUELTO dentro del <div>, sin elemento
                         propio. Envolverlo en un <span> para poder hacerle clic
@@ -475,20 +477,22 @@ export function TemplateSonrisa({ clinic: publicada }: TemplateProps) {
           <div className="so-wrap">
             <div className="so-2">
               <div>
-                <Txt as="span" style={eyebrow} campo={dirCopia("pagos.kicker")} linea maxLen={60}
+                <Txt as="span" style={eyebrow} campo={dirCopia("pagos.kicker")}
                   valor={C("pagos.kicker")} porDefecto="Formas de pago" />
-                <Txt as="h2" style={h2} campo={dirSeccion("pagos", "titulo")} linea maxLen={160}
+                <Txt as="h2" style={h2} campo={dirSeccion("pagos", "titulo")}
                   valor={S.pagos?.titulo} porDefecto="Tu tratamiento, en mensualidades" />
                 {/* El texto por defecto se CONSTRUYE con los plazos de la clínica,
                     así que en el manifiesto va vacío y el literal real se pasa
                     aquí. <Txt> nunca guarda el default, solo lo enseña. */}
                 <Txt as="p" style={{ ...lead, marginTop: 16 }}
-                  campo={dirSeccion("pagos", "subtitulo")} maxLen={500}
+                  campo={dirSeccion("pagos", "subtitulo")}
                   valor={S.pagos?.subtitulo}
                   porDefecto={`Meses sin intereses con tarjetas participantes: ${msi.join(", ")} plazos.`} />
               </div>
               <div style={{ background: "#fff", padding: "28px 30px" }}>
                 <MsiSimulator
+                  claves={{ tratamiento: "pagos.rotuloTratamiento", plazo: "pagos.rotuloPlazo", mensual: "pagos.rotuloMensual" }}
+                  valores={{ tratamiento: C("pagos.rotuloTratamiento"), plazo: C("pagos.rotuloPlazo"), mensual: C("pagos.rotuloMensual") }}
                   plazos={msi}
                   opciones={opcionesMsi}
                   accent={acento}
@@ -507,18 +511,18 @@ export function TemplateSonrisa({ clinic: publicada }: TemplateProps) {
       {verFaq && (
         <section className="so-sec">
           <div className="so-wrap">
-            <Txt as="span" style={eyebrow} campo={dirCopia("faq.kicker")} linea maxLen={60}
+            <Txt as="span" style={eyebrow} campo={dirCopia("faq.kicker")}
               valor={C("faq.kicker")} porDefecto="Preguntas frecuentes" />
-            <Txt as="h2" style={{ ...h2, textAlign: "center" }} campo={dirSeccion("faq", "titulo")} linea maxLen={160}
+            <Txt as="h2" style={{ ...h2, textAlign: "center" }} campo={dirSeccion("faq", "titulo")}
               valor={S.faq?.titulo} porDefecto="Antes de agendar" />
             <div style={{ maxWidth: 840, margin: "44px auto 0" }}>
               {faqs.map((f, i) => (
                 <details key={i} open={i === 0} style={{ borderBottom: `1px solid ${linea}` }}>
                   <Txt as="summary" style={{ cursor: "pointer", padding: "22px 0", fontWeight: 500, fontSize: 17.5, listStyle: "none" }}
-                    campo={dirFaq(f.i, "q")} linea requerido maxLen={200}
+                    campo={dirFaq(f.i, "q")}
                     valor={f.q} />
                   <Txt as="p" style={{ margin: "0 0 22px", color: gris }}
-                    campo={dirFaq(f.i, "a")} requerido maxLen={1200}
+                    campo={dirFaq(f.i, "a")}
                     valor={f.a} />
                 </details>
               ))}
@@ -531,13 +535,13 @@ export function TemplateSonrisa({ clinic: publicada }: TemplateProps) {
       <section style={{ background: tinta, color: "#fff", padding: "110px 0", textAlign: "center" }}>
         <div className="so-wrap">
           <Txt as="h2" style={{ ...h2, fontSize: "clamp(34px,5vw,60px)", maxWidth: "18ch", margin: "0 auto 18px" }}
-            campo={dirSeccion("reservar", "titulo")} linea maxLen={160}
+            campo={dirSeccion("reservar", "titulo")}
             valor={S.reservar?.titulo} porDefecto="Empieza por tu valoración" />
           <Txt as="p" style={{ color: tint(acento, 0.7), maxWidth: "48ch", margin: "0 auto 34px", fontSize: 17 }}
-            campo={dirSeccion("reservar", "subtitulo")} maxLen={500}
+            campo={dirSeccion("reservar", "subtitulo")}
             valor={S.reservar?.subtitulo} porDefecto="Agenda en línea, sin llamar. Te confirmamos por WhatsApp." />
           <Txt as="button" type="button" onClick={() => abrir()} style={{ ...btn, background: "#fff", color: tinta }}
-            campo={dirCopia("reservar.cta")} linea maxLen={60}
+            campo={dirCopia("reservar.cta")}
             valor={C("reservar.cta")} porDefecto="Agenda tu valoración" />
         </div>
       </section>

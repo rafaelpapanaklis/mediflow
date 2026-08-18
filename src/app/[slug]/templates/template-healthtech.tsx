@@ -67,7 +67,7 @@ function Pill({
         style={estilo}
         onMouseEnter={sobre}
         onMouseLeave={fuera}
-        campo={campo} linea maxLen={80}
+        campo={campo}
         valor={valor} porDefecto={porDefecto}
         sufijo={despues !== undefined ? " " : undefined} unido={despues !== undefined}
         despues={despues}
@@ -101,14 +101,14 @@ function SectionHead({
   return (
     <Reveal className={center ? "max-w-2xl mx-auto text-center" : "max-w-2xl"}>
       <Txt as="span" className="inline-block px-3 py-1 rounded-full text-[13px] font-bold mb-4" style={{ background: alpha(tk.theme, 0.1), color: tk.theme }}
-        campo={dirCopia(claveKicker)} linea maxLen={60}
+        campo={dirCopia(claveKicker)}
         valor={kickerValor} porDefecto={kicker} />
       <Txt as="h2" className="text-4xl sm:text-5xl font-extrabold tracking-tight leading-[1.08]" style={{ color: tk.ink }}
-        campo={dirSeccion(seccion, "titulo")} linea maxLen={160}
+        campo={dirSeccion(seccion, "titulo")}
         valor={titleValor} porDefecto={title} />
       {sub && (subValor || sub || editando) && (
         <Txt as="p" className="mt-4 text-lg" style={{ color: tk.muted }}
-          campo={dirSeccion(seccion, "subtitulo")} maxLen={500}
+          campo={dirSeccion(seccion, "subtitulo")}
           valor={subValor} porDefecto={sub} />
       )}
     </Reveal>
@@ -127,7 +127,7 @@ function TrustBadge({ tk, icon, big, small, clave, smallValor }: {
       <span className="flex justify-center mb-1" style={{ color: tk.theme }}>{icon}</span>
       <p className="text-xl font-extrabold leading-none" style={{ color: tk.ink }}>{big}</p>
       <Txt as="p" className="text-[11px] mt-0.5" style={{ color: "#94a3b8" }}
-        campo={clave ? dirCopia(clave) : null} linea maxLen={40}
+        campo={clave ? dirCopia(clave) : null}
         valor={clave ? smallValor : null} porDefecto={small} />
     </div>
   );
@@ -334,14 +334,14 @@ export function TemplateHealthtech({ clinic: publicada, highlights }: TemplatePr
             </div>
 
             <Txt as="h1" className="text-[40px] sm:text-6xl font-extrabold leading-[1.04] tracking-tight" style={{ color: ink }}
-              campo={dirClinica("name")} linea requerido maxLen={120} valor={clinic.name} />
+              campo={dirClinica("name")} valor={clinic.name} />
             {(clinic.landingTagline || editando) && (
               <Txt as="p" className="mt-3 text-2xl sm:text-3xl font-extrabold leading-tight" style={{ background: grad, WebkitBackgroundClip: "text", backgroundClip: "text", color: "transparent" }}
-                campo={dirClinica("landingTagline")} maxLen={300} valor={clinic.landingTagline} />
+                campo={dirClinica("landingTagline")} valor={clinic.landingTagline} />
             )}
             {(clinic.description || editando) && (
               <Txt as="p" className="mt-6 text-lg leading-relaxed" style={{ color: muted }}
-                campo={dirClinica("description")} maxLen={5000} valor={clinic.description} />
+                campo={dirClinica("description")} valor={clinic.description} />
             )}
 
             {highlights && highlights.length > 0 && (
@@ -366,7 +366,7 @@ export function TemplateHealthtech({ clinic: publicada, highlights }: TemplatePr
                   rel="noreferrer"
                   className="inline-flex items-center justify-center gap-2 font-semibold rounded-full px-6 py-3.5 transition-all duration-300 hover:-translate-y-0.5"
                   style={{ background: "#fff", color: ink, border: `1.5px solid ${border}` }}
-                  campo={dirCopia("hero.whatsapp")} linea maxLen={60}
+                  campo={dirCopia("hero.whatsapp")}
                   valor={C("hero.whatsapp")} porDefecto="WhatsApp" prefijo=" " unido
                   antes={<MessageCircle size={18} style={{ color: theme }} />}
                 />
@@ -377,7 +377,7 @@ export function TemplateHealthtech({ clinic: publicada, highlights }: TemplatePr
                   onClick={() => scrollToId(verServicios ? "servicios" : "contacto")}
                   className="inline-flex items-center justify-center gap-2 font-semibold rounded-full px-6 py-3.5 transition-all duration-300 hover:-translate-y-0.5"
                   style={{ background: "#fff", color: ink, border: `1.5px solid ${border}` }}
-                  campo={dirCopia("hero.cta2")} linea maxLen={60}
+                  campo={dirCopia("hero.cta2")}
                   valor={C("hero.cta2")} porDefecto="Conoce más"
                 />
               )}
@@ -421,7 +421,7 @@ export function TemplateHealthtech({ clinic: publicada, highlights }: TemplatePr
                 <div className="grid place-items-center w-11 h-11 rounded-xl text-white" style={{ background: grad }}><Shield size={22} /></div>
                 <div>
                   <Txt as="p" className="text-xs" style={{ color: "#94a3b8" }}
-                    campo={dirCopia("sellos.tarjeta")} linea maxLen={40}
+                    campo={dirCopia("sellos.tarjeta")}
                     valor={C("sellos.tarjeta")} porDefecto="Calificación" />
                   <p className="font-bold text-sm" style={{ color: ink }}>{ratingValue.toFixed(1)} de 5</p>
                 </div>
@@ -468,14 +468,14 @@ export function TemplateHealthtech({ clinic: publicada, highlights }: TemplatePr
                       <span className="grid place-items-center w-14 h-14 rounded-2xl text-2xl" style={{ background: alpha(theme, 0.1) }}>{s.icon || "🏥"}</span>
                       {(s.price || editando) && (
                         <Txt as="span" className="px-3 py-1 rounded-full text-sm font-bold" style={{ background: paper, color: theme }}
-                          campo={dirServicio(i, "price")} linea maxLen={40} valor={s.price} />
+                          campo={dirServicio(i, "price")} valor={s.price} />
                       )}
                     </div>
                     <Txt as="h3" className="mt-5 text-xl font-bold" style={{ color: ink }}
-                      campo={dirServicio(i, "name")} linea requerido maxLen={120} valor={s.name} />
+                      campo={dirServicio(i, "name")} valor={s.name} />
                     {(s.desc || editando) && (
                       <Txt as="p" className="mt-1.5 text-[15px] leading-relaxed" style={{ color: muted }}
-                        campo={dirServicio(i, "desc")} maxLen={400} valor={s.desc} />
+                        campo={dirServicio(i, "desc")} valor={s.desc} />
                     )}
                     <Txt
                       as="button"
@@ -485,7 +485,7 @@ export function TemplateHealthtech({ clinic: publicada, highlights }: TemplatePr
                       style={{ background: paper, color: ink }}
                       onMouseEnter={(e: any) => { e.currentTarget.style.background = grad; e.currentTarget.style.color = "#fff"; }}
                       onMouseLeave={(e: any) => { e.currentTarget.style.background = paper; e.currentTarget.style.color = ink; }}
-                      campo={dirCopia("servicios.cta")} linea maxLen={40}
+                      campo={dirCopia("servicios.cta")}
                       valor={C("servicios.cta")} porDefecto="Agendar" sufijo=" " unido
                       despues={<ArrowRight size={16} />}
                     />
@@ -536,7 +536,7 @@ export function TemplateHealthtech({ clinic: publicada, highlights }: TemplatePr
                         onClick={() => openBooking({ doctorId: u.id })}
                         className="mt-3 w-full py-2.5 rounded-xl font-semibold text-sm flex items-center justify-center gap-2 transition"
                         style={{ background: alpha(theme, 0.1), color: theme }}
-                        campo={dirCopia("equipo.cta")} linea maxLen={60}
+                        campo={dirCopia("equipo.cta")}
                         valor={C("equipo.cta")} porDefecto="Agendar consulta" sufijo=" " unido
                         despues={<ArrowRight size={15} />}
                       />
@@ -598,13 +598,13 @@ export function TemplateHealthtech({ clinic: publicada, highlights }: TemplatePr
                         texto: si se guardaran, la siguiente edición las
                         duplicaría. */}
                     <Txt as="p" className="mt-3 text-[15px] leading-relaxed" style={{ color: "#475569" }}
-                      campo={dirTestimonio(i, "text")} requerido maxLen={800}
+                      campo={dirTestimonio(i, "text")}
                       valor={t.text} prefijo={"\u201C"} sufijo={"\u201D"} />
                     <div className="mt-4 flex items-center gap-2.5">
                       <span className="grid place-items-center w-9 h-9 rounded-full text-white font-bold text-sm" style={{ background: grad }}>{t.name?.[0] ?? "P"}</span>
                       <div>
                         <Txt as="p" className="font-semibold text-sm" style={{ color: ink }}
-                          campo={dirTestimonio(i, "name")} linea maxLen={80} valor={t.name} />
+                          campo={dirTestimonio(i, "name")} valor={t.name} />
                         {t.date && <p className="text-xs" style={{ color: "#94a3b8" }}>{t.date}</p>}
                       </div>
                     </div>
@@ -626,7 +626,7 @@ export function TemplateHealthtech({ clinic: publicada, highlights }: TemplatePr
                 <div>
                   <div className="flex items-center gap-2 bg-white/15 w-fit px-3 py-1.5 rounded-full">
                     <GoogleG size={18} /><Txt as="span" className="text-sm font-semibold"
-                      campo={dirCopia("opiniones.tituloGoogle")} linea maxLen={40}
+                      campo={dirCopia("opiniones.tituloGoogle")}
                       valor={C("opiniones.tituloGoogle")} porDefecto="Google" />
                   </div>
                   {googleReviews!.rating != null && (
@@ -638,7 +638,7 @@ export function TemplateHealthtech({ clinic: publicada, highlights }: TemplatePr
                   <p className="mt-2 text-white/85">{googleReviews!.total} reseñas verificadas</p>
                 </div>
                 <Txt as="button" type="button" onClick={() => openBooking()} className="mt-8 bg-white rounded-2xl py-3.5 font-bold transition hover:brightness-95" style={{ color: shade(theme, 0.1) }}
-                  campo={dirCopia("opiniones.cta")} linea maxLen={60}
+                  campo={dirCopia("opiniones.cta")}
                   valor={C("opiniones.cta")} porDefecto="Agendar mi cita" />
               </Reveal>
 
@@ -692,7 +692,7 @@ export function TemplateHealthtech({ clinic: publicada, highlights }: TemplatePr
                             primera pregunta que alguien editara desde el
                             lienzo habría desaparecido de la página. */}
                         <Txt as="span" className="font-semibold text-[17px]" style={{ color: ink }}
-                          campo={dirFaq(i, "q")} linea requerido maxLen={200}
+                          campo={dirFaq(i, "q")}
                           valor={f.q ?? f.question} />
                         <span
                           className="shrink-0 grid place-items-center w-8 h-8 rounded-full transition-transform duration-300"
@@ -703,7 +703,7 @@ export function TemplateHealthtech({ clinic: publicada, highlights }: TemplatePr
                       </button>
                       <div style={{ maxHeight: isOpen ? 320 : 0, overflow: "hidden", transition: "max-height .4s ease" }}>
                         <Txt as="p" className="px-6 pb-5 text-[15px] leading-relaxed" style={{ color: muted }}
-                          campo={dirFaq(i, "a")} requerido maxLen={1200}
+                          campo={dirFaq(i, "a")}
                           valor={f.a ?? f.answer} />
                       </div>
                     </div>
@@ -713,7 +713,7 @@ export function TemplateHealthtech({ clinic: publicada, highlights }: TemplatePr
             </div>
             <Reveal className="mt-10 flex flex-col sm:flex-row items-center justify-center gap-4 text-center">
               <Txt as="span" className="text-[15px]" style={{ color: muted }}
-                campo={dirCopia("faq.nota")} linea maxLen={160}
+                campo={dirCopia("faq.nota")}
                 valor={C("faq.nota")} porDefecto="¿Te quedó otra duda? Con gusto te ayudamos." />
               <Pill tk={tk} size="sm" onClick={() => openBooking()}
                 campo={dirCopia("faq.cta")} valor={C("faq.cta")} porDefecto="Agendar Cita"
@@ -731,10 +731,10 @@ export function TemplateHealthtech({ clinic: publicada, highlights }: TemplatePr
             <div aria-hidden className="absolute -bottom-24 -left-10 w-80 h-80 rounded-full bg-white/10" />
             <div className="relative">
               <Txt as="h2" className="text-4xl sm:text-5xl font-extrabold text-white leading-tight"
-                campo={dirSeccion("reservar", "titulo")} linea maxLen={160}
+                campo={dirSeccion("reservar", "titulo")}
                 valor={S.reservar?.titulo} porDefecto="¿Listo para tu cita?" />
               <Txt as="p" className="mt-4 text-lg text-white/85 max-w-xl mx-auto"
-                campo={dirSeccion("reservar", "subtitulo")} maxLen={500}
+                campo={dirSeccion("reservar", "subtitulo")}
                 valor={S.reservar?.subtitulo} porDefecto="Agenda en menos de un minuto. Te confirmamos por WhatsApp." />
               <Txt
                 as="button"
@@ -742,7 +742,7 @@ export function TemplateHealthtech({ clinic: publicada, highlights }: TemplatePr
                 onClick={() => openBooking()}
                 className="mt-8 inline-flex items-center gap-2 bg-white px-8 py-4 rounded-full font-bold transition hover:scale-105"
                 style={{ color: shade(theme, 0.1) }}
-                campo={dirCopia("reservar.cta")} linea maxLen={60}
+                campo={dirCopia("reservar.cta")}
                 valor={C("reservar.cta")} porDefecto="Agendar Cita" sufijo=" " unido
                 despues={<ArrowRight size={18} />}
               />
@@ -765,7 +765,7 @@ export function TemplateHealthtech({ clinic: publicada, highlights }: TemplatePr
                   <span className="shrink-0 grid place-items-center w-12 h-12 rounded-2xl" style={{ background: alpha(theme, 0.1), color: theme }}><MapPin size={22} /></span>
                   <div>
                     <Txt as="p" className="text-xs uppercase tracking-wider" style={{ color: muted }}
-                      campo={dirCopia("contacto.etiquetaDireccion")} linea maxLen={60}
+                      campo={dirCopia("contacto.etiquetaDireccion")}
                       valor={C("contacto.etiquetaDireccion")} porDefecto="Dirección" />
                     <p className="font-semibold text-[16px]" style={{ color: ink }}>{clinic.address}{clinic.city ? `, ${clinic.city}` : ""}</p>
                   </div>
@@ -776,7 +776,7 @@ export function TemplateHealthtech({ clinic: publicada, highlights }: TemplatePr
                   <span className="shrink-0 grid place-items-center w-12 h-12 rounded-2xl" style={{ background: alpha(theme, 0.1), color: theme }}><Phone size={22} /></span>
                   <div>
                     <Txt as="p" className="text-xs uppercase tracking-wider" style={{ color: muted }}
-                      campo={dirCopia("contacto.etiquetaTelefono")} linea maxLen={60}
+                      campo={dirCopia("contacto.etiquetaTelefono")}
                       valor={C("contacto.etiquetaTelefono")} porDefecto="Teléfono" />
                     <p className="font-semibold text-[16px]" style={{ color: ink }}>{clinic.phone}</p>
                   </div>
@@ -787,7 +787,7 @@ export function TemplateHealthtech({ clinic: publicada, highlights }: TemplatePr
                   <span className="shrink-0 grid place-items-center w-12 h-12 rounded-2xl" style={{ background: alpha(theme, 0.1), color: theme }}><MessageCircle size={22} /></span>
                   <div>
                     <Txt as="p" className="text-xs uppercase tracking-wider" style={{ color: muted }}
-                      campo={dirCopia("contacto.etiquetaWhatsapp")} linea maxLen={60}
+                      campo={dirCopia("contacto.etiquetaWhatsapp")}
                       valor={C("contacto.etiquetaWhatsapp")} porDefecto="WhatsApp" />
                     <p className="font-semibold text-[16px]" style={{ color: ink }}>{clinic.landingWhatsapp}</p>
                   </div>
@@ -799,7 +799,7 @@ export function TemplateHealthtech({ clinic: publicada, highlights }: TemplatePr
                 <div className="p-5" style={{ background: "#fff", border: `1px solid ${border}`, borderRadius: 20 }}>
                   <div className="flex items-center gap-3 mb-3">
                     <Clock size={20} style={{ color: theme }} /><Txt as="span" className="font-semibold" style={{ color: ink }}
-                      campo={dirCopia("contacto.etiquetaHorarios")} linea maxLen={60}
+                      campo={dirCopia("contacto.etiquetaHorarios")}
                       valor={C("contacto.etiquetaHorarios")} porDefecto="Horarios" />
                   </div>
                   {[0, 1, 2, 3, 4, 5, 6].map((dow) => {
@@ -812,7 +812,7 @@ export function TemplateHealthtech({ clinic: publicada, highlights }: TemplatePr
                             abierto es el dato de la agenda. */}
                         {closed
                           ? <Txt as="span" className="font-medium" style={{ color: CLOSED_RED }}
-                              campo={dirCopia("contacto.cerrado")} linea maxLen={40}
+                              campo={dirCopia("contacto.cerrado")}
                               valor={C("contacto.cerrado")} porDefecto="Cerrado" />
                           : <span className="font-medium" style={{ color: ink }}>
                               {`${s.openTime} – ${s.closeTime}`}
@@ -842,7 +842,7 @@ export function TemplateHealthtech({ clinic: publicada, highlights }: TemplatePr
                     </a>
                   )}
                   <Txt as="button" type="button" onClick={() => openBooking()} className="ml-auto px-6 py-3 rounded-full font-semibold text-white transition hover:brightness-110" style={{ background: theme }}
-                    campo={dirCopia("contacto.cta")} linea maxLen={60}
+                    campo={dirCopia("contacto.cta")}
                     valor={C("contacto.cta")} porDefecto="Agendar Cita" />
                 </div>
               )}
@@ -950,7 +950,7 @@ export function TemplateHealthtech({ clinic: publicada, highlights }: TemplatePr
       >
         <Calendar size={18} />
         <Txt as="span" className="hidden sm:inline"
-          campo={dirCopia("flotante.cta")} linea maxLen={40}
+          campo={dirCopia("flotante.cta")}
           valor={C("flotante.cta")} porDefecto="Agendar Cita" />
       </button>
 

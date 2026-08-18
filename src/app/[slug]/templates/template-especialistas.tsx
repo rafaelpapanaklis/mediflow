@@ -192,7 +192,7 @@ export function TemplateEspecialistas({ clinic: publicada }: TemplateProps) {
             {nav.map(l => <a key={l.href} href={l.href} style={{ textDecoration: "none", fontSize: 14.5, color: gris }}>{l.label}</a>)}
           </div>
           <Txt as="button" type="button" onClick={() => abrir()} style={{ ...btnP, ...btnSm }}
-            campo={dirCopia("nav.cta")} linea maxLen={40}
+            campo={dirCopia("nav.cta")}
             valor={C("nav.cta")} porDefecto="Valoración" />
         </div>
       </nav>
@@ -202,20 +202,20 @@ export function TemplateEspecialistas({ clinic: publicada }: TemplateProps) {
         <div>
           <span style={kicker}>{clinic.specialty}</span>
           <Txt as="h1" style={{ fontSize: "clamp(38px,5.2vw,64px)", fontWeight: 300, maxWidth: "15ch", letterSpacing: "-.03em", lineHeight: 1.1, margin: 0 }}
-            campo={dirClinica("landingTagline")} maxLen={300}
+            campo={dirClinica("landingTagline")}
             valor={clinic.landingTagline} porDefecto={clinic.name} />
           {(clinic.description || editando) && (
             <Txt as="p" style={{ color: gris, fontSize: 18, maxWidth: "46ch", margin: "24px 0 34px", fontWeight: 300 }}
-              campo={dirClinica("description")} maxLen={5000}
+              campo={dirClinica("description")}
               valor={clinic.description} />
           )}
           <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
             <Txt as="button" type="button" onClick={() => abrir()} style={btnP}
-              campo={dirCopia("hero.cta")} linea maxLen={60}
+              campo={dirCopia("hero.cta")}
               valor={C("hero.cta")} porDefecto="Agenda tu valoración" />
             {verCaso && (
               <Txt as="a" href="#casos" style={btnO}
-                campo={dirCopia("hero.cta2")} linea maxLen={60}
+                campo={dirCopia("hero.cta2")}
                 valor={C("hero.cta2")} porDefecto="Ver casos" sufijo=" " unido
                 despues={<ChevronRight size={15} />} />
             )}
@@ -245,7 +245,7 @@ export function TemplateEspecialistas({ clinic: publicada }: TemplateProps) {
               }}>
                 <b style={{ display: "block", ...mono, fontSize: 30, fontWeight: 500, letterSpacing: "-.03em", color: "#fff" }}>{f.valor}</b>
                 <Txt as="span" style={{ fontSize: 13.5, color: gris }}
-                  campo={f.clave ? dirCopia(f.clave) : null} linea maxLen={60}
+                  campo={f.clave ? dirCopia(f.clave) : null}
                   valor={f.clave ? C(f.clave) : null} porDefecto={f.etiqueta} />
               </div>
             ))}
@@ -257,13 +257,13 @@ export function TemplateEspecialistas({ clinic: publicada }: TemplateProps) {
       {verTratamientos && (
         <section className="es-sec" id="tratamientos">
           <div className="es-wrap">
-            <Txt as="span" style={kicker} campo={dirCopia("servicios.kicker")} linea maxLen={60}
+            <Txt as="span" style={kicker} campo={dirCopia("servicios.kicker")}
               valor={C("servicios.kicker")} porDefecto="Tratamientos" />
-            <Txt as="h2" style={h2} campo={dirSeccion("servicios", "titulo")} linea maxLen={160}
+            <Txt as="h2" style={h2} campo={dirSeccion("servicios", "titulo")}
               valor={S.servicios?.titulo} porDefecto="Alta especialidad, precio cerrado" />
             {(sectionSubtitle(S, "servicios") || editando) && (
               <Txt as="p" style={{ ...lead, marginTop: 16 }}
-                campo={dirSeccion("servicios", "subtitulo")} maxLen={500}
+                campo={dirSeccion("servicios", "subtitulo")}
                 valor={S.servicios?.subtitulo} />
             )}
 
@@ -273,11 +273,11 @@ export function TemplateEspecialistas({ clinic: publicada }: TemplateProps) {
                   <span className="es-num" style={{ ...mono, fontSize: 12.5, color: acento, width: 36 }}>{String(i + 1).padStart(2, "0")}</span>
                   <div>
                     <Txt as="b" style={{ fontSize: 21, fontWeight: 500, display: "block", letterSpacing: "-.02em" }}
-                      campo={dirServicio(s.i, "name")} linea requerido maxLen={120}
+                      campo={dirServicio(s.i, "name")}
                       valor={s.name} />
                     {(s.desc || editando) && (
                       <Txt as="span" style={{ color: gris, fontSize: 14.5 }}
-                        campo={dirServicio(s.i, "desc")} maxLen={400}
+                        campo={dirServicio(s.i, "desc")}
                         valor={s.desc} />
                     )}
                   </div>
@@ -289,7 +289,7 @@ export function TemplateEspecialistas({ clinic: publicada }: TemplateProps) {
                       cuando no hay texto, y se llevaría la duración por delante. */}
                   {s.price || editando
                     ? <Txt as="span" style={{ ...mono, fontSize: 20, fontWeight: 500, textAlign: "right" }}
-                        campo={dirServicio(s.i, "price")} linea maxLen={40}
+                        campo={dirServicio(s.i, "price")}
                         valor={s.price}
                         despues={s.durationMin
                           ? <i style={{ display: "block", fontStyle: "normal", fontFamily: "var(--font-sans)", fontSize: 12.5, color: gris }}>{s.durationMin} min</i>
@@ -301,7 +301,7 @@ export function TemplateEspecialistas({ clinic: publicada }: TemplateProps) {
                         )}
                       </span>}
                   <Txt as="button" type="button" onClick={() => abrir({ service: s.name })} style={{ ...btnO, ...btnSm }}
-                    campo={dirCopia("servicios.cta")} linea maxLen={40}
+                    campo={dirCopia("servicios.cta")}
                     valor={C("servicios.cta")} porDefecto="Valoración" />
                 </div>
               ))}
@@ -314,9 +314,9 @@ export function TemplateEspecialistas({ clinic: publicada }: TemplateProps) {
       {verTec && (
         <section className="es-sec" id="tecnologia" style={{ paddingTop: verTratamientos ? 0 : undefined }}>
           <div className="es-wrap">
-            <Txt as="span" style={kicker} campo={dirCopia("tecnologia.kicker")} linea maxLen={60}
+            <Txt as="span" style={kicker} campo={dirCopia("tecnologia.kicker")}
               valor={C("tecnologia.kicker")} porDefecto="Tecnología" />
-            <Txt as="h2" style={h2} campo={dirSeccion("tecnologia", "titulo")} linea maxLen={160}
+            <Txt as="h2" style={h2} campo={dirSeccion("tecnologia", "titulo")}
               valor={S.tecnologia?.titulo} porDefecto="Nada se improvisa en el sillón" />
             <div className="es-3" style={{ marginTop: 52 }}>
               {tecFotos.map((foto, i) => {
@@ -335,11 +335,11 @@ export function TemplateEspecialistas({ clinic: publicada }: TemplateProps) {
                     </div>
                     <div style={{ padding: 24 }}>
                       <Txt as="div" style={{ ...mono, fontSize: 10.5, letterSpacing: ".18em", textTransform: "uppercase", color: acento, marginBottom: 10 }}
-                        campo={dirSeccion(id, "titulo")} linea maxLen={120}
+                        campo={dirSeccion(id, "titulo")}
                         valor={S[id]?.titulo} porDefecto="Equipo" />
                       {(sectionSubtitle(S, id) || editando) && (
                         <Txt as="p" style={{ margin: 0, color: gris, fontSize: 14.5, fontWeight: 300 }}
-                          campo={dirSeccion(id, "subtitulo")} maxLen={500}
+                          campo={dirSeccion(id, "subtitulo")}
                           valor={S[id]?.subtitulo} />
                       )}
                     </div>
@@ -355,9 +355,9 @@ export function TemplateEspecialistas({ clinic: publicada }: TemplateProps) {
       {verCaso && (
         <section className="es-sec" id="casos" style={{ background: fondo2, borderTop: `1px solid ${linea}`, borderBottom: `1px solid ${linea}` }}>
           <div className="es-wrap">
-            <Txt as="span" style={kicker} campo={dirCopia("casos.kicker")} linea maxLen={60}
+            <Txt as="span" style={kicker} campo={dirCopia("casos.kicker")}
               valor={C("casos.kicker")} porDefecto="Caso documentado" />
-            <Txt as="h2" style={h2} campo={dirSeccion("casos", "titulo")} linea maxLen={160}
+            <Txt as="h2" style={h2} campo={dirSeccion("casos", "titulo")}
               valor={S.casos?.titulo} porDefecto="Antes y después" />
             <div className="es-2" style={{ marginTop: 44 }}>
               {/* Dos ranuras en un mismo hueco: la caja la pone la de "antes" y
@@ -366,18 +366,20 @@ export function TemplateEspecialistas({ clinic: publicada }: TemplateProps) {
                 caja={{ position: "relative" }} vacio={{ aspectRatio: "4/3" }}>
                 {(antes) => (
                   <Foto slot="caso1_despues" url={casoDespues} zona="derecha">
-                    {(despues) => <BeforeAfter antes={antes} despues={despues} accent={acento} radius={8} surface="dark" />}
+                    {(despues) => <BeforeAfter antes={antes} despues={despues} accent={acento} radius={8} surface="dark"
+                      claveAntes="casos.antes" valorAntes={C("casos.antes")}
+                    claveDespues="casos.despues" valorDespues={C("casos.despues")} />}
                   </Foto>
                 )}
               </Foto>
               <div>
                 {(sectionSubtitle(S, "casos") || editando) && (
                   <Txt as="p" style={lead}
-                    campo={dirSeccion("casos", "subtitulo")} maxLen={600}
+                    campo={dirSeccion("casos", "subtitulo")}
                     valor={S.casos?.subtitulo} />
                 )}
                 <Txt as="button" type="button" onClick={() => abrir()} style={{ ...btnP, marginTop: 26 }}
-                  campo={dirCopia("casos.cta")} linea maxLen={60}
+                  campo={dirCopia("casos.cta")}
                   valor={C("casos.cta")} porDefecto="Agenda tu valoración" />
               </div>
             </div>
@@ -399,7 +401,7 @@ export function TemplateEspecialistas({ clinic: publicada }: TemplateProps) {
                   </Foto>
                 </div>
                 <div>
-                  <Txt as="span" style={kicker} campo={dirCopia("equipo.kickerUno")} linea maxLen={60}
+                  <Txt as="span" style={kicker} campo={dirCopia("equipo.kickerUno")}
                     valor={C("equipo.kickerUno")} porDefecto="El especialista" />
                   <h2 style={{ ...h2, fontSize: "clamp(28px,3.4vw,40px)" }}>Dr/a. {doctores[0].firstName} {doctores[0].lastName}</h2>
                   {doctores[0].specialty && <p style={{ ...lead, marginTop: 16 }}>{doctores[0].specialty}</p>}
@@ -408,7 +410,7 @@ export function TemplateEspecialistas({ clinic: publicada }: TemplateProps) {
                       {doctores[0].services.slice(0, 6).map(s => (
                         <li key={s} style={{ display: "flex", gap: 18, padding: "14px 0", borderBottom: `1px solid ${linea}`, fontSize: 15 }}>
                           <Txt as="b" style={{ ...mono, fontSize: 11, letterSpacing: ".14em", textTransform: "uppercase", color: acento, minWidth: 120 }}
-                            campo={dirCopia("equipo.etiquetaAtiende")} linea maxLen={40}
+                            campo={dirCopia("equipo.etiquetaAtiende")}
                             valor={C("equipo.etiquetaAtiende")} porDefecto="Atiende" />
                           <span style={{ color: gris, fontWeight: 300 }}>{s}</span>
                         </li>
@@ -420,9 +422,9 @@ export function TemplateEspecialistas({ clinic: publicada }: TemplateProps) {
               </div>
             ) : (
               <>
-                <Txt as="span" style={kicker} campo={dirCopia("equipo.kickerVarios")} linea maxLen={60}
+                <Txt as="span" style={kicker} campo={dirCopia("equipo.kickerVarios")}
                   valor={C("equipo.kickerVarios")} porDefecto="Los especialistas" />
-                <Txt as="h2" style={h2} campo={dirSeccion("equipo", "titulo")} linea maxLen={160}
+                <Txt as="h2" style={h2} campo={dirSeccion("equipo", "titulo")}
                   valor={S.equipo?.titulo} porDefecto="Quién te va a operar" />
                 <div className="es-3" style={{ marginTop: 48 }}>
                   {doctores.map(d => (
@@ -436,7 +438,7 @@ export function TemplateEspecialistas({ clinic: publicada }: TemplateProps) {
                         <b style={{ fontSize: 19, fontWeight: 500, display: "block" }}>Dr/a. {d.firstName} {d.lastName}</b>
                         {d.specialty && <div style={{ ...mono, fontSize: 11, letterSpacing: ".14em", textTransform: "uppercase", color: acento, margin: "8px 0 14px" }}>{d.specialty}</div>}
                         <Txt as="button" type="button" onClick={() => abrir({ doctorId: d.id })} style={{ ...btnO, ...btnSm }}
-                          campo={dirCopia("equipo.cta")} linea maxLen={40}
+                          campo={dirCopia("equipo.cta")}
                           valor={C("equipo.cta")} porDefecto="Valoración" />
                       </div>
                     </article>
@@ -453,19 +455,21 @@ export function TemplateEspecialistas({ clinic: publicada }: TemplateProps) {
         <section className="es-sec" id="pagos" style={{ background: fondo2, borderTop: `1px solid ${linea}`, borderBottom: `1px solid ${linea}` }}>
           <div className="es-wrap es-fin">
             <div>
-              <Txt as="span" style={kicker} campo={dirCopia("pagos.kicker")} linea maxLen={60}
+              <Txt as="span" style={kicker} campo={dirCopia("pagos.kicker")}
                 valor={C("pagos.kicker")} porDefecto="Financiamiento" />
-              <Txt as="h2" style={h2} campo={dirSeccion("pagos", "titulo")} linea maxLen={160}
+              <Txt as="h2" style={h2} campo={dirSeccion("pagos", "titulo")}
                 valor={S.pagos?.titulo} porDefecto="Tu tratamiento cabe en tu mes" />
               {/* El texto por defecto se CONSTRUYE con los plazos de la clínica,
                   así que en el manifiesto va vacío y el literal real se pasa
                   aquí. <Txt> nunca guarda el default, solo lo enseña. */}
               <Txt as="p" style={{ ...lead, marginTop: 16 }}
-                campo={dirSeccion("pagos", "subtitulo")} maxLen={500}
+                campo={dirSeccion("pagos", "subtitulo")}
                 valor={S.pagos?.subtitulo}
                 porDefecto={`Meses sin intereses con tarjetas participantes, hasta ${Math.max(...msi)} plazos. La cifra que ves es la que se carga.`} />
             </div>
             <MsiSimulator
+              claves={{ tratamiento: "pagos.rotuloTratamiento", plazo: "pagos.rotuloPlazo", mensual: "pagos.rotuloMensual" }}
+              valores={{ tratamiento: C("pagos.rotuloTratamiento"), plazo: C("pagos.rotuloPlazo"), mensual: C("pagos.rotuloMensual") }}
               plazos={msi}
               opciones={opcionesMsi}
               accent={acento}
@@ -483,14 +487,14 @@ export function TemplateEspecialistas({ clinic: publicada }: TemplateProps) {
       {verOpiniones && (
         <section className="es-sec">
           <div className="es-wrap">
-            <Txt as="span" style={kicker} campo={dirCopia("opiniones.kicker")} linea maxLen={60}
+            <Txt as="span" style={kicker} campo={dirCopia("opiniones.kicker")}
               valor={C("opiniones.kicker")} porDefecto="Opiniones" />
             {/* Con ficha de Google el titular es una cadena CONSTRUIDA y además
                 va partida en dos elementos: no se instrumenta. Sin Google sí es
                 un título de sección. */}
             {google?.rating
               ? <h2 style={h2}>{google.rating} <b style={{ fontWeight: 600 }}>de {google.total} reseñas</b></h2>
-              : <Txt as="h2" style={h2} campo={dirSeccion("opiniones", "titulo")} linea maxLen={160}
+              : <Txt as="h2" style={h2} campo={dirSeccion("opiniones", "titulo")}
                   valor={S.opiniones?.titulo} porDefecto="Lo que dicen nuestros pacientes" />}
             <div className="es-3" style={{ marginTop: 48 }}>
               {/* `dir` es null en las reseñas de Google: son de Google, no de la
@@ -505,15 +509,15 @@ export function TemplateEspecialistas({ clinic: publicada }: TemplateProps) {
                       si se guardaran, la siguiente edición las duplicaría. */}
                   <Txt as="p" style={{ fontSize: 16, margin: "14px 0 18px", fontWeight: 300 }}
                     campo={t.dir === null ? null : dirTestimonio(t.dir, "text")}
-                    requerido maxLen={800}
+
                     valor={t.text} prefijo="“" sufijo="”" />
                   <Txt as="b" style={{ fontSize: 14.5, fontWeight: 500, display: "block" }}
                     campo={t.dir === null ? null : dirTestimonio(t.dir, "name")}
-                    linea maxLen={80} valor={t.name} />
+                    valor={t.name} />
                   {t.meta && (
                     <Txt as="small" style={{ color: gris, fontSize: 13 }}
                       campo={t.dir === null ? null : dirTestimonio(t.dir, "meta")}
-                      linea maxLen={80} valor={t.meta} />
+                      valor={t.meta} />
                   )}
                 </article>
               ))}
@@ -526,18 +530,18 @@ export function TemplateEspecialistas({ clinic: publicada }: TemplateProps) {
       {verFaq && (
         <section className="es-sec" style={{ paddingTop: 0 }}>
           <div className="es-wrap">
-            <Txt as="span" style={kicker} campo={dirCopia("faq.kicker")} linea maxLen={60}
+            <Txt as="span" style={kicker} campo={dirCopia("faq.kicker")}
               valor={C("faq.kicker")} porDefecto="Preguntas frecuentes" />
-            <Txt as="h2" style={h2} campo={dirSeccion("faq", "titulo")} linea maxLen={160}
+            <Txt as="h2" style={h2} campo={dirSeccion("faq", "titulo")}
               valor={S.faq?.titulo} porDefecto="Antes de decidir" />
             <div style={{ maxWidth: 840, marginTop: 40 }}>
               {faqs.map((f, i) => (
                 <details key={i} open={i === 0} style={{ borderBottom: `1px solid ${linea}` }}>
                   <Txt as="summary" style={{ cursor: "pointer", padding: "20px 0", fontWeight: 500, fontSize: 17, listStyle: "none" }}
-                    campo={dirFaq(f.i, "q")} linea requerido maxLen={200}
+                    campo={dirFaq(f.i, "q")}
                     valor={f.q} />
                   <Txt as="p" style={{ margin: "0 0 20px", color: gris, fontWeight: 300 }}
-                    campo={dirFaq(f.i, "a")} requerido maxLen={1200}
+                    campo={dirFaq(f.i, "a")}
                     valor={f.a} />
                 </details>
               ))}
@@ -549,11 +553,11 @@ export function TemplateEspecialistas({ clinic: publicada }: TemplateProps) {
       {/* ============ UBICACIÓN ============ */}
       <section className="es-sec" style={{ paddingTop: 0 }} id="ubicacion">
         <div className="es-wrap">
-          <Txt as="span" style={kicker} campo={dirCopia("contacto.kicker")} linea maxLen={60}
+          <Txt as="span" style={kicker} campo={dirCopia("contacto.kicker")}
             valor={C("contacto.kicker")} porDefecto="Dónde estamos" />
           {/* El texto por defecto es la CIUDAD de la clínica y, si no la tiene,
               "Ubicación y horarios". <Txt> nunca guarda el default. */}
-          <Txt as="h2" style={h2} campo={dirSeccion("contacto", "titulo")} linea maxLen={160}
+          <Txt as="h2" style={h2} campo={dirSeccion("contacto", "titulo")}
             valor={S.contacto?.titulo} porDefecto={clinic.city ?? "Ubicación y horarios"} />
           <div className="es-ubi" style={{ border: `1px solid ${linea}`, borderRadius: 8, overflow: "hidden", marginTop: 44 }}>
             <div style={{ padding: "38px 34px" }}>
@@ -570,7 +574,7 @@ export function TemplateEspecialistas({ clinic: publicada }: TemplateProps) {
                     {d.open
                       ? <time style={{ ...mono, fontSize: 14 }}>{d.open}</time>
                       : <Txt as="time" style={{ ...mono, fontSize: 14 }}
-                          campo={dirCopia("contacto.cerrado")} linea maxLen={40}
+                          campo={dirCopia("contacto.cerrado")}
                           valor={C("contacto.cerrado")} porDefecto="Cerrado" />}
                   </li>
                 ))}
@@ -579,11 +583,11 @@ export function TemplateEspecialistas({ clinic: publicada }: TemplateProps) {
               {clinic.phone && <p style={{ margin: "0 0 22px" }}><a href={`tel:${clinic.phone}`} style={{ ...mono, color: acento, textDecoration: "none" }}>{clinic.phone}</a></p>}
               <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
                 <Txt as="button" type="button" onClick={() => abrir()} style={{ ...btnP, ...btnSm }}
-                  campo={dirCopia("contacto.cta")} linea maxLen={60}
+                  campo={dirCopia("contacto.cta")}
                   valor={C("contacto.cta")} porDefecto="Agendar valoración" />
                 {clinic.address && (
                   <Txt as="a" style={{ ...btnO, ...btnSm }} href={`https://maps.google.com/?q=${encodeURIComponent(`${clinic.address} ${clinic.city ?? ""}`)}`} target="_blank" rel="noopener noreferrer"
-                    campo={dirCopia("contacto.comoLlegar")} linea maxLen={60}
+                    campo={dirCopia("contacto.comoLlegar")}
                     valor={C("contacto.comoLlegar")} porDefecto="Cómo llegar" />
                 )}
               </div>

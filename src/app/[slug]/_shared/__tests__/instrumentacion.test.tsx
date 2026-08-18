@@ -31,7 +31,8 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { renderToString } from "react-dom/server";
 
-import { manifestOf, plantillaPinta, plantillasInstrumentadas } from "../template-manifest";
+import { manifestOf, plantillaPinta, plantillasInstrumentadas, topeDeCopia } from "../template-manifest";
+import { reglaDeCampo } from "../edit-labels";
 import { EditProvider } from "../edit-runtime";
 import {
   CARPETA_GOLDEN, CLINICA_FIXTURE, CLINICA_UN_DOCTOR, CLINICA_VACIA, PLANTILLAS_CON_GOLDEN,
@@ -170,6 +171,27 @@ for (const [tpl, fuente] of Object.entries(FUENTES_DE_PLANTILLA)) {
     }
   });
 }
+
+/**
+ * El campo del lienzo no puede aceptar más de lo que el PATCH guarda.
+ *
+ * Cuando el `maxLen` se escribía a mano en cada <Txt> se separó de la regla:
+ * diez botones dejaban escribir 80 caracteres donde el servidor acepta 60, así
+ * que la clínica escribía, `aplicarDireccion` descartaba el cambio por pasarse
+ * del tope, y el texto volvía atrás SIN DECIR NADA. Ahora el campo lo resuelve
+ * de la misma fuente; esto lo fija.
+ */
+test("el tope del campo nunca supera el que aplica el servidor", () => {
+  const malos: string[] = [];
+  for (const tpl of plantillasInstrumentadas()) {
+    for (const c of manifestOf(tpl).copia ?? []) {
+      const campo = reglaDeCampo(`copia:${c.clave}`, tpl).maxLen;
+      const servidor = topeDeCopia(c.clave);
+      if (campo > servidor) malos.push(`${tpl}/${c.clave}: campo ${campo} > servidor ${servidor}`);
+    }
+  }
+  assert.deepEqual(malos, [], "Hay campos que dejan escribir más de lo que se puede guardar.");
+});
 
 test("hay al menos una plantilla instrumentada", () => {
   assert.ok(plantillasInstrumentadas().length > 0);

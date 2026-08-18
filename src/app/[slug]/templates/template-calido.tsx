@@ -132,7 +132,7 @@ export function TemplateCalido({ clinic: publicada }: TemplateProps) {
     if (campo) {
       return (
         <Txt as="button" onClick={onClick} className={clase} style={estilo}
-          campo={campo} linea maxLen={80}
+          campo={campo}
           valor={valor} porDefecto={porDefecto}
           sufijo={sufijoFijo ?? (despues !== undefined ? " " : undefined)}
           unido={sufijoFijo !== undefined || despues !== undefined}
@@ -232,7 +232,7 @@ export function TemplateCalido({ clinic: publicada }: TemplateProps) {
             </h1>
             {(clinic.description || editando) && (
               <Txt as="p" className="mt-6 text-lg leading-relaxed font-medium" style={{ color: alpha(ink, 0.65) }}
-                campo={dirClinica("description")} maxLen={5000} valor={clinic.description} />
+                campo={dirClinica("description")} valor={clinic.description} />
             )}
             <div className="mt-8 flex flex-wrap gap-3">
               <SolidBtn onClick={() => openBooking()}
@@ -244,7 +244,7 @@ export function TemplateCalido({ clinic: publicada }: TemplateProps) {
                   onClick={() => scrollToId("servicios")}
                   className="inline-flex items-center justify-center gap-2 font-bold px-7 py-3.5 rounded-full transition-all duration-300 hover:-translate-y-0.5"
                   style={{ background: "#fff", color: shade(accent, 0.1), border: `2px solid ${border}`, ...head }}
-                  campo={dirCopia("hero.cta2")} linea maxLen={60}
+                  campo={dirCopia("hero.cta2")}
                   valor={C("hero.cta2")} porDefecto="Ver servicios" sufijo=" 😊" unido
                 />
               )}
@@ -260,7 +260,7 @@ export function TemplateCalido({ clinic: publicada }: TemplateProps) {
                 <div className="flex items-center gap-2 bg-white rounded-full pl-2 pr-4 py-2" style={{ boxShadow: `0 8px 20px -12px ${alpha(accent, 0.4)}` }}>
                   <span className="grid place-items-center w-9 h-9 rounded-full" style={{ background: peach }}>👨‍👩‍👧</span>
                   <span className="font-bold text-sm">{clinic.landingPatients} <Txt as="span" className="font-medium" style={{ color: alpha(ink, 0.5) }}
-                    campo={dirCopia("chips.pacientes")} linea maxLen={60}
+                    campo={dirCopia("chips.pacientes")}
                     valor={C("chips.pacientes")} porDefecto="pacientes felices" /></span>
                 </div>
               )}
@@ -268,7 +268,7 @@ export function TemplateCalido({ clinic: publicada }: TemplateProps) {
                 <div className="flex items-center gap-2 bg-white rounded-full pl-2 pr-4 py-2" style={{ boxShadow: `0 8px 20px -12px ${alpha(accent, 0.4)}` }}>
                   <span className="grid place-items-center w-9 h-9 rounded-full" style={{ background: lilac }}>🎓</span>
                   <span className="font-bold text-sm">{clinic.landingYearsExperience} <Txt as="span" className="font-medium" style={{ color: alpha(ink, 0.5) }}
-                    campo={dirCopia("chips.anios")} linea maxLen={60}
+                    campo={dirCopia("chips.anios")}
                     valor={C("chips.anios")} porDefecto="años de experiencia" /></span>
                 </div>
               )}
@@ -289,10 +289,10 @@ export function TemplateCalido({ clinic: publicada }: TemplateProps) {
               <span className="text-3xl">🎈</span>
               <div>
                 <Txt as="p" className="font-bold text-sm" style={head}
-                  campo={dirCopia("chips.tarjeta.titulo")} linea maxLen={60}
+                  campo={dirCopia("chips.tarjeta.titulo")}
                   valor={C("chips.tarjeta.titulo")} porDefecto="Sin miedo al dentista" />
                 <Txt as="p" className="text-xs font-medium" style={{ color: alpha(ink, 0.55) }}
-                  campo={dirCopia("chips.tarjeta.texto")} linea maxLen={120}
+                  campo={dirCopia("chips.tarjeta.texto")}
                   valor={C("chips.tarjeta.texto")} porDefecto="Trato amable para toda la familia" />
               </div>
             </div>
@@ -319,18 +319,18 @@ export function TemplateCalido({ clinic: publicada }: TemplateProps) {
                   >
                     <span className="grid place-items-center w-16 h-16 rounded-3xl text-3xl transition-transform group-hover:rotate-6" style={{ background: bubbleColors[i % bubbleColors.length] }}>{s.icon || "🦷"}</span>
                     <Txt as="h3" className="mt-5 text-xl font-bold" style={head}
-                      campo={dirServicio(i, "name")} linea requerido maxLen={120} valor={s.name} />
+                      campo={dirServicio(i, "name")} valor={s.name} />
                     {(s.desc || editando) && (
                       <Txt as="p" className="mt-1.5 text-[15px] font-medium leading-relaxed" style={{ color: alpha(ink, 0.6) }}
-                        campo={dirServicio(i, "desc")} maxLen={400} valor={s.desc} />
+                        campo={dirServicio(i, "desc")} valor={s.desc} />
                     )}
                     <div className="mt-5 flex items-center justify-between">
                       {s.price || editando
                         ? <Txt as="span" className="text-lg font-bold" style={{ color: accent, ...head }}
-                            campo={dirServicio(i, "price")} linea maxLen={40} valor={s.price} />
+                            campo={dirServicio(i, "price")} valor={s.price} />
                         : <span />}
                       <Txt as="button" onClick={() => openBooking({ service: s.name })} className="px-4 py-2 rounded-full font-bold text-sm flex items-center gap-1.5 transition" style={{ background: alpha(accent, 0.12), color: shade(accent, 0.1) }}
-                        campo={dirCopia("servicios.cta")} linea maxLen={40}
+                        campo={dirCopia("servicios.cta")}
                         valor={C("servicios.cta")} porDefecto="Agendar" sufijo=" " unido
                         despues={<ArrowRight size={15} />} />
                     </div>
@@ -365,7 +365,7 @@ export function TemplateCalido({ clinic: publicada }: TemplateProps) {
                     <h3 className="mt-4 font-bold text-lg" style={head}>Dr(a). {u.firstName} {u.lastName}</h3>
                     {u.specialty && <p className="text-sm font-semibold" style={{ color: accent }}>{u.specialty}</p>}
                     <Txt as="button" onClick={() => openBooking({ doctorId: u.id })} className="mt-4 w-full py-2.5 rounded-full font-bold text-sm transition hover:brightness-110" style={{ background: accent, color: "#fff" }}
-                      campo={dirCopia("equipo.cta")} linea maxLen={60}
+                      campo={dirCopia("equipo.cta")}
                       valor={C("equipo.cta")} porDefecto="Agendar consulta" />
                   </div>
                 </Reveal>
@@ -395,7 +395,7 @@ export function TemplateCalido({ clinic: publicada }: TemplateProps) {
             </div>
             <Reveal className="mt-10 text-center">
               <Txt as="button" onClick={() => openBooking()} className="inline-flex items-center gap-2 px-7 py-3.5 rounded-full font-bold text-white transition-all hover:-translate-y-1" style={{ background: accent, boxShadow: `0 14px 30px -10px ${alpha(accent, 0.6)}`, ...head }}
-                campo={dirCopia("galeria.cta")} linea maxLen={80}
+                campo={dirCopia("galeria.cta")}
                 valor={C("galeria.cta")} porDefecto="Ven a conocernos · Agendar Cita" sufijo=" 🦷" unido />
             </Reveal>
           </div>
@@ -420,12 +420,12 @@ export function TemplateCalido({ clinic: publicada }: TemplateProps) {
                           texto: si se guardaran, la siguiente edición las
                           duplicaría. */}
                       <Txt as="p" className="mt-3 text-[16px] font-medium leading-relaxed" style={{ color: alpha(ink, 0.75) }}
-                        campo={dirTestimonio(i, "text")} requerido maxLen={800}
+                        campo={dirTestimonio(i, "text")}
                         valor={t2.text} prefijo={"\""} sufijo={"\""} />
                       <div className="mt-5 flex items-center justify-between">
                         <div>
                           <Txt as="span" className="font-bold block" style={head}
-                            campo={dirTestimonio(i, "name")} linea maxLen={80} valor={t2.name} />
+                            campo={dirTestimonio(i, "name")} valor={t2.name} />
                           {t2.date && <span className="text-xs font-medium" style={{ color: alpha(ink, 0.5) }}>{t2.date}</span>}
                         </div>
                         <Stars value={t2.rating ?? 5} size={15} />
@@ -479,13 +479,13 @@ export function TemplateCalido({ clinic: publicada }: TemplateProps) {
                             primera pregunta que alguien editara desde el
                             lienzo habría desaparecido de la página. */}
                         <Txt as="span" className="font-bold text-[17px]" style={{ color: ink }}
-                          campo={dirFaq(i, "q")} linea requerido maxLen={200}
+                          campo={dirFaq(i, "q")}
                           valor={f.q ?? f.question} />
                         <span className="shrink-0 grid place-items-center w-8 h-8 rounded-full transition-transform duration-300" style={{ background: isOpen ? accent : p1, color: isOpen ? "#fff" : ink, transform: isOpen ? "rotate(180deg)" : "none" }}>▾</span>
                       </button>
                       <div style={{ maxHeight: isOpen ? 280 : 0, overflow: "hidden", transition: "max-height .4s ease" }}>
                         <Txt as="p" className="px-6 pb-5 text-[15px] font-medium leading-relaxed" style={{ color: alpha(ink, 0.65) }}
-                          campo={dirFaq(i, "a")} requerido maxLen={1200}
+                          campo={dirFaq(i, "a")}
                           valor={f.a ?? f.answer} />
                       </div>
                     </div>
@@ -495,7 +495,7 @@ export function TemplateCalido({ clinic: publicada }: TemplateProps) {
             </div>
             <Reveal className="mt-10 flex flex-col sm:flex-row items-center justify-center gap-4 text-center">
               <Txt as="span" className="text-[15px] font-medium" style={{ color: alpha(ink, 0.6) }}
-                campo={dirCopia("faq.nota")} linea maxLen={160}
+                campo={dirCopia("faq.nota")}
                 valor={C("faq.nota")} porDefecto="¿Te quedó otra duda? Con gusto te ayudamos." />
               <SolidBtn onClick={() => openBooking()}
                 campo={dirCopia("faq.cta")} valor={C("faq.cta")} porDefecto="Agendar Cita"
@@ -515,13 +515,13 @@ export function TemplateCalido({ clinic: publicada }: TemplateProps) {
               {/* El emoji va pegado FUERA de lo editable: es decoración de la
                   plantilla y la clínica lo perdería al reescribir el titular. */}
               <Txt as="h2" className="text-4xl sm:text-5xl font-bold text-white leading-tight" style={head}
-                campo={dirSeccion("reservar", "titulo")} linea maxLen={160}
+                campo={dirSeccion("reservar", "titulo")}
                 valor={S.reservar?.titulo} porDefecto="¿Listos para sonreír juntos?" sufijo=" 😄" unido />
               <Txt as="p" className="mt-4 text-lg text-white/90 max-w-xl mx-auto font-medium"
-                campo={dirSeccion("reservar", "subtitulo")} maxLen={500}
+                campo={dirSeccion("reservar", "subtitulo")}
                 valor={S.reservar?.subtitulo} porDefecto="Agenda tu cita en línea. Te escribimos por WhatsApp para confirmar." />
               <Txt as="button" onClick={() => openBooking()} className="mt-8 inline-flex items-center gap-2 bg-white px-8 py-4 rounded-full font-bold transition hover:scale-105" style={{ color: shade(accent, 0.1), ...head }}
-                campo={dirCopia("reservar.cta")} linea maxLen={60}
+                campo={dirCopia("reservar.cta")}
                 valor={C("reservar.cta")} porDefecto="Agendar Cita" sufijo=" " unido
                 despues={<ArrowRight size={18} />} />
             </div>
@@ -556,7 +556,7 @@ export function TemplateCalido({ clinic: publicada }: TemplateProps) {
               {schedules.length > 0 && (
                 <div className="p-5 rounded-[24px] bg-white" style={{ border: `2px solid ${border}` }}>
                   <div className="flex items-center gap-3 mb-3"><Clock size={20} style={{ color: accent }} /><Txt as="span" className="font-bold" style={{ color: ink, ...head }}
-                    campo={dirCopia("contacto.etiquetaHorarios")} linea maxLen={60}
+                    campo={dirCopia("contacto.etiquetaHorarios")}
                     valor={C("contacto.etiquetaHorarios")} porDefecto="Horarios" /></div>
                   {schedules.map((s) => (
                     <div key={s.dayOfWeek} className="flex justify-between py-1.5 text-[15px]" style={{ color: alpha(ink, 0.65) }}>
@@ -566,7 +566,7 @@ export function TemplateCalido({ clinic: publicada }: TemplateProps) {
                       {s.enabled
                         ? <span className="font-bold" style={{ color: ink }}>{`${s.openTime} – ${s.closeTime}`}</span>
                         : <Txt as="span" className="font-bold" style={{ color: "#b91c1c" }}
-                            campo={dirCopia("contacto.cerrado")} linea maxLen={40}
+                            campo={dirCopia("contacto.cerrado")}
                             valor={C("contacto.cerrado")} porDefecto="Cerrado" />}
                     </div>
                   ))}
@@ -657,7 +657,7 @@ export function TemplateCalido({ clinic: publicada }: TemplateProps) {
       >
         <Calendar size={18} />
         <Txt as="span" className="hidden sm:inline"
-          campo={dirCopia("flotante.cta")} linea maxLen={40}
+          campo={dirCopia("flotante.cta")}
           valor={C("flotante.cta")} porDefecto="Agendar Cita" />
       </button>
 
@@ -686,10 +686,10 @@ function WarmHead({ emoji, seccion, claveKicker, kicker, kickerValor, title, tit
     <Reveal className="text-center max-w-2xl mx-auto">
       <div className="text-4xl mb-3">{emoji}</div>
       <Txt as="span" className="inline-block px-4 py-1.5 rounded-full text-sm font-bold mb-3" style={{ background: alpha(accent, 0.12), color: shade(accent, 0.1) }}
-        campo={dirCopia(claveKicker)} linea maxLen={60}
+        campo={dirCopia(claveKicker)}
         valor={kickerValor} porDefecto={kicker} />
       <Txt as="h2" className="text-4xl sm:text-5xl font-bold leading-[1.08]" style={{ ...head, color: ink }}
-        campo={dirSeccion(seccion, "titulo")} linea maxLen={160}
+        campo={dirSeccion(seccion, "titulo")}
         valor={titleValor} porDefecto={title} />
     </Reveal>
   );
@@ -704,7 +704,7 @@ function ContactRow({ icon, label, labelClave, labelValor, value, href, accent, 
       <span className="shrink-0 grid place-items-center w-12 h-12 rounded-full" style={{ background: alpha(accent, 0.1), color: accent }}>{icon}</span>
       <div>
         <Txt as="p" className="text-xs uppercase tracking-wider font-bold" style={{ color: alpha(ink, 0.5) }}
-          campo={dirCopia(labelClave)} linea maxLen={60}
+          campo={dirCopia(labelClave)}
           valor={labelValor} porDefecto={label} />
         <p className="font-bold text-[16px]" style={{ color: ink }}>{value}</p>
       </div>

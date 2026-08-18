@@ -84,6 +84,20 @@ export function etiquetaDeColumna(columna: string): string | undefined {
     : undefined;
 }
 
+/**
+ * El tope y la obligatoriedad de una columna suelta.
+ *
+ * Los lee _shared/edit-labels.ts para que el campo del lienzo acepte
+ * EXACTAMENTE lo mismo que `aplicarDireccion` deja pasar. Cuando el campo era
+ * más permisivo que la regla, la clínica escribía de más y el cambio se
+ * descartaba sin decir nada.
+ */
+export function reglaDeColumna(columna: string): { maxLen: number; requerido: boolean } | undefined {
+  if (!propia(COLUMNAS_SUELTAS, columna)) return undefined;
+  const c = COLUMNAS_SUELTAS[columna as ColumnaSuelta];
+  return { maxLen: c.maxLen, requerido: c.requerido };
+}
+
 export type Direccion =
   | { tipo: "clinica";    columna: ColumnaSuelta }
   | { tipo: "seccion";    seccion: string; campo: CampoDeSeccion }

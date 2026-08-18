@@ -184,14 +184,6 @@ const FOTOS_CASO: ManifestPhotoSlot[] = [
   { id: "caso1_despues", nombre: "Caso 1 · después", proporcion: "4:3", seccion: "casos", zona: "izquierda", ayuda: "El resultado, con el mismo encuadre que la de antes." },
 ];
 
-const TEXTOS_BASE: ManifestText[] = [
-  { seccion: "servicios", campo: "titulo", etiqueta: "Título de servicios", porDefecto: "Lo que cuesta, antes de sentarte" },
-  { seccion: "servicios", campo: "subtitulo", etiqueta: "Bajada de servicios", porDefecto: "Precios de lista. Tu plan puede ajustarse tras la valoración." },
-  { seccion: "equipo", campo: "titulo", etiqueta: "Título del equipo", porDefecto: "Quién te va a atender" },
-  { seccion: "opiniones", campo: "titulo", etiqueta: "Título de opiniones", porDefecto: "Lo que dicen nuestros pacientes" },
-  { seccion: "faq", campo: "titulo", etiqueta: "Título de preguntas", porDefecto: "Lo que todos preguntan antes de venir" },
-  { seccion: "contacto", campo: "titulo", etiqueta: "Título de contacto", porDefecto: "Dónde estamos" },
-];
 
 /* ============================================================
    LOS OCHO MANIFIESTOS
@@ -344,6 +336,7 @@ export const TEMPLATE_MANIFESTS: Record<string, TemplateManifest> = {
 
       { clave: "reservar.kicker", etiqueta: "Cierre · etiqueta", porDefecto: "Tu próxima cita", maxLen: 60, linea: true },
       { clave: "reservar.cta",    etiqueta: "Cierre · botón",    porDefecto: "Agendar Cita",    maxLen: 60, linea: true },
+      { clave: "flotante.cta",    etiqueta: "Botón flotante de reservar", porDefecto: "Agendar Cita", maxLen: 40, linea: true },
 
       { clave: "contacto.kicker",            etiqueta: "Contacto · etiqueta",               porDefecto: "Visítanos",   maxLen: 60, linea: true },
       { clave: "contacto.etiquetaDireccion", etiqueta: "Contacto · rótulo de la dirección", porDefecto: "Dirección",   maxLen: 60, linea: true },
@@ -528,7 +521,9 @@ export const TEMPLATE_MANIFESTS: Record<string, TemplateManifest> = {
       SEC_GALERIA,
       SEC_FAQ,
       SEC_CONTACTO,
-      SEC_RESERVAR,
+      /* SIN SEC_RESERVAR: esta plantilla NO pinta bloque de cierre —va de FAQ a
+         Ubicación y al pie—, y declararlo ponía en la pestaña Diseño un
+         interruptor bloqueado para una sección que no existe. */
     ],
     fotos: [
       FOTO_PORTADA,
@@ -536,19 +531,35 @@ export const TEMPLATE_MANIFESTS: Record<string, TemplateManifest> = {
       { id: "tecnologia1", nombre: "Tecnología 1", proporcion: "16:11", seccion: "tecnologia1", zona: "derecha", ayuda: "El aparato o el consultorio del que quieres presumir." },
       { id: "tecnologia2", nombre: "Tecnología 2", proporcion: "16:11", seccion: "tecnologia2", zona: "izquierda", ayuda: "Segunda foto de equipo o instalaciones." },
     ],
+    /* Escritos uno por uno contra templates/template-equipo.tsx. Hasta la
+       auditoría de la etapa D esta lista empezaba con `...TEXTOS_BASE`, una
+       constante compartida que era el ÚLTIMO sitio del que salían defaults
+       falsos: prometía seis literales que solo pintan las plantillas nuevas.
+       Se borró la constante y aquí queda lo que esta plantilla pinta de verdad.
+       Ocho mentían y están corregidas: las dos tarjetas de tecnología pintan
+       las dos "Equipo del consultorio" (salen del MISMO bucle), y cinco bajadas
+       anunciaban un texto que la plantilla no pinta si el campo va vacío. */
     textos: [
-      ...TEXTOS_BASE,
-      // Los pinta la plantilla desde siempre; faltaba declararlos, así que el
-      // formulario de Diseño no los ofrecía y el editor visual no los vería.
+      { seccion: "servicios", campo: "titulo", etiqueta: "Título de servicios", porDefecto: "Lo que cuesta, antes de sentarte" },
+      { seccion: "servicios", campo: "subtitulo", etiqueta: "Bajada de servicios", porDefecto: "" },
+      /* Con VARIOS doctores —el caso que da nombre a la plantilla— el título es
+         "Especialistas, no rotación de pasantes"; con uno solo, "Quién te va a
+         atender". Aquí va el mayoritario. */
+      { seccion: "equipo", campo: "titulo", etiqueta: "Título del equipo", porDefecto: "Especialistas, no rotación de pasantes" },
       { seccion: "equipo", campo: "subtitulo", etiqueta: "Bajada del equipo", porDefecto: "" },
       { seccion: "galeria", campo: "titulo", etiqueta: "Título de la galería", porDefecto: "Así se ve por dentro" },
+      /* Con ficha de Google conectada el título es "Lo que dicen en Google".
+         Aquí va el caso por defecto, que es no tenerla. */
+      { seccion: "opiniones", campo: "titulo", etiqueta: "Título de opiniones", porDefecto: "Lo que dicen nuestros pacientes" },
+      { seccion: "faq", campo: "titulo", etiqueta: "Título de preguntas", porDefecto: "Lo que todos preguntan antes de venir" },
+      { seccion: "contacto", campo: "titulo", etiqueta: "Título de contacto", porDefecto: "Dónde estamos" },
       { seccion: "casos", campo: "titulo", etiqueta: "Título de casos", porDefecto: "Arrastra y mira la diferencia" },
-      { seccion: "casos", campo: "subtitulo", etiqueta: "Descripción del caso", porDefecto: "Cuenta en dos líneas qué se hizo y en cuántas citas." },
+      { seccion: "casos", campo: "subtitulo", etiqueta: "Descripción del caso", porDefecto: "" },
       { seccion: "tecnologia", campo: "titulo", etiqueta: "Título de tecnología", porDefecto: "Lo que hay detrás del sillón" },
-      { seccion: "tecnologia1", campo: "titulo", etiqueta: "Tecnología 1 · nombre", porDefecto: "Escáner intraoral 3D" },
-      { seccion: "tecnologia1", campo: "subtitulo", etiqueta: "Tecnología 1 · texto", porDefecto: "Qué es y por qué le conviene al paciente." },
-      { seccion: "tecnologia2", campo: "titulo", etiqueta: "Tecnología 2 · nombre", porDefecto: "Esterilización certificada" },
-      { seccion: "tecnologia2", campo: "subtitulo", etiqueta: "Tecnología 2 · texto", porDefecto: "Qué es y por qué le conviene al paciente." },
+      { seccion: "tecnologia1", campo: "titulo", etiqueta: "Tecnología 1 · nombre", porDefecto: "Equipo del consultorio" },
+      { seccion: "tecnologia1", campo: "subtitulo", etiqueta: "Tecnología 1 · texto", porDefecto: "" },
+      { seccion: "tecnologia2", campo: "titulo", etiqueta: "Tecnología 2 · nombre", porDefecto: "Equipo del consultorio" },
+      { seccion: "tecnologia2", campo: "subtitulo", etiqueta: "Tecnología 2 · texto", porDefecto: "" },
     ],
     copia: [
       /* Barra de arriba. Los enlaces del menú no; el botón de reservar sí. */
@@ -560,12 +571,12 @@ export const TEMPLATE_MANIFESTS: Record<string, TemplateManifest> = {
       { clave: "hero.cifraPacientes",  etiqueta: "Portada · leyenda de «pacientes atendidos»", porDefecto: "pacientes atendidos", maxLen: 60, linea: true },
 
       /* Los tres accesos rápidos que cuelgan del hero */
-      { clave: "accesos.servicios.titulo",  etiqueta: "Acceso 1 · título", porDefecto: "Servicios y precios →",           maxLen: 60,  linea: true },
+      { clave: "accesos.servicios.titulo",  etiqueta: "Acceso 1 · título", porDefecto: "Servicios y precios",           maxLen: 60,  linea: true },
       { clave: "accesos.servicios.texto",   etiqueta: "Acceso 1 · texto",  porDefecto: "Costos claros antes de sentarte", maxLen: 120, linea: true },
-      { clave: "accesos.agenda.titulo",     etiqueta: "Acceso 2 · título", porDefecto: "Agenda tu cita →",                maxLen: 60,  linea: true },
+      { clave: "accesos.agenda.titulo",     etiqueta: "Acceso 2 · título", porDefecto: "Agenda tu cita",                maxLen: 60,  linea: true },
       { clave: "accesos.agenda.texto",      etiqueta: "Acceso 2 · texto",  porDefecto: "En línea, sin llamar",            maxLen: 120, linea: true },
-      { clave: "accesos.equipo.titulo",     etiqueta: "Acceso 3 · título (con equipo)",  porDefecto: "Conócenos →",   maxLen: 60, linea: true },
-      { clave: "accesos.ubicacion.titulo",  etiqueta: "Acceso 3 · título (sin equipo)",  porDefecto: "Cómo llegar →", maxLen: 60, linea: true },
+      { clave: "accesos.equipo.titulo",     etiqueta: "Acceso 3 · título (con equipo)",  porDefecto: "Conócenos",   maxLen: 60, linea: true },
+      { clave: "accesos.ubicacion.titulo",  etiqueta: "Acceso 3 · título (sin equipo)",  porDefecto: "Cómo llegar", maxLen: 60, linea: true },
 
       /* Los cuatro "valores". Solo se pintan si la clínica tiene el dato. */
       { clave: "valores.urgencias.titulo", etiqueta: "Valor · título de urgencias",        porDefecto: "Urgencias",            maxLen: 60, linea: true },
@@ -579,6 +590,8 @@ export const TEMPLATE_MANIFESTS: Record<string, TemplateManifest> = {
       { clave: "servicios.kicker",  etiqueta: "Servicios · etiqueta",   porDefecto: "Servicios y precios",   maxLen: 60, linea: true },
       { clave: "equipo.kicker",     etiqueta: "Equipo · etiqueta",      porDefecto: "Quién te atiende",      maxLen: 60, linea: true },
       { clave: "casos.kicker",      etiqueta: "Casos · etiqueta",       porDefecto: "Casos reales",          maxLen: 60, linea: true },
+      { clave: "casos.antes",   etiqueta: "Antes y después · pastilla izquierda", porDefecto: "Antes",   maxLen: 40, linea: true },
+      { clave: "casos.despues", etiqueta: "Antes y después · pastilla derecha",   porDefecto: "Después", maxLen: 40, linea: true },
       { clave: "tecnologia.kicker", etiqueta: "Tecnología · etiqueta",  porDefecto: "Tecnología",            maxLen: 60, linea: true },
       { clave: "opiniones.kicker",  etiqueta: "Opiniones · etiqueta",   porDefecto: "Opiniones",             maxLen: 60, linea: true },
       { clave: "galeria.kicker",    etiqueta: "Galería · etiqueta",     porDefecto: "La clínica",            maxLen: 60, linea: true },
@@ -605,6 +618,7 @@ export const TEMPLATE_MANIFESTS: Record<string, TemplateManifest> = {
       { donde: "Acceso 3 · texto («{n} especialistas» / la ciudad)", porque: "Es una expresión con respaldo, no una cadena." },
       { donde: "Valor de meses sin intereses · texto", porque: "Lleva los plazos dentro («a 3, 6, 12 meses sin intereses»)." },
       { donde: "«{duración} min» de cada servicio", porque: "Es el dato de duración del servicio." },
+      { donde: "El « · hoy» que se pega al día de la semana en los horarios", porque: "Se construye sobre el nombre del día, que sale del calendario." },
       { donde: "«Dr/a. {nombre} {apellido}» y «Agendar con {nombre}»", porque: "Se arman con datos del equipo." },
       { donde: "«{n} reseñas verificadas en Google»", porque: "Se construye con lo que devuelve Google." },
       { donde: "Etiqueta de accesibilidad del botón flotante de WhatsApp", porque: "No es contenido: es texto para lectores de pantalla." },
@@ -675,6 +689,11 @@ export const TEMPLATE_MANIFESTS: Record<string, TemplateManifest> = {
         variante: "Solo sale con ficha de Google conectada, y las reseñas llegan por fetch: en el render de servidor los efectos no corren." },
 
       { clave: "casos.kicker",     etiqueta: "Antes y después · etiqueta",           porDefecto: "Casos reales",         maxLen: 60, linea: true },
+      { clave: "casos.antes",   etiqueta: "Antes y después · pastilla izquierda", porDefecto: "Antes",   maxLen: 40, linea: true },
+      { clave: "casos.despues", etiqueta: "Antes y después · pastilla derecha",   porDefecto: "Después", maxLen: 40, linea: true },
+      { clave: "pagos.rotuloTratamiento", etiqueta: "Simulador · rótulo del tratamiento", porDefecto: "Tratamiento",     maxLen: 60, linea: true },
+      { clave: "pagos.rotuloPlazo",       etiqueta: "Simulador · rótulo del plazo",       porDefecto: "Plazo",           maxLen: 60, linea: true },
+      { clave: "pagos.rotuloMensual",     etiqueta: "Simulador · rótulo del pago",        porDefecto: "Tu pago mensual", maxLen: 60, linea: true },
       { clave: "servicios.kicker", etiqueta: "Tratamientos · etiqueta",              porDefecto: "Tratamientos",         maxLen: 60, linea: true },
       { clave: "servicios.cta",    etiqueta: "Tratamientos · botón de cada tarjeta", porDefecto: "Agendar",              maxLen: 40, linea: true },
       { clave: "galeria.kicker",   etiqueta: "Galería · etiqueta",                   porDefecto: "Nuestras sonrisas",    maxLen: 60, linea: true },
@@ -737,7 +756,7 @@ export const TEMPLATE_MANIFESTS: Record<string, TemplateManifest> = {
     ],
     copia: [
       { clave: "nav.cta",   etiqueta: "Barra · botón de reservar",  porDefecto: "Agendar",              maxLen: 40, linea: true },
-      { clave: "hero.cta",  etiqueta: "Portada · botón principal",  porDefecto: "Agendar cita →",       maxLen: 60, linea: true },
+      { clave: "hero.cta",  etiqueta: "Portada · botón principal",  porDefecto: "Agendar cita",       maxLen: 60, linea: true },
       { clave: "hero.cta2", etiqueta: "Portada · botón de precios", porDefecto: "Ver lista de precios", maxLen: 60, linea: true },
 
       /* De los cuatro datos del hero, solo DOS son literales; los otros dos se
@@ -764,7 +783,8 @@ export const TEMPLATE_MANIFESTS: Record<string, TemplateManifest> = {
       { clave: "equipo.cta",       etiqueta: "Dentistas · botón de cada doctor", porDefecto: "Agendar",              maxLen: 40, linea: true },
       { clave: "opiniones.kicker", etiqueta: "Opiniones · etiqueta",             porDefecto: "Opiniones",            maxLen: 60, linea: true },
       { clave: "faq.kicker",       etiqueta: "Preguntas · etiqueta",             porDefecto: "Preguntas frecuentes", maxLen: 60, linea: true },
-      { clave: "reservar.cta",     etiqueta: "Cierre · botón",                   porDefecto: "Agendar mi cita →",    maxLen: 60, linea: true },
+      { clave: "reservar.cta",     etiqueta: "Cierre · botón",                   porDefecto: "Agendar mi cita",    maxLen: 60, linea: true },
+      { clave: "flotante.whatsapp", etiqueta: "Botón flotante de WhatsApp",      porDefecto: "WhatsApp",           maxLen: 40, linea: true },
     ],
     noEditables: [
       { donde: "Menú de navegación", porque: "Los enlaces siguen a las secciones encendidas." },
@@ -775,6 +795,8 @@ export const TEMPLATE_MANIFESTS: Record<string, TemplateManifest> = {
       { donde: "Opiniones · titular con ficha de Google («{nota} en Google, {n} reseñas»)", porque: "Es una cadena construida. El titular SIN Google sí se edita." },
       { donde: "Dentistas · «Dr/a. {nombre} {apellido}» y sus especialidades", porque: "Se arman con datos del equipo." },
       { donde: "«{duración} min» y el precio de cada fila", porque: "El precio SÍ se edita (es del servicio); la duración es el dato de agenda." },
+      { donde: "La nota «Meses sin intereses disponibles: {plazos} pagos…» bajo la lista de precios", porque: "Lleva los plazos de la clínica dentro." },
+      { donde: "El « · hoy» que se pega al día de la semana", porque: "Se construye sobre el nombre del día." },
       { donde: "El texto del mapa cuando no hay mapa configurado", porque: "Es una expresión con respaldo: o la ciudad, o un aviso." },
       { donde: "Las reseñas de Google", porque: "Son de Google. No hay dónde guardarlas si alguien las reescribe." },
     ],
@@ -796,7 +818,8 @@ export const TEMPLATE_MANIFESTS: Record<string, TemplateManifest> = {
       SEC_OPINIONES,
       SEC_FAQ,
       SEC_CONTACTO,
-      SEC_RESERVAR,
+      /* SIN SEC_RESERVAR: igual que `equipo`, esta plantilla no pinta bloque de
+         cierre y declararlo ofrecía un interruptor para nada. */
     ],
     fotos: [
       FOTO_PORTADA,
@@ -855,6 +878,11 @@ export const TEMPLATE_MANIFESTS: Record<string, TemplateManifest> = {
       { clave: "tecnologia.kicker", etiqueta: "Tecnología · etiqueta",            porDefecto: "Tecnología",   maxLen: 60, linea: true },
 
       { clave: "casos.kicker", etiqueta: "Caso · etiqueta", porDefecto: "Caso documentado",     maxLen: 60, linea: true },
+      { clave: "casos.antes",   etiqueta: "Antes y después · pastilla izquierda", porDefecto: "Antes",   maxLen: 40, linea: true },
+      { clave: "casos.despues", etiqueta: "Antes y después · pastilla derecha",   porDefecto: "Después", maxLen: 40, linea: true },
+      { clave: "pagos.rotuloTratamiento", etiqueta: "Simulador · rótulo del tratamiento", porDefecto: "Tratamiento",     maxLen: 60, linea: true },
+      { clave: "pagos.rotuloPlazo",       etiqueta: "Simulador · rótulo del plazo",       porDefecto: "Plazo",           maxLen: 60, linea: true },
+      { clave: "pagos.rotuloMensual",     etiqueta: "Simulador · rótulo del pago",        porDefecto: "Tu pago mensual", maxLen: 60, linea: true },
       { clave: "casos.cta",    etiqueta: "Caso · botón",    porDefecto: "Agenda tu valoración", maxLen: 60, linea: true },
 
       { clave: "equipo.kickerUno",       etiqueta: "Especialista · etiqueta (uno solo)", porDefecto: "El especialista",   maxLen: 60, linea: true },
@@ -879,6 +907,7 @@ export const TEMPLATE_MANIFESTS: Record<string, TemplateManifest> = {
       { donde: "Opiniones · titular con ficha de Google", porque: "Es una cadena construida y además va partida en dos elementos." },
       { donde: "Especialista · «Dr/a. {nombre} {apellido}», su especialidad y «Agenda con {nombre}»", porque: "Se arman con datos del equipo." },
       { donde: "«{duración} min» y la numeración de cada tratamiento", porque: "La duración es el dato de agenda y el número es la posición en la lista." },
+      { donde: "El « · hoy» que se pega al día de la semana", porque: "Se construye sobre el nombre del día." },
       { donde: "El texto del mapa cuando no hay mapa configurado", porque: "Es la ciudad de la clínica, o nada." },
       { donde: "Las reseñas de Google", porque: "Son de Google. No hay dónde guardarlas si alguien las reescribe." },
     ],

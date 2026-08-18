@@ -73,11 +73,19 @@ export interface TextoParaEditar {
   valor: string | null;
   Tag: any;
   atributos: Record<string, any>;
-  maxLen: number;
+  /**
+   * Tope, forma y obligatoriedad. Los TRES son opcionales y casi siempre van
+   * sin poner: los resuelve el runtime desde la MISMA fuente que aplica el
+   * servidor (_shared/edit-labels.ts → reglaDeCampo). Escribirlos en cada
+   * <Txt> era repetir la regla en dos sitios, y se habían separado: había
+   * botones que dejaban escribir 80 caracteres donde el PATCH acepta 60, así
+   * que la clínica escribía y el cambio se descartaba sin decir nada.
+   */
+  maxLen?: number;
   /** true = una sola línea; Enter confirma en vez de hacer salto. */
-  linea: boolean;
+  linea?: boolean;
   /** No se puede dejar vacío (el nombre de un servicio, p. ej.). */
-  requerido: boolean;
+  requerido?: boolean;
   prefijo?: string;
   sufijo?: string;
   /** prefijo/sufijo van pegados al texto, no como hijos aparte. */
@@ -225,9 +233,9 @@ export function Txt(props: TxtProps) {
         valor: guardado,
         Tag,
         atributos,
-        maxLen: maxLen ?? 300,
-        linea: linea ?? false,
-        requerido: requerido ?? false,
+        maxLen,
+        linea,
+        requerido,
         prefijo,
         sufijo,
         unido,

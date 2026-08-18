@@ -154,11 +154,11 @@ export function ClinicLandingClient({ clinic: publicada, highlights }:{ clinic:C
             {waLink && (
               <Txt as="a" href={waLink} target="_blank" rel="noreferrer"
                 className={`hidden sm:flex items-center gap-2 text-sm font-semibold px-4 py-2 rounded-xl transition-all ${scrolled ? "text-green-600 bg-green-50 hover:bg-green-100" : "text-white bg-white/15 hover:bg-white/25"}`}
-                campo={dirCopia("nav.whatsapp")} linea maxLen={40}
+                campo={dirCopia("nav.whatsapp")}
                 valor={C("nav.whatsapp")} porDefecto="WhatsApp" prefijo="💬 " unido />
             )}
             <Txt as="button" onClick={() => openBooking()} className="l-btn text-sm font-bold px-5 py-2.5 rounded-xl flex items-center gap-2"
-              campo={dirCopia("nav.cta")} linea maxLen={40}
+              campo={dirCopia("nav.cta")}
               valor={C("nav.cta")} porDefecto="Agendar" prefijo=" " unido
               antes={<Calendar size={14}/>} />
             <button onClick={() => setMobileMenu(!mobileMenu)} className={`md:hidden p-2 rounded-lg ${scrolled ? "text-gray-600" : "text-white"}`}>
@@ -202,13 +202,13 @@ export function ClinicLandingClient({ clinic: publicada, highlights }:{ clinic:C
               {clinic.specialty} · {clinic.city ?? "México"}
             </div>
             <Txt as="h1" className="l-anim l-delay1 l-serif text-6xl sm:text-7xl font-bold text-white leading-[1.02] mb-5"
-              campo={dirClinica("name")} linea requerido maxLen={120}
+              campo={dirClinica("name")}
               valor={clinic.name} />
             <Txt as="p" className="l-anim l-delay1 text-xl sm:text-2xl text-white/75 font-light mb-4"
-              campo={dirClinica("landingTagline")} maxLen={300}
+              campo={dirClinica("landingTagline")}
               valor={clinic.landingTagline} />
             <Txt as="p" className="l-anim l-delay2 text-white/60 text-base leading-relaxed mb-6 max-w-lg"
-              campo={dirClinica("description")} maxLen={5000}
+              campo={dirClinica("description")}
               valor={clinic.description} />
             {highlights && highlights.length > 0 && (
               <div className="l-anim l-delay2 flex flex-wrap gap-2 mb-10">
@@ -221,13 +221,13 @@ export function ClinicLandingClient({ clinic: publicada, highlights }:{ clinic:C
             )}
             <div className="l-anim l-delay2 flex flex-wrap gap-3">
               <Txt as="button" onClick={() => openBooking()} className="l-btn px-8 py-4 rounded-2xl text-base font-bold flex items-center gap-2.5"
-                campo={dirCopia("hero.cta")} linea maxLen={60}
+                campo={dirCopia("hero.cta")}
                 valor={C("hero.cta")} porDefecto="Agendar cita" sufijo=" " unido
                 despues={<ArrowRight size={18}/>} />
               {waLink && (
                 <Txt as="a" href={waLink} target="_blank" rel="noreferrer"
                   className="flex items-center gap-2.5 bg-white/12 hover:bg-white/22 backdrop-blur-sm border border-white/20 text-white px-8 py-4 rounded-2xl text-base font-semibold transition-all"
-                  campo={dirCopia("hero.whatsapp")} linea maxLen={60}
+                  campo={dirCopia("hero.whatsapp")}
                   valor={C("hero.whatsapp")} porDefecto="WhatsApp" prefijo="💬 " unido />
               )}
             </div>
@@ -238,7 +238,7 @@ export function ClinicLandingClient({ clinic: publicada, highlights }:{ clinic:C
                   <div>
                     <div className="text-4xl font-bold text-white l-serif">{clinic.users.length}</div>
                     <Txt as="div" className="text-white/50 text-xs mt-1"
-                      campo={dirCopia("hero.statEspecialistas")} linea maxLen={60}
+                      campo={dirCopia("hero.statEspecialistas")}
                       valor={C("hero.statEspecialistas")} porDefecto="Especialistas" />
                   </div>
                 )}
@@ -249,14 +249,14 @@ export function ClinicLandingClient({ clinic: publicada, highlights }:{ clinic:C
                       <Star size={22} className="fill-amber-400 text-amber-400 mb-1"/>
                     </div>
                     <Txt as="div" className="text-white/50 text-xs mt-1"
-                      campo={dirCopia("hero.statCalificacion")} linea maxLen={60}
+                      campo={dirCopia("hero.statCalificacion")}
                       valor={C("hero.statCalificacion")} porDefecto="Calificación" />
                   </div>
                 )}
                 <div>
                   <div className="text-4xl font-bold text-white l-serif">✓</div>
                   <Txt as="div" className="text-white/50 text-xs mt-1"
-                    campo={dirCopia("hero.statCita")} linea maxLen={60}
+                    campo={dirCopia("hero.statCita")}
                     valor={C("hero.statCita")} porDefecto="Cita en línea" />
                 </div>
               </div>
@@ -271,13 +271,13 @@ export function ClinicLandingClient({ clinic: publicada, highlights }:{ clinic:C
           <div className="max-w-6xl mx-auto px-5">
             <div className="max-w-xl mb-16">
               <Txt as="div" className="text-xs font-bold uppercase tracking-widest mb-5 px-4 py-2 rounded-full inline-block" style={{background:`${theme}12`,color:theme}}
-                campo={dirCopia("servicios.kicker")} linea maxLen={60}
+                campo={dirCopia("servicios.kicker")}
                 valor={C("servicios.kicker")} porDefecto="Servicios" />
               <Txt as="h2" className="l-serif text-5xl font-bold text-gray-900 leading-tight mb-4"
-                campo={dirSeccion("servicios", "titulo")} linea maxLen={160}
+                campo={dirSeccion("servicios", "titulo")}
                 valor={S.servicios?.titulo} porDefecto="Lo que ofrecemos" />
               <Txt as="p" className="text-gray-400 text-lg"
-                campo={dirSeccion("servicios", "subtitulo")} maxLen={500}
+                campo={dirSeccion("servicios", "subtitulo")}
                 valor={S.servicios?.subtitulo} porDefecto="Tratamientos con tecnología de vanguardia para tu salud y bienestar" />
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
@@ -295,20 +295,20 @@ export function ClinicLandingClient({ clinic: publicada, highlights }:{ clinic:C
                       para poder ponerle nombre. */}
                   {svc.name || editando ? (
                     <Txt as="h3" className="font-bold text-gray-900 text-xl mb-3"
-                      campo={dirServicio(i, "name")} linea requerido maxLen={120}
+                      campo={dirServicio(i, "name")}
                       valor={svc.name} />
                   ) : <h3 className="font-bold text-gray-900 text-xl mb-3" />}
                   <Txt as="p" className="text-gray-400 text-sm leading-relaxed"
-                    campo={dirServicio(i, "desc")} maxLen={400}
+                    campo={dirServicio(i, "desc")}
                     valor={svc.desc} />
                   <div className="mt-6 flex items-center justify-between">
                     {svc.price || editando
                       ? <Txt as="span" className="font-bold text-lg" style={{color:theme}}
-                          campo={dirServicio(i, "price")} linea maxLen={40}
+                          campo={dirServicio(i, "price")}
                           valor={svc.price} />
                       : <span/>}
                     <Txt as="button" onClick={() => openBooking()} className="text-xs font-bold px-3.5 py-2 rounded-xl flex items-center gap-1" style={{background:`${theme}10`,color:theme}}
-                      campo={dirCopia("servicios.cta")} linea maxLen={40}
+                      campo={dirCopia("servicios.cta")}
                       valor={C("servicios.cta")} porDefecto="Agendar" sufijo=" " unido
                       despues={<ArrowRight size={12}/>} />
                   </div>
@@ -325,13 +325,13 @@ export function ClinicLandingClient({ clinic: publicada, highlights }:{ clinic:C
           <div className="max-w-6xl mx-auto px-5">
             <div className="text-center mb-16">
               <Txt as="div" className="text-xs font-bold uppercase tracking-widest mb-5 px-4 py-2 rounded-full inline-block" style={{background:`${theme}12`,color:theme}}
-                campo={dirCopia("equipo.kicker")} linea maxLen={60}
+                campo={dirCopia("equipo.kicker")}
                 valor={C("equipo.kicker")} porDefecto="Equipo médico" />
               <Txt as="h2" className="l-serif text-5xl font-bold text-gray-900 mb-4"
-                campo={dirSeccion("equipo", "titulo")} linea maxLen={160}
+                campo={dirSeccion("equipo", "titulo")}
                 valor={S.equipo?.titulo} porDefecto="Nuestros especialistas" />
               <Txt as="p" className="text-gray-400 text-lg max-w-lg mx-auto"
-                campo={dirSeccion("equipo", "subtitulo")} maxLen={500}
+                campo={dirSeccion("equipo", "subtitulo")}
                 valor={S.equipo?.subtitulo} porDefecto="Profesionales certificados comprometidos con tu salud" />
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -357,7 +357,7 @@ export function ClinicLandingClient({ clinic: publicada, highlights }:{ clinic:C
                       </div>
                     )}
                     <Txt as="button" onClick={() => openBooking()} className="l-btn w-full py-3 rounded-2xl text-sm font-bold"
-                      campo={dirCopia("equipo.cta")} linea maxLen={60}
+                      campo={dirCopia("equipo.cta")}
                       valor={C("equipo.cta")} porDefecto="Agendar consulta" />
                   </div>
                 </div>
@@ -374,10 +374,10 @@ export function ClinicLandingClient({ clinic: publicada, highlights }:{ clinic:C
             <div className="flex items-end justify-between mb-14">
               <div>
                 <Txt as="div" className="text-xs font-bold uppercase tracking-widest mb-4 px-4 py-2 rounded-full inline-block" style={{background:`${theme}12`,color:theme}}
-                campo={dirCopia("galeria.kicker")} linea maxLen={60}
+                campo={dirCopia("galeria.kicker")}
                 valor={C("galeria.kicker")} porDefecto="Instalaciones" />
                 <Txt as="h2" className="l-serif text-5xl font-bold text-gray-900"
-                  campo={dirSeccion("galeria", "titulo")} linea maxLen={160}
+                  campo={dirSeccion("galeria", "titulo")}
                   valor={S.galeria?.titulo} porDefecto="Nuestra clínica" />
               </div>
             </div>
@@ -414,10 +414,10 @@ export function ClinicLandingClient({ clinic: publicada, highlights }:{ clinic:C
           <div className="max-w-6xl mx-auto px-5">
             <div className="text-center mb-14">
               <Txt as="div" className="text-xs font-bold uppercase tracking-widest mb-5 px-4 py-2 rounded-full inline-block" style={{background:`${theme}12`,color:theme}}
-                campo={dirCopia("opiniones.kicker")} linea maxLen={60}
+                campo={dirCopia("opiniones.kicker")}
                 valor={C("opiniones.kicker")} porDefecto="Testimonios" />
               <Txt as="h2" className="l-serif text-5xl font-bold text-gray-900 mb-4"
-                campo={dirSeccion("opiniones", "titulo")} linea maxLen={160}
+                campo={dirSeccion("opiniones", "titulo")}
                 valor={S.opiniones?.titulo} porDefecto="Lo que dicen nuestros pacientes" />
               <div className="flex items-center justify-center gap-1.5 mt-3">
                 {Array.from({length:5}).map((_,i)=><Star key={i} size={18} className="fill-amber-400 text-amber-400"/>)}
@@ -438,7 +438,7 @@ export function ClinicLandingClient({ clinic: publicada, highlights }:{ clinic:C
                       si se guardaran, la siguiente edición las duplicaría. */}
                   {t.text || editando ? (
                     <Txt as="p" className="text-gray-600 text-sm leading-loose mb-6"
-                      campo={dirTestimonio(i, "text")} requerido maxLen={800}
+                      campo={dirTestimonio(i, "text")}
                       valor={t.text} prefijo={'"'} sufijo={'"'} />
                   ) : <p className="text-gray-600 text-sm leading-loose mb-6">"{t.text}"</p>}
                   <div className="flex items-center gap-3 pt-5 border-t border-gray-50">
@@ -446,7 +446,7 @@ export function ClinicLandingClient({ clinic: publicada, highlights }:{ clinic:C
                     <div>
                       {t.name || editando ? (
                         <Txt as="div" className="font-bold text-sm text-gray-900"
-                          campo={dirTestimonio(i, "name")} linea maxLen={80}
+                          campo={dirTestimonio(i, "name")}
                           valor={t.name} />
                       ) : <div className="font-bold text-sm text-gray-900" />}
                       {/* `date` NO se edita desde el lienzo: la dirección de un
@@ -470,13 +470,13 @@ export function ClinicLandingClient({ clinic: publicada, highlights }:{ clinic:C
           <div className="max-w-6xl mx-auto px-5">
             <div className="text-center mb-14">
               <Txt as="div" className="text-xs font-bold uppercase tracking-widest mb-5 px-4 py-2 rounded-full inline-block" style={{background:`${theme}12`,color:theme}}
-                campo={dirCopia("opiniones.kickerGoogle")} linea maxLen={60}
+                campo={dirCopia("opiniones.kickerGoogle")}
                 valor={C("opiniones.kickerGoogle")} porDefecto="Reseñas de Google" />
               {/* Mismo título de sección que el bloque de testimonios: los dos
                   son "opiniones" y nunca se pintan a la vez. Las reseñas de
                   Google son de Google, así que NINGUNA de ellas se edita. */}
               <Txt as="h2" className="l-serif text-5xl font-bold text-gray-900 mb-4"
-                campo={dirSeccion("opiniones", "titulo")} linea maxLen={160}
+                campo={dirSeccion("opiniones", "titulo")}
                 valor={S.opiniones?.titulo} porDefecto="Lo que dicen nuestros pacientes" />
               {googleReviews.rating && (
                 <div className="flex items-center justify-center gap-1.5 mt-3">
@@ -531,10 +531,10 @@ export function ClinicLandingClient({ clinic: publicada, highlights }:{ clinic:C
           <div className="max-w-3xl mx-auto px-5">
             <div className="text-center mb-14">
               <Txt as="div" className="text-xs font-bold uppercase tracking-widest mb-5 px-4 py-2 rounded-full inline-block" style={{background:`${theme}12`,color:theme}}
-                campo={dirCopia("faq.kicker")} linea maxLen={60}
+                campo={dirCopia("faq.kicker")}
                 valor={C("faq.kicker")} porDefecto="FAQ" />
               <Txt as="h2" className="l-serif text-5xl font-bold text-gray-900"
-                campo={dirSeccion("faq", "titulo")} linea maxLen={160}
+                campo={dirSeccion("faq", "titulo")}
                 valor={S.faq?.titulo} porDefecto="Preguntas frecuentes" />
             </div>
             <div className="space-y-3">
@@ -555,7 +555,7 @@ export function ClinicLandingClient({ clinic: publicada, highlights }:{ clinic:C
                     className="w-full flex items-center justify-between p-6 text-left gap-4 hover:bg-gray-50/50 transition-colors">
                     {pregunta || editando ? (
                       <Txt as="span" className="font-semibold text-gray-900"
-                        campo={dirFaq(i, "q")} linea requerido maxLen={200}
+                        campo={dirFaq(i, "q")}
                         valor={pregunta} />
                     ) : <span className="font-semibold text-gray-900" />}
                     <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0 transition-all" style={{background:openFaq===i?theme:"#f3f4f6",color:openFaq===i?"#fff":"#9ca3af"}}>
@@ -565,7 +565,7 @@ export function ClinicLandingClient({ clinic: publicada, highlights }:{ clinic:C
                   {abierta && (
                     respuesta || editando ? (
                       <Txt as="div" className="px-6 pb-6 text-gray-500 text-sm leading-relaxed"
-                        campo={dirFaq(i, "a")} requerido maxLen={1200}
+                        campo={dirFaq(i, "a")}
                         valor={respuesta} />
                     ) : <div className="px-6 pb-6 text-gray-500 text-sm leading-relaxed" />
                   )}
@@ -582,13 +582,13 @@ export function ClinicLandingClient({ clinic: publicada, highlights }:{ clinic:C
         <div className="max-w-6xl mx-auto px-5">
           <div className="text-center mb-14">
             <Txt as="div" className="text-xs font-bold uppercase tracking-widest mb-5 px-4 py-2 rounded-full inline-block" style={{background:`${theme}12`,color:theme}}
-                campo={dirCopia("contacto.kicker")} linea maxLen={60}
+                campo={dirCopia("contacto.kicker")}
                 valor={C("contacto.kicker")} porDefecto="Contacto" />
             <Txt as="h2" className="l-serif text-5xl font-bold text-gray-900 mb-3"
-              campo={dirSeccion("contacto", "titulo")} linea maxLen={160}
+              campo={dirSeccion("contacto", "titulo")}
               valor={S.contacto?.titulo} porDefecto="Visítanos" />
             <Txt as="p" className="text-gray-400 text-lg"
-              campo={dirSeccion("contacto", "subtitulo")} maxLen={500}
+              campo={dirSeccion("contacto", "subtitulo")}
               valor={S.contacto?.subtitulo} porDefecto="Estamos aquí para atenderte con gusto" />
           </div>
           <div className="grid grid-cols-1 lg:grid-cols-5 gap-6 items-start">
@@ -601,12 +601,12 @@ export function ClinicLandingClient({ clinic: publicada, highlights }:{ clinic:C
                     </div>
                     <div>
                       <Txt as="div" className="font-semibold text-gray-900 text-sm mb-1"
-                        campo={dirCopia("contacto.etiquetaDireccion")} linea maxLen={60}
+                        campo={dirCopia("contacto.etiquetaDireccion")}
                         valor={C("contacto.etiquetaDireccion")} porDefecto="Dirección" />
                       {/* La ciudad va como SUFIJO, fuera del campo: es otra columna
                           y pegarla al texto guardaría "calle, ciudad" en `address`. */}
                       <Txt as="div" className="text-gray-500 text-sm leading-relaxed"
-                        campo={dirClinica("address")} maxLen={300}
+                        campo={dirClinica("address")}
                         valor={clinic.address} sufijo={clinic.city?`, ${clinic.city}`:""} />
                     </div>
                   </div>
@@ -618,12 +618,12 @@ export function ClinicLandingClient({ clinic: publicada, highlights }:{ clinic:C
                     </div>
                     <div>
                       <Txt as="div" className="font-semibold text-gray-900 text-sm mb-1"
-                        campo={dirCopia("contacto.etiquetaTelefono")} linea maxLen={60}
+                        campo={dirCopia("contacto.etiquetaTelefono")}
                         valor={C("contacto.etiquetaTelefono")} porDefecto="Teléfono" />
                       {/* El número se pinta como TEXTO; el href se arma aparte y
                           nunca con lo que se está escribiendo. */}
                       <Txt as="a" href={`tel:${clinic.phone}`} className="text-sm font-semibold" style={{color:theme}}
-                        campo={dirClinica("phone")} linea maxLen={40}
+                        campo={dirClinica("phone")}
                         valor={clinic.phone} />
                     </div>
                   </div>
@@ -635,7 +635,7 @@ export function ClinicLandingClient({ clinic: publicada, highlights }:{ clinic:C
                     </div>
                     <div className="flex-1">
                       <Txt as="div" className="font-semibold text-gray-900 text-sm mb-3"
-                        campo={dirCopia("contacto.etiquetaHorarios")} linea maxLen={60}
+                        campo={dirCopia("contacto.etiquetaHorarios")}
                         valor={C("contacto.etiquetaHorarios")} porDefecto="Horarios" />
                       <div className="space-y-1.5">
                         {clinic.schedules.filter(s=>s.enabled).map(s=>(
@@ -652,7 +652,7 @@ export function ClinicLandingClient({ clinic: publicada, highlights }:{ clinic:C
               <div className="grid grid-cols-1 gap-2">
                 {waLink && (
                   <Txt as="a" href={waLink} target="_blank" rel="noreferrer" className="flex items-center justify-center gap-2.5 bg-green-500 hover:bg-green-600 text-white font-bold py-3.5 rounded-2xl text-sm transition-colors"
-                    campo={dirCopia("contacto.whatsapp")} linea maxLen={60}
+                    campo={dirCopia("contacto.whatsapp")}
                     valor={C("contacto.whatsapp")} porDefecto="Escribir por WhatsApp" prefijo="💬 " unido />
                 )}
                 <div className="grid grid-cols-2 gap-2">
@@ -660,14 +660,14 @@ export function ClinicLandingClient({ clinic: publicada, highlights }:{ clinic:C
                     <Txt as="a" href={`https://instagram.com/${clinic.landingInstagram.replace("@","")}`} target="_blank" rel="noreferrer"
                       className="flex items-center justify-center gap-2 font-bold py-3 rounded-2xl text-sm text-white transition-opacity hover:opacity-90"
                       style={{background:"linear-gradient(45deg,#f09433,#e6683c,#dc2743,#cc2366,#bc1888)"}}
-                      campo={dirCopia("contacto.instagram")} linea maxLen={40}
+                      campo={dirCopia("contacto.instagram")}
                       valor={C("contacto.instagram")} porDefecto="Instagram" prefijo=" " unido
                       antes={<Instagram size={15}/>} />
                   )}
                   {clinic.landingFacebook && (
                     <Txt as="a" href={clinic.landingFacebook} target="_blank" rel="noreferrer"
                       className="flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-2xl text-sm transition-colors"
-                      campo={dirCopia("contacto.facebook")} linea maxLen={40}
+                      campo={dirCopia("contacto.facebook")}
                       valor={C("contacto.facebook")} porDefecto="Facebook" prefijo=" " unido
                       antes={<Facebook size={15}/>} />
                   )}
@@ -699,22 +699,22 @@ export function ClinicLandingClient({ clinic: publicada, highlights }:{ clinic:C
               dos renglones. Sin `multilinea` esto no es instrumentable —
               guardaría "Tu salud, nuestraprioridad". */}
           <Txt as="h2" className="l-serif text-5xl sm:text-6xl font-bold text-white mb-5 leading-tight"
-            campo={dirCopia("reservar.titulo")} maxLen={160} multilinea
+            campo={dirCopia("reservar.titulo")} multilinea
             valor={C("reservar.titulo")} porDefecto={"Tu salud, nuestra" + String.fromCharCode(10) + "prioridad"} />
           <Txt as="p" className="text-white/65 text-xl mb-12 max-w-xl mx-auto"
-            campo={dirSeccion("reservar", "subtitulo")} maxLen={500}
+            campo={dirSeccion("reservar", "subtitulo")}
             valor={S.reservar?.subtitulo} porDefecto="Agenda en menos de 2 minutos. Sin llamadas, sin esperas, sin complicaciones." />
           <div className="flex flex-wrap justify-center gap-4">
             <Txt as="button" onClick={() => openBooking()}
               className="bg-white font-bold px-10 py-4 rounded-2xl text-base shadow-2xl hover:bg-gray-50 transition-all flex items-center gap-2.5"
               style={{color:theme}}
-              campo={dirCopia("reservar.cta")} linea maxLen={60}
+              campo={dirCopia("reservar.cta")}
               valor={C("reservar.cta")} porDefecto="Agendar mi cita" prefijo=" " unido
               antes={<Calendar size={18}/>} />
             {waLink && (
               <Txt as="a" href={waLink} target="_blank" rel="noreferrer"
                 className="bg-green-500 hover:bg-green-600 text-white font-bold px-10 py-4 rounded-2xl text-base shadow-xl transition-all flex items-center gap-2.5"
-                campo={dirCopia("reservar.whatsapp")} linea maxLen={60}
+                campo={dirCopia("reservar.whatsapp")}
                 valor={C("reservar.whatsapp")} porDefecto="WhatsApp" prefijo="💬 " unido />
             )}
           </div>

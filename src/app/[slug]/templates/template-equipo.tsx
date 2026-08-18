@@ -224,7 +224,7 @@ export function TemplateEquipo({ clinic: publicada }: TemplateProps) {
             ))}
           </div>
           <Txt as="button" type="button" onClick={() => abrir()} style={{ ...btnP, ...btnSm }}
-            campo={dirCopia("nav.cta")} linea maxLen={40}
+            campo={dirCopia("nav.cta")}
             valor={C("nav.cta")} porDefecto="Agenda tu cita" />
         </div>
       </nav>
@@ -249,10 +249,10 @@ export function TemplateEquipo({ clinic: publicada }: TemplateProps) {
             {clinic.specialty}{clinic.landingYearsExperience ? ` · desde hace ${clinic.landingYearsExperience} años` : ""}
           </span>
           <Txt as="h1" style={{ fontSize: "clamp(34px,5vw,58px)", fontWeight: 600, maxWidth: "16ch", margin: "14px 0 16px", lineHeight: 1.12, letterSpacing: "-.02em" }}
-            campo={dirClinica("landingTagline")} maxLen={300}
+            campo={dirClinica("landingTagline")}
             valor={clinic.landingTagline} porDefecto={clinic.name} />
           <Txt as="p" style={{ maxWidth: "52ch", color: tint(acento, 0.78), fontSize: 17, margin: "0 0 28px" }}
-            campo={dirClinica("description")} maxLen={5000}
+            campo={dirClinica("description")}
             valor={clinic.description} />
           <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
             {/* El icono va como hermano (`despues`) y el espacio como sufijo
@@ -260,12 +260,12 @@ export function TemplateEquipo({ clinic: publicada }: TemplateProps) {
                 cita ") seguido del svg, y partirlo en dos metería una marca
                 de hidratación donde antes no había ninguna. */}
             <Txt as="button" type="button" onClick={() => abrir()} style={btnP}
-              campo={dirCopia("hero.cta")} linea maxLen={60}
+              campo={dirCopia("hero.cta")}
               valor={C("hero.cta")} porDefecto="Agendar cita" sufijo=" " unido
               despues={<ChevronRight size={16} />} />
             {wa && (
               <Txt as="a" href={wa} target="_blank" rel="noopener noreferrer" style={{ ...btn, background: "#25d366", color: "#0b2e1c" }}
-                campo={dirCopia("hero.whatsapp")} linea maxLen={60}
+                campo={dirCopia("hero.whatsapp")}
                 valor={C("hero.whatsapp")} porDefecto="WhatsApp" prefijo=" " unido
                 antes={<MessageCircle size={18} />} />
             )}
@@ -278,7 +278,7 @@ export function TemplateEquipo({ clinic: publicada }: TemplateProps) {
                     {c.valor} {c.estrellas && <StarRow value={Number(c.valor)} color="#fbbf24" size={15} />}
                   </b>
                   <Txt as="span" style={{ fontSize: 13, color: tint(acento, 0.7) }}
-                    campo={c.clave ? dirCopia(c.clave) : null} linea maxLen={60}
+                    campo={c.clave ? dirCopia(c.clave) : null}
                     valor={c.clave ? C(c.clave) : null} porDefecto={c.etiqueta} />
                 </div>
               ))}
@@ -293,19 +293,19 @@ export function TemplateEquipo({ clinic: publicada }: TemplateProps) {
           {verServicios && (
             <a className="eq-acc" href="#servicios" style={{ padding: "26px 24px", borderRadius: 14, textDecoration: "none", boxShadow: sombra, transition: ".18s", display: "block", background: acento, color: "#fff" }}>
               <Txt as="b" style={{ display: "block", fontSize: 18, fontWeight: 600, marginBottom: 5 }}
-                campo={dirCopia("accesos.servicios.titulo")} linea maxLen={60}
-                valor={C("accesos.servicios.titulo")} porDefecto="Servicios y precios →" />
+                campo={dirCopia("accesos.servicios.titulo")}
+                valor={C("accesos.servicios.titulo")} porDefecto="Servicios y precios" sufijo=" →" unido />
               <Txt as="span" style={{ fontSize: 14, opacity: .85 }}
-                campo={dirCopia("accesos.servicios.texto")} linea maxLen={120}
+                campo={dirCopia("accesos.servicios.texto")}
                 valor={C("accesos.servicios.texto")} porDefecto="Costos claros antes de sentarte" />
             </a>
           )}
           <button type="button" onClick={() => abrir()} className="eq-acc" style={{ padding: "26px 24px", borderRadius: 14, boxShadow: sombra, transition: ".18s", display: "block", textAlign: "left", border: 0, cursor: "pointer", background: tinta, color: "#fff", fontFamily: "inherit" }}>
             <Txt as="b" style={{ display: "block", fontSize: 18, fontWeight: 600, marginBottom: 5 }}
-              campo={dirCopia("accesos.agenda.titulo")} linea maxLen={60}
-              valor={C("accesos.agenda.titulo")} porDefecto="Agenda tu cita →" />
+              campo={dirCopia("accesos.agenda.titulo")}
+              valor={C("accesos.agenda.titulo")} porDefecto="Agenda tu cita" sufijo=" →" unido />
             <Txt as="span" style={{ fontSize: 14, opacity: .85 }}
-              campo={dirCopia("accesos.agenda.texto")} linea maxLen={120}
+              campo={dirCopia("accesos.agenda.texto")}
               valor={C("accesos.agenda.texto")} porDefecto="En línea, sin llamar" />
           </button>
           <a className="eq-acc" href={verEquipo ? "#equipo" : "#ubicacion"} style={{ padding: "26px 24px", borderRadius: 14, textDecoration: "none", boxShadow: sombra, transition: ".18s", display: "block", background: acentoCl, color: acentoOsc }}>
@@ -314,9 +314,9 @@ export function TemplateEquipo({ clinic: publicada }: TemplateProps) {
                 texto al otro sin que nadie lo pidiera. */}
             <Txt as="b" style={{ display: "block", fontSize: 18, fontWeight: 600, marginBottom: 5 }}
               campo={dirCopia(verEquipo ? "accesos.equipo.titulo" : "accesos.ubicacion.titulo")}
-              linea maxLen={60}
+
               valor={C(verEquipo ? "accesos.equipo.titulo" : "accesos.ubicacion.titulo")}
-              porDefecto={verEquipo ? "Conócenos →" : "Cómo llegar →"} />
+              porDefecto={verEquipo ? "Conócenos" : "Cómo llegar"} sufijo=" →" unido />
             <span style={{ fontSize: 14, opacity: .85 }}>
               {verEquipo
                 ? `${doctores.length} ${doctores.length === 1 ? "especialista" : "especialistas"}`
@@ -338,10 +338,10 @@ export function TemplateEquipo({ clinic: publicada }: TemplateProps) {
                   </span>
                   <div>
                     <Txt as="b" style={{ display: "block", fontSize: 15.5, fontWeight: 600, marginBottom: 3 }}
-                      campo={dirCopia(v.clave)} linea maxLen={60}
+                      campo={dirCopia(v.clave)}
                       valor={C(v.clave)} porDefecto={v.titulo} />
                     <Txt as="p" style={{ margin: 0, fontSize: 14, color: gris, lineHeight: 1.5 }}
-                      campo={v.claveTexto ? dirCopia(v.claveTexto) : null} maxLen={240}
+                      campo={v.claveTexto ? dirCopia(v.claveTexto) : null}
                       valor={v.claveTexto ? C(v.claveTexto) : null} porDefecto={v.texto} />
                   </div>
                 </div>
@@ -355,12 +355,12 @@ export function TemplateEquipo({ clinic: publicada }: TemplateProps) {
       {verServicios && (
         <section className="eq-sec" id="servicios" style={{ background: fondo2 }}>
           <div className="eq-wrap">
-            <Txt as="span" style={kicker} campo={dirCopia("servicios.kicker")} linea maxLen={60}
+            <Txt as="span" style={kicker} campo={dirCopia("servicios.kicker")}
               valor={C("servicios.kicker")} porDefecto="Servicios y precios" />
-            <Txt as="h2" style={secT} campo={dirSeccion("servicios", "titulo")} linea maxLen={160}
+            <Txt as="h2" style={secT} campo={dirSeccion("servicios", "titulo")}
               valor={S.servicios?.titulo}
               porDefecto="Lo que cuesta, antes de sentarte" />
-            <Txt as="p" style={secS} campo={dirSeccion("servicios", "subtitulo")} maxLen={500}
+            <Txt as="p" style={secS} campo={dirSeccion("servicios", "subtitulo")}
               valor={S.servicios?.subtitulo} />
 
             <div className="eq-grid-4" style={{ marginTop: 40 }}>
@@ -381,21 +381,21 @@ export function TemplateEquipo({ clinic: publicada }: TemplateProps) {
                       background: relleno ? "rgba(255,255,255,.16)" : acentoCl, color: relleno ? "#fff" : acento,
                     }}>{s.icon || "🦷"}</span>
                     <Txt as="b" style={{ fontSize: 16.5, fontWeight: 600, letterSpacing: "-.01em" }}
-                      campo={dirServicio(s.i, "name")} linea requerido maxLen={120}
+                      campo={dirServicio(s.i, "name")}
                       valor={s.name} />
                     <Txt as="p" style={{ fontSize: 13.5, color: apagado, margin: "5px 0 18px", lineHeight: 1.5 }}
-                      campo={dirServicio(s.i, "desc")} maxLen={400}
+                      campo={dirServicio(s.i, "desc")}
                       valor={s.desc} />
                     <div style={{ marginTop: "auto", display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
                       <Txt as="span" style={{ ...mono, fontSize: 19, fontWeight: 600 }}
-                        campo={dirServicio(s.i, "price")} linea maxLen={40}
+                        campo={dirServicio(s.i, "price")}
                         valor={s.price} />
                       {s.durationMin && <span style={{ ...mono, fontSize: 12.5, color: apagado }}>{s.durationMin} min</span>}
                       <Txt as="button" type="button" onClick={() => abrir({ service: s.name })} style={{
                         ...btnG, ...btnSm, marginLeft: "auto",
                         ...(relleno ? { background: "rgba(255,255,255,.14)", borderColor: "rgba(255,255,255,.28)", color: "#fff" } : {}),
                       }}
-                        campo={dirCopia("servicios.cta")} linea maxLen={40}
+                        campo={dirCopia("servicios.cta")}
                         valor={C("servicios.cta")} porDefecto="Agendar" />
                     </div>
                   </article>
@@ -410,12 +410,12 @@ export function TemplateEquipo({ clinic: publicada }: TemplateProps) {
       {verEquipo && (
         <section className="eq-sec" id="equipo">
           <div className="eq-wrap">
-            <Txt as="span" style={kicker} campo={dirCopia("equipo.kicker")} linea maxLen={60}
+            <Txt as="span" style={kicker} campo={dirCopia("equipo.kicker")}
               valor={C("equipo.kicker")} porDefecto="Quién te atiende" />
-            <Txt as="h2" style={secT} campo={dirSeccion("equipo", "titulo")} linea maxLen={160}
+            <Txt as="h2" style={secT} campo={dirSeccion("equipo", "titulo")}
               valor={S.equipo?.titulo}
               porDefecto={doctores.length > 1 ? "Especialistas, no rotación de pasantes" : "Quién te va a atender"} />
-            <Txt as="p" style={secS} campo={dirSeccion("equipo", "subtitulo")} maxLen={500}
+            <Txt as="p" style={secS} campo={dirSeccion("equipo", "subtitulo")}
               valor={S.equipo?.subtitulo} />
 
             <div className="eq-grid-3" style={{ marginTop: 40 }}>
@@ -445,9 +445,9 @@ export function TemplateEquipo({ clinic: publicada }: TemplateProps) {
       {verCasos && (
         <section className="eq-sec" id="casos" style={{ background: fondo2 }}>
           <div className="eq-wrap">
-            <Txt as="span" style={kicker} campo={dirCopia("casos.kicker")} linea maxLen={60}
+            <Txt as="span" style={kicker} campo={dirCopia("casos.kicker")}
               valor={C("casos.kicker")} porDefecto="Casos reales" />
-            <Txt as="h2" style={secT} campo={dirSeccion("casos", "titulo")} linea maxLen={160}
+            <Txt as="h2" style={secT} campo={dirSeccion("casos", "titulo")}
               valor={S.casos?.titulo}
               porDefecto="Arrastra y mira la diferencia" />
             <div className="eq-grid-2" style={{ marginTop: 34 }}>
@@ -457,16 +457,18 @@ export function TemplateEquipo({ clinic: publicada }: TemplateProps) {
                 caja={{ position: "relative" }} vacio={{ aspectRatio: "4/3" }}>
                 {(antes) => (
                   <Foto slot="caso1_despues" url={casoDespues} zona="derecha">
-                    {(despues) => <BeforeAfter antes={antes} despues={despues} accent={acento} />}
+                    {(despues) => <BeforeAfter antes={antes} despues={despues} accent={acento}
+                      claveAntes="casos.antes" valorAntes={C("casos.antes")}
+                    claveDespues="casos.despues" valorDespues={C("casos.despues")} />}
                   </Foto>
                 )}
               </Foto>
               <div>
                 <Txt as="p" style={{ color: gris, margin: "10px 0 0", fontSize: 16 }}
-                  campo={dirSeccion("casos", "subtitulo")} maxLen={600}
+                  campo={dirSeccion("casos", "subtitulo")}
                   valor={S.casos?.subtitulo} />
                 <Txt as="button" type="button" onClick={() => abrir()} style={{ ...btnP, marginTop: 22 }}
-                  campo={dirCopia("casos.cta")} linea maxLen={60}
+                  campo={dirCopia("casos.cta")}
                   valor={C("casos.cta")} porDefecto="Quiero mi valoración" />
               </div>
             </div>
@@ -478,29 +480,32 @@ export function TemplateEquipo({ clinic: publicada }: TemplateProps) {
       {(verTec1 || verTec2) && (
         <section className="eq-sec" id="tecnologia">
           <div className="eq-wrap">
-            <Txt as="span" style={kicker} campo={dirCopia("tecnologia.kicker")} linea maxLen={60}
+            <Txt as="span" style={kicker} campo={dirCopia("tecnologia.kicker")}
               valor={C("tecnologia.kicker")} porDefecto="Tecnología" />
-            <Txt as="h2" style={secT} campo={dirSeccion("tecnologia", "titulo")} linea maxLen={160}
+            <Txt as="h2" style={secT} campo={dirSeccion("tecnologia", "titulo")}
               valor={S.tecnologia?.titulo}
               porDefecto="Lo que hay detrás del sillón" />
 
-            {[{ ver: verTec1, foto: tec1, id: "tecnologia1", nombre: "Tecnología 1" }, { ver: verTec2, foto: tec2, id: "tecnologia2", nombre: "Tecnología 2" }]
+            {/* El nombre de la ranura ya no viaja aquí: lo resuelve el runtime
+                desde el manifiesto (_shared/edit-labels.ts), que solo existe en
+                modo edición. */}
+            {[{ ver: verTec1, foto: tec1, id: "tecnologia1" }, { ver: verTec2, foto: tec2, id: "tecnologia2" }]
               .filter(t => t.ver)
               .map((t, i) => (
                 <div key={t.id} className="eq-grid-2" style={{ marginTop: 38 }}>
                   <div style={{ order: i % 2 === 1 ? 2 : 0 }}>
                     <Txt as="div" style={{ ...mono, fontSize: 12, letterSpacing: ".1em", textTransform: "uppercase", color: acento, marginBottom: 8 }}
-                      campo={dirSeccion(t.id, "titulo")} linea maxLen={120}
+                      campo={dirSeccion(t.id, "titulo")}
                       valor={S[t.id]?.titulo}
                       porDefecto="Equipo del consultorio" />
                     <Txt as="p" style={{ color: gris, margin: "0 0 18px" }}
-                      campo={dirSeccion(t.id, "subtitulo")} maxLen={500}
+                      campo={dirSeccion(t.id, "subtitulo")}
                       valor={S[t.id]?.subtitulo} />
                     <Txt as="button" type="button" onClick={() => abrir()} style={btnG}
-                      campo={dirCopia("tecnologia.cta")} linea maxLen={60}
+                      campo={dirCopia("tecnologia.cta")}
                       valor={C("tecnologia.cta")} porDefecto="Agendar cita" />
                   </div>
-                  <Foto slot={t.id} url={t.foto} etiqueta={t.nombre}
+                  <Foto slot={t.id} url={t.foto}
                     caja={{ position: "relative" }} vacio={{ aspectRatio: "16/11" }}>
                     {(url) => url ? (
                       <div style={{ borderRadius: 14, overflow: "hidden", aspectRatio: "16/11", boxShadow: sombra }}>
@@ -518,9 +523,9 @@ export function TemplateEquipo({ clinic: publicada }: TemplateProps) {
       {verOpiniones && (
         <section className="eq-sec" id="opiniones" style={{ background: fondo2 }}>
           <div className="eq-wrap">
-            <Txt as="span" style={kicker} campo={dirCopia("opiniones.kicker")} linea maxLen={60}
+            <Txt as="span" style={kicker} campo={dirCopia("opiniones.kicker")}
               valor={C("opiniones.kicker")} porDefecto="Opiniones" />
-            <Txt as="h2" style={secT} campo={dirSeccion("opiniones", "titulo")} linea maxLen={160}
+            <Txt as="h2" style={secT} campo={dirSeccion("opiniones", "titulo")}
               valor={S.opiniones?.titulo}
               porDefecto={google ? "Lo que dicen en Google" : "Lo que dicen nuestros pacientes"} />
 
@@ -545,7 +550,7 @@ export function TemplateEquipo({ clinic: publicada }: TemplateProps) {
                   <StarRow value={t.rating} color="#fbbf24" />
                   <Txt as="p" style={{ margin: "10px 0 16px", fontSize: 15, color: shade(acento, 0.55) }}
                     campo={t.dir === null ? null : dirTestimonio(t.dir, "text")}
-                    requerido maxLen={800}
+
                     valor={t.text} prefijo="“" sufijo="”" />
                   <div style={{ display: "flex", alignItems: "center", gap: 11 }}>
                     <span style={{ width: 38, height: 38, borderRadius: "50%", background: acentoCl, color: acentoOsc, display: "grid", placeItems: "center", fontWeight: 600, fontSize: 14 }}>
@@ -554,10 +559,10 @@ export function TemplateEquipo({ clinic: publicada }: TemplateProps) {
                     <div>
                       <Txt as="b" style={{ fontSize: 14.5, fontWeight: 600, display: "block" }}
                         campo={t.dir === null ? null : dirTestimonio(t.dir, "name")}
-                        linea maxLen={80} valor={t.name} />
+                        valor={t.name} />
                       <Txt as="span" style={{ fontSize: 12.5, color: gris }}
                         campo={t.dir === null ? null : dirTestimonio(t.dir, "meta")}
-                        linea maxLen={80} valor={t.meta} />
+                        valor={t.meta} />
                     </div>
                   </div>
                 </article>
@@ -571,9 +576,9 @@ export function TemplateEquipo({ clinic: publicada }: TemplateProps) {
       {verGaleria && (
         <section className="eq-sec" id="galeria">
           <div className="eq-wrap">
-            <Txt as="span" style={kicker} campo={dirCopia("galeria.kicker")} linea maxLen={60}
+            <Txt as="span" style={kicker} campo={dirCopia("galeria.kicker")}
               valor={C("galeria.kicker")} porDefecto="La clínica" />
-            <Txt as="h2" style={secT} campo={dirSeccion("galeria", "titulo")} linea maxLen={160}
+            <Txt as="h2" style={secT} campo={dirSeccion("galeria", "titulo")}
               valor={S.galeria?.titulo}
               porDefecto="Así se ve por dentro" />
             <div className="eq-gal" style={{ marginTop: 34 }}>
@@ -591,19 +596,19 @@ export function TemplateEquipo({ clinic: publicada }: TemplateProps) {
       {verFaq && (
         <section className="eq-sec" style={{ background: fondo2 }}>
           <div className="eq-wrap">
-            <Txt as="span" style={kicker} campo={dirCopia("faq.kicker")} linea maxLen={60}
+            <Txt as="span" style={kicker} campo={dirCopia("faq.kicker")}
               valor={C("faq.kicker")} porDefecto="Preguntas frecuentes" />
-            <Txt as="h2" style={secT} campo={dirSeccion("faq", "titulo")} linea maxLen={160}
+            <Txt as="h2" style={secT} campo={dirSeccion("faq", "titulo")}
               valor={S.faq?.titulo}
               porDefecto="Lo que todos preguntan antes de venir" />
             <div style={{ maxWidth: 820, margin: "34px auto 0" }}>
               {faqs.map((f, i) => (
                 <details key={i} open={i === 0} style={{ borderBottom: `1px solid ${linea}` }}>
                   <Txt as="summary" style={{ cursor: "pointer", padding: "18px 0", fontWeight: 600, fontSize: 16.5, listStyle: "none" }}
-                    campo={dirFaq(f.i, "q")} linea requerido maxLen={200}
+                    campo={dirFaq(f.i, "q")}
                     valor={f.q} />
                   <Txt as="p" style={{ margin: "0 0 20px", color: gris }}
-                    campo={dirFaq(f.i, "a")} requerido maxLen={1200}
+                    campo={dirFaq(f.i, "a")}
                     valor={f.a} />
                 </details>
               ))}
@@ -615,9 +620,9 @@ export function TemplateEquipo({ clinic: publicada }: TemplateProps) {
       {/* ============ UBICACIÓN ============ */}
       <section className="eq-sec" id="ubicacion">
         <div className="eq-wrap">
-          <Txt as="span" style={kicker} campo={dirCopia("contacto.kicker")} linea maxLen={60}
+          <Txt as="span" style={kicker} campo={dirCopia("contacto.kicker")}
               valor={C("contacto.kicker")} porDefecto="Ubicación y horarios" />
-          <Txt as="h2" style={secT} campo={dirSeccion("contacto", "titulo")} linea maxLen={160}
+          <Txt as="h2" style={secT} campo={dirSeccion("contacto", "titulo")}
             valor={S.contacto?.titulo}
             porDefecto="Dónde estamos" />
           <div className="eq-ubi" style={{ borderRadius: 14, overflow: "hidden", border: `1px solid ${linea}`, marginTop: 34 }}>
@@ -626,7 +631,7 @@ export function TemplateEquipo({ clinic: publicada }: TemplateProps) {
               : <div style={{ minHeight: 260, background: acentoCl, display: "grid", placeItems: "center", color: acentoOsc }}><MapPin size={40} strokeWidth={1.5} /></div>}
             <div style={{ padding: "34px 32px", background: "#fff" }}>
               <Txt as="h3" style={{ fontSize: 19, fontWeight: 600, marginBottom: 14 }}
-                campo={dirCopia("contacto.etiquetaHorarios")} linea maxLen={60}
+                campo={dirCopia("contacto.etiquetaHorarios")}
                 valor={C("contacto.etiquetaHorarios")} porDefecto="Horarios" />
               <ul style={{ listStyle: "none", padding: 0, margin: "0 0 22px" }}>
                 {horario.map(d => (
@@ -641,7 +646,7 @@ export function TemplateEquipo({ clinic: publicada }: TemplateProps) {
                     {d.open
                       ? <time style={{ ...mono, fontSize: 13.5 }}>{d.open}</time>
                       : <Txt as="time" style={{ ...mono, fontSize: 13.5 }}
-                          campo={dirCopia("contacto.cerrado")} linea maxLen={40}
+                          campo={dirCopia("contacto.cerrado")}
                           valor={C("contacto.cerrado")} porDefecto="Cerrado" />}
                   </li>
                 ))}
@@ -651,11 +656,11 @@ export function TemplateEquipo({ clinic: publicada }: TemplateProps) {
               <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
                 {clinic.address && (
                   <Txt as="a" style={{ ...btnP, ...btnSm }} href={`https://maps.google.com/?q=${encodeURIComponent(`${clinic.address} ${clinic.city ?? ""}`)}`} target="_blank" rel="noopener noreferrer"
-                    campo={dirCopia("contacto.comoLlegar")} linea maxLen={60}
+                    campo={dirCopia("contacto.comoLlegar")}
                     valor={C("contacto.comoLlegar")} porDefecto="Cómo llegar" />
                 )}
                 <Txt as="button" type="button" onClick={() => abrir()} style={{ ...btnG, ...btnSm }}
-                  campo={dirCopia("contacto.cta")} linea maxLen={60}
+                  campo={dirCopia("contacto.cta")}
                   valor={C("contacto.cta")} porDefecto="Agendar cita" />
               </div>
             </div>

@@ -42,7 +42,7 @@ import { avisarAlEditor, leerRespuestaDeFoto } from "./edit-bus";
 /* El manifiesto entra AQUÍ y no en las plantillas: este archivo solo se carga
    con import() dinámico bajo ?edit=1, así que ni él ni las ~230 etiquetas de
    los campos tocan nunca el bundle de /[slug]. */
-import { etiquetaDeCampo, ranuraDeFoto } from "./edit-labels";
+import { etiquetaDeCampo, ranuraDeFoto, reglaDeCampo } from "./edit-labels";
 
 /* ------------------------------------------------------------------
    Estado compartido de la sesión de edición
@@ -107,6 +107,13 @@ function TextoEditable({ t }: { t: TextoParaEditar }) {
   /* La etiqueta la resuelve el manifiesto por la dirección del campo. La
      plantilla solo la escribe cuando la dirección no basta. */
   const etq = t.etiqueta ?? etiquetaDeCampo(t.campo, tpl);
+  /* Tope, forma y obligatoriedad salen de la misma regla que aplica el
+     servidor, así que el campo nunca deja escribir algo que se vaya a
+     descartar. La plantilla solo los pone si necesita apartarse. */
+  const regla = reglaDeCampo(t.campo, tpl);
+  const maxLen = t.maxLen ?? regla.maxLen;
+  const unaLinea = t.linea ?? regla.linea;
+  const obligatorio = t.requerido ?? regla.requerido;
   const nodo = useRef<HTMLElement | null>(null);
   const campo = useRef<HTMLTextAreaElement | null>(null);
   const [editando, setEditando] = useState(false);
@@ -161,24 +168,24 @@ function TextoEditable({ t }: { t: TextoParaEditar }) {
     if (!confirmar) return;
     const limpio = crudo.replace(/\r\n/g, "\n").trim();
     const nuevo = limpio === "" ? null : limpio;
-    if (nuevo === null && t.requerido) {
+    if (nuevo === null && obligatorio) {
       avisarAlEditor(slug, { kind: "aviso", texto: `«${etq}» no puede quedarse vacío.` });
       return;
     }
     if (nuevo === t.valor) return;
     setRecien(nuevo);
     mandarTexto(t.campo, nuevo);
-  }, [mandarTexto, slug, t.campo, etq, t.requerido, t.valor]);
+  }, [mandarTexto, slug, t.campo, etq, obligatorio, t.valor]);
 
   if (editando && estilos) {
-    const casiLleno = largo >= Math.floor(t.maxLen * 0.8);
+    const casiLleno = largo >= Math.floor(maxLen * 0.8);
     return (
       <span data-dc-ui="campo" style={{ position: "relative", display: "block", ...estilos.margen }}>
         <textarea
           ref={campo}
           defaultValue={valorVivo ?? ""}
           placeholder={etq}
-          maxLength={t.maxLen}
+          maxLength={maxLen}
           rows={1}
           spellCheck
           onInput={e => {
@@ -190,7 +197,7 @@ function TextoEditable({ t }: { t: TextoParaEditar }) {
           onBlur={() => cerrar(true)}
           onKeyDown={e => {
             if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); cerrar(false); }
-            else if (e.key === "Enter" && t.linea && !e.shiftKey) { e.preventDefault(); cerrar(true); }
+            else if (e.key === "Enter" && unaLinea && !e.shiftKey) { e.preventDefault(); cerrar(true); }
           }}
           /* Nada de `font: inherit` aquí: la taquigrafía pisa fontSize,
              fontWeight y lineHeight, y un titular de 58 px se quedaba
@@ -207,11 +214,11 @@ function TextoEditable({ t }: { t: TextoParaEditar }) {
         {casiLleno && (
           <span style={{
             position: "absolute", right: 0, top: "100%", marginTop: 4, zIndex: 60,
-            font: "500 11px/1 ui-monospace, monospace", color: largo >= t.maxLen ? "#b91c1c" : "#6b7280",
+            font: "500 11px/1 ui-monospace, monospace", color: largo >= maxLen ? "#b91c1c" : "#6b7280",
             background: "#fff", border: "1px solid #e5e7eb", borderRadius: 4, padding: "3px 6px",
             whiteSpace: "nowrap",
           }}>
-            {largo}/{t.maxLen}
+            {largo}/{maxLen}
           </span>
         )}
       </span>
