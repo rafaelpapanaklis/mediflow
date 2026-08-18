@@ -23,7 +23,9 @@
    agrega en los DOS lados: allá para que se VEA mientras se escribe,
    aquí para que se GUARDE.
    ============================================================ */
-import { TEMPLATE_MANIFESTS, allPhotoSlotIds } from "@/app/[slug]/_shared/template-manifest";
+import {
+  TEMPLATE_MANIFESTS, allPhotoSlotIds, allCopyKeys, esClaveDeCopia, topeDeCopia,
+} from "@/app/[slug]/_shared/template-manifest";
 
 /** Tope por campo JSON ya serializado. 64 KB es ~400 servicios o ~300 FAQs. */
 const MAX_JSON_BYTES = 64 * 1024;
@@ -110,6 +112,36 @@ function esMapaDeFotos(v: unknown): boolean {
   return cabe(v);
 }
 
+/**
+ * { claveDeclarada: texto } — TODO el texto suelto de la mini-web.
+ *
+ * Tres candados, y los tres hacen falta:
+ *   1. La clave tiene que estar DECLARADA en el manifiesto de alguna plantilla.
+ *      Sin esto, `landingCopy` sería una bolsa libre donde cualquiera guarda lo
+ *      que quiera y nadie pinta nunca — imposible de validar y de limpiar.
+ *   2. Cada valor va acotado por el tope de SU clave (el mayor declarado; el
+ *      fino lo pone el campo del lienzo, que sí sabe en qué plantilla está).
+ *   3. El mapa entero cabe en 8 KB. Con ~40 claves por plantilla sobra.
+ */
+const MAX_COPY_BYTES = 8 * 1024;
+
+function esMapaDeCopia(v: unknown): boolean {
+  if (esNulo(v)) return true; // borrar la columna entera es legítimo
+  if (!esObjetoPlano(v)) return false;
+  const entradas = Object.entries(v as Record<string, unknown>);
+  if (entradas.length > allCopyKeys().length) return false;
+  for (const [clave, texto] of entradas) {
+    if (!esClaveDeCopia(clave)) return false;
+    if (typeof texto !== "string") return false;
+    if (texto.length > topeDeCopia(clave)) return false;
+  }
+  try {
+    return JSON.stringify(v).length <= MAX_COPY_BYTES;
+  } catch {
+    return false;
+  }
+}
+
 const esEnteroEntre = (min: number, max: number) => (v: unknown) =>
   typeof v === "number" && Number.isInteger(v) && v >= min && v <= max;
 
@@ -151,6 +183,7 @@ export const CAMPOS_EDITABLES = {
   landingTestimonials: listaDe(60, esObjetoPlano),
   landingFaqs:         listaDe(60, esObjetoPlano),
   landingSections:     listaDe(60, esSeccion),
+  landingCopy:         esMapaDeCopia,
 
   /* Redes y mapa */
   landingWhatsapp:  texto(200),

@@ -178,6 +178,15 @@ model Clinic {
   landingUrgentText String?
   landingMsiPlazos  Int[]  @default([])
 
+  // Landing v3 — TODO el texto de la mini-web editable, no solo los títulos de
+  // sección. Requiere sql/landing-copy.sql aplicado en Supabase.
+  //   landingCopy: { <claveDeclarada>: texto } — mapa PLANO. Las claves las
+  //     declara el manifiesto de cada plantilla (TemplateManifest.copia) y una
+  //     clave que ningún manifiesto declara NO se guarda: nada de bolsa libre.
+  //     Los textos por defecto de la plantilla nunca se materializan aquí —
+  //     vaciar un campo borra su clave y vuelve a salir el literal real.
+  landingCopy       Json?
+
   bookingRequests BookingRequest[]
 
   // AI Assistant usage tracking

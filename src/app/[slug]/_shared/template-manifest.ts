@@ -50,6 +50,60 @@ export interface ManifestText {
   porDefecto: string;
 }
 
+/**
+ * UN TEXTO SUELTO DE LA PLANTILLA.
+ *
+ * `textos` cubre el título y la bajada de cada sección, que caben dentro de
+ * `landingSections`. Todo lo DEMÁS que lee un paciente —el kicker de cada
+ * bloque, la etiqueta de cada botón, la leyenda de cada cifra, los avisos— no
+ * tenía dónde vivir y estaba clavado en el JSX. Se declara aquí y se guarda en
+ * la columna `landingCopy` (mapa plano `{clave: texto}`).
+ *
+ * REGLAS
+ *  · La clave es SEMÁNTICA y se comparte entre plantillas ("hero.cta"). Así,
+ *    quien reescribió su botón no lo pierde al cambiar de plantilla.
+ *  · `porDefecto` es el literal REAL de ESTA plantilla. Es lo que la clínica ve
+ *    en gris como "esto sale si lo dejas vacío": si no es el literal real,
+ *    miente. Por eso el mismo `clave` puede traer defaults distintos en cada
+ *    plantilla, y por eso NO se reusan los de otra.
+ *  · El default NUNCA se materializa: vaciar el campo borra la clave.
+ *  · Un texto que se CONSTRUYE (con variables, partido por una coma o con un
+ *    emoji pegado a un dato) no se declara aquí. Ver `noEditables`.
+ */
+export interface ManifestCopy {
+  /** Clave del mapa `landingCopy`. Semántica, en minúsculas, con puntos. */
+  clave: string;
+  /** Nombre visible en el editor, en español. */
+  etiqueta: string;
+  /** El literal REAL que pinta esta plantilla si la clínica no escribe nada. */
+  porDefecto: string;
+  /** Tope de caracteres. 160 si no se dice. */
+  maxLen?: number;
+  /** false = admite varias líneas (los "\n" se pintan como <br/>). */
+  linea?: boolean;
+  /**
+   * Por qué este texto NO sale en el render de prueba.
+   *
+   * La prueba de instrumentación exige un nodo por cada clave declarada: es lo
+   * que evita que una plantilla nazca medio editable en silencio. Un texto que
+   * solo aparece en un estado que la clínica de prueba no puede tener (las
+   * reseñas de Google llegan por fetch, y en el servidor los efectos no corren)
+   * se marca aquí, CON EL MOTIVO. Sin motivo no se salta.
+   */
+  variante?: string;
+}
+
+/**
+ * Lo que esta plantilla NO deja editar, y por qué.
+ *
+ * Se declara para que quede escrito en el mismo sitio que lo editable: si un
+ * texto no está ni en `textos`, ni en `copia`, ni aquí, es un olvido.
+ */
+export interface ManifestNoEditable {
+  donde: string;
+  porque: string;
+}
+
 export interface TemplateManifest {
   id: string;
   nombre: string;
@@ -92,6 +146,13 @@ export interface TemplateManifest {
   secciones: ManifestSection[];
   fotos: ManifestPhotoSlot[];
   textos: ManifestText[];
+  /**
+   * Todo el texto suelto de la plantilla (kickers, botones, leyendas, avisos).
+   * Vive en la columna `landingCopy`. Sin declarar = no editable y no guardable.
+   */
+  copia?: ManifestCopy[];
+  /** Lo que se deja fuera a propósito, con el motivo. Documentación viva. */
+  noEditables?: ManifestNoEditable[];
 }
 
 /* ---------- piezas que se repiten entre plantillas ---------- */
@@ -141,10 +202,11 @@ export const TEMPLATE_MANIFESTS: Record<string, TemplateManifest> = {
        El `porDefecto` es lo que la clínica ve en gris como "esto sale si lo
        dejas vacío": si no es el literal REAL de la plantilla, miente.
 
-       El titular del cierre ("Tu salud, nuestra<br/>prioridad") NO está aquí y
-       es una decisión: lleva un salto de línea DENTRO del titular, así que no
-       es una cadena — instrumentarlo como texto plano guardaría las dos líneas
-       pegadas. Se queda no editable hasta que se arregle la plantilla. */
+       El titular del cierre ("Tu salud, nuestra<br/>prioridad") tampoco está
+       aquí, pero YA SE EDITA: lleva un salto de línea dentro, así que no cabe
+       en `textos` como cadena. Va en `copia` con `linea:false`, el salto viaja
+       como "\n" y <Txt multilinea> lo vuelve a pintar como <br/>. El HTML
+       público sale byte a byte igual que antes. */
     textos: [
       { seccion: "servicios", campo: "titulo",    etiqueta: "Título de servicios",   porDefecto: "Lo que ofrecemos" },
       { seccion: "servicios", campo: "subtitulo", etiqueta: "Bajada de servicios",   porDefecto: "Tratamientos con tecnología de vanguardia para tu salud y bienestar" },
@@ -156,6 +218,57 @@ export const TEMPLATE_MANIFESTS: Record<string, TemplateManifest> = {
       { seccion: "contacto",  campo: "titulo",    etiqueta: "Título de contacto",    porDefecto: "Visítanos" },
       { seccion: "contacto",  campo: "subtitulo", etiqueta: "Bajada de contacto",    porDefecto: "Estamos aquí para atenderte con gusto" },
       { seccion: "reservar",  campo: "subtitulo", etiqueta: "Bajada del cierre",     porDefecto: "Agenda en menos de 2 minutos. Sin llamadas, sin esperas, sin complicaciones." },
+    ],
+    copia: [
+      /* Barra de arriba. El MENÚ no se edita (los enlaces siguen a las
+         secciones); el botón de reservar sí, que es una llamada a la acción. */
+      { clave: "nav.whatsapp",  etiqueta: "Barra · botón de WhatsApp", porDefecto: "WhatsApp", maxLen: 40, linea: true },
+      { clave: "nav.cta",       etiqueta: "Barra · botón de reservar", porDefecto: "Agendar",  maxLen: 40, linea: true },
+
+      /* Portada */
+      { clave: "hero.cta",              etiqueta: "Portada · botón principal",   porDefecto: "Agendar cita", maxLen: 60, linea: true },
+      { clave: "hero.whatsapp",         etiqueta: "Portada · botón de WhatsApp", porDefecto: "WhatsApp",     maxLen: 60, linea: true },
+      { clave: "hero.statEspecialistas", etiqueta: "Portada · leyenda «especialistas»", porDefecto: "Especialistas", maxLen: 60, linea: true },
+      { clave: "hero.statCalificacion",  etiqueta: "Portada · leyenda «calificación»",  porDefecto: "Calificación",  maxLen: 60, linea: true },
+      { clave: "hero.statCita",          etiqueta: "Portada · leyenda «cita en línea»", porDefecto: "Cita en línea", maxLen: 60, linea: true },
+
+      /* Etiquetas de bloque (el pastillita de arriba de cada sección) */
+      { clave: "servicios.kicker",     etiqueta: "Servicios · etiqueta",   porDefecto: "Servicios",         maxLen: 60, linea: true },
+      { clave: "equipo.kicker",        etiqueta: "Equipo · etiqueta",      porDefecto: "Equipo médico",     maxLen: 60, linea: true },
+      { clave: "galeria.kicker",       etiqueta: "Galería · etiqueta",     porDefecto: "Instalaciones",     maxLen: 60, linea: true },
+      { clave: "opiniones.kicker",     etiqueta: "Opiniones · etiqueta",   porDefecto: "Testimonios",       maxLen: 60, linea: true },
+      { clave: "opiniones.kickerGoogle", etiqueta: "Reseñas de Google · etiqueta", porDefecto: "Reseñas de Google", maxLen: 60, linea: true,
+        variante: "El bloque solo existe con reseñas de Google, que llegan por fetch en un efecto; en el render de servidor los efectos no corren." },
+      { clave: "faq.kicker",           etiqueta: "Preguntas · etiqueta",   porDefecto: "FAQ",               maxLen: 60, linea: true },
+      { clave: "contacto.kicker",      etiqueta: "Contacto · etiqueta",    porDefecto: "Contacto",          maxLen: 60, linea: true },
+
+      /* Botones de las tarjetas */
+      { clave: "servicios.cta", etiqueta: "Servicios · botón de cada tarjeta", porDefecto: "Agendar",          maxLen: 40, linea: true },
+      { clave: "equipo.cta",    etiqueta: "Equipo · botón de cada doctor",     porDefecto: "Agendar consulta", maxLen: 60, linea: true },
+
+      /* Bloque de contacto */
+      { clave: "contacto.etiquetaDireccion", etiqueta: "Contacto · rótulo de la dirección", porDefecto: "Dirección", maxLen: 60, linea: true },
+      { clave: "contacto.etiquetaTelefono",  etiqueta: "Contacto · rótulo del teléfono",    porDefecto: "Teléfono",  maxLen: 60, linea: true },
+      { clave: "contacto.etiquetaHorarios",  etiqueta: "Contacto · rótulo de los horarios", porDefecto: "Horarios",  maxLen: 60, linea: true },
+      { clave: "contacto.whatsapp",  etiqueta: "Contacto · botón de WhatsApp",  porDefecto: "Escribir por WhatsApp", maxLen: 60, linea: true },
+      { clave: "contacto.instagram", etiqueta: "Contacto · botón de Instagram", porDefecto: "Instagram",             maxLen: 40, linea: true },
+      { clave: "contacto.facebook",  etiqueta: "Contacto · botón de Facebook",  porDefecto: "Facebook",              maxLen: 40, linea: true },
+
+      /* Cierre. El titular lleva DOS líneas: el salto se guarda como "\n". */
+      { clave: "reservar.titulo",   etiqueta: "Cierre · titular (dos líneas)", porDefecto: "Tu salud, nuestra\nprioridad", maxLen: 160 },
+      { clave: "reservar.cta",      etiqueta: "Cierre · botón principal",      porDefecto: "Agendar mi cita", maxLen: 60, linea: true },
+      { clave: "reservar.whatsapp", etiqueta: "Cierre · botón de WhatsApp",    porDefecto: "WhatsApp",        maxLen: 60, linea: true },
+    ],
+    noEditables: [
+      { donde: "Menú de navegación (escritorio y móvil)", porque: "Los enlaces siguen a las secciones que estén encendidas; renombrarlos los desacoplaría de su destino." },
+      { donde: "Pie de página, incluido «Powered by DaleControl»", porque: "El pie es nuestro, no de la clínica." },
+      { donde: "Portada · pastilla «{especialidad} · {ciudad}»", porque: "Se construye con dos datos de la clínica; como texto plano se guardaría la mezcla ya montada." },
+      { donde: "Portada · las cifras (número de especialistas, calificación, «✓»)", porque: "Son datos calculados, no copy. Sus leyendas SÍ se editan." },
+      { donde: "Portada · las etiquetas de especialidad", porque: "Vienen del catálogo de la categoría clínica, no de la clínica." },
+      { donde: "«Dr/a. {nombre} {apellido}» y las especialidades de cada doctor", porque: "Se arman con datos del equipo; se cambian en la ficha del doctor." },
+      { donde: "«({n} reseñas en Google)» y «Ver {n} reseñas en Google · {nota} ⭐»", porque: "Se construyen con lo que devuelve Google." },
+      { donde: "El texto del mapa cuando no hay mapa configurado", porque: "Es una expresión con respaldo: o la dirección de la clínica, o un aviso." },
+      { donde: "Las reseñas de Google", porque: "Son de Google. No hay dónde guardarlas si alguien las reescribe." },
     ],
   },
 
@@ -223,6 +336,66 @@ export const TEMPLATE_MANIFESTS: Record<string, TemplateManifest> = {
       { seccion: "tecnologia1", campo: "subtitulo", etiqueta: "Tecnología 1 · texto", porDefecto: "Qué es y por qué le conviene al paciente." },
       { seccion: "tecnologia2", campo: "titulo", etiqueta: "Tecnología 2 · nombre", porDefecto: "Esterilización certificada" },
       { seccion: "tecnologia2", campo: "subtitulo", etiqueta: "Tecnología 2 · texto", porDefecto: "Qué es y por qué le conviene al paciente." },
+    ],
+    copia: [
+      /* Barra de arriba. Los enlaces del menú no; el botón de reservar sí. */
+      { clave: "nav.cta", etiqueta: "Barra · botón de reservar", porDefecto: "Agenda tu cita", maxLen: 40, linea: true },
+
+      /* Portada */
+      { clave: "hero.cta",             etiqueta: "Portada · botón principal",   porDefecto: "Agendar cita", maxLen: 60, linea: true },
+      { clave: "hero.whatsapp",        etiqueta: "Portada · botón de WhatsApp", porDefecto: "WhatsApp",     maxLen: 60, linea: true },
+      { clave: "hero.cifraPacientes",  etiqueta: "Portada · leyenda de «pacientes atendidos»", porDefecto: "pacientes atendidos", maxLen: 60, linea: true },
+
+      /* Los tres accesos rápidos que cuelgan del hero */
+      { clave: "accesos.servicios.titulo",  etiqueta: "Acceso 1 · título", porDefecto: "Servicios y precios →",           maxLen: 60,  linea: true },
+      { clave: "accesos.servicios.texto",   etiqueta: "Acceso 1 · texto",  porDefecto: "Costos claros antes de sentarte", maxLen: 120, linea: true },
+      { clave: "accesos.agenda.titulo",     etiqueta: "Acceso 2 · título", porDefecto: "Agenda tu cita →",                maxLen: 60,  linea: true },
+      { clave: "accesos.agenda.texto",      etiqueta: "Acceso 2 · texto",  porDefecto: "En línea, sin llamar",            maxLen: 120, linea: true },
+      { clave: "accesos.equipo.titulo",     etiqueta: "Acceso 3 · título (con equipo)",  porDefecto: "Conócenos →",   maxLen: 60, linea: true },
+      { clave: "accesos.ubicacion.titulo",  etiqueta: "Acceso 3 · título (sin equipo)",  porDefecto: "Cómo llegar →", maxLen: 60, linea: true },
+
+      /* Los cuatro "valores". Solo se pintan si la clínica tiene el dato. */
+      { clave: "valores.urgencias.titulo", etiqueta: "Valor · título de urgencias",        porDefecto: "Urgencias",            maxLen: 60, linea: true },
+      { clave: "valores.msi.titulo",       etiqueta: "Valor · título de meses sin intereses", porDefecto: "Meses sin intereses", maxLen: 60, linea: true },
+      { clave: "valores.precios.titulo",   etiqueta: "Valor · título de precios",          porDefecto: "Precios a la vista",   maxLen: 60, linea: true },
+      { clave: "valores.precios.texto",    etiqueta: "Valor · texto de precios",           porDefecto: "El costo de cada tratamiento está publicado antes de que agendes.", maxLen: 240 },
+      { clave: "valores.doctor.titulo",    etiqueta: "Valor · título de elegir doctor",    porDefecto: "Elige a tu doctor",    maxLen: 60, linea: true },
+      { clave: "valores.doctor.texto",     etiqueta: "Valor · texto de elegir doctor",     porDefecto: "Agenda directo con el especialista que prefieras.", maxLen: 240 },
+
+      /* Etiquetas de bloque */
+      { clave: "servicios.kicker",  etiqueta: "Servicios · etiqueta",   porDefecto: "Servicios y precios",   maxLen: 60, linea: true },
+      { clave: "equipo.kicker",     etiqueta: "Equipo · etiqueta",      porDefecto: "Quién te atiende",      maxLen: 60, linea: true },
+      { clave: "casos.kicker",      etiqueta: "Casos · etiqueta",       porDefecto: "Casos reales",          maxLen: 60, linea: true },
+      { clave: "tecnologia.kicker", etiqueta: "Tecnología · etiqueta",  porDefecto: "Tecnología",            maxLen: 60, linea: true },
+      { clave: "opiniones.kicker",  etiqueta: "Opiniones · etiqueta",   porDefecto: "Opiniones",             maxLen: 60, linea: true },
+      { clave: "galeria.kicker",    etiqueta: "Galería · etiqueta",     porDefecto: "La clínica",            maxLen: 60, linea: true },
+      { clave: "faq.kicker",        etiqueta: "Preguntas · etiqueta",   porDefecto: "Preguntas frecuentes",  maxLen: 60, linea: true },
+      { clave: "contacto.kicker",   etiqueta: "Contacto · etiqueta",    porDefecto: "Ubicación y horarios",  maxLen: 60, linea: true },
+
+      /* Botones repartidos por la página */
+      { clave: "servicios.cta",  etiqueta: "Servicios · botón de cada tarjeta", porDefecto: "Agendar",              maxLen: 40, linea: true },
+      { clave: "casos.cta",      etiqueta: "Casos · botón",                     porDefecto: "Quiero mi valoración", maxLen: 60, linea: true },
+      { clave: "tecnologia.cta", etiqueta: "Tecnología · botón",                porDefecto: "Agendar cita",         maxLen: 60, linea: true },
+
+      /* Bloque de ubicación */
+      { clave: "contacto.etiquetaHorarios", etiqueta: "Ubicación · rótulo de los horarios", porDefecto: "Horarios",    maxLen: 60, linea: true },
+      { clave: "contacto.cerrado",          etiqueta: "Ubicación · cómo se dice «cerrado»", porDefecto: "Cerrado",     maxLen: 40, linea: true },
+      { clave: "contacto.comoLlegar",       etiqueta: "Ubicación · botón del mapa",         porDefecto: "Cómo llegar", maxLen: 60, linea: true },
+      { clave: "contacto.cta",              etiqueta: "Ubicación · botón de reservar",      porDefecto: "Agendar cita", maxLen: 60, linea: true },
+    ],
+    noEditables: [
+      { donde: "Menú de navegación", porque: "Los enlaces siguen a las secciones encendidas; renombrarlos los desacoplaría de su destino." },
+      { donde: "Pie de página, incluido «Hecho con DaleControl»", porque: "El pie es nuestro, no de la clínica." },
+      { donde: "Barra superior (teléfono y dirección)", porque: "Son datos de la clínica con un emoji pegado; se cambian en Configuración." },
+      { donde: "Portada · kicker «{especialidad} · desde hace {n} años»", porque: "Se construye con dos datos; como texto plano se guardaría la mezcla ya montada." },
+      { donde: "Portada · leyendas de reseñas, años y especialistas", porque: "Las tres se construyen con datos («{n} reseñas en Google», «años atendiendo {ciudad}», singular/plural de especialista). La de «pacientes atendidos» SÍ se edita: es la única que es un literal." },
+      { donde: "Acceso 3 · texto («{n} especialistas» / la ciudad)", porque: "Es una expresión con respaldo, no una cadena." },
+      { donde: "Valor de meses sin intereses · texto", porque: "Lleva los plazos dentro («a 3, 6, 12 meses sin intereses»)." },
+      { donde: "«{duración} min» de cada servicio", porque: "Es el dato de duración del servicio." },
+      { donde: "«Dr/a. {nombre} {apellido}» y «Agendar con {nombre}»", porque: "Se arman con datos del equipo." },
+      { donde: "«{n} reseñas verificadas en Google»", porque: "Se construye con lo que devuelve Google." },
+      { donde: "Etiqueta de accesibilidad del botón flotante de WhatsApp", porque: "No es contenido: es texto para lectores de pantalla." },
+      { donde: "Las reseñas de Google", porque: "Son de Google. No hay dónde guardarlas si alguien las reescribe." },
     ],
   },
 
@@ -404,4 +577,53 @@ export function plantillaInstrumentada(templateId: string | null | undefined): b
 /** Los ids de las plantillas instrumentadas, en el orden del manifiesto. */
 export function plantillasInstrumentadas(): string[] {
   return Object.values(TEMPLATE_MANIFESTS).filter(m => m.instrumentada).map(m => m.id);
+}
+
+/* ------------------------------------------------------------------
+   `landingCopy`: el texto suelto
+   ------------------------------------------------------------------ */
+
+/** Tope por defecto de un texto suelto, si el manifiesto no dice otro. */
+export const COPY_MAX_LEN_POR_DEFECTO = 160;
+
+/**
+ * Tope de cada clave declarada, EN TODAS las plantillas.
+ *
+ * El validador del PATCH no sabe con qué plantilla se está escribiendo (la
+ * clínica puede cambiarla en el mismo guardado), así que se queda con el tope
+ * MÁS GRANDE de los declarados para esa clave. El tope fino lo pone el campo
+ * del lienzo, que sí sabe en qué plantilla está.
+ */
+let TOPES: Map<string, number> | null = null;
+function topes(): Map<string, number> {
+  if (TOPES) return TOPES;
+  const m = new Map<string, number>();
+  for (const tpl of Object.values(TEMPLATE_MANIFESTS)) {
+    for (const c of tpl.copia ?? []) {
+      const max = c.maxLen ?? COPY_MAX_LEN_POR_DEFECTO;
+      m.set(c.clave, Math.max(m.get(c.clave) ?? 0, max));
+    }
+  }
+  TOPES = m;
+  return m;
+}
+
+/** ¿Alguna plantilla declara esta clave de texto suelto? */
+export function esClaveDeCopia(clave: string): boolean {
+  return topes().has(clave);
+}
+
+/** Cuántos caracteres admite esa clave (el mayor de los declarados). */
+export function topeDeCopia(clave: string): number {
+  return topes().get(clave) ?? COPY_MAX_LEN_POR_DEFECTO;
+}
+
+/** Todas las claves declaradas por alguna plantilla. */
+export function allCopyKeys(): string[] {
+  return Array.from(topes().keys());
+}
+
+/** La declaración de una clave EN ESTA plantilla (para su default real). */
+export function copyOfManifest(templateId: string | null | undefined, clave: string): ManifestCopy | null {
+  return manifestOf(templateId).copia?.find(c => c.clave === clave) ?? null;
 }

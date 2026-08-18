@@ -39,6 +39,47 @@ export function photoOf(
   return null;
 }
 
+/* ------------------------------------------------------------------
+   `landingCopy`: el texto suelto de la plantilla (kickers, botones,
+   leyendas, avisos). Mapa plano { clave: texto }, con las claves que
+   declara el manifiesto de cada plantilla.
+
+   Los textos por DEFECTO de la plantilla no viven aquí y no se escriben
+   nunca: si la clínica vacía el campo, se borra la clave y vuelve a salir
+   el literal real. Por eso `copyValue` devuelve null y no el default —
+   quien pinta decide qué poner, y <Txt> ya sabe hacerlo.
+   ------------------------------------------------------------------ */
+
+/** { clave: texto } con lo que la clínica reescribió. Vacío si no tocó nada. */
+export function copyMap(clinic: LandingClinic): Record<string, string> {
+  const raw = (clinic as any).landingCopy;
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
+  const out: Record<string, string> = {};
+  for (const [k, v] of Object.entries(raw)) {
+    if (typeof v === "string" && v.trim()) out[k] = v;
+  }
+  return out;
+}
+
+/**
+ * Lo que escribió la clínica para esa clave, o null.
+ *
+ * Se le pasa a `<Txt valor={…} porDefecto="el literal real">`: null hace que
+ * la plantilla pinte su propio literal, exactamente como antes de instrumentar.
+ */
+export function copyValue(copias: Record<string, string>, clave: string): string | null {
+  const v = copias[clave];
+  return typeof v === "string" && v.trim() ? v : null;
+}
+
+/**
+ * El texto ya resuelto, para donde hace falta una cadena y no un nodo:
+ * un `title`, un `alt`, el `aria-label` de un botón.
+ */
+export function copyText(copias: Record<string, string>, clave: string, porDefecto: string): string {
+  return copyValue(copias, clave) ?? porDefecto;
+}
+
 /** Plazos de meses sin intereses. Vacío = la clínica no ofrece MSI. */
 export function msiPlazos(clinic: LandingClinic): number[] {
   const raw = (clinic as any).landingMsiPlazos;

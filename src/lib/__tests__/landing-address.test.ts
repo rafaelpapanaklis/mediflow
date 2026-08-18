@@ -16,7 +16,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   aplicarDireccion, leerDireccion,
-  dirClinica, dirFaq, dirSeccion, dirServicio, dirTestimonio,
+  dirClinica, dirCopia, dirFaq, dirSeccion, dirServicio, dirTestimonio,
   type BorradorLanding,
 } from "../landing-address";
 
@@ -24,7 +24,7 @@ const vacio = (): BorradorLanding => ({
   name: "Clínica", phone: null, address: null, description: null,
   landingTagline: null, landingPatients: null, landingUrgentText: null,
   landingSections: null, landingServices: null, landingFaqs: null,
-  landingTestimonials: null, landingPhotos: null,
+  landingTestimonials: null, landingPhotos: null, landingCopy: null,
 });
 
 const conListas = (): BorradorLanding => ({
@@ -156,4 +156,51 @@ test("quitar una foto borra su llave en vez de dejarla vacía", () => {
   const b = { ...vacio(), landingPhotos: { portada: "https://x.test/a.webp", doctor: "https://x.test/b.webp" } };
   const escrito = aplicarDireccion(b, leerDireccion("foto:portada")!, null)!;
   assert.deepEqual(escrito.valor, { doctor: "https://x.test/b.webp" });
+});
+
+/* ══════════════════════════════════════════════════════════════
+   El texto suelto (landingCopy)
+   ══════════════════════════════════════════════════════════════ */
+
+test("una clave declarada por el manifiesto aterriza en landingCopy", () => {
+  const b = vacio();
+  const dir = leerDireccion(dirCopia("hero.cta"));
+  assert.deepEqual(dir, { tipo: "copia", clave: "hero.cta" });
+  const escrito = aplicarDireccion(b, dir!, "Reserva ahora")!;
+  assert.equal(escrito.columna, "landingCopy");
+  assert.deepEqual(escrito.valor, { "hero.cta": "Reserva ahora" });
+});
+
+test("una clave que NINGÚN manifiesto declara se tira", () => {
+  assert.equal(leerDireccion(dirCopia("lo.que.se.me.ocurra")), null);
+  assert.equal(leerDireccion("copia:__proto__"), null);
+  assert.equal(leerDireccion("copia:constructor"), null);
+});
+
+test("vaciar un texto suelto BORRA la clave, no guarda el texto por defecto", () => {
+  const b = { ...vacio(), landingCopy: { "hero.cta": "Reserva ahora", "faq.kicker": "Dudas" } };
+  const escrito = aplicarDireccion(b, leerDireccion(dirCopia("hero.cta"))!, "")!;
+  assert.deepEqual(escrito.valor, { "faq.kicker": "Dudas" },
+    "si se guardara el default, cambiar de plantilla arrastraría el copy de la anterior");
+});
+
+test("un texto suelto más largo que su tope no se escribe", () => {
+  const b = vacio();
+  // "hero.cta" está declarado con maxLen 60 en classic y en equipo.
+  assert.equal(aplicarDireccion(b, leerDireccion(dirCopia("hero.cta"))!, "x".repeat(61)), null);
+  assert.ok(aplicarDireccion(b, leerDireccion(dirCopia("hero.cta"))!, "x".repeat(60)));
+});
+
+test("escribir un texto suelto no toca a los demás", () => {
+  const b = { ...vacio(), landingCopy: { "faq.kicker": "Dudas" } };
+  const escrito = aplicarDireccion(b, leerDireccion(dirCopia("hero.cta"))!, "Reserva")!;
+  assert.deepEqual(escrito.valor, { "faq.kicker": "Dudas", "hero.cta": "Reserva" });
+  assert.deepEqual(b.landingCopy, { "faq.kicker": "Dudas" }, "nada de mutar en sitio");
+});
+
+test("un titular de dos líneas conserva el salto", () => {
+  const b = vacio();
+  const dos = "Tu salud, nuestra" + String.fromCharCode(10) + "prioridad";
+  const escrito = aplicarDireccion(b, leerDireccion(dirCopia("reservar.titulo"))!, dos)!;
+  assert.deepEqual(escrito.valor, { "reservar.titulo": dos });
 });

@@ -20,10 +20,10 @@ import { Foto, Txt, useEnEdicion } from "../_shared/edit-context";
 // landing-address-parts y NO landing-address: este archivo viaja al navegador
 // de los pacientes, y el módulo grande arrastra el manifiesto de las ocho
 // plantillas (17 KB) sin que la página pública lo necesite para nada.
-import { dirClinica, dirFaq, dirSeccion, dirServicio, dirTestimonio } from "@/lib/landing-address-parts";
+import { dirClinica, dirCopia, dirFaq, dirSeccion, dirServicio, dirTestimonio } from "@/lib/landing-address-parts";
 import { tint, shade, alpha } from "../_shared/landing-utils";
 import {
-  faqList, msiPlazos, photoOf, sectionMap, sectionTitle,
+  copyMap, copyValue, faqList, msiPlazos, photoOf, sectionMap, sectionTitle,
   serviceList, showSection, testimonialList, urgentText, weekSchedule,
 } from "../_shared/landing-data";
 import { BeforeAfter, StarRow } from "../_shared/landing-pieces";
@@ -49,6 +49,11 @@ export function TemplateEquipo({ clinic: publicada }: TemplateProps) {
 
   /* ---- datos reales ---- */
   const S = sectionMap(clinic);
+  /* El texto suelto que reescribio la clinica (kickers, botones, leyendas).
+     `C(clave)` devuelve null si no lo toco, y entonces <Txt> pinta el literal
+     de siempre: en la pagina publica no se mueve un pixel. */
+  const copias = copyMap(clinic);
+  const C = (clave: string) => copyValue(copias, clave);
   const servicios = serviceList(clinic);
   const doctores = clinic.users ?? [];
   const testimonios = testimonialList(clinic);
@@ -104,18 +109,24 @@ export function TemplateEquipo({ clinic: publicada }: TemplateProps) {
   const verFaq = showSection(S, "faq", faqs.length > 0);
 
   /* ---- credenciales del hero: solo hechos que la clínica capturó ---- */
-  const credenciales: { valor: string; etiqueta: string; estrellas?: boolean }[] = [];
+  const credenciales: { valor: string; etiqueta: string; estrellas?: boolean; clave?: string }[] = [];
   if (google?.rating) credenciales.push({ valor: String(google.rating), etiqueta: `${google.total} reseñas en Google`, estrellas: true });
   if (clinic.landingYearsExperience) credenciales.push({ valor: String(clinic.landingYearsExperience), etiqueta: clinic.city ? `años atendiendo ${clinic.city}` : "años de experiencia" });
-  if (clinic.landingPatients) credenciales.push({ valor: clinic.landingPatients, etiqueta: "pacientes atendidos" });
+  /* La UNICA leyenda del hero que es un literal y no una expresion: las otras
+     tres se construyen ("{n} reseñas en Google", "años atendiendo {ciudad}",
+     singular/plural de especialista) y por eso no se instrumentan. */
+  if (clinic.landingPatients) credenciales.push({ valor: clinic.landingPatients, etiqueta: "pacientes atendidos", clave: "hero.cifraPacientes" });
   if (doctores.length > 0) credenciales.push({ valor: String(doctores.length), etiqueta: doctores.length === 1 ? "especialista" : "especialistas" });
 
   /* ---- valores: se arman con lo que la clínica configuró, no con copy ---- */
-  const valores: { Icono: any; titulo: string; texto: string }[] = [];
-  if (urgencias) valores.push({ Icono: Zap, titulo: "Urgencias", texto: urgencias });
-  if (msi.length > 0) valores.push({ Icono: Sparkles, titulo: "Meses sin intereses", texto: `Difiere tu tratamiento a ${msi.join(", ")} meses sin intereses.` });
-  if (servicios.some(s => s.price)) valores.push({ Icono: Shield, titulo: "Precios a la vista", texto: "El costo de cada tratamiento está publicado antes de que agendes." });
-  if (doctores.length > 1) valores.push({ Icono: Users, titulo: "Elige a tu doctor", texto: "Agenda directo con el especialista que prefieras." });
+  /* `clave` = la del titulo; `claveTexto` = la del cuerpo, o null cuando el
+     cuerpo se CONSTRUYE (los plazos de MSI) o sale de otra columna (el aviso
+     de urgencias, que ya se edita como landingUrgentText). */
+  const valores: { Icono: any; titulo: string; texto: string; clave: string; claveTexto: string | null }[] = [];
+  if (urgencias) valores.push({ Icono: Zap, titulo: "Urgencias", texto: urgencias, clave: "valores.urgencias.titulo", claveTexto: null });
+  if (msi.length > 0) valores.push({ Icono: Sparkles, titulo: "Meses sin intereses", texto: `Difiere tu tratamiento a ${msi.join(", ")} meses sin intereses.`, clave: "valores.msi.titulo", claveTexto: null });
+  if (servicios.some(s => s.price)) valores.push({ Icono: Shield, titulo: "Precios a la vista", texto: "El costo de cada tratamiento está publicado antes de que agendes.", clave: "valores.precios.titulo", claveTexto: "valores.precios.texto" });
+  if (doctores.length > 1) valores.push({ Icono: Users, titulo: "Elige a tu doctor", texto: "Agenda directo con el especialista que prefieras.", clave: "valores.doctor.titulo", claveTexto: "valores.doctor.texto" });
 
   const nav: { href: string; label: string }[] = [
     ...(verServicios ? [{ href: "#servicios", label: "Servicios" }] : []),
@@ -212,7 +223,9 @@ export function TemplateEquipo({ clinic: publicada }: TemplateProps) {
               <a key={l.href} href={l.href} style={{ textDecoration: "none", fontSize: 14.5, fontWeight: 500, color: shade(acento, 0.55), padding: "6px 0", borderBottom: "2px solid transparent" }}>{l.label}</a>
             ))}
           </div>
-          <button type="button" onClick={() => abrir()} style={{ ...btnP, ...btnSm }}>Agenda tu cita</button>
+          <Txt as="button" type="button" onClick={() => abrir()} style={{ ...btnP, ...btnSm }}
+            campo={dirCopia("nav.cta")} etiqueta="Botón de reservar de la barra" linea maxLen={40}
+            valor={C("nav.cta")} porDefecto="Agenda tu cita" />
         </div>
       </nav>
 
@@ -242,11 +255,19 @@ export function TemplateEquipo({ clinic: publicada }: TemplateProps) {
             campo={dirClinica("description")} etiqueta="Descripción de la clínica" maxLen={5000}
             valor={clinic.description} />
           <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
-            <button type="button" onClick={() => abrir()} style={btnP}>Agendar cita <ChevronRight size={16} /></button>
+            {/* El icono va como hermano (`despues`) y el espacio como sufijo
+                PEGADO: en la plantilla eran un solo nodo de texto ("Agendar
+                cita ") seguido del svg, y partirlo en dos metería una marca
+                de hidratación donde antes no había ninguna. */}
+            <Txt as="button" type="button" onClick={() => abrir()} style={btnP}
+              campo={dirCopia("hero.cta")} etiqueta="Botón principal de la portada" linea maxLen={60}
+              valor={C("hero.cta")} porDefecto="Agendar cita" sufijo=" " unido
+              despues={<ChevronRight size={16} />} />
             {wa && (
-              <a href={wa} target="_blank" rel="noopener noreferrer" style={{ ...btn, background: "#25d366", color: "#0b2e1c" }}>
-                <MessageCircle size={18} /> WhatsApp
-              </a>
+              <Txt as="a" href={wa} target="_blank" rel="noopener noreferrer" style={{ ...btn, background: "#25d366", color: "#0b2e1c" }}
+                campo={dirCopia("hero.whatsapp")} etiqueta="Botón de WhatsApp de la portada" linea maxLen={60}
+                valor={C("hero.whatsapp")} porDefecto="WhatsApp" prefijo=" " unido
+                antes={<MessageCircle size={18} />} />
             )}
           </div>
           {credenciales.length > 0 && (
@@ -256,7 +277,9 @@ export function TemplateEquipo({ clinic: publicada }: TemplateProps) {
                   <b style={{ display: "block", fontSize: 22, fontWeight: 600, ...mono }}>
                     {c.valor} {c.estrellas && <StarRow value={Number(c.valor)} color="#fbbf24" size={15} />}
                   </b>
-                  <span style={{ fontSize: 13, color: tint(acento, 0.7) }}>{c.etiqueta}</span>
+                  <Txt as="span" style={{ fontSize: 13, color: tint(acento, 0.7) }}
+                    campo={c.clave ? dirCopia(c.clave) : null} etiqueta="Leyenda de la cifra" linea maxLen={60}
+                    valor={c.clave ? C(c.clave) : null} porDefecto={c.etiqueta} />
                 </div>
               ))}
             </div>
@@ -269,16 +292,31 @@ export function TemplateEquipo({ clinic: publicada }: TemplateProps) {
         <div className="eq-accesos" style={{ display: "grid", gridTemplateColumns: `repeat(${verServicios ? 3 : 2},1fr)`, gap: 14, marginTop: -42, position: "relative", zIndex: 5 }}>
           {verServicios && (
             <a className="eq-acc" href="#servicios" style={{ padding: "26px 24px", borderRadius: 14, textDecoration: "none", boxShadow: sombra, transition: ".18s", display: "block", background: acento, color: "#fff" }}>
-              <b style={{ display: "block", fontSize: 18, fontWeight: 600, marginBottom: 5 }}>Servicios y precios →</b>
-              <span style={{ fontSize: 14, opacity: .85 }}>Costos claros antes de sentarte</span>
+              <Txt as="b" style={{ display: "block", fontSize: 18, fontWeight: 600, marginBottom: 5 }}
+                campo={dirCopia("accesos.servicios.titulo")} etiqueta="Acceso 1 · título" linea maxLen={60}
+                valor={C("accesos.servicios.titulo")} porDefecto="Servicios y precios →" />
+              <Txt as="span" style={{ fontSize: 14, opacity: .85 }}
+                campo={dirCopia("accesos.servicios.texto")} etiqueta="Acceso 1 · texto" linea maxLen={120}
+                valor={C("accesos.servicios.texto")} porDefecto="Costos claros antes de sentarte" />
             </a>
           )}
           <button type="button" onClick={() => abrir()} className="eq-acc" style={{ padding: "26px 24px", borderRadius: 14, boxShadow: sombra, transition: ".18s", display: "block", textAlign: "left", border: 0, cursor: "pointer", background: tinta, color: "#fff", fontFamily: "inherit" }}>
-            <b style={{ display: "block", fontSize: 18, fontWeight: 600, marginBottom: 5 }}>Agenda tu cita →</b>
-            <span style={{ fontSize: 14, opacity: .85 }}>En línea, sin llamar</span>
+            <Txt as="b" style={{ display: "block", fontSize: 18, fontWeight: 600, marginBottom: 5 }}
+              campo={dirCopia("accesos.agenda.titulo")} etiqueta="Acceso 2 · título" linea maxLen={60}
+              valor={C("accesos.agenda.titulo")} porDefecto="Agenda tu cita →" />
+            <Txt as="span" style={{ fontSize: 14, opacity: .85 }}
+              campo={dirCopia("accesos.agenda.texto")} etiqueta="Acceso 2 · texto" linea maxLen={120}
+              valor={C("accesos.agenda.texto")} porDefecto="En línea, sin llamar" />
           </button>
           <a className="eq-acc" href={verEquipo ? "#equipo" : "#ubicacion"} style={{ padding: "26px 24px", borderRadius: 14, textDecoration: "none", boxShadow: sombra, transition: ".18s", display: "block", background: acentoCl, color: acentoOsc }}>
-            <b style={{ display: "block", fontSize: 18, fontWeight: 600, marginBottom: 5 }}>{verEquipo ? "Conócenos →" : "Cómo llegar →"}</b>
+            {/* Dos claves y no una: el acceso dice una cosa u otra según haya
+                equipo, y con una sola clave editar un estado le cambiaría el
+                texto al otro sin que nadie lo pidiera. */}
+            <Txt as="b" style={{ display: "block", fontSize: 18, fontWeight: 600, marginBottom: 5 }}
+              campo={dirCopia(verEquipo ? "accesos.equipo.titulo" : "accesos.ubicacion.titulo")}
+              etiqueta="Acceso 3 · título" linea maxLen={60}
+              valor={C(verEquipo ? "accesos.equipo.titulo" : "accesos.ubicacion.titulo")}
+              porDefecto={verEquipo ? "Conócenos →" : "Cómo llegar →"} />
             <span style={{ fontSize: 14, opacity: .85 }}>
               {verEquipo
                 ? `${doctores.length} ${doctores.length === 1 ? "especialista" : "especialistas"}`
@@ -299,8 +337,12 @@ export function TemplateEquipo({ clinic: publicada }: TemplateProps) {
                     <v.Icono size={22} strokeWidth={1.8} />
                   </span>
                   <div>
-                    <b style={{ display: "block", fontSize: 15.5, fontWeight: 600, marginBottom: 3 }}>{v.titulo}</b>
-                    <p style={{ margin: 0, fontSize: 14, color: gris, lineHeight: 1.5 }}>{v.texto}</p>
+                    <Txt as="b" style={{ display: "block", fontSize: 15.5, fontWeight: 600, marginBottom: 3 }}
+                      campo={dirCopia(v.clave)} etiqueta="Título del valor" linea maxLen={60}
+                      valor={C(v.clave)} porDefecto={v.titulo} />
+                    <Txt as="p" style={{ margin: 0, fontSize: 14, color: gris, lineHeight: 1.5 }}
+                      campo={v.claveTexto ? dirCopia(v.claveTexto) : null} etiqueta="Texto del valor" maxLen={240}
+                      valor={v.claveTexto ? C(v.claveTexto) : null} porDefecto={v.texto} />
                   </div>
                 </div>
               ))}
@@ -313,7 +355,8 @@ export function TemplateEquipo({ clinic: publicada }: TemplateProps) {
       {verServicios && (
         <section className="eq-sec" id="servicios" style={{ background: fondo2 }}>
           <div className="eq-wrap">
-            <span style={kicker}>Servicios y precios</span>
+            <Txt as="span" style={kicker} campo={dirCopia("servicios.kicker")} etiqueta="Etiqueta de servicios" linea maxLen={60}
+              valor={C("servicios.kicker")} porDefecto="Servicios y precios" />
             <Txt as="h2" style={secT} campo={dirSeccion("servicios", "titulo")} linea maxLen={160}
               etiqueta="Título de servicios" valor={S.servicios?.titulo}
               porDefecto="Lo que cuesta, antes de sentarte" />
@@ -348,10 +391,12 @@ export function TemplateEquipo({ clinic: publicada }: TemplateProps) {
                         campo={dirServicio(s.i, "price")} etiqueta="Precio" linea maxLen={40}
                         valor={s.price} />
                       {s.durationMin && <span style={{ ...mono, fontSize: 12.5, color: apagado }}>{s.durationMin} min</span>}
-                      <button type="button" onClick={() => abrir({ service: s.name })} style={{
+                      <Txt as="button" type="button" onClick={() => abrir({ service: s.name })} style={{
                         ...btnG, ...btnSm, marginLeft: "auto",
                         ...(relleno ? { background: "rgba(255,255,255,.14)", borderColor: "rgba(255,255,255,.28)", color: "#fff" } : {}),
-                      }}>Agendar</button>
+                      }}
+                        campo={dirCopia("servicios.cta")} etiqueta="Botón de cada servicio" linea maxLen={40}
+                        valor={C("servicios.cta")} porDefecto="Agendar" />
                     </div>
                   </article>
                 );
@@ -365,7 +410,8 @@ export function TemplateEquipo({ clinic: publicada }: TemplateProps) {
       {verEquipo && (
         <section className="eq-sec" id="equipo">
           <div className="eq-wrap">
-            <span style={kicker}>Quién te atiende</span>
+            <Txt as="span" style={kicker} campo={dirCopia("equipo.kicker")} etiqueta="Etiqueta del equipo" linea maxLen={60}
+              valor={C("equipo.kicker")} porDefecto="Quién te atiende" />
             <Txt as="h2" style={secT} campo={dirSeccion("equipo", "titulo")} linea maxLen={160}
               etiqueta="Título del equipo" valor={S.equipo?.titulo}
               porDefecto={doctores.length > 1 ? "Especialistas, no rotación de pasantes" : "Quién te va a atender"} />
@@ -399,7 +445,8 @@ export function TemplateEquipo({ clinic: publicada }: TemplateProps) {
       {verCasos && (
         <section className="eq-sec" id="casos" style={{ background: fondo2 }}>
           <div className="eq-wrap">
-            <span style={kicker}>Casos reales</span>
+            <Txt as="span" style={kicker} campo={dirCopia("casos.kicker")} etiqueta="Etiqueta de casos" linea maxLen={60}
+              valor={C("casos.kicker")} porDefecto="Casos reales" />
             <Txt as="h2" style={secT} campo={dirSeccion("casos", "titulo")} linea maxLen={160}
               etiqueta="Título de casos" valor={S.casos?.titulo}
               porDefecto="Arrastra y mira la diferencia" />
@@ -418,7 +465,9 @@ export function TemplateEquipo({ clinic: publicada }: TemplateProps) {
                 <Txt as="p" style={{ color: gris, margin: "10px 0 0", fontSize: 16 }}
                   campo={dirSeccion("casos", "subtitulo")} etiqueta="Descripción del caso" maxLen={600}
                   valor={S.casos?.subtitulo} />
-                <button type="button" onClick={() => abrir()} style={{ ...btnP, marginTop: 22 }}>Quiero mi valoración</button>
+                <Txt as="button" type="button" onClick={() => abrir()} style={{ ...btnP, marginTop: 22 }}
+                  campo={dirCopia("casos.cta")} etiqueta="Botón de casos" linea maxLen={60}
+                  valor={C("casos.cta")} porDefecto="Quiero mi valoración" />
               </div>
             </div>
           </div>
@@ -429,7 +478,8 @@ export function TemplateEquipo({ clinic: publicada }: TemplateProps) {
       {(verTec1 || verTec2) && (
         <section className="eq-sec" id="tecnologia">
           <div className="eq-wrap">
-            <span style={kicker}>Tecnología</span>
+            <Txt as="span" style={kicker} campo={dirCopia("tecnologia.kicker")} etiqueta="Etiqueta de tecnología" linea maxLen={60}
+              valor={C("tecnologia.kicker")} porDefecto="Tecnología" />
             <Txt as="h2" style={secT} campo={dirSeccion("tecnologia", "titulo")} linea maxLen={160}
               etiqueta="Título de tecnología" valor={S.tecnologia?.titulo}
               porDefecto="Lo que hay detrás del sillón" />
@@ -446,7 +496,9 @@ export function TemplateEquipo({ clinic: publicada }: TemplateProps) {
                     <Txt as="p" style={{ color: gris, margin: "0 0 18px" }}
                       campo={dirSeccion(t.id, "subtitulo")} maxLen={500}
                       etiqueta={`${t.nombre} · texto`} valor={S[t.id]?.subtitulo} />
-                    <button type="button" onClick={() => abrir()} style={btnG}>Agendar cita</button>
+                    <Txt as="button" type="button" onClick={() => abrir()} style={btnG}
+                      campo={dirCopia("tecnologia.cta")} etiqueta="Botón de tecnología" linea maxLen={60}
+                      valor={C("tecnologia.cta")} porDefecto="Agendar cita" />
                   </div>
                   <Foto slot={t.id} url={t.foto} etiqueta={t.nombre}
                     caja={{ position: "relative" }} vacio={{ aspectRatio: "16/11" }}>
@@ -466,7 +518,8 @@ export function TemplateEquipo({ clinic: publicada }: TemplateProps) {
       {verOpiniones && (
         <section className="eq-sec" id="opiniones" style={{ background: fondo2 }}>
           <div className="eq-wrap">
-            <span style={kicker}>Opiniones</span>
+            <Txt as="span" style={kicker} campo={dirCopia("opiniones.kicker")} etiqueta="Etiqueta de opiniones" linea maxLen={60}
+              valor={C("opiniones.kicker")} porDefecto="Opiniones" />
             <Txt as="h2" style={secT} campo={dirSeccion("opiniones", "titulo")} linea maxLen={160}
               etiqueta="Título de opiniones" valor={S.opiniones?.titulo}
               porDefecto={google ? "Lo que dicen en Google" : "Lo que dicen nuestros pacientes"} />
@@ -518,7 +571,8 @@ export function TemplateEquipo({ clinic: publicada }: TemplateProps) {
       {verGaleria && (
         <section className="eq-sec" id="galeria">
           <div className="eq-wrap">
-            <span style={kicker}>La clínica</span>
+            <Txt as="span" style={kicker} campo={dirCopia("galeria.kicker")} etiqueta="Etiqueta de la galería" linea maxLen={60}
+              valor={C("galeria.kicker")} porDefecto="La clínica" />
             <Txt as="h2" style={secT} campo={dirSeccion("galeria", "titulo")} linea maxLen={160}
               etiqueta="Título de la galería" valor={S.galeria?.titulo}
               porDefecto="Así se ve por dentro" />
@@ -537,7 +591,8 @@ export function TemplateEquipo({ clinic: publicada }: TemplateProps) {
       {verFaq && (
         <section className="eq-sec" style={{ background: fondo2 }}>
           <div className="eq-wrap">
-            <span style={kicker}>Preguntas frecuentes</span>
+            <Txt as="span" style={kicker} campo={dirCopia("faq.kicker")} etiqueta="Etiqueta de preguntas" linea maxLen={60}
+              valor={C("faq.kicker")} porDefecto="Preguntas frecuentes" />
             <Txt as="h2" style={secT} campo={dirSeccion("faq", "titulo")} linea maxLen={160}
               etiqueta="Título de preguntas" valor={S.faq?.titulo}
               porDefecto="Lo que todos preguntan antes de venir" />
@@ -560,7 +615,8 @@ export function TemplateEquipo({ clinic: publicada }: TemplateProps) {
       {/* ============ UBICACIÓN ============ */}
       <section className="eq-sec" id="ubicacion">
         <div className="eq-wrap">
-          <span style={kicker}>Ubicación y horarios</span>
+          <Txt as="span" style={kicker} campo={dirCopia("contacto.kicker")} etiqueta="Etiqueta de ubicación" linea maxLen={60}
+              valor={C("contacto.kicker")} porDefecto="Ubicación y horarios" />
           <Txt as="h2" style={secT} campo={dirSeccion("contacto", "titulo")} linea maxLen={160}
             etiqueta="Título de contacto" valor={S.contacto?.titulo}
             porDefecto="Dónde estamos" />
@@ -569,7 +625,9 @@ export function TemplateEquipo({ clinic: publicada }: TemplateProps) {
               ? <iframe src={clinic.landingMapEmbed} loading="lazy" title={`Mapa de ${clinic.name}`} style={{ width: "100%", height: "100%", minHeight: 420, border: 0, display: "block", filter: "grayscale(.15)" }} />
               : <div style={{ minHeight: 260, background: acentoCl, display: "grid", placeItems: "center", color: acentoOsc }}><MapPin size={40} strokeWidth={1.5} /></div>}
             <div style={{ padding: "34px 32px", background: "#fff" }}>
-              <h3 style={{ fontSize: 19, fontWeight: 600, marginBottom: 14 }}>Horarios</h3>
+              <Txt as="h3" style={{ fontSize: 19, fontWeight: 600, marginBottom: 14 }}
+                campo={dirCopia("contacto.etiquetaHorarios")} etiqueta="Rótulo de los horarios" linea maxLen={60}
+                valor={C("contacto.etiquetaHorarios")} porDefecto="Horarios" />
               <ul style={{ listStyle: "none", padding: 0, margin: "0 0 22px" }}>
                 {horario.map(d => (
                   <li key={d.label} style={{
@@ -578,7 +636,13 @@ export function TemplateEquipo({ clinic: publicada }: TemplateProps) {
                     color: d.open ? (d.hoy ? acento : tinta) : gris, fontWeight: d.hoy ? 600 : 400,
                   }}>
                     <span>{d.label}{d.hoy ? " · hoy" : ""}</span>
-                    <time style={{ ...mono, fontSize: 13.5 }}>{d.open ?? "Cerrado"}</time>
+                    {/* Solo el dia CERRADO es texto editable: el horario abierto
+                        es el dato de la agenda. */}
+                    {d.open
+                      ? <time style={{ ...mono, fontSize: 13.5 }}>{d.open}</time>
+                      : <Txt as="time" style={{ ...mono, fontSize: 13.5 }}
+                          campo={dirCopia("contacto.cerrado")} etiqueta="Cómo se dice «cerrado»" linea maxLen={40}
+                          valor={C("contacto.cerrado")} porDefecto="Cerrado" />}
                   </li>
                 ))}
               </ul>
@@ -586,9 +650,13 @@ export function TemplateEquipo({ clinic: publicada }: TemplateProps) {
               {clinic.phone && <p style={{ fontSize: 14.5, margin: "0 0 20px" }}><a href={`tel:${clinic.phone}`} style={{ ...mono, color: acento, textDecoration: "none", fontWeight: 600 }}>{clinic.phone}</a></p>}
               <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
                 {clinic.address && (
-                  <a style={{ ...btnP, ...btnSm }} href={`https://maps.google.com/?q=${encodeURIComponent(`${clinic.address} ${clinic.city ?? ""}`)}`} target="_blank" rel="noopener noreferrer">Cómo llegar</a>
+                  <Txt as="a" style={{ ...btnP, ...btnSm }} href={`https://maps.google.com/?q=${encodeURIComponent(`${clinic.address} ${clinic.city ?? ""}`)}`} target="_blank" rel="noopener noreferrer"
+                    campo={dirCopia("contacto.comoLlegar")} etiqueta="Botón del mapa" linea maxLen={60}
+                    valor={C("contacto.comoLlegar")} porDefecto="Cómo llegar" />
                 )}
-                <button type="button" onClick={() => abrir()} style={{ ...btnG, ...btnSm }}>Agendar cita</button>
+                <Txt as="button" type="button" onClick={() => abrir()} style={{ ...btnG, ...btnSm }}
+                  campo={dirCopia("contacto.cta")} etiqueta="Botón de reservar de ubicación" linea maxLen={60}
+                  valor={C("contacto.cta")} porDefecto="Agendar cita" />
               </div>
             </div>
           </div>

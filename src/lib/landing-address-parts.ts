@@ -35,3 +35,9 @@ export const dirServicio   = (i: number, campo: CampoDeServicio) => `servicio:${
 export const dirFaq        = (i: number, campo: CampoDeFaq) => `faq:${i}:${campo}`;
 export const dirTestimonio = (i: number, campo: CampoDeTestimonio) => `testimonio:${i}:${campo}`;
 export const dirFoto       = (ranura: string) => `foto:${ranura}`;
+/**
+ * Un texto suelto de la plantilla (kicker, botón, leyenda), guardado en la
+ * columna `landingCopy`. La clave la declara el manifiesto: "hero.cta".
+ * Lleva puntos y NUNCA dos puntos, que es lo que separa la dirección.
+ */
+export const dirCopia      = (clave: string) => `copia:${clave}`;

@@ -36,7 +36,7 @@ export default async function EditorVisualPage() {
       phone: true, address: true, description: true,
       landingTagline: true, landingPatients: true, landingUrgentText: true,
       landingSections: true, landingServices: true, landingFaqs: true,
-      landingTestimonials: true, landingPhotos: true,
+      landingTestimonials: true, landingPhotos: true, landingCopy: true,
     },
   });
   if (!clinic) redirect("/dashboard/landing");
@@ -61,6 +61,7 @@ export default async function EditorVisualPage() {
         landingFaqs: clinic.landingFaqs ?? null,
         landingTestimonials: clinic.landingTestimonials ?? null,
         landingPhotos: clinic.landingPhotos ?? null,
+        landingCopy: clinic.landingCopy ?? null,
       }}
     />
   );

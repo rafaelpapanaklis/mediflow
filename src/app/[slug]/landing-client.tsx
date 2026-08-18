@@ -9,8 +9,8 @@ import { Foto, Txt, useEnEdicion } from "./_shared/edit-context";
 // landing-address-parts y NO landing-address: este archivo viaja al navegador
 // de los pacientes, y el módulo grande arrastra el manifiesto de las ocho
 // plantillas (17 KB) sin que la página pública lo necesite para nada.
-import { dirClinica, dirFaq, dirSeccion, dirServicio, dirTestimonio } from "@/lib/landing-address-parts";
-import { photoOf, sectionMap, showSection } from "./_shared/landing-data";
+import { dirClinica, dirCopia, dirFaq, dirSeccion, dirServicio, dirTestimonio } from "@/lib/landing-address-parts";
+import { copyMap, copyValue, photoOf, sectionMap, showSection } from "./_shared/landing-data";
 
 const DAYS_SHORT = ["Lun","Mar","Mié","Jue","Vie","Sáb","Dom"];
 
@@ -65,6 +65,11 @@ export function ClinicLandingClient({ clinic: publicada, highlights }:{ clinic:C
      tarjeta que hoy se pinta a medias desaparecería del sitio publicado de
      alguien sin que nadie lo hubiera pedido. */
   const S = sectionMap(clinic);
+  /* El texto suelto que reescribio la clinica (etiquetas de bloque, botones,
+     leyendas). `C(clave)` devuelve null si no lo toco, y entonces <Txt> pinta
+     el literal de siempre: en la pagina publica no se mueve un pixel. */
+  const copias = copyMap(clinic);
+  const C = (clave: string) => copyValue(copias, clave);
   const hayOpiniones = testimonials.length > 0 || (googleReviews?.reviews.length ?? 0) > 0;
   const verServicios = showSection(S, "servicios", services.length > 0);
   const verEquipo    = showSection(S, "equipo",    clinic.users.length > 0);
@@ -142,15 +147,20 @@ export function ClinicLandingClient({ clinic: publicada, highlights }:{ clinic:C
             ))}
           </div>
           <div className="flex items-center gap-2">
+            {/* El emoji va PEGADO al texto (`unido`) y no como hijo aparte:
+                en la plantilla `💬 WhatsApp` era UN nodo de texto, y partirlo
+                metería una marca de hidratación donde no había ninguna. Aun
+                así el emoji queda fuera de lo que edita la clínica. */}
             {waLink && (
-              <a href={waLink} target="_blank" rel="noreferrer"
-                className={`hidden sm:flex items-center gap-2 text-sm font-semibold px-4 py-2 rounded-xl transition-all ${scrolled ? "text-green-600 bg-green-50 hover:bg-green-100" : "text-white bg-white/15 hover:bg-white/25"}`}>
-                💬 WhatsApp
-              </a>
+              <Txt as="a" href={waLink} target="_blank" rel="noreferrer"
+                className={`hidden sm:flex items-center gap-2 text-sm font-semibold px-4 py-2 rounded-xl transition-all ${scrolled ? "text-green-600 bg-green-50 hover:bg-green-100" : "text-white bg-white/15 hover:bg-white/25"}`}
+                campo={dirCopia("nav.whatsapp")} etiqueta="Botón de WhatsApp de la barra" linea maxLen={40}
+                valor={C("nav.whatsapp")} porDefecto="WhatsApp" prefijo="💬 " unido />
             )}
-            <button onClick={() => openBooking()} className="l-btn text-sm font-bold px-5 py-2.5 rounded-xl flex items-center gap-2">
-              <Calendar size={14}/> Agendar
-            </button>
+            <Txt as="button" onClick={() => openBooking()} className="l-btn text-sm font-bold px-5 py-2.5 rounded-xl flex items-center gap-2"
+              campo={dirCopia("nav.cta")} etiqueta="Botón de reservar de la barra" linea maxLen={40}
+              valor={C("nav.cta")} porDefecto="Agendar" prefijo=" " unido
+              antes={<Calendar size={14}/>} />
             <button onClick={() => setMobileMenu(!mobileMenu)} className={`md:hidden p-2 rounded-lg ${scrolled ? "text-gray-600" : "text-white"}`}>
               <Menu size={22}/>
             </button>
@@ -210,14 +220,15 @@ export function ClinicLandingClient({ clinic: publicada, highlights }:{ clinic:C
               </div>
             )}
             <div className="l-anim l-delay2 flex flex-wrap gap-3">
-              <button onClick={() => openBooking()} className="l-btn px-8 py-4 rounded-2xl text-base font-bold flex items-center gap-2.5">
-                Agendar cita <ArrowRight size={18}/>
-              </button>
+              <Txt as="button" onClick={() => openBooking()} className="l-btn px-8 py-4 rounded-2xl text-base font-bold flex items-center gap-2.5"
+                campo={dirCopia("hero.cta")} etiqueta="Botón principal de la portada" linea maxLen={60}
+                valor={C("hero.cta")} porDefecto="Agendar cita" sufijo=" " unido
+                despues={<ArrowRight size={18}/>} />
               {waLink && (
-                <a href={waLink} target="_blank" rel="noreferrer"
-                  className="flex items-center gap-2.5 bg-white/12 hover:bg-white/22 backdrop-blur-sm border border-white/20 text-white px-8 py-4 rounded-2xl text-base font-semibold transition-all">
-                  💬 WhatsApp
-                </a>
+                <Txt as="a" href={waLink} target="_blank" rel="noreferrer"
+                  className="flex items-center gap-2.5 bg-white/12 hover:bg-white/22 backdrop-blur-sm border border-white/20 text-white px-8 py-4 rounded-2xl text-base font-semibold transition-all"
+                  campo={dirCopia("hero.whatsapp")} etiqueta="Botón de WhatsApp de la portada" linea maxLen={60}
+                  valor={C("hero.whatsapp")} porDefecto="WhatsApp" prefijo="💬 " unido />
               )}
             </div>
             {/* Stats */}
@@ -226,7 +237,9 @@ export function ClinicLandingClient({ clinic: publicada, highlights }:{ clinic:C
                 {clinic.users.length > 0 && (
                   <div>
                     <div className="text-4xl font-bold text-white l-serif">{clinic.users.length}</div>
-                    <div className="text-white/50 text-xs mt-1">Especialistas</div>
+                    <Txt as="div" className="text-white/50 text-xs mt-1"
+                      campo={dirCopia("hero.statEspecialistas")} etiqueta="Leyenda de la cifra de especialistas" linea maxLen={60}
+                      valor={C("hero.statEspecialistas")} porDefecto="Especialistas" />
                   </div>
                 )}
                 {testimonials.length > 0 && (
@@ -235,12 +248,16 @@ export function ClinicLandingClient({ clinic: publicada, highlights }:{ clinic:C
                       {(testimonials.reduce((s,t)=>s+(t.rating??5),0)/testimonials.length).toFixed(1)}
                       <Star size={22} className="fill-amber-400 text-amber-400 mb-1"/>
                     </div>
-                    <div className="text-white/50 text-xs mt-1">Calificación</div>
+                    <Txt as="div" className="text-white/50 text-xs mt-1"
+                      campo={dirCopia("hero.statCalificacion")} etiqueta="Leyenda de la calificación" linea maxLen={60}
+                      valor={C("hero.statCalificacion")} porDefecto="Calificación" />
                   </div>
                 )}
                 <div>
                   <div className="text-4xl font-bold text-white l-serif">✓</div>
-                  <div className="text-white/50 text-xs mt-1">Cita en línea</div>
+                  <Txt as="div" className="text-white/50 text-xs mt-1"
+                    campo={dirCopia("hero.statCita")} etiqueta="Leyenda de «cita en línea»" linea maxLen={60}
+                    valor={C("hero.statCita")} porDefecto="Cita en línea" />
                 </div>
               </div>
             )}
@@ -253,7 +270,9 @@ export function ClinicLandingClient({ clinic: publicada, highlights }:{ clinic:C
         <section id="servicios" className="py-28 bg-white">
           <div className="max-w-6xl mx-auto px-5">
             <div className="max-w-xl mb-16">
-              <div className="text-xs font-bold uppercase tracking-widest mb-5 px-4 py-2 rounded-full inline-block" style={{background:`${theme}12`,color:theme}}>Servicios</div>
+              <Txt as="div" className="text-xs font-bold uppercase tracking-widest mb-5 px-4 py-2 rounded-full inline-block" style={{background:`${theme}12`,color:theme}}
+                campo={dirCopia("servicios.kicker")} etiqueta="Etiqueta de servicios" linea maxLen={60}
+                valor={C("servicios.kicker")} porDefecto="Servicios" />
               <Txt as="h2" className="l-serif text-5xl font-bold text-gray-900 leading-tight mb-4"
                 campo={dirSeccion("servicios", "titulo")} etiqueta="Título de servicios" linea maxLen={160}
                 valor={S.servicios?.titulo} porDefecto="Lo que ofrecemos" />
@@ -288,9 +307,10 @@ export function ClinicLandingClient({ clinic: publicada, highlights }:{ clinic:C
                           campo={dirServicio(i, "price")} etiqueta="Precio" linea maxLen={40}
                           valor={svc.price} />
                       : <span/>}
-                    <button onClick={() => openBooking()} className="text-xs font-bold px-3.5 py-2 rounded-xl flex items-center gap-1" style={{background:`${theme}10`,color:theme}}>
-                      Agendar <ArrowRight size={12}/>
-                    </button>
+                    <Txt as="button" onClick={() => openBooking()} className="text-xs font-bold px-3.5 py-2 rounded-xl flex items-center gap-1" style={{background:`${theme}10`,color:theme}}
+                      campo={dirCopia("servicios.cta")} etiqueta="Botón de cada servicio" linea maxLen={40}
+                      valor={C("servicios.cta")} porDefecto="Agendar" sufijo=" " unido
+                      despues={<ArrowRight size={12}/>} />
                   </div>
                 </div>
               ))}
@@ -304,7 +324,9 @@ export function ClinicLandingClient({ clinic: publicada, highlights }:{ clinic:C
         <section id="doctores" className="py-28" style={{background:`linear-gradient(180deg,#f8f9fa 0%,#fff 100%)`}}>
           <div className="max-w-6xl mx-auto px-5">
             <div className="text-center mb-16">
-              <div className="text-xs font-bold uppercase tracking-widest mb-5 px-4 py-2 rounded-full inline-block" style={{background:`${theme}12`,color:theme}}>Equipo médico</div>
+              <Txt as="div" className="text-xs font-bold uppercase tracking-widest mb-5 px-4 py-2 rounded-full inline-block" style={{background:`${theme}12`,color:theme}}
+                campo={dirCopia("equipo.kicker")} etiqueta="Etiqueta del equipo" linea maxLen={60}
+                valor={C("equipo.kicker")} porDefecto="Equipo médico" />
               <Txt as="h2" className="l-serif text-5xl font-bold text-gray-900 mb-4"
                 campo={dirSeccion("equipo", "titulo")} etiqueta="Título del equipo" linea maxLen={160}
                 valor={S.equipo?.titulo} porDefecto="Nuestros especialistas" />
@@ -334,9 +356,9 @@ export function ClinicLandingClient({ clinic: publicada, highlights }:{ clinic:C
                         {doc.services.length > 3 && <span className="text-xs px-3 py-1 rounded-full bg-gray-50 text-gray-400">+{doc.services.length-3}</span>}
                       </div>
                     )}
-                    <button onClick={() => openBooking()} className="l-btn w-full py-3 rounded-2xl text-sm font-bold">
-                      Agendar consulta
-                    </button>
+                    <Txt as="button" onClick={() => openBooking()} className="l-btn w-full py-3 rounded-2xl text-sm font-bold"
+                      campo={dirCopia("equipo.cta")} etiqueta="Botón de cada doctor" linea maxLen={60}
+                      valor={C("equipo.cta")} porDefecto="Agendar consulta" />
                   </div>
                 </div>
               ))}
@@ -351,7 +373,9 @@ export function ClinicLandingClient({ clinic: publicada, highlights }:{ clinic:C
           <div className="max-w-6xl mx-auto px-5">
             <div className="flex items-end justify-between mb-14">
               <div>
-                <div className="text-xs font-bold uppercase tracking-widest mb-4 px-4 py-2 rounded-full inline-block" style={{background:`${theme}12`,color:theme}}>Instalaciones</div>
+                <Txt as="div" className="text-xs font-bold uppercase tracking-widest mb-4 px-4 py-2 rounded-full inline-block" style={{background:`${theme}12`,color:theme}}
+                campo={dirCopia("galeria.kicker")} etiqueta="Etiqueta de la galería" linea maxLen={60}
+                valor={C("galeria.kicker")} porDefecto="Instalaciones" />
                 <Txt as="h2" className="l-serif text-5xl font-bold text-gray-900"
                   campo={dirSeccion("galeria", "titulo")} etiqueta="Título de la galería" linea maxLen={160}
                   valor={S.galeria?.titulo} porDefecto="Nuestra clínica" />
@@ -389,7 +413,9 @@ export function ClinicLandingClient({ clinic: publicada, highlights }:{ clinic:C
         <section className="py-28" style={{background:`linear-gradient(135deg,${theme}06 0%,${theme}03 100%)`}}>
           <div className="max-w-6xl mx-auto px-5">
             <div className="text-center mb-14">
-              <div className="text-xs font-bold uppercase tracking-widest mb-5 px-4 py-2 rounded-full inline-block" style={{background:`${theme}12`,color:theme}}>Testimonios</div>
+              <Txt as="div" className="text-xs font-bold uppercase tracking-widest mb-5 px-4 py-2 rounded-full inline-block" style={{background:`${theme}12`,color:theme}}
+                campo={dirCopia("opiniones.kicker")} etiqueta="Etiqueta de testimonios" linea maxLen={60}
+                valor={C("opiniones.kicker")} porDefecto="Testimonios" />
               <Txt as="h2" className="l-serif text-5xl font-bold text-gray-900 mb-4"
                 campo={dirSeccion("opiniones", "titulo")} etiqueta="Título de opiniones" linea maxLen={160}
                 valor={S.opiniones?.titulo} porDefecto="Lo que dicen nuestros pacientes" />
@@ -443,7 +469,9 @@ export function ClinicLandingClient({ clinic: publicada, highlights }:{ clinic:C
         <section className="py-28" style={{background:`linear-gradient(135deg,${theme}06 0%,${theme}03 100%)`}}>
           <div className="max-w-6xl mx-auto px-5">
             <div className="text-center mb-14">
-              <div className="text-xs font-bold uppercase tracking-widest mb-5 px-4 py-2 rounded-full inline-block" style={{background:`${theme}12`,color:theme}}>Reseñas de Google</div>
+              <Txt as="div" className="text-xs font-bold uppercase tracking-widest mb-5 px-4 py-2 rounded-full inline-block" style={{background:`${theme}12`,color:theme}}
+                campo={dirCopia("opiniones.kickerGoogle")} etiqueta="Etiqueta de reseñas de Google" linea maxLen={60}
+                valor={C("opiniones.kickerGoogle")} porDefecto="Reseñas de Google" />
               {/* Mismo título de sección que el bloque de testimonios: los dos
                   son "opiniones" y nunca se pintan a la vez. Las reseñas de
                   Google son de Google, así que NINGUNA de ellas se edita. */}
@@ -502,7 +530,9 @@ export function ClinicLandingClient({ clinic: publicada, highlights }:{ clinic:C
         <section className="py-28 bg-white">
           <div className="max-w-3xl mx-auto px-5">
             <div className="text-center mb-14">
-              <div className="text-xs font-bold uppercase tracking-widest mb-5 px-4 py-2 rounded-full inline-block" style={{background:`${theme}12`,color:theme}}>FAQ</div>
+              <Txt as="div" className="text-xs font-bold uppercase tracking-widest mb-5 px-4 py-2 rounded-full inline-block" style={{background:`${theme}12`,color:theme}}
+                campo={dirCopia("faq.kicker")} etiqueta="Etiqueta de preguntas" linea maxLen={60}
+                valor={C("faq.kicker")} porDefecto="FAQ" />
               <Txt as="h2" className="l-serif text-5xl font-bold text-gray-900"
                 campo={dirSeccion("faq", "titulo")} etiqueta="Título de preguntas" linea maxLen={160}
                 valor={S.faq?.titulo} porDefecto="Preguntas frecuentes" />
@@ -551,7 +581,9 @@ export function ClinicLandingClient({ clinic: publicada, highlights }:{ clinic:C
       <section id="contacto" className="py-28 bg-gray-50">
         <div className="max-w-6xl mx-auto px-5">
           <div className="text-center mb-14">
-            <div className="text-xs font-bold uppercase tracking-widest mb-5 px-4 py-2 rounded-full inline-block" style={{background:`${theme}12`,color:theme}}>Contacto</div>
+            <Txt as="div" className="text-xs font-bold uppercase tracking-widest mb-5 px-4 py-2 rounded-full inline-block" style={{background:`${theme}12`,color:theme}}
+                campo={dirCopia("contacto.kicker")} etiqueta="Etiqueta de contacto" linea maxLen={60}
+                valor={C("contacto.kicker")} porDefecto="Contacto" />
             <Txt as="h2" className="l-serif text-5xl font-bold text-gray-900 mb-3"
               campo={dirSeccion("contacto", "titulo")} etiqueta="Título de contacto" linea maxLen={160}
               valor={S.contacto?.titulo} porDefecto="Visítanos" />
@@ -568,7 +600,9 @@ export function ClinicLandingClient({ clinic: publicada, highlights }:{ clinic:C
                       <MapPin size={18} style={{color:theme}}/>
                     </div>
                     <div>
-                      <div className="font-semibold text-gray-900 text-sm mb-1">Dirección</div>
+                      <Txt as="div" className="font-semibold text-gray-900 text-sm mb-1"
+                        campo={dirCopia("contacto.etiquetaDireccion")} etiqueta="Rótulo de la dirección" linea maxLen={60}
+                        valor={C("contacto.etiquetaDireccion")} porDefecto="Dirección" />
                       {/* La ciudad va como SUFIJO, fuera del campo: es otra columna
                           y pegarla al texto guardaría "calle, ciudad" en `address`. */}
                       <Txt as="div" className="text-gray-500 text-sm leading-relaxed"
@@ -583,7 +617,9 @@ export function ClinicLandingClient({ clinic: publicada, highlights }:{ clinic:C
                       <Phone size={18} style={{color:theme}}/>
                     </div>
                     <div>
-                      <div className="font-semibold text-gray-900 text-sm mb-1">Teléfono</div>
+                      <Txt as="div" className="font-semibold text-gray-900 text-sm mb-1"
+                        campo={dirCopia("contacto.etiquetaTelefono")} etiqueta="Rótulo del teléfono" linea maxLen={60}
+                        valor={C("contacto.etiquetaTelefono")} porDefecto="Teléfono" />
                       {/* El número se pinta como TEXTO; el href se arma aparte y
                           nunca con lo que se está escribiendo. */}
                       <Txt as="a" href={`tel:${clinic.phone}`} className="text-sm font-semibold" style={{color:theme}}
@@ -598,7 +634,9 @@ export function ClinicLandingClient({ clinic: publicada, highlights }:{ clinic:C
                       <Clock size={18} style={{color:theme}}/>
                     </div>
                     <div className="flex-1">
-                      <div className="font-semibold text-gray-900 text-sm mb-3">Horarios</div>
+                      <Txt as="div" className="font-semibold text-gray-900 text-sm mb-3"
+                        campo={dirCopia("contacto.etiquetaHorarios")} etiqueta="Rótulo de los horarios" linea maxLen={60}
+                        valor={C("contacto.etiquetaHorarios")} porDefecto="Horarios" />
                       <div className="space-y-1.5">
                         {clinic.schedules.filter(s=>s.enabled).map(s=>(
                           <div key={s.dayOfWeek} className="flex justify-between text-xs">
@@ -613,21 +651,25 @@ export function ClinicLandingClient({ clinic: publicada, highlights }:{ clinic:C
               </div>
               <div className="grid grid-cols-1 gap-2">
                 {waLink && (
-                  <a href={waLink} target="_blank" rel="noreferrer" className="flex items-center justify-center gap-2.5 bg-green-500 hover:bg-green-600 text-white font-bold py-3.5 rounded-2xl text-sm transition-colors">💬 Escribir por WhatsApp</a>
+                  <Txt as="a" href={waLink} target="_blank" rel="noreferrer" className="flex items-center justify-center gap-2.5 bg-green-500 hover:bg-green-600 text-white font-bold py-3.5 rounded-2xl text-sm transition-colors"
+                    campo={dirCopia("contacto.whatsapp")} etiqueta="Botón de WhatsApp del contacto" linea maxLen={60}
+                    valor={C("contacto.whatsapp")} porDefecto="Escribir por WhatsApp" prefijo="💬 " unido />
                 )}
                 <div className="grid grid-cols-2 gap-2">
                   {clinic.landingInstagram && (
-                    <a href={`https://instagram.com/${clinic.landingInstagram.replace("@","")}`} target="_blank" rel="noreferrer"
+                    <Txt as="a" href={`https://instagram.com/${clinic.landingInstagram.replace("@","")}`} target="_blank" rel="noreferrer"
                       className="flex items-center justify-center gap-2 font-bold py-3 rounded-2xl text-sm text-white transition-opacity hover:opacity-90"
-                      style={{background:"linear-gradient(45deg,#f09433,#e6683c,#dc2743,#cc2366,#bc1888)"}}>
-                      <Instagram size={15}/> Instagram
-                    </a>
+                      style={{background:"linear-gradient(45deg,#f09433,#e6683c,#dc2743,#cc2366,#bc1888)"}}
+                      campo={dirCopia("contacto.instagram")} etiqueta="Botón de Instagram" linea maxLen={40}
+                      valor={C("contacto.instagram")} porDefecto="Instagram" prefijo=" " unido
+                      antes={<Instagram size={15}/>} />
                   )}
                   {clinic.landingFacebook && (
-                    <a href={clinic.landingFacebook} target="_blank" rel="noreferrer"
-                      className="flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-2xl text-sm transition-colors">
-                      <Facebook size={15}/> Facebook
-                    </a>
+                    <Txt as="a" href={clinic.landingFacebook} target="_blank" rel="noreferrer"
+                      className="flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-2xl text-sm transition-colors"
+                      campo={dirCopia("contacto.facebook")} etiqueta="Botón de Facebook" linea maxLen={40}
+                      valor={C("contacto.facebook")} porDefecto="Facebook" prefijo=" " unido
+                      antes={<Facebook size={15}/>} />
                   )}
                 </div>
               </div>
@@ -650,27 +692,30 @@ export function ClinicLandingClient({ clinic: publicada, highlights }:{ clinic:C
         <div className="absolute inset-0" style={{backgroundImage:"radial-gradient(circle at 75% 25%,rgba(255,255,255,.08) 0%,transparent 55%)"}}/>
         <div className="absolute bottom-0 right-0 w-64 h-64 rounded-full bg-white/5" style={{filter:"blur(50px)"}}/>
         <div className="relative max-w-4xl mx-auto px-5 text-center">
-          {/* NO editable, y es una decisión declarada: el titular lleva un salto
-              de línea DENTRO, así que no es una cadena. Envolverlo en <Txt>
-              guardaría "Tu salud, nuestraprioridad" en cuanto alguien lo tocara.
-              Por eso tampoco está declarado en el manifiesto de classic. */}
-          <h2 className="l-serif text-5xl sm:text-6xl font-bold text-white mb-5 leading-tight">
-            Tu salud, nuestra<br/>prioridad
-          </h2>
+          {/* Titular de DOS líneas. El salto viaja como "
+" dentro del valor y
+              <Txt multilinea> lo vuelve a pintar como <br/>: el HTML público sale
+              igual que siempre y la clínica edita las dos líneas en un campo de
+              dos renglones. Sin `multilinea` esto no es instrumentable —
+              guardaría "Tu salud, nuestraprioridad". */}
+          <Txt as="h2" className="l-serif text-5xl sm:text-6xl font-bold text-white mb-5 leading-tight"
+            campo={dirCopia("reservar.titulo")} etiqueta="Titular del cierre (dos líneas)" maxLen={160} multilinea
+            valor={C("reservar.titulo")} porDefecto={"Tu salud, nuestra" + String.fromCharCode(10) + "prioridad"} />
           <Txt as="p" className="text-white/65 text-xl mb-12 max-w-xl mx-auto"
             campo={dirSeccion("reservar", "subtitulo")} etiqueta="Bajada del cierre" maxLen={500}
             valor={S.reservar?.subtitulo} porDefecto="Agenda en menos de 2 minutos. Sin llamadas, sin esperas, sin complicaciones." />
           <div className="flex flex-wrap justify-center gap-4">
-            <button onClick={() => openBooking()}
+            <Txt as="button" onClick={() => openBooking()}
               className="bg-white font-bold px-10 py-4 rounded-2xl text-base shadow-2xl hover:bg-gray-50 transition-all flex items-center gap-2.5"
-              style={{color:theme}}>
-              <Calendar size={18}/> Agendar mi cita
-            </button>
+              style={{color:theme}}
+              campo={dirCopia("reservar.cta")} etiqueta="Botón principal del cierre" linea maxLen={60}
+              valor={C("reservar.cta")} porDefecto="Agendar mi cita" prefijo=" " unido
+              antes={<Calendar size={18}/>} />
             {waLink && (
-              <a href={waLink} target="_blank" rel="noreferrer"
-                className="bg-green-500 hover:bg-green-600 text-white font-bold px-10 py-4 rounded-2xl text-base shadow-xl transition-all flex items-center gap-2.5">
-                💬 WhatsApp
-              </a>
+              <Txt as="a" href={waLink} target="_blank" rel="noreferrer"
+                className="bg-green-500 hover:bg-green-600 text-white font-bold px-10 py-4 rounded-2xl text-base shadow-xl transition-all flex items-center gap-2.5"
+                campo={dirCopia("reservar.whatsapp")} etiqueta="Botón de WhatsApp del cierre" linea maxLen={60}
+                valor={C("reservar.whatsapp")} porDefecto="WhatsApp" prefijo="💬 " unido />
             )}
           </div>
         </div>

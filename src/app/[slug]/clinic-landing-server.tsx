@@ -86,6 +86,10 @@ export async function ClinicLandingServer({
       // Landing v2 (sql/landing-v2.sql)
       landingSections: true, landingPhotos: true,
       landingUrgentText: true, landingMsiPlazos: true,
+      // Landing v3 (sql/landing-copy.sql) — el texto suelto de la plantilla.
+      // Si falta aqui, la clinica lo edita, se guarda, y la pagina publica
+      // sigue pintando el literal de siempre: se pierde en silencio.
+      landingCopy: true,
       users:     { where: { isActive: true, role: { in: ["DOCTOR","ADMIN","SUPER_ADMIN"] } },
                    select: { id:true, firstName:true, lastName:true, specialty:true, color:true, avatarUrl:true, services:true } },
       schedules: { orderBy: { dayOfWeek: "asc" },

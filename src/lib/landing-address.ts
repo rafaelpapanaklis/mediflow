@@ -24,7 +24,7 @@
    ============================================================ */
 import type { CampoEditable } from "@/lib/landing-fields";
 import type { LivePreviewField } from "@/app/[slug]/_shared/live-preview";
-import { allPhotoSlotIds, allSectionIds } from "@/app/[slug]/_shared/template-manifest";
+import { allPhotoSlotIds, allSectionIds, esClaveDeCopia, topeDeCopia } from "@/app/[slug]/_shared/template-manifest";
 import type {
   CampoDeFaq, CampoDeSeccion, CampoDeServicio, CampoDeTestimonio, ColumnaSuelta,
 } from "@/lib/landing-address-parts";
@@ -32,7 +32,7 @@ import type {
 // Las plantillas ARMAN direcciones con estos y no deben arrastrar el
 // manifiesto al bundle público; por eso viven en landing-address-parts.
 export {
-  dirClinica, dirFaq, dirFoto, dirSeccion, dirServicio, dirTestimonio,
+  dirClinica, dirCopia, dirFaq, dirFoto, dirSeccion, dirServicio, dirTestimonio,
 } from "@/lib/landing-address-parts";
 export type { ColumnaSuelta } from "@/lib/landing-address-parts";
 
@@ -62,7 +62,7 @@ export type ColumnaDeTexto = Extract<
   | "name" | "phone" | "address" | "description"
   | "landingTagline" | "landingPatients" | "landingUrgentText"
   | "landingSections" | "landingServices" | "landingFaqs" | "landingTestimonials"
-  | "landingPhotos"
+  | "landingPhotos" | "landingCopy"
 >;
 
 /** Índice máximo aceptado en una lista. Coincide con el tope del PATCH. */
@@ -77,7 +77,8 @@ export type Direccion =
   | { tipo: "servicio";   indice: number;  campo: CampoDeServicio }
   | { tipo: "faq";        indice: number;  campo: CampoDeFaq }
   | { tipo: "testimonio"; indice: number;  campo: CampoDeTestimonio }
-  | { tipo: "foto";       ranura: string };
+  | { tipo: "foto";       ranura: string }
+  | { tipo: "copia";      clave: string };
 
 /* ── leerla (lo usa el editor, con lo que llega del iframe) ──── */
 
@@ -108,6 +109,13 @@ export function leerDireccion(raw: unknown): Direccion | null {
 
   if (partes.length === 2 && partes[0] === "foto") {
     return allPhotoSlotIds().includes(partes[1]) ? { tipo: "foto", ranura: partes[1] } : null;
+  }
+
+  if (partes.length === 2 && partes[0] === "copia") {
+    // Contra el manifiesto, igual que las secciones: `landingCopy` no es una
+    // bolsa libre. Una clave que ninguna plantilla declara se quedaría ahí
+    // para siempre sin que nadie la pinte.
+    return esClaveDeCopia(partes[1]) ? { tipo: "copia", clave: partes[1] } : null;
   }
 
   if (partes.length !== 3) return null;
@@ -147,6 +155,7 @@ export interface BorradorLanding {
   landingFaqs: unknown;
   landingTestimonials: unknown;
   landingPhotos: unknown;
+  landingCopy: unknown;
 }
 
 export interface Escritura {
@@ -194,6 +203,16 @@ export function aplicarDireccion(
     if (v !== null && v.length > meta.maxLen) return null;
     // `name` es la única columna NOT NULL del grupo.
     return { columna: dir.columna, valor: dir.columna === "name" ? (v as string) : v };
+  }
+
+  if (dir.tipo === "copia") {
+    // Vaciar BORRA la clave, no guarda la cadena por defecto: si se guardara,
+    // cambiar de plantilla arrastraria el copy de la anterior.
+    if (v !== null && v.length > topeDeCopia(dir.clave)) return null;
+    const copias = mapa(borrador.landingCopy);
+    if (v === null) delete copias[dir.clave];
+    else copias[dir.clave] = v;
+    return { columna: "landingCopy", valor: copias };
   }
 
   if (dir.tipo === "foto") {

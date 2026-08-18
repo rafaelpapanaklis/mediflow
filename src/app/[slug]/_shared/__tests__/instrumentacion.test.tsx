@@ -34,7 +34,7 @@ import { renderToString } from "react-dom/server";
 import { manifestOf, plantillasInstrumentadas } from "../template-manifest";
 import { EditProvider } from "../edit-runtime";
 import {
-  CARPETA_GOLDEN, PLANTILLAS_CON_GOLDEN,
+  CARPETA_GOLDEN, CLINICA_VACIA, PLANTILLAS_CON_GOLDEN,
   congelarReloj, elementoDePlantilla, htmlPublicado,
 } from "./fixture";
 
@@ -46,6 +46,18 @@ const golden = (tpl: string) =>
 /** El mismo árbol, pero con el runtime de edición puesto. */
 const htmlEnEdicion = (tpl: string) =>
   renderToString(<EditProvider slug="aurora">{elementoDePlantilla(tpl)}</EditProvider>);
+
+/**
+ * Los dos estados de la plantilla, pegados.
+ *
+ * La clínica llena y la clínica vacía pintan textos distintos: el tercer
+ * acceso de `equipo` dice "Conócenos" con equipo y "Cómo llegar" sin él, y la
+ * tabla de horarios solo dice "Cerrado" si hay días cerrados. Con un solo
+ * render, la mitad de esos textos podría declararse y no existir.
+ */
+const htmlDeLosDosEstados = (tpl: string) =>
+  htmlEnEdicion(tpl) +
+  renderToString(<EditProvider slug="aurora">{elementoDePlantilla(tpl, CLINICA_VACIA)}</EditProvider>);
 
 /* ══════════════════════════════════════════════════════════════
    1 · Todo lo declarado tiene su nodo
@@ -64,6 +76,28 @@ for (const tpl of plantillasInstrumentadas()) {
       `O se instrumentan, o se quitan del manifiesto — pero no pueden salir en el editor ` +
       `de Diseño y no existir en el lienzo.`,
     );
+  });
+
+  test(`${tpl}: cada texto suelto del manifiesto tiene su nodo editable`, () => {
+    const html = htmlDeLosDosEstados(tpl);
+    const m = manifestOf(tpl);
+    const faltan = (m.copia ?? [])
+      .filter(c => !c.variante)
+      .map(c => `copia:${c.clave}`)
+      .filter(dir => !html.includes(`data-dc-txt="${dir}"`));
+    assert.deepEqual(
+      faltan, [],
+      `El manifiesto de "${tpl}" declara textos sueltos que la plantilla no envuelve en <Txt>. ` +
+      `O se instrumentan, o se quitan del manifiesto — declarados y sin nodo, la clínica no puede ` +
+      `editarlos y aun así ocuparían sitio en landingCopy. Si el texto solo sale en otro estado ` +
+      `(reseñas de Google, p. ej.), márcalo con "variante" y el motivo.`,
+    );
+  });
+
+  test(`${tpl}: ningún texto suelto se declara dos veces`, () => {
+    const claves = (manifestOf(tpl).copia ?? []).map(c => c.clave);
+    const repetidas = claves.filter((c, i) => claves.indexOf(c) !== i);
+    assert.deepEqual(repetidas, [], `Claves repetidas en el manifiesto de "${tpl}".`);
   });
 
   test(`${tpl}: cada ranura de foto del manifiesto tiene su hueco`, () => {

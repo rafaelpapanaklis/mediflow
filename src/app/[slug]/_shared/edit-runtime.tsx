@@ -85,6 +85,17 @@ function margenesDe(el: HTMLElement): CSSProperties {
   return { marginTop: c.marginTop, marginRight: c.marginRight, marginBottom: c.marginBottom, marginLeft: c.marginLeft };
 }
 
+/** Los "\n" del valor, pintados como <br/>. Igual que en edit-context.tsx. */
+function conSaltos(s: string, multilinea?: boolean): ReactNode {
+  if (!multilinea || !s.includes("\n")) return s;
+  const out: ReactNode[] = [];
+  s.split("\n").forEach((linea, i) => {
+    if (i > 0) out.push(<br key={i} />);
+    out.push(linea);
+  });
+  return out;
+}
+
 function TextoEditable({ t }: { t: TextoParaEditar }) {
   const { mandarTexto, slug } = useContext(InternoCtx);
   const nodo = useRef<HTMLElement | null>(null);
@@ -200,9 +211,21 @@ function TextoEditable({ t }: { t: TextoParaEditar }) {
 
   const { Tag, atributos } = t;
   const estiloBase = (atributos.style ?? {}) as CSSProperties;
-  const hijo = atenuado || (t.prefijo === undefined && t.sufijo === undefined)
+  /* Lo pegado (`unido`) y los saltos de línea se pintan igual que en la
+     página pública; el icono hermano (`antes`/`despues`) también, para que
+     el botón se vea entero mientras no se está escribiendo. Cuando el texto
+     está vacío y no hay default, sale el marcador atenuado a secas: pegarle
+     un emoji o una flecha a "Escribe aquí" solo confunde. */
+  const nucleo = atenuado
     ? aPintar
-    : <>{t.prefijo}{aPintar}{t.sufijo}</>;
+    : t.unido
+      ? conSaltos(`${t.prefijo ?? ""}${aPintar}${t.sufijo ?? ""}`, t.multilinea)
+      : (t.prefijo === undefined && t.sufijo === undefined)
+        ? conSaltos(aPintar, t.multilinea)
+        : <>{t.prefijo}{conSaltos(aPintar, t.multilinea)}{t.sufijo}</>;
+  const hijo = atenuado || (t.antes === undefined && t.despues === undefined)
+    ? nucleo
+    : <>{t.antes}{nucleo}{t.despues}</>;
 
   return (
     <Tag

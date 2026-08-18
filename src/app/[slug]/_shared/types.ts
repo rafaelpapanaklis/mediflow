@@ -15,6 +15,9 @@ export interface LandingClinic {
      Leerlos SIEMPRE por los helpers de landing-data.ts, nunca crudos. */
   landingSections?:unknown; landingPhotos?:unknown;
   landingUrgentText?:string|null; landingMsiPlazos?:number[];
+  /* Landing v3 (sql/landing-copy.sql): { claveDelManifiesto: texto } con TODO
+     el texto suelto que reescribió la clínica. Leerlo por copyMap/copyValue. */
+  landingCopy?:unknown;
   users:LandingDoctor[]; schedules:LandingSchedule[];
 }
 export interface TemplateProps { clinic:LandingClinic; highlights?:string[]; }

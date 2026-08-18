@@ -77,6 +77,7 @@ const CAMPOS_VIVOS = {
   landingTiktok:          esTexto,
   landingSections:        esLista,
   landingPhotos:          esMapa,
+  landingCopy:            esMapa,
 } satisfies Record<string, (v: unknown) => boolean>;
 
 export type LivePreviewField = keyof typeof CAMPOS_VIVOS;

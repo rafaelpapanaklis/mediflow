@@ -31,6 +31,25 @@
 import { createContext, useContext, type CSSProperties, type ReactNode } from "react";
 
 /* ------------------------------------------------------------------
+   Titulares con salto de línea dentro.
+
+   `Tu salud, nuestra<br/>prioridad` (classic) no es una cadena: en el JSX
+   son TRES hijos. Guardarlo como texto plano pegaría las dos líneas.
+   Con `multilinea`, el salto viaja como "\n" dentro del valor y se vuelve
+   a pintar como <br/>, así que el HTML público sale exactamente igual que
+   antes y la clínica edita las dos líneas en un campo de dos renglones.
+   ------------------------------------------------------------------ */
+function conSaltos(s: string): ReactNode {
+  if (!s.includes("\n")) return s;
+  const out: ReactNode[] = [];
+  s.split("\n").forEach((linea, i) => {
+    if (i > 0) out.push(<br key={i} />);
+    out.push(linea);
+  });
+  return out;
+}
+
+/* ------------------------------------------------------------------
    Lo que el runtime le presta al contexto. Sin runtime, es null.
    ------------------------------------------------------------------ */
 
@@ -56,6 +75,13 @@ export interface TextoParaEditar {
   requerido: boolean;
   prefijo?: string;
   sufijo?: string;
+  /** prefijo/sufijo van pegados al texto, no como hijos aparte. */
+  unido?: boolean;
+  /** Los "\n" del valor se pintan como <br/>. */
+  multilinea?: boolean;
+  /** Nodos hermanos DENTRO del mismo elemento (el icono de un botón). */
+  antes?: ReactNode;
+  despues?: ReactNode;
 }
 
 export interface FotoParaEditar {
@@ -113,6 +139,27 @@ export interface TxtProps {
   as?: any;
   prefijo?: string;
   sufijo?: string;
+  /**
+   * prefijo/sufijo se pegan al texto en la MISMA cadena, en vez de ir como
+   * hijos aparte.
+   *
+   * Es una diferencia real en el HTML, no un detalle: React separa dos nodos
+   * de texto adyacentes con una marca de hidratación (`<!-- -->`). Un botón
+   * que en la plantilla decía `💬 WhatsApp` es UN nodo de texto; partirlo en
+   * `{"💬 "}{"WhatsApp"}` cambia el DOM público. Con `unido` sale igual que
+   * antes y, aun así, el emoji queda FUERA de lo que edita la clínica.
+   */
+  unido?: boolean;
+  /**
+   * Los "\n" del valor se pintan como <br/>.
+   *
+   * Para los titulares que en el JSX llevaban un <br/> dentro. Sin esto no
+   * son instrumentables: guardarlos como texto plano pegaría las dos líneas.
+   */
+  multilinea?: boolean;
+  /** Nodos hermanos DENTRO del mismo elemento: el icono de un botón. */
+  antes?: ReactNode;
+  despues?: ReactNode;
   maxLen?: number;
   linea?: boolean;
   requerido?: boolean;
@@ -124,6 +171,7 @@ export function Txt(props: TxtProps) {
   const api = useContext(EditCtx);
   const {
     campo, valor, porDefecto, etiqueta, as, prefijo, sufijo,
+    unido, multilinea, antes, despues,
     maxLen, linea, requerido, ...atributos
   } = props;
 
@@ -133,10 +181,22 @@ export function Txt(props: TxtProps) {
 
   if (!api || campo === null) {
     // Página pública: exactamente lo que había antes de instrumentar.
-    // Las tres ramas existen para no meter un hijo `undefined` donde antes
-    // había uno solo: React separa los nodos de texto adyacentes con marcas
-    // de hidratación, y eso ya sería un DOM distinto.
     if (texto === null) return null;
+
+    if (unido || multilinea || antes !== undefined || despues !== undefined) {
+      // Un solo nodo de texto (con lo pegado dentro) y, si acaso, un icono
+      // hermano. Las cuatro ramas existen para no meter un hijo `undefined`
+      // donde la plantilla tenía uno solo.
+      const cadena = unido ? `${prefijo ?? ""}${texto}${sufijo ?? ""}` : texto;
+      const cuerpo = multilinea ? conSaltos(cadena) : cadena;
+      if (antes !== undefined && despues !== undefined) return <Tag {...atributos}>{antes}{cuerpo}{despues}</Tag>;
+      if (antes !== undefined) return <Tag {...atributos}>{antes}{cuerpo}</Tag>;
+      if (despues !== undefined) return <Tag {...atributos}>{cuerpo}{despues}</Tag>;
+      return <Tag {...atributos}>{cuerpo}</Tag>;
+    }
+
+    // Las ramas de siempre. React separa los nodos de texto adyacentes con
+    // marcas de hidratación, y eso ya sería un DOM distinto.
     if (prefijo !== undefined && sufijo !== undefined) return <Tag {...atributos}>{prefijo}{texto}{sufijo}</Tag>;
     if (prefijo !== undefined) return <Tag {...atributos}>{prefijo}{texto}</Tag>;
     if (sufijo !== undefined) return <Tag {...atributos}>{texto}{sufijo}</Tag>;
@@ -159,6 +219,10 @@ export function Txt(props: TxtProps) {
         requerido: requerido ?? false,
         prefijo,
         sufijo,
+        unido,
+        multilinea,
+        antes,
+        despues,
       })}
     </>
   );

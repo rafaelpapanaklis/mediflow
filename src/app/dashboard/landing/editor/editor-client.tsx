@@ -88,6 +88,7 @@ const NOMBRE_DE_COLUMNA: Record<string, string> = {
   landingFaqs:         "las preguntas frecuentes",
   landingTestimonials: "los testimonios",
   landingPhotos:       "las fotos",
+  landingCopy:         "los textos de los botones y las etiquetas",
   landingThemeColor:   "el color de acento",
 };
 
@@ -185,6 +186,8 @@ export function EditorVisual({ inicial }: { inicial: ClinicaDelEditor }) {
     landingTestimonials: Array.isArray(borrador.landingTestimonials) ? borrador.landingTestimonials : [],
     landingPhotos:       (borrador.landingPhotos && typeof borrador.landingPhotos === "object" && !Array.isArray(borrador.landingPhotos))
                            ? borrador.landingPhotos : {},
+    landingCopy:         (borrador.landingCopy && typeof borrador.landingCopy === "object" && !Array.isArray(borrador.landingCopy))
+                           ? borrador.landingCopy : {},
   }), [borrador]);
 
   const patchRef = useRef(patch);

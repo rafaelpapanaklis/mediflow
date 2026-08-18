@@ -155,8 +155,34 @@ export const PLANTILLAS_CON_GOLDEN = Object.keys(PLANTILLAS);
 /** Dónde vive el HTML de referencia, relativo a la raíz del repo. */
 export const CARPETA_GOLDEN = "src/app/[slug]/_shared/__tests__/html-publicado";
 
+/**
+ * LA OTRA CLÍNICA: la que no tiene nada.
+ *
+ * Sin equipo, sin testimonios, sin galería y con la semana entera cerrada.
+ * Existe porque hay textos que SOLO se pintan en ese estado —el tercer acceso
+ * de `equipo` dice "Cómo llegar" cuando no hay doctores, y la tabla de
+ * horarios solo dice "Cerrado" si hay días cerrados—, y sin renderizarla esos
+ * textos podrían declararse en el manifiesto y no existir en ninguna parte.
+ *
+ * NO se compara contra ninguna captura: solo sirve para comprobar presencia.
+ */
+export const CLINICA_VACIA: LandingClinic = {
+  ...CLINICA_FIXTURE,
+  users: [],
+  landingTestimonials: [],
+  landingGallery: [],
+  landingFaqs: [],
+  landingPhotos: {},
+  landingCoverUrl: null,
+  landingPatients: null,
+  landingYearsExperience: null,
+  landingMsiPlazos: [],
+  landingUrgentText: null,
+  schedules: CLINICA_FIXTURE.schedules.map(s => ({ ...s, enabled: false })),
+};
+
 /** El elemento de una plantilla con la clínica de prueba. */
-export function elementoDePlantilla(tpl: string): ReactElement {
+export function elementoDePlantilla(tpl: string, clinica: LandingClinic = CLINICA_FIXTURE): ReactElement {
   const Plantilla = PLANTILLAS[tpl];
   if (!Plantilla) {
     throw new Error(
@@ -164,7 +190,7 @@ export function elementoDePlantilla(tpl: string): ReactElement {
       `(src/app/[slug]/_shared/__tests__/fixture.tsx). Agrégala ahí.`,
     );
   }
-  return <Plantilla clinic={{ ...CLINICA_FIXTURE, landingTemplate: tpl }} highlights={DESTACADOS} />;
+  return <Plantilla clinic={{ ...clinica, landingTemplate: tpl }} highlights={DESTACADOS} />;
 }
 
 /**
