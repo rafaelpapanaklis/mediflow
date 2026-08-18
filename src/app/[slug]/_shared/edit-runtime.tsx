@@ -20,11 +20,20 @@
    no puede rebotar. Esc cancela; Enter (una línea) o salir del campo
    confirma, y ahí sí sale UN mensaje.
 
-   ── QUÉ NO SE GUARDA ─────────────────────────────────────────
-   Vaciar un campo manda null, nunca el texto por defecto de la
-   plantilla. El default se ve atenuado como marcador de posición. Si
-   se guardara, cambiar de plantilla arrastraría el copy de la
-   anterior.
+   ── QUÉ ENSEÑA EL CAMPO Y QUÉ NO SE GUARDA ───────────────────
+   El campo ABRE con el texto que ve un paciente: el valor propio si
+   lo hay y, si no, el literal de la plantilla. Cambiar una palabra
+   tiene que ser cambiar una palabra, no reescribir la frase entera.
+
+   Eso NO materializa el default. Al confirmar, un texto idéntico al
+   literal se manda como null, igual que si se hubiera vaciado el
+   campo: solo se guarda lo que de verdad se apartó de la plantilla.
+   Si se guardara el default, cambiar de plantilla arrastraría el copy
+   de la anterior.
+
+   Cuando no hay literal que precargar —la plantilla CONSTRUYE la
+   frase, o el texto está declarado sin default— el campo abre vacío y
+   el marcador dice de qué campo se trata.
 
    ── CARGA ────────────────────────────────────────────────────
    Este archivo NO se importa nunca de forma estática: LivePreviewBridge
@@ -102,6 +111,97 @@ function conSaltos(s: string, multilinea?: boolean): ReactNode {
   return out;
 }
 
+/* ------------------------------------------------------------------
+   QUÉ ENSEÑA EL CAMPO Y QUÉ SE GUARDA
+
+   Las dos mitades de la misma regla. Van aparte y puras a propósito: el
+   resto de este archivo necesita un navegador para probarse y esto no, así
+   que la regla se fija en __tests__/campo-edicion.test.ts sin montar un DOM.
+   ------------------------------------------------------------------ */
+
+/**
+ * El texto con el que ABRE el campo: exactamente lo que ve un paciente.
+ *
+ * Antes abría vacío y el marcador enseñaba el NOMBRE del campo ("Botón de
+ * reservar de la barra"), así que para pasar de "Agendar" a "Agendar cita"
+ * había que teclear "Agendar" otra vez. Y como los defaults no se
+ * materializan nunca, casi todo texto llega con `valor` en null: ese era el
+ * caso normal, no la excepción.
+ *
+ * Devuelve "" cuando no hay literal que precargar, y son dos situaciones
+ * distintas que aquí se ven igual:
+ *   · `porDefecto` null → el texto está declarado sin literal. En el lienzo
+ *     sale atenuado; en la página pública ese elemento no se pinta.
+ *   · `porDefecto` "" → la frase la CONSTRUYE la plantilla (los plazos de
+ *     MSI, la ciudad, cuántos dentistas hay). No hay literal que precargar.
+ *     Hoy <Txt> ya lo convierte en null antes de llegar aquí (`porDefecto ||
+ *     null`, edit-context.tsx); se contempla igualmente para que esta regla
+ *     no dependa de aquella conversión.
+ */
+export function textoPrecargado(
+  valor: string | null | undefined,
+  porDefecto: string | null | undefined,
+): string {
+  const propio = valor && valor.trim() ? valor : null;
+  return propio ?? porDefecto ?? "";
+}
+
+/** Qué hacer al confirmar el campo. */
+export type Confirmacion =
+  | { accion: "nada" }
+  | { accion: "vacio-prohibido" }
+  | { accion: "guardar"; valor: string | null };
+
+/**
+ * Qué se manda al confirmar.
+ *
+ * Ahora que el campo abre precargado, "escribir el default" es lo que pasa
+ * por omisión: abrir y salir sin tocar nada. Eso NO puede acabar escribiendo
+ * el literal de la plantilla en la base, así que un texto idéntico al default
+ * se manda como null — igual que si se hubiera vaciado el campo. Cubre además
+ * el camino de vuelta: quien reescribió el botón y luego teclea otra vez el
+ * texto original está volviendo al default, no inventándose uno propio.
+ *
+ * Vaciar y "escribir el default" son la misma decisión pero NO el mismo
+ * aviso: un campo obligatorio se queja de lo primero y no de lo segundo,
+ * porque con el default puesto no se queda vacío en pantalla.
+ *
+ * `valor` es el que el campo tenía AL ABRIRSE (el vivo, con el parche
+ * optimista dentro). Comparar contra ese —y no contra el que ya confirmó el
+ * padre— es lo que hace que confirmar sin cambiar nada no mande ni un
+ * mensaje.
+ */
+export function resolverConfirmacion(
+  crudo: string,
+  { valor, porDefecto, obligatorio }: {
+    valor: string | null;
+    porDefecto: string | null;
+    obligatorio: boolean;
+  },
+): Confirmacion {
+  /* Los "\n" sobreviven el viaje de ida y vuelta: solo se normaliza el CRLF
+     que mete Windows al pegar y se recortan los extremos. Un titular de dos
+     renglones se guarda con su salto dentro y se vuelve a pintar como <br/>. */
+  const limpiar = (s: string | null) => (s ?? "").replace(/\r\n/g, "\n").trim();
+  const limpio = limpiar(crudo);
+
+  if (limpio === "" && obligatorio) return { accion: "vacio-prohibido" };
+
+  const defecto = limpiar(porDefecto);
+  /* Qué queda guardado de verdad: ni el vacío ni el literal de la plantilla se
+     materializan, los dos son null. Se aplica IGUAL a lo que se acaba de
+     escribir y a lo que ya había: una clínica que arrastre el literal guardado
+     de antes escribiría un null cada vez que abre el campo y sale sin tocarlo.
+
+     Sin default, `defecto` es "" y solo empata con el campo vacío —que ya es
+     null por la otra mitad—, así que un campo sin literal no colapsa nada. */
+  const materializado = (s: string) => (s === "" || s === defecto ? null : s);
+
+  const nuevo = materializado(limpio);
+  const antes = materializado(limpiar(valor));
+  return nuevo === antes ? { accion: "nada" } : { accion: "guardar", valor: nuevo };
+}
+
 function TextoEditable({ t }: { t: TextoParaEditar }) {
   const { mandarTexto, slug, tpl } = useContext(InternoCtx);
   /* La etiqueta la resuelve el manifiesto por la dirección del campo. La
@@ -142,12 +242,17 @@ function TextoEditable({ t }: { t: TextoParaEditar }) {
   const vacio = !(valorVivo && valorVivo.trim());
   const aPintar = !vacio ? (valorVivo as string) : (t.porDefecto ?? etq);
   const atenuado = vacio && t.porDefecto === null;
+  /* Lo mismo que se está pintando, salvo cuando lo pintado es el marcador
+     atenuado: el NOMBRE del campo no es texto de la clínica y no se precarga. */
+  const precarga = textoPrecargado(valorVivo, t.porDefecto);
 
   function abrir() {
     const el = nodo.current;
     if (!el) return;
     setEstilos({ texto: copiarEstilos(el), margen: margenesDe(el) });
-    setLargo((valorVivo ?? "").length);
+    // El contador arranca contando lo precargado; si no, un campo que abre
+    // con 140 de 160 caracteres diría 0 hasta la primera tecla.
+    setLargo(precarga.length);
     setEditando(true);
   }
 
@@ -166,16 +271,19 @@ function TextoEditable({ t }: { t: TextoParaEditar }) {
     const crudo = el ? el.value : "";
     setEditando(false);
     if (!confirmar) return;
-    const limpio = crudo.replace(/\r\n/g, "\n").trim();
-    const nuevo = limpio === "" ? null : limpio;
-    if (nuevo === null && obligatorio) {
+    const r = resolverConfirmacion(crudo, {
+      valor: valorVivo,
+      porDefecto: t.porDefecto,
+      obligatorio,
+    });
+    if (r.accion === "vacio-prohibido") {
       avisarAlEditor(slug, { kind: "aviso", texto: `«${etq}» no puede quedarse vacío.` });
       return;
     }
-    if (nuevo === t.valor) return;
-    setRecien(nuevo);
-    mandarTexto(t.campo, nuevo);
-  }, [mandarTexto, slug, t.campo, etq, obligatorio, t.valor]);
+    if (r.accion === "nada") return;
+    setRecien(r.valor);
+    mandarTexto(t.campo, r.valor);
+  }, [mandarTexto, slug, t.campo, t.porDefecto, etq, obligatorio, valorVivo]);
 
   if (editando && estilos) {
     const casiLleno = largo >= Math.floor(maxLen * 0.8);
@@ -183,8 +291,12 @@ function TextoEditable({ t }: { t: TextoParaEditar }) {
       <span data-dc-ui="campo" style={{ position: "relative", display: "block", ...estilos.margen }}>
         <textarea
           ref={campo}
-          defaultValue={valorVivo ?? ""}
-          placeholder={etq}
+          defaultValue={precarga}
+          /* Solo se ve si el campo se queda vacío de verdad, que con la
+             precarga ya solo pasa al borrarlo a mano o cuando no hay literal.
+             Con literal enseña el literal —que es lo que volverá a salir—;
+             sin él, el nombre del campo, que es la única pista que queda. */
+          placeholder={t.porDefecto ?? etq}
           maxLength={maxLen}
           rows={1}
           spellCheck

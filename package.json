@@ -55,6 +55,8 @@
     "test:afiliados-pagina": "tsx --test src/lib/affiliates/page-config.test.ts",
     "//test:landing": "SIN --test: node interpreta los corchetes de [slug] como un patrón y no encuentra el archivo. node:test corre igual al importar el módulo.",
     "test:landing": "tsx --tsconfig tsconfig.test.json \"src/app/[slug]/_shared/__tests__/instrumentacion.test.tsx\"",
+    "//test:campo-edicion": "Mismo motivo que test:landing para no usar --test: los corchetes de [slug] se leen como patrón. Necesita el tsconfig de pruebas porque importa edit-runtime.tsx, que trae JSX.",
+    "test:campo-edicion": "tsx --tsconfig tsconfig.test.json \"src/app/[slug]/_shared/__tests__/campo-edicion.test.ts\"",
     "landing:golden": "tsx --tsconfig tsconfig.test.json scripts/landing-golden.ts",
     "test:landing-address": "tsx --test src/lib/__tests__/landing-address.test.ts",
     "test:landing-concurrency": "tsx --test src/lib/__tests__/landing-concurrency.test.ts",

@@ -193,6 +193,31 @@ test("el tope del campo nunca supera el que aplica el servidor", () => {
   assert.deepEqual(malos, [], "Hay campos que dejan escribir más de lo que se puede guardar.");
 });
 
+/**
+ * Y el literal de la plantilla tiene que caber en su propio campo.
+ *
+ * Antes daba igual: el campo abría vacío, así que un default de 180
+ * caracteres en un campo de 160 no molestaba a nadie. Ahora el campo abre
+ * PRECARGADO con ese literal, y uno que se pase del tope abre ya en rojo,
+ * con el contador desbordado y sin dejar escribir una letra más — la clínica
+ * tendría que recortar el texto que ella no escribió para poder tocarlo.
+ */
+test("todo texto por defecto del manifiesto cabe en su propio campo", () => {
+  const malos: string[] = [];
+  for (const tpl of plantillasInstrumentadas()) {
+    const m = manifestOf(tpl);
+    for (const c of m.copia ?? []) {
+      const tope = reglaDeCampo(`copia:${c.clave}`, tpl).maxLen;
+      if (c.porDefecto.length > tope) malos.push(`${tpl}/copia:${c.clave}: ${c.porDefecto.length} > ${tope}`);
+    }
+    for (const t of m.textos) {
+      const tope = reglaDeCampo(`sec:${t.seccion}:${t.campo}`, tpl).maxLen;
+      if (t.porDefecto.length > tope) malos.push(`${tpl}/sec:${t.seccion}:${t.campo}: ${t.porDefecto.length} > ${tope}`);
+    }
+  }
+  assert.deepEqual(malos, [], "Hay literales de plantilla más largos que el campo con el que se precargan.");
+});
+
 test("hay al menos una plantilla instrumentada", () => {
   assert.ok(plantillasInstrumentadas().length > 0);
 });
