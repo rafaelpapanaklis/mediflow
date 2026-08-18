@@ -1,13 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { extractAuditMeta } from "@/lib/audit";
-import { getDbUser, isMissingTableError } from "@/lib/odontogram/api-auth";
+import { getDbUser, isMissingTableError, ROLES_QUE_ESCRIBEN_ODONTOGRAMA } from "@/lib/odontogram/api-auth";
 import { assertPatientVisible } from "@/lib/patient-visibility";
 
 export const dynamic = "force-dynamic";
 
-/** Roles que pueden borrar el odontograma vivo. Recepción/readonly NO. */
-const DESTRUCTIVE_ROLES = new Set<string>(["SUPER_ADMIN", "ADMIN", "DOCTOR"]);
+/** Roles que pueden borrar el odontograma vivo. Recepción/readonly NO.
+ *  La lista se movió a @/lib/odontogram/api-auth: estaba aquí y en /sync, y
+ *  faltaba en las cuatro rutas que sí dejaban escribir (PAC-05). */
+const DESTRUCTIVE_ROLES = ROLES_QUE_ESCRIBEN_ODONTOGRAMA;
 
 /** POST /api/odontogram/reset?patientId=ID — borra todas las entries del paciente. */
 export async function POST(req: NextRequest) {

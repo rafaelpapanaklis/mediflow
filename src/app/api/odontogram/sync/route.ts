@@ -6,6 +6,7 @@ import {
   ensurePatientInClinic,
   getDbUser,
   isMissingTableError,
+  ROLES_QUE_ESCRIBEN_ODONTOGRAMA,
 } from "@/lib/odontogram/api-auth";
 
 export const dynamic = "force-dynamic";
@@ -13,8 +14,10 @@ export const dynamic = "force-dynamic";
 /** conditionId reservado para la nota por diente. */
 const NOTE_CONDITION = "__note__";
 
-/** Roles que pueden REEMPLAZAR el odontograma vivo. Recepción/readonly NO. */
-const DESTRUCTIVE_ROLES = new Set<string>(["SUPER_ADMIN", "ADMIN", "DOCTOR"]);
+/** Roles que pueden REEMPLAZAR el odontograma vivo. Recepción/readonly NO.
+ *  La lista se movió a @/lib/odontogram/api-auth: estaba aquí y en /reset, y
+ *  faltaba en las cuatro rutas que sí dejaban escribir (PAC-05). */
+const DESTRUCTIVE_ROLES = ROLES_QUE_ESCRIBEN_ODONTOGRAMA;
 
 /** Tope de filas aplanadas (anti payload-bomba: este endpoint reemplaza TODO
  *  el odontograma). Un odontograma real queda muy por debajo (~900 máx). */

@@ -5,8 +5,10 @@ import {
   ensurePatientInClinic,
   getDbUser,
   isMissingTableError,
+  puedeEscribirOdontograma,
 } from "@/lib/odontogram/api-auth";
 import { assertPatientVisible } from "@/lib/patient-visibility";
+import { extractAuditMeta } from "@/lib/audit";
 
 export const dynamic = "force-dynamic";
 
@@ -115,6 +117,9 @@ export async function PUT(req: NextRequest) {
   try {
     const dbUser = await getDbUser();
     if (!dbUser) return jsonError("unauthorized", 401);
+    // PAC-05: el mismo rol que exigen /reset y /sync. Escribir un hallazgo en
+    // el odontograma es escribir expediente clínico.
+    if (!puedeEscribirOdontograma(dbUser.role)) return jsonError("forbidden", 403);
 
     const body = await req.json().catch(() => null);
     const parsed = PutSchema.safeParse(body);
@@ -151,6 +156,9 @@ export async function PUT(req: NextRequest) {
             data: { patientId, toothNumber, surface: null, conditionId, notes },
             select: ENTRY_SELECT,
           });
+      await anotarEnBitacora(req, dbUser, patientId, "odontogram_write", {
+        toothNumber, surface: null, conditionId, notes,
+      });
       return NextResponse.json({ entry });
     }
 
@@ -169,6 +177,9 @@ export async function PUT(req: NextRequest) {
       select: ENTRY_SELECT,
     });
 
+    await anotarEnBitacora(req, dbUser, patientId, "odontogram_write", {
+      toothNumber, surface, conditionId, notes,
+    });
     return NextResponse.json({ entry });
   } catch (err) {
     return unexpectedError(err);
@@ -184,6 +195,9 @@ export async function DELETE(req: NextRequest) {
   try {
     const dbUser = await getDbUser();
     if (!dbUser) return jsonError("unauthorized", 401);
+    // PAC-05: igual que el PUT. Quitar hallazgos de una cara, uno a uno, es el
+    // mismo borrado que /reset hace de golpe.
+    if (!puedeEscribirOdontograma(dbUser.role)) return jsonError("forbidden", 403);
 
     const body = await req.json().catch(() => null);
     const parsed = DeleteSchema.safeParse(body);
@@ -209,8 +223,53 @@ export async function DELETE(req: NextRequest) {
       },
     });
 
+    await anotarEnBitacora(req, dbUser, parsed.data.patientId, "odontogram_delete", {
+      toothNumber: parsed.data.toothNumber,
+      surface,
+      conditionId: parsed.data.conditionId ?? null,
+      borradas: result.count,
+    });
     return NextResponse.json({ ok: true, deleted: result.count });
   } catch (err) {
     return unexpectedError(err);
+  }
+}
+
+/**
+ * Deja constancia de quién tocó el odontograma y qué diente.
+ *
+ * PUT y DELETE eran las dos únicas escrituras del odontograma que no escribían
+ * bitácora — /sync y /reset sí—, así que un hallazgo pintado o borrado a mano
+ * quedaba registrado como del equipo clínico y sin nombre. Se apunta con lo que
+ * ya está en la mano: ni una consulta de más.
+ *
+ * No tumba la petición si la bitácora falla: el cambio clínico ya se aplicó y
+ * devolver 500 haría que la pantalla lo pintara como no guardado.
+ */
+async function anotarEnBitacora(
+  req: NextRequest,
+  dbUser: { id: string; clinicId: string },
+  patientId: string,
+  action: "odontogram_write" | "odontogram_delete",
+  // Escalares a secas: es lo que la columna `changes` (Json) acepta, y es todo
+  // lo que hace falta para saber qué diente tocó quién.
+  detalle: Record<string, string | number | boolean | null>,
+): Promise<void> {
+  try {
+    const { ipAddress, userAgent } = extractAuditMeta(req);
+    await prisma.auditLog.create({
+      data: {
+        clinicId: dbUser.clinicId,
+        userId: dbUser.id,
+        entityType: "patient",
+        entityId: patientId,
+        action,
+        changes: { _odontogram: { after: detalle } },
+        ipAddress: ipAddress ?? null,
+        userAgent: userAgent ?? null,
+      },
+    });
+  } catch (e) {
+    console.error("[api/odontogram] no se pudo escribir la bitácora:", e);
   }
 }

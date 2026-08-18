@@ -5,6 +5,29 @@ import { getVisiblePatientClinicIds, clinicScopeFilter } from "@/lib/branches";
 import { patientVisibilityFilter, type VisibilityViewer } from "@/lib/patient-visibility";
 
 /**
+ * QUIÉN PUEDE ESCRIBIR EL ODONTOGRAMA. Recepción y solo-lectura NO.
+ *
+ * Estaba declarado —con estas mismas palabras— en /reset y en /sync, y solo
+ * ahí. PUT y DELETE de /api/odontogram y de /api/odontogram/note no lo
+ * comprobaban: solo pedían sesión y que el paciente fuera de la clínica
+ * (PAC-05). Como la pestaña Odontograma se le enseña a todos los roles, una
+ * recepcionista podía pintar y borrar hallazgos diente por diente y borrar
+ * las notas clínicas una a una — exactamente el destrozo que /reset le
+ * prohíbe, pero en cámara lenta y sin dejar rastro.
+ *
+ * Vive aquí y no en cada ruta porque estaba en dos sitios y faltaba en
+ * cuatro: esa es la manera de que se separen.
+ *
+ * El odontograma es expediente clínico. Quien lo escribe firma un hallazgo.
+ */
+export const ROLES_QUE_ESCRIBEN_ODONTOGRAMA = new Set<string>(["SUPER_ADMIN", "ADMIN", "DOCTOR"]);
+
+/** ¿Este rol puede tocar el odontograma de un paciente? */
+export function puedeEscribirOdontograma(role: string): boolean {
+  return ROLES_QUE_ESCRIBEN_ODONTOGRAMA.has(role);
+}
+
+/**
  * Resuelve el usuario de la clínica activa a partir de la sesión de Supabase.
  * Compartido por las rutas /api/odontogram/* (principal, note, sync, reset).
  */

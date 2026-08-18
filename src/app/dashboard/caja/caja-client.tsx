@@ -88,6 +88,9 @@ export function CajaClient({ caja, history, timezone, hasPin: hasPinInitial, bil
   // Form state — retiro
   const [wAmount, setWAmount]               = useState("");
   const [wReason, setWReason]               = useState("");
+  // FIN-07: el retiro pasa a pedir el PIN, igual que el cierre. Mueve efectivo
+  // de verdad — se resta del esperado y del corte— y hasta ahora no pedía nada.
+  const [wPin, setWPin]                     = useState("");
   // Form state — cierre
   const [counted, setCounted]               = useState("");
   const [closingNotes, setClosingNotes]     = useState("");
@@ -255,10 +258,11 @@ export function CajaClient({ caja, history, timezone, hasPin: hasPinInitial, bil
     const ok = await post("/api/caja/open", { openingBalance: bal, pin: openPin });
     if (!ok) return;
 
-    // Retiro inicial opcional en la misma apertura.
+    // Retiro inicial opcional en la misma apertura. El PIN es el que se acaba
+    // de teclear para abrir: no se le pide dos veces en la misma pantalla.
     const amt = parseFloat(openWAmount);
     if (!Number.isNaN(amt) && amt > 0) {
-      await post("/api/caja/withdrawal", { amount: amt, reason: openWReason.trim() || "Retiro de apertura" });
+      await post("/api/caja/withdrawal", { amount: amt, reason: openWReason.trim() || "Retiro de apertura", pin: openPin });
     }
 
     toast.success(t("cashRegister.toastOpened"));
@@ -271,11 +275,12 @@ export function CajaClient({ caja, history, timezone, hasPin: hasPinInitial, bil
     const amt = parseFloat(wAmount);
     if (Number.isNaN(amt) || amt <= 0) { toast.error(t("cashRegister.amountInvalid")); return; }
     if (!wReason.trim()) { toast.error(t("cashRegister.reasonRequired")); return; }
-    const ok = await post("/api/caja/withdrawal", { amount: amt, reason: wReason.trim() });
+    if (!PIN_RE.test(wPin)) { toast.error("El PIN debe ser de 6 dígitos."); return; }
+    const ok = await post("/api/caja/withdrawal", { amount: amt, reason: wReason.trim(), pin: wPin });
     if (!ok) return;
     toast.success(t("cashRegister.toastWithdrawal"));
     setShowWithdrawal(false);
-    setWAmount(""); setWReason("");
+    setWAmount(""); setWReason(""); setWPin("");
     router.refresh();
   }
 
@@ -485,7 +490,7 @@ export function CajaClient({ caja, history, timezone, hasPin: hasPinInitial, bil
                   </span>
                 </div>
                 <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                  <ButtonNew variant="secondary" icon={<ArrowDownCircle size={16} strokeWidth={1.75} />} onClick={() => setShowWithdrawal(true)}>
+                  <ButtonNew variant="secondary" icon={<ArrowDownCircle size={16} strokeWidth={1.75} />} onClick={() => { setWPin(""); setShowWithdrawal(true); }}>
                     {t("cashRegister.withdrawalCta")}
                   </ButtonNew>
                   <ButtonNew variant="primary" icon={<Lock size={16} strokeWidth={1.75} />} onClick={() => setShowClose(true)}>
@@ -747,10 +752,19 @@ export function CajaClient({ caja, history, timezone, hasPin: hasPinInitial, bil
                   <input type="number" min={0} step="0.01" className="input-new" autoFocus placeholder="0.00"
                     value={wAmount} onChange={e => setWAmount(e.target.value)} />
                 </div>
-                <div className="field-new">
+                <div className="field-new" style={{ marginBottom: 14 }}>
                   <label className="field-new__label">{t("cashRegister.reasonLabel")} <span className="req">*</span></label>
                   <input className="input-new" placeholder={t("cashRegister.reasonPlaceholder")}
                     value={wReason} onChange={e => setWReason(e.target.value)} />
+                </div>
+                {/* FIN-07: el mismo PIN que pide el cierre. Sacar efectivo de la
+                    caja tiene que costar lo mismo que cuadrarla. */}
+                <div className="field-new">
+                  <label className="field-new__label" style={{ display: "flex", alignItems: "center", gap: 6 }}><KeyRound size={13} strokeWidth={1.75} /> PIN de Caja <span className="req">*</span></label>
+                  <input type="password" inputMode="numeric" pattern="\d{6}" maxLength={6} className="input-new"
+                    style={{ fontFamily: "var(--font-mono, monospace)", fontVariantNumeric: "tabular-nums", letterSpacing: "0.25em", textAlign: "center", fontSize: 14 }}
+                    placeholder="••••••" value={wPin}
+                    onChange={e => setWPin(e.target.value.replace(/\D/g, "").slice(0, 6))} />
                 </div>
               </div>
               <div className="modal__footer">
