@@ -132,9 +132,31 @@ export const TEMPLATE_MANIFESTS: Record<string, TemplateManifest> = {
     id: "classic",
     nombre: "Clásico",
     para: "El estándar: limpio, profesional y sirve para cualquier especialidad.",
+    leeManifiesto: true,
+    instrumentada: true,
     secciones: [SEC_SERVICIOS, SEC_EQUIPO, SEC_GALERIA, SEC_OPINIONES, SEC_FAQ, SEC_CONTACTO, SEC_RESERVAR],
     fotos: [FOTO_PORTADA],
-    textos: TEXTOS_BASE,
+    /* NO usa TEXTOS_BASE: esos `porDefecto` son los de las plantillas nuevas y
+       classic pinta otros literales desde antes de que el manifiesto existiera.
+       El `porDefecto` es lo que la clínica ve en gris como "esto sale si lo
+       dejas vacío": si no es el literal REAL de la plantilla, miente.
+
+       El titular del cierre ("Tu salud, nuestra<br/>prioridad") NO está aquí y
+       es una decisión: lleva un salto de línea DENTRO del titular, así que no
+       es una cadena — instrumentarlo como texto plano guardaría las dos líneas
+       pegadas. Se queda no editable hasta que se arregle la plantilla. */
+    textos: [
+      { seccion: "servicios", campo: "titulo",    etiqueta: "Título de servicios",   porDefecto: "Lo que ofrecemos" },
+      { seccion: "servicios", campo: "subtitulo", etiqueta: "Bajada de servicios",   porDefecto: "Tratamientos con tecnología de vanguardia para tu salud y bienestar" },
+      { seccion: "equipo",    campo: "titulo",    etiqueta: "Título del equipo",     porDefecto: "Nuestros especialistas" },
+      { seccion: "equipo",    campo: "subtitulo", etiqueta: "Bajada del equipo",     porDefecto: "Profesionales certificados comprometidos con tu salud" },
+      { seccion: "galeria",   campo: "titulo",    etiqueta: "Título de la galería",  porDefecto: "Nuestra clínica" },
+      { seccion: "opiniones", campo: "titulo",    etiqueta: "Título de opiniones",   porDefecto: "Lo que dicen nuestros pacientes" },
+      { seccion: "faq",       campo: "titulo",    etiqueta: "Título de preguntas",   porDefecto: "Preguntas frecuentes" },
+      { seccion: "contacto",  campo: "titulo",    etiqueta: "Título de contacto",    porDefecto: "Visítanos" },
+      { seccion: "contacto",  campo: "subtitulo", etiqueta: "Bajada de contacto",    porDefecto: "Estamos aquí para atenderte con gusto" },
+      { seccion: "reservar",  campo: "subtitulo", etiqueta: "Bajada del cierre",     porDefecto: "Agenda en menos de 2 minutos. Sin llamadas, sin esperas, sin complicaciones." },
+    ],
   },
 
   futurista: {

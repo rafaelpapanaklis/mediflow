@@ -8372,3 +8372,200 @@ que un titular con `max-width:16ch` no se estire al empezar a escribir.
   el avatar de un doctor) sigue subiéndose desde el formulario.
 - `/dashboard/landing/page.tsx` sigue mandando la fila casi completa al cliente
   (viene de antes; el editor nuevo sí usa `select` explícito).
+
+---
+
+## [Editor-Visual-Etapa2] — `classic`, que es la que usan 10 de 11 clínicas
+
+Rama `feat/editor-classic`, worktree limpio desde `origin/main` (`5c98e304`).
+La etapa 1 dejó el motor probado sobre `equipo`: 1 clínica. Esta lo lleva a `classic`,
+que es **la plantilla por defecto del schema y la que tienen 10 de las 11 clínicas
+activas**. No hay motor nuevo: se replicó el de la etapa 1, pieza por pieza.
+
+### Qué se puede hacer ahora que antes no
+
+Con `classic` activa aparece la tarjeta "Editar haciendo clic encima" en
+`/dashboard/landing`, **vuelve la pestaña Diseño** (la Ola 1 la había escondido
+porque sus interruptores no hacían nada) y el lienzo de `/dashboard/landing/editor`
+deja editar 29 textos y la portada haciendo clic encima.
+
+### 1 · Cableada al manifiesto
+
+`classic` traía su lista de bloques escrita a mano en el JSX y no consultaba
+`landingSections` ni `landingPhotos`. Ahora:
+
+- `sectionMap` + `showSection` para **servicios, equipo, galería, opiniones y FAQ**.
+  Contacto y el bloque de cierre **no se preguntan**: son `obligatoria` en el
+  manifiesto y su interruptor está bloqueado.
+- Los **enlaces del menú** siguen a las secciones. Apagar la galería y dejar su
+  ancla arriba era mandar al paciente a un sitio que ya no existe.
+- La **portada** pasa a `photoOf(clinic, "portada", { cover: true })`, la misma
+  cadena de respaldo que las otras siete (ranura → `landingCoverUrl`).
+- `leeManifiesto: true` + `instrumentada: true`. **La pestaña Diseño y el botón del
+  lienzo salen solos**: las dos condiciones ya se derivaban del manifiesto
+  (`plantillaLeeManifiesto` / `plantillaInstrumentada`), no hubo que escribir el
+  nombre de ninguna plantilla en ninguna pantalla.
+
+**El ORDEN de secciones sigue sin ofrecerse, y es correcto que así sea.** Se
+comprobó: `classic` pinta sus bloques en el orden escrito en el JSX y no lee
+`.orden` — igual que las otras siete. `ManifestEditor` ya no enseña flechas desde la
+Ola 1, así que no había nada que quitar y no se añadió nada. Repetir esa promesa
+vacía, amplificada a 10 clínicas, habría sido peor que no darla.
+
+`classic` **no usa `TEXTOS_BASE`**: esos `porDefecto` son los de las plantillas
+nuevas y `classic` pinta otros literales desde antes de que el manifiesto existiera.
+El `porDefecto` es lo que la clínica ve en gris como "esto sale si lo dejas vacío":
+si no es el literal REAL, miente. Los diez textos declarados llevan el literal exacto
+que pinta el JSX.
+
+### 2 · Instrumentada — 29 textos y 1 ranura
+
+Verificado en el navegador, enumerando `[data-dc-txt]` en el DOM del lienzo:
+
+```
+clinica:name · clinica:landingTagline · clinica:description
+clinica:address (con la ciudad como SUFIJO, fuera del campo) · clinica:phone
+sec:servicios:titulo/subtitulo · sec:equipo:titulo/subtitulo · sec:galeria:titulo
+sec:opiniones:titulo · sec:faq:titulo · sec:contacto:titulo/subtitulo
+sec:reservar:subtitulo
+servicio:N:name/desc/price · testimonio:N:text/name · faq:N:q/a
+foto:portada
+```
+
+### 3 · Lo que quedó NO editable, y por qué
+
+| Qué | Por qué |
+|---|---|
+| **"Tu salud, nuestra`<br/>`prioridad"** (titular del cierre) | Lleva un salto de línea DENTRO del titular: **no es una cadena**. `<Txt>` guardaría las dos líneas pegadas. No está declarado en el manifiesto, así que tampoco sale en el formulario. Arreglarlo = quitar el `<br/>` = cambiar la página pública de 10 clínicas; merece su propia decisión. |
+| **`{specialty} · {city}`** (píldora del hero) | Cadena construida con dos columnas y un separador. Ninguna de las dos está en `ColumnaSuelta`. |
+| **La fecha del testimonio (`t.date`)** | `classic` la guarda en `date`; la dirección de un testimonio solo llega a `name/text/meta`. Instrumentarla escribiría en `meta`, que `classic` no pinta: la clínica escribiría y no vería nada. |
+| **Reseñas de Google** | Son de Google. No hay dónde guardarlas si alguien las reescribe. |
+| **Kickers ("Servicios", "Equipo médico", "FAQ"…), etiquetas de cifras, textos de botones** | No tienen columna donde caer. Es exactamente la ola 3 del plan (`landingCopy`), y esta etapa va sin SQL. |
+| **Nombres de doctores, horarios, calificación media** | Se calculan o vienen de otras tablas. |
+
+### 4 · Las listas van CRUDAS, a propósito
+
+`classic` sigue leyendo `clinic.landingServices/Faqs/Testimonials` sin pasar por
+`serviceList`/`faqList`/`testimonialList`. Esas normalizadoras **tiran los elementos
+incompletos**, y el formulario de siempre deja guardar un servicio sin nombre o una
+FAQ a medias: usarlas habría hecho desaparecer tarjetas del sitio publicado de
+alguien sin que nadie lo pidiera. El índice del `map` sobre la lista cruda **ES** el
+índice guardado, que es justo lo que necesita la dirección.
+
+Por lo mismo, donde el original pintaba un elemento VACÍO (un `<h3>` sin nombre, el
+`<span/>` que hace de separador cuando no hay precio), se conserva ese elemento
+vacío y el `<Txt>` solo entra `|| editando`. En la página pública no se mueve un
+píxel; en el lienzo sí hay dónde hacer clic para rellenarlo.
+
+Dos apaños que sí eran necesarios:
+
+- **FAQs**: `classic` leía solo `faq.question`. `aplicarDireccion` normaliza a
+  `{q, a}` y **borra** `question` al escribir → la primera pregunta editada desde el
+  lienzo habría desaparecido de la página pública. Ahora lee `faq.q ?? faq.question`,
+  la misma precedencia que `faqList`.
+- **Respuestas de FAQ abiertas en el lienzo** (`openFaq === i || editando`): el
+  guardia de clics del runtime bloquea el botón que las despliega, así que sin esto
+  no habría manera de editar una respuesta. La página pública no cambia.
+
+### 5 · La captura de `classic` SÍ cambió — 4 hunks, los dos motivos
+
+Se paró y se consultó antes de regenerarla. `git diff` de `html-publicado/classic.html`
+= **1 línea**; las otras siete capturas se regeneraron **byte a byte idénticas**.
+
+**a) La foto del hero (1 hunk) — decisión consultada y aprobada.**
+
+```
+- <img src="…/portada-vieja.jpg" …>
++ <img src="…/clinic-public/landing/cl-1/portada/1.webp" …>
+```
+
+`landingCoverUrl` → `photoOf(clinic,"portada",{cover:true})`. Sin esto, soltar una
+foto sobre el hero en el lienzo escribe `landingPhotos.portada` y **la página
+publicada no cambia**: el editor mentiría en su función principal. Afecta solo a la
+clínica `classic` que tenga guardadas LAS DOS cosas, que pudo pasar porque hasta
+`29608790` la pestaña Diseño se enseñaba en `classic` y su subida escribía
+`landingPhotos.portada` sin que la página cambiara.
+
+**b) Las preguntas de las FAQ (3 hunks) — era un fallo congelado en la captura.**
+El fixture guarda `{q, a}` y `classic` leía `question`, así que el golden tenía
+grabado a `classic` pintando **preguntas vacías**. Con el arreglo del punto 4 salen.
+A las clínicas de hoy no les afecta (el formulario guarda `{question, answer}`).
+
+### 6 · Verificación
+
+- **`npx next build` COMPLETO, EXIT 0**, `.next` borrado antes, leído entero. Los
+  ~150 `PrismaClientInitializationError` son el ruido conocido de compilar sin
+  `DATABASE_URL`; los `⚠` de Tailwind y `file-type` son preexistentes.
+- **`npm run test:landing`: 15/15**, incluidas las 8 capturas. `test:landing-address`: 12/12.
+- **La prueba se REFUTÓ** (los dos asserts nuevos, a la vez):
+  declarar un texto en el manifiesto sin envolverlo → `classic: cada texto del
+  manifiesto tiene su nodo editable` falla y nombra `'sec:faq:subtitulo'`;
+  mover un literal público → `classic: el HTML público es idéntico al de referencia`
+  falla y dice `byte 8320`. Revertido, 15/15.
+- **First Load JS de `/[slug]`: 263 kB → 265 kB (+2 kB)**, midiendo `origin/main`
+  aparte en otro worktree, no dando por bueno el número de la etapa 1. Los chunks
+  compartidos son idénticos; el único que crece es el de las plantillas
+  (`165-*` 222.0 kB → `846-*` 225.9 kB en crudo), o sea el código instrumentado de
+  `classic` y nada más. Se comprobó marca por marca que **`data-dc-ui`,
+  `data-dc-txt`, `data-dc-foto` y "Cambiar foto" NO están en ningún chunk del First
+  Load de `/[slug]`**: viven en `3800.*.js`, el chunk del `import()` dinámico.
+- **Navegador**: sin `.env` local no hay base, así que se montó un banco de pruebas
+  temporal fuera del middleware (borrado antes de commitear) que hace el viaje
+  completo: el lienzo manda el `postMessage` y el mismo `aplicarDireccion` del editor
+  lo traduce. Comprobado:
+  - Modo público: **0 nodos `data-dc-*` en el DOM**. `<Txt>`/`<Foto>` son passthrough.
+  - Clic sobre un título → `<textarea>` con `fontSize: 48px` (los estilos calculados
+    copiados), `maxLength: 160`, valor **vacío** y el literal de la plantilla como
+    marcador. `Enter` confirma → **un** mensaje → columna `landingSections`.
+  - **Vaciar** el título guarda `titulo: null` y vuelve "Lo que ofrecemos". El default
+    nunca se materializa.
+  - Vaciar un campo **requerido** → «Nombre del servicio» no puede quedarse vacío, y
+    el texto se queda como estaba.
+  - Un precio que estaba vacío se puede poner desde el lienzo (sale en gris itálica).
+  - **Soltar una foto** sobre el hero: la zona se enciende (`pointer-events: auto`),
+    el hero pinta el `blob:` al instante y el padre recibe el `File` y escribe
+    `landingPhotos.portada`.
+  - Apagar `galeria`, `opiniones` y `faq` → los tres bloques desaparecen, el menú
+    pierde "Galería", y contacto y el cierre siguen ahí.
+
+### 7 · Lo que hay que mirar en producción antes/después de este push
+
+Dos cosas que este cambio hace **efectivas** y que hasta hoy se guardaban sin efecto.
+No se puede comprobar desde aquí (no hay `.env` local):
+
+```sql
+-- 1. ¿A alguna clínica classic le cambia el hero?  0 filas = a nadie.
+SELECT slug, "landingCoverUrl", "landingPhotos"->>'portada' AS ranura
+FROM clinics
+WHERE "landingTemplate" = 'classic'
+  AND "landingCoverUrl" IS NOT NULL
+  AND "landingPhotos"->>'portada' IS NOT NULL;
+
+-- 2. ¿Alguna clínica classic tiene secciones apagadas de antes?
+--    Hasta la Ola 1 la pestaña Diseño se enseñaba en classic y el interruptor
+--    se guardaba sin hacer nada. Ahora manda.  0 filas = a nadie.
+SELECT c.slug, s->>'id' AS seccion
+FROM clinics c, jsonb_array_elements(c."landingSections") s
+WHERE c."landingTemplate" = 'classic' AND s->>'visible' = 'false';
+```
+
+### 8 · Lo que sigue roto y NO se tocó
+
+- **Hidratación de `classic`**: el bloque `<style>` de la plantilla lleva apóstrofos y
+  React los escapa a `&#x27;` en SSR pero no en cliente → *"Text content does not
+  match server-rendered HTML"* y la raíz entera se vuelve a pintar en el navegador.
+  **Es preexistente y está probado que lo es**: el `&#x27;` ya está en el golden de
+  `origin/main`, y el bloque `<style>` no lo toca este diff. Arreglarlo pide
+  `dangerouslySetInnerHTML` (prohibido por la regla 5) o cambiar el HTML público.
+  Merece su propio cambio, con su propia decisión.
+- **El orden de la lista de la pestaña Diseño**: `ManifestEditor` ordena por el
+  `orden` guardado, así que una clínica que usó las flechas viejas ve los
+  interruptores en un orden distinto al de su página. Es compartido con las otras
+  cuatro plantillas y no se tocó aquí.
+- **Cruce lienzo ↔ formulario en las FAQs**: el formulario de siempre escribe
+  `{question, answer}` y el lienzo `{q, a}`. `classic` (y `faqList`) leen `q` primero,
+  así que una FAQ ya editada desde el lienzo se ve vacía en el formulario. Viene de
+  la etapa 1 y afecta igual a `equipo`.
+- **`futurista`, `healthtech` y `calido`** siguen sin manifiesto ni instrumentar.
+  Las tres leen `landingCoverUrl` igual que leía `classic`, así que les toca la misma
+  decisión del punto 5a cuando les llegue el turno.

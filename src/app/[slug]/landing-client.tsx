@@ -5,6 +5,12 @@ import { useBookingReopen, type PendingBooking } from "./_shared/booking-session
 import { BookingModal } from "./_shared/booking-modal";
 import type { LandingClinic } from "./_shared/types";
 import { useLiveClinic } from "./_shared/live-preview";
+import { Foto, Txt, useEnEdicion } from "./_shared/edit-context";
+// landing-address-parts y NO landing-address: este archivo viaja al navegador
+// de los pacientes, y el módulo grande arrastra el manifiesto de las ocho
+// plantillas (17 KB) sin que la página pública lo necesite para nada.
+import { dirClinica, dirFaq, dirSeccion, dirServicio, dirTestimonio } from "@/lib/landing-address-parts";
+import { photoOf, sectionMap, showSection } from "./_shared/landing-data";
 
 const DAYS_SHORT = ["Lun","Mar","Mié","Jue","Vie","Sáb","Dom"];
 
@@ -24,6 +30,9 @@ export function ClinicLandingClient({ clinic: publicada, highlights }:{ clinic:C
   // En /dashboard/landing esto trae lo que la clínica lleva escrito sin
   // guardar; en la página pública devuelve `publicada` tal cual.
   const clinic = useLiveClinic(publicada);
+  /* Solo dentro del lienzo del editor. En la página pública es SIEMPRE false,
+     así que ningún paciente ve un bloque distinto por esto. */
+  const editando = useEnEdicion();
   const theme     = clinic.landingThemeColor ?? "#0f766e";
   const themeDark = hexAdjust(theme, -35);
   const [showBook, setShowBook] = useState(false);
@@ -48,6 +57,28 @@ export function ClinicLandingClient({ clinic: publicada, highlights }:{ clinic:C
   const gallery:string[]   = clinic.landingGallery ?? [];
   const waLink = clinic.landingWhatsapp ? `https://wa.me/${clinic.landingWhatsapp.replace(/\D/g,"")}` : null;
 
+  /* ---- lo que guardó el editor por sección ----
+     classic nació antes del manifiesto y traía su lista de bloques escrita a
+     mano: los interruptores de la pestaña Diseño se guardaban y no pasaba
+     nada. Ahora se leen. Las listas siguen siendo las CRUDAS (sin serviceList
+     ni faqList): esas normalizadoras tiran los elementos incompletos, y una
+     tarjeta que hoy se pinta a medias desaparecería del sitio publicado de
+     alguien sin que nadie lo hubiera pedido. */
+  const S = sectionMap(clinic);
+  const hayOpiniones = testimonials.length > 0 || (googleReviews?.reviews.length ?? 0) > 0;
+  const verServicios = showSection(S, "servicios", services.length > 0);
+  const verEquipo    = showSection(S, "equipo",    clinic.users.length > 0);
+  const verGaleria   = showSection(S, "galeria",   gallery.length > 0);
+  const verOpiniones = showSection(S, "opiniones", hayOpiniones);
+  const verFaq       = showSection(S, "faq",       faqs.length > 0);
+  /* Contacto y reserva no se preguntan: son obligatorias en el manifiesto y su
+     interruptor está bloqueado. Sin ellas el paciente no tiene cómo llegar ni
+     cómo agendar. */
+
+  /* La portada, con la misma cadena de respaldo que las otras siete:
+     ranura "portada" → landingCoverUrl (lo que classic leía hasta hoy). */
+  const portada = photoOf(clinic, "portada", { cover: true });
+
   useEffect(() => {
     const fn = () => setScrolled(window.scrollY > 50);
     window.addEventListener("scroll", fn);
@@ -65,10 +96,12 @@ export function ClinicLandingClient({ clinic: publicada, highlights }:{ clinic:C
   // que ya había elegido (y limpia el ?reservar=1 del gate viejo).
   useBookingReopen(clinic.slug, (pending) => { setBookRestore(pending); setShowBook(true); });
 
+  // Los enlaces siguen a las secciones: apagar una y dejar su ancla en el menú
+  // era mandar al paciente a un sitio que ya no existe.
   const navLinks = [
-    ...(services.length > 0   ? [{href:"#servicios", label:"Servicios"}] : []),
-    ...(clinic.users.length>0 ? [{href:"#doctores",  label:"Equipo"}]    : []),
-    ...(gallery.length > 0    ? [{href:"#galeria",   label:"Galería"}]   : []),
+    ...(verServicios ? [{href:"#servicios", label:"Servicios"}] : []),
+    ...(verEquipo    ? [{href:"#doctores",  label:"Equipo"}]    : []),
+    ...(verGaleria   ? [{href:"#galeria",   label:"Galería"}]   : []),
     {href:"#contacto", label:"Contacto"},
   ];
 
@@ -134,17 +167,23 @@ export function ClinicLandingClient({ clinic: publicada, highlights }:{ clinic:C
 
       {/* HERO */}
       <section className="relative flex items-center overflow-hidden" style={{minHeight:"100vh"}}>
-        {clinic.landingCoverUrl
-          ? <>
-              <img src={clinic.landingCoverUrl} alt="" className="absolute inset-0 w-full h-full object-cover"/>
-              <div className="absolute inset-0" style={{background:"linear-gradient(120deg,rgba(0,0,0,.75) 0%,rgba(0,0,0,.3) 100%)"}}/>
-            </>
-          : <div className="absolute inset-0" style={{background:`linear-gradient(135deg,${theme} 0%,${themeDark} 100%)`}}>
-              <div className="absolute inset-0" style={{backgroundImage:"radial-gradient(circle at 70% 30%,rgba(255,255,255,.08) 0%,transparent 60%),radial-gradient(circle at 20% 80%,rgba(255,255,255,.05) 0%,transparent 50%)"}}/>
-              {/* Geometric accent */}
-              <div className="absolute right-0 top-0 w-1/2 h-full opacity-10" style={{background:"repeating-linear-gradient(45deg,#fff 0,#fff 1px,transparent 0,transparent 50%)",backgroundSize:"24px 24px"}}/>
-            </div>
-        }
+        {/* La caja de edición copia la geometría del fondo (absolute inset-0):
+            así la botonera cae sobre la foto y no mueve ni un píxel del hero.
+            A la derecha, que a la izquierda está el titular. */}
+        <Foto slot="portada" url={portada} etiqueta="Portada" zona="derecha"
+          caja={{ position: "absolute", inset: 0 }}>
+          {(url) => url
+            ? <>
+                <img src={url} alt="" className="absolute inset-0 w-full h-full object-cover"/>
+                <div className="absolute inset-0" style={{background:"linear-gradient(120deg,rgba(0,0,0,.75) 0%,rgba(0,0,0,.3) 100%)"}}/>
+              </>
+            : <div className="absolute inset-0" style={{background:`linear-gradient(135deg,${theme} 0%,${themeDark} 100%)`}}>
+                <div className="absolute inset-0" style={{backgroundImage:"radial-gradient(circle at 70% 30%,rgba(255,255,255,.08) 0%,transparent 60%),radial-gradient(circle at 20% 80%,rgba(255,255,255,.05) 0%,transparent 50%)"}}/>
+                {/* Geometric accent */}
+                <div className="absolute right-0 top-0 w-1/2 h-full opacity-10" style={{background:"repeating-linear-gradient(45deg,#fff 0,#fff 1px,transparent 0,transparent 50%)",backgroundSize:"24px 24px"}}/>
+              </div>
+          }
+        </Foto>
         <div className="relative max-w-6xl mx-auto px-5 w-full py-36">
           <div className="max-w-2xl">
             {/* Pill badge */}
@@ -152,15 +191,15 @@ export function ClinicLandingClient({ clinic: publicada, highlights }:{ clinic:C
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"/>
               {clinic.specialty} · {clinic.city ?? "México"}
             </div>
-            <h1 className="l-anim l-delay1 l-serif text-6xl sm:text-7xl font-bold text-white leading-[1.02] mb-5">
-              {clinic.name}
-            </h1>
-            {clinic.landingTagline && (
-              <p className="l-anim l-delay1 text-xl sm:text-2xl text-white/75 font-light mb-4">{clinic.landingTagline}</p>
-            )}
-            {clinic.description && (
-              <p className="l-anim l-delay2 text-white/60 text-base leading-relaxed mb-6 max-w-lg">{clinic.description}</p>
-            )}
+            <Txt as="h1" className="l-anim l-delay1 l-serif text-6xl sm:text-7xl font-bold text-white leading-[1.02] mb-5"
+              campo={dirClinica("name")} etiqueta="Nombre de la clínica" linea requerido maxLen={120}
+              valor={clinic.name} />
+            <Txt as="p" className="l-anim l-delay1 text-xl sm:text-2xl text-white/75 font-light mb-4"
+              campo={dirClinica("landingTagline")} etiqueta="Eslogan" maxLen={300}
+              valor={clinic.landingTagline} />
+            <Txt as="p" className="l-anim l-delay2 text-white/60 text-base leading-relaxed mb-6 max-w-lg"
+              campo={dirClinica("description")} etiqueta="Descripción de la clínica" maxLen={5000}
+              valor={clinic.description} />
             {highlights && highlights.length > 0 && (
               <div className="l-anim l-delay2 flex flex-wrap gap-2 mb-10">
                 {highlights.map(h => (
@@ -210,13 +249,17 @@ export function ClinicLandingClient({ clinic: publicada, highlights }:{ clinic:C
       </section>
 
       {/* SERVICIOS */}
-      {services.length > 0 && (
+      {verServicios && (
         <section id="servicios" className="py-28 bg-white">
           <div className="max-w-6xl mx-auto px-5">
             <div className="max-w-xl mb-16">
               <div className="text-xs font-bold uppercase tracking-widest mb-5 px-4 py-2 rounded-full inline-block" style={{background:`${theme}12`,color:theme}}>Servicios</div>
-              <h2 className="l-serif text-5xl font-bold text-gray-900 leading-tight mb-4">Lo que ofrecemos</h2>
-              <p className="text-gray-400 text-lg">Tratamientos con tecnología de vanguardia para tu salud y bienestar</p>
+              <Txt as="h2" className="l-serif text-5xl font-bold text-gray-900 leading-tight mb-4"
+                campo={dirSeccion("servicios", "titulo")} etiqueta="Título de servicios" linea maxLen={160}
+                valor={S.servicios?.titulo} porDefecto="Lo que ofrecemos" />
+              <Txt as="p" className="text-gray-400 text-lg"
+                campo={dirSeccion("servicios", "subtitulo")} etiqueta="Bajada de servicios" maxLen={500}
+                valor={S.servicios?.subtitulo} porDefecto="Tratamientos con tecnología de vanguardia para tu salud y bienestar" />
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
               {services.map((svc:any, i:number) => (
@@ -226,10 +269,25 @@ export function ClinicLandingClient({ clinic: publicada, highlights }:{ clinic:C
                   <div className="w-16 h-16 rounded-2xl flex items-center justify-center text-3xl mb-6 transition-all group-hover:scale-110" style={{background:`${theme}10`}}>
                     {svc.icon || "🏥"}
                   </div>
-                  <h3 className="font-bold text-gray-900 text-xl mb-3">{svc.name}</h3>
-                  {svc.desc && <p className="text-gray-400 text-sm leading-relaxed">{svc.desc}</p>}
+                  {/* El formulario deja guardar un servicio sin nombre y la tarjeta
+                      sale con el hueco vacío. <Txt> no pinta nada cuando no hay
+                      texto, así que el elemento vacío se mantiene tal cual: en la
+                      página pública no se mueve un píxel. En el lienzo sí aparece,
+                      para poder ponerle nombre. */}
+                  {svc.name || editando ? (
+                    <Txt as="h3" className="font-bold text-gray-900 text-xl mb-3"
+                      campo={dirServicio(i, "name")} etiqueta="Nombre del servicio" linea requerido maxLen={120}
+                      valor={svc.name} />
+                  ) : <h3 className="font-bold text-gray-900 text-xl mb-3" />}
+                  <Txt as="p" className="text-gray-400 text-sm leading-relaxed"
+                    campo={dirServicio(i, "desc")} etiqueta="Descripción del servicio" maxLen={400}
+                    valor={svc.desc} />
                   <div className="mt-6 flex items-center justify-between">
-                    {svc.price ? <span className="font-bold text-lg" style={{color:theme}}>{svc.price}</span> : <span/>}
+                    {svc.price || editando
+                      ? <Txt as="span" className="font-bold text-lg" style={{color:theme}}
+                          campo={dirServicio(i, "price")} etiqueta="Precio" linea maxLen={40}
+                          valor={svc.price} />
+                      : <span/>}
                     <button onClick={() => openBooking()} className="text-xs font-bold px-3.5 py-2 rounded-xl flex items-center gap-1" style={{background:`${theme}10`,color:theme}}>
                       Agendar <ArrowRight size={12}/>
                     </button>
@@ -242,13 +300,17 @@ export function ClinicLandingClient({ clinic: publicada, highlights }:{ clinic:C
       )}
 
       {/* DOCTORES */}
-      {clinic.users.length > 0 && (
+      {verEquipo && (
         <section id="doctores" className="py-28" style={{background:`linear-gradient(180deg,#f8f9fa 0%,#fff 100%)`}}>
           <div className="max-w-6xl mx-auto px-5">
             <div className="text-center mb-16">
               <div className="text-xs font-bold uppercase tracking-widest mb-5 px-4 py-2 rounded-full inline-block" style={{background:`${theme}12`,color:theme}}>Equipo médico</div>
-              <h2 className="l-serif text-5xl font-bold text-gray-900 mb-4">Nuestros especialistas</h2>
-              <p className="text-gray-400 text-lg max-w-lg mx-auto">Profesionales certificados comprometidos con tu salud</p>
+              <Txt as="h2" className="l-serif text-5xl font-bold text-gray-900 mb-4"
+                campo={dirSeccion("equipo", "titulo")} etiqueta="Título del equipo" linea maxLen={160}
+                valor={S.equipo?.titulo} porDefecto="Nuestros especialistas" />
+              <Txt as="p" className="text-gray-400 text-lg max-w-lg mx-auto"
+                campo={dirSeccion("equipo", "subtitulo")} etiqueta="Bajada del equipo" maxLen={500}
+                valor={S.equipo?.subtitulo} porDefecto="Profesionales certificados comprometidos con tu salud" />
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
               {clinic.users.map(doc => (
@@ -284,13 +346,15 @@ export function ClinicLandingClient({ clinic: publicada, highlights }:{ clinic:C
       )}
 
       {/* GALERÍA */}
-      {gallery.length > 0 && (
+      {verGaleria && (
         <section id="galeria" className="py-28 bg-white">
           <div className="max-w-6xl mx-auto px-5">
             <div className="flex items-end justify-between mb-14">
               <div>
                 <div className="text-xs font-bold uppercase tracking-widest mb-4 px-4 py-2 rounded-full inline-block" style={{background:`${theme}12`,color:theme}}>Instalaciones</div>
-                <h2 className="l-serif text-5xl font-bold text-gray-900">Nuestra clínica</h2>
+                <Txt as="h2" className="l-serif text-5xl font-bold text-gray-900"
+                  campo={dirSeccion("galeria", "titulo")} etiqueta="Título de la galería" linea maxLen={160}
+                  valor={S.galeria?.titulo} porDefecto="Nuestra clínica" />
               </div>
             </div>
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 auto-rows-fr">
@@ -321,12 +385,14 @@ export function ClinicLandingClient({ clinic: publicada, highlights }:{ clinic:C
       )}
 
       {/* TESTIMONIOS */}
-      {testimonials.length > 0 && (
+      {verOpiniones && testimonials.length > 0 && (
         <section className="py-28" style={{background:`linear-gradient(135deg,${theme}06 0%,${theme}03 100%)`}}>
           <div className="max-w-6xl mx-auto px-5">
             <div className="text-center mb-14">
               <div className="text-xs font-bold uppercase tracking-widest mb-5 px-4 py-2 rounded-full inline-block" style={{background:`${theme}12`,color:theme}}>Testimonios</div>
-              <h2 className="l-serif text-5xl font-bold text-gray-900 mb-4">Lo que dicen nuestros pacientes</h2>
+              <Txt as="h2" className="l-serif text-5xl font-bold text-gray-900 mb-4"
+                campo={dirSeccion("opiniones", "titulo")} etiqueta="Título de opiniones" linea maxLen={160}
+                valor={S.opiniones?.titulo} porDefecto="Lo que dicen nuestros pacientes" />
               <div className="flex items-center justify-center gap-1.5 mt-3">
                 {Array.from({length:5}).map((_,i)=><Star key={i} size={18} className="fill-amber-400 text-amber-400"/>)}
                 <span className="ml-2 font-bold text-gray-800">{(testimonials.reduce((s,t)=>s+(t.rating??5),0)/testimonials.length).toFixed(1)}</span>
@@ -342,11 +408,26 @@ export function ClinicLandingClient({ clinic: publicada, highlights }:{ clinic:C
                       <Star key={j} size={15} className={j<(t.rating??5)?"fill-amber-400 text-amber-400":"text-gray-100 fill-gray-100"}/>
                     ))}
                   </div>
-                  <p className="text-gray-600 text-sm leading-loose mb-6">"{t.text}"</p>
+                  {/* Las comillas van como prefijo/sufijo y no dentro del texto:
+                      si se guardaran, la siguiente edición las duplicaría. */}
+                  {t.text || editando ? (
+                    <Txt as="p" className="text-gray-600 text-sm leading-loose mb-6"
+                      campo={dirTestimonio(i, "text")} etiqueta="Opinión" requerido maxLen={800}
+                      valor={t.text} prefijo={'"'} sufijo={'"'} />
+                  ) : <p className="text-gray-600 text-sm leading-loose mb-6">"{t.text}"</p>}
                   <div className="flex items-center gap-3 pt-5 border-t border-gray-50">
                     <div className="w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-sm shrink-0" style={{background:theme}}>{t.name?.[0]??"P"}</div>
                     <div>
-                      <div className="font-bold text-sm text-gray-900">{t.name}</div>
+                      {t.name || editando ? (
+                        <Txt as="div" className="font-bold text-sm text-gray-900"
+                          campo={dirTestimonio(i, "name")} etiqueta="Quién lo dice" linea maxLen={80}
+                          valor={t.name} />
+                      ) : <div className="font-bold text-sm text-gray-900" />}
+                      {/* `date` NO se edita desde el lienzo: la dirección de un
+                          testimonio solo llega a name/text/meta, y esta plantilla
+                          guarda la fecha en `date` (el formulario de siempre).
+                          Instrumentarla escribiría en `meta`, que classic no pinta:
+                          la clínica escribiría y no vería nada cambiar. */}
                       {t.date && <div className="text-xs text-gray-400">{t.date}</div>}
                     </div>
                   </div>
@@ -358,12 +439,17 @@ export function ClinicLandingClient({ clinic: publicada, highlights }:{ clinic:C
       )}
 
       {/* GOOGLE REVIEWS - shown when googlePlaceId configured and no manual testimonials */}
-      {googleReviews && googleReviews.reviews.length > 0 && testimonials.length === 0 && (
+      {verOpiniones && googleReviews && googleReviews.reviews.length > 0 && testimonials.length === 0 && (
         <section className="py-28" style={{background:`linear-gradient(135deg,${theme}06 0%,${theme}03 100%)`}}>
           <div className="max-w-6xl mx-auto px-5">
             <div className="text-center mb-14">
               <div className="text-xs font-bold uppercase tracking-widest mb-5 px-4 py-2 rounded-full inline-block" style={{background:`${theme}12`,color:theme}}>Reseñas de Google</div>
-              <h2 className="l-serif text-5xl font-bold text-gray-900 mb-4">Lo que dicen nuestros pacientes</h2>
+              {/* Mismo título de sección que el bloque de testimonios: los dos
+                  son "opiniones" y nunca se pintan a la vez. Las reseñas de
+                  Google son de Google, así que NINGUNA de ellas se edita. */}
+              <Txt as="h2" className="l-serif text-5xl font-bold text-gray-900 mb-4"
+                campo={dirSeccion("opiniones", "titulo")} etiqueta="Título de opiniones" linea maxLen={160}
+                valor={S.opiniones?.titulo} porDefecto="Lo que dicen nuestros pacientes" />
               {googleReviews.rating && (
                 <div className="flex items-center justify-center gap-1.5 mt-3">
                   {Array.from({length:5}).map((_,i)=>(
@@ -401,7 +487,7 @@ export function ClinicLandingClient({ clinic: publicada, highlights }:{ clinic:C
       )}
 
       {/* GOOGLE REVIEWS - shown alongside manual testimonials */}
-      {googleReviews && googleReviews.reviews.length > 0 && testimonials.length > 0 && (
+      {verOpiniones && googleReviews && googleReviews.reviews.length > 0 && testimonials.length > 0 && (
         <div className="max-w-6xl mx-auto px-5 pb-4 text-center">
           <a href={`https://search.google.com/local/reviews?placeid=${clinic.googlePlaceId}`} target="_blank" rel="noreferrer"
             className="inline-flex items-center gap-2 text-sm font-semibold text-gray-500 hover:text-gray-700 transition-colors">
@@ -412,26 +498,50 @@ export function ClinicLandingClient({ clinic: publicada, highlights }:{ clinic:C
       )}
 
       {/* FAQs */}
-      {faqs.length > 0 && (
+      {verFaq && (
         <section className="py-28 bg-white">
           <div className="max-w-3xl mx-auto px-5">
             <div className="text-center mb-14">
               <div className="text-xs font-bold uppercase tracking-widest mb-5 px-4 py-2 rounded-full inline-block" style={{background:`${theme}12`,color:theme}}>FAQ</div>
-              <h2 className="l-serif text-5xl font-bold text-gray-900">Preguntas frecuentes</h2>
+              <Txt as="h2" className="l-serif text-5xl font-bold text-gray-900"
+                campo={dirSeccion("faq", "titulo")} etiqueta="Título de preguntas" linea maxLen={160}
+                valor={S.faq?.titulo} porDefecto="Preguntas frecuentes" />
             </div>
             <div className="space-y-3">
-              {faqs.map((faq:any, i:number) => (
+              {faqs.map((faq:any, i:number) => {
+                /* El formulario de siempre guarda {question, answer}; el lienzo
+                   normaliza a {q, a} al escribir. Se leen las dos formas, con la
+                   misma precedencia que faqList: si no, la primera pregunta que
+                   se edite desde el lienzo desaparecería de la página. */
+                const pregunta  = faq.q ?? faq.question;
+                const respuesta = faq.a ?? faq.answer;
+                /* Abierta en el lienzo, cerrada para el paciente: el guardia de
+                   clics del editor bloquea el botón que la despliega, así que sin
+                   esto no habría manera de editar una respuesta. */
+                const abierta = openFaq===i || editando;
+                return (
                 <div key={i} className="border-2 border-gray-100 rounded-2xl overflow-hidden transition-all" style={openFaq===i?{borderColor:`${theme}30`}:{}}>
                   <button onClick={() => setOpenFaq(openFaq===i?null:i)}
                     className="w-full flex items-center justify-between p-6 text-left gap-4 hover:bg-gray-50/50 transition-colors">
-                    <span className="font-semibold text-gray-900">{faq.question}</span>
+                    {pregunta || editando ? (
+                      <Txt as="span" className="font-semibold text-gray-900"
+                        campo={dirFaq(i, "q")} etiqueta="Pregunta" linea requerido maxLen={200}
+                        valor={pregunta} />
+                    ) : <span className="font-semibold text-gray-900" />}
                     <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0 transition-all" style={{background:openFaq===i?theme:"#f3f4f6",color:openFaq===i?"#fff":"#9ca3af"}}>
                       {openFaq===i ? <ChevronUp size={16}/> : <ChevronDown size={16}/>}
                     </div>
                   </button>
-                  {openFaq===i && <div className="px-6 pb-6 text-gray-500 text-sm leading-relaxed">{faq.answer}</div>}
+                  {abierta && (
+                    respuesta || editando ? (
+                      <Txt as="div" className="px-6 pb-6 text-gray-500 text-sm leading-relaxed"
+                        campo={dirFaq(i, "a")} etiqueta="Respuesta" requerido maxLen={1200}
+                        valor={respuesta} />
+                    ) : <div className="px-6 pb-6 text-gray-500 text-sm leading-relaxed" />
+                  )}
                 </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         </section>
@@ -442,8 +552,12 @@ export function ClinicLandingClient({ clinic: publicada, highlights }:{ clinic:C
         <div className="max-w-6xl mx-auto px-5">
           <div className="text-center mb-14">
             <div className="text-xs font-bold uppercase tracking-widest mb-5 px-4 py-2 rounded-full inline-block" style={{background:`${theme}12`,color:theme}}>Contacto</div>
-            <h2 className="l-serif text-5xl font-bold text-gray-900 mb-3">Visítanos</h2>
-            <p className="text-gray-400 text-lg">Estamos aquí para atenderte con gusto</p>
+            <Txt as="h2" className="l-serif text-5xl font-bold text-gray-900 mb-3"
+              campo={dirSeccion("contacto", "titulo")} etiqueta="Título de contacto" linea maxLen={160}
+              valor={S.contacto?.titulo} porDefecto="Visítanos" />
+            <Txt as="p" className="text-gray-400 text-lg"
+              campo={dirSeccion("contacto", "subtitulo")} etiqueta="Bajada de contacto" maxLen={500}
+              valor={S.contacto?.subtitulo} porDefecto="Estamos aquí para atenderte con gusto" />
           </div>
           <div className="grid grid-cols-1 lg:grid-cols-5 gap-6 items-start">
             <div className="lg:col-span-2 space-y-4">
@@ -455,7 +569,11 @@ export function ClinicLandingClient({ clinic: publicada, highlights }:{ clinic:C
                     </div>
                     <div>
                       <div className="font-semibold text-gray-900 text-sm mb-1">Dirección</div>
-                      <div className="text-gray-500 text-sm leading-relaxed">{clinic.address}{clinic.city?`, ${clinic.city}`:""}</div>
+                      {/* La ciudad va como SUFIJO, fuera del campo: es otra columna
+                          y pegarla al texto guardaría "calle, ciudad" en `address`. */}
+                      <Txt as="div" className="text-gray-500 text-sm leading-relaxed"
+                        campo={dirClinica("address")} etiqueta="Dirección" maxLen={300}
+                        valor={clinic.address} sufijo={clinic.city?`, ${clinic.city}`:""} />
                     </div>
                   </div>
                 )}
@@ -466,7 +584,11 @@ export function ClinicLandingClient({ clinic: publicada, highlights }:{ clinic:C
                     </div>
                     <div>
                       <div className="font-semibold text-gray-900 text-sm mb-1">Teléfono</div>
-                      <a href={`tel:${clinic.phone}`} className="text-sm font-semibold" style={{color:theme}}>{clinic.phone}</a>
+                      {/* El número se pinta como TEXTO; el href se arma aparte y
+                          nunca con lo que se está escribiendo. */}
+                      <Txt as="a" href={`tel:${clinic.phone}`} className="text-sm font-semibold" style={{color:theme}}
+                        campo={dirClinica("phone")} etiqueta="Teléfono" linea maxLen={40}
+                        valor={clinic.phone} />
                     </div>
                   </div>
                 )}
@@ -528,10 +650,16 @@ export function ClinicLandingClient({ clinic: publicada, highlights }:{ clinic:C
         <div className="absolute inset-0" style={{backgroundImage:"radial-gradient(circle at 75% 25%,rgba(255,255,255,.08) 0%,transparent 55%)"}}/>
         <div className="absolute bottom-0 right-0 w-64 h-64 rounded-full bg-white/5" style={{filter:"blur(50px)"}}/>
         <div className="relative max-w-4xl mx-auto px-5 text-center">
+          {/* NO editable, y es una decisión declarada: el titular lleva un salto
+              de línea DENTRO, así que no es una cadena. Envolverlo en <Txt>
+              guardaría "Tu salud, nuestraprioridad" en cuanto alguien lo tocara.
+              Por eso tampoco está declarado en el manifiesto de classic. */}
           <h2 className="l-serif text-5xl sm:text-6xl font-bold text-white mb-5 leading-tight">
             Tu salud, nuestra<br/>prioridad
           </h2>
-          <p className="text-white/65 text-xl mb-12 max-w-xl mx-auto">Agenda en menos de 2 minutos. Sin llamadas, sin esperas, sin complicaciones.</p>
+          <Txt as="p" className="text-white/65 text-xl mb-12 max-w-xl mx-auto"
+            campo={dirSeccion("reservar", "subtitulo")} etiqueta="Bajada del cierre" maxLen={500}
+            valor={S.reservar?.subtitulo} porDefecto="Agenda en menos de 2 minutos. Sin llamadas, sin esperas, sin complicaciones." />
           <div className="flex flex-wrap justify-center gap-4">
             <button onClick={() => openBooking()}
               className="bg-white font-bold px-10 py-4 rounded-2xl text-base shadow-2xl hover:bg-gray-50 transition-all flex items-center gap-2.5"
