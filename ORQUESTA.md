@@ -8569,3 +8569,33 @@ WHERE c."landingTemplate" = 'classic' AND s->>'visible' = 'false';
 - **`futurista`, `healthtech` y `calido`** siguen sin manifiesto ni instrumentar.
   Las tres leen `landingCoverUrl` igual que leía `classic`, así que les toca la misma
   decisión del punto 5a cuando les llegue el turno.
+## FOOTER-INSTAGRAM — el enlace apuntaba a una cuenta que no es nuestra ✅ (2026-08-17)
+
+Tres líneas. El pie de página enlazaba a `instagram.com/dalecontrol`, y la cuenta real es
+`dalecontrol.mx`. Nadie que hiciera clic desde el sitio llegaba a nuestro Instagram.
+
+- `src/components/public/landing/footer.tsx:51` — columna "Redes".
+- `src/components/public/landing/footer.tsx:59` — array `SOCIALS` del pie.
+- `src/components/public/landing/sales/v2/landing-data.ts:361` — `FOOTER.contact`.
+
+Los dos primeros sirven al pie de las páginas de especialidad y `/roadmap`; el tercero se
+propaga a home, blog, casos de uso, herramientas, `/descubre`, las 8 páginas de módulo y
+afiliados.
+
+### Verificación
+
+- **Barrido de `src/` completo**: cero ocurrencias de `instagram.com/dalecontrol` sin el
+  `.mx`. Se hizo con `Select-String` y look-ahead negativo porque ripgrep no admite
+  look-around. Los demás `instagram.com/${…}` que aparecen en el barrido son el handle que
+  cada clínica guarda en su propia BD (`landingInstagram`) — no se tocaron.
+- **`npm run build` completo, exit 0**, leído entero, sin pipes (enmascaran el exit code).
+  364/364 páginas estáticas. Los tres warnings de Tailwind y el ruido de
+  `PrismaClientInitializationError` son preexistentes: en local no hay `DATABASE_URL`.
+
+### Lo que NO se hizo
+
+- **Nadie ha comprobado que `instagram.com/dalecontrol.mx` sea la cuenta viva.** El cambio
+  copia el handle que dio el encargo; no se abrió el perfil para confirmarlo.
+- No se tocó ningún otro enlace ni texto del pie. Twitter y LinkedIn siguen apuntando a
+  `/dalecontrol` tal cual estaban: si esos handles también cambiaron, siguen mal.
+- Sin SQL y sin variables de entorno.

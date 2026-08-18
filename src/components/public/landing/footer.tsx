@@ -48,7 +48,7 @@ const COLUMNS: FooterColumn[] = [
     links: [
       { label: "Twitter", href: "https://twitter.com/dalecontrol" },
       { label: "LinkedIn", href: "https://linkedin.com/company/dalecontrol" },
-      { label: "Instagram", href: "https://instagram.com/dalecontrol" },
+      { label: "Instagram", href: "https://instagram.com/dalecontrol.mx" },
     ],
   },
 ];
@@ -56,7 +56,7 @@ const COLUMNS: FooterColumn[] = [
 const SOCIALS = [
   { label: "Twitter", href: "https://twitter.com/dalecontrol" },
   { label: "LinkedIn", href: "https://linkedin.com/company/dalecontrol" },
-  { label: "Instagram", href: "https://instagram.com/dalecontrol" },
+  { label: "Instagram", href: "https://instagram.com/dalecontrol.mx" },
 ];
 
 export function Footer() {
