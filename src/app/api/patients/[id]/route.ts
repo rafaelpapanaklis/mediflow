@@ -3,7 +3,7 @@ import { Prisma, PatientStatus, Gender, type Role } from "@prisma/client";
 import { getAuthContext, buildPatientWhere } from "@/lib/auth-context";
 import { prisma } from "@/lib/prisma";
 import { getPatientVisibility, sharedRecordScope, ownPrivateRecordsOnly } from "@/lib/branches";
-import { patientSchema } from "@/lib/validations";
+import { parsePatientUpdate } from "@/lib/patients/patient-update-core";
 import { validateCurpRecord } from "@/lib/validators/curp";
 import {
   normalizeVisibleUserIds,
@@ -107,7 +107,12 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
 
   try {
     const body = await req.json();
-    const data = patientSchema.parse(body);
+    // PAC-01 — `parsePatientUpdate` valida con el MISMO patientSchema de antes y
+    // además construye el payload del update. Lo que cambió es la semántica del
+    // campo AUSENTE: ya no se rellena con `[]` / "OTHER", así que editar el
+    // teléfono no borra alergias, padecimientos crónicos ni medicación actual.
+    // Ver src/lib/patients/patient-update-core.ts.
+    const { parsed: data, data: updateData } = parsePatientUpdate(body);
 
     // Visibilidad: SOLO admin la cambia después de creado. patientSchema no
     // incluye el campo (zod lo descarta), así que se lee del body crudo.
@@ -136,11 +141,7 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
     await prisma.patient.update({
       where: { id: params.id },
       data: {
-        ...data,
-        dob:    data.dob    ? new Date(data.dob) : undefined,
-        email:  data.email  || undefined,
-        gender: (data.gender ?? "OTHER") as any,
-        curp:   data.curp ? data.curp.toUpperCase().trim() : data.curp,
+        ...(updateData as any),
         ...(visibleUserIds !== undefined && { visibleUserIds }),
       },
     });

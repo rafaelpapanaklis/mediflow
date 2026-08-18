@@ -21,6 +21,7 @@
     "test:agenda-transitions": "tsx --test src/lib/agenda/__tests__/transitions.test.ts",
     "test:close-appointment": "tsx --test src/lib/agenda/__tests__/close-appointment.test.ts",
     "test:patient-deletion": "tsx --test src/lib/__tests__/patient-deletion-policy.test.ts",
+    "test:patient-update": "tsx --test src/lib/patients/__tests__/patient-update-core.test.ts",
     "test:patient-secrets": "tsx --test src/lib/__tests__/patient-secrets.test.ts",
     "test:private-records": "tsx --test src/lib/__tests__/private-records-scope.test.ts",
     "test:active-clinic": "tsx --test src/lib/active-clinic-core.test.ts",

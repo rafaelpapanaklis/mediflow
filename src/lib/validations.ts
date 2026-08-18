@@ -14,21 +14,48 @@ export const registerSchema = z.object({
   plan:       z.enum(["BASIC","PRO","CLINIC"]).default("PRO"),
 });
 
+/**
+ * Schema del PUT de /api/patients/[id] — o sea, de una EDICIÓN.
+ *
+ * PAC-01 · POR QUÉ NINGÚN CAMPO LLEVA `.default()`
+ * ------------------------------------------------
+ * Este schema tiene UN ÚNICO consumidor en todo el repo: `patientSchema.parse`
+ * en el PUT de src/app/api/patients/[id]/route.ts, cuyo resultado se esparce
+ * sobre un `prisma.patient.update`. El alta (POST /api/patients) NO lo usa: lee
+ * `body.*` a mano con sus propios `?? []` / `?? null`.
+ *
+ * En ese contexto un `.default([])` es destructivo, no protector: zod RELLENA
+ * con `[]` el campo que el body no trae, y el update escribe ese `[]` encima de
+ * lo que había. `allergies`, `chronicConditions`, `currentMedications` y `tags`
+ * llevaban `.default([])` y el modal de edición no manda los tres últimos, así
+ * que corregir un teléfono borraba los padecimientos crónicos y la medicación
+ * actual — justo lo que lee el chequeo de contraindicaciones al recetar.
+ *
+ * Con `.optional()` y SIN default, el campo ausente parsea a `undefined` y
+ * Prisma lo trata como "no tocar esta columna". Mandar `[]` EXPLÍCITO sigue
+ * vaciando el array, que es lo que debe pasar cuando el usuario de verdad
+ * borra el último elemento. Mismo motivo para `gender`: con `.default("OTHER")`
+ * un body sin género reescribía el género del paciente a OTHER.
+ *
+ * SI ALGÚN DÍA ESTE SCHEMA SE USA PARA UN ALTA: los defaults van en el POST, no
+ * aquí. Un schema compartido entre crear y editar no puede llevar defaults, y
+ * la columna ya trae `@default([])` en Postgres para el INSERT.
+ */
 export const patientSchema = z.object({
   firstName:          z.string().min(2),
   lastName:           z.string().min(2),
   email:              z.string().email().optional().or(z.literal("")),
   phone:              z.string().optional(),
   dob:                z.string().optional(),
-  gender:             z.enum(["M","F","OTHER"]).default("OTHER"),
+  gender:             z.enum(["M","F","OTHER"]).optional(),
   bloodType:          z.string().optional(),
   address:            z.string().optional(),
   insuranceProvider:  z.string().optional(),
   insurancePolicy:    z.string().optional(),
-  allergies:          z.array(z.string()).default([]),
-  chronicConditions:  z.array(z.string()).default([]),
-  currentMedications: z.array(z.string()).default([]),
-  tags:               z.array(z.string()).default([]),
+  allergies:          z.array(z.string()).optional(),
+  chronicConditions:  z.array(z.string()).optional(),
+  currentMedications: z.array(z.string()).optional(),
+  tags:               z.array(z.string()).optional(),
   notes:              z.string().optional(),
   // NOM-024 identificación
   curp:               z.string().max(18).optional().nullable(),
