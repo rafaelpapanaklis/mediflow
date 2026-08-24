@@ -1,0 +1,311 @@
+/* ═══════════════════════════════════════════════════════════════════════
+   DaleControl BARBER — estilos del dinero (caja, comisiones, productos).
+   Scope: .barber-shell .bcaja-*  (no toca globals.css ni el dental).
+   Responsive con @container (regla del repo): cada bloque que se reacomoda
+   declara su propio contenedor; los modales se pintan FUERA de ellos.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+.barber-shell .bcaja-page {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  container-type: inline-size;
+  container-name: bcaja-page;
+}
+
+.barber-shell .bcaja-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px 16px;
+}
+.barber-shell .bcaja-head__title {
+  font-size: clamp(20px, 2.2cqi + 12px, 26px);
+  font-weight: 700;
+  letter-spacing: -0.015em;
+  color: var(--text-1);
+  margin: 0;
+}
+.barber-shell .bcaja-head__sub {
+  font-size: 13px;
+  color: var(--text-3);
+  margin: 4px 0 0;
+}
+.barber-shell .bcaja-head__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+/* Rejilla de KPIs */
+.barber-shell .bcaja-kpis {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+@container bcaja-page (min-width: 720px) {
+  .barber-shell .bcaja-kpis { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
+@container bcaja-page (min-width: 1100px) {
+  .barber-shell .bcaja-kpis--5 { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+}
+
+/* Dos columnas (caja: citas por cobrar | tickets) */
+.barber-shell .bcaja-cols {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+@container bcaja-page (min-width: 960px) {
+  .barber-shell .bcaja-cols { grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); }
+}
+
+/* Píldora de estado del turno */
+.barber-shell .bcaja-session {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 14px;
+  padding: 12px 16px;
+  border-radius: 14px;
+  background: var(--bg-elev);
+  border: 1px solid var(--border-soft);
+  box-shadow: var(--shadow-1);
+}
+.barber-shell .bcaja-session__dot {
+  width: 9px; height: 9px; border-radius: 50%;
+  background: var(--success);
+  box-shadow: 0 0 0 4px rgba(16,185,129,0.18);
+}
+.barber-shell .bcaja-session__dot--off { background: var(--text-4); box-shadow: none; }
+.barber-shell .bcaja-session__main { font-size: 13.5px; font-weight: 600; color: var(--text-1); }
+.barber-shell .bcaja-session__meta { font-size: 12px; color: var(--text-3); }
+
+/* Citas por cobrar */
+.barber-shell .bcaja-appt {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--border-soft);
+  border-radius: 12px;
+  background: var(--bg-elev);
+  transition: border-color var(--dur-1, 150ms) var(--ease, ease), box-shadow var(--dur-1, 150ms) var(--ease, ease);
+}
+.barber-shell .bcaja-appt:hover { border-color: var(--border-brand); box-shadow: var(--shadow-2); }
+.barber-shell .bcaja-appt__time {
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  font-size: 15px;
+  color: var(--brand);
+  min-width: 52px;
+}
+.barber-shell .bcaja-appt__name { font-size: 13.5px; font-weight: 600; color: var(--text-1); }
+.barber-shell .bcaja-appt__meta { font-size: 12px; color: var(--text-3); margin-top: 2px; }
+.barber-shell .bcaja-appt__price { font-variant-numeric: tabular-nums; font-weight: 600; color: var(--text-2); font-size: 13px; }
+
+/* Tablas: scroll propio, nunca la página */
+.barber-shell .bcaja-table-wrap { overflow-x: auto; }
+.barber-shell .bcaja-table-wrap .table-new td,
+.barber-shell .bcaja-table-wrap .table-new th { white-space: nowrap; }
+.barber-shell .bcaja-num { text-align: right; font-variant-numeric: tabular-nums; }
+.barber-shell .bcaja-muted { color: var(--text-3); }
+.barber-shell .bcaja-strike { text-decoration: line-through; color: var(--text-4); }
+.barber-shell .bcaja-row-actions { display: inline-flex; gap: 4px; }
+
+/* Método de pago (segmentado) */
+.barber-shell .bcaja-seg {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+.barber-shell .bcaja-seg__btn {
+  height: 40px;
+  border-radius: 10px;
+  border: 1px solid var(--border-soft);
+  background: var(--bg-elev);
+  color: var(--text-2);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  transition: all var(--dur-1, 150ms) var(--ease, ease);
+}
+.barber-shell .bcaja-seg__btn:hover { border-color: var(--border-strong); color: var(--text-1); }
+.barber-shell .bcaja-seg__btn--on {
+  background: var(--caramel-600);
+  border-color: var(--caramel-700);
+  color: #fff;
+}
+.dark .barber-shell .bcaja-seg__btn--on { background: var(--caramel-400); color: var(--caramel-950); border-color: var(--caramel-500); }
+.barber-shell .bcaja-seg__btn:focus-visible { box-shadow: var(--ring); outline: none; }
+
+/* Chips de propina */
+.barber-shell .bcaja-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.barber-shell .bcaja-chip {
+  height: 30px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1px solid var(--border-soft);
+  background: var(--bg-elev);
+  color: var(--text-2);
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.barber-shell .bcaja-chip--on { background: var(--brand-soft); border-color: var(--border-brand); color: var(--brand); }
+
+/* Líneas del ticket */
+.barber-shell .bcaja-lines { display: flex; flex-direction: column; gap: 6px; }
+.barber-shell .bcaja-line {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto auto;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--border-soft);
+  border-radius: 10px;
+  background: var(--bg-elev-2);
+}
+.barber-shell .bcaja-line__name { font-size: 13px; font-weight: 600; color: var(--text-1); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.barber-shell .bcaja-line__hint { font-size: 11px; color: var(--text-3); }
+.barber-shell .bcaja-qty { display: inline-flex; align-items: center; gap: 4px; }
+.barber-shell .bcaja-qty__btn {
+  width: 26px; height: 26px; border-radius: 8px;
+  border: 1px solid var(--border-soft);
+  background: var(--bg-elev);
+  color: var(--text-1);
+  cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.barber-shell .bcaja-qty__btn:disabled { opacity: .4; cursor: not-allowed; }
+.barber-shell .bcaja-qty__n { min-width: 22px; text-align: center; font-variant-numeric: tabular-nums; font-size: 13px; font-weight: 600; }
+.barber-shell .bcaja-line__price { font-variant-numeric: tabular-nums; font-size: 13px; font-weight: 600; min-width: 76px; text-align: right; }
+
+/* Totales del ticket */
+.barber-shell .bcaja-totals {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: var(--bg-elev-2);
+  border: 1px solid var(--border-soft);
+}
+.barber-shell .bcaja-totals__row { display: flex; justify-content: space-between; font-size: 13px; color: var(--text-2); }
+.barber-shell .bcaja-totals__row--big { font-size: 18px; font-weight: 700; color: var(--text-1); padding-top: 6px; border-top: 1px dashed var(--border-soft); }
+.barber-shell .bcaja-totals__row span:last-child { font-variant-numeric: tabular-nums; }
+
+/* Formularios en modal */
+.barber-shell .bcaja-form { display: flex; flex-direction: column; gap: 14px; container-type: inline-size; }
+.barber-shell .bcaja-form__grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; }
+@container (min-width: 480px) {
+  .barber-shell .bcaja-form__grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+.barber-shell .bcaja-hint { font-size: 11.5px; color: var(--text-3); line-height: 1.45; }
+.barber-shell .bcaja-alert {
+  padding: 10px 12px;
+  border-radius: 10px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  border: 1px solid;
+}
+.barber-shell .bcaja-alert--danger { background: var(--danger-soft, rgba(239,68,68,0.08)); border-color: rgba(239,68,68,0.3); color: var(--danger); }
+.barber-shell .bcaja-alert--warning { background: var(--warning-soft, rgba(245,158,11,0.1)); border-color: rgba(245,158,11,0.3); color: var(--warning); }
+.barber-shell .bcaja-alert--info { background: var(--brand-softer); border-color: var(--border-brand); color: var(--text-2); }
+.barber-shell .bcaja-alert--success { background: var(--success-soft, rgba(16,185,129,0.1)); border-color: rgba(16,185,129,0.3); color: var(--success); }
+
+/* Inputs del vertical: ring caramelo (el .input-new base trae violeta) */
+.barber-shell .input-new:focus,
+.barber-shell .input-new:focus-visible {
+  border-color: var(--caramel-500);
+  box-shadow: var(--ring);
+}
+.barber-shell .bcaja-amount { font-variant-numeric: tabular-nums; font-size: 16px; font-weight: 600; height: 42px; }
+
+/* Cliente elegido */
+.barber-shell .bcaja-client {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  padding: 10px 12px; border-radius: 10px;
+  background: var(--brand-softer); border: 1px solid var(--border-brand);
+}
+.barber-shell .bcaja-client__name { font-size: 13px; font-weight: 600; color: var(--text-1); }
+.barber-shell .bcaja-client__meta { font-size: 11.5px; color: var(--text-3); margin-top: 2px; }
+.barber-shell .bcaja-suggest {
+  border: 1px solid var(--border-soft); border-radius: 10px; background: var(--bg-elev);
+  box-shadow: var(--shadow-2); overflow: hidden; margin-top: 4px;
+}
+.barber-shell .bcaja-suggest__item {
+  display: block; width: 100%; text-align: left; padding: 9px 12px;
+  background: transparent; border: 0; cursor: pointer; font-family: inherit;
+  border-bottom: 1px solid var(--border-soft);
+}
+.barber-shell .bcaja-suggest__item:last-child { border-bottom: 0; }
+.barber-shell .bcaja-suggest__item:hover { background: var(--bg-hover); }
+
+/* Periodo */
+.barber-shell .bcaja-period { display: inline-flex; align-items: center; gap: 8px; }
+.barber-shell .bcaja-period__label { font-size: 13.5px; font-weight: 600; color: var(--text-1); text-transform: capitalize; min-width: 130px; text-align: center; }
+
+/* Estado de éxito del ticket */
+.barber-shell .bcaja-success { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 10px; padding: 12px 0; }
+.barber-shell .bcaja-success__icon { width: 56px; height: 56px; border-radius: 50%; background: var(--success-soft, rgba(16,185,129,0.12)); color: var(--success); display: grid; place-items: center; }
+.barber-shell .bcaja-success__amount { font-size: 28px; font-weight: 700; color: var(--text-1); font-variant-numeric: tabular-nums; }
+
+/* Barra de alerta de stock */
+.barber-shell .bcaja-low { display: flex; flex-wrap: wrap; gap: 8px; }
+.barber-shell .bcaja-low__item {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 6px 10px; border-radius: 999px; font-size: 12px; font-weight: 600;
+  background: var(--warning-soft, rgba(245,158,11,0.12)); color: var(--warning); border: 1px solid rgba(245,158,11,0.3);
+}
+
+/* ── Impresión (ticket y recibo) ─────────────────────────────────────── */
+.bcaja-print {
+  max-width: 420px;
+  margin: 0 auto;
+  background: #fff;
+  color: #121010;
+  border: 1px solid var(--border-soft);
+  border-radius: 12px;
+  padding: 24px;
+  font-family: var(--font-sans, system-ui, sans-serif);
+  container-type: inline-size;
+}
+.bcaja-print--wide { max-width: 720px; }
+.bcaja-print__head { text-align: center; margin-bottom: 14px; }
+.bcaja-print__shop { font-size: 18px; font-weight: 700; letter-spacing: -0.01em; }
+.bcaja-print__meta { font-size: 11.5px; color: #4A4138; margin-top: 2px; }
+.bcaja-print__rule { border: 0; border-top: 1px dashed #b8ada0; margin: 12px 0; }
+.bcaja-print__row { display: flex; justify-content: space-between; gap: 12px; font-size: 12.5px; padding: 3px 0; }
+.bcaja-print__row span:last-child { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.bcaja-print__row--total { font-size: 16px; font-weight: 700; padding-top: 8px; }
+.bcaja-print__stamp {
+  display: inline-block; margin: 10px auto; padding: 6px 14px; border: 2px solid #b91c1c; color: #b91c1c;
+  font-weight: 800; letter-spacing: 0.08em; transform: rotate(-4deg); border-radius: 6px;
+}
+.bcaja-print__thanks { text-align: center; font-size: 12.5px; color: #4A4138; margin-top: 10px; }
+.bcaja-print__section { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: #7D7268; margin: 12px 0 6px; font-weight: 700; }
+.bcaja-print__table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.bcaja-print__table th { text-align: left; font-weight: 600; color: #7D7268; padding: 4px 6px; border-bottom: 1px solid #ddd; }
+.bcaja-print__table td { padding: 5px 6px; border-bottom: 1px solid #eee; vertical-align: top; }
+.bcaja-print__sign { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-top: 36px; }
+.bcaja-print__sign div { border-top: 1px solid #333; padding-top: 6px; font-size: 11.5px; text-align: center; color: #4A4138; }
+.bcaja-print-actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin: 0 auto 16px; max-width: 720px; }
+
+@media print {
+  .barber-shell .sidebar-new,
+  .barber-shell .topbar-new,
+  .barber-shell .icon-btn-new,
+  .bcaja-print-actions { display: none !important; }
+  .barber-shell main { padding: 0 !important; }
+  .bcaja-print { border: 0; border-radius: 0; max-width: none; padding: 0; }
+  body { background: #fff !important; }
+}

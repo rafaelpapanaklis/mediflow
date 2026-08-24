@@ -1,21 +1,31 @@
 export const dynamic = "force-dynamic";
 
 import "@/components/barber/cash/money.css";
-import { redirect } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { getBarberContext, hasBarberPermission } from "@/lib/barber-auth";
 import { getBarberPlan } from "@/lib/barber/plans";
 import { getBarberDict, getBarberT } from "@/i18n/dictionaries/barber";
 import type { Dictionary } from "@/i18n/t";
-import { currentPeriodKey, DEFAULT_BARBER_TZ, getCommissionSummary, isValidPeriodKey } from "@/lib/barber/commissions";
+import {
+  BarberCajaError,
+  COMMISSION_BASE_LABELS,
+  currentPeriodKey,
+  DEFAULT_BARBER_TZ,
+  getCommissionReceipt,
+  isValidPeriodKey,
+} from "@/lib/barber/commissions";
 import { BarberDenied } from "@/components/barber/cash/denied";
-import { ComisionesClient } from "@/components/barber/commissions/comisiones-client";
+import { ReceiptPrint } from "@/components/barber/commissions/receipt-print";
 
-/**
- * /barber/comisiones?period=YYYY-MM — nómina por barbero. Gate en SERVIDOR:
- * feature `commissions` (AVANZADO+) + commissions.view. Un rol BARBER recibe
- * SOLO su fila (el recorte lo hace getCommissionSummary, no la UI).
- */
-export default async function Page({ searchParams }: { searchParams: { period?: string } }) {
+/** /barber/comisiones/recibo/[barberId]?period=YYYY-MM — recibo imprimible.
+ *  Un BARBER que pida el recibo de otro recibe 404 (el recorte es del server). */
+export default async function Page({
+  params,
+  searchParams,
+}: {
+  params: { barberId: string };
+  searchParams: { period?: string };
+}) {
   const ctx = await getBarberContext();
   if (!ctx) redirect("/login");
   const plan = await getBarberPlan(ctx.barbershop.plan);
@@ -31,18 +41,27 @@ export default async function Page({ searchParams }: { searchParams: { period?: 
   }
 
   const tz = ctx.barbershop.timezone || DEFAULT_BARBER_TZ;
-  const current = currentPeriodKey(tz);
-  const period = isValidPeriodKey(searchParams.period) ? searchParams.period : current;
-  const summary = await getCommissionSummary(ctx, period);
+  const periodKey = isValidPeriodKey(searchParams.period) ? searchParams.period : currentPeriodKey(tz);
+
+  let receipt: Awaited<ReturnType<typeof getCommissionReceipt>>;
+  try {
+    receipt = await getCommissionReceipt(ctx, { barberId: params.barberId, periodKey });
+  } catch (e) {
+    if (e instanceof BarberCajaError && e.status === 403) notFound();
+    throw e;
+  }
+  if (!receipt) notFound();
 
   return (
-    <ComisionesClient
+    <ReceiptPrint
       dict={dict}
       locale={ctx.barbershop.locale}
-      summary={summary}
-      maxPeriod={current}
-      canManage={hasBarberPermission(permUser, "commissions.manage")}
-      noBarberLinked={ctx.role === "BARBER" && !ctx.barber}
+      shopName={ctx.barbershop.name}
+      periodKey={periodKey}
+      tz={tz}
+      row={receipt.row}
+      entries={receipt.entries}
+      policyLabel={COMMISSION_BASE_LABELS[receipt.summary.policy.base]}
     />
   );
 }
