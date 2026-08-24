@@ -11001,3 +11001,335 @@ AVISOS
    min si vienen como path; si BarberVisitPhoto.url ya es una URL http, pasa
    tal cual. Falla suave: una foto que no se pueda firmar no se muestra, la
    pantalla no se rompe.
+
+═══════════════════════════════════════════════════════════════════════════
+## BARBER MEMBRESÍAS — Membresías del cliente final, anticipos anti no-show y pago en línea ✅ (2026-08-24)
+═══════════════════════════════════════════════════════════════════════════
+COMMITS: cfb56371 (feature) · 7b8afdab (integración + pruebas contra Postgres
+real) · b4c81ced (la tabla sobrevive a un db push). Pusheados a main sobre
+45c06795. Rama feat/barber-membresias.
+
+VERIFICACIÓN (los 9 puntos del encargo)
+ 1. BUILD exit 0, salida completa, sin pipes. `npm run build` = prisma
+    generate + next build; el `prisma generate` truena con EPERM porque dos
+    `next start` ajenos (PID 25104 y 62312, del checkout principal) tienen
+    tomado query_engine-windows.dll.node — el conocido de siempre. NO los
+    maté. Como esta ola NO toca prisma/schema.prisma (verificado con git
+    diff), el cliente generado ya es el correcto y el gate se corrió como
+    `npx next build` → exit 0, 372/372 páginas, 0 "Failed to compile" y 0
+    "Type error". `npx tsc --noEmit` sobre TODO el repo: limpio.
+    OJO para quien repita: el type-check de Next se quedó sin heap (exit
+    134) hasta correrlo con NODE_OPTIONS=--max-old-space-size=8192.
+ 2. Membresía de 2 cortes: el tercero SE COBRA, y el cupo no se pasa ni con
+    peticiones simultáneas. Probado contra Postgres 16 real (no simulado):
+    5 cierres a la vez sobre 2 cortes → exactamente 2 quedan cubiertos y
+    cutsUsed queda en 2. Cada caso trae su CONTROL, que reproduce el patrón
+    inseguro contra la MISMA base y SÍ se pasa del cupo — si no se rompiera,
+    la prueba no probaría nada.
+ 3. Una membresía pagada en EFECTIVO vence sola y aparece en "por vencer",
+    sin tocar Stripe: sweepExpiredMemberships la marca EXPIRED al abrir la
+    pantalla (stripeSubscriptionId sigue null). Probado.
+ 4. El anticipo aplicado a un ticket no se puede aplicar dos veces: la
+    segunda llamada devuelve ALREADY_APPLIED y con tres llamadas
+    simultáneas solo entra UNA línea de crédito. Probado.
+ 5. Con dos barberías, ninguna ve nada de la otra: catálogo, membresías
+    vendidas, stats y anticipos. Y aunque B conozca los ids de A no puede
+    tocarlos (APPOINTMENT_NOT_FOUND / no descuenta su cupo). Probado.
+    Además, auditoría mecánica: 63 llamadas a Prisma en los módulos de la
+    ola, TODAS con barbershopId; las 9 que no lo traen en los argumentos
+    literales usan un `where` o una fila verificada antes con barbershopId
+    (revisadas una por una).
+ 6. Los eventos del webhook NO se solapan con los de T6 — detalle abajo.
+ 7. Ningún secreto de Stripe en el código ni en el repo: todo por env.
+ 8. `node scripts/barber-guard.cjs` → exit 0. 33 archivos, TODOS propios del
+    vertical. prisma/schema.prisma NO se tocó (0 compartidos declarados;
+    ni siquiera hizo falta la excepción de ORQUESTA.md hasta este reporte).
+ 9. Cero "paciente", "doctor", "Dr.", "clínica", "consulta", "expediente"
+    en los 33 archivos (grep incluido en la verificación).
+
+PRUEBAS: 68 propias, todas verdes.
+  npx tsx --test src/lib/barber/__tests__/membresias.test.ts \
+    src/lib/barber/__tests__/anticipos.test.ts \
+    src/lib/barber/__tests__/concurrencia.test.ts \
+    src/lib/barber/__tests__/contrato-caja.test.ts
+  (56 sin base de datos; las de integración se SALTAN solas sin DATABASE_URL)
+  Con Postgres en Docker (12 más, incluidas las 5 del encargo):
+  docker run -d --name barber-membresias-pg -e POSTGRES_PASSWORD=barber \
+    -e POSTGRES_DB=barber -p 54331:5432 postgres:16-alpine
+  DATABASE_URL=postgresql://postgres:barber@localhost:54331/barber \
+    DIRECT_URL=$DATABASE_URL npx prisma db push --skip-generate
+  psql ... -f sql/barber_membresias.sql      # y OTRA VEZ tras cada db push
+  DATABASE_URL=... DIRECT_URL=... npx tsx --test \
+    src/lib/barber/__tests__/membresias-integration.test.ts
+  sql/barber_membresias.sql se aplicó DOS veces seguidas sobre la misma base
+  sin error: es idempotente de verdad.
+
+╔═══════════════════════════════════════════════════════════════════════╗
+║ 🔴 P0 — HALLAZGO EN LA CAJA (T3). NO lo arreglé: es su archivo.        ║
+╚═══════════════════════════════════════════════════════════════════════╝
+La caja también descuenta el cupo de la membresía al cerrar el ticket, y
+su descuento NO es atómico. En src/lib/barber/cash.ts (~línea 1018):
+
+    if (membershipUsed) {
+      await tx.barberClientMembership.updateMany({
+        where: { id: membershipUsed.id, barbershopId },   // <- falta el cupo
+        data:  { cutsUsed: { increment: 1 } },
+      });
+    }
+
+El cupo se revisa antes en JavaScript (toClientLookup) y el increment va sin
+condición. Dos cobros al mismo tiempo leen el mismo cupo y los dos
+incrementan. NO es teoría: lo reproduje contra Postgres real en
+src/lib/barber/__tests__/caja-membresia-carrera.test.ts — una membresía de
+2 cortes con 1 disponible termina en cutsUsed = 3. Un corte regalado por
+cada carrera.
+Es un olvido, no un criterio: para la LEALTAD, cuatro líneas más arriba, SÍ
+pusieron la condición dentro del WHERE (`loyaltyCount: { gte: TARGET }` y
+`if (r.count === 0) throw`).
+ARREGLO (una línea, con el candado que esta ola ya expone):
+
+    const ok = await consumeMembershipCutTx(tx, {
+      barbershopId,
+      clientMembershipId: membershipUsed.id,
+      includedCuts: membershipUsed.includedCuts,   // null = ilimitada
+    });
+    if (!ok) throw new BarberCajaError(409, "MEMBERSHIP_NOT_ACTIVE",
+      "La membresía se quedó sin cupo");
+
+(importar consumeMembershipCutTx de "@/lib/barber/memberships"; hay que
+llevar includedCuts hasta ahí — toClientLookup ya lo tiene a la mano.)
+La prueba de reproducción está escrita para TRONAR en cuanto se arregle, con
+el mensaje "borra este archivo". Es decir: al aplicar el arreglo, borren
+caja-membresia-carrera.test.ts.
+
+CONVIVENCIA CON LA CAJA (mientras el P0 siga abierto, ya está resuelta)
+La caja marca la línea cubierta con un SUFIJO (" · Membresía" y precio 0);
+esta ola marca con una línea de CRÉDITO negativa con prefijo ("Membresía · ").
+isMembershipLine() reconoce las DOS y la revisión de idempotencia de
+applyMembershipToVisit busca las dos, así que la misma visita nunca descuenta
+dos cortes aunque el ticket lo haya cerrado la otra ruta.
+contrato-caja.test.ts lee cash.ts y truena si el sufijo cambia allá.
+
+╔═══════════════════════════════════════════════════════════════════════╗
+║ 🟡 P1 — 3 líneas que le faltan a la reserva pública (T5). Su archivo.  ║
+╚═══════════════════════════════════════════════════════════════════════╝
+T5 dejó el gancho listo y vacío en src/lib/barber/booking.ts:
+
+    export async function resolveDepositForBooking(_args: {...}) {
+      return null;   // "T4 es dueño del flujo de cobro"
+    }
+
+Con esto conectado, la reserva pública ya pide anticipo:
+
+    import { quoteDepositForBooking } from "@/lib/barber/payments";
+    export async function resolveDepositForBooking(args: {
+      barbershopId: string; serviceIds: string[]; total: number;
+    }): Promise<{ amount: number; status: "PENDING" } | null> {
+      const q = await quoteDepositForBooking({
+        barbershopId: args.barbershopId, serviceIds: args.serviceIds,
+      });
+      return q.required ? { amount: q.amount, status: "PENDING" } : null;
+    }
+
+Y para COBRARLO en línea, después de crear la cita:
+    const { url } = await startDepositPayment({ barbershopId, appointmentId,
+      successUrl, cancelUrl });   // manda al cliente a esa URL
+El texto de la política (q.policyText) se enseña ANTES del botón de pagar.
+
+🔵 OBSERVACIÓN (T6, no bloquea): src/lib/barber/__tests__/billing-gating.test.ts
+no corre — su cabecera pide `--import ./scripts/barber-test-hook.mjs` y ese
+archivo no está en el repo, así que truena con "Cannot find module
+'server-only'". Esta ola resolvió lo mismo sin hook y sin tocar node_modules:
+`import "./_sin-server-only"` como PRIMER import (intercepta Module._load).
+Se pueden servir de ahí.
+
+FRONTERA DE WEBHOOKS CON T6 — verificada leyendo SU código, no de palabra
+  · MÍO   /api/barber/payments/webhook  (cliente final: membresías y anticipos)
+      secreto: BARBER_PAYMENTS_STRIPE_WEBHOOK_SECRET
+      escucha EXACTAMENTE 3 eventos y ningún otro:
+         payment_intent.succeeded
+         payment_intent.payment_failed
+         payment_intent.canceled
+  · DE T6 /api/barber/stripe/webhook  (suscripción del SaaS a la barbería)
+      secreto: BARBER_STRIPE_WEBHOOK_SECRET
+      escucha: checkout.session.*  y  customer.subscription.*
+  Intersección: VACÍA. Hay una prueba que lo asegura para siempre
+  ("nuestro webhook y el de la suscripción del SaaS no comparten NI UN
+  evento"), y el handler tiene un candado duro: aunque alguien marque
+  eventos de más en el dashboard de Stripe, aquí NO se procesa nada fuera de
+  la lista. T6 ya lo había anticipado en su cabecera ("T4 escucha
+  payment_intent.* y los de sus membresías").
+  A PROPÓSITO no escucho invoice.*: la RENOVACIÓN de una membresía se detecta
+  por el PaymentIntent de su factura (pi.invoice → invoice.subscription →
+  subscription.metadata), nunca por invoice.paid. Así ese tipo de evento
+  queda libre para T6 el día que lo necesite.
+  Y como la cuenta de Stripe es la misma, a mi endpoint TAMBIÉN le caen
+  PaymentIntents del SaaS: todo lo que no traiga el namespace `dcb` se ignora
+  sin tocar nada (probado).
+
+ENVS QUE RAFAEL DEBE CREAR EN VERCEL (no las inventé ni las publiqué)
+  · BARBER_PAYMENTS_STRIPE_WEBHOOK_SECRET   (Sensitive) — OBLIGATORIA.
+      Es el `whsec_...` del endpoint NUEVO. En Stripe → Webhooks → Add
+      endpoint → https://TU_DOMINIO/api/barber/payments/webhook y marcar SOLO
+      esos 3 eventos payment_intent.*. NO marcar checkout.session.*,
+      customer.subscription.* ni invoice.*: son de T6.
+  · BARBER_PAYMENTS_STRIPE_SECRET_KEY       (Sensitive) — OPCIONAL.
+      Si no está, cae a BARBER_STRIPE_SECRET_KEY (la que ya usa T6, misma
+      cuenta) y luego a STRIPE_SECRET_KEY. O sea: con crear el secreto del
+      webhook basta.
+  Sin la llave, el panel NO truena: se apaga el cobro con tarjeta y la
+  barbería sigue vendiendo membresías en efectivo y SPEI, que es el caso de
+  uso principal en México.
+
+SQL PENDIENTE EN SUPABASE: sql/barber_membresias.sql
+  Crea barber_payment_settings, la ÚNICA tabla nueva de la ola.
+  POR QUÉ existe (y por qué NO está en prisma/schema.prisma): la política de
+  anticipos (monto o %, a quién, ventana de reembolso, cobro en línea, cuenta
+  Connect) no tiene dónde vivir — el schema del vertical no tiene ninguna
+  tabla ni columna de ajustes por barbería. Meterla en schema.prisma habría
+  chocado con las otras 8 terminales que lo estaban editando en paralelo, y
+  una columna nueva en un modelo existente ROMPE todas las lecturas de esa
+  tabla hasta aplicar el SQL. Por eso vive fuera del schema y se lee con SQL
+  crudo. Es la ÚNICA desviación del contrato "no crees tablas", y es
+  reversible con un DROP TABLE sin perder ninguna membresía ni anticipo.
+  Si el SQL no se aplica: nada truena. La política cae a sus valores por
+  defecto (anticipos APAGADOS) y la pestaña muestra un aviso rojo diciendo
+  exactamente qué falta.
+  ⚠️ `prisma db push` la BORRA (la considera sobrante por no estar en el
+  schema). En producción no aplica porque el SQL se corre a mano en Supabase,
+  pero en desarrollo hay que volver a correr el archivo después de un push.
+
+LO QUE SE CONSTRUYÓ
+
+A. Definir membresías — /barber/membresias, pestaña "Planes"
+   La barbería crea sus propios planes: nombre, descripción, precio, cortes
+   incluidos por periodo (o ILIMITADO, que en el schema es includedCuts
+   null), duración del periodo (chips semanal/quincenal/mensual/anual + días
+   a mano) y activo/inactivo. NI UN precio hardcodeado: el estado vacío
+   sugiere los tres formatos que funcionan ("2 cortes al mes", "Corte
+   ilimitado", "Corte + barba quincenal") SIN precio, porque el precio lo
+   pone la barbería. Editar un plan NO reescribe lo ya vendido: quien pagó
+   "2 cortes" conserva sus 2 hasta renovar. Un plan ya vendido no se borra
+   (la FK es NoAction), se desactiva.
+
+B. Vender — los tres métodos de México
+   · EFECTIVO y SPEI: la barbería registra el pago y el sistema calcula la
+     vigencia. Aquí está el hueco del mercado: media plaza no usa tarjeta.
+   · TARJETA EN MOSTRADOR: igual, registro manual.
+   · TARJETA EN LÍNEA: Stripe Checkout. Con "cobrar solo cada periodo" crea
+     una SUSCRIPCIÓN real que se renueva sola; sin eso, un cobro único.
+     La fila BarberClientMembership NO nace en el checkout: nace cuando
+     Stripe confirma el cobro (webhook, o el sync de retorno si el webhook
+     tarda). Nunca queda una membresía activa sin dinero detrás. Los dos
+     caminos se serializan con un lock de asesoría por suscripción, así que
+     no se duplican filas si llegan a la vez.
+   · Vencimiento: sweepExpiredMemberships marca EXPIRED lo que ya pasó de
+     fecha, al abrir la pantalla — sin cron. Las de efectivo vencen al
+     segundo; las de Stripe tienen 3 días de gracia para no parpadear
+     mientras entra el cobro de renovación.
+   · Renovar (manual): encadena el periodo nuevo al actual, así el cliente
+     NO pierde los días que le quedaban, y reinicia el contador de cortes.
+   · Vistas "Por vencer" (7 días o menos) y "Vencidas": la lista con la que
+     el dueño sale a cobrar, con un letrero que lo dice.
+   · Cabecera con Vigentes / Por vencer / Vencidas / Ingreso comprometido.
+
+C. Consumo — lo que llama el cierre de la visita
+   applyMembershipToVisit({ barbershopId, clientId, lines, saleId?,
+   appointmentId? }) descuenta UN corte y deja el servicio en $0 con una
+   línea de CRÉDITO negativa, no bajando el precio del servicio: así la
+   comisión del barbero y los reportes siguen viendo el precio real.
+   · Cubre el servicio MÁS CARO del ticket (lo que más le conviene al
+     cliente). Ignora productos, líneas libres y las que ya están en $0.
+   · Con appointmentId es idempotente: si esa visita ya trae línea de
+     membresía (la nuestra O la de la caja) devuelve ALREADY_APPLIED.
+   · Si el cupo se agotó: covered=false, reason "QUOTA_EXHAUSTED", el
+     servicio se cobra normal y la pantalla lo avisa.
+   · Sin saleId no toca el ticket: solo descuenta y devuelve la línea
+     sugerida en creditLine.
+   · releaseMembershipCut() devuelve el corte si el ticket se cae.
+   · previewMembershipCoverage() es la versión de SOLO LECTURA.
+   · consumeMembershipCutTx(tx, …) es el candado suelto, para usarse dentro
+     de una transacción ajena (es lo que necesita la caja).
+   EL CANDADO: todo (barbería + vigencia + cupo) va DENTRO del WHERE de un
+   solo UPDATE. Postgres re-evalúa la condición contra la fila ya
+   actualizada, así que el segundo cierre simplemente no encuentra fila.
+   Jamás se lee-y-luego-se-escribe. Decide SIEMPRE el servidor.
+
+D. Anticipos anti no-show — pestaña "Anticipos"
+   · Política por barbería: monto FIJO o PORCENTAJE del servicio, tope
+     opcional, y a quién se le pide: a todos / solo a clientes nuevos (sin
+     ninguna visita completada) / SOLO A QUIEN YA FALTÓ ANTES (≥1 NO_SHOW).
+     La tercera viene marcada por defecto: es la más justa y la que mejor
+     recibe el cliente, porque no castiga a quien siempre llega.
+   · El anticipo NUNCA es mayor que el precio del servicio, pase lo que pase.
+   · POLÍTICA VISIBLE ANTES DE PAGAR, sin letra chica: cuánto, que se aplica
+     completo al servicio el día de la visita, y hasta cuántas horas antes se
+     cancela sin costo (0 = no reembolsable, y lo dice así de claro). La
+     barbería puede escribir su propio texto; si no, se redacta solo. La
+     pestaña muestra la vista previa exacta que verá el cliente.
+   · Cobro: startDepositPayment() devuelve URL de Stripe Checkout o el
+     clientSecret, y deja la cita en depositAmount + depositStatus PENDING.
+     Pasa a PAID SOLO cuando Stripe confirma; jamás desde el navegador.
+     markDepositPaidManually() para el anticipo cobrado en mostrador.
+   · Al cerrar el ticket: applyDepositToSale() lo aplica UNA vez. La
+     operación corre dentro de una transacción con SELECT ... FOR UPDATE
+     sobre la cita y revisa si algún ticket de esa visita ya trae la línea.
+   · No llegó: la barbería decide. refundDeposit() devuelve (y reembolsa en
+     Stripe si el cobro fue con tarjeta, buscando el PaymentIntent por
+     metadata) o forfeitDeposit() lo retiene. Las dos dejan registro en
+     depositStatus y anexan una línea a las notas de la cita con monto,
+     fecha y quién lo hizo.
+   · Si la barbería tiene cuenta de Stripe Connect configurada (acct_…), el
+     dinero se manda ahí con transfer_data; si no, cae en la plataforma. El
+     campo solo acepta el formato real de Stripe: cualquier otra cosa se
+     descarta en vez de guardarse a medias.
+
+API PARA LAS OTRAS TERMINALES (importar SIEMPRE de estos dos archivos)
+  @/lib/barber/memberships
+    applyMembershipToVisit · previewMembershipCoverage · consumeMembershipCutTx
+    releaseMembershipCut · getActiveClientMembership
+    getClientMembershipForPortal · listClientMembershipHistory   ← T5 portal
+    listPublicMembershipPlans                                    ← T5 reserva
+    listMembershipPlans · sellMembership · renewClientMembership
+    sweepExpiredMemberships · getMembershipStats
+  @/lib/barber/payments
+    quoteDepositForBooking · startDepositPayment                 ← T5 reserva
+    previewDepositForSale · applyDepositToSale                   ← T3 ticket
+    refundDeposit · forfeitDeposit · markDepositPaidManually
+    listClientDeposits                                           ← T5 portal
+    getBarberPaymentSettings · saveBarberDepositPolicy
+    createMembershipCheckoutSession · syncMembershipCheckout
+    cancelMembershipSubscription · handleBarberPaymentsWebhook
+  Todas exigen barbershopId como string y truenan con 401 si llega vacío: un
+  undefined ahí borraría el filtro de tenant en Prisma.
+
+DECISIONES QUE CONVIENE CONOCER
+  · Todo el dinero se mueve en ENTEROS DE CENTAVOS y se convierte a
+    Prisma.Decimal en la frontera de BD. Cero float. Probado con 1000 sumas
+    de $0.07 sin deriva.
+  · Las membresías son POR SEDE (barbershopId exacto), no por cadena. No se
+    usa getAccessibleBranchIds porque ninguna consulta de esta ola recibe un
+    branchId del request: no hay filtro de sucursal que inventar. El día que
+    se quiera membresía válida en toda la cadena hay que decidir antes qué
+    pasa con BarberClient, que es por sede (unique barbershopId+phone).
+  · Una renovación sobrescribe el periodo: NO hay historial de pagos por
+    periodo (el schema solo guarda el periodo vigente). Si se quiere el
+    historial de cobros de una membresía, hace falta modelarlo.
+  · Vender membresía en efectivo NO crea ticket de caja todavía: T3 es dueño
+    del ticket y no me metí. Hoy ese dinero no entra al corte de caja.
+  · Un cliente con membresía vigente no puede comprar otra: se renueva.
+  · SPEI aquí es registro MANUAL (lo que pide el encargo), no SPEI de Stripe.
+    El cobro en línea es solo tarjeta; el hueco para agregar
+    customer_balance/mx_bank_transfer está marcado en el código.
+
+QA MANUAL PENDIENTE (necesita entorno con Stripe)
+  1. Crear el endpoint de webhook en Stripe con los 3 eventos y la env, y
+     hacer un cobro de prueba de anticipo → que la cita pase a PAID sola.
+  2. Vender una membresía con tarjeta en modo suscripción y esperar una
+     renovación (o forzarla con un reloj de prueba de Stripe) → que endAt se
+     extienda y cutsUsed vuelva a 0 sin tocar nada a mano.
+  3. Reembolsar un anticipo cobrado con tarjeta → que aparezca el refund en
+     Stripe (la búsqueda del PaymentIntent por metadata tarda ~1 min en
+     indexarse; en un reembolso el mismo día no es problema, pero si falla,
+     el estado se registra igual y la barbería devuelve en efectivo).
+  4. Con dos barberías reales en la misma base, repetir a mano el punto 5.
