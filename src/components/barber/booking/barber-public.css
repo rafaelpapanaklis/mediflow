@@ -1,0 +1,820 @@
+/* ═══════════════════════════════════════════════════════════════════════
+   DaleControl BARBER — estilos de las DOS superficies públicas del cliente
+   final: la reserva (/b/[slug]/reservar) y el portal (/b/[slug]/mi-cuenta).
+
+   Scope: todo cuelga de .dcb-public, que a su vez vive dentro de
+   .barber-shell (el tema caramelo). NO se toca globals.css ni el tema.
+
+   POR QUÉ TODO EN px Y NO EN rem
+   ────────────────────────────────────────────────────────────────────────
+   globals.css define html { font-size: clamp(13px, 0.55vw + 10.5px, 16px) }.
+   En un celular la raíz mide 13px, así que cualquier medida en rem (y toda
+   utilidad de Tailwind) sale un 20% más chica justo donde MÁS tráfico hay:
+   Instagram en móvil. Aquí se fija el tamaño base en px y se mide en px.
+
+   POR QUÉ @container Y NO @media
+   ────────────────────────────────────────────────────────────────────────
+   Regla del repo. Además es lo correcto: estas piezas se montan dentro de
+   la mini-web de la barbería, cuyo ancho no es el de la ventana.
+
+   OJO: container-type crea contexto de contención — un position:fixed de un
+   descendiente se ancla al contenedor, no a la ventana. Por eso la barra de
+   acción usa position:sticky y aquí NO hay nada fixed.
+
+   ♿ CONTRASTE: texto blanco SOLO sobre caramel-600/700. El 500 es para
+   bordes, iconos y texto grande.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+.dcb-public {
+  container-type: inline-size;
+  container-name: dcb;
+  font-size: 16px;
+  line-height: 1.5;
+  color: var(--text-1);
+  min-height: 100vh;
+  padding: 0 16px 40px;
+}
+
+/* El preflight de Tailwind declara `svg { display: block }`. Los iconos que
+   viven DENTRO de una línea de texto (la dirección al pie, el barbero de la
+   confirmación) se iban a su propio renglón, alineados a la izquierda de un
+   párrafo centrado. Los que van dentro de un botón no sufren esto porque el
+   botón es flex y los blockifica igual. */
+.dcb-public p svg,
+.dcb-link svg {
+  display: inline;
+  vertical-align: -2px;
+}
+
+.dcb-shell {
+  width: 100%;
+  max-width: 560px;
+  margin: 0 auto;
+}
+
+.dcb-shell--wide { max-width: 720px; }
+
+/* ── Cabecera de la barbería ─────────────────────────────────────────── */
+
+.dcb-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 20px 0 16px;
+}
+
+.dcb-head__logo {
+  width: 48px;
+  height: 48px;
+  border-radius: 14px;
+  object-fit: cover;
+  background: var(--bg-elev-2);
+  border: 1px solid var(--border-soft);
+  flex: 0 0 auto;
+}
+
+.dcb-head__logo--fallback {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--caramel-700);
+  background: var(--caramel-100);
+}
+
+.dcb-head__name {
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  margin: 0;
+}
+
+.dcb-head__meta {
+  font-size: 13px;
+  color: var(--text-3);
+  margin: 2px 0 0;
+}
+
+/* ── Riel de pasos ───────────────────────────────────────────────────── */
+
+.dcb-steps {
+  display: flex;
+  gap: 6px;
+  padding: 0 0 6px;
+  list-style: none;
+  margin: 0;
+}
+
+.dcb-steps__item {
+  flex: 1 1 0;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--border-soft);
+  transition: background 180ms ease;
+}
+
+.dcb-steps__item--done { background: var(--caramel-500); }
+.dcb-steps__item--now { background: var(--caramel-600); }
+
+.dcb-steps__label {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  margin: 10px 0 0;
+}
+
+/* ── Tarjeta / secciones ─────────────────────────────────────────────── */
+
+.dcb-card {
+  background: var(--bg-elev);
+  border: 1px solid var(--border-soft);
+  border-radius: 16px;
+  padding: 16px;
+  box-shadow: var(--shadow-1);
+}
+
+.dcb-title {
+  font-size: 22px;
+  line-height: 1.25;
+  font-weight: 700;
+  letter-spacing: -0.015em;
+  margin: 14px 0 4px;
+}
+
+.dcb-sub {
+  font-size: 14px;
+  color: var(--text-3);
+  margin: 0 0 16px;
+}
+
+.dcb-section {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  margin: 24px 0 10px;
+}
+
+/* ── Opción seleccionable (servicio, barbero) ────────────────────────── */
+
+.dcb-options {
+  display: grid;
+  gap: 10px;
+}
+
+.dcb-option {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  text-align: left;
+  padding: 14px;
+  border-radius: 14px;
+  border: 1.5px solid var(--border-soft);
+  background: var(--bg-elev);
+  color: var(--text-1);
+  cursor: pointer;
+  /* 48px de alto mínimo: se toca con el pulgar sin fallar. */
+  min-height: 64px;
+  transition: border-color 140ms ease, background 140ms ease;
+}
+
+.dcb-option:hover { border-color: var(--border-brand); }
+
+.dcb-option[aria-pressed="true"],
+.dcb-option--on {
+  border-color: var(--caramel-600);
+  background: var(--brand-softer);
+}
+
+.dcb-option__body { flex: 1 1 auto; min-width: 0; }
+
+/* display:block obligatorio: en el markup son <span> dentro de un flex item,
+   y sin esto el nombre y los minutos salen pegados en la misma línea. */
+.dcb-option__name {
+  display: block;
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.3;
+  margin: 0;
+}
+
+.dcb-option__meta {
+  display: block;
+  font-size: 13px;
+  line-height: 1.35;
+  color: var(--text-3);
+  margin: 2px 0 0;
+}
+
+.dcb-option__price {
+  font-size: 16px;
+  font-weight: 700;
+  white-space: nowrap;
+  color: var(--text-1);
+}
+
+.dcb-option__avatar {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex: 0 0 auto;
+  background: var(--caramel-100);
+  border: 1px solid var(--border-soft);
+}
+
+.dcb-option__avatar--fallback {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--caramel-700);
+}
+
+.dcb-option__check {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 1.5px solid var(--border-strong);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  color: transparent;
+}
+
+.dcb-option[aria-pressed="true"] .dcb-option__check,
+.dcb-option--on .dcb-option__check {
+  background: var(--caramel-600);
+  border-color: var(--caramel-600);
+  color: #fff;
+}
+
+/* ── Días y horas ────────────────────────────────────────────────────── */
+
+.dcb-days {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 2px 0 10px;
+  scroll-snap-type: x proximity;
+  -webkit-overflow-scrolling: touch;
+}
+
+.dcb-day {
+  flex: 0 0 auto;
+  scroll-snap-align: start;
+  min-width: 62px;
+  padding: 10px 8px;
+  border-radius: 14px;
+  border: 1.5px solid var(--border-soft);
+  background: var(--bg-elev);
+  color: var(--text-1);
+  cursor: pointer;
+  text-align: center;
+}
+
+.dcb-day__dow {
+  display: block;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+
+.dcb-day__num {
+  display: block;
+  font-size: 19px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.dcb-day__mon {
+  display: block;
+  font-size: 11px;
+  color: var(--text-3);
+}
+
+.dcb-day--on {
+  border-color: var(--caramel-600);
+  background: var(--caramel-600);
+}
+.dcb-day--on .dcb-day__dow,
+.dcb-day--on .dcb-day__num,
+.dcb-day--on .dcb-day__mon { color: #fff; }
+
+.dcb-day:disabled {
+  opacity: 0.38;
+  cursor: not-allowed;
+}
+
+.dcb-times {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+@container dcb (min-width: 420px) {
+  .dcb-times { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
+
+@container dcb (min-width: 620px) {
+  .dcb-times { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+  .dcb-options--two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+.dcb-time {
+  padding: 12px 6px;
+  border-radius: 12px;
+  border: 1.5px solid var(--border-soft);
+  background: var(--bg-elev);
+  color: var(--text-1);
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  min-height: 46px;
+}
+
+.dcb-time--on {
+  border-color: var(--caramel-600);
+  background: var(--caramel-600);
+  color: #fff;
+}
+
+.dcb-time__tag {
+  display: block;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--caramel-700);
+}
+
+.dcb-time--on .dcb-time__tag { color: rgba(255, 255, 255, 0.85); }
+
+/* ── Formulario ──────────────────────────────────────────────────────── */
+
+.dcb-field { display: block; margin: 0 0 14px; }
+
+.dcb-label {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-2);
+  margin: 0 0 6px;
+}
+
+.dcb-input,
+.dcb-textarea {
+  display: block;
+  width: 100%;
+  /* 16px exactos: por debajo, iOS hace zoom al enfocar y descuadra todo. */
+  font-size: 16px;
+  font-family: inherit;
+  color: var(--text-1);
+  background: var(--bg-elev);
+  border: 1.5px solid var(--border-soft);
+  border-radius: 12px;
+  padding: 13px 14px;
+  min-height: 48px;
+}
+
+.dcb-textarea { min-height: 84px; resize: vertical; }
+
+.dcb-input:focus,
+.dcb-textarea:focus {
+  outline: none;
+  border-color: var(--caramel-600);
+  box-shadow: var(--ring);
+}
+
+.dcb-help {
+  font-size: 12px;
+  color: var(--text-3);
+  margin: 6px 0 0;
+}
+
+.dcb-code {
+  font-size: 28px;
+  letter-spacing: 0.32em;
+  text-align: center;
+  font-weight: 700;
+  padding: 14px;
+}
+
+/* Campo trampa: fuera de la vista y del foco, pero presente en el DOM. */
+.dcb-honey {
+  position: absolute;
+  left: -9999px;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+}
+
+/* ── Botones ─────────────────────────────────────────────────────────── */
+
+.dcb-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 52px;
+  padding: 14px 18px;
+  border-radius: 14px;
+  font-size: 16px;
+  font-weight: 700;
+  font-family: inherit;
+  cursor: pointer;
+  border: 1.5px solid transparent;
+  transition: background 140ms ease, border-color 140ms ease;
+}
+
+.dcb-btn--primary {
+  background: var(--caramel-600);
+  border-color: var(--caramel-700);
+  color: #fff;
+}
+.dcb-btn--primary:hover:not(:disabled) { background: var(--caramel-700); }
+
+.dcb-btn--ghost {
+  background: transparent;
+  border-color: var(--border-strong);
+  color: var(--text-1);
+}
+.dcb-btn--ghost:hover:not(:disabled) { background: var(--bg-hover); }
+
+.dcb-btn--sm {
+  width: auto;
+  min-height: 40px;
+  padding: 9px 14px;
+  font-size: 14px;
+  border-radius: 11px;
+}
+
+.dcb-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.dcb-link {
+  background: none;
+  border: none;
+  padding: 8px 4px;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--caramel-700);
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.dark .dcb-link { color: var(--caramel-300); }
+
+.dcb-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+@container dcb (min-width: 480px) {
+  .dcb-actions { flex-direction: row-reverse; }
+  .dcb-actions .dcb-btn { width: auto; flex: 1 1 0; }
+}
+
+/* Barra de acción pegada abajo: sticky, NUNCA fixed (ver cabecera). */
+.dcb-bar {
+  position: sticky;
+  bottom: 0;
+  z-index: 5;
+  margin: 18px -16px 0;
+  padding: 12px 16px calc(12px + env(safe-area-inset-bottom, 0px));
+  background: var(--bg-elev);
+  border-top: 1px solid var(--border-soft);
+}
+
+.dcb-bar__row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  max-width: 560px;
+  margin: 0 auto;
+}
+
+.dcb-bar__total { flex: 1 1 auto; min-width: 0; }
+
+.dcb-bar__total b {
+  display: block;
+  font-size: 17px;
+  font-weight: 700;
+}
+
+.dcb-bar__total span {
+  display: block;
+  font-size: 12px;
+  color: var(--text-3);
+}
+
+.dcb-bar .dcb-btn { width: auto; flex: 0 0 auto; min-width: 150px; }
+
+/* ── Avisos ──────────────────────────────────────────────────────────── */
+
+.dcb-alert {
+  border-radius: 12px;
+  padding: 12px 14px;
+  font-size: 14px;
+  margin: 0 0 14px;
+  border: 1px solid transparent;
+}
+
+.dcb-alert--error {
+  background: rgba(185, 28, 28, 0.08);
+  border-color: rgba(185, 28, 28, 0.28);
+  color: #991b1b;
+}
+
+.dark .dcb-alert--error { color: #fca5a5; }
+
+.dcb-alert--info {
+  background: var(--brand-soft);
+  border-color: var(--border-brand);
+  color: var(--text-2);
+}
+
+.dcb-alert--ok {
+  background: rgba(4, 120, 87, 0.08);
+  border-color: rgba(4, 120, 87, 0.28);
+  color: #047857;
+}
+
+.dark .dcb-alert--ok { color: #6ee7b7; }
+
+.dcb-empty {
+  text-align: center;
+  padding: 28px 16px;
+  color: var(--text-3);
+  font-size: 14px;
+}
+
+.dcb-spin {
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: dcb-spin 700ms linear infinite;
+}
+
+@keyframes dcb-spin { to { transform: rotate(360deg); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .dcb-spin { animation-duration: 2s; }
+  .dcb-steps__item { transition: none; }
+}
+
+/* ── Resumen / confirmación ──────────────────────────────────────────── */
+
+.dcb-summary {
+  display: grid;
+  gap: 8px;
+  margin: 0 0 6px;
+  padding: 0;
+  list-style: none;
+}
+
+.dcb-summary li {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 14px;
+}
+
+.dcb-summary li span { color: var(--text-2); }
+.dcb-summary li b { font-weight: 600; white-space: nowrap; }
+
+.dcb-summary__total {
+  border-top: 1px solid var(--border-soft);
+  padding-top: 10px;
+  margin-top: 4px;
+  font-size: 16px !important;
+}
+
+.dcb-done {
+  text-align: center;
+  padding: 12px 0 4px;
+}
+
+.dcb-done__badge {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: var(--caramel-600);
+  color: #fff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 0 12px;
+}
+
+/* OJO: text-transform: capitalize pondría "28 De Agosto" y "11:00 A.M.".
+   En español solo va en mayúscula la primera letra de la frase. */
+.dcb-done__when {
+  font-size: 18px;
+  font-weight: 700;
+  margin: 0;
+}
+.dcb-done__when::first-letter { text-transform: uppercase; }
+
+.dcb-ref {
+  display: inline-block;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 13px;
+  letter-spacing: 0.12em;
+  background: var(--bg-elev-2);
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  padding: 5px 10px;
+  margin-top: 10px;
+}
+
+/* ── Portal: pestañas, citas, fotos, lealtad ─────────────────────────── */
+
+.dcb-tabs {
+  display: flex;
+  gap: 4px;
+  background: var(--bg-elev-2);
+  border-radius: 14px;
+  padding: 4px;
+  margin: 0 0 18px;
+}
+
+.dcb-tab {
+  flex: 1 1 0;
+  border: none;
+  background: transparent;
+  border-radius: 11px;
+  padding: 10px 6px;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-2);
+  cursor: pointer;
+  min-height: 44px;
+}
+
+.dcb-tab--on {
+  background: var(--bg-elev);
+  color: var(--text-1);
+  box-shadow: var(--shadow-1);
+}
+
+.dcb-appt {
+  border: 1px solid var(--border-soft);
+  border-radius: 16px;
+  padding: 14px;
+  background: var(--bg-elev);
+  margin: 0 0 12px;
+}
+
+.dcb-appt__when {
+  font-size: 16px;
+  font-weight: 700;
+  margin: 0;
+}
+.dcb-appt__when::first-letter { text-transform: uppercase; }
+
+.dcb-appt__meta {
+  font-size: 13px;
+  color: var(--text-3);
+  margin: 3px 0 0;
+}
+
+.dcb-appt__row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.dcb-appt__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.dcb-badge {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 4px 9px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+.dcb-badge--pending {
+  background: rgba(180, 83, 9, 0.12);
+  color: #b45309;
+}
+.dark .dcb-badge--pending { color: #fcd34d; }
+
+.dcb-badge--ok {
+  background: rgba(4, 120, 87, 0.12);
+  color: #047857;
+}
+.dark .dcb-badge--ok { color: #6ee7b7; }
+
+.dcb-badge--neutral {
+  background: var(--bg-elev-2);
+  color: var(--text-3);
+}
+
+.dcb-photos {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+  margin-top: 10px;
+}
+
+@container dcb (min-width: 480px) {
+  .dcb-photos { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
+
+.dcb-photos img {
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  object-fit: cover;
+  border-radius: 10px;
+  border: 1px solid var(--border-soft);
+  background: var(--bg-elev-2);
+}
+
+.dcb-loyalty {
+  background: var(--brand-softer);
+  border: 1px solid var(--border-brand);
+  border-radius: 16px;
+  padding: 14px;
+  margin: 0 0 18px;
+}
+
+.dcb-loyalty__stamps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 10px 0 0;
+}
+
+.dcb-loyalty__stamp {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 1.5px solid var(--border-brand);
+}
+
+.dcb-loyalty__stamp--on {
+  background: var(--caramel-600);
+  border-color: var(--caramel-600);
+}
+
+.dcb-kv {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 14px;
+  padding: 7px 0;
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.dcb-kv:last-child { border-bottom: none; }
+.dcb-kv span { color: var(--text-3); }
+.dcb-kv b { font-weight: 600; }
+
+.dcb-foot {
+  text-align: center;
+  font-size: 12px;
+  color: var(--text-4);
+  padding: 26px 0 0;
+}
+
+.dcb-foot a { color: inherit; text-decoration: underline; text-underline-offset: 3px; }
+
+.dcb-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}

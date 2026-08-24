@@ -18,6 +18,8 @@ import type { Dictionary } from "@/i18n/t";
 
 import shellEs from "./shell.es.json";
 import shellEn from "./shell.en.json";
+import reservaEs from "./reserva.es.json";
+import reservaEn from "./reserva.en.json";
 // ── Ola 1: importa aquí tu área (una línea por idioma) ──
 import agendaEs from "./agenda.es.json";
 import agendaEn from "./agenda.en.json";
@@ -29,6 +31,7 @@ const ES: Dictionary = {
     shell: shellEs as unknown as Dictionary,
     agenda: agendaEs as unknown as Dictionary,
     caja: cajaEs as unknown as Dictionary,
+    reserva: reservaEs as unknown as Dictionary,
   },
 };
 
@@ -37,6 +40,7 @@ const EN: Dictionary = {
     shell: shellEn as unknown as Dictionary,
     agenda: agendaEn as unknown as Dictionary,
     caja: cajaEn as unknown as Dictionary,
+    reserva: reservaEn as unknown as Dictionary,
   },
 };
 

@@ -1,0 +1,179 @@
+{
+  "meta": {
+    "title": "Book at {shop}",
+    "description": "Book your appointment at {shop}. No account, no app: pick a service, a barber and a time."
+  },
+  "cerrado": {
+    "title": "Online booking is off right now",
+    "body": "This barbershop isn't taking appointments online. Give them a call and they'll save you a spot.",
+    "noEncontrada": "We couldn't find this barbershop."
+  },
+  "pasos": {
+    "servicio": "Service",
+    "barbero": "Barber",
+    "fecha": "Day and time",
+    "datos": "Your details",
+    "de": "Step {n} of {total}",
+    "continuar": "Continue"
+  },
+  "servicio": {
+    "title": "What are we doing today?",
+    "sub": "You can pick more than one.",
+    "minutos": "{min} min",
+    "vacio": "This barbershop hasn't published its services yet.",
+    "totalLabel": "Total",
+    "duracionLabel": "Duration"
+  },
+  "barbero": {
+    "title": "With whom?",
+    "sub": "No preference? Pick the first one and we'll assign whoever is free.",
+    "cualquiera": "Anyone available",
+    "cualquieraSub": "More times to choose from",
+    "vacio": "This barbershop hasn't published its team yet."
+  },
+  "fecha": {
+    "title": "Which day?",
+    "sub": "Only days with openings show up.",
+    "horaTitle": "What time?",
+    "sinHoras": "That day is full. Try another one.",
+    "sinDias": "No openings in the next few weeks.",
+    "cargando": "Looking for openings…",
+    "hoy": "Today",
+    "manana": "Tomorrow",
+    "libres": "{n} open",
+    "ultimo": "Last spot"
+  },
+  "datos": {
+    "title": "Who's it for?",
+    "sub": "No passwords: your name and your WhatsApp are enough.",
+    "nombre": "Your name",
+    "nombrePlaceholder": "What people call you",
+    "telefono": "Your WhatsApp",
+    "telefonoPlaceholder": "10 digits",
+    "telefonoAyuda": "That's where the confirmation goes.",
+    "notas": "Anything your barber should know?",
+    "notasPlaceholder": "Optional: the usual cut, allergies, etc.",
+    "enviar": "Save my spot",
+    "enviando": "Saving…",
+    "resumen": "Your appointment",
+    "aviso": "By booking you agree the barbershop may contact you on WhatsApp to confirm."
+  },
+  "confirmacion": {
+    "tituloConfirmada": "You're set, {nombre}!",
+    "tituloPendiente": "Almost there, {nombre}",
+    "subConfirmada": "Your spot is saved.",
+    "subPendiente": "The barbershop will confirm on WhatsApp shortly.",
+    "referencia": "Reference",
+    "conBarbero": "With {barbero}",
+    "cualquierBarbero": "We'll assign a barber when you arrive",
+    "donde": "Where",
+    "comoLlegar": "Get directions",
+    "agregarCalendario": "Add to my calendar",
+    "google": "Google Calendar",
+    "verMisCitas": "See my appointments",
+    "otraCita": "Book another",
+    "duplicada": "This appointment was already saved with your number."
+  },
+  "errores": {
+    "generico": "Something went wrong. Try again.",
+    "sinServicio": "Pick at least one service.",
+    "sinHora": "Pick a time.",
+    "nombreCorto": "Type your name.",
+    "telefonoInvalido": "Type your WhatsApp, 10 digits.",
+    "sinRed": "No connection. Check your internet."
+  },
+  "portal": {
+    "meta": {
+      "title": "My account at {shop}",
+      "description": "Your appointments, visits and payments at {shop}."
+    },
+    "login": {
+      "title": "Sign in with your WhatsApp",
+      "sub": "No passwords: we'll text you a 6-digit code.",
+      "telefono": "Your WhatsApp",
+      "telefonoPlaceholder": "10 digits",
+      "pedirCodigo": "Send me the code",
+      "enviando": "Sending…",
+      "codigoTitle": "Type your code",
+      "codigoSub": "We sent it on WhatsApp. It expires in {min} minutes.",
+      "codigo": "6-digit code",
+      "entrar": "Enter",
+      "entrando": "Entering…",
+      "reenviar": "Send another code",
+      "cambiarNumero": "Use a different number",
+      "invalido": "That code isn't valid or it expired. Ask for a new one."
+    },
+    "nav": {
+      "citas": "My appointments",
+      "visitas": "My visits",
+      "pagos": "My payments",
+      "salir": "Sign out"
+    },
+    "hola": "Hi, {nombre}",
+    "citas": {
+      "title": "Upcoming appointments",
+      "vacio": "You have no appointments saved.",
+      "reservar": "Book an appointment",
+      "cancelar": "Cancel",
+      "cancelando": "Cancelling…",
+      "confirmarCancelar": "Cancel this appointment?",
+      "reagendar": "Ask for another time",
+      "reagendarEnviado": "We let the barbershop know. They'll message you on WhatsApp.",
+      "escribirWhatsapp": "Message on WhatsApp",
+      "noSePuedeCancelar": "For last-minute changes, message the barbershop.",
+      "conBarbero": "With {barbero}",
+      "anticipo": "Deposit",
+      "estado": {
+        "PENDING": "Awaiting confirmation",
+        "CONFIRMED": "Confirmed",
+        "IN_PROGRESS": "In the chair"
+      }
+    },
+    "visitas": {
+      "title": "Visit history",
+      "vacio": "No visits recorded yet.",
+      "fotos": "Photos of your cut",
+      "galeria": "Your photos"
+    },
+    "pagos": {
+      "title": "Your payments",
+      "vacio": "No payments recorded yet.",
+      "propina": "Tip",
+      "total": "Total"
+    },
+    "membresia": {
+      "title": "Your membership",
+      "vigencia": "Valid until {fecha}",
+      "cortes": "{n} cuts left",
+      "cortesIlimitados": "Unlimited cuts",
+      "sinMembresia": "You have no active membership."
+    },
+    "lealtad": {
+      "title": "Your loyalty card",
+      "progreso": "{n} of {meta} cuts",
+      "falta": "{n} to go for your free cut",
+      "listo": "You've got a free cut!",
+      "comoFunciona": "It applies on your next visit. Remind your barber."
+    }
+  },
+  "solicitudes": {
+    "title": "Booking requests",
+    "sub": "What people book from your page. Accept or decline and it becomes an appointment.",
+    "pendientes": "Pending",
+    "resueltas": "Resolved",
+    "vacioPendientes": "No pending requests. All caught up.",
+    "vacioResueltas": "You haven't resolved any requests yet.",
+    "aceptar": "Accept",
+    "rechazar": "Decline",
+    "clienteNuevo": "New client",
+    "clienteVisitas": "{n} visits",
+    "vencida": "That time already passed",
+    "cualquierBarbero": "No barber assigned",
+    "sinPermiso": "You don't have permission to handle requests.",
+    "modoManual": "Mode: you approve by hand. Every online booking waits for your OK.",
+    "modoAuto": "Mode: auto-confirm. Online bookings go straight into the calendar.",
+    "tuLiga": "Your booking link",
+    "copiar": "Copy",
+    "copiado": "Copied!"
+  }
+}

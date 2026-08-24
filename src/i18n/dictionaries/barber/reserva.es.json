@@ -1,0 +1,179 @@
+{
+  "meta": {
+    "title": "Reservar en {shop}",
+    "description": "Aparta tu cita en {shop}. Sin cuenta, sin app: eliges servicio, barbero y hora, y listo."
+  },
+  "cerrado": {
+    "title": "Por ahora no hay reservas en línea",
+    "body": "Esta barbería no está recibiendo citas por internet. Márcales y con gusto te apartan lugar.",
+    "noEncontrada": "No encontramos esta barbería."
+  },
+  "pasos": {
+    "servicio": "Servicio",
+    "barbero": "Barbero",
+    "fecha": "Día y hora",
+    "datos": "Tus datos",
+    "de": "Paso {n} de {total}",
+    "continuar": "Continuar"
+  },
+  "servicio": {
+    "title": "¿Qué te haces hoy?",
+    "sub": "Puedes elegir más de uno.",
+    "minutos": "{min} min",
+    "vacio": "Esta barbería todavía no publica sus servicios.",
+    "totalLabel": "Total",
+    "duracionLabel": "Duración"
+  },
+  "barbero": {
+    "title": "¿Con quién?",
+    "sub": "Si te da igual, elige el primero: te asignamos al que esté libre.",
+    "cualquiera": "Cualquiera disponible",
+    "cualquieraSub": "Más horarios para escoger",
+    "vacio": "Esta barbería todavía no publica su equipo."
+  },
+  "fecha": {
+    "title": "¿Qué día?",
+    "sub": "Solo aparecen los días con lugar.",
+    "horaTitle": "¿A qué hora?",
+    "sinHoras": "Ese día ya se llenó. Prueba con otro.",
+    "sinDias": "No hay lugares libres en las próximas semanas.",
+    "cargando": "Buscando lugares…",
+    "hoy": "Hoy",
+    "manana": "Mañana",
+    "libres": "{n} libres",
+    "ultimo": "Último lugar"
+  },
+  "datos": {
+    "title": "¿A nombre de quién?",
+    "sub": "Nada de contraseñas: con tu nombre y tu WhatsApp basta.",
+    "nombre": "Tu nombre",
+    "nombrePlaceholder": "Como te dicen",
+    "telefono": "Tu WhatsApp",
+    "telefonoPlaceholder": "10 dígitos",
+    "telefonoAyuda": "Ahí te llega la confirmación.",
+    "notas": "¿Algo que deba saber tu barbero?",
+    "notasPlaceholder": "Opcional: el corte de siempre, alergias, etc.",
+    "enviar": "Apartar mi lugar",
+    "enviando": "Apartando…",
+    "resumen": "Tu cita",
+    "aviso": "Al apartar aceptas que la barbería te contacte por WhatsApp para confirmar."
+  },
+  "confirmacion": {
+    "tituloConfirmada": "¡Listo, {nombre}!",
+    "tituloPendiente": "Ya casi, {nombre}",
+    "subConfirmada": "Tu lugar está apartado.",
+    "subPendiente": "La barbería te confirma en un momento por WhatsApp.",
+    "referencia": "Referencia",
+    "conBarbero": "Con {barbero}",
+    "cualquierBarbero": "Te asignamos barbero al llegar",
+    "donde": "Dónde",
+    "comoLlegar": "Cómo llegar",
+    "agregarCalendario": "Agregar a mi calendario",
+    "google": "Google Calendar",
+    "verMisCitas": "Ver mis citas",
+    "otraCita": "Agendar otra",
+    "duplicada": "Esta cita ya estaba apartada con tu número."
+  },
+  "errores": {
+    "generico": "Algo salió mal. Intenta de nuevo.",
+    "sinServicio": "Elige al menos un servicio.",
+    "sinHora": "Elige un horario.",
+    "nombreCorto": "Escribe tu nombre.",
+    "telefonoInvalido": "Escribe tu WhatsApp a 10 dígitos.",
+    "sinRed": "No hay conexión. Revisa tu internet."
+  },
+  "portal": {
+    "meta": {
+      "title": "Mi cuenta en {shop}",
+      "description": "Tus citas, tus visitas y tus pagos en {shop}."
+    },
+    "login": {
+      "title": "Entra con tu WhatsApp",
+      "sub": "Sin contraseñas: te mandamos un código de 6 dígitos.",
+      "telefono": "Tu WhatsApp",
+      "telefonoPlaceholder": "10 dígitos",
+      "pedirCodigo": "Mandarme el código",
+      "enviando": "Enviando…",
+      "codigoTitle": "Escribe tu código",
+      "codigoSub": "Te lo mandamos por WhatsApp. Vence en {min} minutos.",
+      "codigo": "Código de 6 dígitos",
+      "entrar": "Entrar",
+      "entrando": "Entrando…",
+      "reenviar": "Mandar otro código",
+      "cambiarNumero": "Usar otro número",
+      "invalido": "Ese código no es válido o ya venció. Pide uno nuevo."
+    },
+    "nav": {
+      "citas": "Mis citas",
+      "visitas": "Mis visitas",
+      "pagos": "Mis pagos",
+      "salir": "Salir"
+    },
+    "hola": "Hola, {nombre}",
+    "citas": {
+      "title": "Próximas citas",
+      "vacio": "No tienes citas apartadas.",
+      "reservar": "Apartar una cita",
+      "cancelar": "Cancelar",
+      "cancelando": "Cancelando…",
+      "confirmarCancelar": "¿Seguro que cancelas esta cita?",
+      "reagendar": "Pedir otro horario",
+      "reagendarEnviado": "Le avisamos a la barbería. Te escriben por WhatsApp.",
+      "escribirWhatsapp": "Escribir por WhatsApp",
+      "noSePuedeCancelar": "Para cambios de última hora, escríbele a la barbería.",
+      "conBarbero": "Con {barbero}",
+      "anticipo": "Anticipo",
+      "estado": {
+        "PENDING": "Por confirmar",
+        "CONFIRMED": "Confirmada",
+        "IN_PROGRESS": "En silla"
+      }
+    },
+    "visitas": {
+      "title": "Historial de visitas",
+      "vacio": "Todavía no hay visitas registradas.",
+      "fotos": "Fotos de tu corte",
+      "galeria": "Tus fotos"
+    },
+    "pagos": {
+      "title": "Tus pagos",
+      "vacio": "Todavía no hay pagos registrados.",
+      "propina": "Propina",
+      "total": "Total"
+    },
+    "membresia": {
+      "title": "Tu membresía",
+      "vigencia": "Vigente hasta {fecha}",
+      "cortes": "{n} cortes disponibles",
+      "cortesIlimitados": "Cortes ilimitados",
+      "sinMembresia": "No tienes membresía activa."
+    },
+    "lealtad": {
+      "title": "Tu tarjeta de lealtad",
+      "progreso": "{n} de {meta} cortes",
+      "falta": "Te falta {n} para tu corte gratis",
+      "listo": "¡Tienes un corte gratis!",
+      "comoFunciona": "Se aplica en tu próxima visita. Recuérdaselo a tu barbero."
+    }
+  },
+  "solicitudes": {
+    "title": "Solicitudes de reserva",
+    "sub": "Lo que la gente aparta desde tu página. Aceptas o rechazas y se vuelve cita.",
+    "pendientes": "Pendientes",
+    "resueltas": "Resueltas",
+    "vacioPendientes": "No hay solicitudes pendientes. Todo al día.",
+    "vacioResueltas": "Todavía no has resuelto ninguna solicitud.",
+    "aceptar": "Aceptar",
+    "rechazar": "Rechazar",
+    "clienteNuevo": "Cliente nuevo",
+    "clienteVisitas": "{n} visitas",
+    "vencida": "El horario ya pasó",
+    "cualquierBarbero": "Sin barbero asignado",
+    "sinPermiso": "No tienes permiso para atender solicitudes.",
+    "modoManual": "Modo: apruebas a mano. Cada reserva en línea espera tu visto bueno.",
+    "modoAuto": "Modo: confirmación automática. Las reservas en línea entran directo a la agenda.",
+    "tuLiga": "Tu liga de reservas",
+    "copiar": "Copiar",
+    "copiado": "¡Copiada!"
+  }
+}
