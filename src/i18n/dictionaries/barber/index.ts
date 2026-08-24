@@ -25,6 +25,8 @@ import agendaEs from "./agenda.es.json";
 import agendaEn from "./agenda.en.json";
 import cajaEs from "./caja.es.json"; // caja + comisiones + productos (T6 dinero)
 import cajaEn from "./caja.en.json";
+import suscripcionEs from "./suscripcion.es.json";
+import suscripcionEn from "./suscripcion.en.json";
 
 const ES: Dictionary = {
   barber: {
@@ -32,6 +34,7 @@ const ES: Dictionary = {
     agenda: agendaEs as unknown as Dictionary,
     caja: cajaEs as unknown as Dictionary,
     reserva: reservaEs as unknown as Dictionary,
+    suscripcion: suscripcionEs as unknown as Dictionary,
   },
 };
 
@@ -41,6 +44,7 @@ const EN: Dictionary = {
     agenda: agendaEn as unknown as Dictionary,
     caja: cajaEn as unknown as Dictionary,
     reserva: reservaEn as unknown as Dictionary,
+    suscripcion: suscripcionEn as unknown as Dictionary,
   },
 };
 

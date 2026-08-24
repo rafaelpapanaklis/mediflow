@@ -230,3 +230,16 @@ export function isBarbershopSubscriptionActive(
   const status = shop?.subscriptionStatus ?? null;
   return status !== null && BARBER_ACTIVE_SUBSCRIPTION_STATUSES.has(status);
 }
+
+/**
+ * Menú con la suscripción IMPAGA (pending_payment / past_due / canceled):
+ * solo la sección "cuenta" sin Configuración — el camino claro es pagar.
+ * Helper PURO para el layout del panel (una línea allí):
+ *   const nav = isBarbershopSubscriptionActive(ctx.barbershop)
+ *     ? BARBER_NAV_ITEMS : barberNavItemsWhileUnpaid(BARBER_NAV_ITEMS);
+ * La ola de suscripción lo aporta; cablearlo en el layout es un cambio de
+ * shell fuera de su allowlist (ver ORQUESTA [Barber Planes]).
+ */
+export function barberNavItemsWhileUnpaid<T extends { key: string; section: string }>(items: T[]): T[] {
+  return items.filter((i) => i.section === "cuenta" && i.key !== "configuracion");
+}
