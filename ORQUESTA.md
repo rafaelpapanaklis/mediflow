@@ -9206,3 +9206,146 @@ Etiquetas corregidas en el modal: `treatments.*` (planes), `team.edit` (alta/edi
    "Unirse" de una teleconsulta → cae en `/dashboard/2fa`, teclea el código, aterriza en
    `/dashboard/teleconsulta` y desde ahí entra a la sala. El paciente con su liga entra igual
    que antes.
+
+## [DESPUBLICAR-13] — 13 especialidades fuera de internet, footer heredado sin muertos y el drip del blog ya no nace vencido — 2026-08-23
+
+Commit `6fe88a0c` en `main` (12 archivos, +266/−63). Vercel: `pending` → `success` a los
+~4 min del push; producción verificada con curl DESPUÉS del deploy (abajo, status reales).
+
+### Lo que decía el enunciado y lo que había de verdad
+
+- **La trampa del registro se respetó**: `SPECIALTIES` y `SPECIALTY_SLUGS` siguen con las 17;
+  `step-2-clinic.tsx`, `signup-form.tsx` y `src/components/specialties/` no se tocaron
+  (`git diff b43dfeee 6fe88a0c -- src/components/public/auth/signup/` está vacío).
+- **`getSpecialtiesByCategory()` NO tenía un único consumidor.** Además del dropdown lo llama
+  `src/components/public/landing/specialties.tsx` (sección "Specialties" de una landing vieja),
+  pero ese archivo no lo importa nadie: es código muerto y se dejó como está (compila igual:
+  ya hacía `byCategory[cat] ?? []`).
+- **El enunciado no mencionaba `SpecRelated`** ("Otras especialidades", al pie de cada landing
+  de especialidad): hacía `Object.values(SPECIALTIES).slice(0, 4)`, así que `/ortodoncia`
+  habría enlazado a `/medicina-general` → 404 recién creado. Ahora filtra por
+  `isPublicSpecialty` (quedan 3 tarjetas por página; la rejilla se dimensiona a `others.length`).
+- **"No devuelvas categorías vacías" rompía el dropdown tal cual estaba**: iteraba
+  `GROUP_ORDER` y hacía `groups[cat].map(...)` → `TypeError` en "Médicas", "Salud mental" y
+  "Bienestar". Se adaptó: `visibleGroups` = categorías con al menos una pública (hoy sólo
+  "Dental") y el panel pasa de 880 px fijos a `24·2 + cols·190 + (cols−1)·24` (= 880 con 4,
+  238 con 1), `gridTemplateColumns: repeat(cols, 1fr)`. Mismo panel en `header.tsx` (landing) y
+  en `spec-nav.tsx`.
+- **`/legal/privacy` y `/legal/terminos` NO son 404 en prod: son 308** (redirect permanente a
+  `/privacidad` y `/terminos`, `src/app/legal/*`). Lo que el footer viejo apuntaba era
+  `/legal/terms` (ese sí 404), `/legal/cfdi` y `/legal/nom-024` (404). El nuevo footer va
+  directo a `/terminos` y `/privacidad` (200), sin pasar por el redirect.
+- **No había tests del importador del blog** (ningún `test:*` ni archivo toca `planImport`).
+  Se creó `src/lib/blog/__tests__/import-drip.test.ts` + script `test:blog-import`.
+- **La extensión de Chrome no estaba conectada**, así que el paso 2 del registro se verificó
+  por otra vía (abajo), no con clics.
+
+### Bloque 1 — qué se despublicó y cómo
+
+- `src/lib/specialty-data.ts`: `PUBLIC_SPECIALTY_SLUGS` = `odontologia-general`, `ortodoncia`,
+  `endodoncia`, `periodoncia`; `isPublicSpecialty()`; `getSpecialtiesByCategory()` devuelve
+  `Partial<Record<…>>` sólo con públicas y sin categorías vacías.
+- Fuera de internet (13): medicina-general, dermatologia, cardiologia, ginecologia, pediatria,
+  oftalmologia, psicologia, psiquiatria, nutricion, fisioterapia, medicina-estetica,
+  acupuntura, homeopatia. Siguen existiendo como tipo de clínica del registro.
+- `src/app/[slug]/page.tsx`: `generateStaticParams` con las 4; guard
+  `specialty && isPublicSpecialty(params.slug)` en `generateMetadata` **y** en la página (los
+  dos, verificados en el diff). Una despublicada sigue a la rama de clínica y, como no hay
+  clínica con ese slug, `ClinicLandingServer` hace `notFound()` (línea 100). `dynamicParams`
+  sigue en true a propósito: la ruta también sirve las mini-webs de clínica.
+- `src/app/og/[slug]/route.tsx`: mismo par de cambios. Una despublicada recibe la tarjeta
+  genérica "DaleControl · Software para clínicas en México" (200), igual que cualquier slug
+  desconocido — la ruta nunca tuvo 404.
+- `src/app/sitemap.ts` y `src/lib/cache/public-pricing.ts`: enumeran `PUBLIC_SPECIALTY_SLUGS`.
+- Tabla de rutas del build: `● /[slug]` pre-renderiza exactamente
+  `/odontologia-general /ortodoncia /endodoncia /periodoncia`.
+
+### Bloque 2 — footer heredado (`components/public/landing/footer.tsx`)
+
+- 18 enlaces → 13: Producto (`/#funciones`, `/#precios`, `/casos-de-uso`, `/herramientas`,
+  `/afiliados`), Empresa (`/blog`, `mailto:hola@`, `mailto:soporte@`), Legal (`/terminos`,
+  `/privacidad`, `/terminos-afiliados`), Redes (Instagram). `SOCIALS` = sólo Instagram
+  (`instagram.com/dalecontrol.mx`, intacto).
+- Rama nueva `isMailto` → `<a href>` plano sin `target` ni `rel`; http(s) sigue con
+  `_blank` + `noopener noreferrer`; el resto sigue en `<Link>`.
+- `.ld-footer-grid`: `repeat(5, 1fr)` → `repeat(4, 1fr)`; media queries de 1024/768 intactas.
+  Markup, colores, `SecureBadge` y copyright sin cambios.
+
+### Bloque 3 — `firstDripSlot` (`src/lib/blog/import.ts`)
+
+- Ahora: `fromNow` = hoy 13:00 UTC si aún no pasó, si no mañana; `afterLast` = último + 1 día;
+  devuelve el **máximo**. Comentario ampliado con el porqué (el "último programado" que manda
+  el route handler es el mayor `scheduledAt` de la BD **sin mirar el status**, así que tras
+  semanas sin importar queda en el pasado) y con el remedio manual.
+- Test `test:blog-import` (10 casos, node:test): las dos ramas viejas, el caso exacto del
+  18-ago (último = 11-ago → 18-ago 13:00, y `≠ 12-ago`), el mismo caso pasadas las 13:00 →
+  19-ago, último ayer/hoy, propiedad 0–90 días atrás (siempre futuro y a las 13:00) y el lote
+  de 60 a 10/día cayendo del 18 al 23. **Refutación hecha**: con el `import.ts` de HEAD
+  fallan 4 de 10; con el arreglo pasan 10 de 10.
+
+### Bloque 4 — `sql/blog_reprogramar_drip.sql`
+
+- El `UPDATE` tal cual se corrió el 18-ago (ancla `2026-08-18 13:00:00+00`, 10 por día, orden
+  `scheduledAt, createdAt, slug`), con cabecera: el bug, qué hace, que es idempotente y qué
+  ajustar antes de reutilizarlo (ancla = primer hueco válido desde hoy, divisor = por día) más
+  un SELECT para mirar antes. Nombre con guiones bajos como pidió el enunciado (el resto de
+  `sql/` usa kebab-case).
+
+### Verificación local
+
+- `git pull origin main`: ya al día (0/0 contra origin antes y después del push).
+- `npx tsc --noEmit`: exit 0.
+- `npm run build` COMPLETO a un log de 2 994 líneas leído entero: **exit 0**, 352/352 páginas.
+  Sólo lo preexistente: `prisma:error` por `DATABASE_URL` en la generación estática (blog,
+  casos de uso, planes, afiliados), warnings de Tailwind (`duration-[var(--dur-1)]` y cía.),
+  `file-type` "critical dependency" y "edge runtime disables static generation" de `/og/[slug]`.
+- `npm run test:blog-import`: 10/10.
+
+### Verificación en producción (curl, tras el deploy)
+
+| URL | status |
+|---|---|
+| `/odontologia-general` · `/ortodoncia` · `/endodoncia` · `/periodoncia` | **200** (`/ortodoncia`: `X-Vercel-Cache: PRERENDER`) |
+| `/psicologia` | **404** |
+| `/cardiologia` | **404** |
+| las otras 11 despublicadas (medicina-general, dermatologia, ginecologia, pediatria, oftalmologia, psiquiatria, nutricion, fisioterapia, medicina-estetica, acupuntura, homeopatia) | **404** todas |
+| `/sitemap.xml` | 200, 299 `<loc>`; de los 17 slugs sólo aparecen los 4 públicos |
+| `/roadmap` | 200; 13 hrefs en el `<footer>`, twitter/linkedin ausentes, ningún `mailto` con `target` |
+| `/#funciones`, `/#precios` | `/` 200 y la home trae `id="funciones"` e `id="precios"` (1 y 1) |
+| `/casos-de-uso` `/herramientas` `/afiliados` `/blog` `/terminos` `/privacidad` `/terminos-afiliados` | **200** los 7 |
+| `https://instagram.com/dalecontrol.mx` | 301 → `https://www.instagram.com/dalecontrol.mx` **200** (único social) |
+| `/og/ortodoncia` · `/og/psicologia` | 200 · 200 (la 2ª es la tarjeta genérica) |
+| `/legal/privacy` · `/legal/terminos` · `/legal/terms` | 308 · 308 · 404 |
+| `/signup` | 200 |
+
+**Paso 2 del registro (lo que no se debía romper)**, sin navegador (extensión desconectada):
+`/signup?plan=PRO&step=2` responde 200 con "Cuéntanos de tu clínica" en el HTML; el selector
+es un componente cliente, así que se descargaron los 26 chunks JS que esa página carga en
+producción (1.0 MB): el objeto `SPECIALTIES` completo está ahí (`ortodoncia:{slug:"ortodoncia",
+name:"Ortodoncia",…}`, acentos escapados `\xed`) con **17 de 17 slugs + nombre**, y el mapeo
+`SPECIALTY_TO_CATEGORY` con los 17 (`psicologia:"PSYCHOLOGY"`, `homeopatia:"ALTERNATIVE_MEDICINE"`,
+…). `step-2-clinic.tsx` sigue construyendo `specialtyOptions` desde `SPECIALTY_SLUGS` y ese
+directorio no cambió en el commit. Falta el clic real: abrir `/signup?plan=PRO&step=2` y
+desplegar "Tipo de clínica" debe listar 17.
+
+### Decisiones tomadas sin preguntar
+
+- `SpecRelated` filtrado y su rejilla a `others.length` columnas (si no, la 4ª tarjeta era un 404).
+- Dropdown adaptado a `visibleGroups` + ancho por columna (si no, TypeError o un panel de
+  880 px con una sola columna en la esquina).
+- Test nuevo + script `test:blog-import` (el enunciado decía "si hay tests, córrelos": no había).
+- Comentarios actualizados donde decían "17 landings" (`page.tsx`, `public-pricing.ts`,
+  cabecera de `specialty-data.ts`).
+
+### Lo que NO se hizo
+
+- `src/components/public/landing/specialty/specialty-page.tsx` (`SpecialtyPage`) y
+  `landing/specialties.tsx` son código muerto sin ruta ni importador; renderizan cualquier
+  especialidad si alguien los montara. No se tocaron ni se borraron.
+- `/og/<despublicada>` sigue 200 con la tarjeta genérica; el enunciado pedía "el mismo par de
+  cambios", no un 404. Nadie la enlaza: el `ogImage` sólo se emite para las 4 públicas.
+- El route handler del importador sigue tomando el mayor `scheduledAt` sin filtrar por
+  status; con el máximo en `firstDripSlot` ya no importa, pero es la raíz del "último en el
+  pasado".
+- Ningún SQL nuevo por aplicar: `sql/blog_reprogramar_drip.sql` es constancia de lo que YA se
+  corrió el 18-ago.
