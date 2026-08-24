@@ -10794,3 +10794,210 @@ f) Simular un cobro fallido (tarjeta de prueba no aplica en LIVE: usar "Actualiz
    tarjeta" con una tarjeta vencida y forzar la renovación desde el dashboard) →
    past_due → el panel muestra el cobro rechazado con motivo y "Pagar factura pendiente".
 
+
+## [Barber Reserva + Portal] — el cliente reserva sin cuenta, entra sin contraseña y la barbería aprueba desde su bandeja ✅ (2026-08-24)
+
+EL ÁNGULO, HECHO CÓDIGO: Booksy y Fresha empujan al cliente a instalar SU app
+y después le cobran a la barbería 30% o 20% de la primera visita de ese
+cliente. Aquí el cliente reserva SIN cuenta, SIN contraseña y SIN descargar
+nada, y el cliente es de la barbería. Estas dos superficies son esa promesa.
+
+QUÉ SE ENTREGA
+· /b/[slug]/reservar — embudo público. Servicio (uno o varios) → barbero o
+  "cualquiera disponible" → día y hora → nombre y WhatsApp → listo. Sin
+  registro. Con UN solo barbero, o con la liga directa ?barbero=<id> (la que
+  se comparte por WhatsApp o en la bio de Instagram), ese paso se salta solo.
+· /b/[slug]/mi-cuenta — portal del cliente. Entra con teléfono + código de un
+  solo uso. Ve sus próximas citas (cancelar / pedir otro horario), su
+  historial con las fotos que la barbería marcó visibles, sus tickets y
+  anticipos, su membresía y su tarjeta de lealtad.
+· /barber/solicitudes — bandeja del panel: acepta o rechaza y la solicitud se
+  vuelve cita. Permiso requests.manage + feature publicBooking + sedes vía
+  getAccessibleBranchIds (las tres puertas, también entrando por URL directa).
+· Confirmación con dirección, "cómo llegar" y botón de calendario (liga de
+  Google + archivo .ics para iPhone), armados en el cliente sin llamar a
+  ningún servicio de fuera.
+
+ARCHIVOS (28, todos del vertical — guardia exit 0, sin compartidos declarados)
+· src/lib/barber/booking-core.ts + booking.ts — motor de la reserva.
+· src/lib/barber/portal-core.ts + client-portal.ts — motor del portal.
+· src/app/api/barber/public/booking/[slug]/{route,slots/route}.ts
+· src/app/api/barber/portal/[slug]/{code,verify,session,data,citas/[id]}/route.ts
+· src/app/api/barber/booking-requests/{route,[id]/route}.ts
+· src/app/b/[slug]/{reservar,mi-cuenta}/page.tsx
+· src/app/barber/(panel)/solicitudes/{page,solicitudes-client}.tsx
+· src/components/barber/booking/{booking-flow,booking-done}.tsx + barber-public.css
+· src/components/barber/portal/{portal-login,portal-client}.tsx
+· src/i18n/dictionaries/barber/reserva.{es,en}.json + index.ts (1 línea por idioma)
+· src/lib/barber/__tests__/{booking-core,portal-core,salida-publica}.test.ts
+
+HUECOS REALES — nunca se ofrece uno que la base vaya a rechazar
+Un horario existe si, para algún barbero: cabe COMPLETO dentro de un turno
+suyo de BarberSchedule ese día, no lo pisa un BarberTimeOff suyo NI uno de
+barbería entera (barberId null = festivo), y no se solapa con ninguna cita
+suya que ocupe el sillón. La duración es la SUMA real de los servicios
+elegidos. Ocupado = solape de intervalos [inicio, fin), no "empieza a la misma
+hora" — el error que en el dental ofrecía las 10:30 con una cita de 10:00 a
+11:00 y reventaba al insertar. La rejilla es de 15 min anclada a la hora en
+punto (un turno que abre 9:05 ofrece 9:15). En el día en curso se descuentan
+las horas pasadas más 30 min de colchón, en la ZONA DE LA BARBERÍA. El
+selector de días pide UNA sola tanda de lecturas para 28 días, no tres por día.
+
+DOS PERSONAS SOBRE EL MISMO HUECO — decide la base, no la pantalla
+1. pg_advisory_xact_lock por (barbería, día): la segunda reserva ESPERA a que
+   la primera haga commit. Sobrecarga de dos int4 (el tsconfig del repo no
+   admite literales BigInt).
+2. Ya con el candado, se recalcula quién está libre LEYENDO DENTRO de la
+   transacción — o sea, viendo la cita recién commiteada. Sin candidatos → 409
+   "alguien acaba de tomar ese horario", y la pantalla regresa al paso de la
+   hora con la lista ya refrescada.
+3. La ÚLTIMA palabra es de Postgres: se consume isBarberOverlapError() de T1 y
+   el rechazo de la constraint EXCLUDE barber_appt_no_overlap (23P01,
+   sql/barber_agenda.sql) se traduce a 409, no a un 500 crudo. BARBER_BUSY_
+   STATUSES es el complemento EXACTO del WHERE de esa constraint y de
+   BARBER_NON_BLOCKING_STATUSES: si una cambia, cambian las tres.
+"Cualquiera disponible" ASIGNA un barbero concreto al reservar (el menos
+cargado de ese día, desempate por sortOrder). Dejar barberId null habría
+dejado caber dos reservas "cualquiera" a la misma hora con un solo barbero
+libre, y el empalme lo descubriría la barbería el día de la cita.
+
+PORTAL — entrar sin contraseña, sin volverse un directorio de teléfonos
+· El código son 6 dígitos de randomInt y se guarda con bcrypt en
+  BarberClientAuthToken.codeHash. En claro no se guarda ni se loguea NUNCA:
+  el modo de desarrollo lo escribe en el log del servidor, y en producción
+  deliverPortalCode() no escribe nada (gancho listo para T7).
+· Caduca a los 10 min, es de UN solo uso (usedAt en la misma operación que lo
+  acepta, con updateMany condicionado a usedAt null), tope de 5 intentos —al
+  quinto se quema, no se queda vivo esperando al bot— y tope de 3 códigos por
+  cliente cada 15 min. Pedir uno nuevo invalida el anterior: nunca hay dos.
+· ENUMERACIÓN: la respuesta de "mándame el código" es idéntica exista o no el
+  cliente —mismo status, mismo texto— y requestPortalCode() hace un bcrypt de
+  un valor falso cuando NO existe, para que tampoco el tiempo lo delate. La
+  función devuelve void a propósito: ninguna ruta puede filtrar esa señal por
+  accidente. El único error que sí se dice es "el teléfono no tiene 10
+  dígitos", que no revela a nadie.
+· Sesión PROPIA: cookie httpOnly `dcb_portal` firmada con HMAC-SHA256
+  (COOKIE_SECRET), 14 días, con clientId + barbershopId dentro. El vertical no
+  tiene tabla de sesiones de cliente y esta ola no podía crearla.
+· AISLAMIENTO: el barbershopId de la cookie se compara contra el del slug en
+  CADA petición, y ninguna ruta del portal acepta un id de cliente — sale
+  siempre de la cookie. Cambiar el clientId, el barbershopId o la caducidad
+  rompe la firma (probado). Un cliente del portal no tiene sesión Supabase, así
+  que getBarberContext() le devuelve null y el layout de /barber/** lo manda a
+  /login: no hay puerta al panel.
+
+VERIFICACIÓN (lo que se corrió, con su resultado)
+1. `npx next build` → exit 0, salida completa sin pipes que oculten, 0 errores
+   de compilación, las 12 rutas nuevas presentes. (Nota: `npm run build` corre
+   `prisma generate` primero y falló con EPERM porque otras terminales tenían
+   tomado el engine DLL del node_modules compartido; el schema no se tocó, así
+   que el cliente ya generado es el correcto. Un intento anterior murió por
+   heap con 3 builds simultáneos en la máquina: se rehízo con
+   NODE_OPTIONS=--max-old-space-size=8192 → exit 0.)
+2. 44 pruebas propias, todas verdes:
+   npx tsx --test src/lib/barber/__tests__/booking-core.test.ts
+   npx tsx --test src/lib/barber/__tests__/portal-core.test.ts
+   npx tsx --test src/lib/barber/__tests__/salida-publica.test.ts
+   Cubren: solape real (una cita de 10-11 tapa 10:00/10:15/10:30/10:45), el
+   servicio largo que no cabe entre dos citas pegadas, bloqueo de barbería
+   entera vs bloqueo personal, rejilla anclada a la hora en punto, colchón de
+   hoy, horario de verano (Tijuana en enero y en agosto), el día de la semana
+   independiente de la zona del servidor, "el segundo que reserva el mismo
+   hueco se queda sin él", el candado (estable, int4, distingue día y
+   barbería), el reparto al menos cargado, y del portal: firma de la sesión,
+   suplantación de clientId, salto de barbería, caducidad estirada, firma
+   pegada de otra cookie, versión desconocida, basura, y la ventana de
+   cancelación.
+3. AUDITORÍA DE FUGA — convertida en prueba, no en promesa. Las dos
+   superficies recortan con lista BLANCA (PUBLIC_SHOP_FIELDS /
+   PORTAL_SHOP_FIELDS): id, name, slug, phone, address, city, state, timezone,
+   locale, logoUrl, branchName. La prueba pasa una fila ENTERA de Barbershop
+   (con whatsappToken, wabaId, phoneNumberId, stripeCustomerId,
+   stripeSubscriptionId, email, subscriptionStatus, plan) y comprueba que del
+   otro lado no sale ninguno, ni por nombre ni por valor; que una columna
+   nueva del schema tampoco se cuela sola; y que ninguna llave de la lista
+   huele a credencial. CERO tokens.
+   El resto de lo que sale: POST de reserva → reference (6 caracteres, NO el
+   id de la cita), status, policy, startAt, endAt, barberName, services
+   (nombre + precio), total, duplicate. Slots → time + cuántos barberos hay
+   libres (nunca QUIÉNES). Portal → solo del cliente autenticado: nombre,
+   su propio teléfono, visitas, lealtad, sus citas, sus tickets, su membresía
+   y las fotos visibleToClient. NUNCA: soldByUserId, uploadedByUserId, notas
+   internas de la cita, ni un dato de otro cliente.
+4. Toda búsqueda del portal filtra por barbershopId Y clientId (verificado
+   archivo por archivo). Cancelar y reagendar llevan la pertenencia DENTRO del
+   where (id + barbershopId + clientId): un id ajeno no encuentra fila → 404,
+   sin filtrar ni que exista.
+5. Las dos rutas de panel exigen getBarberContext() + assertBarberPermission
+   (verificado mecánicamente sobre todo /api/barber/**).
+6. Fotos: la búsqueda filtra visibleToClient: true. El filtro está en la
+   consulta a la base, no en el render.
+7. Revisión visual real en el navegador a 380 px (ruta temporal sin BD, ya
+   borrada). Encontró y arregló DOS bugs reales: (a) los <span> de nombre y
+   minutos salían pegados en la misma línea —les faltaba display:block dentro
+   del flex item—; (b) el preflight de Tailwind declara `svg { display: block }`
+   y los iconos dentro de un párrafo se iban a su propio renglón, alineados a
+   la izquierda de un texto centrado. Además se cambió text-transform:
+   capitalize por ::first-letter (ponía "28 De Agosto, 11:00 A.M.") y el badge
+   de la cita ahora dice CONFIRMADA / POR CONFIRMAR con el precio aparte, en
+   vez de un ✓ junto al monto. Consola sin errores de la app ni de hidratación.
+8. Terminología: CERO "paciente", "doctor", "Dr.", "clínica", "consulta",
+   "expediente" en los 28 archivos (grep mecánico, comentarios incluidos).
+9. `node scripts/barber-guard.cjs` → exit 0, 28 archivos, 0 compartidos sin
+   declarar, 0 prohibidos.
+10. Rebase sobre las 5 commits que aterrizaron mientras tanto (agenda+fila de
+    T1, caja de T6). Único choque: dictionaries/barber/index.ts, resuelto como
+    UNIÓN (agenda + caja + reserva).
+
+PENDIENTE DE QA CON BASE DE DATOS (aquí no hay DATABASE_URL)
+· Reserva de punta a punta desde un celular real.
+· El código llegando por WhatsApp (hoy el gancho de T7 no envía nada).
+· Las dos personas reservando el mismo hueco contra Postgres de verdad — el
+  cálculo está probado en memoria y la constraint de T1 es la red, pero hace
+  falta sql/barber_agenda.sql APLICADO en Supabase para que la red exista.
+
+FRONTERAS Y GANCHOS ABIERTOS (para quien siga)
+· T7 — notifyBookingCreated() (aviso de cita nueva) y deliverPortalCode()
+  (código de acceso). Los dos son funciones de una línea esperando el envío.
+· T4 — resolveDepositForBooking() devuelve null a propósito. Cuando exista
+  "cuánto anticipo pide esta barbería por estos servicios", se resuelve ahí y
+  se escribe en depositAmount/depositStatus. El portal YA los pinta si están.
+· T1 — la disponibilidad pública se calcula en booking-core porque agenda.ts
+  expone un VALIDADOR (checkAppointmentSlot: "¿este hueco concreto sirve?") y
+  no un GENERADOR ("dame los huecos del día"). Cuando exista el generador, el
+  punto a consolidar es computeFreeBarbersForDay(). Lo que sí se consume ya:
+  isBarberOverlapError().
+· T8 — su botón "Reservar" apunta a /b/[slug]/reservar. El acoplamiento es esa
+  URL y nada más; no se tocó su página, su layout ni su editor.
+
+AVISOS
+1. El contrato de la Ola 0 (types.ts, cabecera) anota el portal como
+   /b/[slug]/portal; la ruta entregada es /b/[slug]/mi-cuenta (la que pidió el
+   encargo). Alguien con types.ts en su allowlist debe alinear el comentario.
+2. EL INTERRUPTOR DE "APROBAR A MANO vs CONFIRMAR AUTOMÁTICO" NO TIENE DÓNDE
+   VIVIR. El schema del vertical no tiene columna para eso y esta ola no podía
+   tocarlo. resolveBookingPolicy() es el punto ÚNICO: hoy LEE (jamás escribe)
+   la llave `bookingPolicy` del Json de BarberLandingConfig —dueño T8— y si no
+   está, gana el default seguro "manual" (la cita nace PENDING y va a la
+   bandeja). Cuando exista Barbershop.bookingPolicy o la pantalla de
+   configuración de T5, se cambia AHÍ y en ningún otro lado. Mientras tanto la
+   bandeja funciona pero la barbería no puede apagarla sola.
+3. Dos constantes esperan su lugar de configuración por barbería:
+   BARBER_LOYALTY_GOAL = 10 sellos por corte gratis y
+   BARBER_CANCEL_WINDOW_HOURS = 2 (hasta cuándo puede cancelar el cliente).
+   Ambas en portal-core.ts, un solo punto cada una.
+4. portalEnabled nace en false. Una reserva pública lo pone en true (el propio
+   acto de reservar es el consentimiento), pero un cliente dado de alta desde
+   el panel NO puede entrar al portal hasta que alguien con portal.manage se
+   lo active. blockedAt cierra las dos puertas: ni reserva ni portal.
+5. Las citas con barberId null que el panel sí puede crear ("cualquier
+   barbero") NO se cuentan al calcular huecos: bloquear a todos por una cita
+   sin dueño cerraría la barbería entera. Punto a consolidar con T1.
+6. El fast-path de 2FA del middleware corta TODA ruta /api con la cookie
+   df_2fa_pending puesta. Un cliente de barbería que además fuera usuario del
+   panel dental con 2FA pendiente vería un 403 en el portal. Es de middleware.ts
+   (fuera de este vertical) y se anota, no se toca.
+7. Las fotos del portal se firman contra el bucket barber-files con TTL de 5
+   min si vienen como path; si BarberVisitPhoto.url ya es una URL http, pasa
+   tal cual. Falla suave: una foto que no se pueda firmar no se muestra, la
+   pantalla no se rompe.
