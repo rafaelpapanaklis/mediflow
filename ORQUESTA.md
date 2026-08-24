@@ -10465,3 +10465,23 @@ COMMENT ON CONSTRAINT barber_time_off_positive_duration ON "barber_time_off" IS
 COMMENT ON INDEX "barber_walkin_position_uniq" IS
   'Fila virtual barber: dos QR simultaneos no pueden llevarse el mismo numero. La API reintenta al chocar.';
 ```
+
+### ADENDA (mismo día, tras rebase sobre [T6 — Barber Caja])
+
+· **El test SÍ quedó permanente**: `src/lib/barber/__tests__/agenda.test.ts`,
+  38 pruebas en verde con `npx tsx --test src/lib/barber/__tests__/agenda.test.ts`.
+  Arriba se había reportado como script temporal porque la allowlist del
+  contrato solo daba `src/lib/barber/agenda.ts`; al rebasar apareció que T6
+  ya había creado `src/lib/barber/__tests__/` y que el guardia lo acepta
+  (`src/lib/barber/` es prefijo propio del vertical) y no hace falta tocar
+  `package.json`. Se siguió ese precedente. Si no gusta, se borra ese archivo
+  y no se cae nada más.
+· **Build del estado FUSIONADO (agenda + fila + caja) → exit 0.** El primer
+  intento tras el rebase murió con `JavaScript heap out of memory` en
+  "Checking validity of types" y un `EPERM` de `prisma generate` (otra
+  terminal tenía tomado el engine del `node_modules` compartido). Se resolvió
+  con `NODE_OPTIONS=--max-old-space-size=8192` y limpiando `.next`. **Aviso
+  para las siguientes terminales**: con el árbol barber ya crecido, el
+  type-check del repo completo se pasa de los 4 GB por defecto.
+· El i18n quedó bien fusionado: `dictionaries/barber/index.ts` tiene `agenda`
+  Y `caja`, sin conflicto.
