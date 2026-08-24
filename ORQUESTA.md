@@ -12854,3 +12854,320 @@ minutos.
 pantalla con `sinTabla`). Nada de esta ola lo necesita, pero mientras no
 entre, ninguna barbería tiene una web publicada de verdad.
 ⚪ **SQL de esta ola: ninguno.** Ni una línea.
+
+═══════════════════════════════════════════════════════════════════════════
+## [Barber Agenda UX] — La agenda por fin dice cuánto dura cada visita, se abre al tocarla y cobra sin salir de ahí ✅ (2026-08-24)
+═══════════════════════════════════════════════════════════════════════════
+
+Rama `fix/barber-agenda-ux` · commit `d41ee664` · 16 archivos · +2154 / −394
+Base: `origin/main` en `020c9e78` (rebase limpio; el commit ajeno de Mi web
+no toca ni uno de mis archivos).
+
+───────────────────────────────────────────────────────────────────────────
+1. QUÉ ESTABA MAL, Y QUÉ LO CAUSABA DE VERDAD
+───────────────────────────────────────────────────────────────────────────
+
+**«La cita se ve mal y no es proporcional.»** Sí era proporcional, pero a
+1.6 px/min: 30 min = 48 px y 45 min = 72 px. A esa escala, y sin color de
+fondo, todo se lee igual de "franjita". Además la tarjeta tenía `left: 3`,
+`right: 3` **y** `width: 100%` a la vez: cuando se declaran los tres, el
+navegador ignora `right`, así que la tarjeta medía el ancho completo de la
+columna y se salía 3 px. De ahí el "ocupa TODO el ancho".
+
+**«Hacer clic en una cita no abre nada.»** El `AppointmentDetail` existía y
+estaba cableado — pero el clic vivía DENTRO del arrastre:
+
+```
+onPointerUp: if (!current) return;        // ← se iba por aquí
+             if (!current.active) props.onCardClick(appt);
+onClick:     e.stopPropagation();          // ← y esto no hacía nada más
+```
+
+`current` es null cuando `onPointerDown` se sale antes de tiempo, y se sale
+para las visitas **terminales** (completada, cancelada, no llegó), para las
+que no tienen barbero, y para todos si no hay `agenda.edit`. Resultado:
+tocar una visita completada no hacía absolutamente nada. Justo la que hay
+que abrir para cobrarla.
+
+**«Hay scroll horizontal raro.»** `.grid { min-width: max-content }` con
+columnas `minmax(168px, 1fr)`: con cuatro sillas la rejilla exigía 734 px
+mínimos aunque el contenedor midiera menos.
+
+**«Al completar nunca se ofrece cobrar.»** Cierto, y era el hueco caro.
+
+───────────────────────────────────────────────────────────────────────────
+2. LA REJILLA
+───────────────────────────────────────────────────────────────────────────
+
+**2 px por minuto** (`BARBER_DAY_PX_PER_MIN`), 1.1 en semana. Medido en el
+navegador sobre el render real de `DayBoard`, no calculado a mano:
+
+```
+ 30 min →  60 px      45 min →  90 px      60 min → 120 px
+ 90 min → 180 px      15 min →  30 px      exactamente 3× entre 30 y 90
+```
+
+**Los seis estados** llevan fondo teñido + barra sólida de 4 px + punto +
+—si hay alto— la palabra. Cancelada va tachada y con la barra punteada; "no
+llegó" con el borde punteado. **El color nunca es el único canal** (WCAG
+1.4.1), porque para alguien con daltonismo el verde de "completada" y el
+ocre de "pendiente" son el mismo gris.
+
+**Contraste medido, no supuesto.** El fondo es
+`color-mix(var(--st) 14%, --bg-elev)` en claro y 26% en oscuro:
+
+| estado      | texto cliente | texto 2º | barra vs fondo |
+|-------------|---------------|----------|----------------|
+| Pendiente   | 15.96 / 8.26  | 8.40 / 5.26 | 3.76 / 4.68 |
+| Confirmada  | 15.62 / 8.63  | 8.22 / 5.51 | 4.63 / 4.50 |
+| En silla    | 15.83 / 9.10  | 8.33 / 5.80 | 4.09 / 3.95 |
+| Completada  | 15.63 / 8.52  | 8.23 / 5.43 | 4.39 / 4.70 |
+| No llegó    | 15.07 / 8.93  | 7.93 / 5.69 | 5.19 / 4.21 |
+| Cancelada   | 15.67 / 9.41  | 8.25 / 6.00 | 4.76 / 3.72 |
+
+(claro / oscuro. Texto pide 4.5 para AA; la barra, 3.0 por 1.4.11.)
+
+**`--text-3` NO se usa dentro de las tarjetas**: sobre el fondo teñido baja
+a ~3.9 y ahí ya no pasa AA. Fuera, sobre fondo liso, sí. Por eso la hora y
+los servicios de la tarjeta van en `--text-2`.
+
+Botones sólidos con texto blanco: solo `caramel-600` (4.90) y `700` (7.13).
+El `500` da 3.48 y **no se usa** para eso. El verde de cobrar, `#1F7A4C`
+sobre blanco, da 5.32.
+
+**Cero scroll horizontal.** Columnas `minmax(0, 1fr)`, fuera el
+`min-width: max-content`, y el scroller usa `overflow-x: clip` — **no
+`hidden`**: `hidden` convierte la caja en contenedor de scroll horizontal y
+eso rompe los `position: sticky` del encabezado y de la regleta. Medido en
+el navegador: `scrollWidth − clientWidth === 0` en las tres rejillas, a
+1180 px y a 380 px.
+
+**Carriles también en la vista día.** Una cancelada NO bloquea la agenda
+(`BARBER_NON_BLOCKING_STATUSES`), así que su reemplazo se le monta encima
+en la misma silla y a la misma hora. Antes una tapaba a la otra; ahora
+`assignLanes()` las pone lado a lado.
+
+**Regleta con etiqueta corta.** `minuteToLabel(600)` da "10:00 a. m." = 54 px
+y la columna de horas medía 54: se cortaba por la izquierda y se leía
+":00 a. m.". Nace `minuteToHourLabel()` → "10 a. m." (33 px). Los minutos
+exactos siguen en la tarjeta, que sí tiene sitio.
+
+**Filtro de sillas.** Con seis barberos en un celular, seis columnas de
+50 px no las lee nadie — y devolver el scroll horizontal no era la
+respuesta. Chips "Todas / Neto / Bruno / …" que recortan columnas **y** el
+resumen de arriba, para que el total del día sea siempre el de lo que se
+está viendo. Vale para día y semana.
+
+Móvil primero y con `@container`, nunca `@media`. Hay dos contenedores
+anidados a propósito: `.screen` manda en la barra de herramientas y
+`.board` en la rejilla. Los modales cuelgan **fuera de los dos**: un
+`container-type` atrapa a `position: fixed`.
+
+───────────────────────────────────────────────────────────────────────────
+3. LA NAVEGACIÓN, JUNTA
+───────────────────────────────────────────────────────────────────────────
+
+`[‹] [›] [Hoy]  ·  fecha + resumen  ·  [Día | Semana]` — un solo grupo, a la
+izquierda. A la derecha quedan las acciones (refrescar, Horarios y bloqueos,
+Nueva visita), que es otra cosa. En pantalla angosta el grupo ocupa la línea
+completa y las acciones se reparten la siguiente.
+
+───────────────────────────────────────────────────────────────────────────
+4. EL DETALLE DE LA VISITA
+───────────────────────────────────────────────────────────────────────────
+
+Tocar una tarjeta **siempre** abre el detalle: el clic salió del arrastre y
+vive en su propio `onClick`, con una bandera `justDragged` que se levanta al
+soltar tras mover y se baja en el siguiente `pointerdown` (así un arrastre
+que termina fuera de la tarjeta no se come el clic siguiente).
+
+Dentro: hora en grande, píldora de estado, **duración editable**, cliente
+con liga a su ficha (`/barber/clientes/<id>`, solo con `clients.view`) y a
+WhatsApp, barbero, origen, servicios con su **precio congelado** uno por
+uno, total, notas.
+
+El estado avanza con `nextStatuses()` filtrado por `canTransition()` del
+contrato. No hay un segundo flujo escondido aquí.
+
+**La duración.** `durationMin` (escalón de 5 min, topes del contrato) pisa
+la suma del catálogo, en el detalle y también al agendar. Alargar es tan
+estructural como mover: pasa por el **mismo** `checkAppointmentSlot()` y la
+**misma** constraint `EXCLUDE` de Postgres. Verificado contra el núcleo real:
+
+```
+estirar la de 10:00 (30 min) a 90 min, con otra a las 11:00
+  → ok:false · issue:OVERLAP · conflictId:"b"
+  → "Ese barbero ya tiene otra visita a esa hora."   (se muestra tal cual)
+estirar a 55 min                → ok:true
+estirar más allá del cierre     → issue:OUTSIDE_SCHEDULE
+```
+
+**Un fallo que encontró la verificación, no yo.** `clampAppointmentMinutes`
+rechazaba (`null`) toda entrada menor a 2.5 min, porque el guard miraba el
+valor YA redondeado: `round(1/5)*5 = 0`. En pantalla eso era el campo de
+duración quedándose mudo al teclear el primer dígito. Ahora el rechazo mira
+la **entrada** (`raw <= 0`) y "1" se acota al mínimo de 5.
+
+───────────────────────────────────────────────────────────────────────────
+5. EL COBRO — UN PUENTE, NO UN SEGUNDO MODAL
+───────────────────────────────────────────────────────────────────────────
+
+**No se construyó otro modal de cobro, y tampoco hizo falta extraer nada.**
+`TicketModal` y `OpenSessionModal` (`src/components/barber/cash/`) ya eran
+componentes autónomos y guiados por diccionario: reciben `dict`, `checkout`,
+`appointment`, `tz` y no saben nada de la pantalla que los monta. Lo único
+que faltaba era quién los monta desde la agenda.
+
+Eso es `charge-bridge.tsx` (91 líneas de plomería, cero reglas de negocio):
+
+1. pide `GET /api/barber/cash-sessions/current` y
+   `GET /api/barber/sales/checkout-context` — **los mismos dos endpoints que
+   alimentan /barber/caja**;
+2. si no hay turno abierto lo dice con todas sus letras y ofrece abrirlo con
+   el mismo `OpenSessionModal`; al abrirlo, vuelve a cargar y sigue;
+3. busca la visita en `checkout.pendingAppointments` (la lista canónica que
+   arma `getCheckoutContext()`) y se la pasa a `TicketModal` tal cual.
+
+Así, precio congelado, agregar servicios y productos, descuento, propinas
+rápidas, membresía vigente, canje de lealtad, los tres métodos de pago,
+comisión y ticket imprimible salen **todos** de `src/lib/barber/cash.ts`,
+que no se tocó ni una línea. Y `createSale()` re-lee el precio congelado de
+`BarberAppointmentService.priceAtBooking` del lado del servidor: el precio
+nunca viaja en el body.
+
+**Completar y cobrar son un solo movimiento.** Pasar a "completada" desde el
+detalle encadena con el cobro sin pasos intermedios; el botón principal dice
+"Completar y cobrar". Si la visita ya está completada, aparece "Cobrar".
+
+**Saltárselo sigue siendo posible, pero es una decisión.** Hay un botón
+"Cobrar después" y una nota que dice a dónde va la visita si lo tomas ("a
+Citas por cobrar de la caja"). No es lo que pasa por descuido.
+
+**Cuando ya se cobró**, la tarjeta lleva su marca "Cobrada" y el detalle
+muestra el importe con liga al ticket. Ese dato sale del servidor con el
+predicado único `isSaleCancelled()` — un ticket cancelado NO cuenta como
+cobrado, igual que en la caja. Va en un mapa aparte (`charged`) del payload,
+**no** dentro de `BarberAppointmentDTO`: ese DTO es contrato compartido de
+todo el vertical y esta pantalla no le agrega campos.
+
+───────────────────────────────────────────────────────────────────────────
+6. "SIN HORARIO CARGADO"
+───────────────────────────────────────────────────────────────────────────
+
+Dejó de ser texto muerto: es una liga a
+`/barber/agenda/horarios?barbero=<id>` con el barbero ya seleccionado del
+otro lado. El id de la URL solo se acepta si aparece en la lista que
+devuelve `/api/barber/schedules` — y esa ya viene filtrada por
+`barbershopId` del contexto, así que un id ajeno no selecciona nada.
+
+───────────────────────────────────────────────────────────────────────────
+7. VERIFICACIÓN — QUÉ SE PROBÓ Y CÓMO
+───────────────────────────────────────────────────────────────────────────
+
+**1. `npm run build` → exit 0**, salida completa, sin pipes ni `tail`.
+   Ambas rutas compilan: `/barber/agenda` 13.4 kB (125 kB de primera carga)
+   y `/barber/agenda/horarios` 4.4 kB. `npx tsc --noEmit` también exit 0.
+
+**2, 3, 8. Medido en un navegador de verdad.** Levanté un render estático
+   de los componentes REALES (`renderToStaticMarkup` de `DayBoard` y
+   `WeekBoard` con el CSS del módulo sin hashear) y lo abrí en Chrome:
+   · 30 min = 60 px y 90 min = 180 px — exactamente 3×
+   · los seis estados distinguibles en claro y en oscuro (tabla del §2)
+   · `scrollWidth − clientWidth === 0` en las tres rejillas
+   · a 380 px de contenedor, las `@container` disparan: se esconden avatar,
+     servicios y horario del encabezado; columnas de 102 px; sigue sin
+     scroll horizontal
+   · cero tarjetas con texto cortado (`scrollHeight > clientHeight`)
+   Encontré y arreglé ahí mismo tres cosas que no se ven leyendo código: la
+   regleta de horas cortada, el nombre del barbero partido a la mitad en la
+   semana, y "CANC…" truncado en tarjetas partidas en carriles.
+
+**4. Encimar estirando → la base la rechaza y la UI lo explica.** Probado
+   contra `checkAppointmentSlot()` real (§4). El 409 del endpoint devuelve
+   el `message` del contrato y el detalle lo pinta tal cual, además de
+   revertir el control de duración a su valor guardado.
+
+**9. `BARBER_GUARD_SHARED=ORQUESTA.md node scripts/barber-guard.cjs`
+   → exit 0.** 16 archivos, los 16 PROPIOS del vertical, cero compartidos
+   sin declarar, cero prohibidos.
+
+**10. Cero "paciente", "doctor", "Dr.", "clínica", "consulta",
+   "expediente"** en los 16 archivos. (Cayó incluso un comentario que decía
+   "el dato que más se consulta".)
+
+**Lo que NO pude verificar y no voy a decir que sí:**
+
+⚠️ **5 y 6 — el cobro end-to-end contra la base.** Cobrar y ver el importe
+en el turno con su comisión exige una barbería real con sesión de Supabase,
+turno de caja abierto y catálogo; no tengo esa sesión. Lo que sí está
+comprobado: compila, consume los mismos endpoints que /barber/caja (cuya
+matemática ya verificaste en producción), y no reimplementa una sola regla
+—`createSale()` es literalmente el mismo código que corre hoy la caja.
+**Falta el QA manual: completar una visita desde la agenda, cobrarla, y ver
+el ticket y la comisión en el corte.**
+
+⚠️ **7 — Día y Semana.** Las dos vistas rinden y sus controles están juntos
+(revisado en el render y en el código), pero el cambio de pestaña es
+interactivo y el render estático no lo ejecuta.
+
+───────────────────────────────────────────────────────────────────────────
+8. LO QUE OTRAS TERMINALES DEBEN SABER
+───────────────────────────────────────────────────────────────────────────
+
+· **`src/lib/barber/cash.ts` NO se tocó.** Lo pedía la regla 5 y no hizo
+  falta ni una excepción. Tampoco se tocó `src/components/barber/cash/`: el
+  puente solo importa `TicketModal` y `OpenSessionModal`, que ya eran
+  autónomos. Si alguien los refactoriza, **la agenda es ahora un segundo
+  consumidor** — ya no son de la caja en exclusiva.
+
+· **`/barber/agenda` ahora importa `@/components/barber/cash/money.css`.**
+  Sin esa hoja, los modales de dinero salen sin estilos. Está toda bajo
+  `.barber-shell .bcaja-*`, así que no pisa nada de la agenda.
+
+· **El payload de `GET /api/barber/appointments` creció**: trae `charged`
+  (mapa `appointmentId → {saleId, total}`) y `can.cash`. `BarberAppointmentDTO`
+  quedó **igual**, a propósito.
+
+· **`PATCH /api/barber/appointments/[id]` acepta `durationMin`** y `POST`
+  también. Opcional: si no viene, la duración la siguen mandando los
+  servicios, como siempre. `clampAppointmentMinutes()` es el punto único del
+  escalón y de los topes — úsalo, no redondees por tu cuenta.
+
+· **`toAppointmentDTO` no cambió**, pero `minuteToLabel` ahora tiene hermana:
+  `minuteToHourLabel()` para reglas de horas.
+
+· **`BARBER_DAY_PX_PER_MIN` pasó de 1.6 a 2** y `BARBER_WEEK_PX_PER_MIN` de
+  0.9 a 1.1. Si algo más mide la rejilla con esas constantes, se ajusta solo.
+
+· **`detail.source` del diccionario cambió de forma**: antes era el mapa de
+  orígenes, ahora es la etiqueta "Origen" y el mapa se llama
+  `detail.sources`. Nadie más lo usaba (verificado con grep).
+
+· **La leyenda y las píldoras se pintan con `BARBER_APPOINTMENT_STATUS_UI`,
+  que tiene los textos en español fijos** en `types.ts`. Una barbería con
+  `locale: "en"` verá "Pendiente" ahí. No lo arreglé porque `types.ts` está
+  fuera de mi allowlist, **pero es un hueco de i18n que ya existía** en todo
+  el vertical (fila virtual, caja, clientes) y algún día toca cerrarlo en un
+  solo movimiento.
+
+───────────────────────────────────────────────────────────────────────────
+9. LO QUE QUEDA PENDIENTE
+───────────────────────────────────────────────────────────────────────────
+
+🔴 **QA manual del cobro desde la agenda** (verificaciones 5 y 6). Es lo
+único que separa esta ola de "cerrada". Camino: abrir turno en /barber/caja
+→ ir a la agenda → completar una visita → cobrar → confirmar que el ticket
+sale en el turno y que la comisión del barbero se creó.
+
+⚪ **Visitas completadas de hace más de un día.** `getCheckoutContext()`
+lista solo las terminadas de la ventana `[ayer, pasado mañana)`. Una visita
+más vieja que se quiera cobrar desde la agenda cae en un aviso que manda a
+/barber/caja. Es honesto pero es un rodeo. Cerrarlo bien pide **una** de
+estas dos, y las dos tocan `cash.ts`, así que no las hice:
+   (a) ensanchar esa ventana, o
+   (b) exportar un `getPendingAppointment(ctx, id)`.
+Levantar la `PendingAppointment` por mi cuenta habría significado duplicar
+la derivación de membresía y lealtad (`toClientLookup` no está exportada), y
+eso sí era reimplementar reglas de negocio.
+
+⚪ **SQL de esta ola: ninguno.** Ni una línea. Nada que correr en Supabase.
