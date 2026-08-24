@@ -30,6 +30,48 @@ export const CREDIT_METHOD = "credit";
 /** Reembolso. Se guarda con monto POSITIVO: es un movimiento, no un ingreso. */
 export const REFUND_METHOD = "refund";
 
+/**
+ * `where` de Payment para sumar INGRESOS reales. Es el MISMO criterio que ya
+ * usan /api/dashboard/home/revenue, /api/dashboard/home/admin y
+ * lib/agenda/server (la referencia): fuera los reembolsos —/refund los guarda
+ * como Payment con method "refund" y monto POSITIVO, así que sin este filtro
+ * se SUMAN como cobro— y fuera los pagos de facturas CANCELADAS. Payment no
+ * tiene clinicId: el tenant se aísla SIEMPRE vía invoice.clinicId, y `clinicId`
+ * es string obligatorio para que un undefined no borre el filtro.
+ */
+export function revenuePaymentWhere(
+  clinicId: string,
+  paidAt: Prisma.DateTimeFilter,
+): Prisma.PaymentWhereInput {
+  return {
+    paidAt,
+    method:  { not: REFUND_METHOD },
+    invoice: { clinicId, status: { notIn: ["CANCELLED"] } },
+  };
+}
+
+/** Facturas con saldo POR COBRAR: emitidas (ni DRAFT ni CANCELLED) y balance > 0. */
+export function receivableInvoiceWhere(clinicId: string): Prisma.InvoiceWhereInput {
+  return {
+    clinicId,
+    status:  { notIn: ["DRAFT", "CANCELLED"] },
+    balance: { gt: 0 },
+  };
+}
+
+/**
+ * Facturas VENCIDAS: por cobrar Y con `dueDate` anterior al inicio de HOY en la
+ * zona de la clínica. Se deriva SIEMPRE de la fecha de vencimiento, nunca del
+ * status OVERDUE (ningún flujo lo escribe). Las facturas sin dueDate no
+ * vencen jamás: no se les inventa una fecha.
+ */
+export function overdueInvoiceWhere(clinicId: string, todayStart: Date): Prisma.InvoiceWhereInput {
+  return {
+    ...receivableInvoiceWhere(clinicId),
+    dueDate: { lt: todayStart },
+  };
+}
+
 /** Offset fijo de México (America/Mexico_City = UTC-6, sin horario de verano
  *  desde 2023), igual que analytics/query.ts. Ancla "hoy" al día natural de la
  *  clínica y no al de UTC. */
@@ -59,7 +101,8 @@ export interface CajaTotals {
   cardDebitIncome:  number; // ingresos con tarjeta de débito ("debit")
   cardCreditIncome: number; // ingresos con tarjeta de crédito ("credit")
   otherIncome:      number; // transfer / check / other (NO tarjeta)
-  totalIncome:      number; // cash + débito + crédito + other
+  totalIncome:      number; // cash + débito + crédito + other (SIN reembolsos)
+  refunds:          number; // Σ reembolsos del turno (method "refund"); se muestran en NEGATIVO, nunca suman
   discounts:        number; // SUM invoice.discount de facturas creadas en la ventana
   tax:              number; // IVA realmente contenido en lo cobrado del turno (0 si exenta)
   withdrawals:      number; // SUM retiros de la caja
@@ -127,11 +170,17 @@ export async function getOpenRegister(clinicId: string) {
  * la ruta /api/caja/close lo snapshotea con el mismo significado de siempre. El
  * desglose sin-tarjeta (transfer/check/other) lo calcula getCajaState restando
  * cardDebitIncome + cardCreditIncome para CajaTotals.otherIncome.
+ *
+ * Los REEMBOLSOS (method "refund", monto positivo) se traen a propósito: la
+ * clínica debe verlos en la lista del turno. Lo que NO hacen es sumar: van a
+ * `refunds` (línea propia, en negativo) y no a cashIncome/otherIncome/
+ * totalIncome. Mismo criterio que revenuePaymentWhere, que además deja fuera
+ * los pagos de facturas CANCELADAS (anuladas: no son ventas del turno).
  */
 export async function deriveWindow(clinicId: string, from: Date, to: Date) {
   const [payments, discountAgg, clinic] = await Promise.all([
     prisma.payment.findMany({
-      where: { paidAt: { gte: from, lte: to }, invoice: { clinicId } },
+      where: { paidAt: { gte: from, lte: to }, invoice: { clinicId, status: { notIn: ["CANCELLED"] } } },
       include: {
         invoice: {
           select: {
@@ -186,6 +235,7 @@ export async function deriveWindow(clinicId: string, from: Date, to: Date) {
   let cardDebitIncome = 0;
   let cardCreditIncome = 0;
   let otherIncome = 0; // todo lo no-efectivo (incluye tarjeta)
+  let refunds = 0;     // reembolsos del turno: se muestran, NO suman
   let tax = 0;         // IVA contenido en lo cobrado, sumado pago por pago
   const list: CajaListRow[] = payments.map((p) => {
     const amount = p.amount ?? 0;
@@ -193,20 +243,22 @@ export async function deriveWindow(clinicId: string, from: Date, to: Date) {
     // exentas y gravadas) solo suma la parte gravada, y un abono parcial aporta
     // su proporción de IVA.
     //
-    // Los reembolsos NO aportan IVA cobrado: /refund guarda el Payment con
-    // method "refund" y monto POSITIVO (es un movimiento, no un ingreso), así
-    // que sumarle IVA reportaba impuesto sobre dinero que se devolvió — cobrar
-    // $1,000 y reembolsar $500 declaraba el IVA de $1,500. Mismo criterio que
-    // /api/dashboard/home/revenue, que ya excluye "refund".
-    if (p.method !== REFUND_METHOD) {
-      tax += invoiceTaxPortion(amount, p.invoice, clinicTaxMode);
-    }
-    if (p.method === CASH_METHOD) {
-      cashIncome += amount;
+    // Los reembolsos NO aportan IVA cobrado ni INGRESO: /refund guarda el
+    // Payment con method "refund" y monto POSITIVO (es un movimiento, no un
+    // ingreso). Antes caían en el `else` de abajo y engordaban otherIncome y
+    // totalIncome: cobrar $1,000 y devolver $500 reportaba $1,500 de ingresos
+    // (y el IVA de $1,500). Mismo criterio que /api/dashboard/home/revenue.
+    if (p.method === REFUND_METHOD) {
+      refunds += amount;
     } else {
-      otherIncome += amount;
-      if (p.method === DEBIT_METHOD) cardDebitIncome += amount;
-      else if (p.method === CREDIT_METHOD) cardCreditIncome += amount;
+      tax += invoiceTaxPortion(amount, p.invoice, clinicTaxMode);
+      if (p.method === CASH_METHOD) {
+        cashIncome += amount;
+      } else {
+        otherIncome += amount;
+        if (p.method === DEBIT_METHOD) cardDebitIncome += amount;
+        else if (p.method === CREDIT_METHOD) cardCreditIncome += amount;
+      }
     }
     return {
       paymentId:   p.id,
@@ -225,7 +277,7 @@ export async function deriveWindow(clinicId: string, from: Date, to: Date) {
   const totalIncome = cashIncome + otherIncome;
   const discounts = discountAgg._sum.discount ?? 0;
 
-  return { cashIncome, cardDebitIncome, cardCreditIncome, otherIncome, totalIncome, discounts, tax: money(tax), list };
+  return { cashIncome, cardDebitIncome, cardCreditIncome, otherIncome, totalIncome, refunds: money(refunds), discounts, tax: money(tax), list };
 }
 
 /** Redondea a 2 decimales para evitar ruido de punto flotante en dinero. */
@@ -273,12 +325,9 @@ async function computeDayBilling(clinicId: string, todayStart: Date, now: Date) 
     status:    { notIn: ["DRAFT", "CANCELLED"] },
     createdAt: { gte: todayStart, lte: now },
   };
-  const overdue: Prisma.InvoiceWhereInput = {
-    clinicId,
-    status:  { notIn: ["DRAFT", "CANCELLED"] },
-    balance: { gt: 0 },
-    dueDate: { lt: todayStart },
-  };
+  // Vencido = por cobrar + dueDate < hoy (overdueInvoiceWhere), el MISMO
+  // criterio que el KPI de Facturas y Finanzas → Saldos.
+  const overdue = overdueInvoiceWhere(clinicId, todayStart);
 
   const [billedAgg, pendingAgg, overdueAgg] = await Promise.all([
     prisma.invoice.aggregate({ _sum: { total: true },   where: issuedToday }),
@@ -337,6 +386,7 @@ export async function getCajaState(clinicId: string): Promise<CajaState> {
     // solo transfer/check/other.
     otherIncome:      money(derived.otherIncome - derived.cardDebitIncome - derived.cardCreditIncome),
     totalIncome:      money(derived.totalIncome),
+    refunds:          money(derived.refunds),
     discounts:        money(derived.discounts),
     tax:              money(derived.tax),
     withdrawals:      money(withdrawalsTotal),

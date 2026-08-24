@@ -100,6 +100,10 @@ function InvoiceEditorBody({
   const [discountMode, setDiscountMode] = useState<"none" | "pct" | "amount">("none");
   const [discountValue, setDiscountValue] = useState<number>(0);
   const [notes, setNotes] = useState("");
+  // "Vence el" (Invoice.dueDate) — opcional. Viaja como "YYYY-MM-DD" y el
+  // servidor lo ancla al día natural de la clínica. Es lo ÚNICO que hace que
+  // una factura cuente como vencida (KPI, filtro "Vencidas", Caja, Finanzas).
+  const [dueDate, setDueDate] = useState("");
   const [saving, setSaving] = useState(false);
 
   // Paciente: fijo por prop (ficha) o elegido aquí con el buscador (Caja).
@@ -238,6 +242,7 @@ function InvoiceEditorBody({
     };
     if (doctorId) payload.doctorId = doctorId;
     if (notes.trim()) payload.notes = notes.trim();
+    if (dueDate) payload.dueDate = dueDate;
     try {
       const res = await fetch("/api/invoices", {
         method: "POST",
@@ -480,11 +485,19 @@ function InvoiceEditorBody({
             )}
           </div>
 
-          <div>
-            <label className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground">{t("billing.invoiceEditor.notes")}</label>
-            <input value={notes} onChange={(e) => setNotes(e.target.value)}
-              placeholder={t("billing.invoiceEditor.notesPlaceholder")}
-              className="mt-1 w-full bg-background border border-border rounded-lg px-3 py-2 text-sm" />
+          <div className="grid sm:grid-cols-2 gap-4">
+            <div>
+              <label className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground">{t("billing.invoiceEditor.dueDate")}</label>
+              <input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)}
+                className="mt-1 w-full bg-background border border-border rounded-lg px-3 py-2 text-sm" />
+              <p className="mt-1 text-[11px] text-muted-foreground">{t("billing.invoiceEditor.dueDateHint")}</p>
+            </div>
+            <div>
+              <label className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground">{t("billing.invoiceEditor.notes")}</label>
+              <input value={notes} onChange={(e) => setNotes(e.target.value)}
+                placeholder={t("billing.invoiceEditor.notesPlaceholder")}
+                className="mt-1 w-full bg-background border border-border rounded-lg px-3 py-2 text-sm" />
+            </div>
           </div>
         </div>
       </div>

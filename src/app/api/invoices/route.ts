@@ -15,6 +15,7 @@ import {
   nextInvoiceNumber,
   withInvoiceNumberRetry,
 } from "@/lib/invoices/next-invoice-number";
+import { DEFAULT_INVOICE_TZ, parseInvoiceDueDate } from "@/lib/invoices/due-date";
 
 // Contexto vía el helper CENTRAL: misma resolución cookie→clínica que la
 // copia local que había aquí, pero aplicando el gate de plan vencido
@@ -22,7 +23,14 @@ import {
 async function getCtx() {
   const ctx = await getAuthContext();
   if (!ctx) return null;
-  return { clinicId: ctx.clinicId, userId: ctx.userId, role: ctx.role, permissionsOverride: ctx.permissionsOverride };
+  return {
+    clinicId: ctx.clinicId,
+    userId: ctx.userId,
+    role: ctx.role,
+    permissionsOverride: ctx.permissionsOverride,
+    // Zona de la clínica: ancla "Vence el" al día natural de la clínica, no al de Vercel (UTC).
+    timezone: (ctx.clinic?.timezone as string | null | undefined) || DEFAULT_INVOICE_TZ,
+  };
 }
 
 export async function GET(req: NextRequest) {
@@ -35,18 +43,44 @@ export async function GET(req: NextRequest) {
   if (deniedPerm) return deniedPerm;
   const { clinicId } = ctx;
   const { searchParams } = new URL(req.url);
-  const search = searchParams.get("search") ?? "";
-  const page = parseInt(searchParams.get("page") ?? "1");
+  const search = (searchParams.get("search") ?? "").trim();
+  const page = Math.max(1, parseInt(searchParams.get("page") ?? "1", 10) || 1);
   const limit = 20;
   const where: any = { clinicId };
-  if (search) { where.OR = [{ invoiceNumber: { contains: search, mode: "insensitive" } }, { patient: { firstName: { contains: search, mode: "insensitive" } } }]; }
+  // Folio, nombre O apellido: el buscador de Facturas (billing-client) llega
+  // aquí con lo que teclea la recepción, y "García" es tan buscable como "Ana".
+  if (search) {
+    where.OR = [
+      { invoiceNumber: { contains: search, mode: "insensitive" } },
+      { patient: { firstName: { contains: search, mode: "insensitive" } } },
+      { patient: { lastName: { contains: search, mode: "insensitive" } } },
+    ];
+  }
   // Visibilidad por paciente. Filtro de RELACIÓN (lista de toda la clínica) y va
   // en AND porque `where.OR` de arriba (búsqueda por texto) lo volvería permisivo.
   const visibility = relatedPatientVisibilityAnd({ userId: ctx.userId, role: ctx.role, clinicId });
   if (visibility.length) where.AND = visibility;
   const [total, invoices] = await Promise.all([
     prisma.invoice.count({ where }),
-    prisma.invoice.findMany({ where, orderBy: { createdAt: "desc" }, skip: (page-1)*limit, take: limit, include: { patient: { select: { id: true, firstName: true, lastName: true } }, payments: true } }),
+    prisma.invoice.findMany({
+      where,
+      orderBy: { createdAt: "desc" },
+      skip: (page - 1) * limit,
+      take: limit,
+      include: {
+        // Los 4 fiscales del paciente prellenan el modal de timbrado en Caja:
+        // una fila que llega por búsqueda debe comportarse igual que una del
+        // snapshot de la página. La visibilidad de arriba ya dejó fuera a los
+        // pacientes restringidos, así que aquí no hay nada que enmascarar.
+        patient: {
+          select: {
+            id: true, firstName: true, lastName: true,
+            rfcPaciente: true, razonSocialPac: true, regimenFiscalPac: true, cpPaciente: true,
+          },
+        },
+        payments: true,
+      },
+    }),
   ]);
   return NextResponse.json({ invoices, total, page, limit });
 }
@@ -111,6 +145,15 @@ export async function POST(req: NextRequest) {
     }
     const { total } = computeInvoiceTotal(subtotal, discount, taxRate, taxIncluded);
 
+    // "Vence el" (FIN-03). El editor manda "YYYY-MM-DD" y se ancla a las 00:00
+    // de ESE día en la zona de la clínica: `new Date("2026-08-22")` en Vercel
+    // (UTC) es el 21 a las 18:00 en México y la factura vencería un día antes.
+    // Sin fecha → NULL: la factura nunca cuenta como vencida.
+    const dueDate = parseInvoiceDueDate(data.dueDate, ctx.timezone);
+    if (dueDate === null) {
+      return NextResponse.json({ error: "Fecha de vencimiento inválida (usa AAAA-MM-DD)" }, { status: 400 });
+    }
+
     // Visibilidad + tenant: el paciente debe pertenecer a la clínica Y ser visible
     // para este usuario. Sin esto, un excluido POSTea {patientId: restringido} y el
     // include:{patient:true} de abajo le devuelve la fila COMPLETA (identidad +
@@ -152,7 +195,7 @@ export async function POST(req: NextRequest) {
         data: { clinicId, patientId: data.patientId, appointmentId: data.appointmentId ?? undefined,
           invoiceNumber: await nextInvoiceNumber(clinicId), items: data.items, subtotal, discount,
           total, paid: 0, balance: total, status: "PENDING", paymentMethod: data.paymentMethod, notes: data.notes,
-          dueDate: data.dueDate ? new Date(data.dueDate) : undefined,
+          dueDate,
           doctorId, taxRate, taxIncluded },
         include: { patient: true },
       }),

@@ -2,7 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getAuthContext } from "@/lib/auth-context";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
-import { CASH_METHOD, money } from "@/lib/caja";
+import {
+  CASH_METHOD,
+  money,
+  overdueInvoiceWhere,
+  receivableInvoiceWhere,
+  revenuePaymentWhere,
+} from "@/lib/caja";
 import { MX_OFFSET_MS, bucketKeyOf, eachBucket } from "@/lib/analytics/query";
 
 export const runtime = "nodejs";
@@ -90,17 +96,23 @@ export async function GET(req: NextRequest) {
   try {
     const todayStart = startOfTodayMx(new Date());
 
+    // Ingresos = pagos del periodo SIN reembolsos ni facturas canceladas
+    // (revenuePaymentWhere, el mismo criterio que el home y la agenda). Antes
+    // el aggregate sumaba TODO Payment: un reembolso (method "refund", monto
+    // positivo) entraba como ingreso y la utilidad salía inflada.
+    const revenueWhere = revenuePaymentWhere(clinicId, { gte: from, lte: to });
+
     // Lote 1 — agregados (máx 6 promesas por Promise.all, regla del repo).
     const [ingresosAgg, efectivoAgg, ventas, citas, porCobrarAgg, vencidoAgg] = await Promise.all([
       // ingresos: pagos del periodo (paidAt), aislados vía invoice.clinicId.
       prisma.payment.aggregate({
         _sum:  { amount: true },
-        where: { paidAt: { gte: from, lte: to }, invoice: { clinicId } },
+        where: revenueWhere,
       }),
       // efectivo: mismo criterio que caja.ts (method === "cash").
       prisma.payment.aggregate({
         _sum:  { amount: true },
-        where: { method: CASH_METHOD, paidAt: { gte: from, lte: to }, invoice: { clinicId } },
+        where: { ...revenueWhere, method: CASH_METHOD },
       }),
       // ventas: facturas creadas en el periodo; el contrato solo pide excluir
       // canceladas (CANCELLED) — DRAFT sí cuenta como venta en curso.
@@ -116,28 +128,25 @@ export async function GET(req: NextRequest) {
       // al periodo). Mismo filtro que caja.ts: excluye DRAFT/CANCELLED.
       prisma.invoice.aggregate({
         _sum:  { balance: true },
-        where: { clinicId, status: { notIn: ["DRAFT", "CANCELLED"] }, balance: { gt: 0 } },
+        where: receivableInvoiceWhere(clinicId),
       }),
       // vencido: subset con Invoice.dueDate < hoy MX y balance > 0 (mismo
-      // criterio que overdueToday en caja.ts). Se usa dueDate y NO el status
-      // OVERDUE porque nada garantiza que un job marque OVERDUE — la fecha de
-      // vencimiento es la fuente de verdad.
+      // criterio que overdueToday en caja.ts y el KPI de Facturas). Se usa
+      // dueDate y NO el status OVERDUE porque nadie escribe OVERDUE — la fecha
+      // de vencimiento es la fuente de verdad.
       prisma.invoice.aggregate({
         _sum:  { balance: true },
-        where: {
-          clinicId,
-          status:  { notIn: ["DRAFT", "CANCELLED"] },
-          balance: { gt: 0 },
-          dueDate: { lt: todayStart },
-        },
+        where: overdueInvoiceWhere(clinicId, todayStart),
       }),
     ]);
 
     // Lote 2 — filas del periodo para serie/porDoctor (se agrupan en JS; un
     // mes son cientos de filas). Los gastos toleran tabla faltante (P2021).
     const [paymentRows, invoiceRows, expenseRows] = await Promise.all([
+      // Misma exclusión de reembolsos/canceladas que `ingresos`: la serie
+      // diaria debe sumar lo mismo que el KPI.
       prisma.payment.findMany({
-        where:  { paidAt: { gte: from, lte: to }, invoice: { clinicId } },
+        where:  revenueWhere,
         select: { amount: true, paidAt: true },
       }),
       prisma.invoice.findMany({

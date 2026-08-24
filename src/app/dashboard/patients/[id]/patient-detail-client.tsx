@@ -3209,8 +3209,13 @@ export function PatientDetailClient({
               }}
               onViewPlan={() => setTab("tratamiento")}
               onInvoiceCreated={(inv) =>
+                // Nueva → al frente; ya conocida (el borrador ligado que el PATCH
+                // del presupuesto acaba de re-sincronizar) → se reemplaza en su
+                // sitio para que Facturación pinte el total nuevo.
                 setInvoices((prev: any[]) =>
-                  prev.some((i: any) => i.id === inv.id) ? prev : [inv, ...prev]
+                  prev.some((i: any) => i.id === inv.id)
+                    ? prev.map((i: any) => (i.id === inv.id ? { ...i, ...inv } : i))
+                    : [inv, ...prev]
                 )
               }
             />

@@ -2,6 +2,7 @@ export const dynamic = "force-dynamic";
 import type { Metadata } from "next";
 import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { revenuePaymentWhere } from "@/lib/caja";
 import { ReportsClient } from "./reports-client";
 import { requirePermissionOrRedirect } from "@/lib/auth/require-permission";
 import { getServerT } from "@/i18n/server";
@@ -38,9 +39,13 @@ export default async function ReportsPage() {
 
   // Promise.all #1 — series mensuales (3 promesas)
   const [revenueResults, patientCounts, apptCounts] = await Promise.all([
+    // Ingresos del mes SIN reembolsos ni facturas canceladas (revenuePaymentWhere,
+    // el mismo criterio que el home). Antes sumaba TODO Payment: un reembolso
+    // (method "refund", monto positivo) inflaba el mes en que se devolvió el
+    // dinero, y los pagos de facturas anuladas inflaban toda la serie.
     Promise.all(ranges.map(r =>
       safe(
-        prisma.payment.aggregate({ where: { invoice: { clinicId }, paidAt: { gte: r.start, lte: r.end } }, _sum: { amount: true } }),
+        prisma.payment.aggregate({ where: revenuePaymentWhere(clinicId, { gte: r.start, lte: r.end }), _sum: { amount: true } }),
         { _sum: { amount: 0 } } as any,
       )
     )),

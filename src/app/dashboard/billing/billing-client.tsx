@@ -19,6 +19,7 @@ import { InvoiceEditorModal } from "@/components/billing/invoice-editor-modal";
 import { useT } from "@/i18n/i18n-provider";
 import { REGIMENES_FISCALES, USOS_CFDI, FORMAS_PAGO_SAT } from "@/lib/cfdi-catalogs";
 import { derivePaymentForm, resolveTaxMode, type CfdiTaxMode } from "@/lib/invoice-totals";
+import { isInvoiceOverdue } from "@/lib/invoices/due-date";
 
 // Mapa de estados de factura → fuente única invoice-status.ts, compartida con
 // la ficha del paciente y el modal de detalle (la divergencia entre copias
@@ -39,6 +40,10 @@ interface Props {
   totalPending:  number;
   totalOverdue:  number;
   monthInvoices: number;
+  /** Facturas de la clínica en TOTAL: `invoices` trae solo las 100 más recientes. */
+  totalInvoices?: number;
+  /** ISO del inicio de HOY en la zona de la clínica: umbral de "Vencidas" (dueDate < esto y saldo > 0). */
+  overdueBefore?: string;
   /** Saldo a favor total de la clínica (SUM patient_credits). 0 si no hay. */
   creditTotal?:  number;
   clinic:        { facturApiEnabled: boolean; rfcEmisor: string | null; cfdiTaxMode?: string | null };
@@ -50,7 +55,7 @@ function patientNameOf(inv: any): string {
   return `${inv.patient?.firstName ?? ""} ${inv.patient?.lastName ?? ""}`.trim() || "—";
 }
 
-export function BillingClient({ invoices: initial, patients, totalPaid, totalPending, totalOverdue, monthInvoices, creditTotal = 0, clinic, cfdiLive = false }: Props) {
+export function BillingClient({ invoices: initial, patients, totalPaid, totalPending, totalOverdue, monthInvoices, totalInvoices, overdueBefore, creditTotal = 0, clinic, cfdiLive = false }: Props) {
   const t = useT();
   const router = useRouter();
   const [invoices, setInvoices] = useState(initial);
@@ -61,6 +66,47 @@ export function BillingClient({ invoices: initial, patients, totalPaid, totalPen
   // useState(initial) solo toma el valor en mount, así que sin esto las
   // mutaciones pierden la actualización después de un router.refresh().
   useEffect(() => { setInvoices(initial); }, [initial]);
+
+  // Búsqueda en TODA la clínica (FIN-04). El servidor manda solo las 100
+  // facturas más recientes; filtrar sobre ellas contestaba "Sin resultados" a
+  // un folio viejo que sí existe. Con texto en el buscador se consulta
+  // GET /api/invoices (search + paginación de 20); sin texto, la lista local.
+  // Si el servidor falla se vuelve al filtro local de siempre.
+  const [remote, setRemote] = useState<{ invoices: any[]; total: number; page: number; limit: number } | null>(null);
+  const [page, setPage]           = useState(1);
+  const [searching, setSearching] = useState(false);
+  const [refreshTick, setRefreshTick] = useState(0);
+  useEffect(() => {
+    const q = search.trim();
+    if (!q) { setRemote(null); setSearching(false); return; }
+    const ctrl = new AbortController();
+    setSearching(true);
+    const timer = setTimeout(() => {
+      fetch(`/api/invoices?search=${encodeURIComponent(q)}&page=${page}`, { signal: ctrl.signal })
+        .then(async (res) => {
+          if (!res.ok) throw new Error(String(res.status));
+          const data = await res.json();
+          setRemote({
+            invoices: Array.isArray(data.invoices) ? data.invoices : [],
+            total:    Number(data.total) || 0,
+            page:     Number(data.page)  || 1,
+            limit:    Number(data.limit) || 20,
+          });
+          setSearching(false);
+        })
+        .catch((err) => {
+          if (err?.name === "AbortError") return;
+          setRemote(null);
+          setSearching(false);
+        });
+    }, 300);
+    return () => { clearTimeout(timer); ctrl.abort(); };
+  }, [search, page, refreshTick]);
+
+  // Vencida = emitida + saldo > 0 + dueDate anterior al inicio de hoy (zona de
+  // la clínica). NUNCA por status OVERDUE: nadie lo escribe. Sin umbral del
+  // servidor (prop ausente) no se marca nada como vencido.
+  const isOverdue = (inv: any) => (overdueBefore ? isInvoiceOverdue(inv, overdueBefore) : false);
 
   // Modals
   const [showNew, setShowNew]                     = useState(false);
@@ -100,26 +146,33 @@ export function BillingClient({ invoices: initial, patients, totalPaid, totalPen
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
-    return invoices.filter(inv => {
+    // Con resultados del servidor, el texto ya se filtró allá (folio, nombre o
+    // apellido); aquí solo se aplica el segmento de estado.
+    const source: any[] = remote ? remote.invoices : invoices;
+    return source.filter(inv => {
       if (status !== "all") {
         const match =
           status === "pending" ? ["PENDING", "PARTIAL"].includes(inv.status) :
           status === "paid"    ? inv.status === "PAID" :
-          status === "overdue" ? inv.status === "OVERDUE" :
+          status === "overdue" ? isOverdue(inv) :
           status === "draft"   ? inv.status === "DRAFT" : true;
         if (!match) return false;
       }
-      if (!q) return true;
+      if (!q || remote) return true;
       const name = `${inv.patient?.firstName ?? ""} ${inv.patient?.lastName ?? ""}`.toLowerCase();
       return name.includes(q) || (inv.invoiceNumber ?? "").toLowerCase().includes(q);
     });
-  }, [invoices, search, status]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [invoices, remote, search, status, overdueBefore]);
 
   // Refresh tras una mutación de factura. router.refresh() re-corre el server
   // component con los revalidatePath que dispararon los endpoints; el
-  // useEffect arriba propaga el prop nuevo al state local.
+  // useEffect arriba propaga el prop nuevo al state local. Si hay una búsqueda
+  // en curso, también se vuelve a pedir al servidor (la fila mutada puede
+  // estar solo en los resultados remotos).
   function refresh() {
     router.refresh();
+    setRefreshTick(n => n + 1);
   }
 
   async function timbraCfdi() {
@@ -196,7 +249,7 @@ export function BillingClient({ invoices: initial, patients, totalPaid, totalPen
         <div>
           <h1 style={{ fontSize: "clamp(16px, 1.4vw, 22px)", letterSpacing: "-0.02em", color: "var(--text-1)", fontWeight: 600, margin: 0 }}>{t("billing.billingClient.title")}</h1>
           <p style={{ color: "var(--text-3)", fontSize: 13, marginTop: 4 }}>
-            {t("billing.billingClient.subtitle", { count: invoices.length })}
+            {t("billing.billingClient.subtitle", { count: totalInvoices ?? invoices.length })}
           </p>
         </div>
         <ButtonNew variant="primary" icon={<Plus size={14} />} onClick={() => setShowNew(true)}>
@@ -221,10 +274,19 @@ export function BillingClient({ invoices: initial, patients, totalPaid, totalPen
           <Search size={14} />
           <input
             value={search}
-            onChange={e => setSearch(e.target.value)}
+            onChange={e => { setSearch(e.target.value); setPage(1); }}
             placeholder={t("billing.billingClient.searchPlaceholder")}
           />
         </div>
+        {search.trim() && (
+          <span style={{ color: "var(--text-3)", fontSize: 12 }} aria-live="polite">
+            {searching
+              ? t("billing.billingClient.searching")
+              : remote
+                ? t("billing.billingClient.searchResults", { count: remote.total })
+                : null}
+          </span>
+        )}
         <div className="segment-new">
           {STATUS_FILTERS.map(f => (
             <button
@@ -262,7 +324,9 @@ export function BillingClient({ invoices: initial, patients, totalPaid, totalPen
             </thead>
             <tbody>
               {filtered.map(inv => {
-                const badge = invoiceStatusBadge(inv.status);
+                // La píldora dice "Vencido" cuando la factura LO ESTÁ (dueDate +
+                // saldo), aunque su status siga en PENDING/PARTIAL.
+                const badge = invoiceStatusBadge(isOverdue(inv) ? "OVERDUE" : inv.status);
                 const fullName = patientNameOf(inv);
                 const isDraft = inv.status === "DRAFT";
                 const canPay  = !["PAID", "CANCELLED"].includes(inv.status) && !isDraft;
@@ -326,6 +390,36 @@ export function BillingClient({ invoices: initial, patients, totalPaid, totalPen
           </table>
         )}
       </CardNew>
+
+      {/* Paginación de la búsqueda en servidor (20 por página). */}
+      {remote && remote.total > remote.limit && (
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap", padding: "10px 4px", fontSize: 12.5, color: "var(--text-3)" }}>
+          <span>
+            {t("billing.billingClient.searchPaging", {
+              from: (remote.page - 1) * remote.limit + 1,
+              to:   Math.min(remote.page * remote.limit, remote.total),
+            })}
+          </span>
+          <div style={{ display: "flex", gap: 6 }}>
+            <button
+              type="button"
+              className="btn-new btn-new--ghost btn-new--sm"
+              disabled={searching || remote.page <= 1}
+              onClick={() => setPage(p => Math.max(1, p - 1))}
+            >
+              {t("billing.billingClient.prevPage")}
+            </button>
+            <button
+              type="button"
+              className="btn-new btn-new--ghost btn-new--sm"
+              disabled={searching || remote.page * remote.limit >= remote.total}
+              onClick={() => setPage(p => p + 1)}
+            >
+              {t("billing.billingClient.nextPage")}
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Nueva factura — MISMO editor que la ficha del paciente (tarifario,
        *  descuento por línea y global, doctor atribuido, IVA). Aquí además elige

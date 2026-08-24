@@ -2,18 +2,27 @@
 // reutilizable: la usan tanto POST /api/quotes/[id]/invoice (presupuesto
 // ACEPTADO) como POST /api/quotes (factura automática al crear). IDEMPOTENTE:
 // un presupuesto = una factura. clinicId SIEMPRE del ctx de sesión.
+//
+// Y su espejo: syncDraftInvoiceFromQuote re-sincroniza esa factura BORRADOR
+// cuando se EDITA el presupuesto (PATCH /api/quotes/[id]) con la MISMA
+// aritmética (invoice-from-quote-core). Antes el PATCH no tocaba la factura:
+// presupuesto de $10,000 subido a $18,000 → el paciente firmaba $18,000 y se
+// cobraba y timbraba la factura de $10,000.
 
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { logAudit } from "@/lib/audit";
-// round2 sale de invoice-totals (que la re-exporta desde ./compute): una sola
-// ruta de módulo para toda la aritmética de la factura.
-import { sumInvoiceItems, computeInvoiceTotal, itemLineTotal, round2 } from "@/lib/invoice-totals";
 import {
   InvoiceNumberExhaustedError,
   nextInvoiceNumber,
   withInvoiceNumberRetry,
 } from "@/lib/invoices/next-invoice-number";
+import {
+  decideLinkedInvoiceLock,
+  invoiceFieldsFromQuote,
+  quoteInvoiceLockedMessage,
+  type LinkedInvoiceLock,
+} from "./invoice-from-quote-core";
 import type {
   BillingInvoiceItem,
   BillingInvoiceLite,
@@ -127,43 +136,14 @@ export async function createInvoiceFromQuote(
     if (existing) return { invoice: serializeInvoice(existing), already: true };
   }
 
-  const items = quote.items.map((it) => {
-    // Misma regla que itemQuantity() del timbrado (finita >0, si no 1). El
-    // `|| 1` anterior dejaba pasar cantidades negativas y ahí los dos lados
-    // calculaban importes distintos.
-    const rawQty = num(it.quantity);
-    const quantity = rawQty > 0 ? rawQty : 1;
-    const unitPrice = num(it.unitPrice);
-    // El descuento POR LÍNEA del presupuesto viaja con el concepto: la guarda
-    // del timbrado (POST /api/cfdi) y el payload a Facturapi calculan
-    // qty × unitPrice − discount; sin él, una línea con descuento dejaría
-    // total < Σconceptos y el timbrado se bloquearía con un 409 falso.
-    // Clamp a importe de línea (regla SAT: descuento ≤ importe).
-    const discount = Math.min(round2(num(it.discount)), round2(unitPrice * quantity));
-    return {
-      description: it.toothFdi ? `${it.name} (${it.toothFdi})` : it.name,
-      quantity,
-      unitPrice,
-      ...(discount > 0 ? { discount } : {}),
-      // El importe de línea se DERIVA de los campos ya normalizados, no se copia
-      // el `lineTotal` del presupuesto: así el JSON del concepto dice lo mismo
-      // que calculan la guarda del timbrado y el comprobante impreso.
-      total: itemLineTotal({ quantity, unitPrice, discount }),
-    };
-  });
-  // Los totales de la FACTURA se derivan de SUS conceptos con la aritmética
-  // canónica (invoice-totals) — no se copian las columnas del presupuesto, que
-  // salen de otra implementación (quotes/compute). Hoy los dos números
-  // coinciden, pero es una coincidencia entre dos matemáticas paralelas: lo que
-  // la guarda del timbrado verifica es Σ round2(qty × unitPrice − desc.línea),
-  // así que ése es el que manda para lo que se va a timbrar. Si algún día
-  // divergen, el presupuesto conserva su importe (no se toca) y la factura sale
-  // por el derivado de sus conceptos.
-  const subtotal = sumInvoiceItems(items);
-  // Clamp al subtotal derivado: un descuento mayor dejaría base 0 y un `total`
-  // que ya no es Σconceptos − descuento (regla SAT: descuento ≤ importe).
-  const discount = round2(Math.min(Math.max(0, num(quote.discountAmount)), subtotal));
-  const { total } = computeInvoiceTotal(subtotal, discount, 0, true);
+  // Conceptos y totales de la FACTURA derivados de SUS conceptos con la
+  // aritmética canónica (invoice-from-quote-core → invoice-totals), la misma
+  // que verifica la guarda del timbrado y la MISMA que usa la re-sincronización
+  // al editar el presupuesto. No se copian las columnas del presupuesto, que
+  // salen de otra implementación (quotes/compute): si algún día divergen, el
+  // presupuesto conserva su importe y la factura sale por el derivado de sus
+  // conceptos.
+  const { items, subtotal, discount, total } = invoiceFieldsFromQuote(quote);
 
   // Folio por MÁXIMO emitido con reintento ante carrera (P0-2). El loop
   // anterior hacía count+1+attempt: con 8 o más huecos por debajo del máximo
@@ -208,4 +188,95 @@ export async function createInvoiceFromQuote(
   });
 
   return { invoice: serializeInvoice({ ...created, payments: [] }), already: false };
+}
+
+// ── Re-sincronización al EDITAR el presupuesto (FIN-05) ───────────────
+
+/** La factura ligada ya no admite regenerarse (confirmada o con pagos). */
+export class QuoteInvoiceLockedError extends Error {
+  readonly lock: LinkedInvoiceLock;
+  constructor(lock: LinkedInvoiceLock) {
+    super(quoteInvoiceLockedMessage(lock));
+    this.name = "QuoteInvoiceLockedError";
+    this.lock = lock;
+  }
+}
+
+type Db = Prisma.TransactionClient | typeof prisma;
+
+/**
+ * Lee la factura ligada (aislada por clinicId) y decide si admite regenerarse.
+ * `invoice` null = ya no existe (se borró el borrador): no hay nada que
+ * sincronizar ni que bloquear. `lock` ≠ null = confirmada o con pagos.
+ */
+export async function getLinkedInvoiceLock(
+  db: Db,
+  clinicId: string,
+  invoiceId: string,
+): Promise<{ invoice: { id: string; invoiceNumber: string; status: string; total: number } | null; lock: LinkedInvoiceLock | null }> {
+  const inv = await db.invoice.findFirst({
+    where: { id: invoiceId, clinicId },
+    select: {
+      id: true, invoiceNumber: true, status: true, paid: true, total: true,
+      _count: { select: { payments: true } },
+    },
+  });
+  if (!inv) return { invoice: null, lock: null };
+  const lock = decideLinkedInvoiceLock({
+    invoiceNumber: inv.invoiceNumber,
+    status: inv.status,
+    paid: inv.paid,
+    paymentsCount: inv._count.payments,
+  });
+  return { invoice: { id: inv.id, invoiceNumber: inv.invoiceNumber, status: inv.status, total: inv.total }, lock };
+}
+
+/**
+ * Regenera conceptos / subtotal / descuento / total / balance de la factura
+ * BORRADOR ligada al presupuesto ya editado, con la misma aritmética del alta.
+ * Va DENTRO de la transacción del PATCH (mismo `tx` que replaceQuoteContent):
+ * o cambian los dos o no cambia ninguno.
+ *
+ * El `where` exige DRAFT + paid 0 + sin un solo Payment: si entre el pre-check
+ * de la ruta y aquí alguien confirmó o cobró la factura, el updateMany no toca
+ * nada y se lanza QuoteInvoiceLockedError (la transacción se revierte y el
+ * presupuesto tampoco cambia). Devuelve la factura ya sincronizada (null si el
+ * borrador ya no existe).
+ */
+export async function syncDraftInvoiceFromQuote(
+  tx: Prisma.TransactionClient,
+  quote: QuoteLike,
+  ctx: InvoiceFromQuoteCtx,
+): Promise<BillingInvoiceLite | null> {
+  if (!quote.invoiceId) return null;
+  const { items, subtotal, discount, total } = invoiceFieldsFromQuote(quote);
+  const res = await tx.invoice.updateMany({
+    where: {
+      id: quote.invoiceId,
+      clinicId: ctx.clinicId,
+      status: "DRAFT",
+      paid: 0,
+      payments: { none: {} },
+    },
+    data: {
+      items: items as unknown as Prisma.InputJsonValue,
+      subtotal,
+      discount,
+      total,
+      balance: total,
+    },
+  });
+  if (res.count === 0) {
+    const { invoice, lock } = await getLinkedInvoiceLock(tx, ctx.clinicId, quote.invoiceId);
+    if (lock) throw new QuoteInvoiceLockedError(lock);
+    if (!invoice) return null; // el borrador se borró: el presupuesto sigue editable
+    // Sin lock y sin update no debería pasar (el where es exactamente la regla
+    // de decideLinkedInvoiceLock); se trata como bloqueo por prudencia.
+    throw new QuoteInvoiceLockedError({ invoiceNumber: invoice.invoiceNumber, status: invoice.status, reason: "not-draft" });
+  }
+  const updated = await tx.invoice.findFirst({
+    where: { id: quote.invoiceId, clinicId: ctx.clinicId },
+    include: { payments: true },
+  });
+  return updated ? serializeInvoice(updated) : null;
 }

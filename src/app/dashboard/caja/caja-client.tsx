@@ -4,7 +4,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import {
   Wallet, TrendingUp, Percent, Receipt, ArrowDownCircle, Banknote,
   Lock, Printer, X, ChevronDown, ChevronRight, History,
-  CreditCard, Download, AlertTriangle, KeyRound, Clock,
+  CreditCard, Download, AlertTriangle, KeyRound, Clock, Undo2,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { KpiCard }   from "@/components/ui/design-system/kpi-card";
@@ -23,6 +23,10 @@ interface BillingProps {
   totalPending:  number;
   totalOverdue:  number;
   monthInvoices: number;
+  /** Facturas de la clínica en TOTAL (el arreglo trae solo las 100 más recientes). */
+  totalInvoices?: number;
+  /** ISO del inicio de HOY en la zona de la clínica: umbral del filtro "Vencidas". */
+  overdueBefore?: string;
   creditTotal:   number;
   clinic:        { facturApiEnabled: boolean; rfcEmisor: string | null; cfdiTaxMode?: string | null };
   /** true = FACTURAPI_ENV=live → el timbrado va al SAT con validez fiscal. */
@@ -46,6 +50,7 @@ interface CloseSummary {
   cardCreditIncome: number;
   otherIncome:      number;
   totalIncome:      number;
+  refunds:          number;
   discounts:        number;
   tax:              number;
   withdrawals:      number;
@@ -56,6 +61,12 @@ interface CloseSummary {
 }
 
 const PIN_RE = /^\d{6}$/;
+
+/** Payment.method de un reembolso (REFUND_METHOD en lib/caja, que no se importa aquí: trae Prisma). */
+const REFUND = "refund";
+const isRefundRow = (r: { method: string }) => r.method === REFUND;
+/** Importe con signo para mostrar: los reembolsos se guardan en POSITIVO y se pintan en negativo. */
+const signedAmount = (r: { method: string; amount: number }) => (isRefundRow(r) ? `−${fmtMXNdec(r.amount)}` : fmtMXNdec(r.amount));
 
 /** A partir de estas horas abiertas sugerimos hacer el corte (solo aviso). */
 const STALE_SHIFT_HOURS = 18;
@@ -107,6 +118,9 @@ export function CajaClient({ caja, history, timezone, hasPin: hasPinInitial, bil
     transfer: t("cashRegister.methodTransfer"),
     check:    t("cashRegister.methodCheck"),
     other:    t("cashRegister.methodOther"),
+    // Sin esta clave el fallback de abajo imprimía "refund" en inglés en el
+    // corte, en el resumen impreso y en el CSV.
+    refund:   t("cashRegister.methodRefund"),
   };
   const methodLabel = (m: string) => METHOD_LABEL[m] ?? m;
 
@@ -172,13 +186,15 @@ export function CajaClient({ caja, history, timezone, hasPin: hasPinInitial, bil
 
   // Conteo y suma por día — SOLO para el encabezado de grupo de la tabla. No
   // interviene en el arqueo: los totales del turno siguen viniendo del servidor.
+  // Los reembolsos cuentan como movimiento pero no suman al importe del día
+  // (mismo criterio que totalIncome).
   const dayAgg = useMemo(() => {
     const m = new Map<string, { count: number; total: number }>();
     for (const r of caja.list) {
       const k = dayKey(r.at);
       const cur = m.get(k) ?? { count: 0, total: 0 };
       cur.count += 1;
-      cur.total += r.amount;
+      if (!isRefundRow(r)) cur.total += r.amount;
       m.set(k, cur);
     }
     return m;
@@ -305,6 +321,7 @@ export function CajaClient({ caja, history, timezone, hasPin: hasPinInitial, bil
       cardCreditIncome: totals.cardCreditIncome,
       otherIncome:      totals.otherIncome,
       totalIncome:      totals.totalIncome,
+      refunds:          totals.refunds,
       discounts:        totals.discounts,
       tax:              totals.tax,
       withdrawals:      totals.withdrawals,
@@ -336,7 +353,9 @@ export function CajaClient({ caja, history, timezone, hasPin: hasPinInitial, bil
         cell(r.patientName),
         cell(r.concept),
         cell(methodLabel(r.method)),
-        r.amount,
+        // Reembolso en NEGATIVO: así la suma de la columna en Excel da lo mismo
+        // que "Ingresos del turno − Reembolsos" y no infla la venta.
+        isRefundRow(r) ? -r.amount : r.amount,
         r.discount,
         cell(r.doctorName),
       ].join(",")),
@@ -357,7 +376,7 @@ export function CajaClient({ caja, history, timezone, hasPin: hasPinInitial, bil
     // línea lleva la fecha completa, no solo la hora.
     const multiDay = daySpan(s.list, s.openedAt, s.closedAt).size > 1;
     const rows = s.list.map(r =>
-      `<tr><td>${multiDay ? fmtDateTime(r.at) : fmtTime(r.at)}</td><td>${esc(r.patientName)}</td><td>${esc(r.concept)}</td><td style="text-align:right">${fmtMXNdec(r.amount)}</td><td>${esc(methodLabel(r.method))}</td><td>${esc(r.doctorName)}</td></tr>`,
+      `<tr><td>${multiDay ? fmtDateTime(r.at) : fmtTime(r.at)}</td><td>${esc(r.patientName)}</td><td>${esc(r.concept)}</td><td style="text-align:right">${signedAmount(r)}</td><td>${esc(methodLabel(r.method))}</td><td>${esc(r.doctorName)}</td></tr>`,
     ).join("");
     const line = (label: string, val: string) =>
       `<tr><td style="padding:2px 12px 2px 0;color:#555">${label}</td><td style="text-align:right;font-weight:600">${val}</td></tr>`;
@@ -373,6 +392,7 @@ export function CajaClient({ caja, history, timezone, hasPin: hasPinInitial, bil
         ${line(t("cashRegister.methodCash"), fmtMXNdec(s.cashIncome))}
         ${line(t("cashRegister.methodDebit"), fmtMXNdec(s.cardDebitIncome))}
         ${line(t("cashRegister.methodCredit"), fmtMXNdec(s.cardCreditIncome))}
+        ${s.refunds > 0 ? line(t("cashRegister.kpiRefunds"), `−${fmtMXNdec(s.refunds)}`) : ""}
         ${line(t("cashRegister.kpiDiscounts"), fmtMXNdec(s.discounts))}
         ${line(t("cashRegister.kpiTax"), fmtMXNdec(s.tax))}
         ${line(t("cashRegister.kpiWithdrawals"), fmtMXNdec(s.withdrawals))}
@@ -425,6 +445,8 @@ export function CajaClient({ caja, history, timezone, hasPin: hasPinInitial, bil
           totalPending={billing.totalPending}
           totalOverdue={billing.totalOverdue}
           monthInvoices={billing.monthInvoices}
+          totalInvoices={billing.totalInvoices}
+          overdueBefore={billing.overdueBefore}
           creditTotal={billing.creditTotal}
           clinic={billing.clinic}
           cfdiLive={billing.cfdiLive}
@@ -506,6 +528,12 @@ export function CajaClient({ caja, history, timezone, hasPin: hasPinInitial, bil
                 <KpiCard label={t("cashRegister.methodCash")}      value={fmtMXNdec(totals.cashIncome)}       icon={Banknote} />
                 <KpiCard label={t("cashRegister.methodDebit")}     value={fmtMXNdec(totals.cardDebitIncome)}  icon={CreditCard} />
                 <KpiCard label={t("cashRegister.methodCredit")}    value={fmtMXNdec(totals.cardCreditIncome)} icon={CreditCard} />
+                {/* Reembolsos del turno: línea propia EN NEGATIVO. Ya no suman
+                 *  a "Ingresos del turno" (el servidor los separa), pero la
+                 *  clínica tiene que verlos. Solo aparece si hubo alguno. */}
+                {totals.refunds > 0 && (
+                  <KpiCard label={t("cashRegister.kpiRefunds")}    value={`−${fmtMXNdec(totals.refunds)}`}    icon={Undo2} />
+                )}
                 <KpiCard label={t("cashRegister.kpiDiscounts")}    value={fmtMXNdec(totals.discounts)}        icon={Percent} />
                 <KpiCard label={t("cashRegister.kpiTax")}          value={fmtMXNdec(totals.tax)}              icon={Receipt} />
                 <KpiCard label={t("cashRegister.kpiWithdrawals")}  value={fmtMXNdec(totals.withdrawals)}      icon={ArrowDownCircle} />
@@ -600,8 +628,8 @@ export function CajaClient({ caja, history, timezone, hasPin: hasPinInitial, bil
                                   </td>
                                   <td style={{ color: "var(--text-1)" }}>{r.patientName}</td>
                                   <td style={{ color: "var(--text-2)" }}>{r.concept}</td>
-                                  <td><BadgeNew tone={r.method === "cash" ? "success" : "info"}>{methodLabel(r.method)}</BadgeNew></td>
-                                  <td style={{ textAlign: "right", fontWeight: 600, color: "var(--text-1)", whiteSpace: "nowrap", fontFamily: "var(--font-mono, monospace)", fontVariantNumeric: "tabular-nums" }}>{fmtMXNdec(r.amount)}</td>
+                                  <td><BadgeNew tone={isRefundRow(r) ? "danger" : r.method === "cash" ? "success" : "info"}>{methodLabel(r.method)}</BadgeNew></td>
+                                  <td style={{ textAlign: "right", fontWeight: 600, color: isRefundRow(r) ? "var(--danger)" : "var(--text-1)", whiteSpace: "nowrap", fontFamily: "var(--font-mono, monospace)", fontVariantNumeric: "tabular-nums" }}>{signedAmount(r)}</td>
                                   <td style={{ textAlign: "right", color: r.discount > 0 ? "var(--danger)" : "var(--text-3)", whiteSpace: "nowrap", fontFamily: "var(--font-mono, monospace)", fontVariantNumeric: "tabular-nums", fontWeight: r.discount > 0 ? 600 : 400 }}>{r.discount > 0 ? `−${fmtMXNdec(r.discount)}` : "—"}</td>
                                   <td style={{ color: "var(--text-2)" }}>{r.doctorName}</td>
                                 </tr>
@@ -792,6 +820,9 @@ export function CajaClient({ caja, history, timezone, hasPin: hasPinInitial, bil
                   <CloseLine label={t("cashRegister.methodCash")}   value={fmtMXNdec(totals.cashIncome)} />
                   <CloseLine label={t("cashRegister.methodDebit")}  value={fmtMXNdec(totals.cardDebitIncome)} />
                   <CloseLine label={t("cashRegister.methodCredit")} value={fmtMXNdec(totals.cardCreditIncome)} />
+                  {totals.refunds > 0 && (
+                    <CloseLine label={t("cashRegister.kpiRefunds")} value={`−${fmtMXNdec(totals.refunds)}`} />
+                  )}
                   <CloseLine label={t("cashRegister.kpiTax")}       value={fmtMXNdec(totals.tax)} />
                   <CloseLine label={t("cashRegister.kpiWithdrawals")} value={`−${fmtMXNdec(totals.withdrawals)}`} />
                   <CloseLine label={t("cashRegister.kpiIncome")}    value={fmtMXNdec(totals.totalIncome)} strong />
@@ -852,6 +883,9 @@ export function CajaClient({ caja, history, timezone, hasPin: hasPinInitial, bil
                 <SumRow label={t("cashRegister.methodCash")}      value={fmtMXNdec(summary.cashIncome)} />
                 <SumRow label={t("cashRegister.methodDebit")}     value={fmtMXNdec(summary.cardDebitIncome)} />
                 <SumRow label={t("cashRegister.methodCredit")}    value={fmtMXNdec(summary.cardCreditIncome)} />
+                {summary.refunds > 0 && (
+                  <SumRow label={t("cashRegister.kpiRefunds")}    value={`−${fmtMXNdec(summary.refunds)}`} />
+                )}
                 <SumRow label={t("cashRegister.kpiDiscounts")}    value={fmtMXNdec(summary.discounts)} />
                 <SumRow label={t("cashRegister.kpiTax")}          value={fmtMXNdec(summary.tax)} />
                 <SumRow label={t("cashRegister.kpiWithdrawals")}  value={fmtMXNdec(summary.withdrawals)} />
@@ -881,7 +915,7 @@ export function CajaClient({ caja, history, timezone, hasPin: hasPinInitial, bil
                           </td>
                           <td>{r.patientName}</td>
                           <td style={{ color: "var(--text-2)" }}>{r.concept}</td>
-                          <td style={{ textAlign: "right", fontWeight: 600, whiteSpace: "nowrap", fontFamily: "var(--font-mono, monospace)", fontVariantNumeric: "tabular-nums" }}>{fmtMXNdec(r.amount)}</td>
+                          <td style={{ textAlign: "right", fontWeight: 600, whiteSpace: "nowrap", color: isRefundRow(r) ? "var(--danger)" : undefined, fontFamily: "var(--font-mono, monospace)", fontVariantNumeric: "tabular-nums" }}>{signedAmount(r)}</td>
                           <td>{methodLabel(r.method)}</td>
                           <td style={{ color: "var(--text-2)" }}>{r.doctorName}</td>
                         </tr>

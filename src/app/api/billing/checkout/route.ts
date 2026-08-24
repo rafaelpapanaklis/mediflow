@@ -199,7 +199,13 @@ export async function POST(req: NextRequest) {
       // discounts es incompatible con allow_promotion_codes (no usamos códigos
       // manuales aquí); solo se manda cuando la promo aplica.
       ...(promoCouponId ? { discounts: [{ coupon: promoCouponId }] } : {}),
-      success_url: `${baseUrl}/dashboard`,
+      // Vuelve a la pantalla de confirmación, NO al panel: Stripe redirige en
+      // milisegundos y el webhook checkout.session.completed (el que activa la
+      // clínica) puede no haber corrido aún. Aterrizar en /dashboard con la
+      // clínica todavía "vencida" la rebotaba a "elige tu plan" y el usuario,
+      // creyendo que el pago falló, pagaba OTRA VEZ (segunda suscripción viva
+      // en Stripe). /suspended/success espera al webhook antes de dar acceso.
+      success_url: `${baseUrl}/dashboard/suspended/success?session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${baseUrl}/dashboard/suspended`,
     });
   } else {

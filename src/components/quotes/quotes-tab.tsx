@@ -104,8 +104,10 @@ export function QuotesTab({ patientId, prefill, onViewInvoice, onViewPlan, onInv
   function closeEditor() { setEditorOpen(false); setEditing(null); setInitialItems(null); }
 
   async function onSaved(created?: { invoice?: BillingInvoiceLite | null }) {
-    // Solo en CREACIÓN llega `created.invoice`: insértala en Facturación al
-    // instante (el contenedor deduplica por id). En edición no viene.
+    // `created.invoice` llega al CREAR (factura automática) y al EDITAR (el
+    // borrador ligado re-sincronizado con los importes nuevos — FIN-05): el
+    // contenedor la inserta o la reemplaza por id, así Facturación muestra el
+    // total nuevo sin recargar.
     if (created?.invoice && onInvoiceCreated) onInvoiceCreated(created.invoice);
     closeEditor();
     setLoading(true);
@@ -521,9 +523,9 @@ function QuoteEditor({
       });
       const out = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(out.error ?? t("quotes.editor.errorSave"));
-      // En creación, propaga la factura automática (si vino) para insertarla en
-      // Facturación sin recargar. En edición no se factura.
-      onSaved(editing ? undefined : { invoice: out.invoice ?? null });
+      // Propaga la factura que devuelve el servidor: en creación la automática,
+      // en edición el borrador ligado ya re-sincronizado (null si no había).
+      onSaved({ invoice: out.invoice ?? null });
     } catch (e) {
       setError((e as Error).message);
       setSaving(false);

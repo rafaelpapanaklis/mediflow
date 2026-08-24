@@ -68,10 +68,16 @@ export function isApiPathBlockedForExpiredPlan(pathname: string | null | undefin
 // ── Páginas de /dashboard que una clínica suspendida SÍ puede visitar ──
 // Cuando el plan venció, el layout de /dashboard rebota TODA navegación a
 // /dashboard/suspended. Estas son las únicas páginas exentas de ese rebote:
-//   • /dashboard/suspended     → la propia pantalla de pago / activación.
-//   • /dashboard/soporte(/...) → abrir y responder tickets de soporte, para
-//                                pedir ayuda mientras reactiva su plan (incluye
-//                                el detalle /dashboard/soporte/[id]).
+//   • /dashboard/suspended(/...) → la propia pantalla de pago / activación Y
+//                                  /dashboard/suspended/success, a donde vuelve
+//                                  Stripe tras el checkout. Esa pantalla vive
+//                                  en el hueco entre el pago y el webhook: la
+//                                  clínica sigue "vencida" en la BD, así que
+//                                  con igualdad exacta el layout la rebotaba a
+//                                  "elige tu plan" y el usuario pagaba dos veces.
+//   • /dashboard/soporte(/...)   → abrir y responder tickets de soporte, para
+//                                  pedir ayuda mientras reactiva su plan (incluye
+//                                  el detalle /dashboard/soporte/[id]).
 // FUENTE ÚNICA: la usan a la vez el redirect server-side (layout) y el guard
 // de cliente (ExpiredPlanModal). Centralizarla evita que ambas superficies se
 // desincronicen y una permita navegar a donde la otra rebota.
@@ -79,6 +85,7 @@ export function isAllowedWhileSuspended(pathname: string | null | undefined): bo
   if (!pathname) return false;
   return (
     pathname === "/dashboard/suspended" ||
+    pathname.startsWith("/dashboard/suspended/") ||
     pathname === "/dashboard/soporte" ||
     pathname.startsWith("/dashboard/soporte/")
   );

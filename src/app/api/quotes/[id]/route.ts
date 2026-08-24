@@ -4,6 +4,12 @@ import { prisma } from "@/lib/prisma";
 import { logAudit } from "@/lib/audit";
 import { replaceQuoteContent, parseValidUntil } from "@/lib/quotes/service";
 import { serializeQuote } from "@/lib/quotes/serialize";
+import {
+  QuoteInvoiceLockedError,
+  getLinkedInvoiceLock,
+  syncDraftInvoiceFromQuote,
+} from "@/lib/quotes/create-invoice-from-quote";
+import type { BillingInvoiceLite } from "@/lib/quotes/types";
 import { assertPatientVisible } from "@/lib/patient-visibility";
 
 export const dynamic = "force-dynamic";
@@ -38,6 +44,13 @@ export async function GET(_req: NextRequest, { params }: Params) {
 /**
  * PATCH /api/quotes/[id] — edita un presupuesto. Solo en estado editable
  * (DRAFT o PRESENTED). Reemplaza ítems y recalcula totales en el servidor.
+ *
+ * FIN-05 — la factura ligada (quote.invoiceId, la que POST /api/quotes crea
+ * en BORRADOR) se regenera en la MISMA transacción con la misma aritmética
+ * del alta. Si esa factura ya se confirmó o tiene pagos, el presupuesto ya no
+ * se edita: 409 con un mensaje que dice qué factura, por qué y qué hacer.
+ * Devuelve `invoice` (la sincronizada) para que la ficha la refresque al
+ * instante, o null si no había.
  */
 export async function PATCH(req: NextRequest, { params }: Params) {
   const ctx = await getAuthContext();
@@ -45,7 +58,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
 
   const existing = await prisma.quote.findFirst({
     where: { id: params.id, clinicId: ctx.clinicId },
-    select: { id: true, status: true, total: true, patientId: true },
+    select: { id: true, status: true, total: true, patientId: true, invoiceId: true },
   });
   if (!existing) return NextResponse.json({ error: "Presupuesto no encontrado" }, { status: 404 });
 
@@ -61,6 +74,22 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       { error: "Solo se pueden editar presupuestos en borrador o presentados" },
       { status: 409 },
     );
+  }
+
+  // Pre-check de la factura ligada ANTES de leer el body: si ya está
+  // confirmada o cobrada, el 409 sale con el mensaje claro y sin tocar nada.
+  // Dentro de la transacción se vuelve a exigir (carrera entre este check y
+  // el update).
+  let linked: { id: string; invoiceNumber: string; total: number } | null = null;
+  if (existing.invoiceId) {
+    const { invoice, lock } = await getLinkedInvoiceLock(prisma, ctx.clinicId, existing.invoiceId);
+    if (lock) {
+      return NextResponse.json(
+        { error: new QuoteInvoiceLockedError(lock).message, code: "QUOTE_INVOICE_LOCKED", invoiceNumber: lock.invoiceNumber },
+        { status: 409 },
+      );
+    }
+    linked = invoice;
   }
 
   let body: Record<string, unknown>;
@@ -81,16 +110,36 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   const notes = typeof body.notes === "string" ? body.notes.slice(0, 2000) : null;
   const validUntil = parseValidUntil(body.validUntil);
 
-  const quote = await replaceQuoteContent({
-    quoteId: existing.id,
-    clinicId: ctx.clinicId,
-    title,
-    items,
-    discountPct: body.discountPct == null ? null : Number(body.discountPct),
-    discountAmount: body.discountAmount == null ? null : Number(body.discountAmount),
-    validUntil,
-    notes,
-  });
+  let quote: Awaited<ReturnType<typeof replaceQuoteContent>>;
+  let invoice: BillingInvoiceLite | null = null;
+  try {
+    ({ quote, invoice } = await prisma.$transaction(async (tx) => {
+      const q = await replaceQuoteContent({
+        quoteId: existing.id,
+        clinicId: ctx.clinicId,
+        title,
+        items,
+        discountPct: body.discountPct == null ? null : Number(body.discountPct),
+        discountAmount: body.discountAmount == null ? null : Number(body.discountAmount),
+        validUntil,
+        notes,
+        tx,
+      });
+      // Borrador ligado → misma aritmética del alta, misma transacción.
+      const inv = linked
+        ? await syncDraftInvoiceFromQuote(tx, q, { clinicId: ctx.clinicId, userId: ctx.userId })
+        : null;
+      return { quote: q, invoice: inv };
+    }));
+  } catch (e) {
+    if (e instanceof QuoteInvoiceLockedError) {
+      return NextResponse.json(
+        { error: e.message, code: "QUOTE_INVOICE_LOCKED", invoiceNumber: e.lock.invoiceNumber },
+        { status: 409 },
+      );
+    }
+    throw e;
+  }
 
   await logAudit({
     clinicId: ctx.clinicId,
@@ -101,7 +150,21 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     changes: { total: { before: Number(existing.total), after: Number(quote.total) } },
   });
 
-  return NextResponse.json(serializeQuote(quote));
+  if (invoice && linked) {
+    await logAudit({
+      clinicId: ctx.clinicId,
+      userId: ctx.userId,
+      entityType: "invoice",
+      entityId: invoice.id,
+      action: "update",
+      changes: {
+        total: { before: Number(linked.total), after: Number(invoice.total) },
+        syncedFromQuote: { before: null, after: quote.folio },
+      },
+    });
+  }
+
+  return NextResponse.json({ ...serializeQuote(quote), invoice });
 }
 
 /** DELETE /api/quotes/[id] — borra un presupuesto (solo DRAFT). */

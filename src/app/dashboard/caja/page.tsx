@@ -4,7 +4,10 @@ import { prisma } from "@/lib/prisma";
 import { canSeePatient, patientVisibilityAnd } from "@/lib/patient-visibility";
 import { getClinicCreditTotal } from "@/lib/patient-credit";
 import { requirePermissionOrRedirect } from "@/lib/auth/require-permission";
-import { getCajaState, getCajaHistory } from "@/lib/caja";
+import { getCajaState, getCajaHistory, money, overdueInvoiceWhere, receivableInvoiceWhere } from "@/lib/caja";
+import { periodRangeUtc } from "@/lib/agenda/time-utils";
+import { DEFAULT_INVOICE_TZ } from "@/lib/invoices/due-date";
+import type { Prisma } from "@prisma/client";
 import { canUseCaja } from "@/lib/caja-pin";
 import { ModuleLocked } from "@/components/dashboard/module-locked";
 import { isFacturapiLive } from "@/lib/facturapi-env";
@@ -56,14 +59,26 @@ export default async function CajaPage() {
     };
   });
 
-  const totalPaid    = invoices.filter(i => i.status === "PAID").reduce((s, i) => s + i.paid, 0);
-  const totalPending = invoices.filter(i => ["PENDING", "PARTIAL"].includes(i.status)).reduce((s, i) => s + i.balance, 0);
-  const totalOverdue = invoices.filter(i => i.status === "OVERDUE").reduce((s, i) => s + i.balance, 0);
-
-  const firstOfMonth = new Date();
-  firstOfMonth.setDate(1);
-  firstOfMonth.setHours(0, 0, 0, 0);
-  const monthInvoices = invoices.filter(i => new Date(i.createdAt) >= firstOfMonth).length;
+  // KPIs sobre TODA la clínica con aggregate (FIN-04). Antes salían del arreglo
+  // de arriba, que trae solo las 100 facturas más recientes: pasadas 100, los
+  // números se congelaban sobre esas 100; y "Total cobrado" filtraba PAID, así
+  // que los abonos de una PARTIAL no contaban. "Vencido" se deriva de dueDate
+  // (overdueInvoiceWhere), nunca del status OVERDUE que nadie escribe. "Hoy" y
+  // "este mes" van en la zona de la clínica: Vercel corre en UTC.
+  const tz = user.clinic?.timezone || DEFAULT_INVOICE_TZ;
+  const todayStart = periodRangeUtc("day", tz).from;
+  const monthStart = periodRangeUtc("month", tz).from;
+  const issued: Prisma.InvoiceWhereInput = { clinicId: user.clinicId, status: { notIn: ["DRAFT", "CANCELLED"] } };
+  const [paidAgg, pendingAgg, overdueAgg, totalInvoices, monthInvoices] = await Promise.all([
+    prisma.invoice.aggregate({ _sum: { paid: true },    where: issued }),
+    prisma.invoice.aggregate({ _sum: { balance: true }, where: receivableInvoiceWhere(user.clinicId) }),
+    prisma.invoice.aggregate({ _sum: { balance: true }, where: overdueInvoiceWhere(user.clinicId, todayStart) }),
+    prisma.invoice.count({ where: { clinicId: user.clinicId } }),
+    prisma.invoice.count({ where: { clinicId: user.clinicId, createdAt: { gte: monthStart } } }),
+  ]);
+  const totalPaid    = money(paidAgg._sum.paid ?? 0);
+  const totalPending = money(pendingAgg._sum.balance ?? 0);
+  const totalOverdue = money(overdueAgg._sum.balance ?? 0);
 
   return (
     <CajaClient
@@ -78,6 +93,10 @@ export default async function CajaPage() {
         totalPending,
         totalOverdue,
         monthInvoices,
+        totalInvoices,
+        // Umbral del filtro "Vencidas" en el cliente: el mismo "hoy" de la clínica
+        // con el que se calculó el KPI de arriba.
+        overdueBefore: todayStart.toISOString(),
         creditTotal,
         clinic: {
           facturApiEnabled: clinic?.facturApiEnabled ?? false,

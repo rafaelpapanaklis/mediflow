@@ -168,6 +168,10 @@ export async function createQuoteWithFolio(args: {
 /**
  * Reemplaza por completo título / ítems / descuentos / vigencia / notas de un
  * presupuesto en DRAFT (transacción: borra ítems viejos, recrea, recalcula).
+ *
+ * `tx` opcional: si el caller ya está dentro de una transacción (el PATCH, que
+ * además re-sincroniza la factura BORRADOR ligada — FIN-05), se ejecuta en ESA
+ * transacción para que presupuesto y factura cambien juntos o no cambie nada.
  */
 export async function replaceQuoteContent(args: {
   quoteId: string;
@@ -178,6 +182,7 @@ export async function replaceQuoteContent(args: {
   discountAmount?: number | null;
   validUntil: Date | null;
   notes: string | null;
+  tx?: Prisma.TransactionClient;
 }) {
   const sanitized = await sanitizeItems(args.clinicId, args.items);
   const totals = computeTotals(sanitized, {
@@ -186,9 +191,9 @@ export async function replaceQuoteContent(args: {
   });
   const itemsData = buildItemsData(totals.items);
 
-  return prisma.$transaction(async (tx) => {
-    await tx.quoteItem.deleteMany({ where: { quoteId: args.quoteId } });
-    return tx.quote.update({
+  const run = async (db: Prisma.TransactionClient) => {
+    await db.quoteItem.deleteMany({ where: { quoteId: args.quoteId } });
+    return db.quote.update({
       where: { id: args.quoteId },
       data: {
         title: args.title,
@@ -202,7 +207,8 @@ export async function replaceQuoteContent(args: {
       },
       include: QUOTE_INCLUDE,
     });
-  });
+  };
+  return args.tx ? run(args.tx) : prisma.$transaction(run);
 }
 
 /** Default de vigencia: 30 días. Acepta ISO o null. */
