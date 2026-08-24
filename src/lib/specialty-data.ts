@@ -1,5 +1,7 @@
 /**
- * Datos de las 17 páginas de especialidad para la landing pública.
+ * Datos de las 17 especialidades. Todas alimentan el selector de tipo de clínica
+ * del registro (step-2-clinic.tsx → enum ClinicCategory), pero SOLO las de
+ * PUBLIC_SPECIALTY_SLUGS tienen landing pública en /[slug].
  * Cada entry provee copy, features, mockup key, testimonial, FAQs y acento visual.
  * Español MX.
  */
@@ -483,19 +485,39 @@ export const SPECIALTIES: Record<string, Specialty> = {
 
 export const SPECIALTY_SLUGS = Object.keys(SPECIALTIES);
 
+/**
+ * Las únicas especialidades con landing pública. El resto sigue existiendo como tipo
+ * de clínica en el registro (step-2-clinic.tsx, enum ClinicCategory), pero NO se
+ * publica ni se indexa: anunciaban funciones que no existen.
+ */
+export const PUBLIC_SPECIALTY_SLUGS = [
+  "odontologia-general",
+  "ortodoncia",
+  "endodoncia",
+  "periodoncia",
+] as const;
+
+export function isPublicSpecialty(slug: string): boolean {
+  return (PUBLIC_SPECIALTY_SLUGS as readonly string[]).indexOf(slug) !== -1;
+}
+
 export function getSpecialty(slug: string): Specialty | null {
   return SPECIALTIES[slug] ?? null;
 }
 
-export function getSpecialtiesByCategory(): Record<SpecialtyCategory, Specialty[]> {
-  const result: Record<SpecialtyCategory, Specialty[]> = {
-    "Dental":       [],
-    "Médicas":      [],
-    "Salud mental": [],
-    "Bienestar":    [],
-  };
+/**
+ * Sólo las especialidades PÚBLICAS, agrupadas por categoría. Una categoría que
+ * se queda sin ninguna NO aparece en el resultado (hoy sólo sobrevive "Dental").
+ * Consumidor: el dropdown público (specialties-dropdown.tsx, montado por el
+ * header de la landing y por spec-nav.tsx).
+ */
+export function getSpecialtiesByCategory(): Partial<Record<SpecialtyCategory, Specialty[]>> {
+  const result: Partial<Record<SpecialtyCategory, Specialty[]>> = {};
   for (const s of Object.values(SPECIALTIES)) {
-    result[s.category].push(s);
+    if (!isPublicSpecialty(s.slug)) continue;
+    const bucket = result[s.category];
+    if (bucket) bucket.push(s);
+    else result[s.category] = [s];
   }
   return result;
 }

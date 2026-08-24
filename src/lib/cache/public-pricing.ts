@@ -16,7 +16,7 @@
  * el peor caso es esperar el temporizador.
  */
 import { revalidatePath } from "next/cache";
-import { SPECIALTY_SLUGS } from "@/lib/specialty-data";
+import { PUBLIC_SPECIALTY_SLUGS } from "@/lib/specialty-data";
 
 /**
  * Superficies que dependen de `affiliate_payout_config` (los 6 montos, el
@@ -37,7 +37,8 @@ const AFFILIATE_PATHS: readonly string[] = ["/afiliados", "/terminos-afiliados"]
  * Superficies que muestran el PRECIO de los planes (`plan_configs`):
  *
  *  · "/"              → tarjetas de precio de la landing v4 (buildPlanCards).
- *  · "/<especialidad>" → las 17 landings de /[slug] (SpecPricing). Se enumeran
+ *  · "/<especialidad>" → las 4 landings PÚBLICAS de /[slug] (SpecPricing;
+ *    PUBLIC_SPECIALTY_SLUGS — las 13 despublicadas responden 404). Se enumeran
  *    en vez de invalidar el patrón "/[slug]" entero porque esa misma ruta sirve
  *    las landings de clínica, que no muestran precios y no hay por qué
  *    regenerar.
@@ -50,7 +51,7 @@ const AFFILIATE_PATHS: readonly string[] = ["/afiliados", "/terminos-afiliados"]
  */
 const PRICING_PATHS: readonly string[] = [
   "/",
-  ...SPECIALTY_SLUGS.map((slug) => `/${slug}`),
+  ...PUBLIC_SPECIALTY_SLUGS.map((slug) => `/${slug}`),
   "/afiliados",
 ];
 

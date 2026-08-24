@@ -4,7 +4,8 @@ import { ClinicLandingServer } from "./clinic-landing-server";
 import type { Metadata } from "next";
 import {
   getSpecialty,
-  SPECIALTY_SLUGS,
+  isPublicSpecialty,
+  PUBLIC_SPECIALTY_SLUGS,
 } from "@/lib/specialty-data";
 import { SpecNavSession } from "@/components/public/landing/nav-session";
 import { SpecFAQ } from "@/components/public/landing/specialty/spec-faq";
@@ -22,9 +23,13 @@ import {
   medicalBusinessLd,
   SITE_URL,
 } from "@/lib/seo";
-// Las 17 landings de especialidad se pre-renderizan en build
-// (generateStaticParams) y revalidan cada 5 min (ISR). La sesión ya no se lee
-// en el server: el nav la detecta client-side (nav-session.tsx). Las landings
+// Las 4 landings PÚBLICAS de especialidad (PUBLIC_SPECIALTY_SLUGS) se
+// pre-renderizan en build (generateStaticParams) y revalidan cada 5 min (ISR).
+// Las otras 13 siguen en SPECIALTIES como tipo de clínica del registro, pero
+// aquí caen al notFound(): dynamicParams está en true, así que cambiar sólo
+// generateStaticParams no basta — el guard isPublicSpecialty va en
+// generateMetadata Y en la página. La sesión ya no se lee en el server: el nav
+// la detecta client-side (nav-session.tsx). Las landings
 // de clínica también son ISR — por eso esta ruta NO lee searchParams (leerlos
 // durante la regeneración estática lanza DYNAMIC_SERVER_USAGE → 500). La
 // vista previa de plantillas (?preview=) vive en /landing-preview/[slug].
@@ -42,13 +47,14 @@ const NON_SPECIALTY_RESERVED = [
 interface Props { params: { slug: string } }
 
 export function generateStaticParams() {
-  return SPECIALTY_SLUGS.map((slug) => ({ slug }));
+  return PUBLIC_SPECIALTY_SLUGS.map((slug) => ({ slug }));
 }
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
-  // 1) Specialty landing (Claude Design — 17 especialidades)
+  // 1) Specialty landing (Claude Design — sólo las 4 públicas; una despublicada
+  //    sigue de largo a la rama de clínica y acaba en su notFound())
   const specialty = getSpecialty(params.slug);
-  if (specialty) {
+  if (specialty && isPublicSpecialty(params.slug)) {
     return buildMetadata({
       title: `${specialty.name} · DaleControl`,
       description: specialty.heroSub,
@@ -75,9 +81,11 @@ export default async function ClinicLandingPage({ params }: Props) {
   // 1) Reserved slugs
   if (NON_SPECIALTY_RESERVED.includes(params.slug)) notFound();
 
-  // 2) Specialty landing (Claude Design)
+  // 2) Specialty landing (Claude Design) — sólo las públicas. Una despublicada
+  //    (p.ej. /psicologia) sigue a la rama de clínica y, al no existir ninguna
+  //    con ese slug, ClinicLandingServer responde notFound().
   const specialty = getSpecialty(params.slug);
-  if (specialty) {
+  if (specialty && isPublicSpecialty(params.slug)) {
     const url = `${SITE_URL}/${specialty.slug}`;
     const ldBlocks: object[] = [
       softwareApplicationLd({

@@ -65,7 +65,8 @@
     "test:landing-concurrency": "tsx --test src/lib/__tests__/landing-concurrency.test.ts",
     "test:ua": "tsx --test src/lib/analytics/ua.test.ts",
     "test:account-manager": "tsx --test src/lib/account-manager/__tests__/availability.test.ts",
-    "test:billing": "tsx --test src/lib/billing/proration.test.ts src/lib/billing/stripe-contract.test.ts src/lib/billing/webhook-decisions.test.ts src/lib/billing/manual-upgrade-diff.test.ts src/lib/billing/billing-guards.test.ts"
+    "test:billing": "tsx --test src/lib/billing/proration.test.ts src/lib/billing/stripe-contract.test.ts src/lib/billing/webhook-decisions.test.ts src/lib/billing/manual-upgrade-diff.test.ts src/lib/billing/billing-guards.test.ts",
+    "test:blog-import": "tsx --test src/lib/blog/__tests__/import-drip.test.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

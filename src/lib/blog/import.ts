@@ -115,13 +115,24 @@ function atPublishHour(d: Date): Date {
  *  - si ya hay artículos programados → el día SIGUIENTE al último (no rellena
  *    días a medias: cada importación ocupa días limpios y es predecible);
  *  - si no hay nada → hoy a las 13:00 UTC si aún no pasó, o mañana.
+ *
+ * El resultado NUNCA es anterior al primer hueco válido contado desde now: se
+ * toma el MÁXIMO entre "último + 1 día" y ese hueco. El "último programado" que
+ * manda el route handler es el mayor scheduledAt de la BD sin mirar el status,
+ * así que tras un tiempo sin importar queda en el pasado (los ya publicados lo
+ * conservan). Calcular "último + 1 día" a secas metió el 18-ago-2026 un lote de
+ * 60 artículos con fechas del 12 al 17, todas vencidas, y el cron (status
+ * scheduled, scheduledAt <= now, take 200) los habría publicado TODOS en una
+ * sola corrida en vez de gotearlos. Si vuelve a pasar con filas ya insertadas,
+ * el remedio manual es sql/blog_reprogramar_drip.sql.
  */
 export function firstDripSlot(lastScheduledAt: Date | null, now: Date): Date {
-  if (lastScheduledAt) {
-    return atPublishHour(new Date(lastScheduledAt.getTime() + DAY_MS));
-  }
   const today = atPublishHour(now);
-  return today.getTime() > now.getTime() ? today : atPublishHour(new Date(now.getTime() + DAY_MS));
+  const fromNow =
+    today.getTime() > now.getTime() ? today : atPublishHour(new Date(now.getTime() + DAY_MS));
+  if (!lastScheduledAt) return fromNow;
+  const afterLast = atPublishHour(new Date(lastScheduledAt.getTime() + DAY_MS));
+  return afterLast.getTime() > fromNow.getTime() ? afterLast : fromNow;
 }
 
 /**

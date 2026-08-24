@@ -1,5 +1,5 @@
 import type { MetadataRoute } from "next";
-import { SPECIALTY_SLUGS } from "@/lib/specialty-data";
+import { PUBLIC_SPECIALTY_SLUGS } from "@/lib/specialty-data";
 import { SITE_URL } from "@/lib/seo";
 import { getCategoryCityCombos, getListedClinicSlugs } from "@/lib/directory/query";
 import { DIRECTORY_CATEGORIES } from "@/lib/directory/types";
@@ -32,7 +32,8 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     priority: 0.9,
   }));
 
-  const specialtyEntries: MetadataRoute.Sitemap = SPECIALTY_SLUGS.map((slug) => ({
+  // Sólo las 4 especialidades con landing pública; las otras 13 responden 404.
+  const specialtyEntries: MetadataRoute.Sitemap = PUBLIC_SPECIALTY_SLUGS.map((slug) => ({
     url: `${SITE_URL}/${slug}`,
     lastModified: now,
     changeFrequency: "weekly",

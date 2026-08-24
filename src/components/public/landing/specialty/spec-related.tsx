@@ -1,10 +1,12 @@
 import Link from "next/link";
-import { SPECIALTIES } from "@/lib/specialty-data";
+import { SPECIALTIES, isPublicSpecialty } from "@/lib/specialty-data";
 
 export function SpecRelated({ currentSlug }: { currentSlug: string }) {
+  // Sólo enlaza especialidades PÚBLICAS: las 13 despublicadas responden 404.
   const others = Object.values(SPECIALTIES)
-    .filter((s) => s.slug !== currentSlug)
+    .filter((s) => s.slug !== currentSlug && isPublicSpecialty(s.slug))
     .slice(0, 4);
+  if (others.length === 0) return null;
 
   return (
     <section
@@ -30,7 +32,7 @@ export function SpecRelated({ currentSlug }: { currentSlug: string }) {
         className="spec-related-grid"
         style={{
           display: "grid",
-          gridTemplateColumns: "repeat(4, 1fr)",
+          gridTemplateColumns: `repeat(${others.length}, 1fr)`,
           gap: 12,
         }}
       >

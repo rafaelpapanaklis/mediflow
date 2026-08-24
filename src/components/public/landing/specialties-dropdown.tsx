@@ -16,6 +16,11 @@ const GROUP_ORDER: SpecialtyCategory[] = ["Dental", "Médicas", "Salud mental", 
 
 const CLOSE_DELAY_MS = 150;
 
+/** 4 columnas de 190 + 3 huecos de 24 + 24 de padding por lado = los 880px originales. */
+const PANEL_PADDING = 24;
+const PANEL_GAP = 24;
+const PANEL_COL_WIDTH = 190;
+
 interface SpecialtiesDropdownProps {
   /** Slug activo si estamos dentro de una página de especialidad. */
   currentSlug?: string;
@@ -27,7 +32,12 @@ export function SpecialtiesDropdown({ currentSlug, triggerColor }: SpecialtiesDr
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
   const closeTimerRef = useRef<number | null>(null);
+  // Sólo llegan las categorías con al menos una especialidad pública (hoy
+  // "Dental"); el panel se dimensiona según cuántas sobreviven para no dejar
+  // columnas vacías.
   const groups = getSpecialtiesByCategory();
+  const visibleGroups = GROUP_ORDER.filter((cat) => (groups[cat] ?? []).length > 0);
+  const cols = Math.max(1, visibleGroups.length);
 
   const cancelClose = useCallback(() => {
     if (closeTimerRef.current !== null) {
@@ -128,8 +138,8 @@ export function SpecialtiesDropdown({ currentSlug, triggerColor }: SpecialtiesDr
         <div
           role="menu"
           style={{
-            width: 880,
-            padding: 24,
+            width: PANEL_PADDING * 2 + cols * PANEL_COL_WIDTH + (cols - 1) * PANEL_GAP,
+            padding: PANEL_PADDING,
             borderRadius: 16,
             background: "rgba(18,16,32,0.96)",
             backdropFilter: "blur(20px)",
@@ -137,12 +147,12 @@ export function SpecialtiesDropdown({ currentSlug, triggerColor }: SpecialtiesDr
             boxShadow:
               "0 30px 60px rgba(0,0,0,0.6), 0 0 40px rgba(124,58,237,0.12), inset 0 1px 0 rgba(255,255,255,0.04)",
             display: "grid",
-            gridTemplateColumns: "repeat(4, 1fr)",
-            gap: 24,
+            gridTemplateColumns: `repeat(${cols}, 1fr)`,
+            gap: PANEL_GAP,
           }}
         >
-          {GROUP_ORDER.map(cat => {
-            const items = groups[cat];
+          {visibleGroups.map(cat => {
+            const items = groups[cat] ?? [];
             const color = GROUP_COLOR[cat];
             return (
               <div key={cat}>

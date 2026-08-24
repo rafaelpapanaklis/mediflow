@@ -1,14 +1,18 @@
 import { ImageResponse } from "next/og";
-import { getSpecialty, SPECIALTY_SLUGS } from "@/lib/specialty-data";
+import { getSpecialty, isPublicSpecialty, PUBLIC_SPECIALTY_SLUGS } from "@/lib/specialty-data";
 
 export const runtime = "edge";
 
 export function generateStaticParams() {
-  return SPECIALTY_SLUGS.map((slug) => ({ slug }));
+  return PUBLIC_SPECIALTY_SLUGS.map((slug) => ({ slug }));
 }
 
 export async function GET(_req: Request, { params }: { params: { slug: string } }) {
-  const specialty = getSpecialty(params.slug);
+  // Sólo las 4 especialidades públicas tienen tarjeta propia; una despublicada
+  // (p.ej. /og/psicologia) recibe la genérica de DaleControl, igual que
+  // cualquier slug desconocido.
+  const found = getSpecialty(params.slug);
+  const specialty = found && isPublicSpecialty(params.slug) ? found : null;
   const title = specialty?.name ?? "DaleControl";
   const subtitle = specialty
     ? `Software para ${specialty.name.toLowerCase()} en México`

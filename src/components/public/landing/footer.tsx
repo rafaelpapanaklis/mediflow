@@ -11,51 +11,38 @@ const COLUMNS: FooterColumn[] = [
   {
     title: "Producto",
     links: [
-      { label: "Features", href: "#features" },
-      { label: "Precios", href: "#pricing" },
-      { label: "Especialidades", href: "#specialties" },
-      { label: "Integrations", href: "/integrations" },
+      { label: "Funciones", href: "/#funciones" },
+      { label: "Precios", href: "/#precios" },
+      { label: "Casos de uso", href: "/casos-de-uso" },
+      { label: "Herramientas gratuitas", href: "/herramientas" },
       { label: "Programa de afiliados", href: "/afiliados" },
     ],
   },
   {
     title: "Empresa",
     links: [
-      { label: "Sobre", href: "/about" },
       { label: "Blog", href: "/blog" },
-      { label: "Contacto", href: "/contact" },
+      { label: "hola@dalecontrol.com", href: "mailto:hola@dalecontrol.com" },
+      { label: "soporte@dalecontrol.com", href: "mailto:soporte@dalecontrol.com" },
     ],
   },
   {
     title: "Legal",
     links: [
-      { label: "Términos", href: "/legal/terms" },
-      { label: "Privacidad", href: "/legal/privacy" },
-      { label: "CFDI", href: "/legal/cfdi" },
-      { label: "NOM-024", href: "/legal/nom-024" },
-    ],
-  },
-  {
-    title: "Soporte",
-    links: [
-      { label: "Docs", href: "/docs" },
-      { label: "Estado", href: "/status" },
-      { label: "Contacto", href: "/support" },
+      { label: "Términos y condiciones", href: "/terminos" },
+      { label: "Aviso de privacidad", href: "/privacidad" },
+      { label: "Términos del programa de afiliados", href: "/terminos-afiliados" },
     ],
   },
   {
     title: "Redes",
     links: [
-      { label: "Twitter", href: "https://twitter.com/dalecontrol" },
-      { label: "LinkedIn", href: "https://linkedin.com/company/dalecontrol" },
       { label: "Instagram", href: "https://instagram.com/dalecontrol.mx" },
     ],
   },
 ];
 
 const SOCIALS = [
-  { label: "Twitter", href: "https://twitter.com/dalecontrol" },
-  { label: "LinkedIn", href: "https://linkedin.com/company/dalecontrol" },
   { label: "Instagram", href: "https://instagram.com/dalecontrol.mx" },
 ];
 
@@ -99,6 +86,9 @@ export function Footer() {
               >
                 {col.links.map((l) => {
                   const isExternal = l.href.startsWith("http");
+                  // mailto: sale como <a> plano, SIN target ni rel — abrir el
+                  // correo en pestaña nueva deja una pestaña en blanco.
+                  const isMailto = l.href.startsWith("mailto:");
                   const linkStyle = {
                     fontSize: 13,
                     color: "var(--ld-fg-muted, var(--fg-muted))",
@@ -113,6 +103,14 @@ export function Footer() {
                           className="ld-footer-link"
                           target="_blank"
                           rel="noopener noreferrer"
+                          style={linkStyle}
+                        >
+                          {l.label}
+                        </a>
+                      ) : isMailto ? (
+                        <a
+                          href={l.href}
+                          className="ld-footer-link"
                           style={linkStyle}
                         >
                           {l.label}
@@ -211,7 +209,7 @@ export function Footer() {
       <style>{`
         .ld-footer-grid {
           display: grid;
-          grid-template-columns: repeat(5, 1fr);
+          grid-template-columns: repeat(4, 1fr);
           gap: 40px;
         }
         .ld-footer-link:hover {
