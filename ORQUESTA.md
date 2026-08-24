@@ -10485,3 +10485,312 @@ COMMENT ON INDEX "barber_walkin_position_uniq" IS
   type-check del repo completo se pasa de los 4 GB por defecto.
 · El i18n quedó bien fusionado: `dictionaries/barber/index.ts` tiene `agenda`
   Y `caja`, sin conflicto.
+## [Barber Planes] — Cobro de la suscripción a DaleControl + gating por plan: Stripe PROPIO, checkout, cambio de plan con prorrateo, webhook idempotente y límites en el servidor ✅ (2026-08-24)
+═══════════════════════════════════════════════════════════════════════════
+COMMIT: 2f2931b9 (rebasado sobre origin/main tras T1 agenda, T6 caja y T5 reserva/portal) · push directo a main (rama feat/barber-planes) · BUILD
+EXIT 0 (BUILD_EXIT_CODE:0 en TRES builds: dos `npm run build` completos sobre mi árbol y un tercero `npx next build` sobre el árbol REBASADO con T1 — sin el `prisma generate` porque otras terminales tenían `next dev`/`next build` vivos agarrando el engine en el node_modules compartido (EPERM ajeno; el schema no cambia y el cliente se verificó íntegro); 372/372 páginas; "Compiled with warnings", las de siempre) · `npx tsc --noEmit` exit 0 · GUARDIA `BARBER_GUARD_SHARED=ORQUESTA.md
+node scripts/barber-guard.cjs` exit 0 (25 propios, 0 compartidos sin declarar, 0
+prohibidos) · 22/22 pruebas offline (`src/lib/barber/__tests__/billing-gating.test.ts`).
+SIN cambios de schema ni SQL nuevo (el contrato lo prohibía): todo vive en columnas que
+ya existen (Barbershop.plan / subscriptionStatus / stripeCustomerId /
+stripeSubscriptionId y barber_plan_configs.stripePriceIdMonthly/Yearly).
+
+▶ LO QUE RAFAEL TIENE QUE HACER (en este orden)
+1. Vercel → Environment Variables, marcadas **Sensitive** (NO existen en el repo):
+   · `BARBER_STRIPE_SECRET_KEY`     → sk_live_… de la cuenta Stripe que cobrará a las
+     barberías. SIN fallback a STRIPE_SECRET_KEY a propósito: si es la misma cuenta LIVE
+     del dental, se pega el mismo valor; si algún día Barber va a su propia cuenta, solo
+     cambia esta env. Hasta que exista, la pantalla dice "cobro en línea no conectado".
+   · `BARBER_STRIPE_WEBHOOK_SECRET` → whsec_… del endpoint del punto 2 (secreto DISTINTO
+     del dental y del de T4).
+   (`NEXT_PUBLIC_APP_URL`, ya existente, se usa para success/cancel/return URLs.)
+2. Stripe → Developers → Webhooks → **endpoint NUEVO**
+   `https://www.dalecontrol.com/api/barber/stripe/webhook` con EXACTAMENTE estos 9 tipos:
+   checkout.session.completed · checkout.session.async_payment_succeeded ·
+   checkout.session.async_payment_failed · checkout.session.expired ·
+   customer.subscription.created · customer.subscription.updated ·
+   customer.subscription.deleted · customer.subscription.paused ·
+   customer.subscription.resumed.
+   NADA MÁS que crear en Stripe: productos, precios, cupón de primer mes y la
+   configuración del portal se AUTOPROVISIONAN en el primer checkout, leyendo la tabla
+   (ver "Catálogo"). Redeploy después de las envs.
+3. QA en LIVE (ver "QA manual pendiente" al final): un checkout real con una barbería de
+   prueba, un cambio de plan (upgrade y downgrade) y un reenvío de evento desde el
+   dashboard de Stripe.
+
+▶ FRONTERA CON T4 Y CON EL DENTAL (dos webhooks, dos secretos, eventos disjuntos)
+· ESTE endpoint (/api/barber/stripe/webhook) escucha SOLO `checkout.session.*` y
+  `customer.subscription.*`. T4 (membresías y anticipos del cliente final,
+  src/lib/barber/payments.ts + /api/barber/payments/**) escucha `payment_intent.*` y los
+  suyos. `invoice.*` no lo escucha nadie de barber: el estado "pago fallido" llega igual
+  por `customer.subscription.updated` (Stripe pasa la suscripción a past_due) y el
+  detalle del rechazo se lee de Stripe al pintar el panel.
+· Defensa en profundidad aunque un evento llegue a un endpoint ajeno: toda sesión de
+  Checkout nuestra lleva `metadata.dc_kind = "barber-subscription"` y toda
+  suscripción/precio/producto/customer `metadata.dc_vertical = "barber"`. El webhook
+  barber responde 200 sin tocar nada ante una sesión sin `dc_kind` o una suscripción
+  sin marca (probado con un checkout "platform-subscription" del dental, una
+  suscripción con `clinicId` y un `payment_intent.succeeded` de T4). A la inversa, el
+  webhook dental ya discrimina por `metadata.kind` y por customer de clínica, así que
+  ignora los eventos barber (verificado leyendo su código; NO se tocó).
+· Aislamiento del dental (Stripe LIVE, sin TEST): cliente Stripe PROPIO (no se importa
+  src/lib/stripe.ts), llave propia, webhook propio, productos y precios propios
+  (etiquetados; un precio guardado en la tabla que NO tenga la marca barber se DESCARTA
+  aunque coincida el importe — jamás se reutiliza uno del dental) y portal con
+  configuración propia SIN cambio de plan ni cancelación dentro de Stripe (un cliente
+  barber nunca ve el catálogo dental desde el portal). Cero bytes cambiados fuera del
+  vertical (guardia exit 0). Misma versión de API pineada que el repo (2024-06-20).
+
+▶ ARCHIVOS (25, todos dentro de la allowlist salvo el test y una función en plan-shared)
+· src/lib/barber/gating.ts (NUEVO) — motor de gate por PLAN (features + límites).
+· src/lib/barber/billing.ts (NUEVO) — cliente Stripe barber, catálogo autoprovisionado,
+  checkout, confirmación, cambio de plan con prorrateo, cancelar/reanudar, portal,
+  resumen (suscripción, tarjeta, facturas, cobros rechazados) y el despachador del
+  webhook (`handleBarberStripeEvent`, con `db` y `stripe` inyectables).
+· src/app/api/barber/billing/{checkout,status,change-plan,change-plan/preview,cancel,
+  resume,portal,confirm}/route.ts + _lib.ts (auth compartida: sesión + billing.manage +
+  matriz). src/app/api/barber/stripe/webhook/route.ts.
+· src/app/barber/(panel)/suscripcion/page.tsx (reescrita) +
+  src/components/barber/billing/{billing-screen,plan-cards,subscription-panel,
+  invoices-table,modal}.tsx, shared.ts (client-safe), billing.css (@container).
+· src/i18n/dictionaries/barber/suscripcion.{es,en}.json + index.ts (2 imports + 1 línea
+  ES + 1 línea EN, como indica el propio índice).
+· src/lib/barber/plan-shared.ts — SOLO se AÑADE `barberNavItemsWhileUnpaid()` (ver
+  "Menú impago"); nada existente cambia.
+· src/lib/barber/__tests__/billing-gating.test.ts (NUEVO, fuera de la allowlist pero
+  dentro del vertical; sin script en package.json para no tocar un archivo compartido).
+
+▶ CONTRATO DE GATING PARA LAS DEMÁS TERMINALES (src/lib/barber/gating.ts, server-only)
+Todo es ASYNC porque el plan vive en barber_plan_configs — `if (hasBarberFeature(...))`
+sin await es un bug (una Promise es truthy). Dos ejes, ambos en el servidor: por ROL
+(assertBarberPermission, de barber-auth) y por PLAN (esto). Uso canónico en una API:
+  const ctx = await getBarberContext();
+  if (!ctx) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+  try {
+    assertBarberPermission(ctx, "walkin.manage");        // rol
+    await assertBarberFeature(ctx, "walkinQueue");        // plan (402 impago / 403 no incluido)
+    await assertBarberLimit(ctx, "barbers");              // tope duro antes de CREAR
+  } catch (err) {
+    const gate = barberGateErrorPayload(err);             // mapea BarberPlanGateError Y BarberForbiddenError
+    if (gate) return NextResponse.json(gate.body, { status: gate.status });
+    throw err;
+  }
+API completa: `hasBarberFeature(ctx, key)` (pregunta SOLO por el plan, como el sidebar;
+NO mira si está pagado) · `assertBarberFeature(ctx, key)` (suscripción activa Y plan que
+la incluye; el mensaje dice qué plan sí la incluye con su precio LEÍDO) ·
+`assertBarberSubscriptionActive(ctx)` (402) · `checkBarberLimit(ctx, "barbers"|"branches",
+adding=1)` (no lanza: {ok, max, used, overLimit, requiredPlan, message}) ·
+`assertBarberLimit(...)` (403 LIMIT_REACHED) · `getBarberGate(ctx)` (plan resuelto,
+estado, uso vs límites con `overLimit`) · `countBarberUsage(rootId)` ·
+`barberGateErrorPayload(err)` → {status, body:{error, code, feature, limit, requiredPlan}}.
+Códigos: SUBSCRIPTION_INACTIVE (402) · FEATURE_LOCKED (403) · LIMIT_REACHED (403) ·
+FORBIDDEN (403, permiso de rol). Mensajes en el locale de la barbería
+(barber.suscripcion.gate.*), p.ej. "Tu plan Básico permite 1 barbero. Para agregar más
+barberos cambia al plan Avanzado (5 barberos, $329/mes)." — el $ sale de la fila.
+Semántica de los límites: el gate se resuelve SIEMPRE sobre la MATRIZ (parentId null;
+una sucursal hereda plan y estado de su matriz, que el webhook propaga a la familia).
+`maxBarbers` = barberos ACTIVOS de toda la familia; `maxBranches` = sedes activas
+INCLUYENDO la matriz (1 = solo la matriz; 2 = matriz + 1 sucursal). -1 = ilimitado.
+Lo inactivo no cuenta. `requiredPlan` = el plan activo MÁS BARATO (mensual) que admite
+`used + adding`, distinto del actual.
+
+▶ DEGRADACIÓN DE PLAN (decisión)
+Si una barbería con 4 barberos baja a Básico (1): NO se borra ni desactiva nada.
+`getBarberGate().limits.barbers.overLimit = true`; `assertBarberLimit` bloquea la
+siguiente alta con el mensaje de qué plan lo permite; la pantalla de suscripción
+muestra el aviso "Tu plan tiene menos capacidad que lo que usas hoy" y el modal del
+cambio de plan lo ANTICIPA antes de confirmar el downgrade ("quedarías por encima de sus
+límites: 4 de 1 barberos"). Lo existente sigue operando.
+
+▶ PRECIOS: UNA FILA, NO UN DEPLOY (catálogo autoprovisionado)
+· Todo precio de la UI y del cobro sale de barber_plan_configs vía getBarberPlans /
+  getBarberPlan (Decimal → CENTAVOS enteros con Prisma.Decimal en `toCents`; en el
+  cliente solo se formatea con aritmética entera, `formatBarberCents`).
+· `ensureBarberStripePrice(plan, "month"|"year")`: (1) usa `stripePriceIdMonthly/Yearly`
+  de la fila SI sigue coincidiendo con ella (activo, MXN, unit_amount == tabla, intervalo
+  y marca dc_vertical=barber en el precio o su producto); (2) si no, busca un precio
+  nuestro por `lookup_key = dcbarber_<plan>_<intervalo>_<centavos>`; (3) si no, crea el
+  producto "DaleControl Barber — <nombre>" (uno por plan, buscado por metadata, con
+  idempotencyKey) y el precio (idempotente por lookup_key) y PERSISTE el id en la fila
+  (+ limpia la caché de planes). Rafael cambia `priceMonthly` → el id guardado deja de
+  coincidir → el siguiente checkout/cambio de plan crea el precio nuevo solo. Las
+  suscripciones existentes conservan su precio hasta cambiar de plan (SaaS estándar).
+· Si Rafael prefiere crear precios a mano en Stripe: ponerles metadata
+  `dc_vertical=barber` y `dc_plan=<BASICO|AVANZADO|PROFESIONAL>` (o al producto) y
+  pegar el id en la fila; sin la marca se descartan y se crea el propio.
+· Anual: si la fila trae `priceYearly`, la tarjeta ofrece el toggle mensual/anual (con
+  equivalente mensual). Primer mes: si `firstMonthPrice` < `priceMonthly`, cupón
+  Stripe `once` (`dcbarber-first-month-<plan>-<descuento>`) SOLO en la PRIMERA
+  contratación mensual (barbería sin stripeSubscriptionId previo); la tarjeta lo anuncia
+  "Primer mes $X". Cambios de plan y anual NO lo aplican.
+
+▶ CHECKOUT Y CICLO DE VIDA
+· Registro → `pending_payment` (ya lo hacía /api/barber/auth/register) → el router
+  /barber manda a /barber/suscripcion → tarjetas con "Contratar" → POST
+  /api/barber/billing/checkout {plan, interval} → Stripe Checkout (mode subscription,
+  tarjeta, locale de la barbería, customer creado y persistido con metadata
+  barbershopId) → success_url = /barber/suscripcion?checkout=success&session_id=… .
+· Al volver, la pantalla llama POST /api/barber/billing/confirm {sessionId}: verifica
+  que la sesión sea NUESTRA y de ESTA barbería (dc_kind + barbershopId) y aplica la
+  suscripción por la MISMA función que el webhook → el acceso se abre aunque el webhook
+  tarde y nadie paga dos veces creyendo que falló (el hueco que sufrió el dental). Si
+  Stripe aún no confirma, reintenta 10 veces cada 3 s y luego avisa "no vuelvas a pagar".
+· Con una suscripción VIVA el checkout responde 409 ALREADY_SUBSCRIBED (jamás una
+  segunda suscripción); en past_due devuelve además la URL de la factura abierta.
+· Webhook mantiene `subscriptionStatus` con el status de Stripe TAL CUAL (active,
+  trialing, past_due, unpaid, canceled, incomplete, incomplete_expired, paused) en la
+  matriz y lo PROPAGA a las sucursales (plan + status; los ids de Stripe solo en la
+  matriz). BARBER_ACTIVE_SUBSCRIPTION_STATUSES (Ola 0) = active|trialing|paid, así que
+  past_due/unpaid/canceled = SIN acceso (el mismo criterio del dental). El plan se
+  sincroniza desde `price.metadata.dc_plan` (→ `sub.metadata.dc_plan` → id de precio
+  guardado en la tabla): si alguien cambia el precio desde el dashboard de Stripe a
+  otro precio barber, el panel lo sigue.
+· Cambio de plan (POST change-plan/preview → modal → POST change-plan): enfoque del
+  dental. UPGRADE: `proration_behavior: always_invoice` + `payment_behavior:
+  error_if_incomplete` → cobra HOY solo el diferencial de los días que quedan; si la
+  tarjeta rechaza, la operación falla entera (402 UPGRADE_PAYMENT_FAILED con motivo:
+  fondos, vencida, CVC, autenticación, rechazo) y el plan NO cambia. DOWNGRADE:
+  `create_prorations` (crédito a la próxima factura, sin cobro hoy). NUNCA se fija
+  `billing_cycle_anchor`: la renovación no se mueve y en ella se cobra el periodo
+  completo del plan nuevo. El ciclo (mensual/anual) se conserva. La dirección la manda
+  el importe con el TIER como veto (bajar de plan jamás se cobra hoy aunque el precio
+  congelado sea menor). El preview usa `invoices.createPreview` (fallback
+  `GET /v1/invoices/upcoming`) con el precio REAL del plan destino y se declara "no
+  disponible" si la simulación no trae líneas de prorrateo o incluye la renovación (no
+  se enseña un importe falso).
+· Cancelar: `cancel_at_period_end = true` (el plan sigue hasta el fin del periodo
+  pagado; el modal lo dice con la fecha; datos intactos); "Reanudar" lo revierte antes
+  de la fecha; al llegar, Stripe manda customer.subscription.deleted → canceled.
+· Tarjeta: "Actualizar tarjeta" abre el portal con la configuración barber
+  (actualizar método de pago, ver/pagar facturas, datos de contacto; sin cambio de plan
+  ni cancelación).
+· Cobros fallidos VISIBLES: el panel lee de Stripe las últimas 12 facturas y destaca en
+  rojo las rechazadas (intentos, próximo reintento de Stripe, motivo/decline_code y
+  enlace "Pagar"); la suscripción en past_due muestra además el aviso "No pudimos
+  cobrar…" con "Pagar factura pendiente" y "Actualizar tarjeta". No se persisten: no
+  hay tabla y Stripe es la fuente (cero riesgo de duplicar filas al reintentar).
+· Estados visibles: Activa · Activa (prueba) · Pago pendiente (pending_payment /
+  incomplete / paused) · Vencida (past_due / unpaid) · Cancelada (canceled /
+  incomplete_expired), más "Cancelación programada: sigue activo hasta <fecha>".
+· Cualquier rol puede VER su estado en /barber/suscripcion (el router manda ahí a los
+  impagos); contratar/cambiar/cancelar/portal/facturas exigen billing.manage (OWNER por
+  default) también en las 8 APIs — la UI oculta, la API decide.
+
+▶ IDEMPOTENCIA DEL WEBHOOK (sin tabla de eventos, por contrato)
+Los handlers NO cobran nada y NO insertan filas. Cada `customer.subscription.*` RELEE la
+suscripción viva en Stripe (`subscriptions.retrieve`) y escribe su estado ABSOLUTO;
+`checkout.session.completed` hace lo mismo con `session.subscription`. Consecuencias
+probadas offline: el mismo evento dos veces produce escrituras idénticas (update matriz +
+updateMany sucursales, cero create); eventos fuera de orden convergen al estado actual;
+el eco de una suscripción vieja y cancelada NO pisa a la vigente (stale-subscription);
+una nueva viva sí se adopta; `metadata.barbershopId` se verifica contra el customer
+(si no cuadra, se resuelve por customer). Ante fallo transitorio (BD/red) responde 500
+para que Stripe reintente; ante evento ajeno responde 200 sin tocar nada.
+
+▶ MENÚ IMPAGO (único hueco, fuera de mi allowlist)
+El router /barber ya manda a /barber/suscripcion a toda barbería inactiva o impaga, y
+las APIs cortan con assertBarberFeature/assertBarberSubscriptionActive. Lo que NO hice
+es ocultar los items del sidebar mientras está impaga, porque eso vive en
+src/app/barber/(panel)/layout.tsx (fuera de mi allowlist y compartido por las 9
+terminales). Dejé el helper puro y probado `barberNavItemsWhileUnpaid()` en
+plan-shared.ts; el cambio en el layout es UNA línea:
+  - const items: BarberNavItem[] = BARBER_NAV_ITEMS.filter((item) => {
+  + const navSource = isBarbershopSubscriptionActive(ctx.barbershop)
+  +   ? BARBER_NAV_ITEMS : barberNavItemsWhileUnpaid(BARBER_NAV_ITEMS);
+  + const items: BarberNavItem[] = navSource.filter((item) => {
+(+ importar ambos de "@/lib/barber/plan-shared"). Resultado: impago = solo "Suscripción".
+
+▶ VERIFICACIÓN (lo que pidió el encargo)
+1. `npm run build` → EXIT 0 (BUILD_EXIT_CODE:0 en TRES builds: dos `npm run build` completos sobre mi árbol y un tercero `npx next build` sobre el árbol REBASADO con T1 — sin el `prisma generate` porque otras terminales tenían `next dev`/`next build` vivos agarrando el engine en el node_modules compartido (EPERM ajeno; el schema no cambia y el cliente se verificó íntegro); 372/372 páginas; "Compiled with warnings", las de siempre). Warnings: las de siempre (Tailwind duration-[…],
+   file-type en ai-wallet del dental); ninguna de mis archivos. Sin DATABASE_URL en el
+   worktree: las páginas SSG del dental loguean prisma:error y caen a su fallback
+   (conocido; exit 0 igual). `npx tsc --noEmit` exit 0.
+2. Grep `\b(199|329|749)\b` en src/** — en MIS archivos: 0 apariciones. Las únicas del
+   vertical son el FALLBACK_BARBER_PLAN_CONFIG de src/lib/barber/plan-shared.ts (Ola 0,
+   "el fallback ES el seed", solo actúa si la tabla no responde; NO lo toqué — si
+   Rafael prefiere que no exista ningún número en código, se pone 0 en el fallback y la
+   UI muestra "sin precio" cuando la tabla falte; decisión suya). El resto de hits son
+   del dental (marketplace/pricing.test, specialties/keys, manual-upgrade-diff.test) y
+   dos paths SVG del glifo de WhatsApp — nada mío. Salida completa del grep guardada en
+   la sesión; resumen: 0 en src/lib/barber/billing.ts, gating.ts, components/barber/
+   billing/**, app/api/barber/**, i18n/barber/suscripcion.*.
+3. Endpoint de feature superior con barbería en Básico → rechaza: probado OFFLINE sobre
+   la capa de decisión (`evaluateBarberFeature(Básico, "walkinQueue") === false` →
+   `assertBarberFeature` lanza FEATURE_LOCKED 403 con el plan que sí la incluye;
+   `barberGateErrorPayload` → {403, code FEATURE_LOCKED, requiredPlan}). Las 8 APIs de
+   cobro exigen billing.manage (asserts en `_lib.ts`). NO existe .env local ni BD
+   accesible desde esta terminal, así que la llamada HTTP real queda para el QA en
+   producción (pasos abajo). Las APIs de feature de las otras terminales deben llamar
+   `assertBarberFeature` — el helper existe; que lo llamen es de cada ola.
+4. Reenvío del mismo evento dos veces → probado offline con `handleBarberStripeEvent`
+   (fake Stripe + fake db): 2 procesamientos, 4 escrituras idénticas (2 por evento),
+   0 inserts, 0 cobros (el webhook no cobra por diseño). En prod: Stripe → Webhooks →
+   evento → "Reenviar" no debe cambiar nada (paso de QA).
+5. Límite de barberos en el SERVIDOR: `assertBarberLimit(ctx, "barbers")` lee el uso
+   real con prisma (familia completa, activos) y lanza 403 LIMIT_REACHED con el plan que
+   lo permite y su precio leído; probado offline con planes sintéticos (111/222/333: el
+   mensaje contiene 222, no 329). La ola de barberos (T9 / barbers.manage) debe llamarlo
+   antes del create; el helper está listo.
+6. Eventos sin solape con T4: listados arriba (barber: checkout.session.* +
+   customer.subscription.*; T4: payment_intent.* + membresías). Probado que el
+   despachador ignora payment_intent.succeeded, un checkout dental y una suscripción sin
+   marca.
+7. Ningún secreto en el repo: grep de `sk_live|whsec_|sk_test` en mis archivos → 0. Las
+   envs NUEVAS son solo dos (arriba). `.env` no existe en este checkout.
+8. `BARBER_GUARD_SHARED=ORQUESTA.md node scripts/barber-guard.cjs` → exit 0 (25 propios
+   + ORQUESTA.md declarado).
+9. Grep `paciente|doctor|Dr\.|clínica|consulta|expediente` en mis 25 archivos → 0
+   (en comentarios se dice "el dental", "lectura", "petición").
+
+▶ AVISOS / DECISIONES DOCUMENTADAS
+(1) `past_due` = SIN acceso inmediato (contrato de la Ola 0 en plan-shared, igual que el
+dental); Stripe sigue reintentando (Smart Retries) y el panel muestra cómo pagar. Si se
+quiere periodo de gracia, es una decisión de producto: cambiar
+BARBER_ACTIVE_SUBSCRIPTION_STATUSES. (2) El cambio de ciclo (mensual↔anual) NO se
+ofrece en el cambio de plan (conserva el ciclo, como el dental); una anual que quiera
+mensual cancela al fin del periodo y contrata de nuevo. (3) Sin Stripe Tax: se cobra el
+precio de la tabla tal cual (el dental lo tiene opcional por env; si Barber lo quiere,
+es una env + una línea). (4) El estado se guarda con el vocabulario de Stripe
+("canceled", una l); el dental escribe "cancelled" — no comparten tabla, no importa.
+(5) GET /api/barber/billing/status expone gate + resumen para quien lo necesite (la
+pantalla hoy usa confirm + router.refresh). (6) Las pruebas se corren con
+`node --import tsx --import file:///<hook>.mjs --test src/lib/barber/__tests__/
+billing-gating.test.ts` (hook con registerHooks que stubbea "server-only" y
+"@/lib/prisma"; no está en el repo para no tocar package.json/tsconfig). (7) sql/
+barber_complemento.sql sigue PENDIENTE (Schema-B) pero NADA de esta ola depende de sus
+tablas: el gate usa barber_shops.parentId (Ola 0) y barber_barbers. (8) El fallback de
+precios de la Ola 0 (punto 2 de la verificación) es la única aparición de 199/329/749
+en el vertical. (9) DUPLICACIÓN DETECTADA AL REBASAR: T6 (caja, a47264f3) trae su propio
+`assertBarberFeature` en src/lib/barber/cash.ts (mira solo `ctx.barbershop.plan` → 403
+FEATURE_NOT_IN_PLAN; NO verifica suscripción activa ni resuelve la matriz) porque gating.ts
+aún no estaba en main. No rompe nada (módulos y nombres locales distintos), pero son DOS
+gates por plan: la Ola 2 debería hacer que cash.ts delegue en `assertBarberFeature` de
+gating.ts (misma firma salvo el 3er parámetro `resolve` que T6 usa en sus pruebas) — cash.ts
+está fuera de mi allowlist y no lo toqué. Idem `moneyErrorResponse` vs
+`barberGateErrorPayload` (ambos mapean BarberForbiddenError a 403 FORBIDDEN). (10) OJO VERCEL:
+con T1 + T6 + esta ola en el mismo árbol, `next build` local revienta con `FATAL ERROR:
+JavaScript heap out of memory` (exit 134) en el worker de tipos/páginas con el heap por
+defecto (~4 GB); pasó limpio con `NODE_OPTIONS=--max-old-space-size=8192`. Si el deploy de
+main en Vercel cae con el mismo error, la salida es esa env en el proyecto (Settings →
+Environment Variables → NODE_OPTIONS=--max-old-space-size=8192) o subir el plan del builder.
+
+▶ QA MANUAL PENDIENTE DE RAFAEL (Stripe LIVE, con una barbería de prueba)
+a) Con las envs puestas y el endpoint creado: registrar barbería → /barber →
+   /barber/suscripcion → "Contratar Básico" → pagar con tarjeta real (se puede
+   reembolsar) → volver: "¡Pago confirmado!" y /barber/inicio abre. En Stripe deben
+   existir el producto "DaleControl Barber — Básico", el precio con lookup_key
+   dcbarber_BASICO_month_19900 y en barber_plan_configs el stripePriceIdMonthly lleno.
+b) Stripe → Webhooks → el evento checkout.session.completed → "Reenviar": la fila no
+   cambia (misma suscripción, mismo estado).
+c) Cambiar a Avanzado: el modal debe mostrar el diferencial prorrateado (crédito +
+   cargo) y cobrar exactamente eso; `current_period_end` NO se mueve; la siguiente
+   factura es el periodo completo del plan nuevo. Bajar de nuevo a Básico: sin cobro,
+   crédito en la próxima factura, aviso de límites si hay >1 barbero.
+d) Cancelar: "Cancelación programada hasta <fecha>"; Reanudar la revierte.
+e) Editar priceMonthly de una fila (p.ej. AVANZADO a 349): el siguiente checkout/cambio
+   crea un precio nuevo (lookup_key con 34900) y reemplaza el id en la fila; las
+   suscripciones vigentes NO cambian de precio.
+f) Simular un cobro fallido (tarjeta de prueba no aplica en LIVE: usar "Actualizar
+   tarjeta" con una tarjeta vencida y forzar la renovación desde el dashboard) →
+   past_due → el panel muestra el cobro rechazado con motivo y "Pagar factura pendiente".
+
