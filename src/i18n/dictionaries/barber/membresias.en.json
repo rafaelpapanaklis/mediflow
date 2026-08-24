@@ -1,0 +1,207 @@
+{
+  "title": "Memberships",
+  "subtitle": "Clients who pay every month: the part of the business that does not depend on walk-ins showing up today.",
+  "tabs": {
+    "planes": "Plans",
+    "clientes": "Clients",
+    "anticipos": "Deposits"
+  },
+  "stats": {
+    "active": "Active",
+    "soon": "Expiring soon",
+    "expired": "Expired",
+    "committed": "Committed revenue",
+    "committedHint": "Total price of active memberships per period."
+  },
+  "locked": {
+    "title": "Memberships are part of the Advanced plan",
+    "body": "With memberships your clients pay every month even when they do not come in, and you can charge them in cash, by transfer or by card.",
+    "cta": "See plans"
+  },
+  "planes": {
+    "heading": "What you sell",
+    "new": "New membership",
+    "edit": "Edit",
+    "activate": "Activate",
+    "deactivate": "Deactivate",
+    "delete": "Delete",
+    "inactive": "Deactivated",
+    "clients": {
+      "one": "1 client",
+      "other": "{count} clients"
+    },
+    "perPeriod": "per period",
+    "showInactive": "Show deactivated ones too",
+    "empty": {
+      "title": "You are not selling any membership yet",
+      "body": "Create your first plan. These are the three that work best in barbershops; you set the price.",
+      "example1": "2 cuts per month",
+      "example2": "Unlimited cuts",
+      "example3": "Cut + beard, every two weeks"
+    },
+    "form": {
+      "createTitle": "New membership",
+      "editTitle": "Edit membership",
+      "name": "Name",
+      "namePlaceholder": "Unlimited cuts",
+      "description": "Description (optional)",
+      "descriptionPlaceholder": "What it includes, conditions, which barbers it covers…",
+      "price": "Price",
+      "priceHint": "What you charge the client each period.",
+      "cuts": "Cuts included",
+      "unlimited": "Unlimited",
+      "cutsHint": "Once they run out, the cut is charged as usual.",
+      "period": "Period length",
+      "periodDays": "days",
+      "periodWeek": "Weekly",
+      "periodBiweekly": "Every 2 weeks",
+      "periodMonthly": "Monthly",
+      "periodYearly": "Yearly",
+      "active": "Available to sell",
+      "save": "Save",
+      "cancel": "Cancel",
+      "saving": "Saving…",
+      "preview": "Reads as: {text}"
+    },
+    "deleteConfirm": "Delete this membership? If you already sold it, deactivate it instead."
+  },
+  "clientes": {
+    "heading": "Who has one",
+    "sell": "Sell a membership",
+    "search": "Search by name or phone",
+    "filters": {
+      "all": "All",
+      "active": "Active",
+      "soon": "Expiring soon",
+      "expired": "Expired"
+    },
+    "columns": {
+      "client": "Client",
+      "plan": "Membership",
+      "cuts": "Cuts",
+      "expires": "Expires",
+      "payment": "Payment",
+      "actions": "Actions"
+    },
+    "cutsOf": "{used} of {total}",
+    "cutsUnlimited": "{used} used · unlimited",
+    "expiresIn": {
+      "one": "in 1 day",
+      "other": "in {count} days"
+    },
+    "expiredAgo": {
+      "one": "1 day ago",
+      "other": "{count} days ago"
+    },
+    "today": "today",
+    "autoRenew": "Renews itself",
+    "manualRenew": "Manual renewal",
+    "renew": "Renew",
+    "pause": "Pause",
+    "resume": "Resume",
+    "cancel": "Cancel",
+    "cancelConfirm": "Cancel this membership? If it is charged by card, the automatic charge is stopped too.",
+    "empty": {
+      "all": "Nobody has a membership yet. Sell the first one to a regular.",
+      "active": "No active memberships right now.",
+      "soon": "Nobody is about to expire. Check back in a few days.",
+      "expired": "No expired memberships. Nicely done."
+    },
+    "callToCollect": "This is the list you use to go collect.",
+    "renewModal": {
+      "title": "Renew membership",
+      "body": "{client} · {plan}. The new period is chained to the current one, so no days are lost.",
+      "howPaid": "How did they pay?",
+      "confirm": "Record payment and renew"
+    },
+    "sellModal": {
+      "title": "Sell a membership",
+      "step1": "1. To whom?",
+      "step2": "2. Which one?",
+      "step3": "3. How do they pay?",
+      "searchClient": "Type the client name or phone",
+      "noClients": "No clients matched that.",
+      "alreadyHas": "Already has {plan} until {date}",
+      "choosePlan": "Choose the membership",
+      "noPlans": "Create a membership in the Plans tab first.",
+      "confirm": "Record the sale",
+      "confirmOnline": "Charge the card",
+      "onlineHint": "Stripe secure checkout opens. The membership activates once the charge is confirmed.",
+      "recurring": "Charge automatically each period (subscription)",
+      "recurringHint": "The card is charged by itself each period, so you never have to chase anyone."
+    }
+  },
+  "payment": {
+    "CASH": "Cash",
+    "SPEI": "Bank transfer (SPEI)",
+    "CARD": "Card at the counter",
+    "STRIPE": "Card online",
+    "chooseHint": "For cash and transfers you record the payment; we work out the expiry date and tell you when it is time to charge again."
+  },
+  "status": {
+    "ACTIVE": "Active",
+    "PAUSED": "Paused",
+    "EXPIRED": "Expired",
+    "CANCELLED": "Cancelled"
+  },
+  "anticipos": {
+    "heading": "No-show deposits",
+    "intro": "Asking for a deposit takes no-shows from one in five appointments down to almost none. It is applied in full to the service on the day of the visit.",
+    "enable": "Ask for a deposit to book",
+    "mode": "How much?",
+    "modeFixed": "Fixed amount",
+    "modePercent": "Percentage of the service",
+    "fixedLabel": "Deposit amount",
+    "percentLabel": "Percentage",
+    "maxLabel": "Maximum cap (optional)",
+    "maxHint": "0 = no cap. We never ask for more than the price of the service.",
+    "audience": "Who do you ask?",
+    "audienceALL": "Everyone",
+    "audienceALLHint": "The strictest one. It can scare off new clients.",
+    "audienceNEW": "New clients only",
+    "audienceNEWHint": "Anyone who has never completed a visit with you.",
+    "audienceNO_SHOW": "Only those who missed before",
+    "audienceNO_SHOWHint": "The fairest one and the best received: it does not punish clients who always show up.",
+    "refundWindow": "Free cancellation",
+    "refundWindowHours": "hours before",
+    "refundWindowHint": "After that moment the deposit is not refunded. 0 = never refunded.",
+    "online": "Charge the deposit online by card",
+    "onlineHint": "When booking, the client pays by card through Stripe secure checkout.",
+    "stripeAccount": "Stripe account that receives the money",
+    "stripeAccountPlaceholder": "acct_…",
+    "stripeAccountHint": "Leave it empty to receive it in the DaleControl account and settle it separately.",
+    "policyText": "What the client sees before paying",
+    "policyTextHint": "Leave it empty and we write it for you. No fine print: this is exactly where the competition earns its worst reviews.",
+    "previewTitle": "Preview",
+    "previewBody": "On a {service} service you would ask for {deposit}.",
+    "save": "Save policy",
+    "saved": "Policy saved",
+    "stripeMissing": "Online card payments are not configured on the server yet. You can take the deposit at the counter in the meantime.",
+    "storageMissing": "sql/barber_membresias.sql still needs to be applied to the database. Until then the default settings are used and nothing can be saved.",
+    "list": {
+      "heading": "Recent deposits",
+      "filters": {
+        "all": "All",
+        "pending": "Unpaid",
+        "paid": "Paid",
+        "closed": "Closed"
+      },
+      "empty": "No deposits yet.",
+      "applied": "Applied to the ticket",
+      "refund": "Refund",
+      "forfeit": "Keep",
+      "refundConfirm": "Refund the deposit? If it was paid by card, it is refunded through Stripe.",
+      "forfeitConfirm": "Keep the deposit? The client does not get it back."
+    },
+    "depositStatus": {
+      "PENDING": "Unpaid",
+      "PAID": "Paid",
+      "REFUNDED": "Refunded",
+      "FORFEITED": "Kept"
+    }
+  },
+  "errors": {
+    "generic": "Something went wrong. Try again.",
+    "load": "We could not load the information."
+  }
+}

@@ -1,0 +1,207 @@
+{
+  "title": "Membresías",
+  "subtitle": "Clientes que pagan cada mes: la parte del negocio que no depende de que hoy entre gente por la puerta.",
+  "tabs": {
+    "planes": "Planes",
+    "clientes": "Clientes",
+    "anticipos": "Anticipos"
+  },
+  "stats": {
+    "active": "Vigentes",
+    "soon": "Por vencer",
+    "expired": "Vencidas",
+    "committed": "Ingreso comprometido",
+    "committedHint": "Suma del precio de las membresías vigentes por periodo."
+  },
+  "locked": {
+    "title": "Las membresías son del plan Avanzado",
+    "body": "Con membresías tus clientes pagan cada mes aunque no vengan, y puedes cobrarles en efectivo, por transferencia o con tarjeta.",
+    "cta": "Ver planes"
+  },
+  "planes": {
+    "heading": "Lo que vendes",
+    "new": "Nueva membresía",
+    "edit": "Editar",
+    "activate": "Activar",
+    "deactivate": "Desactivar",
+    "delete": "Borrar",
+    "inactive": "Desactivada",
+    "clients": {
+      "one": "1 cliente",
+      "other": "{count} clientes"
+    },
+    "perPeriod": "por periodo",
+    "showInactive": "Ver también las desactivadas",
+    "empty": {
+      "title": "Todavía no vendes ninguna membresía",
+      "body": "Crea tu primer plan. Estas son las tres que mejor funcionan en barberías; tú les pones el precio.",
+      "example1": "2 cortes al mes",
+      "example2": "Corte ilimitado",
+      "example3": "Corte + barba quincenal"
+    },
+    "form": {
+      "createTitle": "Nueva membresía",
+      "editTitle": "Editar membresía",
+      "name": "Nombre",
+      "namePlaceholder": "Corte ilimitado",
+      "description": "Descripción (opcional)",
+      "descriptionPlaceholder": "Qué incluye, condiciones, con qué barberos aplica…",
+      "price": "Precio",
+      "priceHint": "Lo que le cobras al cliente cada periodo.",
+      "cuts": "Cortes incluidos",
+      "unlimited": "Ilimitados",
+      "cutsHint": "Cuando se le acaben, el corte se cobra normal.",
+      "period": "Duración del periodo",
+      "periodDays": "días",
+      "periodWeek": "Semanal",
+      "periodBiweekly": "Quincenal",
+      "periodMonthly": "Mensual",
+      "periodYearly": "Anual",
+      "active": "Se puede vender",
+      "save": "Guardar",
+      "cancel": "Cancelar",
+      "saving": "Guardando…",
+      "preview": "Así se lee: {text}"
+    },
+    "deleteConfirm": "¿Borrar esta membresía? Si ya la vendiste, mejor desactívala."
+  },
+  "clientes": {
+    "heading": "Quién la tiene",
+    "sell": "Vender membresía",
+    "search": "Buscar por nombre o teléfono",
+    "filters": {
+      "all": "Todas",
+      "active": "Vigentes",
+      "soon": "Por vencer",
+      "expired": "Vencidas"
+    },
+    "columns": {
+      "client": "Cliente",
+      "plan": "Membresía",
+      "cuts": "Cortes",
+      "expires": "Vence",
+      "payment": "Pago",
+      "actions": "Acciones"
+    },
+    "cutsOf": "{used} de {total}",
+    "cutsUnlimited": "{used} usados · ilimitados",
+    "expiresIn": {
+      "one": "en 1 día",
+      "other": "en {count} días"
+    },
+    "expiredAgo": {
+      "one": "hace 1 día",
+      "other": "hace {count} días"
+    },
+    "today": "hoy",
+    "autoRenew": "Se renueva sola",
+    "manualRenew": "Renovación manual",
+    "renew": "Renovar",
+    "pause": "Pausar",
+    "resume": "Reactivar",
+    "cancel": "Cancelar",
+    "cancelConfirm": "¿Cancelar esta membresía? Si se cobra con tarjeta, también se corta el cobro automático.",
+    "empty": {
+      "all": "Todavía nadie tiene membresía. Véndele la primera a un cliente de confianza.",
+      "active": "No hay membresías vigentes ahora mismo.",
+      "soon": "Nadie está por vencer. Vuelve en unos días.",
+      "expired": "No hay membresías vencidas. Bien ahí."
+    },
+    "callToCollect": "Esta es la lista con la que sales a cobrar.",
+    "renewModal": {
+      "title": "Renovar membresía",
+      "body": "{client} · {plan}. El periodo nuevo se encadena al actual, así no pierde días.",
+      "howPaid": "¿Cómo pagó?",
+      "confirm": "Registrar pago y renovar"
+    },
+    "sellModal": {
+      "title": "Vender membresía",
+      "step1": "1. ¿A quién?",
+      "step2": "2. ¿Cuál?",
+      "step3": "3. ¿Cómo paga?",
+      "searchClient": "Escribe el nombre o el teléfono del cliente",
+      "noClients": "No encontramos clientes con eso.",
+      "alreadyHas": "Ya tiene {plan} hasta el {date}",
+      "choosePlan": "Elige la membresía",
+      "noPlans": "Primero crea una membresía en la pestaña Planes.",
+      "confirm": "Registrar venta",
+      "confirmOnline": "Cobrar con tarjeta",
+      "onlineHint": "Se abre el pago seguro de Stripe. La membresía se activa cuando el cobro se confirma.",
+      "recurring": "Cobrar solo cada periodo (suscripción)",
+      "recurringHint": "Con esto la tarjeta se cobra sola cada periodo y no tienes que perseguir a nadie."
+    }
+  },
+  "payment": {
+    "CASH": "Efectivo",
+    "SPEI": "Transferencia (SPEI)",
+    "CARD": "Tarjeta en mostrador",
+    "STRIPE": "Tarjeta en línea",
+    "chooseHint": "En efectivo y transferencia tú registras el pago; nosotros calculamos la vigencia y te avisamos cuándo toca cobrar de nuevo."
+  },
+  "status": {
+    "ACTIVE": "Activa",
+    "PAUSED": "Pausada",
+    "EXPIRED": "Vencida",
+    "CANCELLED": "Cancelada"
+  },
+  "anticipos": {
+    "heading": "Anticipos anti no-show",
+    "intro": "Pedir un anticipo baja las faltas de una de cada cinco citas a casi ninguna. Se aplica completo al servicio el día de la visita.",
+    "enable": "Pedir anticipo para reservar",
+    "mode": "¿Cuánto?",
+    "modeFixed": "Monto fijo",
+    "modePercent": "Porcentaje del servicio",
+    "fixedLabel": "Monto del anticipo",
+    "percentLabel": "Porcentaje",
+    "maxLabel": "Tope máximo (opcional)",
+    "maxHint": "0 = sin tope. Nunca se pide más que el precio del servicio.",
+    "audience": "¿A quién se lo pides?",
+    "audienceALL": "A todos",
+    "audienceALLHint": "El más estricto. Puede espantar a clientes nuevos.",
+    "audienceNEW": "Solo a clientes nuevos",
+    "audienceNEWHint": "A quien nunca ha completado una visita contigo.",
+    "audienceNO_SHOW": "Solo a quien ya faltó antes",
+    "audienceNO_SHOWHint": "El más justo y el que mejor reciben: no castiga a quien siempre llega.",
+    "refundWindow": "Cancelación sin costo",
+    "refundWindowHours": "horas antes",
+    "refundWindowHint": "Después de ese momento el anticipo no se devuelve. 0 = nunca se devuelve.",
+    "online": "Cobrar el anticipo en línea con tarjeta",
+    "onlineHint": "Al reservar, el cliente paga con tarjeta desde el pago seguro de Stripe.",
+    "stripeAccount": "Cuenta de Stripe que recibe el dinero",
+    "stripeAccountPlaceholder": "acct_…",
+    "stripeAccountHint": "Déjalo vacío para recibirlo en la cuenta de DaleControl y liquidarlo aparte.",
+    "policyText": "Lo que ve el cliente antes de pagar",
+    "policyTextHint": "Déjalo vacío y lo escribimos por ti. Sin letra chica: aquí es donde la competencia se gana sus peores reseñas.",
+    "previewTitle": "Vista previa",
+    "previewBody": "En un servicio de {service} pedirías {deposit}.",
+    "save": "Guardar política",
+    "saved": "Política guardada",
+    "stripeMissing": "El cobro en línea con tarjeta todavía no está configurado en el servidor. Puedes cobrar el anticipo en mostrador mientras tanto.",
+    "storageMissing": "Falta aplicar sql/barber_membresias.sql en la base de datos. Mientras tanto se usa la configuración por defecto y no se puede guardar.",
+    "list": {
+      "heading": "Anticipos recientes",
+      "filters": {
+        "all": "Todos",
+        "pending": "Por pagar",
+        "paid": "Pagados",
+        "closed": "Cerrados"
+      },
+      "empty": "Todavía no hay anticipos.",
+      "applied": "Aplicado al ticket",
+      "refund": "Devolver",
+      "forfeit": "Retener",
+      "refundConfirm": "¿Devolver el anticipo? Si se pagó con tarjeta, se reembolsa en Stripe.",
+      "forfeitConfirm": "¿Retener el anticipo? El cliente no lo recupera."
+    },
+    "depositStatus": {
+      "PENDING": "Por pagar",
+      "PAID": "Pagado",
+      "REFUNDED": "Devuelto",
+      "FORFEITED": "Retenido"
+    }
+  },
+  "errors": {
+    "generic": "Algo salió mal. Intenta de nuevo.",
+    "load": "No pudimos cargar la información."
+  }
+}

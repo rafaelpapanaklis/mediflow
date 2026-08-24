@@ -27,6 +27,8 @@ import cajaEs from "./caja.es.json"; // caja + comisiones + productos (T6 dinero
 import cajaEn from "./caja.en.json";
 import suscripcionEs from "./suscripcion.es.json";
 import suscripcionEn from "./suscripcion.en.json";
+import membresiasEs from "./membresias.es.json"; // membresías + anticipos
+import membresiasEn from "./membresias.en.json";
 
 const ES: Dictionary = {
   barber: {
@@ -35,6 +37,7 @@ const ES: Dictionary = {
     caja: cajaEs as unknown as Dictionary,
     reserva: reservaEs as unknown as Dictionary,
     suscripcion: suscripcionEs as unknown as Dictionary,
+    membresias: membresiasEs as unknown as Dictionary,
   },
 };
 
@@ -45,6 +48,7 @@ const EN: Dictionary = {
     caja: cajaEn as unknown as Dictionary,
     reserva: reservaEn as unknown as Dictionary,
     suscripcion: suscripcionEn as unknown as Dictionary,
+    membresias: membresiasEn as unknown as Dictionary,
   },
 };
 

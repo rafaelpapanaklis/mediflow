@@ -1,0 +1,582 @@
+/* ═══════════════════════════════════════════════════════════════════════
+   DaleControl BARBER — pantalla de membresías y anticipos.
+
+   Todo vive bajo .bmem y usa SOLO los tokens del tema caramelo
+   (src/app/barber/barber-theme.css). No se toca globals.css ni ningún
+   token del panel dental.
+
+   Responsive con @container (regla del repo), nunca @media: el panel
+   tiene sidebar, así que lo que manda es el ancho del contenedor, no el
+   de la ventana.
+
+   ⚠️ Los modales se montan con createPortal en <body>, FUERA de .bmem: un
+   ancestro con container-type atrapa a los position:fixed.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+.bmem {
+  container-type: inline-size;
+  container-name: bmem;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  max-width: 1180px;
+}
+
+/* ── Cabecera ──────────────────────────────────────────────────────── */
+.bmem-head {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.bmem-title {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 700;
+  letter-spacing: -0.015em;
+  color: var(--text-1);
+}
+.bmem-sub {
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: var(--text-3);
+  max-width: 62ch;
+}
+
+/* ── Tarjetas de números ───────────────────────────────────────────── */
+.bmem-stats {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+@container bmem (min-width: 720px) {
+  .bmem-stats { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
+
+.bmem-stat {
+  background: var(--bg-elev);
+  border: 1px solid var(--border-soft);
+  border-radius: 14px;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  box-shadow: var(--shadow-1);
+}
+.bmem-stat-value {
+  font-size: 26px;
+  font-weight: 700;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+  color: var(--text-1);
+  font-variant-numeric: tabular-nums;
+}
+.bmem-stat-label {
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+.bmem-stat.is-warn .bmem-stat-value { color: var(--caramel-600); }
+.dark .bmem-stat.is-warn .bmem-stat-value { color: var(--caramel-400); }
+
+/* ── Pestañas ──────────────────────────────────────────────────────── */
+.bmem-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  background: var(--bg-elev);
+  border: 1px solid var(--border-soft);
+  border-radius: 12px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.bmem-tabs::-webkit-scrollbar { display: none; }
+
+.bmem-tab {
+  flex: 1 1 auto;
+  min-width: 96px;
+  appearance: none;
+  border: 0;
+  background: transparent;
+  border-radius: 9px;
+  padding: 9px 14px;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--text-3);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 140ms ease, color 140ms ease;
+}
+.bmem-tab:hover { color: var(--text-1); background: var(--bg-hover); }
+.bmem-tab[aria-selected="true"] {
+  background: var(--brand-soft);
+  color: var(--brand);
+  box-shadow: inset 0 0 0 1px var(--border-brand);
+}
+
+/* ── Superficie base ───────────────────────────────────────────────── */
+.bmem-card {
+  background: var(--bg-elev);
+  border: 1px solid var(--border-soft);
+  border-radius: 16px;
+  padding: 18px;
+  box-shadow: var(--shadow-1);
+}
+.bmem-section-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+.bmem-h2 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-1);
+}
+
+/* ── Botones ───────────────────────────────────────────────────────── */
+.bmem-btn {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 9px 15px;
+  border-radius: 10px;
+  font-size: 13.5px;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid var(--caramel-700);
+  background: var(--caramel-600);
+  color: #ffffff;
+  transition: background 140ms ease, opacity 140ms ease;
+  white-space: nowrap;
+}
+.bmem-btn:hover:not(:disabled) { background: var(--caramel-700); }
+.bmem-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.dark .bmem-btn {
+  background: var(--caramel-400);
+  border-color: var(--caramel-500);
+  color: var(--caramel-950);
+}
+.dark .bmem-btn:hover:not(:disabled) { background: var(--caramel-300); }
+
+.bmem-btn-ghost {
+  background: transparent;
+  color: var(--text-2);
+  border-color: var(--border-soft);
+}
+.bmem-btn-ghost:hover:not(:disabled) { background: var(--bg-hover); color: var(--text-1); }
+.dark .bmem-btn-ghost {
+  background: transparent;
+  color: var(--text-2);
+  border-color: var(--border-soft);
+}
+.dark .bmem-btn-ghost:hover:not(:disabled) { background: var(--bg-hover); color: var(--text-1); }
+
+.bmem-btn-danger {
+  background: transparent;
+  border-color: rgba(180, 45, 45, 0.35);
+  color: #B42D2D;
+}
+.bmem-btn-danger:hover:not(:disabled) { background: rgba(180, 45, 45, 0.08); }
+.dark .bmem-btn-danger { background: transparent; color: #F2A2A2; border-color: rgba(242, 162, 162, 0.3); }
+.dark .bmem-btn-danger:hover:not(:disabled) { background: rgba(242, 162, 162, 0.1); }
+
+.bmem-btn-sm { padding: 6px 11px; font-size: 12.5px; border-radius: 8px; }
+
+.bmem-btn:focus-visible,
+.bmem-tab:focus-visible,
+.bmem-chip:focus-visible,
+.bmem-input:focus-visible,
+.bmem-select:focus-visible {
+  outline: none;
+  box-shadow: var(--ring);
+}
+
+/* ── Chips de filtro ───────────────────────────────────────────────── */
+.bmem-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.bmem-chip {
+  appearance: none;
+  border: 1px solid var(--border-soft);
+  background: transparent;
+  color: var(--text-2);
+  border-radius: 999px;
+  padding: 6px 13px;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 140ms ease, color 140ms ease, border-color 140ms ease;
+}
+.bmem-chip:hover { background: var(--bg-hover); color: var(--text-1); }
+.bmem-chip.is-on {
+  background: var(--brand-soft);
+  border-color: var(--border-brand);
+  color: var(--brand);
+}
+
+/* ── Campos de formulario ──────────────────────────────────────────── */
+.bmem-grid-2 {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 14px;
+}
+@container bmem (min-width: 620px) {
+  .bmem-grid-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+.bmem-field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.bmem-label {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-2);
+}
+.bmem-hint {
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--text-3);
+  margin: 0;
+}
+.bmem-input,
+.bmem-select,
+.bmem-textarea {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 9px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--border-soft);
+  background: var(--bg);
+  color: var(--text-1);
+  font-size: 14px;
+  font-family: inherit;
+  transition: border-color 140ms ease;
+}
+.bmem-input:focus,
+.bmem-select:focus,
+.bmem-textarea:focus { border-color: var(--border-brand); }
+.bmem-textarea { min-height: 84px; resize: vertical; line-height: 1.5; }
+.bmem-input::placeholder,
+.bmem-textarea::placeholder { color: var(--text-4); }
+
+.bmem-money { display: flex; align-items: center; gap: 0; }
+.bmem-money-prefix {
+  padding: 9px 10px;
+  border: 1px solid var(--border-soft);
+  border-right: 0;
+  border-radius: 10px 0 0 10px;
+  background: var(--bg-elev-2);
+  color: var(--text-3);
+  font-size: 13px;
+  font-weight: 600;
+}
+.bmem-money .bmem-input { border-radius: 0 10px 10px 0; }
+
+.bmem-check {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  cursor: pointer;
+  padding: 10px 12px;
+  border: 1px solid var(--border-soft);
+  border-radius: 10px;
+  background: var(--bg);
+  transition: border-color 140ms ease, background 140ms ease;
+}
+.bmem-check:hover { background: var(--bg-hover); }
+.bmem-check.is-on { border-color: var(--border-brand); background: var(--brand-softer); }
+.bmem-check input { margin-top: 2px; accent-color: var(--caramel-600); width: 15px; height: 15px; }
+.bmem-check-body { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.bmem-check-title { font-size: 13.5px; font-weight: 600; color: var(--text-1); }
+
+/* ── Rejilla de planes ─────────────────────────────────────────────── */
+.bmem-plans {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px;
+}
+@container bmem (min-width: 620px) {
+  .bmem-plans { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@container bmem (min-width: 980px) {
+  .bmem-plans { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+
+.bmem-plan {
+  border: 1px solid var(--border-soft);
+  border-radius: 14px;
+  padding: 16px;
+  background: var(--bg);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+.bmem-plan.is-off { opacity: 0.62; }
+.bmem-plan-name {
+  font-size: 15.5px;
+  font-weight: 700;
+  color: var(--text-1);
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+.bmem-plan-price {
+  font-size: 26px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--brand);
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+.bmem-plan-price small {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-3);
+  letter-spacing: 0;
+  margin-left: 5px;
+}
+.bmem-plan-what {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-2);
+}
+.bmem-plan-desc {
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--text-3);
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.bmem-plan-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: auto;
+  padding-top: 6px;
+}
+
+/* ── Filas de clientes / anticipos ─────────────────────────────────── */
+.bmem-rows { display: flex; flex-direction: column; gap: 8px; }
+
+.bmem-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+  padding: 13px 14px;
+  border: 1px solid var(--border-soft);
+  border-radius: 12px;
+  background: var(--bg);
+}
+@container bmem (min-width: 760px) {
+  .bmem-row { grid-template-columns: minmax(0, 1.5fr) minmax(0, 1.2fr) minmax(0, 1fr) auto; }
+}
+.bmem-row.is-warn { border-color: var(--border-brand); background: var(--brand-softer); }
+.bmem-row.is-late { border-color: rgba(180, 45, 45, 0.3); }
+
+.bmem-cell { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.bmem-cell-main {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-1);
+  overflow-wrap: anywhere;
+}
+.bmem-cell-sub { font-size: 12px; color: var(--text-3); }
+.bmem-row-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+
+/* ── Barra de cortes ───────────────────────────────────────────────── */
+.bmem-bar {
+  height: 6px;
+  border-radius: 999px;
+  background: var(--bg-elev-2);
+  overflow: hidden;
+  max-width: 160px;
+}
+.bmem-bar-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: var(--brand-grad);
+  transition: width 220ms ease;
+}
+.bmem-bar-fill.is-full { background: linear-gradient(90deg, #B42D2D, #D45B5B); }
+
+/* ── Insignias ─────────────────────────────────────────────────────── */
+.bmem-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+.bmem-badge.t-brand { background: var(--brand-soft); color: var(--brand); border-color: var(--border-brand); }
+.bmem-badge.t-ok { background: rgba(34, 121, 71, 0.12); color: #227947; border-color: rgba(34, 121, 71, 0.28); }
+.bmem-badge.t-warn { background: rgba(190, 122, 60, 0.14); color: var(--caramel-700); border-color: rgba(190, 122, 60, 0.32); }
+.bmem-badge.t-bad { background: rgba(180, 45, 45, 0.1); color: #B42D2D; border-color: rgba(180, 45, 45, 0.28); }
+.bmem-badge.t-mute { background: var(--bg-elev-2); color: var(--text-3); border-color: var(--border-soft); }
+.dark .bmem-badge.t-ok { color: #7FCFA1; }
+.dark .bmem-badge.t-warn { color: var(--caramel-300); }
+.dark .bmem-badge.t-bad { color: #F2A2A2; }
+
+/* ── Avisos ────────────────────────────────────────────────────────── */
+.bmem-note {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 12px 14px;
+  border-radius: 12px;
+  font-size: 12.5px;
+  line-height: 1.55;
+  border: 1px solid var(--border-brand);
+  background: var(--brand-softer);
+  color: var(--text-2);
+}
+.bmem-note.t-bad { border-color: rgba(180, 45, 45, 0.3); background: rgba(180, 45, 45, 0.06); }
+.bmem-note strong { color: var(--text-1); }
+
+/* ── Vacíos ────────────────────────────────────────────────────────── */
+.bmem-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 10px;
+  padding: 36px 20px;
+  color: var(--text-3);
+}
+.bmem-empty-title { font-size: 15px; font-weight: 700; color: var(--text-1); }
+.bmem-empty-body { font-size: 13px; line-height: 1.6; max-width: 46ch; margin: 0; }
+.bmem-examples { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; }
+.bmem-example {
+  padding: 5px 12px;
+  border-radius: 999px;
+  border: 1px dashed var(--border-brand);
+  color: var(--brand);
+  font-size: 12px;
+  font-weight: 600;
+  background: var(--brand-softer);
+}
+
+/* ── Modal (montado en <body> por portal) ──────────────────────────── */
+.bmem-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  background: rgba(18, 16, 16, 0.55);
+  backdrop-filter: blur(2px);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding: 0;
+  overflow-y: auto;
+}
+@media (min-width: 640px) {
+  .bmem-overlay { align-items: center; padding: 24px; }
+}
+
+.bmem-modal {
+  width: 100%;
+  max-width: 560px;
+  max-height: min(92vh, 900px);
+  overflow-y: auto;
+  background: var(--bg-elev);
+  color: var(--text-1);
+  border: 1px solid var(--border-soft);
+  border-radius: 18px 18px 0 0;
+  box-shadow: var(--shadow-3);
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+@media (min-width: 640px) {
+  .bmem-modal { border-radius: 18px; }
+}
+.bmem-modal-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+.bmem-modal-title { margin: 0; font-size: 17px; font-weight: 700; color: var(--text-1); }
+.bmem-modal-close {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: var(--text-3);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 8px;
+  line-height: 0;
+}
+.bmem-modal-close:hover { background: var(--bg-hover); color: var(--text-1); }
+.bmem-modal-foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.bmem-step {
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+
+/* ── Resultados de búsqueda del vendedor ───────────────────────────── */
+.bmem-results {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 210px;
+  overflow-y: auto;
+  border: 1px solid var(--border-soft);
+  border-radius: 10px;
+  padding: 4px;
+}
+.bmem-result {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  padding: 8px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  color: var(--text-1);
+  font-family: inherit;
+}
+.bmem-result:hover { background: var(--bg-hover); }
+.bmem-result.is-on { background: var(--brand-soft); }
+.bmem-result-name { font-size: 13.5px; font-weight: 600; }
+.bmem-result-sub { font-size: 11.5px; color: var(--text-3); }
+
+/* ── Errores en línea ──────────────────────────────────────────────── */
+.bmem-error {
+  font-size: 12.5px;
+  color: #B42D2D;
+  margin: 0;
+  line-height: 1.5;
+}
+.dark .bmem-error { color: #F2A2A2; }
+
+.bmem-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+.bmem-search { flex: 1 1 200px; max-width: 320px; }
