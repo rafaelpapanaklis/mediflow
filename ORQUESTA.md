@@ -9676,3 +9676,120 @@ caja/comisiones/membresías/fila/mini-web: NO implementados a propósito (Ola 0 
 esqueleto + contrato). (5) Registro exige teléfono MX 10 dígitos (mxTenDigits, mismo
 criterio que el dental). (6) messageQuota 200/600/-1 PROVISIONAL en la tabla (Rafael
 confirma con el costo de Meta; se edita en barber_plan_configs, no en código).
+
+## [Barber Schema-B] — Complemento del contrato de datos: horarios, fotos de visita, portal del cliente, soporte, mi-web, inventario y multisucursal ✅ (2026-08-24)
+═══════════════════════════════════════════════════════════════════════════
+COMMIT: c49fa396 · push directo a main · BUILD EXIT 0 ("Compiled with warnings",
+las de siempre) · GUARDIA exit 0 (5 propios + prisma/schema.prisma y ORQUESTA.md
+declarados) · npx prisma generate OK.
+SQL PENDIENTE: `sql/barber_complemento.sql` (idempotente, re-ejecutable; asume
+sql/barber.sql ya aplicado — lo está). Rafael lo pega en Supabase. Migración
+espejo: prisma/migrations/20260824190000_barber_complemento/. Hasta aplicarlo,
+las tablas/columnas nuevas no existen; nada de la Ola 0 se rompe (no hay código
+que las consulte todavía).
+
+MODELOS NUEVOS (todos con barbershopId + índice; tablas prefijo barber_):
+1) BarberSchedule (barber_schedules) — horario recurrente. dayOfWeek 0-6 con
+   0 = DOMINGO (criterio JS getDay()); startMinute/endMinute = minutos desde
+   medianoche en la zona de la barbería; varias filas por día = turno partido;
+   endMinute > startMinute (un turno nocturno se parte en dos filas).
+   Índice (barbershopId, barberId, dayOfWeek).
+2) BarberTimeOff (barber_time_off) — bloqueo puntual. barberId NULL = TODA la
+   barbería cerrada (festivo). type BarberTimeOffType (BREAK|VACATION|HOLIDAY|
+   OTHER, default OTHER). barberId es onDelete CASCADE a propósito: un SetNull
+   convertiría el bloqueo personal de un barbero borrado en "barbería cerrada".
+   Índice (barbershopId, startAt, endAt).
+3) BarberVisitPhoto (barber_visit_photos) — fotos por visita (photoUrl del
+   cliente sigue siendo SOLO el perfil). kind BarberPhotoKind (BEFORE|AFTER|
+   REFERENCE). visibleToClient default false — el portal muestra ÚNICAMENTE las
+   marcadas true. Índices (barbershopId, clientId, createdAt) y (appointmentId).
+4) BarberClientAuthToken (barber_client_auth_tokens) — login del portal por
+   teléfono + código de un solo uso, SIN contraseña. Guarda SOLO codeHash
+   (verificado por lectura: no existe columna de código en claro; el código
+   jamás se guarda ni loguea); attempts = intentos fallidos; usedAt = quemado.
+   Índices (clientId, expiresAt) y (barbershopId).
+5) BarberSupportTicket + BarberSupportMessage (barber_support_tickets/_messages)
+   — espejo del soporte dental. status BarberTicketStatus (OPEN|IN_PROGRESS|
+   WAITING_REPLY|CLOSED); priority BarberTicketPriority (LOW|NORMAL|HIGH);
+   authorType BarberTicketAuthor (SHOP|ADMIN). category es String con catálogo
+   BARBER_TICKET_CATEGORIES (BUG|DUDA|FACTURACION|SUGERENCIA). authorUserId SIN
+   FK a propósito: SHOP guarda barber_users.id y ADMIN el id del admin dental
+   (otro sistema) — mismo criterio que SupportMessage.authorId. attachments
+   Json default [] con shape BarberSupportAttachment { path, name, size, type }
+   en BARBER_FILES_BUCKET. lastMessageAt lo mantiene el service.
+6) BarberLandingConfig (barber_landing_configs) — barbershopId ÚNICO; version
+   Int default 0 = BLOQUEO OPTIMISTA (el guardado manda la version leída; si ya
+   no coincide → 409 — exactamente lo que evita el guardar-pisado del editor
+   dental); template/config los define la ola de mi-web (sin default de
+   template a propósito).
+7) BarberStockMovement (barber_stock_movements) — bitácora de inventario.
+   CONVENCIÓN DE SIGNO: qty es SIGNADO — positivo suma stock (IN, RETURN,
+   ADJUST↑), negativo resta (OUT, SALE, ADJUST↓); stock actual = inicial +
+   Σ qty. productId NoAction: producto con bitácora NO se borra (se retira con
+   isActive=false, como barberId en comisiones). La venta descuenta stock bajo
+   cash.manage (movimiento SALE automático); inventory.manage es SOLO para
+   entradas/ajustes/devoluciones MANUALES. Índice (barbershopId, productId,
+   createdAt).
+8) BarberUserBranchAccess (barber_user_branch_access) — acceso de un usuario a
+   OTRAS sedes de su cadena. Único (userId, barbershopId) + índice
+   (barbershopId). Se consume SOLO vía getAccessibleBranchIds().
+CAMPOS NUEVOS EN EXISTENTES: Barbershop.branchName / isMainBranch(true) ·
+BarberClient.portalEnabled(false) / lastPortalLoginAt / supabaseId(ÚNICO) ·
+BarberProduct.minStock / unit.
+INTEGRIDAD: barber_clients (barbershopId, phone) ahora es ÚNICO (@@unique en
+Prisma + swap de índice→unique index en el SQL). phone es NOT NULL desde la
+Ola 0, así que NO hay caso de teléfono opcional que resolver; el alta de
+cliente debe hacer upsert / atrapar P2002 sobre (barbershopId, phone).
+
+CONTRATO AMPLIADO (nombres EXACTOS — importar, no inventar):
+· permissions.ts — BARBER_PERMISSIONS pasa de 20 a 26 claves. NUEVAS (6):
+  portal.manage · schedule.manage · inventory.manage · support.view ·
+  support.manage · branches.manage.
+  Las 26 completas: agenda.view, agenda.edit, clients.view, clients.edit,
+  portal.manage, services.manage, barbers.manage, schedule.manage,
+  walkin.manage, requests.manage, cash.view, cash.manage, commissions.view,
+  commissions.manage, memberships.manage, products.manage, inventory.manage,
+  web.edit, whatsapp.view, whatsapp.send, support.view, support.manage,
+  billing.manage, settings.edit, team.manage, branches.manage.
+  DEFAULTS: OWNER todo; MANAGER todo menos billing.manage (ambos absorben
+  claves nuevas solos vía ALL); RECEPTION += portal.manage (mostrador: agenda,
+  clientes+portal, fila, caja, WhatsApp); BARBER sin cambios (agenda.view,
+  clients.view, walkin.manage, commissions.view) — el permiso da la PUERTA y
+  cada ola recorta ADEMÁS por su barberId (su agenda, sus clientes, sus
+  comisiones). Regla de siempre: permissionsOverride REEMPLAZA los defaults —
+  un permiso nuevo NO le llega a un usuario con override sin agregárselo.
+· types.ts — 6 union types nuevos (BarberTimeOffType, BarberPhotoKind,
+  BarberTicketStatus, BarberTicketPriority, BarberTicketAuthor,
+  BarberStockMovementType) + labels/UI (BARBER_TIME_OFF_TYPE_LABELS,
+  BARBER_PHOTO_KIND_LABELS, BARBER_TICKET_STATUS_UI,
+  BARBER_TICKET_PRIORITY_LABELS, BARBER_TICKET_CATEGORIES/_LABELS,
+  BARBER_STOCK_MOVEMENT_TYPE_LABELS) + DTOs nuevos: BarberScheduleDTO,
+  BarberTimeOffDTO, BarberVisitPhotoDTO, BarberPortalClientDTO,
+  BarberSupportAttachment, BarberSupportTicketDTO, BarberSupportMessageDTO,
+  BarberLandingConfigDTO, BarberStockMovementDTO, BarberBranchDTO. El token del
+  portal NO tiene DTO (codeHash jamás sale del server). DTOs existentes
+  AMPLIADOS (las APIs deben devolver los campos nuevos): BarbershopDTO +=
+  parentId/branchName/isMainBranch · BarberClientDTO += portalEnabled/
+  lastPortalLoginAt · BarberProductDTO += minStock/unit. Rutas contractuales
+  anotadas en la cabecera: /barber/soporte, /barber/sucursales,
+  /b/[slug]/portal.
+· barber-auth.ts — assertBarberPermission YA EXISTÍA (resuelve rol + override)
+  y se conserva idéntico. NUEVO getAccessibleBranchIds(ctx): punto ÚNICO del
+  filtro multisede. Semántica: familia = matriz (parentId null) + sucursales;
+  OWNER ve la familia COMPLETA sin filas de acceso; los demás ven su sede + sus
+  filas BarberUserBranchAccess RECORTADAS a la familia (una fila hacia una
+  cadena ajena se IGNORA — defensa en profundidad); siempre incluye
+  ctx.barbershopId; orden matriz primero y sucursales por createdAt; NO filtra
+  isActive (lo decide el caller). Uso: where { barbershopId: { in: await
+  getAccessibleBranchIds(ctx) } } — la lista JAMÁS sale del request.
+
+AVISOS: (1) BARBER_NAV_ITEMS NO se tocó — soporte/sucursales/portal agregan su
+item + su i18n en SU ola (los labels viven en dictionaries/barber/). (2) El
+build del worktree corrió sin DATABASE_URL: las páginas SSG del dental loguean
+prisma:error y caen a su fallback (conocido; exit 0 igual — en Vercel sí hay
+env). (3) supabaseId de BarberClient es único GLOBAL: una cuenta Supabase se
+liga a UN solo cliente; si el portal necesita multi-barbería por cuenta, esa
+ola lo cambia. (4) Las fotos de visita se gatean con clients.view/edit;
+portal.manage es habilitar el portal, reenviar códigos y marcar
+visibleToClient. (5) Ninguna terminal escribe barbershopId: undefined en un
+where — borra el filtro de tenant (regla de la Ola 0, sigue vigente).
