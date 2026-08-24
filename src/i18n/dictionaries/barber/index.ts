@@ -24,6 +24,8 @@ import clientesEs from "./clientes.es.json";
 import clientesEn from "./clientes.en.json";
 import webEs from "./web.es.json";
 import webEn from "./web.en.json";
+import adminEs from "./admin.es.json";
+import adminEn from "./admin.en.json";
 // ── Ola 1: importa aquí tu área (una línea por idioma) ──
 import agendaEs from "./agenda.es.json";
 import agendaEn from "./agenda.en.json";
@@ -44,6 +46,7 @@ const ES: Dictionary = {
     membresias: membresiasEs as unknown as Dictionary,
     clientes: clientesEs as unknown as Dictionary,
     web: webEs as unknown as Dictionary,
+    admin: adminEs as unknown as Dictionary,
   },
 };
 
@@ -57,6 +60,7 @@ const EN: Dictionary = {
     membresias: membresiasEn as unknown as Dictionary,
     clientes: clientesEn as unknown as Dictionary,
     web: webEn as unknown as Dictionary,
+    admin: adminEn as unknown as Dictionary,
   },
 };
 

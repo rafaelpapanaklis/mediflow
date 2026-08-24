@@ -1,0 +1,795 @@
+/* ═══════════════════════════════════════════════════════════════════════
+   Administración de DaleControl Barber (barberos, equipo, sucursales,
+   soporte). Vive dentro de .barber-shell, así que hereda el tema caramelo
+   por variables: aquí NO se escribe un solo color en duro.
+
+   Responsive con @container (regla del repo), no @media: el ancho útil de
+   estas pantallas depende del sidebar, no del viewport.
+
+   OJO container-type: solo se pone en los contenedores de contenido
+   (.grid, .thread…). Un container-type sobre el envoltorio de la página
+   convertiría a los modales position:fixed en position:absolute respecto a
+   él — por eso .page y .modalRoot quedan LIMPIOS.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  max-width: 1180px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+/* ── Barra de administración (pestañas + selector de sede) ───────────── */
+
+.adminBar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  padding: 8px;
+  border-radius: 14px;
+  background: var(--bg-elev);
+  border: 1px solid var(--border-soft);
+  box-shadow: var(--shadow-1);
+}
+
+.tabs {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+.tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 13px;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  color: var(--text-2);
+  text-decoration: none;
+  border: 1px solid transparent;
+  transition: background 150ms ease, color 150ms ease;
+}
+.tab:hover { background: var(--bg-hover); color: var(--text-1); }
+.tab[aria-current="page"] {
+  background: var(--brand-soft);
+  border-color: var(--border-brand);
+  color: var(--brand);
+}
+.tab:focus-visible { outline: none; box-shadow: var(--ring); }
+
+.tabBadge {
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  font-size: 10.5px;
+  font-weight: 700;
+  display: inline-grid;
+  place-items: center;
+  background: var(--danger, #C0392B);
+  color: #fff;
+}
+
+/* ── Selector de sede ────────────────────────────────────────────────── */
+
+.branchPicker { position: relative; flex: 0 0 auto; }
+
+.branchBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--border-soft);
+  background: var(--bg-elev-2);
+  color: var(--text-1);
+  font-size: 12.5px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  max-width: 260px;
+}
+.branchBtn:hover { border-color: var(--border-brand); }
+.branchBtn:focus-visible { outline: none; box-shadow: var(--ring); }
+.branchBtn:disabled { opacity: .6; cursor: progress; }
+
+.branchBtnLabel {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.branchMenu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 30;
+  min-width: 240px;
+  max-height: 320px;
+  overflow-y: auto;
+  padding: 6px;
+  border-radius: 12px;
+  background: var(--bg-elev);
+  border: 1px solid var(--border-soft);
+  box-shadow: var(--shadow-3);
+}
+
+.branchOption {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 9px 10px;
+  border-radius: 8px;
+  border: none;
+  background: transparent;
+  color: var(--text-1);
+  font-size: 13px;
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.branchOption:hover { background: var(--bg-hover); }
+.branchOption[aria-checked="true"] { background: var(--brand-soft); color: var(--brand); font-weight: 600; }
+.branchOption:focus-visible { outline: none; box-shadow: var(--ring); }
+
+.branchNote {
+  padding: 8px 10px 4px;
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--text-3);
+  border-top: 1px solid var(--border-soft);
+  margin-top: 4px;
+}
+
+/* ── Encabezado de pantalla ──────────────────────────────────────────── */
+
+.header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.headerText { min-width: 0; flex: 1 1 320px; }
+
+.title {
+  margin: 0;
+  font-size: clamp(19px, 2.2vw, 23px);
+  font-weight: 700;
+  letter-spacing: -0.015em;
+  color: var(--text-1);
+}
+
+.subtitle {
+  margin: 4px 0 0;
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: var(--text-2);
+  max-width: 62ch;
+}
+
+.headerActions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+
+/* ── Piezas ──────────────────────────────────────────────────────────── */
+
+.card {
+  background: var(--bg-elev);
+  border: 1px solid var(--border-soft);
+  border-radius: 14px;
+  box-shadow: var(--shadow-1);
+}
+
+.cardPad { padding: clamp(14px, 2vw, 20px); }
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 600;
+  border: 1px solid var(--border-soft);
+  background: var(--bg-elev-2);
+  color: var(--text-2);
+}
+.chipBrand { background: var(--brand-soft); border-color: var(--border-brand); color: var(--brand); }
+.chipWarn { background: rgba(217, 119, 6, 0.12); border-color: rgba(217, 119, 6, 0.35); color: #B45309; }
+.chipDanger { background: rgba(192, 57, 43, 0.10); border-color: rgba(192, 57, 43, 0.32); color: #B02A1C; }
+.chipMuted { color: var(--text-3); }
+
+.banner {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  padding: 14px 16px;
+  border-radius: 12px;
+  border: 1px solid var(--border-brand);
+  background: var(--brand-softer);
+  color: var(--text-1);
+  font-size: 13px;
+  line-height: 1.55;
+}
+.bannerDanger {
+  border-color: rgba(192, 57, 43, 0.32);
+  background: rgba(192, 57, 43, 0.07);
+}
+.bannerTitle { font-weight: 700; margin: 0 0 3px; font-size: 13.5px; }
+.bannerBody { margin: 0; color: var(--text-2); }
+
+.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 10px;
+  padding: clamp(28px, 5vw, 52px) 20px;
+  color: var(--text-2);
+}
+.emptyIcon {
+  width: 46px;
+  height: 46px;
+  border-radius: 14px;
+  display: grid;
+  place-items: center;
+  background: var(--brand-soft);
+  color: var(--brand);
+}
+
+/* ── Botones ─────────────────────────────────────────────────────────── */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 9px 15px;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  border: 1px solid var(--border-soft);
+  background: var(--bg-elev);
+  color: var(--text-1);
+  transition: background 150ms ease, border-color 150ms ease, opacity 150ms ease;
+  white-space: nowrap;
+}
+.btn:hover:not(:disabled) { background: var(--bg-hover); border-color: var(--border-strong); }
+.btn:focus-visible { outline: none; box-shadow: var(--ring); }
+.btn:disabled { opacity: .55; cursor: not-allowed; }
+
+.btnPrimary {
+  background: var(--caramel-600);
+  border-color: var(--caramel-700);
+  color: #fff;
+}
+.btnPrimary:hover:not(:disabled) { background: var(--caramel-700); border-color: var(--caramel-700); }
+:global(.dark) .btnPrimary {
+  background: var(--caramel-400);
+  border-color: var(--caramel-500);
+  color: var(--caramel-950);
+}
+:global(.dark) .btnPrimary:hover:not(:disabled) { background: var(--caramel-300); }
+
+.btnGhost { background: transparent; border-color: transparent; color: var(--text-2); }
+.btnGhost:hover:not(:disabled) { background: var(--bg-hover); color: var(--text-1); }
+
+.btnDanger { color: #B02A1C; border-color: rgba(192, 57, 43, 0.32); background: transparent; }
+.btnDanger:hover:not(:disabled) { background: rgba(192, 57, 43, 0.08); }
+
+.btnSm { padding: 6px 11px; font-size: 12.5px; border-radius: 9px; }
+.btnIcon { padding: 7px; width: 32px; height: 32px; }
+
+/* ── Formularios ─────────────────────────────────────────────────────── */
+
+.field { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+
+.label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-2);
+  letter-spacing: .01em;
+}
+
+.hint { font-size: 11.5px; line-height: 1.45; color: var(--text-3); margin: 0; }
+
+.input,
+.select,
+.textarea {
+  width: 100%;
+  padding: 9px 11px;
+  border-radius: 10px;
+  border: 1px solid var(--border-soft);
+  background: var(--bg);
+  color: var(--text-1);
+  font-size: 13.5px;
+  font-family: inherit;
+  transition: border-color 150ms ease;
+}
+.input::placeholder, .textarea::placeholder { color: var(--text-4); }
+.input:focus, .select:focus, .textarea:focus {
+  outline: none;
+  border-color: var(--brand);
+  box-shadow: var(--ring);
+}
+.textarea { resize: vertical; min-height: 96px; line-height: 1.55; }
+.select { cursor: pointer; }
+
+.formGrid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: 1fr 1fr;
+}
+.formFull { grid-column: 1 / -1; }
+@container (max-width: 460px) {
+  .formGrid { grid-template-columns: 1fr; }
+}
+
+.switchRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 11px 13px;
+  border-radius: 11px;
+  border: 1px solid var(--border-soft);
+  background: var(--bg-elev-2);
+}
+
+.switch {
+  position: relative;
+  flex: 0 0 auto;
+  width: 40px;
+  height: 23px;
+  border-radius: 999px;
+  border: 1px solid var(--border-strong);
+  background: var(--bg);
+  cursor: pointer;
+  transition: background 150ms ease, border-color 150ms ease;
+  padding: 0;
+}
+.switch::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 17px;
+  height: 17px;
+  border-radius: 999px;
+  background: var(--text-3);
+  transition: transform 150ms ease, background 150ms ease;
+}
+.switch[aria-checked="true"] { background: var(--brand); border-color: var(--brand); }
+.switch[aria-checked="true"]::after { transform: translateX(17px); background: #fff; }
+.switch:focus-visible { outline: none; box-shadow: var(--ring); }
+.switch:disabled { opacity: .5; cursor: not-allowed; }
+
+.segmented {
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  border-radius: 11px;
+  background: var(--bg-elev-2);
+  border: 1px solid var(--border-soft);
+}
+.segment {
+  flex: 1 1 0;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: none;
+  background: transparent;
+  color: var(--text-2);
+  font-size: 12.5px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.segment[aria-pressed="true"] {
+  background: var(--bg-elev);
+  color: var(--brand);
+  box-shadow: var(--shadow-1);
+}
+.segment:focus-visible { outline: none; box-shadow: var(--ring); }
+
+.errorText {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: #B02A1C;
+  font-weight: 500;
+}
+
+/* ── Modal. NADA de container-type en su cadena de ancestros. ────────── */
+
+.modalRoot {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background: rgba(18, 16, 16, 0.55);
+  backdrop-filter: blur(2px);
+  overflow-y: auto;
+}
+
+.modal {
+  width: 100%;
+  max-width: 560px;
+  max-height: min(90vh, 900px);
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-elev);
+  color: var(--text-1);
+  border: 1px solid var(--border-soft);
+  border-radius: 16px;
+  box-shadow: var(--shadow-3);
+  overflow: hidden;
+}
+.modalWide { max-width: 760px; }
+
+.modalHead {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 18px;
+  border-bottom: 1px solid var(--border-soft);
+  flex-shrink: 0;
+}
+.modalTitle { margin: 0; font-size: 16px; font-weight: 700; color: var(--text-1); }
+.modalSub { margin: 3px 0 0; font-size: 12.5px; color: var(--text-3); }
+
+.modalBody {
+  /* Contenedor @container de .formGrid. Va aquí y no en .formGrid porque un
+     elemento no puede resolver su propio @container. Es un descendiente de
+     .modalRoot (position:fixed), así que la contención no atrapa nada. */
+  container-type: inline-size;
+  padding: 18px;
+  overflow-y: auto;
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.modalFoot {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 14px 18px;
+  border-top: 1px solid var(--border-soft);
+  background: var(--bg-elev-2);
+  flex-shrink: 0;
+  flex-wrap: wrap;
+}
+.modalFootSpread { justify-content: space-between; }
+
+/* ── Listas de tarjetas (barberos, equipo, sedes) ────────────────────── */
+
+.grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+}
+
+.rowCard {
+  display: flex;
+  gap: 13px;
+  align-items: flex-start;
+  padding: 14px;
+  border-radius: 14px;
+  border: 1px solid var(--border-soft);
+  background: var(--bg-elev);
+  box-shadow: var(--shadow-1);
+  min-width: 0;
+}
+.rowCardMuted { opacity: .68; }
+.rowCardCurrent { border-color: var(--border-brand); box-shadow: 0 0 0 1px var(--border-brand), var(--shadow-1); }
+
+.rowMain { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+
+.rowTitle {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex-wrap: wrap;
+  font-size: 14.5px;
+  font-weight: 700;
+  color: var(--text-1);
+  line-height: 1.25;
+  min-width: 0;
+}
+
+.rowMeta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  font-size: 12.5px;
+  color: var(--text-3);
+  line-height: 1.4;
+}
+.rowMetaItem { display: inline-flex; align-items: center; gap: 5px; min-width: 0; }
+.truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.rowActions { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+
+.avatar {
+  flex: 0 0 auto;
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  object-fit: cover;
+  display: grid;
+  place-items: center;
+  background: var(--brand-soft);
+  color: var(--brand);
+  font-weight: 700;
+  font-size: 15px;
+  border: 1px solid var(--border-brand);
+  overflow: hidden;
+}
+
+.orderCol { display: flex; flex-direction: column; gap: 3px; flex: 0 0 auto; }
+
+/* ── Matriz de permisos ──────────────────────────────────────────────── */
+
+.permGroup { display: flex; flex-direction: column; gap: 2px; }
+
+.permGroupTitle {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+  color: var(--text-4);
+  padding: 12px 2px 4px;
+}
+
+.permRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 11px;
+  border-radius: 10px;
+  border: 1px solid transparent;
+  min-width: 0;
+}
+.permRow:hover { background: var(--bg-hover); }
+.permRowChanged { background: var(--brand-softer); border-color: var(--border-brand); }
+
+.permLabel {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 13px;
+  color: var(--text-1);
+  line-height: 1.35;
+}
+
+.permTag {
+  flex: 0 0 auto;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: .03em;
+  padding: 2px 7px;
+  border-radius: 999px;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.permTagInherited { background: var(--bg-elev-2); color: var(--text-3); }
+.permTagAdded { background: rgba(22, 163, 74, 0.14); color: #15803D; }
+.permTagRemoved { background: rgba(192, 57, 43, 0.12); color: #B02A1C; }
+
+/* Barra de resultado pegada al fondo del cuerpo del modal. Va a sangre
+   (margen negativo que cancela el padding de .modalBody) para que las filas
+   no asomen por los costados al scrollear por debajo. */
+.permSummary {
+  position: sticky;
+  bottom: -18px;
+  margin: 4px -18px -18px;
+  padding: 12px 18px;
+  background: var(--bg-elev-2);
+  border-top: 1px solid var(--border-soft);
+  box-shadow: 0 -8px 16px -12px rgba(18, 16, 16, 0.35);
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--text-2);
+  font-weight: 500;
+}
+
+/* ── Soporte: lista + hilo ───────────────────────────────────────────── */
+
+.supportShell { container-type: inline-size; }
+
+.supportLayout {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: minmax(260px, 340px) 1fr;
+  align-items: start;
+}
+@container (max-width: 780px) {
+  .supportLayout { grid-template-columns: 1fr; }
+}
+
+.ticketList {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 70vh;
+  overflow-y: auto;
+  padding: 6px;
+}
+
+.ticketItem {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  width: 100%;
+  padding: 11px 12px;
+  border-radius: 11px;
+  border: 1px solid transparent;
+  background: transparent;
+  text-align: left;
+  font-family: inherit;
+  cursor: pointer;
+  color: var(--text-1);
+}
+.ticketItem:hover { background: var(--bg-hover); }
+.ticketItem[aria-current="true"] {
+  background: var(--brand-soft);
+  border-color: var(--border-brand);
+}
+.ticketItem:focus-visible { outline: none; box-shadow: var(--ring); }
+
+.ticketSubject { font-size: 13.5px; font-weight: 600; line-height: 1.35; }
+.ticketMeta { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; font-size: 11.5px; color: var(--text-3); }
+
+.thread { display: flex; flex-direction: column; gap: 12px; }
+
+.msgList {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-height: 56vh;
+  overflow-y: auto;
+  padding: 4px;
+}
+
+.msg { display: flex; flex-direction: column; gap: 5px; max-width: 84%; }
+.msgShop { align-self: flex-end; align-items: flex-end; }
+.msgAdmin { align-self: flex-start; align-items: flex-start; }
+
+.msgBubble {
+  padding: 11px 13px;
+  border-radius: 13px;
+  font-size: 13.5px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  word-break: break-word;
+  border: 1px solid var(--border-soft);
+  background: var(--bg-elev-2);
+  color: var(--text-1);
+}
+.msgShop .msgBubble {
+  background: var(--brand-soft);
+  border-color: var(--border-brand);
+}
+
+.msgMeta { font-size: 11px; color: var(--text-4); }
+
+.attachRow { display: flex; flex-wrap: wrap; gap: 7px; }
+
+.attachThumb {
+  display: block;
+  width: 96px;
+  height: 96px;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid var(--border-soft);
+  background: var(--bg-elev-2);
+}
+.attachThumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+.attachFile {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 11px;
+  border-radius: 9px;
+  border: 1px solid var(--border-soft);
+  background: var(--bg-elev-2);
+  font-size: 12.5px;
+  color: var(--text-1);
+  text-decoration: none;
+  max-width: 220px;
+}
+.attachFile:hover { border-color: var(--border-brand); }
+
+.composer {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  padding: 12px;
+  border-radius: 12px;
+  border: 1px solid var(--border-soft);
+  background: var(--bg-elev-2);
+}
+
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ── Dark: ganarle al reset global de formularios ─────────────────────
+   globals.css pinta TODOS los input/select/textarea del producto con
+   `background-color: hsl(var(--card)) !important` en dark — y esos tokens
+   son los del panel dental (azulados), que dentro del vertical caramelo se
+   ven fuera de lugar. globals.css es COMPARTIDO y no se toca: se gana por
+   especificidad (.dark + .barber-shell + clase = 0,3,0 contra 0,1,1) sin
+   sacar una sola regla del vertical.
+   Mismo motivo por el que el modal NO usa el Dialog de Radix: al montar en
+   un portal a <body> se saldría de .barber-shell y este override no lo
+   alcanzaría. */
+:global(.dark) :global(.barber-shell) .input,
+:global(.dark) :global(.barber-shell) .select,
+:global(.dark) :global(.barber-shell) .textarea {
+  background-color: var(--bg) !important;
+  color: var(--text-1) !important;
+  border-color: var(--border-soft) !important;
+}
+:global(.dark) :global(.barber-shell) .input::placeholder,
+:global(.dark) :global(.barber-shell) .textarea::placeholder {
+  color: var(--text-4) !important;
+}
+:global(.dark) :global(.barber-shell) .input:focus,
+:global(.dark) :global(.barber-shell) .select:focus,
+:global(.dark) :global(.barber-shell) .textarea:focus {
+  border-color: var(--brand) !important;
+}
+
+/* ── Dark: los tonos semánticos en duro (ámbar/rojo/verde) están calibrados
+   para fondo claro; sobre la madera oscura del vertical no alcanzan
+   contraste. Aquí se suben de luminosidad conservando el mismo significado. */
+:global(.dark) .chipWarn {
+  background: rgba(245, 158, 11, 0.16);
+  border-color: rgba(245, 158, 11, 0.38);
+  color: #FCD34D;
+}
+:global(.dark) .chipDanger {
+  background: rgba(248, 113, 113, 0.14);
+  border-color: rgba(248, 113, 113, 0.34);
+  color: #FCA5A5;
+}
+:global(.dark) .permTagAdded { background: rgba(74, 222, 128, 0.16); color: #86EFAC; }
+:global(.dark) .permTagRemoved { background: rgba(248, 113, 113, 0.16); color: #FCA5A5; }
+:global(.dark) .errorText { color: #FCA5A5; }
+:global(.dark) .btnDanger { color: #FCA5A5; border-color: rgba(248, 113, 113, 0.34); }
+:global(.dark) .btnDanger:hover:not(:disabled) { background: rgba(248, 113, 113, 0.12); }
+:global(.dark) .bannerDanger {
+  border-color: rgba(248, 113, 113, 0.34);
+  background: rgba(248, 113, 113, 0.08);
+}
+:global(.dark) .tabBadge { color: #241410; background: #FCA5A5; }
+:global(.dark) .permSummary { box-shadow: 0 -8px 16px -12px rgba(0, 0, 0, 0.7); }
