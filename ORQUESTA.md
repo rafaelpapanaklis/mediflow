@@ -9349,3 +9349,213 @@ desplegar "Tipo de clínica" debe listar 17.
   pasado".
 - Ningún SQL nuevo por aplicar: `sql/blog_reprogramar_drip.sql` es constancia de lo que YA se
   corrió el 18-ago.
+
+## [Ola-Dinero] — los reembolsos dejan de ser ingreso, los KPIs miran toda la clínica, "Vence el" existe, el presupuesto arrastra su factura y Stripe ya no cobra dos veces — 2026-08-23
+
+Commit `324a3f92` en `main` (25 archivos, +1127/−158), push directo. Ola 4 del plan acordado:
+P0 ✅ → seguridad/permisos ✅ (18-ago) → **dinero (esta)** → no-ops → desconectado. Cierra los
+6 P1 de dinero de `PANEL_AUDIT_2026-08-12`: FIN-01, SUB-04, FIN-04, FIN-03, FIN-05 y SUB-02.
+**Cero SQL de migración**: todo lo que hacía falta (Invoice.dueDate incluido) ya existía.
+
+### Lo que decía el enunciado y lo que había de verdad
+
+- **`invoiceSchema` SÍ acepta `dueDate`** (`z.string().optional()`, validations.ts:141): zod no lo
+  stripeaba, así que "el backend ya lo acepta" era cierto. Lo que faltaba era que ALGUIEN lo
+  mandara — y que lo anclara al día de la clínica: `new Date("2026-08-22")` en Vercel (UTC) es el
+  21 a las 18:00 en México, la factura vencía un día antes.
+- **Dos de las cuatro superficies de "vencido" ya derivaban por `dueDate` en el servidor**:
+  `computeDayBilling` (píldora del día de Caja) y Finanzas → Saldos. Las que mentían por `status
+  === "OVERDUE"` eran el KPI de Facturas (caja/page.tsx:61) y el filtro "Vencidas"
+  (billing-client.tsx:108). Ahora las cuatro pasan por el mismo helper.
+- **`GET /api/invoices` buscaba por folio y NOMBRE, no por apellido**, y su `patient.select` no
+  traía los 4 fiscales (RFC, razón social, régimen, CP) que el modal de timbrado de Caja prellena.
+  Conectarlo tal cual habría dejado el buscador peor que el filtro local para "García" y el CFDI
+  sin datos en las filas encontradas: se le añadió `lastName` al OR y los fiscales al select (la
+  visibilidad por paciente ya deja fuera a los restringidos, así que no hay nada que enmascarar).
+- **Cancelar exige `paid === 0`** (`/api/invoices/[id]/cancel`:50): una factura CANCELLED solo
+  tiene pagos si antes se reembolsó entero. Por eso excluir CANCELLED del corte de Caja (parte del
+  criterio de referencia) no esconde ninguna venta real.
+- **"Volver a verificar" en `/suspended/success` era un `<Link>` a la misma ruta**: la caché del
+  router de Next sirve una página dinámica hasta 30 s sin ir al servidor, así que podía repetir
+  el "estamos confirmando" viejo aunque el webhook ya hubiera llegado. Ahora es `router.refresh()`
+  automático cada 3 s (tope 20) + botón manual con el mismo refresh, e "Ir al dashboard" es un
+  `<a>` duro (el `<Link>` reutilizaba el árbol del layout calculado con la clínica aún vencida).
+- **El middleware Edge no tiene rebote propio de `/dashboard/suspended`** (0 referencias): el único
+  sitio con igualdad exacta era `isAllowedWhileSuspended`, la fuente única del layout y del guard
+  de cliente. Un solo cambio cubre los dos.
+- **`getAuthContext()` trae `clinic.timezone`** (`include: { clinic: true }`), así que el POST de
+  facturas ancla "Vence el" sin una consulta extra.
+- **La alerta "facturas vencidas" del home admin** (`/api/dashboard/home/admin`:268) usa
+  `dueDate < now` (no el inicio del día) y no excluye DRAFT. Es una de las tres superficies de
+  referencia que el enunciado pedía no tocar; queda anotada abajo.
+
+### FIX 1 — FIN-01 + SUB-04: los reembolsos ya no suman como ingreso
+
+Criterio ÚNICO, copiado de la referencia y expuesto como helper para no tener una cuarta copia
+inline: `revenuePaymentWhere(clinicId, paidAt)` en `src/lib/caja.ts:42` → `method: { not:
+"refund" }` + `invoice: { clinicId, status: { notIn: ["CANCELLED"] } }`. `clinicId` es `string`
+obligatorio: un `undefined` no puede borrar el filtro de tenant.
+
+- `src/lib/caja.ts:180` (`deriveWindow`): el `findMany` sigue trayendo los reembolsos (la clínica
+  debe verlos en la lista) pero excluye facturas CANCELLED; en el reduce (`:251`) el refund va a
+  `refunds` y ya no cae en el `else` que lo sumaba a `otherIncome`/`totalIncome`. `CajaTotals`
+  tiene `refunds` (`:105`); `getCajaState` lo devuelve (`:389`). El IVA ya lo excluía.
+- `src/app/api/finanzas/route.ts:103-115`: `ingresos`, `efectivo` (mismo where + `method: cash`) y
+  la serie diaria (`:149`) usan el helper. Antes `ingresos` sumaba TODO Payment y la utilidad salía
+  inflada; la serie ya suma lo mismo que el KPI.
+- `src/app/dashboard/reports/page.tsx:42-48`: la gráfica de 6 meses usa el helper — además del
+  reembolso, dejaba entrar los pagos de facturas anuladas en toda la serie.
+- `src/app/dashboard/caja/caja-client.tsx`: `METHOD_LABEL.refund` (`:123`) → "Reembolso" (es) /
+  "Refund" (en); la fila del reembolso lleva píldora roja e importe `−$X` (`:631`); línea propia
+  **"Reembolsos −$X"** en los KPIs del turno (`:534`), en el desglose del cierre (`:823`), en el
+  resumen post-cierre (`:886`) y en el impreso (`:395`) — solo cuando hubo alguno; el CSV escribe el
+  importe en NEGATIVO (`:358`) para que la columna sume lo mismo que ingresos − reembolsos; el
+  encabezado por día no lo suma (`:197`).
+- i18n: `cashRegister.methodRefund`, `cashRegister.kpiRefunds` (es/en).
+- No se tocan las 3 referencias (home/revenue, home/admin, agenda/server) ni el signo con que se
+  guarda el Payment de refund (sigue positivo).
+
+### FIX 2 — FIN-04: los KPIs de Facturas sobre TODA la clínica
+
+- `src/app/dashboard/caja/page.tsx:62-81`: segundo `Promise.all` (regla de máx. 6) con
+  `invoice.aggregate` sobre toda la clínica: **Total cobrado** = Σ `paid` de todo lo no
+  DRAFT/CANCELLED (los abonos de una PARTIAL ya cuentan); **Por cobrar** = `receivableInvoiceWhere`
+  (emitida + saldo > 0, el mismo de Finanzas); **Vencido** = `overdueInvoiceWhere` (por cobrar +
+  `dueDate` < inicio de hoy en la zona de la clínica). También "Este mes" (`count` desde el día 1
+  en la zona de la clínica) y el conteo del subtítulo (`totalInvoices`), que decía "100 facturas"
+  en una clínica de 159. El arreglo de las 100 sigue alimentando la tabla inicial.
+- Buscador conectado a `GET /api/invoices` (`billing-client.tsx:70-104`): con texto, debounce de
+  300 ms → `?search=&page=`; muestra "N facturas encontradas en toda la clínica" y paginación de 20
+  (`:395`); sin texto, la lista local de siempre; si la API falla, cae al filtro local. Tras una
+  mutación (`refresh()`, `:175`) se vuelve a pedir la página. El segmento de estado se aplica sobre
+  la página recibida (la API no filtra por estado — anotado abajo).
+- `src/app/api/invoices/route.ts:46-83`: `search` por folio, nombre O apellido; `page` saneado;
+  los 4 fiscales del paciente en el select.
+- i18n: `billing.billingClient.searching`, `searchResults` (plural), `searchPaging`, `prevPage`,
+  `nextPage`.
+
+### FIX 3 — FIN-03: "Vencido" se deriva siempre de la fecha
+
+- Módulo nuevo `src/lib/invoices/due-date.ts` (client-safe, con tests): `parseInvoiceDueDate`
+  ("YYYY-MM-DD" → 00:00 de ese día en la zona de la clínica vía `tzLocalToUtc`; ISO completo pasa
+  tal cual; vacío → `undefined`; basura → `null`), `startOfTodayInTz` (`periodRangeUtc("day")`),
+  `isInvoiceOverdue` (emitida + saldo > 0 + `dueDate` < inicio de hoy; sin `dueDate` NUNCA vence).
+  El espejo Prisma es `overdueInvoiceWhere` en `lib/caja.ts:68`.
+- `src/components/billing/invoice-editor-modal.tsx:106,245,488-494`: campo **"Vence el"** (input
+  date, opcional, con la nota "a partir del día siguiente cuenta como vencida") y `payload.dueDate`.
+- `src/app/api/invoices/route.ts:148-155,198`: el POST lo parsea con la zona de la clínica
+  (`getCtx().timezone`, `:32`) y responde 400 si la fecha es basura.
+- Las 4 superficies por `dueDate`: KPI de Facturas (`caja/page.tsx:75`), píldora del día de Caja
+  (`caja.ts:330`, ya lo hacía, ahora vía el helper), filtro "Vencidas" (`billing-client.tsx:157`
+  con el umbral `overdueBefore` que manda la página) y Finanzas → Saldos (`finanzas/route.ts:139`).
+  De paso la píldora de la fila dice "Vencido" cuando lo está aunque el status siga en PENDING
+  (`billing-client.tsx:329`).
+- **Sin cron, sin backfill, sin default**: las 170 facturas siguen con `dueDate` NULL.
+
+### FIX 4 — FIN-05: editar el presupuesto regenera su factura (o se bloquea)
+
+- Módulo nuevo `src/lib/quotes/invoice-from-quote-core.ts` (puro, con tests):
+  `invoiceFieldsFromQuote` — la aritmética extraída de `createInvoiceFromQuote` (conceptos con
+  descuento de línea acotado, `sumInvoiceItems`, descuento global acotado al subtotal,
+  `computeInvoiceTotal(…, 0, true)`); `decideLinkedInvoiceLock` — solo un BORRADOR sin un solo
+  pago se regenera; `quoteInvoiceLockedMessage` — el texto del 409.
+- `src/lib/quotes/create-invoice-from-quote.ts:146`: el alta usa la función extraída (misma
+  matemática, cero duplicado). `:196-282`: `QuoteInvoiceLockedError`, `getLinkedInvoiceLock` y
+  `syncDraftInvoiceFromQuote` — `updateMany` con `where: { id, clinicId, status: "DRAFT", paid: 0,
+  payments: { none: {} } }` que regenera `items/subtotal/discount/total/balance`; si no toca fila y
+  la factura existe, lanza el error (la transacción se revierte, el presupuesto tampoco cambia).
+- `src/lib/quotes/service.ts:176-211`: `replaceQuoteContent` acepta un `tx` para correr dentro de
+  la transacción del caller.
+- `src/app/api/quotes/[id]/route.ts:79-167`: pre-check de la factura ligada ANTES de leer el body
+  → **409** `{ error, code: "QUOTE_INVOICE_LOCKED", invoiceNumber }` con mensaje para la
+  recepcionista ("La factura F-0012 de este presupuesto ya tiene pagos registrados, así que el
+  presupuesto ya no se puede editar. Para cambiar los importes, ajusta la factura desde
+  Facturación (editar precio o aplicar descuento) o duplica el presupuesto…"); si está libre,
+  `$transaction` = `replaceQuoteContent` + `syncDraftInvoiceFromQuote`; audit log del presupuesto
+  y de la factura (total antes/después); devuelve `invoice` sincronizada.
+- `quotes-tab.tsx:106-110,528` y `patient-detail-client.tsx:3211-3219`: la ficha reemplaza (o
+  inserta) la factura devuelta, así Facturación pinta el total nuevo sin recargar. El editor de
+  presupuestos ya pintaba `out.error` en rojo: el 409 se lee tal cual.
+
+### FIX 5 — SUB-02: la clínica ya no puede pagar dos veces
+
+- `src/app/api/billing/checkout/route.ts:202-208`: `success_url` de tarjeta →
+  `${baseUrl}/dashboard/suspended/success?session_id={CHECKOUT_SESSION_ID}` (SPEI/OXXO siguen en
+  `/dashboard/suspended?pending=`; son asíncronos y ya estaban bien).
+- `src/lib/plan-status.ts:84-91`: `isAllowedWhileSuspended` acepta `/dashboard/suspended/*`
+  (`startsWith`, como ya hacía con `/dashboard/soporte/`). Cubre el redirect del layout y el
+  guard de cliente `ExpiredPlanModal`, que comparten la función.
+- `src/app/dashboard/suspended/success/page.tsx` + `confirming-poll.tsx` (nuevo): la pantalla
+  lee `subscriptionStatus`/`trialEndsAt` de la BD en cada render (force-dynamic); mientras el
+  webhook no llegue muestra "Estamos confirmando tu pago" y `<ConfirmingPoll/>` hace
+  `router.refresh()` cada 3 s hasta 20 veces (luego queda el botón manual). En cuanto
+  `checkout.session.completed` activa la clínica, la misma página pasa sola a "¡Pago confirmado!"
+  y el botón "Ir al dashboard" es un `<a>` duro. Nunca se afirma "activo" sin comprobarlo y en
+  ningún punto se vuelve a ofrecer "elige tu plan".
+- El candado antidoble del endpoint (`checkout:119`, exige `stripeSubscriptionId`) y el webhook
+  no cambian: el usuario ya no vuelve a la pantalla que le pedía pagar.
+
+### Verificación local
+
+- `npx tsc --noEmit`: exit 0.
+- `npm run test:invoice-due-date`: 8/8 · `npm run test:quote-invoice`: 6/6 (scripts nuevos en
+  package.json). Refutación: el test de vencimiento prueba el camino inverso (vence el 22 → NO
+  vencida el 22, SÍ el 23; sin `dueDate` nunca; `status: "OVERDUE"` sin fecha tampoco) y el de
+  presupuestos prueba tanto el $10,000 → $18,000 como los tres bloqueos (confirmada, con pagos,
+  borrador con un pago colado).
+- `npm run build` COMPLETO a un log leído entero: **exit 0**, 352/352 páginas y tabla de rutas completa (2 989 líneas de log; /dashboard/suspended/success y /dashboard/caja presentes). Solo lo
+  preexistente: `prisma:error … DATABASE_URL` en la generación estática, warnings de Tailwind,
+  `file-type` y el aviso de edge runtime de `/og/[slug]`.
+- Encoding: 0 mojibake, sin BOM, JSON de los dos diccionarios válido.
+
+### Lo que quedó fuera (followups)
+
+- **`expectedCash` con reembolso en efectivo** (`caja.ts:378` y `/api/caja/close`:50): un
+  reembolso pagado del cajón no se descuenta del efectivo esperado, así que el arqueo sale con
+  faltante y se le cobra al cajero. No se arregla bien hoy: el Payment de refund no guarda con qué
+  método salió el dinero. Requiere decisión de producto y probablemente una columna nueva.
+- **Paginación de `/api/invoices` sí entró**, pero la API no filtra por estado: con texto en el
+  buscador, "Vencidas"/"Pagadas" se aplican sobre la página de 20 recibida. Añadir `status=` al
+  GET es el siguiente paso natural si molesta.
+- **Alerta "facturas vencidas" del home admin** (`/api/dashboard/home/admin`:268): `dueDate <
+  now` en vez del inicio del día y no excluye DRAFT. Es superficie de referencia del enunciado, no
+  se tocó; con `dueDate` a las 00:00 locales, ahí una factura "vence hoy" aparece desde la
+  medianoche y en las otras 4 desde mañana.
+- **Reportes** sigue armando los 6 meses con la hora del servidor (UTC), no con la zona de la
+  clínica; solo se cambió el criterio de la suma, no la ventana.
+- **Caja y Finanzas** siguen anclando "hoy" al UTC-6 fijo (`startOfTodayMx`); el KPI nuevo de
+  Facturas y el POST usan la zona real de la clínica. Coinciden para America/Mexico_City.
+- El detalle de la factura (`invoice-detail-modal`) no muestra ni edita "Vence el": solo se pone
+  al crear.
+
+### Checklist de QA en prod (las tres aserciones numéricas + las funcionales)
+
+1. **Reportes (FIN-01)**: la gráfica de ingresos debe mostrar **$3,500 MENOS en abril-2026 y
+   $500 MENOS en julio-2026** que antes del deploy. Ni más ni menos — salvo que exista algún pago
+   sobre una factura CANCELLED (query 5 de `sql/ola-dinero-medicion.sql`; esperado: 0 filas).
+   La query 4 da "antes/después/reembolsos" por mes para cotejar.
+2. **Facturas (FIN-04)**: entrar a la clínica `cmn6soeaw0000t17xgljxc2iq` (159 facturas) →
+   Caja → pestaña Facturas. **Los 3 KPIs deben CAMBIAR** respecto a antes (se calculaban sobre las
+   100 más recientes) y el subtítulo decir "159 facturas". Buscar un folio de las primeras 59 →
+   aparece con "N facturas encontradas en toda la clínica". La query 6 del SQL da los dos cálculos.
+3. **Vencido (FIN-03)**: **SEGUIRÁ en $0.00 y eso es CORRECTO**: ninguna de las 170 facturas tiene
+   fecha de vencimiento (query 2: 0 de 170) y no hay backfill. Para probarlo: Nueva factura con
+   "Vence el" = ayer → la píldora de la fila dice "Vencido", aparece en el filtro "Vencidas", en el
+   KPI, en "Vencido" de la pestaña Caja y en Finanzas → Saldos; con "Vence el" = hoy NO aparece
+   hasta mañana.
+4. **Presupuestos (FIN-05)**: crear presupuesto de $10,000 (nace con factura borrador) → editarlo a
+   $18,000 → la factura de Facturación dice $18,000 sin recargar. Confirmar esa factura (o
+   registrarle un pago) → volver a editar el presupuesto → mensaje rojo "La factura F-… ya está
+   confirmada / ya tiene pagos…", y ni el presupuesto ni la factura cambian.
+5. **Stripe (SUB-02)**: con una clínica vencida, pagar con tarjeta de prueba → Stripe regresa a
+   `/dashboard/suspended/success?session_id=…` → "Estamos confirmando tu pago" → en segundos pasa
+   solo a "¡Pago confirmado!" → "Ir al dashboard" entra al panel. En ningún momento reaparece
+   "elige tu plan". Query 8 del SQL: clínicas con más de un checkout creado (rastro histórico del
+   doble pago).
+6. **Corte de Caja con un reembolso (SUB-04)**: abrir caja, cobrar $1,000, reembolsar $300 →
+   "Ingresos del turno" $1,000 (no $1,300), tarjeta "Reembolsos −$300", la fila del reembolso en
+   rojo con "Reembolso", el CSV con −300 y el impreso con la línea de reembolsos.
+
+### Archivos
+
+`src/lib/caja.ts` · `src/lib/invoices/due-date.ts` (NUEVO) · `src/lib/invoices/__tests__/due-date.test.ts` (NUEVO) · `src/lib/quotes/invoice-from-quote-core.ts` (NUEVO) · `src/lib/quotes/__tests__/invoice-from-quote-core.test.ts` (NUEVO) · `src/lib/quotes/create-invoice-from-quote.ts` · `src/lib/quotes/service.ts` · `src/lib/plan-status.ts` · `src/app/api/finanzas/route.ts` · `src/app/api/invoices/route.ts` · `src/app/api/quotes/[id]/route.ts` · `src/app/api/billing/checkout/route.ts` · `src/app/dashboard/reports/page.tsx` · `src/app/dashboard/caja/page.tsx` · `src/app/dashboard/caja/caja-client.tsx` · `src/app/dashboard/billing/billing-client.tsx` · `src/app/dashboard/patients/[id]/patient-detail-client.tsx` · `src/app/dashboard/suspended/success/page.tsx` · `src/app/dashboard/suspended/success/confirming-poll.tsx` (NUEVO) · `src/components/billing/invoice-editor-modal.tsx` · `src/components/quotes/quotes-tab.tsx` · `src/i18n/dictionaries/{es,en}.json` · `sql/ola-dinero-medicion.sql` (NUEVO, solo lectura) · `package.json`
