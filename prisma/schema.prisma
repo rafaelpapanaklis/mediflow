@@ -8508,6 +8508,14 @@ model Barbershop {
   parentId String?
   isActive Boolean @default(true)
 
+  // Multisucursal (complemento B): branchName = nombre corto de la sede
+  // ("Centro", "Norte"); isMainBranch = denormalizado de parentId (matriz
+  // true, sucursal false — lo escribe quien crea la sede). El ACCESO de un
+  // usuario a varias sedes vive en BarberUserBranchAccess y se resuelve
+  // SOLO con getAccessibleBranchIds() (src/lib/barber-auth.ts).
+  branchName   String?
+  isMainBranch Boolean @default(true)
+
   // WhatsApp — soporta los DOS modelos de envío (ver cabecera del bloque).
   // whatsappToken se guardará CIFRADO cuando la ola de WhatsApp lo implemente.
   whatsappSenderMode  BarberWhatsappSender @default(PLATFORM)
@@ -8537,6 +8545,15 @@ model Barbershop {
   cashSessions      BarberCashSession[]
   commissionEntries BarberCommissionEntry[]
   messages          BarberMessage[]
+  schedules         BarberSchedule[]
+  timeOff           BarberTimeOff[]
+  visitPhotos       BarberVisitPhoto[]
+  clientAuthTokens  BarberClientAuthToken[]
+  supportTickets    BarberSupportTicket[]
+  supportMessages   BarberSupportMessage[]
+  landingConfig     BarberLandingConfig?
+  stockMovements    BarberStockMovement[]
+  branchAccess      BarberUserBranchAccess[]
 
   @@index([parentId])
   @@map("barber_shops")
@@ -8568,6 +8585,13 @@ model BarberUser {
   cashSessionsOpened BarberCashSession[] @relation("BarberCashOpenedBy")
   cashSessionsClosed BarberCashSession[] @relation("BarberCashClosedBy")
 
+  timeOffCreated        BarberTimeOff[]          @relation("BarberTimeOffCreatedBy")
+  visitPhotosUploaded   BarberVisitPhoto[]       @relation("BarberVisitPhotoUploadedBy")
+  supportTicketsCreated BarberSupportTicket[]    @relation("BarberSupportTicketCreatedBy")
+  landingConfigsUpdated BarberLandingConfig[]    @relation("BarberLandingConfigUpdatedBy")
+  stockMovements        BarberStockMovement[]    @relation("BarberStockMovementUser")
+  branchAccess          BarberUserBranchAccess[]
+
   @@unique([supabaseId, barbershopId])
   @@index([supabaseId])
   @@index([barbershopId])
@@ -8597,6 +8621,8 @@ model Barber {
   walkIns           BarberWalkIn[]
   sales             BarberSale[]
   commissionEntries BarberCommissionEntry[]
+  schedules         BarberSchedule[]
+  timeOff           BarberTimeOff[]
 
   @@index([barbershopId, isActive])
   @@map("barber_barbers")
@@ -8619,6 +8645,14 @@ model BarberClient {
   totalVisits  Int       @default(0)
   lastVisitAt  DateTime?
   blockedAt    DateTime?
+
+  // Portal del cliente (complemento B): entra con su teléfono + código de un
+  // solo uso (BarberClientAuthToken) — SIN contraseña. supabaseId es opcional
+  // y solo se llena si algún flujo liga la sesión a Supabase.
+  portalEnabled     Boolean   @default(false)
+  lastPortalLoginAt DateTime?
+  supabaseId        String?   @unique
+
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
 
@@ -8627,8 +8661,13 @@ model BarberClient {
   memberships  BarberClientMembership[]
   sales        BarberSale[]
   messages     BarberMessage[]
+  visitPhotos  BarberVisitPhoto[]
+  authTokens   BarberClientAuthToken[]
 
-  @@index([barbershopId, phone])
+  // ÚNICO (antes solo índice): dos reservas simultáneas del mismo teléfono
+  // ya NO crean clientes duplicados (phone es NOT NULL). El alta hace
+  // upsert / atrapa P2002 sobre (barbershopId, phone).
+  @@unique([barbershopId, phone])
   @@index([barbershopId, name])
   @@map("barber_clients")
 }
@@ -8683,6 +8722,7 @@ model BarberAppointment {
   sales             BarberSale[]
   commissionEntries BarberCommissionEntry[]
   messages          BarberMessage[]
+  visitPhotos       BarberVisitPhoto[]
 
   @@index([barbershopId, startAt])
   @@index([barberId, startAt])
@@ -8808,6 +8848,7 @@ model BarberSale {
   soldBy            BarberUser              @relation("BarberSaleSoldBy", fields: [soldByUserId], references: [id], onDelete: NoAction)
   items             BarberSaleItem[]
   commissionEntries BarberCommissionEntry[]
+  stockMovements    BarberStockMovement[]
 
   @@index([barbershopId, createdAt])
   @@index([barberId, createdAt])
@@ -8843,12 +8884,17 @@ model BarberProduct {
   price        Decimal  @db.Decimal(10, 2)
   cost         Decimal? @db.Decimal(10, 2)
   stock        Int      @default(0)
+  /// Umbral de alerta de stock bajo (null = sin alerta).
+  minStock     Int?
+  /// Unidad de venta/medida: "pieza", "ml", "g"… (texto libre).
+  unit         String?
   isActive     Boolean  @default(true)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  barbershop Barbershop       @relation(fields: [barbershopId], references: [id], onDelete: Cascade)
-  saleItems  BarberSaleItem[]
+  barbershop     Barbershop            @relation(fields: [barbershopId], references: [id], onDelete: Cascade)
+  saleItems      BarberSaleItem[]
+  stockMovements BarberStockMovement[]
 
   @@index([barbershopId, isActive])
   @@map("barber_products")
@@ -8954,4 +9000,256 @@ model BarberPlanConfig {
   updatedAt            DateTime @updatedAt
 
   @@map("barber_plan_configs")
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// BARBER — COMPLEMENTO B: horarios y bloqueos, fotos del historial de
+// cortes, portal del cliente (login por teléfono + código), tickets de
+// soporte, configuración de la mini-web, bitácora de inventario y
+// multisucursal. SQL idempotente espejo: sql/barber_complemento.sql
+// ═══════════════════════════════════════════════════════════════════════
+
+enum BarberTimeOffType {
+  BREAK
+  VACATION
+  HOLIDAY
+  OTHER
+}
+
+enum BarberPhotoKind {
+  BEFORE
+  AFTER
+  REFERENCE
+}
+
+enum BarberTicketStatus {
+  OPEN
+  IN_PROGRESS
+  WAITING_REPLY
+  CLOSED
+}
+
+enum BarberTicketPriority {
+  LOW
+  NORMAL
+  HIGH
+}
+
+// SHOP = alguien de la barbería; ADMIN = soporte DaleControl.
+enum BarberTicketAuthor {
+  SHOP
+  ADMIN
+}
+
+enum BarberStockMovementType {
+  IN
+  OUT
+  ADJUST
+  SALE
+  RETURN
+}
+
+/// Horario recurrente de un barbero. dayOfWeek 0-6 con 0 = domingo (criterio
+/// JS getDay()). startMinute/endMinute = minutos desde medianoche en la zona
+/// de la barbería (Barbershop.timezone). Varias filas por día = turno partido
+/// (mañana y tarde son DOS filas). endMinute > startMinute — un turno que
+/// cruza medianoche se parte en dos filas.
+model BarberSchedule {
+  id           String   @id @default(cuid())
+  barbershopId String
+  barberId     String
+  dayOfWeek    Int
+  startMinute  Int
+  endMinute    Int
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  barbershop Barbershop @relation(fields: [barbershopId], references: [id], onDelete: Cascade)
+  barber     Barber     @relation(fields: [barberId], references: [id], onDelete: Cascade)
+
+  @@index([barbershopId, barberId, dayOfWeek])
+  @@map("barber_schedules")
+}
+
+/// Bloqueo puntual de agenda. barberId null = TODA la barbería cerrada (p.ej.
+/// día festivo). Ojo onDelete de barberId: Cascade A PROPÓSITO — un SetNull
+/// convertiría el bloqueo personal de un barbero borrado en "barbería
+/// cerrada" (cambio de semántica silencioso).
+model BarberTimeOff {
+  id              String            @id @default(cuid())
+  barbershopId    String
+  barberId        String?
+  startAt         DateTime
+  endAt           DateTime
+  reason          String?
+  type            BarberTimeOffType @default(OTHER)
+  createdByUserId String
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  barbershop Barbershop @relation(fields: [barbershopId], references: [id], onDelete: Cascade)
+  barber     Barber?    @relation(fields: [barberId], references: [id], onDelete: Cascade)
+  createdBy  BarberUser @relation("BarberTimeOffCreatedBy", fields: [createdByUserId], references: [id], onDelete: NoAction)
+
+  @@index([barbershopId, startAt, endAt])
+  @@map("barber_time_off")
+}
+
+/// Foto del historial de cortes (varias por visita; BarberClient.photoUrl es
+/// solo LA foto de perfil). visibleToClient: el portal del cliente muestra
+/// ÚNICAMENTE las marcadas true (default false — nada se publica solo).
+model BarberVisitPhoto {
+  id               String          @id @default(cuid())
+  barbershopId     String
+  clientId         String
+  appointmentId    String?
+  url              String
+  kind             BarberPhotoKind
+  visibleToClient  Boolean         @default(false)
+  uploadedByUserId String
+  createdAt        DateTime        @default(now())
+
+  barbershop  Barbershop         @relation(fields: [barbershopId], references: [id], onDelete: Cascade)
+  client      BarberClient       @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  appointment BarberAppointment? @relation(fields: [appointmentId], references: [id], onDelete: SetNull)
+  uploadedBy  BarberUser         @relation("BarberVisitPhotoUploadedBy", fields: [uploadedByUserId], references: [id], onDelete: NoAction)
+
+  @@index([barbershopId, clientId, createdAt])
+  @@index([appointmentId])
+  @@map("barber_visit_photos")
+}
+
+/// Código de un solo uso del portal del cliente (login por teléfono, SIN
+/// contraseña). codeHash = SOLO el hash — el código en claro JAMÁS se guarda
+/// ni se loguea. attempts = intentos fallidos contra ESTE código (el tope lo
+/// define la ola del portal). usedAt != null = quemado.
+model BarberClientAuthToken {
+  id           String    @id @default(cuid())
+  clientId     String
+  barbershopId String
+  codeHash     String
+  expiresAt    DateTime
+  usedAt       DateTime?
+  attempts     Int       @default(0)
+  createdAt    DateTime  @default(now())
+
+  client     BarberClient @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  barbershop Barbershop   @relation(fields: [barbershopId], references: [id], onDelete: Cascade)
+
+  @@index([clientId, expiresAt])
+  @@index([barbershopId])
+  @@map("barber_client_auth_tokens")
+}
+
+/// Ticket de soporte barbería → DaleControl (espejo del SupportTicket dental).
+/// category: BUG | DUDA | FACTURACION | SUGERENCIA (String como el dental;
+/// catálogo en BARBER_TICKET_CATEGORIES de types.ts). lastMessageAt lo
+/// mantiene el service en cada mensaje.
+model BarberSupportTicket {
+  id              String               @id @default(cuid())
+  barbershopId    String
+  createdByUserId String
+  subject         String
+  category        String               @default("DUDA")
+  status          BarberTicketStatus   @default(OPEN)
+  priority        BarberTicketPriority @default(NORMAL)
+  lastMessageAt   DateTime             @default(now())
+  closedAt        DateTime?
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+
+  barbershop Barbershop             @relation(fields: [barbershopId], references: [id], onDelete: Cascade)
+  createdBy  BarberUser             @relation("BarberSupportTicketCreatedBy", fields: [createdByUserId], references: [id], onDelete: NoAction)
+  messages   BarberSupportMessage[]
+
+  @@index([barbershopId, status])
+  @@index([status, updatedAt])
+  @@map("barber_support_tickets")
+}
+
+/// Mensaje de un ticket. authorType SHOP → authorUserId = barber_users.id;
+/// ADMIN → authorUserId = id del admin DaleControl (sistema dental). Por eso
+/// authorUserId NO lleva FK (mismo criterio que SupportMessage.authorId del
+/// dental). attachments: BarberSupportAttachment[] = [{ path, name, size,
+/// type }] en el bucket BARBER_FILES_BUCKET.
+model BarberSupportMessage {
+  id           String             @id @default(cuid())
+  ticketId     String
+  barbershopId String
+  authorType   BarberTicketAuthor
+  authorUserId String?
+  body         String             @db.Text
+  attachments  Json               @default("[]")
+  createdAt    DateTime           @default(now())
+
+  ticket     BarberSupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  barbershop Barbershop          @relation(fields: [barbershopId], references: [id], onDelete: Cascade)
+
+  @@index([ticketId, createdAt])
+  @@map("barber_support_messages")
+}
+
+/// Configuración de la mini-web pública (/b/[slug]). version = BLOQUEO
+/// OPTIMISTA: el guardado manda la version que leyó y el server rechaza con
+/// 409 si ya no coincide — exactamente lo que evita el "guardar pisado" que
+/// sufrió el editor dental. template la define la ola de mi-web.
+model BarberLandingConfig {
+  id              String    @id @default(cuid())
+  barbershopId    String    @unique
+  template        String
+  config          Json      @default("{}")
+  version         Int       @default(0)
+  publishedAt     DateTime?
+  updatedByUserId String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  barbershop Barbershop  @relation(fields: [barbershopId], references: [id], onDelete: Cascade)
+  updatedBy  BarberUser? @relation("BarberLandingConfigUpdatedBy", fields: [updatedByUserId], references: [id], onDelete: SetNull)
+
+  @@map("barber_landing_configs")
+}
+
+/// Bitácora de inventario — TODO cambio de BarberProduct.stock deja fila aquí.
+/// CONVENCIÓN DE SIGNO: qty es SIGNADO — positivo suma stock (IN, RETURN,
+/// ADJUST hacia arriba), negativo resta (OUT, SALE, ADJUST hacia abajo).
+/// Invariante: stock actual = stock inicial + Σ qty de sus movimientos.
+/// productId es NoAction: un producto con bitácora NO se borra (retirarlo =
+/// isActive false), mismo criterio que barberId en comisiones.
+model BarberStockMovement {
+  id           String                  @id @default(cuid())
+  productId    String
+  barbershopId String
+  type         BarberStockMovementType
+  qty          Int
+  reason       String?
+  saleId       String?
+  userId       String
+  createdAt    DateTime                @default(now())
+
+  product    BarberProduct @relation(fields: [productId], references: [id], onDelete: NoAction)
+  barbershop Barbershop    @relation(fields: [barbershopId], references: [id], onDelete: Cascade)
+  sale       BarberSale?   @relation(fields: [saleId], references: [id], onDelete: SetNull)
+  user       BarberUser    @relation("BarberStockMovementUser", fields: [userId], references: [id], onDelete: NoAction)
+
+  @@index([barbershopId, productId, createdAt])
+  @@map("barber_stock_movements")
+}
+
+/// Acceso de un BarberUser a OTRA sede de su cadena (la propia la da su fila
+/// BarberUser). Se consume EXCLUSIVAMENTE vía getAccessibleBranchIds()
+/// (src/lib/barber-auth.ts) — ninguna terminal inventa su filtro de sucursal.
+model BarberUserBranchAccess {
+  id           String   @id @default(cuid())
+  userId       String
+  barbershopId String
+  createdAt    DateTime @default(now())
+
+  user       BarberUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+  barbershop Barbershop @relation(fields: [barbershopId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, barbershopId])
+  @@index([barbershopId])
+  @@map("barber_user_branch_access")
 }

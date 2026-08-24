@@ -31,9 +31,13 @@
 //   /barber/whatsapp       → inbox / plantillas      (ola WhatsApp)
 //   /barber/suscripcion    → plan y pago DaleControl (ola Stripe)
 //   /barber/configuracion  → datos de la barbería    (T5)
+//   /barber/soporte        → tickets a DaleControl   (ola soporte)
+//   /barber/sucursales     → sedes y accesos         (ola multisucursal)
 // Público (SIN sesión):
 //   /b/[slug]              → mini-web pública de la barbería   (T8)
 //   /b/[slug]/reservar     → flujo de reserva pública          (T8)
+//   /b/[slug]/portal       → portal del cliente final (teléfono + código
+//                            de un solo uso; ola portal)
 // APIs (prefijo /api/barber/*; multi-tenant desde sesión):
 //   POST /api/barber/auth/register   → alta barbería + OWNER (Ola 0 ✓)
 //   POST /api/barber/auth/logout     → signOut                (Ola 0 ✓)
@@ -62,6 +66,14 @@ export type BarberClientMembershipStatus = "ACTIVE" | "PAUSED" | "EXPIRED" | "CA
 export type BarberPaymentMethod = "CASH" | "CARD" | "SPEI" | "STRIPE";
 export type BarberMessageDirection = "INBOUND" | "OUTBOUND";
 export type BarberMessageStatus = "PENDING" | "SENT" | "DELIVERED" | "READ" | "FAILED";
+// Complemento B (horarios, fotos, portal, soporte, inventario):
+export type BarberTimeOffType = "BREAK" | "VACATION" | "HOLIDAY" | "OTHER";
+export type BarberPhotoKind = "BEFORE" | "AFTER" | "REFERENCE";
+export type BarberTicketStatus = "OPEN" | "IN_PROGRESS" | "WAITING_REPLY" | "CLOSED";
+export type BarberTicketPriority = "LOW" | "NORMAL" | "HIGH";
+/** SHOP = alguien de la barbería; ADMIN = soporte DaleControl. */
+export type BarberTicketAuthor = "SHOP" | "ADMIN";
+export type BarberStockMovementType = "IN" | "OUT" | "ADJUST" | "SALE" | "RETURN";
 
 // ── Terminología del producto. La UI se escribe con estas palabras. ──
 export const BARBER_TERMS = {
@@ -219,6 +231,53 @@ export const BARBER_MESSAGE_STATUS_LABELS: Record<BarberMessageStatus, string> =
   FAILED: "Falló",
 };
 
+export const BARBER_TIME_OFF_TYPE_LABELS: Record<BarberTimeOffType, string> = {
+  BREAK: "Descanso",
+  VACATION: "Vacaciones",
+  HOLIDAY: "Día festivo",
+  OTHER: "Otro",
+};
+
+export const BARBER_PHOTO_KIND_LABELS: Record<BarberPhotoKind, string> = {
+  BEFORE: "Antes",
+  AFTER: "Después",
+  REFERENCE: "Referencia",
+};
+
+export const BARBER_TICKET_STATUS_UI: Record<
+  BarberTicketStatus,
+  { label: string; tone: "info" | "brand" | "warning" | "success" | "danger" | "neutral" }
+> = {
+  OPEN: { label: "Abierto", tone: "info" },
+  IN_PROGRESS: { label: "En curso", tone: "brand" },
+  WAITING_REPLY: { label: "Esperando respuesta", tone: "warning" },
+  CLOSED: { label: "Cerrado", tone: "neutral" },
+};
+
+export const BARBER_TICKET_PRIORITY_LABELS: Record<BarberTicketPriority, string> = {
+  LOW: "Baja",
+  NORMAL: "Normal",
+  HIGH: "Alta",
+};
+
+/** Catálogo canónico de categorías de ticket (String en BD, como el dental). */
+export const BARBER_TICKET_CATEGORIES = ["BUG", "DUDA", "FACTURACION", "SUGERENCIA"] as const;
+export type BarberTicketCategory = (typeof BARBER_TICKET_CATEGORIES)[number];
+export const BARBER_TICKET_CATEGORY_LABELS: Record<BarberTicketCategory, string> = {
+  BUG: "Algo falla",
+  DUDA: "Tengo una duda",
+  FACTURACION: "Facturación y pagos",
+  SUGERENCIA: "Sugerencia",
+};
+
+export const BARBER_STOCK_MOVEMENT_TYPE_LABELS: Record<BarberStockMovementType, string> = {
+  IN: "Entrada",
+  OUT: "Salida",
+  ADJUST: "Ajuste",
+  SALE: "Venta",
+  RETURN: "Devolución",
+};
+
 // ── Catálogo SEMILLA de servicios (se insertan al registrar la barbería). ──
 // price = precio SUGERIDO inicial (MXN); la barbería lo edita a su gusto.
 // NO es un precio de plan de DaleControl (esos viven en barber_plan_configs).
@@ -312,6 +371,10 @@ export interface BarbershopDTO {
   plan: BarberPlanId;
   subscriptionStatus: string;
   isActive: boolean;
+  // Multisucursal (complemento B):
+  parentId: string | null;
+  branchName: string | null;
+  isMainBranch: boolean;
 }
 
 export interface BarberDTO {
@@ -340,6 +403,9 @@ export interface BarberClientDTO {
   totalVisits: number;
   lastVisitAt: string | null;
   blockedAt: string | null;
+  // Portal del cliente (complemento B):
+  portalEnabled: boolean;
+  lastPortalLoginAt: string | null;
 }
 
 export interface BarberServiceDTO {
@@ -443,6 +509,10 @@ export interface BarberProductDTO {
   price: number;
   cost: number | null;
   stock: number;
+  /** Umbral de alerta de stock bajo (null = sin alerta). */
+  minStock: number | null;
+  /** Unidad de venta/medida: "pieza", "ml", "g"… (texto libre). */
+  unit: string | null;
   isActive: boolean;
 }
 
@@ -482,4 +552,117 @@ export interface BarberMessageDTO {
   clientId: string | null;
   appointmentId: string | null;
   createdAt: string;
+}
+
+// ── DTOs del complemento B (horarios, fotos, portal, soporte, landing,
+//    inventario, sucursales) ────────────────────────────────────────────
+
+export interface BarberScheduleDTO {
+  id: string;
+  barberId: string;
+  /** 0-6 con 0 = domingo (criterio JS getDay()). */
+  dayOfWeek: number;
+  /** Minutos desde medianoche en la zona de la barbería. */
+  startMinute: number;
+  endMinute: number;
+  isActive: boolean;
+}
+
+export interface BarberTimeOffDTO {
+  id: string;
+  /** null = TODA la barbería cerrada (p.ej. día festivo). */
+  barberId: string | null;
+  startAt: string;
+  endAt: string;
+  reason: string | null;
+  type: BarberTimeOffType;
+  createdByUserId: string;
+}
+
+export interface BarberVisitPhotoDTO {
+  id: string;
+  clientId: string;
+  appointmentId: string | null;
+  url: string;
+  kind: BarberPhotoKind;
+  /** El portal del cliente muestra SOLO las marcadas true. */
+  visibleToClient: boolean;
+  uploadedByUserId: string;
+  createdAt: string;
+}
+
+/**
+ * Lo que el PORTAL le muestra al cliente sobre sí mismo. El token de acceso
+ * (BarberClientAuthToken) NO tiene DTO: codeHash jamás sale del server y el
+ * código en claro jamás se guarda.
+ */
+export interface BarberPortalClientDTO {
+  clientId: string;
+  name: string;
+  phone: string;
+  portalEnabled: boolean;
+  lastPortalLoginAt: string | null;
+}
+
+/** Adjunto de soporte (espejo del dental): archivo en BARBER_FILES_BUCKET. */
+export interface BarberSupportAttachment {
+  path: string;
+  name: string;
+  size: number;
+  type: string;
+}
+
+export interface BarberSupportTicketDTO {
+  id: string;
+  subject: string;
+  /** Ver BARBER_TICKET_CATEGORIES (String en BD, como el dental). */
+  category: string;
+  status: BarberTicketStatus;
+  priority: BarberTicketPriority;
+  lastMessageAt: string;
+  closedAt: string | null;
+  createdByUserId: string;
+  createdAt: string;
+}
+
+export interface BarberSupportMessageDTO {
+  id: string;
+  ticketId: string;
+  authorType: BarberTicketAuthor;
+  /** SHOP → barber_users.id; ADMIN → id del admin DaleControl (sin FK). */
+  authorUserId: string | null;
+  body: string;
+  attachments: BarberSupportAttachment[];
+  createdAt: string;
+}
+
+export interface BarberLandingConfigDTO {
+  id: string;
+  template: string;
+  config: Record<string, unknown>;
+  /** Bloqueo optimista: se manda de vuelta al guardar; si no coincide → 409. */
+  version: number;
+  publishedAt: string | null;
+  updatedAt: string;
+}
+
+export interface BarberStockMovementDTO {
+  id: string;
+  productId: string;
+  type: BarberStockMovementType;
+  /** SIGNADO: positivo suma stock, negativo resta. stock = inicial + Σ qty. */
+  qty: number;
+  reason: string | null;
+  saleId: string | null;
+  userId: string;
+  createdAt: string;
+}
+
+/** Sede visible en el switcher multisucursal (via getAccessibleBranchIds). */
+export interface BarberBranchDTO {
+  id: string;
+  name: string;
+  branchName: string | null;
+  isMainBranch: boolean;
+  isActive: boolean;
 }

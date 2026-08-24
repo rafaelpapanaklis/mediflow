@@ -81,3 +81,40 @@ export function assertBarberPermission(
   );
   if (!ok) throw new BarberForbiddenError(key);
 }
+
+/**
+ * Sedes (barbershopIds) que el usuario puede VER — punto ÚNICO del filtro
+ * multisucursal: ninguna terminal inventa el suyo.
+ *
+ * Reglas:
+ *  · Familia = la matriz de la cadena (parentId null) + sus sucursales; si
+ *    la barbería del usuario no tiene parentId, ella es la matriz.
+ *  · OWNER ve la familia COMPLETA (no necesita filas de acceso).
+ *  · Cualquier otro rol ve su propia sede + sus filas BarberUserBranchAccess,
+ *    SIEMPRE recortadas a la familia (una fila que apunte a una cadena ajena
+ *    se ignora — defensa en profundidad).
+ *  · Siempre incluye ctx.barbershopId. Orden: matriz primero, luego
+ *    sucursales por createdAt. NO filtra isActive (eso lo decide el caller).
+ *
+ * Uso típico:
+ *   where: { barbershopId: { in: await getAccessibleBranchIds(ctx) } }
+ * La lista sale SIEMPRE de aquí, jamás del request (body/query).
+ */
+export async function getAccessibleBranchIds(ctx: BarberContext): Promise<string[]> {
+  const rootId = ctx.barbershop.parentId ?? ctx.barbershopId;
+  const family = await prisma.barbershop.findMany({
+    where: { OR: [{ id: rootId }, { parentId: rootId }] },
+    select: { id: true },
+    orderBy: { createdAt: "asc" },
+  });
+  const ordered = [rootId, ...family.map((s) => s.id).filter((id) => id !== rootId)];
+
+  if (ctx.role === "OWNER") return ordered;
+
+  const grants = await prisma.barberUserBranchAccess.findMany({
+    where: { userId: ctx.barberUserId },
+    select: { barbershopId: true },
+  });
+  const allowed = new Set<string>([ctx.barbershopId, ...grants.map((g) => g.barbershopId)]);
+  return ordered.filter((id) => allowed.has(id));
+}
