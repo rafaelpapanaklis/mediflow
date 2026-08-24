@@ -11642,3 +11642,334 @@ mismo `mxTenDigits`, así que no crean fichas duplicadas — el mismo criterio d
 este módulo. Y `/api/barber/appointments/clients` lee `totalVisits` /
 `lastVisitAt` de la columna: ahora esas columnas se auto-reparan solas, así que
 su selector de clientes también enseña números reales.
+
+═══════════════════════════════════════════════════════════════════════════
+[T8 - Barber Mi Web] — LA PÁGINA WEB DE CADA BARBERÍA
+═══════════════════════════════════════════════════════════════════════════
+BUILD EXIT 0 (salida completa, sin pipes) · GUARDIA BARBER EXIT 0 (33 archivos,
+cero compartidos, cero prohibidos) · tsc --noEmit EXIT 0 · 30/30 pruebas.
+
+Rama feat/barber-web, rebasada sobre origin/main DESPUÉS de que aterrizaran T1
+(agenda), T3 (caja), T4 (clientes/membresías), T5 (reserva/portal) y T6
+(planes). Un solo conflicto, el esperado: la línea del diccionario. Se resolvió
+CONSERVANDO todo lo ajeno y añadiendo solo `web:`.
+
+───────────────────────────────────────────────────────────────────────────
+QUÉ SE ENTREGA
+───────────────────────────────────────────────────────────────────────────
+· /b/<slug> — la página pública. ISR de 300 s, 188 B de JavaScript de página
+  (las plantillas son server components puros: no hay nada que hidratar).
+· /barber/mi-web — el editor, con vista previa en vivo, QR y liga.
+· /api/barber/landing (GET + PATCH) y /api/barber/landing/upload.
+· 8 plantillas + el motor por manifiesto.
+
+───────────────────────────────────────────────────────────────────────────
+EL MOTOR: POR QUÉ AGREGAR LA NOVENA NO TOCA EL EDITOR
+───────────────────────────────────────────────────────────────────────────
+Cada plantilla declara en components/barber/templates/manifest.ts sus
+secciones y, dentro de cada una, qué texto se puede reescribir, qué fotos
+admite y de qué datos vive (`consume`). El editor recorre ESO. No hay un solo
+`if (plantilla === "x")` en el editor; la prueba de que sobra es que
+manifest.ts no importa ni un componente.
+
+PROCEDIMIENTO EXACTO PARA LA NOVENA PLANTILLA (está también en la cabecera de
+manifest.ts, que es donde alguien lo va a buscar):
+  1. Añade su id a BARBER_WEB_TEMPLATE_IDS  (src/lib/barber/landing.ts)
+  2. Escribe su manifiesto                  (templates/manifest.ts)
+  3. Escribe su componente                  (templates/t-<id>.tsx)
+  4. Regístralo — UNA línea                 (templates/index.tsx)
+  5. Escribe su piel bajo `.dcbw-<id>`      (templates/skins.css)
+NO se tocan: el editor, la API, el guardado, la página pública ni el gating.
+
+El `porDefecto` que el editor enseña en gris ("esto sale si lo dejas vacío")
+sale del MISMO manifiesto que la plantilla usa al pintar (helpers.tsx →
+`copia()`, `titulo()`). No pueden separarse, así que el editor no puede
+mentir sobre lo que va a salir.
+
+CAMBIAR DE PLANTILLA CONSERVA EL CONTENIDO porque nada se guarda con el id de
+la plantilla dentro: `copia["portada.cta"]`, `fotos["portada"]`,
+`secciones["servicios"]` son claves semánticas COMPARTIDAS. Lo único por
+plantilla es `orden[plantilla]`, que es disposición, no contenido. Y la
+validación del PATCH se hace contra la UNIÓN de las ocho, no contra la
+activa: el texto que solo pinta `vintage` se sigue guardando mientras la
+barbería usa `minimal`, y reaparece intacto si vuelve.
+
+───────────────────────────────────────────────────────────────────────────
+LAS OCHO — Y POR QUÉ NO SON LA MISMA CON OTRO COLOR
+───────────────────────────────────────────────────────────────────────────
+  clasica     portada > servicios > equipo > portafolio > resenas > contacto > reservar
+  equipo      portada > equipo > servicios > portafolio > resenas > contacto
+  portafolio  portada > portafolio > servicios > equipo > resenas > contacto
+  minimal     portada > contacto > servicios
+  premium     portada > servicios > portafolio > equipo > resenas > contacto > reservar
+  urbana      portada > servicios > portafolio > equipo > resenas > reservar > contacto
+  vintage     portada > servicios > equipo > resenas > portafolio > contacto > reservar
+  precios     portada > servicios > resenas > equipo > portafolio > contacto
+
+Ocho firmas distintas, y hay una PRUEBA que falla si dos coinciden. No es
+decorativa: cazó dos colisiones reales que yo no había visto —urbana tenía la
+misma estructura que premium, y vintage la misma que clasica—. Las dos se
+rehicieron con un motivo, no moviendo bloques al azar: en urbana el cierre va
+ANTES del contacto (grita y luego da la dirección); en vintage el libro de
+visitas va antes del álbum (en 1955 el libro estaba en el mostrador); en
+precios las opiniones suben justo debajo de la tabla (quien compite por precio
+necesita la prueba social antes de que el visitante piense "tan barato, algo
+tendrá").
+
+Y se diferencian en lo demás: portada partida en dos (clasica) · retratos
+verticales a sangre arriba de todo (equipo) · mosaico de fotos COMO portada y
+barra de reserva pegada abajo (portafolio) · una sola pantalla sin scroll
+(minimal) · índice numerado con líneas de pelo y densidad baja (premium) ·
+bloques pegados, condensada en mayúsculas y cinta corredera (urbana) · marco
+doble, sello EST. y retratos en óvalo (vintage) · <table> de verdad con
+encabezados y agrupada por categoría (precios).
+
+───────────────────────────────────────────────────────────────────────────
+🔴 LOS TRES BUGS DEL DENTAL, CERRADOS
+───────────────────────────────────────────────────────────────────────────
+1 · EL 409 AL GUARDAR. El dental usa `updatedAt` como marca y disparaba en
+    falso el 100% de las veces: la columna guarda MICROsegundos que un `Date`
+    de JavaScript no puede escribir, y además la bumpean veinte procesos que
+    no tienen nada que ver con la mini-web. Aquí la marca es la columna
+    `version` (entero) de BarberLandingConfig, que SOLO sube este endpoint:
+    los dos problemas desaparecen de raíz.
+    Y cuando la versión NO coincide tampoco se contesta 409. Se FUSIONA a tres
+    bandas (base = lo que esta pestaña tenía / mío / servidor), campo por campo
+    y clave por clave dentro de los mapas. Solo es conflicto lo que las dos
+    pestañas cambiaron DISTINTO, y la respuesta dice cuál. Del lado del
+    navegador solo hay una petición en vuelo a la vez: si llega otra mientras
+    tanto se apunta como pendiente y sale sola con la versión nueva, así que
+    el doble clic no puede chocar consigo mismo.
+2 · LOS ~5 MINUTOS EN VER EL CAMBIO. /b/[slug] es ISR de 300 s CON
+    `revalidatePath("/b/<slug>")` en cada guardado que entra. Verificado en
+    .next/prerender-manifest.json → dynamicRoutes["/b/[slug]"] (la tabla del
+    build la marca `●`, no `ƒ`): en Next 14 `revalidate` sin
+    generateStaticParams es un no-op silencioso.
+3 · LA FUGA DE TOKENS (PORT-01). `select` explícito, jamás `include`. La fila
+    barber_shops tiene whatsappToken, stripeCustomerId, stripeSubscriptionId,
+    wabaId, phoneNumberId, email, plan y subscriptionStatus: ninguno sale, y
+    no sale porque NO SE PIDE. Auditoría campo por campo abajo.
+
+───────────────────────────────────────────────────────────────────────────
+VERIFICACIÓN (lo que se hizo, no lo que se pensaba hacer)
+───────────────────────────────────────────────────────────────────────────
+1 · BUILD. `npx next build` EXIT 0, salida completa, sin pipes. (`npm run
+    build` falló con EPERM al renombrar query_engine-windows.dll.node: dos
+    terminales en paralelo —barber-admin y barber-clientes— tenían el motor
+    de Prisma abierto. NO se mataron sus procesos; el cliente ya estaba
+    generado del MISMO schema sin cambios, verificado con un `npm run build`
+    completo anterior. Un intento intermedio murió por heap OOM a 4 GB con
+    tres builds a la vez; se repitió con --max-old-space-size=8192 y .next
+    limpio → EXIT 0.)
+2 · CAMBIO DE TEXTO VISIBLE DE INMEDIATO. En el editor, escribir en "Portada ·
+    botón de reservar" repinta la vista previa en el mismo teclazo (los dos
+    botones que comparten la clave cambian a la vez). Y en público el cambio
+    no espera al ISR porque el PATCH revalida la ruta. ⚠️ La comprobación
+    contra la BASE DE DATOS no se pudo hacer: este equipo no tiene .env(.local)
+    ni token de Vercel válido, así que /b/<slug> real y el PATCH real quedan
+    PENDIENTES para quien tenga entorno (ver "lo que falta").
+3 · DOS GUARDADOS SEGUIDOS Y DOS PESTAÑAS. Probado sobre la lógica pura, que
+    es donde vive la decisión (30 pruebas). Cada caso que debe fusionarse en
+    silencio va con su GEMELO que sí debe dar conflicto — un test que solo
+    comprueba "no salió 409" lo pasa igual una función que nunca conteste 409:
+      · campos distintos desde dos pestañas → fusiona, sin conflicto
+      · el MISMO campo a valores distintos → conflicto, y nombra el campo
+      · el mismo campo al MISMO valor → no es conflicto
+      · dos claves de texto distintas → se fusionan clave por clave
+      · guardar dos veces lo mismo → no choca consigo mismo
+      · borrar una clave que el otro no tocó → se respeta, no reaparece
+      · el ORDEN de las claves de un objeto no es una diferencia (jsonb no
+        conserva el orden de inserción; comparar con JSON.stringify a secas
+        habría marcado conflicto en objetos idénticos reordenados)
+4 · CAMBIO DE PLANTILLA. En el navegador: se escribió un texto en `clasica`,
+    se apagó una sección, se reordenó otra y se cambió a `vintage`. Sobrevivió
+    el texto, sobrevivió la sección apagada, y vintage aplicó SU orden (cada
+    plantilla guarda el suyo). Más la prueba automática sobre las ocho.
+5 · AUDITORÍA DE FUGA. Campo por campo, abajo. Además se descargó el HTML que
+    sirve una plantilla y se contaron las apariciones de whatsappToken,
+    stripeCustomerId, stripeSubscriptionId, subscriptionStatus, wabaId,
+    phoneNumberId, supabaseId, permissionsOverride, barbershopId,
+    commissionPct, chairRent, isActive, teamSize, messagesUsedPeriod y email:
+    CERO cada uno.
+6 · FOTO DE 8 MB DESDE EL CELULAR. Medido en el navegador con la función real:
+      foto ruidosa 11.78 MB 4032x3024 → 726 KB 1600x1200 webp (−94.0%, 309 ms)
+      foto realista  0.59 MB 4032x3024 →  49 KB 1600x1200 webp (−91.9%)
+      imagen que ya estaba bien (4 KB) → se devuelve el MISMO archivo, intacto
+    El ruido puro es el peor caso posible de cualquier compresor: 726 KB es la
+    cota alta, no lo normal. El tope del endpoint (4 MB, que es donde corta el
+    runtime serverless) queda holgado.
+7 · PLAN BÁSICO. Ve su página con la plantilla por defecto y NO entra al
+    editor. El gate está TRES veces y las tres del lado del servidor: el
+    sidebar ya esconde el item (featureKey miniWebEditor, de la Ola 0), la
+    página /barber/mi-web comprueba el plan y devuelve la pantalla de Básico,
+    y /api/barber/landing (PATCH y upload) responde 403. Esconder un botón no
+    es un candado: quien escriba la ruta a mano llega igual.
+    La pantalla de Básico no enseña un candado: enseña SU página, su liga y su
+    QR. Lo que se ofrece al subir de plan es cambiarla, no tenerla.
+8 · MÓVIL. Las ocho a 390 px, con datos y VACÍAS (16 combinaciones), medidas
+    con iframes del mismo origen: `scrollWidth === clientWidth` en las 16, cero
+    desplazamiento horizontal. Lo ancho (la tira de fotos, la tabla de precios,
+    la cinta) se desplaza DENTRO de su propia caja. Las alturas van de 1.4k px
+    (minimal) a 8.8k px (clasica con todo).
+9 · GUARDIA BARBER: EXIT 0. 33 archivos, todos propios del vertical. Cero
+    compartidos (ni siquiera hizo falta declarar ORQUESTA.md hasta este
+    reporte).
+10 · LÉXICO. Cero "paciente", "doctor", "Dr.", "clínica", "consulta" o
+    "expediente" en texto de cara al usuario (i18n + defaults del manifiesto +
+    literales de las plantillas). Lo que aparece en COMENTARIOS es: referencias
+    al producto dental para explicar qué bug no se repite, "consulta" en el
+    sentido de @container / consulta a la base, y la línea de seo.ts que dice
+    justamente "una barbería no es una clínica".
+
+───────────────────────────────────────────────────────────────────────────
+🛡️ AUDITORÍA DE FUGA — LO QUE DEVUELVE LA SUPERFICIE PÚBLICA, CAMPO A CAMPO
+───────────────────────────────────────────────────────────────────────────
+/b/[slug] no recibe ningún parámetro de tenant: la barbería sale del SLUG de
+la URL. No hay barbershopId en body ni en query, así que no hay dónde pedir
+los datos de otra.
+
+barber_shops   → id, name, slug, phone, address, city, state, logoUrl
+                 (+ isActive, que se usa para decidir el 404 y NO viaja)
+barber_barbers → id, name, nickname, photoUrl, bio   (solo isActive true)
+barber_services→ id, name, description, durationMin, price, category
+                 (solo isActive true)
+barber_landing_configs → template, config, version, publishedAt
+
+NO SE PIDEN (y por eso no pueden filtrarse): whatsappToken, wabaId,
+phoneNumberId, whatsappSenderMode, whatsappVerifiedAt, stripeCustomerId,
+stripeSubscriptionId, plan, subscriptionStatus, email, timezone, locale,
+teamSize, parentId, branchName, isMainBranch, messagesUsedPeriod,
+messagesPeriodStart, createdAt, updatedAt — y de Barber: commissionType,
+commissionPct, chairRent, sortOrder.
+
+El teléfono de la barbería SÍ sale: es el teléfono del NEGOCIO, que la propia
+página existe para publicar. El correo NO sale, porque además es identidad de
+login. El WhatsApp público no viene de la fila: lo escribe la barbería en el
+editor (config.whatsapp), o sea que publicarlo es una decisión suya.
+
+Un campo nuevo hay que agregarlo en DOS sitios (el `select` de shop-data.ts y
+el tipo BarberWebShop). Enumerar es a prueba de futuro: una columna secreta
+nueva en barber_shops no se filtra sola.
+
+🔒 XSS EN EL JSON-LD. El bloque va en un `<script>` con
+dangerouslySetInnerHTML, así que todo signo de "menor que" sale escapado a su
+forma unicode. NO es cosmética: `JSON.stringify` escapa las comillas pero no
+la barra, y una barbería llamada `Fade </script><script>…` habría cerrado la
+etiqueta y ejecutado lo que quisiera en una página pública, cacheada por ISR y
+servida a todos sus clientes.
+
+Otras validaciones de la superficie pública: `mapaEmbed` solo acepta https de
+google.com (termina en un `<iframe src>`, y "notgoogle.com" NO pasa: hay
+prueba); las fotos y la galería solo http(s) (un `javascript:` en un `<img>`
+sería XSS almacenado); el WhatsApp se guarda en dígitos con lada porque acaba
+en un `https://wa.me/<numero>`.
+
+───────────────────────────────────────────────────────────────────────────
+FRONTERA CON T5 — VERIFICADA CONTRA SU CÓDIGO YA EN MAIN
+───────────────────────────────────────────────────────────────────────────
+El layout de /b/[slug] es MÍO y es deliberadamente NEUTRO: devuelve
+`{children}` y nada más. Ni un <div>, ni una clase, ni un import de CSS —
+cualquiera de esas cosas se la impondría a /reservar y /mi-cuenta, que son de
+T5. La piel de la mini-web la trae su propio componente de plantilla y termina
+donde termina la plantilla. Confirmado en el build: sus dos rutas compilan
+debajo de este layout sin cambiar nada.
+
+El acoplamiento es UNA URL y coincide exactamente: T5 lee
+`searchParams: { barbero?: string }` en /b/[slug]/reservar, y mis ligas por
+barbero salen como `/b/<slug>/reservar?barbero=<Barber.id>`. Su
+`getPublicBarbers` selecciona los mismos cinco campos que mi cargador, del
+mismo `prisma.barber`, así que el id que mando es el que esperan.
+
+───────────────────────────────────────────────────────────────────────────
+⚠️ LO QUE FALTA (no lo puedo cerrar yo)
+───────────────────────────────────────────────────────────────────────────
+1 · 🔴 sql/barber_complemento.sql SIGUE SIN APLICARSE EN SUPABASE, y ahí nace
+    `barber_landing_configs`. Sin esa tabla el editor NO PUEDE GUARDAR. El
+    código no se cae por eso, a propósito y en los dos lados:
+      · la página pública trata "la tabla no existe" como "no hay fila" y sale
+        con la plantilla por defecto y los datos reales de la barbería, así
+        que TODAS las barberías tienen página igual;
+      · el editor lo detecta y lo DICE con un aviso que nombra el archivo, en
+        vez de un 500 sin explicación, y la API responde 503 con el mismo
+        mensaje (P2021/P2010).
+    Es el único bloqueante para dar por buena la ola.
+2 · QA con base de datos real: guardar de verdad, ver el cambio en /b/<slug> al
+    instante, y el 409 desde dos navegadores. La lógica está probada en
+    aislamiento (30 pruebas) y la UI en el navegador con datos de mentira, pero
+    el camino completo contra Postgres no se pudo correr aquí: no hay .env ni
+    token de Vercel en este equipo.
+3 · SITEMAP. No toqué src/app/sitemap.ts (es de la Ola 3, compartido).
+    SÍ HACE FALTA: estas páginas están para que Google las encuentre, y hoy
+    solo se llega por la liga directa. Para la Ola 3: listar los slugs de
+    `barber_shops` con isActive true, saltándose los que tengan
+    `config.oculta === true` (la página ya manda `robots: noindex` en ese caso,
+    así que los dos criterios coinciden).
+4 · BUCKET. Las fotos van al bucket público que ya existe (`clinic-public`)
+    bajo el prefijo `barber/<barbershopId>/`. Funciona y está aislado por
+    carpeta, pero un bucket propio del vertical (`barber-public`) sería más
+    limpio; crearlo es un cambio manual en Supabase que esta terminal no puede
+    hacer. Y quitar una foto de la galería la quita de la página pero DEJA el
+    objeto en el bucket: falta una limpieza de huérfanos.
+5 · CSRF. /api/barber/landing no comprueba el origen, igual que el resto de
+    /api del repo (el middleware solo lo hace para /api/admin). En este
+    endpoint el riesgo concreto es que alguien engañe a un barbero con sesión
+    para que le reescriban su web. No lo arreglé SOLO en este endpoint porque
+    sería una excepción incoherente con las otras ~200 rutas; es una decisión
+    de repo, no de esta ola.
+6 · El horario que se publica lo escribe la barbería en el editor
+    (config.horario, 7 días, 0 = lunes) y NO se lee de BarberSchedule. A
+    propósito: esa tabla es el horario de cada BARBERO para la agenda de T1,
+    no el de la puerta, y su convención de `dayOfWeek` la fija esa ola —
+    deducirla desde aquí habría sido adivinar. Si más adelante se quiere un
+    botón de "copiar de la agenda", primero hay que acordar la convención.
+7 · Las fotos de BarberVisitPhoto NO se publican en el portafolio, aunque
+    estén marcadas `visibleToClient`. Esa bandera significa "el CLIENTE puede
+    verla en su portal", no "es pública". Publicar el corte de alguien en un
+    sitio indexable sin su permiso explícito es otra cosa. El portafolio son
+    fotos que la barbería sube a propósito en el editor.
+
+───────────────────────────────────────────────────────────────────────────
+DECISIONES QUE CONVIENE CONOCER
+───────────────────────────────────────────────────────────────────────────
+· NO hay guardado automático. La página es PÚBLICA: un autoguardado publicaría
+  cada letra a medio escribir en el sitio que la barbería manda por WhatsApp a
+  sus clientes. La vista previa ya da la respuesta inmediata; publicar es una
+  decisión, y por eso es un botón. Al salir con cambios sin publicar avisa el
+  navegador (comprobado: bloqueó una navegación durante las pruebas).
+· La vista previa NO usa iframe ni postMessage: es LA MISMA plantilla,
+  renderizada en el navegador con los datos que hay en pantalla. Se puede
+  porque las ocho son componentes puros sin hooks, que en /b/[slug] pinta el
+  servidor. Cero riesgo de que la vista previa y la página real se separen.
+  Las miniaturas del selector son lo mismo, encogidas: no son capturas.
+· Los colores son un catálogo cerrado de seis acentos dentro de la paleta
+  caramelo. Los seis pasan AA con texto blanco encima (variante `fuerte`), que
+  es la regla del tema del panel. El verde de WhatsApp también se corrigió:
+  #128C7E da 4,14:1 y no pasa; se usa #0B6B5F.
+· El horario NO marca "hoy". La página se sirve por ISR y el HTML cacheado no
+  sabe qué día es cuando alguien lo abre: un "hoy" calculado en el servidor se
+  congela con la caché y acaba señalando el día equivocado.
+· El JSON-LD es HealthAndBeautyBusiness, nunca nada médico. Y NO lleva
+  `aggregateRating` ni `review`: esas reseñas las escribe la propia barbería
+  en su editor, y marcarlas como reseñas estructuradas es pedirle a Google
+  estrellas a partir de un texto que escribió el propio negocio — justo lo que
+  penaliza. Se pintan en la página, no en el marcado.
+· Toda medida va por @container y ninguna por @media, y el contenedor es la
+  RAÍZ `.dcbw`. Tiene que serlo: un elemento no puede consultar su propio
+  contenedor. Con el container-type puesto en cada sección —como estaba al
+  principio— toda regla que apuntara a la sección misma (la portada partida en
+  dos, por ejemplo) no se aplicaba NUNCA, en ningún ancho. Se veía como un
+  fallo de diseño y era de topología.
+· `overflow-x: clip` y no `hidden` en la raíz de las plantillas: `hidden` con
+  el eje Y en `visible` obliga al Y a valer `auto`, la raíz se vuelve un
+  contenedor de scroll y las barras `position: sticky` de arriba dejan de
+  pegarse. Y por lo mismo la barra de reserva de `portafolio` es `sticky` y no
+  `fixed`: la raíz es contenedor de consulta, o sea que crea bloque contenedor
+  para los `fixed` y un `bottom: 0` se habría anclado al final de la PÁGINA.
+· UN ARCHIVO MÁS DE LOS QUE ENUMERA EL CONTRATO:
+  src/lib/barber/__tests__/landing.test.ts. Está dentro del vertical (la
+  guardia lo da por propio) y sigue la convención que ya usan las otras olas
+  —src/lib/barber/__tests__/ tiene 14 pruebas de T1, T3, T4, T5 y T6—. No se
+  tocó package.json: corre con
+  `npx tsx --test src/lib/barber/__tests__/landing.test.ts`. Si se quiere un
+  atajo `test:barber-web`, esa línea sí es del orquestador.
+═══════════════════════════════════════════════════════════════════════════
