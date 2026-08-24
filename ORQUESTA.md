@@ -11973,3 +11973,344 @@ DECISIONES QUE CONVIENE CONOCER
   `npx tsx --test src/lib/barber/__tests__/landing.test.ts`. Si se quiere un
   atajo `test:barber-web`, esa línea sí es del orquestador.
 ═══════════════════════════════════════════════════════════════════════════
+
+
+## [Barber Admin] — Barberos, equipo con permisos explicados, sucursales y soporte con adjuntos ✅ (2026-08-24)
+═══════════════════════════════════════════════════════════════════════════
+COMMIT: 68521d2b (+ 3b0b6d6e, enlace de horarios) · push directo a main · BUILD EXIT 0 (output completo, sin
+pipes; "Compiled with warnings" = las de siempre de tailwind y file-type) ·
+GUARDIA BARBER exit 0 (33 propios; ORQUESTA.md declarado como única excepción
+compartida) · 29/29 pruebas de permisos y aislamiento en verde.
+
+QUÉ SE ENTREGA (4 pantallas + 14 endpoints + 3 módulos de servidor):
+  /barber/barberos    ficha del profesional (datos, foto, bio, orden, pago)
+  /barber/equipo      usuarios del panel, roles y MATRIZ DE PERMISOS
+  /barber/sucursales  sedes de la cadena, selector y vista consolidada
+  /barber/soporte     tickets a DaleControl con adjuntos comprimidos
+Servidor: src/lib/barber/{team,branches,support}.ts — los route handlers solo
+resuelven sesión, parsean y delegan; TODA validación de permiso vive ahí.
+
+───────────────────────────────────────────────────────────────────────────
+1. PERMISOS — cómo se cerró el bug que traía el dental
+───────────────────────────────────────────────────────────────────────────
+El motor NO se tocó: permissionsOverride sigue REEMPLAZANDO los defaults del
+rol (contrato de la Ola 0). Lo que cambia es CÓMO se edita, que es donde
+estaba el daño: en el dental se guardaba un delta y al darle un permiso a
+alguien se le apagaba todo lo demás.
+
+Regla nueva, en overrideFromEffective() (src/lib/barber/team.ts):
+  · La pantalla edita el conjunto EFECTIVO COMPLETO, nunca un delta.
+  · Si ese conjunto coincide EXACTAMENTE con los defaults del rol -> se
+    guarda [] (herencia pura). Así un permiso nuevo que se agregue al rol
+    mañana le llega solo, sin tocar a nadie.
+  · Si no coincide -> se guarda el conjunto ENTERO, que es justo lo que el
+    motor sabe leer. Añadir uno nunca apaga los demás.
+
+describeMemberPermissions() devuelve, clave por clave: si el ROL lo trae, si
+lo tiene AL FINAL, y el origen (heredado / añadido a mano / quitado a mano).
+La matriz pinta las tres cosas juntas y una barra fija abajo dice el
+resultado: "12 permisos en total · 1 añadido a mano respecto a Recepción", o
+"Hereda todo de Encargado. Si mañana el rol gana un permiso nuevo, lo gana
+también". Botón permanente "Volver a los permisos del rol".
+
+FRENOS DE BLOQUEO (server, 409): nadie se quita a sí mismo team.manage, nadie
+se da de baja ni se cambia el rol a sí mismo, y no se puede dejar una sede sin
+ninguna persona activa que pueda administrar el equipo. Cambiar de rol LIMPIA
+el override (si no, el override viejo mandaría sobre el rol nuevo en silencio)
+y la pantalla lo avisa antes de guardar. Solo un OWNER puede nombrar OWNER.
+
+PLAN: la matriz fina exige `advancedRoles` (Profesional) EN EL SERVIDOR. En
+planes de abajo mandan los roles de fábrica — pero LIMPIAR excepciones
+(volver al rol) se permite en cualquier plan: es la válvula de escape de quien
+bajó de plan con overrides guardados.
+
+───────────────────────────────────────────────────────────────────────────
+2. EL GATE ES DEL SERVIDOR
+───────────────────────────────────────────────────────────────────────────
+Los 14 endpoints delegan en los tres módulos y esos módulos llaman
+assertBarberPermission() ANTES de tocar la BD (comprobado, ver verificación).
+Esconder una pestaña no es un permiso: la barra de administración solo pinta
+lo que el rol ya trae resuelto desde el servidor, y llegar por URL a un área
+ajena devuelve una tarjeta de "sin permiso" mientras la API responde 403.
+
+Multi-tenant: ninguna consulta usa un barbershopId del request. Sale siempre
+de getBarberContext() y, cuando hay cadena, de getAccessibleBranchIds(ctx), y
+se aplica como `{ barbershopId: { in: <lista de la sesión> } }` — con lista
+vacía no devuelve nada, en vez de borrar el filtro (regla dura de la Ola 0).
+Pedir por id un recurso de otra barbería responde 404, no 403: no se confirma
+que exista.
+
+LISTA BLANCA DE SALIDA: BarberUser sale por un `select` explícito
+(MEMBER_SELECT en team.ts). supabaseId JAMÁS cruza al navegador. Hay una
+prueba que falla si aparece un campo cuyo nombre huela a credencial.
+
+───────────────────────────────────────────────────────────────────────────
+3. SUCURSALES — y por qué cambiar de sede RECARGA la página entera
+───────────────────────────────────────────────────────────────────────────
+Selector de sede en la barra de administración (todas las sedes que
+getAccessibleBranchIds ya autoriza) + opción "Toda la cadena" (consolidado)
+cuando alcanza más de una. La elección vive en la cookie httpOnly `dcb_branch`
+y se RE-VALIDA en cada lectura con resolveBranchScope(): una cookie
+manipulada, o una sede a la que le retiraron el acceso, se degrada sola a su
+sede propia — no revienta ni abre nada.
+
+En el dental, cambiar de clínica dejaba datos viejos en pantalla. Aquí
+switchBranchAndReload() (components/barber/team/admin-nav.tsx) hace:
+POST a la cookie -> borra todo lo que el vertical haya dejado en session/
+localStorage bajo el prefijo "dcb:" -> `window.location.assign(pathname)`.
+Navegación DURA, no router.refresh(): refrescar conserva el estado de los
+componentes cliente. Y va al pathname SIN query, para no arrastrar tampoco un
+id de la sede anterior (un ticket abierto, por ejemplo).
+
+LÍMITE DEL PLAN, en el servidor (getBranchLimit + createBranch): exige la
+feature `multiBranch` y respeta maxBranches contando la MATRIZ como una sede
+(mismo criterio que la ola de billing). El plan se lee de la MATRIZ, no de la
+sede donde estás parado: la suscripción es de la cadena. Una sede nueva nace
+colgando de la matriz (parentId = raíz, isMainBranch false) y espeja `plan` y
+`subscriptionStatus` de la matriz, SIN copiar los ids de Stripe.
+No hay DELETE de sedes: detrás hay citas, ventas y caja. Cerrar = isActive
+false, y la matriz no se cierra desde aquí (409).
+
+Repartir acceso (BarberUserBranchAccess) exige `branches.manage` (así lo fija
+el contrato de la Ola 0-B) + plan con multiBranch, y solo alcanza las sedes
+que el que reparte ya alcanza. El OWNER no necesita filas: getAccessibleBranchIds
+le da la cadena completa.
+
+───────────────────────────────────────────────────────────────────────────
+4. SOPORTE — y el endpoint que la Ola 2 tiene que construir
+───────────────────────────────────────────────────────────────────────────
+Sin gate de plan (soporte está en TODOS los planes); sí por permiso:
+support.view para leer, support.manage para abrir y responder.
+
+Hilo con estados OPEN / IN_PROGRESS / WAITING_REPLY / CLOSED. La barbería solo
+mueve dos: cierra su propio ticket y lo reabre. Los intermedios los mueve
+DaleControl. Responder desde la barbería devuelve el ticket a OPEN aunque
+estuviera cerrado — nadie tiene que acordarse de reabrirlo. "Respuesta nueva"
+NO necesitó columna: se deduce del autor del último mensaje, y el contador de
+la pestaña usa status = WAITING_REPLY.
+
+ADJUNTOS: la imagen se comprime EN EL NAVEGADOR con prepararImagen
+(@/lib/image-client, reutilizado tal cual — no se tocó) y se sube a
+POST /api/barber/support/attachments, que valida tipo por MAGIC NUMBER (el
+Content-Type del navegador es falseable), tope 4 MB y 5 archivos, y guarda en
+el bucket BARBER_FILES_BUCKET bajo `support/{barbershopId}/`. El mensaje solo
+lleva metadatos y el servidor RE-VALIDA que el path viva bajo el prefijo de SU
+barbería: adivinar la ruta de otra no sirve de nada. Se leen con ligas
+firmadas de 300 s generadas al abrir el hilo — nunca URL pública.
+
+⚠️ ACCIÓN PARA RAFAEL: el bucket `barber-files` debe existir en Supabase y ser
+PRIVADO. Las capturas de soporte pueden traer datos de clientes.
+
+CONTRATO PARA LA OLA 2 (lado DaleControl, /admin — NO se tocó, es compartido
+con el dental). Está también al pie de src/lib/barber/support.ts:
+  GET   /api/admin/barber-support/tickets            lista global (sin filtro
+        de barbershopId; filtros útiles: status, barbershopId, q)
+  GET   /api/admin/barber-support/tickets/[id]       ticket + mensajes; firma
+        los adjuntos igual (BARBER_FILES_BUCKET, TTL corto)
+  POST  /api/admin/barber-support/tickets/[id]/messages
+        body { body, attachments } -> BarberSupportMessage con authorType
+        "ADMIN" y authorUserId = id del admin (SIN FK, así lo define el
+        schema). ADEMÁS: ticket.lastMessageAt = now y status -> WAITING_REPLY
+        (así es como esta pantalla pinta "Respuesta nueva" y suma el badge).
+  PATCH /api/admin/barber-support/tickets/[id]       status y priority; al
+        cerrar, closedAt = now.
+Esta pantalla ya entiende todo eso sin cambios: authorType ADMIN se pinta como
+"Soporte DaleControl" y responder regresa el ticket a OPEN.
+
+───────────────────────────────────────────────────────────────────────────
+5. VERIFICACIÓN — los 9 puntos, uno por uno
+───────────────────────────────────────────────────────────────────────────
+1) `next build` EXIT 0, output completo, sin pipes. Las 4 páginas y los 14
+   endpoints salen como dinámicos (ƒ) en el listado de rutas. Corrido DOS
+   veces: sobre la base original y otra vez DESPUÉS de rebasar sobre los 13
+   commits que entraron a main mientras tanto (agenda, caja, reserva, portal,
+   planes, clientes, membresías).
+   NOTA HONESTA: `npm run build` = `prisma generate && next build`, y el
+   `prisma generate` revienta con EPERM porque OTRA sesión paralela tiene
+   tomado query_engine-windows.dll.node — node_modules es un junction
+   COMPARTIDO entre todos los worktrees. No se mató un proceso ajeno. Esta ola
+   NO tocó prisma/schema.prisma, y se comprobó que el cliente ya generado
+   corresponde al schema rebasado: los 26 modelos Barber existen en el cliente
+   y `npx tsc --noEmit` pasa sobre TODO el árbol (incluido el código nuevo de
+   las otras olas, que es lo que detectaría un cliente viejo). Con eso se
+   corrió `npx next build` directo: mismo gate, mismo output completo.
+   Segunda nota de máquina: con varias builds paralelas encima, el type-check
+   del árbol rebasado tumbó al worker por heap (4 GB por defecto, "Ineffective
+   mark-compacts"). Con `NODE_OPTIONS=--max-old-space-size=8192` pasa limpio.
+   No es de este código: es el tamaño del repo más la contención. Si a alguien
+   más le revienta la build sin explicación, empiece por ahí.
+
+2) PRUEBA DE PERMISOS POR API, no por UI. Arnés offline (sin BD: aquí no hay
+   DATABASE_URL) que carga los módulos REALES con un prisma en memoria y llama
+   a los 18 servicios que están detrás de los endpoints. Dos modos: "throw"
+   (cualquier consulta revienta) para probar que el 403 sale ANTES de tocar
+   datos, y "record" (datos sembrados + auditoría de cada `where`).
+   · Con un usuario BARBER, los 18 rechazan con BarberForbiddenError y con
+     CERO consultas a la BD: listBarbers, createBarberProfile,
+     updateBarberProfile, reorderBarbers, listMembers, inviteMember,
+     updateMember, setMemberPermissions, setMemberBranchAccess, listBranches,
+     createBranch, updateBranch, setBranchActive, listTickets, createTicket,
+     getTicketDetail, addMessage, setTicketClosed.
+   · Lo mismo con RECEPTION.
+   · Las comisiones son de T3 y todavía no existen; lo que sí se probó es que
+     un BARBER no puede llegar a la ficha de OTRO barbero (ni a la propia):
+     todo el área de barberos exige `barbers.manage`, que su rol no trae, así
+     que el % de comisión y la renta de silla de sus compañeros no salen por
+     ninguna de mis rutas. Cuando T3 publique /api/barber/comisiones tiene que
+     recortar ADEMÁS por barberId — el permiso da la puerta, no el alcance.
+   · CONTRAPRUEBA (refutación): se mutaron a mano las tres protecciones
+     (quitar el assert de listMembers, guardar delta en vez de conjunto
+     completo, quitar la validación de prefijo del adjunto) y 10 de las 29
+     pruebas se pusieron en rojo. Restauradas, 29/29 en verde. Las pruebas
+     prueban algo.
+
+3) UN OVERRIDE NO ESCONDE LO DEL ROL. Caso exacto probado (B1 y C5):
+   a Rita, RECEPTION, se le añade `support.view`. Se guarda el conjunto
+   completo de 12 claves (11 del rol + 1). Después:
+     · listTickets(ctxRita) devuelve sus tickets -> el permiso añadido sirve.
+     · resolveBarberPermissions sigue teniendo cash.manage, cash.view,
+       agenda.edit, clients.edit, portal.manage, walkin.manage,
+       requests.manage, whatsapp.view y whatsapp.send -> NO perdió NADA.
+     · listMembers(ctxRita) sigue en 403 -> tampoco ganó de más.
+   Y el caso inverso (B2): quitarle SOLO cash.manage la deja sin cobrar pero
+   con las otras 10 intactas.
+
+4) RECEPCIÓN cobra y agenda pero NO ve comisiones. Verificado sobre el motor
+   real (A1): cash.manage ✓, cash.view ✓, agenda.edit ✓, commissions.view ✗,
+   commissions.manage ✗, team.manage ✗, barbers.manage ✗, branches.manage ✗.
+
+5) DOS BARBERÍAS, CERO FUGAS (D1-D4). Con dos cadenas sembradas (A con matriz
+   + 2 sucursales, B independiente): A no ve barberos, equipo, sedes ni
+   tickets de B; pedir por id un ticket, usuario, sede o barbero de B devuelve
+   404 y no modifica nada; y una auditoría recorre TODAS las consultas
+   emitidas comprobando que cada una lleve barbershopId restringido a las
+   sedes de la sesión. Además, una fila BarberUserBranchAccess apuntando a la
+   cadena AJENA se IGNORA (E1) — la defensa en profundidad del contrato.
+
+6) CAMBIAR DE SUCURSAL REFRESCA DE VERDAD. Es una navegación de documento
+   completa (window.location.assign), no un refresh de React: no sobrevive
+   estado de cliente. Antes se limpian las claves "dcb:" de session y
+   localStorage, y se navega sin query. Verificado en el navegador que la
+   cookie manipulada no abre nada (E3) y que pedir una sede ajena cae a la
+   propia (E2).
+
+7) maxBranches EN EL SERVIDOR (E4): plan sin multiBranch -> 403 aunque tengas
+   el permiso; plan Profesional con tope 3 y 3 sedes -> 403 con el número en
+   el mensaje; con una libre -> crea, colgando de la matriz. La matriz no se
+   cierra (E5, 409).
+
+8) `node scripts/barber-guard.cjs` -> exit 0. 33 archivos propios del
+   vertical; ORQUESTA.md como única excepción compartida declarada.
+
+9) CERO "paciente", "doctor", "Dr.", "clínica", "consulta", "expediente" en
+   los 33 archivos (grep case-insensitive, incluidos comentarios).
+
+REVISIÓN EN NAVEGADOR (Chrome, página temporal fuera del middleware, borrada
+antes de commitear): las 4 pantallas, claro y oscuro, ancho completo y
+angosto. Tres cosas se arreglaron ahí y no se habrían visto de otra forma:
+  · `container-type` estaba en el MISMO elemento que la @container query —
+    un elemento no puede consultarse a sí mismo, así que el layout de soporte
+    y la rejilla de formularios NUNCA colapsaban. La contención se subió a un
+    envoltorio (.supportShell) y a .modalBody. Ojo para las demás terminales:
+    .page NO lleva container-type A PROPÓSITO, porque los modales viven
+    dentro y la contención convertiría su position:fixed en absolute.
+  · globals.css pinta TODOS los input/select/textarea en dark con
+    `background-color: hsl(var(--card)) !important` — tokens del dental,
+    azulados, dentro del caramelo. globals.css es compartido y no se toca: se
+    gana por especificidad desde el propio módulo
+    (`.dark .barber-shell .input`, 0-3-0 contra 0-1-1).
+  · Los tonos semánticos en duro (ámbar/rojo/verde de los chips y etiquetas)
+    no daban contraste sobre la madera oscura; tienen variante dark.
+
+───────────────────────────────────────────────────────────────────────────
+6. PENDIENTES Y HUECOS QUE NO SON MÍOS (para quien siga)
+───────────────────────────────────────────────────────────────────────────
+· NAVEGACIÓN: BARBER_NAV_ITEMS (src/lib/barber/types.ts) NO se tocó — es de
+  otra terminal y hay varias trabajando en paralelo sobre ese archivo. Las 4
+  pantallas se enlazan entre sí con una barra de administración propia, y
+  /barber/barberos YA está en el sidebar, así que se llega a todo. Cuando el
+  dueño de types.ts pueda, faltan TRES entradas (los labels ya existen en
+  dictionaries/barber/admin.{es,en}.json bajo `nav.*`; el sidebar no necesita
+  cambios, ya sabe pintar estos iconos):
+    { key: "equipo",     href: "/barber/equipo",     icon: "users",
+      section: "cuenta", permission: "team.manage",     featureKey: null },
+    { key: "sucursales", href: "/barber/sucursales", icon: "store",
+      section: "cuenta", permission: "branches.manage", featureKey: null },
+    { key: "soporte",    href: "/barber/soporte",    icon: "life-buoy",
+      section: "cuenta", permission: "support.view",    featureKey: null },
+  (`store` y `life-buoy` habría que agregarlos al mapa ICONS del sidebar; con
+  `settings` y `inbox` ya existentes también funciona sin tocarlo.)
+  Sucursales sin featureKey A PROPÓSITO: la pantalla explica qué se gana con
+  Profesional en vez de desaparecer.
+
+· Barber.specialty NO EXISTE en el schema (comprobado). La ficha pide "bio y
+  especialidades" en un solo campo `bio`, que es el que T8 pinta en la
+  mini-web. Si se quiere un campo aparte, es una columna nueva y por lo tanto
+  otra ola de schema — no se inventó un lugar donde guardarlo porque T2/T3/T8
+  ya leen estas columnas.
+
+· Barber.sortOrder es UNO SOLO: manda a la vez en la agenda y en la web (así
+  lo dejó el contrato de la Ola 0). Si algún día tienen que diferir, es
+  columna nueva.
+
+· FOTO DEL BARBERO: se pega una liga (http/https, validado en servidor). No se
+  hizo subida porque photoUrl lo consume la mini-web PÚBLICA y eso exige que
+  `barber-files` sea público — justo lo contrario de lo que necesitan los
+  adjuntos de soporte, que van al mismo bucket según el contrato. Lo resuelve
+  T8 cuando defina su almacenamiento de imágenes públicas; la subida se cuelga
+  ahí en 20 líneas.
+
+· HORARIO DE LA BARBERÍA: Barbershop no tiene columnas de horario; el horario
+  real vive por barbero en BarberSchedule. T1 ya publicó su pantalla
+  (/barber/agenda/horarios) y los dos avisos —el de la ficha del barbero y el
+  de la sede— enlazan AHÍ, no a una reimplementación. Si alguna vez hace falta
+  un horario a nivel SEDE (no por barbero), son columnas nuevas.
+
+· El CORREO de un miembro no se edita: es su identidad de acceso y moverlo
+  obliga a mover también la cuenta de Supabase (el dental ya se quemó con
+  eso). Se da de baja y se vuelve a dar de alta. Igual que en el dental, el
+  alta genera una contraseña temporal que se enseña UNA vez a quien dio de
+  alta; BarberUser no tiene `mustChangePassword` (el dental sí), así que no se
+  puede forzar el cambio — si se quiere, es columna nueva.
+
+· Un correo que YA tiene cuenta en DaleControl no se puede reutilizar para un
+  alta (Supabase rechaza el createUser y no hay búsqueda por correo en el
+  admin API: listUsers no filtra). Para la misma persona en dos sedes de una
+  cadena NO hace falta: se resuelve con BarberUserBranchAccess.
+
+· getBarberContext() toma la fila BarberUser MÁS ANTIGUA de un supabaseId. Una
+  persona dada de alta en dos barberías DISTINTAS (no dos sedes de la misma)
+  siempre entrará a la primera. Es del contrato de la Ola 0, no de esta ola,
+  pero conviene saberlo.
+
+· ARNÉS DE PRUEBAS: vive fuera del repo (no hay carpeta de tests del vertical
+  ni se puede tocar package.json desde esta ola). Son ~600 líneas: stubs de
+  prisma/next-headers/supabase + semilla de dos cadenas + 29 casos. Si se
+  quiere dejar permanente, entra tal cual como
+  src/lib/barber/__tests__/admin-permissions.test.ts con un script
+  "test:barber-admin": "tsx --test ...". Pídemelo y lo muevo.
+
+───────────────────────────────────────────────────────────────────────────
+7. LO QUE OTRAS TERMINALES DEBEN SABER
+───────────────────────────────────────────────────────────────────────────
+· PERMISOS: nadie inventa su check. `assertBarberPermission(ctx, key)` y
+  listo. Si tu ola necesita una clave nueva, va en BARBER_PERMISSIONS y en
+  los defaults del rol; los usuarios SIN override la reciben solos, los que
+  tengan override NO — la pantalla de equipo ya lo dice y hay un botón para
+  volver al rol. No inventes un segundo motor.
+· SEDES: el filtro multisede es `getAccessibleBranchIds(ctx)` y nada más. Si
+  tu pantalla quiere respetar el selector, usa
+  `getBranchScopeFromCookie(ctx)` de src/lib/barber/branches.ts: te devuelve
+  branchIds ya validados, el activo y si está en consolidado. La cookie NUNCA
+  se cree a ciegas.
+· TEXTO: `cleanText` / `cleanMultiline` (branches.ts) quitan caracteres de
+  control y recortan; úsalos antes de guardar texto de usuario.
+· ERRORES HTTP: `barberApiError(err, tag)` y `barberUnauthorized()` mapean
+  BarberForbiddenError -> 403 y BarberAdminError -> su status. Un route
+  handler del vertical no debería escribir más manejo de errores que eso.
+· MODALES: NO uses el Dialog de Radix dentro del vertical. Monta en un portal
+  a <body>, fuera de .barber-shell, y ahí no existen los tokens del caramelo
+  ni el override de inputs en dark. Usa el `Modal` de
+  components/barber/team/admin-ui.tsx, que vive en el árbol de la página.
+· @container: la contención va en un ANCESTRO del elemento que consulta, y
+  nunca en un ancestro de un position:fixed.
