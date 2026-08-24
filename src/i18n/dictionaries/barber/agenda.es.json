@@ -1,0 +1,267 @@
+{
+  "title": "Agenda",
+  "subtitle": "Tu día, silla por silla.",
+  "views": {
+    "day": "Día",
+    "week": "Semana"
+  },
+  "nav": {
+    "today": "Hoy",
+    "prev": "Anterior",
+    "next": "Siguiente",
+    "pickDate": "Ir a una fecha"
+  },
+  "actions": {
+    "new": "Nueva visita",
+    "schedules": "Horarios y bloqueos",
+    "backToAgenda": "Volver a la agenda",
+    "retry": "Reintentar",
+    "close": "Cerrar",
+    "cancel": "Cancelar",
+    "undo": "Deshacer"
+  },
+  "state": {
+    "loading": "Cargando la agenda…",
+    "error": "No se pudo cargar la agenda.",
+    "emptyDay": "Sin visitas este día. Toca un hueco libre para agendar.",
+    "emptyWeek": "Sin visitas esta semana.",
+    "noBarbersTitle": "Todavía no hay barberos",
+    "noBarbersBody": "Da de alta a tu equipo en Barberos y aquí aparecerá una columna por cada silla.",
+    "noSchedule": "Sin horario cargado",
+    "closed": "Fuera de horario",
+    "readOnly": "Solo puedes ver la agenda. Pide permiso para editarla."
+  },
+  "summary": {
+    "appointments": {
+      "one": "{count} visita",
+      "other": "{count} visitas"
+    },
+    "dayTotal": "Total del día",
+    "hours": "Horario"
+  },
+  "card": {
+    "noServices": "Sin servicios",
+    "noClient": "Sin cliente",
+    "dragHint": "Arrastra para mover",
+    "moreServices": "+{count} más"
+  },
+  "move": {
+    "moved": "Visita movida a las {time}",
+    "movedBarber": "Visita movida con {barber}, {time}",
+    "undone": "Listo, la regresamos a donde estaba.",
+    "undoFailed": "No se pudo deshacer el movimiento.",
+    "remindersCancelled": "Cancelamos el recordatorio anterior; se reprograma con la hora nueva.",
+    "blocked": "Ahí no cabe"
+  },
+  "modal": {
+    "newTitle": "Nueva visita",
+    "editTitle": "Editar visita",
+    "client": "Cliente",
+    "searchPlaceholder": "Busca por nombre o WhatsApp",
+    "searchHint": "Escribe al menos 2 letras",
+    "noResults": "Sin resultados. Puedes darlo de alta abajo.",
+    "newClient": "Cliente nuevo",
+    "clientName": "Nombre",
+    "clientPhone": "WhatsApp (10 dígitos)",
+    "visits": {
+      "one": "{count} visita",
+      "other": "{count} visitas"
+    },
+    "changeClient": "Cambiar",
+    "services": "Servicios",
+    "servicesEmpty": "Todavía no tienes servicios en el catálogo.",
+    "barber": "Barbero",
+    "date": "Fecha",
+    "time": "Hora",
+    "notes": "Notas para el barbero",
+    "notesPlaceholder": "Máquina 2 a los lados, raya de lado izquierdo…",
+    "duration": "Duración",
+    "durationValue": "{min} min",
+    "total": "Total",
+    "priceFrozen": "El precio se congela al reservar: aunque suba el catálogo, esta visita conserva el suyo.",
+    "save": "Agendar visita",
+    "saveEdit": "Guardar cambios",
+    "saving": "Guardando…",
+    "errors": {
+      "client": "Escribe el nombre del cliente.",
+      "services": "Elige al menos un servicio.",
+      "barber": "Elige al barbero.",
+      "time": "Elige una hora válida."
+    }
+  },
+  "detail": {
+    "title": "Visita",
+    "status": "Estado",
+    "client": "Cliente",
+    "barber": "Barbero",
+    "when": "Cuándo",
+    "services": "Servicios",
+    "total": "Total",
+    "notes": "Notas",
+    "edit": "Editar",
+    "openWhatsapp": "Escribir por WhatsApp",
+    "source": {
+      "PANEL": "Agendada en el mostrador",
+      "PUBLIC": "Reservó en línea",
+      "WALKIN": "Llegó sin cita",
+      "WHATSAPP": "Agendada por WhatsApp"
+    }
+  },
+  "schedule": {
+    "title": "Horarios y bloqueos",
+    "subtitle": "Lo que definas aquí es lo que la agenda ofrece: fuera de este horario no se puede agendar.",
+    "tabs": {
+      "week": "Horario de trabajo",
+      "timeOff": "Bloqueos"
+    },
+    "barber": "Barbero",
+    "closedDay": "Descansa",
+    "openDay": "Trabaja",
+    "from": "Entra",
+    "to": "Sale",
+    "addShift": "Agregar turno",
+    "removeShift": "Quitar turno",
+    "splitHint": "¿Cierran a comer? Agrega dos turnos al mismo día (por ejemplo 9:00–14:00 y 16:00–20:00).",
+    "copyToWeek": "Copiar este día a lunes-sábado",
+    "save": "Guardar horario",
+    "saved": "Horario guardado.",
+    "saveError": "No se pudo guardar el horario.",
+    "noBarber": "Elige un barbero para editar su horario.",
+    "unsaved": "Tienes cambios sin guardar.",
+    "timeOff": {
+      "title": "Bloqueos de agenda",
+      "subtitle": "Comidas, vacaciones y días festivos. Mientras un bloqueo esté puesto, esos huecos no se ofrecen.",
+      "new": "Nuevo bloqueo",
+      "who": "¿A quién bloquea?",
+      "wholeShop": "Toda la barbería (día festivo)",
+      "type": "Motivo",
+      "start": "Desde",
+      "end": "Hasta",
+      "reason": "Nota (opcional)",
+      "reasonPlaceholder": "Comida, boda del sobrino, puente…",
+      "create": "Bloquear",
+      "creating": "Bloqueando…",
+      "delete": "Quitar bloqueo",
+      "empty": "No hay bloqueos próximos.",
+      "createError": "No se pudo crear el bloqueo.",
+      "trapped": {
+        "one": "Ojo: {count} visita quedó dentro de este bloqueo. Muévela o cancélala.",
+        "other": "Ojo: {count} visitas quedaron dentro de este bloqueo. Muévelas o cancélalas."
+      }
+    }
+  },
+  "queue": {
+    "title": "Fila virtual",
+    "subtitle": "Quien llega sin cita se anota, ve su lugar y deja de preguntar cuánto falta.",
+    "add": "Anotar a alguien",
+    "addTitle": "Anotar en la fila",
+    "name": "Nombre",
+    "phone": "WhatsApp (10 dígitos)",
+    "phoneHint": "Con WhatsApp le puedes avisar cuando ya casi le toca.",
+    "barber": "¿Con quién?",
+    "anyBarber": "El que esté libre",
+    "join": "Anotar",
+    "empty": "La fila está vacía.",
+    "emptyHint": "Pega el QR junto a la caja y quien llegue se anota solo desde su celular.",
+    "waiting": {
+      "one": "{count} persona en la fila",
+      "other": "{count} personas en la fila"
+    },
+    "eta": "Espera aprox.",
+    "position": "Lugar",
+    "joinedAt": "Llegó a las {time}",
+    "waitingSince": "Lleva {wait} esperando",
+    "actions": {
+      "call": "Llamar",
+      "uncall": "Regresar a la fila",
+      "serve": "Pasar a la silla",
+      "left": "Se fue",
+      "notify": "Avisar por WhatsApp"
+    },
+    "serveTitle": "Pasar a la silla",
+    "serveBody": "Se crea una visita EN SILLA con este barbero, para que el cobro y la comisión salgan de ahí.",
+    "serveConfirm": "Sentar en la silla",
+    "servedOk": "{name} ya está en la silla.",
+    "recent": "Salieron de la fila",
+    "notify": {
+      "queued": "Aviso registrado. Sale en cuanto WhatsApp esté conectado.",
+      "already": "Ya había un aviso encolado para esta persona.",
+      "noPhone": "Esa persona no dejó WhatsApp.",
+      "pending": "Pendiente de envío",
+      "explain": "Esta versión REGISTRA el aviso; el envío por WhatsApp lo conecta la siguiente ola."
+    },
+    "qr": {
+      "title": "QR del mostrador",
+      "body": "Imprímelo y pégalo junto a la caja. Quien llegue lo escanea, se anota y ve su lugar en vivo.",
+      "print": "Imprimir",
+      "copy": "Copiar liga",
+      "copied": "Liga copiada",
+      "link": "Liga de la fila"
+    },
+    "errors": {
+      "name": "Escribe el nombre.",
+      "generic": "No se pudo actualizar la fila."
+    }
+  },
+  "public": {
+    "kicker": "Fila virtual",
+    "title": "Anótate desde tu celular",
+    "subtitle": "Deja tu nombre y checa tu lugar sin preguntarle a nadie.",
+    "name": "Tu nombre",
+    "namePlaceholder": "¿Cómo te llamas?",
+    "phone": "Tu WhatsApp",
+    "phonePlaceholder": "10 dígitos",
+    "phoneHint": "Solo lo usamos para avisarte cuando ya casi te toca.",
+    "barber": "¿Con quién te quieres cortar?",
+    "anyBarber": "El que esté libre",
+    "join": "Anotarme",
+    "joining": "Anotándote…",
+    "waitingNow": {
+      "one": "Ahora hay {count} persona esperando",
+      "other": "Ahora hay {count} personas esperando"
+    },
+    "empty": "Ahorita no hay fila. Pásale.",
+    "yourSpot": "Tu lugar",
+    "ahead": {
+      "one": "{count} persona delante de ti",
+      "other": "{count} personas delante de ti"
+    },
+    "noneAhead": "Nadie delante de ti",
+    "eta": "Espera aproximada",
+    "etaNote": "Es un estimado con el promedio de la barbería. Puede moverse.",
+    "called": "¡Es tu turno!",
+    "calledBody": "Pasa a la silla, te están esperando.",
+    "served": "Listo, ya te atendieron. ¡Gracias por venir!",
+    "left": "Te sacamos de la fila. Si sigues aquí, avísale al mostrador.",
+    "refresh": "Actualizar",
+    "live": "Se actualiza solo",
+    "leaveQueue": "Ya no puedo esperar",
+    "leaveConfirm": "¿Salirte de la fila?",
+    "closedTitle": "La fila no está disponible",
+    "closedBody": "Pregunta en el mostrador y con gusto te anotan.",
+    "notFound": "No encontramos esta barbería.",
+    "errors": {
+      "name": "Escribe tu nombre.",
+      "phone": "Escribe tu WhatsApp a 10 dígitos.",
+      "generic": "No se pudo anotar. Intenta otra vez."
+    }
+  },
+  "weekdays": {
+    "0": "Domingo",
+    "1": "Lunes",
+    "2": "Martes",
+    "3": "Miércoles",
+    "4": "Jueves",
+    "5": "Viernes",
+    "6": "Sábado"
+  },
+  "weekdaysShort": {
+    "0": "Dom",
+    "1": "Lun",
+    "2": "Mar",
+    "3": "Mié",
+    "4": "Jue",
+    "5": "Vie",
+    "6": "Sáb"
+  }
+}

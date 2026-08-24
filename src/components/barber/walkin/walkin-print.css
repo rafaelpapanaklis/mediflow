@@ -1,0 +1,48 @@
+/* ═══════════════════════════════════════════════════════════════════════
+   Hoja imprimible del QR de la fila. CSS NORMAL (no module) a propósito:
+   para imprimir hay que tocar html/body, y un CSS module rechaza cualquier
+   selector que no lleve una clase local ("selectors must be pure").
+
+   Next lo empaqueta con la ruta que lo importa, así que solo viaja con
+   /barber/fila. Aun así todo va colgado de `.dc-barber-print`, que solo
+   existe en esa pantalla: si algún día alguien importa este archivo desde
+   otro lado, no se lleva nada por delante.
+
+   OJO: este @media es `print`, NO un punto de quiebre responsive (esos van
+   con @container, como manda el repo). No existe @container para imprimir.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+.dc-barber-print {
+  display: none;
+}
+
+@media print {
+  /* El resto de la página sigue OCUPANDO ESPACIO aunque esté en
+     visibility:hidden. Sin este overflow:hidden la impresora escupe dos o
+     tres hojas en blanco detrás del QR. */
+  html:has(.dc-barber-print),
+  body:has(.dc-barber-print) {
+    overflow: hidden !important;
+    height: auto !important;
+    background: #fff !important;
+  }
+
+  body:has(.dc-barber-print) * {
+    visibility: hidden !important;
+  }
+
+  .dc-barber-print,
+  .dc-barber-print * {
+    visibility: visible !important;
+  }
+
+  .dc-barber-print {
+    display: block !important;
+    position: fixed;
+    inset: 0;
+    padding: 40px;
+    background: #fff;
+    color: #000;
+    text-align: center;
+  }
+}

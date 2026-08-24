@@ -1,0 +1,267 @@
+{
+  "title": "Schedule",
+  "subtitle": "Your day, chair by chair.",
+  "views": {
+    "day": "Day",
+    "week": "Week"
+  },
+  "nav": {
+    "today": "Today",
+    "prev": "Previous",
+    "next": "Next",
+    "pickDate": "Go to a date"
+  },
+  "actions": {
+    "new": "New visit",
+    "schedules": "Hours and time off",
+    "backToAgenda": "Back to the schedule",
+    "retry": "Try again",
+    "close": "Close",
+    "cancel": "Cancel",
+    "undo": "Undo"
+  },
+  "state": {
+    "loading": "Loading the schedule…",
+    "error": "We couldn't load the schedule.",
+    "emptyDay": "No visits today. Tap an open slot to book one.",
+    "emptyWeek": "No visits this week.",
+    "noBarbersTitle": "No barbers yet",
+    "noBarbersBody": "Add your team under Barbers and a column will show up here for every chair.",
+    "noSchedule": "No hours set",
+    "closed": "Outside working hours",
+    "readOnly": "You can only view the schedule. Ask for permission to edit it."
+  },
+  "summary": {
+    "appointments": {
+      "one": "{count} visit",
+      "other": "{count} visits"
+    },
+    "dayTotal": "Day total",
+    "hours": "Hours"
+  },
+  "card": {
+    "noServices": "No services",
+    "noClient": "No client",
+    "dragHint": "Drag to move",
+    "moreServices": "+{count} more"
+  },
+  "move": {
+    "moved": "Visit moved to {time}",
+    "movedBarber": "Visit moved to {barber}, {time}",
+    "undone": "Done, we put it back.",
+    "undoFailed": "We couldn't undo the move.",
+    "remindersCancelled": "We cancelled the old reminder; it gets rescheduled for the new time.",
+    "blocked": "It doesn't fit there"
+  },
+  "modal": {
+    "newTitle": "New visit",
+    "editTitle": "Edit visit",
+    "client": "Client",
+    "searchPlaceholder": "Search by name or WhatsApp",
+    "searchHint": "Type at least 2 letters",
+    "noResults": "No matches. You can add them below.",
+    "newClient": "New client",
+    "clientName": "Name",
+    "clientPhone": "WhatsApp (10 digits)",
+    "visits": {
+      "one": "{count} visit",
+      "other": "{count} visits"
+    },
+    "changeClient": "Change",
+    "services": "Services",
+    "servicesEmpty": "You don't have any services in the catalog yet.",
+    "barber": "Barber",
+    "date": "Date",
+    "time": "Time",
+    "notes": "Notes for the barber",
+    "notesPlaceholder": "Number 2 on the sides, part on the left…",
+    "duration": "Duration",
+    "durationValue": "{min} min",
+    "total": "Total",
+    "priceFrozen": "The price is locked in at booking: even if the catalog goes up, this visit keeps its price.",
+    "save": "Book visit",
+    "saveEdit": "Save changes",
+    "saving": "Saving…",
+    "errors": {
+      "client": "Type the client's name.",
+      "services": "Pick at least one service.",
+      "barber": "Pick a barber.",
+      "time": "Pick a valid time."
+    }
+  },
+  "detail": {
+    "title": "Visit",
+    "status": "Status",
+    "client": "Client",
+    "barber": "Barber",
+    "when": "When",
+    "services": "Services",
+    "total": "Total",
+    "notes": "Notes",
+    "edit": "Edit",
+    "openWhatsapp": "Message on WhatsApp",
+    "source": {
+      "PANEL": "Booked at the counter",
+      "PUBLIC": "Booked online",
+      "WALKIN": "Walked in",
+      "WHATSAPP": "Booked over WhatsApp"
+    }
+  },
+  "schedule": {
+    "title": "Hours and time off",
+    "subtitle": "What you set here is what the schedule offers: outside these hours nothing can be booked.",
+    "tabs": {
+      "week": "Working hours",
+      "timeOff": "Time off"
+    },
+    "barber": "Barber",
+    "closedDay": "Off",
+    "openDay": "Working",
+    "from": "In",
+    "to": "Out",
+    "addShift": "Add shift",
+    "removeShift": "Remove shift",
+    "splitHint": "Closing for lunch? Add two shifts to the same day (say 9:00–14:00 and 16:00–20:00).",
+    "copyToWeek": "Copy this day to Monday-Saturday",
+    "save": "Save hours",
+    "saved": "Hours saved.",
+    "saveError": "We couldn't save the hours.",
+    "noBarber": "Pick a barber to edit their hours.",
+    "unsaved": "You have unsaved changes.",
+    "timeOff": {
+      "title": "Schedule blocks",
+      "subtitle": "Lunch breaks, vacations and holidays. While a block is on, those slots are never offered.",
+      "new": "New block",
+      "who": "Who does it block?",
+      "wholeShop": "The whole shop (holiday)",
+      "type": "Reason",
+      "start": "From",
+      "end": "To",
+      "reason": "Note (optional)",
+      "reasonPlaceholder": "Lunch, a wedding, a long weekend…",
+      "create": "Block",
+      "creating": "Blocking…",
+      "delete": "Remove block",
+      "empty": "No upcoming blocks.",
+      "createError": "We couldn't create the block.",
+      "trapped": {
+        "one": "Heads up: {count} visit fell inside this block. Move it or cancel it.",
+        "other": "Heads up: {count} visits fell inside this block. Move them or cancel them."
+      }
+    }
+  },
+  "queue": {
+    "title": "Virtual queue",
+    "subtitle": "Whoever walks in signs up, sees their spot and stops asking how much longer.",
+    "add": "Add someone",
+    "addTitle": "Add to the queue",
+    "name": "Name",
+    "phone": "WhatsApp (10 digits)",
+    "phoneHint": "With WhatsApp you can ping them when they're almost up.",
+    "barber": "With whom?",
+    "anyBarber": "Whoever is free",
+    "join": "Add",
+    "empty": "The queue is empty.",
+    "emptyHint": "Stick the QR next to the register and whoever walks in signs up from their phone.",
+    "waiting": {
+      "one": "{count} person in the queue",
+      "other": "{count} people in the queue"
+    },
+    "eta": "Approx. wait",
+    "position": "Spot",
+    "joinedAt": "Arrived at {time}",
+    "waitingSince": "Waiting for {wait}",
+    "actions": {
+      "call": "Call",
+      "uncall": "Back to the queue",
+      "serve": "Take the chair",
+      "left": "Left",
+      "notify": "Ping on WhatsApp"
+    },
+    "serveTitle": "Take the chair",
+    "serveBody": "This creates an IN-CHAIR visit with this barber, so the checkout and the commission come from it.",
+    "serveConfirm": "Seat in the chair",
+    "servedOk": "{name} is in the chair.",
+    "recent": "Left the queue",
+    "notify": {
+      "queued": "Ping recorded. It goes out as soon as WhatsApp is connected.",
+      "already": "There was already a ping queued for this person.",
+      "noPhone": "That person didn't leave a WhatsApp number.",
+      "pending": "Waiting to be sent",
+      "explain": "This version RECORDS the ping; sending it over WhatsApp is wired up by the next wave."
+    },
+    "qr": {
+      "title": "Counter QR",
+      "body": "Print it and stick it next to the register. Whoever walks in scans it, signs up and watches their spot live.",
+      "print": "Print",
+      "copy": "Copy link",
+      "copied": "Link copied",
+      "link": "Queue link"
+    },
+    "errors": {
+      "name": "Type a name.",
+      "generic": "We couldn't update the queue."
+    }
+  },
+  "public": {
+    "kicker": "Virtual queue",
+    "title": "Sign up from your phone",
+    "subtitle": "Leave your name and check your spot without asking anyone.",
+    "name": "Your name",
+    "namePlaceholder": "What's your name?",
+    "phone": "Your WhatsApp",
+    "phonePlaceholder": "10 digits",
+    "phoneHint": "We only use it to ping you when you're almost up.",
+    "barber": "Who do you want cutting?",
+    "anyBarber": "Whoever is free",
+    "join": "Sign me up",
+    "joining": "Signing you up…",
+    "waitingNow": {
+      "one": "There's {count} person waiting right now",
+      "other": "There are {count} people waiting right now"
+    },
+    "empty": "No queue right now. Come on in.",
+    "yourSpot": "Your spot",
+    "ahead": {
+      "one": "{count} person ahead of you",
+      "other": "{count} people ahead of you"
+    },
+    "noneAhead": "Nobody ahead of you",
+    "eta": "Approximate wait",
+    "etaNote": "It's an estimate based on the shop's average. It can shift.",
+    "called": "You're up!",
+    "calledBody": "Head to the chair, they're waiting for you.",
+    "served": "All done. Thanks for coming!",
+    "left": "We took you out of the queue. If you're still here, let the counter know.",
+    "refresh": "Refresh",
+    "live": "Updates on its own",
+    "leaveQueue": "I can't wait any longer",
+    "leaveConfirm": "Leave the queue?",
+    "closedTitle": "The queue isn't available",
+    "closedBody": "Ask at the counter and they'll gladly sign you up.",
+    "notFound": "We couldn't find this shop.",
+    "errors": {
+      "name": "Type your name.",
+      "phone": "Type your 10-digit WhatsApp number.",
+      "generic": "We couldn't sign you up. Try again."
+    }
+  },
+  "weekdays": {
+    "0": "Sunday",
+    "1": "Monday",
+    "2": "Tuesday",
+    "3": "Wednesday",
+    "4": "Thursday",
+    "5": "Friday",
+    "6": "Saturday"
+  },
+  "weekdaysShort": {
+    "0": "Sun",
+    "1": "Mon",
+    "2": "Tue",
+    "3": "Wed",
+    "4": "Thu",
+    "5": "Fri",
+    "6": "Sat"
+  }
+}

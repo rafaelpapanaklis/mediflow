@@ -19,20 +19,20 @@ import type { Dictionary } from "@/i18n/t";
 import shellEs from "./shell.es.json";
 import shellEn from "./shell.en.json";
 // ── Ola 1: importa aquí tu área (una línea por idioma) ──
-// import agendaEs from "./agenda.es.json";
-// import agendaEn from "./agenda.en.json";
+import agendaEs from "./agenda.es.json";
+import agendaEn from "./agenda.en.json";
 
 const ES: Dictionary = {
   barber: {
     shell: shellEs as unknown as Dictionary,
-    // agenda: agendaEs as unknown as Dictionary,
+    agenda: agendaEs as unknown as Dictionary,
   },
 };
 
 const EN: Dictionary = {
   barber: {
     shell: shellEn as unknown as Dictionary,
-    // agenda: agendaEn as unknown as Dictionary,
+    agenda: agendaEn as unknown as Dictionary,
   },
 };
 
