@@ -9793,3 +9793,337 @@ ola lo cambia. (4) Las fotos de visita se gatean con clients.view/edit;
 portal.manage es habilitar el portal, reenviar códigos y marcar
 visibleToClient. (5) Ninguna terminal escribe barbershopId: undefined en un
 where — borra el filtro de tenant (regla de la Ola 0, sigue vigente).
+
+
+## [T6 — Barber Caja] — Dinero de DaleControl Barber: ticket, corte por turno, propinas, comisiones/nómina e inventario ✅ (2026-08-24)
+═══════════════════════════════════════════════════════════════════════════
+COMMIT: a47264f3 (rebase sobre 953d0f27 de T1; conflicto solo en dictionaries/barber/index.ts, resuelto conservando agenda + caja) · push directo a main · BUILD EXIT 0 (`npx next build`, output
+completo en el log; `prisma generate` se corrió aparte porque había 3 builds
+vecinos agarrando el engine compartido) · GUARDIA exit 0 (45 propios, 0
+compartidos, 0 prohibidos; ORQUESTA.md declarado al final) · 17/17 unitarias +
+17/17 integración contra Postgres real.
+SQL PENDIENTE: `sql/barber_caja.sql` (idempotente; SOLO constraints e índices,
+cero tablas/columnas). Requiere barber.sql + barber_complemento.sql aplicados.
+Bloque al final de este reporte. Sin él todo funciona igual (el código ya
+garantiza cada invariante); el SQL es red de seguridad de BD.
+
+QUÉ ES: el módulo que decide si una barbería paga — cómo se reparte el dinero
+entre dueño y barberos. Tres áreas nuevas del panel /barber (reemplazan los
+placeholders de la Ola 0): /barber/caja, /barber/comisiones, /barber/productos,
+más 17 rutas bajo /api/barber/{cash-sessions,sales,commissions,products}.
+
+ARQUITECTURA (src/lib/barber/, DAG sin ciclos: commissions ← inventory ← cash):
+· commissions.ts — BASE del dinero: helpers Decimal (D, money = redondeo ÚNICO
+  half-up a centavos, toNum, parseMoneyInput que rechaza >2 decimales para que
+  el redondeo siga siendo uno solo), BarberCajaError {status, code}, convención
+  de ticket cancelado, periodos por zona horaria (periodKeyFor/periodRange con
+  Intl, "YYYY-MM" en Barbershop.timezone), política de comisión, motor puro
+  (commissionBaseFor, computeCommission, payoutFor) y DB (getCommissionSummary,
+  getCommissionEntries, markCommissionsPaid, getCommissionReceipt).
+· inventory.ts — catálogo (listProducts/createProduct/updateProduct), y el ÚNICO
+  camino que muta stock: applyStockDelta(tx, …) con `UPDATE … WHERE stock >= n`
+  en la transacción de quien llama; registerStockMovement (manual), listMovements,
+  getInventoryStats (bajo mínimo, valor a costo/venta, margen, más vendidos).
+· cash.ts — turnos (open/close/summary/history), createSale (UNA transacción:
+  turno abierto re-verificado dentro → cita/barbero/cliente de ESTA barbería →
+  precios del catálogo o priceAtBooking congelado → canjes → descuento → ticket +
+  líneas → stock → entrada de comisión → sellos/cupo), cancelSale, checkout
+  context, lookupClients, assertBarberFeature (gate de plan en servidor con
+  resolver inyectable) y moneyErrorResponse (403/409/404/400 con `code`).
+· Rutas: cada una hace getBarberContext() → 401, assertBarberFeature(cash |
+  commissions | products) → 403 FEATURE_NOT_IN_PLAN, y delega al lib, que vuelve
+  a exigir el permiso (assertBarberPermission) y recorta por barbershopId.
+· UI: components/barber/{cash,commissions,products}/ sobre .card/.table-new/
+  .modal de globals + money.css propio (scope .barber-shell .bcaja-*, responsive
+  con @container, modales en la raíz del cliente fuera de todo container-type).
+  Botón primario = .barber-btn-primary (el hover del .btn-new--primary base es
+  violeta). i18n: dictionaries/barber/caja.{es,en}.json bajo barber.caja.* con
+  sub-árboles common/caja/session/ticket/print/comisiones/productos; el cliente
+  recibe el sub-diccionario y usa makeT (mismo motor que el server).
+
+A. TICKET (/barber/caja):
+· Cobro en 2 clics desde cita terminada: "Citas por cobrar" lista las DONE de
+  ayer/hoy/mañana (zona de la barbería) sin ticket vivo → Cobrar → modal ya
+  cargado con servicios (priceAtBooking CONGELADO, no el precio vivo), barbero
+  y cliente → "Cobrar $X". Se puede agregar servicios/productos y ajustar.
+· Líneas en BarberSaleItem con qty y unitPrice. El cliente NUNCA manda precios
+  (solo ids + qty); tampoco existen líneas libres con precio capturado (decisión
+  para que no se cuelen precios fuera del catálogo).
+· Propina = BarberSale.tip, atribuida al barbero del ticket, íntegra, FUERA de la
+  base de comisión. Un ticket sin barbero no admite propina (TIP_NEEDS_BARBER).
+  total = subtotal + tip. Chips 0/$20/$50/$100/10%/15%/otra.
+· Métodos: CASH, CARD, SPEI (STRIPE reservado al pago en línea; el POS lo
+  rechaza). ⚠️ PAGO MIXTO NO CABE: BarberSale tiene UN paymentMethod. No se
+  improvisó; propuesta abajo.
+· Descuento por ticket = línea de ajuste negativa ("Descuento", serviceId y
+  productId null) — el schema lo contempla ("línea libre"). No puede superar
+  la suma de líneas (DISCOUNT_TOO_BIG). Reduce subtotal Y base de comisión.
+· Canje de corte gratis (lealtad): elegible si BarberClient.loyaltyCount ≥
+  BARBER_LOYALTY_STAMPS_TARGET (10, exportado en cash.ts — T2 acumula sellos;
+  esta ola SOLO canjea). La línea de servicio elegida queda en $0 con sufijo
+  " · Gratis (lealtad)"; loyaltyCount −10 con guarda gte (dos canjes a la vez no
+  lo dejan negativo). Cancelar el ticket devuelve los 10 sellos.
+· Membresía (gancho para T4): si el cliente tiene BarberClientMembership ACTIVE,
+  endAt futuro y cupo (includedCuts null o cutsUsed < includedCuts), la UI ofrece
+  "Usar membresía": la línea queda en $0 con sufijo " · Membresía" y cutsUsed
+  +1 en la misma transacción; cancelar lo restituye. Regla de cobertura (qué
+  servicios cubre) NO existe en el schema: cubre UNA línea de servicio que
+  elige el cobrador. T4 puede afinar en toClientLookup/createSale.
+· Ticket imprimible/compartible: /barber/caja/ticket/[saleId] (@media print
+  oculta sidebar/topbar), botón WhatsApp (wa.me con el teléfono del cliente,
+  prefijo 52 si son 10 dígitos), Web Share / copiar enlace. Un saleId de otra
+  barbería → 404.
+
+B. CORTE POR TURNO:
+· Abrir con fondo inicial (openingAmount, quién abrió). Un solo turno abierto
+  por barbería: chequeo dentro de la transacción + índice único parcial en el
+  SQL (P2002 → 409 SESSION_ALREADY_OPEN).
+· Cerrar con efectivo contado: expectedAmount = fondo + Σ total de tickets en
+  EFECTIVO (incluye propinas en efectivo, que están en el cajón y se muestran
+  aparte como "propinas a entregar"); countedAmount; diferencia derivada
+  (contado − esperado) con chip Cuadra/Sobra/Falta; desglose por método (CASH/
+  CARD/SPEI con conteo, subtotal, propina, total) y lista de tickets del turno.
+  closedByUserId siempre. updateMany con closedAt:null → 0 filas = ya cerrado.
+· No se cobra sin turno abierto (NO_OPEN_SESSION, re-verificado DENTRO de la
+  transacción del cobro). No existe endpoint para reabrir. Un ticket de un turno
+  cerrado no se cancela (SESSION_CLOSED): corrección = turno nuevo con nota.
+· Historial de turnos cerrados con esperado/contado/diferencia y quién.
+
+C. COMISIONES (/barber/comisiones) — los tres modelos:
+· Una BarberCommissionEntry POR VENTA con barbero, congelada al cobrar (cambiar
+  el esquema del barbero no reescribe el pasado): base, pct, amount, periodKey
+  ("YYYY-MM" en la zona de la barbería), appointmentId.
+    COMMISSION → amount = base × commissionPct / 100 (pct por barbero).
+    CHAIR_RENT → amount = base íntegra (pct null); la renta (Barber.chairRent)
+                 se resta UNA vez por periodo en el total a pagar.
+    SALARY     → amount = 0 (pct null; base registrada como producción).
+· Total a pagar del periodo (payoutFor): COMMISSION = Σ amount + propinas;
+  CHAIR_RENT = Σ amount − chairRent + propinas (puede ser NEGATIVO: el barbero
+  debe la diferencia, se muestra en rojo); SALARY = propinas (el sueldo se paga
+  por nómina fuera; no hay monto de sueldo en el schema).
+· BASE = subtotal SIN propina. Política por barbería (CommissionPolicy.base):
+  "SERVICES" (servicios + descuentos del ticket; default) o
+  "SERVICES_AND_PRODUCTS". ⚠️ HOY la política vive en código
+  (DEFAULT_COMMISSION_POLICY) porque el schema NO tiene columna y esta ola no
+  toca el schema. getCommissionPolicy(barbershopId) es el PUNTO ÚNICO de
+  lectura; la UI muestra la política vigente en la página y en el recibo.
+  Propuesta Schema-C: `Barbershop.commissionBase String @default("SERVICES")`
+  + ALTER TABLE; cambia solo esa función.
+· Vista de periodo por barbero: tickets, producido (servicios/productos/
+  descuentos), base, comisión devengada, propinas, renta, total a pagar, estado
+  (Sin tickets / Pendiente / Parcial / Pagado), detalle expandible por ticket,
+  "Marcar pagado" (paidAt = ahora en todas las pendientes del barbero+periodo;
+  idempotente) y recibo imprimible con firmas
+  (/barber/comisiones/recibo/[barberId]?period=).
+· Rol BARBER: getCommissionSummary/getCommissionEntries recortan por ctx.barber
+  EN EL SERVIDOR (resolveCommissionScope): ve solo su fila; pedir otro barberId
+  → 403 FORBIDDEN_SCOPE; sin fila Barber ligada → lista vacía. No tiene
+  cash.manage ni commissions.manage (no cobra, no marca pagado).
+
+D. PRODUCTOS E INVENTARIO (/barber/productos):
+· Catálogo: nombre, SKU, precio, costo, unidad, stock, mínimo, activo. El stock
+  NO se edita en el formulario: solo por movimientos (el inicial deja un IN
+  "Stock inicial").
+· CONVENCIÓN DE SIGNO (la del schema, BarberStockMovement.qty SIGNADO):
+  IN/RETURN → +qty · OUT/SALE → −qty · ADJUST → delta con signo (la UI pide el
+  stock real contado y calcula la diferencia). stock = inicial + Σ qty. Todo
+  movimiento lleva userId y reason (obligatorio en los manuales).
+· Venta descuenta stock en la MISMA transacción (movimiento SALE con saleId);
+  cancelar devuelve (RETURN con saleId). Stock nunca negativo: `UPDATE … WHERE
+  stock >= n` → 0 filas = OUT_OF_STOCK y rollback de TODA la venta; CHECK
+  (stock >= 0) en el SQL como segunda red.
+· Alerta de mínimo = stock ≤ minStock (en o por debajo; minStock es el punto de
+  reorden). Margen por producto (precio − costo y %), margen promedio ponderado,
+  valor del inventario a costo, más vendidos del periodo (piezas, vendido,
+  utilidad = vendido − piezas × costo ACTUAL) y bitácora por producto.
+· Permisos: products.manage = catálogo/estadísticas; inventory.manage =
+  movimientos manuales; el picker de la caja acepta cash.view; la venta descuenta
+  bajo cash.manage sin pedir inventory.manage (contrato de permissions.ts).
+
+TICKET CANCELADO (convención, ver cabecera de commissions.ts): BarberSale NO
+tiene status/cancelledAt. Soft-cancel = subtotal/tip/total a 0 + líneas borradas
++ comisión borrada + stock devuelto + canjes restituidos + notes con prefijo
+"[CANCELADA] <iso> · <quién> · <motivo> · Original: <resumen>". Así CUALQUIER
+agregado excluye el ticket por construcción aunque olviden filtrar (la lección
+del dental); isSaleCancelled() es el único predicado; una nota nueva no puede
+empezar con la marca. Solo con turno abierto y comisión sin pagar
+(COMMISSION_PAID → ajustar en el siguiente periodo). Propuesta Schema-C:
+cancelledAt / cancelledByUserId / cancelReason.
+
+VERIFICACIÓN (comandos exactos; la integración crea/borra barberías → JAMÁS
+apuntarla a producción):
+  npx tsx --test src/lib/barber/__tests__/caja-commissions.test.ts       → 17/17
+  docker run -d --name barber-caja-pg -e POSTGRES_PASSWORD=barber \
+    -e POSTGRES_DB=barber -p 54329:5432 postgres:16-alpine
+  DATABASE_URL=postgresql://postgres:barber@localhost:54329/barber \
+    DIRECT_URL=$DATABASE_URL npx prisma db push --skip-generate
+  DATABASE_URL=… DIRECT_URL=… npx tsx --test \
+    src/lib/barber/__tests__/caja-integration.test.ts                   → 17/17
+1) npm run build → EXIT 0, output completo (ver arriba por qué `next build`
+   directo tras `npx prisma generate` exitoso).
+2) Tres esquemas a mano (caja-commissions.test.ts):
+   · COMMISSION 40% · ticket Corte 180 + Barba 140 + Cera 150 − desc 20,
+     propina 50 → base SERVICES = 300.00 → comisión 120.00 → pago 170.00
+     (con SERVICES_AND_PRODUCTS la base sería 450.00).
+   · CHAIR_RENT renta 3,000 · producción 10,000, propinas 400 → entrada
+     10,000.00 → pago 7,400.00; producción 1,000 → −2,000.00 (debe).
+   · SALARY · producción 5,000, propinas 250 → entrada 0.00 → pago 250.00.
+   Redondeo: 33.33% de 100 = 33.33; 12.5% de 0.10 = 0.01 (half-up, una vez).
+3) Propina fuera de la base: en integración, cita con priceAtBooking 170 +
+   propina 30 → total 200, entrada base 170.00 / amount 68.00 (no 80).
+4) Ticket cancelado: total 0, sin líneas, sin entrada, stock devuelto (8+2−1=9),
+   ticketCount −1, CARD −540, comisión del barbero 188 (ya sin los 56).
+5) Dos barberías (A y B, ambas AVANZADO): B no ve turnos/tickets/comisiones/
+   productos de A (getSaleDetail null, cancelSale SALE_NOT_FOUND, updateProduct
+   y movimientos PRODUCT_NOT_FOUND, markCommissionsPaid BARBER_NOT_FOUND,
+   lookupClients vacío); A no puede cobrar con barbero/servicio/producto de B.
+6) Rol BARBER llamando las funciones que sirven la API: solo su fila; barberId
+   ajeno → 403 FORBIDDEN_SCOPE en summary y entries; markCommissionsPaid /
+   createSale / getCashState / listProducts → BarberForbiddenError. Las rutas
+   sin sesión → 401 (probado invocando GET/POST de commissions, products y
+   sales). ⚠️ No hay Supabase local para una cookie real: la prueba de rol se
+   hizo sobre las funciones que la ruta llama tras getBarberContext(), con
+   BarberUser rol BARBER ligado/no ligado a un Barber real en la BD.
+7) Plan Básico (features de FALLBACK_BARBER_PLAN_CONFIG.BASICO): assertBarberFeature
+   niega commissions y products (FEATURE_NOT_IN_PLAN) y permite cash/tips; un
+   body con producto en Básico se rechaza sin tocar stock; el picker no ofrece
+   productos.
+8) Stock: venta ×2 → 10→8 con SALE −2; cancelar → RETURN +2. Concurrencia:
+   Promise.allSettled de dos ventas del ÚLTIMO producto → 1 fulfilled, 1
+   OUT_OF_STOCK, stock 0, un solo SALE, un solo ticket (rollback completo).
+9) node scripts/barber-guard.cjs → exit 0.
+10) grep -i "paciente|doctor|Dr\.|clínica|consulta|expediente" en los 45
+   archivos → 0.
+
+HALLAZGOS / AVISOS PARA OTRAS TERMINALES:
+(1) 🔴 Borrar una Barbershop completa en un solo DELETE TRUENA:
+    "Foreign key constraint violated: barber_appointment_services_serviceId_fkey"
+    — Postgres evalúa el NO ACTION antes de que el cascade de citas alcance sus
+    líneas (el razonamiento de la Ola 0 "NO ACTION se verifica al final del
+    statement" no se cumple con cascades encadenados). Visto en la limpieza de
+    la prueba de integración; ahí se borran hijos en orden. Quien construya
+    "eliminar barbería" debe borrar hijos explícitamente o hacer el FK
+    DEFERRABLE INITIALLY DEFERRED.
+(2) Pago mixto: no cabe (un paymentMethod por ticket). Propuesta: tabla
+    barber_sale_payments (saleId, method, amount) o un segundo par
+    paymentMethod2/amount2 en BarberSale; el cierre ya suma por método así que
+    solo cambia breakdownOf().
+(3) Política de comisión por barbería: columna pendiente (arriba, C).
+(4) SALARY sin monto: el módulo no puede liquidar el sueldo; propuesta
+    Barber.salaryAmount Decimal(10,2) por periodo.
+(5) totalVisits/lastVisitAt/loyaltyCount NO se incrementan al cobrar (T2 marca
+    elegibilidad y acumula sellos; aquí solo se canjea). Si T2 quiere que el
+    cobro selle, es un updateMany en createSale paso 11.
+(6) Las pruebas viven en src/lib/barber/__tests__/ (prefijo propio del guard,
+    fuera de la allowlist estricta de 3 libs pero sin colisión posible); no se
+    agregó script a package.json (fuera del vertical) — comandos arriba.
+(7) Lint desacoplado del build (ignoreDuringBuilds); no corrió en el worktree
+    (junction sin eslint físico, conocido).
+
+SQL (pegar en Supabase, idempotente):
+-- ═══════════════════════════════════════════════════════════════════════
+-- DaleControl BARBER — caja, comisiones e inventario (ola T6 "dinero").
+--
+-- NO crea tablas ni columnas: las tablas viven en sql/barber.sql y
+-- sql/barber_complemento.sql (ambos deben estar aplicados antes). Este
+-- archivo agrega SOLO constraints e índices de refuerzo que el código ya
+-- respeta por sí mismo — son la red de seguridad de base de datos.
+--
+-- Aplicar manualmente en Supabase (SQL editor). Re-ejecutable: cada bloque
+-- comprueba existencia antes de crear. Un único delimitador `$barberc$` y
+-- sin DO anidados (el parser de Supabase rompe con $$ anidado).
+-- ═══════════════════════════════════════════════════════════════════════
+
+
+-- ── 1. Un solo turno ABIERTO por barbería ──────────────────────────────
+-- openCashSession() ya lo verifica dentro de su transacción; este índice
+-- único parcial cierra la ventana de carrera entre dos aperturas
+-- simultáneas (la segunda recibe P2002 → 409 SESSION_ALREADY_OPEN).
+CREATE UNIQUE INDEX IF NOT EXISTS "barber_cash_sessions_one_open_idx"
+  ON "barber_cash_sessions" ("barbershopId")
+  WHERE "closedAt" IS NULL;
+
+
+-- ── 2. El stock JAMÁS negativo ─────────────────────────────────────────
+-- applyStockDelta() resta con `WHERE stock >= n` en la misma transacción de
+-- la venta (una de dos ventas simultáneas del último producto falla con
+-- OUT_OF_STOCK). El CHECK es defensa en profundidad ante cualquier UPDATE
+-- que no pase por ahí.
+DO $barberc$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'barber_products_stock_nonnegative'
+  ) THEN
+    ALTER TABLE "barber_products"
+      ADD CONSTRAINT "barber_products_stock_nonnegative" CHECK ("stock" >= 0);
+  END IF;
+END
+$barberc$;
+
+
+-- ── 3. Cantidades del ticket y del movimiento ──────────────────────────
+-- Una línea de ticket siempre tiene qty ≥ 1 (el signo del descuento va en
+-- unitPrice, nunca en qty). Un movimiento de inventario nunca es 0 (su
+-- signo ES la convención: + suma, − resta).
+DO $barberc$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'barber_sale_items_qty_positive'
+  ) THEN
+    ALTER TABLE "barber_sale_items"
+      ADD CONSTRAINT "barber_sale_items_qty_positive" CHECK ("qty" >= 1);
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'barber_stock_movements_qty_nonzero'
+  ) THEN
+    ALTER TABLE "barber_stock_movements"
+      ADD CONSTRAINT "barber_stock_movements_qty_nonzero" CHECK ("qty" <> 0);
+  END IF;
+END
+$barberc$;
+
+
+-- ── 4. Montos del ticket y del turno nunca negativos ───────────────────
+-- subtotal/tip/total viven en Decimal(10,2); un ticket cancelado queda en
+-- 0 (soft-cancel), nunca por debajo. El fondo y el contado tampoco.
+DO $barberc$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'barber_sales_amounts_nonnegative'
+  ) THEN
+    ALTER TABLE "barber_sales"
+      ADD CONSTRAINT "barber_sales_amounts_nonnegative"
+      CHECK ("subtotal" >= 0 AND "tip" >= 0 AND "total" >= 0);
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'barber_cash_sessions_amounts_nonnegative'
+  ) THEN
+    ALTER TABLE "barber_cash_sessions"
+      ADD CONSTRAINT "barber_cash_sessions_amounts_nonnegative"
+      CHECK (
+        "openingAmount" >= 0
+        AND ("countedAmount" IS NULL OR "countedAmount" >= 0)
+      );
+  END IF;
+END
+$barberc$;
+
+
+-- ── 5. Índices de lectura de la ola ────────────────────────────────────
+-- Tickets por barbería + turno (resumen del turno y cierre).
+CREATE INDEX IF NOT EXISTS "barber_sales_barbershopId_cashSessionId_idx"
+  ON "barber_sales" ("barbershopId", "cashSessionId");
+
+-- Movimientos ligados a un ticket (cancelación devuelve por saleId).
+CREATE INDEX IF NOT EXISTS "barber_stock_movements_saleId_idx"
+  ON "barber_stock_movements" ("saleId");
+
+-- Comisiones pendientes por barbería/barbero/periodo (marcar pagado).
+CREATE INDEX IF NOT EXISTS "barber_commission_entries_pending_idx"
+  ON "barber_commission_entries" ("barbershopId", "barberId", "periodKey", "paidAt");
+
+-- Líneas por producto (más vendidos del periodo).
+CREATE INDEX IF NOT EXISTS "barber_sale_items_productId_idx"
+  ON "barber_sale_items" ("productId");
