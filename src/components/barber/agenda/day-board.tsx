@@ -4,16 +4,25 @@
 // Vista DÍA — la pantalla que la barbería tiene abierta todo el día.
 // Una columna por silla, arrastrar para mover, tocar un hueco para agendar.
 //
+// El bloque de cada visita mide LO QUE DURA: 2 px por minuto (30 min = 60
+// px, 90 min = 180 px). Antes todas se veían igual de "franjita" y la
+// agenda no decía lo único que importa de un vistazo: cuánto va a tomar.
+//
 // El arrastre es con eventos de puntero a pelo (no @dnd-kit) por dos
 // razones: la rejilla tendría cientos de zonas soltables (15 min × N
 // barberos) y, sobre todo, hay que VALIDAR el hueco mientras el dedo se
 // mueve para pintar el fantasma en rojo ANTES de soltar. La validación es
 // la misma función que corre el servidor: checkAppointmentSlot().
 //
-// Alternativa accesible al arrastre: la tarjeta es un <button>; con Enter
-// se abre el detalle y desde ahí "Editar" cambia hora y barbero sin ratón.
+// Tocar una tarjeta SIEMPRE abre el detalle — también las cerradas
+// (completada, cancelada, no llegó) y también sin permiso de edición. Antes
+// el clic vivía dentro del arrastre, y como el arrastre se cancela para
+// esas visitas, tocarlas no hacía absolutamente nada. Justo la completada
+// es la que hay que abrir para cobrarla.
 // ═══════════════════════════════════════════════════════════════════════
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
+import { CalendarPlus, CheckCircle2 } from "lucide-react";
 import {
   BARBER_APPOINTMENT_STATUS_UI,
   BARBER_TIME_OFF_TYPE_LABELS,
@@ -24,12 +33,18 @@ import {
   type BarberTimeOffDTO,
 } from "@/lib/barber/types";
 import {
+  BARBER_CARD_COMPACT_PX,
+  BARBER_CARD_MIN_PX,
   BARBER_DAY_PX_PER_MIN,
   BARBER_SLOT_MINUTES,
+  assignLanes,
   barberDayWindows,
   checkAppointmentSlot,
   computeGridBounds,
+  formatMXN,
   hasAnySchedule,
+  minuteToHHMM,
+  minuteToHourLabel,
   minuteToLabel,
   shopDateISO,
   shopLocalToUtc,
@@ -46,7 +61,10 @@ export interface DayBoardProps {
   appointments: BarberAppointmentDTO[];
   schedules: BarberScheduleDTO[];
   timeOff: BarberTimeOffDTO[];
+  /** appointmentId → ticket vivo. Lo calcula el servidor con isSaleCancelled(). */
+  charged: Record<string, { saleId: string; total: number }>;
   canEdit: boolean;
+  canSchedule: boolean;
   t: (key: string, vars?: Record<string, string | number>) => string;
   onSlotClick: (barberId: string, startAt: Date) => void;
   onCardClick: (appointment: BarberAppointmentDTO) => void;
@@ -68,7 +86,7 @@ interface DragState {
 const PX = BARBER_DAY_PX_PER_MIN;
 
 export function DayBoard(props: DayBoardProps) {
-  const { dateISO, timezone, barbers, appointments, schedules, timeOff, canEdit, t } = props;
+  const { dateISO, timezone, barbers, appointments, schedules, timeOff, charged, canEdit, t } = props;
 
   const columns = useMemo(() => barbers.filter((b) => b.isActive), [barbers]);
   const dayStartUtc = useMemo(
@@ -119,6 +137,10 @@ export function DayBoard(props: DayBoardProps) {
   const [drag, setDrag] = useState<DragState | null>(null);
   const dragRef = useRef<DragState | null>(null);
   dragRef.current = drag;
+  // "El clic que viene es la cola de un arrastre" — se levanta al soltar
+  // después de mover y se baja en el siguiente pointerdown, así un arrastre
+  // que termina fuera de la tarjeta no se come el clic siguiente.
+  const justDragged = useRef(false);
 
   const validate = useCallback(
     (appointmentId: string, barberId: string, startMin: number, durationMin: number) => {
@@ -138,21 +160,22 @@ export function DayBoard(props: DayBoardProps) {
     [dayStartUtc, timezone, schedules, timeOff, appointments],
   );
 
-  const columnAt = useCallback(
-    (clientX: number): string | null => {
-      let best: string | null = null;
-      for (const [id, node] of Array.from(columnRefs.current.entries())) {
-        const rect = node.getBoundingClientRect();
-        if (clientX >= rect.left && clientX <= rect.right) return id;
-        if (best === null) best = id;
-      }
-      return best;
-    },
-    [],
-  );
+  const columnAt = useCallback((clientX: number): string | null => {
+    let best: string | null = null;
+    for (const [id, node] of Array.from(columnRefs.current.entries())) {
+      const rect = node.getBoundingClientRect();
+      if (clientX >= rect.left && clientX <= rect.right) return id;
+      if (best === null) best = id;
+    }
+    return best;
+  }, []);
+
+  const canDrag = (appt: BarberAppointmentDTO) =>
+    canEdit && Boolean(appt.barberId) && !isTerminalAppointmentStatus(appt.status);
 
   const onPointerDown = (e: React.PointerEvent, appt: BarberAppointmentDTO) => {
-    if (!canEdit || !appt.barberId || isTerminalAppointmentStatus(appt.status)) return;
+    justDragged.current = false;
+    if (!canDrag(appt) || !appt.barberId) return;
     if (e.button !== 0 && e.pointerType === "mouse") return;
     const durationMin = (new Date(appt.endAt).getTime() - new Date(appt.startAt).getTime()) / 60_000;
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
@@ -193,10 +216,8 @@ export function DayBoard(props: DayBoardProps) {
     } catch {
       /* el navegador ya lo soltó */
     }
-    if (!current.active) {
-      props.onCardClick(appt);
-      return;
-    }
+    if (!current.active) return; // fue un toque: lo atiende onClick
+    justDragged.current = true;
     const movedTime = Math.abs(current.startMin - toMinutes(appt.startAt)) >= 1;
     const movedBarber = current.barberId !== appt.barberId;
     if (!movedTime && !movedBarber) return;
@@ -225,19 +246,23 @@ export function DayBoard(props: DayBoardProps) {
 
   const hourMarks: number[] = [];
   for (let m = bounds.start; m <= bounds.end; m += 60) hourMarks.push(m);
+  const nowVisible = nowMinute !== null && nowMinute >= bounds.start && nowMinute <= bounds.end;
 
   return (
     <div className={css.board}>
       <div className={css.scroller}>
         <div
           className={css.grid}
-          style={{ gridTemplateColumns: `62px repeat(${columns.length}, minmax(168px, 1fr))` }}
+          style={{ gridTemplateColumns: `58px repeat(${columns.length}, minmax(0, 1fr))` }}
         >
           {/* Encabezado */}
           <div className={css.headCorner} />
           {columns.map((barber) => {
             const windows = windowsByBarber.get(barber.id) ?? [];
             const configured = hasAnySchedule(schedules, barber.id);
+            const count = appointments.filter(
+              (a) => a.barberId === barber.id && a.status !== "CANCELLED",
+            ).length;
             return (
               <div key={`h-${barber.id}`} className={css.headCell}>
                 <div className={css.headName}>
@@ -248,16 +273,30 @@ export function DayBoard(props: DayBoardProps) {
                     {initials(barber.nickname || barber.name)}
                   </span>
                   <span className={css.headLabel}>{barber.nickname || barber.name}</span>
+                  {count > 0 ? <span className={css.headCount}>{count}</span> : null}
                 </div>
-                <div className={css.headMeta}>
-                  {!configured
-                    ? t("barber.agenda.state.noSchedule")
-                    : windows.length === 0
+                {!configured ? (
+                  // El aviso LLEVA a arreglarlo, con este barbero ya elegido.
+                  props.canSchedule ? (
+                    <Link
+                      href={`/barber/agenda/horarios?barbero=${barber.id}`}
+                      className={css.headMetaLink}
+                    >
+                      <CalendarPlus size={11} />
+                      {t("barber.agenda.state.noScheduleAction")}
+                    </Link>
+                  ) : (
+                    <div className={css.headMeta}>{t("barber.agenda.state.noSchedule")}</div>
+                  )
+                ) : (
+                  <div className={css.headMeta}>
+                    {windows.length === 0
                       ? t("barber.agenda.schedule.closedDay")
                       : windows
                           .map((w) => `${minuteToLabel(w.start)} – ${minuteToLabel(w.end)}`)
                           .join(" · ")}
-                </div>
+                  </div>
+                )}
               </div>
             );
           })}
@@ -265,10 +304,17 @@ export function DayBoard(props: DayBoardProps) {
           {/* Regleta de horas */}
           <div className={css.gutter} style={{ height, position: "relative" }}>
             {hourMarks.map((m) => (
-              <span key={m} className={css.gutterMark} style={{ top: yOf(m) }}>
-                {minuteToLabel(m)}
+              <span key={m} className={css.gutterMark} style={{ top: Math.max(7, yOf(m)) }}>
+                {minuteToHourLabel(m)}
               </span>
             ))}
+            {nowVisible ? (
+              // 24 h en la píldora del "ahora": es la etiqueta más angosta y
+              // aquí compite por el mismo ancho que la regleta.
+              <span className={css.nowLabel} style={{ top: yOf(nowMinute as number) }}>
+                {minuteToHHMM(Math.round(nowMinute as number))}
+              </span>
+            ) : null}
           </div>
 
           {/* Columnas */}
@@ -277,7 +323,14 @@ export function DayBoard(props: DayBoardProps) {
             const configured = hasAnySchedule(schedules, barber.id);
             const closed = configured ? complement(windows, bounds) : [];
             const blocks = timeOff.filter((off) => off.barberId === null || off.barberId === barber.id);
-            const cards = appointments.filter((a) => a.barberId === barber.id);
+            const cards = appointments
+              .filter((a) => a.barberId === barber.id)
+              .sort((a, b) => a.startAt.localeCompare(b.startAt));
+            // Una cancelada NO bloquea la agenda, así que sí se puede
+            // encimar con la visita que la sustituyó: hacen falta carriles.
+            const lanes = assignLanes(
+              cards.map((a) => ({ start: toMinutes(a.startAt), end: toMinutes(a.endAt) })),
+            );
             const ghost = drag?.active && drag.barberId === barber.id ? drag : null;
 
             return (
@@ -291,11 +344,17 @@ export function DayBoard(props: DayBoardProps) {
                 style={{ height }}
                 onClick={(e) => onColumnClick(e, barber.id)}
               >
+                {hourMarks
+                  .filter((m) => m < bounds.end)
+                  .map((m) => (
+                    <div
+                      key={`hb-${m}`}
+                      className={css.halfBand}
+                      style={{ top: yOf(m + 30), height: 30 * PX }}
+                    />
+                  ))}
                 {hourMarks.map((m) => (
                   <div key={`l-${m}`} className={css.hourLine} style={{ top: yOf(m) }} />
-                ))}
-                {hourMarks.map((m) => (
-                  <div key={`hl-${m}`} className={css.halfLine} style={{ top: yOf(m + 30) }} />
                 ))}
 
                 {closed.map((band, i) => (
@@ -321,74 +380,54 @@ export function DayBoard(props: DayBoardProps) {
                   );
                 })}
 
-                {cards.map((appt) => {
-                  const start = toMinutes(appt.startAt);
-                  const end = toMinutes(appt.endAt);
-                  const top = yOf(Math.max(bounds.start, start));
-                  const cardHeight = Math.max(20, (Math.min(bounds.end, end) - Math.max(bounds.start, start)) * PX);
-                  const ui = BARBER_APPOINTMENT_STATUS_UI[appt.status];
-                  const dim = appt.status === "CANCELLED" || appt.status === "NO_SHOW";
-                  return (
-                    <button
-                      type="button"
-                      key={appt.id}
-                      className={`${css.card} ${cardHeight < 38 ? css.cardCompact : ""} ${
-                        drag?.active && drag.appointmentId === appt.id ? css.cardDragging : ""
-                      }`}
-                      style={{
-                        top,
-                        height: cardHeight,
-                        left: 3,
-                        right: 3,
-                        borderLeftColor: barberColor(appt.barberId ?? barber.id),
-                        opacity: dim ? 0.55 : 1,
-                      }}
-                      title={`${minuteToLabel(start)} · ${appt.clientName ?? ""} · ${ui.label}`}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                      }}
-                      onPointerDown={(e) => onPointerDown(e, appt)}
-                      onPointerMove={(e) => onPointerMove(e, appt)}
-                      onPointerUp={(e) => onPointerUp(e, appt)}
-                      onPointerCancel={() => setDrag(null)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter" || e.key === " ") {
-                          e.preventDefault();
-                          props.onCardClick(appt);
-                        }
-                      }}
-                    >
-                      <span className={css.cardTime}>{minuteToLabel(start)}</span>
-                      <span className={css.cardName}>
-                        {appt.clientName || t("barber.agenda.card.noClient")}
-                      </span>
-                      <span className={css.cardServices}>
-                        {appt.services.length > 0
-                          ? appt.services.map((s) => s.serviceName).join(" + ")
-                          : t("barber.agenda.card.noServices")}
-                      </span>
-                    </button>
-                  );
-                })}
+                {cards.map((appt, index) => (
+                  <AppointmentCard
+                    key={appt.id}
+                    appointment={appt}
+                    top={yOf(Math.max(bounds.start, toMinutes(appt.startAt)))}
+                    height={cardHeightPx(toMinutes(appt.startAt), toMinutes(appt.endAt), bounds)}
+                    lane={lanes[index]?.lane ?? 0}
+                    laneCount={lanes[index]?.lanes ?? 1}
+                    startLabel={minuteToLabel(toMinutes(appt.startAt))}
+                    endLabel={minuteToLabel(toMinutes(appt.endAt))}
+                    barberName={appt.barberName || barber.nickname || barber.name}
+                    barberTint={barberColor(appt.barberId ?? barber.id)}
+                    sale={charged[appt.id] ?? null}
+                    dragging={Boolean(drag?.active && drag.appointmentId === appt.id)}
+                    draggable={canDrag(appt)}
+                    t={t}
+                    onOpen={() => {
+                      if (justDragged.current) {
+                        justDragged.current = false;
+                        return;
+                      }
+                      props.onCardClick(appt);
+                    }}
+                    onPointerDown={(e) => onPointerDown(e, appt)}
+                    onPointerMove={(e) => onPointerMove(e, appt)}
+                    onPointerUp={(e) => onPointerUp(e, appt)}
+                    onPointerCancel={() => setDrag(null)}
+                  />
+                ))}
 
                 {ghost ? (
                   <div
                     className={`${css.ghost} ${ghost.ok ? "" : css.ghostBad}`}
                     style={{
                       top: yOf(ghost.startMin),
-                      height: Math.max(20, ghost.durationMin * PX),
+                      height: Math.max(BARBER_CARD_MIN_PX, ghost.durationMin * PX),
                       left: 3,
                       right: 3,
                     }}
                   >
                     {ghost.ok
-                      ? minuteToLabel(ghost.startMin)
+                      ? `${minuteToLabel(ghost.startMin)} – ${minuteToLabel(ghost.startMin + ghost.durationMin)}`
                       : `${minuteToLabel(ghost.startMin)} · ${t("barber.agenda.move.blocked")}`}
                   </div>
                 ) : null}
 
-                {nowMinute !== null && nowMinute >= bounds.start && nowMinute <= bounds.end ? (
-                  <div className={css.nowLine} style={{ top: yOf(nowMinute) }}>
+                {nowVisible ? (
+                  <div className={css.nowLine} style={{ top: yOf(nowMinute as number) }}>
                     <span className={css.nowDot} />
                   </div>
                 ) : null}
@@ -398,6 +437,132 @@ export function DayBoard(props: DayBoardProps) {
         </div>
       </div>
     </div>
+  );
+}
+
+/** Alto en px del bloque, recortado a la ventana visible de la rejilla. */
+function cardHeightPx(startMin: number, endMin: number, bounds: MinuteWindow): number {
+  const visible = Math.min(bounds.end, endMin) - Math.max(bounds.start, startMin);
+  return Math.max(BARBER_CARD_MIN_PX, visible * PX);
+}
+
+interface CardProps {
+  appointment: BarberAppointmentDTO;
+  top: number;
+  height: number;
+  lane: number;
+  laneCount: number;
+  startLabel: string;
+  endLabel: string;
+  barberName: string;
+  barberTint: string;
+  sale: { saleId: string; total: number } | null;
+  dragging: boolean;
+  draggable: boolean;
+  t: (key: string, vars?: Record<string, string | number>) => string;
+  onOpen: () => void;
+  onPointerDown: (e: React.PointerEvent) => void;
+  onPointerMove: (e: React.PointerEvent) => void;
+  onPointerUp: (e: React.PointerEvent) => void;
+  onPointerCancel: () => void;
+}
+
+/**
+ * Bloque de una visita. Es un <button> de verdad: se abre con Enter y con
+ * espacio, y el foco se ve. Nada de div con onClick.
+ */
+function AppointmentCard(props: CardProps) {
+  const { appointment: appt, t } = props;
+  const ui = BARBER_APPOINTMENT_STATUS_UI[appt.status];
+  const compact = props.height < BARBER_CARD_COMPACT_PX;
+  const roomy = props.height >= 74 && props.laneCount === 1;
+  /** Poco alto o partida en carriles: no cabe el texto del estado. */
+  const narrow = compact || props.laneCount > 1;
+  const total = appt.services.reduce((acc, s) => acc + s.priceAtBooking, 0);
+
+  const now = Date.now();
+  const startMs = new Date(appt.startAt).getTime();
+  const endMs = new Date(appt.endAt).getTime();
+  const terminal = isTerminalAppointmentStatus(appt.status);
+  const live = !terminal && startMs <= now && now < endMs;
+  const past = !terminal && !live && endMs <= now;
+
+  const width = 100 / props.laneCount;
+  const clientLabel = appt.clientName || t("barber.agenda.card.noClient");
+  const serviceLabel =
+    appt.services.length > 0
+      ? appt.services.map((s) => s.serviceName).join(" + ")
+      : t("barber.agenda.card.noServices");
+
+  return (
+    <button
+      type="button"
+      data-status={appt.status}
+      className={[
+        css.card,
+        compact ? css.cardCompact : "",
+        props.dragging ? css.cardDragging : "",
+        live ? css.cardLive : "",
+        past ? css.cardPast : "",
+      ]
+        .filter(Boolean)
+        .join(" ")}
+      style={{
+        top: props.top,
+        height: props.height,
+        left: `calc(${props.lane * width}% + 3px)`,
+        width: `calc(${width}% - 6px)`,
+        cursor: props.draggable ? "grab" : "pointer",
+      }}
+      aria-label={t("barber.agenda.card.aria", {
+        time: props.startLabel,
+        client: clientLabel,
+        status: ui.label,
+      })}
+      title={`${props.startLabel} – ${props.endLabel} · ${clientLabel} · ${serviceLabel} · ${props.barberName} · ${ui.label}`}
+      onClick={(e) => {
+        e.stopPropagation();
+        props.onOpen();
+      }}
+      onPointerDown={props.onPointerDown}
+      onPointerMove={props.onPointerMove}
+      onPointerUp={props.onPointerUp}
+      onPointerCancel={props.onPointerCancel}
+    >
+      <span className={css.cardRow}>
+        <span className={css.cardTime}>
+          {narrow ? props.startLabel : `${props.startLabel} – ${props.endLabel}`}
+        </span>
+        {/* Con la tarjeta partida en carriles, la palabra del estado se
+            cortaría a "CANC…": ahí vale más el punto de color (el estado
+            completo sigue en el title y en el aria-label). */}
+        {narrow ? (
+          <span className={css.cardDot} aria-hidden />
+        ) : (
+          <span className={css.cardStatus}>{ui.label}</span>
+        )}
+      </span>
+
+      <span className={css.cardName}>{clientLabel}</span>
+
+      {compact ? null : <span className={css.cardServices}>{serviceLabel}</span>}
+
+      {roomy ? (
+        <span className={css.cardFoot}>
+          <span className={css.cardBarber}>
+            <span className={css.cardBarberDot} style={{ background: props.barberTint }} aria-hidden />
+            <span className={css.cardBarberName}>{props.barberName}</span>
+          </span>
+          {props.sale ? (
+            <span className={css.cardPaid}>
+              <CheckCircle2 size={11} /> {t("barber.agenda.card.charged")}
+            </span>
+          ) : total > 0 ? (
+            <span className={css.cardPrice}>{formatMXN(total)}</span>
+          ) : null}
+        </span>
+      ) : null}
+    </button>
   );
 }
 

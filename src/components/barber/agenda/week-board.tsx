@@ -2,24 +2,33 @@
 
 // ═══════════════════════════════════════════════════════════════════════
 // Vista SEMANA — para ver de un vistazo dónde queda hueco. Una columna por
-// día, con TODOS los barberos mezclados (el color del borde dice quién es).
+// día, con TODOS los barberos mezclados (el punto de color dice quién es;
+// el fondo y la barra, en qué estado va).
 //
 // Aquí NO se arrastra a propósito: mover una visita entre días exige elegir
-// barbero, y esa decisión se toma mejor en la vista día o en el modal de
-// edición. Tocar un día lleva a la vista día de ese día.
+// barbero, y esa decisión se toma mejor en la vista día o en el detalle.
+// Tocar el encabezado de un día lleva a la vista día de ese día; tocar una
+// visita abre su detalle, igual que en la vista día.
+//
+// Los bloques también son proporcionales (1.1 px por minuto): media semana
+// llena se lee sin abrir nada.
 // ═══════════════════════════════════════════════════════════════════════
 import { useMemo } from "react";
 import {
   BARBER_APPOINTMENT_STATUS_UI,
+  isTerminalAppointmentStatus,
   type BarberAppointmentDTO,
   type BarberDTO,
   type BarberScheduleDTO,
 } from "@/lib/barber/types";
 import {
+  BARBER_CARD_COMPACT_PX,
+  BARBER_CARD_MIN_PX,
   BARBER_WEEK_PX_PER_MIN,
   assignLanes,
   barberDayWindows,
   computeGridBounds,
+  minuteToHourLabel,
   minuteToLabel,
   shopDateISO,
   shopLocalToUtc,
@@ -87,25 +96,31 @@ export function WeekBoard(props: WeekBoardProps) {
   const hourMarks: number[] = [];
   for (let m = bounds.start; m <= bounds.end; m += 60) hourMarks.push(m);
 
+  const now = Date.now();
+
   return (
     <div className={css.board}>
       <div className={css.scroller}>
-        <div className={css.grid} style={{ gridTemplateColumns: "62px repeat(7, minmax(112px, 1fr))" }}>
+        <div className={css.grid} style={{ gridTemplateColumns: "58px repeat(7, minmax(0, 1fr))" }}>
           <div className={css.headCorner} />
-          {perDay.map(({ day }) => {
+          {perDay.map(({ day, items }) => {
             const isToday = day === todayISO;
+            const count = items.filter((i) => i.appointment.status !== "CANCELLED").length;
             return (
               <div key={`h-${day}`} className={`${css.headCell} ${isToday ? css.weekToday : ""}`}>
                 <button
                   type="button"
                   className={css.weekHead}
                   onClick={() => props.onPickDay(day)}
-                  style={{ background: "transparent", border: 0, padding: 0, textAlign: "left" }}
+                  aria-label={t("barber.agenda.views.goToDay")}
                 >
                   <span className={css.weekHeadDay}>
                     {t(`barber.agenda.weekdaysShort.${weekdayOfISO(day)}`)}
                   </span>
                   <span className={css.weekHeadDate}>{parseInt(day.slice(8), 10)}</span>
+                  <span className={css.weekHeadCount}>
+                    {count > 0 ? t("barber.agenda.summary.appointments", { count }) : "—"}
+                  </span>
                 </button>
               </div>
             );
@@ -113,47 +128,102 @@ export function WeekBoard(props: WeekBoardProps) {
 
           <div className={css.gutter} style={{ height, position: "relative" }}>
             {hourMarks.map((m) => (
-              <span key={m} className={css.gutterMark} style={{ top: yOf(m) }}>
-                {minuteToLabel(m)}
+              <span key={m} className={css.gutterMark} style={{ top: Math.max(7, yOf(m)) }}>
+                {minuteToHourLabel(m)}
               </span>
             ))}
           </div>
 
           {perDay.map(({ day, items }) => {
             const lanes = assignLanes(items.map((i) => ({ start: i.start, end: i.end })));
+            const isToday = day === todayISO;
             return (
-              <div key={day} className={css.column} style={{ height }}>
+              <div
+                key={day}
+                className={`${css.column} ${isToday ? css.weekTodayCol : ""}`}
+                style={{ height }}
+              >
+                {hourMarks
+                  .filter((m) => m < bounds.end)
+                  .map((m) => (
+                    <div
+                      key={`hb-${m}`}
+                      className={css.halfBand}
+                      style={{ top: yOf(m + 30), height: 30 * PX }}
+                    />
+                  ))}
                 {hourMarks.map((m) => (
                   <div key={`l-${m}`} className={css.hourLine} style={{ top: yOf(m) }} />
                 ))}
+
                 {items.map((item, index) => {
+                  const appt = item.appointment;
                   const lane = lanes[index];
                   const widthPct = 100 / lane.lanes;
-                  const ui = BARBER_APPOINTMENT_STATUS_UI[item.appointment.status];
-                  const dim =
-                    item.appointment.status === "CANCELLED" || item.appointment.status === "NO_SHOW";
+                  const ui = BARBER_APPOINTMENT_STATUS_UI[appt.status];
+                  const blockHeight = Math.max(
+                    BARBER_CARD_MIN_PX,
+                    (Math.min(bounds.end, item.end) - Math.max(bounds.start, item.start)) * PX,
+                  );
+                  const startLabel = minuteToLabel(item.start);
+                  const clientLabel = appt.clientName || t("barber.agenda.card.noClient");
+                  const terminal = isTerminalAppointmentStatus(appt.status);
+                  const startMs = new Date(appt.startAt).getTime();
+                  const endMs = new Date(appt.endAt).getTime();
+                  const live = !terminal && startMs <= now && now < endMs;
+                  const past = !terminal && !live && endMs <= now;
                   return (
                     <button
                       type="button"
-                      key={item.appointment.id}
-                      className={`${css.card} ${css.cardCompact}`}
+                      key={appt.id}
+                      data-status={appt.status}
+                      className={[
+                        css.card,
+                        blockHeight < BARBER_CARD_COMPACT_PX ? css.cardCompact : "",
+                        live ? css.cardLive : "",
+                        past ? css.cardPast : "",
+                      ]
+                        .filter(Boolean)
+                        .join(" ")}
                       style={{
                         top: yOf(Math.max(bounds.start, item.start)),
-                        height: Math.max(18, (item.end - item.start) * PX),
+                        height: blockHeight,
                         left: `calc(${lane.lane * widthPct}% + 2px)`,
                         width: `calc(${widthPct}% - 4px)`,
-                        borderLeftColor: barberColor(item.appointment.barberId ?? "sin"),
-                        opacity: dim ? 0.5 : 1,
                       }}
-                      title={`${minuteToLabel(item.start)} · ${item.appointment.clientName ?? ""} · ${
-                        item.appointment.barberName ?? ""
+                      aria-label={t("barber.agenda.card.aria", {
+                        time: startLabel,
+                        client: clientLabel,
+                        status: ui.label,
+                      })}
+                      title={`${startLabel} – ${minuteToLabel(item.end)} · ${clientLabel} · ${
+                        appt.barberName ?? ""
                       } · ${ui.label}`}
-                      onClick={() => props.onCardClick(item.appointment)}
+                      onClick={() => props.onCardClick(appt)}
                     >
-                      <span className={css.cardTime}>{minuteToLabel(item.start)}</span>
-                      <span className={css.cardName}>
-                        {item.appointment.clientName || t("barber.agenda.card.noClient")}
+                      <span className={css.cardRow}>
+                        <span className={css.cardTime}>{startLabel}</span>
+                        <span className={css.cardDot} aria-hidden />
                       </span>
+                      <span className={css.cardName}>{clientLabel}</span>
+                      {/* La tercera línea solo si CABE entera: media semana
+                          llena de nombres cortados a la mitad se lee peor
+                          que media semana sin el nombre del barbero. */}
+                      {blockHeight >= 60 ? (
+                        <span className={css.cardServices}>
+                          <span
+                            className={css.cardBarberDot}
+                            style={{
+                              background: barberColor(appt.barberId ?? "sin"),
+                              display: "inline-block",
+                              marginRight: 5,
+                              verticalAlign: -1,
+                            }}
+                            aria-hidden
+                          />
+                          {appt.barberName ?? t("barber.agenda.card.noBarber")}
+                        </span>
+                      ) : null}
                     </button>
                   );
                 })}

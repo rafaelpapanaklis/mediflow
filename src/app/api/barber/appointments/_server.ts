@@ -23,6 +23,7 @@ import {
   type BarberPermissionKey,
 } from "@/lib/barber-auth";
 import { hasBarberPermission } from "@/lib/barber/permissions";
+import { isSaleCancelled } from "@/lib/barber/commissions";
 import { mxTenDigits } from "@/lib/phone-mx";
 import { getBarberPlan } from "@/lib/barber/plans";
 import { barberPlanHasFeature, type BarberResolvedPlan } from "@/lib/barber/plan-shared";
@@ -237,6 +238,42 @@ export async function loadSlotContext(shopId: string, fromUtc: Date, toUtc: Date
       status: a.status,
     })),
   };
+}
+
+// ── ¿Esta visita ya se cobró? ──────────────────────────────────────────
+//
+// La agenda tiene que poder decir "esta ya pasó por caja" sin abrir la
+// caja. El predicado de ticket vivo NO se reinventa aquí: isSaleCancelled()
+// (src/lib/barber/commissions.ts) es el ÚNICO que sabe leer la marca de
+// cancelación en `notes`, y es el mismo que usa createSale() para negarse a
+// cobrar dos veces la misma visita.
+
+export interface ChargedSale {
+  saleId: string;
+  total: number;
+}
+
+/**
+ * Mapa appointmentId → ticket vivo, para las visitas del rango que se
+ * están pintando. Filtra por barbershopId igual que todo lo demás.
+ */
+export async function loadChargedSales(
+  shopId: string,
+  appointmentIds: string[],
+): Promise<Record<string, ChargedSale>> {
+  if (appointmentIds.length === 0) return {};
+  const sales = await prisma.barberSale.findMany({
+    where: { barbershopId: shopId, appointmentId: { in: appointmentIds } },
+    select: { id: true, appointmentId: true, total: true, notes: true },
+    orderBy: { createdAt: "asc" },
+  });
+  const out: Record<string, ChargedSale> = {};
+  for (const sale of sales) {
+    if (!sale.appointmentId) continue;
+    if (isSaleCancelled(sale)) continue;
+    out[sale.appointmentId] = { saleId: sale.id, total: Number(sale.total) };
+  }
+  return out;
 }
 
 // ── El bug M-22 del dental que aquí NO se repite ───────────────────────

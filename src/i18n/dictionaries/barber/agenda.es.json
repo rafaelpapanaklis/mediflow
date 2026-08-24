@@ -3,7 +3,9 @@
   "subtitle": "Tu día, silla por silla.",
   "views": {
     "day": "Día",
-    "week": "Semana"
+    "week": "Semana",
+    "label": "Vista",
+    "goToDay": "Ver este día"
   },
   "nav": {
     "today": "Hoy",
@@ -29,7 +31,8 @@
     "noBarbersBody": "Da de alta a tu equipo en Barberos y aquí aparecerá una columna por cada silla.",
     "noSchedule": "Sin horario cargado",
     "closed": "Fuera de horario",
-    "readOnly": "Solo puedes ver la agenda. Pide permiso para editarla."
+    "readOnly": "Solo puedes ver la agenda. Pide permiso para editarla.",
+    "noScheduleAction": "Cargar su horario"
   },
   "summary": {
     "appointments": {
@@ -43,7 +46,10 @@
     "noServices": "Sin servicios",
     "noClient": "Sin cliente",
     "dragHint": "Arrastra para mover",
-    "moreServices": "+{count} más"
+    "moreServices": "+{count} más",
+    "aria": "{time}, {client}, {status}",
+    "charged": "Cobrada",
+    "noBarber": "Sin barbero"
   },
   "move": {
     "moved": "Visita movida a las {time}",
@@ -87,7 +93,11 @@
       "services": "Elige al menos un servicio.",
       "barber": "Elige al barbero.",
       "time": "Elige una hora válida."
-    }
+    },
+    "durationAuto": "La calculan los servicios elegidos. Puedes cambiarla.",
+    "durationManual": "Duración a mano: manda esta, no la del catálogo.",
+    "durationReset": "Volver al catálogo",
+    "durationResetTitle": "Regresar a los {min} min que suman los servicios"
   },
   "detail": {
     "title": "Visita",
@@ -100,12 +110,25 @@
     "notes": "Notas",
     "edit": "Editar",
     "openWhatsapp": "Escribir por WhatsApp",
-    "source": {
+    "sources": {
       "PANEL": "Agendada en el mostrador",
       "PUBLIC": "Reservó en línea",
       "WALKIN": "Llegó sin cita",
       "WHATSAPP": "Agendada por WhatsApp"
-    }
+    },
+    "source": "Origen",
+    "duration": "Duración",
+    "durationHint": "Alarga o acorta la visita sin volver a agendarla. Si al estirarla se encima con la siguiente del mismo barbero, no se guarda y te decimos por qué.",
+    "durationApply": "Aplicar",
+    "durationLess": "Menos tiempo",
+    "durationMore": "Más tiempo",
+    "durationSaved": "Duración actualizada a {duration}.",
+    "minutes": "min",
+    "charge": "Cobrar",
+    "completeAndCharge": "Completar y cobrar",
+    "alreadyCharged": "Ya se cobró: {amount}.",
+    "viewTicket": "Ver el ticket",
+    "chargeSkipHint": "¿Va a pagar después? Puedes cerrar sin cobrar; la visita queda en “Citas por cobrar” de la caja."
   },
   "schedule": {
     "title": "Horarios y bloqueos",
@@ -263,5 +286,22 @@
     "4": "Jue",
     "5": "Vie",
     "6": "Sáb"
+  },
+  "chairs": {
+    "label": "Sillas",
+    "all": "Todas"
+  },
+  "charge": {
+    "title": "Cobrar la visita de {client}",
+    "loading": "Abriendo la caja…",
+    "later": "Cobrar después",
+    "openSession": "Abrir turno",
+    "noSessionTitle": "No hay un turno de caja abierto",
+    "noSessionBody": "El dinero de hoy entra a un turno, y ahorita no hay ninguno abierto. Ábrelo con el fondo inicial y seguimos con el cobro.",
+    "notPendingTitle": "Esta visita no está en las citas por cobrar",
+    "notPendingBody": "La caja solo lista las visitas terminadas de los últimos días y sin ticket. Si esta es más vieja, cóbrala desde la pantalla de Caja.",
+    "goToCash": "Ir a Caja",
+    "errorLoad": "No se pudo abrir el cobro.",
+    "done": "Cobrado: {amount}."
   }
 }

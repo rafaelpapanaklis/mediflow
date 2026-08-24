@@ -6,6 +6,12 @@
 // hora o a otro barbero. Aquí se valida el hueco ANTES de escribir y la
 // constraint EXCLUDE de Postgres lo vuelve a validar AL escribir.
 //
+// `durationMin` (opcional) pisa la duración que proponen los servicios:
+// alargar una visita es exactamente igual de estructural que moverla, así
+// que pasa por el MISMO checkAppointmentSlot() y por la MISMA constraint.
+// Si al estirarla se encima con la siguiente del mismo barbero, la base
+// gana y el panel recibe el 409 con el motivo.
+//
 // M-22 (dental): al mover se INVALIDAN los recordatorios pendientes de la
 // visita, para que a nadie le llegue el aviso de la hora vieja.
 // ═══════════════════════════════════════════════════════════════════════
@@ -13,6 +19,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import {
   checkAppointmentSlot,
+  clampAppointmentMinutes,
   isBarberOverlapError,
   toAppointmentDTO,
   totalServiceMinutes,
@@ -76,9 +83,22 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
     ? asStringArray(body.serviceIds)
     : current.services.map((s) => s.serviceId);
 
+  // ── Duración a mano ──────────────────────────────────────────────────
+  // El catálogo propone; el mostrador dispone. Si el body trae durationMin
+  // PISA la suma de los servicios (mismo helper que usa la UI, así el
+  // escalón de 5 min y los topes del contrato son idénticos en los dos
+  // lados). Un durationMin basura es un 400, no un silencio.
+  const wantsDuration = body.durationMin !== undefined && body.durationMin !== null;
+  const askedDuration = wantsDuration ? clampAppointmentMinutes(body.durationMin) : null;
+  if (wantsDuration && askedDuration === null) {
+    return jsonError("Esa duración no es válida.", 400, { code: "BAD_DURATION" });
+  }
+
+  const currentDuration = (current.endAt.getTime() - current.startAt.getTime()) / 60_000;
   const movedTime = nextStart.getTime() !== current.startAt.getTime();
   const movedBarber = nextBarberId !== current.barberId;
-  const structural = movedTime || movedBarber || wantsServices;
+  const changedDuration = askedDuration !== null && askedDuration !== currentDuration;
+  const structural = movedTime || movedBarber || wantsServices || changedDuration;
 
   if (structural && isTerminalAppointmentStatus(current.status)) {
     return jsonError(
@@ -99,9 +119,9 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
     if (!barber) return jsonError("Ese barbero no existe en tu barbería.", 404);
   }
 
-  // ── Duración: la mandan los servicios (precio congelado aparte) ──────
+  // ── Duración: la proponen los servicios, la puede pisar el mostrador ──
   let services: { id: string; durationMin: number; price: unknown }[] = [];
-  let durationMin = (current.endAt.getTime() - current.startAt.getTime()) / 60_000;
+  let durationMin = currentDuration;
   if (wantsServices) {
     if (nextServiceIds.length === 0) return jsonError("Elige al menos un servicio.", 400);
     services = await prisma.barberService.findMany({
@@ -113,6 +133,9 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
     }
     durationMin = totalServiceMinutes(services);
   }
+  // Va DESPUÉS del catálogo a propósito: cambiar servicios y duración en la
+  // misma llamada tiene que respetar lo que escribió la persona.
+  if (askedDuration !== null) durationMin = askedDuration;
   const nextEnd = new Date(nextStart.getTime() + durationMin * 60_000);
 
   // Cambiar de cliente desde el modal de edición. Solo se toca si el body
@@ -197,7 +220,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
     let remindersInvalidated = 0;
     if (movedTime || movedBarber) {
       remindersInvalidated = await invalidateAppointmentReminders(shopId, current.id, "MOVED");
-    } else if (wantsServices && durationMin !== (current.endAt.getTime() - current.startAt.getTime()) / 60_000) {
+    } else if (durationMin !== currentDuration) {
       remindersInvalidated = await invalidateAppointmentReminders(
         shopId,
         current.id,

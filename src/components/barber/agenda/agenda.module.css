@@ -7,10 +7,35 @@
      vale lo que uno cree.
    · Colores SOLO por tokens del tema caramelo (.barber-shell): así el
      mismo componente se pinta bien en claro y en oscuro sin duplicar nada.
-   · El contenedor de la rejilla lleva container-type, y por eso los
-     modales se pintan FUERA de él (un container-type atrapa position:fixed
-     y el modal se queda encerrado dentro de la rejilla).
+   · Los contenedores con container-type atrapan a position:fixed, así que
+     los modales se pintan FUERA de .screen (cuelgan de la raíz de la
+     pantalla). Hay DOS contenedores anidados a propósito:
+       .screen → manda en la barra de herramientas
+       .board  → manda en la rejilla y en las tarjetas
+     Las @container sin nombre resuelven contra el ANCESTRO MÁS CERCANO,
+     que es justo lo que queremos en cada caso.
+
+   ♿ CONTRASTE de la paleta de estados (medido, no supuesto):
+   El fondo de una tarjeta es color-mix(var(--st) 14%, --bg-elev) en claro
+   y 26% en oscuro. Sobre ese fondo:
+     · --text-1 (cliente): 15.07–16.13 en claro · 8.26–9.41 en oscuro
+     · --text-2 (hora, servicios): 7.93–8.49 · 5.26–6.00   → AA ✓
+     · la barra sólida --st contra su propio fondo: 3.76–5.19 · 3.72–4.70
+       → ≥3:1, que es lo que pide WCAG 1.4.11 para elementos no textuales.
+   --text-3 NO se usa dentro de las tarjetas: sobre el fondo teñido baja a
+   ~3.9 y ahí ya no pasa AA. Fuera de las tarjetas (fondo liso) sí.
+   El estado NUNCA se comunica solo por color: la tarjeta lleva además la
+   barra lateral, el punto y —si hay alto— la palabra del estado; cancelada
+   va tachada y "no llegó" con borde punteado.
    ═══════════════════════════════════════════════════════════════════════ */
+
+/* ── Contenedor de la pantalla ─────────────────────────────────────────
+   Lleva container-type para que la barra de herramientas tenga @container
+   propias. Los modales NO viven aquí dentro (position:fixed quedaría preso
+   de este mismo container-type). */
+.screen {
+  container-type: inline-size;
+}
 
 /* ── Barra de herramientas ─────────────────────────────────────────── */
 .toolbar {
@@ -18,7 +43,24 @@
   flex-wrap: wrap;
   align-items: center;
   gap: 10px;
-  margin-bottom: 14px;
+  margin-bottom: 12px;
+}
+
+/* Navegar la agenda es UN grupo: flechas, Hoy, la fecha y Día/Semana.
+   Antes los tabs vivían al otro extremo de la pantalla y en un monitor
+   ancho nadie los encontraba. */
+.navGroup {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.navArrows {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
 }
 
 .toolbarSpacer {
@@ -26,10 +68,17 @@
   min-width: 0;
 }
 
+.toolbarActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
 .dateBlock {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 1px;
   min-width: 0;
 }
 
@@ -41,12 +90,18 @@
   text-transform: capitalize;
   margin: 0;
   line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .dateSub {
   font-size: 12px;
   color: var(--text-3);
   margin: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .btn {
@@ -77,11 +132,23 @@
   cursor: not-allowed;
 }
 
+.btn:focus-visible {
+  outline: none;
+  box-shadow: var(--ring);
+}
+
 .btnIcon {
   width: 36px;
   padding: 0;
 }
 
+.btnSm {
+  height: 30px;
+  padding: 0 10px;
+  font-size: 12.5px;
+}
+
+/* Texto blanco SOLO sobre caramel-600/700 (4.90 y 7.13). El 500 no pasa. */
 .btnPrimary {
   background: var(--caramel-600);
   border-color: var(--caramel-700);
@@ -103,6 +170,25 @@
   background: var(--caramel-300);
 }
 
+/* Cobrar: verde sólido con texto blanco (5.32 → AA). Es la acción que
+   mete el dinero a la caja, así que no comparte color con "guardar". */
+.btnMoney {
+  background: #1F7A4C;
+  border-color: #17603B;
+  color: #fff;
+}
+
+.btnMoney:hover:not(:disabled) {
+  background: #17603B;
+  border-color: #17603B;
+}
+
+:global(.dark) .btnMoney {
+  background: #2A8F5C;
+  border-color: #37A76D;
+  color: #fff;
+}
+
 .btnDanger {
   color: #B3261E;
   border-color: rgba(179, 38, 30, 0.35);
@@ -110,6 +196,11 @@
 
 .btnDanger:hover:not(:disabled) {
   background: rgba(179, 38, 30, 0.08);
+}
+
+:global(.dark) .btnDanger {
+  color: #FFB4AE;
+  border-color: rgba(240, 138, 130, 0.4);
 }
 
 .segmented {
@@ -123,7 +214,7 @@
 
 .seg {
   height: 28px;
-  padding: 0 12px;
+  padding: 0 14px;
   border: 0;
   border-radius: 8px;
   background: transparent;
@@ -131,12 +222,78 @@
   font-size: 12.5px;
   font-weight: 600;
   cursor: pointer;
+  font-family: inherit;
+}
+
+.seg:hover {
+  color: var(--text-1);
+}
+
+.seg:focus-visible {
+  outline: none;
+  box-shadow: var(--ring);
 }
 
 .segActive {
   background: var(--bg-elev);
   color: var(--text-1);
   box-shadow: var(--shadow-1);
+}
+
+/* ── Filtro de sillas ──────────────────────────────────────────────────
+   Con seis barberos en un celular, seis columnas de 50 px no las lee
+   nadie. En vez de devolver el scroll horizontal, se elige la silla. */
+.chairs {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+
+.chair {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 11px;
+  border-radius: 999px;
+  border: 1px solid var(--border-soft);
+  background: var(--bg-elev);
+  color: var(--text-2);
+  font-size: 12.5px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.chair:hover {
+  background: var(--bg-hover);
+  color: var(--text-1);
+}
+
+.chair:focus-visible {
+  outline: none;
+  box-shadow: var(--ring);
+}
+
+.chairOn {
+  border-color: var(--caramel-600);
+  background: var(--brand-soft);
+  color: var(--caramel-700);
+}
+
+:global(.dark) .chairOn {
+  color: var(--caramel-200);
+  border-color: var(--caramel-400);
+}
+
+.chairDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex: 0 0 8px;
 }
 
 /* ── Rejilla ───────────────────────────────────────────────────────── */
@@ -149,27 +306,29 @@
   box-shadow: var(--shadow-1);
 }
 
+/* Solo scroll VERTICAL. `clip` y no `hidden`: overflow-x:hidden convierte
+   la caja en contenedor de scroll horizontal y eso rompe los sticky del
+   encabezado y de la regleta. */
 .scroller {
-  overflow: auto;
-  max-height: calc(100vh - 230px);
+  overflow-y: auto;
+  overflow-x: clip;
+  max-height: calc(100vh - 250px);
   min-height: 380px;
   overscroll-behavior: contain;
 }
 
+/* Sin min-width: max-content. Las columnas son minmax(0, 1fr) y la rejilla
+   SIEMPRE cabe: cero scroll horizontal, en el monitor y en el celular. */
 .grid {
   display: grid;
-  min-width: max-content;
-}
-
-.headRow {
-  display: contents;
+  width: 100%;
 }
 
 .headCell {
   position: sticky;
   top: 0;
   z-index: 3;
-  padding: 10px 10px 9px;
+  padding: 9px 10px 8px;
   background: var(--bg-elev);
   border-bottom: 1px solid var(--border-soft);
   border-left: 1px solid var(--border-soft);
@@ -225,6 +384,51 @@
   text-overflow: ellipsis;
 }
 
+/* "Sin horario cargado" dejó de ser un texto muerto: lleva a cargarlo,
+   con el barbero ya elegido del otro lado. */
+.headMetaLink {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--caramel-700);
+  text-decoration: none;
+  border-bottom: 1px dashed var(--border-brand);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+.headMetaLink:hover {
+  color: var(--caramel-800);
+  border-bottom-style: solid;
+}
+
+.headMetaLink:focus-visible {
+  outline: none;
+  box-shadow: var(--ring);
+  border-radius: 4px;
+}
+
+:global(.dark) .headMetaLink {
+  color: var(--caramel-300);
+}
+
+:global(.dark) .headMetaLink:hover {
+  color: var(--caramel-200);
+}
+
+.headCount {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-2);
+  font-variant-numeric: tabular-nums;
+  margin-left: auto;
+  flex: 0 0 auto;
+}
+
 .gutter {
   position: sticky;
   left: 0;
@@ -235,9 +439,10 @@
 
 .gutterMark {
   position: absolute;
-  right: 8px;
+  right: 7px;
   transform: translateY(-50%);
   font-size: 11px;
+  font-weight: 600;
   font-variant-numeric: tabular-nums;
   color: var(--text-3);
   white-space: nowrap;
@@ -261,24 +466,29 @@
   pointer-events: none;
 }
 
-.halfLine {
+/* Franja de media hora: sombreado suave en vez de una línea punteada más.
+   Da referencia de "media hora" sin ensuciar el fondo. */
+.halfBand {
   position: absolute;
   left: 0;
   right: 0;
-  border-top: 1px dashed var(--border-soft);
-  opacity: 0.5;
+  background: rgba(18, 16, 16, 0.028);
   pointer-events: none;
 }
 
-/* Franja gris = fuera del horario del barbero. */
+:global(.dark) .halfBand {
+  background: rgba(250, 245, 238, 0.035);
+}
+
+/* Fuera del horario del barbero: rayado y atenuado. */
 .closedBand {
   position: absolute;
   left: 0;
   right: 0;
   background: repeating-linear-gradient(
     135deg,
-    rgba(18, 16, 16, 0.045),
-    rgba(18, 16, 16, 0.045) 6px,
+    rgba(18, 16, 16, 0.05),
+    rgba(18, 16, 16, 0.05) 6px,
     transparent 6px,
     transparent 12px
   );
@@ -288,8 +498,8 @@
 :global(.dark) .closedBand {
   background: repeating-linear-gradient(
     135deg,
-    rgba(250, 245, 238, 0.05),
-    rgba(250, 245, 238, 0.05) 6px,
+    rgba(250, 245, 238, 0.055),
+    rgba(250, 245, 238, 0.055) 6px,
     transparent 6px,
     transparent 12px
   );
@@ -303,7 +513,7 @@
   border-radius: 8px;
   background: rgba(190, 122, 60, 0.13);
   border: 1px dashed var(--border-brand);
-  padding: 4px 6px;
+  padding: 4px 7px;
   font-size: 11px;
   font-weight: 600;
   color: var(--caramel-700);
@@ -321,7 +531,7 @@
   right: 0;
   height: 0;
   border-top: 2px solid #D93B3B;
-  z-index: 2;
+  z-index: 4;
   pointer-events: none;
 }
 
@@ -329,99 +539,268 @@
   position: absolute;
   left: -4px;
   top: -4px;
-  width: 7px;
-  height: 7px;
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
   background: #D93B3B;
+  box-shadow: 0 0 0 2px var(--bg-elev);
 }
 
-/* ── Tarjeta de visita ─────────────────────────────────────────────── */
-.card {
+/* La hora del "ahora" se pinta UNA vez, en la regleta. */
+.nowLabel {
   position: absolute;
-  border-radius: 10px;
-  border: 1px solid var(--border-soft);
-  border-left-width: 3px;
-  background: var(--bg-elev);
+  right: 5px;
+  transform: translateY(-50%);
+  z-index: 5;
+  padding: 1px 5px;
+  border-radius: 5px;
+  background: #D93B3B;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* ── Tarjeta de visita ─────────────────────────────────────────────────
+   El alto SIEMPRE es proporcional al tiempo (2 px por minuto en día):
+   30 min = 60 px, 90 min = 180 px. Nada de franjitas de alto fijo. */
+.card {
+  --st: #6F6459;
+  box-sizing: border-box;
+  position: absolute;
+  border-radius: 9px;
+  border: 1px solid color-mix(in srgb, var(--st) 38%, transparent);
+  border-left: 4px solid var(--st);
+  background: color-mix(in srgb, var(--st) 14%, var(--bg-elev));
   box-shadow: var(--shadow-1);
-  padding: 5px 8px;
+  padding: 4px 8px 4px 7px;
   overflow: hidden;
   text-align: left;
   cursor: pointer;
-  display: block;
-  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
   font: inherit;
-  color: inherit;
+  color: var(--text-1);
   touch-action: none;
+  z-index: 1;
   transition: box-shadow 140ms ease, transform 140ms ease;
 }
 
+:global(.dark) .card {
+  background: color-mix(in srgb, var(--st) 26%, var(--bg-elev));
+  border-color: color-mix(in srgb, var(--st) 50%, transparent);
+}
+
 .card:hover {
-  box-shadow: var(--shadow-2);
-  z-index: 2;
+  box-shadow: 0 6px 16px -4px color-mix(in srgb, var(--st) 45%, transparent);
+  transform: translateY(-1px);
+  z-index: 5;
 }
 
 .card:focus-visible {
   outline: none;
   box-shadow: var(--ring);
-  z-index: 3;
+  z-index: 6;
+}
+
+/* ── Los seis estados ─────────────────────────────────────────────────
+   Los tonos de claro y de oscuro son distintos a propósito: un azul que
+   se ve bien sobre blanco desaparece sobre madera oscura. */
+.card[data-status="PENDING"]      { --st: #9C6F0F; }
+.card[data-status="CONFIRMED"]    { --st: #2D6AA8; }
+.card[data-status="IN_PROGRESS"]  { --st: #A2612F; }
+.card[data-status="DONE"]         { --st: #1F7A4C; }
+.card[data-status="NO_SHOW"]      { --st: #B3261E; }
+.card[data-status="CANCELLED"]    { --st: #6F6459; }
+
+:global(.dark) .card[data-status="PENDING"]     { --st: #E3AE4A; }
+:global(.dark) .card[data-status="CONFIRMED"]   { --st: #7FB4E6; }
+:global(.dark) .card[data-status="IN_PROGRESS"] { --st: #CD9459; }
+:global(.dark) .card[data-status="DONE"]        { --st: #63C795; }
+:global(.dark) .card[data-status="NO_SHOW"]     { --st: #F08A82; }
+:global(.dark) .card[data-status="CANCELLED"]   { --st: #A2968A; }
+
+/* Cancelada y "no llegó" no dependen solo del color (WCAG 1.4.1). */
+.card[data-status="CANCELLED"] {
+  border-left-style: dashed;
+  opacity: 0.72;
+}
+
+.card[data-status="CANCELLED"] .cardName {
+  text-decoration: line-through;
+}
+
+.card[data-status="NO_SHOW"] {
+  border-style: dashed;
+  border-left-style: solid;
+  opacity: 0.85;
+}
+
+/* Ya terminó y nadie la movió: se apaga para que el día "vivo" resalte. */
+.cardPast {
+  opacity: 0.72;
+}
+
+.cardPast:hover {
+  opacity: 1;
+}
+
+/* En la silla AHORA MISMO: un anillo que se nota desde el otro lado del
+   mostrador. Sin animación (la agenda está abierta 10 horas seguidas). */
+.cardLive {
+  box-shadow: 0 0 0 2px var(--st), var(--shadow-2);
 }
 
 .cardDragging {
-  opacity: 0.35;
+  opacity: 0.3;
 }
 
-.cardTime {
-  font-size: 10.5px;
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
-  color: var(--text-3);
-  letter-spacing: 0.01em;
-}
-
-.cardName {
-  font-size: 12.5px;
-  font-weight: 700;
-  color: var(--text-1);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.cardServices {
-  font-size: 11px;
-  color: var(--text-3);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.cardCompact .cardServices {
-  display: none;
-}
-
-.cardCompact {
-  padding: 2px 7px;
+.cardRow {
   display: flex;
   align-items: center;
   gap: 6px;
+  min-width: 0;
 }
 
-.cardCompact .cardTime {
+.cardTime {
+  font-size: 11px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+  color: var(--text-2);
   flex: 0 0 auto;
 }
+
+.cardDot {
+  width: 7px;
+  height: 7px;
+  flex: 0 0 7px;
+  border-radius: 50%;
+  background: var(--st);
+  margin-left: auto;
+}
+
+.cardStatus {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--text-2);
+  text-transform: uppercase;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-left: auto;
+  flex: 0 1 auto;
+}
+
+.cardName {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-1);
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+.cardServices {
+  font-size: 11.5px;
+  color: var(--text-2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+.cardFoot {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: auto;
+  min-width: 0;
+}
+
+.cardBarber {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-2);
+  min-width: 0;
+}
+
+.cardBarberDot {
+  width: 8px;
+  height: 8px;
+  flex: 0 0 8px;
+  border-radius: 50%;
+}
+
+.cardBarberName {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cardPrice {
+  margin-left: auto;
+  font-size: 11.5px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-1);
+  flex: 0 0 auto;
+}
+
+.cardPaid {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  flex: 0 0 auto;
+  font-size: 10px;
+  font-weight: 700;
+  color: #1F7A4C;
+}
+
+:global(.dark) .cardPaid {
+  color: #63C795;
+}
+
+/* Menos de ~23 min: no cabe la pila, se pinta en una sola línea. */
+.cardCompact {
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 7px 2px 6px;
+  line-height: 1.15;
+}
+
+.cardCompact .cardServices,
+.cardCompact .cardFoot,
+.cardCompact .cardStatus {
+  display: none;
+}
+
+.cardCompact .cardRow { flex: 0 0 auto; }
+.cardCompact .cardName { flex: 1 1 auto; }
+.cardCompact .cardDot { margin-left: 0; }
 
 /* Fantasma que sigue al dedo mientras se arrastra. */
 .ghost {
   position: absolute;
-  border-radius: 10px;
+  border-radius: 9px;
   border: 2px dashed var(--caramel-600);
   background: rgba(190, 122, 60, 0.18);
   pointer-events: none;
-  z-index: 6;
+  z-index: 7;
   padding: 4px 8px;
   font-size: 11.5px;
   font-weight: 700;
   color: var(--caramel-800);
+  overflow: hidden;
 }
 
 :global(.dark) .ghost {
@@ -430,7 +809,7 @@
 
 .ghostBad {
   border-color: #D93B3B;
-  background: rgba(217, 59, 59, 0.18);
+  background: rgba(217, 59, 59, 0.2);
   color: #8E1F1F;
 }
 
@@ -443,7 +822,7 @@
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  padding: 2px 8px;
+  padding: 2px 9px;
   border-radius: 999px;
   font-size: 10.5px;
   font-weight: 700;
@@ -466,13 +845,13 @@
 
 .toneWarning {
   background: rgba(190, 138, 26, 0.14);
-  color: #8A6210;
+  color: #7A5709;
   border-color: rgba(190, 138, 26, 0.3);
 }
 
 .toneSuccess {
   background: rgba(38, 132, 84, 0.13);
-  color: #1D6A42;
+  color: #17603B;
   border-color: rgba(38, 132, 84, 0.28);
 }
 
@@ -484,7 +863,7 @@
 
 .toneNeutral {
   background: var(--bg-elev-2);
-  color: var(--text-3);
+  color: var(--text-2);
   border-color: var(--border-soft);
 }
 
@@ -493,6 +872,47 @@
 :global(.dark) .toneWarning { color: #E8C572; }
 :global(.dark) .toneSuccess { color: #8ED9AF; }
 :global(.dark) .toneDanger { color: #FFB4AE; }
+
+/* ── Leyenda de estados ────────────────────────────────────────────── */
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 14px;
+  margin-top: 10px;
+  font-size: 11.5px;
+  color: var(--text-3);
+}
+
+.legendItem {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+}
+
+.legendSwatch {
+  width: 11px;
+  height: 11px;
+  border-radius: 3px;
+  flex: 0 0 11px;
+  border: 1px solid color-mix(in srgb, var(--st) 55%, transparent);
+  background: color-mix(in srgb, var(--st) 45%, var(--bg-elev));
+}
+
+.legendSwatch[data-status="PENDING"]     { --st: #9C6F0F; }
+.legendSwatch[data-status="CONFIRMED"]   { --st: #2D6AA8; }
+.legendSwatch[data-status="IN_PROGRESS"] { --st: #A2612F; }
+.legendSwatch[data-status="DONE"]        { --st: #1F7A4C; }
+.legendSwatch[data-status="NO_SHOW"]     { --st: #B3261E; }
+.legendSwatch[data-status="CANCELLED"]   { --st: #6F6459; }
+
+:global(.dark) .legendSwatch[data-status="PENDING"]     { --st: #E3AE4A; }
+:global(.dark) .legendSwatch[data-status="CONFIRMED"]   { --st: #7FB4E6; }
+:global(.dark) .legendSwatch[data-status="IN_PROGRESS"] { --st: #CD9459; }
+:global(.dark) .legendSwatch[data-status="DONE"]        { --st: #63C795; }
+:global(.dark) .legendSwatch[data-status="NO_SHOW"]     { --st: #F08A82; }
+:global(.dark) .legendSwatch[data-status="CANCELLED"]   { --st: #A2968A; }
 
 /* ── Estados vacíos ────────────────────────────────────────────────── */
 .empty {
@@ -510,8 +930,8 @@
 }
 
 /* ── Modal ─────────────────────────────────────────────────────────── */
-/* Se monta FUERA del .board a propósito: un ancestro con container-type
-   atrapa a position:fixed y el modal quedaría encerrado en la rejilla. */
+/* Se monta FUERA de .screen y de .board a propósito: un ancestro con
+   container-type atrapa a position:fixed y el modal quedaría encerrado. */
 .backdrop {
   position: fixed;
   inset: 0;
@@ -550,7 +970,7 @@
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 16px 18px;
+  padding: 15px 18px;
   border-bottom: 1px solid var(--border-soft);
 }
 
@@ -575,7 +995,7 @@
   align-items: center;
   justify-content: flex-end;
   gap: 8px;
-  padding: 14px 18px;
+  padding: 13px 18px;
   border-top: 1px solid var(--border-soft);
   background: var(--bg-elev-2);
   flex-wrap: wrap;
@@ -678,6 +1098,80 @@
 
 :global(.dark) .errorBox { color: #FFB4AE; }
 
+.noticeBox {
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--brand-softer);
+  border: 1px solid var(--border-brand);
+  font-size: 12.5px;
+  color: var(--text-2);
+  line-height: 1.5;
+}
+
+/* ── Control de duración ───────────────────────────────────────────── */
+.stepper {
+  display: inline-flex;
+  align-items: center;
+  gap: 0;
+  border: 1px solid var(--border-soft);
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--bg-elev);
+}
+
+.stepperBtn {
+  width: 34px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  background: transparent;
+  color: var(--text-1);
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.stepperBtn:hover:not(:disabled) {
+  background: var(--bg-hover);
+}
+
+.stepperBtn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.stepperBtn:focus-visible {
+  outline: none;
+  box-shadow: var(--ring);
+}
+
+.stepperValue {
+  width: 62px;
+  height: 36px;
+  border: 0;
+  border-left: 1px solid var(--border-soft);
+  border-right: 1px solid var(--border-soft);
+  background: transparent;
+  color: var(--text-1);
+  font-size: 13.5px;
+  font-weight: 700;
+  font-family: inherit;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+.stepperValue:focus {
+  outline: none;
+  box-shadow: var(--ring);
+}
+
+.stepperUnit {
+  padding: 0 10px 0 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-3);
+}
+
 /* ── Buscador de cliente ───────────────────────────────────────────── */
 .results {
   border: 1px solid var(--border-soft);
@@ -750,6 +1244,11 @@
 }
 
 .chip:hover { background: var(--bg-hover); }
+
+.chip:focus-visible {
+  outline: none;
+  box-shadow: var(--ring);
+}
 
 .chipOn {
   border-color: var(--caramel-600);
@@ -827,6 +1326,30 @@
 }
 
 /* ── Detalle de la visita ──────────────────────────────────────────── */
+.detailHead {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.detailWhen {
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--text-1);
+  font-variant-numeric: tabular-nums;
+  margin: 0;
+  line-height: 1.15;
+}
+
+.detailWhenSub {
+  font-size: 12px;
+  color: var(--text-3);
+  margin: 2px 0 0;
+  text-transform: capitalize;
+}
+
 .detailRow {
   display: flex;
   align-items: flex-start;
@@ -854,10 +1377,67 @@
   word-break: break-word;
 }
 
+.detailLink {
+  color: var(--caramel-700);
+  font-weight: 700;
+  text-decoration: none;
+  border-bottom: 1px solid var(--border-brand);
+}
+
+.detailLink:hover {
+  color: var(--caramel-800);
+}
+
+:global(.dark) .detailLink {
+  color: var(--caramel-300);
+}
+
+.serviceLine {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 13px;
+  padding: 5px 0;
+}
+
+.serviceName {
+  color: var(--text-1);
+  font-weight: 600;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.servicePrice {
+  color: var(--text-2);
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  flex: 0 0 auto;
+}
+
 .actionsRow {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+}
+
+.paidBanner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: rgba(38, 132, 84, 0.12);
+  border: 1px solid rgba(38, 132, 84, 0.3);
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #17603B;
+}
+
+:global(.dark) .paidBanner {
+  color: #8ED9AF;
+  border-color: rgba(99, 199, 149, 0.35);
 }
 
 /* ── Vista semana ──────────────────────────────────────────────────── */
@@ -866,6 +1446,18 @@
   flex-direction: column;
   gap: 1px;
   cursor: pointer;
+  background: transparent;
+  border: 0;
+  padding: 0;
+  text-align: left;
+  font-family: inherit;
+  width: 100%;
+}
+
+.weekHead:focus-visible {
+  outline: none;
+  box-shadow: var(--ring);
+  border-radius: 6px;
 }
 
 .weekHeadDay {
@@ -883,15 +1475,48 @@
   font-variant-numeric: tabular-nums;
 }
 
-.weekToday .weekHeadDate { color: var(--brand); }
-
-/* ── Container queries (regla del repo: @container, no @media) ─────── */
-@container (max-width: 720px) {
-  .headMeta { display: none; }
-  .cardServices { display: none; }
-  .scroller { max-height: calc(100vh - 200px); }
+.weekHeadCount {
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
 }
 
-@container (max-width: 520px) {
+.weekToday .weekHeadDate { color: var(--brand); }
+
+.weekTodayCol {
+  background: var(--brand-softer);
+}
+
+/* ── Container queries (regla del repo: @container, no @media) ─────────
+   Sin nombre: cada regla se evalúa contra el ancestro con container-type
+   MÁS CERCANO — .screen para la barra, .board para la rejilla. */
+
+/* Barra de herramientas (contenedor .screen) */
+@container (max-width: 700px) {
+  .navGroup { width: 100%; }
+  .toolbarSpacer { display: none; }
+  .toolbarActions { width: 100%; }
+  .toolbarActions .btn { flex: 1 1 auto; }
+  .dateTitle { font-size: 15.5px; }
+}
+
+/* Rejilla y tarjetas (contenedor .board) */
+@container (max-width: 760px) {
+  .headMeta { font-size: 10.5px; }
+  .cardFoot { display: none; }
+  .scroller { max-height: calc(100vh - 240px); }
+}
+
+@container (max-width: 560px) {
   .headAvatar { display: none; }
+  .cardServices { display: none; }
+  .cardStatus { display: none; }
+  .headLabel { font-size: 12px; }
+}
+
+@container (max-width: 400px) {
+  .headMeta { display: none; }
+  .cardTime { font-size: 10px; }
+  .cardName { font-size: 12px; }
 }

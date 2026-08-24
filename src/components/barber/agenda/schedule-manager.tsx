@@ -46,6 +46,12 @@ export interface ScheduleManagerProps {
   timezone: string;
   branchId: string;
   canManage: boolean;
+  /**
+   * Barbero que llega elegido en la URL (?barbero=). Es lo que hace que el
+   * aviso "Sin horario cargado" de la agenda sirva de algo: aterrizas
+   * directo en el horario de ESE barbero, no en el del primero de la lista.
+   */
+  initialBarberId?: string | null;
 }
 
 export function ScheduleManager(props: ScheduleManagerProps) {
@@ -74,12 +80,19 @@ export function ScheduleManager(props: ScheduleManagerProps) {
       setBarbers(data.barbers ?? []);
       setSchedules(data.schedules ?? []);
       setTimeOff(data.timeOff ?? []);
-      setBarberId((prev) => prev || (data.barbers ?? []).find((b: BarberDTO) => b.isActive)?.id || "");
+      // El de la URL manda, pero SOLO si existe en esta sede: un id ajeno
+      // no debe seleccionar nada (el filtro de inquilino ya lo hizo el
+      // servidor; aquí simplemente no se le hace caso).
+      const list: BarberDTO[] = data.barbers ?? [];
+      const asked = props.initialBarberId
+        ? (list.find((b) => b.id === props.initialBarberId)?.id ?? "")
+        : "";
+      setBarberId((prev) => prev || asked || list.find((b) => b.isActive)?.id || "");
       setError(null);
     } catch {
       setError(t("barber.agenda.state.error"));
     }
-  }, [props.branchId, t]);
+  }, [props.branchId, props.initialBarberId, t]);
 
   useEffect(() => {
     void load();

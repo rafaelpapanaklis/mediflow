@@ -5,14 +5,22 @@
 // este modal ya viene con el barbero y la hora puestos; solo falta decir
 // quién y qué servicio.
 //
-// La duración NO se escribe: sale de la suma de BarberService.durationMin.
-// El precio que se ve aquí es el VIVO del catálogo; al guardar, el servidor
-// lo congela en BarberAppointmentService.priceAtBooking.
+// La duración la PROPONE el catálogo (suma de BarberService.durationMin) y
+// se puede pisar a mano: el catálogo describe el caso normal, no el pelo de
+// hoy. Mientras nadie la toque, sigue a los servicios sola; en cuanto se
+// toca, manda lo escrito y el servidor lo vuelve a acotar con el mismo
+// helper. El precio que se ve aquí es el VIVO del catálogo; al guardar, el
+// servidor lo congela en BarberAppointmentService.priceAtBooking.
 // ═══════════════════════════════════════════════════════════════════════
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Check, Search, UserPlus } from "lucide-react";
+import { Check, Minus, Plus, RotateCcw, Search, UserPlus } from "lucide-react";
 import type { BarberAppointmentDTO, BarberDTO, BarberServiceDTO } from "@/lib/barber/types";
 import {
+  BARBER_DURATION_STEP_MIN,
+  BARBER_MAX_APPOINTMENT_MIN,
+  BARBER_MIN_APPOINTMENT_MIN,
+  appointmentMinutes,
+  clampAppointmentMinutes,
   formatMXN,
   hhmmToMinute,
   minuteToHHMM,
@@ -110,8 +118,27 @@ export function AppointmentDialog(props: AppointmentDialogProps) {
     () => activeServices.filter((s) => selected.includes(s.id)),
     [activeServices, selected],
   );
-  const durationMin = chosenServices.length > 0 ? totalServiceMinutes(chosenServices) : 0;
+  const catalogMinutes = chosenServices.length > 0 ? totalServiceMinutes(chosenServices) : 0;
   const price = totalServicePrice(chosenServices);
+
+  // Duración a mano. `null` = "sigue al catálogo". Al editar arranca a mano
+  // solo si la visita guardada YA no coincide con lo que suma su catálogo:
+  // si coincide, tocar un servicio debe seguir ajustando la duración sola.
+  const [customMinutes, setCustomMinutes] = useState<number | null>(() => {
+    if (!editing) return null;
+    const saved = appointmentMinutes(appointment);
+    const fromCatalog = totalServiceMinutes(
+      props.services.filter((s) => appointment.services.some((x) => x.serviceId === s.id)),
+    );
+    return saved === fromCatalog ? null : saved;
+  });
+  const durationMin = customMinutes ?? catalogMinutes;
+  const durationEditable = durationMin > 0 || customMinutes !== null;
+
+  const setDuration = (next: number) => {
+    const clamped = clampAppointmentMinutes(next);
+    if (clamped !== null) setCustomMinutes(clamped);
+  };
 
   const toggleService = (id: string) => {
     setSelected((prev) => (prev.includes(id) ? prev.filter((s) => s !== id) : [...prev, id]));
@@ -154,6 +181,9 @@ export function AppointmentDialog(props: AppointmentDialogProps) {
           barberId,
           startAt: startAt.toISOString(),
           serviceIds: selected,
+          // Solo viaja si alguien la escribió: sin esto, el servidor la
+          // calcula del catálogo como siempre.
+          durationMin: customMinutes,
           notes: notes.trim() || null,
           clientId,
           clientName: clientName.trim(),
@@ -362,13 +392,60 @@ export function AppointmentDialog(props: AppointmentDialogProps) {
             onChange={(e) => setHhmm(e.target.value)}
           />
         </Field>
-        <Field label={t("barber.agenda.modal.duration")}>
-          <input
-            className={css.input}
-            value={t("barber.agenda.modal.durationValue", { min: durationMin })}
-            readOnly
-            tabIndex={-1}
-          />
+        <Field
+          label={t("barber.agenda.modal.duration")}
+          hint={
+            customMinutes === null
+              ? t("barber.agenda.modal.durationAuto")
+              : t("barber.agenda.modal.durationManual")
+          }
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+            <div className={css.stepper}>
+              <button
+                type="button"
+                className={css.stepperBtn}
+                onClick={() => setDuration(durationMin - BARBER_DURATION_STEP_MIN)}
+                disabled={!durationEditable || durationMin <= BARBER_MIN_APPOINTMENT_MIN}
+                aria-label={t("barber.agenda.detail.durationLess")}
+              >
+                <Minus size={14} />
+              </button>
+              <input
+                className={css.stepperValue}
+                inputMode="numeric"
+                value={durationMin}
+                aria-label={t("barber.agenda.modal.duration")}
+                onChange={(e) => {
+                  const raw = parseInt(e.target.value.replace(/\D/g, ""), 10);
+                  if (Number.isFinite(raw)) setCustomMinutes(raw);
+                }}
+                onBlur={() => {
+                  if (customMinutes !== null) setDuration(customMinutes);
+                }}
+              />
+              <button
+                type="button"
+                className={css.stepperBtn}
+                onClick={() => setDuration(durationMin + BARBER_DURATION_STEP_MIN)}
+                disabled={!durationEditable || durationMin >= BARBER_MAX_APPOINTMENT_MIN}
+                aria-label={t("barber.agenda.detail.durationMore")}
+              >
+                <Plus size={14} />
+              </button>
+              <span className={css.stepperUnit}>{t("barber.agenda.detail.minutes")}</span>
+            </div>
+            {customMinutes !== null && catalogMinutes > 0 ? (
+              <button
+                type="button"
+                className={`${css.btn} ${css.btnSm}`}
+                onClick={() => setCustomMinutes(null)}
+                title={t("barber.agenda.modal.durationResetTitle", { min: catalogMinutes })}
+              >
+                <RotateCcw size={13} /> {t("barber.agenda.modal.durationReset")}
+              </button>
+            ) : null}
+          </div>
         </Field>
       </div>
 

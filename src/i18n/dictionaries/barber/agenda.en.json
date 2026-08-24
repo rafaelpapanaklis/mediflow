@@ -3,7 +3,9 @@
   "subtitle": "Your day, chair by chair.",
   "views": {
     "day": "Day",
-    "week": "Week"
+    "week": "Week",
+    "label": "View",
+    "goToDay": "See this day"
   },
   "nav": {
     "today": "Today",
@@ -29,7 +31,8 @@
     "noBarbersBody": "Add your team under Barbers and a column will show up here for every chair.",
     "noSchedule": "No hours set",
     "closed": "Outside working hours",
-    "readOnly": "You can only view the schedule. Ask for permission to edit it."
+    "readOnly": "You can only view the schedule. Ask for permission to edit it.",
+    "noScheduleAction": "Set their hours"
   },
   "summary": {
     "appointments": {
@@ -43,7 +46,10 @@
     "noServices": "No services",
     "noClient": "No client",
     "dragHint": "Drag to move",
-    "moreServices": "+{count} more"
+    "moreServices": "+{count} more",
+    "aria": "{time}, {client}, {status}",
+    "charged": "Paid",
+    "noBarber": "No barber"
   },
   "move": {
     "moved": "Visit moved to {time}",
@@ -87,7 +93,11 @@
       "services": "Pick at least one service.",
       "barber": "Pick a barber.",
       "time": "Pick a valid time."
-    }
+    },
+    "durationAuto": "Worked out from the services you picked. You can change it.",
+    "durationManual": "Custom duration: this one wins over the catalog.",
+    "durationReset": "Back to catalog",
+    "durationResetTitle": "Go back to the {min} min the services add up to"
   },
   "detail": {
     "title": "Visit",
@@ -100,12 +110,25 @@
     "notes": "Notes",
     "edit": "Edit",
     "openWhatsapp": "Message on WhatsApp",
-    "source": {
+    "sources": {
       "PANEL": "Booked at the counter",
       "PUBLIC": "Booked online",
       "WALKIN": "Walked in",
       "WHATSAPP": "Booked over WhatsApp"
-    }
+    },
+    "source": "Source",
+    "duration": "Duration",
+    "durationHint": "Stretch or shorten the visit without rebooking it. If it ends up overlapping the same barber's next visit, it won't save and we'll tell you why.",
+    "durationApply": "Apply",
+    "durationLess": "Less time",
+    "durationMore": "More time",
+    "durationSaved": "Duration set to {duration}.",
+    "minutes": "min",
+    "charge": "Charge",
+    "completeAndCharge": "Complete and charge",
+    "alreadyCharged": "Already paid: {amount}.",
+    "viewTicket": "See the receipt",
+    "chargeSkipHint": "Paying later? You can close without charging; the visit stays under “Visits to charge” in the register."
   },
   "schedule": {
     "title": "Hours and time off",
@@ -263,5 +286,22 @@
     "4": "Thu",
     "5": "Fri",
     "6": "Sat"
+  },
+  "chairs": {
+    "label": "Chairs",
+    "all": "All"
+  },
+  "charge": {
+    "title": "Charge {client}'s visit",
+    "loading": "Opening the register…",
+    "later": "Charge later",
+    "openSession": "Open a shift",
+    "noSessionTitle": "There's no open register shift",
+    "noSessionBody": "Today's money goes into a shift, and there isn't one open right now. Open it with the starting cash and we'll go on with the charge.",
+    "notPendingTitle": "This visit isn't in the list of visits to charge",
+    "notPendingBody": "The register only lists completed visits from the last few days with no receipt yet. If this one is older, charge it from the Register screen.",
+    "goToCash": "Go to Register",
+    "errorLoad": "We couldn't open the charge.",
+    "done": "Charged: {amount}."
   }
 }

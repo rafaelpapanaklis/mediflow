@@ -16,9 +16,22 @@ import { BarberAreaLocked } from "@/components/barber/agenda/area-locked";
 
 export const dynamic = "force-dynamic";
 
-export default async function BarberSchedulePage() {
+export default async function BarberSchedulePage({
+  searchParams,
+}: {
+  searchParams?: { barbero?: string | string[] };
+}) {
   const ctx = await getBarberContext();
   if (!ctx) redirect("/login");
+
+  // ?barbero=<id> llega desde el aviso "Sin horario cargado" de la agenda.
+  // Aquí NO se valida contra la base: ScheduleManager solo lo acepta si el
+  // id aparece en la lista que devuelve /api/barber/schedules, y esa ya
+  // viene filtrada por barbershopId del contexto.
+  const rawBarber = Array.isArray(searchParams?.barbero)
+    ? searchParams?.barbero[0]
+    : searchParams?.barbero;
+  const initialBarberId = typeof rawBarber === "string" && rawBarber ? rawBarber : null;
 
   const plan = await getBarberPlan(ctx.barbershop.plan);
   if (!barberPlanHasFeature(plan, "agenda")) {
@@ -36,6 +49,7 @@ export default async function BarberSchedulePage() {
       timezone={ctx.barbershop.timezone}
       branchId={ctx.barbershopId}
       canManage={hasBarberPermission(permUser, "schedule.manage")}
+      initialBarberId={initialBarberId}
     />
   );
 }

@@ -35,9 +35,26 @@ import type {
 /** Granularidad de la rejilla: 15 min es el mínimo real de una barbería. */
 export const BARBER_SLOT_MINUTES = 15;
 
-/** Píxeles por minuto de la vista día (la vista semana usa la mitad). */
-export const BARBER_DAY_PX_PER_MIN = 1.6;
-export const BARBER_WEEK_PX_PER_MIN = 0.9;
+/**
+ * Píxeles por minuto. Manda la PROPORCIÓN: una visita de 30 min tiene que
+ * verse a ojo la tercera parte de una de 90. Con 2 px/min eso son 60 px
+ * contra 180 px — imposible confundirlas. Por debajo de ~1.5 las dos se
+ * leen igual de "franjita" y la agenda deja de decir cuánto dura cada cosa.
+ */
+export const BARBER_DAY_PX_PER_MIN = 2;
+export const BARBER_WEEK_PX_PER_MIN = 1.1;
+
+/**
+ * Alto mínimo de una tarjeta, en px. Es exactamente lo que mide UNA línea
+ * de la tarjeta compacta (13 px de texto + 4 px de relleno + borde): por
+ * debajo de esto el nombre del cliente se corta a media letra. Solo entra
+ * en juego en visitas cortísimas — en la vista día, por debajo de 10 min;
+ * en la de semana, por debajo de 18.
+ */
+export const BARBER_CARD_MIN_PX = 22;
+
+/** Por debajo de este alto la tarjeta se pinta en UNA sola línea. */
+export const BARBER_CARD_COMPACT_PX = 46;
 
 /** Ventana por defecto de la rejilla cuando nadie tiene horario cargado. */
 export const BARBER_DEFAULT_DAY_START_MIN = 9 * 60;
@@ -198,6 +215,20 @@ export function minuteToLabel(minute: number): string {
   const suffix = h24 < 12 ? "a. m." : "p. m.";
   const h12 = h24 % 12 === 0 ? 12 : h24 % 12;
   return `${h12}:${pad2(mm)} ${suffix}`;
+}
+
+/**
+ * "9 a. m." — etiqueta de la REGLETA de horas. Va sin minutos a propósito:
+ * la regleta solo marca horas en punto, y "9:00 a. m." completo no cabe en
+ * el ancho de la columna de horas (se cortaba por la izquierda y se leía
+ * ":00 a. m."). Los minutos exactos viven en la tarjeta, que sí tiene sitio.
+ */
+export function minuteToHourLabel(minute: number): string {
+  const m = Math.max(0, Math.round(minute));
+  const h24 = Math.floor(m / 60) % 24;
+  const suffix = h24 < 12 ? "a. m." : "p. m.";
+  const h12 = h24 % 12 === 0 ? 12 : h24 % 12;
+  return `${h12} ${suffix}`;
 }
 
 /** "09:30" → 570. Devuelve null si el texto no es una hora válida. */
@@ -545,6 +576,40 @@ export function totalServiceMinutes(services: { durationMin: number }[]): number
 /** Suma de precios VIVOS del catálogo (lo que se congela al reservar). */
 export function totalServicePrice(services: { price: number }[]): number {
   return services.reduce((acc, s) => acc + (Number(s.price) || 0), 0);
+}
+
+// ── Duración a mano ────────────────────────────────────────────────────
+//
+// Normalmente la duración la mandan los servicios, pero la realidad del
+// mostrador no siempre cabe en el catálogo: "hoy este corte me va a llevar
+// media hora más". Por eso la visita puede llevar una duración PROPIA que
+// pisa la suma del catálogo. El servidor la vuelve a acotar con este mismo
+// helper (punto único) y el hueco se revalida igual que al mover.
+
+/** Escalón del control de duración: 5 min, el mínimo del contrato. */
+export const BARBER_DURATION_STEP_MIN = 5;
+
+/**
+ * Acota una duración escrita a mano al rango del contrato y al escalón de
+ * 5 min. Devuelve null si no es un número usable (así el caller distingue
+ * "no me mandaron duración" de "me mandaron una basura").
+ */
+export function clampAppointmentMinutes(value: unknown): number | null {
+  const raw = typeof value === "string" ? Number(value) : value;
+  if (typeof raw !== "number" || !Number.isFinite(raw)) return null;
+  // El rechazo mira la ENTRADA, no el redondeo: escribir "1" es pedir una
+  // visita cortísima (se acota al mínimo de 5), no escribir basura. Si se
+  // rechazara después de redondear, todo lo menor a 2.5 caería en null y el
+  // campo de duración se quedaría mudo al teclear el primer dígito.
+  if (raw <= 0) return null;
+  const stepped = Math.round(raw / BARBER_DURATION_STEP_MIN) * BARBER_DURATION_STEP_MIN;
+  return Math.min(BARBER_MAX_APPOINTMENT_MIN, Math.max(BARBER_MIN_APPOINTMENT_MIN, stepped));
+}
+
+/** Minutos que dura una visita ya guardada. */
+export function appointmentMinutes(appointment: { startAt: string; endAt: string }): number {
+  const ms = new Date(appointment.endAt).getTime() - new Date(appointment.startAt).getTime();
+  return Number.isFinite(ms) ? Math.round(ms / 60_000) : 0;
 }
 
 /**

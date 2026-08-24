@@ -12,6 +12,7 @@ import { hasBarberPermission } from "@/lib/barber/permissions";
 import {
   addDaysISO,
   checkAppointmentSlot,
+  clampAppointmentMinutes,
   isBarberOverlapError,
   isValidDateISO,
   shopDateISO,
@@ -26,6 +27,7 @@ import {
   asStringArray,
   jsonError,
   loadAgendaWindow,
+  loadChargedSales,
   loadSlotContext,
   openAgendaGate,
   readJson,
@@ -60,6 +62,14 @@ export async function GET(req: Request) {
   const window = await loadAgendaWindow(shopId, fromUtc, toUtc);
   const permUser = { role: ctx.role, permissionsOverride: ctx.user.permissionsOverride };
 
+  // Qué visitas del rango YA pasaron por caja. Va aparte del DTO a
+  // propósito: BarberAppointmentDTO es contrato compartido de todo el
+  // vertical (src/lib/barber/types.ts) y esta pantalla no le agrega campos.
+  const charged = await loadChargedSales(
+    shopId,
+    window.appointments.map((a) => a.id),
+  );
+
   return NextResponse.json({
     branchId: shopId,
     timezone,
@@ -68,11 +78,17 @@ export async function GET(req: Request) {
     from: fromUtc.toISOString(),
     to: toUtc.toISOString(),
     ...window,
+    charged,
     can: {
       edit: hasBarberPermission(permUser, "agenda.edit"),
       schedule: hasBarberPermission(permUser, "schedule.manage"),
       clients: hasBarberPermission(permUser, "clients.view"),
       createClients: hasBarberPermission(permUser, "clients.edit"),
+      // Cobrar desde la agenda es la MISMA puerta que cobrar en la caja:
+      // cash.manage. Y el gate de verdad lo vuelve a aplicar
+      // createSale() en /api/barber/sales — aquí solo se decide si el
+      // botón se pinta.
+      cash: hasBarberPermission(permUser, "cash.manage"),
     },
   });
 }
@@ -113,7 +129,15 @@ export async function POST(req: Request) {
   });
   if (services.length === 0) return jsonError("Los servicios elegidos ya no están disponibles.", 400);
 
-  const durationMin = totalServiceMinutes(services);
+  // La duración la proponen los servicios; el mostrador la puede pisar
+  // (mismo helper que el PATCH y que la UI: escalón de 5 min y topes del
+  // contrato en un solo lugar). Un durationMin basura es 400, no silencio.
+  const wantsDuration = body.durationMin !== undefined && body.durationMin !== null;
+  const askedDuration = wantsDuration ? clampAppointmentMinutes(body.durationMin) : null;
+  if (wantsDuration && askedDuration === null) {
+    return jsonError("Esa duración no es válida.", 400, { code: "BAD_DURATION" });
+  }
+  const durationMin = askedDuration ?? totalServiceMinutes(services);
   const endAt = new Date(startAt.getTime() + durationMin * 60_000);
 
   // Pre-chequeo en memoria (mensaje bonito). La palabra final la tiene la
