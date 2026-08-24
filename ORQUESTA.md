@@ -12314,3 +12314,327 @@ angosto. Tres cosas se arreglaron ahí y no se habrían visto de otra forma:
   components/barber/team/admin-ui.tsx, que vive en el árbol de la página.
 · @container: la contención va en un ANCESTRO del elemento que consulta, y
   nunca en un ancestro de un position:fixed.
+
+## [Barber WhatsApp] — Conexión OWN_WABA, recordatorios `utility`, Inbox con estados reales y campañas con costo a la vista ✅ (2026-08-24)
+═══════════════════════════════════════════════════════════════════════════
+BUILD `npm run build` EXIT 0 (output COMPLETO, 3120 líneas, sin pipes; incluye
+`prisma generate` ✔ y "Compiled with warnings" = las de siempre de tailwind y
+file-type) · `tsc --noEmit` 0 errores · 37/37 pruebas del núcleo en verde ·
+15/15 verificaciones de aislamiento y multi-tenant en verde · GUARDIA BARBER
+exit 0 (29 propios + **1** compartido declarado).
+
+🔴 **`src/lib/whatsapp.ts` NO TIENE UN SOLO CAMBIO.** Ni aparece en la lista
+del guard. El único archivo compartido que se toca es el webhook, con **2
+bloques aditivos de 18 y 15 líneas, los dos DENTRO de un `if (!clinic)`**.
+
+QUÉ SE ENTREGA
+  /barber/whatsapp                      4 pestañas: conexión · conversaciones · plantillas · campañas
+  /api/barber/whatsapp/connect          Embedded Signup (POST) y desconectar (DELETE)
+  /api/barber/whatsapp/status           conexión + cupo + plantillas
+  /api/barber/whatsapp/templates        estado REAL leído de Meta (GET) y alta (POST)
+  /api/barber/whatsapp/threads          hilos (activos / archivados)
+  /api/barber/whatsapp/messages         leer un hilo (GET) y responder a mano (POST)
+  /api/barber/whatsapp/archive          archivar / desarchivar
+  /api/barber/whatsapp/media/[id]       proxy de multimedia, CERO archivos en Storage
+  /api/barber/whatsapp/dispatch         cron (GET) y "enviar pendientes" del panel (POST)
+  /api/barber/whatsapp/campaign         a quién y CUÁNTO CUESTA (GET) · mandar (POST)
+Servidor: src/lib/barber/whatsapp.ts (habla con Meta y con Prisma) +
+whatsapp-core.ts (PURO y client-safe: catálogo, clasificación, cuota,
+adjuntos, las dos decisiones de los bugs del dental). Mismo par que
+plan-shared/plans y booking-core/booking.
+
+───────────────────────────────────────────────────────────────────────────
+1. 🔴 EL DIFF DE LO COMPARTIDO, LÍNEA POR LÍNEA
+───────────────────────────────────────────────────────────────────────────
+**`src/lib/whatsapp.ts` → 0 líneas cambiadas.** Se leyó entero y resultó que
+YA era genérico: `sendWhatsAppMessage`, `sendWhatsAppTemplate`,
+`getWhatsAppMediaMeta` y `markWhatsAppMessageRead` reciben `phoneNumberId` y
+`accessToken` como parámetros. No hizo falta generalizar nada.
+
+Sí hacía falta UNA cosa que ese archivo no sabe hacer: las plantillas de
+categoría AUTHENTICATION (el código del portal) exigen un componente
+`button` con el mismo código además del `body`, y `sendWhatsAppTemplate` solo
+arma `body`. **Decisión: NO se tocó.** Se escribió un `postGraph` propio de
+~30 líneas en src/lib/barber/whatsapp.ts (mismas reglas: timeout de 15 s, UN
+reintento solo ante 5xx/429, `parseWaError`). Duplicar 30 líneas cuesta menos
+que cambiar la firma de un módulo del que dependen ~15 sitios del producto
+que ya factura.
+
+**`src/app/api/whatsapp/webhook/route.ts` → +37 −2, en 2 bloques.**
+
+BLOQUE A — línea 272, mensajes entrantes.
+  ANTES:  `if (!clinic) return NextResponse.json({ ok: true });`
+  AHORA:  el mismo `if (!clinic)`, con el camino barber dentro y el mismo
+          `return NextResponse.json({ ok: true })` al final.
+  POR QUÉ ES NECESARIO: Meta entrega TODOS los webhooks de una misma app a
+  UNA sola URL. Los mensajes de las barberías caen aquí y hasta hoy se
+  tiraban en silencio en esa línea.
+  POR QUÉ NO PUEDE ROMPER EL DENTAL:
+    · el `findFirst` de la clínica y su resultado NO se tocan; el camino
+      dental sigue siendo el `else` implícito y se evalúa PRIMERO;
+    · todo el bloque va en `try/catch` que registra y sigue;
+    · el import es **dinámico** (`await import(...)`) dentro del try, así
+      que ni un fallo al CARGAR el módulo barber puede propagarse;
+    · el status de respuesta es el mismo 200 de antes.
+
+BLOQUE B — línea 745, `ingestDeliveryStatuses`.
+  ANTES:  `if (!clinic) return;`
+  AHORA:  el mismo `if (!clinic)`, con el camino barber dentro y `return`.
+  POR QUÉ ES NECESARIO: sin esto un recordatorio de barbería RECHAZADO por
+  Meta se quedaría para siempre en "enviado" — el bug M-06/M-10 del dental,
+  que el contrato pide explícitamente no repetir.
+  POR QUÉ NO PUEDE ROMPER EL DENTAL: idéntico razonamiento (dentro del
+  `if (!clinic)`, try/catch, import dinámico, mismo `return`).
+
+NO SE TOCÓ, a propósito, aunque se evaluó:
+  · `message_template_status_update`: el estado de las plantillas de barber
+    se lee de Meta EN VIVO (`listBarberTemplates`) porque el schema no se
+    toca y no hay dónde guardarlo. Ventaja de regalo: nunca se desfasa, que
+    es justo lo que le pasa al dental cuando pierde ese webhook.
+  · `smb_message_echoes` (coexistence): sería útil para una barbería que
+    contesta desde su celular, pero NO es estrictamente necesario para esta
+    ola y el contrato manda quitar lo que no lo sea. Queda como pendiente
+    documentado; son ~5 líneas dentro del mismo `if (!clinic)`.
+  · la provisión de plantillas del dental, sus nombres y sus envs: intactos.
+    Las de barber llevan prefijo propio `dc_barber_*`.
+
+───────────────────────────────────────────────────────────────────────────
+2. LOS DOS BUGS DEL DENTAL QUE AQUÍ NO SE REPITEN
+───────────────────────────────────────────────────────────────────────────
+**M-22 (al reagendar llega el aviso de la hora vieja).** T1 ya invalida la
+fila PENDING con `BARBER_REMINDER_INVALIDATED_MARK`. La regla, en
+`reminderAlreadyHandled()` (pura, probada):
+  · fila PENDING/SENT/DELIVERED/READ → NO se reprograma;
+  · fila FAILED por un error REAL de Meta → tampoco (reintentar cada 15 min
+    sería spam de fallos);
+  · fila FAILED **con la marca** → SÍ se reprograma.
+Y el remate: los parámetros de la plantilla se **RECALCULAN al enviar**
+leyendo la cita, no al encolar. Verificado en vivo: con la visita movida de
+las 12:00 a las 17:00, el nuevo aviso sale con "17:00" y NO contiene "12:00".
+Además `drainBarberOutbox` salta cualquier fila con la marca aunque siga
+PENDING — el contrato de T1 al pie de la letra.
+
+**M-06/M-10 (un rechazo pintado como "entregado").** `nextBarberWaStatus()`
+(pura, probada): el estado nunca retrocede, un aviso repetido no escribe
+nada, un estado desconocido no toca nada y **FAILED gana siempre y no se
+sobrescribe** con un "entregado" que llegue tarde. El motivo se guarda con el
+código de Meta dentro (`(#131042) …`) y la burbuja lo enseña tal cual.
+
+───────────────────────────────────────────────────────────────────────────
+3. ECONOMÍA: por qué TODO lo transaccional es `utility`
+───────────────────────────────────────────────────────────────────────────
+Plantilla por plantilla (y hay una prueba que lo fija; romperlo cuadruplica
+la factura de cada barbería):
+  dc_barber_recordatorio_cita      UTILITY         6 variables
+  dc_barber_turno_fila             UTILITY         2 variables
+  dc_barber_reserva_confirmada     UTILITY         4 variables
+  dc_barber_codigo_acceso          AUTHENTICATION  1 variable   (Meta lo EXIGE para un OTP)
+  dc_barber_cumpleanos             MARKETING       3 variables  optional
+  dc_barber_te_extranamos          MARKETING       3 variables  optional
+`optional: true` = no se da de alta sola y no se manda sola. La prueba
+verifica que `optional === (category === "MARKETING")`.
+
+Y una decisión de costo que sale gratis: **si la ventana de 24 h está
+abierta, el aviso sale como TEXTO, no como plantilla** — Meta no cobra lo
+entregado dentro de una ventana de servicio abierta, y encima se lee mejor.
+
+LA PRUEBA DEL CATÁLOGO ENCONTRÓ 3 BUGS REALES antes de que existieran: tres
+cuerpos terminaban con una variable (Meta RECHAZA eso) y el de la fila
+virtual declaraba 3 variables mientras el emisor pasaba 2 (Meta responde
+132000 y el cliente no recibe nada). Corregidos y fijados con una prueba de
+contrato que compara `variables.length`, `sample.length` y los `{{n}}` del
+cuerpo contra lo que pasa cada caller.
+
+───────────────────────────────────────────────────────────────────────────
+4. GANCHOS DE LAS OTRAS TERMINALES — CONECTADOS
+───────────────────────────────────────────────────────────────────────────
+· **T5 · código del portal** — `deliverPortalCode()` en client-portal.ts ya no
+  tiene TODO. Sale como AUTHENTICATION, EN EL MOMENTO (un código que llega en
+  un minuto no sirve para entrar) y **el código nunca se guarda**: la fila del
+  Inbox lleva un cuerpo neutro. Si Meta falla, se registra y se sigue: el
+  código emitido sigue siendo válido y `requestPortalCode` sigue siendo
+  `void` para no filtrar si el cliente existe.
+· **T5 · confirmación de reserva** — `notifyBookingCreated()` ENCOLA (no
+  manda): el flujo de reserva no se queda esperando a Meta ni falla si Meta
+  falla. Idempotente: una reserva no confirma dos veces.
+· **T1 · aviso de la fila** — su ruta sigue intacta. Se consume su fila
+  `templateName = "walkin_casi_es_tu_turno"` y su `body` ya redactado entra
+  completo como {{2}} de `dc_barber_turno_fila`. No se re-parsea una frase en
+  español.
+· **T2 · cumpleaños e inactivos** — se consume `listBarberClients` con filter
+  birthday/inactive. Preparados y **NO se mandan solos**: el GET enseña a
+  cuánta gente y cuántos USD antes de que nadie apriete nada.
+
+───────────────────────────────────────────────────────────────────────────
+5. TRES DECISIONES SIN TABLA (el schema NO se tocó)
+───────────────────────────────────────────────────────────────────────────
+`BarberMessage` no tiene columnas para adjuntos, ni para archivar, ni para
+parámetros de plantilla, y el schema es intocable. `templateName` es texto
+libre que hoy solo usan las filas OUTBOUND de plantilla, así que:
+  · **adjunto entrante** → `attach:{json}` con el media id. Un JSON corrupto
+    es "no hay adjunto", nunca una excepción.
+  · **archivar** → marca append-only `sys:archive` / `sys:unarchive` con
+    fecha. **Archivar no borra NADA**, y un mensaje nuevo desarchiva el hilo
+    solo porque es más reciente que la marca. Solo cuenta la marca MÁS
+    NUEVA.
+  · **parámetros** → no se guardan: se RECALCULAN al enviar (y eso es lo que
+    arregla M-22). Las campañas, que llevan una promo escrita a mano, se
+    mandan EN EL MOMENTO por tandas de 60 en vez de por la cola.
+Nada de esto choca con el dedupe de la fila virtual de T1, que filtra por
+igualdad exacta de `templateName` sobre filas OUTBOUND+PENDING.
+
+**El cupo se cuenta en la MATRIZ**, no por sede: una cadena de tres sucursales
+comparte un cupo, no lo triplica (mismo criterio que los límites de barberos
+y sedes en gating.ts). Se avisa desde el 80 %; al agotarse las filas se
+QUEDAN en cola para el periodo siguiente — no se cortan en silencio ni se
+marcan como fallidas.
+
+───────────────────────────────────────────────────────────────────────────
+6. UN BUG DE PRODUCTO QUE HABÍA QUE ARREGLAR (1 palabra en types.ts)
+───────────────────────────────────────────────────────────────────────────
+El item del sidebar estaba gateado por `featureKey: "whatsappInbox"`, que solo
+tienen Avanzado y Profesional. Pero `whatsappReminders` lo tienen **los tres
+planes** y esta pantalla es TAMBIÉN donde la barbería conecta su número.
+Resultado: un Básico no veía nunca el menú, no podía conectar WhatsApp y los
+recordatorios que SÍ paga jamás iban a salir. Cambiado a
+`featureKey: "whatsappReminders"`; la bandeja y las campañas siguen gateadas
+por `whatsappInbox` DENTRO de la pantalla, con el texto de qué se gana.
+
+───────────────────────────────────────────────────────────────────────────
+7. VERIFICACIÓN (los 10 puntos del contrato)
+───────────────────────────────────────────────────────────────────────────
+ 1. ✅ `npm run build` exit 0, output completo (3120 líneas), sin pipes.
+       NOTA: la primera pasada murió con heap OOM en "Checking validity of
+       types" (4 GB) por los worktrees en paralelo; con
+       `--max-old-space-size=8192` pasa. `tsc --noEmit` aparte: 0 errores.
+       Y hubo que detener un `next dev -p 3411` huérfano del worktree
+       barber-admin que tenía bloqueado el motor de Prisma (EPERM).
+ 2. ✅ Diff de lo compartido línea por línea con justificación → sección 1.
+       `src/lib/whatsapp.ts` con CERO cambios; el webhook con 2 bloques, los
+       dos dentro de `if (!clinic)`. Leído entero: ninguna ruta del dental
+       cambia de comportamiento.
+ 3. ✅ Webhook de clínica con las tablas de barber CAÍDAS: el error de barber
+       sale de `ingestBarberInbound` y el bloque del webhook lo atrapa; se
+       responde 200. Verificado en vivo con un prisma que lanza en toda tabla
+       `barber*`.
+ 4. ✅ `phone_number_id` desconocido: devuelve false sin lanzar, **no escribe
+       ni una fila** y el webhook registra y responde 200.
+ 5. ✅ Reagendar: la fila vieja queda invalidada por T1 y NUNCA se envía; la
+       nueva sale con la hora NUEVA (17:00, no 12:00). Con un recordatorio
+       vivo no se duplica.
+ 6. ✅ Dos barberías: TODA consulta a barberMessage / barberClient /
+       barberAppointment lleva `barbershopId`, y ningún `where` lo lleva
+       `undefined` (que en Prisma BORRA el filtro). Verificado grabando cada
+       llamada a prisma. El media se pide siempre acotado por la barbería que
+       pregunta: la B pidiendo un mensaje de la A consulta
+       `{id: "msg_de_A", barbershopId: "shop_B"}` → no existe.
+ 7. ✅ Un mensaje fallido se ve fallido, con motivo y código de Meta. FAILED
+       no se sobrescribe. (Un recordatorio que invalidamos NOSOTROS no se le
+       enseña como "fallo de Meta": el DTO lo filtra.)
+ 8. ✅ Plantilla por plantilla → sección 3. Prueba que lo fija.
+ 9. ✅ `BARBER_GUARD_SHARED=ORQUESTA.md,src/lib/whatsapp.ts,src/app/api/whatsapp/webhook/route.ts node scripts/barber-guard.cjs` → exit 0.
+10. ✅ Cero "paciente", "doctor", "Dr.", "clínica", "consulta", "expediente"
+       en el CÓDIGO y en los diccionarios (prueba automática que quita
+       comentarios: las notas de aislamiento sí nombran al dental a propósito
+       — explican qué no se toca).
+Extra: `sql/barber_agenda.sql` corregido `tstzrange` → `tsrange` (2
+ocurrencias: el índice y su comentario) con la nota de por qué el cast
+timestamp→timestamptz no es inmutable.
+
+───────────────────────────────────────────────────────────────────────────
+8. 🔴 HANDOFF OBLIGATORIO — QA DEL DENTAL, INMEDIATAMENTE DESPUÉS DEL DEPLOY
+───────────────────────────────────────────────────────────────────────────
+**Rafael: en cuanto esto esté en producción, prueba el WhatsApp del DENTAL.**
+Es el único QA que descarta una regresión en el producto que ya factura:
+  1. Manda un WhatsApp al número de una clínica conectada y confirma que
+     **llega al Inbox del panel** (que el webhook sigue enrutando por
+     `waPhoneNumberId` como siempre).
+  2. Confirma que sale un **recordatorio real** (o dispara
+     /api/cron/appointment-reminders) y que su estado avanza a entregado.
+  3. Contesta CONFIRMAR a ese recordatorio y confirma que la cita se
+     confirma en la agenda.
+Si algo de eso falla, el revert es de UN archivo:
+`git revert` del commit o `git checkout origin/main~1 -- src/app/api/whatsapp/webhook/route.ts`.
+Nada más del dental se tocó.
+
+───────────────────────────────────────────────────────────────────────────
+9. LO QUE FALTA (por orden de urgencia)
+───────────────────────────────────────────────────────────────────────────
+🔴 **1. EL CRON NO ESTÁ DADO DE ALTA.** `vercel.json` está fuera del vertical
+barber y no se toca desde aquí. **Sin esta entrada los recordatorios no salen
+solos** (el botón "Enviar pendientes ahora" del panel hace lo mismo a mano).
+Pegar en el array `crons` de vercel.json:
+```json
+    {
+      "path": "/api/barber/whatsapp/dispatch",
+      "schedule": "*/15 * * * *"
+    }
+```
+(Mismo cadencia que /api/cron/appointment-reminders del dental. El endpoint
+autoriza por `x-vercel-cron` o `Authorization: Bearer $CRON_SECRET`.)
+
+🔴 **2. ENVS NUEVAS EN VERCEL — crear como Sensitive** (no están en el repo):
+  · `NEXT_PUBLIC_BARBER_WHATSAPP_ES_CONFIG_ID` — config_id del Embedded
+    Signup **propio del vertical barber** (uno nuevo en la app de Meta, NO el
+    del dental). Sin esto el botón "Conectar mi WhatsApp" no se pinta y la
+    pantalla explica que falta configurarlo. Es público por diseño (va al
+    navegador), pero créalo igual como Sensitive por consistencia.
+  · `BARBER_WA_PLATFORM_SENDER` — bandera del modo PLATFORM. **NO la crees, o
+    créala en `0`.** Ver abajo.
+  · `BARBER_WA_PLATFORM_PHONE_NUMBER_ID`, `BARBER_WA_PLATFORM_TOKEN`,
+    `BARBER_WA_PLATFORM_WABA_ID` — solo si algún día se enciende PLATFORM.
+Se REUSAN, sin cambiarlas: `META_APP_ID` / `NEXT_PUBLIC_META_APP_ID`,
+`META_APP_SECRET` / `WHATSAPP_APP_SECRET`, `WA_WEBHOOK_VERIFY_TOKEN`,
+`CRON_SECRET`, `DATA_ENCRYPTION_KEY` (el token de cada barbería se guarda
+cifrado con envelope, igual que en el dental).
+
+⚪ **3. Modo PLATFORM: preparado y APAGADO.** El camino está escrito y
+documentado en `resolveSenderCredentials`, pero la bandera nace en 0 porque la
+pregunta de política con Meta —una sola WABA mandando en nombre de cientos de
+negocios distintos— NO está resuelta, y encenderlo sin resolverla pone en
+riesgo la app entera, **incluida la del dental**. Hoy todo va por OWN_WABA,
+que además es mejor producto: el mensaje sale con el nombre de la barbería y
+el consentimiento del cliente es con ella.
+
+⚪ **4. SQL: ninguno.** Esta ola no necesita una sola línea de SQL. El único
+cambio en `sql/` es el arreglo de `tstzrange` → `tsrange` en
+`sql/barber_agenda.sql`, y **en Supabase ya está aplicada la versión buena**:
+el archivo se corrigió para que coincida, no hay nada que correr.
+
+⚪ **5. Verificación de negocio con Meta: opcional a propósito.** Un número
+sin verificar puede escribirle a **250 clientes únicos cada 24 h**, de sobra
+para cualquier barbería. El onboarding NO la exige: "sin verificar" se pinta
+como una nota que lo explica, no como un error. Poner un muro ahí sería
+inventar un problema que no existe.
+
+───────────────────────────────────────────────────────────────────────────
+10. LO QUE OTRAS TERMINALES DEBEN SABER
+───────────────────────────────────────────────────────────────────────────
+· **NO reimplementes un emisor.** Para mandar algo desde el vertical:
+  `enqueueBarberMessage({barbershopId, phone, body, templateName})` y el
+  drenaje lo manda. Si necesitas una plantilla nueva, va al catálogo de
+  `whatsapp-core.ts` (prefijo `dc_barber_`) y su caso a
+  `resolveTemplateForRow`. La prueba del catálogo te avisa si Meta la
+  rechazaría antes de que la mandes.
+· **La cola es `BarberMessage`.** OUTBOUND+PENDING = por enviar. Si tu ola
+  mueve o cancela una cita, invalida sus recordatorios con
+  `pendingReminderInvalidationWhere` + `reminderInvalidationData` de T1 (no
+  con una marca inventada) y esta ola reprograma sola con la hora nueva.
+· **`templateName` está reservado** para tres cosas además del nombre de la
+  plantilla: `attach:` (adjunto entrante), `sys:archive` / `sys:unarchive`
+  (estado del hilo). Si filtras por `templateName`, usa igualdad exacta y
+  descarta con `isBarberWaSysRow()`.
+· **El cupo es un guardarraíl, no una palanca de venta.** Al agotarse, las
+  filas esperan al periodo siguiente; no se pierden ni se marcan fallidas.
+· **Multimedia: cero archivos en Storage.** Se sirve por proxy indexado por
+  el id del MENSAJE (nunca por el del archivo) y acotado por `barbershopId`.
+  Meta borra los binarios a los ~30 días: un adjunto viejo devuelve 410 y la
+  UI lo dice, no pinta un ícono roto.
+· **i18n**: el namespace es `barber.whatsapp.*` con su propio provider
+  (`WaI18n` / `useWaT` en components/barber/whatsapp/ui.tsx), porque el de
+  team/admin-ui prefija `barber.admin.`. El resto de las piezas visuales (Btn,
+  Modal, Chip, Banner, apiCall, useSaving) SÍ se reutilizan de allí: el
+  vertical tiene un solo lenguaje visual.
+· **NADIE ha mandado todavía un WhatsApp real desde barber.** Todo lo de
+  arriba está verificado contra stubs y contra el contrato de Meta, no contra
+  un envío en vivo. El primer envío real es parte del QA de Rafael.

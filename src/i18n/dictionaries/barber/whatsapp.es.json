@@ -1,0 +1,138 @@
+{
+  "title": "WhatsApp",
+  "subtitle": "El canal donde ya te escriben tus clientes. Conecta tu número y deja que los recordatorios salgan solos.",
+  "tabs": {
+    "conexion": "Conexión",
+    "inbox": "Conversaciones",
+    "plantillas": "Plantillas",
+    "campanas": "Campañas"
+  },
+  "connection": {
+    "title": "Tu número de WhatsApp",
+    "lead": "Los mensajes salen con el nombre de tu barbería, desde tu propio número. El cliente te responde a ti.",
+    "connect": "Conectar mi WhatsApp",
+    "connecting": "Conectando…",
+    "reconnect": "Volver a conectar",
+    "disconnect": "Desconectar",
+    "disconnectConfirm": "Se quitan las credenciales de Meta. Tus conversaciones NO se borran y puedes volver a conectar cuando quieras.",
+    "unavailable": "La conexión con Meta todavía no está configurada en el servidor. Escríbenos y lo dejamos listo.",
+    "state": {
+      "DISCONNECTED": "Sin conectar",
+      "CONNECTED": "Conectado",
+      "UNVERIFIED": "Conectado, sin verificación de negocio",
+      "NO_PAYMENT_METHOD": "Falta método de pago en tu cuenta de Meta",
+      "ERROR": "Hay un problema con la conexión"
+    },
+    "help": {
+      "DISCONNECTED": "Conecta el número que ya usas con tus clientes. Puedes seguir usándolo en tu celular con la app de WhatsApp Business.",
+      "CONNECTED": "Todo listo. Los recordatorios salen solos y las respuestas llegan aquí.",
+      "UNVERIFIED": "Esto NO es un problema: sin verificar puedes escribirle hasta a 250 clientes distintos cada 24 horas, de sobra para una barbería. Verificar tu negocio con Meta es opcional y sirve solo si algún día necesitas más.",
+      "NO_PAYMENT_METHOD": "Meta le cobra los mensajes a tu propia cuenta de WhatsApp Business. Agrega una tarjeta ahí y los mensajes vuelven a salir.",
+      "ERROR": "Vuelve a conectar tu WhatsApp para renovar el permiso."
+    },
+    "number": "Número conectado",
+    "verifiedAt": "Verificado el",
+    "notVerified": "Sin verificación de negocio (opcional)"
+  },
+  "quota": {
+    "title": "Mensajes de este periodo",
+    "used": "{used} de {limit} usados",
+    "unlimited": "Mensajes ilimitados",
+    "remaining": "Te quedan {remaining}",
+    "near": "Ya usaste el 80% de los mensajes incluidos de este periodo. Nada se corta todavía, pero conviene saberlo.",
+    "exhausted": "Se acabaron los mensajes incluidos de este periodo. Los que estén en cola salen en cuanto empiece el siguiente; sube de plan si necesitas más ahora.",
+    "since": "Periodo desde el {date}",
+    "cost": "Meta le cobra a tu cuenta unos {price} USD por recordatorio entregado. Trescientas citas al mes salen en menos de 50 pesos."
+  },
+  "templates": {
+    "title": "Plantillas aprobadas por Meta",
+    "lead": "Fuera de las 24 horas siguientes al último mensaje de tu cliente, WhatsApp solo deja escribir con una plantilla aprobada. Las damos de alta por ti en tu cuenta.",
+    "provision": "Dar de alta las que falten",
+    "provisioning": "Dando de alta…",
+    "includeMarketing": "Incluir también las de promoción (cumpleaños y \"te extrañamos\")",
+    "marketingWarn": "Las de promoción cuestan unas 4 veces más que un recordatorio y tu cliente puede bloquear ese tipo de mensajes. Nunca se mandan solas.",
+    "status": {
+      "APPROVED": "Aprobada",
+      "PENDING": "En revisión",
+      "REJECTED": "Rechazada",
+      "MISSING": "Sin dar de alta"
+    },
+    "category": {
+      "UTILITY": "Utilidad",
+      "AUTHENTICATION": "Código de acceso",
+      "MARKETING": "Promoción"
+    },
+    "kind": {
+      "reminder": "Recordatorio de visita",
+      "portalCode": "Código de acceso al portal",
+      "walkinTurn": "Ya casi es tu turno",
+      "bookingConfirmed": "Reserva confirmada",
+      "birthday": "Felicitación de cumpleaños",
+      "winback": "Te extrañamos"
+    },
+    "created": "Se dieron de alta {count}. Meta las revisa y suelen aprobarse en minutos.",
+    "noneNeeded": "No falta ninguna.",
+    "failed": "No se pudieron dar de alta: {names}"
+  },
+  "inbox": {
+    "title": "Conversaciones",
+    "empty": "Todavía no hay conversaciones. En cuanto un cliente te escriba, aparece aquí.",
+    "emptyArchived": "No hay conversaciones archivadas.",
+    "showArchived": "Ver archivadas",
+    "showActive": "Ver activas",
+    "archive": "Archivar",
+    "unarchive": "Sacar del archivo",
+    "archiveNote": "Archivar no borra nada: si el cliente vuelve a escribir, la conversación reaparece sola.",
+    "pickThread": "Elige una conversación para leerla.",
+    "placeholder": "Escribe tu respuesta…",
+    "send": "Enviar",
+    "sending": "Enviando…",
+    "windowClosed": "Pasaron más de 24 horas desde el último mensaje de este cliente. WhatsApp solo permite escribir primero con una plantilla aprobada.",
+    "windowOpen": "Puedes responder libremente durante las próximas 24 horas.",
+    "unknownClient": "Número sin cliente registrado",
+    "attachmentExpired": "Este archivo ya no está disponible: WhatsApp los borra a los 30 días.",
+    "openAttachment": "Abrir archivo",
+    "you": "Tú",
+    "template": "Plantilla"
+  },
+  "status": {
+    "PENDING": "En cola",
+    "SENT": "Enviado",
+    "DELIVERED": "Entregado",
+    "READ": "Leído",
+    "FAILED": "No se entregó"
+  },
+  "outbox": {
+    "title": "Pendientes por enviar",
+    "lead": "Los recordatorios se programan y se mandan solos. Si quieres apurarlos, aquí.",
+    "sendNow": "Enviar pendientes ahora",
+    "sending": "Enviando…",
+    "result": "Se programaron {queued} y salieron {sent}. Fallaron {failed}.",
+    "cronMissing": "El envío automático todavía no está programado en el servidor. Mientras tanto, este botón hace lo mismo."
+  },
+  "campaign": {
+    "title": "Campañas",
+    "lead": "Estos mensajes son de promoción: cuestan unas 4 veces más que un recordatorio y tu cliente puede bloquearlos. Por eso nunca se mandan solos.",
+    "birthday": "Cumpleañeros del mes",
+    "winback": "Clientes que no han vuelto",
+    "recipients": "{count} clientes con WhatsApp",
+    "estimated": "Costo estimado: {usd} USD ({unit} USD por mensaje)",
+    "promoLabel": "¿Qué les ofreces?",
+    "promoHint": "Una línea. Se agrega al final del mensaje.",
+    "promoPlaceholder": "Este mes tu corte lleva barba de cortesía.",
+    "send": "Mandar a {count}",
+    "sending": "Mandando…",
+    "sent": "Salieron {sent}. Fallaron {failed}.",
+    "none": "Ahora mismo no hay a quién escribirle.",
+    "templateMissing": "Primero da de alta la plantilla de promoción en la pestaña de Plantillas y espera a que Meta la apruebe.",
+    "batch": "Se mandan de {max} en {max} para poder decirte qué pasó con cada uno."
+  },
+  "errors": {
+    "noPermission": "No tienes permiso para ver el WhatsApp de la barbería.",
+    "planLocked": "Tu plan no incluye la bandeja de entrada de WhatsApp. Los recordatorios sí están incluidos.",
+    "generic": "Algo salió mal. Intenta de nuevo."
+  },
+  "common": {
+    "cancel": "Cancelar"
+  }
+}

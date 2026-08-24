@@ -48,7 +48,12 @@ $barber$;
 
 -- ── 2. ANTI DOBLE RESERVA (el corazón de esta ola) ─────────────────────
 -- Dos visitas ACTIVAS del mismo barbero no pueden compartir ni un minuto.
--- tstzrange(..., '[)') = intervalo semiabierto: una visita de 10:00 a 10:30
+-- tsrange y NO tstzrange: "startAt"/"endAt" son TIMESTAMP SIN zona, y el
+-- cast timestamp -> timestamptz depende del TimeZone de la sesión, así que
+-- NO es inmutable y Postgres rechaza el índice con "functions in index
+-- expression must be marked IMMUTABLE". La versión con tsrange es la que
+-- ya está aplicada en Supabase; este archivo se corrige para que coincida.
+-- tsrange(..., '[)') = intervalo semiabierto: una visita de 10:00 a 10:30
 -- y otra de 10:30 a 11:00 NO chocan (se tocan, no se enciman) — mismo
 -- criterio que intervalsOverlap() en src/lib/barber/agenda.ts.
 --
@@ -65,7 +70,7 @@ BEGIN
       EXCLUDE USING gist (
         "barberId"     WITH =,
         "barbershopId" WITH =,
-        tstzrange("startAt", "endAt", '[)') WITH &&
+        tsrange("startAt", "endAt", '[)') WITH &&
       )
       WHERE (
         "barberId" IS NOT NULL

@@ -269,7 +269,28 @@ export async function POST(req: NextRequest) {
     const clinic = await prisma.clinic.findFirst({
       where: { waPhoneNumberId: phoneNumberId },
     });
-    if (!clinic) return NextResponse.json({ ok: true });
+    if (!clinic) {
+      // ── DaleControl Barber (producto SEPARADO) ─────────────────────────
+      // Meta entrega TODOS los webhooks de una misma app a UNA sola URL, así
+      // que los mensajes de las barberías caen aquí. El camino dental se
+      // resolvió ARRIBA y no cambia: esto solo corre cuando el
+      // phone_number_id no es de ninguna clínica.
+      //
+      // try/catch + import() dinámico a propósito: ni un fallo del vertical
+      // barber ni un fallo al CARGAR su módulo pueden impedir que se entregue
+      // el mensaje de una clínica. Un phone_number_id desconocido tampoco
+      // truena: se registra y se responde 200 como siempre.
+      try {
+        const { ingestBarberInbound } = await import("@/lib/barber/whatsapp");
+        const handled = await ingestBarberInbound(value, msg);
+        if (!handled) {
+          console.warn(`[whatsapp/webhook] phone_number_id sin dueño: ${phoneNumberId}`);
+        }
+      } catch (e) {
+        console.error("[whatsapp/webhook] camino barber no aplicado:", e);
+      }
+      return NextResponse.json({ ok: true });
+    }
 
     // Dedup por wamid: Meta reintenta el webhook ante timeouts/5xx. Si este
     // mensaje ya fue ingestado, salir antes de crear el IN y de runBotTurn
@@ -722,7 +743,21 @@ async function ingestDeliveryStatuses(value: any): Promise<void> {
     where: { waPhoneNumberId: phoneNumberId },
     select: { id: true },
   });
-  if (!clinic) return;
+  if (!clinic) {
+    // ── DaleControl Barber ─────────────────────────────────────────────
+    // Mismo criterio que en el POST: el camino dental ya se resolvió y esto
+    // solo corre cuando el número no es de ninguna clínica. En try/catch con
+    // import dinámico para que nada de barber pueda afectar al dental.
+    // Sin esto, un recordatorio de barbería RECHAZADO por Meta se quedaría
+    // para siempre en "enviado" — el bug M-06/M-10 del dental.
+    try {
+      const { applyBarberDeliveryStatuses } = await import("@/lib/barber/whatsapp");
+      await applyBarberDeliveryStatuses(phoneNumberId, statuses);
+    } catch (e) {
+      console.error("[whatsapp/webhook] estados barber no aplicados:", e);
+    }
+    return;
+  }
 
   const now = new Date();
   let revokedReason: string | null = null;

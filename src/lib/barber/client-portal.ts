@@ -63,8 +63,9 @@ import type {
 
    FRONTERAS
    ────────────────────────────────────────────────────────────────────────
-   · T7 manda el WhatsApp: deliverPortalCode() es el gancho. Esta ola genera
-     y valida el código; NO envía mensajes.
+   · El WhatsApp lo manda la ola T7 (src/lib/barber/whatsapp.ts) a través de
+     deliverPortalCode(), que YA está conectado. Este módulo sigue siendo el
+     dueño de generar y validar el código; solo delega el envío.
    · T4 es dueño de membresías y anticipos: aquí solo se LEEN.
    ═══════════════════════════════════════════════════════════════════════ */
 
@@ -100,24 +101,44 @@ function generateCode(): string {
 }
 
 /**
- * GANCHO — entrega del código. T7 es dueño del envío por WhatsApp.
+ * Entrega del código — CONECTADO a WhatsApp por la ola T7.
  *
- * Fuera de producción escribe el código en el log del servidor para poder
- * probar el portal sin WhatsApp conectado. En producción NO escribe nada:
- * un código en los logs es un código filtrado.
+ * Sale como plantilla de categoría AUTHENTICATION (lo que Meta exige para
+ * un código de un solo uso; llega con botón de "copiar" en el teléfono del
+ * cliente) y se manda EN EL MOMENTO, no por la cola: un código que llega
+ * dentro de un minuto ya no sirve para entrar.
+ *
+ * El código NUNCA se guarda: la fila que queda en BarberMessage lleva un
+ * cuerpo neutro. Fuera de producción se sigue escribiendo en el log del
+ * servidor para poder probar el portal sin WhatsApp conectado; en producción
+ * no se escribe nada, porque un código en los logs es un código filtrado.
+ *
+ * NOTA de seguridad (documentada, no resuelta aquí): esta llamada solo
+ * ocurre cuando el cliente SÍ existe, así que su duración añade señal a la
+ * enumeración de teléfonos. La defensa real es el tope por IP del endpoint
+ * (/api/barber/portal/[slug]/code) más el tope de reenvíos de abajo; el
+ * texto de la respuesta sigue siendo idéntico exista o no el cliente.
  */
-export function deliverPortalCode(args: {
+export async function deliverPortalCode(args: {
   barbershopId: string;
   phone: string;
   code: string;
-}): void {
-  if (process.env.NODE_ENV === "production") {
-    // TODO(T7): enviar la plantilla de WhatsApp con el código.
-    return;
+}): Promise<void> {
+  if (process.env.NODE_ENV !== "production") {
+    console.info(
+      `[barber/portal] código de acceso para ${args.phone} (barbería ${args.barbershopId}): ${args.code}`,
+    );
   }
-  console.info(
-    `[barber/portal] código de acceso para ${args.phone} (barbería ${args.barbershopId}): ${args.code}`,
-  );
+  try {
+    const { sendBarberPortalCode } = await import("@/lib/barber/whatsapp");
+    await sendBarberPortalCode(args);
+  } catch (err) {
+    // Sin WhatsApp conectado (o con Meta caído) el código YA está emitido y
+    // sigue siendo válido: el cliente puede pedir otro. Jamás propagar —
+    // requestPortalCode es `void` a propósito para no filtrar si el cliente
+    // existe, y una excepción aquí rompería justo esa garantía.
+    console.error(`[barber/portal] no se pudo enviar el código (${args.barbershopId}):`, err);
+  }
 }
 
 /**
@@ -172,7 +193,7 @@ export async function requestPortalCode(args: {
     }),
   ]);
 
-  deliverPortalCode({ barbershopId, phone, code });
+  await deliverPortalCode({ barbershopId, phone, code });
 }
 
 export type PortalVerifyResult =

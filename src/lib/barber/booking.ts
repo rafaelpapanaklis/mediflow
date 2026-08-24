@@ -78,8 +78,8 @@ export * from "@/lib/barber/booking-core";
      en un solo punto (ver nota en el reporte).
    · T4 es dueño de los anticipos: resolveDepositForBooking() es el punto
      de integración y hoy devuelve null a propósito.
-   · T7 manda los WhatsApp: notifyBookingCreated() es el gancho y hoy solo
-     deja rastro en el log del servidor fuera de producción.
+   · El WhatsApp lo manda la ola T7 (src/lib/barber/whatsapp.ts):
+     notifyBookingCreated() YA está conectado y ENCOLA la confirmación.
    ═══════════════════════════════════════════════════════════════════════ */
 
 /** Cliente Prisma o el `tx` de una transacción — las lecturas sirven en ambos. */
@@ -293,20 +293,39 @@ export async function resolveDepositForBooking(_args: {
 // ── WhatsApp (T7) ───────────────────────────────────────────────────────
 
 /**
- * GANCHO — aviso de reserva. T7 es dueño del envío; aquí solo se anuncia el
- * hecho. Fuera de producción deja rastro en el log del servidor para poder
- * verificar el flujo sin WhatsApp conectado; en producción no hace nada
- * (jamás loguea datos del cliente).
+ * Aviso de reserva — CONECTADO a WhatsApp por la ola T7.
+ *
+ * ENCOLA la confirmación (plantilla de utilidad `dc_barber_reserva_confirmada`)
+ * en vez de mandarla aquí mismo: el cliente acaba de ver la pantalla de
+ * "listo", así que un minuto de diferencia no rompe nada y a cambio el flujo
+ * de reserva NUNCA se queda esperando a Meta ni falla porque Meta falle.
+ *
+ * `queueBarberBookingConfirmation` es idempotente: una reserva no confirma
+ * dos veces aunque el flujo se reintente.
+ *
+ * Fuera de producción deja rastro en el log del servidor para poder verificar
+ * el flujo sin WhatsApp conectado; en producción no loguea datos del cliente.
  */
-export function notifyBookingCreated(payload: {
+export async function notifyBookingCreated(payload: {
   barbershopId: string;
   appointmentId: string;
   policy: BarberBookingPolicy;
-}): void {
+}): Promise<void> {
   if (process.env.NODE_ENV !== "production") {
     console.info(
-      `[barber/reserva] cita ${payload.appointmentId} creada (${payload.policy}) — pendiente el aviso de WhatsApp (T7)`,
+      `[barber/reserva] cita ${payload.appointmentId} creada (${payload.policy}) — encolando el aviso de WhatsApp`,
     );
+  }
+  try {
+    const { queueBarberBookingConfirmation } = await import("@/lib/barber/whatsapp");
+    await queueBarberBookingConfirmation({
+      barbershopId: payload.barbershopId,
+      appointmentId: payload.appointmentId,
+    });
+  } catch (err) {
+    // La reserva YA está creada y es lo que importa. Un aviso que no se pudo
+    // encolar no puede tumbarla.
+    console.error(`[barber/reserva] aviso no encolado (${payload.appointmentId}):`, err);
   }
 }
 
@@ -752,7 +771,7 @@ export async function createPublicBooking(
     if ("blocked" in created) return { ok: false, code: "clientBlocked" };
     if (created.taken) return { ok: false, code: "slotTaken" };
 
-    notifyBookingCreated({ barbershopId: shop.id, appointmentId: created.id, policy });
+    await notifyBookingCreated({ barbershopId: shop.id, appointmentId: created.id, policy });
 
     return {
       ok: true,

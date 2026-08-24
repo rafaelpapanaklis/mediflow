@@ -340,7 +340,13 @@ export const BARBER_NAV_ITEMS: BarberNavItemDef[] = [
   { key: "membresias", href: "/barber/membresias", icon: "crown", section: "negocio", permission: "memberships.manage", featureKey: "memberships" },
   { key: "productos", href: "/barber/productos", icon: "package", section: "negocio", permission: "products.manage", featureKey: "products" },
   { key: "mi-web", href: "/barber/mi-web", icon: "globe", section: "crecimiento", permission: "web.edit", featureKey: "miniWebEditor" },
-  { key: "whatsapp", href: "/barber/whatsapp", icon: "message-circle", section: "crecimiento", permission: "whatsapp.view", featureKey: "whatsappInbox" },
+  // featureKey `whatsappReminders` (TODOS los planes) y NO `whatsappInbox`
+  // (solo Avanzado y Profesional): la pantalla es también donde la barbería
+  // CONECTA su número, y los recordatorios sí están incluidos en el Básico.
+  // Con el gate anterior, un Básico no veía nunca el menú, no podía conectar
+  // WhatsApp y los recordatorios de su plan jamás salían. La bandeja de
+  // entrada sigue gateada por `whatsappInbox` DENTRO de la pantalla.
+  { key: "whatsapp", href: "/barber/whatsapp", icon: "message-circle", section: "crecimiento", permission: "whatsapp.view", featureKey: "whatsappReminders" },
   { key: "suscripcion", href: "/barber/suscripcion", icon: "credit-card", section: "cuenta", permission: "billing.manage", featureKey: null },
   { key: "configuracion", href: "/barber/configuracion", icon: "settings", section: "cuenta", permission: "settings.edit", featureKey: null },
 ];

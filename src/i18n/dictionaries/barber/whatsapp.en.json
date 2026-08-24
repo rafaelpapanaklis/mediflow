@@ -1,0 +1,139 @@
+{
+  "title": "WhatsApp",
+  "subtitle": "The channel your clients already use. Connect your number and let reminders go out on their own.",
+  "tabs": {
+    "conexion": "Connection",
+    "inbox": "Conversations",
+    "plantillas": "Templates",
+    "campanas": "Campaigns"
+  },
+  "connection": {
+    "title": "Your WhatsApp number",
+    "lead": "Messages go out under your barbershop's name, from your own number. Clients reply to you.",
+    "connect": "Connect my WhatsApp",
+    "connecting": "Connecting…",
+    "reconnect": "Reconnect",
+    "disconnect": "Disconnect",
+    "disconnectConfirm": "This removes your Meta credentials. Your conversations are NOT deleted and you can reconnect any time.",
+    "unavailable": "The Meta connection is not configured on the server yet. Write to us and we'll set it up.",
+    "state": {
+      "DISCONNECTED": "Not connected",
+      "CONNECTED": "Connected",
+      "UNVERIFIED": "Connected, business not verified",
+      "NO_PAYMENT_METHOD": "Your Meta account needs a payment method",
+      "ERROR": "There's a problem with the connection"
+    },
+    "help": {
+      "DISCONNECTED": "Connect the number you already use with your clients. You can keep using it on your phone with the WhatsApp Business app.",
+      "CONNECTED": "All set. Reminders go out on their own and replies land here.",
+      "UNVERIFIED": "This is NOT a problem: without verification you can message up to 250 different clients every 24 hours — plenty for a barbershop. Verifying your business with Meta is optional and only matters if you ever need more.",
+      "NO_PAYMENT_METHOD": "Meta charges messages to your own WhatsApp Business account. Add a card there and messages start flowing again.",
+      "ERROR": "Reconnect your WhatsApp to renew the permission."
+    },
+    "number": "Connected number",
+    "verifiedAt": "Verified on",
+    "notVerified": "Business not verified (optional)"
+  },
+  "quota": {
+    "title": "Messages this period",
+    "used": "{used} of {limit} used",
+    "unlimited": "Unlimited messages",
+    "remaining": "{remaining} left",
+    "near": "You've used 80% of the messages included this period. Nothing is cut off yet, but it's worth knowing.",
+    "exhausted": "You've used all the messages included this period. Anything queued goes out when the next one starts; upgrade if you need more now.",
+    "since": "Period started {date}",
+    "cost": "Meta charges your account about {price} USD per delivered reminder. Three hundred appointments a month costs under 3 USD.",
+    "costNote": ""
+  },
+  "templates": {
+    "title": "Templates approved by Meta",
+    "lead": "Outside the 24 hours after your client's last message, WhatsApp only allows an approved template. We register them in your account for you.",
+    "provision": "Register the missing ones",
+    "provisioning": "Registering…",
+    "includeMarketing": "Also include promotional ones (birthdays and \"we miss you\")",
+    "marketingWarn": "Promotional templates cost about 4x a reminder and your client can block that kind of message. They never go out on their own.",
+    "status": {
+      "APPROVED": "Approved",
+      "PENDING": "Under review",
+      "REJECTED": "Rejected",
+      "MISSING": "Not registered"
+    },
+    "category": {
+      "UTILITY": "Utility",
+      "AUTHENTICATION": "Access code",
+      "MARKETING": "Promotional"
+    },
+    "kind": {
+      "reminder": "Visit reminder",
+      "portalCode": "Portal access code",
+      "walkinTurn": "You're almost up",
+      "bookingConfirmed": "Booking confirmed",
+      "birthday": "Birthday message",
+      "winback": "We miss you"
+    },
+    "created": "{count} registered. Meta reviews them, usually within minutes.",
+    "noneNeeded": "None missing.",
+    "failed": "Could not register: {names}"
+  },
+  "inbox": {
+    "title": "Conversations",
+    "empty": "No conversations yet. As soon as a client writes to you, it shows up here.",
+    "emptyArchived": "No archived conversations.",
+    "showArchived": "Show archived",
+    "showActive": "Show active",
+    "archive": "Archive",
+    "unarchive": "Unarchive",
+    "archiveNote": "Archiving deletes nothing: if the client writes again, the conversation comes back on its own.",
+    "pickThread": "Pick a conversation to read it.",
+    "placeholder": "Write your reply…",
+    "send": "Send",
+    "sending": "Sending…",
+    "windowClosed": "More than 24 hours have passed since this client's last message. WhatsApp only allows writing first with an approved template.",
+    "windowOpen": "You can reply freely for the next 24 hours.",
+    "unknownClient": "Number with no client on file",
+    "attachmentExpired": "This file is no longer available: WhatsApp deletes them after 30 days.",
+    "openAttachment": "Open file",
+    "you": "You",
+    "template": "Template"
+  },
+  "status": {
+    "PENDING": "Queued",
+    "SENT": "Sent",
+    "DELIVERED": "Delivered",
+    "READ": "Read",
+    "FAILED": "Not delivered"
+  },
+  "outbox": {
+    "title": "Waiting to go out",
+    "lead": "Reminders are scheduled and sent automatically. If you want to hurry them along, here you go.",
+    "sendNow": "Send pending now",
+    "sending": "Sending…",
+    "result": "{queued} scheduled, {sent} sent. {failed} failed.",
+    "cronMissing": "Automatic sending is not scheduled on the server yet. In the meantime, this button does the same thing."
+  },
+  "campaign": {
+    "title": "Campaigns",
+    "lead": "These are promotional messages: they cost about 4x a reminder and your client can block them. That's why they never go out on their own.",
+    "birthday": "This month's birthdays",
+    "winback": "Clients who haven't come back",
+    "recipients": "{count} clients with WhatsApp",
+    "estimated": "Estimated cost: {usd} USD ({unit} USD per message)",
+    "promoLabel": "What are you offering them?",
+    "promoHint": "One line. It's added at the end of the message.",
+    "promoPlaceholder": "This month your cut comes with a free beard trim.",
+    "send": "Send to {count}",
+    "sending": "Sending…",
+    "sent": "{sent} sent. {failed} failed.",
+    "none": "Right now there's no one to write to.",
+    "templateMissing": "First register the promotional template in the Templates tab and wait for Meta to approve it.",
+    "batch": "They go out {max} at a time so we can tell you what happened with each one."
+  },
+  "errors": {
+    "noPermission": "You don't have permission to see the barbershop's WhatsApp.",
+    "planLocked": "Your plan doesn't include the WhatsApp inbox. Reminders are included.",
+    "generic": "Something went wrong. Try again."
+  },
+  "common": {
+    "cancel": "Cancel"
+  }
+}
