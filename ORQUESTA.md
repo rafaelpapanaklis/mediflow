@@ -9559,3 +9559,120 @@ obligatorio: un `undefined` no puede borrar el filtro de tenant.
 ### Archivos
 
 `src/lib/caja.ts` · `src/lib/invoices/due-date.ts` (NUEVO) · `src/lib/invoices/__tests__/due-date.test.ts` (NUEVO) · `src/lib/quotes/invoice-from-quote-core.ts` (NUEVO) · `src/lib/quotes/__tests__/invoice-from-quote-core.test.ts` (NUEVO) · `src/lib/quotes/create-invoice-from-quote.ts` · `src/lib/quotes/service.ts` · `src/lib/plan-status.ts` · `src/app/api/finanzas/route.ts` · `src/app/api/invoices/route.ts` · `src/app/api/quotes/[id]/route.ts` · `src/app/api/billing/checkout/route.ts` · `src/app/dashboard/reports/page.tsx` · `src/app/dashboard/caja/page.tsx` · `src/app/dashboard/caja/caja-client.tsx` · `src/app/dashboard/billing/billing-client.tsx` · `src/app/dashboard/patients/[id]/patient-detail-client.tsx` · `src/app/dashboard/suspended/success/page.tsx` · `src/app/dashboard/suspended/success/confirming-poll.tsx` (NUEVO) · `src/components/billing/invoice-editor-modal.tsx` · `src/components/quotes/quotes-tab.tsx` · `src/i18n/dictionaries/{es,en}.json` · `sql/ola-dinero-medicion.sql` (NUEVO, solo lectura) · `package.json`
+
+═══════════════════════════════════════════════════════════════════════════
+## [T1 — Barber Ola 0] — Fundación DaleControl Barber: schema + contrato + auth + shell + tema + guardia ✅ (2026-08-24)
+═══════════════════════════════════════════════════════════════════════════
+COMMIT: 02d46a9a · push directo a main · BUILD EXIT 0 (✓ Compiled successfully).
+SQL PENDIENTE: `sql/barber.sql` (idempotente, re-ejecutable) — Rafael lo pega en Supabase.
+Hasta que se aplique: el login dental NO se ve afectado (lookup de barber_users va en
+try/catch), /barber/registro devuelve 500 en la transacción (rollback del user de
+Supabase best-effort) y los planes caen al FALLBACK (= seed) de plan-shared.
+
+QUÉ ES: producto NUEVO y SEPARADO en este repo — SaaS para barberías. NO es una
+especialidad dental. Comparte SOLO: Supabase Auth (login), infra (Vercel/Stripe/Meta)
+y design system. Terminología obligatoria: cliente / barbero / barbería / servicio /
+visita (nunca paciente/doctor/clínica/consulta/expediente) → BARBER_TERMS en types.ts.
+
+CONSTRUIDO (Ola 0 = el contrato bloqueante para las 8 terminales de la Ola 1):
+1) SCHEMA (prisma/schema.prisma, bloque al final + migración
+   prisma/migrations/20260824120000_barber_foundation/): 12 enums + 17 modelos, TODOS
+   @@map a tablas prefijo barber_. Tenant = Barbershop (barber_shops; parentId
+   self-relation para cadenas). Negocio: BarberUser, Barber (barber_barbers),
+   BarberClient, BarberService, BarberAppointment (+BarberAppointmentService con
+   priceAtBooking congelado), BarberWalkIn, BarberMembership, BarberClientMembership,
+   BarberSale (+BarberSaleItem), BarberProduct, BarberCashSession,
+   BarberCommissionEntry, BarberMessage, BarberPlanConfig (barber_plan_configs).
+   · WhatsApp: los DOS modelos soportados (whatsappSenderMode PLATFORM|OWN_WABA +
+     campos WABA propia + messagesUsedPeriod/messagesPeriodStart + messageQuota por
+     plan). El ENVÍO NO está implementado (decisión de modelo pendiente de Rafael).
+   · onDelete: barbershopId siempre Cascade; refs protegidas (soldByUserId,
+     openedByUserId, serviceId de líneas, membershipId, barberId de comisiones) van
+     NoAction —no Restrict— para que borrar una barbería completa no truene (NO ACTION
+     se verifica al final del statement; Restrict revienta con cascadas del mismo DELETE).
+2) CONTRATO src/lib/barber/: types.ts (enums como union types client-safe — patrón
+   laboratorios/types.ts, NO re-export de @prisma/client; DTOs; BARBER_APPOINTMENT_FLOW
+   + canTransition()/nextStatuses() con CANCELLED desde todo no-terminal y NO_SHOW solo
+   desde PENDING/CONFIRMED; BARBER_DEFAULT_SERVICES (9, se siembran al registro);
+   makeBarberSlug() probado con acentos; BARBER_TERMS; BARBER_NAV_ITEMS con
+   featureKey+permission por item) · plan-shared.ts (BARBER_PLAN_IDS, features catálogo
+   19 keys, FALLBACK=seed 199/329/749, formatBarberPrice, -1=ilimitado,
+   isBarbershopSubscriptionActive: active|trialing|paid) · plans.ts (getBarberPlan(s),
+   caché 60s + fallback, espejo de plans.ts dental) · permissions.ts (20 keys, defaults
+   por rol OWNER/MANAGER/RECEPTION/BARBER; override REEMPLAZA, no suma).
+3) AUTH: src/lib/barber-auth.ts → getBarberContext() espejo 1:1 de getDentalLabContext
+   (barbershopId SIEMPRE de la sesión; null sin redirigir; try/catch total) +
+   assertBarberPermission()/hasBarberPermission() punto único. src/lib/auth.ts
+   (COMPARTIDO): chequeo BarberUser en getCurrentUser tras el de laboratorio → /barber.
+   🔴 En try/catch con redirect() FUERA del try (NEXT_REDIRECT no se lo puede tragar el
+   catch); si barber_users no existe, loguea y sigue al flujo normal — verificado por
+   lectura: NO puede tumbar el login dental. Barber NO tiene login propio: usa /login
+   (login-form redirige a /dashboard y getCurrentUser rebota a /barber). Sin cambios en
+   src/middleware.ts (mismo patrón que /laboratorios, que vive así en prod).
+4) SHELL /barber: page.tsx (router: sin ctx→/login; inactiva o impaga→suscripcion;
+   ok→inicio) · (panel)/layout.tsx (guard + nav resuelta EN SERVER: features del plan +
+   permisos del rol; el sidebar solo pinta) · 15 placeholders "Próximamente" (uno por
+   área; suscripcion ya muestra los 3 planes LEYENDO barber_plan_configs — cero precios
+   hardcodeados, verificado por grep) · barber-sidebar/topbar/placeholder en
+   src/components/barber/ · registro (AuthShell + visual y form propios del vertical,
+   nada clínico) · POST /api/barber/auth/register (rate-limit IP, admin createUser,
+   transacción Barbershop+OWNER+seed servicios, slug con retries, rollback best-effort,
+   NO auto-login → /login; subscriptionStatus nace "pending_payment" como el dental) ·
+   POST /api/barber/auth/logout. i18n: árbol PROPIO src/i18n/dictionaries/barber/
+   (shell.es/en.json + index.ts, namespace barber.*; un archivo POR ÁREA para que 8
+   terminales no choquen en un JSON — NO se tocaron es.json/en.json del dental).
+5) TEMA (5B): escala caramel 50–950 COMPLETA en tailwind.config.ts (compartido) + tokens
+   scopeados en src/app/barber/barber-theme.css bajo .barber-shell (light crema/tinta,
+   dark #1A1513/#241D19 con primario caramel-400) + remap de la rampa brand-* vía
+   body:has(.barber-shell) (portales Radix incluidos; el panel barber NO lleva
+   .dashboard-shell, así que no pelea con el remap violeta). ♿ Blanco sobre caramel-500
+   NO pasa AA → botones con texto blanco usan 600/700 (documentado en config y CSS).
+6) GUARDIA (5C): scripts/barber-guard.cjs — clasifica diff vs origin/main (commits +
+   staged + working tree + untracked) en PROPIO/COMPARTIDO/PROHIBIDO; compartidos solo
+   pasan declarados en BARBER_GUARD_SHARED. Probado en este worktree: con
+   BARBER_GUARD_SHARED="prisma/schema.prisma,src/lib/auth.ts,tailwind.config.ts" →
+   exit 0 (37 propios, 3 compartidos, 0 prohibidos); quitando src/lib/auth.ts de la
+   declaración → exit 1 con "GUARDIA BARBER: se tocaron archivos fuera del vertical".
+
+VERIFICACIONES (por lectura/grep, además del build):
+(a) try/catch del login: redirect fuera del try; catch loguea y sigue — el flujo dental
+    no se corta ni con tabla inexistente. (b) todas las llamadas prisma.barber* de la
+    ola son: resolvers de sesión (por supabaseId), config global de planes, y el alta
+    pública — no existe aún consulta de negocio, y el contrato exige barbershopId de
+    getBarberContext(). (c) grep 199|329|749 en components/app barber: 0 (solo
+    FALLBACK=seed en plan-shared y sql). (d) grep paciente|doctor|clínica|consulta|
+    expediente en UI/i18n barber: 0. (e) /b LIBRE: no existe src/app/b; ruta estática
+    gana al catch-all /[slug]; el matcher del middleware ni lo toca → T5/T8 pueden
+    construir /b/[slug] y /b/[slug]/reservar sin choques.
+
+MAPA DE ARCHIVOS OLA 1 (con esto NO se pisan; correr SIEMPRE
+`node scripts/barber-guard.cjs` antes de commitear):
+· CADA terminal: su página en src/app/barber/(panel)/<área>/** (reemplaza el
+  placeholder), sus APIs en src/app/api/barber/<área>/**, sus componentes en
+  src/components/barber/<área>-*.tsx o src/components/barber/<área>/**, su lógica en
+  src/lib/barber/<área>*.ts, su i18n en src/i18n/dictionaries/barber/<área>.{es,en}.json
+  + UNA línea de import en index.ts (única colisión tolerada: es un archivo de 2 líneas
+  por terminal, merge trivial).
+· T-inicio: (panel)/inicio · T-agenda: agenda + solicitudes · T-fila: fila ·
+  T-clientes: clientes · T-catalogo: servicios + barberos + configuracion · T-dinero:
+  caja + comisiones · T-membresias: membresias + productos · T-web: mi-web + público
+  src/app/b/** (+sql/barber-<feature>.sql si necesita tablas nuevas, prefijo barber_).
+· NO tocar sin declarar en BARBER_GUARD_SHARED (y avisar en el reporte):
+  prisma/schema.prisma, src/lib/auth.ts, tailwind.config.ts, src/app/globals.css,
+  src/lib/whatsapp.ts, webhook de WhatsApp, ORQUESTA.md, src/app/sitemap.ts.
+  Todo lo demás del repo (dashboard, laboratorios, proveedores, afiliados, landing…)
+  es PROHIBIDO: el guardia lo revienta.
+· Sidebar: NO se toca — para aparecer/gatearse ya existe BARBER_NAV_ITEMS (types.ts).
+  Permisos: hasBarberPermission/assertBarberPermission. Planes: getBarberPlan(s) —
+  prohibido hardcodear precios. Estados de cita: canTransition/nextStatuses.
+
+DECISIONES/AVISOS: (1) enums en types.ts como union strings (patrón real del repo en
+laboratorios/types.ts) en vez de re-export de @prisma/client — client-safe. (2) La
+tabla del profesional quedó "barber_barbers" (regla dura: prefijo barber_ en TODO).
+(3) El gate de suscripción vive en /barber/page.tsx; el layout solo guarda sesión (si
+gateara suscripción haría loop con /barber/suscripcion) — el gate duro por página lo
+cablea la ola de Stripe/suscripción. (4) Checkout Stripe, envío WhatsApp, lógica de
+caja/comisiones/membresías/fila/mini-web: NO implementados a propósito (Ola 0 = solo
+esqueleto + contrato). (5) Registro exige teléfono MX 10 dígitos (mxTenDigits, mismo
+criterio que el dental). (6) messageQuota 200/600/-1 PROVISIONAL en la tabla (Rafael
+confirma con el costo de Meta; se edita en barber_plan_configs, no en código).
