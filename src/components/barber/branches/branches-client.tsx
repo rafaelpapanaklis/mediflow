@@ -320,7 +320,7 @@ export function BranchesClient({
         title={t("branches.hoursTitle")}
         icon={<CalendarClock size={16} />}
         action={
-          <Link href="/barber/agenda" className={[s.btn, s.btnSm].join(" ")}>
+          <Link href="/barber/agenda/horarios" className={[s.btn, s.btnSm].join(" ")}>
             {t("branches.hoursLink")}
           </Link>
         }

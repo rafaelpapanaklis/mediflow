@@ -289,7 +289,7 @@ export function BarbersClient({
         title={t("barbers.scheduleTitle")}
         icon={<CalendarClock size={16} />}
         action={
-          <Link href="/barber/agenda" className={[s.btn, s.btnSm].join(" ")}>
+          <Link href="/barber/agenda/horarios" className={[s.btn, s.btnSm].join(" ")}>
             {t("barbers.scheduleLink")}
           </Link>
         }
