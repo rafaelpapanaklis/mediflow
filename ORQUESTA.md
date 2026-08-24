@@ -11333,3 +11333,259 @@ QA MANUAL PENDIENTE (necesita entorno con Stripe)
      indexarse; en un reembolso el mismo día no es problema, pero si falla,
      el estado se registra igual y la barbería devuelve en efectivo).
   4. Con dos barberías reales en la misma base, repetir a mano el punto 5.
+═══════════════════════════════════════════════════════════════════════════
+## T4 — BARBER · MÓDULO DE CLIENTES (ficha, historial de cortes con foto, preferencias, fidelidad, cumpleaños/inactivos, bloqueo) ✅ (2026-08-24) · rama feat/barber-clientes → main
+═══════════════════════════════════════════════════════════════════════════
+COMMIT: 26745cd3 · BUILD EXIT 0 (`npx next build`, salida completa, sin pipes) ·
+GUARDIA BARBER EXIT 0 (27 archivos, 0 compartidos sin declarar, 0 prohibidos) ·
+26/26 pruebas verdes · PENDIENTE: aplicar `sql/barber_clientes.sql` en Supabase.
+
+OBJETIVO: el "así me lo hiciste la vez pasada". Todo lo que hace que un cliente
+vuelva con el MISMO barbero: su ficha, cómo le gusta el corte, las fotos de sus
+cortes anteriores, su tarjeta de sellos, y las dos listas con las que se
+recupera a quien se está perdiendo.
+
+── QUÉ SE ENTREGA ────────────────────────────────────────────────────────
+PÁGINAS
+· /barber/clientes — lista con búsqueda por TELÉFONO (la llave real del
+  mostrador), nombre y correo. Pestañas: Todos · Premio listo · Cumpleaños ·
+  No han vuelto · Bloqueados. Columnas: última visita (relativa), visitas,
+  sellos, membresía activa, bloqueado. Paginado 25.
+· /barber/clientes/[id] — ficha: identidad + tarjeta de lealtad a la
+  izquierda; preferencias, fotos e historial a la derecha.
+
+CAPA DE DATOS (2 archivos, los del contrato)
+· src/lib/barber/clients.ts   — config, lista, alta/vinculación, ficha,
+  preferencias, bloqueo, cumpleaños/inactivos, fotos + Storage.
+· src/lib/barber/loyalty.ts   — contador derivado, canje, historial de cortes
+  y el armado de la ficha completa.
+
+APIs (10 rutas bajo /api/barber/clients, TODAS con la misma puerta)
+  GET/POST  /api/barber/clients                       lista · alta/vinculación
+  GET       /api/barber/clients/lookup?phone=         ¿ya es cliente? ¿bloqueado?
+  GET       /api/barber/clients/outreach?kind=        cumpleaños | inactivos
+  GET/PATCH /api/barber/clients/settings              umbral, premio, días
+  GET/PATCH /api/barber/clients/[id]                  ficha completa · editar
+  PATCH     /api/barber/clients/[id]/preferences      cómo le gusta el corte
+  POST      /api/barber/clients/[id]/block            bloquear / desbloquear
+  GET/POST  /api/barber/clients/[id]/photos           listar · subir
+  PATCH/DEL /api/barber/clients/[id]/photos/[photoId] publicar/tipo · borrar
+  GET/POST  /api/barber/clients/[id]/loyalty          estado · canjear
+La puerta única es gateBarberClients() en _helpers.ts: sesión (getBarberContext)
+→ feature `clients` del plan → assertBarberPermission. Ninguna ola inventa su
+propio check. NO hay ruta pública en este módulo.
+
+i18n: dictionaries/barber/clientes.{es,en}.json + UNA línea por idioma en
+index.ts (como pide la Ola 1). El servidor baja SOLO el subárbol
+`barber.clientes` al cliente, así que las llaves de la UI son cortas
+(t("tabs.all")) con el mismo makeT del servidor.
+
+── DECISIONES QUE OTRAS OLAS TIENEN QUE CONOCER ──────────────────────────
+
+1) EL CONTADOR DE LEALTAD NO SE INCREMENTA: SE DERIVA.
+   `barber_clients.loyaltyCount` se trata como CACHÉ, no como acumulador:
+       visitas  = citas DONE del cliente
+                + ventas de servicio SIN cita (walk-in de mostrador)
+       contador = visitas − visitas ya canjeadas
+   Consecuencias buscadas: (a) no existe endpoint que reciba un número, así
+   que desde el navegador NO se pueden sumar sellos; (b) es idempotente —
+   cerrar dos veces la misma visita no suma dos sellos porque no se suma,
+   se cuenta; (c) SE AUTO-REPARA: si T1/T3 olvidan el gancho, el número se
+   corrige solo al abrir la ficha o al cargar la lista. La columna se
+   refresca únicamente cuando difiere (en régimen normal: cero escrituras).
+   Una venta de SOLO producto (una cera) NO cuenta como visita.
+
+2) GANCHOS PARA LAS DEMÁS TERMINALES (importar, no reimplementar):
+   · T1 agenda / T3 caja, al cerrar una visita:
+       import { registerBarberVisit } from "@/lib/barber/loyalty";
+       await registerBarberVisit(ctx, { clientId, appointmentId });
+   · T1, al ABRIR la cita, para el aviso de corte gratis:
+       import { getBarberLoyaltyForAppointment } from "@/lib/barber/loyalty";
+       import { BarberLoyaltyBadge } from "@/components/barber/clients/loyalty-card";
+       const loyalty = await getBarberLoyaltyForAppointment(ctx, appointmentId);
+       {loyalty ? <BarberLoyaltyBadge state={loyalty} /> : null}
+     (BarberLoyaltyBadge devuelve null si la barbería no usa lealtad: se
+      puede pintar sin `if`.)
+   · T1 / T5, antes de sentar a alguien:
+       GET /api/barber/clients/lookup?phone=…
+       → { phone, client, blocked, blockReason }.  Bloquear NO borra.
+   · T7 WhatsApp, la lista ya lista para mandar (este módulo NO envía nada):
+       import { listBarberOutreach } from "@/lib/barber/clients";
+       const lista = await listBarberOutreach(ctx, { kind: "inactive" });
+       for (const t of lista.targets) …   // t.phone ya viene a 10 dígitos
+     Ya viene filtrado: solo la barbería de la sesión y SIN bloqueados (a un
+     bloqueado no se le manda promoción). También por HTTP en
+     GET /api/barber/clients/outreach?kind=birthday|inactive&month=&days=.
+
+3) FRONTERA CON T5 (PORTAL DEL CLIENTE) — QUÉ EXPONE ESTA CAPA:
+   Las fotos nacen con visibleToClient = FALSE. Publicarlas exige
+   `portal.manage` (no basta clients.edit): guardar una foto y publicarla son
+   dos acciones distintas, y la ruta lo separa.
+   T5 debe leer las fotos SOLO con:
+       import { listBarberVisitPhotosVisibleToClient } from "@/lib/barber/clients";
+       await listBarberVisitPhotosVisibleToClient({ barbershopId, clientId });
+   Devuelve únicamente las publicadas y NO devuelve el path interno del
+   bucket, solo la URL firmada (5 min). ⚠️ Es la ÚNICA función del módulo que
+   recibe el barbershopId suelto, porque el portal no tiene sesión de
+   barbería: los DOS ids tienen que salir del BarberClientAuthToken ya
+   verificado, JAMÁS del query.
+
+4) FOTOS Y STORAGE:
+   Bucket propio `barber-files` (constante BARBER_FILES_BUCKET del contrato),
+   PRIVADO, ruta `clients/<barbershopId>/<clientId>/<ts>-<rand>.webp`.
+   `BarberVisitPhoto.url` guarda el PATH, no una URL — se firma on-demand
+   tras comprobar la barbería de la sesión. Sin firma no hay foto, y una
+   barbería no puede adivinar la ruta de otra porque el barbershopId de la
+   ruta sale de la sesión. El tipo se comprueba por FIRMA DE BYTES (el
+   Content-Type del multipart lo escribe el cliente). Topes: 4 MB por foto,
+   12 por visita, 300 por ficha.
+
+5) CONFIG POR BARBERÍA SIN TOCAR EL SCHEMA:
+   El umbral de sellos, el nombre del premio y los días de inactividad son
+   4 columnas sueltas de `barber_shops` que crea sql/barber_clientes.sql y
+   que este módulo lee con SQL parametrizado ($queryRaw) — el cliente Prisma
+   no las conoce y prisma/schema.prisma NO se tocó (lo comparten 9 terminales).
+   Si el SQL no está aplicado, la lectura atrapa el 42703 y cae a los
+   defaults (10 cortes / 60 días): el módulo funciona igual, solo que los
+   números no se pueden editar y la UI lo dice.
+
+6) ALCANCE = LA SEDE, NO LA CADENA. No se usa getAccessibleBranchIds() a
+   propósito: barber_clients tiene ÚNICO (barbershopId, phone), o sea que el
+   mismo señor en dos sucursales son dos filas con contadores distintos, y una
+   vista "de la cadena" mostraría duplicados. Si multisucursal quiere agenda de
+   clientes compartida, es un cambio de MODELO, no de filtro. Se eligió el
+   alcance más estrecho a propósito.
+
+7) EL CANJE RESTA EL UMBRAL, NO RESETEA A CERO. En el caso normal es lo mismo
+   (se canjea al llegar al número), pero si alguien alcanzó 12 con umbral 10,
+   los 2 de más son suyos. La condición `loyaltyCount >= threshold` viaja EN
+   EL WHERE del UPDATE, así que dos canjes simultáneos no pasan: el segundo
+   afecta 0 filas y responde 409.
+
+8) LLAVES RESERVADAS EN `preferences`. La bitácora de canjes (`__loyalty`) y
+   el motivo del bloqueo (`__block`) viven en el Json de preferences y SOLO
+   las escribe el servidor: sanitizeClientPreferences() las tira del cuerpo y
+   mergeClientPreferences() las conserva de la fila. El catálogo público es
+   CLIENT_PREFERENCE_FIELDS. Quien toque `preferences` desde otra ola debe
+   usar esos dos helpers o romperá el historial de canjes.
+
+── VERIFICACIÓN (lo que se corrió, con sus números) ──────────────────────
+1. BUILD: `npx next build` EXIT 0, salida completa, sin pipes. Las 10 rutas y
+   las 2 páginas aparecen en el manifiesto (/barber/clientes 4.22 kB,
+   /barber/clientes/[id] 8.12 kB). Nota: `npm run build` truena ANTES, en
+   `prisma generate`, con EPERM al renombrar query_engine-windows.dll.node —
+   otra sesión paralela tiene el engine tomado; el schema no se tocó, así que
+   se corrió next build directo. Los prisma:error de las páginas SSG del blog
+   son los de siempre por no haber DATABASE_URL en local (exit 0 igual).
+2. COMPRESIÓN DE FOTO, medida en un Chromium real (Playwright) ejecutando el
+   trozo REAL extraído de photo-uploader.tsx, no una copia:
+       foto de 9.24 MB (4032x3024, JPEG)  →  529 KB (1600x1200, WebP) en 272 ms
+       retrato menos ruidoso de 6.65 MB   →   53 KB
+       imagen ya optimizada (4 KB)        →  se manda TAL CUAL, no se recomprime
+   O sea: entre ~50 y ~530 KB según el detalle de la foto (el peor caso es la
+   foto muy ruidosa). Promedio de las dos muestras: ~290 KB. Sin esto no
+   entraría en el cuerpo de la petición (~4.5 MB en serverless) ni cabría un
+   portafolio en el Storage.
+3. AISLAMIENTO ENTRE BARBERÍAS (7 pruebas): se conduce TODA la capa de datos
+   con la sesión de la barbería A mientras el payload va cargado con el id de
+   la B (body, preferencias, ids de ficha y de foto), y un espía de Prisma
+   apunta cada WHERE que llega. Resultado: 29 consultas espiadas, TODAS con el
+   id de A y NINGUNA con el de B; la ficha ajena devuelve null (→ 404, no 403:
+   desde fuera "ajeno" y "no existe" son indistinguibles); el alta ignora el
+   barbershopId del cuerpo; el canje sobre una ficha ajena no escribe ni una
+   fila. Auditoría estática además: 38/38 consultas Prisma llevan barbershopId
+   LITERAL en la llamada (no solo en la variable `where`), incluidos los
+   update/delete por id.
+   ⚠️ Queda pendiente la prueba con dos barberías reales en la BD: en local no
+   hay DATABASE_URL.
+4. CONTADOR NO MANIPULABLE (12 pruebas puras): incluye el camino INVERSO —
+   no basta con que el PATCH no pueda inyectar `__loyalty`, hay que probar que
+   la bitácora existente SOBREVIVE al PATCH (si el saneado solo tirara llaves,
+   el merge la borraría y el cliente ganaría sellos gratis). También: umbral
+   configurable, sellos de más que no se pierden, ledger corrupto que no deja
+   el contador negativo, y lealtad apagada.
+5. FOTO NO PUBLICADA: este módulo NO tiene ningún endpoint público (las 10
+   rutas pasan por gateBarberClients, comprobado mecánicamente). La única
+   lectura pensada para el portal filtra visibleToClient EN EL WHERE y no
+   devuelve el path. Nace en false y publicar exige portal.manage.
+6. GUARDIA BARBER: exit 0 — 27 archivos, todos PROPIOS del vertical, 0
+   compartidos sin declarar, 0 prohibidos. (El reporte de ORQUESTA.md va en
+   commit aparte con BARBER_GUARD_SHARED=ORQUESTA.md.)
+7. VOCABULARIO: 0 apariciones de paciente/doctor/Dr./clínica/consulta/
+   expediente (y patient/dentist) en los 27 archivos, comentarios incluidos.
+
+Bug encontrado por las propias pruebas y corregido antes del commit: buscar un
+teléfono PARCIAL con lada ("+52 55 1234") no encontraba nada, porque los
+dígitos "52551234" no aparecen dentro del "5512345678" guardado. Ahora
+phoneSearchVariants() prueba con y sin 52/521 y el WHERE las une con OR.
+
+── SQL PENDIENTE — REQUIERE RAFAEL (aplicar a mano en Supabase) ──────────
+Archivo: sql/barber_clientes.sql (idempotente, re-ejecutable). Bloque:
+
+  ALTER TABLE "barber_shops" ADD COLUMN IF NOT EXISTS "loyaltyEnabled"   BOOLEAN NOT NULL DEFAULT true;
+  ALTER TABLE "barber_shops" ADD COLUMN IF NOT EXISTS "loyaltyThreshold" INTEGER NOT NULL DEFAULT 10;
+  ALTER TABLE "barber_shops" ADD COLUMN IF NOT EXISTS "loyaltyReward"    TEXT;
+  ALTER TABLE "barber_shops" ADD COLUMN IF NOT EXISTS "inactiveDays"     INTEGER NOT NULL DEFAULT 60;
+
+  DO $barberc$
+  BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'barber_shops_loyaltyThreshold_range') THEN
+      ALTER TABLE "barber_shops"
+        ADD CONSTRAINT "barber_shops_loyaltyThreshold_range"
+        CHECK ("loyaltyThreshold" >= 1 AND "loyaltyThreshold" <= 100);
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'barber_shops_inactiveDays_range') THEN
+      ALTER TABLE "barber_shops"
+        ADD CONSTRAINT "barber_shops_inactiveDays_range"
+        CHECK ("inactiveDays" >= 7 AND "inactiveDays" <= 730);
+    END IF;
+  END
+  $barberc$;
+
+  CREATE INDEX IF NOT EXISTS "barber_clients_shop_lastVisit_idx"
+    ON "barber_clients" ("barbershopId", "lastVisitAt");
+  CREATE INDEX IF NOT EXISTS "barber_clients_shop_phone_idx"
+    ON "barber_clients" ("barbershopId", "phone");
+  CREATE INDEX IF NOT EXISTS "barber_clients_shop_birthday_month_idx"
+    ON "barber_clients" ("barbershopId", (EXTRACT(MONTH FROM "birthday")))
+    WHERE "birthday" IS NOT NULL;
+
+  INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+  VALUES ('barber-files', 'barber-files', false, 5242880,
+          ARRAY['image/webp', 'image/jpeg', 'image/png'])
+  ON CONFLICT (id) DO UPDATE
+    SET public = false, file_size_limit = 5242880,
+        allowed_mime_types = ARRAY['image/webp', 'image/jpeg', 'image/png'];
+
+  DROP POLICY IF EXISTS "barber_files_auth_select" ON storage.objects;
+  DROP POLICY IF EXISTS "barber_files_auth_insert" ON storage.objects;
+  DROP POLICY IF EXISTS "barber_files_auth_update" ON storage.objects;
+  DROP POLICY IF EXISTS "barber_files_auth_delete" ON storage.objects;
+  DROP POLICY IF EXISTS "barber_files_public_read"  ON storage.objects;
+
+(El bucket va SIN policies para anon/authenticated: storage.objects tiene RLS
+activo por defecto en Supabase, así que "sin policy" = nadie entra con la anon
+key. La app sube, firma y borra con el service role, que bypassa RLS —
+mismo criterio que sql/supplier-marketplace-rls-and-bucket-hardening.sql.)
+Las verificaciones de solo lectura vienen comentadas al final del archivo.
+
+── AVISOS ────────────────────────────────────────────────────────────────
+(1) Sin el SQL aplicado el módulo funciona, pero el bucket no existe: SUBIR
+    FOTOS FALLA hasta que se aplique. La lista, la ficha, las preferencias, la
+    fidelidad y las dos listas de recuperación sí funcionan (con 10 cortes y
+    60 días fijos).
+(2) NADIE ha probado el módulo contra una BD real todavía: en local no hay
+    DATABASE_URL. Falta el QA de mostrador: alta con teléfono repetido, subir
+    una foto desde el celular, y ver el aviso al reservar a un bloqueado.
+(3) El módulo NO toca src/components/barber/barber-sidebar.tsx (el item
+    "clientes" ya existía en BARBER_NAV_ITEMS con permission clients.view y
+    featureKey clients).
+(4) La vista de cumpleaños trae hasta 500 fichas del mes y las ordena por día
+    en memoria antes de cortar la página: paginar en SQL por nombre y
+    reordenar después daría una página con la gente equivocada. Con más de 500
+    cumpleaños en un mes (≈6.000 clientes) habría que paginar en SQL.
+(5) Los diálogos se montan como HERMANOS de la página, nunca dentro de un
+    `container-type`: un `position: fixed` dentro de un contenedor se ancla al
+    contenedor y no a la ventana. Está escrito en la cabecera del CSS module.
+(6) Responsive con @container (nunca @media) en clients.module.css; medidas en
+    px porque la raíz del panel es de 13px.
