@@ -106,6 +106,16 @@ function lines(shop: Shop) {
 
 before(async () => {
   if (!HAS_DB) return;
+  // barber_payment_settings NO vive en prisma/schema.prisma (a propósito), así
+  // que `prisma db push` la borra. Se recrea aquí para que las pruebas no
+  // dependan del orden en que se corrieron los comandos.
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS "barber_payment_settings" (
+      "barbershopId" TEXT NOT NULL,
+      "settings"     JSONB NOT NULL DEFAULT '{}'::jsonb,
+      "updatedAt"    TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      CONSTRAINT "barber_payment_settings_pkey" PRIMARY KEY ("barbershopId")
+    )`);
   shops.A = await makeShop("A");
   shops.B = await makeShop("B");
 });

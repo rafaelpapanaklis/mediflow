@@ -25,6 +25,13 @@
 -- este archivo aún no se aplicó, TODO cae a los valores por defecto en vez
 -- de tronar (mismo criterio que plans.ts con barber_plan_configs).
 --
+-- ⚠️ OJO CON `prisma db push` / `prisma migrate`: como la tabla NO está en
+-- prisma/schema.prisma a propósito, esos comandos la BORRAN por considerarla
+-- sobrante. En producción no aplica (el SQL del vertical se corre a mano en
+-- Supabase), pero en cualquier base de desarrollo hay que volver a correr
+-- ESTE archivo después de un db push. Si falta, nada truena: la política de
+-- anticipos cae a sus valores por defecto y el panel avisa que falta el SQL.
+--
 -- Para deshacerlo: DROP TABLE IF EXISTS "barber_payment_settings";
 --   (no se pierde ninguna membresía ni ningún anticipo: solo la política).
 -- ═══════════════════════════════════════════════════════════════════════
