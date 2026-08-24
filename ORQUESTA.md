@@ -10127,3 +10127,341 @@ CREATE INDEX IF NOT EXISTS "barber_commission_entries_pending_idx"
 -- Líneas por producto (más vendidos del periodo).
 CREATE INDEX IF NOT EXISTS "barber_sale_items_productId_idx"
   ON "barber_sale_items" ("productId");
+## [Barber Agenda + Fila] — La agenda que se arrastra, el horario que manda y la fila que nadie en México tiene integrada ✅ (2026-08-24)
+
+Commit: `953d0f27` · rama `feat/barber-agenda` → push directo a main.
+36 archivos, TODOS dentro del vertical (guardia exit 0, cero compartidos
+salvo este reporte).
+
+### Qué quedó vivo
+
+**`/barber/agenda` — vista día y vista semana.** La del día es la pantalla que
+la barbería deja abierta todo el día, así que es la que se priorizó: una
+columna por silla, franja gris donde el barbero no trabaja, banda de caramelo
+donde hay un bloqueo, línea roja del "ahora" y refresco silencioso cada 60 s
+—solo con la pestaña visible, una pestaña de fondo no gasta batería ni base—.
+La semana junta a todos los barberos por día (color de borde = barbero) y
+tocar un día salta a la vista día.
+
+**Arrastrar para mover.** Se agarra la tarjeta y se suelta en otra hora u otro
+barbero. Mientras el dedo se mueve, el fantasma se pinta VERDE o ROJO
+validando el hueco con la MISMA función que corre el servidor
+(`checkAppointmentSlot`), así que nadie suelta a ciegas. Al soltar, la tarjeta
+salta al instante (optimista) y si el servidor dice que no, regresa sola con
+el motivo. Siempre sale un "Deshacer" que la devuelve a donde estaba.
+No se usó `@dnd-kit`: la rejilla tendría cientos de zonas soltables (15 min ×
+N barberos) y, sobre todo, hacía falta validar ANTES de soltar. Se hizo con
+eventos de puntero. La alternativa sin ratón es real: la tarjeta es un
+`<button>`, con Enter abre el detalle y desde ahí "Editar" cambia hora y
+barbero.
+
+**Crear en 2 clics.** Clic en un hueco → el modal ya viene con el barbero y la
+hora puestos. Falta decir quién (buscador por nombre o teléfono, o alta al
+vuelo) y qué servicios. La duración NO se escribe: sale de la suma de
+`BarberService.durationMin`. El precio que se ve es el vivo del catálogo y al
+guardar el servidor lo CONGELA en `BarberAppointmentService.priceAtBooking`
+—y editar los servicios después NO recalcula el de los que ya estaban—.
+
+**Estados.** Botón de acción rápida según el estado actual, sacado de
+`nextStatuses()` del contrato, no de una lista inventada: pendiente →
+confirmada → en silla → completada, con cancelar y "no llegó" como
+secundarios. Si el contrato cambia el flujo, la pantalla cambia sola.
+
+**`/barber/agenda/horarios` — horario recurrente y bloqueos.** Turno partido de
+verdad (varias franjas el mismo día: 9–14 y 16–20) y "copiar este día a
+lunes-sábado". Se guarda la SEMANA COMPLETA del barbero en una transacción,
+no fila por fila, para no dejar estados a medio guardar. Bloqueos
+`BarberTimeOff` de un barbero (comida, vacaciones) o de toda la barbería
+cuando `barberId` es null (festivo). Decisión deliberada: crear un bloqueo NO
+se cae si ya hay visitas dentro — se crea y se avisa cuántas quedaron
+atrapadas para moverlas. Obligar a mover 8 visitas antes de registrar unas
+vacaciones es pelear con el usuario.
+
+**`/barber/fila` + `/barber/fila/[slug]` — la fila virtual.** La pública vive
+FUERA del grupo `(panel)` a propósito para que no le aplique el guard de
+sesión: quien escanea el QR no tiene cuenta y no debería necesitarla. Deja
+nombre y WhatsApp, opcionalmente elige barbero, y ve su lugar actualizándose
+solo cada 15 s. El ticket se guarda en `localStorage` por barbería: volver a
+escanear el QR devuelve su lugar en vez de formarlo otra vez. En el panel:
+llamar / pasar a la silla / se fue, con QR imprimible (hoja lista para pegar
+junto a la caja).
+
+### Las tres decisiones que vale la pena discutir
+
+**1. El anti doble reserva es de la BASE, no de la UI.**
+`sql/barber_agenda.sql` replica el enfoque del dental (que vive en
+`prisma/migrations/20260424120000_fase_4_agenda/migration.sql`, NO en
+`schema.prisma`, porque Prisma no sabe declarar EXCLUDE):
+
+```
+ALTER TABLE "barber_appointments" ADD CONSTRAINT barber_appt_no_overlap
+  EXCLUDE USING gist ("barberId" WITH =, "barbershopId" WITH =,
+                      tstzrange("startAt","endAt",'[)') WITH &&)
+  WHERE ("barberId" IS NOT NULL AND "status" NOT IN ('CANCELLED','NO_SHOW'));
+```
+
+El predicado del WHERE es ESPEJO EXACTO de `blocksAgenda()` en el TS, y hay una
+prueba que lo fija. `'[)'` = intervalo semiabierto: 10:00–10:30 y 10:30–11:00
+se tocan, no se enciman. `barberId IS NOT NULL` deja fuera del índice a las
+visitas sin barbero asignado (no ocupan silla de nadie todavía).
+El pre-chequeo en memoria existe solo para dar un mensaje bonito; la palabra
+final la tiene Postgres, y las APIs atrapan el SQLSTATE 23P01 y contestan 409.
+
+**2. `position` de la fila es un contador que nunca se recicla.**
+Renumerar con gente formada es exactamente como alguien pierde su lugar. Así
+que `position` = `MAX+1` por barbería, para siempre, y el número que VE el
+cliente es su RANGO dentro de la fila activa, calculado al vuelo. Dos QR
+escaneados en el mismo milisegundo leen el mismo MAX: por eso el SQL crea
+`barber_walkin_position_uniq` y la API reintenta al chocar (P2002).
+
+**3. "Pasar a la silla" no es una etiqueta, es una visita.**
+Al atender, la entrada se convierte en un `BarberAppointment` IN_PROGRESS con
+`source: WALKIN`, para que el ticket (T3) y la comisión (T6) salgan de ahí y
+no de un registro paralelo. Va todo en una transacción: si la silla ya está
+ocupada, la base lo impide y la entrada NO se marca atendida. Ahí sí se
+IGNORAN horario y bloqueos —el cliente ya está sentado, es un hecho
+consumado—; lo único que se respeta es que un barbero no puede atender a dos
+personas a la vez, que es físicamente cierto.
+
+### M-22 del dental: aquí NO se repite
+
+En el dental, reagendar una cita no cancela el recordatorio viejo y al cliente
+le llega el aviso de la hora anterior. Cómo quedó aquí:
+
+· **Dónde**: `invalidateAppointmentReminders()` en
+  `src/app/api/barber/appointments/_server.ts`, con el WHERE y el DATA
+  definidos como funciones puras en `src/lib/barber/agenda.ts`
+  (`pendingReminderInvalidationWhere` / `reminderInvalidationData`).
+· **Qué hace**: las filas `BarberMessage` con `direction OUTBOUND` +
+  `status PENDING` + `appointmentId` de esa visita pasan a `FAILED` con
+  `errorMessage` empezando en `[recordatorio-invalidado]`. Se MARCA, no se
+  borra: queda rastro de por qué no salió.
+· **Cuándo se dispara**: al mover de hora o de barbero (`MOVED`), al cambiar
+  servicios si cambia la duración (`SERVICES_CHANGED`), al cancelar
+  (`CANCELLED`), al marcar no llegó (`NO_SHOW`) y al completar (`COMPLETED`).
+· **Qué tiene que hacer T7**: reprogramar desde cero leyendo la visita ya
+  movida, y NUNCA tomar como pendiente una fila cuyo `errorMessage` empiece
+  con esa marca (`isInvalidatedReminder()` la reconoce).
+· El panel lo dice en voz alta: al mover sale "Cancelamos el recordatorio
+  anterior; se reprograma con la hora nueva".
+
+### Punto de extensión para T7 (aviso de fila por WhatsApp)
+
+Esta ola **no manda nada**. `POST /api/barber/walkins/[id]/notify` REGISTRA el
+evento: encola un `BarberMessage` OUTBOUND/PENDING con
+`templateName = "walkin_casi_es_tu_turno"`, el `phone` ya normalizado a 10
+dígitos y el `body` redactado por `walkInNotifyBody()`. `BarberMessage` YA es
+la cola: no hay tabla nueva. T7 lee esas filas, las manda y las pasa a SENT
+(+ `waMessageId`) o FAILED. Dedupe de 10 min para que el mostrador no encole
+dos veces al mismo número. El botón exige `whatsapp.send` además de
+`walkin.manage`: encolar un mensaje ES mandarlo, solo que en diferido.
+Limitación honesta: no hay FK a la entrada de fila porque `BarberMessage` no
+tiene columna para walk-ins y el schema NO se tocó; el vínculo es
+`(phone, templateName)` dentro de la misma barbería.
+
+### Verificación (lo que se corrió, no lo que se supone)
+
+1. **`npm run build` → exit 0**, output completo leído, sin pipes. Las 15
+   rutas nuevas aparecen en el manifiesto (`/barber/agenda`,
+   `/barber/agenda/horarios`, `/barber/fila`, `/barber/fila/[slug]` y 11
+   endpoints). Cero "Failed to compile" / "Type error" / "Module not found".
+   Nota conocida: el build del worktree corre sin `DATABASE_URL` y las páginas
+   SSG del dental loguean `prisma:error` y caen a su fallback — igual que en
+   la Ola 0; en Vercel sí hay env.
+2. **Dos visitas encimadas del mismo barbero**: el rechazo DURO es la
+   constraint EXCLUDE del punto 1 de arriba — **PENDIENTE de aplicar en
+   Supabase** (ver bloque SQL al final). No hay Postgres local ni
+   `DATABASE_URL` en este equipo, así que no se pudo ejecutar contra una base
+   real; el propio `.sql` trae la prueba de fuego lista para pegar (dos INSERT
+   solapados, el segundo DEBE fallar). Lo que SÍ se verificó corriendo:
+   el pre-chequeo de la UI rechaza el solape, deja pasar las pegadas
+   (10:30 tras 10:00–10:30), ignora CANCELLED y NO_SHOW, bloquea con DONE, y
+   `isBarberOverlapError` reconoce el 23P01 en sus tres formas.
+3. **Hueco fuera de horario o dentro de un bloqueo no se ofrece**: verificado
+   con 9 casos — dentro del turno sí; en el hueco de la comida no; una visita
+   que se pasa del cierre no; antes de abrir no; un día sin filas de horario
+   no; bloqueo de toda la barbería tapa a todos; bloqueo de otro barbero no
+   estorba; un bloqueo que solo toca el borde no estorba.
+   **Matiz deliberado**: un barbero SIN ninguna fila de horario no se bloquea
+   —si no, el primer día de uso no se puede agendar nada—. En cuanto existe
+   una sola fila, el horario manda y un día sin filas es un día que no trabaja.
+4. **Ninguna query sin `barbershopId`, ninguna que lo reciba del body**:
+   auditadas las 69 llamadas a Prisma del área. 52 llevan `barbershopId`
+   explícito; las otras 17 operan por `id` sobre una fila que YA se resolvió
+   bajo filtro de inquilino (o resuelven al inquilino mismo por `slug`, que es
+   público por diseño). Cero lecturas de `barbershopId` desde body/query/params.
+   Lo único que se acepta del request es `branchId`, y se valida contra
+   `getAccessibleBranchIds(ctx)` — un id ajeno no da error, cae a la sede de la
+   sesión.
+5. **La página pública no filtra nada de nadie**: devuelve el nombre y el logo
+   de la barbería, el CONTEO de la fila, los barberos activos (id, nombre,
+   foto — lo mismo que ya es público en la mini-web) y, solo con el ticket
+   propio (un cuid no adivinable), los datos de quien lo trae. Cero nombres,
+   teléfonos o ids de los demás. `loadTicket` filtra por la barbería del slug,
+   así que un ticket de otra barbería devuelve null. `select` explícito en
+   `Barbershop`: la fila completa trae el token de WhatsApp y los ids de
+   Stripe. La página se cierra sola si la barbería está desactivada, dejó de
+   pagar o su plan no trae la fila — y desde la calle CLOSED y NO_FEATURE se
+   contestan igual (404), porque no hay por qué saber cuál de los dos es.
+6. **Plan Básico no ve la fila virtual**: gate por feature `walkinQueue` en el
+   SERVIDOR, en 5 puntos — la página `/barber/fila` (pinta la pantalla de
+   "viene en Avanzado") y los endpoints `GET/POST /walkins`,
+   `POST /walkins/[id]`, `POST /walkins/[id]/notify` y el público
+   `/walkins/public`. Esconder el menú no es un permiso.
+7. **`node scripts/barber-guard.cjs` → exit 0** con
+   `BARBER_GUARD_SHARED=ORQUESTA.md`. 36 archivos, todos propios del vertical;
+   cero prohibidos, cero compartidos sin declarar. El panel dental no cambió
+   un byte.
+8. **Cero vocabulario del dental**: grep sin resultados sobre
+   `paciente|doctor|dr\.|clínic|clinic[ao]|expediente|consulta` en los 36
+   archivos (código, comentarios, JSON de i18n y SQL).
+
+Extra: **37 pruebas del núcleo puro en verde** (zona horaria, turno partido,
+horario, bloqueos, solapes, rejilla, carriles, fila virtual, estimación de
+espera e invalidación de recordatorios). Se corrieron con un script temporal
+(`tsx`) que NO se commiteó: el guardia lo marcaría como archivo prohibido en
+la raíz y el contrato solo da un archivo de lib (`src/lib/barber/agenda.ts`),
+sin lugar para `__tests__` ni línea en `package.json`. **Si se quiere el test
+permanente, hace falta ampliar la allowlist a
+`src/lib/barber/__tests__/agenda.test.ts` + un script en `package.json`.**
+
+### Decisiones de arquitectura que otras terminales deben conocer
+
+· **`src/lib/barber/agenda.ts` es PURO y client-safe**: cero prisma, cero
+  `server-only`, cero red. Por eso la MISMA aritmética de choques y horarios
+  corre en el servidor (donde es el gate) y en el navegador (donde previsualiza
+  el arrastre). Si alguien mete prisma ahí, el bundle del cliente truena.
+· Lo que sí toca prisma vive en `src/app/api/barber/appointments/_server.ts`
+  (`openAgendaGate`, `loadAgendaWindow`, `loadSlotContext`,
+  `resolveAppointmentClient`, `invalidateAppointmentReminders`) y en
+  `src/app/api/barber/walkins/_server.ts` (`createWalkIn`, `resolvePublicShop`,
+  `loadQueueSnapshot`, rate-limit público). Los `_server.ts` no son rutas: en
+  el App Router solo `route.ts`/`page.tsx` crean rutas.
+· **`openAgendaGate({permission, feature, branchId})`** es la puerta única:
+  sesión → sede validada → plan → permiso, en ese orden. Devuelve
+  `{gate, response}` sin discriminar la unión A PROPÓSITO: el repo compila con
+  `strict: false` y ahí TypeScript no estrecha por la veracidad de una
+  propiedad opcional.
+· **i18n**: `agenda.{es,en}.json` + las 4 líneas en
+  `dictionaries/barber/index.ts` (ya estaban comentadas esperando). Los
+  componentes cliente reciben el diccionario serializado y arman su `t` con
+  `makeT` — `useT` no existe fuera de `/dashboard`.
+· **CSS**: `@container` (no `@media`) y medidas en px (la raíz del panel mide
+  13px). ÚNICA excepción de `@media`: `walkin-print.css`, que es `print`, no un
+  punto de quiebre responsive — y es CSS normal, no module, porque imprimir
+  obliga a tocar `html`/`body` y un CSS module rechaza selectores sin clase
+  local ("selectors must be pure"). Lleva `overflow:hidden` en `html/body`
+  porque el resto de la página sigue ocupando espacio aunque esté en
+  `visibility:hidden` y si no la impresora escupe hojas en blanco.
+· **Los modales cuelgan de la raíz de cada pantalla, NUNCA de la rejilla**: el
+  tablero lleva `container-type` para sus `@container` y un `container-type`
+  atrapa a `position:fixed`. Tampoco se portalizan a `<body>`: los tokens del
+  tema caramelo viven bajo `.barber-shell` y un portal saldría con los colores
+  del dental.
+
+### AVISOS
+
+1. **`sql/barber_agenda.sql` está PENDIENTE en Supabase.** Sin él, la agenda
+   funciona igual (el pre-chequeo en memoria atrapa el 99 %) pero la garantía
+   dura contra la doble reserva NO existe, y la fila puede repartir el mismo
+   número a dos personas que escaneen a la vez. Es la primera tarea de QA.
+2. `walkin_casi_es_tu_turno` **no está dada de alta como plantilla en Meta**.
+   Hoy solo se encola texto libre; T7 decide si la registra o manda dentro de
+   ventana de 24 h.
+3. La vista **semana no permite arrastrar** a propósito: mover entre días exige
+   elegir barbero, y esa decisión se toma mejor en la vista día o en el modal.
+4. `BarberWalkIn` no tiene `clientId`. Al pasar a la silla, si el teléfono es
+   válido y quien opera tiene `clients.edit`, se hace upsert sobre
+   `(barbershopId, phone)` y la visita queda ligada; si no, el cliente va
+   suelto en `clientName`/`clientPhone`. Mismo criterio al crear una visita:
+   alguien con `agenda.edit` pero SIN `clients.edit` NO acaba dando de alta
+   clientes de rebote.
+5. El rol **BARBER tiene `agenda.view` pero no `agenda.edit`** (defaults del
+   contrato): ve la agenda en solo lectura y la pantalla se lo dice. Si se
+   quiere que los barberos muevan sus propias visitas, es un cambio de
+   defaults en `permissions.ts`, no de esta ola.
+6. La estimación de espera es `promedio de servicios activos × gente delante /
+   sillas`, redondeada a bloques de 5. Es a propósito una cuenta que el dueño
+   puede explicarle al cliente en voz alta, y la pantalla pública lo dice:
+   "es un estimado, puede moverse".
+
+### SQL A APLICAR (pegar completo en el editor de Supabase)
+
+El archivo es `sql/barber_agenda.sql`, idempotente y re-ejecutable. Trae al
+final, comentada, la prueba de fuego: dos INSERT solapados donde el segundo
+DEBE fallar con "conflicting key value violates exclusion constraint".
+
+```sql
+CREATE EXTENSION IF NOT EXISTS btree_gist;
+
+DO $barber$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'barber_appt_positive_duration') THEN
+    ALTER TABLE "barber_appointments"
+      ADD CONSTRAINT barber_appt_positive_duration CHECK ("endAt" > "startAt");
+  END IF;
+END
+$barber$;
+
+DO $barber$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'barber_appt_no_overlap') THEN
+    ALTER TABLE "barber_appointments"
+      ADD CONSTRAINT barber_appt_no_overlap
+      EXCLUDE USING gist (
+        "barberId"     WITH =,
+        "barbershopId" WITH =,
+        tstzrange("startAt", "endAt", '[)') WITH &&
+      )
+      WHERE (
+        "barberId" IS NOT NULL
+        AND "status" NOT IN ('CANCELLED', 'NO_SHOW')
+      );
+  END IF;
+END
+$barber$;
+
+DO $barber$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'barber_schedule_valid_range') THEN
+    ALTER TABLE "barber_schedules"
+      ADD CONSTRAINT barber_schedule_valid_range
+      CHECK (
+        "startMinute" >= 0
+        AND "endMinute" <= 1440
+        AND "endMinute" > "startMinute"
+        AND "dayOfWeek" BETWEEN 0 AND 6
+      );
+  END IF;
+END
+$barber$;
+
+DO $barber$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'barber_time_off_positive_duration') THEN
+    ALTER TABLE "barber_time_off"
+      ADD CONSTRAINT barber_time_off_positive_duration CHECK ("endAt" > "startAt");
+  END IF;
+END
+$barber$;
+
+CREATE UNIQUE INDEX IF NOT EXISTS "barber_walkin_position_uniq"
+  ON "barber_walkins" ("barbershopId", "position");
+
+CREATE INDEX IF NOT EXISTS "barber_appt_shop_start_status_idx"
+  ON "barber_appointments" ("barbershopId", "startAt", "status");
+
+CREATE INDEX IF NOT EXISTS "barber_walkin_shop_status_position_idx"
+  ON "barber_walkins" ("barbershopId", "status", "position");
+
+COMMENT ON CONSTRAINT barber_appt_no_overlap ON "barber_appointments" IS
+  'Agenda barber: imposible encimar dos visitas activas del mismo barbero. Ignora CANCELLED y NO_SHOW. Espejo de blocksAgenda() en src/lib/barber/agenda.ts.';
+COMMENT ON CONSTRAINT barber_appt_positive_duration ON "barber_appointments" IS
+  'Agenda barber: la visita dura al menos un instante (endAt > startAt).';
+COMMENT ON CONSTRAINT barber_schedule_valid_range ON "barber_schedules" IS
+  'Horario recurrente barber: minutos 0..1440 en la zona de la barberia, fin > inicio, dia 0-6 (0 = domingo). Turno partido = varias filas.';
+COMMENT ON CONSTRAINT barber_time_off_positive_duration ON "barber_time_off" IS
+  'Bloqueos barber: descanso/vacaciones/festivo con fin > inicio. barberId NULL = barberia cerrada.';
+COMMENT ON INDEX "barber_walkin_position_uniq" IS
+  'Fila virtual barber: dos QR simultaneos no pueden llevarse el mismo numero. La API reintenta al chocar.';
+```
