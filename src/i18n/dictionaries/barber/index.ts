@@ -20,6 +20,8 @@ import shellEs from "./shell.es.json";
 import shellEn from "./shell.en.json";
 import reservaEs from "./reserva.es.json";
 import reservaEn from "./reserva.en.json";
+import clientesEs from "./clientes.es.json";
+import clientesEn from "./clientes.en.json";
 // ── Ola 1: importa aquí tu área (una línea por idioma) ──
 import agendaEs from "./agenda.es.json";
 import agendaEn from "./agenda.en.json";
@@ -38,6 +40,7 @@ const ES: Dictionary = {
     reserva: reservaEs as unknown as Dictionary,
     suscripcion: suscripcionEs as unknown as Dictionary,
     membresias: membresiasEs as unknown as Dictionary,
+    clientes: clientesEs as unknown as Dictionary,
   },
 };
 
@@ -49,6 +52,7 @@ const EN: Dictionary = {
     reserva: reservaEn as unknown as Dictionary,
     suscripcion: suscripcionEn as unknown as Dictionary,
     membresias: membresiasEn as unknown as Dictionary,
+    clientes: clientesEn as unknown as Dictionary,
   },
 };
 
