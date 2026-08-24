@@ -20,6 +20,7 @@ import {
   pickCoveredLine,
   remainingCuts,
   BARBER_MEMBERSHIP_LINE_PREFIX,
+  BARBER_CASH_MEMBERSHIP_SUFFIX,
   type BarberClientMembershipView,
   type BarberMembershipPlanView,
   type MembershipCoverageLine,
@@ -504,6 +505,57 @@ export async function setClientMembershipStatus(args: {
 // C. Consumo — la parte que llama T3 al cerrar la visita
 // ═══════════════════════════════════════════════════════════════════════
 
+/**
+ * ═══ EL CANDADO DEL CUPO — úsalo desde CUALQUIER transacción ═══
+ *
+ * Descuenta UN corte de forma atómica. Todo el candado (barbería + vigencia
+ * + cupo) va DENTRO del WHERE de un solo UPDATE, así que Postgres re-evalúa
+ * la condición contra la fila ya actualizada cuando dos cierres llegan a la
+ * vez: el segundo no encuentra fila y devuelve false. El cupo NUNCA queda
+ * por encima de includedCuts.
+ *
+ * Acepta el cliente de Prisma o el `tx` de una transacción ajena, para que
+ * el cierre del ticket (T3) pueda usarlo dentro de la suya:
+ *
+ *   const ok = await consumeMembershipCutTx(tx, {
+ *     barbershopId,
+ *     clientMembershipId: lookup.activeMembership.id,
+ *     includedCuts: lookup.activeMembership.includedCuts,
+ *   });
+ *   if (!ok) throw new Error("La membresía ya no tiene cupo");
+ *
+ * ⚠️ Un increment SIN el cupo en el WHERE (leer el cupo en JS y luego
+ * escribir) deja pasar dos cierres simultáneos y se pasa del cupo: es
+ * exactamente el caso que reproduce el CONTROL de concurrencia.test.ts.
+ */
+export async function consumeMembershipCutTx(
+  db: {
+    barberClientMembership: {
+      updateMany(args: { where: unknown; data: unknown }): Promise<{ count: number }>;
+    };
+  },
+  args: {
+    barbershopId: string;
+    clientMembershipId: string;
+    /** null = ilimitada (se omite la condición de cupo a propósito). */
+    includedCuts: number | null;
+    now?: Date;
+  },
+): Promise<boolean> {
+  const shopId = requireShop(args.barbershopId);
+  const where = buildConsumeWhere({
+    clientMembershipId: args.clientMembershipId,
+    barbershopId: shopId,
+    includedCuts: args.includedCuts,
+    now: args.now ?? new Date(),
+  });
+  const res = await db.barberClientMembership.updateMany({
+    where: where as Prisma.BarberClientMembershipWhereInput,
+    data: { cutsUsed: { increment: 1 } },
+  });
+  return res.count === 1;
+}
+
 /** La membresía vigente del cliente (o null). Decide el servidor, siempre. */
 export async function getActiveClientMembership(barbershopId: string, clientId: string) {
   const shopId = requireShop(barbershopId);
@@ -643,28 +695,26 @@ export async function applyMembershipToVisit(args: {
     const already = await prisma.barberSaleItem.count({
       where: {
         sale: { appointmentId: args.appointmentId, barbershopId: shopId },
-        description: { startsWith: BARBER_MEMBERSHIP_LINE_PREFIX },
+        // Las DOS marcas: la línea de crédito de esta ola y el sufijo que le
+        // pone la caja al servicio cubierto. Si cualquiera está, no se
+        // descuenta un segundo corte por la misma visita.
+        OR: [
+          { description: { startsWith: BARBER_MEMBERSHIP_LINE_PREFIX } },
+          { description: { endsWith: BARBER_CASH_MEMBERSHIP_SUFFIX } },
+        ],
       },
     });
     if (already > 0) return { ...preview, covered: false, reason: "ALREADY_APPLIED" };
   }
 
   // ── El candado: un solo UPDATE con vigencia + cupo DENTRO del WHERE.
-  //    Dos peticiones simultáneas → Postgres re-evalúa la condición sobre la
-  //    fila ya actualizada y la segunda no encuentra fila (count 0).
-  const where = buildConsumeWhere({
-    clientMembershipId: preview.clientMembershipId,
+  const consumed = await consumeMembershipCutTx(prisma, {
     barbershopId: shopId,
+    clientMembershipId: preview.clientMembershipId,
     includedCuts: preview.includedCuts,
-    now: new Date(),
   });
 
-  const res = await prisma.barberClientMembership.updateMany({
-    where: where as Prisma.BarberClientMembershipWhereInput,
-    data: { cutsUsed: { increment: 1 } },
-  });
-
-  if (res.count === 0) {
+  if (!consumed) {
     // Perdió la carrera (o venció entre el preview y el update).
     const fresh = await prisma.barberClientMembership.findFirst({
       where: { id: preview.clientMembershipId, barbershopId: shopId },

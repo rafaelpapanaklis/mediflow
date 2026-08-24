@@ -260,8 +260,25 @@ export function buildConsumeWhere(args: {
 export const BARBER_MEMBERSHIP_LINE_PREFIX = "Membresía · ";
 export const BARBER_DEPOSIT_LINE_PREFIX = "Anticipo aplicado · ";
 
+/**
+ * La OTRA marca de "esta línea ya la cubrió la membresía": la que le pone
+ * la caja (T3) al cerrar el ticket — sufijo en la descripción del servicio y
+ * unitPrice en 0, en vez de una línea de crédito aparte.
+ *
+ * Se declara aquí en vez de importarla porque este módulo es client-safe y
+ * src/lib/barber/cash.ts es server-only. La fuente de verdad sigue siendo
+ * `MEMBERSHIP_SUFFIX` de ese archivo, y la prueba de contrato de esta ola
+ * (contrato-caja.test.ts) falla si los dos textos dejan de coincidir.
+ */
+export const BARBER_CASH_MEMBERSHIP_SUFFIX = " · Membresía";
+
+/** Reconoce las DOS marcas para que nada descuente dos veces la misma visita. */
 export function isMembershipLine(description: string | null | undefined): boolean {
-  return typeof description === "string" && description.startsWith(BARBER_MEMBERSHIP_LINE_PREFIX);
+  if (typeof description !== "string") return false;
+  return (
+    description.startsWith(BARBER_MEMBERSHIP_LINE_PREFIX) ||
+    description.endsWith(BARBER_CASH_MEMBERSHIP_SUFFIX)
+  );
 }
 
 export function isDepositLine(description: string | null | undefined): boolean {
