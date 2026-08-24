@@ -63,7 +63,7 @@ export function UpsellWebBarberia({
 
         <div className="dcbwe-previa">
           <span className="dcbwe-etiqueta">{t("upsellTuPagina")}</span>
-          <VistaPrevia data={data} modo="movil" />
+          <VistaPrevia data={data} modo="movil" t={t} />
         </div>
       </div>
     </div>

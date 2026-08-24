@@ -28,12 +28,14 @@
 import { useEffect, useRef, useState } from "react";
 import { PlantillaBarberWeb } from "@/components/barber/templates";
 import type { BarberWebData } from "@/components/barber/templates/types";
+import { LimiteVistaPrevia } from "./limite-error";
+import type { TFn } from "./controles";
 
 export type ModoVista = "movil" | "escritorio";
 
 const ANCHO: Record<ModoVista, number> = { movil: 390, escritorio: 1280 };
 
-export function VistaPrevia({ data, modo }: { data: BarberWebData; modo: ModoVista }) {
+export function VistaPrevia({ data, modo, t }: { data: BarberWebData; modo: ModoVista; t: TFn }) {
   const marco = useRef<HTMLDivElement>(null);
   const [caja, setCaja] = useState({ ancho: 0, alto: 0 });
 
@@ -84,7 +86,18 @@ export function VistaPrevia({ data, modo }: { data: BarberWebData; modo: ModoVis
           transformOrigin: "top left",
         }}
       >
-        <PlantillaBarberWeb data={data} />
+        {/* El cortafuegos va DENTRO del lienzo y no fuera: un fallo al
+            pintar la plantilla deja el marco, la escala y los botones de
+            celular/computadora en su sitio, y sólo se sustituye la página
+            de la barbería por el aviso. Ver ./limite-error.tsx. */}
+        <LimiteVistaPrevia
+          reintentarCon={data}
+          titulo={t("vistaFalloTitulo")}
+          cuerpo={t("vistaFalloCuerpo")}
+          detalle={t("vistaFalloDetalle")}
+        >
+          <PlantillaBarberWeb data={data} />
+        </LimiteVistaPrevia>
       </div>
     </div>
   );
@@ -101,7 +114,7 @@ export function VistaPrevia({ data, modo }: { data: BarberWebData; modo: ModoVis
  * enlaces no deben poder recibir el foco con el tabulador desde el
  * editor. El botón de al lado es el control de verdad.
  */
-export function MiniaturaPlantilla({ data }: { data: BarberWebData }) {
+export function MiniaturaPlantilla({ data, t }: { data: BarberWebData; t: TFn }) {
   const ANCHO_MINI = 1100;
   const ESCALA = 0.19;
   return (
@@ -116,7 +129,12 @@ export function MiniaturaPlantilla({ data }: { data: BarberWebData }) {
         }}
         {...({ inert: "" } as Record<string, string>)}
       >
-        <PlantillaBarberWeb data={data} />
+        {/* Las OCHO miniaturas son ocho plantillas completas montadas a la
+            vez: sin cortafuegos, una sola de ellas rota tumbaría el editor
+            con sólo abrir el selector. Cada una cae por su cuenta. */}
+        <LimiteVistaPrevia reintentarCon={data} titulo={t("miniFallo")} cuerpo="" variante="mini">
+          <PlantillaBarberWeb data={data} />
+        </LimiteVistaPrevia>
       </div>
     </div>
   );

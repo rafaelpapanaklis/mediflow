@@ -782,6 +782,81 @@ textarea.dcbwe-input {
   }
 }
 
+/* ── Cuando la plantilla no se puede dibujar ──────────────────────
+   El aviso del cortafuegos (limite-error.tsx). Vive DENTRO del lienzo,
+   que está escalado con transform y mide el ancho real del dispositivo,
+   así que se centra sobre ese ancho y no sobre el del marco.
+   Colores propios y no los tokens del panel: el lienzo tiene fondo
+   blanco fijo (es la página de la barbería), y en modo oscuro un token
+   de texto claro dejaría el aviso ilegible. */
+.dcbwe-fallo {
+  display: grid;
+  place-items: center;
+  min-height: 320px;
+  padding: 32px 24px;
+  background: #fdfaf6;
+  color: #14100e;
+  font-family: var(--font-sans), system-ui, sans-serif;
+}
+
+.dcbwe-fallo-caja {
+  max-width: 460px;
+  text-align: center;
+}
+
+.dcbwe-fallo-caja strong {
+  display: block;
+  font-size: 20px;
+  font-weight: 650;
+  margin-bottom: 10px;
+}
+
+.dcbwe-fallo-caja p {
+  font-size: 15px;
+  line-height: 1.55;
+  color: #5c5049;
+  margin: 0;
+}
+
+.dcbwe-fallo-detalle {
+  margin-top: 18px;
+  text-align: left;
+}
+
+.dcbwe-fallo-detalle summary {
+  cursor: pointer;
+  font-size: 13px;
+  color: #8a7a70;
+}
+
+.dcbwe-fallo-detalle code {
+  display: block;
+  margin-top: 8px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: #f1e9e0;
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+/* La miniatura del selector: 1100 px encogidos a 0.19, así que el texto
+   se escribe grande para que al escalar quede legible. */
+.dcbwe-fallo-mini {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  background: #fdfaf6;
+  color: #8a7a70;
+  font-family: var(--font-sans), system-ui, sans-serif;
+  font-size: 46px;
+  font-weight: 600;
+  text-align: center;
+  padding: 24px;
+}
+
 /* ── Pantalla de plan Básico (sin editor) ─────────────────────── */
 
 .dcbwe-upsell {

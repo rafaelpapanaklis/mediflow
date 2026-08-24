@@ -432,7 +432,7 @@ export function EditorWebBarberia(props: EditorProps) {
                   className={`dcbwe-plantilla ${m.id === manifest.id ? "dcbwe-plantilla-activa" : ""}`}
                 >
                   {abrePlantillas ? (
-                    <MiniaturaPlantilla data={{ ...data, manifest: m }} />
+                    <MiniaturaPlantilla data={{ ...data, manifest: m }} t={t} />
                   ) : (
                     <div className="dcbwe-mini dcbwe-mini-hueco" />
                   )}
@@ -615,7 +615,7 @@ export function EditorWebBarberia(props: EditorProps) {
               </button>
             </div>
           </div>
-          <VistaPrevia data={data} modo={modo} />
+          <VistaPrevia data={data} modo={modo} t={t} />
         </div>
       </div>
     </div>

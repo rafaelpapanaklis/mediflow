@@ -12638,3 +12638,219 @@ inventar un problema que no existe.
 · **NADIE ha mandado todavía un WhatsApp real desde barber.** Todo lo de
   arriba está verificado contra stubs y contra el contrato de Meta, no contra
   un envío en vivo. El primer envío real es parte del QA de Rafael.
+
+═══════════════════════════════════════════════════════════════════════════
+## [Barber Mi Web · Horario] — Por qué encender un día dejaba la pantalla en blanco, y por qué ya no puede volver a pasar ✅ (2026-08-24)
+═══════════════════════════════════════════════════════════════════════════
+BUILD `npm run build` EXIT 0 (output COMPLETO, 950 líneas, sin pipes; incluye
+`prisma generate` ✔, "Checking validity of types" ✔ y 375/375 páginas
+estáticas) · 9/9 pruebas nuevas en verde · GUARDIA BARBER exit 0 (11 propios
++ 1 compartido declarado: ORQUESTA.md) · **el panel dental no tiene ni un
+byte de cambio.**
+
+Rama `fix/barber-web-horario`, empujada a `main` directo.
+
+───────────────────────────────────────────────────────────────────────────
+1. 🔴 LA CAUSA REAL — LA RESPUESTA HONESTA
+───────────────────────────────────────────────────────────────────────────
+Hay que separar dos preguntas que el reporte junta en una, porque tienen dos
+respuestas distintas y sólo una la pude cerrar.
+
+**(a) ¿Por qué la pantalla queda EN BLANCO, hasta el sidebar, sin un solo
+error en la consola?** ← RESUELTO Y REPRODUCIDO.
+
+Porque en TODA la app hay exactamente **un** `error.tsx`, y es de otro
+producto:
+
+    $ find src/app -name "error.tsx" -o -name "global-error.tsx"
+    src/app/live/[slug]/error.tsx
+
+No hay `error.tsx` en `/barber`, ni en `/b`, ni en la raíz, ni un
+`global-error.tsx`. React tiene una sola regla cuando un componente lanza al
+pintar: sube hasta el primer límite de error y desmonta todo lo que quede por
+debajo. Sin ningún límite, ese punto es **la raíz**. Por eso no se cae "la
+vista previa": se cae la aplicación entera, sidebar incluido.
+
+Y por eso la consola sale limpia: en un build de PRODUCCIÓN no existe el
+overlay rojo de `next dev`, así que lo único que queda es un `<body>` vacío.
+
+Esto NO es una teoría. Lo reproduje: metí una bomba temporal en
+`t-clasica.tsx` que lanza cuando `tieneHorario(config)` es true —o sea, en el
+instante exacto que describe el reporte, al encender el lunes— y medí el DOM
+justo después del clic:
+
+    SIN cortafuegos:   editorVivo:false  sidebarVivo:false  controles:0  innerText:""
+    CON cortafuegos:   editorVivo:true   sidebarVivo:true   controles:7
+                       fallo:"No se pudo dibujar la vista previa…"
+
+El síntoma del reporte, clavado. Y arreglado.
+
+**(b) ¿QUÉ lanzaba, exactamente?** ← NO LO PUDE REPRODUCIR, y digo cómo lo
+intenté para que se pueda juzgar el intento.
+
+Con el código que hay hoy en `origin/main`, encender un día NO lanza. Lo
+exprimí así:
+
+  · **3 584 renders en node** (`renderToStaticMarkup`): 8 plantillas × 8
+    estados del horario (lista vacía · los siete cerrados · sólo lunes ·
+    sólo domingo · salteados · un tramo · los siete abiertos · lista
+    incompleta) × barbería llena y barbería recién dada de alta (sin
+    teléfono, sin dirección, sin servicios, sin barberos) × `editando`
+    true/false × configs con secciones apagadas, orden invertido, galería,
+    reseñas, copia reescrita. **0 fallos.**
+  · **~500 clics reales en el navegador**, con el layout del panel REAL
+    (sidebar, topbar y la misma cascada de CSS), encendiendo y apagando los
+    siete días uno por uno en **las ocho plantillas**, en Celular y en
+    Computadora, con el selector de plantillas abierto (ocho plantillas
+    completas montadas a la vez) y cerrado. **0 fallos.**
+  · Y todo eso **dos veces**: en `next dev` y contra un **build de
+    producción** servido con `next start`. **0 fallos.**
+  · `git log --all -- src/components/barber/landing src/components/barber/templates`
+    devuelve **un solo commit** (02539022). No hay una versión distinta en
+    producción ni un arreglo posterior: el código que probé es el que corre.
+
+Lo que sí encontré son los **dos únicos puntos del camino del horario que
+pueden lanzar**, y los dos lanzan justo al calcular el rango de un día
+abierto — o sea, exactamente cuando `abierto` pasa a `true`:
+
+    horaBarberWeb()      →  (t ?? "").split(":")
+                            TypeError: (t ?? "").split is not a function
+                            si `desde`/`hasta` no es una cadena (p. ej. 900)
+
+    horarioBarberWeb()   →  config.horario.map((d) => [d.dia, d])
+    tieneHorario()          TypeError: Cannot read properties of null (reading 'dia')
+                            si `horario` no es una lista, o trae un null dentro
+
+Hoy `normalizarConfigBarberWeb` está entre la columna Json y esas funciones y
+cierra esa puerta: pasa lo que pases, salen siete días con `desde`/`hasta`
+en `HH:MM`. **Así que hoy no son alcanzables desde la base.** Los blindé
+igual, y el motivo es lo único que importa aquí: esa protección es una
+función que alguien puede saltarse mañana, no una garantía del tipo — y el
+precio de saltársela no es un horario feo, es la página pública de la
+barbería caída con un 500.
+
+**Conclusión sin adornos:** no puedo decirte "era esto" porque con este
+código eso no pasa. Lo que sí queda cerrado es que, si vuelve a pasar, ya
+no vas a estar mirando una pantalla blanca: vas a ver el mensaje **y** el
+error con su pila en la consola (`componentDidCatch` lo escribe SIEMPRE, a
+propósito). Un solo pantallazo tuyo y tenemos la causa.
+
+───────────────────────────────────────────────────────────────────────────
+2. QUÉ SE ENTREGA
+───────────────────────────────────────────────────────────────────────────
+  components/barber/landing/limite-error.tsx    🆕 el cortafuegos (clase)
+  components/barber/landing/vista-previa.tsx       envuelve vista previa Y las 8 miniaturas
+  app/barber/(panel)/mi-web/error.tsx           🆕 red de abajo de la pantalla del editor
+  app/b/[slug]/error.tsx                        🆕 red de abajo de la página pública
+  lib/barber/landing.ts                            2º cinturón en horaBarberWeb / horarioBarberWeb / tieneHorario
+  components/barber/templates/__tests__/horario.test.tsx  🆕 9 pruebas
+  landing/editor.css · i18n/barber/web.{es,en}.json        el aviso y sus textos
+
+**El cortafuegos va DENTRO del lienzo**, lo más pegado posible a la
+plantilla: el marco, la escala y los botones Celular/Computadora se quedan en
+su sitio y sólo se sustituye la página de la barbería por el aviso. El
+mensaje dice lo único que a una barbería le importa oír en ese momento:
+
+  > **No se pudo dibujar la vista previa**
+  > Lo que llevas escrito NO se ha perdido: sigue aquí y puedes publicarlo.
+  > Deshaz el último cambio para que la vista previa vuelva.
+  > ▸ Ver detalle técnico  →  (el mensaje del error, para copiar y mandar)
+
+**Las ocho miniaturas del selector también van envueltas, una por una.** No
+es de adorno: son ocho plantillas COMPLETAS montadas a la vez, así que sin
+esto una sola plantilla rota tumbaba el editor con sólo abrir el panel de
+plantillas. Cada una se cae por su cuenta.
+
+**Se reintenta solo, y no entra en bucle.** `reintentarCon={data}`: en cuanto
+la barbería toca cualquier cosa, se vuelve a intentar pintar. El cuidado está
+en `getDerivedStateFromProps` — cuando un hijo revienta, React llama a
+`getDerivedStateFromError` y re-renderiza con las MISMAS props, así que un
+límite que limpie el error sin comparar vuelve a montar al hijo que acaba de
+reventar, para siempre. Medido con la bomba puesta: **2 líneas de consola por
+edición, ni una más**, y al apagar el lunes la vista previa vuelve sola.
+
+**Los dos `error.tsx` no dependen de nada** —ni diccionario, ni hojas de
+estilo, ni componentes compartidos; los estilos van en línea. Una pantalla de
+último recurso que depende de algo que también puede fallar no es una
+pantalla de último recurso. El de `/barber/mi-web` sustituye sólo el hueco de
+la página: **el sidebar y la topbar siguen ahí**, así que la barbería se va a
+Agenda en un clic en vez de quedarse mirando el vacío.
+
+───────────────────────────────────────────────────────────────────────────
+3. LA PÁGINA PÚBLICA `/b/[slug]` — SÍ, EL MISMO PATRÓN LLEGABA HASTA AHÍ
+───────────────────────────────────────────────────────────────────────────
+Con un horario mal formado, **no**: `normalizarConfigBarberWeb` es la única
+puerta entre `barber_landing_configs.config` y las plantillas, y lo probé
+contra la base de verdad. Sembré una barbería con esta basura escrita DIRECTO
+en la columna Json:
+
+    [null, "lunes", 7, {dia:"1", abierto:"si", desde:900, hasta:null},
+     {dia:99}, {dia:2, desde:"25:99", hasta:":"}]
+
+y `/b/el-corte` responde **200** pintando lo que se puede rescatar
+(Martes y Miércoles con su horario, el resto "Cerrado"). **24/24**: las ocho
+plantillas × tres horarios (bueno · un solo día · basura), todas 200.
+
+Pero el PATRÓN sí llegaba: cualquier throw pintando esa página —la plantilla,
+el JSON-LD, un dato con una forma que nadie esperaba— devolvía un 500, y esa
+es la liga que la barbería manda por WhatsApp y pega en su bio de Instagram.
+Ahora hay `error.tsx`: una pantalla en la marca, con un botón de reintentar y
+sin decir nunca qué falló (lo lee un cliente de la barbería, no un
+programador). El ISR sigue intacto — `/b/[slug]` se sigue construyendo como
+`● (SSG)` en el build.
+
+───────────────────────────────────────────────────────────────────────────
+4. LAS 9 PRUEBAS
+───────────────────────────────────────────────────────────────────────────
+    npx tsx --tsconfig tsconfig.test.json \
+      "src/components/barber/templates/__tests__/horario.test.tsx"
+
+(sin `--test`: node:test corre igual al importar, y hace falta el tsconfig de
+pruebas porque esto pinta JSX en node.)
+
+  ✔ las 8 plantillas pintan con el horario en cualquier estado  (256 renders)
+  ✔ encender un día hace aparecer el horario, y apagarlo lo quita
+  ✔ normalizarConfigBarberWeb deja SIEMPRE un horario bien formado
+  ✔ las 8 plantillas pintan con el horario que sale de normalizar basura
+  ✔ horaBarberWeb no revienta con lo que no es una cadena
+  ✔ horarioBarberWeb y horarioAgrupado aguantan un horario crudo
+  ✔ el cortafuegos NO se reintenta con los mismos datos (nada de bucle)
+  ✔ el cortafuegos SÍ reintenta en cuanto la barbería cambia algo
+  ✔ el cortafuegos apunta la clave del primer render, sin error de por medio
+
+**Probé que las pruebas prueban algo.** Revertí a mano los dos blindajes y
+volví a correrlas: 2 en rojo, con los TypeError de arriba palabra por
+palabra. Una prueba que pasa con y sin el arreglo no es una prueba.
+
+───────────────────────────────────────────────────────────────────────────
+5. LO QUE OTRAS TERMINALES DEBEN SABER
+───────────────────────────────────────────────────────────────────────────
+· **Toda la app sigue sin `error.tsx` salvo `/live/[slug]`, `/barber/mi-web`
+  y `/b/[slug]`.** Las tres pantallas que arreglé son las tres que toqué. En
+  cualquier otra ruta —Agenda, Caja, Clientes, Inbox, y TODO el panel
+  dental— un throw al pintar sigue dejando la pantalla en blanco, sin
+  sidebar y sin rastro. No lo arreglé porque está fuera de mi allowlist,
+  **pero es el mismo agujero y sigue abierto**. Es barato: un `error.tsx` por
+  segmento raíz.
+· **Si pintas una plantilla de barbería fuera del editor**, envuélvela en
+  `LimiteVistaPrevia` o en un `error.tsx` de segmento. Son componentes puros
+  y sin hooks, pero pintan datos que escribe la barbería a mano.
+· **`horaBarberWeb`, `horarioBarberWeb` y `tieneHorario` ya no lanzan.** Se
+  doblan: devuelven la cadena cruda, o siete días cerrados. No añadas un
+  `try/catch` encima; ya no hace falta.
+· **El horario de la PUERTA (`config.horario`) no es `BarberSchedule`.** Esa
+  tabla es el horario de cada BARBERO para la agenda de T1 y tiene su propia
+  convención de `dayOfWeek`. Aquí, `dia` 0 = lunes … 6 = domingo.
+
+───────────────────────────────────────────────────────────────────────────
+6. LO QUE QUEDA PENDIENTE
+───────────────────────────────────────────────────────────────────────────
+⚪ **Rafael: si vuelve a pasar, ahora deja rastro.** Reprodúcelo con la
+consola abierta y mándame el bloque `[barber/mi-web] la vista previa no se
+pudo dibujar:` con su pila de componentes. Con eso la causa (b) se cierra en
+minutos.
+⚪ **`sql/barber_complemento.sql` sigue PENDIENTE en Supabase.** Sin él,
+`barber_landing_configs` no existe y el editor no puede guardar (lo dice en
+pantalla con `sinTabla`). Nada de esta ola lo necesita, pero mientras no
+entre, ninguna barbería tiene una web publicada de verdad.
+⚪ **SQL de esta ola: ninguno.** Ni una línea.

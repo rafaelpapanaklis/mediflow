@@ -602,13 +602,22 @@ export function duracionBarberWeb(min: number): string {
   return `${h} h ${m} min`;
 }
 
-/** "09:00" → "9:00 am" (como lo lee un cliente, no como lo guarda la base). */
+/**
+ * "09:00" → "9:00 am" (como lo lee un cliente, no como lo guarda la base).
+ *
+ * El tipo dice `string` y `normalizarConfigBarberWeb` lo garantiza, pero
+ * esto se pinta DENTRO de la página pública de la barbería y de la vista
+ * previa del editor: si algún día llega un número (alguien escribió el
+ * Json a mano, una migración a medias), `t.split` reventaría el render
+ * entero. Una hora fea es un renglón feo; nunca una pantalla en blanco.
+ */
 export function horaBarberWeb(t: string): string {
-  const [h, m] = (t ?? "").split(":").map(Number);
-  if (!Number.isFinite(h)) return t;
+  const crudo = typeof t === "string" ? t : t == null ? "" : String(t);
+  const [h, m] = crudo.split(":").map(Number);
+  if (!Number.isFinite(h)) return crudo;
   const ampm = h >= 12 ? "pm" : "am";
   const h12 = h % 12 === 0 ? 12 : h % 12;
-  return `${h12}:${String(m ?? 0).padStart(2, "0")} ${ampm}`;
+  return `${h12}:${String(Number.isFinite(m) ? m : 0).padStart(2, "0")} ${ampm}`;
 }
 
 export const BARBER_WEB_DIAS = [
@@ -639,7 +648,8 @@ export interface BarberWebFilaHorario {
  * con la caché y acaba señalando el día equivocado.
  */
 export function horarioBarberWeb(config: BarberWebConfig): BarberWebFilaHorario[] {
-  const porDia = new Map(config.horario.map((d) => [d.dia, d]));
+  const porDia = new Map<number, BarberWebDia>();
+  for (const d of diasCrudos(config)) porDia.set(Number(d.dia), d);
   return BARBER_WEB_DIAS.map((etiqueta, i) => {
     const d = porDia.get(i);
     const abierto = !!d?.abierto;
@@ -653,9 +663,25 @@ export function horarioBarberWeb(config: BarberWebConfig): BarberWebFilaHorario[
   });
 }
 
+/**
+ * Los días que hay, saltándose lo que no sea un día.
+ *
+ * Segundo cinturón, igual que en `horaBarberWeb`: el primero es
+ * `normalizarConfigBarberWeb`, que ya deja `horario` como una lista de
+ * objetos con los cuatro campos. Esto existe porque un `config.horario`
+ * que no fuera una lista —o con un `null` dentro— reventaba aquí, y este
+ * `.map` se ejecuta pintando la página pública de la barbería: el fallo
+ * no sería un horario raro, sería la página entera caída.
+ */
+function diasCrudos(config: BarberWebConfig): BarberWebDia[] {
+  const lista = config?.horario;
+  if (!Array.isArray(lista)) return [];
+  return lista.filter((d): d is BarberWebDia => !!d && typeof d === "object");
+}
+
 /** ¿Hay al menos un día abierto? Si no, la sección de horario no se pinta. */
 export function tieneHorario(config: BarberWebConfig): boolean {
-  return config.horario.some((d) => d.abierto);
+  return diasCrudos(config).some((d) => d.abierto);
 }
 
 /** Horario agrupado: "Lun – Vie 9:00 am – 8:00 pm". Para las plantillas compactas. */
