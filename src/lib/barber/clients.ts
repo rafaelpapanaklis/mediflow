@@ -3,6 +3,10 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { createClient as createAdminClient } from "@supabase/supabase-js";
 import { mxTenDigits } from "@/lib/phone-mx";
+// Constantes de T6 (caja). Se IMPORTAN, no se copian: si la caja cambia el
+// sufijo con el que marca un canje, este módulo lo sigue viendo.
+import { BARBER_LOYALTY_STAMPS_TARGET, LOYALTY_SUFFIX } from "@/lib/barber/cash";
+import { CANCELLED_MARK } from "@/lib/barber/commissions";
 import {
   BARBER_FILES_BUCKET,
   type BarberClientDTO,
@@ -488,7 +492,23 @@ export function birthdayToInputValue(date: Date | null): string {
 export interface BarberVisitTally {
   visits: number;
   lastVisitAt: Date | null;
+  /**
+   * Sellos que YA consumió la caja (T6) canjeando cortes gratis desde el
+   * ticket. Se cuentan aparte de la bitácora de la ficha porque son dos
+   * caminos distintos hacia el mismo premio.
+   */
+  cashRedeemedStamps: number;
 }
+
+/**
+ * Un ticket cancelado no cuenta para nada: ni como visita ni como canje.
+ * T6 hace soft-cancel marcando `notes` con CANCELLED_MARK (y borrando las
+ * líneas). OJO Prisma: un `NOT { startsWith }` descarta las filas con notes
+ * NULL, así que hace falta la rama explícita del null.
+ */
+export const NOT_CANCELLED: Prisma.BarberSaleWhereInput = {
+  OR: [{ notes: null }, { NOT: { notes: { startsWith: CANCELLED_MARK } } }],
+};
 
 /**
  * Cuántas veces se ha sentado de verdad cada cliente, PARA TODA UNA PÁGINA
@@ -511,7 +531,7 @@ export async function tallyVisitsForClients(
   const out = new Map<string, BarberVisitTally>();
   if (clientIds.length === 0) return out;
 
-  const [appts, sales] = await Promise.all([
+  const [appts, sales, canjesEnCaja] = await Promise.all([
     prisma.barberAppointment.groupBy({
       by: ["clientId"],
       where: { barbershopId, clientId: { in: clientIds }, status: "DONE" },
@@ -525,26 +545,50 @@ export async function tallyVisitsForClients(
         clientId: { in: clientIds },
         appointmentId: null,
         items: { some: { serviceId: { not: null } } },
+        ...NOT_CANCELLED,
       },
       _count: { _all: true },
       _max: { createdAt: true },
     }),
+    // Canjes hechos en la CAJA: cada ticket con una línea marcada con
+    // LOYALTY_SUFFIX se llevó BARBER_LOYALTY_STAMPS_TARGET sellos.
+    prisma.barberSale.groupBy({
+      by: ["clientId"],
+      where: {
+        barbershopId,
+        clientId: { in: clientIds },
+        items: { some: { description: { endsWith: LOYALTY_SUFFIX } } },
+        ...NOT_CANCELLED,
+      },
+      _count: { _all: true },
+    }),
   ]);
+
+  const blank = (): BarberVisitTally => ({ visits: 0, lastVisitAt: null, cashRedeemedStamps: 0 });
 
   const bump = (id: string | null, count: number, at: Date | null) => {
     if (!id) return;
-    const prev = out.get(id) ?? { visits: 0, lastVisitAt: null };
+    const prev = out.get(id) ?? blank();
     const nextAt =
       at && (!prev.lastVisitAt || at.getTime() > prev.lastVisitAt.getTime())
         ? at
         : prev.lastVisitAt;
-    out.set(id, { visits: prev.visits + count, lastVisitAt: nextAt });
+    out.set(id, { ...prev, visits: prev.visits + count, lastVisitAt: nextAt });
   };
 
   for (const g of appts) bump(g.clientId, g._count._all, g._max.startAt ?? null);
   for (const g of sales) bump(g.clientId, g._count._all, g._max.createdAt ?? null);
 
-  for (const id of clientIds) if (!out.has(id)) out.set(id, { visits: 0, lastVisitAt: null });
+  for (const g of canjesEnCaja) {
+    if (!g.clientId) continue;
+    const prev = out.get(g.clientId) ?? blank();
+    out.set(g.clientId, {
+      ...prev,
+      cashRedeemedStamps: prev.cashRedeemedStamps + g._count._all * BARBER_LOYALTY_STAMPS_TARGET,
+    });
+  }
+
+  for (const id of clientIds) if (!out.has(id)) out.set(id, blank());
   return out;
 }
 
@@ -554,7 +598,7 @@ export async function tallyVisitsForClient(
   clientId: string,
 ): Promise<BarberVisitTally> {
   const map = await tallyVisitsForClients(barbershopId, [clientId]);
-  return map.get(clientId) ?? { visits: 0, lastVisitAt: null };
+  return map.get(clientId) ?? { visits: 0, lastVisitAt: null, cashRedeemedStamps: 0 };
 }
 
 // ── Listado ────────────────────────────────────────────────────────────
@@ -734,9 +778,16 @@ export async function listBarberClients(
   const stale: Array<{ id: string; loyaltyCount: number; totalVisits: number; lastVisitAt: Date | null }> = [];
   const derived = new Map<string, { count: number; visits: number; lastVisitAt: Date | null }>();
   for (const row of rows) {
-    const tally = tallies.get(row.id) ?? { visits: 0, lastVisitAt: null };
+    const tally = tallies.get(row.id) ?? {
+      visits: 0,
+      lastVisitAt: null,
+      cashRedeemedStamps: 0,
+    };
     const ledger = readLoyaltyLedger(row.preferences);
-    const count = Math.max(0, tally.visits - ledger.redeemedVisits);
+    const count = Math.max(
+      0,
+      tally.visits - ledger.redeemedVisits - tally.cashRedeemedStamps,
+    );
     derived.set(row.id, { count, visits: tally.visits, lastVisitAt: tally.lastVisitAt });
     const sameDate =
       (row.lastVisitAt ? row.lastVisitAt.getTime() : null) ===

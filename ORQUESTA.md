@@ -11589,3 +11589,56 @@ Las verificaciones de solo lectura vienen comentadas al final del archivo.
     contenedor y no a la ventana. Está escrito en la cabecera del CSS module.
 (6) Responsive con @container (nunca @media) en clients.module.css; medidas en
     px porque la raíz del panel es de 13px.
+
+── ADENDA (mismo día): RECONCILIACIÓN CON T6 (CAJA) ──────────────────────
+COMMIT: (ver el siguiente al de este bloque) · BUILD EXIT 0 · 32/32 pruebas.
+
+T6 aterrizó en main mientras se construía este módulo, y trae SU PROPIO canje
+del corte gratis desde el ticket. El rebase no dio conflicto de archivos (solo
+la línea del diccionario), pero SÍ había un choque de datos que no se ve en un
+`git diff`:
+
+  · T6 canjea descontando 10 de `loyaltyCount` (constante
+    BARBER_LOYALTY_STAMPS_TARGET en cash.ts) y deja la huella en una línea de
+    venta terminada en LOYALTY_SUFFIX (" · Gratis (lealtad)").
+  · Aquí el contador se DERIVA de las visitas. O sea que el siguiente
+    recálculo —abrir la ficha, cargar la lista— le devolvía al cliente esos 10
+    sellos. CORTE GRATIS INFINITO.
+
+ARREGLO (sin tocar un solo archivo de T6): los canjes de caja se cuentan desde
+su propia huella, igual que los de la ficha desde la bitácora:
+
+  contador = visitas − canjes_de_ficha − (tickets con canje × 10)
+
+tallyVisitsForClients() devuelve ahora `cashRedeemedStamps` y las constantes se
+IMPORTAN de cash.ts (no se copian): si la caja cambia el sufijo, este módulo lo
+sigue viendo. De paso, todas las consultas de venta excluyen los tickets
+CANCELADOS (soft-cancel con CANCELLED_MARK en `notes`; ojo que un
+`NOT { startsWith }` de Prisma descarta las filas con notes NULL, va con su
+rama explícita), así que cancelar un ticket devuelve los sellos por los dos
+lados a la vez. Y el canje cobrado en caja ahora SE VE en el historial de la
+ficha, con su distintivo, no solo el hecho desde la ficha.
+
+Pruebas nuevas (6, en total 32): 12 cortes + 1 canje en caja → 2 sellos y no
+12; sin canje, los mismos 12 sí dan premio; los dos caminos se suman (25 − 10
+ficha − 10 caja = 5); más canjes que visitas no deja el contador negativo; la
+caché se refresca con el número reconciliado y recortada a la barbería; y las
+dos consultas de venta excluyen las canceladas.
+
+⚠️ PARA EL ORQUESTADOR — DIVERGENCIA QUE QUEDA ABIERTA (no la puedo cerrar yo,
+cash.ts está fuera de mi allowlist): T6 tiene el umbral HARDCODEADO en 10
+(BARBER_LOYALTY_STAMPS_TARGET) y este módulo lo hace CONFIGURABLE por barbería
+(loyaltyThreshold, sql/barber_clientes.sql). Con el valor por defecto los dos
+coinciden y no pasa nada. Pero si una barbería lo cambia a 7, la ficha dará el
+premio a los 7 y la caja seguirá pidiendo 10. Cierre de una línea en cash.ts:
+leer `(await getBarberClientsConfig(ctx)).loyaltyThreshold` en vez de la
+constante (y usar ese mismo número al restituir en cancelSale). Mientras tanto,
+la reconciliación de arriba mantiene los DATOS sanos en cualquier caso: lo que
+falla es la coherencia del número que se le enseña al barbero, no el saldo.
+
+Otra nota de convivencia (ésta sí está bien): T1 (agenda) y la fila virtual dan
+de alta clientes con `upsert` sobre (barbershopId, phone) y normalizan con el
+mismo `mxTenDigits`, así que no crean fichas duplicadas — el mismo criterio de
+este módulo. Y `/api/barber/appointments/clients` lee `totalVisits` /
+`lastVisitAt` de la columna: ahora esas columnas se auto-reparan solas, así que
+su selector de clientes también enseña números reales.

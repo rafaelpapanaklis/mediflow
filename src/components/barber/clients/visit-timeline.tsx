@@ -72,6 +72,13 @@ export function VisitTimeline({
 
                 {entry.kind === "sale" ? <Badge>{t("history.walkIn")}</Badge> : null}
 
+                {/* El canje cobrado en caja (T6) también tiene que verse aquí. */}
+                {!isRedemption && entry.loyaltyRedeemed ? (
+                  <Badge tone="brand">
+                    <Gift size={11} /> {t("history.paidWithReward")}
+                  </Badge>
+                ) : null}
+
                 {entry.amount !== null ? (
                   <span className={s.tlMeta}>
                     {formatMoney(entry.amount, locale)}

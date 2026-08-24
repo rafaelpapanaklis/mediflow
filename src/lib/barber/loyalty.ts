@@ -6,6 +6,7 @@ import {
   BARBER_CLIENTS_CONFIG_DEFAULTS,
   LOYALTY_HISTORY_MAX,
   LOYALTY_LEDGER_KEY,
+  NOT_CANCELLED,
   findBarberClient,
   getBarberClientsConfig,
   listBarberClientPhotos,
@@ -22,6 +23,8 @@ import {
   type ClientBlockInfo,
 } from "@/lib/barber/clients";
 import type { BarberClientDTO } from "@/lib/barber/types";
+// El sufijo con el que la caja (T6) marca la línea que se llevó el canje.
+import { LOYALTY_SUFFIX } from "@/lib/barber/cash";
 
 /**
  * ═══════════════════════════════════════════════════════════════════════
@@ -160,7 +163,13 @@ export async function syncBarberClientLoyalty(
   const ledger = readLoyaltyLedger(client.preferences);
   const tally = await tallyVisitsForClient(ctx.barbershopId, client.id);
 
-  const count = Math.max(0, tally.visits - ledger.redeemedVisits);
+  // Dos caminos hacia el mismo premio: el canje desde la ficha (bitácora
+  // __loyalty) y el canje desde el ticket de la caja (T6, que deja su
+  // huella en la línea de venta). Los dos consumen sellos, así que los dos
+  // se restan. Si solo se contara la bitácora, el recálculo le devolvería
+  // al cliente los sellos que la caja ya le descontó: corte gratis infinito.
+  const redeemedVisits = ledger.redeemedVisits + tally.cashRedeemedStamps;
+  const count = Math.max(0, tally.visits - redeemedVisits);
   const lastMs = (d: Date | null) => (d ? d.getTime() : null);
 
   let row = client;
@@ -183,9 +192,12 @@ export async function syncBarberClientLoyalty(
   const state = buildLoyaltyState({
     config,
     visits: tally.visits,
-    redeemedVisits: ledger.redeemedVisits,
+    redeemedVisits,
     lastVisitAt: tally.lastVisitAt,
-    redemptions: ledger.redemptions.length,
+    // Los canjes de caja también cuentan como premios entregados.
+    redemptions:
+      ledger.redemptions.length +
+      Math.floor(tally.cashRedeemedStamps / Math.max(1, config.loyaltyThreshold)),
     lastRedeemedAt: ledger.redemptions[0]?.at ?? null,
   });
 
@@ -362,6 +374,12 @@ export interface BarberVisitEntry {
   photos: BarberVisitPhotoView[];
   /** Solo en kind = "redemption". */
   reward: string | null;
+  /**
+   * El ticket de esta visita se pagó con el corte gratis. Lo marca la caja
+   * (T6) en la línea de venta; aquí se pinta para que el canje quede
+   * VISIBLE en el historial, venga de donde venga.
+   */
+  loyaltyRedeemed: boolean;
 }
 
 export interface BarberVisitHistory {
@@ -398,11 +416,17 @@ export async function getBarberVisitHistory(
         notes: true,
         barber: { select: { id: true, name: true, nickname: true } },
         services: { select: { id: true, priceAtBooking: true, service: { select: { name: true } } } },
-        sales: { select: { total: true, tip: true }, orderBy: { createdAt: "desc" }, take: 1 },
+        // Un ticket cancelado no es un cobro: no debe pintar importe ni canje.
+        sales: {
+          where: NOT_CANCELLED,
+          select: { total: true, items: { select: { description: true } } },
+          orderBy: { createdAt: "desc" },
+          take: 1,
+        },
       },
     }),
     prisma.barberSale.findMany({
-      where: { barbershopId, clientId, appointmentId: null },
+      where: { barbershopId, clientId, appointmentId: null, ...NOT_CANCELLED },
       orderBy: { createdAt: "desc" },
       take: HISTORY_MAX_ENTRIES,
       select: {
@@ -448,6 +472,9 @@ export async function getBarberVisitHistory(
       notes: appt.notes,
       photos: byAppointment.get(appt.id) ?? [],
       reward: null,
+      loyaltyRedeemed: Boolean(
+        sale && sale.items.some((i) => i.description.endsWith(LOYALTY_SUFFIX)),
+      ),
     });
   }
 
@@ -466,6 +493,7 @@ export async function getBarberVisitHistory(
       notes: sale.notes,
       photos: [],
       reward: null,
+      loyaltyRedeemed: sale.items.some((i) => i.description.endsWith(LOYALTY_SUFFIX)),
     });
   }
 
@@ -484,6 +512,7 @@ export async function getBarberVisitHistory(
       notes: r.note,
       photos: [],
       reward: r.reward || BARBER_CLIENTS_CONFIG_DEFAULTS.loyaltyReward,
+      loyaltyRedeemed: true,
     });
   });
 

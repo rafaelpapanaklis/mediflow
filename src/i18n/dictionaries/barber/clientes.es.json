@@ -1,7 +1,10 @@
 {
   "title": "Clientes",
   "subtitle": "Quién es, cómo le gusta el corte y cuándo vino por última vez.",
-  "count": { "one": "{count} cliente", "other": "{count} clientes" },
+  "count": {
+    "one": "{count} cliente",
+    "other": "{count} clientes"
+  },
   "search": {
     "label": "Buscar",
     "placeholder": "Teléfono o nombre",
@@ -96,7 +99,10 @@
     "edit": "Editar datos",
     "notFound": "Esa ficha no existe en esta barbería.",
     "since": "Cliente desde {date}",
-    "visits": { "one": "{count} visita", "other": "{count} visitas" },
+    "visits": {
+      "one": "{count} visita",
+      "other": "{count} visitas"
+    },
     "lastVisit": "Última visita: {date}",
     "neverVisited": "Todavía no se ha sentado en la silla.",
     "call": "Llamar",
@@ -147,14 +153,20 @@
   "loyalty": {
     "title": "Tarjeta de lealtad",
     "stamps": "{count} de {total}",
-    "remaining": { "one": "Le falta 1 para el premio", "other": "Le faltan {count} para el premio" },
+    "remaining": {
+      "one": "Le falta 1 para el premio",
+      "other": "Le faltan {count} para el premio"
+    },
     "ready": "¡{reward} disponible!",
     "readyShort": "Premio listo",
     "redeem": "Canjear {reward}",
     "redeeming": "Canjeando…",
     "redeemed": "Premio canjeado. El contador vuelve a empezar.",
     "off": "Esta barbería no usa tarjeta de lealtad.",
-    "history": { "one": "{count} premio canjeado", "other": "{count} premios canjeados" },
+    "history": {
+      "one": "{count} premio canjeado",
+      "other": "{count} premios canjeados"
+    },
     "serverNote": "El contador lo lleva el servidor: sube solo cuando se cierra una visita."
   },
   "settings": {
@@ -210,7 +222,8 @@
       "DONE": "Completada",
       "NO_SHOW": "No llegó",
       "CANCELLED": "Cancelada"
-    }
+    },
+    "paidWithReward": "Pagó con su premio"
   },
   "errors": {
     "generic": "Algo salió mal. Inténtalo otra vez.",

@@ -1,7 +1,10 @@
 {
   "title": "Clients",
   "subtitle": "Who they are, how they like their cut, and when they last came in.",
-  "count": { "one": "{count} client", "other": "{count} clients" },
+  "count": {
+    "one": "{count} client",
+    "other": "{count} clients"
+  },
   "search": {
     "label": "Search",
     "placeholder": "Phone or name",
@@ -96,7 +99,10 @@
     "edit": "Edit details",
     "notFound": "That profile doesn't exist in this barbershop.",
     "since": "Client since {date}",
-    "visits": { "one": "{count} visit", "other": "{count} visits" },
+    "visits": {
+      "one": "{count} visit",
+      "other": "{count} visits"
+    },
     "lastVisit": "Last visit: {date}",
     "neverVisited": "Hasn't sat in the chair yet.",
     "call": "Call",
@@ -147,14 +153,20 @@
   "loyalty": {
     "title": "Loyalty card",
     "stamps": "{count} of {total}",
-    "remaining": { "one": "1 more for the reward", "other": "{count} more for the reward" },
+    "remaining": {
+      "one": "1 more for the reward",
+      "other": "{count} more for the reward"
+    },
     "ready": "{reward} available!",
     "readyShort": "Reward ready",
     "redeem": "Redeem {reward}",
     "redeeming": "Redeeming…",
     "redeemed": "Reward redeemed. The counter starts over.",
     "off": "This barbershop doesn't use a loyalty card.",
-    "history": { "one": "{count} reward redeemed", "other": "{count} rewards redeemed" },
+    "history": {
+      "one": "{count} reward redeemed",
+      "other": "{count} rewards redeemed"
+    },
     "serverNote": "The server keeps the count: it only goes up when a visit is closed."
   },
   "settings": {
@@ -210,7 +222,8 @@
       "DONE": "Completed",
       "NO_SHOW": "No-show",
       "CANCELLED": "Cancelled"
-    }
+    },
+    "paidWithReward": "Paid with their reward"
   },
   "errors": {
     "generic": "Something went wrong. Try again.",
