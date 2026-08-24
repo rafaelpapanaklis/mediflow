@@ -1,0 +1,158 @@
+/* ═══════════════════════════════════════════════════════════════════════
+   DaleControl BARBER — tema del vertical: caramelo / negro / blanco.
+   (Estética barbería premium: cuero, madera, whisky.)
+
+   Scope: TODO vive bajo .barber-shell (el wrapper del panel /barber y de
+   las páginas públicas /b). NO se tocan los tokens del panel dental ni
+   globals.css: este archivo lo importa solo el layout de /barber, igual
+   que panel-chrome-va.css lo importan los paneles externos.
+
+   Mecanismo (mismo que el repo ya usa):
+   - Tokens semánticos (--bg, --bg-elev, --brand, --text-*) re-declarados
+     bajo .barber-shell → los componentes base (.sidebar-new, .card, etc.)
+     se pintan caramelo sin cambiar una línea suya.
+   - La rampa Tailwind brand-50…950 se remapea vía body:has(.barber-shell)
+     (triplets HSL de la escala caramel) para que bg-brand-600 y los
+     portales de Radix (montan en <body>) hereden el caramelo — misma
+     lección radix-portal que el remap violeta del dashboard.
+
+   ♿ CONTRASTE (obligatorio):
+   - Texto BLANCO sobre caramel-500 (#BE7A3C) NO pasa AA en texto chico.
+   - Botones y píldoras con texto blanco → caramel-600 (#A2612F) o
+     700 (#814A28). El 500 es para acentos, bordes, iconos y texto grande.
+   - En dark, el primario es caramel-400 (#CD9459) con TEXTO OSCURO encima.
+
+   Responsive: usa @container (regla del repo), no @media, en los
+   componentes del vertical.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+.barber-shell {
+  /* ── Escala caramel completa (referencia; Tailwind expone `caramel-*`) ── */
+  --caramel-50:  #FBF7F2;
+  --caramel-100: #F6EADC;
+  --caramel-200: #EBD3B4;
+  --caramel-300: #DDB587;
+  --caramel-400: #CD9459;
+  --caramel-500: #BE7A3C; /* acento */
+  --caramel-600: #A2612F; /* acción primaria (texto blanco OK) */
+  --caramel-700: #814A28;
+  --caramel-800: #5E3720;
+  --caramel-900: #3D2417;
+  --caramel-950: #241410;
+
+  /* Neutros cálidos del vertical */
+  --barber-ink:   #121010; /* negro cálido, no azulado */
+  --barber-cream: #FAF5EE;
+
+  /* ── LIGHT (default): crema + tinta cálida ── */
+  --bg:        var(--barber-cream);
+  --bg-elev:   #FFFFFF;
+  --bg-elev-2: var(--caramel-100);
+  --bg-hover:  rgba(190, 122, 60, 0.06);
+
+  --border-soft:   rgba(18, 16, 16, 0.12);
+  --border-strong: rgba(18, 16, 16, 0.20);
+  --border-brand:  rgba(190, 122, 60, 0.35);
+
+  --brand:        var(--caramel-600);
+  --brand-soft:   rgba(190, 122, 60, 0.12);
+  --brand-softer: rgba(190, 122, 60, 0.05);
+
+  --text-1: var(--barber-ink);
+  --text-2: #4A4138;
+  --text-3: #7D7268;
+  --text-4: #A99D90;
+
+  --brand-grad:   linear-gradient(90deg, #A2612F, #BE7A3C);
+  --brand-grad-v: linear-gradient(180deg, #A2612F, #BE7A3C);
+  --brand-blue:   var(--caramel-500);
+
+  --ring: 0 0 0 3px rgba(190, 122, 60, 0.35);
+
+  --shadow-1: 0 1px 2px rgba(18, 16, 16, 0.05);
+  --shadow-2: 0 4px 12px -2px rgba(18, 16, 16, 0.08);
+  --shadow-3: 0 16px 40px -12px rgba(18, 16, 16, 0.20);
+}
+
+/* ── DARK: madera oscura + caramelo claro ── */
+.dark .barber-shell {
+  --bg:        #1A1513;
+  --bg-elev:   #241D19;
+  --bg-elev-2: #2E241D;
+  --bg-hover:  rgba(205, 148, 89, 0.08);
+
+  --border-soft:   rgba(250, 245, 238, 0.10);
+  --border-strong: rgba(250, 245, 238, 0.18);
+  --border-brand:  rgba(205, 148, 89, 0.40);
+
+  /* Primario dark = caramel-400. OJO: con texto OSCURO (#241410), no blanco. */
+  --brand:        var(--caramel-400);
+  --brand-soft:   rgba(205, 148, 89, 0.14);
+  --brand-softer: rgba(205, 148, 89, 0.06);
+
+  --text-1: #F5EFE7;
+  --text-2: #CBC0B2;
+  --text-3: #9A8E80;
+  --text-4: #6E645A;
+
+  --brand-grad:   linear-gradient(90deg, #CD9459, #BE7A3C);
+  --brand-grad-v: linear-gradient(180deg, #CD9459, #BE7A3C);
+
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.35);
+  --shadow-2: 0 4px 12px -2px rgba(0, 0, 0, 0.45);
+  --shadow-3: 0 16px 40px -12px rgba(0, 0, 0, 0.6);
+}
+
+/* ── Rampa Tailwind brand-* → caramel dentro del vertical ──────────────
+   Vía <body> con :has() para que los portales de Radix (Dialog/Popover
+   montan en <body>, FUERA del shell) hereden el caramelo. El panel barber
+   NO lleva la clase .dashboard-shell, así que no compite con el remap
+   violeta del dashboard. Triplets HSL de la escala caramel 50…950. */
+body:has(.barber-shell) {
+  --brand-50:  33.3 52.9% 96.7%;
+  --brand-100: 32.3 59.1% 91.4%;
+  --brand-200: 33.8 57.9% 81.4%;
+  --brand-300: 32.1 55.8% 69.8%;
+  --brand-400: 30.5 53.7% 57.6%;
+  --brand-500: 28.6 52% 49%;
+  --brand-600: 26.1 55% 41%;
+  --brand-700: 22.9 52.7% 33.1%;
+  --brand-800: 22.3 49.2% 24.7%;
+  --brand-900: 20.5 45.2% 16.5%;
+  --brand-950: 12 38.5% 10.2%;
+
+  /* Fondo cálido (pisa el grid violeta de :root body) */
+  background-color: #FAF5EE;
+  background-image:
+    radial-gradient(ellipse 1200px 600px at 50% -10%, rgba(190, 122, 60, 0.06), transparent 70%),
+    linear-gradient(rgba(18, 16, 16, 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(18, 16, 16, 0.05) 1px, transparent 1px);
+  background-size: auto, 32px 32px, 32px 32px;
+  background-attachment: fixed;
+}
+
+.dark body:has(.barber-shell) {
+  background-color: #1A1513;
+  background-image:
+    radial-gradient(ellipse 1200px 600px at 50% -10%, rgba(205, 148, 89, 0.08), transparent 70%),
+    linear-gradient(rgba(250, 245, 238, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(250, 245, 238, 0.035) 1px, transparent 1px);
+  background-size: auto, 32px 32px, 32px 32px;
+}
+
+/* Botón primario del vertical (texto blanco → 600/700, JAMÁS 500). */
+.barber-shell .barber-btn-primary {
+  background: var(--caramel-600);
+  color: #FFFFFF;
+  border: 1px solid var(--caramel-700);
+  border-radius: 10px;
+  font-weight: 600;
+  transition: background var(--dur-1, 150ms) var(--ease, ease);
+}
+.barber-shell .barber-btn-primary:hover { background: var(--caramel-700); }
+.dark .barber-shell .barber-btn-primary {
+  background: var(--caramel-400);
+  color: var(--caramel-950);
+  border-color: var(--caramel-500);
+}
+.dark .barber-shell .barber-btn-primary:hover { background: var(--caramel-300); }

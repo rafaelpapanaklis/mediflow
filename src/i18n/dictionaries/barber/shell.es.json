@@ -1,0 +1,67 @@
+{
+  "brand": {
+    "product": "DaleControl",
+    "vertical": "Barbería"
+  },
+  "nav": {
+    "inicio": "Inicio",
+    "agenda": "Agenda",
+    "fila": "Fila virtual",
+    "solicitudes": "Solicitudes",
+    "clientes": "Clientes",
+    "servicios": "Servicios",
+    "barberos": "Barberos",
+    "caja": "Caja",
+    "comisiones": "Comisiones",
+    "membresias": "Membresías",
+    "productos": "Productos",
+    "mi-web": "Mi web",
+    "whatsapp": "WhatsApp",
+    "suscripcion": "Suscripción",
+    "configuracion": "Configuración"
+  },
+  "navSections": {
+    "operacion": "Operación",
+    "negocio": "Negocio",
+    "crecimiento": "Crecimiento",
+    "cuenta": "Cuenta"
+  },
+  "topbar": {
+    "root": "Barbería"
+  },
+  "logout": "Cerrar sesión",
+  "placeholder": {
+    "soon": "Próximamente",
+    "body": "Esta sección está en construcción. Muy pronto vas a poder administrarla desde aquí.",
+    "hint": "El equipo de DaleControl está trabajando en esta área del panel."
+  },
+  "areas": {
+    "inicio": "El pulso de tu barbería: citas de hoy, fila, ventas y accesos rápidos.",
+    "agenda": "Agenda de citas por barbero: crea, confirma, reagenda y cobra cada visita.",
+    "fila": "Fila virtual para walk-ins: registra al cliente, míralo avanzar y llámalo a la silla.",
+    "solicitudes": "Solicitudes de reserva que llegan desde tu página pública, listas para aceptar.",
+    "clientes": "Tus clientes con sus preferencias de corte, visitas y tarjeta de lealtad.",
+    "servicios": "Tu catálogo de servicios: nombres, duración y precios que tú decides.",
+    "barberos": "Tu equipo: perfiles, esquema de pago (comisión, silla o sueldo) y orden.",
+    "caja": "Caja por turno: apertura, ventas, propinas y corte con arqueo.",
+    "comisiones": "Comisiones devengadas por barbero y por periodo, listas para liquidar.",
+    "membresias": "Los planes que le vendes a tus clientes: cortes ilimitados, paquetes y más.",
+    "productos": "Inventario simple de ceras, shampoos y todo lo que vendes en mostrador.",
+    "mi-web": "Tu página pública con reservas en línea, editable sin saber de diseño.",
+    "whatsapp": "Recordatorios y conversaciones de WhatsApp con tus clientes.",
+    "suscripcion": "Tu plan de DaleControl Barber: lo que incluye y cómo pagarlo.",
+    "configuracion": "Datos de tu barbería: horario, dirección, logo y equipo con acceso."
+  },
+  "suscripcion": {
+    "title": "Suscripción",
+    "currentPlan": "Tu plan actual",
+    "statusActive": "Activa",
+    "statusPending": "Pago pendiente",
+    "perMonth": "/ mes",
+    "unlimitedBarbers": "Barberos ilimitados",
+    "oneBarber": "1 barbero",
+    "nBarbers": "{count} barberos",
+    "payingSoon": "El pago en línea se habilita muy pronto. Mientras tanto, escríbenos para activar tu plan.",
+    "includes": "Incluye"
+  }
+}

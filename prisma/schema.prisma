@@ -8371,3 +8371,587 @@ model AffiliateSupportMessage {
   @@index([ticketId, createdAt])
   @@map("affiliate_support_messages")
 }
+
+// ═══════════════════════════════════════════════════════════════════════
+// DaleControl BARBER — producto NUEVO y SEPARADO (SaaS para barberías).
+//
+// NO es una especialidad del panel dental: tiene sus propias tablas (prefijo
+// barber_), su propio panel (/barber), sus propios planes (barber_plan_configs)
+// y su propia terminología (cliente / barbero / barbería — nunca paciente /
+// doctor / clínica). Comparte con el dental SOLO: Supabase Auth (login),
+// la infraestructura (Vercel, Stripe, Meta WhatsApp) y el design system.
+//
+// Aislamiento multi-tenant: TODA consulta de negocio filtra por barbershopId,
+// que sale SIEMPRE de la sesión (getBarberContext en src/lib/barber-auth.ts),
+// JAMÁS del body/query. Ojo Prisma: barbershopId undefined BORRA el filtro.
+//
+// WhatsApp: el modelo de envío NO está decidido (número propio de cada
+// barbería vs. número de DaleControl con cupo por plan). El schema soporta
+// AMBOS: whatsappSenderMode + campos de WABA propia + contador de mensajes
+// del periodo + messageQuota en barber_plan_configs. El envío NO se
+// implementa en la Ola 0.
+//
+// Contrato completo del vertical: src/lib/barber/types.ts
+// SQL idempotente para Supabase:  sql/barber.sql
+// ═══════════════════════════════════════════════════════════════════════
+
+enum BarberPlan {
+  BASICO
+  AVANZADO
+  PROFESIONAL
+}
+
+// PLATFORM  = los mensajes salen del número de DaleControl (cupo por plan).
+// OWN_WABA  = la barbería conecta su propia WABA (como las clínicas dentales).
+enum BarberWhatsappSender {
+  PLATFORM
+  OWN_WABA
+}
+
+enum BarberRole {
+  OWNER
+  MANAGER
+  BARBER
+  RECEPTION
+}
+
+enum BarberCommissionType {
+  COMMISSION
+  CHAIR_RENT
+  SALARY
+}
+
+enum BarberAppointmentStatus {
+  PENDING
+  CONFIRMED
+  IN_PROGRESS
+  DONE
+  NO_SHOW
+  CANCELLED
+}
+
+enum BarberAppointmentSource {
+  PANEL
+  PUBLIC
+  WALKIN
+  WHATSAPP
+}
+
+enum BarberDepositStatus {
+  PENDING
+  PAID
+  REFUNDED
+  FORFEITED
+}
+
+enum BarberWalkInStatus {
+  WAITING
+  CALLED
+  SERVED
+  LEFT
+}
+
+enum BarberClientMembershipStatus {
+  ACTIVE
+  PAUSED
+  EXPIRED
+  CANCELLED
+}
+
+enum BarberPaymentMethod {
+  CASH
+  CARD
+  SPEI
+  STRIPE
+}
+
+enum BarberMessageDirection {
+  INBOUND
+  OUTBOUND
+}
+
+enum BarberMessageStatus {
+  PENDING
+  SENT
+  DELIVERED
+  READ
+  FAILED
+}
+
+/// El inquilino (tenant) del vertical barber. parentId permite cadenas:
+/// la matriz tiene parentId null y las sucursales apuntan a ella (feature
+/// multiBranch del plan PROFESIONAL; la lógica llega en olas posteriores).
+model Barbershop {
+  id       String  @id @default(cuid())
+  name     String
+  slug     String  @unique
+  phone    String?
+  email    String?
+  address  String?
+  city     String?
+  state    String?
+  timezone String  @default("America/Mexico_City")
+  locale   String  @default("es")
+  logoUrl  String?
+  /// Tamaño declarado en el registro: "1" | "2-3" | "4-5" | "6+" (espejo de
+  /// Clinic.clinicSize; solo informativo).
+  teamSize String?
+
+  // Plan y suscripción. Registro sin trial → nace "pending_payment", igual
+  // que el dental (ver sql/barber.sql + /api/barber/auth/register). Estados
+  // activos: active | trialing | paid (BARBER_ACTIVE_SUBSCRIPTION_STATUSES).
+  plan                 BarberPlan @default(BASICO)
+  subscriptionStatus   String     @default("pending_payment")
+  stripeCustomerId     String?
+  stripeSubscriptionId String?
+
+  parentId String?
+  isActive Boolean @default(true)
+
+  // WhatsApp — soporta los DOS modelos de envío (ver cabecera del bloque).
+  // whatsappToken se guardará CIFRADO cuando la ola de WhatsApp lo implemente.
+  whatsappSenderMode  BarberWhatsappSender @default(PLATFORM)
+  wabaId              String?
+  phoneNumberId       String?
+  whatsappToken       String?
+  whatsappVerifiedAt  DateTime?
+  messagesUsedPeriod  Int                  @default(0)
+  messagesPeriodStart DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  parent   Barbershop?  @relation("BarbershopBranches", fields: [parentId], references: [id], onDelete: SetNull)
+  branches Barbershop[] @relation("BarbershopBranches")
+
+  users             BarberUser[]
+  barbers           Barber[]
+  clients           BarberClient[]
+  services          BarberService[]
+  appointments      BarberAppointment[]
+  walkIns           BarberWalkIn[]
+  memberships       BarberMembership[]
+  clientMemberships BarberClientMembership[]
+  sales             BarberSale[]
+  products          BarberProduct[]
+  cashSessions      BarberCashSession[]
+  commissionEntries BarberCommissionEntry[]
+  messages          BarberMessage[]
+
+  @@index([parentId])
+  @@map("barber_shops")
+}
+
+/// Quien entra al panel /barber. Espejo de DentalLabUser. permissionsOverride:
+/// si tiene keys, esas REEMPLAZAN el default del rol (no se suman) — misma
+/// semántica que User.permissionsOverride del dental.
+model BarberUser {
+  id                  String     @id @default(cuid())
+  barbershopId        String
+  supabaseId          String
+  email               String
+  firstName           String
+  lastName            String
+  role                BarberRole @default(OWNER)
+  /// Si este usuario ES un barbero operativo, apunta a su fila Barber.
+  barberId            String?
+  isActive            Boolean    @default(true)
+  permissionsOverride String[]   @default([])
+  lastLogin           DateTime?
+  createdAt           DateTime   @default(now())
+  updatedAt           DateTime   @updatedAt
+
+  barbershop Barbershop @relation(fields: [barbershopId], references: [id], onDelete: Cascade)
+  barber     Barber?    @relation(fields: [barberId], references: [id], onDelete: SetNull)
+
+  salesSold          BarberSale[]        @relation("BarberSaleSoldBy")
+  cashSessionsOpened BarberCashSession[] @relation("BarberCashOpenedBy")
+  cashSessionsClosed BarberCashSession[] @relation("BarberCashClosedBy")
+
+  @@unique([supabaseId, barbershopId])
+  @@index([supabaseId])
+  @@index([barbershopId])
+  @@map("barber_users")
+}
+
+/// El profesional (puede existir SIN login; si tiene, BarberUser.barberId
+/// apunta aquí). Esquema de pago: comisión (%), renta de silla o sueldo.
+model Barber {
+  id             String               @id @default(cuid())
+  barbershopId   String
+  name           String
+  nickname       String?
+  photoUrl       String?
+  bio            String?              @db.Text
+  commissionType BarberCommissionType @default(COMMISSION)
+  commissionPct  Decimal?             @db.Decimal(5, 2)
+  chairRent      Decimal?             @db.Decimal(10, 2)
+  isActive       Boolean              @default(true)
+  sortOrder      Int                  @default(0)
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
+
+  barbershop        Barbershop              @relation(fields: [barbershopId], references: [id], onDelete: Cascade)
+  users             BarberUser[]
+  appointments      BarberAppointment[]
+  walkIns           BarberWalkIn[]
+  sales             BarberSale[]
+  commissionEntries BarberCommissionEntry[]
+
+  @@index([barbershopId, isActive])
+  @@map("barber_barbers")
+}
+
+/// El CLIENTE (nunca "paciente"). preferences (Json): máquina/número, raya,
+/// largo, alergias a productos, etc. — forma libre, la define la ola de
+/// clientes. loyaltyCount = sellos de lealtad acumulados.
+model BarberClient {
+  id           String    @id @default(cuid())
+  barbershopId String
+  name         String
+  phone        String
+  email        String?
+  birthday     DateTime?
+  notes        String?   @db.Text
+  preferences  Json?
+  photoUrl     String?
+  loyaltyCount Int       @default(0)
+  totalVisits  Int       @default(0)
+  lastVisitAt  DateTime?
+  blockedAt    DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  barbershop   Barbershop               @relation(fields: [barbershopId], references: [id], onDelete: Cascade)
+  appointments BarberAppointment[]
+  memberships  BarberClientMembership[]
+  sales        BarberSale[]
+  messages     BarberMessage[]
+
+  @@index([barbershopId, phone])
+  @@index([barbershopId, name])
+  @@map("barber_clients")
+}
+
+/// Catálogo de servicios de la barbería. El precio aquí es el precio VIVO;
+/// al reservar se congela en BarberAppointmentService.priceAtBooking.
+model BarberService {
+  id           String   @id @default(cuid())
+  barbershopId String
+  name         String
+  description  String?  @db.Text
+  durationMin  Int
+  price        Decimal  @db.Decimal(10, 2)
+  category     String   @default("general")
+  isActive     Boolean  @default(true)
+  sortOrder    Int      @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  barbershop          Barbershop                 @relation(fields: [barbershopId], references: [id], onDelete: Cascade)
+  appointmentServices BarberAppointmentService[]
+  saleItems           BarberSaleItem[]
+
+  @@index([barbershopId, isActive])
+  @@map("barber_services")
+}
+
+/// La cita. Un walk-in convertido a cita puede NO tener BarberClient:
+/// clientName/clientPhone capturan al cliente suelto. barberId null =
+/// "cualquier barbero" (se asigna después).
+model BarberAppointment {
+  id            String                  @id @default(cuid())
+  barbershopId  String
+  clientId      String?
+  clientName    String?
+  clientPhone   String?
+  barberId      String?
+  startAt       DateTime
+  endAt         DateTime
+  status        BarberAppointmentStatus @default(PENDING)
+  source        BarberAppointmentSource @default(PANEL)
+  depositAmount Decimal?                @db.Decimal(10, 2)
+  depositStatus BarberDepositStatus?
+  notes         String?                 @db.Text
+  createdAt     DateTime                @default(now())
+  updatedAt     DateTime                @updatedAt
+
+  barbershop        Barbershop                 @relation(fields: [barbershopId], references: [id], onDelete: Cascade)
+  client            BarberClient?              @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  barber            Barber?                    @relation(fields: [barberId], references: [id], onDelete: SetNull)
+  services          BarberAppointmentService[]
+  sales             BarberSale[]
+  commissionEntries BarberCommissionEntry[]
+  messages          BarberMessage[]
+
+  @@index([barbershopId, startAt])
+  @@index([barberId, startAt])
+  @@index([barbershopId, status])
+  @@map("barber_appointments")
+}
+
+/// Join cita ↔ servicio. priceAtBooking congela el precio al reservar.
+/// serviceId es NoAction (no Restrict) a propósito: NO ACTION se verifica al
+/// FINAL del statement, así el borrado en cascada de una barbería completa
+/// no truena; borrar un servicio individual con citas sigue bloqueado
+/// (usar isActive para retirarlo del catálogo).
+model BarberAppointmentService {
+  id             String   @id @default(cuid())
+  appointmentId  String
+  serviceId      String
+  priceAtBooking Decimal  @db.Decimal(10, 2)
+  createdAt      DateTime @default(now())
+
+  appointment BarberAppointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+  service     BarberService     @relation(fields: [serviceId], references: [id], onDelete: NoAction)
+
+  @@index([appointmentId])
+  @@index([serviceId])
+  @@map("barber_appointment_services")
+}
+
+/// Fila virtual (walk-ins). position = orden visible en la fila; la ola de
+/// fila define cómo se recompacta. barberId = preferencia, no asignación.
+model BarberWalkIn {
+  id           String             @id @default(cuid())
+  barbershopId String
+  clientName   String
+  phone        String?
+  barberId     String?
+  joinedAt     DateTime           @default(now())
+  calledAt     DateTime?
+  servedAt     DateTime?
+  status       BarberWalkInStatus @default(WAITING)
+  position     Int
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
+
+  barbershop Barbershop @relation(fields: [barbershopId], references: [id], onDelete: Cascade)
+  barber     Barber?    @relation(fields: [barberId], references: [id], onDelete: SetNull)
+
+  @@index([barbershopId, status, position])
+  @@index([barbershopId, joinedAt])
+  @@map("barber_walkins")
+}
+
+/// Plan que la barbería le vende a SU cliente (p.ej. "corte ilimitado").
+/// includedCuts null = ilimitado. periodDays = duración del ciclo.
+model BarberMembership {
+  id           String   @id @default(cuid())
+  barbershopId String
+  name         String
+  description  String?  @db.Text
+  price        Decimal  @db.Decimal(10, 2)
+  includedCuts Int?
+  periodDays   Int      @default(30)
+  isActive     Boolean  @default(true)
+  sortOrder    Int      @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  barbershop        Barbershop               @relation(fields: [barbershopId], references: [id], onDelete: Cascade)
+  clientMemberships BarberClientMembership[]
+
+  @@index([barbershopId, isActive])
+  @@map("barber_memberships")
+}
+
+/// Suscripción de un cliente a una membresía de la barbería.
+/// membershipId es NoAction por la misma razón que BarberAppointmentService.
+model BarberClientMembership {
+  id                   String                       @id @default(cuid())
+  barbershopId         String
+  clientId             String
+  membershipId         String
+  status               BarberClientMembershipStatus @default(ACTIVE)
+  startAt              DateTime                     @default(now())
+  endAt                DateTime
+  cutsUsed             Int                          @default(0)
+  paymentMethod        BarberPaymentMethod          @default(CASH)
+  stripeSubscriptionId String?
+  createdAt            DateTime                     @default(now())
+  updatedAt            DateTime                     @updatedAt
+
+  barbershop Barbershop       @relation(fields: [barbershopId], references: [id], onDelete: Cascade)
+  client     BarberClient     @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  membership BarberMembership @relation(fields: [membershipId], references: [id], onDelete: NoAction)
+
+  @@index([barbershopId, status])
+  @@index([clientId])
+  @@index([membershipId])
+  @@map("barber_client_memberships")
+}
+
+/// Ticket de venta (servicios + productos + propina). soldByUserId es
+/// NoAction: los BarberUser se desactivan (isActive=false), no se borran.
+model BarberSale {
+  id            String              @id @default(cuid())
+  barbershopId  String
+  appointmentId String?
+  clientId      String?
+  barberId      String?
+  subtotal      Decimal             @default(0) @db.Decimal(10, 2)
+  tip           Decimal             @default(0) @db.Decimal(10, 2)
+  total         Decimal             @default(0) @db.Decimal(10, 2)
+  paymentMethod BarberPaymentMethod @default(CASH)
+  cashSessionId String?
+  soldByUserId  String
+  notes         String?             @db.Text
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
+
+  barbershop        Barbershop              @relation(fields: [barbershopId], references: [id], onDelete: Cascade)
+  appointment       BarberAppointment?      @relation(fields: [appointmentId], references: [id], onDelete: SetNull)
+  client            BarberClient?           @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  barber            Barber?                 @relation(fields: [barberId], references: [id], onDelete: SetNull)
+  cashSession       BarberCashSession?      @relation(fields: [cashSessionId], references: [id], onDelete: SetNull)
+  soldBy            BarberUser              @relation("BarberSaleSoldBy", fields: [soldByUserId], references: [id], onDelete: NoAction)
+  items             BarberSaleItem[]
+  commissionEntries BarberCommissionEntry[]
+
+  @@index([barbershopId, createdAt])
+  @@index([barberId, createdAt])
+  @@index([cashSessionId])
+  @@map("barber_sales")
+}
+
+/// Línea del ticket. serviceId XOR productId (o ninguno para línea libre);
+/// description siempre presente para que el ticket sobreviva borrados.
+model BarberSaleItem {
+  id        String  @id @default(cuid())
+  saleId    String
+  serviceId String?
+  productId String?
+  description String
+  qty       Int     @default(1)
+  unitPrice Decimal @db.Decimal(10, 2)
+
+  sale    BarberSale     @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  service BarberService? @relation(fields: [serviceId], references: [id], onDelete: SetNull)
+  product BarberProduct? @relation(fields: [productId], references: [id], onDelete: SetNull)
+
+  @@index([saleId])
+  @@map("barber_sale_items")
+}
+
+/// Inventario simple (ceras, shampoos, aceites…).
+model BarberProduct {
+  id           String   @id @default(cuid())
+  barbershopId String
+  name         String
+  sku          String?
+  price        Decimal  @db.Decimal(10, 2)
+  cost         Decimal? @db.Decimal(10, 2)
+  stock        Int      @default(0)
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  barbershop Barbershop       @relation(fields: [barbershopId], references: [id], onDelete: Cascade)
+  saleItems  BarberSaleItem[]
+
+  @@index([barbershopId, isActive])
+  @@map("barber_products")
+}
+
+/// Corte de caja (por turno, no por día). openedByUserId NoAction (usuarios
+/// se desactivan, no se borran).
+model BarberCashSession {
+  id             String    @id @default(cuid())
+  barbershopId   String
+  openedAt       DateTime  @default(now())
+  closedAt       DateTime?
+  openingAmount  Decimal   @default(0) @db.Decimal(10, 2)
+  countedAmount  Decimal?  @db.Decimal(10, 2)
+  expectedAmount Decimal?  @db.Decimal(10, 2)
+  notes          String?   @db.Text
+  openedByUserId String
+  closedByUserId String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  barbershop Barbershop  @relation(fields: [barbershopId], references: [id], onDelete: Cascade)
+  openedBy   BarberUser  @relation("BarberCashOpenedBy", fields: [openedByUserId], references: [id], onDelete: NoAction)
+  closedBy   BarberUser? @relation("BarberCashClosedBy", fields: [closedByUserId], references: [id], onDelete: SetNull)
+  sales      BarberSale[]
+
+  @@index([barbershopId, openedAt])
+  @@map("barber_cash_sessions")
+}
+
+/// Comisión devengada de un barbero. periodKey = "YYYY-MM" (o quincena
+/// "YYYY-MM-Q1/Q2", lo decide la ola de comisiones). paidAt null = pendiente.
+/// barberId NoAction: no se puede borrar un barbero con comisiones (dinero).
+model BarberCommissionEntry {
+  id            String    @id @default(cuid())
+  barbershopId  String
+  barberId      String
+  saleId        String?
+  appointmentId String?
+  base          Decimal   @db.Decimal(10, 2)
+  pct           Decimal?  @db.Decimal(5, 2)
+  amount        Decimal   @db.Decimal(10, 2)
+  periodKey     String
+  paidAt        DateTime?
+  createdAt     DateTime  @default(now())
+
+  barbershop  Barbershop         @relation(fields: [barbershopId], references: [id], onDelete: Cascade)
+  barber      Barber             @relation(fields: [barberId], references: [id], onDelete: NoAction)
+  sale        BarberSale?        @relation(fields: [saleId], references: [id], onDelete: SetNull)
+  appointment BarberAppointment? @relation(fields: [appointmentId], references: [id], onDelete: SetNull)
+
+  @@index([barbershopId, periodKey])
+  @@index([barberId, periodKey])
+  @@map("barber_commission_entries")
+}
+
+/// Mensajería WhatsApp del vertical barber (recordatorios, inbox, bot).
+/// La ola de WhatsApp la completa; el modelo queda listo desde la Ola 0.
+model BarberMessage {
+  id            String                 @id @default(cuid())
+  barbershopId  String
+  direction     BarberMessageDirection
+  waMessageId   String?
+  phone         String
+  body          String?                @db.Text
+  templateName  String?
+  status        BarberMessageStatus    @default(PENDING)
+  errorMessage  String?
+  clientId      String?
+  appointmentId String?
+  createdAt     DateTime               @default(now())
+  updatedAt     DateTime               @updatedAt
+
+  barbershop  Barbershop         @relation(fields: [barbershopId], references: [id], onDelete: Cascade)
+  client      BarberClient?      @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  appointment BarberAppointment? @relation(fields: [appointmentId], references: [id], onDelete: SetNull)
+
+  @@index([barbershopId, createdAt])
+  @@index([barbershopId, phone])
+  @@index([waMessageId])
+  @@map("barber_messages")
+}
+
+/// Los 3 planes del vertical barber, EDITABLES sin redeploy (espejo de
+/// plan_configs del dental). FUENTE ÚNICA de precios/límites — prohibido
+/// hardcodear precios en la UI. planId: BASICO | AVANZADO | PROFESIONAL.
+/// -1 = ilimitado en maxBarbers/maxBranches/messageQuota.
+/// messageQuota es PROVISIONAL (depende del costo de Meta; Rafael confirma).
+model BarberPlanConfig {
+  planId               String   @id
+  name                 String
+  priceMonthly         Decimal  @db.Decimal(10, 2)
+  priceYearly          Decimal? @db.Decimal(10, 2)
+  firstMonthPrice      Decimal? @db.Decimal(10, 2)
+  maxBarbers           Int      @default(1)
+  maxBranches          Int      @default(1)
+  messageQuota         Int      @default(200)
+  features             Json
+  stripePriceIdMonthly String?
+  stripePriceIdYearly  String?
+  sortOrder            Int      @default(0)
+  isActive             Boolean  @default(true)
+  updatedAt            DateTime @updatedAt
+
+  @@map("barber_plan_configs")
+}

@@ -1,0 +1,67 @@
+{
+  "brand": {
+    "product": "DaleControl",
+    "vertical": "Barbershop"
+  },
+  "nav": {
+    "inicio": "Home",
+    "agenda": "Schedule",
+    "fila": "Virtual queue",
+    "solicitudes": "Requests",
+    "clientes": "Clients",
+    "servicios": "Services",
+    "barberos": "Barbers",
+    "caja": "Cash register",
+    "comisiones": "Commissions",
+    "membresias": "Memberships",
+    "productos": "Products",
+    "mi-web": "My website",
+    "whatsapp": "WhatsApp",
+    "suscripcion": "Subscription",
+    "configuracion": "Settings"
+  },
+  "navSections": {
+    "operacion": "Operations",
+    "negocio": "Business",
+    "crecimiento": "Growth",
+    "cuenta": "Account"
+  },
+  "topbar": {
+    "root": "Barbershop"
+  },
+  "logout": "Sign out",
+  "placeholder": {
+    "soon": "Coming soon",
+    "body": "This section is under construction. You will be able to manage it from here very soon.",
+    "hint": "The DaleControl team is working on this area of the panel."
+  },
+  "areas": {
+    "inicio": "Your barbershop at a glance: today's appointments, queue, sales and shortcuts.",
+    "agenda": "Appointment schedule per barber: create, confirm, reschedule and charge each visit.",
+    "fila": "Virtual queue for walk-ins: register the client, watch them move up and call them to the chair.",
+    "solicitudes": "Booking requests coming from your public page, ready to accept.",
+    "clientes": "Your clients with their haircut preferences, visits and loyalty card.",
+    "servicios": "Your service catalog: names, duration and the prices you decide.",
+    "barberos": "Your team: profiles, pay scheme (commission, chair rent or salary) and order.",
+    "caja": "Cash register per shift: opening, sales, tips and closing with count.",
+    "comisiones": "Commissions earned per barber and period, ready to pay out.",
+    "membresias": "The plans you sell to your clients: unlimited cuts, bundles and more.",
+    "productos": "Simple inventory for waxes, shampoos and everything you sell at the counter.",
+    "mi-web": "Your public page with online booking, editable without design skills.",
+    "whatsapp": "WhatsApp reminders and conversations with your clients.",
+    "suscripcion": "Your DaleControl Barber plan: what it includes and how to pay for it.",
+    "configuracion": "Your barbershop data: hours, address, logo and team access."
+  },
+  "suscripcion": {
+    "title": "Subscription",
+    "currentPlan": "Your current plan",
+    "statusActive": "Active",
+    "statusPending": "Payment pending",
+    "perMonth": "/ month",
+    "unlimitedBarbers": "Unlimited barbers",
+    "oneBarber": "1 barber",
+    "nBarbers": "{count} barbers",
+    "payingSoon": "Online payment is coming very soon. In the meantime, contact us to activate your plan.",
+    "includes": "Includes"
+  }
+}

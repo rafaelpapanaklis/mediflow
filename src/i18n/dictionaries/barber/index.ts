@@ -1,0 +1,55 @@
+// ═══════════════════════════════════════════════════════════════════════
+// DaleControl BARBER — árbol de diccionarios PROPIO del vertical.
+//
+// REGLA (Ola 0): NO se toca src/i18n/dictionaries/{es,en}.json — esos son
+// del panel dental. Cada terminal de la Ola 1 crea SU par de archivos
+// (<area>.es.json / <area>.en.json) en ESTA carpeta y agrega UNA línea por
+// objeto (ES / EN) abajo. Así 8 terminales en paralelo no chocan en un
+// mismo JSON gigante.
+//
+// Todas las llaves viven bajo el namespace `barber.*`:
+//   t("barber.shell.nav.agenda") → "Agenda"
+//   t("barber.agenda.emptyDay")  → (lo crea la terminal de agenda)
+//
+// El motor es el mismo makeT de src/i18n/t (puro, sirve en server y client).
+// ═══════════════════════════════════════════════════════════════════════
+import { makeT } from "@/i18n/t";
+import type { Dictionary } from "@/i18n/t";
+
+import shellEs from "./shell.es.json";
+import shellEn from "./shell.en.json";
+// ── Ola 1: importa aquí tu área (una línea por idioma) ──
+// import agendaEs from "./agenda.es.json";
+// import agendaEn from "./agenda.en.json";
+
+const ES: Dictionary = {
+  barber: {
+    shell: shellEs as unknown as Dictionary,
+    // agenda: agendaEs as unknown as Dictionary,
+  },
+};
+
+const EN: Dictionary = {
+  barber: {
+    shell: shellEn as unknown as Dictionary,
+    // agenda: agendaEn as unknown as Dictionary,
+  },
+};
+
+export const BARBER_SUPPORTED_LOCALES = ["es", "en"] as const;
+export type BarberLocale = (typeof BARBER_SUPPORTED_LOCALES)[number];
+export const BARBER_DEFAULT_LOCALE: BarberLocale = "es";
+
+export function resolveBarberLocale(value: unknown): BarberLocale {
+  return value === "en" ? "en" : "es";
+}
+
+/** Diccionario completo del vertical para el locale dado (default es). */
+export function getBarberDict(locale?: string | null): Dictionary {
+  return resolveBarberLocale(locale) === "en" ? EN : ES;
+}
+
+/** t() del vertical: getBarberT(barbershop.locale)("barber.shell.nav.caja"). */
+export function getBarberT(locale?: string | null) {
+  return makeT(getBarberDict(locale));
+}

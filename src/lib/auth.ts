@@ -141,6 +141,29 @@ export const getCurrentUser = cache(async () => {
       select: { id: true },
     });
     if (labUser) redirect("/laboratorios");
+    // Chequeo simétrico de BARBERÍA (DaleControl Barber): si la sesión
+    // pertenece a un BarberUser activo, mándala a su panel. /barber usa
+    // getBarberContext (no getCurrentUser), así que no hay loop de redirect
+    // — igual que /proveedores y /laboratorios.
+    //
+    // 🔴 try/catch OBLIGATORIO: si la tabla barber_users aún no existe en la
+    // BD (sql/barber.sql sin aplicar), este lookup NO puede tumbar el login
+    // de las clínicas en producción — se loguea y se sigue al flujo normal.
+    // OJO: redirect() lanza NEXT_REDIRECT, por eso vive FUERA del try (si
+    // viviera dentro, el catch se tragaría la redirección).
+    let barberUser: { id: string } | null = null;
+    try {
+      barberUser = await prisma.barberUser.findFirst({
+        where: { supabaseId: supabaseUser.id, isActive: true },
+        select: { id: true },
+      });
+    } catch (err) {
+      console.warn(
+        "[auth] lookup de barber_users falló (¿sql/barber.sql sin aplicar?); sigue flujo normal",
+        err instanceof Error ? err.message : err,
+      );
+    }
+    if (barberUser) redirect("/barber");
     redirect("/onboarding");
   }
 

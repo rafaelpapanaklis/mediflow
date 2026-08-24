@@ -66,6 +66,31 @@ const config: Config = {
           900: "hsl(var(--brand-900) / <alpha-value>)",
           950: "hsl(var(--brand-950) / <alpha-value>)",
         },
+        // ── Vertical BARBER (DaleControl Barber) — escala caramelo. ─────
+        // ESCALA COMPLETA a propósito: un color plano pisaría la escala
+        // 50-950 entera de Tailwind (misma lección que violet arriba).
+        // Rampa fija; se usa SOLO dentro de /barber y páginas públicas /b
+        // (tokens semánticos en src/app/barber/barber-theme.css).
+        // ♿ Texto blanco sobre caramel-500 NO pasa AA en texto chico:
+        // botones/píldoras con texto blanco usan 600 o 700.
+        caramel: {
+          50:  "#FBF7F2",
+          100: "#F6EADC",
+          200: "#EBD3B4",
+          300: "#DDB587",
+          400: "#CD9459",
+          500: "#BE7A3C",
+          600: "#A2612F",
+          700: "#814A28",
+          800: "#5E3720",
+          900: "#3D2417",
+          950: "#241410",
+        },
+        // Neutros cálidos del vertical barber (negro cálido + crema).
+        barber: {
+          ink:   "#121010",
+          cream: "#FAF5EE",
+        },
       },
       borderRadius: {
         lg: "0.75rem",
