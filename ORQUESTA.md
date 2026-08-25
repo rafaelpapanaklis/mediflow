@@ -14465,3 +14465,280 @@ d) Reportes: pasar el ratón por las columnas (tooltip), "Ver tabla", exportar e
    y las horas muertas marcadas en ámbar.
 e) Plan Básico/Avanzado: /barber/reportes muestra la tarjeta de plan y la API
    responde 403 FEATURE_LOCKED.
+═══════════════════════════════════════════════════════════════════════════
+## [Barber Afiliados] — El programa de socios: una barbería recomienda a otra, y cobra cuando la referida PAGA ✅ (2026-08-24)
+═══════════════════════════════════════════════════════════════════════════
+
+En un gremio donde todos se conocen, la recomendación entre barberías es el canal
+de adquisición más barato que existe. Esta ola lo vuelve producto: liga, QR,
+material listo para WhatsApp, embudo y comisiones con comprobante — todo dentro
+del panel de la barbería, sin un portal aparte.
+
+▶ **A · `/barber/afiliados`** — la liga corta con su QR y su código de 8
+caracteres (alfabeto sin I/O/0/1: se dicta por teléfono y se imprime). El embudo:
+cuántos ENTRARON por la liga, cuántos se REGISTRARON y cuántos YA PAGAN. Las
+ganancias partidas en pendiente / disponible / pagado, con el total. La lista de
+barberías recomendadas y la de comisiones, cada pagada con su referencia y su
+comprobante. Material para mandar: el mensaje de WhatsApp ya armado con la liga
+dentro (botón a `wa.me`) y una imagen 1080×1350 con el QR, dibujada en un
+`<canvas>` EN EL NAVEGADOR — sin endpoint de imagen ni assets que mantener.
+
+▶ **ATRIBUCIÓN — cookie propia `dcb_aff`, PRIMER TOQUE, 90 días.** Los 90 días son
+a propósito los MISMOS del dental: no queremos dos criterios de atribución en la
+casa. Si ya hay cookie vigente NO se sobrescribe, ni por otro socio; el primero se
+queda la atribución y al expirar deja de atribuir a nadie. `httpOnly` y escrita
+desde el servidor porque Safari (ITP) borra a los 7 días lo que escribe
+`document.cookie`, y casi todo el tráfico de estas ligas es móvil.
+
+▶ **EL DEDUPE DE CLICS ES POR NAVEGADOR (`dcb_vid`), NO POR IP.** El CGNAT móvil de
+Telcel/AT&T pone miles de teléfonos detrás de una IP, y el WiFi de la barbería hace
+lo mismo con todo el local. Contar por IP SUBCUENTA. Ventana de 30 min. Los bots
+reciben su redirección y su cookie igual que cualquiera, solo que no suman clic; la
+fila se guarda con `counted=false` para poder auditar por qué no contó.
+
+▶ **DÓNDE SE SELLA LA ATRIBUCIÓN: en el ALTA.** `/api/barber/auth/register` lee la
+cookie y llama a `claimBarberReferral()`. Es lo ÚNICO que toqué fuera de mi
+allowlist, autorizado por Rafael, y va con el patrón de aislamiento de
+[feedback_barber_whatsapp_aislamiento]: **import dinámico + try/catch**. Si el
+módulo truena o sus tablas no existen, el alta de una barbería sigue exactamente
+igual que antes de que esto existiera.
+
+▶ **LOS CANDADOS, TODOS EN EL SERVIDOR** (`claimBarberReferralByCode`, punto único
+— ninguna ruta relaja ninguno):
+  · no puede referirse a sí misma;
+  · no puede referir a otra SEDE de su propia cadena (se resuelve a la matriz);
+  · no puede referir a una cuenta del MISMO DUEÑO — mismo `supabaseId` o mismo
+    correo, en el usuario o en la fila de la barbería. Éste es el que impide abrir
+    una segunda cuenta para auto-referirse;
+  · no puede cerrar un CÍRCULO: si A refirió a B, B no puede referir a A (se sube
+    por la cadena, con profundidad acotada a 10 para que una cadena rota jamás
+    cuelgue un alta);
+  · PRIMER TOQUE GANA: la atribución se escribe UNA vez y ninguna superficie la
+    reasigna. El unique de `referredBarbershopId` lo garantiza en la BD, no en una
+    lectura previa: dos altas simultáneas no pueden robarse la referida.
+
+▶ **LA COMISIÓN NACE AL PAGAR, NUNCA AL REGISTRARSE.** Y se DERIVA del estado real
+de la suscripción de la referida (`isBarbershopSubscriptionActive`), no de haber
+visto un evento de Stripe. Dos razones: (1) el webhook del vertical es de la ola
+de cobro y no se toca desde aquí; (2) derivar es más robusto — no depende de que
+un evento llegara. Idempotencia por el unique `(referredBarbershopId, periodKey)`:
+sincronizar mil veces no duplica un peso. Estados: PENDING → (retención cumplida)
+AVAILABLE → PAID. **PAID solo lo pone Rafael a mano**, con su referencia y su
+comprobante; no hay dispersión automática y no me inventé una.
+
+▶ **NI UN PESO ESTÁ EN EL CÓDIGO.** Monto fijo, porcentaje, modalidad (único vs
+recurrente), tope de meses, días de retención y mínimo de cobro salen de
+`barber_affiliate_config`. La UI solo LEE: `grep -E '\$[0-9]|MXN|[0-9]+%'` en
+`afiliados-screen.tsx` y en el diccionario → **0**. La frase que explica la
+comisión ("Ganas $500 por cada barbería…") se ARMA con los números de la tabla en
+`describeBarberCommission()`, no está escrita en el JSX. Todo cálculo en
+`Prisma.Decimal`; lo que falta para el mínimo también se resta en Decimal en el
+servidor y viaja ya calculado, para que el navegador no reste dinero en flotante.
+
+▶ **AISLAMIENTO DEL DENTAL.** CERO imports de `src/lib/affiliates/**` y CERO
+cambios en sus rutas `/r/`. Se copió el CRITERIO (primer toque, 90 días, dedupe
+por navegador) y nada del código, igual que `barber/billing.ts` replicó el patrón
+de Stripe sin importar `src/lib/stripe.ts`. Cookies propias (`dcb_aff`/`dcb_vid`)
+para que las dos atribuciones convivan en el mismo navegador sin pisarse.
+
+▶ **LA RUTA PÚBLICA ES NUEVA Y VIVE EN MI ALLOWLIST**: `GET
+/api/barber/affiliates/r/<CODE>` (no la `/r/` del dental). Siembra la cookie,
+cuenta el clic y manda a `/barber/registro` LIMPIO, sin `?ref=` colgando. **Nunca
+devuelve 404**: un link roto, caducado o de un socio desactivado —pegado en un
+grupo de WhatsApp o impreso en un QR— tiene que llevar al registro, no a un muro.
+⚠️ A diferencia de la `/r/` del dental, ESTA SÍ pasa por el middleware (el matcher
+incluye `/api/:path*`); se verificó por HTTP real que atraviesa sin romperse.
+
+▶ **GATE.** Feature `affiliates` (plan Profesional) + suscripción al día, en la
+página Y otra vez en cada endpoint (`src/app/api/barber/affiliates/_lib.ts`).
+Permiso de rol: se REUSA `billing.manage` (OWNER por default) porque es dinero de
+la barbería frente a DaleControl. Una clave propia exigiría tocar
+`src/lib/barber/permissions.ts`, fuera de mi allowlist — ver PENDIENTES.
+
+═══════════════════════════════════════════════════════════════════════════
+▶ MODELOS NUEVOS (prisma/schema.prisma — autorizado por Rafael)
+═══════════════════════════════════════════════════════════════════════════
+SOLO se AGREGARON modelos. **No se modificó ni un campo de ningún modelo
+existente**, ni del dental ni de barber. Por eso ninguno declara `@relation` a
+`Barbershop`: una relación Prisma exigiría la contra-relación EN el modelo
+`Barbershop`. Las FKs viven en el SQL — mismo patrón que `AffiliateCommission` y
+`AiUsageEvent`.
+
+  1. `BarberAffiliateAccount`    → `barber_affiliate_accounts`
+     La barbería vista como SOCIO. 1:1, `referralCode` único, datos de cobro.
+  2. `BarberAffiliateClick`      → `barber_affiliate_clicks`
+     Un clic. `barbershopId` = la DUEÑA de la liga, nunca la que visita.
+  3. `BarberAffiliateReferral`   → `barber_affiliate_referrals`
+     La atribución. `referredBarbershopId` ÚNICO = primer toque, permanente.
+  4. `BarberAffiliateCommission` → `barber_affiliate_commissions`
+     Devengo + pago manual. Único `(referredBarbershopId, periodKey)`.
+  5. `BarberAffiliateConfig`     → `barber_affiliate_config`
+     Config GLOBAL, una fila `id='default'`.
+
+Enums nuevos: `BarberAffiliateReferralStatus` (SIGNED_UP|PAYING|CHURNED),
+`BarberAffiliateCommissionStatus` (PENDING|AVAILABLE|PAID).
+
+**Todos llevan `barbershopId` + índice, MENOS `BarberAffiliateConfig`, y es a
+propósito**: si la comisión fuera por barbería, la barbería podría fijarse su
+propia comisión. Es global como `barber_plan_configs` y `AiPricingConfig`.
+
+═══════════════════════════════════════════════════════════════════════════
+▶ SQL A APLICAR — `sql/barber_afiliados.sql` (PENDIENTE, lo aplica Rafael)
+═══════════════════════════════════════════════════════════════════════════
+Idempotente y re-ejecutable, mismo estilo que `sql/barber_complemento.sql`: enums
+vía `pg_type`, `CREATE TABLE IF NOT EXISTS`, FKs vía `pg_constraint` dentro de UN
+bloque `DO $barberaf$` (sin `$$` anidado, que rompe el parser de Supabase). Las
+FKs a `barber_shops` van todas en CASCADE, para que borrar una barbería no truene
+como pasó con el NoAction de `barber_appointment_services`.
+
+La semilla de la config es 500 MXN fijos por referida que empieza a pagar, 30 días
+de retención, sin mínimo y sin recurrencia — los MISMOS números que
+`FALLBACK_BARBER_AFFILIATE_CONFIG`. `ON CONFLICT DO NOTHING`: re-ejecutar el
+archivo NO pisa lo que Rafael ya haya ajustado. Al final del archivo quedan las
+consultas listas para (a) ver a quién le toca cobrar con sus datos de depósito y
+(b) marcar una comisión como pagada con referencia y comprobante.
+
+**QUÉ PASA EXACTAMENTE SI RAFAEL NO LO APLICA:**
+  · `/barber/afiliados` abre y muestra el aviso **"Falta aplicar el SQL de
+    afiliados"**, nombrando el archivo. No pinta montos ni cifras falsas.
+  · Las 4 rutas de `/api/barber/affiliates/*` responden sin romperse: el resumen
+    llega con `blocker: "SCHEMA_MISSING"`; `payout` devuelve 503 con ese código.
+  · La liga pública `/r/<code>` **sigue redirigiendo al registro** y sembrando la
+    cookie; simplemente no resuelve a ningún socio ni guarda el clic.
+  · **El ALTA de una barbería NO se ve afectada en absoluto** (try/catch + import
+    dinámico). Ésta es la parte que no se podía romper y no se rompe.
+  · El resto del panel: cero impacto. `npm run build` pasa igual (así se hicieron
+    todos los builds de esta ola: la BD del build no tenía estas tablas).
+  · Todo se enciende solo en cuanto corra el SQL. No hay deploy de por medio.
+⚠️ Al estar EN el schema, `prisma db push` ya no las borra (a diferencia de
+`barber_payment_settings`).
+
+═══════════════════════════════════════════════════════════════════════════
+▶ VERIFICACIÓN
+═══════════════════════════════════════════════════════════════════════════
+Las pruebas se corrieron contra **Postgres 16 real en Docker** (puerto 54341,
+`prisma db push`), con scripts TEMPORALES que NO se commitearon (viven en el
+scratchpad de la sesión; el repo queda sin un archivo de más). **63 checks, 0
+fallas.**
+
+1. `npm run build` → **exit 0**, sin pipes, output completo (970 líneas, guardado
+   en build-rebased.log). 380/380 páginas, 0 errores de tipo. Las 5 rutas nuevas
+   en el manifiesto: `/barber/afiliados` (7 kB), y `/api/barber/affiliates/`
+   {`r/[code]`, `summary`, `claim`, `payout`}. Los warnings (clases ambiguas de
+   Tailwind, `file-type`) ya estaban en main.
+   ⚠️ Dos veces el build cayó ANTES de compilar con `EPERM ... rename
+   query_engine-windows.dll.node`: es el `prisma generate` chocando por el
+   node_modules compartido por junction (otro worktree tenía un `next build` y un
+   `next start -p 3999` vivos, y el antivirus toca el `.tmp` recién escrito). Se
+   confirmó que el engine NO estaba bloqueado, se limpiaron los `.tmp` huérfanos y
+   pasó. No es del código: ver [feedback_prisma_generate_eperm_cliente_stale].
+2. **Una barbería no puede referirse a sí misma.** Llamando el punto único que usa
+   la API (`claimBarberReferralByCode`, que es literalmente lo que ejecuta
+   `POST /api/barber/affiliates/claim`): a sí misma → `SELF_REFERRAL`; a su propia
+   SUCURSAL → `SELF_REFERRAL`; a una cuenta del mismo dueño → `SAME_OWNER`; B→A
+   después de A→B → `CYCLE`; re-atribuir una ya atribuida → `ALREADY_ATTRIBUTED`;
+   código inexistente → `INVALID_CODE`.
+3. **La comisión aparece solo cuando la referida pasa a pagando.** Con B
+   registrada y `pending_payment`: 0 comisiones, embudo `signups=1 / paying=0`. Se
+   cambia a `active` y se sincroniza: 1 comisión, 500 MXN (el valor de la tabla).
+   Sincronizar 3 veces más: sigue habiendo 1.
+4. **Con dos barberías, ninguna ve las comisiones de la otra.** A ve sus 2 (total
+   $1,250) y C solo la suya; C no ve ninguna referida ni comisión de A. Además, de
+   la barbería REFERIDA solo viajan al panel `name` y `city` (públicos, los mismos
+   de su `/b/<slug>`): se verificó que el DTO tiene exactamente
+   `city,earned,firstPaidAt,id,name,signedUpAt,status` — nada de correo, teléfono,
+   plan ni estado de su cobro.
+5. **Un plan Avanzado no entra, y el gate está en el servidor.** BÁSICO →
+   `FEATURE_LOCKED`; AVANZADO → `FEATURE_LOCKED`; PROFESIONAL al día → permitido;
+   PROFESIONAL impaga → `SUBSCRIPTION_INACTIVE`. El mensaje sale con el plan y el
+   precio LEÍDOS de la tabla: *"Programa de socios no está incluido en tu plan
+   Avanzado. Cambia al plan Profesional ($749/mes) para usarlo."*
+6. **Los montos no están hardcodeados.** Se cambió `fixedAmount` de 500 a 750 en
+   la tabla: la comisión NUEVA salió en 750 y la vieja siguió en 500 (el `basis`
+   congela cómo se calculó, así que cambiar la config nunca reescribe lo ya
+   devengado). Se cambió a `mode='pct'`, `percent=20`, `recurring=true`: la
+   comisión salió en **$149.80** = 20% de los $749 del plan Profesional leído de
+   `barber_plan_configs`, con `periodKey` `YYYY-MM`, y `maxMonths=1` cortó en la
+   primera. Grep de `$`/`MXN`/`%` en la UI → 0.
+7. `BARBER_GUARD_SHARED=prisma/schema.prisma,ORQUESTA.md node
+   scripts/barber-guard.cjs` → **exit 0**. Los 2 compartidos declarados; todo lo
+   demás PROPIO del vertical.
+8. **Cero "paciente", "doctor", "Dr.", "clínica", "consulta", "expediente"** en los
+   17 archivos de la ola (código, JSON y SQL). Se reescribieron 3 comentarios
+   internos donde "consulta"/"consultan" significaba *query* — falso positivo, pero
+   el grep queda mecánicamente en cero.
+
+▶ Verificado además, por HTTP real (`next start` contra el Postgres de Docker):
+  · Código válido → **302** a `/barber/registro` + `Set-Cookie dcb_aff` con
+    `Max-Age=7776000` (90 días), `HttpOnly`, `SameSite=Lax`, y `dcb_vid` sembrada.
+  · Código muerto, código deforme y `..%2f..%2fadmin` → 302 al registro, sin
+    atribuir y sin romperse. Nunca un 404.
+  · **Primer toque:** llegando con la cookie de A y tocando la liga de C, NO se
+    reescribe la cookie. A conserva la atribución.
+  · **Dedupe:** 3 visitas del mismo `dcb_vid` → 1 contada, 2 no. Otro navegador
+    desde la MISMA IP → sí cuenta (el caso CGNAT que motivó el diseño). UA de
+    `facebookexternalhit`/WhatsApp → no cuenta.
+▶ Y la pantalla, con `renderToStaticMarkup` (25 checks): pinta con datos, VACÍA,
+  con el blocker de SQL, con el programa pausado, en ES y en EN, y en modo
+  porcentaje+recurrente. Cero llaves i18n crudas en el HTML.
+
+═══════════════════════════════════════════════════════════════════════════
+▶ DOS DEFECTOS ENCONTRADOS POR LAS PRUEBAS (y arreglados aquí)
+═══════════════════════════════════════════════════════════════════════════
+(1) **Ruido de log en cada carga del panel.** La primera versión intentaba un
+`create` por referida y atrapaba el `P2002`. Era idempotente, pero Prisma logea el
+error ANTES del catch: como la sincronización corre en CADA visita al panel, cada
+barbería con referidas pagando ensuciaba el log de producción a cada rato. Ahora
+es un `createMany({ skipDuplicates: true })` (ON CONFLICT DO NOTHING) — misma
+garantía, cero ruido, y una sola ida a la BD.
+
+(2) **Doble pago al cambiar la modalidad.** Si el programa estaba en RECURRENTE y
+Rafael lo pasaba a PAGO ÚNICO, cada referida que ya llevaba filas `YYYY-MM`
+recibía ADEMÁS una fila `signup` — pagándole dos veces por lo mismo. El unique no
+lo cubría (son periodKeys distintos). Ahora "pago único" significa **una comisión
+por referida y punto**: si ya tiene cualquiera, no se genera otra. Y el tope de
+meses del recurrente cuenta TODAS sus filas, incluida una `signup` heredada.
+
+═══════════════════════════════════════════════════════════════════════════
+▶ PENDIENTE PARA OTRA OLA (fuera de mi allowlist — NO lo toqué)
+═══════════════════════════════════════════════════════════════════════════
+(a) **EL ITEM DEL MENÚ NO EXISTE**: hoy a `/barber/afiliados` solo se llega
+escribiendo la URL. Falta UNA línea en `BARBER_NAV_ITEMS`
+(`src/lib/barber/types.ts`) y su etiqueta en `shell.{es,en}.json`:
+```
+{ key: "afiliados", href: "/barber/afiliados", icon: "handshake",
+  section: "crecimiento", permission: "billing.manage", featureKey: "affiliates" },
+```
+El layout ya lo gatea solo (features del plan + permiso del rol). Es el mismo
+motivo por el que la ola de suscripción dejó su cableado de shell anotado aquí.
+
+(b) **Permiso propio.** Se reusa `billing.manage`. Si el programa merece
+`affiliates.view` / `affiliates.manage`, van en `src/lib/barber/permissions.ts` —
+y OJO: un permiso nuevo NO le llega a quien tenga `permissionsOverride` (el
+override REEMPLAZA los defaults).
+
+(c) **Admin del programa.** No hay pantalla para editar
+`barber_affiliate_config` ni para marcar comisiones pagadas: hoy es SQL (las dos
+consultas están al final del archivo). El contrato pedía explícitamente no
+construir admin.
+
+(d) **Aviso al socio.** Nadie le avisa cuando una referida empieza a pagar ni
+cuando se le deposita. El vertical ya tiene WhatsApp; sería la ola natural.
+
+(e) **Cron.** La sincronización corre cuando el socio abre su panel. Un socio que
+no entra en dos meses no genera sus comisiones hasta que entre — no se PIERDE
+nada (se derivan del estado real y el `periodKey` es de calendario), pero con
+`recurring=true` los meses en los que no abrió el panel NO se generan
+retroactivamente. Si se activa el recurrente, esto quiere un cron.
+
+▶ AVISOS
+(1) La ventana para escribir un código a mano (`POST .../claim`) son los primeros
+90 días de vida de la barbería — el MISMO número que la cookie, para no tener dos
+criterios. Sin ventana, una barbería de hace tres años podría regalarle una
+comisión a un amigo. (2) El `periodKey` mensual es de calendario en **UTC**. (3)
+`getBarberAffiliateSummary` sincroniza en cada carga; con muchas referidas son 4
+consultas + 1 `createMany`, todas por índice. (4) La imagen para compartir se
+genera en el navegador con `qrcode` (ya en package.json): sin endpoint nuevo, sin
+assets, y funciona igual en localhost, preview y producción porque el origen lo
+pone `window.location.origin`. (5) La cuenta de socio se crea SOLA la primera vez
+que la barbería entra a la pantalla: no hay "darse de alta".
