@@ -138,7 +138,7 @@ export function BarberRegistroForm() {
             ¡Tu barbería está lista!
           </h1>
           <p style={{ fontSize: 14, color: "var(--ld-fg-muted)", margin: 0, lineHeight: 1.5 }}>
-            Inicia sesión con tu correo y contraseña para entrar a tu panel.
+            Inicia sesión y elige tu plan: tu panel se abre en cuanto se confirma el pago.
           </p>
         </div>
         <Link
@@ -179,7 +179,7 @@ export function BarberRegistroForm() {
           Registra tu barbería
         </h1>
         <p style={{ fontSize: 13.5, color: "var(--ld-fg-muted)", margin: 0, lineHeight: 1.5 }}>
-          Crea tu cuenta en un minuto. Sin tarjeta para empezar.
+          Crea tu cuenta en un minuto. Después eliges tu plan y lo activas con tarjeta.
         </p>
       </div>
 
