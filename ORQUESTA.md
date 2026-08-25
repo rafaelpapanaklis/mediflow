@@ -13171,3 +13171,172 @@ la derivación de membresía y lealtad (`toClientLookup` no está exportada), y
 eso sí era reimplementar reglas de negocio.
 
 ⚪ **SQL de esta ola: ninguno.** Ni una línea. Nada que correr en Supabase.
+
+
+## [Barber Stripe Key] — La llave de Stripe de la suscripción cae a STRIPE_SECRET_KEY, como ya hacía payments.ts: el cobro se activa sin duplicar una variable que nadie puede leer ✅ (2026-08-24)
+═══════════════════════════════════════════════════════════════════════════
+BUILD `npm run build` EXIT 0 (output COMPLETO, 3108 líneas, sin pipes;
+incluye `prisma generate` ✔, "Checking validity of types" ✔ y 375/375 páginas
+estáticas) · GUARDIA BARBER exit 0 (2 propios + 1 compartido declarado:
+ORQUESTA.md) · **el panel dental no tiene ni un byte de cambio** (`git diff
+--stat origin/main..HEAD` = 2 archivos, los dos dentro de la allowlist).
+
+Rama `fix/barber-stripe-key` (worktree con junction, `npx prisma generate`
+exit 0), commit `d458471c`, empujada a `main` directo.
+
+───────────────────────────────────────────────────────────────────────────
+1. QUÉ ESTABA MAL
+───────────────────────────────────────────────────────────────────────────
+Dos módulos del vertical hablan con la misma cuenta de Stripe y resolvían la
+llave con reglas distintas:
+
+    payments.ts  (membresías/anticipos, T4)
+        BARBER_PAYMENTS_STRIPE_SECRET_KEY || BARBER_STRIPE_SECRET_KEY || STRIPE_SECRET_KEY
+
+    billing.ts   (suscripción de la barbería a DaleControl, Planes)
+        BARBER_STRIPE_SECRET_KEY   — y la cabecera decía, literal,
+        "No se importa src/lib/stripe.ts ni se lee STRIPE_SECRET_KEY".
+
+Consecuencia práctica: `isBarberStripeConfigured()` de billing.ts devolvía
+`false` en producción aunque `STRIPE_SECRET_KEY` (la del dental, misma
+cuenta LIVE) ya estuviera en Vercel. /barber/suscripcion decía "cobro en
+línea no conectado" y la única salida era crear `BARBER_STRIPE_SECRET_KEY`
+con el MISMO valor que la existente — que es Sensitive y ya no se puede
+leer. El reporte de [Barber Planes] lo dejó así a propósito ("SIN fallback a
+STRIPE_SECRET_KEY"), pero esa decisión se volvió un bloqueo, no un aislamiento:
+el aislamiento del dental nunca dependió del NOMBRE de la variable.
+
+───────────────────────────────────────────────────────────────────────────
+2. QUÉ CAMBIÓ (2 archivos, +32 −6)
+───────────────────────────────────────────────────────────────────────────
+**`src/lib/barber/billing.ts`**
+  · Nueva `resolveBarberStripeKey()` — PRIVADA, no se exporta: la llave no
+    sale del módulo. Regla: `BARBER_STRIPE_SECRET_KEY || STRIPE_SECRET_KEY`.
+    La propia sigue ganando si existe (por si Barber algún día vive en su
+    propia cuenta de Stripe: se crea la env y nada más cambia).
+  · `isBarberStripeConfigured()` y `getBarberStripe()` la usan. Es lo ÚNICO
+    que cambia de comportamiento. El singleton `_stripe`, la versión de API
+    pineada (2024-06-20), timeout y reintentos quedan igual.
+  · Cabecera reescrita para reflejar la cascada real y por qué no rompe el
+    aislamiento (punto 3).
+  · Todo lo que SÍ aísla del dental está intacto y verificado por grep:
+    cliente propio (no se importa `src/lib/stripe.ts`), `metadata.dc_vertical
+    = "barber"` en producto, precio, cliente y suscripción, `dc_kind =
+    "barber-subscription"` en las sesiones, `lookup_key dcbarber_<plan>_
+    <intervalo>_<centavos>`, `isBarberPriceUsable` que DESCARTA cualquier
+    precio sin la marca aunque coincida el importe, y configuración PROPIA
+    del portal. Cero líneas tocadas en nada de eso.
+
+**`src/app/api/barber/stripe/webhook/route.ts`** — solo comentario de
+cabecera: deja escrito que la LLAVE cascadea y el SECRETO no, y por qué.
+Ni una línea de código.
+
+**`src/lib/barber/payments.ts`** — NO se tocó (está en la allowlist, pero ya
+hacía lo correcto; su cabecera ya documenta la cascada).
+
+───────────────────────────────────────────────────────────────────────────
+3. EL SECRETO DEL WEBHOOK: NO cascadea, y no había nada que quitar
+───────────────────────────────────────────────────────────────────────────
+Revisé los dos webhooks del vertical buscando un fallback al `whsec_` del
+dental (`STRIPE_WEBHOOK_SECRET`, el de /api/webhooks/stripe):
+
+    /api/barber/stripe/webhook    → process.env.BARBER_STRIPE_WEBHOOK_SECRET          (solo esa)
+    /api/barber/payments/webhook  → process.env.BARBER_PAYMENTS_STRIPE_WEBHOOK_SECRET (solo esa)
+
+**No existía ningún fallback, así que no quité nada — y tampoco lo añadí.**
+Un secreto de webhook es POR ENDPOINT: Stripe firma cada URL con su propio
+`whsec_`, y el del dental jamás validaría una firma dirigida a
+/api/barber/stripe/webhook (`constructEvent` tiraría "Firma inválida" → 400
+en todos los eventos). Caer al del dental no "activaría" nada: solo
+convertiría un 503 honesto ("sin configurar") en un 400 engañoso en cada
+evento. Sin la variable el endpoint responde 503 y Stripe reintenta.
+
+───────────────────────────────────────────────────────────────────────────
+4. VARIABLES EN VERCEL — qué sigue siendo obligatorio y qué ya no
+───────────────────────────────────────────────────────────────────────────
+▶ OBLIGATORIAS (Sensitive; sin ellas el webhook correspondiente responde 503):
+   · `BARBER_STRIPE_WEBHOOK_SECRET`          → whsec_ del endpoint
+     https://www.dalecontrol.com/api/barber/stripe/webhook (los 9 tipos del
+     reporte de Planes: checkout.session.* + customer.subscription.*).
+   · `BARBER_PAYMENTS_STRIPE_WEBHOOK_SECRET` → whsec_ del endpoint
+     https://www.dalecontrol.com/api/barber/payments/webhook (payment_intent.*,
+     reporte de Membresías).
+   Son DOS endpoints distintos en Stripe → dos whsec_ distintos → dos envs.
+   Ninguna cascadea a nada.
+
+▶ YA NO HACE FALTA (pasa de obligatoria a opcional):
+   · `BARBER_STRIPE_SECRET_KEY` → solo si Barber cobra desde OTRA cuenta de
+     Stripe. Mientras sea la misma cuenta LIVE del dental, `STRIPE_SECRET_KEY`
+     (que ya existe) basta para billing.ts Y para payments.ts.
+   · `BARBER_PAYMENTS_STRIPE_SECRET_KEY` → igual, ya era opcional.
+
+▶ NO CAMBIA: `STRIPE_SECRET_KEY` y `STRIPE_WEBHOOK_SECRET` del dental no se
+   tocan ni se leen de forma distinta a como ya las leía payments.ts.
+
+───────────────────────────────────────────────────────────────────────────
+5. QUÉ PASA EN PRODUCCIÓN AL DESPLEGAR ESTO (sin tocar nada en Vercel)
+───────────────────────────────────────────────────────────────────────────
+a) `isBarberStripeConfigured()` pasa a `true` con la env que ya existe →
+   /barber/suscripcion deja de decir "cobro en línea no conectado" y muestra
+   el checkout. El primer checkout auto-provisiona en la cuenta compartida el
+   producto "DaleControl Barber — <plan>" y su precio (marcados
+   `dc_vertical=barber`, lookup_key `dcbarber_*`) y persiste el id en
+   `barber_plan_configs`. Es exactamente lo que Planes describía para el caso
+   "misma cuenta LIVE"; solo que ahora ocurre sin duplicar la llave.
+b) El webhook de la suscripción sigue en 503 hasta que exista
+   `BARBER_STRIPE_WEBHOOK_SECRET` — o sea, el checkout cobra pero el estado
+   de la barbería NO se actualiza hasta poner el whsec_. Nada nuevo: era así.
+c) Misma cuenta ⇒ el webhook del DENTAL (/api/webhooks/stripe) también
+   recibe los `customer.subscription.*` de las barberías. Verifiqué en
+   solo-lectura que los IGNORA: resuelve la clínica por `metadata.clinicId`
+   (los objetos barber no lo llevan; llevan `barbershopId`) y, si no está,
+   por `Clinic.stripeCustomerId` (`resolveClinicIdByCustomer`) — un customer
+   creado por barber no es de ninguna clínica → `clinicId = null` → `break`.
+   Las sesiones de checkout barber tampoco traen `metadata.kind` ("platform-
+   subscription"), así que el `case checkout.session.completed` del dental
+   sale por `break`. Y al revés, el webhook barber solo procesa lo que lleva
+   `dc_vertical`/`dc_kind` propios. Esto NO lo introduce este cambio (ya era
+   así con la misma cuenta); lo dejo escrito porque ahora la misma cuenta es
+   el camino por defecto.
+
+───────────────────────────────────────────────────────────────────────────
+6. VERIFICACIÓN
+───────────────────────────────────────────────────────────────────────────
+· `npm run build` en el worktree, literal y sin pipes, EXIT 0: 3108
+  líneas, `prisma generate` ✔, "Compiled successfully" ✔, "Checking validity
+  of types" ✔, 375/375 páginas. Los `prisma:error … DATABASE_URL` del log son
+  el ruido de siempre sin `.env` (ver reportes anteriores), no fallos.
+· `BARBER_GUARD_SHARED=ORQUESTA.md node scripts/barber-guard.cjs` → exit 0.
+· Dental intacto: `git diff --name-only origin/main..HEAD` lista SOLO
+  `src/lib/barber/billing.ts` y `src/app/api/barber/stripe/webhook/route.ts`
+  (+ este reporte). `grep -rn "process.env.STRIPE_SECRET_KEY" src/lib/barber`
+  → billing.ts y payments.ts, ambos con la MISMA cascada.
+· Cero secretos en el repo: grep `sk_live|whsec_|sk_test` sobre los archivos
+  tocados → solo el texto "whsec_" en comentarios, ningún valor.
+· `billing-gating.test.ts` (las 22 pruebas de Planes, que importan de
+  billing.ts): **22/22 en verde** contra el árbol cambiado. OJO: en main esa
+  prueba es imposible de correr tal cual — su cabecera pide un hook
+  `scripts/barber-test-hook.mjs` que NO está en el repo (vivía en un
+  scratchpad ajeno). La corrí con un stub de `server-only` propio, fuera del
+  repo: `node --import tsx --import file:///<scratch>/stub-server-only.mjs
+  --test src/lib/barber/__tests__/billing-gating.test.ts`.
+· Refutación del propio arreglo, offline, con un doble de `stripe` que
+  registra la llave que recibe el constructor (5 escenarios, 5 procesos):
+      sin ninguna                    → configured=false, cliente null
+      solo STRIPE_SECRET_KEY         → usa la del dental   ← el caso de hoy en Vercel
+      solo BARBER_STRIPE_SECRET_KEY  → usa la propia
+      ambas                          → usa la PROPIA (gana)
+      BARBER vacía + STRIPE          → usa la del dental (una vacía no bloquea)
+  apiVersion 2024-06-20 en los cuatro clientes: es el mismo cliente de antes.
+
+───────────────────────────────────────────────────────────────────────────
+7. LO QUE QUEDA (nada de esto lo bloquea este cambio)
+───────────────────────────────────────────────────────────────────────────
+⚪ Rafael: crear `BARBER_STRIPE_WEBHOOK_SECRET` (y, si aún no está,
+   `BARBER_PAYMENTS_STRIPE_WEBHOOK_SECRET`) con los whsec_ de sus endpoints.
+   `BARBER_STRIPE_SECRET_KEY` ya NO hace falta crearla.
+⚪ QA en LIVE del checkout / cambio de plan / portal, pendiente desde Planes.
+⚪ El hueco documentado en Planes sigue: el sidebar no se restringe cuando la
+   barbería está impaga (layout fuera de la allowlist); el router de /barber
+   sí redirige a /barber/suscripcion.
+⚪ SQL de esta ola: ninguno. Nada que correr en Supabase.
