@@ -347,6 +347,14 @@ export const BARBER_NAV_ITEMS: BarberNavItemDef[] = [
   // WhatsApp y los recordatorios de su plan jamás salían. La bandeja de
   // entrada sigue gateada por `whatsappInbox` DENTRO de la pantalla.
   { key: "whatsapp", href: "/barber/whatsapp", icon: "message-circle", section: "crecimiento", permission: "whatsapp.view", featureKey: "whatsappReminders" },
+  // Campañas SÍ va con `whatsappInbox` (Avanzado y Profesional): a
+  // diferencia de la pantalla de WhatsApp, aquí no se conecta nada — solo
+  // se manda marketing de pago, que es justo lo que el Básico no incluye.
+  // Icono "message-circle" y no "megaphone" porque el mapa ICONS del
+  // sidebar no tiene megáfono y un icono desconocido cae a Scissors (que
+  // ya significa "servicios"). Añadir Megaphone a ese mapa es UNA línea en
+  // barber-sidebar.tsx, que esta ola tiene prohibido tocar.
+  { key: "campanas", href: "/barber/campanas", icon: "message-circle", section: "crecimiento", permission: "whatsapp.view", featureKey: "whatsappInbox" },
   { key: "suscripcion", href: "/barber/suscripcion", icon: "credit-card", section: "cuenta", permission: "billing.manage", featureKey: null },
   { key: "configuracion", href: "/barber/configuracion", icon: "settings", section: "cuenta", permission: "settings.edit", featureKey: null },
 ];

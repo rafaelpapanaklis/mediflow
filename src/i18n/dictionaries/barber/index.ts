@@ -37,6 +37,8 @@ import membresiasEs from "./membresias.es.json"; // membresías + anticipos
 import membresiasEn from "./membresias.en.json";
 import whatsappEs from "./whatsapp.es.json"; // conexión + inbox + plantillas
 import whatsappEn from "./whatsapp.en.json";
+import campanasEs from "./campanas.es.json"; // campanas de retencion
+import campanasEn from "./campanas.en.json";
 
 const ES: Dictionary = {
   barber: {
@@ -50,6 +52,7 @@ const ES: Dictionary = {
     web: webEs as unknown as Dictionary,
     admin: adminEs as unknown as Dictionary,
     whatsapp: whatsappEs as unknown as Dictionary,
+    campanas: campanasEs as unknown as Dictionary,
   },
 };
 
@@ -65,6 +68,7 @@ const EN: Dictionary = {
     web: webEn as unknown as Dictionary,
     admin: adminEn as unknown as Dictionary,
     whatsapp: whatsappEn as unknown as Dictionary,
+    campanas: campanasEn as unknown as Dictionary,
   },
 };
 

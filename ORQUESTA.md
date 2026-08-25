@@ -13340,3 +13340,214 @@ c) Misma cuenta ⇒ el webhook del DENTAL (/api/webhooks/stripe) también
    barbería está impaga (layout fuera de la allowlist); el router de /barber
    sí redirige a /barber/suscripcion.
 ⚪ SQL de esta ola: ninguno. Nada que correr en Supabase.
+
+═══════════════════════════════════════════════════════════════════════════
+## [Barber Campañas] — Las listas de retención con el costo SIEMPRE a la vista: seis audiencias ya calculadas, confirmación con el gasto en grande, bitácora anti-repetidos y bajas que se respetan para siempre ✅ (2026-08-24)
+═══════════════════════════════════════════════════════════════════════════
+BUILD `npm run build` EXIT 0 (output COMPLETO, 3116 líneas, sin pipes;
+incluye `prisma generate` ✔, "Checking validity of types" ✔ y 376/376
+páginas). PRUEBAS 16/16 contra Postgres real. GUARDIA BARBER exit 0 (23
+archivos, los 23 PROPIOS del vertical, 0 compartidos, 0 prohibidos) · **el
+panel dental no tiene ni un byte de cambio**.
+
+Rama `feat/barber-campanas` (worktree con junction de `node_modules`, `npx
+prisma generate` exit 0), empujada a `main` directo.
+
+Por qué esta pantalla: en 2025 las visitas de clientes NUEVOS cayeron 17 %
+mientras las membresías subieron 20 %. El negocio ya no está en conseguir
+gente, está en que vuelva la que ya te conoce.
+
+───────────────────────────────────────────────────────────────────────────
+1. QUÉ SE CONSTRUYÓ
+───────────────────────────────────────────────────────────────────────────
+`/barber/campanas`, cuatro pestañas:
+
+· **Listas** — seis audiencias YA calculadas, cada una con el motivo por
+  cliente: no han vuelto (ordenados **por lo que gastaban**, el que más
+  valía primero), cumpleaños del mes, membresías por vencer, membresías
+  vencidas, ya ganaron su premio de fidelidad y no lo han canjeado, y
+  faltaron 2+ veces. Selección, texto final **con el nombre real de un
+  cliente de la lista** (no un `{{1}}`), y envío.
+· **Plantillas** — un texto por campaña, editable, con fichas `{nombre}`
+  `{servicio}` `{barbero}` `{dias}` `{premio}` `{vence}` `{barberia}` que se
+  sustituyen POR CLIENTE al mandar. Más los días de descanso entre campañas.
+· **Resultados** — qué se mandó, cuándo, cuánto costó y **cuántos
+  volvieron** después. Sin esa última columna el dueño no sabe si sirvió, y
+  esa es la única razón para volver a usarla.
+· **Bajas** — quién pidió que no le escriban, y el botón para revertirlo.
+
+Archivos: `src/lib/barber/campaigns.ts` (motor), 5 rutas bajo
+`/api/barber/campaigns/`, la página, 6 componentes + su `.module.css`,
+`campanas.{es,en}.json`, `sql/barber_campanas.sql`.
+
+───────────────────────────────────────────────────────────────────────────
+2. 🔴 EL COSTO, QUE ERA LO INNEGOCIABLE
+───────────────────────────────────────────────────────────────────────────
+Las dos plantillas de campaña son categoría **MARKETING**: **$0.0324 USD**
+por mensaje en México contra $0.008 de una de utilidad — **4.05x**. Lo cobra
+Meta a la cuenta de la barbería, y la pantalla lo dice con esas palabras.
+
+· La **barra de costo** se pinta apenas hay alguien seleccionado, con el
+  número de mensajes y el total en grande. No se colapsa ni se esconde.
+· El **modal de confirmación** lo repite en tamaño enorme y exige marcar
+  "entiendo que es marketing y mis clientes lo aceptaron" — sin ese check el
+  botón está deshabilitado. Nunca sale marketing solo.
+· El costo se cotiza sobre **lo que de verdad va a salir** (seleccionados
+  recortados al tope de 60 por tanda), no sobre la lista entera: enseñar
+  $16 cuando solo pueden salir 60 mensajes sería mentir.
+
+**Con 50 clientes seleccionados la pantalla muestra: 50 mensajes · $1.62
+USD** ($0.0324 × 50). Verificado por prueba automatizada, no a ojo.
+
+Además, **candado de servidor**: el POST manda `confirmCost` con el número
+que la barbería VIO; si no coincide con el que recalcula el servidor
+responde 409 `COST_CHANGED` y **no manda nada**. Si la lista creció entre el
+render y el clic, nadie confirma un gasto distinto del que le enseñaron.
+
+Cupo del plan: se avisa ANTES si la tanda no cabe en lo que queda, y el
+emisor de T7 corta mensaje por mensaje si se acaba.
+
+───────────────────────────────────────────────────────────────────────────
+3. DÓNDE VIVE EL ESTADO (schema Prisma: CERO cambios)
+───────────────────────────────────────────────────────────────────────────
+· **Bajas** (`__optout`) y **bitácora anti-repetidos** (`__campaigns`) →
+  llaves RESERVADAS de `BarberClient.preferences`, escritas con
+  `withReservedPreference()` igual que ya viven ahí la bitácora de lealtad y
+  el bloqueo. **No dependen de ningún SQL**: una baja tiene que funcionar el
+  día uno. Probado que escribir la baja NO borra `__loyalty` ni las
+  preferencias normales.
+· **Plantillas y días de descanso** → dos columnas sueltas de `barber_shops`
+  (`campaignTemplates` JSONB, `campaignCooldownDays`) leídas con `$queryRaw`,
+  mismo patrón que la config de T4. Sin el SQL aplicado se atrapa el 42703 y
+  se cae a los textos por defecto: **la pantalla funciona y sí se pueden
+  mandar campañas**, solo que no se guardan textos propios (banner honesto
+  que nombra el archivo).
+· **Recibo de lo enviado** → las filas REALES de `BarberMessage` que crea el
+  emisor. No hay contador paralelo que pueda mentir.
+
+───────────────────────────────────────────────────────────────────────────
+4. UNA TRAMPA QUE CASI ROMPE EL INBOX (y por qué no se usó `sys:`)
+───────────────────────────────────────────────────────────────────────────
+El plan obvio para la bitácora era escribir una fila de sistema en
+`BarberMessage` con `templateName = "sys:campaign:<audiencia>"`, siguiendo
+la convención que ya documenta `whatsapp-core.ts`.
+
+**Habría desarchivado hilos ajenos en silencio.** En `listBarberThreads`
+(whatsapp.ts:1750) la PRIMERA fila `sys:` que aparece —la más nueva— se
+toma como la última decisión de archivado del hilo, y `archived` se calcula
+como `templateName === BARBER_WA_ARCHIVE_MARK`. Una marca nuestra, al ser
+más nueva que el `sys:archive` de la barbería, habría evaluado a `false` y
+sacado del archivo hilos que alguien archivó a mano.
+
+Por eso la bitácora vive en `preferences` y **no se escribe ni una fila de
+sistema** en `BarberMessage`. `src/lib/barber/whatsapp.ts` quedó con CERO
+cambios: se CONSUME (`sendBarberCampaign`), no se edita.
+
+───────────────────────────────────────────────────────────────────────────
+5. GATING — la feature es `whatsappInbox`, y no es un atajo
+───────────────────────────────────────────────────────────────────────────
+El contrato pedía Avanzado y Profesional, "y si no hay una clara, dilo en
+vez de inventar una nueva". **Sí la hay**: `whatsappInbox` está en
+`BARBER_FEATURES`, y `AVANZADO_FEATURES`/`PROFESIONAL_FEATURES` la incluyen
+mientras `BASICO_FEATURES` no — exactamente el conjunto pedido.
+
+Inventar `campaigns` habría dejado a **todas** las barberías fuera hasta
+correr un UPDATE sobre `barber_plan_configs`: una llave que no está en el
+Json `features` se lee como `false`.
+
+El gate está en el servidor por partida doble y a propósito: la página
+decide qué se PINTA y `openCampaignsGate()` (sobre `openAgendaGate`) decide
+qué se EJECUTA. Un Básico que llame a la API a mano recibe 403 `PLAN_FEATURE`.
+Permisos: `whatsapp.view` para ver, `whatsapp.send` para mandar,
+`settings.edit` para editar textos, `clients.edit` para tocar una baja. El
+rol BARBER no tiene ninguno de los de WhatsApp.
+
+───────────────────────────────────────────────────────────────────────────
+6. VERIFICACIÓN
+───────────────────────────────────────────────────────────────────────────
+1. ✅ `npm run build` EXIT 0, output COMPLETO (3116 líneas), sin pipes.
+   376/376 páginas. Las 5 rutas y `/barber/campanas` (8.67 kB) en la tabla.
+   ⚠️ El PRIMER intento murió con **heap OOM** (exit 134) en "Checking
+   validity of types" con 25 procesos node de otras terminales vivos. NO era
+   el código: `npx tsc --noEmit` ya daba exit 0. Se repitió con
+   `NODE_OPTIONS=--max-old-space-size=8192` → exit 0.
+2. ✅ Costo visible antes de enviar. **Con 50 seleccionados: 50 mensajes ·
+   $1.62 USD.** Prueba: `el costo de 50 mensajes es el de MARKETING`.
+3. ✅ Un dado de baja no aparece en NINGUNA lista. La prueba recorre **las
+   seis audiencias** del catálogo y exige `eligible:false` +
+   `skipReason:"optOut"` en todas; luego revierte y vuelve a entrar.
+4. ✅ No se manda dos veces la misma campaña al mismo cliente: con el sello
+   de ayer queda `alreadySent`; pasado `repeatAfterDays` vuelve a entrar (es
+   una pausa, no un destierro). Y el descanso entre campañas DISTINTAS al
+   mismo teléfono también corta (`cooldown`).
+5. ✅ Dos barberías, ninguna ve clientes de la otra (A ve 3, B ve 1, sin
+   cruce en ninguna dirección).
+6. ✅ Básico fuera, gate en el servidor (sección 5 + prueba del plan).
+7. ✅ `BARBER_GUARD_SHARED=ORQUESTA.md node scripts/barber-guard.cjs` exit 0.
+8. ✅ Cero "paciente", "doctor", "Dr.", "clínica", "consulta", "expediente"
+   (grep -riE sobre los archivos de la ola = 0 hallazgos; se reescribieron 3
+   comentarios donde "consulta" significaba *query*).
+
+**PRUEBAS: 16/16 pass, 0 fail** contra Postgres real (postgres:16-alpine,
+puerto 54333, `prisma db push`). Contenedor creado y borrado en la sesión.
+
+    DATABASE_URL=postgresql://postgres:barber@localhost:54333/barber \
+    DIRECT_URL=$DATABASE_URL npx tsx --test \
+      src/lib/barber/__tests__/campanas.test.ts
+
+Sin `DATABASE_URL` las 8 puras corren igual y las 8 de integración se saltan.
+No se registró script en `package.json`: ese archivo es PROHIBIDO por la
+guardia (no está en los prefijos del vertical). El comando va en la cabecera
+del propio test.
+
+───────────────────────────────────────────────────────────────────────────
+7. DECISIONES QUE CONVIENE CONOCER
+───────────────────────────────────────────────────────────────────────────
+· **Una llamada al emisor POR CLIENTE**, no una por tanda. Cada mensaje
+  lleva su propio texto (las fichas `{servicio}`/`{barbero}` son personales)
+  y así se sabe exactamente QUIÉN falló, no solo cuántos. Son 2 queries
+  extra por cliente contra un round-trip a Meta de 200-500 ms: ruido.
+· **Los `clientIds` del body solo RESTRINGEN.** `sendBarberCampaignRun`
+  recalcula la lista de elegibles y cruza; un id de otra barbería, un dado
+  de baja o un repetido no entran aunque el navegador los mande.
+· **La bitácora se sella solo si el mensaje SALIÓ.** Un fallo no quema el
+  turno del cliente. Si el sellado falla, se loguea fuerte pero no se tumba
+  la tanda: el mensaje ya salió y el precio de perder la bitácora es un
+  repetido.
+· **No se reimplementaron las listas de T4**: inactivos y cumpleaños salen
+  de `listBarberOutreach()`. Lo único que se añade encima es el orden por
+  gasto (un `groupBy` sobre `BarberSale`), que la lista de T4 no daba.
+· "Volvió" = tuvo una visita DESPUÉS del mensaje. No es atribución fina (no
+  se puede saber si volvió POR el mensaje) y la pantalla lo dice con esas
+  palabras, sin hablar de "conversión".
+· CSS con `@container` (nunca `@media`), móvil primero, y el
+  `container-type` va en los bloques de contenido y NO en `.page`: si
+  estuviera en `.page` atraparía el `position:fixed` del modal.
+
+───────────────────────────────────────────────────────────────────────────
+8. LO QUE QUEDA
+───────────────────────────────────────────────────────────────────────────
+🔴 **Rafael: correr `sql/barber_campanas.sql`** en el SQL Editor de Supabase
+   (idempotente). Sin él las campañas funcionan y se mandan, pero los textos
+   propios no se guardan. Las BAJAS no dependen de este archivo.
+⚪ El menú usa el icono `message-circle` (el mismo que WhatsApp) porque el
+   mapa `ICONS` de `barber-sidebar.tsx` no tiene megáfono y un icono
+   desconocido cae a `Scissors`, que ya significa "servicios". Añadir
+   `Megaphone` a ese mapa es **una línea**, en un archivo que esta ola tenía
+   prohibido tocar.
+⚪ Se tocaron 3 archivos fuera de la allowlist estricta pero DENTRO del
+   vertical (la guardia los da por propios): `src/lib/barber/types.ts` (la
+   línea del menú), `shell.{es,en}.json` (su etiqueta). Sin eso la pantalla
+   no era alcanzable. `barber-sidebar.tsx` NO se tocó.
+⚪ Las dos plantillas de marketing (`dc_barber_cumpleanos`,
+   `dc_barber_te_extranamos`) son `optional: true`: cada barbería las tiene
+   que dar de alta en su WABA desde la pantalla de WhatsApp. Mientras no
+   estén APPROVED, la pantalla lo dice y bloquea el botón — antes de armar
+   la tanda, no después.
+⚪ La baja por "responde BAJA" tiene su función lista
+   (`optOutBarberClientByPhone`) pero **nadie la llama todavía**: cablearla
+   al webhook entrante es del dueño de ese archivo (compartido, fuera de
+   esta ola). Hoy la baja se marca a mano desde la pestaña Bajas.
+⚪ NADIE ha mandado todavía un WhatsApp real desde el producto, así que el
+   camino Meta→entrega sigue sin probarse en vivo. Lo que sí está probado es
+   todo lo que decide A QUIÉN y CUÁNTO CUESTA.

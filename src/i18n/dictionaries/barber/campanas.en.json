@@ -1,0 +1,162 @@
+{
+  "title": "Campaigns",
+  "subtitle": "Bringing back someone who already knows you costs less than finding someone new. Here are the usual lists, already worked out, and what it would cost to message them.",
+  "tabs": {
+    "lists": "Lists",
+    "templates": "Templates",
+    "results": "Results",
+    "optouts": "Opt-outs"
+  },
+  "audiences": {
+    "inactive": {
+      "name": "Haven't come back",
+      "hint": "No visit in {days} days. Biggest spenders first."
+    },
+    "birthday": {
+      "name": "Birthdays this month",
+      "hint": "Their birthday is this month."
+    },
+    "membershipExpiring": {
+      "name": "Memberships ending soon",
+      "hint": "They end within {days} days."
+    },
+    "membershipExpired": {
+      "name": "Memberships ended",
+      "hint": "Already ended and not renewed."
+    },
+    "loyaltyReward": {
+      "name": "Earned their reward",
+      "hint": "They hit the visit count and haven't claimed it."
+    },
+    "noShow": {
+      "name": "Missed several times",
+      "hint": "{count} no-shows or more. Decide if you want a deposit."
+    }
+  },
+  "list": {
+    "empty": "Nobody is on this list right now. That's good news.",
+    "loading": "Working out the list…",
+    "eligible": "{count} you can message",
+    "selected": "{count} selected",
+    "selectAll": "Select all",
+    "clear": "Clear selection",
+    "batchNote": "Sent in batches of {max}. Pick who goes in this one.",
+    "trimmed": "We picked the first {max}: that's the most per batch.",
+    "columns": {
+      "client": "Client",
+      "why": "Why they're here",
+      "spent": "Spent so far",
+      "state": "Status"
+    },
+    "why": {
+      "inactive": "{days} days since the last visit",
+      "inactiveNever": "Never been in",
+      "birthday": "Birthday on the {day}",
+      "membershipExpiring": "{name} ends on {date}",
+      "membershipExpired": "{name} ended on {date}",
+      "loyaltyReward": "{count} visits saved up",
+      "noShow": "{count} no-shows",
+      "visits": "{count} visits"
+    },
+    "skip": {
+      "optOut": "Asked not to be messaged",
+      "blocked": "Blocked",
+      "noPhone": "No valid phone",
+      "alreadySent": "Already got this campaign",
+      "cooldown": "Got another campaign recently",
+      "summary": "{count} left out",
+      "detail": "Left out: {parts}"
+    }
+  },
+  "cost": {
+    "heading": "What this will cost",
+    "messages": "{count} messages",
+    "oneMessage": "1 message",
+    "total": "{amount} USD",
+    "unit": "{amount} USD per message",
+    "marketing": "Marketing category: about 4x the price of a reminder, and it needs the client's consent.",
+    "whoPays": "Meta charges this to your WhatsApp account, not us.",
+    "none": "Pick someone to see the cost."
+  },
+  "quota": {
+    "label": "Messages in your plan",
+    "used": "{used} of {limit} this period",
+    "unlimited": "Unlimited on your plan",
+    "remaining": "{count} left",
+    "near": "You're at {pct}% of your message allowance.",
+    "exhausted": "You've used your whole message allowance.",
+    "over": "This batch ({count}) doesn't fit in what's left ({remaining}). We'll send what fits."
+  },
+  "promo": {
+    "label": "Your offer",
+    "help": "This is the only part you write: the greeting and the shop name are already in the approved template.",
+    "tokens": "Tags you can use:",
+    "tokenHelp": "They're swapped for each client's own details. If a client doesn't have one, the tag just disappears.",
+    "preview": "This is what {name} gets",
+    "previewNobody": "This is how the message reads",
+    "placeholder": "Write the offer you want to bring them back with."
+  },
+  "send": {
+    "cta": "Review and send",
+    "confirmTitle": "Confirm the send",
+    "confirmLead": "You're about to message {count} clients. This costs your WhatsApp account:",
+    "confirmCheck": "I understand this is a marketing message and my clients opted in.",
+    "confirmCta": "Yes, send {count} messages",
+    "cancel": "Cancel",
+    "sending": "Sending…",
+    "done": "{sent} messages went out.",
+    "doneWithFailed": "{sent} messages went out. {failed} couldn't be sent.",
+    "doneNone": "No messages went out.",
+    "costChanged": "The list changed since you saw the cost. Check it again before sending.",
+    "quotaStopped": "Sending stopped: your plan's message allowance ran out.",
+    "needsTemplate": "Meta still has to approve the {name} template. Turn it on in the WhatsApp screen before sending campaigns.",
+    "templatePending": "The {name} template is under review by Meta. You can send as soon as it's approved.",
+    "noPermission": "You don't have permission to send WhatsApp messages."
+  },
+  "templates": {
+    "title": "Your wording",
+    "lead": "One text per campaign. It's saved to your shop and used every time you send that list.",
+    "restore": "Back to the suggested text",
+    "save": "Save wording",
+    "saved": "Done, your wording is saved.",
+    "cooldown": "Rest days between campaigns",
+    "cooldownHelp": "Nobody gets two campaigns back to back before that many days, even if they show up on several lists.",
+    "repeatAfter": "Not repeated before {days} days",
+    "approved": "Template approved by Meta",
+    "sqlPending": "Can't save yet: sql/barber_campanas.sql hasn't been applied. Meanwhile the suggested wording is used and you can still send campaigns."
+  },
+  "results": {
+    "title": "What happened with what you sent",
+    "lead": "Last {days} days. The column that matters is the last one: how many came back after getting your message.",
+    "empty": "You haven't sent any campaigns yet.",
+    "columns": {
+      "day": "Day",
+      "campaign": "Campaign",
+      "sent": "Sent",
+      "failed": "Failed",
+      "cost": "Cost",
+      "returned": "Came back"
+    },
+    "totals": "Total",
+    "returnRate": "{pct}% came back",
+    "returnedHelp": "Came back = had a visit after getting the message."
+  },
+  "optouts": {
+    "title": "Opt-outs",
+    "lead": "Anyone who asked not to be messaged stays off every send list. Always. You can undo it here if it was a mistake.",
+    "empty": "Nobody has opted out.",
+    "since": "Since {date}",
+    "bySelf": "The client asked",
+    "byStaff": "The shop marked it",
+    "restore": "Include again",
+    "restored": "{name} is back in campaigns.",
+    "markOut": "Opt out",
+    "marked": "{name} won't get campaigns anymore."
+  },
+  "errors": {
+    "generic": "Something went wrong. Try again.",
+    "noPlan": "Campaigns are on the Advanced and Professional plans.",
+    "noPermission": "You don't have permission to see this screen.",
+    "noWhatsapp": "Connect your WhatsApp before sending campaigns."
+  }
+}

@@ -17,6 +17,7 @@
     "productos": "Products",
     "mi-web": "My website",
     "whatsapp": "WhatsApp",
+    "campanas": "Campaigns",
     "suscripcion": "Subscription",
     "configuracion": "Settings"
   },
@@ -49,6 +50,7 @@
     "productos": "Simple inventory for waxes, shampoos and everything you sell at the counter.",
     "mi-web": "Your public page with online booking, editable without design skills.",
     "whatsapp": "WhatsApp reminders and conversations with your clients.",
+    "campanas": "Bring back the ones who stopped coming, wish happy birthdays and flag memberships about to end.",
     "suscripcion": "Your DaleControl Barber plan: what it includes and how to pay for it.",
     "configuracion": "Your barbershop data: hours, address, logo and team access."
   },

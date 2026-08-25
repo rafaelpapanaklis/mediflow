@@ -1,0 +1,801 @@
+/* ═══════════════════════════════════════════════════════════════════════
+   /barber/campanas — listas de retención, costo, plantillas y resultados.
+
+   Vive dentro de .barber-shell: hereda el tema caramelo por variables y
+   aquí NO se escribe un solo color en duro (salvo los tres semánticos de
+   arriba, que se declaran como tokens propios con su versión oscura al
+   final del archivo).
+
+   Responsive con @container (regla del repo), NUNCA @media: el ancho útil
+   de esta pantalla depende del sidebar, no del viewport.
+
+   OJO container-type: va SOLO en los contenedores de contenido (.lists,
+   .tableWrap). Un elemento NO puede resolver su propio @container, y un
+   container-type sobre el envoltorio de la página convertiría el
+   position:fixed del modal de confirmación en position:absolute respecto a
+   él — el modal quedaría atrapado dentro de la lista.
+
+   MÓVIL PRIMERO: la base es la columna angosta del celular; las
+   @container (min-width) van AÑADIENDO a partir de ahí.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+.page {
+  --camp-ok: #2e7d32;
+  --camp-warn: #b45309;
+  --camp-bad: #b02a1c;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  max-width: 1180px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+.header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.title {
+  margin: 0;
+  font-size: clamp(19px, 2.2vw, 23px);
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--text-1);
+}
+
+.subtitle {
+  margin: 4px 0 0;
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: var(--text-2);
+  max-width: 62ch;
+}
+
+.bannerLink {
+  color: var(--brand);
+  font-weight: 600;
+  text-decoration: underline;
+  font-size: 13px;
+}
+
+/* ── Pestañas ───────────────────────────────────────────────────────── */
+
+.tabs {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px;
+  border-radius: 12px;
+  background: var(--bg-elev);
+  border: 1px solid var(--border-soft);
+  overflow-x: auto;
+}
+
+.tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 13px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--text-2);
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.tab:hover {
+  color: var(--text-1);
+}
+
+.tabActive {
+  background: var(--bg-1);
+  color: var(--text-1);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 8%);
+}
+
+/* ── Listas ─────────────────────────────────────────────────────────── */
+
+.lists,
+.templates,
+.results,
+.optouts {
+  /* El container-type va AQUI, en el bloque de contenido, y no en
+     .page: si estuviera en .page atraparía el modal (position:fixed). */
+  container-type: inline-size;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.audienceRow {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8px;
+}
+
+.audienceCard {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--border-soft);
+  background: var(--bg-elev);
+  text-align: left;
+  cursor: pointer;
+  color: inherit;
+}
+
+.audienceCard:hover {
+  border-color: var(--border);
+}
+
+.audienceCardActive {
+  border-color: var(--brand);
+  background: var(--bg-1);
+  box-shadow: 0 0 0 1px var(--brand) inset;
+}
+
+.audienceName {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--text-1);
+}
+
+.audienceHint {
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text-2);
+}
+
+.listHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.listCount {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 13.5px;
+  color: var(--text-1);
+}
+
+.listCountSub {
+  font-size: 12px;
+  color: var(--text-2);
+}
+
+.listActions {
+  display: flex;
+  gap: 6px;
+}
+
+.note,
+.skipNote {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-2);
+}
+
+.loading {
+  margin: 0;
+  padding: 18px 0;
+  font-size: 13px;
+  color: var(--text-2);
+}
+
+.targets {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 460px;
+  overflow-y: auto;
+  border: 1px solid var(--border-soft);
+  border-radius: 12px;
+  background: var(--bg-elev);
+}
+
+.target + .target {
+  border-top: 1px solid var(--border-soft);
+}
+
+.targetLabel {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  grid-template-areas:
+    "check main"
+    "check why";
+  align-items: center;
+  gap: 2px 10px;
+  padding: 10px 13px;
+  cursor: pointer;
+}
+
+.checkbox {
+  grid-area: check;
+  width: 16px;
+  height: 16px;
+  accent-color: var(--brand);
+  cursor: pointer;
+}
+
+.targetMain {
+  grid-area: main;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+
+.targetName {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--text-1);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.targetPhone {
+  font-size: 12px;
+  color: var(--text-2);
+  font-variant-numeric: tabular-nums;
+}
+
+.targetWhy {
+  grid-area: why;
+  font-size: 12px;
+  color: var(--text-2);
+}
+
+.targetSpent {
+  display: none;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-1);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+/* ── La promoción y su vista previa ─────────────────────────────────── */
+
+.promo {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding: 14px;
+  border-radius: 12px;
+  border: 1px solid var(--border-soft);
+  background: var(--bg-elev);
+}
+
+.promoHead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.promoLabel {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-1);
+}
+
+.promoCount {
+  font-size: 11.5px;
+  color: var(--text-2);
+  font-variant-numeric: tabular-nums;
+}
+
+.promoHelp {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-2);
+}
+
+.tokens {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
+  margin: 2px 0 0;
+}
+
+.tokensLabel {
+  font-size: 12px;
+  color: var(--text-2);
+  margin-right: 2px;
+}
+
+.token {
+  padding: 3px 8px;
+  border-radius: 999px;
+  border: 1px dashed var(--border);
+  background: transparent;
+  color: var(--text-2);
+  font-size: 11.5px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  cursor: pointer;
+}
+
+.token:hover {
+  border-style: solid;
+  color: var(--text-1);
+}
+
+.previewBox {
+  margin-top: 4px;
+  padding: 11px 13px;
+  border-radius: 10px;
+  background: var(--bg-1);
+  border: 1px solid var(--border-soft);
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.previewLabel {
+  font-size: 11.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-2);
+}
+
+.previewText {
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: var(--text-1);
+  white-space: pre-wrap;
+}
+
+/* ── 🔴 El costo. Lo más visible de la pantalla, y a propósito. ──────── */
+
+.cost {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 15px;
+  border-radius: 13px;
+  border: 1px solid var(--brand);
+  background: var(--bg-elev);
+}
+
+.costMain {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.costLabel {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-2);
+}
+
+.costFigures {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.costCount {
+  font-size: clamp(16px, 2.4vw, 19px);
+  font-weight: 700;
+  color: var(--text-1);
+}
+
+.costSep {
+  color: var(--text-2);
+}
+
+.costTotal {
+  font-size: clamp(22px, 3.6vw, 30px);
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--brand);
+  font-variant-numeric: tabular-nums;
+}
+
+.costNone {
+  font-size: 13px;
+  color: var(--text-2);
+}
+
+.costUnit,
+.costWarn,
+.costWho {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-2);
+}
+
+.costWarn {
+  color: var(--camp-warn);
+  font-weight: 600;
+}
+
+.costQuota {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 3px 0 0;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--camp-bad);
+}
+
+.sendRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.summaryText {
+  font-weight: 600;
+}
+
+.summaryWarn {
+  color: var(--camp-bad);
+  font-weight: 600;
+}
+
+/* ── Confirmación ───────────────────────────────────────────────────── */
+
+.confirmLead {
+  margin: 0 0 12px;
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: var(--text-1);
+}
+
+.confirmCost {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  align-items: center;
+  padding: 18px 14px;
+  margin-bottom: 12px;
+  border-radius: 13px;
+  background: var(--bg-1);
+  border: 1px solid var(--brand);
+}
+
+.confirmAmount {
+  font-size: clamp(30px, 8vw, 40px);
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  line-height: 1.05;
+  color: var(--brand);
+  font-variant-numeric: tabular-nums;
+}
+
+.confirmDetail {
+  font-size: 12.5px;
+  color: var(--text-2);
+  text-align: center;
+}
+
+.consent {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  margin-top: 12px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-1);
+  cursor: pointer;
+}
+
+/* ── Plantillas ─────────────────────────────────────────────────────── */
+
+.sectionHead {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.sectionTitle {
+  margin: 0;
+  font-size: 15.5px;
+  font-weight: 700;
+  color: var(--text-1);
+}
+
+.sectionLead {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--text-2);
+  max-width: 62ch;
+}
+
+.cooldown {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 14px;
+  border-radius: 12px;
+  border: 1px solid var(--border-soft);
+  background: var(--bg-elev);
+  max-width: 340px;
+}
+
+.templateList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 10px;
+}
+
+.templateCard {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px;
+  border-radius: 12px;
+  border: 1px solid var(--border-soft);
+  background: var(--bg-elev);
+}
+
+.templateHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.templateName {
+  display: block;
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--text-1);
+}
+
+.templateMeta {
+  display: block;
+  margin-top: 2px;
+  font-size: 11.5px;
+  color: var(--text-2);
+}
+
+.templateBody {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--bg-1);
+  border: 1px solid var(--border-soft);
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--text-1);
+  white-space: pre-wrap;
+}
+
+.templateApproved {
+  font-size: 11.5px;
+  color: var(--camp-ok);
+  font-weight: 600;
+}
+
+/* ── Resultados ─────────────────────────────────────────────────────── */
+
+.totals {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8px;
+}
+
+.stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 13px 15px;
+  border-radius: 12px;
+  border: 1px solid var(--border-soft);
+  background: var(--bg-elev);
+}
+
+.statStrong {
+  border-color: var(--brand);
+}
+
+.statLabel {
+  font-size: 11.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-2);
+}
+
+.statValue {
+  font-size: clamp(20px, 3.2vw, 25px);
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--text-1);
+  font-variant-numeric: tabular-nums;
+}
+
+.statStrong .statValue {
+  color: var(--brand);
+}
+
+.statHint {
+  font-size: 12px;
+  color: var(--text-2);
+}
+
+/* La tabla es lo único que puede ser más ancha que la columna: se le da su
+   PROPIO scroll horizontal para que el body de la página nunca se corra. */
+.tableWrap {
+  overflow-x: auto;
+  border: 1px solid var(--border-soft);
+  border-radius: 12px;
+  background: var(--bg-elev);
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  min-width: 520px;
+}
+
+.table th,
+.table td {
+  padding: 9px 12px;
+  text-align: left;
+  border-bottom: 1px solid var(--border-soft);
+  white-space: nowrap;
+}
+
+.table thead th {
+  font-size: 11.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-2);
+}
+
+.table tfoot th,
+.table tfoot td {
+  font-weight: 700;
+  color: var(--text-1);
+  border-bottom: 0;
+  border-top: 1px solid var(--border);
+}
+
+.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.returned {
+  color: var(--brand);
+  font-weight: 700;
+}
+
+.tplCell {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11.5px;
+  color: var(--text-2);
+}
+
+/* ── Bajas ──────────────────────────────────────────────────────────── */
+
+.optoutList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  border: 1px solid var(--border-soft);
+  border-radius: 12px;
+  background: var(--bg-elev);
+}
+
+.optoutRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 11px 13px;
+}
+
+.optoutRow + .optoutRow {
+  border-top: 1px solid var(--border-soft);
+}
+
+.optoutMain {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.optoutMeta {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  font-size: 11.5px;
+  color: var(--text-2);
+}
+
+.optoutSource {
+  font-weight: 600;
+}
+
+/* ═══ Container queries: se AÑADE a partir del móvil ═══════════════════
+   Resuelven contra .lists / .templates / .results / .optouts, que son los
+   que llevan container-type. */
+
+@container (min-width: 560px) {
+  .audienceRow {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .totals {
+    grid-template-columns: repeat(3, 1fr);
+  }
+
+  /* Con espacio, "por qué está aquí" y el gasto pasan a su propia columna
+     en la misma línea: se compara de un vistazo quién vale más. */
+  .targetLabel {
+    grid-template-columns: auto minmax(0, 1.3fr) minmax(0, 1.4fr) auto;
+    grid-template-areas: "check main why spent";
+    align-items: center;
+  }
+
+  .targetSpent {
+    display: block;
+    grid-area: spent;
+    min-width: 74px;
+  }
+}
+
+@container (min-width: 780px) {
+  .audienceRow {
+    grid-template-columns: repeat(3, 1fr);
+  }
+
+  .templateList {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+/* ── Tema oscuro: solo se redefinen los tokens propios ───────────────── */
+
+:global(.dark) .page {
+  --camp-ok: #6ec177;
+  --camp-warn: #e0a558;
+  --camp-bad: #ef8b7f;
+}

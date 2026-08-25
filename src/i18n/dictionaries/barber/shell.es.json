@@ -17,6 +17,7 @@
     "productos": "Productos",
     "mi-web": "Mi web",
     "whatsapp": "WhatsApp",
+    "campanas": "Campañas",
     "suscripcion": "Suscripción",
     "configuracion": "Configuración"
   },
@@ -49,6 +50,7 @@
     "productos": "Inventario simple de ceras, shampoos y todo lo que vendes en mostrador.",
     "mi-web": "Tu página pública con reservas en línea, editable sin saber de diseño.",
     "whatsapp": "Recordatorios y conversaciones de WhatsApp con tus clientes.",
+    "campanas": "Traer de vuelta a los que ya no vienen, felicitar cumpleaños y avisar membresías por vencer.",
     "suscripcion": "Tu plan de DaleControl Barber: lo que incluye y cómo pagarlo.",
     "configuracion": "Datos de tu barbería: horario, dirección, logo y equipo con acceso."
   },

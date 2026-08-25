@@ -1,0 +1,162 @@
+{
+  "title": "Campañas",
+  "subtitle": "Traer de vuelta a quien ya te conoce cuesta menos que conseguir a alguien nuevo. Aquí están las listas de siempre, ya calculadas, y lo que costaría escribirles.",
+  "tabs": {
+    "lists": "Listas",
+    "templates": "Plantillas",
+    "results": "Resultados",
+    "optouts": "Bajas"
+  },
+  "audiences": {
+    "inactive": {
+      "name": "No han vuelto",
+      "hint": "Sin venir desde hace {days} días. Primero los que más gastaban."
+    },
+    "birthday": {
+      "name": "Cumpleaños del mes",
+      "hint": "Cumplen años este mes."
+    },
+    "membershipExpiring": {
+      "name": "Membresías por vencer",
+      "hint": "Vencen en los próximos {days} días."
+    },
+    "membershipExpired": {
+      "name": "Membresías vencidas",
+      "hint": "Ya vencieron y no se han renovado."
+    },
+    "loyaltyReward": {
+      "name": "Ya ganaron su premio",
+      "hint": "Juntaron sus visitas y no han canjeado."
+    },
+    "noShow": {
+      "name": "Faltaron varias veces",
+      "hint": "{count} faltas o más. Decide si les pides anticipo."
+    }
+  },
+  "list": {
+    "empty": "Nadie entra en esta lista ahora mismo. Es una buena noticia.",
+    "loading": "Calculando la lista…",
+    "eligible": "{count} a quienes se les puede escribir",
+    "selected": "{count} seleccionados",
+    "selectAll": "Seleccionar todos",
+    "clear": "Quitar selección",
+    "batchNote": "Se manda de {max} en {max}. Selecciona los que quieras de esta tanda.",
+    "trimmed": "Seleccionamos los primeros {max}: es el máximo por tanda.",
+    "columns": {
+      "client": "Cliente",
+      "why": "Por qué está aquí",
+      "spent": "Ha gastado",
+      "state": "Estado"
+    },
+    "why": {
+      "inactive": "Hace {days} días que no viene",
+      "inactiveNever": "Nunca ha venido",
+      "birthday": "Cumple el día {day}",
+      "membershipExpiring": "{name} vence el {date}",
+      "membershipExpired": "{name} venció el {date}",
+      "loyaltyReward": "{count} visitas juntadas",
+      "noShow": "{count} faltas",
+      "visits": "{count} visitas"
+    },
+    "skip": {
+      "optOut": "Pidió que no le escriban",
+      "blocked": "Bloqueado",
+      "noPhone": "Sin teléfono válido",
+      "alreadySent": "Ya recibió esta campaña",
+      "cooldown": "Recibió otra campaña hace poco",
+      "summary": "{count} quedaron fuera",
+      "detail": "Fuera de la lista: {parts}"
+    }
+  },
+  "cost": {
+    "heading": "Lo que va a costar",
+    "messages": "{count} mensajes",
+    "oneMessage": "1 mensaje",
+    "total": "{amount} USD",
+    "unit": "{amount} USD por mensaje",
+    "marketing": "Categoría marketing: cuesta unas 4 veces más que un recordatorio y exige el consentimiento del cliente.",
+    "whoPays": "Se lo cobra Meta a tu cuenta de WhatsApp, no nosotros.",
+    "none": "Selecciona a alguien para ver el costo."
+  },
+  "quota": {
+    "label": "Mensajes de tu plan",
+    "used": "{used} de {limit} este periodo",
+    "unlimited": "Sin límite en tu plan",
+    "remaining": "Te quedan {count}",
+    "near": "Vas por el {pct}% de tu cupo de mensajes.",
+    "exhausted": "Ya usaste todo el cupo de mensajes de tu plan.",
+    "over": "Esta tanda ({count}) no cabe en lo que te queda ({remaining}). Se mandarán los que quepan."
+  },
+  "promo": {
+    "label": "Tu promoción",
+    "help": "Es lo único que escribes tú: el saludo y el nombre de la barbería ya vienen en la plantilla aprobada.",
+    "tokens": "Fichas que puedes usar:",
+    "tokenHelp": "Se cambian por el dato de cada cliente. Si un cliente no tiene ese dato, la ficha desaparece sola.",
+    "preview": "Así le llega a {name}",
+    "previewNobody": "Así se vería el mensaje",
+    "placeholder": "Escribe la promoción con la que los quieres traer de vuelta."
+  },
+  "send": {
+    "cta": "Revisar y enviar",
+    "confirmTitle": "Confirma el envío",
+    "confirmLead": "Vas a escribirle a {count} clientes. Esto le cuesta a tu cuenta de WhatsApp:",
+    "confirmCheck": "Entiendo que es un mensaje de marketing y que mis clientes lo aceptaron.",
+    "confirmCta": "Sí, mandar {count} mensajes",
+    "cancel": "Cancelar",
+    "sending": "Mandando…",
+    "done": "Salieron {sent} mensajes.",
+    "doneWithFailed": "Salieron {sent} mensajes. {failed} no se pudieron mandar.",
+    "doneNone": "No salió ningún mensaje.",
+    "costChanged": "La lista cambió desde que viste el costo. Revísala otra vez antes de mandar.",
+    "quotaStopped": "Se detuvo el envío: se acabó el cupo de mensajes de tu plan.",
+    "needsTemplate": "Falta que Meta apruebe la plantilla {name}. Actívala en la pantalla de WhatsApp antes de mandar campañas.",
+    "templatePending": "La plantilla {name} está en revisión de Meta. En cuanto la aprueben podrás mandar.",
+    "noPermission": "No tienes permiso para mandar WhatsApp."
+  },
+  "templates": {
+    "title": "Tus textos",
+    "lead": "Un texto por campaña. Se guarda en tu barbería y se usa cada vez que mandes esa lista.",
+    "restore": "Volver al texto sugerido",
+    "save": "Guardar textos",
+    "saved": "Listo, se guardaron tus textos.",
+    "cooldown": "Días de descanso entre campañas",
+    "cooldownHelp": "Nadie recibirá dos campañas seguidas antes de esos días, aunque aparezca en varias listas.",
+    "repeatAfter": "No se repite antes de {days} días",
+    "approved": "Plantilla aprobada por Meta",
+    "sqlPending": "Todavía no se puede guardar: falta aplicar sql/barber_campanas.sql. Mientras tanto se usan los textos sugeridos y sí puedes mandar campañas."
+  },
+  "results": {
+    "title": "Qué pasó con lo que mandaste",
+    "lead": "Últimos {days} días. La columna que importa es la última: cuántos volvieron después de recibir tu mensaje.",
+    "empty": "Todavía no has mandado ninguna campaña.",
+    "columns": {
+      "day": "Día",
+      "campaign": "Campaña",
+      "sent": "Mandados",
+      "failed": "Fallaron",
+      "cost": "Costó",
+      "returned": "Volvieron"
+    },
+    "totals": "Total",
+    "returnRate": "{pct}% volvió",
+    "returnedHelp": "Volvió = tuvo una visita después de recibir el mensaje."
+  },
+  "optouts": {
+    "title": "Bajas",
+    "lead": "Quien pidió que no le escriban no entra en ninguna lista de envío. Nunca. Aquí puedes revertirlo si fue un error.",
+    "empty": "Nadie se ha dado de baja.",
+    "since": "Desde el {date}",
+    "bySelf": "Lo pidió el cliente",
+    "byStaff": "Lo marcó la barbería",
+    "restore": "Volver a incluir",
+    "restored": "{name} vuelve a entrar en las campañas.",
+    "markOut": "Dar de baja",
+    "marked": "{name} ya no recibirá campañas."
+  },
+  "errors": {
+    "generic": "Algo no salió bien. Inténtalo otra vez.",
+    "noPlan": "Las campañas están en los planes Avanzado y Profesional.",
+    "noPermission": "No tienes permiso para ver esta pantalla.",
+    "noWhatsapp": "Conecta tu WhatsApp antes de mandar campañas."
+  }
+}
