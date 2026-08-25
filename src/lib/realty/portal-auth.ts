@@ -365,9 +365,13 @@ async function deliverPortalCode(args: {
     );
   }
   try {
-    // ── T6: DESCOMENTA ESTAS DOS LÍNEAS ──────────────────────────────
-    // const { sendRealtyPortalCode } = await import("@/lib/realty/whatsapp");
-    // await sendRealtyPortalCode(args);
+    // ── T6: CONECTADO ────────────────────────────────────────────────
+    // El import es DINÁMICO a propósito, tal y como lo dejó escrito T9: así
+    // este módulo no arrastra el de WhatsApp (ni Prisma de más) en rutas que
+    // no mandan nada, y un fallo al cargarlo cae en el catch de abajo sin
+    // tumbar la emisión del código.
+    const { sendRealtyPortalCode } = await import("@/lib/realty/whatsapp");
+    await sendRealtyPortalCode(args);
     // ─────────────────────────────────────────────────────────────────
   } catch (err) {
     // Sin WhatsApp (o con Meta caído) el código YA está emitido y sigue

@@ -1,0 +1,113 @@
+{
+  "title": "WhatsApp",
+  "subtitle": "Every conversation in one place: who asked about which property and who answered.",
+  "tabs": {
+    "inbox": "Conversations",
+    "settings": "Settings"
+  },
+  "kinds": {
+    "portalCode": "Client portal access code",
+    "leadAck": "New lead acknowledgement",
+    "propertyCard": "Property sheet",
+    "visitReminder": "Visit reminder",
+    "rentUpcoming": "Rent coming due",
+    "rentOverdue": "Rent overdue",
+    "matchAlert": "Match alert"
+  },
+  "inbox": {
+    "loading": "Loading…",
+    "empty": "No conversations yet",
+    "emptyHint": "As soon as a lead messages your number, the conversation shows up here.",
+    "emptyArchived": "No archived conversations",
+    "showArchived": "Show archived",
+    "showActive": "Show active",
+    "refresh": "Refresh",
+    "pickThread": "Pick a conversation",
+    "windowOpen": "You can write: they replied less than 24 hours ago",
+    "windowClosed": "More than 24 hours since their last message",
+    "windowHint": "WhatsApp only allows free text for 24 hours after the person's last message. Outside that window an approved template is required.",
+    "composer": "Write your reply…",
+    "send": "Send",
+    "archive": "Archive",
+    "unarchive": "Unarchive",
+    "noPermission": "Your role can read conversations, but not reply.",
+    "openMedia": "Open the file",
+    "viaTemplate": "Template",
+    "failed": "Not delivered"
+  },
+  "settings": {
+    "connectionTitle": "Your WhatsApp number",
+    "connectionBody": "Which number your agency's messages go out from.",
+    "state": "Status",
+    "senderMode": "Sends from",
+    "number": "Number",
+    "problem": "What's missing",
+    "states": {
+      "CONNECTED": "Connected",
+      "DISCONNECTED": "Not connected",
+      "UNVERIFIED": "Not confirmed",
+      "PLAN_LOCKED": "Not in your plan",
+      "ERROR": "Has a problem"
+    },
+    "senders": {
+      "PLATFORM": "The DaleControl number",
+      "OWN_WABA": "Your own number"
+    },
+    "quotaTitle": "Messages this period",
+    "quotaBody": "How many messages your plan includes every 30 days and how many you've used.",
+    "quotaLimit": "Included",
+    "quotaUsed": "Used",
+    "quotaRemaining": "Left",
+    "quotaUnlimited": "Unlimited",
+    "quotaExhausted": "You've used up this period's messages. Automatic notices resume on their own when the next one starts.",
+    "quotaNear": "You're past 80% of this period's messages.",
+    "templatesTitle": "Meta templates",
+    "templatesBody": "To message someone who hasn't replied in the last 24 hours, Meta requires an approved template. There are {utility} utility ones and {marketing} marketing one.",
+    "categories": {
+      "UTILITY": "Utility",
+      "MARKETING": "Marketing",
+      "AUTHENTICATION": "Authentication"
+    },
+    "tplStatus": {
+      "APPROVED": "Approved",
+      "PENDING": "Under review",
+      "REJECTED": "Rejected",
+      "MISSING": "Not created",
+      "PAUSED": "Paused by Meta",
+      "DISABLED": "Disabled by Meta",
+      "OTHER": "Unrecognized status"
+    },
+    "createTemplates": "Create my templates",
+    "createTemplatesMarketing": "Include the marketing one too",
+    "templatesDone": "Done. Meta reviews them within hours, and once approved the notices go out on their own.",
+    "templatesPartial": "Some templates couldn't be created. Check each one's status in the list.",
+    "costHint": "Meta charges per conversation: about {utility} USD for utility and {marketing} USD for marketing. This is an estimate — Meta sets those rates and changes them.",
+    "dispatchTitle": "Time-based notices",
+    "dispatchBody": "Visit reminders and rent collection notices. They normally go out on their own; this button sends the due ones now for your account.",
+    "dispatchRun": "Send the ones due",
+    "dispatchDone": "{n} notices sent."
+  },
+  "upsell": {
+    "badge": "It's on another plan",
+    "title": "WhatsApp for your agency",
+    "body": "Your {plan} plan doesn't include WhatsApp. Here's what it does and which plans have it, so you can decide with the facts in front of you.",
+    "whatYouGet": "What it does",
+    "features": {
+      "lead": "Replies to the lead in seconds, not hours. After 10 minutes the odds of reaching them drop by roughly 80%.",
+      "ficha": "Sends the property sheet with photo, price, details and the link to your site — and to the virtual tour if there is one.",
+      "visita": "Reminds the lead about the visit, and they confirm, cancel or ask to move it by replying.",
+      "renta": "Sends rent notices five days before, on the day, and three and eight days past due.",
+      "match": "When a property matching someone's search comes in, it lets them know — only those who asked for it.",
+      "inbox": "Every conversation in the panel, with each message's real delivery status."
+    },
+    "plansTitle": "Which plans include it",
+    "included": "{n} messages every 30 days",
+    "perMonth": "per month",
+    "cta": "See the plans",
+    "note": "Included messages renew every 30 days. Meta charges per conversation and sets that rate, not DaleControl."
+  },
+  "errors": {
+    "generic": "The action couldn't be completed.",
+    "load": "The information couldn't be loaded."
+  }
+}

@@ -574,9 +574,17 @@ export async function notifyLeadByWhatsapp(
   trigger: RealtyLeadWhatsappTrigger,
 ): Promise<RealtyLeadWhatsappResult> {
   if (!trigger.phone) return { sent: false, skippedReason: "SIN_TELEFONO" };
-  if (!notifierOverride) return { sent: false, skippedReason: "NO_IMPLEMENTADO" };
   try {
-    return await notifierOverride(trigger);
+    // Un emisor registrado a mano (pruebas) manda sobre el de serie.
+    if (notifierOverride) return await notifierOverride(trigger);
+    // ── T6: CONECTADO (opción (b) de las dos que dejó escritas T3) ────
+    // Se eligió ésta y no setRealtyLeadWhatsappNotifier porque en serverless
+    // la opción (a) depende de que ALGUIEN haya importado el módulo de
+    // WhatsApp antes de crear el prospecto — y la ruta que da de alta un
+    // lead no tiene por qué haberlo hecho. Ahí el saludo se perdía en
+    // silencio. El import es DINÁMICO para no crear un ciclo con leads.ts.
+    const { sendRealtyLeadWhatsapp } = await import("@/lib/realty/whatsapp");
+    return await sendRealtyLeadWhatsapp(trigger);
   } catch {
     return { sent: false, skippedReason: "ERROR" };
   }

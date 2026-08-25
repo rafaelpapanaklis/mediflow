@@ -2962,8 +2962,30 @@ export async function deliverRentNotice(notice: RealtyRentNotice): Promise<{
       delivered.push(channel);
       continue;
     }
-    // WHATSAPP → T6.
-    pending.push(channel);
+    // ── WHATSAPP → T6: CONECTADO ─────────────────────────────────────
+    // Se sustituyó SOLO el cuerpo, como pedía el comentario de arriba: la
+    // firma y la cola siguen siendo de T4, que es quien sabe de cobranza
+    // (saldo en centavos, PARCIAL vs PAGADO, y el canal ya viene recortado
+    // por el plan en noticeChannelsFor — el plan PROPIETARIO no trae
+    // WhatsApp y aquí ni siquiera llega).
+    //
+    // La idempotencia es la de T4 (`notice.key`), no una propia: dos llaves
+    // distintas para el mismo aviso serían dos WhatsApps al inquilino.
+    if (!notice.contactPhone) {
+      pending.push(channel);
+      continue;
+    }
+    try {
+      const { sendRentNoticeWhatsapp } = await import("@/lib/realty/whatsapp");
+      const ok = await sendRentNoticeWhatsapp(notice);
+      if (ok) delivered.push(channel);
+      else pending.push(channel);
+    } catch (e) {
+      // Un fallo del WhatsApp no puede tumbar el barrido entero ni el correo
+      // de los demás avisos.
+      console.warn("[realty/leases] no se pudo mandar el WhatsApp del aviso:", (e as Error).message);
+      pending.push(channel);
+    }
   }
 
   return { delivered, pending };

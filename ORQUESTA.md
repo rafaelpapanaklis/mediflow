@@ -18026,6 +18026,232 @@ Componentes (`src/components/realty/leads/`, 9 nuevos)
 
 Diccionario
 - `leads.es.json` + `leads.en.json` + 4 líneas en `index.ts`.
+## [Inmuebles Ola 1 · T6 WhatsApp] — El vertical habla por WhatsApp: acuse al prospecto en segundos, ficha, visitas, cobranza, match e Inbox con entrega REAL ✅ (2026-08-25)
+
+Esta es la terminal de RIESGO de la ola: la única que toca código compartido
+que está VIVO en producción con clientes que pagan. Meta entrega TODOS los
+webhooks de una misma app a UNA sola URL, así que los mensajes de inmuebles
+caen en el webhook del dental y no hay forma de recibirlos sin tocarlo.
+
+**19 archivos: 18 propios + 1 compartido. Guardia exit 0. Build exit 0.**
+El ÚNICO compartido es `src/app/api/whatsapp/webhook/route.ts`, con un diff
+de **+56 / −5 enteramente dentro de los dos `if (!clinic)` que ya existían**.
+
+🔴 **`src/lib/whatsapp.ts` NO tiene UN SOLO CAMBIO.** Se repitió el precedente
+de barber: sus 7 funciones reciben credenciales sueltas y no saben nada de
+`Clinic`, así que inmuebles las IMPORTA tal cual. Y a propósito NO se agregó
+a `SHARED_FILES` del guardia: dejándolo fuera, la guardia se cae en rojo si
+alguien lo toca. Ese archivo lo usan ~15 sitios del dental que están vivos.
+
+═══════════════════════════════════════════════════════════════════════════
+▶ 🔴🔴 RAFAEL: QA INMEDIATO DEL WHATSAPP DEL DENTAL, EN PRODUCCIÓN
+═══════════════════════════════════════════════════════════════════════════
+
+**En cuanto esto despliegue, manda una plantilla real desde una clínica a un
+paciente y confirma que llega.** Es el único compartido vivo que se tocó y
+el que más duele si se rompe: si el webhook falla, se caen los recordatorios
+de las clínicas Y de las barberías.
+
+Qué comprobar, en este orden:
+1. **Sale**: manda un recordatorio/plantilla desde el Inbox de una clínica.
+2. **Llega**: que aparezca en el teléfono del paciente.
+3. **Vuelve**: que la palomita del Inbox pase a "entregado"/"leído". Eso
+   prueba que `ingestDeliveryStatuses` sigue entrando por el camino dental.
+4. **Entra**: que el paciente responda y el mensaje aparezca en el Inbox.
+   Eso prueba el `POST` completo.
+5. **Barbería**: lo mismo con una barbería, si hay una conectada.
+
+Si algo de eso falla, el revert es de UN archivo:
+`git revert` del commit, o restaurar `src/app/api/whatsapp/webhook/route.ts`
+a su versión anterior — nada más del vertical depende de que el enganche esté.
+
+═══════════════════════════════════════════════════════════════════════════
+▶ EL DIFF DEL WEBHOOK, Y POR QUÉ NO PUEDE TOCAR AL DENTAL NI A BARBER
+═══════════════════════════════════════════════════════════════════════════
+
+Dos bloques, los dos DENTRO del `if (!clinic)` que ya existía. La clínica se
+resuelve ARRIBA (`prisma.clinic.findFirst` por `waPhoneNumberId`) y ese
+camino no cambia una línea: un mensaje que SÍ es de una clínica jamás ejecuta
+ninguna línea nueva.
+
+El orden quedó: **dental → barber → inmuebles**, y el nuevo es el último.
+
+```
+if (!clinic) {
+  let handled = false;
+  let barberFailed = false;
+  try { handled = await ingestBarberInbound(value, msg); }      // IDÉNTICO
+  catch (e) { barberFailed = true; console.error(...); }
+  if (!handled && !barberFailed) { ...ingestRealtyInbound... }   // NUEVO
+  if (!handled && !barberFailed) { console.warn("sin dueño") }
+  return NextResponse.json({ ok: true });                        // IDÉNTICO
+}
+```
+
+🔴 **Por qué `!barberFailed`.** La primera versión encadenaba inmuebles con
+solo `!handled`. Un revisor adversarial dedicado señaló que eso SÍ cambiaba
+el comportamiento de barber en su camino de error: si `ingestBarberInbound`
+LANZA, revienta ANTES de poder decir si el número era suyo, y dejar que
+inmuebles lo intentara era una rama de control nueva en un producto vivo. Se
+corrigió. Con la bandera, barber queda byte-idéntico en sus TRES salidas:
+
+| `ingestBarberInbound` | Antes | Ahora |
+|---|---|---|
+| devuelve `true` | sin aviso, 200 | igual |
+| devuelve `false` | aviso "sin dueño", 200 | se ofrece a inmuebles; el aviso sale si nadie lo reconoció |
+| **lanza** | `console.error`, 200 | **igual: NO corre inmuebles, NO avisa** |
+
+De regalo, eso cerró otro riesgo: si un mismo `phone_number_id` estuviera dado
+de alta en una barbería Y en una cuenta de inmuebles (no hay constraint que lo
+impida entre tablas), barber contesta `true` primero y el mensaje NUNCA llega
+a inmuebles. La regla es: **ante la duda, el que se queda sin correr es el
+vertical nuevo**, que no tiene clientes.
+
+Lo demás, igual que el precedente de barber: `import()` DINÁMICO dentro de
+try/catch propio, cuyo `catch` solo hace `console.error`. Cero imports
+estáticos nuevos: si el módulo de inmuebles ni siquiera carga, el dental
+sigue entregando mensajes.
+
+En `ingestDeliveryStatuses` es el mismo patrón. Ahí sí se RECOGE el boolean
+que `applyBarberDeliveryStatuses` ya devolvía y que se estaba tirando —
+recoger un valor de retorno no cambia nada de lo que hace barber.
+
+═══════════════════════════════════════════════════════════════════════════
+▶ QUÉ SE CONSTRUYÓ
+═══════════════════════════════════════════════════════════════════════════
+
+**B. Acuse al prospecto en segundos** (`notifyRealtyLead`). El dato duro:
+pasados 10 minutos, la probabilidad de contactar al prospecto cae ~80 %. Por
+eso NO se encola: se manda al crear el lead. Sella `firstResponseAt` con un
+`updateMany` filtrado a `firstResponseAt: null` — el contrato dice que ese
+reloj no se vuelve a escribir, y así no depende de disciplina.
+
+**C. Ficha del inmueble** (`sendRealtyPropertyCard`). Foto de portada, precio,
+recámaras/baños/cajones/m², colonia, liga a la web y al recorrido virtual.
+Dentro de la ventana de 24 h sale como IMAGEN con pie; fuera, la plantilla con
+la liga (Meta no deja mandar una imagen suelta a quien no escribió).
+🔴 La foto solo se manda si su URL es `https://` absoluta: el bucket
+`realty-files` es PRIVADO y Meta descarga la imagen ÉL MISMO, así que una ruta
+de storage a secas le daría 403 y tumbaría el envío entero por la foto. Sin
+foto se manda igual — el texto ya lleva precio, datos y liga.
+
+**D. Recordatorio de visita** con confirmar / cancelar / cambiar por respuesta.
+🔴 **El bug M-22 del dental no puede pasar aquí, y no por disciplina sino por
+construcción:**
+  · nada se encola con la hora congelada dentro del texto — el mensaje se arma
+    leyendo la visita VIVA justo antes de mandarlo;
+  · la llave de idempotencia LLEVA DENTRO la hora programada
+    (`realtyVisitClaimKey`). Si la visita se mueve, la llave cambia: el aviso
+    viejo queda como historia y el nuevo sale con la hora nueva, sin que el
+    viejo lo bloquee. En el dental, la llave sin la hora era justo lo que
+    bloqueaba al correcto.
+  · y `cancelRealtyVisitReminders` marca los que aún no salieron. Solo toca
+    filas PENDING: una ya mandada es historia y es contra la que se cruza el
+    "CONFIRMAR" del prospecto — borrarla es el error que el dental cometió.
+
+**E. Cobranza de renta escalonada**: 5 días antes, el día, 3 después, 8
+después. Categoría **UTILIDAD** (lo correcto y ~4× más barato que marketing).
+⚠️ La COLA la arma T4 y el envío lo pone esta terminal — ver la segunda
+pasada, más abajo: el barrido propio que había aquí se borró por duplicado.
+Los cuatro pasos se cubren con DOS plantillas, no cuatro: la fecha y los días
+son variables, así que "vence el {{4}}" sirve para el aviso previo y el del
+día. Menos plantillas = menos cosas que se pueden quedar sin aprobar.
+
+**F. Match automático** con TRES frenos, porque es lo único que le escribe a
+alguien que no preguntó hoy: `notifyByWhatsapp` del perfil (nadie entra por
+default), tope diario por cuenta (50) y tope diario por persona (2). La
+plantilla es MARKETING con línea de baja, y la baja **se atiende de verdad**:
+un "BAJA" apaga `notifyByWhatsapp` de ese contacto.
+
+**G. Inbox** con hilos por contacto, envío y recepción, y multimedia **por
+proxy sin guardar en Storage** (copiado del dental: `Range` reenviado,
+`User-Agent: curl/8.4.0`, 410 cuando Meta ya lo borró, `cache-control:
+private`). Se indexa por `messageId` y NO por `mediaId`: con el id del archivo
+en la URL, cualquiera con un id ajeno sacaría el archivo de OTRA inmobiliaria
+usando NUESTRO token.
+
+**H. Configuración**: conexión del número (token **CIFRADO** con
+`encryptField` — el schema de la Ola 0 lo pedía por escrito), plantillas con
+su estado REAL preguntado a Meta, y el cupo del periodo.
+
+═══════════════════════════════════════════════════════════════════════════
+▶ EL BUG DEL DENTAL QUE NO SE REPITE
+═══════════════════════════════════════════════════════════════════════════
+
+En el dental, **un mensaje RECHAZADO por Meta se pintaba como entregado**
+porque los campos de entrega no venían en el select del hilo.
+
+Aquí eso está cerrado por tres lados a la vez:
+1. **El select los trae**: `listRealtyThreadMessages` selecciona `externalId`,
+   `status`, `errorCode` y `errorTitle`, y `listRealtyThreads` trae además el
+   estado del ÚLTIMO mensaje de cada hilo, para que la LISTA tampoco mienta.
+2. **La máquina de estados**: `nextRealtyWaStatus` solo AVANZA y **FAILED
+   nunca se pisa** con un "entregado" que llegue tarde. Con prueba.
+3. **La UI pinta el motivo real**: `(#131047) …` fuera de la burbuja, con el
+   CÓDIGO de Meta, no su redacción — Meta cambia el texto y el idioma cuando
+   quiere, pero nunca el número.
+
+`RealtyMessage` NO tiene `deliveredAt` ni `readAt` (la Ola 0 no las puso) y
+**no se agregaron a propósito**: `status` ya distingue DELIVERED de READ, que
+es lo que evita el bug, y tocar `prisma/schema.prisma` con nueve terminales
+escribiendo en paralelo era riesgo sin premio. Si algún día se quiere la HORA
+exacta de la entrega, son dos columnas nuevas.
+
+═══════════════════════════════════════════════════════════════════════════
+▶ DECISIONES QUE NO SE VEN EN EL DIFF
+═══════════════════════════════════════════════════════════════════════════
+
+**El gate del plan es por FEATURE, nunca por id de plan.** WhatsApp vive solo
+en ASESOR ($349) e INMOBILIARIA ($649); PROPIETARIO ($199) no lo tiene. Se
+comprueba con `realtyPlanHasFeature(plan, "whatsapp")` y no con
+`plan === "ASESOR"`, porque los planes se editan en `realty_plan_configs` sin
+redeploy y un id escrito a mano se queda viejo el día que se mueva la
+escalera. El gate está en la puerta de TODAS las rutas (`openRealtyWaGate`) y
+además en el envío, porque la pantalla puede mentir y el servidor no.
+
+**La pantalla del plan sin WhatsApp se VE, y explica.** No redirige a /inicio.
+Sin dark patterns: no hay cuenta atrás, no hay "solo hoy", no hay botón que
+finja que ya lo tienes. Dice qué hace, en qué planes viene y cuánto cuestan —
+y **los precios salen de la tabla**, cero números escritos en la UI.
+
+**Una sola columna para dos trabajos.** `RealtyMessage` tiene UN `externalId`
+y hacen falta dos cosas: el `wamid` (para que la palomita de Meta encuentre su
+fila por índice) y una llave de idempotencia (para que el cron no mande dos
+veces). Se resolvió con `"<wamid>|<llave>"`: la entrega busca `= wamid` o
+`startsWith wamid + "|"` — las dos anclan por la IZQUIERDA y usan
+`@@index([externalId])` — y la idempotencia busca `endsWith "|" + llave`
+SIEMPRE acotada a un hilo, así que recorre los pocos mensajes de esa
+conversación y no la tabla. Un `endsWith` global es justo el error que el
+dental documenta.
+
+**Todas las fechas van en la zona horaria de la CUENTA.** En Vercel el
+servidor corre en UTC: con `getHours()` a secas, una visita de las 11:00 en
+Guadalajara se le anunciaba al prospecto **como las 17:00**, y una de las
+20:00 salía fechada al día siguiente. `RealtyAccount.timezone` existe justo
+para esto. Lo mismo el paso de la escalera de cobro (día CIVIL, no
+milisegundos) y la medianoche del tope diario del match.
+
+**Un envío que falló NO se reintenta solo.** La fila se reclama antes de
+llamar a Meta, así que un fallo la deja marcada y la llave sigue ocupada.
+Es deliberado: no sabemos si Meta llegó a recibirlo, y mandar dos veces un
+cobro de renta es peor que no mandarlo. Lo que sí se hace es **decir la
+verdad**: `expireStaleRealtyPending` cierra a los 30 min las filas que se
+quedaron reclamadas sin resolver (una función que se murió a media llamada) y
+las marca FAILED con el motivo, para que nadie crea que están por salir.
+
+**El teléfono se normaliza a 10 dígitos** (`mxTenDigits`) en los dos lados,
+como manda el schema: si se guarda como lo escribió la persona, el webhook
+nunca liga el hilo con su contacto y el inbox se llena de conversaciones sin
+nombre.
+
+**Del webhook jamás se crea un contacto.** Se LIGA a uno que ya exista. Un
+número equivocado no puede dar de alta prospectos fantasma.
+
+**i18n con la convención B**, la misma que `/inmobiliaria/registro`: el
+servidor recorta el sub-árbol `realty.whatsapp` y los componentes usan
+`makeRealtyT(dict)` SIN prefijo. Cruzar las dos convenciones aplica el prefijo
+dos veces y pinta la llave cruda — está escrito en el comentario de cada
+archivo para que el siguiente no lo adivine.
 
 ═══════════════════════════════════════════════════════════════════════════
 ▶ VERIFICACIÓN
@@ -18048,6 +18274,106 @@ Diccionario
   en `src/lib/barber/__tests__/`, archivos que esta terminal no tocó).
 - `node scripts/realty-guard.cjs`: **exit 0**, 32 propios, 0 compartidos sin
   declarar, 0 prohibidos.
+- `npx next build` → **exit 0**. Las 9 rutas nuevas y la pantalla compilan.
+  (La primera corrida murió con exit 134: OOM del type-check, exactamente el
+  síntoma que la Ola 0 anticipó. Se repitió con
+  `NODE_OPTIONS=--max-old-space-size=8192` y pasó. **Sigue pendiente fijarlo
+  en el proyecto de Vercel**, o el día que allá cruce el umbral el build se
+  pondrá rojo sin causa aparente.)
+- `node scripts/realty-guard.cjs` con
+  `REALTY_GUARD_SHARED="src/app/api/whatsapp/webhook/route.ts"` → **exit 0**,
+  cero prohibidos, cero compartidos sin declarar.
+- `npx tsx --test src/lib/realty/__tests__/whatsapp-core.test.ts` → **49/49**.
+- `npx tsx --test src/lib/realty/__tests__/i18n-alcance.test.ts` → **11/11**
+  (incluye "es y en tienen exactamente las mismas llaves" y "ningún archivo de
+  inmuebles usa makeT pelado").
+- `npx tsx --test src/lib/realty/__tests__/contrato.test.ts` → **31/31**.
+- `git diff src/lib/whatsapp.ts` → **vacío**. Sin tocar.
+
+═══════════════════════════════════════════════════════════════════════════
+▶ LO QUE ENCONTRARON LOS DOS REVISORES ADVERSARIALES (y qué se hizo)
+═══════════════════════════════════════════════════════════════════════════
+
+**Revisor 1 — auditoría DEDICADA del diff del webhook, línea por línea.**
+
+Veredicto final, textual: *"VEREDICTO CAMINO DENTAL: SIN CAMBIO"*, y barber
+byte-idéntico en sus tres salidas, con la tabla A–K y las líneas que lo
+prueban.
+
+En su PRIMERA pasada NO dio el visto bueno a barber: señaló que encadenar
+inmuebles con solo `!handled` hacía que, **si `ingestBarberInbound` LANZA**,
+la petición siguiera hacia inmuebles — una rama de control nueva en el camino
+de error de un producto vivo. **Tenía razón y se corrigió** con la bandera
+`barberFailed`. En la segunda pasada confirmó las cuatro afirmaciones y cerró
+3 de sus 4 riesgos originales. Incluso verificó un sub-caso que no se le
+había pedido: que un fallo al CARGAR el módulo de barber también cae en el
+mismo catch, así que tampoco dispara el aviso — igual que antes.
+
+Dos avisos suyos que quedan ANOTADOS y no arreglados, porque no son defectos
+vivos:
+
+1. 🔴 **La aislación de inmuebles se apoya en una invariante que vive en
+   barber.** Que un `phone_number_id` dado de alta en los DOS verticales nunca
+   llegue a inmuebles depende de que `shopByPhoneNumberId`
+   (`src/lib/barber/whatsapp.ts`) busque la barbería SIN filtros. Hoy es así
+   (verificado). Si alguien le pone un `isActive: true` —lo más natural del
+   mundo—, el número de una barbería desactivada empezaría a caer en inmuebles
+   EN SILENCIO. Queda documentado en `accountByPhoneNumberId`, pero la defensa
+   de verdad sería un único parcial en la base; ese archivo está fuera del
+   allowlist de esta ola.
+2. **La salud de barber es ahora una dependencia dura del ingest de
+   inmuebles**: si barber lanza sistemáticamente, inmuebles deja de recibir y
+   solo se ve el error de barber en el log. Es el lado correcto en el que
+   fallar, pero conviene saberlo antes de un incidente y no durante.
+
+**Revisor 2 — cazador de bugs del módulo. Encontró 4 reales que se
+arreglaron, uno de ellos P0.**
+
+- **P0 — escritura entre inquilinos.** `contactId` llegaba en el CUERPO de la
+  petición y se validaba solo para LEER el nombre; el id crudo se escribía
+  igual en `RealtyThread`. La FK no lo impide (referencia `id` a secas).
+  Resultado: el hilo de la cuenta A podía apuntar al contacto de la cuenta B y
+  la lista de conversaciones pintaba **el nombre de esa persona**. Arreglado
+  en `upsertRealtyThread`, que es el punto ÚNICO por el que pasan todos los
+  envíos: el id se vuelve a comprobar contra la cuenta SIEMPRE, y si no es
+  suyo se descarta.
+- **P1 — bucle infinito de renders que le pegaba a Meta.** `makeRealtyT`
+  devuelve una función nueva en cada render, y `t` estaba en las dependencias
+  de los `useCallback` que a su vez alimentan los `useEffect`. Cada carga
+  provocaba otra, sin freno, incluyendo `/templates`, que consulta a Meta en
+  CADA llamada. Era un bloqueo de la WABA auto-infligido. Arreglado con
+  `useMemo`.
+- **P1 — un fallo pasajero mataba el aviso para siempre.** La fila se reclama
+  antes de llamar a Meta; al fallar quedaba marcada y la llave seguía ocupada,
+  así que un 500 pasajero dejaba el cobro de renta sin mandar **y contado como
+  "saltado", no como "fallido"** — en silencio. Ahora el fallo LIBERA la llave
+  (se le pega `#<id>` al externalId, que deja de terminar en la llave) con un
+  tope de 3 intentos: un 500 pasajero se reintenta, y una plantilla rechazada
+  no se convierte en pegarle a Meta cada 15 minutos para siempre.
+- **P1 — los dos topes del match no contaban nada.** Se contaban por
+  `templateName`, pero dentro de la ventana de 24 h el aviso sale como texto
+  libre y se guarda con `templateName` en NULL. O sea: los topes se quedaban
+  en cero **justo cuando más falta hacen** — un prospecto que acababa de
+  escribir podía recibir los 40 inmuebles de una importación. Ahora se cuentan
+  por la llave de reclamo, que está presente en los dos casos.
+
+Y tres P2 que también se arreglaron: un contrato sin inquilino capturado ya no
+desaparece del reporte (se cuenta como saltado), archivar un hilo ahora pide
+`whatsapp.send` y no `whatsapp.view` (marcar leído sigue en `view`), y el
+comentario de `cancelRealtyVisitReminders` dejó de prometer de más — con el
+envío síncrono esa función devuelve 0 casi siempre, y quien de verdad impide
+el aviso con la hora vieja es la llave de reclamo.
+
+Un P2 se deja ANOTADO a propósito: el cupo se lee y se incrementa sin
+transacción, así que dos envíos simultáneos en el límite pueden pasarse por
+uno o dos. Es coherente con "el cupo cuenta lo que se mandó, no lo que se
+intentó" y no vale una transacción por mensaje.
+
+El revisor verificó explícitamente las dos cosas más delicadas y las dio por
+CORRECTAS: que la búsqueda del estado de entrega encuentra de verdad las filas
+que escribe el envío (los dos formatos de `externalId`, los dos anclados por
+la izquierda), y que la cadena `visitReminder:<id>:` que busca el cancelador
+existe de verdad.
 
 ═══════════════════════════════════════════════════════════════════════════
 ▶ PENDIENTE — REQUIERE RAFAEL
@@ -20909,3 +21235,296 @@ Tres hallazgos se quedan como están, a propósito:
   · Las dos pruebas de la Ola 0 siguen verdes: contrato **31/31**,
     alcance del diccionario **11/11**.
   · `npx tsc --noEmit` → limpio en todo lo nuevo.
+- 🔴🔴 **QA del WhatsApp del DENTAL en producción, en cuanto despliegue.** Los
+  cinco pasos están al principio de este reporte.
+- 🔴 **Dar de alta el cron.** `vercel.json` está FUERA del allowlist de esta
+  ola (es del dental y de barber a la vez), así que el cron NO quedó
+  registrado. Mientras tanto, el botón "Mandar los que toquen" del panel hace
+  exactamente lo mismo para una cuenta. El bloque a pegar en `"crons"`:
+  `{ "path": "/api/realty/whatsapp/dispatch", "schedule": "*/15 * * * *" }`
+- 🔴 **Correr `sql/realty.sql` en Supabase** (viene de la Ola 0 y sigue
+  bloqueando: sin las tablas, `getRealtyContext()` devuelve null).
+- ⚪ **Variables de entorno**, solo si se quiere el número de la PLATAFORMA:
+  `REALTY_WA_PLATFORM_SENDER=1`, `REALTY_WA_PLATFORM_PHONE_NUMBER_ID`,
+  `REALTY_WA_PLATFORM_TOKEN` y, opcional, `REALTY_WA_PLATFORM_WABA_ID`.
+  **Léase antes la advertencia de abajo sobre PLATFORM.**
+- ⚪ **`NODE_OPTIONS=--max-old-space-size=8192` en Vercel.** El build local
+  murió con exit 134 antes de subirlo. La Ola 0 ya lo había anticipado.
+- ⚪ **Comprobar que ningún `phone_number_id` esté en dos verticales.** No hay
+  constraint que lo impida entre tablas. Debe devolver 0 filas:
+  `SELECT b."phoneNumberId" FROM barber_shops b JOIN realty_accounts r ON r."phoneNumberId" = b."phoneNumberId" WHERE b."phoneNumberId" IS NOT NULL;`
+
+**⚠️ LO QUE EL MODO PLATFORM NO HACE, DICHO CLARO.** Con el número compartido
+de DaleControl los mensajes SALEN, pero ni las respuestas ni los acuses de
+entrega se pueden asignar a una cuenta: el `phone_number_id` que trae el
+webhook es el mismo para todas. Se podría adivinar por el teléfono de quien
+escribe, pero si dos inmobiliarias tienen al mismo prospecto en cartera ese
+mensaje acabaría en el Inbox equivocado — una fuga entre cuentas. Se prefirió
+**decirlo** antes que fingirlo: la pantalla reporta `UNVERIFIED` con la frase
+"los mensajes salen, pero las respuestas y los acuses no se pueden asignar a
+tu cuenta". El camino completo es que cada cuenta conecte su propia WABA. Está
+apagado por defecto (hacen falta las tres variables), así que hoy no afecta a
+nadie.
+
+**NADIE ha mandado todavía un WhatsApp real desde el vertical de inmuebles.**
+Todo lo de arriba está probado contra el contrato y el tipo, no contra Meta.
+
+═══════════════════════════════════════════════════════════════════════════
+▶ ARCHIVOS
+═══════════════════════════════════════════════════════════════════════════
+
+COMPARTIDO (1, declarado en la guardia):
+- `src/app/api/whatsapp/webhook/route.ts` — +56 / −5, todo dentro de los dos
+  `if (!clinic)` que ya existían.
+
+PROPIOS (15):
+- `src/lib/realty/whatsapp-core.ts` — núcleo PURO: catálogo de 6 plantillas,
+  ventana de 24 h, cupo, máquina de estados de entrega, clasificación de
+  respuestas por RAÍZ (no por conjugación), escalera de cobro, match, fechas
+  en la zona de la cuenta y el formato de `externalId`.
+- `src/lib/realty/whatsapp.ts` — servidor: credenciales, cupo, conexión,
+  plantillas en Meta, los dos puntos de entrada del webhook, el envío ÚNICO y
+  las funciones B–G.
+- `src/lib/realty/__tests__/whatsapp-core.test.ts` — 49 pruebas.
+- `src/app/api/realty/whatsapp/_server.ts` — la puerta única (sesión +
+  permiso + feature + suscripción + cuenta activa).
+- `src/app/api/realty/whatsapp/{status,threads,connect,templates,dispatch,send}/route.ts`
+- `src/app/api/realty/whatsapp/threads/[id]/route.ts` y `.../messages/route.ts`
+- `src/app/api/realty/whatsapp/media/[messageId]/route.ts` — el proxy.
+- `src/components/realty/whatsapp/realty-wa-panel.tsx` — Inbox + Configuración.
+- `src/components/realty/whatsapp/realty-wa-upsell.tsx` — la pantalla honesta
+  del plan que no lo incluye, con los precios leídos de la tabla.
+- `src/app/inmobiliaria/(panel)/whatsapp/page.tsx` — reemplaza el placeholder.
+- `src/i18n/dictionaries/realty/whatsapp.{es,en}.json` + una línea por idioma
+  en `index.ts`.
+- `scripts/realty-guard.cjs` — el webhook entra a `SHARED_FILES`;
+  `src/lib/whatsapp.ts` se deja FUERA a propósito, para que la guardia se
+  ponga en rojo si alguien lo toca.
+
+═══════════════════════════════════════════════════════════════════════════
+▶ SEGUNDA PASADA — LOS ENGANCHES CON LAS OTRAS TERMINALES
+═══════════════════════════════════════════════════════════════════════════
+
+Esta terminal se escribió cuando `main` todavía estaba en la Ola 0, así que
+al principio no había con qué engancharse. Cuando T1, T2, T3, T4, T9 y T10
+aterrizaron, se hizo rebase y se conectó lo que cada una había dejado
+preparado. **Cuatro de ellas dejaron un stub tipado con la firma EXACTA que
+esta terminal tenía que cumplir**, y los cuatro están cumplidos.
+
+**1. Saludo al prospecto — T3 (`inbound-mail.ts`).**
+Dejó `RealtyLeadWhatsappTrigger`, `RealtyLeadWhatsappResult` y la firma
+`RealtyLeadWhatsappNotifier`, con DOS formas de conectarlo. Se eligió la (b)
+—sustituir el cuerpo de `notifyLeadByWhatsapp`— y no la (a)
+(`setRealtyLeadWhatsappNotifier`) por una razón concreta: en serverless, la
+(a) depende de que ALGUIEN haya importado el módulo de WhatsApp antes de que
+se cree el prospecto, y la ruta que da de alta un lead no tiene por qué
+haberlo hecho. Ahí el saludo se habría perdido **en silencio**, que es
+justamente el fallo que este vertical persigue. El import es dinámico para no
+crear un ciclo con `leads.ts`. Con eso se encendieron los TRES sitios que ya
+llamaban al stub: el alta manual (`/api/realty/leads`), el correo de portal
+(`ingestPortalMail`) y el botón de "avísales de este inmueble"
+(`/api/realty/leads/matches`). El `skippedReason` que devuelven se traduce al
+vocabulario de T3 (SIN_CUPO / SIN_WHATSAPP / SIN_TELEFONO / ERROR).
+
+**2. Código del portal — T9 (`portal-auth.ts`).** Dejó dos líneas comentadas
+con un "T6: DESCOMENTA ESTAS DOS LÍNEAS" y la firma exacta de
+`sendRealtyPortalCode`. **Esa función no existía: era un hueco de ESTA
+terminal, no de T9.** Se escribió, y con ella la séptima plantilla del
+catálogo — `dc_inmuebles_codigo_acceso`, categoría **AUTHENTICATION**, que es
+lo único que Meta permite para un código de un solo uso. Tres detalles que
+NO son opcionales:
+  · el cuerpo de una AUTHENTICATION va **VACÍO**: lo redacta Meta y llega con
+    botón de "copiar código". Escribir uno propio es lo que la hace
+    rechazable. El validador del catálogo ahora lo exige (con prueba).
+  · necesita el componente `button` con `sub_type: "url"`, que
+    `sendWhatsAppTemplate` del núcleo COMPARTIDO no arma — por eso sale por
+    `postRealtyGraph`, igual que hizo barber. **El archivo compartido sigue
+    sin tocarse.**
+  · 🔴 **el código NO se guarda en el hilo.** La fila de `RealtyMessage` lleva
+    un cuerpo neutro ("Código de acceso al portal"). Un código en la base es
+    un código filtrado. Por eso este envío NO pasa por `sendRealtyWhatsApp`,
+    que guarda lo que manda: se registra a mano y se descuenta el cupo igual.
+
+**3. Cobranza de renta — T4 (`leases.ts`).** Dejó la cola armada
+(`buildRentNoticeQueue`) y el hueco `// WHATSAPP → T6` dentro de
+`deliverRentNotice`, con el encargo de "sustituir el cuerpo, y solo el
+cuerpo".
+
+🔴 **Y aquí esta terminal tuvo que BORRAR trabajo propio.** Había escrito su
+propio barrido de rentas (`sendRealtyRentNotices`) con su propia escalera de
+cuatro pasos y su propia llave de idempotencia. Al aterrizar T4 quedó claro
+que los offsets eran **los mismos** (−5, 0, +3, +8) pero las llaves no: eran
+DOS colas para el mismo cobro, o sea **dos WhatsApps al mismo inquilino**. Se
+borró la de aquí. La de T4 además es mejor: sabe el saldo en CENTAVOS (no el
+cargo), distingue PARCIAL de PAGADO y ya trae el canal recortado por el plan
+—al PROPIETARIO, que no incluye WhatsApp, ni le llega—. Lo que queda de esta
+terminal es `sendRentNoticeWhatsapp(notice)`, que manda UN aviso usando **la
+llave de T4** (`notice.key`) y el texto que T4 ya escribió.
+
+**4. Match automático — T2 (`matching.ts` / `leads.ts`).** Su tipo lo decía
+con todas las letras: *"notifyByWhatsapp — el envío lo hace T6; aquí solo se
+respeta"*. Mismo caso: esta terminal tenía un `realtyPropertyMatchesProfile`
+booleano escrito antes de que existiera `matching.ts`. **También se borró.**
+`notifyRealtyMatches` ahora llama a `findSeekersForProperty`, que puntúa con
+pesos, aplica tolerancia de presupuesto, exige un puntaje mínimo y —esto es
+lo que la versión casera no hacía— **descarta a los prospectos en CIERRE o
+PERDIDO**. Avisarle de un inmueble nuevo a alguien que ya cerró es
+exactamente el mensaje que hace que la gente apague los avisos.
+
+Dos criterios de encaje distintos en el mismo producto son peores que
+ninguno. En los dos casos ganó el módulo del área, no el de WhatsApp.
+
+**Lo que quedó SIN enganchar, y por qué:**
+- **Recordatorio de visita.** No hay dónde. La pantalla de Visitas sigue
+  siendo el placeholder de la Ola 0 y no existe ninguna ruta que mueva o
+  cancele una visita: el ÚNICO sitio del repo que escribe
+  `realtyVisit.update` es esta terminal, desde la respuesta del prospecto.
+  `sendRealtyVisitReminders` y `cancelRealtyVisitReminders` funcionan y
+  están probados, pero hoy solo los dispara el botón del panel. **No es un
+  cable suelto de T6: es un área que todavía no se construyó.**
+- **Match al PUBLICAR un inmueble.** El sitio correcto es el flip de
+  `isPublished` en `properties.ts` (T1), pero ese `select` no trae
+  `isPublished`, así que hoy no hay forma de detectar el borde false→true sin
+  ampliar una consulta de otra terminal. Se dejó documentado en vez de
+  tocarlo. Mientras tanto, el botón manual de "avísales de este inmueble" ya
+  funciona y pasa por el mismo emisor.
+
+**Archivos de otras terminales que se tocaron** (los tres son del vertical,
+la guardia los clasifica como PROPIOS, y en los tres el cambio es EXACTAMENTE
+el que su autor dejó pedido por escrito):
+`src/lib/realty/inbound-mail.ts` (+10/−2), `src/lib/realty/leases.ts`
+(+24/−2), `src/lib/realty/portal-auth.ts` (+7/−3).
+
+**El tercer revisor (el de los enganches) encontró DOS P1, y los dos eran
+fallos MUDOS — de los que no rompen nada a la vista.**
+
+  · **La plantilla del código del portal no se podía dar de alta.** Se agregó
+    al catálogo pero `provisionRealtyTemplates` mandaba a Meta el mismo cuerpo
+    para todas: un `BODY` con `text: ""`. Meta rechaza eso, la plantilla nunca
+    aterrizaba en la WABA y `sendRealtyPortalCode` fallaba PARA SIEMPRE con un
+    132001 que **nadie ve**, porque `deliverPortalCode` se lo traga a
+    propósito (para no filtrar si el teléfono existe). Resultado: nadie podría
+    entrar al portal del cliente por WhatsApp y no habría ni un error visible.
+    Arreglado con `templateCreatePayload`, que ramifica por categoría igual
+    que barber: BODY con `add_security_recommendation`, FOOTER con la
+    caducidad y BUTTONS con un OTP `COPY_CODE`.
+  · **El aviso de coincidencia no podía salir nunca.** La rama de match del
+    notificador mandaba `params: null`. Pero un aviso de coincidencia es
+    COLD OUTREACH por definición —se le manda a quien NO escribió hoy—, así
+    que la ventana de 24 h está cerrada casi siempre y hace falta la plantilla
+    CON sus cinco datos. Fallaba con motivo "params", que además se traducía a
+    ERROR, y con eso el panel de T2 encendía su `senderMissing` y le decía al
+    asesor **"el emisor de WhatsApp todavía no está conectado"** — una mentira
+    redonda. Ahora se arman los cinco parámetros leyendo el inmueble.
+
+Y cuatro cosas menores que también se arreglaron: el centinela `"sin-wamid"`
+ya no sale como si fuera un folio de Meta; `notifyRealtyMatches` respeta la
+tolerancia de match que configuró la cuenta (si no, el panel enseñaba una
+lista y el aviso iba a otra — dos criterios otra vez); `notifyRealtyLead`
+pasó a ser un envoltorio de `sendRealtyLeadWhatsapp` para que haya UN solo
+camino de saludo con UNA sola idempotencia; y se borró
+`formatRealtyPeriodMonth`, que quedó muerto al delegar la cobranza en T4.
+
+Lo que el revisor dio por CORRECTO tras trazarlo: que no hay ciclo de imports
+(el único enlace de vuelta es `import type`, que TypeScript borra, y los demás
+son `await import()` dentro de funciones); que **el código del portal NUNCA
+toca la base** (solo entra en el payload de Meta; la fila guarda un cuerpo
+neutro); que `balanceCents` son centavos de verdad y los parámetros de las
+plantillas de renta cuadran; que la llave de T4 impide el doble envío desde
+sus dos entradas; y que si el WhatsApp falla, ni el correo de los demás avisos
+ni la emisión del código del portal se ven afectados.
+
+Queda ANOTADO, sin arreglar: el `deliverPortalCode` ahora tarda lo que tarde
+Meta, así que el comentario de esa ruta que promete "el mismo trabajo de CPU
+en los dos caminos para que tampoco el tiempo lo delate" ya no es exacto —
+un teléfono que no existe contesta más rápido que uno que sí. Barber tiene el
+mismo compromiso y lo documenta como asumido; aquí lo que sobra es la
+promesa del comentario, no el código.
+
+═══════════════════════════════════════════════════════════════════════════
+▶ AUDITORÍA FINAL DEL WEBHOOK CONTRA EL MAIN DEFINITIVO (83026658)
+═══════════════════════════════════════════════════════════════════════════
+
+Antes de subir, un revisor DEDICADO auditó el diff de
+`src/app/api/whatsapp/webhook/route.ts` línea por línea contra el main con
+las nueve terminales dentro. Veredicto textual:
+
+  **VEREDICTO CAMINO DENTAL: SIN CAMBIO**
+  **VEREDICTO CAMINO BARBER: SIN CAMBIO**
+  **¿SEGURO PARA PUSH?: SÍ**
+
+Lo que probó, con líneas:
+- **Las 56 líneas nuevas caen dentro de los dos `if (!clinic)`.** Bloque 1:
+  abre en 272, cierra en 323; cambios en 283-321. Bloque 2: abre en 776,
+  cierra en 811; cambios en 783-809. Prueba extra de que el bloque cerró: la
+  línea 330 usa `clinic.id`, cosa que TypeScript solo permite al salir del
+  estrechamiento de `!clinic`.
+- **Desde la línea 325 hasta el final del POST no se tocó una sola línea.**
+  Ni statements, ni orden, ni shadowing, ni returns, ni forma de respuesta.
+  Los 30 imports estáticos son idénticos byte a byte.
+- **Los TRES desenlaces de barber son byte-idénticos.** Incluido el que
+  costó la primera corrección: si `ingestBarberInbound` LANZA (o si falla el
+  propio `import()`), `barberFailed` impide que corra inmuebles Y que salga
+  el aviso — exactamente como antes, porque en el original el aviso vivía
+  DENTRO del try y un throw se lo saltaba.
+- **`ingestBarberInbound` devuelve `false` en UN SOLO sitio**
+  (`barber/whatsapp.ts:1356`, `if (!shop) return false`). O sea: inmuebles
+  solo corre cuando está PROBADO que el número no es de ninguna barbería.
+- **Capturar el retorno de `applyBarberDeliveryStatuses` no puede alterar
+  nada**: ya era `Promise<boolean>` en main, el módulo de barber está
+  idéntico, y en JS el callee no puede observar qué se hace con su valor.
+- **El aviso "sin dueño" no puede dispararse donde antes no lo hacía, ni
+  doble.** Sí puede SUPRIMIRSE cuando inmuebles reclama el número, que es lo
+  correcto: ese número sí tiene dueño.
+- **Cero imports estáticos nuevos.** Las dos referencias a inmuebles son
+  `await import()`. Y en TODO el repo, fuera del vertical, esas dos líneas
+  son las únicas que apuntan a `lib/realty/whatsapp`.
+- **El módulo de inmuebles NO toca ningún modelo que no sea suyo**: 51
+  llamadas a `prisma.`, las 51 a modelos `realty*`. Cero `clinic`,
+  `patient`, `appointment`, `inboxMessage` o `barber*`. El tenant se resuelve
+  ÚNICAMENTE contra `realtyAccount`.
+- **`src/lib/whatsapp.ts` byte-idéntico a origin/main** (diff vacío).
+- **Ninguna de las otras nueve terminales tocó el webhook ni
+  `src/lib/whatsapp.ts`**: `git log b23540d5..origin/main` sobre esos dos
+  archivos devuelve cero commits. La base sobre la que se calculó este
+  parche es la misma que hay en main hoy.
+
+CUATRO RIESGOS RESIDUALES, ninguno toca al dental ni a barber:
+
+1. **Latencia del camino "número desconocido".** Cuando barber devuelve
+   `false`, ahora hay un `await import()` del módulo de inmuebles más un
+   `findFirst`. En arranque en frío eso es evaluación de módulo + un viaje a
+   la base. El revisor dice explícitamente que **no puede probar sin medir**
+   que se mantiene bajo el timeout de Meta — lo que sí probó es que ese costo
+   **jamás** se paga en una petición de una clínica ni de una barbería.
+   Agravante menor: un payload que traiga `statuses` Y `messages` de un
+   número desconocido importa el módulo dos veces. Es el mismo patrón que
+   barber ya tenía en main, no es nuevo en especie.
+2. **El aviso "sin dueño" baja de frecuencia** cuando inmuebles reclama
+   números. Si alguien tiene alertas basadas en ese texto, lo notará.
+3. **La aislación se apoya en el ORDEN, no en una restricción de base.**
+   `accountByPhoneNumberId` no excluye números de clínicas ni de barberías;
+   lo que lo impide es que se pregunta al final. Ya está documentado en el
+   propio módulo. La defensa de verdad sería un único parcial en la base.
+4. **La guardia se ensanchó** para admitir el webhook en `SHARED_FILES`. Es
+   un script de desarrollo, no está cableado en `package.json`, así que no
+   puede romper el build; pero futuras ediciones del webhook desde el
+   vertical ya no la hacen saltar por sí solas.
+
+═══════════════════════════════════════════════════════════════════════════
+▶ VERIFICACIÓN FINAL (sobre 83026658, con las nueve terminales dentro)
+═══════════════════════════════════════════════════════════════════════════
+
+- `npx next build` con `NODE_OPTIONS=--max-old-space-size=12288` → **exit 0**.
+  Las 9 rutas del área, el webhook y la pantalla compilan.
+- `node scripts/realty-guard.cjs` con los dos compartidos declarados →
+  **exit 0**, cero prohibidos.
+- **210 pruebas verdes** en todo el vertical: 39 del núcleo de WhatsApp, y
+  171 de las demás terminales (i18n 11, contrato 31, rentas 36, comisiones
+  34, portal 17, suscripción 42). Ninguna se rompió con estos cambios.
+  ⚠️ `suscripcion.test.ts` NO corre con `npx tsx --test` a secas: importa
+  código `server-only` y necesita el hook del propio vertical —
+  `node --import tsx --import ./src/lib/realty/__tests__/offline.mjs --test …`.
+  Parece rota y no lo está.
+- Diff final: **25 archivos, +6090 / −21.** Fuera del vertical, solo dos:
+  `ORQUESTA.md` y el webhook.

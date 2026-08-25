@@ -85,12 +85,26 @@ const SHARED_FILES = [
   "src/lib/auth.ts",
   "next.config.mjs", // el archivo del CSP (frame-src de los recorridos)
   "src/app/error.tsx", // límite de error de la raíz
+  // 🔴 EL WEBHOOK DE WHATSAPP. Meta entrega TODOS los webhooks de una misma
+  // app a UNA sola URL, así que los mensajes de inmuebles caen en el webhook
+  // del dental y no hay forma de recibirlos sin tocar este archivo. Se
+  // agrega con el mismo criterio con el que está en barber-guard.cjs.
+  // Lo único que se le permite es un bloque ADITIVO dentro del `if (!clinic)`
+  // que ya existía: el camino dental se resuelve ANTES y no cambia.
+  "src/app/api/whatsapp/webhook/route.ts",
   // Los que necesitarán las olas siguientes, declarados de antemano para
   // que nadie los agregue a escondidas:
   "src/app/admin/admin-nav.tsx", // una entrada de menú del vertical
   "src/app/sitemap.ts", // las rutas públicas /i/[slug]
   "ORQUESTA.md", // el reporte de cada ola
 ];
+
+// ⚠️ `src/lib/whatsapp.ts` NO está en esta lista A PROPÓSITO. Sus 7 funciones
+// reciben credenciales sueltas y no saben nada de Clinic, así que inmuebles
+// las IMPORTA tal cual —igual que barber— sin cambiarles una línea. Dejarlo
+// fuera de SHARED_FILES hace que la guardia se caiga en rojo si alguien lo
+// toca, que es exactamente lo que queremos: ese archivo lo usan ~15 sitios
+// del dental que están VIVOS en producción.
 
 function isOwn(p) {
   if (OWN_FILES.includes(p)) return true;

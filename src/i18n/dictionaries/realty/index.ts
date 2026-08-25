@@ -30,6 +30,8 @@ import registroEs from "./registro.es.json";
 import registroEn from "./registro.en.json";
 import billingEs from "./billing.es.json";
 import billingEn from "./billing.en.json";
+import whatsappEs from "./whatsapp.es.json";
+import whatsappEn from "./whatsapp.en.json";
 // ── Ola 1: importa aquí tu área (una línea por idioma) ──
 import leadsEs from "./leads.es.json";
 import leadsEn from "./leads.en.json";
@@ -47,6 +49,8 @@ const ES: Dictionary = {
     // T1 — cartera de inmuebles y propietarios.
     inmuebles: propertiesEs as unknown as Dictionary,
     billing: billingEs as unknown as Dictionary,
+    // T6 — WhatsApp del vertical.
+    whatsapp: whatsappEs as unknown as Dictionary,
   },
 };
 
@@ -58,6 +62,7 @@ const EN: Dictionary = {
     rentals: rentalsEn as unknown as Dictionary,
     inmuebles: propertiesEn as unknown as Dictionary,
     billing: billingEn as unknown as Dictionary,
+    whatsapp: whatsappEn as unknown as Dictionary,
   },
 };
 

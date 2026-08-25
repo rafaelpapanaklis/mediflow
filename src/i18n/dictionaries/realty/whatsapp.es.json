@@ -1,0 +1,113 @@
+{
+  "title": "WhatsApp",
+  "subtitle": "Tus conversaciones en un solo lugar: quién preguntó por qué inmueble y quién le contestó.",
+  "tabs": {
+    "inbox": "Conversaciones",
+    "settings": "Configuración"
+  },
+  "kinds": {
+    "portalCode": "Código de acceso al portal",
+    "leadAck": "Acuse a un prospecto nuevo",
+    "propertyCard": "Ficha del inmueble",
+    "visitReminder": "Recordatorio de visita",
+    "rentUpcoming": "Renta por vencer",
+    "rentOverdue": "Renta vencida",
+    "matchAlert": "Aviso de coincidencia"
+  },
+  "inbox": {
+    "loading": "Cargando…",
+    "empty": "Todavía no hay conversaciones",
+    "emptyHint": "En cuanto un prospecto escriba a tu número, la conversación aparece aquí.",
+    "emptyArchived": "No hay conversaciones archivadas",
+    "showArchived": "Ver archivadas",
+    "showActive": "Ver activas",
+    "refresh": "Actualizar",
+    "pickThread": "Elige una conversación",
+    "windowOpen": "Puedes escribirle: contestó hace menos de 24 horas",
+    "windowClosed": "Pasaron más de 24 horas desde su último mensaje",
+    "windowHint": "WhatsApp solo permite texto libre durante 24 horas después del último mensaje de la persona. Fuera de esa ventana hace falta una plantilla aprobada.",
+    "composer": "Escribe tu respuesta…",
+    "send": "Enviar",
+    "archive": "Archivar",
+    "unarchive": "Desarchivar",
+    "noPermission": "Tu rol puede leer las conversaciones, pero no responder.",
+    "openMedia": "Abrir el archivo",
+    "viaTemplate": "Plantilla",
+    "failed": "No se entregó"
+  },
+  "settings": {
+    "connectionTitle": "Tu número de WhatsApp",
+    "connectionBody": "De qué número salen los mensajes de tu inmobiliaria.",
+    "state": "Estado",
+    "senderMode": "Sale desde",
+    "number": "Número",
+    "problem": "Qué falta",
+    "states": {
+      "CONNECTED": "Conectado",
+      "DISCONNECTED": "Sin conectar",
+      "UNVERIFIED": "Sin confirmar",
+      "PLAN_LOCKED": "No está en tu plan",
+      "ERROR": "Con problema"
+    },
+    "senders": {
+      "PLATFORM": "El número de DaleControl",
+      "OWN_WABA": "Tu propio número"
+    },
+    "quotaTitle": "Mensajes de este periodo",
+    "quotaBody": "Cuántos mensajes incluye tu plan cada 30 días y cuántos llevas.",
+    "quotaLimit": "Incluidos",
+    "quotaUsed": "Usados",
+    "quotaRemaining": "Te quedan",
+    "quotaUnlimited": "Sin límite",
+    "quotaExhausted": "Se acabaron los mensajes de este periodo. Los avisos automáticos se reanudan solos cuando empiece el siguiente.",
+    "quotaNear": "Vas por más del 80 % de los mensajes del periodo.",
+    "templatesTitle": "Plantillas de Meta",
+    "templatesBody": "Para escribirle a alguien que no te ha contestado en las últimas 24 horas, Meta exige una plantilla aprobada. Son {utility} de utilidad y {marketing} de marketing.",
+    "categories": {
+      "UTILITY": "Utilidad",
+      "MARKETING": "Marketing",
+      "AUTHENTICATION": "Autenticación"
+    },
+    "tplStatus": {
+      "APPROVED": "Aprobada",
+      "PENDING": "En revisión",
+      "REJECTED": "Rechazada",
+      "MISSING": "Sin crear",
+      "PAUSED": "Pausada por Meta",
+      "DISABLED": "Deshabilitada por Meta",
+      "OTHER": "Estado no reconocido"
+    },
+    "createTemplates": "Crear mis plantillas",
+    "createTemplatesMarketing": "Incluir también la de marketing",
+    "templatesDone": "Listo. Meta las revisa en unas horas y en cuanto las apruebe los avisos salen solos.",
+    "templatesPartial": "Algunas plantillas no se pudieron crear. Revisa el estado de cada una en la lista.",
+    "costHint": "Meta cobra por conversación: alrededor de {utility} USD las de utilidad y {marketing} USD las de marketing. Es una estimación — las tarifas las fija Meta y las cambia.",
+    "dispatchTitle": "Avisos con reloj",
+    "dispatchBody": "Recordatorios de visita y avisos de cobro de renta. Normalmente salen solos; este botón los manda ahora para tu cuenta.",
+    "dispatchRun": "Mandar los que toquen",
+    "dispatchDone": "Se mandaron {n} avisos."
+  },
+  "upsell": {
+    "badge": "Está en otro plan",
+    "title": "WhatsApp para tu inmobiliaria",
+    "body": "Tu plan {plan} no incluye WhatsApp. Aquí está lo que hace y en qué planes viene, para que decidas con el dato enfrente.",
+    "whatYouGet": "Qué hace",
+    "features": {
+      "lead": "Le contesta al prospecto en segundos, no en horas. Pasados 10 minutos la probabilidad de contactarlo cae alrededor de un 80 %.",
+      "ficha": "Manda la ficha del inmueble con foto, precio, datos y la liga a tu web — y al recorrido virtual si lo tiene.",
+      "visita": "Recuerda la visita al prospecto, que confirma, cancela o pide cambiarla respondiendo.",
+      "renta": "Avisa del cobro de la renta cinco días antes, el día, y a los tres y ocho días de vencida.",
+      "match": "Cuando entra un inmueble que encaja con lo que alguien busca, le avisa — solo a quien lo pidió.",
+      "inbox": "Todas las conversaciones en el panel, con el estado real de entrega de cada mensaje."
+    },
+    "plansTitle": "En qué planes viene",
+    "included": "{n} mensajes cada 30 días",
+    "perMonth": "al mes",
+    "cta": "Ver los planes",
+    "note": "Los mensajes incluidos se renuevan cada 30 días. Meta cobra por conversación y esa tarifa la fija Meta, no DaleControl."
+  },
+  "errors": {
+    "generic": "No se pudo completar la acción.",
+    "load": "No se pudo cargar la información."
+  }
+}

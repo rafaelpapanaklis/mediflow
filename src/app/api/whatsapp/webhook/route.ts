@@ -280,14 +280,44 @@ export async function POST(req: NextRequest) {
       // barber ni un fallo al CARGAR su módulo pueden impedir que se entregue
       // el mensaje de una clínica. Un phone_number_id desconocido tampoco
       // truena: se registra y se responde 200 como siempre.
+      let handled = false;
+      let barberFailed = false;
       try {
         const { ingestBarberInbound } = await import("@/lib/barber/whatsapp");
-        const handled = await ingestBarberInbound(value, msg);
-        if (!handled) {
-          console.warn(`[whatsapp/webhook] phone_number_id sin dueño: ${phoneNumberId}`);
-        }
+        handled = await ingestBarberInbound(value, msg);
       } catch (e) {
+        barberFailed = true;
         console.error("[whatsapp/webhook] camino barber no aplicado:", e);
+      }
+
+      // ── DaleControl Inmuebles (TERCER producto) ────────────────────────
+      // Mismo criterio, un escalón más abajo: solo corre cuando el número no
+      // es de ninguna clínica NI de ninguna barbería. Sigue dentro del mismo
+      // `if (!clinic)`, así que el camino dental no cambia una línea, y el de
+      // barber tampoco: su llamada de arriba es idéntica a la que había.
+      // También en try/catch con import() dinámico, por lo mismo de siempre.
+      //
+      // 🔴 `!barberFailed` no es una precaución de más: si barber LANZA, no
+      // sabemos si el número era suyo (revienta ANTES de poder decirlo), y
+      // dejar que inmuebles lo intente cambiaría el comportamiento de un
+      // producto VIVO en su camino de error. Inmuebles es el vertical nuevo
+      // y sin clientes: cuando hay duda, el que se queda sin correr es él.
+      // Consecuencia asumida: si barber falla en serio, inmuebles deja de
+      // recibir. Es el lado correcto en el que fallar.
+      if (!handled && !barberFailed) {
+        try {
+          const { ingestRealtyInbound } = await import("@/lib/realty/whatsapp");
+          handled = await ingestRealtyInbound(value, msg);
+        } catch (e) {
+          console.error("[whatsapp/webhook] camino inmuebles no aplicado:", e);
+        }
+      }
+
+      // El aviso solo cuando de verdad nadie lo reconoció. Si barber lanzó,
+      // ya se registró su error arriba y este renglón mentiría diciendo que
+      // el número no tiene dueño.
+      if (!handled && !barberFailed) {
+        console.warn(`[whatsapp/webhook] phone_number_id sin dueño: ${phoneNumberId}`);
       }
       return NextResponse.json({ ok: true });
     }
@@ -750,11 +780,32 @@ async function ingestDeliveryStatuses(value: any): Promise<void> {
     // import dinámico para que nada de barber pueda afectar al dental.
     // Sin esto, un recordatorio de barbería RECHAZADO por Meta se quedaría
     // para siempre en "enviado" — el bug M-06/M-10 del dental.
+    let handled = false;
+    let barberFailed = false;
     try {
       const { applyBarberDeliveryStatuses } = await import("@/lib/barber/whatsapp");
-      await applyBarberDeliveryStatuses(phoneNumberId, statuses);
+      // applyBarberDeliveryStatuses YA devolvía boolean (false = el número no
+      // es de ninguna barbería); antes se descartaba. Recogerlo no cambia
+      // nada de lo que hace barber: solo permite encadenar el vertical
+      // siguiente cuando el número no era suyo.
+      handled = await applyBarberDeliveryStatuses(phoneNumberId, statuses);
     } catch (e) {
+      barberFailed = true;
       console.error("[whatsapp/webhook] estados barber no aplicados:", e);
+    }
+
+    // ── DaleControl Inmuebles ──────────────────────────────────────────
+    // Sin esto, un aviso de renta RECHAZADO por Meta se quedaría para
+    // siempre en "enviado" — el bug M-06/M-10 del dental, otra vez.
+    // `!barberFailed` por lo mismo que en el POST: si barber lanzó, no se
+    // sabe de quién era el número y el vertical nuevo no corre.
+    if (!handled && !barberFailed) {
+      try {
+        const { applyRealtyDeliveryStatuses } = await import("@/lib/realty/whatsapp");
+        await applyRealtyDeliveryStatuses(phoneNumberId, statuses);
+      } catch (e) {
+        console.error("[whatsapp/webhook] estados inmuebles no aplicados:", e);
+      }
     }
     return;
   }
