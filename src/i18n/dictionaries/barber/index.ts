@@ -47,6 +47,8 @@ import afiliadosEs from "./afiliados.es.json"; // programa de socios
 import afiliadosEn from "./afiliados.en.json";
 import landingEs from "./landing.es.json"; // landing pública /barberias
 import landingEn from "./landing.en.json";
+import compararEs from "./comparar.es.json"; // comparativas /barberias/comparar
+import compararEn from "./comparar.en.json";
 
 const ES: Dictionary = {
   barber: {
@@ -66,6 +68,7 @@ const ES: Dictionary = {
     reportes: inicioEs.reportes as unknown as Dictionary,
     afiliados: afiliadosEs as unknown as Dictionary,
     landing: landingEs as unknown as Dictionary,
+    comparar: compararEs as unknown as Dictionary,
   },
 };
 
@@ -87,6 +90,7 @@ const EN: Dictionary = {
     reportes: inicioEn.reportes as unknown as Dictionary,
     afiliados: afiliadosEn as unknown as Dictionary,
     landing: landingEn as unknown as Dictionary,
+    comparar: compararEn as unknown as Dictionary,
   },
 };
 

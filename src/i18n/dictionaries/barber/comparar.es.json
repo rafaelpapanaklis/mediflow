@@ -1,0 +1,80 @@
+{
+  "meta": {
+    "indiceTitle": "Comparativa de software para barberías en México",
+    "indiceDescription": "DaleControl Barber frente a Booksy, Fresha y AgendaPro: precio, cómo cobra cada uno, WhatsApp incluido y comisión por cliente. Datos revisados el {fecha}.",
+    "competidorTitle": "DaleControl Barber vs {competidor}: comparativa honesta",
+    "competidorDescription": "Precio, forma de cobro, WhatsApp y comisiones de {competidor} frente a DaleControl Barber. Con fuentes y fecha. Datos revisados el {fecha}."
+  },
+  "nav": {
+    "marca": "DaleControl Barber",
+    "inicio": "Inicio",
+    "comparar": "Comparativas",
+    "cta": "Crear mi cuenta"
+  },
+  "indice": {
+    "kicker": "Comparativas",
+    "h1": "DaleControl Barber frente a la competencia",
+    "lede": "Si ya pagas un software para tu barbería, esto es lo que cambia al mudarte. Sin trucos: los precios son los que publica cada quien, con su fuente y su fecha.",
+    "tablaTitulo": "Los tres que más se comparan",
+    "tablaLede": "Cada uno tiene su página con el detalle, sus fuentes y en qué es mejor que nosotros.",
+    "verPagina": "Ver la comparativa con {competidor}",
+    "panoramaTitulo": "El resto del panorama",
+    "panoramaLede": "No tienen página propia todavía, pero si estás comparando merecen estar en el mapa.",
+    "colProducto": "Producto",
+    "colPrecio": "Precio publicado",
+    "colOrigen": "Origen",
+    "colNota": "Lo que hay que saber",
+    "nosotrosNota": "Precio por plan, no por barbero. WhatsApp incluido y sin comisión por cliente."
+  },
+  "pagina": {
+    "kicker": "Comparativa",
+    "h1": "DaleControl Barber vs {competidor}",
+    "volver": "Todas las comparativas"
+  },
+  "tabla": {
+    "titulo": "Lado a lado",
+    "colEje": "Qué comparamos",
+    "colNosotros": "DaleControl Barber",
+    "notaComparabilidad": "Cada precio se muestra tal como lo publica cada empresa. Sólo AgendaPro especifica que los suyos van + IVA; en los demás casos no verificamos el tratamiento fiscal, así que no lo afirmamos."
+  },
+  "escenarios": {
+    "titulo": "El cálculo, a la vista",
+    "lede": "Su precio y el nuestro no se cobran igual, así que compararlos de frente sería tramposo. Esto es lo que pagaría de suscripción una barbería según su tamaño.",
+    "colEquipo": "Tamaño del equipo",
+    "colNosotros": "DaleControl Barber",
+    "unBarbero": "1 barbero",
+    "nBarberos": "{n} barberos",
+    "planNota": "plan {plan}",
+    "soloSuscripcion": "Esto es sólo la suscripción. Las comisiones por cliente del marketplace van aparte y dependen de cuánta gente llegue por ahí, así que no se pueden meter en una tabla sin inventar.",
+    "supuestoTitulo": "El supuesto del cálculo"
+  },
+  "fortalezas": {
+    "titulo": "En qué es mejor {competidor}",
+    "lede": "Si sólo dijéramos que ganamos en todo, no tendrías por qué creernos. Esto es real y es suyo."
+  },
+  "ventajas": {
+    "titulo": "Dónde estamos mejor nosotros",
+    "lede": "Nuestra diferencia defendible es corta: el WhatsApp va incluido de verdad y no cobramos comisión por cliente. Lo demás es ruido."
+  },
+  "reportes": {
+    "titulo": "Lo que reportan usuarios",
+    "formula": "Usuarios reportan en {fuente}:",
+    "aviso": "Son reseñas públicas de terceros, no una experiencia nuestra ni una acusación: las citamos como lo que son, reportes de usuarios. Júzgalas tú."
+  },
+  "fuentes": {
+    "titulo": "Fuentes",
+    "revisado": "Datos revisados el {fecha}.",
+    "verifica": "Los precios cambian sin avisar. Antes de decidir, verifica cada número en el sitio de cada empresa.",
+    "sinEnlace": "Sin enlace directo: revísalo en su sitio oficial."
+  },
+  "cta": {
+    "titulo": "Pruébalo con tu propia barbería",
+    "lede": "Precios en pesos, WhatsApp incluido en el plan y ni un peso de comisión por tus clientes.",
+    "boton": "Crear mi cuenta",
+    "secundario": "Ver todas las comparativas"
+  },
+  "footer": {
+    "aviso": "Booksy, Fresha, AgendaPro, Squire, Amyra y BarberLab son marcas de sus respectivas empresas, sin relación con DaleControl. Lo que decimos de cada una sale de lo que publican en sus sitios y de reseñas públicas de usuarios, revisado el {fecha}.",
+    "verificado": "Comparativa con fuentes y fecha"
+  }
+}

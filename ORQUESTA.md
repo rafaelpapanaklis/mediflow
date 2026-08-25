@@ -15227,3 +15227,188 @@ ola). Cero archivos del dental tocados; `src/app/sitemap.ts` y `vercel.json`
 intactos a propósito. Pruebas:
 `npx tsx --test src/lib/barber/__tests__/marketing.test.ts` (no hay script en
 `package.json`: está fuera de la allowlist).
+---
+
+## [Barber Comparativas] — Las cuatro páginas que capturan al que YA le paga a otro: comparativa con fuente, fecha y el cálculo enseñado ✅ (2026-08-24)
+
+▶ **QUÉ SE CONSTRUYÓ**
+
+Cuatro URLs públicas, tema caramelo, cero JavaScript de cliente (todo componente
+de servidor: una comparativa es texto y una tabla, y su único trabajo es cargar
+rápido y posicionar):
+
+    ○ /barberias/comparar              índice, tabla de LOS SIETE
+    ● /barberias/comparar/booksy
+    ● /barberias/comparar/fresha
+    ● /barberias/comparar/agendapro
+
+El segmento es `[competidor]` para no copiar tres archivos iguales, pero cada
+una es una URL real con su `<title>`, su descripción y su canónica propios
+(`generateMetadata`). `generateStaticParams` las prerrenderiza las tres en el
+build y **`dynamicParams = false`** cierra la puerta: `/comparar/loquesea` da
+404 verificado, no una comparativa vacía.
+
+▶ **LA REGLA QUE SOSTIENE TODO ESTO** (está en la cabecera de `comparativas.ts`)
+
+Son empresas REALES. El módulo de datos hace estructuralmente imposible saltarse
+las reglas, no por disciplina sino por tipos:
+
+1. Cada dato de un competidor es un `Dato { texto, fuenteId, nota? }` con
+   `fuenteId` **obligatorio**. No hay forma de pintar un dato sin fuente.
+2. Las quejas viven en un tipo APARTE, `Reporte`, que sólo se puede pintar por
+   `<Reportes>`, y ese componente las enmarca SIEMPRE como *"Usuarios reportan
+   en &lt;fuente&gt;:"* + un descargo al pie. Nunca entran a la tabla ni se
+   afirman como hecho.
+3. `fortalezas: string[]` es obligatorio y no puede ir vacío.
+4. **Ni un precio NUESTRO escrito a mano.** Los nuestros entran por parámetro
+   (`planes: BarberResolvedPlan[]`) desde `getBarberPlans()` → `barber_plan_configs`.
+
+▶ **EL ÁNGULO, SIN EXAGERAR**
+
+La diferencia defendible es corta y así se escribió: **el WhatsApp va incluido de
+verdad y no cobramos comisión por cliente.** Los dos son verificables en nuestro
+propio producto y en las páginas de precios de ellos. Todo lo demás es ruido y
+no está en las páginas.
+
+▶ **COMPARAR LO COMPARABLE — el cálculo se enseña, no se esconde**
+
+Su precio es por staff y el nuestro por plan, así que ponerlos de frente sería
+tramposo. Cada página lleva una tabla "El cálculo, a la vista" con el costo de
+SUSCRIPCIÓN a 1, 3 y 8 barberos, más DOS notas al pie:
+
+  · **el supuesto** de cada cálculo, escrito (`competidor.supuesto`);
+  · **"esto es sólo la suscripción"** — las comisiones de marketplace van aparte
+    y dependen de cuánta gente llegue por ahí, así que meterlas en la tabla
+    exigiría inventar. No se inventa.
+
+Verificado en vivo: Booksy 429 / 629 / 1,129 · Fresha 239.95 / 479.85 / 1,279.60 ·
+AgendaPro 299 / 550 / 550 (+ IVA) · nosotros 199 / 329 / 749 (de la tabla).
+
+▶ **DÓNDE RECONOCEMOS QUE PIERDEN**
+
+Ninguna página dice que ganamos en todo. Booksy 2 fortalezas, Fresha 3,
+AgendaPro 2 + **una calculada**: como su escalón de hasta 20 profesionales
+($550 + IVA ≈ $638) queda POR DEBAJO de nuestro plan más caro, la página lo dice
+con todas sus letras — y nuestro número sale de `barber_plan_configs`, así que si
+mañana baja el precio, la admisión desaparece sola (`fortalezasCalculadas`).
+
+Las dos que más cuestan admitir, y que están: **Booksy y Fresha tienen
+marketplace propio y nosotros NO.** Eso es descubrimiento — clientes que no te
+conocían — y es algo que ellos hacen y nosotros no.
+
+▶ **CADA AFIRMACIÓN, CON SU FUENTE** (todas revisadas el 23-ago-2026)
+
+    Booksy   $429/mes + $100 por empleado adicional ......... precios Booksy MX
+             Boost: 30% de la 1ª visita del cliente que
+             llega por su marketplace, mín 10 USD / tope
+             100 USD (el mín y el tope están en DÓLARES) .... condiciones Boost
+             3 quejas (cobros de Boost por clientes que ya
+             tenían · baja difícil · enlace anclado en el
+             perfil de Google al irse) ...................... Trustpilot + BBB *
+    Fresha   MX$239.95 una persona / MX$159.95 por miembro .. precios Fresha
+             eliminó el plan gratis en 2025 ................. precios Fresha
+             20% del primer servicio del cliente nuevo ...... precios Fresha
+             20 mensajes de WhatsApp al mes, luego se pagan . precios Fresha
+             2 quejas (comisiones por clientes que no
+             vinieron del marketplace · pagos retenidos) .... Trustpilot *
+    AgendaPro $299 / $550 / $1,500 / $4,500, TODOS + IVA ..... precios AgendaPro MX
+             WhatsApp por paquetes, desde $100 por 50 ....... precios AgendaPro MX
+    Squire   30 a 250 USD, NO opera en México ............... precios Squire
+    Amyra    $2,499 y $4,499 MXN ........................... precios Amyra
+    BarberLab $349 / $649 / $999, recordatorios SÓLO email ... precios BarberLab
+
+    (*) las marcadas son REPORTES de usuarios, nunca hechos: van en el bloque
+        "Lo que reportan usuarios", con la fórmula "usuarios reportan en X" y el
+        descargo "no es una experiencia nuestra ni una acusación".
+
+**Enlaces**: sólo dominios raíz de los que hay certeza (booksy.com, fresha.com,
+agendapro.com) con `rel="nofollow noopener noreferrer"`. **No se inventó ni una
+ruta profunda**: un enlace roto en una comparativa nos quita la razón. Squire,
+Amyra y BarberLab van SIN enlace y la página lo dice ("Sin enlace directo:
+revísalo en su sitio oficial") en vez de fingir una URL.
+
+**Lo que NO se dijo, aunque "se sabe"**: en una segunda pasada se quitaron tres
+afirmaciones que sonaban inofensivas y no estaban en los datos verificados —
+que AgendaPro "cubre varios giros", que Fresha es "la de presencia internacional
+más grande", y el ORIGEN corporativo de los tres (el dato verificado dice que
+**operan en México**, no de dónde son). El pill del índice dice ahora "Opera en
+México" y nada más. Squire/Amyra/BarberLab sí conservan país porque el dato
+verificado sí lo trae.
+
+**Comparabilidad declarada**: AgendaPro es el único que especifica "+ IVA"; la
+nota al pie de cada tabla dice literalmente que en los demás **no verificamos el
+tratamiento fiscal, así que no lo afirmamos**. Lo mismo con el mín/tope de Boost
+en dólares contra un precio base en pesos.
+
+▶ **CÓMO SE VERIFICÓ**
+
+1. `npm run build` → **exit 0**, salida completa, sin pipes. Las cuatro rutas en
+   el manifiesto (`○ /barberias/comparar` + `● [competidor]` con booksy, fresha
+   y agendapro prerrenderizados). Cero errores de tipos en lo mío.
+   ⚠️ **A la primera reventó con `JavaScript heap out of memory` (exit 134)** en
+   la fase de tipos, con el heap por defecto de 4 GB. No es el código —
+   `tsc --noEmit` ya había pasado limpio. Con `NODE_OPTIONS=--max-old-space-size=8192`
+   pasa. Es el efecto de varios worktrees compilando a la vez (ya documentado).
+2. Servidor de producción real en :3311 → las 4 rutas **200** y
+   `/barberias/comparar/inventado` **404**. **Cero llaves de i18n crudas** en las
+   cuatro (el fallo que se comió `/barber/campanas`).
+3. Precios propios a mano: `grep -rn "199\|329\|749"` sobre TODO mi allowlist →
+   **cero coincidencias**. Los tres números sólo aparecen en el HTML servido,
+   viniendo de `getBarberPlans()`.
+4. Vocabulario dental (`paciente|doctor|Dr.|clínica|consulta|expediente`) →
+   **cero coincidencias**. Ojo: por eso en las páginas se dice "datos **revisados**
+   el …" y no "consultados" — "consultado" contiene "consulta" y ensuciaba el grep.
+5. `node scripts/barber-guard.cjs` → **exit 0**, 10 archivos, todos PROPIOS.
+6. Responsive medido en el navegador, no a ojo: con el contenedor a 390 px la
+   tabla se APILA (`display:block`, reaparecen las etiquetas por celda) y a
+   ≥760 px es rejilla de 3 columnas. `scrollWidth > clientWidth` = **false** en
+   el documento, en la tabla y en la de escenarios: cero scroll horizontal.
+
+▶ **EL CRUCE CON LA LANDING `/barberias`, YA RESUELTO** (rebase sobre 8fdab949)
+
+Esto se escribió en paralelo con [Barber Landing] y las dos tocaron los mismos
+dos archivos compartidos. Cómo quedó, tras rebase sobre `origin/main`:
+
+**(1) El guardia — auto-merge limpio, los DOS juegos de prefijos puestos.** Ella
+declaró el árbol completo (`src/app/barberias/`, `src/components/public/barberias/`)
+y ésta su sub-árbol (`.../comparar/`). Con los dos, **los míos quedan cubiertos
+por los suyos y son redundantes**; se conservan a propósito porque documentan de
+quién es cada carpeta y no cuestan nada. El comentario del bloque dice justo eso.
+
+**(2) El index de i18n — ÚNICO conflicto, en sus tres hunks** (import, ES, EN).
+Resuelto conservando **ambos** diccionarios: `landing` y `comparar` conviven en
+los dos idiomas. Ninguna llave de la landing se perdió.
+
+**(3) El choque de layout que temía NO ocurrió.** La landing no creó
+`src/app/barberias/layout.tsx`: su barra y su pie viven dentro de su propio
+`page.tsx` (`components/public/barberias/{nav,footer}.tsx`). Como mi
+`comparar/layout.tsx` sólo envuelve `/barberias/comparar/**`, **no hay barra ni
+pie duplicados** — verificado con las cuatro rutas sirviendo en producción.
+
+▶ ⚠️ **LO QUE SÍ QUEDA ABIERTO DEL CRUCE (no es un bug, es coherencia visual)**
+
+La landing y las comparativas tienen **cabeceras y pies DISTINTOS**: cada una
+trae los suyos. Funcionan y se ven bien por separado, pero un visitante que
+salte de `/barberias` a `/barberias/comparar` va a notar el cambio de barra.
+Unificarlas es una decisión de diseño de una sola terminal —la dueña de
+`components/public/barberias/{nav,footer}.tsx`—, no un arreglo mecánico, y por
+eso NO lo hice aquí: tocar sus componentes se sale de mi allowlist y cambiaría
+la landing viva. Queda anotado para quien tome esa decisión.
+
+▶ **PENDIENTES / AVISOS**
+
+(1) **`src/app/sitemap.ts` NO se tocó** (está fuera de mi allowlist y es
+COMPARTIDO). Las cuatro URLs no están en el sitemap todavía — son cuatro
+renglones para quien tenga ese archivo declarado.
+(2) **ISR de 1 h** (`revalidate = 3600`, como las páginas de módulo del dental).
+Si el admin mueve un precio en `barber_plan_configs`, las comparativas tardan
+hasta una hora en reflejarlo. Es el mismo trato conocido de ISR + admin editable.
+(3) **La fecha se mueve en UN solo lugar**: `REVISADO_EL` / `REVISADO_EL_TEXTO`
+en `comparativas.ts`. Cambiar los datos sin mover esa constante es la única
+forma de que estas páginas mientan — quien actualice precios, que mueva la fecha.
+(4) `comparar.en.json` existe completo por convención del árbol, pero **hoy no
+hay ruta en inglés**: el layout fija `getBarberT("es")`. No es código muerto por
+error, es el gemelo que el `index.ts` exige.
+(5) Pre-existente, NO mío: `src/lib/barber/__tests__/i18n-alcance.test.ts` tira
+dos `TS2802` (iterar un `Set` sin `downlevelIteration`) en `tsc --noEmit`. No
+rompe `npm run build` (Next no typechequea los tests). Está fuera de mi allowlist.

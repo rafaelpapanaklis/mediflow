@@ -1,0 +1,80 @@
+{
+  "meta": {
+    "indiceTitle": "Barbershop software comparison in Mexico",
+    "indiceDescription": "DaleControl Barber against Booksy, Fresha and AgendaPro: pricing, how each one charges, WhatsApp included and per-client commissions. Data reviewed on {fecha}.",
+    "competidorTitle": "DaleControl Barber vs {competidor}: an honest comparison",
+    "competidorDescription": "Pricing, billing model, WhatsApp and commissions of {competidor} against DaleControl Barber. With sources and dates. Data reviewed on {fecha}."
+  },
+  "nav": {
+    "marca": "DaleControl Barber",
+    "inicio": "Home",
+    "comparar": "Comparisons",
+    "cta": "Create my account"
+  },
+  "indice": {
+    "kicker": "Comparisons",
+    "h1": "DaleControl Barber against the competition",
+    "lede": "If you already pay for barbershop software, this is what changes when you move. No tricks: every price is the one each company publishes, with its source and its date.",
+    "tablaTitulo": "The three most often compared",
+    "tablaLede": "Each one has its own page with the detail, the sources and where it beats us.",
+    "verPagina": "See the comparison with {competidor}",
+    "panoramaTitulo": "The rest of the field",
+    "panoramaLede": "They do not have their own page yet, but if you are comparing they deserve a place on the map.",
+    "colProducto": "Product",
+    "colPrecio": "Published price",
+    "colOrigen": "Origin",
+    "colNota": "What you should know",
+    "nosotrosNota": "Priced per plan, not per barber. WhatsApp included and no per-client commission."
+  },
+  "pagina": {
+    "kicker": "Comparison",
+    "h1": "DaleControl Barber vs {competidor}",
+    "volver": "All comparisons"
+  },
+  "tabla": {
+    "titulo": "Side by side",
+    "colEje": "What we compare",
+    "colNosotros": "DaleControl Barber",
+    "notaComparabilidad": "Every price is shown exactly as each company publishes it. Only AgendaPro states that theirs are listed before tax; for the others we did not verify the tax treatment, so we do not claim it."
+  },
+  "escenarios": {
+    "titulo": "The math, out in the open",
+    "lede": "Their pricing and ours do not work the same way, so comparing them head to head would be dishonest. This is what a barbershop would pay in subscription, by team size.",
+    "colEquipo": "Team size",
+    "colNosotros": "DaleControl Barber",
+    "unBarbero": "1 barber",
+    "nBarberos": "{n} barbers",
+    "planNota": "{plan} plan",
+    "soloSuscripcion": "This is the subscription only. Marketplace per-client commissions are charged separately and depend on how many people arrive through it, so they cannot go into a table without guessing.",
+    "supuestoTitulo": "The assumption behind the math"
+  },
+  "fortalezas": {
+    "titulo": "Where {competidor} is better",
+    "lede": "If we only said we win at everything, you would have no reason to believe us. This is real, and it is theirs."
+  },
+  "ventajas": {
+    "titulo": "Where we are better",
+    "lede": "Our defensible difference is short: WhatsApp is genuinely included and we charge no per-client commission. The rest is noise."
+  },
+  "reportes": {
+    "titulo": "What users report",
+    "formula": "Users report on {fuente}:",
+    "aviso": "These are public third-party reviews, not our own experience and not an accusation: we cite them as what they are, user reports. Judge them yourself."
+  },
+  "fuentes": {
+    "titulo": "Sources",
+    "revisado": "Data reviewed on {fecha}.",
+    "verifica": "Prices change without notice. Before you decide, verify every number on each company's own site.",
+    "sinEnlace": "No direct link: check it on their official site."
+  },
+  "cta": {
+    "titulo": "Try it with your own barbershop",
+    "lede": "Prices in pesos, WhatsApp included in the plan and not a single peso of commission on your clients.",
+    "boton": "Create my account",
+    "secundario": "See all comparisons"
+  },
+  "footer": {
+    "aviso": "Booksy, Fresha, AgendaPro, Squire, Amyra and BarberLab are trademarks of their respective companies and are not affiliated with DaleControl. What we say about each one comes from what they publish on their sites and from public user reviews, reviewed on {fecha}.",
+    "verificado": "Comparison with sources and dates"
+  }
+}

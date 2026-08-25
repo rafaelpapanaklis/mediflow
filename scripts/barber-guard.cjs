@@ -46,6 +46,14 @@ const OWN_PREFIXES = [
   "src/app/admin/barberias/",
   "src/app/api/admin/barberias/",
   "src/components/admin/barberias/",
+  // Páginas públicas de COMPARATIVA del vertical (/barberias/comparar/**).
+  // Se escribieron en paralelo con la landing, y por eso cada terminal
+  // declaró lo suyo: ella el árbol completo `src/app/barberias/` (arriba),
+  // ésta sólo su sub-árbol `comparar/`. Con los dos renglones puestos, éstos
+  // ya quedan CUBIERTOS por los de arriba y son redundantes; se conservan a
+  // propósito, porque documentan de quién es la carpeta y no cuestan nada.
+  "src/app/barberias/comparar/",
+  "src/components/public/barberias/comparar/",
 ];
 
 // PROPIO de barber: archivos exactos.
