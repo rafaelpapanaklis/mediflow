@@ -1,0 +1,153 @@
+{
+  "title": "Suscripción",
+  "subtitle": "Tu plan de DaleControl, qué incluye y cómo va tu consumo.",
+  "state": {
+    "active": "Activa",
+    "trialing": "Cortesía",
+    "paid": "Pagada",
+    "past_due": "Pago pendiente",
+    "unpaid": "Sin pagar",
+    "canceled": "Cancelada",
+    "incomplete": "Pago sin terminar",
+    "incomplete_expired": "Pago no completado",
+    "paused": "En pausa",
+    "pending_payment": "Sin contratar",
+    "suspended": "Suspendida",
+    "unknown": "Sin definir"
+  },
+  "account": {
+    "planLabel": "Tu plan",
+    "statusLabel": "Estado",
+    "perMonth": "al mes",
+    "perYear": "al año",
+    "nextCharge": "Próximo cobro",
+    "nextChargeNone": "Sin fecha de cobro programada",
+    "cancelScheduled": "Se cancela el {date}. Hasta entonces todo sigue igual.",
+    "trialUntil": "Cortesía hasta el {date}.",
+    "chargedAmount": "Se te cobran {amount}"
+  },
+  "notice": {
+    "notConfigured": "El cobro en línea todavía no está conectado en esta instalación. Escríbenos a soporte y lo activamos.",
+    "stripeUnreachable": "No pudimos leer tus datos de cobro en este momento. Vuelve a intentarlo en un minuto.",
+    "pendingPayment": "Tu cuenta todavía no tiene plan contratado. Elige uno para entrar al panel.",
+    "pastDue": "Tu último cobro no pasó. Actualiza tu método de pago para no perder el acceso.",
+    "canceled": "Tu suscripción está cancelada. Puedes volver a contratar cuando quieras.",
+    "suspended": "Tu cuenta está suspendida por DaleControl. Escríbenos a soporte.",
+    "confirming": "Estamos confirmando tu pago con el banco. Tarda unos segundos.",
+    "confirmSlow": "Tu pago se registró, pero la confirmación está tardando. Recarga en un minuto; no vuelvas a pagar.",
+    "checkoutCanceled": "No se hizo ningún cargo.",
+    "readOnly": "Solo el dueño de la cuenta puede cambiar el plan o el método de pago."
+  },
+  "usage": {
+    "title": "Tu consumo",
+    "hint": "Lo que llevas usado contra el cupo de tu plan.",
+    "users": "Usuarios",
+    "offices": "Oficinas",
+    "properties": "Inmuebles",
+    "storage": "Espacio de archivos",
+    "messages": "Mensajes de WhatsApp",
+    "ofLimit": "{used} de {limit}",
+    "unlimited": "{used} · sin límite",
+    "notIncluded": "No incluido en tu plan",
+    "near": "Ya usaste el {percent} % de este cupo.",
+    "full": "Este cupo está agotado."
+  },
+  "plans": {
+    "title": "Los planes",
+    "hint": "Precios y límites tal como están configurados hoy. Si cambian, esta pantalla cambia sola.",
+    "current": "Tu plan actual",
+    "choose": "Contratar {plan}",
+    "upgrade": "Cambiar a {plan}",
+    "downgrade": "Bajar a {plan}",
+    "includes": "Incluye",
+    "unavailable": "No disponible",
+    "limitUsers": {
+      "one": "1 usuario",
+      "other": "{count} usuarios"
+    },
+    "limitUsersUnlimited": "Usuarios ilimitados",
+    "limitOffices": {
+      "one": "1 oficina",
+      "other": "{count} oficinas"
+    },
+    "limitOfficesUnlimited": "Oficinas ilimitadas",
+    "limitProperties": "Inmuebles ilimitados",
+    "limitStorage": "{size} de archivos",
+    "limitMessages": {
+      "one": "1 mensaje de WhatsApp al mes",
+      "other": "{count} mensajes de WhatsApp al mes"
+    },
+    "noMessages": "Sin WhatsApp",
+    "everythingIn": "Todo lo del plan {plan}, y además:"
+  },
+  "invoices": {
+    "title": "Historial de pagos",
+    "hint": "Los últimos movimientos de tu suscripción.",
+    "empty": "Todavía no hay pagos registrados.",
+    "unavailable": "El historial se lee de Stripe y ahora mismo no respondió.",
+    "date": "Fecha",
+    "number": "Folio",
+    "amount": "Importe",
+    "status": "Estado",
+    "view": "Ver",
+    "pdf": "PDF",
+    "statusPaid": "Pagada",
+    "statusOpen": "Pendiente",
+    "statusVoid": "Anulada",
+    "statusDraft": "Borrador",
+    "statusUncollectible": "Incobrable",
+    "failed": "El cobro no pasó."
+  },
+  "manage": {
+    "title": "Tu cuenta de cobro",
+    "payMethod": "Actualizar método de pago",
+    "payMethodHint": "Se abre Stripe para cambiar tu tarjeta y ver tus facturas.",
+    "openInvoice": "Pagar la factura pendiente",
+    "cancel": "Cancelar suscripción",
+    "cancelHint": "Sigue funcionando hasta el final del periodo que ya pagaste.",
+    "resume": "Reanudar suscripción",
+    "resumeHint": "Quita la cancelación programada y todo sigue como antes."
+  },
+  "modal": {
+    "changeTitle": "Cambiar a {plan}",
+    "changeUpgrade": "Vas a subir de plan. Se cobra hoy solo la diferencia por los días que faltan del periodo.",
+    "changeDowngrade": "Vas a bajar de plan. Hoy no se cobra nada: te queda un saldo a favor para tu próxima factura.",
+    "keepsDate": "Tu fecha de renovación no se mueve.",
+    "dueToday": "Se cobra hoy: {amount}",
+    "dueTodayUnknown": "No pudimos calcular el importe exacto de hoy. Stripe te va a cobrar solo la parte proporcional.",
+    "overLimit": "Con este plan te quedas por encima de algún cupo. Nada se borra, pero no vas a poder agregar más hasta liberar espacio.",
+    "confirm": "Confirmar el cambio",
+    "back": "Volver",
+    "cancelTitle": "Cancelar tu suscripción",
+    "cancelBody": "Tu plan sigue funcionando hasta el {date}. No se te vuelve a cobrar y puedes reanudar antes de esa fecha.",
+    "cancelBodyNoDate": "Tu plan sigue funcionando hasta el final del periodo que ya pagaste. No se te vuelve a cobrar.",
+    "cancelConfirm": "Sí, cancelar",
+    "cancelKeep": "Mejor no"
+  },
+  "errors": {
+    "generic": "No se pudo completar la operación. Inténtalo de nuevo."
+  },
+  "features": {
+    "properties": "Cartera de inmuebles",
+    "leads": "Prospectos y embudo",
+    "publicWeb": "Tu web pública",
+    "webEditor": "Editor visual de la web",
+    "tours3d": "Recorridos 3D y 360°",
+    "calculators": "Calculadoras (ISAI, crédito, rendimiento)",
+    "rentals": "Contratos de renta y cobranza",
+    "maintenance": "Mantenimientos e incidencias",
+    "whatsapp": "WhatsApp",
+    "whatsappInbox": "Inbox de WhatsApp",
+    "portalsFeed": "Feed para portales",
+    "commissions": "Comisiones y su reparto",
+    "multiOffice": "Varias oficinas",
+    "agentPages": "Página pública por asesor",
+    "mls": "Bolsa compartida (MLS)",
+    "pld": "Prevención de lavado de dinero",
+    "aiStudio": "Estudio con IA (fotos y textos)",
+    "advancedRoles": "Roles avanzados",
+    "analytics": "Analytics",
+    "affiliates": "Programa de socios",
+    "clientPortal": "Portal del cliente"
+  }
+}

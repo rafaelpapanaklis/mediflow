@@ -19821,3 +19821,558 @@ cada renglón es exactamente la del anterior más el excedente por su tasa, y qu
 los once encadenen sin un peso de diferencia es la firma de una tarifa real —
 una inventada no encaja. Es la vigente desde 2024; hay que compararla contra el
 Anexo 8 de la RMF cada enero.
+═══════════════════════════════════════════════════════════════════════════
+▶ [INMUEBLES · OLA 1 · T7] PLANES, STRIPE Y ADMIN — 2026-08-25
+═══════════════════════════════════════════════════════════════════════════
+
+La Ola 0 dejó tres planes sembrados en una tabla y `stripeLookupKey` en NULL
+a propósito. Esta terminal los cobra, los hace valer y los administra.
+
+───────────────────────────────────────────────────────────────────────────
+1. RESOLVEDOR DE PLANES — YA ESTABA, Y ESTÁ BIEN
+───────────────────────────────────────────────────────────────────────────
+
+`src/lib/realty/plans.ts` **no se tocó**. La Ola 0 ya lo dejó completo:
+lee `realty_plan_configs`, caché en memoria de 60 s, fusión de features sobre
+el fallback (una llave nueva del código no desaparece si la fila es vieja) y
+degradación en tres escalones — fila DB → última caché buena → fallback, que
+ES el seed. Se auditó contra el de barber y no le falta nada.
+
+Lo único que faltaba era **quién invalida la caché**: `clearRealtyPlanConfigCache()`
+estaba exportada sin un solo consumidor. Ahora la llama el editor de planes
+del admin (y `persistRealtyLookupKey`), que es para lo que existía.
+
+───────────────────────────────────────────────────────────────────────────
+2. GATING — `src/lib/realty/gating.ts` (PURO, client-safe)
+───────────────────────────────────────────────────────────────────────────
+
+El punto único de "¿esta cuenta puede X?". **No importa prisma ni
+`server-only`**, así que sirve igual en un server component, en una ruta y en
+el navegador. Puede permitirse ser puro porque `getRealtyContext()` ya
+devuelve `ctx.plan` resuelto y `ctx.account` trae el consumo de storage y de
+mensajes: el 90 % de las preguntas de gating no necesitan tocar la base.
+Lo que sí la necesita (contar usuarios, oficinas e inmuebles) vive en
+`getRealtyUsage()` dentro de `billing.ts`, que es server-only.
+**Aquí se DECIDE; allá se MIDE.**
+
+  · `realtyCan(plan, "mls")` — booleano pelado para un `if`.
+  · `realtyFeatureGate(plan, key, catalogo)` — la puerta con el copy ya
+    armado: nombra el plan más barato que sí la trae y su precio, leído del
+    catálogo. Sin catálogo NO menciona precio: jamás se inventa un número.
+  · `realtyLimitGate(accion, {...})` / `realtyUploadGate({...})` — cupos
+    duros de `maxUsers`, `maxOffices`, `maxProperties`, `storageQuotaMb` y
+    `messageQuota`. Avisa al 90 % (`nearLimit` + `warning`), bloquea al 100 %
+    con un mensaje que dice qué pasó y cuál es la salida.
+  · `realtyNavGate(vista, key, catalogo)` — el AND de los TRES filtros del
+    vertical (MODO de la cuenta · FEATURE del plan · PERMISO del rol) en un
+    solo lugar. El layout de la Ola 0 hoy lo repite en línea; cualquier
+    pantalla nueva debe llamar a esto en vez de escribir su propio `if`.
+  · `assertRealtyFeature` / `assertRealtyLimit` / `assertRealtySubscription`
+    lanzan `RealtyGateError`, y `realtyGateErrorBody()` lo traduce a un
+    **402 Payment Required** (no 403: no es falta de permiso, es que tu plan
+    no lo incluye).
+
+🔴 **Se gatea por la FEATURE, nunca por el id del plan.** Mover WhatsApp de
+plan es editar una fila. Hay una prueba que lo demuestra: la misma función,
+con el mismo id de plan y otro reparto de features, cambia de veredicto.
+
+**Cortesía del cupo de mensajes:** `RealtyAccount.messageQuota` (Int?) PISA
+el del plan cuando no es null. La Ola 0 dejó esa columna sin nadie que
+resolviera la precedencia; ahora lo hace `resolveRealtyMessageQuota()`, punto
+único. Un `0` explícito en la cuenta también manda (apagarle WhatsApp a una
+cuenta concreta sin bajarla de plan).
+
+───────────────────────────────────────────────────────────────────────────
+3. COBRO — `src/lib/realty/billing.ts` + 9 rutas + webhook
+───────────────────────────────────────────────────────────────────────────
+
+**Nada se da de alta a mano en Stripe.** El producto y el precio nacen en el
+primer checkout, resueltos por `lookup_key` que lleva el importe dentro:
+
+    dcrealty_<PLAN>_<ciclo>_<centavos>
+
+Editar el precio en la tabla cambia la clave ⇒ nace un precio nuevo y el
+viejo se queda con las suscripciones que ya lo pagaban (comportamiento SaaS
+estándar). Un cambio de precio toca UNA FILA, no un deploy, y no deja
+productos huérfanos — que es exactamente como acabó barber.
+
+Se usa `prices.list({ lookup_keys })` y **no** `prices.search`: list es
+consistente al instante, search va contra un índice con minutos de retraso.
+Tres capas contra carreras: la búsqueda por lookup key, el `idempotencyKey`
+del `prices.create` y `transfer_lookup_key: true` (si un precio viejo aún
+tuviera la clave, Stripe se la transfiere en vez de tirar
+`resource_already_exists`).
+
+**Diferencia con barber que hubo que resolver:** `RealtyPlanConfig` tiene UNA
+columna (`stripeLookupKey`), no dos de `stripePriceId*`. Así que la columna se
+usa como ESPEJO de la clave vigente (útil en el admin) y como override manual:
+si Rafael la pone a mano apuntando a un precio ya existente, se valida contra
+el importe de la tabla y se usa; si no coincide, se avisa en logs y se
+reemplaza por la derivada.
+
+**Llaves (la lección que costó días en barber):**
+
+    REALTY_STRIPE_SECRET_KEY || STRIPE_SECRET_KEY   ← SÍ cascadea
+    REALTY_STRIPE_WEBHOOK_SECRET                    ← NO cascadea, jamás
+
+La llave cascadea porque el aislamiento entre verticales **nunca dependió del
+nombre de la variable**: es la misma cuenta de Stripe y lo que separa los
+productos son las marcas `dc_vertical` en metadata. Exigir una variable nueva
+solo obligaría a duplicar en Vercel un valor Sensitive que ya nadie puede
+leer. El secreto del webhook NO cascadea porque Stripe firma cada endpoint con
+su propio `whsec_`: el del dental daría "Firma inválida" → 400 en TODOS los
+eventos, convirtiendo un 503 honesto ("sin configurar", que Stripe reintenta)
+en un fallo silencioso.
+
+**Sin tablas nuevas.** No se guardan fechas de periodo ni facturas: la próxima
+fecha de cobro y el historial se LEEN de Stripe al pintar la pantalla. Solo se
+persisten cuatro columnas que ya existían: `subscriptionStatus`,
+`stripeSubscriptionId`, `stripeCustomerId` y `plan`.
+
+**Webhook idempotente sin tabla de eventos.** Cada evento relee la suscripción
+VIVA en Stripe y escribe su estado ABSOLUTO (solo `update`, cero `create`). Un
+evento repetido o fuera de orden converge al mismo estado, y una suscripción
+vieja y muerta no puede pisar a la que hoy paga (`stale-subscription`). El
+payload del evento solo se usa como respaldo si Stripe no responde.
+
+**Rutas** (`runtime = "nodejs"` + `dynamic = "force-dynamic"` en las 10):
+
+    POST /api/realty/billing/checkout             contratar (crea producto+precio)
+    POST /api/realty/billing/confirm              confirma al volver de Stripe
+    POST /api/realty/billing/portal               tarjeta y facturas (portal Stripe)
+    POST /api/realty/billing/change-plan          cambio con prorrateo
+    POST /api/realty/billing/change-plan/preview  cuánto se cobra HOY
+    POST /api/realty/billing/cancel               cancelar al fin del periodo
+    POST /api/realty/billing/resume               deshacer la cancelación
+    GET  /api/realty/billing/status               estado + consumo
+    POST /api/realty/stripe/webhook               el webhook del vertical
+
+Todas pasan por `requireRealtyBilling()`: sesión → permiso `billing.manage`
+(que por default solo tiene OWNER; MANAGER está excluido a propósito en
+`permissions.ts`) → cuenta cargada por `accountId` **de la sesión**, nunca del
+body.
+
+**Detalles que se copiaron de barber a conciencia:**
+ · `confirm` cierra el hueco entre el pago y el webhook (la pantalla
+   reintenta 10 veces cada 3 s). Sin eso, quien paga ve "pendiente" unos
+   segundos y algunos vuelven a pagar.
+ · El portal de Stripe se crea con **configuración propia** y
+   `subscription_update`/`subscription_cancel` **apagados**: sin eso Stripe
+   usa la configuración por defecto de la cuenta, que es la del dental — una
+   inmobiliaria vería el catálogo de precios de clínicas dentro del portal.
+ · Cambio de plan: subir → `always_invoice` + `error_if_incomplete` (si la
+   tarjeta rechaza, el plan NO cambia). Bajar → `create_prorations`.
+   **NUNCA `billing_cycle_anchor`**: la fecha de renovación no se mueve.
+   Sin `idempotencyKey` a propósito — una clave estable haría que Stripe
+   repitiera el error CACHEADO cuando el usuario corrige su tarjeta.
+ · La vista previa devuelve `null` antes que enseñar un importe inflado: si
+   la factura simulada no trae líneas de prorrateo, o trae además la
+   renovación del siguiente ciclo, la pantalla dice "no se pudo calcular".
+ · `invoices.createPreview` con caída a `rawRequest GET /v1/invoices/upcoming`:
+   con la versión de API pineada, cuál responde depende del SDK.
+   (`invoices.retrieveUpcoming` **no existe** en el SDK 22.)
+ · `current_period_end` se lee del ITEM y, si no, de la suscripción: Stripe lo
+   movió de sitio y leer solo uno deja la pantalla sin fecha de renovación.
+ · Cancelar es siempre `cancel_at_period_end`, jamás `subscriptions.cancel()`:
+   eso mataría un mes ya pagado.
+
+**Dos cosas que se hicieron MEJOR que en barber:**
+ 1. `ensureRealtyStripeCustomer` lleva `idempotencyKey`. En barber, dos clics
+    simultáneos en "Contratar" pueden crear dos customers y el segundo update
+    pisa al primero.
+ 2. `resolveRealtyBaseUrl` usa `||` y no `??`: con `??`, una variable de
+    entorno VACÍA gana y produce `success_url` rotas.
+
+───────────────────────────────────────────────────────────────────────────
+4. PANTALLA DEL CLIENTE — `/inmobiliaria/suscripcion`
+───────────────────────────────────────────────────────────────────────────
+
+Reemplaza el placeholder de la Ola 0. Enseña: el plan y su precio, el estado
+con su píldora, la próxima fecha de cobro (o la fecha de cancelación
+programada), los CINCO medidores de consumo, la comparación de los tres planes
+y el historial de pagos. Botones para contratar, cambiar de plan, actualizar
+la tarjeta, cancelar y reanudar.
+
+🔴 **Esta página NO puede exigir suscripción activa**: es justo a donde manda
+el router cuando la cuenta está impaga. Cortar ahí sería un bucle de redirects.
+
+**Sin dark patterns.** El botón de cancelar está a la vista, sin encuesta de
+retención; la cancelación explica que el plan sigue hasta el final del periodo
+ya pagado; una feature apagada dice en qué plan viene y cuánto cuesta, con el
+precio de la tabla; y cuando Stripe no responde se dice, en vez de enseñar un
+historial vacío que parece "nunca has pagado".
+
+**Sin permiso `billing.manage`** (p. ej. un MANAGER que escriba la URL) se
+pinta la pantalla en solo lectura: plan, consumo y comparación de planes sí;
+facturas y botones no. El dinero no se enseña a quien no lo administra.
+
+Diccionario: `src/i18n/dictionaries/realty/billing.{es,en}.json` (122 llaves
+cada uno, paridad verificada) colgados de `realty.billing` en el índice del
+vertical. **Convención B**: el servidor baja el sub-árbol YA RECORTADO y el
+componente NO antepone prefijo. Está escrito en la cabecera del componente
+porque cruzar las dos convenciones es el bug que dejó el modal de cobro de
+barber "sin opciones".
+
+───────────────────────────────────────────────────────────────────────────
+5. ADMIN — `/admin/inmobiliarias`
+───────────────────────────────────────────────────────────────────────────
+
+Espejo de `/admin/barberias`, con la capa de datos en `src/lib/realty/admin.ts`.
+
+  · **Listado** con búsqueda (nombre, slug, ciudad, correo) y filtros por
+    modo, plan y estado. Columnas: inmobiliaria, ciudad, modo, plan,
+    suscripción, usuarios, inmuebles, archivos (con % del cupo), última
+    actividad y alta. Patrón anti N+1: una `findMany` base + cinco `groupBy`
+    en paralelo resueltos a `Map`. Tope de 500 filas, dicho en pantalla.
+  · **Ficha** por cuenta: datos, plan y estado de pago, los tres medidores de
+    consumo, equipo, oficinas y la bitácora. Acciones: **suspender,
+    reactivar, cambiar plan y otorgar días**, todas con NOTA OBLIGATORIA
+    (mínimo 8 caracteres, validada en cliente y en servidor).
+  · **Editor de `realty_plan_configs`** en `/admin/inmobiliarias/planes`:
+    nombre, precios, los cinco cupos y las 21 features por casilla. Valida con
+    lista blanca (nunca un spread del body), invalida la caché e invalida
+    también `stripeLookupKey` cuando cambia el precio, para que el siguiente
+    checkout resuelva el precio correcto.
+
+**Qué manda sobre qué, entre soporte y Stripe:**
+ · `suspended` (suspensión manual) es un CANDADO: el webhook no lo pisa. Solo
+   lo quita un humano con "Reactivar". Sin esa regla, la primera renovación
+   devolvía la cuenta a "active" sola.
+   Y como durante la suspensión el webhook no escribió nada, "Reactivar"
+   RESINCRONIZA con Stripe antes de escribir: si la suscripción se canceló
+   mientras estaba suspendida, la cuenta no recupera el acceso por escribir
+   "active" a ciegas.
+ · El PLAN, en cambio, lo manda Stripe cuando la cuenta paga: es el precio
+   contratado. Por eso "Cambiar plan" desde el admin solo funciona en cuentas
+   SIN suscripción viva (comps, cuentas sin contratar); en las que pagan
+   responde 409 y explica las dos salidas reales. Antes se permitía y se
+   revertía solo en días, en silencio.
+
+🔴 **MRR AISLADO.** El MRR de inmuebles sale EXCLUSIVAMENTE de filas
+`realty_accounts` × precios de `realty_plan_configs`. Ninguna consulta de este
+archivo toca `Clinic` ni `Barbershop`: el aislamiento no es un `where`, es
+separación de tablas, y por eso es imposible que arrastre una suscripción
+ajena. Y al revés: `/admin` (dental) y `/admin/barberias` no ven estas filas.
+
+Dos decisiones numéricas que conviene conocer:
+ · El MRR cuenta **solo `subscriptionStatus === "active"`**, no los tres
+   estados de acceso. Una cuenta en cortesía (`trialing`) paga $0 y contarla
+   infla el número — es el bug que ya costó caro en el dental.
+ · El dinero se suma con `Prisma.Decimal` y viaja al cliente como string
+   `toFixed(2)`. Ni un `+` de floats sobre dinero.
+ · A diferencia de barber, aquí NO hay que filtrar `parentId: null`: las
+   oficinas son otro modelo (`RealtyOffice`), así que cada fila de
+   `realty_accounts` es un cliente y el doble conteo es imposible por
+   construcción.
+
+**"Otorgar días" va por el TRIAL de Stripe, no por una bandera.**
+`RealtyAccount` no tiene columna `trialEndsAt` y `prisma/schema.prisma` está
+fuera de esta ola. Una cortesía "a mano" sería ETERNA y nadie se acordaría de
+apagarla. Así que:
+ · con suscripción viva → se corre `trial_end` (sumando sobre lo ya pagado,
+   `proration_behavior: "none"`);
+ · sin suscripción → se crea una en cortesía SIN tarjeta, con
+   `trial_settings.end_behavior.missing_payment_method: "cancel"`: al vencer,
+   Stripe la cancela sola y el webhook lo escribe.
+Si Stripe no está configurado, la acción responde 503 diciendo exactamente eso
+y ofreciendo "Reactivar" (que no tiene fecha de fin) como alternativa.
+
+**Bitácora.** Cada acción escribe en `RealtyAdminAction`. Ese modelo guarda
+`payload Json` (no columnas `note`/`before`/`after` como barber), así que la
+forma va dentro del payload. Degrada suave en tres estados: la acción se
+aplica aunque el registro falle, el `audited: false` llega al usuario como
+aviso, y el `console.info` estructurado con el tag `[realty/admin-action]` sale
+SIEMPRE. La identidad del admin sale de la SESIÓN EN BD, nunca del body — es
+lo que hace auditable la acción.
+El editor de planes NO usa esa tabla (es config de plataforma, sin
+`accountId`, que ahí es FK obligatoria): audita con `logAdminGlobalEvent`,
+greppable en Vercel Logs con el tag `ADMIN_AUDIT`.
+
+**Menú:** una entrada en `src/app/admin/admin-nav.tsx` (+5 / −0: un icono y el
+item, sin tocar nada del dental ni de barberías). Las subrutas cuelgan de
+`/admin/inmobiliarias/**` y no como hermanas, para que `isActive()` encienda
+un solo item — el problema que ya se arregló entre soporte y soporte-afiliados.
+
+───────────────────────────────────────────────────────────────────────────
+6. LO QUE NO SE HIZO, Y POR QUÉ
+───────────────────────────────────────────────────────────────────────────
+
+🔴 **El corte por impago dentro del panel sigue abierto.** Hoy el único corte
+real está en `/inmobiliaria/page.tsx` (el router). El layout del panel NO
+corta —a propósito, cortar ahí crearía un bucle con la pantalla de
+suscripción—, así que **una cuenta impaga que escriba a mano la URL de una
+pantalla interna entra igual**. `(panel)/layout.tsx` está FUERA de la
+allowlist de esta ola y hay nueve terminales trabajando sobre él en paralelo,
+así que no se tocó. Lo que sí queda listo:
+
+    // en cualquier página o endpoint del vertical, UNA línea:
+    assertRealtySubscription(ctx.account);   // lanza 402 si no pagó
+
+    // y en (panel)/layout.tsx, entre el .filter() y el .map():
+    const visibles = isRealtySubscriptionActive(ctx.account)
+      ? items
+      : realtyNavItemsWhileUnpaid(items);
+
+`realtyNavItemsWhileUnpaid` lo dejó escrito y probado la Ola 0 y sigue sin
+cablear. **Es una línea y cierra el agujero.**
+
+· **Ciclo anual:** el código lo soporta entero (`interval: "year"`), pero los
+  tres planes tienen `priceYearly` en NULL, así que la UI solo ofrece mensual.
+  Poner un precio anual en la tabla lo enciende sin tocar código.
+· **Cupón de primer mes:** barber lo tiene; `RealtyPlanConfig` no tiene
+  `firstMonthPrice` y el schema está fuera de la ola. No se inventó.
+· **Soporte del vertical** (`/admin/inmobiliarias/soporte`): no era de esta
+  terminal. La ruta queda libre y anidada como corresponde.
+· **Sitio público de precios** (`/inmobiliarias`): sigue reservado, sin construir.
+
+───────────────────────────────────────────────────────────────────────────
+7. ARCHIVOS
+───────────────────────────────────────────────────────────────────────────
+
+Nuevos — lógica
+  src/lib/realty/billing.ts      motor de Stripe (server-only)
+  src/lib/realty/gating.ts       gate por feature, cupo, modo y permiso (PURO)
+  src/lib/realty/admin.ts        capa de datos del /admin del vertical
+
+Nuevos — API (10 rutas)
+  src/app/api/realty/billing/{_lib,checkout,confirm,portal,cancel,resume,status}
+  src/app/api/realty/billing/change-plan{,/preview}
+  src/app/api/realty/stripe/webhook
+  src/app/api/admin/inmobiliarias/{route,[id],planes/[planId]}
+
+Nuevos — pantallas
+  src/app/inmobiliaria/(panel)/suscripcion/page.tsx      (reemplaza el placeholder)
+  src/components/realty/billing/{shared,billing-screen,plan-cards,usage-panel,
+                                 invoices-table}.tsx + billing.css
+  src/app/admin/inmobiliarias/{page,inmobiliarias-client,[id]/*,planes/*}
+  src/components/admin/inmobiliarias/{shared.ts,manual-action-modal.tsx,
+                                      inmobiliarias.css}
+
+Nuevos — diccionario y pruebas
+  src/i18n/dictionaries/realty/billing.{es,en}.json
+  src/lib/realty/__tests__/suscripcion.test.ts     42 pruebas offline
+  src/lib/realty/__tests__/{offline.mjs,empty.cjs} hook para correr sin Next
+
+Editados
+  src/i18n/dictionaries/realty/index.ts   +4 (dos imports y dos líneas), el
+                                          punto de encuentro que dejó la Ola 0
+  src/app/admin/admin-nav.tsx             +5 / −0  (COMPARTIDO, declarado)
+
+**Aviso de coordinación:** `src/i18n/dictionaries/realty/index.ts` lo tocan
+varias terminales de la Ola 1 a la vez (cada una agrega su área). El conflicto
+al fusionar es casi seguro y es TRIVIAL: todo es aditivo, nadie borra ni
+renombra y las claves son distintas. Resolver "aceptando ambos".
+
+Dos desviaciones menores respecto a la allowlist literal, ambas dentro de
+`OWN_PREFIXES` del guardia y ninguna compartida con otra terminal:
+ · `src/lib/realty/admin.ts` — la capa de datos del admin, espejo de
+   `src/lib/barber/admin.ts`. Meterla en `billing.ts` habría mezclado el motor
+   de cobro con las consultas del panel interno.
+ · `billing.es.json` + `billing.en.json` en vez de un solo `billing.json`: es
+   la convención que impuso la Ola 0 (`<área>.{es,en}.json`) y la prueba de
+   alcance del diccionario exige paridad ES/EN de todo el vertical.
+
+───────────────────────────────────────────────────────────────────────────
+8. VERIFICACIÓN
+───────────────────────────────────────────────────────────────────────────
+
+  · `npx next build` entero, sin pipes: EXIT 0.
+  · Guardia: `REALTY_GUARD_SHARED="src/app/admin/admin-nav.tsx,ORQUESTA.md"
+    node scripts/realty-guard.cjs` → **OK, 0 prohibidos, 0 sin declarar.**
+  · 42 pruebas propias en verde, sin BD, sin Stripe y sin red:
+        node --import tsx --import ./src/lib/realty/__tests__/offline.mjs \
+             --test src/lib/realty/__tests__/suscripcion.test.ts
+    (El hook resuelve `server-only`, que no es un paquete instalado sino un
+    alias interno de Next. La prueba equivalente de barber referencia un
+    `scripts/barber-test-hook.mjs` que **nunca se subió al repo**: está
+    escrita pero no se puede correr. Aquí el hook vive dentro del propio
+    `__tests__` para que no se pierda.)
+  · Las pruebas de la Ola 0 siguen verdes: `contrato.test.ts` 31/31 e
+    `i18n-alcance.test.ts` 11/11.
+  · Revisor read-only de allowlist: limpio.
+  · Revisor read-only de precios escritos: encontró 4 y se corrigieron los 4
+    (dos leyendas del admin con los cupos y el precio del seed, un comentario
+    en `billing.ts`, y el filtro por plan que traía los nombres escritos a
+    mano en vez de leerlos de la tabla). El barrido estático de la prueba se
+    amplió para que los hubiera cazado: ahora cubre `.css` y `.json` además de
+    `.ts/.tsx`, y busca los precios **en pesos y en centavos** más los cupos
+    de archivos.
+
+  · Revisor adversarial de correctitud: **12 hallazgos, los 12 corregidos.**
+    Vale la pena dejarlos escritos porque dos eran caros:
+
+    1. 🔴 **Doble cobro.** El guard que impide una segunda suscripción hacía
+       `catch { existing = null }` — es decir, ante un timeout o un 500 de
+       Stripe asumía "ya no existe" y creaba OTRA suscripción. Y la pantalla
+       empujaba justo a ese camino: si Stripe no respondía, el botón pasaba de
+       "Cambiar de plan" a "Contratar". Ahora solo `resource_missing` cuenta
+       como "ya no existe"; cualquier otro error responde 503 sin cobrar, y la
+       UI deshabilita contratar mientras Stripe no responda.
+    2. 🔴 **La suspensión de soporte se levantaba sola.** `applyRealtySubscription`
+       escribía el estado de Stripe tal cual, así que la primera renovación
+       (un `customer.subscription.updated` garantizado cada mes) devolvía la
+       cuenta suspendida a "active" en silencio. Ahora `suspended` es un
+       CANDADO MANUAL que Stripe no pisa; los ids y el plan se siguen
+       sincronizando para que al reactivar la fila esté al día.
+    3. **El MRR por plan no cuadraba con el MRR total**: el total contaba solo
+       `active` y el desglose multiplicaba por `active|trialing|paid`. Con 4
+       cortesías, la misma pantalla enseñaba $6,490 arriba y $9,086 abajo.
+       Ahora ambos usan el mismo contador y la tabla enseña las dos columnas
+       ("Con acceso" y "Cobrando") para que se vea la diferencia.
+    4. **Cambiar el plan desde el admin mentía.** Decía "no toca Stripe", y por
+       eso el webhook lo revertía en días. Ahora se rechaza con un 409
+       explicando que en una cuenta que paga el plan lo manda el precio
+       contratado, y ofreciendo las dos salidas reales.
+    5. El plan B de la vista previa de prorrateo estaba **muerto**:
+       `rawRequest("GET", …, {params})` lanza siempre en el SDK 22. Los
+       parámetros van en el path.
+    6. El aviso de "te quedas por encima del cupo" al bajar de plan estaba
+       escrito y traducido pero **nunca se pintaba**.
+    7. El modal decía "vas a subir de plan, se cobra la diferencia" también
+       mientras cargaba y cuando la simulación fallaba — incluso al BAJAR.
+    8. La deducción del plan leía `price.metadata.lookup_key`, que no existe
+       (en Stripe `lookup_key` es de primer nivel).
+    9. Los cupos fallaban ABIERTOS si la base hipaba: unos ceros de mentira
+       dejaban pasar a cualquiera. Ahora fallan cerrados.
+   10. `stripeLookupKey` es una columna para dos ciclos: el anual pisaba al
+       mensual. Ahora la columna es el espejo del mensual, y punto.
+   11. Un correo con basura en la fila bloqueaba la contratación 24 h (Stripe
+       cachea también los errores de una clave de idempotencia).
+   12. `GET .../billing/status` serializaba `Infinity` como `null`, que se lee
+       como "no queda nada" justo cuando el cupo es ilimitado. Y
+       `getRealtyAccountDetailForAdmin("")` devolvía la cuenta más reciente
+       del sistema en vez de un 404.
+
+    De los 12, cuatro tienen prueba de regresión nueva (candado manual,
+    deducción por lookup key, cupo que falla cerrado, aviso de cupo rebasado).
+
+───────────────────────────────────────────────────────────────────────────
+9. QUÉ TIENE QUE HACER RAFAEL — PASO A PASO
+───────────────────────────────────────────────────────────────────────────
+
+9.a  VARIABLES DE ENTORNO EN VERCEL
+─────────────────────────────────────
+
+  REALTY_STRIPE_WEBHOOK_SECRET   🔴 OBLIGATORIA. El `whsec_…` del endpoint
+                                 nuevo. SIN fallback: si falta, el webhook
+                                 responde 503 y Stripe reintenta (no se pierde
+                                 nada, pero nadie se activa).
+
+  REALTY_STRIPE_SECRET_KEY       ⚪ OPCIONAL. Solo si se quiere una cuenta de
+                                 Stripe distinta para inmuebles. **Si no se
+                                 pone, cae sola a `STRIPE_SECRET_KEY`, que ya
+                                 está en Vercel.** No hace falta duplicar nada.
+
+  NEXT_PUBLIC_APP_URL            ✅ Ya existe. Se usa para las URLs de vuelta
+                                 de Stripe.
+
+  Tras agregar una variable hay que **volver a desplegar**: Vercel no las
+  inyecta en un deploy ya construido.
+
+9.b  REGISTRAR EL WEBHOOK EN STRIPE
+─────────────────────────────────────
+
+  URL:  https://<tu-dominio>/api/realty/stripe/webhook
+
+  Eventos a seleccionar (9):
+      checkout.session.completed
+      checkout.session.async_payment_succeeded
+      checkout.session.async_payment_failed
+      checkout.session.expired
+      customer.subscription.created
+      customer.subscription.updated
+      customer.subscription.deleted
+      customer.subscription.paused
+      customer.subscription.resumed
+
+  Copiar el `whsec_…` que da Stripe → `REALTY_STRIPE_WEBHOOK_SECRET` → redeploy.
+
+  ⚠️ Como la cuenta de Stripe es la misma, el webhook del DENTAL y el de
+  BARBER también van a recibir estos eventos. Los ignoran: nuestros objetos no
+  llevan `metadata.clinicId`, ni `metadata.kind = "platform-subscription"`, ni
+  `dc_vertical: "barber"`, y el customer no es de ninguna clínica ni barbería.
+  Y este endpoint ignora los suyos exigiendo `dc_vertical: "realty"` /
+  `dc_kind: "realty-subscription"`. **Conviene mirar los tres endpoints en el
+  dashboard tras la primera prueba: los tres deben devolver 200.**
+
+9.c  ANTES DE COBRAR: EL SQL
+─────────────────────────────────────
+
+  `sql/realty.sql` **sigue sin aplicarse** (bloqueante desde la Ola 0). Sin él
+  no hay `realty_accounts` ni `realty_plan_configs` y no hay nada que cobrar.
+  Comprobar después:
+
+      SELECT "planId", "name", "priceMonthly", "stripeLookupKey"
+      FROM "realty_plan_configs" ORDER BY "sortOrder";
+
+  Los tres `stripeLookupKey` deben salir en NULL: se llenan solos en el primer
+  checkout.
+
+9.d  LA PRUEBA DEL COBRO REAL — PASO A PASO
+─────────────────────────────────────────────
+
+  🔴 **En producción NO hay Stripe TEST.** Las llaves de Vercel son LIVE, así
+  que esta prueba mueve dinero de verdad.
+
+   1. Confirmar 9.a, 9.b y 9.c. Desplegar.
+   2. Entrar a `/inmobiliaria/registro`, elegir un modo y darse de alta con un
+      correo de prueba. La cuenta nace en `pending_payment`: **sin acceso**.
+   3. Iniciar sesión. `/inmobiliaria` debe mandar solo a
+      `/inmobiliaria/suscripcion` (si entra al panel, algo está mal).
+   4. En la pantalla: el plan Propietario debe verse con SU precio de la tabla
+      y el botón debe decir **"Contratar Propietario"** (no "Cambiar a").
+   5. Clic en contratar. En ese instante nacen en Stripe:
+        · el producto  "DaleControl Inmuebles — Propietario"
+          con metadata `dc_vertical=realty`, `dc_plan=PROPIETARIO`
+        · el precio con `lookup_key = dcrealty_PROPIETARIO_month_<centavos>`
+      **Verificarlos en el dashboard de Stripe ANTES de pagar.**
+   6. Pagar con una tarjeta real. Es un cargo real por el precio del plan.
+   7. Al volver, la pantalla dice "Estamos confirmando tu pago" y en unos
+      segundos debe pasar a **Activa**, con la próxima fecha de cobro. El
+      panel ya debe abrir.
+   8. En Stripe → la suscripción debe traer en su metadata `dc_vertical=realty`,
+      `dc_kind=realty-subscription` y el `accountId`.
+   9. En Stripe → Webhooks → el endpoint nuevo: los eventos en **200**. En los
+      logs de Vercel debe aparecer una línea `[realty webhook]` por evento, con
+      `handled: true`.
+  10. En Supabase:
+        SELECT plan, "subscriptionStatus", "stripeCustomerId", "stripeSubscriptionId"
+        FROM "realty_accounts" WHERE email = '<el correo de prueba>';
+      → `active`, y los dos ids de Stripe llenos.
+  11. En `/admin/inmobiliarias`: la cuenta debe aparecer con su plan, su estado
+      y el MRR del vertical con el precio de la tabla — **y sin mezclarse con
+      el MRR del dental ni el de barberías** (compararlos: son pantallas
+      distintas con números distintos).
+  12. **El reembolso.** Stripe → Payments → el cargo → Refund (total).
+      ⚠️ **Un reembolso NO cancela la suscripción**: el mes que viene volvería
+      a cobrar. Hay que cancelar además:
+        · Opción A (prueba también el producto): en `/inmobiliaria/suscripcion`,
+          "Cancelar suscripción" → queda `cancel_at_period_end` y la pantalla
+          debe decir la fecha. Reanudar y volver a cancelar para probar las dos.
+        · Opción B (corta de raíz): Stripe → la suscripción → Cancel
+          subscription → **immediately**. El webhook escribe `canceled` y la
+          cuenta pierde el acceso al recargar.
+  13. Opcional, si se quiere probar el prorrateo: cambiar a Asesor. Se cobra
+      HOY solo la diferencia proporcional y la fecha de renovación NO se mueve.
+      Ese cargo también se puede reembolsar.
+  14. Limpieza: borrar la cuenta de prueba de `realty_accounts` (el borrado
+      cascadea a usuarios y oficinas) y el customer de Stripe si se quiere.
+
+  **Alternativa más barata, si se prefiere no mover dinero:** como la llave
+  cascadea, se puede poner `REALTY_STRIPE_SECRET_KEY = sk_test_…` **acotada al
+  entorno Preview** en Vercel, subir una rama `preview/*` (Vercel solo compila
+  `main` y `preview/*`), registrar un segundo webhook en modo TEST apuntando a
+  la URL del preview con su propio `whsec_` en
+  `REALTY_STRIPE_WEBHOOK_SECRET` (también acotado a Preview), y pagar con
+  4242 4242 4242 4242. Producción sigue en LIVE sin enterarse.
+
+9.e  DESPUÉS
+─────────────────────────────────────
+
+  · Cablear el corte por impago en `(panel)/layout.tsx` (punto 6). Es la línea
+    que falta para que una cuenta impaga no entre escribiendo la URL.
+  · Si se quiere ciclo anual, poner `priceYearly` en las filas.
+  · Cambiar un precio: `/admin/inmobiliarias/planes`. Toca una fila, se ve en
+    menos de un minuto y no requiere desplegar.
+
+═══════════════════════════════════════════════════════════════════════════

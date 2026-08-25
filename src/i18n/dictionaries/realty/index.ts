@@ -28,6 +28,8 @@ import shellEs from "./shell.es.json";
 import shellEn from "./shell.en.json";
 import registroEs from "./registro.es.json";
 import registroEn from "./registro.en.json";
+import billingEs from "./billing.es.json";
+import billingEn from "./billing.en.json";
 // ── Ola 1: importa aquí tu área (una línea por idioma) ──
 import leadsEs from "./leads.es.json";
 import leadsEn from "./leads.en.json";
@@ -44,6 +46,7 @@ const ES: Dictionary = {
     rentals: rentalsEs as unknown as Dictionary,
     // T1 — cartera de inmuebles y propietarios.
     inmuebles: propertiesEs as unknown as Dictionary,
+    billing: billingEs as unknown as Dictionary,
   },
 };
 
@@ -54,6 +57,7 @@ const EN: Dictionary = {
     leads: leadsEn as unknown as Dictionary,
     rentals: rentalsEn as unknown as Dictionary,
     inmuebles: propertiesEn as unknown as Dictionary,
+    billing: billingEn as unknown as Dictionary,
   },
 };
 

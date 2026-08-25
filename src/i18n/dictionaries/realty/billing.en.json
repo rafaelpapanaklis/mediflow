@@ -1,0 +1,153 @@
+{
+  "title": "Subscription",
+  "subtitle": "Your DaleControl plan, what it includes and how your usage is going.",
+  "state": {
+    "active": "Active",
+    "trialing": "Courtesy period",
+    "paid": "Paid",
+    "past_due": "Payment due",
+    "unpaid": "Unpaid",
+    "canceled": "Canceled",
+    "incomplete": "Payment not finished",
+    "incomplete_expired": "Payment not completed",
+    "paused": "Paused",
+    "pending_payment": "No plan yet",
+    "suspended": "Suspended",
+    "unknown": "Undefined"
+  },
+  "account": {
+    "planLabel": "Your plan",
+    "statusLabel": "Status",
+    "perMonth": "per month",
+    "perYear": "per year",
+    "nextCharge": "Next charge",
+    "nextChargeNone": "No charge date scheduled",
+    "cancelScheduled": "Cancels on {date}. Until then nothing changes.",
+    "trialUntil": "Courtesy until {date}.",
+    "chargedAmount": "You are charged {amount}"
+  },
+  "notice": {
+    "notConfigured": "Online payments are not connected in this installation yet. Write to support and we will turn them on.",
+    "stripeUnreachable": "We could not read your billing data right now. Please try again in a minute.",
+    "pendingPayment": "Your account has no plan yet. Pick one to get into the panel.",
+    "pastDue": "Your last charge did not go through. Update your payment method so you do not lose access.",
+    "canceled": "Your subscription is canceled. You can subscribe again whenever you want.",
+    "suspended": "Your account was suspended by DaleControl. Please write to support.",
+    "confirming": "We are confirming your payment with the bank. It takes a few seconds.",
+    "confirmSlow": "Your payment went through, but the confirmation is taking a while. Reload in a minute; do not pay again.",
+    "checkoutCanceled": "No charge was made.",
+    "readOnly": "Only the account owner can change the plan or the payment method."
+  },
+  "usage": {
+    "title": "Your usage",
+    "hint": "What you have used against your plan's allowance.",
+    "users": "Users",
+    "offices": "Offices",
+    "properties": "Properties",
+    "storage": "File storage",
+    "messages": "WhatsApp messages",
+    "ofLimit": "{used} of {limit}",
+    "unlimited": "{used} · no limit",
+    "notIncluded": "Not included in your plan",
+    "near": "You have used {percent} % of this allowance.",
+    "full": "This allowance is used up."
+  },
+  "plans": {
+    "title": "The plans",
+    "hint": "Prices and limits exactly as configured today. If they change, this screen changes on its own.",
+    "current": "Your current plan",
+    "choose": "Subscribe to {plan}",
+    "upgrade": "Switch to {plan}",
+    "downgrade": "Move down to {plan}",
+    "includes": "Includes",
+    "unavailable": "Not available",
+    "limitUsers": {
+      "one": "1 user",
+      "other": "{count} users"
+    },
+    "limitUsersUnlimited": "Unlimited users",
+    "limitOffices": {
+      "one": "1 office",
+      "other": "{count} offices"
+    },
+    "limitOfficesUnlimited": "Unlimited offices",
+    "limitProperties": "Unlimited properties",
+    "limitStorage": "{size} of files",
+    "limitMessages": {
+      "one": "1 WhatsApp message per month",
+      "other": "{count} WhatsApp messages per month"
+    },
+    "noMessages": "No WhatsApp",
+    "everythingIn": "Everything in {plan}, plus:"
+  },
+  "invoices": {
+    "title": "Payment history",
+    "hint": "The latest movements on your subscription.",
+    "empty": "No payments recorded yet.",
+    "unavailable": "The history is read from Stripe and it did not respond right now.",
+    "date": "Date",
+    "number": "Number",
+    "amount": "Amount",
+    "status": "Status",
+    "view": "View",
+    "pdf": "PDF",
+    "statusPaid": "Paid",
+    "statusOpen": "Due",
+    "statusVoid": "Voided",
+    "statusDraft": "Draft",
+    "statusUncollectible": "Uncollectible",
+    "failed": "The charge did not go through."
+  },
+  "manage": {
+    "title": "Your billing account",
+    "payMethod": "Update payment method",
+    "payMethodHint": "Opens Stripe to change your card and see your invoices.",
+    "openInvoice": "Pay the outstanding invoice",
+    "cancel": "Cancel subscription",
+    "cancelHint": "It keeps working until the end of the period you already paid for.",
+    "resume": "Resume subscription",
+    "resumeHint": "Removes the scheduled cancellation and everything goes on as before."
+  },
+  "modal": {
+    "changeTitle": "Switch to {plan}",
+    "changeUpgrade": "You are moving up. Today we only charge the difference for the days left in this period.",
+    "changeDowngrade": "You are moving down. Nothing is charged today: you get a credit for your next invoice.",
+    "keepsDate": "Your renewal date does not move.",
+    "dueToday": "Charged today: {amount}",
+    "dueTodayUnknown": "We could not compute today's exact amount. Stripe will only charge the proportional part.",
+    "overLimit": "With this plan you stay above one of the allowances. Nothing is deleted, but you will not be able to add more until you free up space.",
+    "confirm": "Confirm the change",
+    "back": "Go back",
+    "cancelTitle": "Cancel your subscription",
+    "cancelBody": "Your plan keeps working until {date}. You will not be charged again and you can resume before that date.",
+    "cancelBodyNoDate": "Your plan keeps working until the end of the period you already paid for. You will not be charged again.",
+    "cancelConfirm": "Yes, cancel",
+    "cancelKeep": "Never mind"
+  },
+  "errors": {
+    "generic": "The operation could not be completed. Please try again."
+  },
+  "features": {
+    "properties": "Property portfolio",
+    "leads": "Leads and funnel",
+    "publicWeb": "Your public website",
+    "webEditor": "Visual website editor",
+    "tours3d": "3D and 360° tours",
+    "calculators": "Calculators (transfer tax, mortgage, yield)",
+    "rentals": "Lease contracts and rent collection",
+    "maintenance": "Maintenance and incidents",
+    "whatsapp": "WhatsApp",
+    "whatsappInbox": "WhatsApp inbox",
+    "portalsFeed": "Feed for listing portals",
+    "commissions": "Commissions and their split",
+    "multiOffice": "Multiple offices",
+    "agentPages": "Public page per agent",
+    "mls": "Shared listings (MLS)",
+    "pld": "Anti-money-laundering checks",
+    "aiStudio": "AI studio (photos and copy)",
+    "advancedRoles": "Advanced roles",
+    "analytics": "Analytics",
+    "affiliates": "Partner program",
+    "clientPortal": "Client portal"
+  }
+}
