@@ -24,7 +24,6 @@
 // ═══════════════════════════════════════════════════════════════════════
 import type { Dictionary } from "@/i18n/t";
 import { makeRealtyT } from "@/lib/realty/i18n";
-
 import shellEs from "./shell.es.json";
 import shellEn from "./shell.en.json";
 import registroEs from "./registro.es.json";
@@ -34,6 +33,8 @@ import leadsEs from "./leads.es.json";
 import leadsEn from "./leads.en.json";
 import rentalsEs from "./rentals.es.json";
 import rentalsEn from "./rentals.en.json";
+import propertiesEs from "./properties.es.json";
+import propertiesEn from "./properties.en.json";
 
 const ES: Dictionary = {
   realty: {
@@ -41,6 +42,8 @@ const ES: Dictionary = {
     registro: registroEs as unknown as Dictionary,
     leads: leadsEs as unknown as Dictionary,
     rentals: rentalsEs as unknown as Dictionary,
+    // T1 — cartera de inmuebles y propietarios.
+    inmuebles: propertiesEs as unknown as Dictionary,
   },
 };
 
@@ -50,6 +53,7 @@ const EN: Dictionary = {
     registro: registroEn as unknown as Dictionary,
     leads: leadsEn as unknown as Dictionary,
     rentals: rentalsEn as unknown as Dictionary,
+    inmuebles: propertiesEn as unknown as Dictionary,
   },
 };
 

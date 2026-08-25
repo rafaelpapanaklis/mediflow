@@ -5,19 +5,18 @@ import { getRealtyContext, hasRealtyPermission } from "@/lib/realty-auth";
 import { REALTY_NAV_ITEMS, navItemAllowsMode } from "@/lib/realty/types";
 import { getRealtyDict } from "@/i18n/dictionaries/realty";
 import type { Dictionary } from "@/i18n/t";
-import { listRealtyOwners } from "@/lib/realty/properties";
-import { OwnersScreen } from "@/components/realty/properties/owners-screen";
+import { NewPropertyForm } from "@/components/realty/properties/property-detail";
 import { RealtyDenied } from "@/components/realty/properties/denied";
 
 /**
- * /inmobiliaria/propietarios — la libreta de DUEÑOS de la cartera.
+ * /inmobiliaria/inmuebles/nuevo — el alta.
  *
- * En modo OWNER (rentista) el dueño es la propia cuenta y la pantalla no
- * aplica: el recorte sale del campo `modes` del contrato, no de un if
- * inventado aquí. Y el redirect es el corte de verdad — el sidebar solo
- * esconde el item, que no es lo mismo.
+ * Pide lo MÍNIMO (título y tipo) y manda a la ficha. Un formulario de
+ * cuarenta campos antes de poder guardar nada es lo que hace que la cartera
+ * se quede a medio capturar: aquí se crea primero y se completa después,
+ * sección por sección.
  */
-const AREA = "propietarios";
+const AREA = "inmuebles";
 
 export default async function Page() {
   const ctx = await getRealtyContext();
@@ -29,16 +28,13 @@ export default async function Page() {
   const dict = ((getRealtyDict(ctx.account.locale).realty as Dictionary).inmuebles ??
     {}) as Dictionary;
 
-  // Propietarios NO gatea por plan (featureKey es null en el contrato):
-  // solo por permiso.
+  if (ctx.plan.features.properties !== true) {
+    return <RealtyDenied dict={dict} kind="plan" />;
+  }
   const permUser = { role: ctx.role, permissionsOverride: ctx.user.permissionsOverride };
-  if (!hasRealtyPermission(permUser, "owners.manage")) {
+  if (!hasRealtyPermission(permUser, "properties.edit")) {
     return <RealtyDenied dict={dict} kind="permission" />;
   }
 
-  const initial = await listRealtyOwners(ctx, { page: 1 });
-
-  return (
-    <OwnersScreen dict={dict} locale={ctx.account.locale} initial={initial} canEdit />
-  );
+  return <NewPropertyForm dict={dict} canEdit />;
 }

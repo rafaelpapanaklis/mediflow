@@ -131,3 +131,118 @@ export const REALTY_TOUR_URL_ERROR =
   "Esa liga no se puede mostrar. Aceptamos recorridos de " +
   REALTY_TOUR_PROVIDERS.map((p) => p.label).join(", ") +
   " y la liga tiene que empezar con https.";
+
+// ═══════════════════════════════════════════════════════════════════════
+// AÑADIDO POR LA OLA 1 (T1 — inmuebles). La allowlist de arriba NO se toca:
+// lo que sigue solo NORMALIZA lo que pega el asesor y arma la URL que va
+// dentro del iframe. Todo cae dentro de los mismos dominios de siempre.
+// ═══════════════════════════════════════════════════════════════════════
+
+/**
+ * Deja la URL en la forma canónica que la allowlist SÍ reconoce, antes de
+ * validarla.
+ *
+ * Hoy hace una sola cosa, y es la que más se pega en la vida real: el
+ * acortador `youtu.be/ID` que da el botón «Compartir» de YouTube. Ese
+ * dominio NO está en tour-hosts.json —y agregarlo sería tocar la fuente
+ * única, que además alimenta la CSP—, así que en vez de rechazar al asesor
+ * por copiar el botón que le ofrece YouTube, la reescribimos a
+ * `https://www.youtube.com/watch?v=ID`, que es el MISMO video y sí está en
+ * la allowlist y en el frame-src.
+ *
+ * Normalizar la entrada no afloja nada: lo que se guarda y lo que se
+ * embebe sigue siendo un dominio de la lista.
+ */
+export function normalizeRealtyTourUrl(url: string): string {
+  const raw = (url ?? "").trim();
+  if (!raw) return "";
+  let parsed: URL;
+  try {
+    parsed = new URL(raw);
+  } catch {
+    return raw;
+  }
+  if (normalizeHost(parsed.host) === "youtu.be") {
+    const id = parsed.pathname.replace(/^\/+/, "").split("/")[0];
+    if (id) return `https://www.youtube.com/watch?v=${encodeURIComponent(id)}`;
+  }
+  return raw;
+}
+
+/** Id del video de una URL de YouTube (watch?v=…, /embed/…, /shorts/…). */
+function youtubeVideoId(parsed: URL): string | null {
+  const v = parsed.searchParams.get("v");
+  if (v) return v;
+  const parts = parsed.pathname.split("/").filter(Boolean);
+  const marker = parts.findIndex((p) => p === "embed" || p === "shorts" || p === "v");
+  if (marker >= 0 && parts[marker + 1]) return parts[marker + 1];
+  return null;
+}
+
+/**
+ * URL que va en el `src` del iframe.
+ *
+ * La liga que copia el asesor casi nunca es la de embeber: YouTube da
+ * /watch y Vimeo da la página del video, y las dos se niegan a cargarse
+ * dentro de un marco. Aquí se traducen a su forma incrustable — SIEMPRE
+ * dentro del mismo dominio registrable, así que la CSP las sigue
+ * aceptando (player.vimeo.com entra por `https://*.vimeo.com`).
+ *
+ * Devuelve null si la URL no es de un proveedor permitido: el que llama
+ * NO debe pintar un iframe en ese caso.
+ */
+export function realtyTourEmbedUrl(url: string): string | null {
+  const normalized = normalizeRealtyTourUrl(url);
+  const provider = detectRealtyTourProvider(normalized);
+  if (!provider) return null;
+
+  let parsed: URL;
+  try {
+    parsed = new URL(normalized);
+  } catch {
+    return null;
+  }
+
+  if (provider.key === "youtube") {
+    const id = youtubeVideoId(parsed);
+    if (!id) return null;
+    // youtube-nocookie: no deja cookies de seguimiento en el visitante de
+    // la ficha, y está en la allowlist igual que youtube.com.
+    return `https://www.youtube-nocookie.com/embed/${encodeURIComponent(id)}?rel=0`;
+  }
+
+  if (provider.key === "vimeo") {
+    // Ya es el reproductor: se respeta tal cual (trae hash de video privado).
+    if (normalizeHost(parsed.host) === "player.vimeo.com") return normalized;
+    const parts = parsed.pathname.split("/").filter(Boolean);
+    const id = parts.find((p) => /^\d+$/.test(p));
+    if (!id) return null;
+    // Un video "sin listar" trae un hash extra en la ruta que el reproductor
+    // necesita como ?h= — sin él contesta 404 dentro del marco.
+    const hash = parts[parts.indexOf(id) + 1];
+    const query = hash && /^[a-z0-9]+$/i.test(hash) ? `?h=${encodeURIComponent(hash)}` : "";
+    return `https://player.vimeo.com/video/${id}${query}`;
+  }
+
+  // Matterport, Kuula, CloudPano, EyeSpy360, GoIGuide, Luma y Scaniverse
+  // entregan directamente una liga que se puede embeber.
+  return normalized;
+}
+
+/**
+ * `allow` del iframe. Sin `fullscreen` el botón de pantalla completa del
+ * recorrido no hace nada, y en un recorrido 3D eso es media experiencia.
+ */
+export const REALTY_TOUR_IFRAME_ALLOW =
+  "accelerometer; gyroscope; fullscreen; xr-spatial-tracking; picture-in-picture; encrypted-media";
+
+/**
+ * `sandbox` del iframe: lo mínimo para que un recorrido funcione.
+ *
+ * allow-scripts + allow-same-origin es lo que necesita cualquier visor 3D
+ * (WebGL y sus peticiones al propio proveedor). NO se dan
+ * allow-top-navigation ni allow-popups: un iframe de tercero no tiene por
+ * qué poder sacar al usuario de la ficha del inmueble.
+ */
+export const REALTY_TOUR_IFRAME_SANDBOX =
+  "allow-scripts allow-same-origin allow-presentation allow-forms";
