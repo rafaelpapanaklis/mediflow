@@ -17961,3 +17961,228 @@ console.log, cero `any`, cero @ts-ignore.
   ninguno para `/inmobiliaria/prospectos/reglas`** (se llega con un botón
   desde el embudo). Si se quiere en el menú, es tocar `types.ts` — fuera del
   allowlist de esta ola.
+---
+
+## [INMUEBLES · Ola 1 · T1] Cartera, ficha, galería, recorridos, ficha PDF y propietarios
+
+### Qué hice
+
+**A. Listado de inmuebles** — `/inmobiliaria/inmuebles`. Tabla y tarjetas (el usuario elige;
+la preferencia se recuerda en `localStorage`, no en una columna de la base). Portada, título,
+tipo, operación, precio con su moneda, colonia y ciudad, estado, asesor y días en cartera.
+Filtros: tipo · operación · estado · rango de precio · moneda · recámaras · baños · ciudad ·
+colonia · asesor · con/sin recorrido · con/sin exclusiva vigente · publicado o no. Búsqueda por
+texto (título, colonia, ciudad, dirección, descripción y folio). Seis órdenes. **Paginado del
+lado del servidor** (`skip`/`take`/`count`), con anti-carrera por número de secuencia para que
+la respuesta que llega tarde no pise a la que llegó después. Acciones rápidas por fila: ver
+ficha pública, copiar liga, descargar ficha PDF y cambiar estado.
+En **modo OWNER** desaparecen las columnas y los filtros de asesor y de exclusiva, y el campo
+de comisión de la ficha: un rentista no vende para nadie.
+
+**B. Ficha del inmueble** — alta mínima (`/inmuebles/nuevo`: título y tipo bastan) y edición
+por secciones en `/inmuebles/[id]`. **Cada sección se guarda sola**, con su propio botón y su
+propio error, y escribe SOLO sus columnas: dos pestañas abiertas en el mismo inmueble no se
+pisan lo que la otra no tocó. Secciones: básicos · precio · medidas · amenidades · ubicación
+(con mapa Leaflet de pin arrastrable e interruptor «mostrar dirección exacta», apagado por
+defecto) · documentos · propietario y asesor (con alta rápida de propietario sin salir de la
+ficha) · exclusiva (con insignia «Exclusiva vence en N días» a 30 días o menos) · notas
+internas. El interruptor de publicación va aparte, arriba, porque afecta a toda la ficha.
+
+**C. Galería** — arrastrar y soltar para subir, arrastrar para reordenar (HTML5 nativo:
+`@dnd-kit/sortable` NO está instalado y `package.json` no es un archivo del vertical), marcar
+portada y borrar. **Comprime y redimensiona AL SUBIR en el navegador**: 1920 px de lado largo,
+WebP calidad 0.82, con caída a JPEG en Safari viejo y respetando la orientación EXIF. Marca de
+agua opcional con el logo de la cuenta — se aplica **en el servidor** con `sharp`, no en el
+navegador, porque una marca aplicada en el cliente la quita cualquiera con las herramientas de
+desarrollo. Barra de cupo con aviso al 90 % y bloqueo al 100 %, diciendo cuánto falta.
+
+**D. Recorridos virtuales** — los dos caminos en la misma pantalla. (1) Pegar liga: el
+proveedor se **detecta solo** con la allowlist única de `tour-hosts.json` (la misma que arma el
+`frame-src` del CSP), y una liga fuera de la lista se rechaza diciendo cuáles sí entran.
+(2) Subir panorámicas propias: se ven en un **visor 360 propio** construido sobre `three` (ver
+Decisiones). **Ningún iframe se carga de entrada**: cada recorrido enseña una portada con botón
+de reproducir, y el marco va con `sandbox`, `loading="lazy"` y `allowFullScreen`. Insignia
+«Recorrido virtual» en tabla y tarjetas.
+
+**E. Ficha PDF** — una página A4, `@react-pdf/renderer` + Helvetica de las built-in. Portada
+grande + hasta 4 fotos, todas **reducidas con sharp antes de incrustarse** (900/460 px, JPEG 68)
+para que pese poco: se manda por WhatsApp muchas veces al día. Precio, características,
+amenidades, descripción, QR al recorrido virtual si existe y contacto según el modo de la
+cuenta. **NO salen**: notas internas, documentos, comisión pactada, ni la dirección exacta si
+el inmueble no la publica.
+
+**F. Propietarios** — `/inmobiliaria/propietarios`: alta, edición, búsqueda, paginado, sus
+inmuebles y sus exclusivas. Oculta en modo OWNER por el `modes` del contrato + redirect real en
+la página (esconder el menú no es control de acceso).
+
+### Resultado
+
+- `npx next build` — exit 0, salida leída entera.
+- `npx tsc --noEmit` — sin errores propios. (Quedan 3 preexistentes en
+  `src/lib/barber/__tests__/`, que ya venían de antes y no toqué.)
+- `node scripts/realty-guard.cjs` — **verde, todos los archivos PROPIOS del vertical, CERO
+  compartidos declarados.** Ningún archivo fuera de la allowlist.
+- `npx tsx --test src/lib/realty/__tests__/i18n-alcance.test.ts` — 11/11. Incluye la paridad
+  exacta de llaves ES/EN de todo el vertical y «ningún archivo usa `makeT` pelado».
+- `npx tsx --test src/lib/realty/__tests__/contrato.test.ts` — 31/31.
+- **Revisor de allowlist**: limpio. Cero archivos prohibidos; `types.ts`, `schema.prisma`,
+  `next.config.mjs`, `package.json` y todo barber/dental intactos. 17 `@container` y 0 `@media`
+  de breakpoint (los 2 `@media` son `prefers-reduced-motion`). Cero «toilette», «garage»,
+  «ambiente», «CFDI» ni precios de plan.
+- **Revisor de aislamiento** (adversarial, 22 archivos, 19 rutas): **cero fugas entre
+  inquilinos**. Toda consulta lleva el `accountId` de la sesión como literal; ninguna lo toma
+  del body, del query o de `params`; ninguna puede recibirlo `undefined`. Encontró 1 P1 real y
+  varios P2 — los cinco accionables ya están arreglados (abajo).
+
+### Hallazgos de la auditoría — ARREGLADOS en esta entrega
+
+1. **P1 · El recorte por oficina solo se aplicaba al LISTADO.** `getRealtyProperty`,
+   `assertOwnedProperty` y las escrituras filtraban por `accountId` pero no por oficina, así
+   que un asesor recortado a la oficina A no veía un inmueble de la B en `/inmuebles` pero SÍ
+   podía abrir su ficha escribiendo la URL — y la ficha trae notas internas, comisión y las
+   escrituras firmadas. **Arreglado**: `scopeWhere(ctx)` se aplica ahora también en la ficha,
+   en el assert que usan fotos/recorridos/documentos, y en editar, cambiar estado y borrar.
+   La lista y el detalle dicen lo mismo.
+2. **P2 · `pathBelongsToAccount` estaba escrita y no se llamaba desde ningún sitio.**
+   **Arreglado**: la usa `loadAccountLogo` antes de bajar un logo por path. Hoy nadie escribe
+   `logoUrl`, pero el día que exista Configuración, un path de otra cuenta ahí dentro habría
+   estampado el archivo de otro inquilino como marca de agua.
+3. **P2 · La reja SSRF del logo remoto era de cadenas y se esquivaba con DNS**
+   (`169.254.169.254.nip.io` pasaba entera). **Arreglado**: ahora se RESUELVE el hostname y se
+   valida la IP real — privadas, loopback, CGNAT, metadatos de la nube, IPv6 única y de enlace
+   local, e IPv4 mapeada en IPv6 — más https obligatorio, puerto 443, `redirect: "error"`,
+   tope de 2 MB, `content-type` de imagen y timeout de 5 s. El hueco teórico que queda (DNS
+   rebinding) está anotado en el propio código.
+4. **P2 · Un `ownerId` ajeno se convertía en `null` en silencio**, desligando al propietario
+   sin avisar. **Arreglado**: solo un `null` explícito desliga; un id que no valida devuelve
+   400 con su mensaje. Igual para el asesor.
+5. **P2 · `pageSize=30` se ignoraba sin decirlo.** **Arreglado**: la API solo acepta 12/24/48.
+
+### Reportado, NO arreglado (no es de esta terminal)
+
+- **Ni `gateRealty` ni el layout cortan por suscripción impaga o cuenta suspendida.** Una
+  cuenta en `pending_payment` —el estado con el que NACE toda cuenta— entra escribiendo
+  `/inmobiliaria/inmuebles` a mano. **Esto es deliberado de la Ola 0**: el layout dice
+  literalmente que el gate de impago «lo cablea la ola de suscripción — aquí no se corta para
+  no crear un loop con /inmobiliaria/suscripcion». Es una decisión de todo el vertical, no de
+  T1: cablearla en una sola terminal deja incoherentes a las otras nueve. **Que la tome la ola
+  de suscripción.**
+- **`getRealtyContext` elige la membresía más VIEJA** cuando un correo pertenece a varias
+  cuentas. Hoy es determinista y no filtra nada. Cuando alguien construya el selector de
+  cuenta, el `accountId` NO puede salir de una cookie ni del body sin revalidar la membresía
+  contra el `supabaseId`. Ahí nace el P0 de este vertical.
+- **La ficha del propietario lista sus inmuebles sin recorte de oficina.** Son de la misma
+  cuenta, la pantalla ya exige `owners.manage`, y el acceso real a cada ficha quedó cerrado
+  por el punto 1. Anotado por si la ola de equipo endurece el multi-oficina.
+
+### Qué sigue
+
+- **La web pública `/i/[slug]/[propertyId]` todavía no existe** (es de otra ola). «Ver ficha
+  pública» y «copiar liga» ya arman la URL correcta —`/i/<slug-cuenta>/<slug-inmueble>`— y solo
+  se ofrecen cuando el inmueble está publicado, pero hasta que esa ruta exista dan 404.
+- **El bucket `realty-files`** lo crea `sql/realty.sql`; si ese SQL no se ha aplicado en
+  Supabase, las subidas fallarán con el error del Storage. No hay SQL nuevo de esta terminal.
+- Ola siguiente: promover a columna los dos huecos del schema (abajo) y el gate de suscripción.
+
+### Decisiones
+
+1. **`niveles` NO existe en el schema.** No lo agregué (regla dura #1). Se guarda en el Json
+   libre `amenities` bajo la llave reservada `_niveles`, y las llaves que empiezan con `_` se
+   filtran para que no se pinten como casillas de amenidad. **Reportado para promoverlo a
+   columna**: `RealtyProperty.levels Int?`.
+2. **`publishedAt` NO existe.** Solo hay `isPublished Boolean`. «Días publicado» no se puede
+   calcular honestamente, así que la columna se llama **«Días en cartera»** y se deriva de
+   `createdAt`. Decir «días publicado» sobre `createdAt` sería mentir. **Reportado**:
+   `RealtyProperty.publishedAt DateTime?`.
+3. **Hotspots de panorámica: no hay dónde guardarlos.** `RealtyPropertyTour` no tiene campo Json
+   ni tabla de puntos de navegación. Las escenas se enlazan **por orden**, con una tira de
+   puntos abajo del visor: la misma utilidad (recorrer el inmueble cuarto por cuarto) sin
+   inventarme una columna. **Reportado.**
+4. **Visor 360 sobre `three`, no Pannellum ni Photo Sphere Viewer.** Las dos habría que
+   instalarlas, y `package.json` no es un archivo del vertical: tocarlo rompe la guardia, y con
+   razón (la dependencia la instalarían también el dental y barber, vivos en producción).
+   `three` ya está. El import es **dinámico y solo al pulsar «ver»**, para no pagar el arranque
+   de WebGL en el TBT de la ficha — la lección de la landing de barber.
+5. **`youtu.be` no está en la allowlist** y es justo lo que da el botón «Compartir» de YouTube.
+   No toqué `tour-hosts.json` (no es de mi allowlist y además alimenta el CSP): añadí
+   `normalizeRealtyTourUrl()` en `tours.ts`, que reescribe `youtu.be/ID` a
+   `https://www.youtube.com/watch?v=ID` **antes** de validar. Lo que se guarda y lo que se
+   embebe sigue siendo un dominio de la lista. Si se prefiere aceptarlo de frente, se agrega
+   `youtu.be` al `.json` y ya.
+6. **`src/lib/storage.ts` no se tocó.** Su tipo `BucketName` solo admite los dos buckets del
+   dental, así que `realty-files` no compila ahí; y es un archivo compartido por dos productos
+   en producción. El vertical trae su propio helper en `src/lib/realty/media.ts`, con los mismos
+   cuidados (cliente admin cacheado, firma en lote de un solo round-trip, borrado best-effort).
+7. **El contador de cupo se ajusta en TODAS las rutas que suben o borran** (fotos, panorámicas,
+   documentos y el borrado del inmueble completo). El dental tiene el bug contrario —rutas que
+   suben sin registrar el tamaño— y su contador subestima el uso real. Al restar se sube a 0 con
+   un `GREATEST` en la misma sentencia: un `storageUsedBytes` negativo regalaría espacio
+   infinito.
+8. **Se tocó `src/i18n/dictionaries/realty/index.ts`** (dos imports y dos entradas). No está en
+   la lista literal de la terminal, pero el propio archivo lo invita («Ola 1: importa aquí tu
+   área») y sin eso el diccionario no se cuelga de ningún lado. El guard lo da por PROPIO.
+9. **Se añadió al final de `src/lib/realty/tours.ts`** (sí está en mi allowlist):
+   `normalizeRealtyTourUrl`, `realtyTourEmbedUrl` y las constantes de `sandbox`/`allow` del
+   iframe. **La allowlist `REALTY_TOUR_PROVIDERS` y sus validadores no se tocaron** — el
+   revisor lo confirmó byte a byte: un único hunk, todo al final del archivo.
+10. **Aislamiento en un solo punto**: `scopeWhere(ctx)` en `properties.ts` (accountId + oficina)
+    y la puerta única `gateRealty()` en `_helpers.ts` (sesión → plan → permiso). Ninguna
+    consulta acepta un `accountId` por parámetro: sale siempre de `getRealtyContext()`. Se usa
+    `findFirst`/`updateMany`/`deleteMany` con el alcance en el `where`, nunca `findUnique` ni
+    `update` por id pelado.
+11. **Hizo falta un archivo más: `src/lib/realty/properties-shared.ts`.** `next build` falló en
+    seco con «You're importing a component that needs server-only»: un componente `"use client"`
+    que importa aunque sea UNA CONSTANTE de un módulo con `import "server-only"` lo arrastra
+    entero al grafo del navegador (los `import type` sí se borran; los de valores no). Los
+    tipos, las constantes y las funciones puras del módulo se movieron ahí. **Es la convención
+    que la propia Ola 0 ya usa**: `plan-shared.ts` (puro) junto a `plans.ts` (server-only).
+    Está una línea fuera de la allowlist literal, dentro de `src/lib/realty/`, que el guard da
+    por PROPIO.
+12. **Propietarios NO gatea por plan** (`featureKey: null` en el contrato), solo por el permiso
+    `owners.manage`. Si su API exigiera la feature `properties`, el sidebar enseñaría un item
+    que lleva a un 403.
+13. **`t` fuera de las dependencias de los hooks de carga.** `makeRealtyT` devuelve una función
+    nueva cuando cambia el diccionario; con `t` en las deps de `useCallback`, `load` se
+    reengancha y se dispara un bucle de peticiones. Va documentado en las dos pantallas.
+
+### Archivos
+
+**Nuevos — datos y medios**
+- `src/lib/realty/properties.ts` — cartera, filtros, paginado, ficha, propietarios, exclusivas.
+- `src/lib/realty/properties-shared.ts` — la parte pura y client-safe del módulo.
+- `src/lib/realty/media.ts` — bucket `realty-files`, firma en lote, cupo, marca de agua, reja SSRF.
+
+**Modificados**
+- `src/lib/realty/tours.ts` — helpers de embebido añadidos al final (allowlist intacta).
+- `src/i18n/dictionaries/realty/index.ts` — dos líneas del área.
+
+**Nuevos — i18n**
+- `src/i18n/dictionaries/realty/properties.es.json` · `properties.en.json`
+
+**Nuevos — páginas**
+- `src/app/inmobiliaria/(panel)/inmuebles/page.tsx` (reemplaza el placeholder)
+- `src/app/inmobiliaria/(panel)/inmuebles/nuevo/page.tsx`
+- `src/app/inmobiliaria/(panel)/inmuebles/[id]/page.tsx`
+- `src/app/inmobiliaria/(panel)/propietarios/page.tsx` (reemplaza el placeholder)
+- `src/app/inmobiliaria/(panel)/propietarios/[id]/page.tsx`
+
+**Nuevos — componentes** (`src/components/realty/properties/`)
+- `properties.module.css` · `ui.tsx` · `denied.tsx` · `image.ts`
+- `properties-screen.tsx` · `property-detail.tsx` · `owners-screen.tsx`
+- `property-gallery.tsx` · `property-tours.tsx` · `pano-viewer.tsx` · `property-map.tsx`
+
+**Nuevos — API** (`src/app/api/realty/`)
+- `properties/_helpers.ts` — puerta única (sesión + plan + permiso) y errores.
+- `properties/route.ts` · `properties/[id]/route.ts`
+- `properties/[id]/status/route.ts` · `properties/[id]/publish/route.ts`
+- `properties/[id]/photos/route.ts` · `photos/[photoId]/route.ts` · `photos/order/route.ts`
+- `properties/[id]/tours/route.ts` · `tours/pano/route.ts` · `tours/[tourId]/route.ts`
+- `properties/[id]/documents/route.ts` · `documents/[docId]/route.ts`
+- `properties/[id]/exclusive/route.ts` · `properties/[id]/pdf/route.tsx`
+- `owners/route.ts` · `owners/[id]/route.ts`
+
+### SQL
+
+**Ninguno.** Esta terminal no necesitó SQL nuevo: el schema `realty_*` de la Ola 0 ya trae todo
+lo que se usa. Los dos campos que faltan (`levels`, `publishedAt`) quedan REPORTADOS, no
+agregados.
