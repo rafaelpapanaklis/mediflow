@@ -17012,6 +17012,551 @@ escribir). **`WHATSAPP` se devuelve siempre en `pending`** — esa rama es de T6
 correo capturado, el dueño lo ve igual en su lista.
 
 ═══════════════════════════════════════════════════════════════════════════
+## INMUEBLES OLA 1 · T3 — PORTALES / FEED ✅ (2026-08-25) · rama realty/t3 → main
+═══════════════════════════════════════════════════════════════════════════
+
+▶ **QUÉ SE CONSTRUYÓ Y POR QUÉ ASÍ.**
+
+**No existe "una API de portales inmobiliarios".** Los tres grandes de México
+—Inmuebles24, Lamudi y Casas y Terrenos— **no publican API abierta**: se entra
+por convenio comercial y esa gestión NO está hecha. Así que esta ola **no
+construye conectores a esos portales** (serían código muerto contra
+credenciales que no tenemos, y peor: le harían creer a ventas que la función
+existe). Construye las dos cosas que sí funcionan hoy sin permiso de nadie:
+
+1. **El feed propio** — una URL pública con la cartera, que el portal jala.
+2. **La arquitectura de adaptadores** — para que mañana enchufar Inmuebles24
+   sea agregar un archivo y una fila, no rehacer el módulo.
+
+Los tres grandes **sí aparecen en la pantalla**, apagados y con el motivo
+escrito. El asesor VA a preguntar por ellos: una lista donde no aparecen se lee
+como "no lo saben hacer" y una donde aparecen encendidos sería mentira.
+
+---
+
+▶ **A. MODELO CANÓNICO + ADAPTADORES** (`src/lib/realty/portal-adapters/`)
+
+```
+types.ts          RealtyPublishableProperty  ← LA REJA DE PRIVACIDAD
+                  RealtyPortalAdapter        ← build(props, cuenta, opts) → string
+generic-xml.ts    feed XML estilo Trovit/LIFULL (Trovit, Mitula, Nuroa,
+                  Nestoria, iCasas + portales chicos)
+meta-catalog.ts   catálogo Home Listings de Meta (CSV)
+google-listing.ts JSON-LD RealEstateListing para la web propia
+retry.ts          espera creciente + cupo (PURO, por eso se puede probar)
+index.ts          registro de adaptadores + catálogo de DESTINOS
+README.md         cómo agregar uno nuevo
+```
+
+Los cinco adaptadores exponen **la misma interfaz** y además declaran su
+`contentType` y su `filename`. `transport: "feed" | "push"`: hoy los tres son
+`feed` (el portal JALA); el día que haya convenio, el adaptador implementa
+`push()` y la cola lo reintenta sola sin tocar nada más.
+
+**Meta, con precisión.** Desde enero de 2023 **Facebook Marketplace ya no
+permite publicaciones individuales de propiedades hechas por páginas de negocio
+ni por plataformas de terceros**, y lo que queda es beta cerrada. Lo que sigue
+abierto es el **catálogo para anuncios dinámicos**. Por eso el archivo se llama
+`meta-catalog`, la etiqueta de la UI es "Anuncios de Facebook e Instagram" y
+hay una **prueba que falla** si ese texto deja de decir que NO publica en
+Marketplace.
+
+**Meta se sirve como `meta.csv`, no disfrazado de `.xml`.** CSV es el formato
+documentado y sin ambigüedades para Home Listings; una extensión que miente es
+la primera cosa que rompe una integración.
+
+---
+
+▶ **B. EL FEED PÚBLICO** (`/feeds/realty/<accountId>/<archivo>`)
+
+| URL | Qué es |
+|---|---|
+| `…/propiedades.xml` | XML genérico. `?destino=trovit` lo recorta al destino y respeta su cupo |
+| `…/meta.csv` | catálogo de Meta |
+| `…/google.jsonld` | JSON-LD de la web propia |
+| `…/propiedades.json` | el modelo canónico crudo, **para depurar** ("¿qué estoy publicando?") |
+
+- Solo inmuebles **DISPONIBLES** (`isPublished:true` + `status:DISPONIBLE`) de
+  cuentas **activas y al corriente de pago** (`isRealtySubscriptionActive`).
+- Gateado por plan: `portalsFeed` (ASESOR+) para portales; `publicWeb` (los
+  tres planes) para el JSON-LD de la web propia.
+- **Cacheado**: `unstable_cache` (TTL 1 h, etiqueta `realty-feed-<accountId>`
+  que se invalida al cambiar algo) + `Cache-Control: public, s-maxage=3600,
+  stale-while-revalidate=86400` — la misma receta que `/blog/rss.xml`. Mil
+  lecturas de un portal cuestan una consulta a Postgres.
+- **Nunca 500.** Cualquier fallo devuelve un documento **vacío y bien formado**
+  y lo registra en el log. Un portal que recibe un error marca la fuente como
+  rota y a veces deja de intentar; uno que recibe un feed vacío vuelve mañana.
+- Rate-limit 60/min por IP (`persistentRateLimit`), envuelto en try/catch: si
+  el guardia de tráfico falla, **manda el feed**.
+- `/feeds` es un segmento estático → gana sobre el catch-all `/[slug]` de las
+  mini-webs dentales. El middleware no lo toca (su matcher solo cubre
+  `/dashboard`, `/admin`, `/api`, `/proveedores`).
+
+### 🔴 LOS CAMPOS EXACTOS QUE EXPONE EL FEED
+
+**Del inmueble** (`RealtyPublishableProperty`, `portal-adapters/types.ts`):
+
+| Campo | Nota |
+|---|---|
+| `id` | identificador estable del anuncio |
+| `folio` | `shortTermFolio` — la clave corta que el asesor dicta |
+| `kind`, `operation`, `status` | tipo, venta/renta, estatus (solo sale DISPONIBLE) |
+| `price`, `currency` | precio de la operación principal |
+| `salePrice`, `rentPrice`, `maintenanceFee` | desglose |
+| `landM2`, `builtM2` | superficies |
+| `bedrooms`, `bathrooms`, `halfBathrooms`, `parking`, `ageYears` | distribución |
+| `amenities` | **solo llaves del catálogo `REALTY_AMENITIES`**, nunca el Json crudo |
+| `title`, `description` | textos públicos |
+| `colonia`, `city`, `state`, `zip` | **siempre** |
+| `address` | **SOLO si `showExactAddress`**. Si no → `null` |
+| `lat`, `lng` | **SOLO si `showExactAddress`**. Si no → `null` |
+| `photos[]` | `url` (absoluta y pública), `isCover`, `width`, `height`. Máx. 20 |
+| `tours[]` | **la URL del recorrido virtual**, revalidada contra la allowlist de `tours.ts` |
+| `url` | la ficha en la web del cliente: `/i/<slug>/<slug-o-id>` |
+| `createdAt`, `updatedAt` | |
+
+**De la cuenta** (`RealtyPublisherAccount`) — es el CONTACTO del anuncio, los
+mismos datos del NEGOCIO que ya enseña su web pública:
+`id`, `name`, `slug`, `phone`, `email`, `city`, `state`, `logoUrl`, `webUrl`.
+
+### 🔴 LO QUE NO SALE, Y NO PUEDE SALIR
+
+`internalNotes` · `commissionPct` · `ownerId` y **cualquier** dato del
+propietario (nombre, teléfono, correo, RFC) · `assignedUserId` y los datos
+personales del asesor · `officeId` · **documentos** (escrituras, predial,
+identificaciones) · exclusivas · prospectos · visitas · llaves · la `apiKey` de
+ningún portal.
+
+**Por qué es una garantía y no una promesa — tres rejas en fila:**
+
+1. El `select` de Prisma en `loadRealtyFeedData` **enumera las columnas seguras
+   una por una**. Los campos privados **ni siquiera se leen de la base**. Y el
+   select vive DENTRO del `findMany`, no en una constante compartida, para que
+   nadie lo reutilice "para otra pantalla" y le agregue una columna.
+2. La fila se convierte a `RealtyPublishableProperty`, **un tipo que no tiene
+   un solo campo donde quepa un dato privado**.
+3. Los adaptadores solo reciben ese tipo. **Un adaptador no puede filtrar lo
+   que nunca recibió**, ni aunque su autor se equivoque.
+
+**Las coordenadas son la dirección exacta con otro nombre.** No se difuminan:
+se ponen en `null` cuando `showExactAddress` está apagado. Publicar lat/lng con
+siete decimales mientras se oculta la calle apunta igual a la puerta de la
+casa. Hay pruebas de esto en los tres adaptadores.
+
+**Las URLs FIRMADAS de Supabase se descartan** (`publicMediaUrl`). El bucket
+`realty-files` es privado (ahí van escrituras y prediales) y sus enlaces
+caducan en minutos: publicar uno en un feed que el portal lee mañana es
+publicar una liga muerta, y el síntoma ("las fotos no cargan") no apunta a la
+causa. Ver PENDIENTE.
+
+---
+
+▶ **C. ESTADO POR INMUEBLE × PORTAL** — nunca un booleano
+
+La matriz (`getPortalMatrix` + `portals-matrix.tsx`) enseña **cada inmueble
+contra cada destino encendido**, con cuatro estados por celda, la fecha del
+último envío y **el motivo del error dentro de la propia celda**:
+
+| Fila | Significado | ¿Ocupa cupo? |
+|---|---|---|
+| (sin fila) | no publicada | no |
+| `BORRADOR` | **pendiente** — elegida, falta confirmarla | **sí** |
+| `PUBLICADO` | **publicada** — viva en ese destino | **sí** |
+| `ERROR` | **con error** — algo la detiene | **sí, a propósito** |
+| `PAUSADO` | **retirada** — se bajó (a mano o sola) | no |
+
+`ERROR` ocupa cupo a propósito: el asesor QUIERE ese inmueble ahí, y liberarle
+el lugar en silencio le escondería el problema.
+
+La matriz enseña **toda la cartera**, incluidos los despublicados y los
+vendidos: la pregunta que trae al asesor a esta pantalla es "¿por qué ESE no
+aparece?", y un inmueble que no sale de la consulta no tiene respuesta. Cada
+fila lleva sus **bloqueos** (por qué no se puede publicar) y sus **avisos** (se
+puede, pero rinde mucho menos: sin fotos, sin descripción, sin m², **sin
+recorrido virtual**).
+
+---
+
+▶ **D. CUPOS POR PORTAL** — el detalle que hace que alguien cambie de CRM
+
+`RealtyPortalAccount.maxListings` = cuántos anuncios contrató el cliente en ese
+portal. Con 10 contratados y 40 inmuebles, **elige cuáles 10**, ve cuántos le
+quedan, y al intentar el 11º recibe un **409** con el número exacto y qué
+hacer, no un "no se pudo".
+
+- `maxListings = 0` significa **"sin límite declarado"**, no "no puedes
+  publicar nada". Es el default de la columna y quiere decir "todavía no me
+  dijiste cuántos contrataste". Un agregador que lee el feed no tiene límite;
+  un portal de paga sí, y el número lo escribe el cliente.
+- **El cupo se aplica en la puerta de verdad, el propio feed**, y **al final**:
+  sobre lo que de verdad va a salir, no sobre las filas elegidas. Recortar
+  antes desperdiciaba lugares — una fila que apuntaba a un inmueble ya vendido
+  se llevaba uno de los 10 anuncios y el portal recibía 9. Aunque alguien baje
+  el cupo de 10 a 5 después de haber elegido 10, por la URL del portal salen
+  **los 5 más antiguos** (quien llegó primero conserva su lugar) y los
+  sobrantes se marcan con error en la matriz con el motivo escrito.
+- 🔴 **La liga que se le da a un portal con cupo es la de SU tarjeta**, no la
+  general: la general lleva toda la cartera a propósito y está pensada para
+  los agregadores que no cobran por anuncio. Las dos tienen botón de copiar y
+  la pantalla dice cuál es cuál — dejar solo la general destacada hacía que
+  todo el trabajo del cupo no mordiera.
+- Re-seleccionar algo que ya ocupaba lugar **no consume un segundo lugar**.
+- Quitar un inmueble lo deja `PAUSADO`, **no lo borra**: se conserva el
+  historial de que estuvo publicado y por qué se bajó, y libera el lugar.
+
+---
+
+▶ **E. COLA CON REINTENTOS Y DESPUBLICACIÓN AUTOMÁTICA**
+
+`POST /api/realty/portals/cola` (sesión, botón "Revisar ahora" — solo su
+cuenta) · `GET` con `Authorization: Bearer $CRON_SECRET` (todas las cuentas,
+fail-closed si la variable no existe). **El envío nunca es síncrono con la
+pantalla**: los portales se caen y el asesor no se puede quedar mirando una
+rueda girando.
+
+**La pantalla además reconcilia al abrirse**, en `try/catch` y antes de leer.
+Es barato porque la cola solo ESCRIBE donde el estado deseado difiere del
+real: en régimen normal son cuatro consultas y cero `UPDATE`. Eso es lo que
+evita que la matriz diga "Publicada" de un inmueble vendido mientras el cron
+no exista; si la reconciliación falla, la pantalla se pinta igual.
+
+Una pasada hace tres cosas, en orden:
+
+1. **RECONCILIA.** Compara cada fila contra la realidad del inmueble. Solo se
+   BAJA (a `PAUSADO`) lo que de verdad salió de la cartera publicable:
+   vendido, rentado, despublicado o borrado.
+2. **VALIDA.** Lo que un portal rechazaría se marca `ERROR` con el motivo en
+   español — **`ERROR`, no `PAUSADO`**: conserva el lugar del cupo y la
+   elección del asesor. Se re-evalúa en cada pasada (no cuesta una llamada
+   externa), así se arregla solo en cuanto captura lo que faltaba.
+   🔴 Una causa REVERSIBLE (plan bajado, pago atrasado, destino apagado) nunca
+   destruye la elección: la fila vuelve a `BORRADOR` con la verdad escrita y
+   se republica sola cuando la causa desaparece.
+3. **EMPUJA**, solo para adaptadores `push`, con espera creciente
+   **5 → 15 → 45 min → 2 h 15 → 6 h 45 → 12 h**, seis intentos y luego error
+   permanente. Un 401 o un 422 **no se reintenta** (`retryable:false`):
+   reintentar una credencial mala cada 15 minutos no la arregla.
+
+### 🔴 Al marcar VENDIDO o RENTADO, se despublica solo
+
+Por **dos** caminos independientes, y el importante no depende de que nadie se
+acuerde de nada:
+
+- **El feed.** Un inmueble VENDIDO/RENTADO deja de cumplir la condición
+  (`status:DISPONIBLE`) y **sale del feed en la siguiente lectura del portal**,
+  como máximo una hora después (el feed vive una hora en caché). Esto ocurre
+  solo, sin cola, sin cron y sin ganchos. El texto de la pantalla dice
+  exactamente eso y no "al instante": prometer lo segundo con una caché de una
+  hora de por medio es un reclamo esperando a ocurrir.
+- **La cola** marca la fila `PAUSADO` con el motivo ("Se retiró solo: el
+  inmueble está marcado como vendido"), libera el cupo y lo deja escrito en la
+  matriz. Una fila `PAUSADA` **no resucita sola**.
+
+Además se exporta `syncPortalListingsForProperty(accountId, propertyId)` para
+que la pantalla de inmuebles lo llame al guardar y sea **inmediato**. Es un
+ATAJO, no el mecanismo: un vertical cuya limpieza dependa de que diez pantallas
+se acuerden de llamar a un gancho ya perdió.
+
+### Dónde vive el estado del reintento
+
+`realty_portal_listings` **no tiene columnas `attempts` ni `nextAttemptAt`**, y
+el schema es de la Ola 0 (regla dura: no se toca). El contador y la próxima
+hora se guardan como una **marca al final de `lastError`**, que es texto:
+
+```
+El portal respondió 503.
+[dc:reintento n=3 desde=2026-08-25T18:00:00.000Z]
+```
+
+Mismo recurso que ya usa barber para la cancelación suave en `notes`. **La
+marca se quita SIEMPRE antes de enseñar el error**: el asesor ve "El portal
+respondió 503", nunca el corchete. Re-marcar un error que ya la traía **no la
+duplica** (si no, el regex leería la última y el contador se congelaría en
+silencio) — hay prueba de eso. Si algún día se agregan columnas de verdad, lo
+único que cambia son `splitPortalError`/`composePortalError`.
+
+---
+
+▶ **F. LA PANTALLA** (`/inmobiliaria/portales`)
+
+Explica, en español claro y en este orden:
+
+1. **Cómo funciona** — el feed es una liga que se actualiza sola, se la das al
+   portal, y se despublica solo al vender.
+2. **Quién paga qué**, arriba de los destinos y a propósito:
+   > "DaleControl te arma el feed y lleva el control. **La suscripción al
+   > portal la pagas tú directamente con ellos: nosotros publicamos, no
+   > regalamos anuncios.** Si tu plan del portal incluye 10 anuncios, aquí
+   > escoges cuáles 10."
+3. **La liga del feed**, con botón de copiar (y si el portapapeles falla, deja
+   el texto seleccionado en vez de fingir que copió) y un aviso de qué NO
+   incluye.
+4. **Los destinos**, agrupados, con su cupo, sus contadores y su interruptor.
+   Los de convenio salen apagados con el motivo.
+5. **La matriz**, inmueble por inmueble.
+
+Tres candados, **los mismos en la página y en la API** (esconder el menú no es
+control de acceso): sesión + feature de plan `portalsFeed` + permiso
+`portals.manage`. Sin permiso o sin plan sale una pantalla con el motivo y la
+salida, nunca un blanco.
+
+---
+
+▶ **DECISIONES QUE ALGUIEN VA A CUESTIONAR.**
+
+- **El diccionario es UN archivo (`portals.json`) con los dos idiomas dentro y
+  NO se registra en `src/i18n/dictionaries/realty/index.ts`.** La convención
+  del repo es `<area>.{es,en}.json` + 4 líneas en el index — pero ese index lo
+  comparten las DIEZ terminales de la Ola 1 y registrar allí garantizaba
+  conflicto. La pantalla lo importa directo y le pasa el sub-árbol del idioma
+  ya recortado a `makeRealtyT` **con prefijo vacío** (la convención B de
+  `realty/i18n.ts`). Queda escrito dentro del propio JSON: cuando la ola
+  termine, quien consolide puede colgarlo de `realty.portales` sin tocar la
+  pantalla. Los tests de alcance siguen en verde (11/11) porque leen
+  `REALTY_DICTS`, que no cambia.
+- **Se agregó UNA línea a `scripts/realty-guard.cjs`**: `"src/app/feeds/realty/"`
+  en `OWN_PREFIXES`. Sin ella la guardia marca el feed como PROHIBIDO y da
+  exit 1. Es el procedimiento que la propia cabecera del guardia documenta
+  ("una carpeta nueva del vertical se agrega a OWN_PREFIXES, no a la variable
+  de entorno"), y `scripts/realty-guard.cjs` está en su propio `OWN_FILES`.
+  Ninguna otra regla cambió.
+- **El feed vive en `/feeds/` y no en `/api/`** por tres razones: `robots.ts`
+  prohíbe `/api`; el middleware intercepta `/api/**` con el corte rápido de 2FA
+  (un visitante que además sea usuario dental con 2FA pendiente recibiría un
+  403 en un feed público); y una liga que el cliente le pasa a un portal se lee
+  mejor sin `/api` en medio.
+- **Sin fotos NO bloquea la publicación**, solo avisa. Bloquear dejaría
+  inmuebles fuera del feed en silencio, que es peor. Lo que SÍ bloquea: sin
+  título de 5 letras, sin precio > 0, y sin colonia NI ciudad (sin eso el
+  portal no puede filtrarlo y lo descarta él).
+- **Beleta y Clasco** están en el catálogo con texto neutro ("comparte la URL
+  del feed y confirma con ellos el formato que esperan"). No afirmamos nada que
+  no podamos sostener sobre su formato. Hay además un destino **"Otro portal"**
+  para cualquiera que acepte un XML.
+- **La `apiKey` no se puede escribir desde el panel.** Ningún destino de hoy la
+  usa, y una API de panel que acepte credenciales por JSON es justo lo que
+  después aparece en un log. El DTO solo dice si está puesta (`hasApiKey`).
+
+---
+
+▶ **VERIFICACIÓN**
+
+1. **`npx next build` leído ENTERO, sin pipes que enmascaren el exit code:
+   EXIT=0**, "Compiled successfully", "Generating static pages (409/409)" — medido
+   YA REBASADO sobre origin/main, con los cinco commits que las otras
+   terminales de la Ola 1 metieron mientras tanto.
+   Las **6 rutas** del área en la tabla:
+   ```
+   ƒ /inmobiliaria/portales
+   ƒ /feeds/realty/[accountId]/[archivo]
+   ƒ /api/realty/portals
+   ƒ /api/realty/portals/cola
+   ƒ /api/realty/portals/destinos
+   ƒ /api/realty/portals/listings
+   ```
+   (`NODE_OPTIONS=--max-old-space-size=8192`, condición PREEXISTENTE del repo.)
+2. **`npx tsc --noEmit`: cero errores** en todo lo de esta ola. Los únicos 3
+   que salen son **preexistentes de `src/lib/barber/__tests__/`**
+   (`dinero-sumas` TS2353 y dos TS2802 de `i18n-alcance`), ya documentados.
+3. **Pruebas propias: 41/41 en verde.**
+   `npx tsx --test src/lib/realty/portal-adapters/__tests__/adapters.test.ts`
+   El XML **se parsea de verdad** con `xmlbuilder2` (ya es dependencia del
+   repo), no se compara como texto. Cubren, entre otras cosas:
+   - un `]]>` en la descripción NO parte el documento (se comprueba que el
+     texto original sobrevive entero tras el ida y vuelta);
+   - un nombre de cuenta con dos guiones seguidos no rompe el comentario del
+     encabezado XML;
+   - con la dirección exacta apagada NO sale la calle ni las coordenadas,
+     **en los tres adaptadores por separado**;
+   - una coma y una comilla en la descripción no corren las columnas del CSV;
+   - `serializeRealtyLd` escapa el menor-que, así que un título con una
+     etiqueta de cierre de script no parte el bloque;
+   - la antigüedad se convierte a año de construcción (mandarla cruda en
+     `year_built` publicaba "año 12", y el portal ordena por ese campo);
+   - re-marcar un error que ya traía la marca de reintento no la duplica;
+   - **una RENTA sin precio de renta NO hereda el de venta** (ver ▲2);
+   - **la UI de Meta no puede decir "Marketplace"** (prueba que lo vigila);
+   - los tres grandes están en el catálogo pero `available:false` y con motivo.
+4. **No se rompió nada del contrato:** `contrato.test.ts` **31/31** y
+   `i18n-alcance.test.ts` **11/11**, los dos en verde.
+5. **Diccionario comprobado con un script**: las **76 llaves** que usan las
+   pantallas existen en `es` Y en `en`, paridad exacta 76 = 76, cero cadenas
+   vacías y cero llaves sin usar.
+6. **`node scripts/realty-guard.cjs` → exit 0**: todos propios, 0 compartidos
+   sin declarar, 0 prohibidos.
+7. **Ningún archivo del área lleva bytes de control crudos.** El rango del
+   saneador XML va ESCAPADO (con secuencias \uXXXX) y no con los caracteres
+   literales dentro de la clase: con los bytes crudos el archivo dejaba de ser
+   texto plano (`grep` lo trataba como binario) y cualquier formateador podía
+   mutilar la clase sin que nadie se enterara. Es la misma lección que ya
+   estaba escrita en `makeRealtySlug`.
+
+▶ **TRES REVISORES READ-ONLY, Y LO QUE ENCONTRARON.**
+
+**Revisor de privacidad del feed** (12 preguntas dirigidas): **sin una sola
+fuga alcanzable con una petición HTTP real**. Auditó `internalNotes`,
+`commissionPct`, datos del propietario, del asesor, documentos, dirección
+exacta y coordenadas en los tres adaptadores, cuentas inactivas o impagas,
+salto de cuenta por `?destino=`, `accountId` undefined `where` por `where`,
+500 con detalle interno, la `apiKey` y las URLs firmadas. Encontró **un**
+problema, comercial y no de privacidad (▲1).
+
+**Revisor de aislamiento multi-tenant y alcance**: APROBADO. El `accountId`
+sale siempre de la sesión (ninguna ruta lo acepta del body, del query ni de un
+header), el ownership se comprueba antes de escribir y cubre los dos caminos
+del toggle, el cron falla cerrado, los tres candados están duplicados en
+página y API, y el `q` de búsqueda ni inyecta ni salta de cuenta (el
+`accountId` es hermano del `OR`, no está dentro de una rama).
+
+**Revisor de corrección de cupos, cola y despublicación**: encontró 5 fallos
+graves y 9 medios. **Se arreglaron todos menos uno**, que queda documentado.
+
+── Los graves ──
+
+▲1 · **La liga que la pantalla resaltaba IGNORABA el cupo.** El feed general
+lleva TODA la cartera (por diseño), pero era la única con botón de copiar y
+con la etiqueta grande, mientras la liga por destino —la que sí recorta— era
+un ancla chiquita "Abrir". El asesor con 10 anuncios contratados y 40
+inmuebles copiaba la general y **el portal recibía los 40**: todo el trabajo
+de cupos no mordía por la ruta que el producto enseñaba. *Arreglado*: cada
+tarjeta de destino tiene ahora su propia liga con botón de copiar, y bajo la
+general hay un aviso que dice exactamente para qué sirve cada una.
+
+▲2 · **Un precio de VENTA se podía publicar como renta MENSUAL.** `price` es
+`Decimal @default(0)` NOT NULL, así que nunca llega null y el `??` que había
+no caía nunca al segundo lado. Consecuencias: una ficha capturada como venta
+en 4 850 000 y cambiada después a RENTA sin capturar la renta publicaba
+**$4,850,000 al mes**; y un inmueble en AMBAS con solo renta salía con precio
+0 (o sea, no salía). *Arreglado*: la regla vive ahora en
+`portal-adapters/types.ts` (`resolveFeedPrice`), es PURA, tiene cinco pruebas
+y dice: RENTA usa solo el precio de renta —sin él se queda fuera con un
+motivo claro—, y AMBAS con solo renta se anuncia como RENTA, que es lo que de
+verdad cotizaron.
+
+▲3 · **Un dato faltante BORRABA la elección del asesor.** La cola se apoyaba
+en la lista del feed, que ya venía filtrada por bloqueos, así que un inmueble
+al que solo le faltaba el título "desaparecía" y la cola lo trataba como
+retirado: PAUSADO, cupo liberado, y **no volvía nunca** aunque el asesor
+corrigiera el dato. Contradecía por escrito lo que decía el propio archivo.
+*Arreglado*: la cola tiene su propia foto (`loadQueueSnapshot`), que trae los
+inmuebles CON sus bloqueos al lado. Ahora distingue "ya no es publicable" (se
+baja) de "le falta un dato" (ERROR, conserva el lugar y **se arregla solo** en
+cuanto lo capturan).
+
+▲4 · **Bajar de plan o atrasarse un pago borraba todas las selecciones, con un
+motivo mentiroso** ("le falta información que el portal exige" cuando el
+inmueble estaba impecable). *Arreglado*: una causa REVERSIBLE nunca destruye
+la elección. Las filas vuelven a PENDIENTE con la verdad escrita ("Tu plan ya
+no incluye la publicación en portales" / "Tu suscripción no está al
+corriente") y, al pagar o subir de plan, la siguiente pasada las republica
+sin que haya que volver a escoger nada.
+
+▲5 · **Las filas más allá de la 200 no se reconciliaban JAMÁS.** El lote era
+un `take` sin cursor, así que siempre se procesaban las mismas primeras. Con
+40 inmuebles × 6 destinos = 240 filas, las 40 últimas se quedaban en
+"pendiente" para siempre — y un inmueble vendido ahí **no se despublicaba
+nunca**. *Arreglado*: se LEEN todas las filas (leer seis columnas cortas es
+barato) y lo que se acota es la ESCRITURA, que en régimen normal es cero
+porque solo se escribe donde el estado deseado difiere del real.
+
+── Los medios ──
+
+▲6 · Un destino APAGADO se marcaba "publicada": el asesor veía la palomita y
+el portal no recibía nada. Ahora vuelve a PENDIENTE con el motivo, **no** a
+retirada (eso le borraría la elección).
+▲7 · Pulsar una celda "Con error" la retiraba en silencio, sin confirmación ni
+deshacer. Ahora la **reintenta**, que es el reflejo de cualquiera; para
+retirarla se pulsa dos veces. Y el tooltip dice la ACCIÓN primero y el motivo
+después, en vez de solo el error.
+▲8 · Mientras un cambio va en vuelo se bloquean TODAS las celdas, no solo la
+pulsada: dos clics seguidos podían meter 11 anuncios en un cupo de 10.
+▲9 · Con el cupo bajado después de elegir, la tarjeta pintaba "10 de 5
+usados", que es aritméticamente imposible. Ahora dice qué pasó de verdad:
+"Elegiste 10 y tienes 5 contratados: los 5 más nuevos quedaron fuera".
+▲10 · Re-seleccionar por API una fila ya PUBLICADA la degradaba a pendiente.
+▲11 · El aviso tras "Revisar ahora" decía "0, 0, 0" cuando lo que había
+cambiado eran pendientes; ahora los cuenta.
+▲12 · Un destino que dejara de estar disponible enseñaba "enciéndelo", una
+instrucción que el propio servidor rechaza. Ahora enseña el motivo real.
+▲13 · Una zona horaria inválida guardada en la cuenta hacía que `Intl`
+lanzara y tumbara el render entero por una fecha de cortesía. Ahora cae a UTC.
+▲14 · La rama de envío por API trataba "sin configurar" como apagado mientras
+el feed lo trataba como encendido: el mismo estado significaba dos cosas en el
+mismo archivo. Unificado.
+▲15 · `processPortalQueue` repetía a mano la lista de estados de suscripción
+activa en vez de usar `REALTY_ACTIVE_SUBSCRIPTION_STATUSES` del contrato.
+▲16 · Empate de orden: dos filas creadas en el mismo milisegundo podían
+ordenarse distinto en el feed y en la cola, y entonces la matriz contradecía
+al feed. Las dos consultas llevan ahora `id` de desempate.
+
+── Lo que NO se arregló, y por qué ──
+
+⚪ **La caché del feed no se invalida al marcar un inmueble como vendido.**
+`syncPortalListingsForProperty` está exportado y listo, pero **la ficha del
+inmueble es de otra terminal** y todavía no lo llama. Consecuencia real: el
+inmueble deja de entrar al feed de inmediato, pero el portal puede seguir
+sirviéndose de la copia cacheada hasta una hora. Se hicieron dos cosas en vez
+de invadir: (a) el texto de la pantalla dejó de prometer "sale al instante" y
+ahora dice "sale del portal en su siguiente lectura, como mucho una hora
+después"; (b) queda apuntado abajo para quien construya la ficha.
+
+▶ **DOS ENDURECIMIENTOS QUE NO PIDIÓ NADIE PERO VALÍAN LA PENA**
+
+- `syncPortalListingsForProperty` corta en la primera línea si le llega un
+  `accountId` vacío. Es un export para otras pantallas y no tiene sesión
+  detrás; un undefined habría borrado el filtro de Prisma en su `updateMany`.
+- `REALTY_SLOT_STATUSES` dejó de estar duplicada entre el servidor y la tabla
+  del panel. Repetir esa lista era garantía de que un día la celda hiciera lo
+  contrario de lo que cuenta el cupo.
+
+═══════════════════════════════════════════════════════════════════════════
+▶ PENDIENTE — REQUIERE RAFAEL
+═══════════════════════════════════════════════════════════════════════════
+
+- 🔴 **Dar de alta el cron en `vercel.json`.** Ese archivo es compartido y
+  está FUERA del vertical (mismo caso que el dispatch de barber):
+  ```json
+  { "path": "/api/realty/portals/cola", "schedule": "*/15 * * * *" }
+  ```
+  **No es urgente**: la pantalla ya reconcilia sola al abrirse (cuesta cuatro
+  consultas y cero escrituras cuando no hay nada que cambiar), y la
+  despublicación de verdad la hace el propio feed. El cron sirve para las
+  cuentas que no abren la pantalla en días.
+- 🔴 **Decidir dónde viven las FOTOS de los inmuebles.** `realty-files` es un
+  bucket **privado** (ahí van escrituras y prediales) y sus enlaces firmados
+  caducan en minutos: **no sirven en un feed público**. `publicMediaUrl` los
+  descarta a propósito, así que hoy una foto guardada con enlace firmado sale
+  del feed como "sin fotos" en vez de como una liga muerta. Las opciones son
+  un bucket público aparte para fotos (recomendado) o servirlas por una ruta
+  propia. **La ola que construya la subida de fotos tiene que saber esto antes
+  de escribir la primera URL en `realty_property_photos.url`.**
+- 🔴 **Para la terminal de la ficha del inmueble**: al guardar un cambio de
+  estatus o de publicación, llamar a
+  `syncPortalListingsForProperty(accountId, propertyId)` de
+  `@/lib/realty/portals`. Es opcional (la cola reconcilia sola) pero es lo que
+  hace que la despublicación sea INMEDIATA en vez de esperar a la siguiente
+  lectura del portal. No lanza nunca.
+- ⚪ **Agregar `"feeds"` a los slugs reservados**
+  (`src/app/api/check-slug/route.ts`, fuera del alcance). Hoy `/feeds`
+  funciona porque una carpeta real gana sobre el catch-all `/[slug]`, pero si
+  una clínica ya tuviera ese slug, su sitio público dejaría de resolver:
+  `SELECT id, name, slug FROM "Clinic" WHERE slug = 'feeds';` → debe dar 0.
+- ⚪ **El `.xml` y el `.csv` no se han probado contra un portal real.** El
+  documento está bien formado y parsea (hay pruebas), pero cada portal tiene
+  sus manías con los nombres de campo. Al dar de alta el primero conviene usar
+  `.../propiedades.json` para ver exactamente qué se está mandando. La UI no
+  promete "compatible con todos": dice "confirma el formato con el portal".
+- ⚪ **Los conectores por API siguen sin existir**, y es lo correcto. Cuando
+  exista un convenio, el trabajo es **un archivo**
+  (`portal-adapters/mi-portal.ts` con `push()`) y **una fila** en el catálogo,
+  paso a paso en `src/lib/realty/portal-adapters/README.md`.
+- ⚪ **El diccionario `portals.json` no está colgado de `index.ts`.** Funciona
+  (la pantalla lo importa directo), pero cuando la Ola 1 termine y deje de
+  haber diez terminales tocando ese archivo, conviene registrarlo como
+  `realty.portales`. La pantalla no cambia.
+
+═══════════════════════════════════════════════════════════════════════════
 ▶ ARCHIVOS
 ═══════════════════════════════════════════════════════════════════════════
 
@@ -18233,3 +18778,26 @@ en adelante los corrige el `updateMany` de siempre.
   alguien su propia cobranza durante un tropiezo del cobro es caro— y le toca
   a la ola de suscripción, que es la dueña de `/inmobiliaria/suscripcion` y
   del texto que ahí se le dice al cliente.
+Nuevos (19)
+- `src/lib/realty/portal-adapters/` — `types.ts` (modelo canónico, contrato,
+  validación y regla del precio: todo PURO), `generic-xml.ts`,
+  `meta-catalog.ts`, `google-listing.ts`, `retry.ts` (espera creciente y
+  cupo), `index.ts` (registro + catálogo de destinos), `README.md`,
+  `__tests__/adapters.test.ts`.
+- `src/lib/realty/feed.ts` — la reja de privacidad y el armado del feed.
+- `src/lib/realty/portals.ts` — cupos, matriz, cola y despublicación.
+- `src/app/feeds/realty/[accountId]/[archivo]/route.ts` — el feed público.
+- `src/app/api/realty/portals/` — `_server.ts` (los tres candados), `route.ts`,
+  `destinos/route.ts`, `listings/route.ts`, `cola/route.ts`.
+- `src/components/realty/portals/` — `portals-screen.tsx`, `portals-matrix.tsx`.
+- `src/i18n/dictionaries/realty/portals.json`.
+
+Modificados (2)
+- `src/app/inmobiliaria/(panel)/portales/page.tsx` — reemplaza el placeholder
+  de la Ola 0 (el archivo se conserva: hay una prueba que exige que exista).
+- `scripts/realty-guard.cjs` — **+6 líneas**, un prefijo nuevo en
+  `OWN_PREFIXES` (`src/app/feeds/realty/`) y su comentario. Nada más.
+
+NO se tocó: `src/lib/realty/types.ts` · `prisma/schema.prisma` ·
+`src/i18n/dictionaries/realty/index.ts` · `package.json` · `vercel.json` ·
+`src/app/sitemap.ts` · nada de barber ni del dental. Cero dependencias nuevas.

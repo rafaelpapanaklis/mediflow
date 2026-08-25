@@ -1,0 +1,199 @@
+{
+  "_nota": "Diccionario de la pantalla Portales. UN SOLO archivo con los dos idiomas, y NO se registra en index.ts: ese archivo lo comparten las diez terminales de la Ola 1 y registrar aqui obligaria a que las diez editaran el mismo import. La pantalla lo importa directo y le pasa el sub-arbol ya recortado a makeRealtyT, con prefijo VACIO (ver src/lib/realty/i18n.ts). Cuando la ola termine, quien consolide puede colgarlo de realty.portales en index.ts sin tocar la pantalla.",
+  "es": {
+    "title": "Portales",
+    "subtitle": "Publica tu cartera fuera de tu web y mira, inmueble por inmueble, en qué portal está viva y en cuál se atoró.",
+    "comoFunciona": {
+      "title": "Cómo funciona",
+      "paso1Title": "1. Tu feed es una liga",
+      "paso1Body": "Generamos una dirección con tus inmuebles publicados. No es un archivo que subas: es una liga que se actualiza sola cada vez que cambias algo.",
+      "paso2Title": "2. Se la das al portal",
+      "paso2Body": "Copias la liga y la das de alta en tu cuenta del portal. Ellos la leen cada tanto y actualizan tus anuncios solos.",
+      "paso3Title": "3. Se despublica solo",
+      "paso3Body": "En cuanto marcas un inmueble como vendido o rentado deja de entrar al feed, y sale del portal en su siguiente lectura (como mucho una hora después). Ya no tienes que acordarte de bajarlo de cada portal."
+    },
+    "cobro": {
+      "title": "Lo que pagas tú y lo que pagamos nosotros",
+      "body": "DaleControl te arma el feed y lleva el control. La suscripción al portal la pagas tú directamente con ellos: nosotros publicamos, no regalamos anuncios. Si tu plan del portal incluye 10 anuncios, aquí escoges cuáles 10."
+    },
+    "convenio": {
+      "title": "Los portales grandes todavía no",
+      "body": "Inmuebles24, Lamudi y Casas y Terrenos no tienen una conexión abierta: se entra por convenio con cada portal y DaleControl todavía no lo tiene. Mientras tanto, esos anuncios los subes a mano en su sitio. El día que exista el convenio, tus inmuebles salen por aquí sin que cambies nada."
+    },
+    "feed": {
+      "title": "La liga de tu feed",
+      "general": "Feed general — TODOS tus inmuebles publicados, sin límite",
+      "meta": "Catálogo para anuncios de Facebook e Instagram",
+      "json": "Ver lo que se está publicando (para revisar)",
+      "copiar": "Copiar liga",
+      "copiado": "Copiada",
+      "abrir": "Abrir",
+      "publicados": "{n} inmuebles publicados ahora mismo",
+      "publicadosUno": "1 inmueble publicado ahora mismo",
+      "vacio": "Todavía no tienes ningún inmueble publicado. Enciende la publicación en la ficha de cada inmueble y aparecerán aquí.",
+      "aviso": "Cualquiera con esta liga puede ver tus inmuebles publicados. Nunca incluye tus notas internas, tus documentos, ni los datos de los propietarios.",
+      "generalAyuda": "Úsalo con los portales que no te cobran por anuncio. Si tu portal te vende un número de anuncios, dale la liga de SU tarjeta más abajo: esa respeta cuáles elegiste."
+    },
+    "destinos": {
+      "title": "Destinos",
+      "subtitle": "Enciende un destino y anota cuántos anuncios tienes contratados ahí.",
+      "encendido": "Encendido",
+      "apagado": "Apagado",
+      "encender": "Encender",
+      "apagar": "Apagar",
+      "anuncios": "Anuncios contratados",
+      "anunciosAyuda": "Cuántos anuncios te vende el portal. Déjalo en 0 si no tienen límite.",
+      "sinLimite": "Sin límite",
+      "cupo": "{usados} de {max} usados",
+      "cupoLleno": "Cupo lleno",
+      "quedan": "Te quedan {n}",
+      "quedaUno": "Te queda 1",
+      "noDisponible": "No disponible todavía",
+      "sinPagar": "Sin costo",
+      "dePaga": "Tú pagas la suscripción al portal",
+      "guardar": "Guardar",
+      "guardando": "Guardando…",
+      "ultimaRevision": "Última revisión: {fecha}",
+      "nunca": "Todavía sin revisar",
+      "ligaPortal": "Liga para este portal (solo los que elegiste)",
+      "cupoExcedido": "Elegiste {usados} y tienes {max} contratados: los {sobrantes} más nuevos quedaron fuera"
+    },
+    "matriz": {
+      "title": "Inmueble por inmueble",
+      "subtitle": "Un inmueble puede estar vivo en un portal y con error en otro. Aquí se ve cuál es cuál.",
+      "buscar": "Buscar por título, folio o colonia",
+      "inmueble": "Inmueble",
+      "vacio": "Todavía no tienes inmuebles en la cartera.",
+      "sinResultados": "Ningún inmueble coincide con esa búsqueda.",
+      "mas": "Se están mostrando {n} de {total}. Busca para encontrar el resto.",
+      "publicar": "Publicar aquí",
+      "quitar": "Quitar de aquí",
+      "estado": {
+        "PUBLICADO": "Publicada",
+        "BORRADOR": "Pendiente",
+        "ERROR": "Con error",
+        "PAUSADO": "Retirada",
+        "NINGUNO": "No publicada"
+      },
+      "reintento": "Reintento {n}, siguiente {fecha}",
+      "sinReintento": "Ya no se reintenta solo",
+      "bloqueos": "Por qué no se puede publicar",
+      "avisos": "Le falta algo que ayuda mucho",
+      "verFicha": "Abrir ficha",
+      "reintentar": "Reintentar"
+    },
+    "acciones": {
+      "revisar": "Revisar ahora",
+      "revisando": "Revisando…",
+      "revisado": "Listo: {publicados} publicados, {retirados} retirados, {fallidos} con error, {pendientes} pendientes.",
+      "error": "No se pudo. Inténtalo otra vez en un momento."
+    },
+    "sinPermiso": {
+      "title": "No tienes acceso a esta pantalla",
+      "body": "Pídele a quien administra la cuenta que te dé el permiso de portales."
+    },
+    "sinPlan": {
+      "title": "Tu plan no incluye portales",
+      "body": "El feed para portales entra a partir del plan Asesor. Cámbialo en Suscripción y esta pantalla se enciende sola.",
+      "cta": "Ver planes"
+    }
+  },
+  "en": {
+    "title": "Portals",
+    "subtitle": "Publish your listings beyond your own site and see, property by property, where each one is live and where it got stuck.",
+    "comoFunciona": {
+      "title": "How it works",
+      "paso1Title": "1. Your feed is a link",
+      "paso1Body": "We generate an address with your published properties. It is not a file you upload: it is a link that updates itself whenever you change something.",
+      "paso2Title": "2. You hand it to the portal",
+      "paso2Body": "Copy the link and register it in your portal account. They read it periodically and refresh your listings on their own.",
+      "paso3Title": "3. It unpublishes itself",
+      "paso3Body": "The moment you mark a property as sold or rented it stops entering the feed, and it leaves the portal on its next read (an hour at most). You no longer have to remember to take it down from each portal."
+    },
+    "cobro": {
+      "title": "What you pay and what we pay",
+      "body": "DaleControl builds the feed and keeps track. You pay the portal subscription directly to them: we publish, we do not give away listings. If your portal plan includes 10 listings, here you choose which 10."
+    },
+    "convenio": {
+      "title": "The big portals, not yet",
+      "body": "Inmuebles24, Lamudi and Casas y Terrenos have no open connection: you get in through an agreement with each portal and DaleControl does not have one yet. Meanwhile, you upload those listings by hand on their site. The day the agreement exists, your properties go out through here with nothing for you to change."
+    },
+    "feed": {
+      "title": "Your feed link",
+      "general": "General feed — ALL your published properties, no limit",
+      "meta": "Catalog for Facebook and Instagram ads",
+      "json": "See what is being published (to review)",
+      "copiar": "Copy link",
+      "copiado": "Copied",
+      "abrir": "Open",
+      "publicados": "{n} properties published right now",
+      "publicadosUno": "1 property published right now",
+      "vacio": "You have no published properties yet. Turn publishing on in each property and they will show up here.",
+      "aviso": "Anyone with this link can see your published properties. It never includes your internal notes, your documents, or the owners' details.",
+      "generalAyuda": "Use it with portals that do not charge per listing. If your portal sells you a fixed number of listings, hand it the link on ITS card below: that one respects the ones you picked."
+    },
+    "destinos": {
+      "title": "Destinations",
+      "subtitle": "Turn a destination on and write down how many listings you have contracted there.",
+      "encendido": "On",
+      "apagado": "Off",
+      "encender": "Turn on",
+      "apagar": "Turn off",
+      "anuncios": "Contracted listings",
+      "anunciosAyuda": "How many listings the portal sells you. Leave it at 0 if there is no limit.",
+      "sinLimite": "No limit",
+      "cupo": "{usados} of {max} used",
+      "cupoLleno": "Quota full",
+      "quedan": "{n} left",
+      "quedaUno": "1 left",
+      "noDisponible": "Not available yet",
+      "sinPagar": "No cost",
+      "dePaga": "You pay the portal subscription",
+      "guardar": "Save",
+      "guardando": "Saving…",
+      "ultimaRevision": "Last check: {fecha}",
+      "nunca": "Not checked yet",
+      "ligaPortal": "Link for this portal (only the ones you picked)",
+      "cupoExcedido": "You picked {usados} and have {max} contracted: the {sobrantes} newest were left out"
+    },
+    "matriz": {
+      "title": "Property by property",
+      "subtitle": "A property can be live on one portal and failing on another. Here you see which is which.",
+      "buscar": "Search by title, reference or neighborhood",
+      "inmueble": "Property",
+      "vacio": "You have no properties yet.",
+      "sinResultados": "No property matches that search.",
+      "mas": "Showing {n} of {total}. Search to find the rest.",
+      "publicar": "Publish here",
+      "quitar": "Remove from here",
+      "estado": {
+        "PUBLICADO": "Published",
+        "BORRADOR": "Pending",
+        "ERROR": "Failing",
+        "PAUSADO": "Withdrawn",
+        "NINGUNO": "Not published"
+      },
+      "reintento": "Attempt {n}, next {fecha}",
+      "sinReintento": "No longer retried automatically",
+      "bloqueos": "Why it cannot be published",
+      "avisos": "It is missing something that helps a lot",
+      "verFicha": "Open property",
+      "reintentar": "Retry"
+    },
+    "acciones": {
+      "revisar": "Check now",
+      "revisando": "Checking…",
+      "revisado": "Done: {publicados} published, {retirados} withdrawn, {fallidos} failing, {pendientes} pending.",
+      "error": "It did not work. Try again in a moment."
+    },
+    "sinPermiso": {
+      "title": "You do not have access to this screen",
+      "body": "Ask whoever manages the account to grant you the portals permission."
+    },
+    "sinPlan": {
+      "title": "Your plan does not include portals",
+      "body": "The portal feed starts with the Asesor plan. Change it in Subscription and this screen turns on by itself.",
+      "cta": "See plans"
+    }
+  }
+}
