@@ -17068,6 +17068,441 @@ CDMX y el folio. `npx tsx --test src/lib/realty/__tests__/rentas.test.ts`
    modal dependía de `onClose`, que los padres pasan como flecha en línea, así
    que se volvía a correr con cada tecleo y el `focus()` le robaba el cursor al
    textarea. La función vive ahora en un ref y el efecto depende solo de `open`.
+## [Inmuebles Ola 1 · T2] — Prospectos: el embudo con semáforo, la reasignación por no-respuesta, la captura por correo de los portales y el match automático ✅ (2026-08-25)
+
+El CRM del vertical. Todo lo que hay entre "acaba de escribir" y "firmó", con
+el reloj a la vista: **se pierde entre el 70% y el 85% de los prospectos por
+mal seguimiento, y pasados 10 minutos la probabilidad de contactarlo cae 80%.**
+Esta ola no vende esa estadística en un texto de marketing: la convierte en un
+semáforo por tarjeta y en un asesor que pierde el prospecto si no contesta.
+
+**32 archivos, TODOS dentro del allowlist. Guardia exit 0, cero prohibidos,
+cero compartidos sin declarar.** No se tocó `prisma/schema.prisma`, ni
+`types.ts`, ni `permissions.ts`, ni `realty-auth.ts`, ni una línea de
+WhatsApp, ni nada del dental o de barber. De `src/i18n/dictionaries/realty/
+index.ts` se cambiaron exactamente **4 líneas** (2 imports + 2 registros),
+que es el procedimiento que la Ola 0 dejó escrito ahí.
+
+═══════════════════════════════════════════════════════════════════════════
+▶ LO QUE HAY QUE SABER Y NO SE VE EN EL DIFF
+═══════════════════════════════════════════════════════════════════════════
+
+**1. 🔴 DEUDA TÉCNICA DECLARADA: dos tablas que el schema no tiene y que
+viven en `realty_admin_actions`.**
+
+Las reglas de asignación por cuenta (C) y el correo crudo + la llave de
+idempotencia de la captura por correo (D) necesitan persistencia, y el schema
+de la Ola 0 **no tiene tabla ni columna para ninguna de las dos**. La regla
+dura de esta ola prohíbe tocar `prisma/schema.prisma`, así que las dos se
+guardan como eventos en `realty_admin_actions` — la única tabla del vertical
+con `accountId` + `payload Json` libre — bajo dos llaves RESERVADAS:
+
+```
+REALTY_RESERVED_ACTIONS = {
+  routing:     "realty.leadRouting",   // la config de reparto de la cuenta
+  inboundMail: "realty.inboundMail",   // el correo crudo + messageId
+}
+```
+
+Es deuda consciente, no un descuido. Lo que la hace tolerable:
+- Verificado con grep: **hoy nadie más escribe esa tabla** (0 escrituras en
+  todo `src/`; solo existe en `sql/realty.sql`).
+- La lectura de la config **no confía en la recencia a secas**: recorre las
+  últimas 20 filas y se queda con la PRIMERA que parsea a una config válida
+  (`parseRoutingConfig` devuelve `null` ante basura). Es la lección del
+  `AuditLog`/prorrateo del dental: un segundo escritor de la misma llave
+  envenena la fila más nueva, no la lectura entera.
+- `adminUserId` se deja **NULL a propósito**: esa columna es para el admin de
+  DaleControl y meter ahí un `RealtyUser.id` sería un id de otro espacio. El
+  autor real va dentro del payload (`updatedByUserId`).
+- Migrar a columnas reales es copiar el objeto tal cual.
+
+⚠️ **La idempotencia del correo NO tiene índice único.** Se consulta por
+`payload.messageId` (filtro Json nativo de Postgres) antes de crear. Eso cubre
+el caso real —el portal o Postmark reintentan segundos o minutos después— pero
+**no una entrega simultánea exacta**. Cuando la tabla propia entre al schema,
+el único va sobre `(accountId, messageId)`.
+
+**2. ⭐ La reasignación por NO-RESPUESTA es la pieza que casi nadie tiene.**
+Si el asesor no marca contacto en N minutos (default **15**, configurable
+1–1440), el prospecto pasa solo al siguiente de la rotación y **queda
+registrado en la bitácora** con el nombre de quien lo tenía y el de quien lo
+recibe. Detalles que la hacen no-explosiva:
+- Solo alcanza prospectos con `firstResponseAt: null` y etapa no terminal:
+  a quien SÍ le habló nadie le quita nada.
+- Tope de rebotes (`reassignMaxHops`, default 3) para que un prospecto que
+  nadie quiere no se pase el día dando vueltas.
+- **Carrera cerrada**: el `updateMany` lleva el asesor ESPERADO en el `where`,
+  así que si dos barridas corren a la vez solo una gana; la que pierde recibe
+  `count: 0` y no escribe bitácora.
+- Con **un solo asesor no hace nada** (no hay a quién pasarlo).
+- La rotación se actualiza DENTRO del bucle: sin eso, la misma barrida le
+  encajaba todos los rezagados a la misma persona.
+
+Cómo se dispara en serverless (no hay proceso vivo): **barrida perezosa** al
+abrir el embudo (la página y el `GET /api/realty/leads`), más un
+`POST /api/realty/leads/sweep` explícito para que un cron lo llame. Si la
+barrida truena, la pantalla se pinta igual — quedarse sin embudo por una
+barrida fallida sería peor que la barrida que no corrió.
+
+**3. El semáforo mide CONTACTO REAL, no actividad.**
+Verde <1 h, amarillo <24 h, rojo de ahí en adelante; NEUTRO si ya cerró o se
+perdió. La referencia es la última `LLAMADA | WHATSAPP | CORREO | VISITA` de
+la bitácora. **Una `NOTA` no apaga el semáforo** y la UI lo dice en voz alta:
+si contara, cualquiera se quedaría un prospecto escribiendo "pendiente" sin
+marcarle nunca. Y si NUNCA hubo contacto, se mide desde que el prospecto
+ENTRÓ — uno de hace tres días al que nadie le marcó no está "en verde", está
+perdido; sale marcado como *Sin contacto*.
+
+`firstResponseAt` **no se re-escribe nunca**: es "cuánto tardamos la PRIMERA
+vez". Pisarlo en cada llamada lo convertiría en "última llamada" y el reporte
+mentiría.
+
+**4. El tablero arrastra, pero el embudo lo decide el contrato.**
+Kanban de 7 columnas con `@dnd-kit` (ya era dependencia del repo, la usa la
+agenda dental) y vista de tabla alterna — el tablero es para MOVER, la tabla
+para BUSCAR. La transición se valida con `canTransition()` del contrato en
+TRES capas: la columna se pinta bloqueada mientras arrastras, el `onDragEnd`
+no manda nada si la transición es inválida, y `moveLeadStage` la vuelve a
+validar en el servidor. Un kanban de arrastre libre saltaría de NUEVO a OFERTA
+y ensuciaría todo el reporte de conversión.
+
+Mover a **PERDIDO pide motivo ANTES de mover** (los 7 de `REALTY_LOST_REASONS`).
+Sin el motivo, el reporte de pérdidas no distingue "caro" de "nadie le
+contestó", que es lo único que sirve para arreglarlo.
+
+**5. La captura por correo: dos bugs de parser que el navegador nunca habría
+enseñado.** Cada cuenta tiene su buzón `leads+<accountId>@dalecontrol.com`.
+Se escribieron 6 parsers (Inmuebles24, Lamudi, Vivanuncios, Mercado Libre,
+Casas y Terrenos, Propiedades.com) más uno genérico de respaldo. Verificando
+`labeledValue` contra correos realistas salieron dos fallos que ya estaban
+escritos y compilaban:
+- **Etiquetas ordenadas de más larga a más corta.** La alternancia de un regex
+  se queda con la PRIMERA que cuadra: con `"Código"` antes que `"Código del
+  aviso"`, la línea `Código del aviso: INM-7K3Q` devolvía `"del aviso:
+  INM-7K3Q"` — basura que además rompía el ligado con el inmueble.
+- **El separador (`:` o tabulador) es obligatorio y el valor puede venir
+  vacío.** Con el separador opcional, la línea `Nombre:` hacía que `(.+)` se
+  comiera los propios dos puntos y **el prospecto se llamaba `":"`** en vez de
+  caer a la línea siguiente, que es donde estaba el nombre (plantillas de
+  tabla, que es la mitad de los portales).
+
+Otras decisiones del correo:
+- **El crudo se guarda SIEMPRE y ANTES de crear nada** (topado a 12 KB por
+  cuerpo). Los portales cambian su plantilla sin avisar; sin el original no
+  hay forma de arreglar un parser roto y el cliente solo ve que "dejaron de
+  entrar prospectos". Si el alta revienta a la mitad, el correo YA está
+  guardado y se puede reprocesar.
+- **El buzón se busca también en `Delivered-To` / `X-Forwarded-To`.** Con una
+  regla de reenvío —que es como la mitad de los clientes lo va a configurar—
+  el `To` original es el correo del cliente y el buzón solo aparece ahí.
+- **El correo del portal nunca se toma como el del prospecto**: sin ese filtro
+  todos los leads acababan con `noreply@inmuebles24.com`.
+- **Ligar al inmueble es por CERTEZA o nada**: folio corto, slug público o id
+  exacto; título idéntico como último recurso. Un `contains` suelto sobre el
+  título quedó FUERA a propósito — ligar al inmueble equivocado es peor que
+  dejarlo pendiente, porque el asesor le habla de una casa que no es. Cuando
+  no liga, lo dice en la bitácora: *"⚠️ No se pudo ligar al inmueble".*
+- **Un correo ilegible NO se pierde**: entra igual como prospecto con el
+  cuerpo en la bitácora y confianza `BAJA`. Un prospecto incompleto que
+  alguien revisa es mejor que un correo perdido que nadie ve.
+- El endpoint responde **200 a lo irreparable** (buzón desconocido, cuenta
+  inactiva, duplicado) para que el proveedor no reintente en bucle, **401**
+  firma mala, **503** sin secret configurado en producción, y **500 solo** si
+  falló algo transitorio y sí vale reintentar.
+
+**6. El match es UN motor, no dos.** `src/lib/realty/matching.ts` es PURO
+(cero prisma, cero red) y por eso lo usan igual el servidor, las APIs y los
+componentes `"use client"` que pintan el desglose. Las dos direcciones son la
+MISMA función: cambiar el orden del bucle no cambia el puntaje, y eso evita
+que "12 prospectos buscan esto" y "estos inmuebles le quedan" se contradigan.
+- Pesos (suman 100): operación 30 · tipo 20 · presupuesto 25 · zona 15 ·
+  recámaras 10. Umbral de match: 60.
+- **Filtros duros**: estatus ofrecible (default solo `DISPONIBLE`) y operación
+  compatible. **Todo lo demás SUMA, no descarta**: un dato AUSENTE se puntúa
+  como "sin filtro" y suma completo. Un prospecto sin zona, sin recámaras y
+  sin presupuesto no debe desaparecer del tablero — le faltan datos, no
+  interés. Lo que resta es un dato PRESENTE que no cuadra.
+- **Tolerancia del presupuesto ±10% configurable** (0–30 desde la UI). Nadie
+  escribe su presupuesto real: quien dice "hasta 2 millones" firma en 2.15 si
+  la casa le gustó. Un match que corta EXACTO tira justo a los que sí compran.
+  Cuando el precio cae dentro del margen pero fuera del número, suma 60% y
+  **lo dice**: *"$2.15 M — 7% arriba de su tope, dentro del margen"*, para que
+  el asesor sepa que va a tener que negociar.
+- Un inmueble `AMBAS` tiene los DOS precios: el precio se elige por la
+  operación **del que busca**, no por la del inmueble. Comparar una renta
+  mensual contra un presupuesto de compra descartaría a todo el mundo.
+- Las zonas comparan sin acentos y descartando muletillas (`col`, `fracc`,
+  `residencial`, `san`…): sin eso, "Col. Guadalupe" cruzaba con "Col.
+  Américas" por la palabra "col".
+- El puntaje **siempre viene con el porqué** (`reasons[]`, factor por factor,
+  incluidos los que fallaron). Un número sin explicación no se usa: el asesor
+  tiene que poder decirle al prospecto por qué le enseña esa casa.
+- Solo se cruzan prospectos VIVOS (no `CIERRE` ni `PERDIDO`) y se respeta
+  `notifyByWhatsapp` del perfil de búsqueda: avisarle a alguien que ya cerró
+  es exactamente el mensaje que hace que el cliente apague los avisos.
+
+**7. Aislamiento y alcance.** `accountId` sale SIEMPRE de `getRealtyContext()`
+y `assertAccountId()` truena antes de tocar la base si llegara vacío (en
+Prisma un `undefined` BORRA el filtro y devuelve todo). Las escrituras por id
+van con `updateMany`+`accountId` en el `where`, no con `update({where:{id}})`.
+Los ids que llegan del request (`propertyId`, `userId`, `leadId`) se validan
+contra la cuenta ANTES de escribir.
+
+El PERMISO da la puerta; el ALCANCE lo decide la consulta (`leadScopeWhere`):
+un **AGENT** sin `leads.assign` ve lo suyo **más lo que está sin asignar** —
+para que pueda levantar un huérfano, que es justo lo que evita perderlo.
+OWNER/MANAGER/ASSISTANT ven todo. Y **repartir prospectos ajenos pide
+`leads.assign`, no `leads.edit`**: sin esa puerta, un asesor podía vaciarle el
+embudo al de al lado desde la consola del navegador.
+
+**8. Modo OWNER: la sección no existe, y no solo en el menú.** Las 3 páginas
+y las 14 rutas de API cortan por el MISMO campo `modes` del contrato
+(`checkLeadsAccess`), no por un `if` inventado. Esconder un item del sidebar
+no impide un `fetch` escrito a mano.
+
+**9. Detalles de UI que ya costaron caro en otros verticales.**
+- Los diálogos se pintan en un **portal a `.realty-shell`**, no donde se
+  montan y **no a `<body>`**: `.realty-page` declara `container-type`, que
+  ATRAPA `position:fixed` (el modal se iría con el scroll); y `<body>` está
+  FUERA de la cascada donde viven `--bg-elev`, `--text-1` y `--brand`, así que
+  el modal saldría transparente y con la tinta de otro producto.
+- El CSS del área va en un `<style>` porque **las consultas de contenedor no
+  se pueden escribir inline** — y la regla del repo es `@container`, no
+  `@media`. Todo en px: la raíz del panel mide 13 px.
+- El semáforo lleva **el tiempo escrito al lado del punto de color**: el color
+  solo acompaña, no es la única señal.
+- `useNow()` refresca cada minuto **y al volver a la pestaña**: los
+  temporizadores se frenan en segundo plano y el semáforo llegaría atrasado.
+- La preferencia tablero/tabla se lee de `localStorage` en un efecto, no en el
+  estado inicial: así el HTML del servidor y el del primer render coinciden.
+- El nombre de la tarjeta es un enlace de verdad ENCIMA del bloque
+  arrastrable, y el `PointerSensor` exige 6 px de movimiento: sin eso, un clic
+  en el nombre se lee como arrastre y la ficha no abre nunca.
+
+**10. 🔴 EL ALCANCE POR ROL ESTABA EN 4 SITIOS Y HACÍAN FALTA 13.** Una
+revisión adversaria encontró que `leadScopeWhere` solo se aplicaba en
+`filtersToWhere`, `getLeadDetail`, `moveLeadStage` y `markLeadContacted`. El
+resto de rutas que tocan un lead por id lo ignoraban, y eso NO era teórico:
+
+- **La primitiva de enumeración era `findSeekersForProperty`.** La dirección
+  inversa del match (`GET /leads/matches?propertyId=…`, solo `leads.view`)
+  devolvía, por cada prospecto vivo **de toda la agencia**, su `name`,
+  `budgetMin`, `budgetMax`, `zones` y —lo peor— su `leadId`. O sea: fugaba el
+  presupuesto de los clientes de los demás asesores Y repartía los ids con
+  los que atacar todo lo demás. Arreglado con `leadScopeWhere` en la consulta
+  de leads vivos; los perfiles que se quedan sin lead visible los tira solo el
+  filtro que ya existía.
+- **`scheduleVisitFromLead` era una puerta trasera a `moveLeadStage`.** Como
+  agendar visita AVANZA la etapa, un AGENT con `visits.manage` (que lo trae
+  por default) movía a VISITA el prospecto de un compañero sin pasar por el
+  check que dice "no es tuyo", y le firmaba dos entradas en la bitácora.
+- **`RealtyVisit.userId` del body no se validaba contra la cuenta.** La FK del
+  schema es global, no compuesta: cualquier `RealtyUser.id` la satisface. Con
+  un id de OTRA inmobiliaria, la visita quedaba a su nombre y la ficha del
+  prospecto pintaba `visits[].userName` — **filtrando el nombre real de un
+  empleado de otra cuenta**. Este era el único cruce de TENANT, no solo de
+  asesor. `createTask` y `assignLead` sí lo validaban; esta función se quedó
+  sin ello.
+- **`PUT search-profile` anulaba el opt-out de WhatsApp.** Poner
+  `notifyByWhatsapp: true` sobre el contacto de otro asesor lo metía a los
+  envíos masivos, y ese flag es el ÚNICO control de baja que respeta
+  `POST /leads/matches`.
+- **`setTaskDone` era más permisivo que leer.** Ver los pendientes del equipo
+  pedía `leads.assign`; palomearlos pedía solo `leads.edit` — y la ficha del
+  prospecto enseña los `taskId` de los demás. Ahora solo los propios, salvo
+  `leads.assign`.
+- **`PATCH /leads/[id]`, `createTask` y `suggestPropertiesForLead`**: mismo
+  hueco, ya cerrado.
+- **La libreta de contactos no tenía alcance ninguno**: `GET /contacts`
+  servía nombre, teléfono y correo de toda la cartera, y `/contacts/[id]`
+  enseñaba en qué etapa van los prospectos ajenos. Se agregó
+  `contactScopeWhere`, coherente con el del embudo: un AGENT ve los contactos
+  que tiene asignados, los que traen un prospecto suyo o sin asesor, y las
+  fichas sueltas que todavía no tienen prospecto.
+
+Lo que **sigue funcionando a propósito** tras el recorte: un AGENT ve y puede
+levantar los prospectos SIN ASIGNAR (es lo que evita que se pierdan), y la
+ingesta por correo —que corre sin sesión— no pasa por ningún scope.
+
+**10-bis. La SEGUNDA pasada (la que tenía el encargo de REFUTAR los arreglos
+de arriba) confirmó los diez y encontró siete cosas más.** Todas arregladas:
+
+- 🔴 **El opt-out de WhatsApp se volvía a abrir por la puerta principal.**
+  Cerrar el `PUT search-profile` no bastaba: dar de alta un prospecto con el
+  TELÉFONO del cliente de otro asesor reutiliza su contacto (que es lo
+  correcto) y después `upsertSearchProfile` le **pisaba el perfil entero**,
+  `notifyByWhatsapp` incluido. Ahora el alta usa `onlyIfMissing`: el
+  formulario solo puede ESTRENAR un perfil; cambiarlo se hace desde la ficha,
+  que sí valida alcance.
+- 🔴 **La libreta de contactos se podía EDITAR, no solo leer.** El mismo
+  helper gateaba lectura y escritura, así que un asesor reescribía nombre,
+  notas y —lo peligroso— el TELÉFONO de un contacto ajeno sin prospectos. Ese
+  teléfono es la llave con la que se deduplica y con la que el inbox liga el
+  hilo de WhatsApp. Ahora hay `contactWriteScopeWhere`, más estricto: leer la
+  libreta se comparte, editarla no.
+- 🔴 **La bitácora de correos entrantes pedía solo `leads.view`.** El asunto
+  de un aviso de Inmuebles24 trae el NOMBRE del prospecto y el `from` suele
+  ser su correo: era la lista de prospectos entrantes de los compañeros por
+  una puerta lateral. Ahora pide `leads.assign`, y la UI **esconde la sección
+  entera** en vez de pintarla vacía (decir "todavía no ha llegado ningún
+  correo" a quien no tiene permiso es mentirle).
+- `createTask` **fallaba en silencio**: con el alcance puesto, un `leadId`
+  ajeno creaba el pendiente SUELTO y devolvía 201, así que quien lo capturó
+  creía haberlo colgado del prospecto y el recordatorio desaparecía de la
+  ficha. Ahora truena. Lo mismo con un `propertyId` que no es de la cartera.
+- `setTaskDone` decidía por PERMISO mientras el embudo decide por ROL: un
+  ASSISTANT —la mesa de control, que ve el tablero entero— se quedaba sin
+  poder palomear el pendiente de nadie. Alineado a la misma regla
+  (`role !== "AGENT" || leads.assign`).
+- El match inverso **topaba a 800 los perfiles ANTES de recortar por
+  alcance**: en una agencia grande, un asesor recibía una lista truncada o
+  vacía sin que nada se lo dijera. Se invirtió el orden (primero los leads
+  vivos ya recortados, el tope sobre esos, después sus perfiles) — de paso
+  es una consulta menos pesada.
+- El `_count` de prospectos por contacto iba **sin recortar**: a un contacto
+  que ves por tener un huérfano, te decía cuántos más tiene con otros.
+
+Y un hueco de PRODUCTO que la misma pasada destapó: **un asesor veía los
+prospectos huérfanos pero no podía quedárselos** (asignar pedía
+`leads.assign`), así que en una cuenta con reparto MANUAL el huérfano se
+quedaba huérfano para siempre aunque hubiera quien lo trabajara — justo lo
+contrario de lo que dice esta pantalla que hace. Ahora cualquiera con
+`leads.edit` puede asignarse a SÍ MISMO un prospecto **que hoy no tiene
+dueño**; quitárselo a otro sigue pidiendo `leads.assign`.
+
+Y una decisión que conviene que se vea, porque es una elección y no un olvido:
+`contactScopeWhere` deja que un AGENT LEA los **contactos que todavía no
+tienen ningún prospecto**. La libreta compartida es lo normal en una
+inmobiliaria y es lo que evita que tres asesores den de alta a la misma
+persona. Lo que queda recortado es el dato del EMBUDO —presupuesto, etapa,
+bitácora— y **toda la escritura**. Si algún día se quiere una libreta privada
+por asesor, la palanca es esa rama y `RealtyContact.assignedUserId` (que hoy
+nace en NULL y ningún código de esta ola escribe).
+
+**11. 🔴 UN BUCLE INFINITO DE PETICIONES, cortesía de `makeT`.**
+`makeRealtyT` devuelve una **función nueva en cada render**. En la pantalla
+del embudo, `t` estaba suelto en las dependencias del `useCallback` que arma
+`load`; eso le cambiaba la identidad en cada render, el `useEffect` que
+depende de `load` se volvía a disparar, y el embudo entraba en un bucle
+infinito de peticiones. Quedó `useMemo(() => makeRealtyT(dict), [dict])` en
+las tres pantallas. **Ninguna dependencia de hook lleva `t` ya.**
+
+**12. `strict: false` no estrecha uniones discriminadas.** `checkLeadsAccess`
+devolvía `{ok:true} | {ok:false, error}` y las 14 rutas no compilaban: dentro
+del `if (!guard.ok)` TypeScript seguía viendo la rama `ok:true`. Quedó como un
+solo objeto de campos opcionales con `guard.error ?? "Sin permiso"`.
+
+═══════════════════════════════════════════════════════════════════════════
+▶ 🔴 PARA T6 (WhatsApp) — LA FIRMA EXACTA DEL STUB
+═══════════════════════════════════════════════════════════════════════════
+
+Esta terminal **no tocó una sola línea de WhatsApp**. Dejó el punto de
+entrada tipado en `src/lib/realty/inbound-mail.ts`. Copiar tal cual:
+
+```ts
+export interface RealtyLeadWhatsappTrigger {
+  accountId: string;
+  leadId: string;
+  contactId: string;
+  /** 10 dígitos ya normalizados (mxTenDigits). null = llegó sin teléfono. */
+  phone: string | null;
+  contactName: string;
+  /** "portal:inmuebles24" | "manual" | "match" … */
+  source: string;
+  propertyId: string | null;
+  propertyTitle: string | null;
+  reason: "INBOUND_LEAD" | "MATCH_NUEVA_PROPIEDAD";
+  /** Asesor asignado al momento del disparo (la plantilla lo nombra). */
+  assignedUserId: string | null;
+  assignedUserName: string | null;
+}
+
+export interface RealtyLeadWhatsappResult {
+  sent: boolean;
+  skippedReason?:
+    | "NO_IMPLEMENTADO" | "SIN_TELEFONO" | "SIN_WHATSAPP"
+    | "SIN_CUPO" | "OPT_OUT" | "ERROR";
+  /** wamid de Meta cuando sí salió. */
+  externalId?: string;
+}
+
+export type RealtyLeadWhatsappNotifier = (
+  trigger: RealtyLeadWhatsappTrigger,
+) => Promise<RealtyLeadWhatsappResult>;
+```
+
+**Dos formas de conectarlo, las dos válidas:**
+1. `setRealtyLeadWhatsappNotifier(sendRealtyLeadWhatsapp)` — hay que llamarlo
+   en cada arranque del runtime, o sea al importar el módulo que usa el
+   webhook (en serverless no hay estado entre arranques en frío).
+2. Reemplazar el cuerpo de `notifyLeadByWhatsapp()` por la llamada real. Son
+   tres líneas DENTRO de ese archivo.
+
+**No hace falta tocar nada más del CRM.** Quien dispara ya deja la bitácora
+(`RealtyLeadActivity` de tipo `WHATSAPP`, solo cuando `sent: true`) y ya
+propaga el resultado a la respuesta de la API. Hoy el stub devuelve
+`{ sent: false, skippedReason: "NO_IMPLEMENTADO" }` — **no finge que mandó
+nada**, y la pantalla de match lo dice: *"Los avisos por WhatsApp todavía no
+están conectados: quedaron N listos para salir."*
+
+Se usa desde tres sitios: la ingesta de correo (`INBOUND_LEAD`), el alta
+manual de prospecto (`INBOUND_LEAD`) y `POST /api/realty/leads/matches`
+(`MATCH_NUEVA_PROPIEDAD`, respetando `notifyByWhatsapp`).
+
+═══════════════════════════════════════════════════════════════════════════
+▶ QUÉ SE CONSTRUYÓ (32 archivos, 0 fuera del allowlist)
+═══════════════════════════════════════════════════════════════════════════
+
+Lógica (`src/lib/realty/`)
+- `matching.ts` (NUEVO, puro) — motor de match en las dos direcciones,
+  desglose por factor, tolerancia configurable.
+- `leads.ts` (NUEVO) — embudo, bitácora, config de ruteo, 4 estrategias de
+  asignación, barrida de reasignación, tareas, visitas y el puente al match.
+- `inbound-mail.ts` (NUEVO) — buzón por cuenta, 6 parsers + genérico,
+  ingesta idempotente, crudo guardado y el stub de WhatsApp.
+
+APIs (`src/app/api/realty/`, 14 rutas nuevas)
+- `leads/` — GET listado con filtros + barrida, POST alta.
+- `leads/[id]/` — GET ficha, PATCH etapa/asesor/datos.
+- `leads/[id]/{activities,tasks,visits,search-profile,matches}/`.
+- `leads/{matches,tasks,routing,sweep}/` — dirección inversa del match,
+  pendientes de hoy, reglas y barrida a petición.
+- `contacts/` y `contacts/[id]/` — libreta, alta sin duplicar por teléfono.
+- `inbound-mail/` — el webhook del correo.
+
+Pantallas (`src/app/inmobiliaria/(panel)/prospectos/`)
+- `page.tsx` (reemplaza el placeholder), `[id]/page.tsx`, `reglas/page.tsx`.
+
+Componentes (`src/components/realty/leads/`, 9 nuevos)
+- `leads-screen`, `lead-board` (dnd-kit), `lead-card`/`lead-table`,
+  `lead-detail`, `routing-screen`, `tasks-today`, `new-lead-dialog`,
+  `lead-bits`, `lead-ui` (helpers puros + el CSS del área).
+
+Diccionario
+- `leads.es.json` + `leads.en.json` + 4 líneas en `index.ts`.
+
+═══════════════════════════════════════════════════════════════════════════
+▶ VERIFICACIÓN
+═══════════════════════════════════════════════════════════════════════════
+
+- **Tres pasadas de revisión adversaria de solo lectura**: (1) allowlist —
+  32/32 dentro, guardia exit 0, cero imports de WhatsApp; (2) aislamiento
+  `accountId` + alcance por rol, que destapó los diez huecos del punto 10;
+  (3) una encargada de REFUTAR esos arreglos, que confirmó los diez y sacó
+  siete cosas más (punto 10-bis). Todo lo de las tres está cerrado.
+- `npx next build`: **exit 0**, leído entero.
+- **47 comprobaciones en verde** sobre los motores puros (match en las dos
+  direcciones, tolerancia, filtros duros, parsers de los 6 portales + genérico
+  + HTML de tabla + reenvío, buzón, las 4 estrategias de reparto, turnos con
+  zona horaria de la cuenta, semáforo y formatos). Se corrieron con `tsx`
+  desde el scratchpad y **no se commitearon**: `src/lib/realty/__tests__/` no
+  está en el allowlist de esta terminal. Los tres motores son puros y están
+  listos para que se conviertan en `.test.ts` en cuanto se autorice.
+- `npx tsc --noEmit`: limpio (los únicos errores del repo son preexistentes,
+  en `src/lib/barber/__tests__/`, archivos que esta terminal no tocó).
+- `node scripts/realty-guard.cjs`: **exit 0**, 32 propios, 0 compartidos sin
+  declarar, 0 prohibidos.
 
 ═══════════════════════════════════════════════════════════════════════════
 ▶ PENDIENTE — REQUIERE RAFAEL
@@ -17498,3 +17933,31 @@ console.log, cero `any`, cero @ts-ignore.
 - ⚪ npx next build local necesita NODE_OPTIONS=--max-old-space-size=8192 o
   muere con exit 134 en "Checking validity of types". Ya estaba documentado
   en la Ola 0 y sigue igual: no es de esta ola, pero el margen se acaba.
+- 🔴 **Dar de alta un stream de Postmark Inbound apuntado a
+  `POST /api/realty/inbound-mail`.** El que ya existe
+  (`/api/webhooks/postmark/inbound`) resuelve la clínica por
+  `Clinic.postmarkInboundEmail` y **nunca encontraría una cuenta de
+  inmuebles**: son dos rutas distintas a propósito. Sin ese stream, la
+  pantalla de reglas enseña el buzón pero no entra ningún correo.
+- 🔴 **`REALTY_INBOUND_SECRET` en Vercel.** Cascadea a
+  `POSTMARK_INBOUND_SECRET` si prefieres reutilizar el que ya está. **Sin
+  ninguno de los dos, en producción el endpoint responde 503 y lo dice en la
+  UI** ("Falta configurar la conexión de correo…"), en vez de aceptar
+  cualquier cosa: el `accountId` viaja en la dirección del buzón, así que un
+  webhook abierto deja inyectar prospectos falsos en la cuenta que se quiera.
+- ⚪ Opcionales: `REALTY_INBOUND_MAIL_DOMAIN` (default `dalecontrol.com`) y
+  `REALTY_INBOUND_MAIL_LOCALPART` (default `leads`). El dominio tiene que
+  aceptar sub-direcciones `+`.
+- ⚪ **Cron a `POST /api/realty/leads/sweep`** si quieres que la reasignación
+  corra sin que nadie abra el panel. Hoy la ruta pide sesión con
+  `leads.assign` (no recibe cuenta por body, a propósito); un cron que barra
+  TODAS las cuentas necesita una ruta de plataforma bajo
+  `/api/admin/inmobiliarias`, que es de otra terminal.
+- ⚪ **Meter al schema las dos tablas del punto 1** cuando se abra una ola de
+  deuda técnica, con único en `(accountId, messageId)` para el correo. Hasta
+  entonces funcionan sobre `realty_admin_actions` y **no requieren ningún SQL
+  nuevo**: esa tabla ya existe desde la Ola 0.
+- ⚪ El item de sidebar "Prospectos" ya existía en el contrato; **no se agregó
+  ninguno para `/inmobiliaria/prospectos/reglas`** (se llega con un botón
+  desde el embudo). Si se quiere en el menú, es tocar `types.ts` — fuera del
+  allowlist de esta ola.

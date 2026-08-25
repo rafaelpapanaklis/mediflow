@@ -30,6 +30,8 @@ import shellEn from "./shell.en.json";
 import registroEs from "./registro.es.json";
 import registroEn from "./registro.en.json";
 // ── Ola 1: importa aquí tu área (una línea por idioma) ──
+import leadsEs from "./leads.es.json";
+import leadsEn from "./leads.en.json";
 import rentalsEs from "./rentals.es.json";
 import rentalsEn from "./rentals.en.json";
 
@@ -37,6 +39,7 @@ const ES: Dictionary = {
   realty: {
     shell: shellEs as unknown as Dictionary,
     registro: registroEs as unknown as Dictionary,
+    leads: leadsEs as unknown as Dictionary,
     rentals: rentalsEs as unknown as Dictionary,
   },
 };
@@ -45,6 +48,7 @@ const EN: Dictionary = {
   realty: {
     shell: shellEn as unknown as Dictionary,
     registro: registroEn as unknown as Dictionary,
+    leads: leadsEn as unknown as Dictionary,
     rentals: rentalsEn as unknown as Dictionary,
   },
 };
