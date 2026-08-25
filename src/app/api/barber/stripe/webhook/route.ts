@@ -17,7 +17,12 @@ export const dynamic = "force-dynamic";
  *
  * Endpoint y secreto PROPIOS (BARBER_STRIPE_WEBHOOK_SECRET), distintos del
  * dental (/api/webhooks/stripe) y del de T4 (membresías/anticipos del
- * cliente final). Tipos de evento que se suscriben en Stripe para ESTE
+ * cliente final). La LLAVE del cliente sí cae a STRIPE_SECRET_KEY (ver
+ * billing.ts: misma cuenta), pero este secreto NO tiene fallback a
+ * propósito: Stripe firma cada endpoint con su propio whsec_, y el del
+ * dental nunca validaría una firma dirigida a esta URL. Sin la variable el
+ * endpoint responde 503 y Stripe reintenta.
+ * Tipos de evento que se suscriben en Stripe para ESTE
  * endpoint — y solo estos:
  *   checkout.session.completed · checkout.session.async_payment_succeeded ·
  *   checkout.session.async_payment_failed · checkout.session.expired ·

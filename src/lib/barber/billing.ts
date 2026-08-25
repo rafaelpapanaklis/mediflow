@@ -24,8 +24,17 @@ import {
  * llegue a otro endpoint, nadie procesa lo ajeno.
  *
  * AISLAMIENTO DEL DENTAL (Stripe LIVE, sin entorno de prueba):
- *   · Cliente Stripe PROPIO, con su propia llave (BARBER_STRIPE_SECRET_KEY).
- *     No se importa src/lib/stripe.ts ni se lee STRIPE_SECRET_KEY.
+ *   · Cliente Stripe PROPIO: nunca se importa src/lib/stripe.ts. La LLAVE
+ *     cae en cascada, con la misma regla que payments.ts:
+ *       BARBER_STRIPE_SECRET_KEY || STRIPE_SECRET_KEY
+ *     Hoy es la misma cuenta de Stripe que el dental, así que compartir la
+ *     llave no mezcla nada: el aislamiento lo dan la marca dc_vertical, el
+ *     lookup_key propio y el portal propio (abajo), no el nombre de la
+ *     variable. La propia gana si existe, por si el vertical algún día vive
+ *     en su propia cuenta.
+ *   · El SECRETO del webhook (BARBER_STRIPE_WEBHOOK_SECRET) NO cae a nada:
+ *     Stripe firma cada endpoint con un whsec_ distinto y el del dental
+ *     jamás validaría una firma dirigida a /api/barber/stripe/webhook.
  *   · Productos y precios PROPIOS, etiquetados metadata.dc_vertical="barber"
  *     y con lookup_key "dcbarber_<plan>_<intervalo>_<centavos>". Un precio
  *     guardado en la tabla que NO tenga esa marca se descarta y se crea el
@@ -99,13 +108,25 @@ export function barberBillingErrorPayload(
 
 let _stripe: Stripe | null = null;
 
-export function isBarberStripeConfigured(): boolean {
-  return Boolean(process.env.BARBER_STRIPE_SECRET_KEY);
+/**
+ * Llave del cliente propio, en cascada (misma regla que payments.ts):
+ *   BARBER_STRIPE_SECRET_KEY || STRIPE_SECRET_KEY
+ * Así activar el cobro no exige duplicar en Vercel una variable Sensitive
+ * cuyo valor ya nadie puede leer. No se exporta: la llave no sale de aquí.
+ * El secreto del webhook NO cascadea (ver /api/barber/stripe/webhook).
+ */
+function resolveBarberStripeKey(): string | null {
+  const key = process.env.BARBER_STRIPE_SECRET_KEY || process.env.STRIPE_SECRET_KEY;
+  return key ? key : null;
 }
 
-/** null si falta BARBER_STRIPE_SECRET_KEY (la app nunca crashea por Stripe). */
+export function isBarberStripeConfigured(): boolean {
+  return resolveBarberStripeKey() !== null;
+}
+
+/** null si no hay llave, ni propia ni compartida (la app nunca crashea por Stripe). */
 export function getBarberStripe(): Stripe | null {
-  const key = process.env.BARBER_STRIPE_SECRET_KEY;
+  const key = resolveBarberStripeKey();
   if (!key) return null;
   if (!_stripe) {
     _stripe = new Stripe(key, {
