@@ -19390,3 +19390,434 @@ México, los días de retraso en calendario y la firma de bytes de las fotos.
 - ⚪ El pago NO se hace en línea: la pantalla dice "el pago se hace directo
   con la inmobiliaria" y ofrece el botón de WhatsApp. Si algún día hay cobro
   en línea, el hueco está en la tarjeta "¿Cómo pago?".
+
+
+## [Inmuebles T10 · Calculadoras mexicanas] — Las tres cuentas que deciden una operación en México, con CERO números fiscales escritos en el código ✅ (2026-08-25)
+
+Rama `realty/t10`, commit `ba5a71eb`. El diferenciador más barato y más vendible del vertical:
+verificado contra EasyBroker, Nocnok, Wasi, Tokko, Inmuebles24 Suite, MisRentas
+y Rentaio, **ninguno trae estas calculadoras dentro del CRM**. Van en los TRES
+planes (`calculators` ya estaba en `PROPIETARIO_FEATURES`, y de ahí lo heredan
+ASESOR e INMOBILIARIA).
+
+### La regla que mandó sobre todo lo demás
+
+**Ningún parámetro fiscal se escribe en el código.** La UMA, la UDI, el INPC,
+las tasas de ISAI por estado y los topes de Infonavit cambian cada año, así que
+todos viven en `realty_calc_params` con `effectiveFrom`, editables desde
+`/admin/inmobiliarias/parametros`.
+
+Lo que eso significa en la práctica, y es la parte que hay que probar antes de
+enseñarla:
+
+- **Con la tabla vacía, las tres calculadoras NO truenan y NO inventan.** Cada
+  resolutor devuelve una lista de faltantes con su etiqueta en español y qué
+  hacer para resolverlo, y la pantalla la pinta en vez del resultado. Hay una
+  prueba dedicada a eso (`con la tabla vacía, nada revienta`).
+- **Si falta el ISAI de un estado, ese estado no calcula.** No cae a una tasa
+  "de referencia": lo dice y pide capturarla. La tira de escrituración de la
+  ficha pública directamente NO SE PINTA si le falta el parámetro — un rango
+  inventado en la ficha de una casa es peor que no decir nada, porque el
+  comprador lo toma por bueno y la operación se cae en la notaría.
+- **Si falta el INPC del año de compra, el ISR no se calcula.** Sin él no se
+  puede actualizar el costo de adquisición, que es media cuenta.
+- **Si falta el INPC del año anterior a la venta**, sí se calcula, pero con el
+  índice más reciente que haya Y SE DICE EN PANTALLA con el año que se usó.
+
+### Dónde vive cada número (el mapa del `meta`)
+
+El enum `RealtyCalcParamKind` de la Ola 0 tiene SEIS valores y es contrato
+cerrado (`schema.prisma` no se tocó en esta ola). Las calculadoras necesitan más
+de seis familias, así que la columna `meta Json?` carga el resto. El mapa está
+documentado en la cabecera de `src/lib/realty/calc/catalog.ts`:
+
+| kind | stateCode | `value` | qué lleva el `meta` |
+| --- | --- | --- | --- |
+| ISAI | `MX` | tasa general de referencia (informativa) | honorarios notariales, registro, avalúo, certificados e IVA — los costos de escrituración federales |
+| ISAI | `JAL`… | tasa de ESE estado | cedular del estado, su nota y su fuente |
+| UMA | `MX` | UMA diaria | mensual y anual |
+| UDI | `MX` | valor de la UDI | TODO el bloque del ISR (la exención del 93 se mide en UDIS: es su casa natural) |
+| INPC | `MX` | índice de diciembre (una fila por año) | mes y base del índice |
+| INFONAVIT | `MX` | monto máximo tradicional | Unamos, tasas, plazo, puntos, edad, factor de pago **y el bloque BANCARIO** |
+| FOVISSSTE | `MX` | monto máximo | tasas, plazo, edad, factor de pago |
+
+### A · Precalificador de crédito
+
+`src/lib/realty/calc/infonavit.ts` — puro y client-safe, así que el navegador
+recalcula en vivo mientras el prospecto escribe y el servidor vuelve a correr
+LA MISMA función como autoridad.
+
+Estima por **capacidad de pago**, que es como lo deciden de verdad las tres
+fuentes:
+
+```
+pago disponible = sueldo × factor del producto − deudas
+crédito         = valor presente de esa anualidad al plazo y la tasa
+crédito         = mínimo(lo anterior, tope del producto)
+```
+
+Tres cosas que hacen que el número se pueda defender frente al cliente:
+
+- **El plazo no es el del folleto: se recorta por edad.** A los 55 años quedan
+  15 hasta el límite de 70, así que el crédito se calcula a 180 meses y sale
+  más chico. Es la causa número uno de que un precalificador optimista mienta.
+- **Los puntos de Infonavit son una PUERTA, no un multiplicador.** Con 900
+  puntos no hay crédito por mucho sueldo que haya: devuelve "todavía no
+  califica", cuántos puntos faltan y cómo se suben. Si no los captura, avisa.
+- **El banco topa por aforo.** Con poco enganche el techo real no es el sueldo:
+  `presupuesto = min(crédito / aforo, crédito + ahorro)`.
+
+Devuelve rango de crédito, mensualidad, plazo, presupuesto de compra, y
+**cuántos inmuebles propios entran en ese rango** con liga al listado filtrado
+(`/inmobiliaria/inmuebles?precioMin=…&precioMax=…` — si esa pantalla todavía no
+lee esos parámetros, la liga aterriza igual en la lista).
+
+### B · Gastos de escrituración
+
+`src/lib/realty/calc/escrituracion.ts`.
+
+- **La base gravable no es el precio**: es el mayor de precio de escritura,
+  valor catastral y avalúo. Si gana uno que no es el precio, lo advierte.
+- **El resultado es un RANGO, no un número.** Honorarios, derechos del registro
+  y avalúo se mueven por notaría y por municipio. Un solo número sería más
+  cómodo y sería mentira.
+- **El IVA grava SOLO honorarios** (notario y avalúo). El ISAI es impuesto y el
+  registro cobra derechos: ninguno lo causa. Meterlos en la base infla el
+  estimado.
+- **El avalúo tiene piso**: en una casa barata el porcentaje no cubre ni la
+  visita del perito.
+- Cierra con el dato que evita que se caiga la operación: **"esta casa te sale
+  realmente en $X"**.
+
+### C · ISR de quien vende
+
+`src/lib/realty/calc/isr.ts`. Es la conversación que gana la exclusiva.
+
+Aplica art. 93-XIX (exención de casa habitación hasta 700,000 UDIS de PRECIO,
+con la regla de los 3 años), art. 121 (costo partido en terreno/construcción
+20/80 cuando no se pueden separar, construcción depreciada 3% anual con piso del
+20%, todo actualizado por INPC) y art. 120 + tarifa del 152.
+
+Dos detalles que valen la pena:
+
+- **La exención parcial existe.** Pasarse del tope NO pierde la exención
+  entera: se grava la proporción del excedente. Mucha gente cree lo contrario.
+- **Las dos lecturas del artículo 120 coinciden**: dividir entre los años,
+  aplicar la tarifa y volver a multiplicar da EXACTAMENTE lo mismo que sacar la
+  tasa efectiva y aplicarla a la ganancia entera. Hay una prueba que lo verifica,
+  así que no hubo que elegir entre interpretaciones.
+- **La comisión del asesor es deducible** y baja el impuesto. Es un argumento de
+  venta real y está en el desglose con esas palabras.
+
+### D · Panel de parámetros en /admin
+
+`/admin/inmobiliarias/parametros` (la primera presencia del vertical en /admin).
+
+- Tabla completa con familia, estado, año, valor, vigencia y **badge de "por
+  verificar"**.
+- Aviso permanente **"revisar cada enero"** explicando qué se publica cuándo, y
+  la regla de no borrar el valor viejo (se necesita para recalcular operaciones
+  de años pasados).
+- **Alerta cuando el año en curso no tiene parámetros cargados**, diciendo qué
+  familias faltan.
+- Botón **"Sembrar el catálogo 2026"**: idempotente por `(kind, stateCode, year,
+  effectiveFrom)`. Volver a sembrar NO pisa lo que alguien ya corrigió a mano —
+  las filas existentes se cuentan como omitidas. Es la diferencia importante con
+  un upsert.
+- El `meta` se edita como JSON crudo a propósito: ahí viven los once tramos de
+  la tarifa del 152 y los bloques de crédito.
+
+### E · Pantalla "Calculadoras" en el panel
+
+`/inmobiliaria/calculadoras` — reemplaza el placeholder de la Ola 0 sin tocar el
+layout, el sidebar ni el contrato. Las tres en pestañas, más historial.
+
+Cada resultado se puede: **guardar en la bitácora del prospecto** (buscador de
+prospectos, `RealtyLeadActivity` kind `NOTA`), **mandar por WhatsApp** (`wa.me`
+sin destinatario, listo para que T6 lo enchufe al inbox) y **bajar en PDF**
+(`@react-pdf/renderer`, el servidor RECALCULA y no dibuja números que le mande
+el cliente).
+
+### Versión pública (lo que se autocalifica solo)
+
+`POST /api/realty/calc/publico/[slug]` + `PrecalificadorPublico`.
+
+Orden deliberado: **primero el número, después el teléfono.** Contesta cinco
+cosas y VE su resultado sin muro; solo entonces se le ofrece dejar su WhatsApp,
+y a cambio de algo concreto (las casas que entran en su presupuesto). Pedir el
+teléfono antes del número sube el abandono y además es de mala educación: le
+estás cobrando por una cuenta que hizo él.
+
+Al enviar se crea el **`RealtyLead` YA CLASIFICADO**: `creditKind` con el
+producto que eligió y `budgetMin`/`budgetMax` con el presupuesto REAL calculado
+en el servidor, más la bitácora contando cómo se precalificó. Se autocalifica
+solo. La cuenta sale SIEMPRE del slug de la URL: el endpoint jamás acepta un
+`accountId`.
+
+Anti-abuso sin captcha (un captcha en móvil mata la conversión): límite
+persistente por IP, campo trampa `website`, y tope de prospectos vivos por
+teléfono en esa cuenta.
+
+### Lo que encontraron los revisores (y que ya está arreglado)
+
+Cuatro revisores de solo lectura: uno dedicado a la aritmética con los tres
+casos del encargo, uno de seguridad de las APIs, uno de React/Next y uno de
+cumplimiento del contrato. Encontraron **tres defectos graves que tenían una
+prueba en verde encima**, y eso es lo que hace que valga la pena contarlos:
+
+**P0 · El aforo bancario estaba al revés — y era el número de portada.**
+El presupuesto salía de `min(crédito / aforo, crédito + ahorro)`. Pero
+`crédito/aforo` es el valor MÍNIMO de casa en el que cabría ese crédito, no un
+techo: como siempre es mayor que el crédito, el `min` casi nunca mordía. Con
+cero enganche prometía una casa financiada al 100%, y con $100,000 de enganche
+declaraba un aforo del 90% mientras el número implicaba **97.75%**. Al revés
+también fallaba: a alguien con dos millones en efectivo le decía que le
+alcanzaba para $805,969.
+
+Lo correcto: el banco presta como mucho `aforo × V`, así que el comprador pone
+`(1 − aforo) × V` de su bolsa, y de ahí `V = ahorro / (1 − aforo)`. Con 90% de
+aforo, cada peso de enganche compra diez. Ahora $100,000 dan $1,000,000 con un
+aforo implícito de exactamente 90.00%, y sin enganche el presupuesto es **$0**,
+que es la verdad incómoda.
+
+La prueba que lo cubría reimplementaba la fórmula rota y pasaba por tautología.
+Se reescribió con valores clavados a mano.
+
+**P1 · La mensualidad se pintaba al revés en cuanto el tope del producto
+mordía.** El extremo "máximo" se calculaba con la tasa MÍNIMA y el "mínimo" con
+la MÁXIMA; cuando el tope recortaba los dos escenarios al mismo monto, el de
+tasa alta pagaba más y la pantalla decía "de $10,173 a $8,604". Con Fovissste
+pasaba ya con un sueldo de $30,000. Ahora los dos pagos se calculan por par
+coherente y se ordenan.
+
+**CRÍTICO · El modal de "Guardar en el prospecto" aparecía fuera de pantalla.**
+`.realty-page` declara `container-type: inline-size`, y eso implica
+`contain: layout`: el elemento se vuelve BLOQUE CONTENEDOR de sus descendientes
+`position: fixed`. El `inset: 0` del modal se resolvía contra la caja de la
+página —más de 2000 px de alto en la pantalla de resultados— en vez del
+viewport, así que pulsabas "Guardar" abajo del todo y el diálogo aterrizaba a
+media altura del documento. El comentario del código afirmaba lo contrario.
+Ahora va en `createPortal` al `<body>`. La cabecera de `realty-theme.css` ya lo
+advertía: *"los modales van FUERA de cualquier contenedor con container-type"*.
+
+**Además:**
+
+- **Escalada de privilegios por override.** Las rutas de prospectos pedían solo
+  `calculators.use`. Como `permissionsOverride` REEMPLAZA los defaults del rol,
+  un dueño que le diera a alguien el override `["calculators.use"]` —pensando
+  que le daba una calculadora— le entregaba de regalo la libreta de contactos
+  entera, escritura en la bitácora de cualquier prospecto y el conteo del
+  inventario. Ahora cada ruta pide además el permiso del DATO que toca
+  (`leads.view`, `leads.edit`, `properties.view`), y eso no le quita nada a
+  nadie: los cuatro roles por defecto que traen `calculators.use` traen también
+  esos tres.
+- **Comodines de LIKE sin escapar.** Prisma no escapa `%` ni `_` dentro de
+  `contains`, así que buscar `%` volcaba la libreta completa. Se limpian.
+- **El `meta` se publicaba entero.** Se edita como JSON crudo en /admin y se
+  sirve a internet sin sesión, cacheado media hora en el borde: cualquier cosa
+  pegada ahí por error se publicaba sola. Ahora sale con lista blanca por
+  familia. (Y el compilador atrapó de paso que `rows.map(toRow)` pasaba el
+  ÍNDICE como el flag de saneado: la lista blanca se habría apagado en la
+  primera fila y encendido en el resto.)
+- **El GET público era un oráculo.** Sin rate limit y sin mirar la suscripción,
+  servía para barrer slugs cosechando nombres y para deducir a quién se le
+  venció el pago comparando GET-200 contra POST-403. Ahora tiene el mismo
+  límite y las mismas condiciones que el POST, y los tres casos negativos
+  responden lo mismo.
+- **"De contado" era un callejón sin salida en el formulario público.** El
+  campo de edad se esconde en ese modo, pero la función seguía exigiéndola: la
+  caja simplemente no crecía, sin resultado, sin campos de contacto y sin
+  explicación. La edad ya solo se pide cuando hay plazo que recortar.
+- **La pantalla de "gracias" pintaba el presupuesto SIN la leyenda** — justo la
+  que el prospecto fotografía y manda por WhatsApp. Arreglada.
+- **El factor de INPC perdía un año de inflación.** Se indexaba de dic(compra)
+  a dic(venta−1) mientras se depreciaban los años completos: una casa comprada
+  y vendida con un año de diferencia salía con factor 1.0000 clavado. Menos
+  costo deducible es MÁS impuesto del que se va a pagar. Ahora la base es
+  dic(compra−1), y los años indexados coinciden con los depreciados.
+- **Un parámetro absurdo del admin producía `Infinity`.** `topeAnios = 0` daba
+  una división entre cero que viajaba hasta el desglose de la pantalla, y
+  `tasaAnualMin = 0` regalaba un crédito sin intereses. Ahora los rangos se
+  comprueban al leer y un parámetro fuera de rango sale como faltante.
+- **Los puntos de Infonavit en 0 o negativos abrían la puerta** en vez de
+  cerrarla (se leían como "no me dijiste"). Y la tasa capturada a mano no tenía
+  cota, así que un 0.001% dibujaba un crédito absurdo en un PDF con membrete.
+- **El enlace al inventario iba en centavos** a una pantalla que espera pesos:
+  el filtro habría salido multiplicado por cien. Y la copia prometía "en ese
+  rango" cuando la consulta solo tiene techo; ahora dice "de ese precio o
+  menos". El plural también estaba roto ("hay 1 inmuebles").
+- Accesibilidad: labels asociados en el editor de parámetros, Escape en los
+  dos modales, `aria-label` en el buscador, `tabpanel` de verdad con roving
+  tabindex, y el diálogo marcado en la caja y no en el fondo.
+- Se borró `resumenParaFicha()`: devolvía dinero SIN leyenda y no lo llamaba
+  nadie. Era una mina para el primero que lo conectara.
+
+### Veredicto de la aritmética, con números
+
+El revisor dedicado hizo las tres cuentas a lápiz ANTES de mirar el código.
+Los tres casos del encargo cuadran (los del ISR, con la base del INPC ya
+corregida):
+
+**CASO 1 · Escrituración de $2,000,000 en CDMX** — cuadra al centavo, y la
+suma del desglose es exactamente el total, sin centavos perdidos.
+
+| Concepto | Mínimo | Máximo |
+| --- | ---: | ---: |
+| ISAI 4.97% | $99,400 | $99,400 |
+| Notario 1.0% / 2.5% | $20,000 | $50,000 |
+| Registro 0.5% / 1.2% | $10,000 | $24,000 |
+| Avalúo (con piso) | $3,000 | $7,000 |
+| Certificados | $1,500 | $6,000 |
+| IVA 16% sobre honorarios | $3,680 | $9,120 |
+| **TOTAL** | **$137,580** | **$195,520** |
+| | **6.88%** | **9.78%** |
+
+**CASO 2 · Venta de $5,000,000 de casa habitación, sin exención previa** →
+**EXENTO**. Tope = 700,000 UDIS × 8.83 = **$6,181,000**, exacto y sin residuo
+de coma flotante. Ganancia estimada $3,253,269, ISR $0.
+
+**CASO 3 · Venta de $8,000,000 de casa habitación** → **exención PARCIAL**:
+exenta hasta el tope y gravado el excedente. Proporción gravada 22.7375%
+(delta 0 contra la cuenta a mano). Factor INPC dic-2015 → dic-2024 = 1.549171.
+Costo actualizado $3,532,109 · ganancia $4,467,891 · gravada $1,015,887 ·
+÷10 años = $101,588.67 → tarifa del 152 (tramo de 10.88%) = $7,247.67 × 10 =
+**ISR $72,476.70**, tasa efectiva 7.13%.
+
+Lo que además resistió: cero `NaN`, `Infinity` o negativos en 25 entradas
+raras; 20,000 escenarios de ISR aleatorios sin una sola violación de "ISR ≥ 0",
+"ISR ≤ ganancia gravada" y "neto ≥ 0"; deriva de redondeo máxima de 2.18
+centavos en escrituración; y continuidad exacta en el tope de la exención
+($6,181,000.00 exento, $6,181,000.01 gravado por un centavo).
+
+### Verificación
+
+- `npx next build` — **exit 0**. Las 8 rutas nuevas compilan como dinámicas.
+- `npx tsc --noEmit` — limpio. Los únicos 3 errores son preexistentes en
+  `src/lib/barber/__tests__/` (los mismos que la prueba de i18n del vertical
+  documenta como heredados y que aquí no se heredan).
+- `npx tsx --test src/lib/realty/calc/__tests__/aritmetica.test.ts` — **43/43**.
+- `npx tsx --test src/lib/realty/calc/__tests__/diccionario.test.ts` — **7/7**.
+- `npx tsx --test src/lib/realty/__tests__/contrato.test.ts` — 31/31.
+- `npx tsx --test src/lib/realty/__tests__/i18n-alcance.test.ts` — 11/11.
+- `node scripts/realty-guard.cjs` — **OK, todo dentro del vertical**: 0
+  prohibidos y 0 compartidos sin declarar.
+
+### Decisiones que hay que confirmar (no las tomé yo solo)
+
+🔴 **Dinero en centavos enteros, no en `Decimal`.** La regla decía "Decimal,
+nunca float". `decimal.js` no es dependencia directa del repo y 30 KB al
+navegador para sumar seis renglones no se justificaba, así que la aritmética va
+en **centavos enteros**: las sumas y restas entre enteros son exactas, y los
+porcentajes pasan por coma flotante UNA vez y se redondean a centavo en el acto,
+antes de volver a sumarse con nada — el error nunca se acumula porque nunca
+sobrevive a la operación. `Prisma.Decimal` sigue en la frontera de la base
+(parámetros, `budgetMin/Max`, comparación de precios). Es el único punto donde
+sustituí la letra de la regla por su fondo, y quien la escribió tiene que
+confirmarlo.
+
+🔴 **41 de las 52 filas sembradas nacen marcadas "por verificar"**, incluidas
+casi todas las tasas de ISAI. La calculadora lo dice en su aviso y la pantalla
+de parámetros lo pinta en ámbar, así que nadie se lo va a tragar sin enterarse
+— pero **nadie las ha confrontado todavía con la ley de hacienda de cada
+estado**. La tabla completa con fuente y año va más abajo.
+
+### Lo que NO se construyó, y por qué
+
+- **La versión pública no está MONTADA.** El componente está hecho, la API
+  funciona y crea el prospecto clasificado, pero la ficha pública `/i/[slug]/
+  [propertyId]` es territorio de otra terminal y el allowlist de esta ola no la
+  incluye. Se entrega como pieza autónoma: `<BotonConCuantoTeAlcanza slug=…
+  rows=… dict=… />` y `<TiraEscrituracion precioCents=… stateCode=… rows=…
+  dict=… />`, las dos sin dependencias de servidor. Los `rows` salen de
+  `getCalcParamRows()` en el componente de servidor. **Aviso para quien las
+  monte:** hay que bajarles `calcDict[locale]`, NO el diccionario raíz de
+  realty — cruzar las convenciones pinta las llaves crudas.
+- **`/admin/inmobiliarias/parametros` no está enlazada** en el menú del admin.
+  `src/app/admin/admin-nav.tsx` es COMPARTIDO y no se declaró en esta ola. La
+  línea que falta, junto a la de Barberías:
+  `{ href: "/admin/inmobiliarias", label: "Inmobiliarias", icon: Building2, section: "main" },`
+  Mientras tanto se llega escribiendo la URL.
+- **El enlace "ver los que le quedan"** apunta a
+  `/inmobiliaria/inmuebles?precioMax=<pesos>`. Esa pantalla todavía es el
+  placeholder de la Ola 0 y no lee `searchParams`: el enlace aterriza en la
+  lista sin filtrar hasta que la terminal de inmuebles lo cablee.
+- **El INPC solo va de 2010 a 2024.** Un inmueble comprado antes de 2010 hace
+  que el ISR se NIEGUE con "no tengo el INPC de {año}" — degradación correcta,
+  pero es justo el vendedor con la ganancia más grande. Y 2025 no está
+  sembrado: una venta de 2026 se actualiza con el índice de 2024 y lo dice en
+  pantalla.
+- **La UMA se siembra y se edita, pero ninguna calculadora la lee todavía.**
+  Estaba en el encargo del panel de parámetros; queda cargada y versionada para
+  quien la necesite.
+- **No se implementó el pago a la entidad federativa del art. 127** (5% de la
+  ganancia, acreditable contra el ISR federal). Como es acreditable no cambia
+  el total, y añadirlo era una superficie más donde equivocarse.
+
+### Los 52 parámetros sembrados, con su fuente y su año
+
+Para auditar. TOTAL 52 filas · 41 marcadas POR VERIFICAR. La tabla nace VACÍA: sembrar es un acto
+explícito del administrador desde /admin/inmobiliarias/parametros, no un
+efecto secundario del despliegue. Sembrar otra vez NO pisa lo que alguien ya
+corrigió a mano — las filas existentes se cuentan como omitidas.
+
+| Familia | Estado | Año | Vigente desde | Valor | ¿Verificado? | Fuente |
+| --- | --- | --- | --- | --- | --- | --- |
+| ISAI | Federal (aplica a todo el país) | 2026 | 2026-01-01 | 2 | por verificar | Rangos de mercado del brief del vertical. IVA: 16% de la Ley del IVA. |
+| ISAI | Aguascalientes | 2026 | 2026-01-01 | 2 | por verificar | Tasa general de referencia del brief del vertical. PENDIENTE de confirmar contra la ley de ingresos estatal o municipal vigente. |
+| ISAI | Baja California | 2026 | 2026-01-01 | 2 | por verificar | Tasa general de referencia del brief del vertical. PENDIENTE de confirmar contra la ley de ingresos estatal o municipal vigente. |
+| ISAI | Baja California Sur | 2026 | 2026-01-01 | 2.3 | por verificar | Tasa general de referencia del brief del vertical. PENDIENTE de confirmar contra la ley de ingresos estatal o municipal vigente. |
+| ISAI | Campeche | 2026 | 2026-01-01 | 2 | por verificar | Tasa general de referencia del brief del vertical. PENDIENTE de confirmar contra la ley de ingresos estatal o municipal vigente. |
+| ISAI | Chiapas | 2026 | 2026-01-01 | 2 | por verificar | Tasa general de referencia del brief del vertical. PENDIENTE de confirmar contra la ley de ingresos estatal o municipal vigente. |
+| ISAI | Chihuahua | 2026 | 2026-01-01 | 2 | por verificar | Tasa general de referencia del brief del vertical. PENDIENTE de confirmar contra la ley de ingresos estatal o municipal vigente. |
+| ISAI | Ciudad de México | 2026 | 2026-01-01 | 4.97 | por verificar | Tasa general de referencia del brief del vertical. PENDIENTE de confirmar contra la ley de ingresos estatal o municipal vigente. |
+| ISAI | Coahuila | 2026 | 2026-01-01 | 3 | por verificar | Tasa general de referencia del brief del vertical. PENDIENTE de confirmar contra la ley de ingresos estatal o municipal vigente. |
+| ISAI | Colima | 2026 | 2026-01-01 | 2 | por verificar | Tasa general de referencia del brief del vertical. PENDIENTE de confirmar contra la ley de ingresos estatal o municipal vigente. |
+| ISAI | Durango | 2026 | 2026-01-01 | 2.5 | por verificar | Tasa general de referencia del brief del vertical. PENDIENTE de confirmar contra la ley de ingresos estatal o municipal vigente. |
+| ISAI | Guanajuato | 2026 | 2026-01-01 | 2 | por verificar | Tasa general de referencia del brief del vertical. PENDIENTE de confirmar contra la ley de ingresos estatal o municipal vigente. |
+| ISAI | Guerrero | 2026 | 2026-01-01 | 2 | por verificar | Tasa general de referencia del brief del vertical. PENDIENTE de confirmar contra la ley de ingresos estatal o municipal vigente. |
+| ISAI | Hidalgo | 2026 | 2026-01-01 | 2 | por verificar | Tasa general de referencia del brief del vertical. PENDIENTE de confirmar contra la ley de ingresos estatal o municipal vigente. |
+| ISAI | Jalisco | 2026 | 2026-01-01 | 2 | por verificar | Tasa general de referencia del brief del vertical. PENDIENTE de confirmar contra la ley de ingresos estatal o municipal vigente. |
+| ISAI | Estado de México | 2026 | 2026-01-01 | 4.5 | por verificar | Tasa general de referencia del brief del vertical. PENDIENTE de confirmar contra la ley de ingresos estatal o municipal vigente. |
+| ISAI | Michoacán | 2026 | 2026-01-01 | 2 | por verificar | Tasa general de referencia del brief del vertical. PENDIENTE de confirmar contra la ley de ingresos estatal o municipal vigente. |
+| ISAI | Morelos | 2026 | 2026-01-01 | 2 | por verificar | Tasa general de referencia del brief del vertical. PENDIENTE de confirmar contra la ley de ingresos estatal o municipal vigente. |
+| ISAI | Nayarit | 2026 | 2026-01-01 | 2 | por verificar | Tasa general de referencia del brief del vertical. PENDIENTE de confirmar contra la ley de ingresos estatal o municipal vigente. |
+| ISAI | Nuevo León | 2026 | 2026-01-01 | 2 | por verificar | Tasa general de referencia del brief del vertical. PENDIENTE de confirmar contra la ley de ingresos estatal o municipal vigente. |
+| ISAI | Oaxaca | 2026 | 2026-01-01 | 2 | por verificar | Tasa general de referencia del brief del vertical. PENDIENTE de confirmar contra la ley de ingresos estatal o municipal vigente. |
+| ISAI | Puebla | 2026 | 2026-01-01 | 2 | por verificar | Tasa general de referencia del brief del vertical. PENDIENTE de confirmar contra la ley de ingresos estatal o municipal vigente. |
+| ISAI | Querétaro | 2026 | 2026-01-01 | 2 | por verificar | Tasa general de referencia del brief del vertical. PENDIENTE de confirmar contra la ley de ingresos estatal o municipal vigente. |
+| ISAI | Quintana Roo | 2026 | 2026-01-01 | 3 | por verificar | Tasa general de referencia del brief del vertical. PENDIENTE de confirmar contra la ley de ingresos estatal o municipal vigente. |
+| ISAI | San Luis Potosí | 2026 | 2026-01-01 | 2 | por verificar | Tasa general de referencia del brief del vertical. PENDIENTE de confirmar contra la ley de ingresos estatal o municipal vigente. |
+| ISAI | Sinaloa | 2026 | 2026-01-01 | 2 | por verificar | Tasa general de referencia del brief del vertical. PENDIENTE de confirmar contra la ley de ingresos estatal o municipal vigente. |
+| ISAI | Sonora | 2026 | 2026-01-01 | 2 | por verificar | Tasa general de referencia del brief del vertical. PENDIENTE de confirmar contra la ley de ingresos estatal o municipal vigente. |
+| ISAI | Tabasco | 2026 | 2026-01-01 | 2 | por verificar | Tasa general de referencia del brief del vertical. PENDIENTE de confirmar contra la ley de ingresos estatal o municipal vigente. |
+| ISAI | Tamaulipas | 2026 | 2026-01-01 | 2 | por verificar | Tasa general de referencia del brief del vertical. PENDIENTE de confirmar contra la ley de ingresos estatal o municipal vigente. |
+| ISAI | Tlaxcala | 2026 | 2026-01-01 | 2 | por verificar | Tasa general de referencia del brief del vertical. PENDIENTE de confirmar contra la ley de ingresos estatal o municipal vigente. |
+| ISAI | Veracruz | 2026 | 2026-01-01 | 2 | por verificar | Tasa general de referencia del brief del vertical. PENDIENTE de confirmar contra la ley de ingresos estatal o municipal vigente. |
+| ISAI | Yucatán | 2026 | 2026-01-01 | 2 | por verificar | Tasa general de referencia del brief del vertical. PENDIENTE de confirmar contra la ley de ingresos estatal o municipal vigente. |
+| ISAI | Zacatecas | 2026 | 2026-01-01 | 2 | por verificar | Tasa general de referencia del brief del vertical. PENDIENTE de confirmar contra la ley de ingresos estatal o municipal vigente. |
+| UMA | Federal (aplica a todo el país) | 2025 | 2025-02-01 | 113.14 | **sí** | INEGI, publicada en el Diario Oficial de la Federación. |
+| UDI | Federal (aplica a todo el país) | 2026 | 2026-01-01 | 8.83 | por verificar | Valor de referencia de la UDI (Banxico). Los demás parámetros son de la LISR. |
+| INPC | Federal (aplica a todo el país) | 2010 | 2010-12-31 | 74.93 | por verificar | INEGI, INPC de diciembre. Reconstruido desde la cadena de inflación anual: confírmalo antes de usarlo en una operación real. |
+| INPC | Federal (aplica a todo el país) | 2011 | 2011-12-31 | 77.792 | por verificar | INEGI, INPC de diciembre. Reconstruido desde la cadena de inflación anual: confírmalo antes de usarlo en una operación real. |
+| INPC | Federal (aplica a todo el país) | 2012 | 2012-12-31 | 80.568 | por verificar | INEGI, INPC de diciembre. Reconstruido desde la cadena de inflación anual: confírmalo antes de usarlo en una operación real. |
+| INPC | Federal (aplica a todo el país) | 2013 | 2013-12-31 | 83.77 | por verificar | INEGI, INPC de diciembre. Reconstruido desde la cadena de inflación anual: confírmalo antes de usarlo en una operación real. |
+| INPC | Federal (aplica a todo el país) | 2014 | 2014-12-31 | 87.189 | por verificar | INEGI, INPC de diciembre. Reconstruido desde la cadena de inflación anual: confírmalo antes de usarlo en una operación real. |
+| INPC | Federal (aplica a todo el país) | 2015 | 2015-12-31 | 89.047 | **sí** | INEGI, INPC de diciembre. Encadenado y cuadrado con la inflación anual publicada. |
+| INPC | Federal (aplica a todo el país) | 2016 | 2016-12-31 | 92.039 | **sí** | INEGI, INPC de diciembre. Encadenado y cuadrado con la inflación anual publicada. |
+| INPC | Federal (aplica a todo el país) | 2017 | 2017-12-31 | 98.273 | **sí** | INEGI, INPC de diciembre. Encadenado y cuadrado con la inflación anual publicada. |
+| INPC | Federal (aplica a todo el país) | 2018 | 2018-12-31 | 103.02 | **sí** | INEGI, INPC de diciembre. Encadenado y cuadrado con la inflación anual publicada. |
+| INPC | Federal (aplica a todo el país) | 2019 | 2019-12-31 | 105.934 | **sí** | INEGI, INPC de diciembre. Encadenado y cuadrado con la inflación anual publicada. |
+| INPC | Federal (aplica a todo el país) | 2020 | 2020-12-31 | 109.271 | **sí** | INEGI, INPC de diciembre. Encadenado y cuadrado con la inflación anual publicada. |
+| INPC | Federal (aplica a todo el país) | 2021 | 2021-12-31 | 117.308 | **sí** | INEGI, INPC de diciembre. Encadenado y cuadrado con la inflación anual publicada. |
+| INPC | Federal (aplica a todo el país) | 2022 | 2022-12-31 | 126.478 | **sí** | INEGI, INPC de diciembre. Encadenado y cuadrado con la inflación anual publicada. |
+| INPC | Federal (aplica a todo el país) | 2023 | 2023-12-31 | 132.373 | **sí** | INEGI, INPC de diciembre. Encadenado y cuadrado con la inflación anual publicada. |
+| INPC | Federal (aplica a todo el país) | 2024 | 2024-12-31 | 137.949 | **sí** | INEGI, INPC de diciembre. Encadenado y cuadrado con la inflación anual publicada. |
+| INFONAVIT | Federal (aplica a todo el país) | 2026 | 2026-01-01 | 2935000 | por verificar | Cifras de Infonavit 2026 del brief del vertical. |
+| FOVISSSTE | Federal (aplica a todo el país) | 2026 | 2026-01-01 | 1420000 | por verificar | Cifras de Fovissste 2026 del brief del vertical. |
+
+La tarifa anual del artículo 152 (once tramos) viaja dentro del `meta` de la
+fila UDI. Está **verificada aritméticamente tramo por tramo**: la cuota fija de
+cada renglón es exactamente la del anterior más el excedente por su tasa, y que
+los once encadenen sin un peso de diferencia es la firma de una tarifa real —
+una inventada no encaja. Es la vigente desde 2024; hay que compararla contra el
+Anexo 8 de la RMF cada enero.
