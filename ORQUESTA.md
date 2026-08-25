@@ -16148,3 +16148,192 @@ los tokens del vertical (`--bg #1A1513`) y los inputs ganándole al reset de
   `clinic-public/barber/<id>/…`).
 - ⚪ QA con sesión real: subir un logo de verdad y ver la liga en /b/<slug>,
   ticket y portal; cambiar el slug y escanear un QR viejo.
+
+
+## [Barber Landing v2] — `/barberias` ya se ve a barbería: poste de barbero (3D en escritorio, CSS en móvil), letrero, latón y cuero, con el MISMO sistema tipográfico que la landing dental y el copy intacto palabra por palabra ✅ (2026-08-25)
+
+**Rama** `feat/barber-landing-v2` (worktree `mediflow-worktrees/barber-landing-v2`, junction de `node_modules`, `npx prisma generate` corrido) sobre `origin/main` `022fdc99` → push directo a `main`. **Alcance tocado:** `src/app/barberias/page.tsx` y `src/components/public/barberias/**` (sin `comparar/`). **Cero bytes** fuera de eso: ni `public/barberias/` (no hizo falta un solo asset: todo es CSS, SVG en línea y geometría procedural), ni `globals.css`, ni el guardia, ni el dental.
+
+▶ **PRIMERO, LO QUE CAMBIÓ LA DECISIÓN TIPOGRÁFICA.** La consigna daba por buena la
+familia ("`--font-sans` = IBM Plex Sans, `--font-logo` = Hanken Grotesk") y pedía igualar el
+tratamiento. Al abrir la landing dental lado a lado resultó que **el sitio público no usa
+ninguna de las dos en el texto**: `src/app/page.tsx` carga `Inter` con `next/font` (pesos
+400–800) y lo fija en la raíz (`fontFamily: var(--font-inter)`), y lo mismo hacen las 8 páginas
+de módulo, `/casos-de-uso`, `/herramientas`, `/descubre`, el blog, `/afiliados` y `/socio` (20
+archivos, `grep -rl "font-inter\|Inter("`). El layout raíz solo aporta IBM Plex para el PANEL
+y Hanken para el **wordmark** (`sales/nav.tsx` la usa solo en "DaleControl"). La landing barber
+v1 era la única superficie pública en Plex + Hanken en títulos: por eso se sentía "ajena".
+
+**Decisión:** la landing barber carga Inter **por página, igual que el home** (`Inter({ weight:
+["400","600","700","800"], variable: "--font-inter", display: "swap" })` — Google la sirve como
+fuente variable, así que es UN archivo de 50 KB para los cuatro pesos, y como es el mismo archivo
+que ya baja el home, va cacheado para quien venga de ahí). Hanken se queda **solo en el wordmark**
+(`.dcbl-brand__name`, 800 → cae al 700 que carga el layout, medido con `document.fonts`). Y el
+tratamiento es calcado del home, no "parecido":
+
+| pieza | dental (`sales/v2`) | barber v2 |
+|---|---|---|
+| H1 | Inter 800 · `clamp(34px,4.8vw,60px)` · lh 1.03 · `-0.042em` · balance | Inter 800 · `clamp(38px,5.2vw,60px)` · lh 1.02 · `-0.042em` · balance |
+| H2 | 800 · `clamp(27px,3.4vw,42px)` · lh 1.08 · `-0.035em` | 800 · `clamp(28px,3.6vw,46px)` · lh 1.08 · `-0.035em` |
+| lead | `clamp(16px,1.55vw,19px)` · lh 1.6 · 44ch · pretty | `clamp(16px,1.55vw,19px)` · lh 1.6 · 46ch · pretty |
+| precio | 42px 800 `-0.03em` | 54px 800 `-0.04em` tabular |
+| CTA | 50px alto · 700 · 16px · radio 12 | 50px alto · 700 · 16px · radio 12 |
+
+La única voz propia del vertical es **Bebas Neue** (un peso, 10 KB), la condensada en
+mayúsculas de los rótulos de barbería, y va **solo en letreros**: la placa de la portada, los
+eyebrows con reglas (`── PRECIOS ──`), las insignias "DESDE AVANZADO", los nombres de plan,
+los numerales de secciones y preguntas, el `BARBER` del wordmark. Nunca en texto corrido.
+Los breakpoints son `@container` (regla del vertical); los tamaños fluidos van en `vw` como
+el home — probé `cqi` y cuesta un doble paso de layout de todo el árbol (~70 ms observados,
+ver la sección de rendimiento), y `.dcbl` mide lo mismo que el viewport.
+
+**Revertir a IBM Plex si Rafael prefiere que la landing case con el panel y no con el sitio
+público es una línea**: `--sans: var(--font-sans)` en `barberias.css` y borrar el `Inter(...)`
+de `page.tsx`. Lo dejo escrito porque es una decisión de marca, no técnica.
+
+▶ **LO QUE AHORA SE VE A BARBERÍA (elegido, no todo lo posible).**
+
+1. **El poste de barbero.** Es el momento 3D, y el ÚNICO. En escritorio capaz gira en
+   three.js (r184, el que ya usa el repo); en móvil, sin WebGL o con "menos movimiento", es un
+   poste en CSS puro que viaja en el HTML: vidrio con brillo, franjas rojo/crema/marino que
+   suben (`transform` compuesto en GPU, `background-size` ajustado al periodo para que el bucle
+   no salte), tapas y remates de latón con degradados, sombra en el piso. También es el **glifo
+   de marca** en nav y pie (`.dcbl-mark`: un poste de 18×36 px con sus tapas).
+2. **Iconografía del oficio dibujada a mano** (`oficio.tsx`, monolínea 1.7, viewBox 24):
+   tijeras de barbero, navaja abierta, máquina, peine, brocha, silla y libreta. La barra de
+   herramientas bajo la portada (tijeras · navaja · máquina · peine · brocha) es la "estación";
+   la silla y la libreta van en "Así se va el dinero"; las tijeras en los límites de barberos,
+   la placa y el sello del cierre; la navaja en "Sin comisiones ocultas". El resto sigue en
+   lucide para no desentonar.
+3. **Texturas de la paleta caramelo, sin un solo PNG:** grano de cuero (feTurbulence en un
+   SVG de 300 bytes, `mix-blend-mode: overlay` al 9 %) en las secciones oscuras y grano de
+   papel (multiply al 5 %) en las claras; **mosaico hexagonal** al pie de la portada (el piso
+   de la barbería, un `<pattern>` de 56×97 px con máscara que lo desvanece hacia arriba);
+   **latón** en el degradado del H1 (`Sin comisiones por cliente.` — el punto más oscuro es
+   caramel-500: 5.4:1 sobre el negro cálido), en placas con marco doble (`border` + `outline`
+   con offset) y en el plan destacado; **la cinta del poste** (4 px de franjas) bajo el nav
+   y sobre el plan recomendado; **recibos impresos** con borde dentado (`mask:
+   conic-gradient`) para el ticket de la portada y la tarjeta "¿Y cuánto cuesta?".
+4. **Jerarquía y movimiento con intención.** Portada con placa → H1 → lead → CTAs → prueba;
+   escena con el poste y las tres tarjetas; entrada escalonada de placa, botones, tarjetas y
+   burbujas (el "Confirmar" llega a los 900 ms, el "Confirmada" a los 1500). El H1 y el lead
+   **no** se animan: son el LCP. Reveal al hacer scroll con UN observador (`reveal.tsx`, mismo
+   patrón que `scroll-reveal.tsx` del dental); cabeceras de grupo pegajosas en "Qué hace";
+   hover con elevación. Todo `opacity`/`transform`. Con `prefers-reduced-motion: reduce` el
+   bloque final de `barberias.css` apaga TODO y el 3D ni se pide.
+5. **Precios de un vistazo:** nombre del plan en letrero con regla, importe grande en la
+   misma línea base en las tres tarjetas, el de en medio elevado con la cinta y "EL MÁS
+   ELEGIDO", límites con iconos, "Todo lo de X, y además:" en letrero, y el plato oscuro
+   "SIN COMISIONES OCULTAS" con marco de latón.
+
+▶ **EL 3D, REGLA POR REGLA** (`pole.tsx` + `pole-upgrade.tsx` + `pole-3d.tsx`).
+
+- **Carga diferida, nunca bloquea:** el chunk de three (`9f83608c` 83 KB gz + `2abcbbbe` 76 KB
+  gz, procedural: cero modelos que descargar) se pide con `next/dynamic` (`ssr: false`, como
+  `Clinic3DMount.tsx`) **después del `load`, después de la primera señal de una persona
+  (pointermove / wheel / scroll / keydown) y en un `requestIdleCallback`**. Quien aterriza y
+  se va no baja un byte de three; quien se queda lo ve en ~1 s. Medido: `canvas` ausente antes
+  de mover el mouse, montado 3.7 s después (`data-3d="on"`), chunks pedidos a t≈3.8 s.
+- **Fallback estático para siempre:** el poste CSS está SIEMPRE en el DOM debajo del canvas;
+  el crossfade es un atributo (`data-3d`) y si el contexto WebGL se pierde vuelve solo. Sin
+  WebGL (`--disable-webgl`): `poleFallbackVisible: true`, sin canvas, página completa.
+- **Móvil = poste CSS, punto:** la puerta exige `pointer: fine` + `hover: hover` y ≥ 1000 px de
+  contenedor; además rechaza `saveData`, redes 2g/3g, `deviceMemory < 4`, `hardwareConcurrency
+  < 4` y WebGL por software (SwiftShader/llvmpipe en `UNMASKED_RENDERER_WEBGL`). En iPhone 13
+  emulado: `canvasMounted: false`.
+- **`prefers-reduced-motion`:** `document.getAnimations()` = **0** en escritorio con la
+  preferencia activa, sin canvas.
+- **Presupuesto:** el arranque va en tareas cortas (escena → PMREM del `RoomEnvironment` → 
+  `renderer.compileAsync` en paralelo → primer frame); montado de golpe costaba 555 ms de una
+  sola tarea (Lighthouse escritorio 97 → 84). Ver números abajo. El giro se **midió**, no se
+  dedujo: con el signo original las franjas bajaban (+61 px en 1.16 s, leyendo el canvas en
+  Chromium con la GPU real); ahora suben, como el poste de la esquina.
+
+▶ **VERIFICACIÓN (todo en el worktree, con la build final).**
+
+1. **`npm run build` → `BUILD_EXIT_CODE:0`**, 386/386 páginas, `/barberias` sigue **estática
+   (○)**, 2.6 kB propios / 101 kB first-load. Sin pipes; log completo en
+   `scratchpad/build-v5.log` (4 300 líneas; los únicos avisos son los de siempre: `file-type`
+   en `ai-wallet/spei` y `ease-[var(--ease)]` de Tailwind, ambos ajenos).
+2. **Rendimiento antes/después — A/B INTERCALADO** (mismo Lighthouse 12.8.2, mismo Chrome,
+   misma máquina, corridas alternadas base/v2, cada build servida con `next start` en su
+   puerto; el "antes" es una build LIMPIA de `origin/main` `022fdc99` en
+   `mediflow-worktrees/barber-landing-base`; una corrida suelta NO sirve: la misma build me dio
+   72, 79 y 90 a distintas horas):
+
+   | | antes (main, 3 corridas) | después (v2 final, 3 corridas) |
+   |---|---|---|
+   | móvil (Moto G, 4G lento simulado) | **81/79/79** · FCP 3.2 s · LCP 4.2 s · TBT 86 ms · CLS 0.013 | **64/74/64** · FCP 3.4 s · LCP 5.0–5.5 s · TBT 109 ms · **CLS 0.18** (0.03 en una) |
+   | escritorio | **97** · FCP 0.8 s · LCP 1.2 s · TBT 0 · CLS 0.001 | **99** · FCP 0.4 s · LCP 0.7 s · TBT 67 ms · CLS 0.027 |
+   | escritorio **con el 3D forzado** (mouse movido, GPU real) | — | 88 · LCP 0.7 s · TBT 290 ms (build v3) |
+
+   PSI real de producción (pagespeed.web.dev, antes del deploy): **móvil 69**, FCP 2.6 s, LCP
+   7.3 s, TBT 140 ms, CLS 0. El "después" en producción hay que leerlo cuando Vercel termine
+   (la API de PSI agotó su cuota diaria; la UI sí corre).
+
+   **Móvil quedó PEOR y hay que decirlo claro.** El LCP es el lead (texto). Lo que manda no
+   son bytes (875 KB / 39 peticiones en las dos) sino **a qué milisegundo pinta el primer
+   frame**: main pinta a ~230 ms observados, v2 a ~340; en cuanto pasa de ~250 ms, Lantern
+   mete gtag/fbevents (440 KB del layout raíz) en el grafo del LCP y el LCP simulado salta.
+   Lo aislé sirviendo la misma HTML con 12 variantes de CSS sin rebuild: `cqi` (−74 ms),
+   animaciones de entrada (−77), grano (−51), sombras grandes (−53), **el swap de fuentes
+   (−134)**; `text-wrap`, máscaras, `container-type` y el poste: 0. Ya apliqué los cuatro
+   primeros en móvil (v8/v9) y el obs FCP bajó de 381 a ~335 ms, pero **el swap de Inter en
+   el H1 (4→3 líneas) da el CLS 0.18** y `display: fallback` no lo evitó de forma estable.
+   **El 3D no aparece en ninguna medición sin interacción (PSI, Lighthouse, CrUX de rebote)**;
+   su costo real para quien SÍ lo dispara está en la fila "forzado".
+3. **Sin WebGL:** completa y correcta, poste CSS de 84×475 px visible, `canvas: null`.
+4. **`prefers-reduced-motion: reduce`:** 0 animaciones, 0 en marcha, sin canvas.
+5. **Móvil sin desplazamiento horizontal:** `scrollWidth === clientWidth` a 390, 768 y 1440
+   (los únicos elementos que asoman fuera son decorativos y los recorta `overflow-x: clip`).
+6. **Cero precios hardcodeados:**
+   ```
+   $ grep -n "199\|329\|749" src/components/public/barberias/*.tsx src/components/public/barberias/*.css src/app/barberias/page.tsx
+   (ninguno)
+   ```
+7. **`node scripts/barber-guard.cjs` → exit 0** (18 archivos, todos PROPIOS; 0 compartidos, 0
+   prohibidos). Para el reporte: `BARBER_GUARD_SHARED=ORQUESTA.md`. **No se añadió
+   `public/barberias/` al guardia porque no existe**: no hay assets.
+8. **Cero vocabulario dental:**
+   ```
+   $ grep -rn -i "paciente\|doctor\|Dr\.\|clínica\|clinica\|consulta\|expediente" src/components/public/barberias/*.tsx src/components/public/barberias/*.css src/app/barberias/page.tsx
+   (ninguna)
+   ```
+   Un comentario mío decía "la clínica 3D del panel": lo cazó el grep y se cambió a "el visor
+   3D del panel" antes del commit.
+9. **Prueba estática de la landing** (`npx tsx --test src/lib/barber/__tests__/marketing.test.ts`):
+   **11/12**, igual que en `main` sin mis cambios. La que falla (`cada t("…") literal…`)
+   recoge las llaves `barber.comparar.*` de `comparar/`, que la ola de comparativas montó con
+   otro prefijo; falla desde antes y no es de esta ola (el archivo no está en mi allowlist).
+10. **Copy:** no se cambió, cortó ni añadió una sola cadena; `landing.{es,en}.json` intactos.
+    Los "01…05" de grupos, "01…07" del FAQ y "01…04" del problema son numerales de CSS/JSX,
+    no copy. La placa de la portada cabe en una línea a 390 px (14 px, tracking .13em).
+11. **Contraste:** blanco solo sobre caramel-600/700; el degradado de latón del H1 no baja de
+    caramel-500 (5.4:1); atenuados #4A4138/#6B6057 sobre crema. Y un bug heredado: el lead de
+    la portada pintaba `#4a4138` sobre negro (v1 solo lo aclaraba bajo `.dcbl-dark`, y la
+    portada no lleva esa clase) — ahora `.dcbl-hero .dcbl-lead` va en crema al 82 %.
+
+▶ **CÓMO SE VERIFICÓ SIN PELEAR CON EL MCP** (queda en memoria): Playwright 1.59 ya vive en
+`node_modules`; un arnés (`verify.mjs`) corre iPhone 13, 768, 1440, `reducedMotion: "reduce"`,
+`--disable-webgl` y **`--use-gl=angle --use-angle=d3d11`** (Chromium headless con la RTX real:
+la única forma de ver el 3D montado y de leer el canvas frame a frame). El Chrome del MCP
+sirvió para la foto final con GPU real; su pestaña vive `hidden` y no mueve rAF.
+
+▶ **CIERRE (Rafael pidió parar): qué quedó, qué falta, cómo retomar.**
+- **Quedó la v9** en `main`: build verde, guardia exit 0, todo el rediseño y el 3D; móvil
+  Lighthouse 64–74 vs 79 de main por el **CLS 0.18 del swap de Inter en el H1**.
+- **Falta** solo eso. **Siguiente paso concreto:** en `barberias.css` volver a animar la
+  entrada de la portada también en móvil (`.dcbl-enter` fuera del `@container 720`) —o mejor,
+  reservar el alto del H1 con `min-height` por breakpoint— y comprobar con
+  `bash ab2.sh v10 3 1` (scratchpad de esta sesión: `static-serve.mjs`/`variants.sh` aíslan
+  variantes de CSS sin rebuild). Objetivo: obs FCP < 250 ms y CLS < 0.02 = móvil ≥ 79.
+
+▶ **QUEDA PENDIENTE / PARA DECIDIR.**
+- Leer el PSI de producción tras el deploy (UI de pagespeed.web.dev; la API está sin cuota).
+- `/barberias/comparar/**` sigue con su propio CSS (`comparar.css`, prefijo `dcb-cmp`) y el
+  look v1: quedó fuera del alcance a propósito. Si se alinea, es otra ola.
+- El bloque LCP de móvil lo manda el layout raíz (CSS bloqueante + scripts de terceros);
+  nada de eso es de barber.
+- El test roto de `comparar/` en `marketing.test.ts` (ver punto 9).
+- El worktree `barber-landing-base` (solo para medir) se borró al terminar; el de la ola se
+  queda hasta que Rafael lo limpie, sin junction pendiente.
