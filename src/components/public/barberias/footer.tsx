@@ -1,11 +1,11 @@
 import Link from "next/link";
-import { Scissors } from "lucide-react";
 import type { TFunction } from "@/i18n/t";
 import {
   BARBER_LANDING_ANCHORS,
   BARBER_LOGIN_PATH,
   BARBER_REGISTER_PATH,
 } from "@/lib/barber/marketing";
+import { BrandName } from "./nav";
 
 export function BarberFooter({ t, year }: { t: TFunction; year: number }) {
   const a = BARBER_LANDING_ANCHORS;
@@ -15,12 +15,10 @@ export function BarberFooter({ t, year }: { t: TFunction; year: number }) {
         <div className="dcbl-footer__grid">
           <div>
             <div className="dcbl-brand">
-              <span className="dcbl-brand__glyph" aria-hidden="true">
-                <Scissors size={18} />
-              </span>
+              <span className="dcbl-mark" aria-hidden="true" />
               <span className="dcbl-brand__text">
-                <span className="dcbl-brand__name" style={{ color: "#faf5ee" }}>
-                  {t("nav.brand")}
+                <span className="dcbl-brand__name">
+                  <BrandName brand={t("nav.brand")} />
                 </span>
                 <span className="dcbl-brand__tag">{t("nav.vertical")}</span>
               </span>

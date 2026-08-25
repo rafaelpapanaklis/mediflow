@@ -1,7 +1,17 @@
 /* ═══════════════════════════════════════════════════════════════════════
-   DaleControl BARBER — landing pública /barberias.
+   DaleControl BARBER — landing pública /barberias (v2, "la barbería").
 
    Scope: TODO cuelga de .dcbl. No toca globals.css ni el tema del panel.
+
+   SISTEMA TIPOGRÁFICO — el MISMO tratamiento que la landing dental (/):
+   ────────────────────────────────────────────────────────────────────────
+   Inter 800 en títulos con tracking apretado (-0.042em en el H1, -0.035em
+   en los H2), interlineado 1.02–1.08, text-wrap: balance; el lead en
+   clamp(16px…19px) a 1.6 y 44–46ch. Hanken Grotesk SOLO en el wordmark,
+   como en el nav del dental. Lo único propio del vertical es la fuente de
+   LETRERO (Bebas Neue) para etiquetas, insignias, numerales y nombres de
+   plan: la tipografía condensada en mayúsculas de los rótulos de barbería.
+   Nunca en texto corrido.
 
    POR QUÉ TODO EN px
    ────────────────────────────────────────────────────────────────────────
@@ -10,27 +20,41 @@
    chica justo donde llega casi todo el tráfico (Instagram, móvil). Aquí la
    base son 16px fijos y todo se mide en px.
 
-   RESPONSIVE CON @container
+   RESPONSIVE CON @container (regla del vertical)
    ────────────────────────────────────────────────────────────────────────
-   Regla del vertical. .dcbl es el contenedor (inline-size) y las secciones
-   preguntan por su ancho. Ojo: container-type crea contexto de contención, así
-   que aquí NO hay nada position: fixed (la barra es sticky, que sí funciona).
-   El root lleva overflow-x: clip (no hidden: hidden lo volvería scrollport
-   y mataría el sticky) para que ningún resplandor decorativo provoque
-   desplazamiento horizontal.
+   .dcbl es el contenedor (inline-size) y las secciones preguntan por su
+   ancho. Los tamaños fluidos van en vw como en el home: medido en
+   Lighthouse, las unidades cqi obligan a un doble paso de layout de todo
+   el árbol (~70 ms observados, ×4 en móvil) y aquí .dcbl mide lo que el
+   viewport. Ojo:
+   container-type crea contexto de contención, así que aquí NO hay nada
+   position: fixed (la barra es sticky, que sí funciona). El root lleva
+   overflow-x: clip (no hidden: hidden lo volvería scrollport y mataría el
+   sticky) para que ningún resplandor decorativo provoque desplazamiento
+   horizontal.
 
-   ♿ CONTRASTE (medido, ver el reporte de la ola):
-   texto blanco solo sobre caramel-600/700; sobre negro cálido el acento es
-   caramel-300/400; el texto atenuado sobre crema es #4A4138 / #6B6057.
+   MOVIMIENTO
+   ────────────────────────────────────────────────────────────────────────
+   Solo opacity/transform (nunca layout): el poste gira, la portada entra
+   escalonada, las secciones aparecen al hacer scroll. El H1 y el lead NO
+   se animan: son el LCP. Con prefers-reduced-motion: reduce, nada se mueve
+   (bloque al final) y el poste 3D ni se descarga (pole-upgrade.tsx).
+
+   ♿ CONTRASTE (medido): texto blanco solo sobre caramel-600/700; sobre
+   negro cálido el acento es caramel-300/400; el texto atenuado sobre crema
+   es #4A4138 / #6B6057. El degradado de latón del H1 no baja de caramel-500
+   (5.4:1 sobre el negro cálido).
    ═══════════════════════════════════════════════════════════════════════ */
 
 .dcbl {
   container-type: inline-size;
   container-name: dcbl;
 
-  --ink: #121010;
+  --ink: #141110;
   --ink-2: #1a1614;
+  --ink-3: #0d0b0b;
   --cream: #faf5ee;
+  --paper: #f6efe4;
   --white: #ffffff;
   --c50: #fbf7f2;
   --c100: #f6eadc;
@@ -45,12 +69,27 @@
   --c950: #241410;
   --text-2: #4a4138;
   --text-3: #6b6057;
-  --line: rgba(18, 16, 16, 0.12);
+  --line: rgba(20, 17, 16, 0.12);
   --line-dark: rgba(250, 245, 238, 0.14);
-  --radius: 16px;
-  --sans: var(--font-sans), "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
-  --mono: var(--font-mono), "IBM Plex Mono", ui-monospace, SFMono-Regular, monospace;
-  --display: var(--font-logo), var(--font-sans), "IBM Plex Sans", system-ui, sans-serif;
+  --wa: #25d366;
+
+  /* El poste: rojo, crema y azul marino (el de toda la vida) + latón. */
+  --pole-red: #b5372d;
+  --pole-navy: #24395a;
+  --pole-cream: #f7f0e5;
+  --brass: linear-gradient(135deg, #f3dcae 0%, #d9a765 32%, #a2612f 64%, #e9c78f 100%);
+  --brass-text: linear-gradient(100deg, #f3dcae 0%, #ddb587 35%, #be7a3c 68%, #efd3a3 100%);
+  --brass-line: linear-gradient(90deg, transparent, #d9a765 30%, #f3dcae 50%, #d9a765 70%, transparent);
+
+  /* Grano (cuero / papel): un SVG diminuto, cero peticiones. */
+  --grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23g)'/%3E%3C/svg%3E");
+  /* Mosaico hexagonal: el piso de la barbería, al pie de la portada. */
+  --hex: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='56' height='97' viewBox='0 0 56 97'%3E%3Cpath d='M28 0L56 16.2 56 48.5 28 64.7 0 48.5 0 16.2Z M28 64.7V97' fill='none' stroke='%23faf5ee' stroke-opacity='.55' stroke-width='1'/%3E%3C/svg%3E");
+
+  --radius: 18px;
+  --sans: var(--font-inter), "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --sign: var(--font-sign), "Bebas Neue", "Oswald", Impact, "Arial Narrow", sans-serif;
+  --logo: var(--font-logo), var(--sans);
 
   font-family: var(--sans);
   font-size: 16px;
@@ -60,6 +99,7 @@
   min-height: 100vh;
   overflow-x: clip;
   -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 
 .dcbl *,
@@ -70,6 +110,7 @@
 .dcbl h1,
 .dcbl h2,
 .dcbl h3,
+.dcbl h4,
 .dcbl p,
 .dcbl ul,
 .dcbl ol {
@@ -87,29 +128,34 @@
 .dcbl svg {
   flex-shrink: 0;
 }
-/* El preflight de Tailwind pone svg { display: block }: los iconos que
-   viven dentro de una línea de texto se devuelven a inline. */
-.dcbl .dcbl-inline-icon {
-  display: inline;
-  vertical-align: -3px;
+.dcbl ::selection {
+  background: var(--c200);
+  color: var(--ink);
 }
 .dcbl :focus-visible {
-  outline: 3px solid rgba(190, 122, 60, 0.6);
+  outline: 3px solid rgba(205, 148, 89, 0.75);
   outline-offset: 3px;
   border-radius: 8px;
 }
 .dcbl [id] {
   scroll-margin-top: 84px;
 }
+.dcbl-balance {
+  text-wrap: balance;
+}
+.dcbl-pretty {
+  text-wrap: pretty;
+}
 
 /* ── Layout ─────────────────────────────────────────────────────────── */
 .dcbl-wrap {
   width: 100%;
-  max-width: 1160px;
+  max-width: 1180px;
   margin: 0 auto;
   padding: 0 20px;
 }
 .dcbl-section {
+  position: relative;
   padding: 64px 0;
 }
 .dcbl-section--tight {
@@ -129,53 +175,126 @@
   margin-right: auto;
 }
 
+/* Grano: cuero en las secciones oscuras, papel en las claras. */
+.dcbl-grain {
+  position: relative;
+  isolation: isolate;
+}
+/* Sin mix-blend-mode a propósito: el blend obliga a componer la sección
+   entera en otra capa y en un móvil (CPU 4× más lenta en Lighthouse) se
+   notaba en el LCP. Con opacidad simple el grano se ve igual de sutil. */
+.dcbl-grain::before {
+  content: "";
+  display: none;
+  position: absolute;
+  inset: 0;
+  background-image: var(--grain);
+  background-size: 180px 180px;
+  opacity: 0.045;
+  pointer-events: none;
+  z-index: 0;
+}
+.dcbl-dark.dcbl-grain::before {
+  opacity: 0.06;
+}
+.dcbl-grain > * {
+  position: relative;
+  z-index: 1;
+}
+
+/* La cinta del poste: 4px de franjas. Se usa como remate, con mesura. */
+.dcbl-tape {
+  height: 4px;
+  background: repeating-linear-gradient(
+    -55deg,
+    var(--pole-red) 0 9px,
+    var(--pole-cream) 9px 18px,
+    var(--pole-navy) 18px 27px,
+    var(--pole-cream) 27px 36px
+  );
+}
+
 /* ── Tipografía ─────────────────────────────────────────────────────── */
-.dcbl-eyebrow {
-  display: inline-block;
-  font-family: var(--mono);
-  font-size: 12px;
-  font-weight: 600;
+/* Letrero: la única voz "de barbería". Mayúsculas, condensada, con aire. */
+.dcbl-sign {
+  font-family: var(--sign);
+  font-weight: 400;
   letter-spacing: 0.14em;
   text-transform: uppercase;
+  line-height: 1;
+}
+.dcbl-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  font-family: var(--sign);
+  font-size: 16px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  line-height: 1;
   color: var(--c700);
-  margin-bottom: 14px;
+  margin-bottom: 16px;
+}
+.dcbl-eyebrow::before,
+.dcbl-eyebrow::after {
+  content: "";
+  width: 26px;
+  height: 1px;
+  background: currentColor;
+  opacity: 0.55;
+}
+.dcbl-head--center .dcbl-eyebrow {
+  justify-content: center;
 }
 .dcbl-dark .dcbl-eyebrow {
   color: var(--c300);
 }
 .dcbl-h1 {
-  font-family: var(--display);
-  font-weight: 700;
-  font-size: clamp(34px, 6vw, 62px);
+  font-weight: 800;
+  font-size: 44px;
+  font-size: clamp(38px, 5.2vw, 60px);
   line-height: 1.02;
-  letter-spacing: -0.03em;
+  letter-spacing: -0.042em;
+  text-wrap: balance;
 }
 .dcbl-h1__accent {
   display: block;
   color: var(--c300);
+  background: var(--brass-text);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  padding-bottom: 0.06em;
 }
 .dcbl-h2 {
-  font-family: var(--display);
-  font-weight: 700;
-  font-size: clamp(28px, 4.2vw, 44px);
+  font-weight: 800;
+  font-size: 32px;
+  font-size: clamp(28px, 3.6vw, 46px);
   line-height: 1.08;
-  letter-spacing: -0.025em;
+  letter-spacing: -0.035em;
+  text-wrap: balance;
 }
 .dcbl-h3 {
-  font-family: var(--display);
-  font-weight: 700;
+  font-weight: 800;
   font-size: 22px;
-  line-height: 1.2;
-  letter-spacing: -0.015em;
+  font-size: clamp(21px, 2.1vw, 26px);
+  line-height: 1.15;
+  letter-spacing: -0.03em;
 }
+/* text-wrap: pretty SOLO en el lead de la portada (y balance solo en H1/H2,
+   como el home): puesto en ~50 párrafos y en todos los títulos, el algoritmo
+   de partición de línea subía "Style & Layout" 260 ms en el primer pintado
+   —medido en Lighthouse— y eso en móvil es LCP. */
 .dcbl-lead {
   font-size: 17px;
+  font-size: clamp(16px, 1.55vw, 19px);
   line-height: 1.6;
   color: var(--text-2);
   margin-top: 16px;
 }
-.dcbl-dark .dcbl-lead {
-  color: rgba(250, 245, 238, 0.8);
+.dcbl-dark .dcbl-lead,
+.dcbl-hero .dcbl-lead {
+  color: rgba(250, 245, 238, 0.82);
 }
 .dcbl-muted {
   color: var(--text-3);
@@ -187,23 +306,23 @@
   align-items: center;
   justify-content: center;
   gap: 8px;
-  height: 50px;
-  padding: 0 22px;
+  min-height: 50px;
+  padding: 0 24px;
   border-radius: 12px;
   font-family: inherit;
-  font-weight: 600;
-  font-size: 15px;
-  line-height: 1;
+  font-weight: 700;
+  font-size: 16px;
+  line-height: 1.15;
   border: 1px solid transparent;
   cursor: pointer;
   white-space: nowrap;
-  transition: background-color 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+  transition: background-color 0.16s ease, transform 0.18s ease, box-shadow 0.18s ease, border-color 0.16s ease, color 0.16s ease;
 }
 .dcbl-btn:hover {
-  transform: translateY(-1px);
+  transform: translateY(-2px);
 }
 .dcbl-btn--sm {
-  height: 40px;
+  min-height: 40px;
   padding: 0 16px;
   font-size: 14px;
   border-radius: 10px;
@@ -211,52 +330,119 @@
 .dcbl-btn--primary {
   background: var(--c600);
   color: #fff;
-  box-shadow: 0 10px 24px -10px rgba(162, 97, 47, 0.8);
+  box-shadow: 0 14px 30px -12px rgba(162, 97, 47, 0.9), inset 0 1px 0 rgba(255, 255, 255, 0.18);
 }
 .dcbl-btn--primary:hover {
   background: var(--c700);
+  box-shadow: 0 18px 34px -12px rgba(162, 97, 47, 0.95), inset 0 1px 0 rgba(255, 255, 255, 0.18);
 }
 .dcbl-btn--ghost {
   background: rgba(250, 245, 238, 0.05);
-  border-color: rgba(250, 245, 238, 0.24);
+  border-color: rgba(250, 245, 238, 0.32);
   color: var(--cream);
 }
 .dcbl-btn--ghost:hover {
-  background: rgba(250, 245, 238, 0.1);
+  background: rgba(250, 245, 238, 0.12);
+  border-color: rgba(250, 245, 238, 0.5);
 }
 .dcbl-btn--light {
   background: var(--white);
-  border-color: var(--line);
+  border-color: rgba(20, 17, 16, 0.18);
   color: var(--ink);
 }
 .dcbl-btn--light:hover {
   border-color: var(--c500);
+  color: var(--c700);
 }
 .dcbl-btn--block {
   width: 100%;
 }
 
-/* ── Píldoras de plan ───────────────────────────────────────────────── */
+/* ── Insignias ──────────────────────────────────────────────────────── */
 .dcbl-badge {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  font-family: var(--mono);
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.08em;
+  gap: 6px;
+  font-family: var(--sign);
+  font-size: 13px;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
+  line-height: 1;
   color: var(--c800);
   background: var(--c100);
   border: 1px solid var(--c200);
-  padding: 3px 9px;
-  border-radius: 999px;
+  padding: 5px 9px 4px;
+  border-radius: 4px;
   white-space: nowrap;
 }
 .dcbl-badge--dark {
   color: var(--c300);
   background: rgba(205, 148, 89, 0.12);
-  border-color: rgba(205, 148, 89, 0.4);
+  border-color: rgba(205, 148, 89, 0.45);
+}
+
+/* ── Marca: el poste en miniatura ───────────────────────────────────── */
+.dcbl-brand {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  flex: 0 0 auto;
+}
+.dcbl-mark {
+  position: relative;
+  display: block;
+  width: 18px;
+  height: 36px;
+  border-radius: 9px;
+  background: repeating-linear-gradient(
+    -56deg,
+    var(--pole-red) 0 5px,
+    var(--pole-cream) 5px 10px,
+    var(--pole-navy) 10px 15px,
+    var(--pole-cream) 15px 20px
+  );
+  box-shadow: inset 0 0 0 1.5px #d9a765, inset 4px 0 6px rgba(255, 255, 255, 0.25), inset -5px 0 7px rgba(0, 0, 0, 0.45), 0 0 16px rgba(205, 148, 89, 0.35);
+  flex: 0 0 auto;
+}
+.dcbl-mark::before,
+.dcbl-mark::after {
+  content: "";
+  position: absolute;
+  left: -3px;
+  right: -3px;
+  height: 5px;
+  border-radius: 2px;
+  background: linear-gradient(90deg, #814a28, #f0d29b 45%, #a2612f);
+}
+.dcbl-mark::before {
+  top: -2px;
+}
+.dcbl-mark::after {
+  bottom: -2px;
+}
+.dcbl-brand__text {
+  display: flex;
+  flex-direction: column;
+  line-height: 1;
+  gap: 3px;
+}
+.dcbl-brand__name {
+  font-family: var(--logo);
+  font-weight: 800;
+  font-size: 17.5px;
+  letter-spacing: -0.025em;
+  white-space: nowrap;
+}
+.dcbl-brand__name em {
+  font-style: normal;
+  color: var(--c400);
+}
+.dcbl-brand__tag {
+  font-family: var(--sign);
+  font-size: 12.5px;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  color: var(--c300);
 }
 
 /* ── Nav ────────────────────────────────────────────────────────────── */
@@ -264,64 +450,29 @@
   position: sticky;
   top: 0;
   z-index: 40;
-  background: rgba(18, 16, 16, 0.9);
-  -webkit-backdrop-filter: blur(12px);
-  backdrop-filter: blur(12px);
-  border-bottom: 1px solid var(--line-dark);
+  background: rgba(20, 17, 16, 0.86);
+  -webkit-backdrop-filter: blur(14px);
+  backdrop-filter: blur(14px);
   color: var(--cream);
 }
 .dcbl-nav__in {
   display: flex;
   align-items: center;
   gap: 10px;
-  height: 64px;
-}
-.dcbl-brand {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex: 0 0 auto;
-}
-.dcbl-brand__glyph {
-  width: 34px;
-  height: 34px;
-  border-radius: 10px;
-  background: linear-gradient(135deg, #a2612f, #be7a3c);
-  display: grid;
-  place-items: center;
-  color: #fff;
-  box-shadow: 0 0 22px rgba(190, 122, 60, 0.35);
-}
-.dcbl-brand__text {
-  display: flex;
-  flex-direction: column;
-  line-height: 1.05;
-}
-.dcbl-brand__name {
-  font-family: var(--display);
-  font-weight: 700;
-  font-size: 16px;
-  letter-spacing: -0.01em;
-}
-.dcbl-brand__tag {
-  font-family: var(--mono);
-  font-size: 10.5px;
-  font-weight: 600;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-  color: var(--c300);
+  height: 66px;
 }
 .dcbl-nav__links {
   display: none;
 }
 .dcbl-nav__links a {
-  font-size: 14px;
-  font-weight: 500;
-  color: rgba(250, 245, 238, 0.8);
+  font-size: 14.5px;
+  font-weight: 600;
+  color: rgba(250, 245, 238, 0.78);
   padding: 6px 2px;
+  transition: color 0.15s ease;
 }
 .dcbl-nav__links a:hover {
-  color: var(--cream);
+  color: var(--c300);
 }
 .dcbl-nav__right {
   margin-left: auto;
@@ -335,47 +486,105 @@
 .dcbl-nav__cta-long {
   display: none;
 }
+.dcbl-nav .dcbl-tape {
+  height: 3px;
+}
 
-/* ── Hero ───────────────────────────────────────────────────────────── */
+/* ── Portada ────────────────────────────────────────────────────────── */
 .dcbl-hero {
   position: relative;
   overflow: hidden;
-  background: linear-gradient(165deg, #121010 0%, #1c1411 60%, #241410 100%);
+  isolation: isolate;
   color: var(--cream);
-  padding: 52px 0 64px;
-}
-.dcbl-hero::before {
-  content: "";
-  position: absolute;
-  inset: 0;
   background:
-    radial-gradient(70% 55% at 88% -5%, rgba(205, 148, 89, 0.3), transparent 60%),
-    radial-gradient(55% 45% at -8% 105%, rgba(129, 74, 40, 0.45), transparent 60%);
-  pointer-events: none;
+    radial-gradient(900px 520px at 80% -12%, rgba(205, 148, 89, 0.36), transparent 62%),
+    radial-gradient(720px 480px at -12% 104%, rgba(129, 74, 40, 0.55), transparent 60%),
+    linear-gradient(165deg, #141110 0%, #1c1411 55%, #241410 100%);
+  padding: 44px 0 56px;
 }
-.dcbl-hero::after {
-  content: "";
+.dcbl-hero__grain,
+.dcbl-hero__floor,
+.dcbl-hero__glow {
   position: absolute;
-  inset: 0;
-  background-image:
-    linear-gradient(rgba(250, 245, 238, 0.045) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(250, 245, 238, 0.045) 1px, transparent 1px);
-  background-size: 32px 32px;
-  -webkit-mask-image: radial-gradient(80% 70% at 50% 30%, #000 30%, transparent 100%);
-  mask-image: radial-gradient(80% 70% at 50% 30%, #000 30%, transparent 100%);
   pointer-events: none;
+  z-index: 0;
+}
+.dcbl-hero__grain {
+  display: none;
+  inset: 0;
+  background-image: var(--grain);
+  background-size: 180px 180px;
+  opacity: 0.06;
+}
+/* Cubre TODA la portada (inset: 0) y el desvanecido lo hace la máscara:
+   anclado al borde inferior con un alto en %, cada píxel que crecía la
+   portada al llegar la fuente movía el borde superior del mosaico y
+   Lighthouse lo contaba como CLS (0.035). Así su origen no se mueve. */
+.dcbl-hero__floor {
+  display: none;
+  inset: 0;
+  background-image: var(--hex);
+  background-size: 56px 97px;
+  background-position: center bottom;
+  opacity: 0.16;
+  -webkit-mask-image: linear-gradient(to top, rgba(0, 0, 0, 1) 0%, rgba(0, 0, 0, 0.5) 28%, transparent 62%);
+  mask-image: linear-gradient(to top, rgba(0, 0, 0, 1) 0%, rgba(0, 0, 0, 0.5) 28%, transparent 62%);
+}
+/* Piso y resplandor: solo a partir de 720px. En móvil el piso apenas se ve
+   detrás de la escena y el resplandor queda fuera de la pantalla, y los dos
+   (máscara + capa grande) cuestan pintado justo donde el LCP es de texto.
+   Sin filter: blur — el degradado radial ya es suave y un blur de 10px sobre
+   520px es de lo más caro que se puede pedir en el primer pintado. */
+.dcbl-hero__glow {
+  display: none;
+  width: 520px;
+  height: 520px;
+  right: -140px;
+  top: 40px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(205, 148, 89, 0.24) 0%, rgba(205, 148, 89, 0.1) 32%, transparent 64%);
 }
 .dcbl-hero__grid {
   position: relative;
+  z-index: 1;
   display: grid;
-  gap: 40px;
+  gap: 44px;
 }
 .dcbl-hero__copy {
-  max-width: 620px;
+  max-width: 660px;
+}
+.dcbl-plate {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  max-width: 100%;
+  padding: 9px 14px 8px;
+  border: 1px solid rgba(221, 181, 135, 0.5);
+  outline: 1px solid rgba(221, 181, 135, 0.2);
+  outline-offset: 4px;
+  border-radius: 5px;
+  background: rgba(250, 245, 238, 0.04);
+  font-family: var(--sign);
+  font-size: 14px;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  line-height: 1.15;
+  color: var(--c300);
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.4);
+}
+.dcbl-plate > span {
+  text-wrap: balance;
+}
+.dcbl-plate svg {
+  color: var(--c400);
+}
+.dcbl-hero .dcbl-h1 {
+  margin-top: 26px;
 }
 .dcbl-hero__lead {
   margin-top: 20px;
-  max-width: 560px;
+  max-width: 46ch;
+  text-wrap: pretty;
 }
 .dcbl-hero__cta {
   display: flex;
@@ -385,41 +594,55 @@
 }
 .dcbl-hero__cta .dcbl-btn {
   flex: 1 1 100%;
+  min-height: 54px;
 }
 .dcbl-trust {
   display: flex;
   flex-wrap: wrap;
-  gap: 10px 20px;
+  gap: 10px 22px;
   margin-top: 22px;
-  font-size: 13.5px;
-  color: rgba(250, 245, 238, 0.78);
+  font-size: 14px;
+  font-weight: 500;
+  color: rgba(250, 245, 238, 0.8);
 }
 .dcbl-trust li {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 7px;
 }
 .dcbl-trust svg {
   color: var(--c400);
 }
 
-/* La "escena": recordatorio, agenda y ticket. */
+/* La escena: el poste + recordatorio, agenda y ticket. */
 .dcbl-stage {
+  --pole-w: 58px;
+  position: relative;
   display: grid;
-  gap: 14px;
-  grid-template-columns: 1fr;
+  grid-template-columns: var(--pole-w) minmax(0, 1fr) minmax(0, 1fr);
+  /* Móvil: el poste acompaña al recordatorio y a la agenda; el ticket va
+     a lo ancho. A partir de 560px, agenda y ticket se ponen lado a lado. */
   grid-template-areas:
-    "wa"
-    "agenda"
-    "ticket";
+    "pole wa wa"
+    "pole agenda agenda"
+    "ticket ticket ticket";
+  gap: 12px;
+  align-items: stretch;
 }
+.dcbl-pole-host {
+  grid-area: pole;
+  position: relative;
+  min-height: 320px;
+  z-index: 0;
+}
+/* Sin backdrop-filter: cada uno obliga a rasterizar y desenfocar lo que hay
+   detrás en el primer pintado; un fondo cálido semiopaco se ve igual. */
 .dcbl-card {
-  background: rgba(250, 245, 238, 0.06);
+  position: relative;
+  background: rgba(34, 27, 23, 0.78);
   border: 1px solid rgba(250, 245, 238, 0.14);
-  border-radius: 18px;
-  padding: 16px;
-  -webkit-backdrop-filter: blur(6px);
-  backdrop-filter: blur(6px);
+  border-radius: 16px;
+  padding: 14px;
   min-width: 0;
 }
 .dcbl-card--wa {
@@ -435,20 +658,22 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  font-family: var(--mono);
-  font-size: 11.5px;
-  font-weight: 600;
-  letter-spacing: 0.1em;
+  font-family: var(--sign);
+  font-size: 14px;
+  letter-spacing: 0.14em;
   text-transform: uppercase;
+  line-height: 1;
   color: var(--c300);
   margin-bottom: 12px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid rgba(250, 245, 238, 0.12);
 }
 .dcbl-card__dot {
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: var(--c400);
-  box-shadow: 0 0 10px rgba(205, 148, 89, 0.8);
+  background: var(--wa);
+  box-shadow: 0 0 10px rgba(37, 211, 102, 0.7);
 }
 .dcbl-thread {
   display: flex;
@@ -456,7 +681,7 @@
   gap: 8px;
 }
 .dcbl-bubble {
-  max-width: 92%;
+  max-width: 94%;
   padding: 10px 12px;
   font-size: 13.5px;
   line-height: 1.45;
@@ -471,7 +696,7 @@
   align-self: flex-end;
   background: var(--c600);
   color: #fff;
-  font-weight: 600;
+  font-weight: 700;
   border-radius: 14px 14px 4px 14px;
 }
 .dcbl-thread__status {
@@ -479,8 +704,9 @@
   align-items: center;
   gap: 6px;
   font-size: 12.5px;
+  font-weight: 600;
   color: var(--c300);
-  margin-top: 4px;
+  margin-top: 2px;
 }
 .dcbl-agenda {
   display: grid;
@@ -494,10 +720,9 @@
   min-width: 0;
 }
 .dcbl-agenda__chair {
-  font-family: var(--mono);
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.1em;
+  font-family: var(--sign);
+  font-size: 13px;
+  letter-spacing: 0.14em;
   text-transform: uppercase;
   color: rgba(250, 245, 238, 0.7);
   margin-bottom: 2px;
@@ -507,19 +732,18 @@
   font-size: 12.5px;
   line-height: 1.3;
   padding: 8px 10px;
-  border-radius: 10px;
+  border-radius: 9px;
   background: rgba(205, 148, 89, 0.16);
   border-left: 3px solid var(--c400);
   color: var(--cream);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  min-width: 0;
+  hyphens: none;
 }
 .dcbl-slot--hot {
   background: var(--c600);
   border-left-color: var(--c300);
   color: #fff;
-  font-weight: 600;
+  font-weight: 700;
 }
 .dcbl-slot--free {
   background: transparent;
@@ -527,22 +751,193 @@
   border-left: 1px dashed rgba(250, 245, 238, 0.3);
   color: rgba(250, 245, 238, 0.7);
 }
+
+/* El ticket es un recibo impreso: papel, borde dentado, cifras tabulares. */
+.dcbl-receipt {
+  background: var(--paper);
+  color: var(--ink);
+  border: 0;
+  border-radius: 6px 6px 0 0;
+  padding: 14px 14px 22px;
+  -webkit-mask: conic-gradient(from -45deg at bottom, #0000, #000 1deg 89deg, #0000 90deg) 50% / 14px 100%;
+  mask: conic-gradient(from -45deg at bottom, #0000, #000 1deg 89deg, #0000 90deg) 50% / 14px 100%;
+  box-shadow: none;
+}
+.dcbl-receipt .dcbl-card__head {
+  color: var(--c700);
+  border-bottom-color: rgba(20, 17, 16, 0.15);
+}
 .dcbl-ticket__row {
   display: flex;
   justify-content: space-between;
   gap: 12px;
-  font-size: 13.5px;
-  padding: 7px 0;
-  border-bottom: 1px dashed rgba(250, 245, 238, 0.16);
+  font-size: 13px;
+  padding: 6px 0;
+  border-bottom: 1px dashed rgba(20, 17, 16, 0.22);
+  font-variant-numeric: tabular-nums;
+}
+.dcbl-ticket__row span:last-child {
+  font-weight: 700;
 }
 .dcbl-ticket__row--total {
-  font-weight: 700;
+  font-weight: 800;
+  font-size: 14px;
   border-bottom: 0;
+  padding-top: 8px;
+  color: var(--c800);
 }
 .dcbl-ticket__note {
-  margin-top: 8px;
-  font-size: 12.5px;
-  color: var(--c300);
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--text-3);
+  line-height: 1.35;
+}
+
+/* ── El poste (CSS, siempre presente: es lo que ve el móvil) ────────── */
+.dcbl-pole {
+  --w: var(--pole-w);
+  --x: calc(var(--w) * 0.42);
+  /* Periodo vertical de las franjas a -56°: 4 franjas / cos(56°). */
+  --period: calc(var(--x) * 4 * 1.7883);
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  transition: opacity 0.8s ease;
+}
+.dcbl-pole__finial {
+  width: calc(var(--w) * 0.5);
+  height: calc(var(--w) * 0.5);
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #f8e6bf 0%, #d9a765 38%, #8a4f26 78%, #4a2b17 100%);
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.55);
+}
+.dcbl-pole__neck {
+  width: calc(var(--w) * 0.36);
+  height: calc(var(--w) * 0.16);
+  background: linear-gradient(90deg, #5e3720, #a2612f 22%, #f0d29b 50%, #a2612f 78%, #5e3720);
+  border-radius: 3px;
+}
+.dcbl-pole__cap {
+  width: calc(var(--w) * 1.14);
+  height: calc(var(--w) * 0.3);
+  border-radius: calc(var(--w) * 0.1);
+  background: linear-gradient(90deg, #4a2b17 0%, #a2612f 16%, #f3dcae 40%, #d9a765 58%, #814a28 84%, #3d2417 100%);
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.35), inset 0 -2px 0 rgba(0, 0, 0, 0.35);
+  z-index: 1;
+}
+.dcbl-pole__glass {
+  position: relative;
+  width: var(--w);
+  flex: 1 1 auto;
+  min-height: calc(var(--w) * 2.4);
+  max-height: calc(var(--w) * 5.4);
+  border-radius: calc(var(--w) * 0.22);
+  overflow: hidden;
+  margin: calc(var(--w) * -0.06) 0;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12), 0 0 0 1px rgba(0, 0, 0, 0.5);
+  background: var(--pole-cream);
+}
+.dcbl-pole__stripes {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: calc(100% + var(--period));
+  background-image: repeating-linear-gradient(
+    -56deg,
+    var(--pole-red) 0 var(--x),
+    var(--pole-cream) var(--x) calc(var(--x) * 2),
+    var(--pole-navy) calc(var(--x) * 2) calc(var(--x) * 3),
+    var(--pole-cream) calc(var(--x) * 3) calc(var(--x) * 4)
+  );
+  background-size: 100% var(--period);
+  animation: dcblPoleRise 2.6s linear infinite;
+  will-change: transform;
+}
+@keyframes dcblPoleRise {
+  to {
+    transform: translateY(calc(-1 * var(--period)));
+  }
+}
+.dcbl-pole__shine {
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(180deg, rgba(0, 0, 0, 0.35) 0%, rgba(0, 0, 0, 0) 12%, rgba(0, 0, 0, 0) 88%, rgba(0, 0, 0, 0.4) 100%),
+    linear-gradient(
+      90deg,
+      rgba(0, 0, 0, 0.55) 0%,
+      rgba(0, 0, 0, 0.18) 16%,
+      rgba(255, 255, 255, 0.34) 30%,
+      rgba(255, 255, 255, 0.1) 42%,
+      rgba(0, 0, 0, 0) 58%,
+      rgba(0, 0, 0, 0.35) 84%,
+      rgba(0, 0, 0, 0.65) 100%
+    );
+}
+.dcbl-pole__shadow {
+  position: absolute;
+  left: 50%;
+  bottom: -18px;
+  width: calc(var(--w) * 2.4);
+  height: 26px;
+  transform: translateX(-50%);
+  background: radial-gradient(ellipse at center, rgba(0, 0, 0, 0.6), transparent 68%);
+  pointer-events: none;
+}
+/* El 3D (three.js) se monta encima solo en escritorio capaz; ver pole-3d.tsx. */
+.dcbl-pole3d-wrap {
+  position: absolute;
+  top: -8%;
+  bottom: -8%;
+  left: -70%;
+  right: -70%;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.9s ease;
+  z-index: 1;
+}
+.dcbl-pole3d-wrap canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.dcbl-pole-host[data-3d="on"] .dcbl-pole3d-wrap {
+  opacity: 1;
+}
+.dcbl-pole-host[data-3d="on"] .dcbl-pole {
+  opacity: 0;
+}
+
+/* ── La barra de herramientas (tijeras, navaja, máquina, peine, brocha) ─ */
+.dcbl-rail {
+  position: relative;
+  background: var(--ink-3);
+  color: var(--c400);
+  border-top: 1px solid rgba(250, 245, 238, 0.07);
+  border-bottom: 1px solid rgba(250, 245, 238, 0.07);
+}
+.dcbl-rail__in {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 24px;
+  gap: clamp(22px, 5vw, 72px);
+  height: 62px;
+}
+.dcbl-rail__in > span {
+  display: inline-flex;
+  opacity: 0.85;
+}
+.dcbl-rail__in > i {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.35;
 }
 
 /* ── Problema ───────────────────────────────────────────────────────── */
@@ -551,28 +946,48 @@
   gap: 14px;
 }
 .dcbl-pcard {
+  position: relative;
+  overflow: hidden;
   background: var(--white);
   border: 1px solid var(--line);
   border-radius: var(--radius);
-  padding: 22px;
+  padding: 24px 22px 22px;
   display: flex;
   flex-direction: column;
   gap: 12px;
+  transition: transform 0.25s ease, border-color 0.25s ease, box-shadow 0.25s ease;
+}
+.dcbl-pcard:hover {
+  transform: translateY(-4px);
+  border-color: var(--c300);
+  box-shadow: 0 26px 44px -30px rgba(94, 55, 32, 0.55);
+}
+.dcbl-pcard__num {
+  position: absolute;
+  top: 10px;
+  right: 16px;
+  font-family: var(--sign);
+  font-size: 54px;
+  line-height: 1;
+  color: var(--c100);
+  letter-spacing: 0.02em;
+  pointer-events: none;
 }
 .dcbl-pcard__icon {
-  width: 42px;
-  height: 42px;
-  border-radius: 12px;
+  width: 46px;
+  height: 46px;
+  border-radius: 13px;
   background: var(--c100);
   color: var(--c700);
   display: grid;
   place-items: center;
+  border: 1px solid var(--c200);
 }
 .dcbl-pcard__title {
-  font-family: var(--display);
-  font-weight: 700;
+  font-weight: 800;
   font-size: 19px;
-  letter-spacing: -0.01em;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
 }
 .dcbl-pcard__body {
   font-size: 15px;
@@ -584,7 +999,7 @@
   background: var(--white);
 }
 .dcbl-group {
-  padding: 30px 0;
+  padding: 34px 0;
   border-top: 1px solid var(--line);
   display: grid;
   gap: 18px;
@@ -596,20 +1011,39 @@
 .dcbl-group__head {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
+  align-self: start;
+}
+.dcbl-group__num {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  font-family: var(--sign);
+  font-size: 15px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--c500);
+  line-height: 1;
+}
+.dcbl-group__num::after {
+  content: "";
+  width: 34px;
+  height: 1px;
+  background: var(--c300);
 }
 .dcbl-group__icon {
-  width: 38px;
-  height: 38px;
-  border-radius: 11px;
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
   background: var(--ink);
   color: var(--c300);
   display: grid;
   place-items: center;
-  margin-bottom: 8px;
+  margin: 4px 0 6px;
+  box-shadow: 0 10px 20px -12px rgba(20, 17, 16, 0.8);
 }
 .dcbl-group__sub {
-  font-size: 15px;
+  font-size: 15.5px;
   color: var(--text-3);
 }
 .dcbl-group__grid {
@@ -624,13 +1058,20 @@
   background: var(--c50);
   border: 1px solid var(--line);
   min-width: 0;
+  transition: transform 0.22s ease, border-color 0.22s ease, background-color 0.22s ease;
+}
+.dcbl-feat:hover {
+  transform: translateY(-3px);
+  border-color: var(--c300);
+  background: var(--white);
 }
 .dcbl-feat__icon {
-  width: 40px;
-  height: 40px;
-  border-radius: 12px;
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
   background: var(--c100);
   color: var(--c700);
+  border: 1px solid var(--c200);
   display: grid;
   place-items: center;
   flex: 0 0 auto;
@@ -642,9 +1083,9 @@
   min-width: 0;
 }
 .dcbl-feat__title {
-  font-weight: 700;
+  font-weight: 800;
   font-size: 16px;
-  letter-spacing: -0.01em;
+  letter-spacing: -0.015em;
   line-height: 1.3;
 }
 .dcbl-feat__text {
@@ -660,36 +1101,41 @@
 .dcbl-wa {
   position: relative;
   overflow: hidden;
-  background: linear-gradient(160deg, #121010 0%, #1f1612 100%);
+  background:
+    radial-gradient(60% 50% at 100% 0%, rgba(205, 148, 89, 0.24), transparent 60%),
+    linear-gradient(160deg, #141110 0%, #1f1612 100%);
   color: var(--cream);
-}
-.dcbl-wa::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background: radial-gradient(60% 50% at 100% 0%, rgba(205, 148, 89, 0.22), transparent 60%);
-  pointer-events: none;
 }
 .dcbl-wa__grid {
   position: relative;
   display: grid;
-  gap: 32px;
+  gap: 34px;
+}
+.dcbl-wa__points {
+  margin-top: 26px;
 }
 .dcbl-wa__points li {
   display: flex;
-  gap: 12px;
-  padding: 12px 0;
+  gap: 14px;
+  padding: 13px 0;
   border-top: 1px solid var(--line-dark);
 }
 .dcbl-wa__points li:first-child {
   border-top: 0;
 }
-.dcbl-wa__points svg {
-  color: var(--c400);
-  margin-top: 2px;
+.dcbl-wa__point-icon {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background: rgba(205, 148, 89, 0.12);
+  border: 1px solid rgba(205, 148, 89, 0.35);
+  color: var(--c300);
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
 }
 .dcbl-wa__point-title {
-  font-weight: 600;
+  font-weight: 700;
   font-size: 15.5px;
 }
 .dcbl-wa__point-body {
@@ -707,28 +1153,51 @@
   margin-top: 6px;
   align-self: flex-start;
 }
+/* El costo, impreso como recibo. */
 .dcbl-cost {
-  background: var(--cream);
+  position: relative;
+  background: var(--paper);
   color: var(--ink);
-  border-radius: 20px;
-  padding: 24px;
+  border-radius: 6px 6px 0 0;
+  padding: 26px 24px 34px;
   display: flex;
   flex-direction: column;
   gap: 12px;
   align-self: start;
+  -webkit-mask: conic-gradient(from -45deg at bottom, #0000, #000 1deg 89deg, #0000 90deg) 50% / 16px 100%;
+  mask: conic-gradient(from -45deg at bottom, #0000, #000 1deg 89deg, #0000 90deg) 50% / 16px 100%;
+  box-shadow: 0 40px 60px -40px rgba(0, 0, 0, 0.9);
+}
+.dcbl-cost::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image: var(--grain);
+  background-size: 180px 180px;
+  opacity: 0.06;
+  mix-blend-mode: multiply;
+  pointer-events: none;
+}
+.dcbl-cost > * {
+  position: relative;
 }
 .dcbl-cost__title {
-  font-family: var(--display);
-  font-weight: 700;
-  font-size: 22px;
-  letter-spacing: -0.015em;
+  font-weight: 800;
+  font-size: 23px;
+  letter-spacing: -0.03em;
+  line-height: 1.1;
+  padding-bottom: 12px;
+  border-bottom: 1px dashed rgba(20, 17, 16, 0.3);
 }
 .dcbl-cost__quotas li {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 9px;
   font-size: 15px;
-  padding: 4px 0;
+  font-weight: 600;
+  padding: 6px 0;
+  border-bottom: 1px dashed rgba(20, 17, 16, 0.18);
+  font-variant-numeric: tabular-nums;
 }
 .dcbl-cost__quotas svg {
   color: var(--c600);
@@ -738,22 +1207,26 @@
   color: var(--text-2);
 }
 .dcbl-cost__example {
-  font-family: var(--display);
-  font-weight: 700;
+  font-weight: 800;
   font-size: 20px;
   line-height: 1.25;
-  letter-spacing: -0.01em;
+  letter-spacing: -0.02em;
   color: var(--c700);
   padding: 12px 14px;
-  border-radius: 12px;
+  border-radius: 10px;
   background: var(--c100);
+  border: 1px solid var(--c200);
+  font-variant-numeric: tabular-nums;
 }
 .dcbl-cost__connect {
   font-size: 13px;
   color: var(--text-3);
 }
 
-/* ── Precios ────────────────────────────────────────────────────────── */
+/* ── Precios: el tablero ────────────────────────────────────────────── */
+.dcbl-pricing {
+  background: var(--cream);
+}
 .dcbl-plans {
   display: grid;
   gap: 18px;
@@ -761,97 +1234,143 @@
 }
 .dcbl-plan {
   position: relative;
+  overflow: hidden;
   background: var(--white);
   border: 1px solid var(--line);
   border-radius: 20px;
-  padding: 26px 22px 22px;
+  padding: 28px 24px 24px;
   display: flex;
   flex-direction: column;
   gap: 16px;
+  transition: transform 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease;
+}
+.dcbl-plan:hover {
+  transform: translateY(-5px);
+  border-color: var(--c400);
+  box-shadow: 0 34px 60px -36px rgba(94, 55, 32, 0.6);
 }
 .dcbl-plan--recommended {
-  border-color: var(--c500);
-  box-shadow: 0 24px 50px -28px rgba(162, 97, 47, 0.6);
+  border: 2px solid var(--c500);
+  box-shadow: 0 34px 64px -34px rgba(162, 97, 47, 0.7);
+  padding-top: 34px;
+}
+.dcbl-plan--recommended::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 6px;
+  background: repeating-linear-gradient(
+    -55deg,
+    var(--pole-red) 0 9px,
+    var(--pole-cream) 9px 18px,
+    var(--pole-navy) 18px 27px,
+    var(--pole-cream) 27px 36px
+  );
 }
 .dcbl-plan__flag {
   position: absolute;
-  top: -13px;
-  left: 20px;
+  top: 14px;
+  right: 16px;
   background: var(--c600);
   color: #fff;
-  font-family: var(--mono);
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
+  font-family: var(--sign);
+  font-size: 13.5px;
+  letter-spacing: 0.14em;
   text-transform: uppercase;
-  padding: 5px 10px;
-  border-radius: 999px;
+  line-height: 1;
+  padding: 7px 11px 5px;
+  border-radius: 4px;
+  box-shadow: 0 8px 18px -8px rgba(162, 97, 47, 0.9);
 }
 .dcbl-plan__name {
-  font-family: var(--display);
-  font-weight: 700;
-  font-size: 20px;
-  letter-spacing: -0.01em;
+  font-family: var(--sign);
+  font-weight: 400;
+  font-size: 26px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  line-height: 1;
+  color: var(--c800);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.dcbl-plan__name::after {
+  content: "";
+  flex: 1 1 auto;
+  height: 1px;
+  background: var(--c200);
 }
 .dcbl-plan__price {
   display: flex;
   align-items: baseline;
-  gap: 6px;
+  gap: 8px;
   flex-wrap: wrap;
 }
 .dcbl-plan__amount {
-  font-family: var(--display);
-  font-weight: 700;
-  font-size: 44px;
+  font-weight: 800;
+  font-size: 54px;
   line-height: 1;
-  letter-spacing: -0.03em;
+  letter-spacing: -0.04em;
+  font-variant-numeric: tabular-nums;
 }
 .dcbl-plan__per {
-  font-size: 14px;
+  font-size: 14.5px;
+  font-weight: 600;
   color: var(--text-3);
 }
 .dcbl-plan__promo {
+  margin-top: 8px;
   font-size: 13.5px;
-  font-weight: 600;
+  font-weight: 700;
   color: var(--c700);
+  background: var(--c100);
+  border: 1px solid var(--c200);
+  border-radius: 8px;
+  padding: 8px 10px;
 }
 .dcbl-plan__yearly {
+  margin-top: 6px;
   font-size: 13px;
   color: var(--text-3);
 }
 .dcbl-plan__limits {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 7px;
   padding-top: 14px;
   border-top: 1px solid var(--line);
 }
 .dcbl-plan__limits li {
   display: flex;
   align-items: center;
-  gap: 8px;
-  font-size: 14px;
-  font-weight: 500;
+  gap: 9px;
+  font-size: 14.5px;
+  font-weight: 600;
 }
 .dcbl-plan__limits svg {
   color: var(--c600);
 }
 .dcbl-plan__plus {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text-2);
+  font-family: var(--sign);
+  font-size: 14px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  line-height: 1;
+  color: var(--c700);
   padding-top: 14px;
   border-top: 1px solid var(--line);
 }
 .dcbl-plan__features {
   display: flex;
   flex-direction: column;
-  gap: 7px;
+  gap: 8px;
 }
 .dcbl-plan__features li {
   display: flex;
-  gap: 8px;
-  font-size: 14px;
+  gap: 9px;
+  font-size: 14.5px;
   color: var(--text-2);
   line-height: 1.4;
 }
@@ -860,25 +1379,35 @@
   margin-top: 2px;
 }
 .dcbl-nofees {
+  position: relative;
   margin-top: 28px;
   background: var(--ink);
   color: var(--cream);
   border-radius: 20px;
-  padding: 24px;
+  padding: 26px 24px;
   display: grid;
   gap: 14px;
+  border: 1px solid rgba(221, 181, 135, 0.4);
+  outline: 1px solid rgba(221, 181, 135, 0.16);
+  outline-offset: 5px;
 }
 .dcbl-nofees__title {
-  font-family: var(--display);
-  font-weight: 700;
-  font-size: 20px;
-  letter-spacing: -0.015em;
+  font-family: var(--sign);
+  font-weight: 400;
+  font-size: 24px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  line-height: 1;
+  color: var(--c300);
+  display: flex;
+  align-items: center;
+  gap: 12px;
 }
 .dcbl-nofees li {
   display: flex;
   gap: 10px;
   font-size: 14.5px;
-  color: rgba(250, 245, 238, 0.85);
+  color: rgba(250, 245, 238, 0.86);
   line-height: 1.45;
 }
 .dcbl-nofees svg {
@@ -894,17 +1423,19 @@
 
 /* ── Preguntas ──────────────────────────────────────────────────────── */
 .dcbl-faq {
-  max-width: 780px;
+  max-width: 800px;
   margin: 0 auto;
   display: flex;
   flex-direction: column;
   gap: 10px;
+  counter-reset: dcblFaq;
 }
 .dcbl-faq details {
   background: var(--white);
   border: 1px solid var(--line);
   border-radius: 14px;
   padding: 0 18px;
+  transition: border-color 0.2s ease;
 }
 .dcbl-faq details[open] {
   border-color: var(--c300);
@@ -914,15 +1445,27 @@
   cursor: pointer;
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: 14px;
   padding: 16px 0;
-  font-weight: 600;
+  font-weight: 700;
   font-size: 16px;
   line-height: 1.35;
+  counter-increment: dcblFaq;
 }
 .dcbl-faq summary::-webkit-details-marker {
   display: none;
+}
+.dcbl-faq summary::before {
+  content: counter(dcblFaq, decimal-leading-zero);
+  font-family: var(--sign);
+  font-size: 18px;
+  letter-spacing: 0.06em;
+  color: var(--c500);
+  line-height: 1;
+  min-width: 26px;
+}
+.dcbl-faq summary > span {
+  flex: 1 1 auto;
 }
 .dcbl-faq__icon {
   color: var(--c600);
@@ -932,35 +1475,53 @@
   transform: rotate(45deg);
 }
 .dcbl-faq__a {
-  padding: 0 0 18px;
+  padding: 0 0 18px 40px;
   font-size: 15px;
   line-height: 1.6;
   color: var(--text-2);
 }
 
-/* ── Cierre ─────────────────────────────────────────────────────────── */
+/* ── Cierre: el letrero ─────────────────────────────────────────────── */
 .dcbl-final {
   position: relative;
   overflow: hidden;
   background: var(--ink);
   color: var(--cream);
 }
-.dcbl-final::before {
+.dcbl-final::after {
   content: "";
   position: absolute;
   inset: 0;
-  background: radial-gradient(50% 60% at 50% 100%, rgba(190, 122, 60, 0.28), transparent 65%);
+  background: radial-gradient(50% 60% at 50% 100%, rgba(190, 122, 60, 0.3), transparent 65%);
   pointer-events: none;
 }
 .dcbl-final__box {
   position: relative;
+  z-index: 1;
   max-width: 820px;
   margin: 0 auto;
   text-align: center;
-  padding: 44px 22px;
+  padding: 52px 22px 44px;
   border-radius: 24px;
-  border: 1px solid rgba(205, 148, 89, 0.35);
-  background: rgba(250, 245, 238, 0.04);
+  border: 1px solid rgba(221, 181, 135, 0.5);
+  outline: 1px solid rgba(221, 181, 135, 0.18);
+  outline-offset: 7px;
+  background: rgba(250, 245, 238, 0.035);
+}
+.dcbl-final__seal {
+  position: absolute;
+  top: -22px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: var(--ink);
+  border: 1px solid rgba(221, 181, 135, 0.6);
+  color: var(--c300);
+  display: grid;
+  place-items: center;
+  box-shadow: 0 0 0 6px var(--ink);
 }
 .dcbl-final__body {
   margin: 16px auto 26px;
@@ -973,14 +1534,14 @@
 }
 .dcbl-final__login a {
   color: var(--c300);
-  font-weight: 600;
+  font-weight: 700;
   text-decoration: underline;
   text-underline-offset: 3px;
 }
 
 /* ── Pie ────────────────────────────────────────────────────────────── */
 .dcbl-footer {
-  background: #0d0b0b;
+  background: var(--ink-3);
   color: rgba(250, 245, 238, 0.75);
   padding: 40px 0 28px;
   font-size: 14px;
@@ -990,18 +1551,22 @@
   display: grid;
   gap: 26px;
 }
+.dcbl-footer .dcbl-brand__name {
+  color: var(--cream);
+}
 .dcbl-footer__tagline {
-  margin-top: 12px;
+  margin-top: 14px;
   max-width: 320px;
 }
 .dcbl-footer__col h3 {
-  font-family: var(--mono);
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.14em;
+  font-family: var(--sign);
+  font-weight: 400;
+  font-size: 14px;
+  letter-spacing: 0.2em;
   text-transform: uppercase;
+  line-height: 1;
   color: var(--c300);
-  margin-bottom: 10px;
+  margin-bottom: 12px;
 }
 .dcbl-footer__col li {
   padding: 4px 0;
@@ -1027,6 +1592,38 @@
   color: var(--cream);
 }
 
+/* ── Movimiento ─────────────────────────────────────────────────────── */
+/* Entrada de la portada: escalonada, una sola vez. El H1 y el lead NO. */
+@keyframes dcblUp {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+/* En móvil solo entran las dos burbujas de WhatsApp (.dcbl-enter-always):
+   nueve capas animadas en el primer pintado costaban ~75 ms observados
+   (×4 en Lighthouse móvil). El resto de la entrada se enciende a 720px. */
+.dcbl-enter-always {
+  animation: dcblUp 0.7s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+  animation-delay: var(--d, 0ms);
+}
+/* Aparición al hacer scroll (reveal.tsx): el JS pone el estado inicial y
+   lo quita al entrar en pantalla. Sin JS, todo se ve. */
+.dcbl-reveal-init {
+  opacity: 0;
+  transform: translateY(20px);
+}
+.dcbl-reveal-on {
+  opacity: 1;
+  transform: none;
+  transition: opacity 0.65s ease, transform 0.65s ease;
+  transition-delay: var(--rd, 0ms);
+}
+
 /* ── Responsive (por ancho del contenedor .dcbl) ───────────────────── */
 @container dcbl (min-width: 480px) {
   .dcbl-nav__login {
@@ -1042,12 +1639,14 @@
   }
   .dcbl-hero__cta .dcbl-btn {
     flex: 0 0 auto;
+    padding: 0 28px;
   }
   .dcbl-stage {
-    grid-template-columns: 1.1fr 0.9fr;
+    --pole-w: 70px;
+    gap: 14px;
     grid-template-areas:
-      "wa agenda"
-      "wa ticket";
+      "pole wa wa"
+      "pole agenda ticket";
   }
 }
 @container dcbl (min-width: 640px) {
@@ -1059,6 +1658,7 @@
   }
   .dcbl-nofees {
     grid-template-columns: 1fr 1fr;
+    gap: 16px 28px;
   }
   .dcbl-nofees__title {
     grid-column: 1 / -1;
@@ -1069,21 +1669,51 @@
     padding: 0 32px;
   }
   .dcbl-section {
-    padding: 88px 0;
+    padding: 92px 0;
   }
   .dcbl-section--tight {
     padding-top: 64px;
   }
   .dcbl-hero {
-    padding: 72px 0 84px;
+    padding: 64px 0 76px;
+  }
+  .dcbl-hero__floor,
+  .dcbl-hero__glow,
+  .dcbl-hero__grain,
+  .dcbl-grain::before {
+    display: block;
+  }
+  .dcbl-enter {
+    animation: dcblUp 0.7s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+    animation-delay: var(--d, 0ms);
+  }
+  .dcbl-card {
+    box-shadow: 0 30px 50px -30px rgba(0, 0, 0, 0.8);
+  }
+  .dcbl-plate {
+    font-size: 15px;
+    letter-spacing: 0.16em;
   }
   .dcbl-footer__grid {
     grid-template-columns: 1.4fr 1fr 1fr;
+  }
+  .dcbl-card {
+    padding: 16px;
+  }
+  .dcbl-cost {
+    padding: 30px 28px 38px;
   }
 }
 @container dcbl (min-width: 840px) {
   .dcbl-plans {
     grid-template-columns: repeat(3, 1fr);
+    align-items: stretch;
+  }
+  .dcbl-plan--recommended {
+    transform: translateY(-10px);
+  }
+  .dcbl-plan--recommended:hover {
+    transform: translateY(-15px);
   }
   .dcbl-nofees {
     grid-template-columns: repeat(4, 1fr);
@@ -1093,25 +1723,39 @@
   .dcbl-nav__links {
     display: flex;
     align-items: center;
-    gap: 22px;
-    margin-left: 26px;
+    gap: 24px;
+    margin-left: 30px;
   }
   .dcbl-wa__grid {
     grid-template-columns: 1.1fr 0.9fr;
-    gap: 48px;
+    gap: 52px;
     align-items: start;
   }
 }
 @container dcbl (min-width: 1000px) {
+  .dcbl-hero {
+    padding: 72px 0 84px;
+  }
   .dcbl-hero__grid {
     grid-template-columns: 1.05fr 0.95fr;
     align-items: center;
-    gap: 48px;
+    gap: 52px;
+  }
+  .dcbl-stage {
+    --pole-w: 84px;
+    gap: 16px;
+  }
+  .dcbl-problem__grid {
+    grid-template-columns: repeat(4, 1fr);
   }
   .dcbl-group {
-    grid-template-columns: 260px 1fr;
-    gap: 32px;
-    padding: 40px 0;
+    grid-template-columns: 280px 1fr;
+    gap: 44px;
+    padding: 44px 0;
+  }
+  .dcbl-group__head {
+    position: sticky;
+    top: 96px;
   }
   .dcbl-group__grid {
     grid-template-columns: 1fr 1fr;
@@ -1119,19 +1763,46 @@
 }
 @container dcbl (min-width: 1080px) {
   .dcbl-section {
-    padding: 104px 0;
+    padding: 108px 0;
   }
   .dcbl-section--tight {
     padding-top: 72px;
   }
 }
 
+/* ── Sin movimiento: nada se mueve ──────────────────────────────────── */
 @media (prefers-reduced-motion: reduce) {
-  .dcbl-btn,
+  .dcbl *,
+  .dcbl *::before,
+  .dcbl *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    animation-delay: 0ms !important;
+    transition-duration: 0.01ms !important;
+    transition-delay: 0ms !important;
+  }
+  .dcbl-pole__stripes {
+    animation: none !important;
+    transform: none !important;
+  }
+  .dcbl-enter,
+  .dcbl-enter-always {
+    animation: none !important;
+    opacity: 1;
+    transform: none;
+  }
+  .dcbl-reveal-init {
+    opacity: 1;
+    transform: none;
+  }
+  .dcbl-btn:hover,
+  .dcbl-pcard:hover,
+  .dcbl-feat:hover,
+  .dcbl-plan:hover,
+  .dcbl-plan--recommended:hover {
+    transform: none;
+  }
   .dcbl-faq__icon {
     transition: none;
-  }
-  .dcbl-btn:hover {
-    transform: none;
   }
 }

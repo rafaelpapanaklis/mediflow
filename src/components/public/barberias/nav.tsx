@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { Scissors } from "lucide-react";
 import type { TFunction } from "@/i18n/t";
 import {
   BARBER_LANDING_ANCHORS,
@@ -8,10 +7,23 @@ import {
   BARBER_REGISTER_PATH,
 } from "@/lib/barber/marketing";
 
+/** "DaleControl" con el "Dale" en caramelo, como el wordmark del sitio. */
+export function BrandName({ brand }: { brand: string }) {
+  const cut = brand.indexOf("Control");
+  if (cut <= 0) return <>{brand}</>;
+  return (
+    <>
+      <em>{brand.slice(0, cut)}</em>
+      {brand.slice(cut)}
+    </>
+  );
+}
+
 /**
  * Barra pegajosa. Server component: sin menú hamburguesa a propósito — en
  * móvil quedan la marca y los dos botones que importan (entrar / empezar),
- * y las anclas aparecen a partir de 900px de ancho del contenedor.
+ * y las anclas aparecen a partir de 900px de ancho del contenedor. Debajo,
+ * la cinta del poste (3px) es la firma del vertical.
  */
 export function BarberLandingNav({ t }: { t: TFunction }) {
   const a = BARBER_LANDING_ANCHORS;
@@ -23,11 +35,11 @@ export function BarberLandingNav({ t }: { t: TFunction }) {
           className="dcbl-brand"
           aria-label={`${t("nav.brand")} ${t("nav.vertical")}`}
         >
-          <span className="dcbl-brand__glyph" aria-hidden="true">
-            <Scissors size={18} />
-          </span>
+          <span className="dcbl-mark" aria-hidden="true" />
           <span className="dcbl-brand__text" aria-hidden="true">
-            <span className="dcbl-brand__name">{t("nav.brand")}</span>
+            <span className="dcbl-brand__name">
+              <BrandName brand={t("nav.brand")} />
+            </span>
             <span className="dcbl-brand__tag">{t("nav.vertical")}</span>
           </span>
         </Link>
@@ -49,6 +61,7 @@ export function BarberLandingNav({ t }: { t: TFunction }) {
           </Link>
         </div>
       </div>
+      <div className="dcbl-tape" aria-hidden="true" />
     </header>
   );
 }

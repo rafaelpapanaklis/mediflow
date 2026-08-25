@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { Bebas_Neue, Inter } from "next/font/google";
 import { getBarberDict } from "@/i18n/dictionaries/barber";
 import { makeBarberT } from "@/lib/barber/i18n";
 import { getBarberPlans } from "@/lib/barber/plans";
@@ -28,6 +29,7 @@ import { BarberPricing } from "@/components/public/barberias/pricing";
 import { BarberFaq, type BarberFaqItem } from "@/components/public/barberias/faq";
 import { BarberFinalCta } from "@/components/public/barberias/final-cta";
 import { BarberFooter } from "@/components/public/barberias/footer";
+import { BarberReveal } from "@/components/public/barberias/reveal";
 import "@/components/public/barberias/barberias.css";
 
 /* ═══════════════════════════════════════════════════════════════════════
@@ -46,12 +48,40 @@ import "@/components/public/barberias/barberias.css";
    lee cookies ni searchParams (volvería dinámica la ruta y perdería el HTML
    pre-renderizado que le da el LCP y el CLS 0).
 
+   ── TIPOGRAFÍA: LA MISMA QUE EL RESTO DEL SITIO PÚBLICO ───────────────
+   La landing dental (src/app/page.tsx) y todas las páginas públicas cargan
+   Inter por página con next/font y la fijan en su raíz; el layout raíz
+   solo aporta IBM Plex (el panel) y Hanken (el wordmark). Aquí se hace lo
+   mismo: Inter en los mismos pesos que el home (400–800, mismos archivos →
+   misma caché) y, como voz propia del vertical, Bebas Neue para letreros e
+   insignias. Los archivos se autoalojan en /_next/static/media y se
+   precargan; display: fallback (ver abajo por qué no swap).
+
    ── IDIOMA ────────────────────────────────────────────────────────────
    El diccionario existe en es y en (barber.landing.*), pero la página pinta
    es-MX: una superficie pública no tiene de dónde leer el locale (no hay
    sesión) y leer Accept-Language la volvería dinámica. Mismo criterio que
    las páginas públicas del dental.
    ═══════════════════════════════════════════════════════════════════════ */
+
+// display: "fallback" y no "swap": 100 ms de bloqueo y luego, si la fuente
+// no llegó, el respaldo ajustado. En la práctica el archivo (precargado,
+// 50 KB) ya está cuando se pinta el primer frame y el H1 nace en Inter: sin
+// el re-layout del swap ni el salto de líneas que daba CLS 0.18 en móvil.
+const inter = Inter({
+  subsets: ["latin"],
+  weight: ["400", "600", "700", "800"],
+  variable: "--font-inter",
+  display: "fallback",
+});
+
+// Letrero de barbería: un solo peso, solo para etiquetas e insignias.
+const sign = Bebas_Neue({
+  subsets: ["latin"],
+  weight: "400",
+  variable: "--font-sign",
+  display: "fallback",
+});
 
 export const revalidate = 600;
 
@@ -186,7 +216,7 @@ export default async function BarberiasLandingPage() {
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: serializeBarberJsonLd(jsonLd) }}
       />
-      <div className="dcbl">
+      <div className={`dcbl ${inter.variable} ${sign.variable}`}>
         <BarberLandingNav t={t} />
         <main>
           <BarberHero t={t} from={from} />
@@ -198,6 +228,7 @@ export default async function BarberiasLandingPage() {
           <BarberFinalCta t={t} />
         </main>
         <BarberFooter t={t} year={new Date().getFullYear()} />
+        <BarberReveal />
       </div>
     </>
   );

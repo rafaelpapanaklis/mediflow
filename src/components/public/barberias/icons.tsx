@@ -1,5 +1,4 @@
 import {
-  Armchair,
   Bell,
   Bot,
   Calculator,
@@ -17,13 +16,11 @@ import {
   LifeBuoy,
   Megaphone,
   MessageCircle,
-  NotebookPen,
   Package,
   Percent,
   Printer,
   QrCode,
   Receipt,
-  Scissors,
   ShieldCheck,
   Smartphone,
   Store,
@@ -34,13 +31,15 @@ import {
   Wallet,
   type LucideIcon,
 } from "lucide-react";
+import { OficioLibreta, OficioSilla, OficioTijeras } from "./oficio";
 
 /**
- * Nombre (el que guarda src/lib/barber/marketing.ts) → icono de lucide.
- * Un nombre desconocido cae a las tijeras, nunca a un hueco.
+ * Nombre (el que guarda src/lib/barber/marketing.ts) → icono. Los objetos
+ * del oficio (tijeras, silla, libreta) van dibujados a mano en oficio.tsx;
+ * el resto son lucide. Un nombre desconocido cae a las tijeras, nunca a un
+ * hueco.
  */
-const ICONS: Record<string, LucideIcon> = {
-  armchair: Armchair,
+const LUCIDE: Record<string, LucideIcon> = {
   bell: Bell,
   bot: Bot,
   calculator: Calculator,
@@ -58,13 +57,11 @@ const ICONS: Record<string, LucideIcon> = {
   "life-buoy": LifeBuoy,
   megaphone: Megaphone,
   "message-circle": MessageCircle,
-  "notebook-pen": NotebookPen,
   package: Package,
   percent: Percent,
   printer: Printer,
   "qr-code": QrCode,
   receipt: Receipt,
-  scissors: Scissors,
   "shield-check": ShieldCheck,
   smartphone: Smartphone,
   store: Store,
@@ -76,6 +73,10 @@ const ICONS: Record<string, LucideIcon> = {
 };
 
 export function LandingIcon({ name, size = 20 }: { name: string; size?: number }) {
-  const Icon = ICONS[name] ?? Scissors;
+  if (name === "scissors") return <OficioTijeras size={size} />;
+  if (name === "armchair") return <OficioSilla size={size} />;
+  if (name === "notebook-pen") return <OficioLibreta size={size} />;
+  const Icon = LUCIDE[name];
+  if (!Icon) return <OficioTijeras size={size} />;
   return <Icon size={size} aria-hidden="true" />;
 }
