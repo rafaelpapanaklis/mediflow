@@ -17,6 +17,12 @@ import { notFound } from "next/navigation";
 import { buildMetadata, SITE_URL } from "@/lib/seo";
 import { getBarberT } from "@/i18n/dictionaries/barber";
 import { getBarberPlans } from "@/lib/barber/plans";
+import { barberComparativaLd } from "@/lib/barber/seo";
+import {
+  BARBER_PRODUCT_NAME,
+  activeBarberPlans,
+  serializeBarberJsonLd,
+} from "@/lib/barber/marketing";
 import {
   COMPETIDOR_SLUGS,
   REVISADO_EL_TEXTO,
@@ -87,8 +93,33 @@ export default async function CompararCompetidorPage({ params }: PageProps) {
 
   const planes = await getBarberPlans();
 
+  // JSON-LD: el producto con el rango REAL de precios (de la tabla) y las
+  // migas landing -> índice -> esta comparativa. Nunca un tipo de negocio:
+  // aquí se habla del software, no de una barbería.
+  const jsonLd = barberComparativaLd({
+    producto: BARBER_PRODUCT_NAME,
+    // La descripción de ESTA página, no `competidor.resumen`: ese texto
+    // describe al competidor, y colgárselo a un nodo que se llama
+    // "DaleControl Barber" le diría a Google que somos ellos.
+    descripcion: t("barber.comparar.meta.competidorDescription", {
+      competidor: competidor.nombre,
+      fecha: REVISADO_EL_TEXTO,
+    }),
+    path: `${RUTA_INDICE}/${competidor.slug}`,
+    precios: activeBarberPlans(planes).map((p) => p.priceMonthly),
+    migas: [
+      { name: BARBER_PRODUCT_NAME, path: "/barberias" },
+      { name: t("barber.comparar.indice.h1"), path: RUTA_INDICE },
+      { name: competidor.nombre, path: `${RUTA_INDICE}/${competidor.slug}` },
+    ],
+  });
+
   return (
     <>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: serializeBarberJsonLd(jsonLd) }}
+      />
       <Encabezado
         kicker={t("barber.comparar.pagina.kicker")}
         titulo={t("barber.comparar.pagina.h1", { competidor: competidor.nombre })}

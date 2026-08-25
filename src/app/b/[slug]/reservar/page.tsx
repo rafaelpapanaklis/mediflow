@@ -40,7 +40,20 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   return {
     title: t("barber.reserva.meta.title", { shop: shop.name }),
     description: t("barber.reserva.meta.description", { shop: shop.name }),
-    robots: { index: true, follow: true },
+    // noindex, follow — decidido en la ola de SEO del vertical.
+    //
+    // Esta pantalla es contenido CALCADO de /b/<slug>: los mismos servicios,
+    // los mismos barberos, el mismo negocio. Indexarla pone a la barbería a
+    // competir contra su propia página en Google (y la que gana la pelea
+    // suele ser la peor de las dos para convertir: un formulario sin fotos,
+    // sin horario y sin reseñas). Además se sirve force-dynamic, así que
+    // cada visita del robot es una lectura de la base que no vende nada.
+    //
+    // `follow` sí: el robot llega, no la indexa, y sigue los enlaces hacia
+    // /b/<slug>, que es la página que SÍ queremos posicionada. Por eso el
+    // noindex vive aquí y no en un Disallow de robots.txt: un Disallow
+    // impediría rastrear la página y, con ella, LEER este noindex.
+    robots: { index: false, follow: true },
     openGraph: {
       title: t("barber.reserva.meta.title", { shop: shop.name }),
       description: t("barber.reserva.meta.description", { shop: shop.name }),

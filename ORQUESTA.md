@@ -15412,3 +15412,527 @@ error, es el gemelo que el `index.ts` exige.
 (5) Pre-existente, NO mío: `src/lib/barber/__tests__/i18n-alcance.test.ts` tira
 dos `TS2802` (iterar un `Set` sin `downlevelIteration`) en `tsc --noEmit`. No
 rompe `npm run build` (Next no typechequea los tests). Está fuera de mi allowlist.
+## [Barber SEO] — Google ya puede encontrar el vertical: sitemap propio, la mini-web de cada barbería indexable, y lo privado fuera ✅ (2026-08-24)
+
+Sin esto, la landing y las comparativas que construyen las otras dos terminales
+existen pero no las encuentra nadie, y las páginas de las barberías tampoco.
+Ahora `/sitemap.xml` incluye el vertical, cada mini-web se anuncia sola en cuanto
+la barbería paga, y las tres superficies privadas están explícitamente fuera.
+
+**5 archivos: 3 nuevos del vertical, 1 línea de metadatos en la reserva pública,
+y 1 compartido (`src/app/sitemap.ts`) — ese con 43 líneas añadidas y CERO
+borradas.**
+
+═══════════════════════════════════════════════════════════════════════════
+▶ EL ARCHIVO COMPARTIDO: `src/app/sitemap.ts`
+═══════════════════════════════════════════════════════════════════════════
+
+Este archivo es del dental y está VIVO en producción. El diff COMPLETO:
+
+```diff
+@@ -8,6 +8,9 @@ import { listPublishedForSitemap } from "@/lib/blog/queries";
+ import { CASOS_DE_USO, CASOS_PUBLISHED_AT } from "@/lib/casos/data";
+ import { HERRAMIENTAS, HERRAMIENTAS_PUBLISHED_AT } from "@/lib/herramientas/data";
+ import { PRODUCTO_SLUGS } from "@/lib/producto/data";
++// Vertical BARBER. Ver el bloque ADITIVO al final de la función.
++import { barberStaticSitemapPaths } from "@/lib/barber/seo";
++import { getBarberWebSitemapEntries } from "@/lib/barber/seo-query";
+
+ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
+   const now = new Date();
+@@ -116,6 +119,44 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
+     blogPostEntries = [];
+   }
+
++  // ════════════════════════════════════════════════════════════════════
++  // VERTICAL BARBER (DaleControl Barber) — bloque ADITIVO.
++  //
++  // Nada de lo de arriba cambia: el dental está VIVO en producción y este
++  // sitemap es suyo. Las dos listas de abajo se añaden al final del return y
++  // ninguna puede tumbarlo: las dos caen a [] ante cualquier fallo, igual que
++  // los bloques de clínicas y blog.
++  //
++  // Qué entra y qué NO (y por qué) está documentado en src/lib/barber/seo.ts.
++  // ════════════════════════════════════════════════════════════════════
++
++  // Landing del vertical + comparativas. Data ESTÁTICA, sin DB (siempre
++  // segura). El registro de comparativas vive en src/lib/barber/seo.ts:
++  // publicar una comparativa nueva NO vuelve a tocar este archivo compartido.
++  const barberStaticEntries: MetadataRoute.Sitemap = barberStaticSitemapPaths().map((r) => ({
++    url: `${SITE_URL}${r.path}`,
++    lastModified: now,
++    changeFrequency: r.changeFrequency,
++    priority: r.priority,
++  }));
++
++  // Mini-webs de barbería /b/<slug> (DB, cap 5000). Solo barberías activas,
++  // con la suscripción al corriente y su página NO apagada: una barbería que
++  // apagó su web se sirve con noindex y un sitemap jamás debe listarla.
++  // En build sin DATABASE_URL → [].
++  let barberWebEntries: MetadataRoute.Sitemap = [];
++  try {
++    const webs = await getBarberWebSitemapEntries();
++    barberWebEntries = webs.map((w) => ({
++      url: `${SITE_URL}${w.path}`,
++      lastModified: w.lastModified,
++      changeFrequency: "weekly",
++      priority: 0.5,
++    }));
++  } catch {
++    barberWebEntries = [];
++  }
++
+   return [
+     ...staticEntries,
+@@ -127,5 +168,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
+     ...blogPostEntries,
+     ...casoEntries,
+     ...herramientaEntries,
++    ...barberStaticEntries,
++    ...barberWebEntries,
+   ];
+ }
+```
+
+**La prueba mecánica de que el dental no cambió:** `git diff --stat` dice
+`1 file changed, 43 insertions(+)`. **Cero borrados y cero modificados** — no hay
+una sola línea del dental tocada, ni siquiera reordenada. Las diez listas del
+dental salen del `return` en el mismo orden que antes; las dos de barber van
+DETRÁS, así que ni el orden de las URLs del dental cambia.
+
+**Tres decisiones del bloque, y por qué:**
+
+1. **Los dos `try/catch` y el `[]`.** Copia literal del criterio que ya usan
+   `clinicEntries` y `blogPostEntries`. Si el vertical barber reventara, el
+   sitemap del dental sale intacto. `getBarberWebSitemapEntries` además ya no
+   lanza nunca por dentro: el `try` de aquí es el segundo cinturón.
+
+2. **Las prioridades salen del criterio del dental, no inventadas.** La landing
+   vale `0.9` porque es lo que valen sus hermanas de intención comercial
+   (`/software-agenda-dental` y compañía). Las comparativas valen `0.7`, como
+   `/casos-de-uso/*`. Cada mini-web vale `0.5`, exactamente lo que vale la
+   landing pública de una clínica.
+
+3. **El registro de comparativas NO vive aquí.** Vive en
+   `src/lib/barber/seo.ts`. Es deliberado: publicar la comparativa número 12 no
+   debe obligar a nadie a volver a abrir un archivo compartido del dental. Este
+   archivo se toca UNA vez —hoy— y ya no se vuelve a tocar por el vertical.
+
+═══════════════════════════════════════════════════════════════════════════
+▶ QUÉ SE INDEXA Y QUÉ NO — decisión por decisión
+═══════════════════════════════════════════════════════════════════════════
+
+| ruta | ¿sitemap? | ¿meta robots? | por qué |
+|---|---|---|---|
+| `/barberias` | **SÍ** | index | La landing del producto. Es la puerta comercial del vertical. |
+| `/barberias/comparar/*` | **SÍ** (registro) | index | Contenido editorial de intención de compra, igual que `/casos-de-uso/*`. |
+| `/b/<slug>` | **SÍ** | index | **Es lo que le vendemos a la barbería**: para muchas es su único sitio y lo que ponen en la bio de Instagram. |
+| `/b/<slug>` apagada | **NO** | **noindex** | La dueña apagó su web a propósito. Ya salía con `noindex`; ahora tampoco se anuncia. |
+| `/b/<slug>/reservar` | **NO** | **noindex, follow** ← *cambiado* | Ver abajo. |
+| `/b/<slug>/mi-cuenta` | **NO** | noindex | Portal del cliente: historial de visitas y datos personales de una persona. Nunca en un buscador. |
+| `/barber/fila/<slug>` | **NO** | noindex | La fila virtual es efímera por definición: cambia cada pocos minutos y no significa nada fuera del local. Indexarla es publicar un dato caduco. |
+| `/barber/**` (panel) | **NO** | redirige a `/login` | Equivalente de `/dashboard`. Todo pide sesión; `/barber/registro` además ya declaraba `noindex`. |
+
+**El único cambio de criterio: `/b/<slug>/reservar` pasa de `index:true` a
+`noindex, follow`.** Estaba en `index` y creo que es un error, por tres razones:
+es contenido CALCADO de `/b/<slug>` (mismos servicios, mismos barberos), así que
+pone a la barbería a competir contra su propia página — y la que suele ganar esa
+pelea es la peor de las dos para convertir, un formulario sin fotos ni reseñas;
+se sirve `force-dynamic`, así que cada visita del robot es una lectura de la base
+que no vende nada; y el dental aplica exactamente este criterio a su `/reservar`
+(está en el `Disallow` de su `robots.txt`). El `follow` se queda: el robot entra,
+no la indexa, y sigue los enlaces hacia `/b/<slug>`, que es la que sí queremos
+posicionada. **1 línea de metadatos + su comentario, dentro de mi allowlist.**
+
+**Por qué NADA de esto se resolvió tocando `robots.txt`:** un `Disallow` impide
+RASTREAR la página y, por tanto, impide LEER el `noindex`. Una URL ya indexada se
+quedaría dentro para siempre. El `noindex` en los metadatos es lo que de verdad
+las saca. (Y además `src/app/robots.ts` no está en la lista COMPARTIDA del
+guardia, así que declararlo no lo habría indultado — misma pared que se encontró
+la ola de i18n con `package.json`.)
+
+═══════════════════════════════════════════════════════════════════════════
+▶ QUIÉN ENTRA AL SITEMAP: la regla, y las dos trampas que tiene
+═══════════════════════════════════════════════════════════════════════════
+
+`getBarberWebSitemapEntries` (`src/lib/barber/seo-query.ts`) publica la barbería
+que cumple TRES cosas: `isActive`, suscripción viva, y su página no apagada.
+
+**Trampa 1 — `publishedAt` NO sirve como llave, y usarlo habría borrado al plan
+Básico entero.** El encargo decía "su página publicada" y lo natural es filtrar
+por `publishedAt != null`. Sería un error: una barbería del plan Básico **no
+tiene editor**, así que nunca tendrá fila en `barber_landing_configs` y su
+`publishedAt` es null para siempre — y aun así **su página está viva**, con
+plantilla clásica y sus servicios y barberos reales (es justo lo que se le
+vende). Además, ni siquiera en Profesional hay separación borrador/publicado:
+`cargarBarberWeb` pinta el `config` actual mire lo que mire `publishedAt`. La
+llave real de "apagada" es `config.oculta`, que es lo que la página ya usa para
+decidir su propio `noindex`. `publishedAt` se aprovecha para otra cosa: es la
+mejor fecha de `lastModified` cuando existe.
+
+**Trampa 2 — el registro público minta páginas indexadas gratis.** Esto NO estaba
+en el encargo y lo añadí a propósito. `/barber/registro` es un formulario
+público, y `Barbershop.isActive` nace en `true` con
+`subscriptionStatus = "pending_payment"`. Con la regla literal (`isActive` + no
+apagada), **cualquiera que rellene el registro y no pague nunca obtiene una
+página indexada en dalecontrol.com, y el sitemap se la estaría entregando a
+Google en bandeja.** Un padrón de registros basura publicados desde el dominio
+principal es un problema del dominio, no de una barbería. Así que el `where`
+exige suscripción viva usando el punto ÚNICO del repo,
+`BARBER_ACTIVE_SUBSCRIPTION_STATUSES` (`active | trialing | paid`) — el mismo
+criterio con el que el panel decide si la cuenta está al corriente, y el mismo
+espíritu del `visibilityWhere()` del dental.
+▶ **Consecuencia que hay que saber:** una barbería en `past_due` sale del sitemap
+hasta que pague. **No se des-indexa** —su página sigue viva y sigue siendo
+`index,follow`—, solo se deja de re-anunciar. Si prefieres que el cobro no toque
+el SEO, se borra la línea `subscriptionStatus` del `where` y vuelve el criterio
+literal del encargo.
+
+**Detalles de implementación que importan:**
+
+- **Jamás se lee la columna `config` (jsonb).** Tiene la galería, las reseñas y
+  toda la copia del editor: traerla para miles de barberías serían megabytes por
+  cada petición del sitemap. Lo único que hace falta de ella es un booleano, y
+  ese se resuelve DENTRO de Postgres con
+  `where: { config: { path: ["oculta"], equals: true } }` — el mismo filtro por
+  ruta de json que ya usa el repo en el webhook de WhatsApp y en
+  `sidebar-counts`. Viajan solo los ids de las apagadas.
+- **`equals: true` es estricto**, igual que `normalizarConfigBarberWeb`
+  (`o.oculta === true`): un `"true"` de texto o un `1` NO apagan la página, ni
+  aquí ni allá. Las dos superficies dicen lo mismo.
+- **`select` explícito de tres columnas.** La fila `barber_shops` tiene
+  `whatsappToken`, `stripeCustomerId`, `email` y `phoneNumberId`. Aquí solo se
+  piden `id`, `slug` y `updatedAt`, y lo único que sale al mundo es la URL.
+- **La tabla puede no existir.** `sql/barber_complemento.sql` no está aplicado en
+  todos los entornos. Se trata igual que en `shop-data.ts`: `P2021`/`P2010` →
+  nadie ha podido apagar nada → todas las páginas activas entran.
+- **Y falla CERRADO.** Si la lectura de configuraciones revienta por un motivo
+  que NO sea "la tabla no existe", no se publica ninguna mini-web. Publicarlas
+  sin poder comprobar cuáles están apagadas sería filtrarle al buscador justo las
+  páginas que su dueña pidió esconder.
+
+═══════════════════════════════════════════════════════════════════════════
+▶ DATOS ESTRUCTURADOS
+═══════════════════════════════════════════════════════════════════════════
+
+**La mini-web ya venía bien de la ola [T8 - Barber Mi Web]** y lo verifiqué en
+vez de darlo por bueno: `src/app/b/[slug]/_shared/seo.ts` genera
+`HealthAndBeautyBusiness` con `address` (PostalAddress), `telephone`,
+`openingHoursSpecification`, `priceRange` y catálogo de servicios. Salida real
+con datos de ejemplo (3 servicios, 2 días abiertos):
+
+```json
+{ "@context": "https://schema.org", "@type": "HealthAndBeautyBusiness",
+  "name": "Fade Centro", "telephone": "+52 55 1234 5678",
+  "address": { "@type": "PostalAddress", "streetAddress": "Av. Juárez 100",
+               "addressLocality": "Monterrey", "addressRegion": "Nuevo León",
+               "addressCountry": "MX" },
+  "openingHoursSpecification": [ … 2 días … ], "priceRange": "$120 – $260" }
+```
+
+Comprobado: parsea como JSON, `@type` es exactamente
+`HealthAndBeautyBusiness`, y **cero** apariciones de `MedicalBusiness`,
+`MedicalClinic`, `MedicalOrganization`, `MedicalSpecialty`, `Dentist`,
+`Physician` ni `Hospital`. Una barbería no es un negocio médico y Google trata
+la salud con criterios más duros y otra intención de búsqueda.
+
+**Lo que aporté (`src/lib/barber/seo.ts`), listo para que lo importen las otras
+dos terminales:** `barberSoftwareApplicationLd()` produce el
+`SoftwareApplication` de la landing y las comparativas, con `AggregateOffer` en
+MXN (`199.00`–`749.00`, del seed de `FALLBACK_BARBER_PLAN_CONFIG`; acepta los
+precios reales de `getBarberPlans()` si quien llama ya los tiene) y
+`applicationSubCategory`, que es lo que separa esto del software dental a ojos de
+Google. Más `barberBreadcrumbLd()` para las comparativas, que cuelgan de la
+landing.
+
+▶ **Ojo al detalle que sí importa:** la landing es `SoftwareApplication`, **no**
+`HealthAndBeautyBusiness`. El negocio es la barbería; nosotros somos el software
+que le vendemos. Hay una prueba que lo vigila.
+
+▶ **`serializarJsonLdBarber` escapa todo "menor que" a su escape unicode.** No es
+cosmética: si mañana entra un texto editable en ese JSON (el nombre de una
+barbería, el de un competidor en una comparativa), una cadena con `</script>`
+cerraría la etiqueta y ejecutaría lo que quisiera en una página pública y
+cacheada. Hay prueba con la cadena venenosa.
+
+═══════════════════════════════════════════════════════════════════════════
+▶ EL DIRECTORIO `/descubre` — NO se conectó, y no es pereza
+═══════════════════════════════════════════════════════════════════════════
+
+**Conclusión: es imposible sin modificar código del dental, así que queda para
+tu decisión.** La razón es de datos, no de UI:
+
+- **Una barbería no es una fila de `Clinic`.** El modelo `Barbershop`
+  (`barber_shops`) **no tiene FK ni relación con `Clinic`** — lo único que
+  menciona a `Clinic` en las 79 líneas del modelo es un comentario sobre
+  `teamSize`.
+- **Todo `/descubre` lee `prisma.clinic`**: `visibilityWhere()`,
+  `queryDirectoryClinics()`, `getCategoryCityCombos()`, `getListedClinicSlugs()`.
+  Una barbería es literalmente invisible para esas consultas.
+- **Las 17 categorías son el espejo del enum `ClinicCategory`.** Hay
+  `HAIR_SALON` y `BEAUTY_CENTER`, pero no hay `BARBERSHOP` — y aunque se
+  reciclara una, seguiría sin haber fila que devolver.
+- **El shape público `DirectoryClinic` es dental**: trae `users[]` con
+  `specialty`, `landingServices`, reseñas por clínica.
+
+Conectarlas obligaría a tocar **7 archivos vivos del dental**:
+`src/lib/directory/query.ts`, `types.ts`, `booking-state.ts`,
+`src/app/descubre/clinica/[slug]/page.tsx` y las 3 rutas
+`/api/directory/{clinics,cities,reviews}` — más el enum de Prisma. Mi contrato
+dice que si implica modificar código compartido del dental, no lo haga. **No lo
+hice.**
+
+▶ **Si lo quieres, la vía barata (sin tocar el dental) es un directorio propio
+del vertical**: `/barberias/directorio` leyendo `barber_shops` con el mismo
+criterio del sitemap. Reutiliza la capa que ya dejé y no roza una línea dental.
+Es una ola aparte; dilo y se hace.
+
+═══════════════════════════════════════════════════════════════════════════
+▶ RENDIMIENTO DE LAS MINI-WEBS (auditoría, sin cambios)
+═══════════════════════════════════════════════════════════════════════════
+
+Revisado y **ya estaba bien**; no toqué nada porque no había nada que arreglar:
+
+- **ISR confirmado en el build**: `/b/[slug]` sale como `●` (SSG con
+  `revalidate = 300`), no como `ƒ`. Con `generateStaticParams` devolviendo `[]`
+  no se prerenderiza nada en el build —son miles de slugs desconocidos— pero cada
+  uno se cachea en su primera visita. Y `/api/barber/landing` llama a
+  `revalidatePath("/b/<slug>")` en cada guardado, así que la barbería ve su
+  cambio al instante.
+- **Imágenes**: `loading="lazy"` + `decoding="async"` en todas menos la portada,
+  que va `eager` por ser el LCP. Correcto: diferir el LCP lo empeora.
+- **Sin desplazamiento horizontal**: la raíz `.dcbw` lleva `overflow-x: clip`
+  (no `hidden` — con el eje Y en `visible`, `hidden` convertiría la raíz en un
+  scrollport y las barras `sticky` dejarían de pegarse), `box-sizing:
+  border-box` en todo, e `img { display:block; max-width:100% }`. Los 12 usos de
+  `vw` están todos dentro de `clamp()` para aire y separaciones; **no hay ni un
+  `width: 100vw`**, que es la causa clásica del desborde en móvil.
+- **CLS**: 18 reglas `aspect-ratio` reservan el hueco de cada foto antes de que
+  cargue. Los `<img>` no llevan `width`/`height`, pero `aspect-ratio` cumple la
+  misma función.
+- **Observación (no la arreglé, es de la mini-web):** no hay `srcset`/`sizes`, así
+  que un teléfono descarga el mismo webp de 1600 px que un escritorio. Está
+  documentado como decisión consciente (las fotos ya van comprimidas en el
+  navegador antes de subir y pasarlas por el optimizador de Vercel añade latencia
+  y coste). Si algún día pesa, es un `srcset` en `Foto()` y nada más.
+
+═══════════════════════════════════════════════════════════════════════════
+▶ VALIDACIÓN
+═══════════════════════════════════════════════════════════════════════════
+
+- `npm run build` → **exit 0**, **381/381 páginas**, 0 "Failed to compile", 0
+  errores de tipos. Sin pipes.
+  ▶ Un aviso por si le pasa a alguien más: el primer intento devolvió `exit 1`
+  con `npm run build | tail -0`. **Lo tumbó el pipe**, no el código: `tail -0`
+  cierra la tubería y next muere de EPIPE. Sin pipe, verde a la primera. Es
+  literalmente la razón de la regla de "jamás `| tail`".
+- `BARBER_GUARD_SHARED=ORQUESTA.md,src/app/sitemap.ts node scripts/barber-guard.cjs`
+  → **exit 0**. 5 archivos cambiados vs `origin/main`: 4 propios del vertical,
+  1 compartido declarado, **0 prohibidos y 0 compartidos sin declarar**.
+- **20 pruebas nuevas** (`src/lib/barber/__tests__/seo.test.ts`), sin base de
+  datos y sin navegador, medio segundo:
+  `npx tsx --test src/lib/barber/__tests__/seo.test.ts` → **20/20**.
+  Junto con las vecinas (`landing`, `salida-publica`): **61/61**.
+- **Refutada contra sí misma**: con el filtro de apagadas neutralizado
+  (`if (false && ocultas.has(...))`), la prueba "la barbería que apagó su página
+  NO entra al sitemap" **falla** (19 pass / 1 fail). Restaurado, 20/20. Y cada
+  exclusión tiene su gemelo que sí debe aparecer, para que una función que no
+  devuelva nada no pase las pruebas por accidente.
+- **Sitemap generado de verdad**, leído del build
+  (`.next/server/app/sitemap.xml.body`):
+  `<loc>https://www.dalecontrol.com/barberias</loc>` con `<changefreq>monthly` y
+  `<priority>0.9`.
+- **Cero vocabulario del dental** en los 3 archivos nuevos y en el bloque nuevo
+  del sitemap: `grep -niE "paciente|doctor|Dr\.|clínica|consulta|expediente"` →
+  **0 coincidencias**. (Hubo que reescribir cuatro comentarios donde "consulta"
+  significaba *query* y "clínica" se refería al producto dental: la regla es
+  mecánica y no distingue.)
+
+▶ **LO QUE NO PUDE PROBAR:** no hay `DATABASE_URL` local ni Docker corriendo, así
+que **la consulta a `barber_shops` no se ejecutó nunca contra Postgres**. Lo que
+sí está probado: la regla de exclusión (pruebas puras + refutación) y que el
+`where` completo —incluido el filtro `path: ["oculta"]`— **compila contra los
+tipos reales de Prisma**, que rechazarían un campo o un filtro json inválido. Lo
+único que queda por ver con datos es el conteo real. Es un `curl` a
+`/sitemap.xml` después del deploy.
+
+═══════════════════════════════════════════════════════════════════════════
+▶ PENDIENTES Y DECISIONES TUYAS
+═══════════════════════════════════════════════════════════════════════════
+
+1. ▶ **Las comparativas están registradas pero vacías, a propósito.**
+   `/barberias/comparar/*` todavía no existe en `main` (lo construye la otra
+   terminal) y meter slugs adivinados habría llenado el sitemap de 404. Cuando
+   aterricen, es **una línea** en `BARBER_COMPARATIVA_SLUGS`
+   (`src/lib/barber/seo.ts`) y el sitemap las recoge solo. **No hay que volver a
+   tocar `src/app/sitemap.ts`.** Igual con `/barberias`: ya está en el sitemap y
+   404 hasta que su terminal lo publique — es lo correcto, se despliegan juntas.
+
+2. ▶ **El sitemap se congela en el deploy.** `/sitemap.xml` sale como `○`
+   (estático) en el build, así que **una barbería que se da de alta hoy no
+   aparece hasta el siguiente deploy**. Esto ya le pasaba al dental con sus
+   clínicas y su blog — no es nuevo ni lo introduje yo. Se arregla con un
+   `export const revalidate = 86400` en `src/app/sitemap.ts`, pero eso **cambia
+   el comportamiento del dental**, así que no lo hice: es tu decisión.
+
+3. ▶ **`robots.txt` no cubre `/barber/`.** El panel dental está en el `Disallow`
+   (`/dashboard`), el de barberías no. Hoy no hace daño (todo redirige a
+   `/login` y `/barber/registro` ya declara `noindex`), así que es cinturón
+   sobre tirantes. **Si algún día se añade, tiene que ser `/barber/` CON barra
+   final:** `Disallow: /barber` sin barra bloquearía también `/barberias` y
+   `/barberias/comparar/*` —el prefijo casa— y enterraría la landing entera.
+   No lo toqué porque `src/app/robots.ts` no está en la lista COMPARTIDA del
+   guardia y declararlo no lo indulta.
+
+4. ▶ **La mini-web ignora la suspensión.** `setBarbershopSuspension` escribe
+   `subscriptionStatus`, **no `isActive`**, así que una barbería suspendida por
+   impago sigue sirviendo su `/b/<slug>` pública y normal. El sitemap ya deja de
+   anunciarla (punto de arriba), pero la página sigue viva. Si quieres que
+   también se apague, es en `cargarBarberWeb` (`shop-data.ts`) — archivo de la
+   terminal de Mi Web, fuera de "solo metadatos", por eso no lo toqué.
+
+5. ▶ **`src/lib/barber/__tests__/i18n-alcance.test.ts` no compila con `tsc`**
+   (`TS2802`, `[...set]` sin `--downlevelIteration`). **Es PREEXISTENTE**: el
+   archivo está intacto respecto a `origin/main` y `npm run build` pasa igual
+   (Next usa otro target efectivo), así que no bloquea nada. Son dos
+   `Array.from()` cuando alguien pase por ahí.
+
+▶ **ARCHIVOS**
+- `src/lib/barber/seo.ts` **(nuevo)** — núcleo PURO: rutas, registro de
+  comparativas, la regla de qué mini-web entra, JSON-LD de
+  `SoftwareApplication`/`BreadcrumbList` y el serializador seguro. Sin prisma y
+  sin `server-only` para que lo puedan importar las páginas de `/barberias`.
+- `src/lib/barber/seo-query.ts` **(nuevo)** — la lectura de la base. Separado a
+  propósito: así `seo.ts` no arrastra prisma a un bundle de navegador.
+- `src/lib/barber/__tests__/seo.test.ts` **(nuevo)** — 20 pruebas.
+- `src/app/sitemap.ts` **(COMPARTIDO, declarado)** — +43 / −0.
+- `src/app/b/[slug]/reservar/page.tsx` — 1 línea de metadatos (`noindex, follow`)
+  y su justificación.
+
+### ADENDA tras el rebase — las comparativas ya existen, el registro dejó de estar vacío (2026-08-24)
+
+Cuando escribí lo de arriba, `/barberias` y `/barberias/comparar/*` todavía no
+estaban en `main` y el registro de comparativas quedó **vacío a propósito** para
+no llenar el sitemap de 404. Ya aterrizaron las dos olas (`86dadb0d` la landing,
+`269bc551` las comparativas), así que rebasé encima y cerré el cabo suelto.
+
+▶ **El rebase entró limpio, sin un solo conflicto.** Lo comprobé archivo por
+archivo en vez de fiarme: `scripts/barber-guard.cjs` y
+`src/i18n/dictionaries/barber/index.ts` quedan **byte a byte idénticos a
+`origin/main`** (`git diff origin/main -- <archivo>` → vacío), y los tres
+reportes conviven en orden en ORQUESTA.md: [Barber Landing] (14940),
+[Barber Comparativas] (15232) y éste. No se perdió nada de las otras dos olas.
+
+▶ **1 · El registro ya no es una lista a mano — ES la fuente de las páginas.**
+
+```ts
+export const BARBER_COMPARATIVA_SLUGS: readonly string[] = COMPETIDOR_SLUGS;
+```
+
+`COMPETIDOR_SLUGS` (`src/lib/barber/comparativas.ts`) es exactamente el array del
+que `/barberias/comparar/[competidor]` saca su `generateStaticParams`. Al leer
+las dos superficies el MISMO array, **no puede existir una comparativa que se
+genere y no se anuncie, ni una URL anunciada que dé 404**. Hay una prueba que lo
+vigila (`el registro del sitemap ES la fuente de las páginas, no una copia`): si
+alguien añade un competidor y una de las dos listas no se entera, se cae.
+
+Publicar la comparativa número 4 es añadir su competidor en `comparativas.ts` y
+nada más. **`src/app/sitemap.ts` no se vuelve a tocar nunca.**
+
+Se sumó también el **índice** `/barberias/comparar` con prioridad `0.8` — más que
+cada comparativa suelta (`0.7`), porque es el que captura "alternativas a X" en
+genérico y reparte hacia las tres. Mismo criterio que el dental con
+`/casos-de-uso` frente a un caso concreto.
+
+▶ **2 · Las comparativas tenían metadatos pero NO tenían datos estructurados.**
+
+La landing sí traía su `SoftwareApplication` + `FAQPage` de su propia ola. Las
+cuatro páginas de comparativa traían `buildMetadata` (title, description,
+canonical, OG, keywords) y **cero JSON-LD**. Como el contrato de esta ola era "la
+landing y las comparativas con `SoftwareApplication`", se lo puse: `@graph` con
+`SoftwareApplication` + `BreadcrumbList` en el índice y en las tres de detalle.
+
+Salida REAL, extraída del HTML generado en el build
+(`.next/server/app/barberias/comparar/booksy.html`):
+
+```json
+{ "@context": "https://schema.org", "@graph": [
+  { "@type": "SoftwareApplication",
+    "@id": "https://www.dalecontrol.com/barberias/comparar/booksy#software",
+    "name": "DaleControl Barber", "applicationCategory": "BusinessApplication",
+    "offers": { "@type": "AggregateOffer", "priceCurrency": "MXN",
+                "lowPrice": "199.00", "highPrice": "749.00", "offerCount": 3 } },
+  { "@type": "BreadcrumbList", "itemListElement": [
+      { "position": 1, "name": "DaleControl Barber", "item": ".../barberias" },
+      { "position": 2, "name": "DaleControl Barber frente a la competencia",
+        "item": ".../barberias/comparar" },
+      { "position": 3, "name": "Booksy", "item": ".../barberias/comparar/booksy" } ] } ] }
+```
+
+Los precios NO están escritos a mano: salen de `activeBarberPlans(planes)`, o sea
+de `barber_plan_configs`, igual que los que pinta la página. Si el admin mueve un
+precio, el JSON-LD se mueve solo (las páginas son `revalidate = 3600`).
+
+▶ **Un fallo que encontré al leer la salida generada, no el código.** El primer
+intento le pasaba `competidor.resumen` como `description` al nodo
+`SoftwareApplication`. Ese texto describe a **Booksy** ("Agenda con marketplace
+propio. Cobra por empleado y una comisión…"), así que el bloque decía, en datos
+estructurados, que *DaleControl Barber* es eso. Le estaríamos contando a Google
+que somos nuestro competidor. Ahora usa la descripción de la propia página
+("Precio, forma de cobro, WhatsApp y comisiones de Booksy **frente a**
+DaleControl Barber…"). **Se ve leyendo el JSON renderizado; no se ve leyendo el
+diff.**
+
+▶ **3 · Se borraron tres helpers míos que quedaron duplicados.** La ola de landing
+había construido `serializeBarberJsonLd` en `src/lib/barber/marketing.ts` y ya
+estaba EN USO. Mis `serializarJsonLdBarber`, `barberSoftwareApplicationLd` y
+`barberBreadcrumbLd` pasaban a ser un segundo sitio donde arreglar el mismo
+agujero el día que se escape un "menor que". **Fuera**: ahora `seo.ts` solo
+CONSTRUYE el objeto (`barberComparativaLd`) y las páginas lo serializan con el de
+marketing, que es el punto único. La prueba del `</script>` venenoso se conservó,
+apuntando ahora a la función que de verdad se usa.
+
+▶ **LA LISTA COMPLETA, actualizada — qué se indexa y qué no**
+
+| ruta | ¿sitemap? | ¿robots? | por qué |
+|---|---|---|---|
+| `/barberias` | SÍ · 0.9 | index | Landing del producto: la puerta comercial del vertical. |
+| `/barberias/comparar` | SÍ · 0.8 | index | Índice: captura "alternativas a X" en genérico y reparte a las tres. |
+| `/barberias/comparar/booksy` | SÍ · 0.7 | index | Intención de compra altísima: busca quien YA le paga a otro. |
+| `/barberias/comparar/fresha` | SÍ · 0.7 | index | Ídem. |
+| `/barberias/comparar/agendapro` | SÍ · 0.7 | index | Ídem. |
+| `/b/<slug>` | SÍ · 0.5 | index | **Es lo que le vendemos a la barbería**: para muchas es su único sitio. |
+| `/b/<slug>` apagada | **NO** | **noindex** | La dueña la apagó a propósito. Un sitemap jamás debe listar una URL noindex. |
+| `/b/<slug>` sin pagar | **NO** | index | El registro es público: sin este filtro, quien no paga obtiene página indexada en el dominio principal y el sitemap se la entrega a Google. |
+| `/b/<slug>/reservar` | **NO** | **noindex, follow** | Calcado de la mini-web y `force-dynamic`: canibaliza a la página que sí queremos posicionada y gasta rastreo. `follow` para que el robot siga hacia `/b/<slug>`. |
+| `/b/<slug>/mi-cuenta` | **NO** | noindex | Portal del cliente: historial de visitas y datos personales de una persona. |
+| `/barber/fila/<slug>` | **NO** | noindex | Efímera: cambia cada pocos minutos y no significa nada fuera del local. |
+| `/barber/**` | **NO** | redirige a `/login` | El panel. Equivalente de `/dashboard`. `/barber/registro` además declara noindex. |
+
+▶ **VALIDACIÓN tras el rebase**
+
+- `npm run build` → **exit 0**, **386/386 páginas** (eran 381 antes de que
+  entraran las 5 páginas nuevas), 0 "Failed to compile", 0 errores de tipos.
+  Sin pipes.
+- `BARBER_GUARD_SHARED=ORQUESTA.md,src/app/sitemap.ts node scripts/barber-guard.cjs`
+  → **exit 0**.
+- **`src/app/sitemap.ts` sigue en +43 / −0** vs `origin/main`. El registro de
+  comparativas se llenó sin volver a tocarlo, que era exactamente el objetivo del
+  diseño. Y `git diff --name-only origin/main` filtrando lo de barber devuelve
+  **vacío**: no se tocó ni un archivo del dental.
+- **21 pruebas** en `src/lib/barber/__tests__/seo.test.ts` → 21/21.
+- **Las 5 rutas nuevas salen en el sitemap generado de verdad**, leídas de
+  `.next/server/app/sitemap.xml.body`:
+  `/barberias`, `/barberias/comparar`, `/barberias/comparar/{booksy,fresha,agendapro}`.
+- **JSON-LD verificado en el HTML renderizado**, no en el código: parsea, el
+  `@graph` trae `SoftwareApplication` + `BreadcrumbList`, y cero
+  `MedicalBusiness` / `MedicalClinic` / `MedicalSpecialty` / `Dentist` /
+  `Physician` / `HealthAndBeautyBusiness` (el negocio es la barbería, y ese tipo
+  vive en la mini-web).
+
+▶ **SIGUEN PENDIENTES** (sin cambios respecto al reporte de arriba): el sitemap se
+congela en el deploy (`○` estático — una barbería nueva no aparece hasta el
+siguiente); `robots.txt` no cubre `/barber/` y, si algún día se añade, **tiene que
+ser con barra final** o entierra `/barberias`; la mini-web ignora la suspensión
+(`setBarbershopSuspension` escribe `subscriptionStatus`, no `isActive`); y
+`/descubre` sigue sin poder alojar barberías sin tocar 7 archivos del dental.

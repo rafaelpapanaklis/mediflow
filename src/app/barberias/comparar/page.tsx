@@ -10,6 +10,12 @@ import type { Metadata } from "next";
 import { buildMetadata, SITE_URL } from "@/lib/seo";
 import { getBarberT } from "@/i18n/dictionaries/barber";
 import { getBarberPlans } from "@/lib/barber/plans";
+import { barberComparativaLd } from "@/lib/barber/seo";
+import {
+  BARBER_PRODUCT_NAME,
+  activeBarberPlans,
+  serializeBarberJsonLd,
+} from "@/lib/barber/marketing";
 import {
   COMPETIDORES,
   PANORAMA,
@@ -54,8 +60,26 @@ export const metadata: Metadata = buildMetadata({
 export default async function CompararIndicePage() {
   const planes = await getBarberPlans();
 
+  // JSON-LD: el producto con el rango REAL de precios (salen de la tabla,
+  // no escritos a mano) y las migas hacia la landing. Nunca un tipo de
+  // negocio: aquí se habla del software, no de una barbería.
+  const jsonLd = barberComparativaLd({
+    producto: BARBER_PRODUCT_NAME,
+    descripcion: DESCRIPTION,
+    path: "/barberias/comparar",
+    precios: activeBarberPlans(planes).map((p) => p.priceMonthly),
+    migas: [
+      { name: BARBER_PRODUCT_NAME, path: "/barberias" },
+      { name: t("barber.comparar.indice.h1"), path: "/barberias/comparar" },
+    ],
+  });
+
   return (
     <>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: serializeBarberJsonLd(jsonLd) }}
+      />
       <Encabezado
         kicker={t("barber.comparar.indice.kicker")}
         titulo={t("barber.comparar.indice.h1")}

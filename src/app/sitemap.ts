@@ -8,6 +8,9 @@ import { listPublishedForSitemap } from "@/lib/blog/queries";
 import { CASOS_DE_USO, CASOS_PUBLISHED_AT } from "@/lib/casos/data";
 import { HERRAMIENTAS, HERRAMIENTAS_PUBLISHED_AT } from "@/lib/herramientas/data";
 import { PRODUCTO_SLUGS } from "@/lib/producto/data";
+// Vertical BARBER. Ver el bloque ADITIVO al final de la función.
+import { barberStaticSitemapPaths } from "@/lib/barber/seo";
+import { getBarberWebSitemapEntries } from "@/lib/barber/seo-query";
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const now = new Date();
@@ -116,6 +119,44 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     blogPostEntries = [];
   }
 
+  // ════════════════════════════════════════════════════════════════════
+  // VERTICAL BARBER (DaleControl Barber) — bloque ADITIVO.
+  //
+  // Nada de lo de arriba cambia: el dental está VIVO en producción y este
+  // sitemap es suyo. Las dos listas de abajo se añaden al final del return y
+  // ninguna puede tumbarlo: las dos caen a [] ante cualquier fallo, igual que
+  // los bloques de clínicas y blog.
+  //
+  // Qué entra y qué NO (y por qué) está documentado en src/lib/barber/seo.ts.
+  // ════════════════════════════════════════════════════════════════════
+
+  // Landing del vertical + comparativas. Data ESTÁTICA, sin DB (siempre
+  // segura). El registro de comparativas vive en src/lib/barber/seo.ts:
+  // publicar una comparativa nueva NO vuelve a tocar este archivo compartido.
+  const barberStaticEntries: MetadataRoute.Sitemap = barberStaticSitemapPaths().map((r) => ({
+    url: `${SITE_URL}${r.path}`,
+    lastModified: now,
+    changeFrequency: r.changeFrequency,
+    priority: r.priority,
+  }));
+
+  // Mini-webs de barbería /b/<slug> (DB, cap 5000). Solo barberías activas,
+  // con la suscripción al corriente y su página NO apagada: una barbería que
+  // apagó su web se sirve con noindex y un sitemap jamás debe listarla.
+  // En build sin DATABASE_URL → [].
+  let barberWebEntries: MetadataRoute.Sitemap = [];
+  try {
+    const webs = await getBarberWebSitemapEntries();
+    barberWebEntries = webs.map((w) => ({
+      url: `${SITE_URL}${w.path}`,
+      lastModified: w.lastModified,
+      changeFrequency: "weekly",
+      priority: 0.5,
+    }));
+  } catch {
+    barberWebEntries = [];
+  }
+
   return [
     ...staticEntries,
     ...productoEntries,
@@ -127,5 +168,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     ...blogPostEntries,
     ...casoEntries,
     ...herramientaEntries,
+    ...barberStaticEntries,
+    ...barberWebEntries,
   ];
 }
