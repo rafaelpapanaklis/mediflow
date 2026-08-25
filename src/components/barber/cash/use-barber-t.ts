@@ -1,7 +1,8 @@
 "use client";
 
 import { useMemo } from "react";
-import { makeT, type Dictionary, type TFunction } from "@/i18n/t";
+import { type Dictionary, type TFunction } from "@/i18n/t";
+import { makeBarberT } from "@/lib/barber/i18n";
 
 /**
  * t() de cliente para el dinero barber. El server manda el sub-diccionario
@@ -11,5 +12,5 @@ import { makeT, type Dictionary, type TFunction } from "@/i18n/t";
  * dictionaries/barber/index.ts).
  */
 export function useBarberT(dict: Dictionary): TFunction {
-  return useMemo(() => makeT(dict), [dict]);
+  return useMemo(() => makeBarberT(dict), [dict]);
 }

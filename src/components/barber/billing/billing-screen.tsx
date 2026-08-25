@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AlertTriangle, CheckCircle2, Info, Loader2, XCircle } from "lucide-react";
-import { makeT } from "@/i18n/t";
+import { makeBarberT } from "@/lib/barber/i18n";
 import { BillingModal } from "./modal";
 import { PlanCards } from "./plan-cards";
 import { SubscriptionPanel } from "./subscription-panel";
@@ -72,7 +72,7 @@ export function BillingScreen({
   summary: BarberBillingSummary;
   checkout: CheckoutReturn;
 }) {
-  const t = useMemo(() => makeT(dict), [dict]);
+  const t = useMemo(() => makeBarberT(dict), [dict]);
   const router = useRouter();
 
   const [notice, setNotice] = useState<Notice | null>(() =>

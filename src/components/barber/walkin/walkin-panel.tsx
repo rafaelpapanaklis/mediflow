@@ -14,7 +14,8 @@
 // ═══════════════════════════════════════════════════════════════════════
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { BellRing, LogOut, Plus, RefreshCw, Scissors, Volume2 } from "lucide-react";
-import { makeT, type Dictionary } from "@/i18n/t";
+import { type Dictionary } from "@/i18n/t";
+import { makeBarberT } from "@/lib/barber/i18n";
 import {
   BARBER_WALKIN_STATUS_UI,
   type BarberDTO,
@@ -64,7 +65,7 @@ export interface WalkinPanelProps {
 }
 
 export function WalkinPanel(props: WalkinPanelProps) {
-  const t = useMemo(() => makeT(props.dict), [props.dict]);
+  const t = useMemo(() => makeBarberT(props.dict), [props.dict]);
   const [data, setData] = useState<Payload | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);

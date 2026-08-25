@@ -28,7 +28,8 @@
    ═══════════════════════════════════════════════════════════════════════ */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { makeT, type Dictionary } from "@/i18n/t";
+import { type Dictionary } from "@/i18n/t";
+import { makeBarberT } from "@/lib/barber/i18n";
 import {
   BARBER_WEB_ACCENTS,
   BARBER_WEB_DIAS,
@@ -80,7 +81,7 @@ interface Conflicto {
 
 export function EditorWebBarberia(props: EditorProps) {
   const t = useMemo<TFn>(() => {
-    const tt = makeT(props.dict);
+    const tt = makeBarberT(props.dict);
     return (k, vars) => tt(`barber.web.${k}`, vars);
   }, [props.dict]);
 

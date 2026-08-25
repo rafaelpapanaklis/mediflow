@@ -2,7 +2,8 @@
 
 import { createContext, useContext, useMemo, useState } from "react";
 import type { ReactNode } from "react";
-import { makeT, type Dictionary, type TVars } from "@/i18n/t";
+import { type Dictionary, type TVars } from "@/i18n/t";
+import { makeBarberT } from "@/lib/barber/i18n";
 import {
   Banner,
   Btn,
@@ -43,8 +44,7 @@ type BotT = (key: string, vars?: TVars) => string;
 function useBotT(): BotT {
   const dict = useContext(BotDict);
   return useMemo(() => {
-    const base = makeT(dict ?? {});
-    return (key: string, vars?: TVars) => base(`barber.bot.${key}`, vars);
+    return makeBarberT(dict ?? {}, "barber.bot");
   }, [dict]);
 }
 

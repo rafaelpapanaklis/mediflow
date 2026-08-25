@@ -13,8 +13,8 @@
 //
 // El motor es el mismo makeT de src/i18n/t (puro, sirve en server y client).
 // ═══════════════════════════════════════════════════════════════════════
-import { makeT } from "@/i18n/t";
 import type { Dictionary } from "@/i18n/t";
+import { makeBarberT } from "@/lib/barber/i18n";
 
 import shellEs from "./shell.es.json";
 import shellEn from "./shell.en.json";
@@ -99,7 +99,13 @@ export function getBarberDict(locale?: string | null): Dictionary {
   return resolveBarberLocale(locale) === "en" ? EN : ES;
 }
 
-/** t() del vertical: getBarberT(barbershop.locale)("barber.shell.nav.caja"). */
+/**
+ * t() del vertical: getBarberT(barbershop.locale)("barber.shell.nav.caja").
+ *
+ * Va por makeBarberT y no por makeT a secas para que, EN DESARROLLO, una
+ * llave que no resuelve grite en consola en vez de pintarse cruda en la
+ * pantalla (ver src/lib/barber/i18n.ts). En produccion es makeT tal cual.
+ */
 export function getBarberT(locale?: string | null) {
-  return makeT(getBarberDict(locale));
+  return makeBarberT(getBarberDict(locale));
 }

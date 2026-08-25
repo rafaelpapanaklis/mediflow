@@ -11,7 +11,8 @@ import {
   type ReactNode,
 } from "react";
 import { X } from "lucide-react";
-import { makeT, type Dictionary, type TVars } from "@/i18n/t";
+import { type Dictionary, type TVars } from "@/i18n/t";
+import { makeBarberT } from "@/lib/barber/i18n";
 import s from "./admin.module.css";
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -37,8 +38,7 @@ export type AdminT = (key: string, vars?: TVars) => string;
 export function useT(): AdminT {
   const dict = useContext(DictContext);
   return useMemo(() => {
-    const base = makeT(dict ?? {});
-    return (key: string, vars?: TVars) => base(`barber.admin.${key}`, vars);
+    return makeBarberT(dict ?? {}, "barber.admin");
   }, [dict]);
 }
 

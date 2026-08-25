@@ -21,7 +21,8 @@ import {
   Wallet,
 } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
-import { makeT, type Dictionary, type TFunction } from "@/i18n/t";
+import { type Dictionary, type TFunction } from "@/i18n/t";
+import { makeBarberT } from "@/lib/barber/i18n";
 import { BarberShareCard } from "./share-card";
 import {
   buildBarberShareText,
@@ -72,7 +73,7 @@ export function AfiliadosScreen({
   dict: Dictionary;
   summary: BarberAffiliateSummaryDTO;
 }) {
-  const t = useMemo(() => makeT(dict), [dict]);
+  const t = useMemo(() => makeBarberT(dict), [dict]);
   const [summary, setSummary] = useState(initial);
 
   // El origen lo pone el NAVEGADOR: así la liga funciona igual en localhost,

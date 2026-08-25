@@ -2,7 +2,6 @@ import { redirect } from "next/navigation";
 import { getBarberContext, hasBarberPermission } from "@/lib/barber-auth";
 import { getBarberPlan } from "@/lib/barber/plans";
 import { getBarberDict, getBarberT, resolveBarberLocale } from "@/i18n/dictionaries/barber";
-import type { Dictionary } from "@/i18n/t";
 import {
   BARBER_CAMPAIGN_AUDIENCES,
   CAMPAIGN_BATCH_MAX,
@@ -37,7 +36,11 @@ export default async function Page() {
 
   const locale = resolveBarberLocale(ctx.barbershop.locale);
   const t = getBarberT(locale);
-  const dict = ((getBarberDict(locale).barber as Dictionary).campanas ?? {}) as Dictionary;
+  // OJO: el diccionario va COMPLETO (desde la raíz), no el sub-arbol `barber.campanas`.
+  // useCampT() antepone el prefijo `barber.campanas.` a CADA llave, asi que recortarlo
+  // aqui lo dejaba buscando `barber.campanas.title` DENTRO de `barber.campanas`: no
+  // resolvia y makeT devuelve la llave cruda, que es lo que se pintaba en pantalla.
+  const dict = getBarberDict(locale);
 
   const permUser = { role: ctx.role, permissionsOverride: ctx.user.permissionsOverride };
   const plan = await getBarberPlan(ctx.barbershop.plan);

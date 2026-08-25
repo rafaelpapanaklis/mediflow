@@ -12,7 +12,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, Copy, Plus, Trash2 } from "lucide-react";
-import { makeT, type Dictionary } from "@/i18n/t";
+import { type Dictionary } from "@/i18n/t";
+import { makeBarberT } from "@/lib/barber/i18n";
 import {
   BARBER_TIME_OFF_TYPE_LABELS,
   type BarberDTO,
@@ -55,7 +56,7 @@ export interface ScheduleManagerProps {
 }
 
 export function ScheduleManager(props: ScheduleManagerProps) {
-  const t = useMemo(() => makeT(props.dict), [props.dict]);
+  const t = useMemo(() => makeBarberT(props.dict), [props.dict]);
   const [tab, setTab] = useState<"week" | "timeOff">("week");
 
   const [barbers, setBarbers] = useState<BarberDTO[]>([]);

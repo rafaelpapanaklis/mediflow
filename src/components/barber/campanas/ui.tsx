@@ -1,7 +1,8 @@
 "use client";
 
 import { createContext, useContext, useMemo, type ReactNode } from "react";
-import { makeT, type Dictionary, type TVars } from "@/i18n/t";
+import { type Dictionary, type TVars } from "@/i18n/t";
+import { makeBarberT } from "@/lib/barber/i18n";
 
 // ═══════════════════════════════════════════════════════════════════════
 // i18n y formato de /barber/campanas.
@@ -24,8 +25,7 @@ export type CampT = (key: string, vars?: TVars) => string;
 export function useCampT(): CampT {
   const dict = useContext(CampDictContext);
   return useMemo(() => {
-    const base = makeT(dict ?? {});
-    return (key: string, vars?: TVars) => base(`barber.campanas.${key}`, vars);
+    return makeBarberT(dict ?? {}, "barber.campanas");
   }, [dict]);
 }
 

@@ -11,7 +11,8 @@
 // QR devuelve tu lugar en vez de formarte otra vez.
 // ═══════════════════════════════════════════════════════════════════════
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { makeT, type Dictionary } from "@/i18n/t";
+import { type Dictionary } from "@/i18n/t";
+import { makeBarberT } from "@/lib/barber/i18n";
 import { Field, agendaCss } from "@/components/barber/agenda/agenda-ui";
 import css from "./walkin.module.css";
 
@@ -53,7 +54,7 @@ export interface WalkinPublicProps {
 const POLL_MS = 15_000;
 
 export function WalkinPublic(props: WalkinPublicProps) {
-  const t = useMemo(() => makeT(props.dict), [props.dict]);
+  const t = useMemo(() => makeBarberT(props.dict), [props.dict]);
   const storageKey = `dc:barber:fila:${props.slug}`;
 
   const [ticketId, setTicketId] = useState<string | null>(null);

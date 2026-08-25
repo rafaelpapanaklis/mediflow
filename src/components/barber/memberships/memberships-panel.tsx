@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { makeT, type Dictionary } from "@/i18n/t";
+import { type Dictionary } from "@/i18n/t";
+import { makeBarberT } from "@/lib/barber/i18n";
 import {
   formatCents,
   moneyToCents,
@@ -42,7 +43,7 @@ export interface MembershipsPanelProps {
  * sesión.
  */
 export function MembershipsPanel(props: MembershipsPanelProps) {
-  const t = useMemo(() => makeT(props.messages), [props.messages]);
+  const t = useMemo(() => makeBarberT(props.messages), [props.messages]);
 
   const [tab, setTab] = useState<TabKey>("clientes");
   const [plans, setPlans] = useState(props.initialPlans);

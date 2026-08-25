@@ -19,7 +19,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { CalendarClock, ChevronLeft, ChevronRight, Plus, RefreshCw } from "lucide-react";
-import { makeT, type Dictionary } from "@/i18n/t";
+import { type Dictionary } from "@/i18n/t";
+import { makeBarberT } from "@/lib/barber/i18n";
 import type { SaleRow } from "@/lib/barber/cash";
 import {
   BARBER_APPOINTMENT_STATUS_UI,
@@ -97,7 +98,7 @@ export interface AgendaClientProps {
 }
 
 export function AgendaClient(props: AgendaClientProps) {
-  const t = useMemo(() => makeT(props.dict), [props.dict]);
+  const t = useMemo(() => makeBarberT(props.dict), [props.dict]);
   const [view, setView] = useState<"day" | "week">("day");
   const [dateISO, setDateISO] = useState(props.initialDateISO);
   const [data, setData] = useState<AgendaPayload | null>(null);

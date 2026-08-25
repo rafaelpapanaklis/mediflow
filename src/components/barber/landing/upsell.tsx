@@ -18,7 +18,8 @@
    ═══════════════════════════════════════════════════════════════════════ */
 
 import { useMemo } from "react";
-import { makeT, type Dictionary } from "@/i18n/t";
+import { type Dictionary } from "@/i18n/t";
+import { makeBarberT } from "@/lib/barber/i18n";
 import type { BarberWebData } from "@/components/barber/templates/types";
 import { Compartir } from "./compartir";
 import { VistaPrevia } from "./vista-previa";
@@ -35,7 +36,7 @@ export function UpsellWebBarberia({
   urlPublica: string;
 }) {
   const t = useMemo<TFn>(() => {
-    const tt = makeT(dict);
+    const tt = makeBarberT(dict);
     return (k, vars) => tt(`barber.web.${k}`, vars);
   }, [dict]);
 

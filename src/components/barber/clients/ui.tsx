@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { X } from "lucide-react";
-import { makeT, type Dictionary, type TVars } from "@/i18n/t";
+import { type Dictionary, type TVars } from "@/i18n/t";
+import { makeBarberT } from "@/lib/barber/i18n";
 import s from "./clients.module.css";
 
 /**
@@ -19,7 +20,7 @@ import s from "./clients.module.css";
 export type BarberT = (key: string, vars?: TVars) => string;
 
 export function useBarberT(dict: Dictionary): BarberT {
-  return useMemo(() => makeT(dict), [dict]);
+  return useMemo(() => makeBarberT(dict), [dict]);
 }
 
 // ── Insignias ──────────────────────────────────────────────────────────

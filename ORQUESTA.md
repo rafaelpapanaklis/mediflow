@@ -14742,3 +14742,196 @@ genera en el navegador con `qrcode` (ya en package.json): sin endpoint nuevo, si
 assets, y funciona igual en localhost, preview y producción porque el origen lo
 pone `window.location.origin`. (5) La cuenta de socio se crea SOLA la primera vez
 que la barbería entra a la pantalla: no hay "darse de alta".
+
+═══════════════════════════════════════════════════════════════════════════
+## [Barber i18n Campañas] — /barber/campanas pintaba las CLAVES en vez de los textos ✅ (2026-08-24)
+═══════════════════════════════════════════════════════════════════════════
+
+`/barber/campanas` mostraba `barber.campanas.title`, `barber.campanas.subtitle`,
+`barber.campanas.tabs.lists`, `barber.campanas.audiences.birthday.name`… la
+pantalla entera, encabezado incluido. **20 llaves crudas** en el HTML, en los dos
+idiomas.
+
+═══════════════════════════════════════════════════════════════════════════
+▶ LA CAUSA REAL: no faltaba ninguna traducción — el PREFIJO se aplicaba DOS VECES
+═══════════════════════════════════════════════════════════════════════════
+
+El diccionario estaba completo y bien conectado. Lo que no encajaba era el
+**alcance** con el que servidor y cliente hablaban del mismo árbol.
+
+`src/app/barber/(panel)/campanas/page.tsx` bajaba el sub-árbol YA RECORTADO:
+
+```ts
+const dict = ((getBarberDict(locale).barber as Dictionary).campanas ?? {}) as Dictionary;
+```
+
+…pero `useCampT()` (`src/components/barber/campanas/ui.tsx`) antepone el prefijo
+a CADA llave:
+
+```ts
+return (key, vars) => base(`barber.campanas.${key}`, vars);
+```
+
+Así que `t("title")` terminaba buscando **`barber.campanas.title` DENTRO de
+`barber.campanas`** — o sea `barber.campanas.barber.campanas.title`. No resuelve,
+y `makeT` devuelve la propia llave como fallback. De ahí que se pintara la ruta
+COMPLETA con prefijo y no solo `title`: **lo que se veía en pantalla era
+literalmente lo que el componente había pedido.**
+
+El vertical mezcla dos convenciones, y las dos son legítimas:
+
+| | quién baja el diccionario | quién pone el prefijo |
+|---|---|---|
+| **A** | la página pasa la RAÍZ (`getBarberDict(locale)`) | el hook: `makeBarberT(dict, "barber.campanas")` |
+| **B** | la página RECORTA (`…​.barber.caja`) | nadie: `t("ticket.title")` |
+
+`campanas` tenía la página en modo **B** y el hook en modo **A**. Nada lo impedía:
+compila, tipa, buildea y renderiza. **Afiliados funcionaba** justamente porque su
+página pasa `dict={getBarberDict(locale)}` entero (modo A puro).
+
+**El arreglo son 2 líneas** en la página — pasar la raíz y quitar el `import type
+{ Dictionary }` que quedó sin uso. Ni un texto en duro, ni un JSON tocado.
+
+Verificado renderizando la pantalla REAL a HTML (`renderToStaticMarkup`) con las
+dos versiones del diccionario:
+
+```
+ES  con el sub-árbol recortado (el bug): 20 llaves crudas en el HTML
+    con el diccionario completo (arreglado): 0
+    textos pintados: "Campañas", "Listas", "Plantillas", "Resultados",
+                     "Cumpleaños del mes", "Cumplen años este mes."
+EN  idem: 20 → 0 ("Campaigns", "Templates", "Results", "Birthdays this month"…)
+```
+
+Las **6 audiencias** salen por nombre (`Cumpleaños del mes`, `No han vuelto`,
+`Membresías por vencer`, `Membresías vencidas`, `Ya ganaron su premio`,
+`Faltaron varias veces`), las **4 pestañas**, los **4 errores**
+(`generic`/`noPlan`/`noPermission`/`noWhatsapp`), las **5 razones de omisión** y
+el **aviso de costo antes de enviar** (`cost.heading`/`none`/`oneMessage`/
+`messages`). ES y EN tienen **118 llaves idénticas**, sin huecos.
+
+═══════════════════════════════════════════════════════════════════════════
+▶ EL BARRIDO DEL VERTICAL: /barber/campanas era la ÚNICA rota
+═══════════════════════════════════════════════════════════════════════════
+
+No basta con mirar si las llaves EXISTEN — el bug era de alcance, no de
+diccionario. Se revisaron los dos ejes:
+
+**Eje 1 — ¿existe la llave?** Barrido estático de los 96 archivos de
+`src/{components,app,lib}/barber/**` con llaves: se extrajo cada literal
+`t("…")` y se resolvió contra `es` Y `en`. **Cero llaves inexistentes** (los
+únicos avisos eran `split(".")` y `test("…")` que el escáner confunde con `t(`).
+Las dinámicas (`audiences.${id}.name`, `weekdays.${d}`, `status.${s}`…) se
+expandieron a mano contra las uniones de TypeScript reales.
+
+**Eje 2 — ¿el alcance de la página coincide con el del componente?** Es el eje
+que fallaba. Se trazaron a mano LOS 20+ puntos de entrada del vertical:
+
+| pantalla | diccionario que baja | prefijo del componente | |
+|---|---|---|---|
+| `/barber/campanas` | ~~`barber.campanas`~~ → **raíz** | `barber.campanas.` | **ARREGLADA** |
+| `/barber/whatsapp` | raíz | `barber.whatsapp.` | ok |
+| `/barber/whatsapp/bot` | raíz | `barber.bot.` | ok |
+| `/barber/{equipo,barberos,sucursales,soporte}` | raíz (`admin-frame`) | `barber.admin.` | ok |
+| `/barber/{caja,comisiones,productos}` + ticket/recibo | `barber.caja` | — | ok |
+| `/barber/clientes` y `/barber/clientes/[id]` | `barber.clientes` | — | ok |
+| `/barber/reportes` | `barber.reportes` | — | ok |
+| `/barber/inicio` | raíz (`t` como prop) | `barber.inicio.` | ok |
+| `/barber/afiliados` | raíz | — (llaves completas) | ok |
+| `/barber/agenda` y `/barber/agenda/horarios` | raíz | — | ok |
+| `/barber/suscripcion` | raíz | — | ok |
+| `/barber/membresias` | raíz | — | ok |
+| `/barber/mi-web` | raíz | `barber.web.` | ok |
+| `/barber/fila` y `/barber/fila/[slug]` | raíz | — | ok |
+| `/barber/solicitudes` | raíz | — | ok |
+| layout del panel (menú lateral) | raíz | — | ok |
+| portal del cliente y reserva pública (`/b/<slug>`) | `getBarberT` propio | — | ok |
+
+También se comprobó que **cada consumidor de un hook que prefija está dentro de
+su provider** — un `useT()` montado fuera de `AdminI18n` daría `dict = null` y
+produciría exactamente el mismo síntoma. Los 4 proveedores cubren a sus 6+5+1+1
+consumidores.
+
+**Resultado: ninguna otra pantalla del vertical muestra una clave cruda.**
+
+═══════════════════════════════════════════════════════════════════════════
+▶ QUE NO VUELVA A LLEGAR A PRODUCCIÓN EN SILENCIO
+═══════════════════════════════════════════════════════════════════════════
+
+El fallback de `makeT` (devolver la llave) es correcto —nunca rompe el render—
+pero es **mudo**: la pantalla "funciona" y nadie se entera. Dos redes nuevas:
+
+**1 · `src/lib/barber/i18n.ts` — `makeBarberT(dict, prefijo?)`.** Envuelve a
+`makeT` y, **SOLO en desarrollo**, escupe un `console.warn` por cada llave que se
+pinta cruda, con la ruta COMPLETA que se intentó resolver y la pista del alcance:
+
+```
+[barber i18n] llave SIN traducir: "barber.campanas.title" — se está pintando la
+llave cruda. El componente antepone "barber.campanas."; comprueba que el servidor
+esté bajando el diccionario COMPLETO (getBarberDict) y no el sub-árbol ya recortado.
+```
+
+Detalles que importan: **una llave avisa UNA vez** (una tabla de 200 filas no debe
+escupir 200 líneas iguales); filtra falsos positivos (`t()` a veces recibe texto ya
+resuelto — solo avisa si parece identificador con puntos); y en producción
+`makeBarberT` **devuelve literalmente `makeT`** — cero comprobaciones, cero costo,
+cero ruido en la consola de la barbería. Comprobado: `NODE_ENV=production` → 0
+líneas de aviso.
+
+Los **16 constructores de `t` del vertical** pasan ahora por ahí, incluido
+`getBarberT` de `src/i18n/dictionaries/barber/index.ts` (que cubre las páginas de
+servidor, el portal del cliente y la reserva pública). Con el bug puesto, la
+consola gritaba las 20 llaves.
+
+**2 · `src/lib/barber/__tests__/i18n-alcance.test.ts`** — 4 pruebas estáticas, sin
+Postgres ni navegador, medio segundo:
+
+```
+npx tsx --test src/lib/barber/__tests__/i18n-alcance.test.ts
+```
+
+- el que antepone prefijo recibe el diccionario COMPLETO, no el sub-árbol
+- ningún componente de barber usa `makeT` pelado (perdería el aviso)
+- campañas: encabezado, 4 pestañas, 6 audiencias, omisiones, costo y errores en es y en
+- campañas: es y en tienen EXACTAMENTE las mismas llaves
+
+**Refutada contra sí misma**: al reponer a mano la línea original de `page.tsx`,
+la primera prueba falla con el mensaje que dice qué hacer. Restaurado el arreglo,
+vuelve a verde.
+
+═══════════════════════════════════════════════════════════════════════════
+▶ VALIDACIÓN
+═══════════════════════════════════════════════════════════════════════════
+- `npm run build` → **exit 0**, 381/381 páginas, sin errores de tipos.
+  (El primer intento murió con `JavaScript heap out of memory` durante el
+  chequeo de tipos: es la contención de worktrees en paralelo, no el código.
+  `NODE_OPTIONS=--max-old-space-size=8192` y en verde. `npx tsc --noEmit`
+  también pasa suelto.)
+- `BARBER_GUARD_SHARED=ORQUESTA.md node scripts/barber-guard.cjs` → **exit 0**:
+  19 propios, 0 prohibidos. **El panel dental no cambió ni un byte** —
+  `src/i18n/t.ts` (el motor compartido) quedó INTACTO a propósito: la alarma vive
+  en `src/lib/barber/**`, que es del vertical.
+- Pruebas de barber: **259 en verde** (117 + 151 en dos tandas, 8 saltadas por
+  falta de Postgres), más las 4 nuevas.
+
+▶ **UN FALLO PREEXISTENTE, NO ES DE ESTA OLA**:
+`src/lib/barber/__tests__/billing-gating.test.ts` truena con
+`Cannot find module 'server-only'`. Le falta el `import "./_sin-server-only"`
+como primera línea, igual que sus hermanas. **Reproducido igual en el worktree
+limpio de `origin/main` (9ad00176) sin tocar nada.** Fuera del alcance de este
+arreglo; es una línea cuando alguien pase por ahí.
+
+▶ **PENDIENTE (fuera de mi allowlist)**: el atajo `test:barber-i18n` en
+`package.json` — ese archivo no está en `OWN_PREFIXES` del guardia y
+`BARBER_GUARD_SHARED` no lo indulta (solo perdona lo que ya está en
+`SHARED_FILES`). El comando queda documentado en la cabecera de la prueba.
+
+▶ AVISOS
+(1) La convención **A** (raíz + prefijo en el hook) y la **B** (sub-árbol
+recortado, sin prefijo) siguen conviviendo, y está bien: la prueba nueva vigila
+que no se crucen. Si se añade una pantalla que prefija, hay que sumar su fila a
+`PREFIJADORES` en `i18n-alcance.test.ts`. (2) El aviso de desarrollo se apoya en
+`process.env.NODE_ENV`, que Next incrusta al compilar: en el bundle de producción
+la rama entera se elimina. (3) `makeBarberT` acepta el prefijo con o sin punto
+final. (4) El único cambio de comportamiento en las otras 15 pantallas es el
+`console.warn` en desarrollo — el texto que ven las barberías es idéntico.

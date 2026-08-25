@@ -1,7 +1,8 @@
 "use client";
 
 import { createContext, useContext, useMemo, type ReactNode } from "react";
-import { makeT, type Dictionary, type TVars } from "@/i18n/t";
+import { type Dictionary, type TVars } from "@/i18n/t";
+import { makeBarberT } from "@/lib/barber/i18n";
 
 // ═══════════════════════════════════════════════════════════════════════
 // i18n de /barber/whatsapp.
@@ -28,8 +29,7 @@ export type WaT = (key: string, vars?: TVars) => string;
 export function useWaT(): WaT {
   const dict = useContext(WaDictContext);
   return useMemo(() => {
-    const base = makeT(dict ?? {});
-    return (key: string, vars?: TVars) => base(`barber.whatsapp.${key}`, vars);
+    return makeBarberT(dict ?? {}, "barber.whatsapp");
   }, [dict]);
 }
 
