@@ -14935,3 +14935,295 @@ que no se crucen. Si se añade una pantalla que prefija, hay que sumar su fila a
 la rama entera se elimina. (3) `makeBarberT` acepta el prefijo con o sin punto
 final. (4) El único cambio de comportamiento en las otras 15 pantallas es el
 `console.warn` en desarrollo — el texto que ven las barberías es idéntico.
+
+
+## [Barber Landing] — `/barberias`: la página que convierte a una barbería en cliente — WhatsApp de verdad desde su número, sin comisiones por cliente, en pesos; cada promesa verificada contra el panel y ni un precio escrito a mano ✅ (2026-08-24)
+═══════════════════════════════════════════════════════════════════════════
+
+Esto lo lee una barbería ANTES de pagar. Por eso la página no es un catálogo:
+es una venta ordenada por lo que le importa al dueño (llenar la silla, cobrar
+bien, que el barbero cobre lo justo, que el cliente vuelva, crecer), en
+español de México y con las palabras del gremio (silla, corte, fade, walk-in,
+renta de silla). Y por eso la regla que manda: **cada línea se abrió en el
+código de HOY (`origin/main` = `cc92cfeb`, con las 27 olas que el `main` local
+todavía no tenía) antes de escribirse**. Lo que el panel no hace, no se anuncia.
+
+▶ **A · LA PÁGINA** — `src/app/barberias/page.tsx` (estática, ISR 600 s como
+la landing dental) + 11 componentes en `src/components/public/barberias/` +
+`barberias.css`. Móvil primero (casi todo llega de Instagram): 16 px de base en
+px —la raíz del sitio mide 13 px en un celular y cualquier rem sale un 20 %
+más chico—, `@container` sobre `.dcbl` (regla del vertical) y CERO JavaScript
+propio: las preguntas frecuentes son `<details>`, la escena de la portada es
+HTML + CSS, no hay imágenes. Secciones, en orden: barra pegajosa → portada
+("Agenda, WhatsApp y caja para tu barbería. Sin comisiones por cliente.", con
+el "desde $X" de la tabla) → el problema (la libreta, el WhatsApp a mano, las
+cuentas del sábado, la silla vacía) → qué hace, en cinco grupos → la banda de
+WhatsApp con el costo REAL → los tres planes → siete preguntas → cierre → pie.
+Todos los CTA van a `/barber/registro`; "Entrar" al `/login` compartido (que ya
+sabe mandar a un BarberUser a `/barber`).
+
+▶ **PRECIOS: NI UNO EN EL CÓDIGO.** `getBarberPlans()` (tabla
+`barber_plan_configs`, caché 60 s + fallback al seed) → `buildBarberPlanCards()`
+en `src/lib/barber/marketing.ts` arma las tarjetas: importe mensual, primer mes
+y anual SOLO si la fila los trae (`firstMonthPrice` < mensual, `priceYearly` >
+0), límites (`maxBarbers`, `maxBranches`, `messageQuota`; −1 = sin tope) y las
+features. Cada tarjeta lista "Todo lo de <plan anterior>, y además:" con la
+DIFERENCIA calculada entre filas, no una lista escrita. El "desde $X" de la
+portada y de la meta descripción es el plan activo más barato; la etiqueta
+"Desde <plan>" de cada promesa se deriva de qué fila trae la feature (y no se
+pinta cuando ya la trae el plan más barato). Un plan con `isActive=false`
+desaparece solo. Rafael cambia un precio editando la fila y en ≤ 10 min la
+landing lo sigue.
+
+▶ **EL COSTO DEL WHATSAPP TAMPOCO SE ESCRIBE.** La promesa central del mercado
+("WhatsApp de verdad incluido") se cuenta completa y honesta: DaleControl no
+cobra por mensaje y cada plan trae su cupo (de la tabla), pero Meta SÍ le cobra
+a la cuenta de WhatsApp Business de la barbería. La cifra sale de
+`BARBER_WA_PRICE_USD.UTILITY` (whatsapp-core, la misma constante que el panel
+enseña antes de mandar una campaña) por `BARBER_LANDING_EXAMPLE_VISITS` (300, el
+ejemplo de la cabecera de whatsapp-core) al tipo de cambio de referencia del bot
+(`BARBER_BOT_USD_MXN_FALLBACK`): "300 citas al mes ≈ 2.40 USD, unos 44 pesos".
+Si Meta sube el precio, se cambia la constante y la landing y el panel dicen lo
+mismo.
+
+▶ **CADA PROMESA Y DÓNDE SE VERIFICÓ** — viven como `claims` en
+`src/lib/barber/marketing.ts` con su `verifiedIn`, y `marketing.test.ts` exige
+que esos archivos EXISTAN (si alguien borra el módulo, la prueba truena antes
+de que la landing mienta):
+
+  · Reserva desde tu liga, sin app · sin registro ni contraseña →
+    `src/components/barber/booking/booking-flow.tsx` (cabecera: "sin registro,
+    sin contraseña, sin descargar nada"), `src/app/b/[slug]/reservar/page.tsx`,
+    `src/lib/barber/booking.ts` (createPublicBooking).
+  · Fila virtual con QR · se anota desde su celular · ve su lugar en vivo · aviso
+    por WhatsApp cuando casi es su turno → `walkin/walkin-qr.tsx`,
+    `src/app/barber/fila/[slug]/page.tsx` (pública, sin sesión),
+    `api/barber/walkins/[id]/notify/route.ts` + plantilla `dc_barber_turno_fila`.
+  · Recordatorios desde tu número · salen solos · CONFIRMAR / CANCELAR / CAMBIAR
+    → `whatsapp-core.ts` (plantilla `dc_barber_recordatorio_cita`,
+    `classifyBarberReply`), `whatsapp.ts` (programación con lead 45 min–24 h,
+    `applyReminderReply`).
+  · Bot que agenda con huecos reales y pasa a una persona → `bot.ts` (usa
+    `getPublicSlots` + `createPublicBooking`), `bot-core.ts` (`asksForHuman`).
+  · Página web con N plantillas y editor con vista previa → el N sale de
+    `BARBER_WEB_MANIFEST_LIST.length` (manifest.ts = 8), `landing/editor.tsx`,
+    `src/app/b/[slug]/page.tsx`; la sección "reservar" está en el manifiesto.
+  · Campañas (cumpleaños, te extrañamos, membresías por vencer, premio sin
+    canjear) con el costo antes de mandar y nunca solas → `campaigns.ts`
+    (6 audiencias, `confirmCost`), `campanas/campanas-screen.tsx`.
+  · Caja por turno con arqueo · fondo · diferencia contra lo esperado · quién
+    abrió y cerró → `cash.ts` (`countedAmount`, `expectedAmount`, `difference`,
+    `openedByUserId/closedByUserId`), `cash/session-modals.tsx`.
+  · Ticket con propina que se imprime · efectivo, tarjeta o transferencia →
+    `cash/ticket-modal.tsx`, `cash/ticket-print.tsx` (fila `print.tip`),
+    `types.ts` (`BARBER_PAYMENT_METHOD_LABELS`).
+  · Membresías en efectivo, SPEI o tarjeta · cada visita descuenta un corte al
+    cobrar → `memberships/sell-membership-modal.tsx` (`METHODS = CASH, SPEI,
+    CARD, STRIPE`), `memberships.ts` (`sellMembershipManually`), `cash.ts`
+    (`consumeMembershipCutTx`).
+  · Anticipos anti no-show: a quién (nuevos / reincidentes / todos) y cuánto;
+    devolver o retener; todo registrado → `payments-core.ts`
+    (`depositAudienceApplies`, `computeDepositCents`),
+    `api/barber/deposits/actions/route.ts` (`refund` / `forfeit` / `mark-paid`),
+    `memberships/deposits-tab.tsx`.
+  · Productos e inventario · la venta descuenta stock · marca lo que queda poco
+    → `inventory.ts` (invariante de stock), `products/productos-client.tsx`
+    (`lowStock`, `minStock`).
+  · Porcentaje, renta de silla o sueldo · comisión sobre el ticket SIN propina ·
+    propina íntegra → `commissions.ts` (cabecera: los tres esquemas y "la
+    propina jamás entra a la base"), `types.ts` (`BARBER_COMMISSION_TYPE_LABELS`).
+  · Corte de cada barbero cada mes · marcar pagado · recibo → `periodKey =
+    YYYY-MM` en `commissions.ts`, `api/barber/commissions/pay/route.ts`,
+    `commissions/receipt-print.tsx`.
+  · Agenda por barbero, día y semana · horarios y bloqueos · fuera de horario no
+    deja agendar · turno partido → `agenda/agenda-client.tsx` (`view: day |
+    week`), `agenda/week-board.tsx`, `agenda/schedule-manager.tsx` (cabecera).
+  · Dueño, encargado, barbero y recepción · el barbero ve lo suyo, no la caja ·
+    permisos persona por persona desde el plan con `advancedRoles` →
+    `permissions.ts` (defaults por rol: BARBER = agenda.view, clients.view,
+    walkin.manage, commissions.view), `team/permission-matrix.tsx` (deshabilitada
+    sin `advancedRoles`), `team.ts:882`.
+  · Historial de cortes con foto · número de máquina, fade, raya, barba →
+    `clients/visit-timeline.tsx`, `clients/photo-uploader.tsx`,
+    `clients/preferences-panel.tsx` (`clipperNumber, fade, part, beard…`).
+  · Tarjeta de lealtad: a las N visitas corte gratis · se cuenta sola · la caja
+    aplica el canje · el cliente la ve en su portal → N = `BARBER_LOYALTY_GOAL`
+    (portal-core, 10), `loyalty.ts` (contador DERIVADO), `cash.ts`
+    (`LOYALTY_SUFFIX`), `portal/portal-client.tsx` (sección lealtad).
+  · Portal del cliente sin contraseña: teléfono + código por WhatsApp · ve sus
+    citas · cancela o reagenda con tiempo · sus fotos → `portal/portal-login.tsx`,
+    `portal-core.ts` (`canClientCancel`, `BARBER_CANCEL_WINDOW_HOURS`),
+    `portal/portal-client.tsx` (acciones `cancelar | reagendar`, fotos SOLO
+    `visibleToClient`).
+  · Bandeja de WhatsApp con el estado real y el motivo del rechazo →
+    `whatsapp/inbox-panel.tsx` (cabecera, decisión 1).
+  · Varias sucursales, una cuenta · selector · accesos por persona →
+    `branches.ts` (`getAccessibleBranchIds`, cookie `dcb_branch`),
+    `branches/branches-client.tsx`.
+  · Reportes: ingresos por día, mapa de calor de horas muertas, no-shows, quién
+    volvió en 30 días → `stats.ts` (`deadSlots`, `REPORT_RETURN_WINDOW_DAYS`),
+    `dashboard/reportes-view.tsx`, `dashboard/heatmap.tsx`.
+  · Programa de socios: recomienda y cobra cuando la referida paga →
+    `affiliates.ts` (cabecera), `afiliados/afiliados-screen.tsx`.
+  · Soporte desde el panel con capturas, en todos los planes → `support.ts`
+    ("Soporte NO se gatea por plan"), `support/support-client.tsx`.
+  · Sin comisiones por cita / cliente / cobro → `billing.ts` (solo suscripción
+    por Stripe Checkout; no hay `application_fee` en `payments.ts`: los cobros al
+    cliente final van con `transfer_data.destination` sin porcentaje nuestro).
+  · Cancela cuando quieras, el plan sigue hasta el fin del periodo pagado →
+    `api/barber/billing/cancel/route.ts` (`cancel_at_period_end`).
+  · Sube de plan y paga solo la diferencia de los días que faltan →
+    `api/barber/billing/change-plan/route.ts` (`always_invoice` + prorrateo).
+  · Se acaban los mensajes: la cola espera al siguiente periodo o subes de plan →
+    `whatsapp.ts:776-778` y el texto `quota.exhausted` del propio panel.
+  · Sin app ni terminal · tus clientes tampoco descargan nada → booking-flow y
+    portal son web; no existe app nativa ni integración de terminal.
+  · Tus clientes son tuyos · los mensajes salen de TU número · nunca les
+    escribimos → `whatsapp.ts` (`OWN_WABA`; `platformSenderEnabled()` nace
+    APAGADO), multi-tenant por `barbershopId` en toda consulta.
+
+▶ **LO QUE NO SE PROMETE — porque el panel no lo hace HOY** (y así se dijo en
+la página, sin adornarlo):
+  · **Anticipo cobrado EN LÍNEA o pedido AL RESERVAR.** `resolveDepositForBooking()`
+    en `booking.ts` sigue devolviendo `null` (stub de T5 para T4) y
+    `startDepositPayment()` no tiene NINGÚN consumidor en `src/` (solo su
+    definición). `applyDepositToSale()` / `previewDepositForSale()` solo los
+    llaman las pruebas: el anticipo tampoco se descuenta del ticket. La promesa
+    quedó en lo que sí funciona: política (a quién y cuánto), registro del
+    anticipo cobrado en mostrador, devolver o retener, todo en bitácora.
+  · **"Tú pones el número" de la lealtad.** `loyaltyThreshold` es configurable
+    en clientes pero `cash.ts` sigue con `BARBER_LOYALTY_STAMPS_TARGET = 10`
+    (divergencia abierta en [T4 Clientes]); la landing dice "a las 10 visitas"
+    con el 10 importado de `portal-core`, sin prometer que se cambia.
+  · CFDI, app nativa, marketplace, integraciones, terminal física: ni una
+    mención. Del marketplace solo se dice que NO lo hay (es un argumento de
+    venta: nadie te "manda" clientes a cambio de un porcentaje).
+  · "Exporta tus clientes": no existe exportación (0 `csv` en el módulo). La
+    respuesta a "¿mis clientes son míos?" habla de dónde viven, quién los ve y
+    de que los mensajes salen de tu número — nada de "te los llevas".
+  · Precio anual y promo de primer mes: el seed los trae en `null`, así que hoy
+    NO se pintan; aparecen solos el día que la fila los traiga.
+
+▶ **DICCIONARIO.** `src/i18n/dictionaries/barber/landing.{es,en}.json` montados
+como `barber.landing` (dos líneas en `index.ts`), leídos con
+`makeBarberT(getBarberDict("es"), "barber.landing")` (convención A, raíz +
+prefijo). La página pinta es-MX: una superficie pública no tiene de dónde leer
+el locale y leer `Accept-Language` la volvería dinámica (mismo criterio que
+las públicas del dental). El `en` existe completo y con paridad de llaves
+(la prueba lo exige) para el día que se enrute.
+
+▶ **SEO.** `<title>` absoluto ("DaleControl Barber · Software para barberías
+con WhatsApp", 58 caracteres, sin heredar el "Software para clínicas" del
+layout raíz), meta descripción con el "desde $X" de la tabla, canonical
+`/barberias`, Open Graph y Twitter con **imagen propia** por convención de
+archivo (`opengraph-image.tsx` + `twitter-image.tsx`, 1200×630, runtime edge —
+no lleva precio a propósito y por eso no necesita Prisma; el nodejs de next/og
+no arranca en el dev de Windows). JSON-LD con `SoftwareApplication`
+(`BusinessApplication`, ofertas = filas activas de la tabla, `featureList` del
+catálogo) y `FAQPage` generado del MISMO arreglo que pinta el acordeón (con el
+`<` escapado, como en `/b/[slug]`). Nada médico, ni en el schema ni en las
+keywords.
+
+  🔴 **Para la terminal del sitemap (compartido, no lo toqué):** indexar
+  `${SITE_URL}/barberias` con `changeFrequency: "weekly"` y `priority: 0.9`
+  (misma prioridad que las landings de producto). NO indexar `/barber/registro`
+  (ya lleva `robots: noindex`) ni `/barber/fila/*`. `robots.ts` no necesita
+  cambios: `/barberias` no cae en ningún `disallow`.
+
+▶ **AISLAMIENTO.** `/barberias` es una ruta ESTÁTICA y gana al catch-all
+`/[slug]` de las especialidades dentales sin tocar `NON_SPECIALTY_RESERVED`
+(misma razón por la que `/b` no está ahí). Cero archivos del dental
+modificados; `src/app/sitemap.ts` intacto. **El guardia se editó** (está en su
+propia lista `OWN_FILES`): dos prefijos EXACTOS nuevos en `OWN_PREFIXES` —
+`src/app/barberias/` y `src/components/public/barberias/` — nunca
+`src/components/public/`, que abriría la landing dental entera. Con eso
+`BARBER_GUARD_SHARED=ORQUESTA.md node scripts/barber-guard.cjs` → exit 0 con
+los 22 archivos como PROPIOS y cero compartidos sin declarar.
+
+▶ **VERIFICACIÓN (anotada tal cual):**
+  1. `npm run build` (prisma generate + next build, `NODE_OPTIONS=
+     --max-old-space-size=8192` porque había otro build ajeno corriendo en
+     `barber-comparar`): dos corridas completas, la última sobre el árbol
+     definitivo → `BUILD_EXIT_CODE:0` + marcador, `✓ Generating static pages
+     (382/382)`, `prisma generate` sin EPERM, sin `Failed to compile` ni `Type
+     error`. Tabla de rutas: `○ /barberias  202 B  98.7 kB` (estática; el JS de
+     la ruta son 202 B, el resto es el framework compartido) y `ƒ
+     /barberias/opengraph-image` + `ƒ /barberias/twitter-image` (edge). Las
+     únicas advertencias del log son preexistentes (clases `ease-[…]` de
+     Tailwind y `file-type` en `api/ai-wallet`). HTML prerenderizado
+     `.next/server/app/barberias.html`: 174 228 bytes, con título, descripción
+     ("Desde $199" del seed, porque no hay `.env`), canonical, `og:image` y
+     `twitter:image` apuntando a las imágenes propias, y el JSON-LD.
+  2. `grep -rn -E "199|329|749"` sobre `src/app/barberias`,
+     `src/components/public/barberias`, `src/lib/barber/marketing.ts` y los dos
+     `landing.*.json` → **exit 1, cero coincidencias**. La prueba
+     `marketing.test.ts` repite este grep en cada corrida y ya cazó dos
+     intentos míos (un "$199" en un comentario y un "consultan" en el CSS).
+  3. Promesas ↔ archivo: la lista de arriba (29 promesas, 60+ archivos), toda
+     verificada con lectura directa en el worktree de `origin/main`; ninguna
+     tuvo que retirarse por no poder verificarse — las cuatro que NO se
+     pudieron sostener están en "lo que no se promete".
+  4. Móvil, contra `next start` del build (sin `.env` → seed) en Chrome: a **390 px**
+     (iframe del mismo origen, porque el resize del MCP se aplica tarde y en píxeles
+     de dispositivo) `scrollWidth 375 ≤ 390` y **0 elementos** fuera del viewport
+     recorriendo TODO `.dcbl *`; a **312 px css** (la ventana real que quedó)
+     `scrollWidth 297 ≤ 312`, 0 desbordes; a **1280 px** (iframe escalado) 0
+     desbordes, portada a dos columnas, tres planes, grupo 260 px + rejilla. Las
+     container queries conmutan como se diseñó (CTA corto y sin anclas en móvil,
+     anclas y "Entrar" en escritorio). Capturas de las 8 secciones revisadas una
+     por una. Rendimiento sin Lighthouse instalado (no está en el repo y no se
+     descargó nada): HTML prerenderizado 174 KB (26 KB transferidos), JS propio de
+     la ruta **202 B** (98.7 kB compartidos del framework, sin JS de la landing),
+     CSS 40 KB, `DOMContentLoaded` 63 ms, `load` 593 ms, **CLS 0**. El LCP medido
+     no vale: la pestaña del MCP estaba `hidden` y Chrome difiere el pintado.
+  5. Contraste AA: 29 pares medidos con un script (fórmula WCAG, canales
+     alfa fundidos sobre su fondo). Mínimo **4.90:1** (blanco sobre
+     caramel-600: botón primario, burbuja, bandera "el más elegido", bloque
+     ocupado de la agenda); el resto entre 5.63 y 18.96. Texto blanco SOLO
+     sobre caramel-600/700; sobre negro cálido el acento es caramel-300
+     (9.96:1) y 400 (7.20:1); atenuados sobre crema #4A4138 (9.20:1) y
+     #6B6057 (5.63:1).
+  6. `node scripts/barber-guard.cjs` → **exit 0** (arriba).
+  7. Vocabulario: `grep -rn -i -E "paciente|doctor|Dr\.|clínica|clinica|
+     consulta|expediente"` sobre los mismos archivos → **exit 1, cero**.
+     La prueba lo repite (y `marketing.ts` se salta a sí mismo porque ahí
+     vive la lista).
+  8. `npx tsx --test src/lib/barber/__tests__/marketing.test.ts` → **12/12**:
+     archivos de cada promesa existen, features del catálogo, cero seed de
+     precios, cero vocabulario dental, paridad es/en, cada `t("…")` literal de
+     los componentes resuelve en los dos idiomas, tarjetas (orden, destacado,
+     acumulado de features, plan inactivo, primer mes solo si es menor),
+     "desde <plan>" derivado, costo de WhatsApp compuesto de las constantes,
+     JSON-LD escapado. `i18n-alcance.test.ts` sigue 4/4.
+  9. `npx tsc --noEmit` sobre TODO el árbol: mis archivos limpios; los únicos
+     2 errores son PREEXISTENTES en `src/lib/barber/__tests__/i18n-alcance.test.ts:166-167`
+     (`[...set]` sin `--downlevelIteration`, ver feedback_ts_target_no_set_spread;
+     el arreglo es `Array.from(es)` — no lo toqué, no es de esta ola).
+
+▶ **PENDIENTE DE RAFAEL / OTRAS TERMINALES:**
+  · Sitemap (arriba) y comparativas contra competidores: otras terminales.
+  · Para que la promesa de WhatsApp sea real EN PRODUCCIÓN siguen las dos
+    pendientes de [Barber WhatsApp]: el cron `/api/barber/whatsapp/dispatch`
+    cada 15 min en `vercel.json` (hoy los recordatorios solo salen con el
+    botón del panel) y la env `NEXT_PUBLIC_BARBER_WHATSAPP_ES_CONFIG_ID`.
+  · Verificar los precios contra la BD REAL: en local no hay `.env`, así que
+    el build y la captura usan el FALLBACK (= seed). Como en la landing dental,
+    la comprobación de verdad es un preview `preview/*` de Vercel con sesión.
+  · Los `sql/barber_*.sql` pendientes no afectan la landing (no lee más que
+    `barber_plan_configs`, con fallback), pero sí a lo que promete: sin
+    `barber_membresias.sql` no se guarda la política de anticipos, sin
+    `barber_bot.sql` el bot no enciende, sin `barber_complemento.sql` el editor
+    de Mi web no guarda.
+  · Cerrar en producto lo que la landing NO pudo prometer: conectar
+    `resolveDepositForBooking` → `quoteDepositForBooking` (3 líneas), dar un
+    consumidor a `startDepositPayment` y a `applyDepositToSale` en la caja, y
+    leer `loyaltyThreshold` en `cash.ts`. El día que entre, la promesa se
+    agrega en `marketing.ts` con su `verifiedIn` y su copy.
+
+▶ **ENTREGA.** Commit `86dadb0d` (feat, 22 archivos, +3777) + este reporte, desde
+el worktree `mediflow-worktrees/barber-landing` (detached sobre `origin/main`
+`cc92cfeb`, junction de `node_modules`; sigue montado, como los demás de la
+ola). Cero archivos del dental tocados; `src/app/sitemap.ts` y `vercel.json`
+intactos a propósito. Pruebas:
+`npx tsx --test src/lib/barber/__tests__/marketing.test.ts` (no hay script en
+`package.json`: está fuera de la allowlist).
