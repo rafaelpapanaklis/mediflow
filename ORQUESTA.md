@@ -14247,3 +14247,221 @@ Bot → quien perdió: Uy, ese horario se acaba de apartar. Te quedan 4:30 pm,
 
 ⚪ El bot **no** hace campañas de reactivación, afiliados, reportes ni admin.
    Fuera de alcance a propósito.
+
+
+## [Barber Inicio + Reportes] — La barbería por fin tiene pantalla de inicio: el día en un vistazo (ingreso, visitas, caja, fila, avisos) y, en Profesional, los reportes con las horas muertas ✅ (2026-08-24)
+═══════════════════════════════════════════════════════════════════════════
+COMMIT: b5eb25c4 · push directo a main (rebasado sobre ec1e7841: bot + admin DC +
+campañas) · BUILD EXIT 0 (output completo, sin pipes, 376/376 páginas, dos veces:
+sobre mi árbol y sobre el árbol rebasado; "Compiled with warnings" = las de
+siempre de file-type; los prisma:error de DATABASE_URL son del dental sin .env) ·
+GUARDIA BARBER exit 0 (18 propios; ORQUESTA.md como única compartida declarada) ·
+7/7 pruebas de integración contra Postgres real · cero "paciente/doctor/Dr./
+clínica/consulta/expediente" en los 18 archivos.
+
+QUÉ SE ENTREGA
+  /barber/inicio          resumen del día (TODOS los planes; antes redirigía a la agenda)
+  /barber/reportes        feature `analytics` (Profesional) — periodo, sede, barbero, CSV
+  GET /api/barber/stats/inicio?branchId=
+  GET /api/barber/stats/reports?range=today|week|month|custom&from=&to=&branchId=&barberId=&format=json|csv
+  src/lib/barber/stats.ts                      la capa de datos (única fuente de los números)
+  src/components/barber/dashboard/**           inicio-view (server), reportes-view (client),
+                                               revenue-chart, heatmap, bars, dashboard.css
+  src/i18n/dictionaries/barber/inicio.{es,en}.json  montado como barber.inicio y barber.reportes
+  src/lib/barber/__tests__/stats-integration.test.ts
+
+───────────────────────────────────────────────────────────────────────────
+1. INICIO — lo que ve el dueño al entrar
+───────────────────────────────────────────────────────────────────────────
+· KPI hero: ingreso de hoy (Σ subtotal sin propinas = "Vendido" de la caja y
+  "Producido" de comisiones) con delta vs. ayer y, en la nota, vs. el mismo día
+  de la semana pasada; propinas y total cobrado en la misma nota. Tickets, ticket
+  promedio (ingreso ÷ tickets, en Decimal) y visitas de hoy.
+· Visitas de hoy: terminadas / por atender / en silla / canceladas / no llegaron,
+  y "N visitas terminadas sin cobrar" con liga a Caja — la MISMA regla que las
+  citas por cobrar de la caja (DONE sin ticket vivo, predicado CANCELLED_MARK).
+· Turno de caja: abierto/cerrado, efectivo esperado, fondo, tickets, vendido,
+  propinas, quién lo abrió. Fila virtual: esperando + llamados. Próximas 3 visitas
+  (en silla primero, luego las pendientes de hoy) y "Mañana: N visitas".
+· Avisos accionables, cada uno con su liga: barberos sin horario (→ /barber/
+  agenda/horarios), productos bajo mínimo (→ /barber/productos), membresías que
+  vencen esta semana (→ /barber/membresias), citas de mañana sin confirmar (→
+  /barber/agenda), solicitudes web pendientes (→ /barber/solicitudes). Solo se
+  calculan/enseñan los que el rol puede resolver y el plan incluye.
+· Barbería sin una sola visita ni venta: en vez de ceros, los seis primeros pasos
+  (equipo, horarios, servicios, primera visita, caja, web) con estado listo/
+  pendiente leído de la base.
+· Selector de sede (misma cookie dcb_branch y misma recarga dura que la barra de
+  administración); vista consolidada de la cadena para OWNER. El turno de caja se
+  muestra de la sede activa (o la propia en consolidado: los turnos son por sede).
+· Impago: /barber/inicio manda a /barber/suscripcion igual que el router /barber
+  (antes la página no cortaba porque solo redirigía a la agenda).
+
+───────────────────────────────────────────────────────────────────────────
+2. REPORTES — plan Profesional
+───────────────────────────────────────────────────────────────────────────
+· Periodo: hoy · esta semana (lunes→hoy) · este mes (1→hoy) · rango (tope 366
+  días); comparativa con el periodo anterior de la misma longitud. Filtros en
+  UNA fila arriba de todo; viven en la URL (range/from/to/branch/barber) y el CSV
+  sale de la MISMA lectura (/api/barber/stats/reports?…&format=csv).
+· Ingresos por día: columnas apiladas servicios (NETOS de descuentos, la misma
+  base que la comisión) / productos / propinas, con tooltip por banda, leyenda y
+  vista de tabla; más de 5 semanas se agrupa por semana.
+· Por barbero: tickets, producido, ticket promedio, propinas y comisión (la
+  columna solo viaja con commissions.view). Servicios y productos más vendidos con
+  peso y —productos— margen = ingreso − qty × costo actual (misma definición que
+  inventory.ts).
+· 🔥 Horas muertas: mapa hora × día (lunes primero) de visitas = citas DONE/IN_
+  PROGRESS + ventas de mostrador con servicio (la definición de "visita" de
+  clients.ts). Rango de horas del horario cargado (BarberSchedule; si no hay,
+  9–21). Celda abierta sin una visita en todo el periodo = marcada ("abierto sin
+  visitas"); cerrada = rayada. Resumen "N horas abiertas sin visitas de M" y las
+  3 horas pico. En "hoy" solo cuenta como abierto el día de la semana de hoy.
+· No-shows: cuántos, tasa = no-shows ÷ (no-shows + terminadas), terminadas y
+  canceladas, y quiénes reinciden (2+ en el periodo; con cliente, teléfono y
+  última fecha).
+· Retención: nuevos (primera visita de su vida dentro del periodo) vs recurrentes
+  (visitaron en el periodo y ya venían de antes), y cuántos nuevos volvieron en
+  ≤ 30 días (REPORT_RETURN_WINDOW_DAYS). Solo clientes registrados.
+· Métodos de pago: efectivo / tarjeta / SPEI (/ en línea si hubo) con reparto.
+· Paleta validada con el validador del skill dataviz en claro (#FFFFFF) y en
+  oscuro (#241D19): servicios caramelo, productos azul, propinas aqua, en línea
+  violeta. El aqua queda en 2.82:1 en claro → relevo obligatorio cumplido
+  (leyenda + tooltip + tabla). Rampa del mapa de calor de un solo tono (caramelo).
+
+───────────────────────────────────────────────────────────────────────────
+3. CONTRATO: ALCANCE, PERMISOS Y DINERO — todo en el servidor
+───────────────────────────────────────────────────────────────────────────
+· barbershopId SIEMPRE de getBarberContext. Sedes por resolveBranchScope
+  (branches.ts, punto único): la lista se aplica como `IN (...)`; un branchId
+  ajeno cae a la sede propia (probado: B pidiendo la sede de A ve solo B).
+· Rol BARBER = solo lo suyo, por resolveCommissionScope (el mismo recorte que la
+  nómina): sus ventas, sus visitas, sus comisiones; sin turno de caja (no tiene
+  cash.view), sin avisos de stock/membresías/horarios; pedir ?barberId= ajeno →
+  403 FORBIDDEN_SCOPE; sin fila Barber ligada → todo en cero y aviso. Probado
+  también llamando a las DOS rutas con la sesión doblada.
+· Reportes: feature `analytics` con assertBarberFeature de gating.ts en la ruta
+  (402/403 FEATURE_LOCKED con requiredPlan) y barberPlanHasFeature en la página;
+  permiso = cash.view O commissions.view (así el barbero ve SUS reportes; una
+  recepción con cash.view los ve sin la columna de comisión). Decisión mía:
+  no existe permiso "reports.view" en las 26 claves y no toco permissions.ts.
+· Dinero en Decimal: los SUM vuelven de Postgres como Decimal y se redondean UNA
+  vez con money(); ningún precio en código.
+· Reglas REUTILIZADAS, no copiadas: expectedCashFor (cash.ts) para el efectivo
+  esperado, CANCELLED_MARK / NOT_CANCELLED (commissions.ts / clients.ts) para el
+  ticket cancelado, resolveCommissionScope, resolveBranchScope, la definición de
+  visita de clients.ts, el margen de inventory.ts, BARBER_DEFAULT_DAY_*_MIN de
+  agenda.ts.
+
+───────────────────────────────────────────────────────────────────────────
+4. RENDIMIENTO — contado, no supuesto
+───────────────────────────────────────────────────────────────────────────
+Inicio se abre decenas de veces al día, así que se contaron las sentencias que
+llegan a Postgres (log_statement = all en el contenedor, leído desde la prueba):
+  Inicio (dueño):   6 sentencias   · Inicio (barbero): 6   · Reportes (mes): 11
+Un solo Promise.all de 5 lecturas (ventas por día, visitas de hoy con nombres,
+fila, avisos + arranque en UN SELECT, turno abierto con totales) + 1-2 de
+resolveBranchScope. Reportes: 6 + 4 en dos lotes. Ninguna lectura por fila.
+HALLAZGO que vale para las demás terminales: un `include` / `select` anidado de
+Prisma NO es un JOIN — resuelve cada relación con una sentencia aparte. La
+primera versión de Inicio hacía 18 (6 solo para las visitas de hoy y 6 para
+summarizeSession, que trae TODOS los tickets del turno con sus líneas para
+sumarlos en JS). Se cambiaron por SQL con JOIN/LATERAL y quedó en 6. Las
+columnas de fecha son timestamp(3) naive en UTC (así las crea Prisma y así las
+crea sql/barber.sql): el SQL usa timezone(tz, timezone('UTC', col)) para la hora
+local y los límites viajan como ISO→timestamptz→UTC, sin depender del TimeZone
+de la sesión.
+
+───────────────────────────────────────────────────────────────────────────
+5. VERIFICACIÓN (lo que pidió el encargo)
+───────────────────────────────────────────────────────────────────────────
+1. `npm run build` → BUILD_EXIT_CODE:0 dos veces (árbol propio y rebasado),
+   output completo a archivo, 376/376 páginas, rutas /barber/inicio (ƒ),
+   /barber/reportes (ƒ), /api/barber/stats/{inicio,reports} (ƒ) en la tabla.
+   `npx tsc --noEmit` → 0 errores.
+2. Inicio CUADRA con Caja y Comisiones (prueba stats-integration, mismos datos
+   por la MISMA puerta: openCashSession/createSale/cancelSale de cash.ts):
+     Inicio  : ingreso $640.00 · propinas $50.00 · tickets 3 · efectivo esperado $700.00
+     Caja    : vendido $640.00 · propinas $50.00 · tickets 3 · esperado  $700.00
+               (fondo $500 + el único ticket vivo en efectivo $200; la venta
+                cancelada NO cuenta; ayer vivió en otro turno ya cerrado)
+     Comisiones (mes): producido $820.00 = Inicio hoy $640 + ayer $180;
+               Alan 40% → $216.00 (3 tickets de $180); Beto renta de silla →
+               $130.00 (base 140 − 10 de descuento). Reportes.byBarber trae
+               exactamente esas cifras y Reportes.ingresos = $820.00.
+3. Rol BARBER por la API: /stats/inicio → 200 con ingreso $360 (sus 2 tickets),
+   cash null, sin el nombre del otro barbero ni el "640"; /stats/reports → 1 fila
+   (la suya), comisión $216; ?barberId=<otro> → 403 FORBIDDEN_SCOPE.
+4. Dos barberías: B ve $200 (lo suyo), cero nombres de A; A no ve a Bruno;
+   B pidiendo branchId de A cae a su propia sede.
+5. Plan Avanzado (sin analytics): /stats/inicio → 200; /stats/reports → 403
+   FEATURE_LOCKED, feature "analytics", requiredPlan PROFESIONAL. La página
+   pinta la tarjeta de plan. Profesional → 200 y CSV (text/csv con BOM).
+6. Sentencias del render de Inicio: 6 (dueño) / 6 (barbero); Reportes 11.
+7. `BARBER_GUARD_SHARED=ORQUESTA.md node scripts/barber-guard.cjs` → exit 0.
+8. grep paciente|doctor|Dr\.|clínica|consulta|expediente en mis 18 archivos → 0
+   (hasta los comentarios dicen "lecturas" y "sentencias").
++ UI mirada en Chrome (render estático de las vistas con los datos del Postgres
+  de Docker, claro y oscuro, 1000px y 400px): 4 KPIs → 2 por fila en móvil,
+  rejilla 7/5 → una columna, sin scroll horizontal (scrollWidth = ancho), mapa
+  de calor con scroll propio. Corregido en el camino: los <a> con clase de
+  botón salían subrayados por la regla global de enlaces.
+
+Cómo correr las pruebas (Postgres en Docker; se SALTAN sin DATABASE_URL):
+  docker run -d --name barber-stats-pg -e POSTGRES_PASSWORD=barber -e POSTGRES_DB=barber -p 54329:5432 postgres:16-alpine
+  DATABASE_URL=postgresql://postgres:barber@localhost:54329/barber DIRECT_URL=$DATABASE_URL npx prisma db push --skip-generate
+  docker exec barber-stats-pg psql -U postgres -d barber -c "ALTER SYSTEM SET log_statement='all';" -c "SELECT pg_reload_conf();"   (solo para el conteo)
+  DATABASE_URL=… DIRECT_URL=… npx tsx --test src/lib/barber/__tests__/stats-integration.test.ts
+  (BARBER_KEEP=1 deja las barberías para mirar la UI a mano.)
+
+───────────────────────────────────────────────────────────────────────────
+6. HUECOS Y DECISIONES DOCUMENTADAS
+───────────────────────────────────────────────────────────────────────────
+(1) Reportes NO aparece en el sidebar: BARBER_NAV_ITEMS (types.ts) y el mapa de
+    iconos del sidebar están fuera de mi allowlist. Hoy se llega desde el botón
+    "Ver reportes" de Inicio (solo si el plan lo incluye y el rol puede). Para el
+    menú son DOS líneas:
+      types.ts   → { key: "reportes", href: "/barber/reportes", icon: "bar-chart", section: "negocio", permission: "cash.view", featureKey: "analytics" },
+      sidebar    → "bar-chart": BarChart3,   (en ICONS; sin esto cae a Scissors)
+      shell.{es,en}.json → nav.reportes: "Reportes" / "Reports"
+    Un barbero con commissions.view pero sin cash.view no vería el item aunque
+    sí puede abrir la pantalla; si se quiere, permission: null y que la página
+    decida (ya lo hace).
+(2) Permiso de reportes = cash.view || commissions.view (ver §3). Si Rafael
+    prefiere una clave propia ("reports.view"), es permissions.ts + team.ts.
+(3) La retención cuenta "volvió en ≤ 30 días" también para nuevos cuya ventana
+    aún no cerró (un nuevo de ayer cuenta como "no volvió" hasta que vuelva).
+    Ventana fija en código; no hay dónde configurarla por barbería.
+(4) Ingresos por día apila servicios NETOS de descuento (el descuento se resta a
+    servicios, como hace la base de comisión); el descuento bruto se ve en el
+    tooltip, la tabla y el CSV. Así la pila suma exactamente lo cobrado.
+(5) La gráfica se pinta en SSR a 640px y toma el ancho real al hidratar
+    (ResizeObserver); hay un reflujo de milisegundos al cargar. Sin auto-refresco
+    (cada refresco son 6 sentencias × decenas de aperturas); botón "Actualizar".
+(6) "Próximas visitas" son las de HOY (en silla primero); si no quedan, dice
+    cuántas hay mañana. La agenda no acepta ?date=, así que las ligas van a
+    /barber/agenda a secas.
+(7) Membresías "por vencer": ACTIVE con endAt en (ahora, +7 días], el mismo
+    predicado del filtro "soon" de memberships.ts (sin el barrido de vencidas,
+    que ahí es escritura).
+(8) El turno de caja en la vista consolidada de una cadena es el de la sede
+    propia (los turnos son por sede); el resto de números sí consolidan.
+(9) CSV: UTF-8 con BOM y CRLF para que Excel abra acentos; números sin formato
+    de moneda para poder sumar; secciones una debajo de otra.
+(10) Sin .env ni Supabase aquí: el camino sesión→página real y el hover de la
+    gráfica quedan para el QA manual (abajo). Todo lo demás se probó contra
+    Postgres real y con las rutas invocadas directo.
+
+▶ QA MANUAL PENDIENTE DE RAFAEL
+a) Entrar a /barber/inicio con una barbería con turno abierto y comparar a
+   ojo con /barber/caja (vendido, propinas, tickets, efectivo esperado) y con
+   /barber/comisiones del mes (producido).
+b) Con un usuario rol BARBER: que Inicio diga "Tu producción de hoy" y que
+   /barber/reportes (si el plan es Profesional) traiga una sola fila.
+c) En una cadena: cambiar de sede en Inicio (recarga dura) y "Toda la cadena";
+   en Reportes el selector de sede va por URL (?branch=all).
+d) Reportes: pasar el ratón por las columnas (tooltip), "Ver tabla", exportar el
+   CSV y abrirlo en Excel; el mapa de calor con un mes real debe verse casi lleno
+   y las horas muertas marcadas en ámbar.
+e) Plan Básico/Avanzado: /barber/reportes muestra la tarjeta de plan y la API
+   responde 403 FEATURE_LOCKED.
