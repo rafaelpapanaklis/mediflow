@@ -43,6 +43,8 @@ import botEs from "./bot.es.json"; // bot que agenda por WhatsApp
 import botEn from "./bot.en.json";
 import inicioEs from "./inicio.es.json"; // inicio (resumen del día) + reportes
 import inicioEn from "./inicio.en.json";
+import afiliadosEs from "./afiliados.es.json"; // programa de socios
+import afiliadosEn from "./afiliados.en.json";
 
 const ES: Dictionary = {
   barber: {
@@ -60,6 +62,7 @@ const ES: Dictionary = {
     bot: botEs as unknown as Dictionary,
     inicio: inicioEs.inicio as unknown as Dictionary,
     reportes: inicioEs.reportes as unknown as Dictionary,
+    afiliados: afiliadosEs as unknown as Dictionary,
   },
 };
 
@@ -79,6 +82,7 @@ const EN: Dictionary = {
     bot: botEn as unknown as Dictionary,
     inicio: inicioEn.inicio as unknown as Dictionary,
     reportes: inicioEn.reportes as unknown as Dictionary,
+    afiliados: afiliadosEn as unknown as Dictionary,
   },
 };
 

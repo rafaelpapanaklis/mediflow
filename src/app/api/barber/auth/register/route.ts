@@ -124,8 +124,9 @@ export async function POST(req: Request) {
   }
 
   // e) Barbershop + BarberUser OWNER + catálogo semilla, en UNA transacción.
+  let shopId: string;
   try {
-    await prisma.$transaction(async (tx) => {
+    shopId = await prisma.$transaction(async (tx) => {
       const shop = await tx.barbershop.create({
         data: {
           name: shopName,
@@ -164,6 +165,8 @@ export async function POST(req: Request) {
           isActive: true,
         })),
       });
+
+      return shop.id;
     });
   } catch (err) {
     console.error("[barber-register] transacción falló", err);
@@ -179,6 +182,20 @@ export async function POST(req: Request) {
     );
   }
 
-  // g) Éxito. El cliente redirige a /login (login compartido).
+  // g) PROGRAMA DE SOCIOS. Si el visitante llegó por la liga de otra
+  // barbería, la cookie dcb_aff sigue en su navegador y aquí se sella la
+  // atribución (los candados de auto-referido viven en el módulo, no aquí).
+  //
+  // Aislamiento a propósito: import DINÁMICO + try/catch. Si el módulo de
+  // afiliados truena, o sus tablas todavía no existen, el alta de la
+  // barbería sigue exactamente igual que antes de que esto existiera.
+  try {
+    const { claimBarberReferral } = await import("@/lib/barber/affiliates");
+    await claimBarberReferral(shopId, req.headers.get("cookie"));
+  } catch (err) {
+    console.error("[barber-register] atribución de socio (ignorada)", err);
+  }
+
+  // h) Éxito. El cliente redirige a /login (login compartido).
   return NextResponse.json({ ok: true }, { status: 201 });
 }

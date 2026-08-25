@@ -9253,3 +9253,216 @@ model BarberUserBranchAccess {
   @@index([barbershopId])
   @@map("barber_user_branch_access")
 }
+
+// ═══════════════════════════════════════════════════════════════════════
+// BARBER — PROGRAMA DE SOCIOS (afiliados del vertical). Una barbería
+// recomienda DaleControl Barber a otra y cobra comisión cuando la referida
+// PAGA (no cuando se registra). SQL idempotente espejo:
+// sql/barber_afiliados.sql
+//
+// AISLADO DEL DENTAL A PROPÓSITO. El motor de afiliados dental (Affiliate,
+// AffiliateCommission, AffiliateClick, /r/<code>, cookie dc_aff) NO se toca
+// ni se importa: allá el afiliado es una PERSONA externa con panel propio;
+// aquí el socio ES una barbería cliente y todo vive dentro de su panel.
+// Cookies propias (dcb_aff / dcb_vid) para que las dos atribuciones jamás
+// se pisen en el mismo navegador. Lo único que se copió a propósito es el
+// criterio: PRIMER TOQUE y 90 días, para no tener dos reglas en la casa.
+//
+// SIN relación Prisma a Barbershop a PROPÓSITO (mismo patrón que
+// AffiliateCommission / AiUsageEvent): las FKs viven en el SQL. Así no se
+// añade ni un campo a un modelo existente y esta ola no colisiona con
+// ninguna otra rama.
+//
+// DINERO: Decimal(10,2) SIEMPRE, jamás Float. Los montos y porcentajes NO
+// están en el código ni en la UI: salen de BarberAffiliateConfig.
+// ═══════════════════════════════════════════════════════════════════════
+
+/// SIGNED_UP = se registró por la liga. PAYING = su suscripción está al día
+/// (es lo que dispara la comisión). CHURNED = pagó y dejó de pagar; la
+/// comisión ya generada NO se borra, solo deja de generarse la siguiente.
+enum BarberAffiliateReferralStatus {
+  SIGNED_UP
+  PAYING
+  CHURNED
+}
+
+/// PENDING = generada, aún en periodo de retención (holdDays). AVAILABLE =
+/// se puede pagar. PAID = Rafael ya la pagó a mano y dejó el comprobante.
+enum BarberAffiliateCommissionStatus {
+  PENDING
+  AVAILABLE
+  PAID
+}
+
+/// La barbería vista como SOCIO: su código de referido y sus datos de pago.
+/// 1:1 con la barbería (barbershopId único). Se crea sola la primera vez
+/// que entra a /barber/afiliados con un plan que incluye la feature.
+model BarberAffiliateAccount {
+  id           String  @id @default(cuid())
+  barbershopId String  @unique
+  /// Código público de la liga corta. [A-Z0-9]{8} sin caracteres ambiguos
+  /// (ver BARBER_AFF_CODE_ALPHABET en @/lib/barber/affiliates).
+  referralCode String  @unique
+  isActive     Boolean @default(true)
+
+  /// Cómo quiere cobrar: lo captura la barbería, lo lee Rafael al pagar.
+  /// Texto libre a propósito (CLABE, banco, "efectivo en sucursal"): no hay
+  /// dispersión automática que exija un formato.
+  payoutMethod  String?
+  payoutDetails String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  referrals   BarberAffiliateReferral[]
+  commissions BarberAffiliateCommission[]
+
+  @@index([barbershopId])
+  @@map("barber_affiliate_accounts")
+}
+
+/// Un clic en la liga de un socio. barbershopId = la barbería DUEÑA de la
+/// liga (quien cobra), nunca la que visita. El dedupe es por `vid` (cookie
+/// dcb_vid del navegador) y NO por IP: en México el CGNAT móvil pone miles
+/// de teléfonos detrás de una sola IP y la liga se comparte por WhatsApp.
+model BarberAffiliateClick {
+  id           String @id @default(cuid())
+  barbershopId String
+  code         String
+  /// Cookie dcb_vid — id opaco aleatorio del navegador. Nada derivado de la
+  /// IP ni del user-agent: derivarlo de la red sería el mismo bug con otro
+  /// nombre. Nullable porque un visitante sin cookies igual se redirige.
+  vid       String?
+  /// sha256 truncado con sal — JAMÁS la IP cruda.
+  ipHash    String?
+  userAgent String?
+  /// true = suma al contador; false = bot o repetido dentro de la ventana.
+  /// La fila se guarda igual para poder auditar por qué no contó.
+  counted   Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  @@index([barbershopId, createdAt])
+  @@index([code, vid, createdAt])
+  @@map("barber_affiliate_clicks")
+}
+
+/// La atribución: quién refirió a quién. UNA por barbería referida
+/// (referredBarbershopId único) y PERMANENTE — se escribe una sola vez, al
+/// darse de alta la referida, y ninguna superficie la cambia ni la borra.
+/// Si se pudiera reasignar, cualquiera se robaría la comisión de otro justo
+/// antes del primer cobro.
+model BarberAffiliateReferral {
+  id           String @id @default(cuid())
+  /// Barbería que REFIERE (la que cobra). Redundante con account.barbershopId
+  /// a propósito: todo filtro del panel es `where barbershopId` directo.
+  barbershopId String
+  accountId    String
+  /// Barbería REFERIDA. Única: primer toque gana, no hay segunda atribución.
+  referredBarbershopId String @unique
+  code                 String
+
+  status BarberAffiliateReferralStatus @default(SIGNED_UP)
+  /// Epoch del clic que sembró la cookie (no del alta): es la fecha que
+  /// prueba que el socio hizo el trabajo antes del registro.
+  firstTouchAt DateTime
+  signedUpAt   DateTime  @default(now())
+  /// Primera vez que la referida quedó al día. null = nunca ha pagado.
+  firstPaidAt  DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  account     BarberAffiliateAccount      @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  commissions BarberAffiliateCommission[]
+
+  @@index([barbershopId, createdAt])
+  @@index([accountId, status])
+  @@map("barber_affiliate_referrals")
+}
+
+/// Comisión devengada por un socio. Se genera cuando la referida está al
+/// día, NUNCA al registrarse. Idempotente por (referredBarbershopId,
+/// periodKey): correr la sincronización mil veces no duplica un peso.
+model BarberAffiliateCommission {
+  id           String @id @default(cuid())
+  /// Barbería que COBRA. El índice con status es la consulta del panel.
+  barbershopId String
+  accountId    String
+  referralId   String
+  /// Denormalizado para no unir con la referida al listar.
+  referredBarbershopId String
+  /// Periodo que cubre: "signup" (pago único) o "YYYY-MM" (recurrente).
+  /// Junto con referredBarbershopId es la llave de idempotencia.
+  periodKey            String
+
+  amount   Decimal @db.Decimal(10, 2)
+  currency String  @default("MXN")
+  /// Foto de CÓMO se calculó, congelada al generarse: cambiar la config
+  /// nunca reescribe una comisión ya devengada.
+  basis    Json?
+
+  status      BarberAffiliateCommissionStatus @default(PENDING)
+  /// Cuándo deja de estar retenida (createdAt + holdDays de la config).
+  availableAt DateTime
+
+  // ── Pago MANUAL (Rafael). No hay dispersión automática: esto es el
+  //    registro y el comprobante, nada más.
+  paidAt         DateTime?
+  /// Referencia del pago: folio SPEI, id de la transferencia, "efectivo".
+  payoutRef      String?
+  /// URL del comprobante que Rafael adjunta al pagar.
+  payoutProofUrl String?
+  payoutNote     String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  account  BarberAffiliateAccount  @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  referral BarberAffiliateReferral @relation(fields: [referralId], references: [id], onDelete: Cascade)
+
+  @@unique([referredBarbershopId, periodKey])
+  @@index([barbershopId, status])
+  @@index([accountId, createdAt])
+  @@map("barber_affiliate_commissions")
+}
+
+/// Config GLOBAL del programa — una sola fila id="default", igual que
+/// AiPricingConfig del dental y que barber_plan_configs.
+///
+/// ÚNICO modelo de este bloque SIN barbershopId, y a propósito: si la
+/// comisión fuera por barbería, la barbería podría fijarse su propia
+/// comisión. La edita Rafael por SQL (no hay admin en esta ola).
+///
+/// Si la fila no existe, el código cae a FALLBACK_BARBER_AFFILIATE_CONFIG
+/// (@/lib/barber/affiliates) — los MISMOS números que el INSERT de
+/// sql/barber_afiliados.sql. La UI jamás escribe un monto: siempre lee.
+model BarberAffiliateConfig {
+  id        String  @id @default("default")
+  isEnabled Boolean @default(true)
+
+  /// "fixed" = monto fijo por referida que paga. "pct" = porcentaje del
+  /// precio del plan que contrató la referida.
+  mode        String  @default("fixed")
+  /// Monto fijo en MXN (mode = "fixed").
+  fixedAmount Decimal @default(0) @db.Decimal(10, 2)
+  /// Porcentaje 0..100 (mode = "pct").
+  percent     Decimal @default(0) @db.Decimal(5, 2)
+  currency    String  @default("MXN")
+
+  /// true = una comisión por cada mes que la referida siga pagando;
+  /// false = una sola vez (periodKey "signup").
+  recurring Boolean @default(false)
+  /// Tope de meses del recurrente. 0 = sin tope.
+  maxMonths Int     @default(0)
+  /// Días de retención antes de que la comisión pase a AVAILABLE (cubre
+  /// reembolsos y contracargos de la referida).
+  holdDays  Int     @default(30)
+  /// Mínimo acumulado en AVAILABLE para poder pedir el pago.
+  minPayout Decimal @default(0) @db.Decimal(10, 2)
+  /// Liga a los términos del programa que ve el socio. null = no se pinta.
+  termsUrl  String?
+
+  updatedAt DateTime @updatedAt
+
+  @@map("barber_affiliate_config")
+}

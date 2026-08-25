@@ -1,0 +1,126 @@
+{
+  "title": "Partner program",
+  "subtitle": "Recommend DaleControl to another barbershop and earn a commission once they start paying.",
+  "blocker": {
+    "schemaMissingTitle": "The affiliates SQL hasn't been applied",
+    "schemaMissingBody": "The program's tables don't exist in the database yet. Apply sql/barber_afiliados.sql in Supabase and this screen turns on by itself. Nothing else in the panel is affected in the meantime.",
+    "disabledTitle": "The program is paused",
+    "disabledBody": "No new commissions are being generated right now. What you already earned is still on record.",
+    "lockedTitle": "Your plan doesn't include the partner program",
+    "lockedBody": "Switch plans to start earning for every barbershop you recommend."
+  },
+  "link": {
+    "title": "Your link",
+    "body": "Share it on WhatsApp, put it in your bio or stick the QR on the counter. Whoever comes in through it stays linked to you for {days} days, even if they sign up later.",
+    "copy": "Copy link",
+    "copied": "Copied!",
+    "qrBody": "Any barber can scan it with their phone camera.",
+    "loading": "Getting your link ready…"
+  },
+  "terms": {
+    "title": "How it pays",
+    "pctAmount": "{percent}% of the plan",
+    "onetime": "You earn {amount} for every barbershop you recommend, the first time they pay.",
+    "recurring": "You earn {amount} every month the barbershop you recommended keeps paying.",
+    "recurringCapped": "You earn {amount} a month for every barbershop you recommend, up to {months} months.",
+    "whenTitle": "Earned when they pay",
+    "whenBody": "The commission shows up when the barbershop you recommended activates its subscription, not when it signs up.",
+    "holdTitle": "{days}-day hold",
+    "holdBody": "Each commission becomes available {days} days after it's generated. That's the margin in case of a refund.",
+    "payTitle": "We pay you",
+    "payBody": "Once you have an available balance we deposit it and the receipt stays here, in your commission list.",
+    "minPayout": "Minimum to get paid: {amount}.",
+    "seeTerms": "Read the full terms"
+  },
+  "funnel": {
+    "title": "Your funnel",
+    "clicks": "Came in through your link",
+    "clicksHelp": "Unique visits. Reloads and bots don't count.",
+    "signups": "Signed up",
+    "signupsHelp": "Opened their account with your link.",
+    "paying": "Already paying",
+    "payingHelp": "These are the ones earning you a commission.",
+    "empty": "Nobody has come in through your link yet. Send it to a couple of people in the trade and you'll see it move here."
+  },
+  "earnings": {
+    "title": "What you've earned",
+    "pending": "Pending",
+    "pendingHelp": "On hold. It releases on its own.",
+    "available": "Available",
+    "availableHelp": "Ready for us to deposit.",
+    "paid": "Paid out",
+    "paidHelp": "With its receipt in the list.",
+    "total": "Total earned",
+    "belowMin": "You need {amount} more in available balance to reach the payout minimum.",
+    "readyToPay": "You've reached the minimum: we'll reach out to deposit it."
+  },
+  "referrals": {
+    "title": "Barbershops you recommended",
+    "empty": "Barbershops that sign up with your link will show up here.",
+    "colName": "Barbershop",
+    "colStatus": "Status",
+    "colSignedUp": "Signed up",
+    "colFirstPaid": "Started paying",
+    "colEarned": "Earned you",
+    "statusSIGNED_UP": "Signed up",
+    "statusPAYING": "Paying",
+    "statusCHURNED": "Stopped paying",
+    "notYet": "Not yet"
+  },
+  "commissions": {
+    "title": "Your commissions",
+    "empty": "No commissions yet. They're generated when a barbershop you recommended starts paying.",
+    "colReferred": "From",
+    "colPeriod": "Period",
+    "colAmount": "Amount",
+    "colStatus": "Status",
+    "periodSignup": "First payment",
+    "statusPENDING": "Pending",
+    "statusAVAILABLE": "Available",
+    "statusPAID": "Paid",
+    "availableOn": "Available on {date}",
+    "paidOn": "Paid on {date}",
+    "ref": "Reference: {ref}",
+    "proof": "View receipt"
+  },
+  "share": {
+    "title": "Ready to send",
+    "body": "Copy the message or download the image and send them on WhatsApp as they are.",
+    "textLabel": "WhatsApp message",
+    "whatsappText": "Hey, I run my barbershop on DaleControl: the calendar, the walk-in queue and the cash count in one app. If you want to try it, come in through here: {url}",
+    "copyText": "Copy message",
+    "copied": "Copied!",
+    "sendWhatsapp": "Open WhatsApp",
+    "imageLabel": "Image to share",
+    "imageBody": "It carries your QR and your code. Looks good as a WhatsApp status.",
+    "downloadImage": "Download image",
+    "imageAlt": "Shareable image with the QR for {shop}",
+    "cardHeadline": "Run your barbershop on DaleControl",
+    "cardSub": "Recommended by {shop}",
+    "cardCta": "Scan it and try it"
+  },
+  "payout": {
+    "title": "Where we deposit",
+    "body": "Leave us your details and we'll use them when it's time to pay you. You can change them anytime.",
+    "method": "Payment method",
+    "methodPlaceholder": "Transfer, cash…",
+    "details": "Details",
+    "detailsPlaceholder": "Account number, bank and account holder",
+    "save": "Save",
+    "saving": "Saving…",
+    "saved": "Saved.",
+    "error": "Couldn't save. Try again."
+  },
+  "claim": {
+    "title": "Did someone recommend you?",
+    "body": "If another barbershop gave you their code and it wasn't registered when you signed up, type it here.",
+    "placeholder": "8-character code",
+    "submit": "Register code",
+    "submitting": "Registering…",
+    "referredByTitle": "Your referrer is on record",
+    "referredBy": "You came in through {shop}."
+  },
+  "errors": {
+    "generic": "Something went wrong. Try again."
+  }
+}

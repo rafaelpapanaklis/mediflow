@@ -1,0 +1,477 @@
+/* ═══════════════════════════════════════════════════════════════════════
+   DaleControl BARBER — Programa de socios (/barber/afiliados).
+   Prefijo .dcba-*. Solo tokens del tema caramelo (.barber-shell): sin
+   colores propios salvo los semánticos de estado, igual que billing.css.
+
+   Responsive con @container (regla del repo), NUNCA @media. El contenedor
+   se declara en la RAÍZ y lo leen los descendientes: un contenedor nunca
+   se mide a sí mismo.
+
+   Aquí no hay modales, así que container-type no atrapa ningún fixed.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+.dcba-root {
+  container-type: inline-size;
+  container-name: dcba;
+  max-width: 1120px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  color: var(--text-1);
+}
+
+/* ── Cabecera ─────────────────────────────────────────────────────────── */
+.dcba-header {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.dcba-title {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--text-1);
+}
+.dcba-subtitle {
+  margin: 0;
+  font-size: 13.5px;
+  color: var(--text-2);
+  max-width: 60ch;
+}
+
+/* ── Avisos ───────────────────────────────────────────────────────────── */
+.dcba-alert {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  padding: 14px 16px;
+  border-radius: 12px;
+  border: 1px solid var(--border-brand);
+  background: var(--brand-softer);
+  font-size: 13.5px;
+  line-height: 1.55;
+}
+.dcba-alert--warn {
+  border-color: rgba(245, 158, 11, 0.4);
+  background: rgba(245, 158, 11, 0.08);
+}
+.dcba-alert--ok {
+  border-color: rgba(22, 163, 74, 0.35);
+  background: rgba(22, 163, 74, 0.07);
+}
+.dcba-alert__icon {
+  flex: 0 0 auto;
+  margin-top: 1px;
+  color: var(--brand);
+}
+.dcba-alert--warn .dcba-alert__icon { color: #d97706; }
+.dcba-alert--ok .dcba-alert__icon { color: #16a34a; }
+.dcba-alert__title { margin: 0 0 2px; font-weight: 700; }
+.dcba-alert__body { margin: 0; color: var(--text-2); }
+
+/* ── Tarjeta base ─────────────────────────────────────────────────────── */
+.dcba-card {
+  background: var(--bg-elev);
+  border: 1px solid var(--border-soft);
+  border-radius: 16px;
+  padding: 20px;
+  box-shadow: var(--shadow-1);
+}
+.dcba-card__title {
+  margin: 0 0 4px;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-1);
+}
+.dcba-card__sub {
+  margin: 0 0 14px;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--text-2);
+}
+.dcba-kicker {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+
+/* ── Rejilla principal: liga + reglas ─────────────────────────────────── */
+.dcba-split {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 16px;
+}
+@container dcba (min-width: 760px) {
+  .dcba-split { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+}
+
+/* ── Liga + QR ────────────────────────────────────────────────────────── */
+.dcba-link {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.dcba-link__row {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+@container dcba (min-width: 560px) {
+  .dcba-link__row { flex-direction: row; align-items: flex-start; }
+}
+.dcba-qrbox {
+  flex: 0 0 auto;
+  align-self: flex-start;
+  padding: 12px;
+  border-radius: 14px;
+  background: #ffffff;
+  border: 1px solid var(--border-soft);
+  line-height: 0;
+}
+.dcba-link__body {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.dcba-url {
+  display: block;
+  width: 100%;
+  padding: 9px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--border-soft);
+  background: var(--bg-elev-2);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12.5px;
+  color: var(--text-1);
+  overflow-wrap: anywhere;
+}
+.dcba-code {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  align-self: flex-start;
+  padding: 4px 12px;
+  border-radius: 999px;
+  background: var(--brand-soft);
+  color: var(--brand);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+}
+
+/* ── Botones ──────────────────────────────────────────────────────────── */
+.dcba-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.dcba-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 9px 14px;
+  border-radius: 10px;
+  border: 1px solid var(--border-strong);
+  background: var(--bg-elev);
+  color: var(--text-1);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.2;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+.dcba-btn:hover:not(:disabled) { background: var(--bg-hover); }
+.dcba-btn:focus-visible { outline: none; box-shadow: var(--ring); }
+.dcba-btn:disabled { opacity: 0.55; cursor: not-allowed; }
+.dcba-btn--primary {
+  border-color: transparent;
+  background: var(--caramel-600);
+  color: #fff;
+}
+.dcba-btn--primary:hover:not(:disabled) { background: var(--caramel-700); }
+.dark .dcba-btn--primary {
+  background: var(--caramel-400);
+  color: var(--caramel-950);
+}
+.dark .dcba-btn--primary:hover:not(:disabled) { background: var(--caramel-300); }
+
+/* ── Rejilla de cifras ────────────────────────────────────────────────── */
+.dcba-stats {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+}
+@container dcba (min-width: 520px) {
+  .dcba-stats { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+.dcba-stat {
+  padding: 16px;
+  border-radius: 14px;
+  border: 1px solid var(--border-soft);
+  background: var(--bg-elev);
+  box-shadow: var(--shadow-1);
+}
+.dcba-stat__label {
+  margin: 0 0 6px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-2);
+}
+.dcba-stat__value {
+  margin: 0;
+  font-size: 26px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--text-1);
+  font-variant-numeric: tabular-nums;
+}
+.dcba-stat__help {
+  margin: 6px 0 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-3);
+}
+.dcba-stat--brand .dcba-stat__value { color: var(--brand); }
+.dcba-total {
+  margin: 12px 0 0;
+  font-size: 13px;
+  color: var(--text-2);
+}
+.dcba-total strong {
+  color: var(--text-1);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Reglas del programa ──────────────────────────────────────────────── */
+.dcba-rules {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.dcba-rule {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+}
+.dcba-rule__icon {
+  flex: 0 0 auto;
+  margin-top: 1px;
+  color: var(--brand);
+}
+.dcba-rule__title {
+  margin: 0;
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--text-1);
+}
+.dcba-rule__body {
+  margin: 2px 0 0;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--text-2);
+}
+.dcba-headline {
+  margin: 0 0 14px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: var(--brand-soft);
+  border: 1px solid var(--border-brand);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.5;
+  color: var(--text-1);
+}
+
+/* ── Material para compartir ──────────────────────────────────────────── */
+.dcba-sharegrid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 16px;
+}
+@container dcba (min-width: 700px) {
+  .dcba-sharegrid { grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr); }
+}
+.dcba-sharetext {
+  width: 100%;
+  min-height: 118px;
+  padding: 12px;
+  border-radius: 10px;
+  border: 1px solid var(--border-soft);
+  background: var(--bg-elev-2);
+  color: var(--text-1);
+  font-size: 13px;
+  line-height: 1.6;
+  font-family: inherit;
+  resize: vertical;
+}
+.dcba-sharetext:focus-visible { outline: none; box-shadow: var(--ring); }
+.dcba-preview {
+  display: block;
+  width: 100%;
+  max-width: 260px;
+  height: auto;
+  border-radius: 12px;
+  border: 1px solid var(--border-soft);
+  box-shadow: var(--shadow-2);
+}
+
+/* ── Tablas ───────────────────────────────────────────────────────────── */
+/* overflow-x en un contenedor propio: la página nunca hace scroll lateral. */
+.dcba-tablewrap {
+  width: 100%;
+  overflow-x: auto;
+}
+.dcba-table {
+  width: 100%;
+  min-width: 520px;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.dcba-table th {
+  text-align: left;
+  padding: 8px 10px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  border-bottom: 1px solid var(--border-soft);
+  white-space: nowrap;
+}
+.dcba-table td {
+  padding: 11px 10px;
+  border-bottom: 1px solid var(--border-soft);
+  color: var(--text-1);
+  vertical-align: top;
+}
+.dcba-table tr:last-child td { border-bottom: none; }
+.dcba-table .dcba-num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.dcba-cellsub {
+  display: block;
+  margin-top: 2px;
+  font-size: 11.5px;
+  color: var(--text-3);
+}
+
+/* ── Píldoras de estado ───────────────────────────────────────────────── */
+.dcba-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 600;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+.dcba-badge--ok { color: #166534; background: rgba(22, 163, 74, 0.14); }
+.dcba-badge--warn { color: #92400e; background: rgba(245, 158, 11, 0.16); }
+.dcba-badge--neutral { color: var(--text-2); background: var(--bg-elev-2); }
+.dcba-badge--brand { color: var(--brand); background: var(--brand-soft); }
+.dark .dcba-badge--ok { color: #86efac; }
+.dark .dcba-badge--warn { color: #fcd34d; }
+
+/* ── Formularios ──────────────────────────────────────────────────────── */
+.dcba-form {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+  align-items: end;
+}
+@container dcba (min-width: 620px) {
+  .dcba-form--two { grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr) auto; }
+  .dcba-form--one { grid-template-columns: minmax(0, 1fr) auto; }
+}
+.dcba-field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+}
+.dcba-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-2);
+}
+/* `!` a propósito: globals.css del panel gana a las utilidades y pisa los
+   inputs; una regla propia sin peso se pierde en modo oscuro. */
+.dcba-input {
+  width: 100% !important;
+  padding: 9px 12px !important;
+  border-radius: 10px !important;
+  border: 1px solid var(--border-soft) !important;
+  background: var(--bg-elev) !important;
+  color: var(--text-1) !important;
+  font-size: 13px !important;
+  font-family: inherit !important;
+}
+.dcba-input::placeholder { color: var(--text-4) !important; }
+.dcba-input:focus-visible { outline: none !important; box-shadow: var(--ring) !important; }
+.dcba-input--code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace !important;
+  letter-spacing: 0.18em !important;
+  text-transform: uppercase !important;
+}
+
+/* ── Vacíos ───────────────────────────────────────────────────────────── */
+.dcba-empty {
+  margin: 0;
+  padding: 22px 16px;
+  text-align: center;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text-3);
+}
+.dcba-note {
+  margin: 10px 0 0;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--text-2);
+}
+.dcba-link-inline {
+  color: var(--brand);
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+/* Spinner propio: el shell barber no depende de las utilidades de Tailwind
+   para esto, y `animate-spin` no está garantizada dentro de .barber-shell. */
+@keyframes dcba-rotate {
+  to { transform: rotate(360deg); }
+}
+.dcba-spin {
+  animation: dcba-rotate 0.9s linear infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .dcba-spin { animation-duration: 2.4s; }
+}
+
+/* Lector de pantalla: el texto que anuncia el resultado de una acción. */
+.dcba-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}

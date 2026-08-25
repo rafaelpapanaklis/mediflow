@@ -1,0 +1,126 @@
+{
+  "title": "Programa de socios",
+  "subtitle": "Recomienda DaleControl a otra barbería y gana comisión cuando empiece a pagar.",
+  "blocker": {
+    "schemaMissingTitle": "Falta aplicar el SQL de afiliados",
+    "schemaMissingBody": "Las tablas del programa todavía no existen en la base de datos. Aplica sql/barber_afiliados.sql en Supabase y esta pantalla se enciende sola. Mientras tanto nada más del panel se ve afectado.",
+    "disabledTitle": "El programa está pausado",
+    "disabledBody": "Ahora mismo no se están generando comisiones nuevas. Lo que ya ganaste sigue registrado.",
+    "lockedTitle": "Tu plan no incluye el programa de socios",
+    "lockedBody": "Cambia de plan para empezar a ganar por cada barbería que recomiendes."
+  },
+  "link": {
+    "title": "Tu liga",
+    "body": "Compártela por WhatsApp, ponla en tu bio o pega el QR en el mostrador. Quien entre por aquí queda ligado a ti durante {days} días, aunque se registre después.",
+    "copy": "Copiar liga",
+    "copied": "¡Copiada!",
+    "qrBody": "Cualquier barbero puede escanearlo con la cámara del teléfono.",
+    "loading": "Preparando tu liga…"
+  },
+  "terms": {
+    "title": "Cómo se paga",
+    "pctAmount": "{percent}% del plan",
+    "onetime": "Ganas {amount} por cada barbería que recomiendes, la primera vez que pague.",
+    "recurring": "Ganas {amount} cada mes que la barbería que recomendaste siga pagando.",
+    "recurringCapped": "Ganas {amount} al mes por cada barbería que recomiendes, hasta {months} meses.",
+    "whenTitle": "Se gana cuando paga",
+    "whenBody": "La comisión aparece cuando la barbería que recomendaste activa su suscripción, no cuando se registra.",
+    "holdTitle": "Retención de {days} días",
+    "holdBody": "Cada comisión pasa a disponible {days} días después de generarse. Es el margen por si hay una devolución.",
+    "payTitle": "Te pagamos nosotros",
+    "payBody": "Cuando tengas saldo disponible te lo depositamos y el comprobante queda aquí, en tu lista de comisiones.",
+    "minPayout": "Mínimo para cobrar: {amount}.",
+    "seeTerms": "Ver los términos completos"
+  },
+  "funnel": {
+    "title": "Tu embudo",
+    "clicks": "Entraron por tu liga",
+    "clicksHelp": "Visitas únicas. No contamos recargas ni robots.",
+    "signups": "Se registraron",
+    "signupsHelp": "Abrieron su cuenta con tu liga.",
+    "paying": "Ya están pagando",
+    "payingHelp": "Estas son las que te generan comisión.",
+    "empty": "Todavía nadie ha entrado por tu liga. Mándala a un par de compas del gremio y aquí vas a ver el movimiento."
+  },
+  "earnings": {
+    "title": "Lo que has ganado",
+    "pending": "Pendiente",
+    "pendingHelp": "En retención. Se libera solo.",
+    "available": "Disponible",
+    "availableHelp": "Listo para que te lo depositemos.",
+    "paid": "Ya pagado",
+    "paidHelp": "Con su comprobante en la lista.",
+    "total": "Total ganado",
+    "belowMin": "Te faltan {amount} de saldo disponible para llegar al mínimo de cobro.",
+    "readyToPay": "Ya llegaste al mínimo: te contactamos para depositarte."
+  },
+  "referrals": {
+    "title": "Barberías que recomendaste",
+    "empty": "Aquí van a aparecer las barberías que se registren con tu liga.",
+    "colName": "Barbería",
+    "colStatus": "Estado",
+    "colSignedUp": "Se registró",
+    "colFirstPaid": "Empezó a pagar",
+    "colEarned": "Te ha dado",
+    "statusSIGNED_UP": "Registrada",
+    "statusPAYING": "Pagando",
+    "statusCHURNED": "Dejó de pagar",
+    "notYet": "Todavía no"
+  },
+  "commissions": {
+    "title": "Tus comisiones",
+    "empty": "Todavía no tienes comisiones. Se generan cuando una barbería que recomendaste empieza a pagar.",
+    "colReferred": "Por",
+    "colPeriod": "Periodo",
+    "colAmount": "Monto",
+    "colStatus": "Estado",
+    "periodSignup": "Primer pago",
+    "statusPENDING": "Pendiente",
+    "statusAVAILABLE": "Disponible",
+    "statusPAID": "Pagada",
+    "availableOn": "Disponible el {date}",
+    "paidOn": "Pagada el {date}",
+    "ref": "Referencia: {ref}",
+    "proof": "Ver comprobante"
+  },
+  "share": {
+    "title": "Material listo para mandar",
+    "body": "Copia el mensaje o descarga la imagen y mándalos por WhatsApp tal cual.",
+    "textLabel": "Mensaje de WhatsApp",
+    "whatsappText": "Oye, yo llevo mi barbería con DaleControl: la agenda, la fila y el corte de caja en una sola app. Si la quieres probar, entra por aquí: {url}",
+    "copyText": "Copiar mensaje",
+    "copied": "¡Copiado!",
+    "sendWhatsapp": "Abrir WhatsApp",
+    "imageLabel": "Imagen para compartir",
+    "imageBody": "Trae tu QR y tu código. Se ve bien en estado de WhatsApp.",
+    "downloadImage": "Descargar imagen",
+    "imageAlt": "Imagen para compartir con el QR de {shop}",
+    "cardHeadline": "Lleva tu barbería con DaleControl",
+    "cardSub": "Te la recomienda {shop}",
+    "cardCta": "Escanea y pruébala"
+  },
+  "payout": {
+    "title": "A dónde te depositamos",
+    "body": "Déjanos tus datos y los usamos cuando toque pagarte. Puedes cambiarlos cuando quieras.",
+    "method": "Forma de pago",
+    "methodPlaceholder": "Transferencia, efectivo…",
+    "details": "Datos",
+    "detailsPlaceholder": "CLABE, banco y a nombre de quién",
+    "save": "Guardar",
+    "saving": "Guardando…",
+    "saved": "Listo, guardado.",
+    "error": "No se pudo guardar. Intenta de nuevo."
+  },
+  "claim": {
+    "title": "¿Alguien te recomendó?",
+    "body": "Si otra barbería te pasó su código y no quedó registrado al darte de alta, escríbelo aquí.",
+    "placeholder": "Código de 8 caracteres",
+    "submit": "Registrar código",
+    "submitting": "Registrando…",
+    "referredByTitle": "Ya tienes quién te recomendó",
+    "referredBy": "Entraste por la recomendación de {shop}."
+  },
+  "errors": {
+    "generic": "Algo falló. Intenta de nuevo."
+  }
+}
