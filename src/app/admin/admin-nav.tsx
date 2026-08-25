@@ -7,6 +7,7 @@ import {
   LayoutDashboard, Building2, CreditCard, TrendingDown, CheckSquare,
   BarChart3, Megaphone, Ticket, Settings, LogOut, Menu, X, Bug, Truck, Handshake, Coins, Star,
   LifeBuoy, FlaskConical, Users, KeyRound, ScrollText, LineChart, Newspaper, UserRound, Globe,
+  Scissors,
 } from "lucide-react";
 import { BadgeNew } from "@/components/ui/design-system/badge-new";
 import { AvatarNew } from "@/components/ui/design-system/avatar-new";
@@ -25,6 +26,9 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/admin/clientes",     label: "Clientes",     icon: Users,           section: "main"   },
   { href: "/admin/suppliers",    label: "Proveedores",  icon: Truck,           section: "main"   },
   { href: "/admin/labs",         label: "Laboratorios", icon: FlaskConical,    section: "main"   },
+  // Vertical BARBER. Su soporte vive BAJO esta ruta (/admin/barberias/soporte),
+  // no como hermana: así isActive() enciende un solo item en toda la sección.
+  { href: "/admin/barberias",    label: "Barberías",    icon: Scissors,        section: "main"   },
   { href: "/admin/affiliates",   label: "Afiliados",    icon: Handshake,       section: "main"   },
   // Ruta HERMANA de /admin/affiliates, no hija, a propósito: isActive() empareja
   // por segmento, así que "/admin/affiliates/paginas" encendería también

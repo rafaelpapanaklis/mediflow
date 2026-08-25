@@ -1,0 +1,482 @@
+/* ═══════════════════════════════════════════════════════════════════════
+   DaleControl BARBER — piel de la sección /admin/barberias.
+
+   ANCHOS: todo se mide con @container, NUNCA con @media. Quien manda es el
+   ancho del <main> del panel admin, no el de la ventana: con el sidebar
+   abierto/cerrado la misma ventana deja anchos muy distintos y un @media
+   se equivoca en los dos casos.
+
+   El contenedor se declara UNA vez en la raíz (.dcba) y todas las reglas
+   de ancho preguntan por él: `container-type` no se aplica a sí mismo, así que ningún
+   `@container dcba (...)` puede apuntar a `.dcba`; siempre a un descendiente.
+
+   OJO con `container-type: inline-size`: crea contexto de contención y
+   ATRAPA a los `position: fixed` de dentro. Por eso los modales de esta
+   sección se montan FUERA de .dcba (hermanos, no hijos) — ver
+   manual-action-modal.tsx.
+
+   Colores: sólo tokens del panel (--text-1, --bg-elev, --border-soft, …),
+   así funciona en claro y en oscuro sin tocar globals.css.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+.dcba {
+  container-type: inline-size;
+  container-name: dcba;
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 32px 24px;
+}
+
+/* ── Encabezado ─────────────────────────────────────────────────────── */
+
+.dcba-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+  flex-wrap: wrap;
+  margin-bottom: 22px;
+}
+
+.dcba-title {
+  font-size: 22px;
+  letter-spacing: -0.02em;
+  color: var(--text-1);
+  font-weight: 600;
+  margin: 0;
+}
+
+.dcba-sub {
+  color: var(--text-3);
+  font-size: 13px;
+  margin: 4px 0 0;
+}
+
+.dcba-backlink {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--text-2);
+  text-decoration: none;
+  margin-bottom: 14px;
+}
+
+.dcba-backlink:hover {
+  color: var(--text-1);
+}
+
+/* ── Rejillas ───────────────────────────────────────────────────────── */
+
+.dcba-kpis {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 14px;
+  margin-bottom: 20px;
+}
+
+.dcba-grid2,
+.dcba-grid3 {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 14px;
+}
+
+.dcba-section {
+  margin-bottom: 20px;
+}
+
+/* Rejilla de CAMPOS dentro de una tarjeta. Va con auto-fit y no con
+   @container a propósito: `.dcba-grid2`/`.dcba-grid3` preguntan por la RAÍZ
+   (un contenedor no se consulta a sí mismo), así que anidada dentro de una
+   tarjeta de media pantalla se partiría en dos columnas cuando su hueco real
+   no da para dos. `auto-fit` + `minmax` mide el hueco de verdad. */
+.dcba-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 12px;
+}
+
+@container dcba (min-width: 560px) {
+  .dcba-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .dcba-grid2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@container dcba (min-width: 860px) {
+  .dcba-kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .dcba-grid3 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@container dcba (min-width: 1080px) {
+  .dcba-kpis { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+  .dcba-grid3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+
+/* ── Controles (búsqueda + filtros) ─────────────────────────────────── */
+
+.dcba-controls {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.dcba-control {
+  flex: 1 1 190px;
+  min-width: 0;
+  max-width: 260px;
+}
+
+.dcba-control--wide {
+  flex: 1 1 260px;
+  max-width: 340px;
+}
+
+@container dcba (max-width: 620px) {
+  .dcba-control,
+  .dcba-control--wide {
+    flex: 1 1 100%;
+    max-width: none;
+  }
+}
+
+/* ── Tabla ──────────────────────────────────────────────────────────── */
+
+/* overflow-x acotado al card: la página nunca hace scroll horizontal. */
+.dcba-tablewrap {
+  overflow-x: auto;
+}
+
+.dcba-th {
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+}
+
+.dcba-th:hover {
+  color: var(--text-1);
+}
+
+.dcba-sortmark {
+  margin-left: 4px;
+  opacity: 0.65;
+  font-size: 10px;
+}
+
+.dcba-row {
+  cursor: pointer;
+}
+
+.dcba-nowrap {
+  white-space: nowrap;
+}
+
+.dcba-ellipsis {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 220px;
+}
+
+/* Columnas que sólo caben cuando el panel es ancho. Mismo criterio que el
+   `hidden md:table-cell` del dental pero medido por CONTENEDOR. */
+.dcba-col-wide {
+  display: table-cell;
+}
+
+@container dcba (max-width: 900px) {
+  .dcba-col-wide { display: none; }
+}
+
+.dcba-col-xwide {
+  display: table-cell;
+}
+
+@container dcba (max-width: 1120px) {
+  .dcba-col-xwide { display: none; }
+}
+
+/* ── Medidor de consumo (mensajes de WhatsApp) ──────────────────────── */
+
+.dcba-meter {
+  width: 100%;
+  height: 4px;
+  background: var(--bg-elev);
+  border-radius: 2px;
+  overflow: hidden;
+  margin-top: 4px;
+}
+
+.dcba-meter__fill {
+  height: 100%;
+  border-radius: 2px;
+  transition: width 0.3s;
+}
+
+/* ── Bloques informativos ───────────────────────────────────────────── */
+
+.dcba-label {
+  font-size: 10.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-3);
+  margin-bottom: 3px;
+}
+
+.dcba-value {
+  font-size: 12.5px;
+  color: var(--text-2);
+  word-break: break-word;
+}
+
+.dcba-cardtitle {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-1);
+  margin: 0 0 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.dcba-note {
+  font-size: 11.5px;
+  color: var(--text-3);
+  line-height: 1.45;
+}
+
+.dcba-warn {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--border-soft);
+  background: var(--bg-elev);
+  font-size: 12px;
+  color: var(--text-2);
+  line-height: 1.45;
+  margin-bottom: 14px;
+}
+
+.dcba-empty {
+  padding: 56px 24px;
+  text-align: center;
+}
+
+.dcba-empty__icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  background: var(--bg-elev);
+  border: 1px solid var(--border-soft);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 12px;
+}
+
+.dcba-empty__title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-1);
+  margin-bottom: 4px;
+}
+
+.dcba-empty__body {
+  font-size: 12.5px;
+  color: var(--text-3);
+  margin-bottom: 16px;
+}
+
+/* ── Hilo de soporte ────────────────────────────────────────────────── */
+
+.dcba-thread {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 4px 2px;
+  max-height: 62vh;
+  overflow-y: auto;
+}
+
+.dcba-bubble {
+  max-width: min(640px, 88%);
+  border-radius: 12px;
+  padding: 10px 14px;
+  border: 1px solid var(--border-soft);
+  background: var(--bg-elev);
+  align-self: flex-start;
+}
+
+.dcba-bubble--admin {
+  align-self: flex-end;
+  background: var(--brand-softer, var(--bg-elev));
+  border-color: var(--brand-soft, var(--border-soft));
+}
+
+@container dcba (max-width: 620px) {
+  .dcba-bubble { max-width: 96%; }
+}
+
+.dcba-bubble__head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 4px;
+}
+
+.dcba-bubble__who {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-1);
+}
+
+.dcba-bubble__when {
+  font-size: 10.5px;
+  color: var(--text-3);
+  margin-left: auto;
+}
+
+.dcba-bubble__body {
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--text-1);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.dcba-atts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.dcba-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11.5px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border-soft);
+  background: var(--bg-elev-2);
+  color: var(--text-2);
+  text-decoration: none;
+  max-width: 220px;
+}
+
+.dcba-chip__name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dcba-thumb {
+  max-height: 110px;
+  max-width: 170px;
+  border-radius: 8px;
+  border: 1px solid var(--border-soft);
+  object-fit: cover;
+  display: block;
+}
+
+.dcba-composer {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.dcba-composer__foot {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.dcba-composer__spacer {
+  flex: 1 1 auto;
+}
+
+/* ── Modal de acción manual ─────────────────────────────────────────────
+   Se monta FUERA de .dcba: `container-type` atrapa position:fixed y el
+   modal quedaría anclado al bloque, no a la ventana. */
+
+.dcba-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(2px);
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+.dcba-modal {
+  width: 100%;
+  max-width: 520px;
+  max-height: 88vh;
+  overflow-y: auto;
+  border-radius: 14px;
+  border: 1px solid var(--border-soft);
+  background: var(--bg-elev);
+  box-shadow: 0 18px 60px rgba(0, 0, 0, 0.4);
+  padding: 20px;
+}
+
+.dcba-modal__title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-1);
+  margin: 0 0 6px;
+}
+
+.dcba-modal__body {
+  font-size: 12.5px;
+  color: var(--text-3);
+  line-height: 1.5;
+  margin: 0 0 14px;
+}
+
+.dcba-modal__field {
+  margin-bottom: 14px;
+}
+
+.dcba-modal__foot {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}
+
+.dcba-textarea {
+  width: 100%;
+  min-height: 96px;
+  resize: vertical;
+  font-family: inherit;
+  font-size: 13px;
+  line-height: 1.5;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--border-soft);
+  background: var(--bg-elev);
+  color: var(--text-1);
+}
+
+.dcba-textarea:focus {
+  outline: none;
+  border-color: var(--brand, var(--text-2));
+}
+
+.dcba-counter {
+  font-size: 11px;
+  color: var(--text-3);
+  text-align: right;
+  margin-top: 4px;
+}

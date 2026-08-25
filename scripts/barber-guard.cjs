@@ -37,6 +37,13 @@ const OWN_PREFIXES = [
   "src/components/barber/",
   "src/lib/barber/",
   "src/i18n/dictionaries/barber/",
+  // Sección BARBERÍAS del panel de plataforma. Viven bajo src/app/admin/**
+  // y src/components/admin/** porque ahí es donde el admin las espera, pero
+  // son carpetas EXCLUSIVAS del vertical: nada del dental las importa. Todo
+  // lo demás de src/app/admin/** sigue siendo PROHIBIDO.
+  "src/app/admin/barberias/",
+  "src/app/api/admin/barberias/",
+  "src/components/admin/barberias/",
 ];
 
 // PROPIO de barber: archivos exactos.
@@ -64,6 +71,10 @@ const SHARED_FILES = [
   "src/app/api/whatsapp/webhook/route.ts",
   "ORQUESTA.md",
   "src/app/sitemap.ts",
+  // Sidebar del panel de plataforma: compartido con el dental (VIVO). Sólo
+  // se declara para AÑADIR una entrada de menú del vertical; cualquier otro
+  // cambio ahí se revisa a mano.
+  "src/app/admin/admin-nav.tsx",
 ];
 
 function isOwn(p) {
