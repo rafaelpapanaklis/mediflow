@@ -45,6 +45,8 @@ import inicioEs from "./inicio.es.json"; // inicio (resumen del día) + reportes
 import inicioEn from "./inicio.en.json";
 import afiliadosEs from "./afiliados.es.json"; // programa de socios
 import afiliadosEn from "./afiliados.en.json";
+import landingEs from "./landing.es.json"; // landing pública /barberias
+import landingEn from "./landing.en.json";
 
 const ES: Dictionary = {
   barber: {
@@ -63,6 +65,7 @@ const ES: Dictionary = {
     inicio: inicioEs.inicio as unknown as Dictionary,
     reportes: inicioEs.reportes as unknown as Dictionary,
     afiliados: afiliadosEs as unknown as Dictionary,
+    landing: landingEs as unknown as Dictionary,
   },
 };
 
@@ -83,6 +86,7 @@ const EN: Dictionary = {
     inicio: inicioEn.inicio as unknown as Dictionary,
     reportes: inicioEn.reportes as unknown as Dictionary,
     afiliados: afiliadosEn as unknown as Dictionary,
+    landing: landingEn as unknown as Dictionary,
   },
 };
 

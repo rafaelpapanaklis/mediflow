@@ -33,6 +33,8 @@ const path = require("path");
 const OWN_PREFIXES = [
   "src/app/barber/",
   "src/app/b/", // páginas públicas de barbería (mini-web + reserva)
+  "src/app/barberias/", // landing pública del vertical (/barberias)
+  "src/components/public/barberias/", // secciones de esa landing
   "src/app/api/barber/",
   "src/components/barber/",
   "src/lib/barber/",

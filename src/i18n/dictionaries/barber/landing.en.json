@@ -1,0 +1,365 @@
+{
+  "meta": {
+    "title": "DaleControl Barber · Barbershop software with WhatsApp",
+    "description": "Per-barber schedule, WhatsApp reminders from your own number, virtual queue with QR, bookings without an app and a cash register with commissions. No per-client fees. From {from} a month, in pesos.",
+    "ogTitle": "Schedule, WhatsApp and cash register for your barbershop.",
+    "ogSub": "No per-client fees · In pesos · Made in Mexico",
+    "ogAlt": "DaleControl Barber: schedule, WhatsApp and cash register for your barbershop, with no per-client fees",
+    "offerCategory": "Monthly subscription"
+  },
+  "nav": {
+    "brand": "DaleControl",
+    "vertical": "Barber",
+    "ariaMain": "Page sections",
+    "features": "What it does",
+    "whatsapp": "WhatsApp",
+    "pricing": "Pricing",
+    "faq": "Questions",
+    "login": "Log in",
+    "cta": "Register your barbershop",
+    "ctaShort": "Start"
+  },
+  "hero": {
+    "eyebrow": "Barbershop software · Made in Mexico",
+    "title": "Schedule, WhatsApp and cash register for your barbershop.",
+    "titleAccent": "No per-client fees.",
+    "sub": "Reminders go out from your own number. Clients book without downloading anything. The register tells you what each barber is owed. From {from} a month, in pesos.",
+    "cta": "Register your barbershop",
+    "ctaSecondary": "See pricing",
+    "trust": {
+      "fees": "No per-booking fee",
+      "cancel": "Cancel whenever you want",
+      "pesos": "Prices in pesos"
+    },
+    "mock": {
+      "aria": "What it looks like: a WhatsApp reminder, today's schedule and the barber's ticket",
+      "waTitle": "La Navaja · WhatsApp",
+      "waMsg": "Hi Beto, a reminder of your visit at La Navaja. Tomorrow 5:00 pm · Cut + beard · With Chuy. Reply CONFIRM, CANCEL or CHANGE.",
+      "waReply": "Confirm",
+      "waStatus": "Confirmed. The schedule already knows.",
+      "agendaTitle": "Schedule · today",
+      "chairA": "Chuy",
+      "chairB": "Memo",
+      "slotA1": "4:00 · Fade + beard",
+      "slotA2": "5:00 · Beto · cut",
+      "slotB1": "4:30 · Walk-in",
+      "slotB2": "5:30 · Open",
+      "ticketTitle": "Ticket · Chuy",
+      "ticketService": "Cut + beard",
+      "ticketServiceAmount": "$280",
+      "ticketTip": "Tip",
+      "ticketTipAmount": "$40",
+      "ticketCommission": "Commission 50 %",
+      "ticketCommissionAmount": "$140",
+      "ticketNote": "The tip goes to the barber in full."
+    }
+  },
+  "problem": {
+    "eyebrow": "What happens today",
+    "title": "This is how a barbershop loses money.",
+    "items": {
+      "libreta": {
+        "title": "The notebook",
+        "body": "Appointments in a notebook or in your head. Two clients at the same time and one leaves angry."
+      },
+      "whatsapp": {
+        "title": "WhatsApp by hand",
+        "body": "You answer «got anything tomorrow at 5?» at eleven at night. And the one who never confirmed never showed up."
+      },
+      "cuentas": {
+        "title": "Saturday's math",
+        "body": "On a napkin you work out who cut what, what their percentage is and how much the tip was. Something is always missing."
+      },
+      "silla": {
+        "title": "The empty chair",
+        "body": "The walk-in sees the line, has no idea how long the wait is and goes across the street. Nobody measures the dead hours."
+      }
+    }
+  },
+  "features": {
+    "eyebrow": "What it does",
+    "title": "What matters to the owner.",
+    "sub": "No filler modules. Every piece solves something that costs you money or time today.",
+    "from": "From {plan}",
+    "groups": {
+      "llenar": {
+        "title": "Fill the chair",
+        "sub": "Get people in, and in on time.",
+        "items": {
+          "reserva": {
+            "title": "Booking from your link, no app",
+            "body": "Put it in your Instagram bio. The client picks a service, a barber and a time, leaves their WhatsApp and that's it. No sign-up, no password, nothing to download."
+          },
+          "fila": {
+            "title": "Virtual queue with QR",
+            "body": "Stick the QR on the counter. Walk-ins join from their phone, watch their place live, and you ping them on WhatsApp when it's almost their turn."
+          },
+          "recordatorios": {
+            "title": "Reminders from your number",
+            "body": "They go out on their own before every appointment. The client replies CONFIRM, CANCEL or CHANGE and the schedule finds out."
+          },
+          "bot": {
+            "title": "A bot that books on its own",
+            "body": "Answers WhatsApp at eleven at night with real openings from your schedule and leaves the appointment booked. If it's unsure, it hands the conversation to you."
+          },
+          "web": {
+            "title": "Your website in minutes",
+            "body": "{count} templates, an editor with live preview, your services, your team and your hours. With the booking button already in place."
+          },
+          "campanas": {
+            "title": "Campaigns to bring them back",
+            "body": "Birthdays, «we miss you», memberships about to expire, unclaimed rewards. You see the exact cost before sending, and they never go out on their own."
+          }
+        }
+      },
+      "cobrar": {
+        "title": "Charge right",
+        "sub": "So the money adds up at the end of the shift.",
+        "items": {
+          "caja": {
+            "title": "Cash register by shift, with a count",
+            "body": "Open with your float, charge, close by counting the cash. The difference against what was expected shows up right away, with who opened and who closed."
+          },
+          "ticket": {
+            "title": "Ticket with tip",
+            "body": "Services, products, discount and tip on a ticket you can print. Cash, card or bank transfer."
+          },
+          "membresias": {
+            "title": "Memberships",
+            "body": "Sell monthly haircut packages in cash, SPEI or card. Each visit takes one cut off the package at checkout."
+          },
+          "anticipos": {
+            "title": "No-show deposits",
+            "body": "You decide who to ask for a deposit —new clients, repeat no-shows or everyone— and how much. If the client doesn't show, you choose: refund it or keep it. Everything is on record."
+          },
+          "productos": {
+            "title": "Products and inventory",
+            "body": "Wax, pomade, shampoo. A sale takes stock off on its own and the panel flags what's running low."
+          }
+        }
+      },
+      "barbero": {
+        "title": "Pay each barber what's fair",
+        "sub": "And let them see it themselves, without asking you.",
+        "items": {
+          "comisiones": {
+            "title": "Percentage, chair rent or salary",
+            "body": "Each barber with their own scheme. Commission is computed on the ticket without the tip: the tip goes to the barber in full, always."
+          },
+          "nomina": {
+            "title": "Each barber's payout",
+            "body": "Every month you see each person's numbers —sales, commission, tips, rent—, mark it paid and print their receipt."
+          },
+          "agenda": {
+            "title": "Schedule per barber, by day and by week",
+            "body": "Each chair with its own column, hours and blocks. Outside working hours the schedule won't let you book. Split shifts included."
+          },
+          "roles": {
+            "title": "Everyone sees their own",
+            "body": "Owner, manager, barber and front desk. The barber sees their schedule and commissions, not your register.",
+            "extra": "From {advancedPlan}, permissions can be adjusted person by person."
+          }
+        }
+      },
+      "volver": {
+        "title": "Make the client come back",
+        "sub": "The one who returns every three weeks is worth more than ten new ones.",
+        "items": {
+          "ficha": {
+            "title": "Haircut history with photos",
+            "body": "Every visit with date, barber, service and a photo of the result. And how they like their cut, at hand: clipper number, the fade, the part, the beard."
+          },
+          "lealtad": {
+            "title": "Loyalty card",
+            "body": "After {goal} visits, a free cut. It counts on its own with every visit and the register applies the reward. The client sees it in their portal."
+          },
+          "portal": {
+            "title": "Client portal, no password",
+            "body": "They log in with their phone and a code that arrives on WhatsApp. They see their appointments, cancel or reschedule in time, check their card and the photos you share."
+          },
+          "inbox": {
+            "title": "WhatsApp inbox",
+            "body": "Every conversation on your number in one place, with the real status of each message: delivered, read or rejected, and why."
+          }
+        }
+      },
+      "crecer": {
+        "title": "To grow",
+        "sub": "When it's several chairs, or several locations.",
+        "items": {
+          "sucursales": {
+            "title": "Several locations, one account",
+            "body": "Each location with its own schedule and register, a switcher to move between them and access per person."
+          },
+          "reportes": {
+            "title": "Reports with dead hours",
+            "body": "Revenue per day, a heatmap of the hours nobody fills, no-shows and who came back within 30 days."
+          },
+          "socios": {
+            "title": "Partner program",
+            "body": "Recommend DaleControl to another barbershop and get paid when they pay."
+          },
+          "soporte": {
+            "title": "Support from the panel",
+            "body": "Open a ticket with screenshots and we answer right there. On every plan."
+          }
+        }
+      }
+    }
+  },
+  "whatsapp": {
+    "eyebrow": "The difference",
+    "title": "Real WhatsApp. From your number, not ours.",
+    "body": "You connect your barbershop's WhatsApp from the panel. Everything that goes out —reminders, confirmations, queue notices— goes out with your name and your number, and the replies come to you.",
+    "points": {
+      "recordatorio": {
+        "title": "Reminder before the appointment",
+        "body": "The client replies CONFIRM, CANCEL or CHANGE."
+      },
+      "confirmacion": {
+        "title": "Confirmation when booking",
+        "body": "With date, time and address."
+      },
+      "turno": {
+        "title": "Queue turn notice",
+        "body": "«2 people ahead of you. Come by in about 20 min.»"
+      },
+      "inbox": {
+        "title": "Inbox",
+        "body": "With the real status of every message."
+      },
+      "campanas": {
+        "title": "Retention campaigns",
+        "body": "With the cost in plain sight before sending."
+      },
+      "bot": {
+        "title": "Booking bot",
+        "body": "Real openings, appointment booked, and it hands you the conversation if unsure."
+      }
+    },
+    "cost": {
+      "title": "And how much does it cost?",
+      "ours": "DaleControl doesn't charge per message. Every plan comes with its monthly allowance:",
+      "quota": {
+        "one": "{plan}: 1 message a month",
+        "other": "{plan}: {count} messages a month"
+      },
+      "quotaUnlimited": "{plan}: no cap",
+      "meta": "The only thing on top is what Meta charges your own WhatsApp Business account: about {usd} USD per delivered reminder.",
+      "example": "{visits} appointments a month ≈ {usdTotal} USD, about {mxn} pesos.",
+      "connect": "The number is connected from the panel with your WhatsApp Business account."
+    }
+  },
+  "pricing": {
+    "eyebrow": "Pricing",
+    "title": "Three plans. In pesos. No fine print.",
+    "sub": "What you see is what you pay. No per-booking fee, no per-new-client fee, no percentage of what you charge.",
+    "recommended": "Most chosen",
+    "perMonth": "a month",
+    "yearly": "or {price} a year ({perMonth} a month)",
+    "firstMonth": "Your first month for {price}",
+    "cta": "Start with {plan}",
+    "includes": "Includes",
+    "plus": "Everything in {plan}, plus:",
+    "limits": {
+      "barbers": {
+        "one": "1 barber",
+        "other": "Up to {count} barbers"
+      },
+      "barbersUnlimited": "Unlimited barbers",
+      "branches": {
+        "one": "1 location",
+        "other": "Up to {count} locations"
+      },
+      "branchesUnlimited": "Unlimited locations",
+      "messages": {
+        "one": "1 WhatsApp message a month",
+        "other": "{count} WhatsApp messages a month"
+      },
+      "messagesUnlimited": "WhatsApp messages with no cap"
+    },
+    "features": {
+      "agenda": "Schedule per barber, by day and by week",
+      "clients": "Clients with history, photos and preferences",
+      "publicBooking": "Bookings from your link, no app",
+      "whatsappReminders": "WhatsApp reminders from your number",
+      "cash": "Cash register by shift, with a count",
+      "tips": "Ticket with tips",
+      "loyalty": "Loyalty card",
+      "commissions": "Commissions and payouts per barber",
+      "walkinQueue": "Virtual queue with QR",
+      "memberships": "Client memberships",
+      "deposits": "No-show deposits",
+      "whatsappInbox": "WhatsApp inbox and campaigns",
+      "miniWebEditor": "Your website with editor",
+      "products": "Products and inventory",
+      "multiBranch": "Several locations in one account",
+      "whatsappBot": "WhatsApp booking bot",
+      "advancedRoles": "Permissions person by person",
+      "analytics": "Reports with dead hours",
+      "affiliates": "Partner program"
+    },
+    "noFees": {
+      "title": "No hidden fees",
+      "cita": "Zero fee per booked appointment or per booking from your page.",
+      "cliente": "Zero fee per new client. There's no marketplace «sending» you clients for a cut.",
+      "cobro": "Zero percentage of what you charge: deposits, memberships and tickets are yours.",
+      "cancel": "Cancel from the panel whenever you want. The plan stays active until the last day you already paid for."
+    },
+    "footnote": "Prices in Mexican pesos (MXN). Paid by card, month to month, no contract."
+  },
+  "faq": {
+    "eyebrow": "Frequently asked questions",
+    "title": "What people ask before paying.",
+    "items": {
+      "commission": {
+        "q": "Do you charge a fee per client or per appointment?",
+        "a": "No. You pay your monthly plan and that's it. Not per booked appointment, not per new client, not per booking from your page. There's no marketplace «sending» you clients for a cut either: clients come through your link, your QR and your WhatsApp."
+      },
+      "whatsapp": {
+        "q": "Does WhatsApp cost extra?",
+        "a": "Not on our side: every plan includes reminders from your own number, with a monthly message allowance ({basicQuota} on {basicPlan}). What does exist is what Meta charges your WhatsApp Business account: about {usd} USD per delivered reminder, so {visits} appointments a month come to about {mxn} pesos.",
+        "aInbox": "The inbox and campaigns start at {inboxPlan}.",
+        "aBot": "The booking bot, at {botPlan}."
+      },
+      "cancel": {
+        "q": "Can I cancel whenever I want?",
+        "a": "Yes, from the panel, with no contract or penalty. The plan stays active until the last day you already paid for, and you won't be charged again."
+      },
+      "solo": {
+        "q": "Does it work if it's just me?",
+        "a": "Yes. The {basicPlan} plan includes {basicLimit}: schedule, bookings from your link, reminders, a register with tips and a loyalty card. The day you hire someone, you upgrade from the panel and only pay the difference for the days left."
+      },
+      "owner": {
+        "q": "Are my clients mine?",
+        "a": "Yes. Their phone numbers, history and photos live in your account and only your team sees them. Messages go out from your number, not ours. We never write to them ourselves or share them with another barbershop."
+      },
+      "app": {
+        "q": "Do I need an app or a card terminal?",
+        "a": "No. Everything runs in the browser: on your phone, the tablet at the counter or the computer. Your clients don't download anything either: they book and enter their portal from a link."
+      },
+      "messages": {
+        "q": "What happens if I run out of messages for the month?",
+        "a": "Nothing is lost. Reminders left in the queue go out as soon as the next period starts, or you upgrade on the spot if you need them now."
+      }
+    }
+  },
+  "final": {
+    "title": "Your barbershop, under control starting today.",
+    "body": "Register your barbershop, pick your plan and in one afternoon you have the schedule, WhatsApp and register running.",
+    "cta": "Register your barbershop",
+    "loginHint": "Already have an account?",
+    "login": "Log in"
+  },
+  "footer": {
+    "tagline": "Schedule, WhatsApp and cash register for barbershops. Made in Mexico.",
+    "product": "Product",
+    "legal": "Legal",
+    "terms": "Terms",
+    "privacy": "Privacy",
+    "login": "Log in",
+    "register": "Register your barbershop",
+    "dental": "DaleControl also makes software for dentists",
+    "rights": "© {year} DaleControl"
+  }
+}

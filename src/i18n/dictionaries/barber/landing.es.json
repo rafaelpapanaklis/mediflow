@@ -1,0 +1,365 @@
+{
+  "meta": {
+    "title": "DaleControl Barber · Software para barberías con WhatsApp",
+    "description": "Agenda por barbero, recordatorios por WhatsApp desde tu propio número, fila virtual con QR, reservas sin app y caja con comisiones. Sin comisiones por cliente. Desde {from} al mes, en pesos.",
+    "ogTitle": "Agenda, WhatsApp y caja para tu barbería.",
+    "ogSub": "Sin comisiones por cliente · En pesos · Hecho en México",
+    "ogAlt": "DaleControl Barber: agenda, WhatsApp y caja para tu barbería, sin comisiones por cliente",
+    "offerCategory": "Suscripción mensual"
+  },
+  "nav": {
+    "brand": "DaleControl",
+    "vertical": "Barber",
+    "ariaMain": "Secciones de la página",
+    "features": "Qué hace",
+    "whatsapp": "WhatsApp",
+    "pricing": "Precios",
+    "faq": "Preguntas",
+    "login": "Entrar",
+    "cta": "Registra tu barbería",
+    "ctaShort": "Empezar"
+  },
+  "hero": {
+    "eyebrow": "Software para barberías · Hecho en México",
+    "title": "Agenda, WhatsApp y caja para tu barbería.",
+    "titleAccent": "Sin comisiones por cliente.",
+    "sub": "Los recordatorios salen de tu propio número. El cliente reserva sin descargar nada. La caja te dice cuánto le toca a cada barbero. Desde {from} al mes, en pesos.",
+    "cta": "Registra tu barbería",
+    "ctaSecondary": "Ver precios",
+    "trust": {
+      "fees": "Sin comisión por cita",
+      "cancel": "Cancelas cuando quieras",
+      "pesos": "Precios en pesos"
+    },
+    "mock": {
+      "aria": "Así se ve: un recordatorio por WhatsApp, la agenda del día y el ticket del barbero",
+      "waTitle": "La Navaja · WhatsApp",
+      "waMsg": "Hola Beto, te recordamos tu visita en La Navaja. Mañana 5:00 pm · Corte + barba · Con Chuy. Responde CONFIRMAR, CANCELAR o CAMBIAR.",
+      "waReply": "Confirmar",
+      "waStatus": "Confirmada. La agenda ya lo sabe.",
+      "agendaTitle": "Agenda · hoy",
+      "chairA": "Chuy",
+      "chairB": "Memo",
+      "slotA1": "4:00 · Fade + barba",
+      "slotA2": "5:00 · Beto · corte",
+      "slotB1": "4:30 · Walk-in",
+      "slotB2": "5:30 · Libre",
+      "ticketTitle": "Ticket · Chuy",
+      "ticketService": "Corte + barba",
+      "ticketServiceAmount": "$280",
+      "ticketTip": "Propina",
+      "ticketTipAmount": "$40",
+      "ticketCommission": "Comisión 50 %",
+      "ticketCommissionAmount": "$140",
+      "ticketNote": "La propina es íntegra del barbero."
+    }
+  },
+  "problem": {
+    "eyebrow": "Lo que pasa hoy",
+    "title": "Así se va el dinero en una barbería.",
+    "items": {
+      "libreta": {
+        "title": "La libreta",
+        "body": "Las citas en una libreta o en la cabeza. Dos clientes a la misma hora y uno se va enojado."
+      },
+      "whatsapp": {
+        "title": "El WhatsApp a mano",
+        "body": "Contestas «¿tienes mañana a las 5?» a las once de la noche. Y el que no confirmó, no llegó."
+      },
+      "cuentas": {
+        "title": "Las cuentas del sábado",
+        "body": "Sacas en una servilleta quién cortó qué, cuánto es su porcentaje y de cuánto fue la propina. Siempre falta algo."
+      },
+      "silla": {
+        "title": "La silla vacía",
+        "body": "El walk-in ve la fila, no sabe cuánto va a esperar y se va a la de enfrente. Las horas muertas nadie las mide."
+      }
+    }
+  },
+  "features": {
+    "eyebrow": "Qué hace",
+    "title": "Lo que le importa al dueño.",
+    "sub": "Nada de módulos de relleno. Cada cosa resuelve algo que hoy te cuesta dinero o tiempo.",
+    "from": "Desde {plan}",
+    "groups": {
+      "llenar": {
+        "title": "Llenar la silla",
+        "sub": "Que la gente llegue, y llegue a la hora.",
+        "items": {
+          "reserva": {
+            "title": "Reserva desde tu liga, sin app",
+            "body": "La pones en la bio de Instagram. El cliente elige servicio, barbero y hora, deja su WhatsApp y listo. Sin registro, sin contraseña, sin descargar nada."
+          },
+          "fila": {
+            "title": "Fila virtual con QR",
+            "body": "Pegas el QR en el mostrador. El walk-in se anota desde su celular, ve su lugar en vivo y le avisas por WhatsApp cuando ya casi es su turno."
+          },
+          "recordatorios": {
+            "title": "Recordatorios desde tu número",
+            "body": "Salen solos antes de cada cita. El cliente responde CONFIRMAR, CANCELAR o CAMBIAR y la agenda se entera."
+          },
+          "bot": {
+            "title": "Un bot que agenda solo",
+            "body": "Contesta el WhatsApp a las once de la noche con huecos reales de tu agenda y deja la cita hecha. Si duda, te pasa la conversación a ti."
+          },
+          "web": {
+            "title": "Tu página web en minutos",
+            "body": "{count} plantillas, editor con vista previa, tus servicios, tu equipo y tu horario. Con el botón de reservar ya puesto."
+          },
+          "campanas": {
+            "title": "Campañas para que vuelvan",
+            "body": "Cumpleaños, «te extrañamos», membresías por vencer, premio sin canjear. Ves el costo exacto antes de mandar y nunca se mandan solas."
+          }
+        }
+      },
+      "cobrar": {
+        "title": "Cobrar bien",
+        "sub": "Que el dinero cuadre al final del turno.",
+        "items": {
+          "caja": {
+            "title": "Caja por turno con arqueo",
+            "body": "Abres con tu fondo, cobras, cierras contando el efectivo. La diferencia contra lo esperado se ve al momento, con quién abrió y quién cerró."
+          },
+          "ticket": {
+            "title": "Ticket con propina",
+            "body": "Servicios, productos, descuento y propina en un ticket que se imprime. Efectivo, tarjeta o transferencia."
+          },
+          "membresias": {
+            "title": "Membresías",
+            "body": "Vendes paquetes de cortes al mes en efectivo, SPEI o tarjeta. Cada visita descuenta un corte del paquete al cobrar."
+          },
+          "anticipos": {
+            "title": "Anticipos anti no-show",
+            "body": "Tú decides a quién pedirle anticipo —nuevos, reincidentes o todos— y cuánto. Si el cliente no llega, eliges: se lo devuelves o te lo quedas. Todo queda registrado."
+          },
+          "productos": {
+            "title": "Productos e inventario",
+            "body": "Cera, pomada, shampoo. La venta descuenta el stock sola y el panel te marca lo que va quedando poco."
+          }
+        }
+      },
+      "barbero": {
+        "title": "Que el barbero cobre lo justo",
+        "sub": "Y que lo vea él mismo, sin pedirte cuentas.",
+        "items": {
+          "comisiones": {
+            "title": "Porcentaje, renta de silla o sueldo",
+            "body": "Cada barbero con su esquema. La comisión se calcula sobre el ticket sin la propina: la propina es íntegra del barbero, siempre."
+          },
+          "nomina": {
+            "title": "El corte de cada barbero",
+            "body": "Cada mes ves lo de cada quien —ventas, comisión, propinas, renta—, lo marcas pagado e imprimes su recibo."
+          },
+          "agenda": {
+            "title": "Agenda por barbero, día y semana",
+            "body": "Cada silla con su columna, su horario y sus bloqueos. Fuera de horario, la agenda no deja agendar. Turno partido incluido."
+          },
+          "roles": {
+            "title": "Cada quien ve lo suyo",
+            "body": "Dueño, encargado, barbero y recepción. El barbero ve su agenda y sus comisiones, no tu caja.",
+            "extra": "Desde {advancedPlan}, los permisos se ajustan persona por persona."
+          }
+        }
+      },
+      "volver": {
+        "title": "Que el cliente vuelva",
+        "sub": "El que vuelve cada tres semanas vale más que diez nuevos.",
+        "items": {
+          "ficha": {
+            "title": "Historial de cortes con foto",
+            "body": "Cada visita con fecha, barbero, servicio y foto del resultado. Y cómo le gusta el corte, a la mano: número de máquina, el fade, la raya, la barba."
+          },
+          "lealtad": {
+            "title": "Tarjeta de lealtad",
+            "body": "A las {goal} visitas, corte gratis. Se cuenta sola con cada visita y la caja aplica el canje. El cliente la ve en su portal."
+          },
+          "portal": {
+            "title": "Portal del cliente, sin contraseña",
+            "body": "Entra con su teléfono y un código que le llega por WhatsApp. Ve sus citas, cancela o reagenda con tiempo, revisa su tarjeta y las fotos que le compartas."
+          },
+          "inbox": {
+            "title": "Bandeja de WhatsApp",
+            "body": "Todas las conversaciones de tu número en un solo lugar, con el estado real de cada mensaje: entregado, leído o rechazado, y por qué."
+          }
+        }
+      },
+      "crecer": {
+        "title": "Para crecer",
+        "sub": "Cuando ya son varias sillas, o varias sucursales.",
+        "items": {
+          "sucursales": {
+            "title": "Varias sucursales, una cuenta",
+            "body": "Cada sede con su agenda y su caja, un selector para cambiar de sede y accesos por persona."
+          },
+          "reportes": {
+            "title": "Reportes con horas muertas",
+            "body": "Ingresos por día, mapa de calor de las horas que nadie ocupa, no-shows y quién volvió en 30 días."
+          },
+          "socios": {
+            "title": "Programa de socios",
+            "body": "Recomiendas DaleControl a otra barbería y cobras cuando la referida paga."
+          },
+          "soporte": {
+            "title": "Soporte desde el panel",
+            "body": "Abres un ticket con capturas y te contestamos ahí mismo. En todos los planes."
+          }
+        }
+      }
+    }
+  },
+  "whatsapp": {
+    "eyebrow": "El diferenciador",
+    "title": "WhatsApp de verdad. Desde tu número, no del nuestro.",
+    "body": "Conectas el WhatsApp de tu barbería desde el panel. Todo lo que sale —recordatorios, confirmaciones, avisos de la fila— sale con tu nombre y tu número, y las respuestas te llegan a ti.",
+    "points": {
+      "recordatorio": {
+        "title": "Recordatorio antes de la cita",
+        "body": "El cliente contesta CONFIRMAR, CANCELAR o CAMBIAR."
+      },
+      "confirmacion": {
+        "title": "Confirmación al reservar",
+        "body": "Con fecha, hora y dirección."
+      },
+      "turno": {
+        "title": "Aviso de turno en la fila",
+        "body": "«Faltan 2 personas para tu turno. Vente en unos 20 min.»"
+      },
+      "inbox": {
+        "title": "Bandeja de entrada",
+        "body": "Con el estado real de cada mensaje."
+      },
+      "campanas": {
+        "title": "Campañas de retención",
+        "body": "Con el costo a la vista antes de mandar."
+      },
+      "bot": {
+        "title": "Bot que agenda",
+        "body": "Huecos reales, cita hecha, y te pasa la conversación si duda."
+      }
+    },
+    "cost": {
+      "title": "¿Y cuánto cuesta?",
+      "ours": "DaleControl no te cobra por mensaje. Cada plan trae su cupo mensual:",
+      "quota": {
+        "one": "{plan}: 1 mensaje al mes",
+        "other": "{plan}: {count} mensajes al mes"
+      },
+      "quotaUnlimited": "{plan}: sin tope",
+      "meta": "Lo único aparte es lo que Meta le cobra a tu propia cuenta de WhatsApp Business: unos {usd} USD por recordatorio entregado.",
+      "example": "{visits} citas al mes ≈ {usdTotal} USD, unos {mxn} pesos.",
+      "connect": "El número se conecta desde el panel con tu cuenta de WhatsApp Business."
+    }
+  },
+  "pricing": {
+    "eyebrow": "Precios",
+    "title": "Tres planes. En pesos. Sin letra chica.",
+    "sub": "Lo que ves es lo que pagas. Ni comisión por cita, ni por cliente nuevo, ni porcentaje sobre lo que cobras.",
+    "recommended": "El más elegido",
+    "perMonth": "al mes",
+    "yearly": "o {price} al año ({perMonth} al mes)",
+    "firstMonth": "Tu primer mes por {price}",
+    "cta": "Empezar con {plan}",
+    "includes": "Incluye",
+    "plus": "Todo lo de {plan}, y además:",
+    "limits": {
+      "barbers": {
+        "one": "1 barbero",
+        "other": "Hasta {count} barberos"
+      },
+      "barbersUnlimited": "Barberos sin límite",
+      "branches": {
+        "one": "1 sucursal",
+        "other": "Hasta {count} sucursales"
+      },
+      "branchesUnlimited": "Sucursales sin límite",
+      "messages": {
+        "one": "1 mensaje de WhatsApp al mes",
+        "other": "{count} mensajes de WhatsApp al mes"
+      },
+      "messagesUnlimited": "Mensajes de WhatsApp sin tope"
+    },
+    "features": {
+      "agenda": "Agenda por barbero, día y semana",
+      "clients": "Clientes con historial, fotos y preferencias",
+      "publicBooking": "Reservas desde tu liga, sin app",
+      "whatsappReminders": "Recordatorios por WhatsApp desde tu número",
+      "cash": "Caja por turno con arqueo",
+      "tips": "Ticket con propinas",
+      "loyalty": "Tarjeta de lealtad",
+      "commissions": "Comisiones y nómina por barbero",
+      "walkinQueue": "Fila virtual con QR",
+      "memberships": "Membresías de clientes",
+      "deposits": "Anticipos anti no-show",
+      "whatsappInbox": "Bandeja de WhatsApp y campañas",
+      "miniWebEditor": "Tu página web con editor",
+      "products": "Productos e inventario",
+      "multiBranch": "Varias sucursales en una cuenta",
+      "whatsappBot": "Bot de WhatsApp que agenda",
+      "advancedRoles": "Permisos persona por persona",
+      "analytics": "Reportes con horas muertas",
+      "affiliates": "Programa de socios"
+    },
+    "noFees": {
+      "title": "Sin comisiones ocultas",
+      "cita": "Cero comisión por cita agendada o por reserva desde tu página.",
+      "cliente": "Cero comisión por cliente nuevo. No hay marketplace que te «mande» clientes a cambio de un porcentaje.",
+      "cobro": "Cero porcentaje sobre lo que cobras: anticipos, membresías y tickets son tuyos.",
+      "cancel": "Cancelas desde el panel cuando quieras. El plan sigue activo hasta el último día que ya pagaste."
+    },
+    "footnote": "Precios en pesos mexicanos (MXN). Pago con tarjeta, mes a mes, sin permanencia."
+  },
+  "faq": {
+    "eyebrow": "Preguntas frecuentes",
+    "title": "Lo que preguntan antes de pagar.",
+    "items": {
+      "commission": {
+        "q": "¿Me cobran comisión por cliente o por cita?",
+        "a": "No. Pagas tu plan mensual y ya. Ni por cita agendada, ni por cliente nuevo, ni por reserva desde tu página. Tampoco hay un marketplace que te «mande» clientes a cambio de un porcentaje: los clientes llegan por tu liga, tu QR y tu WhatsApp."
+      },
+      "whatsapp": {
+        "q": "¿El WhatsApp cuesta aparte?",
+        "a": "De nuestro lado, no: todos los planes incluyen recordatorios desde tu propio número, con un cupo mensual de mensajes ({basicQuota} en {basicPlan}). Lo que sí existe es lo que Meta le cobra a tu cuenta de WhatsApp Business: unos {usd} USD por recordatorio entregado, o sea que {visits} citas al mes te salen en unos {mxn} pesos.",
+        "aInbox": "La bandeja de entrada y las campañas van desde {inboxPlan}.",
+        "aBot": "El bot que agenda, desde {botPlan}."
+      },
+      "cancel": {
+        "q": "¿Puedo cancelar cuando quiera?",
+        "a": "Sí, desde el panel, sin permanencia ni penalización. El plan sigue activo hasta el último día que ya pagaste y no se te vuelve a cobrar."
+      },
+      "solo": {
+        "q": "¿Sirve si soy uno solo?",
+        "a": "Sí. El plan {basicPlan} incluye {basicLimit}: agenda, reservas por tu liga, recordatorios, caja con propinas y tarjeta de lealtad. El día que contrates a alguien, subes de plan desde el panel y solo pagas la diferencia de los días que faltan."
+      },
+      "owner": {
+        "q": "¿Mis clientes son míos?",
+        "a": "Sí. Sus teléfonos, su historial y sus fotos viven en tu cuenta y solo los ve tu equipo. Los mensajes salen de tu número, no del nuestro. Nunca les escribimos nosotros ni los compartimos con otra barbería."
+      },
+      "app": {
+        "q": "¿Necesito una app o una terminal?",
+        "a": "No. Todo corre en el navegador: en el celular, en la tablet del mostrador o en la compu. Tus clientes tampoco descargan nada: reservan y entran a su portal desde una liga."
+      },
+      "messages": {
+        "q": "¿Qué pasa si se me acaban los mensajes del mes?",
+        "a": "Nada se pierde. Los recordatorios que queden en cola salen en cuanto empiece el siguiente periodo, o subes de plan al momento si los necesitas ya."
+      }
+    }
+  },
+  "final": {
+    "title": "Tu barbería, con control desde hoy.",
+    "body": "Registra tu barbería, elige tu plan y en una tarde tienes agenda, WhatsApp y caja andando.",
+    "cta": "Registra tu barbería",
+    "loginHint": "¿Ya tienes cuenta?",
+    "login": "Entrar"
+  },
+  "footer": {
+    "tagline": "Agenda, WhatsApp y caja para barberías. Hecho en México.",
+    "product": "Producto",
+    "legal": "Legal",
+    "terms": "Términos",
+    "privacy": "Privacidad",
+    "login": "Entrar",
+    "register": "Registra tu barbería",
+    "dental": "DaleControl también hace software para dentistas",
+    "rights": "© {year} DaleControl"
+  }
+}
