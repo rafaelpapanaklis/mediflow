@@ -249,14 +249,41 @@ export type BarberBookingPolicy = "auto" | "manual";
  * estado, no la reserva. (Distinto del dental, donde la solicitud pública
  * no llega a apartar el horario por sí sola.)
  *
- * DÓNDE VIVE EL INTERRUPTOR: hoy en ningún lado. El schema del vertical no
- * tiene columna para esto y esta ola NO puede tocarlo, así que se lee —
- * solo se LEE, jamás se escribe — la llave `bookingPolicy` del Json de
- * BarberLandingConfig (dueño: T8), y si no está, gana el default seguro.
- * Cuando exista `Barbershop.bookingPolicy` (o la pantalla de configuración
- * de T5), se cambia AQUÍ y en ningún otro lugar: es el punto único.
+ * DÓNDE VIVE EL INTERRUPTOR: en la columna suelta `barber_shops.bookingPolicy`
+ * (sql/barber_settings.sql), que escribe /barber/configuracion vía
+ * src/lib/barber/settings.ts. El schema Prisma no la conoce (el contrato del
+ * vertical prohíbe tocarlo), así que se lee con SQL parametrizado; si el SQL
+ * aún no está aplicado (42703) se recuerda por proceso y se cae al legado.
+ *
+ * LEGADO: antes se leía la llave `bookingPolicy` del Json de
+ * BarberLandingConfig. Se conserva como segundo intento, pero ya no es la
+ * fuente: el editor de "Mi web" normaliza ese Json al guardar y borra lo que
+ * no conoce, así que un ajuste guardado ahí se perdía solo. Sigue siendo el
+ * punto único: quien quiera cambiar la política lo hace AQUÍ.
  */
+let bookingPolicyColumnMissing = false;
+
+function isMissingBookingColumn(e: unknown): boolean {
+  const meta = (e as { meta?: { code?: unknown } } | null)?.meta;
+  if (meta && String(meta.code) === "42703") return true;
+  return e instanceof Error && /42703|does not exist|no existe la columna/i.test(e.message);
+}
+
 export async function resolveBookingPolicy(barbershopId: string): Promise<BarberBookingPolicy> {
+  if (!bookingPolicyColumnMissing) {
+    try {
+      const rows = await prisma.$queryRaw<Array<{ bookingPolicy: string | null }>>`
+        SELECT "bookingPolicy" FROM "barber_shops" WHERE "id" = ${barbershopId} LIMIT 1
+      `;
+      const v = rows[0]?.bookingPolicy;
+      if (v === "auto") return "auto";
+      if (v === "manual") return "manual";
+      // Sin fila (o valor raro): sigue al legado y al default.
+    } catch (e) {
+      if (isMissingBookingColumn(e)) bookingPolicyColumnMissing = true;
+      // Cualquier otro fallo: el default seguro manda, nunca se propaga.
+    }
+  }
   try {
     const row = await prisma.barberLandingConfig.findUnique({
       where: { barbershopId },

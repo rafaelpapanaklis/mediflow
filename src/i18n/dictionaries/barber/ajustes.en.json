@@ -1,0 +1,206 @@
+{
+  "common": {
+    "save": "Save",
+    "saving": "Saving…",
+    "cancel": "Cancel",
+    "close": "Close",
+    "edit": "Edit",
+    "delete": "Delete",
+    "moveUp": "Move up",
+    "moveDown": "Move down",
+    "optional": "optional",
+    "loading": "Loading…",
+    "genericError": "Something went wrong. Try again.",
+    "noPermissionTitle": "No access to this section",
+    "noPermissionBody": "Your role can't see this. Ask the owner or manager to enable it for you.",
+    "minutes": "{count} min",
+    "sqlPending": "This setting can't be changed from the panel yet: {file} still has to be applied to the database. The default value is used in the meantime."
+  },
+  "servicios": {
+    "title": "Services",
+    "subtitle": "Your menu: what you offer, how long it takes and what it costs. These are the prices clients see when booking online, on your page and on the receipt.",
+    "new": "New service",
+    "stats": {
+      "active": { "one": "{count} active", "other": "{count} active" },
+      "inactive": { "one": "{count} retired", "other": "{count} retired" },
+      "categories": { "one": "{count} category", "other": "{count} categories" }
+    },
+    "showInactive": "Show retired",
+    "search": "Search services",
+    "orderHint": "This order is the one shown in the agenda, online booking and your page. Arrange it with the arrows.",
+    "col": {
+      "name": "Service",
+      "duration": "Duration",
+      "price": "Price",
+      "category": "Category",
+      "status": "Status",
+      "usage": "Usage"
+    },
+    "active": "Active",
+    "inactive": "Retired",
+    "usage": {
+      "none": "No appointments or sales yet",
+      "appointments": { "one": "{count} appointment", "other": "{count} appointments" },
+      "sales": { "one": "{count} sale", "other": "{count} sales" },
+      "upcoming": { "one": "{count} upcoming", "other": "{count} upcoming" }
+    },
+    "actions": {
+      "edit": "Edit",
+      "retire": "Retire",
+      "reactivate": "Reactivate",
+      "delete": "Delete"
+    },
+    "empty": {
+      "title": "Your menu is empty",
+      "body": "Without services there's nothing to schedule or book. Load the suggested ones and tweak them, or create the first one from scratch.",
+      "seed": "Load the {count} suggested",
+      "seedHint": "Suggested prices in pesos; change them whenever you like.",
+      "create": "Create the first one"
+    },
+    "emptyFiltered": "No service matches your search.",
+    "form": {
+      "createTitle": "New service",
+      "editTitle": "Edit service",
+      "name": "Name",
+      "namePlaceholder": "Classic haircut",
+      "description": "Description",
+      "descriptionHint": "Shown in online booking and on your page.",
+      "duration": "Duration (minutes)",
+      "durationHint": "In steps of 5. The agenda blocks exactly this long.",
+      "price": "Price",
+      "priceHint": "In pesos (MXN). It's what the client sees when booking.",
+      "category": "Category",
+      "categoryHint": "Groups your menu in booking and on your page: haircut, beard, combo, color, facial…",
+      "active": "Active in the menu",
+      "activeHint": "Retired stops being offered everywhere; its history is kept.",
+      "priceChange": {
+        "title": "Already-booked appointments keep their price",
+        "body": "The new price applies to new appointments, online booking, your page and the receipt. Appointments already in the agenda are charged {old}, as promised.",
+        "upcoming": {
+          "one": "There is {count} upcoming appointment that stays at {old}.",
+          "other": "There are {count} upcoming appointments that stay at {old}."
+        }
+      },
+      "errors": {
+        "name": "Give the service a name.",
+        "duration": "Duration goes from {min} to {max} minutes, in steps of 5.",
+        "price": "Enter a valid price (up to 2 decimals)."
+      }
+    },
+    "retire": {
+      "title": "Retire “{name}”",
+      "body": "It stops showing in the agenda, the queue, online booking, your page, the bot and the register. Appointments and sales that already include it are untouched, and you can reactivate it anytime.",
+      "confirm": "Retire from menu"
+    },
+    "delete": {
+      "title": "Delete “{name}”",
+      "body": "It has no appointments or sales, so it can really be deleted. If you'd rather keep it in case you offer it again, retire it instead.",
+      "confirm": "Delete",
+      "blocked": "This service already has appointments or sales: retire it instead of deleting it so the history stays intact."
+    },
+    "toast": {
+      "created": "Service created",
+      "saved": "Service saved",
+      "retired": "Service retired",
+      "reactivated": "Service reactivated",
+      "deleted": "Service deleted",
+      "seeded": "Menu loaded"
+    }
+  },
+  "configuracion": {
+    "title": "Settings",
+    "subtitle": "Your barbershop's details and how it works. Whatever you change here applies to the agenda, online booking, your page and messages.",
+    "profile": {
+      "title": "Barbershop details",
+      "sub": "Shown on your public page, in WhatsApp reminders and on the receipt.",
+      "name": "Name",
+      "nameHint": "This is how clients see you everywhere.",
+      "phone": "Phone",
+      "phoneHint": "So clients can call you. Not the number your WhatsApp messages are sent from.",
+      "email": "Email",
+      "emailHint": "Where DaleControl notifies you about your account and subscription.",
+      "address": "Address",
+      "addressHint": "Street and number: feeds the “Directions” button on your page.",
+      "city": "City",
+      "state": "State",
+      "timezone": "Time zone",
+      "timezoneHint": "Defines what time appointments are and when reminders go out. Change it only if you move.",
+      "branchNote": "You're at the “{branch}” location. The business name is shared by the whole chain; other locations are edited in Locations.",
+      "saved": "Details saved"
+    },
+    "logo": {
+      "title": "Logo",
+      "hint": "Square, JPG or PNG. Shown on your page, in the client portal and on the receipt.",
+      "upload": "Upload logo",
+      "change": "Change",
+      "remove": "Remove",
+      "uploading": "Uploading…",
+      "saved": "Logo updated",
+      "removed": "Logo removed",
+      "none": "No logo"
+    },
+    "slug": {
+      "title": "Your page address",
+      "sub": "It's the link you share and the one your QR codes point to.",
+      "current": "Current address",
+      "label": "New address",
+      "preview": "It will become",
+      "warningTitle": "Changing it breaks what you already shared",
+      "warningBody": "The old address stops working immediately. Links you sent over WhatsApp or social media and QR codes you already printed will lead to a page that doesn't exist. You'll have to share the new one and reprint the QRs.",
+      "confirm": "I understand the old address will stop working",
+      "check": {
+        "checking": "Checking…",
+        "available": "Available",
+        "current": "That's your current address",
+        "taken": "Another barbershop already uses it",
+        "reserved": "It's reserved",
+        "invalid": "Lowercase letters, numbers and hyphens only",
+        "short": "At least {min} characters",
+        "long": "At most {max} characters",
+        "empty": "Type an address"
+      },
+      "save": "Change address",
+      "saved": "Address changed. Share the new link and reprint your QRs.",
+      "copy": "Copy link",
+      "copied": "Link copied",
+      "open": "Open"
+    },
+    "loyalty": {
+      "title": "Loyalty",
+      "sub": "The stamp card: every completed visit adds one and, at the goal, the client earns the reward.",
+      "enabled": "Loyalty program on",
+      "enabledHint": "Off: the card disappears from the client's profile and portal, and the register doesn't offer the redemption. Accumulated stamps aren't lost.",
+      "threshold": "Visits to earn the reward",
+      "thresholdHint": "With 10, the tenth visit earns the reward. Completed appointments and service sales at the register count.",
+      "reward": "Reward name",
+      "rewardHint": "This is what the client reads on their card and in campaigns: “Free haircut”, “Complimentary beard”…",
+      "summary": "Every {count} visits → {reward}",
+      "saved": "Loyalty saved"
+    },
+    "inactivity": {
+      "title": "Inactive clients",
+      "sub": "When a client moves to the inactive list.",
+      "days": "Days without a visit",
+      "daysHint": "After that long since their last visit, the client shows up in Clients › Inactive and enters the “We miss you” campaign.",
+      "saved": "Saved"
+    },
+    "campaigns": {
+      "title": "WhatsApp campaigns",
+      "sub": "The brake so nobody gets flooded.",
+      "cooldown": "Rest days between campaigns",
+      "cooldownHint": "The same phone doesn't get two campaigns —of any kind— with fewer than this many days in between. Appointment reminders don't count.",
+      "saved": "Saved"
+    },
+    "booking": {
+      "title": "Online booking",
+      "sub": "What happens when a client books from your page.",
+      "auto": "Confirmed automatically",
+      "autoHint": "The appointment is born confirmed and the client knows right away. You just see it appear in the agenda.",
+      "manual": "Go through Requests",
+      "manualHint": "The appointment is born pending; you accept or decline it in Requests and the client gets your answer.",
+      "note": "Either way the slot is held from the moment the client books: nobody else can take it while you decide.",
+      "planNote": "Your plan doesn't include online booking. The setting is saved and applies as soon as you turn it on.",
+      "saved": "Saved"
+    }
+  }
+}

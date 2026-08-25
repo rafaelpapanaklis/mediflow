@@ -1,0 +1,206 @@
+{
+  "common": {
+    "save": "Guardar",
+    "saving": "Guardando…",
+    "cancel": "Cancelar",
+    "close": "Cerrar",
+    "edit": "Editar",
+    "delete": "Eliminar",
+    "moveUp": "Subir",
+    "moveDown": "Bajar",
+    "optional": "opcional",
+    "loading": "Cargando…",
+    "genericError": "Algo salió mal. Intenta de nuevo.",
+    "noPermissionTitle": "Sin acceso a esta sección",
+    "noPermissionBody": "Tu rol no tiene permiso para ver esto. Pídele al dueño o encargado que te lo habilite.",
+    "minutes": "{count} min",
+    "sqlPending": "Este ajuste todavía no se puede cambiar desde el panel: falta aplicar {file} en la base de datos. Mientras tanto se usa el valor por defecto."
+  },
+  "servicios": {
+    "title": "Servicios",
+    "subtitle": "Tu catálogo: lo que ofreces, cuánto dura y cuánto cuesta. Estos precios son los que ve el cliente al reservar en línea, en tu página y en el ticket.",
+    "new": "Nuevo servicio",
+    "stats": {
+      "active": { "one": "{count} activo", "other": "{count} activos" },
+      "inactive": { "one": "{count} retirado", "other": "{count} retirados" },
+      "categories": { "one": "{count} categoría", "other": "{count} categorías" }
+    },
+    "showInactive": "Mostrar retirados",
+    "search": "Buscar servicio",
+    "orderHint": "El orden de aquí es el que se ve en la agenda, en la reserva en línea y en tu página. Acomódalo con las flechas.",
+    "col": {
+      "name": "Servicio",
+      "duration": "Duración",
+      "price": "Precio",
+      "category": "Categoría",
+      "status": "Estado",
+      "usage": "Uso"
+    },
+    "active": "Activo",
+    "inactive": "Retirado",
+    "usage": {
+      "none": "Sin citas ni ventas todavía",
+      "appointments": { "one": "{count} cita", "other": "{count} citas" },
+      "sales": { "one": "{count} venta", "other": "{count} ventas" },
+      "upcoming": { "one": "{count} próxima", "other": "{count} próximas" }
+    },
+    "actions": {
+      "edit": "Editar",
+      "retire": "Retirar",
+      "reactivate": "Reactivar",
+      "delete": "Eliminar"
+    },
+    "empty": {
+      "title": "Tu catálogo está vacío",
+      "body": "Sin servicios no hay nada que agendar ni reservar. Carga los sugeridos y ajústalos a tu gusto, o crea el primero desde cero.",
+      "seed": "Cargar los {count} sugeridos",
+      "seedHint": "Precios sugeridos en pesos; los cambias cuando quieras.",
+      "create": "Crear el primero"
+    },
+    "emptyFiltered": "Ningún servicio coincide con lo que buscas.",
+    "form": {
+      "createTitle": "Nuevo servicio",
+      "editTitle": "Editar servicio",
+      "name": "Nombre",
+      "namePlaceholder": "Corte clásico",
+      "description": "Descripción",
+      "descriptionHint": "Se muestra en la reserva en línea y en tu página.",
+      "duration": "Duración (minutos)",
+      "durationHint": "En pasos de 5. La agenda aparta exactamente este tiempo.",
+      "price": "Precio",
+      "priceHint": "En pesos (MXN). Es el que ve el cliente al reservar.",
+      "category": "Categoría",
+      "categoryHint": "Agrupa tu carta en la reserva y en tu página: corte, barba, combo, color, facial…",
+      "active": "Activo en el catálogo",
+      "activeHint": "Retirado deja de ofrecerse en todos lados; su historial se conserva.",
+      "priceChange": {
+        "title": "Las citas ya agendadas conservan su precio",
+        "body": "El precio nuevo aplica a las citas nuevas, a la reserva en línea, a tu página y al ticket. Las que ya están en la agenda se cobran a {old}, como se les prometió.",
+        "upcoming": {
+          "one": "Hay {count} cita próxima que se queda en {old}.",
+          "other": "Hay {count} citas próximas que se quedan en {old}."
+        }
+      },
+      "errors": {
+        "name": "Ponle nombre al servicio.",
+        "duration": "La duración va de {min} a {max} minutos, en pasos de 5.",
+        "price": "Escribe un precio válido (hasta 2 decimales)."
+      }
+    },
+    "retire": {
+      "title": "Retirar «{name}»",
+      "body": "Deja de aparecer en la agenda, la fila, la reserva en línea, tu página, el bot y la caja. Las citas y ventas que ya lo tienen no se tocan, y lo puedes reactivar cuando quieras.",
+      "confirm": "Retirar del catálogo"
+    },
+    "delete": {
+      "title": "Eliminar «{name}»",
+      "body": "No tiene citas ni ventas, así que se puede borrar de verdad. Si prefieres conservarlo por si lo vuelves a ofrecer, retíralo en su lugar.",
+      "confirm": "Eliminar",
+      "blocked": "Este servicio ya tiene citas o ventas: retíralo en vez de borrarlo, así el historial no se rompe."
+    },
+    "toast": {
+      "created": "Servicio creado",
+      "saved": "Servicio guardado",
+      "retired": "Servicio retirado",
+      "reactivated": "Servicio reactivado",
+      "deleted": "Servicio eliminado",
+      "seeded": "Catálogo cargado"
+    }
+  },
+  "configuracion": {
+    "title": "Configuración",
+    "subtitle": "Los datos de tu barbería y cómo trabaja. Lo que cambies aquí se aplica en la agenda, la reserva en línea, tu página y los mensajes.",
+    "profile": {
+      "title": "Datos de la barbería",
+      "sub": "Salen en tu página pública, en los recordatorios de WhatsApp y en el ticket.",
+      "name": "Nombre",
+      "nameHint": "Así te ve el cliente en todos lados.",
+      "phone": "Teléfono",
+      "phoneHint": "Para que te llamen. No es el número desde el que salen los WhatsApp.",
+      "email": "Correo",
+      "emailHint": "Donde DaleControl te avisa de tu cuenta y tu suscripción.",
+      "address": "Dirección",
+      "addressHint": "Calle y número: alimenta el botón «Cómo llegar» de tu página.",
+      "city": "Ciudad",
+      "state": "Estado",
+      "timezone": "Zona horaria",
+      "timezoneHint": "Define a qué hora son las citas y cuándo salen los recordatorios. Cámbiala solo si te mudas de zona.",
+      "branchNote": "Estás en la sede «{branch}». El nombre del negocio es el mismo para toda la cadena; los datos de las otras sedes se editan en Sucursales.",
+      "saved": "Datos guardados"
+    },
+    "logo": {
+      "title": "Logo",
+      "hint": "Cuadrado, JPG o PNG. Sale en tu página, en el portal del cliente y en el ticket.",
+      "upload": "Subir logo",
+      "change": "Cambiar",
+      "remove": "Quitar",
+      "uploading": "Subiendo…",
+      "saved": "Logo actualizado",
+      "removed": "Logo quitado",
+      "none": "Sin logo"
+    },
+    "slug": {
+      "title": "Dirección de tu página",
+      "sub": "Es la liga que compartes y la que llevan tus códigos QR.",
+      "current": "Dirección actual",
+      "label": "Nueva dirección",
+      "preview": "Quedará como",
+      "warningTitle": "Cambiarla rompe lo que ya compartiste",
+      "warningBody": "La dirección anterior deja de funcionar en el momento. Las ligas que mandaste por WhatsApp o redes y los códigos QR que ya imprimiste llevarán a una página que no existe. Tendrás que compartir la nueva y reimprimir los QR.",
+      "confirm": "Entiendo que la dirección anterior dejará de funcionar",
+      "check": {
+        "checking": "Comprobando…",
+        "available": "Disponible",
+        "current": "Es tu dirección actual",
+        "taken": "Ya la usa otra barbería",
+        "reserved": "Está reservada",
+        "invalid": "Solo minúsculas, números y guiones",
+        "short": "Mínimo {min} caracteres",
+        "long": "Máximo {max} caracteres",
+        "empty": "Escribe una dirección"
+      },
+      "save": "Cambiar dirección",
+      "saved": "Dirección cambiada. Comparte la nueva liga y reimprime tus QR.",
+      "copy": "Copiar liga",
+      "copied": "Liga copiada",
+      "open": "Abrir"
+    },
+    "loyalty": {
+      "title": "Fidelidad",
+      "sub": "La tarjeta de sellos: cada visita completada suma uno y, al llegar a la meta, el cliente gana el premio.",
+      "enabled": "Programa de fidelidad encendido",
+      "enabledHint": "Apagado: la tarjeta deja de verse en la ficha y en el portal del cliente, y la caja no ofrece el canje. Los sellos acumulados no se pierden.",
+      "threshold": "Visitas para ganar el premio",
+      "thresholdHint": "Con 10, la décima visita se lleva el premio. Cuentan las citas completadas y las ventas de servicio en caja.",
+      "reward": "Nombre del premio",
+      "rewardHint": "Así se le dice al cliente en su tarjeta y en las campañas: «Corte gratis», «Barba de cortesía»…",
+      "summary": "Cada {count} visitas → {reward}",
+      "saved": "Fidelidad guardada"
+    },
+    "inactivity": {
+      "title": "Clientes inactivos",
+      "sub": "Cuándo un cliente pasa a la lista de inactivos.",
+      "days": "Días sin visita",
+      "daysHint": "Pasado ese tiempo desde su última visita, el cliente aparece en Clientes › Inactivos y entra a la campaña «Te extrañamos».",
+      "saved": "Guardado"
+    },
+    "campaigns": {
+      "title": "Campañas de WhatsApp",
+      "sub": "El freno para no saturar a nadie.",
+      "cooldown": "Días de descanso entre campañas",
+      "cooldownHint": "Un mismo teléfono no recibe dos campañas —de cualquier tipo— con menos de estos días entre una y otra. Los recordatorios de cita no cuentan.",
+      "saved": "Guardado"
+    },
+    "booking": {
+      "title": "Reservas en línea",
+      "sub": "Qué pasa cuando un cliente reserva desde tu página.",
+      "auto": "Se confirman solas",
+      "autoHint": "La cita nace confirmada y el cliente lo sabe al instante. Tú solo la ves aparecer en la agenda.",
+      "manual": "Pasan por Solicitudes",
+      "manualHint": "La cita nace pendiente; la aceptas o rechazas en Solicitudes y el cliente recibe tu respuesta.",
+      "note": "En los dos casos el hueco queda apartado desde que el cliente reserva: nadie más puede tomarlo mientras decides.",
+      "planNote": "Tu plan no incluye reservas en línea. El ajuste queda guardado y aplica en cuanto las actives.",
+      "saved": "Guardado"
+    }
+  }
+}

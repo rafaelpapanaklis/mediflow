@@ -15936,3 +15936,215 @@ siguiente); `robots.txt` no cubre `/barber/` y, si algún día se añade, **tien
 ser con barra final** o entierra `/barberias`; la mini-web ignora la suspensión
 (`setBarbershopSuspension` escribe `subscriptionStatus`, no `isActive`); y
 `/descubre` sigue sin poder alojar barberías sin tocar 7 archivos del dental.
+
+## [Barber Servicios + Configuración] — Las dos últimas pantallas del panel: el catálogo que ve el cliente y todo lo que no se podía tocar ✅ (2026-08-25)
+
+`/barber/servicios` y `/barber/configuracion` dejan de ser el "Próximamente" de
+la Ola 0. Servicios es la pantalla más consecuente del panel: esos precios son
+los que ve el cliente en la reserva pública, en la mini-web, en el bot y en el
+ticket. Configuración junta lo que hasta hoy no se podía cambiar desde ningún
+lado: datos del negocio, logo, la dirección pública, fidelidad, inactividad,
+descanso entre campañas y si la reserva en línea se confirma sola.
+
+**25 archivos: 21 nuevos + 4 editados, TODOS del vertical (guard exit 0, cero
+compartidos).** Ni `barber-sidebar.tsx` ni `prisma/schema.prisma` se tocaron.
+
+═══════════════════════════════════════════════════════════════════════════
+▶ LO QUE HAY QUE SABER Y NO SE VE EN EL DIFF
+═══════════════════════════════════════════════════════════════════════════
+
+**1. La política de reserva vivía en un Json que se borra solo — ahora tiene
+columna (y por eso toqué `booking.ts`, fuera del allowlist estricto).**
+`resolveBookingPolicy()` leía la llave `bookingPolicy` del Json de
+`BarberLandingConfig.config`. Verifiqué en `landing.ts` +
+`api/barber/landing/route.ts` que el editor de "Mi web" **normaliza ese Json
+contra su vocabulario y descarta lo que no conoce** en CADA guardado: un
+ajuste guardado ahí se perdía la siguiente vez que la barbería tocara su
+página. Un ajuste que se pierde solo no es un ajuste. Solución:
+
+- `sql/barber_settings.sql` (NUEVO, PENDIENTE de correr en Supabase): columna
+  suelta `barber_shops."bookingPolicy" TEXT NOT NULL DEFAULT 'manual'` + CHECK
+  (`manual`|`auto`). Idempotente, delimitador `$barberset$`.
+- `src/lib/barber/booking.ts` — SOLO `resolveBookingPolicy()`: lee la columna
+  con `$queryRaw` primero; si el SQL no está aplicado (42703) lo recuerda por
+  proceso y cae al Json legado y al default `manual`. Es la única edición fuera
+  del allowlist del encargo; es archivo 100 % del vertical (guard: propio), 25
+  líneas, y el propio comentario del archivo pedía cambiarlo "AQUÍ y en ningún
+  otro lugar" cuando existiera la pantalla de configuración. Sin este cambio el
+  interruptor de Reservas sería decorativo.
+
+**2. Fidelidad, inactividad y campañas NO tienen un segundo lector.**
+`settings.ts` delega en `getBarberClientsConfig` / `saveBarberClientsConfig`
+(clients.ts) y en `getBarberCampaignConfig` / `saveBarberCampaignConfig`
+(campaigns.ts). Solo añade validación con mensaje (400) ANTES de delegar, para
+que el dueño vea "va de 1 a 100" en vez de un recorte silencioso. Cada sección
+sabe si su SQL está aplicado (`persisted`) y la pantalla lo dice tarjeta por
+tarjeta con el nombre del archivo que falta, deshabilitando solo esa tarjeta.
+
+**3. El precio de una cita se congela al agendarla y la pantalla lo dice ANTES
+de guardar.** No hay que hacer nada nuevo para congelarlo
+(`BarberAppointmentService.priceAtBooking` ya existía); lo que faltaba era
+que el dueño lo supiera. En el formulario, en cuanto el precio escrito difiere
+del guardado, aparece el aviso ámbar: "Las citas ya agendadas conservan su
+precio… se cobran a $180.00… Hay 3 citas próximas que se quedan en $180.00."
+El conteo sale de `upcomingCount` (citas PENDING/CONFIRMED futuras que
+incluyen el servicio), calculado en el servidor.
+
+**4. Retirar, nunca borrar.** `deleteService` solo procede con cero citas y
+cero ventas (`deletable`), responde 409 si no, y la FK `NoAction` de
+`barber_appointment_services` es la última red (P2003 → 409). La pantalla
+ofrece "Eliminar" únicamente cuando `deletable`; si no, "Retirar" (isActive =
+false), que saca el servicio de agenda, fila, reserva, mini-web, bot y caja
+(todos filtran `isActive: true`, lo comprobé en cada consumidor) sin tocar el
+historial.
+
+**5. `updateMany` con `data: {}` devuelve `count: 0` y parecía un 404.** Lo
+cazó la prueba de integración: guardar un servicio sin cambios reales (mismo
+precio) dejaba `data` vacío y el "count 0 = 404" mentía. Ahora, sin cambios,
+se devuelve la fila tal cual. Anotado en memoria.
+
+**6. Un elemento no puede consultar su propio `@container`.** La rejilla de
+configuración se quedaba en una columna a 944 px porque el `container-type`
+estaba en el mismo `.grid` que consultaba. Lo vi midiendo en Chrome
+(`gridTemplateColumns: "944px"`), no leyendo el código. Ahora el contenedor
+es `.gridWrap` y a ≥ 860 px hay dos columnas (medido: `465px 465px`).
+
+**7. El slug.** Normaliza como `makeBarberSlug` (sin inventar "barberia" si
+queda vacío), 3–40 caracteres, `^[a-z0-9]+(-[a-z0-9]+)*$`, lista corta de
+reservados (admin, api, b, barberias, login, registro, reservar, mi-cuenta,
+portal, www, dalecontrol). Disponibilidad con retardo de 400 ms (GET
+`/api/barber/settings/slug?slug=`), excluyendo a la propia barbería. El
+cambio exige `confirm: true` en el body — la casilla "Entiendo que la
+dirección anterior dejará de funcionar" no es un candado, el servidor lo
+vuelve a exigir — y el índice único resuelve la carrera (P2002 → 409). Se
+revalidan `/b/<viejo>` y `/b/<nuevo>`.
+
+**8. Logo.** Misma receta que la foto de portada de la mini-web
+(`/api/barber/landing/upload`): bucket PÚBLICO `clinic-public` bajo
+`barber/<barbershopId>/logo/`, comprime en el navegador con `prepararFoto`,
+valida magic number y 4 MB. Lo que cambia: puerta `settings.edit` y SIN gate
+de plan (un Básico también tiene logo). Ojo: sigue sin haber bucket propio del
+vertical (mismo pendiente que la mini-web).
+
+**9. Divergencia conocida que NO cerré (fuera de alcance):** el umbral de
+fidelidad es configurable aquí y `cash.ts` sigue con `BARBER_LOYALTY_STAMPS_TARGET
+= 10` en duro. Si una barbería pone 7, la ficha da el premio a los 7 y la
+caja pide 10. Se cierra leyendo `getBarberClientsConfig(ctx).loyaltyThreshold`
+en cash.ts (ver memoria `project_barber_clientes`).
+
+═══════════════════════════════════════════════════════════════════════════
+▶ ARCHIVOS
+═══════════════════════════════════════════════════════════════════════════
+
+Servidor
+- `src/lib/barber/services.ts` (NUEVO) — listServices (con conteos de citas /
+  próximas / ventas por servicio), createService, updateService (devuelve
+  `previousPrice`), deleteService, reorderServices (los no enviados van detrás),
+  reseedDefaultServices (solo con catálogo vacío), categorías sugeridas
+  derivadas de `BARBER_DEFAULT_SERVICES` + "general". Precio: `parseMoneyInput`
+  → Decimal, ≤ 2 decimales, ≤ 99 999.99. Duración: entero, escalón de 5,
+  5–600 min. Tope 120 servicios (lo que lista la mini-web).
+- `src/lib/barber/settings.ts` (NUEVO) — vista completa (`getBarberSettings`,
+  con `select` explícito: nunca whatsappToken ni Stripe), updateBarberProfile
+  (zona horaria validada con Intl), setBarberLogo, slug (check + change),
+  saveLoyaltySettings / saveInactivitySettings / saveCampaignSettings (delegan),
+  readBookingPolicySetting / saveBookingPolicy (columna nueva, 42703 → persisted false).
+- `src/lib/barber/booking.ts` — solo `resolveBookingPolicy` (punto 1).
+- `sql/barber_settings.sql` (NUEVO) — PENDIENTE de correr.
+
+API (todas: sesión → barbershopId de `getBarberContext()`, permiso con
+`assertBarberPermission`, `barberApiError` de branches.ts)
+- `api/barber/services/route.ts` GET/POST · `[id]/route.ts` PATCH/DELETE ·
+  `reorder/route.ts` POST {ids} · `reseed/route.ts` POST — `services.manage`.
+- `api/barber/settings/route.ts` GET / PATCH {section: profile|loyalty|
+  inactivity|campaigns|booking} · `slug/route.ts` GET ?slug= / PATCH {slug,
+  confirm} · `logo/route.ts` POST multipart / DELETE — `settings.edit`.
+- Cada escritura revalida `/b/<slug>` (ISR 300 s de la mini-web), best-effort.
+
+Pantalla
+- `src/app/barber/(panel)/servicios/page.tsx` y `configuracion/page.tsx`
+  (gate de cortesía en servidor: `services.manage` / `settings.edit`; el
+  candado real es cada API).
+- `src/components/barber/servicios/{servicios-screen,service-form-modal}.tsx`
+  + `servicios.module.css`; `src/components/barber/configuracion/
+  configuracion-screen.tsx` + `configuracion.module.css`. Átomos reusados de
+  `team/admin-ui.tsx` (Btn, Field, Switch, Modal, Banner, apiCall, useSaving)
+  y `cash/use-barber-t.ts`. Tema caramelo por variables; @container, no @media.
+- i18n: `src/i18n/dictionaries/barber/ajustes.{es,en}.json` (157 llaves, es y
+  en idénticas) + `ajustes` en `index.ts`. Convención B del vertical: la
+  página baja el sub-árbol `barber.ajustes` ya recortado y los componentes
+  usan llaves cortas — nadie antepone prefijo, así no se aplica dos veces.
+- `src/lib/barber/__tests__/ajustes-integration.test.ts` (NUEVO, fuera del
+  allowlist estricto pero en la carpeta de pruebas del vertical): 15 casos
+  contra Postgres real; se salta sin DATABASE_URL.
+
+═══════════════════════════════════════════════════════════════════════════
+▶ VERIFICACIÓN (los 8 puntos del encargo)
+═══════════════════════════════════════════════════════════════════════════
+
+1. `npm run build` completo, sin pipes, DOS veces (antes y después de los
+   ajustes de la verificación visual): `BUILD_EXIT_CODE:0`, "Generating
+   static pages (386/386)", las 9 rutas nuevas en la tabla
+   (`/barber/servicios` 6.48 kB, `/barber/configuracion` 7.79 kB, 7 rutas
+   `/api/barber/{services,settings}/…`). Los `prisma:error DATABASE_URL` del
+   log son el red herring conocido. `npx tsc --noEmit` limpio salvo dos
+   TS2802 PREEXISTENTES en `i18n-alcance.test.ts` (spread de Set; no es mío,
+   el build de Next no lo mira).
+2. Las dos pantallas abiertas en Chrome (componentes REALES montados con props
+   de prueba en una página temporal fuera del matcher del middleware, borrada
+   antes del commit): `document.body.innerText.match(/(barber|servicios|
+   configuracion|common)\.[a-z]/)` → `null` en es y en en, en las tres vistas
+   (catálogo, catálogo vacío, configuración) y en el modal. Consola sin ningún
+   `[barber i18n]`. Test de alcance: `npx tsx --test
+   src/lib/barber/__tests__/i18n-alcance.test.ts` → pasa (mi pantalla no
+   prefija, así que no hay fila que añadir a PREFIJADORES). Paridad es/en:
+   157 = 157, cero llaves huérfanas.
+3. Precio: prueba "cambiar el precio: la reserva pública lo enseña nuevo y la
+   cita agendada conserva el viejo" — `updateService` 180 → 220 devuelve
+   `previousPrice 180`; `getPublicServices()` (lo que consume /b/<slug>/reservar)
+   da 220; `barber_appointment_services.priceAtBooking` sigue en 180. En la
+   pantalla, el aviso ámbar aparece al escribir 220 con "Hay 3 citas próximas
+   que se quedan en $180.00" (verificado en el DOM del modal).
+4. Retirar con citas: la fila sigue, la cita sigue apuntando al servicio, la
+   reserva pública deja de listarlo, `deleteService` → 409 y no borra nada,
+   reactivar lo devuelve. (prueba "retirar un servicio con citas no lo borra
+   ni rompe el historial").
+5. Slug: ocupado → `problem: "taken"` y `changeBarberSlug` → 409; reservado
+   → `reserved`; sin `confirm` → 400; `"  aj… Nuevo Slug!  "` → `aj…-nuevo-slug`
+   y la otra barbería intacta. En pantalla: aviso rojo "Cambiarla rompe lo que
+   ya compartiste" + casilla de confirmación + botón deshabilitado hasta que
+   el slug está libre Y la casilla marcada.
+6. Dos barberías (A y B con dueño y barbero cada una): A lista solo lo suyo;
+   editar/borrar/reordenar un id de B desde A → 404 y el precio de B intacto;
+   config de fidelidad de A (7) no toca la de B (10); política de reserva de
+   A `auto`, B sigue `manual`; un rol BARBER no puede ni listar ni leer la
+   configuración (BarberForbiddenError). 15/15 verdes contra `postgres:16-alpine`
+   con el schema completo + los ALTER de los tres SQL.
+7. `BARBER_GUARD_SHARED=ORQUESTA.md node scripts/barber-guard.cjs` → exit 0:
+   23 propios (25 con este reporte y el test), 0 compartidos, 0 prohibidos.
+8. `grep -rniE "paciente|doctor|Dr\.|clínica|consulta|expediente"` sobre los
+   archivos del encargo → 0 (las únicas coincidencias eran "consulta" como
+   *query* en comentarios; las reescribí para que el grep quede en cero; las
+   referencias a `clinic-public`/`CLINIC_PUBLIC` son el nombre del bucket
+   compartido, no copy).
+
+Además, medido en Chrome: cero desborde horizontal a 1000 px y a 400 px; a
+400 px las filas del catálogo se apilan (`grid-template-areas` order/main/meta/
+actions) y la rejilla de configuración pasa a una columna; modo oscuro con
+los tokens del vertical (`--bg #1A1513`) y los inputs ganándole al reset de
+`globals.css` (`.dark .barber-shell`), incluido el buscador y el input del slug.
+
+═══════════════════════════════════════════════════════════════════════════
+▶ PENDIENTE — REQUIERE RAFAEL
+═══════════════════════════════════════════════════════════════════════════
+
+- 🔴 Correr `sql/barber_settings.sql` en Supabase (la política de reserva). Sin
+  él la tarjeta "Reservas en línea" avisa y queda en `manual`.
+- 🔴 Siguen pendientes `sql/barber_clientes.sql` y `sql/barber_campanas.sql`:
+  las tarjetas de Fidelidad / Inactivos y Campañas avisan cuál falta y no dejan
+  guardar hasta entonces.
+- ⚪ Cerrar la divergencia del umbral de fidelidad en `cash.ts` (punto 9).
+- ⚪ Bucket propio del vertical para logos y fotos de mini-web (hoy
+  `clinic-public/barber/<id>/…`).
+- ⚪ QA con sesión real: subir un logo de verdad y ver la liga en /b/<slug>,
+  ticket y portal; cambiar el slug y escanear un QR viejo.
