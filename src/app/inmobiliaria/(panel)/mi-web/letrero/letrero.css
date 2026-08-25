@@ -1,0 +1,218 @@
+/* ═══════════════════════════════════════════════════════════════════════
+   EL LETRERO IMPRIMIBLE.
+
+   CSS NORMAL (no module) a propósito: para imprimir hay que tocar
+   html/body, y un CSS module rechaza cualquier selector que no lleve una
+   clase local ("selectors must be pure"). Next lo empaqueta con la ruta
+   que lo importa, así que solo viaja con /inmobiliaria/mi-web/letrero.
+
+   OJO: este @media es `print`, NO un punto de quiebre responsive (esos van
+   con @container, como manda el repo). No existe @container para imprimir.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+.dcrwl {
+  display: grid;
+  gap: 20px;
+  align-items: start;
+}
+
+.dcrwl-controles {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid var(--border-soft);
+  border-radius: 12px;
+  background: var(--bg-elev);
+  max-width: 420px;
+}
+
+.dcrwl-tamanos {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.dcrwl-url {
+  font-size: 11px;
+  color: var(--text-3);
+  word-break: break-all;
+  margin: 0;
+}
+
+/* ── La hoja ────────────────────────────────────────────────────── */
+
+.dcrwl-hoja {
+  --dcrwl-tinta: #101a15;
+  --dcrwl-acento: #2f6b4d;
+  background: #fff;
+  color: var(--dcrwl-tinta);
+  border: 1px solid var(--border-soft);
+  border-radius: 10px;
+  padding: 36px 30px;
+  text-align: center;
+  display: grid;
+  gap: 12px;
+  justify-items: center;
+  align-content: start;
+  /* Proporciones reales del papel, para que lo que se ve sea lo que sale. */
+  aspect-ratio: 216 / 279;
+  max-width: 520px;
+  width: 100%;
+  margin-inline: auto;
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+.dcrwl-hoja-media {
+  aspect-ratio: 216 / 140;
+  padding: 24px;
+}
+.dcrwl-hoja-tabloide {
+  aspect-ratio: 279 / 432;
+}
+
+.dcrwl-hoja-cabeza {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  width: 100%;
+  border-bottom: 3px solid var(--dcrwl-acento);
+  padding-bottom: 8px;
+}
+.dcrwl-marca {
+  font-weight: 800;
+  font-size: 17px;
+  letter-spacing: -0.01em;
+}
+.dcrwl-folio {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: #5b6b64;
+}
+
+.dcrwl-titular {
+  margin: 6px 0 0;
+  /* `cqi` y no `vw`: la hoja se pinta encogida dentro de una columna del
+     panel, así que el rótulo tiene que escalar con LA HOJA y no con la
+     ventana. Con `vw`, una pantalla ancha y un panel angosto desbordaban el
+     titular fuera del papel. El contenedor es `.realty-page` (nombre
+     `realty`), que ya declara container-type. */
+  font-size: clamp(30px, 7cqi, 52px);
+  font-weight: 900;
+  line-height: 1;
+  letter-spacing: -0.03em;
+  text-transform: uppercase;
+  color: var(--dcrwl-acento);
+}
+.dcrwl-inmueble {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+.dcrwl-datos {
+  margin: 0;
+  font-size: 14px;
+  color: #4a5751;
+}
+.dcrwl-precio {
+  margin: 0;
+  font-size: 26px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+.dcrwl-qr {
+  margin-top: 6px;
+  padding: 10px;
+  background: #fff;
+  border: 2px solid var(--dcrwl-tinta);
+  border-radius: 8px;
+  line-height: 0;
+}
+.dcrwl-qr svg {
+  width: 100%;
+  height: auto;
+  max-width: 100%;
+  display: block;
+}
+.dcrwl-instruccion {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #4a5751;
+}
+.dcrwl-tel {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+}
+
+/* ═══ Impresión ═══════════════════════════════════════════════════
+   Todo lo que no sea la hoja se oculta con `visibility` y la hoja se
+   reancla al inicio de la página. `overflow: hidden` en html/body porque
+   el resto de la pantalla SIGUE OCUPANDO ESPACIO aunque esté invisible: sin
+   eso la impresora escupe dos o tres hojas en blanco detrás del letrero.
+   ══════════════════════════════════════════════════════════════════ */
+
+@media print {
+  @page {
+    margin: 10mm;
+  }
+
+  /* 🔴 SIN ESTO EL LETRERO NO SE IMPRIME BIEN.
+     `.realty-page` (src/app/inmobiliaria/realty-theme.css) declara
+     `container-type: inline-size`, y eso implica `contain: layout`, que
+     convierte el elemento en BLOQUE CONTENEDOR de los `position: fixed` de
+     dentro. El `inset: 0` de la hoja se resolvería contra la columna del
+     panel —encogida y desplazada— en vez de contra la caja de página, y
+     toda la estrategia de impresión de abajo dejaría de cumplirse.
+     Al imprimir no hay consultas de contenedor que servir, así que
+     apagar la contención aquí no cuesta nada. */
+  .realty-shell .realty-page {
+    container-type: normal !important;
+    contain: none !important;
+  }
+
+  html:has(.dcrwl-hoja),
+  body:has(.dcrwl-hoja) {
+    overflow: hidden !important;
+    height: auto !important;
+    background: #fff !important;
+  }
+
+  body:has(.dcrwl-hoja) * {
+    visibility: hidden !important;
+  }
+
+  .dcrwl-hoja,
+  .dcrwl-hoja * {
+    visibility: visible !important;
+  }
+
+  .dcrwl-hoja {
+    position: fixed;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    max-width: none;
+    aspect-ratio: auto;
+    margin: 0;
+    border: 0;
+    border-radius: 0;
+    padding: 8mm;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: space-between;
+    /* Los fondos y los colores del letrero NO son decoración: sin esto,
+       Chrome imprime el rótulo en gris y el QR pierde contraste. */
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+
+  .dcrwl-nopr {
+    display: none !important;
+  }
+}

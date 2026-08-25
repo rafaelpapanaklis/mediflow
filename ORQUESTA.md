@@ -20376,3 +20376,536 @@ Dos desviaciones menores respecto a la allowlist literal, ambas dentro de
     menos de un minuto y no requiere desplegar.
 
 ═══════════════════════════════════════════════════════════════════════════
+
+═══════════════════════════════════════════════════════════════════════════
+▶ OLA 1 · T5 — LA WEB PÚBLICA DEL VERTICAL INMUEBLES (/i/[slug])
+═══════════════════════════════════════════════════════════════════════════
+
+Cada cuenta de inmuebles tiene ya su sitio público, su editor visual y su
+letrero con QR. Lo que hace distinta a esta pieza del resto del producto no
+es que sea "la mini-web del tercer vertical": es que **el MODO de la cuenta
+cambia el SUJETO de la página**, y eso no es cosmética.
+
+  · AGENT  → el sujeto es LA PERSONA. Los inmuebles son la prueba de su
+             trabajo. El 70% de los compradores mira la reputación del
+             asesor antes de decidir y el 90% investiga en línea: por eso
+             el retrato y las CREDENCIALES van arriba, antes que la cartera.
+  · AGENCY → el sujeto es LA EMPRESA. Los inmuebles son el catálogo, y cada
+             asesor tiene su propio subdirectorio.
+  · OWNER  → el sujeto es EL INMUEBLE. El dueño no quiere ser famoso:
+             quiere rentar. "Trato directo con el dueño, sin comisión" es
+             un gancho real porque el inquilino se ahorra el mes que cobra
+             la inmobiliaria.
+
+Por eso el editor solo ofrece las TRES plantillas del modo de la cuenta y
+los bloques cuyo `modos` lo incluye — y el PATCH lo vuelve a comprobar, así
+que una cuenta AGENT no puede guardarse una plantilla de AGENCY ni mandando
+la petición a mano.
+
+── LAS RUTAS ──────────────────────────────────────────────────────────────
+
+  /i/[slug]                              portada según el modo        ISR 300s
+  /i/[slug]/propiedades                  buscador con filtros         dinámica
+  /i/[slug]/propiedades/[inmueble]       ficha del inmueble           ISR 300s
+  /i/[slug]/agentes/[agente]             SOLO AGENCY + feature agentPages  ISR 300s
+  /i/[slug]/contacto                     contacto                     ISR 300s
+  /i/sitemap.xml                         sitemap propio del vertical  ISR 1h
+
+  /inmobiliaria/mi-web                   editor visual (reemplaza el placeholder)
+  /inmobiliaria/mi-web/letrero           generador de letrero con QR
+  GET|PATCH /api/realty/landing          guardar con bloqueo optimista
+  POST /api/realty/landing/upload        fotos de la web (bucket público)
+
+El contrato de la Ola 0 apuntaba `/i/[slug]/[propertyId]`. Se construyó
+`/i/[slug]/propiedades/[inmueble]` porque un segmento hablante es lo que
+Google necesita para rankear "casa en renta en <colonia>", y porque deja
+libre `/i/[slug]/<lo-que-sea>` para lo que venga. La ficha resuelve por
+`publicUrlSlug` **o por id**, así que un letrero impreso con el id sigue
+funcionando después de que alguien le ponga slug al anuncio.
+
+── LAS NUEVE PLANTILLAS Y SUS BLOQUES ─────────────────────────────────────
+
+La firma de una plantilla es el ORDEN de sus bloques, y una prueba exige que
+las nueve firmas sean distintas: dos plantillas con la misma firma son la
+misma con otro color, que es justo lo que este vertical no quiere vender.
+
+AGENT — el sujeto es la persona
+  · **asesor** (retrato partido en dos · credenciales en tira · rejilla)
+    portada(retrato) → credenciales(tira) → inmuebles(rejilla) →
+    zonas(pastillas) → testimonios(tarjetas) → sobre-mi(columna) → contacto
+  · **minimal** (sin foto, esquinas rectas, carga en un parpadeo)
+    portada(sobria) → inmuebles(filas) → zonas(linea) → contacto
+  · **historia** (editorial oscura, serif, para lujo)
+    portada(editorial) → sobre-mi(editorial) → credenciales(linea) →
+    inmuebles(escaparate) → testimonios(cita) → zonas(pastillas) → contacto
+
+AGENCY — el sujeto es la empresa
+  · **clasica** (la de fábrica: buscas arriba, ves inventario, conoces al equipo)
+    portada(buscador) → buscador(barra) → inmuebles(rejilla) →
+    equipo(tarjetas) → credenciales(tira) → sucursales(lista) → contacto
+  · **corporativa** (desarrolladoras y preventas: los números por delante)
+    portada(desarrollo) → numeros(tira) → inmuebles(preventa) →
+    sucursales(tarjetas) → equipo(compacto) → credenciales(tira) → mapa → contacto
+  · **boutique** (pocas propiedades, foto enorme, serif y aire)
+    portada(boutique) → inmuebles(escaparate) → credenciales(sello) →
+    equipo(retratos) → sucursales(minima) → contacto
+
+OWNER — el sujeto es el inmueble
+  · **mis-rentas** (tablero de disponibilidad arriba de todo)
+    portada(tablero) → disponibilidad-ahora(tablero) → inmuebles(rejilla) →
+    requisitos-para-rentar(lista) → trato-directo(banda) → contacto
+  · **una-propiedad** (landing de UN solo inmueble; la portada ES la ficha)
+    portada(unaPropiedad) → trato-directo(banda) →
+    requisitos-para-rentar(tarjeta) → mapa(recuadro) → contacto
+  · **catalogo** (lista limpia, sin biografía; los requisitos ANTES del listado)
+    portada(sobria) → requisitos-para-rentar(linea) → buscador(compacto) →
+    inmuebles(filas) → trato-directo(nota) → contacto
+
+Quince bloques, cada uno con su componente en
+`src/components/realty/web/blocks/<id>.tsx`. **No hay un componente por
+plantilla**: hay uno por bloque y un manifiesto que dice qué bloques lleva
+cada plantilla, en qué orden y con qué `variante` de maquetado. Agregar la
+décima plantilla es escribir su manifiesto y su piel; el editor, la API, el
+guardado y la página pública no se tocan.
+
+🔴 **Cambiar de plantilla NO pierde nada.** El contenido se guarda por clave
+SEMÁNTICA (`copia["portada.cta"]`, `fotos["portada"]`, `bloques["inmuebles"]`)
+y se valida contra la UNIÓN de las nueve plantillas, no contra la activa. Lo
+que la nueva no pinta se queda guardado y reaparece intacto si se vuelve. Lo
+único que va por plantilla es el ORDEN de los bloques, que es disposición y
+no contenido. Hay prueba de las dos cosas.
+
+── LA PRUEBA QUE ATA EL MANIFIESTO AL JSX ─────────────────────────────────
+
+  npx tsx --test src/lib/realty/templates/__tests__/manifiesto.test.ts
+  → 51 pruebas, 51 en verde.
+
+Cada bloque declara `pinta: [...]` — qué datos sueltos pinta de verdad — y la
+prueba lee su `.tsx` (sin comentarios) y compara con **igualdad estricta en
+las dos direcciones**: declarar de más falla igual que declarar de menos. Las
+marcas son expresiones de código reales (`config.credenciales`,
+`MapaBajoDemanda`, `tieneRecorrido`), no palabras sueltas.
+
+Sin esa prueba, la declaración y el código se separan al primer refactor y el
+editor empieza a mentirle a la inmobiliaria: le ofrece llenar un campo que su
+plantilla no pinta, o le esconde uno que sí saldría. `pinta` va en el
+CATÁLOGO de bloques y no en cada plantilla porque el JSX del bloque es uno
+solo: si cada plantilla declarara el suyo, la prueba no tendría contra qué
+archivo comparar.
+
+La misma prueba cubre: las nueve firmas distintas, que ninguna plantilla use
+bloques de otro modo, que todo literal por defecto quepa en su propio campo,
+la fusión a tres bandas (cada caso que debe fusionarse en silencio con su
+gemelo que SÍ debe dar conflicto) y las listas blancas de salida.
+
+── LOS DOS BUGS DEL DENTAL, ARREGLADOS DE NACIMIENTO ──────────────────────
+
+**1 · El 409 al guardar.** El editor dental usaba `updatedAt` como marca y
+devolvía 409 SIEMPRE, por dos motivos independientes: la columna guarda
+microsegundos que un `Date` de JavaScript no puede escribir, y además la
+bumpean veinte procesos ajenos. Aquí la marca es la columna `version`, un
+entero que solo sube este endpoint. Y como un 409 por sí solo no es una
+salida —"recarga y pierde lo que escribiste"—, antes se FUSIONA a tres
+bandas (base / mío / servidor):
+
+    · No lo toqué            → gana el servidor.
+    · Lo toqué y él no       → gana lo mío.
+    · Lo tocamos igual       → no hay nada que decidir.
+    · Lo tocamos distinto    → conflicto REAL, y se dice de QUÉ campo.
+
+La comparación usa una serialización canónica con las claves ordenadas,
+porque `jsonb` no conserva el orden de inserción y dos objetos idénticos
+reordenados darían conflicto siempre. Cuando aun así hay choque, la pantalla
+ofrece las dos salidas de verdad: quedarme con lo suyo o republicar lo mío.
+
+**2 · Los cinco minutos.** `/i/[slug]` es ISR de 300 s con
+`generateStaticParams` devolviendo `[]` — sin él, en Next 14 `revalidate` es
+un no-op silencioso y la ruta se queda dinámica. El otro lado del trato: el
+PATCH llama a `revalidatePath` de las cuatro superficies que leen la
+configuración (portada, buscador, contacto y, por patrón de ruta, todas las
+fichas y todas las páginas de asesor). Sin eso, la inmobiliaria cambia un
+texto, entra a ver su página, no lo ve y da por perdido lo que escribió.
+
+── LA WEB ES PÚBLICA ──────────────────────────────────────────────────────
+
+Todo lo que sale viaja a un navegador desconocido y se lee entero con "ver
+código fuente" — además queda cacheado por ISR, así que ni siquiera hace
+falta llegar en el momento justo.
+
+  · `select` EXPLÍCITO en todas las consultas, jamás `include`. La fila de
+    `realty_accounts` lleva whatsappToken, wabaId, phoneNumberId y los ids de
+    Stripe.
+  · Los DTOs los arman cuatro mapeadores PUROS en `src/lib/realty/landing.ts`
+    (`aInmueblePublico`, `aAgentePublico`, `aCuentaPublica`,
+    `aSucursalPublica`). Al ser puros, la prueba les mete una fila con TODO lo
+    sensible dentro —tokens, comisiones, notas internas, el dueño, el correo
+    del asesor— y falla si sale una sola clave o un solo valor centinela.
+  · **`showExactAddress` false → solo colonia y ciudad.** No solo la calle:
+    tampoco las coordenadas. Un pin "aproximado" con la latitud real a siete
+    decimales es la dirección exacta con otro nombre. El DTO las deja en
+    `null`, así que ni la ficha, ni el mapa, ni el JSON-LD (`geo`) pueden
+    filtrarlas aunque quien los escriba se equivoque.
+  · El correo del asesor NO sale: en este vertical el correo del equipo ES el
+    usuario del login, y publicarlo regala la mitad de un intento de entrada.
+  · Un asesor solo se pinta con el AND de los DOS interruptores
+    (`RealtyUser.publicProfileEnabled` Y `RealtyAgentProfile.active`).
+  · El JSON-LD se inyecta con el helper compartido `<JsonLd>`, que escapa
+    todo `<` a `<`. Un inmueble titulado con una etiqueta de cierre de
+    script no puede salirse del bloque.
+
+── EL FORMULARIO CAE EN EL CRM, NO EN UN CORREO ───────────────────────────
+
+`src/components/realty/web/lead-action.ts` crea `RealtyContact` +
+`RealtyLead` + una `RealtyLeadActivity` con el mensaje.
+
+  · 🔴 El `accountId` sale del SLUG de la URL resuelto contra la base, NUNCA
+    del formulario. El contrato lo dice con todas sus letras.
+  · El inmueble y el asesor se resuelven SIEMPRE recortados a esa cuenta: el
+    id de un inmueble ajeno no liga nada.
+  · El contacto se REUSA por teléfono dentro de la cuenta (normalizado a 10
+    dígitos con `mxTenDigits`): si no, el mismo interesado preguntando por
+    tres casas sale tres veces en la libreta.
+  · `source` vive en el CONTACTO —"web" o "letrero"—; `RealtyLead` no tiene
+    ese campo, tiene `portal`, que es otra cosa. Se pone `portal: "propio"`.
+  · No se toca `firstResponseAt`: ese reloj lo arranca quien CONTESTA.
+  · Dos frenos de spam en memoria: por IP (6/min) y por teléfono (4/min).
+
+── LA FICHA ───────────────────────────────────────────────────────────────
+
+Galería, recorrido virtual, mapa, características, amenidades, preguntas
+frecuentes y formulario. Dos decisiones que pesan en el PSI móvil:
+
+  · **El recorrido no se monta con la página.** Matterport y compañía son
+    varios megabytes de WebGL que el 90% de los visitantes nunca abre: se
+    pinta la portada con un botón y el iframe entra al primer clic. La URL
+    pasa por `urlEmbedRecorrido`, que convierte un `youtube.com/watch` (que
+    dentro de un iframe NO se reproduce) a `youtube-nocookie.com/embed/<id>`
+    y una página de Vimeo a `player.vimeo.com` — las dos dentro de la MISMA
+    allowlist de `tour-hosts.json` que arma el `frame-src` de la CSP.
+  · **El mapa tampoco.** Se pinta la ubicación en texto con un botón; el
+    iframe de Google Maps entra al pedirlo. `www.google.com` ya estaba en el
+    `frame-src`, así que no hizo falta tocar `next.config.mjs`.
+  · **El buscador no lleva una sola línea de JavaScript**: es un
+    `<form method="get">` que navega a `/propiedades?op=…&zona=…`. Además de
+    ser lo más barato posible, cada combinación es una URL indexable.
+
+Las preguntas frecuentes se arman con los DATOS REALES del inmueble (precio,
+ubicación, tamaño, si tiene recorrido, los requisitos) y se PINTAN en la
+página antes de marcarse como FAQPage. Ese orden importa: un FAQPage cuyo
+contenido no está visible es motivo de acción manual de Google.
+
+── SEO Y DATOS ESTRUCTURADOS ──────────────────────────────────────────────
+
+  · AGENT  → `@graph` con RealEstateAgent + **Person**, y las credenciales
+    marcadas como `hasCredential`. Con los resúmenes de IA comiéndose los
+    clics, E-E-A-T pesa, y una acreditación verificable es exactamente la
+    señal que esos sistemas buscan citar.
+  · AGENCY → RealEstateAgent. **No existe ningún "RealEstateOrganization" en
+    schema.org**: RealEstateAgent YA es un LocalBusiness y una Organization,
+    y un tipo inventado hace que Google descarte el bloque entero sin avisar.
+  · OWNER  → solo WebSite. Un rentista no es una inmobiliaria y marcarlo como
+    negocio inmobiliario sería falso.
+  · Los tres → **RealEstateListing** en cada ficha (con `about`, `offers`,
+    `businessFunction` Sell/LeaseOut y `availability`), BreadcrumbList en
+    todas las interiores, FAQPage en la ficha e ItemList en los listados.
+  · Lo que NO se marca: `aggregateRating` ni `review`. Los testimonios los
+    escribe la propia cuenta en su editor; pedirle estrellas a Google con eso
+    es lo que sus guías de reseñas autogeneradas prohíben.
+  · Una cuenta con la web apagada o con la suscripción impaga se sirve con
+    `noindex` y NO entra al sitemap. Apagada no es 404: el slug existe y se
+    vuelve a encender en un clic, así que se deja una salida (WhatsApp).
+
+── EL LETRERO CON QR ──────────────────────────────────────────────────────
+
+`/inmobiliaria/mi-web/letrero`. Tres tamaños (carta, media carta, tabloide),
+QR en SVG y hoja imprimible con `@media print`. La liga lleva `?f=letrero` y
+el prospecto entra al CRM con esa fuente.
+
+El `?f=` se lee **en el navegador y solo al enviar**, no en el servidor:
+leer `searchParams` en una ruta ISR lanza DYNAMIC_SERVER_USAGE al regenerar y
+le devuelve un 500 al visitante. Así el caché queda intacto y no hay riesgo
+de desajuste de hidratación.
+
+El letrero en la reja sigue siendo el canal número uno en México y nadie mide
+si sirve. Ahora se puede: por primera vez el asesor sabe cuántos prospectos le
+trajo el cartón frente a lo que gasta en portales.
+
+── DECISIONES QUE CONVIENE CONOCER ────────────────────────────────────────
+
+1. **Sitemap propio en `/i/sitemap.xml`** en vez de un bloque en
+   `src/app/sitemap.ts`. Ese archivo es COMPARTIDO con el dental (vivo, con
+   clínicas que pagan) y con barber, y diez terminales de esta ola se
+   habrían peleado por él. El precio: **`/i/sitemap.xml` no está
+   referenciado desde `/robots.txt`** (también compartido) y hay que darlo de
+   alta a mano en Search Console. Está en los pendientes.
+
+2. **Nada de i18n para esta área.** El editor no se tradujo a propósito: la
+   mitad de sus etiquetas salen del MANIFIESTO, y el manifiesto es la copia
+   de una web inmobiliaria mexicana ("recámara", "cochera", "trato directo
+   con el dueño") — traducirlo sería traducir el contenido del cliente. Un
+   editor con la mitad de la pantalla en inglés y la otra mitad en español es
+   peor que uno en español. Consecuencia: **no se creó
+   `src/i18n/dictionaries/realty/web.json` y no se tocó `index.ts`**, así que
+   la paridad ES/EN del vertical sigue intacta y esta terminal no compite por
+   ese archivo con las otras nueve.
+
+3. **Los componentes van todos en `src/components/realty/web/**`** y NO en
+   `src/components/public/inmuebles/**`. Esa segunda carpeta está en el
+   allowlist de la tarea pero NO en `OWN_PREFIXES` de `scripts/realty-guard.cjs`:
+   usarla habría hecho fallar la guardia o habría obligado a tocar el script.
+
+4. **Las fotos de la web van al bucket `clinic-public`**, bajo el prefijo
+   `realty/<accountId>/`. `REALTY_FILES_BUCKET` ("realty-files") es PRIVADO
+   por diseño —ahí van escrituras y prediales— y sirve URLs firmadas de cinco
+   minutos: una web indexable con imágenes que caducan cada cinco minutos no
+   es una web. Es la misma decisión que tomó barber.
+
+5. **`next/image` no se usa.** `images.remotePatterns` solo autoriza
+   `images.unsplash.com` y las fotos viven en Supabase Storage: el
+   optimizador las rechazaría con un 400 y la ficha saldría sin fotos. Se usa
+   `<img>` con `width`/`height` (CLS 0) y carga diferida salvo la primera.
+
+6. **La conversión de la URL del recorrido se BORRÓ de aquí.** Esta ola
+   escribió su propio `urlEmbedRecorrido` en `landing.ts` y, al rebasar, la
+   ola de la cartera ya había puesto `realtyTourEmbedUrl` en
+   `src/lib/realty/tours.ts` — que es el PUNTO ÚNICO que el contrato designa
+   para todo lo de recorridos. Se eliminó la copia y la web pública usa la
+   del contrato, que además añade `?rel=0` a YouTube (sin ese parámetro, el
+   recorrido termina ofreciendo videos de otra gente dentro de la ficha) y
+   trae `REALTY_TOUR_IFRAME_ALLOW` / `REALTY_TOUR_IFRAME_SANDBOX`, que ahora
+   también usa el iframe de la ficha. Dos implementaciones de lo mismo son
+   dos sitios donde arreglar el marco en blanco el día que falle.
+
+7. ⚠️ **`/i/portal` es del portal del cliente (ola T9), no de una cuenta.**
+   Es un segmento estático bajo `/i/`, así que gana al `[slug]` dinámico:
+   una cuenta cuyo slug fuera `portal` quedaría inalcanzable. Hoy no hay
+   ninguna, y `makeRealtySlug` no lo reserva. Conviene añadirlo a los slugs
+   prohibidos del alta cuando alguien toque ese archivo — está fuera del
+   allowlist de esta terminal.
+
+── LO QUE ENCONTRÓ LA REVISIÓN ADVERSARIAL (y se arregló) ─────────────────
+
+Tres revisores read-only auditaron el trabajo antes del commit. La reja
+principal aguantó —`select` explícito sin un solo `include`, los mapeadores
+puros con su prueba de centinelas, la privacidad de la dirección cerrada por
+ocho rutas distintas, `isPublished` en 10 de 10 consultas, el AND del asesor
+en 5 de 5, el `<` escapado en el JSON-LD— pero salieron dos agujeros de
+verdad, los dos ya cerrados:
+
+1. 🔴 **El correo de la cuenta ES el correo del login.** `/api/realty/auth/register`
+   escribe el MISMO valor en `RealtyAccount.email` y en `RealtyUser.email`, y
+   ese segundo es la credencial (`@@unique([accountId, email])`). Yo lo estaba
+   publicando en `/contacto` y en el JSON-LD — y como el sitemap lista todas
+   las cuentas que pagan, eso era cosechar media llave por cuenta a escala.
+   Es la regla que ya le aplicaba al ASESOR y que no le había aplicado al
+   dueño. **Arreglado:** `email` sale de `SELECT_CUENTA` y de
+   `RealtyWebCuentaDTO`; el correo público es SOLO `config.correo`, el que se
+   escribe a mano en el editor sabiendo que se publica (y el editor lo avisa
+   con todas sus letras). Con prueba.
+
+2. 🔴 **Una URL firmada del bucket privado habría llegado al HTML.**
+   `realty-files` es privado y sirve URLs de cinco minutos; el día que la ola
+   de inmuebles guardara una de esas en `RealtyPropertyPhoto.url` o en
+   `RealtyPropertyTour.fileUrl`, el token quedaría incrustado en una página
+   ISR cacheada. Es EXACTAMENTE la fuga de tokens del dental, esperando a
+   materializarse. **Arreglado:** `esUrlDeArchivoPublica()` descarta cualquier
+   URL con firma (`/object/sign/`, `?token=`, `X-Amz-Signature`…) antes de
+   armar el DTO. Una foto que falta es un defecto que se ve y se arregla; un
+   token publicado no se ve hasta que alguien lo usa. Con prueba.
+
+Y cuatro menores, también cerradas:
+  · El sitemap copiaba a mano la lista de estados de suscripción en vez de
+    usar `REALTY_ACTIVE_SUBSCRIPTION_STATUSES`; el día que se añadiera un
+    estado, el sitemap habría listado URLs marcadas con `noindex`.
+  · `aSucursalPublica` arrastraba `lat`/`lng` al DTO sin que nada las
+    pintara. Una oficina NO tiene el interruptor `showExactAddress` que sí
+    protege al inmueble: carga muerta con filo. Fuera del `select` y del tipo.
+  · El bloque `mapa` no pasaba el aviso de "ubicación aproximada" que su
+    propio manifiesto declara, y usaba zoom de calle sobre la dirección de la
+    CUENTA — que en modo OWNER puede ser la casa de un particular. Ahora una
+    oficina va a zoom 16 y la dirección de la cuenta a 13, con el aviso.
+  · La server action del formulario aceptaba prospectos aunque la web
+    estuviera apagada (una server action se puede invocar directamente).
+
+La revisión de CSS encontró además **un bug que yo mismo había metido**, y
+vale la pena dejarlo escrito porque es de los que no se ven leyendo el
+código: al prefijar las nueve pieles con `-p-` usando un reemplazo
+automático, renombré también las reglas de BLOQUE. `.dcrw-p-asesor` y
+`.dcrw-p-historia` acabaron siendo piel Y bloque a la vez, mientras el JSX
+seguía usando `.dcrw-asesor` y `.dcrw-historia`. Consecuencias:
+
+  · La raíz de la plantilla `historia` se volvía una rejilla de dos columnas
+    a partir de 640 cqi: la barra en la columna izquierda, la página entera
+    en la derecha y el pie abajo. La plantilla oscura, rota en escritorio.
+  · La raíz de `asesor` recibía borde, radio y un `overflow: hidden` que
+    PISABA el `overflow-x: clip` de la raíz — exactamente el fallo que el
+    comentario de cabecera del archivo juraba haber evitado.
+  · Tres variantes de bloque (`equipo-compacto`, `equipo-retratos` y la
+    rejilla de `sobre-mi`) no existían visualmente en ninguna plantilla.
+
+Arreglado separando las seis reglas de bloque de las de piel. La lección:
+un `sed` sobre nombres de clase no distingue una piel de un bloque, y el
+comentario que explica la convención no la hace cumplir.
+
+Y tres más de esa misma revisión:
+  · El botón de WhatsApp usaba `#128C7E` con texto blanco: **4.14:1**, por
+    debajo de AA para texto normal — y el comentario del archivo afirmaba
+    4.8:1, que era falso. Ahora `#0E6F64` (6.04:1), que sigue leyéndose como
+    WhatsApp. Los seis acentos del catálogo sí pasaban (6.02 a 14.16), y la
+    piel oscura invierte correctamente a texto oscuro (6.68 a 9.88).
+  · El `position: fixed` de la hoja del letrero lo ATRAPABA el
+    `container-type` de `.realty-page`: al imprimir se anclaba a la columna
+    del panel en vez de al papel, y salían hojas en blanco. Se apaga la
+    contención dentro del `@media print`.
+  · Con operación AMBAS, la ficha decía "Este departamento está venta o
+    renta" — y eso se INDEXABA dentro del FAQPage. Ya concuerda.
+
+Y tres promesas que se publicaban SOLAS, sin que ninguna cuenta las
+escribiera, por venir en el `porDefecto` del manifiesto: "contesto el mismo
+día", "Contesto de 9 a 8, todos los días" y "Invierte con una empresa que
+entrega" (una garantía de cumplimiento sobre preventas). Fuera las tres.
+
+── Y LO QUE ENCONTRÓ EL REVISOR DE CONCURRENCIA ───────────────────────────
+
+Confirmó que los dos bugs del dental están arreglados EN SU RAÍZ (la marca
+es `version` y no hay un solo `where` con `updatedAt`; el ISR está encendido
+de verdad — lo comprobó contra `.next/prerender-manifest.json`, no leyendo el
+código). Pero la capa NUEVA que se construyó encima —la fusión y su pantalla
+de conflicto— traía **tres caminos de pérdida silenciosa que el editor
+dental no tenía**. Los tres tenían la misma pinta: el sistema decía "listo" y
+algo se había borrado. Los tres, cerrados y con prueba:
+
+1. 🔴 **"Publicar lo mío" revertía lo ajeno.** El botón adoptaba la base del
+   servidor y republicaba la pantalla tal cual. Como mi pantalla tiene los
+   demás campos como estaban cuando cargué, se revertía TODO lo que la otra
+   pestaña había cambiado y yo no toqué —el teléfono, una foto, el título de
+   Google— mientras el aviso solo nombraba el campo en disputa. Ana ve
+   "alguien más editó la historia", pulsa "publicar lo mío" y el título que
+   escribió Beto desaparece sin 409 y sin rastro.
+   **Arreglado:** ahora "lo mío" es *lo que yo cambié*, no *lo que tengo en
+   pantalla*. Se fusiona en el cliente con la misma regla de tres bandas del
+   servidor pero resolviendo los choques a mi favor (`gana: "mio"`), y se
+   publica ESE resultado.
+
+2. 🔴 **Escribir mientras el guardado viajaba se descartaba.** Al volver la
+   respuesta se pisaba la pantalla con lo guardado y se marcaba todo limpio
+   — así que las letras escritas en ese segundo y medio se perdían, el aviso
+   de cerrar pestaña se apagaba, y el cartel decía "Publicado". La peor
+   combinación posible: pierdes texto y encima crees que estás a salvo. El
+   código solo contemplaba el doble CLIC, no el seguir ESCRIBIENDO, que es lo
+   que hace todo el mundo.
+   **Arreglado:** se compara lo que hay en pantalla con lo que se envió; si
+   cambió, la pantalla manda y se queda "sucia" para el siguiente guardado.
+
+3. 🔴 **El 409 de última instancia vaciaba el editor.** El 409 que salta tras
+   tres vueltas no llevaba `config`, y el cliente lo normalizaba igual: eso
+   devuelve la config VACÍA. Quien pulsara "quedarme con lo suyo" se
+   encontraba el editor en blanco —sin textos, sin fotos, sin credenciales—
+   y marcado como limpio, así que ni el aviso de cerrar pestaña saltaba.
+   **Arreglado por los dos lados:** el servidor manda el estado actual
+   también en ese 409, y el cliente se niega a ofrecer "quedarme con lo suyo"
+   si el cuerpo no trae config.
+
+Y cuatro más de la misma revisión:
+  · **Lectura desgarrada en el panel.** `/inmobiliaria/mi-web` leía la fila
+    DOS veces: la `version` de una consulta y `published`/`template` de otra.
+    Entre las dos cabía un guardado ajeno, y el editor recibía una foto
+    imposible (versión nueva con valores viejos); como la versión coincidía,
+    el siguiente guardado entraba por el camino directo y reponía lo viejo:
+    **una web recién apagada volvía a estar en línea.** Ahora es una sola
+    lectura.
+  · **Falso 409 en el mismo bloque.** `bloques` se fusionaba como un objeto
+    entero, así que cambiar el TÍTULO de la portada mientras el otro escribe
+    la BAJADA daba conflicto. Ahora se fusiona campo a campo. Las listas
+    (zonas, credenciales, orden…) siguen siendo un valor entero, que ahí sí
+    es lo correcto.
+  · **El sitemap no se revalidaba.** Una cuenta apagaba su web y
+    `/i/sitemap.xml` la seguía anunciando a Google hasta una hora, justo lo
+    que el comentario de ese archivo declara inaceptable.
+  · **La revalidación tiraba la caché de TODOS los inquilinos.** El patrón
+    `revalidatePath("/i/[slug]/propiedades/[inmueble]", "page")` es correcto
+    pero global: con quinientas inmobiliarias, que una cambie un color deja
+    frías las fichas de las otras cuatrocientas noventa y nueve. Ahora se
+    revalidan las fichas y los asesores DE ESA CUENTA, una a una, con
+    fallback al patrón (y aviso en el log) por encima de 120 inmuebles.
+
+Menores de la misma tanda: un `template` ausente o con errata reseteaba la
+plantilla en silencio (ahora es 400); guardar y subir no tenían freno de
+tasa (ahora sí, por cuenta); y el mensaje del 403 nombraba planes concretos
+—"está en Asesor e Inmobiliaria"— que hoy es FALSO porque el seed le da
+`webEditor` a los tres. Ese mensaje ya no nombra ningún plan: qué plan trae
+la feature se decide en la tabla y se edita sin redeploy.
+
+Tres hallazgos se quedan como están, a propósito:
+  · Que una página completa con `noindex` delate una suscripción impaga.
+    Arreglarlo sería indexar cuentas que no pagan, que es peor.
+  · Que se pueda colgar una nota en un contacto que ya existe en el CRM si se
+    conoce su teléfono. Es inherente a cualquier formulario público; los
+    frenos por IP y por teléfono acotan el volumen.
+  · Que la web esté viva desde el registro, antes de pagar. Es la promesa
+    explícita del plan más barato.
+  · Que un PATCH escrito a mano pueda mandar la portada al pie de la página
+    reordenando `orden`. El editor no lo permite y es autolesión: nadie
+    sabotea su propia web pasando por encima de su propia interfaz.
+  · Que el item del menú se gatee por `publicWeb` mientras las cuatro capas
+    reales preguntan por `webEditor`. No es un agujero (quien entra sin
+    `webEditor` ve el upsell), pero es una discrepancia de llave que vive en
+    `src/lib/realty/types.ts`, fuera del allowlist de esta terminal.
+  · Que la subida no descuente `storageUsedBytes` ni respete el cupo del
+    plan. Es de la ola de inmuebles; mientras tanto hay freno de tasa.
+
+── PENDIENTE — REQUIERE RAFAEL ────────────────────────────────────────────
+
+- 🔴 **`webEditor` está encendido en los TRES planes.** El producto dice que
+  el plan PROPIETARIO ($199) tiene web con la plantilla por defecto **pero
+  sin editor**; el seed de la Ola 0 (`sql/realty.sql` y el fallback de
+  `plan-shared.ts`) le da la feature igual. El código ya hace lo correcto —
+  pregunta por `plan.features.webEditor` y JAMÁS por el id del plan, en las
+  cuatro capas—, así que esto se arregla con **un UPDATE, sin redeploy**:
+
+      UPDATE realty_plan_configs
+      SET features = jsonb_set(features, '{webEditor}', 'false')
+      WHERE "planId" = 'PROPIETARIO';
+
+  No lo apliqué yo: `plan-shared.ts` está fuera del allowlist de esta
+  terminal y tocar el reparto de features afecta a las otras nueve. Mientras
+  no se corra, el plan de $199 ve el editor completo.
+
+- 🔴 **Dar de alta `/i/sitemap.xml` en Search Console.** `robots.txt` es
+  compartido y solo anuncia `/sitemap.xml`.
+
+- ⚪ **Nada de esto se puede probar contra datos reales hasta que corra
+  `sql/realty.sql` en Supabase** (sigue siendo el bloqueante de la Ola 0).
+  Mientras tanto todo degrada con elegancia: el cargador devuelve `null` y la
+  ruta hace `notFound()`; el editor avisa de que falta la tabla en vez de
+  perder lo que se escriba; y la server action del formulario responde
+  "escríbenos por WhatsApp" en vez de un 500.
+
+- ⚪ **Verificación visual pendiente.** Las nueve plantillas están probadas de
+  forma ESTÁTICA (manifiesto ↔ JSX, firmas, topes, fusión, fugas), pero
+  ninguna se ha visto pintada con datos reales: hace falta una cuenta con
+  inmuebles publicados y fotos.
+
+- ⚪ El QR del letrero apunta a `NEXT_PUBLIC_SITE_URL`. Si esa variable
+  todavía apunta al dominio de pruebas, los letreros impresos hoy quedarán
+  apuntando ahí para siempre. Conviene confirmarla ANTES de imprimir nada.
+
+── GATES ──────────────────────────────────────────────────────────────────
+
+  · `npx next build` → **exit 0**, cero errores de compilación. Las cuatro
+    rutas que deben cachearse salieron como `●` y no como `ƒ`, que es la
+    prueba de que `generateStaticParams` encendió el ISR de verdad;
+    `/propiedades` sale `ƒ` a propósito (lee filtros) y `/i/sitemap.xml`
+    no chocó con el segmento `[slug]`.
+    ⚠️ El PRIMER intento murió con **exit 134** (sin memoria en el
+    type-check, con otras terminales compilando a la vez). Se relanzó con
+    `NODE_OPTIONS=--max-old-space-size=8192` y pasó. Es el escenario que la
+    Ola 0 ya había anotado como pendiente para Vercel.
+  · `node scripts/realty-guard.cjs` → **exit 0**. 52 archivos: 51 PROPIOS
+    del vertical y ORQUESTA.md declarado en REALTY_GUARD_SHARED. 0
+    compartidos sin declarar, 0 prohibidos.
+  · `npx tsx --test src/lib/realty/templates/__tests__/manifiesto.test.ts`
+    → **58/58**.
+  · Las dos pruebas de la Ola 0 siguen verdes: contrato **31/31**,
+    alcance del diccionario **11/11**.
+  · `npx tsc --noEmit` → limpio en todo lo nuevo.
