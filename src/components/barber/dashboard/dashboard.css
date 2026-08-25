@@ -1,0 +1,475 @@
+/* ═══════════════════════════════════════════════════════════════════════
+   DaleControl BARBER — Inicio (resumen del día) y Reportes.
+   Scope: .barber-shell .bdash-*  (no toca globals.css ni el dental).
+
+   · Responsive con @container (regla del repo), nunca @media. El contenedor
+     de medida es la RAÍZ de la pantalla (.bdash-page); las secciones se
+     miden contra él. No hay modales ni position:fixed aquí dentro.
+   · Medidas en px: la raíz del panel mide 13px y un rem no vale 16.
+   · Colores SOLO por tokens del tema caramelo; las series de las gráficas
+     llevan sus propios tokens (abajo), validados con el validador de
+     paletas del skill dataviz en claro (#FFFFFF) y en oscuro (#241D19):
+       servicios = caramelo, productos = azul, propinas = aqua.
+     El aqua queda bajo 3:1 en claro → relevo obligatorio: la gráfica tiene
+     leyenda, tooltip y vista de tabla.
+   · La rampa del mapa de calor es UN solo tono (caramelo) claro→oscuro; en
+     oscuro se invierte el ancla (poco = fondo, mucho = caramelo claro).
+   ═══════════════════════════════════════════════════════════════════════ */
+
+.barber-shell {
+  --bdash-s1: #A2612F;
+  --bdash-s2: #2a78d6;
+  --bdash-s3: #1baf7a;
+  --bdash-s4: #4a3aa7;
+  --bdash-h1: #F6EADC;
+  --bdash-h2: #EBD3B4;
+  --bdash-h3: #DDB587;
+  --bdash-h4: #BE7A3C;
+  --bdash-h5: #814A28;
+  --bdash-h-ink-light: #121010;
+  --bdash-h-ink-dark: #FFFFFF;
+  --bdash-grid: rgba(18, 16, 16, 0.10);
+  --bdash-axis: rgba(18, 16, 16, 0.22);
+}
+.dark .barber-shell {
+  --bdash-s1: #BE7A3C;
+  --bdash-s2: #3987e5;
+  --bdash-s3: #199e70;
+  --bdash-s4: #9085e9;
+  --bdash-h1: #3D2417;
+  --bdash-h2: #5E3720;
+  --bdash-h3: #814A28;
+  --bdash-h4: #BE7A3C;
+  --bdash-h5: #DDB587;
+  --bdash-h-ink-light: #F5EFE7;
+  --bdash-h-ink-dark: #241410;
+  --bdash-grid: rgba(250, 245, 238, 0.12);
+  --bdash-axis: rgba(250, 245, 238, 0.28);
+}
+
+/* ── Página ─────────────────────────────────────────────────────────── */
+.barber-shell .bdash-page {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  container-type: inline-size;
+  container-name: bdash;
+}
+.barber-shell .bdash-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px 16px;
+}
+.barber-shell .bdash-head__title {
+  font-size: clamp(20px, 2.2cqi + 12px, 26px);
+  font-weight: 700;
+  letter-spacing: -0.015em;
+  color: var(--text-1);
+  margin: 0;
+}
+.barber-shell .bdash-head__sub {
+  font-size: 13px;
+  color: var(--text-3);
+  margin: 4px 0 0;
+  text-transform: none;
+}
+.barber-shell .bdash-head__sub::first-letter { text-transform: uppercase; }
+.barber-shell .bdash-head__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+.barber-shell .bdash-note {
+  padding: 10px 12px;
+  border-radius: 10px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  background: var(--brand-softer);
+  border: 1px solid var(--border-brand);
+  color: var(--text-2);
+}
+.barber-shell .bdash-select {
+  height: 32px;
+  padding: 0 28px 0 10px;
+  border-radius: 9px;
+  border: 1px solid var(--border-soft);
+  background: var(--bg-elev);
+  color: var(--text-1);
+  font-size: 12.5px;
+  font-weight: 600;
+  font-family: inherit;
+}
+.barber-shell .bdash-select:focus-visible { outline: none; box-shadow: var(--ring); border-color: var(--caramel-500); }
+.barber-shell .bdash-btn-icon { display: inline-flex; align-items: center; gap: 6px; }
+/* Un <a> con clase de botón no lleva subrayado (globals lo pone a todo enlace). */
+.barber-shell .bdash-page a.btn-new { text-decoration: none; }
+.barber-shell .bdash-spin { animation: bdash-spin 0.9s linear infinite; }
+@keyframes bdash-spin { to { transform: rotate(360deg); } }
+
+/* ── Rejillas ───────────────────────────────────────────────────────── */
+.barber-shell .bdash-kpis {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+@container bdash (min-width: 720px) {
+  .barber-shell .bdash-kpis { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
+.barber-shell .bdash-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+@container bdash (min-width: 960px) {
+  .barber-shell .bdash-grid { grid-template-columns: minmax(0, 7fr) minmax(0, 5fr); }
+  .barber-shell .bdash-grid--even { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+.barber-shell .bdash-stack { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+
+/* ── Chips, filas y listas ──────────────────────────────────────────── */
+.barber-shell .bdash-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.barber-shell .bdash-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  font-size: 12.5px;
+  font-weight: 600;
+  background: var(--bg-elev-2);
+  color: var(--text-2);
+  border: 1px solid var(--border-soft);
+}
+.barber-shell .bdash-chip__n { font-variant-numeric: tabular-nums; color: var(--text-1); }
+.barber-shell .bdash-chip__dot { width: 8px; height: 8px; border-radius: 50%; background: var(--text-4); }
+.barber-shell .bdash-chip--success .bdash-chip__dot { background: var(--success); }
+.barber-shell .bdash-chip--info .bdash-chip__dot { background: var(--info, #2a78d6); }
+.barber-shell .bdash-chip--brand .bdash-chip__dot { background: var(--brand); }
+.barber-shell .bdash-chip--danger .bdash-chip__dot { background: var(--danger); }
+
+.barber-shell .bdash-list { display: flex; flex-direction: column; gap: 8px; }
+.barber-shell .bdash-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--border-soft);
+  border-radius: 12px;
+  background: var(--bg-elev);
+}
+.barber-shell .bdash-row__time {
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  font-size: 14px;
+  color: var(--brand);
+  min-width: 48px;
+}
+.barber-shell .bdash-row__main { flex: 1; min-width: 0; }
+.barber-shell .bdash-row__name {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--text-1);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.barber-shell .bdash-row__meta { font-size: 12px; color: var(--text-3); margin-top: 2px; }
+.barber-shell .bdash-row__n {
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  color: var(--text-1);
+  white-space: nowrap;
+}
+
+.barber-shell .bdash-callout {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  border: 1px solid;
+}
+.barber-shell .bdash-callout--danger { background: var(--danger-soft, rgba(239, 68, 68, 0.08)); border-color: rgba(239, 68, 68, 0.3); color: var(--danger); }
+.barber-shell .bdash-callout--success { background: var(--success-soft, rgba(16, 185, 129, 0.1)); border-color: rgba(16, 185, 129, 0.3); color: var(--success); }
+.barber-shell .bdash-callout--warning { background: var(--warning-soft, rgba(245, 158, 11, 0.1)); border-color: rgba(245, 158, 11, 0.3); color: var(--warning); }
+.barber-shell .bdash-callout__text { flex: 1; min-width: 0; }
+.barber-shell .bdash-callout__cta { font-weight: 700; white-space: nowrap; color: inherit; text-decoration: underline; text-underline-offset: 2px; }
+
+.barber-shell .bdash-empty { padding: 14px; font-size: 12.5px; color: var(--text-3); text-align: center; line-height: 1.5; }
+.barber-shell .bdash-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--brand);
+  text-decoration: none;
+}
+.barber-shell .bdash-link:hover { text-decoration: underline; text-underline-offset: 2px; }
+.barber-shell .bdash-foot {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border-soft);
+  font-size: 12px;
+  color: var(--text-3);
+}
+
+/* ── Números grandes ────────────────────────────────────────────────── */
+.barber-shell .bdash-big {
+  font-size: 30px;
+  font-weight: 700;
+  color: var(--text-1);
+  letter-spacing: -0.01em;
+  line-height: 1.1;
+}
+.barber-shell .bdash-big__label { font-size: 12px; color: var(--text-3); margin-top: 4px; }
+.barber-shell .bdash-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-1);
+}
+.barber-shell .bdash-status__dot { width: 9px; height: 9px; border-radius: 50%; background: var(--success); box-shadow: 0 0 0 4px rgba(16, 185, 129, 0.18); }
+.barber-shell .bdash-status__dot--off { background: var(--text-4); box-shadow: none; }
+.barber-shell .bdash-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; }
+.barber-shell .bdash-stat { padding: 10px 12px; border-radius: 12px; background: var(--bg-elev-2); border: 1px solid var(--border-soft); }
+.barber-shell .bdash-stat__label { font-size: 11.5px; color: var(--text-3); }
+.barber-shell .bdash-stat__value { font-size: 20px; font-weight: 700; color: var(--text-1); margin-top: 2px; letter-spacing: -0.01em; }
+.barber-shell .bdash-stat__hint { font-size: 11px; color: var(--text-4); margin-top: 2px; }
+
+/* ── Avisos accionables ─────────────────────────────────────────────── */
+.barber-shell .bdash-alert {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--border-soft);
+  background: var(--bg-elev);
+}
+.barber-shell .bdash-alert__icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
+  display: grid;
+  place-items: center;
+  flex: none;
+  background: var(--warning-soft, rgba(245, 158, 11, 0.12));
+  color: var(--warning);
+}
+.barber-shell .bdash-alert__body { flex: 1; min-width: 0; }
+.barber-shell .bdash-alert__title { font-size: 13px; font-weight: 600; color: var(--text-1); }
+.barber-shell .bdash-alert__hint { font-size: 12px; color: var(--text-3); margin-top: 2px; line-height: 1.4; }
+.barber-shell .bdash-alert__cta {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--brand);
+  text-decoration: none;
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+.barber-shell .bdash-alert__cta:hover { text-decoration: underline; text-underline-offset: 2px; }
+
+/* ── Arranque (barbería sin datos) ──────────────────────────────────── */
+.barber-shell .bdash-setup { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; }
+@container bdash (min-width: 640px) {
+  .barber-shell .bdash-setup { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@container bdash (min-width: 1100px) {
+  .barber-shell .bdash-setup { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+.barber-shell .bdash-step {
+  display: flex;
+  gap: 12px;
+  padding: 14px;
+  border-radius: 14px;
+  border: 1px solid var(--border-soft);
+  background: var(--bg-elev);
+  text-decoration: none;
+  color: inherit;
+  transition: border-color var(--dur-1, 150ms) var(--ease, ease), box-shadow var(--dur-1, 150ms) var(--ease, ease);
+}
+.barber-shell .bdash-step:hover { border-color: var(--border-brand); box-shadow: var(--shadow-2); }
+.barber-shell .bdash-step__n {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-weight: 700;
+  font-size: 13px;
+  background: var(--brand-soft);
+  color: var(--brand);
+  flex: none;
+}
+.barber-shell .bdash-step--done .bdash-step__n { background: var(--success-soft, rgba(16, 185, 129, 0.12)); color: var(--success); }
+.barber-shell .bdash-step__title { font-size: 13.5px; font-weight: 600; color: var(--text-1); }
+.barber-shell .bdash-step__hint { font-size: 12px; color: var(--text-3); margin-top: 2px; line-height: 1.4; }
+.barber-shell .bdash-step__state { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; margin-top: 6px; color: var(--text-4); }
+.barber-shell .bdash-step--done .bdash-step__state { color: var(--success); }
+
+/* ── Filtros de reportes (una sola fila, arriba de todo) ────────────── */
+.barber-shell .bdash-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  align-items: center;
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: var(--bg-elev);
+  border: 1px solid var(--border-soft);
+}
+.barber-shell .bdash-filters__spacer { flex: 1; }
+.barber-shell .bdash-filters__label { font-size: 11.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-4); }
+.barber-shell .bdash-seg {
+  display: inline-flex;
+  gap: 3px;
+  padding: 3px;
+  border-radius: 10px;
+  background: var(--bg-elev-2);
+  border: 1px solid var(--border-soft);
+}
+.barber-shell .bdash-seg__btn {
+  height: 28px;
+  padding: 0 11px;
+  border-radius: 8px;
+  border: 0;
+  background: transparent;
+  color: var(--text-2);
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+}
+.barber-shell .bdash-seg__btn:hover { color: var(--text-1); }
+.barber-shell .bdash-seg__btn--on { background: var(--bg-elev); color: var(--text-1); box-shadow: var(--shadow-1); }
+.barber-shell .bdash-seg__btn:focus-visible { outline: none; box-shadow: var(--ring); }
+.barber-shell .bdash-dates { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.barber-shell .bdash-dates input {
+  height: 32px;
+  padding: 0 8px;
+  border-radius: 9px;
+  border: 1px solid var(--border-soft);
+  background: var(--bg-elev);
+  color: var(--text-1);
+  font-size: 12.5px;
+  font-family: inherit;
+}
+.barber-shell .bdash-dates input:focus-visible { outline: none; box-shadow: var(--ring); border-color: var(--caramel-500); }
+
+/* ── Gráfica de columnas apiladas ───────────────────────────────────── */
+.barber-shell .bdash-chart { position: relative; }
+.barber-shell .bdash-chart svg { display: block; width: 100%; height: auto; overflow: visible; }
+.barber-shell .bdash-chart__grid { stroke: var(--bdash-grid); stroke-width: 1; }
+.barber-shell .bdash-chart__axis { stroke: var(--bdash-axis); stroke-width: 1; }
+.barber-shell .bdash-chart__tick { font-size: 11px; fill: var(--text-3); font-variant-numeric: tabular-nums; }
+.barber-shell .bdash-chart__band { fill: transparent; cursor: default; }
+.barber-shell .bdash-chart__band:focus-visible { outline: none; fill: var(--bg-hover); }
+.barber-shell .bdash-chart__band--on { fill: var(--bg-hover); }
+.barber-shell .bdash-legend { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 12px; color: var(--text-2); margin-top: 10px; }
+.barber-shell .bdash-legend__key { display: inline-flex; align-items: center; gap: 6px; }
+.barber-shell .bdash-legend__swatch { width: 10px; height: 10px; border-radius: 3px; flex: none; }
+.barber-shell .bdash-tip {
+  position: absolute;
+  z-index: 5;
+  top: 6px;
+  pointer-events: none;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: var(--bg-elev);
+  border: 1px solid var(--border-strong);
+  box-shadow: var(--shadow-3);
+  font-size: 12px;
+  color: var(--text-2);
+  min-width: 170px;
+  transform: translateX(-50%);
+}
+.barber-shell .bdash-tip__title { font-weight: 600; color: var(--text-1); margin-bottom: 4px; }
+.barber-shell .bdash-tip__row { display: flex; justify-content: space-between; gap: 12px; padding: 1px 0; }
+.barber-shell .bdash-tip__row strong { color: var(--text-1); font-variant-numeric: tabular-nums; font-weight: 600; }
+.barber-shell .bdash-tip__key { display: inline-block; width: 10px; height: 2px; border-radius: 1px; margin-right: 6px; vertical-align: middle; }
+.barber-shell .bdash-tip__row--total { margin-top: 3px; padding-top: 3px; border-top: 1px solid var(--border-soft); }
+
+/* ── Mapa de calor (horas muertas) ──────────────────────────────────── */
+.barber-shell .bdash-heat-wrap { overflow-x: auto; padding-bottom: 4px; }
+.barber-shell .bdash-heat {
+  display: grid;
+  gap: 3px;
+  grid-template-columns: 34px repeat(var(--bdash-hours), minmax(26px, 1fr));
+  min-width: calc(34px + var(--bdash-hours) * 29px);
+}
+.barber-shell .bdash-heat__label { font-size: 11px; font-weight: 600; color: var(--text-3); display: flex; align-items: center; }
+.barber-shell .bdash-heat__hour { font-size: 10.5px; color: var(--text-3); text-align: center; font-variant-numeric: tabular-nums; padding-bottom: 2px; }
+.barber-shell .bdash-heat__cell {
+  height: 28px;
+  border-radius: 5px;
+  display: grid;
+  place-items: center;
+  font-size: 11px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  background: var(--bg-elev-2);
+  color: var(--text-3);
+  border: 0;
+  padding: 0;
+  cursor: default;
+  font-family: inherit;
+}
+.barber-shell .bdash-heat__cell:hover,
+.barber-shell .bdash-heat__cell:focus-visible { outline: 2px solid var(--brand); outline-offset: 1px; }
+.barber-shell .bdash-heat__cell--closed {
+  background: transparent;
+  color: var(--text-4);
+  background-image: repeating-linear-gradient(45deg, var(--bdash-grid) 0 2px, transparent 2px 7px);
+}
+.barber-shell .bdash-heat__cell--dead { background: var(--warning-soft, rgba(245, 158, 11, 0.16)); color: var(--warning); }
+.barber-shell .bdash-heat__cell--l1 { background: var(--bdash-h1); color: var(--bdash-h-ink-light); }
+.barber-shell .bdash-heat__cell--l2 { background: var(--bdash-h2); color: var(--bdash-h-ink-light); }
+.barber-shell .bdash-heat__cell--l3 { background: var(--bdash-h3); color: var(--bdash-h-ink-light); }
+.barber-shell .bdash-heat__cell--l4 { background: var(--bdash-h4); color: var(--bdash-h-ink-dark); }
+.barber-shell .bdash-heat__cell--l5 { background: var(--bdash-h5); color: var(--bdash-h-ink-dark); }
+.barber-shell .bdash-heat-legend { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; margin-top: 10px; font-size: 11.5px; color: var(--text-3); }
+.barber-shell .bdash-heat-legend__ramp { display: inline-flex; gap: 2px; }
+.barber-shell .bdash-heat-legend__step { width: 16px; height: 12px; border-radius: 3px; }
+
+/* ── Barras horizontales (top de servicios / productos) ─────────────── */
+.barber-shell .bdash-bars { display: flex; flex-direction: column; gap: 10px; }
+.barber-shell .bdash-bar { display: flex; flex-direction: column; gap: 4px; }
+.barber-shell .bdash-bar__head { display: flex; justify-content: space-between; gap: 10px; font-size: 12.5px; align-items: baseline; }
+.barber-shell .bdash-bar__name { color: var(--text-1); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.barber-shell .bdash-bar__val { color: var(--text-1); font-variant-numeric: tabular-nums; white-space: nowrap; font-weight: 600; }
+.barber-shell .bdash-bar__track { height: 8px; border-radius: 4px; background: var(--bg-elev-2); overflow: hidden; }
+.barber-shell .bdash-bar__fill { height: 100%; border-radius: 0 4px 4px 0; background: var(--bdash-s1); }
+.barber-shell .bdash-bar__fill--s2 { background: var(--bdash-s2); }
+.barber-shell .bdash-bar__meta { font-size: 11.5px; color: var(--text-3); display: flex; flex-wrap: wrap; gap: 4px 10px; }
+
+/* ── Barra apilada de métodos de pago ───────────────────────────────── */
+.barber-shell .bdash-stackbar { display: flex; gap: 2px; height: 14px; border-radius: 6px; overflow: hidden; background: var(--bg-elev-2); }
+.barber-shell .bdash-stackbar__seg { height: 100%; min-width: 2px; }
+.barber-shell .bdash-swatch--1 { background: var(--bdash-s1); }
+.barber-shell .bdash-swatch--2 { background: var(--bdash-s2); }
+.barber-shell .bdash-swatch--3 { background: var(--bdash-s3); }
+.barber-shell .bdash-swatch--4 { background: var(--bdash-s4); }
+
+/* ── Tablas: scroll propio, nunca la página ─────────────────────────── */
+.barber-shell .bdash-table-wrap { overflow-x: auto; }
+.barber-shell .bdash-table-wrap .table-new td,
+.barber-shell .bdash-table-wrap .table-new th { white-space: nowrap; }
+.barber-shell .bdash-num { text-align: right; font-variant-numeric: tabular-nums; }
+.barber-shell .bdash-muted { color: var(--text-3); }
+.barber-shell .bdash-card-actions { display: inline-flex; gap: 6px; align-items: center; }

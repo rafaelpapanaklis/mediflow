@@ -41,6 +41,8 @@ import campanasEs from "./campanas.es.json"; // campanas de retencion
 import campanasEn from "./campanas.en.json";
 import botEs from "./bot.es.json"; // bot que agenda por WhatsApp
 import botEn from "./bot.en.json";
+import inicioEs from "./inicio.es.json"; // inicio (resumen del día) + reportes
+import inicioEn from "./inicio.en.json";
 
 const ES: Dictionary = {
   barber: {
@@ -56,6 +58,8 @@ const ES: Dictionary = {
     whatsapp: whatsappEs as unknown as Dictionary,
     campanas: campanasEs as unknown as Dictionary,
     bot: botEs as unknown as Dictionary,
+    inicio: inicioEs.inicio as unknown as Dictionary,
+    reportes: inicioEs.reportes as unknown as Dictionary,
   },
 };
 
@@ -73,6 +77,8 @@ const EN: Dictionary = {
     whatsapp: whatsappEn as unknown as Dictionary,
     campanas: campanasEn as unknown as Dictionary,
     bot: botEn as unknown as Dictionary,
+    inicio: inicioEn.inicio as unknown as Dictionary,
+    reportes: inicioEn.reportes as unknown as Dictionary,
   },
 };
 
