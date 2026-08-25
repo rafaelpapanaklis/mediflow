@@ -18920,7 +18920,7 @@ Cero cambios de UI, de lógica y del vertical dental.
 ═══════════════════════════════════════════════════════════════════════════
 ## INMUEBLES · OLA 1 · T9 — PORTAL DEL CLIENTE (inquilino y propietario) ✅ (2026-08-25)
 ═══════════════════════════════════════════════════════════════════════════
-COMMIT: 4b3646ee · rama `realty/t9` → main · BUILD EXIT 0 · GUARDIA INMUEBLES: OK
+COMMIT: d33d396b · rama `realty/t9` → main · BUILD EXIT 0 · GUARDIA INMUEBLES: OK
 (35 archivos, todos PROPIOS del vertical; ORQUESTA.md declarado en REALTY_GUARD_SHARED).
 SIN SQL obligatorio: `RealtyClientAuthToken` ya existe desde la Ola 0. Se agrega
 `sql/realty-portal.sql`, que son SOLO tres índices de rendimiento (opcional,
