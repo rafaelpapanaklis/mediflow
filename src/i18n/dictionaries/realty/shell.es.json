@@ -1,0 +1,65 @@
+{
+  "brand": {
+    "product": "DaleControl",
+    "vertical": "Inmuebles"
+  },
+  "nav": {
+    "inicio": "Inicio",
+    "inmuebles": "Inmuebles",
+    "prospectos": "Prospectos",
+    "visitas": "Visitas",
+    "rentas": "Rentas",
+    "cobranza": "Cobranza",
+    "propietarios": "Propietarios",
+    "comisiones": "Comisiones",
+    "equipo": "Equipo",
+    "reportes": "Reportes",
+    "mi-web": "Mi web",
+    "portales": "Portales",
+    "whatsapp": "WhatsApp",
+    "calculadoras": "Calculadoras",
+    "suscripcion": "Suscripción",
+    "configuracion": "Configuración",
+    "soporte": "Soporte"
+  },
+  "navSections": {
+    "operacion": "Operación",
+    "arrendamiento": "Arrendamiento",
+    "negocio": "Negocio",
+    "crecimiento": "Crecimiento",
+    "cuenta": "Cuenta"
+  },
+  "modes": {
+    "AGENCY": "Inmobiliaria",
+    "AGENT": "Asesor",
+    "OWNER": "Propietario"
+  },
+  "topbar": {
+    "root": "Inmuebles"
+  },
+  "logout": "Cerrar sesión",
+  "placeholder": {
+    "soon": "En construcción",
+    "body": "Esta sección todavía no está lista. Muy pronto vas a poder trabajarla desde aquí.",
+    "hint": "El equipo de DaleControl está construyendo esta parte del panel."
+  },
+  "areas": {
+    "inicio": "El pulso del día: visitas de hoy, prospectos sin contestar, rentas por cobrar y qué inmueble se movió.",
+    "inmuebles": "Tu cartera completa: fotos, recorridos 3D, precio, ubicación y en qué estatus va cada inmueble.",
+    "prospectos": "El embudo, de \"acaba de escribir\" a \"firmó\": quién lo atiende, cuánto tardaste en contestarle y por qué se cayó.",
+    "visitas": "La agenda de visitas y el control de llaves: quién enseña qué, a qué hora y quién trae las llaves.",
+    "rentas": "Los contratos de arrendamiento: inquilino, aval, depósito, vigencia y la regla de incremento.",
+    "cobranza": "Los cargos del mes, los pagos recibidos con su recibo, los depósitos en garantía y los gastos del inmueble.",
+    "propietarios": "La libreta de dueños y sus exclusivas: con quién tienes el papel firmado y hasta cuándo.",
+    "comisiones": "Las operaciones cerradas y el reparto: captador, colocador, oficina y quién ya cobró.",
+    "equipo": "Tus asesores, sus permisos y tus oficinas: quién ve qué y quién puede tocar el dinero.",
+    "reportes": "Los números del negocio: cuánto entra, de dónde llegan los prospectos y qué inmuebles se atoran.",
+    "mi-web": "Tu página pública con tu cartera en vivo, en tu propia dirección, sin pagarle a nadie por listar.",
+    "portales": "El feed de tus inmuebles para publicarlos fuera, y el estado de cada uno en cada portal.",
+    "whatsapp": "Tus conversaciones en un solo lugar: quién preguntó por qué inmueble y quién le contestó.",
+    "calculadoras": "ISAI, mensualidad del crédito y rendimiento de una renta, con parámetros que se actualizan cada año.",
+    "suscripcion": "Tu plan, lo que incluye, tu cupo de archivos y el método de pago.",
+    "configuracion": "Los datos de tu cuenta: nombre, licencia inmobiliaria, dirección y cómo te ve el cliente.",
+    "soporte": "Escríbele al equipo de DaleControl cuando algo falle o no te cuadre."
+  }
+}

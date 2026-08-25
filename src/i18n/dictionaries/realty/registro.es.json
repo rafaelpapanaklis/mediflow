@@ -1,0 +1,61 @@
+{
+  "meta": {
+    "title": "Da de alta tu inmobiliaria · DaleControl Inmuebles",
+    "description": "Crea tu cuenta en DaleControl Inmuebles: cartera, prospectos, rentas y tu web pública."
+  },
+  "step": {
+    "mode": "Paso 1 de 2",
+    "form": "Paso 2 de 2"
+  },
+  "mode": {
+    "title": "¿Qué eres?",
+    "subtitle": "Con esto armamos tu panel. Si te equivocas, se cambia después en Configuración.",
+    "AGENCY": {
+      "label": "Inmobiliaria con agentes",
+      "help": "Tienes un equipo de asesores y comercializas inmuebles de otras personas."
+    },
+    "AGENT": {
+      "label": "Asesor independiente",
+      "help": "Trabajas por tu cuenta y comercializas inmuebles de otras personas."
+    },
+    "OWNER": {
+      "label": "Tengo propiedades en renta",
+      "help": "Los inmuebles son tuyos y quieres administrarlos: contratos, cobranza y mantenimiento."
+    },
+    "change": "Cambiar"
+  },
+  "form": {
+    "accountName": "Nombre de tu inmobiliaria",
+    "accountNameAgent": "Cómo te presentas",
+    "accountNameOwner": "Cómo quieres llamarle a tu cuenta",
+    "firstName": "Tu nombre",
+    "lastName": "Tu apellido",
+    "email": "Correo electrónico",
+    "password": "Contraseña",
+    "passwordHint": "Mínimo 8 caracteres.",
+    "phone": "WhatsApp",
+    "phoneHint": "Es nuestro canal para ayudarte a arrancar.",
+    "city": "Ciudad",
+    "state": "Estado",
+    "teamSize": "¿Cuántos son?",
+    "submit": "Crear mi cuenta",
+    "submitting": "Creando tu cuenta…",
+    "haveAccount": "¿Ya tienes cuenta?",
+    "signIn": "Inicia sesión"
+  },
+  "errors": {
+    "accountName": "El nombre de la cuenta es obligatorio.",
+    "firstName": "Tu nombre es obligatorio.",
+    "lastName": "Tu apellido es obligatorio.",
+    "email": "El correo electrónico es obligatorio.",
+    "password": "La contraseña debe tener al menos 8 caracteres.",
+    "phone": "El WhatsApp es obligatorio.",
+    "generic": "No se pudo completar el registro. Inténtalo de nuevo."
+  },
+  "success": {
+    "title": "Tu cuenta está lista",
+    "body": "Inicia sesión con tu correo y tu contraseña para entrar a tu panel.",
+    "next": "Te vamos a pedir elegir plan antes de empezar.",
+    "cta": "Ir a iniciar sesión"
+  }
+}

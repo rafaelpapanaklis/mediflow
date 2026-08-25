@@ -1,0 +1,206 @@
+/* ═══════════════════════════════════════════════════════════════════════
+   DaleControl INMUEBLES — tema del vertical: VERDE PINO + ARENA.
+   (Terreno, jardín y papel de escrituras: sobrio, no "startup".)
+
+   Scope: TODO vive bajo .realty-shell (el wrapper del panel /inmobiliaria
+   y de las páginas públicas /i). NO se tocan los tokens del panel dental,
+   ni los de barber, ni globals.css: este archivo lo importa solo el layout
+   del vertical, igual que barber-theme.css y panel-chrome-va.css.
+
+   Mecanismo (el mismo que ya usan el dental y barber):
+   - Tokens semánticos (--bg, --bg-elev, --brand, --text-*) re-declarados
+     bajo .realty-shell → los componentes base (.sidebar-new, .card, etc.)
+     se pintan verdes sin cambiar una línea suya.
+   - La rampa Tailwind brand-50…950 se remapea vía body:has(.realty-shell)
+     (triplets HSL de la escala pine) para que bg-brand-600 y los portales
+     de Radix (Dialog/Popover montan en <body>, FUERA del shell) hereden el
+     verde — misma lección radix-portal que barber y que el dashboard.
+
+   ♿ CONTRASTE (medido, no supuesto — blanco sobre cada tono):
+   - pine-400 #63A07E → 3.06  ✗ NO pasa AA
+   - pine-500 #3F8461 → 4.48  ✗ NO pasa AA en texto chico (pide 4.5)
+   - pine-600 #2F6B4D → 6.30  ✓
+   - pine-700 #27543E → 8.66  ✓
+   Por eso TODO botón o píldora con texto blanco va en 600 o 700. El 500 es
+   para acentos, bordes, iconos y texto grande.
+   En oscuro el primario es pine-400 (#63A07E) con TEXTO OSCURO encima
+   (#0E1E16 → 5.64 ✓), jamás blanco.
+
+   Responsive: usa @container (regla del repo), no @media, en los
+   componentes del vertical. Ojo: container-type crea contexto de
+   contención y ATRAPA a position:fixed — los modales van FUERA de
+   cualquier contenedor con container-type.
+
+   Medidas en px, no rem: la raíz del panel mide 13px y un rem no vale 16.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+.realty-shell {
+  /* ── Escala pine completa (nunca un color plano) ── */
+  --pine-50:  #F2F7F4;
+  --pine-100: #E0EDE5;
+  --pine-200: #BFD9CA;
+  --pine-300: #94BFA6;
+  --pine-400: #63A07E;
+  --pine-500: #3F8461; /* acento — NO para texto blanco encima */
+  --pine-600: #2F6B4D; /* acción primaria (texto blanco OK) */
+  --pine-700: #27543E;
+  --pine-800: #21422F;
+  --pine-900: #1B3527;
+  --pine-950: #0E1E16;
+
+  /* Neutros del vertical */
+  --realty-ink:  #14201A; /* verde-negro, no azulado */
+  --realty-sand: #F5F1E8; /* arena: papel de escritura, no blanco frío */
+
+  /* ── CLARO (default): arena + tinta ── */
+  --bg:        var(--realty-sand);
+  --bg-elev:   #FFFFFF;
+  --bg-elev-2: var(--pine-50);
+  --bg-hover:  rgba(63, 132, 97, 0.06);
+
+  --border-soft:   rgba(20, 32, 26, 0.12);
+  --border-strong: rgba(20, 32, 26, 0.20);
+  --border-brand:  rgba(63, 132, 97, 0.35);
+
+  --brand:        var(--pine-600);
+  --brand-soft:   rgba(63, 132, 97, 0.12);
+  --brand-softer: rgba(63, 132, 97, 0.05);
+
+  --text-1: var(--realty-ink);
+  --text-2: #46524B;
+  --text-3: #77837B;
+  --text-4: #A3ADA6;
+
+  --brand-grad:   linear-gradient(90deg, #2F6B4D, #3F8461);
+  --brand-grad-v: linear-gradient(180deg, #2F6B4D, #3F8461);
+  --brand-blue:   var(--pine-500);
+
+  /* --ring es un box-shadow completo en este repo, no un color. */
+  --ring: 0 0 0 3px rgba(63, 132, 97, 0.35);
+
+  --shadow-1: 0 1px 2px rgba(20, 32, 26, 0.05);
+  --shadow-2: 0 4px 12px -2px rgba(20, 32, 26, 0.08);
+  --shadow-3: 0 16px 40px -12px rgba(20, 32, 26, 0.20);
+
+  /* El botón de cerrar sesión del sidebar usa var(--danger); si el token
+     global no llegara, aquí tiene un valor propio en vez de heredar nada. */
+  --danger: #B3261E;
+}
+
+/* ── OSCURO: pino profundo + verde claro ── */
+.dark .realty-shell {
+  --bg:        #101815;
+  --bg-elev:   #182420;
+  --bg-elev-2: #1F2E28;
+  --bg-hover:  rgba(99, 160, 126, 0.08);
+
+  --border-soft:   rgba(242, 247, 244, 0.10);
+  --border-strong: rgba(242, 247, 244, 0.18);
+  --border-brand:  rgba(99, 160, 126, 0.40);
+
+  /* Primario oscuro = pine-400. OJO: con texto OSCURO (#0E1E16), no blanco. */
+  --brand:        var(--pine-400);
+  --brand-soft:   rgba(99, 160, 126, 0.14);
+  --brand-softer: rgba(99, 160, 126, 0.06);
+
+  --text-1: #EDF3EF;
+  --text-2: #BCC7C0;
+  --text-3: #8B968F;
+  --text-4: #626D66;
+
+  --brand-grad:   linear-gradient(90deg, #63A07E, #3F8461);
+  --brand-grad-v: linear-gradient(180deg, #63A07E, #3F8461);
+
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.35);
+  --shadow-2: 0 4px 12px -2px rgba(0, 0, 0, 0.45);
+  --shadow-3: 0 16px 40px -12px rgba(0, 0, 0, 0.6);
+
+  --danger: #F2B8B5;
+}
+
+/* ── Rampa Tailwind brand-* → pine dentro del vertical ─────────────────
+   Vía <body> con :has() para que los portales de Radix (Dialog/Popover
+   montan en <body>, FUERA del shell) hereden el verde. El panel de
+   inmuebles NO lleva .dashboard-shell ni .barber-shell, así que no compite
+   con el remap violeta del dashboard ni con el caramelo de barber.
+   Triplets HSL (sin hsl()) de la escala pine 50…950 — ese es el formato
+   que Tailwind necesita para poder aplicar opacidad (bg-brand-600/40). */
+body:has(.realty-shell) {
+  --brand-50:  144 23.8% 95.9%;
+  --brand-100: 143.1 26.5% 90.4%;
+  --brand-200: 145.4 25.5% 80%;
+  --brand-300: 145.1 25.1% 66.5%;
+  --brand-400: 146.6 24.3% 50.8%;
+  --brand-500: 149.6 35.4% 38.2%;
+  --brand-600: 150 39% 30.2%;
+  --brand-700: 150.7 36.6% 24.1%;
+  --brand-800: 145.5 33.3% 19.4%;
+  --brand-900: 147.7 32.5% 15.7%;
+  --brand-950: 150 36.4% 8.6%;
+
+  /* Fondo arena (pisa el grid violeta de :root body) */
+  background-color: #F5F1E8;
+  background-image:
+    radial-gradient(ellipse 1200px 600px at 50% -10%, rgba(63, 132, 97, 0.07), transparent 70%),
+    linear-gradient(rgba(20, 32, 26, 0.045) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(20, 32, 26, 0.045) 1px, transparent 1px);
+  background-size: auto, 32px 32px, 32px 32px;
+  background-attachment: fixed;
+}
+
+.dark body:has(.realty-shell) {
+  background-color: #101815;
+  background-image:
+    radial-gradient(ellipse 1200px 600px at 50% -10%, rgba(99, 160, 126, 0.09), transparent 70%),
+    linear-gradient(rgba(242, 247, 244, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(242, 247, 244, 0.035) 1px, transparent 1px);
+  background-size: auto, 32px 32px, 32px 32px;
+}
+
+/* Botón primario del vertical (texto blanco → 600/700, JAMÁS 500). */
+.realty-shell .realty-btn-primary {
+  background: var(--pine-600);
+  color: #FFFFFF;
+  border: 1px solid var(--pine-700);
+  border-radius: 10px;
+  font-weight: 600;
+  transition: background var(--dur-1, 150ms) var(--ease, ease);
+}
+.realty-shell .realty-btn-primary:hover { background: var(--pine-700); }
+.dark .realty-shell .realty-btn-primary {
+  background: var(--pine-400);
+  color: var(--pine-950);
+  border-color: var(--pine-500);
+}
+.dark .realty-shell .realty-btn-primary:hover { background: var(--pine-300); }
+
+/* Píldora del MODO de la cuenta (Inmobiliaria / Asesor / Propietario).
+   Va en el topbar: es lo que le recuerda a quien mira por qué su panel se
+   ve distinto al de su vecino. */
+.realty-shell .realty-mode-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--pine-700);
+  background: var(--brand-soft);
+  border: 1px solid var(--border-brand);
+}
+.dark .realty-shell .realty-mode-chip { color: var(--pine-300); }
+
+/* Contenedor de página del vertical: aquí se declara el container para que
+   los componentes de cada ola consulten @container realty y no @media.
+   NO se pone en el <main> del layout a propósito: un container-type en el
+   contenedor de scroll atraparía cualquier position:fixed de dentro. */
+.realty-shell .realty-page {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  container-type: inline-size;
+  container-name: realty;
+}

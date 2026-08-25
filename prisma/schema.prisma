@@ -9597,3 +9597,1587 @@ model BarberBotPause {
   @@index([barbershopId, pausedAt(sort: Desc)], map: "barber_bot_pauses_shop_idx")
   @@map("barber_bot_pauses")
 }
+
+// ═══════════════════════════════════════════════════════════════════════
+// DaleControl INMUEBLES — producto NUEVO y SEPARADO (SaaS inmobiliario).
+//
+// NO es una especialidad del dental ni una variante de barber: tiene sus
+// propias tablas (prefijo realty_), su propio panel (/inmobiliaria), su web
+// pública (/i/[slug]), sus propios planes (realty_plan_configs) y su propia
+// terminología (prospecto / inquilino / propietario / asesor / inmueble —
+// nunca paciente / doctor / clínica / barbero). Comparte con los otros dos
+// SOLO: Supabase Auth (login), la infraestructura (Vercel, Stripe, Meta
+// WhatsApp) y el design system.
+//
+// Aislamiento multi-tenant: TODA consulta de negocio filtra por accountId,
+// que sale SIEMPRE de la sesión (getRealtyContext en src/lib/realty-auth.ts),
+// JAMÁS del body/query. Ojo Prisma: un accountId undefined BORRA el filtro.
+//
+// 🔴 accountId ESTÁ EN TODAS LAS TABLAS DEL VERTICAL, incluidas las hijas
+// (fotos, líneas de inventario, splits de comisión). Es denormalización a
+// propósito: `include` NO es un JOIN, así que sin la columna no se puede
+// filtrar un hijo por el tenant de su padre en un solo where. Las dos ÚNICAS
+// excepciones son de plataforma, no de negocio, y están marcadas:
+// realty_plan_configs y realty_calc_params.
+//
+// ⚠️ QUÉ GARANTIZA Y QUÉ NO. Las llaves foráneas son de UNA sola columna, así
+// que la BASE no impide una fila con accountId = A y propertyId = <inmueble
+// de B>. La columna hace el filtro por tenant POSIBLE en un solo where; NO lo
+// hace automático. La regla para TODAS las olas:
+//
+//   · LEER  → filtra SIEMPRE por accountId, también en la hija:
+//       where: { accountId: ctx.accountId, propertyId }
+//     Un propertyId de otra cuenta devuelve vacío, no la fila ajena.
+//   · ESCRIBIR → el id del padre viene del body y NO es de fiar. Antes de
+//     insertar, comprueba que el padre es de la cuenta:
+//       const p = await tx.realtyProperty.findFirst({
+//         where: { id: body.propertyId, accountId: ctx.accountId },
+//         select: { id: true },
+//       });
+//       if (!p) return 404;
+//     Sin esa comprobación, un include posterior devuelve el inmueble ajeno
+//     COMPLETO (dirección, precio, internalNotes) dentro de la respuesta.
+//
+// Endurecerlo en la base pide @@unique([id, accountId]) en cada padre y FKs
+// compuestas en las ~30 hijas. Evaluado y NO hecho en la Ola 0: es un cambio
+// grande y, sin las escrituras reales escritas todavía, no se puede probar.
+// Queda anotado en el reporte de la ola como decisión de Rafael.
+//
+// 🔴 LOS TRES MODOS (RealtyAccount.mode) son el eje del producto:
+//   AGENCY = inmobiliaria con agentes   → comercializa inmuebles ajenos
+//   AGENT  = asesor independiente solo  → comercializa inmuebles ajenos
+//   OWNER  = propietario / rentista     → administra LOS SUYOS
+// El modo arma el sidebar (campo `modes` de REALTY_NAV_ITEMS) y decide qué
+// pantallas existen. Va en el contrato DESDE la Ola 0 a propósito.
+//
+// 🔴 NO EXISTE FACTURACIÓN EN ESTE VERTICAL. Ni CFDI, ni timbrado, ni
+// complemento de pago. Lo que se entrega es un RECIBO: RealtyPayment.
+//
+// 🔴 FECHAS: DateTime pelado = TIMESTAMP(3) SIN zona, en TODO el bloque y sin
+// una sola excepción. (Ojo: partes del dental sí usan @db.Timestamptz; este
+// vertical no, y mezclarlos dentro del bloque rompería las comparaciones.)
+// En un constraint de exclusión sobre rangos de fecha hay que usar
+// `tsrange`, NUNCA `tstzrange`: con timestamptz Postgres rechaza el índice
+// con "functions in index expression must be marked IMMUTABLE".
+//
+// Contrato completo del vertical: src/lib/realty/types.ts
+// SQL idempotente para Supabase:  sql/realty.sql
+// ═══════════════════════════════════════════════════════════════════════
+
+/// AGENCY | AGENT | OWNER — ver la cabecera del bloque.
+enum RealtyMode {
+  AGENCY
+  AGENT
+  OWNER
+}
+
+enum RealtyPlan {
+  PROPIETARIO
+  ASESOR
+  INMOBILIARIA
+}
+
+enum RealtyRole {
+  OWNER
+  MANAGER
+  AGENT
+  ASSISTANT
+}
+
+// PLATFORM = los mensajes salen del número de DaleControl (cupo por plan).
+// OWN_WABA = la cuenta conecta su propia WABA.
+enum RealtyWhatsappSender {
+  PLATFORM
+  OWN_WABA
+}
+
+enum RealtyPropertyKind {
+  CASA
+  DEPARTAMENTO
+  TERRENO
+  BODEGA
+  LOCAL
+  EDIFICIO
+  OFICINA
+  RANCHO
+}
+
+enum RealtyOperation {
+  VENTA
+  RENTA
+  AMBAS
+}
+
+enum RealtyPropertyStatus {
+  DISPONIBLE
+  APARTADO
+  VENDIDO
+  RENTADO
+}
+
+enum RealtyCurrency {
+  MXN
+  USD
+}
+
+enum RealtyTourKind {
+  TOUR_3D
+  TOUR_360
+  PANO_PROPIA
+  VIDEO
+}
+
+enum RealtyDocumentKind {
+  ESCRITURA
+  PREDIAL
+  REGIMEN
+  IDENTIFICACION
+  OTRO
+}
+
+enum RealtyContactKind {
+  PROSPECTO
+  PROPIETARIO
+  INQUILINO
+}
+
+enum RealtyLeadStage {
+  NUEVO
+  CONTACTADO
+  CALIFICADO
+  VISITA
+  OFERTA
+  CIERRE
+  PERDIDO
+}
+
+enum RealtyCreditKind {
+  INFONAVIT
+  FOVISSSTE
+  BANCARIO
+  CONTADO
+  NINGUNO
+}
+
+enum RealtyLeadActivityKind {
+  NOTA
+  LLAMADA
+  WHATSAPP
+  CORREO
+  VISITA
+  CAMBIO_ETAPA
+  ASIGNACION
+}
+
+enum RealtyVisitStatus {
+  PROGRAMADA
+  CONFIRMADA
+  REALIZADA
+  CANCELADA
+  NO_ASISTIO
+}
+
+enum RealtyLeaseStatus {
+  BORRADOR
+  ACTIVO
+  VENCIDO
+  TERMINADO
+}
+
+enum RealtyLeasePartyRole {
+  INQUILINO
+  AVAL
+  FIADOR
+}
+
+enum RealtyScreeningStatus {
+  PENDIENTE
+  APROBADO
+  RECHAZADO
+}
+
+// INPC = la renta sube con la inflación publicada; FIJO = porcentaje pactado.
+enum RealtyIncreaseRule {
+  INPC
+  FIJO
+  NINGUNO
+}
+
+enum RealtyChargeStatus {
+  PENDIENTE
+  PARCIAL
+  PAGADO
+  VENCIDO
+}
+
+enum RealtyPaymentMethod {
+  EFECTIVO
+  SPEI
+  TARJETA
+  OTRO
+}
+
+enum RealtyDepositStatus {
+  RETENIDO
+  DEVUELTO
+  APLICADO
+}
+
+enum RealtyMaintenanceStatus {
+  ABIERTO
+  EN_PROCESO
+  RESUELTO
+}
+
+enum RealtyExpenseKind {
+  PREDIAL
+  AGUA
+  MANTENIMIENTO
+  REPARACION
+  OTRO
+}
+
+enum RealtyInventoryCheckKind {
+  ENTRADA
+  SALIDA
+}
+
+enum RealtyDealKind {
+  VENTA
+  RENTA
+}
+
+enum RealtyDealStatus {
+  EN_PROCESO
+  CERRADO
+  CANCELADO
+}
+
+enum RealtyCommissionParty {
+  CAPTADOR
+  COLOCADOR
+  OFICINA
+  FRANQUICIA
+  EXTERNO
+}
+
+enum RealtyPortalListingStatus {
+  BORRADOR
+  PUBLICADO
+  PAUSADO
+  ERROR
+}
+
+enum RealtyMessageDirection {
+  INBOUND
+  OUTBOUND
+}
+
+enum RealtyMessageStatus {
+  PENDING
+  SENT
+  DELIVERED
+  READ
+  FAILED
+}
+
+enum RealtyTicketStatus {
+  OPEN
+  IN_PROGRESS
+  WAITING_REPLY
+  CLOSED
+}
+
+enum RealtyTicketPriority {
+  LOW
+  NORMAL
+  HIGH
+}
+
+/// AGENCY = alguien de la cuenta; ADMIN = soporte DaleControl.
+enum RealtyTicketAuthor {
+  AGENCY
+  ADMIN
+}
+
+/// Parámetros de las calculadoras mexicanas. CAMBIAN CADA AÑO.
+enum RealtyCalcParamKind {
+  ISAI
+  UMA
+  UDI
+  INPC
+  INFONAVIT
+  FOVISSSTE
+}
+
+// ── Cuenta y equipo ────────────────────────────────────────────────────
+
+/// El inquilino (tenant) del vertical inmuebles. `mode` decide QUÉ producto
+/// es esta cuenta (ver cabecera). storageUsedBytes es BigInt porque el cupo
+/// del plan INMOBILIARIA (40 GB) desborda un Int de 4 bytes.
+/// 🔴 JSON.stringify REVIENTA con un BigInt sin convertir: al armar un DTO
+/// va SIEMPRE Number(account.storageUsedBytes).
+model RealtyAccount {
+  id        String     @id @default(cuid())
+  mode      RealtyMode @default(AGENCY)
+  name      String
+  slug      String     @unique
+  legalName String?
+  phone     String?
+  email     String?
+  address   String?
+  city      String?
+  state     String?
+  timezone  String     @default("America/Mexico_City")
+  locale    String     @default("es")
+  logoUrl   String?
+  /// Tamaño declarado en el registro: "1" | "2-5" | "6-15" | "16+".
+  teamSize  String?
+
+  // Plan y suscripción. Registro sin trial → nace "pending_payment", igual
+  // que barber y el dental. Activos: active | trialing | paid
+  // (REALTY_ACTIVE_SUBSCRIPTION_STATUSES en realty/plan-shared.ts).
+  //
+  // ⚠️ `mode` y `plan` son ejes INDEPENDIENTES y NO hay constraint que los
+  // ligue — a propósito. El MODO dice qué pantallas tienen sentido; el PLAN,
+  // cuánta capacidad pagaste. Un rentista (OWNER) puede pagar INMOBILIARIA
+  // para tener varias oficinas, y una agencia puede empezar en PROPIETARIO y
+  // toparse con el límite de 1 usuario. Por eso los defaults (AGENCY +
+  // PROPIETARIO) no son incoherentes: son "agencia que todavía no paga".
+  // Quien inserte una cuenta sin pasar por /api/realty/auth/register tiene
+  // que poner el modo a mano.
+  plan                 RealtyPlan @default(PROPIETARIO)
+  subscriptionStatus   String     @default("pending_payment")
+  stripeCustomerId     String?
+  stripeSubscriptionId String?
+
+  /// Bytes ocupados en realty-files (fotos + tours + documentos). El CUPO
+  /// vive en el plan (storageQuotaMb); esto es el consumo.
+  storageUsedBytes BigInt @default(0)
+
+  // Licencia inmobiliaria estatal (Jalisco, CDMX, Q. Roo… la exigen). Es
+  // informativa y se enseña en la web pública si está vigente.
+  licenseNumber    String?
+  licenseState     String?
+  licenseExpiresAt DateTime?
+
+  // WhatsApp — soporta los DOS modelos de envío. whatsappToken se guardará
+  // CIFRADO cuando la ola de WhatsApp lo implemente.
+  whatsappSenderMode  RealtyWhatsappSender @default(PLATFORM)
+  wabaId              String?
+  phoneNumberId       String?
+  whatsappToken       String?
+  whatsappVerifiedAt  DateTime?
+  /// Cupo PROPIO que PISA el del plan (null = manda realty_plan_configs).
+  messageQuota        Int?
+  messagesUsedPeriod  Int                  @default(0)
+  messagesPeriodStart DateTime?
+
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users            RealtyUser[]
+  offices          RealtyOffice[]
+  officeAccess     RealtyUserOfficeAccess[]
+  agentProfiles    RealtyAgentProfile[]
+  properties       RealtyProperty[]
+  propertyPhotos   RealtyPropertyPhoto[]
+  propertyTours    RealtyPropertyTour[]
+  propertyDocs     RealtyPropertyDocument[]
+  propertyOwners   RealtyPropertyOwner[]
+  exclusives       RealtyExclusive[]
+  contacts         RealtyContact[]
+  leads            RealtyLead[]
+  leadActivities   RealtyLeadActivity[]
+  searchProfiles   RealtySearchProfile[]
+  tasks            RealtyTask[]
+  visits           RealtyVisit[]
+  keys             RealtyKey[]
+  leases           RealtyLease[]
+  leaseParties     RealtyLeaseParty[]
+  rentCharges      RealtyRentCharge[]
+  payments         RealtyPayment[]
+  deposits         RealtyDeposit[]
+  maintenances     RealtyMaintenance[]
+  expenses         RealtyExpense[]
+  inventoryChecks  RealtyInventoryCheck[]
+  inventoryItems   RealtyInventoryItem[]
+  deals            RealtyDeal[]
+  commissionSplits RealtyCommissionSplit[]
+  landingConfig    RealtyLandingConfig?
+  portalAccounts   RealtyPortalAccount[]
+  portalListings   RealtyPortalListing[]
+  threads          RealtyThread[]
+  messages         RealtyMessage[]
+  clientAuthTokens RealtyClientAuthToken[]
+  supportTickets   RealtySupportTicket[]
+  supportMessages  RealtySupportMessage[]
+  adminActions     RealtyAdminAction[]
+
+  // Sin @@index([slug]): `slug @unique` ya crea su propio índice.
+  @@index([subscriptionStatus])
+  @@map("realty_accounts")
+}
+
+/// Quien entra al panel /inmobiliaria. permissionsOverride: si tiene keys,
+/// esas REEMPLAZAN el default del rol (no se suman) — misma semántica que
+/// el dental y barber. `active` (no isActive) porque así lo pide el contrato
+/// del vertical; el SQL usa la misma columna.
+model RealtyUser {
+  id                   String     @id @default(cuid())
+  accountId            String
+  /// Identidad del login COMPARTIDO (Supabase Auth). El User del dental no
+  /// se toca: este vertical tiene su propia tabla de usuarios.
+  supabaseId           String
+  email                String
+  firstName            String
+  lastName             String
+  role                 RealtyRole @default(OWNER)
+  permissionsOverride  String[]   @default([])
+  /// ¿Su ficha sale en la web pública? (feature agentPages del plan.)
+  /// La ficha se pinta solo si publicProfileEnabled Y
+  /// RealtyAgentProfile.active son true — un AND, para que apagar uno no deje
+  /// al asesor visible por el otro. Este es el interruptor de la CUENTA (lo
+  /// mueve quien administra el equipo); `active` es el de la ficha (lo mueve
+  /// el propio asesor cuando la deja a medias).
+  publicProfileEnabled Boolean    @default(false)
+  active               Boolean    @default(true)
+  lastLogin            DateTime?
+  createdAt            DateTime   @default(now())
+  updatedAt            DateTime   @updatedAt
+
+  account      RealtyAccount            @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  agentProfile RealtyAgentProfile?
+  officeAccess RealtyUserOfficeAccess[]
+
+  assignedProperties    RealtyProperty[]        @relation("RealtyPropertyAssignedTo")
+  assignedContacts      RealtyContact[]         @relation("RealtyContactAssignedTo")
+  assignedLeads         RealtyLead[]            @relation("RealtyLeadAssignedTo")
+  leadActivities        RealtyLeadActivity[]    @relation("RealtyLeadActivityUser")
+  tasks                 RealtyTask[]            @relation("RealtyTaskUser")
+  visits                RealtyVisit[]           @relation("RealtyVisitUser")
+  keysHeld              RealtyKey[]             @relation("RealtyKeyHolder")
+  commissionSplits      RealtyCommissionSplit[] @relation("RealtyCommissionSplitUser")
+  landingConfigsUpdated RealtyLandingConfig[]   @relation("RealtyLandingConfigUpdatedBy")
+  supportTicketsCreated RealtySupportTicket[]   @relation("RealtySupportTicketCreatedBy")
+
+  @@unique([supabaseId, accountId])
+  // Dos invitaciones al mismo correo creaban DOS usuarios en la misma cuenta,
+  // con permisos distintos y sin forma de saber cuál manda.
+  @@unique([accountId, email])
+  // Sin @@index([supabaseId]): la columna guía del @@unique de arriba ya
+  // sirve para el lookup del login. Duplicarlo solo cuesta escrituras.
+  @@index([accountId, active])
+  @@map("realty_users")
+}
+
+/// Sucursal física. En modo AGENT y OWNER hay una sola (la que crea el alta);
+/// multiOffice es feature del plan INMOBILIARIA.
+model RealtyOffice {
+  id        String   @id @default(cuid())
+  accountId String
+  name      String
+  address   String?
+  lat       Decimal? @db.Decimal(10, 7)
+  lng       Decimal? @db.Decimal(10, 7)
+  phone     String?
+  /// La matriz; getAccessibleOfficeIds la pone primero en la lista.
+  /// ⚠️ UNA por cuenta, y la BASE NO LO IMPONE (Prisma no expresa únicos
+  /// parciales). Con dos, ese orden deja de ser determinista y la "principal"
+  /// cambia sola entre peticiones. Quien marque una matriz quita la anterior
+  /// en la MISMA transacción.
+  isMain    Boolean  @default(false)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  account    RealtyAccount            @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  access     RealtyUserOfficeAccess[]
+  properties RealtyProperty[]
+
+  @@index([accountId, isActive])
+  @@map("realty_offices")
+}
+
+/// Acceso de un RealtyUser a una oficina. Se consume EXCLUSIVAMENTE vía
+/// getAccessibleOfficeIds() (src/lib/realty-auth.ts) — ninguna terminal
+/// inventa su filtro de oficina.
+model RealtyUserOfficeAccess {
+  id        String   @id @default(cuid())
+  accountId String
+  userId    String
+  officeId  String
+  createdAt DateTime @default(now())
+
+  account RealtyAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  user    RealtyUser    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  office  RealtyOffice  @relation(fields: [officeId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, officeId])
+  @@index([accountId])
+  @@index([officeId])
+  @@map("realty_user_office_access")
+}
+
+/// Ficha PÚBLICA del asesor (feature agentPages). credentials/socials son
+/// Json de forma libre que define la ola de equipo.
+model RealtyAgentProfile {
+  id           String   @id @default(cuid())
+  accountId    String
+  realtyUserId String   @unique
+  displayName  String
+  photoUrl     String?
+  bio          String?  @db.Text
+  zones        String[] @default([])
+  specialties  String[] @default([])
+  credentials  Json?
+  socials      Json?
+  /// Sub-ruta pública del asesor. NULL = sin página propia; varios NULL NO
+  /// chocan entre sí (Postgres trata cada NULL como distinto), que es justo
+  /// lo que queremos aquí.
+  publicSlug   String?
+  /// Interruptor de la FICHA. La ficha se pinta solo si este Y
+  /// RealtyUser.publicProfileEnabled son true (ver ahí).
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  account    RealtyAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  realtyUser RealtyUser    @relation(fields: [realtyUserId], references: [id], onDelete: Cascade)
+
+  @@unique([accountId, publicSlug])
+  @@index([accountId, active])
+  @@map("realty_agent_profiles")
+}
+
+// ── Inmuebles ──────────────────────────────────────────────────────────
+
+/// El INMUEBLE (nunca "propiedad" a secas en la UI, nunca "ambiente").
+/// assignedUserId es NULLABLE A PROPÓSITO: un inmueble entra a la cartera
+/// antes de que se decida quién lo trabaja, y en modo OWNER no hay asesor
+/// que asignar. Cualquier consulta que asuma que hay asesor está mal.
+/// internalNotes NUNCA sale a la web pública.
+model RealtyProperty {
+  id             String               @id @default(cuid())
+  accountId      String
+  officeId       String?
+  assignedUserId String?
+  ownerId        String?
+  kind           RealtyPropertyKind   @default(CASA)
+  operation      RealtyOperation      @default(VENTA)
+  status         RealtyPropertyStatus @default(DISPONIBLE)
+
+  // Dinero. Decimal(14,2): un edificio de 80 millones no cabe en (10,2).
+  price          Decimal        @default(0) @db.Decimal(14, 2)
+  currency       RealtyCurrency @default(MXN)
+  rentPrice      Decimal?       @db.Decimal(14, 2)
+  maintenanceFee Decimal?       @db.Decimal(14, 2)
+
+  // Medidas y distribución (español de México: recámara, cochera).
+  /// Decimal(12,2) y no (10,2): con 10 el tope eran ~9 999 ha y RANCHO está
+  /// en el enum — en Chihuahua y Sonora los hay más grandes.
+  landM2        Decimal? @db.Decimal(12, 2)
+  builtM2       Decimal? @db.Decimal(10, 2)
+  bedrooms      Int?
+  bathrooms     Int?
+  halfBathrooms Int?
+  parking       Int?
+  ageYears      Int?
+  /// Amenidades: mapa libre. Catálogo sugerido en REALTY_AMENITIES.
+  amenities     Json?
+
+  // Ubicación. showExactAddress false → la web pública enseña SOLO colonia
+  // y ciudad. Es la privacidad que pide el propietario, no un adorno.
+  address          String?
+  colonia          String?
+  city             String?
+  state            String?
+  zip              String?
+  lat              Decimal? @db.Decimal(10, 7)
+  lng              Decimal? @db.Decimal(10, 7)
+  showExactAddress Boolean  @default(false)
+
+  title         String
+  description   String? @db.Text
+  internalNotes String? @db.Text
+
+  commissionPct  Decimal? @db.Decimal(5, 2)
+  /// ¿Sale en la web pública y en el feed de portales? Es INDEPENDIENTE del
+  /// estatus comercial: un inmueble DISPONIBLE que el dueño no quiere
+  /// anunciado se despublica con esto, sin mentir sobre su estatus. Nace en
+  /// false: nada se publica solo.
+  isPublished    Boolean  @default(false)
+  /// Sub-ruta pública dentro de /i/[slug]. Único POR CUENTA.
+  publicUrlSlug  String?
+  /// Clave corta que el asesor dicta por teléfono ("INM-7K3Q"). Ver
+  /// makeRealtyFolio en realty/types.ts. Única POR CUENTA.
+  shortTermFolio String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  account      RealtyAccount        @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  office       RealtyOffice?        @relation(fields: [officeId], references: [id], onDelete: SetNull)
+  assignedUser RealtyUser?          @relation("RealtyPropertyAssignedTo", fields: [assignedUserId], references: [id], onDelete: SetNull)
+  // NoAction: con SetNull, borrar al propietario dejaba sus inmuebles con
+  // ownerId NULL — indistinguibles de los que nunca tuvieron dueño
+  // capturado, y en modo AGENCY/AGENT el dueño es medio producto.
+  owner        RealtyPropertyOwner? @relation(fields: [ownerId], references: [id], onDelete: NoAction)
+
+  photos         RealtyPropertyPhoto[]
+  tours          RealtyPropertyTour[]
+  documents      RealtyPropertyDocument[]
+  exclusives     RealtyExclusive[]
+  leads          RealtyLead[]
+  tasks          RealtyTask[]
+  visits         RealtyVisit[]
+  keys           RealtyKey[]
+  leases         RealtyLease[]
+  maintenances   RealtyMaintenance[]
+  expenses       RealtyExpense[]
+  deals          RealtyDeal[]
+  portalListings RealtyPortalListing[]
+
+  // Los dos únicos incluyen una columna NULLABLE: en Postgres cada NULL
+  // cuenta como distinto, así que MUCHOS inmuebles pueden convivir con
+  // publicUrlSlug/shortTermFolio en NULL sin chocar. Es justo lo que
+  // queremos (un inmueble sin publicar no tiene liga ni clave), y el único
+  // sigue impidiendo dos ligas iguales dentro de la misma cuenta.
+  @@unique([accountId, publicUrlSlug])
+  @@unique([accountId, shortTermFolio])
+  @@index([accountId, status])
+  // La lista por defecto de /inmuebles es "lo más nuevo primero": sin este
+  // índice se ordena en memoria la cartera completa de la cuenta.
+  @@index([accountId, createdAt])
+  @@index([accountId, operation, kind])
+  // El filtro más usado de la cartera es operación + estatus A LA VEZ.
+  @@index([accountId, operation, status])
+  @@index([accountId, assignedUserId])
+  @@index([accountId, city, colonia])
+  @@index([officeId])
+  @@index([ownerId])
+  @@map("realty_properties")
+}
+
+/// Foto del inmueble. `sortOrder` y no `order`: ORDER es palabra reservada
+/// en SQL y en cuanto alguien escriba una consulta cruda se le vuelve un
+/// campo minado. watermarked = ya lleva la marca de agua aplicada.
+///
+/// ⚠️ isCover: UNA por inmueble, y la BASE NO LO IMPONE (Prisma no expresa
+/// índices únicos parciales). Con dos portadas, la tarjeta de la web pública
+/// cambia de foto entre renders y nadie entiende por qué. Quien marque una
+/// portada TIENE que quitar la anterior en la MISMA transacción:
+///   await tx.realtyPropertyPhoto.updateMany({
+///     where: { propertyId, isCover: true }, data: { isCover: false } });
+///   await tx.realtyPropertyPhoto.update({
+///     where: { id }, data: { isCover: true } });
+model RealtyPropertyPhoto {
+  id          String   @id @default(cuid())
+  accountId   String
+  propertyId  String
+  sortOrder   Int      @default(0)
+  url         String
+  width       Int?
+  height      Int?
+  bytes       Int      @default(0)
+  isCover     Boolean  @default(false)
+  watermarked Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  account  RealtyAccount  @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  property RealtyProperty @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+
+  @@index([accountId, propertyId, sortOrder])
+  @@index([propertyId, isCover])
+  @@map("realty_property_photos")
+}
+
+/// Recorrido 3D / 360° / video. `provider` sale de detectRealtyTourProvider
+/// (src/lib/realty/tours.ts) — la MISMA allowlist que arma el frame-src de
+/// la CSP. Un dominio fuera de esa lista pinta un iframe EN BLANCO sin un
+/// solo error en consola: por eso se valida al guardar, no al pintar.
+/// externalUrl (enlace del proveedor) XOR fileUrl (panorámica propia
+/// subida a realty-files).
+model RealtyPropertyTour {
+  id          String         @id @default(cuid())
+  accountId   String
+  propertyId  String
+  kind        RealtyTourKind @default(TOUR_360)
+  provider    String         @default("propio")
+  externalUrl String?
+  fileUrl     String?
+  bytes       Int            @default(0)
+  sortOrder   Int            @default(0)
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  account  RealtyAccount  @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  property RealtyProperty @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+
+  @@index([accountId, propertyId, sortOrder])
+  @@map("realty_property_tours")
+}
+
+/// Documento del inmueble (escritura, predial, régimen…). PRIVADO: el
+/// bucket realty-files no es público y el panel entrega signed URLs de 5
+/// min después de comprobar el accountId de la sesión.
+model RealtyPropertyDocument {
+  id         String             @id @default(cuid())
+  accountId  String
+  propertyId String
+  kind       RealtyDocumentKind @default(OTRO)
+  name       String
+  url        String
+  bytes      Int                @default(0)
+  createdAt  DateTime           @default(now())
+
+  account  RealtyAccount  @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  property RealtyProperty @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+
+  @@index([accountId, propertyId])
+  @@map("realty_property_documents")
+}
+
+/// El DUEÑO del inmueble (persona a la que le pagas o le rindes cuentas).
+/// En modo OWNER la cuenta es su propio dueño y esta tabla queda vacía.
+model RealtyPropertyOwner {
+  id        String   @id @default(cuid())
+  accountId String
+  name      String
+  phone     String?
+  email     String?
+  /// Solo dato de contacto. Este vertical NO factura: no hay CFDI ni
+  /// timbrado, el RFC es para el contrato de arrendamiento y ya.
+  rfc       String?
+  notes     String?  @db.Text
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  account    RealtyAccount     @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  properties RealtyProperty[]
+  exclusives RealtyExclusive[]
+
+  @@index([accountId, name])
+  @@index([accountId, phone])
+  @@map("realty_property_owners")
+}
+
+/// Contrato de EXCLUSIVA sobre un inmueble. Es lo que le da derecho a la
+/// inmobiliaria a cobrar comisión: sin exclusiva vigente, la operación se
+/// puede ir con cualquiera.
+model RealtyExclusive {
+  id            String   @id @default(cuid())
+  accountId     String
+  propertyId    String
+  ownerId       String
+  startsAt      DateTime
+  endsAt        DateTime
+  commissionPct Decimal  @db.Decimal(5, 2)
+  signedDocUrl  String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  account  RealtyAccount       @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  // Los DOS lados con NoAction: la exclusiva y su signedDocUrl son el papel
+  // que da derecho a cobrar la comisión. Con Cascade, borrar el inmueble se
+  // llevaba el documento. Antes estaba protegido solo el lado del dueño.
+  property RealtyProperty      @relation(fields: [propertyId], references: [id], onDelete: NoAction)
+  owner    RealtyPropertyOwner @relation(fields: [ownerId], references: [id], onDelete: NoAction)
+
+  // "Exclusivas por vencer" recorre la cuenta entera por fecha de fin.
+  @@index([accountId, endsAt])
+  @@index([accountId, propertyId, endsAt])
+  @@index([ownerId])
+  @@map("realty_exclusives")
+}
+
+// ── CRM ────────────────────────────────────────────────────────────────
+
+/// La persona. kind dice en qué papel entró (prospecto, propietario,
+/// inquilino); una misma persona puede terminar siendo las tres, por eso
+/// el papel NO se usa como filtro de seguridad, solo de listado.
+model RealtyContact {
+  id             String            @id @default(cuid())
+  accountId      String
+  name           String
+  /// 🔴 NORMALIZADO A 10 DÍGITOS (mxTenDigits de @/lib/phone-mx), igual que
+  /// RealtyThread.phone. Si se guarda como lo escribió la persona ("33 1234
+  /// 5678", "+52 33…"), el webhook de WhatsApp NUNCA logra ligar el hilo
+  /// entrante con su contacto y el inbox se llena de conversaciones sin
+  /// nombre. Un `contains` sobre un teléfono sin normalizar no compara nada.
+  phone          String?
+  email          String?
+  kind           RealtyContactKind @default(PROSPECTO)
+  /// De dónde llegó: "web", "portal:inmuebles24", "referido", "letrero"…
+  source         String?
+  assignedUserId String?
+  notes          String?           @db.Text
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+
+  account      RealtyAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  assignedUser RealtyUser?   @relation("RealtyContactAssignedTo", fields: [assignedUserId], references: [id], onDelete: SetNull)
+
+  leads          RealtyLead[]
+  searchProfiles RealtySearchProfile[]
+  leaseParties   RealtyLeaseParty[]
+  deals          RealtyDeal[]
+  threads        RealtyThread[]
+
+  @@index([accountId, kind])
+  @@index([accountId, phone])
+  @@index([accountId, name])
+  @@index([accountId, assignedUserId])
+  @@map("realty_contacts")
+}
+
+/// El PROSPECTO dentro del embudo. firstResponseAt es el reloj del negocio:
+/// en bienes raíces gana quien contesta primero, así que se guarda cuándo
+/// alguien le respondió por PRIMERA vez y no se vuelve a escribir.
+/// La máquina de estados vive en canTransition() (realty/types.ts).
+model RealtyLead {
+  id              String           @id @default(cuid())
+  accountId       String
+  contactId       String
+  propertyId      String?
+  /// Portal de origen ("inmuebles24", "lamudi", "propio"…).
+  portal          String?
+  stage           RealtyLeadStage  @default(NUEVO)
+  /// Ver REALTY_LOST_REASONS (String en BD, catálogo en el contrato).
+  lostReason      String?
+  budgetMin       Decimal?         @db.Decimal(14, 2)
+  budgetMax       Decimal?         @db.Decimal(14, 2)
+  creditKind      RealtyCreditKind @default(NINGUNO)
+  firstResponseAt DateTime?
+  assignedAt      DateTime?
+  assignedUserId  String?
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  account      RealtyAccount   @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  contact      RealtyContact   @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  property     RealtyProperty? @relation(fields: [propertyId], references: [id], onDelete: SetNull)
+  assignedUser RealtyUser?     @relation("RealtyLeadAssignedTo", fields: [assignedUserId], references: [id], onDelete: SetNull)
+
+  activities RealtyLeadActivity[]
+  tasks      RealtyTask[]
+  visits     RealtyVisit[]
+
+  @@index([accountId, stage])
+  @@index([accountId, assignedUserId, stage])
+  @@index([accountId, createdAt])
+  @@index([contactId])
+  @@index([propertyId])
+  @@map("realty_leads")
+}
+
+/// Bitácora del prospecto. userId es nullable y SetNull a propósito: los
+/// usuarios se desactivan (active=false), no se borran, así que en la
+/// práctica el autor no se pierde; y si algún día se borrara uno, la bitácora
+/// SOBREVIVE sin autor en vez de bloquear el borrado. Lo que no puede pasar
+/// es perder la línea de tiempo del prospecto.
+model RealtyLeadActivity {
+  id        String                 @id @default(cuid())
+  accountId String
+  leadId    String
+  kind      RealtyLeadActivityKind @default(NOTA)
+  note      String?                @db.Text
+  userId    String?
+  createdAt DateTime               @default(now())
+
+  account RealtyAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  lead    RealtyLead    @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  user    RealtyUser?   @relation("RealtyLeadActivityUser", fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([accountId, leadId, createdAt])
+  @@map("realty_lead_activities")
+}
+
+/// Lo que BUSCA un contacto. Alimenta el MATCH AUTOMÁTICO: cuando entra un
+/// inmueble a la cartera, se cruza contra estos perfiles y se avisa a quien
+/// encaje (notifyByWhatsapp).
+model RealtySearchProfile {
+  id               String          @id @default(cuid())
+  accountId        String
+  contactId        String
+  /// Tipos de inmueble que acepta: mapa { CASA: true, TERRENO: false… }.
+  kinds            Json?
+  operation        RealtyOperation @default(VENTA)
+  zones            String[]        @default([])
+  budgetMin        Decimal?        @db.Decimal(14, 2)
+  budgetMax        Decimal?        @db.Decimal(14, 2)
+  bedroomsMin      Int?
+  notifyByWhatsapp Boolean         @default(false)
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+
+  account RealtyAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  contact RealtyContact @relation(fields: [contactId], references: [id], onDelete: Cascade)
+
+  @@index([accountId, operation])
+  @@index([contactId])
+  @@map("realty_search_profiles")
+}
+
+/// Pendiente con fecha. Cuelga de un prospecto, de un inmueble, o de nada.
+model RealtyTask {
+  id         String   @id @default(cuid())
+  accountId  String
+  userId     String
+  leadId     String?
+  propertyId String?
+  dueAt      DateTime
+  done       Boolean  @default(false)
+  title      String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  account  RealtyAccount   @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  user     RealtyUser      @relation("RealtyTaskUser", fields: [userId], references: [id], onDelete: Cascade)
+  // SetNull y NO Cascade: un pendiente puede colgar de los dos a la vez, así
+  // que con Cascade borrar el inmueble se llevaba por delante un recordatorio
+  // que era del prospecto. Un pendiente sin inmueble sigue teniendo título,
+  // fecha y dueño; uno borrado en silencio es trabajo de alguien que
+  // desaparece sin avisar.
+  lead     RealtyLead?     @relation(fields: [leadId], references: [id], onDelete: SetNull)
+  property RealtyProperty? @relation(fields: [propertyId], references: [id], onDelete: SetNull)
+
+  @@index([accountId, userId, done, dueAt])
+  @@index([accountId, dueAt])
+  @@index([leadId])
+  @@index([propertyId])
+  @@map("realty_tasks")
+}
+
+/// Visita al inmueble. feedback es lo que dijo el prospecto al salir: es el
+/// dato que le sirve al propietario para bajar el precio.
+model RealtyVisit {
+  id          String            @id @default(cuid())
+  accountId   String
+  propertyId  String
+  leadId      String?
+  userId      String?
+  scheduledAt DateTime
+  status      RealtyVisitStatus @default(PROGRAMADA)
+  feedback    String?           @db.Text
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  account  RealtyAccount  @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  property RealtyProperty @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  lead     RealtyLead?    @relation(fields: [leadId], references: [id], onDelete: SetNull)
+  user     RealtyUser?    @relation("RealtyVisitUser", fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([accountId, scheduledAt])
+  @@index([accountId, userId, scheduledAt])
+  @@index([propertyId, scheduledAt])
+  @@index([leadId])
+  @@map("realty_visits")
+}
+
+/// Quién tiene las llaves AHORA. returnedAt null = siguen fuera. Es la
+/// pregunta que se hace todos los días en una inmobiliaria y hoy se
+/// contesta con un grupo de WhatsApp.
+model RealtyKey {
+  id           String    @id @default(cuid())
+  accountId    String
+  propertyId   String
+  holderUserId String?
+  /// A quién se le prestaron si no es alguien del equipo ("al velador").
+  holderNote   String?
+  takenAt      DateTime  @default(now())
+  returnedAt   DateTime?
+  createdAt    DateTime  @default(now())
+
+  account  RealtyAccount  @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  property RealtyProperty @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  holder   RealtyUser?    @relation("RealtyKeyHolder", fields: [holderUserId], references: [id], onDelete: SetNull)
+
+  // "¿Qué llaves están fuera?" (accountId + returnedAt IS NULL) es la
+  // pregunta de todos los días y no tenía índice con prefijo utilizable.
+  @@index([accountId, returnedAt])
+  @@index([accountId, propertyId, returnedAt])
+  @@index([accountId, holderUserId, returnedAt])
+  @@map("realty_keys")
+}
+
+// ── Rentas ─────────────────────────────────────────────────────────────
+
+/// Contrato de arrendamiento. paymentDay = día del mes en que toca pagar
+/// (1-31); la ola de cobranza genera los RealtyRentCharge a partir de él.
+/// increaseRule INPC usa el índice de RealtyCalcParam del año que toque.
+model RealtyLease {
+  id            String             @id @default(cuid())
+  accountId     String
+  propertyId    String
+  startsAt      DateTime
+  endsAt        DateTime
+  rentAmount    Decimal            @db.Decimal(14, 2)
+  currency      RealtyCurrency     @default(MXN)
+  paymentDay    Int                @default(1)
+  depositAmount Decimal            @default(0) @db.Decimal(14, 2)
+  increaseRule  RealtyIncreaseRule @default(NINGUNO)
+  increasePct   Decimal?           @db.Decimal(5, 2)
+  status        RealtyLeaseStatus  @default(BORRADOR)
+  signedDocUrl  String?
+  notes         String?            @db.Text
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+
+  account  RealtyAccount  @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  property RealtyProperty @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+
+  parties         RealtyLeaseParty[]
+  charges         RealtyRentCharge[]
+  payments        RealtyPayment[]
+  deposits        RealtyDeposit[]
+  maintenances    RealtyMaintenance[]
+  inventoryChecks RealtyInventoryCheck[]
+
+  @@index([accountId, status])
+  @@index([accountId, endsAt])
+  @@index([propertyId, status])
+  @@map("realty_leases")
+}
+
+/// Quién firma el contrato y en qué papel. screeningStatus = resultado de
+/// la investigación de solvencia (la ola de rentas define el proceso).
+model RealtyLeaseParty {
+  id              String                 @id @default(cuid())
+  accountId       String
+  leaseId         String
+  role            RealtyLeasePartyRole   @default(INQUILINO)
+  contactId       String
+  screeningStatus RealtyScreeningStatus?
+  createdAt       DateTime               @default(now())
+  updatedAt       DateTime               @updatedAt
+
+  account RealtyAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  lease   RealtyLease   @relation(fields: [leaseId], references: [id], onDelete: Cascade)
+  contact RealtyContact @relation(fields: [contactId], references: [id], onDelete: NoAction)
+
+  @@unique([leaseId, contactId, role])
+  @@index([accountId, leaseId])
+  @@index([contactId])
+  @@map("realty_lease_parties")
+}
+
+/// El cargo mensual de la renta. periodMonth = "YYYY-MM" del mes que cubre.
+/// ÚNICO por (leaseId, periodMonth): correr el generador dos veces NO
+/// duplica el cobro del mes.
+model RealtyRentCharge {
+  id          String             @id @default(cuid())
+  accountId   String
+  leaseId     String
+  periodMonth String
+  dueAt       DateTime
+  amount      Decimal            @db.Decimal(14, 2)
+  status      RealtyChargeStatus @default(PENDIENTE)
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+
+  account  RealtyAccount   @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  lease    RealtyLease     @relation(fields: [leaseId], references: [id], onDelete: Cascade)
+  payments RealtyPayment[]
+
+  @@unique([leaseId, periodMonth])
+  @@index([accountId, status, dueAt])
+  @@index([accountId, dueAt])
+  // La pantalla de cobranza se mira por MES ("agosto"), no solo por fecha.
+  @@index([accountId, periodMonth])
+  @@map("realty_rent_charges")
+}
+
+/// Un pago recibido. 🔴 receiptUrl es un RECIBO. Este vertical NO factura:
+/// no hay CFDI, ni timbrado, ni complemento de pago, y ninguna pantalla
+/// puede decir "factura".
+/// chargeId (renta) / leaseId (depósito, penalización) / dealId (comisión
+/// de una operación): al menos uno debería venir, lo cuida la ola de dinero.
+model RealtyPayment {
+  id         String              @id @default(cuid())
+  accountId  String
+  chargeId   String?
+  leaseId    String?
+  dealId     String?
+  amount     Decimal             @db.Decimal(14, 2)
+  method     RealtyPaymentMethod @default(EFECTIVO)
+  paidAt     DateTime            @default(now())
+  /// Referencia bancaria o folio del SPEI.
+  reference  String?
+  receiptUrl String?
+  createdAt  DateTime            @default(now())
+  updatedAt  DateTime            @updatedAt
+
+  account RealtyAccount     @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  // 🔴 NoAction y NO SetNull en las tres. Con SetNull, borrar el inmueble
+  // arrastraba el contrato y con él sus cargos — pero el PAGO sobrevivía con
+  // chargeId/leaseId/dealId en NULL, seguía sumando en el reporte de ingresos
+  // por @@index([accountId, paidAt]) y ya no había forma de saber de quién
+  // era. Con NoAction ese borrado FALLA (P2003) y hay que TERMINAR el
+  // contrato en vez de borrarlo, que es lo correcto.
+  // El borrado de la cuenta entera sigue funcionando: NO ACTION se verifica
+  // al FINAL del statement y para entonces el pago también se fue en cascada.
+  charge  RealtyRentCharge? @relation(fields: [chargeId], references: [id], onDelete: NoAction)
+  lease   RealtyLease?      @relation(fields: [leaseId], references: [id], onDelete: NoAction)
+  deal    RealtyDeal?       @relation(fields: [dealId], references: [id], onDelete: NoAction)
+
+  @@index([accountId, paidAt])
+  @@index([chargeId])
+  @@index([leaseId])
+  @@index([dealId])
+  @@map("realty_payments")
+}
+
+/// El depósito en garantía. RETENIDO mientras dura el contrato; al final se
+/// DEVUELVE o se APLICA (a daños o a rentas no pagadas).
+model RealtyDeposit {
+  id         String              @id @default(cuid())
+  accountId  String
+  leaseId    String
+  amount     Decimal             @db.Decimal(14, 2)
+  status     RealtyDepositStatus @default(RETENIDO)
+  resolvedAt DateTime?
+  note       String?             @db.Text
+  createdAt  DateTime            @default(now())
+  updatedAt  DateTime            @updatedAt
+
+  account RealtyAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  // NoAction: un depósito RETENIDO es dinero del inquilino que hay que
+  // devolver. Con Cascade, borrar el contrato lo borraba sin dejar rastro de
+  // que se había cobrado. El contrato se TERMINA, no se borra.
+  lease   RealtyLease   @relation(fields: [leaseId], references: [id], onDelete: NoAction)
+
+  @@index([accountId, status])
+  @@index([leaseId])
+  @@map("realty_deposits")
+}
+
+/// Incidencia de mantenimiento. reportedBy es texto libre porque casi
+/// siempre lo reporta el inquilino, que no tiene usuario del panel.
+model RealtyMaintenance {
+  id          String                  @id @default(cuid())
+  accountId   String
+  propertyId  String
+  leaseId     String?
+  reportedBy  String?
+  description String                  @db.Text
+  photoUrls   String[]                @default([])
+  status      RealtyMaintenanceStatus @default(ABIERTO)
+  vendorName  String?
+  cost        Decimal?                @db.Decimal(14, 2)
+  resolvedAt  DateTime?
+  createdAt   DateTime                @default(now())
+  updatedAt   DateTime                @updatedAt
+
+  account  RealtyAccount  @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  property RealtyProperty @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  lease    RealtyLease?   @relation(fields: [leaseId], references: [id], onDelete: SetNull)
+
+  @@index([accountId, status, createdAt])
+  @@index([propertyId, status])
+  @@index([leaseId])
+  @@map("realty_maintenances")
+}
+
+/// Gasto del inmueble (predial, agua, reparaciones). Es lo que se le resta
+/// al propietario en su corte, y lo que hace real el "rendimiento" de la
+/// calculadora.
+model RealtyExpense {
+  id         String            @id @default(cuid())
+  accountId  String
+  propertyId String
+  kind       RealtyExpenseKind @default(OTRO)
+  amount     Decimal           @db.Decimal(14, 2)
+  paidAt     DateTime
+  note       String?           @db.Text
+  receiptUrl String?
+  createdAt  DateTime          @default(now())
+  updatedAt  DateTime          @updatedAt
+
+  account  RealtyAccount  @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  property RealtyProperty @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+
+  @@index([accountId, paidAt])
+  @@index([propertyId, kind, paidAt])
+  @@map("realty_expenses")
+}
+
+/// Inventario de ENTRADA (lo que se entrega) y de SALIDA (lo que se
+/// devuelve). Es la prueba con la que se decide si el depósito se devuelve.
+model RealtyInventoryCheck {
+  id          String                   @id @default(cuid())
+  accountId   String
+  leaseId     String
+  kind        RealtyInventoryCheckKind @default(ENTRADA)
+  performedAt DateTime                 @default(now())
+  signedBy    String?
+  notes       String?                  @db.Text
+  createdAt   DateTime                 @default(now())
+  updatedAt   DateTime                 @updatedAt
+
+  account RealtyAccount         @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  lease   RealtyLease           @relation(fields: [leaseId], references: [id], onDelete: Cascade)
+  items   RealtyInventoryItem[]
+
+  @@index([accountId, leaseId, kind])
+  @@map("realty_inventory_checks")
+}
+
+/// Renglón del inventario: recámara / clóset / "puerta corrediza rayada".
+model RealtyInventoryItem {
+  id        String   @id @default(cuid())
+  accountId String
+  checkId   String
+  room      String
+  item      String
+  condition String
+  photoUrls String[] @default([])
+  createdAt DateTime @default(now())
+
+  account RealtyAccount        @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  check   RealtyInventoryCheck @relation(fields: [checkId], references: [id], onDelete: Cascade)
+
+  @@index([accountId, checkId])
+  @@map("realty_inventory_items")
+}
+
+// ── Operaciones y comisiones ───────────────────────────────────────────
+
+/// La operación cerrada (venta o renta). amount = precio de la operación;
+/// commissionAmount = lo que cobró la casa. El reparto vive en los splits.
+model RealtyDeal {
+  id               String           @id @default(cuid())
+  accountId        String
+  propertyId       String
+  kind             RealtyDealKind   @default(VENTA)
+  contactId        String?
+  closedAt         DateTime?
+  amount           Decimal          @default(0) @db.Decimal(14, 2)
+  commissionAmount Decimal          @default(0) @db.Decimal(14, 2)
+  status           RealtyDealStatus @default(EN_PROCESO)
+  notes            String?          @db.Text
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  account  RealtyAccount  @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  property RealtyProperty @relation(fields: [propertyId], references: [id], onDelete: NoAction)
+  contact  RealtyContact? @relation(fields: [contactId], references: [id], onDelete: SetNull)
+
+  splits   RealtyCommissionSplit[]
+  payments RealtyPayment[]
+
+  @@index([accountId, status, closedAt])
+  @@index([accountId, closedAt])
+  @@index([propertyId])
+  @@index([contactId])
+  @@map("realty_deals")
+}
+
+/// El reparto de la comisión. realtyUserId null = la parte es de la oficina,
+/// de la franquicia o de un asesor EXTERNO que no tiene usuario aquí — por
+/// eso es nullable y por eso `party` es obligatorio.
+/// La suma de los pct de un deal debería dar 100: lo valida la ola de
+/// comisiones, no la base (un split se captura antes que los otros).
+model RealtyCommissionSplit {
+  id           String                @id @default(cuid())
+  accountId    String
+  dealId       String
+  realtyUserId String?
+  party        RealtyCommissionParty @default(COLOCADOR)
+  pct          Decimal               @default(0) @db.Decimal(5, 2)
+  amount       Decimal               @default(0) @db.Decimal(14, 2)
+  /// Nombre de la contraparte externa cuando no hay realtyUserId.
+  externalName String?
+  paidAt       DateTime?
+  createdAt    DateTime              @default(now())
+  updatedAt    DateTime              @updatedAt
+
+  account    RealtyAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  deal       RealtyDeal    @relation(fields: [dealId], references: [id], onDelete: Cascade)
+  // 🔴 NoAction y NO SetNull: aquí realtyUserId NULL SIGNIFICA "la parte es
+  // de la oficina". Con SetNull, dar de baja a un asesor convertía su
+  // comisión sin pagar en una parte de la oficina, sin aviso y sin rastro.
+  // Los usuarios se desactivan (active=false), no se borran.
+  realtyUser RealtyUser?   @relation("RealtyCommissionSplitUser", fields: [realtyUserId], references: [id], onDelete: NoAction)
+
+  @@index([accountId, dealId])
+  @@index([accountId, realtyUserId, paidAt])
+  @@map("realty_commission_splits")
+}
+
+// ── Web pública ────────────────────────────────────────────────────────
+
+/// Configuración de la web pública (/i/[slug]). UNA por cuenta.
+/// 🔴 `version` es BLOQUEO OPTIMISTA: el editor manda de vuelta la versión
+/// que cargó y si no coincide se responde 409 en vez de pisar el trabajo de
+/// otra pestaña. Es exactamente el 409 que sufrió la mini-web del dental
+/// hasta que se le puso este campo — aquí nace con él.
+model RealtyLandingConfig {
+  id              String   @id @default(cuid())
+  accountId       String   @unique
+  template        String   @default("clasica")
+  data            Json     @default("{}")
+  published       Boolean  @default(false)
+  version         Int      @default(1)
+  updatedByUserId String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  account   RealtyAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  updatedBy RealtyUser?   @relation("RealtyLandingConfigUpdatedBy", fields: [updatedByUserId], references: [id], onDelete: SetNull)
+
+  @@map("realty_landing_configs")
+}
+
+// ── Portales ───────────────────────────────────────────────────────────
+
+/// Credenciales de la cuenta en un portal (inmuebles24, lamudi, vivanuncios).
+/// 🔴 apiKey JAMÁS sale al navegador: el DTO solo dice si está configurada.
+/// La Ola 1 solo construye el FEED propio; la sincronización real llega
+/// después, pero el schema ya está para que nadie tenga que migrarlo.
+model RealtyPortalAccount {
+  id                String   @id @default(cuid())
+  accountId         String
+  portal            String
+  externalAccountId String?
+  apiKey            String?
+  maxListings       Int      @default(0)
+  active            Boolean  @default(false)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  account RealtyAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@unique([accountId, portal])
+  @@index([accountId, active])
+  @@map("realty_portal_accounts")
+}
+
+/// Estado de UN inmueble en UN portal. lastError guarda el mensaje crudo:
+/// sin él, "no se publicó" es indistinguible de "se publicó y lo bajaron".
+model RealtyPortalListing {
+  id           String                    @id @default(cuid())
+  accountId    String
+  propertyId   String
+  portal       String
+  externalId   String?
+  status       RealtyPortalListingStatus @default(BORRADOR)
+  lastPushedAt DateTime?
+  lastError    String?                   @db.Text
+  createdAt    DateTime                  @default(now())
+  updatedAt    DateTime                  @updatedAt
+
+  account  RealtyAccount  @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  property RealtyProperty @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+
+  @@unique([propertyId, portal])
+  @@index([accountId, portal, status])
+  @@map("realty_portal_listings")
+}
+
+// ── WhatsApp ───────────────────────────────────────────────────────────
+
+/// Conversación con un teléfono. ÚNICO por (accountId, phone): dos mensajes
+/// entrando a la vez NO abren dos hilos del mismo número.
+/// OJO al comparar teléfonos: se guardan normalizados a 10 dígitos.
+model RealtyThread {
+  id            String   @id @default(cuid())
+  accountId     String
+  contactId     String?
+  phone         String
+  lastMessageAt DateTime @default(now())
+  unread        Int      @default(0)
+  archived      Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  account  RealtyAccount   @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  contact  RealtyContact?  @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  messages RealtyMessage[]
+
+  @@unique([accountId, phone])
+  @@index([accountId, archived, lastMessageAt])
+  @@index([contactId])
+  @@map("realty_threads")
+}
+
+/// Mensaje de WhatsApp. errorCode/errorTitle vienen de Meta y son lo único
+/// que explica un envío fallido: guardarlos es la diferencia entre "no
+/// llegó" y "la plantilla no está aprobada".
+model RealtyMessage {
+  id           String                 @id @default(cuid())
+  accountId    String
+  threadId     String
+  direction    RealtyMessageDirection @default(OUTBOUND)
+  body         String?                @db.Text
+  mediaUrl     String?
+  templateName String?
+  externalId   String?
+  status       RealtyMessageStatus    @default(PENDING)
+  /// Int y no String: Meta CAMBIA la redacción del error cuando quiere, pero
+  /// nunca el número. Comparar contra el texto es una prueba que se rompe
+  /// sola (mismo criterio que InboxMessage.errorCode del dental).
+  errorCode    Int?
+  errorTitle   String?
+  createdAt    DateTime               @default(now())
+
+  account RealtyAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  thread  RealtyThread  @relation(fields: [threadId], references: [id], onDelete: Cascade)
+
+  // 🔴 ÚNICO y no solo índice: Meta REENTREGA el webhook ante cualquier
+  // respuesta que no sea 200 y ante un timeout. Sin este único, cada
+  // reentrega insertaba otra vez el mismo mensaje en el hilo. externalId es
+  // nullable y en Postgres los NULL no chocan entre sí, así que los salientes
+  // que todavía no tienen id de Meta conviven sin problema.
+  @@unique([threadId, externalId])
+  @@index([accountId, threadId, createdAt])
+  @@index([externalId])
+  @@map("realty_messages")
+}
+
+// ── Plataforma ─────────────────────────────────────────────────────────
+
+/// Los 3 planes del vertical, EDITABLES sin redeploy. FUENTE ÚNICA de
+/// precios y límites — CERO precios escritos en la UI.
+/// planId: PROPIETARIO | ASESOR | INMOBILIARIA. -1 = ilimitado.
+/// ⚠️ SIN accountId a propósito: es config de PLATAFORMA, no de una cuenta.
+model RealtyPlanConfig {
+  planId          String   @id
+  name            String
+  priceMonthly    Decimal  @db.Decimal(10, 2)
+  priceYearly     Decimal? @db.Decimal(10, 2)
+  maxUsers        Int      @default(1)
+  maxOffices      Int      @default(1)
+  maxProperties   Int      @default(-1)
+  /// Cupo de archivos en MEGABYTES.
+  storageQuotaMb  Int      @default(2048)
+  /// 0 = el plan NO incluye WhatsApp (el de $199 no lo tiene).
+  messageQuota    Int      @default(0)
+  features        Json
+  stripeLookupKey String?
+  sortOrder       Int      @default(0)
+  isActive        Boolean  @default(true)
+  updatedAt       DateTime @updatedAt
+
+  @@map("realty_plan_configs")
+}
+
+/// Código de un solo uso para que el CLIENTE FINAL (inquilino, propietario)
+/// entre a su portal con su teléfono. codeHash: el código en claro JAMÁS se
+/// guarda ni sale del servidor. attempts frena la fuerza bruta.
+model RealtyClientAuthToken {
+  id        String    @id @default(cuid())
+  accountId String
+  phone     String
+  codeHash  String
+  expiresAt DateTime
+  attempts  Int       @default(0)
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  account RealtyAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@index([accountId, phone, expiresAt])
+  @@map("realty_client_auth_tokens")
+}
+
+/// Ticket de la cuenta a soporte DaleControl. category es String con
+/// catálogo en REALTY_TICKET_CATEGORIES (como el dental y barber).
+model RealtySupportTicket {
+  id              String               @id @default(cuid())
+  accountId       String
+  subject         String
+  category        String               @default("DUDA")
+  status          RealtyTicketStatus   @default(OPEN)
+  priority        RealtyTicketPriority @default(NORMAL)
+  lastMessageAt   DateTime             @default(now())
+  closedAt        DateTime?
+  createdByUserId String?
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+
+  account   RealtyAccount          @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  createdBy RealtyUser?            @relation("RealtySupportTicketCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  messages  RealtySupportMessage[]
+
+  @@index([accountId, status, lastMessageAt])
+  // El panel de DaleControl mira los tickets abiertos de TODAS las cuentas:
+  // ese barrido no puede empezar por accountId.
+  @@index([status, lastMessageAt])
+  @@map("realty_support_tickets")
+}
+
+/// Mensaje del ticket. attachments: [{ path, name, size, type }] en el
+/// bucket realty-files. authorUserId de un ADMIN no tiene FK (el admin de
+/// DaleControl no vive en las tablas del vertical).
+model RealtySupportMessage {
+  id           String             @id @default(cuid())
+  accountId    String
+  ticketId     String
+  authorType   RealtyTicketAuthor @default(AGENCY)
+  authorUserId String?
+  body         String             @db.Text
+  attachments  Json               @default("[]")
+  createdAt    DateTime           @default(now())
+
+  account RealtyAccount       @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  ticket  RealtySupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+
+  @@index([accountId, ticketId, createdAt])
+  @@map("realty_support_messages")
+}
+
+/// Bitácora de lo que el admin de DaleControl le hace a una cuenta
+/// (suspender, cambiar de plan, subir un cupo). adminUserId SIN FK a
+/// propósito: el admin vive en las tablas de plataforma, no aquí.
+model RealtyAdminAction {
+  id          String   @id @default(cuid())
+  accountId   String
+  adminUserId String?
+  action      String
+  payload     Json?
+  createdAt   DateTime @default(now())
+
+  account RealtyAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@index([accountId, createdAt])
+  @@map("realty_admin_actions")
+}
+
+/// Parámetros de las CALCULADORAS mexicanas (ISAI por estado, UMA, UDI,
+/// INPC, tasas de Infonavit/Fovissste).
+///
+/// 🔴 CAMBIAN CADA AÑO: la UMA se publica en enero y el ISAI lo fija cada
+/// congreso estatal. Por eso viven en tabla EDITABLE y jamás quemados en el
+/// código. effectiveFrom permite que el valor viejo y el nuevo convivan y
+/// que una operación se calcule con el que estaba vigente ese día.
+///
+/// stateCode es NOT NULL con default "MX" (= federal) A PROPÓSITO: en un
+/// índice único de Postgres cada NULL cuenta como distinto, así que con la
+/// columna nullable el único de abajo no serviría de nada.
+///
+/// El único SÍ incluye effectiveFrom, o sea que PERMITE dos valores del mismo
+/// año con vigencias distintas — eso es a propósito (un congreso estatal
+/// puede cambiar el ISAI a media anualidad). Lo que impide es capturar DOS
+/// VECES el mismo valor con la misma vigencia. Para saber cuál aplica a una
+/// operación se toma el de effectiveFrom más reciente que sea <= la fecha de
+/// la operación; NUNCA se asume que hay uno solo por año.
+///
+/// ⚠️ SIN accountId a propósito: son parámetros de PLATAFORMA que comparten
+/// todas las cuentas.
+model RealtyCalcParam {
+  id            String              @id @default(cuid())
+  kind          RealtyCalcParamKind
+  stateCode     String              @default("MX")
+  year          Int
+  value         Decimal             @db.Decimal(14, 6)
+  meta          Json?
+  effectiveFrom DateTime
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
+
+  @@unique([kind, stateCode, year, effectiveFrom])
+  @@index([kind, stateCode, year])
+  @@map("realty_calc_params")
+}

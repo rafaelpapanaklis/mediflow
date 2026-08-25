@@ -1,0 +1,65 @@
+{
+  "brand": {
+    "product": "DaleControl",
+    "vertical": "Real Estate"
+  },
+  "nav": {
+    "inicio": "Home",
+    "inmuebles": "Properties",
+    "prospectos": "Leads",
+    "visitas": "Showings",
+    "rentas": "Leases",
+    "cobranza": "Collections",
+    "propietarios": "Owners",
+    "comisiones": "Commissions",
+    "equipo": "Team",
+    "reportes": "Reports",
+    "mi-web": "My site",
+    "portales": "Portals",
+    "whatsapp": "WhatsApp",
+    "calculadoras": "Calculators",
+    "suscripcion": "Subscription",
+    "configuracion": "Settings",
+    "soporte": "Support"
+  },
+  "navSections": {
+    "operacion": "Operations",
+    "arrendamiento": "Leasing",
+    "negocio": "Business",
+    "crecimiento": "Growth",
+    "cuenta": "Account"
+  },
+  "modes": {
+    "AGENCY": "Agency",
+    "AGENT": "Agent",
+    "OWNER": "Owner"
+  },
+  "topbar": {
+    "root": "Real Estate"
+  },
+  "logout": "Sign out",
+  "placeholder": {
+    "soon": "Coming soon",
+    "body": "This section isn't ready yet. You'll be able to work on it from here very soon.",
+    "hint": "The DaleControl team is building this part of the panel."
+  },
+  "areas": {
+    "inicio": "Today at a glance: showings, leads waiting on a reply, rent due and which listing moved.",
+    "inmuebles": "Your full portfolio: photos, 3D tours, price, location and the status of every listing.",
+    "prospectos": "The funnel, from \"just messaged\" to \"signed\": who owns it, how fast you replied and why it fell through.",
+    "visitas": "The showing schedule and key control: who shows what, at what time and who has the keys.",
+    "rentas": "Lease agreements: tenant, guarantor, deposit, term and the rent increase rule.",
+    "cobranza": "This month's charges, payments received with their receipt, security deposits and property expenses.",
+    "propietarios": "Your owner book and their exclusives: who you have a signed agreement with, and until when.",
+    "comisiones": "Closed deals and how the commission splits: listing side, selling side, office and who already got paid.",
+    "equipo": "Your agents, their permissions and your offices: who sees what and who can touch the money.",
+    "reportes": "The numbers: what comes in, where leads come from and which listings get stuck.",
+    "mi-web": "Your public site with your live portfolio, at your own address, without paying anyone to list.",
+    "portales": "The feed of your listings for outside publishing, and the status of each one on each portal.",
+    "whatsapp": "Every conversation in one place: who asked about which property and who answered.",
+    "calculadoras": "Transfer tax, mortgage payment and rental yield, with parameters that update every year.",
+    "suscripcion": "Your plan, what it includes, your storage allowance and your payment method.",
+    "configuracion": "Your account details: name, real estate license, address and how clients see you.",
+    "soporte": "Message the DaleControl team when something breaks or doesn't add up."
+  }
+}

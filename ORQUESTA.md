@@ -16449,3 +16449,353 @@ Ni un precio en la UI: el formulario no recibe los planes y la fuente única sig
 - `BARBER_GUARD_SHARED=ORQUESTA.md node scripts/barber-guard.cjs` → **exit 0**: 1 propio (`src/components/barber/barber-registro-form.tsx`), 1 compartido declarado (`ORQUESTA.md`), 0 sin declarar, 0 prohibidos. Corrido dos veces: antes de añadir este reporte (1 propio, 0 compartidos) y con el reporte ya en el árbol.
 
 ▶ **NOTA DE ENTORNO (por qué no se tocó el árbol principal).** `mediflow/` tenía WIP ajeno sin commitear (realty: `prisma/schema.prisma` +1453, `next.config.mjs`, `src/lib/auth.ts` y carpetas nuevas `src/app/inmobiliaria/`, `src/lib/realty/`, …) y un `next build` corriendo sobre su `node_modules` (cuyo cliente Prisma ya lleva los modelos de realty). Ahí `git pull` chocaba con `56a4774d` en el schema, `git add -A` habría metido el WIP en este commit y el guardia lo marcaba como PROHIBIDO; buildear con junction habría pisado el cliente Prisma a media compilación ajena. Por eso: worktree limpio desde `origin/main`, `npm ci` propio, commit con solo los dos archivos. El `main` local del repo principal sigue atrás de `origin/main` hasta que ese WIP se guarde o commitee y se haga `git pull --ff-only origin main`.
+## [Inmuebles Ola 0] — El tercer vertical existe: contrato, schema completo, panel con los TRES modos y el SQL listo para Supabase ✅ (2026-08-25)
+
+DaleControl Inmuebles arranca como producto APARTE del dental y de barber, en
+este mismo repo y con el MISMO login. Esta ola no vende nada todavía: pone el
+cimiento para que las diez terminales de la Ola 1 empiecen el mismo día sin
+pelearse por el schema, por los tipos ni por el diccionario.
+
+**51 archivos: 47 nuevos + 4 compartidos editados. Guardia exit 0, cero
+prohibidos.** Los cuatro compartidos son exactamente los autorizados:
+`prisma/schema.prisma`, `src/lib/auth.ts`, `next.config.mjs` (el CSP) y
+`src/app/error.tsx` (nuevo). Ni una línea del dental ni de barber se movió:
+el diff del schema es **+1584 / −0**.
+
+═══════════════════════════════════════════════════════════════════════════
+▶ LO QUE HAY QUE SABER Y NO SE VE EN EL DIFF
+═══════════════════════════════════════════════════════════════════════════
+
+**1. Los TRES MODOS son el eje, y por eso van en el contrato desde hoy.**
+`RealtyAccount.mode` = `AGENCY` | `AGENT` | `OWNER`. El interruptor real del
+producto no es el tamaño de la cuenta: es *¿los inmuebles son tuyos o los
+vendes de alguien más?* El modo NO se lee con ifs regados: vive en el campo
+`modes` de cada `REALTY_NAV_ITEMS`, y el layout lo aplica en un solo lugar
+junto con la feature del plan y el permiso del rol (un AND de tres). Medido:
+el menú de AGENCY trae 17 items, el de AGENT 16 (sin Equipo) y el de OWNER 12
+(sin Prospectos, Visitas, Propietarios, Comisiones ni Equipo).
+
+Y **esconder un item del menú NO es control de acceso**: las 17 páginas
+placeholder llevan además un `redirect` que usa EL MISMO campo `modes`, así
+quien escriba la URL a mano tampoco entra. Ese patrón queda escrito para que
+la Ola 1 lo herede en vez de inventarse un if por pantalla.
+
+**2. `prisma format` reformatea TODO el archivo — hubo que deshacerlo.**
+Al correrlo tras anexar el bloque, el diff salió **+1826 / −373**: 373 líneas
+del dental cambiadas por puro alineado de columnas. En un archivo compartido
+con dos productos vivos, eso es ruido que esconde el cambio real. El
+procedimiento que quedó: anexar → `prisma format` → RESCATAR solo el bloque
+realty ya formateado → `git checkout` del schema → volver a anexar. Resultado:
+**+1584 / −0**, y el archivo en CRLF puro (0 finales de línea sueltos).
+
+**3. El SQL NO se escribió a mano: se generó del schema y se probó en un
+Postgres de verdad, dos veces.** `prisma migrate diff --from-empty` sobre un
+schema temporal que contenía solo el bloque realty, y de ahí un transformador
+que lo vuelve idempotente. Las comprobaciones del transformador fallan si el
+conteo no cuadra (35 enums / 40 tablas / 101 índices / 86 FKs) o si aparece un
+`ALTER TABLE` que no sea una FK. Después se aplicó sobre `postgres:16-alpine`:
+
+- Pasada 1 → exit 0. Pasada 2 → exit 0, y siguen siendo **3 planes, no 6**
+  (el `ON CONFLICT DO NOTHING` hace su trabajo).
+- 40 tablas, 35 enums, 86 FKs, 101 índices declarados.
+- **0 columnas `timestamptz`** — todas `TIMESTAMP(3)` sin zona, que es lo que
+  exige que cualquier constraint de exclusión futuro use `tsrange` y nunca
+  `tstzrange` (con `timestamptz` Postgres rechaza el índice con "functions in
+  index expression must be marked IMMUTABLE"). Está escrito en la cabecera del
+  bloque y en el SQL.
+- Las únicas 3 tablas sin `accountId` son `realty_accounts` (su id ES el
+  accountId), `realty_plan_configs` y `realty_calc_params` (las dos de
+  plataforma). Ninguna tabla de negocio se quedó sin índice por `accountId`.
+- Las 10 FKs con `NO ACTION` son exactamente las 10 declaradas a propósito.
+  Ninguna heredó el NO ACTION por descuido.
+
+**4. TODO está en `prisma/schema.prisma`. No hay tablas que vivan solo en
+SQL.** En barber eso pasó y un `prisma db push` se las hubiera llevado. Aquí
+las 40 tablas están en el schema y `sql/realty.sql` es su espejo generado.
+
+**5. `accountId` está en todas las tablas de negocio — y el schema dice
+EXACTAMENTE qué garantiza eso y qué no.** La primera versión de la cabecera
+decía que la columna "cierra el agujero de fuga entre cuentas". No lo cierra:
+las FKs son de una sola columna, así que la base NO impide una fila con
+`accountId = A` y `propertyId = <inmueble de B>`. La columna hace el filtro
+por tenant POSIBLE en un solo `where`; no lo hace automático. La cabecera del
+bloque ahora lleva la regla escrita con su snippet: al LEER se filtra siempre
+por `accountId` también en la hija; al ESCRIBIR se comprueba que el padre es
+de la cuenta antes de insertar, porque el id del padre viene del body y no es
+de fiar. Endurecerlo de verdad pide `@@unique([id, accountId])` en cada padre
+y FKs compuestas en las ~30 hijas: **evaluado y NO hecho** (ver PENDIENTE).
+
+**6. La allowlist de recorridos 3D vive en UN archivo y sirve para tres
+cosas.** `src/lib/realty/tour-hosts.json` → (a) valida la URL que pega el
+asesor, (b) arma el `frame-src` de la CSP en `next.config.mjs`, (c) detecta el
+proveedor y su tipo. Es `.json` y no `.ts` porque `next.config.mjs` es Node
+puro y no puede importar TypeScript. **Un iframe cuyo dominio no esté en
+`frame-src` sale EN BLANCO, sin un solo error en consola** — se diagnostica
+mal siempre ("Matterport está caído"). Verificado: la CSP resultante lleva los
+20 tokens (10 dominios × pelado + comodín) y el validador rechaza `http:`,
+dominios parecidos (`notmatterport.com`) y la URL con el dominio en el *path*.
+
+Y esa lectura va **envuelta en try/catch**: `next.config.mjs` lo evalúan
+`next build` Y `next start`, así que un JSON borrado o malformado no tumbaría
+solo este vertical — tumbaría el arranque de toda la aplicación, dental
+incluido. Si falla, se degrada a "sin proveedores" y avisa en el log.
+
+**7. Los tres `error.tsx` desde el día 1, y el de la raíz es NEUTRO.** En
+barber la pantalla en blanco total salió de no tener límite de error: React
+sube hasta el primero que encuentre y desmonta todo lo de abajo; sin ninguno,
+ese punto es la RAÍZ. Y en build de producción no hay overlay rojo, la consola
+sale limpia. Hasta hoy este repo tenía **3** `error.tsx` en toda la app
+(`/b/[slug]`, `/barber/(panel)/mi-web`, `/live/[slug]`). Ahora hay 6.
+`src/app/error.tsx` lo van a ver también usuarios del dental y de barbería, así
+que no lleva el color ni la voz de ningún vertical, no importa nada, y los
+estilos van en línea.
+
+Detalle que se corrigió y que barber sigue arrastrando: `var(--x), fallback`
+**no es un fallback**. Si `--x` no está definida, la declaración entera es
+inválida y NO cae al siguiente item de la lista. La forma buena es
+`var(--x, fallback)`. En una pantalla de último recurso eso importa: es justo
+donde puede faltar el token.
+
+**8. El OOM del build es PREEXISTENTE — no lo trajo esta ola.** `npx next
+build` con el heap por defecto muere en "Checking validity of types" con
+`FATAL ERROR: JavaScript heap out of memory` (exit 134). Se midió el
+contrafactual: **se hizo stash de todo, se regeneró el cliente Prisma desde el
+schema original y se compiló main limpio — truena exactamente igual, exit
+134.** Con `NODE_OPTIONS=--max-old-space-size=8192` compila en verde
+(`EXIT=0`, 407 páginas estáticas, las 21 rutas del vertical en la tabla).
+Vercel da más memoria a sus builders que el default local, y ahí no hay
+síntoma hoy — pero el margen se está acabando.
+
+═══════════════════════════════════════════════════════════════════════════
+▶ LO QUE ENCONTRARON LOS DOS REVISORES ADVERSARIALES (y qué se hizo)
+═══════════════════════════════════════════════════════════════════════════
+
+Dos revisores independientes: uno sobre la frontera/allowlist, otro sobre el
+schema. El de frontera dio **LIMPIO: 0 violaciones** (aditivo puro, CSP intacta
+salvo `frame-src`, cero imports de `@/lib/barber` o `@/lib/patients`,
+`{es,en}.json` del dental byte-idénticos). El de schema encontró defectos
+reales. **Se arreglaron 29 cosas antes del commit.** Las que valen la pena
+contar:
+
+**Dinero que podía perder su ancla (P0).** `RealtyPayment.charge/lease/deal`
+eran `SetNull`. Cadena concreta: borrar un inmueble → se va el contrato → se
+van sus cargos → **el pago sobrevive con los tres FKs en NULL, sigue sumando
+en el reporte de ingresos por `@@index([accountId, paidAt])` y ya no hay forma
+de saber de quién era.** Ahora son `NoAction`: ese borrado falla con P2003 y
+hay que TERMINAR el contrato, que es lo correcto. Igual `RealtyDeposit.lease`
+(un depósito RETENIDO es dinero del inquilino que hay que devolver).
+
+**Una comisión que cambiaba de dueño sola (P0).**
+`RealtyCommissionSplit.realtyUser` era `SetNull`, y en ese modelo
+`realtyUserId = NULL` **significa** "la parte es de la oficina". Dar de baja a
+un asesor convertía su comisión sin pagar en dinero de la casa, sin aviso y
+sin rastro. → `NoAction`.
+
+**Mensajes de WhatsApp duplicados (P0).** `RealtyMessage` tenía índice sobre
+`externalId` pero no único. Meta REENTREGA el webhook ante cualquier respuesta
+que no sea 200 y ante un timeout: cada reentrega insertaba otra vez el mismo
+mensaje. → `@@unique([threadId, externalId])`. `InboxMessage` del dental ya lo
+tenía; se había copiado la mitad.
+
+**Un comentario que decía lo contrario del código.** `RealtyLeadActivity`
+documentaba `userId NoAction: … la bitácora no puede perder al autor` y el
+código decía `SetNull`. Alguien iba a leer el comentario y confiar en él.
+
+**Dos DTOs contra los que no se podía programar.** `RealtyCalcParamDTO`
+declaraba `stateCode: string | null` con el jsdoc "null = federal" mientras la
+columna es NOT NULL con default "MX": la rama `=== null` nunca se ejecutaba.
+Y faltaban `ownerId` en `RealtyPropertyDTO` (sin él, en modo AGENCY no se
+puede enseñar de quién es cada inmueble) y `externalName` en
+`RealtyCommissionSplitDTO` (sin él, la pantalla de comisiones pinta una fila
+anónima con un monto).
+
+**Siete índices y dos campos.** Se quitaron 2 índices redundantes
+(`@@index([slug])` junto a `slug @unique`) y se agregaron 7: la cartera por
+fecha (la lista por defecto se ordenaba en memoria), operación+estatus a la
+vez, "¿qué llaves están fuera?" (la pregunta de todos los días no tenía índice
+utilizable), exclusivas por vencer, cobranza por mes, tickets abiertos de
+TODAS las cuentas para el admin, y `@@unique([accountId, email])` en
+`RealtyUser` (dos invitaciones al mismo correo creaban dos usuarios con
+permisos distintos). Se agregó `RealtyProperty.isPublished`: hasta entonces la
+única forma de sacar un inmueble de la web era cambiarle el estatus COMERCIAL,
+que es mentir. Y `landM2` pasó a `Decimal(12,2)`: con (10,2) el tope eran
+~9 999 ha y `RANCHO` está en el enum.
+
+**Un `tsc --noEmit` limpio.** El test de i18n copiaba de barber el spread de
+un `Set` (`[...set]`), que saca TS2802 porque el tsconfig no fija `target`.
+Barber arrastra esos dos errores desde que se escribió; aquí se usó
+`Array.from` y el vertical no aporta ni uno.
+
+**Lo que NO se arregló, y por qué:** las FKs compuestas del punto 5. Es el
+arreglo más caro (11 padres con `@@unique([id, accountId])` + ~30 hijas con
+`references: [id, accountId]`) y el más valioso a largo plazo, pero sin las
+escrituras reales escritas todavía no hay forma de probarlo. Queda abajo como
+decisión de Rafael, con la regla documentada en el schema mientras tanto.
+
+═══════════════════════════════════════════════════════════════════════════
+▶ DECISIONES TOMADAS (las que la Ola 1 hereda sin discutir)
+═══════════════════════════════════════════════════════════════════════════
+
+- **`sortOrder` y no `order`** en fotos y recorridos. `ORDER` es palabra
+  reservada en SQL: funciona citada, pero se vuelve un campo minado en cuanto
+  alguien escriba una consulta cruda. Es además la convención del repo.
+- **`RealtyProperty.ownerId`** (nullable) además de `RealtyExclusive`. Sin él,
+  un inmueble sin exclusiva firmada no tendría dueño en el modelo, que es el
+  caso más común al capturar.
+- **`RealtyCalcParam.stateCode` es NOT NULL con default `'MX'`** (= federal) en
+  vez de nullable. En un índice único de Postgres cada NULL cuenta como
+  distinto: con la columna nullable el único no serviría de nada.
+- **`realty_calc_params` se queda VACÍA.** El ISAI lo fija cada congreso
+  estatal y la UMA se publica cada enero. Sembrar números sin verificar produce
+  una calculadora peor que no tenerla. La ola de calculadoras los captura con
+  su fuente y su fecha.
+- **`storageUsedBytes` es BigInt** (40 GB no cabe en un Int de 4 bytes). Queda
+  avisado en el schema y en el DTO: `JSON.stringify` revienta con un BigInt sin
+  convertir, así que va siempre `Number(...)` al armar el DTO.
+- **`mode` y `plan` son ejes INDEPENDIENTES** y no hay constraint que los
+  ligue. El modo dice qué pantallas tienen sentido; el plan, cuánta capacidad
+  pagaste. Un rentista puede pagar INMOBILIARIA para tener varias oficinas.
+  Por eso los defaults (AGENCY + PROPIETARIO) no son incoherentes: son
+  "agencia que todavía no paga". Está escrito en el schema.
+- **Reparto de features**: PROPIETARIO 8 · ASESOR +5 (whatsapp, whatsappInbox,
+  portalsFeed, commissions, clientPortal) · INMOBILIARIA +8 (multiOffice,
+  agentPages, mls, pld, aiStudio, advancedRoles, analytics, affiliates). 3D/360
+  en los TRES; lo que cambia entre planes es el CUPO DE ARCHIVOS (2 / 10 / 40
+  GB) e inmuebles ilimitados en los tres. WhatsApp arranca en ASESOR: el plan
+  de $199 no lo trae y su `messageQuota` es 0, no "cupo cero".
+- **La oficina matriz nace con la cuenta** en el alta. Sin ella
+  `getAccessibleOfficeIds` devuelve `[]` y cualquier consulta filtrada por
+  oficina se queda en blanco desde el primer minuto.
+- **El alta NO redirige sola** tras crear la cuenta (barber salta a `/login`
+  con un `setTimeout` de 1.8 s, justo cuando la persona está leyendo qué pasó).
+  Aquí hay un botón.
+- **Contraste medido, no supuesto**: blanco sobre pine-500 da 4.48 y NO pasa
+  AA; sobre 600 da 6.30 y sobre 700, 8.66. Los botones usan 600/700. En oscuro
+  el primario es pine-400 con texto oscuro (5.64).
+- **CERO precios escritos en la UI.** Todo sale de `realty_plan_configs`, con
+  `FALLBACK_REALTY_PLAN_CONFIG` = el seed exacto del SQL.
+- **NO EXISTE FACTURACIÓN en este vertical.** Ni CFDI, ni timbrado, ni
+  complemento de pago. Lo que se entrega es un RECIBO
+  (`RealtyPayment.receiptUrl`). Si una pantalla dice "factura", está mal.
+  Verificado con grep: cero menciones fuera de los comentarios que lo prohíben.
+- **Sin `prisma/migrations/*realty*`.** Solo `sql/realty.sql`. El flujo del
+  repo aplica el SQL a mano en Supabase (`prisma migrate` no corre: falta
+  `DIRECT_URL`), y una carpeta de migración que nunca se aplica con
+  `migrate deploy` crea un historial falso. La ruta queda reservada en el
+  guardia por si se decide lo contrario.
+
+═══════════════════════════════════════════════════════════════════════════
+▶ VERIFICACIÓN
+═══════════════════════════════════════════════════════════════════════════
+
+1. `npx next build` leído ENTERO, sin pipes que enmascaren el exit code:
+   **EXIT=0**, "Generating static pages (407/407)", las **21 rutas** del
+   vertical en la tabla (`/inmobiliaria` + 17 del panel + `/inmobiliaria/
+   registro` + 2 APIs). Necesita `NODE_OPTIONS=--max-old-space-size=8192`, que
+   es una condición PREEXISTENTE del repo (punto 8, con el contrafactual
+   medido).
+2. `npx tsc --noEmit` filtrado a los archivos del vertical: **cero errores**.
+3. `npx prisma validate` → válido. `npx prisma generate` → OK.
+4. `sql/realty.sql` aplicado DOS veces sobre `postgres:16-alpine` con
+   `ON_ERROR_STOP=1`: exit 0 las dos, 3 planes (no 6), bucket privado
+   (`public=false`, 50 MB), 0 `timestamptz`, 0 tablas de negocio sin índice por
+   `accountId`, y las 10 FKs con NO ACTION son exactamente las 10 declaradas.
+5. `npx tsx --test src/lib/realty/__tests__/contrato.test.ts` → **31/31**.
+   Cubre el embudo (no se salta etapas, sí se retrocede una, PERDIDO desde
+   cualquier no terminal), el slug (acentos, vacío, corte a 40 sin guion
+   colgando), el folio sin I/O/0/1, los tres menús por modo, la allowlist de
+   recorridos (acepta subdominios, rechaza http y dominios parecidos), el
+   override que REEMPLAZA y no suma, y el reparto acumulativo de features.
+6. `npx tsx --test src/lib/realty/__tests__/i18n-alcance.test.ts` → **11/11**.
+   Recorre `REALTY_NAV_ITEMS` (no una lista escrita a mano que se quede vieja)
+   y falla si a un item le falta etiqueta o descripción en es o en en; verifica
+   paridad es/en llave por llave, que ninguna traducción esté VACÍA (el modal
+   de cobro de barber se veía "sin opciones" por eso), que las dos convenciones
+   de prefijo no se crucen, que nadie use `makeT` pelado, que los dos mapas de
+   iconos cubran todo el menú y que cada href tenga página.
+7. `REALTY_GUARD_SHARED="prisma/schema.prisma,src/lib/auth.ts,next.config.mjs,
+   src/app/error.tsx" node scripts/realty-guard.cjs` → **exit 0**: 47 propios,
+   4 compartidos declarados, 0 sin declarar, 0 prohibidos. Sin la variable,
+   exit 1 listando los 4 (el guardia sí muerde).
+8. Dos revisores adversariales independientes; 29 arreglos aplicados.
+
+═══════════════════════════════════════════════════════════════════════════
+▶ ARCHIVOS
+═══════════════════════════════════════════════════════════════════════════
+
+Contrato y librería (`src/lib/realty/`)
+- `types.ts` — ÚNICA fuente de verdad: 39 union types, los tres modos y sus
+  helpers, `REALTY_TERMS`, rutas base y bucket, la máquina de estados del
+  prospecto con `canTransition()`, labels es-MX de cada enum, amenidades,
+  `makeRealtySlug()`, `makeRealtyFolio()`, `REALTY_NAV_ITEMS` con `modes`, y
+  los 36 DTOs. NADIE más lo toca en la Ola 1.
+- `permissions.ts` — 26 claves, roles OWNER/MANAGER/AGENT/ASSISTANT,
+  `resolveRealtyPermissions` / `hasRealtyPermission` / `RealtyForbiddenError`.
+- `plan-shared.ts` — puro y client-safe; 21 features, el FALLBACK = SEED,
+  `formatRealtyPrice` / `formatRealtyStorage` / `realtyNavItemsWhileUnpaid`.
+- `plans.ts` — resolutor server-only con caché de 60 s y fusión de features
+  sobre el fallback.
+- `tours.ts` + `tour-hosts.json` — la allowlist única.
+- `i18n.ts` — `makeRealtyT` con alarma en desarrollo.
+- `__tests__/contrato.test.ts`, `__tests__/i18n-alcance.test.ts`.
+
+Sesión y guardia
+- `src/lib/realty-auth.ts` — `getRealtyContext()` (cuenta + modo + plan
+  resuelto + rol), `assertRealtyPermission()`, `getAccessibleOfficeIds()`.
+- `scripts/realty-guard.cjs`.
+
+Panel y público (`src/app/inmobiliaria/`, `src/app/i/`)
+- `page.tsx` (router), `(panel)/layout.tsx`, 17 páginas placeholder,
+  `registro/page.tsx`, `realty-theme.css`, `error.tsx`, `src/app/i/error.tsx`.
+- `src/components/realty/` — sidebar, topbar (con la píldora del modo),
+  placeholder, formulario de alta en dos pasos y su panel visual.
+- `src/app/api/realty/auth/{register,logout}/route.ts`.
+
+Diccionario (`src/i18n/dictionaries/realty/`)
+- `index.ts` + `shell.{es,en}.json` + `registro.{es,en}.json`. NO se tocó
+  `{es,en}.json` del dental.
+
+Datos
+- `prisma/schema.prisma` — +1584 / −0: 40 modelos y 35 enums `Realty*`.
+- `sql/realty.sql` (1414) — enums, tablas, índices, FKs, seed de los 3 planes,
+  bucket privado `realty-files` y 6 consultas de verificación comentadas.
+
+Compartidos editados (los 4 autorizados)
+- `src/lib/auth.ts` — bloque simétrico al de barber, DESPUÉS de él y ANTES de
+  `redirect("/onboarding")`, con try/catch y el `redirect()` FUERA del try
+  (dentro, el catch se tragaría el NEXT_REDIRECT y se rompería el login).
+  Vive dentro del `if (!user)`, así que ningún usuario dental paga la query.
+- `next.config.mjs` — el `frame-src` derivado del `.json`, con try/catch.
+  Ninguna otra directiva de la CSP cambió.
+- `src/app/error.tsx` — nuevo, neutro.
+- `prisma/schema.prisma`.
+
+═══════════════════════════════════════════════════════════════════════════
+▶ PENDIENTE — REQUIERE RAFAEL
+═══════════════════════════════════════════════════════════════════════════
+
+- 🔴 **Correr `sql/realty.sql` en Supabase.** Esta ola es BLOQUEANTE: hasta
+  que las tablas existan, `getRealtyContext()` devuelve null y el panel manda
+  a `/login`. Nada del dental ni de barber se ve afectado mientras tanto — el
+  lookup nuevo de `auth.ts` está envuelto en try/catch justamente para eso.
+- 🔴 **Comprobar el choque de rutas ANTES de anunciar el vertical.**
+  `/inmobiliaria`, `/inmobiliarias` e `/i` son rutas estáticas nuevas, y una
+  ruta estática SIEMPRE le gana al catch-all `/[slug]` de las mini-webs
+  dentales. Si una clínica ya tiene uno de esos slugs, su sitio público deja
+  de resolver. La lista de reservados de `src/app/api/check-slug/route.ts` no
+  los incluye (ese archivo está FUERA del allowlist de esta ola, igual que le
+  pasó a barber con `barber`/`barberias`). La consulta está en el SQL como
+  verificación 8.d-bis y debe devolver 0 filas:
+  `SELECT id, name, slug FROM "Clinic" WHERE slug IN ('i','inmobiliaria','inmobiliarias');`
+- 🔴 **Verificar el bucket `realty-files` PRIVADO** tras aplicar el SQL
+  (consulta 8.c). Ahí van a vivir escrituras y prediales.
+- ⚪ **Decidir sobre las FKs compuestas** (punto 5). Hoy la regla está
+  documentada en el schema y depende de la disciplina de cada terminal. Si se
+  quiere garantía de base, el momento barato es AHORA, antes de que haya datos.
+- ⚪ Fijar `NODE_OPTIONS=--max-old-space-size=8192` en el proyecto de Vercel.
+  Hoy no truena allá, pero el margen del type-check se está acabando y el
+  síntoma cuando pase será un build rojo sin causa aparente (exit 134).
+- ⚪ Dar de alta los precios en Stripe cuando llegue la ola de suscripción:
+  `realty_plan_configs.stripeLookupKey` está en NULL a propósito.
+- ⚪ La landing del vertical (`/inmobiliarias`) NO se construyó: la ruta queda
+  libre y reservada (`REALTY_LANDING_BASE`).

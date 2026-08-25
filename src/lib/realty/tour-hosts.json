@@ -1,0 +1,14 @@
+{
+  "_readme": "FUENTE ÚNICA de los proveedores de recorrido 3D/360/video del vertical INMUEBLES. Es un .json y no un .ts porque lo consumen DOS mundos: src/lib/realty/tours.ts (validación y detección de proveedor) y next.config.mjs (frame-src de la CSP), y next.config.mjs no puede importar TypeScript. Un proveedor nuevo se agrega AQUÍ y en ningún otro lado. Sin esto en frame-src el iframe sale EN BLANCO sin un solo error en consola.",
+  "providers": [
+    { "key": "matterport", "label": "Matterport", "kind": "TOUR_3D", "domains": ["matterport.com"] },
+    { "key": "kuula", "label": "Kuula", "kind": "TOUR_360", "domains": ["kuula.co"] },
+    { "key": "cloudpano", "label": "CloudPano", "kind": "TOUR_360", "domains": ["cloudpano.com"] },
+    { "key": "eyespy360", "label": "EyeSpy360", "kind": "TOUR_360", "domains": ["eyespy360.com"] },
+    { "key": "goiguide", "label": "GoIGuide", "kind": "TOUR_360", "domains": ["goiguide.com"] },
+    { "key": "lumalabs", "label": "Luma AI", "kind": "TOUR_3D", "domains": ["lumalabs.ai"] },
+    { "key": "scaniverse", "label": "Scaniverse", "kind": "TOUR_3D", "domains": ["scaniverse.com"] },
+    { "key": "youtube", "label": "YouTube", "kind": "VIDEO", "domains": ["youtube.com", "youtube-nocookie.com"] },
+    { "key": "vimeo", "label": "Vimeo", "kind": "VIDEO", "domains": ["vimeo.com"] }
+  ]
+}

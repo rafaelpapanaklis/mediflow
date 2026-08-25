@@ -1,0 +1,61 @@
+{
+  "meta": {
+    "title": "Create your real estate account · DaleControl",
+    "description": "Create your DaleControl Real Estate account: portfolio, leads, leases and your public site."
+  },
+  "step": {
+    "mode": "Step 1 of 2",
+    "form": "Step 2 of 2"
+  },
+  "mode": {
+    "title": "What are you?",
+    "subtitle": "This is how we lay out your panel. If you pick wrong, you can change it later in Settings.",
+    "AGENCY": {
+      "label": "Agency with agents",
+      "help": "You have a team of agents and you sell or rent other people's properties."
+    },
+    "AGENT": {
+      "label": "Independent agent",
+      "help": "You work on your own and you sell or rent other people's properties."
+    },
+    "OWNER": {
+      "label": "I have properties to rent out",
+      "help": "The properties are yours and you want to manage them: leases, collections and maintenance."
+    },
+    "change": "Change"
+  },
+  "form": {
+    "accountName": "Your agency's name",
+    "accountNameAgent": "How you introduce yourself",
+    "accountNameOwner": "What you want to call your account",
+    "firstName": "First name",
+    "lastName": "Last name",
+    "email": "Email",
+    "password": "Password",
+    "passwordHint": "At least 8 characters.",
+    "phone": "WhatsApp",
+    "phoneHint": "It's how we reach you to help you get started.",
+    "city": "City",
+    "state": "State",
+    "teamSize": "How many of you are there?",
+    "submit": "Create my account",
+    "submitting": "Creating your account…",
+    "haveAccount": "Already have an account?",
+    "signIn": "Sign in"
+  },
+  "errors": {
+    "accountName": "The account name is required.",
+    "firstName": "Your first name is required.",
+    "lastName": "Your last name is required.",
+    "email": "Email is required.",
+    "password": "The password must be at least 8 characters.",
+    "phone": "WhatsApp is required.",
+    "generic": "We couldn't finish the signup. Please try again."
+  },
+  "success": {
+    "title": "Your account is ready",
+    "body": "Sign in with your email and password to get into your panel.",
+    "next": "We'll ask you to pick a plan before you start.",
+    "cta": "Go to sign in"
+  }
+}

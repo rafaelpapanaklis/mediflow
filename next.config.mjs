@@ -1,3 +1,42 @@
+import { readFileSync } from "node:fs";
+
+// ── frame-src del vertical INMUEBLES (recorridos 3D / 360 / video) ──────
+// La allowlist de proveedores vive en UN SOLO archivo,
+// src/lib/realty/tour-hosts.json, y desde ahí sirve para tres cosas:
+//   (a) validar la URL que pega el asesor  (src/lib/realty/tours.ts)
+//   (b) armar este frame-src               (aquí)
+//   (c) detectar el proveedor y su tipo    (src/lib/realty/tours.ts)
+// Es un .json y no un .ts porque este archivo es Node puro y no puede
+// importar TypeScript; con los dominios copiados a mano, la CSP y el
+// validador se desincronizan a la primera y nadie se entera.
+//
+// 🔴 Un iframe cuyo dominio no esté aquí sale EN BLANCO, sin un solo error
+// en la consola. Se diagnostica mal siempre ("Matterport está caído").
+//
+// 🔴 try/catch OBLIGATORIO, por el mismo motivo que el lookup de auth.ts: este
+// archivo lo evalúa `next build` Y `next start`. Si el .json se borra, se
+// renombra o se malforma, un throw aquí NO rompe solo el vertical de
+// inmuebles: tumba el arranque de TODA la aplicación, dental y barbería
+// incluidos. Peor el remedio que la enfermedad. Si falla, se degrada a
+// "sin proveedores de recorrido" (los tours salen en blanco, que es un
+// problema de una pantalla) y se avisa en el log del build.
+let REALTY_TOUR_FRAME_SRC = "";
+try {
+  const realtyTourHosts = JSON.parse(
+    readFileSync(new URL("./src/lib/realty/tour-hosts.json", import.meta.url), "utf8"),
+  );
+  REALTY_TOUR_FRAME_SRC = (realtyTourHosts?.providers ?? [])
+    .flatMap((p) => p?.domains ?? [])
+    .filter((d) => typeof d === "string" && d.length > 0)
+    .flatMap((d) => [`https://${d}`, `https://*.${d}`])
+    .join(" ");
+} catch (err) {
+  console.warn(
+    "[next.config] no se pudo leer src/lib/realty/tour-hosts.json; los recorridos 3D del vertical de inmuebles quedarán bloqueados por la CSP",
+    err instanceof Error ? err.message : err,
+  );
+}
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   // El lint corre como gate manual (`npm run lint`); no se acopla a `next build`
@@ -88,7 +127,12 @@ const nextConfig = {
               "connect-src 'self' https: wss:",
               // td.doubleclick / googleads.g.doubleclick = iframes del tag de conversiones de Google Ads.
               // www.facebook.com / staticxx.facebook.com = iframe de comunicación del SDK de Meta (xd_arbiter); sin esto el popup del Embedded Signup no puede devolver el resultado.
-              "frame-src 'self' https://js.stripe.com https://www.paypal.com https://www.google.com https://td.doubleclick.net https://googleads.g.doubleclick.net https://daily.co https://*.daily.co https://*.tawk.to https://www.facebook.com https://staticxx.facebook.com",
+              // REALTY_TOUR_FRAME_SRC = recorridos 3D/360/video del vertical de
+              // inmuebles (Matterport, Kuula, CloudPano, EyeSpy360, GoIGuide, Luma,
+              // Scaniverse, YouTube, Vimeo). Se arma arriba desde
+              // src/lib/realty/tour-hosts.json: para dar de alta un proveedor nuevo
+              // se edita ESE archivo y nada más — aquí no se escribe ningún dominio.
+              `frame-src 'self' https://js.stripe.com https://www.paypal.com https://www.google.com https://td.doubleclick.net https://googleads.g.doubleclick.net https://daily.co https://*.daily.co https://*.tawk.to https://www.facebook.com https://staticxx.facebook.com ${REALTY_TOUR_FRAME_SRC}`,
               // 'self' (antes 'none'): equivalente moderno de X-Frame-Options SAMEORIGIN.
               // Habilita el iframe same-origin del visor de heatmap; terceros siguen sin poder enmarcar.
               "frame-ancestors 'self'",

@@ -164,6 +164,30 @@ export const getCurrentUser = cache(async () => {
       );
     }
     if (barberUser) redirect("/barber");
+    // Chequeo simétrico de INMUEBLES (DaleControl Inmuebles): si la sesión
+    // pertenece a un RealtyUser activo, mándala a su panel. /inmobiliaria
+    // usa getRealtyContext (no getCurrentUser), así que no hay loop de
+    // redirect — igual que /proveedores, /laboratorios y /barber.
+    //
+    // 🔴 try/catch OBLIGATORIO, por el mismo motivo que barber: si la tabla
+    // realty_users aún no existe en la BD (sql/realty.sql sin aplicar), este
+    // lookup NO puede tumbar el login de las clínicas NI el de las barberías
+    // en producción — se loguea y se sigue al flujo normal.
+    // OJO: redirect() lanza NEXT_REDIRECT, por eso vive FUERA del try (si
+    // viviera dentro, el catch se tragaría la redirección).
+    let realtyUser: { id: string } | null = null;
+    try {
+      realtyUser = await prisma.realtyUser.findFirst({
+        where: { supabaseId: supabaseUser.id, active: true },
+        select: { id: true },
+      });
+    } catch (err) {
+      console.warn(
+        "[auth] lookup de realty_users falló (¿sql/realty.sql sin aplicar?); sigue flujo normal",
+        err instanceof Error ? err.message : err,
+      );
+    }
+    if (realtyUser) redirect("/inmobiliaria");
     redirect("/onboarding");
   }
 
