@@ -4,6 +4,7 @@ import { randomInt } from "crypto";
 import { cookies } from "next/headers";
 import { createClient as createSupabaseAdmin } from "@supabase/supabase-js";
 import { prisma } from "@/lib/prisma";
+import { sumMoneyBy } from "@/lib/barber/money";
 import { isBarbershopSubscriptionActive } from "@/lib/barber/plan-shared";
 import { BARBER_FILES_BUCKET, canTransition } from "@/lib/barber/types";
 import {
@@ -445,7 +446,7 @@ export async function loadPortalData(args: {
 
   for (const a of appointments) {
     const services = toLines(a.services);
-    const total = services.reduce((acc, s) => acc + s.price, 0);
+    const total = sumMoneyBy(services, (s) => s.price);
     const barberName = a.barber ? a.barber.nickname || a.barber.name : null;
 
     const isFuture = a.startAt.getTime() > now.getTime();

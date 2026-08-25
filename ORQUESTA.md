@@ -16337,3 +16337,97 @@ sirvió para la foto final con GPU real; su pestaña vive `hidden` y no mueve rA
 - El test roto de `comparar/` en `marketing.test.ts` (ver punto 9).
 - El worktree `barber-landing-base` (solo para medir) se borró al terminar; el de la ola se
   queda hasta que Rafael lo limpie, sin junction pendiente.
+
+## [Barber Deuda Técnica] — Las 5 tablas y 7 columnas que vivían solo en SQL entran al schema (con migración que no hace NADA en producción), los precios se suman en centavos y la reserva pública deja de decir "llena" cuando lo que falta es cargar horarios ✅ (2026-08-25)
+
+**Rama/worktree:** `fix/barber-deuda-tecnica` sobre `origin/main` `abc07c35`, push directo a `main`.
+**Alcance tocado:** 34 archivos, todos del vertical + `prisma/schema.prisma` (declarado al guardia) y la migración `prisma/migrations/20260825120000_barber_deuda_tecnica_tablas_sql/`. El dental: **ni un byte** (el guardia lo confirma: 0 prohibidos, 0 compartidos sin declarar).
+
+▶ **RESUMEN EN TRES LÍNEAS.**
+1. `prisma/schema.prisma` ya conoce `barber_payment_settings`, `barber_admin_actions`, `barber_bot_settings`, `barber_bot_usage`, `barber_bot_pauses` y las 7 columnas de `barber_shops`; la migración espejo es idempotente y **`prisma migrate diff` contra una base igual a producción sale VACÍO**. Un `db push` en desarrollo ya no borra nada.
+2. Toda suma de precios del vertical pasa por `sumMoney`/`sumMoneyBy` (`src/lib/barber/money.ts`): centavos enteros, un solo redondeo. `1.99 + 1.99 + 2.99` ya es `6.97` y no `6.970000000000001`.
+3. `/b/<slug>/reservar` distingue "no hay lugar" de "no han cargado horarios" y ofrece WhatsApp/teléfono; Inicio pone un **bloqueo rojo arriba de todo** cuando la reserva en línea está activa sin un solo horario.
+
+═══════════════════════════════════════════════════════════════════
+▶ **PUNTO 2 (lo importante) — el schema alineado con la realidad.**
+═══════════════════════════════════════════════════════════════════
+
+**Cómo se modeló, y por qué así.** Cada tipo, default, nombre, índice y acción de FK se copió del `.sql` que creó el objeto, no se dedujo:
+- `BarberPaymentSettings` (`barber_payment_settings`), `BarberBotSettings`, `BarberBotUsage` (PK compuesta `barbershopId, day`, `spentMicros BigInt`), `BarberBotPause` (PK `barbershopId, phone`): `settings Json @default("{}")`, `updatedAt DateTime @default(now()) @updatedAt` (= `TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP` en la base; el `@updatedAt` solo lo mueve el cliente), FK `ON DELETE CASCADE ON UPDATE CASCADE`, índices con su `map:` (`barber_bot_usage_day_idx`, `barber_bot_pauses_shop_idx` con `pausedAt(sort: Desc)`).
+- `BarberAdminAction` (`barber_admin_actions`) **conserva el snake_case y el `timestamptz`** con `@map` por columna y `@db.Timestamptz(6)`. Detalle que el diff cazó y que a mano se pasa: la FK se creó inline (`REFERENCES … ON DELETE CASCADE`), así que quedó `ON UPDATE NO ACTION` — **no** el `Cascade` que Prisma pone por defecto. Va `onUpdate: NoAction` explícito. `id` sin default en la base (antes lo ponía `gen_random_uuid()::text`); ahora `@default(uuid())` del lado del cliente, que no cambia el DDL.
+- `Barbershop`: `loyaltyEnabled Boolean @default(true)`, `loyaltyThreshold Int @default(10)`, `loyaltyReward String?`, `inactiveDays Int @default(60)`, `campaignCooldownDays Int @default(21)`, `campaignTemplates Json?`, `bookingPolicy String @default("manual")` + 5 relaciones inversas.
+- Los tres índices que esos MISMOS `.sql` crean sobre tablas que ya estaban en el schema (`barber_clients_shop_lastVisit_idx`, `barber_clients_shop_phone_idx`, `barber_client_memberships_shop_end_idx`) también se declaran, para que un `db push` no los tire.
+- **Lo que Prisma no puede modelar y sigue viviendo solo en SQL (y en la migración):** los 4 `CHECK` de rangos y de `'manual'|'auto'`, el índice de expresión `barber_clients_shop_birthday_month_idx` (`EXTRACT(MONTH …)`) y el índice parcial `barber_messages_campaign_idx`. `migrate diff` los ignora, así que no ensucian el diff; la capa de negocio repite los rangos en código, como ya hacía.
+
+**La migración** (`20260825120000_barber_deuda_tecnica_tablas_sql/migration.sql`, escrita a mano, no con `migrate dev`): espejo exacto de `sql/barber_{membresias,admin,bot,clientes,campanas,settings}.sql` con `IF NOT EXISTS` en todo y las FK/CHECK dentro de `DO $barberdt$ … $barberdt$` con guarda contra `pg_constraint`. **En una base donde ya existe todo no ejecuta ni un ALTER** (verificado aplicándola dos veces seguidas: exit 0 las dos, diff intacto). Lo único del `.sql` que NO está en la migración es el bucket `barber-files` (`storage.buckets` es de Supabase, no de Postgres).
+
+**El acceso pasó de `$queryRaw` al cliente Prisma** en `payments.ts` (findUnique/upsert), `admin.ts` (create/findMany), `bot.ts` (findUnique/upsert/createMany skipDuplicates/deleteMany/findMany), `clients.ts`, `campaigns.ts`, `settings.ts` y **`booking.ts` (`resolveBookingPolicy`, mismo patrón y misma columna: no lo listaba el encargo, pero dejar un lector crudo de una columna ya modelada era media reforma)**. Se queda en crudo lo que sigue necesitándolo: `stats.ts` (agregados), `birthdayIdsForMonth` (EXTRACT), los `FOR UPDATE` y los advisory locks.
+- El `INSERT … ON CONFLICT DO UPDATE SET spentMicros = spentMicros + n` del gasto de IA se conserva **atómico**: el `upsert` con `increment` sobre la PK compuesta lo emite Prisma como UNA sentencia (`… ON CONFLICT ("barbershopId","day") DO UPDATE SET "spentMicros" = ("spentMicros" + $6)`), comprobado con el log de sentencias. Y `createMany({ skipDuplicates })` sale como `ON CONFLICT DO NOTHING`: la primera pausa (y su motivo) manda, igual que antes.
+- **La red de seguridad NO se quitó.** `src/lib/barber/db-errors.ts` reconoce las cuatro formas — `P2021`/`P2022` del cliente y `42P01`/`42703` del crudo (vía `P2010` o por el texto) — y cada módulo cae exactamente a lo de antes: bot apagado + `storageReady:false`, anticipos por defecto + `storageReady:false`, bitácora `null` + acción registrada solo en consola, fidelidad 10/60 + `persisted:false`, campañas defaults, `bookingPolicy` → memo por proceso → Json legado → `manual`. Guardar sin la tabla sigue diciendo **qué `.sql` falta**. Es lo que prueba `deuda-tecnica-integration.test.ts` tirando las tablas y las columnas de verdad.
+
+**⚠️ Lo que cambia de naturaleza, y hay que tener presente antes del deploy.** Al ser columnas del modelo, **cualquier lectura de `Barbershop` sin `select`** (empezando por `getBarberContext()`, que hace `include: { barbershop: true }`) pide las 7 columnas. En producción existen (Rafael lo verificó hoy) → nada cambia. En una base que NO las tenga, el panel entero fallaría con `P2022` hasta correr la migración — que es justo la base que antes se rompía en silencio con `db push`. Comprobación de un segundo antes de desplegar, en el SQL editor de Supabase:
+```sql
+SELECT column_name FROM information_schema.columns
+WHERE table_name = 'barber_shops'
+  AND column_name IN ('loyaltyEnabled','loyaltyThreshold','loyaltyReward','inactiveDays','campaignCooldownDays','campaignTemplates','bookingPolicy');
+-- esperado: 7 filas. Si falta alguna, correr sql/barber_clientes.sql, sql/barber_campanas.sql y sql/barber_settings.sql (idempotentes) ANTES del deploy.
+SELECT table_name FROM information_schema.tables
+WHERE table_name IN ('barber_payment_settings','barber_admin_actions','barber_bot_settings','barber_bot_usage','barber_bot_pauses');
+-- esperado: 5 filas.
+```
+
+**Deriva que EXISTE y quedó FUERA a propósito (no se forzó):** con TODOS los `sql/barber*.sql` aplicados en la base Docker, `migrate diff` todavía pide:
+- `DROP CONSTRAINT` de las 5 FK de `barber_affiliate_*` → `barber_shops` que crea `sql/barber_afiliados.sql`. El schema dice literalmente "SIN relación Prisma a Barbershop a PROPÓSITO … las FKs viven en el SQL": decisión de esa ola, no de esta. Consecuencia: un `db push` en desarrollo las tira (no en producción, que no se hace push).
+- `DROP INDEX` de 6 índices de `sql/barber_agenda.sql` y `sql/barber_caja.sql` (`barber_appt_shop_start_status_idx`, `barber_walkin_position_uniq` (UNIQUE), `barber_sales_barbershopId_cashSessionId_idx`, `barber_stock_movements_saleId_idx`, `barber_commission_entries_pending_idx`, `barber_sale_items_productId_idx`). Los modelé y **los volví a quitar**: esos dos `.sql` no están en la lista que se verificó hoy en Supabase, y declararlos sin saber si existen allá rompía la garantía de "diff vacío" en el otro sentido (`CREATE INDEX`, y el UNIQUE podría fallar con datos repetidos). Si `agenda`/`caja` ya están aplicados en producción, son 6 líneas de `@@index/@@unique` con `map:` — ver "Cómo retomar".
+
+═══════════════════════════════════════════════════════════════════
+▶ **PUNTO 1 — dinero en centavos.**
+═══════════════════════════════════════════════════════════════════
+`src/lib/barber/money.ts` (client-safe, sin `Prisma.Decimal` para no mandar decimal.js al navegador): `toCents` (reusa `moneyToCents` de `memberships-core`, acepta number/string/`Prisma.Decimal` por su `toString`; basura = 0 como el `Number(x) || 0` de antes), `sumMoney`, `sumMoneyBy`. `totalServicePrice()` lo usa; su único llamador (`appointment-dialog.tsx`) consume un `number` y no dependía del comportamiento viejo. **El mismo patrón estaba en 11 sitios más y se arregló en todos:** `booking.ts` ×2 (total al crear la reserva y en las solicitudes), `bot.ts` (total de la cita en el contexto del bot), `client-portal.ts`, `loyalty.ts` (gasto por visita), `agenda-client.tsx` (total del día), `appointment-detail.tsx`, `day-board.tsx`, `booking-flow.tsx`, `caja-client.tsx`, `bars.tsx`. Las sumas de `commissions.ts` y `cash.ts` ya iban en `Prisma.Decimal`/centavos y no se tocaron. Ojo con el ejemplo del encargo: `179.99+180+180` da `539.99` exacto en V8; los que sí se rompen son del estilo `1.99+1.99+2.99 = 6.970000000000001` (la prueba usa esos y 5 000 combinaciones al azar contra la suma entera).
+
+═══════════════════════════════════════════════════════════════════
+▶ **PUNTO 3 — la reserva pública dice la verdad.**
+═══════════════════════════════════════════════════════════════════
+- **Servidor:** `getPublicBarbers()` trae `hasSchedule` (un `_count` filtrado de `BarberSchedule.isActive`); `getPublicContact()` (nuevo) devuelve WhatsApp (el de la mini-web si lo configuró; si no, el teléfono de la barbería normalizado con lada) y teléfono. Viaja como prop aparte de `toPublicShop()`: la lista blanca de salida pública no cambia y `salida-publica.test.ts` sigue igual.
+- **Página:** con la lista de días vacía hay tres casos y tres textos: (a) **ningún** barbero con horario → "Esta barbería todavía no ha cargado sus horarios en línea. No es que esté llena…" + botón WhatsApp (`wa.me` con texto prellenado) y "Llamar"; (b) el barbero **elegido/pinneado** no tiene horario pero otros sí → "{barbero} todavía no tiene horario en línea" + "Ver lugares con cualquier barbero" (recarga los días con `any`) + "Elegir otro barbero" (si el paso existe) + contacto; (c) de verdad no hay hueco → el texto de siempre. Sin teléfono ni WhatsApp se dice también ("búscala en sus redes"). Estilos `.dcb-notice*` en `barber-public.css`, es/en en `reserva.*.json`.
+- **Panel:** `InicioSetup` gana `publicBookingOn` y `bookingBlocked` (= plan con `publicBooking` y **cero** horarios activos en el alcance). El bloqueo NO depende de "publicada" a propósito: `/b/<slug>` existe para toda barbería activa aunque no haya fila en `barber_landing_configs` (plan Básico no tiene editor), así que la liga puede estar circulando igual. Se pinta como `.bdash-blocker` (borde rojo, icono, `role="alert"`) **arriba de todo, en todos los roles**, con la liga `/b/<slug>/reservar` a la vista; el CTA "Cargar horarios ahora" solo para quien puede (`can.schedule`), a los demás "pídele al dueño…". El aviso por barbero de siempre ("N barberos sin horario cargado") sigue debajo. El `slug` va como prop desde la página, no en el resumen (ver verificación: un texto libre dentro del JSON del resumen hizo tronar una prueba por azar).
+
+═══════════════════════════════════════════════════════════════════
+▶ **VERIFICACIÓN.**
+═══════════════════════════════════════════════════════════════════
+1. **`npm run build` → `BUILD_EXIT:0`** (tres veces: tras el grueso, tras los últimos retoques y sobre el código final; salida completa en el log, sin `| tail`). Los `prisma.clinic.findMany … DATABASE_URL` que imprime la generación estática son páginas del dental sin `.env` local, preexistentes y no fatales. Con `NODE_OPTIONS=--max-old-space-size=8192` por las terminales en paralelo.
+   **Pruebas del vertical:** estáticas 275/276 (`agenda`, `booking-core`, `portal-core`, `salida-publica`, `i18n-alcance`, `marketing`, `seo`, `landing`, `whatsapp`, `bot`, `contrato-caja`, `membresias`, `anticipos`, `caja-commissions`): la única roja, `landing: cada t("…") literal de los componentes resuelve en es y en`, **falla igual en `origin/main` limpio** (llaves `barber.comparar.*` de la ola de comparativas; ya lo anotó el reporte de Landing v2). Nuevas unitarias `db-errors` 5/5 y `dinero-sumas` 5/5. **Integración contra Postgres real (Docker):** `deuda-tecnica-integration` 5/5, `admin-integration` 11/11, `bot-integration` 12/12, `membresias-integration` 11/11, `ajustes-integration` 15/15, `campanas` 16/16, `stats-integration` 7/7, `caja-integration` 17/17, `concurrencia` 11/11, `caja-membresia-carrera` 1/1, `sin-horario-integration` 3/3.
+2. **El diff, VACÍO, dos veces** (base Docker `postgres:16-alpine`; sin credenciales de producción el "estado real" se reconstruyó exactamente como lo describe el encargo):
+   ```
+   ═══ PRUEBA 1: base = schema de origin/main (db push) + los 6 sql/barber_*.sql a mano (= producción) → diff contra el schema NUEVO
+   Your database is now in sync with your Prisma schema. Done in 7.52s
+     aplicado barber_membresias.sql exit=0 · barber_admin.sql exit=0 · barber_bot.sql exit=0
+     aplicado barber_clientes_sin_storage.sql exit=0 · barber_campanas.sql exit=0 · barber_settings.sql exit=0
+   $ npx prisma migrate diff --from-url <proof> --to-schema-datamodel prisma/schema.prisma --script
+   -- This is an empty migration.
+   DIFF1_EXIT=0
+
+   ═══ PRUEBA 2: base = schema de origin/main (db push) + SOLO la migración nueva → diff contra el schema NUEVO
+   Your database is now in sync with your Prisma schema. Done in 7.75s
+     migración aplicada exit=0
+   $ npx prisma migrate diff --from-url <fresh> --to-schema-datamodel prisma/schema.prisma --script
+   -- This is an empty migration.
+   DIFF2_EXIT=0
+   ```
+   La 1 demuestra que el schema es lo que hay en producción (nadie pierde una tabla); la 2, que la migración crea exactamente eso y nada más. Aplicarla dos veces seguidas sobre la base espejo: exit 0 las dos. **No** se pudo usar `migrate diff --from-migrations`: el historial no se reproduce desde cero (`20260424120000_fase_4_agenda` truena en una base vacía con `type "AppointmentStatus" does not exist`, y falta `migration_lock.toml`) — preexistente, del dental.
+3. **Tabla inaccesible → sigue funcionando y avisa** (`deuda-tecnica-integration.test.ts`, contra Postgres): `DROP TABLE barber_bot_settings` → `getBarberBotSettings()` da `enabled:false, storageReady:false` y `saveBarberBotSettings()` rechaza con "Falta aplicar sql/barber_bot.sql…"; `DROP TABLE barber_payment_settings` → política por defecto (`enabled:false`), `storageReady:false`, guardar → `SETTINGS_STORAGE_MISSING` 503; `DROP TABLE barber_admin_actions` → `listBarberAdminActions()` = `null` (la ficha avisa) y la suspensión sigue ocurriendo con `audited:false` (`admin-integration`); `DROP COLUMN` de las 4 de fidelidad → 10 cortes / 60 días, `persisted:false`, guardar → `sql_pendiente`. Tras volver a aplicar la migración todo vuelve a leer y a guardar.
+4. **Suma exacta:** `dinero-sumas.test.ts` — `[1.99, 1.99, 2.99] → 6.97` y `[1.99, 32.99, 128.99] → 163.97` (con `+` dan `…000000001` y `…00000003`), `totalServicePrice()` idéntico, 5 000 combinaciones aleatorias de 1-6 precios iguales a la suma entera, `Prisma.Decimal`/string/number aceptados, basura = 0, negativos exactos.
+5. **Barbería sin horario:** `sin-horario-integration.test.ts` — dos barberos sin horario → `hasSchedule:false` en ambos y `setup.bookingBlocked:true` (con `publicBooking:false` en el plan NO se bloquea); primer horario cargado → ese barbero `true`, bloqueo `false`, el aviso por barbero sigue contando al otro; un horario **inactivo** no cuenta; `getPublicContact` da `525512345678` del teléfono y prefiere el WhatsApp de la mini-web. Lo visual (el aviso `.dcb-notice` y el bloqueador `.bdash-blocker`) se verificó por compilación y por las pruebas del dato; no hubo sesión de barbería para verlo en pantalla (Inicio exige Supabase).
+6. **`BARBER_GUARD_SHARED=prisma/schema.prisma,ORQUESTA.md node scripts/barber-guard.cjs` → exit 0** (34 propios, 2 compartidos declarados, 0 sin declarar, 0 prohibidos).
+7. **Cero vocabulario dental** en las líneas añadidas (`git diff -U0 | grep '^+' | grep -iE 'paciente|doctor|Dr\.|cl[ií]nica|consulta|expediente'` → 0; un "log de consultas" en un comentario se cazó y pasó a "log de sentencias SQL").
+
+▶ **QUÉ HACER EN SUPABASE (nada urgente, nada destructivo).**
+- Para el código: **nada**, si la verificación de hoy es correcta (las 7 columnas y las 5 tablas ya están). El bloque SQL de la migración está impreso al final del mensaje de cierre por si se quiere correr a mano: es idempotente.
+- Para el historial de Prisma: `npx prisma migrate resolve --applied 20260825120000_barber_deuda_tecnica_tablas_sql` deja la fila en `_prisma_migrations` sin ejecutar nada. Si en su día `barber_foundation`/`barber_complemento` tampoco se registraron, un `migrate deploy` se atoraría en ellas ANTES de llegar a esta — eso es de antes de esta ola; la migración nueva es segura de aplicar por cualquiera de las dos vías.
+
+▶ **CÓMO RETOMAR / PENDIENTES.**
+- **Afiliados:** decidir si las 5 FK a `barber_shops` se modelan (relaciones con nombre en `BarberAffiliateReferral`, que tiene dos) o si se sacan del SQL; hoy `db push` en dev las tira.
+- **Agenda/caja:** comprobar en Supabase si `sql/barber_agenda.sql` y `sql/barber_caja.sql` están aplicados (`SELECT indexname FROM pg_indexes WHERE indexname IN ('barber_walkin_position_uniq','barber_appt_shop_start_status_idx','barber_sales_barbershopId_cashSessionId_idx','barber_stock_movements_saleId_idx','barber_commission_entries_pending_idx','barber_sale_items_productId_idx')`). Si salen las 6, declararlas en el schema (`@@unique([barbershopId, position], map: "barber_walkin_position_uniq")` en `BarberWalkIn`, y cinco `@@index(…, map: …)`); el diff vuelve a vacío. `barber_cash_sessions_one_open_idx` (parcial) y la EXCLUDE `barber_appt_no_overlap` no se pueden modelar y no estorban.
+- Sigue abierta la divergencia `loyaltyThreshold` configurable vs `BARBER_LOYALTY_STAMPS_TARGET = 10` en `cash.ts`; ahora que la columna está en el modelo, `cash.ts` puede leerla con un `select`.
+- La prueba roja de `landing.test.ts` (llaves `barber.comparar.*`) sigue siendo de la ola de comparativas.
+- Docker: el contenedor `barber-deuda-pg` se borró al terminar. El worktree `mediflow-worktrees/barber-deuda-tecnica` queda con junction a `node_modules` (borrar el junction con `[System.IO.Directory]::Delete(p, $false)` antes de `git worktree remove`).

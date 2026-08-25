@@ -4,6 +4,7 @@ import {
   BarChart3,
   CalendarClock,
   CalendarDays,
+  CalendarOff,
   CheckCircle2,
   Contact,
   Crown,
@@ -38,12 +39,15 @@ export function InicioView({
   locale,
   firstName,
   branches,
+  slug,
 }: {
   summary: InicioSummary;
   t: TFunction;
   locale: string;
   firstName: string;
   branches: BranchOption[];
+  /** Slug de la barbería: arma la liga pública /b/<slug>/reservar del aviso de bloqueo. */
+  slug: string;
 }) {
   const k = (key: string, vars?: Record<string, string | number>) => t(`barber.inicio.${key}`, vars);
   const tz = s.timezone;
@@ -163,6 +167,32 @@ export function InicioView({
       </div>
 
       {s.scope.selfOnly && <div className="bdash-note">{s.scope.barberLinked ? k("selfOnly") : k("noBarberLinked")}</div>}
+
+      {/* Reserva en línea activa sin UN solo horario: la liga pública le dice a
+          la gente que no hay lugar. Es un bloqueo, no un pendiente más: va
+          arriba de todo, en rojo, para todos los roles (el CTA solo para quien
+          puede cargar horarios). */}
+      {s.setup.bookingBlocked && (
+        <div className="bdash-blocker" role="alert">
+          <div className="bdash-blocker__icon" aria-hidden>
+            <CalendarOff size={22} />
+          </div>
+          <div className="bdash-blocker__body">
+            <div className="bdash-blocker__title">{k("blocker.title")}</div>
+            <p className="bdash-blocker__text">
+              {k(s.setup.hasWeb ? "blocker.bodyPublished" : "blocker.body")}{" "}
+              <code className="bdash-blocker__url">/b/{slug}/reservar</code>
+            </p>
+          </div>
+          {s.can.schedule ? (
+            <Link href="/barber/agenda/horarios" className="btn-new barber-btn-primary bdash-blocker__cta">
+              <CalendarClock size={14} aria-hidden /> {k("blocker.cta")}
+            </Link>
+          ) : (
+            <span className="bdash-blocker__hint">{k("blocker.askOwner")}</span>
+          )}
+        </div>
+      )}
 
       {s.setup.isFresh ? (
         <CardNew title={k("setup.title")} sub={k("setup.body")}>

@@ -1,6 +1,7 @@
 import "server-only";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { isMissingColumnError } from "@/lib/barber/db-errors";
 import { mxTenDigits } from "@/lib/phone-mx";
 import type { BarberContext } from "@/lib/barber-auth";
 import {
@@ -160,18 +161,13 @@ export const CAMPAIGN_DEFAULT_PROMOS: Record<BarberCampaignAudience, string> = {
   noShow: "Te guardamos lugar; apártalo y llegas sin fila.",
 };
 
-/** Recuerda, por proceso, que las columnas de config no existen todavía. */
+/**
+ * Recuerda, por proceso, que las columnas de config no existen todavía
+ * (P2022: esta base va atrás de prisma/schema.prisma). Las columnas
+ * `campaignCooldownDays` y `campaignTemplates` nacieron en
+ * sql/barber_campanas.sql y hoy están en el schema.
+ */
 let campaignColumnsMissing = false;
-
-function isMissingColumnError(e: unknown): boolean {
-  // 42703 = undefined_column. Prisma lo envuelve en P2010 y deja el código
-  // nativo en meta.code, pero según la versión solo aparece en el mensaje.
-  if (e instanceof Prisma.PrismaClientKnownRequestError) {
-    const meta = e.meta as { code?: unknown } | undefined;
-    if (meta && String(meta.code) === "42703") return true;
-  }
-  return e instanceof Error && /42703|does not exist|no existe la columna/i.test(e.message);
-}
 
 function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value)
@@ -220,15 +216,11 @@ export async function getBarberCampaignConfig(
 
   const barbershopId = ctx.barbershopId;
   try {
-    const rows = await prisma.$queryRaw<
-      Array<{ campaignCooldownDays: number | null; campaignTemplates: unknown }>
-    >`
-      SELECT "campaignCooldownDays", "campaignTemplates"
-      FROM "barber_shops"
-      WHERE "id" = ${barbershopId}
-      LIMIT 1
-    `;
-    const row = rows[0];
+    // En barber_shops el inquilino ES el id de la fila.
+    const row = await prisma.barbershop.findUnique({
+      where: { id: barbershopId },
+      select: { campaignCooldownDays: true, campaignTemplates: true },
+    });
     if (!row) return fallback;
     return {
       cooldownDays: clampInt(
@@ -290,12 +282,13 @@ export async function saveBarberCampaignConfig(
   }
 
   try {
-    await prisma.$executeRaw`
-      UPDATE "barber_shops"
-      SET "campaignCooldownDays" = ${cooldownDays},
-          "campaignTemplates" = ${JSON.stringify(templates)}::jsonb
-      WHERE "id" = ${barbershopId}
-    `;
+    // `update` exige un where único: un id undefined truena aquí en vez de
+    // convertirse en un UPDATE sin filtro.
+    await prisma.barbershop.update({
+      where: { id: barbershopId },
+      data: { campaignCooldownDays: cooldownDays, campaignTemplates: templates },
+      select: { id: true },
+    });
     return { ok: true, config: next };
   } catch (e) {
     if (isMissingColumnError(e)) {

@@ -1,6 +1,7 @@
 import "server-only";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { isMissingColumnError } from "@/lib/barber/db-errors";
 import { createClient as createAdminClient } from "@supabase/supabase-js";
 import { mxTenDigits } from "@/lib/phone-mx";
 // Constantes de T6 (caja). Se IMPORTAN, no se copian: si la caja cambia el
@@ -43,12 +44,13 @@ import type { BarberContext } from "@/lib/barber-auth";
  *   y config de la barbería  →  este archivo.
  * · Contador de lealtad (derivado, no manipulable) → barber/loyalty.ts.
  *
- * ── CONFIG POR BARBERÍA SIN TOCAR EL SCHEMA ─────────────────────────
- * `loyaltyThreshold` / `inactiveDays` viven como columnas sueltas de
- * `barber_shops` creadas por sql/barber_clientes.sql y se leen con SQL
- * parametrizado (el cliente Prisma no las conoce). Si el SQL no está
- * aplicado, la lectura atrapa el 42703 y cae a los defaults: el módulo
- * funciona igual, solo que los números no se pueden editar.
+ * ── CONFIG POR BARBERÍA ─────────────────────────────────────────────
+ * `loyaltyEnabled` / `loyaltyThreshold` / `loyaltyReward` / `inactiveDays`
+ * son columnas de `barber_shops` (nacieron en sql/barber_clientes.sql y hoy
+ * están en prisma/schema.prisma), leídas con `select` explícito. La red de
+ * seguridad se conserva: si esta base todavía no tiene las columnas
+ * (P2022), la lectura cae a los defaults y el módulo funciona igual, solo
+ * que los números no se pueden editar.
  * ═══════════════════════════════════════════════════════════════════════
  */
 
@@ -81,21 +83,17 @@ export const INACTIVE_DAYS_MAX = 730;
 /**
  * Recuerda, por proceso, que las columnas de config no existen todavía.
  * Sin esto cada render volvería a pegarle a Postgres para recibir el mismo
- * 42703. Se limpia sola al reiniciar el runtime (que es justo cuando puede
- * haber cambiado el estado del SQL en un deploy).
+ * P2022. Se limpia sola al reiniciar el runtime (que es justo cuando puede
+ * haber cambiado el estado de la migración en un deploy).
  */
 let configColumnsMissing = false;
 
-function isMissingColumnError(e: unknown): boolean {
-  // 42703 = undefined_column. Prisma lo envuelve en P2010 (raw query failed)
-  // y deja el código nativo en meta.code, pero según la versión también
-  // aparece solo en el mensaje: se comprueban las dos formas.
-  if (e instanceof Prisma.PrismaClientKnownRequestError) {
-    const meta = e.meta as { code?: unknown } | undefined;
-    if (meta && String(meta.code) === "42703") return true;
-  }
-  return e instanceof Error && /42703|does not exist|no existe la columna/i.test(e.message);
-}
+const CLIENTS_CONFIG_SELECT = {
+  loyaltyEnabled: true,
+  loyaltyThreshold: true,
+  loyaltyReward: true,
+  inactiveDays: true,
+} as const;
 
 function clampInt(value: unknown, min: number, max: number, fallback: number): number {
   const n = typeof value === "number" ? value : Number(value);
@@ -110,20 +108,11 @@ export async function getBarberClientsConfig(ctx: BarberContext): Promise<Barber
 
   const barbershopId = ctx.barbershopId;
   try {
-    const rows = await prisma.$queryRaw<
-      Array<{
-        loyaltyEnabled: boolean;
-        loyaltyThreshold: number;
-        loyaltyReward: string | null;
-        inactiveDays: number;
-      }>
-    >`
-      SELECT "loyaltyEnabled", "loyaltyThreshold", "loyaltyReward", "inactiveDays"
-      FROM "barber_shops"
-      WHERE "id" = ${barbershopId}
-      LIMIT 1
-    `;
-    const row = rows[0];
+    // En barber_shops el inquilino ES el id de la fila.
+    const row = await prisma.barbershop.findUnique({
+      where: { id: barbershopId },
+      select: CLIENTS_CONFIG_SELECT,
+    });
     if (!row) return fallback;
     const reward = (row.loyaltyReward ?? "").trim();
     return {
@@ -198,14 +187,18 @@ export async function saveBarberClientsConfig(
 
   const barbershopId = ctx.barbershopId;
   try {
-    await prisma.$executeRaw`
-      UPDATE "barber_shops"
-      SET "loyaltyEnabled"   = ${next.loyaltyEnabled},
-          "loyaltyThreshold" = ${next.loyaltyThreshold},
-          "loyaltyReward"    = ${next.loyaltyReward},
-          "inactiveDays"     = ${next.inactiveDays}
-      WHERE "id" = ${barbershopId}
-    `;
+    // `update` exige un where único: un id undefined truena aquí en vez de
+    // convertirse en un UPDATE sin filtro.
+    await prisma.barbershop.update({
+      where: { id: barbershopId },
+      data: {
+        loyaltyEnabled: next.loyaltyEnabled,
+        loyaltyThreshold: next.loyaltyThreshold,
+        loyaltyReward: next.loyaltyReward,
+        inactiveDays: next.inactiveDays,
+      },
+      select: { id: true },
+    });
     return { ok: true, config: { ...next, persisted: true } };
   } catch (e) {
     if (isMissingColumnError(e)) {

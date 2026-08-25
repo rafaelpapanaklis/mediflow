@@ -40,6 +40,7 @@ import {
   minuteToLabel,
   shopMinuteOfDay,
 } from "@/lib/barber/agenda";
+import { sumMoneyBy } from "@/lib/barber/money";
 import { Field, Modal, Pill, agendaCss as css } from "./agenda-ui";
 
 export interface AppointmentDetailProps {
@@ -87,7 +88,7 @@ export function AppointmentDetail(props: AppointmentDetailProps) {
   const secondary = options.filter((s) => s !== primary);
   const terminal = isTerminalAppointmentStatus(appt.status);
 
-  const total = appt.services.reduce((acc, s) => acc + s.priceAtBooking, 0);
+  const total = sumMoneyBy(appt.services, (s) => s.priceAtBooking);
   const startLabel = minuteToLabel(shopMinuteOfDay(new Date(appt.startAt), timezone));
   const endLabel = minuteToLabel(shopMinuteOfDay(new Date(appt.endAt), timezone));
   const dayLabel = new Intl.DateTimeFormat("es-MX", {

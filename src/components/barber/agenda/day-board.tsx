@@ -52,6 +52,7 @@ import {
   weekdayOfISO,
   type MinuteWindow,
 } from "@/lib/barber/agenda";
+import { sumMoneyBy } from "@/lib/barber/money";
 import { agendaCss as css, barberColor, initials } from "./agenda-ui";
 
 export interface DayBoardProps {
@@ -478,7 +479,7 @@ function AppointmentCard(props: CardProps) {
   const roomy = props.height >= 74 && props.laneCount === 1;
   /** Poco alto o partida en carriles: no cabe el texto del estado. */
   const narrow = compact || props.laneCount > 1;
-  const total = appt.services.reduce((acc, s) => acc + s.priceAtBooking, 0);
+  const total = sumMoneyBy(appt.services, (s) => s.priceAtBooking);
 
   const now = Date.now();
   const startMs = new Date(appt.startAt).getTime();

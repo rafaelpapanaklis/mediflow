@@ -287,6 +287,15 @@ export interface InicioSetup {
   hasWeb: boolean;
   /** Sin una sola visita ni venta: la barbería acaba de empezar. */
   isFresh: boolean;
+  /** El plan trae reserva en línea: la liga /b/<slug>/reservar funciona. */
+  publicBookingOn: boolean;
+  /**
+   * Reserva en línea activa y NI UN horario cargado en el alcance: la liga
+   * pública existe pero nadie puede apartar. Inicio lo enseña como bloqueo,
+   * no como un pendiente más. (La liga se arma en la página con el slug del
+   * contexto: el resumen no lleva textos libres, solo números y banderas.)
+   */
+  bookingBlocked: boolean;
 }
 
 export interface InicioSummary {
@@ -643,6 +652,11 @@ export async function getInicioSummary(ctx: BarberContext, opts: InicioOptions =
     hasSales: Boolean(ar?.has_sales),
     hasWeb: Boolean(ar?.has_web),
     isFresh: !ar?.has_appointments && !ar?.has_sales,
+    publicBookingOn: features.publicBooking === true,
+    // La página /b/<slug> existe para toda barbería activa (con o sin
+    // editor), así que el bloqueo no depende de "publicada": depende de que
+    // la reserva en línea esté encendida y no haya un solo horario.
+    bookingBlocked: features.publicBooking === true && !ar?.has_schedules,
   };
 
   const cash: InicioCash | null = canCash

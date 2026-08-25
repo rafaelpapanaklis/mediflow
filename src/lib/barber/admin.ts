@@ -2,6 +2,7 @@ import "server-only";
 import { Prisma } from "@prisma/client";
 import { createClient as createSupabaseAdmin } from "@supabase/supabase-js";
 import { prisma } from "@/lib/prisma";
+import { isMissingTableError } from "@/lib/barber/db-errors";
 import { getBarberPlans } from "@/lib/barber/plans";
 import {
   BARBER_PLAN_IDS,
@@ -1019,16 +1020,17 @@ export async function changeBarbershopPlan(
 
 // ── Bitácora de acciones manuales ───────────────────────────────────────
 //
-// `barber_admin_actions` vive en sql/barber_admin.sql y se lee/escribe con SQL
-// crudo parametrizado: el contrato de esta terminal prohíbe tocar
-// prisma/schema.prisma. Mientras el .sql no esté aplicado, la acción SIGUE
-// ocurriendo y la ficha avisa que no quedó registrada — pero el rastro
-// estructurado se emite igual por consola, que en Vercel sí se conserva.
+// `barber_admin_actions` nació en sql/barber_admin.sql (snake_case y
+// timestamptz, así se quedó) y hoy es el modelo BarberAdminAction del
+// schema, así que se lee y escribe con el cliente Prisma. La red de
+// seguridad se conserva: mientras esta base no tenga la tabla (P2021), la
+// acción SIGUE ocurriendo y la ficha avisa que no quedó registrada — pero el
+// rastro estructurado se emite igual por consola, que en Vercel sí se conserva.
 
 function isMissingRelation(err: unknown): boolean {
+  if (isMissingTableError(err)) return true;
   const msg = err instanceof Error ? err.message : String(err);
-  const meta = (err as { meta?: { code?: string } })?.meta?.code;
-  return meta === "42P01" || /barber_admin_actions/i.test(msg);
+  return /barber_admin_actions/i.test(msg);
 }
 
 async function recordBarberAdminAction(entry: {
@@ -1057,13 +1059,18 @@ async function recordBarberAdminAction(entry: {
   );
 
   try {
-    await prisma.$executeRaw`
-      INSERT INTO barber_admin_actions
-        (id, barbershop_id, action, note, before_value, after_value, actor_admin_id, actor_email)
-      VALUES
-        (gen_random_uuid()::text, ${entry.barbershopId}, ${entry.action}, ${entry.note},
-         ${entry.beforeValue}, ${entry.afterValue}, ${entry.actor.id}, ${entry.actor.email})
-    `;
+    await prisma.barberAdminAction.create({
+      data: {
+        barbershopId: entry.barbershopId,
+        action: entry.action,
+        note: entry.note,
+        beforeValue: entry.beforeValue,
+        afterValue: entry.afterValue,
+        actorAdminId: entry.actor.id,
+        actorEmail: entry.actor.email,
+      },
+      select: { id: true },
+    });
     return true;
   } catch (e) {
     if (isMissingRelation(e)) {
@@ -1082,31 +1089,28 @@ export async function listBarberAdminActions(
   barbershopId: string,
 ): Promise<AdminBarberActionRow[] | null> {
   try {
-    const rows = await prisma.$queryRaw<
-      Array<{
-        id: string;
-        action: string;
-        note: string;
-        before_value: string | null;
-        after_value: string | null;
-        actor_email: string | null;
-        created_at: Date;
-      }>
-    >`
-      SELECT id, action, note, before_value, after_value, actor_email, created_at
-      FROM barber_admin_actions
-      WHERE barbershop_id = ${barbershopId}
-      ORDER BY created_at DESC
-      LIMIT 50
-    `;
+    const rows = await prisma.barberAdminAction.findMany({
+      where: { barbershopId },
+      select: {
+        id: true,
+        action: true,
+        note: true,
+        beforeValue: true,
+        afterValue: true,
+        actorEmail: true,
+        createdAt: true,
+      },
+      orderBy: { createdAt: "desc" },
+      take: 50,
+    });
     return rows.map((r) => ({
       id: r.id,
       action: r.action as BarberAdminActionType,
       note: r.note,
-      beforeValue: r.before_value,
-      afterValue: r.after_value,
-      actorEmail: r.actor_email,
-      createdAt: new Date(r.created_at).toISOString(),
+      beforeValue: r.beforeValue,
+      afterValue: r.afterValue,
+      actorEmail: r.actorEmail,
+      createdAt: r.createdAt.toISOString(),
     }));
   } catch (e) {
     if (!isMissingRelation(e)) console.error("[barber/admin] bitácora ilegible:", e);

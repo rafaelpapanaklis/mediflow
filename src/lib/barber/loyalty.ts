@@ -1,5 +1,6 @@
 import "server-only";
 import { prisma } from "@/lib/prisma";
+import { sumMoneyBy } from "@/lib/barber/money";
 import type { BarberAppointmentStatus } from "@/lib/barber/types";
 import type { BarberContext } from "@/lib/barber-auth";
 import {
@@ -458,7 +459,7 @@ export async function getBarberVisitHistory(
 
   for (const appt of appointments) {
     const sale = appt.sales[0];
-    const booked = appt.services.reduce((sum, s) => sum + Number(s.priceAtBooking), 0);
+    const booked = sumMoneyBy(appt.services, (s) => s.priceAtBooking);
     entries.push({
       id: appt.id,
       kind: "appointment",

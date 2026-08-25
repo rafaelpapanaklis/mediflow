@@ -29,6 +29,7 @@ import type {
   BarberWalkInDTO,
   BarberWalkInStatus,
 } from "@/lib/barber/types";
+import { sumMoneyBy } from "@/lib/barber/money";
 
 // ── Constantes de rejilla ──────────────────────────────────────────────
 
@@ -573,9 +574,14 @@ export function totalServiceMinutes(services: { durationMin: number }[]): number
   return Math.max(BARBER_SLOT_MINUTES, total);
 }
 
-/** Suma de precios VIVOS del catálogo (lo que se congela al reservar). */
+/**
+ * Suma de precios VIVOS del catálogo (lo que se congela al reservar).
+ *
+ * En centavos enteros, no en float: 179.99 + 180 + 180 con `+` da
+ * 539.9899999999999 en pantalla. Basura (NaN, null) suma 0, igual que antes.
+ */
 export function totalServicePrice(services: { price: number }[]): number {
-  return services.reduce((acc, s) => acc + (Number(s.price) || 0), 0);
+  return sumMoneyBy(services, (s) => s.price);
 }
 
 // ── Duración a mano ────────────────────────────────────────────────────

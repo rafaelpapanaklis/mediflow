@@ -141,11 +141,28 @@ before(async () => {
   });
 });
 
+/**
+ * sql/barber_admin.sql sentencia por sentencia (Prisma no admite varios
+ * statements en una llamada), igual que lo haría el editor de SQL de Supabase.
+ */
+async function aplicarSqlAdmin(): Promise<void> {
+  const ddl = readFileSync("sql/barber_admin.sql", "utf8")
+    .split(/\r?\n/)
+    .filter((l) => !l.trim().startsWith("--"))
+    .join("\n")
+    .split(";")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  for (const statement of ddl) await db.$executeRawUnsafe(statement);
+}
+
 after(async () => {
   if (!HAS_DB) return;
   if (shopId) await db.barbershop.deleteMany({ where: { OR: [{ id: shopId }, { parentId: shopId }] } });
   if (clinicId) await db.clinic.deleteMany({ where: { id: clinicId } });
-  await db.$executeRawUnsafe("DROP TABLE IF EXISTS barber_admin_actions").catch(() => {});
+  // barber_admin_actions YA está en prisma/schema.prisma: la base queda con
+  // la tabla puesta, alineada con el schema, para quien venga después.
+  await aplicarSqlAdmin().catch(() => {});
   await db.$disconnect();
 });
 
@@ -342,7 +359,10 @@ test("sin nota no se suspende ni se cambia de plan", { skip }, async () => {
 });
 
 test("la acción manual se propaga a las sucursales y la bitácora falla SUAVE sin el .sql", { skip }, async () => {
-  // Sin sql/barber_admin.sql aplicado: la acción ocurre igual, avisada.
+  // La tabla ya viene con `prisma db push` (está en el schema desde la ola
+  // de deuda técnica): para probar la red de seguridad hay que QUITARLA.
+  await db.$executeRawUnsafe("DROP TABLE IF EXISTS barber_admin_actions");
+  // Sin la tabla: la acción ocurre igual, avisada.
   const res = await setBarbershopSuspension(shopId, {
     suspend: true,
     note: "Impago acordado por teléfono con el dueño.",
@@ -366,16 +386,7 @@ test("la acción manual se propaga a las sucursales y la bitácora falla SUAVE s
 });
 
 test("con sql/barber_admin.sql aplicado la acción queda registrada con su nota", { skip }, async () => {
-  // Prisma no admite varios statements en una sola llamada: el .sql se aplica
-  // sentencia por sentencia, igual que lo haría el editor de SQL de Supabase.
-  const ddl = readFileSync("sql/barber_admin.sql", "utf8")
-    .split(/\r?\n/)
-    .filter((l) => !l.trim().startsWith("--"))
-    .join("\n")
-    .split(";")
-    .map((s) => s.trim())
-    .filter(Boolean);
-  for (const statement of ddl) await db.$executeRawUnsafe(statement);
+  await aplicarSqlAdmin();
 
   const nota = "Cortesía por el mes que estuvo caída su agenda.";
   const res = await changeBarbershopPlan(shopId, { plan: "AVANZADO", note: nota, actor: ACTOR });

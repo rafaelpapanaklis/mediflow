@@ -285,6 +285,43 @@
 }
 .barber-shell .bdash-alert__cta:hover { text-decoration: underline; text-underline-offset: 2px; }
 
+/* ── Bloqueo: reserva en línea activa sin un solo horario ────────────── */
+.barber-shell .bdash-blocker {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 14px;
+  padding: 14px 16px;
+  border-radius: 14px;
+  border: 2px solid var(--danger, #dc2626);
+  background: var(--danger-soft, rgba(239, 68, 68, 0.08));
+  color: var(--text-1);
+}
+.barber-shell .bdash-blocker__icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  display: grid;
+  place-items: center;
+  flex: none;
+  background: var(--danger, #dc2626);
+  color: #fff;
+}
+.barber-shell .bdash-blocker__body { flex: 1 1 260px; min-width: 0; }
+.barber-shell .bdash-blocker__title { font-size: 15px; font-weight: 700; line-height: 1.3; color: var(--danger, #dc2626); }
+.barber-shell .bdash-blocker__text { margin: 4px 0 0; font-size: 13px; line-height: 1.5; color: var(--text-2); }
+.barber-shell .bdash-blocker__url {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  padding: 1px 6px;
+  border-radius: 6px;
+  background: var(--bg-elev);
+  border: 1px solid var(--border-soft);
+  white-space: nowrap;
+}
+.barber-shell .bdash-blocker__cta { flex: none; }
+.barber-shell .bdash-blocker__hint { font-size: 12.5px; color: var(--text-3); }
+
 /* ── Arranque (barbería sin datos) ──────────────────────────────────── */
 .barber-shell .bdash-setup { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; }
 @container bdash (min-width: 640px) {

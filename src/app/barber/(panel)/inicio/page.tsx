@@ -36,6 +36,7 @@ export default async function Page() {
       locale={ctx.barbershop.locale}
       firstName={ctx.user.firstName}
       branches={branches.map((b) => ({ id: b.id, label: b.label }))}
+      slug={ctx.barbershop.slug}
     />
   );
 }

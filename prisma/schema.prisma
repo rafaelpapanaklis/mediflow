@@ -8526,6 +8526,24 @@ model Barbershop {
   messagesUsedPeriod  Int                  @default(0)
   messagesPeriodStart DateTime?
 
+  // ── Configuración por barbería que nació FUERA del schema ─────────────
+  // Estas siete columnas las crearon a mano sql/barber_clientes.sql,
+  // sql/barber_campanas.sql y sql/barber_settings.sql mientras el schema
+  // estaba congelado. Tipos y defaults copiados de esos archivos, no
+  // deducidos. Sus CHECK (rangos, 'manual'|'auto') viven solo en la base:
+  // Prisma no los modela y la capa de negocio los repite en código.
+  //
+  // Fidelidad e inactividad → src/lib/barber/clients.ts
+  loyaltyEnabled   Boolean @default(true)
+  loyaltyThreshold Int     @default(10)
+  loyaltyReward    String?
+  inactiveDays     Int     @default(60)
+  // Campañas de retención → src/lib/barber/campaigns.ts
+  campaignCooldownDays Int   @default(21)
+  campaignTemplates    Json?
+  // Reserva pública: 'manual' | 'auto' → settings.ts y resolveBookingPolicy
+  bookingPolicy String @default("manual")
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -8554,6 +8572,11 @@ model Barbershop {
   landingConfig     BarberLandingConfig?
   stockMovements    BarberStockMovement[]
   branchAccess      BarberUserBranchAccess[]
+  paymentSettings   BarberPaymentSettings?
+  adminActions      BarberAdminAction[]
+  botSettings       BarberBotSettings?
+  botUsage          BarberBotUsage[]
+  botPauses         BarberBotPause[]
 
   @@index([parentId])
   @@map("barber_shops")
@@ -8669,6 +8692,12 @@ model BarberClient {
   // upsert / atrapa P2002 sobre (barbershopId, phone).
   @@unique([barbershopId, phone])
   @@index([barbershopId, name])
+  // Los dos de abajo los creó sql/barber_clientes.sql (lista de inactivos y
+  // búsqueda por teléfono). Se declaran para que Prisma no los tire en un
+  // db push. El de cumpleaños por mes de ese mismo archivo es un índice de
+  // expresión (EXTRACT(MONTH …)) y Prisma no puede modelarlo: sigue solo en SQL.
+  @@index([barbershopId, lastVisitAt], map: "barber_clients_shop_lastVisit_idx")
+  @@index([barbershopId, phone], map: "barber_clients_shop_phone_idx")
   @@map("barber_clients")
 }
 
@@ -8819,6 +8848,9 @@ model BarberClientMembership {
   @@index([barbershopId, status])
   @@index([clientId])
   @@index([membershipId])
+  // "Por vencer / vencidas" ordena por endAt dentro de la barbería
+  // (sql/barber_membresias.sql). Declarado para que un db push no lo tire.
+  @@index([barbershopId, endAt], map: "barber_client_memberships_shop_end_idx")
   @@map("barber_client_memberships")
 }
 
@@ -9465,4 +9497,103 @@ model BarberAffiliateConfig {
   updatedAt DateTime @updatedAt
 
   @@map("barber_affiliate_config")
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// BARBER — TABLAS QUE NACIERON FUERA DEL SCHEMA
+//
+// Durante las olas en paralelo el schema estuvo congelado y cinco tablas se
+// crearon solo desde sql/barber_{membresias,admin,bot}.sql. Aquí se modelan
+// tal cual EXISTEN en la base (nombres, tipos, defaults e índices copiados
+// de esos archivos, no deducidos) para que un `prisma db push` deje de
+// borrarlas. Migración espejo, idempotente:
+// prisma/migrations/20260825120000_barber_deuda_tecnica_tablas_sql
+//
+// Ojo con barber_admin_actions: usa snake_case y timestamptz porque así se
+// creó en producción. Se respeta con @map / @db.Timestamptz, no se
+// "normaliza".
+// ═══════════════════════════════════════════════════════════════════════
+
+/// Política de anticipos por barbería (sql/barber_membresias.sql).
+/// `settings` = { deposit: BarberDepositPolicy }; lo valida y normaliza
+/// normalizeDepositPolicy() (payments-core.ts). La lee/escribe payments.ts.
+model BarberPaymentSettings {
+  barbershopId String   @id
+  settings     Json     @default("{}")
+  updatedAt    DateTime @default(now()) @updatedAt
+
+  barbershop Barbershop @relation(fields: [barbershopId], references: [id], onDelete: Cascade)
+
+  @@map("barber_payment_settings")
+}
+
+/// Bitácora de acciones MANUALES del panel de DaleControl sobre una
+/// barbería (suspender, reactivar, cambiar plan) con nota obligatoria
+/// (sql/barber_admin.sql). actorAdminId es admin_users.id SIN FK a
+/// propósito: borrar un admin no rompe la bitácora. La escribe admin.ts.
+model BarberAdminAction {
+  id           String   @id @default(uuid())
+  barbershopId String   @map("barbershop_id")
+  /// SUSPEND | REACTIVATE | PLAN_CHANGE
+  action       String
+  note         String
+  beforeValue  String?  @map("before_value")
+  afterValue   String?  @map("after_value")
+  actorAdminId String?  @map("actor_admin_id")
+  actorEmail   String?  @map("actor_email")
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  // La FK se creó inline (REFERENCES … ON DELETE CASCADE): ON UPDATE queda en
+  // NO ACTION, que NO es el default de Prisma. Se declara para que coincida.
+  barbershop Barbershop @relation(fields: [barbershopId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([barbershopId, createdAt(sort: Desc)], map: "barber_admin_actions_shop_idx")
+  @@index([createdAt(sort: Desc)], map: "barber_admin_actions_created_idx")
+  @@map("barber_admin_actions")
+}
+
+/// Configuración del bot de WhatsApp por barbería (sql/barber_bot.sql).
+/// `settings` tiene la forma de BarberBotSettings (bot-core.ts); la BD solo
+/// guarda el blob. La lee/escribe bot.ts.
+model BarberBotSettings {
+  barbershopId String   @id
+  settings     Json     @default("{}")
+  updatedAt    DateTime @default(now()) @updatedAt
+
+  barbershop Barbershop @relation(fields: [barbershopId], references: [id], onDelete: Cascade)
+
+  @@map("barber_bot_settings")
+}
+
+/// Gasto de IA del bot por barbería y por DÍA de la barbería
+/// (sql/barber_bot.sql). `day` es YYYY-MM-DD en la zona de la barbería;
+/// spentMicros son millonésimas de peso (1 MXN = 1e6).
+model BarberBotUsage {
+  barbershopId String
+  day          String
+  spentMicros  BigInt   @default(0)
+  turns        Int      @default(0)
+  updatedAt    DateTime @default(now()) @updatedAt
+
+  barbershop Barbershop @relation(fields: [barbershopId], references: [id], onDelete: Cascade)
+
+  @@id([barbershopId, day])
+  @@index([day], map: "barber_bot_usage_day_idx")
+  @@map("barber_bot_usage")
+}
+
+/// Conversaciones con el bot PAUSADO: en este hilo contesta una persona
+/// (sql/barber_bot.sql). `phone` = 10 dígitos normalizados, igual que
+/// BarberMessage.phone.
+model BarberBotPause {
+  barbershopId String
+  phone        String
+  reason       String?
+  pausedAt     DateTime @default(now())
+
+  barbershop Barbershop @relation(fields: [barbershopId], references: [id], onDelete: Cascade)
+
+  @@id([barbershopId, phone])
+  @@index([barbershopId, pausedAt(sort: Desc)], map: "barber_bot_pauses_shop_idx")
+  @@map("barber_bot_pauses")
 }

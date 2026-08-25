@@ -27,6 +27,7 @@
 // ═══════════════════════════════════════════════════════════════════════
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { isMissingColumnError } from "@/lib/barber/db-errors";
 import { assertBarberPermission, type BarberContext } from "@/lib/barber-auth";
 import { makeBarberSlug } from "@/lib/barber/types";
 import {
@@ -178,18 +179,13 @@ async function readProfile(ctx: BarberContext): Promise<BarberShopProfile & { sl
   return row;
 }
 
-// ── Política de reserva (columna suelta) ────────────────────────────────
+// ── Política de reserva (columna bookingPolicy de barber_shops) ─────────
 
-/** Recuerda, por proceso, que la columna no existe todavía (ver clients.ts). */
+/**
+ * Recuerda, por proceso, que la columna no existe todavía (P2022: esta base
+ * va atrás de prisma/schema.prisma; ver clients.ts).
+ */
 let bookingColumnMissing = false;
-
-function isMissingColumnError(e: unknown): boolean {
-  if (e instanceof Prisma.PrismaClientKnownRequestError) {
-    const meta = e.meta as { code?: unknown } | undefined;
-    if (meta && String(meta.code) === "42703") return true;
-  }
-  return e instanceof Error && /42703|does not exist|no existe la columna/i.test(e.message);
-}
 
 export function isBookingPolicy(v: unknown): v is BarberBookingPolicy {
   return v === "manual" || v === "auto";
@@ -202,10 +198,11 @@ export async function readBookingPolicySetting(
   if (bookingColumnMissing) return fallback;
   const barbershopId = ctx.barbershopId;
   try {
-    const rows = await prisma.$queryRaw<Array<{ bookingPolicy: string | null }>>`
-      SELECT "bookingPolicy" FROM "barber_shops" WHERE "id" = ${barbershopId} LIMIT 1
-    `;
-    const v = rows[0]?.bookingPolicy;
+    const row = await prisma.barbershop.findUnique({
+      where: { id: barbershopId },
+      select: { bookingPolicy: true },
+    });
+    const v = row?.bookingPolicy;
     return { policy: isBookingPolicy(v) ? v : "manual", persisted: true };
   } catch (e) {
     if (isMissingColumnError(e)) {
@@ -238,9 +235,11 @@ export async function saveBookingPolicy(
   }
   const barbershopId = ctx.barbershopId;
   try {
-    await prisma.$executeRaw`
-      UPDATE "barber_shops" SET "bookingPolicy" = ${raw} WHERE "id" = ${barbershopId}
-    `;
+    await prisma.barbershop.update({
+      where: { id: barbershopId },
+      data: { bookingPolicy: raw },
+      select: { id: true },
+    });
     return { ok: true, value: raw };
   } catch (e) {
     if (isMissingColumnError(e)) {

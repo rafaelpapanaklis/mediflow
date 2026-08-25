@@ -1,5 +1,8 @@
 import "server-only";
 import { prisma } from "@/lib/prisma";
+import { isMissingColumnError } from "@/lib/barber/db-errors";
+import { normalizarConfigBarberWeb, normalizarTelefono } from "@/lib/barber/landing";
+import { sumMoneyBy } from "@/lib/barber/money";
 import type { Prisma, PrismaClient } from "@prisma/client";
 import { mxTenDigits } from "@/lib/phone-mx";
 import { isBarbershopSubscriptionActive } from "@/lib/barber/plan-shared";
@@ -199,6 +202,20 @@ export interface PublicBarberDTO {
   nickname: string | null;
   photoUrl: string | null;
   bio: string | null;
+  /**
+   * true = tiene al menos un turno activo en BarberSchedule. Sin horario NO
+   * aparece ningún hueco, y la página tiene que poder decir "todavía no
+   * cargan horarios" en vez de "está llena".
+   */
+  hasSchedule: boolean;
+}
+
+/** Cómo contactar a la barbería cuando la reserva en línea no puede ayudar. */
+export interface PublicContactDTO {
+  /** Dígitos con lada para wa.me (p. ej. "525512345678"), o null. */
+  whatsapp: string | null;
+  /** Teléfono tal cual lo capturó la barbería, para `tel:`, o null. */
+  phone: string | null;
 }
 
 /** Servicios activos de la barbería, en el orden que la barbería definió. */
@@ -228,10 +245,49 @@ export async function getPublicServices(barbershopId: string): Promise<PublicSer
 export async function getPublicBarbers(barbershopId: string): Promise<PublicBarberDTO[]> {
   const rows = await prisma.barber.findMany({
     where: { barbershopId, isActive: true },
-    select: { id: true, name: true, nickname: true, photoUrl: true, bio: true },
+    select: {
+      id: true,
+      name: true,
+      nickname: true,
+      photoUrl: true,
+      bio: true,
+      _count: { select: { schedules: { where: { isActive: true } } } },
+    },
     orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
   });
-  return rows;
+  return rows.map((b) => ({
+    id: b.id,
+    name: b.name,
+    nickname: b.nickname,
+    photoUrl: b.photoUrl,
+    bio: b.bio,
+    hasSchedule: b._count.schedules > 0,
+  }));
+}
+
+/**
+ * WhatsApp y teléfono de la barbería para la página pública. El WhatsApp
+ * sale de la mini-web si lo configuró (es el que ya enseña /b/<slug>); si
+ * no, del teléfono de la barbería. Nunca truena: sin tabla o sin datos
+ * devuelve nulls y la página pinta lo que haya.
+ */
+export async function getPublicContact(shop: {
+  id: string;
+  phone: string | null;
+}): Promise<PublicContactDTO> {
+  let whatsapp: string | null = null;
+  try {
+    const row = await prisma.barberLandingConfig.findUnique({
+      where: { barbershopId: shop.id },
+      select: { config: true },
+    });
+    whatsapp = normalizarConfigBarberWeb(row?.config).whatsapp;
+  } catch {
+    // barber_landing_configs puede no existir en este entorno: sigue con el
+    // teléfono de la barbería.
+  }
+  if (!whatsapp) whatsapp = normalizarTelefono(shop.phone);
+  return { whatsapp, phone: shop.phone ?? null };
 }
 
 // ── Política de confirmación ────────────────────────────────────────────
@@ -249,11 +305,11 @@ export type BarberBookingPolicy = "auto" | "manual";
  * estado, no la reserva. (Distinto del dental, donde la solicitud pública
  * no llega a apartar el horario por sí sola.)
  *
- * DÓNDE VIVE EL INTERRUPTOR: en la columna suelta `barber_shops.bookingPolicy`
- * (sql/barber_settings.sql), que escribe /barber/configuracion vía
- * src/lib/barber/settings.ts. El schema Prisma no la conoce (el contrato del
- * vertical prohíbe tocarlo), así que se lee con SQL parametrizado; si el SQL
- * aún no está aplicado (42703) se recuerda por proceso y se cae al legado.
+ * DÓNDE VIVE EL INTERRUPTOR: en la columna `barber_shops.bookingPolicy`
+ * (nació en sql/barber_settings.sql; hoy está en prisma/schema.prisma), que
+ * escribe /barber/configuracion vía src/lib/barber/settings.ts. Se lee con
+ * `select` explícito; si esta base aún no tiene la columna (P2022) se
+ * recuerda por proceso y se cae al legado.
  *
  * LEGADO: antes se leía la llave `bookingPolicy` del Json de
  * BarberLandingConfig. Se conserva como segundo intento, pero ya no es la
@@ -263,24 +319,19 @@ export type BarberBookingPolicy = "auto" | "manual";
  */
 let bookingPolicyColumnMissing = false;
 
-function isMissingBookingColumn(e: unknown): boolean {
-  const meta = (e as { meta?: { code?: unknown } } | null)?.meta;
-  if (meta && String(meta.code) === "42703") return true;
-  return e instanceof Error && /42703|does not exist|no existe la columna/i.test(e.message);
-}
-
 export async function resolveBookingPolicy(barbershopId: string): Promise<BarberBookingPolicy> {
   if (!bookingPolicyColumnMissing) {
     try {
-      const rows = await prisma.$queryRaw<Array<{ bookingPolicy: string | null }>>`
-        SELECT "bookingPolicy" FROM "barber_shops" WHERE "id" = ${barbershopId} LIMIT 1
-      `;
-      const v = rows[0]?.bookingPolicy;
+      const row = await prisma.barbershop.findUnique({
+        where: { id: barbershopId },
+        select: { bookingPolicy: true },
+      });
+      const v = row?.bookingPolicy;
       if (v === "auto") return "auto";
       if (v === "manual") return "manual";
       // Sin fila (o valor raro): sigue al legado y al default.
     } catch (e) {
-      if (isMissingBookingColumn(e)) bookingPolicyColumnMissing = true;
+      if (isMissingColumnError(e)) bookingPolicyColumnMissing = true;
       // Cualquier otro fallo: el default seguro manda, nunca se propaga.
     }
   }
@@ -641,7 +692,7 @@ export async function createPublicBooking(
   if (services.length !== serviceIds.length) return { ok: false, code: "noServices" };
   const durationMin = services.reduce((acc, s) => acc + s.durationMin, 0);
   if (durationMin <= 0 || durationMin > 600) return { ok: false, code: "noServices" };
-  const total = services.reduce((acc, s) => acc + Number(s.price), 0);
+  const total = sumMoneyBy(services, (s) => s.price);
 
   // ── Barbero pedido: tiene que ser de ESTA barbería y estar activo ────
   // Un id ajeno NO se degrada silenciosamente a "cualquiera": el cliente
@@ -964,7 +1015,7 @@ export async function listBookingRequests(args: {
       status: r.status,
       createdAt: r.createdAt.toISOString(),
       services,
-      total: services.reduce((acc, s) => acc + s.price, 0),
+      total: sumMoneyBy(services, (s) => s.price),
       notes: r.notes,
       isPast: r.startAt.getTime() < now.getTime(),
     };

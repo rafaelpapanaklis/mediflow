@@ -1,13 +1,15 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Check, ChevronLeft, MapPin, Scissors } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { CalendarOff, Check, ChevronLeft, MapPin, MessageCircle, Phone, Scissors } from "lucide-react";
 import { getBarberT } from "@/i18n/dictionaries/barber";
 import type {
   PublicBarberDTO,
   PublicBarbershopDTO,
+  PublicContactDTO,
   PublicServiceDTO,
 } from "@/lib/barber/booking";
+import { sumMoneyBy } from "@/lib/barber/money";
 import { BookingDone, type BookingConfirmation } from "./booking-done";
 
 /* ═══════════════════════════════════════════════════════════════════════
@@ -39,13 +41,64 @@ export interface BookingFlowProps {
   shop: PublicBarbershopDTO;
   services: PublicServiceDTO[];
   barbers: PublicBarberDTO[];
+  /** WhatsApp y teléfono de la barbería, para cuando aquí no se puede apartar. */
+  contact: PublicContactDTO;
   /** Barbero fijado por la liga directa (?barbero=). */
   pinnedBarberId: string | null;
 }
 
 const ANY = "any";
 
-export function BookingFlow({ slug, shop, services, barbers, pinnedBarberId }: BookingFlowProps) {
+/**
+ * "Todavía no hay horarios en línea" — honesto y con salida. NUNCA se pinta
+ * como "no hay lugar": el cliente se va creyendo que la barbería está llena
+ * y la barbería pierde la cita sin enterarse. Reproducido en producción con
+ * una barbería recién publicada.
+ */
+function NoScheduleNotice(props: {
+  title: string;
+  body: string;
+  waHref: string | null;
+  telHref: string | null;
+  waLabel: string;
+  telLabel: string;
+  noContact: string;
+  /** Acciones propias del embudo (van antes que las de contacto). */
+  children?: ReactNode;
+}) {
+  const hasContact = !!props.waHref || !!props.telHref;
+  const contactIsPrimary = !props.children;
+  return (
+    <div className="dcb-notice" role="status">
+      <span className="dcb-notice__icon" aria-hidden="true">
+        <CalendarOff size={20} />
+      </span>
+      <p className="dcb-notice__title">{props.title}</p>
+      <p className="dcb-notice__body">{props.body}</p>
+      <div className="dcb-notice__actions">
+        {props.children}
+        {props.waHref ? (
+          <a
+            className={"dcb-btn dcb-btn--sm " + (contactIsPrimary ? "dcb-btn--primary" : "dcb-btn--ghost")}
+            href={props.waHref}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            <MessageCircle size={16} aria-hidden="true" /> {props.waLabel}
+          </a>
+        ) : null}
+        {props.telHref ? (
+          <a className="dcb-btn dcb-btn--ghost dcb-btn--sm" href={props.telHref}>
+            <Phone size={16} aria-hidden="true" /> {props.telLabel}
+          </a>
+        ) : null}
+      </div>
+      {!hasContact ? <p className="dcb-notice__body">{props.noContact}</p> : null}
+    </div>
+  );
+}
+
+export function BookingFlow({ slug, shop, services, barbers, contact, pinnedBarberId }: BookingFlowProps) {
   const t = useMemo(() => getBarberT(shop.locale), [shop.locale]);
 
   // Con un solo barbero no hay nada que preguntar; con la liga directa,
@@ -87,8 +140,27 @@ export function BookingFlow({ slug, shop, services, barbers, pinnedBarberId }: B
     () => services.filter((s) => selectedServices.indexOf(s.id) >= 0),
     [services, selectedServices],
   );
-  const totalPrice = chosen.reduce((acc, s) => acc + s.price, 0);
+  const totalPrice = sumMoneyBy(chosen, (s) => s.price);
   const totalMin = chosen.reduce((acc, s) => acc + s.durationMin, 0);
+
+  // ── Sin horarios cargados: decir la verdad, no "está llena" ────────────
+  // Los días vacíos tienen dos causas que se leen distinto: de verdad no
+  // hay hueco en el rango (raro) o nadie ha cargado horario todavía (una
+  // barbería recién publicada). El servidor ya dice quién tiene horario.
+  const anyBarberScheduled = barbers.some((b) => b.hasSchedule);
+  const chosenBarber = barberId === ANY ? null : barbers.find((b) => b.id === barberId) ?? null;
+  const chosenBarberNoSchedule = chosenBarber !== null && !chosenBarber.hasSchedule;
+  const waHref = contact.whatsapp
+    ? `https://wa.me/${contact.whatsapp}?text=${encodeURIComponent(
+        t("barber.reserva.fecha.whatsappTexto", { shop: shop.name }),
+      )}`
+    : null;
+  const telHref = contact.phone ? `tel:${contact.phone.replace(/[^\d+]/g, "")}` : null;
+  const contactLabels = {
+    waLabel: t("barber.reserva.fecha.escribirWhatsapp"),
+    telLabel: t("barber.reserva.fecha.llamar"),
+    noContact: t("barber.reserva.fecha.sinContacto"),
+  };
 
   const money = useMemo(
     () =>
@@ -391,7 +463,44 @@ export function BookingFlow({ slug, shop, services, barbers, pinnedBarberId }: B
               <span className="dcb-spin" aria-hidden="true" /> {t("barber.reserva.fecha.cargando")}
             </p>
           ) : openDays && openDays.length === 0 ? (
-            <p className="dcb-empty">{t("barber.reserva.fecha.sinDias")}</p>
+            !anyBarberScheduled ? (
+              <NoScheduleNotice
+                title={t("barber.reserva.fecha.sinHorario")}
+                body={t("barber.reserva.fecha.sinHorarioBody")}
+                waHref={waHref}
+                telHref={telHref}
+                {...contactLabels}
+              />
+            ) : chosenBarberNoSchedule ? (
+              <NoScheduleNotice
+                title={t("barber.reserva.fecha.sinHorarioBarbero", {
+                  barbero: chosenBarber.nickname || chosenBarber.name,
+                })}
+                body={t("barber.reserva.fecha.sinHorarioBarberoBody")}
+                waHref={waHref}
+                telHref={telHref}
+                {...contactLabels}
+              >
+                <button
+                  type="button"
+                  className="dcb-btn dcb-btn--primary dcb-btn--sm"
+                  onClick={() => setBarberId(ANY)}
+                >
+                  {t("barber.reserva.fecha.conCualquiera")}
+                </button>
+                {steps.indexOf("barbero") >= 0 ? (
+                  <button
+                    type="button"
+                    className="dcb-btn dcb-btn--ghost dcb-btn--sm"
+                    onClick={() => setStepIndex(steps.indexOf("barbero"))}
+                  >
+                    {t("barber.reserva.fecha.otroBarbero")}
+                  </button>
+                ) : null}
+              </NoScheduleNotice>
+            ) : (
+              <p className="dcb-empty">{t("barber.reserva.fecha.sinDias")}</p>
+            )
           ) : (
             <div className="dcb-days" role="group" aria-label={t("barber.reserva.fecha.title")}>
               {(openDays ?? []).map((day) => (

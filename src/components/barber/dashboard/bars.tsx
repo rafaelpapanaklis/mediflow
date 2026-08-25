@@ -1,4 +1,5 @@
 import type { ReportItemRow, ReportPayment } from "@/lib/barber/stats";
+import { sumMoneyBy } from "@/lib/barber/money";
 import type { BarberPaymentMethod } from "@/lib/barber/types";
 import { fmtInt, fmtMoney, fmtPct } from "./format";
 
@@ -77,7 +78,7 @@ export function PaymentsBar({
   ticketsLabel: string;
 }) {
   const withMoney = payments.filter((p) => p.total > 0);
-  const sum = withMoney.reduce((s, p) => s + p.total, 0);
+  const sum = sumMoneyBy(withMoney, (p) => p.total);
   return (
     <div>
       {withMoney.length > 0 && (

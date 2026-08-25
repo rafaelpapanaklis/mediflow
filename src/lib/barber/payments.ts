@@ -2,6 +2,7 @@ import "server-only";
 import Stripe from "stripe";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { isMissingTableError } from "@/lib/barber/db-errors";
 import {
   BARBER_DEPOSIT_LINE_PREFIX,
   centsToMoney,
@@ -121,13 +122,13 @@ function requireStripe(): Stripe {
 // ═══════════════════════════════════════════════════════════════════════
 // Configuración de anticipos por barbería
 //
-// NOTA DE ALMACENAMIENTO (ver reporte): el schema del vertical no tiene
-// dónde guardar ajustes por barbería, y el contrato prohíbe tocar
-// prisma/schema.prisma. La política vive en una tabla PROPIA de esta ola,
-// `barber_payment_settings`, creada solo en sql/barber_membresias.sql y
-// leída por SQL crudo. Así ninguna otra terminal se entera y, si el SQL
-// todavía no se aplicó, todo cae a los valores por defecto en vez de
-// tronar (mismo criterio que plans.ts con barber_plan_configs).
+// NOTA DE ALMACENAMIENTO: la política vive en `barber_payment_settings`
+// (modelo BarberPaymentSettings). La tabla nació en sql/barber_membresias.sql
+// cuando el schema estaba congelado y hoy ya está en prisma/schema.prisma,
+// así que se lee con el cliente Prisma. La red de seguridad NO se quitó:
+// si esta base todavía no tiene la tabla (P2021), todo cae a los valores
+// por defecto y el panel avisa, en vez de tronar (mismo criterio que
+// plans.ts con barber_plan_configs).
 // ═══════════════════════════════════════════════════════════════════════
 
 const SETTINGS_TTL_MS = 30_000;
@@ -149,18 +150,23 @@ export async function getBarberPaymentSettings(
   }
 
   try {
-    const rows = await prisma.$queryRaw<{ settings: unknown }[]>`
-      SELECT "settings" FROM "barber_payment_settings" WHERE "barbershopId" = ${shopId} LIMIT 1
-    `;
-    const raw = rows[0]?.settings ?? null;
+    const row = await prisma.barberPaymentSettings.findUnique({
+      where: { barbershopId: shopId },
+      select: { settings: true },
+    });
+    const raw: unknown = row?.settings ?? null;
     const policy = normalizeDepositPolicy(
       raw && typeof raw === "object" ? (raw as Record<string, unknown>).deposit ?? raw : null,
     );
     settingsCache.set(shopId, { policy, ready: true, at: Date.now() });
     return { policy, storageReady: true };
-  } catch {
-    // Tabla aún sin crear (o BD caída): valores por defecto, jamás romper el
-    // panel ni la reserva pública.
+  } catch (err) {
+    // Tabla aún sin crear (P2021) o BD caída: valores por defecto, jamás
+    // romper el panel ni la reserva pública. Solo se registra lo que NO es
+    // "falta la tabla", para no confundir un problema real con SQL pendiente.
+    if (!isMissingTableError(err)) {
+      console.warn("[barber/payments] no se pudo leer la política de anticipos:", err);
+    }
     const policy = { ...DEFAULT_BARBER_DEPOSIT_POLICY };
     settingsCache.set(shopId, { policy, ready: false, at: Date.now() });
     return { policy, storageReady: false };
@@ -173,15 +179,18 @@ export async function saveBarberDepositPolicy(
 ): Promise<BarberDepositPolicy> {
   const shopId = requireShop(barbershopId);
   const policy = normalizeDepositPolicy(raw);
-  const payload = JSON.stringify({ deposit: policy });
+  // Ida y vuelta por JSON: deja el blob exactamente como lo dejaba el
+  // `::jsonb` de antes (sin undefined, sin prototipos) y con el tipo Json
+  // que pide Prisma.
+  const payload = JSON.parse(JSON.stringify({ deposit: policy })) as Prisma.InputJsonObject;
 
   try {
-    await prisma.$executeRaw`
-      INSERT INTO "barber_payment_settings" ("barbershopId", "settings", "updatedAt")
-      VALUES (${shopId}, ${payload}::jsonb, CURRENT_TIMESTAMP)
-      ON CONFLICT ("barbershopId")
-      DO UPDATE SET "settings" = EXCLUDED."settings", "updatedAt" = CURRENT_TIMESTAMP
-    `;
+    await prisma.barberPaymentSettings.upsert({
+      where: { barbershopId: shopId },
+      create: { barbershopId: shopId, settings: payload },
+      update: { settings: payload },
+      select: { barbershopId: true },
+    });
   } catch (err) {
     // Casi siempre es la tabla sin crear, pero se registra el error real para
     // no confundir un problema de BD con "falta correr el SQL".

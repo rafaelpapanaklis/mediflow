@@ -283,6 +283,13 @@
         "returnRate": "Tasa de retorno %"
       }
     },
+    "blocker": {
+      "title": "Nadie puede reservar en línea: no hay ni un horario cargado",
+      "body": "Tu liga de reservas ya funciona, pero sin horarios le dice a la gente que no hay lugar. Carga el horario de al menos un barbero y se arregla solo.",
+      "bodyPublished": "Tu página ya está publicada y la reserva en línea está activa, pero sin horarios le dice a la gente que no hay lugar. Carga el horario de al menos un barbero y se arregla solo.",
+      "cta": "Cargar horarios ahora",
+      "askOwner": "Pídele al dueño o al encargado que cargue los horarios."
+    },
     "locked": {
       "title": "Los reportes son del plan Profesional",
       "body": "Ingresos por día, horas muertas, no-shows, retención y métodos de pago. Puedes cambiar de plan desde Suscripción.",

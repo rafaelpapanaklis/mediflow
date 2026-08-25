@@ -1,5 +1,8 @@
 import "server-only";
+import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { isMissingTableError } from "@/lib/barber/db-errors";
+import { sumMoneyBy } from "@/lib/barber/money";
 import { mxTenDigits } from "@/lib/phone-mx";
 import { getBarberPlan } from "@/lib/barber/plans";
 import { barberPlanHasFeature, isBarbershopSubscriptionActive } from "@/lib/barber/plan-shared";
@@ -131,15 +134,15 @@ function usdMxn(): number {
 }
 
 /* ═══════════════════════════════════════════════════════════════════════
-   ALMACENAMIENTO — tablas propias, FUERA de prisma/schema.prisma.
+   ALMACENAMIENTO — tres tablas propias: barber_bot_settings,
+   barber_bot_usage y barber_bot_pauses (modelos BarberBotSettings,
+   BarberBotUsage y BarberBotPause).
 
-   Ver la cabecera de sql/barber_bot.sql: el contrato de esta ola prohíbe
-   tocar el schema, así que la configuración, el gasto y las pausas viven en
-   tres tablas creadas solo por ese .sql y se leen con SQL crudo.
-
-   Si el .sql NO se aplicó: TODO cae a los defaults (bot APAGADO) y el panel
-   lo dice con todas sus letras. Nada truena y, sobre todo, el bot no
-   contesta a ciegas.
+   Nacieron en sql/barber_bot.sql cuando el schema estaba congelado y hoy ya
+   están en prisma/schema.prisma, así que se leen con el cliente Prisma. La
+   red de seguridad NO se quitó: si esta base todavía no las tiene (P2021),
+   TODO cae a los defaults (bot APAGADO) y el panel lo dice con todas sus
+   letras. Nada truena y, sobre todo, el bot no contesta a ciegas.
    ═══════════════════════════════════════════════════════════════════════ */
 
 const SETTINGS_TTL_MS = 20_000;
@@ -173,13 +176,19 @@ export async function getBarberBotSettings(
   }
 
   try {
-    const rows = await prisma.$queryRaw<{ settings: unknown }[]>`
-      SELECT "settings" FROM "barber_bot_settings" WHERE "barbershopId" = ${shopId} LIMIT 1
-    `;
-    const settings = normalizeBotSettings(rows[0]?.settings ?? null);
+    const row = await prisma.barberBotSettings.findUnique({
+      where: { barbershopId: shopId },
+      select: { settings: true },
+    });
+    const settings = normalizeBotSettings(row?.settings ?? null);
     settingsCache.set(shopId, { settings, ready: true, at: Date.now() });
     return { settings, storageReady: true };
-  } catch {
+  } catch (err) {
+    // Sin tabla (P2021) o BD caída: apagado, que es el default seguro. Solo
+    // se registra lo que NO es "falta la tabla".
+    if (!isMissingTableError(err)) {
+      console.warn("[barber/bot] no se pudo leer la configuración:", err);
+    }
     const settings = normalizeBotSettings(null);
     settingsCache.set(shopId, { settings, ready: false, at: Date.now() });
     return { settings, storageReady: false };
@@ -199,15 +208,17 @@ export async function saveBarberBotSettings(
 ): Promise<BarberBotSettings> {
   const shopId = requireShop(barbershopId);
   const settings = normalizeBotSettings(raw);
-  const payload = JSON.stringify(settings);
+  // Ida y vuelta por JSON: el blob queda como lo dejaba el `::jsonb` de
+  // antes (sin undefined) y con el tipo Json que pide Prisma.
+  const payload = JSON.parse(JSON.stringify(settings)) as Prisma.InputJsonObject;
 
   try {
-    await prisma.$executeRaw`
-      INSERT INTO "barber_bot_settings" ("barbershopId", "settings", "updatedAt")
-      VALUES (${shopId}, ${payload}::jsonb, CURRENT_TIMESTAMP)
-      ON CONFLICT ("barbershopId")
-      DO UPDATE SET "settings" = EXCLUDED."settings", "updatedAt" = CURRENT_TIMESTAMP
-    `;
+    await prisma.barberBotSettings.upsert({
+      where: { barbershopId: shopId },
+      create: { barbershopId: shopId, settings: payload },
+      update: { settings: payload },
+      select: { barbershopId: true },
+    });
   } catch (err) {
     console.error("[barber/bot] no se pudo guardar la configuración:", err);
     throw new BarberBotStorageError(
@@ -223,11 +234,11 @@ export async function saveBarberBotSettings(
 
 async function isThreadPaused(barbershopId: string, phone: string): Promise<boolean> {
   try {
-    const rows = await prisma.$queryRaw<{ phone: string }[]>`
-      SELECT "phone" FROM "barber_bot_pauses"
-      WHERE "barbershopId" = ${barbershopId} AND "phone" = ${phone} LIMIT 1
-    `;
-    return rows.length > 0;
+    const row = await prisma.barberBotPause.findUnique({
+      where: { barbershopId_phone: { barbershopId, phone } },
+      select: { phone: true },
+    });
+    return row !== null;
   } catch {
     // Sin tabla no hay pausas registradas. El bot ya está apagado por
     // defecto en ese escenario, así que esto no abre ninguna puerta.
@@ -245,11 +256,12 @@ export async function pauseBarberBotThread(args: {
   if (!phone) return;
   const reason = args.reason ? args.reason.trim().slice(0, 180) : null;
   try {
-    await prisma.$executeRaw`
-      INSERT INTO "barber_bot_pauses" ("barbershopId", "phone", "reason", "pausedAt")
-      VALUES (${shopId}, ${phone}, ${reason}, CURRENT_TIMESTAMP)
-      ON CONFLICT ("barbershopId", "phone") DO NOTHING
-    `;
+    // skipDuplicates = ON CONFLICT DO NOTHING: si el hilo ya estaba en pausa,
+    // se conserva la primera pausa (y su motivo).
+    await prisma.barberBotPause.createMany({
+      data: [{ barbershopId: shopId, phone, reason }],
+      skipDuplicates: true,
+    });
   } catch (err) {
     console.error("[barber/bot] no se pudo pausar la conversación:", err);
   }
@@ -263,10 +275,7 @@ export async function resumeBarberBotThread(args: {
   const phone = mxTenDigits(args.phone);
   if (!phone) return;
   try {
-    await prisma.$executeRaw`
-      DELETE FROM "barber_bot_pauses"
-      WHERE "barbershopId" = ${shopId} AND "phone" = ${phone}
-    `;
+    await prisma.barberBotPause.deleteMany({ where: { barbershopId: shopId, phone } });
   } catch (err) {
     console.error("[barber/bot] no se pudo reanudar la conversación:", err);
   }
@@ -275,18 +284,16 @@ export async function resumeBarberBotThread(args: {
 export async function listBarberBotPauses(barbershopId: string): Promise<BarberBotPause[]> {
   const shopId = requireShop(barbershopId);
   try {
-    const rows = await prisma.$queryRaw<
-      { phone: string; reason: string | null; pausedAt: Date }[]
-    >`
-      SELECT "phone", "reason", "pausedAt" FROM "barber_bot_pauses"
-      WHERE "barbershopId" = ${shopId}
-      ORDER BY "pausedAt" DESC
-      LIMIT 100
-    `;
+    const rows = await prisma.barberBotPause.findMany({
+      where: { barbershopId: shopId },
+      select: { phone: true, reason: true, pausedAt: true },
+      orderBy: { pausedAt: "desc" },
+      take: 100,
+    });
     return rows.map((r) => ({
       phone: r.phone,
       reason: r.reason,
-      pausedAt: r.pausedAt instanceof Date ? r.pausedAt.toISOString() : String(r.pausedAt),
+      pausedAt: r.pausedAt.toISOString(),
     }));
   } catch {
     return [];
@@ -297,13 +304,12 @@ export async function listBarberBotPauses(barbershopId: string): Promise<BarberB
 
 async function readSpendMicros(barbershopId: string, day: string): Promise<number> {
   try {
-    const rows = await prisma.$queryRaw<{ spentMicros: bigint | number }[]>`
-      SELECT "spentMicros" FROM "barber_bot_usage"
-      WHERE "barbershopId" = ${barbershopId} AND "day" = ${day} LIMIT 1
-    `;
-    const raw = rows[0]?.spentMicros;
-    if (raw === undefined || raw === null) return 0;
-    return typeof raw === "bigint" ? Number(raw) : Number(raw) || 0;
+    const row = await prisma.barberBotUsage.findUnique({
+      where: { barbershopId_day: { barbershopId, day } },
+      select: { spentMicros: true },
+    });
+    if (!row) return 0;
+    return Number(row.spentMicros) || 0;
   } catch {
     // Sin tabla NO hay tope posible. Devolver 0 dejaría la IA sin freno, así
     // que se devuelve Infinity: sin almacenamiento, no se gasta.
@@ -317,15 +323,19 @@ async function addSpend(
   micros: number,
 ): Promise<void> {
   if (!Number.isFinite(micros) || micros <= 0) return;
+  const add = BigInt(Math.round(micros));
   try {
-    await prisma.$executeRaw`
-      INSERT INTO "barber_bot_usage" ("barbershopId", "day", "spentMicros", "turns", "updatedAt")
-      VALUES (${barbershopId}, ${day}, ${Math.round(micros)}, 1, CURRENT_TIMESTAMP)
-      ON CONFLICT ("barbershopId", "day") DO UPDATE SET
-        "spentMicros" = "barber_bot_usage"."spentMicros" + EXCLUDED."spentMicros",
-        "turns"       = "barber_bot_usage"."turns" + 1,
-        "updatedAt"   = CURRENT_TIMESTAMP
-    `;
+    // Acumulación ATÓMICA: con la PK compuesta en el where y sin escrituras
+    // anidadas, Prisma lo ejecuta como un solo
+    // INSERT … ON CONFLICT DO UPDATE SET spentMicros = spentMicros + $n
+    // (verificado con el log de sentencias SQL), así que dos turnos a la vez
+    // no se pisan el gasto.
+    await prisma.barberBotUsage.upsert({
+      where: { barbershopId_day: { barbershopId, day } },
+      create: { barbershopId, day, spentMicros: add, turns: 1 },
+      update: { spentMicros: { increment: add }, turns: { increment: 1 } },
+      select: { barbershopId: true },
+    });
   } catch (err) {
     // La llamada YA se hizo y ya se pagó: no contarla es mejor que tumbar
     // la respuesta al cliente. Queda el rastro en el log.
@@ -1754,7 +1764,7 @@ export async function listBarberBotBookings(
     clientPhone: r.clientPhone,
     barberName: r.barber ? r.barber.nickname || r.barber.name : null,
     services: r.services.map((s) => s.service?.name ?? "").filter(Boolean),
-    total: r.services.reduce((acc, s) => acc + Number(s.priceAtBooking ?? 0), 0),
+    total: sumMoneyBy(r.services, (s) => s.priceAtBooking ?? 0),
     createdAt: r.createdAt.toISOString(),
   }));
 }

@@ -283,6 +283,13 @@
         "returnRate": "Return rate %"
       }
     },
+    "blocker": {
+      "title": "Nobody can book online: not a single schedule is set",
+      "body": "Your booking link is live, but with no schedules it tells people there's no room. Set at least one barber's schedule and this fixes itself.",
+      "bodyPublished": "Your website is published and online booking is on, but with no schedules it tells people there's no room. Set at least one barber's schedule and this fixes itself.",
+      "cta": "Set schedules now",
+      "askOwner": "Ask the owner or manager to set the schedules."
+    },
     "locked": {
       "title": "Reports are part of the Professional plan",
       "body": "Revenue by day, dead hours, no-shows, retention and payment methods. You can change plans from Subscription.",

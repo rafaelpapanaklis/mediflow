@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import {
   getPublicBarbers,
+  getPublicContact,
   getPublicServices,
   isBookingGateOk,
   resolveBookingGate,
@@ -86,9 +87,13 @@ export default async function BarberBookingPage({ params, searchParams }: PagePr
   }
 
   const shop = toPublicShop(gate.shop);
-  const [services, barbers] = await Promise.all([
+  // El contacto viaja aparte de toPublicShop(): solo WhatsApp y teléfono,
+  // para que la página pueda decir "escríbeles" cuando no hay horarios en
+  // línea en vez de dar a entender que la barbería está llena.
+  const [services, barbers, contact] = await Promise.all([
     getPublicServices(shop.id),
     getPublicBarbers(shop.id),
+    getPublicContact({ id: shop.id, phone: shop.phone }),
   ]);
 
   // Liga directa por barbero (?barbero=<id>) para compartir en WhatsApp o en
@@ -122,6 +127,7 @@ export default async function BarberBookingPage({ params, searchParams }: PagePr
         shop={shop}
         services={services}
         barbers={barbers}
+        contact={contact}
         pinnedBarberId={pinnedBarberId}
       />
     </Shell>

@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import type { Dictionary } from "@/i18n/t";
 import type { CashState, CheckoutContext, PendingAppointment, SaleRow } from "@/lib/barber/cash";
+import { sumMoneyBy } from "@/lib/barber/money";
 import type { BarberPaymentMethod } from "@/lib/barber/types";
 import { CardNew } from "@/components/ui/design-system/card-new";
 import { BadgeNew } from "@/components/ui/design-system/badge-new";
@@ -144,7 +145,7 @@ export function CajaClient({
           ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
               {checkout.pendingAppointments.map((a) => {
-                const total = a.services.reduce((s, x) => s + x.priceAtBooking, 0);
+                const total = sumMoneyBy(a.services, (x) => x.priceAtBooking);
                 return (
                   <div key={a.id} className="bcaja-appt">
                     <div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 0 }}>

@@ -21,6 +21,7 @@ import Link from "next/link";
 import { CalendarClock, ChevronLeft, ChevronRight, Plus, RefreshCw } from "lucide-react";
 import { type Dictionary } from "@/i18n/t";
 import { makeBarberT } from "@/lib/barber/i18n";
+import { sumMoney } from "@/lib/barber/money";
 import type { SaleRow } from "@/lib/barber/cash";
 import {
   BARBER_APPOINTMENT_STATUS_UI,
@@ -304,9 +305,11 @@ export function AgendaClient(props: AgendaClientProps) {
 
   const dayTotal = useMemo(
     () =>
-      visibleAppointments
-        .filter((a) => a.status !== "CANCELLED" && a.status !== "NO_SHOW")
-        .reduce((acc, a) => acc + a.services.reduce((s, x) => s + x.priceAtBooking, 0), 0),
+      sumMoney(
+        visibleAppointments
+          .filter((a) => a.status !== "CANCELLED" && a.status !== "NO_SHOW")
+          .reduce<number[]>((acc, a) => acc.concat(a.services.map((x) => x.priceAtBooking)), []),
+      ),
     [visibleAppointments],
   );
 
