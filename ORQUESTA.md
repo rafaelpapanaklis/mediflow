@@ -18916,3 +18916,477 @@ Cero cambios de UI, de lógica y del vertical dental.
 ### SQL
 
 **Ninguno.**
+
+═══════════════════════════════════════════════════════════════════════════
+## INMUEBLES · OLA 1 · T9 — PORTAL DEL CLIENTE (inquilino y propietario) ✅ (2026-08-25)
+═══════════════════════════════════════════════════════════════════════════
+COMMIT: 4b3646ee · rama `realty/t9` → main · BUILD EXIT 0 · GUARDIA INMUEBLES: OK
+(35 archivos, todos PROPIOS del vertical; ORQUESTA.md declarado en REALTY_GUARD_SHARED).
+SIN SQL obligatorio: `RealtyClientAuthToken` ya existe desde la Ola 0. Se agrega
+`sql/realty-portal.sql`, que son SOLO tres índices de rendimiento (opcional,
+idempotente, cero cambios de tabla). SIN envs nuevas.
+
+QUÉ ES
+────────────────────────────────────────────────────────────────────────────
+`/i/portal` — el portal del cliente FINAL del vertical. No es el panel: aquí
+entra el inquilino que recibió una liga por WhatsApp, parado en la calle, con
+el celular y sin contraseña que recordar.
+
+Tiene DOS CARAS detrás del mismo login, y es lo que lo hace distinto:
+
+  INQUILINO    su contrato · sus pagos · su adeudo · reportar una falla
+  PROPIETARIO  sus inmuebles · su estado de cuenta · mantenimientos · contratos
+
+Un inquilino no ve NADA del propietario ni al revés. No es un filtro de la
+interfaz: son dos alcances distintos resueltos en el servidor, y el papel de
+uno no abre ninguna consulta del otro.
+
+CÓMO ENTRA (login sin contraseña — calcado del portal de barbería)
+────────────────────────────────────────────────────────────────────────────
+Teléfono a 10 dígitos (mxTenDigits, la misma regla de todo el repo) + código
+de 6 dígitos de un solo uso, generado con `randomInt` (CSPRNG).
+
+  · El código se guarda HASHEADO con bcrypt cost 10 en
+    `RealtyClientAuthToken.codeHash`. Un volcado de la tabla no revela uno.
+  · Caduca a los 10 min, es de UN SOLO uso y muere al 5º intento fallido.
+  · Tope de reenvíos: 3 por teléfono cada 15 min (por TELÉFONO, no por
+    cuenta) + 10/10 min por IP con `persistentRateLimit`.
+  · Fuerza bruta: `failbanGuard` + `recordAuthFailure/Success` por IP Y por
+    teléfono, con bloqueo creciente. Es el mismo patrón que /api/paciente/login.
+  · 🔴 LA RESPUESTA ES IDÉNTICA EXISTA O NO EL TELÉFONO — mismo status, mismo
+    texto y el mismo costo de CPU (se hashea un valor falso cuando no hay a
+    quién mandarle). `requestPortalCode` devuelve `void` a propósito para que
+    ninguna ruta pueda filtrar esa señal ni por accidente. Sin esto, el portal
+    sería un directorio para averiguar quién le renta a quién.
+  · Lo ÚNICO que se avisa es un teléfono mal escrito (400): eso no revela
+    membresía y sin el aviso la persona espera un código que nunca pidió bien.
+
+Si el teléfono es inquilino en una inmobiliaria y propietario en otra (o en la
+misma), después de validar el código se le PREGUNTA con cuál entrar. Con una
+sola cara entra directo y esa pantalla nunca aparece.
+
+🔴 LA FIRMA EXACTA DEL STUB DE ENVÍO — PARA T6
+────────────────────────────────────────────────────────────────────────────
+El código lo manda T6. Aquí está el stub tipado (`deliverPortalCode`, en
+`src/lib/realty/portal-auth.ts`). El contrato que T9 espera encontrar:
+
+    // src/lib/realty/whatsapp.ts
+    export async function sendRealtyPortalCode(args: {
+      accountId: string;   // la cuenta desde cuyo WhatsApp sale el mensaje
+      phone: string;       // 10 dígitos YA normalizados (mxTenDigits)
+      code: string;        // 6 dígitos en claro, solo en memoria
+    }): Promise<boolean>;  // true si Meta lo aceptó
+
+También está exportado como tipo en portal-auth.ts:
+    export type RealtyPortalCodeSender = (args: {
+      accountId: string; phone: string; code: string;
+    }) => Promise<boolean>;
+
+Requisitos del mensaje (los impone Meta, no nosotros):
+  · Plantilla de categoría **AUTHENTICATION** — es lo único que Meta permite
+    para un código de un solo uso, y llega con botón de "copiar código".
+  · Se manda EN EL MOMENTO, no por la cola: un código que llega dentro de un
+    minuto ya no sirve para entrar.
+  · El código NO se guarda en el hilo: la fila de `RealtyMessage` lleva cuerpo
+    neutro. Un código en la base es un código filtrado.
+
+PARA CONECTARLO, T6 CAMBIA **UNA SOLA LÍNEA** de `portal-auth.ts`:
+descomentar el import dinámico dentro de `deliverPortalCode`:
+
+    const { sendRealtyPortalCode } = await import("@/lib/realty/whatsapp");
+    await sendRealtyPortalCode(args);
+
+Está comentado porque un import a un módulo que TODAVÍA NO EXISTE rompe el
+build entero del repo. Mientras tanto, fuera de producción el código se
+imprime en el log del servidor (`[realty/portal] código de acceso para …`)
+para poder probar el flujo completo sin WhatsApp conectado. En producción no
+se escribe nada.
+
+🔴 LA LIGA QUE T6 MANDA POR WHATSAPP
+────────────────────────────────────────────────────────────────────────────
+    https://<sitio>/i/portal?tel=5512345678&c=<slug-de-la-inmobiliaria>
+
+  · `tel` prellena el campo (se limpia con mxTenDigits; basura se ignora).
+  · `c` es el slug de la cuenta y SOLO pinta su logo y su nombre arriba, para
+    que la persona reconozca de quién es la liga.
+  · 🔴 NINGUNO DE LOS DOS AUTENTICA NADA. No hay liga mágica: un mensaje
+    reenviado no le abre a nadie el contrato de otro. Lo único que abre sesión
+    es el código de seis dígitos.
+
+LA SESIÓN — AISLADA DEL PANEL POR CONSTRUCCIÓN, NO POR LISTA NEGRA
+────────────────────────────────────────────────────────────────────────────
+Cookie **`dcr_portal`**, httpOnly, `sameSite: lax`, `secure` en producción,
+30 días de caducidad y un TECHO ABSOLUTO de 90 (igual que el portal del
+paciente: el inquilino vuelve una vez al mes, cuando paga). Valor firmado con
+HMAC-SHA256 y comparado con `timingSafeEqual`:
+
+    v1.<teléfono>.<INQUILINO|PROPIETARIO|->.<accountId|->.<nace>.<expira>.<hmac>
+
+  · No comparte nombre con `patient_session` (dental), `dcb_portal` (barber)
+    ni con las `sb-*` de Supabase.
+  · El panel resuelve su sesión con `supabase.auth.getUser()`. `dcr_portal` es
+    literalmente invisible para @supabase/ssr, así que `getRealtyContext()`
+    devuelve null y /inmobiliaria manda al login. No hay puerta que alguien
+    pueda olvidar cerrar.
+  · El middleware ni siquiera intercepta `/i/portal` (su matcher es
+    /dashboard, /admin, /api y /proveedores).
+  · El campo `nace` NO se renueva al cambiar de cara: pasados 90 días se
+    vuelve a pedir código. Sin ese techo, quien se hiciera con la cookie la
+    renovaría para siempre y no hay tabla de sesiones que revocar.
+
+🔴 **LA COOKIE NO LLEVA PERMISOS, LLEVA IDENTIDAD.** Guarda el teléfono
+verificado y con cuál cara entró — nunca el contactId, el ownerId ni la lista
+de contratos. El conjunto real (`leaseIds` / `propertyIds`) se vuelve a
+derivar de la base en CADA petición (`getPortalScope`). Cuesta una consulta
+indexada y compra tres cosas:
+  · El día que la persona deja de ser inquilina, el portal se le cierra SOLO,
+    sin esperar a que caduque una cookie de 30 días.
+  · Un contrato nuevo aparece sin volver a entrar.
+  · Si está capturada dos veces en la misma cuenta (pasa), las dos filas caen
+    bajo la misma sesión en vez de partirse en dos identidades que enseñan la
+    mitad de sus pagos cada una.
+
+🔴 **FALLA CERRADO SIN SECRETO.** `portalSecret()` cascadea
+`COOKIE_SECRET || SUPABASE_SERVICE_ROLE_KEY`, pero **en producción devuelve
+null si no hay ninguna** y entonces no se emite ni se acepta ninguna sesión
+(503, "no pudimos abrir tu sesión"). Los helpers gemelos del repo
+(barber/portal-core, active-clinic-core, live-config) caen a un literal de
+desarrollo que está EN EL REPOSITORIO — cualquiera con el código podría
+firmarse una cookie válida. Aquí no. Fuera de producción sí hay literal, para
+poder probar en local sin configurar nada.
+
+EL CERCO — CÓMO SE ACOTA CADA CONSULTA
+────────────────────────────────────────────────────────────────────────────
+`getPortalScope()` es el PUNTO ÚNICO. Devuelve:
+
+  INQUILINO   → { accountId, contactIds[], leaseIds[] }
+  PROPIETARIO → { accountId, ownerIds[],  propertyIds[] }
+
+y TODA consulta lleva `accountId` **y** el conjunto de ids. Los dos. El
+accountId aísla el tenant; la lista aísla a la persona dentro de ese tenant.
+Ningún id que venga de la URL o del cuerpo se consulta a secas: se compara
+contra el conjunto ANTES (y además va dentro del `where`), así que un id ajeno
+no devuelve la fila ajena — devuelve nada, igual que un id inventado.
+
+El teléfono se cruza con `$queryRaw` y `right(regexp_replace(phone,'[^0-9]',
+'','g'),10)`. Es a propósito: `RealtyContact.phone` SÍ está documentado como
+normalizado, pero `RealtyPropertyOwner.phone` NO — ahí el dueño se captura a
+mano y llega como "33 1234 5678" o "+52 33…". Con una igualdad simple, media
+lista de propietarios se quedaría fuera de su propio portal.
+
+QUÉ VE CADA CARA (y qué NO)
+────────────────────────────────────────────────────────────────────────────
+INQUILINO
+  · Su contrato: inmueble, vigencia, renta, día de pago, depósito (con su
+    estado: en garantía / devuelto / aplicado) y el documento firmado.
+  · Sus pagos: lo que debe, cuándo vence, historial con RECIBO descargable.
+  · 🔴 El adeudo dicho sin dramatismo: "Vence el 5 de septiembre" o "Llevas
+    12 días de retraso", con la fecha exacta debajo. **Ámbar sobrio, nunca
+    rojo, ni con seis meses de retraso.** Quien abre esto ya sabe que debe la
+    renta — probablemente por eso entró — y humillarlo no consigue el dinero.
+    El cargo que se enseña primero es el MÁS VIEJO sin pagar, no el siguiente
+    por vencer.
+  · Reportar una falla: descripción + hasta 4 fotos desde el celular, con
+    avance en tres pasos (recibido → en proceso → resuelto) y quién va a ir.
+    Crea un `RealtyMaintenance` normal → alimenta el módulo de T4.
+  · Sus documentos: su contrato firmado y sus recibos. Y NADA MÁS.
+  · NO ve: gastos, comisiones, rentabilidad, otros inquilinos, ni nada del
+    panel. Tampoco `RealtyPropertyDocument` (escrituras, prediales, régimen,
+    identificaciones): son papeles del inmueble y de su DUEÑO — la escritura
+    dice quién es el propietario y cuánto pagó por la casa. No es un filtro de
+    la interfaz: `resolveTenantFile` solo conoce dos tipos, "contrato" y
+    "recibo".
+
+PROPIETARIO
+  · Sus inmuebles con su estado (rentado / disponible / apartado / vendido) y
+    quién los renta.
+  · Su estado de cuenta del mes, con las dos flechas para cambiar de mes (sin
+    JavaScript, `?mes=YYYY-MM`; el mes futuro va desactivado):
+        Cobrado − Administración − Gastos = **Se le depositó**
+    Descargable en PDF (@react-pdf/renderer, `attachment`).
+  · Los mantenimientos de sus inmuebles con su costo.
+  · Sus contratos ordenados POR FECHA DE FIN ASCENDENTE (lo que se vence
+    antes va primero, que es la única razón para abrir esa pantalla), con
+    aviso a 60 días.
+  · 🔴 Del inquilino ve SOLO EL NOMBRE con el que firmó. Ni teléfono, ni
+    correo, ni investigación de solvencia, ni su historial de retrasos. La
+    lista blanca está en el propio select:
+    `parties: { select: { contact: { select: { name: true } } } }`.
+  · De la inmobiliaria salen 9 campos y ni uno más (`PORTAL_ACCOUNT_FIELDS`):
+    lista BLANCA, no negra, para que un campo nuevo en `RealtyAccount` (un
+    token de WhatsApp, un id de Stripe) no se filtre por olvido.
+
+🔴 DOS DECISIONES QUE SON DINERO (escritas en buildOwnerStatement)
+────────────────────────────────────────────────────────────────────────────
+1. **La retención sale de `RealtyProperty.commissionPct`**, el porcentaje
+   pactado en la ficha del inmueble. Si está vacío, la retención es CERO y
+   tanto la pantalla como el PDF lo dicen con todas sus letras ("No hay
+   comisión de administración pactada en tus inmuebles, así que no se retuvo
+   nada"). Inventar un porcentaje "de mercado" sería cobrarle al propietario
+   algo que nadie acordó.
+
+2. **Los gastos salen SOLO de `RealtyExpense`**, la tabla cuyo propio
+   contrato dice "es lo que se le resta al propietario en su corte". El
+   `cost` de `RealtyMaintenance` NO se resta: cuando la inmobiliaria paga esa
+   reparación la captura como gasto (kind REPARACION o MANTENIMIENTO), y
+   restarla otra vez le cobraría dos veces la misma plomería. El costo se
+   ENSEÑA en su sección, informativo, y la pantalla y el PDF lo dicen.
+
+Todo el dinero se suma en CENTAVOS ENTEROS (`sumMoney`): los montos son
+`Decimal(14,2)` y sumarlos con `+` a secas arrastra el error binario, que en
+un corte de doce meses acaba impreso. La comisión se redondea al centavo en
+CADA cobro, así la suma de las líneas cuadra con el total y no queda un peso
+suelto que el propietario no sepa explicar.
+
+Las fechas se cuentan en DÍAS DE CALENDARIO de la zona de la inmobiliaria
+(`America/Mexico_City` por defecto), no en múltiplos de 24 h desde un instante
+UTC: con horario de verano de por medio no dan lo mismo, y la que le importa
+al inquilino es la del calendario que tiene colgado.
+
+MÓVIL PRIMERO
+────────────────────────────────────────────────────────────────────────────
+  · Una columna, botones de 50 px, barra de pestañas abajo al alcance del
+    pulgar, `env(safe-area-inset-*)` para el iPhone.
+  · **Todo en px, nada de rem ni de Tailwind**: `globals.css` define
+    `html { font-size: clamp(13px, …) }`, así que en un celular la raíz mide
+    13 px y toda utilidad en rem sale 20% más chica justo donde entra el 90%
+    de esta gente. `.dcr-public` fija `font-size: 16px` explícito.
+  · **`@container`, no `@media`** (`container-name: dcr`).
+    ⚠️ `container-type` crea contexto de contención: la barra de pestañas
+    (`position: fixed`) vive FUERA de `.dcr-public`, colgada de `.dcr-app`.
+    Dentro se anclaría al contenedor y flotaría a media pantalla.
+  · El input del código es `inputMode="numeric"` +
+    `autoComplete="one-time-code"`: iOS y Android ofrecen el código del
+    mensaje sin cambiar de app. Los campos miden 16 px EXACTOS para que iOS
+    no haga zoom al enfocarlos.
+  · Las fotos se comprimen EN EL NAVEGADOR a WebP con el lado mayor en
+    1600 px (≈300 KB). Sin eso, una foto de celular son 8-15 MB, no cabe en el
+    cuerpo de una petición serverless (~4.5 MB) y el reporte fallaría siempre.
+    De paso resuelve el HEIC del iPhone, que el bucket `realty-files` no
+    acepta. El servidor no se fía: relee el tamaño y **el tipo REAL por firma
+    de bytes** (el Content-Type del multipart lo escribe el cliente).
+  · Tema verde pino + arena de `.realty-shell`. Botones con texto blanco solo
+    sobre pine-600/700 (6.30 y 8.66 de contraste); el 500 no pasa AA.
+
+ARCHIVOS (35)
+────────────────────────────────────────────────────────────────────────────
+Núcleo
+  src/lib/realty/portal-core.ts   PURO (sin prisma, sin next/headers): firma
+      de la sesión, aritmética de dinero y de fechas civiles, dueState,
+      buildOwnerStatement, sniffImageMime, lista blanca de la cuenta.
+  src/lib/realty/portal-auth.ts   Servidor: identidades, código, sesión,
+      alcance, cargadores acotados y el stub de envío. Re-exporta el núcleo.
+
+APIs (src/app/api/realty/portal/)
+  auth/code       POST  pedir código (respuesta constante)
+  auth/verify     POST  canjear código → cookie (+ failban)
+  auth/elegir     POST  fijar la cara (revalida contra la base)
+  auth/session    DELETE cerrar sesión (no toca la base)
+  archivo         GET   302 a liga firmada de 5 min — la ÚNICA puerta a un
+                        archivo del bucket privado
+  inquilino/fallas          GET + POST (multipart con fotos)
+  inquilino/recibo/[id]     GET  recibo en PDF
+  propietario/estado-de-cuenta GET estado de cuenta en PDF
+
+Pantallas (src/app/i/portal/)
+  layout · error · page (login) · elegir/page
+  (sesion)/layout — guard + armazón + pestañas
+  (sesion)/inquilino/{page, pagos, fallas, documentos}
+  (sesion)/propietario/{page, estado-de-cuenta, mantenimientos, contratos}
+
+Componentes (src/components/realty/portal/)
+  realty-portal.css · portal-i18n.ts · portal-login · portal-elegir ·
+  portal-salir · portal-tabs · portal-reportar-falla · recibo-pdf ·
+  estado-cuenta-pdf
+
+Diccionario y pruebas
+  src/i18n/dictionaries/realty/portal.json
+  src/lib/realty/__tests__/portal-core.test.ts   17 pruebas puras
+  sql/realty-portal.sql                         3 índices, opcionales
+
+DECISIONES QUE CONVIENE CONOCER
+────────────────────────────────────────────────────────────────────────────
+· **El diccionario del portal NO se registra en
+  `src/i18n/dictionaries/realty/index.ts`.** Ese índice exige que ES y EN
+  tengan EXACTAMENTE las mismas llaves y su prueba de alcance falla si no.
+  El portal es de español de México y de un solo idioma A PROPÓSITO: lo abre
+  un inquilino mexicano desde una liga de WhatsApp, no una cuenta con el
+  panel en inglés. Registrar un `portal.es.json` sin gemelo reventaría esa
+  prueba para las otras nueve terminales; inventar un inglés que nadie va a
+  leer es peor. Se carga directo con `makeRealtyT(PORTAL_DICT)` (convención
+  B: sub-árbol recortado, prefijo VACÍO) desde `portal-i18n.ts`, que es el
+  único punto a tocar el día que haga falta inglés.
+· **Acceso por contrato NO-borrador.** Da portal un contrato ACTIVO, VENCIDO
+  o TERMINADO; BORRADOR no (todavía no es una relación con nadie). Un
+  inquilino que ya se fue conserva sus recibos, que es lo correcto.
+· **Solo el rol INQUILINO abre portal**, no AVAL ni FIADOR. Más estrecho es
+  más seguro; ampliarlo es una línea si se decide que el aval debe ver el
+  adeudo.
+· **La cuenta tiene que estar viva y al corriente** (`isActive` +
+  `isRealtySubscriptionActive`), igual que el portal de barbería: si la
+  inmobiliaria deja de pagar, los datos de sus clientes dejan de estar
+  servidos.
+· **`storageUsedBytes` se incrementa** con las fotos que sube el inquilino
+  (best-effort, en try/catch). Hoy nadie más lo escribe, así que el número es
+  parcial — pero parcial y real es mejor que cero.
+· **CSRF explícito** en las mutaciones (`portalOriginMismatch`), además del
+  `sameSite: lax`. El middleware solo comprueba origen en /api/admin/*.
+  El logout NO lo exige a propósito: un CSRF que solo consigue CERRARLE la
+  sesión a alguien no roba nada, y exigirlo dejaría a la gente "adentro" en
+  los navegadores que no mandan Referer.
+· **Dos bucles de redirección detectados y cerrados en el trazado**: (a) una
+  cookie con cara elegida que ya no existe rebotaba entre `/i/portal` y el
+  guard de (sesion) — ahora el destino se decide con lo que dice la BASE, no
+  con lo que dice la cookie; (b) `/i/portal/elegir` con UNA sola identidad y
+  la cookie a medias mandaba a la cara, cuyo guard devolvía a elegir — ahora
+  el atajo solo se toma si la cookie YA trae cara fijada.
+
+🔴 VEREDICTO DEL REVISOR DE SEGURIDAD (read-only, dedicado a romperlo)
+────────────────────────────────────────────────────────────────────────────
+Se le pidió ATACAR, no aprobar. Diez ataques, uno por uno. Textual:
+
+ 1. **IDOR por id en la URL — BLOQUEADO.** Los seis vectores llevan
+    `accountId` + el conjunto del cerco en el `where`; el `leaseId` de
+    fallas se valida antes de subir un byte y el `propertyId` se deriva, no
+    se recibe.
+ 2. **Datos de otra cuenta — BLOQUEADO.** Ningún `findFirst/findMany/
+    findUnique` sin `accountId`, ningún `undefined` que borre un filtro,
+    ningún `include` sin lista blanca, y el SQL crudo va parametrizado.
+ 3. **Cruzar las dos caras — BLOQUEADO.** El inquilino que va a
+    `/propietario` rebota a su lado y `?tipo=gasto` le da 401.
+ 4. **Falsificar la cookie — BLOQUEADO** (HMAC del payload completo,
+    `timingSafeEqual`, caducidad comprobada, puntos imposibles) y
+    producción sin secreto falla cerrado con 503.
+ 5. **Abrir el panel con `dcr_portal` — IMPOSIBLE.** `@supabase/ssr` solo
+    lee `sb-*`; en TODO `src/` la única lectura del valor de `dcr_portal`
+    es `portal-auth.ts`.
+ 6. **Enumerar teléfonos — BLOQUEADO en status y cuerpo**; queda un canal
+    lateral TEMPORAL bajo (el camino "existe" paga 2-5 viajes extra a
+    Postgres sobre el mismo bcrypt).
+ 7. **Fuerza bruta del código — ESTABA ROTO. YA ARREGLADO** (ver abajo).
+    De paso confirmó que el `MAX_PER_WINDOW * accountIds.length` que yo
+    sospechaba NO es un agujero: cuenta FILAS, así que son 3 códigos por
+    teléfono valga 1 cuenta o 7. Y el uso único SÍ es atómico.
+ 8. **Fuga de campos — BLOQUEADO.** No sale `whatsappToken`,
+    `stripeCustomerId`, `subscriptionStatus`, `plan` ni `storageUsedBytes`;
+    del inquilino el propietario ve SOLO el nombre; ningún componente
+    cliente recibe el `scope` ni la cuenta enteros.
+ 9. **Fotos — tipo y ruta BLOQUEADOS** (firma de bytes, path server-side);
+    el CUPO estaba roto. YA ARREGLADO.
+10. **CSRF y cookies — BLOQUEADO.** Origen comprobado en las cuatro
+    mutaciones y fallando cerrado; ninguna mutación por GET.
+
+LO QUE ENCONTRARON LOS DOS REVISORES Y SE ARREGLÓ
+────────────────────────────────────────────────────────────────────────────
+Nueve cosas reales. Las cuatro primeras eran graves:
+
+1. 🔴 **El contador de intentos era un SET, no un incremento.** Se leía
+   `attempts`, se sumaba uno EN MEMORIA y se asignaba el resultado: un lost
+   update de manual. Quinientas peticiones simultáneas leían 0, escribían 1,
+   y el tope de cinco no se agotaba nunca — se adivinaban quinientos códigos
+   gastando UN intento. `failbanGuard` no salvaba: se consulta al principio
+   del handler, así que en una ráfaga ninguna petición ve el candado que las
+   otras escriben. Ahora el intento se RESERVA antes de comparar, con
+   `where: { attempts: { lt: MAX } }` + `increment`, que es una sola
+   sentencia y Postgres serializa.
+2. 🔴 **La cookie se escribía con seis campos y se leía con cinco.** Al
+   añadir el techo absoluto quedó a medias: la caducidad se leía del campo
+   equivocado, así que TODA cookie recién emitida salía caducada y nadie
+   podía entrar. El síntoma era "entro y me saca al login", indistinguible
+   de "el código no sirvió". Hay prueba que lo blinda.
+3. 🔴 **El depósito en garantía se le contaba al propietario como renta
+   cobrada.** Un inquilino nuevo que paga renta 10,000 + depósito 10,000
+   producía "Cobrado 20,000 · Administración −1,500 · Se te depositó
+   18,500". El depósito es dinero del inquilino RETENIDO: se le informaba
+   el doble de ingreso y se le retenía comisión sobre dinero que no es
+   suyo. Ahora el corte solo cuenta pagos con `chargeId` (= renta).
+4. 🔴 **Bucle infinito de redirecciones.** Quien entró como PROPIETARIO y a
+   quien luego le reasignaron el inmueble rebotaba entre `/i/portal`,
+   `/elegir` y el guard: `ERR_TOO_MANY_REDIRECTS`. Se cerró comparando la
+   LLAVE de identidad, no solo "trae alguna cara". (Otros dos bucles se
+   habían cerrado antes, al trazar el flujo a mano.)
+5. **"No hay comisión pactada" cuando sí la hay.** El flag salía del bucle
+   de COBROS, así que un mes sin pagos pero con predial lo imprimía en el
+   PDF que el propietario guarda para reclamar. Ahora sale de la cartera.
+6. **Las fotos se subían ANTES de comprobar el cupo de reportes abiertos**,
+   así que un reporte rechazado dejaba megas huérfanos en el bucket que
+   nadie contaba ni borraba. Ahora todo lo que puede rechazar el reporte se
+   comprueba antes de subir un byte, hay tope de bytes de TODA la petición,
+   y lo que ya subió se borra si algo falla.
+7. **Tras mandar el reporte, la lista seguía enseñando la de antes.** El
+   copy decía "aquí mismo vas viendo cómo avanza" señalando una lista donde
+   el reporte NO estaba: la señora habría creído que se perdió y lo habría
+   mandado otra vez, hasta diez. Ahora hay `router.refresh()`.
+8. **`right(digitos,10)` era más laxo que `mxTenDigits`** y hacía colisionar
+   un "+1 555 123 4567" con un mexicano — cruzando cuentas. Ahora el SQL
+   replica `mxTenDigits` letra por letra.
+9. **Cosas menores**: `/archivo` podía acabar en un 302 a una URL arbitraria
+   (ahora solo firma lo que es de nuestro bucket); "Vence en 1 días";
+   `formatMoney` ignoraba la moneda en tres sitios (un contrato en dólares
+   se imprimía en pesos); un `@container` que consultaba a su propio
+   contenedor y nunca se aplicaba; sin `createImageBitmap` no se podía
+   adjuntar NINGUNA foto (ahora manda la original); y las URLs de objeto no
+   se revocaban al desmontar.
+
+PRUEBAS
+────────────────────────────────────────────────────────────────────────────
+  npx tsx --test src/lib/realty/__tests__/portal-core.test.ts   → 17/17
+
+Estáticas y puras: sin Postgres, sin navegador, sin sesión; medio segundo.
+Cubren el ida y vuelta de la cookie (el bug 2 de arriba), la manipulación
+del rol y de la cuenta, el techo absoluto, el guard de origen fallando
+cerrado, el cuadre al centavo del corte con 7.5%, los dos casos de
+"sin comisión pactada", el mes cruzando diciembre→enero en la zona de
+México, los días de retraso en calendario y la firma de bytes de las fotos.
+(No hay línea en package.json: ese archivo está fuera del allowlist.)
+
+▶ PENDIENTE — REQUIERE RAFAEL / OTRAS TERMINALES
+────────────────────────────────────────────────────────────────────────────
+- 🔴 **T6: descomentar las dos líneas de `deliverPortalCode`** en
+  `src/lib/realty/portal-auth.ts` y dar de alta la plantilla AUTHENTICATION.
+  Hasta entonces el código NO llega por WhatsApp (fuera de producción sí sale
+  en el log del servidor).
+- 🔴 **Sin `COOKIE_SECRET` ni `SUPABASE_SERVICE_ROLE_KEY` en producción, el
+  portal no abre sesión (503, a propósito).** `SUPABASE_SERVICE_ROLE_KEY` ya
+  está puesta en Vercel, así que hoy funciona; conviene poner
+  `COOKIE_SECRET` explícita para no depender de la llave de servicio.
+- 🔴 **QA con datos reales.** El portal está compilado, revisado por dos
+  agentes y con 17 pruebas del núcleo en verde, pero NADIE ha entrado
+  todavía con un teléfono de verdad: hace falta una cuenta con un contrato
+  ACTIVO, un contacto con teléfono y un propietario con inmuebles.
+- 🔴 **Confirmar que Upstash está configurado en producción**
+  (`UPSTASH_REDIS_REST_URL` / `_TOKEN`). No aparecen en `.env.example`, y
+  sin ellas TODO el anti-fuerza-bruta del repo —`persistentRateLimit` Y el
+  lockout de `failban`— degrada a un `Map` en memoria por instancia, que en
+  serverless es, en la práctica, ningún freno. El portal ya no depende solo
+  de eso (el tope de intentos del código es atómico en la base), pero es el
+  freno de TODOS los logins del producto, no solo de este.
+- ⚪ **Correr `sql/realty-portal.sql`** (nuevo, opcional). Son tres índices
+  de RENDIMIENTO, cero cambios de tabla, idempotentes. El portal identifica
+  a la persona por su teléfono NORMALIZADO en el motor, y eso no puede usar
+  el índice `(accountId, phone)`: hoy recorre `realty_contacts` y
+  `realty_property_owners` enteras en cada resolución de sesión (mitigado
+  con `cache()` de React, que la deja en UNA por petición). Con cuatro
+  inquilinos no se nota; con cuarenta mil, sí.
+- ⚪ **Añadir `/api/realty/portal` a `TWO_FA_GATE_ALLOWLIST_BASES`**
+  (`src/lib/auth/two-factor-gate.ts`, FUERA del allowlist de esta ola). El
+  fast-path de 2FA del panel dental corta con 403 CUALQUIER `/api/*` cuando
+  existe la cookie `df_2fa_pending` (12 h de vida). Quien empiece un login
+  del panel con 2FA y luego abra `/i/portal` en el mismo navegador verá el
+  portal romperse con el mensaje de 2FA del dental. Al inquilino real no le
+  pasa (entra desde su celular), pero rompe el QA de cualquiera que use el
+  panel. `/api/barber` está igual.
+- ⚪ **Fijar la convención de `RealtyRentCharge.dueAt` antes de que T5
+  escriba el generador de cargos.** El portal lo interpreta como instante y
+  lo pasa a fecha civil de la cuenta. Si el generador lo escribe como
+  medianoche UTC, en México eso cae el día ANTERIOR a las 18:00 y el portal
+  dirá "vence el 4" para un cargo del 5.
+- ⚪ Si T8 crea un `src/app/i/layout.tsx` con la piel de la mini-web, el
+  portal quedará envuelto en él. `/i/portal` seguirá resolviendo (segmento
+  estático > dinámico) y el armazón propio sigue siendo de pantalla completa,
+  pero conviene acordarlo antes.
+- ⚪ Las fotos que sube el inquilino se guardan y se cuentan, pero el portal
+  solo enseña CUÁNTAS hay, no las miniaturas. El panel (T4) sí las tiene.
+- ⚪ El pago NO se hace en línea: la pantalla dice "el pago se hace directo
+  con la inmobiliaria" y ofrece el botón de WhatsApp. Si algún día hay cobro
+  en línea, el hueco está en la tarjeta "¿Cómo pago?".
