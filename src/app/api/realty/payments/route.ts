@@ -38,9 +38,11 @@ export async function GET(req: NextRequest) {
 
   try {
     const sp = req.nextUrl.searchParams;
+    const moneda = sp.get("moneda");
     const board = await getCollectionsBoard(ctx, {
       periodMonth: sp.get("periodo") ?? undefined,
       onlyOverdue: sp.get("vencidos") === "1",
+      currency: moneda === "USD" || moneda === "MXN" ? moneda : undefined,
     });
     return NextResponse.json({ board });
   } catch (err) {

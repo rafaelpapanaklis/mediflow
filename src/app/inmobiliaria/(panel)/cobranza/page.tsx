@@ -36,7 +36,7 @@ const AREA = "cobranza";
 export default async function Page({
   searchParams,
 }: {
-  searchParams?: { periodo?: string };
+  searchParams?: { periodo?: string; moneda?: string };
 }) {
   const ctx = await getRealtyContext();
   if (!ctx) redirect("/login");
@@ -63,7 +63,13 @@ export default async function Page({
   const planHasWhatsapp = ctx.plan.features.whatsapp === true;
 
   const [board, notices, maintenance, expenses, properties] = await Promise.all([
-    getCollectionsBoard(ctx, { periodMonth: searchParams?.periodo }),
+    getCollectionsBoard(ctx, {
+      periodMonth: searchParams?.periodo,
+      currency:
+        searchParams?.moneda === "USD" || searchParams?.moneda === "MXN"
+          ? searchParams.moneda
+          : undefined,
+    }),
     buildRentNoticeQueue({
       accountId: ctx.accountId,
       accountName: ctx.account.name,
@@ -124,6 +130,8 @@ export default async function Page({
       periodMonth={board.periodMonth}
       rows={rows}
       totals={board.totals}
+      currency={board.currency}
+      currencies={board.currencies}
       notices={noticeRows}
       maintenance={maintenance}
       expenses={{ rows: expenses.rows, totalCents: expenses.totalCents }}

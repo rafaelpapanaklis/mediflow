@@ -402,7 +402,7 @@ export function LeaseDetailClient({
                   </a>
                   <a
                     className="rnt-btn rnt-btn--sm"
-                    href={`/api/realty/leases/${lease.propertyId}/estado-cuenta?propiedad=1&formato=csv`}
+                    href={`/api/realty/leases/${lease.propertyId}/estado-cuenta?propiedad=1&formato=csv&moneda=${lease.currency}`}
                   >
                     <Download size={13} />
                     {t("statement.byProperty")}

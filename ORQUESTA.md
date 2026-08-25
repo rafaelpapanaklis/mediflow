@@ -18186,3 +18186,50 @@ la página (esconder el menú no es control de acceso).
 **Ninguno.** Esta terminal no necesitó SQL nuevo: el schema `realty_*` de la Ola 0 ya trae todo
 lo que se usa. Los dos campos que faltan (`levels`, `publishedAt`) quedan REPORTADOS, no
 agregados.
+▶ SEGUNDA PASADA — se cerraron dos de los pendientes anotados arriba
+═══════════════════════════════════════════════════════════════════════════
+
+**🔴 Ya no se suman pesos con dólares.** Era el defecto más real de los que
+habían quedado abiertos. Tres sitios lo hacían:
+
+- `getCollectionsBoard` acumulaba los centavos de TODAS las filas y el
+  encabezado decía `"MXN"` escrito a mano. Ahora el tablero tiene UNA moneda:
+  se elige la dominante del periodo (o la que pida la pantalla con
+  `?moneda=`), las filas se recortan a ella y los totales son solo de esa.
+  Devuelve además `currencies[]`, y la pantalla enseña un selector MXN/USD
+  **solo si de verdad hay más de una** — a quien cobra todo en pesos, que es
+  casi todo el mundo, no le sale un control que no significa nada.
+- `getPropertyStatement` aplanaba los contratos del inmueble sin mirar la
+  moneda y reportaba la del primero. Ahora arma la hoja de UNA moneda (la del
+  contrato más reciente, o la que pidan) y devuelve `otherCurrencies` con las
+  que quedaron fuera. El CSV lo dice en su encabezado: sin eso es una columna
+  de números que alguien va a sumar con otra que no le toca.
+- De paso, el estado de cuenta del INMUEBLE recuperó el desempate que ya
+  tenía el del contrato (el cargo va antes que su pago del mismo día), para
+  que el saldo corriente no se vea negativo por un renglón.
+
+**🔴 Un aumento con vigencia futura ya no puede cobrar de más.**
+`rentAmount` cambia en cuanto se aplica el aumento, aunque la vigencia sea del
+mes que viene, y tanto el generador de cargos como el barrido usan siempre el
+`rentAmount` actual. Si más tarde faltaba el cargo de un mes ANTERIOR al
+aumento, se creaba con la renta nueva — cobrándole al inquilino un aumento que
+todavía no le aplicaba. Ahora `applyIncrease` tapa los huecos DENTRO de la
+transacción y con la renta VIEJA, antes de subirla; los meses de la vigencia
+en adelante los corrige el `updateMany` de siempre.
+
+**Lo que se decidió NO tocar, y por qué:**
+
+- **Los 14 `update`/`delete` por `id` sin `accountId` en el `where`.** Los
+  catorce tienen su `findFirst` con `accountId` inmediatamente arriba y el
+  revisor confirmó que ninguno es explotable. Pasarlos a `updateMany` los
+  volvería seguros por construcción en vez de por memoria de quien los
+  escribió, pero son catorce sitios que tocar con el build ya en verde y el
+  beneficio es defensa en profundidad, no un agujero abierto. Queda anotado
+  para quien haga el siguiente refactor del área, no para hacerlo a las
+  prisas.
+- **El corte por suscripción impaga en las pantallas y las APIs.** El barrido
+  SÍ se arregló (era el que mandaba correos en nombre de quien dejó de pagar).
+  Cortar además el panel entero es una decisión de PRODUCTO —bloquearle a
+  alguien su propia cobranza durante un tropiezo del cobro es caro— y le toca
+  a la ola de suscripción, que es la dueña de `/inmobiliaria/suscripcion` y
+  del texto que ahí se le dice al cliente.

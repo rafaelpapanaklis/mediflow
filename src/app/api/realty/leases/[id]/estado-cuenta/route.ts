@@ -38,9 +38,11 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     // Con ?propiedad=1 el [id] de la ruta es el del INMUEBLE, no el del
     // contrato: así el dueño ve la historia completa de la casa aunque haya
     // pasado por tres inquilinos.
+    const moneda = sp.get("moneda");
+    const currency = moneda === "USD" || moneda === "MXN" ? moneda : undefined;
     const statement =
       sp.get("propiedad") === "1"
-        ? await getPropertyStatement(ctx, params.id)
+        ? await getPropertyStatement(ctx, params.id, currency)
         : await getLeaseStatement(ctx, params.id);
 
     if (sp.get("formato") === "csv") {

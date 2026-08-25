@@ -286,7 +286,13 @@ export interface CollectionsBoard {
   today: string;
   rows: CollectionRow[];
   totals: CollectionsTotals;
+  /**
+   * La moneda de ESTE tablero. Los totales son SOLO de esta moneda: sumar
+   * pesos con dólares da un número que no significa nada.
+   */
   currency: RealtyCurrency;
+  /** Todas las monedas con cargos en el periodo, para poder cambiar de vista. */
+  currencies: RealtyCurrency[];
   /** Cuántos avisos saldrían HOY con el calendario escalonado. */
   noticesToday: number;
   planHasWhatsapp: boolean;
@@ -1258,7 +1264,14 @@ export async function applyIncrease(
 
   const lease = await prisma.realtyLease.findFirst({
     where: { id: leaseId, accountId: ctx.accountId },
-    select: { id: true, rentAmount: true, notes: true },
+    select: {
+      id: true,
+      rentAmount: true,
+      notes: true,
+      startsAt: true,
+      endsAt: true,
+      paymentDay: true,
+    },
   });
   if (!lease) throw notFound("ese contrato");
 
@@ -1281,6 +1294,32 @@ export async function applyIncrease(
   let skippedCharges = 0;
 
   await prisma.$transaction(async (tx) => {
+    // 🔴 PRIMERO se tapan los huecos CON LA RENTA VIEJA. `rentAmount` cambia
+    // ya mismo aunque la vigencia sea del mes que viene, y el generador de
+    // cargos (y el barrido) usan SIEMPRE el rentAmount actual. Si más tarde
+    // faltara el cargo de un mes ANTERIOR al aumento, se crearía con la renta
+    // nueva — cobrándole al inquilino un aumento que todavía no aplicaba.
+    // Generando aquí, esos meses quedan al precio que les toca; los de
+    // `fromMonth` en adelante los corrige el updateMany de abajo.
+    const plan = buildChargeSchedule({
+      startsAt: lease.startsAt,
+      endsAt: lease.endsAt,
+      paymentDay: lease.paymentDay,
+      rentAmount: lease.rentAmount,
+    });
+    if (plan.length > 0) {
+      await tx.realtyRentCharge.createMany({
+        data: plan.map((r) => ({
+          accountId: ctx.accountId,
+          leaseId,
+          periodMonth: r.periodMonth,
+          dueAt: r.dueAt,
+          amount: centsToDecimal(r.amountCents),
+        })),
+        skipDuplicates: true,
+      });
+    }
+
     await tx.realtyLease.update({
       where: { id: leaseId },
       data: {
@@ -1323,7 +1362,7 @@ export async function applyIncrease(
 
 export async function getCollectionsBoard(
   ctx: RealtyContext,
-  opts: { periodMonth?: string; onlyOverdue?: boolean } = {},
+  opts: { periodMonth?: string; onlyOverdue?: boolean; currency?: RealtyCurrency } = {},
 ): Promise<CollectionsBoard> {
   const today = todayInTimezone(ctx.account.timezone);
   const period =
@@ -1349,12 +1388,38 @@ export async function getCollectionsBoard(
     take: 1000,
   });
 
+  // 🔴 UN TABLERO, UNA MONEDA. Antes los totales sumaban los centavos de
+  // todas las filas y el encabezado decía "MXN" a mano: un inmueble en
+  // dólares y otro en pesos producían un total que no era ninguna de las
+  // dos cosas. Se elige la moneda dominante del periodo (o la que pida la
+  // pantalla) y los totales son SOLO de esa.
+  const counts = new Map<RealtyCurrency, number>();
+  for (const row of rows) {
+    const c: RealtyCurrency = row.lease?.currency ?? "MXN";
+    counts.set(c, (counts.get(c) ?? 0) + 1);
+  }
+  const currencies = Array.from(counts.keys()).sort(
+    (a, b) => (counts.get(b) ?? 0) - (counts.get(a) ?? 0) || a.localeCompare(b),
+  );
+  const currency: RealtyCurrency =
+    opts.currency && counts.has(opts.currency) ? opts.currency : currencies[0] ?? "MXN";
+
   const totals = emptyCollectionsTotals();
   const out: CollectionRow[] = [];
   let noticesToday = 0;
 
   for (const row of rows) {
+    const rowCurrency: RealtyCurrency = row.lease?.currency ?? "MXN";
     const view = mapCharge(row, today);
+
+    // Los avisos se cuentan sobre TODAS las monedas, no solo la del tablero:
+    // un recordatorio se le manda a una persona, y a esa persona le da igual
+    // en qué moneda esté su renta. Si esto viviera dentro del filtro, el
+    // número no cuadraría con la cola real (buildRentNoticeQueue).
+    if (view.balance > 0 && pickReminderStep(row.dueAt, today)) noticesToday += 1;
+
+    if (rowCurrency !== currency) continue;
+
     const parties = (row.lease?.parties ?? []).map(mapParty);
     const tenant = tenantOf(parties);
     accumulate(totals, {
@@ -1363,7 +1428,6 @@ export async function getCollectionsBoard(
       balanceCents: toCents(view.balance),
       daysLate: view.daysLate,
     });
-    if (view.balance > 0 && pickReminderStep(row.dueAt, today)) noticesToday += 1;
     if (opts.onlyOverdue && !(view.balance > 0 && view.daysLate > 0)) continue;
     out.push({
       ...view,
@@ -1371,7 +1435,7 @@ export async function getCollectionsBoard(
       propertyTitle: row.lease?.property?.title ?? "Inmueble",
       tenantName: tenant?.contactName ?? "Sin inquilino capturado",
       tenantPhone: tenant?.contactPhone ?? null,
-      currency: row.lease?.currency ?? "MXN",
+      currency: rowCurrency,
       leaseStatus: row.lease?.status ?? "BORRADOR",
     });
   }
@@ -1382,7 +1446,8 @@ export async function getCollectionsBoard(
     today: today.toISOString(),
     rows: out,
     totals,
-    currency: "MXN",
+    currency,
+    currencies: currencies.length > 0 ? currencies : ["MXN"],
     noticesToday,
     planHasWhatsapp: ctx.plan.features.whatsapp === true,
   };
@@ -1680,7 +1745,14 @@ export interface Statement {
   scope: "CONTRATO" | "INMUEBLE";
   title: string;
   subtitle: string;
+  /** La moneda de ESTE estado de cuenta. Los totales son solo de ella. */
   currency: RealtyCurrency;
+  /**
+   * Las otras monedas que tiene el inmueble y que NO están en esta hoja.
+   * Vacío casi siempre; cuando no lo está, la pantalla tiene que decirlo en
+   * vez de dejar creer que el saldo es todo lo que se debe.
+   */
+  otherCurrencies: RealtyCurrency[];
   lines: StatementLine[];
   chargedCents: number;
   paidCents: number;
@@ -1762,6 +1834,7 @@ export async function getLeaseStatement(
     title: lease.property?.title ?? "Inmueble",
     subtitle: tenantOf(parties)?.contactName ?? "Sin inquilino capturado",
     currency: lease.currency,
+    otherCurrencies: [],
     lines,
     chargedCents,
     paidCents,
@@ -1774,6 +1847,7 @@ export async function getLeaseStatement(
 export async function getPropertyStatement(
   ctx: RealtyContext,
   propertyId: string,
+  currencyWanted?: RealtyCurrency,
 ): Promise<Statement> {
   const property = await prisma.realtyProperty.findFirst({
     where: { id: propertyId, accountId: ctx.accountId },
@@ -1783,12 +1857,29 @@ export async function getPropertyStatement(
 
   const leases = await prisma.realtyLease.findMany({
     where: { accountId: ctx.accountId, propertyId },
-    select: { id: true },
+    select: { id: true, currency: true },
     orderBy: { startsAt: "asc" },
   });
 
-  const parts = await Promise.all(leases.map((l) => getLeaseStatement(ctx, l.id)));
-  const lines = parts.flatMap((p) => p.lines).sort((a, b) => a.date.localeCompare(b.date));
+  // 🔴 NO se mezclan monedas. Un inmueble con un contrato viejo en dólares y
+  // el de ahora en pesos producía UNA columna de centavos sumados y un
+  // "saldo" que no era ni pesos ni dólares. Se arma la hoja de UNA moneda
+  // —la del contrato más reciente, o la que pidan— y se dice cuáles quedaron
+  // fuera.
+  const present = Array.from(new Set(leases.map((l) => l.currency)));
+  const fallback: RealtyCurrency =
+    leases.length > 0 ? leases[leases.length - 1].currency : "MXN";
+  const currency: RealtyCurrency =
+    currencyWanted && present.includes(currencyWanted) ? currencyWanted : fallback;
+
+  const mine = leases.filter((l) => l.currency === currency);
+  const parts = await Promise.all(mine.map((l) => getLeaseStatement(ctx, l.id)));
+  const lines = parts.flatMap((p) => p.lines).sort(
+    // Mismo desempate que el estado de cuenta de un contrato: el cargo va
+    // antes que su pago del mismo día, para que el saldo corriente no se vea
+    // negativo por un renglón.
+    (a, b) => a.date.localeCompare(b.date) || b.chargeCents - a.chargeCents,
+  );
 
   let running = 0;
   let chargedCents = 0;
@@ -1804,7 +1895,8 @@ export async function getPropertyStatement(
     scope: "INMUEBLE",
     title: property.title,
     subtitle: [property.colonia, property.city].filter(Boolean).join(", ") || "Sin ubicación capturada",
-    currency: parts[0]?.currency ?? "MXN",
+    currency,
+    otherCurrencies: present.filter((c) => c !== currency),
     lines: merged,
     chargedCents,
     paidCents,
@@ -1818,6 +1910,22 @@ export function statementToCsv(statement: Statement): string {
   const esc = (v: string) => `"${String(v ?? "").replace(/"/g, '""')}"`;
   const money = (cents: number) => (cents / 100).toFixed(2);
   const rows: string[] = [];
+  // La moneda va en el encabezado: una hoja de Excel sin moneda es una
+  // columna de números que alguien va a sumar con otra que no le toca.
+  rows.push([esc(`${statement.title} — ${statement.subtitle}`)].join(","));
+  rows.push([esc("Moneda"), esc(statement.currency)].join(","));
+  if (statement.otherCurrencies.length > 0) {
+    rows.push(
+      [
+        esc("Aviso"),
+        esc(
+          `Este inmueble también tiene contratos en ${statement.otherCurrencies.join(", ")}. ` +
+            "No están en esta hoja.",
+        ),
+      ].join(","),
+    );
+  }
+  rows.push("");
   rows.push(["Fecha", "Concepto", "Periodo", "Cargo", "Pago", "Saldo", "Referencia", "Recibo"].map(esc).join(","));
   for (const l of statement.lines) {
     rows.push(

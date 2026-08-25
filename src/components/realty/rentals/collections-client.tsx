@@ -111,6 +111,8 @@ export function CollectionsClient({
   periodMonth,
   rows,
   totals,
+  currency,
+  currencies,
   notices,
   maintenance,
   expenses,
@@ -125,6 +127,10 @@ export function CollectionsClient({
   periodMonth: string;
   rows: CollectionRowView[];
   totals: BoardTotals;
+  /** La moneda del tablero: los totales son SOLO de ella. */
+  currency: RealtyCurrency;
+  /** Las monedas con cargos este mes, para poder cambiar de vista. */
+  currencies: RealtyCurrency[];
   notices: NoticePreview[];
   maintenance: MaintenanceRow[];
   expenses: { rows: ExpenseRow[]; totalCents: number };
@@ -150,7 +156,11 @@ export function CollectionsClient({
 
   function goMonth(delta: number) {
     const next = addMonthKey(periodMonth, delta);
-    router.push(`/inmobiliaria/cobranza?periodo=${next}`);
+    router.push(`/inmobiliaria/cobranza?periodo=${next}&moneda=${currency}`);
+  }
+
+  function goCurrency(next: RealtyCurrency) {
+    router.push(`/inmobiliaria/cobranza?periodo=${periodMonth}&moneda=${next}`);
   }
 
   async function sweep() {
@@ -213,6 +223,23 @@ export function CollectionsClient({
             >
               <ChevronRight size={14} />
             </button>
+            {/* El selector solo aparece si de verdad hay más de una moneda:
+                a quien cobra todo en pesos —casi todo el mundo— no le sale
+                un control que no significa nada. Los totales son de UNA
+                moneda; sumar pesos con dólares no da ningún número real. */}
+            {currencies.length > 1
+              ? currencies.map((c) => (
+                  <button
+                    key={c}
+                    type="button"
+                    className={`rnt-btn rnt-btn--sm${c === currency ? " rnt-btn--primary" : ""}`}
+                    aria-pressed={c === currency}
+                    onClick={() => goCurrency(c)}
+                  >
+                    {c}
+                  </button>
+                ))
+              : null}
             {canCollect ? (
               <button
                 type="button"
@@ -232,24 +259,24 @@ export function CollectionsClient({
       <div className="rnt-kpis">
         <Kpi
           label={t("collections.kpi.charged")}
-          value={formatCents(totals.chargedCents)}
+          value={formatCents(totals.chargedCents, currency)}
           hint={t("collections.kpi.chargedHint")}
         />
         <Kpi
           label={t("collections.kpi.collected")}
-          value={formatCents(totals.paidCents)}
+          value={formatCents(totals.paidCents, currency)}
           hint={t("collections.kpi.collectedHint")}
           tone="good"
         />
         <Kpi
           label={t("collections.kpi.balance")}
-          value={formatCents(totals.balanceCents)}
+          value={formatCents(totals.balanceCents, currency)}
           hint={t("collections.kpi.balanceHint")}
           tone={totals.balanceCents > 0 ? "danger" : "good"}
         />
         <Kpi
           label={t("collections.kpi.overdue")}
-          value={formatCents(totals.overdueCents)}
+          value={formatCents(totals.overdueCents, currency)}
           hint={t("collections.kpi.overdueHint")}
           tone={totals.overdueCents > 0 ? "danger" : undefined}
         />
@@ -268,7 +295,7 @@ export function CollectionsClient({
                 onClick={() => setAging(aging === key ? null : key)}
               >
                 <div className="rnt-aging__label">{t(`collections.aging.${key}`)}</div>
-                <div className="rnt-aging__value">{formatCents(cell.balanceCents)}</div>
+                <div className="rnt-aging__value">{formatCents(cell.balanceCents, currency)}</div>
                 <div className="rnt-aging__count">
                   {cell.count} {t("collections.aging.chargesWord")}
                 </div>
