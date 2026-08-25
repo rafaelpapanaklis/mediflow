@@ -536,6 +536,19 @@ export interface CreateBookingInput {
   phone: string;
   notes: string | null;
   now?: Date;
+  /**
+   * Canal que crea la cita. Default PUBLIC (la reserva de /b/[slug]).
+   * El bot de WhatsApp manda WHATSAPP para que la agenda y el historial
+   * del panel sepan que esa cita se cerró sola en el chat.
+   */
+  source?: "PUBLIC" | "WHATSAPP";
+  /**
+   * true = NO encolar la confirmación por WhatsApp. Lo usa el bot: el
+   * cliente está leyendo la respuesta en ese mismo chat, y mandarle
+   * además la plantilla sería gastarle un mensaje del plan para
+   * decirle dos veces lo mismo.
+   */
+  skipNotify?: boolean;
 }
 
 /**
@@ -736,7 +749,7 @@ export async function createPublicBooking(
           startAt,
           endAt,
           status: policy === "auto" ? "CONFIRMED" : "PENDING",
-          source: "PUBLIC",
+          source: input.source ?? "PUBLIC",
           notes: input.notes,
           ...(deposit ? { depositAmount: deposit.amount, depositStatus: deposit.status } : {}),
           services: {
@@ -771,7 +784,9 @@ export async function createPublicBooking(
     if ("blocked" in created) return { ok: false, code: "clientBlocked" };
     if (created.taken) return { ok: false, code: "slotTaken" };
 
-    await notifyBookingCreated({ barbershopId: shop.id, appointmentId: created.id, policy });
+    if (!input.skipNotify) {
+      await notifyBookingCreated({ barbershopId: shop.id, appointmentId: created.id, policy });
+    }
 
     return {
       ok: true,

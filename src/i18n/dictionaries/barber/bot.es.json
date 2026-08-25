@@ -1,0 +1,106 @@
+{
+  "title": "Bot de WhatsApp",
+  "subtitle": "Contesta tu WhatsApp y agenda solo. Los horarios que ofrece salen de tu agenda real: nunca inventa un hueco.",
+  "errors": {
+    "noPermission": "No tienes permiso para ver el bot de WhatsApp.",
+    "planLocked": "El bot de WhatsApp es del plan Profesional. Con él, tu WhatsApp agenda solo aunque estés cortando.",
+    "saveFailed": "No se pudo guardar. Intenta otra vez.",
+    "storageMissing": "Falta aplicar sql/barber_bot.sql en la base de datos. Mientras tanto el bot no puede encenderse.",
+    "aiMissing": "Falta configurar la llave de IA en el servidor. Sin ella el bot no puede responder."
+  },
+  "power": {
+    "title": "El bot",
+    "on": "Encendido",
+    "off": "Apagado",
+    "hintOn": "Está contestando los mensajes que llegan a tu WhatsApp.",
+    "hintOff": "Los mensajes llegan a tu bandeja y los contestas tú.",
+    "notConnected": "Primero conecta tu número de WhatsApp para que el bot pueda contestar."
+  },
+  "tone": {
+    "title": "Cómo habla",
+    "relajado": "Relajado",
+    "relajadoHint": "Como un barbero que ya te conoce.",
+    "formal": "Formal",
+    "formalHint": "Amable y correcto, sin exceso de confianza.",
+    "nameLabel": "Cómo se presenta",
+    "namePlaceholder": "El nombre de tu barbería",
+    "nameHint": "Déjalo vacío y usa el nombre de la barbería.",
+    "notesLabel": "Lo que debe saber",
+    "notesPlaceholder": "Hay estacionamiento en la esquina. No aceptamos tarjeta. El local está en el segundo piso.",
+    "notesHint": "Datos que quieras que conteste. No pongas precios ni horarios: esos los toma solo de tu agenda."
+  },
+  "abilities": {
+    "title": "Qué puede hacer",
+    "hint": "Apaga lo que prefieras atender tú. Lo que apagues, el bot lo pasa a una persona.",
+    "agendar": "Agendar citas",
+    "cancelar": "Cancelar citas",
+    "reagendar": "Mover citas",
+    "precios": "Decir precios",
+    "horarios": "Decir horarios",
+    "ubicacion": "Decir la dirección",
+    "reagendarLocked": "Para mover una cita hay que poder agendar."
+  },
+  "hours": {
+    "title": "Cuándo contesta",
+    "always": "A toda hora",
+    "alwaysHint": "Recomendado: los mensajes de la noche son los que más se pierden.",
+    "custom": "Solo en un horario",
+    "from": "Desde",
+    "to": "Hasta",
+    "days": "Días",
+    "offHint": "Fuera de ese horario avisa que contestan al abrir y deja el chat marcado para ti.",
+    "noDays": "Elige al menos un día o el bot no contestará nunca."
+  },
+  "spend": {
+    "title": "Tope de gasto de IA",
+    "hint": "Por día y por barbería. Al llegar al tope el bot deja de usar IA y te pasa los chats, para que un cliente insistente no dispare la cuenta.",
+    "capLabel": "Tope diario",
+    "today": "Hoy llevas {spent} de {cap}",
+    "reached": "Ya se alcanzó el tope de hoy. Los chats están pasando a tu bandeja.",
+    "model": "Modelo: {model}"
+  },
+  "quota": {
+    "title": "Cupo de mensajes",
+    "used": "{used} de {limit} este periodo",
+    "unlimited": "Sin límite en tu plan",
+    "tight": "Te queda poco cupo. Cuando se acabe, el bot deja de contestar y te lo decimos aquí.",
+    "exhausted": "Se acabó el cupo del periodo. El bot no está contestando."
+  },
+  "pauses": {
+    "title": "Conversaciones que atiendes tú",
+    "empty": "Ninguna. El bot está atendiendo todos los chats.",
+    "hint": "Aquí caen los chats en los que el cliente pidió una persona o el bot prefirió no arriesgarse.",
+    "resume": "Devolver al bot",
+    "pausedAt": "Desde {when}",
+    "reasonLabel": "Motivo"
+  },
+  "history": {
+    "title": "Lo que ha agendado",
+    "empty": "Todavía no agenda nada. En cuanto un cliente escriba, aquí aparece.",
+    "hint": "Citas que se cerraron solas en el chat.",
+    "when": "Para {when}",
+    "bookedAt": "Agendada {when}",
+    "status": {
+      "PENDING": "Por confirmar",
+      "CONFIRMED": "Confirmada",
+      "IN_PROGRESS": "En curso",
+      "DONE": "Terminada",
+      "NO_SHOW": "No llegó",
+      "CANCELLED": "Cancelada"
+    }
+  },
+  "actions": {
+    "save": "Guardar",
+    "saving": "Guardando…",
+    "saved": "Guardado"
+  },
+  "weekdays": {
+    "0": "Dom",
+    "1": "Lun",
+    "2": "Mar",
+    "3": "Mié",
+    "4": "Jue",
+    "5": "Vie",
+    "6": "Sáb"
+  }
+}

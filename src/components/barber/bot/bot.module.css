@@ -1,0 +1,329 @@
+/* ═══════════════════════════════════════════════════════════════════════
+   /barber/whatsapp/bot — el bot que agenda.
+
+   Vive dentro de .barber-shell: hereda el tema caramelo por variables y
+   aquí NO se escribe un solo color en duro (los semánticos se declaran
+   arriba, con su versión oscura al final).
+
+   Responsive con @container (regla del repo), no @media: el ancho útil
+   depende del sidebar, no del viewport.
+
+   OJO container-type: va SOLO en el contenedor de contenido (.grid). Un
+   elemento NO puede resolver su propio @container, y un container-type
+   sobre el envoltorio de la página convertiría cualquier position:fixed de
+   dentro en position:absolute respecto a él.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+.page {
+  --bot-ok: #2e7d32;
+  --bot-warn: #b45309;
+  --bot-bad: #b02a1c;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  max-width: 1180px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+.header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.title {
+  margin: 0;
+  font-size: clamp(19px, 2.2vw, 23px);
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--text-1);
+}
+
+.subtitle {
+  margin: 4px 0 0;
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: var(--text-2);
+  max-width: 62ch;
+}
+
+/* ── Rejilla de tarjetas ────────────────────────────────────────────── */
+
+.grid {
+  container-type: inline-size;
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 14px;
+  width: 100%;
+}
+
+@container (min-width: 720px) {
+  .grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@container (min-width: 1040px) {
+  .grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px;
+  border-radius: 14px;
+  background: var(--bg-elev);
+  border: 1px solid var(--border-soft);
+  min-width: 0;
+}
+
+/* El historial es una lista larga: ocupa la fila entera cuando cabe. */
+.wide {
+  grid-column: 1 / -1;
+}
+
+.cardTitle {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: -0.005em;
+  color: var(--text-1);
+}
+
+.hint {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--text-2);
+}
+
+.empty {
+  margin: 4px 0 0;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--text-2);
+  padding: 14px;
+  border-radius: 10px;
+  border: 1px dashed var(--border-soft);
+  text-align: center;
+}
+
+/* ── Tope de gasto ──────────────────────────────────────────────────── */
+
+.capRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.currency {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-2);
+}
+
+.capRow input {
+  max-width: 130px;
+}
+
+.meterWrap {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.meterLabel {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-2);
+  font-variant-numeric: tabular-nums;
+}
+
+.meter {
+  height: 8px;
+  border-radius: 999px;
+  background: var(--border-soft);
+  overflow: hidden;
+}
+
+.meterFill {
+  height: 100%;
+  border-radius: 999px;
+  background: var(--bot-ok);
+  /* El ancho llega en línea (es un dato, no un estilo). */
+  transition: width 240ms ease;
+}
+
+.meterFill[data-tight="true"] {
+  background: var(--bot-warn);
+}
+
+/* ── Días de la semana ──────────────────────────────────────────────── */
+
+.hoursRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.hoursRow > * {
+  flex: 1 1 120px;
+  min-width: 0;
+}
+
+.days {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.day {
+  appearance: none;
+  cursor: pointer;
+  padding: 6px 10px;
+  border-radius: 999px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-2);
+  background: transparent;
+  border: 1px solid var(--border-soft);
+  transition: background 140ms ease, color 140ms ease, border-color 140ms ease;
+}
+
+.day:hover:not(:disabled) {
+  border-color: var(--brand);
+}
+
+.day[aria-pressed="true"] {
+  background: var(--brand);
+  border-color: var(--brand);
+  color: var(--on-brand, #fff);
+}
+
+.day:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.day:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
+
+/* ── Listas (pausas e historial) ────────────────────────────────────── */
+
+.list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border-soft);
+  min-width: 0;
+}
+
+.list > .row:last-child {
+  border-bottom: none;
+}
+
+.rowMain {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.rowTitle {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  flex-wrap: wrap;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--text-1);
+}
+
+.rowSub {
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--text-2);
+  /* Un servicio con nombre larguísimo no puede empujar la fila. */
+  overflow-wrap: anywhere;
+}
+
+.rowEnd {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.ref {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--text-2);
+  font-variant-numeric: tabular-nums;
+}
+
+.total {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--text-1);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Estado de la cita ──────────────────────────────────────────────── */
+
+.status {
+  font-size: 11.5px;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 999px;
+  white-space: nowrap;
+  background: var(--border-soft);
+  color: var(--text-2);
+}
+
+.st_CONFIRMED,
+.st_DONE {
+  background: color-mix(in srgb, var(--bot-ok) 16%, transparent);
+  color: var(--bot-ok);
+}
+
+.st_PENDING,
+.st_IN_PROGRESS {
+  background: color-mix(in srgb, var(--bot-warn) 16%, transparent);
+  color: var(--bot-warn);
+}
+
+.st_CANCELLED,
+.st_NO_SHOW {
+  background: color-mix(in srgb, var(--bot-bad) 16%, transparent);
+  color: var(--bot-bad);
+}
+
+/* ── Oscuro ─────────────────────────────────────────────────────────── */
+/* Los semánticos de arriba no tienen contraste suficiente sobre el fondo
+   oscuro del tema caramelo; aquí se aclaran. Se apunta a .barber-shell
+   porque globals.css gana por especificidad a una clase suelta. */
+
+:global(.dark) .page {
+  --bot-ok: #6cc070;
+  --bot-warn: #e0a95c;
+  --bot-bad: #ef7a6d;
+}

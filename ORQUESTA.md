@@ -13935,3 +13935,315 @@ BARBER_GUARD_SHARED=ORQUESTA.md,src/app/admin/admin-nav.tsx node scripts/barber-
 ⚪ **`package.json` no se tocó** (está fuera de la allowlist), así que las
    pruebas de integración no tienen atajo `npm run test:*`. El comando
    completo está en la cabecera del propio archivo de pruebas.
+## [Barber Bot] — El WhatsApp que agenda solo: entiende "quiero corte el sábado en la tarde", ofrece huecos REALES de la agenda, cierra la cita y pasa con una persona en cuanto duda ✅ (2026-08-24)
+═══════════════════════════════════════════════════════════════════════════
+BUILD `npm run build` EXIT 0 (output COMPLETO, 3138 líneas, sin pipes;
+incluye `prisma generate` ✔, "Checking validity of types" ✔ con 0 errores y
+376/376 páginas). `npx tsc --noEmit` 0 errores. PRUEBAS 40/40 — 28 offline
+(sin BD, sin red, sin IA) + 12 de integración contra Postgres REAL. Además
+se volvieron a correr las 118 pruebas barber que ya existían: 118/118 verdes
+(whatsapp 37, agenda 38, booking-core 19, concurrencia 11, salida-pública
+11, contrato-caja 2). GUARDIA BARBER exit 0 (15 archivos, los 15 PROPIOS del
+vertical, 0 compartidos sin declarar, 0 prohibidos) · **el panel dental no
+tiene ni un byte de cambio**.
+
+Rama `feat/barber-bot` (worktree con junction de `node_modules`, `npx prisma
+generate` exit 0), rebasada sobre `origin/main` DESPUÉS de que entrara
+[Barber Campañas] (cd7dbe18) y empujada a `main` directo.
+
+Por qué esto: en México la mayoría de las barberías agenda por WhatsApp a
+mano. El mensaje llega mientras el dueño está cortando, contesta 40 minutos
+después y el cliente ya se fue a otro lado. Esto convierte ese chat en
+agenda sin que nadie toque el teléfono.
+
+───────────────────────────────────────────────────────────────────────────
+1. QUÉ SE CONSTRUYÓ
+───────────────────────────────────────────────────────────────────────────
+**A. El bot** (`src/lib/barber/bot.ts` + `bot-core.ts`). Conversación en
+español mexicano, tuteando, de 1 a 3 frases. Sabe:
+
+· **Agendar** — entiende "quiero corte el sábado en la tarde", propone
+  huecos reales, pide el nombre y crea la cita con `source = WHATSAPP`.
+· **Consultar** — precios, horarios, dirección, servicios y con qué barbero.
+· **Cancelar y mover** SU propia cita (solo las de su teléfono).
+· **Reconocer al cliente por su teléfono** — lo saluda por su nombre y le
+  ofrece "lo de siempre" (último servicio + barbero), confirmándolo antes de
+  agendar.
+· **Pasar con una persona** en cuanto lo pide, se queja, o algo no cuadra.
+
+**B. El panel** `/barber/whatsapp/bot` — encender/apagar (se guarda al
+momento: es el interruptor que alguien busca con prisa), tono relajado o
+formal, cómo se presenta, qué puede y qué no puede hacer (6 interruptores),
+horario en que responde, tope de gasto de IA, cupo de mensajes, las
+conversaciones que atiende una persona (con un botón para devolverlas al
+bot) y **el historial de lo que agendó** — que es lo que hace que el dueño
+le agarre confianza.
+
+**C. Las APIs** `/api/barber/bot` (GET estado, PATCH configuración) y
+`/api/barber/bot/pause` (tomar o soltar una conversación).
+
+───────────────────────────────────────────────────────────────────────────
+2. 🔴 LA REGLA QUE NO SE NEGOCIA: EL BOT NO PUEDE INVENTAR DISPONIBILIDAD
+───────────────────────────────────────────────────────────────────────────
+No se resolvió con el prompt. Se resolvió quitándole al modelo la capacidad
+física de hacerlo:
+
+· **El modelo no tiene horarios.** Los únicos horarios que existen en su
+  contexto son los que devuelve la herramienta `buscar_horarios`, que llama
+  a `getPublicSlots()` de `booking.ts` — o sea, la agenda real: turnos del
+  barbero, bloqueos y citas ya puestas. Si no llamó a la herramienta, no
+  tiene ninguna hora que ofrecer.
+· **La cita la crea `createPublicBooking`, no el bot.** Ese camino toma un
+  `pg_advisory_xact_lock` por (barbería, día) y **vuelve a calcular quién
+  está libre DENTRO de la transacción**. Aunque el modelo alucinara una
+  hora, Postgres la rechaza. Debajo sigue la constraint EXCLUDE
+  `barber_appt_no_overlap` de T1 como última palabra.
+· **El error vuelve al modelo como DATO, con alternativas.** Cuando el hueco
+  se ocupó entre que lo ofreció y el cliente contestó, la herramienta le
+  devuelve `{error:"ocupado", alternativas:[...]}` con huecos frescos del
+  motor. El bot lo dice y sigue ayudando, en vez de callarse o inventar.
+· **Los precios salen de `BarberService`.** Cero constantes, cero memoria
+  del modelo. La prueba lo fija: el catálogo que ve el modelo trae `$180`
+  porque eso es lo que dice la fila.
+
+Tres pruebas de `bot.test.ts` leen el código fuente y truenan si alguien
+mete un `barberAppointment.create` en el bot o le escribe su propia rejilla
+de huecos. La garantía queda amarrada, no solo escrita.
+
+───────────────────────────────────────────────────────────────────────────
+3. DÓNDE VIVE EL ESTADO (schema Prisma: CERO cambios)
+───────────────────────────────────────────────────────────────────────────
+El contrato prohíbe tocar `prisma/schema.prisma`. Se siguió el precedente
+EXACTO de `barber_payment_settings` (ola de membresías): **`sql/barber_bot.sql`**
+crea tres tablas fuera del schema, que se leen y escriben con SQL crudo:
+
+· `barber_bot_settings` — la configuración (jsonb), validada por
+  `normalizeBotSettings()` antes de entrar y al salir.
+· `barber_bot_usage` — el gasto de IA **por barbería y por día**, en micros
+  de peso. En memoria no serviría: Vercel corre varias instancias y el tope
+  dejaría de ser un tope.
+· `barber_bot_pauses` — qué conversaciones atiende una persona.
+
+**Si el .sql no se aplica, nada truena y sobre todo el bot NO contesta a
+ciegas**: cae a los defaults, que lo dejan APAGADO, y el panel lo dice con
+todas sus letras. ⚠️ Un `prisma db push` las borra (no están en el schema a
+propósito): en desarrollo hay que volver a correr el archivo.
+
+El **historial de lo que agendó** no necesitó ni una tabla ni una marca en
+los mensajes: una cita del bot es un `BarberAppointment` con
+`source = WHATSAPP`, que ya lo escribe la propia creación.
+
+───────────────────────────────────────────────────────────────────────────
+4. DÓNDE SE ENGANCHA — y los 2 archivos compartidos que hubo que tocar
+───────────────────────────────────────────────────────────────────────────
+🔴 **`src/lib/whatsapp.ts` y `src/app/api/whatsapp/webhook/route.ts` (los del
+dental) NO se tocaron.** Ni un byte. La guardia lo confirma.
+
+Sí se tocaron **dos archivos del vertical barber que están fuera de la
+allowlist estricta** (la guardia los da por PROPIOS, y sin ellos el bot
+sencillamente no recibe mensajes). Se dicen aquí en vez de esconderlos:
+
+· **`src/lib/barber/whatsapp.ts` (+54 / −8).** `ingestBarberInbound` es el
+  ÚNICO punto por donde entra un mensaje. Se añadió:
+  1. `applyReminderReply` ahora **devuelve boolean** (¿atendí este mensaje?).
+     Sin esa señal, un "CONFIRMAR" recibiría dos respuestas: la del
+     recordatorio y la del bot.
+  2. Una función `runBotIfEnabled` de 14 líneas con **import dinámico dentro
+     de try/catch** — el mismo patrón que el webhook compartido usa con el
+     vertical entero. Ni un fallo del bot ni un fallo al CARGAR su módulo
+     pueden romper la ingesta, los recordatorios ni el Inbox.
+  **El bot NO manda nada.** Devuelve el texto y lo manda `replyInline` de
+  esa capa, con su ventana de 24 h, su cupo y su registro. El bot decide QUÉ
+  decir; el transporte sigue siendo de quien ya era.
+· **`src/lib/barber/booking.ts` (+17 / −2).** `CreateBookingInput` acepta dos
+  campos opcionales: `source` (para que la cita nazca marcada como WHATSAPP
+  en vez de PUBLIC) y `skipNotify` (para no mandarle además la plantilla de
+  confirmación a alguien que está leyendo la respuesta en ese mismo chat —
+  sería gastarle un mensaje del plan para decirle dos veces lo mismo).
+  Ambos con default = comportamiento actual, así que la reserva pública de
+  `/b/[slug]/reservar` se comporta EXACTAMENTE igual que antes (sus 11
+  pruebas de salida-pública y las 11 de concurrencia siguen verdes).
+
+Escribir un creador de citas propio para el bot habría sido peor: sería un
+segundo camino sin el candado por día ni el recálculo, y ahí es donde
+aparecen las citas fantasma.
+
+───────────────────────────────────────────────────────────────────────────
+5. EL DINERO
+───────────────────────────────────────────────────────────────────────────
+· **Los mensajes del bot son GRATIS.** El cliente acaba de escribir, así que
+  la ventana de 24 h está abierta y todo va como texto de servicio. **Aquí
+  no se manda una sola plantilla, y menos de `marketing`** — una prueba
+  truena si alguien mete `sendTemplate` o `MARKETING` en el bot.
+· **Cupo de mensajes del plan.** Si se acabó, el bot no contesta (mandar
+  fallaría y el cliente vería el mismo silencio que un bot roto) y el panel
+  lo dice. Al 85 % ya avisa, antes de que se acabe. **Nunca se corta en
+  silencio.**
+· **Tope de gasto de IA por barbería y por día**, configurable de $0 a $500.
+  Al llegar al tope el bot **no se apaga**: contesta la verdad ("en un
+  momento te atiende alguien"), marca el hilo para una persona y deja de
+  llamar al modelo. Un cliente insistente no puede disparar la cuenta.
+  El costo se redondea HACIA ARRIBA (mil turnos redondeando a la baja
+  regalarían el tope) y un modelo que no esté en la tabla de tarifas se
+  cobra al precio MÁS CARO: frenar de más es mejor que gastar de más.
+
+───────────────────────────────────────────────────────────────────────────
+6. GATING — `whatsappBot`, plan Profesional, candado en el SERVIDOR
+───────────────────────────────────────────────────────────────────────────
+Tres capas, y la que manda es la de abajo:
+1. La página `/barber/whatsapp/bot` pinta el aviso de plan (cortesía).
+2. `/api/barber/bot` valida `whatsappBot` en GET **y** en PATCH.
+3. **`runBarberBotTurn` lo valida otra vez**, en el camino del webhook, donde
+   no hay sesión ni pantalla que valga. Un Avanzado con el interruptor
+   guardado en `true` **no contesta**: la prueba lo enciende a propósito y
+   verifica que ni siquiera se llama al modelo.
+
+También valida suscripción activa, barbería activa, y que el hilo no esté
+pausado — en ese orden, y todo antes de gastar un peso.
+
+───────────────────────────────────────────────────────────────────────────
+7. VERIFICACIÓN
+───────────────────────────────────────────────────────────────────────────
+1. ✅ `npm run build` **EXIT 0**, output COMPLETO (3138 líneas), sin pipes.
+   0 errores de tipo, 0 "Failed to compile", 376/376 páginas. Las rutas
+   nuevas aparecen: `/barber/whatsapp/bot` (4.2 kB), `/api/barber/bot`,
+   `/api/barber/bot/pause`. (El primer intento murió por heap OOM — ruido de
+   worktrees en paralelo, no del código; con `--max-old-space-size=8192`
+   entra limpio.)
+
+2. ✅ **Conversación completa simulada** contra Postgres real (el modelo va
+   guionado para que sea determinista, pero TODO lo que ve — precios,
+   huecos, resultados — sale de la base):
+
+```
+Cliente: hola, quiero corte el sábado en la tarde
+Bot: Va. Para el sábado en la tarde tengo 4 pm, 4:15 pm, 4:30 pm. ¿Cuál te late?
+Cliente: 4 pm está bien, soy Rafa
+Bot: Listo Rafa. Quedas el sábado 29 de agosto a las 4 pm con Beto. La cita
+     quedó apartada y la barbería la confirma en un momento. Tu folio es QV6DYB.
+
+Cliente: cuánto cuesta la barba?
+Bot: La barba te sale en $120 y nos lleva 20 minutos.
+
+Cliente: puedo mover mi cita más tarde?
+Bot: Hecho, te movimos al sábado 29 de agosto a las 4:30 pm.
+
+Cliente: mejor cancélala porfa
+Bot: Listo, tu cita quedó cancelada. Cuando quieras te reagendamos.
+
+Cliente: hola                       [cliente conocido, con historia]
+Bot: ¡Qué onda, Toño! ¿Lo de siempre con Beto?
+
+Cliente: quiero hablar con una persona
+Bot: Claro que sí. Ya le avisé a alguien de la barbería y te escribe en un
+     momento por aquí. 🙌
+
+Cliente: quiero corte el sábado     [con el tope de IA agotado]
+Bot: ¡Hola! En un momento te atiende alguien de la barbería por aquí para
+     agendarte. 🙏
+```
+   El `$120` es el precio de la fila de `BarberService`; el `$888` de la
+   barbería B nunca aparece. El folio, el nombre del barbero y "quedó
+   apartada" (no "confirmada": la política de esa barbería es manual) salen
+   de lo que devolvió `createPublicBooking`.
+
+3. ✅ **No ofrece un hueco fuera del horario ni encimado.** El barbero de la
+   prueba trabaja 16:00–20:00. La prueba recorre TODOS los huecos que
+   devuelve el motor y verifica que ninguno empieza antes de las 16:00 ni
+   termina después de las 20:00 contando la duración. Y el hueco que se
+   llevó la cita del primer test **desaparece** de la siguiente consulta.
+   Además: los horarios que el bot ofreció son `deepEqual` a los que
+   devuelve `getPublicSlots` — ni uno más.
+
+4. ✅ **Dos clientes al mismo hueco, a la vez.** Dos `runBarberBotTurn`
+   concurrentes pidiendo el mismo horario con UN solo barbero:
+```
+Cliente Luis: quiero corte el sábado a las 16:00, soy Luis
+Cliente Memo: quiero corte el sábado a las 16:00, soy Memo   (al mismo tiempo)
+Bot → quien ganó:   Listo Luis, quedas a las 4 pm.
+Bot → quien perdió: Uy, ese horario se acaba de apartar. Te quedan 4:30 pm,
+                    4:45 pm, 5 pm.
+```
+   Se crea **UNA** cita (`booked` suma 1 entre los dos), en la base queda
+   **una** fila para ese barbero, y el que perdió recibe alternativas reales
+   del motor — ninguna de ellas es el horario que se acaba de ocupar.
+   ⚠️ El primer intento de esta prueba salió en rojo y **era la prueba, no el
+   código**: los dos turnos compartían una sola cola de guion y uno se robaba
+   los pasos del otro. Se pasó a guion POR CONVERSACIÓN. De paso salió un
+   detalle real: `effects.booked` contaba también los duplicados (mismo
+   teléfono, misma hora), que no crean nada — ya no.
+
+5. ✅ **"Quiero hablar con una persona" pausa el bot y marca el hilo.** Se
+   detecta **por reglas, antes de llamar al modelo** (0 llamadas de IA): la
+   prueba lo verifica. El hilo aparece en el panel con su motivo, y mientras
+   está pausado el bot **no contesta ahí** aunque el cliente siga escribiendo.
+   El mostrador lo devuelve al bot con un botón.
+   ⚠️ Aquí salieron **tres huecos reales** del detector, que la prueba cazó:
+   "pásame con **alguien**", "quiero hablar con **el** barbero" y "quiero
+   hablar con **el** dueño" no se detectaban (los artículos `el/la/los` no
+   estaban, y `comunicar` en infinitivo tampoco). Arreglado. Y hay una prueba
+   de falsos positivos igual de importante: "quiero un corte", "quiero corte
+   el sábado en la tarde", "cuánto cuesta el corte con Pedro" y "me agendas
+   con Luis el barbero mañana" **NO** disparan el pase a humano — mandar a un
+   cliente que solo quería cortarse el pelo a una cola humana es caro.
+
+6. ✅ **Un plan Avanzado no tiene bot, y el gate está en el servidor.**
+   Sección 6. La prueba deja el interruptor en `true` a propósito: aun así
+   `skipped = "planLocked"` y 0 llamadas al modelo.
+
+7. ✅ **Dos barberías, ninguna ve datos de la otra.** El catálogo que ve el
+   bot de A no trae ni un servicio, ni un precio, ni un barbero de B. Y
+   agendar con un `serviceId` AJENO no crea nada. Además, una prueba
+   estática recorre **todas** las consultas Prisma del bot y verifica que
+   ninguna se queda sin `barbershopId` (en `barber_shops`, que su propio
+   `id` es el inquilino) — un `undefined` ahí borraría el filtro.
+
+8. ✅ `node scripts/barber-guard.cjs` → **exit 0**. 15 archivos, los 15
+   PROPIOS del vertical, 0 compartidos sin declarar, 0 prohibidos.
+
+9. ✅ **Cero "paciente", "doctor", "Dr.", "clínica", "consulta", "expediente"**
+   — una prueba lo verifica sobre los 6 archivos del bot (código, pantalla,
+   los dos diccionarios y el .sql). También cero voseo: el prompt prohíbe
+   "vos/tenés/podés" explícitamente y la prueba lo comprueba.
+
+───────────────────────────────────────────────────────────────────────────
+8. LO QUE QUEDA — ACCIONES DE RAFAEL
+───────────────────────────────────────────────────────────────────────────
+🔴 **Correr `sql/barber_bot.sql`** en el SQL Editor de Supabase (idempotente).
+   Sin él el bot **no se puede encender** y el panel lo dice. Es el único
+   bloqueante.
+
+🔴 **Crear la llave de IA en Vercel como Sensitive** (NO está en el repo):
+   · `BARBER_ANTHROPIC_API_KEY` — la llave de Anthropic del vertical.
+     Cae en cascada a `ANTHROPIC_API_KEY` si no existe (mismo criterio que
+     `BARBER_STRIPE_SECRET_KEY`). Sin ninguna de las dos, el bot no responde
+     y el panel avisa.
+
+⚪ Dos envs OPCIONALES, con default sano; solo si se quieren mover:
+   · `BARBER_BOT_AI_MODEL` — default `claude-sonnet-4-6` (el mismo que usa
+     el bot del dental para este trabajo: conversación corta, alto volumen).
+     **Si se pone un modelo que no esté en `BARBER_BOT_MODEL_PRICES`, el tope
+     de gasto lo cobra a la tarifa más cara**, a propósito.
+   · `BARBER_BOT_USD_MXN` — default 18. Solo mueve el tope de gasto, jamás
+     la factura real.
+
+⚪ **La pantalla no tiene enlace todavía.** Se llega por URL directa
+   (`/barber/whatsapp/bot`). Meter el enlace es UNA línea, pero los dos
+   lugares donde va están fuera de esta ola: `barber-sidebar.tsx` (prohibido
+   explícitamente) y `whatsapp-screen.tsx` (fuera de la allowlist, y con la
+   ola de campañas recién entrada era pedir un conflicto). Lo natural es una
+   pestaña "Bot" junto a Conversaciones y Plantillas en `/barber/whatsapp`.
+
+⚪ **El camino REAL contra la API de Anthropic no se ha ejercitado.** En las
+   pruebas el modelo va guionado (`fetch` interceptado) para que sean
+   deterministas y no cuesten. Lo que SÍ está probado de punta a punta es
+   todo lo que decide: disponibilidad, creación de la cita, carreras,
+   aislamiento, pausas, plan y tope de gasto. El primer turno con la llave
+   real es lo que falta ver.
+
+⚪ **Sigue sin haberse mandado un WhatsApp real desde el producto**, así que
+   el tramo Meta→entrega tampoco está probado en vivo — igual que en las
+   olas anteriores del vertical.
+
+⚪ El bot **no** hace campañas de reactivación, afiliados, reportes ni admin.
+   Fuera de alcance a propósito.

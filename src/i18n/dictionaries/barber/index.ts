@@ -39,6 +39,8 @@ import whatsappEs from "./whatsapp.es.json"; // conexión + inbox + plantillas
 import whatsappEn from "./whatsapp.en.json";
 import campanasEs from "./campanas.es.json"; // campanas de retencion
 import campanasEn from "./campanas.en.json";
+import botEs from "./bot.es.json"; // bot que agenda por WhatsApp
+import botEn from "./bot.en.json";
 
 const ES: Dictionary = {
   barber: {
@@ -53,6 +55,7 @@ const ES: Dictionary = {
     admin: adminEs as unknown as Dictionary,
     whatsapp: whatsappEs as unknown as Dictionary,
     campanas: campanasEs as unknown as Dictionary,
+    bot: botEs as unknown as Dictionary,
   },
 };
 
@@ -69,6 +72,7 @@ const EN: Dictionary = {
     admin: adminEn as unknown as Dictionary,
     whatsapp: whatsappEn as unknown as Dictionary,
     campanas: campanasEn as unknown as Dictionary,
+    bot: botEn as unknown as Dictionary,
   },
 };
 

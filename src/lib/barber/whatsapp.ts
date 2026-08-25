@@ -1418,8 +1418,44 @@ export async function ingestBarberInbound(value: any, msg: any): Promise<boolean
   // "CONFIRMAR" y no puede tocar la agenda de nadie.
   if (incoming) return true;
 
-  await applyReminderReply(shop, creds, phone, rawText);
+  const handled = await applyReminderReply(shop, creds, phone, rawText);
+
+  // El BOT es el último en la fila, a propósito: primero manda lo que el
+  // cliente respondió a un recordatorio nuestro (eso ya tiene dueño y no
+  // se le consulta a ninguna IA). Solo lo que nadie atendió llega al bot.
+  if (!handled) await runBotIfEnabled(shop, creds, phone, rawText);
   return true;
+}
+
+/**
+ * Puente al bot que agenda (src/lib/barber/bot.ts).
+ *
+ * ESTE módulo NO sabe nada del bot: import DINÁMICO dentro de try/catch,
+ * igual que el webhook compartido hace con el vertical entero. Ni un fallo
+ * del bot ni un fallo al CARGAR su módulo pueden romper la ingesta, los
+ * recordatorios ni el Inbox — que es de lo que ya vive el producto.
+ *
+ * El bot decide QUÉ decir; el envío sigue siendo de aquí (replyInline:
+ * ventana de 24 h, cupo y registro en el Inbox incluidos). Así el bot no
+ * puede inventarse un camino de envío ni saltarse el cupo.
+ */
+async function runBotIfEnabled(
+  shop: ShopWaRow,
+  creds: BarberWaCredentials | null,
+  phone: string,
+  text: string,
+): Promise<void> {
+  try {
+    const { runBarberBotTurn } = await import("@/lib/barber/bot");
+    const turn = await runBarberBotTurn({
+      barbershopId: shop.id,
+      phone,
+      text,
+    });
+    if (turn.reply) await replyInline(shop, creds, phone, turn.reply);
+  } catch (err) {
+    console.error(`[barber/wa] el bot no pudo atender (${shop.id}):`, err);
+  }
 }
 
 /**
@@ -1428,15 +1464,19 @@ export async function ingestBarberInbound(value: any, msg: any): Promise<boolean
  * La transición SIEMPRE pasa por canTransition() del contrato: si el estado
  * no lo permite (la visita ya se completó, ya estaba cancelada) no se toca
  * nada y se le contesta la verdad.
+ *
+ * Devuelve true si ESTE camino ya atendió el mensaje (movió la visita y/o
+ * le contestó). false = el mensaje sigue sin dueño, y entonces lo toma el
+ * bot. Sin esta señal, un "CONFIRMAR" recibiría dos respuestas.
  */
 async function applyReminderReply(
   shop: ShopWaRow,
   creds: BarberWaCredentials | null,
   phone: string,
   text: string,
-): Promise<void> {
+): Promise<boolean> {
   const action = classifyBarberReply(text);
-  if (action === "unclear") return;
+  if (action === "unclear") return false;
 
   const template = barberWaTemplate("reminder");
   const sentReminders = await prisma.barberMessage.findMany({
@@ -1465,13 +1505,15 @@ async function applyReminderReply(
     .filter((a) => a.status === "PENDING" || a.status === "CONFIRMED")
     .filter((a) => (seen.has(a.id) ? false : (seen.add(a.id), true)));
 
-  if (candidates.length === 0) return;
+  // Sin ninguna visita a la que aplicar, esto no es una respuesta a un
+  // recordatorio aunque lo parezca: que lo lea el bot.
+  if (candidates.length === 0) return false;
 
   // Un teléfono compartido (el celular de la familia) con DOS visitas por
   // confirmar: no se adivina. Se le dice y lo resuelve el mostrador.
   if (candidates.length > 1) {
     await replyInline(shop, creds, phone, AMBIGUOUS_REPLY);
-    return;
+    return true;
   }
 
   const appt = candidates[0];
@@ -1497,11 +1539,14 @@ async function applyReminderReply(
         `✅ Tu visita del ${formatWhen(appt.startAt, shop.timezone, shop.locale)} ya estaba confirmada. Te esperamos.`,
       );
     }
-    return;
+    return true;
   }
 
   if (action === "cancel") {
-    if (!canTransition(current, "CANCELLED")) return;
+    // No se puede cancelar (ya se completó, ya estaba cancelada): aquí no hay
+    // nada que hacer, pero el cliente merece una respuesta. Se la da el bot,
+    // que sí sabe explicarlo y ofrecer alternativas.
+    if (!canTransition(current, "CANCELLED")) return false;
     await prisma.$transaction(async (tx) => {
       await tx.barberAppointment.update({
         where: { id: appt.id },
@@ -1521,7 +1566,7 @@ async function applyReminderReply(
       phone,
       "❌ Tu visita quedó cancelada. Cuando quieras agendar de nuevo, escríbenos por aquí. ¡Nos vemos!",
     );
-    return;
+    return true;
   }
 
   // reschedule — NO se toca el estado de la visita: cambiar de horario es
@@ -1533,6 +1578,7 @@ async function applyReminderReply(
     phone,
     "🗓️ Con gusto te movemos la visita. Dinos qué día y a qué hora te queda mejor y te confirmamos el lugar.",
   );
+  return true;
 }
 
 /**

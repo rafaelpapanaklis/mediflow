@@ -1,0 +1,106 @@
+{
+  "title": "WhatsApp bot",
+  "subtitle": "It answers your WhatsApp and books on its own. Every time it offers comes from your real schedule — it never makes a slot up.",
+  "errors": {
+    "noPermission": "You don't have permission to see the WhatsApp bot.",
+    "planLocked": "The WhatsApp bot is part of the Profesional plan. With it, your WhatsApp books appointments even while you're cutting hair.",
+    "saveFailed": "Couldn't save. Try again.",
+    "storageMissing": "sql/barber_bot.sql hasn't been applied to the database yet. Until then the bot can't be turned on.",
+    "aiMissing": "The AI key isn't configured on the server. Without it the bot can't reply."
+  },
+  "power": {
+    "title": "The bot",
+    "on": "On",
+    "off": "Off",
+    "hintOn": "It's answering the messages coming into your WhatsApp.",
+    "hintOff": "Messages land in your inbox and you answer them.",
+    "notConnected": "Connect your WhatsApp number first so the bot can reply."
+  },
+  "tone": {
+    "title": "How it talks",
+    "relajado": "Casual",
+    "relajadoHint": "Like a barber who already knows you.",
+    "formal": "Formal",
+    "formalHint": "Warm and correct, without over-familiarity.",
+    "nameLabel": "How it introduces itself",
+    "namePlaceholder": "Your barbershop's name",
+    "nameHint": "Leave it empty to use the barbershop's name.",
+    "notesLabel": "What it should know",
+    "notesPlaceholder": "There's parking on the corner. We don't take cards. We're on the second floor.",
+    "notesHint": "Facts you want it to answer. Don't put prices or hours here — it takes those from your schedule."
+  },
+  "abilities": {
+    "title": "What it can do",
+    "hint": "Turn off whatever you'd rather handle yourself. Anything you turn off, the bot hands to a person.",
+    "agendar": "Book appointments",
+    "cancelar": "Cancel appointments",
+    "reagendar": "Move appointments",
+    "precios": "Quote prices",
+    "horarios": "Give opening hours",
+    "ubicacion": "Give the address",
+    "reagendarLocked": "Moving an appointment requires booking."
+  },
+  "hours": {
+    "title": "When it answers",
+    "always": "Around the clock",
+    "alwaysHint": "Recommended: late-night messages are the ones most often lost.",
+    "custom": "Only during set hours",
+    "from": "From",
+    "to": "To",
+    "days": "Days",
+    "offHint": "Outside those hours it says you'll reply when you open and flags the chat for you.",
+    "noDays": "Pick at least one day or the bot will never answer."
+  },
+  "spend": {
+    "title": "AI spending cap",
+    "hint": "Per day, per barbershop. Once it hits the cap the bot stops using AI and hands chats to you, so one persistent customer can't run up the bill.",
+    "capLabel": "Daily cap",
+    "today": "{spent} of {cap} so far today",
+    "reached": "Today's cap has been reached. Chats are going to your inbox.",
+    "model": "Model: {model}"
+  },
+  "quota": {
+    "title": "Message allowance",
+    "used": "{used} of {limit} this period",
+    "unlimited": "Unlimited on your plan",
+    "tight": "You're running low. When it runs out the bot stops replying and we'll say so right here.",
+    "exhausted": "This period's allowance is gone. The bot isn't replying."
+  },
+  "pauses": {
+    "title": "Chats you're handling",
+    "empty": "None. The bot is handling every chat.",
+    "hint": "Chats where the customer asked for a person, or the bot chose not to risk it.",
+    "resume": "Give back to the bot",
+    "pausedAt": "Since {when}",
+    "reasonLabel": "Reason"
+  },
+  "history": {
+    "title": "What it has booked",
+    "empty": "Nothing yet. As soon as a customer writes in, it shows up here.",
+    "hint": "Appointments closed on their own in the chat.",
+    "when": "For {when}",
+    "bookedAt": "Booked {when}",
+    "status": {
+      "PENDING": "To confirm",
+      "CONFIRMED": "Confirmed",
+      "IN_PROGRESS": "In progress",
+      "DONE": "Done",
+      "NO_SHOW": "No-show",
+      "CANCELLED": "Cancelled"
+    }
+  },
+  "actions": {
+    "save": "Save",
+    "saving": "Saving…",
+    "saved": "Saved"
+  },
+  "weekdays": {
+    "0": "Sun",
+    "1": "Mon",
+    "2": "Tue",
+    "3": "Wed",
+    "4": "Thu",
+    "5": "Fri",
+    "6": "Sat"
+  }
+}
