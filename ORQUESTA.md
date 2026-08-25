@@ -17232,3 +17232,269 @@ semáforo 1-15 días, folio REC-000123 desde un máximo de 122.
   así que nadie los corre solos. `package.json` es archivo PROHIBIDO para el
   vertical, así que la línea la tiene que agregar quien pueda tocarlo:
   `"test:rentas": "tsx --test src/lib/realty/__tests__/rentas.test.ts"`.
+
+═══════════════════════════════════════════════════════════════════════════
+▶ OLA 1 · TERMINAL 8 — EQUIPO, OFICINAS Y COMISIONES (vertical INMUEBLES)
+═══════════════════════════════════════════════════════════════════════════
+
+Dos pantallas del panel de inmuebles, de placeholder a producto:
+/inmobiliaria/equipo (personas, permisos, ficha pública del asesor, oficinas)
+y /inmobiliaria/comisiones (operaciones cerradas, reparto, recibo del periodo
+y tablero). 31 archivos, ~9 500 líneas. Guardia INMUEBLES en verde: CERO
+archivos compartidos tocados — ni schema.prisma, ni types.ts, ni
+permissions.ts, ni realty-auth.ts, ni el índice de diccionarios que comparten
+las diez terminales de la ola.
+
+───────────────────────────────────────────────────────────────────────────
+▶ LO QUE HACE
+───────────────────────────────────────────────────────────────────────────
+
+EQUIPO. Alta por correo con los cuatro roles del contrato. El login de
+DaleControl es COMPARTIDO entre los tres productos, así que hay dos caminos:
+correo nuevo → se crea el acceso con contraseña temporal que se enseña UNA
+vez; correo que YA tiene cuenta (el asesor que cambia de inmobiliaria, o que
+ya usa el dental) → se LIGA sin tocarle su contraseña. Ese segundo camino no
+existía en barber ni en el dental, que en ese caso mandan a usar otro correo.
+
+Matriz de permisos con la advertencia que pedía la regla: en cuanto hay UNA
+excepción, esa persona deja de heredar y un permiso nuevo del rol no le va a
+llegar. Se dice con todas sus letras, no se supone. La pantalla edita el
+conjunto EFECTIVO completo y el servidor guarda [] cuando coincide con el rol
+(herencia pura) o el conjunto entero — nunca un delta, que es el bug que se
+sufrió en el dental.
+
+Ficha pública del asesor con las credenciales REALES del mercado mexicano,
+capturadas una por una y no en un campo libre: EC0110.02 (el estándar del
+CONOCER), AMPI con su sección, y el registro estatal CON FECHA DE
+VENCIMIENTO — la pantalla avisa cuando ya venció, porque presumir en la web
+una licencia caducada es de lo primero que un cliente puede comprobar. Dos
+interruptores en AND (el de la cuenta y el del asesor), como manda el schema.
+La forma de los Json `credentials` y `socials` queda documentada en team.ts:
+ese es el contrato con quien pinte /i/{slug}/agentes/{agente}.
+
+OFICINAS. Alta con dirección, coordenadas y liga al mapa. Una sola principal,
+y marcarla quita la anterior EN LA MISMA transacción (sin eso, el orden de
+getAccessibleOfficeIds deja de ser determinista y la "principal" cambia sola
+entre peticiones). Borrar solo si está VACÍA; con inmuebles dentro se cierra,
+porque borrarla los dejaría con officeId NULL sin que nadie sepa de dónde
+salieron. Los inmuebles SIN oficina se cuentan aparte y no se esconden: un
+`{ in: [...] }` los descarta en silencio y la suma por sede dejaría de cuadrar
+con la cartera total.
+
+COMISIONES. Registro de la operación cerrada; al cerrarla el inmueble pasa a
+VENDIDO o RENTADO y ESO es lo que dispara la despublicación de portales — esta
+ola solo cambia el estatus, no llama a nadie. Editor de reparto entre
+CAPTADOR, COLOCADOR, OFICINA, FRANQUICIA y EXTERNO, por porcentaje o por monto
+fijo, que enseña LOS PESOS mientras se escribe (un "40%" no le dice nada a
+nadie; "$60,000" sí) y no deja guardar hasta que la suma cierre al centavo.
+Recibo por periodo con devengado / pagado / por pagar / en proceso, y pago por
+persona o de golpe. Tablero con cerrado, en proceso, conversión del embudo y
+tiempo de primera respuesta.
+
+PLANTILLAS DE REPARTO SIN TABLA. El schema no tiene tabla de plantillas y esta
+ola no lo toca, así que las plantillas de la cuenta se DEDUCEN de lo que la
+inmobiliaria ya repartió: un reparto usado doce veces ES su plantilla, sale
+primero, y se mantiene sola. Detrás van los presets de mercado (40/40/20,
+50/50, 35/35/20/10…) que no dupliquen los suyos. Resultó mejor que una tabla:
+no hay nada que capturar y aprende del uso.
+
+───────────────────────────────────────────────────────────────────────────
+▶ LA BAJA DE UN ASESOR (la regla de negocio de Rafael, escrita UNA vez)
+───────────────────────────────────────────────────────────────────────────
+
+Pantalla que cuenta antes de confirmar: "tiene 14 inmuebles, 3 visitas
+agendadas y 7 prospectos activos. ¿A quién se los paso?" — con la opción
+explícita de dejarlos sin asignar. Y luego, en la transacción:
+
+ 1. Sus inmuebles SIGUEN publicados. No se toca isPublished ni el estatus.
+ 2. Quedan sin asesor (assignedUserId = null) o con el que se elija.
+ 3. Su página /i/{slug}/agentes/{agente} se apaga, pero la fila
+    RealtyAgentProfile SOBREVIVE con su publicSlug y solo se pone active =
+    false. 🔴 Eso es deliberado y es el CONTRATO con quien construya la web
+    pública: con la fila viva se puede responder 301 a la página de la
+    inmobiliaria y conservar el SEO. Si se borrara sería un 404 y se tiraría
+    a la basura el posicionamiento de esa dirección.
+ 4. Prospectos y contactos a la bandeja general (o al nuevo asesor), con
+    rastro en la bitácora del prospecto (kind ASIGNACION) diciendo qué pasó.
+    Cuando van a la bandeja general se limpia también assignedAt: si no, el
+    tablero diría que llevan asignados desde que los tomó alguien que ya no
+    está.
+ 5. Visitas POR VENIR y pendientes abiertos se reasignan. Las visitas YA
+    REALIZADAS conservan a quien las enseñó: son historia y no se reescribe.
+
+Lo que NO se toca, y por qué:
+ · Las comisiones. En RealtyCommissionSplit un realtyUserId NULL SIGNIFICA
+   "la parte es de la oficina", así que borrar al asesor convertiría su
+   comisión sin pagar en dinero de la casa, sin aviso. Se siguen debiendo y
+   se siguen viendo. La pantalla lo dice con el monto exacto.
+ · Las llaves sin devolver. Pasárselas a otro sería mentir: el juego sigue
+   físicamente en su bolsa. Se AVISAN en rojo para que se recuperen.
+ · RealtyTask.userId es NOT NULL, así que sin destinatario los pendientes se
+   quedan con quien se dio de baja (siguen existiendo) y la pantalla lo dice.
+
+Por eso "eliminar" aquí es DESACTIVAR: un DELETE rompería las comisiones
+(onDelete NoAction) y dejaría la bitácora sin autor.
+
+───────────────────────────────────────────────────────────────────────────
+▶ LA ARITMÉTICA (lo que decide cuánto cobra cada quien)
+───────────────────────────────────────────────────────────────────────────
+
+src/lib/realty/commissions.ts es PURO y client-safe a propósito: el editor lo
+importa para enseñar los pesos mientras se escribe y el servidor lo vuelve a
+correr antes de guardar. Una sola función, así la pantalla no puede prometer
+un reparto que la API vaya a rechazar — ni al revés.
+
+Centavos enteros y BigInt. commissionAmount es Decimal(14,2): hasta ~1e14
+centavos, y multiplicar eso por los 10 000 puntos base da ~1e18, que REVIENTA
+el entero seguro de JavaScript (9e15) en silencio y con el resultado
+equivocado. El producto va en BigInt y solo vuelve a Number cuando ya es un
+importe.
+
+Reparto por resto mayor. 33.33% de $100 tres veces da 99.99 y falta un
+centavo; repartirlo "a ojo" deja un centavo que nadie cobra y que no cuadra
+con el recibo. Aquí el residuo se entrega, centavo a centavo, a las partes con
+la fracción más grande. Un revisor lo demostró formalmente (leftover =
+floor(Σ fracciones) ∈ [0, n−1], siempre repartible) y lo confirmó con 300 000
+repartos aleatorios: 0 fallos.
+
+33 pruebas puras en src/lib/realty/__tests__/comisiones.test.ts, sin Postgres
+ni navegador, medio segundo. Incluida la de Rafael: $150,000 al 40/40/20 →
+$60,000 / $60,000 / $30,000 exactos.
+
+───────────────────────────────────────────────────────────────────────────
+▶ LO QUE ENCONTRARON LOS TRES REVISORES (y qué se arregló)
+───────────────────────────────────────────────────────────────────────────
+
+Tres revisores read-only e independientes: aritmética, permisos/aislamiento y
+alcance/fronteras. Encontraron NUEVE defectos reales. Todos arreglados antes
+del commit. Los que valen la pena contar:
+
+🔴 team.manage era la LLAVE MAESTRA (escalada de privilegios). setMemberPermissions
+guardaba el conjunto que mandaba el cliente sin comprobar que quien lo reparte
+LO TENGA. Ataque de una sola llamada: un gerente —que por rol NO tiene
+billing.manage— se editaba a sí mismo mandando las 24 claves y salía con la
+suscripción en la mano. Y un asesor a quien le dieron team.manage como
+excepción se auto-otorgaba todo lo demás. "Solo un dueño nombra a otro dueño"
+no servía de nada: el atacante no necesitaba el ROL, se llevaba el SET.
+Ahora la regla es simétrica y vale para dar Y para quitar: las claves que el
+llamante no posee no se mueven, ni hacia arriba ni hacia abajo (así un gerente
+tampoco puede quitarle la suscripción al dueño). La pantalla las pinta en gris
+con la etiqueta "No es tuyo".
+
+🔴 El aislamiento por OFICINA estaba solo en la LECTURA. Un gerente con acceso
+a la sucursal 1 no VEÍA las operaciones de la 2, pero con el id en la mano
+podía cerrarlas, repartirlas y marcarlas pagadas — y la respuesta le devolvía
+la operación entera, así que la escritura era además un canal de lectura de lo
+que el alcance le negaba. Ahora todo lo que toca una operación por id pasa por
+loadDealInScope. Incumplía directamente la regla 3 del encargo.
+
+🔴 La API no validaba el MODO ni el PLAN. Las páginas redirigían y el menú
+escondía, pero /api/realty/team respondía igual desde una cuenta en modo
+AGENT, y el módulo entero de comisiones se podía usar por curl sin tener la
+feature en el plan (bypass de monetización). assertRealtyArea lo corta, y sale
+del MISMO campo `modes`/`featureKey` de REALTY_NAV_ITEMS — no de un if
+inventado que se quedaría viejo. Es literalmente lo que pedía la regla 6:
+"nunca confíes en que la UI escondió el botón".
+
+🔴 "Pagar todo" a un asesor EXTERNO pagaba a TODOS los externos del periodo.
+El where filtraba por `party: "EXTERNO"` y ahí caben contrapartes distintas.
+Ahora el nombre identifica a quién se le paga, y sin él es un 400.
+
+🔴 La cuenta podía quedarse SIN DUEÑO, viva pero decapitada. El freno de
+"último administrador" miraba team.manage, y MANAGER también lo tiene: el
+único OWNER se bajaba a gerente (o un gerente lo daba de baja) y a partir de
+ahí NADIE podía volver a crear un dueño —solo un OWNER puede— ni tocar la
+suscripción. Sin más salida que soporte. assertNotLastOwner lo cierra.
+
+🔴 El modal de oficinas no era fijo. Sus dos modales vivían DENTRO del div con
+container-type, y un container-type convierte a su elemento en bloque
+contenedor de los position:fixed de dentro: el modal salía a media pantalla
+con el fondo sin cubrir. Es exactamente la trampa contra la que advierte el
+comentario del propio CSS. Las otras dos pantallas sí lo hacían bien.
+
+🔴 El editor de reparto se contradecía a sí mismo. El porcentaje de una parte
+por MONTO se derivaba con una división entera que trunca: tres partes de $1.00
+sobre una comisión de $3.00 daban 33.33% cada una y la barra decía "99.99%"
+JUNTO AL PALOMEO VERDE de "cierra al 100%". Y peor, ese 33.33 truncado se
+guardaba, con lo que la deducción de plantillas descartaba el reparto por no
+sumar 100: una operación cerrada al centavo no llegaba nunca a ser plantilla y
+nadie iba a saber por qué. Ahora el porcentaje se deriva del IMPORTE con el
+mismo resto mayor que el dinero, así que cuando el reparto cierra los
+porcentajes suman 100 por construcción. Al revés también mentía: formatPct
+recortaba a 100, y un reparto al 150% se enseñaba como "100%" mientras el chip
+decía "sobran $500".
+
+🔴 Un importe absurdo tumbaba el editor. toCents("1e307") pasaba el
+Number.isFinite pero ×100 se desbordaba a Infinity, y BigInt(Infinity) LANZA:
+computeSplits rompía su promesa de "nunca lanza", se caía el editor en pleno
+render y la API devolvía 500 en vez de 400. El campo es texto libre, así que
+era alcanzable tecleando.
+
+🟡 Un asesor raso veía el embudo de todo el equipo. El ranking consultaba los
+prospectos de la cuenta entera sin recortar por usuario: cualquiera con
+commissions.view se llevaba conversión y tiempos de respuesta de sus
+compañeros. Ahora sin commissions.manage el tablero es el SUYO.
+
+🟡 Fuga por la puerta de las oficinas. setMemberOfficeAccess devolvía la ficha
+completa —correo y matriz de permisos— a quien tiene offices.manage pero no
+team.manage: se podía leer el directorio de uno en uno. Y getOfficesOverview
+no pedía ningún permiso, exponiendo números por sede y el precio del plan de
+upgrade a cualquiera con sesión.
+
+Lo que los revisores dieron por LIMPIO: el motor de reparto (demostrado y con
+fuzz), el aislamiento por accountId (ninguna fuga cross-tenant en las tres
+capas), MEMBER_SELECT como lista blanca sin supabaseId, la frontera
+servidor/cliente (los 10 componentes verificados import por import), el
+contraste AA (blanco solo sobre pine-600; en oscuro pine-400 con texto
+oscuro, jamás pine-500), las siete reglas de la baja, y la higiene: cero
+console.log, cero `any`, cero @ts-ignore.
+
+───────────────────────────────────────────────────────────────────────────
+▶ DECISIONES QUE CONVIENE CONOCER
+───────────────────────────────────────────────────────────────────────────
+
+· SIN DICCIONARIO PROPIO, en español directo. La convención del vertical pide
+  <area>.es.json + <area>.en.json y UNA línea en
+  src/i18n/dictionaries/realty/index.ts — pero ese índice lo comparten las
+  DIEZ terminales de esta ola y tocarlo era la forma más segura de romperle
+  el push a las otras nueve. El encargo pedía español de México y la prueba
+  i18n-alcance NO exige diccionario por área (solo que es/en tengan las
+  mismas llaves, que se respeta). El texto está en los componentes; pasarlo a
+  diccionario después es mecánico. Es la única desviación deliberada.
+
+· UNA PRUEBA FUERA DEL ALLOWLIST: src/lib/realty/__tests__/comisiones.test.ts.
+  Archivo nuevo, carpeta propia, cero riesgo de choque. Sin ella no había
+  forma de demostrar el 40/40/20.
+
+───────────────────────────────────────────────────────────────────────────
+▶ PENDIENTE — REQUIERE RAFAEL
+───────────────────────────────────────────────────────────────────────────
+
+- 🔴 NADA DE ESTO SE HA PROBADO CONTRA UNA BASE REAL. El SQL de la Ola 0 sigue
+  sin aplicarse en Supabase, así que ninguna de las dos pantallas se ha visto
+  con datos. Lo verificado es: build en verde, tipos limpios, 76 pruebas
+  (33 de aritmética pura + las 42 de contrato/i18n de la Ola 0 que siguen
+  pasando) y tres revisiones de código. El QA con datos está pendiente.
+
+- 🔴 LA META POR ASESOR NO SE PUEDE GUARDAR y es lo único del encargo que
+  queda fuera. El schema no tiene tabla de metas y la regla 1 prohíbe tocarlo
+  con nueve terminales en paralelo; meterla solo en un .sql sería repetir la
+  deuda técnica de barber (cinco tablas que vivían fuera del schema). El
+  tablero SÍ está completo y con números reales —cerrado, en proceso,
+  conversión del embudo, tiempo de primera respuesta por MEDIANA (el promedio
+  lo desvía un prospecto contestado tres días después) y ranking— pero la
+  barra de avance compara contra el mejor del periodo, no contra una meta.
+  Cuando exista realty_agent_goals, la meta entra en buildAgentRanking y no
+  cambia nada más. La pantalla lo dice, no lo disimula.
+
+- ⚪ El tiempo de primera respuesta depende de que alguien escriba
+  RealtyLead.firstResponseAt. Si la ola de prospectos no lo puebla, esa
+  columna del tablero sale vacía — no es un error de esta ola.
+
+- ⚪ La invitación no manda correo: se entrega una contraseña temporal, igual
+  que barber y el dental. Con RESEND_API_KEY ya configurada, mandar el correo
+  de bienvenida es un añadido pequeño y aislado.
+
+- ⚪ npx next build local necesita NODE_OPTIONS=--max-old-space-size=8192 o
+  muere con exit 134 en "Checking validity of types". Ya estaba documentado
+  en la Ola 0 y sigue igual: no es de esta ola, pero el margen se acaba.
