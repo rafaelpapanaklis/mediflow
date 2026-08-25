@@ -1,0 +1,528 @@
+{
+  "common": {
+    "save": "Guardar",
+    "saving": "Guardando…",
+    "cancel": "Cancelar",
+    "close": "Cerrar",
+    "delete": "Eliminar",
+    "edit": "Editar",
+    "back": "Regresar",
+    "search": "Buscar",
+    "all": "Todos",
+    "none": "—",
+    "loading": "Cargando…",
+    "retry": "Reintentar",
+    "add": "Agregar",
+    "remove": "Quitar",
+    "total": "Total",
+    "download": "Descargar",
+    "copy": "Copiar",
+    "copied": "Copiado",
+    "photos": "Fotos",
+    "addPhoto": "Agregar foto",
+    "uploading": "Subiendo…",
+    "genericError": "Algo falló. Inténtalo otra vez.",
+    "days": "días"
+  },
+  "leases": {
+    "title": "Contratos de arrendamiento",
+    "subtitle": "Quién renta, desde cuándo, cuánto paga y qué día. De aquí salen los cobros del mes.",
+    "new": "Nuevo contrato",
+    "newTitle": "Nuevo contrato de arrendamiento",
+    "editTitle": "Editar el contrato",
+    "kpi": {
+      "active": "Contratos activos",
+      "activeHint": "Los que están generando renta hoy.",
+      "expiring": "Por vencer en 90 días",
+      "expiringHint": "Empieza la renovación con tiempo.",
+      "balance": "Saldo por cobrar",
+      "balanceHint": "Todo lo que falta de todos los contratos.",
+      "overdue": "Cargos vencidos",
+      "overdueHint": "Con saldo y ya pasada la fecha de pago."
+    },
+    "filter": {
+      "status": "Estado del contrato",
+      "search": "Buscar por inmueble o inquilino",
+      "expiring": "Por vencer",
+      "expiring30": "30 días",
+      "expiring60": "60 días",
+      "expiring90": "90 días",
+      "clear": "Quitar filtros"
+    },
+    "status": {
+      "BORRADOR": "Borrador",
+      "ACTIVO": "Activo",
+      "VENCIDO": "Vencido",
+      "TERMINADO": "Terminado"
+    },
+    "table": {
+      "property": "Inmueble",
+      "tenant": "Inquilino",
+      "term": "Vigencia",
+      "rent": "Renta",
+      "paymentDay": "Día de pago",
+      "status": "Estado",
+      "balance": "Saldo",
+      "open": "Abrir"
+    },
+    "empty": {
+      "title": "Todavía no hay contratos",
+      "body": "Da de alta el primero: escoge el inmueble, captura al inquilino y la renta, y el sistema arma solo los cobros de todo el periodo.",
+      "cta": "Dar de alta un contrato"
+    },
+    "emptyFiltered": {
+      "title": "Ningún contrato con esos filtros",
+      "body": "Prueba con otro estado o quita la búsqueda."
+    },
+    "form": {
+      "property": "Inmueble",
+      "propertyHint": "El inmueble que se renta. Si no aparece, primero se da de alta en Inmuebles.",
+      "tenant": "Inquilino",
+      "tenantHint": "La persona que firma y paga.",
+      "guarantor": "Aval o fiador",
+      "guarantorHint": "Opcional. Quien responde si el inquilino deja de pagar.",
+      "role": "Papel",
+      "startsAt": "Empieza el",
+      "endsAt": "Termina el",
+      "rent": "Renta mensual",
+      "currency": "Moneda",
+      "paymentDay": "Día de pago",
+      "paymentDayHint": "El día del mes en que vence. Si el mes no tiene ese día, vence el último.",
+      "deposit": "Depósito en garantía",
+      "depositHint": "Se registra como retenido al activar el contrato.",
+      "increaseRule": "Regla de aumento",
+      "increasePct": "Porcentaje pactado",
+      "signedDocUrl": "Liga al contrato firmado",
+      "notes": "Notas",
+      "notesHint": "Lo que se pactó y no cabe en un campo. Solo lo ve tu equipo.",
+      "addParty": "Agregar aval o fiador",
+      "screening": "Investigación de solvencia",
+      "pickContact": "Escoge a la persona",
+      "pickProperty": "Escoge el inmueble",
+      "preview": "Se van a generar {count} cobros, uno por mes.",
+      "previewNone": "Con esas fechas no sale ningún cobro. Revisa el inicio y el término."
+    },
+    "increaseRule": {
+      "INPC": "Según la inflación (INPC)",
+      "FIJO": "Porcentaje fijo",
+      "NINGUNO": "Sin incremento"
+    },
+    "role": {
+      "INQUILINO": "Inquilino",
+      "AVAL": "Aval",
+      "FIADOR": "Fiador"
+    },
+    "screening": {
+      "none": "Sin investigar",
+      "PENDIENTE": "Investigación pendiente",
+      "APROBADO": "Aprobado",
+      "RECHAZADO": "Rechazado"
+    },
+    "actions": {
+      "activate": "Activar el contrato",
+      "activateHint": "Al activarlo se generan los cobros de todo el periodo y se registra el depósito.",
+      "terminate": "Terminar el contrato",
+      "terminateConfirm": "Se termina el contrato. Los cobros y los pagos se quedan como historial. ¿Seguimos?",
+      "regenerate": "Generar los cobros que falten",
+      "regenerateHint": "No duplica nada: solo agrega los meses que aún no existen.",
+      "delete": "Eliminar el borrador",
+      "deleteConfirm": "Este contrato está en borrador y no tiene dinero registrado. ¿Lo eliminamos?",
+      "statement": "Estado de cuenta",
+      "statementCsv": "Descargar en Excel"
+    },
+    "toast": {
+      "created": "Contrato creado",
+      "updated": "Contrato actualizado",
+      "activated": "Contrato activo. Se generaron {count} cobros.",
+      "terminated": "Contrato terminado",
+      "deleted": "Contrato eliminado",
+      "charges": "Se agregaron {count} cobros"
+    },
+    "detail": {
+      "backToList": "Todos los contratos",
+      "term": "Vigencia",
+      "rent": "Renta mensual",
+      "paymentDay": "Vence el día",
+      "deposit": "Depósito",
+      "increase": "Aumento",
+      "parties": "Quién firma",
+      "charges": "Cobros del contrato",
+      "payments": "Pagos recibidos",
+      "notes": "Notas del contrato",
+      "noParties": "Todavía no hay nadie capturado. Sin inquilino, el contrato no se puede activar.",
+      "noCharges": "Todavía no hay cobros. Se generan al activar el contrato.",
+      "noPayments": "Todavía no se ha recibido ningún pago.",
+      "daysToEnd": "Faltan {count} días para que venza",
+      "endedAgo": "Venció hace {count} días",
+      "endsToday": "Vence hoy"
+    },
+    "expiring": {
+      "title": "Por vencer",
+      "body": "Renueva a tiempo: un contrato que se vence sin avisar deja el inmueble sin cobrar.",
+      "none": "Ningún contrato vence en los próximos 90 días."
+    },
+    "tabs": {
+      "data": "Datos del contrato",
+      "charges": "Cobros",
+      "increase": "Aumento",
+      "deposit": "Depósito",
+      "inventory": "Inventario"
+    }
+  },
+  "charges": {
+    "table": {
+      "period": "Mes",
+      "dueAt": "Vence",
+      "amount": "Cargo",
+      "paid": "Pagado",
+      "balance": "Saldo",
+      "status": "Estado",
+      "actions": "Acciones"
+    },
+    "status": {
+      "PENDIENTE": "Pendiente",
+      "PARCIAL": "Pago parcial",
+      "PAGADO": "Pagado",
+      "VENCIDO": "Vencido"
+    },
+    "pay": "Registrar pago",
+    "lateDays": "{count} días de retraso"
+  },
+  "collections": {
+    "title": "Cobranza",
+    "subtitle": "Qué se cobra este mes, qué ya se pagó y qué está vencido. Todo en una hoja.",
+    "month": {
+      "prev": "Mes anterior",
+      "next": "Mes siguiente",
+      "current": "Ir al mes actual"
+    },
+    "kpi": {
+      "charged": "Se cobra este mes",
+      "chargedHint": "La suma de todos los cargos del periodo.",
+      "collected": "Ya cobrado",
+      "collectedHint": "Lo que entró, incluidos los abonos parciales.",
+      "balance": "Falta por cobrar",
+      "balanceHint": "El saldo del mes, vencido o no.",
+      "overdue": "Vencido",
+      "overdueHint": "Con saldo y con la fecha de pago ya pasada."
+    },
+    "aging": {
+      "title": "Antigüedad del saldo",
+      "AL_CORRIENTE": "Al corriente",
+      "D1_15": "1 a 15 días",
+      "D16_30": "16 a 30 días",
+      "D30_MAS": "Más de 30 días",
+      "showAll": "Ver todo el mes",
+      "chargesWord": "cobros"
+    },
+    "table": {
+      "property": "Inmueble",
+      "tenant": "Inquilino",
+      "dueAt": "Vence",
+      "amount": "Cargo",
+      "balance": "Saldo",
+      "status": "Estado",
+      "actions": "Acciones"
+    },
+    "empty": {
+      "title": "No hay nada que cobrar en este mes",
+      "body": "Cuando actives un contrato aparecerán aquí sus cobros, uno por mes."
+    },
+    "emptyFiltered": {
+      "title": "Nada en ese cajón del semáforo",
+      "body": "Toca “Ver todo el mes” para regresar."
+    },
+    "onlyOverdue": "Solo lo vencido",
+    "tabs": {
+      "charges": "Cobros del mes",
+      "reminders": "Recordatorios",
+      "maintenance": "Mantenimiento",
+      "expenses": "Gastos"
+    },
+    "sweep": "Correr el barrido",
+    "sweepHint": "Genera los cobros que falten, marca lo vencido y arma los avisos de hoy.",
+    "sweepDone": "Listo: {charges} cobros nuevos, {notices} avisos"
+  },
+  "payment": {
+    "title": "Registrar un pago",
+    "sub": "{property} · {tenant}",
+    "amount": "¿Cuánto pagó?",
+    "amountHint": "Puede ser menos que el cargo: queda como pago parcial con su saldo.",
+    "method": "¿Cómo pagó?",
+    "paidAt": "¿Qué día pagó?",
+    "reference": "Referencia",
+    "referenceHint": "El folio del SPEI o el número de la transferencia, si lo hay.",
+    "emitReceipt": "Emitir el recibo con folio",
+    "charge": "Cargo del mes",
+    "already": "Ya pagado",
+    "willRemain": "Quedaría pendiente",
+    "full": "Pagar todo el saldo",
+    "submit": "Registrar el pago",
+    "method_": {
+      "EFECTIVO": "Efectivo",
+      "SPEI": "Transferencia (SPEI)",
+      "TARJETA": "Tarjeta",
+      "OTRO": "Otro"
+    },
+    "toast": {
+      "saved": "Pago registrado",
+      "savedWithReceipt": "Pago registrado. Recibo {folio}",
+      "deleted": "Pago cancelado"
+    },
+    "delete": "Cancelar este pago",
+    "deleteConfirm": "Se elimina el pago y el cargo vuelve a quedar con su saldo. ¿Seguimos?"
+  },
+  "receipt": {
+    "label": "Recibo",
+    "open": "Ver el recibo",
+    "emit": "Emitir el recibo",
+    "none": "Sin recibo",
+    "notInvoice": "Es un recibo de renta, no un comprobante fiscal."
+  },
+  "reminders": {
+    "title": "Recordatorios de pago",
+    "subtitle": "Cuatro toques por cobro, con distinto tono. Un solo mensaje repetido cuatro veces se vuelve ruido y la gente lo silencia.",
+    "planWhatsapp": "Tu plan incluye WhatsApp: los avisos salen por WhatsApp y quedan como pendiente en el panel.",
+    "planNoWhatsapp": "Tu plan es Propietario y NO incluye WhatsApp. Los avisos salen por CORREO y quedan como pendiente aquí en el panel.",
+    "planUpgrade": "Para mandarlos por WhatsApp hay que subir al plan Asesor.",
+    "planUpgradeCta": "Ver los planes",
+    "steps": {
+      "PREVIO_5": "5 días antes",
+      "DIA_PAGO": "El día del pago",
+      "VENCIDO_3": "3 días después",
+      "VENCIDO_8": "8 días después"
+    },
+    "tone": {
+      "amable": "Amable",
+      "recordatorio": "Recordatorio",
+      "firme": "Firme",
+      "urgente": "Urgente"
+    },
+    "help": {
+      "PREVIO_5": "Un aviso amable de que se acerca el día de pago.",
+      "DIA_PAGO": "El recordatorio del día, con el monto y cómo pagar.",
+      "VENCIDO_3": "Ya venció: se avisa el saldo y se pide fecha de pago.",
+      "VENCIDO_8": "Última llamada antes de escalar la cobranza."
+    },
+    "queueTitle": "Avisos que salen hoy",
+    "queueEmpty": "Hoy no toca ningún aviso.",
+    "queueBody": "Un aviso sale solo el día exacto del escalón; así un cargo viejo no manda un mensaje diario para siempre.",
+    "channel": {
+      "WHATSAPP": "WhatsApp",
+      "CORREO": "Correo",
+      "PANEL": "Pendiente en el panel"
+    },
+    "noEmail": "Sin correo capturado: este aviso solo queda como pendiente aquí.",
+    "cron": "El barrido diario los arma solo. También puedes correrlo a mano desde arriba."
+  },
+  "increase": {
+    "title": "Aumento anual de la renta",
+    "subtitle": "Calcula el aumento con la inflación, revisa el tope y genera el aviso para el inquilino.",
+    "rule": "Regla pactada",
+    "inpc": "Inflación del año {year}",
+    "inpcMissing": "Todavía no está capturada la inflación",
+    "inpcMissingBody": "El INPC vive en los parámetros de las calculadoras y aún no se ha cargado. Captura el porcentaje a mano y sigue: nada se detiene.",
+    "pctMissing": "Este contrato no tiene porcentaje pactado",
+    "pctMissingBody": "Su regla de aumento es un porcentaje fijo, pero está vacío. Captúralo aquí o edítalo en los datos del contrato.",
+    "noneRule": "Este contrato se pactó SIN incremento. Si de todos modos quieres subir la renta, captura el porcentaje.",
+    "cap": "Tope legal",
+    "capLaw": "En la Ciudad de México el aumento anual no puede pasar de la inflación del año anterior (reforma al Código Civil, agosto de 2024).",
+    "capNotApplies": "Este inmueble no está en la Ciudad de México, así que ese tope no le aplica.",
+    "current": "Renta actual",
+    "suggested": "Aumento sugerido",
+    "newRent": "Renta nueva",
+    "pct": "Porcentaje que vas a aplicar",
+    "effectiveFrom": "Aplica a partir de",
+    "apply": "Aplicar el aumento",
+    "editable": "Se van a actualizar {count} cobros futuros.",
+    "locked": "{count} cobros no se tocan porque ya tienen abonos.",
+    "overTitle": "Ese aumento pasa el tope de la Ciudad de México",
+    "overBody": "El tope es {cap} y estás capturando {pct}. Guardarlo así puede dejar la cláusula sin efecto si el inquilino la reclama.",
+    "overReason": "¿Por qué se aplica de todos modos?",
+    "overReasonHint": "Queda registrado en el contrato con tu nombre y la fecha.",
+    "overConfirm": "Entiendo y lo aplico de todos modos",
+    "toast": {
+      "applied": "Aumento aplicado. Renta nueva: {rent}",
+      "copied": "Aviso copiado"
+    },
+    "noticeTitle": "Aviso para el inquilino",
+    "noticeBody": "Cópialo y mándaselo. Un aumento se avisa por escrito y con anticipación.",
+    "history": "Aumentos por encima del tope",
+    "historyEmpty": "No hay ninguno registrado.",
+    "historyRow": "{date} · tope {cap} · aplicado {pct}"
+  },
+  "deposit": {
+    "title": "Depósito en garantía",
+    "subtitle": "Es dinero del inquilino. Se retiene mientras dura el contrato y al final se devuelve o se aplica, siempre con una nota.",
+    "amount": "Monto",
+    "status": "Estado",
+    "resolvedAt": "Resuelto el",
+    "note": "Resolución",
+    "noteHint": "Escribe por qué se devuelve o se aplica. Sin nota, esa decisión no se puede defender después.",
+    "register": "Registrar el depósito",
+    "resolve": "Resolver el depósito",
+    "empty": "No hay depósito registrado en este contrato.",
+    "state": {
+      "RETENIDO": "Retenido",
+      "DEVUELTO": "Devuelto",
+      "APLICADO": "Aplicado"
+    },
+    "compareHint": "Antes de resolverlo, compara el inventario de entrada contra el de salida.",
+    "toast": {
+      "created": "Depósito registrado",
+      "resolved": "Depósito resuelto"
+    }
+  },
+  "inventory": {
+    "title": "Inventario del inmueble",
+    "subtitle": "Cuarto por cuarto, con fotos fechadas y la firma de las dos partes. Es la única prueba que resuelve la discusión del depósito al final.",
+    "entrada": "Inventario de entrada",
+    "salida": "Inventario de salida",
+    "newEntrada": "Levantar el de entrada",
+    "newSalida": "Levantar el de salida",
+    "edit": "Editar el recorrido",
+    "performedAt": "Fecha del recorrido",
+    "signedBy": "Firmaron",
+    "signedByHint": "Los nombres de quien entrega y quien recibe.",
+    "notes": "Observaciones",
+    "room": "Cuarto",
+    "item": "Concepto",
+    "condition": "Estado",
+    "addRow": "Agregar concepto",
+    "addRoom": "Agregar un cuarto completo",
+    "addRoomHint": "Mete los conceptos de siempre y solo corriges lo que cambie.",
+    "removeRow": "Quitar este concepto",
+    "compareTitle": "Entrada contra salida",
+    "compareBody": "Lado a lado, con las fotos de las dos veces. Lo que empeoró sale marcado.",
+    "verdict": {
+      "PEOR": "Empeoró",
+      "IGUAL": "Igual",
+      "MEJOR": "Mejoró",
+      "SOLO_ENTRADA": "No se revisó a la salida",
+      "SOLO_SALIDA": "No estaba en la entrada"
+    },
+    "summary": {
+      "worse": "{count} conceptos empeoraron",
+      "same": "{count} quedaron igual",
+      "missing": "{count} no se revisaron a la salida"
+    },
+    "empty": {
+      "title": "Todavía no hay recorridos",
+      "body": "Levanta el inventario de entrada el día que entregues la casa. Sin él, al final del contrato no hay contra qué comparar."
+    },
+    "onlyEntrada": "Falta el inventario de salida. Levántalo el día que recibas la casa.",
+    "onlySalida": "No hay inventario de entrada, así que no hay contra qué comparar.",
+    "conditions": {
+      "NUEVO": "Nuevo",
+      "BUENO": "Buen estado",
+      "USO": "Con uso normal",
+      "DANADO": "Dañado",
+      "FALTANTE": "Falta o no sirve"
+    },
+    "photoHint": "Las fotos se comprimen antes de subirse y cuentan contra el espacio de tu plan.",
+    "storage": "Espacio usado: {used} de {quota}",
+    "storageFull": "Se acabó el espacio de tu plan. Borra fotos que ya no ocupes o sube de plan.",
+    "noPhotos": "Sin fotos",
+    "toast": {
+      "saved": "Recorrido guardado",
+      "photo": "Foto agregada"
+    }
+  },
+  "maintenance": {
+    "title": "Mantenimiento",
+    "subtitle": "Lo que reporta el inquilino, quién lo atendió y cuánto costó. El costo se va a los gastos del inmueble.",
+    "new": "Reportar una incidencia",
+    "description": "¿Qué está fallando?",
+    "descriptionHint": "Con detalle: dónde, desde cuándo y qué se ha intentado.",
+    "reportedBy": "¿Quién lo reportó?",
+    "reportedByHint": "Casi siempre el inquilino, que no tiene usuario del panel.",
+    "property": "Inmueble",
+    "vendor": "Proveedor que lo atendió",
+    "cost": "Costo",
+    "resolvedAt": "Se resolvió el",
+    "createExpense": "Registrar el costo como gasto del inmueble",
+    "createExpenseHint": "Así la rentabilidad del inmueble no depende de que alguien se acuerde de capturarlo aparte.",
+    "status": {
+      "ABIERTO": "Abierto",
+      "EN_PROCESO": "En proceso",
+      "RESUELTO": "Resuelto"
+    },
+    "table": {
+      "property": "Inmueble",
+      "description": "Qué pasa",
+      "reported": "Reportó",
+      "status": "Estado",
+      "days": "Días",
+      "cost": "Costo",
+      "actions": "Acciones"
+    },
+    "empty": {
+      "title": "Sin incidencias abiertas",
+      "body": "Cuando el inquilino reporte algo, aparece aquí con sus fotos."
+    },
+    "toast": {
+      "created": "Incidencia registrada",
+      "updated": "Incidencia actualizada",
+      "expense": "Se registró el gasto del inmueble"
+    },
+    "noExpensePermission": "El costo se guardó, pero no tienes permiso para registrar gastos del inmueble.",
+    "portalNote": "El inquilino también podrá reportar desde su portal cuando esté listo."
+  },
+  "expenses": {
+    "title": "Gastos del inmueble",
+    "subtitle": "Predial, agua, mantenimiento y reparaciones. Es lo que después vuelve real el rendimiento de cada inmueble.",
+    "new": "Registrar un gasto",
+    "property": "Inmueble",
+    "kind": "Tipo de gasto",
+    "amount": "Monto",
+    "paidAt": "Fecha",
+    "note": "Nota",
+    "receiptUrl": "Liga al comprobante",
+    "receiptUrlHint": "Opcional. El comprobante que guardas tú; este vertical no factura.",
+    "kinds": {
+      "PREDIAL": "Predial",
+      "AGUA": "Agua",
+      "MANTENIMIENTO": "Mantenimiento",
+      "REPARACION": "Reparación",
+      "OTRO": "Otro gasto"
+    },
+    "table": {
+      "date": "Fecha",
+      "property": "Inmueble",
+      "kind": "Tipo",
+      "amount": "Monto",
+      "note": "Nota",
+      "actions": "Acciones"
+    },
+    "empty": {
+      "title": "Todavía no hay gastos capturados",
+      "body": "Captura el predial, el agua y las reparaciones. Sin ellos, el rendimiento del inmueble es la renta bruta disfrazada de utilidad."
+    },
+    "filterProperty": "Filtrar por inmueble",
+    "totalLabel": "Total del periodo",
+    "deleteConfirm": "¿Eliminamos este gasto?",
+    "toast": {
+      "created": "Gasto registrado",
+      "deleted": "Gasto eliminado"
+    }
+  },
+  "statement": {
+    "title": "Estado de cuenta",
+    "generated": "Generado el {date}",
+    "charged": "Total cargado",
+    "paid": "Total pagado",
+    "balance": "Saldo",
+    "table": {
+      "date": "Fecha",
+      "concept": "Concepto",
+      "charge": "Cargo",
+      "payment": "Pago",
+      "balance": "Saldo",
+      "receipt": "Recibo"
+    },
+    "empty": "Sin movimientos todavía.",
+    "byProperty": "Del inmueble completo",
+    "byLease": "De este contrato",
+    "notInvoice": "Este documento es un estado de cuenta de arrendamiento, no un comprobante fiscal."
+  }
+}

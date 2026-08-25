@@ -39,6 +39,11 @@ const OWN_PREFIXES = [
   "src/app/i/", // web pública de cada cuenta (/i/[slug])
   "src/app/inmobiliarias/", // landing pública del vertical (RESERVADA)
   "src/app/api/realty/",
+  // Crons del vertical. Viven bajo src/app/api/cron/** porque ahí es donde
+  // Vercel los busca, pero cada carpeta es EXCLUSIVA de inmuebles y lleva
+  // el prefijo "realty-": nada del dental ni de barber las importa. Todo lo
+  // demás de src/app/api/cron/** sigue siendo PROHIBIDO.
+  "src/app/api/cron/realty-rent/",
   "src/components/realty/",
   "src/lib/realty/",
   "src/i18n/dictionaries/realty/",

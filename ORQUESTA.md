@@ -16799,3 +16799,436 @@ Compartidos editados (los 4 autorizados)
   `realty_plan_configs.stripeLookupKey` está en NULL a propósito.
 - ⚪ La landing del vertical (`/inmobiliarias`) NO se construyó: la ruta queda
   libre y reservada (`REALTY_LANDING_BASE`).
+
+## [Inmuebles Ola 1 · T4 Rentas y Cobranza] — La mitad del producto que nadie cubre en México: contratos que generan sus propios cobros, el tope de aumento de la CDMX como reja, recibo con folio del MÁXIMO, e inventario de entrada contra salida con fotos ✅ (2026-08-25)
+
+**Rama:** `realty/t4` · **Base:** `b23540d5` (Ola 0)
+
+Los CRM inmobiliarios de México sirven al que VENDE (EasyBroker, Nocnok, Wasi);
+los de rentas sirven al que ADMINISTRA (MisRentas, Rentaio). Nadie hace las dos
+en un panel. Esta terminal construyó la segunda mitad, escrita para el cliente
+típico del vertical: el señor con diez casas que hoy las lleva en Excel.
+
+═══════════════════════════════════════════════════════════════════════════
+▶ LO QUE SE CONSTRUYÓ
+═══════════════════════════════════════════════════════════════════════════
+
+**A. Contratos de arrendamiento** — `/inmobiliaria/rentas` y `/rentas/[id]`
+- Alta con inmueble, inquilino, aval o fiador, vigencia, renta, moneda, día de
+  pago, depósito y regla de aumento. Estados borrador → activo → vencido →
+  terminado.
+- 🔴 **Al ACTIVAR se generan solos TODOS los cargos del periodo**, uno por mes.
+  Idempotente por el único `(leaseId, periodMonth)`: correr el generador dos
+  veces NO duplica el cobro del mes.
+- La regla del calendario está escrita en UN solo lugar (`buildChargeSchedule`)
+  y probada: un contrato del 15-mar al 14-mar con día de pago 15 son DOCE
+  cobros, no trece; el día 31 en febrero es el 28 (o el 29 bisiesto); y el
+  primer cobro nunca vence antes de que el inquilino se haya mudado.
+- Techo duro de 120 cargos: un dedazo en el año ("2226") ya no puede insertar
+  2 400 filas. La vista previa del formulario dice cuántos cobros van a salir
+  ANTES de guardar, que es cuando alguien nota el dedazo.
+- **El inquilino se captura en el mismo formulario.** Mandar al dueño a otra
+  pantalla a dar de alta el contacto es justo donde abandonaba el flujo.
+- Vista de contratos por vencer a 30 / 60 / 90 días.
+
+**B. Aumento anual con INPC y el TOPE de la CDMX** ⭐ (cumplimiento legal)
+- 🔴 **El tope es una REJA, no un texto de ayuda.** Si el inmueble está en la
+  Ciudad de México y el porcentaje pasa la inflación del año anterior, el POST
+  responde **409 `OVER_CAP` y NO guarda nada**. Solo se guarda con una
+  confirmación explícita, y esa confirmación **queda REGISTRADA** en las notas
+  del contrato con fecha, usuario, tope y motivo — y **sobrevive a que alguien
+  reescriba las notas después** (`mergeNotesPreservingAcks`, probado).
+- Si el INPC todavía no está capturado en `realty_calc_params` (lo llena T10),
+  **degrada con elegancia**: dice que falta, pide el porcentaje a mano y sigue.
+  No truena y no inventa un número — un dato inventado en una cláusula de
+  aumento es peor que un dato ausente.
+- 🔴 **"México" (el estado) NO se confunde con la Ciudad de México.** Marcar
+  Toluca como CDMX bloquearía un aumento perfectamente legal. Probado con
+  CDMX / cdmx / Ciudad de México / D.F. / Distrito Federal contra México /
+  Estado de México / MEX / Naucalpan.
+- Al aplicarlo se reescriben SOLO los cargos futuros SIN abonos. Un cargo que
+  ya recibió dinero no se toca nunca: cambiarle el importe convertiría un pago
+  completo en un saldo de la nada.
+- Genera el **aviso de aumento** ya redactado para mandárselo al inquilino.
+
+**C. Cobranza** — `/inmobiliaria/cobranza`
+- Tablero del mes: qué se cobra, qué se pagó, qué falta y qué está vencido.
+- **Semáforo por antigüedad del SALDO** (al corriente / 1-15 / 16-30 / +30).
+  Lo que envejece es el dinero que falta, no la fecha: un cargo vencido hace 40
+  días pero ya pagado está al corriente.
+- Registro de pago con **abono PARCIAL**: el cargo queda en PARCIAL con su
+  saldo y la pantalla recalcula "quedaría pendiente" mientras se teclea.
+  El estado del cargo se RECALCULA desde la suma de sus pagos, nunca desde el
+  que acaba de entrar (con dos abonos simultáneos, sumar solo el último dejaría
+  el cargo en PARCIAL estando ya cubierto).
+- 🔴 **RECIBO en PDF con folio consecutivo, tomado del MÁXIMO EMITIDO.**
+  Ver la nota del folio abajo — es el punto que más cuidado llevó.
+- Estado de cuenta por CONTRATO y por INMUEBLE, exportable a CSV (con BOM,
+  para que Excel en Windows lea los acentos).
+
+**D. Recordatorios escalonados** ⭐
+- Cuatro toques por cargo con TONO distinto: −5 días (amable), el día del pago
+  (recordatorio), +3 (firme), +8 (urgente). Un solo mensaje repetido cuatro
+  veces se vuelve ruido y la gente lo silencia.
+- El aviso sale el día EXACTO del escalón y ningún otro: así un cargo viejo no
+  manda un mensaje diario para siempre. Probado día por día.
+- 🔴 **El plan PROPIETARIO ($199) NO tiene WhatsApp.** En ese plan los avisos
+  salen por **CORREO** y como pendiente dentro del panel, y la pantalla lo dice
+  con esas palabras, con la liga a suscripción como el motivo para subir a
+  $349. Nadie llega esperando lo que no compró.
+- Cron diario `/api/cron/realty-rent` (ver PENDIENTE: falta darlo de alta).
+
+**E. Depósito en garantía**
+- Se registra solo al activar el contrato. Estados retenido / devuelto /
+  aplicado, y **resolverlo EXIGE una nota**: sin ella esa decisión no se puede
+  defender en la conversación del final del contrato.
+
+**F. Inventario de entrada y de salida** ⭐ (el diferenciador)
+- Recorrido cuarto por cuarto con catálogo de conceptos (muros, pisos,
+  ventanas, puertas, cocina, baños, instalaciones…), estado de cada uno,
+  **fotos** y firma de las dos partes. "Agregar un cuarto completo" mete los
+  catorce conceptos de golpe: capturarlos a mano es donde alguien decide que
+  mejor no levanta el inventario.
+- **Comparación ENTRADA contra SALIDA lado a lado**, con las fotos de las dos
+  veces y lo que empeoró marcado. Esa es LA pelea al final de todo contrato, y
+  con esto deja de ser la palabra de uno contra la del otro.
+- Las fotos se **comprimen en el navegador** (1600 px, JPEG 0.72: de ~5 MB a
+  ~300 KB) y **cuentan contra el cupo de almacenamiento del plan**, que la
+  pantalla enseña. Bucket `realty-files` PRIVADO: en la BD se guarda la RUTA,
+  no una URL, y se firma al leer con caducidad de 5 minutos.
+
+**G. Mantenimiento**
+- Bandeja del panel: abierto → en proceso → resuelto, con proveedor, costo,
+  fecha y fotos. Al resolver con costo puede **crear el gasto del inmueble en
+  el mismo acto** — así la rentabilidad real no depende de que alguien se
+  acuerde de capturarlo aparte.
+- La API de alta ya está lista para que el portal del inquilino (T9) la use;
+  `reportedBy` es texto libre porque quien reporta no tiene usuario del panel.
+
+**H. Gastos por propiedad**
+- Predial, agua, mantenimiento, reparación y otros, con fecha, nota y liga al
+  comprobante. Es lo que hace real el rendimiento por inmueble de la Ola 2.
+
+═══════════════════════════════════════════════════════════════════════════
+▶ 🔴 EL FOLIO DEL RECIBO — cómo se resolvió sin tocar el schema
+═══════════════════════════════════════════════════════════════════════════
+
+`RealtyPayment` **no tiene columna de folio** y el schema no se toca en la Ola 1.
+El folio vive DENTRO de `receiptUrl`, que es justo la liga del recibo:
+
+    receiptUrl = "/api/realty/payments/recibo/REC-000123"
+
+Dos consecuencias buscadas: la liga es real y resoluble (el folio ES la
+dirección del documento), y el número queda en la columna sin inventar nada.
+
+**El siguiente folio sale de un MAX en SQL, JAMÁS de un `count + 1`:**
+
+```sql
+SELECT MAX(CAST(digits AS BIGINT)) AS max
+FROM (
+  SELECT substring("receiptUrl" from '([0-9]+)[^0-9]*$') AS digits
+  FROM "realty_payments"
+  WHERE "accountId" = $1 AND "receiptUrl" IS NOT NULL
+) s
+WHERE digits IS NOT NULL AND length(digits) <= 12
+```
+
+Es el mismo patrón que el folio de factura del dental
+(`src/lib/invoices/next-invoice-number.ts`), y por el mismo motivo: con un pago
+borrado, `count + 1` apunta a un folio YA emitido y salen dos recibos con el
+mismo número. El `CAST` a BIGINT compara como NÚMERO — ordenar como texto
+pondría `REC-000009` por encima de `REC-000010` en cuanto creciera el ancho.
+
+**La carrera está cerrada con `pg_advisory_xact_lock` por CUENTA** dentro de la
+transacción: dos recibos simultáneos de la misma cuenta se forman en fila y los
+de cuentas distintas no se estorban. Y emitir es **idempotente**: si el pago ya
+tiene recibo se devuelve el mismo folio — un pago jamás tiene dos.
+
+═══════════════════════════════════════════════════════════════════════════
+▶ 🔴 STUBS PARA T6 (WhatsApp) — la firma exacta, es frontera entre olas
+═══════════════════════════════════════════════════════════════════════════
+
+Esta terminal **no manda un solo WhatsApp** y no tocó nada del módulo
+compartido. Deja la cola armada y estas dos firmas. Ningún campo cambia de
+nombre sin avisar.
+
+**1. El shape de un aviso** — `src/lib/realty/rent-charges.ts`
+
+```ts
+export type RealtyReminderStepKey = "PREVIO_5" | "DIA_PAGO" | "VENCIDO_3" | "VENCIDO_8";
+export type RealtyNoticeChannel = "WHATSAPP" | "CORREO" | "PANEL";
+
+export interface RealtyRentNotice {
+  key: string;              // idempotencia: `${chargeId}:${step}`
+  accountId: string;
+  leaseId: string;
+  chargeId: string;
+  propertyId: string;
+  propertyTitle: string;
+  contactId: string | null;
+  contactName: string;
+  contactPhone: string | null;   // normalizado a 10 dígitos (mxTenDigits)
+  contactEmail: string | null;
+  step: RealtyReminderStepKey;
+  tone: "amable" | "recordatorio" | "firme" | "urgente";
+  periodMonth: string;      // "YYYY-MM"
+  periodLabel: string;      // "Agosto de 2026"
+  dueAt: string;            // ISO
+  daysLate: number;         // negativo = todavía no vence
+  balanceCents: number;     // 🔴 el SALDO en CENTAVOS, no el cargo
+  currency: RealtyCurrency;
+  channels: RealtyNoticeChannel[];
+  message: string;          // ya redactado en es-MX; T6 puede sustituirlo
+}
+```
+
+**2. Quién arma la cola y quién entrega** — `src/lib/realty/leases.ts`
+
+```ts
+export async function buildRentNoticeQueue(args: {
+  accountId: string;
+  accountName: string;
+  timezone: string | null;
+  planHasWhatsapp: boolean;
+  today?: Date;
+  limit?: number;
+}): Promise<RealtyRentNotice[]>;
+
+/** 🔴 T6 sustituye SOLO EL CUERPO de esta función. La firma es la frontera. */
+export async function deliverRentNotice(notice: RealtyRentNotice): Promise<{
+  delivered: RealtyRentNotice["channels"];
+  pending: RealtyRentNotice["channels"];
+}>;
+```
+
+Hoy `deliverRentNotice` hace lo que SÍ le toca a T4: manda el **correo** cuando
+el aviso lleva el canal `CORREO` (plan PROPIETARIO) y da por entregado `PANEL`
+(el pendiente se calcula en vivo desde los cargos con saldo, no hay nada que
+escribir). **`WHATSAPP` se devuelve siempre en `pending`** — esa rama es de T6.
+
+`noticeChannelsFor(planHasWhatsapp)` es el punto ÚNICO que decide el canal:
+`true → ["WHATSAPP","PANEL"]`, `false → ["CORREO","PANEL"]`. Siempre incluye
+`PANEL` para que un aviso jamás se pierda del todo: si el inquilino no tiene
+correo capturado, el dueño lo ve igual en su lista.
+
+═══════════════════════════════════════════════════════════════════════════
+▶ ARCHIVOS
+═══════════════════════════════════════════════════════════════════════════
+
+**Lógica** (3 archivos, la separación es a propósito)
+- `src/lib/realty/rent-charges.ts` — PURO y client-safe: centavos enteros,
+  calendario de cobros, semáforo, escalones del recordatorio, folio.
+- `src/lib/realty/inpc.ts` — PURO y client-safe: aumento, tope de la CDMX,
+  detección de la CDMX, marcas de la confirmación registrada.
+- `src/lib/realty/leases.ts` — `server-only`: TODO lo que habla con la base.
+  Los dos de arriba son puros porque los importan componentes `"use client"`;
+  meterles prisma los volvería inservibles en el navegador.
+
+**APIs** (18 rutas) — `src/app/api/realty/{leases,payments,maintenance,expenses}/**`
+más `src/app/api/cron/realty-rent/route.ts`.
+
+**Pantallas** — `/inmobiliaria/rentas`, `/rentas/[id]`, `/cobranza`
+(+ 12 componentes en `src/components/realty/rentals/**`).
+
+**i18n** — `rentals.es.json` + `rentals.en.json` (405 llaves, mismas en los dos
+idiomas) y las 4 líneas de registro en `src/i18n/dictionaries/realty/index.ts`.
+
+**Pruebas** — `src/lib/realty/__tests__/rentas.test.ts` (32 casos, sin BD ni
+navegador): el dinero, el calendario, el semáforo, los escalones, el tope de la
+CDMX y el folio. `npx tsx --test src/lib/realty/__tests__/rentas.test.ts`
+
+═══════════════════════════════════════════════════════════════════════════
+▶ DECISIONES QUE CONVIENE CONOCER
+═══════════════════════════════════════════════════════════════════════════
+
+1. **Dinero en centavos enteros.** Los importes son `Decimal(14,2)` en Postgres
+   y viajan al navegador como `number` (así lo fija el contrato). Sumarlos con
+   `+` acumula error binario: doce rentas de 4 166.67 dan 50 000.039999999994.
+   Todo se convierte a centavos, se suma en enteros y se divide UNA vez al
+   presentar. Al escribir, `centsToDecimal` arma el string a mano — `cents/100`
+   es una división en punto flotante.
+
+2. **Mediodía UTC para toda fecha de calendario.** Las columnas son
+   `timestamp(3)` SIN zona. A medianoche, el mismo instante se lee como el día
+   anterior en México y la cobranza corre un día. A las 12:00Z el día es el
+   mismo se mire desde donde se mire. El "hoy" sale de `RealtyAccount.timezone`.
+
+3. **PARCIAL gana sobre VENCIDO.** Un cargo con abono y saldo vencido se pinta
+   "pago parcial" con sus días al lado, no rojo pelado: es lo que el dueño
+   necesita ver, y la antigüedad la lleva el semáforo, no el estado.
+
+4. **El cron pone VENCIDO, nunca TERMINADO.** Terminar un contrato es una
+   decisión de una persona, con su depósito resuelto y su inventario de salida.
+
+5. **Los modales se montan con portal en `<body>`.** `.rnt` declara
+   `container-type` y eso ATRAPA a `position:fixed`; por eso el CSS del modal
+   vuelve a declarar sus tokens (fuera del shell ya no los hereda).
+
+6. **Se atrapó un bug de foco antes de que llegara a nadie:** el efecto del
+   modal dependía de `onClose`, que los padres pasan como flecha en línea, así
+   que se volvía a correr con cada tecleo y el `focus()` le robaba el cursor al
+   textarea. La función vive ahora en un ref y el efecto depende solo de `open`.
+
+═══════════════════════════════════════════════════════════════════════════
+▶ PENDIENTE — REQUIERE RAFAEL
+═══════════════════════════════════════════════════════════════════════════
+
+- 🔴 **Dar de alta el cron en `vercel.json`.** Ese archivo está FUERA del
+  vertical (el guardia lo prohíbe) y no se toca desde aquí. El bloque exacto,
+  al array `crons` (8:00 de México = 14:00 UTC, mismo precedente que
+  `recall-sweep`):
+
+  ```json
+      {
+        "path": "/api/cron/realty-rent",
+        "schedule": "0 14 * * *"
+      }
+  ```
+
+  Mientras tanto **no se pierde nada**: el botón "Correr el barrido" del
+  tablero de cobranza hace exactamente lo mismo para una cuenta
+  (`POST /api/realty/leases/barrido`), y los cargos también se generan al
+  activar el contrato.
+
+- 🟡 **Se agregó UNA línea a `scripts/realty-guard.cjs`** y conviene que lo
+  sepas, porque es el archivo que audita a las demás terminales. El diff son
+  +5 líneas: el prefijo `"src/app/api/cron/realty-rent/"` en `OWN_PREFIXES`,
+  con su comentario. Sin él la guardia marcaba el cron como PROHIBIDO y salía
+  exit 1. El razonamiento: el cron está en el allowlist que se le dio a esta
+  terminal, la guardia se lista A SÍ MISMA en `OWN_FILES` (o sea que por
+  diseño es un archivo del vertical), y su propia cabecera instruye este
+  arreglo con estas palabras: *"una carpeta nueva del vertical se agrega a
+  OWN_PREFIXES, no a la variable de entorno"* — no hay valor de
+  `REALTY_GUARD_SHARED` que sirva, porque la variable solo indulta rutas que
+  ya estén en `SHARED_FILES`. El cambio es aditivo, de un solo prefijo, y
+  **el resto de `src/app/api/cron/**` sigue prohibido**. Aun así es el control
+  auditándose a sí mismo: si prefieres que un cron del vertical viva bajo
+  `src/app/api/realty/cron/**` y la guardia quede intacta, es mover un archivo.
+
+- 🟡 **Recordatorios: el calendario es de producto, no configurable por cuenta
+  todavía.** Los cuatro escalones (−5 / día / +3 / +8) y sus tonos viven en
+  `REALTY_REMINDER_STEPS` y la pantalla los enseña tal cual. Para que cada
+  cuenta los mueva hace falta UNA columna que no existe
+  (`RealtyAccount.reminderPolicy Json?`), y `prisma/schema.prisma` está fuera
+  del alcance de la Ola 1. La pantalla NO finge un interruptor que no guarda:
+  enseña el calendario real y dice qué sale por dónde.
+
+- ⚪ **QA con datos reales pendiente.** Todo lo probado es lógica pura (32
+  casos sin BD). Falta una pasada contra Supabase con un contrato de verdad:
+  activar, generar cargos, cobrar parcial, emitir recibo y bajar el PDF.
+
+- ⚪ **El INPC no está cargado** en `realty_calc_params` (es de T10). Hasta que
+  lo esté, la pantalla de aumento pide el porcentaje a mano y lo dice. No
+  bloquea nada.
+
+- ⚪ **Correo:** los avisos del plan PROPIETARIO salen por `sendEmail`
+  (`src/lib/email.ts`), que sin `RESEND_API_KEY` hace `console.log` y devuelve
+  `delivered: false`. Con la llave puesta salen de verdad, sin tocar código.
+
+═══════════════════════════════════════════════════════════════════════════
+▶ LO QUE ENCONTRARON LOS REVISORES (y se arregló antes de subir)
+═══════════════════════════════════════════════════════════════════════════
+
+Tres revisores read-only leyeron el área completa: allowlist y guardia,
+aislamiento por `accountId`, y la aritmética del dinero. El de seguridad
+recorrió las 80 llamadas Prisma una por una: **cero consultas sin filtro de
+tenant, cero escrituras de fila hija sin verificar el padre, cero rutas sin
+guard.** Lo que sí salió, y se corrigió:
+
+**🔴 El tope de la CDMX fallaba ABIERTO sin INPC.** El más grave, y era justo
+la promesa central del módulo. `exceedsCap` devuelve false cuando no hay
+tope conocido, así que con el INPC sin capturar —o con la tabla caída, que el
+try/catch convierte en lo mismo— un +35 % en un departamento de la Roma se
+guardaba sin 409, sin confirmación y sin una línea de huella. Que no era lo
+buscado lo probaba el propio mensaje de error, que ya tenía escrita la rama
+"el que publique el INPC" y era código muerto. Ahora hay `needsCapAck`: no
+saber el tope NO es lo mismo que no tener tope, así que se pide la
+confirmación igual y se registra con `tope: sin dato` — que
+`buildIncreaseAckLine` ya sabía escribir y nunca se usaba.
+
+**🔴 El recibo con folio no era un documento congelado.** El saldo del PDF
+sumaba TODOS los pagos del cargo, incluidos los posteriores. Reimprimir
+REC-000123 después de liquidar mostraba "Saldo $0.00" donde el día que se
+entregó decía "$7,000.00": el mismo folio con números distintos según cuándo
+lo abrieras. Ahora el corte va por `(paidAt, createdAt, id)` del propio pago.
+
+**🔴 El folio se podía REUTILIZAR.** El MAX se calcula sobre filas vivas, así
+que borrar el pago del folio más alto lo hacía bajar — y el siguiente recibo
+salía con un número ya entregado. Es la misma patología del `count + 1` que
+este módulo evita, en el caso más probable de todos: el último capturado es
+justo el que se corrige. Ahora **un pago con recibo emitido no se borra**
+(409 `RECEIPT_ISSUED`); se registra el movimiento que lo compensa, que además
+es lo correcto en un módulo de dinero. Sin recibo se borra igual que antes.
+
+**🔴 `photoUrls` era texto libre del request.** Acababa en dos sitios feos:
+`signRealtyPaths`, que firma con la llave de servicio lo que se le dé (mandar
+la ruta de una foto de otra cuenta devolvía una URL firmada válida), y un
+`<img src>` del panel (una `https://evil.tld/px.gif` guardada ahí manda IP,
+navegador y `Referer` con el id del contrato cada vez que alguien abre la
+ficha). Ahora `keepOwnEvidencePaths` solo deja pasar rutas
+`<scope>/<accountId>/…` — las únicas que este servidor pudo haber generado.
+
+**🔴 `receiptUrl` y `signedDocUrl` sin validar esquema.** Se pintan como
+`href`, y React 18 renderiza un `javascript:` con solo un warning en consola.
+Ahora pasan por `safeExternalUrl` (solo http/https).
+
+**🔴 El barrido mandaba cobranza en nombre de cuentas que ya no pagan.**
+`subscriptionStatus` se seleccionaba y no se leía nunca — un `select` muerto
+que delataba un check pensado y no escrito. Una cuenta en `past_due` seguía
+generando cargos y mandando correos a sus inquilinos desde nuestra
+infraestructura. Ahora el barrido la salta.
+
+**Un centavo entre lo que se ve y lo que se guarda.** `toCents` usaba un
+epsilon fijo en centavos mientras el error de `n * 100` crece con la
+magnitud: arriba de unos $45 000 dejaba de compensar y `toCents(9999999.995)`
+daba un centavo de menos. Ahora se trabaja sobre el TEXTO y es exacto en todo
+el rango de `Decimal(14,2)`. Y la pantalla del aumento calculaba en pesos
+mientras el servidor calculaba en centavos: 163,537.15 +50 % enseñaba
+245,305.72 y guardaba 245,305.73. Ahora la pantalla llama a la MISMA función.
+
+**Otros:** se mató `applyPctToCents` (duplicaba a `applyIncreaseToCents` y sin
+su guard de `Number.isFinite`, así que un pct NaN llegaba a armar `"NaN.NaN"`);
+el conteo de "se van a actualizar N cobros" usaba un criterio distinto al del
+update y mentía por uno; `clampPaymentDay("abc")` devolvía NaN y sacaba cargos
+con `Invalid Date`; un PATCH que no reenviaba `signedDocUrl` o `cost` los
+BORRABA; el depósito se resolvía sin atarlo al contrato de la URL; un depósito
+escrito como "1,500" se guardaba como $0.00 sin quejarse; y un contrato de
+exactamente 10 años se rechazaba por un `>=`.
+
+Y uno que salió releyendo mi propio código, antes de los revisores: el efecto
+del modal dependía de `onClose`, que los padres pasan como flecha en línea, así
+que se volvía a ejecutar con cada tecleo y el `focus()` le robaba el cursor al
+textarea. Se escribía una letra y se salía el foco.
+
+**Las 36 pruebas cubren ahora cada uno de estos casos**, incluido el del
+cierre: renta 12,000 → abono de 5,000 → saldo 7,000 exactos, cargo en PARCIAL,
+semáforo 1-15 días, folio REC-000123 desde un máximo de 122.
+
+═══════════════════════════════════════════════════════════════════════════
+▶ LO QUE SE DEJÓ ANOTADO Y NO SE ARREGLÓ
+═══════════════════════════════════════════════════════════════════════════
+
+- **Un inmueble con contratos en MXN y en USD suma las dos monedas** en el
+  estado de cuenta por propiedad, y el tablero de cobranza fija "MXN" a mano.
+  Hoy nadie tiene contratos en dólares; cuando los haya, hay que separar por
+  moneda antes de sumar. Es el defecto más real de los que quedan.
+- **`RealtyLease.rentAmount` cambia en cuanto se aplica el aumento**, aunque
+  el mes de arranque sea futuro. Si después se genera un cargo de un mes
+  ANTERIOR que faltaba, sale con la renta nueva. Guardar la fecha de vigencia
+  pide una columna que no existe.
+- **Los 14 `update`/`delete` por `id`** tienen su `findFirst` con `accountId`
+  inmediatamente arriba, así que no son explotables, pero pasarlos a
+  `updateMany` con `accountId` en el `where` los volvería seguros por
+  construcción y no por memoria de quien los escribió.
+- **`getRealtyContext` devuelve la fila `RealtyAccount` completa**
+  (`whatsappToken`, `stripeCustomerId`). Verificado: ninguna pantalla de esta
+  ola la filtra. Pero está a un `<Client account={ctx.account} />` de
+  distancia, y `realty-auth.ts` está fuera del alcance de esta terminal.
+- **Ninguna ruta corta por suscripción impaga.** Es convención del repo (el
+  layout lo documenta para no crear un loop con /suscripcion), pero esta es la
+  primera ola que pone dinero y envío de correos detrás de esa puerta. El
+  barrido sí se arregló; las pantallas y las APIs siguen la convención.
+- **Los tres suites de realty no están en `package.json`** (`test:realty-*`),
+  así que nadie los corre solos. `package.json` es archivo PROHIBIDO para el
+  vertical, así que la línea la tiene que agregar quien pueda tocarlo:
+  `"test:rentas": "tsx --test src/lib/realty/__tests__/rentas.test.ts"`.

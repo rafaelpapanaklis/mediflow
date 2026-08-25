@@ -1,0 +1,698 @@
+/* ═══════════════════════════════════════════════════════════════════════
+   DaleControl INMUEBLES — Rentas y Cobranza.
+
+   Todo cuelga de .rnt, que es el contenedor de estas dos pantallas. Los
+   colores salen de los tokens del vertical (realty-theme.css): aquí NO se
+   escribe un hex de marca, para que el modo oscuro funcione solo.
+   No se toca globals.css ni tailwind.config.ts: el guardia los prohíbe.
+
+   ANCHOS: @container, nunca @media. Quien manda es el ancho del <main> del
+   panel, no el de la ventana: con el sidebar abierto o cerrado la misma
+   ventana deja anchos muy distintos y un @media se equivoca en los dos
+   casos. El contenedor se declara UNA vez en .rnt y todas las reglas
+   preguntan por él — un contenedor no se consulta a sí mismo.
+
+   ⚠️ container-type crea contexto de contención y ATRAPA a position:fixed.
+   Los modales de estas pantallas se montan con portal en <body>, FUERA
+   de .rnt. Ver <Modal> en ui.tsx.
+
+   Medidas en px, no rem: la raíz del panel mide 13px y un rem no vale 16.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+.rnt {
+  container-type: inline-size;
+  container-name: rnt;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+/* ── Encabezado de pantalla ─────────────────────────────────────────── */
+.rnt-head {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.rnt-head__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+.rnt-head__title {
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--text-1);
+  margin: 0;
+}
+.rnt-head__sub {
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-3);
+  margin: 4px 0 0;
+  max-width: 62ch;
+}
+.rnt-head__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+/* ── Botones ────────────────────────────────────────────────────────── */
+.rnt-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 36px;
+  padding: 0 14px;
+  border-radius: 10px;
+  border: 1px solid var(--border-soft);
+  background: var(--bg-elev);
+  color: var(--text-2);
+  font-size: 13px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 150ms ease, color 150ms ease, border-color 150ms ease;
+}
+.rnt-btn:hover:not(:disabled) {
+  background: var(--bg-hover);
+  color: var(--text-1);
+}
+.rnt-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.rnt-btn:focus-visible {
+  outline: none;
+  box-shadow: var(--ring);
+}
+/* Primario: pine-600 en claro y pine-400 con tinta oscura encima en dark.
+   El 500 nunca lleva texto blanco (3.06 / 4.48 de contraste, no pasa AA). */
+.rnt-btn--primary {
+  background: var(--pine-600);
+  border-color: var(--pine-700);
+  color: #ffffff;
+}
+.rnt-btn--primary:hover:not(:disabled) {
+  background: var(--pine-700);
+  color: #ffffff;
+}
+.dark .rnt-btn--primary {
+  background: var(--pine-400);
+  border-color: var(--pine-500);
+  color: var(--pine-950);
+}
+.dark .rnt-btn--primary:hover:not(:disabled) {
+  background: var(--pine-300);
+  color: var(--pine-950);
+}
+.rnt-btn--danger {
+  color: var(--danger);
+  border-color: var(--border-soft);
+}
+.rnt-btn--sm {
+  height: 30px;
+  padding: 0 10px;
+  font-size: 12px;
+  border-radius: 8px;
+}
+.rnt-btn--ghost {
+  background: transparent;
+  border-color: transparent;
+}
+
+/* ── Tarjeta ────────────────────────────────────────────────────────── */
+.rnt-card {
+  background: var(--bg-elev);
+  border: 1px solid var(--border-soft);
+  border-radius: 14px;
+  box-shadow: var(--shadow-1);
+  overflow: hidden;
+}
+.rnt-card__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 13px 16px;
+  border-bottom: 1px solid var(--border-soft);
+  background: var(--bg-elev-2);
+}
+.rnt-card__title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-1);
+}
+.rnt-card__sub {
+  font-size: 11.5px;
+  color: var(--text-3);
+  margin-top: 2px;
+}
+.rnt-card__body {
+  padding: 16px;
+}
+.rnt-card__body--flush {
+  padding: 0;
+}
+
+/* ── KPIs ───────────────────────────────────────────────────────────── */
+.rnt-kpis {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 10px;
+}
+.rnt-kpi {
+  background: var(--bg-elev);
+  border: 1px solid var(--border-soft);
+  border-radius: 12px;
+  padding: 13px 15px;
+  box-shadow: var(--shadow-1);
+  min-width: 0;
+}
+.rnt-kpi__label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+.rnt-kpi__value {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--text-1);
+  margin-top: 5px;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+}
+.rnt-kpi__hint {
+  font-size: 11.5px;
+  color: var(--text-3);
+  margin-top: 5px;
+  line-height: 1.35;
+}
+.rnt-kpi--danger .rnt-kpi__value { color: var(--danger); }
+.rnt-kpi--good .rnt-kpi__value { color: var(--pine-600); }
+.dark .rnt-kpi--good .rnt-kpi__value { color: var(--pine-300); }
+
+/* ── Píldoras. Los tonos van con los tokens del vertical, no con los
+      colores oscuros que trae .badge-new de globals.css (en el modo claro
+      arena ese "brand" sale violeta pálido sobre verde). ── */
+.rnt-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+  border: 1px solid transparent;
+}
+.rnt-pill__dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  flex: 0 0 auto;
+}
+.rnt-pill--success { color: #1B5E3F; background: rgba(63, 132, 97, 0.14); border-color: rgba(63, 132, 97, 0.35); }
+.rnt-pill--brand   { color: var(--pine-700); background: var(--brand-soft); border-color: var(--border-brand); }
+.rnt-pill--info    { color: #1D4ED8; background: rgba(37, 99, 235, 0.10); border-color: rgba(37, 99, 235, 0.28); }
+.rnt-pill--warning { color: #92400E; background: rgba(217, 119, 6, 0.12); border-color: rgba(217, 119, 6, 0.30); }
+.rnt-pill--danger  { color: #9F1239; background: rgba(190, 24, 60, 0.10); border-color: rgba(190, 24, 60, 0.28); }
+.rnt-pill--neutral { color: var(--text-2); background: var(--bg-elev-2); border-color: var(--border-soft); }
+
+.dark .rnt-pill--success { color: #86D3AA; background: rgba(99, 160, 126, 0.16); border-color: rgba(99, 160, 126, 0.38); }
+.dark .rnt-pill--brand   { color: var(--pine-300); }
+.dark .rnt-pill--info    { color: #93C5FD; background: rgba(59, 130, 246, 0.16); border-color: rgba(59, 130, 246, 0.32); }
+.dark .rnt-pill--warning { color: #FCD34D; background: rgba(245, 158, 11, 0.16); border-color: rgba(245, 158, 11, 0.32); }
+.dark .rnt-pill--danger  { color: #FCA5A5; background: rgba(239, 68, 68, 0.16); border-color: rgba(239, 68, 68, 0.32); }
+
+/* ── Semáforo de antigüedad ─────────────────────────────────────────── */
+.rnt-aging {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8px;
+}
+.rnt-aging__cell {
+  border: 1px solid var(--border-soft);
+  border-left-width: 4px;
+  border-radius: 10px;
+  padding: 10px 12px;
+  background: var(--bg-elev);
+  text-align: left;
+  font-family: inherit;
+  cursor: pointer;
+  min-width: 0;
+  transition: background 150ms ease;
+}
+.rnt-aging__cell:hover { background: var(--bg-hover); }
+.rnt-aging__cell[aria-pressed="true"] { background: var(--brand-softer); box-shadow: var(--shadow-1); }
+.rnt-aging__cell--success { border-left-color: #3F8461; }
+.rnt-aging__cell--warning { border-left-color: #D97706; }
+.rnt-aging__cell--danger  { border-left-color: #BE123C; }
+.rnt-aging__cell--neutral { border-left-color: var(--border-strong); }
+.rnt-aging__label {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--text-2);
+}
+.rnt-aging__value {
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--text-1);
+  margin-top: 3px;
+  font-variant-numeric: tabular-nums;
+}
+.rnt-aging__count { font-size: 11.5px; color: var(--text-3); margin-top: 2px; }
+
+/* ── Tabla ──────────────────────────────────────────────────────────── */
+.rnt-tablewrap {
+  width: 100%;
+  overflow-x: auto;
+}
+.rnt-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12.5px;
+  min-width: 640px;
+}
+.rnt-table th {
+  text-align: left;
+  font-weight: 600;
+  font-size: 11px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  background: var(--bg-elev-2);
+  padding: 9px 12px;
+  border-bottom: 1px solid var(--border-soft);
+  white-space: nowrap;
+}
+.rnt-table td {
+  padding: 11px 12px;
+  border-bottom: 1px solid var(--border-soft);
+  color: var(--text-1);
+  vertical-align: middle;
+}
+.rnt-table tbody tr:last-child td { border-bottom: none; }
+.rnt-table tbody tr:hover { background: var(--bg-hover); }
+.rnt-table .num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.rnt-table .rnt-strong { font-weight: 600; }
+.rnt-table .rnt-muted { color: var(--text-3); font-size: 11.5px; }
+
+/* ── Formularios ────────────────────────────────────────────────────── */
+.rnt-field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+}
+.rnt-field__label {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--text-2);
+}
+.rnt-field__hint {
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--text-3);
+}
+.rnt-input,
+.rnt-select,
+.rnt-textarea {
+  width: 100%;
+  background: var(--bg-elev);
+  color: var(--text-1);
+  border: 1px solid var(--border-soft);
+  border-radius: 9px;
+  padding: 8px 11px;
+  font-size: 13px;
+  font-family: inherit;
+  height: 36px;
+  outline: none;
+  transition: border-color 150ms ease, box-shadow 150ms ease;
+}
+.rnt-textarea {
+  height: auto;
+  min-height: 82px;
+  resize: vertical;
+  line-height: 1.5;
+}
+.rnt-input:hover,
+.rnt-select:hover,
+.rnt-textarea:hover { border-color: var(--border-strong); }
+.rnt-input:focus,
+.rnt-select:focus,
+.rnt-textarea:focus {
+  border-color: var(--brand);
+  box-shadow: var(--ring);
+}
+.rnt-input::placeholder,
+.rnt-textarea::placeholder { color: var(--text-4); }
+/* El popup nativo del <select> no hereda tokens: sin esto sale
+   blanco-sobre-blanco en oscuro (misma regla que globals.css). */
+.rnt-select option { background-color: var(--bg-elev); color: var(--text-1); }
+
+.rnt-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+}
+/* auto-fit y NO @container a propósito: esta rejilla vive DENTRO de tarjetas
+   de anchos distintos, y un contenedor no se consulta a sí mismo. auto-fit
+   mide el hueco de verdad. */
+.rnt-grid--auto {
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+}
+
+/* ── Barra de filtros ───────────────────────────────────────────────── */
+.rnt-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.rnt-toolbar__grow { flex: 1 1 180px; min-width: 0; }
+
+.rnt-tabs {
+  display: flex;
+  gap: 2px;
+  border-bottom: 1px solid var(--border-soft);
+  overflow-x: auto;
+}
+.rnt-tab {
+  position: relative;
+  padding: 9px 13px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-3);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  font-family: inherit;
+  white-space: nowrap;
+}
+.rnt-tab:hover { color: var(--text-1); }
+.rnt-tab[aria-selected="true"] { color: var(--text-1); }
+.rnt-tab[aria-selected="true"]::after {
+  content: "";
+  position: absolute;
+  left: 9px;
+  right: 9px;
+  bottom: -1px;
+  height: 2px;
+  border-radius: 2px 2px 0 0;
+  background: var(--brand);
+}
+.rnt-tab__count {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  font-size: 10.5px;
+  background: var(--bg-elev-2);
+  color: var(--text-3);
+}
+
+/* ── Vacío ──────────────────────────────────────────────────────────── */
+.rnt-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  text-align: center;
+  padding: 34px 20px;
+  color: var(--text-3);
+}
+.rnt-empty__title { font-size: 14px; font-weight: 700; color: var(--text-1); }
+.rnt-empty__body { font-size: 12.5px; line-height: 1.55; max-width: 46ch; }
+
+/* ── Avisos en línea ────────────────────────────────────────────────── */
+.rnt-note {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  border: 1px solid var(--border-soft);
+  border-left-width: 3px;
+  border-radius: 10px;
+  padding: 11px 13px;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--text-2);
+  background: var(--bg-elev-2);
+}
+.rnt-note strong { color: var(--text-1); }
+.rnt-note--info    { border-left-color: #2563EB; }
+.rnt-note--warning { border-left-color: #D97706; }
+.rnt-note--danger  { border-left-color: #BE123C; }
+.rnt-note--brand   { border-left-color: var(--pine-500); background: var(--brand-softer); }
+
+/* ── Modal. Se monta con portal en <body>: FUERA de .rnt, porque
+      container-type atraparía su position:fixed. ── */
+.rnt-modal__overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  background: rgba(20, 32, 26, 0.55);
+  backdrop-filter: blur(3px);
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  overflow-y: auto;
+}
+.rnt-modal {
+  /* El modal declara TODOS sus colores: al montarse en <body> ya no está
+     bajo .realty-shell, así que no hereda los tokens del vertical y sin
+     esto saldría con la tinta del dental. */
+  --brand: #2F6B4D;
+  --brand-soft: rgba(63, 132, 97, 0.12);
+  --brand-softer: rgba(63, 132, 97, 0.05);
+  --pine-300: #94BFA6;
+  --pine-400: #63A07E;
+  --pine-500: #3F8461;
+  --pine-600: #2F6B4D;
+  --pine-700: #27543E;
+  --pine-950: #0E1E16;
+  --bg-elev: #FFFFFF;
+  --bg-elev-2: #F2F7F4;
+  --bg-hover: rgba(63, 132, 97, 0.06);
+  --border-soft: rgba(20, 32, 26, 0.12);
+  --border-strong: rgba(20, 32, 26, 0.2);
+  --border-brand: rgba(63, 132, 97, 0.35);
+  --text-1: #14201A;
+  --text-2: #46524B;
+  --text-3: #77837B;
+  --text-4: #A3ADA6;
+  --danger: #B3261E;
+  --ring: 0 0 0 3px rgba(63, 132, 97, 0.35);
+  --shadow-1: 0 1px 2px rgba(20, 32, 26, 0.05);
+
+  width: 100%;
+  max-width: 560px;
+  max-height: min(88vh, 860px);
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-elev);
+  color: var(--text-1);
+  border: 1px solid var(--border-strong);
+  border-radius: 16px;
+  box-shadow: 0 24px 60px -12px rgba(0, 0, 0, 0.45);
+  overflow: hidden;
+}
+.rnt-modal--wide { max-width: 780px; }
+.rnt-modal--full { max-width: 1040px; }
+
+.dark .rnt-modal {
+  --brand: #63A07E;
+  --bg-elev: #182420;
+  --bg-elev-2: #1F2E28;
+  --bg-hover: rgba(99, 160, 126, 0.08);
+  --border-soft: rgba(242, 247, 244, 0.1);
+  --border-strong: rgba(242, 247, 244, 0.18);
+  --text-1: #EDF3EF;
+  --text-2: #BCC7C0;
+  --text-3: #8B968F;
+  --text-4: #626D66;
+  --danger: #F2B8B5;
+}
+
+.rnt-modal__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 18px;
+  border-bottom: 1px solid var(--border-soft);
+  flex: 0 0 auto;
+}
+.rnt-modal__title { font-size: 15px; font-weight: 700; color: var(--text-1); }
+.rnt-modal__sub { font-size: 12px; color: var(--text-3); margin-top: 3px; line-height: 1.45; }
+.rnt-modal__body {
+  padding: 18px;
+  overflow-y: auto;
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.rnt-modal__foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 13px 18px;
+  border-top: 1px solid var(--border-soft);
+  background: var(--bg-elev-2);
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+}
+.rnt-modal__close {
+  background: transparent;
+  border: none;
+  color: var(--text-3);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 8px;
+  line-height: 0;
+}
+.rnt-modal__close:hover { background: var(--bg-hover); color: var(--text-1); }
+
+/* ── Inventario: entrada contra salida ──────────────────────────────── */
+.rnt-inv-row {
+  border: 1px solid var(--border-soft);
+  border-radius: 12px;
+  padding: 12px;
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 10px;
+  background: var(--bg-elev);
+}
+.rnt-inv-row__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.rnt-inv-row__title { font-size: 13px; font-weight: 700; color: var(--text-1); }
+.rnt-inv-row__where { font-size: 11.5px; color: var(--text-3); }
+.rnt-inv-side {
+  border: 1px solid var(--border-soft);
+  border-radius: 10px;
+  padding: 10px;
+  background: var(--bg-elev-2);
+  min-width: 0;
+}
+.rnt-inv-side__label {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  margin-bottom: 6px;
+}
+.rnt-inv-photos {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+.rnt-inv-photo {
+  width: 62px;
+  height: 62px;
+  border-radius: 8px;
+  object-fit: cover;
+  border: 1px solid var(--border-soft);
+  background: var(--bg-elev);
+  display: block;
+}
+.rnt-inv-photo--empty {
+  display: grid;
+  place-items: center;
+  font-size: 10px;
+  color: var(--text-4);
+  text-align: center;
+  padding: 4px;
+}
+
+/* ── Escalones del recordatorio ─────────────────────────────────────── */
+.rnt-steps {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8px;
+}
+.rnt-step {
+  border: 1px solid var(--border-soft);
+  border-radius: 10px;
+  padding: 11px 13px;
+  background: var(--bg-elev);
+  min-width: 0;
+}
+.rnt-step__when {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--text-1);
+}
+.rnt-step__tone {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--pine-600);
+  margin-top: 2px;
+}
+.dark .rnt-step__tone { color: var(--pine-300); }
+.rnt-step__help {
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--text-3);
+  margin-top: 5px;
+}
+
+/* ── Rejilla de anchos. TODO por @container, nunca por @media. ───────── */
+@container rnt (min-width: 520px) {
+  .rnt-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .rnt-aging { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .rnt-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .rnt-steps { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@container rnt (min-width: 760px) {
+  .rnt-kpis { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .rnt-aging { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .rnt-inv-row { grid-template-columns: 1fr 1fr; }
+  .rnt-inv-row__head { grid-column: 1 / -1; }
+  .rnt-steps { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
+
+@container rnt (min-width: 1000px) {
+  .rnt-grid--wide { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .rnt-split {
+    display: grid;
+    grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr);
+    gap: 18px;
+    align-items: start;
+  }
+}
+
+/* Columnas que solo tienen sentido con espacio: se esconden en pantallas
+   angostas en vez de aplastar la tabla. */
+@container rnt (max-width: 720px) {
+  .rnt-table .rnt-hide-sm { display: none; }
+}
+@container rnt (max-width: 520px) {
+  .rnt-table .rnt-hide-xs { display: none; }
+  .rnt-head__actions { width: 100%; }
+  .rnt-head__actions .rnt-btn { flex: 1 1 auto; justify-content: center; }
+}

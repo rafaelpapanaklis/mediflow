@@ -1,0 +1,528 @@
+{
+  "common": {
+    "save": "Save",
+    "saving": "Saving…",
+    "cancel": "Cancel",
+    "close": "Close",
+    "delete": "Delete",
+    "edit": "Edit",
+    "back": "Back",
+    "search": "Search",
+    "all": "All",
+    "none": "—",
+    "loading": "Loading…",
+    "retry": "Try again",
+    "add": "Add",
+    "remove": "Remove",
+    "total": "Total",
+    "download": "Download",
+    "copy": "Copy",
+    "copied": "Copied",
+    "photos": "Photos",
+    "addPhoto": "Add photo",
+    "uploading": "Uploading…",
+    "genericError": "Something went wrong. Please try again.",
+    "days": "days"
+  },
+  "leases": {
+    "title": "Lease agreements",
+    "subtitle": "Who rents, since when, how much they pay and on what day. This is where the month's charges come from.",
+    "new": "New lease",
+    "newTitle": "New lease agreement",
+    "editTitle": "Edit lease",
+    "kpi": {
+      "active": "Active leases",
+      "activeHint": "The ones producing rent today.",
+      "expiring": "Expiring within 90 days",
+      "expiringHint": "Start the renewal in time.",
+      "balance": "Outstanding balance",
+      "balanceHint": "Everything still owed across all leases.",
+      "overdue": "Overdue charges",
+      "overdueHint": "With a balance and past the payment date."
+    },
+    "filter": {
+      "status": "Lease status",
+      "search": "Search by property or tenant",
+      "expiring": "Expiring",
+      "expiring30": "30 days",
+      "expiring60": "60 days",
+      "expiring90": "90 days",
+      "clear": "Clear filters"
+    },
+    "status": {
+      "BORRADOR": "Draft",
+      "ACTIVO": "Active",
+      "VENCIDO": "Expired",
+      "TERMINADO": "Ended"
+    },
+    "table": {
+      "property": "Property",
+      "tenant": "Tenant",
+      "term": "Term",
+      "rent": "Rent",
+      "paymentDay": "Payment day",
+      "status": "Status",
+      "balance": "Balance",
+      "open": "Open"
+    },
+    "empty": {
+      "title": "No leases yet",
+      "body": "Create the first one: pick the property, add the tenant and the rent, and the system builds every monthly charge for you.",
+      "cta": "Create a lease"
+    },
+    "emptyFiltered": {
+      "title": "No leases match those filters",
+      "body": "Try another status or clear the search."
+    },
+    "form": {
+      "property": "Property",
+      "propertyHint": "The property being rented. If it is missing, add it under Properties first.",
+      "tenant": "Tenant",
+      "tenantHint": "The person who signs and pays.",
+      "guarantor": "Guarantor",
+      "guarantorHint": "Optional. Whoever answers if the tenant stops paying.",
+      "role": "Role",
+      "startsAt": "Starts on",
+      "endsAt": "Ends on",
+      "rent": "Monthly rent",
+      "currency": "Currency",
+      "paymentDay": "Payment day",
+      "paymentDayHint": "The day of the month it is due. If the month is shorter, it falls on the last day.",
+      "deposit": "Security deposit",
+      "depositHint": "Recorded as held when the lease is activated.",
+      "increaseRule": "Increase rule",
+      "increasePct": "Agreed percentage",
+      "signedDocUrl": "Link to the signed lease",
+      "notes": "Notes",
+      "notesHint": "Whatever was agreed and does not fit in a field. Only your team sees it.",
+      "addParty": "Add a guarantor",
+      "screening": "Background check",
+      "pickContact": "Pick the person",
+      "pickProperty": "Pick the property",
+      "preview": "{count} charges will be created, one per month.",
+      "previewNone": "Those dates produce no charges. Check the start and end."
+    },
+    "increaseRule": {
+      "INPC": "Tied to inflation (INPC)",
+      "FIJO": "Fixed percentage",
+      "NINGUNO": "No increase"
+    },
+    "role": {
+      "INQUILINO": "Tenant",
+      "AVAL": "Guarantor",
+      "FIADOR": "Surety"
+    },
+    "screening": {
+      "none": "Not checked",
+      "PENDIENTE": "Check pending",
+      "APROBADO": "Approved",
+      "RECHAZADO": "Rejected"
+    },
+    "actions": {
+      "activate": "Activate the lease",
+      "activateHint": "Activating creates every charge for the term and records the deposit.",
+      "terminate": "End the lease",
+      "terminateConfirm": "The lease will be ended. Charges and payments stay as history. Continue?",
+      "regenerate": "Create the missing charges",
+      "regenerateHint": "Nothing is duplicated: it only adds months that do not exist yet.",
+      "delete": "Delete the draft",
+      "deleteConfirm": "This lease is a draft with no money recorded. Delete it?",
+      "statement": "Statement",
+      "statementCsv": "Download for Excel"
+    },
+    "toast": {
+      "created": "Lease created",
+      "updated": "Lease updated",
+      "activated": "Lease is active. {count} charges were created.",
+      "terminated": "Lease ended",
+      "deleted": "Lease deleted",
+      "charges": "{count} charges were added"
+    },
+    "detail": {
+      "backToList": "All leases",
+      "term": "Term",
+      "rent": "Monthly rent",
+      "paymentDay": "Due on day",
+      "deposit": "Deposit",
+      "increase": "Increase",
+      "parties": "Who signs",
+      "charges": "Lease charges",
+      "payments": "Payments received",
+      "notes": "Lease notes",
+      "noParties": "Nobody has been added yet. Without a tenant the lease cannot be activated.",
+      "noCharges": "No charges yet. They are created when the lease is activated.",
+      "noPayments": "No payment has been received yet.",
+      "daysToEnd": "{count} days left before it expires",
+      "endedAgo": "Expired {count} days ago",
+      "endsToday": "Expires today"
+    },
+    "expiring": {
+      "title": "Expiring soon",
+      "body": "Renew in time: a lease that lapses unnoticed leaves the property earning nothing.",
+      "none": "No lease expires in the next 90 days."
+    },
+    "tabs": {
+      "data": "Lease details",
+      "charges": "Charges",
+      "increase": "Increase",
+      "deposit": "Deposit",
+      "inventory": "Inventory"
+    }
+  },
+  "charges": {
+    "table": {
+      "period": "Month",
+      "dueAt": "Due",
+      "amount": "Charge",
+      "paid": "Paid",
+      "balance": "Balance",
+      "status": "Status",
+      "actions": "Actions"
+    },
+    "status": {
+      "PENDIENTE": "Pending",
+      "PARCIAL": "Partial payment",
+      "PAGADO": "Paid",
+      "VENCIDO": "Overdue"
+    },
+    "pay": "Record a payment",
+    "lateDays": "{count} days late"
+  },
+  "collections": {
+    "title": "Collections",
+    "subtitle": "What is due this month, what has been paid and what is overdue. All on one page.",
+    "month": {
+      "prev": "Previous month",
+      "next": "Next month",
+      "current": "Go to the current month"
+    },
+    "kpi": {
+      "charged": "Due this month",
+      "chargedHint": "The sum of every charge in the period.",
+      "collected": "Collected",
+      "collectedHint": "What came in, partial payments included.",
+      "balance": "Still to collect",
+      "balanceHint": "The month's balance, overdue or not.",
+      "overdue": "Overdue",
+      "overdueHint": "With a balance and past the payment date."
+    },
+    "aging": {
+      "title": "Balance aging",
+      "AL_CORRIENTE": "Current",
+      "D1_15": "1 to 15 days",
+      "D16_30": "16 to 30 days",
+      "D30_MAS": "More than 30 days",
+      "showAll": "Show the whole month",
+      "chargesWord": "charges"
+    },
+    "table": {
+      "property": "Property",
+      "tenant": "Tenant",
+      "dueAt": "Due",
+      "amount": "Charge",
+      "balance": "Balance",
+      "status": "Status",
+      "actions": "Actions"
+    },
+    "empty": {
+      "title": "Nothing to collect this month",
+      "body": "Once you activate a lease its charges show up here, one per month."
+    },
+    "emptyFiltered": {
+      "title": "Nothing in that aging bucket",
+      "body": "Tap “Show the whole month” to go back."
+    },
+    "onlyOverdue": "Overdue only",
+    "tabs": {
+      "charges": "This month",
+      "reminders": "Reminders",
+      "maintenance": "Maintenance",
+      "expenses": "Expenses"
+    },
+    "sweep": "Run the sweep",
+    "sweepHint": "Creates missing charges, flags what is overdue and builds today's reminders.",
+    "sweepDone": "Done: {charges} new charges, {notices} reminders"
+  },
+  "payment": {
+    "title": "Record a payment",
+    "sub": "{property} · {tenant}",
+    "amount": "How much did they pay?",
+    "amountHint": "It can be less than the charge: it stays as a partial payment with its balance.",
+    "method": "How did they pay?",
+    "paidAt": "What day did they pay?",
+    "reference": "Reference",
+    "referenceHint": "The wire reference or transfer number, if there is one.",
+    "emitReceipt": "Issue the numbered receipt",
+    "charge": "Charge for the month",
+    "already": "Already paid",
+    "willRemain": "Would remain owing",
+    "full": "Pay the whole balance",
+    "submit": "Record the payment",
+    "method_": {
+      "EFECTIVO": "Cash",
+      "SPEI": "Bank transfer (SPEI)",
+      "TARJETA": "Card",
+      "OTRO": "Other"
+    },
+    "toast": {
+      "saved": "Payment recorded",
+      "savedWithReceipt": "Payment recorded. Receipt {folio}",
+      "deleted": "Payment cancelled"
+    },
+    "delete": "Cancel this payment",
+    "deleteConfirm": "The payment will be removed and the charge goes back to owing. Continue?"
+  },
+  "receipt": {
+    "label": "Receipt",
+    "open": "View the receipt",
+    "emit": "Issue the receipt",
+    "none": "No receipt",
+    "notInvoice": "It is a rent receipt, not a tax document."
+  },
+  "reminders": {
+    "title": "Payment reminders",
+    "subtitle": "Four touches per charge, each with a different tone. One message repeated four times becomes noise and people mute it.",
+    "planWhatsapp": "Your plan includes WhatsApp: reminders go out over WhatsApp and stay pending in the panel.",
+    "planNoWhatsapp": "Your plan is Propietario and does NOT include WhatsApp. Reminders go out by EMAIL and stay pending here in the panel.",
+    "planUpgrade": "To send them over WhatsApp you need to move up to the Asesor plan.",
+    "planUpgradeCta": "See the plans",
+    "steps": {
+      "PREVIO_5": "5 days before",
+      "DIA_PAGO": "On the payment day",
+      "VENCIDO_3": "3 days after",
+      "VENCIDO_8": "8 days after"
+    },
+    "tone": {
+      "amable": "Friendly",
+      "recordatorio": "Reminder",
+      "firme": "Firm",
+      "urgente": "Urgent"
+    },
+    "help": {
+      "PREVIO_5": "A friendly heads-up that the payment day is near.",
+      "DIA_PAGO": "The day-of reminder, with the amount and how to pay.",
+      "VENCIDO_3": "It is overdue: the balance is stated and a date is requested.",
+      "VENCIDO_8": "Last call before collections escalate."
+    },
+    "queueTitle": "Reminders going out today",
+    "queueEmpty": "No reminder is due today.",
+    "queueBody": "A reminder only goes out on the exact day of its step, so an old charge never sends a daily message forever.",
+    "channel": {
+      "WHATSAPP": "WhatsApp",
+      "CORREO": "Email",
+      "PANEL": "Pending in the panel"
+    },
+    "noEmail": "No email on file: this reminder only stays pending here.",
+    "cron": "The daily sweep builds them on its own. You can also run it by hand from above."
+  },
+  "increase": {
+    "title": "Annual rent increase",
+    "subtitle": "Compute the increase from inflation, check the cap and generate the notice for the tenant.",
+    "rule": "Agreed rule",
+    "inpc": "Inflation for {year}",
+    "inpcMissing": "Inflation has not been captured yet",
+    "inpcMissingBody": "The INPC lives in the calculator parameters and has not been loaded. Enter the percentage by hand and carry on: nothing is blocked.",
+    "pctMissing": "This lease has no agreed percentage",
+    "pctMissingBody": "Its increase rule is a fixed percentage, but it is empty. Enter it here or edit it in the lease details.",
+    "noneRule": "This lease was agreed with NO increase. If you still want to raise the rent, enter the percentage.",
+    "cap": "Legal cap",
+    "capLaw": "In Mexico City the annual increase cannot exceed the previous year's inflation (Civil Code reform, August 2024).",
+    "capNotApplies": "This property is not in Mexico City, so that cap does not apply to it.",
+    "current": "Current rent",
+    "suggested": "Suggested increase",
+    "newRent": "New rent",
+    "pct": "Percentage you will apply",
+    "effectiveFrom": "Effective from",
+    "apply": "Apply the increase",
+    "editable": "{count} future charges will be updated.",
+    "locked": "{count} charges are left alone because they already have payments.",
+    "overTitle": "That increase exceeds the Mexico City cap",
+    "overBody": "The cap is {cap} and you are entering {pct}. Saving it this way can leave the clause unenforceable if the tenant challenges it.",
+    "overReason": "Why apply it anyway?",
+    "overReasonHint": "It is recorded in the lease with your name and the date.",
+    "overConfirm": "I understand and I am applying it anyway",
+    "toast": {
+      "applied": "Increase applied. New rent: {rent}",
+      "copied": "Notice copied"
+    },
+    "noticeTitle": "Notice for the tenant",
+    "noticeBody": "Copy it and send it. An increase is announced in writing and in advance.",
+    "history": "Increases above the cap",
+    "historyEmpty": "None recorded.",
+    "historyRow": "{date} · cap {cap} · applied {pct}"
+  },
+  "deposit": {
+    "title": "Security deposit",
+    "subtitle": "It is the tenant's money. It is held for the term and at the end it is returned or applied, always with a note.",
+    "amount": "Amount",
+    "status": "Status",
+    "resolvedAt": "Resolved on",
+    "note": "Resolution",
+    "noteHint": "Write down why it is returned or applied. Without a note that decision cannot be defended later.",
+    "register": "Record the deposit",
+    "resolve": "Resolve the deposit",
+    "empty": "No deposit recorded on this lease.",
+    "state": {
+      "RETENIDO": "Held",
+      "DEVUELTO": "Returned",
+      "APLICADO": "Applied"
+    },
+    "compareHint": "Before resolving it, compare the move-in inventory against the move-out one.",
+    "toast": {
+      "created": "Deposit recorded",
+      "resolved": "Deposit resolved"
+    }
+  },
+  "inventory": {
+    "title": "Property inventory",
+    "subtitle": "Room by room, with dated photos and both signatures. It is the only proof that settles the deposit argument at the end.",
+    "entrada": "Move-in inventory",
+    "salida": "Move-out inventory",
+    "newEntrada": "Record the move-in walkthrough",
+    "newSalida": "Record the move-out walkthrough",
+    "edit": "Edit the walkthrough",
+    "performedAt": "Walkthrough date",
+    "signedBy": "Signed by",
+    "signedByHint": "The names of whoever hands over and whoever receives.",
+    "notes": "Observations",
+    "room": "Room",
+    "item": "Item",
+    "condition": "Condition",
+    "addRow": "Add an item",
+    "addRoom": "Add a whole room",
+    "addRoomHint": "It drops in the usual items and you only correct what changed.",
+    "removeRow": "Remove this item",
+    "compareTitle": "Move-in vs move-out",
+    "compareBody": "Side by side, with the photos from both times. Whatever got worse is flagged.",
+    "verdict": {
+      "PEOR": "Got worse",
+      "IGUAL": "Unchanged",
+      "MEJOR": "Improved",
+      "SOLO_ENTRADA": "Not checked on the way out",
+      "SOLO_SALIDA": "Was not in the move-in list"
+    },
+    "summary": {
+      "worse": "{count} items got worse",
+      "same": "{count} stayed the same",
+      "missing": "{count} were not checked on the way out"
+    },
+    "empty": {
+      "title": "No walkthroughs yet",
+      "body": "Record the move-in inventory the day you hand over the house. Without it there is nothing to compare against at the end."
+    },
+    "onlyEntrada": "The move-out inventory is missing. Record it the day you take the house back.",
+    "onlySalida": "There is no move-in inventory, so there is nothing to compare against.",
+    "conditions": {
+      "NUEVO": "New",
+      "BUENO": "Good condition",
+      "USO": "Normal wear",
+      "DANADO": "Damaged",
+      "FALTANTE": "Missing or broken"
+    },
+    "photoHint": "Photos are compressed before uploading and count against your plan's storage.",
+    "storage": "Storage used: {used} of {quota}",
+    "storageFull": "Your plan is out of storage. Delete photos you no longer need or move up a plan.",
+    "noPhotos": "No photos",
+    "toast": {
+      "saved": "Walkthrough saved",
+      "photo": "Photo added"
+    }
+  },
+  "maintenance": {
+    "title": "Maintenance",
+    "subtitle": "What the tenant reports, who fixed it and what it cost. The cost flows into the property's expenses.",
+    "new": "Report an issue",
+    "description": "What is failing?",
+    "descriptionHint": "In detail: where, since when and what has been tried.",
+    "reportedBy": "Who reported it?",
+    "reportedByHint": "Almost always the tenant, who has no panel account.",
+    "property": "Property",
+    "vendor": "Vendor who handled it",
+    "cost": "Cost",
+    "resolvedAt": "Resolved on",
+    "createExpense": "Record the cost as a property expense",
+    "createExpenseHint": "That way the property's return does not depend on someone remembering to enter it separately.",
+    "status": {
+      "ABIERTO": "Open",
+      "EN_PROCESO": "In progress",
+      "RESUELTO": "Resolved"
+    },
+    "table": {
+      "property": "Property",
+      "description": "What is wrong",
+      "reported": "Reported by",
+      "status": "Status",
+      "days": "Days",
+      "cost": "Cost",
+      "actions": "Actions"
+    },
+    "empty": {
+      "title": "No open issues",
+      "body": "When the tenant reports something it shows up here with their photos."
+    },
+    "toast": {
+      "created": "Issue recorded",
+      "updated": "Issue updated",
+      "expense": "The property expense was recorded"
+    },
+    "noExpensePermission": "The cost was saved, but you do not have permission to record property expenses.",
+    "portalNote": "Tenants will also be able to report from their portal once it is ready."
+  },
+  "expenses": {
+    "title": "Property expenses",
+    "subtitle": "Property tax, water, maintenance and repairs. This is what later makes each property's return real.",
+    "new": "Record an expense",
+    "property": "Property",
+    "kind": "Expense type",
+    "amount": "Amount",
+    "paidAt": "Date",
+    "note": "Note",
+    "receiptUrl": "Link to the proof",
+    "receiptUrlHint": "Optional. The proof you keep yourself; this product does not issue tax documents.",
+    "kinds": {
+      "PREDIAL": "Property tax",
+      "AGUA": "Water",
+      "MANTENIMIENTO": "Maintenance",
+      "REPARACION": "Repair",
+      "OTRO": "Other expense"
+    },
+    "table": {
+      "date": "Date",
+      "property": "Property",
+      "kind": "Type",
+      "amount": "Amount",
+      "note": "Note",
+      "actions": "Actions"
+    },
+    "empty": {
+      "title": "No expenses recorded yet",
+      "body": "Enter the property tax, the water and the repairs. Without them, the property's return is gross rent dressed up as profit."
+    },
+    "filterProperty": "Filter by property",
+    "totalLabel": "Total for the period",
+    "deleteConfirm": "Delete this expense?",
+    "toast": {
+      "created": "Expense recorded",
+      "deleted": "Expense deleted"
+    }
+  },
+  "statement": {
+    "title": "Statement of account",
+    "generated": "Generated on {date}",
+    "charged": "Total charged",
+    "paid": "Total paid",
+    "balance": "Balance",
+    "table": {
+      "date": "Date",
+      "concept": "Concept",
+      "charge": "Charge",
+      "payment": "Payment",
+      "balance": "Balance",
+      "receipt": "Receipt"
+    },
+    "empty": "No movements yet.",
+    "byProperty": "For the whole property",
+    "byLease": "For this lease",
+    "notInvoice": "This document is a lease statement of account, not a tax document."
+  }
+}
