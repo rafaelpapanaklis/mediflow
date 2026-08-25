@@ -92,6 +92,13 @@
       "publicRequestsHint": "Llegaron desde tu página web.",
       "publicRequestsCta": "Ver solicitudes"
     },
+    "blocker": {
+      "title": "Nadie puede reservar en línea: no hay ni un horario cargado",
+      "body": "Tu liga de reservas ya funciona, pero sin horarios le dice a la gente que no hay lugar. Carga el horario de al menos un barbero y se arregla solo.",
+      "bodyPublished": "Tu página ya está publicada y la reserva en línea está activa, pero sin horarios le dice a la gente que no hay lugar. Carga el horario de al menos un barbero y se arregla solo.",
+      "cta": "Cargar horarios ahora",
+      "askOwner": "Pídele al dueño o al encargado que cargue los horarios."
+    },
     "setup": {
       "title": "Tu barbería está lista para arrancar",
       "body": "Estos son los primeros pasos. En cuanto cobres la primera visita, aquí verás el resumen del día.",
@@ -282,13 +289,6 @@
         "newReturned": "Nuevos que volvieron",
         "returnRate": "Tasa de retorno %"
       }
-    },
-    "blocker": {
-      "title": "Nadie puede reservar en línea: no hay ni un horario cargado",
-      "body": "Tu liga de reservas ya funciona, pero sin horarios le dice a la gente que no hay lugar. Carga el horario de al menos un barbero y se arregla solo.",
-      "bodyPublished": "Tu página ya está publicada y la reserva en línea está activa, pero sin horarios le dice a la gente que no hay lugar. Carga el horario de al menos un barbero y se arregla solo.",
-      "cta": "Cargar horarios ahora",
-      "askOwner": "Pídele al dueño o al encargado que cargue los horarios."
     },
     "locked": {
       "title": "Los reportes son del plan Profesional",

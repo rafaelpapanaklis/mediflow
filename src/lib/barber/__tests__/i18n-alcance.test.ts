@@ -166,3 +166,176 @@ test("campañas: es y en tienen EXACTAMENTE las mismas llaves", () => {
   assert.deepEqual([...es].filter((k) => !en.has(k)), [], "llaves que solo están en es");
   assert.deepEqual([...en].filter((k) => !es.has(k)), [], "llaves que solo están en en");
 });
+
+// ── 4. TODA llave literal del vertical existe en es y en ────────────────
+//
+// El bug de /barber/inicio: el aviso rojo de "no hay horarios cargados"
+// pintaba "barber.inicio.blocker.title" en pantalla. La llave no faltaba —
+// el objeto "blocker" estaba escrito bajo la raíz "reportes" del mismo
+// archivo (inicio.es.json), y nadie pide "barber.reportes.blocker". Un
+// padre equivocado y la pantalla se ve rota sin que reviente nada.
+//
+// Ni el build ni los tipos ven eso: makeT devuelve la llave cuando no
+// resuelve. Así que la única red posible es leer el código y comprobar,
+// llave por llave, que existe en los DOS diccionarios.
+//
+// Se extraen las llaves ESTÁTICAS de dos formas:
+//   a) t("barber.algo.otro") — literal completo.
+//   b) helper de prefijo constante del archivo:
+//        const k = (key) => t(`barber.inicio.${key}`)   → k("blocker.title")
+//        const t = useMemo(() => { ... return (k) => tt(`barber.web.${k}`) })
+//      El prefijo sale del template; las llaves, de cada llamada literal a
+//      ese helper en el MISMO archivo.
+// Un ternario de dos literales, k(cond ? "a" : "b"), cuenta como dos
+// llaves: las dos se pintan según el caso.
+// Lo dinámico (`kpi.${nombre}`, t(variable)) no se puede
+// comprobar leyendo: se ignora a propósito.
+
+/** Borra comentarios SIN mover líneas: la prosa menciona llaves de ejemplo. */
+function sinComentarios(fuente: string): string {
+  return fuente
+    .replace(/\/\*[\s\S]*?\*\//g, (m) => m.replace(/[^\n]/g, " "))
+    .replace(/(^|[^:\\])\/\/[^\n]*/g, (m, antes: string) => antes + " ".repeat(m.length - antes.length));
+}
+
+/** `barber.web.${k}` → "barber.web". Con la interpolación AL FINAL: si hay
+ *  algo después (`barber.x.${a}.title`) la llave es dinámica y no cuenta. */
+const RE_PREFIJO = /`(barber\.[A-Za-z0-9_]+)\.\$\{\s*[A-Za-z_$][\w$]*\s*\}`/;
+
+/** Helpers de prefijo declarados en el archivo: nombre → prefijo. */
+function prefijosDelArchivo(codigo: string): Map<string, string> {
+  const lineas = codigo.split("\n");
+  const mapa = new Map<string, string>();
+  lineas.forEach((linea, i) => {
+    const m = RE_PREFIJO.exec(linea);
+    if (!m) return;
+    // const k = (key) => t(`barber.inicio.${key}`)
+    let nombre = /const\s+([A-Za-z_$][\w$]*)\s*=\s*[<(]/.exec(linea)?.[1];
+    // const t = useMemo(() => { ...; return (k) => tt(`barber.web.${k}`) })
+    for (let j = i - 1; !nombre && j >= 0 && j >= i - 12; j--) {
+      nombre = /const\s+([A-Za-z_$][\w$]*)\s*=\s*useMemo/.exec(lineas[j])?.[1];
+    }
+    if (nombre) mapa.set(nombre, m[1]);
+  });
+  return mapa;
+}
+
+type Uso = {
+  archivo: string;
+  linea: number;
+  llave: string;
+  /** true = el prefijo se leyó del archivo, la ruta es la definitiva. */
+  exacta: boolean;
+};
+
+/** Una llave de verdad: identificador con puntos, sin espacios (mismo
+ *  criterio que looksLikeKey en src/lib/barber/i18n.ts). Así un t("Hola")
+ *  ya resuelto no se cuela como llave faltante. */
+const PARECE_LLAVE = /^[A-Za-z][A-Za-z0-9_.-]*$/;
+
+/** Cualquier `algo("literal")` del archivo: el nombre y el primer argumento. */
+const RE_LLAMADA = /\b([A-Za-z_$][\w$]*)\(\s*"([^"\\]*)"/g;
+
+/** `k(cond ? "a" : "b")` — las dos ramas son literales y las dos se pintan.
+ *  En el bug de Inicio, blocker.body y blocker.bodyPublished salían justo
+ *  de aquí, así que ignorarlas dejaba fuera 2 de las 5 llaves rotas. */
+const RE_TERNARIO = /\b([A-Za-z_$][\w$]*)\(\s*[^)"']*?\?\s*"([^"\\]*)"\s*:\s*"([^"\\]*)"/g;
+
+function llavesDelArchivo(rutaAbs: string): Uso[] {
+  const codigo = sinComentarios(readFileSync(rutaAbs, "utf8"));
+  const prefijos = prefijosDelArchivo(codigo);
+  const rel = rutaAbs.slice(RAIZ.length + 1).split("\\").join("/");
+  const usos: Uso[] = [];
+
+  const anota = (llamador: string, literal: string, indice: number) => {
+    // Solo t() y los helpers de prefijo del propio archivo: un
+    // startsWith("barber.") o cualquier otra llamada no es una llave.
+    if (llamador !== "t" && !prefijos.has(llamador)) return;
+    const prefijo = prefijos.get(llamador);
+    const llave = literal.startsWith("barber.") ? literal : prefijo ? `${prefijo}.${literal}` : null;
+    if (!llave || !PARECE_LLAVE.test(llave)) return;
+    usos.push({
+      archivo: rel,
+      linea: codigo.slice(0, indice).split("\n").length,
+      llave,
+      exacta: !literal.startsWith("barber."),
+    });
+  };
+
+  for (const m of codigo.matchAll(RE_LLAMADA)) anota(m[1], m[2], m.index);
+  for (const m of codigo.matchAll(RE_TERNARIO)) {
+    anota(m[1], m[2], m.index);
+    anota(m[1], m[3], m.index);
+  }
+  return usos;
+}
+
+/** Las raíces del vertical: shell, agenda, caja, inicio, reportes… */
+const AREAS = Object.keys(getBarberDict("es").barber as Dictionary);
+
+/**
+ * Un literal que empieza por `barber.` es AMBIGUO leyendo el archivo:
+ *   · si la página le pasó la raíz, es la llave completa;
+ *   · si le pasó el sub-árbol YA RECORTADO, es relativa a un área.
+ * La segunda pasa de verdad: /barber/reportes baja `barber.reportes` y el
+ * selector de barbero pide t("barber.label") → barber.reportes.barber.label.
+ * Así que se acepta si resuelve de CUALQUIERA de las dos formas; solo se
+ * exige la ruta exacta cuando el prefijo se leyó del propio archivo.
+ */
+function resuelveEnAlgunAlcance(raiz: Dictionary, u: Uso): boolean {
+  if (resuelve(raiz, u.llave)) return true;
+  if (u.exacta) return false;
+  return AREAS.some((area) => resuelve(raiz, `barber.${area}.${u.llave}`));
+}
+
+// Llaves que el código pide y que NO existen en NINGÚN diccionario: se
+// sacan de la afirmación con un TODO que las nombra, nunca inventando el
+// texto. Vacío = el vertical está sano.
+const SIN_TRADUCCION_TODAVIA = new Set<string>([
+  // (vacío)
+]);
+
+test("toda llave literal de barber existe en es y en", () => {
+  const usos: Uso[] = [];
+  for (const carpeta of ["components/barber", "app/barber"]) {
+    for (const archivo of recorrer(join(SRC, carpeta))) usos.push(...llavesDelArchivo(archivo));
+  }
+  // Red de seguridad del propio extractor: si alguien cambia la forma de
+  // llamar a t() y aquí dejan de salir llaves, la prueba pasaría en verde
+  // sin haber comprobado NADA.
+  assert.ok(usos.length > 500, `solo se extrajeron ${usos.length} llaves literales — el extractor se quedó ciego`);
+  assert.ok(
+    usos.some((u) => u.llave === "barber.inicio.blocker.title"),
+    "el extractor dejó de leer el helper de prefijo de inicio-view.tsx — era justo el caso que se escapó",
+  );
+
+  const faltan: string[] = [];
+  for (const locale of ["es", "en"] as const) {
+    const raiz = getBarberDict(locale);
+    for (const u of usos) {
+      if (SIN_TRADUCCION_TODAVIA.has(u.llave)) continue;
+      if (!resuelveEnAlgunAlcance(raiz, u)) faltan.push(`[${locale}] ${u.llave} ← ${u.archivo}:${u.linea}`);
+    }
+  }
+  assert.deepEqual(
+    [...new Set(faltan)].sort(),
+    [],
+    "el código pide llaves que el diccionario no tiene — mira si el bloque quedó colgado del padre equivocado",
+  );
+});
+
+test("el aviso de 'sin horarios' de Inicio cuelga de barber.inicio, no de barber.reportes", () => {
+  for (const locale of ["es", "en"] as const) {
+    const raiz = getBarberDict(locale);
+    for (const hoja of ["title", "body", "bodyPublished", "cta", "askOwner"]) {
+      assert.ok(
+        resuelve(raiz, `barber.inicio.blocker.${hoja}`),
+        `falta barber.inicio.blocker.${hoja} en ${locale}`,
+      );
+      assert.ok(
+        !resuelve(raiz, `barber.reportes.blocker.${hoja}`),
+        `barber.reportes.blocker.${hoja} volvió a existir en ${locale}: nadie lo pide ahí, el bloque va bajo inicio`,
+      );
+    }
+  }
+});

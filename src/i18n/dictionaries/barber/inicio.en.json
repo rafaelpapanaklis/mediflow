@@ -92,6 +92,13 @@
       "publicRequestsHint": "They came in from your website.",
       "publicRequestsCta": "View requests"
     },
+    "blocker": {
+      "title": "Nobody can book online: not a single schedule is set",
+      "body": "Your booking link is live, but with no schedules it tells people there's no room. Set at least one barber's schedule and this fixes itself.",
+      "bodyPublished": "Your website is published and online booking is on, but with no schedules it tells people there's no room. Set at least one barber's schedule and this fixes itself.",
+      "cta": "Set schedules now",
+      "askOwner": "Ask the owner or manager to set the schedules."
+    },
     "setup": {
       "title": "Your barbershop is ready to start",
       "body": "These are the first steps. As soon as you charge the first visit, the day's summary shows up here.",
@@ -282,13 +289,6 @@
         "newReturned": "New clients who came back",
         "returnRate": "Return rate %"
       }
-    },
-    "blocker": {
-      "title": "Nobody can book online: not a single schedule is set",
-      "body": "Your booking link is live, but with no schedules it tells people there's no room. Set at least one barber's schedule and this fixes itself.",
-      "bodyPublished": "Your website is published and online booking is on, but with no schedules it tells people there's no room. Set at least one barber's schedule and this fixes itself.",
-      "cta": "Set schedules now",
-      "askOwner": "Ask the owner or manager to set the schedules."
     },
     "locked": {
       "title": "Reports are part of the Professional plan",

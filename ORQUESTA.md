@@ -18801,3 +18801,118 @@ Modificados (2)
 NO se tocó: `src/lib/realty/types.ts` · `prisma/schema.prisma` ·
 `src/i18n/dictionaries/realty/index.ts` · `package.json` · `vercel.json` ·
 `src/app/sitemap.ts` · nada de barber ni del dental. Cero dependencias nuevas.
+
+---
+
+## [Barber Inicio · i18n] — El aviso de "sin horarios" pintaba las llaves crudas: el bloque `blocker` colgaba de `reportes` en vez de `inicio` ✅ (2026-08-25)
+
+### Qué se veía
+
+En `/barber/inicio`, cuando la barbería todavía no tiene ni un horario cargado, el aviso rojo
+salía así en producción:
+
+```
+barber.inicio.blocker.title
+barber.inicio.blocker.body
+barber.inicio.blocker.cta
+```
+
+La llave cruda, tal cual, dentro del recuadro rojo. La pantalla "funcionaba": nada reventó,
+nada apareció en logs, el build seguía verde.
+
+### Dónde estaba de verdad
+
+El texto SÍ estaba escrito, y bien escrito. Lo que estaba mal era de quién colgaba.
+
+`src/i18n/dictionaries/barber/inicio.{es,en}.json` tiene DOS raíces —`inicio` y `reportes`— y
+`src/i18n/dictionaries/barber/index.ts` las monta como `barber.inicio` y `barber.reportes`.
+El objeto `blocker` completo (`title`, `body`, `bodyPublished`, `cta`, `askOwner`) había
+quedado escrito dentro de la raíz **`reportes`**, en los dos idiomas.
+
+`inicio-view.tsx` lo pide desde su helper de prefijo:
+
+```ts
+const k = (key: string, vars?) => t(`barber.inicio.${key}`, vars);
+...
+{k("blocker.title")}
+```
+
+O sea buscaba `barber.inicio.blocker.title` y el texto vivía en `barber.reportes.blocker.title`.
+`makeT` devuelve la propia llave cuando no resuelve —fallback correcto, nunca rompe el render—
+así que la pantalla se pintó "bien" con la llave dentro.
+
+`grep -rn "reportes.blocker" src/` sale vacío: **nadie** pedía ese texto donde estaba. Por eso
+el arreglo es MOVER, no copiar: el bloque se pasó tal cual, sin tocar una sola letra del copy,
+de la raíz `reportes` a la raíz `inicio` en `inicio.es.json` y en `inicio.en.json`.
+
+### Por qué no lo atrapó nada
+
+Ni el build ni TypeScript ven una llave de i18n: es un string. `makeBarberT` avisa por consola
+en desarrollo, pero solo si alguien abre esa pantalla, en ese estado (una barbería sin ningún
+horario cargado), y además mira la consola.
+
+### La prueba que lo caza de aquí en adelante
+
+`src/lib/barber/__tests__/i18n-alcance.test.ts` — nueva prueba **estática** (lee el código
+fuente; ni Postgres, ni navegador, ni sesión; corre en ~300 ms):
+
+> **`toda llave literal de barber existe en es y en`**
+
+Recorre los `.ts`/`.tsx` de `src/components/barber/` y `src/app/barber/` y saca las llaves que
+se pueden verificar leyendo:
+
+- `t("barber.algo.otro")` — literal completo.
+- Helpers de prefijo constante del propio archivo. Saca el prefijo del template y le concatena
+  cada llamada literal a ese helper en el MISMO archivo. Las dos formas que hay hoy:
+
+  ```ts
+  const k = (key) => t(`barber.inicio.${key}`);                          // → k("blocker.title")
+  const t = useMemo(() => { ...; return (k) => tt(`barber.web.${k}`) }); // → t("titulo")
+  ```
+
+- `k(cond ? "a" : "b")` cuenta como dos llaves: las dos se pintan. No es un detalle —
+  `blocker.body` y `blocker.bodyPublished` salen justo de un ternario, así que ignorarlos
+  dejaba fuera 2 de las 5 llaves rotas.
+
+Lo dinámico (`` t(`kpi.${nombre}`) ``, `t(variable)`) se ignora a propósito: leyendo no se puede
+resolver. Hoy se comprueban **959 llaves** contra el diccionario `es` Y el `en`.
+
+Dos detalles que hubo que respetar para que la prueba no mienta:
+
+- **Un literal que empieza por `barber.` es ambiguo.** Si la página pasó la raíz, es la llave
+  completa; si pasó el sub-árbol ya recortado, es relativa. Pasa de verdad: `/barber/reportes`
+  baja `barber.reportes` y el selector de barbero pide `t("barber.label")`, que resuelve como
+  `barber.reportes.barber.label`. La prueba lo acepta si resuelve de cualquiera de las dos
+  formas, y solo exige la ruta exacta cuando el prefijo se leyó del propio archivo.
+- **Red de seguridad del extractor:** si alguien cambia la forma de llamar a `t()` y aquí dejan
+  de salir llaves, la prueba pasaría en verde sin comprobar nada. Por eso afirma que salen más
+  de 500 y que `barber.inicio.blocker.title` sigue entre ellas.
+
+Se comprobó al revés antes de dar por bueno el arreglo: con el `blocker` de vuelta bajo
+`reportes`, la prueba falla y nombra las **cinco** llaves con archivo y línea
+(`inicio-view.tsx:181,183,183,189,192`) en los dos idiomas.
+
+Y una segunda prueba clava este caso concreto:
+
+> **`el aviso de 'sin horarios' de Inicio cuelga de barber.inicio, no de barber.reportes`**
+
+Exige las 5 hojas bajo `barber.inicio.blocker` y exige que NO vuelvan a existir bajo
+`barber.reportes.blocker`.
+
+### Llaves faltantes destapadas
+
+**Ninguna.** Fuera del `blocker` de Inicio, las 959 llaves literales del vertical resuelven en
+`es` y en `en`. `SIN_TRADUCCION_TODAVIA` (la lista de excepciones con TODO) queda vacía.
+
+### Archivos
+
+- `src/i18n/dictionaries/barber/inicio.es.json` — `blocker` movido de `reportes` a `inicio`.
+- `src/i18n/dictionaries/barber/inicio.en.json` — igual.
+- `src/lib/barber/__tests__/i18n-alcance.test.ts` — las dos pruebas nuevas.
+
+Cero cambios de copy: el diff son 14 líneas movidas por archivo, las mismas que salieron.
+Cero cambios de UI, de lógica y del vertical dental.
+
+### SQL
+
+**Ninguno.**
