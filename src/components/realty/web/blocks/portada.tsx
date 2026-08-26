@@ -255,10 +255,13 @@ export function BloquePortada({ data }: { data: RealtyWebData }) {
             {galeria.length > 0 ? (
               <div className="dcrw-torre-galeria">
                 <p className="dcrw-kicker">{copia(data, ID, "portada.galeria")}</p>
-                <ul className="dcrw-torre-fotos">
-                  {galeria.map((f, i) => (
+                {/* Decorativas y fuera del tabulador, como las miniaturas de
+                    la vitrina: la ficha ya se abre desde el botón de arriba y
+                    seis paradas de teclado más al MISMO destino estorban. */}
+                <ul className="dcrw-torre-fotos" aria-hidden="true">
+                  {galeria.map((f) => (
                     <li key={f.url}>
-                      <a href={ficha} aria-label={`${inm.titulo}, foto ${i + 2}`}>
+                      <a href={ficha} tabIndex={-1}>
                         <Foto url={f.url} alt="" width={f.width} height={f.height} />
                       </a>
                     </li>
@@ -280,7 +283,7 @@ export function BloquePortada({ data }: { data: RealtyWebData }) {
     return (
       <section
         id={ID}
-        className={`dcrw-sec dcrw-sec-portada dcrw-hero dcrw-hero-cine dcrw-hero-${v}`}
+        className={`dcrw-sec dcrw-sec-portada dcrw-hero dcrw-hero-cine${v === "vitrina" ? " dcrw-hero-vitrina" : ""}`}
         data-variante={v}
       >
         <div className="dcrw-hero-lienzo">

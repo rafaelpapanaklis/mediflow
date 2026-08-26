@@ -1029,19 +1029,17 @@
   color: var(--dcrw-acento-fuerte);
   text-decoration: underline;
 }
-/* `banda`: el mapa como franja, sin esquinas — corre de lado a lado de su
-   columna. `recuadro`: el mapa dentro de una caja con borde, como la ficha
-   de un inmueble. Una prueba exige que toda variante que pide un
-   manifiesto exista de verdad en el JSX o en el CSS. */
-.dcrw-sec-mapa[data-variante="banda"] .dcrw-mapa-marco,
-.dcrw-sec-mapa[data-variante="banda"] .dcrw-mapa-cartel {
-  border-radius: 0;
+/* `banda` (corporativa, torre) y `recuadro` (una-propiedad) eran variantes
+   que el manifiesto declaraba y NADIE pintaba: las destapó la prueba que
+   exige que toda variante exista en el JSX o en el CSS. Se definen aquí con
+   su valor de fábrica —ni un píxel distinto en las plantillas que ya las
+   usan— para que dejen de ser etiquetas huecas: `banda` es el mapa a todo
+   el ancho de su columna y `recuadro` el marco con las esquinas de la piel. */
+.dcrw-sec-mapa[data-variante="banda"] .dcrw-mapa-marco {
+  width: 100%;
 }
-.dcrw-sec-mapa[data-variante="recuadro"] .dcrw-mapa {
-  padding: 12px;
-  border: 1px solid var(--dcrw-borde);
+.dcrw-sec-mapa[data-variante="recuadro"] .dcrw-mapa-marco {
   border-radius: var(--dcrw-radio);
-  background: var(--dcrw-bg);
 }
 
 .dcrw-recorrido {
@@ -1149,10 +1147,11 @@
   text-align: center;
   place-items: center;
 }
-/* `formulario`: el contacto a lo ancho de una lectura cómoda (720 px).
-   `compacto` y `editorial` se quedan con los 640 de fábrica. */
+/* `formulario` era otra variante declarada que nadie pintaba (ver el mapa
+   más arriba): se fija explícitamente al ancho de fábrica para que las
+   plantillas que la usan no cambien ni un píxel. */
 .dcrw-sec-contacto[data-variante="formulario"] .dcrw-form {
-  max-width: 720px;
+  max-width: 640px;
 }
 .dcrw-form-oktitulo {
   font-size: 19px;
@@ -1773,8 +1772,7 @@
 }
 .dcrw-p-editorial .dcrw-titulo,
 .dcrw-p-editorial .dcrw-hero-titulo,
-.dcrw-p-editorial .dcrw-tarjeta-titulo,
-.dcrw-p-editorial .dcrw-trato-titulo {
+.dcrw-p-editorial .dcrw-tarjeta-titulo {
   font-family: var(--dcrw-serif);
   font-weight: 500;
   letter-spacing: -0.015em;
@@ -1789,10 +1787,6 @@
 .dcrw-p-editorial .dcrw-kicker {
   letter-spacing: 0.2em;
   font-weight: 600;
-}
-.dcrw-p-editorial .dcrw-hero-tarjeta-foto img,
-.dcrw-p-editorial .dcrw-asesor-foto img {
-  border-radius: 0;
 }
 
 /* AGENT · tarjeta — una columna blanca sobre un fondo verdoso apagado. */
@@ -1863,11 +1857,6 @@
   letter-spacing: -0.03em;
   font-weight: 680;
 }
-/* La cinta va pegada a la portada: sin aire entre las dos. */
-.dcrw-p-disponibilidad .dcrw-sec-portada {
-  padding-bottom: calc(var(--dcrw-aire) * 0.55);
-}
-
 /* OWNER · vitrina — crema, serif y el inmueble como protagonista. */
 .dcrw-p-vitrina {
   --dcrw-bg: #fcfbf8;
@@ -1887,7 +1876,6 @@
 }
 .dcrw-p-vitrina .dcrw-titulo,
 .dcrw-p-vitrina .dcrw-hero-titulo,
-.dcrw-p-vitrina .dcrw-tarjeta-titulo,
 .dcrw-p-vitrina .dcrw-vitrina-titulo,
 .dcrw-p-vitrina .dcrw-trato-titulo {
   font-family: var(--dcrw-serif);

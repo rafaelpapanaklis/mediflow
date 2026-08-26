@@ -352,10 +352,10 @@ const COPIA_CREDENCIALES: RealtyWebManifestCopia[] = [
 ];
 
 /* ═══════════════════════════════════════════════════════════════════
-   3 · LAS NUEVE PLANTILLAS
+   3 · LAS QUINCE PLANTILLAS (nueve de la ola 1 + seis premium al final)
 
    El ORDEN de los bloques es la firma de la plantilla. Una prueba exige
-   que las nueve firmas sean distintas: dos plantillas con la misma firma
+   que las quince firmas sean distintas: dos plantillas con la misma firma
    son la misma con otro color, que es exactamente lo que este vertical NO
    quiere vender.
    ═══════════════════════════════════════════════════════════════════ */
