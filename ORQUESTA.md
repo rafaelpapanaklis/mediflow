@@ -21528,3 +21528,214 @@ CUATRO RIESGOS RESIDUALES, ninguno toca al dental ni a barber:
   Parece rota y no lo está.
 - Diff final: **25 archivos, +6090 / −21.** Fuera del vertical, solo dos:
   `ORQUESTA.md` y el webhook.
+
+## [Inmuebles · fix] — Nadie podía contratar el plan de entrada: la tarjeta nacía marcada como "Tu plan actual" y con el botón muerto ✅ (2026-08-25)
+
+Rama `fix/realty-plan-gate` sobre `origin/main` = `c156a11e`. Commit del arreglo:
+`64092371` (ya en main).
+
+▶ EL BUG, Y POR QUÉ NO SE VEÍA
+
+`RealtyAccount` tiene DOS defaults que no se hablan entre sí:
+
+```prisma
+plan                 RealtyPlan @default(PROPIETARIO)
+subscriptionStatus   String     @default("pending_payment")
+```
+
+O sea: una cuenta recién registrada YA llega con el plan de entrada escrito en
+la fila **sin haber pagado un peso**. La columna `plan` de una cuenta impaga es
+una *preferencia*, no algo que se esté pagando — y el schema lo dice con todas
+sus letras tres líneas más arriba ("son 'agencia que todavía no paga'").
+
+`src/components/realty/billing/plan-cards.tsx` no lo miraba:
+
+```tsx
+const isCurrent = plan.id === currentPlanId;   // ← sin preguntar si paga
+```
+
+y `isCurrent` gobierna las dos cosas a la vez: el realce de la tarjeta **y** el
+botón, que en esa rama es `<button disabled>Tu plan actual</button>`.
+
+Resultado en la única pantalla donde se puede pagar: la tarjeta de PROPIETARIO
+salía marcada como contratada y con el botón apagado. **Nadie podía contratar
+el plan de entrada del vertical.**
+
+No hay segunda puerta. El layout del panel le recorta el menú a una cuenta
+impaga (`realtyNavItemsWhileUnpaid` → solo `suscripcion` y `soporte`), el
+router de `/inmobiliaria` la manda justo ahí, y `/api/realty/billing/checkout`
+acepta cualquier plan sin quejarse — el único que decía que no era el botón.
+
+▶ QUÉ SE ARREGLÓ, Y POR QUÉ SON DOS BOOLEANOS Y NO UNO
+
+`isCurrent` ahora exige que haya plan contratado. Lo que **no** se hizo fue
+reusar el `hasSubscription` que ya llegaba, aunque era lo más corto:
+
+```tsx
+// src/app/inmobiliaria/(panel)/suscripcion/page.tsx
+subscription: summary?.subscription ?? null,
+//            ↑ summary es null si el usuario no tiene `billing.manage`
+```
+
+y en `src/lib/realty/permissions.ts`: `MANAGER: ALL.filter((k) => k !== "billing.manage")`.
+
+Un MANAGER de una agencia que **sí paga** nunca ve el objeto de Stripe (la
+página ni se lo pregunta), así que `hasSubscription` es false para él. Colgar
+la insignia de ahí le habría borrado el dato correcto de qué plan tiene
+contratada su agencia. Son dos preguntas distintas y ahora se ven distintas:
+
+| | fuente | qué decide |
+|---|---|---|
+| `hasSubscription` | objeto de Stripe (`data.subscription`) | ¿hay algo que MODIFICAR? → CONTRATAR vs CAMBIAR |
+| `subscribed` | `subscriptionStatus` de la fila (llega siempre) | ¿pagas un plan? → qué tarjeta es "la tuya" |
+
+Mezclarlos sería peor que el bug: una cuenta `active` **sin** suscripción viva
+en Stripe pasaría a decir "Cambiar a X" y el `onPick` la mandaría igual a un
+checkout — que es exactamente cómo se crea una SEGUNDA suscripción y se cobra
+dos veces (el propio archivo ya lo avisa en `canPay`).
+
+El conjunto de estados "con plan contratado" (`realtyAccountIsSubscribed` en
+`components/realty/billing/shared.ts`) deja FUERA a propósito:
+
+- `pending_payment` → el default de la columna; no contrató nada.
+- `incomplete` / `incomplete_expired` → el primer cobro nunca cerró; tiene que
+  poder reintentar **ese mismo** plan.
+- `canceled` → se dio de baja; tiene que poder volver a contratar el que tenía.
+- desconocido → ante la duda se deja vender. El modo de falla caro es el que
+  estamos arreglando.
+
+▶ DOS CAMINOS QUE EL MISMO ARREGLO DESTAPA (no estaban en el encargo)
+
+1. **Recontratar después de cancelar.** Una cuenta `canceled` seguía con su
+   plan viejo en la columna, así que esa tarjeta también nacía muerta: podía
+   contratar cualquier plan MENOS el que tenía. Ahora las tres están libres.
+2. **Reintentar un checkout que no cerró.** Igual con `incomplete`.
+
+▶ BARBER: ES MEDIO BUG, Y SE ARREGLÓ LA MITAD QUE FALTABA
+
+Mismo origen (`Barbershop.plan @default(BASICO)` + `pending_payment`), pero
+allá el **botón ya estaba bien**: mira `hasLiveSubscription`, así que una
+barbería recién registrada SÍ podía contratar BASICO. Nadie estaba bloqueado.
+
+Lo que mentía era la insignia, que sí colgaba del `isCurrent` pelado:
+
+```tsx
+{isCurrent && <span className="dcbb-plan__current">Tu plan actual</span>}
+```
+
+Una barbería que no había pagado veía **"TU PLAN ACTUAL" al lado de un botón
+que decía "Contratar"** en la misma tarjeta. Se arregló solo eso.
+
+🔴 **Las tres líneas del botón (`disabled`, `cta`, la clase) se dejaron sin
+tocar a propósito**, con su `isCurrent && hasLiveSubscription` intacto. Con el
+nuevo `isCurrent`, el comportamiento del botón es **idéntico al de hoy en los
+cuatro casos** — impaga, pagando, `past_due` y MANAGER — y por eso `past_due`
+entra en `subscribed` (si no, la tarjeta de su propio plan se habría
+*habilitado* y "cambiar al plan que ya tengo" es un 409). El cambio en barber
+es de insignia y realce, y nada más.
+
+▶ EL DENTAL **NO** TIENE ESTE BUG (se revisó y se descartó, con pruebas)
+
+`src/components/dashboard/subscription-tab.tsx:551` se ve igual —
+`isCurrent = plan.id === currentPlanId` y `disabled={isCurrent || …}`— y
+`Clinic.plan` también trae `@default(PRO)`. Pero la semántica del dental es
+otra y la tarjeta apagada es **correcta** ahí:
+
+1. `/api/billing/change-plan` documenta y aplica el caso 3: *"SIN PAGAR AÚN
+   (pending_payment / sin suscripción): el plan es solo una preferencia, se
+   actualiza in-place y se cobra al activar en /dashboard/suspended"*. Y
+   arranca con `if (clinic.plan === targetPlanId) → 400 "Ya estás en este
+   plan"`. Habilitar ese botón daría un error, no una venta.
+2. **El cobro del dental no vive en ese tab.** Cuando `!subscriptionActive`, el
+   propio tab pinta el CTA "Activar cuenta" → `/dashboard/suspended`.
+3. En `/dashboard/suspended` las tarjetas son un **radiogroup**, ninguna se
+   deshabilita nunca, y `/api/billing/checkout` solo rechaza si ya hay
+   suscripción VIVA (y ahí manda al portal de Stripe) — nunca por "ya tienes
+   ese plan". El plan de entrada (BASIC) se puede pagar sin problema.
+
+Conclusión: en inmuebles la tarjeta ES la puerta de pago; en el dental es un
+cambiador de plan y la puerta está en otra pantalla. Mismo código, distinto
+significado. No se tocó nada del dental.
+
+▶ LO QUE SÍ SE VIO EN EL DENTAL Y **NO** SE ARREGLÓ (decisión, no olvido)
+
+`src/app/dashboard/suspended/suspended-client.tsx:217` pinta la insignia "PLAN
+ACTUAL" con el mismo `plan.id === currentPlan`, así que una clínica que nunca
+pagó ve "PLAN ACTUAL" sobre PRO en la pantalla que existe **justo porque no ha
+pagado**. Es la misma mentira cosmética que en barber, pero ahí `currentPlan`
+además decide la **preselección** y el **upsell** (`NEXT_PLAN[currentPlan]`),
+y la pantalla ya distingue reactivación de compra nueva (`isReactivation`).
+Arreglarlo bien es una decisión de producto sobre el upsell, no un `&&`: no
+bloquea a nadie y se deja anotado en vez de cambiarlo de paso.
+
+Segundo detalle del mismo archivo, para cuando se toque: a una clínica que
+nunca pagó le recomienda **CLINIC** (`NEXT_PLAN["PRO"]`), o sea le vende el
+plan de arriba del que todavía no compra.
+
+▶ VERIFICACIÓN
+
+- `npm run build` completo en el worktree con
+  `NODE_OPTIONS=--max-old-space-size=12288` → **exit 0**, `prisma generate`
+  incluido, **424/424** páginas estáticas y cero errores de tipos.
+  `/inmobiliaria/suscripcion` y `/barber/suscripcion` compilan las dos. (Con
+  avisos de webpack Next imprime `⚠ Compiled with warnings` y no "Compiled
+  successfully": el veredicto es el marcador + la tabla de rutas completa.)
+- `node scripts/realty-guard.cjs` con los dos compartidos declarados →
+  **exit 0**: 5 propios, 2 compartidos declarados, 0 prohibidos.
+- **47/47** en `suscripcion.test.ts` (42 que ya estaban + 5 nuevas). Recordatorio:
+  esa prueba NO corre con `npx tsx --test` a secas —
+  `node --import tsx --import ./src/lib/realty/__tests__/offline.mjs --test …`.
+- **22/22** en `src/lib/barber/__tests__/billing-gating.test.ts`. Esa prueba
+  está rota en main por falta de `scripts/barber-test-hook.mjs` (nunca se
+  subió); corre con el hook offline de inmuebles, que resuelve `server-only`.
+- La prueba estática nueva **no es vacua**: se le pasó por encima la versión de
+  `origin/main` de las dos tarjetas y falla sobre las dos.
+- `npx tsc --noEmit`: cero errores en los 7 archivos tocados. Los 6 que salen
+  son de `src/lib/barber/__tests__/{dinero-sumas,i18n-alcance}.test.ts` y ya
+  estaban en main (`Set` sin `downlevelIteration`, un literal de más).
+
+▶ LAS 5 PRUEBAS NUEVAS
+
+Cuatro fijan la tabla de estados de `realtyAccountIsSubscribed` (recién
+registrada / cobro que no cerró / cobro tarde / desconocido) y la quinta es un
+barrido **estático sobre los dos verticales**: lee la línea `const isCurrent =`
+de las dos tarjetas de plan y exige que la comparación con `currentPlanId` no
+vaya sola. Si alguien reescribe la condición en cualquiera de los dos, se cae.
+
+▶ ARCHIVOS (7)
+
+PROPIOS de inmuebles (5):
+- `src/components/realty/billing/plan-cards.tsx` — el arreglo + prop `subscribed`.
+- `src/components/realty/billing/billing-screen.tsx` — deriva `accountSubscribed`.
+- `src/components/realty/billing/shared.ts` — `realtyAccountIsSubscribed`.
+- `src/lib/realty/__tests__/suscripcion.test.ts` — 5 pruebas.
+- `scripts/realty-guard.cjs` — declara los dos de barber en `SHARED_FILES`.
+
+COMPARTIDOS declarados (2):
+- `src/components/barber/billing/plan-cards.tsx` — solo la insignia.
+- `src/components/barber/billing/billing-screen.tsx` — solo deriva `subscribed`.
+
+Cero cambios en `prisma/schema.prisma`, cero SQL, cero endpoints, cero
+diccionarios (las llaves `plans.choose` / `plans.current` ya existían en es y
+en en). Nada del dental.
+
+▶ PENDIENTE — REQUIERE RAFAEL
+
+1. **QA de la pantalla con una cuenta impaga de verdad.** El arreglo está
+   probado por unidad y por barrido estático, pero **nadie ha visto todavía la
+   pantalla con una cuenta `pending_payment` en un navegador**, ni ha llegado
+   al Checkout de Stripe desde ahí. Es lo primero que hay que mirar.
+2. **La guardia se ensanchó** con dos archivos de barber. Es un script de
+   desarrollo, no está cableado en `package.json` y no puede romper el build;
+   pero de ahora en adelante editar esas dos tarjetas desde el vertical de
+   inmuebles ya no la hace saltar sola.
+3. **Riesgo preexistente que este arreglo NO toca:** una cuenta en `paused`
+   (Stripe pausó la cobranza) no entra en `hasLiveSubscription`, así que el
+   botón la manda a un checkout NUEVO teniendo una suscripción pausada. Es
+   anterior a este cambio y sigue igual; vale revisarlo si `paused` llega a
+   usarse de verdad.
+4. El worktree `mediflow-worktrees/realty-plan-gate` tiene `node_modules`
+   PROPIO (no junction): se le dio uno con `npm ci` porque el cliente Prisma
+   compartido estaba generado desde el schema de otra rama y un `prisma
+   generate` desde aquí se lo habría pisado. Ocupa ~1 GB; se puede borrar el
+   worktree entero sin ceremonia.
