@@ -415,6 +415,63 @@ export function hasFeedback(feedback: string | null | undefined): boolean {
   return typeof feedback === "string" && feedback.trim() !== "";
 }
 
+/**
+ * ═══════════════════════════════════════════════════════════════════════
+ * LA COSTURA CON O2-T3 — punto ÚNICO donde este reporte lee la opinión de
+ * una visita. Todo lo que el propietario ve sobre "qué opinaron" pasa por
+ * aquí: el conteo de la pantalla, la tabla del PDF, las columnas de la hoja
+ * de cálculo y —lo que más pesa— el `priceObjections` del que cuelga la
+ * recomendación de ajustar el precio.
+ *
+ * HOY la única fuente es `RealtyVisit.feedback`: texto libre, sin enum ni
+ * casillas, escrito por el asesor desde el teléfono entre visita y visita.
+ * De ahí que las dos señales sean HEURÍSTICAS y que la pantalla enseñe
+ * SIEMPRE el texto original al lado del conteo: el propietario juzga,
+ * nosotros solo agrupamos.
+ *
+ * CUANDO O2-T3 ATERRICE su retroalimentación estructurada, se cambia ESTA
+ * función y nada más. La forma de `VisitFeedbackRead` es el contrato:
+ * mientras siga devolviendo `text`, `priceObjection` y `liked`, ni las
+ * consultas, ni el PDF, ni el CSV, ni la recomendación se enteran.
+ *
+ * DEGRADACIÓN ELEGANTE, y es lo importante: sin fuente, esto NO adivina.
+ * Devuelve todo en falso y `source: "SIN_DATO"`, y quien lo consume lo dice
+ * con todas sus letras ("ninguna de esas visitas dejó comentario
+ * registrado, así que no sabemos qué los detuvo") en vez de inventarle al
+ * propietario una conclusión sobre por qué no se vende su casa.
+ * ═══════════════════════════════════════════════════════════════════════
+ */
+export interface VisitFeedbackRead {
+  /** Lo que escribieron, tal cual. null si no hay nada que enseñar. */
+  text: string | null;
+  /** ¿Hay algo que leer? false ⇒ las dos señales de abajo son falsas. */
+  hasAny: boolean;
+  priceObjection: boolean;
+  liked: boolean;
+  /**
+   * De dónde salieron las señales. Hoy solo "TEXTO" o "SIN_DATO". El día
+   * que T3 traiga campos estructurados, "ESTRUCTURADO" permite que la
+   * pantalla deje de llamarlas heurísticas sin tener que adivinarlo.
+   */
+  source: "TEXTO" | "ESTRUCTURADO" | "SIN_DATO";
+}
+
+export function readVisitFeedback(visit: {
+  feedback?: string | null;
+}): VisitFeedbackRead {
+  const raw = visit?.feedback ?? null;
+  if (!hasFeedback(raw)) {
+    return { text: null, hasAny: false, priceObjection: false, liked: false, source: "SIN_DATO" };
+  }
+  return {
+    text: raw,
+    hasAny: true,
+    priceObjection: looksLikePriceObjection(raw),
+    liked: looksLikeLiked(raw),
+    source: "TEXTO",
+  };
+}
+
 // ═══════════════════════════════════════════════════════════════════════
 // 4. FORMA DEL REPORTE AL PROPIETARIO
 // ═══════════════════════════════════════════════════════════════════════

@@ -100,8 +100,11 @@ import {
   csvMoneyHeaders,
   emptyMoney,
   hasFeedback,
-  looksLikeLiked,
-  looksLikePriceObjection,
+  // `looksLikeLiked` y `looksLikePriceObjection` NO se importan aquí a
+  // propósito: se llegan a través de `readVisitFeedback`, que es la costura
+  // única con O2-T3. Llamarlas sueltas desde este archivo abriría un
+  // segundo camino que el día del cambio se quedaría atrás.
+  readVisitFeedback,
   medianOf,
   mergeMoney,
   priceDeltaPct,
@@ -658,7 +661,11 @@ export async function getOwnerActivityReport(
 
   // ── Visitas y lo que dijeron ──
   const visitLines: OwnerReportVisitLine[] = visits.map((v) => {
-    const fb = v.feedback ?? null;
+    // 🔴 UN SOLO LUGAR lee la opinión de una visita: `readVisitFeedback`.
+    // Es la costura con O2-T3 — cuando aterrice su retroalimentación
+    // estructurada se cambia esa función y ni esta consulta, ni el PDF, ni
+    // la hoja de cálculo, ni la recomendación se enteran. Ver su cabecera.
+    const fb = readVisitFeedback(v);
     return {
       id: v.id,
       scheduledAt: v.scheduledAt.toISOString(),
@@ -666,9 +673,9 @@ export async function getOwnerActivityReport(
       happened: visitHappened(v.status, v.scheduledAt, now),
       agentName: v.user ? `${v.user.firstName ?? ""} ${v.user.lastName ?? ""}`.trim() || null : null,
       visitorName: v.lead?.contact?.name ?? null,
-      feedback: fb,
-      priceObjection: looksLikePriceObjection(fb),
-      liked: looksLikeLiked(fb),
+      feedback: fb.text,
+      priceObjection: fb.priceObjection,
+      liked: fb.liked,
     };
   });
 
