@@ -1,0 +1,182 @@
+{
+  "_nota": {
+    "por-que-aqui": "Diccionario PROPIO del Estudio IA. NO se cuelga del barril (index.ts) a proposito: ese archivo lo tocan todas las terminales de la ola a la vez y seria un choque garantizado. Mismo criterio que calc.json.",
+    "convencion": "Los DOS idiomas viven en este archivo con arboles identicos, y la pantalla recorta con makeRealtyT(dict.es) — convencion B, prefijo VACIO."
+  },
+  "es": {
+    "title": "Estudio con IA",
+    "subtitle": "El reel, la foto amueblada y los textos del anuncio, sin salir del panel.",
+    "inmueble": "Inmueble",
+    "sinFotos": "sin fotos",
+    "sinInmuebles": "Todavía no tienes inmuebles en la cartera. Da de alta uno para poder generar su reel y sus textos.",
+    "cargando": "Generando…",
+    "copiar": "Copiar",
+    "copiado": "Copiado",
+    "tabs": {
+      "reel": "Reel",
+      "staging": "Amueblar",
+      "texto": "Textos",
+      "consumo": "Consumo"
+    },
+    "kinds": {
+      "reel": "Reel",
+      "staging": "Home staging",
+      "description": "Descripción",
+      "social": "Textos para redes"
+    },
+    "cap": {
+      "alcanzado": "Llegaste a tu límite de IA de hoy. Mañana se reinicia solo — no hay nada que hacer ni a quién pedirle.",
+      "cerca": "Te queda menos del 20 % del límite de IA de hoy."
+    },
+    "consumo": {
+      "hoy": "Consumo de IA de hoy",
+      "mes": "En lo que va del mes: {monto}",
+      "vacio": "Todavía no has generado nada.",
+      "todos": "Todos los inmuebles",
+      "soloEste": "Solo el inmueble elegido",
+      "vacioInmueble": "Todavía no has generado nada para “{inmueble}”."
+    },
+    "reel": {
+      "explica": "Arma un video vertical 9:16 con las fotos que ya están en la ficha, listo para TikTok, Reels y Shorts. Esto no consume IA.",
+      "plantillas": {
+        "recorrido": "Recorrido",
+        "antes-de-que-se-vaya": "Antes de que se vaya",
+        "tour-rapido": "Tour rápido"
+      },
+      "armar": "Preparar el reel",
+      "resumen": "{escenas} escenas · {dur}",
+      "aviso": "El video se graba en tu navegador y en tiempo real: deja esta pestaña al frente mientras avanza la barra.",
+      "grabando": "Grabando… {pct} %",
+      "generar": "Generar el video",
+      "otraVez": "Generar otra vez",
+      "descargar": "Descargar {ext}",
+      "compartir": "Enviar por WhatsApp",
+      "soloDescarga": "Desde la computadora no se puede pasar el video directo a WhatsApp. Descárgalo y súbelo desde tu teléfono.",
+      "sinCompartir": "Este aparato no pudo abrir la hoja para compartir. Descarga el video y súbelo desde tu teléfono.",
+      "sinSoporte": "Tu navegador no puede grabar video. Prueba con Chrome, Edge o Safari actualizados.",
+      "sinFotos": "No se pudieron cargar las fotos del inmueble."
+    },
+    "staging": {
+      "explica": "Sube la foto de un cuarto vacío y te la devuelve amueblada. La foto original NO se toca: la amueblada entra como una foto más del inmueble.",
+      "avisoLegal": "Toda imagen generada sale con la marca “IMAGEN ILUSTRATIVA” quemada en el archivo. No se puede quitar, y así tiene que ser: es una recreación, no el inmueble real.",
+      "estilos": {
+        "moderno": "Moderno",
+        "calido": "Cálido",
+        "minimalista": "Minimalista"
+      },
+      "generar": "Amueblar la foto",
+      "generando": "Amueblando…",
+      "listo": "Listo. Quedó guardada como una foto más del inmueble.",
+      "resultado": "Cuarto amueblado con IA",
+      "guardada": "Ya está en la galería del inmueble, con su marca de imagen ilustrativa."
+    },
+    "texto": {
+      "explica": "Escribe la descripción del anuncio y el material para redes con los datos de la ficha y las primeras tres fotos, que la IA sí mira. No inventa nada que no le hayas capturado ni que no se vea en las fotos.",
+      "tonos": {
+        "directo": "Directo",
+        "calido": "Cálido",
+        "premium": "Premium"
+      },
+      "generarDescripcion": "Escribir la descripción",
+      "generarRedes": "Textos para redes",
+      "descripcion": "Descripción del anuncio",
+      "post": "Copy del post",
+      "hashtags": "Hashtags",
+      "comentario": "Primer comentario"
+    },
+    "errores": {
+      "generico": "No se pudo completar. Inténtalo otra vez.",
+      "sinPlan": "El Estudio con IA viene en el plan Inmobiliaria. Con tu plan actual el resto del panel sigue igual: esta pantalla es lo único que cambia.",
+      "sinPermiso": "No tienes permiso para generar contenido de los inmuebles. Quien administra la cuenta puede darte el permiso de editar inmuebles.",
+      "sinSuscripcion": "La suscripción no está activa, así que el Estudio con IA está en pausa. En cuanto se regularice el pago vuelve solo."
+    }
+  },
+  "en": {
+    "title": "AI Studio",
+    "subtitle": "The reel, the staged photo and the listing copy, without leaving the panel.",
+    "inmueble": "Property",
+    "sinFotos": "no photos",
+    "sinInmuebles": "You don't have any properties yet. Add one to generate its reel and copy.",
+    "cargando": "Generating…",
+    "copiar": "Copy",
+    "copiado": "Copied",
+    "tabs": {
+      "reel": "Reel",
+      "staging": "Staging",
+      "texto": "Copy",
+      "consumo": "Usage"
+    },
+    "kinds": {
+      "reel": "Reel",
+      "staging": "Home staging",
+      "description": "Description",
+      "social": "Social copy"
+    },
+    "cap": {
+      "alcanzado": "You've hit today's AI limit. It resets on its own tomorrow — nothing to do and no one to ask.",
+      "cerca": "Less than 20% of today's AI limit is left."
+    },
+    "consumo": {
+      "hoy": "Today's AI usage",
+      "mes": "So far this month: {monto}",
+      "vacio": "You haven't generated anything yet.",
+      "todos": "All properties",
+      "soloEste": "Only the selected property",
+      "vacioInmueble": "You haven't generated anything for “{inmueble}” yet."
+    },
+    "reel": {
+      "explica": "Builds a 9:16 vertical video from the photos already on the listing, ready for TikTok, Reels and Shorts. This does not consume AI.",
+      "plantillas": {
+        "recorrido": "Walkthrough",
+        "antes-de-que-se-vaya": "Before it's gone",
+        "tour-rapido": "Quick tour"
+      },
+      "armar": "Prepare the reel",
+      "resumen": "{escenas} scenes · {dur}",
+      "aviso": "The video records in your browser in real time: keep this tab in front while the bar advances.",
+      "grabando": "Recording… {pct}%",
+      "generar": "Generate the video",
+      "otraVez": "Generate again",
+      "descargar": "Download {ext}",
+      "compartir": "Send on WhatsApp",
+      "soloDescarga": "A desktop browser can't hand the video straight to WhatsApp. Download it and upload it from your phone.",
+      "sinCompartir": "This device could not open the share sheet. Download the video and upload it from your phone.",
+      "sinSoporte": "Your browser can't record video. Try an up-to-date Chrome, Edge or Safari.",
+      "sinFotos": "The property photos couldn't be loaded."
+    },
+    "staging": {
+      "explica": "Upload a photo of an empty room and get it back furnished. The original photo is NEVER touched: the staged one is added as another photo of the property.",
+      "avisoLegal": "Every generated image carries the mark “IMAGEN ILUSTRATIVA” burned into the file. It can't be removed, and that's the point: it's a recreation, not the real property.",
+      "estilos": {
+        "moderno": "Modern",
+        "calido": "Warm",
+        "minimalista": "Minimalist"
+      },
+      "generar": "Furnish the photo",
+      "generando": "Furnishing…",
+      "listo": "Done. It was saved as another photo of the property.",
+      "resultado": "Room staged with AI",
+      "guardada": "It's in the property gallery now, with its illustrative-image mark."
+    },
+    "texto": {
+      "explica": "Writes the listing description and the social material from the listing data and the first three photos, which the AI actually looks at. It invents nothing you haven't captured and nothing the photos don't show.",
+      "tonos": {
+        "directo": "Direct",
+        "calido": "Warm",
+        "premium": "Premium"
+      },
+      "generarDescripcion": "Write the description",
+      "generarRedes": "Social copy",
+      "descripcion": "Listing description",
+      "post": "Post copy",
+      "hashtags": "Hashtags",
+      "comentario": "First comment"
+    },
+    "errores": {
+      "generico": "It couldn't be completed. Try again.",
+      "sinPlan": "AI Studio is part of the Inmobiliaria plan. On your current plan the rest of the panel is unchanged: this screen is the only difference.",
+      "sinPermiso": "You do not have permission to generate content for properties. Whoever administers the account can grant you the edit-properties permission.",
+      "sinSuscripcion": "The subscription is not active, so AI Studio is paused. It comes back on its own once the payment is settled."
+    }
+  }
+}
