@@ -21,7 +21,9 @@
     "privacidad": {
       "title": "Qué ve el otro asesor de tu inmueble",
       "body": "Exactamente lo mismo que ya publicas en tu web y en los portales: fotos, precio, medidas, colonia y ciudad. Nunca tus notas internas, ni los documentos, ni los datos del propietario, ni su teléfono, ni lo que le cobras a él de comisión. La dirección exacta solo sale si tú la tienes marcada como pública en el inmueble.",
-      "verCampos": "Ver la lista completa de lo que se comparte"
+      "verCampos": "Ver la lista completa de lo que se comparte",
+      "nuncaTitle": "Lo que no sale nunca",
+      "nuncaBody": "Ninguna combinación de opciones comparte esto. Son los nombres técnicos de los datos que se quedan siempre dentro de tu cuenta:"
     },
     "buscar": {
       "title": "Inventario de otras inmobiliarias",
@@ -299,7 +301,9 @@
     "privacidad": {
       "title": "What the other agent sees of your property",
       "body": "Exactly what you already publish on your website and on the portals: photos, price, measurements, neighborhood and city. Never your internal notes, the documents, the owner's details, their phone, or what you charge them in commission. The exact address only shows if you have it marked as public on the property.",
-      "verCampos": "See the full list of what gets shared"
+      "verCampos": "See the full list of what gets shared",
+      "nuncaTitle": "What never leaves",
+      "nuncaBody": "No combination of options shares these. They are the technical names of the data that always stays inside your account:"
     },
     "buscar": {
       "title": "Inventory from other agencies",
