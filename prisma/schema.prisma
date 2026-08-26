@@ -10030,6 +10030,22 @@ model RealtyAccount {
   contractSignatures RealtyContractSignature[]
   signatureTokens    RealtySignatureToken[]
 
+  // ── CRECIMIENTO (Ola 2, O2-T7). Bloque ADITIVO: si al rebasar choca con
+  //    otra terminal en esta misma lista, se CONSERVAN LOS DOS bloques.
+  botSettings          RealtyBotSettings?
+  botSpend             RealtyBotSpend[]
+  botTurns             RealtyBotTurn[]
+  botPauses            RealtyBotPause[]
+  contactOptOuts       RealtyContactOptOut[]
+  growthSettings       RealtyGrowthSettings?
+  campaigns            RealtyCampaign[]
+  campaignRecipients   RealtyCampaignRecipient[]
+  priceWatch           RealtyPropertyPriceWatch[]
+  screeningRequests    RealtyScreeningRequest[]
+  affiliate            RealtyAffiliate?
+  affiliateReferral    RealtyAffiliateReferral?
+  affiliateCommissions RealtyAffiliateCommission[]
+
   // Sin @@index([slug]): `slug @unique` ya crea su propio índice.
   @@index([subscriptionStatus])
   @@map("realty_accounts")
@@ -11884,4 +11900,421 @@ model RealtyMlsAdoption {
   @@index([accountId, showOnLanding, sortOrder])
   @@index([listingId])
   @@map("realty_mls_adoptions")
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// INMUEBLES — CRECIMIENTO (Ola 2, terminal O2-T7)
+// Bot de WhatsApp · consentimiento · campañas · vigilancia de precio ·
+// investigación de inquilino · programa de socios.
+//
+// 🔴 ESTE BLOQUE Y `sql/realty_growth.sql` SON LA MISMA VERDAD. Nada de
+// esto vive solo en SQL: los nombres de tabla (@@map), de columna, los
+// tipos y las FK con onDelete: Cascade son un espejo 1:1 del .sql, para que
+// `prisma migrate diff` contra una base que ya corrió el .sql salga VACÍO.
+// Si cambias uno, cambia el otro en el mismo commit.
+//
+// La capa de datos (src/lib/realty/bot/growth-db.ts) habla con estas tablas
+// por $queryRaw parametrizado y NO por el cliente tipado: se escribió para
+// tolerar que el .sql todavía no se haya aplicado en producción (el panel
+// dice "falta aplicar sql/realty_growth.sql" en vez de tronar). Tener aquí
+// los modelos NO cambia eso — los pone en el contrato, que es donde deben
+// estar, y deja el camino listo para migrarla al cliente tipado.
+// ═══════════════════════════════════════════════════════════════════════
+
+/// Configuración del BOT por cuenta.
+///
+/// 🔴 `enabled` y `aiDailyCapMxn` están FUERA del Json `settings` a
+/// propósito: son las dos que deciden si se le habla a un prospecto en
+/// nombre de la inmobiliaria y cuánto se puede gastar haciéndolo. Fuera del
+/// blob se pueden inspeccionar con un SELECT y acotar con un CHECK
+/// (`realty_bot_cap_bounded`, en el .sql: 0 ≤ cap ≤ 500). NO existe valor
+/// "ilimitado". Nace APAGADO y CON tope.
+model RealtyBotSettings {
+  accountId       String   @id
+  enabled         Boolean  @default(false)
+  aiDailyCapMxn   Int      @default(0)
+  settings        Json     @default("{}")
+  updatedByUserId String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @default(now()) @updatedAt
+
+  account RealtyAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@map("realty_bot_settings")
+}
+
+/// Gasto de IA POR CUENTA Y POR DÍA. `day` es la fecha en la ZONA DE LA
+/// CUENTA, no en UTC: un tope "por día" que se reinicia a las 6 de la tarde
+/// no es un tope, es una sorpresa.
+///
+/// costMicros: 1 peso = 1 000 000 micros. Un turno cuesta fracciones de
+/// centavo y sumarlo en centavos redondeados regala el tope.
+model RealtyBotSpend {
+  accountId  String
+  day        DateTime @db.Date
+  costMicros BigInt   @default(0)
+  turns      Int      @default(0)
+  updatedAt  DateTime @default(now()) @updatedAt
+
+  account RealtyAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@id([accountId, day])
+  @@map("realty_bot_spend")
+}
+
+/// Cada turno del bot: qué le escribieron, qué contestó y cuánto costó.
+///
+/// `correctedBody` es la corrección que escribe una persona desde el panel y
+/// NO reescribe `outboundBody`: lo que se mandó, se mandó, y borrarlo haría
+/// imposible entender por qué el bot dijo lo que dijo. Las correcciones se
+/// le dan de comer al siguiente turno como reglas.
+model RealtyBotTurn {
+  id            String    @id
+  accountId     String
+  threadId      String?
+  contactId     String?
+  leadId        String?
+  phone         String
+  inboundBody   String?
+  outboundBody  String?
+  /// Por qué NO contestó (RealtyBotSkipReason en bot/core.ts). null = contestó.
+  skipReason    String?
+  handoff       Boolean   @default(false)
+  handoffReason String?
+  model         String?
+  inputTokens   Int       @default(0)
+  outputTokens  Int       @default(0)
+  costMicros    BigInt    @default(0)
+  /// Lo que el bot dedujo en este turno (presupuesto, crédito, zona). Se
+  /// guarda aunque ya se haya escrito en el lead: es la evidencia de DÓNDE
+  /// salió el dato.
+  extracted     Json?
+  correctedBody String?
+  correctedById String?
+  correctedAt   DateTime?
+  createdAt     DateTime  @default(now())
+
+  account RealtyAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@index([accountId, createdAt(sort: Desc)], map: "realty_bot_turns_account_created_idx")
+  @@index([threadId, createdAt(sort: Desc)], map: "realty_bot_turns_thread_idx")
+  @@map("realty_bot_turns")
+}
+
+/// Conversaciones que atiende UNA PERSONA. Mientras haya fila, el bot calla
+/// en ese teléfono: es lo que pasa cuando el prospecto pide humano o cuando
+/// alguien del equipo toma el hilo desde el panel.
+model RealtyBotPause {
+  accountId String
+  phone     String
+  reason    String?
+  pausedAt  DateTime @default(now())
+
+  account RealtyAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@id([accountId, phone])
+  @@map("realty_bot_pauses")
+}
+
+/// LA BAJA. La tabla que evita que Meta le tumbe el número al cliente.
+///
+/// 🔴 El número de WhatsApp es DEL CLIENTE: un reporte de spam se lo tumba a
+/// él, no a DaleControl. Por eso la baja es tabla propia, con único por
+/// (cuenta, teléfono), y se consulta ANTES de cada envío de campaña.
+///
+/// La llave es el TELÉFONO y no el contactId: la misma persona puede estar
+/// dos veces en la libreta y la baja es de la PERSONA, no del registro.
+/// scope MARKETING = no quiere campañas (sigue recibiendo el aviso de su
+/// visita). scope ALL = no quiere nada automático.
+model RealtyContactOptOut {
+  id        String   @id
+  accountId String
+  contactId String?
+  /// 10 dígitos (mxTenDigits).
+  phone     String
+  scope     String   @default("MARKETING")
+  source    String   @default("REPLY")
+  note      String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+
+  account RealtyAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@unique([accountId, phone], map: "realty_contact_optouts_account_phone_key")
+  @@index([contactId], map: "realty_contact_optouts_contact_idx")
+  @@map("realty_contact_optouts")
+}
+
+/// Ajustes de crecimiento por cuenta.
+///
+/// `campaignDailyCap` es INDEPENDIENTE del cupo del plan (messageQuota, que
+/// es mensual): protege del envío masivo en un solo día, que es exactamente
+/// lo que dispara los reportes de spam y las restricciones de Meta.
+model RealtyGrowthSettings {
+  accountId        String   @id
+  googleReviewUrl  String?
+  reviewsEnabled   Boolean  @default(false)
+  campaignDailyCap Int      @default(100)
+  priceDropEnabled Boolean  @default(false)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @default(now()) @updatedAt
+
+  account RealtyAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@map("realty_growth_settings")
+}
+
+/// Una campaña. `segment` guarda el criterio EN CRUDO con el que se armó la
+/// lista, para poder explicar a quién se le mandó y por qué meses después.
+///
+/// `templateKind` es la plantilla de WhatsApp (RealtyWaKind) con la que sale:
+/// fuera de la ventana de 24 h no hay texto libre — o hay plantilla, o no se
+/// manda. `body` es para quien SÍ tenga la ventana abierta y para la vista
+/// previa.
+///
+/// El único parcial `realty_campaigns_price_drop_open_key` (en el .sql;
+/// Prisma no modela índices parciales) deja UNA sola campaña viva de bajada
+/// de precio por inmueble: sin él, tres ajustes de precio en una semana son
+/// tres WhatsApps a la misma persona.
+model RealtyCampaign {
+  id           String    @id
+  accountId    String
+  name         String
+  kind         String    @default("MANUAL")
+  status       String    @default("BORRADOR")
+  templateKind String?
+  body         String?
+  propertyId   String?
+  segment      Json      @default("{}")
+  scheduledAt  DateTime?
+  startedAt    DateTime?
+  finishedAt   DateTime?
+  createdById  String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @default(now()) @updatedAt
+
+  account    RealtyAccount             @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  recipients RealtyCampaignRecipient[]
+
+  @@index([accountId, status, scheduledAt], map: "realty_campaigns_account_status_idx")
+  @@index([accountId, createdAt(sort: Desc)], map: "realty_campaigns_account_created_idx")
+  @@map("realty_campaigns")
+}
+
+/// Un destinatario por fila. `status` OMITIDO + `skipReason` es lo que
+/// permite enseñar "no se le mandó a 12 personas porque pidieron baja" en
+/// vez de un silencio.
+///
+/// El único (campaignId, phone) es lo que hace el envío REENTRANTE: correr
+/// la tanda dos veces NO le manda dos veces a la misma persona.
+model RealtyCampaignRecipient {
+  id         String    @id
+  campaignId String
+  accountId  String
+  contactId  String?
+  phone      String
+  name       String?
+  params     Json?
+  status     String    @default("PENDIENTE")
+  skipReason String?
+  messageId  String?
+  error      String?
+  sentAt     DateTime?
+  createdAt  DateTime  @default(now())
+
+  campaign RealtyCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  account  RealtyAccount  @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@unique([campaignId, phone], map: "realty_campaign_recipients_unique")
+  @@index([campaignId, status], map: "realty_campaign_recipients_pending_idx")
+  @@index([accountId, sentAt], map: "realty_campaign_recipients_account_sent_idx")
+  @@map("realty_campaign_recipients")
+}
+
+/// Vigilancia de precio: el disparador de "bajó de precio la casa que viste".
+///
+/// 🔴 POR QUÉ EXISTE: `RealtyProperty.price` se PISA al editarlo — el
+/// vertical no guarda histórico de precio. Así que la vigilancia lleva su
+/// propia foto del último precio visto: el barrido compara y, si BAJÓ, arma
+/// la campaña. La PRIMERA corrida solo toma la foto (sin precio anterior no
+/// hay bajada, y fabricar una habría mandado un WhatsApp a media cartera el
+/// día del estreno).
+model RealtyPropertyPriceWatch {
+  propertyId   String    @id
+  accountId    String
+  /// Precio de la operación que anuncia, en la moneda del inmueble.
+  lastPrice    Decimal   @db.Decimal(14, 2)
+  currency     String    @default("MXN")
+  operation    String    @default("VENTA")
+  lastDropAt   DateTime?
+  lastDropFrom Decimal?  @db.Decimal(14, 2)
+  checkedAt    DateTime  @default(now())
+
+  account RealtyAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@index([accountId, checkedAt], map: "realty_price_watch_account_idx")
+  @@map("realty_property_price_watch")
+}
+
+/// INVESTIGACIÓN DE INQUILINO — ingreso que no depende de la suscripción.
+///
+/// 🔴 CONSULTAR EL BURÓ SIN PERMISO DEL INVESTIGADO ES ILEGAL (LFPDPPP art.
+/// 8 y Ley para Regular las Sociedades de Información Crediticia art. 28: la
+/// consulta necesita autorización EXPRESA). Por eso el consentimiento no es
+/// un checkbox: se guarda el TEXTO que aceptó, con fecha, nombre e IP, y la
+/// base lo repite con el CHECK `realty_screening_needs_consent` — sin
+/// `consentAt` la solicitud no sale de PENDIENTE_CONSENTIMIENTO. Un bug de
+/// UI no puede saltárselo.
+///
+/// `provider` es MANUAL hoy (la tramita alguien de DaleControl y sube el
+/// resultado). El adaptador para enchufar una API vive en
+/// src/lib/realty/screening.ts (RealtyScreeningProvider) y `providerRef`
+/// ya guarda el folio del tercero.
+///
+/// `applicant` lleva lo MÍNIMO (nombre, ingreso declarado, empleo,
+/// referencias). Aquí NO se guardan documentos de identidad ni números de
+/// cuenta: eso viaja al proveedor y vuelve como resultado.
+model RealtyScreeningRequest {
+  id               String    @id
+  accountId        String
+  contactId        String
+  leaseId          String?
+  leasePartyId     String?
+  propertyId       String?
+  tier             String    @default("BASICA")
+  provider         String    @default("MANUAL")
+  providerRef      String?
+  status           String    @default("PENDIENTE_CONSENTIMIENTO")
+  consentText      String?
+  consentAt        DateTime?
+  consentName      String?
+  consentIp        String?
+  consentUserAgent String?
+  applicant        Json      @default("{}")
+  priceCents       Int?
+  currency         String    @default("MXN")
+  resultUrl        String?
+  resultSummary    String?
+  riskLevel        String?
+  recommendation   String?
+  requestedById    String?
+  requestedAt      DateTime?
+  deliveredAt      DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @default(now()) @updatedAt
+
+  account RealtyAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@index([accountId, status, createdAt(sort: Desc)], map: "realty_screening_account_status_idx")
+  @@index([contactId, createdAt(sort: Desc)], map: "realty_screening_contact_idx")
+  @@index([leaseId], map: "realty_screening_lease_idx")
+  @@map("realty_screening_requests")
+}
+
+/// PROGRAMA DE SOCIOS — configuración de PLATAFORMA, no de una cuenta: una
+/// sola fila con id = 'default' (mismo criterio que RealtyPlanConfig, sin
+/// accountId a propósito). El monto es EDITABLE desde el admin sin redeploy:
+/// cero pesos escritos en el código.
+///
+/// `commissionMonths` = -1 significa "mientras la referida siga pagando"
+/// (mismo criterio de ilimitado que el resto del vertical).
+model RealtyAffiliateConfig {
+  id               String   @id @default("default")
+  enabled          Boolean  @default(true)
+  /// Porcentaje de la mensualidad de la cuenta referida.
+  commissionPct    Decimal  @default(20) @db.Decimal(5, 2)
+  commissionMonths Int      @default(12)
+  /// Días que dura la cookie de atribución.
+  cookieDays       Int      @default(60)
+  /// Mínimo para poder solicitar pago, en centavos.
+  payoutMinCents   Int      @default(50000)
+  terms            String?
+  updatedAt        DateTime @default(now()) @updatedAt
+
+  @@map("realty_affiliate_config")
+}
+
+/// EL SOCIO. Hoy siempre es una cuenta de inmuebles que recomienda a otra
+/// (espejo de barber). Una cuenta, un código.
+model RealtyAffiliate {
+  id         String   @id
+  accountId  String   @unique(map: "realty_affiliates_account_key")
+  code       String   @unique(map: "realty_affiliates_code_key")
+  status     String   @default("ACTIVO")
+  payoutInfo String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @default(now()) @updatedAt
+
+  account     RealtyAccount               @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  referrals   RealtyAffiliateReferral[]
+  commissions RealtyAffiliateCommission[]
+
+  @@map("realty_affiliates")
+}
+
+/// Clics de atribución. `vid` es el id anónimo del visitante (cookie); el
+/// único por (code, vid, día) evita que F5 infle el contador.
+///
+/// NO se guarda la IP en claro: solo un hash, y sirve para detectar bots.
+/// SIN accountId a propósito: el clic ocurre ANTES de que exista cuenta.
+model RealtyAffiliateClick {
+  id        String   @id
+  code      String
+  vid       String
+  day       DateTime @db.Date
+  ipHash    String?
+  userAgent String?
+  isBot     Boolean  @default(false)
+  landedAt  DateTime @default(now())
+
+  @@unique([code, vid, day], map: "realty_affiliate_clicks_dedupe")
+  @@index([code, landedAt(sort: Desc)], map: "realty_affiliate_clicks_code_idx")
+  @@map("realty_affiliate_clicks")
+}
+
+/// La cuenta referida. Único por cuenta referida: una cuenta tiene UN
+/// padrino y no se lo puede robar otro socio después.
+model RealtyAffiliateReferral {
+  id                String    @id
+  affiliateId       String
+  referredAccountId String    @unique(map: "realty_affiliate_referrals_account_key")
+  attributedAt      DateTime  @default(now())
+  firstPaidAt       DateTime?
+  createdAt         DateTime  @default(now())
+
+  affiliate       RealtyAffiliate @relation(fields: [affiliateId], references: [id], onDelete: Cascade)
+  referredAccount RealtyAccount   @relation(fields: [referredAccountId], references: [id], onDelete: Cascade)
+
+  @@index([affiliateId, attributedAt(sort: Desc)], map: "realty_affiliate_referrals_affiliate_idx")
+  @@map("realty_affiliate_referrals")
+}
+
+/// La comisión DEVENGADA. Nace cuando la cuenta referida PAGA (espejo de
+/// barber: al pagar, no al registrarse). PENDIENTE → APROBADA → PAGADA, o
+/// CANCELADA por reembolso.
+///
+/// `sourceRef` es ÚNICO (índice parcial en el .sql, solo sobre los no nulos):
+/// el webhook de Stripe REENTREGA, y sin esto cada reentrega devengaba otra
+/// comisión.
+model RealtyAffiliateCommission {
+  id                String    @id
+  affiliateId       String
+  referredAccountId String
+  amountCents       Int
+  currency          String    @default("MXN")
+  baseCents         Int       @default(0)
+  commissionPct     Decimal   @default(0) @db.Decimal(5, 2)
+  /// "YYYY-MM" del mes que se cobró.
+  periodMonth       String
+  status            String    @default("PENDIENTE")
+  sourceRef         String?
+  paidAt            DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @default(now()) @updatedAt
+
+  affiliate       RealtyAffiliate @relation(fields: [affiliateId], references: [id], onDelete: Cascade)
+  referredAccount RealtyAccount   @relation(fields: [referredAccountId], references: [id], onDelete: Cascade)
+
+  @@index([affiliateId, status, createdAt(sort: Desc)], map: "realty_affiliate_commissions_affiliate_idx")
+  @@map("realty_affiliate_commissions")
 }
