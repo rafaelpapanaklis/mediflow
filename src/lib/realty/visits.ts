@@ -323,6 +323,27 @@ export interface VisitTargets {
   leads: { id: string; name: string; phone: string | null }[];
 }
 
+export interface VisitTargetsQuery {
+  search?: string | null;
+  /**
+   * Qué lista hace falta. Cada selector del diálogo tiene SU propio buscador
+   * (antes compartían uno y teclear el nombre del prospecto filtraba también
+   * la cartera), así que cada uno pide lo suyo: traer la otra lista en cada
+   * tecleo era pagar la consulta para tirar la mitad.
+   */
+  only?: "properties" | "leads" | null;
+  /**
+   * Un id que SIEMPRE tiene que venir en la lista, aunque el buscador no lo
+   * alcance. Es lo que hace posible entrar desde la ficha del inmueble: la
+   * cartera se recorta a 40 por título y la casa concreta puede no estar.
+   *
+   * Se resuelve CON EL MISMO recorte (cuenta + oficina, y rol en prospectos):
+   * mandar el id de un inmueble ajeno no lo mete en la lista.
+   */
+  ensurePropertyId?: string | null;
+  ensureLeadId?: string | null;
+}
+
 /**
  * Lo que hace falta para agendar: inmuebles de la cartera y prospectos.
  *
@@ -332,16 +353,26 @@ export interface VisitTargets {
  */
 export async function searchVisitTargets(
   ctx: RealtyContext,
-  search?: string | null,
+  query: VisitTargetsQuery = {},
 ): Promise<VisitTargets> {
   assertRealtyAccountId(ctx.accountId);
   const officeIds = await getAccessibleOfficeIds(ctx);
-  const term = cleanSearch(search);
+  const term = cleanSearch(query.search);
+  const wantProperties = query.only !== "leads";
+  const wantLeads = query.only !== "properties";
 
-  const propWhere: Prisma.RealtyPropertyWhereInput = {
+  // El ALCANCE va aparte del filtro del buscador: el "ensure" lo reusa tal
+  // cual, y así un id fijado nunca se salta el recorte por cuenta u oficina.
+  const propScope: Prisma.RealtyPropertyWhereInput = {
     accountId: ctx.accountId,
     OR: [{ officeId: { in: officeIds } }, { officeId: null }],
   };
+  const leadScope: Prisma.RealtyLeadWhereInput = {
+    accountId: ctx.accountId,
+    ...(ctx.role === "AGENT" ? { assignedUserId: ctx.realtyUserId } : {}),
+  };
+
+  const propWhere: Prisma.RealtyPropertyWhereInput = { ...propScope };
   if (term) {
     // El OR de arriba es el de las oficinas; el del buscador va en un AND
     // aparte o se fusionarían y el filtro de oficina dejaría de aplicar.
@@ -356,10 +387,7 @@ export async function searchVisitTargets(
     ];
   }
 
-  const leadWhere: Prisma.RealtyLeadWhereInput = {
-    accountId: ctx.accountId,
-    ...(ctx.role === "AGENT" ? { assignedUserId: ctx.realtyUserId } : {}),
-  };
+  const leadWhere: Prisma.RealtyLeadWhereInput = { ...leadScope };
   if (term) {
     leadWhere.contact = {
       OR: [
@@ -369,29 +397,66 @@ export async function searchVisitTargets(
     };
   }
 
-  const [properties, leads] = await Promise.all([
-    prisma.realtyProperty.findMany({
-      where: propWhere,
-      select: { id: true, title: true, colonia: true },
-      orderBy: { title: "asc" },
-      take: 40,
-    }),
-    prisma.realtyLead.findMany({
-      where: leadWhere,
-      select: { id: true, contact: { select: { name: true, phone: true } } },
-      orderBy: { createdAt: "desc" },
-      take: 40,
-    }),
+  const [properties, leads, pinnedProperty, pinnedLead] = await Promise.all([
+    wantProperties
+      ? prisma.realtyProperty.findMany({
+          where: propWhere,
+          select: { id: true, title: true, colonia: true },
+          orderBy: { title: "asc" },
+          take: 40,
+        })
+      : Promise.resolve([]),
+    wantLeads
+      ? prisma.realtyLead.findMany({
+          where: leadWhere,
+          select: { id: true, contact: { select: { name: true, phone: true } } },
+          orderBy: { createdAt: "desc" },
+          take: 40,
+        })
+      : Promise.resolve([]),
+    wantProperties && query.ensurePropertyId
+      ? prisma.realtyProperty.findFirst({
+          where: { ...propScope, id: query.ensurePropertyId },
+          select: { id: true, title: true, colonia: true },
+        })
+      : Promise.resolve(null),
+    wantLeads && query.ensureLeadId
+      ? prisma.realtyLead.findFirst({
+          where: { ...leadScope, id: query.ensureLeadId },
+          select: { id: true, contact: { select: { name: true, phone: true } } },
+        })
+      : Promise.resolve(null),
   ]);
 
-  return {
-    properties,
-    leads: leads.map((l) => ({
-      id: l.id,
-      name: l.contact?.name ?? "—",
-      phone: l.contact?.phone ?? null,
-    })),
-  };
+  const outProperties = properties.map((p) => ({
+    id: p.id,
+    title: p.title,
+    colonia: p.colonia,
+  }));
+  // Va ARRIBA y sin duplicarse: es el que la persona ya eligió en la otra
+  // pantalla, y enterrarlo al final de cuarenta obligaría a buscarlo otra vez.
+  if (pinnedProperty && !outProperties.some((p) => p.id === pinnedProperty.id)) {
+    outProperties.unshift({
+      id: pinnedProperty.id,
+      title: pinnedProperty.title,
+      colonia: pinnedProperty.colonia,
+    });
+  }
+
+  const outLeads = leads.map((l) => ({
+    id: l.id,
+    name: l.contact?.name ?? "—",
+    phone: l.contact?.phone ?? null,
+  }));
+  if (pinnedLead && !outLeads.some((l) => l.id === pinnedLead.id)) {
+    outLeads.unshift({
+      id: pinnedLead.id,
+      name: pinnedLead.contact?.name ?? "—",
+      phone: pinnedLead.contact?.phone ?? null,
+    });
+  }
+
+  return { properties: outProperties, leads: outLeads };
 }
 
 /**

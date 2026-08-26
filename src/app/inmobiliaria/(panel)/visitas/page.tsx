@@ -57,7 +57,21 @@ function Aviso({ texto }: { texto: string }) {
   );
 }
 
-export default async function Page() {
+/** Un id de la URL: string, no vacío y de largo razonable. Si no, null. */
+function idParam(value: string | string[] | undefined): string | null {
+  // Next entrega un ARRAY cuando el parámetro viene repetido
+  // (?inmueble=a&inmueble=b). Sin esta guarda, ese array llegaría a la
+  // consulta como si fuera un id.
+  if (typeof value !== "string") return null;
+  const clean = value.trim();
+  return clean.length > 0 && clean.length <= 40 ? clean : null;
+}
+
+export default async function Page({
+  searchParams,
+}: {
+  searchParams?: Record<string, string | string[] | undefined>;
+}) {
   const ctx = await getRealtyContext();
   if (!ctx) redirect("/login");
 
@@ -108,10 +122,21 @@ export default async function Page() {
     }
   }
 
+  // 🔑 La puerta desde la ficha del inmueble y la del prospecto. Esas
+  // pantallas son de otras terminales, así que el contrato es una LIGA:
+  //   /inmobiliaria/visitas?nueva=1&inmueble=<id>[&prospecto=<id>]
+  // Los ids NO se confían: el diálogo los resuelve contra la API, que los
+  // recorta por cuenta, por oficina y por rol. Uno ajeno no enseña nada.
+  const propertyId = idParam(searchParams?.inmueble);
+  const leadId = idParam(searchParams?.prospecto);
+  const preselect =
+    searchParams?.nueva === "1" || propertyId || leadId ? { propertyId, leadId } : null;
+
   return (
     <VisitsScreen
       dict={dict}
       locale={locale}
+      preselect={preselect}
       initial={{ ...initial, me: { realtyUserId: ctx.realtyUserId, role: ctx.role } }}
       origin={origin}
       canKeys={canKeys}

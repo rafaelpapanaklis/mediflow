@@ -22,6 +22,18 @@ export async function GET(req: NextRequest) {
   }
   if (!ctx) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
 
-  const data = await searchVisitTargets(ctx, req.nextUrl.searchParams.get("search"));
+  const sp = req.nextUrl.searchParams;
+  const only = sp.get("only");
+
+  const data = await searchVisitTargets(ctx, {
+    search: sp.get("search"),
+    // Cualquier otro valor pide LAS DOS listas: un `only` con basura no debe
+    // dejar al diálogo sin inmuebles, solo sin el ahorro.
+    only: only === "properties" || only === "leads" ? only : null,
+    // Los ids fijados los resuelve la capa de datos DENTRO del alcance: aquí
+    // se pasan tal cual y mandar uno ajeno simplemente no devuelve nada.
+    ensurePropertyId: sp.get("propertyId"),
+    ensureLeadId: sp.get("leadId"),
+  });
   return NextResponse.json(data, { headers: { "Cache-Control": "no-store" } });
 }

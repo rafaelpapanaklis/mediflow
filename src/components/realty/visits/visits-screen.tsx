@@ -69,6 +69,20 @@ export interface VisitsWindowPayload {
   me: { realtyUserId: string; role: string };
 }
 
+/**
+ * Entrada desde OTRA pantalla (la ficha del inmueble o la del prospecto).
+ *
+ * 🔑 CONTRATO CON LAS DEMÁS TERMINALES: esas fichas viven fuera de la
+ * allowlist de ésta, así que la puerta es una LIGA y nada más —
+ * `/inmobiliaria/visitas?nueva=1&inmueble=<id>` (y `&prospecto=<id>`). Quien
+ * quiera "Agendar visita" desde su pantalla añade un `<a href>` y ya: no
+ * necesita importar nada de aquí ni conocer la API.
+ */
+export interface VisitsPreselect {
+  propertyId: string | null;
+  leadId: string | null;
+}
+
 export function VisitsScreen({
   dict,
   locale,
@@ -77,6 +91,7 @@ export function VisitsScreen({
   canKeys,
   keysOverdue,
   canAssign,
+  preselect,
 }: {
   dict: Dictionary;
   locale: string;
@@ -86,6 +101,8 @@ export function VisitsScreen({
   keysOverdue: number;
   /** Un AGENT no reasigna: el servidor lo fuerza y aquí se esconde el gesto. */
   canAssign: boolean;
+  /** Si viene, la pantalla abre "Agendar visita" ya con lo elegido. */
+  preselect: VisitsPreselect | null;
 }) {
   // 🔴 useMemo NO es cosmético: makeRealtyT devuelve una FUNCIÓN NUEVA en
   // cada render. Con `t` suelto en las dependencias de `load`, el efecto que
@@ -106,7 +123,19 @@ export function VisitsScreen({
   const [toast, setToast] = useState<ToastState | null>(null);
   const [overdue, setOverdue] = useState(keysOverdue);
 
-  const [showNew, setShowNew] = useState(false);
+  const [showNew, setShowNew] = useState(preselect !== null);
+
+  // La liga de entrada se limpia de la barra de direcciones en cuanto se usa.
+  // Sin esto, recargar (o volver con el botón de atrás) reabría el diálogo
+  // con un inmueble que la persona quizá ya agendó hace rato.
+  useEffect(() => {
+    if (!preselect) return;
+    try {
+      window.history.replaceState(window.history.state, "", window.location.pathname);
+    } catch {
+      /* navegador sin history: la liga se queda, que no es grave */
+    }
+  }, [preselect]);
   // 🔴 El diálogo guarda la VISITA, no su id. Guardando el id había que
   // tenerla dentro de `data.visits` para poder pintarla, y la ruta de hoy
   // (que abre visitas de HOY estando la agenda en otro día) la metía ahí a
@@ -251,20 +280,34 @@ export function VisitsScreen({
         const json = await res.json().catch(() => null);
         if (!res.ok || !json) {
           setToast({
-            message: (json && json.error) || t("move.failed"),
+            // Una visita que se cerró en OTRA pestaña llega aquí como 409.
+            // Ese caso tiene su texto traducido; el resto cae en el mensaje
+            // del servidor, que ya viene redactado.
+            message:
+              json && json.code === "NOT_MOVABLE"
+                ? t("move.blocked")
+                : (json && json.error) || t("move.failed"),
             tone: "bad",
           });
           void load();
           return false;
         }
-        patchVisit(json.visit as RealtyVisitCardDTO);
+        const moved = json.visit as RealtyVisitCardDTO;
+        patchVisit(moved);
         if (!opts.silent) {
           const hora = new Intl.DateTimeFormat(locale === "en" ? "en-US" : "es-MX", {
             timeZone: timeZone || "America/Mexico_City",
             timeStyle: "short",
           }).format(new Date(body.scheduledAt));
+          // Si además cambió de asesor, el aviso lo DICE: soltar la tarjeta
+          // una columna a la derecha reasigna la visita, y enterarse solo por
+          // el color de la columna es cómo se pierde una visita ajena.
+          const changedAgent = Object.prototype.hasOwnProperty.call(body, "userId");
           setToast({
-            message: t("move.moved", { time: hora }),
+            message:
+              changedAgent && moved.userName
+                ? t("move.movedAgent", { agent: moved.userName, time: hora })
+                : t("move.moved", { time: hora }),
             // 🔴 El recordatorio viejo se canceló y la pantalla LO DICE.
             note: json.remindersCancelled > 0 ? t("move.remindersCancelled") : null,
             tone: "ok",
@@ -562,6 +605,8 @@ export function VisitsScreen({
           defaultDateISO={slot.dateISO}
           defaultMinute={slot.minute}
           defaultAgentId={agentFilter || (canAssign ? "" : data.me.realtyUserId)}
+          defaultPropertyId={preselect ? preselect.propertyId : null}
+          defaultLeadId={preselect ? preselect.leadId : null}
           onClose={() => setShowNew(false)}
           onCreated={() => {
             setShowNew(false);

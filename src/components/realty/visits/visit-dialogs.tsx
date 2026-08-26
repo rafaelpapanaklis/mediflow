@@ -102,7 +102,9 @@ function Picker({
             {noneLabel}
           </button>
         ) : null}
-        {items.length === 0 && !noneLabel ? (
+        {/* Se dice también cuando hay opción "sin nada": si no, buscar un
+            prospecto que no existe dejaba la lista muda y parecía rota. */}
+        {items.length === 0 ? (
           <span className={css.result} style={{ color: "var(--text-4)", cursor: "default" }}>
             {emptyLabel}
           </span>
@@ -132,6 +134,59 @@ interface TargetsPayload {
   leads: { id: string; name: string; phone: string | null }[];
 }
 
+/**
+ * Una lista del selector, con su propio buscador.
+ *
+ * 🔴 CADA SELECTOR PIDE LO SUYO. Antes los dos compartían un único término:
+ * teclear el nombre del prospecto filtraba TAMBIÉN la cartera, y las dos
+ * cajas de búsqueda se copiaban la una a la otra mientras escribías. Ahora
+ * cada una manda `only=` y solo trae su mitad.
+ *
+ * `ensureId` mantiene visible el que ya venía elegido desde otra pantalla:
+ * la lista se recorta a 40 y ese inmueble concreto podría no salir. El
+ * servidor lo resuelve DENTRO del alcance, así que fijar un id ajeno no
+ * enseña nada.
+ */
+function useTargetList(
+  kind: "properties" | "leads",
+  search: string,
+  ensureId: string | null,
+): PickerItem[] {
+  const [items, setItems] = useState<PickerItem[]>([]);
+  const [debounced, setDebounced] = useState("");
+
+  useEffect(() => {
+    const id = window.setTimeout(() => setDebounced(search.trim()), 300);
+    return () => window.clearTimeout(id);
+  }, [search]);
+
+  useEffect(() => {
+    let alive = true;
+    const sp = new URLSearchParams();
+    sp.set("only", kind);
+    if (debounced) sp.set("search", debounced);
+    if (ensureId) sp.set(kind === "properties" ? "propertyId" : "leadId", ensureId);
+    fetch(`/api/realty/visits/targets?${sp.toString()}`, { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((json: TargetsPayload | null) => {
+        if (!alive || !json) return;
+        setItems(
+          kind === "properties"
+            ? (json.properties ?? []).map((p) => ({ id: p.id, label: p.title, meta: p.colonia }))
+            : (json.leads ?? []).map((l) => ({ id: l.id, label: l.name, meta: l.phone })),
+        );
+      })
+      .catch(() => {
+        /* el diálogo sigue usable: se reintenta al teclear */
+      });
+    return () => {
+      alive = false;
+    };
+  }, [kind, debounced, ensureId]);
+
+  return items;
+}
+
 export function NewVisitDialog({
   t,
   timeZone,
@@ -140,6 +195,8 @@ export function NewVisitDialog({
   defaultDateISO,
   defaultMinute,
   defaultAgentId,
+  defaultPropertyId,
+  defaultLeadId,
   onClose,
   onCreated,
 }: {
@@ -151,41 +208,27 @@ export function NewVisitDialog({
   defaultDateISO: string;
   defaultMinute: number;
   defaultAgentId: string | null;
+  /** Vienen de la ficha del inmueble o del prospecto (?inmueble= / ?prospecto=). */
+  defaultPropertyId?: string | null;
+  defaultLeadId?: string | null;
   onClose: () => void;
   onCreated: () => void;
 }) {
-  const [search, setSearch] = useState("");
-  const [debounced, setDebounced] = useState("");
-  const [targets, setTargets] = useState<TargetsPayload>({ properties: [], leads: [] });
-  const [propertyId, setPropertyId] = useState<string | null>(null);
-  const [leadId, setLeadId] = useState<string | null>(null);
+  const [propertySearch, setPropertySearch] = useState("");
+  const [leadSearch, setLeadSearch] = useState("");
+  const [propertyId, setPropertyId] = useState<string | null>(defaultPropertyId ?? null);
+  const [leadId, setLeadId] = useState<string | null>(defaultLeadId ?? null);
   const [agentId, setAgentId] = useState<string>(defaultAgentId ?? "");
   const [dateISO, setDateISO] = useState(defaultDateISO);
   const [time, setTime] = useState(minuteToLabel(defaultMinute));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    const id = window.setTimeout(() => setDebounced(search.trim()), 300);
-    return () => window.clearTimeout(id);
-  }, [search]);
-
-  useEffect(() => {
-    let alive = true;
-    const sp = new URLSearchParams();
-    if (debounced) sp.set("search", debounced);
-    fetch(`/api/realty/visits/targets?${sp.toString()}`, { cache: "no-store" })
-      .then((r) => (r.ok ? r.json() : null))
-      .then((json: TargetsPayload | null) => {
-        if (alive && json) setTargets(json);
-      })
-      .catch(() => {
-        /* el diálogo sigue usable: se reintenta al teclear */
-      });
-    return () => {
-      alive = false;
-    };
-  }, [debounced]);
+  // Se fija el que VINO de la otra pantalla, no el que se está eligiendo
+  // aquí: si fuera el elegido, cada clic dispararía otra consulta y la lista
+  // se reordenaría bajo el dedo de quien acaba de tocarla.
+  const properties = useTargetList("properties", propertySearch, defaultPropertyId ?? null);
+  const leads = useTargetList("leads", leadSearch, defaultLeadId ?? null);
 
   async function submit() {
     if (!propertyId) {
@@ -246,25 +289,25 @@ export function NewVisitDialog({
     >
       <Field label={t("new.property")} error={error && !propertyId ? error : null}>
         <Picker
-          items={targets.properties.map((p) => ({ id: p.id, label: p.title, meta: p.colonia }))}
+          items={properties}
           value={propertyId}
           onPick={setPropertyId}
           placeholder={t("new.propertyPlaceholder")}
-          search={search}
-          onSearch={setSearch}
-          emptyLabel={t("grid.empty")}
+          search={propertySearch}
+          onSearch={setPropertySearch}
+          emptyLabel={t("new.noProperties")}
         />
       </Field>
 
       <Field label={t("new.lead")}>
         <Picker
-          items={targets.leads.map((l) => ({ id: l.id, label: l.name, meta: l.phone }))}
+          items={leads}
           value={leadId}
           onPick={setLeadId}
           placeholder={t("new.leadPlaceholder")}
-          search={search}
-          onSearch={setSearch}
-          emptyLabel={t("grid.empty")}
+          search={leadSearch}
+          onSearch={setLeadSearch}
+          emptyLabel={t("new.noLeads")}
           noneLabel={t("new.leadNone")}
         />
       </Field>
