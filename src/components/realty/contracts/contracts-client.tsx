@@ -33,8 +33,23 @@ import { NewContractForm, type ContractSources } from "./new-contract-form";
 
 type StatusFilter = RealtyContractStatus | "TODOS";
 
-/** Las que se ven en las pestañas. ARCHIVADO vive en su propia pestaña. */
-const TABS: StatusFilter[] = ["TODOS", "BORRADOR", "ENVIADO", "PARCIAL", "FIRMADO", "ARCHIVADO"];
+/**
+ * Las seis pestañas, en el orden en que un contrato las recorre.
+ *
+ * ARCHIVADO y ANULADO tienen la suya: sin ellas, un contrato anulado solo
+ * aparecería dentro de "todos" y no habría forma de irse a ver únicamente
+ * los que se dejaron sin efecto — que es justo lo que alguien busca cuando
+ * pregunta "¿qué pasó con aquel contrato?".
+ */
+const TABS: StatusFilter[] = [
+  "TODOS",
+  "BORRADOR",
+  "ENVIADO",
+  "PARCIAL",
+  "FIRMADO",
+  "ARCHIVADO",
+  "ANULADO",
+];
 
 function fechaCorta(iso: string | null): string {
   if (!iso) return "—";

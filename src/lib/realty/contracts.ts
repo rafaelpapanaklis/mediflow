@@ -1223,7 +1223,7 @@ export async function listContracts(
       FROM "realty_contracts"
      WHERE "accountId" = ${ctx.accountId}
        AND ("status" <> 'ARCHIVADO'
-            OR ${filters.status === "ARCHIVADO" || filters.includeArchived === true})
+            OR ${filters.status === "ARCHIVADO" || filters.includeArchived === true}::boolean)
      ORDER BY "createdAt" DESC
      LIMIT 500`;
   if (rows.length === 0) return [];
@@ -1891,13 +1891,47 @@ export async function registerSignature(args: {
        WHERE "contractId" = ${r.contractId} AND "mustSign" = true AND "signedAt" IS NULL`;
     complete = Number(pend[0]?.n ?? 0) === 0;
 
-    await tx.$executeRaw`
-      UPDATE "realty_contracts"
-         SET "status" = ${complete ? "FIRMADO" : "PARCIAL"},
-             "signedAt" = ${complete ? now : null},
-             "updatedAt" = ${now}
-       WHERE "id" = ${r.contractId} AND "accountId" = ${r.accountId}
-         AND "status" IN ('ENVIADO','PARCIAL')`;
+    // 🔴 EL ESTADO SE MUEVE CON CUIDADO Y LA FECHA SE SELLA SIEMPRE.
+    //
+    // El caso que obliga a esto: un contrato SELLADO, con ligas fuera, que
+    // el asesor archiva antes de que el inquilino firme. La liga sigue viva
+    // 14 días, así que la firma SÍ llega. Si aquí se filtrara por
+    // `status IN ('ENVIADO','PARCIAL')` —como estaba—, esa firma se
+    // guardaba pero el contrato no se enteraba: al desarchivarlo volvía
+    // como PARCIAL aunque hubieran firmado todos, y nadie sabría por qué.
+    //
+    //   · CASE en el status → un ARCHIVADO se queda ARCHIVADO (firmar no
+    //     puede desarchivar por la puerta de atrás) y un ENVIADO/PARCIAL
+    //     avanza. ANULADO ni llega: se rechaza antes.
+    //   · COALESCE en signedAt → se sella la primera vez y NUNCA se pisa.
+    //     Con `= ${complete ? now : null}` una firma intermedia borraba la
+    //     fecha; con COALESCE eso no puede pasar. Y como archiveContract
+    //     reconstruye el estado leyendo `signedAt`, desarchivar devuelve
+    //     FIRMADO, que es la verdad.
+    //
+    // Dos sentencias y no una con parámetros dentro del CASE: `complete` ya
+    // se conoce en JavaScript, y una consulta que se lee sola vale más que
+    // ahorrar ocho líneas — sobre todo aquí, donde un NULL parametrizado
+    // dentro de un COALESCE es justo el sitio donde Postgres se queja de no
+    // poder deducir el tipo del parámetro.
+    if (complete) {
+      await tx.$executeRaw`
+        UPDATE "realty_contracts"
+           SET "status" = CASE
+                 WHEN "status" IN ('ENVIADO','PARCIAL') THEN 'FIRMADO'
+                 ELSE "status" END,
+               "signedAt" = COALESCE("signedAt", ${now}),
+               "updatedAt" = ${now}
+         WHERE "id" = ${r.contractId} AND "accountId" = ${r.accountId}`;
+    } else {
+      await tx.$executeRaw`
+        UPDATE "realty_contracts"
+           SET "status" = CASE
+                 WHEN "status" IN ('ENVIADO','PARCIAL') THEN 'PARCIAL'
+                 ELSE "status" END,
+               "updatedAt" = ${now}
+         WHERE "id" = ${r.contractId} AND "accountId" = ${r.accountId}`;
+    }
   });
 
   return {
