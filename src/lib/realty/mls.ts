@@ -15,8 +15,10 @@ import {
   REALTY_MLS_MAX_ADOPTIONS,
   REALTY_MLS_MAX_PAGE_SIZE,
   REALTY_MLS_PAGE_SIZE,
+  REALTY_MLS_REF_PREFIX,
   REALTY_MLS_SORTS,
   isRealtyMlsField,
+  listingIdDeRef,
   normalizePct,
   sanitizeExposedFields,
   type RealtyMlsAdoptionDTO,
@@ -1498,7 +1500,7 @@ export async function listAdoptions(ctx: RealtyContext): Promise<RealtyMlsAdopti
  * Los inmuebles EN COLABORACIÓN de una cuenta, listos para el motor de la
  * mini-web. Es la única función que T5 necesita llamar.
  *
- * ── CÓMO SE ENCHUFA (una línea en cada sitio) ──────────────────────────
+ * ── CÓMO SE ENCHUFA (dos líneas, en un solo archivo) ───────────────────
  * En `src/app/i/[slug]/_shared/data.ts`, dentro del Promise.all que ya
  * existe en `cargarWebRealty`:
  *
@@ -1506,36 +1508,68 @@ export async function listAdoptions(ctx: RealtyContext): Promise<RealtyMlsAdopti
  *
  * y al armar el objeto:
  *
- *     inmuebles: [...propios.map(aInmueblePublico), ...colaboraciones],
+ *     inmuebles: [
+ *       ...inmuebles.map((i) => aInmueblePublico(i as Record<string, unknown>)),
+ *       ...colaboraciones,
+ *     ],
  *     totalInmuebles: total + colaboraciones.length,
  *
- * Devuelve `RealtyWebInmuebleDTO[]` YA pasados por `aInmueblePublico`
- * (landing.ts), así que hereda gratis las dos rejas de la web pública: las
- * URLs firmadas del bucket privado se descartan y la dirección exacta solo
- * sale si el dueño la autorizó.
+ * Devuelve fichas YA pasadas por `aInmueblePublico` (landing.ts), así que
+ * heredan gratis las dos rejas de la web pública: las URLs firmadas del
+ * bucket privado se descartan y la dirección exacta solo sale si el dueño
+ * la autorizó. `RealtyWebInmuebleColaboracion` extiende
+ * `RealtyWebInmuebleDTO`, así que el array mezclado sigue cumpliendo el
+ * tipo de `RealtyWebData.inmuebles` sin castear nada.
+ *
+ * ── CÓMO SE MARCA "EN COLABORACIÓN" EN LA PLANTILLA ────────────────────
+ * El tipo del array es el base, así que los dos campos de más no se ven.
+ * Se sacan con el helper PURO del contrato (sirve en "use client"):
+ *
+ *     import { datosDeColaboracion } from "@/components/realty/mls/mls-contract";
+ *     const colab = datosDeColaboracion(inm);
+ *     {colab ? <span className="badge">{colab.etiquetaColaboracion}</span> : null}
  *
  * ── LO QUE T5 TIENE QUE DECIDIR, Y ESTÁ DOCUMENTADO ────────────────────
- * 1. El `ref` de estas fichas es `mls:<listingId>`, con prefijo A
- *    PROPÓSITO. Dos cuentas distintas pueden tener el mismo
- *    `publicUrlSlug` (el @@unique es POR CUENTA), así que sin prefijo el
- *    `key={inm.ref}` de React colisionaría y la ficha ajena chocaría con
- *    una propia. Además el prefijo hace evidente en la URL que la ficha no
- *    es de la casa.
+ * 1. El `ref` de estas fichas es `mls:<listingId>`
+ *    (REALTY_MLS_REF_PREFIX), con prefijo A PROPÓSITO. Dos cuentas
+ *    distintas pueden tener el mismo `publicUrlSlug` (el @@unique es POR
+ *    CUENTA), así que sin prefijo el `key={inm.ref}` de React colisionaría
+ *    y la ficha ajena chocaría con una propia. Además el prefijo hace
+ *    evidente en la URL que la ficha no es de la casa.
  * 2. `cargarFichaRealty` filtra por `accountId` de la cuenta del slug, así
  *    que la ficha de detalle de una colaboración da 404 hoy. Mientras T5
  *    no la extienda, la tarjeta debe enlazar a la ficha del DUEÑO
  *    (`/i/<slug-del-dueño>/propiedades/<ref-propio>`), que sí resuelve. El
  *    slug del dueño viaja en `colaboracionDe.slug`.
+ * 3. El BUSCADOR de la web pública (`buscarInmueblesWeb`, mismo archivo)
+ *    consulta realty_properties acotado a la cuenta del slug, así que NO
+ *    ve estas fichas. Es coherente —son inventario prestado, no cartera— y
+ *    se deja así hasta que T5 decida otra cosa; el listado y la home sí
+ *    las pintan.
  *
  * ── LAS TRES REJAS ─────────────────────────────────────────────────────
  * La ficha solo sale si: la adopción está encendida (`showOnLanding`), el
  * dueño la sigue compartiendo (`active`) y el dueño la tiene PUBLICADA y
  * DISPONIBLE. Con que una diga que no, no se pinta.
  */
+export type RealtyWebInmuebleColaboracion = RealtyWebInmuebleDTO & {
+  /** Quién lo tiene de verdad. Los mismos campos públicos de la bolsa. */
+  colaboracionDe: RealtyMlsAgencyDTO;
+  /**
+   * La etiqueta lista para pintar, en español y armada aquí.
+   *
+   * Va en el DTO y no en un diccionario porque la web pública del vertical
+   * NO tiene i18n (los textos viven dentro de las plantillas). Si T5
+   * prefiere otra redacción, tiene `colaboracionDe.nombre` al lado y este
+   * campo se ignora: es una comodidad, no un contrato.
+   */
+  etiquetaColaboracion: string;
+};
+
 export async function inmueblesEnColaboracion(
   accountId: string,
   limite = REALTY_MLS_MAX_ADOPTIONS,
-): Promise<Array<RealtyWebInmuebleDTO & { colaboracionDe: RealtyMlsAgencyDTO }>> {
+): Promise<RealtyWebInmuebleColaboracion[]> {
   const id = (accountId ?? "").trim();
   if (!id) return [];
   const take = Math.max(1, Math.min(REALTY_MLS_MAX_ADOPTIONS, Math.floor(limite)));
@@ -1584,7 +1618,7 @@ export async function inmueblesEnColaboracion(
     const byProperty = new Map(properties.map((p) => [p.id, p]));
     const byAccount = new Map(accounts.map((a) => [a.id, a]));
 
-    const out: Array<RealtyWebInmuebleDTO & { colaboracionDe: RealtyMlsAgencyDTO }> = [];
+    const out: RealtyWebInmuebleColaboracion[] = [];
     for (const adoption of adoptions) {
       const listing = byListing.get(adoption.listingId);
       if (!listing) continue;
@@ -1632,11 +1666,14 @@ export async function inmueblesEnColaboracion(
         tours: allowed.has("tours") ? property.tours : [],
       });
 
+      const quienLoTiene = toAgencia(agency);
       out.push({
         ...dto,
-        // Prefijo obligatorio: ver la nota 1 del docblock.
-        ref: `mls:${listing.id}`,
-        colaboracionDe: toAgencia(agency),
+        // Prefijo obligatorio: ver la nota 1 del docblock y
+        // REALTY_MLS_REF_PREFIX en el contrato.
+        ref: `${REALTY_MLS_REF_PREFIX}${listing.id}`,
+        colaboracionDe: quienLoTiene,
+        etiquetaColaboracion: `En colaboración con ${quienLoTiene.nombre}`,
       });
     }
     return out;
@@ -1649,13 +1686,23 @@ export async function inmueblesEnColaboracion(
 }
 
 /**
- * Avisar al dueño de que un prospecto entró por SU inmueble a través de la
- * web de un colega. La otra función que T5 puede llamar, desde
- * `enviarProspectoWeb` (components/realty/web/lead-action.ts):
+ * 🔴 LA SEGUNDA (Y ÚLTIMA) FUNCIÓN QUE T5 LLAMA. Una línea, al final de
+ * `enviarProspectoWeb` (components/realty/web/lead-action.ts), justo
+ * después de crear el lead:
  *
- *     if (inmuebleRef?.startsWith("mls:")) {
- *       await avisarColaboracion(accountId, inmuebleRef.slice(4), nombre);
- *     }
+ *     await avisarProspectoDeColaboracion(accountId, inmuebleRef, nombre);
+ *
+ * Se le pasa el `ref` TAL CUAL llegó del formulario. Ella misma comprueba
+ * el prefijo y devuelve false si no es una ficha de la bolsa, así que no
+ * hace falta un `if` alrededor ni recordar cuántos caracteres mide "mls:".
+ *
+ * ── LO QUE T5 NO DEBE HACER, Y ES LO IMPORTANTE ────────────────────────
+ * `enviarProspectoWeb` resuelve `inmuebleRef` contra realty_properties
+ * ACOTADO a la cuenta del slug. Un ref con prefijo no lo va a encontrar
+ * —el inmueble es de otra cuenta— y ASÍ TIENE QUE SER: el lead se guarda
+ * con `propertyId: null`. Ligarlo al inmueble ajeno sería escribir en el
+ * CRM de una cuenta con el id de otra, que es exactamente lo que este
+ * módulo existe para que no pase. No hay nada que arreglar ahí.
  *
  * El prospecto se queda en el CRM de quien HOSPEDA la web —él es quien lo
  * atiende— y al dueño le entra un PENDIENTE en su cuenta con el nombre de
@@ -1663,6 +1710,21 @@ export async function inmueblesEnColaboracion(
  * trabaja, y duplicarlo sería que dos personas llamaran al mismo señor.
  *
  * Nunca lanza: un aviso que falla no puede tumbar la captación de nadie.
+ */
+export async function avisarProspectoDeColaboracion(
+  hostAccountId: string,
+  inmuebleRef: unknown,
+  prospectoNombre: string,
+): Promise<boolean> {
+  const listingId = listingIdDeRef(inmuebleRef);
+  if (!listingId) return false;
+  return avisarColaboracion(hostAccountId, listingId, prospectoNombre);
+}
+
+/**
+ * El aviso en sí, por listingId ya limpio. Se exporta por si algún día hace
+ * falta llamarlo sin pasar por el `ref` de la web, pero el camino normal
+ * —y el que T5 usa— es `avisarProspectoDeColaboracion`.
  */
 export async function avisarColaboracion(
   hostAccountId: string,

@@ -505,6 +505,96 @@ export interface RealtyMlsShareInput {
   notes?: string | null;
 }
 
+// ═══════════════════════════════════════════════════════════════════════
+// 5. LA COSTURA CON LA WEB PÚBLICA (T5)
+// ═══════════════════════════════════════════════════════════════════════
+
+/**
+ * 🔴 EL PREFIJO DEL `ref` DE UNA FICHA EN COLABORACIÓN. Obligatorio, y por
+ * dos razones distintas:
+ *
+ *   1. Dos cuentas pueden tener el mismo `publicUrlSlug` (el @@unique de
+ *      RealtyProperty.publicUrlSlug es POR CUENTA). Sin prefijo, el
+ *      `key={inm.ref}` de React colisionaría y la ficha ajena chocaría con
+ *      una propia.
+ *   2. Hace evidente en la URL que la ficha no es de la casa.
+ *
+ * Va DETRÁS del listingId y nunca del propertyId: el id del inmueble ajeno
+ * no tiene por qué viajar al navegador, y el listingId es el único
+ * identificador que toda ruta de la bolsa vuelve a comprobar.
+ *
+ * Vive en el CONTRATO —que es puro— y no en el motor `server-only`, para
+ * que una plantilla "use client" pueda preguntar si una ficha es propia o
+ * prestada sin arrastrar prisma al navegador.
+ */
+export const REALTY_MLS_REF_PREFIX = "mls:";
+
+/** ¿Este `ref` de la web pública apunta a una ficha de la bolsa? */
+export function esRefDeColaboracion(ref: unknown): boolean {
+  return typeof ref === "string" && ref.startsWith(REALTY_MLS_REF_PREFIX);
+}
+
+/**
+ * `"mls:abc123"` → `"abc123"`. Cualquier otra cosa → null.
+ *
+ * 🔴 Un ref con prefijo NUNCA se resuelve contra `realty_properties` de la
+ * cuenta que hospeda: ese inmueble NO es suyo y el `findFirst` con su
+ * accountId no lo encontraría de todos modos. Un prospecto que llega por
+ * una ficha en colaboración se guarda SIN propertyId — ligarlo al inmueble
+ * ajeno sería escribir en el CRM de una cuenta con el id de otra.
+ */
+export function listingIdDeRef(ref: unknown): string | null {
+  if (!esRefDeColaboracion(ref)) return null;
+  const id = (ref as string).slice(REALTY_MLS_REF_PREFIX.length).trim();
+  return id === "" ? null : id;
+}
+
+/** Lo que una ficha prestada trae de más respecto a una propia. */
+export interface RealtyMlsMarcaColaboracion {
+  colaboracionDe: RealtyMlsAgencyDTO;
+  /** "En colaboración con Inmobiliaria X" — listo para pintar. */
+  etiquetaColaboracion: string;
+}
+
+/**
+ * 🔴 EL ÚNICO HELPER QUE UNA PLANTILLA DE LA WEB PÚBLICA NECESITA.
+ *
+ * `RealtyWebData.inmuebles` está tipado como `RealtyWebInmuebleDTO[]`, así
+ * que las fichas prestadas entran ahí con sus dos campos de más pero el
+ * tipo no los deja ver. Esto los saca con seguridad:
+ *
+ *     const colab = datosDeColaboracion(inm);
+ *     {colab ? <span class="badge">{colab.etiquetaColaboracion}</span> : null}
+ *
+ * Comprueba las TRES cosas —el prefijo del ref y que los dos campos estén
+ * de verdad— así que una ficha propia jamás sale marcada por accidente, ni
+ * siquiera si alguien le colgara el prefijo a mano.
+ *
+ * Es genérico y estructural a propósito: no importa nada de `landing.ts`,
+ * así que una plantilla "use client" lo puede llamar sin arrastrar el motor
+ * de la web pública a su bundle.
+ */
+export function datosDeColaboracion<T extends { ref?: unknown }>(
+  inmueble: T | null | undefined,
+): (T & RealtyMlsMarcaColaboracion) | null {
+  if (!inmueble || !esRefDeColaboracion(inmueble.ref)) return null;
+  const con = inmueble as T & Partial<RealtyMlsMarcaColaboracion>;
+  const agencia = con.colaboracionDe;
+  if (!agencia || typeof agencia.nombre !== "string") return null;
+  return {
+    ...(inmueble as T),
+    colaboracionDe: agencia,
+    etiquetaColaboracion:
+      typeof con.etiquetaColaboracion === "string" && con.etiquetaColaboracion.trim() !== ""
+        ? con.etiquetaColaboracion
+        : `En colaboración con ${agencia.nombre}`,
+  };
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// 6. UTILIDADES
+// ═══════════════════════════════════════════════════════════════════════
+
 /** Porcentaje 0–100 con dos decimales, o null si no es un número válido. */
 export function normalizePct(value: unknown): number | null {
   const n = typeof value === "number" ? value : Number(value);

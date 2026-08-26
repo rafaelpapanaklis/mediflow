@@ -21528,3 +21528,596 @@ CUATRO RIESGOS RESIDUALES, ninguno toca al dental ni a barber:
   Parece rota y no lo está.
 - Diff final: **25 archivos, +6090 / −21.** Fuera del vertical, solo dos:
   `ORQUESTA.md` y el webhook.
+
+
+## [Inmuebles Ola 2 · O2-T4] — La Bolsa Inmobiliaria: la única puerta del producto entre dos cuentas, y las tres reglas que la cierran ✅ (2026-08-26)
+
+Rama `realty/o2t4`, 5 commits sobre `c156a11e`. **24 archivos, +8 961 líneas**, de
+los cuales UNO está fuera de mi allowlist: `prisma/schema.prisma` (declarado en
+`REALTY_GUARD_SHARED`). Guardia en verde.
+
+### Por qué esto vale más de lo que parece
+
+El moat de EasyBroker no es su software: es su Bolsa Inmobiliaria. Plan gratis,
+inventario compartido con comisión compartida, y cada quien publicando el
+inventario ajeno en su propio sitio. Es efecto red puro — **vale poco con 5
+clientes y muchísimo con 500**, y por eso se construye AHORA: porque tarda en
+encender y el que empieza tarde nunca alcanza.
+
+La consecuencia incómoda de eso manda sobre todo el copy de la pantalla: **los
+primeros meses la bolsa va a estar vacía.** Ninguna cadena de
+`i18n/dictionaries/realty/mls.json` promete una bolsa llena, ni un número de
+inmuebles, ni cuántas inmobiliarias hay. El vacío dice lo que pasa:
+
+> «Aquí aparecerán los inmuebles que otras inmobiliarias decidan compartir. Al
+> principio va a estar vacía: la bolsa se llena conforme más cuentas entran y
+> ponen su inventario. Comparte el tuyo para que te encuentren a ti.»
+
+El archivo lleva una llave `_copyHonesto` que dice exactamente eso, para que
+quien venga después sepa que no es un descuido.
+
+---
+
+### 🔴 LA LISTA EXACTA DE CAMPOS QUE LA BOLSA EXPONE ENTRE CUENTAS
+
+Esto es lo que hay que auditar, y sale GENERADO de las constantes, no escrito a
+mano (`node scratchpad/audit-mls.js` lo vuelve a imprimir en cualquier momento).
+
+**El DTO completo que cruza de una cuenta a otra — `RealtyMlsListingDTO`, 38
+campos y ni uno más.** Se arma campo por campo en `projectListing`
+(`src/lib/realty/mls.ts`): en el archivo entero **no hay un solo spread de una
+fila de Prisma**, y eso es deliberado — un `...row` es exactamente cómo se
+publica la columna que alguien agregue el mes que viene.
+
+| Grupo | Campos |
+|---|---|
+| **De la bolsa** (los términos, no el inmueble) | `listingId` · `propertyId` · `comisionCompartida` · `aceptaColaboracion` · `exigeClienteDelSocio` · `recado` · `compartidoEn` |
+| **Quién comparte** (`quienComparte`, 7 campos) | `nombre` · `slug` · `ciudad` · `estado` · `logoUrl` · `telefono` · `correo` |
+| **Identidad del inmueble** | `titulo` · `descripcion` · `kind` · `operation` · `status` · `folio` |
+| **Dinero del inmueble** | `precio` · `moneda` · `precioRenta` · `mantenimiento` |
+| **Medidas** | `terrenoM2` · `construidoM2` · `recamaras` · `banos` · `mediosBanos` · `cocheras` · `antiguedad` · `amenidades` |
+| **Ubicación** | `colonia` · `ciudad` · `estado` · `cp` · **`direccion`** ⚠️ · **`lat`** ⚠️ · **`lng`** ⚠️ |
+| **Multimedia** | `fotos` · `tours` |
+| **Antigüedad del anuncio** | `publicadoEn` |
+| **Mi relación con la ficha** (calculado, no del inmueble) | `miAcuerdo` · `adoptado` |
+
+⚠️ **Los tres con doble reja.** `direccion`, `lat` y `lng` salen SOLO si se
+cumplen las DOS: el dueño dejó el campo encendido Y el inmueble tiene
+`showExactAddress`. Con que una diga que no, salen en `null`. Un pin
+"aproximado" con la latitud real a siete decimales es la dirección exacta con
+otro nombre.
+
+**El dueño puede RECORTAR, nunca ampliar.** `exposedFields` se sanea contra la
+lista blanca (`sanitizeExposedFields`): lo que no esté en ella se descarta EN
+SILENCIO —un error diría "esa llave existe pero no te la doy"— y siete campos
+son irrecortables porque sin ellos la ficha no es una ficha sino una fila en
+blanco que ensucia el buscador de todos: `titulo`, `kind`, `operation`,
+`status`, `precio`, `moneda`, `ciudad`.
+
+**Es exactamente el corte del feed público de portales, y ni un campo más.** El
+criterio: si algo no se le enseña a un desconocido en internet, tampoco se le
+enseña a un colega. La bolsa añade UNA cosa que la web pública no tiene —
+`sharedCommissionPct`— y esa no sale del inmueble sino de
+`realty_mls_listings`, es decir de lo que su dueño tecleó SABIENDO que lo iban
+a leer otras cuentas. Igual que `recado` y que los dos interruptores de
+colaboración.
+
+#### Lo que NO sale JAMÁS, bajo ninguna combinación de parámetros
+
+`REALTY_MLS_NEVER_EXPOSED` (24 llaves) existe como red de seguridad y como
+objetivo explícito para el revisor. La reja real es la lista blanca:
+
+```
+accountId · officeId · assignedUserId · assignedUserName · ownerId · ownerName
+owner · ownerPhone · ownerEmail · ownerRfc · ownerNotes · commissionPct
+internalNotes · documents · documentos · exclusives · exclusiva
+leads · visits · keys · tasks · deals · portalListings · isPublished
+```
+
+Dos aclaraciones que valen por diez comentarios:
+
+- **`commissionPct` NO es `sharedCommissionPct`.** El primero es lo que la
+  inmobiliaria le cobra a SU propietario y no es asunto del colega; el segundo
+  es lo que suelta de su parte y es la razón de ser de la bolsa. Viven en
+  tablas distintas a propósito.
+- **El teléfono y el correo que salen son los DEL NEGOCIO** —los mismos que esa
+  cuenta ya publica en su web y en el feed de portales— y **jamás los del
+  propietario del inmueble**, que ni siquiera se lee de la base en este módulo.
+
+#### La auditoría, corrida
+
+```
+projectListing devuelve 38 campos  → ninguno está en la lista NEGRA          ✅
+RealtyMlsListingDTO (38) · AgencyDTO (7) · AgreementDTO (14) ·
+  AdoptionDTO (14) · ReceivableDTO (9) → ninguno en la lista NEGRA           ✅
+SELECT_AGENCIA: id, name, slug, city, state, logoUrl, phone, email, isActive
+  → nada que huela a credencial ni a facturación                             ✅
+SELECT_BOLSA lee 33 columnas; de la negra solo accountId e isPublished, que
+  se leen PARA COMPROBAR INVARIANTES y no llegan al DTO                      ✅
+Spreads en el motor: 8, y los 8 son `where` de Prisma, una copia de array
+  (`[...rows]`) o `...dto` (el DTO público ya proyectado)                     ✅
+```
+
+---
+
+### Las tres reglas del aislamiento
+
+Todo lo demás del vertical arranca su `where` con el `accountId` de la sesión y
+ahí se acaba la conversación. Aquí no se puede, así que el aislamiento viene de
+otro lado:
+
+1. **CONSENTIMIENTO EXPLÍCITO.** Un inmueble existe para otras cuentas solo si
+   su dueño creó una fila en `realty_mls_listings` y la dejó `active`. No hay
+   "compartido por omisión", no hay herencia, no hay "si ya está publicado en
+   tu web ya cuenta". Apagar el interruptor lo retira de la bolsa de todos en
+   la MISMA consulta: las lecturas filtran por `active` en el mismo SELECT — no
+   hay copia, no hay caché, no hay trabajo diferido que pueda quedarse atrás.
+2. **LISTA BLANCA DE CAMPOS.** Lista blanca y no negra: con una negra, la
+   columna que alguien agregue el mes que viene sale publicada por omisión y
+   nadie se entera.
+3. **EL ID AJENO NO VIAJA.** El navegador jamás recibe el `accountId` de otra
+   cuenta ni manda uno. Para todo —proponer, adoptar, contactar— manda el
+   `listingId` y el servidor deriva de quién es. Un id que no viaja es un id
+   que no se puede falsificar.
+
+**Y una cuarta que es de construcción: sin FK, todo falla CERRADO.** Las tres
+tablas no tienen llaves foráneas (ver más abajo el porqué), así que cada
+lectura vuelve a leer el inmueble y la cuenta y comprueba la invariante
+`property.accountId === listing.accountId`. Una fila huérfana o incoherente no
+produce resultados y se registra en el log del servidor.
+
+#### La puerta: CINCO cortes, en este orden
+
+`src/app/api/realty/mls/_guard.ts` — una sola función, **10 archivos de ruta y 16 manejadores**:
+
+| # | Corte | Respuesta | Por qué así |
+|---|---|---|---|
+| 1 | Sesión | 401 | De aquí sale el accountId. Nunca del body, nunca del query. |
+| 2 | Suscripción | 402 | El layout del panel no corta (hueco conocido del vertical). Una cuenta impaga no se pasea por el inventario de las que sí pagan. |
+| 3 | Modo | **404** | Un rentista (OWNER) no comercializa para terceros: la bolsa no existe para él. 404 y no 403 porque para esa cuenta la sección literalmente no está. |
+| 4 | Feature `mls` | 402 `FEATURE_LOCKED` | **Nunca `plan.id === "INMOBILIARIA"`.** El mensaje trae el plan y el precio LEÍDOS de la tabla: cero precios en el código. |
+| 5 | Permiso | 403 | `properties.*` / `web.edit`. |
+
+**Por qué `properties.view`/`properties.edit` y no un permiso `mls.*` nuevo:**
+`permissionsOverride` REEMPLAZA los defaults del rol en vez de sumarse. Una
+llave nueva no la tendría NADIE con override puesto, y esa gente se quedaría
+fuera en silencio, sin un mensaje que explique por qué. La bolsa es inventario:
+leerla es `properties.view`, compartir lo propio es `properties.edit`, y poner
+inventario ajeno en tu sitio es `web.edit` porque eso no toca tu cartera,
+cambia lo que se ve en tu web.
+
+**Un solo 404 para tres cosas distintas.** "No existe", "ya no se comparte" y
+"es de otra cuenta" dan el MISMO texto. Distinguirlos convertiría la ruta en un
+oráculo de qué ids existen.
+
+---
+
+### Lo que se construyó (A–E)
+
+**A · Publicar en la bolsa** — dos entradas al mismo motor:
+- La pestaña **"Lo que comparto"** (`compartir-tab.tsx`), con el pulso de cada
+  ficha: cuántas cuentas la tienen en su web, cuántas propusieron colaborar.
+- **Y el interruptor DENTRO de la ficha del inmueble**
+  (`compartir-inmueble.tsx`), que es donde de verdad se decide: nadie entra a
+  una pantalla de bolsa para compartir algo, lo decide mirando el inmueble que
+  acaba de captar.
+- **Encender por primera vez NO publica: abre el formulario.** Lo primero que
+  mira el otro asesor es cuánta comisión compartes, y eso no puede salir por
+  default sin que nadie lo haya visto. Apagar sí es inmediato.
+
+**B · Buscar en la bolsa** (`buscar-tab.tsx` + `GET /api/realty/mls`) — los
+mismos filtros del inventario propio (tipo, operación, ciudad, colonia, precio,
+recámaras) **más los dos que de verdad usa un asesor: "comparte al menos X%" y
+"solo quienes aceptan colaborar"**, y el orden "mejor comisión compartida".
+Cada resultado enseña la propiedad, quién la tiene, cuánto comparte y el botón
+de contacto (WhatsApp / llamar / correo, con el teléfono del negocio).
+
+**C · Acuerdo de colaboración** (`realty_mls_agreements`) — quién capta, quién
+coloca, el porcentaje y la fecha. `PROPUESTO → ACEPTADO → CERRADO` es el camino
+feliz; el captador puede **aceptar con otro porcentaje** (la contraoferta, sin
+la cual la negociación se sale del producto y acaba por WhatsApp). Volver a
+proponer tras un rechazo REUSA la fila, así nadie llena la bandeja del vecino a
+base de propuestas repetidas.
+
+**D · Publicar inventario ajeno en la web propia** (`realty_mls_adoptions`,
+tope 24) — ver «La costura con T5» más abajo.
+
+**E · Mis colaboraciones** (`colaboraciones-tab.tsx` + `GET
+/api/realty/mls/panel`) — lo que comparto, lo que tomé, los acuerdos y las
+comisiones por cobrar, en una sola llamada. El contador de **propuestas por
+responder se pinta en la pestaña ANTES de entrar**: un aviso que solo aparece
+cuando ya entraste no es un aviso.
+
+---
+
+### 🔴 La costura con T8 (comisiones): la bolsa NO calcula dinero
+
+`POST /api/realty/mls/acuerdos/[id]/cerrar`. El único motor de comisiones del
+vertical es `computeSplits` y el único sitio que escribe el reparto es
+`setDealSplits`. Esta ruta **no inventa un reparto paralelo**: toma el
+porcentaje que las dos partes ya pactaron, lo convierte en la fila que el
+modelo de T8 YA tiene —`party: "EXTERNO"` + `externalName`— y se la entrega a
+SU función junto con las partes que ya existían (porque `setDealSplits`
+REEMPLAZA el reparto entero: mandarle solo mi fila borraría al captador, al
+colocador y a la oficina).
+
+**El nombre del externo no lo teclea nadie.** T8 agrupa a los externos del
+recibo por `ext:${nombre.toLowerCase()}` y "pagar todo" hace match EXACTO, así
+que el nombre sale siempre de `RealtyAccount.name` de la contraparte: dos
+grafías del mismo colega serían dos beneficiarios distintos en el recibo.
+
+⚠️ **LO QUE HAY QUE SABER ANTES DE PROBARLO, Y NO ES UN BUG:**
+`computeSplits` exige que el reparto sume EXACTAMENTE la comisión. Si la
+operación ya tiene su reparto cerrado al 100 %, añadir la parte del colega da
+101 %+ y T8 lo rechaza con razón. **En ese caso el acuerdo SE QUEDA CERRADO
+—porque de verdad se cerró— y la respuesta lo dice con todas sus letras:**
+`splitAplicado: false`, el motivo textual de T8, y la fila exacta para
+agregarla a mano («externo "Inmobiliaria X", 50 %»), con liga a Comisiones.
+
+Se decidió NO reequilibrar automáticamente. Bajarle el porcentaje al captador o
+a la oficina para hacerle sitio al externo es decidir sobre el dinero de otras
+personas sin que lo vean. Eso se hace en la pantalla de Comisiones, mirándolo.
+El caso en que sí entra solo: cuando el reparto tiene hueco justo por ese
+porcentaje.
+
+---
+
+### 🔴 La costura con T5 (web pública): tres nombres, ni un archivo suyo tocado
+
+**No toqué nada de T5.** Toda la superficie está aquí:
+
+```ts
+// 1) src/app/i/[slug]/_shared/data.ts — dentro del Promise.all de cargarWebRealty:
+import { inmueblesEnColaboracion } from "@/lib/realty/mls";
+      inmueblesEnColaboracion(cuenta.id),
+
+//    y al armar el objeto:
+      inmuebles: [
+        ...inmuebles.map((i) => aInmueblePublico(i as Record<string, unknown>)),
+        ...colaboraciones,
+      ],
+      totalInmuebles: total + colaboraciones.length,
+
+// 2) src/components/realty/web/lead-action.ts — al final de enviarProspectoWeb,
+//    después de crear el lead. UNA línea, sin `if`:
+import { avisarProspectoDeColaboracion } from "@/lib/realty/mls";
+      await avisarProspectoDeColaboracion(accountId, inmuebleRef, nombre);
+
+// 3) En la plantilla, para marcar la ficha como "en colaboración".
+//    El helper es PURO: sirve en un componente "use client".
+import { datosDeColaboracion } from "@/components/realty/mls/mls-contract";
+      const colab = datosDeColaboracion(inm);
+      {colab ? <span className="badge">{colab.etiquetaColaboracion}</span> : null}
+```
+
+**Firmas exactas:**
+
+```ts
+inmueblesEnColaboracion(
+  accountId: string,
+  limite?: number,                       // por omisión 24 (REALTY_MLS_MAX_ADOPTIONS)
+): Promise<RealtyWebInmuebleColaboracion[]>
+// = RealtyWebInmuebleDTO & { colaboracionDe: RealtyMlsAgencyDTO;
+//                            etiquetaColaboracion: string }
+// Nunca lanza: si algo falla devuelve [] y la web se pinta con lo propio.
+
+avisarProspectoDeColaboracion(
+  hostAccountId: string,
+  inmuebleRef: unknown,                  // el `ref` TAL CUAL llegó del formulario
+  prospectoNombre: string,
+): Promise<boolean>                      // false si el ref no es de la bolsa
+// Nunca lanza: un aviso que falla no puede tumbar la captación de nadie.
+
+datosDeColaboracion<T extends { ref?: unknown }>(
+  inmueble: T | null | undefined,
+): (T & { colaboracionDe: RealtyMlsAgencyDTO; etiquetaColaboracion: string }) | null
+```
+
+**Cuatro cosas que T5 tiene que saber:**
+
+1. **El `ref` es `mls:<listingId>`, con prefijo obligatorio.** Dos cuentas
+   pueden tener el mismo `publicUrlSlug` (el `@@unique` es POR CUENTA), así que
+   sin prefijo el `key={inm.ref}` de React colisionaría y la ficha ajena
+   chocaría con una propia. Además hace evidente en la URL que la ficha no es
+   de la casa. Va detrás del **listingId** y nunca del propertyId: el id del
+   inmueble ajeno no tiene por qué viajar al navegador.
+2. **`cargarFichaRealty` filtra por `accountId` del slug, así que la ficha de
+   detalle de una colaboración da 404 hoy.** Mientras eso no se extienda, la
+   tarjeta debe enlazar a la ficha del DUEÑO
+   (`/i/<slug-del-dueño>/propiedades/<ref-propio>`), que sí resuelve; el slug
+   del dueño viaja en `colaboracionDe.slug`.
+3. **`enviarProspectoWeb` va a guardar el lead con `propertyId: null`, y ESO
+   ESTÁ BIEN.** Resuelve el ref contra `realty_properties` acotado a la cuenta
+   del slug, y un ref con prefijo no lo encuentra porque el inmueble es de
+   otra. Ligarlo sería escribir en el CRM de una cuenta con el id de otra, que
+   es justo lo que este módulo existe para impedir. **No hay nada que
+   "arreglar" ahí.** El prospecto se queda en el CRM de quien hospeda —él lo
+   atiende— y al dueño le entra un PENDIENTE (`RealtyTask`) con el nombre de
+   quien lo recibió. Un pendiente y no un lead: duplicarlo sería que dos
+   personas llamaran al mismo señor.
+4. **El buscador de la web pública (`buscarInmueblesWeb`) NO ve estas fichas**,
+   porque consulta `realty_properties` acotado a la cuenta. Es coherente —son
+   inventario prestado, no cartera— y se deja así; el listado y la home sí las
+   pintan.
+
+**Las tres rejas de esta ruta:** la ficha se pinta solo si la adopción está
+encendida (`showOnLanding`), el dueño la sigue compartiendo (`active`) y la
+tiene PUBLICADA y DISPONIBLE. Y se pasa por `aInmueblePublico` (el mapeador de
+T5), así que hereda gratis sus dos rejas: las URLs firmadas del bucket privado
+se descartan y la dirección exacta solo sale si el dueño la autorizó. **No se
+le pasa la fila de Prisma** sino una fila armada a mano, campo por campo y ya
+recortada: ese mapeador es de T5 y el día que le añadan un campo, este módulo
+no puede ser la vía por la que se escape.
+
+---
+
+### El schema: tres tablas, cero llaves foráneas, y por qué
+
+`prisma/schema.prisma`, **al final del bloque Realty**, en tres bloques
+CONTIGUOS. Si al rebasar hay conflicto ahí, es otra terminal agregando SUS
+modelos al final: **conserva los dos bloques**.
+
+**Sin relaciones de Prisma, a propósito.** Una relación obliga a declarar el
+lado inverso DENTRO de `RealtyAccount` y de `RealtyProperty`, es decir a editar
+modelos que están a mil líneas de distancia, en medio del archivo que se pelean
+siete terminales en paralelo. El precio, dicho en voz alta:
+
+> **No hay `ON DELETE CASCADE`. Borrar un inmueble deja su fila de bolsa
+> huérfana.** NO es una fuga —toda lectura vuelve a leer el inmueble y falla
+> cerrada— pero conviene barrerlas. La consulta `4.c` del `.sql` las lista.
+> Quien cablee la limpieza es `deleteRealtyProperty`, que vive en T1.
+
+- **`realty_mls_listings`** — el CONSENTIMIENTO. `propertyId` es único GLOBAL y
+  no `[accountId, propertyId]`: el id de un inmueble ya es único en toda la
+  base. La pertenencia se comprueba ANTES de escribir, contra
+  `realty_properties`, nunca confiando en el accountId que llegue del
+  navegador. El índice de búsqueda empieza por `active` y no por `accountId`
+  —al revés que todo el vertical— porque la consulta es "todo lo activo MENOS
+  lo mío".
+- **`realty_mls_agreements`** — el acuerdo. Es la **única tabla del producto
+  con DOS inquilinos por fila** (`listingAccountId` + `partnerAccountId`), y
+  `listingAccountId` está desnormalizado a propósito: sin él, "mis acuerdos
+  como captador" sería un join en cada pantalla.
+- **`realty_mls_adoptions`** — el escaparate. Adoptar NO es un acuerdo: es
+  escaparate, y el acuerdo se firma cuando hay cliente. Por eso son dos tablas
+  y no una.
+
+---
+
+### ⚠️ SQL PARA SUPABASE — NO APLICADO. Copiar y pegar tal cual
+
+Va **después** de `sql/realty.sql`. Es idempotente (`IF NOT EXISTS` en todo),
+un solo delimitador `$realty$` y sin bloques `DO` anidados. **Nada vive solo
+aquí: las tres tablas y el enum están también en `prisma/schema.prisma`**, así
+que un `prisma db push` no se las lleva por delante. El archivo completo, con
+las cinco consultas de comprobación comentadas, está en `sql/realty-mls.sql`.
+
+```sql
+-- ── 1. Enum ────────────────────────────────────────────────────────────
+DO $realty$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'RealtyMlsAgreementStatus') THEN
+    CREATE TYPE "RealtyMlsAgreementStatus" AS ENUM (
+      'PROPUESTO', 'ACEPTADO', 'RECHAZADO', 'CANCELADO', 'CERRADO'
+    );
+  END IF;
+END
+$realty$;
+
+-- ── 2. Tablas ──────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS "realty_mls_listings" (
+    "id" TEXT NOT NULL,
+    "accountId" TEXT NOT NULL,
+    "propertyId" TEXT NOT NULL,
+    "sharedCommissionPct" DECIMAL(5,2) NOT NULL DEFAULT 0,
+    "acceptsCollaboration" BOOLEAN NOT NULL DEFAULT true,
+    "requiresBuyerFromPartner" BOOLEAN NOT NULL DEFAULT false,
+    "exposedFields" JSONB,
+    "active" BOOLEAN NOT NULL DEFAULT true,
+    "notes" TEXT,
+    "sharedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "realty_mls_listings_pkey" PRIMARY KEY ("id")
+);
+
+CREATE TABLE IF NOT EXISTS "realty_mls_agreements" (
+    "id" TEXT NOT NULL,
+    "listingId" TEXT NOT NULL,
+    "listingAccountId" TEXT NOT NULL,
+    "partnerAccountId" TEXT NOT NULL,
+    "propertyId" TEXT NOT NULL,
+    "agreedPct" DECIMAL(5,2) NOT NULL DEFAULT 0,
+    "status" "RealtyMlsAgreementStatus" NOT NULL DEFAULT 'PROPUESTO',
+    "message" TEXT,
+    "proposedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "respondedAt" TIMESTAMP(3),
+    "closedAt" TIMESTAMP(3),
+    "dealId" TEXT,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "realty_mls_agreements_pkey" PRIMARY KEY ("id")
+);
+
+CREATE TABLE IF NOT EXISTS "realty_mls_adoptions" (
+    "id" TEXT NOT NULL,
+    "accountId" TEXT NOT NULL,
+    "listingId" TEXT NOT NULL,
+    "propertyId" TEXT NOT NULL,
+    "showOnLanding" BOOLEAN NOT NULL DEFAULT true,
+    "sortOrder" INTEGER NOT NULL DEFAULT 0,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "realty_mls_adoptions_pkey" PRIMARY KEY ("id")
+);
+
+-- ── 3. Índices (10: 3 únicos + 7 de búsqueda) ──────────────────────────
+CREATE UNIQUE INDEX IF NOT EXISTS "realty_mls_listings_propertyId_key"
+  ON "realty_mls_listings"("propertyId");
+CREATE UNIQUE INDEX IF NOT EXISTS "realty_mls_agreements_listingId_partnerAccountId_key"
+  ON "realty_mls_agreements"("listingId", "partnerAccountId");
+CREATE UNIQUE INDEX IF NOT EXISTS "realty_mls_adoptions_accountId_listingId_key"
+  ON "realty_mls_adoptions"("accountId", "listingId");
+
+CREATE INDEX IF NOT EXISTS "realty_mls_listings_active_sharedAt_idx"
+  ON "realty_mls_listings"("active", "sharedAt");
+CREATE INDEX IF NOT EXISTS "realty_mls_listings_accountId_active_idx"
+  ON "realty_mls_listings"("accountId", "active");
+CREATE INDEX IF NOT EXISTS "realty_mls_agreements_listingAccountId_status_proposedAt_idx"
+  ON "realty_mls_agreements"("listingAccountId", "status", "proposedAt");
+CREATE INDEX IF NOT EXISTS "realty_mls_agreements_partnerAccountId_status_proposedAt_idx"
+  ON "realty_mls_agreements"("partnerAccountId", "status", "proposedAt");
+CREATE INDEX IF NOT EXISTS "realty_mls_agreements_propertyId_idx"
+  ON "realty_mls_agreements"("propertyId");
+CREATE INDEX IF NOT EXISTS "realty_mls_adoptions_accountId_showOnLanding_sortOrder_idx"
+  ON "realty_mls_adoptions"("accountId", "showOnLanding", "sortOrder");
+CREATE INDEX IF NOT EXISTS "realty_mls_adoptions_listingId_idx"
+  ON "realty_mls_adoptions"("listingId");
+```
+
+**Comprobación después de aplicar** (debe devolver 0 filas — un acuerdo jamás
+puede tener al mismo inquilino de los dos lados, y nadie puede estar en la
+bolsa sin haberlo pedido):
+
+```sql
+SELECT id FROM "realty_mls_agreements" WHERE "listingAccountId" = "partnerAccountId";
+
+SELECT l.id, l."accountId", l."propertyId" FROM "realty_mls_listings" l
+JOIN "realty_properties" p ON p.id = l."propertyId"
+WHERE l.active = true AND p."accountId" <> l."accountId";
+```
+
+---
+
+### 🔴 LO QUE FALTA / DECISIONES PARA RAFAEL
+
+1. **NO HAY ITEM DE MENÚ, y no lo pude poner.** `REALTY_NAV_ITEMS` vive en
+   `src/lib/realty/types.ts`, que esta terminal tiene PROHIBIDO tocar. La ruta
+   `/inmobiliaria/bolsa` funciona escribiéndola, pero el sidebar no la pinta.
+   El renglón exacto, para pegar después de `comisiones`:
+
+   ```ts
+   { key: "bolsa", href: "/inmobiliaria/bolsa", icon: "handshake", section: "negocio", permission: "properties.view", featureKey: "mls", modes: BROKER_MODES },
+   ```
+
+   Y su etiqueta en el diccionario compartido:
+   `realty.shell.nav.bolsa = "Bolsa inmobiliaria"` (en: `"Property exchange"`).
+   ⚠️ Hay que comprobar que el sidebar sepa pintar el icono `handshake`; si no
+   está en su mapa, `share` o `users` sirven.
+
+   Por eso mismo, **la guarda de modo de la página NO busca el item en el
+   contrato** (como hacen Calculadoras y Comisiones): ahí el `find` devolvería
+   `undefined` y la guarda se saltaría sola. Usa `BROKER_MODES_MLS`.
+
+2. **⚠️ QA: una cuenta recién creada NO aparece en la bolsa.** Endurecí el
+   filtro para que solo se vea el inventario de cuentas **vivas Y al
+   corriente** (`active | trialing | paid`). El motivo: a quien no paga, la
+   puerta le responde 402, así que **no puede aceptar una propuesta ni
+   contestar un mensaje** — dejar su inventario a la vista era mandar al colega
+   a perseguir a alguien que literalmente no puede abrir el panel. Pero una
+   cuenta nace en `pending_payment`, así que **en pruebas la bolsa va a salir
+   vacía hasta que la suscripción quede al corriente. Es esto, no un fallo.**
+   Si prefieres que el inventario impago siga visible, es quitar
+   `CUENTA_EN_LA_BOLSA` de `src/lib/realty/mls.ts` (un solo objeto, cinco usos).
+
+3. **El tope de la bolsa: 2 000 fichas activas** (`REALTY_MLS_SCAN_CAP`). Sin
+   FK no hay join entre `realty_mls_listings` (donde vive la comisión
+   compartida) y `realty_properties` (donde viven precio, recámaras y ciudad),
+   así que el cruce se hace en memoria. **Si se pasa, la pantalla lo DICE**
+   (`truncado`) en vez de enseñar una lista recortada que parece completa. Ese
+   día toca promover el cruce a una vista SQL, **no subir el número en
+   silencio**.
+
+4. **El tope de adopciones es 24** (`REALTY_MLS_MAX_ADOPTIONS`) y vive en el
+   contrato, que es puro: el número de la reja del servidor y el del contador
+   de la pantalla ("3 de 24 lugares usados") son el MISMO. No hay forma de que
+   se separen.
+
+5. **No hay notificación al captador cuando le proponen colaborar.** Solo el
+   contador en la pestaña. Un WhatsApp o un correo sería la mejora obvia y
+   probablemente la que más mueve la aguja: la bolsa muere si las propuestas
+   tardan tres días en verse. **No lo hice porque WhatsApp es territorio de T6
+   y no toco archivos de otra terminal.**
+
+6. **`install-integ-final.log` (raíz del repo) está TRACKEADO en main**, desde
+   un merge dental viejo (`7bb31409`). Lo borré, la guardia se puso roja porque
+   es un archivo fuera del vertical, y lo restauré. **No es mío y ahí sigue.**
+   Alguien debería quitarlo, pero no desde una rama de inmuebles.
+
+7. **`ficha.quitarDeWeb` quedó en el diccionario sin usarse.** Quitar de la web
+   se hace desde "Mis colaboraciones", donde está el id de la adopción; la
+   ficha de la bolsa no lo conoce y pedirlo obligaría a una ruta más. La llave
+   se deja porque el día que la ficha reciba ese id, el texto ya está en los
+   dos idiomas.
+
+### Lo que arreglé de mi propio trabajo al revisarlo (commit `20c36532`)
+
+Vale la pena leerlo porque tres de los cuatro eran mentiras de la interfaz, no
+errores de programación:
+
+- **`vigente` decía una cosa y la web hacía otra.** Miraba solo `active`,
+  mientras la web pública exige ADEMÁS publicado y disponible: un inmueble ya
+  vendido salía en el panel como vigente y en el sitio no se pintaba. Ahora son
+  las mismas tres rejas, y una ficha retirada **deja de recibir datos VIVOS**
+  (sin foto, sin precio): apagar el interruptor significa "deja de enseñar mi
+  inmueble", no "enséñalo con una etiqueta". La pantalla dejó de pintar "$0",
+  que es otra forma de mentir, y el texto ya no le echa la culpa al dueño de
+  las otras tres causas posibles.
+- **`listAgreements` leía el inmueble sin acotar la cuenta.** Título y ciudad
+  son campos obligatorios de la lista blanca, así que no había nada que
+  filtrar; lo que faltaba era garantizar que fueran del inmueble CORRECTO.
+- **El título del pendiente que le llega al dueño no tenía tope.** El
+  `.slice(0, 200)` al final de una concatenación solo recorta el ÚLTIMO literal
+  —el punto liga más fuerte que el más—. Ahora se recorta cada pieza ANTES de
+  armar la frase, que además conserva el "(en colaboración)" final, que es
+  justo lo que hay que leer.
+
+---
+
+### Verificación (⚠️ SIN COMPILAR — regla de esta sesión)
+
+Rafael verifica al integrar. Lo que sí corrí:
+
+- `node scripts/realty-guard.cjs` con `REALTY_GUARD_SHARED="prisma/schema.prisma,ORQUESTA.md"`
+  → **exit 0**, cero prohibidos, un solo compartido declarado. Corrido de nuevo
+  DESPUÉS de `git fetch`: `origin/main` avanzó dos commits (`64092371`,
+  `c2be0107`, el fix de la tarjeta del plan de entrada) y **no tocan ni uno de
+  mis 24 archivos**. El único solape al integrar será `ORQUESTA.md`, que es el
+  de siempre: conservar los dos bloques.
+- **Auditoría de aislamiento** (`scratchpad/audit-mls.js`, arriba) → limpia.
+- **i18n**: 247 llaves en `es` y 247 en `en`, mismo árbol exacto; toda llave
+  literal `t("…")` de los 8 componentes y de la página resuelve en los DOS
+  idiomas; las 12 llaves dinámicas (`camposLabels.${campo}`, `estado.${status}`,
+  `tabs.${key}`…) comprobadas contra sus catálogos completos.
+- **Sin servidor en cliente**: recorrido el grafo de imports de los 8 archivos
+  de `components/realty/mls/` → **ninguno alcanza `server-only` ni
+  `@/lib/prisma`**. El contrato (`mls-contract.ts`) es puro y es lo único que
+  los `"use client"` importan del núcleo.
+- **Campos de Prisma**: comprobados contra `schema.prisma` los 35 de
+  `RealtyProperty`, y los de `RealtyTask`, `RealtyDeal`,
+  `RealtyCommissionSplit`, `RealtyUser` y las tres tablas nuevas → todos
+  existen.
+- **Rutas**: los 16 `fetch()` de los componentes apuntan a los 16 manejadores
+  que existen (10 archivos de ruta), con el método correcto.
+- `sql/realty-mls.sql` contrastado línea por línea contra el bloque de
+  `schema.prisma`: mismo enum, mismas 3 tablas, mismas 10 columnas de índice.
+  (Corregí la cabecera, que decía 9 índices y son 10.)
+
+**Lo que NO pude verificar y hay que mirar al integrar:**
+
+- **No hay build ni `tsc`.** Lo más frágil sin compilador son los tipos
+  genéricos de `datosDeColaboracion` (spread de un genérico `T`, soportado
+  desde TS 3.2) y el `satisfies Prisma.RealtyAccountWhereInput` de
+  `CUENTA_EN_LA_BOLSA`.
+- **Nadie ha corrido esto contra una base real.** Las tres tablas no existen en
+  Supabase hasta que se aplique el `.sql` de arriba; el cliente de Prisma
+  necesita `prisma generate` con el schema nuevo o `prisma.realtyMlsListing`
+  no existirá en tiempo de ejecución.
+- **Ni una sola ficha ha cruzado de una cuenta a otra todavía.** La prueba de
+  fuego es con DOS cuentas de verdad: compartir en A, buscar en B, proponer,
+  aceptar, cerrar contra una operación, y comprobar en B que no se ve NADA que
+  no esté en la tabla de este reporte.
+
