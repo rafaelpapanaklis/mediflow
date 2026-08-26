@@ -360,7 +360,7 @@ const HOY = new Date("2026-08-26T12:00:00Z");
 test("una visita que ya pasó y nadie cerró SÍ cuenta", () => {
   // Nadie en el vertical marca REALIZADA: contar por ese estado daría cero
   // visitas siempre, y el reporte estrella diría que a la casa no fue nadie.
-  assert.equal(visitHappened("AGENDADA", AYER, HOY), true);
+  assert.equal(visitHappened("PROGRAMADA", AYER, HOY), true);
   assert.equal(visitHappened("CONFIRMADA", AYER, HOY), true);
 });
 
@@ -375,7 +375,7 @@ test("una visita futura no se cuenta como hecha, salvo REALIZADA", () => {
 });
 
 test("una fecha basura no truena ni cuenta", () => {
-  assert.equal(visitHappened("AGENDADA", "no-es-fecha", HOY), false);
+  assert.equal(visitHappened("PROGRAMADA", "no-es-fecha", HOY), false);
 });
 
 // ═══════════════════════════════════════════════════════════════════════

@@ -538,6 +538,9 @@ export async function getOwnerActivityReport(
       },
       select: {
         id: true,
+        // `leadId` se pide aquí para NO tener que volver a consultar las
+        // mismas visitas solo para saber qué prospectos llegaron a agendar.
+        leadId: true,
         scheduledAt: true,
         status: true,
         feedback: true,
@@ -550,7 +553,24 @@ export async function getOwnerActivityReport(
       where: {
         accountId: ctx.accountId,
         propertyId: property.id,
-        status: { not: "CANCELADO" },
+        // 🔴 EL RECORTE AL PERIODO, y por qué cada mitad es distinta.
+        //
+        // Sin él, un inmueble vendido hace tres años entraba a CUALQUIER
+        // reporte y la recomendación arrancaba con "La operación se cerró
+        // EN EL PERIODO", que es sencillamente falso — y es la primera
+        // frase que lee el propietario.
+        //
+        //   · CERRADO   → tiene que haber cerrado DENTRO del periodo. Un
+        //     cierre viejo es historia, no actividad de estos días.
+        //   · EN_PROCESO → basta con que ya existiera al terminar el
+        //     periodo. Una oferta hecha el mes pasado que SIGUE sobre la
+        //     mesa es justo lo que el propietario necesita saber;
+        //     esconderla por no haber nacido dentro del rango sería
+        //     ocultarle una oferta viva.
+        OR: [
+          { status: "CERRADO", closedAt: { gte: range.start, lt: range.end } },
+          { status: "EN_PROCESO", createdAt: { lt: range.end } },
+        ],
       },
       select: { id: true, status: true, amount: true, closedAt: true, createdAt: true },
       orderBy: { createdAt: "desc" },
@@ -566,21 +586,11 @@ export async function getOwnerActivityReport(
   };
 
   // La visita no guarda portal: se lo pregunta a su prospecto, y por eso
-  // hace falta el conjunto de prospectos que SÍ llegaron a agendar.
+  // hace falta el conjunto de prospectos que SÍ llegaron a agendar. Sale de
+  // las visitas que ya se trajeron arriba —mismo filtro, mismas filas— y no
+  // de una segunda consulta idéntica.
   const leadIdsWithVisit = new Set<string>(
-    (
-      await prisma.realtyVisit.findMany({
-        where: {
-          accountId: ctx.accountId,
-          propertyId: property.id,
-          scheduledAt: { gte: range.start, lt: range.end },
-          leadId: { not: null },
-        },
-        select: { leadId: true },
-      })
-    )
-      .map((v) => v.leadId)
-      .filter((id): id is string => typeof id === "string"),
+    visits.map((v) => v.leadId).filter((id): id is string => typeof id === "string"),
   );
 
   let calls = 0;
@@ -1075,7 +1085,18 @@ export async function getPropertyEconomics(
     // Meses cubiertos por el contrato DENTRO del rango.
     const cursorStart = l.startsAt > range.start ? l.startsAt : range.start;
     const cursorEnd = l.endsAt < range.end ? l.endsAt : range.end;
-    const cur = new Date(cursorStart.getTime());
+
+    // 🔴 EL CURSOR ARRANCA EL DÍA 1 DEL MES, no el día del contrato.
+    //
+    // `setUTCMonth(+1)` sobre un día 29, 30 o 31 DESBORDA: el 31 de enero
+    // más un mes es el 3 de marzo, no el 28 de febrero. Con el cursor en el
+    // día del contrato, un arrendamiento firmado un día 31 se saltaba
+    // febrero entero y el inmueble aparecía con un mes VACÍO de más — en la
+    // pantalla que le dice al rentista cuántos meses no le rindió su casa.
+    // Con el cursor siempre en día 1 no hay mes que desborde.
+    const cur = new Date(
+      Date.UTC(cursorStart.getUTCFullYear(), cursorStart.getUTCMonth(), 1),
+    );
     let guard = 0;
     while (cur.getTime() <= cursorEnd.getTime() && guard < 400) {
       set.add(monthKey(cur));
