@@ -4,6 +4,7 @@ import "@/components/barber/dashboard/dashboard.css";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { getBarberContext } from "@/lib/barber-auth";
+import { requireBarberPaidAccess } from "@/lib/barber/paid-access";
 import { getBarberPlan } from "@/lib/barber/plans";
 import { barberPlanHasFeature } from "@/lib/barber/plan-shared";
 import { listBranchOptions, readBranchCookie } from "@/lib/barber/branches";
@@ -29,6 +30,7 @@ export default async function Page({
 }) {
   const ctx = await getBarberContext();
   if (!ctx) redirect("/login");
+  await requireBarberPaidAccess(ctx);
 
   const plan = await getBarberPlan(ctx.barbershop.plan);
   const locale = ctx.barbershop.locale;

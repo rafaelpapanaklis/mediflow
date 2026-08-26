@@ -5,6 +5,11 @@ import { useState, type FormEvent } from "react";
 import { Scissors } from "lucide-react";
 import { FormField } from "@/components/public/auth/form-field";
 import { PasswordInput } from "@/components/public/auth/password-input";
+import { PhoneCountryInput } from "@/components/barber/phone-country-input";
+import {
+  BARBER_DEFAULT_PHONE_COUNTRY,
+  normalizeBarberPhone,
+} from "@/lib/barber/phone-countries";
 
 const TEAM_SIZES = ["1", "2-3", "4-5", "6+"] as const;
 type TeamSize = (typeof TEAM_SIZES)[number];
@@ -46,6 +51,15 @@ function Chip({
  * Alta pública de barbería. Sin selector de especialidad, sin nada clínico.
  * POST /api/barber/auth/register → NO inicia sesión: redirige a /login (el
  * login compartido; getCurrentUser sabe mandar BarberUsers a /barber).
+ *
+ * Textos en español DURO, a propósito: esta pantalla no pasa por el
+ * diccionario (i18n del vertical vive dentro del panel). No agregar llaves
+ * de adorno aquí — hay una prueba de alcance que las caza.
+ *
+ * TELÉFONO: se captura el país por separado (PhoneCountryInput) y el número
+ * local pelado; lo que se ENVÍA lo arma normalizeBarberPhone — 10 dígitos
+ * limpios en México, E.164 completo fuera. El servidor vuelve a validar con
+ * esa misma función: aquí no se decide nada, solo se captura.
  */
 export function BarberRegistroForm() {
   const [shopName, setShopName] = useState("");
@@ -53,7 +67,10 @@ export function BarberRegistroForm() {
   const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  /** Dígitos del número LOCAL (sin lada) + país elegido, por separado. */
   const [phone, setPhone] = useState("");
+  const [phoneIso, setPhoneIso] = useState(BARBER_DEFAULT_PHONE_COUNTRY);
+  const [phoneError, setPhoneError] = useState<string | null>(null);
   const [city, setCity] = useState("");
   const [state, setState] = useState("");
   const [teamSize, setTeamSize] = useState<TeamSize>("1");
@@ -66,13 +83,18 @@ export function BarberRegistroForm() {
     e.preventDefault();
     if (loading) return;
     setError(null);
+    setPhoneError(null);
 
     if (!shopName.trim()) return setError("El nombre de la barbería es requerido.");
     if (!firstName.trim()) return setError("Tu nombre es requerido.");
     if (!lastName.trim()) return setError("Tu apellido es requerido.");
     if (!email.trim()) return setError("El correo electrónico es requerido.");
     if (password.length < 8) return setError("La contraseña debe tener al menos 8 caracteres.");
-    if (!phone.trim()) return setError("El teléfono (WhatsApp) es requerido.");
+
+    // Sin número válido NO se envía nada, y el error se pinta bajo el campo.
+    // La misma función corre en el servidor: si aquí pasa, allá pasa.
+    const tel = normalizeBarberPhone(phoneIso, phone);
+    if (!tel.ok) return setPhoneError(tel.error);
 
     setLoading(true);
     try {
@@ -85,7 +107,9 @@ export function BarberRegistroForm() {
           lastName: lastName.trim(),
           email: email.trim(),
           password,
-          phone: phone.trim(),
+          // MX: 10 dígitos limpios (como siempre). Resto: E.164 completo.
+          phone: tel.stored,
+          country: tel.iso,
           city: city.trim() || undefined,
           state: state.trim() || undefined,
           teamSize,
@@ -247,13 +271,19 @@ export function BarberRegistroForm() {
         required
       />
 
-      <FormField
+      <PhoneCountryInput
         label="Teléfono (WhatsApp)"
-        type="tel"
+        iso={phoneIso}
+        onIsoChange={(next) => {
+          setPhoneIso(next);
+          setPhoneError(null);
+        }}
         value={phone}
-        onChange={(e) => setPhone(e.target.value)}
-        placeholder="10 dígitos"
-        autoComplete="tel"
+        onValueChange={(next) => {
+          setPhone(next);
+          setPhoneError(null);
+        }}
+        error={phoneError ?? undefined}
         hint="Es nuestro canal para ayudarte a arrancar."
         required
       />

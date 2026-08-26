@@ -12,6 +12,7 @@
 import "@/components/barber/cash/money.css";
 import { redirect } from "next/navigation";
 import { getBarberContext } from "@/lib/barber-auth";
+import { requireBarberPaidAccess } from "@/lib/barber/paid-access";
 import { hasBarberPermission } from "@/lib/barber/permissions";
 import { getBarberPlan } from "@/lib/barber/plans";
 import { barberPlanHasFeature } from "@/lib/barber/plan-shared";
@@ -26,6 +27,7 @@ export const dynamic = "force-dynamic";
 export default async function BarberAgendaPage() {
   const ctx = await getBarberContext();
   if (!ctx) redirect("/login");
+  await requireBarberPaidAccess(ctx);
 
   const dict = getBarberDict(ctx.barbershop.locale);
   const plan = await getBarberPlan(ctx.barbershop.plan);

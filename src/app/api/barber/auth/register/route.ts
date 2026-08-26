@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { createClient as createAdminClient } from "@supabase/supabase-js";
 import { BARBER_DEFAULT_SERVICES, makeBarberSlug } from "@/lib/barber/types";
-import { MX_PHONE_ERROR, mxTenDigits } from "@/lib/phone-mx";
+import { normalizeBarberPhone } from "@/lib/barber/phone-countries";
 
 // Alta pública de barbería (DaleControl Barber) — espejo de
 // /api/laboratorios/auth/register. Crea el usuario en Supabase Auth y, en UNA
@@ -66,6 +66,10 @@ export async function POST(req: Request) {
   const rawEmail = typeof b.email === "string" ? b.email.trim() : "";
   const password = typeof b.password === "string" ? b.password : "";
   const rawPhone = typeof b.phone === "string" ? b.phone : "";
+  // País del teléfono (ISO-2). No se guarda en ninguna columna — barber_shops
+  // no la tiene y esta ola no lleva SQL: solo decide CÓMO se valida y se
+  // normaliza el número. Si no llega, México (barberPhoneCountry lo resuelve).
+  const rawCountry = typeof b.country === "string" ? b.country : "";
   const city = typeof b.city === "string" ? b.city.trim() : "";
   const state = typeof b.state === "string" ? b.state.trim() : "";
   const teamSizeRaw = typeof b.teamSize === "string" ? b.teamSize : "";
@@ -91,10 +95,16 @@ export async function POST(req: Request) {
   }
   // WhatsApp de la barbería: OBLIGATORIO (mismo criterio que el registro
   // dental: es el canal de contacto si se registra y no paga).
-  const phone = mxTenDigits(rawPhone);
-  if (!phone) {
-    return NextResponse.json({ error: MX_PHONE_ERROR }, { status: 400 });
+  //
+  // El servidor NO confía en lo que armó el navegador: vuelve a normalizar
+  // con la MISMA función del formulario (normalizeBarberPhone). México sale
+  // en 10 dígitos limpios, exactamente como antes de que hubiera países; el
+  // resto en E.164 ("+" + lada + número), sin espacios ni guiones.
+  const tel = normalizeBarberPhone(rawCountry, rawPhone);
+  if (!tel.ok) {
+    return NextResponse.json({ error: tel.error }, { status: 400 });
   }
+  const phone = tel.stored;
 
   const email = rawEmail.toLowerCase();
 

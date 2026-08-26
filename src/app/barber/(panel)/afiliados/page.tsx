@@ -4,6 +4,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Lock } from "lucide-react";
 import { getBarberContext } from "@/lib/barber-auth";
+import { requireBarberPaidAccess } from "@/lib/barber/paid-access";
 import { hasBarberPermission } from "@/lib/barber/permissions";
 import { assertBarberFeature, BarberPlanGateError } from "@/lib/barber/gating";
 import { getBarberAffiliateSummary } from "@/lib/barber/affiliates";
@@ -27,6 +28,7 @@ import "@/components/barber/afiliados/afiliados.css";
 export default async function BarberAfiliadosPage() {
   const ctx = await getBarberContext();
   if (!ctx) redirect("/login");
+  await requireBarberPaidAccess(ctx);
 
   const locale = ctx.barbershop.locale;
   const t = getBarberT(locale);

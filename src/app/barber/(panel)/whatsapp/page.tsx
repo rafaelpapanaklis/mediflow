@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { getBarberContext, hasBarberPermission } from "@/lib/barber-auth";
+import { requireBarberPaidAccess } from "@/lib/barber/paid-access";
 import { getBarberPlan } from "@/lib/barber/plans";
 import { barberPlanHasFeature } from "@/lib/barber/plan-shared";
 import { getBarberDict, getBarberT, resolveBarberLocale } from "@/i18n/dictionaries/barber";
@@ -33,6 +34,7 @@ export const dynamic = "force-dynamic";
 export default async function Page() {
   const ctx = await getBarberContext();
   if (!ctx) redirect("/login");
+  await requireBarberPaidAccess(ctx);
 
   const locale = resolveBarberLocale(ctx.barbershop.locale);
   const t = getBarberT(locale);

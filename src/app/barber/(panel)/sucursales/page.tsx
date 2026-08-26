@@ -2,6 +2,7 @@ export const dynamic = "force-dynamic";
 
 import { redirect } from "next/navigation";
 import { getBarberContext } from "@/lib/barber-auth";
+import { requireBarberPaidAccess } from "@/lib/barber/paid-access";
 import { hasBarberPermission } from "@/lib/barber/permissions";
 import { getBranchLimit, getBranchScopeFromCookie, listBranches } from "@/lib/barber/branches";
 import { BARBER_PUBLIC_BASE } from "@/lib/barber/types";
@@ -17,6 +18,7 @@ import { BranchesClient } from "@/components/barber/branches/branches-client";
 export default async function Page() {
   const ctx = await getBarberContext();
   if (!ctx) redirect("/login");
+  await requireBarberPaidAccess(ctx);
 
   const permUser = { role: ctx.role, permissionsOverride: ctx.user.permissionsOverride };
   if (!hasBarberPermission(permUser, "branches.manage")) {

@@ -3,6 +3,7 @@ export const dynamic = "force-dynamic";
 import "@/components/barber/cash/money.css";
 import { redirect } from "next/navigation";
 import { getBarberContext, hasBarberPermission } from "@/lib/barber-auth";
+import { requireBarberPaidAccess } from "@/lib/barber/paid-access";
 import { getBarberPlan } from "@/lib/barber/plans";
 import { getBarberDict, getBarberT } from "@/i18n/dictionaries/barber";
 import type { Dictionary } from "@/i18n/t";
@@ -18,6 +19,7 @@ import { ComisionesClient } from "@/components/barber/commissions/comisiones-cli
 export default async function Page({ searchParams }: { searchParams: { period?: string } }) {
   const ctx = await getBarberContext();
   if (!ctx) redirect("/login");
+  await requireBarberPaidAccess(ctx);
   const plan = await getBarberPlan(ctx.barbershop.plan);
   const t = getBarberT(ctx.barbershop.locale);
   const dict = (getBarberDict(ctx.barbershop.locale).barber as Dictionary).caja as Dictionary;

@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { Crown, Lock } from "lucide-react";
 import { getBarberContext } from "@/lib/barber-auth";
+import { requireBarberPaidAccess } from "@/lib/barber/paid-access";
 import { hasBarberPermission } from "@/lib/barber/permissions";
 import { getBarberPlan } from "@/lib/barber/plans";
 import { getBarberDict, getBarberT } from "@/i18n/dictionaries/barber";
@@ -29,6 +30,7 @@ export const dynamic = "force-dynamic";
 export default async function Page() {
   const ctx = await getBarberContext();
   if (!ctx) redirect("/login");
+  await requireBarberPaidAccess(ctx);
 
   const plan = await getBarberPlan(ctx.barbershop.plan);
   const t = getBarberT(ctx.barbershop.locale);

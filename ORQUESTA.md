@@ -21739,3 +21739,241 @@ en en). Nada del dental.
    compartido estaba generado desde el schema de otra rama y un `prisma
    generate` desde aquí se lo habría pisado. Ocupa ~1 GB; se puede borrar el
    worktree entero sin ceremonia.
+
+---
+
+## [Barber Candado + Teléfono] — Sin pagar ya no se entra al panel: el candado deja de vivir en dos pantallas sueltas y una prueba obliga a cada pantalla nueva a respetarlo; el registro pide el teléfono con país y bandera ✅ (2026-08-26)
+
+Dos tareas del vertical BARBER en un commit. Cero SQL, cero cambios en
+`prisma/schema.prisma`, cero archivos del dental.
+
+════════════════════════════════════════════════════════════════════
+TAREA A — EL ACCESO GRATIS AL PANEL
+════════════════════════════════════════════════════════════════════
+
+▶ QUÉ PODÍA HACER UNA BARBERÍA SIN PAGAR (antes de este commit)
+
+Una barbería en `pending_payment` (que es como NACE toda cuenta: el registro
+no da trial) aterrizaba en `/barber/suscripcion`… **con el menú completo al
+lado**. Un clic y estaba dentro. El candado existía en DOS pantallas sueltas
+—`/barber/page.tsx`, que es solo el router, y `/barber/inicio`— y las otras
+**24 pantallas del panel nacieron gratis**. Sin pagar un peso se podía:
+
+- **Agenda** — ver y operar la agenda del día, y COBRAR desde ahí (la pantalla
+  monta el mismo modal de ticket de Caja).
+- **Agenda › Horarios** — configurar los horarios de la barbería.
+- **Clientes** y **Clientes › ficha** — la base de clientes entera, con
+  teléfonos, historial, fotos, lealtad y preferencias.
+- **Caja** — abrir turno, cobrar tickets, cerrar corte. Y **Caja › ticket** —
+  reimprimir cualquier venta.
+- **Comisiones** y **Comisiones › recibo** — cálculo y recibo de barberos.
+- **Productos** — inventario y movimientos.
+- **Fila virtual**, **Solicitudes** de reserva, **Servicios**, **Barberos**,
+  **Equipo** (¡altas de usuarios y permisos!), **Sucursales**, **Membresías**,
+  **Mi web** (el editor de la mini-web pública), **WhatsApp**, **WhatsApp ›
+  Bot**, **Campañas**, **Afiliados**, **Reportes**, **Configuración**.
+
+Nada de eso "se veía roto": cada pantalla renderizaba perfecta, con datos
+reales. Por eso duró.
+
+▶ QUÉ YA NO SE PUEDE
+
+Las 24 pantallas de arriba redirigen a `/barber/suscripcion`. Las **dos
+únicas excepciones**, escritas a mano y con su porqué:
+
+- `/barber/suscripcion` — es donde se paga; bloquearla es un bucle infinito.
+- `/barber/soporte` — una barbería impaga tiene que poder pedir ayuda (mismo
+  criterio que el dental).
+
+▶ CÓMO
+
+- **`src/lib/barber/paid-access.ts` (nuevo)** — `requireBarberPaidAccess(ctx)`
+  redirige, `hasBarberPaidAccess(ctx)` devuelve booleano para el layout. Va en
+  **módulo aparte de `gating.ts` a propósito**: `gating.ts` lo importan rutas
+  de API y un `redirect()` ahí lanza `NEXT_REDIRECT` DENTRO del endpoint — no
+  redirige a nadie, revienta la petición.
+- **Quién paga = la MATRIZ.** Resuelve `parentId` igual que `loadRootShop` de
+  `gating.ts`; el estado sale de `isBarbershopSubscriptionActive` (fuente
+  única, no una lista de estados nueva). `isActive` sí se mira sobre la sede
+  de la SESIÓN: una sucursal apagada no trabaja aunque su matriz esté al día.
+- **NO se tocó `src/middleware.ts`** (su matcher no cubre `/barber`, así que
+  el layout no tiene header `x-pathname` y no puede saber en qué ruta está;
+  además está fuera de la lista de compartidos del guardia).
+- **`/barber/inicio` y `/barber/page.tsx`** cambiaron su copia inline de la
+  regla por la llamada al helper. **Ahora la regla se escribe UNA vez.** (El
+  router no estaba en el encargo, pero dejarlo con su propia copia contradecía
+  el objetivo: además miraba la fila de la sesión y no la de la matriz.)
+- **El layout del panel** (`(panel)/layout.tsx`) recorta el menú con
+  `barberNavItemsWhileUnpaid` —el helper PURO que ya existía en `plan-shared`
+  y que **nadie usaba**— ANTES del filtro de plan/permiso, y deja ver
+  **Suscripción aunque el rol no tenga `billing.manage`**: si no, un empleado
+  vería el menú vacío sin saber por qué su barbería dejó de funcionar. El
+  layout **sigue sin cortar el paso** (envuelve también a `/barber/suscripcion`).
+
+▶ LA PRUEBA NUEVA — `src/lib/barber/__tests__/candado-suscripcion.test.ts`
+
+Estática (lee el código fuente; sin BD, sin navegador, sin sesión), mismo
+estilo que `i18n-alcance.test.ts`. **5 pruebas, 5 en verde:**
+
+1. El helper existe, redirige a `/barber/suscripcion`, usa
+   `isBarbershopSubscriptionActive` y resuelve `parentId` — y `gating.ts`
+   sigue SIN importar `next/navigation`.
+2. **Toda `page.tsx` bajo `(panel)` llama al candado**, salvo la lista de
+   exentas, que va escrita explícita en el test. La próxima pantalla que
+   alguien agregue no nace gratis.
+3. **El candado corre ANTES de cargar datos**: dentro del componente, los dos
+   primeros `await` tienen que ser `getBarberContext` y el candado. Sin esto,
+   llamarlo al final —cuando la pantalla ya leyó agenda, caja y clientes de
+   quien no pagó— pasaría en verde.
+4. Las dos exentas existen, y `/barber/suscripcion` **no** se bloquea a sí misma.
+5. El layout recorta con `barberNavItemsWhileUnpaid`, en el orden correcto, y
+   no redirige.
+
+**No es vacua** (se comprobó a mano): quitando la llamada de `agenda/page.tsx`
+caen 2 de las 5; moviéndola después de cargar datos cae 1.
+
+▶ A5 — RUTAS DE API QUE SIGUEN ABIERTAS (**no se tocaron; es tu decisión**)
+
+Medido con un barrido sobre `src/app/api/barber/**/route.ts` (cuenta la
+LLAMADA al gate en la propia ruta o en un helper local suyo — importar
+`gating.ts` solo para `barberGateErrorPayload` no cuenta):
+
+| | |
+|---|---|
+| Total de rutas | **110** |
+| Exigen suscripción activa | **27** |
+| No la exigen | **83** |
+| — públicas / de cobro por naturaleza (auth, billing, portal del cliente, webhooks de Stripe y pagos, liga de socio) | 17 |
+| — **DE PANEL, abiertas** | **66** |
+
+Las 27 son las 20 que ya sabías vía `assertBarberFeature` directo, más 3 de
+`affiliates` (por `_lib.ts`) y 4 de `walkins` (por `_server.ts`).
+
+Las **66 abiertas**, por área: `clients` 10 · `whatsapp` 9 · `team` 7 ·
+`campaigns` 5 · `appointments` 4 · `memberships` 4 · `services` 4 ·
+`support` 4 · `branches` 3 · `schedules` 3 · `settings` 3 ·
+`booking-requests` 2 · `bot` 2 · `deposits` 2 · `landing` 2 · `public` 2.
+
+Traducción práctica: con el panel ya cerrado, **una barbería impaga con sesión
+válida todavía puede llamar esos endpoints a mano** (fetch desde la consola,
+curl con la cookie). Las más gordas: `clients/**` (exporta la base de
+clientes), `team/members/**` (altas y permisos), `whatsapp/**` (manda
+mensajes de pago). De `support` (4) al menos 2 deberían quedarse abiertas a
+propósito. Y las 2 de `public/booking/[slug]` son cara al cliente: hoy la
+reserva pública de una barbería impaga sigue funcionando — decisión distinta,
+no un descuido de esta ola.
+
+════════════════════════════════════════════════════════════════════
+TAREA B — TELÉFONO CON SELECTOR DE PAÍS EN EL REGISTRO
+════════════════════════════════════════════════════════════════════
+
+Antes: un input pelado con placeholder "10 dígitos". Quien no fuera de México
+no tenía cómo darse de alta con su número real.
+
+▶ CÓMO QUEDÓ EL TELÉFONO — QUÉ SE GUARDA
+
+- **MÉXICO → EXACTAMENTE COMO HOY**: 10 dígitos limpios vía `mxTenDigits`
+  (`src/lib/phone-mx.ts`, sin tocar), con su mismo `MX_PHONE_ERROR`. Sin `+`,
+  sin `52`. **Nada del vertical nota el cambio.** Sigue tolerando lo que la
+  gente escribe: `55 1234 5678`, `+52 55 1234 5678`, `5215512345678`.
+- **CUALQUIER OTRO PAÍS → E.164 completo**: `"+" + lada + número`, sin
+  espacios ni guiones. `+573001234567`, `+34612345678`, `+50251234567`.
+- **NO se agregó columna de país.** `barber_shops` no la tiene y esta ola no
+  lleva SQL: el país viaja en el JSON del registro, decide CÓMO se valida y se
+  normaliza, y luego vive en el propio prefijo del número.
+
+▶ ARQUITECTURA (una regla, dos consumidores)
+
+- **`src/lib/barber/phone-countries.ts` (nuevo)** — módulo PURO y client-safe:
+  la lista curada, `barberPhoneCountry`, `barberPhoneFlag` y
+  **`normalizeBarberPhone`**, que es LA regla. La usan el formulario del
+  navegador **y** el endpoint. Si en el navegador pasa, en el servidor pasa.
+- **La regla**: MX con `mxTenDigits`; el resto, E.164 de **6 a 15 dígitos**
+  (el 15 es el tope de la propia E.164).
+- **El servidor NO confía en el cliente**: `register/route.ts` acepta
+  `country` (ISO-2, default `"MX"` si no llega o si es desconocido) y vuelve a
+  normalizar con la misma función. Si alguien llama al endpoint con el país
+  por un lado y el número local pelón por el otro, se le pega la lada; si trae
+  un largo raro, se rechaza.
+- La bandera se **deriva** del ISO-2 (regional indicators) en vez de escribir
+  el emoji en el código: así ningún guardado en ANSI la convierte en
+  interrogaciones. Windows no trae glifos de bandera y pinta las dos letras —
+  por eso la lada va SIEMPRE al lado.
+
+▶ EL COMPONENTE — `src/components/barber/phone-country-input.tsx` (nuevo)
+
+Cliente. **19 países curados, sin librería ni dependencia npm nueva**: MX
+(preseleccionado y primero), US, ES, CO, AR, CL, PE, GT, EC, CR, DO, PA, UY,
+BO, PY, SV, HN, NI, VE — cada uno con bandera, nombre, lada y el largo
+esperado del número local (que es el placeholder).
+
+- El campo de número **solo acepta dígitos** (tope 15); la lada se ve a la
+  izquierda, en el botón, y **no se teclea a mano**.
+- **Teclado de verdad** (es un `listbox`, no un div con `onClick`): abre con
+  Enter, Espacio o ↓/↑ y anuncia `aria-expanded`; dentro, ↑ ↓ Inicio Fin
+  mueven, Enter/Espacio eligen, Esc cierra y devuelve el foco al botón, Tab
+  cierra y sigue de largo. Clic fuera cierra (`pointerdown`, no `click`: si
+  arrastras desde dentro y sueltas afuera, `click` cerraría a media selección).
+- **Sin número válido el formulario NO envía**, con el error inline bajo el
+  campo (`role="alert"`, `aria-invalid` para que `globals.css` pinte el borde
+  rojo).
+- Estilo: variables `--ld-*` y estilos EN LÍNEA, como el resto del formulario
+  de registro. Cero Tailwind nuevo.
+- El texto del registro sigue en **español DURO**: no se agregó ni una llave
+  de diccionario (esa pantalla no pasa por i18n y hay prueba de alcance).
+
+▶ ⚠️ RIESGO ABIERTO — WHATSAPP FUERA DE MÉXICO (**no parchado, a propósito**)
+
+El envío de WhatsApp del vertical pasa por **`normalizeMxWhatsAppPhone`**
+(`src/lib/whatsapp.ts`), que **antepone `52`**: hoy los recordatorios asumen
+México de cabo a rabo. Una barbería registrada con otro país **se da de alta
+bien, pero sus mensajes no saldrían** — irían a un número mexicano inventado.
+
+No se tocó porque `src/lib/whatsapp.ts` está fuera del alcance de esta ola y
+porque **esto se arregla entero o no se arregla**: hay que decidir qué pasa
+con las barberías ya registradas, con la ventana de 24 h, con las plantillas
+aprobadas en la WABA y con el webhook compartido. Un parche a medias sería
+peor que el problema. **Queda escrito aquí como riesgo, no como pendiente
+menor.**
+
+════════════════════════════════════════════════════════════════════
+VERIFICACIÓN
+════════════════════════════════════════════════════════════════════
+
+- `npx tsx --test src/lib/barber/__tests__/i18n-alcance.test.ts` → **6/6**.
+- `npx tsx --test src/lib/barber/__tests__/candado-suscripcion.test.ts` → **5/5**.
+- `npm run build` COMPLETO (sin pipes, leído entero) → **exit 0**; tipos
+  validados, 424 páginas generadas. Los `prisma:error: DATABASE_URL` del log
+  son el entorno local sin `.env` de BD, no el código.
+- `npx tsc --noEmit` → cero errores en los archivos tocados. Los que salen son
+  los preexistentes de `__tests__/{dinero-sumas,i18n-alcance}.test.ts`, ya en
+  main.
+- `$env:BARBER_GUARD_SHARED="ORQUESTA.md"; node scripts/barber-guard.cjs` →
+  **exit 0**.
+
+▶ NOTAS DE COMPILACIÓN (para la próxima ola)
+
+El `tsconfig.json` va con **`strict: false` y sin `target`**. Dos trampas que
+mordieron y que ya están sorteadas en el código nuevo:
+- `[...string]` y `[...matchAll()]` **no compilan** (TS2802) → `Array.from`.
+- Una **unión discriminada no estrecha** con `strict:false`: `if (!r.ok)
+  r.error` no compila. `BarberPhoneResult` es UNA sola forma con los campos
+  que no aplican vacíos — la misma convención de `BarberLimitCheck` en
+  `gating.ts`.
+
+▶ PENDIENTE — REQUIERE RAFAEL
+
+1. **QA con una cuenta `pending_payment` de verdad en un navegador.** El
+   candado está probado por barrido estático, pero **nadie ha entrado todavía
+   con una barbería impaga** a ver el menú recortado ni a comprobar que las 24
+   pantallas rebotan.
+2. **Las 66 rutas de API** de arriba: decide si va otra ola. No se tocaron.
+3. **`/barber/soporte` quedó exento pero es poco descubrible**: no está en
+   `BARBER_NAV_ITEMS`, así que una barbería impaga solo llega escribiendo la
+   URL (el enlace vive en `admin-nav.tsx`, dentro de pantallas que ahora están
+   cerradas). Si quieres que se pueda pedir ayuda de verdad sin pagar, hace
+   falta un enlace desde `/barber/suscripcion`.
+4. **El riesgo de WhatsApp fuera de México** (arriba). Mientras no se resuelva,
+   una barbería no mexicana se registra pero no recibe ni manda recordatorios.
+5. **Nadie ha probado el registro con un número no mexicano de punta a punta**
+   (formulario → endpoint → fila en Supabase).

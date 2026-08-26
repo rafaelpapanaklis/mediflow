@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { getAccessibleBranchIds, getBarberContext } from "@/lib/barber-auth";
+import { requireBarberPaidAccess } from "@/lib/barber/paid-access";
 import { hasBarberPermission } from "@/lib/barber/permissions";
 import { getBarberPlan } from "@/lib/barber/plans";
 import { listBookingRequests, resolveBookingPolicy } from "@/lib/barber/booking";
@@ -23,6 +24,7 @@ export const dynamic = "force-dynamic";
 export default async function SolicitudesPage() {
   const ctx = await getBarberContext();
   if (!ctx) redirect("/login");
+  await requireBarberPaidAccess(ctx);
 
   const t = getBarberT(ctx.barbershop.locale);
   const plan = await getBarberPlan(ctx.barbershop.plan);

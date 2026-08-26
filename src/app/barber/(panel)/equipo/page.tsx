@@ -3,6 +3,7 @@ export const dynamic = "force-dynamic";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { getBarberContext } from "@/lib/barber-auth";
+import { requireBarberPaidAccess } from "@/lib/barber/paid-access";
 import { hasBarberPermission } from "@/lib/barber/permissions";
 import { getBranchScopeFromCookie, listBranchOptions } from "@/lib/barber/branches";
 import { getTeamContext, listMembers } from "@/lib/barber/team";
@@ -18,6 +19,7 @@ import { TeamClient } from "@/components/barber/team/team-client";
 export default async function Page() {
   const ctx = await getBarberContext();
   if (!ctx) redirect("/login");
+  await requireBarberPaidAccess(ctx);
 
   const permUser = { role: ctx.role, permissionsOverride: ctx.user.permissionsOverride };
   if (!hasBarberPermission(permUser, "team.manage")) {

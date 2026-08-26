@@ -7,6 +7,7 @@
 // ═══════════════════════════════════════════════════════════════════════
 import { redirect } from "next/navigation";
 import { getBarberContext } from "@/lib/barber-auth";
+import { requireBarberPaidAccess } from "@/lib/barber/paid-access";
 import { hasBarberPermission } from "@/lib/barber/permissions";
 import { getBarberPlan } from "@/lib/barber/plans";
 import { barberPlanHasFeature } from "@/lib/barber/plan-shared";
@@ -23,6 +24,7 @@ export default async function BarberSchedulePage({
 }) {
   const ctx = await getBarberContext();
   if (!ctx) redirect("/login");
+  await requireBarberPaidAccess(ctx);
 
   // ?barbero=<id> llega desde el aviso "Sin horario cargado" de la agenda.
   // Aquí NO se valida contra la base: ScheduleManager solo lo acepta si el

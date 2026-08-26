@@ -10,6 +10,7 @@
 // ═══════════════════════════════════════════════════════════════════════
 import { redirect } from "next/navigation";
 import { getBarberContext } from "@/lib/barber-auth";
+import { requireBarberPaidAccess } from "@/lib/barber/paid-access";
 import { hasBarberPermission } from "@/lib/barber/permissions";
 import { getBarberPlan } from "@/lib/barber/plans";
 import { barberPlanHasFeature } from "@/lib/barber/plan-shared";
@@ -22,6 +23,7 @@ export const dynamic = "force-dynamic";
 export default async function BarberQueuePage() {
   const ctx = await getBarberContext();
   if (!ctx) redirect("/login");
+  await requireBarberPaidAccess(ctx);
 
   const plan = await getBarberPlan(ctx.barbershop.plan);
   if (!barberPlanHasFeature(plan, "walkinQueue")) {
