@@ -23,7 +23,6 @@ export const dynamic = "force-dynamic";
 
 import { redirect } from "next/navigation";
 import type { Metadata } from "next";
-import { prisma } from "@/lib/prisma";
 import { getRealtyContext } from "@/lib/realty-auth";
 import { REALTY_NAV_ITEMS, navItemAllowsMode } from "@/lib/realty/types";
 import { RealtyAreaDenied } from "@/components/realty/rentals/area-denied";
@@ -31,6 +30,7 @@ import {
   accountTimezone,
   getOperationsReport,
   getOwnerActivityReport,
+  getOwnerReportSchedule,
   getPropertyEconomics,
   getReportAccess,
   getReportPickers,
@@ -128,16 +128,12 @@ export default async function Page({
       : Promise.resolve(null),
   ]);
 
-  // El botón de WhatsApp solo se pinta si de verdad hay a quién mandarle:
-  // un botón que siempre falla enseña a la gente a no confiar en el panel.
-  let ownerHasPhone = false;
-  if (ownerReport?.ownerId) {
-    const owner = await prisma.realtyPropertyOwner.findFirst({
-      where: { id: ownerReport.ownerId, accountId: ctx.accountId },
-      select: { phone: true },
-    });
-    ownerHasPhone = Boolean(owner?.phone && owner.phone.trim() !== "");
-  }
+  // Por dónde le llega a este propietario y si le sale solo cada lunes. El
+  // botón de WhatsApp solo se pinta si de verdad hay a quién mandarle: un
+  // botón que siempre falla enseña a la gente a no confiar en el panel.
+  const schedule = ownerReport
+    ? await getOwnerReportSchedule(ctx, ownerReport.propertyId)
+    : null;
 
   return (
     <ReportsClient
@@ -154,8 +150,7 @@ export default async function Page({
       portfolio={portfolio}
       tax={tax}
       operations={operations}
-      ownerHasPhone={ownerHasPhone}
-      planHasWhatsapp={ctx.plan.features.whatsapp === true}
+      schedule={schedule}
     />
   );
 }

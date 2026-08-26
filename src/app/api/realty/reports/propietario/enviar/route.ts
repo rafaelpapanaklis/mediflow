@@ -30,7 +30,6 @@
 // cliente en nombre de la inmobiliaria.
 // ═══════════════════════════════════════════════════════════════════════
 import { NextResponse, type NextRequest } from "next/server";
-import { hasRealtyPermission } from "@/lib/realty-auth";
 import { resolveRealtyBaseUrl } from "@/lib/realty/billing";
 import { sendOwnerReport } from "@/lib/realty/reports";
 import { gateReport, isDenied, reportError } from "../../_guard";
@@ -51,19 +50,18 @@ function safeYmd(value: unknown): string | null {
 export async function POST(req: NextRequest) {
   const gate = await gateReport("activity");
   if (isDenied(gate)) return gate.response;
-  const { ctx } = gate;
+  const { ctx, access } = gate;
 
-  if (
-    !hasRealtyPermission(
-      { role: ctx.role, permissionsOverride: ctx.user.permissionsOverride },
-      "whatsapp.send",
-    )
-  ) {
+  // `access.sendWhatsapp` es EL MISMO booleano que decide si el botón se
+  // pinta. Si esta ruta tuviera su propio criterio, el día que alguien
+  // ajuste uno se abriría un agujero en el otro y nadie se enteraría.
+  if (!access.sendWhatsapp) {
     return NextResponse.json(
       {
         ok: false,
         reason: "plan",
-        error: "No tienes permiso para mandar WhatsApp. Copia la liga y mándasela tú.",
+        error:
+          "No puedes mandar WhatsApp desde aquí (te falta el permiso o tu plan no lo incluye). Copia la liga y mándasela tú.",
       },
       { status: 403 },
     );

@@ -285,6 +285,15 @@ export interface ReportAccess {
   funnel: boolean;
   commissions: boolean;
   collections: boolean;
+  /**
+   * ¿Puede MANDARLE el reporte al propietario por WhatsApp?
+   *
+   * No es lo mismo que `activity`: ver cómo va un inmueble no es lo mismo
+   * que gastar un mensaje del cupo de la cuenta escribiéndole a un cliente
+   * en nombre de la inmobiliaria. Vive aquí —y no suelto en la ruta— para
+   * que el botón que se pinta y la ruta que se llama no puedan discrepar.
+   */
+  sendWhatsapp: boolean;
   /** El plan gatea rentas: sin ella no hay cobranza, ni gastos, ni fiscal. */
   planRentals: boolean;
   planCommissions: boolean;
@@ -307,6 +316,11 @@ export function getReportAccess(ctx: RealtyContext): ReportAccess {
     funnel: can(ctx, "leads.view") && planLeads,
     commissions: can(ctx, "commissions.view") && planCommissions,
     collections: can(ctx, "payments.manage") && planRentals,
+    sendWhatsapp:
+      can(ctx, "properties.view") &&
+      can(ctx, "leads.view") &&
+      can(ctx, "whatsapp.send") &&
+      ctx.plan.features.whatsapp === true,
     planRentals,
     planCommissions,
     planLeads,
@@ -3110,14 +3124,129 @@ export interface OwnerReportRunSummary {
   reasons: Record<string, number>;
   /** Días que abarca cada reporte del barrido. */
   windowDays: number;
+  /**
+   * Inmuebles con exclusiva VIGENTE que no entraron en esta corrida por los
+   * topes de abajo, y cuentas que ni se alcanzaron a recorrer.
+   *
+   * 🔴 Van en el resumen a propósito. Un barrido que recorta en silencio se
+   * lee igual que uno que cubrió todo, y el día que una inmobiliaria con
+   * 200 exclusivas note que a 140 propietarios nunca les llegó nada, la
+   * única forma de saberlo era este número. Distinto de cero = hay que
+   * subir los topes o partir el barrido en varias corridas.
+   */
+  truncated: number;
+  accountsSkipped: number;
 }
 
 /** Cuánto mira hacia atrás el reporte automático. Ver la nota de abajo. */
-const WEEKLY_REPORT_DAYS = 30;
+export const WEEKLY_REPORT_DAYS = 30;
 
 /** Topes del barrido, para que un cron no se convierta en una factura. */
 const WEEKLY_MAX_PER_ACCOUNT = 60;
 const WEEKLY_MAX_TOTAL = 500;
+
+/**
+ * ── LO QUE LA PANTALLA TIENE QUE PODER DECIR ───────────────────────────
+ * Si el envío automático existe pero no se ve, nadie lo usa y —peor— nadie
+ * entiende por qué a un propietario le llega solo y a otro no. Esto es lo
+ * que el panel pinta debajo del botón de WhatsApp, en una frase.
+ *
+ * `channel` es por dónde le llegaría HOY, con el mismo orden que sigue
+ * `sendOwnerReport`: WhatsApp si hay teléfono Y el plan lo incluye, correo
+ * si no, y nada si el propietario no tiene ni uno ni otro. No promete la
+ * entrega —la ventana de 24 h de Meta se decide en el momento— pero sí
+ * dice la verdad sobre lo que está configurado.
+ */
+export interface OwnerReportSchedule {
+  /** ¿Este inmueble entra en el barrido de los lunes? */
+  auto: boolean;
+  /** Hasta cuándo. Es la fecha de fin de la exclusiva, en ISO. */
+  until: string | null;
+  channel: OwnerReportChannel | null;
+  ownerHasPhone: boolean;
+  ownerHasEmail: boolean;
+  /** Días que abarca cada reporte automático. */
+  windowDays: number;
+  /**
+   * Días que aguanta la liga firmada. Viaja en el DTO y NO se importa en la
+   * pantalla: `REPORT_LINK_DAYS` vive en este archivo, que es `server-only`,
+   * y basta con que un componente `"use client"` importe UNA constante de
+   * aquí para que el bundle se lo trague y el build se caiga.
+   */
+  linkDays: number;
+}
+
+/**
+ * ¿A este inmueble le sale el reporte solo?
+ *
+ * El interruptor es la EXCLUSIVA VIGENTE, no una casilla: ver la nota larga
+ * de `runWeeklyOwnerReports`. Esta función solo LEE lo mismo que lee el
+ * barrido, para que la pantalla y el cron no puedan discrepar.
+ *
+ * El inmueble se comprueba contra el alcance del usuario ANTES de tocar la
+ * exclusiva: si no es suyo, la respuesta es "no" y no un error que revele
+ * que existe.
+ */
+export async function getOwnerReportSchedule(
+  ctx: RealtyContext,
+  propertyId: string,
+  now: Date = new Date(),
+): Promise<OwnerReportSchedule> {
+  const apagado: OwnerReportSchedule = {
+    auto: false,
+    until: null,
+    channel: null,
+    ownerHasPhone: false,
+    ownerHasEmail: false,
+    windowDays: WEEKLY_REPORT_DAYS,
+    linkDays: REPORT_LINK_DAYS,
+  };
+  if (!safeId(propertyId)) return apagado;
+
+  const scope = await propertyScopeWhere(ctx);
+  const property = await prisma.realtyProperty.findFirst({
+    where: { ...scope, id: propertyId },
+    select: { id: true, owner: { select: { phone: true, email: true } } },
+  });
+  if (!property) return apagado;
+
+  const owner = property.owner;
+  const ownerHasPhone = Boolean(owner?.phone && mxTenDigits(owner.phone));
+  const ownerHasEmail = Boolean(owner?.email && owner.email.trim() !== "");
+
+  const exclusive = await prisma.realtyExclusive.findFirst({
+    where: {
+      accountId: ctx.accountId,
+      propertyId: property.id,
+      startsAt: { lte: now },
+      endsAt: { gt: now },
+    },
+    // La que más tarde vence: si alguien registró dos traslapadas, la que
+    // manda es la que mantiene vivo el compromiso.
+    orderBy: { endsAt: "desc" },
+    select: { endsAt: true },
+  });
+
+  const channel: OwnerReportChannel | null =
+    ownerHasPhone && ctx.plan.features.whatsapp === true
+      ? "whatsapp"
+      : ownerHasEmail
+        ? "email"
+        : null;
+
+  return {
+    // Sin canal no hay envío automático por más exclusiva que haya: el
+    // barrido lo saltaría con "sin_contacto", así que la pantalla no puede
+    // prometer un correo que nunca va a salir.
+    auto: Boolean(exclusive) && channel !== null,
+    until: exclusive ? exclusive.endsAt.toISOString() : null,
+    channel,
+    ownerHasPhone,
+    ownerHasEmail,
+    windowDays: WEEKLY_REPORT_DAYS,
+    linkDays: REPORT_LINK_DAYS,
+  };
+}
 
 /** "2026-W35" — la llave que impide mandar dos veces el mismo lunes. */
 export function isoWeekKey(d: Date): string {
@@ -3150,6 +3279,8 @@ export async function runWeeklyOwnerReports(now: Date = new Date()): Promise<Own
     failed: 0,
     reasons: {},
     windowDays: WEEKLY_REPORT_DAYS,
+    truncated: 0,
+    accountsSkipped: 0,
   };
   const bump = (key: string) => {
     summary.reasons[key] = (summary.reasons[key] ?? 0) + 1;
@@ -3184,7 +3315,13 @@ export async function runWeeklyOwnerReports(now: Date = new Date()): Promise<Own
   let total = 0;
 
   for (const acc of accounts) {
-    if (total >= WEEKLY_MAX_TOTAL) break;
+    if (total >= WEEKLY_MAX_TOTAL) {
+      // Se acabó el presupuesto global y quedan cuentas sin recorrer. No se
+      // consulta cuántas exclusivas traían (sería pagar consultas por algo
+      // que ya no se va a mandar), pero SÍ queda dicho que existieron.
+      summary.accountsSkipped += 1;
+      continue;
+    }
 
     const exclusives = await prisma.realtyExclusive.findMany({
       where: {
@@ -3207,6 +3344,15 @@ export async function runWeeklyOwnerReports(now: Date = new Date()): Promise<Own
       take: WEEKLY_MAX_PER_ACCOUNT,
     });
     if (exclusives.length === 0) continue;
+    // El `take` de arriba prioriza las exclusivas que ANTES vencen —que es
+    // el orden correcto, porque este reporte sirve justo para renovarlas—
+    // pero recorta. Si tocó el tope, se pregunta cuántas quedaron fuera.
+    if (exclusives.length === WEEKLY_MAX_PER_ACCOUNT) {
+      const vigentes = await prisma.realtyExclusive.count({
+        where: { accountId: acc.id, startsAt: { lte: now }, endsAt: { gt: now } },
+      });
+      summary.truncated += Math.max(0, vigentes - WEEKLY_MAX_PER_ACCOUNT);
+    }
 
     // Un contexto por asesor, no uno por inmueble: la mayoría de una cuenta
     // cuelga del mismo puñado de personas.
@@ -3214,7 +3360,12 @@ export async function runWeeklyOwnerReports(now: Date = new Date()): Promise<Own
     let fallbackOwnerCtx: RealtyContext | null | undefined;
 
     for (const ex of exclusives) {
-      if (total >= WEEKLY_MAX_TOTAL) break;
+      if (total >= WEEKLY_MAX_TOTAL) {
+        // El tope global cortó a media cuenta: lo que queda de esta lista
+        // tampoco se manda, y se dice.
+        summary.truncated += 1;
+        continue;
+      }
       const property = ex.property;
       if (!property) continue;
 

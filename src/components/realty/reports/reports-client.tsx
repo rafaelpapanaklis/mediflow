@@ -26,6 +26,7 @@ import type { Dictionary } from "@/i18n/t";
 import { makeRealtyT } from "@/lib/realty/i18n";
 import type {
   OperationsReport,
+  OwnerReportSchedule,
   PortfolioReport,
   ReportAccess,
   ReportPickers,
@@ -56,8 +57,8 @@ export interface ReportsClientProps {
   portfolio: PortfolioReport | null;
   tax: TaxSummary | null;
   operations: OperationsReport | null;
-  ownerHasPhone: boolean;
-  planHasWhatsapp: boolean;
+  /** Por dónde le llega al propietario y si le sale solo. null = sin inmueble. */
+  schedule: OwnerReportSchedule | null;
 }
 
 export function ReportsClient(props: ReportsClientProps) {
@@ -75,8 +76,7 @@ export function ReportsClient(props: ReportsClientProps) {
     portfolio,
     tax,
     operations,
-    ownerHasPhone,
-    planHasWhatsapp,
+    schedule,
   } = props;
 
   const t = useMemo(() => makeRealtyT(dict), [dict]);
@@ -149,7 +149,11 @@ export function ReportsClient(props: ReportsClientProps) {
           selectedId={propertyId}
           from={from}
           to={to}
-          canWhatsapp={planHasWhatsapp && ownerHasPhone}
+          schedule={schedule}
+          // El permiso de MANDAR sale del servidor, igual que la ruta que
+          // ese botón llama: dos criterios distintos acaban en un botón que
+          // se pinta y una ruta que contesta 403.
+          canWhatsapp={access.sendWhatsapp && (schedule?.ownerHasPhone ?? false)}
           onNavigate={navigate}
         />
       ) : null}

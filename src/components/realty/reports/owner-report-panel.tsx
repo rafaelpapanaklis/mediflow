@@ -26,6 +26,7 @@ import { formatCents, formatShortDate } from "@/lib/realty/rent-charges";
 import { formatMinutes } from "@/lib/realty/commissions";
 import { formatPctOrDash } from "@/lib/realty/owner-report";
 import type { OwnerActivityReport } from "@/lib/realty/owner-report";
+import type { OwnerReportSchedule } from "@/lib/realty/reports";
 import { Card, EmptyState, Kpi, Note, Pill } from "../rentals/ui";
 import {
   BlockHead,
@@ -43,8 +44,10 @@ export interface OwnerPanelProps {
   selectedId: string | null;
   from: string;
   to: string;
-  /** El propietario tiene teléfono capturado y el plan trae WhatsApp. */
+  /** Puede mandar (permiso + plan) Y hay a quién mandarle. Del SERVIDOR. */
   canWhatsapp: boolean;
+  /** Si a este inmueble le sale el reporte solo cada lunes, y por dónde. */
+  schedule: OwnerReportSchedule | null;
   onNavigate: (params: Record<string, string | null>) => void;
 }
 
@@ -56,6 +59,7 @@ export function OwnerReportPanel({
   from,
   to,
   canWhatsapp,
+  schedule,
   onNavigate,
 }: OwnerPanelProps) {
   const router = useRouter();
@@ -442,6 +446,37 @@ export function OwnerReportPanel({
               </div>
             </Card>
           ) : null}
+
+          {/* ── El envío automático ──────────────────────────────────
+              🔴 No es un adorno. El barrido de los lunes YA existe y su
+              interruptor es la EXCLUSIVA VIGENTE, no una casilla (este
+              vertical no tiene dónde guardar una: ver la nota larga de
+              runWeeklyOwnerReports). Un automatismo que nadie ve es un
+              automatismo que nadie usa —y peor, es el asesor preguntando
+              por qué a un propietario le llega solo y a otro no. Aquí se
+              dice, en una frase, con la fecha real y el canal real. */}
+          <Card>
+            <BlockHead title={t("propietario.envioAuto")} sub={t("propietario.envioAutoCuerpo")} />
+            {schedule?.auto ? (
+              <Note tone="brand">
+                {t("propietario.envioAutoSi", {
+                  fecha: formatShortDate(schedule.until),
+                  canal:
+                    schedule.channel === "whatsapp"
+                      ? t("propietario.canalWhatsapp")
+                      : t("propietario.canalCorreo"),
+                  dias: schedule.windowDays,
+                })}
+              </Note>
+            ) : schedule && !schedule.ownerHasPhone && !schedule.ownerHasEmail ? (
+              // Sin contacto no hay envío por más exclusiva que haya, y lo
+              // que hay que arreglar NO es la exclusiva: es la ficha.
+              <Note tone="warning">{t("propietario.envioAutoSinContacto")}</Note>
+            ) : (
+              <Note tone="info">{t("propietario.envioAutoNo")}</Note>
+            )}
+            <Hint>{t("propietario.ligaCaduca", { dias: schedule?.linkDays ?? 30 })}</Hint>
+          </Card>
 
           <Hint>
             {t("generado", { fecha: formatShortDate(report.generatedAt) })}
