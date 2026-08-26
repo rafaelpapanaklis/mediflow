@@ -894,14 +894,17 @@ export async function listRealtyBotVisits(
 > {
   let ids: string[] = [];
   try {
+    // Sin el operador `?` de jsonb a propósito: en una plantilla Prisma.sql
+    // un `?` suelto es ambiguo con los marcadores del driver. `->>` devuelve
+    // NULL cuando la llave no está, así que esto basta.
+    //
+    // La explicación vive AQUÍ y no dentro del `Prisma.sql`: las comillas
+    // invertidas con las que citaba `?` CERRABAN la plantilla, y el archivo
+    // entero dejaba de compilar ("Expression expected", growth-db.ts:900).
     const rows = await prisma.$queryRaw<{ visitId: string }[]>(
       Prisma.sql`SELECT DISTINCT extracted->>'visitId' AS "visitId"
                  FROM realty_bot_turns
                  WHERE "accountId" = ${accountId}
-                   -- Sin el operador `?` de jsonb a propósito: en una
-                   -- plantilla Prisma.sql un `?` suelto es ambiguo con los
-                   -- marcadores del driver. `->>` devuelve NULL cuando la
-                   -- llave no está, así que esto basta.
                    AND extracted->>'visitId' IS NOT NULL
                  ORDER BY 1
                  LIMIT ${Math.min(100, Math.max(1, limit))}`,

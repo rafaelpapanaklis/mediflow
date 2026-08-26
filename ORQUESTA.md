@@ -24736,3 +24736,208 @@ Rafael verifica al integrar. Lo que sí corrí:
   aceptar, cerrar contra una operación, y comprobar en B que no se ve NADA que
   no esté en la tabla de este reporte.
 
+
+## [Inmuebles Ola 2 · Integración] — Las nueve ramas en un solo commit: dos choques reales, un archivo que no compilaba, y la trampa de la llave que git se lleva fuera del conflicto ✅ (2026-08-26)
+
+**Rama:** `main` (clon principal) · **Empuje:** UNO solo, al final.
+**Base:** `63c1b29e` (tras `pull --ff-only`, avance limpio desde `93b6f76a`).
+
+Nueve terminales trabajaron en paralelo y **ninguna compiló su trabajo** — se les
+pidió no hacerlo para no saturar la máquina. Esta integración es, por tanto, la
+PRIMERA vez que las nueve se ven juntas y la primera vez que alguien las compila.
+
+---
+
+### 1. Qué entró
+
+Las nueve, en este orden. Ninguna quedó fuera.
+
+| # | Rama | Área | Conflicto |
+|---|------|------|-----------|
+| 1 | `realty/fix1` | Arreglos: Inicio, editor, Matterport | — |
+| 2 | `realty/o2t3` | Visitas y llaves | — |
+| 3 | `realty/o2t5` | Dinero y reportes | — |
+| 4 | `realty/o2t6` | Estudio (copy, reel, staging) | — |
+| 5 | `realty/web2` | Seis plantillas premium de mini-web | 🔴 `portada.tsx` |
+| 6 | `realty/o2t1` | Cumplimiento antilavado (PLD) | — |
+| 7 | `realty/o2t2` | Contratos y firma | 🔴 `schema.prisma` |
+| 8 | `realty/o2t4` | Bolsa / MLS | 🔴 `schema.prisma` |
+| 9 | `realty/o2t7` | Crecimiento (bot, campañas, socios) | 🔴 `schema.prisma` |
+
+**238 archivos** (198 nuevos, 40 modificados, 0 borrados) · **+73,517 / −721**
+líneas · 57 commits · **74 rutas de API nuevas** · **+36 modelos y enums** de
+Prisma (507 → 543).
+
+---
+
+### 2. El choque que NO estaba previsto: `portada.tsx` (fix1 × web2)
+
+El plan anticipaba conflictos solo en `schema.prisma`. Hubo uno más: `fix1` y
+`web2` salieron las dos de `c156a11e` y las dos reescribieron a fondo
+`src/components/realty/web/blocks/portada.tsx` (437 y 668 líneas). **Ocho
+hunks**, uno de ellos de 216 líneas.
+
+No se descartó ningún lado. Se resolvió hunk por hunk, y antes de tocar nada se
+comprobaron las dos cosas de las que dependía que la unión fuera legítima:
+
+- **`landing.ts` conserva las DOS funciones.** `fix1` añadió
+  `recorridoEmbebible()` sin borrar `tieneRecorrido()`. O sea que el bloque
+  `torre` de `web2`, que usa la vieja, sigue compilando.
+- **`href` de `<EmbedRecorrido>` es OPCIONAL** (`href?: string`). O sea que el
+  bloque `torre`, que no lo pasa, sigue compilando.
+
+Ninguna de las dos ramas rompió la API de la otra: el conflicto era **textual**,
+no semántico. Resolución:
+
+| Hunk | Qué era | Se quedó |
+|------|---------|----------|
+| 1, 2 | Comentario de cabecera | **web2** (describe las 15 plantillas; superconjunto) |
+| 3 | Import del ayudante de recorrido | **las dos** (`recorridoEmbebible` + `tieneRecorrido`) |
+| 4 | Imports | **web2** (superconjunto: `+realtyAmenityLabel`, `+Pastilla`) |
+| 5 | `destacado()` | **web2** (mismo cuerpo, pero exportado para que Torre lo excluya del listado) |
+| 6 | Recorrido de `unaPropiedad` | **fix1** — es el ARREGLO del Matterport, no una preferencia |
+| 7 | `href={tour.url}` | **fix1** — mismo arreglo |
+| 8 | Bloque `torre` (216 líneas) | **web2** (puramente aditivo) |
+
+Comprobado después: los dos ayudantes se usan exactamente donde tocaba (126 y
+186), `Pastilla` y `realtyAmenityLabel` se usan, y las variantes que no tienen
+rama propia (`buscador`, `desarrollo`, `boutique`, `tablero`) siguen cayendo al
+`return` final. Las otras tres compartidas por las dos ramas
+(`landing.ts`, `manifest.ts`, `manifiesto.test.ts`) se mezclaron solas.
+
+---
+
+### 3. `schema.prisma`: la trampa de la llave que git saca del conflicto
+
+Las cuatro ramas (`o2t1`, `o2t2`, `o2t4`, `o2t7`) añaden sus modelos **al final**
+del bloque Realty. La regla —conservar los dos bloques— es la correcta, pero
+aplicada a lo bruto **rompe el archivo**, y conviene dejarlo escrito porque va a
+volver a pasar:
+
+> Cuando los dos lados añaden al FINAL del archivo, git detecta que la última
+> línea (`}`) es común a los dos, la saca FUERA del conflicto y la deja después
+> de `>>>>>>>`. Esa `}` acaba cerrando solo el último modelo de *theirs*, y **el
+> último modelo de *ours* se queda abierto.**
+
+Concatenar los dos lados sin más produjo modelos FUSIONADOS: `RealtyPldNotice` sin
+cerrar, y más adelante `RealtyContactOptOut` terminando con el `@@map` de
+`RealtyContractTemplate`. Lo cazó `npx prisma validate` (11 errores la primera
+vez, 5 la segunda) — no el ojo.
+
+**Cómo quedó resuelto de verdad.** En vez de parchear los marcadores, se
+reconstruyó el archivo de forma determinista, aprovechando que los cuatro diffs
+son **puramente aditivos (0 líneas borradas)**:
+
+```
+schema.prisma = schema.prisma de main
+              + las adiciones de o2t1, o2t2, o2t4 y o2t7, en orden,
+                cada una en su ancla del archivo base
+```
+
+Cuatro anclas, exactamente las que declaran los hunks: `RealtyAccount` (las
+retro-relaciones de las cuatro), `RealtyContact` y `RealtyDeal` (solo `o2t1`), y
+el final del archivo (los modelos de las cuatro).
+
+**Verificado, no supuesto:**
+
+- `npx prisma validate` → **`The schema is valid 🚀`**
+- **543** modelos y enums = 507 (main) + 12 + 5 + 4 + 15. Sin duplicados.
+- Llaves equilibradas (609 `{` = 609 `}`).
+- Los **36** modelos y enums nuevos, comparados uno a uno contra su rama de
+  origen: **idénticos carácter por carácter**.
+- Los únicos tres modelos del base que cambian son `RealtyAccount`,
+  `RealtyContact` y `RealtyDeal` — los que reciben retro-relaciones. Las 28+2+3
+  líneas de las cuatro ramas están **todas** presentes.
+- `npx prisma generate` → OK.
+
+`ORQUESTA.md` (cinco ramas) se mezcló solo. Comprobado línea a línea: los 380 +
+603 + 461 + 277 + 146 renglones únicos de los cinco reportes **están todos**.
+
+---
+
+### 4. El build: un archivo que no compilaba
+
+Primer build: **exit 1**. Un solo error, y era real:
+
+```
+./src/lib/realty/bot/growth-db.ts
+  x Expression expected   (growth-db.ts:900)
+```
+
+Dentro de una plantilla `` Prisma.sql`…` ``, un comentario SQL citaba `?` y `->>`
+**con comillas invertidas**. Esas comillas **cierran la plantilla**: el archivo
+entero dejaba de compilar. La ironía es que el comentario existía para explicar
+por qué se evitaba el operador `?`.
+
+Arreglo (una sola vez en todo el repo — se buscó el patrón en los 238 archivos y
+no aparece en ningún otro sitio): la explicación **sale del SQL** y pasa a ser un
+comentario `//` encima del `$queryRaw`. Se conserva palabra por palabra, y de
+paso los `?` desaparecen del SQL, que es justo lo que el autor quería evitar.
+
+⚠️ **Sobre el exit code.** La notificación del proceso en segundo plano dijo
+"exit code 0" — era el del envoltorio, no el del build. El exit real (`1`) se
+recogió con un marcador escrito a fichero. Es exactamente la razón por la que no
+se compila con `| tail`.
+
+---
+
+### 5. Qué se verificó
+
+- **Build de producción** (`NODE_OPTIONS=--max-old-space-size=12288 npm run build`):
+  **EXIT 0**. Sin el `--max-old-space-size` no arranca: 3,172 archivos y 543 modelos.
+  Se construyeron las **36 rutas del panel** de inmobiliaria y **165 rutas
+  `/api/realty/`**. Las seis pantallas nuevas (`bolsa`, `bot`, `campanas`,
+  `contratos`, `estudio`, `socios`) compilan y aparecen en la tabla de rutas.
+  ℹ️ El log local trae ruido de `PrismaClientInitializationError` en las páginas
+  del blog: es el `DATABASE_URL` de mentira que se usó para compilar sin base
+  (no hay `.env` en este clon). La app lo atrapa, el build sale 0, y en Vercel
+  —con la variable de verdad— no aparece.
+- **`tsc --noEmit` sobre el repo entero**: **cero errores en el vertical de
+  inmuebles**. Los 6 que salen son de `src/lib/barber/__tests__/`
+  (`dinero-sumas`, `i18n-alcance`), **ya existían en `main`**, la Ola 2 no los
+  tocó, y `next build` no los compila porque no entran en el grafo de la build.
+- **`scripts/realty-guard.cjs`** → **exit 0, cero archivos prohibidos**. Los 238
+  archivos caen dentro del vertical; los únicos compartidos son `schema.prisma` y
+  `ORQUESTA.md`, los dos declarados. **Ni el dental ni barbería —los dos vivos y
+  con clientes que pagan— reciben una sola línea.**
+
+---
+
+### 6. Lo que queda ROJO (no lo arregla esta integración)
+
+**a) Cuatro `.sql` sin aplicar.** Hasta que Rafael los corra en Supabase, esas
+cuatro áreas no funcionan aunque el código ya esté en producción. En orden:
+
+1. `sql/realty-pld.sql` (o2t1) — 5 tablas, 7 enums, 14 índices **+ el backfill
+   del permiso nuevo**. Sin él, `pld.view` / `pld.manage` **no le llegan a quien
+   ya tiene `permissionsOverride`** (el override REEMPLAZA, no se suma).
+2. `sql/realty-contratos.sql` (o2t2) — 5 tablas.
+3. `sql/realty-mls.sql` (o2t4) — 3 tablas + 1 enum. Va DESPUÉS de `sql/realty.sql`.
+4. `sql/realty_growth.sql` (o2t7) — 15 tablas.
+
+Los cuatro son **idempotentes** (todo con `IF NOT EXISTS`, cero `DROP`): correrlos
+dos veces no rompe nada. De los cuatro, solo `realty_growth` degrada con
+elegancia — reconoce el `42P01` y pinta "falta aplicar sql/realty_growth.sql".
+Los otros tres **truenan** contra tablas que no existen.
+
+**b) Seis pantallas SIN entrada en el menú.** Existen y compilan, pero solo se
+llega escribiendo la URL a mano:
+
+| Pantalla | Rama |
+|----------|------|
+| `/inmobiliaria/contratos` | o2t2 |
+| `/inmobiliaria/bolsa` | o2t4 |
+| `/inmobiliaria/estudio` | o2t6 |
+| `/inmobiliaria/bot` | o2t7 |
+| `/inmobiliaria/campanas` | o2t7 |
+| `/inmobiliaria/socios` | o2t7 |
+
+`REALTY_NAV_ITEMS` (en `src/lib/realty/types.ts`) tiene 18 items para 24
+pantallas. `o2t1` (cumplimiento), `o2t3` (visitas) y `o2t5` (reportes) **sí**
+metieron el suyo; las otras cuatro no. **No se añadieron aquí a propósito**: cada
+item lleva `key`, `section`, icono y una reja de plan/permiso en
+`src/lib/realty/gating.ts`, y elegir esas rejas por mi cuenta puede abrirle una
+pantalla a un plan que no debe verla. Es trabajo de producto, no de integración.
+
+**c) Nada de esto ha tocado una base de datos real.** El build compila; nadie ha
+firmado un contrato, publicado una ficha en la bolsa, ni mandado una campaña.
