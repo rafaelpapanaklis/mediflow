@@ -82,37 +82,41 @@ export async function photosForVision(
   const urls = signedUrls.filter(Boolean).slice(0, VISION_MAX_PHOTOS) as string[];
   if (urls.length === 0) return out;
 
-  let sharp: typeof import("sharp");
   try {
-    sharp = (await import("sharp")).default;
+    // Mismo patrón que staging.ts: import dinámico y el tipo INFERIDO de
+    // `.default`. Sin anotarlo a mano — `sharp` se declara con `export =` y
+    // escribir su tipo aquí es la clase de detalle que rompe un build.
+    const sharp = (await import("sharp")).default;
+
+    for (const url of urls) {
+      try {
+        const res = await fetch(url, { signal: AbortSignal.timeout(15_000) });
+        if (!res.ok) continue;
+        const raw = Buffer.from(await res.arrayBuffer());
+        const jpeg = await sharp(raw)
+          // `rotate()` sin argumentos aplica la orientación del EXIF. Sin
+          // esto, una foto de teléfono llega ACOSTADA y el modelo describe
+          // un cuarto de lado.
+          .rotate()
+          .resize({
+            width: VISION_MAX_EDGE,
+            height: VISION_MAX_EDGE,
+            fit: "inside",
+            withoutEnlargement: true,
+          })
+          .jpeg({ quality: 78 })
+          .toBuffer();
+        out.push({ base64: jpeg.toString("base64"), mediaType: "image/jpeg" });
+      } catch (e) {
+        // Una foto que no baja NO tumba la generación: se redacta con las
+        // que sí bajaron.
+        console.error("[realty/studio] una foto no se pudo preparar:", e);
+      }
+    }
   } catch (e) {
     console.error("[realty/studio] sin sharp, se redacta sin fotos:", e);
-    return out;
   }
 
-  for (const url of urls) {
-    try {
-      const res = await fetch(url, { signal: AbortSignal.timeout(15_000) });
-      if (!res.ok) continue;
-      const raw = Buffer.from(await res.arrayBuffer());
-      const jpeg = await sharp(raw)
-        // `rotate()` sin argumentos aplica la orientación del EXIF. Sin
-        // esto, una foto de teléfono llega ACOSTADA y el modelo describe un
-        // cuarto de lado.
-        .rotate()
-        .resize({
-          width: VISION_MAX_EDGE,
-          height: VISION_MAX_EDGE,
-          fit: "inside",
-          withoutEnlargement: true,
-        })
-        .jpeg({ quality: 78 })
-        .toBuffer();
-      out.push({ base64: jpeg.toString("base64"), mediaType: "image/jpeg" });
-    } catch (e) {
-      console.error("[realty/studio] una foto no se pudo preparar:", e);
-    }
-  }
   return out;
 }
 
