@@ -272,6 +272,7 @@
     "notEmbeddableHint": "Remove it and paste your provider's Share link instead. Matterport's looks like this: https://my.matterport.com/show/?m=XXXXXXXX",
     "frameFailed": "The tour isn't showing",
     "frameFailedHint": "It may be slow, blocked by your connection, or the provider may not allow it inside another page. Open it separately to find out which.",
+    "frameKeepWaiting": "Keep waiting",
     "panoDrop": "Drag your 360 panoramas here",
     "panoHint": "Equirectangular photos (the ones your phone takes in 360 panorama mode). They play in our own viewer.",
     "panoChoose": "Choose panoramas",

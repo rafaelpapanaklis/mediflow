@@ -85,7 +85,10 @@ const MARCAS: Record<RealtyWebPinta, RegExp> = {
   agentes: /\bdata\.agentes\b/,
   inmuebles: /\bdata\.inmuebles\b/,
   buscador: /\bBuscadorInmuebles\b/,
-  recorrido: /\btieneRecorrido\b/,
+  // Cualquiera de las dos: `tieneRecorrido` es la insignia del listado y
+  // `recorridoEmbebible` es la que elige el recorrido que se pinta. Las dos
+  // salen del mismo sitio y responden la misma pregunta.
+  recorrido: /\b(tieneRecorrido|recorridoEmbebible)\b/,
   mapa: /\bMapaBajoDemanda\b/,
   whatsapp: /\bligaWhatsApp\b/,
 };
@@ -918,9 +921,11 @@ test("la liga de COMPARTIR de Matterport (y la de Kuula) se usan tal cual", () =
   // Solo la de Compartir. Las demás ligas del mismo dominio pasan el filtro
   // de dominio y luego el iframe NO puede mostrarlas: ver la batería
   // completa en src/lib/realty/__tests__/recorridos.test.ts.
+  // El id es de ONCE caracteres: "abc123" ya no se acepta a propósito (una
+  // palabra corta colándose como identificador acababa en marco roto).
   assert.equal(
-    realtyTourEmbedUrl("https://my.matterport.com/show/?m=abc123"),
-    "https://my.matterport.com/show/?m=abc123",
+    realtyTourEmbedUrl("https://my.matterport.com/show/?m=SxQL3iGyoDo"),
+    "https://my.matterport.com/show/?m=SxQL3iGyoDo",
   );
   assert.equal(realtyTourEmbedUrl("https://kuula.co/share/xyz"), "https://kuula.co/share/xyz");
   assert.equal(realtyTourEmbedUrl("https://matterport.com/discover/space/casa"), null);

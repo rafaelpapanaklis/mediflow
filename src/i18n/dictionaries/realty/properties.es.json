@@ -272,6 +272,7 @@
     "notEmbeddableHint": "Quítala y vuelve a pegar la liga de Compartir de tu proveedor. La de Matterport se ve así: https://my.matterport.com/show/?m=XXXXXXXX",
     "frameFailed": "El recorrido no se está mostrando",
     "frameFailedHint": "Puede que tarde de más, que tu conexión lo bloquee o que el proveedor no permita verlo dentro de otra página. Ábrelo aparte para saber cuál es.",
+    "frameKeepWaiting": "Seguir esperando",
     "panoDrop": "Arrastra tus panorámicas 360 aquí",
     "panoHint": "Fotos equirectangulares (las que toma tu celular en modo panorámica 360). Se ven en nuestro visor.",
     "panoChoose": "Elegir panorámicas",

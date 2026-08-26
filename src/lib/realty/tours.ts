@@ -164,8 +164,23 @@ export const REALTY_TOUR_URL_ERROR =
  *
  * Cada proveedor tiene el suyo y dice de dónde sale su forma.
  */
-/** Matterport: 11 caracteres alfanuméricos (`SxQL3iGyoDo`). */
-const ID_MATTERPORT = /^[A-Za-z0-9]{6,64}$/;
+/**
+ * Matterport: ONCE caracteres alfanuméricos (`SxQL3iGyoDo`). Exactamente
+ * once, no "seis o más".
+ *
+ * 🔴 Con `{6,64}` colaba cualquier palabra: `matterport.com/es/show/precios`
+ * daba id `precios` y `?m=newsletter` daba id `newsletter`. Las dos se
+ * canonizaban, pasaban la puerta con `ok: true`, se guardaban… y pintaban
+ * el marco roto que todo esto viene a evitar. Un patrón laxo aquí no
+ * "acepta de más": acepta basura y la guarda.
+ *
+ * El riesgo del otro lado está asumido y es el correcto: si Matterport
+ * estrenara ids de otra longitud, la liga se RECHAZA con un mensaje que
+ * dice qué copiar — recuperable y ruidoso— en vez de guardarse y verse
+ * gris, que es silencioso. Además el parámetro `m=` se mira ANTES que la
+ * ruta, y la liga de Compartir siempre lo trae.
+ */
+const ID_MATTERPORT = /^[A-Za-z0-9]{11}$/;
 /** Kuula: cinco o seis caracteres (`7l8Rk`). */
 const ID_KUULA = /^[A-Za-z0-9]{3,32}$/;
 /** Luma: un UUID con guiones. */
@@ -180,28 +195,42 @@ export function normalizeRealtyTourUrl(url: string): string {
   } catch {
     return raw;
   }
-  // 🔴 NORMALIZAR NO ES ASCENDER DE PROTOCOLO. Todas las reescrituras de
-  // abajo arman una URL `https://…`, así que aplicarlas a una entrada
-  // `http://` la subiría a https en silencio — y una liga que la puerta
-  // debía rechazar (contenido mixto: el navegador la bloquea dentro de una
-  // página https, marco en blanco y sin error) pasaría de largo. El
-  // protocolo lo decide detectRealtyTourProvider y aquí no se toca.
-  if (parsed.protocol !== "https:") return raw;
-
+  // El acortador de YouTube se reescribe venga en http o en https: la
+  // reescritura NO asciende nada, construye una URL de youtube.com que ya
+  // es https de origen. Va ANTES de la guarda de protocolo a propósito —
+  // ponerla después rompía `http://youtu.be/<id>`, que llevaba funcionando
+  // desde la Ola 1 y es lo que llega reenviado por WhatsApp o por correo.
   if (normalizeHost(parsed.host) === "youtu.be") {
     const id = parsed.pathname.replace(/^\/+/, "").split("/")[0];
     if (id) return `https://www.youtube.com/watch?v=${encodeURIComponent(id)}`;
   }
+
+  // 🔴 PARA EL RESTO, NORMALIZAR NO ES ASCENDER DE PROTOCOLO. Las
+  // reescrituras de abajo arman una URL `https://…` a partir del MISMO
+  // host que trajo la entrada, así que aplicarlas a un `http://` lo subiría
+  // a https en silencio — y una liga que la puerta debía rechazar
+  // (contenido mixto: el navegador la bloquea dentro de una página https,
+  // marco en blanco y sin error) pasaría de largo.
+  if (parsed.protocol !== "https:") return raw;
 
   const provider = REALTY_TOUR_PROVIDERS.find((p) =>
     p.domains.some((d) => hostMatchesDomain(parsed.host, d)),
   );
 
   // Matterport: la ÚNICA forma que se deja embeber es la liga de Compartir.
+  //
+  // 🔴 SE CONSERVAN LOS PARÁMETROS. Tirarlos parecía "canonizar" y era una
+  // regresión sobre filas que HOY se ven bien: `lang=es` devuelve el visor
+  // al español, `brand=0` quita la marca de Matterport del recorrido del
+  // cliente, y `sr`/`ss` son la vista inicial que el asesor eligió al
+  // compartir. Lo único que se canoniza es `m`, que es lo que decide QUÉ
+  // espacio se abre; lo demás es cómo se ve, y eso lo eligió una persona.
   if (provider?.key === "matterport") {
     const id = matterportSpaceId(parsed);
-    if (id) return `https://my.matterport.com/show/?m=${encodeURIComponent(id)}`;
-    return raw; // sin identificador no hay nada que canonizar; lo rechaza checkRealtyTourUrl
+    if (!id) return raw; // sin identificador no hay nada que canonizar; lo rechaza checkRealtyTourUrl
+    const params = new URLSearchParams(parsed.search);
+    params.set("m", id);
+    return `https://my.matterport.com/show/?${params.toString()}`;
   }
 
   // Kuula: /post/<id> es la página del visor; /share/<id> es la que Kuula
@@ -209,7 +238,12 @@ export function normalizeRealtyTourUrl(url: string): string {
   // (/share/collection/<id>) NO se toca: ya viene en forma de compartir.
   if (provider?.key === "kuula") {
     const partes = parsed.pathname.split("/").filter(Boolean);
-    if (partes[0] === "post" && partes[1] && ID_KUULA.test(partes[1])) {
+    // `partes.length === 2` NO sobra: sin esa condición, un
+    // `kuula.co/post/collection/7lXYZ` se convertía en
+    // `kuula.co/share/collection` —una liga SIN identificador— y como esta
+    // rama no verifica su propio resultado, se guardaba con 201 y se veía
+    // rota. Reescribir solo la forma que se sabe leer; el resto, tal cual.
+    if (partes.length === 2 && partes[0] === "post" && ID_KUULA.test(partes[1])) {
       return `https://kuula.co/share/${partes[1]}${parsed.search}`;
     }
     return raw;
@@ -218,8 +252,9 @@ export function normalizeRealtyTourUrl(url: string): string {
   // Luma: /capture/<uuid> es la página; /embed/<uuid> es el visor incrustable.
   if (provider?.key === "lumalabs") {
     const partes = parsed.pathname.split("/").filter(Boolean);
-    if (partes[0] === "capture" && partes[1] && ID_LUMA.test(partes[1])) {
-      return `https://lumalabs.ai/embed/${partes[1]}`;
+    // Misma cautela que en Kuula, y los parámetros se conservan.
+    if (partes.length === 2 && partes[0] === "capture" && ID_LUMA.test(partes[1])) {
+      return `https://lumalabs.ai/embed/${partes[1]}${parsed.search}`;
     }
     return raw;
   }

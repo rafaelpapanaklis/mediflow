@@ -13,7 +13,7 @@ import {
 } from "@/lib/realty/types";
 import { isRealtySubscriptionActive, realtyPlanHasFeature } from "@/lib/realty/plan-shared";
 import { getRealtyPlan } from "@/lib/realty/plans";
-import { detectRealtyTourProvider } from "@/lib/realty/tours";
+import { realtyTourEmbedUrl } from "@/lib/realty/tours";
 import {
   REALTY_FEED_FILES,
   adapterForDestination,
@@ -220,8 +220,17 @@ export function toPublishable(
     // El enlace del proveedor manda y se vuelve a validar contra la MISMA
     // allowlist que arma el frame-src de la CSP: lo que no se puede embeber
     // tampoco se manda a un portal.
+    //
+    // 🔴 Y ESO SE PREGUNTA CON `realtyTourEmbedUrl`, NO CON
+    // `detectRealtyTourProvider`. El segundo solo dice que el DOMINIO está
+    // en la lista — que es exactamente el chequeo que se quedó corto con
+    // Matterport. Con él, un `matterport.com/discover/space/…` guardado
+    // antes se seguía publicando a los portales como recorrido virtual
+    // mientras la propia web decía que ese inmueble no tenía ninguno: el
+    // comentario de arriba afirmaba lo que el código no hacía.
     const external = (t.externalUrl ?? "").trim();
-    const url = external && detectRealtyTourProvider(external) ? external : publicMediaUrl(t.fileUrl);
+    const url =
+      external && realtyTourEmbedUrl(external) ? external : publicMediaUrl(t.fileUrl);
     if (!url) continue;
     tours.push({ kind: t.kind, provider: t.provider, url });
   }

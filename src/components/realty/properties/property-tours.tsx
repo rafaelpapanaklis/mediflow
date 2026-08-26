@@ -91,6 +91,16 @@ export function PropertyTours({
   const veredicto = useMemo(() => {
     const clean = url.trim();
     if (!clean) return null;
+    // 🔴 NO SE JUZGA UNA URL A MEDIO ESCRIBIR. Sin esto, teclear "h" ya
+    // pintaba el recuadro rojo con el párrafo largo de proveedores, ponía
+    // el campo en aria-invalid y —lo peor— un lector de pantalla volvía a
+    // leer los ~150 caracteres EN CADA TECLA. Hasta que no hay una URL
+    // completa, el campo solo enseña su pista neutra.
+    try {
+      new URL(clean);
+    } catch {
+      return null;
+    }
     return checkRealtyTourUrl(clean);
   }, [url]);
   const detected = veredicto?.provider ?? null;
@@ -247,7 +257,11 @@ export function PropertyTours({
                 />
               </Field>
               {veredicto && !veredicto.ok && veredicto.error ? (
-                <p id="tour-url-error" role="alert" className={s.tourUrlError}>
+                // `role="status"` y no `"alert"`: el mensaje cambia mientras
+                // se termina de teclear el identificador, y `alert` es
+                // assertive — interrumpiría al lector de pantalla en cada
+                // cambio. Cortés basta: se anuncia en la primera pausa.
+                <p id="tour-url-error" role="status" className={s.tourUrlError}>
                   {veredicto.error}
                 </p>
               ) : null}
@@ -457,6 +471,7 @@ function TourFrame({
             avisoTitulo={t("tours.frameFailed")}
             avisoCuerpo={t("tours.frameFailedHint")}
             avisoAbrir={t("tours.openExternal")}
+            avisoCerrar={t("tours.frameKeepWaiting")}
           />
         ) : (
           <button

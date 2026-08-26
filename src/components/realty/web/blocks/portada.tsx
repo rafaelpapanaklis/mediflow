@@ -28,8 +28,7 @@ import {
   rutaInmuebleWeb,
   rutaPropiedadesWeb,
   recorridoEmbebible,
-  tieneRecorrido,
-  ubicacionPublica,
+  ubicacionPublica,
   fotoPortada,
   type RealtyWebData,
   type RealtyWebInmuebleDTO,
@@ -98,10 +97,11 @@ export function BloquePortada({ data }: { data: RealtyWebData }) {
     const inm = destacado(data);
     if (!inm) return null;
     const portada = fotoPortada(inm);
-    // recorridoEmbebible, no tours[0]: elige el primero que se pueda
-    // PINTAR. tieneRecorrido() responde lo mismo y es el que usa la
-    // insignia del listado, para que insignia y ficha no se contradigan.
-    const tour = tieneRecorrido(inm) ? recorridoEmbebible(inm) : null;
+    // recorridoEmbebible devuelve el primero que SE PUEDE PINTAR, o null.
+    // Antes esto era `tieneRecorrido(inm) ? inm.tours[0] : null`, que hacía
+    // dos veces el mismo trabajo (y con tours[0] enseñaba la panorámica
+    // propia en vez del Matterport si estaba primero).
+    const tour = recorridoEmbebible(inm);
     const embed = tour ? realtyTourEmbedUrl(tour.url) : null;
     const donde = ubicacionPublica(inm);
     const waInm = ligaWhatsApp(

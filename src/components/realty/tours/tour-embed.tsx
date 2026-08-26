@@ -17,12 +17,15 @@
    `load` igualmente. Un "si a los N segundos no cargó, avisa" NO atrapa ese
    caso — que es justo el más común. Por eso aquí hay DOS redes y no una:
 
-     1. SIEMPRE, cargue o no: una salida visible para abrir el recorrido en
-        una pestaña. Es lo único que funciona cuando el marco "cargó" un
-        error. Nunca hay un recuadro sin explicación ni escapatoria.
-     2. SI TARDA DE MÁS: el aviso grande encima, con el motivo probable.
-        Cubre la red lenta, el proveedor caído y el bloqueo de la red del
-        cliente, donde `load` no llega nunca.
+     1. UNA SALIDA VISIBLE, cargue o no, para abrir el recorrido en una
+        pestaña. Es lo único que funciona cuando el marco "cargó" un error.
+        Va donde no hay otra salida —la web pública— y arriba a la
+        izquierda, porque cualquier cosa encima del iframe intercepta el
+        clic y las demás esquinas son las de los controles del visor. En el
+        panel se apaga: la cabecera del recorrido ya tiene su botón.
+     2. SI TARDA DE MÁS: el aviso grande encima, con el motivo probable y
+        con un botón para cerrarlo. Cubre la red lenta, el proveedor caído y
+        el bloqueo de la red del cliente, donde `load` no llega nunca.
 
    La red de VERDAD, sin embargo, es la de antes de guardar:
    `checkRealtyTourUrl` rechaza al pegarla la liga que no se va a poder
@@ -44,9 +47,15 @@ import {
   REALTY_TOUR_IFRAME_SANDBOX,
 } from "@/lib/realty/tours";
 
-/** Margen antes de dar por perdido el recorrido. Un Matterport pesado en
- *  una red de una casa en obra tarda; 8 s es esperar sin desesperar. */
-const ESPERA_MS = 8000;
+/**
+ * Margen antes de dar por perdido el recorrido.
+ *
+ * Doce segundos y no ocho: un Matterport pesado en la red de una casa en
+ * obra tarda diez o más, y el aviso saliendo ANTES de que cargara tapaba —
+ * con un velo casi opaco— un recorrido que venía en camino. Por eso además
+ * se puede cerrar a mano.
+ */
+const ESPERA_MS = 12000;
 
 export interface RealtyTourEmbedProps {
   /** URL YA convertida por realtyTourEmbedUrl(). */
@@ -57,10 +66,26 @@ export interface RealtyTourEmbedProps {
   /** La liga tal como se guardó, para abrirla fuera. Si falta, se usa `src`. */
   href?: string;
   referrerPolicy?: React.HTMLAttributeReferrerPolicy;
+  /**
+   * Pinta SIEMPRE una salida pequeña encima del marco.
+   *
+   * 🔴 Apagada por defecto, y el motivo importa: cualquier cosa encima del
+   * iframe INTERCEPTA EL CLIC, y la esquina inferior derecha —donde estaba—
+   * es justo donde viven el botón de pantalla completa y el de calidad de
+   * YouTube, el de Vimeo y los de fullscreen/VR de Matterport y Kuula.
+   * Sobre un recorrido que carga bien, eso es una regresión de uso.
+   *
+   * El panel NO la necesita: la cabecera de cada recorrido ya tiene su
+   * botón de "abrir en una pestaña". La web pública SÍ, porque ahí no hay
+   * otra salida si el marco se queda mudo. Va arriba a la izquierda, que es
+   * la esquina que ningún visor usa para sus controles.
+   */
+  salidaSiempre?: boolean;
   /** Textos: cada mundo pone los suyos (el panel, desde su diccionario). */
   avisoTitulo?: string;
   avisoCuerpo?: string;
   avisoAbrir?: string;
+  avisoCerrar?: string;
   esperaMs?: number;
 }
 
@@ -74,21 +99,25 @@ export function RealtyTourEmbed({
   avisoCuerpo = "Puede que la liga no sea la de Compartir, o que el proveedor no permita " +
     "verlo dentro de otra página. Ábrelo en una pestaña nueva para comprobarlo.",
   avisoAbrir = "Abrir el recorrido",
+  avisoCerrar = "Seguir esperando",
   esperaMs = ESPERA_MS,
+  salidaSiempre = false,
 }: RealtyTourEmbedProps) {
   const [cargado, setCargado] = useState(false);
   const [tarde, setTarde] = useState(false);
+  const [cerrado, setCerrado] = useState(false);
 
   useEffect(() => {
     // Cada `src` nuevo reinicia el reloj: cambiar de recorrido no debe
     // heredar el veredicto del anterior.
     setCargado(false);
     setTarde(false);
+    setCerrado(false);
     const id = window.setTimeout(() => setTarde(true), Math.max(1000, esperaMs));
     return () => window.clearTimeout(id);
   }, [src, esperaMs]);
 
-  const mostrarAviso = tarde && !cargado;
+  const mostrarAviso = tarde && !cargado && !cerrado;
   const ligaFuera = href || src;
 
   return (
@@ -112,18 +141,21 @@ export function RealtyTourEmbed({
         }}
       />
 
-      {/* RED 1 — siempre presente. Chiquita, en una esquina, sin tapar el
-          recorrido cuando sí se ve; y es la ÚNICA salida cuando el marco
-          "cargó" la página de error del propio navegador. */}
-      {mostrarAviso ? null : (
+      {/* RED 1 — la salida pequeña. Solo donde no hay otra (ver
+          `salidaSiempre`), y ARRIBA A LA IZQUIERDA: es la única esquina
+          que ningún visor ocupa con sus controles. Es lo único que sirve
+          cuando el marco "cargó" la página de error del propio navegador,
+          porque en ese caso `load` sí se dispara y el aviso grande no sale. */}
+      {salidaSiempre && !mostrarAviso ? (
         <a
           href={ligaFuera}
           target="_blank"
           rel="noreferrer noopener"
+          title={avisoAbrir}
           style={{
             position: "absolute",
-            right: 8,
-            bottom: 8,
+            left: 8,
+            top: 8,
             zIndex: 2,
             display: "inline-flex",
             alignItems: "center",
@@ -141,12 +173,12 @@ export function RealtyTourEmbed({
         >
           {avisoAbrir}
         </a>
-      )}
+      ) : null}
 
       {/* RED 2 — el aviso grande cuando `load` no llegó nunca. */}
       {mostrarAviso ? (
         <div
-          role="status"
+          role="alert"
           style={{
             position: "absolute",
             inset: 0,
@@ -186,6 +218,24 @@ export function RealtyTourEmbed({
           >
             {avisoAbrir}
           </a>
+          {/* Se puede cerrar. Si el recorrido venía tarde pero venía, el
+              visitante recupera el visor sin recargar la página. */}
+          <button
+            type="button"
+            onClick={() => setCerrado(true)}
+            style={{
+              background: "none",
+              border: 0,
+              padding: 4,
+              color: "#EDF3EF",
+              fontSize: 11.5,
+              opacity: 0.7,
+              textDecoration: "underline",
+              cursor: "pointer",
+            }}
+          >
+            {avisoCerrar}
+          </button>
         </div>
       ) : null}
     </div>

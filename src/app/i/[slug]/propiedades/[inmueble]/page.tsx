@@ -27,7 +27,8 @@ import {
   rutaPropiedadesWeb,
   recorridoEmbebible,
   tieneRecorrido,
-  ubicacionPublica,
+  ubicacionPublica,
+
 } from "@/lib/realty/landing";
 import {
   REALTY_OPERATION_LABELS,
@@ -120,10 +121,11 @@ export default async function PaginaFicha({ params }: Props) {
   const portada = fotoPortada(inm);
   const resto = inm.fotos.filter((f) => f !== portada).slice(0, 6);
   const donde = ubicacionPublica(inm);
-  // recorridoEmbebible, no tours[0]: elige el primero que se pueda
-  // PINTAR. tieneRecorrido() responde lo mismo y es el que usa la
-  // insignia del listado, para que insignia y ficha no se contradigan.
-  const tour = tieneRecorrido(inm) ? recorridoEmbebible(inm) : null;
+  // recorridoEmbebible devuelve el primero que SE PUEDE PINTAR, o null.
+  // Antes esto era `tieneRecorrido(inm) ? inm.tours[0] : null`, que hacía
+  // dos veces el mismo trabajo (y con tours[0] enseñaba la panorámica
+  // propia en vez del Matterport si estaba primero).
+  const tour = recorridoEmbebible(inm);
   const embedTour = tour ? realtyTourEmbedUrl(tour.url) : null;
   const mapa = embedMapa(inm);
   const estatus = REALTY_PROPERTY_STATUS_UI[inm.status];

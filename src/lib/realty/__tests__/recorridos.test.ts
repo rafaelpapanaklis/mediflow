@@ -46,9 +46,9 @@ test("la liga de Compartir se queda como está", () => {
 });
 
 test("las variantes que SÍ traen el identificador se canonizan a /show/?m=", () => {
+  // Sin parámetros: los que traen se conservan, y eso lo fija la prueba
+  // siguiente. Aquí solo se comprueba que la FORMA converge.
   const variantes = [
-    // el subdominio de siempre, con parámetros de más que Matterport agrega
-    `https://my.matterport.com/show/?m=${ID}&play=1&brand=0`,
     // sin subdominio
     `https://matterport.com/show/?m=${ID}`,
     // con www
@@ -67,14 +67,60 @@ test("las variantes que SÍ traen el identificador se canonizan a /show/?m=", ()
   }
 });
 
-test("los parámetros de más NO viajan al iframe (la liga guardada es UNA)", () => {
-  // Importa para la deduplicación del route handler: dos pegadas de la
-  // misma casa con distinto `?play=` son el MISMO recorrido, y si se
-  // guardaran distintas el 409 de "ya está agregado" no saltaría.
-  assert.equal(
-    normalizeRealtyTourUrl(`https://my.matterport.com/show/?m=${ID}&play=1`),
-    normalizeRealtyTourUrl(`https://my.matterport.com/show/?m=${ID}&brand=0&help=2`),
+test("los parámetros de la liga SE CONSERVAN (son decisiones de una persona)", () => {
+  /* 🔴 La primera versión de este arreglo los tiraba, y era una regresión
+   * sobre filas que HOY se ven bien: `lang=es` devuelve el visor al
+   * español, `brand=0` quita la marca de Matterport del recorrido del
+   * cliente, `play=1` lo arranca solo y `sr`/`ss` son la vista inicial que
+   * el asesor eligió al compartir. Lo único que se canoniza es `m`.
+   */
+  const conParams = normalizeRealtyTourUrl(
+    `https://my.matterport.com/show/?m=${ID}&lang=es&brand=0&sr=-.05,-1.2`,
   );
+  assert.ok(conParams.includes(`m=${ID}`), "el identificador sigue ahí");
+  for (const p of ["lang=es", "brand=0"]) {
+    assert.ok(conParams.includes(p), `se perdió "${p}": ${conParams}`);
+  }
+  assert.ok(conParams.startsWith("https://my.matterport.com/show/?"), conParams);
+  // Y una liga de /models/<id> con parámetros también los conserva.
+  assert.ok(
+    normalizeRealtyTourUrl(`https://my.matterport.com/models/${ID}?lang=es`).includes("lang=es"),
+  );
+});
+
+test("http:// se rechaza en TODOS los proveedores… menos donde nunca hubo http", () => {
+  /* 🔴 El acortador de YouTube es la excepción, y tiene que serlo: su
+   * reescritura NO asciende de protocolo, construye una URL de youtube.com
+   * que ya es https de origen. Poner la guarda de protocolo ANTES de esa
+   * rama rompió `http://youtu.be/<id>`, que llevaba funcionando desde la
+   * Ola 1 y es lo que llega reenviado por WhatsApp o por correo.
+   */
+  assert.equal(
+    realtyTourEmbedUrl("http://youtu.be/dQw4w9WgXcQ"),
+    "https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ?rel=0",
+  );
+  // El resto sí: en una página https, un iframe http lo bloquea el
+  // navegador por contenido mixto — marco en blanco y sin un solo error.
+  assert.equal(realtyTourEmbedUrl(`http://my.matterport.com/show/?m=${ID}`), null);
+  assert.equal(realtyTourEmbedUrl("http://kuula.co/post/7l8Rk"), null);
+});
+
+test("un id de Matterport es de ONCE caracteres: una palabra no cuela", () => {
+  /* Con el patrón laxo de antes (`{6,64}`), estas dos se canonizaban, la
+   * puerta las daba por buenas y se guardaban — para acabar pintando el
+   * marco roto que todo esto viene a evitar.
+   */
+  for (const trampa of [
+    "https://matterport.com/es/show/precios",
+    "https://matterport.com/discover/space/casa?m=newsletter",
+    "https://my.matterport.com/show/?m=contacto",
+  ]) {
+    assert.equal(realtyTourEmbedUrl(trampa), null, `no debería aceptarse: ${trampa}`);
+    assert.equal(checkRealtyTourUrl(trampa).ok, false, `no debería guardarse: ${trampa}`);
+  }
+  // Y el id de verdad sigue pasando.
+  assert.equal(matterportSpaceId(COMPARTIR), ID);
+  assert.equal(ID.length, 11);
 });
 
 test("una liga de Matterport SIN identificador se rechaza, no se guarda rota", () => {
@@ -109,6 +155,8 @@ test("matterportSpaceId: de dónde sale el identificador y de dónde no", () => 
   // Un `m=` vacío o de basura no cuenta como identificador.
   assert.equal(matterportSpaceId("https://my.matterport.com/show/?m="), null);
   assert.equal(matterportSpaceId("https://my.matterport.com/show/?m=ab"), null);
+  // Y una palabra de longitud plausible tampoco es un identificador.
+  assert.equal(matterportSpaceId("https://my.matterport.com/show/?m=newsletter"), null);
 });
 
 /* ══════════════════════════════════════════════════════════════════
@@ -119,6 +167,14 @@ test("Kuula: /post/<id> es la página; se reescribe a la de compartir", () => {
   // Los ids de Kuula son CORTOS (cinco caracteres). El patrón único de
   // antes exigía seis y dejaba pasar esta liga sin reescribir.
   assert.equal(realtyTourEmbedUrl("https://kuula.co/post/7l8Rk"), "https://kuula.co/share/7l8Rk");
+  // 🔴 Y NADA MÁS que esa forma. Sin exigir dos segmentos exactos, un
+  // `/post/collection/7lXYZ` se convertía en `https://kuula.co/share/collection`
+  // —una liga SIN identificador— y se guardaba con 201, rota. Esta rama no
+  // verifica su propio resultado, así que solo puede reescribir lo que sabe leer.
+  assert.equal(
+    realtyTourEmbedUrl("https://kuula.co/post/collection/7lXYZ"),
+    "https://kuula.co/post/collection/7lXYZ",
+  );
   assert.equal(realtyTourEmbedUrl("https://kuula.co/share/7l8Rk"), "https://kuula.co/share/7l8Rk");
   // Una colección ya viene en forma de compartir: NO se toca.
   assert.equal(
@@ -136,6 +192,16 @@ test("Luma: /capture/<uuid> es la página; /embed/<uuid> es el visor", () => {
   assert.equal(
     realtyTourEmbedUrl(`https://lumalabs.ai/embed/${uuid}`),
     `https://lumalabs.ai/embed/${uuid}`,
+  );
+  // Los parámetros del visor se conservan, igual que en Matterport.
+  assert.equal(
+    realtyTourEmbedUrl(`https://lumalabs.ai/capture/${uuid}?mode=sparkles`),
+    `https://lumalabs.ai/embed/${uuid}?mode=sparkles`,
+  );
+  // Y una ruta que no es la que se sabe leer, tal cual.
+  assert.equal(
+    realtyTourEmbedUrl(`https://lumalabs.ai/capture/${uuid}/algo`),
+    `https://lumalabs.ai/capture/${uuid}/algo`,
   );
 });
 

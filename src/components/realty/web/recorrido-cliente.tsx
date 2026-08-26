@@ -63,6 +63,11 @@ export function EmbedRecorrido({
           avisoTitulo="El recorrido no se está mostrando"
           avisoCuerpo="Puede que tarde de más o que tu conexión lo esté bloqueando. Ábrelo en una pestaña nueva."
           avisoAbrir={`Ver el recorrido en ${proveedor}`}
+          avisoCerrar="Seguir esperando"
+          // La web pública SÍ lleva la salida siempre visible: es el único
+          // sitio donde el visitante no tiene otra forma de abrir el
+          // recorrido si el marco se queda mudo.
+          salidaSiempre
         />
       </div>
     );
