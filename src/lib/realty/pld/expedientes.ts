@@ -23,17 +23,21 @@ import "server-only";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import type { RealtyContext } from "@/lib/realty-auth";
-import type {
-  BeneficiarioControlador,
-  DocumentoRow,
-  ExpedienteResumen,
-  ExpedienteRow,
-  PldDocKind,
-  PldPepKind,
-  PldPersonKind,
+import {
+  PLD_DOC_KIND_LIST,
+  PLD_PEP_KINDS,
+  PLD_PERSON_KINDS,
+  type BeneficiarioControlador,
+  type DocumentoRow,
+  type ExpedienteResumen,
+  type ExpedienteRow,
+  type PldDocKind,
+  type PldPepKind,
+  type PldPersonKind,
 } from "./contrato";
 import {
   estadoDeExpediente,
+  fechaDeCalendario,
   riesgoDeExpediente,
   sumarAnios,
   type PldParams,
@@ -115,9 +119,8 @@ export function leerBeneficiarios(raw: Prisma.JsonValue | null): BeneficiarioCon
   return out;
 }
 
-const PEP_KINDS: PldPepKind[] = ["NO", "PEP", "FAMILIAR", "ASOCIADO"];
 function esPepKind(v: unknown): v is PldPepKind {
-  return typeof v === "string" && (PEP_KINDS as string[]).includes(v);
+  return typeof v === "string" && (PLD_PEP_KINDS as string[]).includes(v);
 }
 
 const iso = (d: Date | null): string | null => (d ? d.toISOString() : null);
@@ -305,7 +308,7 @@ export interface ParcheExpediente {
   notes?: string | null;
 }
 
-const PERSON_KINDS: PldPersonKind[] = ["FISICA", "MORAL", "FIDEICOMISO"];
+
 
 function limpiar(v: unknown, max: number): string | null {
   if (typeof v !== "string") return null;
@@ -327,7 +330,7 @@ export function parsearParcheExpediente(
 
   if ("personKind" in body) {
     const pk = body.personKind;
-    if (typeof pk !== "string" || !(PERSON_KINDS as string[]).includes(pk)) {
+    if (typeof pk !== "string" || !(PLD_PERSON_KINDS as string[]).includes(pk)) {
       return { error: "Ese tipo de persona no existe." };
     }
     parche.personKind = pk as PldPersonKind;
@@ -348,10 +351,14 @@ export function parsearParcheExpediente(
     const raw = body.birthDate;
     if (raw === null || raw === "") {
       parche.birthDate = null;
-    } else if (typeof raw === "string" && !Number.isNaN(Date.parse(raw))) {
-      parche.birthDate = raw;
     } else {
-      return { error: "Esa fecha de nacimiento no se entiende." };
+      // 🔴 Al MEDIODÍA UTC, no a medianoche (ver HORA_DE_CALENDARIO en
+      // umbrales.ts). Con medianoche, un nacimiento capturado como
+      // 1990-05-14 se pintaba 1990-05-13 en México y se le restaba otro día
+      // en cada ida y vuelta por el formulario.
+      const d = fechaDeCalendario(raw);
+      if (!d) return { error: "Esa fecha de nacimiento no se entiende." };
+      parche.birthDate = d.toISOString();
     }
   }
 
@@ -530,16 +537,13 @@ export async function recalcularRiesgo(ctx: RealtyContext, fileId: string): Prom
 
 // ── Documentos del expediente ──────────────────────────────────────────
 
-export const PLD_DOC_KINDS: PldDocKind[] = [
-  "IDENTIFICACION",
-  "COMPROBANTE_DOMICILIO",
-  "CONSTANCIA_FISCAL",
-  "CURP",
-  "ACTA_CONSTITUTIVA",
-  "PODER",
-  "BENEFICIARIO_CONTROLADOR",
-  "OTRO",
-];
+/**
+ * Alias del servidor sobre la lista del contrato. Se conserva el nombre
+ * porque la ruta de subida ya importa `PLD_DOC_KINDS`, y se re-exporta en
+ * vez de duplicar: dos listas de tipos de documento que se separen es un
+ * papel que la pantalla ofrece subir y la API rechaza.
+ */
+export const PLD_DOC_KINDS: PldDocKind[] = PLD_DOC_KIND_LIST;
 
 /**
  * Hasta cuándo hay que conservar un papel que se sube HOY.

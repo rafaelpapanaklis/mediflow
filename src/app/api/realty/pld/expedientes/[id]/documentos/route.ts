@@ -30,6 +30,7 @@ import {
   vigenciaPorOmision,
 } from "@/lib/realty/pld/expedientes";
 import { getPldParams } from "@/lib/realty/pld/parametros";
+import { fechaDeCalendario } from "@/lib/realty/pld/umbrales";
 import type { PldDocKind } from "@/lib/realty/pld/contrato";
 import { errorPld, gatePld, malaPeticion, noEncontrado } from "../../../_guard";
 
@@ -38,10 +39,14 @@ export const dynamic = "force-dynamic";
 /** Tope de papeles por expediente. Una red, no una regla de negocio. */
 const MAX_DOCS = 60;
 
+/**
+ * La fecha de expedición y la de vigencia son FECHAS DE CALENDARIO, no
+ * instantes: se guardan al mediodía UTC (ver HORA_DE_CALENDARIO en
+ * umbrales.ts). A medianoche, un comprobante expedido el 1 de marzo salía
+ * como 28 de febrero en toda la República.
+ */
 function fechaOpcional(raw: FormDataEntryValue | null): Date | null {
-  if (typeof raw !== "string" || !raw.trim()) return null;
-  const t = Date.parse(raw);
-  return Number.isNaN(t) ? null : new Date(t);
+  return fechaDeCalendario(typeof raw === "string" ? raw : null);
 }
 
 export async function POST(req: Request, { params }: { params: { id: string } }) {

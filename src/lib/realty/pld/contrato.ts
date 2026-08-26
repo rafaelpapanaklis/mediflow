@@ -57,6 +57,31 @@ export type EstadoExpediente = "INCOMPLETO" | "COMPLETO" | "VENCIDO";
 /** Contra qué umbral cayó una operación. */
 export type NivelUmbral = "NINGUNO" | "IDENTIFICACION" | "AVISO";
 
+// ── Los valores, en el orden en que se enseñan ─────────────────────────
+//
+// 🔴 VIVEN AQUÍ Y NO EN expedientes.ts. Ese archivo es "server-only": un
+// componente "use client" que importara una sola de estas listas se
+// arrastraría el módulo entero —y con él prisma— hasta el navegador, y el
+// build se cae por un `import` que parecía inofensivo. Aquí son la ÚNICA
+// definición: la validación del servidor y los desplegables de la pantalla
+// leen la misma lista, así que no pueden separarse con el tiempo.
+
+export const PLD_PERSON_KINDS: PldPersonKind[] = ["FISICA", "MORAL", "FIDEICOMISO"];
+
+export const PLD_PEP_KINDS: PldPepKind[] = ["NO", "PEP", "FAMILIAR", "ASOCIADO"];
+
+/** El orden importa: primero los dos que casi siempre se piden. */
+export const PLD_DOC_KIND_LIST: PldDocKind[] = [
+  "IDENTIFICACION",
+  "COMPROBANTE_DOMICILIO",
+  "CONSTANCIA_FISCAL",
+  "CURP",
+  "ACTA_CONSTITUTIVA",
+  "PODER",
+  "BENEFICIARIO_CONTROLADOR",
+  "OTRO",
+];
+
 // ── Etiquetas en español de México ─────────────────────────────────────
 
 export const PLD_PERSON_KIND_LABELS: Record<PldPersonKind, string> = {

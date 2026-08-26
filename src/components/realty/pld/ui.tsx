@@ -482,6 +482,258 @@ export function Pestanas({
   );
 }
 
+// ── Campos ─────────────────────────────────────────────────────────────
+//
+// El kit de las calculadoras (calc/ui.tsx) trae dinero, número, selector y
+// casilla: sus tres pantallas no capturan nada más. El expediente sí —RFC,
+// domicilio, fechas, motivos— así que las tres piezas que faltan viven
+// aquí. Se copia su `inputBase` en vez de exportarlo desde allá: ese
+// archivo lo comparten las demás terminales de la ola y una firma nueva
+// suya es un conflicto de rebase garantizado por tres reglas de CSS.
+
+const entrada: React.CSSProperties = {
+  width: "100%",
+  height: 38,
+  background: "var(--bg)",
+  color: "var(--text-1)",
+  border: "1px solid var(--border-soft)",
+  borderRadius: 10,
+  padding: "0 11px",
+  fontSize: 13.5,
+  outline: "none",
+  fontFamily: "inherit",
+};
+
+export function InputTexto({
+  id,
+  value,
+  onChange,
+  placeholder,
+  maxLength,
+  disabled,
+  mayusculas,
+}: {
+  id?: string;
+  value: string;
+  onChange: (v: string) => void;
+  placeholder?: string;
+  maxLength?: number;
+  disabled?: boolean;
+  /** RFC y CURP se capturan en mayúsculas SIEMPRE. */
+  mayusculas?: boolean;
+}) {
+  return (
+    <input
+      id={id}
+      type="text"
+      autoComplete="off"
+      value={value}
+      disabled={disabled}
+      maxLength={maxLength}
+      placeholder={placeholder}
+      onChange={(e) => onChange(mayusculas ? e.target.value.toUpperCase() : e.target.value)}
+      style={{
+        ...entrada,
+        opacity: disabled ? 0.6 : 1,
+        textTransform: mayusculas ? "uppercase" : undefined,
+      }}
+    />
+  );
+}
+
+export function AreaTexto({
+  id,
+  value,
+  onChange,
+  placeholder,
+  maxLength,
+  filas = 3,
+  disabled,
+}: {
+  id?: string;
+  value: string;
+  onChange: (v: string) => void;
+  placeholder?: string;
+  maxLength?: number;
+  filas?: number;
+  disabled?: boolean;
+}) {
+  return (
+    <textarea
+      id={id}
+      rows={filas}
+      value={value}
+      disabled={disabled}
+      maxLength={maxLength}
+      placeholder={placeholder}
+      onChange={(e) => onChange(e.target.value)}
+      style={{
+        ...entrada,
+        height: "auto",
+        padding: "9px 11px",
+        lineHeight: 1.5,
+        resize: "vertical",
+        opacity: disabled ? 0.6 : 1,
+      }}
+    />
+  );
+}
+
+/**
+ * Fecha. El valor viaja como "AAAA-MM-DD" —lo que el input nativo entiende—
+ * y NUNCA como un Date: un Date se serializa en UTC y una fecha capturada
+ * en México por la tarde retrocede un día al ida y vuelta.
+ */
+export function InputFecha({
+  id,
+  value,
+  onChange,
+  disabled,
+  max,
+}: {
+  id?: string;
+  value: string;
+  onChange: (v: string) => void;
+  disabled?: boolean;
+  max?: string;
+}) {
+  return (
+    <input
+      id={id}
+      type="date"
+      value={value}
+      max={max}
+      disabled={disabled}
+      onChange={(e) => onChange(e.target.value)}
+      style={{ ...entrada, opacity: disabled ? 0.6 : 1 }}
+    />
+  );
+}
+
+/**
+ * Fila de filtros. Botones y no un <select>: son cuatro o cinco opciones
+ * que se leen de un vistazo, y el tablero salta a una de ellas — un select
+ * escondería justo lo que la tarjeta acaba de señalar.
+ */
+export function Filtros({
+  valor,
+  onCambiar,
+  items,
+}: {
+  valor: string;
+  onCambiar: (v: string) => void;
+  items: { key: string; label: string; contador?: number }[];
+}) {
+  return (
+    <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+      {items.map((it) => {
+        const on = it.key === valor;
+        return (
+          <button
+            key={it.key}
+            type="button"
+            aria-pressed={on}
+            onClick={() => onCambiar(it.key)}
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 6,
+              padding: "5px 11px",
+              borderRadius: 999,
+              border: `1px solid ${on ? "var(--border-brand, #167a54)" : "var(--border-soft)"}`,
+              background: on ? "var(--brand-softer, rgba(22,128,84,0.12))" : "var(--bg)",
+              color: on ? "var(--text-1)" : "var(--text-3)",
+              fontSize: 11.5,
+              fontWeight: on ? 700 : 500,
+              cursor: "pointer",
+              fontFamily: "inherit",
+              whiteSpace: "nowrap",
+            }}
+          >
+            {it.label}
+            {typeof it.contador === "number" && (
+              <span style={{ color: "var(--text-4)", fontVariantNumeric: "tabular-nums" }}>
+                {it.contador}
+              </span>
+            )}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+/**
+ * Lo que falta capturar en /admin para que el módulo pueda comparar.
+ *
+ * Gemelo visual de `Faltantes` de calc/ui.tsx y NO ese mismo componente:
+ * aquel exige `CalcFaltante[]`, cuyo `kind` es la unión cerrada de
+ * RealtyCalcParamKind. `FaltantePld.kind` es `string` porque cruza la
+ * frontera del servidor al cliente ya serializado, y forzar el tipo con un
+ * `as` para reusar 30 líneas de JSX es justo el atajo que esconde el día
+ * que las dos formas dejen de coincidir.
+ */
+export function FaltantesPld({
+  faltantes,
+  titulo,
+  cuerpo,
+}: {
+  faltantes: { kind: string; stateCode: string; etiqueta: string; comoResolver: string }[];
+  titulo: string;
+  cuerpo: string;
+}) {
+  return (
+    <div
+      style={{
+        padding: 18,
+        borderRadius: 12,
+        background: "rgba(191, 130, 20, 0.08)",
+        border: "1px solid rgba(191, 130, 20, 0.30)",
+      }}
+    >
+      <div style={{ display: "flex", gap: 9, alignItems: "flex-start" }}>
+        <AlertTriangle size={16} style={{ flexShrink: 0, marginTop: 1, color: "#a8741a" }} />
+        <div style={{ minWidth: 0 }}>
+          <h3 style={{ margin: 0, fontSize: 13.5, fontWeight: 700, color: "var(--text-1)" }}>
+            {titulo}
+          </h3>
+          <p style={{ margin: "6px 0 0", fontSize: 12.5, color: "var(--text-2)", lineHeight: 1.55 }}>
+            {cuerpo}
+          </p>
+          <ul style={{ margin: "10px 0 0", paddingLeft: 18, display: "grid", gap: 6 }}>
+            {faltantes.map((f, i) => (
+              <li
+                key={`${f.kind}-${f.stateCode}-${i}`}
+                style={{ fontSize: 12.5, color: "var(--text-1)" }}
+              >
+                <strong style={{ fontWeight: 600 }}>{f.etiqueta}</strong>
+                <span
+                  style={{ display: "block", fontSize: 11.5, color: "var(--text-3)", marginTop: 1 }}
+                >
+                  {f.comoResolver}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** El error de una petición, en rojo y sin tecnicismos. */
+export function ErrorLinea({ texto }: { texto: string | null }) {
+  if (!texto) return null;
+  return (
+    <p
+      role="alert"
+      style={{ margin: 0, fontSize: 12, color: "#b03030", lineHeight: 1.5, fontWeight: 600 }}
+    >
+      {texto}
+    </p>
+  );
+}
+
 /** Aviso ámbar corto, para lo que hay que leer pero no bloquea. */
 export function AvisoAmbar({ children }: { children: ReactNode }) {
   return (

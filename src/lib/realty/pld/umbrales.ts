@@ -366,11 +366,50 @@ export function etiquetaPeriodo(periodMonth: string): string {
 }
 
 /**
+ * 🔴 LA CONVENCIÓN DEL MEDIODÍA — por qué ninguna FECHA DE CALENDARIO de
+ * este módulo se guarda a medianoche.
+ *
+ * Una fecha de calendario (el 17 del corte, la fecha de nacimiento, la
+ * vigencia de un comprobante) no es un instante: es un día. Pero la columna
+ * es un DateTime, así que hay que elegir una hora, y medianoche UTC es la
+ * peor posible: en México (UTC-6) esa medianoche cae a las 18:00 del día
+ * ANTERIOR, así que el corte del 17 se pinta como 16 y una fecha de
+ * nacimiento retrocede un día en cada ida y vuelta por el formulario.
+ *
+ * Al MEDIODÍA UTC no hay zona mexicana —de UTC-6 a UTC-8— que cambie de
+ * día: son las 04:00-06:00 de la mañana del día correcto. Es la misma
+ * convención que ya usa `parseDate` de src/app/api/realty/deals/service.ts
+ * para el cierre de una operación, y por eso el periodo de un cierre no se
+ * equivoca de mes.
+ *
+ * Los INSTANTES de verdad (cuándo se revisó el expediente, cuándo se marcó
+ * el aviso, cuándo vence la alerta de 24 horas) NO pasan por aquí: esos sí
+ * son un momento y se guardan tal cual.
+ */
+export const HORA_DE_CALENDARIO = "T12:00:00.000Z";
+
+/**
+ * Lo que manda un `<input type="date">` ("AAAA-MM-DD") → un Date al
+ * mediodía UTC. Devuelve null si no se entiende.
+ *
+ * El `Z` explícito importa: `new Date("2026-04-17T12:00:00")` SIN zona se
+ * interpreta en la del servidor, y entonces el resultado depende de cómo
+ * esté configurada la máquina que corra el despliegue.
+ */
+export function fechaDeCalendario(raw: unknown): Date | null {
+  if (typeof raw !== "string") return null;
+  const s = raw.trim();
+  if (!s) return null;
+  const t = Date.parse(/^\d{4}-\d{2}-\d{2}$/.test(s) ? `${s}${HORA_DE_CALENDARIO}` : s);
+  return Number.isNaN(t) ? null : new Date(t);
+}
+
+/**
  * Cuándo vence el aviso de un periodo: el día de corte del mes SIGUIENTE.
  *
- * Se devuelve como medianoche UTC del día de corte, la misma convención que
- * usa `effectiveFrom` en el resto del vertical. `Date.UTC` resuelve solo el
- * salto de año: el periodo "2026-12" vence en enero de 2027.
+ * Al MEDIODÍA UTC del día de corte — ver HORA_DE_CALENDARIO: a medianoche,
+ * el 17 se pintaba como 16 en toda la República. `Date.UTC` resuelve solo
+ * el salto de año: el periodo "2026-12" vence en enero de 2027.
  *
  * ⚠️ NO se recorre al siguiente día hábil cuando el corte cae en sábado,
  * domingo o día festivo. Es a propósito: adelantar el vencimiento nunca
@@ -380,7 +419,7 @@ export function etiquetaPeriodo(periodMonth: string): string {
 export function vencimientoDelPeriodo(periodMonth: string, diaLimite: number): Date {
   const [y, m] = periodMonth.split("-").map(Number);
   // m es 1–12; como índice 0-based, el mes SIGUIENTE es exactamente `m`.
-  return new Date(Date.UTC(y, m, diaLimite));
+  return new Date(Date.UTC(y, m, diaLimite, 12, 0, 0));
 }
 
 /** Días de calendario entre dos instantes (positivo = `hasta` es futuro). */

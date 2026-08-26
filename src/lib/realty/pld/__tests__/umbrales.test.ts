@@ -20,6 +20,7 @@ import type { RawCalcParamRow } from "../../calc/catalog";
 import { toCents } from "../../calc/money";
 import {
   diasEntre,
+  fechaDeCalendario,
   documentosRequeridos,
   estadoDeExpediente,
   etiquetaPeriodo,
@@ -503,4 +504,46 @@ test("un riesgo ALTO nunca se degrada a MEDIO por acumular motivos", () => {
   });
   assert.equal(r.risk, "ALTO");
   assert.equal(r.motivos.length, 2);
+});
+
+// ── 10. La convención del MEDIODÍA ─────────────────────────────────────
+//
+// Una fecha de calendario guardada a medianoche UTC se pinta un día ANTES
+// en toda la República. Esta sección es la red de esa regla: es un bug que
+// no truena nada — solo enseña el 16 donde la ley dice 17.
+
+test("una fecha de <input type=date> se guarda al mediodía UTC, no a medianoche", () => {
+  const d = fechaDeCalendario("2026-04-17");
+  assert.ok(d);
+  assert.equal(d.toISOString(), "2026-04-17T12:00:00.000Z");
+});
+
+test("🔴 a medianoche UTC el día RETROCEDE en México; al mediodía no", () => {
+  // Lo que pasaba antes: el corte del 17 se pintaba como 16.
+  assert.equal(
+    fechaLocalISO(new Date("2026-04-17T00:00:00.000Z"), "America/Mexico_City"),
+    "2026-04-16",
+  );
+  // Lo que pasa ahora, en las tres zonas mexicanas (UTC-6, -7 y -8).
+  const d = fechaDeCalendario("2026-04-17") as Date;
+  assert.equal(fechaLocalISO(d, "America/Mexico_City"), "2026-04-17");
+  assert.equal(fechaLocalISO(d, "America/Chihuahua"), "2026-04-17");
+  assert.equal(fechaLocalISO(d, "America/Tijuana"), "2026-04-17");
+});
+
+test("el vencimiento del periodo cae en el día de corte también en la zona de la cuenta", () => {
+  const d = vencimientoDelPeriodo("2026-03", 17);
+  assert.equal(fechaLocalISO(d, "America/Mexico_City"), "2026-04-17");
+  assert.equal(fechaLocalISO(d, "America/Tijuana"), "2026-04-17");
+});
+
+test("una fecha con hora se respeta tal cual; lo que no se entiende da null", () => {
+  const conHora = fechaDeCalendario("2026-04-17T23:30:00.000Z");
+  assert.equal(conHora?.toISOString(), "2026-04-17T23:30:00.000Z");
+  assert.equal(fechaDeCalendario(""), null);
+  assert.equal(fechaDeCalendario("   "), null);
+  assert.equal(fechaDeCalendario("ayer"), null);
+  assert.equal(fechaDeCalendario(null), null);
+  assert.equal(fechaDeCalendario(undefined), null);
+  assert.equal(fechaDeCalendario(20260417), null);
 });
