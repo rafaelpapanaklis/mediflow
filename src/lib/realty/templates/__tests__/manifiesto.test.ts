@@ -340,16 +340,108 @@ test("el editor no puede volver a llamar a Panel sin la clave del bloque", () =>
 });
 
 /* ══════════════════════════════════════════════════════════════════
-   2 · LAS NUEVE PLANTILLAS
+   2 · LAS QUINCE PLANTILLAS — cinco por modo (tres de la ola 1 y dos
+   premium de la segunda)
    ══════════════════════════════════════════════════════════════════ */
 
-test("hay tres plantillas por modo y ninguna se cruza", () => {
+test("hay cinco plantillas por modo y ninguna se cruza", () => {
+  assert.equal(REALTY_WEB_TEMPLATE_IDS.length, 15, "se esperaban quince plantillas");
   for (const modo of ["AGENCY", "AGENT", "OWNER"] as RealtyMode[]) {
     const lista = plantillasDeModo(modo);
-    assert.equal(lista.length, 3, `el modo ${modo} no tiene tres plantillas`);
+    assert.equal(lista.length, 5, `el modo ${modo} no tiene cinco plantillas`);
     for (const id of lista) {
       assert.equal(REALTY_WEB_MANIFESTS[id].modo, modo, `${id} declara otro modo en su manifiesto`);
     }
+  }
+});
+
+test("las seis premium existen, dos por modo, y son las que se pidieron", () => {
+  // Nombradas a propósito: si alguien renombra una, el editor de una cuenta
+  // que la tenía guardada caería a la de fábrica sin avisar.
+  const premium: Record<RealtyMode, RealtyWebTemplateId[]> = {
+    AGENCY: ["galeria", "torre"],
+    AGENT: ["editorial", "tarjeta"],
+    OWNER: ["disponibilidad", "vitrina"],
+  };
+  for (const modo of Object.keys(premium) as RealtyMode[]) {
+    for (const id of premium[modo]) {
+      assert.equal(REALTY_WEB_MANIFESTS[id]?.modo, modo, `falta la premium «${id}» en ${modo}`);
+    }
+  }
+});
+
+test("ningún bloque de ninguna plantilla se queda sin nombre para el editor", () => {
+  // El editor rotula cada bloque con `bloqueDef(id).nombre`. Un bloque que
+  // no está en el catálogo cae a un def neutro cuyo nombre es el id crudo
+  // ("disponibilidad-ahora") — y eso, en pantalla, es un bloque sin nombre.
+  const sinNombre: string[] = [];
+  for (const id of REALTY_WEB_TEMPLATE_IDS) {
+    const m = REALTY_WEB_MANIFESTS[id];
+    assert.ok(m.nombre.trim(), `la plantilla ${id} no tiene nombre`);
+    assert.ok(m.para.trim(), `la plantilla ${id} no dice para quién es`);
+    assert.ok(m.estructura.trim(), `la plantilla ${id} no describe su estructura`);
+    for (const b of m.bloques) {
+      const def = REALTY_WEB_BLOQUES[b.id];
+      if (!def || !def.nombre.trim() || def.nombre === b.id) sinNombre.push(`${id}/${b.id}`);
+      for (const t of b.textos ?? []) {
+        if (!t.etiqueta.trim()) sinNombre.push(`${id}/${b.id}.${t.campo} (texto sin etiqueta)`);
+      }
+      for (const c of b.copia ?? []) {
+        if (!c.etiqueta.trim()) sinNombre.push(`${id}/${c.clave} (copia sin etiqueta)`);
+      }
+      for (const f of b.fotos ?? []) {
+        if (!f.nombre.trim()) sinNombre.push(`${id}/${f.id} (foto sin nombre)`);
+      }
+    }
+  }
+  assert.deepEqual(sinNombre, [], `bloques o campos sin nombre: ${sinNombre.join(", ")}`);
+});
+
+test("toda variante que pide una plantilla existe en el JSX o en el CSS del bloque", () => {
+  // Una `variante` es solo una cadena: nada la valida en tipos. Si se
+  // escribe mal ("revistta"), el bloque cae en silencio a su maquetado por
+  // defecto y la plantilla premium se ve como la de fábrica. Se acepta la
+  // variante si el .tsx la nombra o si algún CSS de la web la estiliza
+  // como `-<variante>` o `data-variante="<variante>"`.
+  const css = [
+    "src/components/realty/web/skin.css",
+    "src/components/realty/web/blocks/portada.css",
+    "src/components/realty/web/blocks/inmuebles.css",
+    "src/components/realty/web/blocks/secundarios.css",
+  ]
+    .map((p) => join(RAIZ, p))
+    .filter((p) => existsSync(p))
+    .map((p) => readFileSync(p, "utf8"))
+    .join("\n");
+  const huerfanas: string[] = [];
+  for (const id of REALTY_WEB_TEMPLATE_IDS) {
+    for (const b of REALTY_WEB_MANIFESTS[id].bloques) {
+      if (!b.variante) continue;
+      const enJsx = codigoDelBloque(b.id).includes(`"${b.variante}"`);
+      const enCss =
+        css.includes(`-${b.variante}`) || css.includes(`data-variante="${b.variante}"`);
+      if (!enJsx && !enCss) huerfanas.push(`${id}/${b.id}=${b.variante}`);
+    }
+  }
+  assert.deepEqual(huerfanas, [], `variantes que nadie pinta: ${huerfanas.join(", ")}`);
+});
+
+test("las seis premium no reordenan sin más: cada una trae al menos una variante que las nueve no usan", () => {
+  // El encargo: si las seis solo reordenan variantes existentes, no se van
+  // a ver distintas y el encargo falla. Se comprueba mecánicamente.
+  const originales: RealtyWebTemplateId[] = [
+    "asesor", "minimal", "historia", "clasica", "corporativa", "boutique",
+    "mis-rentas", "una-propiedad", "catalogo",
+  ];
+  const usadas = new Set<string>();
+  for (const id of originales) {
+    for (const b of REALTY_WEB_MANIFESTS[id].bloques) usadas.add(`${b.id}:${b.variante ?? ""}`);
+  }
+  for (const id of ["galeria", "torre", "editorial", "tarjeta", "disponibilidad", "vitrina"] as RealtyWebTemplateId[]) {
+    const nuevas = REALTY_WEB_MANIFESTS[id].bloques
+      .filter((b) => b.variante && !usadas.has(`${b.id}:${b.variante}`))
+      .map((b) => `${b.id}:${b.variante}`);
+    assert.ok(nuevas.length > 0, `«${id}» solo reordena variantes que ya usaban las nueve`);
   }
 });
 

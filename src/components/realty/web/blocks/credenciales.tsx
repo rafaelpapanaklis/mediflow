@@ -14,6 +14,10 @@
    La LICENCIA de la cuenta se pinta aparte y SOLO si sigue vigente
    (aCuentaPublica la deja en null cuando está vencida): presumir una
    licencia caducada es peor que no enseñar ninguna.
+
+   Variantes: `tira`, `linea`, `sello` y la premium `prosa` (editorial): ni
+   tarjetas ni iconos, un solo párrafo en serif cursiva con el título como
+   kicker — las acreditaciones dichas, no enlistadas.
    ═══════════════════════════════════════════════════════════════════════ */
 
 import type { RealtyWebData } from "@/lib/realty/landing";
@@ -28,6 +32,33 @@ export function BloqueCredenciales({ data }: { data: RealtyWebData }) {
   if (config.credenciales.length === 0 && !licencia) return null;
 
   const v = variante(data, ID) || "tira";
+
+  if (v === "prosa") {
+    // Una sola oración separada por " · ": la licencia primero (es la que
+    // pesa legalmente) y después cada credencial con su folio y detalle
+    // entre paréntesis. Sin Encabezado: el título va como kicker y la
+    // bajada no cabe en una frase.
+    const t = titulo(data, ID);
+    const partes: string[] = [];
+    if (licencia) {
+      partes.push(
+        `${copia(data, ID, "credenciales.licencia")} ${licencia.numero}${licencia.estado ? " · " + licencia.estado : ""}`,
+      );
+    }
+    for (const c of config.credenciales) {
+      partes.push(
+        `${c.titulo}${c.folio ? ", " + copia(data, ID, "credenciales.folio") + " " + c.folio : ""}${c.detalle ? " (" + c.detalle + ")" : ""}`,
+      );
+    }
+    return (
+      <Sec id={ID} variante={v}>
+        <div className="dcrw-credenciales-prosa">
+          {t ? <p className="dcrw-kicker">{t}</p> : null}
+          <p className="dcrw-credenciales-texto">{partes.join(" · ")}</p>
+        </div>
+      </Sec>
+    );
+  }
 
   return (
     <Sec id={ID} variante={v}>

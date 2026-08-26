@@ -483,6 +483,38 @@ export function EditorWebInmuebles(props: EditorWebProps) {
             />
           </Panel>
 
+          {/* Solo cuando la portada de ESTA plantilla habla de UN inmueble
+              ("una-propiedad", "torre"): se sabe por su `consume`, no por
+              el id de la plantilla. Sin elegir, manda el más reciente. */}
+          {manifest.bloques.some((b) => b.id === "portada" && (b.consume ?? []).includes("inmuebles")) ? (
+            <Panel titulo="Inmueble destacado" abierto>
+              <Campo
+                etiqueta="El que manda la portada"
+                ayuda={
+                  props.data.inmuebles.length === 0
+                    ? "Todavía no tienes inmuebles publicados: la portada se pinta con el primero que publiques."
+                    : "Si lo dejas en «el más reciente», la portada cambia sola cuando publiques otro."
+                }
+              >
+                <select
+                  className="dcrwe-input"
+                  value={config.inmuebleDestacado}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    cambiar((c) => ({ ...c, inmuebleDestacado: v }));
+                  }}
+                >
+                  <option value="">El más reciente</option>
+                  {props.data.inmuebles.map((i) => (
+                    <option key={i.ref} value={i.ref}>
+                      {i.titulo}
+                    </option>
+                  ))}
+                </select>
+              </Campo>
+            </Panel>
+          ) : null}
+
           <h2 className="dcrwe-seccion">Secciones</h2>
           {bloquesDelManifiesto.map((b) => (
             <EditorBloque

@@ -9,6 +9,11 @@
 
    Los saltos de línea se respetan (se guardan como "\n" y se pintan como
    párrafos): quien escribe su historia la escribe en párrafos.
+
+   Variantes: `columna`, `editorial` (con retrato al lado) y la premium
+   `reportaje` (editorial): SIN foto —el retrato ya manda en la portada—,
+   el primer párrafo grande en serif con letra capital y el resto en una
+   columna de lectura centrada.
    ═══════════════════════════════════════════════════════════════════════ */
 
 import type { RealtyWebData } from "@/lib/realty/landing";
@@ -26,7 +31,9 @@ export function BloqueSobreMi({ data }: { data: RealtyWebData }) {
   if (parrafos.length === 0) return null;
 
   const v = variante(data, ID);
-  const imagen = foto(data, v === "editorial" ? "retrato" : "portada");
+  // `reportaje` no lleva foto: el retrato a sangre ya ocupó toda la portada
+  // y repetirlo aquí sería enseñar la misma cara dos veces seguidas.
+  const imagen = v === "reportaje" ? null : foto(data, v === "editorial" ? "retrato" : "portada");
 
   return (
     <Sec id={ID} variante={v}>
@@ -39,7 +46,11 @@ export function BloqueSobreMi({ data }: { data: RealtyWebData }) {
         <div className="dcrw-historia-texto">
           <Encabezado titulo={titulo(data, ID)} subtitulo={subtitulo(data, ID)} />
           {parrafos.map((p, i) => (
-            <p key={i}>{p}</p>
+            // La "entrada" es el primer párrafo del reportaje: grande, en
+            // serif y con letra capital. Solo en esa variante lleva clase.
+            <p key={i} className={v === "reportaje" && i === 0 ? "dcrw-historia-entrada" : undefined}>
+              {p}
+            </p>
           ))}
         </div>
       </div>
