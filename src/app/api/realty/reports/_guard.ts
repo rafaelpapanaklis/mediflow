@@ -102,6 +102,18 @@ export function yearFromQuery(ctx: RealtyContext, sp: URLSearchParams): number {
   return Number.isInteger(raw) && raw > 2000 && raw <= actual + 1 ? raw : actual;
 }
 
+/**
+ * Cartera o rentabilidad. Cualquier otra cosa es la cartera: una variante
+ * mal escrita en la URL no puede ser un 400 en un botón de descarga.
+ *
+ * Vive aquí y no en el `route.ts` porque un route handler de Next SOLO
+ * puede exportar los verbos y su configuración — cualquier otro export
+ * truena el build con "is not a valid Route export field".
+ */
+export function variantFromQuery(sp: URLSearchParams): "cartera" | "rentabilidad" {
+  return sp.get("variant") === "rentabilidad" ? "rentabilidad" : "cartera";
+}
+
 /** El id del query, o null. Nada llega crudo a Prisma sin pasar por aquí. */
 export function idFromQuery(sp: URLSearchParams, key: string): string | null {
   const raw = (sp.get(key) ?? "").trim();

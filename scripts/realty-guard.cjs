@@ -44,6 +44,7 @@ const OWN_PREFIXES = [
   // el prefijo "realty-": nada del dental ni de barber las importa. Todo lo
   // demás de src/app/api/cron/** sigue siendo PROHIBIDO.
   "src/app/api/cron/realty-rent/",
+  "src/app/api/cron/realty-reports/",
   // Feeds públicos del vertical (/feeds/realty/<accountId>/…). Carpeta nueva
   // y EXCLUSIVA de inmuebles: nada del dental ni de barber vive bajo
   // src/app/feeds/. Se agrega aquí y no a REALTY_GUARD_SHARED porque la

@@ -66,7 +66,12 @@ export function PortfolioPanel({
 
   const isCartera = variant === "cartera";
   const base = isCartera ? "cartera" : "rentabilidad";
-  const query = `?from=${report.from}&to=${report.to}${ownerId ? `&ownerId=${encodeURIComponent(ownerId)}` : ""}`;
+  // `variant` viaja en la URL de la exportación: es UNA sola ruta detrás de
+  // las dos pestañas, así que sin esto la rentabilidad se descargaría con
+  // las columnas de la cartera y con el permiso de la cartera.
+  const query = `?from=${report.from}&to=${report.to}&variant=${base}${
+    ownerId ? `&ownerId=${encodeURIComponent(ownerId)}` : ""
+  }`;
 
   return (
     <div className="rep-stack">
