@@ -21977,3 +21977,159 @@ mordieron y que ya están sorteadas en el código nuevo:
    una barbería no mexicana se registra pero no recibe ni manda recordatorios.
 5. **Nadie ha probado el registro con un número no mexicano de punta a punta**
    (formulario → endpoint → fila en Supabase).
+
+═══════════════════════════════════════════════════════════════════════════
+## [Inmuebles · Mi web · Ola 2] — Seis plantillas PREMIUM (dos por modo): portada a sangre a toda la altura, el listado como revista, tipografía editorial y aire — 20 variantes de maquetado nuevas sin tocar las nueve originales ✅ (2026-08-26) · rama realty/web2
+═══════════════════════════════════════════════════════════════════════════
+COMMITS: 8e35a563 (las seis + 20 variantes + prueba + editor) · f94049ef (lo que dejó el revisor) ·
+el último de la rama (este reporte) · rama `realty/web2` pusheada a origin, NUNCA a main.
+GATES: `npx tsc --noEmit` limpio en TODO lo tocado (los únicos errores del árbol son de
+src/lib/barber/__tests__/{dinero-sumas,i18n-alcance}.test.ts, ya en main e6a94e1d, ajenos a esta
+ola) · `npx tsx --test src/lib/realty/templates/__tests__/manifiesto.test.ts` → 62/62 · `npx next
+build` con NODE_OPTIONS=--max-old-space-size=12288 (lanzado fuera del job del tool, receta WMI +
+marcador) → BUILD_EXIT_CODE:0, "⚠ Compiled with warnings" (los de siempre: Tailwind `duration-[…]`
+ambiguo y `file-type`, ambos en main), "Generating static pages (424/424)", tabla de rutas completa
+con /i/[slug]/* y /inmobiliaria/mi-web; corrió DOS veces (antes y después de los retoques del revisor) y el log entero de la final (3 469 líneas) se leyó filtrado: los 328
+renglones de `prisma:error … DATABASE_URL` y sus 164 "Validation Error Count: 1" son el ruido
+conocido de la generación estática sin BD, nada nuevo · `node scripts/realty-guard.cjs` →
+OK (todos los archivos dentro del vertical, 0 compartidos, 0 prohibidos) · revisor read-only
+(subagente Explore, sin permiso de escritura) → calculó a mano las QUINCE firmas y confirmó que
+son distintas; confirmó modo por modo que ningún bloque se cuela en un modo ajeno; confirmó
+contra el diff que las ramas nuevas de portada/inmuebles/equipo/numeros/sobre-mi/zonas/
+credenciales solo se activan con las variantes nuevas y que las nueve originales producen el
+MISMO JSX; recorrió selector por selector los tres CSS nuevos (ninguna regla genérica alcanza a
+las nueve) y las 15 reglas `.dcrw-p-*` nuevas (ninguna pasa de (0,2,0)); marcas de la prueba,
+imports y variantes cuadran; cero @media, cero hex de acento, cero "toilette"/"ambiente", cero
+precios de plan, cero CFDI. Sin hallazgos que bloqueen; sus "debería"/"nit" se corrigieron en el
+segundo commit (abajo) y se volvieron a correr tsc, prueba, guardia y build.
+
+LO QUE DEJÓ EL REVISOR Y CÓMO QUEDÓ (segundo commit):
+  · Las tres variantes heredadas que la ola 1 declaraba y nadie pintaba (contacto=formulario,
+    mapa=banda, mapa=recuadro): mi primera versión les daba un significado NUEVO (formulario a
+    720px, mapa sin esquinas, mapa en recuadro), que era un cambio visible en seis de las nueve
+    originales — contra la regla de "aditivo". Ahora se fijan explícitamente a su valor de
+    fábrica (640px, ancho completo, esquinas de la piel): dejan de ser etiquetas huecas para la
+    prueba y las nueve no cambian ni un píxel.
+  · La galería de Torre eran seis enlaces tabulables al MISMO destino; ahora va aria-hidden y
+    fuera del tabulador, como las miniaturas de la vitrina (la ficha ya se abre desde el botón).
+  · Lo ocupado en las fichas de Disponibilidad bajaba el texto a ≈3:1 (opacity .55); ahora .62,
+    el mismo valor que el tablero de mis-rentas.
+  · Clase duplicada `dcrw-hero-cine dcrw-hero-cine`, cuatro reglas de piel muertas (editorial
+    sin equipo ni trato-directo, vitrina sin tarjeta) y un padding duplicado: fuera. Encabezado
+    "LAS NUEVE" de la sección 3 del manifiesto: actualizado.
+  · Se dejaron tal cual (nits sin efecto): `dcrw-dispo-libre` y `dcrw-asesor-liga-wa` se emiten
+    sin regla propia (ganchos para la piel); los dos hex de estatus (#0f7a4f/#8a5a00) en
+    secundarios.css duplican a `.dcrw-estatus-success/-warning` de skin.css porque no hay token
+    para ellos.
+
+QUÉ VA A VER RAFAEL (una línea por plantilla; el selector de /inmobiliaria/mi-web las ofrece
+solo en su modo y solo con la feature `webEditor` — ese gating ya existía y no se tocó):
+
+  AGENCY · **Galería** (`galeria`) — la mejor foto a sangre y a TODA la altura visible con el
+    titular abajo a la izquierda; el buscador FLOTA sobre el borde de la foto; el inventario como
+    revista (dos por fila, foto 3:2, el PRECIO primero y luego la colonia, sin cajas); credenciales
+    en una línea; el equipo en retratos 3:4 sobrios sin tarjeta. Piel arena cálida + serif.
+  AGENCY · **Torre** (`torre`) — UN desarrollo manda: su foto a sangre, "Desde $X", colonia,
+    medidas; debajo, en la misma portada, amenidades como pastillas, el recorrido virtual
+    (Matterport/Kuula/YouTube, iframe al clic) y la galería de renders/avance; luego los NÚMEROS
+    del avance de obra en una banda oscura (cifras enormes en el acento claro); el resto del
+    inventario en filas DISCRETAS que excluyen al protagonista; equipo compacto, mapa y formulario.
+    Es casi una landing de producto. Piel tinta, sans apretada, radios de 8px.
+  AGENT · **Editorial** (`editorial`) — el retrato PEGADO al borde derecho a toda la altura
+    (en móvil arriba, a lo ancho); titular de revista; la historia como reportaje (primer párrafo
+    grande en serif con letra capital, el resto en columna de lectura de 720px); las credenciales
+    dichas en UNA frase en cursiva ("Licencia JAL-001 · EC0110.02, folio 77 · AMPI") en vez de
+    una tira de tarjetas; las zonas como oración ("TRABAJO EN Providencia, Chapalita y Andares.");
+    los inmuebles como portafolio numerado "01, 02…" con la primera pieza a doble ancho; cita.
+    Piel papel (#f7f4ee), esquinas rectas, botones en versalitas.
+  AGENT · **Tarjeta** (`tarjeta`) — vertical de verdad: la página entera es una columna blanca de
+    640px sobre fondo verdoso apagado, también en escritorio; foto redonda con anillo del acento,
+    nombre, titular, el WhatsApp ENORME (primero, a lo ancho) y "ver inmuebles" debajo; zonas en
+    pastillas centradas; los inmuebles en UNA columna, tarjetas altas con el precio como pastilla
+    blanca sobre la foto y la colonia en la esquina contraria; cita; contacto corto. Para abrirse
+    desde la bio de Instagram.
+  OWNER · **Disponibilidad** (`disponibilidad`) — portada clara con el SELLO "Trato directo · sin
+    comisión" arriba del titular y el contador "N disponibles ahora" (solo cuenta lo LIBRE; con
+    cero se calla); pegada a la portada, una CINTA del acento con "Hablas conmigo, no con una
+    inmobiliaria" y el WhatsApp; el tablero como FICHAS con foto 4:3, pastilla de estatus
+    (Libre/Apartado/Rentado), precio primero, colonia, título y "En línea desde agosto de 2026";
+    lo ocupado atenuado y sin liga; los requisitos en columnas dentro de una caja suave. Cero
+    biografía.
+  OWNER · **Vitrina** (`vitrina`) — portada a sangre centrada (sin foto subida usa la del primer
+    inmueble); cada inmueble es un SPREAD a dos columnas alternando el lado de la foto: recorrido
+    virtual embebido si lo tiene (si no, la foto 16:10), tres miniaturas, tipo · operación, título
+    en serif, colonia, PRECIO grande, medidas, hasta seis amenidades y DOS botones — ver ficha y su
+    propio WhatsApp con el mensaje ya escrito ("Hola, me interesa «Casa X» (folio)"); luego la nota
+    "sin comisión", requisitos en una línea y el formulario. Piel crema + serif.
+
+LAS 20 VARIANTES NUEVAS (todas ADITIVAS: las que usan las nueve originales no cambiaron de JSX ni
+de CSS; el revisor lo confirmó contra el diff):
+  portada (blocks/portada.tsx + portada.css) · cine, torre, reportaje, tarjeta, aviso, vitrina
+  inmuebles (blocks/inmuebles.tsx + inmuebles.css) · revista, discreta, portafolio, columna, vitrina
+  buscador (inmuebles.css) · flotante
+  equipo · sobrio · numeros · avance · credenciales · prosa · zonas · frase · sobre-mi · reportaje
+  disponibilidad-ahora · fichas · requisitos-para-rentar · columnas · trato-directo · cinta
+  (los ocho en blocks/secundarios.css)
+
+DE DÓNDE SALE LO "PREMIUM" (y qué se decidió distinto del brief, con por qué):
+  · Quiet luxury con el tema del vertical: las pieles solo mueven los tokens (fondos arena/papel/
+    crema, tinta más cálida, --dcrw-aire de 96–116px contra 68 de fábrica) y QUITAN las franjas
+    grises alternas de la ola 1 (`.dcrw-p-<id> .dcrw-sec { background: var(--dcrw-bg) }`, en
+    especificidad (0,2,0) a propósito para que la banda oscura de "avance", la cinta y el buscador
+    flotante —(0,2,0) en archivos importados después— sigan ganando por orden).
+  · "Toda la altura visible" se mide con `cqi` (ancho del contenedor) y NUNCA con `vh`: dentro del
+    marco escalado del editor `vh` es la ventana del panel y la vista previa mentiría.
+  · Ninguna fuente nueva: los titulares editoriales usan `--dcrw-serif` (ui-serif/Georgia) como ya
+    hacen "historia" y "boutique". Meter una webfont exigía tocar el layout de /i/[slug] y
+    next/font; no era el encargo.
+  · Torre: el brief pedía "avance de obra y plantas arquitectónicas". NO existe ningún campo para el
+    % de avance ni para distinguir una planta de un render (RealtyProperty tiene fotos, tours y
+    amenities) y la regla era no tocar types.ts ni el schema. Se resolvió SIN inventar campos: el
+    avance son los NÚMEROS de la empresa (texto libre que ya existía: "68% de avance", "Entrega
+    dic 2027", "120 unidades") en la variante `avance`, y la galería son las fotos del desarrollo
+    que no son la portada, con el rótulo editable (por defecto "Renders y avance"). Si Rafael
+    quiere el % como dato estructurado o una ranura de "plantas", es un campo nuevo: se reporta,
+    no se hizo.
+  · Disponibilidad: el brief decía "disponible desde". La única fecha que existe es la de
+    publicación (createdAt → publicadoEn). El rótulo por defecto es "En línea desde" y es editable;
+    prometer una fecha de disponibilidad que nadie capturó sería mentir en el dato que más importa.
+  · Editorial vs. la "historia" existente (que ya era editorial oscura): se distingue por
+    ESTRUCTURA — retrato a sangre en vez de foto de fondo, historia con letra capital y credenciales
+    y zonas en prosa, portafolio numerado — y por firma
+    (portada>sobre-mi>credenciales>zonas>inmuebles>testimonios>contacto contra
+    portada>sobre-mi>credenciales>inmuebles>testimonios>zonas>contacto).
+
+LO QUE SE TOCÓ FUERA DEL MANIFIESTO Y LOS BLOQUES (poco, y por qué):
+  · src/lib/realty/landing.ts: los seis ids en REALTY_WEB_TEMPLATE_IDS y REALTY_WEB_TEMPLATE_MODE
+    (es lo que el propio manifiesto dice que hay que hacer para agregar una plantilla). types.ts y
+    schema.prisma NO se tocaron.
+  · src/components/realty/web/index.tsx: tres imports de CSS después de skin.css.
+  · Catálogo de bloques: `inmuebles.pinta` gana "whatsapp" (la vitrina lleva WhatsApp por
+    inmueble); la prueba manifiesto↔JSX lo exige en las dos direcciones.
+  · Editor (editor.tsx): panel "Inmueble destacado". `config.inmuebleDestacado` existía desde la
+    ola 1 y el manifiesto de "una-propiedad" decía "se elige en el editor", pero NADIE lo había
+    cableado: siempre caía al más reciente. Ahora sale un <select> con los inmuebles publicados,
+    solo cuando la portada de la plantilla activa `consume` inmuebles (por manifiesto, no por id):
+    hoy "una-propiedad" y "torre". Sin elegir, sigue mandando el más reciente.
+  · skin.css: además de las seis pieles, tres reglas para variantes que la ola 1 declaraba pero
+    NADIE pintaba (`contacto=formulario`, `mapa=banda`, `mapa=recuadro`). Las destapó la prueba
+    nueva; ahora significan algo (formulario a 720px, mapa sin esquinas, mapa en recuadro) en vez
+    de ser etiquetas huecas.
+
+PRUEBAS (src/lib/realty/templates/__tests__/manifiesto.test.ts, 62 en verde):
+  · "hay cinco plantillas por modo" (15 en total) y "las seis premium existen, dos por modo".
+  · Las QUINCE firmas de orden son distintas (la prueba de siempre, ahora sobre quince).
+  · "ningún bloque de ninguna plantilla se queda sin nombre para el editor": cada bloque de cada
+    manifiesto está en el catálogo con `nombre`, y cada texto/copia/foto tiene etiqueta.
+  · "toda variante que pide una plantilla existe en el JSX o en el CSS": una variante es solo una
+    cadena; con "revistta" el bloque caía en silencio al maquetado de fábrica.
+  · "las seis premium no reordenan sin más": cada una trae al menos una variante que ninguna de
+    las nueve usaba — es la comprobación mecánica del encargo.
+  · Cambiar de plantilla no pierde nada: es la garantía del motor (vocabulario = UNIÓN de las
+    quince; `ordenDeBloques` por plantilla) y la prueba de siempre corre ahora sobre las quince.
+
+PENDIENTES / LO QUE NO SE HIZO:
+  · Nadie ha visto las seis en un navegador con datos reales: se verificó por compilación, prueba
+    y lectura del revisor. Rafael verá las pieles en la vista previa del editor al elegirlas.
+  · Campo de "% de avance" y ranura de "plantas" para Torre: campo nuevo, se reporta (arriba).
+  · Los errores de tsc en src/lib/barber/__tests__ vienen de main y no son de esta ola.
