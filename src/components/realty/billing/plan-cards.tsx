@@ -25,6 +25,7 @@ export function RealtyPlanCards({
   canManage,
   busy,
   hasSubscription,
+  subscribed,
   onPick,
 }: {
   t: TFunction;
@@ -34,6 +35,18 @@ export function RealtyPlanCards({
   busy: boolean;
   /** Sin suscripción viva, el botón CONTRATA; con ella, CAMBIA de plan. */
   hasSubscription: boolean;
+  /**
+   * ¿La CUENTA tiene un plan contratado? Pregunta DISTINTA de la de arriba:
+   * `hasSubscription` mira el objeto de Stripe (¿hay algo que modificar?) y
+   * esta mira el estado de la cuenta (¿pagas un plan?). Se separan porque el
+   * objeto de Stripe solo se pide con permiso `billing.manage`, y porque una
+   * cuenta puede estar "active" sin suscripción viva.
+   *
+   * Ver `realtyAccountIsSubscribed` en ./shared: sin esto, el
+   * `@default(PROPIETARIO)` de la columna marcaba el plan de entrada como
+   * "Tu plan actual" en una cuenta recién registrada, con el botón apagado.
+   */
+  subscribed: boolean;
   onPick: (plan: RealtyPlanCardDTO) => void;
 }) {
   const active = plans.filter((p) => p.isActive);
@@ -45,7 +58,10 @@ export function RealtyPlanCards({
         const shown = previous
           ? plan.features.filter((f) => !previous.features.includes(f))
           : plan.features;
-        const isCurrent = plan.id === currentPlanId;
+        // Sin plan contratado NINGUNA tarjeta es "la tuya": la columna `plan`
+        // de una cuenta impaga es una preferencia, no algo que se esté
+        // pagando. Con las tres libres, las tres ofrecen "Contratar".
+        const isCurrent = subscribed && plan.id === currentPlanId;
 
         const usersLine = isRealtyUnlimited(plan.maxUsers)
           ? t("plans.limitUsersUnlimited")

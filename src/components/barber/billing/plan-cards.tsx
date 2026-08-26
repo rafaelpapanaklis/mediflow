@@ -27,6 +27,7 @@ export function PlanCards({
   canManage,
   configured,
   hasLiveSubscription,
+  subscribed,
   lockedInterval,
   busyPlan,
   onContract,
@@ -39,6 +40,12 @@ export function PlanCards({
   canManage: boolean;
   configured: boolean;
   hasLiveSubscription: boolean;
+  /**
+   * ¿La barbería tiene un plan contratado? (estado de la BD, no de Stripe —
+   * ver la derivación en billing-screen.tsx). Gobierna SOLO la insignia y el
+   * realce de "tu plan"; el botón lo sigue decidiendo `hasLiveSubscription`.
+   */
+  subscribed: boolean;
   lockedInterval: BarberBillingIntervalUI | null;
   busyPlan: string | null;
   onContract: (planId: BarberPlanCardDTO["id"], interval: BarberBillingIntervalUI) => void;
@@ -102,7 +109,9 @@ export function PlanCards({
 
       <div className="dcbb-plans">
         {plans.map((plan) => {
-          const isCurrent = plan.id === currentPlanId;
+          // Sin plan contratado NINGUNA tarjeta es "la tuya": el @default(BASICO)
+          // de la columna no es algo que se esté pagando.
+          const isCurrent = subscribed && plan.id === currentPlanId;
           const yearly = interval === "year";
           const cents = yearly ? plan.priceYearlyCents : plan.priceMonthlyCents;
           const hasPrice = cents !== null;

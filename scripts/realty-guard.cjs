@@ -97,6 +97,16 @@ const SHARED_FILES = [
   "src/app/admin/admin-nav.tsx", // una entrada de menú del vertical
   "src/app/sitemap.ts", // las rutas públicas /i/[slug]
   "ORQUESTA.md", // el reporte de cada ola
+  // 🟠 LAS TARJETAS DE PLAN DE BARBER. El bug de "Tu plan actual" en una
+  // cuenta impaga nace del mismo sitio en los dos verticales: la columna
+  // `plan` trae un @default (PROPIETARIO aquí, BASICO allá) y la tarjeta lo
+  // daba por contratado. En barber el BOTÓN ya miraba la suscripción viva, así
+  // que allá el único cambio permitido es que la INSIGNIA mire lo mismo que el
+  // botón: cero cambios de comportamiento en el botón, en el cobro o en las
+  // APIs. Cualquier otra edición de barber desde este vertical se revisa a
+  // mano — igual que el webhook de arriba.
+  "src/components/barber/billing/plan-cards.tsx",
+  "src/components/barber/billing/billing-screen.tsx",
 ];
 
 // ⚠️ `src/lib/whatsapp.ts` NO está en esta lista A PROPÓSITO. Sus 7 funciones

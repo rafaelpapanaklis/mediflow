@@ -140,6 +140,46 @@ export function stateKey(status: string | null | undefined): string {
   return KNOWN_STATES.has(s) ? s : "unknown";
 }
 
+/**
+ * Estados en los que la cuenta YA CONTRATÓ un plan (aunque el cobro vaya
+ * tarde, o soporte la tenga en pausa).
+ *
+ * 🔴 POR QUÉ ESTO EXISTE. `RealtyAccount.plan` trae `@default(PROPIETARIO)`:
+ * una cuenta recién registrada YA llega con el plan de entrada escrito en la
+ * columna sin haber pagado un peso. Preguntar solo `plan.id === currentPlanId`
+ * marcaba esa tarjeta como "Tu plan actual" y le apagaba el botón — o sea,
+ * nadie podía contratar el plan de entrada del vertical.
+ *
+ * Se responde con `subscriptionStatus` de la CUENTA y NO con el objeto de
+ * Stripe (`data.subscription`), porque ese objeto solo se pide con permiso
+ * `billing.manage` (ver la página: `canManage ? getRealtyBillingSummary(...)
+ * : null`). Si no, un MANAGER de una agencia que sí paga vería las tres
+ * tarjetas como si no tuviera plan.
+ *
+ * Fuera a propósito:
+ *  · `pending_payment` → el default de la columna; no ha contratado nada.
+ *  · `incomplete` / `incomplete_expired` → el primer cobro nunca cerró; tiene
+ *    que poder reintentar ESE MISMO plan.
+ *  · `canceled` → se dio de baja; tiene que poder volver a contratar el que
+ *    tenía (antes esa tarjeta también nacía muerta).
+ *  · cualquier estado desconocido → ante la duda se deja vender, que es el
+ *    modo de falla barato: el caro es el que estamos arreglando.
+ */
+const SUBSCRIBED_STATES = new Set([
+  "active",
+  "trialing",
+  "paid",
+  "past_due",
+  "unpaid",
+  "paused",
+  "suspended",
+]);
+
+/** ¿La cuenta tiene un plan contratado? (pregunta del badge "Tu plan actual"). */
+export function realtyAccountIsSubscribed(status: string | null | undefined): boolean {
+  return SUBSCRIBED_STATES.has(stateKey(status));
+}
+
 export type BillingTone = "success" | "warning" | "danger" | "neutral";
 
 export function stateTone(status: string | null | undefined): BillingTone {

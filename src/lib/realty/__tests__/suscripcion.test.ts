@@ -67,7 +67,10 @@ import {
   type RealtyBillingDb,
   type SubscriptionLike,
 } from "@/lib/realty/billing";
-import { limitsOverTargetPlan } from "@/components/realty/billing/shared";
+import {
+  limitsOverTargetPlan,
+  realtyAccountIsSubscribed,
+} from "@/components/realty/billing/shared";
 
 const RAIZ = join(__dirname, "..", "..", "..", ".."); // → raíz del repo
 
@@ -483,6 +486,83 @@ test("menú con la suscripción impaga: solo el camino a pagar", () => {
   assert.deepEqual(
     nav.map((i) => i.key),
     ["suscripcion", "soporte"],
+  );
+});
+
+// ═══════════════════════════════════════════════════════════════════════
+// 4-bis. "TU PLAN ACTUAL" NO ES LA COLUMNA `plan`
+//
+// `RealtyAccount.plan` trae @default(PROPIETARIO) y `subscriptionStatus`
+// @default("pending_payment"): una cuenta recién registrada llega con el plan
+// de ENTRADA escrito en la fila sin haber pagado nada. Marcar esa tarjeta
+// como "la tuya" apagaba su botón — o sea, nadie podía contratar el plan de
+// entrada del vertical. Estas pruebas fijan la regla.
+// ═══════════════════════════════════════════════════════════════════════
+
+test("una cuenta recién registrada NO tiene plan contratado", () => {
+  // El default de la columna: si esto diera true, el plan de entrada volvería
+  // a nacer con el botón muerto.
+  assert.equal(realtyAccountIsSubscribed("pending_payment"), false);
+});
+
+test("un cobro que nunca cerró deja el plan LIBRE para reintentarlo", () => {
+  // `incomplete` = hay objeto en Stripe pero el primer pago falló. Bloquear
+  // ese plan sería impedir justo el reintento.
+  for (const status of ["incomplete", "incomplete_expired", "canceled", "cancelled"]) {
+    assert.equal(
+      realtyAccountIsSubscribed(status),
+      false,
+      `"${status}" no debe marcar ninguna tarjeta como contratada`,
+    );
+  }
+});
+
+test("con el cobro tarde el plan SIGUE siendo el suyo", () => {
+  // Distinto de `assertRealtySubscription`, que a past_due le NIEGA el panel:
+  // ahí la pregunta es "¿entras?" y aquí "¿qué plan pagas?". Un past_due que
+  // dejara de reconocer su plan podría 'cambiarse' al que ya tiene.
+  for (const status of ["active", "trialing", "paid", "past_due", "unpaid", "suspended"]) {
+    assert.equal(
+      realtyAccountIsSubscribed(status),
+      true,
+      `"${status}" sí tiene plan contratado`,
+    );
+  }
+});
+
+test("un estado desconocido deja VENDER, no bloquea", () => {
+  // Ante la duda, el modo de falla barato es ofrecer contratar; el caro es el
+  // que se está arreglando (nadie puede pagar).
+  for (const status of [null, undefined, "", "lo_que_sea"]) {
+    assert.equal(realtyAccountIsSubscribed(status), false);
+  }
+});
+
+test("ninguna tarjeta de plan decide 'actual' mirando SOLO el id del plan", () => {
+  // Barrido estático sobre los DOS verticales que cobran por plan. La regla
+  // no es "usa esta variable": es que la comparación con `currentPlanId` no
+  // puede ir sola. Si alguien reescribe la condición, esto se cae.
+  const tarjetas = [
+    join(RAIZ, "src", "components", "realty", "billing", "plan-cards.tsx"),
+    join(RAIZ, "src", "components", "barber", "billing", "plan-cards.tsx"),
+  ];
+
+  const culpables: string[] = [];
+  for (const archivo of tarjetas) {
+    assert.ok(existsSync(archivo), `no existe ${archivo}: la prueba se quedó vieja`);
+    const fuente = readFileSync(archivo, "utf8");
+    const linea = fuente
+      .split(/\r?\n/)
+      .find((l) => /const\s+isCurrent\s*=/.test(l));
+    assert.ok(linea, `${archivo}: no se encontró la definición de isCurrent`);
+    if (!/subscribed\s*&&/.test(linea as string)) {
+      culpables.push(`${archivo.slice(RAIZ.length + 1).replace(/\\/g, "/")}: ${linea?.trim()}`);
+    }
+  }
+  assert.deepEqual(
+    culpables,
+    [],
+    `"tu plan actual" sin comprobar que haya plan contratado: ${culpables.join("; ")}`,
   );
 });
 

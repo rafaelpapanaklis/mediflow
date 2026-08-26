@@ -91,6 +91,18 @@ export function BillingScreen({
   const hasLive = sub?.live === true;
   const lockedInterval: BarberBillingIntervalUI | null = hasLive && sub ? sub.interval : null;
 
+  // ¿La barbería tiene un plan CONTRATADO? Se responde con el estado de la BD
+  // y no con `summary.subscription`, que viaja null sin permiso `billing.manage`
+  // (ver la página). `Barbershop.plan` trae @default(BASICO): una barbería
+  // recién registrada YA llega con el plan de entrada en la columna sin haber
+  // pagado nada, y la insignia "Tu plan actual" lo daba por bueno mientras el
+  // botón de al lado decía "Contratar". Solo gobierna la insignia: el botón ya
+  // miraba `hasLive` y no cambia.
+  //  · "pending"  = pending_payment / incomplete / paused → nunca cerró un cobro.
+  //  · "canceled" = canceled / incomplete_expired        → ya no paga.
+  const subscribed =
+    statusKey === "active" || statusKey === "trialing" || statusKey === "pastDue";
+
   // ── Al volver de Stripe Checkout: confirmar contra Stripe y esperar ──
   useEffect(() => {
     if (checkout.result !== "success" || !checkout.sessionId) return;
@@ -398,6 +410,7 @@ export function BillingScreen({
         canManage={canManage}
         configured={summary.configured}
         hasLiveSubscription={hasLive}
+        subscribed={subscribed}
         lockedInterval={lockedInterval}
         busyPlan={busy?.startsWith("plan:") ? busy.slice(5) : null}
         onContract={contract}

@@ -11,6 +11,7 @@ import { RealtyInvoicesTable } from "./invoices-table";
 import {
   formatCentsMXN,
   limitsOverTargetPlan,
+  realtyAccountIsSubscribed,
   shortDate,
   stateKey,
   stateTone,
@@ -152,6 +153,14 @@ export function RealtyBillingScreen({
   const hasLiveSubscription =
     !!data.subscription &&
     ["active", "trialing", "past_due", "unpaid"].includes(data.subscription.status);
+
+  // ── ¿La CUENTA paga un plan? ──
+  // No es la misma pregunta que la de arriba y no se responde con la misma
+  // fuente: `data.subscription` viaja NULL cuando el usuario no tiene
+  // `billing.manage` (la página ni le pregunta a Stripe), así que un MANAGER
+  // de una agencia que sí paga daría false ahí. `subscriptionStatus` es de la
+  // fila y llega siempre. Esto es lo que decide qué tarjeta es "la tuya".
+  const accountSubscribed = realtyAccountIsSubscribed(data.subscriptionStatus);
 
   const pickPlan = useCallback(
     async (plan: RealtyPlanCardDTO) => {
@@ -373,6 +382,7 @@ export function RealtyBillingScreen({
             canManage={canPay}
             busy={busy}
             hasSubscription={hasLiveSubscription}
+            subscribed={accountSubscribed}
             onPick={pickPlan}
           />
         </section>
