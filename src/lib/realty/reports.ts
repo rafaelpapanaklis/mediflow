@@ -1414,6 +1414,20 @@ export async function getTaxSummary(
     totalExpenses = mergeMoney(totalExpenses, r.expenses);
     totalLikelyDeductible = mergeMoney(totalLikelyDeductible, r.likelyDeductible);
     totalRetained = mergeMoney(totalRetained, r.retained);
+  }
+
+  // Solo los inmuebles CON movimiento entran a la hoja: una lista de 200
+  // inmuebles en ceros no le sirve a ningún contador.
+  const conMovimiento = list.filter(
+    (r) => activeCurrencies(r.income).length > 0 || activeCurrencies(r.expenses).length > 0,
+  );
+
+  // 🔴 El aviso se cuenta SOBRE LOS QUE SE VAN A PINTAR, no sobre la cartera
+  // entera. Contándolos todos, un rentista con 3 casas rentadas y 40
+  // publicadas leía "43 inmuebles no tienen comisión pactada" encima de una
+  // tabla de TRES renglones — un número que no cuadra con nada de lo que
+  // tiene enfrente y que le hace desconfiar del resto de la hoja.
+  for (const r of conMovimiento) {
     if (r.commissionPct === null || r.commissionPct === 0) withoutCommissionPct += 1;
   }
 
@@ -1426,12 +1440,7 @@ export async function getTaxSummary(
     ownerId: args.ownerId ?? null,
     ownerName: owner?.name ?? null,
     ownerRfc: owner?.rfc ?? null,
-    // Solo los inmuebles con movimiento: una lista de 200 inmuebles en ceros
-    // no le sirve a ningún contador.
-    properties: list.filter(
-      (r) =>
-        activeCurrencies(r.income).length > 0 || activeCurrencies(r.expenses).length > 0,
-    ),
+    properties: conMovimiento,
     payments: paymentLines,
     totalIncome,
     totalExpenses,
