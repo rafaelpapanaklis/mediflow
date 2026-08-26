@@ -596,6 +596,21 @@ export function Pestanas<T extends string>({
 /* ── Modal ──────────────────────────────────────────────────────────── */
 
 /**
+ * Pila de modales abiertos.
+ *
+ * 🔴 POR QUÉ: los modales de este área SE ANIDAN de verdad — el botón
+ * "Investigar a este prospecto" abre un modal que contiene el panel de
+ * investigación, y ese panel abre los suyos. Como cada uno escucha Escape
+ * en `document`, sin esta pila una sola tecla cerraba los DOS y el usuario
+ * perdía lo que estaba capturando. Solo cierra el de arriba.
+ *
+ * Vive a nivel de módulo porque la relación entre modales es global: no hay
+ * ningún ancestro común que pueda saberlo (están en portales hermanos del
+ * <body>).
+ */
+let pilaModales: symbol[] = [];
+
+/**
  * 🔴 VA EN PORTAL. Ver la nota de arriba: `.realty-page` es un contenedor de
  * consulta y atraparía el `position: fixed`. El portal se monta después del
  * primer render (`montado`) porque en SSR no hay `document`.
@@ -620,20 +635,44 @@ export function Modal({
   const [montado, setMontado] = useState(false);
   useEffect(() => setMontado(true), []);
 
-  // Escape cierra, y mientras esté abierto el fondo no hace scroll.
+  // Escape cierra. `onCerrar` suele llegar como flecha en línea, o sea una
+  // función NUEVA en cada render del padre: se guarda en una ref para que
+  // el listener se registre UNA vez por apertura y no en cada tecleo.
+  const cerrarRef = useRef(onCerrar);
+  cerrarRef.current = onCerrar;
+
+  // Identidad estable de ESTE modal dentro de la pila, para toda su vida.
+  const yo = useRef<symbol>(Symbol("modal"));
+
   useEffect(() => {
     if (!abierto) return undefined;
+    const id = yo.current;
+    pilaModales.push(id);
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onCerrar();
+      // Solo el de más arriba responde a Escape.
+      if (e.key === "Escape" && pilaModales[pilaModales.length - 1] === id) {
+        cerrarRef.current();
+      }
     };
     document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      pilaModales = pilaModales.filter((x) => x !== id);
+    };
+  }, [abierto]);
+
+  // El fondo no hace scroll mientras esté abierto. Va en SU PROPIO efecto y
+  // con `abierto` como única dependencia: si compartiera el de arriba, cada
+  // render del padre lo desmontaría y remontaría, y el valor "original" que
+  // se guarda para restaurar sería el que puso la vuelta anterior.
+  useEffect(() => {
+    if (!abierto) return undefined;
     const previo = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     return () => {
-      document.removeEventListener("keydown", onKey);
       document.body.style.overflow = previo;
     };
-  }, [abierto, onCerrar]);
+  }, [abierto]);
 
   if (!abierto || !montado) return null;
 

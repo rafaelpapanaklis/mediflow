@@ -165,7 +165,15 @@ export function RealtyCampanasScreen({
       {error && <Aviso tono="malo">{error}</Aviso>}
       {nota && <Aviso tono="bueno">{nota}</Aviso>}
 
-      <Pestanas valor={tab} onChange={setTab} opciones={tabs} />
+      {/* 🔴 El argumento de tipo EXPLÍCITO no es adorno. Pasarle un setter de
+          React a un componente genérico mete candidatos de inferencia en
+          conflicto: de `valor` y `opciones` sale Tab, pero de `onChange`
+          sale SetStateAction<Tab> (= Tab | ((prev)=>Tab)), que NO cumple
+          `T extends string`; TypeScript lo descarta y colapsa T al tope de
+          la restricción, `string`. El build truena con "Dispatch<
+          SetStateAction<Tab>> is not assignable to (v: string) => void".
+          Mismo tropiezo que Tabs<StatusFilter> en rentals/ui.tsx. */}
+      <Pestanas<Tab> valor={tab} onChange={setTab} opciones={tabs} />
 
       {tab === "campanas" && (
         <>
