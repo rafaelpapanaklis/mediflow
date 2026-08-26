@@ -1,0 +1,376 @@
+/* ═══════════════════════════════════════════════════════════════════════
+   DaleControl INMUEBLES — Contratos y firma electrónica.
+
+   ── LO QUE ESTE ARCHIVO **NO** TRAE ──────────────────────────────────
+   Botones, tarjetas, tablas, píldoras, modales, campos de formulario. Todo
+   eso ya existe en rentals.css (`.rnt-*`) y este módulo lo IMPORTA tal
+   cual. Un segundo juego de botones con otro verde es justo cómo un panel
+   deja de verse como un panel. Aquí solo vive lo que Contratos tiene y
+   Rentas no: el papel del documento, las fichas de variable y el tablero
+   de firmas.
+
+   Todo cuelga de `.ctr`, que es hermano de `.rnt` y declara el contenedor
+   CON EL NOMBRE `rnt`. No es un capricho: las rejillas de rentals.css
+   (.rnt-kpis, .rnt-grid, .rnt-split) son responsivas por `@container rnt`,
+   y una consulta de contenedor solo resuelve contra el ancestro que lleve
+   ESE nombre. Sin esta línea, los cuatro KPI de Contratos se quedaban en
+   UNA columna en un monitor de 27" y nada lo delataba: no hay error, solo
+   una pantalla que se ve mal y parece que así se diseñó.
+
+   ⚠️ container-type crea contención y ATRAPA a position:fixed. Por eso el
+   <Modal> de rentals/ui.tsx se monta con createPortal en <body> — el mismo
+   motivo por el que .realty-page lo documenta.
+
+   Medidas en px y no en rem: la raíz del panel mide 13px y un rem no vale
+   16 aquí.
+
+   Colores: tokens del vertical (realty-theme.css). Ni un hex de marca
+   escrito a mano, para que el modo oscuro salga solo.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+.ctr {
+  container-type: inline-size;
+  container-name: rnt;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+/* ── El papel ──────────────────────────────────────────────────────────
+   El cuerpo del contrato se lee como un documento, no como un campo de
+   formulario: fondo claro, ancho de lectura y respeto por los saltos de
+   línea del texto guardado (white-space: pre-wrap). */
+.ctr-paper {
+  background: var(--bg);
+  border: 1px solid var(--border-soft);
+  border-radius: 12px;
+  padding: 22px 24px;
+  font-size: 13px;
+  line-height: 1.65;
+  color: var(--text-1);
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 520px;
+  overflow-y: auto;
+}
+.ctr-paper--full {
+  max-height: none;
+  overflow: visible;
+}
+/* El textarea del borrador se ve IGUAL que el papel: lo que se escribe es
+   exactamente lo que se va a firmar, sin cambio de tipografía en medio. */
+.ctr-paper-edit {
+  width: 100%;
+  min-height: 420px;
+  resize: vertical;
+  background: var(--bg);
+  border: 1px solid var(--border-soft);
+  border-radius: 12px;
+  padding: 22px 24px;
+  font-family: inherit;
+  font-size: 13px;
+  line-height: 1.65;
+  color: var(--text-1);
+}
+.ctr-paper-edit:focus-visible {
+  outline: none;
+  border-color: var(--brand);
+  box-shadow: var(--ring);
+}
+
+/* ── La huella ─────────────────────────────────────────────────────────
+   64 caracteres hexadecimales. Monoespaciada y partible: es lo que alguien
+   va a comparar carácter por carácter algún día. */
+.ctr-hash {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px;
+  color: var(--text-3);
+  word-break: break-all;
+  line-height: 1.5;
+}
+
+/* ── Fichas de variable (editor de plantillas) ─────────────────────── */
+.ctr-vars {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  max-height: 260px;
+  overflow-y: auto;
+  padding: 2px;
+}
+.ctr-var {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 9px;
+  border-radius: 999px;
+  border: 1px solid var(--border-brand);
+  background: var(--brand-softer);
+  color: var(--pine-700);
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 150ms ease;
+}
+.ctr-var:hover {
+  background: var(--brand-soft);
+}
+.ctr-var__code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px;
+  opacity: 0.75;
+}
+.dark .ctr-var {
+  color: var(--pine-300);
+}
+
+/* ── Ficha de datos (dl / dt / dd) ─────────────────────────────────
+   Etiqueta a la izquierda y dato a la derecha, en la misma línea mientras
+   quepa. Se usa <dl> y no una tabla porque esto ES una lista de pares
+   nombre-valor: quien lee con lector de pantalla oye "Vigencia: …" en vez
+   de "columna 1, columna 2". */
+.ctr-def {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+}
+.ctr-def > div {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 4px 12px;
+}
+.ctr-def dt {
+  margin: 0;
+  font-size: 11.5px;
+  color: var(--text-3);
+}
+.ctr-def dd {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-1);
+  text-align: right;
+  word-break: break-word;
+}
+
+/* ── Tablero de firmantes ─────────────────────────────────────────── */
+.ctr-party {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border: 1px solid var(--border-soft);
+  border-radius: 12px;
+  background: var(--bg-elev);
+}
+.ctr-party + .ctr-party {
+  margin-top: 8px;
+}
+.ctr-party__main {
+  flex: 1 1 200px;
+  min-width: 0;
+}
+.ctr-party__name {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--text-1);
+}
+.ctr-party__meta {
+  font-size: 11.5px;
+  color: var(--text-3);
+  margin-top: 2px;
+  word-break: break-word;
+}
+.ctr-party__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+/* ── Evidencia de una firma ───────────────────────────────────────── */
+.ctr-evidence {
+  display: grid;
+  gap: 4px;
+  padding: 12px 14px;
+  border: 1px solid var(--border-soft);
+  border-left: 3px solid var(--brand);
+  border-radius: 10px;
+  background: var(--bg-elev);
+}
+.ctr-evidence + .ctr-evidence {
+  margin-top: 8px;
+}
+.ctr-evidence__who {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-1);
+}
+.ctr-evidence__line {
+  font-size: 11.5px;
+  color: var(--text-3);
+  word-break: break-word;
+}
+.ctr-evidence--alert {
+  border-left-color: var(--danger);
+}
+
+/* ── La liga recién emitida ───────────────────────────────────────── */
+.ctr-link {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px dashed var(--border-strong);
+  border-radius: 10px;
+  background: var(--bg-elev-2);
+}
+.ctr-link__url {
+  flex: 1 1 240px;
+  min-width: 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px;
+  color: var(--text-2);
+  word-break: break-all;
+}
+
+/* ── Dos columnas cuando hay ancho ────────────────────────────────── */
+.ctr-split {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: 1fr;
+}
+@container rnt (min-width: 900px) {
+  .ctr-split {
+    grid-template-columns: minmax(0, 1.6fr) minmax(280px, 1fr);
+    align-items: start;
+  }
+}
+
+/* ── La pantalla pública de firma (/i/firmar/{token}) ──────────────────
+   NO es el panel: la abre un inquilino o un aval en su celular, casi
+   siempre con una mano y a contraluz. Por eso el papel va a ancho de
+   lectura, el botón de firmar es grande y la barra de aceptar se queda
+   pegada abajo — no se busca, está donde el pulgar ya estaba.
+
+   Cuelga de `.sgn` y vive aquí y no en un archivo aparte porque es el
+   MISMO módulo: el papel, la huella y el trazo son las mismas piezas. */
+.sgn {
+  min-height: 100dvh;
+  background: var(--bg);
+  color: var(--text-1);
+  padding: 18px 14px 120px;
+}
+.sgn__wrap {
+  max-width: 780px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.sgn__head {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border-soft);
+}
+.sgn__brand {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--brand);
+}
+.sgn__title {
+  font-size: 19px;
+  font-weight: 700;
+  line-height: 1.3;
+  margin: 0;
+}
+.sgn__sub {
+  font-size: 12.5px;
+  color: var(--text-3);
+}
+/* El papel de la pantalla pública NO recorta: quien va a firmar tiene que
+   poder leer el documento entero sin pelearse con dos barras de scroll. */
+.sgn__paper {
+  background: var(--bg-elev);
+  border: 1px solid var(--border-soft);
+  border-radius: 12px;
+  padding: 20px 18px;
+  font-size: 13.5px;
+  line-height: 1.7;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+/* Recuadro del trazo. touch-action: none es OBLIGATORIO: sin él, el dedo
+   que dibuja hace scroll de la página y no se puede firmar en el celular. */
+.sgn__canvas {
+  width: 100%;
+  height: 190px;
+  display: block;
+  border: 1px dashed var(--border-strong);
+  border-radius: 12px;
+  background: #ffffff;
+  touch-action: none;
+  cursor: crosshair;
+}
+.sgn__bar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 20;
+  padding: 12px 14px calc(12px + env(safe-area-inset-bottom));
+  background: var(--bg-elev);
+  border-top: 1px solid var(--border-soft);
+  box-shadow: 0 -8px 24px rgba(20, 32, 26, 0.10);
+}
+.sgn__bar-in {
+  max-width: 780px;
+  margin: 0 auto;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+.sgn__accept {
+  flex: 1 1 240px;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--text-2);
+  cursor: pointer;
+}
+.sgn__accept input {
+  margin-top: 2px;
+  width: 18px;
+  height: 18px;
+  accent-color: var(--brand);
+  flex: none;
+}
+.sgn__cta {
+  flex: 1 1 180px;
+  min-height: 46px;
+  font-size: 15px;
+  justify-content: center;
+}
+.sgn__done {
+  display: grid;
+  gap: 10px;
+  padding: 22px 20px;
+  border-radius: 14px;
+  border: 1px solid var(--border-brand);
+  background: var(--brand-softer);
+  text-align: center;
+}
+.sgn__done-title {
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--text-1);
+}

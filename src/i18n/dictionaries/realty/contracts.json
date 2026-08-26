@@ -1,0 +1,670 @@
+{
+  "_nota": {
+    "es": "Diccionario PROPIO de Contratos y firma electronica. No se cuelga del barril (index.ts) a proposito: ese archivo lo tocan varias terminales a la vez y seria un choque garantizado. Aqui viven los DOS idiomas en un solo archivo, con arboles identicos, y cada pantalla lo recorta con makeRealtyT(dict.es) — convencion B, prefijo VACIO. OJO: el TEXTO DE LAS CLAUSULAS no vive aqui. Las plantillas de contrato son documentos legales en espanol de Mexico y viven en REALTY_BASE_TEMPLATES (src/lib/realty/contracts.ts) o en la fila que edita cada inmobiliaria: traducir un contrato es trabajo de abogado, no de un archivo de etiquetas.",
+    "en": "Contracts & e-signature OWN dictionary. Deliberately not wired into the barrel (index.ts): several terminals edit that file at once and it would collide. Both locales live here with identical trees, and each screen trims it with makeRealtyT(dict.en) — convention B, EMPTY prefix. NOTE: clause TEXT does not live here. Contract templates are legal documents in Mexican Spanish and live in REALTY_BASE_TEMPLATES (src/lib/realty/contracts.ts) or in each agency's own row: translating a contract is a lawyer's job, not a labels file's."
+  },
+
+  "es": {
+    "title": "Contratos",
+    "subtitle": "El contrato sale de los datos que ya tienes, se firma desde el celular y queda con su evidencia.",
+
+    "comun": {
+      "error": "Algo salió mal. Inténtalo otra vez.",
+      "cerrar": "Cerrar",
+      "cancelar": "Cancelar",
+      "guardar": "Guardar",
+      "guardando": "Guardando…",
+      "volver": "Volver a contratos",
+      "copiar": "Copiar liga",
+      "copiado": "Liga copiada",
+      "copiarFalla": "No se pudo copiar. Selecciona la liga y cópiala a mano.",
+      "sinDato": "—"
+    },
+
+    "kinds": {
+      "ARRENDAMIENTO": "Arrendamiento",
+      "EXCLUSIVA": "Exclusiva",
+      "PROMESA": "Promesa de compraventa",
+      "COMISION": "Comisión / colaboración"
+    },
+
+    "status": {
+      "BORRADOR": "Borrador",
+      "ENVIADO": "Esperando firmas",
+      "PARCIAL": "Firmado a medias",
+      "FIRMADO": "Firmado",
+      "ARCHIVADO": "Archivado",
+      "ANULADO": "Anulado"
+    },
+
+    "roles": {
+      "ARRENDADOR": "Arrendador",
+      "INQUILINO": "Inquilino",
+      "AVAL": "Aval",
+      "PROPIETARIO": "Propietario",
+      "INMOBILIARIA": "Inmobiliaria",
+      "COMPRADOR": "Comprador",
+      "VENDEDOR": "Vendedor",
+      "ASESOR": "Asesor"
+    },
+
+    "nav": {
+      "contratos": "Contratos",
+      "vencimientos": "Vencimientos",
+      "plantillas": "Plantillas",
+      "boveda": "Bóveda"
+    },
+
+    "acciones": {
+      "nuevo": "Generar contrato"
+    },
+
+    "kpis": {
+      "borradores": "Borradores",
+      "esperando": "Esperando firma",
+      "esperandoHint": "Ya salieron las ligas",
+      "firmados": "Firmados",
+      "porVencer": "Por vencer",
+      "porVencerHint": "En los próximos 90 días"
+    },
+
+    "filtros": {
+      "estado": "Estado del contrato",
+      "todos": "Todos",
+      "tipo": "Tipo de contrato",
+      "tipoTodos": "Todos los tipos"
+    },
+
+    "vacio": {
+      "title": "Todavía no hay contratos",
+      "body": "Un contrato no se escribe: se genera. Elige la renta, la exclusiva o la operación de la que sale y la plantilla se llena sola con los datos que ya capturaste."
+    },
+
+    "tabla": {
+      "folio": "Folio",
+      "contrato": "Contrato",
+      "estado": "Estado",
+      "firmas": "Firmas",
+      "vigencia": "Vigencia",
+      "acciones": "Acciones",
+      "abrir": "Abrir",
+      "vencido": "Ya venció",
+      "enDias": "En {dias} días"
+    },
+
+    "nuevo": {
+      "title": "Generar un contrato",
+      "sub": "Elige de dónde sale. Los datos se llenan solos.",
+      "tipo": "Tipo de contrato",
+      "origen": {
+        "lease": "Contrato de renta",
+        "exclusive": "Exclusiva",
+        "deal": "Operación"
+      },
+      "origenProperty": "Inmueble (opcional)",
+      "origenHint": "De aquí salen el inmueble, las personas, los montos y las fechas.",
+      "origenOpcional": "El convenio de colaboración puede ir sin inmueble.",
+      "sinInmueble": "Sin inmueble",
+      "elige": "Elige uno…",
+      "vacio": {
+        "lease": "No hay contratos de renta capturados. Crea uno en Rentas y regresa: de ahí salen el inquilino, el monto y la vigencia.",
+        "exclusive": "No hay exclusivas capturadas. Créala en el inmueble y regresa.",
+        "deal": "No hay operaciones capturadas. Crea una en Comisiones y regresa."
+      },
+      "titulo": "Cómo lo vas a reconocer",
+      "tituloHint": "Solo para ti. No sale impreso en el contrato.",
+      "tituloPlaceholder": "Se pone solo si lo dejas vacío",
+      "comisionNota": "Este es el único tipo que pide capturar: el segundo asesor y el reparto de la comisión no viven en ninguna tabla del producto.",
+      "asesorB": "Segundo asesor: nombre",
+      "asesorBTel": "Segundo asesor: teléfono",
+      "montoOperacion": "Monto de la operación",
+      "soloNumeros": "Solo números. La cantidad con letra se escribe sola.",
+      "comisionTotal": "Comisión total",
+      "comisionTotalHint": "Solo números. La cantidad con letra se escribe sola.",
+      "pctA": "Parte del primer asesor",
+      "pctB": "Parte del segundo asesor",
+      "avisoAbogado": "Las plantillas que trae el sistema son un punto de partida genérico. Antes de que alguien firme con ellas, revísalas con tu abogado y ajústalas al estado donde se firma.",
+      "generar": "Generar borrador",
+      "generando": "Generando…",
+      "creado": "Listo. Léelo y, si está bien, mándalo a firmar."
+    },
+
+    "detalle": {
+      "volver": "Contratos",
+      "pdf": "Ver el PDF",
+      "descargar": "Descargar",
+      "editar": "Editar el texto",
+      "cancelarEdicion": "Descartar cambios",
+      "guardado": "Cambios guardados",
+      "selladoAviso": "Este contrato ya se mandó a firmar, así que el texto quedó congelado. Es lo que hace que la huella siga valiendo. Si hay que cambiar algo: anúlalo y genera uno nuevo — el viejo se queda en el expediente.",
+      "borradorAviso": "Es un borrador: puedes editarlo cuantas veces quieras. En cuanto lo mandes a firmar, el texto se congela.",
+      "anuladoTitle": "Contrato anulado",
+      "anuladoMotivo": "Motivo",
+      "noEncontrado": "No encontramos ese contrato.",
+      "documento": "El documento",
+
+      "ficha": {
+        "title": "La ficha",
+        "tipo": "Tipo",
+        "inmueble": "Inmueble",
+        "vigencia": "Vigencia",
+        "sinVigencia": "Sin vigencia capturada",
+        "creado": "Generado el",
+        "firmado": "Firmado el",
+        "huella": "Huella del documento (SHA-256)",
+        "huellaHint": "Se calcula sobre el TEXTO, no sobre el PDF: dos impresiones del mismo contrato pueden diferir en bytes y seguir siendo el mismo documento. Si cambiara una sola letra, esta huella dejaría de coincidir."
+      },
+
+      "partes": {
+        "title": "Quién firma",
+        "sub": "El contrato no queda firmado hasta que firman todas las personas marcadas.",
+        "editar": "Cambiar las personas",
+        "firmoEl": "Firmó el",
+        "pendiente": "Falta su firma",
+        "noFirma": "No firma",
+        "sinCorreo": "Sin correo capturado",
+        "sinTelefono": "Sin teléfono capturado",
+        "resumen": "{firmadas} de {requeridas} firmas"
+      },
+
+      "link": {
+        "SIN_ENVIAR": "Sin mandar",
+        "ENVIADA": "Liga mandada",
+        "VENCIDA": "Liga vencida",
+        "USADA": "Ya firmó"
+      },
+
+      "enviar": {
+        "title": "Mandar a firmar",
+        "sub": "Cada persona recibe SU liga. Es personal: quien la tenga puede firmar en su nombre.",
+        "avisoSellado": "Al mandarlo, el texto se congela y ya no se puede editar.",
+        "whatsapp": "Mandar por WhatsApp",
+        "correo": "Mandar por correo",
+        "copiar": "Solo dame la liga",
+        "reenviar": "Reenviar",
+        "enviando": "Mandando…",
+        "resultado": "Así salió",
+        "entregado": "Entregado",
+        "noEntregado": "No salió",
+        "ligas": "Las ligas (solo se ven ahora)",
+        "ligasHint": "Guárdalas si las vas a mandar tú: por seguridad no se pueden volver a ver. Si las pierdes, reenvía y se emite una nueva.",
+        "soloEsta": "Reenviarle a esta persona invalida SU liga anterior. Las de los demás siguen sirviendo.",
+        "vence": "Vence el"
+      },
+
+      "evidencia": {
+        "title": "La evidencia",
+        "sub": "Esto es lo que hace válida una firma electrónica: que sea atribuible a quien firmó y que se pueda detectar si el documento cambió después.",
+        "vacia": "Todavía no firma nadie.",
+        "firmadoEl": "Firmó el",
+        "ip": "Desde la IP",
+        "dispositivo": "Dispositivo",
+        "huella": "Huella que firmó",
+        "alerta": "AVISO: el texto de este contrato no coincide con el que esta persona firmó."
+      },
+
+      "acciones": {
+        "archivar": "Archivar",
+        "desarchivar": "Sacar del archivo",
+        "anular": "Anular",
+        "borrar": "Borrar el borrador",
+        "archivado": "Archivado",
+        "desarchivado": "Ya está de vuelta en el tablero",
+        "borrado": "Borrador eliminado",
+        "borrarConfirm": "¿Borrar este borrador? Todavía no lo firma nadie, así que se puede. Un contrato ya mandado a firmar nunca se borra."
+      },
+
+      "anular": {
+        "title": "Anular el contrato",
+        "sub": "No se borra: se queda entero en el expediente, marcado como sin efecto y con el motivo.",
+        "motivo": "Motivo",
+        "motivoHint": "Queda guardado y sale impreso en el PDF. Léelo dentro de dos años: tiene que explicarse solo.",
+        "confirmar": "Anular",
+        "hecho": "Contrato anulado"
+      },
+
+      "partesModal": {
+        "title": "Quién firma este contrato",
+        "sub": "Solo mientras es borrador. Después de mandarlo a firmar, las personas ya no se cambian.",
+        "rol": "Papel",
+        "nombre": "Nombre",
+        "correo": "Correo",
+        "telefono": "Teléfono",
+        "firma": "Tiene que firmar",
+        "agregar": "Agregar persona",
+        "quitar": "Quitar",
+        "guardado": "Listo",
+        "aviso": "Sin correo ni teléfono no hay por dónde mandarle su liga: tendrás que copiarla y hacérsela llegar tú."
+      }
+    },
+
+    "plantillas": {
+      "title": "Plantillas de contrato",
+      "subtitle": "El texto que se usa cada vez que generas un contrato de ese tipo. Se guarda por cuenta.",
+      "tipo": "Tipo de contrato",
+      "nombre": "Nombre de la plantilla",
+      "cuerpo": "El texto",
+      "cuerpoHint": "Escribe el contrato tal cual va a salir. Donde vaya un dato, mete su variable con las fichas de la derecha.",
+      "variables": "Variables disponibles",
+      "variablesHint": "Da clic en una para insertarla donde tengas el cursor. Se llenan solas con los datos de la renta, la exclusiva o la operación.",
+      "propia": "Plantilla editada por ti",
+      "base": "Plantilla base del sistema",
+      "baseHint": "Todavía no la has editado. En cuanto guardes, esta cuenta usará la tuya.",
+      "guardada": "Plantilla guardada",
+      "restaurar": "Volver a la del sistema",
+      "restaurarConfirm": "¿Descartar tu versión y volver a la plantilla base? Los contratos ya generados NO cambian: cada uno guarda su propio texto.",
+      "restaurada": "Listo, volvió la plantilla base",
+      "vistaPrevia": "Ver cómo queda",
+      "vistaPreviaHint": "Con los datos reales de tu cuenta. Los huecos que aún no tienen dato salen con una línea, como en papel.",
+      "generandoPrevia": "Armando la vista previa…",
+      "previaTitle": "Así queda",
+      "avisoAbogado": "⚠️ Las plantillas que trae el sistema las escribió un programa, no un abogado. Cubren la estructura que pide la práctica mexicana, pero antes de que un cliente firme con ellas, revísalas con tu abogado y ajústalas al estado donde se firma.",
+      "sinCambios": "No has cambiado nada.",
+      "desconocidas": "Estas variables no existen para este tipo de contrato y hay que quitarlas antes de guardar: {vars}"
+    },
+
+    "vencimientos": {
+      "title": "Vencimientos",
+      "subtitle": "Lo que se acaba pronto: contratos firmados, rentas y exclusivas. A tiempo de renovar, no después.",
+      "ventana": "Ventana",
+      "v30": "30 días",
+      "v60": "60 días",
+      "v90": "90 días",
+      "contratos": "Contratos por vencer",
+      "contratosSub": "Los que generaste aquí.",
+      "rentas": "Rentas por vencer SIN contrato generado",
+      "rentasSub": "Están en Rentas, pero nunca se generó su contrato firmable.",
+      "exclusivas": "Exclusivas por vencer SIN contrato generado",
+      "exclusivasSub": "El derecho a cobrar comisión se acaba con la exclusiva.",
+      "vence": "Vence el",
+      "enDias": "En {dias} días",
+      "hoy": "Vence hoy",
+      "vacio": "Nada vence en esta ventana.",
+      "generar": "Generar su contrato",
+      "abrir": "Abrir"
+    },
+
+    "boveda": {
+      "title": "Bóveda",
+      "subtitle": "Todo lo que se firmó, guardado en el expediente del inmueble y de la persona. Con su PDF y su evidencia.",
+      "nota": "Desde aquí no se borra nada, y es a propósito: un contrato firmado es la prueba de lo que se pactó. Lo que se puede es archivarlo, que lo saca del tablero de trabajo y lo deja aquí.",
+      "porInmueble": "Por inmueble",
+      "porContacto": "Por persona",
+      "sinInmueble": "Sin inmueble ligado",
+      "sinContacto": "Sin persona ligada",
+      "vacio": "Todavía no hay contratos firmados.",
+      "descargar": "Descargar el PDF",
+      "abrir": "Abrir",
+      "firmadoEl": "Firmado el",
+      "cuantos": "{n} en el expediente"
+    },
+
+    "firmar": {
+      "brand": "Documento para firmar",
+      "de": "Te lo comparte {inmobiliaria}",
+      "eres": "Firmas como {nombre} · {rol}",
+      "folio": "Folio",
+      "lee": "Lee el documento completo antes de firmar. Es el mismo texto que va a quedar firmado.",
+      "otros": "También lo firman",
+      "otrosFirmo": "ya firmó",
+      "otrosFalta": "falta su firma",
+      "traza": "Traza tu firma",
+      "trazaHint": "Con el dedo o con el mouse, dentro del recuadro.",
+      "limpiar": "Borrar y volver a trazar",
+      "acepto": "Leí el documento completo y estoy de acuerdo con lo que dice.",
+      "firmar": "Firmar el documento",
+      "firmando": "Registrando tu firma…",
+      "faltaTrazo": "Traza tu firma en el recuadro antes de continuar.",
+      "faltaAcepto": "Marca la casilla para confirmar que leíste el documento.",
+      "huella": "Huella del documento (SHA-256)",
+      "aviso": "Tu firma electrónica tiene la misma validez que la de tu puño y letra (artículos 89 y 89 bis del Código de Comercio y 210-A del Código Federal de Procedimientos Civiles). Al firmar se guarda la fecha y hora del servidor, tu dirección IP, tu dispositivo y la huella del documento: eso es lo que permite comprobar después que nadie le cambió una coma.",
+      "listoTitle": "Listo, quedó firmada",
+      "listoBody": "Guarda tu copia. Trae la evidencia impresa y la huella del documento.",
+      "listoCompleto": "Ya firmaron todas las partes.",
+      "listoFaltan": "Falta que firmen los demás. En cuanto lo hagan, te llega el acuse.",
+      "descargar": "Descargar mi copia",
+      "yaFirmaste": "Ya habías firmado este documento.",
+      "muertaTitle": "Esta liga no está disponible",
+      "muertaBody": "Puede haber vencido o haberse reemplazado por una nueva. Pídele a tu asesor que te la mande otra vez.",
+      "cargando": "Abriendo el documento…"
+    },
+
+    "errores": {
+      "sinPlan": "Tu plan todavía no incluye los contratos. Vienen incluidos desde el plan Propietario, junto con las rentas y la cobranza.",
+      "sinPermiso": "Tu usuario no tiene permiso para esta sección. Pídeselo a quien administra la cuenta: es el permiso de contratos de arrendamiento.",
+      "sinTablas": "Los contratos todavía no están listos en esta base de datos. Hay que correr sql/realty-contratos.sql."
+    }
+  },
+
+  "en": {
+    "title": "Contracts",
+    "subtitle": "The contract is built from data you already have, signed from a phone, and stored with its evidence.",
+
+    "comun": {
+      "error": "Something went wrong. Please try again.",
+      "cerrar": "Close",
+      "cancelar": "Cancel",
+      "guardar": "Save",
+      "guardando": "Saving…",
+      "volver": "Back to contracts",
+      "copiar": "Copy link",
+      "copiado": "Link copied",
+      "copiarFalla": "Couldn't copy. Select the link and copy it manually.",
+      "sinDato": "—"
+    },
+
+    "kinds": {
+      "ARRENDAMIENTO": "Lease",
+      "EXCLUSIVA": "Exclusive listing",
+      "PROMESA": "Purchase promise",
+      "COMISION": "Commission / co-broke"
+    },
+
+    "status": {
+      "BORRADOR": "Draft",
+      "ENVIADO": "Awaiting signatures",
+      "PARCIAL": "Partially signed",
+      "FIRMADO": "Signed",
+      "ARCHIVADO": "Archived",
+      "ANULADO": "Voided"
+    },
+
+    "roles": {
+      "ARRENDADOR": "Landlord",
+      "INQUILINO": "Tenant",
+      "AVAL": "Guarantor",
+      "PROPIETARIO": "Owner",
+      "INMOBILIARIA": "Agency",
+      "COMPRADOR": "Buyer",
+      "VENDEDOR": "Seller",
+      "ASESOR": "Agent"
+    },
+
+    "nav": {
+      "contratos": "Contracts",
+      "vencimientos": "Expirations",
+      "plantillas": "Templates",
+      "boveda": "Vault"
+    },
+
+    "acciones": {
+      "nuevo": "Generate contract"
+    },
+
+    "kpis": {
+      "borradores": "Drafts",
+      "esperando": "Awaiting signature",
+      "esperandoHint": "Links are already out",
+      "firmados": "Signed",
+      "porVencer": "Expiring",
+      "porVencerHint": "Within the next 90 days"
+    },
+
+    "filtros": {
+      "estado": "Contract status",
+      "todos": "All",
+      "tipo": "Contract type",
+      "tipoTodos": "All types"
+    },
+
+    "vacio": {
+      "title": "No contracts yet",
+      "body": "A contract isn't typed out: it's generated. Pick the lease, listing or deal it comes from and the template fills itself with data you already captured."
+    },
+
+    "tabla": {
+      "folio": "Number",
+      "contrato": "Contract",
+      "estado": "Status",
+      "firmas": "Signatures",
+      "vigencia": "Term",
+      "acciones": "Actions",
+      "abrir": "Open",
+      "vencido": "Expired",
+      "enDias": "In {dias} days"
+    },
+
+    "nuevo": {
+      "title": "Generate a contract",
+      "sub": "Pick where it comes from. The data fills itself in.",
+      "tipo": "Contract type",
+      "origen": {
+        "lease": "Lease",
+        "exclusive": "Exclusive listing",
+        "deal": "Deal"
+      },
+      "origenProperty": "Property (optional)",
+      "origenHint": "Property, people, amounts and dates all come from here.",
+      "origenOpcional": "A co-broke agreement can go without a property.",
+      "sinInmueble": "No property",
+      "elige": "Pick one…",
+      "vacio": {
+        "lease": "No leases captured yet. Create one under Rentals and come back: tenant, amount and term come from there.",
+        "exclusive": "No exclusive listings captured yet. Create one on the property and come back.",
+        "deal": "No deals captured yet. Create one under Commissions and come back."
+      },
+      "titulo": "How you'll recognize it",
+      "tituloHint": "For you only. It is not printed on the contract.",
+      "tituloPlaceholder": "Filled in automatically if you leave it blank",
+      "comisionNota": "This is the only type that asks you to type things in: the second agent and the commission split don't live in any table of the product.",
+      "asesorB": "Second agent: name",
+      "asesorBTel": "Second agent: phone",
+      "montoOperacion": "Deal amount",
+      "soloNumeros": "Numbers only. The amount in words is written for you.",
+      "comisionTotal": "Total commission",
+      "comisionTotalHint": "Numbers only. The amount in words is written for you.",
+      "pctA": "First agent's share",
+      "pctB": "Second agent's share",
+      "avisoAbogado": "The templates shipped with the system are a generic starting point. Before anyone signs with them, have your lawyer review them and adapt them to the state where they will be signed.",
+      "generar": "Generate draft",
+      "generando": "Generating…",
+      "creado": "Done. Read it and, if it looks right, send it out for signature."
+    },
+
+    "detalle": {
+      "volver": "Contracts",
+      "pdf": "View PDF",
+      "descargar": "Download",
+      "editar": "Edit the text",
+      "cancelarEdicion": "Discard changes",
+      "guardado": "Changes saved",
+      "selladoAviso": "This contract was already sent for signature, so the text is frozen. That is what keeps the hash meaningful. If something must change: void it and generate a new one — the old one stays in the file.",
+      "borradorAviso": "It's a draft: edit it as many times as you want. The moment you send it for signature, the text freezes.",
+      "anuladoTitle": "Voided contract",
+      "anuladoMotivo": "Reason",
+      "noEncontrado": "We couldn't find that contract.",
+      "documento": "The document",
+
+      "ficha": {
+        "title": "Details",
+        "tipo": "Type",
+        "inmueble": "Property",
+        "vigencia": "Term",
+        "sinVigencia": "No term captured",
+        "creado": "Generated on",
+        "firmado": "Signed on",
+        "huella": "Document hash (SHA-256)",
+        "huellaHint": "It's computed over the TEXT, not the PDF: two printouts of the same contract can differ byte for byte and still be the same document. If a single letter changed, this hash would stop matching."
+      },
+
+      "partes": {
+        "title": "Who signs",
+        "sub": "The contract isn't signed until every marked person has signed.",
+        "editar": "Change the people",
+        "firmoEl": "Signed on",
+        "pendiente": "Signature pending",
+        "noFirma": "Doesn't sign",
+        "sinCorreo": "No email captured",
+        "sinTelefono": "No phone captured",
+        "resumen": "{firmadas} of {requeridas} signatures"
+      },
+
+      "link": {
+        "SIN_ENVIAR": "Not sent",
+        "ENVIADA": "Link sent",
+        "VENCIDA": "Link expired",
+        "USADA": "Already signed"
+      },
+
+      "enviar": {
+        "title": "Send for signature",
+        "sub": "Each person gets THEIR own link. It's personal: whoever holds it can sign in their name.",
+        "avisoSellado": "Once you send it, the text freezes and can no longer be edited.",
+        "whatsapp": "Send over WhatsApp",
+        "correo": "Send by email",
+        "copiar": "Just give me the link",
+        "reenviar": "Resend",
+        "enviando": "Sending…",
+        "resultado": "How it went",
+        "entregado": "Delivered",
+        "noEntregado": "Not delivered",
+        "ligas": "The links (visible only now)",
+        "ligasHint": "Save them if you're sending them yourself: for security they can't be shown again. If you lose one, resend and a new link is issued.",
+        "soloEsta": "Resending to this person invalidates THEIR previous link. Everyone else's keeps working.",
+        "vence": "Expires on"
+      },
+
+      "evidencia": {
+        "title": "The evidence",
+        "sub": "This is what makes an electronic signature valid: that it can be attributed to the signer and that any later change to the document can be detected.",
+        "vacia": "Nobody has signed yet.",
+        "firmadoEl": "Signed on",
+        "ip": "From IP",
+        "dispositivo": "Device",
+        "huella": "Hash that was signed",
+        "alerta": "WARNING: this contract's text does not match what this person signed."
+      },
+
+      "acciones": {
+        "archivar": "Archive",
+        "desarchivar": "Unarchive",
+        "anular": "Void",
+        "borrar": "Delete draft",
+        "archivado": "Archived",
+        "desarchivado": "Back on the board",
+        "borrado": "Draft deleted",
+        "borrarConfirm": "Delete this draft? Nobody has signed it yet, so it can go. A contract already sent for signature is never deleted."
+      },
+
+      "anular": {
+        "title": "Void the contract",
+        "sub": "It isn't deleted: it stays whole in the file, marked as having no effect, with the reason.",
+        "motivo": "Reason",
+        "motivoHint": "It's stored and printed on the PDF. Read it two years from now: it has to explain itself.",
+        "confirmar": "Void",
+        "hecho": "Contract voided"
+      },
+
+      "partesModal": {
+        "title": "Who signs this contract",
+        "sub": "Only while it's a draft. Once sent for signature, the people can't be changed.",
+        "rol": "Role",
+        "nombre": "Name",
+        "correo": "Email",
+        "telefono": "Phone",
+        "firma": "Must sign",
+        "agregar": "Add person",
+        "quitar": "Remove",
+        "guardado": "Done",
+        "aviso": "With no email and no phone there's no way to send them their link: you'll have to copy it and get it to them yourself."
+      }
+    },
+
+    "plantillas": {
+      "title": "Contract templates",
+      "subtitle": "The text used every time you generate a contract of that type. Stored per account.",
+      "tipo": "Contract type",
+      "nombre": "Template name",
+      "cuerpo": "The text",
+      "cuerpoHint": "Write the contract exactly as it should come out. Wherever a value goes, drop in its variable using the chips on the right.",
+      "variables": "Available variables",
+      "variablesHint": "Click one to insert it at the cursor. They fill themselves from the lease, listing or deal.",
+      "propia": "Template edited by you",
+      "base": "System base template",
+      "baseHint": "You haven't edited it yet. As soon as you save, this account uses yours.",
+      "guardada": "Template saved",
+      "restaurar": "Back to the system one",
+      "restaurarConfirm": "Discard your version and go back to the base template? Contracts already generated do NOT change: each one stores its own text.",
+      "restaurada": "Done, the base template is back",
+      "vistaPrevia": "See how it looks",
+      "vistaPreviaHint": "With your account's real data. Gaps with no value yet print as a line, like on paper.",
+      "generandoPrevia": "Building the preview…",
+      "previaTitle": "This is how it looks",
+      "avisoAbogado": "⚠️ The templates shipped with the system were written by a program, not a lawyer. They cover the structure Mexican practice expects, but before a client signs with them, have your lawyer review them and adapt them to the state where they will be signed.",
+      "sinCambios": "You haven't changed anything.",
+      "desconocidas": "These variables don't exist for this contract type and must be removed before saving: {vars}"
+    },
+
+    "vencimientos": {
+      "title": "Expirations",
+      "subtitle": "What's about to run out: signed contracts, leases and exclusive listings. In time to renew, not after.",
+      "ventana": "Window",
+      "v30": "30 days",
+      "v60": "60 days",
+      "v90": "90 days",
+      "contratos": "Contracts expiring",
+      "contratosSub": "The ones you generated here.",
+      "rentas": "Leases expiring with NO contract generated",
+      "rentasSub": "They're under Rentals, but their signable contract was never generated.",
+      "exclusivas": "Exclusive listings expiring with NO contract generated",
+      "exclusivasSub": "The right to charge commission ends with the listing.",
+      "vence": "Expires on",
+      "enDias": "In {dias} days",
+      "hoy": "Expires today",
+      "vacio": "Nothing expires in this window.",
+      "generar": "Generate its contract",
+      "abrir": "Open"
+    },
+
+    "boveda": {
+      "title": "Vault",
+      "subtitle": "Everything that got signed, filed under the property and the person. With its PDF and its evidence.",
+      "nota": "Nothing is deleted from here, and that's on purpose: a signed contract is the proof of what was agreed. What you can do is archive it, which takes it off the working board and leaves it here.",
+      "porInmueble": "By property",
+      "porContacto": "By person",
+      "sinInmueble": "No property linked",
+      "sinContacto": "No person linked",
+      "vacio": "No signed contracts yet.",
+      "descargar": "Download the PDF",
+      "abrir": "Open",
+      "firmadoEl": "Signed on",
+      "cuantos": "{n} on file"
+    },
+
+    "firmar": {
+      "brand": "Document to sign",
+      "de": "Shared with you by {inmobiliaria}",
+      "eres": "You're signing as {nombre} · {rol}",
+      "folio": "Number",
+      "lee": "Read the whole document before signing. This is the exact text that will be signed.",
+      "otros": "Also signing",
+      "otrosFirmo": "already signed",
+      "otrosFalta": "signature pending",
+      "traza": "Draw your signature",
+      "trazaHint": "With your finger or the mouse, inside the box.",
+      "limpiar": "Clear and draw again",
+      "acepto": "I read the whole document and I agree with what it says.",
+      "firmar": "Sign the document",
+      "firmando": "Recording your signature…",
+      "faltaTrazo": "Draw your signature in the box before continuing.",
+      "faltaAcepto": "Tick the box to confirm you read the document.",
+      "huella": "Document hash (SHA-256)",
+      "aviso": "Your electronic signature has the same validity as a handwritten one (articles 89 and 89 bis of the Mexican Commercial Code and 210-A of the Federal Code of Civil Procedure). Signing stores the server's date and time, your IP address, your device and the document's hash: that is what later proves nobody changed a single comma.",
+      "listoTitle": "Done, it's signed",
+      "listoBody": "Save your copy. It carries the evidence printed on it and the document hash.",
+      "listoCompleto": "Every party has now signed.",
+      "listoFaltan": "The others still have to sign. As soon as they do, you'll get the receipt.",
+      "descargar": "Download my copy",
+      "yaFirmaste": "You had already signed this document.",
+      "muertaTitle": "This link isn't available",
+      "muertaBody": "It may have expired or been replaced by a new one. Ask your agent to send it again.",
+      "cargando": "Opening the document…"
+    },
+
+    "errores": {
+      "sinPlan": "Your plan doesn't include contracts yet. They come with the Owner plan and up, together with rentals and collections.",
+      "sinPermiso": "Your user doesn't have permission for this section. Ask whoever administers the account: it's the lease contracts permission.",
+      "sinTablas": "Contracts aren't ready in this database yet. sql/realty-contratos.sql needs to be run."
+    }
+  }
+}
