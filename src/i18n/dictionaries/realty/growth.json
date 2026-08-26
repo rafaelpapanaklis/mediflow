@@ -159,8 +159,8 @@
       },
       "previa": {
         "title": "Vista previa",
-        "vanA": "Le llega a {n}",
-        "seOmiten": "Se omiten {n}",
+        "vanA": "Le llega a",
+        "seOmiten": "Se omiten",
         "porQue": "Por que se omiten",
         "vacio": "Con esos filtros no queda nadie.",
         "sinNombre": "Sin nombre"
@@ -508,8 +508,8 @@
       },
       "previa": {
         "title": "Preview",
-        "vanA": "Reaches {n}",
-        "seOmiten": "{n} skipped",
+        "vanA": "Reaches",
+        "seOmiten": "Skipped",
         "porQue": "Why they are skipped",
         "vacio": "Nobody matches those filters.",
         "sinNombre": "No name"
