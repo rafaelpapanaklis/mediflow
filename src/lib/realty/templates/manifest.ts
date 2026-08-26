@@ -77,6 +77,7 @@ export const REALTY_WEB_BLOQUES: Record<RealtyWebBloqueId, RealtyWebBloqueDef> =
   portada: {
     id: "portada",
     nombre: "Portada",
+    ayuda: "Lo primero que se ve al entrar: tu logo, la foto grande, el título y el botón de WhatsApp.",
     modos: ["AGENCY", "AGENT", "OWNER"],
     // Sin `consume`: la portada se pinta siempre, aunque la cartera esté
     // vacía. Es lo único que garantiza que una cuenta recién dada de alta
@@ -89,6 +90,7 @@ export const REALTY_WEB_BLOQUES: Record<RealtyWebBloqueId, RealtyWebBloqueDef> =
   buscador: {
     id: "buscador",
     nombre: "Buscador de inmuebles",
+    ayuda: "La barra para filtrar por operación, tipo, zona y recámaras sin salir de la página.",
     modos: ["AGENCY", "AGENT", "OWNER"],
     consume: ["inmuebles"],
     pinta: ["buscador", "inmuebles"],
@@ -96,6 +98,7 @@ export const REALTY_WEB_BLOQUES: Record<RealtyWebBloqueId, RealtyWebBloqueDef> =
   inmuebles: {
     id: "inmuebles",
     nombre: "Inmuebles",
+    ayuda: "La rejilla con tus inmuebles publicados: foto, precio, ubicación y el recorrido si lo tiene.",
     modos: ["AGENCY", "AGENT", "OWNER"],
     consume: ["inmuebles"],
     pinta: ["inmuebles", "recorrido"],
@@ -103,6 +106,7 @@ export const REALTY_WEB_BLOQUES: Record<RealtyWebBloqueId, RealtyWebBloqueDef> =
   mapa: {
     id: "mapa",
     nombre: "Dónde estamos",
+    ayuda: "El mapa con tus sucursales y el botón de «cómo llegar». Se carga solo si lo abren.",
     modos: ["AGENCY", "AGENT", "OWNER"],
     consume: ["sucursales", "contacto"],
     pinta: ["mapa", "sucursales"],
@@ -110,6 +114,7 @@ export const REALTY_WEB_BLOQUES: Record<RealtyWebBloqueId, RealtyWebBloqueDef> =
   contacto: {
     id: "contacto",
     nombre: "Contacto",
+    ayuda: "El formulario y el WhatsApp: por aquí te entran los prospectos al CRM.",
     modos: ["AGENCY", "AGENT", "OWNER"],
     consume: ["contacto"],
     pinta: ["whatsapp"],
@@ -119,6 +124,7 @@ export const REALTY_WEB_BLOQUES: Record<RealtyWebBloqueId, RealtyWebBloqueDef> =
   "sobre-mi": {
     id: "sobre-mi",
     nombre: "Sobre mí",
+    ayuda: "Tu historia en unas líneas: quién eres, desde cuándo y por qué te compran a ti.",
     modos: ["AGENT"],
     consume: ["historia"],
     pinta: ["historia"],
@@ -126,6 +132,7 @@ export const REALTY_WEB_BLOQUES: Record<RealtyWebBloqueId, RealtyWebBloqueDef> =
   credenciales: {
     id: "credenciales",
     nombre: "Credenciales y certificaciones",
+    ayuda: "Tu cédula, AMPI, registro estatal y certificaciones. Es lo que da confianza.",
     // También AGENCY: una inmobiliaria con AMPI y registro estatal tiene
     // exactamente el mismo diferenciador que un asesor certificado.
     modos: ["AGENT", "AGENCY"],
@@ -135,6 +142,7 @@ export const REALTY_WEB_BLOQUES: Record<RealtyWebBloqueId, RealtyWebBloqueDef> =
   zonas: {
     id: "zonas",
     nombre: "Zonas que trabajo",
+    ayuda: "Las colonias y ciudades donde trabajas, para que te encuentre quien busca ahí.",
     modos: ["AGENT"],
     consume: ["zonas"],
     pinta: ["zonas"],
@@ -142,6 +150,7 @@ export const REALTY_WEB_BLOQUES: Record<RealtyWebBloqueId, RealtyWebBloqueDef> =
   testimonios: {
     id: "testimonios",
     nombre: "Lo que dicen mis clientes",
+    ayuda: "Lo que dijeron tus clientes. Se pintan tal cual los escribas aquí.",
     modos: ["AGENT"],
     consume: ["testimonios"],
     pinta: ["testimonios"],
@@ -151,6 +160,7 @@ export const REALTY_WEB_BLOQUES: Record<RealtyWebBloqueId, RealtyWebBloqueDef> =
   equipo: {
     id: "equipo",
     nombre: "Nuestro equipo",
+    ayuda: "Las fichas de tus asesores, con su foto y su WhatsApp directo.",
     modos: ["AGENCY"],
     consume: ["agentes"],
     pinta: ["agentes", "whatsapp"],
@@ -158,6 +168,7 @@ export const REALTY_WEB_BLOQUES: Record<RealtyWebBloqueId, RealtyWebBloqueDef> =
   sucursales: {
     id: "sucursales",
     nombre: "Sucursales",
+    ayuda: "Las direcciones y teléfonos de tus oficinas, con su foto.",
     modos: ["AGENCY"],
     consume: ["sucursales"],
     pinta: ["sucursales"],
@@ -165,6 +176,7 @@ export const REALTY_WEB_BLOQUES: Record<RealtyWebBloqueId, RealtyWebBloqueDef> =
   numeros: {
     id: "numeros",
     nombre: "Los números de la empresa",
+    ayuda: "Tres o cuatro cifras que dicen el tamaño de la empresa: años, operaciones, clientes.",
     modos: ["AGENCY"],
     consume: ["numeros"],
     pinta: ["numeros"],
@@ -174,6 +186,7 @@ export const REALTY_WEB_BLOQUES: Record<RealtyWebBloqueId, RealtyWebBloqueDef> =
   "disponibilidad-ahora": {
     id: "disponibilidad-ahora",
     nombre: "Qué está disponible ahora",
+    ayuda: "El tablero de qué tienes libre, apartado y rentado ahora mismo.",
     modos: ["OWNER"],
     consume: ["inmuebles"],
     pinta: ["inmuebles"],
@@ -181,6 +194,7 @@ export const REALTY_WEB_BLOQUES: Record<RealtyWebBloqueId, RealtyWebBloqueDef> =
   "requisitos-para-rentar": {
     id: "requisitos-para-rentar",
     nombre: "Requisitos para rentar",
+    ayuda: "Lo que pides para rentar: aval, depósito y comprobantes. Ahorra llamadas.",
     modos: ["OWNER"],
     consume: ["requisitos"],
     pinta: ["requisitos"],
@@ -188,6 +202,7 @@ export const REALTY_WEB_BLOQUES: Record<RealtyWebBloqueId, RealtyWebBloqueDef> =
   "trato-directo": {
     id: "trato-directo",
     nombre: "Trato directo con el dueño",
+    ayuda: "La banda que aclara que no hay comisión de por medio: te escriben directo a ti.",
     modos: ["OWNER"],
     consume: ["contacto"],
     pinta: ["whatsapp"],

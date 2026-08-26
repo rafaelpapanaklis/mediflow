@@ -27,8 +27,8 @@ import {
   precioAnunciado,
   rutaInmuebleWeb,
   rutaPropiedadesWeb,
-  tieneRecorrido,
-  ubicacionPublica,
+  recorridoEmbebible,
+  ubicacionPublica,
   fotoPortada,
   type RealtyWebData,
   type RealtyWebInmuebleDTO,
@@ -97,7 +97,11 @@ export function BloquePortada({ data }: { data: RealtyWebData }) {
     const inm = destacado(data);
     if (!inm) return null;
     const portada = fotoPortada(inm);
-    const tour = tieneRecorrido(inm) ? inm.tours[0] : null;
+    // recorridoEmbebible devuelve el primero que SE PUEDE PINTAR, o null.
+    // Antes esto era `tieneRecorrido(inm) ? inm.tours[0] : null`, que hacía
+    // dos veces el mismo trabajo (y con tours[0] enseñaba la panorámica
+    // propia en vez del Matterport si estaba primero).
+    const tour = recorridoEmbebible(inm);
     const embed = tour ? realtyTourEmbedUrl(tour.url) : null;
     const donde = ubicacionPublica(inm);
     const waInm = ligaWhatsApp(
@@ -112,6 +116,7 @@ export function BloquePortada({ data }: { data: RealtyWebData }) {
             {embed && tour ? (
               <EmbedRecorrido
                 src={embed}
+                href={tour.url}
                 titulo={inm.titulo}
                 etiqueta={copia(data, ID, "portada.recorrido")}
                 proveedor={realtyTourProviderLabel(tour.provider)}

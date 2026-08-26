@@ -49,6 +49,8 @@ import {
   fusionarConfigRealtyWeb,
   fusionarPlantilla,
   manifiestoRealtyWeb,
+  nombreDesdeClave,
+  tituloDePanel,
   normalizarConfigRealtyWeb,
   ordenDeBloques,
   plantillaEfectiva,
@@ -83,7 +85,10 @@ const MARCAS: Record<RealtyWebPinta, RegExp> = {
   agentes: /\bdata\.agentes\b/,
   inmuebles: /\bdata\.inmuebles\b/,
   buscador: /\bBuscadorInmuebles\b/,
-  recorrido: /\btieneRecorrido\b/,
+  // Cualquiera de las dos: `tieneRecorrido` es la insignia del listado y
+  // `recorridoEmbebible` es la que elige el recorrido que se pinta. Las dos
+  // salen del mismo sitio y responden la misma pregunta.
+  recorrido: /\b(tieneRecorrido|recorridoEmbebible)\b/,
   mapa: /\bMapaBajoDemanda\b/,
   whatsapp: /\bligaWhatsApp\b/,
 };
@@ -147,6 +152,191 @@ for (const id of REALTY_WEB_BLOQUE_IDS) {
 test("ningún bloque se queda sin modos (sería invisible para todos)", () => {
   const huerfanos = REALTY_WEB_BLOQUE_IDS.filter((id) => REALTY_WEB_BLOQUES[id].modos.length === 0);
   assert.deepEqual(huerfanos, []);
+});
+
+/* ── El encabezado del editor: ningún bloque puede quedarse mudo ────
+ *
+ * 🔴 POR QUÉ EXISTE ESTA PRUEBA. El editor de "Mi web" pinta cada bloque
+ * como un `<details>` CERRADO: lo único que se ve en la columna izquierda
+ * es `nombre`, y lo único que explica qué hay dentro es `ayuda`. Un bloque
+ * sin nombre no se ve como un error — se ve como una BARRA GRIS VACÍA, y
+ * uno sin ayuda se ve como una sección que no dice nada. Es exactamente el
+ * modo de falla de la llave de i18n vacía en barber (campañas pintando
+ * "barber.campanas.title" y el modal de cobro "sin opciones"): la pantalla
+ * "funciona", así que nadie se entera.
+ *
+ * Se comprueban las DOS puntas: el catálogo (donde se declaran) y lo que
+ * el editor pide de verdad para CADA plantilla y CADA modo, que es
+ * `bloqueDef(bloque.id)` — el mismo camino que recorre controles.tsx.
+ */
+test("todo bloque del catálogo tiene nombre y ayuda (sin ellos el editor pinta una barra gris)", () => {
+  const malos: string[] = [];
+  for (const id of REALTY_WEB_BLOQUE_IDS) {
+    const def = REALTY_WEB_BLOQUES[id];
+    if (typeof def.nombre !== "string" || def.nombre.trim() === "") malos.push(`${id}.nombre`);
+    if (typeof def.ayuda !== "string" || def.ayuda.trim() === "") malos.push(`${id}.ayuda`);
+  }
+  assert.deepEqual(
+    malos,
+    [],
+    "bloques sin nombre o sin ayuda en REALTY_WEB_BLOQUES: " +
+      malos.join(", ") +
+      ". El editor los pinta como una barra gris sin texto y quien la ve cree que " +
+      "esa sección no existe. El nombre y la ayuda van en " +
+      "src/lib/realty/templates/manifest.ts.",
+  );
+});
+
+test("cada bloque de cada plantilla llega al editor con encabezado (los tres modos)", () => {
+  const malos: string[] = [];
+  for (const modo of ["AGENCY", "AGENT", "OWNER"] as RealtyMode[]) {
+    for (const tid of REALTY_WEB_TEMPLATE_IDS) {
+      const manifiesto = manifiestoRealtyWeb(tid, modo);
+      if (manifiesto.modo !== modo) continue; // la plantilla de otro modo cae a la suya
+      for (const bloque of manifiesto.bloques) {
+        // MISMA llamada que hace src/components/realty/web/editor/controles.tsx
+        const def = bloqueDef(bloque.id);
+        if (!def.nombre || def.nombre.trim() === "") {
+          malos.push(`${modo}/${manifiesto.id}/${bloque.id}: sin nombre`);
+        }
+        if (!def.ayuda || def.ayuda.trim() === "") {
+          malos.push(`${modo}/${manifiesto.id}/${bloque.id}: sin ayuda`);
+        }
+      }
+    }
+  }
+  assert.deepEqual(malos, [], `paneles mudos en el editor: ${malos.join(" · ")}`);
+});
+
+test("un bloque desconocido tampoco pinta un encabezado vacío", () => {
+  // bloqueDef es el único punto por el que el editor saca el título. Si
+  // alguien guarda un orden con un id que ya no existe, la barra tiene que
+  // seguir diciendo CUÁL es, no quedarse en blanco.
+  const fantasma = bloqueDef("bloque-que-ya-no-existe");
+  assert.equal(fantasma.nombre, "Bloque que ya no existe");
+  assert.ok(fantasma.ayuda.trim().length > 0, "el bloque de emergencia también lleva ayuda");
+
+  // Y el caso límite de verdad: una clave vacía.
+  assert.equal(nombreDesdeClave(""), "Sección");
+  assert.equal(nombreDesdeClave("trato-directo"), "Trato directo");
+});
+
+test("la RED DE SEGURIDAD nunca devuelve un espacio (sería la misma barra gris)", () => {
+  /* 🔴 ESTE ES EL AGUJERO QUE TENÍA LA PRIMERA VERSIÓN DEL ARREGLO. El
+   * `.trim()` corría ANTES de cambiar los separadores por espacios, así que
+   * una clave de puros guiones ("-", "__", " - ") pasaba el guardia de
+   * vacío y devolvía " ": la red contra la barra muda pintaba exactamente
+   * una barra muda. Y la única prueba que había miraba `""`, que es el
+   * único caso que sí funcionaba.
+   *
+   * Se comprueba la función PURA que usa el componente, no el .tsx como
+   * texto: así vaciarla rompe la suite.
+   */
+  const clavesFeas = ["", "   ", "-", "--", "_", "__", " - ", "-_-", "	"];
+  for (const clave of clavesFeas) {
+    const nombre = nombreDesdeClave(clave);
+    assert.equal(nombre.trim(), nombre, `"${clave}" deja espacios sueltos: ${JSON.stringify(nombre)}`);
+    assert.ok(nombre.length > 0, `"${clave}" devolvió vacío`);
+    assert.equal(nombre, "Sección", `"${clave}" debería caer al nombre neutro`);
+  }
+  // Y una clave con basura alrededor sigue leyéndose.
+  assert.equal(nombreDesdeClave("__sobre-mi__"), "Sobre mi");
+
+  // tituloDePanel: lo que el <summary> pinta de verdad. NUNCA vacío.
+  for (const titulo of ["", "   ", null, undefined, 0, {}]) {
+    const visible = tituloDePanel(titulo as unknown, "trato-directo");
+    assert.equal(visible, "Trato directo", `título ${JSON.stringify(titulo)} no cayó al respaldo`);
+  }
+  for (const titulo of ["", "   ", null, undefined]) {
+    const visible = tituloDePanel(titulo as unknown, "-");
+    assert.ok(visible.trim().length > 0, "el respaldo del respaldo también tiene que tener texto");
+  }
+  // Y un título bueno se respeta tal cual (recortado).
+  assert.equal(tituloDePanel("  Redes sociales  ", "loQueSea"), "Redes sociales");
+});
+
+test("NINGÚN panel del editor puede quedarse sin título, venga de donde venga", () => {
+  /* 🔴 POR QUÉ ESTA PRUEBA ES MÁS ANCHA QUE LA DE ARRIBA.
+   *
+   * Las de arriba cuidan el ÚNICO encabezado dinámico: el de EditorBloque,
+   * que saca su nombre del manifiesto. Pero la columna izquierda del editor
+   * tiene DOCE paneles más —Plantilla, Color, Publicación, Tu historia,
+   * Credenciales, Zonas, Testimonios, Requisitos, Números, Cómo te
+   * contactan, Redes sociales, Título y descripción— y hoy su título es un
+   * literal escrito en el JSX. Hoy. El día que alguien cambie uno por una
+   * variable (por i18n, por ejemplo) y esa variable llegue vacía, volvemos
+   * exactamente al síntoma que se está arreglando: una barra gris sin texto
+   * que no parece un error, parece una sección que no existe.
+   *
+   * Aquí se leen TODAS las llamadas a <Panel> del editor y se exige que
+   * cada `titulo=` sea, o un literal con texto, o `{def.nombre}` — que es el
+   * único dinámico y viene con su red de seguridad (`clave`) comprobada en
+   * la prueba siguiente. Cualquier tercera forma tiene que pasar por aquí
+   * antes de llegar a la pantalla.
+   */
+  const editor = readFileSync(
+    join(RAIZ, "src/components/realty/web/editor/editor.tsx"),
+    "utf8",
+  );
+  const llamadas = editor.match(/<Panel\s+titulo=(\{[^}]*\}|"[^"]*")/g) ?? [];
+  // 🔴 Sin esta igualdad, el guardián se esquiva SOLO con reordenar los
+  // atributos: `<Panel abierto titulo={loQueSea}>` no casa con el patrón de
+  // arriba y pasaría invisible. Aquí se cuentan TODOS los <Panel del
+  // archivo y se exige que el patrón los haya visto a todos.
+  const todos = editor.match(/<Panel[\s>]/g) ?? [];
+  assert.equal(
+    llamadas.length,
+    todos.length,
+    `hay ${todos.length} <Panel> en el editor y el patrón solo reconoció ${llamadas.length}. ` +
+      "Seguramente alguno no lleva `titulo` como primer atributo: ponlo primero " +
+      "o amplía esta prueba, pero no lo dejes sin vigilar.",
+  );
+  assert.ok(
+    llamadas.length >= 10,
+    `solo se encontraron ${llamadas.length} paneles en el editor; ¿cambió la forma de llamarlos? ` +
+      "Si es así, ACTUALIZA esta prueba: sin ella una barra gris vuelve a pasar sin que nadie la vea.",
+  );
+
+  const malos: string[] = [];
+  for (const llamada of llamadas) {
+    const valor = llamada.replace(/^<Panel\s+titulo=/, "");
+    if (valor.startsWith('"')) {
+      if (valor.replace(/"/g, "").trim() === "") malos.push(`${llamada} (literal vacío)`);
+      continue;
+    }
+    // La única expresión permitida es la del catálogo, que ya está cubierta.
+    if (valor.replace(/\s/g, "") !== "{def.nombre}") malos.push(llamada);
+  }
+  assert.deepEqual(
+    malos,
+    [],
+    "títulos de panel que no son ni un literal con texto ni {def.nombre}: " +
+      malos.join(" · ") +
+      ". Si de verdad hace falta un título dinámico nuevo, pásale también " +
+      "`clave` al Panel y agrégalo a esta prueba.",
+  );
+});
+
+test("el editor no puede volver a llamar a Panel sin la clave del bloque", () => {
+  // La red de seguridad de controles.tsx solo sirve si recibe la clave: sin
+  // ella el nombre de emergencia sería "Sección" para todos y el aviso de
+  // consola no diría cuál se rompió. Esto se lee del código, que es donde
+  // vive el riesgo.
+  const fuente = readFileSync(
+    join(RAIZ, "src/components/realty/web/editor/controles.tsx"),
+    "utf8",
+  );
+  const codigo = fuente.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+  assert.ok(
+    /<Panel\s+titulo=\{def\.nombre\}[^>]*\bclave=\{p\.bloque\.id\}/.test(codigo),
+    "EditorBloque tiene que pasarle `clave={p.bloque.id}` al Panel: es lo que " +
+      "convierte una barra gris muda en un nombre legible y en un aviso de consola.",
+  );
+  assert.ok(
+    /<Panel\s+titulo=\{def\.nombre\}\s+ayuda=\{def\.ayuda\}/.test(codigo),
+    "EditorBloque tiene que pasarle `ayuda={def.ayuda}` al Panel: sin esa línea " +
+      "el panel abierto no dice qué sale en esa sección de la web.",
+  );
 });
 
 /* ══════════════════════════════════════════════════════════════════
@@ -727,12 +917,18 @@ test("una página de Vimeo se convierte al reproductor", () => {
   assert.equal(realtyTourEmbedUrl("https://vimeo.com/123456789"), "https://player.vimeo.com/video/123456789");
 });
 
-test("Matterport y Kuula se usan tal cual", () => {
+test("la liga de COMPARTIR de Matterport (y la de Kuula) se usan tal cual", () => {
+  // Solo la de Compartir. Las demás ligas del mismo dominio pasan el filtro
+  // de dominio y luego el iframe NO puede mostrarlas: ver la batería
+  // completa en src/lib/realty/__tests__/recorridos.test.ts.
+  // El id es de ONCE caracteres: "abc123" ya no se acepta a propósito (una
+  // palabra corta colándose como identificador acababa en marco roto).
   assert.equal(
-    realtyTourEmbedUrl("https://my.matterport.com/show/?m=abc123"),
-    "https://my.matterport.com/show/?m=abc123",
+    realtyTourEmbedUrl("https://my.matterport.com/show/?m=SxQL3iGyoDo"),
+    "https://my.matterport.com/show/?m=SxQL3iGyoDo",
   );
   assert.equal(realtyTourEmbedUrl("https://kuula.co/share/xyz"), "https://kuula.co/share/xyz");
+  assert.equal(realtyTourEmbedUrl("https://matterport.com/discover/space/casa"), null);
 });
 
 test("una URL fuera de la allowlist NO se embebe (saldría un marco en blanco)", () => {

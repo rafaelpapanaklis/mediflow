@@ -1,0 +1,156 @@
+{
+  "hello": "Hola, {name}",
+  "helloNoName": "Tu día de hoy",
+  "sub": {
+    "AGENCY": "Lo que tu equipo tiene que atender hoy, en orden de urgencia.",
+    "AGENT": "Lo tuyo de hoy: a quién le hablas, a quién ves y qué se te vence.",
+    "OWNER": "Tus rentas de hoy: cuánto entra, quién debe y qué hay que arreglar."
+  },
+  "heat": {
+    "verde": "recién entrados",
+    "amarillo": "se enfrían",
+    "rojo": "ya se enfriaron"
+  },
+  "fresh": {
+    "title": "Empieza por aquí",
+    "body": "Tu cuenta está lista y todavía sin datos. Estos son los primeros pasos, en el orden que menos trabajo te da.",
+    "inmueble": "Da de alta tu primer inmueble",
+    "inmuebleHint": "Con fotos y precio. Es lo que alimenta tu web, tus portales y tus prospectos.",
+    "prospecto": "Registra tu primer prospecto",
+    "prospectoHint": "O deja que entren solos desde tu web y por WhatsApp.",
+    "contrato": "Captura tu primer contrato de renta",
+    "contratoHint": "Con eso ya se generan los cargos del mes y los recordatorios de cobro.",
+    "web": "Prende tu web pública",
+    "webHint": "Tus inmuebles con tu nombre y tu WhatsApp, sin que programes nada.",
+    "equipo": "Invita a tu equipo",
+    "equipoHint": "Cada asesor con su usuario, sus prospectos y su comisión."
+  },
+  "card": {
+    "prospectos": {
+      "title": "Prospectos sin atender",
+      "value": "esperan respuesta",
+      "cta": "Ver prospectos",
+      "foot": "Pasados {minutes} minutos sin respuesta, un prospecto se enfría.",
+      "unassigned": "Sin asesor asignado",
+      "empty": {
+        "title": "Aún no te llega ningún prospecto",
+        "body": "Prende tu web pública y conecta WhatsApp: los interesados entran aquí solos, con su teléfono y qué buscan."
+      },
+      "clear": {
+        "title": "Todos contestados",
+        "body": "No queda nadie esperando respuesta. Así es como no se pierde una venta."
+      }
+    },
+    "visitas": {
+      "title": "Visitas de hoy",
+      "value": "agendadas para hoy",
+      "toConfirm": "{count} sin confirmar",
+      "noAgent": "Sin asesor asignado",
+      "cta": "Ver la agenda",
+      "empty": {
+        "title": "Hoy no tienes visitas",
+        "body": "Agenda una desde la ficha del prospecto: se le manda el recordatorio por WhatsApp y llega."
+      }
+    },
+    "tareas": {
+      "title": "Pendientes vencidos",
+      "value": "ya pasaron de fecha",
+      "cta": "Ver pendientes",
+      "clear": {
+        "title": "Sin pendientes vencidos",
+        "body": "Todo lo que te pusiste de tarea sigue en fecha."
+      }
+    },
+    "inmuebles": {
+      "title": "Tu cartera",
+      "value": "publicados",
+      "unpublished": "{count} sin publicar todavía",
+      "noPhotos": "{count} están publicados SIN una sola foto. Un inmueble sin fotos casi no lo abren: súbelas y se ve el cambio el mismo día.",
+      "cta": "Ver inmuebles",
+      "empty": {
+        "title": "Aún no tienes inmuebles",
+        "body": "Agrega el primero: con eso ya tienes web, ficha para compartir y algo que mandarle a un prospecto."
+      }
+    },
+    "exclusivas": {
+      "title": "Exclusivas por vencer",
+      "value": "vencen este mes",
+      "days": "{count} d",
+      "cta": "Ver propietarios",
+      "clear": {
+        "title": "Ninguna exclusiva se vence pronto",
+        "body": "Nada que renovar en los próximos 30 días."
+      }
+    },
+    "ranking": {
+      "title": "Tu equipo este mes",
+      "ops": "{count} operaciones cerradas",
+      "cta": "Ver comisiones",
+      "empty": {
+        "title": "Todavía no hay operaciones cerradas este mes",
+        "body": "En cuanto registres una operación cerrada, aquí sale quién la cerró y cuánto le toca."
+      }
+    },
+    "comisiones": {
+      "title": "Tus comisiones del mes",
+      "pending": "por cobrar",
+      "collected": "Ya cobraste {amount} de {count} operaciones cerradas este mes.",
+      "cta": "Ver comisiones",
+      "empty": {
+        "title": "Sin operaciones cerradas este mes",
+        "body": "Cuando cierres una, aquí ves cuánto te toca y qué falta por pagarte."
+      }
+    },
+    "cobranza": {
+      "title": "Cobranza del mes",
+      "value": "te falta cobrar",
+      "overdue": "{amount} ya está vencido, en {count} cargos.",
+      "onTime": "Nada vencido: todo lo que falta todavía está en fecha.",
+      "cta": "Ver cobranza",
+      "empty": {
+        "title": "Este mes no hay nada que cobrar",
+        "body": "Los cargos salen de tus contratos activos. Captura uno y el cobro del mes se genera solo."
+      }
+    },
+    "deudores": {
+      "title": "Quién te debe",
+      "since": "Vencido el {date} · {days} días",
+      "cta": "Ver cobranza",
+      "clear": {
+        "title": "Nadie te debe",
+        "body": "Todos tus inquilinos están al corriente."
+      }
+    },
+    "contratos": {
+      "title": "Contratos por vencer",
+      "value": "vencen en 60 días",
+      "days": "{count} d",
+      "cta": "Ver contratos",
+      "clear": {
+        "title": "Ningún contrato vence pronto",
+        "body": "Nada que renovar en los próximos 60 días."
+      }
+    },
+    "mantenimientos": {
+      "title": "Mantenimientos abiertos",
+      "value": "sin resolver",
+      "days": "{count} d",
+      "inProgress": "En proceso",
+      "open": "Reportado, sin atender",
+      "cta": "Ver mantenimientos",
+      "clear": {
+        "title": "Nada descompuesto",
+        "body": "No tienes reportes abiertos de tus inquilinos."
+      }
+    },
+    "vacias": {
+      "title": "Propiedades vacías",
+      "value": "sin contrato activo",
+      "cta": "Ver inmuebles",
+      "clear": {
+        "title": "Todo rentado",
+        "body": "No tienes propiedades desocupadas."
+      }
+    }
+  }
+}

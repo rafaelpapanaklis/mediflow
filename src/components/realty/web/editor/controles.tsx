@@ -19,25 +19,65 @@ import type {
   RealtyWebFuente,
   RealtyWebManifestBloque,
 } from "@/lib/realty/landing";
-import { bloqueDef, consumeDe } from "@/lib/realty/landing";
+import { bloqueDef, consumeDe, tituloDePanel } from "@/lib/realty/landing";
 
 /* ── Panel plegable ───────────────────────────────────────────────── */
+
+/**
+ * 🔴 RED DE SEGURIDAD DEL ENCABEZADO.
+ *
+ * El `<summary>` cerrado ES la barra que se ve en la columna izquierda. Si
+ * `titulo` llega vacío, esa barra queda con padding, borde y flecha… y nada
+ * dentro: una tira gris que no se puede diagnosticar mirándola, porque no
+ * parece un error sino una sección que no existe. Es el mismo modo de falla
+ * que la llave de i18n vacía de barber (el modal de cobro "sin opciones").
+ *
+ * Aquí NO se pinta nunca un encabezado mudo: se cae a un nombre legible
+ * derivado de la clave del bloque y se grita en consola EN DESARROLLO con
+ * esa clave, para que quien agregue un bloque nuevo lo vea al primer render.
+ */
+const avisados = new Set<string>();
+
+function tituloSeguro(titulo: string, clave?: string): string {
+  // El texto lo decide `tituloDePanel`, que es PURO y vive en landing.ts:
+  // así una prueba puede ejecutarlo de verdad. Cuando esto era una función
+  // local, lo único que se podía comprobar era que la LLAMADA siguiera en
+  // el .tsx — se podía vaciar el cuerpo entero y la suite seguía verde.
+  const visible = tituloDePanel(titulo, clave);
+  const original = typeof titulo === "string" ? titulo.trim() : "";
+  if (!original && process.env.NODE_ENV !== "production") {
+    const marca = clave || "(sin clave)";
+    if (!avisados.has(marca)) {
+      avisados.add(marca);
+      console.warn(
+        `[realty editor] panel SIN nombre: clave "${marca}". Se pinta "${visible}" ` +
+          "para no dejar una barra gris vacía, pero el nombre de verdad va en " +
+          "REALTY_WEB_BLOQUES (src/lib/realty/templates/manifest.ts).",
+      );
+    }
+  }
+  return visible;
+}
 
 export function Panel({
   titulo,
   ayuda,
+  clave,
   abierto,
   children,
 }: {
   titulo: string;
   ayuda?: string;
+  /** Clave del bloque: de ahí sale el nombre de emergencia y el aviso. */
+  clave?: string;
   abierto?: boolean;
   children: ReactNode;
 }) {
+  const visible = tituloSeguro(titulo, clave);
   return (
     <details className="dcrwe-panel" open={abierto}>
       <summary>
-        <span>{titulo}</span>
+        <span>{visible}</span>
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" aria-hidden="true">
           <path d="m6 9 6 6 6-6" />
         </svg>
@@ -334,7 +374,7 @@ export function EditorBloque(p: EditorBloqueProps) {
   const sinDatos = fuentes.length > 0 && faltan.length === fuentes.length;
 
   return (
-    <Panel titulo={def.nombre}>
+    <Panel titulo={def.nombre} ayuda={def.ayuda} clave={p.bloque.id}>
       <div className="dcrwe-bloque-barra">
         {p.bloque.obligatoria ? (
           <span className="dcrwe-chip">Siempre se ve</span>

@@ -1,0 +1,156 @@
+{
+  "hello": "Hi, {name}",
+  "helloNoName": "Your day",
+  "sub": {
+    "AGENCY": "What your team has to handle today, most urgent first.",
+    "AGENT": "Your day: who to call, who you're meeting, what's due.",
+    "OWNER": "Your rentals today: what comes in, who owes, what needs fixing."
+  },
+  "heat": {
+    "verde": "just came in",
+    "amarillo": "going cold",
+    "rojo": "already cold"
+  },
+  "fresh": {
+    "title": "Start here",
+    "body": "Your account is ready and still empty. These are the first steps, in the order that takes the least work.",
+    "inmueble": "Add your first listing",
+    "inmuebleHint": "With photos and a price. It feeds your website, your portals and your leads.",
+    "prospecto": "Add your first lead",
+    "prospectoHint": "Or let them come in on their own from your website and WhatsApp.",
+    "contrato": "Enter your first lease",
+    "contratoHint": "That alone generates this month's charges and the payment reminders.",
+    "web": "Turn on your public website",
+    "webHint": "Your listings with your name and your WhatsApp, no coding needed.",
+    "equipo": "Invite your team",
+    "equipoHint": "Every agent with their own login, their leads and their commission."
+  },
+  "card": {
+    "prospectos": {
+      "title": "Leads waiting on a reply",
+      "value": "waiting for an answer",
+      "cta": "View leads",
+      "foot": "After {minutes} minutes without a reply, a lead goes cold.",
+      "unassigned": "No agent assigned",
+      "empty": {
+        "title": "No leads yet",
+        "body": "Turn on your public website and connect WhatsApp: buyers land here on their own, with their phone and what they're after."
+      },
+      "clear": {
+        "title": "All answered",
+        "body": "Nobody is waiting on a reply. That's how a sale doesn't get lost."
+      }
+    },
+    "visitas": {
+      "title": "Today's showings",
+      "value": "booked for today",
+      "toConfirm": "{count} unconfirmed",
+      "noAgent": "No agent assigned",
+      "cta": "Open the calendar",
+      "empty": {
+        "title": "No showings today",
+        "body": "Book one from the lead's page: the WhatsApp reminder goes out and they show up."
+      }
+    },
+    "tareas": {
+      "title": "Overdue to-dos",
+      "value": "past their date",
+      "cta": "View to-dos",
+      "clear": {
+        "title": "Nothing overdue",
+        "body": "Everything you set for yourself is still on time."
+      }
+    },
+    "inmuebles": {
+      "title": "Your listings",
+      "value": "published",
+      "unpublished": "{count} not published yet",
+      "noPhotos": "{count} are published WITHOUT a single photo. A listing with no photos barely gets opened: upload them and you'll see the change the same day.",
+      "cta": "View listings",
+      "empty": {
+        "title": "No listings yet",
+        "body": "Add the first one: that alone gives you a website, a page to share and something to send a lead."
+      }
+    },
+    "exclusivas": {
+      "title": "Exclusives expiring",
+      "value": "expire this month",
+      "days": "{count} d",
+      "cta": "View owners",
+      "clear": {
+        "title": "No exclusive expires soon",
+        "body": "Nothing to renew in the next 30 days."
+      }
+    },
+    "ranking": {
+      "title": "Your team this month",
+      "ops": "{count} deals closed",
+      "cta": "View commissions",
+      "empty": {
+        "title": "No deals closed this month yet",
+        "body": "As soon as you record a closed deal, you'll see here who closed it and what they earned."
+      }
+    },
+    "comisiones": {
+      "title": "Your commissions this month",
+      "pending": "still owed to you",
+      "collected": "You've already been paid {amount} from {count} deals closed this month.",
+      "cta": "View commissions",
+      "empty": {
+        "title": "No deals closed this month",
+        "body": "When you close one, you'll see here what you earn and what's still owed to you."
+      }
+    },
+    "cobranza": {
+      "title": "This month's rent",
+      "value": "still to collect",
+      "overdue": "{amount} is already overdue, across {count} charges.",
+      "onTime": "Nothing overdue: what's left is still within its date.",
+      "cta": "View collections",
+      "empty": {
+        "title": "Nothing to collect this month",
+        "body": "Charges come from your active leases. Enter one and the month's rent is generated for you."
+      }
+    },
+    "deudores": {
+      "title": "Who owes you",
+      "since": "Due {date} · {days} days",
+      "cta": "View collections",
+      "clear": {
+        "title": "Nobody owes you",
+        "body": "All your tenants are up to date."
+      }
+    },
+    "contratos": {
+      "title": "Leases expiring",
+      "value": "expire within 60 days",
+      "days": "{count} d",
+      "cta": "View leases",
+      "clear": {
+        "title": "No lease expires soon",
+        "body": "Nothing to renew in the next 60 days."
+      }
+    },
+    "mantenimientos": {
+      "title": "Open maintenance",
+      "value": "unresolved",
+      "days": "{count} d",
+      "inProgress": "In progress",
+      "open": "Reported, not started",
+      "cta": "View maintenance",
+      "clear": {
+        "title": "Nothing broken",
+        "body": "You have no open reports from your tenants."
+      }
+    },
+    "vacias": {
+      "title": "Vacant properties",
+      "value": "with no active lease",
+      "cta": "View listings",
+      "clear": {
+        "title": "All rented",
+        "body": "You have no vacant properties."
+      }
+    }
+  }
+}

@@ -9,27 +9,33 @@
    pinta la foto de portada del inmueble con un botón de reproducir encima;
    el iframe se monta cuando alguien lo pide.
 
-   La URL viene YA convertida por urlEmbedRecorrido() — un
-   youtube.com/watch dentro de un iframe no se reproduce, y un host fuera
-   del frame-src sale EN BLANCO sin un solo error en consola.
+   La URL viene YA convertida por realtyTourEmbedUrl() — un
+   youtube.com/watch dentro de un iframe no se reproduce, una liga de
+   Matterport que no sea la de Compartir tampoco, y un host fuera del
+   frame-src sale EN BLANCO sin un solo error en consola. Cuando aun así no
+   carga, RealtyTourEmbed lo dice en pantalla en vez de dejar el gris.
    ═══════════════════════════════════════════════════════════════════════ */
 
 import { useState } from "react";
-import {
-  REALTY_TOUR_IFRAME_ALLOW,
-  REALTY_TOUR_IFRAME_SANDBOX,
-} from "@/lib/realty/tours";
+import { RealtyTourEmbed } from "@/components/realty/tours/tour-embed";
 import { Foto, IcoRecorrido, SinFoto } from "@/components/realty/web/pieces";
 
 export function EmbedRecorrido({
   src,
+  href,
   titulo,
   etiqueta,
   proveedor,
   portada,
 }: {
-  /** URL del embed, ya construida por urlEmbedRecorrido(). */
+  /** URL del embed, ya construida por realtyTourEmbedUrl(). */
   src: string;
+  /**
+   * La liga TAL COMO SE GUARDÓ, para abrirla fuera cuando el marco falla.
+   * No es lo mismo que `src`: la de embed de YouTube, por ejemplo, se abre
+   * sin controles ni recomendaciones y no es la que uno querría compartir.
+   */
+  href?: string;
   titulo: string;
   etiqueta: string;
   proveedor: string;
@@ -43,16 +49,25 @@ export function EmbedRecorrido({
         {/* `allow` y `sandbox` salen del contrato (src/lib/realty/tours.ts),
             no de aquí: son la misma reja que usa el panel al previsualizar
             un recorrido, y un iframe de tercero no tiene por qué poder
-            navegar la pestaña ni abrir ventanas. */}
-        <iframe
+            navegar la pestaña ni abrir ventanas.
+
+            Y el marco NO se queda en gris si el recorrido no carga: el
+            visitante ve un aviso con la liga para abrirlo aparte, en vez de
+            un recuadro mudo que le hace pensar que la página está rota. */}
+        <RealtyTourEmbed
           src={src}
+          href={href}
           title={titulo}
           className="dcrw-recorrido-marco"
-          loading="lazy"
-          allow={REALTY_TOUR_IFRAME_ALLOW}
-          sandbox={REALTY_TOUR_IFRAME_SANDBOX}
-          allowFullScreen
           referrerPolicy="no-referrer-when-downgrade"
+          avisoTitulo="El recorrido no se está mostrando"
+          avisoCuerpo="Puede que tarde de más o que tu conexión lo esté bloqueando. Ábrelo en una pestaña nueva."
+          avisoAbrir={`Ver el recorrido en ${proveedor}`}
+          avisoCerrar="Seguir esperando"
+          // La web pública SÍ lleva la salida siempre visible: es el único
+          // sitio donde el visitante no tiene otra forma de abrir el
+          // recorrido si el marco se queda mudo.
+          salidaSiempre
         />
       </div>
     );

@@ -1202,6 +1202,21 @@
   flex-direction: column;
   gap: 12px;
 }
+/* El "por qué no puedo agregar esta liga", debajo del campo. No es un
+   `hint` gris: es el único sitio donde el asesor se entera de que su
+   Matterport no es el de Compartir, así que se lee como error. */
+.tourUrlError {
+  margin: 0;
+  padding: 9px 11px;
+  border-radius: 9px;
+  border: 1px solid rgba(179, 38, 30, 0.28);
+  background: rgba(179, 38, 30, 0.08);
+  color: var(--text-1);
+  font-size: 12px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
 .tourItem {
   border: 1px solid var(--border-soft);
   border-radius: 12px;
@@ -1267,7 +1282,22 @@
   border: 1px solid rgba(224, 237, 229, 0.4);
   transition: transform 160ms ease, background 160ms ease;
 }
-.tourPoster:hover .tourPlay {
+/* Un botón deshabilitado que conserva el cursor de mano y el círculo de
+   Play iluminándose al pasar el ratón invita a pulsar lo que no se puede.
+   Aquí es peor que en otros sitios: debajo dice "esta liga no se puede
+   mostrar", así que el cartel y el botón se contradicen. */
+.tourPoster:disabled {
+  cursor: default;
+}
+.tourPoster:disabled .tourPlay {
+  opacity: 0.35;
+}
+.tourPoster:disabled:hover .tourPlay {
+  transform: none;
+  background: rgba(224, 237, 229, 0.16);
+}
+
+.tourPoster:not(:disabled):hover .tourPlay {
   transform: scale(1.06);
   background: rgba(224, 237, 229, 0.26);
 }

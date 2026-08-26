@@ -22373,3 +22373,473 @@ Tocados (23): `plan-status.ts`, `billing/proration.ts`, `webhooks/stripe/route.t
    extiende desde el fin que Stripe ya fijó (+2 meses); el siguiente
    `subscription.updated` lo deja en el valor real. Ahora corrige las DOS
    fechas.
+
+## [Inmuebles · Arreglos] — Los tres hallazgos de la cuenta real: los paneles del editor, el Inicio vacío y el Matterport roto ✅ (2026-08-26)
+
+Rama `realty/fix1`. **NO va a main**: Rafael integra la ola completa.
+
+═══════════════════════════════════════════════════════════════════════════
+▶ 🔴 LO PRIMERO, PORQUE CAMBIA EL DIAGNÓSTICO DEL ARREGLO 1
+═══════════════════════════════════════════════════════════════════════════
+
+El brief decía: *"Cuando el bloque del manifiesto NO trae `nombre`, el summary
+queda sin texto: un renglón con padding y borde, sin nada dentro. Eso es la
+barra gris."*
+
+**Eso no cuadra con el código que está en main, y conviene saberlo antes de
+volver a mirar la captura.** Se auditaron las dos puntas:
+
+1. **Los 15 bloques del manifiesto TIENEN `nombre`, y ya lo tenían en
+   `83026658`.** `REALTY_WEB_BLOQUE_IDS` (landing.ts) y `REALTY_WEB_BLOQUES`
+   (manifest.ts) coinciden uno a uno; ninguna de las nueve plantillas usa un
+   id que caiga al fallback. Lo que faltaba era `ayuda`, que no existía.
+2. **Los paneles de CONTENIDO, CONTACTO Y REDES y GOOGLE no leen el
+   manifiesto.** Son doce `<Panel titulo="…">` con el título escrito a mano
+   en `editor.tsx` — "Tu historia", "Credenciales", "Zonas", "Testimonios",
+   "Requisitos para rentar", "Números de la empresa", "Cómo te contactan",
+   "Redes sociales", "Título y descripción", más Plantilla / Color /
+   Publicación. Un literal no puede llegar vacío.
+3. El único encabezado dinámico del editor es el de `EditorBloque`, bajo
+   SECCIONES, y sale de `bloqueDef(id).nombre` — que nunca fue vacío.
+
+**Conclusión honesta: no pude reproducir la barra gris a partir del código, y
+no encontré la vía por la que un `<summary>` se quedaría sin texto.** Lo que
+sí encontré y arreglé son los dos defectos reales que había en esa columna, y
+los dos explican que un panel se lea como "una barra gris sin nombre":
+
+- el `<summary>` **no fijaba su color**: lo heredaba. Un encabezado cuyo
+  color depende de lo que herede el contenedor de turno es exactamente el
+  tipo de cosa que se ve bien en una máquina y no en otra;
+- **ningún panel decía qué hay dentro**. Doce acordeones cerrados, uno debajo
+  de otro, con una palabra encima y nada más: la columna entera se lee como
+  una pila de barras.
+
+Si la captura vuelve a salir, lo que hace falta para cerrarlo de verdad es
+saber **navegador y modo (claro/oscuro)**, y si los rótulos se ven al
+seleccionar el texto con el cursor. Con eso se distingue en un minuto entre
+"no hay texto" y "el texto está y no se ve".
+
+═══════════════════════════════════════════════════════════════════════════
+▶ ARREGLO 1 · "Mi web": los paneles ya no pueden quedarse mudos
+═══════════════════════════════════════════════════════════════════════════
+
+**(a) Los 15 bloques del manifiesto llevan `ayuda`.** Campo nuevo y
+OBLIGATORIO en `RealtyWebBloqueDef`: una línea que dice qué sale en esa
+sección de la web pública. Español de México, corto, sin jerga.
+
+**(b) Red de seguridad, y VIVE EN UNA FUNCIÓN PURA.** `Panel` ya no pinta
+nunca un encabezado vacío: si `titulo` llega en blanco cae a un nombre
+legible derivado de la clave del bloque (`"trato-directo"` → `"Trato
+directo"`) y grita en consola —SOLO en desarrollo, una vez por clave—
+diciendo cuál se rompió. `EditorBloque` le pasa `clave={p.bloque.id}`; sin
+eso el nombre de emergencia sería "Sección" para todos y el aviso no diría
+cuál.
+
+La lógica está en `tituloDePanel()` (landing.ts), pura y exportada, y no
+dentro del componente: una red de seguridad que ninguna prueba puede
+EJECUTAR no es una red. Ver el hallazgo 2 de los revisores.
+
+**(c) Cinco pruebas** en `manifiesto.test.ts`:
+- todo bloque del catálogo tiene `nombre` Y `ayuda` no vacíos;
+- **cada bloque de cada plantilla en los TRES modos** llega al editor con
+  encabezado, recorriendo el mismo `bloqueDef()` que recorre `controles.tsx`;
+- un bloque desconocido tampoco pinta un encabezado vacío;
+- 🔴 **la más ancha, y la que faltaba: NINGÚN `<Panel>` del editor puede
+  quedarse sin título, venga de donde venga.** Se leen las doce llamadas del
+  JSX y se exige que cada `titulo=` sea un literal con texto o `{def.nombre}`.
+  Cualquier tercera forma —una variable, una llave de i18n— falla la prueba
+  hasta que se le agregue su red. Y se cuenta que el patrón haya visto TODOS
+  los `<Panel` del archivo, para que no se esquive reordenando atributos. Es
+  la que cubre los doce paneles que el brief daba por dinámicos y no lo son;
+- la red de seguridad EJECUTADA: `tituloDePanel` y `nombreDesdeClave` con
+  nueve claves feas, incluidas las de puros guiones.
+
+**(d) CSS del acordeón.** `color: var(--text-1)` EXPLÍCITO en el `summary`
+(era lo único heredado), `min-height: 46px` para que la barra no colapse,
+`:hover`, y un FONDO —no un borde— que distingue abierto de cerrado sin
+mirar la flecha (el primer hijo del cuerpo ya trae su propia línea, y las
+dos juntas se veían como un doble filete). El texto no cambia de color en
+ningún estado. La `ayuda` va en `--text-2` y no en `--text-3`: medido,
+`#77837B` sobre blanco da 3.95:1 y a 11.5 px eso no pasa AA.
+
+═══════════════════════════════════════════════════════════════════════════
+▶ ARREGLO 2 · "Inicio": el tablero del día, distinto en cada modo
+═══════════════════════════════════════════════════════════════════════════
+
+`/inmobiliaria/inicio` era el placeholder de la Ola 0 — 18 líneas y un cartel
+de "en construcción". Y **no es una pantalla más**: es el aterrizaje del
+panel y el destino de TODOS los `redirect("/inmobiliaria/inicio")` de las
+demás pantallas. Quien entraba, y quien rebotaba de una pantalla que su plan
+no incluye, caía en el cartel.
+
+**Archivos nuevos**
+- `src/lib/realty/inicio-shared.ts` — puro y client-safe: formas, semáforo y
+  el catálogo de tarjetas.
+- `src/lib/realty/inicio.ts` — `getRealtyInicio(ctx)`, las consultas.
+- `src/components/realty/inicio/inicio-view.tsx` — la pantalla. **Componente
+  de servidor, cero islas de cliente**: un tablero que solo enseña números no
+  necesita hidratarse, y esta es la pantalla que más se abre.
+- `src/components/realty/inicio/inicio.css` — prefijo `dcri-`, `@container
+  realty` (nunca `@media`), px, y colores por token salvo los tres del
+  semáforo.
+- `src/i18n/dictionaries/realty/inicio.{es,en}.json` — ES y EN completos.
+
+**Lo que ve cada modo**
+
+- **AGENCY** — prospectos sin atender con semáforo · visitas de hoy · tareas
+  vencidas · cartera (publicados y **cuántos publicados SIN una sola foto**) ·
+  exclusivas que vencen en 30 días · ranking corto de asesores del mes ·
+  cobranza del mes si administra rentas.
+- **AGENT** — lo mismo pero SOLO lo suyo, **sin ranking ni nada de equipo**, y
+  con sus comisiones del mes (cobrado y por cobrar) en lugar del ranking.
+- **OWNER** — **cero embudo y cero comisiones.** Cuánto le toca cobrar este
+  mes · quién le debe y desde cuándo · contratos que vencen en 60 días ·
+  mantenimientos abiertos · propiedades vacías (sin contrato activo).
+
+**El semáforo, y por qué NO reusa el que ya existía.** El vertical ya tenía
+`contactHeat` (verde <1 h, amarillo <24 h, rojo). Mide otra cosa: cuánto lleva
+sin contacto un prospecto que YA está en el embudo, donde una hora es normal.
+El Inicio mide el tiempo hasta la PRIMERA respuesta de alguien a quien nadie
+ha tocado, y ahí los minutos deciden. Bandas propias: **verde <5 min, ámbar
+5–10, rojo ≥10**. Con las bandas de una hora, un prospecto de 45 minutos sin
+respuesta saldría EN VERDE — la mentira exacta que esta pantalla existe para
+no decir. Las dos conviven a propósito y el código dice por qué.
+
+**Nunca un cero mudo.** Ninguna tarjeta pinta un `0` solo. Sin datos dice qué
+hacer y lleva a donde se hace ("Aún no tienes inmuebles — agrega el primero:
+con eso ya tienes web, ficha para compartir y algo que mandarle a un
+prospecto"). Y distingue tres estados que se confunden siempre:
+`null` = no lo puede ver (no se pinta la tarjeta) · `0` con historia = "todos
+contestados" · `0` sin historia = "todavía no te llega ninguno". Para eso hay
+un `count` extra de prospectos: sin él, a quien contestó sus cuarenta
+prospectos se le diría "da de alta el primero".
+
+**El primer día no es un tablero de ceros.** Una cuenta estrenada ve una
+lista de arranque numerada —da de alta tu primer inmueble, registra tu primer
+prospecto, captura tu primer contrato, prende tu web, invita a tu equipo—,
+cada paso una liga. Un tablero de ceros se lee como "el producto no funciona".
+
+**Aislamiento.** `accountId` sale SIEMPRE de `ctx` y va en TODAS las
+consultas; ninguna función del archivo recibe un accountId suelto. El recorte
+por oficina usa `getAccessibleOfficeIds(ctx)` con la rama `officeId: null`
+—la cartera "de la casa"— porque un `{ in: ids }` a secas la descartaría. Lo
+que no tiene oficina (prospectos, visitas, tareas) se recorta por rol con
+`leadScopeWhere` y con "solo lo mío" para quien no puede asignar.
+
+**Cada tarjeta hereda la reja de SU pantalla.** No hay ifs nuevos: `puedeVer()`
+lee `REALTY_NAV_ITEMS` y aplica el mismo AND de tres del sidebar (modo →
+feature del plan → permiso). Una tarjeta que llevara a una pantalla cerrada
+sería un clic hasta un redirect. La página en sí NO tiene reja propia, a
+propósito: como todas las demás rebotan aquí, cerrarla haría un bucle.
+
+**Consultas.** Dos lotes de 6 y 5 lecturas, más dos sueltas que se lanzan
+antes y se esperan después (comisiones y "vacías"). Ninguna pasa de siete, y
+cada una se cortocircuita con `Promise.resolve(null)` si el plan o el permiso
+no la habilitan: la posición se conserva y la consulta no se paga. Hay una
+prueba que lo vigila.
+
+═══════════════════════════════════════════════════════════════════════════
+▶ ARREGLO 3 · El recorrido de Matterport
+═══════════════════════════════════════════════════════════════════════════
+
+Confirmado lo que ya estaba descartado: **no es el CSP**. La causa es que
+Matterport solo deja embeber su liga de COMPARTIR. Cualquier otra del mismo
+dominio pasa la validación —que solo miraba el DOMINIO— y el iframe se queda
+en gris.
+
+**(a) Normalización.** Si la liga trae identificador (parámetro `m=`, o el id
+después de `/show/` o `/models/`), se reconstruye
+`https://my.matterport.com/show/?m={id}`. Los parámetros de más (`?play=1`,
+`&brand=0`) se tiran, así que dos pegadas de la misma casa se guardan iguales
+y el 409 de "ya está agregado" sí salta.
+
+**(b) Se rechaza al pegarla.** `checkRealtyTourUrl()` existía y **no la
+llamaba nadie**: ni la pantalla ni el route handler. Ahora la usan los dos, y
+es el mismo criterio en los dos lados — si no, uno de ellos miente. La
+pantalla deshabilita el botón y pinta el motivo en rojo bajo el campo, con la
+forma de la liga buena; el servidor devuelve 400 con el mismo texto. Antes el
+hint decía "Detectamos Matterport" para una liga que Matterport se niega a
+mostrar, y el asesor la guardaba convencido.
+
+**(c) El marco nunca se queda en gris mudo.** `RealtyTourEmbed`, en el panel
+y en la web pública. 🔴 **Y aquí hay un detalle que arruina la solución
+obvia**: cuando el proveedor rechaza el embebido (X-Frame-Options), el
+navegador pinta SU página de error dentro del marco y **dispara `load`
+igualmente**. Un "si a los N segundos no cargó, avisa" NO atrapa ese caso, que
+es el más común. Por eso hay dos redes: una salida SIEMPRE visible para abrir
+el recorrido en una pestaña (lo único que sirve cuando el marco "cargó" un
+error), y el aviso grande a los 8 s para la red lenta o el proveedor caído.
+La red de verdad, de todos modos, es rechazarla antes de guardarla.
+
+**(d) Los otros seis proveedores.** Lo que consta y lo que no:
+
+| Proveedor | Qué acepta | Qué se hace |
+|---|---|---|
+| **Matterport** | SOLO `my.matterport.com/show/?m=<id>` (verificado por Rafael) | Se normaliza; sin id, se RECHAZA al pegarla |
+| **Kuula** | su botón de Insertar entrega `/share/<id>` | `/post/<id>` → `/share/<id>`. Las colecciones (`/share/collection/…`) no se tocan |
+| **Luma AI** | su embebido documentado es `/embed/<uuid>` | `/capture/<uuid>` → `/embed/<uuid>` |
+| **YouTube / Vimeo** | ya se convertían | sin cambios (`youtu.be`, `watch?v=`, `/shorts/`, página de Vimeo) |
+| **CloudPano, EyeSpy360, GoIGuide, Scaniverse** | **no consta** | **se dejan TAL CUAL, a propósito** |
+
+🔴 La regla que se siguió: **reescribir una liga que ya funciona es peor que
+no reescribir la que no funciona.** De esos cuatro no hay forma de comprobar
+aquí cuál es su liga embebible, y adivinarla rompería las ligas buenas de
+quien ya las tiene guardadas. Para ellos la red es la de runtime. Cuando
+alguno dé problema real, su rama va en `normalizeRealtyTourUrl` con el caso
+que la justifique.
+
+**Un bug que salió de paso, del mismo tamaño que el original.** El patrón de
+identificador era UNO solo para los tres proveedores y exigía **mínimo 6
+caracteres**. Los ids de Kuula son de **cinco** (`7l8Rk`), así que
+`kuula.co/post/7l8Rk` —la liga que de verdad pega la gente— no entraba y se
+guardaba sin reescribir. Un patrón demasiado estrecho no falla ruidosamente:
+deja la liga como estaba. Ahora hay uno por proveedor.
+
+**Un cambio de comportamiento deliberado, por si se nota.** `normalizeRealtyTourUrl`
+ya NO reescribe nada cuando la liga viene en `http://`. Antes, un
+`http://youtu.be/ID` se reescribía a `https://www.youtube.com/watch?v=ID` y se
+aceptaba; y —esto era lo grave— con el cambio de Matterport, un
+`http://my.matterport.com/show/?m=<id>` se habría ASCENDIDO a https en silencio,
+aceptando una liga que las dos pruebas del contrato dicen que debe rechazarse
+(en una página https el navegador bloquea el iframe por contenido mixto: marco
+en blanco, otra vez sin error). Normalizar no es ascender de protocolo. El
+mensaje de rechazo ya decía "y la liga tiene que empezar con https".
+
+**Y otro, en la web pública.** `tieneRecorrido()` era `tours.length > 0` y la
+ficha tomaba `tours[0]`. Dos consecuencias: la insignia "con recorrido" del
+listado **mentía** cuando el único recorrido no se podía embeber (el visitante
+entraba y encontraba una foto), y un inmueble con una panorámica propia
+guardada ANTES que su Matterport enseñaba la panorámica —que la web pública no
+sabe embeber— y se caía a la portada con el Matterport ahí sin que nadie lo
+viera. Ahora `recorridoEmbebible()` elige el primero que SE PUEDE PINTAR y
+`tieneRecorrido()` responde lo mismo, así que insignia y ficha no se
+contradicen.
+
+**(e) 13 pruebas nuevas** en `src/lib/realty/__tests__/recorridos.test.ts`,
+con las variantes reales de Matterport (`/show/?m=`, sin subdominio, con www,
+`/models/<id>`, `/models/<id>/edit`, con parámetros de más) y las que hay que
+rechazar (`/discover/space/…`, la raíz, una sección del sitio). La que más
+protege: **lo que `checkRealtyTourUrl` acepta es EXACTAMENTE lo que
+`realtyTourEmbedUrl` sabe pintar** — si esos dos se separan, el bug vuelve por
+la puerta de atrás.
+
+⚠️ La allowlist sigue viviendo SOLO en `src/lib/realty/tour-hosts.json`. No se
+tocó ni ese archivo ni `next.config.mjs`.
+
+═══════════════════════════════════════════════════════════════════════════
+▶ LO QUE ENCONTRARON LOS REVISORES ADVERSARIALES (y qué se arregló ANTES de subir)
+═══════════════════════════════════════════════════════════════════════════
+
+Tres revisores read-only, con el encargo explícito de REFUTAR el arreglo, no de
+confirmarlo. Encontraron nueve cosas que valían la pena. Todas arregladas.
+
+**1. 🔴 La red contra la barra gris… pintaba una barra gris.**
+`nombreDesdeClave("-")` devolvía `" "` — un espacio. El `.trim()` corría ANTES
+de cambiar los separadores por espacios, así que una clave de puros guiones
+pasaba el guardia de vacío. Y la única prueba que había miraba `""`, que era el
+único caso que sí funcionaba. Se recorta al final y hay una prueba con nueve
+claves feas.
+
+**2. 🔴 La red de seguridad no la ejecutaba ninguna prueba.** Se comprobaba
+leyendo `controles.tsx` como TEXTO: eso vigila que la LLAMADA siga ahí, no que
+la función siga haciendo algo. Se podía vaciar el cuerpo entero y la suite
+seguía verde. La lógica se movió a `tituloDePanel()` —pura, en landing.ts— y
+ahora la prueba la corre de verdad.
+
+**3. 🔴 El dinero del equipo se recortaba con un permiso del CRM.** El ranking
+usaba `leads.assign` para decidir si alguien ve lo de todos o solo lo suyo.
+`leads.assign` se le da a un asesor senior para que REPARTA PROSPECTOS — y con
+eso el Inicio le enseñaba el nombre y la comisión mensual EN PESOS de todos sus
+compañeros. Ahora usa `commissions.manage`, que es el punto único del repo.
+
+**4. 🔴 "Visitas de hoy" estaba corrida el offset de la cuenta.**
+`todayInTimezone` ancla el día a mediodía UTC precisamente para que ningún
+offset lo corra; el código le hacía `setUTCHours(0,0,0,0)` y tiraba esa ancla.
+En CDMX (UTC−6) la tarjeta metía las visitas de AYER de 6 a 12 de la noche y
+perdía las de HOY de esa misma franja — que en inmuebles es la de más visitas.
+En Tijuana son siete horas. Ahora usa `zonedMidnightUtc`.
+
+**5. 🔴 "Exclusivas por vencer" se saltaba la que vence HOY.** En el vertical
+conviven DOS anclas de fecha sin unificar: `RealtyExclusive.endsAt` se guarda a
+medianoche UTC y `RealtyLease.endsAt` a mediodía. Comparando contra mediodía, la
+exclusiva de hoy quedaba fuera por doce horas — y la tarjeta existe justamente
+para gritar por esa. Ventanas de día completo ancladas a medianoche.
+
+**6. 🔴 Sin permisos ⇒ "cuenta recién estrenada".** El `recienLlegado` colapsaba
+`null` ("no lo puede ver") con `0` ("no lo tiene") — el cero mudo que el propio
+archivo prohíbe, aplicado a la bandera que cambia la PANTALLA ENTERA. Un
+asistente con permisos recortados en una inmobiliaria con 500 inmuebles
+aterrizaba en el onboarding de "empieza por aquí". Ahora solo se afirma de lo
+que se ve.
+
+**7. 🔴 Tres cifras se topaban en 20 sin decirlo.** Visitas, contratos y
+mantenimientos calculaban el total sobre el arreglo ya recortado por `take`:
+una agencia con 45 contratos por vencer leía "20". Un tope disfrazado de total
+es peor que no dar el número. Ahora se lee uno de más y se dice "20+".
+
+**8. 🔴 El filtro anidado copiaba solo `.OR`.** `property: { OR: alcanceProp.OR }`
+tira el accountId del filtro anidado y se rompe EN SILENCIO el día que
+`alcanceInmuebles` cambie de forma: si pasara a expresarse con `AND`, `.OR`
+sería `undefined` y Prisma **borraría el filtro**. Ahora se pasa el where
+completo. Además, las dos consultas que lo usan ahora EXIGEN que exista: antes,
+si `alcanceProp` era null (alguien con `commissions.view` pero sin
+`properties.view`), el ternario no ponía filtro más estricto — no ponía
+ninguno, y le enseñaba las comisiones de todas las oficinas. Menos permiso
+nunca puede significar más alcance.
+
+**9. 🟡 Cinco más, arregladas:** el `count` de prospectos ignoraba el alcance del
+asesor (a uno nuevo se le decía "ya los contestaste todos"); las visitas sin
+asesor asignado eran invisibles para todos los asesores (faltaba la rama
+`userId: null`); la lista de arranque ofrecía "invita a tu equipo" a quien no
+tiene el permiso; el guardián de `<Panel>` se esquivaba solo con reordenar los
+atributos; y `.dcrwe-ayuda` —la línea que se acaba de agregar a los 15 bloques—
+daba 3.95:1 de contraste en modo claro a 11.5 px, por debajo de AA.
+
+**Lo que los revisores confirmaron que está bien**, y conviene tenerlo escrito:
+cero `accountId` faltantes en las 13 consultas del Inicio; ningún dato crítico
+cruza al navegador (ni teléfonos, ni correos, ni notas internas, ni
+`signedDocUrl`; el `tenantPhone` que calcula `getCollectionsBoard` muere en el
+servidor); `getAccessibleOfficeIds` devolviendo `[]` enseña de MENOS, no de más,
+igual que el resto del vertical; ningún rango de fechas está invertido; y
+ninguna plantilla cae al bloque de emergencia.
+
+**10. 🟡 Y una que puse yo, porque la paridad de i18n NO basta.**
+`i18n-alcance.test.ts` comprueba que ES y EN tengan las MISMAS llaves. Pero si
+la pantalla pide una que no está en NINGUNO de los dos, la paridad se cumple
+igual y `makeT` devuelve la llave cruda — que es exactamente lo que llegó a
+producción en /barber/campanas. Hay una prueba nueva que extrae del JSX las
+~60 llaves que el Inicio pide de verdad (incluidas las que se arman con una
+variable, `sub.${modo}` y `fresh.${paso}`) y las busca en los dos diccionarios.
+
+**11. 🔴🔴 Y EL PEOR DE TODOS, QUE ERA MÍO: rompí `http://youtu.be/<id>`.**
+Al arreglar Matterport puse una guarda de protocolo *antes* de la rama que
+reescribe el acortador de YouTube. Pero esa reescritura NO asciende nada:
+construye una URL de `youtube.com` que ya es https de origen. Resultado: una
+liga que llevaba funcionando desde la Ola 1 —y que es justo la que llega
+reenviada por WhatsApp o por correo— pasó a rechazarse. La guarda ahora va
+después. Es el recordatorio de por qué se revisa: el arreglo introdujo la
+misma clase de fallo que venía a quitar.
+
+**12. 🔴 Matterport perdía TODOS los parámetros de la liga.** `lang=es`
+devuelve el visor al español, `brand=0` quita la marca de Matterport del
+recorrido del cliente, `play=1` lo arranca solo y `sr`/`ss` son la vista
+inicial que el asesor eligió al compartir. Los tiraba en nombre de
+"canonizar" — y eso era una regresión sobre filas que HOY se ven bien. Ahora
+solo se canoniza `m`, que decide QUÉ espacio se abre; lo demás es cómo se ve,
+y eso lo eligió una persona.
+
+**13. 🔴 Kuula y Luma reescribían truncando la ruta y sin verificar.** A
+diferencia de Matterport —que si no encuentra id devuelve null y la puerta
+rechaza—, esas dos ramas nunca comprueban su propio resultado: un
+`kuula.co/post/collection/7lXYZ` acababa en `kuula.co/share/collection`, una
+liga SIN identificador, guardada con 201 y rota. El mismo bug de Matterport
+por la puerta de Kuula. Ahora solo se reescribe la forma exacta que se sabe
+leer.
+
+**14. 🔴 El enlace de salida tapaba los controles del visor.** Estaba SIEMPRE
+encima del iframe, abajo a la derecha — justo donde viven pantalla completa y
+calidad de YouTube, el de Vimeo y los de fullscreen/VR de Matterport y Kuula.
+Interceptaba el clic sobre recorridos que cargan perfecto. Ahora es opcional,
+va arriba a la izquierda (la única esquina que ningún visor usa) y solo en la
+web pública: el panel ya tiene su botón en la cabecera del recorrido.
+
+**15. 🔴 El aviso podía taparse encima de un recorrido que venía en camino.**
+Ocho segundos son pocos para un Matterport en la red de una casa en obra, y
+el velo va al 92 % sin forma de cerrarlo. Doce segundos y un botón de
+"seguir esperando".
+
+**16. 🔴 `feed.ts` decía una cosa y hacía otra.** Su comentario afirma "lo que
+no se puede embeber tampoco se manda a un portal" y preguntaba por el
+DOMINIO — el chequeo que este arreglo declara insuficiente. Un
+`matterport.com/discover/space/…` guardado antes se seguía publicando a los
+portales como recorrido virtual mientras la propia web decía que ese inmueble
+no tenía ninguno.
+
+**17. 🟡 Y cinco más:** el id de Matterport es de ONCE caracteres y con
+`{6,64}` colaban `m=precios` y `m=newsletter` (se canonizaban, se guardaban y
+pintaban el marco roto); el error rojo del formulario se pintaba desde la
+PRIMERA TECLA y un lector de pantalla releía 150 caracteres en cada
+pulsación; el póster deshabilitado conservaba el cursor de mano y el círculo
+de Play iluminándose; y `tieneRecorrido` + `recorridoEmbebible` calculaban dos
+veces lo mismo en cada ficha.
+
+**Lo que el tercer revisor confirmó que está bien:** no hay pérdida de datos
+ni filas atrapadas (una liga vieja no embebible se sigue viendo, se explica y
+se puede borrar); `tieneRecorrido` con una panorámica propia es una
+CORRECCIÓN y no una regresión (antes la insignia mentía); no hay ciclo de
+imports ni fuga de servidor al bundle de cliente; la pestaña de panorámicas
+está intacta; `sandbox` y `allow` siguen saliendo del contrato; e i18n con
+las mismas claves en ES y EN y el prefijo correcto.
+
+═══════════════════════════════════════════════════════════════════════════
+▶ DECISIONES QUE NO SE VEN EN EL DIFF
+═══════════════════════════════════════════════════════════════════════════
+
+**El Inicio NO tiene reja propia, y es a propósito.** Todas las demás pantallas
+del panel rebotan aquí con `redirect("/inmobiliaria/inicio")`. Si esta también
+rebotara, el rebote sería infinito y la cuenta se quedaría sin panel. Lo que se
+recorta es CADA TARJETA, y no con ifs nuevos: `puedeVer()` lee
+`REALTY_NAV_ITEMS` y aplica el mismo AND de tres que el sidebar. Hay una prueba
+que comprueba que la página no se redirige a sí misma.
+
+**Dos lecturas del Inicio van fuera del `Promise.all`** (comisiones y "vacías").
+No es estilo: con demasiadas formas distintas en el arreglo, TypeScript deja de
+inferir la tupla y todas las filas destructuradas salen `unknown`. Se lanzan
+antes y se esperan después, así que corren en paralelo igual.
+
+**De los cuatro proveedores de recorrido sin forma conocida no se adivinó nada.**
+Reescribir una liga que ya funciona es peor que no reescribir la que no
+funciona. Para esos la red es la de runtime.
+
+**Dos archivos salen en el diff como reescritos enteros, y NO lo están.**
+`src/app/i/[slug]/propiedades/[inmueble]/page.tsx` y
+`src/components/realty/web/blocks/portada.tsx` estaban guardados con CRLF —los
+dos únicos del área— y quedaron normalizados a LF, como el resto del repo.
+El cambio real son **11 líneas entre los dos**: revísalos con `git show -w`.
+
+**`install-integ-final.log` NO se borró.** Está en la raíz y **ya venía
+commiteado en main** — no es basura de este proceso, y borrarlo sería tocar un
+archivo fuera del vertical (la guardia lo marcaría como PROHIBIDO). Si de verdad
+sobra, va en un commit aparte y fuera de esta rama.
+
+═══════════════════════════════════════════════════════════════════════════
+▶ PENDIENTE — REQUIERE RAFAEL
+═══════════════════════════════════════════════════════════════════════════
+
+1. 🔴 **La captura del editor.** Con el código de main no hay camino que deje un
+   `<summary>` sin texto. Si vuelve a pasar, hace falta: navegador, modo
+   claro/oscuro, y si el texto aparece al seleccionarlo con el cursor. Eso
+   distingue "no hay texto" de "el texto está y no se ve", que se arreglan de
+   maneras opuestas.
+
+2. **QA del Inicio con las tres cuentas reales** (AGENCY, AGENT, OWNER). Lo que
+   más conviene mirar: que las visitas de la tarde salgan en el día correcto
+   (era el bug del offset), que la exclusiva que vence HOY aparezca, y que un
+   asesor con permisos recortados NO vea el ranking del equipo.
+
+3. **Un Matterport de verdad**, pegando primero una liga de `/discover/space/…`
+   (debe rechazarla explicando qué copiar) y luego la de Compartir (debe
+   guardarse y verse).
+
+4. **Los recorridos ya guardados que no son embebibles** no se migran solos: el
+   asesor los ve con el cartel "Esta liga no se puede mostrar aquí" y tiene que
+   quitarlos y volver a pegar la de Compartir. No hay backfill porque no hay
+   forma de adivinar el identificador de una liga que no lo trae.
+
+═══════════════════════════════════════════════════════════════════════════
+▶ VERIFICACIÓN
+═══════════════════════════════════════════════════════════════════════════
+
+- `npx tsc --noEmit` → **limpio** en todo lo tocado.
+  ⚠️ Quedan 6 errores PREEXISTENTES en `src/lib/barber/__tests__/` (iteración de
+  `Set` sin `downlevelIteration` y un literal de objeto en `dinero-sumas`). Son
+  de barber, están en main desde antes y la guardia del vertical prohíbe
+  tocarlos desde aquí. No los introduje y no los puedo arreglar en esta rama.
+- `node scripts/realty-guard.cjs` → **OK**, cero prohibidos, cero compartidos
+  sin declarar.
+- **268 pruebas del vertical en verde**, incluidas las 21 nuevas del Inicio y
+  las 16 de recorridos. Más las 42 de suscripción, que necesitan el hook
+  del propio vertical:
+  `node --import tsx --import ./src/lib/realty/__tests__/offline.mjs --test …`
+- 🔴 **NO se corrió `npx next build`** (pide 12 GB y ya tumbó la máquina dos
+  veces). El build completo va UNA vez al integrar la ola.
