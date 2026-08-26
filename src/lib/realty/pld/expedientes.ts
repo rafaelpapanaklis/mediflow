@@ -26,6 +26,7 @@ import type { RealtyContext } from "@/lib/realty-auth";
 import type {
   BeneficiarioControlador,
   DocumentoRow,
+  ExpedienteResumen,
   ExpedienteRow,
   PldDocKind,
   PldPepKind,
@@ -208,6 +209,37 @@ export function armarExpediente(
     faltantes: calc.faltantes,
     vencidos: calc.vencidos,
     motivosRiesgo: riesgo.motivos,
+  };
+}
+
+/**
+ * El expediente RECORTADO a lo que pinta la tabla.
+ *
+ * 🔴 Esto es lo ÚNICO que sale al navegador con la pantalla. El RFC, la
+ * CURP, la fecha de nacimiento, el domicilio, los beneficiarios, las notas
+ * y hasta los NOMBRES de los papeles se quedan en el servidor hasta que
+ * alguien abra ese expediente en concreto — y esa apertura se audita.
+ *
+ * Es una LISTA BLANCA por construcción: se nombra campo por campo lo que
+ * sale. Un `delete` sobre una copia habría dejado pasar sola la siguiente
+ * columna que alguien agregue a ExpedienteRow.
+ */
+export function resumirExpediente(e: ExpedienteRow): ExpedienteResumen {
+  return {
+    id: e.id,
+    contactId: e.contactId,
+    contactName: e.contactName,
+    personKind: e.personKind,
+    pep: e.pep,
+    pepAskedAt: e.pepAskedAt,
+    risk: e.risk,
+    motivosRiesgo: e.motivosRiesgo,
+    estado: e.estado,
+    faltantes: e.faltantes,
+    vencidos: e.vencidos,
+    documentos: e.documents.filter((d) => !d.archivedAt).length,
+    updatedAt: e.updatedAt,
+    reviewedByName: e.reviewedByName,
   };
 }
 

@@ -33,7 +33,7 @@ import type {
   UmbralesVigentes,
 } from "./contrato";
 import { armarCalendario, MESES_CALENDARIO } from "./avisos";
-import { listarExpedientes } from "./expedientes";
+import { listarExpedientes, resumirExpediente } from "./expedientes";
 import { cargarOperaciones } from "./operaciones";
 import { getPldParams } from "./parametros";
 import { umbralesEnPesos, type PldParams } from "./umbrales";
@@ -103,21 +103,29 @@ export async function getPantallaCumplimiento(
     desde: desdeDelCalendario(hoy),
   });
 
-  // 2. Expedientes, ya con esas señales encima.
-  const expedientes = await listarExpedientes(ctx, { rebasa, efectivo }, hoy);
+  // 2. Expedientes COMPLETOS, ya con esas señales encima.
+  //
+  // 🔴 Estas filas NO salen de aquí tal cual. Traen el RFC, la CURP, el
+  // domicilio y los beneficiarios de toda la cartera, y esta pantalla las
+  // usa solo para CONTAR. Lo que se devuelve al navegador es el resumen
+  // (ver ExpedienteResumen en contrato.ts); el detalle se pide expediente
+  // por expediente, y esa petición es la que deja renglón en la bitácora.
+  const completos = await listarExpedientes(ctx, { rebasa, efectivo }, hoy);
 
   // 3. Calendario del corte.
   const periodos = await armarCalendario(ctx, params, operaciones, hoy);
 
   // 4. Contactos a los que todavía se les puede abrir expediente.
-  const contactos = await listarContactos(ctx, expedientes);
+  const contactos = await listarContactos(ctx, completos);
 
   return {
     umbrales: params ? umbralesParaPantalla(params) : null,
     faltantes,
     avisos: resueltos.avisos,
-    tablero: contarTablero(expedientes, operaciones, periodos, hoy),
-    expedientes,
+    // El tablero se cuenta con las filas COMPLETAS —necesita las vigencias
+    // de cada papel— y el recorte se hace después, al serializar.
+    tablero: contarTablero(completos, operaciones, periodos, hoy),
+    expedientes: completos.map((e) => resumirExpediente(e)),
     operaciones,
     periodos,
     contactos,

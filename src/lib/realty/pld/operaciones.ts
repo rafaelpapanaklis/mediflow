@@ -65,7 +65,13 @@ export interface OperacionesCargadas {
 export async function cargarOperaciones(
   ctx: RealtyContext,
   params: PldParams | null,
-  opciones: { desde?: Date | null; periodMonth?: string | null; take?: number } = {},
+  opciones: {
+    desde?: Date | null;
+    periodMonth?: string | null;
+    /** Acota a un cliente. Lo usa el detalle de UN expediente. */
+    contactId?: string | null;
+    take?: number;
+  } = {},
 ): Promise<OperacionesCargadas> {
   const take = Math.min(1000, Math.max(1, opciones.take ?? 400));
   const timeZone = ctx.account.timezone || "America/Mexico_City";
@@ -77,6 +83,11 @@ export async function cargarOperaciones(
     // cae en ningún periodo y no se puede avisar.
     closedAt: opciones.desde ? { gte: opciones.desde } : { not: null },
   };
+  // 🔴 A MANO y nunca `contactId: opciones.contactId ?? undefined`: un
+  // `undefined` en el where BORRA el filtro, y en el detalle de un
+  // expediente eso significaría evaluar la cartera entera para pintar el
+  // riesgo de una sola persona.
+  if (opciones.contactId) where.contactId = opciones.contactId;
 
   const filas = await prisma.realtyDeal.findMany({
     where,

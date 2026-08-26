@@ -206,6 +206,45 @@ export interface ExpedienteRow {
   motivosRiesgo: string[];
 }
 
+/**
+ * EL RENGLÓN DE LA LISTA. Deliberadamente MENOS que `ExpedienteRow`.
+ *
+ * 🔴 POR QUÉ EXISTEN DOS FORMAS Y NO UNA. Lo que se manda al navegador con
+ * la pantalla es una LISTA de cientos de personas. Bajar de golpe el RFC,
+ * la CURP, el domicilio y los beneficiarios de toda la cartera —para pintar
+ * una tabla que solo enseña nombre, estado y riesgo— es exactamente la fuga
+ * de "la fila entera al navegador": nadie la ve, viaja en el HTML, y queda
+ * en la caché del navegador de quien tenga la sesión abierta.
+ *
+ * Aquí solo va lo que la TABLA pinta. El detalle se pide cuando alguien
+ * abre el expediente, por GET /api/realty/pld/expedientes/[id] — y esa
+ * petición es la que deja renglón en la bitácora. Sin esta separación, la
+ * bóveda no podría decir quién consultó qué: TODOS habrían consultado TODO
+ * con solo entrar a la pantalla.
+ *
+ * Los tipos de papel que faltan o vencieron SÍ viajan: son categorías
+ * ("Comprobante de domicilio"), no datos de nadie, y son justo lo que
+ * convierte la lista en accionable.
+ */
+export interface ExpedienteResumen {
+  id: string;
+  contactId: string;
+  contactName: string;
+  personKind: PldPersonKind;
+  pep: PldPepKind;
+  /** Sin fecha, el cuestionario no está contestado. */
+  pepAskedAt: string | null;
+  risk: PldRisk;
+  motivosRiesgo: string[];
+  estado: EstadoExpediente;
+  faltantes: PldDocKind[];
+  vencidos: PldDocKind[];
+  /** Papeles vivos (los archivados no se cuentan). */
+  documentos: number;
+  updatedAt: string;
+  reviewedByName: string | null;
+}
+
 /** Una operación vista desde cumplimiento. */
 export interface OperacionRow {
   dealId: string;
@@ -328,7 +367,11 @@ export interface PantallaCumplimiento {
   faltantes: FaltantePld[];
   avisos: string[];
   tablero: TableroPld;
-  expedientes: ExpedienteRow[];
+  /**
+   * 🔴 RESUMEN, no el expediente entero. Ver ExpedienteResumen: el detalle
+   * se pide por expediente y esa petición es la que se audita.
+   */
+  expedientes: ExpedienteResumen[];
   operaciones: OperacionRow[];
   periodos: PeriodoRow[];
   contactos: ContactoLite[];
