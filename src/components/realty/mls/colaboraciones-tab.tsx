@@ -512,8 +512,12 @@ function AdopcionFila({
       <div style={{ flex: 1, minWidth: 170 }}>
         <div style={{ fontSize: 12.5, fontWeight: 700, color: "var(--text-1)" }}>{ad.titulo}</div>
         <div style={{ fontSize: 11.5, color: "var(--text-3)", marginTop: 2 }}>
-          {money(ad.precio, ad.moneda)}
-          {ad.ciudad ? ` · ${ad.ciudad}` : ""} · {t("ficha.de", { agencia: ad.quienComparte.nombre })}
+          {/* Sin `vigente` el motor deja de mandar datos VIVOS (precio y
+              foto), así que pintar `money(0)` diría "cuesta $0" — que es
+              otra forma de mentir. Se omite y ya. */}
+          {ad.vigente ? `${money(ad.precio, ad.moneda)} · ` : ""}
+          {ad.ciudad ? `${ad.ciudad} · ` : ""}
+          {t("ficha.de", { agencia: ad.quienComparte.nombre })}
         </div>
         {!ad.vigente ? (
           <div style={{ fontSize: 11, color: "var(--danger)", marginTop: 3 }}>

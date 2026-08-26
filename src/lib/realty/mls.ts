@@ -3,6 +3,7 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import type { RealtyContext } from "@/lib/realty-auth";
 import { REALTY_PHOTO_URL_TTL, signRealtyUrls } from "@/lib/realty/media";
+import { REALTY_ACTIVE_SUBSCRIPTION_STATUSES } from "@/lib/realty/plan-shared";
 import { aInmueblePublico, type RealtyWebInmuebleDTO } from "@/lib/realty/landing";
 import type {
   RealtyCurrency,
@@ -227,6 +228,36 @@ const SELECT_AGENCIA = {
 } satisfies Prisma.RealtyAccountSelect;
 
 type AgencyRow = Prisma.RealtyAccountGetPayload<{ select: typeof SELECT_AGENCIA }>;
+
+/**
+ * 🔴 QUIÉN PUEDE ESTAR EN LA BOLSA: una cuenta viva Y al corriente.
+ *
+ * Es el `where` que se le pega a TODA lectura de la cuenta que comparte, y
+ * no es una regla de cobranza: es que la bolsa no puede mentir. Al que no
+ * paga, la puerta de /api/realty/mls/** le responde 402 (lo hace
+ * `assertRealtySubscription` en el guard), así que NO PUEDE aceptar una
+ * propuesta ni contestar un mensaje. Dejar su inventario a la vista sería
+ * mandar al colega a perseguir a alguien que literalmente no puede abrir
+ * el panel para decirle que sí.
+ *
+ * Los estados salen del punto único del vertical
+ * (REALTY_ACTIVE_SUBSCRIPTION_STATUSES): activo, en prueba o pagado. Un
+ * past_due sigue vivo para Stripe pero NO da acceso, y por tanto tampoco
+ * da bolsa.
+ *
+ * ⚠️ Consecuencia para QA: una cuenta recién creada nace en
+ * `pending_payment`, así que su inventario NO sale en la bolsa de nadie
+ * hasta que la suscripción quede al corriente. Una bolsa vacía en pruebas
+ * suele ser esto y no un fallo.
+ *
+ * NO se aplica al historial (acuerdos y adopciones ya existentes): borrar
+ * de la vista un trato que existió dejaría a las dos partes sin el papel
+ * que explica de dónde salió su dinero.
+ */
+const CUENTA_EN_LA_BOLSA = {
+  isActive: true,
+  subscriptionStatus: { in: Array.from(REALTY_ACTIVE_SUBSCRIPTION_STATUSES) },
+} satisfies Prisma.RealtyAccountWhereInput;
 
 function toAgencia(row: AgencyRow): RealtyMlsAgencyDTO {
   return {
@@ -730,7 +761,7 @@ export async function searchBolsa(
     ),
   );
   const accounts = await prisma.realtyAccount.findMany({
-    where: { id: { in: accountIds }, isActive: true },
+    where: { id: { in: accountIds }, ...CUENTA_EN_LA_BOLSA },
     select: SELECT_AGENCIA,
   });
   const byAccount = new Map(accounts.map((a) => [a.id, a]));
@@ -863,7 +894,7 @@ export async function getBolsaListing(
       select: SELECT_BOLSA,
     }),
     prisma.realtyAccount.findFirst({
-      where: { id: listing.accountId, isActive: true },
+      where: { id: listing.accountId, ...CUENTA_EN_LA_BOLSA },
       select: SELECT_AGENCIA,
     }),
     prisma.realtyMlsAgreement.findFirst({
@@ -932,16 +963,25 @@ export async function proposeAgreement(
   if (listing.accountId === ctx.accountId) return { ok: false, reason: "own" };
   if (!listing.acceptsCollaboration) return { ok: false, reason: "no_collab" };
 
-  // El inmueble tiene que seguir siendo de quien comparte y seguir vivo.
-  const property = await prisma.realtyProperty.findFirst({
-    where: {
-      id: listing.propertyId,
-      accountId: listing.accountId,
-      status: { in: BOLSA_STATUSES },
-    },
-    select: { id: true },
-  });
-  if (!property) return { ok: false, reason: "not_found" };
+  // El inmueble tiene que seguir siendo de quien comparte y seguir vivo, y
+  // quien comparte tiene que seguir PUDIENDO responder: una cuenta impaga
+  // recibe 402 en toda la bolsa, así que un acuerdo con ella nacería muerto
+  // y el colega se quedaría esperando una respuesta que nadie puede dar.
+  const [property, agencia] = await Promise.all([
+    prisma.realtyProperty.findFirst({
+      where: {
+        id: listing.propertyId,
+        accountId: listing.accountId,
+        status: { in: BOLSA_STATUSES },
+      },
+      select: { id: true },
+    }),
+    prisma.realtyAccount.findFirst({
+      where: { id: listing.accountId, ...CUENTA_EN_LA_BOLSA },
+      select: { id: true },
+    }),
+  ]);
+  if (!property || !agencia) return { ok: false, reason: "not_found" };
 
   const proposed =
     input.agreedPct === undefined || input.agreedPct === null
@@ -1175,7 +1215,21 @@ export async function listAgreements(
       select: SELECT_AGENCIA,
     }),
     prisma.realtyProperty.findMany({
-      where: { id: { in: Array.from(new Set(rows.map((r) => r.propertyId))) } },
+      where: {
+        id: { in: Array.from(new Set(rows.map((r) => r.propertyId))) },
+        // 🔴 El inmueble tiene que seguir siendo de UNA de las dos cuentas
+        // del acuerdo. Sin FK nada garantiza que un propertyId no acabe
+        // apuntando a otro sitio, y este es de los pocos sitios del módulo
+        // donde se lee un inmueble ajeno sin volver a pasar por la ficha de
+        // bolsa. Título y ciudad son campos OBLIGATORIOS de la lista blanca
+        // —no se pueden recortar— así que no hay nada que filtrar aquí; lo
+        // que sí hay que garantizar es que sean del inmueble correcto.
+        accountId: {
+          in: Array.from(
+            new Set(rows.flatMap((r) => [r.listingAccountId, r.partnerAccountId])),
+          ),
+        },
+      },
       select: { id: true, title: true, city: true },
     }),
   ]);
@@ -1241,17 +1295,27 @@ export async function adoptListing(
   if (!listing) return { ok: false, reason: "not_found" };
   if (listing.accountId === ctx.accountId) return { ok: false, reason: "own" };
 
-  const property = await prisma.realtyProperty.findFirst({
-    where: {
-      id: listing.propertyId,
-      accountId: listing.accountId,
-      // 🔴 La decisión del dueño manda: si no lo tiene publicado, nadie lo
-      // publica por él.
-      isPublished: true,
-      status: "DISPONIBLE",
-    },
-    select: { id: true },
-  });
+  const [property, agencia] = await Promise.all([
+    prisma.realtyProperty.findFirst({
+      where: {
+        id: listing.propertyId,
+        accountId: listing.accountId,
+        // 🔴 La decisión del dueño manda: si no lo tiene publicado, nadie lo
+        // publica por él.
+        isPublished: true,
+        status: "DISPONIBLE",
+      },
+      select: { id: true },
+    }),
+    // Y la cuenta tiene que seguir en la bolsa. Pintar en mi web el
+    // inventario de alguien que ya no está en el producto es anunciar un
+    // inmueble que nadie puede enseñar.
+    prisma.realtyAccount.findFirst({
+      where: { id: listing.accountId, ...CUENTA_EN_LA_BOLSA },
+      select: { id: true },
+    }),
+  ]);
+  if (!agencia) return { ok: false, reason: "not_found" };
   if (!property) return { ok: false, reason: "not_published" };
 
   const count = await prisma.realtyMlsAdoption.count({ where: { accountId: ctx.accountId } });
@@ -1329,7 +1393,9 @@ export async function listAdoptions(ctx: RealtyContext): Promise<RealtyMlsAdopti
   });
   const byListing = new Map(listings.map((l) => [l.id, l]));
 
-  const [properties, accounts] = await Promise.all([
+  const accountIds = Array.from(new Set(listings.map((l) => l.accountId)));
+
+  const [properties, accounts, vivas] = await Promise.all([
     prisma.realtyProperty.findMany({
       where: { id: { in: listings.map((l) => l.propertyId) } },
       select: {
@@ -1340,6 +1406,11 @@ export async function listAdoptions(ctx: RealtyContext): Promise<RealtyMlsAdopti
         price: true,
         currency: true,
         operation: true,
+        // Las dos condiciones que la web pública vuelve a exigir en
+        // `inmueblesEnColaboracion`. Se traen para que ESTA pantalla pueda
+        // decir la verdad sobre lo que se está pintando allá.
+        isPublished: true,
+        status: true,
         photos: {
           select: { url: true },
           orderBy: [{ isCover: "desc" }, { sortOrder: "asc" }],
@@ -1347,13 +1418,22 @@ export async function listAdoptions(ctx: RealtyContext): Promise<RealtyMlsAdopti
         },
       },
     }),
+    // SIN el filtro de la bolsa: el nombre de quien comparte se sigue
+    // pintando aunque su cuenta se haya caído, porque si no la tarjeta
+    // desaparece sin explicación y el usuario no entiende qué pasó.
     prisma.realtyAccount.findMany({
-      where: { id: { in: Array.from(new Set(listings.map((l) => l.accountId))) } },
+      where: { id: { in: accountIds } },
       select: SELECT_AGENCIA,
+    }),
+    // Y aparte, quiénes siguen EN la bolsa. Es lo que decide `vigente`.
+    prisma.realtyAccount.findMany({
+      where: { id: { in: accountIds }, ...CUENTA_EN_LA_BOLSA },
+      select: { id: true },
     }),
   ]);
   const byProperty = new Map(properties.map((p) => [p.id, p]));
   const byAccount = new Map(accounts.map((a) => [a.id, a]));
+  const cuentasVivas = new Set(vivas.map((a) => a.id));
 
   const covers = await signRealtyUrls(
     rows.map((r) => {
@@ -1373,21 +1453,38 @@ export async function listAdoptions(ctx: RealtyContext): Promise<RealtyMlsAdopti
     if (!p || !a) return;
     if (p.accountId !== l.accountId) return;
     const allowed = new Set(fieldsOf(l.exposedFields));
+
+    // 🔴 `vigente` son las TRES MISMAS rejas que aplica la web pública en
+    // `inmueblesEnColaboracion`, más la cuenta. Antes solo miraba `active`,
+    // así que una ficha cuyo dueño la despublicó o cuyo inmueble ya se
+    // vendió salía aquí como vigente mientras en la web no se pintaba: la
+    // pantalla decía una cosa y el sitio hacía otra.
+    const vigente =
+      l.active &&
+      cuentasVivas.has(l.accountId) &&
+      p.isPublished === true &&
+      p.status === "DISPONIBLE";
+
     out.push({
       id: r.id,
       listingId: l.id,
       propertyId: l.propertyId,
       titulo: allowed.has("titulo") ? p.title : "Inmueble",
-      coverUrl: allowed.has("fotos") ? (covers[i] ?? "") : "",
+      // Retirada de la bolsa = se acabaron los datos VIVOS. La fila se queda
+      // para que el usuario entienda por qué desapareció de su web, pero el
+      // dueño apagó el interruptor y eso significa "deja de enseñar mi
+      // inmueble", no "enséñalo con una etiqueta". Título y ciudad se
+      // quedan: sin ellos la tarjeta no se puede ni reconocer.
+      coverUrl: vigente && allowed.has("fotos") ? (covers[i] ?? "") : "",
       ciudad: allowed.has("ciudad") ? str(p.city) : null,
-      precio: allowed.has("precio") ? (num(p.price) ?? 0) : 0,
+      precio: vigente && allowed.has("precio") ? (num(p.price) ?? 0) : 0,
       moneda: (p.currency === "USD" ? "USD" : "MXN") as RealtyCurrency,
       operation: p.operation as RealtyOperation,
-      comisionCompartida: pct(l.sharedCommissionPct),
+      comisionCompartida: vigente ? pct(l.sharedCommissionPct) : 0,
       quienComparte: toAgencia(a),
       enLaWeb: r.showOnLanding,
       orden: r.sortOrder,
-      vigente: l.active,
+      vigente,
     });
   });
   return out;
@@ -1477,7 +1574,10 @@ export async function inmueblesEnColaboracion(
         select: SELECT_BOLSA,
       }),
       prisma.realtyAccount.findMany({
-        where: { id: { in: Array.from(new Set(listings.map((l) => l.accountId))) }, isActive: true },
+        where: {
+          id: { in: Array.from(new Set(listings.map((l) => l.accountId))) },
+          ...CUENTA_EN_LA_BOLSA,
+        },
         select: SELECT_AGENCIA,
       }),
     ]);
@@ -1605,15 +1705,21 @@ export async function avisarColaboracion(
 
     const quien = host?.name ?? "otra inmobiliaria";
     const nombre = (prospectoNombre ?? "").trim().slice(0, 60) || "Un interesado";
+    // Cada pieza se recorta ANTES de armar la frase, y no la frase entera
+    // después: `"…".slice(0, 200)` al final de una concatenación solo recorta
+    // el ÚLTIMO literal (el punto liga más fuerte que el más), así que el
+    // título salía sin tope. Y recortar el total dejaría el pendiente
+    // terminado a media palabra, sin el "(en colaboración)" que es justo lo
+    // que hay que leer.
+    const titulo = (property.title ?? "").trim().slice(0, 70) || "un inmueble";
+    const host_ = quien.trim().slice(0, 50);
     await prisma.realtyTask.create({
       data: {
         accountId: listing.accountId,
         userId,
         propertyId: property.id,
         dueAt: new Date(),
-        title:
-          `${nombre} preguntó por "${property.title}" desde la web de ${quien} ` +
-          "(en colaboración).".slice(0, 200),
+        title: `${nombre} preguntó por "${titulo}" desde la web de ${host_} (en colaboración).`,
       },
     });
     return true;
