@@ -23334,3 +23334,817 @@ PENDIENTES / LO QUE NO SE HIZO:
     y lectura del revisor. Rafael verá las pieles en la vista previa del editor al elegirlas.
   · Campo de "% de avance" y ranura de "plantas" para Torre: campo nuevo, se reporta (arriba).
   · Los errores de tsc en src/lib/barber/__tests__ vienen de main y no son de esta ola.
+═══════════════════════════════════════════════════════════════════════════
+▶ INMUEBLES · OLA 2 · T1 — CUMPLIMIENTO ANTILAVADO (PLD / LFPIORPI)
+   rama `realty/o2t1` · 6 commits · 40 archivos · +9 318 / −0
+═══════════════════════════════════════════════════════════════════════════
+
+Verificado contra EasyBroker, Nocnok, Wasi, Tokko e Inmuebles24 Suite:
+ninguno trae cumplimiento antilavado dentro del CRM. Hoy se compra aparte.
+
+**LO QUE ES:** un EXPEDIENTE y unas ALERTAS. Junta los papeles del cliente,
+compara el monto de cada operación contra el umbral vigente y arma el
+archivo para que el cliente lo suba **él** al portal del SAT.
+
+**LO QUE NO ES:** un despacho. DaleControl no presenta avisos, no dictamina,
+no firma y no responde por el cumplimiento de nadie. Si el cliente incumple,
+las multas son suyas.
+
+Esa frontera no se dejó al criterio de quien escriba el JSX: las seis
+leyendas legales viven en constantes de `src/lib/realty/pld/contrato.ts`, en
+español y en duro, **fuera del diccionario**. No son etiquetas de UI: si
+alguien traduce mal "DaleControl no presenta avisos por ti", el producto
+empieza a prometer algo que no hace. Así no hay forma de pintar el botón de
+descarga sin su advertencia al lado.
+
+───────────────────────────────────────────────────────────────────────────
+1. LO QUE SE CONSTRUYÓ
+───────────────────────────────────────────────────────────────────────────
+
+**A · EXPEDIENTE KYC** — `RealtyPldFile`, uno por contacto y por cuenta
+(`@@unique([accountId, contactId])`). Identificación oficial, comprobante de
+domicilio, RFC/CURP, ocupación, domicilio y **beneficiario controlador** si
+es persona moral o fideicomiso. Los papeles van al bucket **privado**
+`realty-files`, bajo `<accountId>/cumplimiento/<fileId>/`, y se leen siempre
+con URL firmada de 5 minutos.
+
+El **estado** (incompleto / completo / vencido) **NO es una columna**: se
+calcula de los papeles que hay y de sus vigencias. Guardarlo sería tener dos
+verdades y que una envejeciera. Precedencia: INCOMPLETO gana a VENCIDO — a
+un expediente al que le falta un papel nunca estuvo completo.
+
+**B · UMBRALES AUTOMÁTICOS** — al abrir la pestaña de operaciones, cada
+`RealtyDeal` CERRADO se compara y se dice qué obligación se disparó. Nada
+más: compara. La comparación es `>=`, no `>` — la ley dice "igual o superior
+al equivalente a…", así que una operación que caiga en el centavo exacto del
+umbral **sí** obliga. La prueba comprueba ese centavo.
+
+El **efectivo** de una operación es la suma de sus `RealtyPayment` con
+`method = EFECTIVO`. Cuando la inmobiliaria no captura pagos, esa suma es
+cero y la bandera nunca saltaría: para eso está `cashDeclared`, un número que
+alguien declara a mano. **Si está capturado, MANDA — no se suma.** Sumarlos
+contaría dos veces el mismo billete y levantaría una bandera roja falsa, que
+es la forma más rápida de que dejen de creerle a las banderas.
+
+Efectivo sobre el tope → **bandera roja visible, y la bandera NO SE APAGA.**
+Se puede dejar constancia de que alguien la revisó (`cashAckNote`), y aun así
+el renglón sigue marcado y sigue contando en el tablero. Un botón que la
+apagara la convertiría en una molestia que se quita con un clic.
+
+**C · SEMÁFORO PEP** — casilla y cuestionario. PEP, familiar o asociado
+cercano suben el expediente a **riesgo alto**, y el motivo se pinta en
+palabras al lado (una etiqueta de colores sin motivo no se puede accionar).
+
+🔴 **Un "NO" por omisión no es un "NO" declarado.** El sello `pepAskedAt` lo
+pone el servidor al recibir la llave `pep`; mientras nadie conteste, el
+expediente **no cuenta como integrado** aunque el desplegable diga "No", y
+la pantalla lo dice en ámbar.
+
+**D · CALENDARIO DEL DÍA 17** — trece meses, **todos**, tengan o no
+operaciones. El que no las tiene sale marcado **EN CEROS** con su fecha
+límite igual de visible: un mes sin operaciones también se reporta y no
+presentarlo se sanciona igual — es el error más caro y más fácil de cometer.
+Un periodo vacío que no apareciera en pantalla sería justo la omisión que
+este módulo existe para evitar.
+
+El **aviso de 24 horas** ante indicios se levanta por operación, con su
+motivo; el vencimiento se calcula con el plazo del parámetro. Se puede
+cerrar ("ya se atendió") y **bajar** — levantarla por error tiene que poder
+deshacerse.
+
+"Presentado" **lo marca una persona**, con su nombre y su acuse. No hay cron
+que marque periodos y **descargar no es presentar**. Deshacer también se
+permite: alguien marca el mes equivocado y tiene que poder corregirlo; lo
+que queda es la bitácora.
+
+**E · BÓVEDA DE 10 AÑOS** — `retainUntil` se calcula al subir, con el plazo
+que diga el parámetro. Mientras esa fecha no pase, la UI **no borra:
+archiva** (`archivedAt`); el objeto sigue en el bucket. El corte de verdad
+lo hace la API (409 `RETENTION_ACTIVE`, con la fecha exacta en el mensaje);
+esconder el botón es solo para no ofrecer lo imposible.
+
+Y la mitad que casi todo el mundo olvida: **quién consultó qué.**
+`RealtyPldAccessLog` registra abrir un expediente, abrir un papel, archivar
+y bajar un concentrado — con el nombre **en el renglón**, porque dentro de
+diez años "el usuario cku3n…" no le dice nada a nadie, y sin FK a
+`realty_users`, porque una bitácora que se borra con su autor no es una
+bitácora. Escribir en ella nunca puede tumbar la acción: si falla, se
+registra en el log del servidor y se sigue.
+
+**F · ARCHIVO DE AVISO** — hoja de concentrado en CSV, con la leyenda
+*"Este archivo lo presentas tú en el portal del SAT. DaleControl no presenta
+avisos por ti"* pegada al botón, otra vez en el modal de marcar, y **dentro
+del propio archivo** (el CSV se reenvía por correo y llega a gente que nunca
+vio nuestro botón). Los parámetros con los que se comparó viajan dentro:
+dentro de un año nadie se acordará de con qué UMA salió ese corte.
+
+**G · TABLERO** — expedientes incompletos y vencidos, operaciones sobre
+umbral sin expediente, PEP detectados, documentos por vencer, efectivo en
+bandera, alertas abiertas y el próximo corte. Los ocho contadores son
+**botones**: cada uno salta a su pestaña ya filtrada. Un tablero que solo
+cuenta obliga a buscar a mano lo que acaba de señalar.
+
+───────────────────────────────────────────────────────────────────────────
+2. CERO VALORES FISCALES EN EL CÓDIGO
+───────────────────────────────────────────────────────────────────────────
+
+Ni la UMA, ni 8 025, ni 16 000, ni el día 17, ni las 24 horas, ni los 10
+años están escritos en `src/`. Todos salen de `realty_calc_params`
+(`kind = UMA`, `stateCode = MX`, sub-objeto `pld` de su `meta`).
+
+**Los umbrales se guardan en VECES LA UMA, no en pesos.** La ley no dice
+"941 412.75 pesos": dice "8 025 veces la UMA". Cuando el INEGI publique la
+de 2027, los tres umbrales se mueven solos con capturar UNA fila. Guardar el
+peso ya multiplicado obligaría a corregir tres números cada enero y a
+equivocarse en uno. La multiplicación es exacta: UMA en centavos (11 731)
+por un entero (8 025) = 94 141 275 centavos, sin un redondeo por en medio.
+
+**El bloque `pld` va en TODAS las filas UMA, no solo en la del año.** Un
+umbral en veces la UMA no cambia de año a año; lo que cambia es cuánto vale
+una UMA. Si el bloque existiera solo en la fila de 2026, una operación
+cerrada en 2025 elegiría la fila de 2025 y el módulo diría "falta el
+parámetro" para una venta perfectamente normal.
+
+**La tabla no tiene `accountId`**: son parámetros de PLATAFORMA, editables
+solo desde `/admin`. Una inmobiliaria no puede bajarse su propio umbral, que
+sería la forma más simple de no tener que avisar nunca.
+
+**Si falta el parámetro, la pantalla DEGRADA y no truena.** Dice
+exactamente cuál falta y cómo capturarlo, y el módulo **sigue sirviendo**:
+se integran expedientes, se suben papeles y se lee la bitácora — nada de eso
+depende de un número. Lo único que desaparece es la comparación, que es
+justo lo que no se puede inventar. Y donde no se puede degradar se rechaza:
+subir un papel sin saber cuántos años conservarlo devuelve 409, porque
+guardarlo con un plazo inventado haría que la UI creyera que se puede
+borrar.
+
+**El bloque `pld` NO está en la lista blanca de `sanitizarMeta`**, y eso es
+deliberado: `/api/realty/calc/params` sirve esas filas a internet **sin
+sesión**, cacheadas media hora en el borde. Los umbrales son públicos, pero
+no hay razón para publicarlos ahí. Por eso este módulo tiene su propio
+lector (`pld/parametros.ts`) — mismo `findMany`, sin sanear. Precedente
+exacto en el vertical: `getInpcPct` de `leases.ts`.
+
+───────────────────────────────────────────────────────────────────────────
+3. CUATRO COSAS QUE SE ARREGLARON SOBRE LO QUE YA HABÍA EN EL WORKTREE
+───────────────────────────────────────────────────────────────────────────
+
+Al llegar había 10 archivos sin commitear (el motor completo, sin pantallas).
+Se commiteó tal cual primero y después se corrigieron cuatro cosas que solo
+se ven leyendo el flujo entero:
+
+**1 · El expediente completo viajaba al navegador para TODA la cartera.**
+La pantalla bajaba una lista de cientos de personas con el RFC, la CURP, la
+fecha de nacimiento, el domicilio, los beneficiarios y las notas de cada
+una — para pintar una tabla que solo enseña nombre, estado y riesgo. Nadie
+los veía: iban en el HTML y quedaban en la caché del navegador de quien
+tuviera la sesión abierta.
+
+Ahora sale `ExpedienteResumen` (lista blanca campo por campo; un `delete`
+sobre una copia habría dejado pasar sola la siguiente columna que alguien
+agregue) y el detalle se pide de uno en uno por
+`GET /api/realty/pld/expedientes/[id]`. **Y con eso la bóveda empieza a
+decir la verdad**: si el detalle bajara con la pantalla, todos habrían
+consultado todo con solo entrar, y la bitácora de diez años no diría nada.
+
+**2 · El corte del día 17 se pintaba como 16 en toda la República.** Una
+fecha de calendario guardada a medianoche UTC cae a las 18:00 del día
+ANTERIOR en México. Afectaba al vencimiento del periodo, a la fecha de
+nacimiento (que además retrocedía **otro** día en cada ida y vuelta por el
+formulario) y a la expedición y vigencia de cada papel.
+
+Se adoptó la convención del **MEDIODÍA UTC**, que es la que ya usaba
+`parseDate` de `deals/service.ts` — por eso el periodo de un cierre nunca se
+equivocó de mes. A las 12:00 UTC no hay zona mexicana (UTC-6 a UTC-8) que
+cambie de día. El `Z` va explícito: sin él, el resultado dependería de cómo
+esté configurada la máquina del despliegue. **4 pruebas nuevas**, incluida
+la que demuestra el retroceso, en las tres zonas.
+
+**3 · El campo de efectivo congelaba la cifra.** `OperacionRow` solo traía
+el número ya resuelto, así que el input arrancaba con la suma de los pagos
+dentro: abrir una operación con $50 000 en pagos y pulsar Guardar sin tocar
+nada escribía `cashDeclared = 50 000`. Desde ese momento la cifra deja de
+venir de los pagos — un pago nuevo ya no la mueve y la bandera roja deja de
+saltar sola. El usuario nunca supo que declaró algo. Ahora viajan los tres
+por separado y el input arranca **vacío** cuando nadie declaró nada.
+
+**4 · El borrador podía saltar de un expediente a otro.** La ficha se
+reusaba al cambiar de fila: mientras el detalle nuevo viajaba, el borrador
+seguía teniendo los datos del anterior y Guardar seguía encendido. Guardar
+en esa ventana escribía los datos de una persona en el expediente de otra.
+`key={abierto}` lo remonta, y `cargando` también apaga el botón.
+
+───────────────────────────────────────────────────────────────────────────
+4. AISLAMIENTO Y PERMISOS
+───────────────────────────────────────────────────────────────────────────
+
+- `accountId` en las **cinco** tablas, y siempre del contexto de sesión —
+  nunca del body ni del query.
+- Las escrituras usan `updateMany` con `accountId` en el where (devuelve
+  `count: 0` si la fila no era tuya), o comprueban la pertenencia ANTES.
+  Nunca `update({ where: { id } })` a secas.
+- Los filtros opcionales se arman **a mano**: un `campo: valor ?? undefined`
+  en Prisma BORRA el filtro y devuelve la tabla de todos los inquilinos.
+- Los dos `upsert` van por el índice **completo** (`accountId, dealId`) y
+  (`accountId, periodMonth`).
+- `pathBelongsToAccount()` antes de firmar o borrar en el Storage, aunque la
+  fila ya viniera filtrada.
+- Los 500 en las APIs devuelven un mensaje saneado: la traza filtra rutas y
+  fragmentos de consulta, y aquí la consulta lleva el RFC y el domicilio de
+  un tercero.
+- Gate por la **feature `pld`**, nunca por `plan === "INMOBILIARIA"`.
+- **Tres candados** en la página (modo, feature, permiso) repetidos en cada
+  ruta de API: la página decide qué se PINTA, la API qué se EJECUTA.
+  Esconder el item del menú no es control de acceso.
+
+🔴 **`pld.view` y `pld.manage` NO entran en los defaults de AGENT ni de
+ASSISTANT**: cumplimiento es trabajo de oficial de cumplimiento, no del
+asesor de piso. OWNER y MANAGER los absorben solos vía `ALL`… **pero solo si
+su `permissionsOverride` está vacío**, porque en este vertical el override
+REEMPLAZA los defaults. Quien tenga excepciones capturadas se queda sin el
+módulo **y sin forma de arreglarlo desde la UI**:
+`updateRealtyMemberPermissions` no deja repartir un permiso que el llamante
+no tiene (`PERMISSION_OUT_OF_REACH`), así que el dueño con excepciones no
+puede dárselo a nadie ni a sí mismo. **Por eso la sección 5 del SQL no es
+opcional.**
+
+───────────────────────────────────────────────────────────────────────────
+5. VERIFICACIÓN — LO QUE SE CORRIÓ Y LO QUE NO
+───────────────────────────────────────────────────────────────────────────
+
+**NO SE COMPILÓ** (regla de la sesión: ocho terminales en la máquina). Ni
+`next build` ni `tsc --noEmit`. En su lugar:
+
+- **50 / 50 pruebas verdes** —
+  `npx tsx --test src/lib/realty/pld/__tests__/umbrales.test.ts`. Puras: sin
+  Postgres, sin sesión, sin navegador. Cubren el centavo exacto del borde
+  del umbral, el `>=` contra el `>`, el periodo en la zona de la cuenta, el
+  salto de año del corte, la precedencia INCOMPLETO > VENCIDO, el "NO por
+  omisión" y las cuatro de la convención del mediodía.
+- **Guardia del vertical en verde**, cero prohibidos. Único compartido
+  declarado: `prisma/schema.prisma` (+ `ORQUESTA.md` para este reporte).
+- **Los seis archivos compartidos solo CRECIERON** — `git diff --numstat`
+  da 0 borrados en los seis. El diff de la rama entera es **+9 318 / −0**.
+- **32 archivos**: todos los imports locales resuelven contra los exports
+  reales del destino, y **ningún `"use client"` arrastra un módulo
+  `server-only`** (comprobado archivo por archivo).
+- **153 llaves de i18n** usadas, las 164 del diccionario **alineadas en `es`
+  y en `en`**, placeholders `{var}` incluidos.
+- Los **14 iconos** de lucide existen en la versión instalada (0.427.0).
+- **Cero imports muertos.**
+- `sql/realty-pld.sql` comparado **mecánicamente** contra
+  `prisma/schema.prisma`: las 74 columnas de los cinco modelos una por una,
+  cada `@@unique` y `@@index`, las 11 FKs, que las tablas referenciadas
+  existan en `sql/realty.sql`, y que no haya `$$` ni `DO` anidados fuera de
+  comentario.
+
+**LO QUE NO SE PUDO VERIFICAR** y hay que mirar al integrar:
+
+- **Nadie ha visto estas pantallas en un navegador.** No hay base con datos
+  de inmuebles a mano. El riesgo real está en la disposición y el CSS, no en
+  la lógica.
+- **El SQL no se aplicó.** Va abajo en bloque copy-paste.
+- **Los umbrales nacen `porVerificar: true`** y nadie los ha confrontado
+  contra el texto vigente de la LFPIORPI ni contra la reforma del
+  27-mar-2026. Mientras la bandera esté encendida la pantalla lo dice en
+  ámbar, y la fuente capturada lo confiesa por escrito.
+
+───────────────────────────────────────────────────────────────────────────
+6. LO QUE **NO** ESTÁ, Y NO ES UN DESCUIDO
+───────────────────────────────────────────────────────────────────────────
+
+**· El XML oficial del aviso NO se genera. Es una decisión, no un recorte.**
+El esquema XSD del Anexo, sus catálogos de claves y sus reglas de validación
+son un documento normativo que hay que leer, versionar y probar contra el
+validador real del portal. Un XML hecho de memoria tiene dos finales, y los
+dos son malos: lo rechaza el portal y la inmobiliaria pierde el día del
+corte peleando con un archivo que le vendimos como listo; o lo **acepta** con
+los campos mal mapeados, y entonces declaró datos incorrectos ante la
+autoridad y la responsabilidad es suya. El segundo es el caro. Un CSV que
+nadie confunde con un acuse es honesto; un XML que parece oficial y no lo
+es, no. El archivo lo dice en su primera línea y la pantalla lo repite.
+
+**· No hay cron.** Nada le recuerda a nadie que se acerca el 17: el
+calendario hay que abrirlo. Es la pieza natural de la siguiente ola —
+recordatorio por WhatsApp o correo unos días antes del corte.
+
+**· El corte no se recorre al siguiente día hábil** cuando cae en sábado,
+domingo o festivo. Adelantar el vencimiento nunca perjudica a nadie, y meter
+un calendario de días inhábiles mexicanos sin que un abogado lo valide sería
+inventar una regla.
+
+**· No hay cotejo contra listas de personas bloqueadas.** El aviso de 24
+horas se levanta a mano, con el motivo que escriba una persona. Cotejar
+contra la lista de la UIF es otro proyecto.
+
+**· El vocabulario del dominio está en español también en la versión en
+inglés.** Estado, riesgo, tipo de persona, tipo de documento y las
+respuestas del cuestionario PEP viven en constantes de `contrato.ts` — donde
+viven porque son términos legales mexicanos, no etiquetas de UI. Una cuenta
+con `locale: "en"` verá el armazón en inglés y esos términos en español.
+Consciente, y del todo revisable si algún día se vende fuera de México.
+
+**· La bitácora no registra "listar".** Registra abrir un expediente, abrir
+un papel, archivarlo y bajar un concentrado. Entrar a la pantalla no deja
+renglón: si lo dejara, un tablero abierto todo el día enterraría los accesos
+que sí importan.
+
+**· El plazo de diez años no lo hace valer una restricción de la base**,
+sino la aplicación (`archivedAt` en vez de `DELETE`, y 409 mientras
+`retainUntil` no pase). Un `DELETE` directo en Supabase se lo lleva.
+
+───────────────────────────────────────────────────────────────────────────
+7. ⚠️  ESTO LO TIENE QUE REVISAR UN ABOGADO ANTES DE VENDERLO
+───────────────────────────────────────────────────────────────────────────
+
+Las seis leyendas de `contrato.ts` (`LEYENDA_ALCANCE`,
+`LEYENDA_DESCARGA_AVISO`, `LEYENDA_UMBRALES`, `LEYENDA_EFECTIVO_PROHIBIDO`,
+`LEYENDA_EN_CEROS`, `LEYENDA_BOVEDA`) son la frontera legal del producto y
+están redactadas por quien escribió el código, no por un abogado. Igual el
+copy de `pld.json` que habla de obligaciones y sanciones.
+
+Y los **números**: los umbrales sembrados salen del brief del vertical, no
+de una lectura confrontada del Diario Oficial. Están marcados
+`porVerificar: true` a propósito, y esa bandera la apaga —desde `/admin`,
+sin desplegar nada— quien haya cotejado el texto vigente. **Hasta entonces,
+esta pantalla ordena papeles; no certifica cumplimiento.**
+
+───────────────────────────────────────────────────────────────────────────
+8. QUÉ HAY QUE HACER PARA QUE ESTO FUNCIONE
+───────────────────────────────────────────────────────────────────────────
+
+1. Correr `sql/realty-pld.sql` completo en Supabase (bloque abajo). Mirar
+   antes el `SELECT` de la sección 5: dice a quién le va a tocar el permiso.
+2. `npx prisma generate` — hay cinco modelos y siete enums nuevos.
+3. Con una sesión de `/admin`: **`POST /api/realty/pld/parametros`**. Es
+   idempotente y aditivo: una fila UMA que ya traiga el bloque `pld` se deja
+   INTACTA, para que volver a sembrar nunca le devuelva el número de fábrica
+   a un umbral corregido a mano. `GET` a la misma ruta responde
+   `listo: true` cuando ya está.
+4. Cotejar los umbrales contra el texto vigente y apagar `porVerificar` en
+   `/admin/inmobiliarias/parametros`.
+
+Sin el paso 3 la pantalla **funciona pero no compara nada**: enseña qué
+falta capturar y deja integrar expedientes.
+
+───────────────────────────────────────────────────────────────────────────
+9. ARCHIVOS
+───────────────────────────────────────────────────────────────────────────
+
+**Compartidos (los seis, solo aditivo, 0 líneas borradas):**
+`prisma/schema.prisma` (+319: 7 enums y 5 modelos al FINAL del bloque
+Realty) · `src/lib/realty/types.ts` (+5: el item de menú) ·
+`src/lib/realty/permissions.ts` (+11: `pld.view`, `pld.manage`) ·
+`src/components/realty/realty-sidebar.tsx` (+2: el icono `shield-check`) ·
+`src/i18n/dictionaries/realty/shell.{es,en}.json` (+1 cada uno).
+
+**Propios:** `sql/realty-pld.sql` · `src/lib/realty/pld/` (12 archivos:
+`contrato`, `umbrales`, `formato`, `seed`, `parametros`, `expedientes`,
+`operaciones`, `avisos`, `archivo`, `almacen`, `bitacora`, `pantalla` + las
+pruebas) · `src/app/api/realty/pld/` (10 rutas) ·
+`src/components/realty/pld/` (7 componentes) ·
+`src/app/inmobiliaria/(panel)/cumplimiento/page.tsx` ·
+`src/i18n/dictionaries/realty/pld.json`.
+
+═══════════════════════════════════════════════════════════════════════════
+▶ EL SQL — COPY-PASTE, **SIN APLICAR**
+═══════════════════════════════════════════════════════════════════════════
+
+```sql
+-- ═══════════════════════════════════════════════════════════════════════
+-- DaleControl INMUEBLES · CUMPLIMIENTO ANTILAVADO (PLD / LFPIORPI)
+--
+-- 7 enums · 5 tablas · 14 índices · 11 llaves foráneas
+-- + el backfill del permiso nuevo para las cuentas que YA existen.
+--
+-- Aplicar manualmente en Supabase (SQL editor). IDEMPOTENTE: cada bloque
+-- comprueba existencia antes de crear, así que correrlo dos veces no
+-- produce errores ni duplicados.
+--
+-- 🔴 NADA VIVE SOLO AQUÍ. Las cinco tablas están también en
+-- prisma/schema.prisma (al final del bloque Realty), así que un
+-- `prisma db push` no se las lleva por delante — en barber eso sí pasó.
+--
+-- Nota sobre $$: un único delimitador `$realty$` y NUNCA bloques DO
+-- anidados (el parser SQL de Supabase rompe con $$ anidado).
+--
+-- Nota sobre fechas: TIMESTAMP(3) SIN zona, como el resto del vertical.
+--
+-- ── 🔴 CERO NÚMEROS DE LA LEY EN ESTE ARCHIVO ─────────────────────────
+-- No hay UMA, ni 8 025, ni 16 000, ni día 17, ni 24 horas, ni 10 años.
+-- Todo eso vive en `realty_calc_params` (kind = 'UMA', stateCode = 'MX',
+-- bloque `pld` de su `meta`) y se siembra desde el panel de plataforma con
+-- POST /api/realty/pld/parametros — que además es IDEMPOTENTE y ADITIVO:
+-- una fila que ya trae el bloque se deja INTACTA, para que volver a
+-- sembrar nunca le devuelva el número de fábrica a un umbral que alguien
+-- corrigió contra el texto de la ley.
+--
+-- Estas tablas guardan RESULTADOS y DECISIONES de una persona. Nunca la
+-- regla.
+-- ═══════════════════════════════════════════════════════════════════════
+
+
+-- ── 1. Enums ───────────────────────────────────────────────────────────
+DO $realty$
+BEGIN
+  -- Persona física, moral o fideicomiso: cambia QUÉ papeles pide el
+  -- expediente (una moral debe declarar beneficiario controlador).
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'RealtyPldPersonKind') THEN
+    CREATE TYPE "RealtyPldPersonKind" AS ENUM ('FISICA', 'MORAL', 'FIDEICOMISO');
+  END IF;
+
+  -- Persona políticamente expuesta. El familiar y el asociado cercano
+  -- cuentan igual que el titular.
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'RealtyPldPepKind') THEN
+    CREATE TYPE "RealtyPldPepKind" AS ENUM ('NO', 'PEP', 'FAMILIAR', 'ASOCIADO');
+  END IF;
+
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'RealtyPldRisk') THEN
+    CREATE TYPE "RealtyPldRisk" AS ENUM ('BAJO', 'MEDIO', 'ALTO');
+  END IF;
+
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'RealtyPldDocKind') THEN
+    CREATE TYPE "RealtyPldDocKind" AS ENUM ('IDENTIFICACION', 'COMPROBANTE_DOMICILIO', 'CONSTANCIA_FISCAL', 'CURP', 'ACTA_CONSTITUTIVA', 'PODER', 'BENEFICIARIO_CONTROLADOR', 'OTRO');
+  END IF;
+
+  -- EN_CEROS = no hubo operaciones, y aun así hay que reportarlo: es el
+  -- error más caro y más fácil de cometer.
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'RealtyPldNoticeKind') THEN
+    CREATE TYPE "RealtyPldNoticeKind" AS ENUM ('NORMAL', 'EN_CEROS');
+  END IF;
+
+  -- PRESENTADO lo marca una PERSONA después de subirlo en el portal del
+  -- SAT. DaleControl nunca lo pone por su cuenta.
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'RealtyPldNoticeStatus') THEN
+    CREATE TYPE "RealtyPldNoticeStatus" AS ENUM ('PENDIENTE', 'PRESENTADO');
+  END IF;
+
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'RealtyPldAccessAction') THEN
+    CREATE TYPE "RealtyPldAccessAction" AS ENUM ('VER_EXPEDIENTE', 'ABRIR_DOCUMENTO', 'DESCARGAR_AVISO', 'ARCHIVAR_DOCUMENTO');
+  END IF;
+END
+$realty$;
+
+
+-- ── 2. Tablas ──────────────────────────────────────────────────────────
+--
+-- accountId en LAS CINCO. Es la regla del vertical y no es negociable:
+-- `include` no es un JOIN, así que sin la columna no se puede filtrar un
+-- hijo por el tenant de su padre en un solo where.
+
+-- El EXPEDIENTE de identificación de un cliente. Uno por contacto y por
+-- cuenta: la misma persona puede aparecer en varias operaciones y el
+-- expediente se integra UNA vez.
+--
+-- NO hay columna `status`: el estado (incompleto / completo / vencido) se
+-- calcula de los papeles que hay y de sus vigencias. Guardarlo sería tener
+-- dos verdades y que una envejeciera.
+CREATE TABLE IF NOT EXISTS "realty_pld_files" (
+    "id" TEXT NOT NULL,
+    "accountId" TEXT NOT NULL,
+    "contactId" TEXT NOT NULL,
+    "personKind" "RealtyPldPersonKind" NOT NULL DEFAULT 'FISICA',
+    "rfc" TEXT,
+    "curp" TEXT,
+    "birthDate" TIMESTAMP(3),
+    "nationality" TEXT,
+    "occupation" TEXT,
+    "address" TEXT,
+    "pep" "RealtyPldPepKind" NOT NULL DEFAULT 'NO',
+    "pepDetail" TEXT,
+    -- Cuándo se PREGUNTÓ. Sin fecha, el cuestionario no está contestado:
+    -- "NO" por omisión y "NO" declarado no son lo mismo.
+    "pepAskedAt" TIMESTAMP(3),
+    -- [{ name, rfc, curp, pct, pep }]
+    "beneficialOwners" JSONB,
+    "risk" "RealtyPldRisk" NOT NULL DEFAULT 'BAJO',
+    "riskNote" TEXT,
+    "reviewedAt" TIMESTAMP(3),
+    -- Sin FK a realty_users A PROPÓSITO: un expediente de cumplimiento
+    -- tiene que sobrevivir a que la persona que lo revisó deje la
+    -- inmobiliaria. Por eso se guarda también el nombre.
+    "reviewedById" TEXT,
+    "reviewedByName" TEXT,
+    "notes" TEXT,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "realty_pld_files_pkey" PRIMARY KEY ("id")
+);
+
+-- Un papel del expediente, en el bucket PRIVADO realty-files.
+--
+-- 🔴 BÓVEDA: `retainUntil` se calcula al subir, con el plazo que diga el
+-- parámetro vigente. Mientras esa fecha no pase, la UI NO BORRA: archiva
+-- (`archivedAt`). El objeto sigue en el bucket.
+--
+-- `url` guarda el PATH interno del bucket, NUNCA una URL firmada: una
+-- firma guardada en la columna queda muerta, y si acaba en una página
+-- cacheada se publica sola.
+CREATE TABLE IF NOT EXISTS "realty_pld_documents" (
+    "id" TEXT NOT NULL,
+    "accountId" TEXT NOT NULL,
+    "fileId" TEXT NOT NULL,
+    "kind" "RealtyPldDocKind" NOT NULL DEFAULT 'OTRO',
+    "name" TEXT NOT NULL,
+    "url" TEXT NOT NULL,
+    "bytes" INTEGER NOT NULL DEFAULT 0,
+    "issuedAt" TIMESTAMP(3),
+    "expiresAt" TIMESTAMP(3),
+    "retainUntil" TIMESTAMP(3) NOT NULL,
+    "archivedAt" TIMESTAMP(3),
+    "uploadedById" TEXT,
+    "uploadedByName" TEXT,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "realty_pld_documents_pkey" PRIMARY KEY ("id")
+);
+
+-- Quién consultó qué y cuándo. Es la mitad auditable de la bóveda — la
+-- que casi todo el mundo olvida.
+--
+-- Sin FK a realty_users: una bitácora que se borra con su autor no es una
+-- bitácora. Se guarda el nombre EN EL RENGLÓN porque dentro de diez años
+-- "el usuario cku3n…" no le dice nada a nadie.
+CREATE TABLE IF NOT EXISTS "realty_pld_access_logs" (
+    "id" TEXT NOT NULL,
+    "accountId" TEXT NOT NULL,
+    "action" "RealtyPldAccessAction" NOT NULL,
+    "fileId" TEXT,
+    "documentId" TEXT,
+    -- Para DESCARGAR_AVISO: el periodo del que se bajó el archivo.
+    "subject" TEXT,
+    "userId" TEXT,
+    "userName" TEXT,
+    "ip" TEXT,
+    "userAgent" TEXT,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "realty_pld_access_logs_pkey" PRIMARY KEY ("id")
+);
+
+-- El aviso MENSUAL. periodMonth = "AAAA-MM" del mes que se reporta.
+--
+-- Va ANTES que realty_pld_operations en este archivo porque aquella la
+-- referencia; las llaves foráneas van todas al final, así que el orden es
+-- solo para que se lea en el sentido correcto.
+CREATE TABLE IF NOT EXISTS "realty_pld_notices" (
+    "id" TEXT NOT NULL,
+    "accountId" TEXT NOT NULL,
+    "periodMonth" TEXT NOT NULL,
+    "kind" "RealtyPldNoticeKind" NOT NULL DEFAULT 'NORMAL',
+    "status" "RealtyPldNoticeStatus" NOT NULL DEFAULT 'PENDIENTE',
+    -- Calculada al crear la fila con el parámetro vigente, al MEDIODÍA del
+    -- día de corte: a medianoche, el 17 se pintaba como 16 en toda la
+    -- República (ver HORA_DE_CALENDARIO en src/lib/realty/pld/umbrales.ts).
+    "dueDate" TIMESTAMP(3) NOT NULL,
+    "presentedAt" TIMESTAMP(3),
+    "presentedById" TEXT,
+    "presentedByName" TEXT,
+    -- Acuse que devuelve el portal. Texto libre: el formato lo pone el SAT.
+    "acuse" TEXT,
+    "notes" TEXT,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "realty_pld_notices_pkey" PRIMARY KEY ("id")
+);
+
+-- La cara PLD de una operación (realty_deals). NO duplica el monto ni el
+-- umbral: eso se calcula en vivo contra el parámetro vigente. Si se
+-- guardara, una operación evaluada con la UMA del año pasado seguiría
+-- diciendo "no rebasa" para siempre.
+--
+-- `cashDeclared` es el efectivo declarado A MANO, para la operación cuyos
+-- pagos no se registraron en DaleControl. Si está capturado MANDA sobre la
+-- suma de los realty_payments en efectivo — no se suman: sumarlos contaría
+-- dos veces el mismo billete y levantaría una bandera roja falsa.
+CREATE TABLE IF NOT EXISTS "realty_pld_operations" (
+    "id" TEXT NOT NULL,
+    "accountId" TEXT NOT NULL,
+    "dealId" TEXT NOT NULL,
+    "cashDeclared" DECIMAL(14,2),
+    -- Efectivo por encima del tope: quién lo vio y qué dijo. La bandera
+    -- roja NO se apaga; se deja constancia de que se revisó.
+    "cashAckAt" TIMESTAMP(3),
+    "cashAckById" TEXT,
+    "cashAckNote" TEXT,
+    -- Alerta urgente ante indicios. `urgentDueAt` se calcula con el plazo
+    -- del parámetro, no con un 24 escrito en el código.
+    "urgentFlaggedAt" TIMESTAMP(3),
+    "urgentReason" TEXT,
+    "urgentDueAt" TIMESTAMP(3),
+    "urgentDoneAt" TIMESTAMP(3),
+    "noticeId" TEXT,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "realty_pld_operations_pkey" PRIMARY KEY ("id")
+);
+
+
+-- ── 3. Índices ─────────────────────────────────────────────────────────
+--
+-- Los dos ÚNICOS no son decoración: sostienen los `upsert` del módulo.
+-- Prisma exige el índice COMPLETO para un upsert compuesto, y uno parcial
+-- (solo `dealId`, solo `periodMonth`) dejaría que la fila de otra
+-- inmobiliaria se pisara.
+
+CREATE UNIQUE INDEX IF NOT EXISTS "realty_pld_files_accountId_contactId_key" ON "realty_pld_files"("accountId", "contactId");
+CREATE INDEX IF NOT EXISTS "realty_pld_files_accountId_risk_idx" ON "realty_pld_files"("accountId", "risk");
+CREATE INDEX IF NOT EXISTS "realty_pld_files_accountId_pep_idx" ON "realty_pld_files"("accountId", "pep");
+CREATE INDEX IF NOT EXISTS "realty_pld_files_contactId_idx" ON "realty_pld_files"("contactId");
+
+CREATE INDEX IF NOT EXISTS "realty_pld_documents_accountId_fileId_idx" ON "realty_pld_documents"("accountId", "fileId");
+-- "documentos por vencer" del tablero.
+CREATE INDEX IF NOT EXISTS "realty_pld_documents_accountId_expiresAt_idx" ON "realty_pld_documents"("accountId", "expiresAt");
+-- Qué papeles ya salieron del plazo de conservación y se pueden borrar.
+CREATE INDEX IF NOT EXISTS "realty_pld_documents_accountId_retainUntil_idx" ON "realty_pld_documents"("accountId", "retainUntil");
+
+CREATE INDEX IF NOT EXISTS "realty_pld_access_logs_accountId_createdAt_idx" ON "realty_pld_access_logs"("accountId", "createdAt");
+CREATE INDEX IF NOT EXISTS "realty_pld_access_logs_accountId_fileId_createdAt_idx" ON "realty_pld_access_logs"("accountId", "fileId", "createdAt");
+CREATE INDEX IF NOT EXISTS "realty_pld_access_logs_documentId_idx" ON "realty_pld_access_logs"("documentId");
+
+CREATE UNIQUE INDEX IF NOT EXISTS "realty_pld_notices_accountId_periodMonth_key" ON "realty_pld_notices"("accountId", "periodMonth");
+CREATE INDEX IF NOT EXISTS "realty_pld_notices_accountId_status_dueDate_idx" ON "realty_pld_notices"("accountId", "status", "dueDate");
+
+CREATE UNIQUE INDEX IF NOT EXISTS "realty_pld_operations_accountId_dealId_key" ON "realty_pld_operations"("accountId", "dealId");
+CREATE INDEX IF NOT EXISTS "realty_pld_operations_accountId_urgentDueAt_idx" ON "realty_pld_operations"("accountId", "urgentDueAt");
+CREATE INDEX IF NOT EXISTS "realty_pld_operations_dealId_idx" ON "realty_pld_operations"("dealId");
+CREATE INDEX IF NOT EXISTS "realty_pld_operations_noticeId_idx" ON "realty_pld_operations"("noticeId");
+
+
+-- ── 4. Llaves foráneas (idempotentes vía pg_constraint) ────────────────
+-- ADD CONSTRAINT no soporta IF NOT EXISTS, así que van todas dentro de un
+-- solo DO con su comprobación. Un único delimitador, sin anidar.
+--
+-- 🔴 CASCADE hacia la cuenta y hacia el contacto, y NO "NO ACTION". Con NO
+-- ACTION, borrar una CUENTA entera podía fallar por el orden en que
+-- Postgres resuelve los cascades. La retención de diez años NO se hace
+-- valer con una FK: se hace valer en la aplicación (los documentos se
+-- ARCHIVAN, y DELETE responde 409 mientras no pase `retainUntil`).
+--
+-- Las dos de la BITÁCORA van en SET NULL a propósito: el renglón sobrevive
+-- al expediente y al papel que describe. Una bitácora que se borra con lo
+-- que audita no es una bitácora.
+DO $realty$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'realty_pld_files_accountId_fkey') THEN
+    ALTER TABLE "realty_pld_files" ADD CONSTRAINT "realty_pld_files_accountId_fkey" FOREIGN KEY ("accountId") REFERENCES "realty_accounts"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+  END IF;
+
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'realty_pld_files_contactId_fkey') THEN
+    ALTER TABLE "realty_pld_files" ADD CONSTRAINT "realty_pld_files_contactId_fkey" FOREIGN KEY ("contactId") REFERENCES "realty_contacts"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+  END IF;
+
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'realty_pld_documents_accountId_fkey') THEN
+    ALTER TABLE "realty_pld_documents" ADD CONSTRAINT "realty_pld_documents_accountId_fkey" FOREIGN KEY ("accountId") REFERENCES "realty_accounts"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+  END IF;
+
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'realty_pld_documents_fileId_fkey') THEN
+    ALTER TABLE "realty_pld_documents" ADD CONSTRAINT "realty_pld_documents_fileId_fkey" FOREIGN KEY ("fileId") REFERENCES "realty_pld_files"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+  END IF;
+
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'realty_pld_access_logs_accountId_fkey') THEN
+    ALTER TABLE "realty_pld_access_logs" ADD CONSTRAINT "realty_pld_access_logs_accountId_fkey" FOREIGN KEY ("accountId") REFERENCES "realty_accounts"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+  END IF;
+
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'realty_pld_access_logs_fileId_fkey') THEN
+    ALTER TABLE "realty_pld_access_logs" ADD CONSTRAINT "realty_pld_access_logs_fileId_fkey" FOREIGN KEY ("fileId") REFERENCES "realty_pld_files"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+  END IF;
+
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'realty_pld_access_logs_documentId_fkey') THEN
+    ALTER TABLE "realty_pld_access_logs" ADD CONSTRAINT "realty_pld_access_logs_documentId_fkey" FOREIGN KEY ("documentId") REFERENCES "realty_pld_documents"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+  END IF;
+
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'realty_pld_notices_accountId_fkey') THEN
+    ALTER TABLE "realty_pld_notices" ADD CONSTRAINT "realty_pld_notices_accountId_fkey" FOREIGN KEY ("accountId") REFERENCES "realty_accounts"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+  END IF;
+
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'realty_pld_operations_accountId_fkey') THEN
+    ALTER TABLE "realty_pld_operations" ADD CONSTRAINT "realty_pld_operations_accountId_fkey" FOREIGN KEY ("accountId") REFERENCES "realty_accounts"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+  END IF;
+
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'realty_pld_operations_dealId_fkey') THEN
+    ALTER TABLE "realty_pld_operations" ADD CONSTRAINT "realty_pld_operations_dealId_fkey" FOREIGN KEY ("dealId") REFERENCES "realty_deals"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+  END IF;
+
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'realty_pld_operations_noticeId_fkey') THEN
+    ALTER TABLE "realty_pld_operations" ADD CONSTRAINT "realty_pld_operations_noticeId_fkey" FOREIGN KEY ("noticeId") REFERENCES "realty_pld_notices"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+  END IF;
+END
+$realty$;
+
+
+-- ── 5. El permiso nuevo, para las cuentas que YA existen ───────────────
+--
+-- 🔴 POR QUÉ HACE FALTA ESTO. En este vertical `permissionsOverride`
+-- REEMPLAZA los defaults del rol, no se suma a ellos. Así que un permiso
+-- NUEVO —pld.view, pld.manage— llega solo a quien tenga el arreglo VACÍO.
+-- Quien tenga excepciones capturadas se queda sin el módulo… y sin forma
+-- de arreglarlo desde la UI: `updateRealtyMemberPermissions` no deja
+-- repartir un permiso que el propio llamante no tiene
+-- (PERMISSION_OUT_OF_REACH en src/lib/realty/team.ts). El dueño con
+-- excepciones no puede dárselo a nadie NI a sí mismo.
+--
+-- QUÉ HACE: le AGREGA las dos claves a los OWNER y MANAGER que tengan un
+-- override no vacío. A esos dos roles el default les da TODO (al MANAGER,
+-- todo menos billing), así que esto no regala nada: restituye lo que el
+-- rol ya decía. Su override se escribió cuando `pld.*` no existía, así que
+-- nadie pudo excluirlo a propósito.
+--
+-- QUÉ NO HACE: no toca AGENT ni ASSISTANT. Cumplimiento es trabajo de
+-- oficial de cumplimiento, no del asesor de piso, y por eso tampoco está
+-- en sus defaults. Si una inmobiliaria quiere dárselo a un asesor, se lo
+-- da desde Equipo.
+--
+-- ⚠️ ANTES DE CORRERLO, mira a quién va a tocar:
+--
+--   SELECT u."id", u."email", u."role", u."permissionsOverride"
+--     FROM "realty_users" u
+--    WHERE u."role" IN ('OWNER', 'MANAGER')
+--      AND array_length(u."permissionsOverride", 1) > 0
+--      AND NOT (u."permissionsOverride" @> ARRAY['pld.view']::text[]);
+--
+-- Es idempotente: el `NOT @>` hace que la segunda pasada no cambie nada.
+
+UPDATE "realty_users"
+   SET "permissionsOverride" = "permissionsOverride" || ARRAY['pld.view']::text[]
+ WHERE "role" IN ('OWNER', 'MANAGER')
+   AND array_length("permissionsOverride", 1) > 0
+   AND NOT ("permissionsOverride" @> ARRAY['pld.view']::text[]);
+
+UPDATE "realty_users"
+   SET "permissionsOverride" = "permissionsOverride" || ARRAY['pld.manage']::text[]
+ WHERE "role" IN ('OWNER', 'MANAGER')
+   AND array_length("permissionsOverride", 1) > 0
+   AND NOT ("permissionsOverride" @> ARRAY['pld.manage']::text[]);
+
+
+-- ── 6. La feature del plan ─────────────────────────────────────────────
+--
+-- `pld` ya viene en el seed de sql/realty.sql (INMOBILIARIA en true, los
+-- otros dos en false). Esto es solo la red por si la fila de planes se
+-- pobló ANTES de que la llave existiera: en ese caso el gate leería
+-- `undefined`, o sea false, y el módulo sería invisible para todos.
+--
+-- 🔴 Solo rellena la llave si FALTA (`NOT (features ? 'pld')`). Un `pld`
+-- puesto en false a mano se respeta: apagar una feature es una decisión
+-- comercial y este archivo no la revierte.
+
+UPDATE "realty_plan_configs"
+   SET "features" = "features" || '{"pld": true}'::jsonb
+ WHERE "planId" = 'INMOBILIARIA'
+   AND NOT ("features" ? 'pld');
+
+UPDATE "realty_plan_configs"
+   SET "features" = "features" || '{"pld": false}'::jsonb
+ WHERE "planId" IN ('PROPIETARIO', 'ASESOR')
+   AND NOT ("features" ? 'pld');
+
+
+-- ── 7. Verificación ────────────────────────────────────────────────────
+--
+-- Las cinco tablas:
+--   SELECT table_name FROM information_schema.tables
+--    WHERE table_name LIKE 'realty_pld%' ORDER BY table_name;
+--
+-- Los siete enums:
+--   SELECT typname FROM pg_type WHERE typname LIKE 'RealtyPld%' ORDER BY typname;
+--
+-- Las once llaves foráneas:
+--   SELECT conname FROM pg_constraint
+--    WHERE conname LIKE 'realty_pld%_fkey' ORDER BY conname;
+--
+-- Los tres índices ÚNICOS (sin ellos, los upsert del módulo fallan):
+--   SELECT indexname FROM pg_indexes
+--    WHERE indexname IN (
+--      'realty_pld_files_accountId_contactId_key',
+--      'realty_pld_notices_accountId_periodMonth_key',
+--      'realty_pld_operations_accountId_dealId_key'
+--    );
+--
+-- La feature del plan:
+--   SELECT "planId", "features"->'pld' FROM "realty_plan_configs" ORDER BY "sortOrder";
+--
+-- 🔴 Y LO QUE FALTA DESPUÉS DE ESTE ARCHIVO: los umbrales. Sin ellos la
+-- pantalla funciona pero NO COMPARA NADA — dice qué falta capturar y sigue
+-- dejando integrar expedientes. Se siembran con una sesión de /admin:
+--
+--   POST /api/realty/pld/parametros
+--
+-- y se comprueban con GET a la misma ruta (`listo: true`). Después se
+-- editan en /admin/inmobiliarias/parametros, sin desplegar nada.
+--
+--   SELECT "year", "value", "meta"->'pld'
+--     FROM "realty_calc_params"
+--    WHERE "kind" = 'UMA' AND "stateCode" = 'MX'
+--    ORDER BY "effectiveFrom" DESC;
+--
+-- El bloque nace con `porVerificar: true`: los umbrales salen del brief del
+-- vertical y NADIE los ha confrontado contra el texto vigente de la
+-- LFPIORPI ni contra la reforma del 27 de marzo de 2026. Mientras esa
+-- bandera esté encendida la pantalla lo dice en ámbar. La apaga quien haya
+-- cotejado el texto, desde /admin.
+-- ═══════════════════════════════════════════════════════════════════════
+```

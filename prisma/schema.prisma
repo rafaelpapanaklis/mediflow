@@ -10015,6 +10015,13 @@ model RealtyAccount {
   supportMessages  RealtySupportMessage[]
   adminActions     RealtyAdminAction[]
 
+  // Cumplimiento antilavado (feature `pld`, solo plan INMOBILIARIA).
+  pldFiles      RealtyPldFile[]
+  pldDocuments  RealtyPldDocument[]
+  pldAccessLogs RealtyPldAccessLog[]
+  pldOperations RealtyPldOperation[]
+  pldNotices    RealtyPldNotice[]
+
   // Sin @@index([slug]): `slug @unique` ya crea su propio índice.
   @@index([subscriptionStatus])
   @@map("realty_accounts")
@@ -10424,6 +10431,8 @@ model RealtyContact {
   leaseParties   RealtyLeaseParty[]
   deals          RealtyDeal[]
   threads        RealtyThread[]
+  /// Expediente antilavado. Es UNO por cuenta (@@unique en RealtyPldFile).
+  pldFiles       RealtyPldFile[]
 
   @@index([accountId, kind])
   @@index([accountId, phone])
@@ -10866,6 +10875,9 @@ model RealtyDeal {
 
   splits   RealtyCommissionSplit[]
   payments RealtyPayment[]
+  /// La cara PLD de la operación: las decisiones que tomó una persona sobre
+  /// el efectivo y la alerta de 24 horas. El umbral NO se guarda aquí.
+  pldOps   RealtyPldOperation[]
 
   @@index([accountId, status, closedAt])
   @@index([accountId, closedAt])
@@ -11180,4 +11192,311 @@ model RealtyCalcParam {
   @@unique([kind, stateCode, year, effectiveFrom])
   @@index([kind, stateCode, year])
   @@map("realty_calc_params")
+}
+
+// ── Cumplimiento antilavado (PLD / LFPIORPI) ───────────────────────────
+//
+// 🔴 QUÉ ES Y QUÉ NO ES ESTE MÓDULO. Es un EXPEDIENTE y unas ALERTAS: junta
+// los papeles, compara contra el umbral vigente y arma el archivo para que
+// el cliente lo suba. NO presenta avisos ante el SAT, no dictamina y no
+// sustituye a un despacho. Si el cliente incumple, la multa es suya. Ningún
+// texto de estas pantallas puede decir lo contrario.
+//
+// 🔴 CERO NÚMEROS DE LA LEY EN EL SCHEMA. Los umbrales (8 025 y 16 000 UMA),
+// la UMA diaria, el día de corte, las 24 horas y los 10 años de conservación
+// viven en realty_calc_params (kind = UMA, stateCode = "MX") y se editan en
+// /admin/inmobiliarias/parametros. Aquí solo se guardan RESULTADOS y
+// DECISIONES de una persona, nunca la regla.
+//
+// Aislamiento: accountId en TODAS las tablas, como el resto del vertical.
+
+/// Persona física, moral o fideicomiso: cambia QUÉ papeles pide el
+/// expediente (una moral debe declarar beneficiario controlador).
+enum RealtyPldPersonKind {
+  FISICA
+  MORAL
+  FIDEICOMISO
+}
+
+/// Relación de la persona con un cargo público. La reforma publicada el
+/// 27 de marzo de 2026 obliga a identificar PEP en actividades vulnerables,
+/// y el familiar o el asociado cercano cuentan igual que el titular.
+enum RealtyPldPepKind {
+  NO
+  PEP
+  FAMILIAR
+  ASOCIADO
+}
+
+/// Grado de riesgo del expediente. Se CALCULA (ver riesgoDeExpediente en
+/// src/lib/realty/pld/umbrales.ts) y se guarda para poder ordenar y filtrar
+/// sin recalcular la cartera entera en cada pintada.
+enum RealtyPldRisk {
+  BAJO
+  MEDIO
+  ALTO
+}
+
+/// Los papeles que puede llevar un expediente. IDENTIFICACION y
+/// COMPROBANTE_DOMICILIO son los dos que casi siempre se piden; el resto
+/// depende del tipo de persona.
+enum RealtyPldDocKind {
+  IDENTIFICACION
+  COMPROBANTE_DOMICILIO
+  CONSTANCIA_FISCAL
+  CURP
+  ACTA_CONSTITUTIVA
+  PODER
+  BENEFICIARIO_CONTROLADOR
+  OTRO
+}
+
+/// NORMAL = hubo operaciones que avisar. EN_CEROS = no hubo, y aun así hay
+/// que reportarlo: es el error más caro y más fácil de cometer.
+enum RealtyPldNoticeKind {
+  NORMAL
+  EN_CEROS
+}
+
+/// PENDIENTE nace solo; PRESENTADO lo marca una persona después de subirlo
+/// en el portal del SAT. DaleControl nunca lo pone por su cuenta.
+enum RealtyPldNoticeStatus {
+  PENDIENTE
+  PRESENTADO
+}
+
+/// Qué se consultó. La bóveda de diez años exige poder decir quién vio qué
+/// papel y cuándo.
+enum RealtyPldAccessAction {
+  VER_EXPEDIENTE
+  ABRIR_DOCUMENTO
+  DESCARGAR_AVISO
+  ARCHIVAR_DOCUMENTO
+}
+
+/// El EXPEDIENTE de identificación de un cliente. Uno por contacto y por
+/// cuenta: la misma persona puede aparecer en varias operaciones y el
+/// expediente se integra UNA vez.
+///
+/// `status` NO es una columna: el estado (incompleto / completo / vencido)
+/// se calcula con estadoDeExpediente() a partir de los papeles que hay y de
+/// sus vigencias. Guardarlo sería tener dos verdades.
+model RealtyPldFile {
+  id         String              @id @default(cuid())
+  accountId  String
+  contactId  String
+  personKind RealtyPldPersonKind @default(FISICA)
+
+  /// Datos de identificación. Nullable a propósito: un expediente se empieza
+  /// con lo que hay y la pantalla dice qué falta.
+  rfc         String?
+  curp        String?
+  birthDate   DateTime?
+  nationality String?
+  /// Ocupación, profesión, actividad o giro del negocio.
+  occupation  String?
+  /// Domicilio declarado. Es el del expediente, NO el del inmueble.
+  address     String?
+
+  /// Semáforo PEP. pepDetail guarda el cargo, el ente y el parentesco.
+  pep          RealtyPldPepKind @default(NO)
+  pepDetail    String?          @db.Text
+  /// Cuándo se le PREGUNTÓ. Sin fecha, el cuestionario no está contestado:
+  /// "NO" por omisión y "NO" declarado no son lo mismo.
+  pepAskedAt   DateTime?
+
+  /// Beneficiario controlador de una persona moral o fideicomiso:
+  /// [{ name, rfc, curp, pct, pep }]. Json y no tabla porque son dos o tres
+  /// renglones que solo se leen junto con el expediente (mismo patrón que
+  /// RealtySupportMessage.attachments).
+  beneficialOwners Json?
+
+  /// Riesgo calculado y su sello de tiempo.
+  risk        RealtyPldRisk @default(BAJO)
+  riskNote    String?       @db.Text
+
+  /// Última revisión humana del expediente.
+  reviewedAt     DateTime?
+  /// Sin FK a RealtyUser A PROPÓSITO: un expediente de cumplimiento tiene que
+  /// sobrevivir a que la persona que lo revisó deje la inmobiliaria. Se
+  /// guarda también el nombre para que la bitácora se lea dentro de 10 años.
+  reviewedById   String?
+  reviewedByName String?
+
+  notes     String?  @db.Text
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  account RealtyAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  // Cascade y no NoAction: con NoAction, borrar una CUENTA entera podía
+  // fallar por el orden en que Postgres resuelve los cascades. La retención
+  // de diez años se hace valer en la aplicación (los documentos se ARCHIVAN,
+  // no se borran) — ver puedeBorrarDocumento en src/lib/realty/pld/.
+  contact RealtyContact @relation(fields: [contactId], references: [id], onDelete: Cascade)
+
+  documents RealtyPldDocument[]
+  accesses  RealtyPldAccessLog[]
+
+  /// Un expediente por persona y por cuenta.
+  @@unique([accountId, contactId])
+  @@index([accountId, risk])
+  @@index([accountId, pep])
+  @@index([contactId])
+  @@map("realty_pld_files")
+}
+
+/// Un papel del expediente, en el bucket PRIVADO realty-files.
+///
+/// 🔴 BÓVEDA DE DIEZ AÑOS: `retainUntil` se calcula al subir, con el plazo
+/// que diga el parámetro vigente. Mientras esa fecha no pase, la UI NO
+/// BORRA: archiva (archivedAt). El objeto sigue en el bucket.
+model RealtyPldDocument {
+  id        String           @id @default(cuid())
+  accountId String
+  fileId    String
+  kind      RealtyPldDocKind @default(OTRO)
+  name      String
+  /// PATH interno del bucket, NUNCA una URL firmada (una firma guardada en
+  /// la columna queda muerta, y si acaba en una página cacheada se publica).
+  url       String
+  bytes     Int              @default(0)
+
+  /// Vigencia del papel. Un comprobante de domicilio de hace tres años no
+  /// integra el expediente aunque esté subido.
+  issuedAt  DateTime?
+  expiresAt DateTime?
+
+  /// Hasta cuándo hay que conservarlo. Se calcula al subir.
+  retainUntil DateTime
+  /// Archivado desde la UI. El renglón y el objeto SIGUEN existiendo.
+  archivedAt  DateTime?
+
+  uploadedById   String?
+  uploadedByName String?
+  createdAt      DateTime @default(now())
+
+  account RealtyAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  file    RealtyPldFile @relation(fields: [fileId], references: [id], onDelete: Cascade)
+
+  accesses RealtyPldAccessLog[]
+
+  @@index([accountId, fileId])
+  @@index([accountId, expiresAt])
+  @@index([accountId, retainUntil])
+  @@map("realty_pld_documents")
+}
+
+/// Quién consultó qué y cuándo. Es la mitad auditable de la bóveda.
+///
+/// SIN FK a RealtyUser ni onDelete que lo toque: una bitácora que se borra
+/// con su autor no es una bitácora. Se guarda el nombre en el renglón.
+model RealtyPldAccessLog {
+  id         String                @id @default(cuid())
+  accountId  String
+  action     RealtyPldAccessAction
+  fileId     String?
+  documentId String?
+  /// Para DESCARGAR_AVISO: el periodo o la operación de la que se bajó.
+  subject    String?
+
+  userId    String?
+  userName  String?
+  ip        String?
+  userAgent String?
+  createdAt DateTime @default(now())
+
+  account  RealtyAccount      @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  file     RealtyPldFile?     @relation(fields: [fileId], references: [id], onDelete: SetNull)
+  document RealtyPldDocument? @relation(fields: [documentId], references: [id], onDelete: SetNull)
+
+  @@index([accountId, createdAt])
+  @@index([accountId, fileId, createdAt])
+  @@index([documentId])
+  @@map("realty_pld_access_logs")
+}
+
+/// La cara PLD de una operación (RealtyDeal). No duplica el monto ni el
+/// umbral: eso se calcula en vivo contra el parámetro vigente. Aquí solo
+/// viven las DECISIONES de una persona.
+model RealtyPldOperation {
+  id        String @id @default(cuid())
+  accountId String
+  dealId    String
+
+  /// EFECTIVO DECLARADO A MANO, en pesos.
+  ///
+  /// La fuente normal del efectivo NO es esta columna: es la suma de los
+  /// RealtyPayment de la operación con `method = EFECTIVO`, que es dinero
+  /// que alguien capturó de verdad. Esta columna existe para la operación
+  /// cuyos pagos no se registraron en DaleControl y aun así hay que
+  /// declarar cuánto se liquidó en efectivo.
+  ///
+  /// 🔴 PRECEDENCIA: si está capturada, MANDA sobre la suma de pagos — no
+  /// se suman. Sumarlas contaría dos veces el mismo billete y dispararía
+  /// una bandera roja falsa; y una bandera roja que resulta ser falsa es
+  /// la forma más rápida de que dejen de creerle a las banderas.
+  cashDeclared Decimal? @db.Decimal(14, 2)
+
+  /// Efectivo capturado por encima del tope: quién lo vio y qué dijo. La
+  /// bandera roja NO se apaga; se deja constancia de que se revisó.
+  cashAckAt   DateTime?
+  cashAckById String?
+  cashAckNote String?   @db.Text
+
+  /// Alerta de 24 horas (indicios o coincidencia con listas). dueAt se
+  /// calcula con el plazo del parámetro, no con un 24 escrito aquí.
+  urgentFlaggedAt DateTime?
+  urgentReason    String?   @db.Text
+  urgentDueAt     DateTime?
+  urgentDoneAt    DateTime?
+
+  /// El aviso mensual en el que se reportó, si ya se reportó.
+  noticeId String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  account RealtyAccount    @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  deal    RealtyDeal       @relation(fields: [dealId], references: [id], onDelete: Cascade)
+  notice  RealtyPldNotice? @relation(fields: [noticeId], references: [id], onDelete: SetNull)
+
+  /// Una fila PLD por operación.
+  @@unique([accountId, dealId])
+  @@index([accountId, urgentDueAt])
+  @@index([dealId])
+  @@index([noticeId])
+  @@map("realty_pld_operations")
+}
+
+/// El aviso MENSUAL. periodMonth = "AAAA-MM" del mes que se reporta; el
+/// plazo vence el día que diga el parámetro del mes SIGUIENTE.
+///
+/// EN_CEROS existe porque un mes sin operaciones TAMBIÉN se reporta.
+model RealtyPldNotice {
+  id          String                @id @default(cuid())
+  accountId   String
+  periodMonth String
+  kind        RealtyPldNoticeKind   @default(NORMAL)
+  status      RealtyPldNoticeStatus @default(PENDIENTE)
+  /// Fecha límite calculada al crear la fila, con el parámetro vigente.
+  dueDate     DateTime
+
+  /// Lo marca una PERSONA después de subirlo en el portal del SAT.
+  presentedAt     DateTime?
+  presentedById   String?
+  presentedByName String?
+  /// Acuse que devuelve el portal. Texto libre: el formato lo pone el SAT.
+  acuse           String?
+
+  notes     String?  @db.Text
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  account    RealtyAccount        @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  operations RealtyPldOperation[]
+
+  /// Un aviso por mes y por cuenta.
+  @@unique([accountId, periodMonth])
+  @@index([accountId, status, dueDate])
+  @@map("realty_pld_notices")
 }

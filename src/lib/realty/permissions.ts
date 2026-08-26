@@ -50,6 +50,17 @@ export const REALTY_PERMISSIONS = [
   // CAMBIO de oficina no es permiso: lo resuelve getAccessibleOfficeIds().
   { key: "offices.manage", label: "Administrar oficinas" },
   { key: "calculators.use", label: "Usar las calculadoras" },
+  // Cumplimiento antilavado (LFPIORPI). Es trabajo de oficial de
+  // cumplimiento, no del asesor de piso: por eso NO entra en los defaults
+  // de AGENT ni de ASSISTANT. OWNER y MANAGER lo absorben solos vía ALL.
+  //
+  // 🔴 Un permiso NUEVO no le llega a quien ya tiene permissionsOverride
+  // (el override REEMPLAZA, no se suma). El backfill para las cuentas que
+  // ya existen va en sql/realty-pld.sql, y sin él un dueño con excepciones
+  // tampoco puede REPARTIR la clave (ver PERMISSION_OUT_OF_REACH en
+  // src/lib/realty/team.ts).
+  { key: "pld.view", label: "Ver el tablero de cumplimiento antilavado" },
+  { key: "pld.manage", label: "Integrar expedientes y marcar avisos presentados" },
   // La libreta de DUEÑOS de los inmuebles en cartera + sus exclusivas.
   { key: "owners.manage", label: "Administrar propietarios y exclusivas" },
 ] as const;
