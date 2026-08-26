@@ -196,6 +196,15 @@
       },
       "direccionAviso": "La dirección exacta y el punto en el mapa solo salen si además tienes marcada la dirección como pública en el inmueble."
     },
+    "enFicha": {
+      "title": "Compartir en la bolsa",
+      "compartido": "Otras inmobiliarias están viendo este inmueble en la bolsa y te pueden proponer colaborar.",
+      "noCompartido": "Este inmueble no está en la bolsa: no lo ve ninguna otra inmobiliaria.",
+      "interruptor": "Compartir este inmueble en la bolsa",
+      "abrir": "Poner en la bolsa",
+      "camposContados": "Enseña {n} de {total} datos",
+      "sinPermiso": "Solo quien puede editar la cartera decide qué inmuebles entran a la bolsa."
+    },
     "colaboraciones": {
       "title": "Mis colaboraciones",
       "acuerdos": "Acuerdos",
@@ -475,6 +484,15 @@
         "publicadoEn": "Listing age"
       },
       "direccionAviso": "The exact address and the map pin only show if you also have the address marked as public on the property."
+    },
+    "enFicha": {
+      "title": "Share in the exchange",
+      "compartido": "Other agencies can see this property in the exchange and may propose working together on it.",
+      "noCompartido": "This property is not in the exchange: no other agency can see it.",
+      "interruptor": "Share this property in the exchange",
+      "abrir": "Put it in the exchange",
+      "camposContados": "Shows {n} of {total} details",
+      "sinPermiso": "Only someone who can edit the portfolio decides which properties go into the exchange."
     },
     "colaboraciones": {
       "title": "My collaborations",
