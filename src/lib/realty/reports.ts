@@ -451,11 +451,23 @@ async function loadPayments(
   const where: Prisma.RealtyPaymentWhereInput = {
     accountId: ctx.accountId,
     paidAt: { gte: range.start, lt: range.end },
-    ...extra,
-    OR: [
-      { charge: { lease: { property: scope } } },
-      { lease: { property: scope } },
-      { deal: { property: scope } },
+    // 🔴 EL RECORTE VA DENTRO DE `AND`, y `extra` ES OTRO ELEMENTO DEL AND.
+    //
+    // Antes el `OR` de las tres rutas al inmueble vivía en el primer nivel,
+    // con `...extra` esparcido al lado. Funciona hoy —nadie pasa `extra`—
+    // pero el día que alguien le mande un filtro que traiga su PROPIO `OR`,
+    // el spread pisa el de aquí y el recorte por oficina desaparece EN
+    // SILENCIO: la consulta seguiría devolviendo filas, solo que de más.
+    // Dentro del AND los dos conviven y ninguno puede borrar al otro.
+    AND: [
+      {
+        OR: [
+          { charge: { lease: { property: scope } } },
+          { lease: { property: scope } },
+          { deal: { property: scope } },
+        ],
+      },
+      extra,
     ],
   };
 
@@ -1841,8 +1853,15 @@ async function buildDelinquency(ctx: RealtyContext, now: Date): Promise<Delinque
   // Sale de los cargos que YA existen (el contrato los genera completos al
   // activarse), no de multiplicar la renta por tres: si a un contrato le
   // quedan dos meses, el tercero no debe aparecer como si fuera a cobrarse.
-  const in3 = new Date(today.getTime());
-  in3.setUTCMonth(in3.getUTCMonth() + 3);
+  // 🔴 El corte es el DÍA 1 del mes que está tres adelante, no "hoy + 3
+  // meses". Dos razones, y las dos son visibles en pantalla:
+  //   · `setUTCMonth(+3)` sobre un día 29, 30 o 31 DESBORDA: el 31 de enero
+  //     más tres meses es el 1 de MAYO, así que la "proyección a 3 meses"
+  //     amanecía con CUATRO renglones el último día del mes.
+  //   · Agrupando por periodMonth, cortar en día 1 da exactamente los tres
+  //     meses que promete el encabezado, cualquier día que se abra.
+  // `Date.UTC` con el mes desbordado cruza bien el fin de año (nov + 3 = feb).
+  const in3 = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth() + 3, 1));
   const future = await prisma.realtyRentCharge.findMany({
     where: {
       accountId: ctx.accountId,
