@@ -220,7 +220,12 @@ export function FichaExpediente({
           {puedeGestionar && (
             <Boton
               variante="primario"
-              disabled={guardando || !borrador}
+              // `cargando` también apaga el botón: el remontaje del padre ya
+              // impide arrastrar un borrador de otro expediente, pero
+              // recargar DESPUÉS de guardar deja el borrador viejo unos
+              // milisegundos y guardar dos veces seguidas pisaría lo que el
+              // servidor acaba de devolver.
+              disabled={guardando || cargando || !borrador}
               onClick={() => void guardar()}
             >
               {guardando ? t("ficha.guardando") : t("ficha.guardar")}

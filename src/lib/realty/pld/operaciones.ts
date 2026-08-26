@@ -203,6 +203,8 @@ export async function cargarOperaciones(
       closedAt: iso(d.closedAt),
       amount: montoCents / 100,
       efectivo: efectivoCents / 100,
+      cashDeclared: pld?.cashDeclared != null ? Number(pld.cashDeclared) : null,
+      efectivoPagos: pagosEfectivoCents / 100,
       periodMonth: periodo,
       nivel: ev?.nivel ?? "NINGUNO",
       requiereExpediente: ev?.requiereExpediente ?? false,

@@ -144,7 +144,8 @@
       "acuseNoApaga": "Dejar constancia NO apaga la bandera: la operación sigue marcada y sigue contando en el tablero. Solo queda registrado que alguien la revisó y qué hizo al respecto.",
       "alerta24Ayuda": "Ante un indicio, el aviso se presenta dentro de las siguientes {horas} horas. Levantar la alerta aquí arranca ese reloj y lo deja a la vista; presentarlo sigue siendo tuyo.",
       "alertaSinPlazo": "No podemos calcular el plazo de la alerta: falta capturar las horas del aviso urgente en el panel de DaleControl.",
-      "bajarAlerta": "Bajar la alerta"
+      "bajarAlerta": "Bajar la alerta",
+      "efectivoPagos": "Pagos en efectivo ya registrados en la operación: {monto}."
     },
     "calendario": {
       "titulo": "Calendario del corte",
@@ -325,7 +326,8 @@
       "acuseNoApaga": "Recording the review does NOT clear the flag: the deal stays marked and keeps counting on the dashboard. It only records that someone looked at it and what they did.",
       "alerta24Ayuda": "When there are red flags, the report is due within {horas} hours. Raising the alert here starts that clock and keeps it visible; filing it is still yours to do.",
       "alertaSinPlazo": "We cannot work out the alert deadline: the urgent-report hours are not captured in the DaleControl panel yet.",
-      "bajarAlerta": "Drop the alert"
+      "bajarAlerta": "Drop the alert",
+      "efectivoPagos": "Cash payments already recorded on this deal: {monto}."
     },
     "calendario": {
       "titulo": "Filing calendar",

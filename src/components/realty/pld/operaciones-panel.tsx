@@ -246,8 +246,12 @@ function ModalOperacion({
   onCerrar: () => void;
   onRefrescar: () => void;
 }) {
+  // 🔴 Arranca VACÍO cuando nadie declaró nada, aunque haya pagos en
+  // efectivo registrados. Precargarlo con la suma haría que guardar sin
+  // tocar el campo congelara esa cifra como declaración, y desde entonces
+  // un pago nuevo ya no movería la bandera roja.
   const [efectivo, setEfectivo] = useState(
-    operacion.efectivo > 0 ? String(operacion.efectivo) : "",
+    operacion.cashDeclared != null ? String(operacion.cashDeclared) : "",
   );
   const [acuse, setAcuse] = useState(operacion.cashAckNote ?? "");
   const [motivo, setMotivo] = useState(operacion.urgentReason ?? "");
@@ -325,7 +329,9 @@ function ModalOperacion({
       <Campo
         label={t("operaciones.efectivoDeclarado")}
         htmlFor="pld-op-efectivo"
-        hint={t("operaciones.efectivoAyuda")}
+        hint={`${t("operaciones.efectivoAyuda")} ${t("operaciones.efectivoPagos", {
+          monto: fmtMXN2(toCents(operacion.efectivoPagos)),
+        })}`}
       >
         <InputTexto
           id="pld-op-efectivo"

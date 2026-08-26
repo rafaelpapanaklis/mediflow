@@ -282,7 +282,23 @@ export interface OperacionRow {
   closedAt: string | null;
   /** En PESOS con decimales, como el resto del vertical pinta dinero. */
   amount: number;
+  /**
+   * El efectivo que MANDA: lo declarado a mano si lo hay, si no la suma de
+   * los pagos. Es contra esto que se compara el tope.
+   */
   efectivo: number;
+  /**
+   * Lo DECLARADO a mano, o null si nadie declaró nada.
+   *
+   * 🔴 Viaja aparte de `efectivo` a propósito. Si la pantalla solo tuviera
+   * el número resuelto, el campo de captura arrancaría con la suma de los
+   * pagos ya escrita dentro, y guardar sin tocar nada la CONGELARÍA como
+   * declaración: a partir de ahí, un pago nuevo en efectivo ya no movería
+   * la cifra y la bandera roja dejaría de saltar sola.
+   */
+  cashDeclared: number | null;
+  /** La suma de los pagos EFECTIVO registrados. Se enseña como referencia. */
+  efectivoPagos: number;
   /** El periodo "AAAA-MM" al que cae por su fecha de cierre. */
   periodMonth: string | null;
   nivel: NivelUmbral;

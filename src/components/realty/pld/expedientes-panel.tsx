@@ -266,8 +266,14 @@ export function PanelExpedientes({
         )}
       </Tarjeta>
 
+      {/* 🔴 key={abierto}: la ficha se REMONTA al cambiar de expediente.
+          Sin esto, React reusaría la instancia y su borrador seguiría
+          teniendo los datos del expediente anterior mientras el detalle
+          nuevo viaja — y Guardar en esa ventana escribiría los datos de una
+          persona en el expediente de otra. */}
       {abierto && (
         <FichaExpediente
+          key={abierto}
           fileId={abierto}
           resumen={expedientes.find((e) => e.id === abierto) ?? null}
           puedeGestionar={puedeGestionar}
