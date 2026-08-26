@@ -299,7 +299,10 @@ export function yieldBlockedText(reason: YieldBlockedReason | null): string | nu
 const PRICE_OBJECTION_PATTERNS: RegExp[] = [
   /\bcar[oa]s?\b/,
   /\bcarisim[oa]s?\b/,
-  /\bprecio\s+(alto|elevado|arriba|excesivo|fuera)\b/,
+  // La cópula en medio es OBLIGATORIA en la forma que más se escribe: "el
+  // precio ESTÁ alto". Sin ella el patrón solo pegaba con "precio alto", que
+  // casi nadie teclea, y la queja más común del país se contaba como cero.
+  /\bprecio\s+(muy\s+|un\s+poco\s+|algo\s+)?(esta|es|lo\s+ven|se\s+ve|quedo|salio)?\s*(muy\s+)?(alt[oa]|elevad[oa]|arriba|excesiv[oa]|fuera)\b/,
   /\bmuy\s+(alto|elevado)\b/,
   /\bse\s+(pas[oa]|paso)\s+de\s+precio\b/,
   /\bfuera\s+de\s+(su\s+)?presupuesto\b/,
@@ -310,6 +313,63 @@ const PRICE_OBJECTION_PATTERNS: RegExp[] = [
   /\bpide\s+(un\s+)?descuento\b/,
   /\bmas\s+barat[oa]\b/,
 ];
+
+/**
+ * ── 🔴 LA NEGACIÓN ─────────────────────────────────────────────────────
+ * "no esta caro" contiene la palabra "caro" y "no les gusto" contiene "les
+ * gusto". Un patrón a secas cuenta las DOS como si dijeran lo contrario de
+ * lo que dicen, y en español de a diario esas dos frases son de las más
+ * comunes que escribe un asesor al salir de una visita.
+ *
+ * No es un detalle cosmético: `priceObjections > 0` es lo que empuja el
+ * reporte al caso PRECIO, cuyo titular le dice al propietario que su casa
+ * está cara y le pide un ajuste. Contar "no esta cara" como queja de precio
+ * es recomendarle bajar el precio a alguien de quien NADIE se quejó — en la
+ * única pantalla del sistema que ve un cliente del cliente.
+ *
+ * La regla: se busca un negador en lo que va del corte de oración anterior
+ * hasta el patrón. El corte (una coma, un punto, un "pero", un "aunque")
+ * importa, porque en "no me acuerdo del baño, pero les gustó mucho" el "no"
+ * pertenece a otra frase y no debe voltear nada.
+ */
+const NEGATORS = /\b(no|ni|nunca|jamas|tampoco|nada)\b/;
+
+/** Coma, punto y las conjunciones que abren una frase nueva. */
+const CLAUSE_BREAK = /[,.;:!?]|\b(pero|aunque|sino)\b/g;
+
+/** Lo que va del último corte de oración hasta `index`. */
+function clauseBefore(text: string, index: number): string {
+  const before = text.slice(0, index);
+  let cut = 0;
+  CLAUSE_BREAK.lastIndex = 0;
+  let m: RegExpExecArray | null;
+  while ((m = CLAUSE_BREAK.exec(before)) !== null) {
+    cut = m.index + m[0].length;
+    if (m.index >= before.length) break;
+  }
+  return before.slice(cut);
+}
+
+/**
+ * ¿Alguno de los patrones pega SIN una negación delante?
+ *
+ * Se recorren TODAS las apariciones, no solo la primera: en "no esta caro,
+ * pero el de al lado si esta caro" la segunda sí es una queja de precio.
+ */
+function matchesUnnegated(text: string, patterns: readonly RegExp[]): boolean {
+  for (const re of patterns) {
+    // Copia con /g: el patrón original no la lleva y `lastIndex` de un
+    // regex compartido a nivel de módulo se acuerda de la llamada anterior.
+    const g = new RegExp(re.source, re.flags.includes("g") ? re.flags : `${re.flags}g`);
+    let m: RegExpExecArray | null;
+    while ((m = g.exec(text)) !== null) {
+      if (!NEGATORS.test(clauseBefore(text, m.index))) return true;
+      // Un patrón que puede casar vacío colgaría el bucle.
+      if (m.index === g.lastIndex) g.lastIndex += 1;
+    }
+  }
+  return false;
+}
 
 /** Quita acentos y baja a minúsculas para que el patrón pegue igual. */
 export function normalizeFeedback(text: string): string {
@@ -331,10 +391,7 @@ export function looksLikePriceObjection(feedback: string | null | undefined): bo
   if (!feedback) return false;
   const s = normalizeFeedback(feedback);
   if (s.trim() === "") return false;
-  for (const re of PRICE_OBJECTION_PATTERNS) {
-    if (re.test(s)) return true;
-  }
-  return false;
+  return matchesUnnegated(s, PRICE_OBJECTION_PATTERNS);
 }
 
 /** ¿Le gustó el inmueble, dejando el precio aparte? También heurística. */
@@ -351,10 +408,7 @@ const LIKED_PATTERNS: RegExp[] = [
 export function looksLikeLiked(feedback: string | null | undefined): boolean {
   if (!feedback) return false;
   const s = normalizeFeedback(feedback);
-  for (const re of LIKED_PATTERNS) {
-    if (re.test(s)) return true;
-  }
-  return false;
+  return matchesUnnegated(s, LIKED_PATTERNS);
 }
 
 export function hasFeedback(feedback: string | null | undefined): boolean {
