@@ -1,0 +1,537 @@
+/* ═══════════════════════════════════════════════════════════════════════
+   MAQUETADOS PREMIUM DEL LISTADO DE INMUEBLES Y DEL BUSCADOR FLOTANTE.
+
+   Vive junto al bloque (blocks/inmuebles.tsx) y se importa desde
+   src/components/realty/web/index.tsx DESPUÉS de skin.css: misma
+   especificidad, gana lo que se declara después. Solo agrega variantes
+   nuevas (`revista`, `discreta`, `portafolio`, `columna`, `vitrina` y el
+   buscador `flotante`); no toca `rejilla`, `filas`, `escaparate` ni
+   `preventa`, que son las de las nueve plantillas originales.
+
+   Reglas heredadas de skin.css: @container y nunca @media; ningún color
+   de acento escrito, solo las variables --dcrw-acento*; tokens de la
+   piel (--dcrw-radio, --dcrw-bg-2, --dcrw-serif) y no valores sueltos.
+   Los únicos colores escritos son los blancos y los velos SOBRE foto,
+   que no dependen de la piel porque van encima de una imagen.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* ═══════════════════════════════════════════════════════════════════
+   COMPARTIDO POR LAS CINCO: la foto que respira
+   Un scale suave en la FOTO y no en la tarjeta. La tarjeta base se
+   levanta 2px con borde de acento (hover de catálogo); aquí no hay caja
+   que levantar, así que es la imagen la que crece hacia dentro de su
+   marco (overflow hidden). La transición la anula skin.css con
+   prefers-reduced-motion.
+   ═══════════════════════════════════════════════════════════════════ */
+
+.dcrw-lista-revista .dcrw-tarjeta-foto,
+.dcrw-discreta-foto,
+.dcrw-portafolio-foto,
+.dcrw-columna-foto,
+.dcrw-vitrina-foto {
+  overflow: hidden;
+}
+.dcrw-lista-revista .dcrw-tarjeta-foto img,
+.dcrw-discreta-foto img,
+.dcrw-portafolio-foto img,
+.dcrw-columna-foto img,
+.dcrw-vitrina-foto img {
+  transition: transform 400ms ease;
+}
+.dcrw-lista-revista .dcrw-tarjeta:hover .dcrw-tarjeta-foto img,
+.dcrw-discreta:hover .dcrw-discreta-foto img,
+.dcrw-portafolio-pieza:hover .dcrw-portafolio-foto img,
+.dcrw-columna-pieza:hover .dcrw-columna-foto img,
+.dcrw-vitrina-pieza:hover .dcrw-vitrina-foto img {
+  transform: scale(1.03);
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   REVISTA (galeria) — la tarjeta base sin caja y reordenada
+   El precio primero porque es lo primero que se pregunta; la colonia
+   después porque es lo segundo. El título ya lo dice la foto.
+   ═══════════════════════════════════════════════════════════════════ */
+
+.dcrw-lista-revista {
+  gap: 36px 28px;
+}
+.dcrw-lista-revista .dcrw-tarjeta {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  overflow: visible;
+}
+.dcrw-lista-revista .dcrw-tarjeta:hover {
+  transform: none;
+  border-color: transparent;
+}
+.dcrw-lista-revista .dcrw-tarjeta-foto {
+  border-radius: var(--dcrw-radio);
+}
+.dcrw-lista-revista .dcrw-tarjeta-foto img,
+.dcrw-lista-revista .dcrw-tarjeta-foto .dcrw-sinfoto {
+  aspect-ratio: 3 / 2;
+}
+.dcrw-lista-revista .dcrw-tarjeta-cuerpo {
+  padding: 18px 2px 0;
+  gap: 4px;
+}
+/* El reordenamiento: precio → colonia → título → tipo · operación →
+   datos → enlace. Solo `order`; el HTML es el de siempre. */
+.dcrw-lista-revista .dcrw-tarjeta-cuerpo .dcrw-precio {
+  order: 1;
+  font-size: clamp(22px, 2.4cqi, 26px);
+  line-height: 1.15;
+}
+.dcrw-lista-revista .dcrw-tarjeta-donde {
+  order: 2;
+  font-size: 15px;
+}
+.dcrw-lista-revista .dcrw-tarjeta-titulo {
+  order: 3;
+  margin-top: 6px;
+  font-size: 20px;
+}
+.dcrw-lista-revista .dcrw-tarjeta-op {
+  order: 4;
+}
+.dcrw-lista-revista .dcrw-datos {
+  order: 5;
+  margin-top: 2px;
+}
+.dcrw-lista-revista .dcrw-tarjeta-cta {
+  order: 6;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   DISCRETA (torre) — filas compactas que no compiten con la portada
+   ═══════════════════════════════════════════════════════════════════ */
+
+.dcrw-lista-discreta {
+  gap: 14px;
+}
+.dcrw-discreta {
+  display: grid;
+  grid-template-columns: 96px 1fr;
+  gap: 16px;
+  align-items: center;
+}
+.dcrw-discreta-foto {
+  position: relative;
+  display: block;
+  width: 96px;
+  aspect-ratio: 1 / 1;
+  border-radius: var(--dcrw-radio-chico);
+  background: var(--dcrw-bg-2);
+}
+.dcrw-discreta-foto img,
+.dcrw-discreta-foto .dcrw-sinfoto {
+  width: 100%;
+  height: 100%;
+  aspect-ratio: 1 / 1;
+  object-fit: cover;
+  min-height: 0;
+  padding: 6px;
+  font-size: 11px;
+}
+.dcrw-discreta-cuerpo {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+.dcrw-discreta-titulo {
+  font-size: 16px;
+  font-weight: 640;
+  line-height: 1.3;
+  letter-spacing: -0.01em;
+}
+.dcrw-discreta:hover .dcrw-discreta-titulo {
+  color: var(--dcrw-acento-fuerte);
+}
+.dcrw-discreta-donde {
+  font-size: 13.5px;
+  color: var(--dcrw-tinta-2);
+}
+.dcrw-discreta-precio {
+  margin-top: 2px;
+  font-size: 16px;
+}
+.dcrw-discreta-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 2px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--dcrw-tinta-3);
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   PORTAFOLIO (editorial) — piezas numeradas, sin radio, título en serif
+   ═══════════════════════════════════════════════════════════════════ */
+
+.dcrw-lista-portafolio {
+  gap: 44px;
+}
+.dcrw-portafolio-pieza {
+  display: grid;
+  gap: 14px;
+  align-content: start;
+}
+/* "01" en serif con una línea fina que corre hasta el borde: el número
+   de página de una revista, no una viñeta. */
+.dcrw-portafolio-num {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  font-family: var(--dcrw-serif);
+  font-size: 15px;
+  letter-spacing: 0.08em;
+  color: var(--dcrw-tinta-3);
+}
+.dcrw-portafolio-num::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--dcrw-borde);
+}
+.dcrw-portafolio-foto {
+  position: relative;
+  display: block;
+  border-radius: 0;
+  background: var(--dcrw-bg-2);
+}
+.dcrw-portafolio-foto img,
+.dcrw-portafolio-foto .dcrw-sinfoto {
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+}
+.dcrw-portafolio-cuerpo {
+  display: grid;
+  gap: 10px;
+}
+.dcrw-portafolio-texto {
+  display: grid;
+  gap: 6px;
+}
+.dcrw-portafolio-titulo {
+  font-family: var(--dcrw-serif);
+  font-weight: 500;
+  font-size: clamp(22px, 2.8cqi, 30px);
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+}
+.dcrw-portafolio-titulo a:hover {
+  color: var(--dcrw-acento-fuerte);
+}
+.dcrw-portafolio-linea {
+  font-size: 12px;
+  font-weight: 640;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--dcrw-tinta-3);
+}
+.dcrw-portafolio-cifras {
+  display: grid;
+  gap: 6px;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   COLUMNA (tarjeta) — una columna siempre, alta, para el pulgar
+   El precio y la colonia van SOBRE la foto: en un teléfono se decide
+   antes de leer el cuerpo.
+   ═══════════════════════════════════════════════════════════════════ */
+
+.dcrw-lista-columna {
+  grid-template-columns: 1fr;
+  gap: 22px;
+}
+.dcrw-columna-pieza {
+  display: grid;
+  gap: 12px;
+}
+.dcrw-columna-foto {
+  position: relative;
+  display: block;
+  border-radius: 18px;
+  background: var(--dcrw-bg-2);
+}
+.dcrw-columna-foto img,
+.dcrw-columna-foto .dcrw-sinfoto {
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+}
+/* Degradado solo en el tercio de abajo, donde va el texto blanco; el
+   resto de la foto queda limpio. */
+.dcrw-columna-velo {
+  position: absolute;
+  inset: auto 0 0 0;
+  height: 48%;
+  background: linear-gradient(180deg, rgba(10, 16, 13, 0), rgba(10, 16, 13, 0.58));
+  pointer-events: none;
+}
+/* Una fila flex y no dos absolutos: un precio "venta · renta al mes" largo
+   y una colonia larga se reparten el ancho en vez de encimarse. */
+.dcrw-columna-pie {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: 12px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 10px;
+}
+.dcrw-columna-precio {
+  padding: 8px 14px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.94);
+  color: var(--dcrw-tinta);
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  line-height: 1.2;
+  box-shadow: 0 6px 18px -8px rgba(10, 16, 13, 0.5);
+}
+.dcrw-columna-colonia {
+  flex: 1;
+  min-width: 0;
+  color: #fff;
+  font-size: 13.5px;
+  font-weight: 620;
+  text-align: right;
+  text-shadow: 0 1px 2px rgba(10, 16, 13, 0.55);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding-bottom: 8px;
+}
+.dcrw-columna-cuerpo {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding-inline: 4px;
+}
+.dcrw-columna-op {
+  font-size: 12px;
+  font-weight: 660;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--dcrw-tinta-3);
+}
+.dcrw-columna-titulo {
+  font-size: 19px;
+  font-weight: 660;
+  line-height: 1.28;
+  letter-spacing: -0.01em;
+}
+.dcrw-columna-cuerpo .dcrw-tarjeta-cta {
+  padding-top: 4px;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   VITRINA (vitrina) — un spread por inmueble
+   ═══════════════════════════════════════════════════════════════════ */
+
+.dcrw-lista-vitrina {
+  grid-template-columns: 1fr;
+  gap: 0;
+}
+.dcrw-vitrina-pieza {
+  display: grid;
+  gap: 22px;
+}
+/* 28 + línea + 28 = 56px entre piezas, con la línea fina en medio. */
+.dcrw-vitrina-pieza + .dcrw-vitrina-pieza {
+  margin-top: 28px;
+  padding-top: 28px;
+  border-top: 1px solid var(--dcrw-borde);
+}
+.dcrw-vitrina-media {
+  display: grid;
+  gap: 8px;
+  align-content: start;
+}
+.dcrw-vitrina-foto {
+  position: relative;
+  display: block;
+  border-radius: var(--dcrw-radio);
+  background: var(--dcrw-bg-2);
+}
+.dcrw-vitrina-foto img,
+.dcrw-vitrina-foto .dcrw-sinfoto {
+  width: 100%;
+  aspect-ratio: 16 / 10;
+  object-fit: cover;
+}
+.dcrw-vitrina-minis {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+.dcrw-vitrina-minis img {
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+  border-radius: var(--dcrw-radio-chico);
+  background: var(--dcrw-bg-2);
+}
+.dcrw-vitrina-texto {
+  display: grid;
+  gap: 8px;
+  align-content: center;
+}
+.dcrw-vitrina-kicker {
+  font-size: 12px;
+  font-weight: 660;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--dcrw-tinta-3);
+}
+.dcrw-vitrina-titulo {
+  font-family: var(--dcrw-serif);
+  font-weight: 500;
+  font-size: clamp(24px, 3.2cqi, 34px);
+  line-height: 1.15;
+  letter-spacing: -0.01em;
+}
+.dcrw-vitrina-titulo a:hover {
+  color: var(--dcrw-acento-fuerte);
+}
+.dcrw-vitrina-donde {
+  font-size: 15px;
+  color: var(--dcrw-tinta-2);
+}
+.dcrw-vitrina-texto .dcrw-precio-grande {
+  margin-block: 6px 0;
+}
+.dcrw-vitrina-texto .dcrw-amenidades {
+  margin-top: 6px;
+}
+.dcrw-vitrina-botones {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   BUSCADOR FLOTANTE (galeria)
+   La sección pierde el aire de arriba y el fondo gris de las pares; el
+   formulario sube con margen negativo y se monta sobre el borde inferior
+   de la portada de cine. z-index porque la portada va antes en el flujo
+   y sin él la foto lo taparía.
+   ═══════════════════════════════════════════════════════════════════ */
+
+.dcrw-sec-buscador[data-variante="flotante"] {
+  padding-top: 0;
+  background: transparent;
+}
+.dcrw-sec-buscador[data-variante="flotante"] .dcrw-buscador {
+  position: relative;
+  z-index: 2;
+  margin-top: -58px;
+  padding: 18px;
+  box-shadow: 0 18px 48px -22px rgba(22, 33, 28, 0.45);
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   ESCRITORIO — @container, nunca @media (ver skin.css)
+   ═══════════════════════════════════════════════════════════════════ */
+
+@container dcrw (min-width: 640px) {
+  /* skin.css pone .dcrw-lista a dos columnas desde aquí; revista,
+     portafolio y columna esperan a 900 (o nunca) para que la foto siga
+     siendo grande en una tableta. */
+  .dcrw-lista-revista,
+  .dcrw-lista-portafolio,
+  .dcrw-lista-columna,
+  .dcrw-lista-vitrina {
+    grid-template-columns: 1fr;
+  }
+  .dcrw-lista-discreta {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 14px 28px;
+  }
+  .dcrw-columna-precio {
+    font-size: 17px;
+  }
+}
+
+@container dcrw (min-width: 900px) {
+  /* revista: dos por fila, con más aire entre filas que entre columnas. */
+  .dcrw-lista-revista {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 52px 32px;
+  }
+
+  /* discreta: la foto crece un poco; sigue siendo la lista de abajo. */
+  .dcrw-lista-discreta {
+    gap: 16px 40px;
+  }
+  .dcrw-discreta {
+    grid-template-columns: 112px 1fr;
+  }
+  .dcrw-discreta-foto {
+    width: 112px;
+  }
+
+  /* portafolio: la primera pieza abre a doble ancho con foto 16:9 y su
+     cuerpo a dos columnas (título a la izquierda, cifras a la derecha),
+     como la apertura de un reportaje; el resto va de dos en dos. */
+  .dcrw-lista-portafolio {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 60px 40px;
+  }
+  .dcrw-portafolio-pieza:first-child {
+    grid-column: 1 / -1;
+  }
+  .dcrw-portafolio-pieza:first-child .dcrw-portafolio-foto img,
+  .dcrw-portafolio-pieza:first-child .dcrw-portafolio-foto .dcrw-sinfoto {
+    aspect-ratio: 16 / 9;
+  }
+  .dcrw-portafolio-pieza:first-child .dcrw-portafolio-titulo {
+    font-size: clamp(28px, 3.6cqi, 40px);
+  }
+  .dcrw-portafolio-pieza:first-child .dcrw-portafolio-cuerpo {
+    grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
+    align-items: end;
+    gap: 32px;
+  }
+  .dcrw-portafolio-pieza:first-child .dcrw-portafolio-cifras {
+    justify-items: end;
+    text-align: right;
+  }
+  .dcrw-portafolio-pieza:first-child .dcrw-portafolio-cifras .dcrw-datos {
+    justify-content: flex-end;
+  }
+
+  /* columna: una columna también aquí. La piel recorta el ancho. */
+  .dcrw-lista-columna {
+    grid-template-columns: 1fr;
+  }
+
+  /* vitrina: foto 58 / texto 42, y en las pares la foto cambia de lado. */
+  .dcrw-lista-vitrina {
+    grid-template-columns: 1fr;
+  }
+  .dcrw-vitrina-pieza {
+    grid-template-columns: 58fr 42fr;
+    gap: 44px;
+    align-items: center;
+  }
+  .dcrw-vitrina-pieza:nth-child(even) {
+    grid-template-columns: 42fr 58fr;
+  }
+  .dcrw-vitrina-pieza:nth-child(even) .dcrw-vitrina-media {
+    order: 2;
+  }
+
+  /* buscador flotante: sube más porque la portada es más alta. */
+  .dcrw-sec-buscador[data-variante="flotante"] .dcrw-buscador {
+    margin-top: -72px;
+    padding: 22px;
+  }
+}

@@ -11,6 +11,10 @@
 
    Lo que NO dice: nada sobre precios, descuentos ni promesas de rapidez.
    Solo el hecho —hablas con el dueño— y el botón para hacerlo.
+
+   Variantes: `banda`, `nota` y la premium `cinta` (disponibilidad): una
+   cinta delgada del color del acento, pegada a la portada, con el botón de
+   WhatsApp a la derecha — el CSS vive en secundarios.css.
    ═══════════════════════════════════════════════════════════════════════ */
 
 import { ligaWhatsApp, type RealtyWebData } from "@/lib/realty/landing";

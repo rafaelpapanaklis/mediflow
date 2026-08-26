@@ -1,0 +1,391 @@
+/* ═══════════════════════════════════════════════════════════════════════
+   MAQUETADOS PREMIUM DE LOS BLOQUES SECUNDARIOS.
+
+   Equipo `sobrio`, números `avance`, credenciales `prosa`, zonas `frase`,
+   sobre-mí `reportaje`, disponibilidad `fichas`, requisitos `columnas` y
+   trato directo `cinta`. Se importa desde src/components/realty/web/index.tsx
+   DESPUÉS de skin.css: misma especificidad, gana lo declarado después.
+   Solo AGREGA variantes: las de las nueve plantillas originales no se
+   tocan.
+
+   Reglas heredadas de skin.css: @container y nunca @media; ningún color
+   de acento escrito, solo las variables --dcrw-acento*; tokens de la
+   piel (--dcrw-radio, --dcrw-bg-2, --dcrw-serif) y no valores sueltos.
+
+   ── CÓMO PISAN A skin.css ────────────────────────────────────────
+   `.dcrw-sec:nth-of-type(even)` pinta el fondo gris alterno con
+   especificidad (0,2,0). `.dcrw-sec-numeros[data-variante="avance"]`
+   pesa exactamente lo mismo, y como este archivo va después, gana: así
+   la banda oscura y la cinta del acento se imponen al gris sin !important.
+   Lo mismo con las rejillas: una regla base de aquí (fuera de @container)
+   pesa igual que la de skin.css dentro de su @container y llega después,
+   así que manda; las de dentro de los @container de abajo son las que
+   cambian de verdad con el ancho.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* ── Equipo · sobrio (galería) ──────────────────────────────────────
+   Retrato 3:4 sin tarjeta: ni borde ni fondo, el nombre debajo y las
+   zonas en una línea. Cuatro por fila en escritorio, dos en móvil — el
+   equipo se ve como el de una firma, no como una hoja de contactos. */
+
+.dcrw-equipo-sobrio {
+  grid-template-columns: repeat(2, 1fr);
+  gap: 30px 18px;
+}
+.dcrw-equipo-sobrio .dcrw-asesor {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  overflow: visible;
+}
+.dcrw-equipo-sobrio .dcrw-asesor-foto img,
+.dcrw-equipo-sobrio .dcrw-asesor-foto .dcrw-sinfoto {
+  aspect-ratio: 3 / 4;
+  border-radius: var(--dcrw-radio-chico);
+}
+.dcrw-equipo-sobrio .dcrw-asesor-cuerpo {
+  padding: 14px 0 0;
+  gap: 5px;
+}
+.dcrw-equipo-sobrio .dcrw-asesor-nombre {
+  font-size: 16px;
+  font-weight: 640;
+  letter-spacing: -0.005em;
+}
+.dcrw-asesor-zonas-linea {
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--dcrw-tinta-2);
+}
+.dcrw-equipo-sobrio .dcrw-asesor-acciones {
+  gap: 6px 16px;
+  margin-top: 4px;
+}
+/* Ligas de texto y no botones: subrayado fino en gris que se oscurece al
+   pasar. La de WhatsApp conserva el icono para seguir siendo reconocible. */
+.dcrw-asesor-liga {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13.5px;
+  font-weight: 620;
+  color: var(--dcrw-acento-fuerte);
+  text-decoration: underline;
+  text-decoration-color: var(--dcrw-borde-fuerte);
+  text-underline-offset: 3px;
+  transition: text-decoration-color 140ms ease;
+}
+.dcrw-asesor-liga:hover {
+  text-decoration-color: currentColor;
+}
+
+/* ── Números · avance (torre) ───────────────────────────────────────
+   Banda oscura a lo ancho de la sección. Va sobre --dcrw-tinta y texto
+   blanco: la torre solo tiene pieles claras, en una piel oscura la tinta
+   sería clara y esto se invertiría — si algún día una plantilla oscura
+   pide `avance`, hay que pisar el fondo desde su piel. */
+
+.dcrw-sec-numeros[data-variante="avance"] {
+  background: var(--dcrw-tinta);
+  color: #fff;
+}
+.dcrw-sec-numeros[data-variante="avance"] .dcrw-kicker {
+  color: var(--dcrw-acento-claro);
+}
+.dcrw-sec-numeros[data-variante="avance"] .dcrw-titulo {
+  color: #fff;
+}
+.dcrw-sec-numeros[data-variante="avance"] .dcrw-bajada {
+  color: rgba(255, 255, 255, 0.72);
+}
+.dcrw-numeros-avance {
+  grid-template-columns: repeat(2, 1fr);
+  gap: 28px 20px;
+  text-align: left;
+}
+/* La línea fina a la izquierda de cada cifra es lo único que las separa:
+   sin cajas, sin fondos — solo el número, enorme. */
+.dcrw-numeros-avance li {
+  border-left: 1px solid rgba(255, 255, 255, 0.14);
+  padding-left: 16px;
+}
+.dcrw-numeros-avance .dcrw-numero-valor {
+  font-size: clamp(36px, 6cqi, 60px);
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  line-height: 1;
+  color: var(--dcrw-acento-claro);
+}
+.dcrw-numeros-avance .dcrw-numero-etiqueta {
+  margin-top: 8px;
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.72);
+}
+
+/* ── Credenciales · prosa (editorial) ───────────────────────────────
+   Un párrafo en serif cursiva, sin iconos ni cajas: las acreditaciones
+   dichas en una frase, como en la solapa de un libro. */
+
+.dcrw-credenciales-prosa {
+  max-width: 62ch;
+}
+.dcrw-credenciales-prosa .dcrw-kicker {
+  margin-bottom: 12px;
+}
+.dcrw-credenciales-texto {
+  font-family: var(--dcrw-serif);
+  font-style: italic;
+  font-size: clamp(17px, 1.9cqi, 19px);
+  line-height: 1.6;
+  color: var(--dcrw-tinta-2);
+}
+
+/* ── Zonas · frase (editorial) ──────────────────────────────────────
+   "TRABAJO EN  Providencia, Chapalita y Andares." El rótulo hereda las
+   versalitas de .dcrw-kicker pero en línea y en sans; la lista va en serif
+   grande. */
+
+.dcrw-zonas-frase {
+  font-family: var(--dcrw-serif);
+  font-size: clamp(20px, 2.4cqi, 24px);
+  line-height: 1.4;
+  letter-spacing: -0.005em;
+  color: var(--dcrw-tinta);
+  max-width: 44ch;
+}
+.dcrw-zonas-frase-rotulo {
+  display: inline-block;
+  margin: 0 6px 0 0;
+  font-family: var(--dcrw-sans);
+  vertical-align: 0.12em;
+}
+
+/* ── Sobre mí · reportaje (editorial) ───────────────────────────────
+   Sin foto: una sola columna de lectura. El primer párrafo (.dcrw-historia-
+   entrada) va grande, en serif y con letra capital; los demás en 17px y
+   62ch, como el cuerpo de un reportaje. Hijo directo (`> p`) a propósito:
+   los <p> del Encabezado viven dentro de su <header> y no son párrafos.
+   Y `p.dcrw-historia-entrada` con la etiqueta para pesar más que la regla
+   de todos los párrafos, que si no lo aplastaría. */
+
+.dcrw-historia-reportaje {
+  grid-template-columns: 1fr;
+  gap: 0;
+}
+.dcrw-historia-reportaje .dcrw-historia-texto > p {
+  margin-top: 18px;
+  font-size: 17px;
+  line-height: 1.7;
+  color: var(--dcrw-tinta-2);
+  max-width: 62ch;
+}
+.dcrw-historia-reportaje .dcrw-historia-texto > p.dcrw-historia-entrada {
+  margin-top: 0;
+  font-family: var(--dcrw-serif);
+  font-size: clamp(21px, 2.6cqi, 28px);
+  line-height: 1.4;
+  color: var(--dcrw-tinta);
+  max-width: none;
+}
+.dcrw-historia-reportaje .dcrw-historia-texto > p.dcrw-historia-entrada::first-letter {
+  float: left;
+  font-size: 3.2em;
+  line-height: 0.85;
+  padding-right: 10px;
+  padding-top: 2px;
+  font-weight: 500;
+  color: var(--dcrw-acento-fuerte);
+}
+
+/* ── Disponibilidad · fichas (disponibilidad) ───────────────────────
+   Fichas y no filas: foto 4:3 con la pastilla de estatus encima, y debajo
+   el PRECIO primero — es lo que quien busca renta mira antes que nada—,
+   la colonia, el título y desde cuándo está en línea. Lo ocupado se ve
+   igual pero atenuado y sin liga. El prefijo es `dispo` y no `ficha`:
+   `.dcrw-ficha` ya es la página del inmueble en skin.css. */
+
+.dcrw-dispo {
+  display: grid;
+  gap: 26px 20px;
+}
+.dcrw-dispo-ficha {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.dcrw-dispo-ocupada {
+  opacity: 0.55;
+}
+.dcrw-dispo-foto {
+  position: relative;
+  display: block;
+  overflow: hidden;
+  margin-bottom: 10px;
+  border-radius: var(--dcrw-radio);
+  background: var(--dcrw-bg-2);
+}
+.dcrw-dispo-foto img,
+.dcrw-dispo-foto .dcrw-sinfoto {
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+}
+/* Los dos tonos de estatus son los mismos de .dcrw-estatus en skin.css:
+   verde (>=4.5:1 con blanco) y ámbar oscuro; lo ocupado va en el gris
+   medio de la piel. Texto blanco en los tres. */
+.dcrw-dispo-estatus {
+  position: absolute;
+  left: 10px;
+  top: 10px;
+  padding: 5px 11px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 680;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: #fff;
+}
+.dcrw-dispo-estatus-libre {
+  background: #0f7a4f;
+}
+.dcrw-dispo-estatus-apartado {
+  background: #8a5a00;
+}
+.dcrw-dispo-estatus-ocupado {
+  background: var(--dcrw-tinta-2);
+}
+.dcrw-dispo-ficha .dcrw-precio {
+  font-size: clamp(20px, 2.4cqi, 24px);
+  line-height: 1.2;
+}
+.dcrw-dispo-donde {
+  font-size: 14px;
+  color: var(--dcrw-tinta-2);
+}
+.dcrw-dispo-titulo {
+  margin-top: 2px;
+  font-size: 17px;
+  font-weight: 640;
+  line-height: 1.3;
+  letter-spacing: -0.01em;
+}
+.dcrw-dispo-desde {
+  font-size: 13px;
+  color: var(--dcrw-tinta-3);
+}
+.dcrw-dispo-cta {
+  margin-top: 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  align-self: start;
+  font-size: 14px;
+  font-weight: 640;
+  color: var(--dcrw-acento-fuerte);
+}
+
+/* ── Requisitos · columnas (disponibilidad) ─────────────────────────
+   La misma lista con check, repartida en columnas dentro de una caja del
+   tono suave del acento. Sin el tope de 62ch: la caja es la que mide. */
+
+.dcrw-requisitos-columnas {
+  max-width: none;
+  gap: 14px 24px;
+  padding: 26px;
+  background: var(--dcrw-acento-suave);
+  border: 1px solid var(--dcrw-acento-claro);
+  border-radius: var(--dcrw-radio);
+}
+
+/* ── Trato directo · cinta (disponibilidad) ─────────────────────────
+   Una cinta delgada del color fuerte del acento pegada a la portada: sin
+   aire de sección, sin caja propia, el título a la izquierda y el botón
+   de WhatsApp a la derecha. El botón ya es verde oscuro; el borde
+   blanco translúcido es lo que lo despega del fondo del acento. */
+
+.dcrw-sec-trato-directo[data-variante="cinta"] {
+  padding-block: 0;
+  background: var(--dcrw-acento-fuerte);
+  color: #fff;
+}
+.dcrw-trato-cinta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 16px;
+  padding: 14px 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+.dcrw-trato-cinta .dcrw-trato-titulo {
+  font-size: clamp(16px, 1.6cqi, 17px);
+  font-weight: 660;
+  letter-spacing: -0.01em;
+  line-height: 1.3;
+  color: #fff;
+}
+.dcrw-trato-cinta .dcrw-trato-bajada,
+.dcrw-trato-cinta .dcrw-trato-nota {
+  margin-top: 2px;
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.82);
+}
+.dcrw-trato-cinta .dcrw-btn-whatsapp {
+  border-color: rgba(255, 255, 255, 0.35);
+  padding: 9px 16px;
+  font-size: 14px;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   ESCRITORIO — @container, nunca @media (ver skin.css)
+   ═══════════════════════════════════════════════════════════════════ */
+
+@container dcrw (min-width: 640px) {
+  .dcrw-equipo-sobrio {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 34px 22px;
+  }
+  /* skin.css sube .dcrw-numeros a cuatro columnas aquí; `avance` espera
+     a los 900 porque sus cifras miden el doble. */
+  .dcrw-numeros-avance {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .dcrw-historia-reportaje {
+    grid-template-columns: 1fr;
+  }
+  .dcrw-dispo {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .dcrw-requisitos-columnas {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .dcrw-trato-cinta {
+    justify-content: space-between;
+  }
+}
+
+@container dcrw (min-width: 900px) {
+  .dcrw-equipo-sobrio {
+    grid-template-columns: repeat(4, 1fr);
+    gap: 36px 24px;
+  }
+  .dcrw-numeros-avance {
+    grid-template-columns: repeat(4, 1fr);
+  }
+  /* La columna de lectura: 720px centrados, que a 17px son unos 75
+     caracteres por línea con el 62ch del párrafo mandando por dentro. */
+  .dcrw-historia-reportaje {
+    grid-template-columns: 1fr;
+    gap: 0;
+    max-width: 720px;
+    margin-inline: auto;
+  }
+  .dcrw-dispo {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 30px 24px;
+  }
+  .dcrw-requisitos-columnas {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}

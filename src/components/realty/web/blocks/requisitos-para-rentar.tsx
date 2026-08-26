@@ -6,6 +6,10 @@
    a quien no califica sin hacerle perder el viaje, y le ahorra al dueño
    veinte mensajes que terminan en nada. En la plantilla "catálogo" van
    incluso arriba del listado, por eso mismo.
+
+   Variantes: `lista`, `tarjeta`, `linea` y la premium `columnas`
+   (disponibilidad): la misma lista con check, en dos o tres columnas
+   dentro de una caja suave — el CSS vive en secundarios.css.
    ═══════════════════════════════════════════════════════════════════════ */
 
 import type { RealtyWebData } from "@/lib/realty/landing";

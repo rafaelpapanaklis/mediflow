@@ -1,0 +1,389 @@
+/* ═══════════════════════════════════════════════════════════════════════
+   MAQUETADOS PREMIUM DE LA PORTADA.
+
+   `cine` (galería), `torre` (desarrollo), `reportaje` (editorial),
+   `tarjeta` (bio de Instagram), `aviso` (disponibilidad) y `vitrina`.
+   Se importa desde src/components/realty/web/index.tsx DESPUÉS de
+   skin.css. Solo AGREGA variantes: retrato, sobria, editorial, buscador,
+   desarrollo, boutique, tablero y unaPropiedad siguen en skin.css tal cual.
+
+   ── LA ALTURA SIN `vh` ───────────────────────────────────────────
+   "Toda la altura visible" se calcula con `cqi` (ancho del contenedor) y
+   no con `vh`: dentro del marco escalado del editor, `vh` es la ventana
+   del panel y la portada saldría de otro tamaño que en público. Con cqi
+   la proporción es la misma a 390 px que a 1400.
+
+   ── EL FONDO NO CUBRE TODA LA SECCIÓN ─────────────────────────────
+   `.dcrw-hero-fondo` en skin.css es `position: absolute; inset: 0` de la
+   SECCIÓN. La torre lleva debajo de la foto una franja clara (amenidades,
+   recorrido, galería), así que la foto y el velo viven dentro de
+   `.dcrw-hero-lienzo`, que es el que tiene `position: relative`.
+
+   Reglas heredadas de skin.css: @container y nunca @media; ningún color
+   de acento escrito, solo las variables --dcrw-acento*. La regla
+   `.dcrw-hero:not(:has(.dcrw-hero-fondo))` de skin.css sigue mandando
+   cuando no hay foto: texto oscuro sobre fondo claro, nunca blanco sobre
+   blanco.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* ── Cine (galería), vitrina y torre: a sangre y a toda la altura ── */
+
+.dcrw-hero-cine {
+  padding-block: 0;
+  color: #fff;
+}
+.dcrw-hero-lienzo {
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+  min-height: clamp(520px, 64cqi, 780px);
+  padding-block: 52px 60px;
+}
+.dcrw-hero-cine .dcrw-hero-velo {
+  background: linear-gradient(
+    180deg,
+    rgba(10, 16, 13, 0.22) 0%,
+    rgba(10, 16, 13, 0.3) 42%,
+    rgba(10, 16, 13, 0.8) 100%
+  );
+}
+.dcrw-hero-cine .dcrw-hero-caja {
+  width: 100%;
+  gap: 0;
+}
+.dcrw-hero-cine .dcrw-hero-marca {
+  margin-bottom: 28px;
+}
+.dcrw-hero-cine .dcrw-kicker {
+  color: var(--dcrw-acento-claro);
+  letter-spacing: 0.18em;
+  margin-bottom: 14px;
+}
+.dcrw-hero-cine .dcrw-hero-titulo {
+  font-size: clamp(36px, 7.4cqi, 76px);
+  font-weight: 600;
+  line-height: 1.02;
+  letter-spacing: -0.03em;
+  max-width: 14ch;
+}
+.dcrw-hero-cine .dcrw-hero-bajada {
+  margin-top: 18px;
+  font-size: clamp(16px, 1.8cqi, 19px);
+  max-width: 46ch;
+  color: rgba(255, 255, 255, 0.86);
+}
+.dcrw-hero-cine .dcrw-hero-donde {
+  color: rgba(255, 255, 255, 0.86);
+  font-size: 15px;
+}
+.dcrw-hero-cine .dcrw-hero-botones {
+  margin-top: 30px;
+}
+/* Sobre la foto el `fuerte` se pierde: el botón principal va claro con
+   texto oscuro, como en la piel oscura de "historia". */
+.dcrw-hero-cine:has(.dcrw-hero-fondo) .dcrw-btn-primario {
+  background: #fff;
+  color: var(--dcrw-tinta);
+}
+.dcrw-hero-cine:has(.dcrw-hero-fondo) .dcrw-btn-primario:hover {
+  background: var(--dcrw-acento-claro);
+}
+
+/* Galería: la foto deja sitio para el buscador que flota sobre su borde
+   (blocks/inmuebles.css lo sube con margen negativo). */
+.dcrw-hero-cine[data-variante="cine"] .dcrw-hero-lienzo {
+  padding-bottom: 124px;
+}
+
+/* Vitrina: centrada. Aquí no hay buscador que flote; el titular es el remate. */
+.dcrw-hero-vitrina .dcrw-hero-lienzo {
+  align-items: center;
+  text-align: center;
+  padding-block: 72px;
+}
+.dcrw-hero-vitrina .dcrw-hero-caja {
+  justify-items: center;
+}
+.dcrw-hero-vitrina .dcrw-hero-marca {
+  justify-content: center;
+}
+.dcrw-hero-vitrina .dcrw-hero-titulo,
+.dcrw-hero-vitrina .dcrw-hero-bajada {
+  margin-inline: auto;
+}
+.dcrw-hero-vitrina .dcrw-hero-titulo {
+  max-width: 18ch;
+}
+.dcrw-hero-vitrina .dcrw-hero-botones {
+  justify-content: center;
+}
+
+/* ── Torre: el desarrollo, y debajo su ficha ─────────────────────── */
+
+.dcrw-hero-torre .dcrw-hero-lienzo {
+  min-height: clamp(560px, 68cqi, 820px);
+}
+.dcrw-hero-torre .dcrw-hero-titulo {
+  max-width: 16ch;
+}
+.dcrw-hero-torre .dcrw-precio-grande {
+  color: #fff;
+  font-size: clamp(26px, 4cqi, 40px);
+  margin-block: 16px 6px;
+}
+.dcrw-precio-rotulo {
+  font-size: 0.42em;
+  font-weight: 640;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--dcrw-acento-claro);
+  margin-right: 4px;
+  vertical-align: middle;
+}
+/* Sin foto ni de fondo ni del inmueble, el precio vuelve a su acento. */
+.dcrw-hero-torre:not(:has(.dcrw-hero-fondo)) .dcrw-precio-grande {
+  color: var(--dcrw-acento-fuerte);
+}
+.dcrw-hero-torre:not(:has(.dcrw-hero-fondo)) .dcrw-precio-rotulo {
+  color: var(--dcrw-tinta-3);
+}
+.dcrw-hero-torre:has(.dcrw-hero-fondo) .dcrw-datos {
+  color: rgba(255, 255, 255, 0.86);
+}
+.dcrw-hero-torre:has(.dcrw-hero-fondo) .dcrw-datos li + li::before {
+  color: rgba(255, 255, 255, 0.5);
+}
+
+/* La ficha del desarrollo: franja clara bajo la foto. Hereda el color de
+   la piel y no el blanco del lienzo. */
+.dcrw-torre-ficha {
+  color: var(--dcrw-tinta);
+  display: grid;
+  gap: 34px;
+  padding-block: 38px 10px;
+}
+.dcrw-torre-ficha .dcrw-kicker {
+  color: var(--dcrw-tinta-3);
+  letter-spacing: 0.16em;
+  margin-bottom: 12px;
+}
+.dcrw-torre-fotos {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+}
+.dcrw-torre-fotos a {
+  display: block;
+  overflow: hidden;
+  border-radius: var(--dcrw-radio-chico);
+  background: var(--dcrw-bg-2);
+}
+.dcrw-torre-fotos img {
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+  transition: transform 400ms ease;
+}
+.dcrw-torre-fotos a:hover img {
+  transform: scale(1.03);
+}
+
+/* ── Reportaje: el retrato pegado al borde ───────────────────────── */
+
+.dcrw-hero-reportaje {
+  padding-block: 0;
+}
+.dcrw-hero-reportaje-caja {
+  display: grid;
+}
+.dcrw-hero-reportaje-texto {
+  padding: 40px var(--dcrw-lado) 52px;
+}
+.dcrw-hero-reportaje-foto {
+  position: relative;
+  /* En móvil el retrato va PRIMERO y a lo ancho: es lo que se ve al abrir. */
+  order: -1;
+  background: var(--dcrw-bg-2);
+}
+.dcrw-hero-reportaje-foto img,
+.dcrw-hero-reportaje-foto .dcrw-sinfoto {
+  width: 100%;
+  aspect-ratio: 4 / 5;
+  object-fit: cover;
+  object-position: center top;
+  min-height: 0;
+}
+.dcrw-hero-reportaje .dcrw-kicker {
+  letter-spacing: 0.18em;
+  margin-bottom: 14px;
+}
+.dcrw-hero-reportaje .dcrw-hero-titulo {
+  font-size: clamp(34px, 6.6cqi, 66px);
+  font-weight: 500;
+  line-height: 1.04;
+  letter-spacing: -0.025em;
+  max-width: 15ch;
+}
+.dcrw-hero-reportaje .dcrw-hero-bajada {
+  margin-top: 20px;
+  font-size: clamp(16px, 1.75cqi, 18.5px);
+  line-height: 1.6;
+  max-width: 44ch;
+}
+.dcrw-hero-reportaje .dcrw-hero-botones {
+  margin-top: 30px;
+}
+
+/* ── Tarjeta: vertical, para la bio de Instagram ─────────────────── */
+
+.dcrw-hero-tarjeta {
+  text-align: center;
+  padding-block: 36px 26px;
+}
+.dcrw-hero-tarjeta .dcrw-hero-caja {
+  justify-items: center;
+  gap: 0;
+}
+.dcrw-hero-tarjeta-foto img,
+.dcrw-hero-tarjeta-foto .dcrw-sinfoto {
+  width: 136px;
+  height: 136px;
+  min-height: 0;
+  border-radius: 50%;
+  object-fit: cover;
+  box-shadow:
+    0 0 0 4px var(--dcrw-bg),
+    0 0 0 6px var(--dcrw-acento-claro);
+}
+.dcrw-hero-tarjeta .dcrw-hero-nombre {
+  margin-top: 18px;
+  font-size: 13px;
+  font-weight: 680;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--dcrw-tinta-2);
+}
+.dcrw-hero-tarjeta .dcrw-hero-texto {
+  width: 100%;
+}
+.dcrw-hero-tarjeta .dcrw-kicker {
+  margin-top: 6px;
+}
+.dcrw-hero-tarjeta .dcrw-hero-titulo {
+  font-size: clamp(28px, 6cqi, 38px);
+  margin-top: 4px;
+}
+.dcrw-hero-tarjeta .dcrw-hero-bajada {
+  margin-inline: auto;
+  max-width: 38ch;
+}
+.dcrw-hero-botones-apiladas {
+  display: grid;
+  width: 100%;
+  max-width: 420px;
+  margin-inline: auto;
+  gap: 10px;
+  margin-top: 26px;
+}
+.dcrw-btn-enorme {
+  padding: 17px 24px;
+  font-size: 17px;
+  border-radius: 16px;
+}
+
+/* ── Aviso: clara, con el sello y el contador ────────────────────── */
+
+.dcrw-hero-aviso {
+  padding-block: calc(var(--dcrw-aire) * 0.7) calc(var(--dcrw-aire) * 0.55);
+}
+.dcrw-hero-sello {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 14px;
+  border-radius: 999px;
+  background: var(--dcrw-acento-fuerte);
+  color: #fff;
+  font-size: 12.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  margin-bottom: 20px;
+}
+.dcrw-hero-aviso .dcrw-hero-titulo {
+  font-size: clamp(30px, 5.6cqi, 52px);
+  max-width: 20ch;
+}
+.dcrw-hero-contador {
+  margin-top: 20px;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+  color: var(--dcrw-tinta-2);
+  font-size: 15px;
+}
+.dcrw-hero-contador strong {
+  font-size: 32px;
+  font-weight: 720;
+  letter-spacing: -0.02em;
+  line-height: 1;
+  color: var(--dcrw-acento-fuerte);
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   ESCRITORIO — @container, nunca @media
+   ═══════════════════════════════════════════════════════════════════ */
+
+@container dcrw (min-width: 640px) {
+  .dcrw-torre-fotos {
+    grid-template-columns: repeat(3, 1fr);
+  }
+  .dcrw-hero-tarjeta {
+    padding-block: 48px 30px;
+  }
+}
+
+@container dcrw (min-width: 900px) {
+  .dcrw-hero-lienzo {
+    padding-block: 64px 72px;
+  }
+  .dcrw-hero-cine[data-variante="cine"] .dcrw-hero-lienzo {
+    padding-bottom: 144px;
+  }
+  .dcrw-torre-ficha {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    align-items: start;
+    gap: 40px 48px;
+    padding-block: 46px 12px;
+  }
+  .dcrw-torre-galeria {
+    grid-column: 1 / -1;
+  }
+  /* Sin recorrido, las amenidades no se quedan solas en media página. */
+  .dcrw-torre-amenidades:last-child,
+  .dcrw-torre-amenidades:has(+ .dcrw-torre-galeria) {
+    grid-column: 1 / -1;
+  }
+
+  .dcrw-hero-reportaje-caja {
+    grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr);
+    min-height: clamp(560px, 62cqi, 760px);
+  }
+  .dcrw-hero-reportaje-texto {
+    align-self: center;
+    /* Alineado con .dcrw-ancho: el mismo margen que el resto de la página. */
+    padding-left: max(var(--dcrw-lado), calc((100cqi - var(--dcrw-ancho)) / 2 + var(--dcrw-lado)));
+    padding-right: 56px;
+    padding-block: 64px;
+  }
+  .dcrw-hero-reportaje-foto {
+    order: 0;
+  }
+  .dcrw-hero-reportaje-foto img,
+  .dcrw-hero-reportaje-foto .dcrw-sinfoto {
+    position: absolute;
+    inset: 0;
+    height: 100%;
+    aspect-ratio: auto;
+  }
+}

@@ -26,7 +26,7 @@
    plantilla conserva todo lo que las dos comparten sin copiar nada: la
    plantilla nueva lee las mismas claves. Y lo que la nueva NO pinta se
    queda guardado esperando, porque la validación se hace contra la UNIÓN
-   de las nueve plantillas y no contra la activa.
+   de las quince plantillas y no contra la activa.
    Lo único que sí va POR plantilla es el ORDEN de los bloques
    (`orden[plantilla]`), que es disposición y no contenido.
 
@@ -110,7 +110,14 @@ export function rutaContactoWeb(slug: string): string {
 }
 
 /* ═══════════════════════════════════════════════════════════════════
-   2 · LAS NUEVE PLANTILLAS — tres por modo
+   2 · LAS QUINCE PLANTILLAS — cinco por modo
+
+   Las nueve primeras son las de la ola 1 (tres por modo). Las seis con
+   la marca "premium" llegaron después con un encargo distinto: no "seis
+   más", sino seis que se vean CARAS — portada a sangre, tipografía
+   editorial, aire entre secciones, el listado como revista. Comparten
+   motor, bloques y editor con las nueve; lo que cambia es el maquetado
+   (`variante`) y la piel.
    ═══════════════════════════════════════════════════════════════════ */
 
 export const REALTY_WEB_TEMPLATE_IDS = [
@@ -118,14 +125,20 @@ export const REALTY_WEB_TEMPLATE_IDS = [
   "asesor",
   "minimal",
   "historia",
+  "editorial", // premium: el asesor como reportaje
+  "tarjeta", // premium: vertical, para la bio de Instagram
   // AGENCY — el sujeto es la empresa
   "clasica",
   "corporativa",
   "boutique",
+  "galeria", // premium: portada de cine, inventario como revista
+  "torre", // premium: UN desarrollo manda, casi una landing de producto
   // OWNER — el sujeto es el inmueble
   "mis-rentas",
   "una-propiedad",
   "catalogo",
+  "disponibilidad", // premium: tablero de lo libre, sin comisión arriba
+  "vitrina", // premium: pocas propiedades, cada una con su espacio
 ] as const;
 
 export type RealtyWebTemplateId = (typeof REALTY_WEB_TEMPLATE_IDS)[number];
@@ -133,18 +146,24 @@ export type RealtyWebTemplateId = (typeof REALTY_WEB_TEMPLATE_IDS)[number];
 /**
  * Qué modo usa cada plantilla. Una plantilla pertenece a UN modo: no hay
  * "sirve para todos" porque el sujeto de la página no puede ser la persona
- * y el inmueble a la vez. El editor ofrece únicamente las tres del modo.
+ * y el inmueble a la vez. El editor ofrece únicamente las cinco del modo.
  */
 export const REALTY_WEB_TEMPLATE_MODE: Record<RealtyWebTemplateId, RealtyMode> = {
   asesor: "AGENT",
   minimal: "AGENT",
   historia: "AGENT",
+  editorial: "AGENT",
+  tarjeta: "AGENT",
   clasica: "AGENCY",
   corporativa: "AGENCY",
   boutique: "AGENCY",
+  galeria: "AGENCY",
+  torre: "AGENCY",
   "mis-rentas": "OWNER",
   "una-propiedad": "OWNER",
   catalogo: "OWNER",
+  disponibilidad: "OWNER",
+  vitrina: "OWNER",
 };
 
 /**
@@ -613,7 +632,7 @@ function vocabulario() {
   return _vocabulario;
 }
 
-/** ¿Este id de ranura de foto existe en alguna de las nueve plantillas? */
+/** ¿Este id de ranura de foto existe en alguna de las quince plantillas? */
 export function esRanuraDeFotoRealtyWeb(v: unknown): boolean {
   return typeof v === "string" && vocabulario().fotos.has(v);
 }
@@ -736,7 +755,7 @@ export function normalizarConfigRealtyWeb(raw: unknown): RealtyWebConfig {
     for (const [clave, v] of Object.entries(r.copia as Record<string, unknown>)) {
       const tope = voc.copia.get(clave);
       // Clave inventada → fuera, en silencio. Lo que no declara ninguna de
-      // las nueve plantillas no tiene dónde pintarse.
+      // las quince plantillas no tiene dónde pintarse.
       if (tope === undefined) continue;
       const t = texto(v, tope);
       // Vacío = "vuelve a salir el literal de la plantilla". El default

@@ -5,6 +5,16 @@
    (ver buscador-form.tsx). Las opciones salen del INVENTARIO REAL de la
    cuenta: ofrecer un filtro que siempre devuelve cero es peor que no
    ofrecerlo.
+
+   Variantes:
+     · (vacía)   → sección normal con encabezado.
+     · compacto  → menos campos, para la barra de la portada.
+     · flotante  (AGENCY/galeria) → el MISMO JSX: la sección sale con
+                  data-variante="flotante" (lo pone Sec) y el encabezado
+                  es null porque la plantilla deja título y bajada vacíos.
+                  Todo lo demás —subirlo sobre el borde de la portada de
+                  cine, quitarle el aire y el fondo gris— es CSS en
+                  blocks/inmuebles.css.
    ═══════════════════════════════════════════════════════════════════════ */
 
 import type { RealtyWebData } from "@/lib/realty/landing";

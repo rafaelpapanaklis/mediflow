@@ -1029,6 +1029,20 @@
   color: var(--dcrw-acento-fuerte);
   text-decoration: underline;
 }
+/* `banda`: el mapa como franja, sin esquinas — corre de lado a lado de su
+   columna. `recuadro`: el mapa dentro de una caja con borde, como la ficha
+   de un inmueble. Una prueba exige que toda variante que pide un
+   manifiesto exista de verdad en el JSX o en el CSS. */
+.dcrw-sec-mapa[data-variante="banda"] .dcrw-mapa-marco,
+.dcrw-sec-mapa[data-variante="banda"] .dcrw-mapa-cartel {
+  border-radius: 0;
+}
+.dcrw-sec-mapa[data-variante="recuadro"] .dcrw-mapa {
+  padding: 12px;
+  border: 1px solid var(--dcrw-borde);
+  border-radius: var(--dcrw-radio);
+  background: var(--dcrw-bg);
+}
 
 .dcrw-recorrido {
   position: relative;
@@ -1134,6 +1148,11 @@
 .dcrw-form-ok {
   text-align: center;
   place-items: center;
+}
+/* `formulario`: el contacto a lo ancho de una lectura cómoda (720 px).
+   `compacto` y `editorial` se quedan con los 640 de fábrica. */
+.dcrw-sec-contacto[data-variante="formulario"] .dcrw-form {
+  max-width: 720px;
 }
 .dcrw-form-oktitulo {
   font-size: 19px;
@@ -1653,6 +1672,231 @@
 }
 .dcrw-p-catalogo .dcrw-hero-titulo {
   font-size: clamp(26px, 5cqi, 36px);
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   LAS SEIS PIELES PREMIUM
+
+   Lo que las hace ver caras no es un color nuevo: es el RESTRAINT.
+   Paleta terrosa y apagada (arena cálida, carbón, el verde pino del
+   acento), nada de blanco y negro duros; titulares grandes con serif
+   donde el tono es editorial y sans apretada donde es de producto;
+   mucho más aire entre secciones (--dcrw-aire de 96 a 116 px contra
+   68 de fábrica); y SIN las franjas alternas de fondo de la ola 1: una
+   página cara no cambia de color cada sección, deja respirar el blanco.
+   Los maquetados que las distinguen viven en blocks/*.css.
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* AGENCY · galería — arena cálida, serif de revista, aire. */
+.dcrw-p-galeria {
+  --dcrw-bg: #fbfaf7;
+  --dcrw-bg-2: #f2eee5;
+  --dcrw-tinta: #1d211f;
+  --dcrw-tinta-2: #565e59;
+  --dcrw-radio: 10px;
+  --dcrw-radio-chico: 6px;
+  --dcrw-aire: 112px;
+  --dcrw-ancho: 1180px;
+}
+.dcrw-p-galeria .dcrw-sec {
+  background: var(--dcrw-bg);
+}
+.dcrw-p-galeria .dcrw-sec-equipo,
+.dcrw-p-galeria .dcrw-sec-contacto {
+  background: var(--dcrw-bg-2);
+}
+.dcrw-p-galeria .dcrw-titulo,
+.dcrw-p-galeria .dcrw-hero-titulo,
+.dcrw-p-galeria .dcrw-tarjeta-titulo {
+  font-family: var(--dcrw-serif);
+  font-weight: 500;
+  letter-spacing: -0.015em;
+}
+.dcrw-p-galeria .dcrw-titulo {
+  font-size: clamp(28px, 4.6cqi, 42px);
+}
+.dcrw-p-galeria .dcrw-kicker {
+  font-weight: 600;
+  letter-spacing: 0.18em;
+}
+.dcrw-p-galeria .dcrw-encabezado {
+  margin-bottom: 40px;
+}
+
+/* AGENCY · torre — tinta, sans apretada, geometría de producto. */
+.dcrw-p-torre {
+  --dcrw-bg: #ffffff;
+  --dcrw-bg-2: #eef1f3;
+  --dcrw-tinta: #151c22;
+  --dcrw-tinta-2: #4f5a63;
+  --dcrw-radio: 8px;
+  --dcrw-radio-chico: 5px;
+  --dcrw-aire: 96px;
+  --dcrw-ancho: 1200px;
+}
+.dcrw-p-torre .dcrw-sec {
+  background: var(--dcrw-bg);
+}
+.dcrw-p-torre .dcrw-sec-inmuebles,
+.dcrw-p-torre .dcrw-sec-contacto {
+  background: var(--dcrw-bg-2);
+}
+.dcrw-p-torre .dcrw-titulo,
+.dcrw-p-torre .dcrw-hero-titulo {
+  letter-spacing: -0.035em;
+  font-weight: 640;
+}
+.dcrw-p-torre .dcrw-btn {
+  border-radius: 6px;
+}
+
+/* AGENT · editorial — papel, serif, esquinas rectas y filetes finos. */
+.dcrw-p-editorial {
+  --dcrw-bg: #f7f4ee;
+  --dcrw-bg-2: #efe9dd;
+  --dcrw-tinta: #1f1c17;
+  --dcrw-tinta-2: #5b554b;
+  --dcrw-tinta-3: #8a8378;
+  --dcrw-borde: rgba(31, 28, 23, 0.12);
+  --dcrw-borde-fuerte: rgba(31, 28, 23, 0.26);
+  --dcrw-radio: 0px;
+  --dcrw-radio-chico: 0px;
+  --dcrw-aire: 116px;
+  --dcrw-ancho: 1100px;
+}
+.dcrw-p-editorial .dcrw-sec {
+  background: var(--dcrw-bg);
+}
+.dcrw-p-editorial .dcrw-sec-inmuebles,
+.dcrw-p-editorial .dcrw-sec-contacto {
+  border-top: 1px solid var(--dcrw-borde);
+}
+.dcrw-p-editorial .dcrw-titulo,
+.dcrw-p-editorial .dcrw-hero-titulo,
+.dcrw-p-editorial .dcrw-tarjeta-titulo,
+.dcrw-p-editorial .dcrw-trato-titulo {
+  font-family: var(--dcrw-serif);
+  font-weight: 500;
+  letter-spacing: -0.015em;
+}
+.dcrw-p-editorial .dcrw-btn {
+  border-radius: 0;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  font-size: 13px;
+  padding: 13px 22px;
+}
+.dcrw-p-editorial .dcrw-kicker {
+  letter-spacing: 0.2em;
+  font-weight: 600;
+}
+.dcrw-p-editorial .dcrw-hero-tarjeta-foto img,
+.dcrw-p-editorial .dcrw-asesor-foto img {
+  border-radius: 0;
+}
+
+/* AGENT · tarjeta — una columna blanca sobre un fondo verdoso apagado. */
+.dcrw-p-tarjeta {
+  --dcrw-bg: #ffffff;
+  --dcrw-bg-2: #ffffff;
+  --dcrw-radio: 18px;
+  --dcrw-radio-chico: 12px;
+  --dcrw-aire: 44px;
+  --dcrw-ancho: 640px;
+  background: #e8ece9;
+}
+.dcrw-p-tarjeta .dcrw-barra {
+  background: transparent;
+  border-bottom: 0;
+}
+.dcrw-p-tarjeta .dcrw-barra-caja {
+  max-width: var(--dcrw-ancho);
+}
+.dcrw-p-tarjeta main {
+  max-width: var(--dcrw-ancho);
+  margin-inline: auto;
+  background: var(--dcrw-bg);
+}
+.dcrw-p-tarjeta .dcrw-sec {
+  background: var(--dcrw-bg);
+}
+.dcrw-p-tarjeta .dcrw-sec + .dcrw-sec {
+  border-top: 1px solid var(--dcrw-borde);
+}
+.dcrw-p-tarjeta .dcrw-encabezado {
+  margin-inline: auto;
+  text-align: center;
+  margin-bottom: 20px;
+}
+.dcrw-p-tarjeta .dcrw-titulo {
+  font-size: clamp(22px, 4cqi, 26px);
+}
+.dcrw-p-tarjeta .dcrw-zonas {
+  justify-content: center;
+}
+.dcrw-p-tarjeta .dcrw-pie {
+  background: transparent;
+  border-top: 0;
+  text-align: center;
+}
+.dcrw-p-tarjeta .dcrw-pie-redes {
+  justify-content: center;
+}
+
+/* OWNER · disponibilidad — blanca y clara, de tablero, sin adornos. */
+.dcrw-p-disponibilidad {
+  --dcrw-bg: #ffffff;
+  --dcrw-bg-2: #f4f7f5;
+  --dcrw-radio: 14px;
+  --dcrw-radio-chico: 8px;
+  --dcrw-aire: 80px;
+  --dcrw-ancho: 1120px;
+}
+.dcrw-p-disponibilidad .dcrw-sec {
+  background: var(--dcrw-bg);
+}
+.dcrw-p-disponibilidad .dcrw-sec-contacto {
+  background: var(--dcrw-bg-2);
+}
+.dcrw-p-disponibilidad .dcrw-titulo,
+.dcrw-p-disponibilidad .dcrw-hero-titulo {
+  letter-spacing: -0.03em;
+  font-weight: 680;
+}
+/* La cinta va pegada a la portada: sin aire entre las dos. */
+.dcrw-p-disponibilidad .dcrw-sec-portada {
+  padding-bottom: calc(var(--dcrw-aire) * 0.55);
+}
+
+/* OWNER · vitrina — crema, serif y el inmueble como protagonista. */
+.dcrw-p-vitrina {
+  --dcrw-bg: #fcfbf8;
+  --dcrw-bg-2: #f4f0e7;
+  --dcrw-tinta: #221f1a;
+  --dcrw-tinta-2: #5e584f;
+  --dcrw-radio: 12px;
+  --dcrw-radio-chico: 7px;
+  --dcrw-aire: 110px;
+  --dcrw-ancho: 1160px;
+}
+.dcrw-p-vitrina .dcrw-sec {
+  background: var(--dcrw-bg);
+}
+.dcrw-p-vitrina .dcrw-sec-contacto {
+  background: var(--dcrw-bg-2);
+}
+.dcrw-p-vitrina .dcrw-titulo,
+.dcrw-p-vitrina .dcrw-hero-titulo,
+.dcrw-p-vitrina .dcrw-tarjeta-titulo,
+.dcrw-p-vitrina .dcrw-vitrina-titulo,
+.dcrw-p-vitrina .dcrw-trato-titulo {
+  font-family: var(--dcrw-serif);
+  font-weight: 500;
+  letter-spacing: -0.015em;
+}
+.dcrw-p-vitrina .dcrw-kicker {
+  letter-spacing: 0.18em;
+  font-weight: 600;
 }
 
 /* ── Movimiento reducido ────────────────────────────────────────── */

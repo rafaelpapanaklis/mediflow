@@ -46,6 +46,12 @@ import { BloqueDisponibilidad } from "@/components/realty/web/blocks/disponibili
 import { BloqueRequisitos } from "@/components/realty/web/blocks/requisitos-para-rentar";
 import { BloqueTratoDirecto } from "@/components/realty/web/blocks/trato-directo";
 import "@/components/realty/web/skin.css";
+// Los maquetados PREMIUM (seis plantillas de la segunda ola) viven junto a
+// su bloque y se cargan DESPUÉS de skin.css: misma especificidad, gana lo
+// declarado después. Solo agregan variantes; no pisan las nueve originales.
+import "@/components/realty/web/blocks/portada.css";
+import "@/components/realty/web/blocks/inmuebles.css";
+import "@/components/realty/web/blocks/secundarios.css";
 
 type ComponenteBloque = (props: { data: RealtyWebData }) => JSX.Element | null;
 
