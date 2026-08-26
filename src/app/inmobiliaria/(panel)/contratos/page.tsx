@@ -36,7 +36,12 @@ export default async function Page() {
     // En paralelo: son dos consultas independientes y la segunda (las listas
     // del formulario) no depende de la primera.
     [contracts, sources] = await Promise.all([
-      listContracts(ctx, {}),
+      // includeArchived porque el tablero TIENE pestaña de archivados y sin
+      // esto siempre saldría vacía: listContracts los excluye EN LA BASE
+      // salvo que se pidan. El cliente ya los trata aparte —no suman en
+      // "todos" ni en los KPI de trabajo vivo—, que es lo correcto:
+      // archivar saca del tablero, no del producto.
+      listContracts(ctx, { includeArchived: true }),
       contractSources(ctx),
     ]);
   } catch (e) {

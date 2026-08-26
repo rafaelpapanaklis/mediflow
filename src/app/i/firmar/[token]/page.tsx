@@ -1,5 +1,4 @@
 export const dynamic = "force-dynamic";
-export const revalidate = 0;
 
 // ═══════════════════════════════════════════════════════════════════════
 // /i/firmar/{token} — la liga que abre quien tiene que firmar.
@@ -12,9 +11,10 @@ export const revalidate = 0;
 // deliberada con /share/p del dental, que dice "Link revocado" y con eso
 // confirma que el token era bueno.
 //
-// 🔴 force-dynamic + revalidate 0. Un documento a punto de firmarse no
-// puede quedarse en el caché de un proxy compartido ni en el de Next: dos
-// personas distintas abren ligas distintas de la misma ruta.
+// 🔴 force-dynamic. Un documento a punto de firmarse no puede quedarse en
+// el caché de Next ni en el de un proxy: dos personas distintas abren
+// ligas distintas de la misma ruta. (La API que lo sirve además manda
+// no-store en cada respuesta.)
 //
 // El idioma sale de la CUENTA, no del navegador: el contrato está
 // redactado en ese idioma y unos botones en otro no ayudarían a nadie.

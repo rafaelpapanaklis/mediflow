@@ -16,7 +16,7 @@ import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import toast from "react-hot-toast";
-import { ArrowRight, CalendarClock, FileSignature, Plus, Settings2 } from "lucide-react";
+import { Archive, ArrowRight, CalendarClock, FileSignature, Plus, Settings2 } from "lucide-react";
 import type { Dictionary } from "@/i18n/t";
 import { makeRealtyT } from "@/lib/realty/i18n";
 import { Card, EmptyState, Kpi, Pill, Tabs } from "../rentals/ui";
@@ -136,6 +136,10 @@ export function ContractsClient({
             <Link className="rnt-btn" href="/inmobiliaria/contratos/vencimientos">
               <CalendarClock size={14} />
               {t("nav.vencimientos")}
+            </Link>
+            <Link className="rnt-btn" href="/inmobiliaria/contratos/boveda">
+              <Archive size={14} />
+              {t("nav.boveda")}
             </Link>
             <Link className="rnt-btn" href="/inmobiliaria/contratos/plantillas">
               <Settings2 size={14} />
