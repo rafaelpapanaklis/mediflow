@@ -92,7 +92,9 @@
         "costo": "Costo",
         "escalado": "Paso a una persona",
         "pausar": "Que la atienda una persona",
-        "reanudar": "Devolversela al bot"
+        "reanudar": "Devolversela al bot",
+        "contestarPendiente": "Contestar lo pendiente",
+        "contestandoPendiente": "Contestando..."
       },
       "pausas": {
         "title": "Conversaciones que atiende una persona",
@@ -441,7 +443,9 @@
         "costo": "Cost",
         "escalado": "Handed to a human",
         "pausar": "Let a human handle this one",
-        "reanudar": "Give it back to the bot"
+        "reanudar": "Give it back to the bot",
+        "contestarPendiente": "Answer what is pending",
+        "contestandoPendiente": "Answering..."
       },
       "pausas": {
         "title": "Conversations handled by a human",

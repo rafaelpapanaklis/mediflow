@@ -1025,3 +1025,108 @@ export async function createRealtyReviewCampaign(
     segment: { closedWithinDays: opts.withinDays ?? 60 },
   });
 }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   5. EL BARRIDO — lo que hace que "programada" signifique algo
+   ═══════════════════════════════════════════════════════════════════════ */
+
+export interface RealtyCampaignSweepResult {
+  campaigns: number;
+  sent: number;
+  failed: number;
+  skipped: number;
+  /** Campañas que quedaron a medias y se retoman en la siguiente vuelta. */
+  pending: number;
+}
+
+/**
+ * Manda lo que YA le tocaba salir.
+ *
+ * 🔴 POR QUÉ EXISTE: sin esto, `scheduledAt` es decoración. Una campaña se
+ * podía dejar PROGRAMADA para el martes a las 10 y nadie la mandaba nunca
+ * — la peor clase de error, porque la pantalla dice que está programada y
+ * el dueño se entera semanas después de que su promoción no salió.
+ *
+ * Toma SOLO las que ya vencieron (`scheduledAt <= ahora`) y las que se
+ * quedaron a medias (ENVIANDO). Las de estado BORRADOR NO entran: un
+ * borrador sin fecha es algo que alguien está escribiendo, y mandarlo
+ * porque pasó un cron sería exactamente el "se envió sola" que el diseño
+ * de esta ola evita.
+ *
+ * Manda UNA TANDA por campaña y por vuelta, no la campaña entera: el tope
+ * diario y el cupo del plan los sigue aplicando `sendRealtyCampaignBatch`
+ * fila por fila, y repartir en varias vueltas es justo lo que protege el
+ * número. Lo que quede vuelve en la siguiente.
+ *
+ * Es reentrante: dos vueltas seguidas no mandan dos veces a la misma
+ * persona, porque cada fila pasa de PENDIENTE a ENVIADO dentro del
+ * recorrido.
+ */
+export async function sweepRealtyCampaigns(
+  accountId?: string,
+  opts: { limit?: number; batch?: number; now?: Date } = {},
+): Promise<RealtyCampaignSweepResult> {
+  const out: RealtyCampaignSweepResult = {
+    campaigns: 0,
+    sent: 0,
+    failed: 0,
+    skipped: 0,
+    pending: 0,
+  };
+  if (!(await realtyGrowthStorageReady())) return out;
+
+  const now = opts.now ?? new Date();
+  const limit = Math.min(50, Math.max(1, Math.floor(opts.limit ?? 20)));
+  const batch = Math.min(REALTY_CAMPAIGN_BATCH_MAX, Math.max(1, Math.floor(opts.batch ?? 30)));
+
+  let rows: { id: string; accountId: string; slug: string; timezone: string }[] = [];
+  try {
+    // El slug y la zona salen de la CUENTA de cada campaña, no de un
+    // contexto de sesión: en el camino del cron no hay sesión ninguna.
+    rows = await prisma.$queryRaw<{ id: string; accountId: string; slug: string; timezone: string }[]>(
+      Prisma.sql`SELECT c.id, c."accountId", a.slug, a.timezone
+                 FROM realty_campaigns c
+                 JOIN realty_accounts a ON a.id = c."accountId"
+                 WHERE a."isActive" = true
+                   AND (
+                     (c.status = 'PROGRAMADA' AND c."scheduledAt" IS NOT NULL
+                       AND c."scheduledAt" <= ${now})
+                     OR c.status = 'ENVIANDO'
+                   )
+                   ${accountId ? Prisma.sql`AND c."accountId" = ${accountId}` : Prisma.empty}
+                 ORDER BY c."scheduledAt" NULLS LAST
+                 LIMIT ${limit}`,
+    );
+  } catch (err) {
+    if (!isMissingRealtyGrowthTable(err)) {
+      console.error("[realty/campaigns] barrido: no se pudieron listar las programadas:", err);
+    }
+    return out;
+  }
+
+  for (const row of rows) {
+    out.campaigns += 1;
+    try {
+      const res = await sendRealtyCampaignBatch({
+        accountId: row.accountId,
+        slug: row.slug,
+        timezone: row.timezone || "America/Mexico_City",
+        campaignId: row.id,
+        limit: batch,
+        now,
+      });
+      out.sent += res.sent;
+      out.failed += res.failed;
+      out.skipped += res.skipped;
+      out.pending += res.remainingPending;
+    } catch (err) {
+      // Una campaña que truena NO puede detener el barrido de las demás:
+      // son de cuentas distintas y no tienen por qué pagar el error ajena.
+      if (!(err instanceof RealtyCampaignError)) {
+        console.error(`[realty/campaigns] barrido: falló la campaña ${row.id}:`, err);
+      }
+    }
+  }
+
+  return out;
+}

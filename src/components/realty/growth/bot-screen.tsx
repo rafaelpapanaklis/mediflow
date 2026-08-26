@@ -100,6 +100,7 @@ export function RealtyBotScreen({
     estadoInicial?.settings ?? DEFAULT_REALTY_BOT_SETTINGS,
   );
   const [cargando, setCargando] = useState(!estadoInicial);
+  const [barriendo, setBarriendo] = useState(false);
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [ok, setOk] = useState(false);
@@ -603,7 +604,36 @@ export function RealtyBotScreen({
       </Tarjeta>
 
       {/* ── 5. QUÉ CONTESTÓ ───────────────────────────────────────────── */}
-      <Tarjeta titulo={t("bot.turnos.title")} sub={t("bot.turnos.sub")}>
+      <Tarjeta
+        titulo={t("bot.turnos.title")}
+        sub={t("bot.turnos.sub")}
+        accion={
+          // El bot vive del BARRIDO (no se tocó el webhook), así que la
+          // respuesta llega con el retraso del cron. Este botón deja que el
+          // dueño lo vea trabajar ya, sin esperar la siguiente vuelta.
+          <Boton
+            pequeno
+            disabled={!puedeEditar || !encendido || barriendo || faltaSql}
+            onClick={async () => {
+              setBarriendo(true);
+              setError(null);
+              const r = await apiJson<{ answered: number }>("/api/realty/bot/sweep", {
+                method: "POST",
+                json: {},
+              });
+              setBarriendo(false);
+              if (!r.ok) {
+                setError(r.error ?? t("errores.red"));
+                return;
+              }
+              await recargar();
+            }}
+          >
+            <Play size={12} aria-hidden="true" />
+            {barriendo ? t("bot.turnos.contestandoPendiente") : t("bot.turnos.contestarPendiente")}
+          </Boton>
+        }
+      >
         {estado.turns.length === 0 ? (
           <Vacio texto={t("bot.turnos.vacio")} />
         ) : (
