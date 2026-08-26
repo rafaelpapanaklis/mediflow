@@ -1,0 +1,344 @@
+/* ═══════════════════════════════════════════════════════════════════════
+   DaleControl INMUEBLES — Reportes.
+
+   SOLO lo que Rentas no tiene. Los botones, las tarjetas, los KPI, las
+   tablas y las pestañas salen de rentals.css, que ya es del vertical y ya
+   está hecho con los tokens del panel verde. Aquí no se re-declara ni un
+   borde: dos hojas describiendo el mismo botón acaban divergiendo.
+
+   No se toca globals.css ni tailwind.config.ts — el guardia los prohíbe.
+
+   ANCHOS: @container, nunca @media. Quien manda es el ancho del <main> del
+   panel, no el de la ventana: con el sidebar abierto o cerrado la misma
+   ventana deja anchos muy distintos. El contenedor lo declara .rnt (un
+   contenedor no se consulta a sí mismo), así que estas reglas preguntan por
+   `rnt` y NO vuelven a declarar container-type: hacerlo aquí crearía un
+   segundo contexto de contención que atraparía los modales del panel.
+
+   Medidas en px, no rem: la raíz del panel mide 13px y un rem no vale 16.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* ── Apilado vertical de bloques ────────────────────────────────────── */
+/* Rentas no tiene un stack: sus pantallas apilan con el gap de .rnt. Los
+   paneles de Reportes viven DENTRO de una pestaña, así que necesitan el
+   suyo. */
+
+.rep-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* ── Dinero ─────────────────────────────────────────────────────────── */
+
+.rep-money {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* Dos monedas = dos renglones. NUNCA una suma. Ver reports-shared.tsx. */
+.rep-money-stack {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 1px;
+  line-height: 1.35;
+}
+.rep-money-stack--block {
+  align-items: flex-start;
+}
+.rep-money__cur {
+  font-style: normal;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--text-3);
+  margin-left: 4px;
+}
+
+/* ── Rendimiento ────────────────────────────────────────────────────── */
+
+.rep-yield {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.rep-yield--good {
+  color: var(--success);
+}
+.rep-yield--mid {
+  color: var(--text-1);
+}
+.rep-yield--bad {
+  color: var(--danger);
+}
+/* El guion de "no se pudo calcular" lleva subrayado punteado y title: sin
+   la pista, un — se lee como un cero y el propietario cree que no ganó. */
+.rep-yield--none {
+  color: var(--text-3);
+  border-bottom: 1px dotted var(--border-soft);
+  cursor: help;
+}
+
+/* ── Encabezado de bloque ───────────────────────────────────────────── */
+
+.rep-blockhead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.rep-blockhead__title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-1);
+  letter-spacing: -0.01em;
+}
+.rep-blockhead__sub {
+  margin: 3px 0 0;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--text-2);
+  max-width: 70ch;
+}
+/* La nota de método. Va más chica y más apagada que el subtítulo, pero SE
+   PINTA: es donde el reporte confiesa de dónde sale cada número. */
+.rep-blockhead__note {
+  margin: 6px 0 0;
+  font-size: 11.5px;
+  line-height: 1.6;
+  color: var(--text-3);
+  max-width: 78ch;
+}
+.rep-blockhead__right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* ── Exportar ───────────────────────────────────────────────────────── */
+
+.rep-exports {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* ── Periodo ────────────────────────────────────────────────────────── */
+
+.rep-period {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.rep-period__field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+.rep-period__field > span {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+.rep-period__field .rnt-input {
+  /* self-start no basta en una columna flex: sin el ancho, el input de
+     fecha se estira a la altura de la fila y se ve como una caja rara. */
+  width: auto;
+  min-width: 148px;
+}
+
+/* ── Sugerencia / dato al pie de un número ─────────────────────────── */
+
+.rep-hint {
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--text-3);
+  margin-top: 2px;
+}
+
+/* ── La recomendación al propietario ────────────────────────────────── */
+/* Es lo único de esta pantalla que ve un cliente del cliente, así que se
+   trata como una pieza y no como un párrafo más. */
+
+.rep-advice {
+  border-radius: 14px;
+  border: 1px solid var(--border-brand);
+  background: var(--brand-soft);
+  padding: 16px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.rep-advice--warning {
+  border-color: var(--border-soft);
+  background: var(--bg-elev);
+}
+.rep-advice__head {
+  font-size: 15.5px;
+  font-weight: 700;
+  color: var(--text-1);
+  line-height: 1.4;
+}
+.rep-advice__body {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.65;
+  color: var(--text-2);
+  max-width: 74ch;
+}
+.rep-advice__actions {
+  margin: 4px 0 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.rep-advice__actions li {
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--text-2);
+}
+
+/* ── Rejilla de KPI ─────────────────────────────────────────────────── */
+
+.rep-kpis {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+@container rnt (min-width: 560px) {
+  .rep-kpis {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+@container rnt (min-width: 820px) {
+  .rep-kpis {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+}
+
+/* Los tres números grandes de la cartera. Menos columnas, más aire. */
+.rep-headline {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px;
+}
+@container rnt (min-width: 700px) {
+  .rep-headline {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+.rep-headline__cell {
+  border-radius: 14px;
+  border: 1px solid var(--border-soft);
+  background: var(--bg-elev);
+  padding: 16px 18px;
+}
+.rep-headline__label {
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+.rep-headline__value {
+  margin-top: 6px;
+  font-size: 24px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--text-1);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Embudo ─────────────────────────────────────────────────────────── */
+
+.rep-funnel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.rep-funnel__row {
+  display: grid;
+  grid-template-columns: minmax(96px, 150px) minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+}
+.rep-funnel__label {
+  font-size: 12.5px;
+  color: var(--text-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rep-funnel__bar {
+  height: 20px;
+  border-radius: 6px;
+  background: var(--bg-hover);
+  overflow: hidden;
+}
+.rep-funnel__fill {
+  height: 100%;
+  border-radius: 6px;
+  background: var(--brand);
+  /* min-width para que un escalón con 1 de 400 siga siendo visible: una
+     barra de 0.2 px se lee como cero y no lo es. */
+  min-width: 3px;
+}
+.rep-funnel__num {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-1);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* ── Selector con etiqueta, para inmueble / propietario / año ───────── */
+
+.rep-pick {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  flex: 1 1 240px;
+  max-width: 420px;
+}
+.rep-pick > span {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+
+/* ── Barra de herramientas del reporte ─────────────────────────────── */
+
+.rep-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+/* ── La opinión de una visita ──────────────────────────────────────── */
+
+.rep-quote {
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--text-2);
+  max-width: 60ch;
+}
+.rep-quote--empty {
+  color: var(--text-3);
+  font-style: italic;
+}
