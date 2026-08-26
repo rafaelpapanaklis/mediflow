@@ -10,6 +10,7 @@
  * Correr con:
  *   npx tsx --test src/lib/clinical-shared/__tests__/get-active-clinic-modules.test.ts
  */
+import "./_sin-server-only"; // PRIMERO: el módulo importa plans.ts → "server-only", que no existe fuera de Next
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {

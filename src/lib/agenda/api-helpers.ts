@@ -27,6 +27,9 @@ export interface ClinicSession {
     agendaDayEnd: number;
     waConnected: boolean;
     trialEndsAt: Date | null;
+    // Junto con trialEndsAt alimenta isInTrial/isPlanExpired (plan-status): la
+    // fecha sola no dice si la clínica paga o está en trial.
+    subscriptionStatus: string | null;
     // Horario configurado en Ajustes (P1-13): lo usan scheduleViolation (aviso
     // de fuera-de-horario/día cerrado) y effectiveAgendaWindow (eje del panel).
     schedules: ScheduleDay[];
@@ -60,6 +63,7 @@ export async function loadClinicSession(): Promise<ClinicSession | NextResponse>
       agendaDayEnd: true,
       waConnected: true,
       trialEndsAt: true,
+      subscriptionStatus: true,
       schedules: {
         select: { dayOfWeek: true, enabled: true, openTime: true, closeTime: true },
         orderBy: { dayOfWeek: "asc" },

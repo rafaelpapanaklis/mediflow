@@ -27,7 +27,7 @@ import {
   TWO_FA_SETUP_PATH,
 } from "@/lib/auth/two-factor-constants";
 import { MUST_CHANGE_PASSWORD_PATH } from "@/lib/auth/must-change-password";
-import { ACTIVE_SUBSCRIPTION_STATUSES, isPlanExpired, isAllowedWhileSuspended } from "@/lib/plan-status";
+import { isPlanExpired, isAllowedWhileSuspended, isInTrial as inTrialNow } from "@/lib/plan-status";
 import { getBranchQuota } from "@/lib/branches";
 import { HIDE_SUPPLY_MODULES } from "@/lib/hidden-modules";
 
@@ -130,11 +130,10 @@ export default async function DashboardLayout({ children }: { children: React.Re
   // se re-ejecuta.
   const trialEndsAt = clinic.trialEndsAt ? new Date(clinic.trialEndsAt) : null;
   const now = new Date();
-  const subscriptionStatus = (clinic as { subscriptionStatus?: string | null }).subscriptionStatus ?? null;
-  const subscriptionActive =
-    subscriptionStatus !== null && ACTIVE_SUBSCRIPTION_STATUSES.has(subscriptionStatus);
-  const isExpired = isPlanExpired(clinic);
-  const isInTrial = !!trialEndsAt && trialEndsAt > now && !subscriptionActive;
+  const isExpired = isPlanExpired(clinic, now);
+  // Trial/cortesía vigente = periodo por delante SIN suscripción viva. Misma
+  // fuente única (plan-status) que el gate; alimenta el banner y el sidebar.
+  const isInTrial = inTrialNow(clinic, now);
 
   // Redirect server-side a la pantalla de pago. Excepciones: la propia
   // /dashboard/suspended (ahí se completa el pago) y /dashboard/soporte(/*)

@@ -65,7 +65,8 @@
     "test:landing-concurrency": "tsx --test src/lib/__tests__/landing-concurrency.test.ts",
     "test:ua": "tsx --test src/lib/analytics/ua.test.ts",
     "test:account-manager": "tsx --test src/lib/account-manager/__tests__/availability.test.ts",
-    "test:billing": "tsx --test src/lib/billing/proration.test.ts src/lib/billing/stripe-contract.test.ts src/lib/billing/webhook-decisions.test.ts src/lib/billing/manual-upgrade-diff.test.ts src/lib/billing/billing-guards.test.ts",
+    "test:billing": "tsx --test src/lib/billing/proration.test.ts src/lib/billing/stripe-contract.test.ts src/lib/billing/webhook-decisions.test.ts src/lib/billing/manual-upgrade-diff.test.ts src/lib/billing/billing-guards.test.ts src/lib/billing/renewal-period.test.ts",
+    "test:plan-status": "tsx --test src/lib/__tests__/plan-status.test.ts src/lib/__tests__/plan-status-guard.test.ts src/lib/clinical-shared/__tests__/trial-vs-paying.test.ts",
     "test:blog-import": "tsx --test src/lib/blog/__tests__/import-drip.test.ts",
     "test:invoice-due-date": "tsx --test src/lib/invoices/__tests__/due-date.test.ts",
     "test:quote-invoice": "tsx --test src/lib/quotes/__tests__/invoice-from-quote-core.test.ts"

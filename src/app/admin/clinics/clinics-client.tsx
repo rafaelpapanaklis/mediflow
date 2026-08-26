@@ -14,6 +14,8 @@ import { AvatarNew } from "@/components/ui/design-system/avatar-new";
 import { KpiCard }   from "@/components/ui/design-system/kpi-card";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import { FALLBACK_PLAN_PRICES_MXN } from "@/lib/plan-shared";
+import { getPlanStatus, type PlanStatusKind } from "@/lib/plan-status";
+import { PlanStatusBadge } from "@/components/admin/plan-status-badge";
 
 interface Props { clinics: any[] }
 
@@ -25,22 +27,35 @@ export function AdminClinicsClient({ clinics: initial }: Props) {
   const [filter, setFilter]   = useState("all");
   const [loading, setLoading] = useState<string | null>(null);
 
-  const counts = useMemo(() => {
-    const now = Date.now();
-    const active  = clinics.filter(c => !c.trialEndsAt || new Date(c.trialEndsAt).getTime() >= now).length;
-    const trial   = clinics.filter(c => c.trialEndsAt && new Date(c.trialEndsAt).getTime() > now).length;
-    const expired = clinics.filter(c => c.trialEndsAt && new Date(c.trialEndsAt).getTime() < now).length;
-    const mrr     = clinics.reduce((s, c) => s + (FALLBACK_PLAN_PRICES_MXN[c.plan] ?? 0), 0);
-    return { all: clinics.length, active, trial, expired, mrr };
+  // Estado de plan con la MISMA regla que el gate (src/lib/plan-status.ts).
+  // Antes los KPIs y los filtros comparaban trialEndsAt contra hoy a ojo: una
+  // clínica AL CORRIENTE con la fecha vieja contaba y se filtraba como
+  // "expirada". Se recalcula solo cuando cambia la lista (extender/suspender).
+  const kindById = useMemo(() => {
+    const now = new Date();
+    const map = new Map<string, PlanStatusKind>();
+    for (const c of clinics) map.set(c.id, getPlanStatus(c, now).kind);
+    return map;
   }, [clinics]);
+
+  const counts = useMemo(() => {
+    const kinds = Array.from(kindById.values());
+    const active  = kinds.filter(k => k === "active").length;
+    const trial   = kinds.filter(k => k === "trial").length;
+    const pastDue = kinds.filter(k => k === "past_due").length;
+    const expired = kinds.filter(k => k === "expired").length;
+    const mrr     = clinics.reduce((s, c) => s + (FALLBACK_PLAN_PRICES_MXN[c.plan] ?? 0), 0);
+    return { all: clinics.length, active, trial, pastDue, expired, mrr };
+  }, [clinics, kindById]);
 
   const filtered = clinics.filter(c => {
     const q = search.toLowerCase();
     const matchSearch = c.name.toLowerCase().includes(q) || c.slug.includes(q) || c.users[0]?.email?.toLowerCase().includes(q);
-    const expired = c.trialEndsAt && new Date(c.trialEndsAt) < new Date();
-    if (filter === "active")  return matchSearch && !expired;
-    if (filter === "expired") return matchSearch && expired;
-    if (filter === "trial")   return matchSearch && c.trialEndsAt && new Date(c.trialEndsAt) > new Date();
+    const kind = kindById.get(c.id) ?? "expired";
+    if (filter === "active")   return matchSearch && kind === "active";
+    if (filter === "past_due") return matchSearch && kind === "past_due";
+    if (filter === "expired")  return matchSearch && kind === "expired";
+    if (filter === "trial")    return matchSearch && kind === "trial";
     return matchSearch;
   });
 
@@ -108,9 +123,10 @@ export function AdminClinicsClient({ clinics: initial }: Props) {
 
   const filters = [
     { id: "all",     label: "Todas",     count: counts.all },
-    { id: "active",  label: "Activas",   count: counts.active },
-    { id: "trial",   label: "En trial",  count: counts.trial },
-    { id: "expired", label: "Expiradas", count: counts.expired },
+    { id: "active",   label: "Al corriente",  count: counts.active },
+    { id: "past_due", label: "Cobro fallido", count: counts.pastDue },
+    { id: "trial",    label: "En trial",      count: counts.trial },
+    { id: "expired",  label: "Vencidas",      count: counts.expired },
   ];
 
   return (
@@ -129,12 +145,12 @@ export function AdminClinicsClient({ clinics: initial }: Props) {
 
       {/* KPI row */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0,1fr))", gap: 14, marginBottom: 20 }}>
-        <KpiCard label="Activas" value={String(counts.active)} icon={Activity}
+        <KpiCard label="Al corriente" value={String(counts.active)} icon={Activity}
           delta={{ value: `${counts.all ? Math.round((counts.active / counts.all) * 100) : 0}% del total`, direction: "up" }} />
         <KpiCard label="En trial" value={String(counts.trial)} icon={Clock}
-          delta={{ value: "Periodo de prueba", direction: "up" }} />
-        <KpiCard label="Expiradas" value={String(counts.expired)} icon={XCircle}
-          delta={{ value: "No convertidas", direction: "down" }} />
+          delta={{ value: "Sin suscripción, con periodo", direction: "up" }} />
+        <KpiCard label="Vencidas" value={String(counts.expired)} icon={XCircle}
+          delta={{ value: `${counts.pastDue} con cobro fallido (con acceso)`, direction: "down" }} />
         <KpiCard label="MRR total" value={formatCurrency(counts.mrr, "MXN")} icon={DollarSign}
           delta={{ value: `${counts.all} clínicas`, direction: "up" }} />
       </div>
@@ -184,8 +200,6 @@ export function AdminClinicsClient({ clinics: initial }: Props) {
           </thead>
           <tbody>
             {filtered.map(clinic => {
-              const expired   = clinic.trialEndsAt && new Date(clinic.trialEndsAt) < new Date();
-              const trialDays = clinic.trialEndsAt ? Math.ceil((new Date(clinic.trialEndsAt).getTime() - Date.now()) / 86400000) : null;
               const owner     = clinic.users[0];
               const isLoading = loading === clinic.id;
               const used      = clinic.aiTokensUsed ?? 0;
@@ -275,25 +289,9 @@ export function AdminClinicsClient({ clinics: initial }: Props) {
                     </div>
                   </td>
                   <td>
-                    {(() => {
-                      const subActive =
-                        (clinic as any).subscriptionStatus === "active" ||
-                        (clinic as any).subscriptionStatus === "paid";
-                      if (subActive) {
-                        return <BadgeNew tone="success" dot>Activa · mensual</BadgeNew>;
-                      }
-                      if (expired) {
-                        return <BadgeNew tone="danger" dot>Trial expirado</BadgeNew>;
-                      }
-                      if (trialDays !== null && trialDays === 0) {
-                        return <BadgeNew tone="danger" dot>Trial · expira hoy</BadgeNew>;
-                      }
-                      if (trialDays !== null && trialDays > 0) {
-                        const tone = trialDays <= 3 ? "danger" : "warning";
-                        return <BadgeNew tone={tone} dot>Trial · {trialDays}d restantes</BadgeNew>;
-                      }
-                      return <BadgeNew tone="neutral" dot>Sin trial</BadgeNew>;
-                    })()}
+                    {/* Al corriente / Cobro fallido / Trial / Vencida — la misma
+                        regla que el gate, no una copia por fila. */}
+                    <PlanStatusBadge clinic={clinic} />
 
                     {/* Cancelación solicitada */}
                     {(clinic as any).cancelRequested && (

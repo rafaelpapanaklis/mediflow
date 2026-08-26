@@ -6,6 +6,8 @@ import { getPlanLimits } from "@/lib/plans";
 import { getAdminMrr } from "@/lib/admin/mrr";
 import { isAdminAuthed, getAdminSession } from "@/lib/admin-auth";
 import { logAdminClinicMutation } from "@/lib/admin-audit";
+import { manualPeriodFields } from "@/lib/billing/proration";
+import { getPlanStatus, isInTrial } from "@/lib/plan-status";
 
 // GET — Dashboard metrics
 export async function GET(req: NextRequest) {
@@ -16,12 +18,17 @@ export async function GET(req: NextRequest) {
   const firstOfPrevMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
   const lastOfPrevMonth = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59);
 
-  // Parallel queries (max 7)
-  const [totalClinics, activeClinics, trialClinics, expiredClinics, thisMonthRevenue, prevMonthRevenue, recentPayments] = await Promise.all([
+  // Parallel queries (max 7). El estado de plan de TODAS las clínicas se
+  // clasifica con la MISMA regla que el gate (src/lib/plan-status.ts). Antes
+  // eran tres `where` de Prisma escritos a ojo (`trialEndsAt < now` +
+  // `not: "active"`) que no coincidían con isPlanExpired: "trialing"/"paid"
+  // salían como vencidas y una cancelada con periodo por delante también.
+  const [totalClinics, activeClinics, planRows, thisMonthRevenue, prevMonthRevenue, recentPayments] = await Promise.all([
     prisma.clinic.count(),
     prisma.clinic.count({ where: { subscriptionStatus: "active" } }),
-    prisma.clinic.count({ where: { subscriptionStatus: { in: ["trialing", null] }, trialEndsAt: { gt: now } } }),
-    prisma.clinic.count({ where: { OR: [{ subscriptionStatus: "cancelled" }, { trialEndsAt: { lt: now }, subscriptionStatus: { not: "active" } }] } }),
+    prisma.clinic.findMany({
+      select: { id: true, name: true, plan: true, email: true, trialEndsAt: true, subscriptionStatus: true, createdAt: true },
+    }),
     prisma.subscriptionInvoice.aggregate({ where: { status: "paid", paidAt: { gte: firstOfMonth } }, _sum: { amount: true }, _count: true }),
     prisma.subscriptionInvoice.aggregate({ where: { status: "paid", paidAt: { gte: firstOfPrevMonth, lte: lastOfPrevMonth } }, _sum: { amount: true }, _count: true }),
     prisma.subscriptionInvoice.findMany({ orderBy: { createdAt: "desc" }, take: 50, include: { clinic: { select: { id: true, name: true, plan: true } } } }),
@@ -59,13 +66,15 @@ export async function GET(req: NextRequest) {
     orderBy: { createdAt: "desc" },
   });
 
-  // Overdue clinics (past trial, no active subscription)
-  const overdueClinics = await prisma.clinic.findMany({
-    where: { subscriptionStatus: { not: "active" }, trialEndsAt: { lt: now } },
-    select: { id: true, name: true, plan: true, email: true, trialEndsAt: true, createdAt: true },
-    orderBy: { trialEndsAt: "desc" },
-    take: 30,
-  });
+  // Trial/cortesía vigente y VENCIDAS de verdad (las que el gate bloquea hoy),
+  // con la fuente única de plan-status; la vencida más reciente arriba.
+  const trialClinics = planRows.filter((c) => isInTrial(c, now)).length;
+  const expiredRows = planRows.filter((c) => getPlanStatus(c, now).expired);
+  const expiredClinics = expiredRows.length;
+  const overdueClinics = expiredRows
+    .slice()
+    .sort((a, b) => b.trialEndsAt.getTime() - a.trialEndsAt.getTime())
+    .slice(0, 30);
 
   // MISMA función que /admin y /admin/payments. Sumar Clinic.monthlyPrice daba
   // $0: esa columna sólo la escriben verify_payment y activate_clinic (más
@@ -114,14 +123,21 @@ export async function POST(req: NextRequest) {
       data: { status: "paid", paidAt: new Date() },
     });
 
-    // Activate the clinic's subscription
+    // Activate the clinic's subscription. trialEndsAt (el "acceso hasta" del
+    // gate) se mueve JUNTO con nextBillingDate: antes se quedaba como estaba y
+    // /admin pintaba "vencida" a una clínica recién verificada. Nunca acorta
+    // una cortesía anterior (ver manualPeriodFields).
     const nextBilling = new Date();
     nextBilling.setMonth(nextBilling.getMonth() + 1);
+    const current = await prisma.clinic.findUnique({
+      where: { id: invoice.clinicId },
+      select: { trialEndsAt: true },
+    });
     await prisma.clinic.update({
       where: { id: invoice.clinicId },
       data: {
         subscriptionStatus: "active",
-        nextBillingDate: nextBilling,
+        ...manualPeriodFields(current, nextBilling),
         monthlyPrice: invoice.amount,
       },
     });
@@ -157,12 +173,17 @@ export async function POST(req: NextRequest) {
     // que el checkout; un plan inválido coacciona a PRO.
     const { monthlyPrice } = await getPlanLimits(plan);
 
+    // Misma regla que verify_payment: las dos fechas se mueven juntas.
+    const current = await prisma.clinic.findUnique({
+      where: { id: clinicId },
+      select: { trialEndsAt: true },
+    });
     await prisma.clinic.update({
       where: { id: clinicId },
       data: {
         subscriptionStatus: "active",
         plan: plan as any,
-        nextBillingDate: nextBilling,
+        ...manualPeriodFields(current, nextBilling),
         monthlyPrice,
       },
     });

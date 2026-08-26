@@ -13,6 +13,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { FALLBACK_PLAN_PRICES_MXN } from "@/lib/plan-shared";
+import { isPlanExpired } from "@/lib/plan-status";
 import { getPatientQuotaMany } from "@/lib/patient-quota";
 import { aggregatePatientQuotas, type PatientQuota } from "@/lib/patient-quota-shared";
 
@@ -149,8 +150,10 @@ function clinicStatus(subscriptionStatus: string | null, trialEndsAt: Date | nul
   if (subscriptionStatus === "active") return "active";
   if (subscriptionStatus === "cancelled") return "churn";
   if (subscriptionStatus === "past_due") return "past_due";
-  if (trialEndsAt) return trialEndsAt.getTime() > Date.now() ? "trial" : "expired";
-  return "none";
+  if (!trialEndsAt) return "none";
+  // Misma regla que el gate (src/lib/plan-status.ts), no una comparación
+  // propia de la fecha contra hoy.
+  return isPlanExpired({ subscriptionStatus, trialEndsAt }) ? "expired" : "trial";
 }
 
 function aggregateStatus(norms: ClinicNormStatus[]): ClienteAggStatus {

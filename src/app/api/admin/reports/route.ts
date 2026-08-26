@@ -1,6 +1,7 @@
 import { isAdminAuthed } from "@/lib/admin-auth";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { isInTrial } from "@/lib/plan-status";
 import * as XLSX from "xlsx";
 
 
@@ -36,7 +37,6 @@ async function computeMetrics(from: Date, to: Date) {
   const [
     allClinics,
     activeClinics,
-    trialClinics,
     periodInvoices,
     periodPayments,
     newClinicsPeriod,
@@ -44,17 +44,6 @@ async function computeMetrics(from: Date, to: Date) {
   ] = await Promise.all([
     safe(prisma.clinic.findMany({ select: { id: true, plan: true, monthlyPrice: true, subscriptionStatus: true, createdAt: true, trialEndsAt: true } }), [] as any[]),
     safe(prisma.clinic.findMany({ where: { subscriptionStatus: "active" }, select: { monthlyPrice: true, plan: true } }), [] as any[]),
-    // Antes usaba { in: ["trialing", null as any] }. Prisma no matchea NULL
-    // dentro de IN; se reemplaza por OR explícito.
-    safe(prisma.clinic.findMany({
-      where: {
-        AND: [
-          { OR: [{ subscriptionStatus: "trialing" }, { subscriptionStatus: null }] },
-          { trialEndsAt: { gt: now } },
-        ],
-      },
-      select: { id: true },
-    }), [] as { id: string }[]),
     safe(prisma.subscriptionInvoice.findMany({
       where: { createdAt: { gte: from, lte: to } },
       include: { clinic: { select: { name: true, plan: true } } },
@@ -67,6 +56,10 @@ async function computeMetrics(from: Date, to: Date) {
     safe(prisma.clinic.count({ where: { createdAt: { gte: from, lte: to } } }), 0),
     safe(prisma.clinic.count({ where: { subscriptionStatus: "cancelled", updatedAt: { gte: from, lte: to } } }), 0),
   ]);
+
+  // Trial/cortesía vigente con la MISMA regla que el gate (plan-status), sobre
+  // las filas ya cargadas. Antes era un `where` propio (trialing/null + fecha).
+  const trialClinics = allClinics.filter((c) => isInTrial(c, now));
 
   const mrr = activeClinics.reduce((s, c) => s + (c.monthlyPrice ?? 0), 0);
   const arr = mrr * 12;

@@ -22118,3 +22118,258 @@ por su ruta).
 4. La corona de `club` calcula el cuerpo del texto por longitud del nombre
    (suelo de 2,6 unidades): nombres de más de ~90 caracteres podrían recortar
    la cola; nombres de 49 se probaron y caben.
+
+
+## [Renovacion-Expira] — Una clínica AL CORRIENTE salía "EXPIRADO" en /admin: la renovación de Stripe movía el próximo cobro pero no el "acceso hasta", y el /admin calculaba el vencimiento a ojo. Ahora las dos fechas viajan juntas, el /admin lee la MISMA regla que el gate y distingue al corriente / cobro fallido / trial / vencida ✅ (2026-08-26)
+
+Worktree `fix/renovacion-expira` desde `origin/main` (93b6f76a). Cero cambios en
+`prisma/schema.prisma`, cero endpoints nuevos, cero cambios en precios ni en la
+lógica de cobro. Dos SQL nuevos en `sql/` que corre Rafael (uno de solo
+lectura, uno de UPDATE reversible); yo no apliqué ninguno.
+
+▶ EL CASO
+
+Menta Dental (BASIC) contrató el 24-jul con la promo y Stripe cobró la
+renovación del 24-ago sin problema. En la base: `subscriptionStatus=active`,
+`nextBillingDate=2026-09-24`, pero `trialEndsAt=2026-08-24` (un mes atrás).
+`/admin/clinics/[id]` la pintaba "EXPIRADO" y Rafael estuvo a punto de
+"arreglarla" a mano. Estaba perfectamente al corriente. Dos fallos encadenados.
+
+▶ QUÉ ELEGÍ Y POR QUÉ — OPCIÓN (a): la renovación mueve `trialEndsAt` igual que la contratación
+
+`trialEndsAt` pasa a significar, explícitamente y documentado en
+`src/lib/plan-status.ts`: **"hasta cuándo tiene acceso la clínica sin mirar la
+suscripción"**. Es lo que ya significaba en la práctica para todos los que lo
+ESCRIBEN (`activatePlatformSubscription` lo pone junto con `nextBillingDate`,
+`proration.ts` lo llama "pagado-hasta… NO es un trial gratis", el cron SUB-01 y
+el prorrateo usan `manualPaidUntil = MAX(trialEndsAt, nextBillingDate)`, los
+botones de /admin "+N días" y "Suspender" lo escriben). Solo la renovación y las
+activaciones manuales del admin se lo saltaban.
+
+Descarté (b) ("que trialEndsAt sea solo trial y las superficies lean
+nextBillingDate con suscripción viva") por tres razones:
+1. Obliga a cambiar `isPlanExpired` y eso cambia de estado a clínicas EN EL
+   DEPLOY (las past_due/cancelled con `nextBillingDate` por delante ganarían
+   acceso; un `unpaid` cuyo periodo Stripe sigue rodando ganaría acceso ETERNO
+   salvo que también se condicione la escritura de nextBillingDate). No tengo
+   acceso a la base para enseñar antes qué clínicas cambiarían, y el push a
+   main despliega solo: no puedo cumplir "enséñame antes" y "pushea" a la vez.
+2. Deja en la base dos fechas que se contradicen (justo lo que no se vale);
+   solo enseña a los lectores a tolerarlo.
+3. Con (a) `isPlanExpired` NO cambia: **ninguna clínica cambia de estado por el
+   deploy**. Lo que cambia es lo que se escribe a partir de ahora y lo que
+   /admin muestra.
+
+▶ FALLO 1 — LA RENOVACIÓN NO MOVÍA `trialEndsAt` (los escritores)
+
+- `src/lib/billing/proration.ts` → **`subscriptionPeriodFields(sub)`** (nuevo,
+  puro): del `current_period_end` REAL de Stripe saca `nextBillingDate` siempre
+  y `trialEndsAt` al MISMO valor **solo si la suscripción está `active` o
+  `trialing`** (`PERIOD_GRANTING_STATUSES`). En `past_due` / `unpaid` /
+  `canceled` / `incomplete` mueve solo el próximo cobro: ahí el periodo que
+  Stripe abre NO está pagado, y un `unpaid` sigue rodando periodos cada mes —
+  mover el acceso con cada uno regalaría acceso eterno a quien no paga. La
+  renovación normal llega con `active` (Stripe avanza el periodo ANTES de
+  intentar el cobro), así que un cobro fallido deja como mucho ESE periodo de
+  gracia y el siguiente ya no se concede. Sin fin de periodo devuelve `{}` (no
+  toca ninguna columna; antes se escribía null y se borraba).
+- `src/app/api/webhooks/stripe/route.ts` → `customer.subscription.created /
+  updated` usa `subscriptionPeriodFields` y audita las dos fechas.
+  `activatePlatformSubscription` ya escribía las dos: sin cambios.
+- **Los otros dos escritores con el mismo hueco**, que el barrido destapó:
+  `/api/admin/billing` (`verify_payment`, `activate_clinic`) y
+  `/api/admin/subscriptions` (factura marcada pagada) escribían
+  `nextBillingDate` y dejaban `trialEndsAt` como estaba (el comentario de
+  `manual-subscription-lapse.ts` lo documentaba como limitación conocida).
+  Ahora usan **`manualPeriodFields(current, periodEnd)`**: `nextBillingDate =
+  periodo nuevo`, `trialEndsAt = MAX(lo que tenía, periodo nuevo)` — nunca
+  acorta una cortesía o un prepago anterior. Sin esto el backfill habría que
+  repetirlo tras cada activación manual.
+- Qué pasa ahora cuando un reintento de Stripe falla: el periodo abierto con
+  `active` ya movió `trialEndsAt`; llega `past_due` → la clínica CONSERVA el
+  acceso hasta el fin de ese periodo (/admin: "Cobro fallido · acceso hasta
+  24 sep") y, si nadie cobra, ese día queda vencida ("Vencida · cobro
+  fallido"). Antes: fuera al instante con el periodo pagado. Es la política
+  que pide el encargo ("un past_due un rato no es un expirado"); si Rafael
+  prefiere bloqueo inmediato en past_due, es otra regla (isPlanExpired) y no
+  se tocó.
+
+▶ FALLO 2 — EL /admin CALCULABA "EXPIRADO" CON OTRA REGLA (los lectores)
+
+Barrido de solo lectura sobre TODO `src/`: **30 cálculos sueltos** (cada uno
+con una regla ligeramente distinta: unos miraban solo la fecha, otros
+`!== "active"` a secas perdiendo `trialing`/`paid`, otros el Set escrito a mano).
+Se confirmó `clinic-detail-client.tsx:127` (solo la fecha) y
+`admin/page.tsx:376` (fecha + `=== "active"`, se pinta en la 403).
+
+`src/lib/plan-status.ts` (fuente única) crece con `now` inyectable y:
+- `isInTrial(clinic, now)` — periodo por delante Y sin suscripción viva (la
+  regla que ya usaba el layout para el banner; ahora exportada).
+- `daysUntil(date, now)` — el único cálculo de "días restantes".
+- `getPlanStatus(clinic, now)` → `kind: active | past_due | trial | expired`
+  + `expired`, `periodEnd`, `daysLeft`, `nextBillingDate`, `subscriptionStatus`.
+  **Invariante probado:** `kind === "expired"` ⇔ `isPlanExpired`.
+- `src/lib/plan-status-label.ts` (puro, probado) + `src/components/admin/
+  plan-status-badge.tsx`: "Al corriente · renueva 24 sep" / "Cobro fallido ·
+  acceso hasta 24 sep" / "Trial · 5d" (o "Cancelada · 5d de acceso") /
+  "Vencida · cobro fallido | cancelada | nunca pagó". El `title` explica el
+  porqué con `subscriptionStatus`.
+
+CAMBIADOS a la fuente única (16 en /admin + 5 del dashboard):
+- `/admin/clinics/[id]/clinic-detail-client.tsx` — insignia del header, tarjeta
+  "Acceso hasta (trialEndsAt)" (+ "Próximo cobro" y un aviso amarillo si el
+  acceso-hasta va >1 día atrás del cobro con suscripción viva: "fila anterior
+  al fix, corre sql/sub-02"), base del botón "+N días".
+- `/admin/page.tsx` — KPIs "En trial" (isInTrial) y "Vencidas" (isPlanExpired,
+  con "+N con cobro fallido (aún con acceso)"), tarjeta de alertas, tabla
+  (solo viajan al navegador los 3 campos que la regla necesita, no la fila).
+  Antes "En trial" contaba a TODA clínica con fecha por delante, pagara o no,
+  y el MRR potencial la sumaba dos veces.
+- `/admin/clinics/clinics-client.tsx` — KPIs, filtros (nuevo tab "Cobro
+  fallido"), insignia por fila.
+- `/admin/payments/page.tsx`, `/api/admin/billing` (GET), `/api/admin/reports`
+  — tres `where` de Prisma escritos a ojo → clasificación en memoria con la
+  fuente única. "Clínicas vencidas" pasa a ser exactamente lo que el gate
+  bloquea (antes sumaba toda cancelada aunque le quedara periodo).
+- `/admin/churn/page.tsx`, `src/lib/admin/clientes.ts` (CRM).
+- Dashboard (mismo resultado, sin la copia): `dashboard/layout.tsx`
+  (`isInTrial`), `suspended/success/page.tsx` (`!isPlanExpired`),
+  `subscription-tab.tsx` (Set y fechas a mano), alerta "Prueba vence en N
+  días" del home (`/api/dashboard/home/admin`: ahora solo con trial vigente;
+  `loadClinicSession` trae `subscriptionStatus`).
+
+PERMITIDOS (siguen comparando, con su porqué y contador exacto en el test):
+`plan-status.ts` (ES la regla), `manual-subscription-lapse.ts` + cron SUB-01
+(regla propia del pagador manual, con tests), `affiliates/stats.ts` ("referida
+activa" por fecha: mueve comisiones y niveles — decisión de negocio, no un fix
+de pantalla), export XLSX de afiliados (etiqueta, status primero), `trial.ts`
+y `trial-banner.tsx` (solo cuentan días; el gate es `isInTrial`).
+
+▶ LA CONSECUENCIA QUE HAY QUE SABER — "en trial" ya no es solo la fecha
+
+Cuatro lectores decidían "en trial" mirando SOLO `trialEndsAt > now`:
+`marketplace/access-control-core.ts` (`evaluateAccess`: en trial → acceso a
+TODO), `access-control.ts` (`hasAnyActiveSpecialtyModule`, `getTrialStatus`),
+`clinical-shared/get-active-clinic-modules.ts` (en trial → TODAS las
+especialidades y se salta el gate del plan) y la alerta del home. Como la
+contratación pone `trialEndsAt = fin del periodo pagado`, **a toda clínica que
+paga se le abría TODO durante su primer mes** (artefacto, no diseño) y se le
+cerraba al mes 2 cuando la fecha quedaba vieja. Con la opción (a) eso habría
+pasado a ser PARA SIEMPRE y para todas las que pagan (BASIC con los módulos de
+CLINIC). Así que esos lectores pasan a `isInTrial` (snapshot con
+`subscriptionStatus`, opcional para no romper llamadores): una clínica que paga
+ve desde el día 1 lo de su plan + lo comprado, como cualquiera desde su mes 2.
+Nadie pierde acceso al PANEL; lo único que cambia es que las clínicas que hoy
+están en esa ventana de primer mes dejan de ver especialidades que no
+compraron. La query 4 del SQL de lectura lista exactamente quiénes son.
+
+▶ TESTS (todo con `tsx --test`, sin red ni BD)
+
+- `npm run test:plan-status` (**23/23**): `plan-status.test.ts` — Menta Dental
+  al corriente para el gate Y para la etiqueta; tabla de verdad de
+  `isPlanExpired` (12 statuses × pasado/futuro/ISO); `isInTrial` (quien paga
+  nunca está en trial); nunca trial y vencida a la vez; invariantes de
+  `getPlanStatus`; la etiqueta dice "Vencida" exactamente cuando el gate
+  bloquea; `daysUntil`. `plan-status-guard.test.ts` — recorre `src/` entero
+  (quita comentarios sin mover líneas, caza `trialEndsAt` <,>,− contra
+  now/new Date()/Date.now()/today, los `where` `{ lt|gt }`, y sigue alias
+  `const d = new Date(x.trialEndsAt)` 10 líneas); 7 permitidos con porqué y
+  contador exacto (sobra o falta uno → rojo); las 8 pantallas de /admin
+  importan plan-status y las 3 con insignia usan `<PlanStatusBadge/>`; ninguna
+  insignia "Expirado" escrita a mano; **todo `prisma.clinic.update` que
+  escribe `nextBillingDate` escribe `trialEndsAt`** (o usa uno de los dos
+  helpers). `trial-vs-paying.test.ts` — quien paga con fecha por delante no
+  está en trial en `evaluateAccess` ni en `deriveActiveClinicModuleKeys`;
+  legado intacto sin suscripción.
+- `npm run test:billing` (**106/106**, +12 nuevos en
+  `src/lib/billing/renewal-period.test.ts`): la renovación deja las dos fechas
+  IGUALES; trialing también; past_due/unpaid/canceled/incomplete no mueven el
+  acceso; sin fin de periodo `{}`; Menta Dental de punta a punta (renueva →
+  past_due un rato → entra → periodo termina → vencida "cobro fallido");
+  regresión: con el helper viejo el mismo past_due la sacaba al instante; un
+  `unpaid` que rueda 6 periodos no gana acceso; `manualPeriodFields` nunca
+  hacia atrás; estructural: el handler usa `subscriptionPeriodFields`.
+- Vecinos: `test:marketplace` 7/7, `test:subscription-lapse` 12/12, `test:mrr`
+  10/10, **`test:active-clinic-modules` 11/11 — estaba ROTO en main** ("Cannot
+  find module 'server-only'"); se arregla con el stub local
+  `src/lib/clinical-shared/__tests__/_sin-server-only.ts` importado primero.
+- `npx tsc --noEmit -p tsconfig.json`: **0 errores en lo tocado**; salen los 6
+  preexistentes de `barber/__tests__/{dinero-sumas,i18n-alcance}` que ya están
+  en main.
+
+▶ SQL — dos bloques en `sql/`, copy-paste, NINGUNO aplicado por mí
+
+- `sql/sub-02-renovacion-trialEndsAt-lectura.sql` (SOLO LECTURA): 1) la lista
+  de desfasadas (suscripción viva + nextBillingDate fijado + trialEndsAt más
+  de 1 día atrás; las sedes quedan fuera por `nextBillingDate IS NULL`), 2) el
+  conteo (total, cuántas ya tienen el acceso-hasta pasado = las que la bomba
+  sacaría hoy, por tarjeta vs a mano), 3) Menta Dental, 4) quién está en la
+  ventana "todo abierto" del primer mes.
+- `sql/sub-02-renovacion-trialEndsAt-update.sql` (REVERSIBLE): A) `CREATE
+  TABLE IF NOT EXISTS sub02_trial_ends_at_backup AS SELECT …` (respaldo con
+  los tipos de las columnas, idempotente) + vista previa antes→después fila
+  por fila SIN tocar `clinics`; B) `BEGIN; UPDATE … FROM backup WHERE
+  trialEndsAt = old AND status viva AND new > old; SELECT count(*) (debe dar
+  0); COMMIT;`; C) el UPDATE inverso comentado + DROP del respaldo. Nunca
+  mueve la fecha hacia atrás y no cambia el acceso de nadie (solo filas con
+  suscripción viva, que el gate nunca bloquea).
+
+▶ BUILD Y GUARDIA
+
+- `npx next build` COMPLETO (lanzado fuera del árbol del tool con un `.cmd` y
+  marcador vía WMI, `NODE_OPTIONS=--max-old-space-size=8192`, sin pipes; las
+  3 470 líneas del log leídas en seis lecturas): **`BUILD_EXIT_CODE:0`**,
+  `Checking validity of types` sin errores, `✓ Generating static pages
+  (424/424)`, tabla de rutas completa (`ƒ /admin/clinics/[id]` 21,8 kB,
+  `ƒ /api/webhooks/stripe`, `ƒ /api/cron/subscription-lapse`). Lo rojo del log
+  son los `prisma:error … DATABASE_URL` del entorno local sin `.env` (blog,
+  casos-de-uso, planConfig…) y `⚠ Compiled with warnings` por los tres avisos
+  preexistentes de Tailwind (`ease-[var(--ease)]`…) y el de `file-type` en
+  `ai-wallet`: nada de esta ola. No se tocó `prisma/schema.prisma`, así que se
+  usó el cliente Prisma ya generado (el `node_modules` es un junction al repo
+  principal) y no hizo falta `prisma generate`.
+- `git fetch origin && git merge origin/main` antes del push (ver commit).
+
+▶ ARCHIVOS
+
+Nuevos: `src/lib/plan-status-label.ts`, `src/components/admin/plan-status-badge.tsx`,
+`src/lib/__tests__/plan-status.test.ts`, `src/lib/__tests__/plan-status-guard.test.ts`,
+`src/lib/billing/renewal-period.test.ts`, `src/lib/clinical-shared/__tests__/trial-vs-paying.test.ts`,
+`src/lib/clinical-shared/__tests__/_sin-server-only.ts`, `sql/sub-02-renovacion-trialEndsAt-lectura.sql`,
+`sql/sub-02-renovacion-trialEndsAt-update.sql`.
+Tocados (23): `plan-status.ts`, `billing/proration.ts`, `webhooks/stripe/route.ts`,
+`api/admin/{billing,subscriptions,reports}/route.ts`, `admin/{page,payments/page,churn/page}.tsx`,
+`admin/clinics/{clinics-client,[id]/clinic-detail-client}.tsx`, `lib/admin/clientes.ts`,
+`dashboard/{layout,suspended/success/page}.tsx`, `components/dashboard/subscription-tab.tsx`,
+`api/dashboard/home/admin/route.ts`, `lib/agenda/api-helpers.ts`,
+`marketplace/{access-control,access-control-core}.ts`, `clinical-shared/get-active-clinic-modules.ts`
+(+ su test), `billing/manual-subscription-lapse.ts` (solo el comentario), `package.json`
+(`test:plan-status`, `test:billing`).
+
+▶ PENDIENTE — REQUIERE RAFAEL
+
+1. **Correr los dos SQL** en ese orden (lectura → update). Hasta entonces las
+   clínicas viejas siguen con `trialEndsAt` atrás hasta su próximo evento de
+   Stripe; la ficha de /admin lo avisa en amarillo y la insignia ya dice "Al
+   corriente" de todos modos.
+2. **Probar en /admin** con Menta Dental: header "Al corriente · renueva 24
+   sep", tarjeta "Acceso hasta" con el aviso amarillo (antes del backfill) y
+   sin él (después). En `/admin/clinics` los tabs Al corriente / Cobro fallido
+   / En trial / Vencidas. En `/admin` el KPI "Vencidas" y la tarjeta.
+3. **Probar el ciclo real con una tarjeta de prueba de Stripe** (nadie lo ha
+   hecho: los tests son offline): contratar → forzar un cobro fallido (tarjeta
+   `4000 0000 0000 0341` o "Avanzar reloj" en test mode) → ver "Cobro fallido
+   · acceso hasta X" y que la clínica siga entrando; pagar → "Al corriente".
+4. **Decidir** si `affiliates/stats.ts` ("referida activa" por fecha) y el
+   export XLSX deben pasar a `isInTrial`/`isPlanExpired`: mueven comisiones y
+   están en la lista de permitidos a propósito.
+5. **El botón "Suspender" de /admin** sigue siendo el hack `trialEndsAt =
+   2000-01-01`: con suscripción viva NO bloquea nada (el gate exige status no
+   activo) y ahora la insignia lo hace visible (sigue "Al corriente"). La
+   suspensión real de una clínica de tarjeta es cancelar en Stripe desde la
+   ficha del cliente. Fuera del alcance de esta ola.
+6. Carrera preexistente, no tocada: si `customer.subscription.created` llega
+   ANTES que `checkout.session.completed`, `activatePlatformSubscription`
+   extiende desde el fin que Stripe ya fijó (+2 meses); el siguiente
+   `subscription.updated` lo deja en el valor real. Ahora corrige las DOS
+   fechas.

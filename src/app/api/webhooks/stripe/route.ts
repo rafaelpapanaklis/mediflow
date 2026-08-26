@@ -35,7 +35,7 @@ import {
   PLAN_UPGRADE_DIFF_KIND,
   canSuspendForFailedInvoice,
   isPlanTierUpgrade,
-  nextBillingDateFields,
+  subscriptionPeriodFields,
 } from "@/lib/billing/proration";
 import { recordStripeInvoice } from "@/lib/billing/record-stripe-invoice";
 import { sendPlanActivatedEmail, sendPlanRenewedEmail } from "@/lib/email";
@@ -214,18 +214,25 @@ export async function POST(req: NextRequest) {
           const subPlanFields = isPlanId(subPlan)
             ? { plan: subPlan, aiTokensLimit: (await getPlanLimits(subPlan)).aiTokensDefault }
             : {};
+          // Fin del periodo REAL de Stripe → nextBillingDate Y trialEndsAt (el
+          // "acceso hasta" del gate, isPlanExpired) al MISMO valor cuando la
+          // suscripción está active/trialing. Antes SOLO se movía
+          // nextBillingDate: trialEndsAt se quedaba en la fecha de la
+          // contratación y se atrasaba un mes por cada renovación — con
+          // `active` no bloqueaba, pero el primer `past_due` de un reintento
+          // sacaba a la clínica al instante con el periodo pagado, y /admin la
+          // pintaba "Expirada". Si Stripe NO reporta el fin de periodo, no se
+          // toca ninguna fecha (`subscriptionPeriodFields` devuelve {}); antes
+          // se escribía `null` y el dato se BORRABA. En las versiones nuevas de
+          // la API el fin de periodo vive en el item, no en la suscripción.
+          const periodFields = subscriptionPeriodFields(sub);
           await prisma.clinic.update({
             where: { id: clinicId },
             data: {
               stripeSubscriptionId: sub.id,
               subscriptionStatus:   sub.status,
               subscriptionId:       sub.id,
-              // Si Stripe NO reporta el fin de periodo, NO se toca la fecha de
-              // renovación (`nextBillingDateFields` devuelve {}). Antes se
-              // escribía `null` y el dato se BORRABA: el panel dejaba de mostrar
-              // cuándo se renueva. En las versiones nuevas de la API el fin de
-              // periodo vive en el item, no en la suscripción.
-              ...nextBillingDateFields(sub),
+              ...periodFields,
               ...subPlanFields,
             },
           });
@@ -238,6 +245,12 @@ export async function POST(req: NextRequest) {
             action: "update",
             changes: {
               subscriptionStatus: { before: null, after: sub.status },
+              ...(periodFields.nextBillingDate
+                ? { nextBillingDate: { before: null, after: periodFields.nextBillingDate } }
+                : {}),
+              ...(periodFields.trialEndsAt
+                ? { trialEndsAt: { before: null, after: periodFields.trialEndsAt } }
+                : {}),
               _source: { before: null, after: { event: event.type, subscriptionId: sub.id } },
             },
           });

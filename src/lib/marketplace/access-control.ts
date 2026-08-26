@@ -10,6 +10,7 @@
  * Si retorna `hasAccess=false`, redirigir a `/marketplace?expired=true`.
  */
 import { prisma } from "@/lib/prisma";
+import { daysUntil, isInTrial } from "@/lib/plan-status";
 import {
   evaluateAccess,
   type ClinicAccessSnapshot,
@@ -31,6 +32,7 @@ export async function canAccessModule(
     where: { id: clinicId },
     select: {
       trialEndsAt: true,
+      subscriptionStatus: true,
       clinicModules: {
         select: {
           status: true,
@@ -47,6 +49,7 @@ export async function canAccessModule(
 
   const snapshot: ClinicAccessSnapshot = {
     trialEndsAt: clinic.trialEndsAt,
+    subscriptionStatus: clinic.subscriptionStatus,
     modules: clinic.clinicModules.map((cm) => ({
       moduleKey: cm.module.key,
       status: cm.status,
@@ -81,14 +84,15 @@ export async function hasAnyActiveSpecialtyModule(clinicId: string): Promise<boo
 
   const clinic = await prisma.clinic.findUnique({
     where: { id: clinicId },
-    select: { trialEndsAt: true },
+    select: { trialEndsAt: true, subscriptionStatus: true },
   });
   if (!clinic) return false;
 
-  const inTrial = clinic.trialEndsAt.getTime() > Date.now();
-  if (inTrial) return true;
-
   const now = new Date();
+  // Trial/cortesía vigente (plan-status): la fecha sola no basta — una
+  // clínica que paga tiene trialEndsAt en el futuro y NO está en trial.
+  if (isInTrial(clinic, now)) return true;
+
   const active = await prisma.clinicModule.findFirst({
     where: {
       clinicId,
@@ -114,16 +118,19 @@ export async function getTrialStatus(
 ): Promise<TrialStatus | null> {
   const clinic = await prisma.clinic.findUnique({
     where: { id: clinicId },
-    select: { trialStartedAt: true, trialEndsAt: true },
+    select: { trialStartedAt: true, trialEndsAt: true, subscriptionStatus: true },
   });
   if (!clinic) return null;
 
+  // "Expirado" aquí = NO hay trial/cortesía vigente (plan-status). Para una
+  // clínica que paga es true desde el primer día: su marketplace muestra los
+  // módulos comprados y bloquea el resto, no "todo en prueba".
   const now = new Date();
-  const msLeft = clinic.trialEndsAt.getTime() - now.getTime();
+  const inTrial = isInTrial(clinic, now);
   return {
     trialStartedAt: clinic.trialStartedAt,
     trialEndsAt: clinic.trialEndsAt,
-    daysLeft: Math.max(0, Math.ceil(msLeft / 86400000)),
-    isExpired: msLeft <= 0,
+    daysLeft: inTrial ? Math.max(0, daysUntil(clinic.trialEndsAt, now) ?? 0) : 0,
+    isExpired: !inTrial,
   };
 }

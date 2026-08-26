@@ -395,6 +395,61 @@ export function nextBillingDateFields(sub: unknown): { nextBillingDate?: Date } 
   return periodEnd ? { nextBillingDate: new Date(periodEnd * 1000) } : {};
 }
 
+/**
+ * Statuses de Stripe con los que el fin de periodo reportado es un periodo
+ * CON DERECHO A ACCESO: pagado (`active`) o en trial de Stripe (`trialing`).
+ */
+export const PERIOD_GRANTING_STATUSES = new Set(["active", "trialing"]);
+
+/**
+ * Campos de fecha a escribir desde un evento `customer.subscription.*`.
+ *
+ *   • `nextBillingDate` — siempre que Stripe reporte el fin de periodo
+ *     (informativo: cuándo intenta cobrar).
+ *   • `trialEndsAt` — el "acceso hasta" del gate (isPlanExpired). Se mueve al
+ *     MISMO valor SOLO si la suscripción está active/trialing. Antes de esto la
+ *     renovación movía nextBillingDate y dejaba trialEndsAt congelado en la
+ *     contratación: con `active` no bloqueaba, pero un `past_due` de un
+ *     reintento sacaba a la clínica al instante con el periodo pagado, y
+ *     /admin la pintaba "Expirada" estando al corriente.
+ *
+ * Por qué NO en past_due / unpaid / canceled / incomplete: ahí el periodo que
+ * Stripe abre NO está pagado. Un `unpaid` sigue rodando periodos cada mes;
+ * mover el acceso con cada uno regalaría acceso eterno a quien no paga. La
+ * renovación normal llega con `active` (Stripe avanza el periodo ANTES de
+ * intentar el cobro), así que un cobro fallido deja como mucho ese periodo de
+ * gracia y el siguiente ya no se concede.
+ *
+ * Devuelve `{}` (no toca ninguna columna) cuando no hay fin de periodo.
+ */
+export function subscriptionPeriodFields(sub: unknown): { nextBillingDate?: Date; trialEndsAt?: Date } {
+  const next = nextBillingDateFields(sub);
+  if (!next.nextBillingDate) return {};
+  const status = (sub as { status?: string | null } | null | undefined)?.status ?? null;
+  if (status !== null && PERIOD_GRANTING_STATUSES.has(status)) {
+    return { nextBillingDate: next.nextBillingDate, trialEndsAt: next.nextBillingDate };
+  }
+  return next;
+}
+
+/**
+ * Campos de fecha a escribir cuando un pago MANUAL (transferencia verificada,
+ * alta desde /admin, factura marcada pagada) fija un nuevo fin de periodo.
+ *
+ * `nextBillingDate` = el periodo que se acaba de fijar. `trialEndsAt` (acceso
+ * hasta) = `manualPaidUntil`: el MÁXIMO entre lo que ya tenía y el periodo
+ * nuevo, para que activar a mano nunca ACORTE una cortesía o un prepago
+ * anterior, y para que deje de quedarse meses atrás de nextBillingDate (lo
+ * que obligaba a manualPaidUntil y al cron SUB-01 a mirar las dos columnas).
+ */
+export function manualPeriodFields(
+  current: { trialEndsAt?: Date | string | null } | null | undefined,
+  periodEnd: Date,
+): { nextBillingDate: Date; trialEndsAt: Date } {
+  const paidUntil = manualPaidUntil({ trialEndsAt: current?.trialEndsAt ?? null, nextBillingDate: periodEnd });
+  return { nextBillingDate: periodEnd, trialEndsAt: paidUntil ?? periodEnd };
+}
+
 // ── Preview de la factura de prorrateo ──────────────────────────────────────
 
 export interface ChangePlanPreviewLine {

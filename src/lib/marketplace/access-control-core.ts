@@ -4,6 +4,7 @@
  *
  * El wrapper que lee de DB vive en ./access-control.ts.
  */
+import { isInTrial } from "@/lib/plan-status";
 
 export type ModuleAccessReason =
   | "trial"           // dentro de los 14 días de trial
@@ -20,6 +21,13 @@ export interface ModuleAccess {
 /** Subset de los datos de la clínica necesarios para decidir acceso. */
 export interface ClinicAccessSnapshot {
   trialEndsAt: Date;
+  /**
+   * Sin él, la fecha sola decide (trial legado). Con suscripción viva
+   * (active/trialing/paid) la clínica NO está en trial aunque trialEndsAt
+   * esté en el futuro: para quien paga, trialEndsAt es el fin del periodo
+   * pagado (= nextBillingDate), no un trial. Ver src/lib/plan-status.ts.
+   */
+  subscriptionStatus?: string | null;
   modules: Array<{
     moduleKey: string;
     status: string;          // "active" | "trial" | "paused" | "cancelled"
@@ -32,9 +40,12 @@ export interface ClinicAccessSnapshot {
  * clínica puede acceder al módulo. Inyecta `now` para tests.
  *
  * Política:
- *   - Durante trial (now < trialEndsAt): acceso a TODO.
- *   - Post-trial: solo si ClinicModule.status === 'active' &&
- *     currentPeriodEnd > now.
+ *   - Durante trial/cortesía VIGENTE (isInTrial: periodo por delante y SIN
+ *     suscripción viva): acceso a TODO.
+ *   - Si no: solo si ClinicModule.status === 'active' && currentPeriodEnd > now.
+ *     Una clínica que PAGA cae aquí desde el primer día: su trialEndsAt es el
+ *     fin del periodo pagado, no un trial (antes la fecha sola le abría todo
+ *     el marketplace durante su primer mes).
  */
 export function evaluateAccess(
   snapshot: ClinicAccessSnapshot | null,
@@ -45,7 +56,7 @@ export function evaluateAccess(
     return { hasAccess: false, reason: "unknown_clinic" };
   }
 
-  if (now < snapshot.trialEndsAt) {
+  if (isInTrial(snapshot, now)) {
     return { hasAccess: true, reason: "trial" };
   }
 

@@ -1,7 +1,7 @@
 import { CheckCircle2, Loader2 } from "lucide-react";
 import { getCurrentUser } from "@/lib/auth";
 import { getServerT } from "@/i18n/server";
-import { ACTIVE_SUBSCRIPTION_STATUSES } from "@/lib/plan-status";
+import { isPlanExpired } from "@/lib/plan-status";
 import { ConfirmingPoll } from "./confirming-poll";
 
 export const dynamic = "force-dynamic";
@@ -28,12 +28,10 @@ export default async function SuspendedSuccessPage({ searchParams }: PageProps) 
   const clinic = user.clinic;
   const sessionId = searchParams?.session_id ?? null;
 
-  const subscriptionStatus = (clinic as { subscriptionStatus?: string | null }).subscriptionStatus ?? null;
-  const subscriptionActive =
-    subscriptionStatus !== null && ACTIVE_SUBSCRIPTION_STATUSES.has(subscriptionStatus);
-  const trialEndsAt = clinic.trialEndsAt ? new Date(clinic.trialEndsAt) : null;
-  const trialActive = !!trialEndsAt && trialEndsAt > new Date();
-  const isActivated = subscriptionActive || trialActive;
+  // "Activada" = exactamente lo contrario de lo que bloquea el gate
+  // (isPlanExpired): suscripción viva O periodo por delante. Misma fuente que
+  // el layout, sin recalcular la fecha a mano.
+  const isActivated = !isPlanExpired(clinic);
 
   return (
     <div className="mx-auto flex min-h-[60vh] max-w-xl flex-col items-center justify-center px-4 py-16 text-center">

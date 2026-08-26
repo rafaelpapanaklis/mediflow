@@ -4,11 +4,11 @@ import { prisma } from "@/lib/prisma";
 import { CardNew }  from "@/components/ui/design-system/card-new";
 import { BadgeNew } from "@/components/ui/design-system/badge-new";
 import { formatRelativeDate } from "@/lib/format";
+import { daysUntil, isInTrial } from "@/lib/plan-status";
 
 export default async function ChurnPage() {
   const now   = new Date();
   const prev7 = new Date(now); prev7.setDate(prev7.getDate()-7);
-  const next3 = new Date(now); next3.setDate(next3.getDate()+3);
 
   const allClinics = await prisma.clinic.findMany({
     include: {
@@ -22,16 +22,18 @@ export default async function ChurnPage() {
     const last = c.users[0]?.lastLogin;
     return last && new Date(last) < prev7 && c.subscriptionStatus === "active";
   });
+  // "En trial" = trial/cortesía vigente SIN suscripción viva (plan-status):
+  // una clínica que paga no es un trial por vencer aunque su periodo pagado
+  // termine en 3 días.
   const trialExpiring = allClinics.filter(c => {
-    if (!c.trialEndsAt) return false;
-    const d = new Date(c.trialEndsAt);
-    return d > now && d < next3;
+    if (!isInTrial(c, now)) return false;
+    const days = daysUntil(c.trialEndsAt, now);
+    return days !== null && days <= 3;
   });
   const inactiveTrial = allClinics
     .filter(c => {
-      const isTrial = c.trialEndsAt && new Date(c.trialEndsAt) > now;
-      const last    = c.users[0]?.lastLogin;
-      return isTrial && (!last || new Date(last) < prev7);
+      const last = c.users[0]?.lastLogin;
+      return isInTrial(c, now) && (!last || new Date(last) < prev7);
     })
     // Orden determinista: el trial mas proximo a vencer arriba; tiebreaker
     // por createdAt desc para que renders consecutivos sean estables.

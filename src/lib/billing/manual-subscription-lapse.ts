@@ -59,10 +59,13 @@ export const MANUAL_LAPSE_STATUS = "past_due";
  *
  * Que hagan falta los dos no es redundante:
  *   • el webhook de SPEI/OXXO mueve los DOS al mismo valor,
- *   • pero /admin/billing (verify_payment y activate_clinic) mueve SOLO
- *     nextBillingDate y deja trialEndsAt como estaba (normalmente pasado).
+ *   • /admin/billing (verify_payment y activate_clinic) y /admin/subscriptions
+ *     mueven hoy los dos (manualPeriodFields: trialEndsAt nunca hacia atrás),
+ *     pero las filas activadas ANTES de ese cambio siguen con trialEndsAt
+ *     viejo hasta que corra el backfill sql/sub-02-renovacion-*.sql.
  * Mirar solo nextBillingDate suspendería a quien tenga trial vivo por delante;
- * mirar solo trialEndsAt suspendería a toda clínica activada desde /admin.
+ * mirar solo trialEndsAt suspendería a toda clínica activada desde /admin
+ * antes del backfill.
  */
 export type LapseCandidate = {
   subscriptionStatus?: string | null;

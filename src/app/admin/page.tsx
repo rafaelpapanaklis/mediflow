@@ -15,6 +15,8 @@ import { ButtonNew } from "@/components/ui/design-system/button-new";
 import { BadgeNew }  from "@/components/ui/design-system/badge-new";
 import { AvatarNew } from "@/components/ui/design-system/avatar-new";
 import { KpiCard }   from "@/components/ui/design-system/kpi-card";
+import { PlanStatusBadge } from "@/components/admin/plan-status-badge";
+import { getPlanStatus, isInTrial, isPlanExpired } from "@/lib/plan-status";
 
 export const metadata: Metadata = { title: "Super Admin — DaleControl" };
 
@@ -106,8 +108,13 @@ async function renderAdminDashboard() {
     loadPlanPrices(),
   ]);
 
-  const trialClinics   = allClinics.filter(c => c.trialEndsAt && new Date(c.trialEndsAt) > now);
-  const expiredClinics = allClinics.filter(c => c.trialEndsAt && new Date(c.trialEndsAt) < now && c.subscriptionStatus !== "active");
+  // Misma regla que el gate (src/lib/plan-status.ts): "en trial" = periodo por
+  // delante SIN suscripción viva; "vencida" = isPlanExpired. Antes se comparaba
+  // trialEndsAt contra hoy a ojo y una clínica AL CORRIENTE con la fecha vieja
+  // salía como "Expirado" (y una que paga con fecha por delante, como "trial").
+  const trialClinics   = allClinics.filter(c => isInTrial(c, now));
+  const expiredClinics = allClinics.filter(c => isPlanExpired(c, now));
+  const pastDueClinics = allClinics.filter(c => getPlanStatus(c, now).kind === "past_due");
   const activeClinics  = allClinics.filter(c => c.subscriptionStatus === "active");
   const churnRisk      = allClinics.filter(c => {
     const last = c.users[0]?.lastLogin;
@@ -207,9 +214,12 @@ async function renderAdminDashboard() {
         <CardNew>
           <div style={{ fontSize: 11, color: "var(--text-3)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: 8, display: "flex", alignItems: "center", gap: 6 }}>
             <span style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--danger)" }} />
-            Trial expirado
+            Vencidas
           </div>
           <div style={{ fontSize: 28, fontWeight: 600, color: "var(--text-1)" }}>{expiredClinics.length}</div>
+          <div style={{ fontSize: 11, color: "var(--text-3)", marginTop: 4 }}>
+            {pastDueClinics.length} con cobro fallido (aún con acceso)
+          </div>
         </CardNew>
       </div>
 
@@ -269,8 +279,8 @@ async function renderAdminDashboard() {
           </CardNew>
 
           <CardNew
-            title="Trial expirado"
-            sub="No convirtieron"
+            title="Vencidas"
+            sub="Sin acceso al panel hoy"
             action={<XCircle size={16} style={{ color: "var(--text-3)" }} />}
           >
             {expiredClinics.length === 0 ? (
@@ -371,10 +381,6 @@ async function renderAdminDashboard() {
           </thead>
           <tbody>
             {allClinics.slice(0, 10).map(clinic => {
-              const isActive  = clinic.subscriptionStatus === "active";
-              const isTrial   = clinic.trialEndsAt && new Date(clinic.trialEndsAt) > now;
-              const isExpired = clinic.trialEndsAt && new Date(clinic.trialEndsAt) < now && !isActive;
-              const trialDays = clinic.trialEndsAt ? Math.ceil((new Date(clinic.trialEndsAt).getTime() - now.getTime()) / (1000 * 60 * 60 * 24)) : null;
               return (
                 <tr key={clinic.id}>
                   <td>
@@ -398,10 +404,15 @@ async function renderAdminDashboard() {
                   </td>
                   <td className="mono" style={{ color: "var(--text-2)" }}>{clinic._count.patients}</td>
                   <td>
-                    {isActive  && <BadgeNew tone="success" dot>Activa</BadgeNew>}
-                    {isTrial   && <BadgeNew tone="warning" dot>Trial {trialDays}d</BadgeNew>}
-                    {isExpired && <BadgeNew tone="danger" dot>Expirado</BadgeNew>}
-                    {!isActive && !isTrial && !isExpired && <BadgeNew tone="neutral">Sin plan</BadgeNew>}
+                    {/* Solo los 3 campos que la regla necesita: la fila entera no viaja al navegador. */}
+                    <PlanStatusBadge
+                      now={now}
+                      clinic={{
+                        trialEndsAt: clinic.trialEndsAt,
+                        subscriptionStatus: clinic.subscriptionStatus,
+                        nextBillingDate: clinic.nextBillingDate,
+                      }}
+                    />
                   </td>
                   <td className="mono" style={{ color: "var(--text-3)" }}>
                     {formatRelativeDate(clinic.createdAt)}

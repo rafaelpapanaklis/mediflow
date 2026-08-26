@@ -16,7 +16,9 @@ export default async function AdminClinicsPage() {
       id: true, name: true, slug: true, specialty: true, country: true,
       plan: true, trialEndsAt: true, createdAt: true,
       aiTokensUsed: true, aiTokensLimit: true, aiLastResetAt: true,
-      subscriptionStatus: true,
+      // subscriptionStatus + nextBillingDate: lo que la insignia de estado de
+      // plan (plan-status) necesita para "Al corriente · renueva el …".
+      subscriptionStatus: true, nextBillingDate: true,
       paymentMethodCollected: true, paymentMethodType: true, paymentMethodLast4: true,
       cancelRequested: true, cancelRequestedAt: true,
       state: true, clinicSize: true,

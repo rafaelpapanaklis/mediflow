@@ -9,12 +9,14 @@
  *
  * Reglas — espejo de `evaluateAccess` en
  * `lib/marketplace/access-control-core.ts`:
- *   - Trial vigente (now < trialEndsAt): se devuelven TODAS las keys de
+ *   - Trial/cortesía VIGENTE (isInTrial de plan-status: periodo por delante
+ *     y SIN suscripción viva): se devuelven TODAS las keys de
  *     `SPECIALTY_MODULE_KEYS`. Un consumidor que haga
  *     `keys.includes(PERIODONTICS_MODULE_KEY)` recibe `true` exactamente
  *     igual que `canAccessModule(...).hasAccess` en trial.
- *   - Post-trial: solo las filas con `status='active'` Y
- *     `currentPeriodEnd > now`.
+ *   - Si no (incluida la clínica que PAGA, cuyo trialEndsAt es el fin del
+ *     periodo pagado y no un trial): solo las filas con `status='active'` Y
+ *     `currentPeriodEnd > now`, y los módulos del panel según su plan.
  *   - Clínica inexistente: `[]`.
  *
  * El consumidor decide la categoría (DENTAL vs MEDICINE) — esta función no
@@ -32,6 +34,7 @@ import {
 } from "@/lib/specialties/keys";
 import { getResolvedPlan } from "@/lib/plans";
 import { PLAN_MODULE_KEYS } from "@/lib/plan-shared";
+import { isInTrial } from "@/lib/plan-status";
 
 /**
  * Universo de keys consideradas "especialidad clínica" en el sidebar y
@@ -57,6 +60,7 @@ export async function getActiveClinicModuleKeys(
     select: {
       plan: true,
       trialEndsAt: true,
+      subscriptionStatus: true,
       clinicModules: {
         where: {
           status: "active",
@@ -70,7 +74,7 @@ export async function getActiveClinicModuleKeys(
 
   if (!clinic) return [];
 
-  const inTrial = clinic.trialEndsAt.getTime() > now.getTime();
+  const inTrial = isInTrial(clinic, now);
 
   // Especialidades del marketplace (lógica previa intacta).
   const specialtyKeys = inTrial
@@ -99,6 +103,8 @@ export async function getActiveClinicModuleKeys(
  */
 export interface ClinicModulesSnapshot {
   trialEndsAt: Date;
+  /** Con suscripción viva la clínica NO está en trial (ver plan-status). */
+  subscriptionStatus?: string | null;
   modules: Array<{
     moduleKey: string;
     status: string;
@@ -111,7 +117,7 @@ export function deriveActiveClinicModuleKeys(
   now: Date = new Date(),
 ): string[] {
   if (!snapshot) return [];
-  if (snapshot.trialEndsAt.getTime() > now.getTime()) {
+  if (isInTrial(snapshot, now)) {
     return [...SPECIALTY_MODULE_KEYS];
   }
   return snapshot.modules

@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { daysUntil, isInTrial } from "@/lib/plan-status";
 import {
   loadClinicSession,
   requireRole,
@@ -30,7 +31,7 @@ export async function GET(req: NextRequest) {
       aggregateAdminPeriodKpis(period, session.clinic.id, session.clinic.timezone),
       aggregatePreviousPeriodKpis(period, session.clinic.id, session.clinic.timezone),
       buildRevenueSeries(session.clinic.id, session.clinic.timezone),
-      buildAlerts(session.clinic.id, session.clinic.trialEndsAt ?? null),
+      buildAlerts(session.clinic.id, session.clinic),
       buildTeamPerformance(period, session.clinic.id, session.clinic.timezone, session.clinic.category),
     ]);
 
@@ -233,7 +234,10 @@ async function buildRevenueSeries(
   return out;
 }
 
-async function buildAlerts(clinicId: string, trialEndsAt: Date | null): Promise<HomeAdminAlert[]> {
+async function buildAlerts(
+  clinicId: string,
+  clinic: { trialEndsAt: Date | null; subscriptionStatus: string | null },
+): Promise<HomeAdminAlert[]> {
   const alerts: HomeAdminAlert[] = [];
 
   // Inventario bajo (quantity <= minQuantity)
@@ -291,18 +295,18 @@ async function buildAlerts(clinicId: string, trialEndsAt: Date | null): Promise<
     /* skip — la alerta se omite, no rompemos el endpoint */
   }
 
-  // Trial vencimiento — recibimos trialEndsAt del session.clinic (loadClinicSession
-  // ya hace include: { clinic: true }), evitamos un findUnique redundante.
-  if (trialEndsAt) {
-    const days = Math.ceil((trialEndsAt.getTime() - Date.now()) / 86_400_000);
-    if (days > 0 && days <= 14) {
-      alerts.push({
-        id: "trial",
-        tone: days <= 3 ? "danger" : "warning",
-        title: `Prueba vence en ${days} día${days === 1 ? "" : "s"}`,
-        href: "/dashboard/settings?tab=subscription",
-      });
-    }
+  // Trial vencimiento — SOLO con trial/cortesía VIGENTE (fuente única
+  // plan-status). Una clínica que PAGA tiene trialEndsAt = fin del periodo
+  // pagado y no debe leer "Prueba vence en N días" cada mes. Los datos vienen
+  // de session.clinic (loadClinicSession), sin findUnique redundante.
+  const days = isInTrial(clinic) ? daysUntil(clinic.trialEndsAt) : null;
+  if (days !== null && days > 0 && days <= 14) {
+    alerts.push({
+      id: "trial",
+      tone: days <= 3 ? "danger" : "warning",
+      title: `Prueba vence en ${days} día${days === 1 ? "" : "s"}`,
+      href: "/dashboard/settings?tab=subscription",
+    });
   }
 
   return alerts;

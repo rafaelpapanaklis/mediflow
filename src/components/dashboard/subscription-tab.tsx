@@ -6,6 +6,7 @@ import toast from "react-hot-toast";
 import { Check, CreditCard, Download, ExternalLink, Loader2, Receipt, Sparkles } from "lucide-react";
 import { type PlanId, isPlanId } from "@/lib/billing/plans";
 import { cfdiBullet } from "@/lib/plan-shared";
+import { daysUntil, isInTrial as inTrialNow, isPlanExpired, isSubscriptionActive } from "@/lib/plan-status";
 import { PaymentMethodModal } from "./payment-method-modal";
 import { CfdiUsageCard } from "./cfdi-usage-card";
 import { useT } from "@/i18n/i18n-provider";
@@ -126,12 +127,11 @@ export function SubscriptionTab({ clinic }: Props) {
   const trialEndsAt = clinic.trialEndsAt ? new Date(clinic.trialEndsAt) : null;
   const now = new Date();
 
-  const subscriptionActive =
-    clinic.subscriptionStatus === "active" ||
-    clinic.subscriptionStatus === "paid" ||
-    clinic.subscriptionStatus === "trialing";
-  const isInTrial = !!trialEndsAt && trialEndsAt > now && !subscriptionActive;
-  const trialExpired = !!trialEndsAt && trialEndsAt < now && !subscriptionActive;
+  // Fuente única (src/lib/plan-status.ts): la misma regla que el gate del
+  // layout, no una copia a mano del conjunto de statuses ni de la fecha.
+  const subscriptionActive = isSubscriptionActive(clinic.subscriptionStatus);
+  const isInTrial = inTrialNow(clinic, now);
+  const trialExpired = isPlanExpired(clinic, now);
 
   // Clínica que paga a mano (SPEI/OXXO o activada por un admin) cuyo periodo YA
   // venció. Su `subscriptionStatus` se queda en "active" para siempre —nada la
@@ -151,8 +151,7 @@ export function SubscriptionTab({ clinic }: Props) {
 
   const { daysLeft, pct } = useMemo(() => {
     if (!trialEndsAt) return { daysLeft: 0, pct: 0 };
-    const msLeft = trialEndsAt.getTime() - now.getTime();
-    const left = Math.max(0, Math.ceil(msLeft / 86_400_000));
+    const left = Math.max(0, daysUntil(trialEndsAt, now) ?? 0);
     const used = Math.min(TRIAL_DAYS_TOTAL, TRIAL_DAYS_TOTAL - left);
     return { daysLeft: left, pct: Math.min(100, Math.round((used / TRIAL_DAYS_TOTAL) * 100)) };
     // eslint-disable-next-line react-hooks/exhaustive-deps

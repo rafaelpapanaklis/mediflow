@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { isAdminAuthed, getAdminSession } from "@/lib/admin-auth";
 import { logAdminClinicMutation } from "@/lib/admin-audit";
+import { manualPeriodFields } from "@/lib/billing/proration";
 
 export async function POST(req: NextRequest) {
   const admin = await getAdminSession();
@@ -28,13 +29,19 @@ export async function POST(req: NextRequest) {
     include: { clinic: { select: { name: true } } },
   });
 
-  // If paid, update clinic subscription status
+  // If paid, update clinic subscription status. trialEndsAt (el "acceso
+  // hasta" del gate) se mueve junto con nextBillingDate — nunca hacia atrás
+  // (ver manualPeriodFields).
   if (status === "paid") {
+    const current = await prisma.clinic.findUnique({
+      where: { id: clinicId },
+      select: { trialEndsAt: true },
+    });
     await prisma.clinic.update({
       where: { id: clinicId },
       data: {
         subscriptionStatus: "active",
-        nextBillingDate:    new Date(periodEnd),
+        ...manualPeriodFields(current, new Date(periodEnd)),
       },
     });
   }

@@ -23,6 +23,8 @@ import { ClinicAccountManagerBlock } from "@/components/admin/clinic-account-man
 import { ClinicPaymentMethodCard, type ClinicRecurringCharge } from "@/components/admin/clinic-payment-method-card";
 import type { AccountManagerDTO } from "@/lib/account-manager/types";
 import type { StripeLivePaymentMethod } from "@/lib/admin/stripe-payment-method";
+import { daysUntil, getPlanStatus } from "@/lib/plan-status";
+import { PlanStatusBadge } from "@/components/admin/plan-status-badge";
 
 /** Lo que ESTA clínica nos ha pagado por su suscripción (subscription_invoices). */
 export interface PlatformPayments {
@@ -124,8 +126,20 @@ export function AdminClinicDetailClient({
     })();
   }, [tab, notesLoaded, clinic.id]);
 
-  const expired   = clinic.trialEndsAt && new Date(clinic.trialEndsAt) < new Date();
-  const daysLeft  = clinic.trialEndsAt ? Math.ceil((new Date(clinic.trialEndsAt).getTime() - Date.now()) / 86400000) : null;
+  // Estado de plan con la MISMA regla que el gate de /dashboard y /api
+  // (src/lib/plan-status.ts). Antes se comparaba trialEndsAt contra hoy a ojo,
+  // sin mirar subscriptionStatus, y una clínica AL CORRIENTE con la fecha de
+  // la contratación sin mover salía con la insignia roja "Expirado".
+  const planStatus = getPlanStatus(clinic);
+  const expired    = planStatus.expired;
+  const daysLeft   = planStatus.daysLeft;
+  // trialEndsAt (acceso hasta) atrasado respecto al próximo cobro con la
+  // suscripción viva: la fila es anterior al fix de la renovación y le toca el
+  // backfill sql/sub-02-renovacion-*.sql. Se avisa, no se decide nada con ello.
+  const accessLag  =
+    planStatus.kind === "active" && planStatus.nextBillingDate && planStatus.periodEnd
+      ? (daysUntil(planStatus.nextBillingDate) ?? 0) - (daysLeft ?? 0)
+      : 0;
   const owner     = clinic.users[0];
   // Dueño-cliente (cuenta SUPER_ADMIN) para enlazar al CRM de clientes.
   const clienteOwner = (clinic.users || []).find((u: any) => u.role === "SUPER_ADMIN") || owner;
@@ -151,7 +165,11 @@ export function AdminClinicDetailClient({
   async function extendTrial(days: number) {
     setSaving(true);
     try {
-      const base = expired ? new Date() : (clinic.trialEndsAt ? new Date(clinic.trialEndsAt) : new Date());
+      // Extiende desde el fin del periodo si aún está por delante; si ya pasó,
+      // desde hoy. Sale de plan-status, no de una comparación propia.
+      const base = daysLeft !== null && daysLeft > 0 && planStatus.periodEnd
+        ? new Date(planStatus.periodEnd)
+        : new Date();
       base.setDate(base.getDate() + days);
       await fetch(`/api/admin/clinics/${clinic.id}`, {
         method: "PATCH",
@@ -306,9 +324,7 @@ export function AdminClinicDetailClient({
             <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6, flexWrap: "wrap" }}>
               <h1 style={{ fontSize: 20, margin: 0, color: "var(--text-1)", fontWeight: 600 }}>{clinic.name}</h1>
               <BadgeNew tone={planTone(clinic.plan)}>{clinic.plan}</BadgeNew>
-              <BadgeNew tone={expired ? "danger" : "success"} dot>
-                {expired ? "Expirado" : (daysLeft !== null ? `${daysLeft}d activo` : "Activo")}
-              </BadgeNew>
+              <PlanStatusBadge clinic={clinic} />
             </div>
             <div style={{ display: "flex", gap: 20, fontSize: 12, color: "var(--text-2)", flexWrap: "wrap" }}>
               <span>{clinic.specialty}</span>
@@ -441,7 +457,7 @@ export function AdminClinicDetailClient({
                 </div>
 
                 <div className="field-new">
-                  <label className="field-new__label">Vencimiento actual</label>
+                  <label className="field-new__label">Acceso hasta (trialEndsAt)</label>
                   <div
                     style={{
                       background: "var(--bg-elev)",
@@ -457,16 +473,23 @@ export function AdminClinicDetailClient({
                     }}
                   >
                     <span>
-                      {clinic.trialEndsAt
-                        ? new Date(clinic.trialEndsAt).toLocaleDateString("es-MX", { day: "numeric", month: "long", year: "numeric" })
+                      {planStatus.periodEnd
+                        ? planStatus.periodEnd.toLocaleDateString("es-MX", { day: "numeric", month: "long", year: "numeric" })
                         : "Sin fecha"}
                     </span>
-                    {daysLeft !== null && (
-                      <BadgeNew tone={expired ? "danger" : "success"}>
-                        {expired ? "Expirado" : `${daysLeft} días restantes`}
-                      </BadgeNew>
-                    )}
+                    <PlanStatusBadge clinic={clinic} />
                   </div>
+                  {planStatus.nextBillingDate && (
+                    <div style={{ fontSize: 11, color: "var(--text-3)", marginTop: 6 }}>
+                      Próximo cobro (nextBillingDate):{" "}
+                      {planStatus.nextBillingDate.toLocaleDateString("es-MX", { day: "numeric", month: "long", year: "numeric" })}
+                      {accessLag > 1 && (
+                        <span style={{ color: "var(--warning)", fontWeight: 600 }}>
+                          {" "}· acceso-hasta va {accessLag} días atrás del cobro: fila anterior al fix, corre sql/sub-02-renovacion-trialEndsAt-update.sql
+                        </span>
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 <ButtonNew variant="primary" onClick={updatePlan} disabled={saving}>

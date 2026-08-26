@@ -3,10 +3,21 @@ import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { getAdminMrr, mrrBreakdownHint, EMPTY_MRR } from "@/lib/admin/mrr";
 import { comparePaymentDateDesc } from "@/lib/admin/payment-date";
+import { isInTrial, isPlanExpired } from "@/lib/plan-status";
 import { PaymentsClient } from "./payments-client";
 
 /** Tope de la pestaña "Todos los pagos". */
 const RECENT_PAYMENTS_LIMIT = 100;
+
+/** Lo mínimo para clasificar el plan de una clínica con plan-status. */
+type PlanRow = {
+  id: string;
+  name: string;
+  plan: string;
+  email: string | null;
+  trialEndsAt: Date;
+  subscriptionStatus: string | null;
+};
 
 // Helpers que no fallan: si la query truena por (p. ej.) una tabla que no
 // existe todavía o un campo null raro, devolvemos valores seguros para que
@@ -92,20 +103,18 @@ async function renderPaymentsPage() {
   // verdad: si una fila entra en el top real, ningún otro registro de su propia
   // tanda la desplaza. Ordenar sólo en JS sobre "los 100 últimos por createdAt"
   // dejaría fuera un cobro viejo verificado hoy.
-  const [totalClinics, activeClinics, trialClinics, paidPayments, unpaidPayments, pendingTransfers] =
+  const [totalClinics, activeClinics, planRows, paidPayments, unpaidPayments, pendingTransfers] =
     await Promise.all([
       safe(prisma.clinic.count(), 0),
       safe(prisma.clinic.count({ where: { subscriptionStatus: "active" } }), 0),
-      // Antes: { in: ["trialing", null as any] } — Prisma no matchea NULL dentro
-      // de IN y en algunas versiones lanza error. Usamos OR explícito.
-      safe(prisma.clinic.count({
-        where: {
-          AND: [
-            { OR: [{ subscriptionStatus: "trialing" }, { subscriptionStatus: null }] },
-            { trialEndsAt: { gt: now } },
-          ],
-        },
-      }), 0),
+      // Estado de plan de TODAS las clínicas con la MISMA regla que el gate
+      // (src/lib/plan-status.ts). Antes eran tres `where` escritos a ojo
+      // (`trialEndsAt < now` + `not: "active"`) que no coincidían con
+      // isPlanExpired: "trialing"/"paid" salían como vencidas y una cancelada
+      // con periodo por delante también.
+      safe(prisma.clinic.findMany({
+        select: { id: true, name: true, plan: true, email: true, trialEndsAt: true, subscriptionStatus: true },
+      }) as Promise<PlanRow[]>, [] as PlanRow[]),
       safe(prisma.subscriptionInvoice.findMany({
         where: { paidAt: { not: null } },
         orderBy: { paidAt: "desc" },
@@ -131,22 +140,18 @@ async function renderPaymentsPage() {
     .sort(comparePaymentDateDesc)
     .slice(0, RECENT_PAYMENTS_LIMIT);
 
-  const [expiredClinics, overdueClinics, thisMonthRev, prevMonthRev] =
+  // Trial/cortesía vigente y VENCIDAS de verdad (las que el gate bloquea hoy),
+  // la vencida más reciente arriba.
+  const trialClinics   = planRows.filter((c) => isInTrial(c, now)).length;
+  const expiredRows    = planRows.filter((c) => isPlanExpired(c, now));
+  const expiredClinics = expiredRows.length;
+  const overdueClinics = expiredRows
+    .slice()
+    .sort((a, b) => new Date(b.trialEndsAt).getTime() - new Date(a.trialEndsAt).getTime())
+    .slice(0, 50);
+
+  const [thisMonthRev, prevMonthRev] =
     await Promise.all([
-      safe(prisma.clinic.count({
-        where: {
-          OR: [
-            { subscriptionStatus: "cancelled" },
-            { trialEndsAt: { lt: now }, subscriptionStatus: { not: "active" } },
-          ],
-        },
-      }), 0),
-      safe(prisma.clinic.findMany({
-        where: { subscriptionStatus: { not: "active" }, trialEndsAt: { lt: now } },
-        select: { id: true, name: true, plan: true, email: true, trialEndsAt: true },
-        orderBy: { trialEndsAt: "desc" },
-        take: 50,
-      }), [] as any[]),
       safe(prisma.subscriptionInvoice.aggregate({
         where: { status: "paid", paidAt: { gte: firstOfMonth } },
         _sum: { amount: true },
