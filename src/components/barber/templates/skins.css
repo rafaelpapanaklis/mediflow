@@ -2476,3 +2476,2532 @@
 .dcbw-equipo-franja-in {
   padding-inline: max(var(--dcbw-lado), calc((100% - var(--dcbw-ancho)) / 2));
 }
+
+/* ═══════════════════════════════════════════════════════════════
+   15 · PLANTILLA 9 — ESTUDIO
+   Lateral fija con horario y reserva, contenido al lado, serif fina.
+   ═══════════════════════════════════════════════════════════════ */
+
+.dcbw-estudio {
+  /* Hueso y grafito. Tinta-2 da 7,3:1 sobre el hueso y tinta-3 5,3:1
+     (4,8:1 sobre la arena de la lateral): cuerpo y secundarios en AA. */
+  --dcbw-bg: #f2ede4;
+  --dcbw-bg-2: #e9e2d6;
+  --dcbw-tinta: #22211f;
+  --dcbw-tinta-2: #4f4c46;
+  --dcbw-tinta-3: #65615a;
+  --dcbw-borde: rgba(34, 33, 31, 0.14);
+  --dcbw-borde-fuerte: rgba(34, 33, 31, 0.3);
+  --dcbw-radio: 2px;
+  --dcbw-ancho: 920px;
+  /* cqi y no vw: en la vista previa del editor el ancho que manda es el
+     del marco, no el de la ventana. */
+  --dcbw-aire: clamp(52px, 7cqi, 92px);
+}
+
+.dcbw-estudio .dcbw-h1,
+.dcbw-estudio .dcbw-h2 {
+  font-family: var(--dcbw-serif);
+  font-weight: 400;
+  letter-spacing: -0.01em;
+}
+
+.dcbw-estudio .dcbw-h1 {
+  font-size: clamp(42px, 10cqi, 96px);
+  line-height: 0.98;
+}
+
+.dcbw-estudio .dcbw-h2 {
+  font-size: clamp(30px, 5cqi, 48px);
+  line-height: 1.06;
+}
+
+/* Kickers en grafito y no en el acento: un caramelo sobre hueso no pasa
+   AA a 12 px. El acento queda para el botón, el filete y las estrellas. */
+.dcbw-estudio .dcbw-kicker {
+  font-size: 11.5px;
+  font-weight: 500;
+  letter-spacing: 0.2em;
+  color: var(--dcbw-tinta-3);
+}
+
+.dcbw-estudio .dcbw-bajada {
+  font-family: var(--dcbw-serif);
+  font-style: italic;
+  font-size: clamp(16px, 1.7cqi, 19px);
+}
+
+.dcbw-estudio .dcbw-encabezado {
+  gap: 12px;
+  padding-top: 18px;
+  margin-bottom: clamp(32px, 4cqi, 48px);
+  border-top: 1px solid var(--dcbw-tinta);
+}
+
+.dcbw-estudio .dcbw-btn {
+  border-radius: 2px;
+  padding: 14px 24px;
+  font-size: 12.5px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.dcbw-estudio .dcbw-btn-fantasma {
+  border-color: var(--dcbw-borde-fuerte);
+  opacity: 1;
+}
+
+.dcbw-estudio .dcbw-btn-fantasma:hover {
+  border-color: var(--dcbw-tinta);
+  color: var(--dcbw-tinta);
+}
+
+.dcbw-estudio .dcbw-dato h3 {
+  font-weight: 500;
+  letter-spacing: 0.2em;
+  color: var(--dcbw-tinta-3);
+  margin-bottom: 8px;
+}
+
+.dcbw-estudio .dcbw-redes a {
+  width: 36px;
+  height: 36px;
+  border-radius: 2px;
+  border: 1px solid var(--dcbw-borde-fuerte);
+}
+
+.dcbw-estudio .dcbw-horario li {
+  padding: 6px 0;
+  border-bottom: 1px solid var(--dcbw-borde);
+}
+
+.dcbw-estudio .dcbw-horario .dcbw-horario-rango {
+  font-weight: 500;
+}
+
+.dcbw-es-enlace {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 30px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--dcbw-tinta);
+  border-bottom: 1px solid var(--dcbw-tinta);
+  transition: color 140ms ease, border-color 140ms ease;
+}
+
+.dcbw-es-enlace:hover {
+  color: var(--dcbw-acento);
+  border-color: var(--dcbw-acento);
+}
+
+/* ── El marco: una columna en el teléfono, dos a partir de 960 ─── */
+
+.dcbw-es-marco {
+  display: block;
+}
+
+.dcbw-es-contenido {
+  min-width: 0;
+}
+
+/* ── La lateral (cabecera compacta en el teléfono) ─────────────── */
+
+.dcbw-es-columna {
+  background: var(--dcbw-bg-2);
+  border-bottom: 1px solid var(--dcbw-borde);
+}
+
+.dcbw-es-lateral {
+  display: grid;
+  gap: 24px;
+  padding: 14px var(--dcbw-lado);
+}
+
+.dcbw-es-marca {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+}
+
+.dcbw-es-logo {
+  width: 44px;
+  height: 44px;
+  object-fit: contain;
+  border-radius: 2px;
+  flex: none;
+}
+
+.dcbw-es-marca-txt {
+  min-width: 0;
+}
+
+.dcbw-es-nombre {
+  font-family: var(--dcbw-serif);
+  font-size: 20px;
+  line-height: 1.1;
+  letter-spacing: -0.01em;
+  text-wrap: balance;
+}
+
+.dcbw-es-linea {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 12px;
+  margin-top: 4px;
+  font-size: 12.5px;
+  color: var(--dcbw-tinta-2);
+  font-variant-numeric: tabular-nums;
+}
+
+.dcbw-es-linea span {
+  max-width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dcbw-es-ficha {
+  display: none;
+}
+
+.dcbw-es-eslogan {
+  font-family: var(--dcbw-serif);
+  font-style: italic;
+  font-size: 17px;
+  line-height: 1.4;
+  color: var(--dcbw-tinta-2);
+  text-wrap: pretty;
+}
+
+.dcbw-es-horario {
+  display: grid;
+  gap: 3px;
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+}
+
+.dcbw-es-ficha .dcbw-dato + .dcbw-dato {
+  margin-top: 0;
+}
+
+.dcbw-es-ficha .dcbw-dato p {
+  font-size: 14.5px;
+}
+
+.dcbw-es-ficha .dcbw-es-enlace {
+  margin-top: 6px;
+}
+
+.dcbw-es-ficha .dcbw-redes {
+  margin-top: 0;
+}
+
+.dcbw-es-reserva {
+  display: grid;
+  gap: 8px;
+  padding-top: 24px;
+  border-top: 1px solid var(--dcbw-borde);
+}
+
+.dcbw-es-btn {
+  width: 100%;
+}
+
+.dcbw-es-nota {
+  margin-top: 6px;
+  font-size: 11px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  text-align: center;
+  color: var(--dcbw-tinta-3);
+}
+
+/* ── La barra de abajo (solo teléfono) ─────────────────────────── */
+
+.dcbw-es-barra {
+  position: sticky;
+  bottom: 0;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px var(--dcbw-lado);
+  padding-bottom: max(10px, env(safe-area-inset-bottom));
+  background: color-mix(in srgb, var(--dcbw-bg) 92%, transparent);
+  backdrop-filter: blur(12px);
+  border-top: 1px solid var(--dcbw-borde);
+}
+
+.dcbw-es-barra > span {
+  font-family: var(--dcbw-serif);
+  font-size: 17px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dcbw-es-barra .dcbw-btn {
+  min-height: 42px;
+  padding: 10px 18px;
+  flex: none;
+}
+
+/* ── Portada: el nombre en display y la foto ───────────────────── */
+
+.dcbw-es-hero {
+  display: grid;
+  gap: clamp(24px, 4cqi, 44px);
+  padding-top: clamp(28px, 5cqi, 64px);
+}
+
+.dcbw-es-hero-txt {
+  display: grid;
+  gap: 14px;
+}
+
+.dcbw-es-hero-txt::before {
+  content: "";
+  display: block;
+  width: 48px;
+  height: 1px;
+  margin-bottom: 6px;
+  background: var(--dcbw-acento);
+}
+
+.dcbw-es-hero-eslogan {
+  font-family: var(--dcbw-serif);
+  font-style: italic;
+  font-size: 18px;
+  color: var(--dcbw-tinta-2);
+  max-width: 40ch;
+  text-wrap: pretty;
+}
+
+.dcbw-es-hero-img,
+.dcbw-es-hero .dcbw-hueco {
+  width: 100%;
+  aspect-ratio: 4 / 5;
+  object-fit: cover;
+  border-radius: 0;
+}
+
+/* ── Servicios: lista con filetes ──────────────────────────────── */
+
+.dcbw-es-grupo + .dcbw-es-grupo {
+  margin-top: clamp(36px, 5cqi, 56px);
+}
+
+.dcbw-es-categoria {
+  margin-bottom: 10px;
+  font-size: 11.5px;
+  font-weight: 500;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--dcbw-tinta-3);
+}
+
+.dcbw-es-lista {
+  border-top: 1px solid var(--dcbw-borde);
+}
+
+.dcbw-es-lista li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas:
+    "nombre precio"
+    "meta cta"
+    "desc desc";
+  align-items: baseline;
+  gap: 4px 20px;
+  padding: 20px 0;
+  border-bottom: 1px solid var(--dcbw-borde);
+}
+
+.dcbw-es-servicio {
+  grid-area: nombre;
+  font-family: var(--dcbw-serif);
+  font-size: clamp(20px, 2.4cqi, 23px);
+  line-height: 1.2;
+}
+
+.dcbw-es-lista .dcbw-es-precio {
+  grid-area: precio;
+  font-size: 18px;
+  font-weight: 400;
+}
+
+.dcbw-es-lista .dcbw-es-duracion {
+  grid-area: meta;
+  font-variant-caps: all-small-caps;
+  letter-spacing: 0.1em;
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--dcbw-tinta-3);
+}
+
+.dcbw-es-lista .dcbw-es-cta {
+  grid-area: cta;
+  justify-self: end;
+}
+
+.dcbw-es-desc {
+  grid-area: desc;
+  font-size: 15px;
+  color: var(--dcbw-tinta-2);
+  max-width: 56ch;
+  text-wrap: pretty;
+}
+
+/* ── Equipo: retratos en blanco y negro ────────────────────────── */
+
+.dcbw-es-barberos {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 36px 20px;
+}
+
+.dcbw-es-barberos li {
+  display: grid;
+  align-content: start;
+  gap: 6px;
+}
+
+.dcbw-es-retrato {
+  width: 100%;
+  aspect-ratio: 4 / 5;
+  object-fit: cover;
+  margin-bottom: 10px;
+  filter: grayscale(1);
+  transition: filter 480ms ease;
+}
+
+.dcbw-es-barberos li:hover .dcbw-es-retrato {
+  filter: none;
+}
+
+.dcbw-es-inicial {
+  display: grid;
+  place-items: center;
+  background: var(--dcbw-bg-2);
+  border: 1px solid var(--dcbw-borde);
+  font-family: var(--dcbw-serif);
+  font-size: clamp(40px, 8cqi, 64px);
+  color: var(--dcbw-tinta-3);
+}
+
+.dcbw-es-barberos h3 {
+  font-family: var(--dcbw-serif);
+  font-size: 22px;
+  font-weight: 400;
+  line-height: 1.15;
+}
+
+.dcbw-es-apodo {
+  font-variant-caps: all-small-caps;
+  letter-spacing: 0.12em;
+  font-size: 15px;
+  color: var(--dcbw-tinta-3);
+}
+
+.dcbw-es-barberos .dcbw-bio {
+  font-size: 14.5px;
+}
+
+.dcbw-es-barberos .dcbw-es-enlace {
+  justify-self: start;
+  margin-top: 6px;
+}
+
+.dcbw-es-equipo-foto {
+  width: 100%;
+  aspect-ratio: 3 / 2;
+  object-fit: cover;
+  margin-top: clamp(36px, 6cqi, 64px);
+  border-radius: 0;
+}
+
+img.dcbw-es-equipo-foto {
+  filter: grayscale(1);
+}
+
+/* ── Portafolio: rejilla apretada, sin bordes redondeados ──────── */
+
+.dcbw-es-rejilla {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 2px;
+}
+
+.dcbw-es-rejilla img {
+  width: 100%;
+  aspect-ratio: 4 / 5;
+  object-fit: cover;
+  border-radius: 0;
+}
+
+/* ── Reseñas: cita en serif itálica, nombre en versalitas ──────── */
+
+.dcbw-es-citas {
+  display: grid;
+  gap: 36px 48px;
+}
+
+.dcbw-es-citas li {
+  display: grid;
+  align-content: start;
+  gap: 14px;
+  padding-top: 18px;
+  border-top: 1px solid var(--dcbw-borde);
+}
+
+.dcbw-es-citas blockquote {
+  font-family: var(--dcbw-serif);
+  font-style: italic;
+  font-size: clamp(18px, 2.2cqi, 22px);
+  line-height: 1.45;
+  text-wrap: pretty;
+}
+
+.dcbw-es-citas cite {
+  font-style: normal;
+  font-variant-caps: all-small-caps;
+  letter-spacing: 0.14em;
+  font-size: 15px;
+  color: var(--dcbw-tinta-2);
+}
+
+/* ── Contacto: el detalle (mapa + foto del local + datos) ──────── */
+
+.dcbw-es-contacto-marco {
+  display: grid;
+  gap: 40px;
+}
+
+.dcbw-es-contacto-txt .dcbw-dato + .dcbw-dato {
+  margin-top: 26px;
+}
+
+.dcbw-es-contacto-txt .dcbw-dato p {
+  font-size: 15.5px;
+}
+
+.dcbw-es-contacto-txt .dcbw-es-enlace {
+  margin-top: 8px;
+}
+
+.dcbw-es-tabla {
+  max-width: 360px;
+}
+
+.dcbw-es-contacto-acciones {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin-top: 28px;
+}
+
+.dcbw-es-contacto-acciones .dcbw-redes {
+  margin-top: 0;
+}
+
+.dcbw-es-contacto-visual {
+  display: grid;
+  align-content: start;
+  gap: 2px;
+}
+
+.dcbw-es-contacto-visual .dcbw-mapa {
+  min-height: 280px;
+  border-radius: 0;
+  filter: grayscale(1);
+}
+
+.dcbw-es-ambiente {
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+  border-radius: 0;
+}
+
+/* ── Medidas ───────────────────────────────────────────────────── */
+
+@container dcbw (min-width: 620px) {
+  .dcbw-es-barberos,
+  .dcbw-es-rejilla {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .dcbw-es-citas {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .dcbw-es-hero-img,
+  .dcbw-es-hero .dcbw-hueco {
+    aspect-ratio: 3 / 2;
+  }
+}
+
+/* A partir de 960: la lateral se queda quieta y el contenido scrollea.
+   La rejilla va en el marco (hijo de la raíz), nunca en `.dcbw-estudio`:
+   un elemento no puede consultar su propio contenedor. */
+@container dcbw (min-width: 960px) {
+  .dcbw-es-marco {
+    display: grid;
+    grid-template-columns: minmax(260px, 320px) minmax(0, 1fr);
+  }
+  .dcbw-es-columna {
+    border-bottom: 0;
+    border-right: 1px solid var(--dcbw-borde);
+  }
+  .dcbw-es-lateral {
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    align-self: start;
+    max-height: 100vh;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-width: thin;
+    gap: 28px;
+    padding: 40px 36px 36px;
+  }
+  .dcbw-es-marca {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 22px;
+  }
+  .dcbw-es-logo {
+    width: 64px;
+    height: 64px;
+  }
+  .dcbw-es-nombre {
+    font-size: 28px;
+  }
+  .dcbw-es-linea {
+    display: none;
+  }
+  .dcbw-es-ficha {
+    display: grid;
+    gap: 24px;
+  }
+  .dcbw-es-barra,
+  .dcbw-es-hero-eslogan {
+    display: none;
+  }
+  .dcbw-es-contacto-marco {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr);
+    align-items: start;
+    gap: 56px;
+  }
+  .dcbw-es-contacto-marco.dcbw-es-sin-visual,
+  .dcbw-es-contacto-marco.dcbw-es-sin-datos {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dcbw-es-retrato,
+  .dcbw-es-enlace {
+    transition: none;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   16 · PLANTILLA 10 — CARTA
+   Una hoja con marco doble, secciones numeradas I, II, III y todo
+   en dos columnas de menú con filete de puntos.
+
+   OJO: `.dcbw-carta` ya existe como PIEZA compartida —la lista
+   "nombre …… precio" de clásica (`ul.dcbw-carta`, regla
+   `.dcbw-carta li + li`)—. Por eso toda regla de esta piel cuelga de
+   `.dcbw.dcbw-carta` (la raíz lleva las dos clases y el `ul` de
+   clásica no): así nada de aquí alcanza a clásica, y la regla
+   compartida `li + li` se anula dentro de esta plantilla.
+   ═══════════════════════════════════════════════════════════════ */
+
+.dcbw.dcbw-carta {
+  --dcbw-bg: #1a1512;
+  --dcbw-bg-2: #211b17;
+  --dcbw-tinta: #efe6d4;
+  --dcbw-tinta-2: #bfb3a0;
+  --dcbw-tinta-3: #8d8172;
+  --dcbw-borde: rgba(239, 230, 212, 0.16);
+  --dcbw-borde-fuerte: rgba(239, 230, 212, 0.32);
+  --dcbw-radio: 0;
+  --dcbw-aire: clamp(36px, 5.5cqi, 64px);
+  --dcbw-lado: clamp(18px, 5cqi, 56px);
+  /* Serif también en el cuerpo: es una carta, no un sitio. */
+  font-family: var(--dcbw-serif);
+  /* Grano del papel oscuro: dos tramas finas y una luz arriba, en CSS. */
+  background-image:
+    radial-gradient(ellipse 90% 100% at 50% 0%, rgba(239, 230, 212, 0.05), transparent 70%),
+    repeating-linear-gradient(0deg, rgba(239, 230, 212, 0.02) 0 1px, transparent 1px 3px),
+    repeating-linear-gradient(90deg, rgba(0, 0, 0, 0.1) 0 1px, transparent 1px 5px);
+  background-size:
+    100% 520px,
+    auto,
+    auto;
+  background-repeat: no-repeat, repeat, repeat;
+}
+
+/* La pieza compartida `.dcbw-carta li + li` (filete y aire entre los
+   servicios de clásica) alcanzaría aquí a TODAS las listas, incluida la
+   del horario. Se anula; cada lista de esta carta pone lo suyo. */
+.dcbw.dcbw-carta li + li {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: 0;
+}
+
+.dcbw.dcbw-carta .dcbw-h1 {
+  font-family: var(--dcbw-serif);
+  font-weight: 400;
+  font-size: clamp(36px, 10cqi, 84px);
+  line-height: 1.02;
+  letter-spacing: 0.005em;
+}
+
+.dcbw.dcbw-carta .dcbw-h2 {
+  font-family: var(--dcbw-serif);
+  font-weight: 400;
+  font-size: clamp(26px, 5cqi, 40px);
+  letter-spacing: 0.01em;
+}
+
+.dcbw.dcbw-carta .dcbw-btn {
+  border-radius: 0;
+  font-family: var(--dcbw-serif);
+  font-weight: 400;
+  font-size: 13px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  padding: 14px 26px;
+}
+
+/* Latón con tinta oscura encima: 10:1 con whisky, 6,9:1 con acero. */
+.dcbw.dcbw-carta .dcbw-btn-primario {
+  background: var(--dcbw-acento-claro);
+  color: var(--dcbw-bg);
+}
+
+.dcbw.dcbw-carta .dcbw-btn-primario:hover {
+  background: var(--dcbw-tinta);
+}
+
+.dcbw.dcbw-carta .dcbw-btn-fantasma {
+  border-color: var(--dcbw-borde-fuerte);
+  color: var(--dcbw-tinta);
+  opacity: 1;
+}
+
+.dcbw.dcbw-carta .dcbw-btn-fantasma:hover {
+  border-color: var(--dcbw-acento-claro);
+  color: var(--dcbw-acento-claro);
+}
+
+/* La hoja: marco de filete doble, latón por fuera y tenue por dentro,
+   con 6 px de hueco entre los dos. Todas las secciones viven dentro. */
+.dcbw-ca-hoja {
+  --dcbw-ca-margen: clamp(12px, 3cqi, 40px);
+  max-width: min(1000px, calc(100% - var(--dcbw-ca-margen) * 2));
+  margin: var(--dcbw-ca-margen) auto;
+  padding: 6px;
+  border: 1px solid var(--dcbw-acento-claro);
+}
+
+.dcbw-ca-hoja-in {
+  border: 1px solid var(--dcbw-borde);
+  background: color-mix(in srgb, var(--dcbw-bg-2) 55%, transparent);
+}
+
+.dcbw.dcbw-carta .dcbw-sec {
+  padding-block: clamp(36px, 5.5cqi, 64px);
+}
+
+/* Entre sección y sección, un filete que no toca el marco. */
+.dcbw-ca-hoja-in > .dcbw-sec + .dcbw-sec {
+  background: linear-gradient(var(--dcbw-borde), var(--dcbw-borde)) top center /
+    calc(100% - var(--dcbw-lado) * 2) 1px no-repeat;
+}
+
+/* ── Cabecera de la carta ─────────────────────────────────────── */
+
+.dcbw-ca-cabecera {
+  display: grid;
+  justify-items: center;
+  text-align: center;
+  gap: 14px;
+  padding-top: clamp(40px, 6cqi, 72px);
+}
+
+.dcbw-ca-sello {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  max-width: 620px;
+  font-size: 13px;
+  font-variant-caps: all-small-caps;
+  letter-spacing: 0.22em;
+  line-height: 1.35;
+  color: var(--dcbw-acento-claro);
+}
+
+/* Los filetes ceden antes que el texto: en teléfono se acortan o
+   desaparecen, pero el sello no se parte por su culpa. */
+.dcbw-ca-sello::before,
+.dcbw-ca-sello::after {
+  content: "";
+  flex: 1 1 0;
+  min-width: 0;
+  height: 1px;
+  background: var(--dcbw-borde-fuerte);
+}
+
+.dcbw-ca-sello-txt {
+  flex: 0 1 auto;
+  padding-left: 0.22em;
+  text-wrap: balance;
+}
+
+.dcbw-ca-sello-sep {
+  margin-inline: 0.2em;
+}
+
+.dcbw-ca-logo {
+  width: 84px;
+  height: 84px;
+  object-fit: contain;
+  margin-top: 4px;
+}
+
+.dcbw-ca-cabecera .dcbw-hueco.dcbw-ca-logo {
+  min-height: 84px;
+  padding: 6px;
+  font-size: 11px;
+}
+
+.dcbw-ca-eslogan {
+  font-style: italic;
+  font-size: clamp(16px, 1.9cqi, 20px);
+  color: var(--dcbw-tinta-2);
+  max-width: 44ch;
+  text-wrap: balance;
+}
+
+.dcbw-ca-filete {
+  display: block;
+  width: 56px;
+  height: 1px;
+  background: var(--dcbw-acento-claro);
+}
+
+.dcbw-ca-cabecera .dcbw-ca-filete {
+  margin-block: 6px;
+}
+
+.dcbw-ca-acciones {
+  justify-content: center;
+  margin-top: 6px;
+}
+
+/* ── Encabezado numerado de cada sección ──────────────────────── */
+
+.dcbw-ca-cab {
+  display: grid;
+  justify-items: center;
+  text-align: center;
+  gap: 10px;
+  margin-bottom: clamp(26px, 4cqi, 40px);
+}
+
+.dcbw-ca-num {
+  font-size: 14px;
+  letter-spacing: 0.32em;
+  padding-left: 0.32em;
+  line-height: 1;
+  color: var(--dcbw-acento-claro);
+}
+
+.dcbw-ca-bajada {
+  font-style: italic;
+  font-size: 15.5px;
+  color: var(--dcbw-tinta-2);
+  max-width: 52ch;
+  text-wrap: pretty;
+}
+
+.dcbw-ca-cab .dcbw-ca-filete {
+  margin-top: 4px;
+}
+
+/* ── Cuerpo en dos columnas de menú ───────────────────────────── */
+
+.dcbw-ca-cuerpo {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 22px clamp(32px, 5cqi, 64px);
+}
+
+.dcbw-ca-cuerpo > * {
+  min-width: 0;
+}
+
+/* Los servicios fluyen como un menú de verdad: la lista sigue en la
+   columna de al lado y una regla fina las separa. */
+.dcbw-ca-carta {
+  column-gap: clamp(32px, 5cqi, 64px);
+  column-rule: 1px solid var(--dcbw-borde);
+}
+
+.dcbw-ca-grupo + .dcbw-ca-grupo {
+  margin-top: 34px;
+}
+
+.dcbw-ca-categoria {
+  font-variant-caps: all-small-caps;
+  font-size: 17px;
+  font-weight: 400;
+  letter-spacing: 0.24em;
+  text-align: center;
+  color: var(--dcbw-tinta);
+  padding-bottom: 8px;
+  margin-bottom: 18px;
+  border-bottom: 1px solid var(--dcbw-borde-fuerte);
+  break-after: avoid;
+}
+
+.dcbw-ca-renglon {
+  break-inside: avoid;
+}
+
+.dcbw.dcbw-carta .dcbw-ca-renglon + .dcbw-ca-renglon {
+  margin-top: 22px;
+}
+
+.dcbw-ca-linea {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  font-size: clamp(17px, 2cqi, 20px);
+  line-height: 1.3;
+}
+
+.dcbw-ca-nombre {
+  min-width: 0;
+}
+
+/* Filete de puntos de 1 px (el compartido es de 2 px). */
+.dcbw-ca-puntos {
+  flex: 1 1 auto;
+  min-width: 22px;
+  border-bottom: 1px dotted var(--dcbw-tinta-3);
+  transform: translateY(-4px);
+}
+
+.dcbw.dcbw-carta .dcbw-precio {
+  font-weight: 400;
+  color: var(--dcbw-acento-claro);
+  font-variant-numeric: tabular-nums lining-nums;
+}
+
+.dcbw-ca-detalle {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 14px;
+  margin-top: 4px;
+}
+
+.dcbw.dcbw-carta .dcbw-ca-duracion {
+  font-variant-caps: all-small-caps;
+  font-size: 14.5px;
+  font-weight: 400;
+  letter-spacing: 0.14em;
+  color: var(--dcbw-tinta-2);
+}
+
+.dcbw-ca-desc {
+  font-style: italic;
+  font-size: 14.5px;
+  color: var(--dcbw-tinta-2);
+  flex: 1 1 12ch;
+  min-width: 0;
+}
+
+/* El enlace discreto: por renglón, por barbero y para el mapa. */
+.dcbw-ca-liga {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 26px;
+  font-size: 12.5px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: var(--dcbw-acento-claro);
+  border-bottom: 1px solid transparent;
+}
+
+.dcbw-ca-liga:hover {
+  border-bottom-color: currentColor;
+}
+
+.dcbw-ca-detalle .dcbw-ca-liga {
+  margin-left: auto;
+}
+
+/* ── Detrás de la barra ───────────────────────────────────────── */
+
+.dcbw.dcbw-carta .dcbw-ca-barbero {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 18px;
+  align-items: start;
+  padding-top: 18px;
+  border-top: 1px solid var(--dcbw-borde);
+}
+
+.dcbw-ca-retrato {
+  display: block;
+  width: 92px;
+  height: 92px;
+  padding: 4px;
+  border: 1px solid var(--dcbw-borde-fuerte);
+}
+
+.dcbw-ca-retrato img,
+.dcbw-ca-retrato .dcbw-inicial {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.dcbw-ca-retrato img {
+  filter: grayscale(1) contrast(1.06);
+}
+
+.dcbw.dcbw-carta .dcbw-inicial {
+  background: var(--dcbw-bg-2);
+  color: var(--dcbw-acento-claro);
+  font-family: var(--dcbw-serif);
+  font-weight: 400;
+  font-size: 34px;
+  border: 1px solid var(--dcbw-borde);
+}
+
+.dcbw-ca-barbero-txt {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.dcbw-ca-barbero h3 {
+  font-variant-caps: all-small-caps;
+  font-size: 20px;
+  font-weight: 400;
+  letter-spacing: 0.16em;
+  line-height: 1.2;
+}
+
+.dcbw-ca-apodo {
+  font-style: italic;
+  font-size: 15px;
+  color: var(--dcbw-acento-claro);
+}
+
+.dcbw-ca-bio {
+  font-size: 14.5px;
+  color: var(--dcbw-tinta-2);
+  margin-top: 3px;
+  text-wrap: pretty;
+}
+
+.dcbw-ca-barbero .dcbw-ca-liga {
+  margin-top: 6px;
+  justify-self: start;
+}
+
+/* ── Se dice en la barra ──────────────────────────────────────── */
+
+.dcbw.dcbw-carta .dcbw-ca-cita {
+  display: grid;
+  gap: 8px;
+  padding-top: 16px;
+  border-top: 1px solid var(--dcbw-borde);
+}
+
+.dcbw.dcbw-carta .dcbw-estrellas {
+  color: var(--dcbw-acento-claro);
+}
+
+.dcbw-ca-cita p {
+  font-style: italic;
+  font-size: 16.5px;
+  line-height: 1.5;
+  text-wrap: pretty;
+}
+
+.dcbw-ca-cita cite {
+  font-style: normal;
+  font-variant-caps: all-small-caps;
+  font-size: 15px;
+  letter-spacing: 0.16em;
+  color: var(--dcbw-tinta-2);
+}
+
+/* ── En la pared ──────────────────────────────────────────────── */
+
+.dcbw-ca-pared {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: clamp(12px, 2cqi, 22px);
+}
+
+.dcbw-ca-cuadro {
+  margin: 0;
+  padding: 5px;
+  border: 1px solid var(--dcbw-borde-fuerte);
+}
+
+.dcbw-ca-cuadro img {
+  width: 100%;
+  aspect-ratio: 4 / 5;
+  object-fit: cover;
+}
+
+/* ── Cierre ───────────────────────────────────────────────────── */
+
+.dcbw-ca-cierre {
+  display: grid;
+  justify-items: center;
+  text-align: center;
+}
+
+.dcbw-ca-cierre .dcbw-ca-cab {
+  margin-bottom: 22px;
+}
+
+/* ── Contraportada ────────────────────────────────────────────── */
+
+.dcbw-ca-dato + .dcbw-ca-dato {
+  margin-top: 26px;
+}
+
+.dcbw-ca-dato h3 {
+  font-variant-caps: all-small-caps;
+  font-size: 15.5px;
+  font-weight: 400;
+  letter-spacing: 0.22em;
+  color: var(--dcbw-acento-claro);
+  margin-bottom: 6px;
+}
+
+.dcbw-ca-dato p {
+  font-size: 16.5px;
+}
+
+.dcbw-ca-dato .dcbw-ca-liga {
+  margin-top: 6px;
+}
+
+.dcbw.dcbw-carta .dcbw-horario {
+  max-width: none;
+  gap: 0;
+  font-size: 15px;
+}
+
+.dcbw.dcbw-carta .dcbw-horario li {
+  padding: 6px 0;
+  border-bottom: 1px dotted var(--dcbw-borde-fuerte);
+}
+
+.dcbw.dcbw-carta .dcbw-horario .dcbw-horario-rango {
+  font-weight: 400;
+}
+
+.dcbw.dcbw-carta .dcbw-tel {
+  font-size: 18px;
+}
+
+/* "Escríbenos por WhatsApp" cabe en un renglón a 390 px. */
+.dcbw.dcbw-carta .dcbw-ca-wa {
+  letter-spacing: 0.12em;
+  padding-inline: 20px;
+  max-width: 100%;
+}
+
+.dcbw.dcbw-carta .dcbw-redes {
+  margin-top: 22px;
+  gap: 10px;
+}
+
+.dcbw.dcbw-carta .dcbw-redes a {
+  border-radius: 0;
+  border-color: var(--dcbw-borde-fuerte);
+  color: var(--dcbw-tinta-2);
+}
+
+.dcbw.dcbw-carta .dcbw-redes a:hover {
+  border-color: var(--dcbw-acento-claro);
+  color: var(--dcbw-acento-claro);
+}
+
+/* El mapa, a lo ancho y en monocromo oscuro para que no rompa la hoja. */
+.dcbw-ca-mapa {
+  margin-top: clamp(28px, 4cqi, 44px);
+  padding: 5px;
+  border: 1px solid var(--dcbw-borde-fuerte);
+}
+
+.dcbw.dcbw-carta .dcbw-mapa {
+  min-height: 280px;
+  border-radius: 0;
+  filter: grayscale(1) invert(0.92) contrast(0.95);
+}
+
+.dcbw.dcbw-carta .dcbw-pie {
+  justify-content: center;
+  gap: 18px;
+  border-top: 0;
+  padding-top: 0;
+  font-size: 12.5px;
+  letter-spacing: 0.08em;
+}
+
+/* ── Dos columnas de menú ─────────────────────────────────────── */
+
+@container dcbw (min-width: 760px) {
+  .dcbw-ca-cuerpo {
+    grid-template-columns: 1fr 1fr;
+  }
+  .dcbw-ca-carta {
+    columns: 2;
+  }
+  .dcbw-ca-pared {
+    grid-template-columns: repeat(3, 1fr);
+  }
+  .dcbw-ca-sello {
+    font-size: 16px;
+    letter-spacing: 0.28em;
+  }
+  .dcbw-ca-sello-txt {
+    padding-left: 0.28em;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   17 · PLANTILLA 11 — NOCTURNA
+   Portada a pantalla completa en duotono con el reloj de cierre,
+   tarjetas con borde luminoso, barberos en tira horizontal.
+   ═══════════════════════════════════════════════════════════════ */
+
+.dcbw-nocturna {
+  --dcbw-bg: #0a0e14;
+  --dcbw-bg-2: #10161f;
+  --dcbw-tinta: #eef2f6;
+  --dcbw-tinta-2: #a9b2bd;
+  --dcbw-tinta-3: #76808c;
+  --dcbw-borde: rgba(238, 242, 246, 0.14);
+  --dcbw-borde-fuerte: rgba(238, 242, 246, 0.3);
+  --dcbw-radio: 6px;
+  /* cqi y no vw: en la vista previa del editor a 390 px el viewport mide
+     1600 y el aire saldría de escritorio. */
+  --dcbw-aire: clamp(60px, 9cqi, 120px);
+}
+
+/* Grotesca ancha: la sans del sitio en mayúsculas, gruesa y con aire
+   entre letras. Nada de fuentes externas. */
+.dcbw-nocturna .dcbw-h1,
+.dcbw-nocturna .dcbw-h2 {
+  font-family: var(--dcbw-sans);
+  text-transform: uppercase;
+  font-weight: 800;
+}
+
+.dcbw-nocturna .dcbw-h1 {
+  font-size: clamp(40px, 11cqi, 96px);
+  line-height: 0.98;
+  letter-spacing: 0.04em;
+  overflow-wrap: anywhere;
+}
+
+.dcbw-nocturna .dcbw-h2 {
+  font-size: clamp(26px, 5cqi, 44px);
+  line-height: 1.02;
+  letter-spacing: 0.06em;
+}
+
+.dcbw-nocturna .dcbw-kicker {
+  font-family: var(--dcbw-mono);
+  font-weight: 500;
+  letter-spacing: 0.18em;
+  color: var(--dcbw-acento-claro);
+}
+
+.dcbw-nocturna .dcbw-encabezado {
+  gap: 12px;
+  margin-bottom: 40px;
+}
+
+/* Sobre negro azulado, el acento para texto y filetes es el CLARO. */
+.dcbw-nocturna .dcbw-enlace,
+.dcbw-nocturna .dcbw-apodo,
+.dcbw-nocturna .dcbw-estrellas {
+  color: var(--dcbw-acento-claro);
+}
+
+.dcbw-nocturna .dcbw-inicial {
+  background: var(--dcbw-bg-2);
+  color: var(--dcbw-acento-claro);
+  border: 1px solid var(--dcbw-borde);
+}
+
+.dcbw-nocturna .dcbw-hueco {
+  background: color-mix(in srgb, var(--dcbw-acento-claro) 7%, transparent);
+}
+
+.dcbw-nocturna .dcbw-sec + .dcbw-sec {
+  border-top: 1px solid var(--dcbw-borde);
+}
+
+/* Botones. El primario va "encendido": fondo claro y texto oscuro (ver
+   la cabecera de t-nocturna.tsx). El hover compartido cambia a `base`,
+   que con texto oscuro no pasa AA en vino: se redefine hacia el blanco. */
+.dcbw-nocturna .dcbw-btn {
+  border-radius: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 13px;
+  font-weight: 700;
+  padding: 14px 24px;
+}
+
+.dcbw-nocturna .dcbw-btn-primario {
+  background: var(--dcbw-acento-claro);
+  color: #0a0e14;
+}
+
+.dcbw-nocturna .dcbw-btn-primario:hover {
+  background: color-mix(in srgb, var(--dcbw-acento-claro) 78%, #fff);
+}
+
+.dcbw-nocturna .dcbw-btn-fantasma {
+  border-color: var(--dcbw-borde-fuerte);
+  color: var(--dcbw-tinta);
+  opacity: 1;
+}
+
+.dcbw-nocturna .dcbw-btn-fantasma:hover {
+  border-color: var(--dcbw-acento-claro);
+  color: var(--dcbw-acento-claro);
+}
+
+/* El enlace pequeño en mono: tarjetas, barberos y contacto. */
+.dcbw-no-liga {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  font-family: var(--dcbw-mono);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--dcbw-tinta);
+  border-bottom: 1px solid var(--dcbw-acento-claro);
+}
+
+.dcbw-no-liga:hover {
+  color: var(--dcbw-acento-claro);
+}
+
+/* ── Portada ──────────────────────────────────────────────────── */
+
+.dcbw-no-hero {
+  position: relative;
+  padding: 0;
+  min-height: min(100vh, 860px);
+  min-height: min(100svh, 860px);
+  display: grid;
+  align-items: end;
+  background: var(--dcbw-bg);
+}
+
+/* El duotono. `isolation: isolate` encierra las mezclas en este
+   envoltorio: lighten con el negro azulado se lleva las sombras,
+   multiply con el acento claro se lleva las luces. */
+.dcbw-no-duo {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  isolation: isolate;
+  background: var(--dcbw-bg);
+}
+
+.dcbw-no-duo-img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 0;
+  filter: grayscale(1) contrast(1.05);
+}
+
+.dcbw-no-duo .dcbw-hueco {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border-radius: 0;
+  filter: none;
+  align-items: start;
+  padding-top: clamp(40px, 14cqi, 120px);
+}
+
+.dcbw-no-duo-sombra,
+.dcbw-no-duo-luz {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.dcbw-no-duo-sombra {
+  background: #0a0e14;
+  mix-blend-mode: lighten;
+}
+
+.dcbw-no-duo-luz {
+  background: var(--dcbw-acento-claro);
+  mix-blend-mode: multiply;
+}
+
+/* El velo para leer: sube desde el fondo y deja ver la foto arriba. */
+.dcbw-no-velo {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(
+    to top,
+    rgba(10, 14, 20, 0.96) 0%,
+    rgba(10, 14, 20, 0.74) 34%,
+    rgba(10, 14, 20, 0.3) 64%,
+    rgba(10, 14, 20, 0.08) 100%
+  );
+}
+
+.dcbw-no-hero-in {
+  position: relative;
+  z-index: 2;
+  width: 100%;
+  display: grid;
+  grid-template-areas: "txt" "reloj" "acc";
+  gap: 26px;
+  padding-block: calc(var(--dcbw-aire) * 1.6) var(--dcbw-aire);
+  padding-inline: max(var(--dcbw-lado), calc((100% - var(--dcbw-ancho)) / 2));
+}
+
+.dcbw-no-hero-txt {
+  grid-area: txt;
+  display: grid;
+  gap: 14px;
+  justify-items: start;
+}
+
+.dcbw-no-hero-acc {
+  grid-area: acc;
+}
+
+.dcbw-no-hero .dcbw-no-reloj {
+  grid-area: reloj;
+  justify-self: start;
+}
+
+.dcbw-no-logo {
+  width: 64px;
+  height: 64px;
+  object-fit: contain;
+  border-radius: 8px;
+  margin-bottom: 6px;
+}
+
+.dcbw-no-hero .dcbw-hueco.dcbw-no-logo {
+  min-height: 0;
+  padding: 4px;
+  font-size: 10.5px;
+  line-height: 1.2;
+}
+
+.dcbw-no-eslogan {
+  font-size: clamp(16px, 1.9cqi, 20px);
+  color: var(--dcbw-tinta-2);
+  max-width: 46ch;
+  text-wrap: pretty;
+}
+
+@container dcbw (min-width: 900px) {
+  .dcbw-no-hero-in {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas: "txt reloj" "acc reloj";
+    align-items: end;
+    column-gap: 48px;
+  }
+  .dcbw-no-hero .dcbw-no-reloj {
+    justify-self: end;
+    align-self: end;
+  }
+}
+
+/* El reloj: rótulo, hora grande en el acento claro, días en mono. */
+.dcbw-no-reloj {
+  display: grid;
+  gap: 4px;
+  justify-items: start;
+  padding: 16px 20px 18px;
+  border: 1px solid color-mix(in srgb, var(--dcbw-acento-claro) 45%, transparent);
+  border-radius: var(--dcbw-radio);
+  background: color-mix(in srgb, var(--dcbw-bg) 55%, transparent);
+  backdrop-filter: blur(8px);
+  min-width: min(100%, 250px);
+}
+
+.dcbw-no-reloj-etq {
+  font-family: var(--dcbw-mono);
+  font-size: 11.5px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--dcbw-tinta-2);
+}
+
+.dcbw-no-reloj-hora {
+  font-size: clamp(36px, 7.5cqi, 68px);
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  line-height: 1;
+  color: var(--dcbw-acento-claro);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.dcbw-no-reloj-dias {
+  font-family: var(--dcbw-mono);
+  font-size: 13px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--dcbw-tinta-2);
+}
+
+.dcbw-no-reloj-chico {
+  justify-items: center;
+  text-align: center;
+  backdrop-filter: none;
+  background: transparent;
+}
+
+.dcbw-no-reloj-chico .dcbw-no-reloj-hora {
+  font-size: clamp(28px, 4.5cqi, 40px);
+}
+
+/* ── Servicios: tarjetas con borde luminoso ───────────────────── */
+
+.dcbw-no-grupo + .dcbw-no-grupo {
+  margin-top: 44px;
+}
+
+.dcbw-no-cat {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 16px;
+  font-family: var(--dcbw-mono);
+  font-size: 12px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--dcbw-acento-claro);
+}
+
+.dcbw-no-cat::after {
+  content: "";
+  flex: 1 1 auto;
+  height: 1px;
+  background: var(--dcbw-borde);
+}
+
+.dcbw-no-tarjetas {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: 1fr;
+}
+
+/* El único brillo de la página. */
+.dcbw-no-tarjeta {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+  padding: 22px 22px 20px;
+  border-radius: var(--dcbw-radio);
+  background: var(--dcbw-bg-2);
+  border: 1px solid color-mix(in srgb, var(--dcbw-acento-claro) 55%, transparent);
+  box-shadow:
+    0 0 24px color-mix(in srgb, var(--dcbw-acento-claro) 16%, transparent),
+    inset 0 0 0 1px color-mix(in srgb, var(--dcbw-acento-claro) 12%, transparent);
+}
+
+.dcbw-no-tarjeta-cab {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.dcbw-no-tarjeta h3 {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  line-height: 1.3;
+}
+
+.dcbw-no-tarjeta .dcbw-duracion {
+  font-family: var(--dcbw-mono);
+  font-size: 11.5px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  /* tinta-2 y no tinta-3: sobre bg-2 la tinta-3 se queda en 4,5:1 justo. */
+  color: var(--dcbw-tinta-2);
+}
+
+.dcbw-no-tarjeta .dcbw-carta-desc {
+  font-size: 14.5px;
+}
+
+.dcbw-no-tarjeta-pie {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 8px 12px;
+  margin-top: auto;
+  padding-top: 6px;
+}
+
+.dcbw-no-tarjeta .dcbw-precio {
+  font-size: clamp(28px, 3.4cqi, 36px);
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  line-height: 1;
+  color: var(--dcbw-acento-claro);
+}
+
+@container dcbw (min-width: 620px) {
+  .dcbw-no-tarjetas {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@container dcbw (min-width: 960px) {
+  .dcbw-no-tarjetas {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+/* ── Barberos: tira horizontal ────────────────────────────────── */
+
+.dcbw-no-tira {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: min(72%, 280px);
+  gap: 16px;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  overscroll-behavior-x: contain;
+  margin-inline: calc(var(--dcbw-lado) * -1);
+  padding-inline: var(--dcbw-lado);
+  padding-bottom: 12px;
+  scroll-padding-inline: var(--dcbw-lado);
+  scrollbar-width: thin;
+  scrollbar-color: var(--dcbw-borde-fuerte) transparent;
+}
+
+.dcbw-no-tira > * {
+  scroll-snap-align: start;
+  min-width: 0;
+}
+
+.dcbw-no-barbero {
+  display: grid;
+  gap: 12px;
+  align-content: start;
+}
+
+.dcbw-no-barbero-foto {
+  width: 100%;
+  aspect-ratio: 3 / 4;
+  object-fit: cover;
+  border-radius: var(--dcbw-radio);
+  border: 1px solid var(--dcbw-borde);
+  filter: grayscale(1) contrast(1.06);
+  transition: filter 200ms ease;
+}
+
+.dcbw-no-barbero:hover .dcbw-no-barbero-foto {
+  filter: none;
+}
+
+.dcbw-no-barbero .dcbw-inicial {
+  height: auto;
+  font-size: clamp(48px, 9cqi, 72px);
+  filter: none;
+}
+
+.dcbw-no-barbero-txt {
+  display: grid;
+  gap: 4px;
+  justify-items: start;
+}
+
+.dcbw-no-barbero h3 {
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.dcbw-no-barbero .dcbw-bio {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.dcbw-no-barbero .dcbw-no-liga {
+  margin-top: 6px;
+}
+
+/* En escritorio las tarjetas crecen hasta llenar la fila con tres
+   barberos; con más, siguen siendo una tira que se arrastra. */
+@container dcbw (min-width: 960px) {
+  .dcbw-no-tira {
+    grid-auto-columns: minmax(280px, 360px);
+  }
+}
+
+/* ── Portafolio ───────────────────────────────────────────────── */
+
+.dcbw-no-rejilla {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(2, 1fr);
+}
+
+.dcbw-no-rejilla img {
+  width: 100%;
+  aspect-ratio: 1;
+  object-fit: cover;
+  border-radius: var(--dcbw-radio);
+  border: 1px solid var(--dcbw-borde);
+}
+
+@container dcbw (min-width: 620px) {
+  .dcbw-no-rejilla {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+@container dcbw (min-width: 960px) {
+  .dcbw-no-rejilla {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+
+/* ── Reseñas: borde fino, sin brillo ──────────────────────────── */
+
+.dcbw-no-opiniones {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: 1fr;
+}
+
+.dcbw-no-opiniones .dcbw-resena {
+  display: grid;
+  gap: 12px;
+  align-content: start;
+  padding: 22px;
+  border: 1px solid var(--dcbw-borde-fuerte);
+  border-radius: var(--dcbw-radio);
+}
+
+.dcbw-no-opiniones .dcbw-resena cite {
+  margin-top: 0;
+  font-family: var(--dcbw-mono);
+  font-size: 12px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--dcbw-tinta-2);
+}
+
+@container dcbw (min-width: 620px) {
+  .dcbw-no-opiniones {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@container dcbw (min-width: 960px) {
+  .dcbw-no-opiniones {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+/* ── Cierre ───────────────────────────────────────────────────── */
+
+.dcbw-no-cierre {
+  background: var(--dcbw-bg-2);
+}
+
+.dcbw-no-cierre-in {
+  display: grid;
+  gap: 28px;
+  justify-items: center;
+  text-align: center;
+  max-width: 640px;
+  margin-inline: auto;
+}
+
+.dcbw-no-cierre .dcbw-encabezado {
+  align-items: center;
+  margin-bottom: 0;
+}
+
+/* ── Contacto ─────────────────────────────────────────────────── */
+
+.dcbw-no-contacto-in {
+  display: grid;
+  gap: 40px;
+}
+
+.dcbw-no-datos {
+  display: grid;
+  align-content: start;
+}
+
+.dcbw-no-datos .dcbw-dato h3 {
+  font-family: var(--dcbw-mono);
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  color: var(--dcbw-acento-claro);
+}
+
+.dcbw-no-datos .dcbw-dato p {
+  color: var(--dcbw-tinta-2);
+}
+
+.dcbw-no-datos .dcbw-no-liga {
+  margin-top: 6px;
+}
+
+.dcbw-no-contacto-wa {
+  justify-self: start;
+  margin-top: 28px;
+}
+
+.dcbw-no-mapa {
+  min-height: 320px;
+  border: 1px solid var(--dcbw-borde);
+}
+
+@container dcbw (min-width: 860px) {
+  .dcbw-no-contacto-con-mapa {
+    grid-template-columns: 1fr 1.1fr;
+    gap: 64px;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   18 · PLANTILLA 12 — CLUB
+   Emblema tipográfico centrado, franja de socios, tarifas al final.
+   ═══════════════════════════════════════════════════════════════ */
+
+.dcbw-club {
+  --dcbw-bg: #0f2a23;
+  --dcbw-bg-2: #0b211b;
+  --dcbw-tinta: #efe8d8;
+  --dcbw-tinta-2: #bcb4a2;
+  /* #979180 y no #8c8676: el gris de la spec daba 4,2:1 sobre el verde;
+     este da 4,85:1 y pasa AA en secundarios. */
+  --dcbw-tinta-3: #979180;
+  --dcbw-borde: rgba(239, 232, 216, 0.16);
+  --dcbw-borde-fuerte: rgba(239, 232, 216, 0.34);
+  --dcbw-radio: 0;
+  --dcbw-aire: clamp(72px, 11cqi, 150px);
+  /* El diámetro del emblema manda sobre toda la portada. */
+  --dcbw-cb-d: clamp(220px, 46cqi, 360px);
+}
+
+/* Serif alta, peso 400, sin una sola negrita. */
+.dcbw-club .dcbw-h2,
+.dcbw-club h3 {
+  font-family: var(--dcbw-serif);
+  font-weight: 400;
+}
+
+.dcbw-club .dcbw-h2 {
+  font-size: clamp(28px, 5cqi, 46px);
+  line-height: 1.08;
+  letter-spacing: 0.01em;
+}
+
+.dcbw-club .dcbw-encabezado {
+  align-items: center;
+  text-align: center;
+  gap: 12px;
+  margin-bottom: clamp(30px, 5cqi, 52px);
+}
+
+/* Un filete corto de latón bajo el título, antes de la bajada. */
+.dcbw-club .dcbw-encabezado::after {
+  content: "";
+  order: 1;
+  width: 36px;
+  height: 1px;
+  background: var(--dcbw-acento-claro);
+}
+
+.dcbw-club .dcbw-bajada {
+  order: 2;
+  margin-inline: auto;
+  font-family: var(--dcbw-serif);
+  font-style: italic;
+  font-size: clamp(16px, 1.8cqi, 19px);
+}
+
+.dcbw-club .dcbw-btn {
+  border-radius: 0;
+  font-family: var(--dcbw-serif);
+  font-weight: 400;
+  font-size: 13px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  padding: 15px 30px;
+  min-height: 50px;
+}
+
+/* Placa de latón con tinta casi negra: ≥ 5,4:1 con los seis acentos. */
+.dcbw-club .dcbw-btn-primario {
+  background: var(--dcbw-acento-claro);
+  color: #08120f;
+}
+
+.dcbw-club .dcbw-btn-primario:hover {
+  background: var(--dcbw-tinta);
+}
+
+.dcbw-club .dcbw-btn-fantasma {
+  border-color: var(--dcbw-borde-fuerte);
+  color: var(--dcbw-tinta);
+  opacity: 1;
+}
+
+.dcbw-club .dcbw-btn-fantasma:hover {
+  border-color: var(--dcbw-acento-claro);
+  color: var(--dcbw-acento-claro);
+}
+
+.dcbw-club .dcbw-enlace {
+  font-family: var(--dcbw-serif);
+  font-weight: 400;
+  font-size: 12.5px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--dcbw-acento-claro);
+  border-bottom: 1px solid color-mix(in srgb, var(--dcbw-acento-claro) 40%, transparent);
+}
+
+.dcbw-club .dcbw-enlace:hover {
+  border-bottom-color: var(--dcbw-acento-claro);
+}
+
+.dcbw-club .dcbw-acciones {
+  justify-content: center;
+  gap: 12px;
+}
+
+/* Reglas grabadas entre secciones, nunca tarjetas. */
+.dcbw-club .dcbw-sec + .dcbw-sec {
+  border-top: 1px solid var(--dcbw-borde);
+}
+
+/* EL MARCO DOBLE — latón fuera, hueco de 8px, línea tenue dentro. Es el
+   único motivo de la plantilla: emblema, retratos, franja y mapa. */
+.dcbw-cb-marco {
+  position: relative;
+  border: 1px solid var(--dcbw-acento-claro);
+}
+
+.dcbw-cb-marco::before {
+  content: "";
+  position: absolute;
+  inset: 8px;
+  border: 1px solid var(--dcbw-borde-fuerte);
+  border-radius: inherit;
+  pointer-events: none;
+}
+
+/* Renglón en versalitas con filete a cada lado (sello, título de citas). */
+.dcbw-cb-filetes {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  font-family: var(--dcbw-serif);
+  font-weight: 400;
+  font-size: 12px;
+  line-height: 1.4;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--dcbw-acento-claro);
+  text-align: center;
+}
+
+.dcbw-cb-filetes::before,
+.dcbw-cb-filetes::after {
+  content: "";
+  flex: 0 0 clamp(24px, 6cqi, 64px);
+  height: 1px;
+  background: var(--dcbw-acento-claro);
+  opacity: 0.7;
+}
+
+/* ── Portada: el emblema ────────────────────────────────────── */
+
+.dcbw-cb-hero {
+  padding-block: clamp(48px, 9cqi, 110px) clamp(64px, 10cqi, 120px);
+  min-height: min(92vh, 900px);
+  min-height: min(92svh, 900px);
+  display: grid;
+  place-items: center;
+}
+
+.dcbw-cb-hero-in {
+  display: grid;
+  justify-items: center;
+  text-align: center;
+  gap: clamp(20px, 3cqi, 30px);
+  width: 100%;
+}
+
+/* La caja mide 128 % del emblema: la corona de texto vive en ese margen. */
+.dcbw-cb-emblema-caja {
+  position: relative;
+  width: calc(var(--dcbw-cb-d) * 1.28);
+  max-width: 100%;
+  aspect-ratio: 1;
+  display: grid;
+  place-items: center;
+  /* El texto solo corona por arriba: se recorta el aire sobrante de abajo. */
+  margin-bottom: calc(var(--dcbw-cb-d) * -0.1);
+}
+
+.dcbw-cb-nombre {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+}
+
+.dcbw-cb-arco {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.dcbw-cb-arco-txt {
+  fill: var(--dcbw-acento-claro);
+  font-family: var(--dcbw-serif);
+  font-weight: 400;
+  font-variant-caps: all-small-caps;
+  letter-spacing: 0.32em;
+}
+
+.dcbw-cb-emblema {
+  width: var(--dcbw-cb-d);
+  aspect-ratio: 1;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+}
+
+.dcbw-cb-mono {
+  font-family: var(--dcbw-serif);
+  font-weight: 400;
+  font-size: calc(var(--dcbw-cb-d) * 0.34);
+  line-height: 1;
+  letter-spacing: 0.06em;
+  /* El tracking sobra a la derecha del último glifo: se compensa. */
+  padding-left: 0.06em;
+  color: var(--dcbw-tinta);
+  transform: translateY(0.03em);
+}
+
+.dcbw-cb-mono-3 {
+  font-size: calc(var(--dcbw-cb-d) * 0.27);
+}
+
+.dcbw-cb-logo {
+  width: 58%;
+  height: 58%;
+  object-fit: contain;
+}
+
+.dcbw-cb-sello-punto {
+  padding-inline: 2px;
+  opacity: 0.7;
+}
+
+.dcbw-cb-eslogan {
+  font-family: var(--dcbw-serif);
+  font-style: italic;
+  font-size: clamp(20px, 3.2cqi, 30px);
+  line-height: 1.3;
+  color: var(--dcbw-tinta-2);
+  max-width: 28ch;
+  text-wrap: balance;
+}
+
+/* ── La franja de socios ────────────────────────────────────── */
+
+.dcbw-cb-socios {
+  background: color-mix(in srgb, var(--dcbw-acento-claro) 8%, var(--dcbw-bg-2));
+}
+
+.dcbw-cb-socios-in {
+  max-width: 900px;
+  margin-inline: auto;
+  padding: clamp(30px, 5cqi, 60px) clamp(18px, 4cqi, 56px);
+  display: grid;
+  justify-items: center;
+  text-align: center;
+}
+
+.dcbw-cb-socios-in .dcbw-encabezado {
+  margin-bottom: clamp(22px, 3.5cqi, 36px);
+}
+
+.dcbw-cb-beneficios {
+  width: 100%;
+  display: grid;
+  margin-bottom: clamp(26px, 4cqi, 38px);
+  text-align: left;
+  border-top: 1px solid var(--dcbw-borde);
+}
+
+.dcbw-cb-beneficios li {
+  display: grid;
+  grid-template-columns: 40px 1fr;
+  align-items: baseline;
+  gap: 14px;
+  padding: 14px 4px;
+  border-bottom: 1px solid var(--dcbw-borde);
+}
+
+.dcbw-cb-romano {
+  font-family: var(--dcbw-serif);
+  font-size: 19px;
+  letter-spacing: 0.08em;
+  color: var(--dcbw-acento-claro);
+}
+
+.dcbw-cb-beneficio {
+  font-family: var(--dcbw-serif);
+  font-size: clamp(18px, 2.2cqi, 22px);
+  line-height: 1.3;
+}
+
+.dcbw-cb-nota {
+  margin-top: 16px;
+  font-family: var(--dcbw-serif);
+  font-style: italic;
+  font-size: 14px;
+  color: var(--dcbw-tinta-3);
+  max-width: 44ch;
+}
+
+@container dcbw (min-width: 760px) {
+  .dcbw-cb-beneficios {
+    grid-template-columns: repeat(3, 1fr);
+    border-top: 0;
+  }
+  .dcbw-cb-beneficios li {
+    grid-template-columns: 1fr;
+    justify-items: center;
+    text-align: center;
+    gap: 10px;
+    padding: 26px 22px;
+    border-top: 1px solid var(--dcbw-borde);
+  }
+  .dcbw-cb-beneficios li + li {
+    border-left: 1px solid var(--dcbw-borde);
+  }
+  .dcbw-cb-romano {
+    font-size: 24px;
+  }
+}
+
+/* ── Los maestros ───────────────────────────────────────────── */
+
+.dcbw-cb-maestros {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 36px 20px;
+  max-width: 1100px;
+  margin-inline: auto;
+}
+
+.dcbw-cb-maestros li {
+  width: calc((100% - 20px) / 2);
+  display: grid;
+  justify-items: center;
+  align-content: start;
+  text-align: center;
+  gap: 6px;
+}
+
+.dcbw-cb-retrato {
+  display: block;
+  width: 100%;
+  padding: 9px;
+  margin-bottom: 10px;
+}
+
+.dcbw-cb-retrato img,
+.dcbw-cb-inicial {
+  display: block;
+  width: 100%;
+  aspect-ratio: 4 / 5;
+  object-fit: cover;
+}
+
+.dcbw-cb-retrato img {
+  filter: grayscale(1) contrast(1.04);
+}
+
+.dcbw-cb-inicial {
+  display: grid;
+  place-items: center;
+  background: var(--dcbw-bg-2);
+  color: var(--dcbw-acento-claro);
+  font-family: var(--dcbw-serif);
+  font-size: clamp(40px, 8cqi, 72px);
+}
+
+.dcbw-cb-maestros h3 {
+  font-size: clamp(19px, 2.2cqi, 23px);
+  line-height: 1.15;
+}
+
+.dcbw-cb-apodo {
+  font-family: var(--dcbw-serif);
+  font-variant-caps: all-small-caps;
+  letter-spacing: 0.14em;
+  font-size: 15px;
+  color: var(--dcbw-acento-claro);
+}
+
+.dcbw-cb-maestros .dcbw-bio {
+  margin-top: 4px;
+}
+
+.dcbw-cb-maestros .dcbw-enlace {
+  margin-top: 6px;
+}
+
+.dcbw-cb-equipo-foto {
+  max-width: 1000px;
+  margin: clamp(40px, 6cqi, 72px) auto 0;
+  padding: 9px;
+}
+
+.dcbw-cb-equipo-foto img,
+.dcbw-cb-equipo-foto .dcbw-hueco {
+  width: 100%;
+  aspect-ratio: 3 / 2;
+  object-fit: cover;
+  border-radius: 0;
+}
+
+.dcbw-cb-equipo-foto img {
+  filter: grayscale(1) contrast(1.04);
+}
+
+@container dcbw (min-width: 700px) {
+  .dcbw-cb-maestros {
+    gap: 44px 28px;
+  }
+  .dcbw-cb-maestros li {
+    width: calc((100% - 56px) / 3);
+  }
+}
+
+@container dcbw (min-width: 1000px) {
+  .dcbw-cb-maestros li {
+    width: calc((100% - 84px) / 4);
+  }
+}
+
+/* ── El trabajo ─────────────────────────────────────────────── */
+
+.dcbw-cb-rejilla {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 14px;
+  max-width: 1100px;
+  margin-inline: auto;
+}
+
+.dcbw-cb-obra {
+  border: 1px solid var(--dcbw-borde-fuerte);
+  padding: 6px;
+}
+
+.dcbw-cb-obra img {
+  width: 100%;
+  aspect-ratio: 4 / 5;
+  object-fit: cover;
+}
+
+@container dcbw (min-width: 860px) {
+  .dcbw-cb-rejilla {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 22px;
+  }
+  .dcbw-cb-obra {
+    padding: 8px;
+  }
+}
+
+/* ── Palabra de socio ───────────────────────────────────────── */
+
+.dcbw-cb-palabra {
+  background: var(--dcbw-bg-2);
+}
+
+.dcbw-cb-palabra .dcbw-cb-filetes {
+  margin-bottom: clamp(30px, 5cqi, 52px);
+}
+
+.dcbw-cb-citas {
+  display: grid;
+  gap: 40px;
+  max-width: 1000px;
+  margin-inline: auto;
+}
+
+.dcbw-cb-citas li {
+  display: grid;
+  justify-items: center;
+  text-align: center;
+  gap: 18px;
+}
+
+.dcbw-cb-citas li + li {
+  padding-top: 40px;
+  border-top: 1px solid var(--dcbw-borde);
+}
+
+.dcbw-cb-citas blockquote {
+  font-family: var(--dcbw-serif);
+  font-style: italic;
+  font-size: clamp(21px, 3.2cqi, 32px);
+  line-height: 1.35;
+  max-width: 32ch;
+  text-wrap: balance;
+}
+
+.dcbw-cb-citas cite {
+  font-style: normal;
+  font-family: var(--dcbw-serif);
+  font-variant-caps: all-small-caps;
+  letter-spacing: 0.16em;
+  font-size: 16px;
+  color: var(--dcbw-acento-claro);
+}
+
+@container dcbw (min-width: 860px) {
+  .dcbw-cb-citas-2 {
+    grid-template-columns: 1fr 1fr;
+    gap: 0;
+  }
+  .dcbw-cb-citas-2 li {
+    padding-inline: clamp(24px, 4cqi, 56px);
+  }
+  .dcbw-cb-citas-2 li + li {
+    padding-top: 0;
+    border-top: 0;
+    border-left: 1px solid var(--dcbw-borde);
+  }
+}
+
+/* ── Tarifas: discretas y al final ──────────────────────────── */
+
+.dcbw-cb-tarifas-in {
+  max-width: 560px;
+  margin-inline: auto;
+  font-size: 15px;
+}
+
+.dcbw-cb-grupo + .dcbw-cb-grupo {
+  margin-top: 30px;
+}
+
+.dcbw-cb-categoria {
+  font-variant-caps: all-small-caps;
+  letter-spacing: 0.18em;
+  font-size: 16px;
+  color: var(--dcbw-acento-claro);
+  text-align: center;
+  padding-bottom: 8px;
+  margin-bottom: 4px;
+  border-bottom: 1px solid var(--dcbw-acento-claro);
+}
+
+.dcbw-cb-fila {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  align-items: baseline;
+  column-gap: 14px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--dcbw-borde);
+}
+
+.dcbw-cb-servicio {
+  grid-column: 1;
+}
+
+.dcbw-cb-fila .dcbw-duracion {
+  grid-column: 2;
+  font-family: var(--dcbw-serif);
+  font-weight: 400;
+  font-variant-caps: all-small-caps;
+  letter-spacing: 0.1em;
+  font-size: 14px;
+  color: var(--dcbw-tinta-3);
+}
+
+.dcbw-cb-fila .dcbw-precio {
+  grid-column: 3;
+  font-family: var(--dcbw-serif);
+  font-weight: 400;
+  font-size: 15px;
+  color: var(--dcbw-acento-claro);
+  text-align: right;
+}
+
+.dcbw-cb-desc {
+  grid-column: 1 / -1;
+  grid-row: 2;
+  font-size: 13px;
+  color: var(--dcbw-tinta-3);
+  margin-top: 2px;
+}
+
+.dcbw-cb-tarifas-cta {
+  display: flex;
+  justify-content: center;
+  margin-top: 30px;
+}
+
+/* ── La casa ────────────────────────────────────────────────── */
+
+.dcbw-cb-casa {
+  display: grid;
+  gap: 44px;
+}
+
+.dcbw-cb-casa .dcbw-encabezado {
+  align-items: flex-start;
+  text-align: left;
+  margin-bottom: 28px;
+}
+
+.dcbw-cb-casa .dcbw-bajada {
+  margin-inline: 0;
+}
+
+.dcbw-club .dcbw-dato {
+  border-top: 1px solid var(--dcbw-borde);
+  padding-top: 16px;
+}
+
+.dcbw-club .dcbw-dato h3 {
+  font-variant-caps: all-small-caps;
+  text-transform: none;
+  letter-spacing: 0.16em;
+  font-size: 15px;
+  color: var(--dcbw-acento-claro);
+  margin-bottom: 8px;
+}
+
+.dcbw-club .dcbw-horario {
+  max-width: 360px;
+}
+
+.dcbw-club .dcbw-horario li {
+  border-bottom: 1px solid var(--dcbw-borde);
+  padding: 5px 0;
+}
+
+.dcbw-club .dcbw-horario .dcbw-horario-rango {
+  font-weight: 400;
+}
+
+.dcbw-club .dcbw-redes a {
+  border-radius: 0;
+}
+
+.dcbw-club .dcbw-redes a:hover,
+.dcbw-club .dcbw-pie a:hover {
+  border-color: var(--dcbw-acento-claro);
+  color: var(--dcbw-acento-claro);
+}
+
+.dcbw-cb-casa-wa {
+  margin-top: 22px;
+}
+
+.dcbw-cb-casa-mapa {
+  padding: 9px;
+  min-height: 340px;
+  display: grid;
+}
+
+.dcbw-cb-casa-mapa .dcbw-mapa {
+  min-height: 320px;
+  border-radius: 0;
+  filter: grayscale(1) contrast(1.05);
+}
+
+@container dcbw (min-width: 860px) {
+  /* El mapa se estira a la altura de la columna de datos: una caja de
+     320px flotando arriba dejaba medio metro de verde vacío debajo. */
+  .dcbw-cb-casa {
+    grid-template-columns: 1fr 1.1fr;
+    gap: 64px;
+    align-items: stretch;
+  }
+  .dcbw-cb-casa-sola {
+    grid-template-columns: 1fr;
+  }
+  .dcbw-cb-casa-sola .dcbw-cb-casa-datos {
+    max-width: 640px;
+  }
+}

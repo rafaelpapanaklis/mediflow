@@ -119,12 +119,13 @@ test("el PATCH acepta lo bueno y lo normaliza", () => {
    3 · Cambiar de plantilla NO borra contenido
    ══════════════════════════════════════════════════════════════ */
 
-test("las ocho plantillas del manifiesto son exactamente las declaradas", () => {
+test("las doce plantillas del manifiesto son exactamente las declaradas", () => {
   assert.deepEqual(
     Object.keys(BARBER_WEB_MANIFESTS).sort(),
     [...BARBER_WEB_TEMPLATE_IDS].sort(),
   );
-  assert.equal(BARBER_WEB_TEMPLATE_IDS.length, 8);
+  // 8 de la ola de la mini-web + estudio, carta, nocturna y club.
+  assert.equal(BARBER_WEB_TEMPLATE_IDS.length, 12);
 });
 
 test("el contenido compartido sobrevive a un cambio de plantilla", () => {

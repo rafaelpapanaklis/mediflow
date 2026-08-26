@@ -21977,3 +21977,144 @@ mordieron y que ya están sorteadas en el código nuevo:
    una barbería no mexicana se registra pero no recibe ni manda recordatorios.
 5. **Nadie ha probado el registro con un número no mexicano de punta a punta**
    (formulario → endpoint → fila en Supabase).
+
+
+## [Barber Mini-web · 4 plantillas] — Cuatro plantillas más para `/b/<slug>` (estudio, carta, nocturna, club), cada una con una ESTRUCTURA que ninguna de las ocho tenía; la prueba del horario deja de llevar la tabla a mano y una prueba nueva caza la plantilla registrada a medias ✅ (2026-08-26)
+
+**Commit:** el que trae este reporte — `feat(barber): cuatro plantillas más para la mini-web — estudio, carta, nocturna y club…` (ver `git log` de esta fecha) · directo a `main` (fast-forward sobre `e6a94e1d`, el commit del candado) · árbol principal, en paralelo con la terminal del candado: archivos distintos, `git add` por rutas, nunca `-A`.
+
+▶ QUÉ SE HIZO
+
+Cuatro plantillas nuevas en `src/components/barber/templates/` siguiendo el
+procedimiento de 5 pasos de `manifest.ts` (id → manifiesto → componente →
+registro → piel). El editor, la API, el guardado y la página pública **no se
+tocaron**: leen el manifiesto y el registro. Cada plantilla nació en su propio
+archivo (`t-<id>.tsx`) escrita por un agente en paralelo; los compartidos
+(`landing.ts`, `manifest.ts`, `index.tsx`, `skins.css`) los integró la sesión
+principal de un tirón, para que el árbol —que la otra terminal también compila—
+no quedara inconsistente ni un minuto.
+
+| id | Lo que la distingue (estructura, no paleta) | Para quién |
+|---|---|---|
+| **estudio** | Columna lateral FIJA a la izquierda (sticky, no fixed: la raíz `.dcbw` atrapa los `fixed`) con marca, eslogan, dirección + "Cómo llegar", horario, teléfono, redes y el botón de reservar SIEMPRE a la vista; el contenido scrollea al lado. En teléfono la lateral se pliega a cabecera compacta y la reserva baja a una barra inferior sticky. Sin sección "reservar" a propósito. Hueso/arena y grafito, serif fina peso 400, filetes de 1 px, retratos B/N. | Barbería-estudio europea, sobria y cara: vende oficio y calma, no volumen. |
+| **carta** | La página ES una hoja de carta de bar: marco de filete doble (latón fuera, tenue dentro), secciones numeradas I, II, III… **según el orden real** (apagar o mover una sección no deja huecos en la numeración), todo en dos columnas de menú desde 760 px (`columns: 2` en la carta, grid 1fr 1fr en el resto), "nombre ······ precio" con filete de puntos de 1 px, duración en versalitas, contraportada = contacto. Papel oscuro cálido con grano hecho SOLO con gradientes CSS, serif también en el cuerpo, latón. | La barbería-bar. |
+| **nocturna** | Portada a pantalla completa con la foto en DUOTONO hecho solo con CSS (grayscale + capa `lighten` negro azulado + capa `multiply` con el acento claro, encerradas con `isolation: isolate`) y un RELOJ "Abierto hasta las 11:00 pm · Vie y Sáb" sacado del horario real; servicios en tarjetas con borde luminoso (el ÚNICO brillo de la página); barberos en tira horizontal con scroll-snap por gesto. Negro azulado, grotesca ancha en mayúsculas, botón "encendido" (acento claro con tinta oscura). | La barbería que abre cuando la gente sale del trabajo. |
+| **club** | Portada = EMBLEMA tipográfico centrado sin imágenes: monograma con las iniciales del nombre (`monograma()` salta artículos: "La Navaja de Oro" → NO) dentro de un círculo con marco doble y el nombre completo rodeándolo por `<textPath>`; si hay logo, ocupa el centro. Franja ancha de SOCIOS con tres beneficios en romanos, **copia editable, no datos** (el contrato no trae membresías y no se inventaron); tarifas DISCRETAS al final en una columna de 560 px — lo contrario exacto de `precios`. Verde botella y latón, serif alta, marcos finos dobles como único motivo. | La barbería de socios, la más cara de las doce. |
+
+Firmas de orden (la prueba de `landing.test.ts` exige que sean únicas entre las 12):
+`estudio` P·S·E·G·R·C · `carta` P·S·E·R·G·V·C · `nocturna` P·S·E·G·R·V·C · `club` P·socios·E·G·R·S·C.
+
+▶ DECISIONES QUE HAY QUE CONOCER
+
+1. **El reloj de NOCTURNA no dice "hoy".** La consigna pedía "hoy abrimos hasta
+   ___". `landing.ts` (§7) prohíbe marcar "hoy" porque la página se sirve por
+   ISR: un "hoy" calculado en el servidor se congela con la caché y acaba
+   señalando el día equivocado; y la página pública es cero-JS (las plantillas
+   no hidratan). Lo que se pinta es honesto y estable: el **cierre más tardío
+   de la semana** (`cierreMasTardio`, función pura sobre `config.horario`) y
+   los días que cierran a esa hora agrupados (`etiquetaDias`: "Jue – Sáb",
+   "Vie y Sáb", "Lun, Mié y Vie"). Sin horario: en público no se pinta; en el
+   editor sale "— : —". Si algún día se quiere el "hoy" real, es un `<script>`
+   en línea de cinco líneas en la página pública (la CSP lo permite), no un
+   cambio de plantilla.
+2. **`carta` choca con una pieza compartida.** `.dcbw-carta` ya es la lista
+   "nombre …… precio" de `clasica` (`ul.dcbw-carta`, `.dcbw-carta li + li`).
+   El id era obligatorio, así que TODA la piel de la plantilla cuelga de
+   `.dcbw.dcbw-carta` (la raíz lleva las dos clases; el `ul` de clásica no
+   lleva `.dcbw`) y anula `li + li` dentro de su hoja. Verificado en Chromium:
+   clásica con y sin el bloque nuevo da estilos computados idénticos en sus
+   270 elementos. Queda documentado en la cabecera del bloque y en el
+   procedimiento de `manifest.ts`. Si se prefiere renombrar el id, es un
+   cambio de tres líneas, pero rompería el `template` guardado de quien ya la
+   eligiera.
+3. **La franja de socios es una sección nueva del vocabulario** (`socios`,
+   `consume: []`, apagable) con cinco claves de copia (`socios.linea1/2/3`,
+   `socios.cta`, `socios.nota`). El botón enlaza a WhatsApp con un texto de
+   "quiero ser socio" y, sin WhatsApp, a la reserva. Entra sola en
+   `normalizarConfigBarberWeb` porque el vocabulario es la UNIÓN de las doce.
+4. **Las cuatro pisan `--dcbw-aire` (y `carta` también `--dcbw-lado`) con
+   `cqi` en vez de `vw`:** en la vista previa del editor a 390 px dentro de un
+   viewport de 1600, `vw` mide la pantalla y el aire salía de escritorio. Las
+   ocho viejas siguen con `vw`; si se quiere uniformar, es un cambio mecánico.
+5. **Botón primario "encendido" en las tres oscuras** (fondo
+   `--dcbw-acento-claro` con tinta oscura, ≥ 5,4:1 con los seis acentos) en
+   vez de blanco sobre `-fuerte`: sobre negro azulado / papel oscuro / verde
+   botella, el `fuerte` con blanco se hunde y el claro es la única luz. La
+   regla de contraste (blanco SOLO sobre `-fuerte`) se respeta: no hay texto
+   blanco sobre claro en ninguna.
+6. **Sin "use client", sin hooks, sin `new Date`, sin `<style>`/`<script>`,
+   cero npm nuevo, cero fuentes externas, cero imágenes de adorno** (textura,
+   duotono, emblema y corona son CSS o SVG en línea). Los cuatro archivos se
+   escanearon a mano por esos patrones y ninguno escribe un literal de
+   respaldo en el JSX: todo texto sale del manifiesto vía `copia()`.
+
+▶ PRUEBAS
+
+- `horario.test.tsx` ya **no lleva la tabla de plantillas a mano**: itera
+  `BARBER_WEB_TEMPLATE_IDS` contra el registro REAL de `index.tsx`. Para eso
+  nació `__tests__/_sin-css.ts` (stub de `Module._load` para `.css`: `index`
+  arrastra `skins.css` y Node lo leía como JS). La plantilla trece queda
+  cubierta sola. → **9/9**, 12 × 8 estados × 2 barberías × 2 modos = 384
+  renders.
+- `__tests__/registro.test.ts` (NUEVA, estática): para cada id de
+  `BARBER_WEB_TEMPLATE_IDS` exige manifiesto con su propio id, presencia única
+  en `BARBER_WEB_MANIFEST_LIST` (el selector del editor), componente en
+  `index.tsx` importado de `./t-<id>`, bloque `.dcbw-<id>` (o
+  `.dcbw.dcbw-<id>`) en `skins.css`, acento del catálogo, claves «seccion.cosa»
+  declaradas en SU sección, y —la que impide que el editor mienta— **que cada
+  `copia(data, "sección", "clave")` que lee el JSX de `t-<id>.tsx` esté
+  declarada en su manifiesto**. → **6/6**.
+- `src/lib/barber/__tests__/landing.test.ts` → **30/30** (incluida "las ocho se
+  diferencian en ESTRUCTURA", que ahora recorre 12; se cambió `length 8` por
+  `length 12`).
+- Cada agente corrió además su propio probe en node (render con `LLENA`/`PELADA`
+  × editando × 8 estados de horario, sin "undefined/null/NaN", 0 huecos en
+  público) y **capturas con Playwright a 390 y 1280** (completas y por
+  sección), que la sesión principal revisó una por una; las PNG quedan en el
+  scratchpad de la sesión, no en el repo.
+- `npx tsc --noEmit -p tsconfig.json` → **0 errores en los archivos tocados**.
+  Salen los 6 preexistentes de `__tests__/{dinero-sumas,i18n-alcance}.test.ts`,
+  ya en main antes de esta ola.
+
+▶ BUILD Y GUARDIA
+
+- `npm run build` COMPLETO (`prisma generate && next build`, lanzado fuera del
+  job del tool con marcador, sin pipes, las 3 481 líneas del log leídas):
+  **`BUILD_EXIT_CODE:0`**, `✓ Generating static pages (424/424)`, tabla de rutas
+  completa (`● /b/[slug]`, `ƒ /barber/mi-web` 25,9 kB). Lo rojo del log son los
+  `prisma:error … DATABASE_URL` del entorno local sin `.env` (los mismos del
+  build de la terminal del candado) y los tres avisos preexistentes de Tailwind
+  (`ease-[var(--ease)]`) y de `file-type` en `ai-wallet`: nada de esta ola.
+  Se esperó a que terminara el build de la otra terminal antes de lanzar éste
+  (comparten `.next`).
+- `$env:BARBER_GUARD_SHARED="ORQUESTA.md"; node scripts/barber-guard.cjs` →
+  **exit 0**, 12 propios + ORQUESTA.md declarado, 0 prohibidos.
+
+▶ ARCHIVOS
+
+Nuevos: `t-estudio.tsx` (358), `t-carta.tsx` (350), `t-nocturna.tsx` (381),
+`t-club.tsx` (378), `__tests__/registro.test.ts`, `__tests__/_sin-css.ts`.
+Tocados: `landing.ts` (4 ids), `manifest.ts` (4 manifiestos + lista +
+cabecera), `index.tsx` (4 líneas), `skins.css` (4 bloques al final, 2478 →
+5007 líneas), `__tests__/horario.test.tsx`, `src/lib/barber/__tests__/landing.test.ts`
+(este último estaba fuera de la lista de rutas del encargo, pero tenía
+`length 8` escrito a mano y habría quedado rojo en main; se subió explícito
+por su ruta).
+
+▶ PENDIENTE — REQUIERE RAFAEL
+
+1. **QA en el editor real** (`/barber/mi-web` con base): elegir cada una de las
+   cuatro, subir fotos reales, apagar/reordenar secciones y mirar la vista
+   previa a 390 y en escritorio. Lo verificado aquí es render en node y
+   capturas estáticas con la misma `skins.css`; el `container-type` del
+   lienzo del editor es el mismo, pero nadie ha abierto todavía las cuatro con
+   datos de verdad.
+2. **El mapa de `carta`** lleva `filter: grayscale(1) invert(.92)` para no
+   romper la hoja oscura con el iframe blanco de Google; en headless sin red
+   el iframe salió vacío, así que ese look no está visto con el mapa real.
+3. **Versalitas sintetizadas**: `font-variant-caps: all-small-caps` sobre
+   Georgia (que no trae versalitas reales). En Chromium se ven bien; en Safari
+   iOS conviene mirarlo.
+4. La corona de `club` calcula el cuerpo del texto por longitud del nombre
+   (suelo de 2,6 unidades): nombres de más de ~90 caracteres podrían recortar
+   la cola; nombres de 49 se probaron y caben.

@@ -1,20 +1,23 @@
 /* ═══════════════════════════════════════════════════════════════════════
-   EL MANIFIESTO DE LAS OCHO PLANTILLAS.
+   EL MANIFIESTO DE LAS DOCE PLANTILLAS.
 
    Cada plantilla declara aquí QUÉ tiene: sus secciones, en qué orden, qué
    texto se puede reescribir en cada una y qué fotos admite. El editor de
    /barber/mi-web se dibuja LEYENDO esto y no conoce ninguna plantilla por
    su nombre.
 
-   ── AGREGAR LA NOVENA PLANTILLA ───────────────────────────────────
+   ── AGREGAR LA DECIMOTERCERA PLANTILLA ────────────────────────────
    1. Añade su id a BARBER_WEB_TEMPLATE_IDS (src/lib/barber/landing.ts).
-   2. Escribe su manifiesto aquí abajo.
+   2. Escribe su manifiesto aquí abajo (y súmalo a BARBER_WEB_MANIFEST_LIST,
+      que es lo que ofrece el selector del editor).
    3. Escribe su componente en ./t-<id>.tsx.
    4. Regístralo en ./index.tsx (una línea en BARBER_WEB_TEMPLATES).
-   5. Escribe su piel en ./skins.css bajo `.dcbw-<id>`.
+   5. Escribe su piel en ./skins.css bajo `.dcbw-<id>` (si el id choca con
+      una pieza compartida, como `carta`, cuelga todo de `.dcbw.dcbw-<id>`).
    El editor NO se toca. Tampoco la API, ni el guardado, ni la página
    pública. La prueba de que sobra: este archivo no importa ni un solo
-   componente.
+   componente. Y __tests__/registro.test.ts exige los cinco pasos para
+   cada id: una plantilla registrada a medias no pasa.
 
    ── REGLAS DE LAS CLAVES ──────────────────────────────────────────
    · La clave de copia es SEMÁNTICA y se COMPARTE entre plantillas
@@ -113,7 +116,7 @@ function secContacto(extra?: Partial<BarberWebManifestSeccion>): BarberWebManife
 }
 
 /* ═══════════════════════════════════════════════════════════════════
-   LOS OCHO MANIFIESTOS
+   LOS DOCE MANIFIESTOS
    ═══════════════════════════════════════════════════════════════════ */
 
 export const BARBER_WEB_MANIFESTS: Record<BarberWebTemplateId, BarberWebManifest> = {
@@ -657,6 +660,328 @@ export const BARBER_WEB_MANIFESTS: Record<BarberWebTemplateId, BarberWebManifest
       secContacto({ fotos: [FOTO_AMBIENTE] }),
     ],
   },
+
+  /* ────────────────────────────────────────────────────────────────
+     9 · ESTUDIO — barbería-estudio, sobria y cara.
+     Estructura: columna lateral FIJA a la izquierda con marca, horario,
+     teléfono y el botón de reservar siempre a la vista; el contenido
+     scrollea al lado. Serif fina y filetes de un pelo. No tiene cierre
+     "reservar" a propósito: el botón nunca sale de pantalla.
+     ──────────────────────────────────────────────────────────────── */
+  estudio: {
+    id: "estudio",
+    nombre: "Estudio",
+    para: "Barbería-estudio, sobria y cara: para quien vende oficio y calma, no volumen.",
+    estructura: "Columna lateral fija con horario y reserva siempre a la vista · contenido scrollea al lado · serif fina y filetes",
+    acentoSugerido: "acero",
+    secciones: [
+      {
+        id: "portada",
+        nombre: "Portada y columna lateral",
+        obligatoria: true,
+        consume: [],
+        fotos: [FOTO_LOGO, FOTO_PORTADA],
+        copia: [
+          ...copiaPortada("Reservar", "Barbería de estudio. Solo con cita.", "WhatsApp"),
+          { clave: "portada.nota", etiqueta: "Portada · nota bajo el botón", porDefecto: "Con cita previa", maxLen: 60 },
+        ],
+      },
+      {
+        id: "servicios",
+        nombre: "Servicios y precios",
+        consume: ["servicios"],
+        textos: [
+          { campo: "titulo", etiqueta: "Título de servicios", porDefecto: "Servicios" },
+          { campo: "subtitulo", etiqueta: "Bajada de servicios", porDefecto: "El tiempo que cada trabajo necesita." },
+        ],
+        copia: [
+          { clave: "servicios.kicker", etiqueta: "Servicios · etiqueta", porDefecto: "Tratamientos", maxLen: 40 },
+          { clave: "servicios.cta", etiqueta: "Servicios · botón de cada corte", porDefecto: "Reservar", maxLen: 40 },
+        ],
+      },
+      {
+        id: "equipo",
+        nombre: "Barberos",
+        consume: ["barberos"],
+        fotos: [FOTO_EQUIPO],
+        textos: [
+          { campo: "titulo", etiqueta: "Título del equipo", porDefecto: "El equipo" },
+          { campo: "subtitulo", etiqueta: "Bajada del equipo", porDefecto: "" },
+        ],
+        copia: [
+          { clave: "equipo.kicker", etiqueta: "Equipo · etiqueta", porDefecto: "Quién te atiende", maxLen: 40 },
+          COPIA_EQUIPO_CTA,
+        ],
+      },
+      {
+        id: "portafolio",
+        nombre: "Portafolio de cortes",
+        consume: ["galeria"],
+        textos: [{ campo: "titulo", etiqueta: "Título del portafolio", porDefecto: "Trabajo" }],
+        copia: [{ clave: "portafolio.kicker", etiqueta: "Portafolio · etiqueta", porDefecto: "Selección", maxLen: 40 }],
+      },
+      {
+        id: "resenas",
+        nombre: "Reseñas de clientes",
+        consume: ["resenas"],
+        textos: [{ campo: "titulo", etiqueta: "Título de reseñas", porDefecto: "Clientes" }],
+        copia: [{ clave: "resenas.kicker", etiqueta: "Reseñas · etiqueta", porDefecto: "Opiniones", maxLen: 40 }],
+      },
+      secContacto({
+        fotos: [FOTO_AMBIENTE],
+        textos: [
+          { campo: "titulo", etiqueta: "Título de contacto", porDefecto: "El estudio" },
+          { campo: "subtitulo", etiqueta: "Bajada de contacto", porDefecto: "" },
+        ],
+      }),
+    ],
+  },
+
+  /* ────────────────────────────────────────────────────────────────
+     10 · CARTA — la carta de una barbería-bar.
+     Estructura: UNA hoja con marco de filete doble, secciones numeradas
+     con romanos según el orden real (apagar o mover no deja huecos) y
+     todo en dos columnas de menú con filete de puntos de 1 px. Serif en
+     el cuerpo, versalitas, latón sobre papel oscuro.
+     ──────────────────────────────────────────────────────────────── */
+  carta: {
+    id: "carta",
+    nombre: "Carta",
+    para: "La barbería-bar: la página se lee como la carta de la casa, de la cabecera a la contraportada.",
+    estructura: "Una hoja con marco doble · secciones numeradas I, II, III · todo en dos columnas de menú con filete de puntos · versalitas",
+    acentoSugerido: "whisky",
+    oscura: true,
+    secciones: [
+      {
+        id: "portada",
+        nombre: "Cabecera de la carta",
+        obligatoria: true,
+        consume: [],
+        fotos: [FOTO_LOGO],
+        copia: [
+          ...copiaPortada("Reservar", "Corte, barba y navaja. Carta de la casa.", "WhatsApp"),
+          { clave: "portada.sello", etiqueta: "Portada · sello (año o lema)", porDefecto: "EST.", maxLen: 24 },
+          { clave: "portada.lema", etiqueta: "Portada · lema del sello", porDefecto: "Casa de barbería", maxLen: 60 },
+        ],
+      },
+      {
+        id: "servicios",
+        nombre: "Servicios y precios",
+        consume: ["servicios"],
+        textos: [
+          { campo: "titulo", etiqueta: "Título de servicios", porDefecto: "La carta" },
+          { campo: "subtitulo", etiqueta: "Bajada de servicios", porDefecto: "Precios de la casa." },
+        ],
+        copia: [{ clave: "servicios.cta", etiqueta: "Servicios · enlace de cada renglón", porDefecto: "Reservar", maxLen: 40 }],
+      },
+      {
+        id: "equipo",
+        nombre: "Barberos",
+        consume: ["barberos"],
+        textos: [
+          { campo: "titulo", etiqueta: "Título del equipo", porDefecto: "Detrás de la barra" },
+          { campo: "subtitulo", etiqueta: "Bajada del equipo", porDefecto: "" },
+        ],
+        copia: [COPIA_EQUIPO_CTA],
+      },
+      {
+        id: "resenas",
+        nombre: "Reseñas de clientes",
+        consume: ["resenas"],
+        textos: [{ campo: "titulo", etiqueta: "Título de reseñas", porDefecto: "Se dice en la barra" }],
+      },
+      {
+        id: "portafolio",
+        nombre: "Portafolio de cortes",
+        consume: ["galeria"],
+        textos: [{ campo: "titulo", etiqueta: "Título del portafolio", porDefecto: "En la pared" }],
+      },
+      {
+        id: "reservar",
+        nombre: "Cierre con reserva",
+        consume: [],
+        textos: [
+          { campo: "titulo", etiqueta: "Título del cierre", porDefecto: "Reserva tu silla" },
+          { campo: "subtitulo", etiqueta: "Bajada del cierre", porDefecto: "" },
+        ],
+        copia: [{ clave: "reservar.cta", etiqueta: "Cierre · botón", porDefecto: "Reservar", maxLen: 40 }],
+      },
+      secContacto({
+        textos: [
+          { campo: "titulo", etiqueta: "Título de contacto", porDefecto: "La casa" },
+          { campo: "subtitulo", etiqueta: "Bajada de contacto", porDefecto: "" },
+        ],
+      }),
+    ],
+  },
+
+  /* ────────────────────────────────────────────────────────────────
+     11 · NOCTURNA — la barbería que abre de noche.
+     Estructura: portada a pantalla completa con la foto en duotono
+     (solo CSS) y el reloj "abierto hasta las" sacado del horario real
+     (el cierre más tardío de la semana, sin "hoy"); servicios en
+     tarjetas con borde luminoso; barberos en tira horizontal por gesto.
+     ──────────────────────────────────────────────────────────────── */
+  nocturna: {
+    id: "nocturna",
+    nombre: "Nocturna",
+    para: "La barbería que abre de noche: negro azulado, una sola luz y la hora de cierre bien grande.",
+    estructura:
+      "Portada a pantalla completa en duotono con la hora de cierre sacada del horario · servicios en tarjetas con borde luminoso · barberos en tira horizontal",
+    acentoSugerido: "whisky",
+    oscura: true,
+    secciones: [
+      {
+        id: "portada",
+        nombre: "Portada",
+        obligatoria: true,
+        consume: [],
+        fotos: [FOTO_LOGO, FOTO_PORTADA],
+        copia: [
+          ...copiaPortada("Reservar", "Abrimos cuando sales del trabajo.", "WhatsApp"),
+          { clave: "portada.reloj", etiqueta: "Portada · rótulo del reloj", porDefecto: "Abierto hasta las", maxLen: 40 },
+        ],
+      },
+      {
+        id: "servicios",
+        nombre: "Servicios y precios",
+        consume: ["servicios"],
+        textos: [
+          { campo: "titulo", etiqueta: "Título de servicios", porDefecto: "Servicios" },
+          { campo: "subtitulo", etiqueta: "Bajada de servicios", porDefecto: "" },
+        ],
+        copia: [{ clave: "servicios.cta", etiqueta: "Servicios · botón de cada corte", porDefecto: "Reservar", maxLen: 40 }],
+      },
+      {
+        id: "equipo",
+        nombre: "Barberos",
+        consume: ["barberos"],
+        textos: [
+          { campo: "titulo", etiqueta: "Título del equipo", porDefecto: "Quién atiende" },
+          { campo: "subtitulo", etiqueta: "Bajada del equipo", porDefecto: "" },
+        ],
+        copia: [COPIA_EQUIPO_CTA],
+      },
+      {
+        id: "portafolio",
+        nombre: "Portafolio de cortes",
+        consume: ["galeria"],
+        textos: [{ campo: "titulo", etiqueta: "Título del portafolio", porDefecto: "Trabajos" }],
+      },
+      {
+        id: "resenas",
+        nombre: "Reseñas de clientes",
+        consume: ["resenas"],
+        textos: [{ campo: "titulo", etiqueta: "Título de reseñas", porDefecto: "Lo que dicen" }],
+      },
+      {
+        id: "reservar",
+        nombre: "Cierre con reserva",
+        consume: [],
+        textos: [
+          { campo: "titulo", etiqueta: "Título del cierre", porDefecto: "Aparta tu lugar" },
+          { campo: "subtitulo", etiqueta: "Bajada del cierre", porDefecto: "Con cita, sin fila." },
+        ],
+        copia: [{ clave: "reservar.cta", etiqueta: "Cierre · botón", porDefecto: "Reservar", maxLen: 40 }],
+      },
+      secContacto({
+        textos: [
+          { campo: "titulo", etiqueta: "Título de contacto", porDefecto: "Dónde" },
+          { campo: "subtitulo", etiqueta: "Bajada de contacto", porDefecto: "" },
+        ],
+      }),
+    ],
+  },
+
+  /* ────────────────────────────────────────────────────────────────
+     12 · CLUB — barbería de socios.
+     Estructura: la portada es un EMBLEMA tipográfico centrado (monograma
+     de las iniciales dentro de un círculo con marco doble y el nombre
+     rodeándolo por un textPath; el logo, si lo hay, toma el centro), una
+     FRANJA DE SOCIOS a sangre con tres beneficios en romanos que es copia
+     editable (no existe ninguna membresía en el contrato), retratos en
+     blanco y negro, y las TARIFAS al final, discretas, en una columna
+     estrecha: lo contrario exacto de `precios`.
+     ──────────────────────────────────────────────────────────────── */
+  club: {
+    id: "club",
+    nombre: "Club",
+    para: "Barbería de socios, la más cara: verde botella, latón y serif alta.",
+    estructura: "Emblema tipográfico centrado como portada · franja ancha de socios con copia editable · tarifas discretas al final, al revés que precios",
+    acentoSugerido: "caramelo",
+    oscura: true,
+    secciones: [
+      {
+        id: "portada",
+        nombre: "Portada (el emblema)",
+        obligatoria: true,
+        consume: [],
+        fotos: [FOTO_LOGO],
+        copia: [
+          ...copiaPortada("Reservar", "Barbería de socios.", "WhatsApp"),
+          { clave: "portada.sello", etiqueta: "Portada · sello (año o lema)", porDefecto: "EST.", maxLen: 24 },
+          { clave: "portada.lema", etiqueta: "Portada · lema del sello", porDefecto: "Club de barbería", maxLen: 60 },
+        ],
+      },
+      /* Copia editable, no datos: la barbería la apaga si no tiene socios. */
+      {
+        id: "socios",
+        nombre: "Franja de socios",
+        consume: [],
+        textos: [
+          { campo: "titulo", etiqueta: "Título de socios", porDefecto: "Socios del club" },
+          { campo: "subtitulo", etiqueta: "Bajada de socios", porDefecto: "La silla de siempre, sin esperar." },
+        ],
+        copia: [
+          { clave: "socios.linea1", etiqueta: "Socios · beneficio 1", porDefecto: "Cita preferente", maxLen: 60 },
+          { clave: "socios.linea2", etiqueta: "Socios · beneficio 2", porDefecto: "Corte y barba sin límite", maxLen: 60 },
+          { clave: "socios.linea3", etiqueta: "Socios · beneficio 3", porDefecto: "Toalla caliente en cada visita", maxLen: 60 },
+          { clave: "socios.cta", etiqueta: "Socios · botón", porDefecto: "Quiero ser socio", maxLen: 40 },
+          { clave: "socios.nota", etiqueta: "Socios · nota", porDefecto: "Pregunta en recepción o escríbenos.", maxLen: 120 },
+        ],
+      },
+      {
+        id: "equipo",
+        nombre: "Barberos",
+        consume: ["barberos"],
+        fotos: [FOTO_EQUIPO],
+        textos: [
+          { campo: "titulo", etiqueta: "Título del equipo", porDefecto: "Los maestros" },
+          { campo: "subtitulo", etiqueta: "Bajada del equipo", porDefecto: "" },
+        ],
+        copia: [COPIA_EQUIPO_CTA],
+      },
+      {
+        id: "portafolio",
+        nombre: "Portafolio de cortes",
+        consume: ["galeria"],
+        textos: [{ campo: "titulo", etiqueta: "Título del portafolio", porDefecto: "El trabajo" }],
+      },
+      {
+        id: "resenas",
+        nombre: "Reseñas de clientes",
+        consume: ["resenas"],
+        textos: [{ campo: "titulo", etiqueta: "Título de reseñas", porDefecto: "Palabra de socio" }],
+      },
+      /* Al FINAL y discretas: un socio no viene por el precio. */
+      {
+        id: "servicios",
+        nombre: "Tarifas (al final, discretas)",
+        consume: ["servicios"],
+        textos: [
+          { campo: "titulo", etiqueta: "Título de tarifas", porDefecto: "Tarifas" },
+          { campo: "subtitulo", etiqueta: "Bajada de tarifas", porDefecto: "" },
+        ],
+        copia: [{ clave: "servicios.cta", etiqueta: "Tarifas · botón del final", porDefecto: "Reservar", maxLen: 40 }],
+      },
+      secContacto({
+        textos: [
+          { campo: "titulo", etiqueta: "Título de contacto", porDefecto: "La casa" },
+          { campo: "subtitulo", etiqueta: "Bajada de contacto", porDefecto: "" },
+        ],
+      }),
+    ],
+  },
 };
 
 /** La lista para el selector del editor, en el orden en que se presentan. */
@@ -669,6 +994,10 @@ export const BARBER_WEB_MANIFEST_LIST: BarberWebManifest[] = [
   BARBER_WEB_MANIFESTS.urbana,
   BARBER_WEB_MANIFESTS.vintage,
   BARBER_WEB_MANIFESTS.precios,
+  BARBER_WEB_MANIFESTS.estudio,
+  BARBER_WEB_MANIFESTS.carta,
+  BARBER_WEB_MANIFESTS.nocturna,
+  BARBER_WEB_MANIFESTS.club,
 ];
 
 /** El manifiesto de una plantilla, cayendo a la clásica si el id no existe. */

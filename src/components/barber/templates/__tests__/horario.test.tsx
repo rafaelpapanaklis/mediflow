@@ -12,9 +12,12 @@
    dejaba la pantalla en blanco —hasta el sidebar— sin un solo error en la
    consola. Esta prueba fija el contrato que impide que vuelva a pasar:
 
-     1. Las OCHO plantillas pintan con el horario en CUALQUIER estado
+     1. TODAS las plantillas pintan con el horario en CUALQUIER estado
         (ninguno, uno solo, todos, salteados), en el editor y en público,
-        con la barbería llena y con la barbería recién dada de alta.
+        con la barbería llena y con la barbería recién dada de alta. Se
+        recorre BARBER_WEB_TEMPLATE_IDS contra el registro REAL de
+        ../index.tsx (con el stub de ./_sin-css), así que una plantilla
+        nueva queda cubierta sola, sin tocar esta prueba.
      2. `normalizarConfigBarberWeb` deja SIEMPRE un horario bien formado,
         le metas lo que le metas. Es la única puerta por la que el Json de
         la base llega a las plantillas, así que si aquí no entra basura,
@@ -28,6 +31,7 @@
    Sin base de datos y sin navegador: son componentes puros.
    ═══════════════════════════════════════════════════════════════════════ */
 
+import "./_sin-css"; // ← PRIMERO: ../index arrastra skins.css
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -43,27 +47,11 @@ import {
   type BarberWebConfig,
 } from "@/lib/barber/landing";
 import { LimiteVistaPrevia } from "@/components/barber/landing/limite-error";
-import { BARBER_WEB_MANIFESTS } from "../manifest";
-import { PlantillaClasica } from "../t-clasica";
-import { PlantillaEquipo } from "../t-equipo";
-import { PlantillaMinimal } from "../t-minimal";
-import { PlantillaPortafolio } from "../t-portafolio";
-import { PlantillaPrecios } from "../t-precios";
-import { PlantillaPremium } from "../t-premium";
-import { PlantillaUrbana } from "../t-urbana";
-import { PlantillaVintage } from "../t-vintage";
+import { BARBER_WEB_MANIFESTS, BARBER_WEB_TEMPLATES } from "../index";
 import type { BarberWebData, BarberWebTemplateComponent } from "../types";
 
-const PLANTILLAS: Record<string, BarberWebTemplateComponent> = {
-  clasica: PlantillaClasica,
-  equipo: PlantillaEquipo,
-  portafolio: PlantillaPortafolio,
-  minimal: PlantillaMinimal,
-  premium: PlantillaPremium,
-  urbana: PlantillaUrbana,
-  vintage: PlantillaVintage,
-  precios: PlantillaPrecios,
-};
+/** El registro real: la plantilla trece entra aquí sola. */
+const PLANTILLAS: Record<string, BarberWebTemplateComponent> = BARBER_WEB_TEMPLATES;
 
 /* ── Las dos barberías extremas ──────────────────────────────────── */
 
@@ -134,10 +122,10 @@ function datos(tpl: string, horario: BarberWebConfig["horario"], base: typeof LL
 }
 
 /* ══════════════════════════════════════════════════════════════
-   1 · Las ocho plantillas, en todos los estados del horario
+   1 · Todas las plantillas, en todos los estados del horario
    ══════════════════════════════════════════════════════════════ */
 
-test("las 8 plantillas pintan con el horario en cualquier estado", () => {
+test("todas las plantillas pintan con el horario en cualquier estado", () => {
   let pintadas = 0;
   for (const tpl of BARBER_WEB_TEMPLATE_IDS) {
     const Plantilla = PLANTILLAS[tpl];
@@ -155,8 +143,8 @@ test("las 8 plantillas pintan con el horario en cualquier estado", () => {
       }
     }
   }
-  // 8 plantillas × 8 estados × 2 barberías × 2 modos.
-  assert.equal(pintadas, 8 * ESTADOS.length * 2 * 2);
+  // N plantillas × 8 estados × 2 barberías × 2 modos.
+  assert.equal(pintadas, BARBER_WEB_TEMPLATE_IDS.length * ESTADOS.length * 2 * 2);
 });
 
 test("encender un día hace aparecer el horario en la plantilla, y apagarlo lo quita", () => {
@@ -205,7 +193,7 @@ test("normalizarConfigBarberWeb deja SIEMPRE un horario bien formado", () => {
   }
 });
 
-test("las 8 plantillas pintan con el horario que sale de normalizar basura", () => {
+test("todas las plantillas pintan con el horario que sale de normalizar basura", () => {
   for (const raw of BASURA) {
     const config = normalizarConfigBarberWeb(raw);
     for (const tpl of BARBER_WEB_TEMPLATE_IDS) {

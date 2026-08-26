@@ -33,7 +33,7 @@
 import { BARBER_WEB_MANIFESTS } from "@/components/barber/templates/manifest";
 
 /* ══════════════════════════════════════════════════════════════
-   1 · Las ocho plantillas
+   1 · Las doce plantillas
    ══════════════════════════════════════════════════════════════ */
 
 export const BARBER_WEB_TEMPLATE_IDS = [
@@ -45,6 +45,10 @@ export const BARBER_WEB_TEMPLATE_IDS = [
   "urbana",
   "vintage",
   "precios",
+  "estudio",
+  "carta",
+  "nocturna",
+  "club",
 ] as const;
 
 export type BarberWebTemplateId = (typeof BARBER_WEB_TEMPLATE_IDS)[number];

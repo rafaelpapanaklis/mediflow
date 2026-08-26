@@ -1,12 +1,12 @@
 /* ═══════════════════════════════════════════════════════════════════════
    EL REGISTRO DE PLANTILLAS.
 
-   El ÚNICO sitio que conoce a las ocho por su nombre. Ni la página
+   El ÚNICO sitio que conoce a las doce por su nombre. Ni la página
    pública, ni el editor, ni la API saben qué plantillas existen: piden
    `<PlantillaBarberWeb data={…} />` y esto resuelve.
 
-   Agregar la novena = una línea aquí (más su manifiesto, su componente y
-   su piel). Ver el procedimiento completo en ./manifest.ts.
+   Agregar la decimotercera = una línea aquí (más su manifiesto, su
+   componente y su piel). Ver el procedimiento completo en ./manifest.ts.
 
    Sin "use client": se pinta en el servidor para /b/[slug] y en el
    navegador para la vista previa del editor.
@@ -14,9 +14,13 @@
 
 import type { BarberWebTemplateId } from "@/lib/barber/landing";
 import type { BarberWebData, BarberWebTemplateComponent } from "./types";
+import { PlantillaCarta } from "./t-carta";
 import { PlantillaClasica } from "./t-clasica";
+import { PlantillaClub } from "./t-club";
 import { PlantillaEquipo } from "./t-equipo";
+import { PlantillaEstudio } from "./t-estudio";
 import { PlantillaMinimal } from "./t-minimal";
+import { PlantillaNocturna } from "./t-nocturna";
 import { PlantillaPortafolio } from "./t-portafolio";
 import { PlantillaPrecios } from "./t-precios";
 import { PlantillaPremium } from "./t-premium";
@@ -33,6 +37,10 @@ export const BARBER_WEB_TEMPLATES: Record<BarberWebTemplateId, BarberWebTemplate
   urbana: PlantillaUrbana,
   vintage: PlantillaVintage,
   precios: PlantillaPrecios,
+  estudio: PlantillaEstudio,
+  carta: PlantillaCarta,
+  nocturna: PlantillaNocturna,
+  club: PlantillaClub,
 };
 
 /**
