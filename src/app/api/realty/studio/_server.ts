@@ -21,7 +21,7 @@ import "server-only";
 // ═══════════════════════════════════════════════════════════════════════
 import { NextResponse } from "next/server";
 import { getRealtyContext, type RealtyContext } from "@/lib/realty-auth";
-import { hasRealtyPermission, type RealtyPermissionKey } from "@/lib/realty/permissions";
+import { hasRealtyPermission } from "@/lib/realty/permissions";
 import { isRealtySubscriptionActive, realtyPlanHasFeature } from "@/lib/realty/plan-shared";
 import { REALTY_NAV_ITEMS, navItemAllowsMode } from "@/lib/realty/types";
 import {
@@ -132,6 +132,17 @@ export async function ownedProperty(accountId: string, propertyId: string) {
       state: true,
       amenities: true,
       description: true,
+      // Las fotos que va a MIRAR el modelo al redactar. En el orden de la
+      // galería (portada primero), que es el que el asesor ya decidió: la
+      // portada es la foto que él considera que vende el inmueble.
+      //
+      // Se piden 3 y no todas: cada imagen se paga por su tamaño en tokens
+      // de entrada (ver VISION_MAX_PHOTOS en studio/copy.ts).
+      photos: {
+        select: { url: true },
+        orderBy: [{ isCover: "desc" }, { sortOrder: "asc" }],
+        take: 3,
+      },
     },
   });
 }

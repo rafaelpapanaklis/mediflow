@@ -26,6 +26,7 @@ import { startOfDayInTz } from "@/lib/realty/whatsapp-core";
 import {
   buildStudioSpend,
   dailyCapMicros,
+  monthAnchorUtc,
   studioFits,
   type Micros,
   type StudioSpendDTO,
@@ -58,9 +59,12 @@ function dayStartFor(timezone: string): Date {
   return startOfDayInTz(new Date(), timezone || "America/Mexico_City");
 }
 
+/** Medianoche del día 1 del mes, también en la zona de la CUENTA. */
 function monthStartFor(timezone: string): Date {
-  const day = dayStartFor(timezone);
-  return new Date(Date.UTC(day.getUTCFullYear(), day.getUTCMonth(), 1));
+  const tz = timezone || "America/Mexico_City";
+  // El ancla (mediodía UTC del día 1 local) y luego la misma bajada a
+  // medianoche que usa el día. Ver monthAnchorUtc para el porqué.
+  return startOfDayInTz(monthAnchorUtc(new Date(), tz), tz);
 }
 
 async function sumMicrosSince(accountId: string, since: Date): Promise<Micros> {
@@ -222,16 +226,32 @@ export async function releaseStudioSpend(reservation: StudioReservation): Promis
   }
 }
 
-/** Lo generado por esta cuenta, para el panel. Lo más nuevo primero. */
-export async function listStudioItems(accountId: string, limit = 40) {
+/**
+ * Lo generado por esta cuenta, para el panel. Lo más nuevo primero.
+ *
+ * Con `propertyId` se recorta a UN inmueble, que es como el asesor lo mira:
+ * "¿qué le he hecho ya a esta casa?". El filtro se aplica en memoria y NO en
+ * la consulta porque el propertyId vive DENTRO del payload Json, y filtrar
+ * por una ruta de Json ata esta lectura a Postgres y a la forma exacta del
+ * objeto. Para eso se leen más filas y se recortan aquí: son 400 filas de un
+ * `action` propio, con el índice ([accountId, createdAt]) haciendo el
+ * trabajo, y el tope diario impide de raíz que una cuenta genere miles.
+ */
+export async function listStudioItems(accountId: string, limit = 40, propertyId?: string | null) {
   try {
     const rows = await prisma.realtyAdminAction.findMany({
       where: { accountId, action: STUDIO_USAGE_ACTION },
       orderBy: { createdAt: "desc" },
-      take: Math.min(Math.max(1, limit), 200),
+      take: propertyId ? 400 : Math.min(Math.max(1, limit), 200),
       select: { id: true, payload: true, createdAt: true },
     });
-    return rows.map((r) => {
+    const vistos = propertyId
+      ? rows.filter((r) => {
+          const p = r.payload as unknown as UsagePayload | null;
+          return p?.propertyId === propertyId;
+        })
+      : rows;
+    return vistos.slice(0, Math.min(Math.max(1, limit), 200)).map((r) => {
       const p = (r.payload as unknown as UsagePayload | null) ?? ({} as UsagePayload);
       return {
         id: r.id,

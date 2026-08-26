@@ -37,6 +37,85 @@ function model(): string {
   return process.env.REALTY_AI_MODEL || REALTY_STUDIO_DEFAULT_MODEL;
 }
 
+// ── Las fotos que ve el modelo ──────────────────────────────────────────
+
+/** Una foto ya lista para mandarse: base64 y su tipo. */
+export interface StudioPhotoInput {
+  base64: string;
+  mediaType: string;
+}
+
+/**
+ * Cuántas fotos ve el modelo. TRES, y no todas.
+ *
+ * Cada imagen cuesta ≈ ancho×alto/750 tokens de ENTRADA, así que las fotos
+ * dominan el precio de la generación mucho antes que el texto. Tres bastan
+ * para saber si la sala tiene doble altura o si la cocina abre al comedor
+ * —que es lo que hace distinta a una descripción— y doce solo multiplican
+ * la factura sin decir nada nuevo.
+ */
+export const VISION_MAX_PHOTOS = 3;
+
+/**
+ * Lado largo al que se encogen antes de mandarlas: 768 px.
+ *
+ * A 768 px una foto son ~790 tokens; a 1568 (el máximo que el proveedor
+ * respeta) son ~3 300. Cuatro veces el precio por un detalle que ninguna
+ * descripción de anuncio va a usar. Con el tope diario de 2 USD, la
+ * diferencia es entre ~60 y ~25 descripciones al día.
+ */
+export const VISION_MAX_EDGE = 768;
+
+/**
+ * Baja las fotos firmadas y las deja listas para el modelo.
+ *
+ * 🔴 NUNCA lanza. Una foto que no descarga, un bucket lento o un sharp que
+ * no puede con el archivo devuelven una lista más corta (o vacía) y la
+ * generación sigue SIN fotos: una descripción hecha solo con los datos es
+ * peor que una hecha con las fotos, pero es infinitamente mejor que un
+ * error rojo donde debía ir el anuncio.
+ */
+export async function photosForVision(
+  signedUrls: Array<string | null | undefined>,
+): Promise<StudioPhotoInput[]> {
+  const out: StudioPhotoInput[] = [];
+  const urls = signedUrls.filter(Boolean).slice(0, VISION_MAX_PHOTOS) as string[];
+  if (urls.length === 0) return out;
+
+  let sharp: typeof import("sharp");
+  try {
+    sharp = (await import("sharp")).default;
+  } catch (e) {
+    console.error("[realty/studio] sin sharp, se redacta sin fotos:", e);
+    return out;
+  }
+
+  for (const url of urls) {
+    try {
+      const res = await fetch(url, { signal: AbortSignal.timeout(15_000) });
+      if (!res.ok) continue;
+      const raw = Buffer.from(await res.arrayBuffer());
+      const jpeg = await sharp(raw)
+        // `rotate()` sin argumentos aplica la orientación del EXIF. Sin
+        // esto, una foto de teléfono llega ACOSTADA y el modelo describe un
+        // cuarto de lado.
+        .rotate()
+        .resize({
+          width: VISION_MAX_EDGE,
+          height: VISION_MAX_EDGE,
+          fit: "inside",
+          withoutEnlargement: true,
+        })
+        .jpeg({ quality: 78 })
+        .toBuffer();
+      out.push({ base64: jpeg.toString("base64"), mediaType: "image/jpeg" });
+    } catch (e) {
+      console.error("[realty/studio] una foto no se pudo preparar:", e);
+    }
+  }
+  return out;
+}
+
 export interface StudioTextCall {
   text: string;
   micros: Micros;
@@ -74,6 +153,7 @@ async function callClaude(args: {
   system: string;
   user: string;
   maxTokens: number;
+  photos?: StudioPhotoInput[];
 }): Promise<StudioTextOutcome> {
   const key = apiKey();
   if (!key) {
@@ -88,6 +168,18 @@ async function callClaude(args: {
   }
 
   const used = model();
+
+  // Las fotos van ANTES del texto: el proveedor documenta ese orden y con él
+  // el modelo lee la instrucción sabiendo ya qué está mirando.
+  const fotos = args.photos ?? [];
+  const content: Array<Record<string, unknown>> = [
+    ...fotos.map((f) => ({
+      type: "image",
+      source: { type: "base64", media_type: f.mediaType, data: f.base64 },
+    })),
+    { type: "text", text: args.user },
+  ];
+
   try {
     const res = await fetch(ANTHROPIC_URL, {
       method: "POST",
@@ -115,7 +207,7 @@ async function callClaude(args: {
         // el costo de cada generación, que es lo que este módulo cuida.
         output_config: { effort: "low" },
         system: args.system,
-        messages: [{ role: "user", content: args.user }],
+        messages: [{ role: "user", content }],
       }),
       // Holgado y por debajo del maxDuration de la ruta (120 s): con el
       // razonamiento encendido una redacción puede tardar más que un
@@ -237,6 +329,26 @@ const NO_INVENTAR = [
   "· Español de México, tuteo, sin regionalismos de España.",
 ].join("\n");
 
+/**
+ * Lo que se añade CUANDO van fotos.
+ *
+ * 🔴 Las fotos abren una puerta nueva a la mentira: el modelo puede "ver"
+ * una alberca en un reflejo o llamarle mármol a un porcelanato. La regla de
+ * no inventar deja de bastar en cuanto hay imágenes, así que se acota qué
+ * puede decir de ellas: lo evidente, y nada de materiales, marcas ni
+ * medidas sacadas del ojo. Quien responde por el anuncio es el asesor.
+ */
+const MIRANDO_LAS_FOTOS = [
+  "TE ADJUNTO FOTOS REALES DEL INMUEBLE. Reglas para usarlas:",
+  "· Habla solo de lo que se ve CLARAMENTE: distribución, luz, si un espacio",
+  "  se abre a otro, altura, vista, si tiene jardín o terraza.",
+  "· NO adivines materiales ni marcas. No digas 'mármol', 'granito', 'roble'",
+  "  ni 'acabados de lujo' salvo que sea inequívoco en la foto.",
+  "· NO estimes medidas ni cuentes cuartos por las fotos: para eso están los datos.",
+  "· Los muebles pueden no incluirse en la venta: no los ofrezcas.",
+  "· Si una foto está borrosa o no se entiende, ignórala.",
+].join("\n");
+
 const TONE_HINT: Record<RealtyCopyTone, string> = {
   directo: "Tono DIRECTO: frases cortas, dato tras dato, cero adornos. Para quien ya sabe lo que busca.",
   calido: "Tono CÁLIDO: habla de cómo se vive ahí, en segunda persona, sin cursilería.",
@@ -248,11 +360,15 @@ const TONE_HINT: Record<RealtyCopyTone, string> = {
 export async function generateDescription(args: {
   property: StudioPropertyContext;
   tone: RealtyCopyTone;
+  /** Fotos de la ficha. Vacío = se redacta solo con los datos. */
+  photos?: StudioPhotoInput[];
 }): Promise<StudioTextOutcome> {
+  const conFotos = (args.photos?.length ?? 0) > 0;
   const system = [
     "Eres quien redacta los anuncios de una inmobiliaria mexicana.",
     "Escribes la descripción que va en el portal y en la web de la agencia.",
     NO_INVENTAR,
+    ...(conFotos ? [MIRANDO_LAS_FOTOS] : []),
     TONE_HINT[args.tone],
   ].join("\n\n");
 
@@ -267,7 +383,7 @@ export async function generateDescription(args: {
     "Devuelve SOLO el texto del anuncio, sin títulos ni comillas ni viñetas.",
   ].join("\n");
 
-  return callClaude({ system, user, maxTokens: 4000 });
+  return callClaude({ system, user, maxTokens: 4000, photos: args.photos });
 }
 
 // ── D. Textos para redes ────────────────────────────────────────────────
@@ -312,13 +428,17 @@ export function parseSocial(raw: string): RealtySocialResult {
 export async function generateSocial(args: {
   property: StudioPropertyContext;
   tone: RealtyCopyTone;
+  /** Fotos de la ficha. En redes son las que dictan el gancho. */
+  photos?: StudioPhotoInput[];
 }): Promise<StudioTextOutcome> {
   const zona = args.property.colonia || args.property.city || "la zona";
+  const conFotos = (args.photos?.length ?? 0) > 0;
   const system = [
     "Eres quien lleva las redes de una inmobiliaria mexicana.",
     "Escribes para Instagram y TikTok, donde la gente NO busca metros cuadrados:",
     "busca imaginarse viviendo ahí. Vendes el estilo de vida, con datos reales.",
     NO_INVENTAR,
+    ...(conFotos ? [MIRANDO_LAS_FOTOS] : []),
     TONE_HINT[args.tone],
   ].join("\n\n");
 
@@ -339,5 +459,5 @@ export async function generateSocial(args: {
     "(el primer comentario: una línea invitando a escribir por mensaje directo.)",
   ].join("\n");
 
-  return callClaude({ system, user, maxTokens: 4000 });
+  return callClaude({ system, user, maxTokens: 4000, photos: args.photos });
 }

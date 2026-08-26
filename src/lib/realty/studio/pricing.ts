@@ -112,6 +112,45 @@ export function dailyCapMicros(
   return usdToMicros(raw);
 }
 
+/**
+ * Ancla del PRIMER DÍA del mes en la zona de la CUENTA, como instante UTC a
+ * mediodía. Quien la usa la baja a la medianoche exacta con `startOfDayInTz`.
+ *
+ * 🔴 Por qué no basta con mirar el mes de la medianoche local de hoy: esa
+ * medianoche es un instante UTC de las 06:00 (México va de UTC-5 a UTC-8), y
+ * `Date.UTC(año, mes, 1)` sobre él da las 00:00 UTC del día 1 — seis horas
+ * ANTES de que empiece el mes en Guadalajara. El resultado es que las
+ * generaciones de la última tarde del mes anterior se cuentan en el mes
+ * nuevo. Es una cifra informativa, pero es dinero en pantalla y no puede
+ * estar mal.
+ *
+ * Se ancla a MEDIODÍA UTC y no a medianoche a propósito: mediodía UTC del
+ * día 1 cae dentro del día 1 local para cualquier desfase entre UTC-12 y
+ * UTC+11, así que el horario de verano no puede empujarlo al día anterior.
+ */
+export function monthAnchorUtc(now: Date, timeZone: string): Date {
+  let year = now.getUTCFullYear();
+  let month = now.getUTCMonth() + 1;
+  try {
+    // "en-CA" da ISO (2026-08-26), que se parte sin ambigüedad de formato.
+    const partes = new Intl.DateTimeFormat("en-CA", {
+      timeZone: timeZone || "UTC",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).format(now);
+    const [y, m] = partes.split("-").map(Number);
+    if (Number.isFinite(y) && Number.isFinite(m)) {
+      year = y;
+      month = m;
+    }
+  } catch {
+    // Una zona horaria inválida NO puede tumbar el panel de consumo: se cae
+    // al mes en UTC, que a lo sumo se corre unas horas.
+  }
+  return new Date(Date.UTC(year, month - 1, 1, 12, 0, 0));
+}
+
 export interface StudioSpendDTO {
   /** Gastado HOY, en micros. */
   spentMicros: Micros;

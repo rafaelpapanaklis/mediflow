@@ -19,6 +19,7 @@
 // ═══════════════════════════════════════════════════════════════════════
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { RealtyReelPlan } from "@/lib/realty/studio/types";
+import { reelRecordedMs } from "@/lib/realty/studio/reel-plan";
 
 type Estado = "idle" | "cargando" | "grabando" | "listo" | "error";
 
@@ -211,24 +212,15 @@ export function RealtyReelComposer({
       };
     });
 
-    setEstado("grabando");
-    rec.start();
+    // 🔴 La MISMA cuenta que hizo el servidor al armar el plan, importada de
+    // reel-plan y no repetida aquí: si se recalculara a mano, el "14.3 s"
+    // que enseña la pantalla y el archivo que sale podrían separarse sin que
+    // nadie lo note. Se mide sobre `escenas` —las que SÍ cargaron— y no
+    // sobre plan.scenes, porque una foto que no baja no se graba.
+    const totales = reelRecordedMs(escenas);
 
-    const t0 = performance.now();
-    const totales = escenas.reduce((a, s) => a + s.durationMs, 0);
-
-    const pintar = () => {
-      const ahora = performance.now() - t0;
-      if (ahora >= totales) {
-        try {
-          rec.stop();
-        } catch {
-          /* ya estaba parado */
-        }
-        return;
-      }
-      setProgreso(Math.min(100, Math.round((ahora / totales) * 100)));
-
+    /** Pinta el cuadro que corresponde al milisegundo `ahora`. */
+    const pintarEn = (ahora: number) => {
       // Qué escena toca y cuánto lleva dentro de ella.
       let acc = 0;
       let idx = 0;
@@ -297,7 +289,32 @@ export function RealtyReelComposer({
         ctx.drawImage(logo, W - margen - lw, margen, lw, lh);
         ctx.restore();
       }
+    };
 
+    // 🔴 El PRIMER cuadro se pinta ANTES de que arranque la grabadora.
+    // `captureStream` graba lo que el canvas tenga en ese momento, y el
+    // canvas todavía no ha visto una sola foto: sin esto, el reel abre con
+    // un parpadeo negro. En un video de 13 segundos que se juzga en el
+    // primer segundo, eso es el segundo que decide si lo siguen viendo.
+    pintarEn(0);
+
+    setEstado("grabando");
+    rec.start();
+
+    const t0 = performance.now();
+
+    const pintar = () => {
+      const ahora = performance.now() - t0;
+      if (ahora >= totales) {
+        try {
+          rec.stop();
+        } catch {
+          /* ya estaba parado */
+        }
+        return;
+      }
+      setProgreso(Math.min(100, Math.round((ahora / totales) * 100)));
+      pintarEn(ahora);
       requestAnimationFrame(pintar);
     };
 
@@ -443,6 +460,16 @@ export function RealtyReelComposer({
           </button>
         )}
       </div>
+
+      {/* En escritorio `canShare({files})` es casi siempre `false`, así que el
+          botón de compartir no aparece y quedaría un video sin salida obvia.
+          Se dice qué hacer —bajarlo y subirlo desde el teléfono— en vez de
+          dejar a la persona buscando un botón que este navegador no tiene. */}
+      {videoUrl && !puedeCompartir && (
+        <p style={{ fontSize: 12, color: "var(--text-3)", margin: 0, textAlign: "center" }}>
+          {t("reel.soloDescarga")}
+        </p>
+      )}
 
       {videoUrl && (
         <video

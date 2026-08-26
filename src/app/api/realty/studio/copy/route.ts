@@ -6,11 +6,13 @@ import {
   ownedProperty,
   studioServerError,
 } from "../_server";
+import { signRealtyUrls } from "@/lib/realty/media";
 import {
   generateDescription,
   generateSocial,
   isTextOk,
   parseSocial,
+  photosForVision,
   type StudioPropertyContext,
 } from "@/lib/realty/studio/copy";
 import {
@@ -88,16 +90,38 @@ export async function POST(req: NextRequest) {
       currentDescription: p.description,
     };
 
+    // Las fotos que va a MIRAR el modelo. Viven en un bucket privado, así
+    // que hay que firmarlas antes de bajarlas.
+    //
+    // 🔴 Se preparan ANTES de reservar el gasto. Si el bucket está lento o
+    // una foto no baja, `photosForVision` devuelve una lista más corta y se
+    // redacta con lo que haya — pero el minuto que tarde en descubrirlo no
+    // debe transcurrir con presupuesto ya apartado: una reserva viva
+    // mientras se bajan fotos es tope que otra pestaña no puede usar.
+    const photos = await photosForVision(
+      await signRealtyUrls(p.photos.map((f) => f.url)),
+    );
+
     // Se RESERVA antes de llamar. El estimado es holgado; el cargo real se
     // corrige abajo con los tokens que devuelva el modelo.
+    // El detalle que verá el asesor en el historial. Que diga si la IA MIRÓ
+    // las fotos no es adorno: es la diferencia entre "me describió la casa"
+    // y "me acomodó los datos que ya tenía capturados".
+    const detalle = photos.length > 0 ? `${tone} · ${photos.length} fotos` : `${tone} · sin fotos`;
+
     const reservation = await reserveStudioSpend({
       accountId: ctx.accountId,
       timezone: ctx.account.timezone,
       kind: wants === "social" ? "social" : "description",
-      estimatedMicros: usdToMicros(0.03),
+      // El estimado sube con las fotos porque el costo sube con las fotos:
+      // cada imagen son ~790 tokens de entrada. Solo importa mientras la
+      // reserva está viva —abajo se corrige con el gasto REAL—, pero es lo
+      // que impide que diez pestañas a la vez reserven de menos y se pasen
+      // del tope entre todas.
+      estimatedMicros: usdToMicros(0.02 + photos.length * 0.008),
       propertyId: p.id,
       propertyTitle: p.title,
-      detail: tone,
+      detail: detalle,
     });
     if (!reservation) {
       return NextResponse.json(
@@ -111,8 +135,8 @@ export async function POST(req: NextRequest) {
 
     const outcome =
       wants === "social"
-        ? await generateSocial({ property, tone })
-        : await generateDescription({ property, tone });
+        ? await generateSocial({ property, tone, photos })
+        : await generateDescription({ property, tone, photos });
 
     if (!isTextOk(outcome)) {
       // 🔴 Aquí se decide si el intento fallido se cobra, y la regla es
@@ -144,7 +168,7 @@ export async function POST(req: NextRequest) {
     await settleStudioSpend({
       reservation,
       actualMicros: outcome.call.micros,
-      detail: tone,
+      detail: detalle,
       model: outcome.call.model,
       inputTokens: outcome.call.inputTokens,
       outputTokens: outcome.call.outputTokens,

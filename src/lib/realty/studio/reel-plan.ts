@@ -100,6 +100,26 @@ export function reelPlace(p: ReelPropertyInput): string {
 }
 
 /**
+ * Cuánto dura el video DE VERDAD: la suma de las escenas, sin descontar los
+ * cruces.
+ *
+ * 🔴 Existe para que el plan y el grabador no se contradigan. El cruce de
+ * este reel es un ENCIMADO en la cola de cada escena —la siguiente foto
+ * aparece con opacidad creciente sobre la que termina—, y cuando llega el
+ * corte la escena siguiente empieza igual desde cero con toda su duración.
+ * O sea: el cruce NO acorta el video. Un `totalMs` que restara los cruces
+ * (como haría un editor con solapamiento real) enseñaría "11.3 s" para un
+ * archivo de 13 s, y quien publica un reel en TikTok cuenta los segundos.
+ *
+ * Lo usan LAS DOS mitades —el plan del servidor y el grabador del
+ * navegador— justo para que no puedan separarse: si un día el ritmo cambia,
+ * cambia en una sola función.
+ */
+export function reelRecordedMs(scenes: Array<{ durationMs: number }>): number {
+  return scenes.reduce((acc, s) => acc + Math.max(0, s.durationMs), 0);
+}
+
+/**
  * Arma el plan.
  *
  * El orden de las fotos NO se reinventa: llega el de la galería, que ya lo
@@ -153,17 +173,13 @@ export function buildReelPlan(args: {
     };
   });
 
-  // El cruce se descuenta una vez por transición, no una por escena.
-  const totalMs =
-    scenes.reduce((acc, s) => acc + s.durationMs, 0) -
-    spec.crossfadeMs * Math.max(0, scenes.length - 1);
-
   return {
     template: args.template,
     width: REEL_WIDTH,
     height: REEL_HEIGHT,
     fps: REEL_FPS,
-    totalMs: Math.max(1000, totalMs),
+    // La MISMA cuenta que hará el grabador. Ver reelRecordedMs.
+    totalMs: Math.max(1000, reelRecordedMs(scenes)),
     crossfadeMs: spec.crossfadeMs,
     scenes,
     logoUrl: args.logoUrl,

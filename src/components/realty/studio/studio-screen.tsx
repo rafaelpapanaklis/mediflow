@@ -52,10 +52,20 @@ export function RealtyStudioScreen({
   const [items, setItems] = useState<RealtyStudioItem[]>([]);
   const [aviso, setAviso] = useState<{ tipo: "ok" | "err"; texto: string } | null>(null);
   const [cargando, setCargando] = useState<string | null>(null);
+  // "¿Qué le he hecho ya a ESTA casa?" — la pregunta que se hace el asesor
+  // cuando abre el historial. Apagado por defecto: al llegar a la pantalla
+  // lo que interesa es cuánto se lleva gastado en total.
+  const [soloEsteInmueble, setSoloEsteInmueble] = useState(false);
 
+  const filtroPropertyId = soloEsteInmueble && propertyId ? propertyId : null;
+
+  // 🔴 `filtroPropertyId` en las dependencias, y NO `t`: makeRealtyT
+  // devuelve una función nueva por render y metería este useCallback (y el
+  // useEffect que lo consume) en un bucle de fetch sin fondo.
   const cargarConsumo = useCallback(async () => {
     try {
-      const res = await fetch("/api/realty/studio/spend");
+      const qs = filtroPropertyId ? `?propertyId=${encodeURIComponent(filtroPropertyId)}` : "";
+      const res = await fetch(`/api/realty/studio/spend${qs}`);
       if (!res.ok) return;
       const data = await res.json();
       setSpend(data?.spend ?? null);
@@ -63,7 +73,7 @@ export function RealtyStudioScreen({
     } catch {
       /* el consumo es informativo: si no carga, no se rompe nada */
     }
-  }, []);
+  }, [filtroPropertyId]);
 
   useEffect(() => {
     void cargarConsumo();
@@ -146,33 +156,34 @@ export function RealtyStudioScreen({
         </Card>
       ) : (
         <>
-          {tab !== "consumo" && (
-            <Card>
-              <label style={{ display: "grid", gap: 6 }}>
-                <span style={{ fontSize: 12, fontWeight: 600, color: "var(--text-2)" }}>
-                  {t("inmueble")}
-                </span>
-                <select
-                  value={propertyId}
-                  onChange={(e) => setPropertyId(e.target.value)}
-                  style={{
-                    padding: "8px 10px",
-                    fontSize: 13,
-                    borderRadius: 9,
-                    border: "1px solid var(--border-soft)",
-                    background: "var(--bg)",
-                    color: "var(--text-1)",
-                  }}
-                >
-                  {properties.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.title} {p.photos ? `· ${p.photos} fotos` : `· ${t("sinFotos")}`}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            </Card>
-          )}
+          {/* El selector va en TODAS las pestañas, la de consumo incluida:
+              es el inmueble sobre el que trabaja la pantalla entera, y el
+              historial se puede recortar a él. */}
+          <Card>
+            <label style={{ display: "grid", gap: 6 }}>
+              <span style={{ fontSize: 12, fontWeight: 600, color: "var(--text-2)" }}>
+                {t("inmueble")}
+              </span>
+              <select
+                value={propertyId}
+                onChange={(e) => setPropertyId(e.target.value)}
+                style={{
+                  padding: "8px 10px",
+                  fontSize: 13,
+                  borderRadius: 9,
+                  border: "1px solid var(--border-soft)",
+                  background: "var(--bg)",
+                  color: "var(--text-1)",
+                }}
+              >
+                {properties.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.title} {p.photos ? `· ${p.photos} fotos` : `· ${t("sinFotos")}`}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </Card>
 
           {aviso && (
             <p
@@ -221,7 +232,15 @@ export function RealtyStudioScreen({
               bloqueado={spend?.exhausted === true}
             />
           )}
-          {tab === "consumo" && <ConsumoTab t={t} items={items} />}
+          {tab === "consumo" && (
+            <ConsumoTab
+              t={t}
+              items={items}
+              solo={soloEsteInmueble}
+              setSolo={setSoloEsteInmueble}
+              titulo={properties.find((p) => p.id === propertyId)?.title ?? ""}
+            />
+          )}
         </>
       )}
     </div>
@@ -448,43 +467,67 @@ function TextoTab({ t, propertyId, pedir, cargando, setCargando, bloqueado }: an
   );
 }
 
-function ConsumoTab({ t, items }: { t: (k: string, v?: any) => string; items: RealtyStudioItem[] }) {
-  if (items.length === 0) {
-    return (
-      <Card>
-        <p style={{ margin: 0, fontSize: 13, color: "var(--text-2)" }}>{t("consumo.vacio")}</p>
-      </Card>
-    );
-  }
+function ConsumoTab({
+  t,
+  items,
+  solo,
+  setSolo,
+  titulo,
+}: {
+  t: (k: string, v?: any) => string;
+  items: RealtyStudioItem[];
+  solo: boolean;
+  setSolo: (v: boolean) => void;
+  titulo: string;
+}) {
   return (
     <Card>
-      <ul style={{ display: "grid", gap: 6, listStyle: "none", padding: 0, margin: 0 }}>
-        {items.map((it) => (
-          <li
-            key={it.id}
-            style={{
-              display: "flex",
-              justifyContent: "space-between",
-              gap: 10,
-              padding: "8px 10px",
-              borderRadius: 9,
-              border: "1px solid var(--border-soft)",
-              fontSize: 12.5,
-            }}
-          >
-            <span style={{ display: "grid", gap: 2 }}>
-              <strong style={{ color: "var(--text-1)" }}>{t(`kinds.${it.kind}`)}</strong>
-              <span style={{ color: "var(--text-3)" }}>
-                {it.propertyTitle ?? "—"}
-                {it.detail ? ` · ${it.detail}` : ""}
+      {/* El recorte por inmueble: "¿qué le he hecho ya a esta casa?" */}
+      <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+        <Chip activo={!solo} onClick={() => setSolo(false)}>
+          {t("consumo.todos")}
+        </Chip>
+        <Chip activo={solo} onClick={() => setSolo(true)}>
+          {t("consumo.soloEste")}
+        </Chip>
+      </div>
+
+      {items.length === 0 ? (
+        <p style={{ margin: 0, fontSize: 13, color: "var(--text-2)" }}>
+          {/* Vacío filtrado y vacío de verdad NO dicen lo mismo: "todavía no
+              has generado nada" delante de un historial lleno es una mentira
+              que hace pensar que se perdió algo. */}
+          {solo ? t("consumo.vacioInmueble", { inmueble: titulo }) : t("consumo.vacio")}
+        </p>
+      ) : (
+        <ul style={{ display: "grid", gap: 6, listStyle: "none", padding: 0, margin: 0 }}>
+          {items.map((it) => (
+            <li
+              key={it.id}
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                gap: 10,
+                padding: "8px 10px",
+                borderRadius: 9,
+                border: "1px solid var(--border-soft)",
+                fontSize: 12.5,
+              }}
+            >
+              <span style={{ display: "grid", gap: 2 }}>
+                <strong style={{ color: "var(--text-1)" }}>{t(`kinds.${it.kind}`)}</strong>
+                <span style={{ color: "var(--text-3)" }}>
+                  {it.propertyTitle ?? "—"}
+                  {it.detail ? ` · ${it.detail}` : ""}
+                </span>
               </span>
-            </span>
-            <span style={{ color: "var(--text-2)", whiteSpace: "nowrap" }}>
-              {formatMicrosUsd(it.micros)}
-            </span>
-          </li>
-        ))}
-      </ul>
+              <span style={{ color: "var(--text-2)", whiteSpace: "nowrap" }}>
+                {formatMicrosUsd(it.micros)}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
     </Card>
   );
 }

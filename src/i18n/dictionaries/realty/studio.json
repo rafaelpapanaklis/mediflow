@@ -31,7 +31,10 @@
     "consumo": {
       "hoy": "Consumo de IA de hoy",
       "mes": "En lo que va del mes: {monto}",
-      "vacio": "Todavía no has generado nada."
+      "vacio": "Todavía no has generado nada.",
+      "todos": "Todos los inmuebles",
+      "soloEste": "Solo el inmueble elegido",
+      "vacioInmueble": "Todavía no has generado nada para “{inmueble}”."
     },
     "reel": {
       "explica": "Arma un video vertical 9:16 con las fotos que ya están en la ficha, listo para TikTok, Reels y Shorts. Esto no consume IA.",
@@ -48,6 +51,7 @@
       "otraVez": "Generar otra vez",
       "descargar": "Descargar {ext}",
       "compartir": "Enviar por WhatsApp",
+      "soloDescarga": "Desde la computadora no se puede pasar el video directo a WhatsApp. Descárgalo y súbelo desde tu teléfono.",
       "sinCompartir": "Este aparato no pudo abrir la hoja para compartir. Descarga el video y súbelo desde tu teléfono.",
       "sinSoporte": "Tu navegador no puede grabar video. Prueba con Chrome, Edge o Safari actualizados.",
       "sinFotos": "No se pudieron cargar las fotos del inmueble."
@@ -67,7 +71,7 @@
       "guardada": "Ya está en la galería del inmueble, con su marca de imagen ilustrativa."
     },
     "texto": {
-      "explica": "Escribe la descripción del anuncio y el material para redes con los datos de la ficha. La IA no inventa nada que no le hayas capturado.",
+      "explica": "Escribe la descripción del anuncio y el material para redes con los datos de la ficha y las primeras tres fotos, que la IA sí mira. No inventa nada que no le hayas capturado ni que no se vea en las fotos.",
       "tonos": {
         "directo": "Directo",
         "calido": "Cálido",
@@ -115,7 +119,10 @@
     "consumo": {
       "hoy": "Today's AI usage",
       "mes": "So far this month: {monto}",
-      "vacio": "You haven't generated anything yet."
+      "vacio": "You haven't generated anything yet.",
+      "todos": "All properties",
+      "soloEste": "Only the selected property",
+      "vacioInmueble": "You haven't generated anything for “{inmueble}” yet."
     },
     "reel": {
       "explica": "Builds a 9:16 vertical video from the photos already on the listing, ready for TikTok, Reels and Shorts. This does not consume AI.",
@@ -132,6 +139,7 @@
       "otraVez": "Generate again",
       "descargar": "Download {ext}",
       "compartir": "Send on WhatsApp",
+      "soloDescarga": "A desktop browser can't hand the video straight to WhatsApp. Download it and upload it from your phone.",
       "sinCompartir": "This device could not open the share sheet. Download the video and upload it from your phone.",
       "sinSoporte": "Your browser can't record video. Try an up-to-date Chrome, Edge or Safari.",
       "sinFotos": "The property photos couldn't be loaded."
@@ -151,7 +159,7 @@
       "guardada": "It's in the property gallery now, with its illustrative-image mark."
     },
     "texto": {
-      "explica": "Writes the listing description and the social material from the listing data. The AI invents nothing you haven't captured.",
+      "explica": "Writes the listing description and the social material from the listing data and the first three photos, which the AI actually looks at. It invents nothing you haven't captured and nothing the photos don't show.",
       "tonos": {
         "directo": "Direct",
         "calido": "Warm",
