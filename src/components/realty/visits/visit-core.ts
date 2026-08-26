@@ -443,6 +443,61 @@ export function parseVisitFeedback(feedback: string | null | undefined): {
   };
 }
 
+// ── 4 bis. El titular del reporte al propietario ────────────────────────
+//
+// 🔑 Lo consume O2-T5 a través de `getPropertyVisitReport` (visits.ts, que
+// lo re-exporta). Vive AQUÍ y no allá por una razón práctica: allá importa
+// Prisma y "server-only", así que no se puede probar sin base de datos. Es
+// la frase que un PROPIETARIO va a leer sobre su propia casa — merece
+// prueba, no confianza.
+
+/** Mínimo de opiniones para decirle algo a un propietario sobre su precio. */
+export const REALTY_REPORT_MIN_SAMPLE = 3;
+
+/**
+ * El titular. Se calla cuando no tiene con qué hablar.
+ *
+ * El orden importa: el precio se menciona primero porque es el único
+ * hallazgo sobre el que el propietario puede ACTUAR. "No era lo que
+ * buscaban" es un problema de a quién se le está enseñando, no del
+ * inmueble, y decirlo como si fuera lo mismo confunde.
+ *
+ * ⚠️ ESTÁ EN ESPAÑOL A PROPÓSITO y no pasa por i18n: es una frase de
+ * negocio, no una etiqueta de pantalla. Si O2-T5 lo manda a una cuenta con
+ * locale "en", tendrá que traducirla de su lado.
+ */
+export function buildReportHeadline(
+  realizadas: number,
+  conRetroalimentacion: number,
+  outcomes: Record<RealtyVisitOutcome, number>,
+): string | null {
+  if (conRetroalimentacion < REALTY_REPORT_MIN_SAMPLE) return null;
+
+  // ⚠️ El titular cuenta CON LAS OPINIONES cuando hay más opiniones que
+  // visitas realizadas. Suena imposible y no lo es: capturar el resultado y
+  // después reabrir la visita a PROGRAMADA (para corregirla) baja
+  // `realizadas` y deja el texto del resultado donde estaba. Sin este
+  // máximo, a un propietario le llegaba "0 visitas y 3 dijeron que el precio
+  // está arriba". En el camino normal los dos números coinciden y esto no
+  // cambia nada.
+  const muestra = Math.max(realizadas, conRetroalimentacion);
+  const visitas = `${muestra} ${muestra === 1 ? "visita" : "visitas"}`;
+
+  if (outcomes.PRECIO_ALTO >= Math.ceil(conRetroalimentacion / 2)) {
+    return `${visitas} y ${outcomes.PRECIO_ALTO} dijeron que les gustó pero el precio se les hizo alto. El precio está arriba de lo que está pagando la zona.`;
+  }
+  if (outcomes.NO_ERA >= Math.ceil(conRetroalimentacion / 2)) {
+    return `${visitas} y ${outcomes.NO_ERA} dijeron que no era lo que buscaban. No es el precio: se lo estamos enseñando a la gente equivocada.`;
+  }
+  if (outcomes.NO_LE_GUSTO >= Math.ceil(conRetroalimentacion / 2)) {
+    return `${visitas} y ${outcomes.NO_LE_GUSTO} no quedaron conformes con el inmueble. Vale la pena revisar fotos, limpieza y detalles antes de seguir enseñándolo.`;
+  }
+  if (outcomes.LE_GUSTO >= Math.ceil(conRetroalimentacion / 2)) {
+    return `${visitas} y a ${outcomes.LE_GUSTO} les gustó. Hay interés real: falta empujar la oferta.`;
+  }
+  return `${visitas} con opiniones repartidas. Todavía no hay un patrón claro.`;
+}
+
 // ── 5. Ruta del día ─────────────────────────────────────────────────────
 
 export interface RouteStop {

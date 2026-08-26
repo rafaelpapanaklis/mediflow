@@ -32,7 +32,9 @@ import { hasRealtyPermission } from "@/lib/realty/permissions";
 import { realtyCan } from "@/lib/realty/gating";
 import { realtyVisitClaimKey, claimFromExternalId } from "@/lib/realty/whatsapp-core";
 import {
+  REALTY_REPORT_MIN_SAMPLE,
   addDaysISO,
+  buildReportHeadline,
   canVisitTransition,
   daysBetween,
   formatVisitFeedback,
@@ -842,8 +844,6 @@ export interface RealtyPropertyVisitReport {
   lastVisitAt: string | null;
 }
 
-/** Mínimo de opiniones para decirle algo a un propietario sobre su precio. */
-export const REALTY_REPORT_MIN_SAMPLE = 3;
 
 /**
  * Retroalimentación agregada de UN inmueble.
@@ -936,35 +936,11 @@ export async function getPropertyVisitReport(args: {
 }
 
 /**
- * El titular. Se calla cuando no tiene con qué hablar.
- *
- * El orden importa: el precio se menciona primero porque es el único
- * hallazgo sobre el que el propietario puede ACTUAR. "No era lo que
- * buscaban" es un problema de a quién se le está enseñando, no del
- * inmueble, y decirlo como si fuera lo mismo confunde.
+ * El titular vive en el núcleo puro (`visit-core.ts`) para poder probarlo
+ * sin base de datos, y se re-exporta desde aquí: quien consuma el reporte
+ * sigue teniendo UN SOLO import, como dice el contrato con O2-T5.
  */
-export function buildReportHeadline(
-  realizadas: number,
-  conRetroalimentacion: number,
-  outcomes: Record<RealtyVisitOutcome, number>,
-): string | null {
-  if (conRetroalimentacion < REALTY_REPORT_MIN_SAMPLE) return null;
-  const visitas = `${realizadas} ${realizadas === 1 ? "visita" : "visitas"}`;
-
-  if (outcomes.PRECIO_ALTO >= Math.ceil(conRetroalimentacion / 2)) {
-    return `${visitas} y ${outcomes.PRECIO_ALTO} dijeron que les gustó pero el precio se les hizo alto. El precio está arriba de lo que está pagando la zona.`;
-  }
-  if (outcomes.NO_ERA >= Math.ceil(conRetroalimentacion / 2)) {
-    return `${visitas} y ${outcomes.NO_ERA} dijeron que no era lo que buscaban. No es el precio: se lo estamos enseñando a la gente equivocada.`;
-  }
-  if (outcomes.NO_LE_GUSTO >= Math.ceil(conRetroalimentacion / 2)) {
-    return `${visitas} y ${outcomes.NO_LE_GUSTO} no quedaron conformes con el inmueble. Vale la pena revisar fotos, limpieza y detalles antes de seguir enseñándolo.`;
-  }
-  if (outcomes.LE_GUSTO >= Math.ceil(conRetroalimentacion / 2)) {
-    return `${visitas} y a ${outcomes.LE_GUSTO} les gustó. Hay interés real: falta empujar la oferta.`;
-  }
-  return `${visitas} con opiniones repartidas. Todavía no hay un patrón claro.`;
-}
+export { buildReportHeadline, REALTY_REPORT_MIN_SAMPLE };
 
 // ═══════════════════════════════════════════════════════════════════════
 // 5. RECORDATORIOS

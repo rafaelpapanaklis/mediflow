@@ -23,6 +23,7 @@ import {
   assignVisitLanes,
   buildMapsPlaceUrl,
   buildMapsRouteUrl,
+  buildReportHeadline,
   canVisitTransition,
   computeVisitGridBounds,
   daysBetween,
@@ -43,6 +44,7 @@ import {
   weekDaysISO,
   weekdayOfISO,
   type RealtyVisitCardDTO,
+  type RealtyVisitOutcome,
 } from "../visit-core";
 
 // → raíz del repo desde src/components/realty/visits/__tests__/
@@ -483,4 +485,59 @@ test("cada estado y cada resultado tienen su etiqueta en los dos idiomas", () =>
       assert.ok(typeof outcome[resultados[j]] === "string", `falta outcome.${resultados[j]} en ${locales[i]}`);
     }
   }
+});
+
+// ── El titular del reporte al propietario (contrato con O2-T5) ──────────
+
+function conteo(over: Partial<Record<RealtyVisitOutcome, number>>): Record<RealtyVisitOutcome, number> {
+  return { LE_GUSTO: 0, PRECIO_ALTO: 0, NO_LE_GUSTO: 0, NO_ERA: 0, ...over };
+}
+
+test("con menos de tres opiniones NO se le dice nada a un propietario", () => {
+  // Es la regla que evita decirle a alguien que su casa está cara porque dos
+  // personas lo dijeron. Silencio no es un hueco: es la respuesta correcta.
+  assert.equal(buildReportHeadline(2, 2, conteo({ PRECIO_ALTO: 2 })), null);
+  assert.equal(buildReportHeadline(9, 0, conteo({})), null);
+  assert.ok(buildReportHeadline(3, 3, conteo({ PRECIO_ALTO: 3 })) !== null);
+});
+
+test("el precio se menciona primero: es lo único sobre lo que el dueño puede actuar", () => {
+  const titular = buildReportHeadline(6, 4, conteo({ PRECIO_ALTO: 3, LE_GUSTO: 1 }));
+  assert.ok(titular !== null);
+  assert.ok(
+    (titular as string).indexOf("precio") !== -1,
+    `el titular no habla del precio: ${titular}`,
+  );
+});
+
+test("'no era lo que buscaban' NO se disfraza de problema de precio", () => {
+  const titular = buildReportHeadline(5, 4, conteo({ NO_ERA: 4 }));
+  assert.ok(titular !== null);
+  assert.ok((titular as string).indexOf("gente equivocada") !== -1, titular as string);
+});
+
+test("sin patrón claro se dice que no hay patrón, no se inventa uno", () => {
+  const titular = buildReportHeadline(4, 4, conteo({ LE_GUSTO: 1, PRECIO_ALTO: 1, NO_LE_GUSTO: 1, NO_ERA: 1 }));
+  assert.ok(titular !== null);
+  assert.ok((titular as string).indexOf("patrón claro") !== -1, titular as string);
+});
+
+test("🔴 nunca sale '0 visitas y 3 dijeron…' al reabrir una visita ya capturada", () => {
+  // Capturar el resultado y DESPUÉS reabrir la visita a PROGRAMADA para
+  // corregirla baja `realizadas` y deja el texto del resultado donde estaba.
+  // El titular tiene que seguir contando algo posible.
+  const titular = buildReportHeadline(0, 3, conteo({ PRECIO_ALTO: 3 }));
+  assert.ok(titular !== null);
+  assert.ok(
+    (titular as string).indexOf("0 visitas") === -1,
+    `le estaríamos diciendo al dueño que hubo 0 visitas: ${titular}`,
+  );
+  assert.ok((titular as string).indexOf("3 visitas") === 0, titular as string);
+});
+
+test("una sola visita se dice en singular", () => {
+  const titular = buildReportHeadline(1, 3, conteo({ LE_GUSTO: 3 }));
+  assert.ok((titular as string).indexOf("3 visitas") === 0, titular as string);
+  const uno = buildReportHeadline(1, 1, conteo({ LE_GUSTO: 1 }));
+  assert.equal(uno, null, "con una sola opinión todavía no se habla");
 });
