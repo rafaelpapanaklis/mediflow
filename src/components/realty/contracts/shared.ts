@@ -382,6 +382,15 @@ export interface PublicSigningDTO {
   /** Huella del documento, la misma que se imprime en el acuse. */
   documentHash: string;
   accountName: string;
+  /**
+   * Idioma de la INMOBILIARIA, no del navegador de quien firma.
+   *
+   * La pantalla de firma no tiene sesión ni preferencia guardada, y el
+   * documento está redactado en el idioma que eligió la cuenta: poner los
+   * botones en inglés encima de un contrato en español sería peor que no
+   * traducir nada.
+   */
+  locale: "es" | "en";
   /** Quién es esta persona en el contrato. */
   signerName: string;
   signerRole: RealtyPartyRole;

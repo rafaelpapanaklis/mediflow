@@ -9,10 +9,17 @@
    Rentas no: el papel del documento, las fichas de variable y el tablero
    de firmas.
 
-   Todo cuelga de `.ctr`, que es hermano de `.rnt` y NO declara
-   container-type: la página ya lo declara en .realty-page, y un contenedor
-   no se consulta a sí mismo. Las consultas de ancho preguntan por
-   `realty`, que es el nombre que declara el vertical.
+   Todo cuelga de `.ctr`, que es hermano de `.rnt` y declara el contenedor
+   CON EL NOMBRE `rnt`. No es un capricho: las rejillas de rentals.css
+   (.rnt-kpis, .rnt-grid, .rnt-split) son responsivas por `@container rnt`,
+   y una consulta de contenedor solo resuelve contra el ancestro que lleve
+   ESE nombre. Sin esta línea, los cuatro KPI de Contratos se quedaban en
+   UNA columna en un monitor de 27" y nada lo delataba: no hay error, solo
+   una pantalla que se ve mal y parece que así se diseñó.
+
+   ⚠️ container-type crea contención y ATRAPA a position:fixed. Por eso el
+   <Modal> de rentals/ui.tsx se monta con createPortal en <body> — el mismo
+   motivo por el que .realty-page lo documenta.
 
    Medidas en px y no en rem: la raíz del panel mide 13px y un rem no vale
    16 aquí.
@@ -22,6 +29,8 @@
    ═══════════════════════════════════════════════════════════════════════ */
 
 .ctr {
+  container-type: inline-size;
+  container-name: rnt;
   display: flex;
   flex-direction: column;
   gap: 18px;
@@ -203,9 +212,135 @@
   gap: 16px;
   grid-template-columns: 1fr;
 }
-@container realty (min-width: 900px) {
+@container rnt (min-width: 900px) {
   .ctr-split {
-    grid-template-columns: minmax(0, 1.6fr) minmax(260px, 1fr);
+    grid-template-columns: minmax(0, 1.6fr) minmax(280px, 1fr);
     align-items: start;
   }
+}
+
+/* ── La pantalla pública de firma (/i/firmar/{token}) ──────────────────
+   NO es el panel: la abre un inquilino o un aval en su celular, casi
+   siempre con una mano y a contraluz. Por eso el papel va a ancho de
+   lectura, el botón de firmar es grande y la barra de aceptar se queda
+   pegada abajo — no se busca, está donde el pulgar ya estaba.
+
+   Cuelga de `.sgn` y vive aquí y no en un archivo aparte porque es el
+   MISMO módulo: el papel, la huella y el trazo son las mismas piezas. */
+.sgn {
+  min-height: 100dvh;
+  background: var(--bg);
+  color: var(--text-1);
+  padding: 18px 14px 120px;
+}
+.sgn__wrap {
+  max-width: 780px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.sgn__head {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border-soft);
+}
+.sgn__brand {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--brand);
+}
+.sgn__title {
+  font-size: 19px;
+  font-weight: 700;
+  line-height: 1.3;
+  margin: 0;
+}
+.sgn__sub {
+  font-size: 12.5px;
+  color: var(--text-3);
+}
+/* El papel de la pantalla pública NO recorta: quien va a firmar tiene que
+   poder leer el documento entero sin pelearse con dos barras de scroll. */
+.sgn__paper {
+  background: var(--bg-elev);
+  border: 1px solid var(--border-soft);
+  border-radius: 12px;
+  padding: 20px 18px;
+  font-size: 13.5px;
+  line-height: 1.7;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+/* Recuadro del trazo. touch-action: none es OBLIGATORIO: sin él, el dedo
+   que dibuja hace scroll de la página y no se puede firmar en el celular. */
+.sgn__canvas {
+  width: 100%;
+  height: 190px;
+  display: block;
+  border: 1px dashed var(--border-strong);
+  border-radius: 12px;
+  background: #ffffff;
+  touch-action: none;
+  cursor: crosshair;
+}
+.sgn__bar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 20;
+  padding: 12px 14px calc(12px + env(safe-area-inset-bottom));
+  background: var(--bg-elev);
+  border-top: 1px solid var(--border-soft);
+  box-shadow: 0 -8px 24px rgba(20, 32, 26, 0.10);
+}
+.sgn__bar-in {
+  max-width: 780px;
+  margin: 0 auto;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+.sgn__accept {
+  flex: 1 1 240px;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--text-2);
+  cursor: pointer;
+}
+.sgn__accept input {
+  margin-top: 2px;
+  width: 18px;
+  height: 18px;
+  accent-color: var(--brand);
+  flex: none;
+}
+.sgn__cta {
+  flex: 1 1 180px;
+  min-height: 46px;
+  font-size: 15px;
+  justify-content: center;
+}
+.sgn__done {
+  display: grid;
+  gap: 10px;
+  padding: 22px 20px;
+  border-radius: 14px;
+  border: 1px solid var(--border-brand);
+  background: var(--brand-softer);
+  text-align: center;
+}
+.sgn__done-title {
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--text-1);
 }

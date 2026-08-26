@@ -110,10 +110,12 @@ export class ContractTablesMissingError extends Error {
 
 // ── Ids ────────────────────────────────────────────────────────────────
 /**
- * Id al estilo cuid. Prisma genera los suyos con `@default(cuid())`, pero
- * eso vive en el schema y estas tablas no están ahí, así que el id lo pone
- * este archivo. 12 bytes de aleatoriedad más el reloj: colisión imposible
- * en la práctica y ordena por creación, que ayuda al índice.
+ * Id al estilo cuid. Los cinco modelos declaran `id String @id` SIN
+ * `@default(cuid())` a propósito: quien inserta es el SQL crudo de este
+ * archivo, no el cliente generado, así que un default del schema nunca
+ * llegaría a correr y solo serviría para hacer creer que sí. El id lo pone
+ * aquí: 12 bytes de aleatoriedad más el reloj — colisión imposible en la
+ * práctica y ordena por creación, que ayuda al índice.
  */
 function newId(): string {
   return `c${Date.now().toString(36)}${randomBytes(9).toString("hex")}`;
@@ -1171,6 +1173,10 @@ function toRowDTO(
     status: r.status as RealtyContractStatus,
     propertyId: r.propertyId,
     propertyTitle,
+    // La bóveda del CONTACTO filtra por aquí. Si se cae de este objeto, el
+    // expediente de un inquilino sale vacío y la pantalla no tiene forma de
+    // notarlo: no hay error, solo una lista sin nada.
+    contactId: r.contactId,
     leaseId: r.leaseId,
     exclusiveId: r.exclusiveId,
     dealId: r.dealId,
@@ -1192,6 +1198,12 @@ export interface ListContractsFilters {
   expiringInDays?: number;
   propertyId?: string;
   contactId?: string;
+  /**
+   * Trae también los ARCHIVADOS. Lo usa la BÓVEDA y nada más: el tablero
+   * de trabajo no los quiere y por eso el default los deja fuera EN LA
+   * BASE. Archivar saca del tablero; no saca del expediente.
+   */
+  includeArchived?: boolean;
 }
 
 export async function listContracts(
@@ -1210,7 +1222,8 @@ export async function listContracts(
            "signedAt","archivedAt","voidedAt","voidReason","documentHash","createdAt"
       FROM "realty_contracts"
      WHERE "accountId" = ${ctx.accountId}
-       AND ("status" <> 'ARCHIVADO' OR ${filters.status === "ARCHIVADO"})
+       AND ("status" <> 'ARCHIVADO'
+            OR ${filters.status === "ARCHIVADO" || filters.includeArchived === true})
      ORDER BY "createdAt" DESC
      LIMIT 500`;
   if (rows.length === 0) return [];
@@ -1656,6 +1669,7 @@ interface OpenTokenRow {
   documentHash: string;
   status: string;
   accountName: string;
+  accountLocale: string;
   partyName: string;
   partyRole: string;
   partySignedAt: Date | null;
@@ -1683,7 +1697,7 @@ export async function openSigningToken(token: string): Promise<PublicSigningDTO 
     SELECT t."id" AS "tokenId", t."contractId", t."partyId", t."accountId",
            t."expiresAt", t."usedAt", t."revokedAt", t."attempts",
            c."kind", c."folio", c."title", c."body", c."documentHash", c."status",
-           a."name" AS "accountName",
+           a."name" AS "accountName", a."locale" AS "accountLocale",
            p."name" AS "partyName", p."role" AS "partyRole", p."signedAt" AS "partySignedAt"
       FROM "realty_signature_tokens" t
       JOIN "realty_contracts" c ON c."id" = t."contractId"
@@ -1724,6 +1738,7 @@ export async function openSigningToken(token: string): Promise<PublicSigningDTO 
     body: r.body,
     documentHash: r.documentHash,
     accountName: r.accountName,
+    locale: r.accountLocale === "en" ? "en" : "es",
     signerName: r.partyName,
     signerRole: r.partyRole as RealtyPartyRole,
     signedAt: r.partySignedAt ? r.partySignedAt.toISOString() : null,
@@ -1792,7 +1807,7 @@ export async function registerSignature(args: {
     SELECT t."id" AS "tokenId", t."contractId", t."partyId", t."accountId",
            t."expiresAt", t."usedAt", t."revokedAt", t."attempts",
            c."kind", c."folio", c."title", c."body", c."documentHash", c."status",
-           a."name" AS "accountName",
+           a."name" AS "accountName", a."locale" AS "accountLocale",
            p."name" AS "partyName", p."role" AS "partyRole", p."signedAt" AS "partySignedAt"
       FROM "realty_signature_tokens" t
       JOIN "realty_contracts" c ON c."id" = t."contractId"
@@ -2262,14 +2277,16 @@ export async function previewTemplate(
   body: string,
   source: ContractSource | null,
 ): Promise<string> {
-  let values: Record<string, string> = {};
+  // Los datos de la CUENTA salen siempre, con o sin origen: el nombre, el
+  // domicilio y la fecha son reales desde el primer momento y hacen que la
+  // vista previa se parezca al papel de verdad. Lo demás sale con su línea.
+  let values: Record<string, string> = accountValues(ctx);
   if (source) {
     try {
-      values = (await resolveContractData(ctx, { ...source, kind })).values;
+      values = { ...values, ...(await resolveContractData(ctx, { ...source, kind })).values };
     } catch {
-      // Sin origen válido se pinta con los ejemplos del catálogo: la vista
-      // previa es para ver el TEXTO, no para validar los datos.
-      values = {};
+      // Un origen que ya no existe NO tumba la vista previa: es para ver el
+      // TEXTO, no para validar los datos.
     }
   }
   values.folio = values.folio ?? "CTR-000001";

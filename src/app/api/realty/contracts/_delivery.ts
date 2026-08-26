@@ -24,7 +24,11 @@ import "server-only";
 // ═══════════════════════════════════════════════════════════════════════
 
 import { sendEmail } from "@/lib/email";
-import { isRealtyWaSendOk, sendRealtyWhatsApp } from "@/lib/realty/whatsapp";
+import { sendRealtyWhatsApp } from "@/lib/realty/whatsapp";
+// La guarda de tipo vive en whatsapp-core.ts y whatsapp.ts la IMPORTA sin
+// reexportarla: pedírsela a whatsapp.ts no compila. El resto del repo la
+// saca de core (src/app/api/realty/whatsapp/send/route.ts hace lo mismo).
+import { isRealtyWaSendOk } from "@/lib/realty/whatsapp-core";
 import { markLinkSent, type IssuedLink } from "@/lib/realty/contracts";
 
 export type DeliveryChannel = "whatsapp" | "correo" | "copiada";
