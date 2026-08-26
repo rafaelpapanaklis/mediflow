@@ -11181,3 +11181,173 @@ model RealtyCalcParam {
   @@index([kind, stateCode, year])
   @@map("realty_calc_params")
 }
+
+// ═══════════════════════════════════════════════════════════════════════
+// BOLSA INMOBILIARIA (MLS interna) — O2-T4
+//
+// La ÚNICA parte del producto donde una cuenta ve datos de otra. Tres
+// tablas, y las tres existen para responder a una sola pregunta con una
+// fila: "¿el dueño de este inmueble dijo explícitamente que sí?".
+//
+// 🔴 SIN RELACIONES DE PRISMA, A PROPÓSITO. Una relación obliga a declarar
+// el lado inverso DENTRO de RealtyAccount y de RealtyProperty, es decir a
+// editar modelos que están a mil líneas de aquí, en medio del archivo que
+// se pelean siete terminales en paralelo. Estos tres bloques son
+// CONTIGUOS y van al final: si otra terminal agrega los suyos también al
+// final, el conflicto de git es "conserva los dos bloques" y nada más.
+//
+// El precio de esa decisión, dicho en voz alta: no hay ON DELETE CASCADE.
+// Borrar un inmueble deja su fila de bolsa huérfana. NO es una fuga: cada
+// lectura de la bolsa vuelve a leer el inmueble y la cuenta, y una fila
+// huérfana simplemente no produce resultados (falla CERRADA). Quien
+// cablee la limpieza es `deleteRealtyProperty`, que vive en T1.
+//
+// Lo que se comparte y lo que no lo decide `src/lib/realty/mls.ts`, no
+// estas tablas: aquí solo vive el CONSENTIMIENTO.
+// ═══════════════════════════════════════════════════════════════════════
+
+/// Estado de un acuerdo de colaboración entre dos cuentas.
+/// PROPUESTO → ACEPTADO → CERRADO es el camino feliz. RECHAZADO y
+/// CANCELADO son finales, pero la fila se queda: es la memoria de que ya
+/// se preguntó (y el único índice que impide volver a preguntar en bucle).
+enum RealtyMlsAgreementStatus {
+  PROPUESTO
+  ACEPTADO
+  RECHAZADO
+  CANCELADO
+  CERRADO
+}
+
+/// Un inmueble puesto en la bolsa por su dueño. Es el CONSENTIMIENTO
+/// explícito: sin fila aquí, o con `active` en false, el inmueble no
+/// existe para ninguna otra cuenta. Apagarlo lo retira de la bolsa de
+/// todos en la misma consulta, sin trabajos diferidos.
+///
+/// `propertyId` es único GLOBAL y no `[accountId, propertyId]`: el id de
+/// un inmueble ya es único en toda la base, así que el compuesto no
+/// añadiría nada y en cambio obligaría a llevar las dos columnas a cada
+/// upsert. La pertenencia se comprueba ANTES de escribir, contra
+/// realty_properties, nunca confiando en el accountId que llegue del
+/// navegador.
+model RealtyMlsListing {
+  id String @id @default(cuid())
+
+  /// La cuenta que CAPTÓ el inmueble y decide compartirlo.
+  accountId  String
+  propertyId String @unique
+
+  /// Lo primero que mira el otro asesor: qué parte de la comisión suelta
+  /// quien captó. 0–100 con dos decimales, igual que todos los
+  /// porcentajes del vertical (RealtyCommissionSplit.pct).
+  sharedCommissionPct Decimal @default(0) @db.Decimal(5, 2)
+
+  /// ¿Acepta trabajar con otro asesor? false = está en la bolsa solo para
+  /// que se vea el inventario, sin colaboración.
+  acceptsCollaboration Boolean @default(true)
+
+  /// ¿Exige que el cliente lo traiga el otro asesor? true = no acepta
+  /// referidos tibios, quiere comprador propio del colega.
+  requiresBuyerFromPartner Boolean @default(false)
+
+  /// Lista BLANCA de campos que este inmueble enseña en la bolsa. null =
+  /// los públicos por defecto. Nunca puede AMPLIAR lo público: la reja
+  /// dura vive en REALTY_MLS_PUBLIC_FIELDS (src/lib/realty/mls.ts) y esta
+  /// columna solo puede RECORTAR sobre ella.
+  exposedFields Json?
+
+  /// El interruptor. false = fuera de la bolsa, de inmediato.
+  active Boolean @default(true)
+
+  /// Recado para el colega ("solo cita con cliente calificado"). Es texto
+  /// que su autor ESCRIBE sabiendo que lo van a leer otras cuentas — no
+  /// confundir con internalNotes del inmueble, que jamás sale.
+  notes String? @db.Text
+
+  sharedAt  DateTime @default(now())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // La consulta de la bolsa es "todo lo activo MENOS lo mío", así que el
+  // índice útil empieza por active y no por accountId (al revés que el
+  // resto del vertical, donde todo empieza por el inquilino).
+  @@index([active, sharedAt])
+  @@index([accountId, active])
+  @@map("realty_mls_listings")
+}
+
+/// El acuerdo entre dos cuentas sobre UN inmueble: quién capta, quién
+/// coloca, qué porcentaje y desde cuándo.
+///
+/// `listingAccountId` está DESNORMALIZADO a propósito: sin él, "mis
+/// acuerdos como captador" obligaría a un join contra realty_mls_listings
+/// en cada pantalla. Se copia al crear y no se vuelve a tocar.
+///
+/// Al cerrarse la operación, este acuerdo alimenta el split de comisión
+/// de T8 — party EXTERNO + externalName — y guarda el `dealId` para que
+/// se pueda rastrear al revés. NO hay reparto propio: el único motor de
+/// comisiones del vertical es computeSplits().
+model RealtyMlsAgreement {
+  id        String @id @default(cuid())
+  listingId String
+
+  /// Quien CAPTA: la cuenta dueña del inmueble.
+  listingAccountId String
+  /// Quien COLOCA: la cuenta que trae al cliente y propone colaborar.
+  partnerAccountId String
+  propertyId       String
+
+  /// Porcentaje de la comisión que se lleva QUIEN COLOCA. 0–100.
+  agreedPct Decimal @default(0) @db.Decimal(5, 2)
+
+  status RealtyMlsAgreementStatus @default(PROPUESTO)
+
+  /// El recado de la propuesta. Lo escribe quien coloca, lo lee quien
+  /// capta. Ambos saben que la otra cuenta lo va a leer.
+  message String? @db.Text
+
+  proposedAt  DateTime  @default(now())
+  respondedAt DateTime?
+  closedAt    DateTime?
+
+  /// El RealtyDeal (de la cuenta que CAPTA) al que alimentó este acuerdo.
+  /// null mientras no se cierre.
+  dealId String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Un solo acuerdo por par (inmueble, cuenta que coloca). Volver a
+  // proponer tras un rechazo REUSA esta fila: así nadie puede llenar la
+  // bandeja del vecino a base de propuestas repetidas.
+  @@unique([listingId, partnerAccountId])
+  @@index([listingAccountId, status, proposedAt])
+  @@index([partnerAccountId, status, proposedAt])
+  @@index([propertyId])
+  @@map("realty_mls_agreements")
+}
+
+/// Un inmueble AJENO que una cuenta eligió pintar en SU propia mini-web,
+/// marcado "en colaboración". El formulario de esa ficha cae en el CRM de
+/// quien hospeda —él atiende al prospecto— y se le avisa al dueño.
+///
+/// Adoptar NO es un acuerdo: es escaparate. El acuerdo se firma cuando
+/// hay cliente. Por eso son dos tablas y no una.
+model RealtyMlsAdoption {
+  id String @id @default(cuid())
+
+  /// La cuenta que ADOPTA (la que lo pinta en su web). NO la dueña.
+  accountId  String
+  listingId  String
+  propertyId String
+
+  showOnLanding Boolean @default(true)
+  sortOrder     Int     @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([accountId, listingId])
+  @@index([accountId, showOnLanding, sortOrder])
+  @@index([listingId])
+  @@map("realty_mls_adoptions")
+}
