@@ -37,6 +37,8 @@ import {
   urgenciaPrimerContacto,
 } from "@/lib/realty/inicio-shared";
 import { REALTY_NAV_ITEMS } from "@/lib/realty/types";
+import { REALTY_DICTS } from "@/i18n/dictionaries/realty";
+import type { Dictionary } from "@/i18n/t";
 import type { RealtyMode } from "@/lib/realty/types";
 
 const RAIZ = join(__dirname, "..", "..", "..", "..");
@@ -299,5 +301,72 @@ test("ningún Promise.all del Inicio pasa de siete lecturas", () => {
       consultas <= 7,
       `un Promise.all del Inicio hace ${consultas} lecturas; el tope de esta pantalla es 7`,
     );
+  }
+});
+
+/* ══════════════════════════════════════════════════════════════════
+   4 · i18n — CADA llave que la pantalla pide, existe
+   ══════════════════════════════════════════════════════════════════ */
+
+/** ¿`llave` resuelve a texto (o a un plural) dentro de `dict`? */
+function resuelve(dict: Dictionary, llave: string): boolean {
+  let nodo: string | Dictionary | undefined = dict;
+  for (const parte of llave.split(".")) {
+    if (nodo == null || typeof nodo === "string") return false;
+    nodo = (nodo as Dictionary)[parte];
+  }
+  if (typeof nodo === "string") return true;
+  return !!nodo && typeof nodo === "object" && ("one" in nodo || "other" in nodo);
+}
+
+test("todas las llaves que pide el Inicio existen en es y en en", () => {
+  /* 🔴 LA PRUEBA DE PARIDAD NO BASTA, Y ESTE REPO YA PAGÓ POR ESO.
+   *
+   * `i18n-alcance.test.ts` comprueba que ES y EN tengan las MISMAS llaves —
+   * pero si la pantalla pide una que no está en NINGUNO de los dos, la
+   * paridad se cumple igual y `makeT` devuelve la llave cruda. Eso es
+   * exactamente lo que llegó a producción en /barber/campanas: el
+   * encabezado pintando "barber.campanas.title" y nadie se enteró porque la
+   * pantalla "funcionaba".
+   *
+   * Aquí se leen del JSX las llaves que se piden de verdad —los `k("…")` de
+   * inicio-view.tsx— y se buscan en los dos diccionarios. Se ignoran las
+   * dinámicas (`k(\`sub.${modo}\`)`), que se cubren aparte abajo.
+   */
+  const vista = readFileSync(
+    join(RAIZ, "src/components/realty/inicio/inicio-view.tsx"),
+    "utf8",
+  );
+  const llaves = Array.from(
+    new Set((vista.match(/[^A-Za-z]k\("([^"]+)"/g) ?? []).map((m) => m.slice(4, -1))),
+  );
+  assert.ok(llaves.length > 30, `solo se encontraron ${llaves.length} llaves; ¿cambió el helper k()?`);
+
+  for (const locale of ["es", "en"] as const) {
+    const raiz = REALTY_DICTS[locale];
+    const faltan = llaves.filter((llave) => !resuelve(raiz, `realty.inicio.${llave}`));
+    assert.deepEqual(
+      faltan,
+      [],
+      `llaves que el Inicio pide y no existen en "${locale}": ${faltan.join(", ")}. ` +
+        "Se pintarían CRUDAS en la pantalla y nadie lo notaría.",
+    );
+  }
+});
+
+test("las llaves que se arman con una variable también existen", () => {
+  // `k(\`sub.${data.modo}\`)` y `k(\`fresh.${p.key}\`)`: el patrón de arriba
+  // no las ve, y son justo las que se rompen al agregar un modo o un paso.
+  const dinamicas = [
+    ...(["AGENCY", "AGENT", "OWNER"] as RealtyMode[]).map((m) => `sub.${m}`),
+    ...["inmueble", "prospecto", "contrato", "web", "equipo"].flatMap((p) => [
+      `fresh.${p}`,
+      `fresh.${p}Hint`,
+    ]),
+  ];
+  for (const locale of ["es", "en"] as const) {
+    const raiz = REALTY_DICTS[locale];
+    const faltan = dinamicas.filter((llave) => !resuelve(raiz, `realty.inicio.${llave}`));
+    assert.deepEqual(faltan, [], `faltan en "${locale}": ${faltan.join(", ")}`);
   }
 });
