@@ -124,6 +124,36 @@
   color: var(--pine-300);
 }
 
+/* ── Ficha de datos (dl / dt / dd) ─────────────────────────────────
+   Etiqueta a la izquierda y dato a la derecha, en la misma línea mientras
+   quepa. Se usa <dl> y no una tabla porque esto ES una lista de pares
+   nombre-valor: quien lee con lector de pantalla oye "Vigencia: …" en vez
+   de "columna 1, columna 2". */
+.ctr-def {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+}
+.ctr-def > div {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 4px 12px;
+}
+.ctr-def dt {
+  margin: 0;
+  font-size: 11.5px;
+  color: var(--text-3);
+}
+.ctr-def dd {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-1);
+  text-align: right;
+  word-break: break-word;
+}
+
 /* ── Tablero de firmantes ─────────────────────────────────────────── */
 .ctr-party {
   display: flex;

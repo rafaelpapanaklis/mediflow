@@ -141,6 +141,7 @@
       "anuladoTitle": "Contrato anulado",
       "anuladoMotivo": "Motivo",
       "noEncontrado": "No encontramos ese contrato.",
+      "documento": "El documento",
 
       "ficha": {
         "title": "La ficha",
@@ -472,6 +473,7 @@
       "anuladoTitle": "Voided contract",
       "anuladoMotivo": "Reason",
       "noEncontrado": "We couldn't find that contract.",
+      "documento": "The document",
 
       "ficha": {
         "title": "Details",
