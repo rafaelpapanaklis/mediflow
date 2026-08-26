@@ -433,7 +433,10 @@ export async function getRealtyInicio(
               // El where COMPLETO, por lo mismo que en comisiones.
               property: alcanceProp,
             },
-            select: { id: true, endsAt: true, property: { select: { id: true, title: true } } },
+            // Sin el `id` de la propiedad: la tarjeta pinta el título y la
+            // liga va a la pantalla de propietarios, así que ese id cruzaría
+            // el cable para nada.
+            select: { id: true, endsAt: true, property: { select: { title: true } } },
             orderBy: { endsAt: "asc" },
             take: TOPE_FILAS + 1,
           })
