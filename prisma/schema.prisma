@@ -10015,6 +10015,14 @@ model RealtyAccount {
   supportMessages  RealtySupportMessage[]
   adminActions     RealtyAdminAction[]
 
+  // Ola 2 · T2 — contratos y firma electrónica. Cascadean: si la
+  // inmobiliaria se va del producto, sus contratos se van con ella (es su
+  // expediente, no el nuestro).
+  contractTemplates  RealtyContractTemplate[]
+  contracts          RealtyContract[]
+  contractSignatures RealtyContractSignature[]
+  signatureTokens    RealtySignatureToken[]
+
   // Sin @@index([slug]): `slug @unique` ya crea su propio índice.
   @@index([subscriptionStatus])
   @@map("realty_accounts")
@@ -11180,4 +11188,211 @@ model RealtyCalcParam {
   @@unique([kind, stateCode, year, effectiveFrom])
   @@index([kind, stateCode, year])
   @@map("realty_calc_params")
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// CONTRATOS Y FIRMA ELECTRÓNICA (Ola 2 · T2)
+//
+// Cinco tablas. Están AQUÍ —y no solo en sql/realty-contratos.sql— por una
+// razón concreta y ya vivida: `prisma db push` reconcilia la base con ESTE
+// archivo, así que una tabla que solo existe en un .sql se la lleva por
+// delante. En barber pasó. La regla del vertical es "nada vive solo en
+// SQL", y estas cinco la cumplen.
+//
+// El módulo las CONSULTA con $queryRaw parametrizado desde
+// src/lib/realty/contracts.ts (el único archivo del repo que las toca), no
+// con el cliente generado: se construyeron con diez terminales trabajando
+// a la vez sobre este mismo archivo, donde no hay garantía de que cada
+// worktree tenga el cliente regenerado. Los nombres de columna, de índice
+// y de constraint de abajo están ESCRITOS A MANO (`map:`) para que
+// coincidan carácter por carácter con el .sql: los dos caminos crean
+// exactamente la misma base.
+//
+// ⚠️ Las PLANTILLAS de contrato que trae el módulo las tiene que revisar un
+// abogado antes de que un cliente firme con ellas.
+// ═══════════════════════════════════════════════════════════════════════
+
+/// Plantilla de contrato de una inmobiliaria. UNA por (cuenta, tipo).
+/// Sin fila = se usa la plantilla base del código (REALTY_BASE_TEMPLATES).
+model RealtyContractTemplate {
+  id String @id
+  accountId String
+  /// ARRENDAMIENTO | EXCLUSIVA | PROMESA | COMISION
+  kind String
+  name String
+  body String
+  version Int @default(1)
+  updatedByUserId String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+
+  account RealtyAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@unique([accountId, kind], map: "realty_contract_templates_account_kind_key")
+  @@map("realty_contract_templates")
+}
+
+/// El contrato generado.
+///
+/// `body` es un SNAPSHOT del texto ya resuelto: el que las partes leen y
+/// firman. No se vuelve a renderizar desde la plantilla, así que editarla
+/// mañana no cambia lo que alguien firmó ayer.
+///
+/// `documentHash` es el sha256 del canónico de ESE snapshot
+/// (canonicalDocument en src/lib/realty/signature.ts).
+///
+/// `sealedAt` es la línea que no se cruza dos veces: en cuanto se manda a
+/// firmar, el cuerpo queda congelado. TODAS las escrituras al cuerpo llevan
+/// `"sealedAt" IS NULL` en el WHERE, no un `if` en JavaScript.
+///
+/// leaseId / exclusiveId / dealId / propertyId / contactId van SIN relación
+/// a propósito: un contrato firmado es prueba y tiene que sobrevivir a que
+/// alguien borre la renta de la que salió. Se guarda el id y se resuelve al
+/// leer; si el origen ya no está, el contrato sigue legible.
+model RealtyContract {
+  id String @id
+  accountId String
+  kind String
+  folio String
+  title String
+
+  leaseId String?
+  exclusiveId String?
+  dealId String?
+  propertyId String?
+  contactId String?
+
+  body String
+  /// JSON de las variables resueltas, como TEXT (no Json): aquí no hay
+  /// consultas por dentro del objeto y TEXT evita el baile de DbNull.
+  variables String @default("{}")
+  documentHash String
+
+  /// BORRADOR | ENVIADO | PARCIAL | FIRMADO | ARCHIVADO | ANULADO
+  status String @default("BORRADOR")
+
+  effectiveFrom DateTime?
+  effectiveTo DateTime?
+
+  sealedAt DateTime?
+  signedAt DateTime?
+  archivedAt DateTime?
+  voidedAt DateTime?
+  voidReason String?
+  /// Cuando se anula por corrección, el contrato que lo sustituye.
+  replacedById String?
+
+  createdByUserId String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+
+  account RealtyAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  parties RealtyContractParty[]
+
+  @@unique([accountId, folio], map: "realty_contracts_account_folio_key")
+  @@index([accountId, status, createdAt], map: "realty_contracts_account_status_idx")
+  @@index([accountId, effectiveTo], map: "realty_contracts_account_effectiveto_idx")
+  @@index([accountId, propertyId], map: "realty_contracts_account_property_idx")
+  @@index([accountId, contactId], map: "realty_contracts_account_contact_idx")
+  @@index([accountId, leaseId], map: "realty_contracts_account_lease_idx")
+  @@map("realty_contracts")
+}
+
+/// Quién firma. El contrato NO queda FIRMADO hasta que todas las partes con
+/// `mustSign = true` tienen `signedAt`.
+model RealtyContractParty {
+  id String @id
+  accountId String
+  contractId String
+  /// ARRENDADOR | INQUILINO | AVAL | PROPIETARIO | INMOBILIARIA |
+  /// COMPRADOR | VENDEDOR | ASESOR
+  role String
+  name String
+  email String?
+  phone String?
+  contactId String?
+  mustSign Boolean @default(true)
+  sortOrder Int @default(0)
+  signedAt DateTime?
+  signatureId String?
+  createdAt DateTime @default(now())
+
+  contract RealtyContract @relation(fields: [contractId], references: [id], onDelete: Cascade, map: "realty_contract_parties_contract_fkey")
+
+  @@index([contractId, sortOrder], map: "realty_contract_parties_contract_idx")
+  @@index([accountId], map: "realty_contract_parties_account_idx")
+  @@map("realty_contract_parties")
+}
+
+/// La evidencia de cada firma.
+///
+/// 🔴 ESTA TABLA NO SE ACTUALIZA NUNCA. Solo INSERT y SELECT: no hay una
+/// sola sentencia UPDATE ni DELETE contra ella en todo el módulo, y el
+/// único por (contractId, partyId) hace que un segundo intento choque en la
+/// base en vez de pisar la primera firma.
+///
+/// `documentHash` se duplica aquí a propósito: es el hash del texto TAL
+/// COMO ESTABA cuando esta persona firmó. Si algún día no coincide con el
+/// del contrato, la evidencia lo delata sola.
+///
+/// `strokePath` vive en el bucket privado realty-files; `strokeInline` es la
+/// red de abajo si el bucket falla. Una de las dos SIEMPRE tiene algo.
+///
+/// SIN relación a RealtyContractParty a propósito: la evidencia no puede
+/// desaparecer en cascada detrás de una fila de partes.
+model RealtyContractSignature {
+  id String @id
+  accountId String
+  contractId String
+  partyId String
+  signerName String
+  documentHash String
+  strokePath String?
+  strokeInline String?
+  strokeHash String
+  ip String?
+  userAgent String?
+  /// Reloj del SERVIDOR. Jamás una fecha que venga del dispositivo.
+  signedAt DateTime @default(now())
+  tokenId String?
+  createdAt DateTime @default(now())
+
+  account RealtyAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@unique([contractId, partyId], map: "realty_contract_signatures_party_key")
+  @@index([accountId, signedAt], map: "realty_contract_signatures_account_idx")
+  @@map("realty_contract_signatures")
+}
+
+/// La liga de firma (/i/firmar/{token}).
+///
+/// 🔴 EL TOKEN EN CLARO NO SE GUARDA: solo su sha256, igual que
+/// RealtyClientAuthToken.codeHash. Quien se lleve un volcado de la base no
+/// puede firmar por nadie.
+///
+/// `attempts` cuenta los intentos de FIRMA fallidos, no las aperturas: un
+/// token de 256 bits no se adivina a fuerza bruta; lo que hay que frenar es
+/// que una liga filtrada se use a golpes.
+model RealtySignatureToken {
+  id String @id
+  accountId String
+  contractId String
+  partyId String
+  tokenHash String
+  expiresAt DateTime
+  attempts Int @default(0)
+  usedAt DateTime?
+  revokedAt DateTime?
+  sentAt DateTime?
+  /// whatsapp | correo | copiada
+  sentVia String?
+  viewedAt DateTime?
+  createdAt DateTime @default(now())
+
+  account RealtyAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@unique([tokenHash], map: "realty_signature_tokens_hash_key")
+  @@index([contractId, partyId], map: "realty_signature_tokens_contract_idx")
+  @@index([accountId, expiresAt], map: "realty_signature_tokens_account_idx")
+  @@map("realty_signature_tokens")
 }
