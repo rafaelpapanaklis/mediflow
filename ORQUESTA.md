@@ -22843,3 +22843,339 @@ sobra, va en un commit aparte y fuera de esta rama.
   `node --import tsx --import ./src/lib/realty/__tests__/offline.mjs --test …`
 - 🔴 **NO se corrió `npx next build`** (pide 12 GB y ya tumbó la máquina dos
   veces). El build completo va UNA vez al integrar la ola.
+
+## [Inmuebles Ola 2 · T5 Dinero y Reportes] — El reporte al propietario en UN clic, la cartera que el dueño de diez casas nunca ha visto, y el resumen que se lleva al contador ✅ (2026-08-26)
+
+Rama `realty/o2t5`, 8 commits sobre `c156a11e`. **26 archivos, +10 030 / −10**, todos
+dentro del vertical (`node scripts/realty-guard.cjs` → exit 0, cero prohibidos).
+
+Cinco pantallas, cuatro PDF, cinco hojas de cálculo, una liga firmada que abre sin
+sesión y un barrido semanal. Todo cuelga de **un solo cálculo**: la pantalla, el PDF
+y el CSV consumen el MISMO DTO y la MISMA aritmética. Si discreparan en un número, el
+que queda mal es el asesor enfrente de su cliente.
+
+### 🔴 Las tres cosas que este reporte NO PUEDE SABER, y que por eso no dice
+
+Van primero porque es lo que hay que entender antes de prometerle nada a un cliente.
+
+1. **VISTAS del anuncio.** No existe tabla de analítica en el vertical, `RealtyProperty`
+   no tiene contador y **ningún portal nos devuelve sus estadísticas** — el feed es de
+   una sola vía. Lo que sí sabemos es cuánta gente **ESCRIBIÓ** desde cada portal, y eso
+   es lo que se reporta, con ese nombre y con una nota que explica la diferencia.
+   Decirle al propietario "tu casa se vio 340 veces" sería inventarle el número.
+2. **MONTO de una oferta.** No hay tabla de ofertas: `OFERTA` es una ETAPA del prospecto
+   y no guarda importe. Se cuentan las etapas OFERTA y las operaciones `EN_PROCESO`, que
+   sí son ofertas formales con monto. La columna dice "no registrado" en vez de un cero.
+3. **RETENCIÓN FISCAL.** En este vertical "retenido" es la **comisión de administración**
+   que se queda la inmobiliaria, NO un impuesto. El resumen anual lo dice con todas sus
+   letras: confundirlos sería decirle al arrendador que le retuvimos ISR.
+
+### 🔴 La regla que mandó sobre todo: no se suman pesos con dólares
+
+El inventario acepta MXN y USD (`RealtyProperty.currency`, `RealtyLease.currency`) y
+**ningún movimiento de dinero guarda su moneda**: ni `RealtyPayment`, ni
+`RealtyRentCharge`, ni `RealtyExpense`, ni `RealtyDeal`, ni `RealtyCommissionSplit`. La
+moneda siempre se HEREDA, y por eso es tan fácil perderla por el camino. T4 ya se comió
+ese bug en cobranza (`2ba44ae6`).
+
+Aquí no se esconde nada: un reporte de patrimonio que ocultara los inmuebles en dólares
+mentiría por omisión. Los totales viajan en `MoneyByCurrency` —un cajón por moneda que
+nunca se colapsa— y:
+
+- **De quién hereda cada peso**: gasto, mantenimiento y operación → `property.currency`;
+  cargo de renta y su pago → `lease.currency`. Y pueden NO coincidir: una casa listada
+  en dólares puede estar rentada en pesos.
+- **No se convierte.** No existe tipo de cambio en el sistema —ni tabla, ni captura, ni
+  fuente— e inventarle uno al reporte sería inventar el número. Dos monedas = dos
+  renglones.
+- **Un porcentaje solo se emite DENTRO de una moneda.** Si los ingresos de un inmueble
+  están en una y sus gastos en otra, el rendimiento NO sale y se dice por qué
+  (`blocked: "MEZCLA_MONEDAS"`).
+- **"Mejor" y "peor" inmueble solo si TODOS comparten moneda.** Comparar un 8 % en
+  dólares con un 6 % en pesos como si fueran lo mismo es justo la trampa que esto evita.
+- **En la hoja de cálculo, DOS COLUMNAS por importe** (`… (MXN)` / `… (USD)`). Si
+  compartieran columna, el primer `=SUMA()` que alguien escriba en Excel produce el
+  número inventado que todo esto existe para evitar.
+- **Centavos enteros, siempre.** El redondeo ocurre UNA vez, al presentar.
+
+### Qué se construyó
+
+**A · Reporte de actividad al propietario** — `/inmobiliaria/reportes?tab=propietario`.
+Es lo ÚNICO del sistema que ve un cliente del cliente. Empieza por la lectura en texto
+claro, no por una tabla: el propietario no quiere doce columnas, quiere que alguien le
+diga qué está pasando. Lleva dónde está anunciado y qué trajo cada lado, el interés
+(contactos, llamadas, mensajes, mediana de primera respuesta, sin contestar), las
+visitas con lo que opinaron, las ofertas, y **lo que se está cerrando en la zona**
+(operaciones REALES de la propia cuenta, mismo tipo, misma ciudad, misma moneda, últimos
+12 meses; **con menos de tres comparables no se enseña nada** — una o dos casas no son
+una zona).
+
+La recomendación es prosa, no números, y **se diagnostica el primer escalón roto** del
+embudo: si el inmueble ni siquiera está anunciado, hablar del precio sería un consejo
+inútil. Siete casos, del más arriba al más abajo: `SIN_ANUNCIO → TEMPRANO → SIN_INTERES
+→ SIN_VISITAS → PRECIO → SIN_OFERTAS → CON_OFERTAS` (+ `CERRADO`). El del enunciado es
+el caso PRECIO:
+
+> **7 visitas y ninguna oferta.** A los que la vieron les gustó, pero les pareció cara:
+> de 7 visitas, 4 mencionaron el precio. El precio está arriba de lo que se está
+> cerrando en la zona. Se cerraron 5 operaciones comparables en Del Valle con una
+> mediana de $4,150,000.00: este inmueble está pidiendo 12.3 % por encima.
+
+**B · Cartera del propietario** — valor, renta, gastos del año, **rendimiento neto real**
+anualizado, meses vacía, y cuál le deja más y cuál menos. Comprobado contra el caso del
+enunciado: 12 000/mes con 2 000 de gasto sobre un valor de 2 000 000 = **6.0 % anual**.
+
+**C · Resumen fiscal anual del arrendador** — ingresos por inmueble y en total, gastos,
+"probablemente deducibles" **agrupados por CATEGORÍA** (el sistema no tiene casilla de
+"deducible": nadie marca un gasto como tal, y quién decide es el contador), retenciones
+de administración, y los pagos recibidos con su fecha, su forma y su folio de recibo.
+La pantalla dice **"Llévale esto a tu contador"** y **"Esto NO es una declaración ni un
+comprobante fiscal"**. Ni CFDI ni timbrado en ningún lado, salvo para NEGARLOS
+explícitamente: *"Este sistema no emite facturas ni timbra nada. Los comprobantes que
+ves son RECIBOS."*
+
+**D · Rentabilidad por inmueble** — la MISMA consulta que la cartera, presentada
+distinto. Comparten `getPropertyEconomics` a propósito: dos pantallas que dicen lo mismo
+no pueden discrepar si leen la misma cuenta.
+
+**E · Reportes de la operación** — embudo acumulado (la etapa es MUTABLE y se puede
+retroceder, así que contar por `stage` da la FOTO de hoy: quien está en OFERTA ya pasó
+por CONTACTADO) · **qué portal trae los que CIERRAN**, ordenado por cierres y NO por
+volumen de prospectos, que es el punto entero · tiempo de primera respuesta por asesor
+(pasados 10 minutos la probabilidad de contacto cae 80 %) · morosidad con antigüedad y
+proyección a 3 meses · comisiones devengadas y pagadas.
+
+**F · Exportación** — los cinco reportes en PDF **y** en hoja de cálculo, sin excepción.
+
+### La reja: el permiso abre la PUERTA, cada bloque comprueba el SUYO
+
+🔴 **Esta pantalla no se gatea como las demás del vertical.** El item de menú `reportes`
+pide SOLO `properties.view`, no tiene `featureKey` y está en TODOS los modos — y así
+debe ser: un asesor tiene que poder ver su embudo y un rentista su rendimiento. Pero con
+esa sola llave, un `AGENT` llegaría al resumen fiscal con el dinero completo de la
+cartera.
+
+`getReportAccess(ctx)` es el punto ÚNICO que responde "¿quién puede ver esto?" y lo
+consumen **los tres**: las pestañas que se pintan, el servidor que decide qué consultar,
+y las diez rutas de `/api/realty/reports/**` (`_guard.ts`). Si la exportación tuviera su
+propio criterio, el día que alguien ajuste uno se abriría un agujero en el otro.
+
+Y el servidor **ni siquiera CONSULTA** lo que el usuario no puede ver: esconder una
+pestaña no es control de acceso, y a estas rutas se llega escribiendo la URL a mano.
+
+| bloque | qué pide |
+| --- | --- |
+| `base` (la puerta) | `properties.view` |
+| `activity` | `properties.view` + `leads.view` |
+| `portfolio` / `profitability` | `properties.view` + (`payments.manage` \|\| `expenses.manage`) + plan `rentals` |
+| `tax` | (`payments.manage` \|\| `expenses.manage`) + plan `rentals` |
+| `funnel` | `leads.view` + plan `leads` |
+| `commissions` | `commissions.view` + plan `commissions` |
+| `collections` | `payments.manage` + plan `rentals` |
+| `sendWhatsapp` | los de `activity` + `whatsapp.send` + plan `whatsapp` |
+
+Dos recortes finos dentro del bloque, heredados del criterio de T2 y T8: **un asesor
+raso no ve el embudo ni los tiempos de respuesta de sus compañeros** (sin
+`leads.assign`/`team.manage`/OWNER/MANAGER el embudo se recorta a lo suyo), y **sin
+`commissions.manage` solo se ve la propia parte** — el permiso de ver comisiones no es
+el permiso de ver las de los demás.
+
+### 🔴 La liga firmada: la ÚNICA ruta del vertical que contesta sin sesión
+
+El propietario NO tiene cuenta y no se va a registrar para leer cómo va su casa. Por eso
+`/api/realty/reports/propietario/pdf?t=<token>` abre sin sesión. Qué la protege:
+
+- **HMAC-SHA256** y comparación en **tiempo constante**. En producción **sin secreto no
+  se firma NI se acepta nada** (falla CERRADO). Los helpers gemelos del repo caen a un
+  literal que está en el repositorio; ese literal permitiría fabricarse una liga al
+  reporte de cualquier inmueble. Aquí no.
+- **El token NO lleva permisos: lleva QUIÉN lo emitió.** El alcance se vuelve a derivar
+  de la base en CADA petición, con el mismo `getOwnerActivityReport` de la pantalla. Si
+  al asesor lo dan de baja o el inmueble sale de su alcance, la liga **deja de abrir
+  sola** — sin lista de revocación que mantener.
+- **Caduca a los 30 días.** Una liga eterna que se reenvía por WhatsApp acaba en un grupo
+  familiar tres años después.
+- **Sin enumeración**: el `propertyId` va DENTRO de la firma; cambiarle una letra a la
+  URL invalida el token entero.
+- `X-Robots-Tag: noindex, nofollow`, y la misma respuesta para "no existe", "caducó" y
+  "no es tuyo".
+
+**Va la LIGA, no un PDF adjunto**, a propósito: el PDF se arma de la base en el momento
+en que se abre. Un adjunto es una foto congelada — si el asesor manda el reporte el lunes
+y el martes se registra una visita, el propietario sigue viendo el lunes y llama a
+preguntar por qué.
+
+### El envío por WhatsApp, y por qué a veces dice que NO pudo
+
+`POST /api/realty/reports/propietario/enviar` usa `sendRealtyWhatsApp` de T6 sin tocarle
+una línea. **Fuera de la ventana de 24 h NO se finge el envío**: no hay plantilla
+aprobada para este reporte (las seis del vertical son de prospecto, visita y cobranza) y
+Meta no deja escribir primero sin una. Contesta `reason: "window"` y la pantalla ofrece
+copiar la liga. Un botón que dice "enviado" y no envía enseña a la gente a desconfiar del
+panel entero. **La liga vuelve aunque el envío falle**: es el plan B, y se necesita más
+justo cuando WhatsApp no pudo.
+
+El teléfono del propietario se captura A MANO ("33 1234 5678", "+52 33…"), a diferencia
+del de un contacto: pasa por `mxTenDigits` o media lista no recibiría nada y nadie sabría
+por qué.
+
+### El envío automático semanal, y la columna que falta
+
+🔴 **Este vertical NO tiene dónde guardar una casilla "mandar cada semana".**
+`RealtyProperty` y `RealtyPropertyOwner` no tienen columna libre ni campo Json de
+ajustes, y el schema es de otra terminal. Inventar una tabla que viva solo en un `.sql`
+—sin modelo de Prisma— es la deuda que barber ya pagó dos veces (P2022 en una base sin
+las columnas). No se repitió aquí.
+
+**El interruptor es el que YA EXISTE y además es el correcto: la EXCLUSIVA VIGENTE.** Es
+literalmente el papel que obliga a informarle al propietario, es por inmueble **Y** por
+propietario (que es como lo pedía el encargo), el asesor ya la da de alta y la quita
+desde la ficha, y es lo que este reporte sirve para renovar.
+
+Y **se dice en pantalla**, con la fecha real y el canal real, porque un automatismo que
+nadie ve es un automatismo que nadie usa: *"Con exclusiva vigente hasta el 12/03/2027.
+Cada lunes por la mañana le sale solo por WhatsApp, con los últimos 30 días."* — o, si no
+la hay, qué hacer para activarlo.
+
+➡️ **LO QUE FALTA Y ES UNA SOLA COLUMNA**: `RealtyProperty.ownerReportWeekly Boolean
+@default(true)`, para poder APAGARLO por inmueble sin cancelar la exclusiva. Hoy no hay
+forma de decir "sí quiero la exclusiva, no quiero el correo automático". Cuando exista,
+se añade al `where` de `runWeeklyOwnerReports` y a `getOwnerReportSchedule` — los dos
+únicos sitios que leen el interruptor.
+
+### ⚠️ EL CRON NO ESTÁ DADO DE ALTA
+
+`vercel.json` está FUERA del vertical (el guardia lo marca como prohibido) y no se tocó.
+El bloque exacto que hay que pegar en `crons`:
+
+```json
+{ "path": "/api/cron/realty-reports", "schedule": "0 15 * * 1" }
+```
+
+Lunes 15:00 UTC = **9:00 de la mañana en CDMX** (México no cambia de horario desde 2022,
+así que es UTC−6 todo el año). Sin `CRON_SECRET` la ruta responde 503 y no manda nada
+—falla cerrado, igual que `/api/cron/realty-rent`—, y el barrido exige `NEXT_PUBLIC_APP_URL`
+(u otra de la cascada): **un mensaje con una liga a `undefined/api/...` es peor que no
+mandar el mensaje**, porque quema la confianza del propietario.
+
+Idempotencia: la llave de reclamo es `ownerReport:<propertyId>:<semana ISO>`. Si Vercel
+dispara dos veces el mismo lunes, el segundo choca contra el único del hilo y no manda
+nada. Correrlo a mano tampoco duplica.
+
+Topes: 60 exclusivas por cuenta, 500 en total, y **el resumen dice lo que recortó**
+(`truncated`, `accountsSkipped`). Un barrido que recorta en silencio se lee igual que uno
+que cubrió todo, y el día que una inmobiliaria con 200 exclusivas note que a 140
+propietarios nunca les llegó nada, la única forma de saberlo era ese número.
+
+### 🐛 Seis bugs encontrados y arreglados durante la revisión
+
+Ninguno se ve como un error cuando ocurre; todos producen un número creíble y falso.
+
+1. **`"no está caro"` contaba como queja de precio** y `"no les gustó"` como que les
+   gustó — los patrones pegaban sin mirar lo que llevaban delante. De ese booleano cuelga
+   el TITULAR que lee el propietario: `priceObjections > 0` empuja al caso PRECIO, cuyo
+   consejo es *"platica con el propietario un ajuste de precio"*. Se le estaba
+   recomendando bajarle el precio a alguien **de quien nadie se quejó**, en la única
+   pantalla que ve un cliente del cliente. Ahora `matchesUnnegated()` busca un negador
+   entre el último corte de oración y el patrón (el corte importa: en *"no me acuerdo del
+   baño, pero les gustó mucho"* el "no" es de otra frase) y recorre TODAS las apariciones,
+   no la primera.
+2. **`"el precio ESTÁ alto"` no pegaba con ningún patrón** (pedían "precio alto" pegado,
+   que casi nadie teclea). La forma más común del país se contaba como cero.
+3. **Una operación cerrada hace tres años entraba a CUALQUIER periodo.** La consulta de
+   `RealtyDeal` no tenía recorte de fechas, así que la primera frase del reporte era *"La
+   operación se cerró EN EL PERIODO"* sobre un inmueble vendido en 2024. Ahora `CERRADO`
+   exige `closedAt` dentro del rango; `EN_PROCESO` solo exige existir al terminarlo —una
+   oferta del mes pasado que SIGUE sobre la mesa es justo lo que hay que decirle, y
+   esconderla por no haber nacido dentro del rango sería ocultar una oferta viva.
+4. **"Meses vacía" contaba uno de más** con un contrato firmado en día 29, 30 o 31. El
+   cursor avanzaba con `setUTCMonth(+1)` desde el día del contrato, y **el 31 de enero
+   más un mes es el 3 de MARZO**: febrero no se agregaba nunca. Es la pantalla que le dice
+   al rentista cuántos meses no le rindió su casa. El cursor ahora arranca en día 1.
+5. **La "proyección a 3 meses" mostraba CUATRO renglones** el último día de los meses
+   largos, por el mismo desbordamiento. El corte ahora es el día 1 del mes que está tres
+   adelante.
+6. **El aviso "N inmuebles sin comisión pactada" contaba la cartera ENTERA**, pero la hoja
+   solo pinta los que tuvieron movimiento. Un rentista con 3 casas rentadas y 40
+   publicadas leía *"43 de tus inmuebles…"* encima de una tabla de TRES renglones.
+
+Y dos endurecimientos: `loadPayments` tenía el `OR` del recorte por oficina en el primer
+nivel del `where` con `...extra` esparcido al lado —el día que alguien pase un filtro con
+su propio `OR`, el spread lo pisa y **el aislamiento desaparece en silencio**; ahora son
+dos elementos de un `AND`. Y una consulta menos en la pantalla estrella (las visitas ya
+traen su `leadId` en vez de volver a consultarlas enteras).
+
+### 🤝 La costura con O2-T3, y lo que comparto con /inmobiliaria/inicio
+
+**O2-T3 todavía no publica su reporte en ORQUESTA.md**, así que la retroalimentación de
+visitas se consume detrás de UNA función: `readVisitFeedback(visit)` en `owner-report.ts`.
+Todo lo que el propietario ve sobre "qué opinaron" pasa por ella. Cuando T3 aterrice
+campos estructurados **se cambia esa función y nada más**: mientras siga devolviendo
+`{ text, priceObjection, liked }`, ni las consultas, ni el PDF, ni el CSV, ni la
+recomendación se enteran. Sin fuente NO adivina: devuelve todo en falso con
+`source: "SIN_DATO"` y la pantalla lo dice con todas sus letras.
+
+**Para la terminal de `/inmobiliaria/inicio`** (no toqué ese archivo). Todo esto ya está
+exportado de `src/lib/realty/reports.ts` y respeta `accountId` + `getAccessibleOfficeIds`:
+
+| función | devuelve |
+| --- | --- |
+| `resolveRange(ctx, from, to)` · `accountTimezone(ctx)` | el periodo en la zona de la CUENTA (una operación cerrada el 31 a las 8 de la noche en Cancún cae en el mes siguiente si se calcula en UTC) |
+| `propertyScopeWhere(ctx)` · `nestedPropertyScope(ctx)` | el recorte de inmuebles, suelto o para anidar bajo `property:` |
+| `getReportAccess(ctx)` | qué bloques puede ver este usuario |
+| `getOperationsReport(ctx, {from,to})` | embudo, portales, asesores, morosidad y comisiones — **ya viene recortado por permiso**, los bloques que no tocan llegan en `null` |
+| `getPropertyEconomics(ctx, {from,to,ownerId})` | ingresos, gastos, neto, rendimiento y meses vacía por inmueble |
+| `getOwnerActivityReport(ctx, {propertyId,from,to})` | la actividad de UN inmueble |
+| `getTaxSummary(ctx, {year,ownerId})` | el resumen anual |
+| `getReportPickers(ctx)` | inmuebles, propietarios y años con movimiento |
+| `getOwnerReportSchedule(ctx, propertyId)` | si le sale solo cada lunes, y por dónde |
+
+Y de `src/lib/realty/owner-report.ts` —**PURO y client-safe**, sin prisma y sin
+`server-only`— salen todos los helpers de dinero (`MoneyByCurrency`, `addAmount`,
+`mergeMoney`, `computeYield`, `formatMoneyByCurrency`) y el armador de CSV. Se pueden
+importar por VALOR desde un `"use client"`. De `reports.ts` **solo `import type`**: basta
+con que un cliente importe UNA constante de ahí para que el bundle se trague `server-only`
+y el build se caiga.
+
+### Verificación (sin compilar — el gate es de Rafael al integrar)
+
+Por instrucción de la sesión no se corrió `next build` ni `tsc --noEmit` (ocho terminales
+en paralelo). En su lugar, cinco comprobaciones mecánicas:
+
+- **41 pruebas puras en verde, 130 ms, sin BD ni navegador ni hook de `offline.mjs`** —
+  `npx tsx --test src/lib/realty/__tests__/reportes.test.ts`. Cubren la regla de la
+  moneda, el rendimiento del enunciado y sus cuatro bloqueos, la negación, la inyección
+  de fórmulas en el CSV y la inyección de cabeceras en el nombre del archivo (que sale
+  del título del inmueble, que lo escribe el usuario).
+- **31 llamadas a Prisma** con todos sus campos resueltos **siguiendo las relaciones** en
+  cada anidamiento (`owner.phone` contra `RealtyPropertyOwner`, no contra
+  `RealtyProperty`): todos existen en `schema.prisma`. Los 15 modelos y los ~30 literales
+  de enum también.
+- **311 nombres importados**: todos existen en su módulo de origen (resolviendo
+  re-exports).
+- **74 componentes JSX** importados o definidos; **268 accesos `report.<campo>`** en
+  paneles y PDF existen en su DTO.
+- **199 llaves de i18n**, `es` y `en` simétricas, **cero llaves crudas** (convención B:
+  el servidor recorta el sub-árbol y el cliente llama a `makeRealtyT` SIN prefijo).
+
+### ⛔ Lo que NO está probado y hay que mirar al integrar
+
+1. **Ningún PDF se ha renderizado.** `@react-pdf/renderer` + `sharp` para el logo solo
+   corren en `runtime = "nodejs"`. Los cuatro documentos están escritos pero **nadie ha
+   visto uno**. Es lo primero que hay que abrir.
+2. **Ningún número se ha comprobado contra datos reales.** Toda la aritmética está
+   probada en aislamiento; las CONSULTAS no (no hay base en este worktree).
+3. **Nadie ha mandado el reporte por WhatsApp**, en línea con que nadie ha mandado
+   todavía un WhatsApp real desde el producto.
+4. **La liga firmada necesita `COOKIE_SECRET` (o `SUPABASE_SERVICE_ROLE_KEY`) en
+   producción.** Sin ninguna de las dos, el botón de copiar liga contesta 503 y el envío
+   devuelve `reason: "no_link"`. Es deliberado —falla cerrado— pero hay que confirmarlo
+   en Vercel antes de enseñar la pantalla.
+5. **`RealtyVisitStatus.REALIZADA` no lo pone NADIE hoy** en el vertical: el único código
+   que mueve el status es la respuesta del prospecto por WhatsApp, que solo pone
+   CONFIRMADA o CANCELADA. Por eso "la visita ocurrió" se mide como *ya pasó su hora y no
+   se canceló ni faltó*. Contar por `REALIZADA` daría cero visitas siempre y el reporte
+   estrella diría que a la casa no fue nadie.
+6. **`scripts/realty-guard.cjs` creció una línea**: `src/app/api/cron/realty-reports/` en
+   `OWN_PREFIXES` (carpeta nueva y exclusiva del vertical, no en `REALTY_GUARD_SHARED` —
+   la variable solo indulta rutas que ya estén en `SHARED_FILES`).
