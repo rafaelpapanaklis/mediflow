@@ -669,6 +669,11 @@ export const REALTY_NAV_ITEMS: RealtyNavItemDef[] = [
   // OWNER el dueño es la propia cuenta, así que la pantalla no aplica.
   { key: "propietarios", href: "/inmobiliaria/propietarios", icon: "contact", section: "negocio", permission: "owners.manage", featureKey: null, modes: BROKER_MODES },
   { key: "comisiones", href: "/inmobiliaria/comisiones", icon: "percent", section: "negocio", permission: "commissions.view", featureKey: "commissions", modes: BROKER_MODES },
+  // Cumplimiento antilavado. modes: ALL_MODES a propósito — el arrendamiento
+  // por encima del umbral también es actividad vulnerable, así que un
+  // rentista con plan INMOBILIARIA la necesita igual. Quien lo restringe de
+  // verdad es featureKey: solo ese plan trae la feature `pld`.
+  { key: "cumplimiento", href: "/inmobiliaria/cumplimiento", icon: "shield-check", section: "negocio", permission: "pld.view", featureKey: "pld", modes: ALL_MODES },
   // Equipo: usuarios, roles y oficinas. Un asesor independiente está solo.
   { key: "equipo", href: "/inmobiliaria/equipo", icon: "user-plus", section: "negocio", permission: "team.manage", featureKey: null, modes: ["AGENCY"] },
   { key: "reportes", href: "/inmobiliaria/reportes", icon: "chart", section: "negocio", permission: "properties.view", featureKey: null, modes: ALL_MODES },
