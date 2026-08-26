@@ -16,13 +16,13 @@ import type { Metadata } from "next";
 import type { Dictionary } from "@/i18n/t";
 import { ContractTablesMissingError, getContract } from "@/lib/realty/contracts";
 import { ContractDetailClient } from "@/components/realty/contracts/contract-detail-client";
-import { TablesMissing, gateContractScreen } from "../_gate";
+import { TablesMissing, contractsGateDenied, gateContractScreen } from "../_gate";
 
 export const metadata: Metadata = { title: "Contrato — DaleControl Inmuebles" };
 
 export default async function Page({ params }: { params: { id: string } }) {
   const gate = await gateContractScreen();
-  if (!gate.ok) return gate.screen;
+  if (contractsGateDenied(gate)) return gate.screen;
   const { ctx, dict } = gate;
 
   let contract = null;

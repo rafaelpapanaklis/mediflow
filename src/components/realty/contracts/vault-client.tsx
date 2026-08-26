@@ -123,7 +123,7 @@ export function VaultClient({
 
       <div className="rnt-toolbar">
         <div className="rnt-toolbar__grow">
-          <Tabs
+          <Tabs<Eje>
             label={t("boveda.title")}
             value={eje}
             onChange={setEje}

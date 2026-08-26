@@ -122,7 +122,7 @@ export function ExpiringClient({
 
       <div className="rnt-toolbar">
         <div className="rnt-toolbar__grow">
-          <Tabs
+          <Tabs<Ventana>
             label={t("vencimientos.ventana")}
             value={ventana}
             onChange={setVentana}

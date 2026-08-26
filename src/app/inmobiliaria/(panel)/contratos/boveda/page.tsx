@@ -17,13 +17,13 @@ import { prisma } from "@/lib/prisma";
 import { ContractTablesMissingError, listContracts } from "@/lib/realty/contracts";
 import { VaultClient } from "@/components/realty/contracts/vault-client";
 import type { ContractRowDTO } from "@/components/realty/contracts/shared";
-import { TablesMissing, gateContractScreen } from "../_gate";
+import { TablesMissing, contractsGateDenied, gateContractScreen } from "../_gate";
 
 export const metadata: Metadata = { title: "Bóveda de contratos — DaleControl Inmuebles" };
 
 export default async function Page() {
   const gate = await gateContractScreen();
-  if (!gate.ok) return gate.screen;
+  if (contractsGateDenied(gate)) return gate.screen;
   const { ctx, dict } = gate;
 
   let firmados: ContractRowDTO[] = [];

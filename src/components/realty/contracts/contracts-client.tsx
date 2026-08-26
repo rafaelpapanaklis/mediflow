@@ -192,7 +192,7 @@ export function ContractsClient({
 
       <div className="rnt-toolbar">
         <div className="rnt-toolbar__grow">
-          <Tabs
+          <Tabs<StatusFilter>
             label={t("filtros.estado")}
             value={status}
             onChange={setStatus}

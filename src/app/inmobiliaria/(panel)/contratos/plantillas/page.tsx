@@ -16,13 +16,13 @@ import {
   type ContractTemplateDTO,
 } from "@/lib/realty/contracts";
 import { TemplatesClient } from "@/components/realty/contracts/templates-client";
-import { TablesMissing, gateContractScreen } from "../_gate";
+import { TablesMissing, contractsGateDenied, gateContractScreen } from "../_gate";
 
 export const metadata: Metadata = { title: "Plantillas de contrato — DaleControl Inmuebles" };
 
 export default async function Page() {
   const gate = await gateContractScreen();
-  if (!gate.ok) return gate.screen;
+  if (contractsGateDenied(gate)) return gate.screen;
   const { ctx, dict } = gate;
 
   let templates: ContractTemplateDTO[] = [];

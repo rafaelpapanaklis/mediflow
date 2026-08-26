@@ -284,7 +284,11 @@ export function ContractDetailClient({
     if (ok) setPartesAbierto(false);
   }
 
-  const rolesSugeridos: RealtyPartyRole[] = ROLES_BY_KIND[c.kind] ?? REALTY_PARTY_ROLES;
+  // `readonly` porque REALTY_PARTY_ROLES es un `as const`: una tupla de
+  // solo lectura no entra en un array mutable. El tipo del catálogo manda,
+  // no se le quita el readonly con un cast — aquí nadie lo modifica.
+  const rolesSugeridos: readonly RealtyPartyRole[] =
+    ROLES_BY_KIND[c.kind] ?? REALTY_PARTY_ROLES;
 
   return (
     <div className="ctr">

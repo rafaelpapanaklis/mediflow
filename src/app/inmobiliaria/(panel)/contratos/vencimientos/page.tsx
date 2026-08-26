@@ -16,13 +16,13 @@ import type { Metadata } from "next";
 import type { Dictionary } from "@/i18n/t";
 import { ContractTablesMissingError, expiringBoard, type ExpiringBoard } from "@/lib/realty/contracts";
 import { ExpiringClient } from "@/components/realty/contracts/expiring-client";
-import { TablesMissing, gateContractScreen } from "../_gate";
+import { TablesMissing, contractsGateDenied, gateContractScreen } from "../_gate";
 
 export const metadata: Metadata = { title: "Vencimientos — DaleControl Inmuebles" };
 
 export default async function Page() {
   const gate = await gateContractScreen();
-  if (!gate.ok) return gate.screen;
+  if (contractsGateDenied(gate)) return gate.screen;
   const { ctx, dict } = gate;
 
   let board: ExpiringBoard = { contracts: [], leasesSinContrato: [], exclusivasSinContrato: [] };

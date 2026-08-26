@@ -21,13 +21,13 @@ import {
 import { ContractsClient } from "@/components/realty/contracts/contracts-client";
 import type { ContractRowDTO } from "@/components/realty/contracts/shared";
 import type { ContractSources } from "@/components/realty/contracts/new-contract-form";
-import { TablesMissing, gateContractScreen } from "./_gate";
+import { TablesMissing, contractsGateDenied, gateContractScreen } from "./_gate";
 
 export const metadata: Metadata = { title: "Contratos — DaleControl Inmuebles" };
 
 export default async function Page() {
   const gate = await gateContractScreen();
-  if (!gate.ok) return gate.screen;
+  if (contractsGateDenied(gate)) return gate.screen;
   const { ctx, dict } = gate;
 
   let contracts: ContractRowDTO[] = [];

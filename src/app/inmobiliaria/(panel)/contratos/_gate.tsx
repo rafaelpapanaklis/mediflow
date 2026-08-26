@@ -39,9 +39,40 @@ import contractsDict from "@/i18n/dictionaries/realty/contracts.json";
 /** El item cuyo MODO y cuyas rejas comparte esta sección. */
 const ANCLA = "rentas";
 
-export type ContractsGate =
-  | { ok: true; ctx: RealtyContext; dict: Dictionary; locale: "es" | "en" }
-  | { ok: false; screen: ReactElement };
+export interface ContractsGateOk {
+  ok: true;
+  ctx: RealtyContext;
+  dict: Dictionary;
+  locale: "es" | "en";
+}
+export interface ContractsGateDenied {
+  ok: false;
+  screen: ReactElement;
+}
+export type ContractsGate = ContractsGateOk | ContractsGateDenied;
+
+/**
+ * 🔴 GUARDA DE TIPO EXPLÍCITA, Y NO `if (!gate.ok)`.
+ *
+ * La unión de arriba ya está discriminada como manda el manual —`ok` con
+ * literales `true` y `false`, no `boolean`— y aun así NO estrecha: este
+ * repo compila con `strict: false`, y sin `strictNullChecks` TypeScript no
+ * aplica el estrechamiento por discriminante booleano. `gate.screen` sale
+ * con "Property 'screen' does not exist on type ContractsGate" aunque el
+ * tipo esté escrito exactamente como se supone que debe escribirse.
+ *
+ * Lo que SÍ estrecha en este repo es un predicado de tipo (`x is T`), que
+ * funciona en las DOS ramas: dentro del `if` es Denied, y después del
+ * `return` es Ok por exclusión.
+ *
+ * No es un truco nuevo: whatsapp-core.ts tiene `isRealtyWaSendOk` por
+ * exactamente este motivo, con la explicación escrita al lado, y barber
+ * tiene `isManualSendError`. Esta es la tercera vez que el repo tropieza
+ * con la misma piedra.
+ */
+export function contractsGateDenied(gate: ContractsGate): gate is ContractsGateDenied {
+  return gate.ok === false;
+}
 
 function Aviso({ kind, texto }: { kind: "plan" | "permission"; texto: string }) {
   const Icon = kind === "plan" ? CreditCard : Lock;
