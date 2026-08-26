@@ -57,6 +57,7 @@
    ═══════════════════════════════════════════════════════════════════════ */
 
 import { REALTY_WEB_BLOQUES, REALTY_WEB_MANIFESTS } from "@/lib/realty/templates/manifest";
+import { realtyTourEmbedUrl } from "@/lib/realty/tours";
 import {
   REALTY_PUBLIC_BASE,
   type RealtyMode,
@@ -318,6 +319,19 @@ export interface RealtyWebBloqueDef {
   id: RealtyWebBloqueId;
   /** Nombre visible en el editor. */
   nombre: string;
+  /**
+   * Una línea que dice QUÉ SALE en esa sección de la web pública.
+   *
+   * 🔴 No es adorno. El editor pinta cada bloque como un `<details>`
+   * cerrado; sin esta línea, la columna izquierda es una pila de barras
+   * iguales con una palabra encima ("Portada", "Contacto", "Inmuebles") y
+   * no hay forma de saber qué se abre sin abrirlas todas. Es el mismo modo
+   * de falla que una etiqueta de i18n vacía: no se ve como un error, se ve
+   * como una pantalla que no explica nada.
+   *
+   * Obligatoria y no vacía — lo cuida la prueba del manifiesto.
+   */
+  ayuda: string;
   /** Modos en los que este bloque tiene sentido. Nunca vacío. */
   modos: RealtyMode[];
   /**
@@ -356,12 +370,51 @@ export interface RealtyWebManifestBloque {
   variante?: string;
 }
 
+/**
+ * "trato-directo" → "Trato directo". Nombre legible a partir de la clave,
+ * para que un bloque desconocido NUNCA pinte un encabezado mudo.
+ */
+export function nombreDesdeClave(id: string): string {
+  // 🔴 EL `.trim()` VA AL FINAL, Y ESO NO ES ESTILO. Recortando solo al
+  // principio, una clave de puros separadores ("-", "__", " - ") pasaba el
+  // guardia de vacío y devolvía UN ESPACIO: es decir, la red contra la
+  // barra gris muda pintaba exactamente una barra gris muda. Se limpia
+  // primero y se comprueba después.
+  const limpio = String(id ?? "")
+    .replace(/[-_]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!limpio) return "Sección";
+  return limpio.charAt(0).toUpperCase() + limpio.slice(1);
+}
+
+/**
+ * El texto que SE PINTA en el encabezado de un panel del editor.
+ *
+ * Vive aquí —puro y exportado— y no dentro del componente a propósito: una
+ * red de seguridad que ninguna prueba puede ejecutar no es una red. Estando
+ * aquí, `Panel` la usa y la prueba del manifiesto la corre de verdad, así
+ * que si alguien la vacía, la suite se cae. Antes se comprobaba leyendo el
+ * .tsx como texto: eso vigila que la LLAMADA siga ahí, no que la función
+ * siga haciendo algo.
+ *
+ * Devuelve SIEMPRE algo con texto. Nunca "" ni " ".
+ */
+export function tituloDePanel(titulo: unknown, clave?: string): string {
+  const limpio = typeof titulo === "string" ? titulo.trim() : "";
+  return limpio || nombreDesdeClave(clave ?? "");
+}
+
 /** El bloque del catálogo. Cae a un bloque neutro si el id no existe. */
 export function bloqueDef(id: string): RealtyWebBloqueDef {
   return (
     REALTY_WEB_BLOQUES[id as RealtyWebBloqueId] ?? {
       id: id as RealtyWebBloqueId,
-      nombre: id,
+      // Ni el nombre ni la ayuda pueden salir vacíos: un bloque que el
+      // catálogo no conoce se sigue pudiendo abrir y mover, y el editor
+      // tiene que decir CUÁL es. Ver `nombreDesdeClave`.
+      nombre: nombreDesdeClave(id),
+      ayuda: "Sección de tu web. Ábrela para ver qué se puede cambiar aquí.",
       modos: ["AGENCY", "AGENT", "OWNER"],
       consume: [],
       pinta: [],
@@ -1724,9 +1777,32 @@ export const REALTY_WEB_CAMPOS_PROHIBIDOS: string[] = [
    11 · UTILIDADES DE LA WEB
    ═══════════════════════════════════════════════════════════════════ */
 
-/** ¿Este inmueble tiene recorrido virtual? (para la insignia del listado). */
+/**
+ * El primer recorrido del inmueble que DE VERDAD se puede pintar, o null.
+ *
+ * 🔴 DOS BUGS EN UNA LÍNEA, y los dos se veían igual de mal:
+ *
+ *   1. `inm.tours[0]` tomaba el PRIMERO a secas. Un inmueble con una
+ *      panorámica propia subida antes que su Matterport enseñaba la
+ *      panorámica —que la web pública no sabe embeber— y se caía a la foto
+ *      de portada, con el Matterport ahí guardado sin que nadie lo viera.
+ *   2. La insignia "con recorrido" del listado se pintaba con
+ *      `tours.length > 0`, sin preguntar si alguno se podía mostrar. El
+ *      visitante entraba a la ficha esperando el recorrido y encontraba una
+ *      foto. La insignia MENTÍA.
+ *
+ * `realtyTourEmbedUrl` es el único que sabe la respuesta (allowlist + forma
+ * embebible del proveedor), así que la pregunta se le hace a él.
+ */
+export function recorridoEmbebible(
+  inm: Pick<RealtyWebInmuebleDTO, "tours">,
+): RealtyWebTourDTO | null {
+  return inm.tours.find((t) => realtyTourEmbedUrl(t.url) !== null) ?? null;
+}
+
+/** ¿Este inmueble tiene recorrido virtual QUE SE PUEDA VER? (la insignia). */
 export function tieneRecorrido(inm: Pick<RealtyWebInmuebleDTO, "tours">): boolean {
-  return inm.tours.length > 0;
+  return recorridoEmbebible(inm) !== null;
 }
 
 /** La foto de portada del inmueble, o la primera, o null. */

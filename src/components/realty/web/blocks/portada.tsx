@@ -27,6 +27,7 @@ import {
   precioAnunciado,
   rutaInmuebleWeb,
   rutaPropiedadesWeb,
+  recorridoEmbebible,
   tieneRecorrido,
   ubicacionPublica,
   fotoPortada,
@@ -97,7 +98,10 @@ export function BloquePortada({ data }: { data: RealtyWebData }) {
     const inm = destacado(data);
     if (!inm) return null;
     const portada = fotoPortada(inm);
-    const tour = tieneRecorrido(inm) ? inm.tours[0] : null;
+    // recorridoEmbebible, no tours[0]: elige el primero que se pueda
+    // PINTAR. tieneRecorrido() responde lo mismo y es el que usa la
+    // insignia del listado, para que insignia y ficha no se contradigan.
+    const tour = tieneRecorrido(inm) ? recorridoEmbebible(inm) : null;
     const embed = tour ? realtyTourEmbedUrl(tour.url) : null;
     const donde = ubicacionPublica(inm);
     const waInm = ligaWhatsApp(
@@ -112,6 +116,7 @@ export function BloquePortada({ data }: { data: RealtyWebData }) {
             {embed && tour ? (
               <EmbedRecorrido
                 src={embed}
+                href={tour.url}
                 titulo={inm.titulo}
                 etiqueta={copia(data, ID, "portada.recorrido")}
                 proveedor={realtyTourProviderLabel(tour.provider)}

@@ -25,6 +25,7 @@ import {
   rutaAgenteWeb,
   rutaInmuebleWeb,
   rutaPropiedadesWeb,
+  recorridoEmbebible,
   tieneRecorrido,
   ubicacionPublica,
 } from "@/lib/realty/landing";
@@ -119,7 +120,10 @@ export default async function PaginaFicha({ params }: Props) {
   const portada = fotoPortada(inm);
   const resto = inm.fotos.filter((f) => f !== portada).slice(0, 6);
   const donde = ubicacionPublica(inm);
-  const tour = tieneRecorrido(inm) ? inm.tours[0] : null;
+  // recorridoEmbebible, no tours[0]: elige el primero que se pueda
+  // PINTAR. tieneRecorrido() responde lo mismo y es el que usa la
+  // insignia del listado, para que insignia y ficha no se contradigan.
+  const tour = tieneRecorrido(inm) ? recorridoEmbebible(inm) : null;
   const embedTour = tour ? realtyTourEmbedUrl(tour.url) : null;
   const mapa = embedMapa(inm);
   const estatus = REALTY_PROPERTY_STATUS_UI[inm.status];
@@ -165,6 +169,7 @@ export default async function PaginaFicha({ params }: Props) {
                 {embedTour && tour ? (
                   <EmbedRecorrido
                     src={embedTour}
+                    href={tour.url}
                     titulo={inm.titulo}
                     etiqueta={etiquetaRecorrido}
                     proveedor={realtyTourProviderLabel(tour.provider)}

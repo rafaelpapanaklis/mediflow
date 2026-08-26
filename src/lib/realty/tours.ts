@@ -153,6 +153,24 @@ export const REALTY_TOUR_URL_ERROR =
  * Normalizar la entrada no afloja nada: lo que se guarda y lo que se
  * embebe sigue siendo un dominio de la lista.
  */
+/* ── Los identificadores, UNO POR PROVEEDOR ───────────────────────────
+ *
+ * 🔴 Antes había UN solo patrón (`{6,64}` alfanumérico) para los tres. Es
+ * el tipo de atajo que se ve bien y no lo es: los ids de Kuula son de
+ * CINCO caracteres (`7l8Rk`), así que `kuula.co/post/7l8Rk` —la liga que
+ * de verdad pega la gente— no entraba en el patrón y se guardaba sin
+ * reescribir. Un patrón demasiado estrecho no falla ruidosamente: falla
+ * dejando la liga como estaba, que es justo lo que no se nota.
+ *
+ * Cada proveedor tiene el suyo y dice de dónde sale su forma.
+ */
+/** Matterport: 11 caracteres alfanuméricos (`SxQL3iGyoDo`). */
+const ID_MATTERPORT = /^[A-Za-z0-9]{6,64}$/;
+/** Kuula: cinco o seis caracteres (`7l8Rk`). */
+const ID_KUULA = /^[A-Za-z0-9]{3,32}$/;
+/** Luma: un UUID con guiones. */
+const ID_LUMA = /^[A-Za-z0-9][A-Za-z0-9-]{7,63}$/;
+
 export function normalizeRealtyTourUrl(url: string): string {
   const raw = (url ?? "").trim();
   if (!raw) return "";
@@ -162,11 +180,102 @@ export function normalizeRealtyTourUrl(url: string): string {
   } catch {
     return raw;
   }
+  // 🔴 NORMALIZAR NO ES ASCENDER DE PROTOCOLO. Todas las reescrituras de
+  // abajo arman una URL `https://…`, así que aplicarlas a una entrada
+  // `http://` la subiría a https en silencio — y una liga que la puerta
+  // debía rechazar (contenido mixto: el navegador la bloquea dentro de una
+  // página https, marco en blanco y sin error) pasaría de largo. El
+  // protocolo lo decide detectRealtyTourProvider y aquí no se toca.
+  if (parsed.protocol !== "https:") return raw;
+
   if (normalizeHost(parsed.host) === "youtu.be") {
     const id = parsed.pathname.replace(/^\/+/, "").split("/")[0];
     if (id) return `https://www.youtube.com/watch?v=${encodeURIComponent(id)}`;
   }
+
+  const provider = REALTY_TOUR_PROVIDERS.find((p) =>
+    p.domains.some((d) => hostMatchesDomain(parsed.host, d)),
+  );
+
+  // Matterport: la ÚNICA forma que se deja embeber es la liga de Compartir.
+  if (provider?.key === "matterport") {
+    const id = matterportSpaceId(parsed);
+    if (id) return `https://my.matterport.com/show/?m=${encodeURIComponent(id)}`;
+    return raw; // sin identificador no hay nada que canonizar; lo rechaza checkRealtyTourUrl
+  }
+
+  // Kuula: /post/<id> es la página del visor; /share/<id> es la que Kuula
+  // entrega en su propio botón de Insertar. Una colección
+  // (/share/collection/<id>) NO se toca: ya viene en forma de compartir.
+  if (provider?.key === "kuula") {
+    const partes = parsed.pathname.split("/").filter(Boolean);
+    if (partes[0] === "post" && partes[1] && ID_KUULA.test(partes[1])) {
+      return `https://kuula.co/share/${partes[1]}${parsed.search}`;
+    }
+    return raw;
+  }
+
+  // Luma: /capture/<uuid> es la página; /embed/<uuid> es el visor incrustable.
+  if (provider?.key === "lumalabs") {
+    const partes = parsed.pathname.split("/").filter(Boolean);
+    if (partes[0] === "capture" && partes[1] && ID_LUMA.test(partes[1])) {
+      return `https://lumalabs.ai/embed/${partes[1]}`;
+    }
+    return raw;
+  }
+
+  // CloudPano, EyeSpy360, GoIGuide y Scaniverse se dejan TAL CUAL a
+  // propósito.
+  //
+  // 🔴 LA REGLA QUE SE APRENDIÓ AQUÍ: reescribir una liga que ya funciona
+  // es peor que no reescribir la que no funciona. De Matterport consta —
+  // Rafael lo vio— que solo embebe la de Compartir; de Kuula y Luma consta
+  // que su propio botón de Insertar entrega /share/ y /embed/. De los otros
+  // cuatro NO consta nada, y adivinar su forma "de compartir" rompería las
+  // ligas buenas de quien ya las tenía guardadas. Para esos cuatro la red
+  // es la de RUNTIME: si el marco no carga, RealtyTourEmbed lo dice en
+  // pantalla y ofrece abrirlo aparte (nunca un gris mudo). Cuando alguno
+  // dé problema de verdad, su rama va AQUÍ, con el caso que la justifique.
   return raw;
+}
+
+/**
+ * El identificador del espacio de Matterport, o null si la liga no lo trae.
+ *
+ * 🔴 POR QUÉ IMPORTA. `matterport.com` entero está en la allowlist, así que
+ * CUALQUIER liga del dominio pasa la validación… pero Matterport solo deja
+ * embeber la de COMPARTIR (`/show/?m=<id>`). Una liga de `/discover/space/…`,
+ * de la app o de un espacio privado pasa el filtro de dominio y luego el
+ * iframe se queda EN GRIS, que es justo el síntoma que no se diagnostica.
+ *
+ * Se busca el id en este orden:
+ *   1. el parámetro `m=` (es el que trae la liga de Compartir y el embed)
+ *   2. el segmento que sigue a /show/ o /models/ en la ruta
+ * Un `/discover/space/<nombre-de-la-casa>` NO tiene identificador: ahí se
+ * devuelve null a propósito, para poder rechazar la liga al pegarla en vez
+ * de guardar algo que se verá roto.
+ */
+export function matterportSpaceId(url: URL | string): string | null {
+  let parsed: URL;
+  if (typeof url === "string") {
+    try {
+      parsed = new URL(url.trim());
+    } catch {
+      return null;
+    }
+  } else {
+    parsed = url;
+  }
+
+  const m = parsed.searchParams.get("m");
+  if (m && ID_MATTERPORT.test(m)) return m;
+
+  const partes = parsed.pathname.split("/").filter(Boolean);
+  for (const marca of ["show", "models"]) {
+    const i = partes.indexOf(marca);
+    if (i >= 0 && partes[i + 1] && ID_MATTERPORT.test(partes[i + 1])) return partes[i + 1];
+  }
+  return null;
 }
 
 /** Id del video de una URL de YouTube (watch?v=…, /embed/…, /shorts/…). */
@@ -224,9 +333,83 @@ export function realtyTourEmbedUrl(url: string): string | null {
     return `https://player.vimeo.com/video/${id}${query}`;
   }
 
-  // Matterport, Kuula, CloudPano, EyeSpy360, GoIGuide, Luma y Scaniverse
-  // entregan directamente una liga que se puede embeber.
+  if (provider.key === "matterport") {
+    // normalizeRealtyTourUrl ya la dejó en /show/?m=<id> si tenía id. Si no
+    // lo tenía, NO se pinta iframe: una liga de /discover/space/… es del
+    // mismo dominio pero Matterport se niega a mostrarla dentro de un marco,
+    // y el resultado sería el recuadro gris de siempre.
+    return matterportSpaceId(parsed) ? normalized : null;
+  }
+
+  // Kuula, CloudPano, EyeSpy360, GoIGuide, Luma y Scaniverse entregan
+  // directamente una liga que se puede embeber (Kuula y Luma ya vienen
+  // reescritas a su forma de compartir por normalizeRealtyTourUrl).
   return normalized;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+ * LA PUERTA DE ENTRADA: una sola respuesta para "¿puedo guardar esta liga?"
+ * ═══════════════════════════════════════════════════════════════════════ */
+
+/** Veredicto de una liga pegada por el asesor. */
+export interface RealtyTourCheck {
+  ok: boolean;
+  provider: RealtyTourProvider | null;
+  /** La liga YA canonizada, que es la que se guarda. null si no pasa. */
+  url: string | null;
+  /** La que va en el `src` del iframe. null si no pasa. */
+  embedUrl: string | null;
+  /** Qué decirle al asesor cuando no pasa. null si pasa. */
+  error: string | null;
+}
+
+/** Lo que hay que copiar de Matterport, dicho con sus propias palabras. */
+export const REALTY_TOUR_MATTERPORT_ERROR =
+  "De Matterport necesitamos la liga de Compartir, la que se ve así: " +
+  "https://my.matterport.com/show/?m=XXXXXXXX. La que pegaste no se puede " +
+  "mostrar dentro de la ficha.";
+
+/**
+ * ¿Esta liga se puede guardar Y se va a poder ver?
+ *
+ * 🔴 Son DOS preguntas distintas y antes solo se hacía la primera. Estar en
+ * la allowlist (`detectRealtyTourProvider`) dice que el dominio es de un
+ * proveedor conocido y que la CSP lo va a dejar pasar. NO dice que el
+ * proveedor acepte que ESA liga en concreto se meta en un iframe.
+ *
+ * Matterport es el caso que lo destapó: `matterport.com` entero está
+ * permitido, así que una liga de `/discover/space/…` pasaba la validación,
+ * se guardaba, y en la ficha salía el marco gris con el icono de recurso
+ * roto. Vale más rechazarla al pegarla —y enseñar qué copiar— que guardar
+ * algo que se va a ver roto.
+ *
+ * La usan la UI (para deshabilitar el botón y explicar) y el route handler
+ * (que es el que manda). Mismo criterio en los dos lados.
+ */
+export function checkRealtyTourUrl(raw: string): RealtyTourCheck {
+  const limpio = (raw ?? "").trim();
+  if (!limpio) {
+    return { ok: false, provider: null, url: null, embedUrl: null, error: "Pega la liga del recorrido." };
+  }
+
+  const url = normalizeRealtyTourUrl(limpio);
+  const provider = detectRealtyTourProvider(url);
+  if (!provider) {
+    return { ok: false, provider: null, url: null, embedUrl: null, error: REALTY_TOUR_URL_ERROR };
+  }
+
+  const embedUrl = realtyTourEmbedUrl(url);
+  if (!embedUrl) {
+    // Único caso hoy: dominio permitido pero la liga no es la de compartir.
+    const error =
+      provider.key === "matterport"
+        ? REALTY_TOUR_MATTERPORT_ERROR
+        : `Esa liga de ${provider.label} no se puede mostrar dentro de la ficha. ` +
+          "Busca la opción de Compartir o Insertar en su sitio y pega esa.";
+    return { ok: false, provider, url: null, embedUrl: null, error };
+  }
+
+  return { ok: true, provider, url, embedUrl, error: null };
 }
 
 /**

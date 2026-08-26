@@ -7,14 +7,12 @@ import { ExternalLink, ImagePlus, Link2, Loader2, Play, Trash2, View } from "luc
 import type { RealtyPropertyTourDTO } from "@/lib/realty/types";
 import { REALTY_TOUR_KIND_LABELS } from "@/lib/realty/types";
 import {
-  REALTY_TOUR_IFRAME_ALLOW,
-  REALTY_TOUR_IFRAME_SANDBOX,
   REALTY_TOUR_PROVIDERS,
-  detectRealtyTourProvider,
-  normalizeRealtyTourUrl,
+  checkRealtyTourUrl,
   realtyTourEmbedUrl,
   realtyTourProviderLabel,
 } from "@/lib/realty/tours";
+import { RealtyTourEmbed } from "@/components/realty/tours/tour-embed";
 import type { RealtyStorageUsage } from "@/lib/realty/properties-shared";
 import { apiCall, Field, formatBytes, styles as s, useRealtyT } from "./ui";
 import { ImagenNoLegible, ImagenPesada, pareceEquirectangular, prepararPanoramica } from "./image";
@@ -80,13 +78,23 @@ export function PropertyTours({
     [],
   );
 
-  // Detección en vivo mientras el asesor pega: ve de quién es la liga
-  // ANTES de darle a agregar.
-  const detected = useMemo(() => {
+  /**
+   * Veredicto EN VIVO mientras el asesor pega.
+   *
+   * 🔴 Antes aquí solo se preguntaba por el dominio, y ese era el bug: una
+   * liga de `matterport.com/discover/space/…` daba proveedor "Matterport",
+   * habilitaba el botón, se guardaba… y en la ficha salía el marco gris.
+   * Reconocer el dominio NO es lo mismo que poder embeberlo. Ahora se usa
+   * el MISMO `checkRealtyTourUrl` que manda en el route handler, así que
+   * lo que la pantalla habilita es exactamente lo que el servidor acepta.
+   */
+  const veredicto = useMemo(() => {
     const clean = url.trim();
     if (!clean) return null;
-    return detectRealtyTourProvider(normalizeRealtyTourUrl(clean));
+    return checkRealtyTourUrl(clean);
   }, [url]);
+  const detected = veredicto?.provider ?? null;
+  const puedeAgregar = veredicto?.ok === true;
 
   const embedded = tours.filter((x) => x.kind !== "PANO_PROPIA" && x.externalUrl);
   const panos = tours.filter((x) => x.kind === "PANO_PROPIA" && x.fileUrl);
@@ -94,6 +102,12 @@ export function PropertyTours({
   async function addLink() {
     const clean = url.trim();
     if (!clean) return;
+    // La misma reja que deshabilita el botón, por si se llegó por el Enter.
+    const check = checkRealtyTourUrl(clean);
+    if (!check.ok) {
+      toast.error(check.error ?? t("errors.badTourUrl"));
+      return;
+    }
     setAdding(true);
     try {
       await apiCall(`/api/realty/properties/${propertyId}/tours`, {
@@ -198,11 +212,18 @@ export function PropertyTours({
 
           {tab === "link" ? (
             <div style={{ display: "grid", gap: 10 }}>
+              {/* El hint dice UNA de tres cosas, en este orden:
+                  · la liga sirve      → "Detectamos Matterport"
+                  · la liga NO sirve   → qué copiar, con el ejemplo (abajo)
+                  · no hay nada escrito → la lista de proveedores
+                  El caso del medio es el que faltaba: antes decía
+                  "Detectamos Matterport" para una liga que Matterport se
+                  niega a embeber, y el asesor la guardaba convencido. */}
               <Field
                 label={t("tours.urlLabel")}
                 htmlFor="tour-url"
                 hint={
-                  detected
+                  puedeAgregar && detected
                     ? t("tours.detected", { provider: detected.label })
                     : t("tours.providers", { list: providerList })
                 }
@@ -215,20 +236,27 @@ export function PropertyTours({
                   placeholder={t("tours.urlPlaceholder")}
                   value={url}
                   onChange={(e) => setUrl(e.target.value)}
+                  aria-invalid={veredicto ? !veredicto.ok : undefined}
+                  aria-describedby={veredicto && !veredicto.ok ? "tour-url-error" : undefined}
                   onKeyDown={(e) => {
-                    if (e.key === "Enter" && detected && !adding) {
+                    if (e.key === "Enter" && puedeAgregar && !adding) {
                       e.preventDefault();
                       void addLink();
                     }
                   }}
                 />
               </Field>
+              {veredicto && !veredicto.ok && veredicto.error ? (
+                <p id="tour-url-error" role="alert" className={s.tourUrlError}>
+                  {veredicto.error}
+                </p>
+              ) : null}
               <div>
                 <button
                   type="button"
                   className={`${s.btn} realty-btn-primary`}
                   onClick={() => void addLink()}
-                  disabled={adding || !detected}
+                  disabled={adding || !puedeAgregar}
                 >
                   {adding ? <Loader2 size={14} className={s.spin} /> : <Link2 size={14} />}
                   {adding ? t("tours.adding") : t("tours.add")}
@@ -415,15 +443,20 @@ function TourFrame({
       </div>
       <div className={s.tourStage}>
         {playing && src ? (
-          <iframe
-            className={s.tourFrame}
+          /* RealtyTourEmbed y no un <iframe> pelado: un marco de tercero que
+             no carga NO avisa —ni error, ni onError, ni consola—, se queda
+             en gris. Aquí el asesor ve el aviso y la liga para abrirla
+             aparte, que es lo que le dice si el problema es la liga o la
+             red. Es el MISMO componente que la web pública, para que lo que
+             ve él sea lo que ve su cliente. */
+          <RealtyTourEmbed
             src={src}
+            href={tour.externalUrl ?? undefined}
             title={realtyTourProviderLabel(tour.provider)}
-            loading="lazy"
-            sandbox={REALTY_TOUR_IFRAME_SANDBOX}
-            allow={REALTY_TOUR_IFRAME_ALLOW}
-            allowFullScreen
-            referrerPolicy="strict-origin-when-cross-origin"
+            className={s.tourFrame}
+            avisoTitulo={t("tours.frameFailed")}
+            avisoCuerpo={t("tours.frameFailedHint")}
+            avisoAbrir={t("tours.openExternal")}
           />
         ) : (
           <button
@@ -435,10 +468,16 @@ function TourFrame({
             <span className={s.tourPlay}>
               <Play size={22} />
             </span>
+            {/* Sin `src` la liga guardada ya no se puede embeber (por
+                ejemplo, un Matterport que no es el de Compartir, guardado
+                antes de que esto se validara al pegar). El cartel dice QUÉ
+                pasa y qué copiar, en vez del genérico de antes. */}
             <span className={s.tourPosterLabel}>
-              {src ? t("tours.play") : t("errors.badTourUrl")}
+              {src ? t("tours.play") : t("tours.notEmbeddable")}
             </span>
-            <span className={s.tourPosterHint}>{t("tours.playHint")}</span>
+            <span className={s.tourPosterHint}>
+              {src ? t("tours.playHint") : t("tours.notEmbeddableHint")}
+            </span>
           </button>
         )}
       </div>

@@ -175,25 +175,44 @@
   align-items: center;
   justify-content: space-between;
   gap: 10px;
+  /* min-height: si algún día un encabezado se quedara sin texto, la barra
+     NO colapsa a la altura de la flecha — se sigue viendo y se sigue
+     pudiendo abrir. El gemelo de barbería ya lo tenía; aquí faltaba. */
+  min-height: 46px;
   padding: 12px 14px;
   font-size: 13.5px;
   font-weight: 640;
+  /* Explícito y no heredado: el color del texto del encabezado es lo único
+     que separa "panel plegado" de "barra gris". No se deja al azar de lo
+     que herede el contenedor de turno. */
+  color: var(--text-1);
   cursor: pointer;
   list-style: none;
+  transition: background var(--dur-1, 150ms) var(--ease, ease);
 }
 .dcrwe-panel > summary::-webkit-details-marker {
   display: none;
+}
+.dcrwe-panel > summary:hover {
+  background: var(--bg-hover);
 }
 .dcrwe-panel > summary svg {
   transition: transform 140ms ease;
   color: var(--text-3);
   flex: none;
 }
+.dcrwe-panel[open] > summary {
+  /* Abierto ≠ cerrado también sin mirar la flecha. Se distingue con FONDO y
+     no con un borde inferior: el primer hijo del cuerpo (.dcrwe-bloque-barra)
+     ya trae su propia línea, y las dos juntas se veían como un doble filete.
+     El TEXTO no cambia de color en ningún estado (ver `color` arriba). */
+  background: var(--bg-elev-2);
+}
 .dcrwe-panel[open] > summary svg {
   transform: rotate(180deg);
 }
 .dcrwe-panel-cuerpo {
-  padding: 0 14px 14px;
+  padding: 12px 14px 14px;
   display: grid;
   gap: 12px;
 }
@@ -212,7 +231,11 @@
 .dcrwe-ayuda {
   font-size: 11.5px;
   line-height: 1.5;
-  color: var(--text-3);
+  /* --text-2 y no --text-3. Medido: #77837B sobre #FFFFFF da 3.95:1, por
+     debajo del 4.5:1 que WCAG AA exige para texto chico — y a 11.5px esto
+     ES texto chico. --text-2 (#46524B) llega a ~8:1. En oscuro los dos
+     pasaban; el que fallaba era el modo claro, que es el default. */
+  color: var(--text-2);
   margin: 0;
 }
 .dcrwe-input {

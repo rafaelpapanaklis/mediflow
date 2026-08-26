@@ -39,10 +39,14 @@ import rentalsEs from "./rentals.es.json";
 import rentalsEn from "./rentals.en.json";
 import propertiesEs from "./properties.es.json";
 import propertiesEn from "./properties.en.json";
+// Arreglo 1 — el tablero de Inicio, distinto en cada MODO de cuenta.
+import inicioEs from "./inicio.es.json";
+import inicioEn from "./inicio.en.json";
 
 const ES: Dictionary = {
   realty: {
     shell: shellEs as unknown as Dictionary,
+    inicio: inicioEs as unknown as Dictionary,
     registro: registroEs as unknown as Dictionary,
     leads: leadsEs as unknown as Dictionary,
     rentals: rentalsEs as unknown as Dictionary,
@@ -57,6 +61,7 @@ const ES: Dictionary = {
 const EN: Dictionary = {
   realty: {
     shell: shellEn as unknown as Dictionary,
+    inicio: inicioEn as unknown as Dictionary,
     registro: registroEn as unknown as Dictionary,
     leads: leadsEn as unknown as Dictionary,
     rentals: rentalsEn as unknown as Dictionary,
