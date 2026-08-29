@@ -132,7 +132,7 @@ export function EduTarifariosScreen({
             <p className="edu-empty__detail">
               Crea al menos dos: una predeterminada (&quot;Público general&quot;) y una con la regla
               &quot;paciente que trajo un alumno&quot;. Esa segunda es la que hace que el paciente
-              que trae un residente pague distinto, sin que nadie tenga que acordarse en el
+              que trae un alumno pague distinto, sin que nadie tenga que acordarse en el
               mostrador.
             </p>
           </div>
@@ -463,7 +463,7 @@ function FormLista({
           rows={2}
           value={notes}
           onChange={(e) => setNotes(e.target.value)}
-          placeholder="Pacientes que trae un residente de la escuela."
+          placeholder="Pacientes que trae un alumno de la escuela."
         />
       </div>
     </EduModal>

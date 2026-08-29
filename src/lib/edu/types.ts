@@ -17,7 +17,7 @@
 //   /instituto/login        → login DEDICADO del vertical          Ola 0 ✓
 //   /instituto/inicio       → pantalla de inicio                   Ola 0 ✓
 //   /instituto/padron       → padrón de alumnos                    Ola 1A ✓
-//   /instituto/padron/estructura → programas y generaciones        Ola 1A ✓
+//   /instituto/padron/estructura → especialidades y generaciones   Ola 1A ✓
 //   /instituto/docentes     → docentes y su carga                  Ola 1A ✓
 //   /instituto/pacientes    → pacientes de la clínica              Ola 2  ✓
 //   /instituto/agenda       → día y semana, por sillón             Ola 2  ✓
@@ -33,6 +33,7 @@
 //   /instituto/tarifarios   → listas de precios, tabla comparativa Ola 5  ✓
 //   /instituto/caja         → cobrar: paciente → tarifa → recibo   Ola 5  ✓
 //   /instituto/caja/corte   → corte del turno                      Ola 5  ✓
+//   /instituto/equipo       → altas y bajas de cuentas             Ola 1B ✓
 // Las olas que siguen cuelgan sus pantallas de /instituto/<área> y su
 // entrada de menú de EDU_NAV_ITEMS (abajo). Ninguna inventa su propio
 // guard: todas pasan por el layout del grupo (panel).
@@ -41,7 +42,7 @@
 //   GET   /api/instituto/padron             → lista de alumnos     Ola 1A ✓
 //   POST  /api/instituto/padron             → alta de alumno       Ola 1A ✓
 //   PATCH /api/instituto/padron/[id]        → estado, semestre…    Ola 1A ✓
-//   GET·POST  /api/instituto/programas      → programas            Ola 1A ✓
+//   GET·POST  /api/instituto/programas      → especialidades       Ola 1A ✓
 //   PATCH     /api/instituto/programas/[id] → editar / desactivar  Ola 1A ✓
 //   GET·POST  /api/instituto/generaciones   → generaciones         Ola 1A ✓
 //   PATCH     /api/instituto/generaciones/[id]                     Ola 1A ✓
@@ -77,6 +78,8 @@
 //   GET·PATCH /api/instituto/caja/cobros/[id] → recibo / cancelar  Ola 5  ✓
 //   POST      /api/instituto/caja/cobros/[id]/pagos → pago o devolución Ola 5 ✓
 //   GET·POST·PATCH /api/instituto/caja/corte → turno: ver, abrir, cerrar Ola 5 ✓
+//   POST      /api/instituto/equipo         → alta de cuenta(s)    Ola 1B ✓
+//   PATCH     /api/instituto/equipo/[id]    → baja / reactivación   Ola 1B ✓
 // ═══════════════════════════════════════════════════════════════════════
 
 // ── Enums ───────────────────────────────────────────────────────────────
@@ -91,7 +94,7 @@ export const EDU_ROLES: EduRole[] = ["DIRECCION", "DOCENTE", "ALUMNO", "CAJA"];
 
 /**
  * Cómo se llama cada rol EN PANTALLA. La UI jamás pinta el valor del enum:
- * "ALUMNO" en mayúsculas no es lo que un residente espera leer sobre su
+ * "ALUMNO" en mayúsculas no es lo que un alumno espera leer sobre su
  * nombre. Punto único — ninguna ola vuelve a traducir esto con un switch.
  */
 export const EDU_ROLE_LABELS: Record<EduRole, string> = {
@@ -101,11 +104,18 @@ export const EDU_ROLE_LABELS: Record<EduRole, string> = {
   CAJA: "Caja",
 };
 
-/** Una línea que explica qué hace ese rol; se usa en el panel y en altas. */
+/**
+ * Una línea que explica qué hace ese rol; se usa en el panel y en las altas
+ * de /instituto/equipo.
+ *
+ * ⚠️ Aquí NO se dice "residente" (Ola 1B). El producto le dice ALUMNO en
+ * todas sus pantallas, y llamarle de dos maneras distintas obliga a quien
+ * da de alta a preguntarse si son dos cosas.
+ */
 export const EDU_ROLE_DESCRIPTIONS: Record<EduRole, string> = {
   DIRECCION: "Dirige el instituto: padrón, docentes, contrato y reportes.",
   DOCENTE: "Supervisa a los alumnos y autoriza los procedimientos.",
-  ALUMNO: "Residente en formación: atiende pacientes y pide autorización.",
+  ALUMNO: "Alumno en formación: atiende pacientes y pide autorización.",
   CAJA: "Cobra a los pacientes y hace los cortes del día.",
 };
 
@@ -140,7 +150,7 @@ export const EDU_STUDENT_STATUS_LABELS: Record<EduStudentStatus, string> = {
 export const EDU_STUDENT_STATUS_DESCRIPTIONS: Record<EduStudentStatus, string> = {
   ACTIVE: "Está inscrito y atendiendo pacientes.",
   ON_LEAVE: "Pausó la residencia; vuelve a activarse cuando regrese.",
-  GRADUATED: "Terminó el programa. Su expediente sigue completo.",
+  GRADUATED: "Terminó la especialidad. Su expediente sigue completo.",
   WITHDRAWN: "Ya no pertenece a la generación. No se borra nada de lo que hizo.",
 };
 
@@ -623,6 +633,19 @@ export const EDU_NAV_ITEMS: EduNavItemDef[] = [
     section: "administracion",
     permission: "tarifarios.view",
   },
+  // ── Ola 1B · las cuentas ─────────────────────────────────────────────
+  {
+    // Va en ADMINISTRACIÓN y no en ACADÉMICO a propósito: aquí se dan de
+    // alta las cuentas de TODO el instituto —dirección, docentes, alumnos
+    // y caja—, no solo las del padrón. Un cajero no es asunto académico, y
+    // meterlo bajo "Académico" haría que quien busca "cómo doy de alta al
+    // de recepción" no lo encontrara.
+    key: "equipo",
+    href: "/instituto/equipo",
+    icon: "user-plus",
+    section: "administracion",
+    permission: "equipo.manage",
+  },
 ];
 
 /** Etiqueta de cada sección del menú (las vacías no se pintan). */
@@ -646,12 +669,18 @@ export const EDU_NAV_LABELS: Record<string, string> = {
   agenda: "Agenda",
   pacientes: "Pacientes",
   padron: "Padrón",
-  estructura: "Programas y generaciones",
+  // Ola 1B: la escuela les dice ESPECIALIDADES, no "programas". El modelo
+  // sigue llamándose EduProgram y la ruta sigue siendo /padron/estructura —
+  // solo cambia lo que se LEE. Renombrar el modelo obligaría a migrar
+  // tablas y a tocar el dental; renombrar la ruta rompería los enlaces que
+  // la escuela ya tenga guardados.
+  estructura: "Especialidades y generaciones",
   docentes: "Docentes",
   sillones: "Sillones",
   caja: "Caja",
   tarifarios: "Tarifarios",
   procedimientos: "Procedimientos",
+  equipo: "Equipo",
 };
 
 // ── Marca del vertical ──────────────────────────────────────────────────
@@ -693,6 +722,6 @@ export const EDU_UPCOMING_AREAS: { key: string; title: string; detail: string }[
   {
     key: "evaluacion",
     title: "Evaluación",
-    detail: "Rúbricas, requisitos cumplidos y avance de cada residente.",
+    detail: "Rúbricas, requisitos cumplidos y avance de cada alumno.",
   },
 ];

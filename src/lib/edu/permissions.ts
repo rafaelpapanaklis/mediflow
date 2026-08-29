@@ -42,7 +42,7 @@ import type { EduRole } from "@/lib/edu/types";
 export const EDU_ALL_PERMISSIONS = {
   "inicio.view": "Entrar al panel del instituto",
   "padron.view": "Ver el padrón de alumnos",
-  "padron.manage": "Dar de alta y de baja alumnos, programas y generaciones",
+  "padron.manage": "Dar de alta y de baja alumnos, especialidades y generaciones",
   "docentes.view": "Ver la lista de docentes",
   "supervision.assign": "Asignar alumnos a un docente supervisor",
   // ── Ola 2 · el piso clínico ──────────────────────────────────────────
@@ -90,6 +90,17 @@ export const EDU_ALL_PERMISSIONS = {
   "caja.charge": "Cobrarle a un paciente y registrar sus pagos",
   "caja.refund": "Devolver dinero y cancelar un cobro",
   "caja.corte": "Abrir y cerrar el turno de caja",
+  // ── Ola 1B · el equipo ───────────────────────────────────────────────
+  // UNA sola key, y la exigen /instituto/equipo y los dos endpoints de
+  // /api/instituto/equipo. Es la que faltaba para que el producto se
+  // pudiera usar: hasta esta ola no había forma de crear un alumno, un
+  // docente ni un cajero desde el panel — la única vía era SQL a mano.
+  //
+  // 🔴 No se parte en "equipo.view" + "equipo.manage": una pantalla que
+  // LISTA las cuentas del instituto y no deja tocarlas no le sirve a nadie
+  // más que a quien las administra, y dos interruptores para una pantalla
+  // es cómo se llega a que uno de los dos no lo exija nadie.
+  "equipo.manage": "Dar de alta cuentas del instituto y darlas de baja",
 } as const;
 
 export type EduPermissionKey = keyof typeof EDU_ALL_PERMISSIONS;
@@ -143,6 +154,13 @@ export const EDU_PERMISSION_GROUPS: { title: string; keys: EduPermissionKey[] }[
       "caja.refund",
       "caja.corte",
     ],
+  },
+  {
+    // Grupo propio, y de UNA sola key: crear cuentas no se parece a nada
+    // de lo de arriba. Quien administra el equipo decide quién ENTRA al
+    // instituto, no qué ve una vez dentro.
+    title: "Equipo",
+    keys: ["equipo.manage"],
   },
 ];
 
@@ -256,6 +274,15 @@ export const EDU_ROLE_DEFAULTS: Record<EduRole, EduPermissionKey[]> = {
     "caja.charge",
     "caja.refund",
     "caja.corte",
+    // ── Ola 1B ──────────────────────────────────────────────────────────
+    // SOLO dirección. Dar de alta una cuenta es decidir quién entra al
+    // instituto, y quien la da queda con la contraseña temporal en la
+    // mano; además, desde esta pantalla se puede crear a alguien con rol
+    // DIRECCION, así que dársela a otro rol sería regalar la llave de la
+    // escuela. Si un día una escuela quiere que su coordinador dé altas,
+    // se le enciende por override desde la pantalla de permisos — a
+    // sabiendas y una por una.
+    "equipo.manage",
   ],
   DOCENTE: [
     "inicio.view",

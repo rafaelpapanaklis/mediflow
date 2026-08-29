@@ -17,6 +17,7 @@ import {
   Sun,
   Tags,
   UserCheck,
+  UserPlus,
   Users,
   X,
 } from "lucide-react";
@@ -57,6 +58,8 @@ const ICONS: Record<string, React.ComponentType<{ size?: number | string }>> = {
   banknote: Banknote,
   tags: Tags,
   "clipboard-list": ClipboardList,
+  // Ola 1B — el equipo.
+  "user-plus": UserPlus,
 };
 
 export interface EduShellProps {

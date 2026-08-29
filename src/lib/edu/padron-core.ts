@@ -23,6 +23,22 @@
 import type { Prisma } from "@prisma/client";
 import type { EduRole, EduStudentStatus } from "@/lib/edu/types";
 import { EDU_STUDENT_STATUSES } from "@/lib/edu/types";
+import { eduNormalizeSearch } from "@/lib/edu/search";
+
+/**
+ * El buscador SIN ACENTOS del vertical (Ola 1B) vive en
+ * src/lib/edu/search.ts —módulo puro, lo usan también las pantallas— y se
+ * REEXPORTA desde aquí porque éste es el archivo que ya importaba medio
+ * vertical. Dos normalizadores de búsqueda es como se acaba con uno que
+ * quita la diéresis y otro que no.
+ */
+export {
+  eduIndexMatches,
+  eduNormalizeSearch,
+  eduPatientSearchIndex,
+  eduStudentSearchIndex,
+  eduUserSearchIndex,
+} from "@/lib/edu/search";
 
 /**
  * La fecha de calendario se pinta en UTC. El formateador ya existe desde la
@@ -213,23 +229,29 @@ export function eduSearchInput(raw: string | null | undefined): string | null {
 }
 
 /**
- * Palabras de búsqueda, saneadas para LIKE.
+ * Palabras de búsqueda, saneadas para LIKE y NORMALIZADAS (minúsculas, sin
+ * acentos).
  *
  * 🔴 Prisma NO escapa los comodines de `contains`: el texto se pega dentro
  * de un `LIKE '%…%'` tal cual, así que buscar "%" trae la tabla entera y un
  * término que termine en "\" hace que Postgres tire un error de patrón. Se
  * quitan `%`, `_` y `\` — ninguna matrícula ni nombre real los lleva.
  *
+ * 🔴 Y SE QUITAN LOS ACENTOS, con el MISMO eduNormalizeSearch que escribe
+ * la columna `searchIndex`. Ahí está toda la corrección de la Ola 1B: si
+ * solo se normalizara un lado, buscar "Rodriguez" seguiría devolviendo cero
+ * con "Rodríguez" en la ficha — que es exactamente lo que pasaba en
+ * producción. Normalizados los dos lados, funciona en las dos direcciones y
+ * de paso deja de hacer falta `mode: "insensitive"`.
+ *
  * Se parte en palabras y se piden TODAS (AND): "juan pe" tiene que
- * encontrar a Juan Pérez, y el nombre y el apellido viven en dos columnas
- * distintas, así que un solo `contains` sobre una de ellas no basta.
- * Máximo tres palabras: es un buscador, no un motor de consultas.
+ * encontrar a Juan Pérez. Máximo tres palabras: es un buscador, no un motor
+ * de consultas.
  */
 export function eduSearchTokens(raw: string | null | undefined): string[] {
   const clean = eduSearchInput(raw);
   if (!clean) return [];
-  return clean
-    .replace(/[%_\\]/g, " ")
+  return eduNormalizeSearch(clean.replace(/[%_\\]/g, " "))
     .split(/\s+/)
     .map((t) => t.trim())
     .filter((t) => t.length > 0)
@@ -292,13 +314,23 @@ export function eduStudentWhere({
   if (filters.cohortId) where.cohortId = filters.cohortId;
   if (filters.status) where.status = filters.status;
 
+  // 🔴 EL BUSCADOR MIRA SOLO LAS COLUMNAS NORMALIZADAS. Nunca `matricula`
+  // ni `firstName` directamente: son las que llevan el acento, y `contains`
+  // compara el texto tal cual — por ahí es por donde "Rodriguez" no
+  // encontraba a "Rodríguez". En `searchIndex` los dos lados están sin
+  // acentos y en minúsculas, así que tampoco hace falta `mode:
+  // "insensitive"`.
+  //
+  // Son DOS columnas y no una porque la matrícula es del ALUMNO y el nombre
+  // es de la PERSONA: si el índice del alumno arrastrara el nombre de su
+  // EduUser, renombrar a alguien dejaría la matrícula pegada a un nombre
+  // viejo sin que nadie se enterara hasta que lo buscaran.
   const tokens = eduSearchTokens(filters.q);
   if (tokens.length > 0) {
     where.AND = tokens.map((token) => ({
       OR: [
-        { matricula: { contains: token, mode: "insensitive" as const } },
-        { user: { firstName: { contains: token, mode: "insensitive" as const } } },
-        { user: { lastName: { contains: token, mode: "insensitive" as const } } },
+        { searchIndex: { contains: token } },
+        { user: { searchIndex: { contains: token } } },
       ],
     }));
   }

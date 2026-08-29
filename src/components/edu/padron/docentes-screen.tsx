@@ -1,9 +1,11 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ChevronDown, ChevronRight, X } from "lucide-react";
+import { ChevronDown, ChevronRight, Search, X } from "lucide-react";
 import { eduRequest } from "@/components/edu/edu-http";
+import { eduIndexMatches, eduSearchTokens } from "@/lib/edu/padron-core";
 import type { EduAssignmentRow, EduTeacherRow } from "@/lib/edu/padron-core";
 
 /**
@@ -28,9 +30,25 @@ export function EduDocentesScreen({ teachers, assignments, canAssign }: EduDocen
   const router = useRouter();
   const [, startNav] = useTransition();
   const [abierto, setAbierto] = useState<string | null>(null);
+  const [q, setQ] = useState("");
   const [busyId, setBusyId] = useState<string | null>(null);
   const [flash, setFlash] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  // 🔴 EL BUSCADOR FILTRA EN MEMORIA, Y AQUÍ SÍ ESTÁ BIEN. Los docentes de
+  // una escuela son veinte o treinta y ya llegaron todos del servidor: pedir
+  // un viaje por cada tecla sería peor. Lo que NO cambia es la regla de
+  // siempre — filtrar en memoria solo vale cuando la lista COMPLETA está en
+  // el navegador; en el padrón y en pacientes, que tienen techo de filas,
+  // el filtro va a la base.
+  //
+  // Usa el MISMO troceador y el MISMO normalizador que las consultas de
+  // Postgres, así que aquí también "Rodriguez" encuentra a "Rodríguez".
+  const visibles = useMemo(() => {
+    const tokens = eduSearchTokens(q);
+    if (tokens.length === 0) return teachers;
+    return teachers.filter((t) => eduIndexMatches(`${t.name} ${t.email} ${t.phone ?? ""}`, tokens));
+  }, [teachers, q]);
 
   const porDocente = useMemo(() => {
     const map = new Map<string, EduAssignmentRow[]>();
@@ -63,7 +81,7 @@ export function EduDocentesScreen({ teachers, assignments, canAssign }: EduDocen
         <p className="edu-empty__title">Todavía no hay docentes</p>
         <p className="edu-empty__detail">
           Aquí aparece cada persona del instituto con rol <strong>Docente</strong>. Las cuentas se
-          dan de alta aparte: esta ola administra el padrón, no los accesos.
+          crean en <Link href="/instituto/equipo">Equipo</Link>; aquí solo se reparte la carga.
         </p>
       </div>
     );
@@ -84,6 +102,54 @@ export function EduDocentesScreen({ teachers, assignments, canAssign }: EduDocen
         </div>
       )}
 
+      <form className="edu-toolbar" onSubmit={(e) => e.preventDefault()}>
+        <div className="edu-field">
+          <label className="edu-field__label" htmlFor="edu-doc-q">
+            Buscar
+          </label>
+          <div className="edu-input-wrap">
+            <input
+              id="edu-doc-q"
+              className="edu-input edu-input--sm"
+              type="search"
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              placeholder="Nombre o correo"
+              autoComplete="off"
+            />
+            <span className="edu-reveal" aria-hidden="true">
+              <Search size={17} />
+            </span>
+          </div>
+        </div>
+        {q && (
+          <button
+            type="button"
+            className="edu-btn edu-btn--ghost edu-btn--sm"
+            onClick={() => setQ("")}
+          >
+            <X size={15} />
+            Limpiar
+          </button>
+        )}
+      </form>
+
+      <div className="edu-toolbar__foot">
+        <span className="edu-count">
+          {visibles.length} {visibles.length === 1 ? "docente" : "docentes"}
+        </span>
+      </div>
+
+      {visibles.length === 0 && (
+        <div className="edu-empty">
+          <p className="edu-empty__title">Ningún docente coincide</p>
+          <p className="edu-empty__detail">
+            El buscador ignora los acentos y las mayúsculas: &quot;rodriguez&quot; encuentra a
+            &quot;Rodríguez&quot;. Prueba con menos letras.
+          </p>
+        </div>
+      )}
+
       <div className="edu-table edu-table--docentes">
         <div className="edu-rowhead" aria-hidden="true">
           <span>Docente</span>
@@ -93,7 +159,7 @@ export function EduDocentesScreen({ teachers, assignments, canAssign }: EduDocen
           <span />
         </div>
 
-        {teachers.map((t) => {
+        {visibles.map((t) => {
           const alumnos = porDocente.get(t.id) ?? [];
           const expandido = abierto === t.id;
           return (

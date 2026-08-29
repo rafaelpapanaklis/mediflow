@@ -36,6 +36,10 @@ import { prisma } from "@/lib/prisma";
 import { EduPadronError } from "@/lib/edu/padron";
 import { eduCleanId, eduOptionalText, eduSafeTimeZone } from "@/lib/edu/agenda-core";
 import { eduPatientFullName } from "@/lib/edu/pacientes-core";
+// Ola 1B: el MISMO troceador que usan el padrón y los pacientes. Si la caja
+// partiera el término a su manera, el buscador del mostrador encontraría
+// cosas distintas que el de la lista de pacientes.
+import { eduSearchTokens } from "@/lib/edu/padron-core";
 import { eduUserDisplayName } from "@/lib/edu-auth";
 import {
   EDU_CAJA_MAX_ROWS,
@@ -231,14 +235,20 @@ function chargesWhere(
     // que es lo contrario de lo que se pidió.
     and.push({ cashSessionId: sessionId ?? "__sin_turno__" });
   }
-  if (filters.q) {
-    const t = filters.q;
+  // 🔴 Ola 1B: el buscador de cobros mira el índice SIN ACENTOS del
+  // paciente, no sus columnas crudas — buscar "Rodriguez" tenía que
+  // encontrar el cobro de "Rodríguez" y devolvía cero. El folio DEL COBRO
+  // se sigue comparando contra su columna con `mode: "insensitive"`: lo
+  // genera el sistema, es ASCII por construcción y no tiene índice propio.
+  //
+  // Y se parte en palabras como los demás buscadores del vertical, en vez
+  // de mandar la frase entera: "maria rodriguez" tiene que encontrar a
+  // María Rodríguez aunque el nombre y el apellido estén en dos columnas.
+  for (const token of eduSearchTokens(filters.q)) {
     and.push({
       OR: [
-        { folio: { contains: t, mode: "insensitive" } },
-        { patient: { folio: { contains: t, mode: "insensitive" } } },
-        { patient: { firstName: { contains: t, mode: "insensitive" } } },
-        { patient: { lastName: { contains: t, mode: "insensitive" } } },
+        { folio: { contains: token, mode: "insensitive" } },
+        { patient: { searchIndex: { contains: token } } },
       ],
     });
   }
