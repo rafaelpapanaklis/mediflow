@@ -116,6 +116,24 @@ export const EDU_ALL_PERMISSIONS = {
   "autorizaciones.request": "Mandar un plan o un procedimiento a autorización",
   "autorizaciones.view": "Ver la bandeja de autorizaciones",
   "autorizaciones.decide": "Autorizar, pedir cambios o rechazar",
+  // ── Ola 3B · IA de apoyo y consentimientos ───────────────────────────
+  // Cuatro keys, todas con lector de SERVIDOR (la prueba de
+  // __tests__/edu-permissions.test.ts falla si alguna se queda sin él):
+  //   estudios.analyze        → POST /api/instituto/estudios/[id]/analisis
+  //   consentimientos.view    → /instituto/pacientes/[id]/consentimientos + su GET
+  //   consentimientos.create  → POST de la carta y la contrafirma
+  //   consentimientos.revoke  → POST .../revocar
+  //
+  // ⚠️ El DICTADO no trae key propia y no es un olvido: reusa
+  // "expediente.write". Dictar es escribir la nota — el micrófono es una
+  // forma de teclear, no un permiso aparte. Una key "dictado.use" habría
+  // sido un interruptor que se puede apagar sin cerrar nada (quien lo
+  // tenga apagado escribe la misma nota a mano), y el catálogo de este
+  // vertical no admite interruptores que no cierren una puerta.
+  "estudios.analyze": "Pedirle a la IA que analice una radiografía",
+  "consentimientos.view": "Ver las cartas de consentimiento informado",
+  "consentimientos.create": "Emitir una carta de consentimiento y contrafirmarla",
+  "consentimientos.revoke": "Dejar constancia de que el paciente revocó su consentimiento",
 } as const;
 
 export type EduPermissionKey = keyof typeof EDU_ALL_PERMISSIONS;
@@ -157,7 +175,20 @@ export const EDU_PERMISSION_GROUPS: { title: string; keys: EduPermissionKey[] }[
       "odontograma.edit",
       "estudios.view",
       "estudios.upload",
+      // Ola 3B. Va en ESTE grupo y no en uno propio: quien apaga el
+      // expediente quiere apagar también la IA que lo lee, y separarlas
+      // sería una casilla más que buscar en otra pantalla.
+      "estudios.analyze",
     ],
+  },
+  {
+    // Ola 3B. Grupo APARTE del expediente a propósito: es el único bloque
+    // del vertical donde CAJA tiene una casilla encendida y el resto
+    // apagadas, y mezclarlo con el expediente —donde caja no tiene
+    // ninguna— haría que "darle consentimientos a caja" pareciera
+    // "darle el expediente a caja".
+    title: "Consentimientos informados",
+    keys: ["consentimientos.view", "consentimientos.create", "consentimientos.revoke"],
   },
   {
     title: "Tarifarios y caja",
@@ -293,6 +324,33 @@ export const EDU_PERMISSION_GROUPS: { title: string; keys: EduPermissionKey[] }[
  * docente lo de los alumnos que supervisa HOY. Un docente que ya rotó deja
  * de ver —y por tanto de poder firmar— lo de los alumnos que entregó, sin
  * que nadie le apague un permiso.
+ *
+ * ── Ola 3B · IA de apoyo y consentimientos ──────────────────────────────
+ * DIRECCION, DOCENTE y ALUMNO llevan las cuatro. CAJA lleva UNA:
+ * "consentimientos.view".
+ *
+ * 🔴 Esa key de caja es la EXCEPCIÓN que hay que entender antes de tocar
+ * nada. En todas las olas anteriores, caja se quedaba fuera del expediente
+ * clínico por completo, cerrado en dos sitios (aquí y en el ALCANCE). El
+ * consentimiento no es expediente clínico: es un documento que el paciente
+ * firma y se lleva, y quien se lo imprime y se lo entrega es recepción.
+ * Por eso —y solo para este recurso— la lectura se resuelve con el alcance
+ * de "patients" y no con el de "cases" (ver src/lib/edu/consentimientos.ts,
+ * que lo explica largo). Caja ve la carta; sigue sin ver una sola nota.
+ *
+ * ⚠️ "estudios.analyze" NO se le da a caja, y no hace falta insistir en
+ * ello: el análisis se lee con el alcance del expediente, que para caja es
+ * "none". Aunque alguien le encendiera la casilla, no encontraría un
+ * estudio que analizar.
+ *
+ * ⚠️ El ALUMNO sí lleva "consentimientos.revoke". Es deliberado y es la
+ * decisión menos obvia de la ola: revocar no es autorizar, es REGISTRAR
+ * que el paciente se retractó, y el paciente se retracta delante del
+ * alumno, en el sillón. El estado peligroso no es que un alumno registre
+ * una revocación de más: es que exista un consentimiento vivo para un
+ * procedimiento que el paciente ya rechazó porque el alumno tuvo que ir a
+ * buscar a su docente. Y lo que puede revocar está recortado a SUS
+ * pacientes por el alcance, como todo lo demás.
  */
 export const EDU_ROLE_DEFAULTS: Record<EduRole, EduPermissionKey[]> = {
   DIRECCION: [
@@ -334,6 +392,10 @@ export const EDU_ROLE_DEFAULTS: Record<EduRole, EduPermissionKey[]> = {
     "autorizaciones.request",
     "autorizaciones.view",
     "autorizaciones.decide",
+    "estudios.analyze",
+    "consentimientos.view",
+    "consentimientos.create",
+    "consentimientos.revoke",
   ],
   DOCENTE: [
     "inicio.view",
@@ -353,6 +415,10 @@ export const EDU_ROLE_DEFAULTS: Record<EduRole, EduPermissionKey[]> = {
     // Firma y NO pide: quien autoriza no es quien propone.
     "autorizaciones.view",
     "autorizaciones.decide",
+    "estudios.analyze",
+    "consentimientos.view",
+    "consentimientos.create",
+    "consentimientos.revoke",
   ],
   ALUMNO: [
     "inicio.view",
@@ -368,6 +434,10 @@ export const EDU_ROLE_DEFAULTS: Record<EduRole, EduPermissionKey[]> = {
     // Pide y NO firma. Si llevara "decide", el gate sería un formulario.
     "autorizaciones.request",
     "autorizaciones.view",
+    "estudios.analyze",
+    "consentimientos.view",
+    "consentimientos.create",
+    "consentimientos.revoke",
   ],
   CAJA: [
     "inicio.view",
@@ -382,6 +452,11 @@ export const EDU_ROLE_DEFAULTS: Record<EduRole, EduPermissionKey[]> = {
     "caja.charge",
     "caja.refund",
     "caja.corte",
+    // 🔴 La ÚNICA key de esta ola que lleva caja, y la única casilla del
+    // expediente que ha llevado nunca: la carta se imprime, se entrega y
+    // se recoge firmada en el mostrador. Ver, y nada más — ni emitir, ni
+    // revocar, ni analizar una placa.
+    "consentimientos.view",
   ],
 };
 

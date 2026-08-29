@@ -12,6 +12,7 @@ import {
 } from "@/lib/edu/estudios-core";
 import { EDU_STUDY_KIND_LABELS, type EduStudyKind } from "@/lib/edu/types";
 import type { EduCaseOption } from "@/lib/edu/expediente-core";
+import type { EduIaEstado } from "@/lib/edu/ia-core";
 import { EduEstudioViewer } from "@/components/edu/expediente/estudio-viewer";
 import {
   EduUploadCancelled,
@@ -39,6 +40,9 @@ export interface EduEstudiosScreenProps {
   rows: EduStudyRow[];
   cases: EduCaseOption[];
   canUpload: boolean;
+  /** Ola 3B: estado del apoyo de IA, resuelto en el SERVIDOR. */
+  iaAnalisis: EduIaEstado;
+  canAnalyze: boolean;
 }
 
 const ICONO: Record<EduStudyKind, typeof ImageIcon> = {
@@ -61,6 +65,8 @@ export function EduEstudiosScreen({
   rows,
   cases,
   canUpload,
+  iaAnalisis,
+  canAnalyze,
 }: EduEstudiosScreenProps) {
   const router = useRouter();
   const [navigating, startNav] = useTransition();
@@ -171,7 +177,14 @@ export function EduEstudiosScreen({
         />
       )}
 
-      {ver && <EduEstudioViewer estudio={ver} onClose={() => setVer(null)} />}
+      {ver && (
+        <EduEstudioViewer
+          estudio={ver}
+          onClose={() => setVer(null)}
+          iaAnalisis={iaAnalisis}
+          canAnalyze={canAnalyze}
+        />
+      )}
     </div>
   );
 }

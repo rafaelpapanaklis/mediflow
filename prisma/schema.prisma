@@ -12398,6 +12398,10 @@ model EduInstitution {
   // deja declarar una relación por un solo lado); el modelo vive al FINAL
   // del archivo, con su propio encabezado.
   caseApprovals    EduCaseApproval[]
+  // Ola 3B · IA de apoyo y consentimientos. Bloque ADITIVO al final de las
+  // relaciones: los modelos viven al FINAL del archivo, con su encabezado.
+  studyAnalyses    EduStudyAnalysis[]
+  consents         EduConsent[]
 
   @@map("edu_institutions")
 }
@@ -12810,6 +12814,8 @@ model EduPatient {
   studies    EduStudy[]
   /// Ola 5: lo que este paciente debe y lo que ya pagó.
   charges      EduCharge[]
+  /// Ola 3B: sus cartas de consentimiento informado.
+  consents     EduConsent[]
 
   @@unique([institutionId, folio])
   @@index([institutionId, status])
@@ -12941,6 +12947,8 @@ model EduCase {
   /// sincronizada con ellas, y el día que discrepen gana la bandera, que
   /// es la que no tiene firma ni fecha.
   approvals    EduCaseApproval[]
+  /// Ola 3B: los consentimientos que se firmaron para ESTE caso.
+  consents     EduConsent[]
 
   @@index([institutionId, status], map: "edu_cases_status_idx")
   @@index([institutionId, studentId, status], map: "edu_cases_student_idx")
@@ -13227,6 +13235,10 @@ model EduStudy {
   patient     EduPatient     @relation(fields: [patientId], references: [id], onDelete: Cascade)
   case        EduCase?       @relation(fields: [caseId], references: [id], onDelete: SetNull)
   uploadedBy  EduUser        @relation("EduStudyUploader", fields: [uploadedById], references: [id], onDelete: Cascade)
+  /// Ola 3B: los análisis de IA que se le pidieron a esta imagen. Son N y
+  /// no uno: en una escuela el alumno pide el suyo y el docente quiere ver
+  /// exactamente lo que el alumno vio (ver EduStudyAnalysis).
+  analyses    EduStudyAnalysis[]
 
   // Un path solo puede estar registrado UNA vez. Es lo que hace idempotente
   // al /confirm: un reintento del cliente devuelve la fila que ya existe en
@@ -13795,4 +13807,206 @@ model EduCaseApproval {
   @@index([institutionId, caseId, stage], map: "edu_case_approvals_caso_idx")
   @@index([targetType, targetId], map: "edu_case_approvals_target_idx")
   @@map("edu_case_approvals")
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// INSTITUCIONAL — Ola 3B · IA DE APOYO Y CONSENTIMIENTOS INFORMADOS.
+//
+// Dos tablas: el análisis radiográfico de apoyo (EduStudyAnalysis) y la
+// carta de consentimiento informado (EduConsent).
+//
+// 🔴 institutionId está en las DOS, igual que en las olas 1A, 2, 3 y 5 y
+// por la misma razón: toda consulta filtra por el institutionId de la
+// SESIÓN, y un filtro que necesita un JOIN para existir es un filtro que
+// alguien va a olvidar. Ojo Prisma: un institutionId undefined BORRA el
+// filtro y devuelve las filas de TODOS los institutos.
+//
+// El .sql idempotente equivalente vive en sql/edu-ola-3b.sql y hay que
+// aplicarlo a mano en Supabase.
+// ═══════════════════════════════════════════════════════════════════════
+
+/// EL ANÁLISIS DE IA DE UNA IMAGEN DEL EXPEDIENTE.
+///
+/// 🔴 ES APOYO, NO DIAGNÓSTICO, y la tabla está hecha para que eso no se
+/// pueda diluir: NO tiene ninguna relación con EduRecord. El resultado no
+/// se escribe dentro de una nota clínica por ningún camino del producto.
+/// Vive aquí, aparte, con el nombre de quien lo pidió encima, y si el
+/// alumno quiere usar algo lo redacta él en su nota — con su autoría.
+///
+/// ⚠️ SE GUARDA LA HISTORIA, y aquí es donde se aparta del dental a
+/// propósito. `XrayAnalysis` del dental tiene `fileId @unique` y hace
+/// upsert: re-analizar PISA el análisis anterior. En un consultorio eso
+/// está bien (hay un doctor y le interesa la última lectura). En una
+/// escuela no: el docente necesita ver EXACTAMENTE lo que vio su alumno
+/// cuando decidió, no una versión posterior que lo reemplazó. Por eso
+/// `studyId` NO es único y las filas se acumulan.
+///
+/// 🔴 No hay `patientId` denormalizado y no es un olvido: el alcance se
+/// resuelve cargando el estudio DENTRO del alcance clínico y consultando
+/// después por su id. Una segunda copia del paciente aquí sería una
+/// segunda cosa que puede quedar desincronizada, y ningún `where` la
+/// necesita.
+model EduStudyAnalysis {
+  id            String @id @default(cuid())
+  institutionId String
+  studyId       String
+
+  /// Lo que devolvió el modelo. `findings` es el array de hallazgos y
+  /// `recommendations` puede ser array o string: se guarda tal cual y lo
+  /// normaliza src/lib/edu/ia-core.ts al leer, para que una respuesta con
+  /// otra forma no deje la pestaña en blanco.
+  summary         String @db.Text
+  findings        Json
+  recommendations Json
+
+  /// Derivados para poder filtrar sin abrir el JSON.
+  severity   String @db.VarChar(20)
+  confidence Float
+
+  /// Qué modelo lo escribió. Va en la fila y no en una constante: dentro
+  /// de un año hay que poder contestar con QUÉ se generó esta lectura, y
+  /// la constante del código ya será otra.
+  modelUsed  String @db.VarChar(80)
+  tokensUsed Int    @default(0)
+  /// Costo estimado en MILLONÉSIMAS de dólar (entero, como los centavos de
+  /// la Ola 5: en coma flotante no se puede sumar dinero). null = no se
+  /// pudo calcular. Se guarda aunque hoy no se le cobre a nadie —el
+  /// instituto no tiene cartera de IA todavía— justamente para poder
+  /// contestar cuánto costó el día que esa decisión se tome.
+  costUsdMicros Int?
+
+  /// QUIÉN lo pidió. El id es opcional y con SetNull —dar de baja a una
+  /// persona no puede llevarse la constancia de lo que pidió— y el NOMBRE
+  /// va congelado al lado, que es lo que de verdad se lee después.
+  requestedByUserId String?
+  requestedByName   String  @db.VarChar(160)
+
+  createdAt DateTime @default(now())
+
+  institution EduInstitution @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+  study       EduStudy       @relation(fields: [studyId], references: [id], onDelete: Cascade)
+
+  @@index([institutionId, studyId, createdAt], map: "edu_study_analyses_study_idx")
+  @@map("edu_study_analyses")
+}
+
+/// LA CARTA DE CONSENTIMIENTO INFORMADO (NOM-004-SSA3-2012 numeral 10.1.1
+/// y NOM-013-SSA2-2015 numeral 9.6.9).
+///
+/// Copia el PATRÓN del ConsentForm del dental —token público, evidencia de
+/// la firma, testigos, contrafirma, revocación que no borra— y le agrega
+/// lo que una escuela tiene y un consultorio no: DOS profesionales.
+///
+/// 🔴 EL ALUMNO EXPLICA Y TRATA; EL DOCENTE ES EL RESPONSABLE. Los dos
+/// quedan escritos y los dos contrafirman. Un consentimiento de clínica
+/// universitaria con un solo profesional no dice quién responde.
+///
+/// 🔴 TODAS LAS PERSONAS VAN CON EL NOMBRE CONGELADO al lado del id, y el
+/// id es opcional con SetNull. Es la misma decisión que `feeScheduleLabel`
+/// de la Ola 5 y la misma que el dental tomó en ConsentForm (ahí, sin ni
+/// siquiera guardar el id): un documento firmado tiene que seguir diciendo
+/// QUIÉN lo firmó aunque esa persona se dé de baja, se renombre o cambie
+/// de instituto. Con solo la llave foránea, una baja borraría del
+/// documento al responsable del acto.
+///
+/// ⚠️ NO hay columna `status`: se DERIVA de (signedAt, revokedAt,
+/// expiresAt, ahora) en src/lib/edu/consentimientos-core.ts. "Vencido"
+/// depende de la hora, así que una columna guardada mentiría desde el
+/// segundo siguiente a escribirla.
+model EduConsent {
+  id            String  @id @default(cuid())
+  institutionId String
+  patientId     String
+  /// El caso, si el consentimiento cuelga de uno. Opcional: la carta de
+  /// atención general se firma en el tamizaje, antes de que exista caso.
+  caseId        String?
+
+  /// Qué se consiente. `procedureKey` es la clave del catálogo compartido
+  /// (src/lib/consent/templates.ts, módulo PURO que el vertical IMPORTA);
+  /// null = el alumno redactó el texto.
+  procedureKey String? @db.VarChar(60)
+  procedure    String  @db.VarChar(200)
+  /// El texto EXACTO que se firmó. Instantánea inmutable: cambiar la
+  /// plantilla mañana no reescribe lo que alguien firmó ayer.
+  content      String  @db.Text
+  /// SHA-256 del texto canónico (receta en consentimientos-core.ts, con su
+  /// versión DENTRO del texto). Se normaliza NFC y CRLF antes de digerir:
+  /// sin eso, la misma carta copiada desde otro sistema operativo da otro
+  /// hash y la firma parece vencida sola.
+  contentHash  String? @db.VarChar(64)
+
+  /// La liga pública. El token ES la credencial: no hay sesión detrás.
+  token     String   @unique @db.VarChar(64)
+  /// Cuándo caduca la posibilidad de FIRMAR. Una carta ya firmada se sigue
+  /// leyendo para siempre: es la copia del paciente.
+  expiresAt DateTime
+
+  /// El ALUMNO que explica el procedimiento y lo va a realizar.
+  studentUserId    String?
+  studentName      String  @db.VarChar(160)
+  studentMatricula String? @db.VarChar(30)
+  /// El DOCENTE responsable del acto.
+  supervisorUserId String?
+  supervisorName   String? @db.VarChar(160)
+  /// Quién generó el documento (puede ser cualquiera de los dos, o la
+  /// dirección).
+  createdByUserId  String?
+  createdByName    String  @db.VarChar(160)
+
+  /// Firma del paciente o de su representante legal (NOM-004 10.1.1.3).
+  /// `signerName` vacío = firmó el paciente por sí mismo.
+  signerName     String?   @db.VarChar(160)
+  signerRelation String?   @db.VarChar(60)
+  signedAt       DateTime?
+  /// PATH interno del bucket privado `edu-files`, jamás una URL: una URL
+  /// firmada caduca y dejaría la columna con enlaces muertos.
+  signatureUrl   String?   @db.VarChar(400)
+
+  /// Evidencia de la firma electrónica (Código de Comercio arts. 89 y 89
+  /// bis; CFPC 210-A). `viewedAt` es la que distingue un consentimiento
+  /// INFORMADO de una firma a ciegas: acredita que el documento se abrió
+  /// antes de firmarse.
+  viewedAt        DateTime?
+  signedIp        String?   @db.VarChar(64)
+  signedUserAgent String?   @db.VarChar(400)
+
+  /// Testigos del acto, hasta dos (NOM-004 10.1.1.7).
+  witness1Name         String?   @db.VarChar(160)
+  witness1SignatureUrl String?   @db.VarChar(400)
+  witness1SignedAt     DateTime?
+  witness2Name         String?   @db.VarChar(160)
+  witness2SignatureUrl String?   @db.VarChar(400)
+  witness2SignedAt     DateTime?
+
+  /// Contrafirma del ALUMNO que va a tratar.
+  studentSignedAt     DateTime?
+  studentSignatureUrl String?   @db.VarChar(400)
+  /// Contrafirma del DOCENTE responsable. `supervisorSignedByUserId`
+  /// existe aparte de `supervisorUserId` por lo mismo que EduRecord separa
+  /// `authorUserId` de `signedByUserId`: el docente titular puede haber
+  /// rotado y firmar la dirección, y hay que poder contestar quién firmó
+  /// de verdad sin perder quién era el responsable designado.
+  supervisorSignedAt       DateTime?
+  supervisorSignatureUrl   String?   @db.VarChar(400)
+  supervisorSignedByUserId String?
+  supervisorSignedByName   String?   @db.VarChar(160)
+
+  /// Revocación. NO borra nada: deja constancia. Es un derecho del
+  /// paciente y la carta ya emitida sigue existiendo, marcada.
+  revokedAt       DateTime?
+  revokedByUserId String?
+  revokedByName   String?   @db.VarChar(160)
+  revokedReason   String?   @db.VarChar(500)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  institution EduInstitution @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+  patient     EduPatient     @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  case        EduCase?       @relation(fields: [caseId], references: [id], onDelete: SetNull)
+
+  @@index([institutionId, patientId, createdAt], map: "edu_consents_patient_idx")
+  @@index([institutionId, caseId], map: "edu_consents_case_idx")
+  @@index([institutionId, studentUserId], map: "edu_consents_student_idx")
+  @@map("edu_consents")
 }

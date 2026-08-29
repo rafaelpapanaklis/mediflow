@@ -21,6 +21,8 @@ import {
   EDU_RECORD_STATUS_LABELS,
   type EduRecordStatus,
 } from "@/lib/edu/types";
+import type { EduIaEstado } from "@/lib/edu/ia-core";
+import { EduDictadoMic } from "@/components/edu/expediente/dictado-mic";
 
 /**
  * /instituto/pacientes/[id]/expediente — las notas clínicas.
@@ -46,6 +48,14 @@ export interface EduExpedienteScreenProps {
   canWrite: boolean;
   /** El id del EduUser de la sesión, para saber qué notas escribió. */
   meUserId: string;
+  /**
+   * Ola 3B — si el dictado por voz está disponible, y si no, POR QUÉ. Lo
+   * resuelve el SERVIDOR (eduIaEstadoActual): la bandera EDU_IA_ENABLED es
+   * una variable de entorno sin prefijo NEXT_PUBLIC_, así que en el
+   * navegador no existe y preguntarla aquí devolvería "apagado" siempre —
+   * que es peor que un error, porque parece un dato.
+   */
+  iaDictado: EduIaEstado;
 }
 
 const TAG_BY_STATUS: Record<EduRecordStatus, string> = {
@@ -77,6 +87,7 @@ export function EduExpedienteScreen({
   cases,
   canWrite,
   meUserId,
+  iaDictado,
 }: EduExpedienteScreenProps) {
   const router = useRouter();
   const [navigating, startNav] = useTransition();
@@ -334,6 +345,7 @@ export function EduExpedienteScreen({
           cases={cases}
           casosAbiertos={casosAbiertos}
           corrige={nueva.corrects}
+          iaDictado={iaDictado}
           onClose={() => setNueva(null)}
           onDone={(msg) => {
             setNueva(null);
@@ -345,6 +357,7 @@ export function EduExpedienteScreen({
       {editar && (
         <NotaEditar
           nota={editar}
+          iaDictado={iaDictado}
           onClose={() => setEditar(null)}
           onDone={(msg) => {
             setEditar(null);
@@ -360,23 +373,52 @@ export function EduExpedienteScreen({
 // El formulario SOAP, compartido por el alta y la edición
 // ═══════════════════════════════════════════════════════════════════════
 
+/**
+ * Agrega lo dictado AL FINAL de lo que ya había, sin pisarlo.
+ *
+ * 🔴 Nunca reemplaza. Un dictado que borra el párrafo que el alumno acababa
+ * de teclear es la forma más rápida de que nadie vuelva a tocar el
+ * micrófono. Se separa con un espacio si el campo tenía algo, y el tope del
+ * campo se respeta aquí y no en el `maxLength` del textarea, que no aplica a
+ * un cambio por código.
+ */
+function agregarDictado(actual: string, dictado: string, max: number): string {
+  const base = actual.trimEnd();
+  const junto = base ? `${base} ${dictado}` : dictado;
+  return junto.slice(0, max);
+}
+
 function CamposSoap({
   draft,
   setDraft,
   disabled,
   idPrefix,
+  iaDictado,
 }: {
   draft: SoapDraft;
   setDraft: (d: SoapDraft) => void;
   disabled: boolean;
   idPrefix: string;
+  iaDictado: EduIaEstado;
 }) {
   return (
     <>
       <div className="edu-field">
-        <label className="edu-field__label" htmlFor={`${idPrefix}-dx`}>
-          Diagnóstico
-        </label>
+        <div className="edu-field__head">
+          <label className="edu-field__label" htmlFor={`${idPrefix}-dx`}>
+            Diagnóstico
+          </label>
+          <EduDictadoMic
+            estado={iaDictado}
+            disabled={disabled}
+            onText={(t) =>
+              setDraft({
+                ...draft,
+                diagnostico: agregarDictado(draft.diagnostico, t, EDU_RECORD_DIAGNOSIS_MAX),
+              })
+            }
+          />
+        </div>
         <input
           id={`${idPrefix}-dx`}
           className="edu-input"
@@ -390,9 +432,21 @@ function CamposSoap({
 
       {EDU_SOAP_FIELDS.map((f) => (
         <div className="edu-field" key={f}>
-          <label className="edu-field__label" htmlFor={`${idPrefix}-${f}`}>
-            {EDU_SOAP_LABELS[f]}
-          </label>
+          {/* El micrófono va POR CAMPO y no uno solo arriba: el SOAP son
+              cuatro apartados distintos y un dictado que cae siempre en el
+              mismo sitio obligaría a cortar y pegar cuatro veces. */}
+          <div className="edu-field__head">
+            <label className="edu-field__label" htmlFor={`${idPrefix}-${f}`}>
+              {EDU_SOAP_LABELS[f]}
+            </label>
+            <EduDictadoMic
+              estado={iaDictado}
+              disabled={disabled}
+              onText={(t) =>
+                setDraft({ ...draft, [f]: agregarDictado(draft[f], t, EDU_RECORD_TEXT_MAX) })
+              }
+            />
+          </div>
           <textarea
             id={`${idPrefix}-${f}`}
             className="edu-input"
@@ -423,6 +477,7 @@ function NotaNueva({
   cases,
   casosAbiertos,
   corrige,
+  iaDictado,
   onClose,
   onDone,
 }: {
@@ -431,6 +486,7 @@ function NotaNueva({
   cases: EduCaseOption[];
   casosAbiertos: EduCaseOption[];
   corrige: EduRecordRow | null;
+  iaDictado: EduIaEstado;
   onClose: () => void;
   onDone: (mensaje: string) => void;
 }) {
@@ -540,7 +596,7 @@ function NotaNueva({
         </div>
       )}
 
-      <CamposSoap draft={draft} setDraft={setDraft} disabled={busy} idPrefix="edu-nueva" />
+      <CamposSoap draft={draft} setDraft={setDraft} disabled={busy} idPrefix="edu-nueva" iaDictado={iaDictado} />
     </EduModal>
   );
 }
@@ -551,10 +607,12 @@ function NotaNueva({
 
 function NotaEditar({
   nota,
+  iaDictado,
   onClose,
   onDone,
 }: {
   nota: EduRecordRow;
+  iaDictado: EduIaEstado;
   onClose: () => void;
   onDone: (mensaje: string) => void;
 }) {
@@ -633,7 +691,7 @@ function NotaEditar({
         Al firmar, esta nota queda cerrada: no se vuelve a editar ni a borrar. Si después hay algo
         que corregir, se escribe una nota nueva que apunte a ésta.
       </p>
-      <CamposSoap draft={draft} setDraft={setDraft} disabled={busy} idPrefix="edu-editar" />
+      <CamposSoap draft={draft} setDraft={setDraft} disabled={busy} idPrefix="edu-editar" iaDictado={iaDictado} />
     </EduModal>
   );
 }

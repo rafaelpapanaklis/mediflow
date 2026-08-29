@@ -5,6 +5,8 @@ import { Download, ZoomIn, ZoomOut } from "lucide-react";
 import { EduModal } from "@/components/edu/edu-modal";
 import { EDU_STUDY_KIND_LABELS } from "@/lib/edu/types";
 import type { EduStudyRow } from "@/lib/edu/estudios-core";
+import type { EduIaEstado } from "@/lib/edu/ia-core";
+import { EduAnalisisIa } from "@/components/edu/expediente/analisis-ia";
 
 /**
  * ═══════════════════════════════════════════════════════════════════════
@@ -48,9 +50,14 @@ import type { EduStudyRow } from "@/lib/edu/estudios-core";
 export function EduEstudioViewer({
   estudio,
   onClose,
+  iaAnalisis,
+  canAnalyze,
 }: {
   estudio: EduStudyRow;
   onClose: () => void;
+  /** Ola 3B: si el apoyo de IA está disponible, y si no, por qué. */
+  iaAnalisis: EduIaEstado;
+  canAnalyze: boolean;
 }) {
   const [zoom, setZoom] = useState(false);
 
@@ -135,6 +142,12 @@ export function EduEstudioViewer({
             <p className="edu-estudio__notes">{estudio.notes}</p>
           </div>
         )}
+
+        {/* Ola 3B · el apoyo de IA vive DENTRO del visor y no en la
+            galería: la lectura solo tiene sentido con la imagen delante.
+            El panel se pinta siempre —también cuando la IA está apagada—
+            porque su primer trabajo es explicar por qué lo está. */}
+        <EduAnalisisIa estudio={estudio} estado={iaAnalisis} canAnalyze={canAnalyze} />
 
         <div className="edu-kv edu-kv--2">
           <div>

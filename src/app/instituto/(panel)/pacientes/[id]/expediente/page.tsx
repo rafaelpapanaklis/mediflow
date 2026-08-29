@@ -14,6 +14,7 @@ import {
   listEduPatientRecords,
 } from "@/lib/edu/expediente";
 import { eduScopeIsEmpty } from "@/lib/edu/visibility";
+import { eduIaEstadoActual } from "@/lib/edu/ia";
 import { EduDenied } from "@/components/edu/edu-denied";
 import { EduExpedienteScreen } from "@/components/edu/expediente/expediente-screen";
 
@@ -68,6 +69,11 @@ export default async function PacienteExpedientePage({ params }: { params: { id:
       cases={cases}
       canWrite={hasEduPermission(permUser, "expediente.write")}
       meUserId={ctx.eduUserId}
+      // 🔴 Se resuelve AQUÍ, en el servidor. EDU_IA_ENABLED no lleva
+      // prefijo NEXT_PUBLIC_ (una bandera que abre el grifo del gasto no
+      // se anuncia al navegador), así que el componente cliente no puede
+      // preguntarla: la recibe ya decidida, con el motivo escrito.
+      iaDictado={eduIaEstadoActual("dictado")}
     />
   );
 }

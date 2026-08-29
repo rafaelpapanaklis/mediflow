@@ -35,6 +35,9 @@
 //   /instituto/caja/corte   → corte del turno                      Ola 5  ✓
 //   /instituto/equipo       → altas y bajas de cuentas             Ola 1B ✓
 //   /instituto/autorizaciones → LA BANDEJA DEL DOCENTE             Ola 4  ✓
+//   /instituto/pacientes/[id]/consentimientos → cartas NOM-004     Ola 3B ✓
+// PÚBLICA (SIN sesión — vive FUERA del grupo (panel), igual que /login):
+//   /instituto/consentimiento/[token] → el paciente lee y firma    Ola 3B ✓
 // Las olas que siguen cuelgan sus pantallas de /instituto/<área> y su
 // entrada de menú de EDU_NAV_ITEMS (abajo). Ninguna inventa su propio
 // guard: todas pasan por el layout del grupo (panel).
@@ -86,6 +89,13 @@
 //   PATCH /api/instituto/autorizaciones/[id] → autorizar · pedir cambios ·
 //                                              rechazar            Ola 4  ✓
 //   POST  /api/instituto/autorizaciones/lote → autorizar EN LOTE   Ola 4  ✓
+//   POST  /api/instituto/ai/dictado         → audio → texto        Ola 3B ✓
+//   GET·POST /api/instituto/estudios/[id]/analisis → apoyo de IA   Ola 3B ✓
+//   GET·POST /api/instituto/pacientes/[id]/consentimientos         Ola 3B ✓
+//   POST  /api/instituto/consentimientos/[id]/revocar              Ola 3B ✓
+//   POST  /api/instituto/consentimientos/[id]/contrafirma          Ola 3B ✓
+//   GET·POST /api/instituto/consentimientos/publico/[token]  ← SIN SESIÓN
+//                                            el token ES la credencial Ola 3B ✓
 // ═══════════════════════════════════════════════════════════════════════
 
 // ── Enums ───────────────────────────────────────────────────────────────

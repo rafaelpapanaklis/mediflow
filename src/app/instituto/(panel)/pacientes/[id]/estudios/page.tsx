@@ -7,6 +7,7 @@ import { EDU_CLINICAL_NONE_DETAIL, eduClinicalScope } from "@/lib/edu/expediente
 import { getEduClinicalPatient, listEduPatientCaseOptions } from "@/lib/edu/expediente";
 import { listEduPatientStudies } from "@/lib/edu/estudios";
 import { eduScopeIsEmpty } from "@/lib/edu/visibility";
+import { eduIaEstadoActual } from "@/lib/edu/ia";
 import { EduDenied } from "@/components/edu/edu-denied";
 import { EduEstudiosScreen } from "@/components/edu/expediente/estudios-screen";
 
@@ -57,6 +58,10 @@ export default async function PacienteEstudiosPage({ params }: { params: { id: s
       rows={rows}
       cases={cases}
       canUpload={hasEduPermission(permUser, "estudios.upload")}
+      // Ola 3B. El estado de la IA lo resuelve el SERVIDOR: EDU_IA_ENABLED
+      // no lleva prefijo NEXT_PUBLIC_ y en el navegador no existe.
+      iaAnalisis={eduIaEstadoActual("analisis")}
+      canAnalyze={hasEduPermission(permUser, "estudios.analyze")}
     />
   );
 }

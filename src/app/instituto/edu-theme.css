@@ -3217,3 +3217,456 @@ select.edu-input {
   color: var(--edu-text-2);
   font-style: italic;
 }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   13 · OLA 3B — DICTADO, APOYO DE IA Y CONSENTIMIENTOS.
+
+   Bloque ADITIVO al final del archivo: no se toca ni una regla anterior.
+   Todo cuelga de .edu-shell / .edu-auth como el resto del vertical, así
+   que hereda los tokens de arriba y no define ninguno nuevo.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* ── El micrófono del dictado ─────────────────────────────────────────── */
+
+/* La etiqueta del campo y el micrófono en la MISMA línea, con el
+   micrófono pegado a la derecha. Se usa `gap` y no un margen para que en
+   un teléfono estrecho el error de abajo se encoja antes que la etiqueta. */
+.edu-field__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+  margin-bottom: 5px;
+}
+
+.edu-field__head .edu-field__label {
+  margin-bottom: 0;
+}
+
+.edu-mic__wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  /* Se encoge ANTES que la etiqueta del campo: si algo tiene que caber a
+     medias en un teléfono, que sea el aviso y no el nombre del campo. */
+  flex-shrink: 8;
+  color: var(--edu-text-3);
+}
+
+.edu-mic {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 28px;
+  height: 28px;
+  padding: 0 5px;
+  border-radius: 7px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--edu-text-2);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.14s ease, color 0.14s ease, border-color 0.14s ease;
+}
+
+.edu-mic:hover:not(:disabled) {
+  background: var(--edu-hover);
+  color: var(--edu-600);
+}
+
+.edu-mic:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+/* Apagado por falta de cobro de IA: se PINTA, no se esconde. Un botón que
+   desaparece parece una función que no existe; uno deshabilitado con su
+   `title` es un producto que te está contando algo. */
+.edu-mic--off {
+  border-style: dashed;
+  border-color: var(--edu-line);
+}
+
+.edu-mic--rec {
+  color: var(--edu-danger);
+  border-color: rgba(179, 38, 30, 0.35);
+}
+
+.edu-mic__punto {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--edu-danger);
+  flex-shrink: 0;
+}
+
+.edu-mic__reloj {
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.edu-mic__error {
+  font-size: 11px;
+  color: var(--edu-danger);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 260px;
+  min-width: 0;
+}
+
+/* ── El panel de apoyo de IA ──────────────────────────────────────────── */
+
+.edu-ia {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  border: 1px solid var(--edu-line);
+  border-radius: var(--edu-radius);
+  background: var(--edu-surface-2);
+  padding: 14px;
+}
+
+.edu-ia__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.edu-ia__title {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--edu-text-1);
+}
+
+/* 🔴 El aviso de "apoyo, no diagnóstico" NO se puede cerrar y no va en
+   letra chica: 12.5px sobre ámbar, con el icono fijo arriba a la
+   izquierda para que el texto largo no se meta debajo. */
+.edu-ia__aviso {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--edu-amber-300);
+  background: var(--edu-amber-50);
+  color: var(--edu-amber-900);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+.edu-ia__aviso svg {
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.edu-ia__card {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  border: 1px solid var(--edu-line);
+  border-radius: 10px;
+  background: var(--edu-surface);
+  padding: 12px;
+}
+
+.edu-ia__meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.edu-ia__resumen {
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: var(--edu-text-1);
+}
+
+.edu-ia__hallazgos,
+.edu-ia__recos {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+
+.edu-ia__hallazgos > li {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding-left: 10px;
+  border-left: 2px solid var(--edu-200);
+}
+
+.edu-ia__hallazgo-top {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex-wrap: wrap;
+  font-size: 13px;
+  color: var(--edu-text-1);
+}
+
+.edu-ia__diente {
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+  color: var(--edu-text-2);
+}
+
+.edu-ia__conf {
+  font-size: 11.5px;
+  color: var(--edu-text-3);
+  font-variant-numeric: tabular-nums;
+}
+
+.edu-ia__desc {
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--edu-text-2);
+}
+
+.edu-ia__desc--razon {
+  color: var(--edu-text-3);
+  font-style: italic;
+}
+
+.edu-ia__recos > li {
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--edu-text-2);
+  padding-left: 14px;
+  position: relative;
+}
+
+.edu-ia__recos > li::before {
+  content: "•";
+  position: absolute;
+  left: 2px;
+  color: var(--edu-400);
+}
+
+/* ── Consentimientos, en el panel ─────────────────────────────────────── */
+
+.edu-consent {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  border: 1px solid var(--edu-line);
+  border-left: 3px solid var(--edu-300);
+  border-radius: var(--edu-radius);
+  background: var(--edu-surface);
+  box-shadow: var(--edu-shadow-1);
+  padding: 14px 16px;
+}
+
+/* El estado se lee en el BORDE antes que en la píldora: en una lista de
+   diez cartas, el color de la banda izquierda es lo que se barre con la
+   vista. */
+.edu-consent--firmado {
+  border-left-color: var(--edu-ok);
+}
+.edu-consent--pendiente {
+  border-left-color: var(--edu-amber-700);
+}
+.edu-consent--revocado {
+  border-left-color: var(--edu-danger);
+}
+.edu-consent--vencido {
+  border-left-color: var(--edu-line-strong);
+}
+
+.edu-consent__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.edu-consent__head > div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.edu-consent__proc {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--edu-text-1);
+}
+
+.edu-consent__estado {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--edu-text-2);
+}
+
+.edu-consent__firmas {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8px;
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--edu-surface-2);
+}
+
+@media (min-width: 700px) {
+  .edu-consent__firmas {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.edu-consent__firmas dt {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--edu-text-3);
+}
+
+.edu-consent__firmas dd {
+  margin: 2px 0 0;
+  font-size: 12.5px;
+  color: var(--edu-text-1);
+}
+
+/* El editor del texto que se va a firmar: monoespaciado y con el salto de
+   línea respetado, porque lo que se guarda es texto plano y tiene que
+   verse igual aquí, en el teléfono del paciente y en el papel. */
+.edu-consent__editor {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  resize: vertical;
+}
+
+/* ── La página PÚBLICA de firma ───────────────────────────────────────── */
+
+/* Reusa `.edu-auth` para heredar los tokens del vertical y le PISA la
+   rejilla de dos columnas del login (regla posterior + especificidad de
+   dos clases). No se toca ni una línea de aquella. */
+.edu-auth.edu-publico {
+  display: block;
+  min-height: 100vh;
+  background: var(--edu-bg);
+  color: var(--edu-text-1);
+  padding: 18px 14px 48px;
+}
+
+.edu-publico__hoja {
+  max-width: 720px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  background: var(--edu-surface);
+  border: 1px solid var(--edu-line);
+  border-radius: 16px;
+  box-shadow: var(--edu-shadow-1);
+  padding: 20px 18px 26px;
+}
+
+@media (min-width: 720px) {
+  .edu-publico__hoja {
+    padding: 30px 34px 36px;
+  }
+}
+
+.edu-publico__head {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  border-bottom: 1px solid var(--edu-line);
+  padding-bottom: 12px;
+}
+
+.edu-publico__marca {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--edu-500);
+}
+
+.edu-publico__title {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: -0.015em;
+}
+
+.edu-publico__sub {
+  margin: 0;
+  font-size: 13.5px;
+  color: var(--edu-text-2);
+}
+
+/* 🔴 `pre-wrap` y no una conversión a HTML: el documento que se firma es
+   texto plano, y tiene que verse IDÉNTICO en esta pantalla, en el editor
+   del panel y en el papel. Cualquier maquetado intermedio es una forma de
+   que el papel y la pantalla dejen de coincidir. */
+.edu-publico__texto {
+  white-space: pre-wrap;
+  font-size: 14px;
+  line-height: 1.65;
+  color: var(--edu-text-1);
+  border: 1px solid var(--edu-line);
+  border-radius: 12px;
+  background: var(--edu-surface-2);
+  padding: 16px;
+  /* Un texto largo en un teléfono: se desplaza dentro de su caja, nunca
+     empuja la página a lo ancho. */
+  overflow-x: auto;
+}
+
+.edu-publico__firmas ul {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13px;
+  color: var(--edu-text-1);
+}
+
+.edu-publico__nota {
+  margin: 8px 0 0;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--edu-text-3);
+}
+
+.edu-publico__pad {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  border: 1px solid var(--edu-line-brand);
+  border-radius: 12px;
+  background: var(--edu-50);
+  padding: 14px;
+}
+
+.edu-publico__pie {
+  border-top: 1px solid var(--edu-line);
+  padding-top: 12px;
+  font-size: 12px;
+  color: var(--edu-text-3);
+  text-align: center;
+}
